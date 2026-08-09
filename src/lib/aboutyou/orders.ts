@@ -295,10 +295,10 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   const produse = [...qtyByProduct.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
   const variante = [...qtyByVariant.values()];
   if (produse.length > 0 || variante.length > 0) {
-    const { data: rez, error } = await admin.rpc("consuma_stoc_comanda_marketplace" as never, {
+    const { data: rez, error } = await admin.rpc("consuma_stoc_comanda_marketplace", {
       p_order_id: orderId, p_business_id: ctx.businessId,
       p_produse: produse, p_variante: variante,
-    } as never);
+    });
     const r = rez as { gasit?: boolean; deja?: boolean; lipsa?: unknown[] } | null;
     if (error || r?.gasit !== true) {
       await logError({

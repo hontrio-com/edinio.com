@@ -96,14 +96,14 @@ export async function POST(request: NextRequest) {
    * si in loturi ramasese deschis pe calea cu cele mai multe comenzi online.
    */
   if (orderStatus) {
-    const { data: t, error: eT } = await admin.rpc("aplica_tranzitia_comenzii" as never, {
+    const { data: t, error: eT } = await admin.rpc("aplica_tranzitia_comenzii", {
       p_order_id: orderId,
       p_status: orderStatus,
       // Plata se scrie separat, mai jos, prin `finalizeazaPlataComenzii`: acolo e
       // idempotenta si tot ce urmeaza dupa plata.
       p_payment_status: null,
       p_business_id: order.business_id,
-    } as never);
+    });
     const rez = t as { gasit?: boolean; stoc?: string } | null;
     if (eT || rez?.gasit !== true) {
       await logError({

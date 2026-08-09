@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
     // Functia din baza pune marcajul si scade contorul in aceeasi tranzactie,
     // deci doua rulari suprapuse (sau o anulare facuta in acelasi timp din panou)
     // nu pot scadea de doua ori. `true` = chiar acum s-a scazut.
-    const { data: dat, error } = await admin.rpc("release_order_discount" as never, { p_order_id: c.id } as never);
+    const { data: dat, error } = await admin.rpc("release_order_discount", { p_order_id: c.id });
     if (error) {
       console.error("[discount-release] eliberare esuata pentru comanda", c.id, error.message);
       continue;

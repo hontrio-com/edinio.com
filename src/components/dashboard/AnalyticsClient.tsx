@@ -314,9 +314,9 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
       /* `as never` pe numele functiilor: tipurile generate nu le stiu inca, iar
          regenerarea lor rescrie `store_settings` din tabela in VEDERE si rupe
          patruzeci de locuri. Formele raspunsurilor se declara mai jos, explicit. */
-      supabase.rpc("site_analytics_breakdown_zile" as never, { bid: businessId, p_zile: p } as never),
-      supabase.rpc("orders_venit_zilnic" as never, { bid: businessId, p_zile: p } as never),
-      supabase.rpc("orders_venit_zilnic" as never, { bid: businessId, p_zile: p, p_deplasare: 1 } as never),
+      supabase.rpc("site_analytics_breakdown_zile", { bid: businessId, p_zile: p }),
+      supabase.rpc("orders_venit_zilnic", { bid: businessId, p_zile: p }),
+      supabase.rpc("orders_venit_zilnic", { bid: businessId, p_zile: p, p_deplasare: 1 }),
       supabase.rpc("orders_county_counts", { bid: businessId }),
     ]);
 

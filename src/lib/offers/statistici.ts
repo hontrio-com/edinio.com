@@ -83,12 +83,12 @@ export async function scrieStatisticiOferte(admin: Client, evenimente: Eveniment
   await Promise.all(
     evenimente.map(async (e) => {
       try {
-        await admin.rpc("increment_offer_stats" as never, {
+        await admin.rpc("increment_offer_stats", {
           p_offer_id: e.offerId,
           p_impressions: Math.max(0, Math.trunc(Number(e.impressions) || 0)),
           p_conversions: Math.max(0, Math.trunc(Number(e.conversions) || 0)),
           p_revenue: Math.max(0, round2(e.revenue ?? 0)),
-        } as never);
+        });
       } catch {
         // statistica e best-effort
       }

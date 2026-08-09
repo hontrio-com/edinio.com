@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+
+/** Forma unei modificari de comanda, asa cum o stie baza. */
+type PatchComanda = Database["public"]["Tables"]["orders"]["Update"];
 import { poateAvansaLaConfirmat } from "@/lib/order-progress";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
@@ -47,11 +51,19 @@ export interface ComandaDePlatit {
  * `klarna_order_id`, …), care se scrie in aceeasi instructiune.
  */
 export async function finalizeazaPlataComenzii(
-  admin: SupabaseClient,
+  /*
+   * `SupabaseClient<Database>`, nu `SupabaseClient` gol.
+   *
+   * Fara generic, `.rpc()` accepta ORICE sir si orice argumente — deci un nume de
+   * functie scris gresit sau un argument lipsa trec nevazute. Verificat: cu tipul
+   * gol, tsc nu semnala nici `p_order_id_GRESIT`, nici `p_status: 42`, nici un nume
+   * de functie inexistent. Zero erori, la toate trei.
+   */
+  admin: SupabaseClient<Database>,
   comanda: ComandaDePlatit,
-  campuriSuplimentare: Record<string, unknown> = {},
+  campuriSuplimentare: PatchComanda = {},
 ): Promise<RezultatPlata> {
-  const comun: Record<string, unknown> = {
+  const comun: PatchComanda = {
     ...campuriSuplimentare,
     payment_status: "paid",
     updated_at: new Date().toISOString(),

@@ -53,6 +53,7 @@ import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchi
 import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
+import type { Json } from "@/types/database.types";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
 const STORE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
@@ -1241,7 +1242,7 @@ export async function placeOrder(data: {
      * pentru cateva secunde e o suparare; o campanie de 100 care serveste 130 e o
      * paguba, si una pe care o afli abia la socoteala.
      */
-    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use", { p_discount_id: validDiscountId });
     if (eCupon) {
       await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
       return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
@@ -1265,7 +1266,7 @@ export async function placeOrder(data: {
    * dau cuponul inapoi; doar textul difera.
    */
   if (stoc.fel !== "revendicat") {
-    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
     return { error: stoc.error };
   }
 
@@ -1350,7 +1351,7 @@ export async function placeOrder(data: {
     // Comanda n-a intrat, deci utilizarea revendicata si stocul rezervat se dau
     // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
     // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
-    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
     await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
@@ -1728,7 +1729,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
    * ce `businesses ... eq(user_id)` de mai sus a confirmat ca magazinul e al lui.
    */
   const adminTranzitie = createAdminClient();
-  const { data: tranzitie, error } = await adminTranzitie.rpc("aplica_tranzitia_comenzii" as never, {
+  const { data: tranzitie, error } = await adminTranzitie.rpc("aplica_tranzitia_comenzii", {
     p_order_id: orderId,
     p_status: data.status,
     p_payment_status: data.payment_status,
@@ -1736,7 +1737,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     // Se trimite si aici fiindca nu costa nimic si inchide drumul daca vreodata
     // verificarea de deasupra se muta sau se pierde la o refactorizare.
     p_business_id: order.business_id,
-  } as never);
+  });
 
   if (error) {
     await logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id, severity: "critical" });
@@ -2343,7 +2344,7 @@ export async function updateOrderDetails(orderId: string, data: {
    *
    * Calculele raman in aplicatie; functia scrie doar ce a hotarat ea.
    */
-  const { data: ed, error } = await admin.rpc("editeaza_comanda_atomic" as never, {
+  const { data: ed, error } = await admin.rpc("editeaza_comanda_atomic", {
     p_order_id: orderId,
     p_business_id: order.business_id,
     p_patch: {
@@ -2361,7 +2362,11 @@ export async function updateOrderDetails(orderId: string, data: {
       // continuare ca „istorica". Aceeasi expresie ca la plasare.
       vat_rate: vatCfg.vat_enabled ? vatCfg.vat_rate : 0,
       total: newTotal,
-    },
+      // `as unknown as Json`: obiectul E jsonb valid, dar `plan.items` e `unknown[]`
+      // si TS nu poate dovedi asta. Cast INGUST, doar pe argument — numele functiei
+      // si celelalte argumente raman verificate, spre deosebire de `as never` pe tot
+      // apelul, care stingea verificarea cu totul.
+    } as unknown as Json,
     p_produse: stoc.fel === "revendicat" ? decrements : [],
     p_variante: stoc.fel === "revendicat" ? stocRezervat([], plan.adaugate).variante : [],
     /*
@@ -2374,7 +2379,7 @@ export async function updateOrderDetails(orderId: string, data: {
      * intamplata, nu-l mai elibereaza niciodata.
      */
     p_status_asteptat: order.status,
-  } as never);
+  });
 
   const rezEd = ed as { gasit?: boolean; stoc_cunoscut?: boolean; motiv?: string; status_curent?: string } | null;
   if (rezEd?.motiv === "status schimbat") {
@@ -2446,7 +2451,7 @@ export async function deleteOrder(orderId: string) {
    * apel cu drepturi de serviciu.
    */
   const { data: sters, error } = await createAdminClient()
-    .rpc("sterge_comanda" as never, { p_order_id: orderId, p_business_id: order.business_id } as never);
+    .rpc("sterge_comanda", { p_order_id: orderId, p_business_id: order.business_id });
   if (error) {
     await logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la stergerea comenzii." };
@@ -2997,7 +3002,7 @@ export async function placeCartOrder(data: {
      * pentru cateva secunde e o suparare; o campanie de 100 care serveste 130 e o
      * paguba, si una pe care o afli abia la socoteala.
      */
-    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use", { p_discount_id: validDiscountId });
     if (eCupon) {
       await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
       return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
@@ -3019,7 +3024,7 @@ export async function placeCartOrder(data: {
    * dau cuponul inapoi; doar textul difera.
    */
   if (stoc.fel !== "revendicat") {
-    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
     return { error: stoc.error };
   }
 
@@ -3104,7 +3109,7 @@ export async function placeCartOrder(data: {
   if (error) {
     // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
     // rezervat. Vezi `placeOrder`.
-    if (validDiscountId) await admin.rpc("release_discount_use" as never, { p_discount_id: validDiscountId } as never);
+    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
     await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };

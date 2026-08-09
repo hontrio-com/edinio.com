@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -25,7 +26,15 @@ import { logError } from "@/lib/error-logger";
  * doua copii ale acesteia ar apuca-o pe acelasi drum.
  */
 export async function tranzitieComandaMarketplace(
-  admin: SupabaseClient,
+  /*
+   * `SupabaseClient<Database>`, nu `SupabaseClient` gol.
+   *
+   * Fara generic, `.rpc()` accepta ORICE sir si orice argumente — deci un nume de
+   * functie scris gresit sau un argument lipsa trec nevazute. Verificat: cu tipul
+   * gol, tsc nu semnala nici `p_order_id_GRESIT`, nici `p_status: 42`, nici un nume
+   * de functie inexistent. Zero erori, la toate trei.
+   */
+  admin: SupabaseClient<Database>,
   p: {
     orderId: string;
     businessId: string;
@@ -59,14 +68,14 @@ export async function tranzitieComandaMarketplace(
     }
   }
 
-  const { data, error } = await admin.rpc("aplica_tranzitia_comenzii" as never, {
+  const { data, error } = await admin.rpc("aplica_tranzitia_comenzii", {
     p_order_id: p.orderId,
     p_status: p.status,
     // Marketplace-ul nu schimba starea platii: comenzile vin deja platite, iar
     // rambursarea se reflecta prin STATUS (`refunded`), nu prin `payment_status`.
     p_payment_status: null,
     p_business_id: p.businessId,
-  } as never);
+  });
 
   const rez = data as { gasit?: boolean; stoc?: string; negative?: unknown[] } | null;
   if (error || rez?.gasit !== true) {

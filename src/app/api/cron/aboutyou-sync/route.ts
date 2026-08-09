@@ -9,6 +9,7 @@ import {
 } from "@/lib/aboutyou/sync";
 import { pollOrders } from "@/lib/aboutyou/orders";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
+import type { Json } from "@/types/database.types";
 
 type Admin = SupabaseClient<Database>;
 
@@ -82,9 +83,9 @@ export async function GET(req: NextRequest) {
    * un termen: al doilea lucrator primeste randurile URMATOARE, nu aceleasi. Vezi
    * migratia `2026-08-19-lease-cozi-marketplace`.
    */
-  const { data: revendicate, error: eCoada } = await admin.rpc("revendica_din_coada" as never, {
+  const { data: revendicate, error: eCoada } = await admin.rpc("revendica_din_coada", {
     p_coada: "aboutyou_sync_queue", p_limita: QUEUE_BATCH,
-  } as never);
+  });
   if (eCoada) {
     await logError({ action: "aboutyou-sync", message: `coada nu s-a putut revendica: ${eCoada.message}`, severity: "critical" });
     return NextResponse.json({ ok: false, error: "coada indisponibila" }, { status: 503 });
@@ -215,11 +216,12 @@ export async function GET(req: NextRequest) {
  * singura instructiune, deci nu mai exista fereastra.
  */
 async function patchConfig(admin: Admin, businessId: string, patch: Partial<AboutYouConfig>) {
-  const { error } = await admin.rpc("jsonb_merge_config" as never, {
+  const { error } = await admin.rpc("jsonb_merge_config", {
     p_business_id: businessId,
     p_column: "aboutyou_config",
-    p_patch: patch,
-  } as never);
+    // `AboutYouConfig` e jsonb valid, dar tipul lui nu are semnatura de index.
+    p_patch: patch as unknown as Json,
+  });
   if (!error) return;
   // Cadere de siguranta daca functia lipseste inca din baza.
   const { data: ss } = await admin.from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();

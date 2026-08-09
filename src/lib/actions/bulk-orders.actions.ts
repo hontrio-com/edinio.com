@@ -394,13 +394,13 @@ export async function bulkUpdateOrderStatus(
   const reusite: { id: string; payment_status: string }[] = [];
   const cazute: string[] = [];
   for (const id of ids) {
-    const { data: t, error: eT } = await admin.rpc("aplica_tranzitia_comenzii" as never, {
+    const { data: t, error: eT } = await admin.rpc("aplica_tranzitia_comenzii", {
       p_order_id: id, p_status: status, p_payment_status: null,
       // Limita de magazin: fara ea, un POST direct pe actiune cu id-uri din ALT
       // magazin le-ar fi mutat statusul si le-ar fi eliberat stocul. Interogarea
       // veche o avea (`.eq("business_id", ...)`), apelul per comanda a pierdut-o.
       p_business_id: businessId,
-    } as never);
+    });
     const r = t as unknown as {
       gasit?: boolean; plata_veche?: string; cupon?: string; stoc?: string; negative?: unknown[];
     } | null;

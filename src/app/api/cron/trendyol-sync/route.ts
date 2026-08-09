@@ -62,9 +62,9 @@ export async function GET(req: NextRequest) {
    * un termen: al doilea lucrator primeste randurile URMATOARE, nu aceleasi. Vezi
    * migratia `2026-08-19-lease-cozi-marketplace`.
    */
-  const { data: revendicate, error: eCoada } = await admin.rpc("revendica_din_coada" as never, {
+  const { data: revendicate, error: eCoada } = await admin.rpc("revendica_din_coada", {
     p_coada: "trendyol_sync_queue", p_limita: QUEUE_BATCH,
-  } as never);
+  });
   if (eCoada) {
     await logError({ action: "trendyol-sync", message: `coada nu s-a putut revendica: ${eCoada.message}`, severity: "critical" });
     return NextResponse.json({ ok: false, error: "coada indisponibila" }, { status: 503 });

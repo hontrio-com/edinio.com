@@ -3182,6 +3182,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      agregeaza_analitice: { Args: { p_zile?: number }; Returns: number }
+      aplica_tranzitia_comenzii: { Args: { p_order_id: string; p_status: string; p_payment_status?: string | null; p_business_id?: string }; Returns: Json }
+      catalog_aplica_proiectii: { Args: { p_randuri: Json }; Returns: number }
+      catalog_cauta: { Args: { p_business: string; p_cuvinte: string[]; p_filtre: Json; p_plafon?: number }; Returns: Json }
+      catalog_pagina: { Args: { p_business: string; p_filtre: Json; p_limit: number; p_offset: number }; Returns: Json }
+      catalog_randuri: { Args: { p_business: string; p_spec: Json }; Returns: Json }
+      catalog_reface_cuvinte: { Args: { p_business: string }; Returns: number }
+      catalog_scrie_rezumat: { Args: { p_randuri: Json }; Returns: number }
+      catalog_verifica: { Args: { p_esantion?: number }; Returns: number }
+      consuma_stoc_comanda_marketplace: { Args: { p_order_id: string; p_business_id: string; p_produse: Json; p_variante: Json }; Returns: Json }
+      curata_analitice_brute: { Args: { p_pastreaza_zile?: number; p_max?: number }; Returns: number }
+      editeaza_comanda_atomic: { Args: { p_order_id: string; p_business_id: string; p_patch: Json; p_produse: Json; p_variante: Json; p_status_asteptat?: string | null }; Returns: Json }
+      elibereaza_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: undefined }
+      jsonb_merge_config: { Args: { p_business_id: string; p_column: string; p_patch: Json }; Returns: undefined }
+      numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
+      orders_venit_zilnic: { Args: { bid: string; p_zile: number; p_deplasare?: number }; Returns: unknown }
+      proba_stoc: { Args: Record<PropertyKey, never>; Returns: Json }
+      revendica_din_coada: { Args: { p_coada: string; p_limita?: number; p_lease?: unknown }; Returns: Json[] }
+      revendica_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: Json }
+      scrie_variante_daca_neschimbat: { Args: { p_business: string; p_product: string; p_asteptat: Json; p_nou: Json }; Returns: string }
+      site_analytics_breakdown_zile: { Args: { bid: string; p_zile: number }; Returns: unknown }
+      sterge_comanda: { Args: { p_order_id: string; p_business_id?: string }; Returns: Json }
       claim_discount_use: { Args: { p_discount_id: string }; Returns: boolean }
       consuma_limita: {
         Args: {

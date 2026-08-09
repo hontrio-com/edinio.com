@@ -226,12 +226,12 @@ export async function applyStockPlan(
       // raporteaza mai jos.
       if (missing.length === productChanges.length) { scris = true; break; }
 
-      const { data: fel, error: rpcErr } = await admin.rpc("scrie_variante_daca_neschimbat" as never, {
+      const { data: fel, error: rpcErr } = await admin.rpc("scrie_variante_daca_neschimbat", {
         p_business: businessId,
         p_product: productId,
         p_asteptat: data.page_sections as never,
         p_nou: next as never,
-      } as never);
+      });
 
       if (rpcErr) { mesajEroare = rpcErr.message; break; }
       if (fel === "scris") { scris = true; break; }

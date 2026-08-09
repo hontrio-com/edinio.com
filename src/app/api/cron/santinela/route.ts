@@ -188,7 +188,7 @@ export async function GET(req: NextRequest) {
          * (verificare doar pe produs, scadere plafonata la zero pe marime), a doua
          * bucata primea `{"ok": true}` si proba o prindea.
          */
-        const { data, error } = await admin.rpc("proba_stoc" as never, {} as never);
+        const { data, error } = await admin.rpc("proba_stoc", {});
         if (error) return `proba n-a putut rula: ${error.message}`;
         const r = data as unknown as
           { ok?: boolean; motiv?: string; pasi?: { pas: string; ok: boolean; detaliu?: string }[] } | null;

@@ -146,13 +146,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Trei extensii din baseline nu exista pe un Postgres obisnuit:
+      #   pg_graphql, supabase_vault  — nu sunt in contrib, le pune Supabase;
+      #   pg_stat_statements          — e in contrib, dar cere shared_preload_libraries.
+      #
+      # Se scot DOAR pentru proba de portabilitate. Baseline-ul ramane neatins:
+      # el descrie productia asa cum e, iar productia chiar le are. Ce se verifica
+      # aici e ca RESTUL schemei — tabele, functii, politici, chei — se aplica pe o
+      # baza goala. Niciuna din cele trei nu e folosita de `public` sau `privat`
+      # (verificat: zero referinte la `graphql.`, iar din `vault` se citeste printr-o
+      # vedere pe care o pune preludiul).
+      - name: Pregateste baseline-ul pentru un Postgres obisnuit
+        run: |
+          set -euo pipefail
+          grep -vE '^create extension if not exists (pg_graphql|supabase_vault|pg_stat_statements) '             migrations/000-schema-baseline.sql > /tmp/baseline-portabil.sql
+          echo "scoase: $(grep -cE '^create extension if not exists (pg_graphql|supabase_vault|pg_stat_statements) ' migrations/000-schema-baseline.sql) extensii ale platformei"
+          # Daca filtrul n-a lasat nimic, mai bine cade acum decat sa „treaca" pe gol.
+          grep -q 'create table' /tmp/baseline-portabil.sql
+
       - name: Preludiu + baseline
         env:
           PGPASSWORD: proba
         run: |
           set -euo pipefail
           psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1             -f migrations/000-prelude-platforma.sql
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1             -f migrations/000-schema-baseline.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1             -f /tmp/baseline-portabil.sql
 
       # O aplicare fara eroare nu inseamna ca a construit ceva: `create table if
       # not exists` peste un fisier gol „reuseste" la fel de linistit. Se NUMARA.

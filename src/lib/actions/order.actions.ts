@@ -646,6 +646,32 @@ async function revendicaStocul(
 }
 
 /**
+ * Da inapoi utilizarea cuponului cand comanda nu mai intra.
+ *
+ * Perechea lui `claim_discount_use`, ca `elibereazaStocul` pentru stoc. Exista ca
+ * functie, si nu ca patru apeluri imprastiate, tocmai fiindca era chemata in patru
+ * locuri FARA sa se uite nimeni la rezultat: daca revendicarea a reusit si
+ * compensarea pica, ramane consumata o utilizare pentru o comanda care nu s-a
+ * facut niciodata — o campanie de 100 serveste 99, si nimeni nu afla de ce.
+ *
+ * Nu opreste nimic: comanda oricum nu intra. Dar se VEDE.
+ */
+async function elibereazaCuponul(
+  admin: SupabaseClient<Database>,
+  discountId: string | null | undefined,
+): Promise<void> {
+  if (!discountId) return;
+  const { error } = await admin.rpc("release_discount_use", { p_discount_id: discountId });
+  if (error) {
+    await logError({
+      action: "releaseDiscountUse",
+      message: `utilizarea cuponului NU s-a putut da inapoi: ${error.message}`,
+      details: { discountId, code: error.code }, severity: "critical",
+    });
+  }
+}
+
+/**
  * Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
  * `revendicaStocul`, ca `release_discount_use` pentru cupon.
  *
@@ -1266,7 +1292,7 @@ export async function placeOrder(data: {
    * dau cuponul inapoi; doar textul difera.
    */
   if (stoc.fel !== "revendicat") {
-    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
+    await elibereazaCuponul(admin, validDiscountId);
     return { error: stoc.error };
   }
 
@@ -1351,7 +1377,7 @@ export async function placeOrder(data: {
     // Comanda n-a intrat, deci utilizarea revendicata si stocul rezervat se dau
     // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
     // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
-    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
+    await elibereazaCuponul(admin, validDiscountId);
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
     await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
@@ -3024,7 +3050,7 @@ export async function placeCartOrder(data: {
    * dau cuponul inapoi; doar textul difera.
    */
   if (stoc.fel !== "revendicat") {
-    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
+    await elibereazaCuponul(admin, validDiscountId);
     return { error: stoc.error };
   }
 
@@ -3109,7 +3135,7 @@ export async function placeCartOrder(data: {
   if (error) {
     // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
     // rezervat. Vezi `placeOrder`.
-    if (validDiscountId) await admin.rpc("release_discount_use", { p_discount_id: validDiscountId });
+    await elibereazaCuponul(admin, validDiscountId);
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
     await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };

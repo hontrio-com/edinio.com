@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { cuponulSePoateElibera, ORE_PANA_LA_ELIBERARE, type ComandaDeMaturat } from "./reguli";
+import { logError } from "@/lib/error-logger";
 
 /**
  * Da inapoi utilizarile de cupon ramase agatate de plati online care nu s-au
@@ -45,7 +46,13 @@ export async function GET(req: NextRequest) {
   // Curata contoarele de limitare expirate (tabela `rate_limits`). Merge aici
   // fiindca acesta e cronul orar cel mai usor; nu are legatura cu cupoanele, dar
   // altfel tabela ar creste la nesfarsit.
-  await admin.rpc("curata_limite").then(() => {}, () => {});
+  {
+    // `.then(succes, esec)` NU prinde nimic aici: clientul Supabase intoarce
+    // `{ error }`, nu arunca. Auxiliara ramane auxiliara — nu opreste eliberarea
+    // cupoanelor — dar acum se VEDE cand nu si-a facut treaba.
+    const { error } = await admin.rpc("curata_limite");
+    if (error) await logError({ action: "discount-release.curata_limite", message: error.message, severity: "warning" });
+  }
 
   /*
    * Alarma de drift a modelului de citire al catalogului.
@@ -61,7 +68,13 @@ export async function GET(req: NextRequest) {
    * Inghitit: o alarma care nu poate rula n-are voie sa opreasca eliberarea
    * cupoanelor, care e treaba adevarata a acestui cron.
    */
-  await admin.rpc("catalog_verifica", { p_esantion: 300 }).then(() => {}, () => {});
+  {
+    // `.then(succes, esec)` NU prinde nimic aici: clientul Supabase intoarce
+    // `{ error }`, nu arunca. Auxiliara ramane auxiliara — nu opreste eliberarea
+    // cupoanelor — dar acum se VEDE cand nu si-a facut treaba.
+    const { error } = await admin.rpc("catalog_verifica", { p_esantion: 300 });
+    if (error) await logError({ action: "discount-release.catalog_verifica", message: error.message, severity: "warning" });
+  }
 
   /*
    * Agregarea zilnica a analiticelor.
@@ -84,7 +97,13 @@ export async function GET(req: NextRequest) {
    * Inghitit, ca si alarma de mai sus: treaba adevarata a acestui cron e
    * eliberarea cupoanelor.
    */
-  await admin.rpc("agregeaza_analitice", { p_zile: 2 }).then(() => {}, () => {});
+  {
+    // `.then(succes, esec)` NU prinde nimic aici: clientul Supabase intoarce
+    // `{ error }`, nu arunca. Auxiliara ramane auxiliara — nu opreste eliberarea
+    // cupoanelor — dar acum se VEDE cand nu si-a facut treaba.
+    const { error } = await admin.rpc("agregeaza_analitice", { p_zile: 2 });
+    if (error) await logError({ action: "discount-release.agregeaza_analitice", message: error.message, severity: "warning" });
+  }
 
   /*
    * Stergerea randurilor brute vechi, DUPA agregare, in aceeasi rulare.
@@ -134,7 +153,7 @@ export async function GET(req: NextRequest) {
    * atunci cand s-a revendicat o utilizare, deci multimea e aceeasi sau mai larga
    * — iar `release_order_discount` respinge oricum comenzile fara `discount_id`.
    */
-  const { data: comenzi } = await admin
+  const { data: comenzi, error: eComenzi } = await admin
     .from("orders")
     .select("id, business_id, payment_method, payment_status, status, created_at, discount_code")
     .eq("payment_status", "unpaid")
@@ -143,6 +162,22 @@ export async function GET(req: NextRequest) {
     .lt("created_at", pana)
     .order("created_at", { ascending: true })
     .limit(MAX_COMENZI);
+
+  /*
+   * Citirea PRINCIPALA nu are voie sa taca.
+   *
+   * Fara `error`, la o baza cazuta `comenzi` e `null`, bucla nu ruleaza, si cronul
+   * raspundea `{ ok: true, cercetate: 0 }` — o rulare sanatoasa la vedere care
+   * n-a eliberat niciun cupon. Auxiliarele de mai sus pot pica linistite (sunt
+   * treburi separate, si asa scrie si in comentariile lor); asta, nu.
+   */
+  if (eComenzi) {
+    await logError({
+      action: "discount-release", message: `citirea comenzilor a esuat: ${eComenzi.message}`,
+      severity: "critical",
+    });
+    return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
+  }
 
   if (!comenzi || comenzi.length === 0) {
     return NextResponse.json({ ok: true, cercetate: 0, eliberate: 0 });

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
+import { verificaLegaturaDocumentului } from "@/lib/invoicing-legatura";
 import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { invoiceParty } from "@/lib/billing/invoice-party";
@@ -448,7 +449,7 @@ export async function generateFgoInvoice(
       ? r.valoare
       : { Numar: r.referinta ?? "", Serie: dFgo?.serie ?? "", Link: dFgo?.link ?? "" };
 
-    await supabase.from("orders").update({
+    const { data: randuriFactura, error: eFactura } = await supabase.from("orders").update({
       fgo_invoice_number: result.Numar,
       fgo_invoice_series: result.Serie,
       fgo_invoice_link: result.Link,
@@ -458,7 +459,11 @@ export async function generateFgoInvoice(
       fgo_storno_number: null,
       fgo_storno_series: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    await verificaLegaturaDocumentului({
+      actiune: "fgo.factura", document: `${result.Serie} ${result.Numar}`,
+      orderId, businessId, eroare: eFactura, randuri: randuriFactura,
+    });
 
     if (slot.inlocuieste) {
       // Urma locala a perechii desfiintate. Randul comenzii tine doar documentul viu,
@@ -596,12 +601,30 @@ export async function cancelFgoInvoiceAction(
     // iar un discriminant din ceas ar strica idempotenta si ar putea emite doua
     // facturi la o simpla reincercare. Se lasa asa cat timp actiunea nu e legata de
     // niciun buton si n-a rulat niciodata in productie.
-    await supabase.from("orders").update({
+    const { data: randuriAnulare, error: eAnulare } = await supabase.from("orders").update({
       fgo_invoice_number: null,
       fgo_invoice_series: null,
       fgo_invoice_link: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * Scrierea se verifica, dar eliberarea slotului de mai jos ramane
+     * NECONDITIONATA — si e important in ce ordine se citeste asta.
+     *
+     * Daca eliberarea ar depinde de reusita scrierii, randul ar ramane `reusit` cu
+     * un document MORT, iar `legaturaVie` nu l-ar prinde: ea intreaba „mai poarta
+     * comanda referinta?", si raspunsul e DA tocmai fiindca scrierea a picat. Prima
+     * emitere de dupa ar intra pe „adopta" si ar scrie inapoi documentul ANULAT.
+     * Deci se elibereaza oricum, iar despre coloanele ramase se STRIGA.
+     */
+    if (eAnulare || !randuriAnulare || randuriAnulare.length === 0) {
+      await logError({
+        action: "fgo.anulareFactura",
+        message: `Factura fGO a fost anulata la furnizor, dar coloanele comenzii NU s-au golit: ${eAnulare?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, code: eAnulare?.code },
+        businessId, severity: "critical",
+      });
+    }
 
     /*
      * Slotul din registru se elibereaza odata cu coloanele.

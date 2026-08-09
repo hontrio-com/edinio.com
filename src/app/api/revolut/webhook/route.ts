@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { verifyWebhookSignature, type RevolutConfig } from "@/lib/revolut";
 import { finalizeRevolutOrder } from "@/lib/revolut-finalize";
+import { citireCazuta, intrebareFaraSens } from "@/lib/supabase/citire";
+import { logError } from "@/lib/error-logger";
 
 /**
  * Revolut Merchant signed webhook (`ORDER_COMPLETED`). Registered per merchant with
  * `?businessId=…`, so we load the right signing secret. The HMAC-SHA256 signature is
  * verified over the exact raw body BEFORE any DB write; then we finalize the order
- * idempotently. Always answers 200 so Revolut does not retry-storm (it retries 3×
- * on error); the browser return route is the primary path.
+ * idempotently.
+ *
+ * ⚠ NU raspunde 200 orice s-ar intampla. Un 2xx ii spune lui Revolut „livrat",
+ * si el nu mai repeta niciodata. Deci: „nu cunosc comanda" → 200 (evenimentul
+ * chiar nu ne priveste), dar „n-am putut interoga baza" → 503, ca sa mai vina o
+ * data. Vezi `citireCazuta`. Fereastra lui de reincercare e insa de ~30 de minute
+ * in total, deci 503 doar mareste sansa — recuperarea adevarata e cronul
+ * `/api/cron/revolut-reconcile`.
  */
 export async function POST(request: NextRequest) {
   const ok = () => NextResponse.json({ received: true });
@@ -22,12 +30,35 @@ export async function POST(request: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const { data: settings } = await admin
+  const reia = async (ce: string, mesaj: string) => {
+    await logError({
+      action: "revolut/webhook",
+      message: `${ce}: ${mesaj}`,
+      details: { businessId },
+      businessId,
+      severity: "critical",
+    });
+    return NextResponse.json({ received: false, error: "citire esuata" }, { status: 503 });
+  };
+
+  /*
+   * `.maybeSingle()`, nu `.single()`: cu `.single()` lipsa randului vine tot ca
+   * `error` (PGRST116), iar poarta de mai jos ar da 503 pentru orice magazin
+   * fara rand in `store_settings` — o furtuna de reincercari pentru un caz
+   * perfect normal.
+   */
+  const { data: settings, error: eCfg } = await admin
     .from("store_settings")
     .select("revolut_config")
     .eq("business_id", businessId)
-    .single();
+    .maybeSingle();
+  if (eCfg) return await reia("configul Revolut nu s-a putut citi", eCfg.message);
   const cfg = settings?.revolut_config as RevolutConfig | null;
+  /*
+   * Config lipsa ramane 200, si NU e o scapare: comerciantul poate deconecta
+   * Revolut fara ca webhookul sa fie sters de la ei. Un 503 acolo ar reincerca
+   * la fiecare eveniment, la nesfarsit.
+   */
   if (!cfg?.signing_secret) return ok();
 
   // Verify the signature over the exact raw body before trusting anything.
@@ -56,6 +87,13 @@ export async function POST(request: NextRequest) {
     .eq("business_id", businessId)
     .eq("revolut_order_id", event.order_id)
     .maybeSingle();
+  /*
+   * Verificarea sta AICI, imediat, nu dupa ramura de rezerva: altfel o eroare pe
+   * prima cautare cade tacut in `if (!order && ...)` si e mascata de a doua.
+   */
+  if (citireCazuta(byRevolut.error, byRevolut.data)) {
+    return await reia("cautarea comenzii dupa revolut_order_id a picat", byRevolut.error!.message);
+  }
   order = (byRevolut.data as OrderRow | null) ?? null;
 
   if (!order && event.merchant_order_ext_ref) {
@@ -65,9 +103,23 @@ export async function POST(request: NextRequest) {
       .eq("business_id", businessId)
       .eq("id", event.merchant_order_ext_ref)
       .maybeSingle();
+    /*
+     * `22P02` (uuid invalid) NU e o cadere: inseamna ca referinta externa nu e un
+     * id de-al nostru — comanda facuta direct in contul comerciantului, sau un
+     * eveniment de test. Tratata ca esec, ar produce reincercari si alarme
+     * critice la fiecare livrare a aceluiasi eveniment strain.
+     */
+    if (!intrebareFaraSens(byExt.error) && citireCazuta(byExt.error, byExt.data)) {
+      return await reia("cautarea comenzii dupa merchant_order_ext_ref a picat", byExt.error!.message);
+    }
     order = (byExt.data as OrderRow | null) ?? null;
   }
 
+  /*
+   * „Comanda nu exista" ramane 200, si trebuie sa ramana: Revolut trimite
+   * `ORDER_COMPLETED` pentru TOATE comenzile contului, nu doar pentru ale
+   * noastre.
+   */
   if (!order || order.payment_status === "paid") return ok();
 
   /*

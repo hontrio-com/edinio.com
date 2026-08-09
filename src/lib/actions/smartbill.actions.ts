@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
+import { verificaLegaturaDocumentului } from "@/lib/invoicing-legatura";
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { baniiAuIntrat } from "@/lib/billing/incasare";
 import { cheieDocument, mentiuneRefacturare, slotFacturare, type SlotFacturare } from "@/lib/billing/refacturare";
@@ -667,12 +668,18 @@ export async function generateOrderInvoice(
   const result = await emiteFacturaSubRegistru(businessId, orderId, slot, config, params);
   if ("error" in result) return result;
 
-  await supabase.from("orders").update({
-    smartbill_invoice_number: result.number,
-    smartbill_invoice_series: result.series,
-    smartbill_invoice_url: result.documentUrl ?? null,
-    ...campuriStornoGolite,
-  }).eq("id", orderId);
+  {
+    const { data: randuri, error: eScriere } = await supabase.from("orders").update({
+      smartbill_invoice_number: result.number,
+      smartbill_invoice_series: result.series,
+      smartbill_invoice_url: result.documentUrl ?? null,
+      ...campuriStornoGolite,
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    await verificaLegaturaDocumentului({
+      actiune: "smartbill.factura", document: `${result.series}${result.number}`,
+      orderId, businessId, eroare: eScriere, randuri,
+    });
+  }
 
   await jurnalRefacturare(businessId, orderId, order.order_number, slot, result);
   const emailWarning = await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
@@ -729,11 +736,22 @@ export async function generateOrderEstimate(
     ? r.valoare
     : { number: r.referinta ?? "", series: dP?.serie ?? "", documentUrl: dP?.url ?? undefined };
 
-  await supabase.from("orders").update({
-    smartbill_estimate_number: result.number,
-    smartbill_estimate_series: result.series,
-    smartbill_estimate_url: result.documentUrl ?? null,
-  }).eq("id", orderId);
+  {
+    const { data: randuri, error: eScriere } = await supabase.from("orders").update({
+      smartbill_estimate_number: result.number,
+      smartbill_estimate_series: result.series,
+      smartbill_estimate_url: result.documentUrl ?? null,
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * Aici consecinta e scrisa chiar in fisier, mai sus: proforma emisa ramane
+     * ORFANA in contul SmartBill, iar `convertEstimateToInvoice` n-o mai gaseste,
+     * fiindca randul comenzii nu-i stie numarul.
+     */
+    await verificaLegaturaDocumentului({
+      actiune: "smartbill.proforma", document: `${result.series}${result.number}`,
+      orderId, businessId, eroare: eScriere, randuri,
+    });
+  }
 
   const emailWarning = await trySendDocEmail(config, order.customer_email, "estimate", result.series, result.number);
   return { number: result.number, series: result.series, ...(emailWarning ? { emailWarning } : {}) };
@@ -788,7 +806,7 @@ export async function convertEstimateToInvoice(
         ? { error: `Proforma e legata in SmartBill de factura ${inlocuita}, cea pe care ai stornat-o. Emite factura direct din comanda (butonul Factura), nu din proforma.` }
         : { error: "Proforma a fost deja facturata in SmartBill (factura e inca ciorna). Finalizeaz-o din contul SmartBill." };
     }
-    await supabase.from("orders").update({
+    const { data: randuriAdoptare, error: eAdoptare } = await supabase.from("orders").update({
       smartbill_invoice_number: existing.number,
       smartbill_invoice_series: existing.series,
       // Linkul se GOLESTE, nu se pastreaza. Pana acum ramura asta era accesibila
@@ -798,7 +816,16 @@ export async function convertEstimateToInvoice(
       // `getEstimateInvoices` nu intoarce adresa, deci null e valoarea onesta.
       smartbill_invoice_url: null,
       ...campuriStornoGolite,
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * ⚠ Ramura asta NU are cheie de registru: adopta o factura emisa de mana din
+     * contul SmartBill. Deci nici a doua apasare nu repara singura legatura —
+     * logul e tot ce ramane intre document si comanda.
+     */
+    await verificaLegaturaDocumentului({
+      actiune: "smartbill.adoptareFactura", document: `${existing.series}${existing.number}`,
+      orderId, businessId, eroare: eAdoptare, randuri: randuriAdoptare,
+    });
     await jurnalRefacturare(businessId, orderId, order.order_number, slot, existing);
     return { number: existing.number, series: existing.series };
   }
@@ -826,12 +853,18 @@ export async function convertEstimateToInvoice(
   const result = await emiteFacturaSubRegistru(businessId, orderId, slot, config, params);
   if ("error" in result) return result;
 
-  await supabase.from("orders").update({
-    smartbill_invoice_number: result.number,
-    smartbill_invoice_series: result.series,
-    smartbill_invoice_url: result.documentUrl ?? null,
-    ...campuriStornoGolite,
-  }).eq("id", orderId);
+  {
+    const { data: randuri, error: eScriere } = await supabase.from("orders").update({
+      smartbill_invoice_number: result.number,
+      smartbill_invoice_series: result.series,
+      smartbill_invoice_url: result.documentUrl ?? null,
+      ...campuriStornoGolite,
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    await verificaLegaturaDocumentului({
+      actiune: "smartbill.factura", document: `${result.series}${result.number}`,
+      orderId, businessId, eroare: eScriere, randuri,
+    });
+  }
 
   await jurnalRefacturare(businessId, orderId, order.order_number, slot, result);
   const emailWarning = await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
@@ -1063,12 +1096,21 @@ export async function maybeAutoGenerateInvoice(
     const result = await emiteFacturaSubRegistru(businessId, orderId, slot, config, params);
     if ("error" in result) return false;
 
-    await supabase.from("orders").update({
+    const { data: randuriAuto, error: eAuto } = await supabase.from("orders").update({
       smartbill_invoice_number: result.number,
       smartbill_invoice_series: result.series,
       smartbill_invoice_url: result.documentUrl ?? null,
       ...campuriStornoGolite,
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * ⚠ Calea ASTA nu are niciun om in fata. Pe celelalte, o a doua apasare
+     * adopta documentul din registru si repara legatura; aici, fara semnal,
+     * factura ramane nelegata la nesfarsit.
+     */
+    await verificaLegaturaDocumentului({
+      actiune: "smartbill.facturaAutomata", document: `${result.series}${result.number}`,
+      orderId, businessId, eroare: eAuto, randuri: randuriAuto,
+    });
     await jurnalRefacturare(businessId, orderId, order.order_number, slot, result);
     // Best-effort email — never affects the already-created invoice.
     await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);

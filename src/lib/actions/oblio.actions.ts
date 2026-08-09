@@ -7,6 +7,7 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
+import { verificaLegaturaDocumentului } from "@/lib/invoicing-legatura";
 import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
@@ -538,7 +539,7 @@ export async function generateOblioInvoice(
       ? r.valoare
       : { number: r.referinta ?? "", seriesName: dOb?.serie ?? "", link: dOb?.link ?? null };
 
-    await supabase.from("orders").update({
+    const { data: randuriFactura, error: eFactura } = await supabase.from("orders").update({
       oblio_invoice_number: result.number,
       oblio_invoice_series: result.seriesName,
       oblio_invoice_link: result.link ?? null,
@@ -549,7 +550,11 @@ export async function generateOblioInvoice(
       oblio_storno_series: null,
       oblio_storno_link: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    await verificaLegaturaDocumentului({
+      actiune: "oblio.factura", document: `${result.seriesName} ${result.number}`,
+      orderId, businessId, eroare: eFactura, randuri: randuriFactura,
+    });
 
     if (slot.inlocuieste) {
       // Urma locala a perechii desfiintate. Randul comenzii tine doar documentul viu,
@@ -660,12 +665,17 @@ export async function generateOblioProforma(
       ? r.valoare
       : { number: r.referinta ?? "", seriesName: dPr?.serie ?? "", link: dPr?.link ?? null };
 
-    await supabase.from("orders").update({
+    const { data: randuriProforma, error: eProforma } = await supabase.from("orders").update({
       oblio_proforma_number: result.number,
       oblio_proforma_series: result.seriesName,
       oblio_proforma_link: result.link ?? null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    // Proforma orfana la furnizor = conversia in factura n-o mai gaseste.
+    await verificaLegaturaDocumentului({
+      actiune: "oblio.proforma", document: `${result.seriesName} ${result.number}`,
+      orderId, businessId, eroare: eProforma, randuri: randuriProforma,
+    });
 
     return { number: result.number, series: result.seriesName };
   } catch (e) {
@@ -824,14 +834,32 @@ export async function cancelOblioProforma(
     const token = await getOblioToken(config.client_id, config.client_secret);
     await cancelOblioDoc(token, "proforma", config.cif, orderData.oblio_proforma_series, orderData.oblio_proforma_number);
 
-    await supabase.from("orders").update({
+    const { data: randuriAnulareProforma, error: eAnulareProforma } = await supabase.from("orders").update({
       oblio_proforma_number: null,
       oblio_proforma_series: null,
       // `oblio_proforma_link` ramanea pe loc, deci randul pastra un link catre un
       // document ANULAT. Se goleste odata cu numarul.
       oblio_proforma_link: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * Scrierea se verifica, dar eliberarea slotului de mai jos ramane
+     * NECONDITIONATA — si e important in ce ordine se citeste asta.
+     *
+     * Daca eliberarea ar depinde de reusita scrierii, randul ar ramane `reusit` cu
+     * un document MORT, iar `legaturaVie` nu l-ar prinde: ea intreaba „mai poarta
+     * comanda referinta?", si raspunsul e DA tocmai fiindca scrierea a picat. Prima
+     * emitere de dupa ar intra pe „adopta" si ar scrie inapoi documentul ANULAT.
+     * Deci se elibereaza oricum, iar despre coloanele ramase se STRIGA.
+     */
+    if (eAnulareProforma || !randuriAnulareProforma || randuriAnulareProforma.length === 0) {
+      await logError({
+        action: "oblio.anulareProforma",
+        message: `Proforma Oblio a fost anulata la furnizor, dar coloanele comenzii NU s-au golit: ${eAnulareProforma?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, code: eAnulareProforma?.code },
+        businessId, severity: "critical",
+      });
+    }
 
     // Fara eliberare, o proforma noua ar fi „adoptat" chiar pe cea anulata.
     const eliberat = await marcheazaAnulata(

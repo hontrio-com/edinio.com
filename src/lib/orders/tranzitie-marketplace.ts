@@ -25,6 +25,26 @@ import { logError } from "@/lib/error-logger";
  * [[finalizare-plata]]: cinci copii ale regulii de plata se despartisera deja, si
  * doua copii ale acesteia ar apuca-o pe acelasi drum.
  */
+/**
+ * Ce s-a intamplat cu tranzitia, din punctul de vedere al APELANTULUI.
+ *
+ * ═══ DE CE NU E UN `boolean` ═══
+ *
+ * Era, si nimeni nu-l citea — dar nici n-avea cum sa-l citeasca util. Un `false`
+ * nu spune daca merita reincercat, iar apelantii (ingestul de marketplace) au
+ * exact aceasta intrebare: `pollPackages` opreste avansarea marcajului de timp
+ * cand ceva a esuat, deci un esec PERMANENT (comanda stearsa, alt magazin) ar
+ * ingheta fereastra pentru totdeauna si ar opri sincronizarea intregului magazin.
+ * E fix capcana descrisa pe larg in `trendyol/orders.ts`, la plafonul de paginare.
+ *
+ * Deci:
+ *   `ok`         — s-a aplicat.
+ *   `reincearca` — n-am putut afla (retea, lock, timeout). Marcajul NU avanseaza.
+ *   `definitiv`  — baza a raspuns limpede „nu se poate". Reincercarea n-are ce sa
+ *                  schimbe, deci marcajul are voie sa avanseze; ramane logul.
+ */
+export type RezultatTranzitie = "ok" | "reincearca" | "definitiv";
+
 export async function tranzitieComandaMarketplace(
   /*
    * `SupabaseClient<Database>`, nu `SupabaseClient` gol.
@@ -45,7 +65,7 @@ export async function tranzitieComandaMarketplace(
     /** Campuri care NU tin de ciclul de viata (ex. numarul de urmarire). */
     campuriSuplimentare?: Record<string, unknown>;
   },
-): Promise<boolean> {
+): Promise<RezultatTranzitie> {
   /*
    * Campurile care nu tin de ciclu se scriu INAINTE si separat.
    *
@@ -77,16 +97,33 @@ export async function tranzitieComandaMarketplace(
     p_business_id: p.businessId,
   });
 
-  const rez = data as { gasit?: boolean; stoc?: string; negative?: unknown[] } | null;
+  const rez = data as { gasit?: boolean; motiv?: string; stoc?: string; negative?: unknown[] } | null;
   if (error || rez?.gasit !== true) {
+    /*
+     * ⚠ „N-am putut afla" si „nu se poate" NU se trateaza la fel.
+     *
+     * `error` inseamna ca RPC-ul n-a raspuns: lock timeout pe `select ... for
+     * update`, statement timeout, deadlock, 5xx tranzitoriu de la PostgREST.
+     * Functia e un singur corp plpgsql, deci n-a scris NIMIC — nici status, nici
+     * cupon, nici eliberare de stoc — si o reincercare chiar poate reusi.
+     *
+     * `gasit: false` (rand inexistent sau `motiv: "alt magazin"`) e un raspuns
+     * limpede. Reincercat la nesfarsit, ar bloca marcajul de timp al intregului
+     * magazin pentru un singur pachet otravit.
+     *
+     * `rez` null fara `error` nu s-ar cuveni sa existe (functia intoarce mereu un
+     * jsonb), deci se citeste ca „nu stim": mai bine reincercam degeaba decat sa
+     * sarim peste o comanda.
+     */
+    const fel: RezultatTranzitie = error || rez == null ? "reincearca" : "definitiv";
     await logError({
       action: `${p.sursa}/tranzitie`,
-      message: error?.message ?? "tranzitia comenzii n-a raspuns valid",
-      details: { orderId: p.orderId, status: p.status, raspuns: rez },
+      message: error?.message ?? `tranzitia comenzii n-a raspuns valid (${fel})`,
+      details: { orderId: p.orderId, status: p.status, raspuns: rez, fel },
       businessId: p.businessId,
       severity: "critical",
     });
-    return false;
+    return fel;
   }
 
   if (rez.stoc === "necunoscut") {
@@ -105,5 +142,12 @@ export async function tranzitieComandaMarketplace(
       details: { orderId: p.orderId, negative: rez.negative }, businessId: p.businessId, severity: "warning",
     });
   }
-  return true;
+  /*
+   * ⚠ Avertismentele de mai sus raman „ok".
+   *
+   * Daca cineva le-ar transforma in `reincearca`, ingestul ar incepe sa raporteze
+   * esec pe comenzi vechi perfect valide (`stoc: "necunoscut"` inseamna doar ca
+   * sunt dinainte de `stoc_rezervat`) si ar bloca marcajul intregului magazin.
+   */
+  return "ok";
 }

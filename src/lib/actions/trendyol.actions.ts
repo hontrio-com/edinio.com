@@ -1112,20 +1112,22 @@ export async function getTrendyolOrderFulfillment(
 
 export async function markTrendyolPicking(
   businessId: string, orderId: string,
-): Promise<{ success: true; status: string } | { error: string }> {
+): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => setPackageStatus(admin, ctx, orderId, "Picking"));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
-  return { success: true, status: res.status };
+  // `avertisment` = s-a facut la Trendyol, dar comanda locala n-a preluat starea.
+  // Se DUCE pana la om: altfel panoul spune „reusit" peste o divergenta reala.
+  return { success: true, status: res.status, avertisment: res.avertisment };
 }
 
 export async function markTrendyolInvoiced(
   businessId: string, orderId: string, invoiceNumber?: string,
-): Promise<{ success: true; status: string } | { error: string }> {
+): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => setPackageStatus(admin, ctx, orderId, "Invoiced", invoiceNumber?.trim() || undefined));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
-  return { success: true, status: res.status };
+  return { success: true, status: res.status, avertisment: res.avertisment };
 }
 
 /**
@@ -1138,9 +1140,9 @@ export async function markTrendyolInvoiced(
 export async function sendTrendyolTracking(
   businessId: string, orderId: string,
   input: { trackingNumber: string; providerCode: string; returnTrackingNumber?: string },
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true; avertisment?: string } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => sendTrackingNumber(admin, ctx, orderId, input));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
-  return { success: true };
+  return { success: true, avertisment: res.avertisment };
 }

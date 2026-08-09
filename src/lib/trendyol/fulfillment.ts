@@ -67,7 +67,19 @@ function packageLines(side: SideRow): { lineId: number; quantity: number }[] {
     .filter((x): x is { lineId: number; quantity: number } => x !== null);
 }
 
-export type FulfillOutcome = { ok: true; status: string } | { ok: false; error: string };
+/**
+ * `avertisment` = „la Trendyol s-a facut, la noi nu s-a aplicat tot".
+ *
+ * ⚠ NU se inverseaza `ok` intr-un asemenea caz, si e important de ce: cand se
+ * ajunge aici, `updatePackage` a REUSIT deja — pachetul a avansat la Trendyol. Un
+ * `ok: false` l-ar trimite pe comerciant sa reincerce, iar a doua trimitere pe un
+ * pachet deja avansat e respinsa de Trendyol cu o eroare fara legatura; la
+ * `sendTrackingNumber` ar rupe chiar lantul `Picking -> AWB` si ar bloca
+ * expedierea. Trebuie sa fie o a treia stare, nu o inversare.
+ */
+export type FulfillOutcome =
+  | { ok: true; status: string; avertisment?: string }
+  | { ok: false; error: string };
 
 // Advance a Trendyol package to Picking or Invoiced and reflect it locally.
 export async function setPackageStatus(
@@ -97,10 +109,17 @@ export async function setPackageStatus(
    * O anulare pornita de aici lasa marfa consumata, exact ca celelalte doua.
    */
   if (side.order_id) {
-    await tranzitieComandaMarketplace(admin, {
+    const t = await tranzitieComandaMarketplace(admin, {
       orderId: side.order_id, businessId: ctx.businessId,
       status: edinioStatusForTrendyol(status), sursa: "trendyol",
     });
+    if (t !== "ok") {
+      return {
+        ok: true,
+        status,
+        avertisment: "Statusul a fost trimis catre Trendyol, dar comanda din Edinio nu s-a actualizat. Se reia la sincronizarea urmatoare.",
+      };
+    }
   }
   return { ok: true, status };
 }

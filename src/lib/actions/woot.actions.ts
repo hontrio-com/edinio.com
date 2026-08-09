@@ -390,7 +390,7 @@ export async function cancelWootAwb(
     await cancelWootOrder(token, Number(wootOrderId));
 
     const admin = adminClient();
-    await admin
+    const { data: randuri, error: eScriere } = await admin
       .from("orders")
       .update({
         woot_order_id: null,
@@ -399,7 +399,22 @@ export async function cancelWootAwb(
         updated_at: new Date().toISOString(),
       })
       .eq("id", orderId)
-      .eq("business_id", businessId);
+      .eq("business_id", businessId)
+      .select("id");
+
+    /*
+     * Aceeasi regula ca la emitere (mai sus): scrierea se verifica, dar esecul ei
+     * NU devine eroare catre om — comanda e deja anulata la Woot, iar o a doua
+     * apasare ar cadea la ei cu „comanda inexistenta". Ramane strigatul in loguri.
+     */
+    if (eScriere || !randuri || randuri.length === 0) {
+      await logError({
+        action: "woot.cancelOrder",
+        message: `Comanda Woot ${wootOrderId} a fost anulata la curier, dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, wootOrderId, code: eScriere?.code },
+        businessId, severity: "critical",
+      });
+    }
 
     /*
      * Slotul din registru se elibereaza DUPA ce Woot a confirmat anularea.

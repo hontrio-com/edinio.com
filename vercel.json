@@ -18,6 +18,14 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/revolut-reconcile",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/klarna-reconcile",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/reconcile-subscriptions",
       "schedule": "0 * * * *"
     },

@@ -31,8 +31,40 @@
 #
 # ═══ CUM SE APLICA PE O BAZA GOALA ═══
 #
-#   1. `000-schema-baseline.sql`  (fisierul asta)
-#   2. restul migratiilor, in ordinea datei — sunt istoricul de DUPA baseline
+#   1. `migrations/000-prelude-platforma.sql`  (DOAR pe Postgres gol, nu pe Supabase)
+#   2. `migrations/000-schema-baseline.sql`    (fisierul asta)
+#
+# ATAT. NU se mai aplica nimic altceva.
+#
+# ⚠ TEXTUL DE AICI SPUNEA ALTCEVA, SI ERA FALS: „restul migratiilor, in ordinea
+# datei — sunt istoricul de DUPA baseline". Nu sunt de DUPA: baseline-ul e un dump
+# REGENERAT al productiei (istoricul lui git arata 13 regenerari), deci le contine
+# deja pe toate. Urmata literal, indicatia de dinainte:
+#
+#   * pica in `migrations/2026-08-05-format-slug-magazin.sql`, pe o constrangere
+#     care exista deja — si atunci cine „forteaza mai departe" reaplica prin
+#     `create or replace` corpuri VECHI peste cele noi din snapshot
+#     (`blocheaza_escaladare_users_profile` apare in 4 migratii,
+#     `incheie_operatie_externa` in 3, `revendica_stoc_comanda` in 2);
+#   * iar cine se opreste cuminte la prima eroare ramane deja cu o baza DEGRADATA,
+#     fiindca tot ce e inaintea acelui fisier s-a aplicat cu succes — inclusiv
+#     `2026-08-04-blocare-escaladare-rol.sql`, care reda lui `authenticated` UPDATE
+#     pe `mfa_otp`, `mfa_otp_expires_at` si `mfa_email_enabled`, adica exact trei
+#     granturi pe care productia de azi le tine INCHISE.
+#
+# Deci: `migrations/` si `scripts/migrations/` sunt ISTORIC. Nu se reaplica la
+# restaurare.
+#
+# ⚠ MARCAJUL DE TAIERE NU E IN FISIER, si nici in numele migratiilor (numele merg
+# mai departe decat commiturile, iar cele doua dosare au conventii diferite). E
+# commit-ul ultimei regenerari:
+#
+#     git log -1 --format="%h %ad" --date=short -- migrations/000-schema-baseline.sql
+#
+# O migratie se aplica peste baseline daca si numai daca a fost ADAUGATA dupa acel
+# commit. Regula fiind ca baseline-ul se regenereaza odata cu fiecare schimbare de
+# schema, lista aceea ar trebui sa fie mereu goala — iar CI-ul chiar o verifica si
+# pica daca nu e. Toate detaliile in `migrations/CITESTE-INTAI.md`.
 #
 # ═══ CHEI ═══
 #

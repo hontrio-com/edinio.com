@@ -56,11 +56,17 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
     router.refresh();
   }
 
-  function advance(fn: () => Promise<{ success: true; status: string } | { error: string }>, okMsg: string) {
+  function advance(
+    fn: () => Promise<{ success: true; status: string; avertisment?: string } | { error: string }>,
+    okMsg: string,
+  ) {
     startTransition(async () => {
       const res = await fn();
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success(okMsg);
+      // Trendyol a preluat schimbarea, dar comanda din Edinio nu: nu e o eroare
+      // (o reincercare ar fi respinsa de Trendyol), dar nici un succes curat.
+      if (res.avertisment) toast.warning(res.avertisment);
+      else toast.success(okMsg);
       refresh();
     });
   }
@@ -89,7 +95,8 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
     startTransition(async () => {
       const res = await sendTrendyolTracking(businessId, orderId, { trackingNumber: awb.trim(), providerCode: curier });
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success("AWB trimis către Trendyol.");
+      if (res.avertisment) toast.warning(res.avertisment);
+      else toast.success("AWB trimis către Trendyol.");
       setAwb("");
       refresh();
     });

@@ -337,11 +337,31 @@ export async function cancelDpdShipmentAction(
   try {
     await cancelDpdShipment(config, orderData.dpd_shipment_id);
 
-    await supabase.from("orders").update({
+    const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       dpd_shipment_id: null,
       dpd_awb_number: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * Scrierea locala se VERIFICA, dar esecul ei NU devine eroare catre om.
+     *
+     * AWB-ul e deja ANULAT la curier. Un „Eroare la actualizare" l-ar trimite pe
+     * comerciant sa apese din nou, iar a doua anulare cade la curier cu „AWB
+     * inexistent" si arata ca un sistem stricat. Deci se raporteaza succes si se
+     * striga in `/admin/logs`: acolo ramane singura dovada ca o comanda mai poarta
+     * un numar de transport care nu mai exista.
+     *
+     * `.eq("business_id")` nu e decorativ: fara el, zero randuri ar putea insemna
+     * si „alta comanda", nu doar „scriere pierduta", si alarma ar fi ambigua.
+     */
+    if (eScriere || !randuri || randuri.length === 0) {
+      await logError({
+        action: "dpd.cancelShipment",
+        message: `Expeditia DPD ${orderData.dpd_shipment_id} a fost anulata la curier, dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, shipmentId: orderData.dpd_shipment_id, code: eScriere?.code },
+        businessId, severity: "critical",
+      });
+    }
 
     /*
      * Slotul din registru se elibereaza DUPA confirmarea anularii, ca la Woot.

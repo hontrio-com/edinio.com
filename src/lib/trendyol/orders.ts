@@ -97,7 +97,7 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
   const info = new Map<string, { productId: string | null; variantTitle: string | null }>();
   if (barcodes.length > 0) {
     const { data: vs, error: eVar } = await admin
-      .from("trendyol_variants").select("barcode, product_id, variant_title" as never).eq("business_id", ctx.businessId).in("barcode", barcodes);
+      .from("trendyol_variants").select("barcode, product_id, variant_title").eq("business_id", ctx.businessId).in("barcode", barcodes);
     /*
      * „Nu exista mapare" si „n-am putut CITI maparea" sunt doua lucruri diferite.
      *
@@ -122,9 +122,7 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
        */
       return "failed";
     }
-    // `as never` pe `select`: `variant_title` e adaugata de migratia
-    // `2026-08-19-stoc-marketplace` si nu apare inca in tipurile generate.
-    for (const v of (vs ?? []) as unknown as { barcode: string; product_id: string | null; variant_title: string | null }[]) {
+    for (const v of vs ?? []) {
       info.set(v.barcode, { productId: v.product_id, variantTitle: v.variant_title ?? null });
     }
   }
@@ -173,12 +171,30 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
      * statusul pe `cancelled` si LASA STOCUL CONSUMAT — tocmai pe sursa de comenzi
      * pe care n-o controlam si care anuleaza cel mai des.
      */
+    /*
+     * ⚠ REZULTATUL TRANZITIEI SE CITESTE.
+     *
+     * Era aruncat, si tocmai pe ramura pe care ajunge o ANULARE venita de la
+     * Trendyol (comanda exista deja de la ingestul initial). Cand tranzitia pica,
+     * `aplica_tranzitia_comenzii` nu scrie nimic: statusul ramane vechi si stocul
+     * ramane REZERVAT. Ingestul iesea totusi „updated", `ok` ramanea `true`, iar
+     * marcajul de timp sarea peste comanda — cu doar cinci minute de suprapunere,
+     * pierderea era definitiva de la rularea urmatoare.
+     *
+     * Rezultat: comerciantul pregateste si expediaza o comanda pe care Trendyol
+     * a anulat-o, iar marfa ramane blocata in `stoc_rezervat` — produsul pare
+     * epuizat pe toate celelalte canale.
+     */
+    let reiaTranzitia = false;
     if (ex.order_id) {
-      await tranzitieComandaMarketplace(admin, {
+      const t = await tranzitieComandaMarketplace(admin, {
         orderId: ex.order_id, businessId: ctx.businessId,
         status: edinioStatus, sursa: "trendyol",
         campuriSuplimentare: { tracking_number: tracking },
       });
+      // `definitiv` NU blocheaza: un singur pachet otravit ar ingheta fereastra
+      // magazinului pentru totdeauna. Vezi `RezultatTranzitie`.
+      if (t === "reincearca") reiaTranzitia = true;
     }
     /*
      * ⚠ RANDUL LATERAL EXISTA NU INSEAMNA CA INGESTUL S-A TERMINAT.
@@ -196,7 +212,13 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
       const r = await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
       if (r === "failed") return "failed";
     }
-    return "updated";
+    /*
+     * Iesirea pe esecul tranzitiei sta AICI, nu imediat dupa ea: un `return` mai
+     * sus ar sari peste consumul de stoc, care e tocmai reparatia unui consum
+     * picat anterior. S-ar inchide o gaura deschizand alta — o comanda cu
+     * `stoc_marketplace_la` NULL n-ar mai fi dusa la capat niciodata.
+     */
+    return reiaTranzitia ? "failed" : "updated";
   }
 
   const total = num(pkg.packageTotalPrice) || num(pkg.totalPrice) || edinioItems.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -238,9 +260,35 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
   let orderId: string;
   let isNew = true;
   if (error || !created) {
-    const { data: found } = await admin.from("orders").select("id")
+    const { data: found, error: eCautare } = await admin.from("orders").select("id")
       .eq("business_id", ctx.businessId).eq("order_number", `TY-${packageId}`).maybeSingle();
-    if (!found) return "skipped";
+    if (!found) {
+      /*
+       * ⚠ AICI SE INTORCEA „skipped", SI ERA ACEEASI GRESEALA REPARATA CU 120 DE
+       * LINII MAI SUS PENTRU MAPAREA CODURILOR DE BARE.
+       *
+       * `pollPackages` socoteste esec DOAR pe „failed"; „skipped" trece drept
+       * sincronizare curata, deci marcajul de timp avanseaza si pachetul se pierde
+       * DEFINITIV — fara niciun log, fiindca `error`-ul insertului era aruncat.
+       *
+       * Dar nici „failed" necazut nu merge oriunde: o problema PERMANENTA de date
+       * (o constrangere incalcata de ce ne trimite Trendyol) ar ingheta fereastra
+       * intregului magazin la nesfarsit. Deci se separa, ca peste tot in proiect,
+       * refuzul DOVEDIT de „nu stim": codurile de mai jos inseamna „randul asta nu
+       * va intra niciodata asa", si atunci se strica un singur pachet, zgomotos,
+       * in loc sa se opreasca tot.
+       */
+      const cod = error?.code ?? eCautare?.code;
+      const dateNepotrivite = cod === "23502" || cod === "23514" || cod === "22001" || cod === "22P02";
+      await logError({
+        action: "trendyol/orders",
+        message: `comanda nu s-a putut salva si nici regasi: ${error?.message ?? eCautare?.message ?? "motiv necunoscut"}`,
+        details: { packageId, code: cod, permanent: dateNepotrivite },
+        businessId: ctx.businessId,
+        severity: "critical",
+      });
+      return dateNepotrivite ? "skipped" : "failed";
+    }
     orderId = (found as { id: string }).id;
     isNew = false;
   } else {
@@ -295,30 +343,50 @@ export function fereastraComenzi(sinceMs: number | undefined, acum = Date.now())
 
 // Poll recent shipment packages for one business (cron safety net). `sinceMs` is a
 // unix-millisecond timestamp (Trendyol uses GMT+3 epoch millis).
-export async function pollPackages(admin: Db, ctx: TrendyolSyncContext, sinceMs?: number): Promise<{ ingested: number; ok: boolean }> {
+export async function pollPackages(
+  admin: Db, ctx: TrendyolSyncContext, sinceMs?: number,
+): Promise<{ ingested: number; ok: boolean; cursorMs?: number }> {
   let ingested = 0;
   let ok = true;
+  /*
+   * ═══ CURSORUL: ULTIMA COMANDA CHIAR DUSA LA CAPAT ═══
+   *
+   * `cursorMs` creste cat timp pachetele reusesc, SI SE OPRESTE la primul care
+   * pica. Apelantul poate astfel muta marcajul pana exact acolo: ce s-a citit nu
+   * se reciteste, iar ce n-a mers ramane in fereastra urmatoare. Fara el, singurele
+   * doua purtari posibile erau „sar peste tot ce n-am citit" (pierdere definitiva)
+   * si „nu misc nimic" (blocaj permanent, fiindca fereastra ramane aceeasi).
+   */
+  let cursorMs: number | undefined;
+  let cursorInghetat = false;
   const { startDate, endDate } = fereastraComenzi(sinceMs);
   /*
-   * ⚠ `ok` INSEAMNA „AM CITIT TOT", nu „n-a explodat nimic".
+   * ⚠ `ok` INSEAMNA „AM CITIT TOT SI TOTUL A INTRAT", nu „n-a explodat nimic".
    *
-   * Apelantul muta marcajul de timp inainte numai daca `ok`. Pana acum `ok`
-   * ramanea `true` in doua cazuri in care NU citisem tot:
+   * Apelantul sare marcajul la „acum" numai daca `ok`. Pe `!ok` foloseste
+   * `cursorMs`, adica muta marcajul exact pana la ultima comanda dusa la capat.
+   * Deci cele doua cazuri in care NU am citit tot — plafonul de pagini si un
+   * pachet care pica la ingest — nu mai inseamna nici pierdere, nici blocaj:
+   * inseamna „reiau de aici".
    *
-   *   * plafonul de 5 pagini: la `totalPages = 8` ieseam din bucla linistiti, iar
-   *     paginile 6-8 nu erau citite NICIODATA — dupa ce ieseau din fereastra
-   *     (pana la 14 zile), comenzile alea se pierdeau definitiv. La 50 de comenzi
-   *     pe zi, 14 zile inseamna 700, adica peste plafon;
-   *   * un pachet care pica la ingest intorcea `skipped`, care nu era socotit
-   *     esec.
-   *
-   * Plafonul nu se ridica la un numar mai mare — asta doar muta pragul. Se
-   * RAPORTEAZA ca n-am terminat, iar fereastra ramane pe loc pana terminam.
+   * Plafonul nu se ridica la un numar mai mare: asta doar muta pragul si
+   * inmulteste cererile catre un API cu limita de 50 la 10 secunde.
    */
   const MAX_PAGINI = 5;
   let maiSuntPagini = false;
   for (let page = 0; page < MAX_PAGINI; page++) {
-    const res = await getOrders(ctx.auth, { startDate, endDate, page, size: 100, orderByField: "PackageLastModifiedDate", orderByDirection: "DESC" });
+    /*
+     * ⚠ „ASC", NU „DESC", SI DE ASTA ATARNA TOT CURSORUL.
+     *
+     * Cu DESC citim cele mai NOI comenzi, iar la trunchiere raman necitite cele
+     * mai vechi — adica tocmai cele de langa marginea de JOS a ferestrei, care e
+     * chiar marcajul. Un cursor mutat „la cea mai veche citita" ar face fereastra
+     * urmatoare `[cea mai veche citita, acum]`: exact aceleasi 500 de comenzi noi,
+     * la infinit, iar restanta nu s-ar atinge niciodata. Reteta „muta marcajul la
+     * cea mai veche comanda citita" e corecta doar cu ASC, unde ce s-a citit e
+     * chiar prefixul cel mai vechi si marcajul are voie sa treaca peste el.
+     */
+    const res = await getOrders(ctx.auth, { startDate, endDate, page, size: 100, orderByField: "PackageLastModifiedDate", orderByDirection: "ASC" });
     if (isTrendyolError(res)) { ok = false; break; }
     const content = res.data?.content ?? [];
     if (content.length === 0) break;
@@ -328,38 +396,93 @@ export async function pollPackages(admin: Db, ctx: TrendyolSyncContext, sinceMs?
       // Un pachet nereusit opreste avansarea marcajului pentru TOATA fereastra:
       // altfel el singur s-ar pierde, iar restul ar parea in regula.
       if (r === "failed") ok = false;
+      /*
+       * Cursorul se opreste la primul pachet REINCERCABIL si nu mai porneste:
+       * altfel ar sari peste el exact ca marcajul de dinainte — regresia reparata
+       * deja o data pentru maparea codurilor de bare.
+       *
+       * ⚠ DOAR pe „failed", NU si pe „skipped". „skipped" inseamna un pachet care
+       * nu va intra NICIODATA asa cum e (date respinse de o constrangere, pachet
+       * fara id). Inghetat si pe el, cursorul ar ramane in urma acelui pachet la
+       * fiecare rulare — si cum trunchierea stinge acum `ok`, fereastra s-ar opri
+       * definitiv exact acolo. Un pachet otravit are voie sa strice un pachet, nu
+       * sincronizarea magazinului.
+       */
+      if (r === "failed") cursorInghetat = true;
+      if (!cursorInghetat) {
+        const t = Number(pkg.lastModifiedDate);
+        if (Number.isFinite(t) && t > 0) cursorMs = cursorMs == null ? t : Math.max(cursorMs, t);
+      }
     }
     const totalPages = Number(res.data?.totalPages ?? 1);
     if (page + 1 >= totalPages) break;
     if (page + 1 >= MAX_PAGINI) maiSuntPagini = totalPages > MAX_PAGINI;
   }
+
+  /*
+   * ⚠ TRUNCHIEREA TREBUIE SA STINGA `ok`. ALTFEL CURSORUL E COD MORT.
+   *
+   * Prima forma a acestei reparatii lasa `ok = true` la trunchiere (ca inainte) si
+   * doar loga. Dar apelantul citeste `cursorMs` NUMAI pe ramura `else` a lui
+   * `if (r.ok)` — deci cursorul nu se folosea niciodata exact in cazul pentru care
+   * a fost scris, iar marcajul sarea tot la „acum". Cu sortarea intoarsa pe ASC,
+   * asta ar fi mutat pierderea de pe comenzile VECHI pe cele NOI: mai rau decat
+   * inainte.
+   *
+   * Acum `ok = false` NU mai inseamna blocaj, fiindca exista cursor: apelantul
+   * muta marcajul pana la ultima comanda dusa la capat si continua de acolo.
+   * Blocajul permanent de care se temea comentariul de mai jos aparea doar cat
+   * timp singura alegere era „acum" sau „nimic".
+   */
+  if (maiSuntPagini) ok = false;
+  /*
+   * ⚠ CURSORUL TREBUIE SA CREASCA. Daca nu, e blocaj, nu progres.
+   *
+   * Cazul: toate pachetele citite au aceeasi milisecunda de modificare, deci
+   * `cursorMs` iese egal cu marginea de jos a ferestrei si urmatoarea rulare cere
+   * exact aceleasi randuri. Absurd de improbabil la 100 pe pagina, dar daca s-ar
+   * intampla ar fi tacut — asa ca se refuza cursorul si se striga.
+   */
+  if (cursorMs != null && sinceMs != null && cursorMs <= sinceMs) {
+    await logError({
+      action: "trendyol/orders",
+      message: "Cursorul de sincronizare nu a avansat peste marcajul curent; fereastra ramane pe loc.",
+      details: { cursorMs, sinceMs }, businessId: ctx.businessId, severity: "critical",
+    });
+    cursorMs = undefined;
+  }
+
   if (maiSuntPagini) {
     /*
-     * ⚠ AICI NU SE BLOCHEAZA MARCAJUL, SI E O ALEGERE, NU O SCAPARE.
+     * ⚠ DE CE `ok = false` E ACUM CORECT, DESI INAINTE ERA O CAPCANA.
      *
-     * Prima mea forma punea `ok = false`. Suna corect — „nu avansa peste ce n-ai
-     * citit" — dar produce un BLOCAJ PERMANENT: fereastra ramane aceeasi, deci la
-     * rularea urmatoare citim exact aceleasi cinci pagini, gasim iar surplus, si
-     * blocam iar. Sincronizarea s-ar opri cu totul, la nesfarsit. Am fi schimbat
-     * „poate pierdem comenzi vechi" pe „sigur nu mai sincronizam nimic".
+     * Prima incercare, demult, punea `ok = false` si ATAT. Suna corect — „nu avansa
+     * peste ce n-ai citit" — dar producea BLOCAJ PERMANENT: fereastra ramanea
+     * aceeasi, deci la minutul urmator se citeau exact aceleasi cinci pagini, se
+     * gasea iar surplus, si se bloca iar. Sincronizarea s-ar fi oprit cu totul.
      *
-     * Raspunsul adevarat nu e nici plafon mai mare (doar muta pragul), ci un
-     * CURSOR: marcajul sa se mute la cea mai veche comanda CHIAR CITITA, nu la
-     * „acum" — atunci fereastra urmatoare le prinde pe cele ramase, si progresul e
-     * garantat. Cere schimbarea locului unde se scrie marcajul, deci se face
-     * separat.
+     * Nici plafonul mai mare nu repara nimic — doar muta pragul, si inmulteste
+     * cererile catre un API cu limita de 50 la 10 secunde.
      *
-     * Pana atunci, cel putin se VEDE: `critical` in `/admin/logs`, nu un
-     * `console.warn` pe care nu-l citeste nimeni. Masurat azi: 12 comenzi Trendyol
-     * in toata baza, deci pragul de 500 e departe.
+     * Diferenta de acum e CURSORUL: `ok = false` nu mai inseamna „nu misca nimic",
+     * ci „nu sari la acum — muta marcajul exact pana unde am ajuns". Cu ASC,
+     * paginile citite sunt chiar cele mai vechi, deci marcajul poate trece peste
+     * ele fara sa sara nimic, si fereastra urmatoare continua de acolo. Progresul e
+     * garantat: un magazin cu restanta o recupereaza in transe de cate 500 pe minut.
+     *
+     * Cazul in care NU se poate construi cursorul (lipseste `lastModifiedDate`)
+     * ramane singurul care blocheaza — si atunci trebuie sa strige, fiindca acolo
+     * chiar nu exista drum bun.
      */
     await logError({
       action: "trendyol/orders",
-      message: `Fereastra de sincronizare are peste ${MAX_PAGINI} pagini (${MAX_PAGINI * 100} comenzi): cele mai vechi NU au fost citite. Se cere trecerea pe cursor.`,
-      businessId: ctx.businessId, severity: "critical",
+      message: cursorMs != null
+        ? `Fereastra de sincronizare are peste ${MAX_PAGINI} pagini (${MAX_PAGINI * 100} comenzi): restul se preia la rularile urmatoare, de la cursor.`
+        : `Fereastra de sincronizare are peste ${MAX_PAGINI} pagini (${MAX_PAGINI * 100} comenzi) SI nu s-a putut construi un cursor (lipseste lastModifiedDate): fereastra ramane pe loc si sincronizarea se OPRESTE pana se rezolva.`,
+      details: { cursorMs }, businessId: ctx.businessId, severity: "critical",
     });
   }
-  return { ingested, ok };
+  return { ingested, ok, cursorMs };
 }
 
 // Best-effort extraction of packages from a webhook payload (same shape as the

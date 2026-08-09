@@ -361,6 +361,7 @@ export type Database = {
           size_id: number | null
           sku: string
           updated_at: string
+          variant_title: string | null
         }
         Insert: {
           ay_status?: string | null
@@ -379,6 +380,7 @@ export type Database = {
           size_id?: number | null
           sku: string
           updated_at?: string
+          variant_title?: string | null
         }
         Update: {
           ay_status?: string | null
@@ -397,6 +399,7 @@ export type Database = {
           size_id?: number | null
           sku?: string
           updated_at?: string
+          variant_title?: string | null
         }
         Relationships: [
           {
@@ -1707,6 +1710,9 @@ export type Database = {
           smartbill_storno_number: string | null
           smartbill_storno_series: string | null
           status: string
+          stoc_eliberat_la: string | null
+          stoc_marketplace_la: string | null
+          stoc_rezervat: Json | null
           stripe_session_id: string | null
           subtotal: number
           total: number
@@ -1782,6 +1788,9 @@ export type Database = {
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string
+          stoc_eliberat_la?: string | null
+          stoc_marketplace_la?: string | null
+          stoc_rezervat?: Json | null
           stripe_session_id?: string | null
           subtotal: number
           total: number
@@ -1857,6 +1866,9 @@ export type Database = {
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
           status?: string
+          stoc_eliberat_la?: string | null
+          stoc_marketplace_la?: string | null
+          stoc_rezervat?: Json | null
           stripe_session_id?: string | null
           subtotal?: number
           total?: number
@@ -3024,6 +3036,7 @@ export type Database = {
           stock_code: string | null
           ty_status: string | null
           updated_at: string
+          variant_title: string | null
           vat_rate: number | null
         }
         Insert: {
@@ -3041,6 +3054,7 @@ export type Database = {
           stock_code?: string | null
           ty_status?: string | null
           updated_at?: string
+          variant_title?: string | null
           vat_rate?: number | null
         }
         Update: {
@@ -3058,6 +3072,7 @@ export type Database = {
           stock_code?: string | null
           ty_status?: string | null
           updated_at?: string
+          variant_title?: string | null
           vat_rate?: number | null
         }
         Relationships: [

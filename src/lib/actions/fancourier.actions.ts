@@ -292,14 +292,29 @@ export async function cancelFanCourierPickupAction(
   try {
     await deleteFanCourierPickupOrder(config, config.last_pickup_id);
 
-    await supabase.from("store_settings").update({
+    const { data: randuriRidicare, error: eRidicare } = await supabase.from("store_settings").update({
       fan_courier_config: {
         ...config,
         last_pickup_date: null,
         last_pickup_id: null,
       } as unknown as import("@/types/database.types").Json,
       updated_at: new Date().toISOString(),
-    }).eq("business_id", businessId);
+    }).eq("business_id", businessId).select("business_id");
+
+    /*
+     * Acelasi tipar ca la AWB-uri: ridicarea e deja stearsa la FAN, deci esecul
+     * scrierii nu se intoarce ca eroare — dar nici nu are voie sa treaca tacut.
+     * Fara semnal, configul ar pastra un `last_pickup_id` mort, iar interfata i-ar
+     * arata comerciantului o ridicare programata care nu mai exista.
+     */
+    if (eRidicare || !randuriRidicare || randuriRidicare.length === 0) {
+      await logError({
+        action: "fancourier.deletePickup",
+        message: `Ridicarea FAN ${config.last_pickup_id} a fost stearsa la curier, dar configul NU s-a actualizat: ${eRidicare?.message ?? "niciun rand modificat"}`,
+        details: { businessId, pickupId: config.last_pickup_id, code: eRidicare?.code },
+        businessId, severity: "critical",
+      });
+    }
 
     /*
      * Fara eliberare, reprogramarea pe ACEEASI zi ar fi primit `deja` si ar fi scris
@@ -341,10 +356,30 @@ export async function deleteFanCourierAwbAction(
   try {
     await deleteFanCourierAwb(config, orderData.fan_courier_awb_number);
 
-    await supabase.from("orders").update({
+    const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       fan_courier_awb_number: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * Scrierea locala se VERIFICA, dar esecul ei NU devine eroare catre om.
+     *
+     * AWB-ul e deja ANULAT la curier. Un „Eroare la actualizare" l-ar trimite pe
+     * comerciant sa apese din nou, iar a doua anulare cade la curier cu „AWB
+     * inexistent" si arata ca un sistem stricat. Deci se raporteaza succes si se
+     * striga in `/admin/logs`: acolo ramane singura dovada ca o comanda mai poarta
+     * un numar de transport care nu mai exista.
+     *
+     * `.eq("business_id")` nu e decorativ: fara el, zero randuri ar putea insemna
+     * si „alta comanda", nu doar „scriere pierduta", si alarma ar fi ambigua.
+     */
+    if (eScriere || !randuri || randuri.length === 0) {
+      await logError({
+        action: "fancourier.deleteAwb",
+        message: `AWB FAN Courier ${orderData.fan_courier_awb_number} a fost anulat la curier, dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, awb: orderData.fan_courier_awb_number, code: eScriere?.code },
+        businessId, severity: "critical",
+      });
+    }
 
     // Fara eliberare, emiterea urmatoare ar adopta chiar AWB-ul sters.
     const eliberat = await marcheazaAnulata(createAdminClient(), businessId, cheieOperatie("awb", "fancourier", orderId));

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
@@ -55,20 +56,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Stripe not connected for this business" }, { status: 400 });
   }
 
-  /*
-   * Plafon DURABIL pe COMANDA, nu pe magazin: o comanda reala are nevoie de
-   * cateva reincercari de plata, nu de mii, iar o cheie pe businessId ar fi
-   * lasat un atacator sa blocheze plata pentru toti ceilalti cumparatori ai
-   * magazinului. Se consuma abia aici, dupa ce stim ca `orderId` chiar exista,
-   * ca sa nu se umple tabela de limite cu chei inventate.
-   */
-  if (!(await consumaLimita(`pay-start:${orderId}`, 5, 3600)).permis) {
-    return NextResponse.json(
-      { error: "Ai incercat de prea multe ori sa platesti aceasta comanda. Incearca din nou peste o ora sau scrie magazinului." },
-      { status: 429 },
-    );
-  }
-
   const asteptat = Math.round(Number(order.total) * 100);
 
   /*
@@ -79,16 +66,68 @@ export async function POST(request: NextRequest) {
    */
   const sesiuneVeche = order.stripe_session_id as string | null;
   if (sesiuneVeche) {
+    let veche: Stripe.Checkout.Session | null = null;
     try {
       // Al doilea argument ramane gol: tipurile SDK-ului separa parametrii de
       // optiunile cererii, iar sesiunea traieste pe contul conectat.
-      const veche = await stripe.checkout.sessions.retrieve(sesiuneVeche, {}, { stripeAccount: stripeConfig.account_id });
+      veche = await stripe.checkout.sessions.retrieve(sesiuneVeche, {}, { stripeAccount: stripeConfig.account_id });
+    } catch (e) {
+      /*
+       * ⚠ O CITIRE PICATA NU INSEAMNA „SESIUNEA NU MAI EXISTA".
+       *
+       * Aici se cadea direct pe `sessions.create`, deci un timeout sau un 5xx de
+       * la Stripe nastea o A DOUA sesiune deschisa, pe aceeasi suma, in timp ce
+       * prima ramanea platibila 24 de ore. Daca clientul le plateste pe amandoua,
+       * al doilea webhook cade pe `{ fel: "deja-platita" }` — iesire TACUTA, fara
+       * log si fara marcaj — deci clientul e taxat de doua ori si nimic din
+       * aplicatie nu stie. E o paguba a CLIENTULUI, si nu cere nicio editare de
+       * comanda ca s-o produca.
+       *
+       * Numai un refuz DOVEDIT („nu exista", `resource_missing`) permite crearea
+       * uneia noi. Orice altceva inseamna „nu stim", si atunci nu se creeaza
+       * nimic: clientul reincearca peste cateva secunde, fara sesiuni orfane.
+       */
+      const err = e as { code?: string; statusCode?: number };
+      const dovedit = err?.code === "resource_missing" || err?.statusCode === 404;
+      if (!dovedit) {
+        await logError({
+          action: "stripe/order-checkout",
+          message: `sesiunea veche nu a putut fi citita, iar refuzul NU e dovedit: ${e instanceof Error ? e.message : String(e)}`,
+          details: { orderId, sesiuneVeche },
+          severity: "critical",
+        });
+        return NextResponse.json(
+          { error: "Nu am putut pregati plata. Reincearca peste cateva momente." },
+          { status: 503 },
+        );
+      }
+      console.warn("[stripe/order-checkout] sesiunea veche nu mai exista:", { orderId, code: err?.code });
+    }
+
+    if (veche) {
       if (veche.status === "open" && veche.url && veche.amount_total === asteptat) {
         return NextResponse.json({ url: veche.url });
       }
-    } catch (e) {
-      // Sesiunea nu mai poate fi citita (stearsa, alt cont conectat) — cream una noua.
-      console.warn("[stripe/order-checkout] sesiunea veche nu a putut fi citita:", { orderId, error: e });
+      /*
+       * Sesiune inca DESCHISA, dar pe alta suma: comanda a fost editata intre timp.
+       * Refolosirea o refuza deja (conditia de mai sus), dar pana acum sesiunea
+       * veche ramanea platibila 24 de ore — deci clientul putea plati vechiul total
+       * si comanda se marca platita pe suma noua. Se inchide la Stripe, nu doar la
+       * noi. Esecul inchiderii nu opreste crearea celei noi: cel mai rau caz ramane
+       * cel de azi, si e semnalat.
+       */
+      if (veche.status === "open") {
+        try {
+          await stripe.checkout.sessions.expire(sesiuneVeche, {}, { stripeAccount: stripeConfig.account_id });
+        } catch (e) {
+          await logError({
+            action: "stripe/order-checkout",
+            message: `sesiunea veche pe alta suma nu s-a putut expira: ${e instanceof Error ? e.message : String(e)}`,
+            details: { orderId, sesiuneVeche, sumaVeche: veche.amount_total, sumaNoua: asteptat },
+            severity: "critical",
+          });
+        }
+      }
     }
   }
 
@@ -99,6 +138,32 @@ export async function POST(request: NextRequest) {
   // second time into `/{slug}/{slug}/confirm` → 404. The proxy 307-redirects the
   // platform `/{slug}/...` path to the custom domain when one is configured.
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com";
+
+  /*
+   * ⚠ LIMITA DURABILA SE CONSUMA ABIA AICI, NU LA INTRAREA IN RUTA.
+   *
+   * E un plafon pe COMANDA, nu pe magazin: o comanda reala are nevoie de cateva
+   * reincercari de plata, nu de mii, iar o cheie pe `businessId` ar fi lasat un
+   * atacator sa blocheze plata pentru toti ceilalti cumparatori ai magazinului.
+   *
+   * Ea exista ca sa opreasca deschiderea de sesiuni NOI pe contul conectat al
+   * comerciantului, deci locul ei e chiar inaintea `sessions.create`. Consumata la
+   * intrare, se cheltuia si pe caile care NU creeaza nimic: refolosirea unei
+   * sesiuni deschise (perfect legitima, poate fi facuta de zeci de ori cu un
+   * refresh) si — mai rau — noul 503 de cand citirea sesiunii vechi pica fara
+   * dovada. Cinci hopuri de retea si clientul ramanea blocat o ORA pe o comanda
+   * pe care voia s-o plateasca.
+   *
+   * Mutata aici, apara exact ce trebuie sa apere si nu mai pedepseste pe nimeni
+   * pentru esecurile noastre. Se consuma dupa ce stim ca `orderId` chiar exista,
+   * ca sa nu se umple tabela de limite cu chei inventate.
+   */
+  if (!(await consumaLimita(`pay-start:${orderId}`, 5, 3600)).permis) {
+    return NextResponse.json(
+      { error: "Ai incercat de prea multe ori sa platesti aceasta comanda. Incearca din nou peste o ora sau scrie magazinului." },
+      { status: 429 },
+    );
+  }
 
   const session = await stripe.checkout.sessions.create(
     {

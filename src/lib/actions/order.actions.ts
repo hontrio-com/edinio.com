@@ -36,6 +36,7 @@ import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdic
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
+import { inchideSesiuneaStripeVeche } from "@/lib/stripe-sesiune";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
@@ -2034,7 +2035,7 @@ export async function updateOrderDetails(orderId: string, data: {
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number")
+    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -2427,6 +2428,43 @@ export async function updateOrderDetails(orderId: string, data: {
     logError({ action: "updateOrderDetails.stocRezervat", message: "Comanda e dinainte de inregistrarea stocului rezervat; liniile adaugate NU se vor da inapoi automat la anulare.", details: { orderId }, businessId: order.business_id, userId: user.id, severity: "warning" });
   }
 
+  /*
+   * ⚠ SUMA S-A SCHIMBAT: SESIUNEA DE PLATA VECHE NU MAI ARE VOIE SA INCASEZE.
+   *
+   * O sesiune Stripe Checkout ramane platibila 24 de ore de la creare. Fara
+   * randurile astea, clientul plecat la plata pe 100 de lei putea plati exact 100
+   * dupa ce comanda ajunsese la 150 — si comanda de 150 se marca PLATITA.
+   *
+   * Se face DUPA scrierea reusita: invers, o editare picata l-ar fi lasat pe
+   * client fara sesiune valida pentru o comanda nemodificata. Si numai cand suma
+   * chiar s-a schimbat — o editare de adresa nu are de ce sa strice o plata in
+   * curs.
+   */
+  if (order.stripe_session_id && newTotal !== Number(order.total)) {
+    /*
+     * ⚠ INVELIT IN `try`, si NU din prudenta generica.
+     *
+     * Scrierea atomica de mai sus a REUSIT deja. Orice aruncare de aici (Stripe
+     * indisponibil, cheie lipsa) ar iesi din actiune ca esec, comerciantul ar
+     * vedea „Eroare la salvare" pentru o editare care CHIAR a intrat in baza, si
+     * ar apasa din nou — adaugand produsele a doua oara. Inchiderea sesiunii e
+     * curatenie de dupa; nu are voie sa schimbe verdictul editarii.
+     */
+    try {
+      await inchideSesiuneaStripeVeche(admin, {
+        businessId: order.business_id,
+        orderId,
+        sessionId: order.stripe_session_id as string,
+      });
+    } catch (e) {
+      await logError({
+        action: "updateOrderDetails.stripeSesiune",
+        message: `Comanda a fost editata, dar inchiderea sesiunii Stripe a aruncat: ${e instanceof Error ? e.message : String(e)}`,
+        details: { orderId, sessionId: order.stripe_session_id },
+        businessId: order.business_id, userId: user.id, severity: "critical",
+      });
+    }
+  }
 
   // Google Merchant availability sync for the added items (mirrors placeOrder).
   // Stocul de produs SI cel de marime sunt deja scazute de revendicare.

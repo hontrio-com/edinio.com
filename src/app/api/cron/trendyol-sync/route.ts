@@ -8,6 +8,7 @@ import {
   type TrendyolQueueItem, type TrendyolSyncContext,
 } from "@/lib/trendyol/sync";
 import { pollPackages } from "@/lib/trendyol/orders";
+import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import type { TrendyolConfig } from "@/lib/trendyol/types";
 
 type Admin = SupabaseClient<Database>;
@@ -111,9 +112,12 @@ export async function GET(req: NextRequest) {
   // ── 2) Poll open batches ─────────────────────────────────────────────────────────
   const { data: batchBiz } = await admin
     .from("trendyol_batches").select("business_id")
-    .in("status", ["pending", "processing", "retry"]).limit(200);
-  const pollSet = new Set<string>((batchBiz ?? []).map((r) => r.business_id));
-  for (const businessId of [...pollSet].slice(0, MAX_BIZ)) {
+    .in("status", ["pending", "processing", "retry"])
+    // `order` + rotatie in loc de `slice`: fara ele, primele magazine ies mereu
+    // primele si cele de la coada nu ajung niciodata la rand.
+    .order("business_id", { ascending: true }).limit(1000);
+  const pollSet = alegeInRotatie([...new Set((batchBiz ?? []).map((r) => r.business_id))], MAX_BIZ);
+  for (const businessId of pollSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
     await pollOpenBatches(admin, ctx);
@@ -124,9 +128,10 @@ export async function GET(req: NextRequest) {
   // ── 3) Reconcile approval for stores with listings awaiting approval ─────────────
   const { data: pendingBiz } = await admin
     .from("trendyol_listings").select("business_id")
-    .in("status", PENDING_STATUSES).limit(300);
-  const reconcileSet = new Set<string>((pendingBiz ?? []).map((r) => r.business_id));
-  for (const businessId of [...reconcileSet].slice(0, RECONCILE_BIZ)) {
+    .in("status", PENDING_STATUSES)
+    .order("business_id", { ascending: true }).limit(1000);
+  const reconcileSet = alegeInRotatie([...new Set((pendingBiz ?? []).map((r) => r.business_id))], RECONCILE_BIZ);
+  for (const businessId of reconcileSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
     await reconcileStatuses(admin, ctx);
@@ -135,11 +140,20 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 4) Poll recent orders (safety net for missed webhooks) ──────────────────────
-  const { data: sellerBiz } = await admin
-    .from("trendyol_listings").select("business_id").limit(500);
-  const orderSet = new Set<string>((sellerBiz ?? []).map((r) => r.business_id));
+  /*
+   * ⚠ POOL-UL VINE DIN `store_settings`, NU DIN TABELA DE LISTARI.
+   *
+   * Era `trendyol_listings ... .limit(500)`, deduplicat DUPA aceea: un singur
+   * vanzator cu 500 de produse umplea singur fereastra, si atunci NICIUN alt
+   * magazin nu-si mai lua comenzile — nu incet, ci deloc. Trunchierea se facea
+   * inaintea deduplicarii, deci rotatia n-ar fi reparat-o. Vezi `magazineConectate`.
+   */
+  const { ids: sellerIds, error: eSelleri } = await magazineConectate(admin, "trendyol_config");
+  if (eSelleri) {
+    await logError({ action: "trendyol-sync", message: `magazinele conectate nu s-au putut citi: ${eSelleri}`, severity: "critical" });
+  }
   let ingested = 0;
-  for (const businessId of [...orderSet].slice(0, ORDERS_BIZ)) {
+  for (const businessId of alegeInRotatie(sellerIds, ORDERS_BIZ)) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
     const parsed = ctx.config.orders_synced_at ? Date.parse(ctx.config.orders_synced_at) : NaN;
@@ -147,18 +161,49 @@ export async function GET(req: NextRequest) {
     const runStart = Date.now();
     const r = await pollPackages(admin, ctx, sinceMs);
     ingested += r.ingested;
-    // Advance the watermark only on a clean poll (avoid skipping a failed window).
-    if (r.ok) await patchConfig(admin, businessId, { orders_synced_at: new Date(runStart).toISOString() });
+    /*
+     * Trei purtari, nu doua:
+     *   * citire completa si curata -> marcajul trece la „acum";
+     *   * citire partiala (trunchiere sau un pachet cazut) DAR cu cursor -> marcajul
+     *     trece exact pana la ultima comanda dusa la capat, deci progresul e
+     *     garantat si nimic nu se sare;
+     *   * fara cursor -> nu se misca nimic, ca sa nu se piarda fereastra.
+     */
+    if (r.ok) {
+      await patchConfig(admin, businessId, { orders_synced_at: new Date(runStart).toISOString() });
+    } else if (r.cursorMs != null) {
+      /*
+       * ⚠ CURSORUL SE SCRIE COMPENSAT CU SUPRAPUNEREA, altfel poate sta pe loc.
+       *
+       * La citire se scade `ORDERS_OVERLAP_MS` din marcaj (randul de mai sus), ca
+       * sa nu se piarda nimic in cusatura dintre doua rulari. Dar cursorul e
+       * EXACT: stim precis pana unde am ajuns. Scris nemodificat, fereastra
+       * urmatoare ar porni cu cinci minute inaintea lui — iar daca cele 500 de
+       * comenzi citite incap in mai putin de cinci minute (adica exact rafala care
+       * produce trunchierea), fereastra urmatoare ar fi ACEEASI si s-ar reciti la
+       * nesfarsit aceleasi pagini.
+       *
+       * Adunand suprapunerea aici, scaderea de la citire o anuleaza si fereastra
+       * urmatoare porneste fix de la ultima comanda dusa la capat: progres
+       * garantat, fara sa se sara nimic.
+       */
+      await patchConfig(admin, businessId, {
+        orders_synced_at: new Date(r.cursorMs + ORDERS_OVERLAP_MS).toISOString(),
+      });
+    }
     await pause(PACE_MS);
   }
 
   // ── 5) Reverse inventory reconciliation (drift safety net; every ~15 min) ────────
   let corrected = 0;
   if (new Date().getMinutes() % 15 === 0) {
-    const { data: invBiz } = await admin
-      .from("trendyol_listings").select("business_id").in("status", ["approved", "active"]).limit(500);
-    const invSet = new Set<string>((invBiz ?? []).map((r) => r.business_id));
-    for (const businessId of [...invSet].slice(0, INVENTORY_BIZ)) {
+    /*
+     * `pas = 15`: trecerea asta ruleaza doar la sferturi de ora, deci intre doua
+     * executii EFECTIVE indicele de tura creste cu 15. Lasat pe 1, `start` ar sari
+     * cu `15 * INVENTORY_BIZ` si ar reveni la aceleasi magazine la nesfarsit —
+     * exact infometarea pe care rotatia trebuia s-o inlature.
+     */
+    for (const businessId of alegeInRotatie(sellerIds, INVENTORY_BIZ, 15)) {
       const ctx = await ctxFor(businessId);
       if (!ctx) continue;
       const r = await reconcileInventory(admin, ctx);

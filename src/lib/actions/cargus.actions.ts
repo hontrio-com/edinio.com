@@ -273,11 +273,31 @@ export async function deleteCargusAwbAction(
   try {
     await deleteCargusAwb(config, orderData.cargus_awb_number);
 
-    await supabase.from("orders").update({
+    const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       cargus_awb_number: null,
       cargus_service_name: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * Scrierea locala se VERIFICA, dar esecul ei NU devine eroare catre om.
+     *
+     * AWB-ul e deja ANULAT la curier. Un „Eroare la actualizare" l-ar trimite pe
+     * comerciant sa apese din nou, iar a doua anulare cade la curier cu „AWB
+     * inexistent" si arata ca un sistem stricat. Deci se raporteaza succes si se
+     * striga in `/admin/logs`: acolo ramane singura dovada ca o comanda mai poarta
+     * un numar de transport care nu mai exista.
+     *
+     * `.eq("business_id")` nu e decorativ: fara el, zero randuri ar putea insemna
+     * si „alta comanda", nu doar „scriere pierduta", si alarma ar fi ambigua.
+     */
+    if (eScriere || !randuri || randuri.length === 0) {
+      await logError({
+        action: "cargus.deleteAwb",
+        message: `AWB Cargus ${orderData.cargus_awb_number} a fost anulat la curier, dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, awb: orderData.cargus_awb_number, code: eScriere?.code },
+        businessId, severity: "critical",
+      });
+    }
 
     // Slotul se elibereaza dupa confirmarea anularii: altfel emiterea urmatoare ar
     // „adopta" chiar AWB-ul sters si l-ar scrie inapoi pe comanda.

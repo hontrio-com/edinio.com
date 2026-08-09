@@ -6,6 +6,7 @@ import { poateAvansaLaConfirmat } from "@/lib/order-progress";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
+import { logError } from "@/lib/error-logger";
 
 export type StripeFinalizeResult =
   | { status: "paid" }
@@ -49,15 +50,43 @@ export async function finalizeStripeOrder(
     return { status: "failed", error: "Plata nu a fost finalizata la Stripe." };
   }
 
-  // Suma incasata se compara cu totalul comenzii, dar o nepotrivire NU opreste
-  // marcarea. Sesiunea e creata de noi, id-ul ei e salvat pe comanda si e citita
-  // de pe contul conectat al comerciantului — deci nu exista cale prin care
-  // clientul sa o falsifice. Singura sursa reala de diferenta e editarea
-  // comenzii dupa initierea platii, iar acolo raspunsul corect e „banii au
-  // intrat, semnaleaza diferenta", nu „lasa comanda neplatita".
+  /*
+   * ═══ NEPOTRIVIREA DE SUMA: SE MARCHEAZA PLATIT, DAR NU IN TACERE ═══
+   *
+   * Marcarea NU se opreste, si asta ramane decizia corecta: sesiunea e creata de
+   * noi, id-ul ei e salvat pe comanda si e citita de pe contul conectat al
+   * comerciantului, deci clientul n-are cum s-o falsifice — iar banii SUNT deja
+   * capturati la Stripe. Un refuz aici ar lasa comanda `unpaid` cu banii incasati,
+   * adica exact incidentul din 29.07 pentru care s-au scris `/api/stripe/return`
+   * si cronul de reconciliere. Mai rau: cronul polleaza `stripe_session_id`-ul
+   * CURENT, iar a doua lui trecere filtreaza `.is("stripe_session_id", null)` —
+   * o comanda cu sesiune noua n-ar mai intra in niciuna, deci plata ar deveni
+   * definitiv nerecuperabila automat.
+   *
+   * Ce era gresit: `console.warn` nu ajunge nicaieri. Diferenta e o problema de
+   * BANI si trebuie sa apara in `/admin/logs`, cu `business_id`, ca sa poata fi
+   * reconciliata de un om. Sursa ei reala e editarea comenzii dupa initierea
+   * platii — inchisa acum si la sursa, in `order-checkout` si in `updateOrder`.
+   *
+   * Doua precautii, altfel alarma devine zgomot si nimeni n-o mai citeste:
+   *   * `no_payment_required` are `amount_total` 0 prin definitie (linia de mai
+   *     sus il accepta explicit), deci se sare peste verificare;
+   *   * toleranta de UN BAN, ca la Netopia: `Math.round(total * 100)` si
+   *     rotunjirea Stripe pot diferi cu un ban pe preturi cu TVA inclus.
+   */
   const asteptat = Math.round((Number(order.total) || 0) * 100);
-  if (typeof session.amount_total === "number" && session.amount_total !== asteptat) {
-    console.warn("[stripe] amount mismatch:", { orderId: order.id, asteptat, incasat: session.amount_total });
+  if (
+    session.payment_status !== "no_payment_required" &&
+    typeof session.amount_total === "number" &&
+    Math.abs(session.amount_total - asteptat) > 1
+  ) {
+    await logError({
+      action: "stripe.sumaNepotrivita",
+      message: `Sesiunea Stripe a incasat ${session.amount_total} bani, comanda are ${asteptat}. Comanda a fost marcata platita; diferenta cere verificare.`,
+      details: { orderId: order.id, sessionId, asteptat, incasat: session.amount_total },
+      businessId: order.businessId,
+      severity: "critical",
+    });
   }
 
   // Aceeasi regula ca la toate celelalte procesatoare: vezi `finalizare-plata.ts`.

@@ -169,7 +169,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   const info = new Map<string, { productId: string | null; name: string; variantTitle: string | null }>();
   if (skus.length > 0) {
     const { data: vs, error: eVar } = await admin
-      .from("aboutyou_variants").select("sku, product_id, variant_title" as never).eq("business_id", ctx.businessId).in("sku", skus);
+      .from("aboutyou_variants").select("sku, product_id, variant_title").eq("business_id", ctx.businessId).in("sku", skus);
     /*
      * „Nu exista mapare" si „n-am putut CITI maparea" sunt doua lucruri diferite.
      * Fara verificare, o citire picata dadea harta goala -> `product_id` null ->
@@ -192,9 +192,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
        */
       throw new Error(`maparea SKU nu s-a putut citi: ${eVar.message}`);
     }
-    // `as never` pe select: coloana vine din migratia `2026-08-19-stoc-marketplace`
-    // si nu apare inca in tipurile generate.
-    const randuri = (vs ?? []) as unknown as { sku: string; product_id: string | null; variant_title: string | null }[];
+    const randuri = vs ?? [];
     const prodIds = [...new Set(randuri.map((v) => v.product_id).filter(Boolean) as string[])];
     const prodName = new Map<string, string>();
     if (prodIds.length > 0) {
@@ -259,11 +257,29 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      * Starile terminale trec prin motorul comun: o anulare sau un retur trebuie sa
      * ELIBEREZE stocul, nu doar sa schimbe eticheta. Vezi `tranzitie-marketplace`.
      */
+    /*
+     * ⚠ REZULTATUL TRANZITIEI SE CITESTE — vezi geamana din `trendyol/orders.ts`.
+     *
+     * O tranzitie picata lasa statusul vechi si stocul REZERVAT, dar ingestul
+     * iesea „updated" si `pollOrders` muta fereastra. Aici nu exista suprapunere
+     * deloc (`orders_synced_at` se scrie direct la „acum"), deci pierderea era
+     * definitiva de la rularea urmatoare.
+     *
+     * Semnalul se da prin ARUNCARE, nu prin valoare de retur: acesta e protocolul
+     * fisierului (vezi `consumaStoculComenzii`), iar `pollOrders` prinde exceptiile
+     * si pune `ok = false`. `ingestOrder` nici n-are „failed" in semnatura, si un
+     * `return` largit ar trece nevazut prin `pollOrders`, care testeaza doar
+     * `=== "created"`.
+     */
+    let reiaTranzitia = false;
     if (ex.order_id && (order.status === "cancelled" || order.status === "returned")) {
-      await tranzitieComandaMarketplace(admin, {
+      const t = await tranzitieComandaMarketplace(admin, {
         orderId: ex.order_id, businessId: ctx.businessId,
         status: edinioStatusFor(order.status), sursa: "aboutyou",
       });
+      // `definitiv` NU blocheaza fereastra: ar ingheta magazinul intreg pentru o
+      // singura comanda imposibila.
+      if (t === "reincearca") reiaTranzitia = true;
     }
     /*
      * ⚠ RANDUL LATERAL EXISTA NU INSEAMNA CA INGESTUL S-A TERMINAT.
@@ -274,6 +290,14 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      */
     if (ex.order_id) {
       await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
+    }
+    /*
+     * Aruncarea vine DUPA consumul de stoc, nu inaintea lui: altfel s-ar sari
+     * peste reparatia unui consum picat anterior — o comanda cu
+     * `stoc_marketplace_la` NULL n-ar mai fi dusa la capat niciodata.
+     */
+    if (reiaTranzitia) {
+      throw new Error(`Tranzitia comenzii About You ${ayNumber} nu s-a aplicat; fereastra ramane pe loc.`);
     }
     return "updated";
   }

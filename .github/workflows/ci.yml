@@ -84,6 +84,27 @@ jobs:
         if: steps.instalare_stricta.outcome == 'failure'
         run: npm install --no-audit --no-fund
 
+      # ⚠ Verdele jobului nu are voie sa spuna ceva ce nu s-a verificat.
+      #
+      # Cand se cade pe rezerva, arborele instalat POATE diferi de lockfile — deci
+      # typecheck, teste si build masoara altceva decat pleaca in productie. Pana
+      # acum asta se putea afla doar uitandu-te in lista de pasi si observand ca
+      # rezerva a rulat; adica nimeni n-o afla. Acum scrie in rezumatul rularii,
+      # unde se vede fara sa cauti.
+      #
+      # NU se iese cu 1: ar opri typecheck/teste/build cu totul, si atunci poarta
+      # n-ar mai apara nimic. Se semnaleaza degradarea, nu se sacrifica rularea.
+      - name: Semnaleaza instalarea degradata
+        if: steps.instalare_stricta.outcome == 'failure'
+        run: |
+          echo "::warning title=Instalare degradata::\`npm ci\` a picat; s-a folosit \`npm install\`. Arborele instalat poate diferi de lockfile." >&2
+          {
+            echo "### ⚠ Instalare degradata"
+            echo
+            echo "\`npm ci\` a picat, iar pasii urmatori au rulat peste un arbore instalat cu \`npm install\`."
+            echo "**Un verde aici NU garanteaza arborele exact din \`package-lock.json\`.**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca
       # trece cu `.env.example`: Next.js are nevoie ca VARIABILELE SA EXISTE, nu
       # ca ele sa fie adevarate. Asta face ca poarta sa mearga si pe fork-uri,
@@ -144,7 +165,11 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
         ports: ["5432:5432"]
     steps:
+      # `fetch-depth: 0`: pasul de migratii post-baseline are nevoie de istoric ca
+      # sa afle commit-ul ultimei regenerari a baseline-ului.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Trei extensii din baseline nu exista pe un Postgres obisnuit:
       #   pg_graphql, supabase_vault  — nu sunt in contrib, le pune Supabase;
@@ -182,6 +207,18 @@ jobs:
           mkdir -p /tmp/sect
           awk '/^-- ── /{n++} {print > sprintf("/tmp/sect/%02d.sql", n+0)}' /tmp/baseline-portabil.sql
           ls -1 /tmp/sect | wc -l
+          # ⚠ Pasii de mai jos enumera fisierele 00..14 CABLAT. Daca generatorul
+          # adauga vreodata o sectiune, ea n-ar fi mentionata de niciun pas si ar
+          # disparea in tacere — jobul ar ramane verde peste o schema incompleta,
+          # fiindca `set -euo pipefail` nu are cum sa observe un fisier de care nu
+          # vorbeste nimeni. Deci se NUMARA.
+          asteptate=15
+          gasite=$(ls -1 /tmp/sect | wc -l)
+          if [ "$gasite" -ne "$asteptate" ]; then
+            echo "PICAT: baseline-ul are $gasite sectiuni, pasii acopera $asteptate."
+            echo "Adauga sectiunea noua intr-un pas de mai jos si actualizeaza numarul."
+            exit 1
+          fi
 
       - name: 1 extensii, tipuri, secvente
         env: { PGPASSWORD: proba }
@@ -246,3 +283,52 @@ jobs:
           # Si ca declansatorul de insumare a stocului chiar exista: fara el,
           # coloana produsului nu mai e suma marimilor si tot inventarul se schimba.
           verifica "declansator sync_variant_stock" "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relname='products' and t.tgname='products_sync_variant_stock'" 1
+
+      # ── Migratiile de DUPA baseline ─────────────────────────────────────────
+      #
+      # Pana acum, jobul asta aplica baseline-ul si atat — deci NU putea prinde o
+      # migratie care nu se aplica peste el. Iar regula „ce se reaplica si ce nu"
+      # nu era scrisa nicaieri corect (vezi migrations/CITESTE-INTAI.md).
+      #
+      # Marcajul de taiere NU e data din numele fisierului: numele merg mai
+      # departe decat commit-urile, iar cele doua dosare au conventii diferite de
+      # numire. Marcajul e commit-ul ultimei regenerari a baseline-ului.
+      #
+      # Azi lista e goala, fiindca baseline-ul se regenereaza odata cu fiecare
+      # schimbare de schema — si tocmai de aia pasul merita sa existe: prinde
+      # PRIMA migratie care ajunge pe main fara regenerare.
+      - name: Baseline-ul acopera toate migratiile
+        run: |
+          set -euo pipefail
+          taiere=$(git log -1 --format=%H -- migrations/000-schema-baseline.sql)
+          # ⚠ Poarta trebuie sa cada INCHIS. Un marcaj gol (istoric trunchiat,
+          # fisier redenumit) ar face `"$taiere..HEAD"` sa nu insemne nimic si pasul
+          # ar iesi verde fara sa fi verificat nimic — chiar tiparul pe care restul
+          # jobului il combate.
+          if [ -z "$taiere" ]; then
+            echo "PICAT: nu s-a putut afla commit-ul ultimei regenerari a baseline-ului."
+            exit 1
+          fi
+          echo "baseline regenerat ultima data in $taiere"
+          noi=$(git log --diff-filter=A --format= --name-only "$taiere..HEAD" -- migrations/ scripts/migrations/ | grep -E '\.sql$' | sort -u || true)
+          if [ -z "$noi" ]; then
+            echo "0 migratii post-baseline — refacerea e preludiu + baseline."
+            exit 0
+          fi
+          # ⚠ NU se aplica automat, si NU din lene.
+          #
+          # Ordinea corecta a doua migratii nu se poate deduce aici: numele au
+          # conventii diferite intre cele doua dosare (`2026-06-15_x.sql` cu
+          # underscore, `2026-07-31-x.sql` cu liniuta), iar datele din nume nu sunt
+          # datele reale. O aplicare in ordine alfabetica de CALE ar fi exact
+          # greseala pe care migrations/CITESTE-INTAI.md o interzice.
+          #
+          # Regula proiectului e ca baseline-ul se regenereaza odata cu fiecare
+          # schimbare de schema, deci lista de mai jos ar trebui sa fie mereu goala.
+          # Cand nu e, raspunsul nu e „ghicim ordinea", ci „regenereaza baseline-ul".
+          echo "PICAT: exista migratii adaugate dupa ultima regenerare a baseline-ului:"
+          echo "$noi"
+          echo
+          echo "Ruleaza: bash scripts/schema-baseline.sh   (apoi --check), si comite baseline-ul."
+          echo "Vezi migrations/CITESTE-INTAI.md pentru de ce nu se reaplica istoricul."
+          exit 1

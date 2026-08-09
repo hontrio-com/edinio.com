@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { revolutReady, type RevolutConfig } from "@/lib/revolut";
 import { finalizeRevolutOrder } from "@/lib/revolut-finalize";
+import { citireCazuta } from "@/lib/supabase/citire";
+import { logError } from "@/lib/error-logger";
 
 /**
  * Browser return target after the Revolut hosted checkout. We confirm the order
@@ -24,11 +26,44 @@ export async function GET(request: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const [{ data: order }, { data: settings }, { data: business }] = await Promise.all([
+  const [
+    { data: order, error: eOrder },
+    { data: settings, error: eSettings },
+    { data: business, error: eBusiness },
+  ] = await Promise.all([
     admin.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
     admin.from("store_settings").select("revolut_config").eq("business_id", businessId).single(),
     admin.from("businesses").select("slug").eq("id", businessId).single(),
   ]);
+
+  /*
+   * „Comanda nu exista" si „n-am putut interoga baza" duceau la acelasi redirect
+   * mut catre „/". La Revolut plata e deja INCASATA cand clientul ajunge aici,
+   * deci al doilea caz trebuie sa lase urma si sa-i spuna omului sa ia legatura
+   * cu magazinul, nu sa-l trimita pe pagina de start ca si cum n-ar fi platit.
+   */
+  if (citireCazuta(eOrder, order) || citireCazuta(eSettings, settings) || citireCazuta(eBusiness, business)) {
+    const e = [eOrder, eSettings, eBusiness].find((x) => x && x.code !== "PGRST116");
+    await logError({
+      action: "revolut/return",
+      message: `citire picata inainte de finalizare: ${e?.message ?? "motiv necunoscut"}`,
+      details: { orderId },
+      businessId,
+      severity: "critical",
+    });
+    /*
+     * ⚠ Slug-ul poate lipsi tocmai fiindca citirea lui `businesses` a picat, iar
+     * atunci `/${""}/confirm` da `//confirm` — adresa PROTOCOL-RELATIVA, pe care
+     * `new URL` o citeste ca host EXTERN (`https://confirm/`). Clientul care
+     * tocmai a platit ar fi trimis in afara site-ului. Fara slug se merge acasa.
+     */
+    const slugSigur = business?.slug ?? "";
+    if (!slugSigur) return NextResponse.redirect(new URL("/", baseUrl));
+    return NextResponse.redirect(new URL(
+      `/${slugSigur}/confirm?status=esuat&motiv=${encodeURIComponent("Nu am putut verifica plata. Te rugam contacteaza magazinul.")}&orderId=${encodeURIComponent(orderId)}`,
+      baseUrl,
+    ));
+  }
 
   const slug = business?.slug ?? "";
   if (!order || !business) {

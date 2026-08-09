@@ -307,6 +307,15 @@ export interface TrendyolShipmentPackage {
   shipmentPackageId: number;
   orderNumber: string;
   orderDate?: number;
+  /**
+   * Epoca in milisecunde a ULTIMEI MODIFICARI a pachetului.
+   *
+   * ⚠ Nu se confunda cu `orderDate`. Fereastra de interogare si sortarea merg
+   * amandoua pe data ultimei modificari, iar cursorul de sincronizare se
+   * construieste din campul asta: pe `orderDate` ar sari comenzi, fiindca acela
+   * nu se misca atunci cand se schimba statusul pachetului.
+   */
+  lastModifiedDate?: number;
   status?: string;
   shipmentPackageStatus?: string;
   cargoTrackingNumber?: number | string | null;

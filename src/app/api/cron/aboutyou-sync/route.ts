@@ -8,6 +8,9 @@ import {
   type AboutYouQueueItem, type AboutYouSyncContext,
 } from "@/lib/aboutyou/sync";
 import { pollOrders } from "@/lib/aboutyou/orders";
+// Mutata in `lib/marketplace/rotatie` ca s-o poata folosi si cronul Trendyol,
+// care taia inca cu `.slice()`.
+import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 import type { Json } from "@/types/database.types";
 
@@ -20,31 +23,12 @@ const MAX_ATTEMPTS = 5;
 const MAX_BIZ = 12;
 const RECONCILE_BIZ = 6;
 const POLL_ORDERS_BIZ = 10;
+// Suprapunerea ferestrei de comenzi, ca sa nu se piarda nimic in cusatura dintre
+// doua rulari. Trendyol o avea de mult; aici era zero.
+const ORDERS_OVERLAP_MS = 5 * 60 * 1000;
 const PACE_MS = 300;
 const PENDING_STATUSES = ["pending", "draft", "pending_approval", "pending_active"];
 const ACTIVE_STATUSES = ["active", "published", "inactive", "rejected", "problem"];
-
-/*
- * Alege cine intra pe tura asta, prin rotatie.
- *
- * Inainte era `slice(0, N)` peste o lista fara ordine garantata: acelasi magazin
- * putea iesi mereu primul, iar cele de dupa locul N nu ajungeau niciodata la rand.
- * Fereastra porneste din minutul curent, deci in cateva minute trec toti.
- */
-function alegeInRotatie(idsuri: string[], cati: number, pas = 1): string[] {
-  const sortate = [...idsuri].sort();
-  if (sortate.length <= cati) return sortate;
-  /*
-   * Indicele de tura se ia din CEASUL ABSOLUT, nu din minutul din ora.
-   *
-   * Trecerea „larga" ruleaza doar la minutele divizibile cu 10, deci pasul dintre
-   * doua treceri consecutive era 10 x 6 = 60 — exact perioada minutelor. Rezultat:
-   * aceleasi sase magazine, la infinit, si restul niciodata.
-   */
-  const tura = Math.floor(Date.now() / 60_000 / pas);
-  const start = (tura * cati) % sortate.length;
-  return Array.from({ length: cati }, (_, i) => sortate[(start + i) % sortate.length]);
-}
 
 function verifyCron(req: NextRequest): boolean {
   // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
@@ -156,9 +140,12 @@ export async function GET(req: NextRequest) {
   // ── 2) Poll open batches for businesses that have any ────────────────────────────
   const { data: batchBiz } = await admin
     .from("aboutyou_batches").select("business_id")
-    .in("status", ["pending", "processing", "retry"]).limit(200);
-  const pollSet = new Set<string>((batchBiz ?? []).map((r) => r.business_id));
-  for (const businessId of [...pollSet].slice(0, MAX_BIZ)) {
+    .in("status", ["pending", "processing", "retry"])
+    // `order` + rotatie in loc de `slice`: era singurul pas al acestui cron ramas
+    // pe taiere oarba.
+    .order("business_id", { ascending: true }).limit(1000);
+  const pollSet = alegeInRotatie([...new Set((batchBiz ?? []).map((r) => r.business_id))], MAX_BIZ);
+  for (const businessId of pollSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
     await pollOpenBatches(admin, ctx);
@@ -190,12 +177,36 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 4) Poll orders for active sellers (order.created webhook is primary) ─────────
-  const { data: sellerBiz } = await admin.from("aboutyou_listings").select("business_id").limit(500);
-  const orderPollSet = alegeInRotatie([...new Set((sellerBiz ?? []).map((r) => r.business_id))], POLL_ORDERS_BIZ);
+  /*
+   * ⚠ Pool-ul vine din `store_settings`, nu din tabela de listari: cu
+   * `.limit(500)` deduplicat DUPA aceea, un singur vanzator cu 500 de produse
+   * umplea singur fereastra si ceilalti nu-si mai luau comenzile deloc. Rotatia
+   * exista deja aici si tot nu ajuta — ea alege dintre cei ajunsi in multime,
+   * trunchierea decide cine ajunge. Vezi `magazineConectate`.
+   */
+  const { ids: sellerIds, error: eSelleri } = await magazineConectate(admin, "aboutyou_config");
+  if (eSelleri) {
+    await logError({ action: "aboutyou-sync", message: `magazinele conectate nu s-au putut citi: ${eSelleri}`, severity: "critical" });
+  }
+  const orderPollSet = alegeInRotatie(sellerIds, POLL_ORDERS_BIZ);
   for (const businessId of orderPollSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
-    const pr = await pollOrders(admin, ctx, ctx.config.orders_synced_at);
+    /*
+     * ⚠ O MARJA DE SUPRAPUNERE, ca la Trendyol. Aici era ZERO.
+     *
+     * Marcajul se scria la momentul rularii, iar fereastra urmatoare pornea exact
+     * de acolo. Orice comanda ale carei ceasuri cad in cusatura dintre doua rulari
+     * (ceasul lor nu bate cu al nostru, iar `orders_from` e evaluat la ei) ieseau
+     * din amandoua ferestrele si nu mai erau cerute niciodata. Cinci minute costa
+     * cateva reciteri idempotente si inchid cusatura.
+     */
+    const marcaj = ctx.config.orders_synced_at;
+    const marcajMs = marcaj ? Date.parse(marcaj) : NaN;
+    const since = Number.isFinite(marcajMs)
+      ? new Date(marcajMs - ORDERS_OVERLAP_MS).toISOString()
+      : marcaj;
+    const pr = await pollOrders(admin, ctx, since);
     ordersIngested += pr.ingested;
     // Only advance the watermark when the poll actually completed, so a transient
     // failure doesn't skip an unfetched window of orders.

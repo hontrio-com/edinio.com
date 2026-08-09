@@ -123,3 +123,61 @@ jobs:
             exit 0
           fi
           bash scripts/schema-baseline.sh --check
+
+  # ── Restaurare pe o baza GOALA ──────────────────────────────────────────────
+  #
+  # Diferenta dintre „avem schema in Git" si „stim ca putem reface Edinio".
+  # Scriptul de baseline documenta procesul; jobul asta il DEMONSTREAZA.
+  #
+  # Nu are nevoie de niciun secret: ruleaza pe un Postgres gol, pornit aici.
+  # Deci merge si pe fork-uri, si nu atinge productia in niciun fel.
+  restaurare:
+    name: schema se aplica pe o baza goala
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: proba
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        ports: ["5432:5432"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preludiu + baseline
+        env:
+          PGPASSWORD: proba
+        run: |
+          set -euo pipefail
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1             -f migrations/000-prelude-platforma.sql
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1             -f migrations/000-schema-baseline.sql
+
+      # O aplicare fara eroare nu inseamna ca a construit ceva: `create table if
+      # not exists` peste un fisier gol „reuseste" la fel de linistit. Se NUMARA.
+      - name: Proba de fum - chiar s-a construit
+        env:
+          PGPASSWORD: proba
+        run: |
+          set -euo pipefail
+          verifica() {
+            local nume="$1" sql="$2" minim="$3"
+            local n
+            n=$(psql -h localhost -U postgres -d postgres -tAc "$sql")
+            echo "  $nume: $n (minim $minim)"
+            [ "$n" -ge "$minim" ] || { echo "PICAT: $nume"; exit 1; }
+          }
+          verifica "tabele"        "select count(*) from pg_tables where schemaname in ('public','privat')" 60
+          verifica "functii"       "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','privat')" 80
+          verifica "politici RLS"  "select count(*) from pg_policies where schemaname in ('public','privat')" 70
+          verifica "indexuri"      "select count(*) from pg_indexes where schemaname in ('public','privat')" 100
+          verifica "chei straine"  "select count(*) from pg_constraint c join pg_class r on r.oid=c.conrelid join pg_namespace n on n.oid=r.relnamespace where n.nspname='public' and c.contype='f'" 30
+          # Piesele fara de care platforma nu merge, verificate PE NUME.
+          verifica "revendica_stoc_complet"    "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='revendica_stoc_complet'" 1
+          verifica "aplica_tranzitia_comenzii" "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='aplica_tranzitia_comenzii'" 1
+          verifica "privat.store_settings"     "select count(*) from pg_tables where schemaname='privat' and tablename='store_settings'" 1
+          verifica "vederea store_settings"    "select count(*) from pg_views where schemaname='public' and viewname='store_settings'" 1
+          # Si ca declansatorul de insumare a stocului chiar exista: fara el,
+          # coloana produsului nu mai e suma marimilor si tot inventarul se schimba.
+          verifica "declansator sync_variant_stock" "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relname='products' and t.tgname='products_sync_variant_stock'" 1

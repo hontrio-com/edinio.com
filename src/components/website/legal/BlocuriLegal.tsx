@@ -1,14 +1,15 @@
-import { segmenteEvidentiate, type Bloc } from "@/lib/website/termeni";
+import { segmenteEvidentiate, type Bloc } from "@/lib/website/legal";
 
 /**
  * Randarea blocurilor dintr-un document juridic.
  *
  * Componentă de SERVER: textul e fix, nu are nimic de ascultat. Singura bucată
- * de JavaScript de pe pagină e cuprinsul, care trebuie să știe unde ai ajuns.
+ * de JavaScript de pe paginile astea e cuprinsul, care trebuie să știe unde ai
+ * ajuns.
  *
  * ⚠ Nicăieri aici nu se schimbă textul. Numerotarea („10.4.") vine gata
- * despărțită din `termeni.ts`, iar îngroșările se fac tăind textul în bucăți și
- * lipindu-l la loc — vezi `segmenteEvidentiate`.
+ * despărțită din fișierele de conținut, iar îngroșările se fac tăind textul în
+ * bucăți și lipindu-l la loc — vezi `segmenteEvidentiate`.
  */
 export function BlocuriLegal({ blocuri }: { blocuri: Bloc[] }) {
   return (
@@ -43,6 +44,23 @@ function BlocLegal({ bloc }: { bloc: Bloc }) {
             ),
           )}
         </p>
+      );
+
+    case "subtitlu":
+      /*
+        `h3`, fiindcă articolul e `h2`. La Confidențialitate un articol are până
+        la opt astfel de titluri („Dreptul de acces", „Dreptul la rectificare"…),
+        iar fără ele documentul devine un bloc de text prin care nu poți sări.
+        Nu intră în cuprins: 50 de articole plus ~60 de subtitluri ar face
+        cuprinsul mai lung decât ce cuprinde.
+      */
+      return (
+        <h3 className="mt-7 text-[15.5px] font-semibold leading-[1.4] text-ink first:mt-0">
+          {bloc.nr ? (
+            <span className="mr-1.5 tabular-nums font-medium text-ink-3">{bloc.nr}</span>
+          ) : null}
+          {bloc.text}
+        </h3>
       );
 
     case "lista":
@@ -104,7 +122,9 @@ function BlocLegal({ bloc }: { bloc: Bloc }) {
                 className="grid gap-1 px-4 py-3 sm:grid-cols-[240px_minmax(0,1fr)] sm:gap-4 sm:px-5"
               >
                 <dt className="text-[13.5px] text-ink-3">{rand.eticheta}</dt>
-                <dd className="text-[14.5px] leading-[1.6] text-ink">
+                {/* `whitespace-pre-line`: unde documentul rupe adresa pe două
+                    rânduri, o lăsăm ruptă. */}
+                <dd className="whitespace-pre-line text-[14.5px] leading-[1.6] text-ink">
                   {rand.href ? (
                     <a href={rand.href} className="underline-offset-2 hover:underline">
                       {rand.valoare}
@@ -117,6 +137,17 @@ function BlocLegal({ bloc }: { bloc: Bloc }) {
             ),
           )}
         </dl>
+      );
+
+    case "adresa":
+      return (
+        <address className="mt-4 rounded-[12px] border border-hairline bg-tint px-4 py-3.5 text-[14.5px] not-italic leading-[1.7] text-ink sm:px-5">
+          {bloc.linii.map((linie, i) => (
+            <span key={linie} className={i === 0 ? "block font-semibold" : "block"}>
+              {linie}
+            </span>
+          ))}
+        </address>
       );
 
     case "accent":
@@ -142,5 +173,75 @@ function BlocLegal({ bloc }: { bloc: Bloc }) {
           </a>
         </p>
       );
+
+    case "tabel":
+      return <TabelLegal bloc={bloc} />;
   }
+}
+
+/**
+ * Tabelele din Politica de Cookies.
+ *
+ * ═══ UN SINGUR `<table>`, CARE ÎȘI SCHIMBĂ DOAR `display` ═══
+ *
+ * De la `lg` în sus e tabel; sub `lg` fiecare RÂND devine o fișă, cu numele
+ * coloanei deasupra fiecărei valori. Același tipar ca la tabelul de comparație
+ * de pe pagina de start, și din același motiv:
+ *
+ * - **derularea pe orizontală** pică la „să se înțeleagă tot": tabelul rezumat
+ *   are cinci coloane, iar pe 390px se văd două — cine nu ghicește că poate
+ *   trage lateral crede că a citit tot;
+ * - **două desene în pagină** (tabel + fișe, ascunse pe rând) ar însemna
+ *   aceleași texte în două locuri, deci despărțite la prima corectură, și
+ *   conținut citit de două ori de cititoarele de ecran.
+ *
+ * ⚠ Etichetele din fișe și antetul tabelului NU se suprapun niciodată: antetul
+ * e `display:none` sub `lg`, etichetele sunt `display:none` peste. Deci la orice
+ * lățime, numele coloanei ajunge la cititoarele de ecran exact o dată.
+ */
+function TabelLegal({ bloc }: { bloc: Extract<Bloc, { tip: "tabel" }> }) {
+  return (
+    <div className="mt-5">
+      <div className="overflow-hidden rounded-[12px] border border-hairline">
+        <table className="block w-full border-collapse text-left lg:table">
+          <thead className="hidden lg:table-header-group">
+            <tr className="bg-tint">
+              {bloc.antet.map((cap) => (
+                <th
+                  key={cap}
+                  scope="col"
+                  className="border-b border-hairline px-4 py-2.5 text-[12.5px] font-semibold uppercase tracking-[0.06em] text-ink-3"
+                >
+                  {cap}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="block lg:table-row-group">
+            {bloc.randuri.map((rand) => (
+              <tr
+                key={rand[0]}
+                className="block border-t border-hairline first:border-t-0 lg:table-row lg:border-t"
+              >
+                {rand.map((celula, j) => (
+                  <td
+                    key={bloc.antet[j]}
+                    className="block px-4 pb-2 pt-2 align-top text-[14px] leading-[1.6] text-ink-2 first:pt-3 last:pb-3 lg:table-cell lg:px-4 lg:py-3 lg:first:pt-3 lg:last:pb-3"
+                  >
+                    <span className="mb-0.5 block text-[11.5px] uppercase tracking-[0.06em] text-ink-3 lg:hidden">
+                      {bloc.antet[j]}
+                    </span>
+                    <span className={j === 0 ? "font-semibold text-ink" : undefined}>
+                      {celula}
+                    </span>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {bloc.nota ? <p className="mt-2.5 text-[13px] text-ink-3">{bloc.nota}</p> : null}
+    </div>
+  );
 }

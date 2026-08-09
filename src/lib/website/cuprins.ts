@@ -3,11 +3,16 @@
  *
  * ═══ DE CE E AICI, ȘI NU ÎN COMPONENTĂ ═══
  *
- * Ca să poată fi PROBATĂ. `IntersectionObserver` nu livrează nimic într-o filă
- * de fundal, exact ca `requestAnimationFrame` — măsurat pe pagina asta:
- * `visibilityState` „hidden", zero cadre, iar observatorul nu și-a chemat
- * funcția nici măcar o dată la pornire. Comportamentul nu se poate deci verifica
- * apăsând pe ceva în browser.
+ * Ca să poată fi PROBATĂ. Într-o filă de fundal, Chrome nu rulează
+ * `requestAnimationFrame`, nu avansează tranzițiile CSS și nu mai livrează
+ * `IntersectionObserver` după încărcare — măsurat pe paginile astea:
+ * `visibilityState` „hidden", zero cadre, iar un observator pornit DUPĂ
+ * încărcare n-a fost chemat niciodată.
+ *
+ * La încărcare el chiar se declanșează o dată — cuprinsul aprinde corect
+ * articolul din adresă, verificat pe `/confidentialitate#...` — dar nu se mai
+ * actualizează când derulezi. Deci comportamentul la derulare nu se poate
+ * verifica apăsând pe ceva din unealta de browser.
  *
  * ⚠ Fișier `.ts`, nu `.tsx`, și nu întâmplător: probele rulează pe Node, care
  * dezbracă tipurile dar NU știe JSX. O funcție pură lăsată lângă componentă e o

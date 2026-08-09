@@ -1,16 +1,20 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { articolulActiv, type IntrareCuprins } from "./cuprins";
-import { TERMENI_SECTIUNI } from "./termeni";
+import { TERMENI } from "./termeni";
 
 /*
  * De ce exista probele astea, si nu o verificare in browser:
  *
- * `IntersectionObserver` NU livreaza nimic intr-o fila de fundal, exact ca
- * `requestAnimationFrame`. Masurat pe pagina de Termeni: `visibilityState` era
- * „hidden", n-a rulat niciun cadru, iar observatorul nu si-a chemat functia nici
- * macar o data la pornire. Deci aprinderea din cuprins nu se poate verifica
- * apasand pe ceva — regula ei sta intr-o functie pura, si aici se probeaza.
+ * Intr-o fila de fundal, Chrome nu ruleaza `requestAnimationFrame`, nu avanseaza
+ * tranzitiile CSS si nu mai livreaza `IntersectionObserver` dupa incarcare.
+ * Masurat: `visibilityState` „hidden", zero cadre, iar un observator pornit dupa
+ * incarcare n-a fost chemat niciodata. La incarcarea paginii el CHIAR se
+ * declanseaza o data — cuprinsul aprinde corect articolul din adresa — dar nu
+ * se mai actualizeaza la derulare.
+ *
+ * Deci comportamentul la derulare nu se poate verifica apasand pe ceva din
+ * unealta de browser. Regula sta intr-o functie pura, si aici se probeaza.
  */
 
 const INTRARI: IntrareCuprins[] = [
@@ -43,7 +47,7 @@ test("id-urile necunoscute din multime sunt ignorate", () => {
 });
 
 test("merge pe cuprinsul real al Termenilor, nu doar pe unul inventat", () => {
-  const intrari = TERMENI_SECTIUNI.map(({ id, nr, titlu }) => ({ id, nr, titlu }));
+  const intrari = TERMENI.sectiuni.map(({ id, nr, titlu }) => ({ id, nr, titlu }));
   const alDoilea = intrari[1].id;
   const alTreizecilea = intrari[29].id;
   assert.equal(articolulActiv(intrari, new Set([alTreizecilea, alDoilea])), alDoilea);

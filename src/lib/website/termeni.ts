@@ -37,6 +37,10 @@
  *    fața paragrafului. Numerele NU s-au atins: la un contract, trimiterea
  *    „conform art. 34.3" trebuie să găsească exact ce trimite.
  *
+ * ⚠ Tipurile blocurilor și `segmenteEvidentiate` s-au mutat în `legal.ts`, ca
+ * să fie aceleași și pentru Confidențialitate și Cookies. Aici rămâne DOAR
+ * textul.
+ *
  * ═══ CE SE EVIDENȚIAZĂ, ȘI DE CE ATÂT ═══
  *
  * `evidenta` scoate în relief bucăți din text FĂRĂ să le schimbe: termene și
@@ -50,45 +54,14 @@
  * evidență și pe alta nu e o afirmație despre cât cântărește fiecare.
  */
 
-export const TERMENI_TITLU = "Termeni și condiții de utilizare Edinio";
+import type { Bloc, DocumentLegal, Sectiune } from "./legal";
 
-export const TERMENI_ACTUALIZARE = "10 august 2026";
+const TERMENI_TITLU = "Termeni și condiții de utilizare Edinio";
 
-export type Bloc =
-  | {
-      tip: "paragraf";
-      /** Numerotarea din document („10.4."), afișată stins în fața textului. */
-      nr?: string;
-      text: string;
-      /** Bucăți exacte din `text` care se îngroașă. Vezi nota din antet. */
-      evidenta?: string[];
-    }
-  | { tip: "lista"; items: string[] }
-  | { tip: "definitii"; items: { termen: string; text: string }[] }
-  /**
-   * Fișa de identificare a firmei.
-   *
-   * ⚠ Rândul FĂRĂ `eticheta` e denumirea, capul fișei. În original ea stă
-   * singură, fără niciun cuvânt în față — iar proba de integritate a prins
-   * exact asta: pusesem „Denumire:", adică un cuvânt care nu e al clientului,
-   * într-un document juridic. Nu i se pune etichetă înapoi.
-   */
-  | { tip: "date"; items: { eticheta?: string; valoare: string; href?: string }[] }
-  /** Propoziția prin care documentul se declară el însuși esențial. */
-  | { tip: "accent"; text: string }
-  | { tip: "email"; adresa: string };
-
-export interface Sectiune {
-  /** Ancora din adresă. Stabilă: pe ea se pot da linkuri către o clauză. */
-  id: string;
-  /** Numărul articolului, așa cum e în document. */
-  nr: number;
-  titlu: string;
-  blocuri: Bloc[];
-}
+const TERMENI_ACTUALIZARE = "10 august 2026";
 
 /** Preambulul, dinaintea articolului 1. Nu intră în cuprins. */
-export const TERMENI_PREAMBUL: Bloc[] = [
+const TERMENI_PREAMBUL: Bloc[] = [
   {
     tip: "paragraf",
     text: "Prezentele Termeni și Condiții reglementează accesarea și utilizarea platformei Edinio, precum și raporturile contractuale dintre VOID SFT GAMES SRL și Clienții care utilizează serviciile Edinio.",
@@ -1852,29 +1825,9 @@ export const TERMENI_SECTIUNI: Sectiune[] = [
   },
 ];
 
-/**
- * Taie textul în bucăți, îngroșându-le pe cele cerute prin `evidenta`.
- *
- * Întoarce o listă de segmente, nu JSX, ca să poată fi probată fără să randezi
- * nimic. Bucata căutată se ia LITERAL: caracterele speciale de regex se
- * neutralizează, altfel un termen cu paranteză ar arunca.
- *
- * ⚠ Nu schimbă niciodată textul: lipite la loc, segmentele dau exact intrarea.
- * Proba din `termeni.test.ts` verifică asta pentru fiecare paragraf din document.
- */
-export function segmenteEvidentiate(
-  text: string,
-  evidenta?: string[],
-): { text: string; tare: boolean }[] {
-  if (!evidenta?.length) return [{ text, tare: false }];
-
-  const tipar = new RegExp(`(${evidenta.map(scapaRegex).join("|")})`, "g");
-  return text
-    .split(tipar)
-    .filter((bucata) => bucata !== "")
-    .map((bucata) => ({ text: bucata, tare: evidenta.includes(bucata) }));
-}
-
-function scapaRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+export const TERMENI: DocumentLegal = {
+  titlu: TERMENI_TITLU,
+  actualizare: TERMENI_ACTUALIZARE,
+  preambul: TERMENI_PREAMBUL,
+  sectiuni: TERMENI_SECTIUNI,
+};

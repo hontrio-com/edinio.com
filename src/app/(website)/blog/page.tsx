@@ -7,8 +7,8 @@ import { siteMetadata } from "@/lib/website/metadata";
  * înlocuim definitiv secțiunea Roadmap cu Blog").
  *
  * ⚠ E o COAJĂ, ca și Roadmap-ul dinaintea ei: `PageShell` cu titlu și
- * introducere, fără articole. A fost redenumită în loc să fie ștearsă tocmai ca
- * linkurile din meniu și din subsol să ducă undeva, nu în 404.
+ * introducere, fără articole. A fost redenumită (`git mv`) în loc să fie ștearsă
+ * tocmai ca linkurile din meniu și din subsol să ducă undeva, nu în 404.
  *
  * ⚠ TEXTELE DE MAI JOS SUNT PUSE DE MINE, nu de client. Sunt scrise ca să nu
  * promită articole care nu există încă. Se înlocuiesc când vine conținutul.

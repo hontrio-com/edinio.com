@@ -47,6 +47,16 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: "Integrare plăți cu cardul", href: "/plati-cu-cardul" },
       { label: "Integrare curieri", href: "/curieri" },
       { label: "Mentenanță gratuită", href: "/mentenanta-gratuita" },
+      /*
+        ⚠ `/migrare` EXISTĂ PE RAMURA ASTA, DAR A FOST ȘTEARSĂ PE `main` (2c138eb).
+        Pagina stă în `app/(landing)/migrare`, alt grup de rute decât restul
+        site-ului — de aceea o căutare doar prin `app/(website)` zice că lipsește.
+
+        La unirea cu `main` sunt doar două ieșiri: ori se păstrează pagina, ori
+        rândul ăsta (plus cele două linkuri din `nav.ts`) trebuie dus altundeva.
+        Dacă se uită, proba din `footer.test.ts` cade — dinadins: mai bine se
+        oprește suita decât să apară un link mort în subsolul FIECĂREI pagini.
+      */
       { label: "Migrare gratuită", href: "/migrare" },
     ],
   },

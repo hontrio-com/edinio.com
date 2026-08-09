@@ -3795,7 +3795,8 @@ create table if not exists public.orders (
   klarna_session_id text,
   stoc_rezervat jsonb,
   stoc_eliberat_la timestamp with time zone,
-  stoc_marketplace_la timestamp with time zone);
+  stoc_marketplace_la timestamp with time zone,
+  ipay_order_number text);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,

@@ -2,6 +2,19 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+
+  /*
+   * `/roadmap` a devenit `/blog` (2026-08-09).
+   *
+   * Redirectul nu e politete: pagina veche e in productie de luni de zile, deci
+   * exista in indexul Google si in linkurile date pana acum. Fara el, fiecare
+   * dintre ele ar da 404 in ziua unirii cu `main`, iar autoritatea adunata pe
+   * adresa veche s-ar pierde. `permanent: true` = 308, adica exact ce spune
+   * Google sa folosesti cand o adresa se muta definitiv.
+   */
+  async redirects() {
+    return [{ source: "/roadmap", destination: "/blog", permanent: true }];
+  },
   serverExternalPackages: ["@aws-sdk/client-s3", "sanitize-html", "sharp"],
   experimental: {
     serverActions: {

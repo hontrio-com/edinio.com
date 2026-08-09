@@ -21,9 +21,11 @@ const ETICHETE_MENIU = new Map(
 );
 
 test("fiecare card trimite la o pagina care exista in meniu", () => {
-  /* Nu e o formalitate: chiar acum `/migrare` e legat de doua ori din `nav.ts`
-     fara sa existe pagina. Un href scris gresit intr-un card ar face exact la fel,
-     tacut, iar butonul ar duce in 404. */
+  /* Nota veche de aici zicea ca `/migrare` e legat de doua ori din `nav.ts` fara
+     sa existe pagina. E GRESITA si a fost corectata (2026-08-10): pagina exista,
+     doar ca in alt grup de rute — `app/(landing)/migrare`, nu `app/(website)`.
+     Grupurile in paranteze nu apar in adresa, deci `/migrare` raspunde.
+     Proba ramane utila: un href scris gresit intr-un card ar duce tacut in 404. */
   assert.ok(ETICHETE_MENIU.size >= 5, `meniul are doar ${ETICHETE_MENIU.size} pagini`);
   for (const card of FEATURE_CARDS) {
     assert.ok(

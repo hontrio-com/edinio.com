@@ -1,132 +1,191 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
+import { FOOTER_COLUMNS, SOCIAL_LINKS, type FooterLink } from "@/lib/website/footer";
 
-const PRODUCT_LINKS = [
-  { href: "/#functionalitati", label: "Funcționalități" },
-  /*
-    Ancora era `#demo`, iar demo-ul interactiv a fost inlocuit pe prima pagina cu
-    tabelul de comparatie (2026-08-09). Fara randul asta ar fi ramas un link de
-    meniu care nu duce nicaieri — aceeasi fundatura ca cele doua linkuri catre
-    `/migrare`. Eticheta e insa pusa de mine, nu de client: daca vrea alt cuvant,
-    aici se schimba.
-  */
-  { href: "/#comparatie", label: "Comparație" },
-  { href: "/#preturi", label: "Prețuri" },
-  { href: "/#faq", label: "Întrebări frecvente" },
-];
-
-const LEGAL_LINKS = [
-  { href: "/termeni", label: "Termeni și condiții" },
-  { href: "/confidentialitate", label: "Politica de confidențialitate" },
-  { href: "/cookies", label: "Politica cookies" },
-  { href: "/gdpr", label: "GDPR" },
-];
-
+/**
+ * Subsolul site-ului de prezentare.
+ *
+ * ═══ ALB, CA TOT RESTUL ═══
+ *
+ * ⚠ Era pe fundal închis (`bg-foreground`), singurul lucru rămas așa de când
+ * banda de final a trecut pe alb. Regula site-ului e „fundal ALB peste tot", iar
+ * cererea a fost „refăcut în design-ul nostru" — deci alb, cu o linie subțire
+ * sus care îl desparte de secțiunea de deasupra.
+ *
+ * E o schimbare vizibilă și se întoarce dintr-o clasă, dacă preferă închis.
+ *
+ * ═══ CE S-A SCOS ═══
+ *
+ * Datele firmei (denumire, CUI, sediu). Cerute afară, fiindcă apar oricum în
+ * Politici — verificat că e adevărat: sunt în `/termeni` și
+ * `/confidentialitate`. Vezi nota din `lib/website/footer.ts`.
+ *
+ * Insignele ANPC rămân: sunt obligatorii și n-au unde altundeva să stea.
+ *
+ * ═══ SIGLELE SOCIALE SUNT GRI PÂNĂ LA HOVER ═══
+ *
+ * În culorile lor, cele trei ar fi cel mai colorat lucru de pe o pagină pe care
+ * clientul a cerut, la harta din CTA, „mai subtil". Gri implicit, culoare la
+ * hover: mărcile nu se modifică permanent, iar subsolul rămâne liniștit.
+ */
 export function Footer() {
   return (
-    <footer className="bg-foreground text-background">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 lg:gap-12">
-          {/* Col 1: Logo + descriere */}
-          <div className="col-span-2 md:col-span-1">
-            <Logo size="lg" href={undefined} className="mb-4" textClassName="text-background" />
-            <p className="text-sm text-background/60 leading-relaxed">
-              Platformă completă pentru magazine online. Creează-ți magazinul în câteva minute, cu mentenanță gratuită pe viață și suport 7 zile din 7.
+    <footer className="border-t border-hairline bg-white">
+      <div className="mx-auto max-w-[1200px] px-5 py-14 sm:px-6 lg:px-8 lg:py-16">
+        {/*
+          Coloana de marcă e mai lată decât celelalte patru: ține o frază, nu o
+          listă. Pe telefon toate stau una sub alta; de la `sm` în sus, cele
+          patru liste se așază două câte două, ca să nu iasă rânduri de un cuvânt.
+        */}
+        {/*
+          ⚠ Coloanele NU sunt egale, și nu din estetică.
+
+          Etichetele au lungimi foarte diferite: „Magazin online Mobilier și
+          decor" are 32 de caractere, „Integrare curieri" are 17. Cu cinci
+          coloane egale, Industrii s-ar rupe pe două rânduri la fiecare intrare,
+          iar Platformă ar sta pe jumătate goală. Fracțiile sunt calculate din
+          lățimea reală a celui mai lung text din fiecare coloană, MĂSURATĂ în
+          browser — prima încercare dăduse coloanei Contact 147px, iar
+          „Email: contact@edinio.com" (158px) se rupea pe două rânduri.
+
+          Pe telefon toate stau una sub alta; de la `sm` în sus, cele patru liste
+          se așază două câte două, ca să nu iasă coloane de un cuvânt.
+        */}
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.25fr_0.95fr_1.1fr_1.2fr_0.95fr] lg:gap-8">
+          <div className="sm:col-span-2 lg:col-span-1">
+            <Logo size="lg" />
+            <p className="mt-4 max-w-[320px] text-[13.5px] leading-[1.6] text-ink-2">
+              Platformă completă pentru magazine online. Creează-ți magazinul în
+              câteva minute, cu mentenanță gratuită pe viață și suport 7 zile din 7.
             </p>
-          </div>
 
-          {/* Col 2: Produs */}
-          <div>
-            <h4 className="text-sm font-semibold mb-4">Produs</h4>
-            <ul className="space-y-2.5">
-              {PRODUCT_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-background/60 hover:text-background transition-colors"
+            <ul className="mt-6 flex items-center gap-3">
+              {SOCIAL_LINKS.map((s) => (
+                <li key={s.label}>
+                  <a
+                    href={s.href}
+                    target="_blank"
+                    /*
+                      `noopener` nu e opțional pe linkuri care deschid fereastră
+                      nouă: fără el, pagina deschisă poate ajunge la `window.opener`.
+                    */
+                    rel="noopener noreferrer"
+                    aria-label={`Edinio pe ${s.label}`}
+                    className="group flex h-9 w-9 items-center justify-center rounded-[8px] border border-hairline transition-colors hover:bg-tint"
                   >
-                    {link.label}
-                  </Link>
+                    {/*
+                      Culoarea vine la hover pe TOT butonul, nu pe siglă: ținta
+                      de apăsare e pătratul de 36px, iar dacă efectul ar sta pe
+                      `<img>`, o treime din suprafață ar rămâne moartă.
+                    */}
+                    <Image
+                      src={s.src}
+                      alt=""
+                      aria-hidden="true"
+                      width={Math.round(s.inaltime * s.ratio)}
+                      height={s.inaltime}
+                      /* Loader-ul proiectului lasă neatinse imaginile locale. */
+                      unoptimized
+                      style={{ height: s.inaltime, width: "auto" }}
+                      className="opacity-55 grayscale transition duration-200 group-hover:opacity-100 group-hover:grayscale-0"
+                    />
+                  </a>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Col 3: Contact */}
-          <div>
-            <h4 className="text-sm font-semibold mb-4">Contact</h4>
-            <ul className="space-y-2.5 text-sm text-background/60">
-              <li>SC VOID SFT GAMES SRL</li>
-              <li>CUI: 43474393</li>
-              <li>
-                <a href="tel:+40750456809" className="hover:text-background transition-colors">
-                  0750 456 809
-                </a>
-              </li>
-              <li>
-                <a href="mailto:contact@edinio.com" className="hover:text-background transition-colors">
-                  contact@edinio.com
-                </a>
-              </li>
-              <li>Mătăsari, Jud. Gorj</li>
-              <li>Str. Progresului, Nr. 2</li>
-            </ul>
-          </div>
-
-          {/* Col 4: Legal */}
-          <div>
-            <h4 className="text-sm font-semibold mb-4">Legal</h4>
-            <ul className="space-y-2.5">
-              {LEGAL_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-background/60 hover:text-background transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {FOOTER_COLUMNS.map((col) => (
+            <nav key={col.title} aria-labelledby={`subsol-${col.title}`}>
+              <h2
+                id={`subsol-${col.title}`}
+                className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-3"
+              >
+                {col.title}
+              </h2>
+              <ul className="mt-4 space-y-2.5">
+                {col.links.map((link) => (
+                  <li key={link.href}>
+                    <LinkSubsol link={link} />
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
         </div>
 
-        {/* Bottom bar */}
-        <div className="mt-12 pt-8 border-t border-background/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-background/40">
+        <div className="mt-12 flex flex-col items-center justify-between gap-6 border-t border-hairline pt-8 sm:flex-row">
+          <p className="text-[13px] text-ink-3">
             &copy; {new Date().getFullYear()} Edinio. Toate drepturile rezervate.
           </p>
+
+          {/*
+            Insignele ANPC. Pe fundal alb nu mai au nevoie de opacitate
+            coborâtă — pe cel închis stăteau la 0,6 tocmai ca să nu strige.
+
+            `unoptimized`: sunt fișiere locale, iar loader-ul proiectului le lasă
+            oricum neatinse. Fără steag, Next construia degeaba un `srcSet` cu
+            patru variante ale aceleiași adrese și se plângea în consolă pe
+            fiecare pagină — avertismentul se vedea și înainte de refacere.
+          */}
           <div className="flex items-center gap-3">
-            <a
-              href="https://anpc.ro/ce-este-sal/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer">
               <Image
                 src="/anpc-sal.avif"
-                alt="ANPC SAL"
+                alt="ANPC — Soluționarea Alternativă a Litigiilor"
                 width={180}
                 height={50}
-                className="h-10 w-auto opacity-60 hover:opacity-100 transition-opacity"
+                unoptimized
+                className="h-10 w-auto"
               />
             </a>
-            <a
-              href="https://ec.europa.eu/consumers/odr"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer">
               <Image
                 src="/anpc-sol.avif"
-                alt="ANPC SOL"
+                alt="ANPC — Soluționarea Online a Litigiilor"
                 width={180}
                 height={50}
-                className="h-10 w-auto opacity-60 hover:opacity-100 transition-opacity"
+                unoptimized
+                className="h-10 w-auto"
               />
             </a>
           </div>
         </div>
       </div>
     </footer>
+  );
+}
+
+/**
+ * Un rând din subsol.
+ *
+ * `tel:` și `mailto:` NU trec prin `next/link`: routerul încearcă să le trateze
+ * ca navigări interne, iar pe unele browsere asta înseamnă că apăsarea nu face
+ * nimic. Ele rămân `<a>` simple.
+ */
+function LinkSubsol({ link }: { link: FooterLink }) {
+  const clase = "text-[13.5px] leading-[1.5] text-ink-2 transition-colors hover:text-ink";
+  const tinta = link.extern ? (
+    <a href={link.href} className={clase}>
+      {link.label}
+    </a>
+  ) : (
+    <Link href={link.href} className={clase}>
+      {link.label}
+    </Link>
+  );
+
+  if (!link.prefix) return tinta;
+  /*
+    Aranjare ÎN LINIE, nu `flex`: cu `flex` cuvântul și valoarea sunt două cutii
+    lipite, iar spațiul dintre ele ar depinde de un `gap` — care s-a și dovedit
+    că nu se genera, si iesea „Telefon:0750 456 809". Aici spațiul e chiar un
+    spațiu, iar rândul se rupe unde se rupe orice text.
+  */
+  return (
+    <span className="text-[13.5px] leading-[1.5] text-ink-3">
+      {link.prefix} {tinta}
+    </span>
   );
 }

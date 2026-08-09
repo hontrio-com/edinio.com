@@ -9,7 +9,7 @@ import {
   Gauge,
   Gem,
   LifeBuoy,
-  Map,
+  Newspaper,
   PawPrint,
   Pill,
   Plug,
@@ -370,10 +370,15 @@ export const RESOURCES: NavItem[] = [
     description: "Ghiduri pas cu pas pentru fiecare funcție a platformei.",
   },
   {
-    label: "Roadmap",
-    href: "/roadmap",
-    icon: Map,
-    description: "Ce lansăm acum și ce urmează. Public, actualizat lunar.",
+    /*
+      A luat locul „Roadmap" (cerut 2026-08-09: se înlocuiește definitiv).
+      Pagina e aceeași, redenumită, iar `/roadmap` redirecționează permanent
+      către `/blog` din `next.config.ts` — altfel orice link vechi ar da 404.
+    */
+    label: "Blog",
+    href: "/blog",
+    icon: Newspaper,
+    description: "Ghiduri despre vânzarea online și noutățile platformei.",
   },
   {
     label: "Întrebări frecvente",
@@ -420,5 +425,5 @@ export const MENU_PREFIXES: Record<MenuId, string[]> = {
     "/industrii",
   ],
   "de-ce-noi": ["/vs"],
-  resurse: ["/ajutor", "/roadmap", "/intrebari-frecvente", "/migrare"],
+  resurse: ["/ajutor", "/blog", "/intrebari-frecvente", "/migrare"],
 };

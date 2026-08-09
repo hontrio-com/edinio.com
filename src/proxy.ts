@@ -34,7 +34,7 @@ const NON_STORE_SEGMENTS = new Set([
   // fura pagina: vizitatorul ar fi trimis (307) pe domeniul lui.
   // Tinut in acord cu `src/lib/website/nav.ts`.
   "magazin-online", "plati-cu-cardul", "curieri", "integrari", "optimizare",
-  "mentenanta-gratuita", "industrii", "vs", "ajutor", "roadmap",
+  "mentenanta-gratuita", "industrii", "vs", "ajutor", "blog",
   "intrebari-frecvente",
 ]);
 

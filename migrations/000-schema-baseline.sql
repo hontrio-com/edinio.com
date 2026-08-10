@@ -216,7 +216,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, gls_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -3170,7 +3170,6 @@ create table if not exists privat.store_settings (
   colete_config jsonb,
   oblio_config jsonb,
   fgo_config jsonb,
-  gls_config jsonb,
   cargus_config jsonb,
   dpd_config jsonb,
   fan_courier_config jsonb,
@@ -3201,7 +3200,8 @@ create table if not exists privat.store_settings (
   storefront_design_draft jsonb,
   storefront_design_pub_at timestamp with time zone,
   cod_fee_config jsonb,
-  show_vat_label boolean default true not null);
+  show_vat_label boolean default true not null,
+  gls_config jsonb);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),
@@ -3770,7 +3770,6 @@ create table if not exists public.orders (
   oblio_storno_number text,
   oblio_storno_series text,
   fgo_invoice_number text,
-  gls_awb_number text,
   fgo_invoice_series text,
   fgo_invoice_link text,
   fgo_storno_number text,
@@ -3802,7 +3801,11 @@ create table if not exists public.orders (
   stoc_eliberat_la timestamp with time zone,
   stoc_marketplace_la timestamp with time zone,
   ipay_order_number text,
-  netopia_ntp_id text);
+  netopia_ntp_id text,
+  gls_awb_number text,
+  gls_status_code text,
+  gls_status_checked_at timestamp with time zone,
+  gls_awb_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -4183,7 +4186,7 @@ alter table public.domain_orders add constraint domain_orders_status_check CHECK
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
 alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
-alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
@@ -4403,6 +4406,7 @@ CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btre
 CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
 CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);
 CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_status, status, created_at) WHERE (discount_code IS NOT NULL);
+CREATE INDEX orders_gls_urmarire_idx ON public.orders USING btree (gls_status_checked_at NULLS FIRST) WHERE ((gls_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX page_form_submissions_business_idx ON public.page_form_submissions USING btree (business_id, created_at DESC);
 CREATE INDEX product_import_rows_cursor_idx ON public.product_import_rows USING btree (import_id, status, row_index);
 CREATE INDEX product_import_rows_images_idx ON public.product_import_rows USING btree (import_id, row_index) WHERE (images_done = false);
@@ -4456,7 +4460,6 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(colete_config, '{client_secret,token}'::text[]) AS colete_config,
     privat.decripteaza_config(oblio_config, '{client_secret}'::text[]) AS oblio_config,
     privat.decripteaza_config(fgo_config, '{private_key}'::text[]) AS fgo_config,
-    privat.decripteaza_config(gls_config, '{password}'::text[]) AS gls_config,
     privat.decripteaza_config(cargus_config, '{password,subscription_key}'::text[]) AS cargus_config,
     privat.decripteaza_config(dpd_config, '{password}'::text[]) AS dpd_config,
     privat.decripteaza_config(fan_courier_config, '{password}'::text[]) AS fan_courier_config,
@@ -4487,7 +4490,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     storefront_design_draft,
     storefront_design_pub_at,
     cod_fee_config,
-    show_vat_label
+    show_vat_label,
+    privat.decripteaza_config(gls_config, '{password}'::text[]) AS gls_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────

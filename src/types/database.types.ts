@@ -1964,7 +1964,10 @@ export type Database = {
           fan_courier_awb_number: string | null
           fgo_invoice_link: string | null
           fgo_invoice_number: string | null
+          gls_awb_at: string | null
           gls_awb_number: string | null
+          gls_status_checked_at: string | null
+          gls_status_code: string | null
           fgo_invoice_series: string | null
           fgo_storno_number: string | null
           fgo_storno_series: string | null
@@ -2043,7 +2046,10 @@ export type Database = {
           fan_courier_awb_number?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
+          gls_awb_at?: string | null
           gls_awb_number?: string | null
+          gls_status_checked_at?: string | null
+          gls_status_code?: string | null
           fgo_invoice_series?: string | null
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null
@@ -2122,7 +2128,10 @@ export type Database = {
           fan_courier_awb_number?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
+          gls_awb_at?: string | null
           gls_awb_number?: string | null
+          gls_status_checked_at?: string | null
+          gls_status_code?: string | null
           fgo_invoice_series?: string | null
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null

@@ -147,9 +147,26 @@ export async function createFanCourierAwbAction(
       return { referinta: awbNumber, valoare: { awbNumber } };
     },
     verdictFurnizor,
-    // Pe `deja`: mai poarta comanda AWB-ul din registru? Daca nu, e urma unei
-    // anulari a carei eliberare s-a pierdut — se elibereaza si se reia.
-    async () => !!orderData.fan_courier_awb_number,
+    /*
+     * ⚠ NU SE DA `legaturaVie`, si nu din uitare.
+     *
+     * Aici statea `async () => !!orderData.<coloana>` — dar `orderData` se
+     * citeste INAINTE, iar mai sus exista un `return` care opreste totul daca
+     * numarul exista deja. Deci in clipa apelului predicatul era garantat fals:
+     * literalmente `async () => false`.
+     *
+     * Iar `false` pe ramura `deja` inseamna „elibereaza slotul si REIA", adica
+     * inca un apel la curier. Si `deja` apare exact in cazul pentru care exista
+     * registrul: AWB creat, scrierea pe comanda pierduta. Adica paza se
+     * transforma tocmai acolo in AL DOILEA COLET REAL, FACTURAT.
+     *
+     * Fara callback, `deja` ADOPTA referinta din registru si o scrie inapoi pe
+     * comanda — ce face codul de mai jos oricum.
+     *
+     * ⚠ Schimbul, pe fata: cazul prost devine o comanda care poarta un AWB
+     * anulat (vizibil, si deja strigat in `/admin/logs` de `marcheazaAnulata`
+     * cand eliberarea pica), in loc de un colet platit de doua ori.
+     */
   );
 
   if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };

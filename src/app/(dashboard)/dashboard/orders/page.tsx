@@ -14,6 +14,7 @@ import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
+import type { GlsConfig } from "@/lib/gls/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday";
 
@@ -49,7 +50,7 @@ export default async function OrdersPage({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config)")
+    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config)")
     .eq("user_id", user.id)
     .eq("type", "ministore")
     .limit(1)
@@ -73,6 +74,9 @@ export default async function OrdersPage({
   const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
   const dg = settings?.dpd_config as DpdConfig | null;
   const dpdEnabled = !!(dg?.enabled && dg?.username && dg?.client_id);
+  const gl = settings?.gls_config as GlsConfig | null;
+  /* Client Number-ul e obligatoriu in fiecare cerere MyGLS. */
+  const glsEnabled = !!(gl?.enabled && gl?.username && gl?.client_number);
   const fg = settings?.fan_courier_config as FanCourierConfig | null;
   const fanCourierEnabled = !!(fg?.enabled && fg?.username && fg?.client_id);
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -80,7 +84,7 @@ export default async function OrdersPage({
 
   const integrari: Integrari = {
     smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled,
-    cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled,
+    cargusEnabled, dpdEnabled, glsEnabled, fanCourierEnabled, samedayEnabled,
     fanPickup: { lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null },
   };
 
@@ -109,6 +113,7 @@ type Integrari = {
   fgoEnabled: boolean;
   cargusEnabled: boolean;
   dpdEnabled: boolean;
+  glsEnabled: boolean;
   fanCourierEnabled: boolean;
   samedayEnabled: boolean;
   fanPickup: { lastDate: string | null; lastId: string | null };
@@ -223,6 +228,6 @@ async function ListaComenzi({
   const pendingCount = statusCounts.pending ?? 0;
 
   return (
-    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
   );
 }

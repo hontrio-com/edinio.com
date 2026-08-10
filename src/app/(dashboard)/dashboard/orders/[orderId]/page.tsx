@@ -9,6 +9,7 @@ import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
+import type { GlsConfig } from "@/lib/gls/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday";
 import type { SmsoConfig } from "@/lib/smso";
@@ -41,7 +42,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -64,6 +65,10 @@ export default async function OrderDetailPage({ params }: Props) {
   const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
   const dg = settings?.dpd_config as DpdConfig | null;
   const dpdEnabled = !!(dg?.enabled && dg?.username && dg?.client_id);
+  const gl = settings?.gls_config as GlsConfig | null;
+  /* Client Number-ul e obligatoriu in fiecare cerere MyGLS: fara el butonul ar
+     aparea si ar esua la prima apasare. */
+  const glsEnabled = !!(gl?.enabled && gl?.username && gl?.client_number);
   const fg = settings?.fan_courier_config as FanCourierConfig | null;
   const fanCourierEnabled = !!(fg?.enabled && fg?.username && fg?.client_id);
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -97,6 +102,7 @@ export default async function OrderDetailPage({ params }: Props) {
       fgoEnabled={fgoEnabled}
       cargusEnabled={cargusEnabled}
       dpdEnabled={dpdEnabled}
+      glsEnabled={glsEnabled}
       fanCourierEnabled={fanCourierEnabled}
       samedayEnabled={samedayEnabled}
       smsoEnabled={smsoEnabled}

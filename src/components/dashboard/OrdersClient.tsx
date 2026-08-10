@@ -16,6 +16,7 @@ import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from 
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
+import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
 import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { FanCourierPickupModal } from "@/components/dashboard/FanCourierPickupModal";
 import { DpdPickupModal } from "@/components/dashboard/DpdPickupModal";
@@ -42,7 +43,7 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -62,6 +63,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   fgoEnabled?: boolean;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
+  glsEnabled?: boolean;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   businessId?: string;
@@ -81,6 +83,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [, startOblioTransition] = useTransition();
   const [cargusModalOrder, setCargusModalOrder] = useState<Order | null>(null);
   const [dpdModalOrder, setDpdModalOrder] = useState<Order | null>(null);
+  const [glsModalOrder, setGlsModalOrder] = useState<Order | null>(null);
   const [fanCourierModalOrder, setFanCourierModalOrder] = useState<Order | null>(null);
   const [fanPickupOpen, setFanPickupOpen] = useState(false);
   const [dpdPickupOpen, setDpdPickupOpen] = useState(false);
@@ -374,6 +377,15 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
           order={dpdModalOrder}
           businessId={businessId}
           onSuccess={() => { setDpdModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {glsModalOrder && businessId && (
+        <GlsAwbModal
+          open={!!glsModalOrder}
+          onClose={() => setGlsModalOrder(null)}
+          order={glsModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setGlsModalOrder(null); router.refresh(); }}
         />
       )}
       {fanCourierModalOrder && businessId && (
@@ -725,6 +737,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     {dpdEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB DPD</th>
                     )}
+                    {glsEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB GLS</th>
+                    )}
                     {fanCourierEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB FAN Courier</th>
                     )}
@@ -867,6 +882,29 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setDpdModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {glsEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["gls_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setGlsModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["gls_awb_number"] as string}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setGlsModalOrder(order); }}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
                               >
                                 <Package className="h-3 w-3" />

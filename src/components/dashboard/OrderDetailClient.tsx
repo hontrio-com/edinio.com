@@ -32,6 +32,7 @@ import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
+import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
@@ -222,6 +223,7 @@ export function OrderDetailClient({
   fgoEnabled,
   cargusEnabled,
   dpdEnabled,
+  glsEnabled,
   fanCourierEnabled,
   samedayEnabled,
   smsoEnabled,
@@ -243,6 +245,7 @@ export function OrderDetailClient({
   fgoEnabled?: boolean;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
+  glsEnabled?: boolean;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   smsoEnabled?: boolean;
@@ -321,6 +324,7 @@ export function OrderDetailClient({
   const [wootModalOpen, setWootModalOpen] = useState(false);
   const [cargusModalOpen, setCargusModalOpen] = useState(false);
   const [dpdModalOpen, setDpdModalOpen] = useState(false);
+  const [glsModalOpen, setGlsModalOpen] = useState(false);
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
   const [coleteModalOpen, setColeteModalOpen] = useState(false);
@@ -353,6 +357,7 @@ export function OrderDetailClient({
     { id: "fan-courier", name: "FAN Courier", logo: "/integrations/fan-courier.svg", enabled: !!fanCourierEnabled, awb: (order.fan_courier_awb_number as string | null) ?? null, open: () => setFanCourierModalOpen(true) },
     { id: "cargus", name: "Cargus", logo: "/integrations/cargus.svg", enabled: !!cargusEnabled, awb: (order.cargus_awb_number as string | null) ?? null, open: () => setCargusModalOpen(true) },
     { id: "dpd", name: "DPD", logo: "/integrations/dpd.svg", enabled: !!dpdEnabled, awb: (order.dpd_awb_number as string | null) ?? null, open: () => setDpdModalOpen(true) },
+    { id: "gls", name: "GLS", logo: "/integrations/gls.svg", enabled: !!glsEnabled, awb: (order.gls_awb_number as string | null) ?? null, open: () => setGlsModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
     { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
@@ -1331,6 +1336,9 @@ export function OrderDetailClient({
       )}
       {coleteEnabled && (
         <ColeteAwbModal open={coleteModalOpen} onClose={() => setColeteModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setColeteModalOpen(false); router.refresh(); }} />
+      )}
+      {glsEnabled && (
+        <GlsAwbModal open={glsModalOpen} onClose={() => setGlsModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setGlsModalOpen(false); router.refresh(); }} />
       )}
 
       {/* ── Status/payment change confirmation ── */}

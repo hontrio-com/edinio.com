@@ -102,6 +102,35 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [creating, setCreating] = useState(false);
   const [eticheta, setEticheta] = useState<string | null>(null);
   const [awbEmis, setAwbEmis] = useState<string | null>(null);
+  const [seDescarca, setSeDescarca] = useState(false);
+
+  /**
+   * Eticheta unui AWB emis mai demult, luata din R2.
+   *
+   * ⚠ NU se cere de la GLS: MyGLS o da o singura data, iar un al doilea
+   * `PrintLabels` ar crea un al doilea colet real. Ruta doar citeste ce s-a
+   * salvat la emitere.
+   */
+  async function descarcaSalvata() {
+    setSeDescarca(true);
+    try {
+      const res = await fetch(`/api/gls/awb?orderId=${order.id}&businessId=${businessId}`);
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        toast.error(j?.error ?? "Eticheta nu a putut fi descarcata");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `eticheta-gls-${comanda.gls_awb_number}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setSeDescarca(false);
+    }
+  }
 
   function descarca(base64: string, awb: string) {
     const octeti = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -176,8 +205,14 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         </div>
 
         {areAwb && !awbEmis && (
-          <div className="mb-4 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-            Comanda are deja AWB GLS <strong>{comanda.gls_awb_number}</strong>.
+          <div className="mb-4 space-y-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+            <p>
+              Comanda are deja AWB GLS <strong>{comanda.gls_awb_number}</strong>.
+            </p>
+            <Button size="sm" variant="outline" onClick={descarcaSalvata} disabled={seDescarca}>
+              {seDescarca ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Descarca eticheta
+            </Button>
           </div>
         )}
 

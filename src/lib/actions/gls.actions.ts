@@ -19,6 +19,8 @@ import {
 } from "@/lib/gls/client";
 import { coletGls, type DateExpediere, type OptiuniServicii } from "@/lib/gls/expediere";
 import { dataDinNet } from "@/lib/gls/data-net";
+import { cheieEticheta } from "@/lib/gls/eticheta";
+import { uploadToR2 } from "@/lib/r2";
 import type { Json } from "@/types/database.types";
 
 /**
@@ -286,6 +288,35 @@ export async function createGlsAwbAction(
     r.fel === "facut"
       ? r.valoare
       : { awb: r.referinta ?? "", etichetaBase64: null };
+
+  /*
+   * ⚠ ETICHETA SE SALVEAZA ACUM SAU NICIODATA.
+   *
+   * MyGLS o intoarce o singura data. Se urca in R2 INAINTE de a raspunde
+   * browserului, ca sa existe si dupa ce omul inchide pagina.
+   *
+   * Esecul urcarii NU opreste raspunsul: coletul exista deja la GLS, iar
+   * browserul primeste oricum PDF-ul in `etichetaBase64` si il descarca. Ar fi
+   * absurd sa intoarcem eroare pentru un fisier de rezerva si sa-l trimitem pe
+   * om sa apese din nou — a doua apasare nu mai poate obtine eticheta oricum.
+   */
+  if (r.fel === "facut" && rezultat.etichetaBase64) {
+    try {
+      await uploadToR2(
+        Buffer.from(rezultat.etichetaBase64, "base64"),
+        cheieEticheta(businessId, orderId),
+        "application/pdf",
+      );
+    } catch (e) {
+      await logError({
+        action: "gls.salveazaEticheta",
+        message: `AWB GLS ${rezultat.awb} emis, dar eticheta NU s-a putut salva: ${(e as Error).message}. Comerciantul o are doar din descarcarea automata.`,
+        details: { orderId, businessId, awb: rezultat.awb },
+        businessId,
+        severity: "warning",
+      });
+    }
+  }
 
   const { error: eScriere, data: randuri } = await supabase.from("orders").update({
     gls_awb_number: rezultat.awb,

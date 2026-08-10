@@ -25,7 +25,13 @@ const TTL_GASIT = 60_000;
 const TTL_NEGASIT = 15_000;
 type RandDomeniu = { slug: string; custom_domain: string | null };
 const cacheDomenii = new CacheScurt<RandDomeniu[]>(TTL_GASIT);
-const cacheSlugCatreDomeniu = new CacheScurt<string | null>(TTL_GASIT);
+/**
+ * Domeniul propriu al unui slug, IMPREUNA cu sanatatea lui. `sanatos: null`
+ * inseamna „inca neverificat" si se trateaza ca sanatos — doar un `false`
+ * dovedit opreste redirectul.
+ */
+type TintaProprie = { domeniu: string; sanatos: boolean | null };
+const cacheSlugCatreDomeniu = new CacheScurt<TintaProprie | null>(TTL_GASIT);
 
 function clientAnonim() {
   return createServerClient<Database>(
@@ -131,18 +137,32 @@ export async function proxy(request: NextRequest) {
 
     const { pathname } = request.nextUrl;
 
-    // Metadata routes are served by the host-aware root handlers (sitemap.ts /
-    // robots.ts), so don't rewrite them onto /{slug}.
-    if (pathname === "/sitemap.xml" || pathname === "/robots.txt") {
-      return NextResponse.next();
-    }
-
     // Look up business by custom_domain. A visitor may arrive on the "www."
     // twin, whose canonical is the apex — match both and redirect www → apex so
     // the store resolves regardless of which the customer typed.
     const isWww = bareHost.startsWith("www.");
     const apexHost = isWww ? bareHost.slice(4) : bareHost;
     const candidates = isWww ? [bareHost, apexHost] : [bareHost];
+
+    /*
+     * Rutele de metadate se servesc de handlerele de radacina, care stiu de host
+     * (sitemap.ts / robots.ts), deci nu se rescriu pe /{slug}.
+     *
+     * DAR normalizarea www -> apex trebuie sa se intample INAINTE. `sitemap.ts`
+     * cauta `custom_domain` dupa hostul brut, iar in baza domeniul e stocat
+     * canonic, ca apex: pe `www.magazin.ro` interogarea nu gasea nimic si iesea
+     * un sitemap GOL, cu 200 — adica exact forma pe care motoarele de cautare o
+     * accepta tacut si o tin minte. Iesirea de aici era plasata inaintea
+     * blocului de normalizare, deci le sarea pe amandoua.
+     */
+    if (pathname === "/sitemap.xml" || pathname === "/robots.txt") {
+      if (isWww) {
+        const target = new URL(`https://${apexHost}${pathname}`);
+        target.search = request.nextUrl.search;
+        return NextResponse.redirect(target, 308);
+      }
+      return NextResponse.next();
+    }
 
     // `error` se trateaza SEPARAT de „nu s-a gasit". Daca am cacha si esecul,
     // o pana de o clipa a bazei s-ar transforma in 15 secunde de 404 pe domeniul
@@ -156,8 +176,24 @@ export async function proxy(request: NextRequest) {
         .select("slug, custom_domain")
         .in("custom_domain", candidates)
         .eq("is_published", true);
+
+      /*
+       * O interogare PICATA nu inseamna „domeniul nu exista".
+       *
+       * `rows = data ?? []` trimitea mai departe o lista goala, care cadea pe
+       * ramura de 404 de la finalul blocului: o pana de o clipa a bazei
+       * transforma FIECARE magazin pe domeniu propriu intr-un 404 — si un 404
+       * pe care Google il poate indexa, deci cu efect mult mai lung decat pana.
+       * 503 spune adevarul („reveniti"), nu se indexeaza si nu se cacheaza.
+       */
+      if (error) {
+        return new NextResponse("Serviciu indisponibil temporar", {
+          status: 503,
+          headers: { "Retry-After": "30", "Cache-Control": "no-store" },
+        });
+      }
       rows = data ?? [];
-      if (!error) cacheDomenii.set(cheieDomeniu, rows, rows.length === 0 ? TTL_NEGASIT : undefined);
+      cacheDomenii.set(cheieDomeniu, rows, rows.length === 0 ? TTL_NEGASIT : undefined);
     }
 
     const exact = rows?.find((r) => r.custom_domain === bareHost) ?? null;
@@ -179,10 +215,24 @@ export async function proxy(request: NextRequest) {
       return NextResponse.rewrite(url);
     }
 
-    // Domain not found — show 404
-    const url = request.nextUrl.clone();
-    url.pathname = "/404";
-    return NextResponse.rewrite(url);
+    /*
+     * Domeniu necunoscut.
+     *
+     * `/404` NU e o cale rezervata: e in acelasi spatiu cu `/[slug]`, deci un
+     * magazin publicat cu slug-ul „404" ar fi servit, cu HTTP 200, pentru ORICE
+     * domeniu strain indreptat catre noi. Azi nu exista un asemenea magazin, dar
+     * nimic nu impiedica pe cineva sa il ceara maine.
+     *
+     * `NextResponse.rewrite(url, { status })` NU merge: in Next 16 statusul e
+     * pastrat doar pe `redirect` si pe `x-middleware-refresh`, iar randarea il
+     * suprascrie oricum (verificat in next/dist/server/lib/router-server si
+     * base-server). Deci raspundem direct, cu statusul pe care il vrem.
+     */
+    return new NextResponse(
+      "<!doctype html><meta charset=utf-8><title>Domeniu neconfigurat</title>" +
+        "<p>Acest domeniu nu este conectat la niciun magazin.",
+      { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+    );
   }
 
   // Platform host: if /{slug} is a published store with an active custom domain,
@@ -192,19 +242,34 @@ export async function proxy(request: NextRequest) {
     const firstSeg = pathname.split("/")[1] ?? "";
     if (firstSeg && !NON_STORE_SEGMENTS.has(firstSeg)) {
       // Acelasi rationament ca mai sus: esecul nu se cacheaza.
-      let domeniu = cacheSlugCatreDomeniu.get(firstSeg);
-      if (domeniu === undefined) {
+      let tinta = cacheSlugCatreDomeniu.get(firstSeg);
+      if (tinta === undefined) {
         const { data, error } = await clientAnonim()
           .from("businesses")
-          .select("custom_domain")
+          .select("custom_domain, custom_domain_healthy")
           .eq("slug", firstSeg)
           .eq("is_published", true)
           .maybeSingle();
-        domeniu = data?.custom_domain ?? null;
-        if (!error) cacheSlugCatreDomeniu.set(firstSeg, domeniu, domeniu === null ? TTL_NEGASIT : undefined);
+        tinta = data?.custom_domain
+          ? { domeniu: data.custom_domain, sanatos: data.custom_domain_healthy }
+          : null;
+        if (!error) cacheSlugCatreDomeniu.set(firstSeg, tinta, tinta === null ? TTL_NEGASIT : undefined);
       }
-      if (domeniu) {
-        const target = new URL(`https://${domeniu}${pathname.slice(firstSeg.length + 1) || "/"}`);
+      /*
+       * ═══ REDIRECTUL NU SE FACE CATRE UN DOMENIU DOVEDIT MORT. ═══
+       *
+       * Pana acum singura conditie era „coloana e nenula". Masurat pe 10.08.2026:
+       * `okai.ro` era cazut (ECONNREFUSED), iar magazinul `okxishop` — publicat si
+       * platit — devenea COMPLET inaccesibil, fiindca proxy-ul trimitea activ
+       * vizitatorii catre domeniul mort si le lua si ultima cale de acces, adresa
+       * de platforma. Pe `alexshop.ro` era si mai rau: domeniul servea un site
+       * WordPress strain, deci clientii plecau de la magazinul Edinio la altceva.
+       *
+       * `null` (neverificat inca) ramane redirect: un domeniu tocmai conectat nu
+       * asteapta cronul. Doar `false`, adica masurat si cazut, opreste.
+       */
+      if (tinta && tinta.sanatos !== false) {
+        const target = new URL(`https://${tinta.domeniu}${pathname.slice(firstSeg.length + 1) || "/"}`);
         target.search = request.nextUrl.search;
         return NextResponse.redirect(target, 307);
       }

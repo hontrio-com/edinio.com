@@ -462,22 +462,63 @@ const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.c
  */
 
 /**
- * Alerta pentru domenii custom care nu functioneaza si pe care reconcilierea
- * automata NU a reusit sa le repare singura.
+ * O problema de domeniu, asa cum o produce cronul de reconciliere.
+ *
+ * `alNostru` e campul care schimba TOT, si lipsa lui e jumatate din incidentul
+ * esafe.ro (10.08.2026). Doua situatii care arata identic din afara cer raspunsuri
+ * opuse de la comerciant:
+ *   - domeniul e deja indreptat catre noi si NOI n-am terminat configurarea:
+ *     el nu are ce sa faca, si orice instructiune de DNS trimisa lui e o pista
+ *     falsa care il tine si mai mult cazut;
+ *   - DNS-ul lui nu raspunde deloc (registrar expirat, zona stearsa): acolo noi
+ *     nu putem intra, si doar el poate repara.
+ *
+ * `problem` e diagnosticul tehnic si ajunge NUMAI la suport. Catre comerciant
+ * pleaca `pasi`, in cuvintele lui.
+ */
+export type DomeniuStricat = {
+  /** Numele magazinului, pentru cine citeste alerta la suport. */
+  store: string;
+  /** Slugul: adresa de rezerva de pe edinio.com, care merge si cu domeniul mort. */
+  slug: string | null;
+  domain: string;
+  /** Diagnosticul tehnic. Pentru suport, nu pentru comerciant. */
+  problem: string;
+  /** Ce are de facut comerciantul, pe intelesul lui. Poate fi gol. */
+  pasi: string[];
+  /** `true` cand domeniul e delegat catre noi, deci reparatia e a NOASTRA. */
+  alNostru: boolean;
+  /** Adresa proprietarului magazinului, cand o stim. */
+  ownerEmail?: string | null;
+  /**
+   * Adresa proprietarului e chiar pe domeniul cazut, deci alerta NU are cum sa
+   * ajunga la el: cu nameserverele mute pica si MX-ul. Suportul trebuie sa stie
+   * ca trebuie sunat, nu doar scris.
+   */
+  ownerEmailPeDomeniu?: boolean;
+};
+
+/** Un domeniu despre care nu am putut afla nimic. Nici sanatos, nici stricat. */
+export type DomeniuNeverificat = { domain: string; motiv: string };
+
+/**
+ * Alerta catre SUPORT pentru domenii custom care nu functioneaza.
  *
  * Se cheama DOAR din cronul orar (`/api/cron/domains-reconcile`), deci nu are
  * suprafata publica si nu-i trebuie plafon — spre deosebire de
  * `sendMigrationLeadToAdmin` de mai sus. Continutul e compus integral aici din
  * date interne; nimic din el nu vine dintr-un formular.
+ *
+ * Franarea (un email la 12 ore, per destinatar) sta la apelant, fiindca acolo e
+ * baza de date in care se tine marcajul.
  */
-export async function sendBrokenDomainsToAdmin(items: {
-  store: string;
-  domain: string;
-  problem: string;
-}[]) {
-  if (!process.env.RESEND_API_KEY || items.length === 0) return;
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export async function sendBrokenDomainsToAdmin(
+  items: DomeniuStricat[],
+  neverificate: DomeniuNeverificat[] = [],
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  if (items.length === 0 && neverificate.length === 0) return;
+
   const rows = items
     .map(
       (it) => `
@@ -485,23 +526,137 @@ export async function sendBrokenDomainsToAdmin(items: {
       <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
         <p style="margin:0;font-size:15px;color:#18181b;font-weight:600;">${esc(it.domain)}</p>
         <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${esc(it.store)}</p>
-        <p style="margin:6px 0 0 0;font-size:13px;color:#dc2626;">${esc(it.problem)}</p>
+        <p style="margin:6px 0 0 0;font-size:13px;color:${it.alNostru ? "#dc2626" : "#b45309"};">
+          <strong>${it.alNostru ? "AL NOSTRU" : "de reparat la client"}</strong> &mdash; ${esc(it.problem)}
+        </p>
+        <p style="margin:6px 0 0 0;font-size:12px;color:#71717a;">
+          ${it.ownerEmail
+            ? `Proprietar: ${esc(it.ownerEmail)}`
+            : "PROPRIETARUL NU POATE FI ANUNTAT: magazinul nu are nicio adresa de email."}
+          ${it.ownerEmailPeDomeniu
+            ? ` &mdash; <strong style="color:#dc2626;">adresa e pe domeniul cazut, deci emailul NU ajunge. Suna-l.</strong>`
+            : ""}
+        </p>
       </td>
-    </tr>`
+    </tr>`,
     )
     .join("");
-  const titlu = items.length === 1 ? "Un domeniu nu functioneaza" : `${items.length} domenii nu functioneaza`;
+
+  /*
+   * Sectiunea asta exista fiindca lipsa ei a tinut esafe.ro cazut ore intregi:
+   * un domeniu despre care nu se putea citi nimic cadea in „asteptam clientul",
+   * o categorie care prin proiectare nu alerteaza pe nimeni. „Nu stiu" nu mai are
+   * voie sa fie tacut.
+   */
+  const bloculNeverificat = neverificate.length
+    ? `
+    <p style="margin:24px 0 8px 0;font-size:13px;font-weight:600;color:#a16207;">
+      ${neverificate.length} ${neverificate.length === 1 ? "domeniu pe care NU l-am putut verifica" : "domenii pe care NU le-am putut verifica"}
+    </p>
+    <p style="margin:0 0 10px 0;font-size:12px;color:#71717a;">Nu sunt declarate nici sanatoase, nici stricate. Daca revin la fiecare rulare, citirea e stricata, nu domeniul.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;overflow:hidden;">
+      ${neverificate
+        .map(
+          (n) => `
+      <tr>
+        <td style="padding:10px 16px;border-bottom:1px solid #fef3c7;">
+          <p style="margin:0;font-size:14px;color:#18181b;font-weight:600;">${esc(n.domain)}</p>
+          <p style="margin:2px 0 0 0;font-size:12px;color:#92400e;">${esc(n.motiv)}</p>
+        </td>
+      </tr>`,
+        )
+        .join("")}
+    </table>`
+    : "";
+
+  const titlu =
+    items.length === 0
+      ? "Domenii neverificate"
+      : items.length === 1
+        ? "Un domeniu nu functioneaza"
+        : `${items.length} domenii nu functioneaza`;
+
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${titlu}</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Reconcilierea automata a incercat sa le repare si nu a reusit. Fara zona DNS un domeniu e cazut complet — si site, si email.</p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
-      ${rows}
-    </table>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Reconcilierea automata face doar reparatii care adauga. Ce e marcat „AL NOSTRU" inseamna ca domeniul e deja indreptat catre Vercel si asteapta o interventie de la noi — pana atunci e cazut complet, si site, si email.</p>
+    ${rows
+      ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">${rows}</table>`
+      : ""}
+    ${bloculNeverificat}
   `;
+
+  const subiect = items.length
+    ? `[Domenii] ${items.length} ${items.length === 1 ? "domeniu cazut" : "domenii cazute"}`
+    : `[Domenii] ${neverificate.length} neverificate`;
+
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Domenii] ${items.length} ${items.length === 1 ? "domeniu cazut" : "domenii cazute"}`,
+    subject: subiect,
+    html: baseTemplate(content),
+  });
+}
+
+/**
+ * Aceeasi problema, spusa PROPRIETARULUI magazinului.
+ *
+ * Pana pe 10.08.2026 alerta pleca exclusiv catre `SUPPORT_ADMIN_EMAIL`, adica in
+ * aceeasi cutie cu tichetele si cu notificarile de utilizator nou — iar omul al
+ * carui magazin era cazut nu afla niciodata. eSafe a stat inaccesibil o zi
+ * intreaga fara ca proprietarul sa primeasca un rand.
+ *
+ * Aici nu intra niciun diagnostic tehnic: comerciantul primeste doar ce inseamna
+ * pentru el (magazinul e inchis pe domeniul lui), ce are de facut, si adresa de
+ * rezerva pe care poate trimite clientii chiar acum.
+ */
+export async function sendBrokenDomainToOwner(to: string, items: DomeniuStricat[]) {
+  if (!process.env.RESEND_API_KEY || items.length === 0) return;
+
+  const blocuri = items
+    .map((it) => {
+      const rezerva = it.slug ? `${SITE_URL}/${it.slug}` : SITE_URL;
+      const pasi = it.pasi.length
+        ? `<ol style="margin:12px 0 0 0;padding-left:20px;font-size:14px;color:#3f3f46;line-height:1.7;">${it.pasi
+            .map((p) => `<li style="margin-bottom:4px;">${esc(p)}</li>`)
+            .join("")}</ol>`
+        : "";
+      return `
+      <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:18px;margin-bottom:16px;">
+        <p style="margin:0;font-size:15px;font-weight:700;color:#18181b;">${esc(it.domain)}</p>
+        <p style="margin:8px 0 0 0;font-size:14px;color:#3f3f46;line-height:1.6;">
+          ${
+            it.alNostru
+              ? "Ai facut deja tot ce tinea de tine: domeniul este indreptat catre noi. Configurarea de la noi nu este insa gata, si pana o terminam domeniul nu raspunde. Ne ocupam."
+              : "Domeniul nu raspunde deloc, asa ca nici magazinul si nici emailul de pe el nu functioneaza. Ce trebuie schimbat este la firma de la care ai domeniul, iar acolo nu putem intra noi in locul tau."
+          }
+        </p>
+        ${pasi}
+        <p style="margin:14px 0 0 0;font-size:13px;color:#71717a;">
+          Pana se rezolva, magazinul tau este deschis si functioneaza la adresa
+          <a href="${escapeUrl(rezerva)}" style="color:#15803d;text-decoration:none;font-weight:600;">${esc(rezerva)}</a>.
+          Poti trimite clientii acolo fara nicio grija.
+        </p>
+      </div>`;
+    })
+    .join("");
+
+  const unul = items.length === 1;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${unul ? "Domeniul tau nu functioneaza" : "Domeniile tale nu functioneaza"}</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Verificam din ora in ora domeniile conectate la Edinio. La ${unul ? "domeniul tau" : "domeniile tale"} am gasit o problema si vrem sa afli de la noi, nu de la un client care nu a putut intra in magazin.</p>
+    ${blocuri}
+    <div style="text-align:center;margin-top:24px;">
+      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Deschide setarile de domeniu
+      </a>
+    </div>
+    <p style="margin:20px 0 0 0;font-size:13px;color:#71717a;">Daca ceva nu iti este clar, raspunde la acest email si te ajutam noi.</p>
+  `;
+
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: subiectSigur(unul ? `Domeniul ${items[0].domain} nu functioneaza` : `${items.length} domenii ale magazinului tau nu functioneaza`),
     html: baseTemplate(content),
   });
 }

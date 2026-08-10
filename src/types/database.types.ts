@@ -569,6 +569,8 @@ export type Database = {
           created_at: string
           cui: string | null
           custom_domain: string | null
+          custom_domain_checked_at: string | null
+          custom_domain_healthy: boolean | null
           description: string | null
           email: string | null
           features: Json
@@ -605,6 +607,8 @@ export type Database = {
           created_at?: string
           cui?: string | null
           custom_domain?: string | null
+          custom_domain_checked_at?: string | null
+          custom_domain_healthy?: boolean | null
           description?: string | null
           email?: string | null
           features?: Json
@@ -641,6 +645,8 @@ export type Database = {
           created_at?: string
           cui?: string | null
           custom_domain?: string | null
+          custom_domain_checked_at?: string | null
+          custom_domain_healthy?: boolean | null
           description?: string | null
           email?: string | null
           features?: Json

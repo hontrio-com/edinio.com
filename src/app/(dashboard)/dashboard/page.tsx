@@ -128,9 +128,11 @@ export default async function DashboardPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
+  // `custom_domain_healthy` intra in select fiindca bara de stare nu are voie sa
+  // dea verde pe un domeniu dovedit mort. `null` inseamna doar „neverificat".
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, slug, custom_domain, business_name, is_published, logo_url")
+    .select("id, slug, custom_domain, custom_domain_healthy, business_name, is_published, logo_url")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -138,9 +140,14 @@ export default async function DashboardPage() {
 
   if (!business) redirect("/onboarding/details");
 
+  // Adresa de platforma ramane calculata separat: e ce oferim cand domeniul
+  // propriu nu raspunde, si acolo magazinul chiar se deschide.
+  // Rezerva nu e cosmetica: pe calea de avarie asta devine linkul ANCORAT si
+  // COPIAT de comerciant, deci un `undefined` s-ar duce la clienti prin clipboard.
+  const platformUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com"}/${business.slug}`;
   const publicUrl = business.custom_domain
     ? `https://${business.custom_domain}`
-    : `${process.env.NEXT_PUBLIC_SITE_URL}/${business.slug}`;
+    : platformUrl;
 
   /*
    * Bara de stare pleaca IMEDIAT; cifrele curg dupa ea.
@@ -159,6 +166,9 @@ export default async function DashboardPage() {
         isPublished={business.is_published}
         businessId={business.id}
         publicUrl={publicUrl}
+        platformUrl={platformUrl}
+        customDomain={business.custom_domain}
+        domainHealthy={business.custom_domain_healthy}
       />
       <Suspense fallback={<ScheletPanou />}>
         <ContinutPanou business={business} userId={user.id} publicUrl={publicUrl} />

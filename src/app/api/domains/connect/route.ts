@@ -2,8 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { addDomainToVercel, removeDomainFromVercel } from "@/lib/vercel";
+import { addDomainToVercel, removeDomainFromVercel, type MetodaConectare } from "@/lib/vercel";
 import { valideazaDomeniuClient } from "@/lib/platform-hosts";
+
+/**
+ * Metoda de conectare, asa cum a ales-o clientul.
+ *
+ * Implicit „inregistrari": e singura varianta care nu poate strica nimic din ce
+ * are deja. „nameservere" cere zona la Vercel, iar zona porneste GOALA — deci ii
+ * opreste emailul pana isi readauga MX-urile. Cand lipseste, alegem varianta
+ * care nu face rau.
+ *
+ * O valoare necunoscuta se REFUZA, nu se rezolva tacit in cea implicita: daca
+ * interfata trimite altceva decat stim noi, clientul a apasat „nameservere" si
+ * ar primi tacut conectarea prin inregistrari, cu instructiuni pentru cealalta
+ * metoda. Etichetele vechi ale interfetei sunt acceptate explicit ca sinonime.
+ */
+function citesteMetoda(brut: unknown): MetodaConectare | null {
+  if (brut === undefined || brut === null || brut === "") return "inregistrari";
+  if (brut === "inregistrari" || brut === "records") return "inregistrari";
+  if (brut === "nameservere" || brut === "nameservers") return "nameservere";
+  return null;
+}
 
 /**
  * Scoate domeniul din Vercel doar daca niciun ALT magazin nu-l mai foloseste.
@@ -17,28 +37,45 @@ import { valideazaDomeniuClient } from "@/lib/platform-hosts";
 async function stergeDacaNuIlMaiFoloseseNimeni(
   domeniu: string,
   businessIdCurent: string,
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   // Cautarea trebuie facuta cu SERVICE ROLE, nu cu clientul utilizatorului:
   // RLS ii arata userului doar magazinele PUBLICATE plus ale lui, deci un
   // magazin nepublicat al altui comerciant care foloseste acelasi domeniu era
   // invizibil aici si domeniul i se stergea din Vercel de sub picioare.
-  const { data: altele } = await createAdminClient()
+  const { data: altele, error } = await createAdminClient()
     .from("businesses").select("id").eq("custom_domain", domeniu).neq("id", businessIdCurent).limit(1);
-  if (altele && altele.length > 0) return;
-  await removeDomainFromVercel(domeniu);
+
+  // Daca nu putem sti cine mai foloseste domeniul, NU stergem: o stergere gresita
+  // scoate din rutare magazinul altui comerciant.
+  if (error) {
+    return { success: false, error: "Nu am putut verifica daca domeniul mai e folosit de alt magazin." };
+  }
+  if (altele && altele.length > 0) return { success: true };
+
+  return await removeDomainFromVercel(domeniu);
 }
 
 export async function POST(req: NextRequest) {
   const user = await getCachedUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
 
-  const { domain, businessId } = (await req.json()) as {
-    domain: string;
-    businessId: string;
+  const body = (await req.json()) as {
+    domain?: string;
+    businessId?: string;
+    metoda?: unknown;
   };
+  const { domain, businessId } = body;
 
   if (!domain || !businessId) {
     return NextResponse.json({ error: "Date incomplete" }, { status: 400 });
+  }
+
+  const metoda = citesteMetoda(body.metoda);
+  if (!metoda) {
+    return NextResponse.json(
+      { error: "Metoda de conectare necunoscuta. Alege inregistrari A/CNAME sau nameservere." },
+      { status: 400 },
+    );
   }
 
   // Valideaza INAINTE de orice apel catre Vercel si inainte de orice scriere:
@@ -87,8 +124,8 @@ export async function POST(req: NextRequest) {
   // fara nimic in interfata care sa spuna asta. Acum cel nou e complet pus la
   // punct si salvat inainte sa se demonteze ceva.
 
-  // 1. Adauga domeniul nou (cont + zona DNS, proiect, geaman www).
-  const vercelResult = await addDomainToVercel(clean);
+  // 1. Adauga domeniul nou. Zona DNS se atinge DOAR pe metoda „nameservere".
+  const vercelResult = await addDomainToVercel(clean, { metoda });
   if (!vercelResult.success) {
     return NextResponse.json(
       { error: vercelResult.error ?? "Nu am putut adauga domeniul pe Vercel" },
@@ -102,7 +139,18 @@ export async function POST(req: NextRequest) {
   // ramane legata de `user_id` ca sa nu depinda doar de grant.
   const { error } = await createAdminClient()
     .from("businesses")
-    .update({ custom_domain: clean })
+    .update({
+      custom_domain: clean,
+      /*
+       * Domeniu nou = sanatate NECUNOSCUTA, nu „stricata". `null` lasa proxy-ul
+       * sa redirectioneze catre el imediat, fara sa astepte cronul; doar o
+       * masuratoare care DOVEDESTE ca e mort il opreste. Daca am lasa aici
+       * steagul mostenit de la domeniul dinainte, un `false` vechi ar taia
+       * redirectul catre un domeniu care poate merge perfect.
+       */
+      custom_domain_healthy: null,
+      custom_domain_checked_at: null,
+    })
     .eq("id", businessId)
     .eq("user_id", user.id);
 
@@ -110,12 +158,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Nu am putut salva domeniul" }, { status: 500 });
   }
 
-  // 3. Abia acum retragem domeniul vechi.
+  const avertismente = vercelResult.warning ? [vercelResult.warning] : [];
+
+  // 3. Abia acum retragem domeniul vechi. Esecul nu pica cererea — domeniul nou
+  // e deja salvat si functional — dar nici nu se ascunde: pana se rezolva, cel
+  // vechi ramane atasat proiectului nostru.
   if (domeniuVechi && domeniuVechi !== clean) {
-    await stergeDacaNuIlMaiFoloseseNimeni(domeniuVechi, businessId);
+    const scos = await stergeDacaNuIlMaiFoloseseNimeni(domeniuVechi, businessId);
+    if (!scos.success) {
+      avertismente.push(`Domeniul vechi ${domeniuVechi} nu a putut fi scos din rutare: ${scos.error ?? "eroare necunoscuta"}`);
+    }
   }
 
-  return NextResponse.json({ success: true, domain: clean, warning: vercelResult.warning });
+  return NextResponse.json({
+    success: true,
+    domain: clean,
+    metoda,
+    warning: avertismente.length ? avertismente.join(" ") : undefined,
+  });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -142,15 +202,50 @@ export async function DELETE(req: NextRequest) {
 
   const domainToRemove = biz.custom_domain;
 
-  // Clear from DB first (safe side — if Vercel fails, DB is clean)
-  await createAdminClient()
+  /*
+   * Vercel INTAI, baza dupa.
+   *
+   * Invers — cum era pana acum — un esec la Vercel lasa domeniul atasat in
+   * proiect dar sters din `custom_domain`, adica invizibil pentru tot ce porneste
+   * de la coloana aia: cronul de reconciliere, emailurile, /admin/logs. Nimeni
+   * nu-l mai vedea, deci nimeni nu-l mai putea repara, iar comerciantul primea
+   * „deconectat" pe un domeniu care ii tinea in continuare rutarea. Asa, cel mai
+   * rau caz e o deconectare care esueaza VIZIBIL si se poate reincerca.
+   */
+  const scos = await stergeDacaNuIlMaiFoloseseNimeni(domainToRemove, businessId);
+  if (!scos.success) {
+    return NextResponse.json(
+      {
+        error:
+          `Nu am putut scoate ${domainToRemove} din rutarea Vercel: ${scos.error ?? "eroare necunoscuta"} ` +
+          `Domeniul a ramas conectat la magazin. Incearca din nou in cateva minute.`,
+      },
+      { status: 502 },
+    );
+  }
+
+  const { error } = await createAdminClient()
     .from("businesses")
-    .update({ custom_domain: null })
+    .update({
+      custom_domain: null,
+      // Steagurile de sanatate se refera la un domeniu care nu mai e al
+      // magazinului; lasate in urma, ar minti despre urmatorul.
+      custom_domain_healthy: null,
+      custom_domain_checked_at: null,
+    })
     .eq("id", businessId)
     .eq("user_id", user.id);
 
-  // Then remove from Vercel
-  await stergeDacaNuIlMaiFoloseseNimeni(domainToRemove, businessId);
+  if (error) {
+    return NextResponse.json(
+      {
+        error:
+          `${domainToRemove} a fost scos din rutare, dar magazinul a ramas salvat cu el. ` +
+          `Reincarca pagina si incearca deconectarea din nou.`,
+      },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ success: true });
 }

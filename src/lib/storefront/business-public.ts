@@ -69,7 +69,11 @@ type CampuriInterne =
   | "lng"
   | "niche_id"
   | "created_at"
-  | "updated_at";
+  | "updated_at"
+  // Sanatatea domeniului custom: o constata cronul, o citesc proxy-ul si panoul.
+  // Paginile publice nu o cer niciodata (nu e in COLOANE_BUSINESS_PUBLIC).
+  | "custom_domain_healthy"
+  | "custom_domain_checked_at";
 
 export type BusinessPublic = Omit<Business, CampuriInterne>;
 
@@ -79,7 +83,10 @@ export type BusinessPublic = Omit<Business, CampuriInterne>;
  * de care are nevoie (proprietar, suspendare, sitemap). Din el se taie
  * `pentruBrowser` inainte de granita cu clientul.
  */
-export type BusinessCitit = Omit<Business, "lat" | "lng" | "niche_id" | "created_at">;
+export type BusinessCitit = Omit<
+  Business,
+  "lat" | "lng" | "niche_id" | "created_at" | "custom_domain_healthy" | "custom_domain_checked_at"
+>;
 
 /**
  * Taie campurile interne inainte ca randul sa treaca granita catre client.
@@ -103,6 +110,8 @@ export function pentruBrowser<T extends Partial<Business>>(business: T): Omit<T,
     niche_id: _nisa,
     created_at: _creat,
     updated_at: _actualizat,
+    custom_domain_healthy: _sanatate,
+    custom_domain_checked_at: _verificatLa,
     ...public_
   } = business;
   return public_;

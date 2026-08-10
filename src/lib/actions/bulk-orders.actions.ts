@@ -14,6 +14,7 @@ import { createSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { createFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { createDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { createGlsAwbAction } from "@/lib/actions/gls.actions";
+import { createPallexAwbAction } from "@/lib/actions/pallex.actions";
 import { greutateaColetului, idurileDeCantarit } from "@/lib/shipping/awb-weight";
 import type { ProdusCotat } from "@/lib/shipping/cart-weight";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -24,6 +25,7 @@ import type { SamedayConfig } from "@/lib/sameday";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
+import { pallexGata, type PallExConfig } from "@/lib/pallex/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -46,8 +48,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -213,13 +215,14 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
   const fc = settings?.fan_courier_config as FanCourierConfig | null;
   const dg = settings?.dpd_config as DpdConfig | null;
   const gl = settings?.gls_config as GlsConfig | null;
+  const pe = settings?.pallex_config as PallExConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -232,6 +235,9 @@ export async function bulkGenerateAwbs(
      * in loc de un singur mesaj limpede „GLS nu e configurat".
      */
     gls: !!(gl?.enabled && gl?.username && gl?.password && gl?.client_number),
+    /* Aceeasi regula ca in `configSiComanda` din pallex.actions.ts, scrisa o
+       singura data in `pallexGata` — vezi comentariul de acolo. */
+    pallex: pallexGata(pe),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -241,7 +247,7 @@ export async function bulkGenerateAwbs(
 
   const { data: orders } = await admin
     .from("orders")
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -258,6 +264,7 @@ export async function bulkGenerateAwbs(
   const COURIER_ALIASES: Record<string, Exclude<BulkCourier, "auto">> = {
     cargus: "cargus", sameday: "sameday", fancourier: "fancourier", "fan-courier": "fancourier", "fan_courier": "fancourier", dpd: "dpd",
     gls: "gls",
+    pallex: "pallex", "pall-ex": "pallex",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -278,6 +285,7 @@ export async function bulkGenerateAwbs(
       : target === "sameday" ? row.sameday_awb_number
       : target === "fancourier" ? row.fan_courier_awb_number
       : target === "gls" ? row.gls_awb_number
+      : target === "pallex" ? row.pallex_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -410,6 +418,50 @@ async function createAwbForOrder(
         ramburs: cod,
         continut: content,
         servicii: laPunct ? { parcelShopId: addr.locker_id } : undefined,
+      });
+    }
+    case "pallex": {
+      /*
+       * ⚠⚠ COMENZILE CU BANI NEINCASATI NU PLEACA IN LOT.
+       *
+       * Pall-Ex nu are ramburs, deloc. Pe bucata, formularul ii cere
+       * comerciantului sa confirme explicit ca trimite oricum; in lot nu exista
+       * niciun camp de confirmat si nimeni nu se uita la fiecare comanda.
+       *
+       * Trecute tacut, ar insemna zeci de paleti plecati cu marfa neplatita si
+       * fara nicio cale de incasare — o greseala pe care n-o mai repara nimeni a
+       * doua zi. Aici iese ca EROARE, cu numele comenzii, si comerciantul o
+       * termina din formularul ei.
+       */
+      if (cod > 0) {
+        return {
+          error:
+            `Comanda are ${cod.toFixed(2)} lei neincasati, iar Pall-Ex nu incaseaza la livrare. `
+            + "Emite partida din comanda, unde poti confirma explicit.",
+        };
+      }
+      /*
+       * ⚠ Strada, judetul si codul postal se compun EXACT ca in `PallexAwbModal`,
+       * ca lotul si emiterea pe bucata sa trimita acelasi text la curier. Doua
+       * compuneri diferite ar insemna ca aceeasi comanda pleaca cu adrese diferite
+       * dupa cum a fost apasat butonul.
+       *
+       * Datele si ferestrele orare se lasa NECOMPLETATE dinadins: actiunea le
+       * calculeaza din configurarea magazinului, deci lotul si formularul cad pe
+       * aceleasi valori implicite.
+       */
+      return createPallexAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          strada: [street, streetNo].filter(Boolean).join(" ").trim() || addressLine,
+          oras: city,
+          judet: county || null,
+          codPostal: zip || null,
+          telefon: o.customer_phone,
+        },
+        numarPaleti: 1,
+        greutateKg: weight,
+        observatii: content.slice(0, 100),
       });
     }
     default:

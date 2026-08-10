@@ -106,6 +106,7 @@ const ORBIT_ICONS: { src: string; alt: string; filter?: string; scale?: number }
   { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   { src: "/integrations/smso.svg", alt: "SMSO", scale: 1.3 },
   { src: "/integrations/gls.svg", alt: "GLS" },
+  { src: "/integrations/pallex.avif", alt: "Pall-Ex" },
 ];
 
 function IntegrationOrbit() {
@@ -229,7 +230,7 @@ const FEATURES: Feature[] = [
       "Plăți, curieri, facturare, SMS și marketing. Totul conectat nativ la magazinul tău.",
     benefits: [
       "Plăți prin card, ramburs sau ridicare din magazin",
-      "Curieri: Sameday, Fan Courier, Cargus, DPD, GLS, Woot",
+      "Curieri: Sameday, Fan Courier, Cargus, DPD, GLS, Pall-Ex, Woot",
       "Facturare: SmartBill, Oblio, FGO",
       "SMS și marketing: SMSO",
     ],

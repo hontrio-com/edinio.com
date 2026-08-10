@@ -13,6 +13,12 @@ const COURIERS: { code: string; label: string }[] = [
   { code: "sameday", label: "Sameday" },
   { code: "woot", label: "Woot" },
   { code: "colete", label: "Colete Online" },
+  /* ⚠ Trebuie sa ramana in pas cu `COURIER_FIELDS` din src/lib/aboutyou/sync.ts.
+     Lipsa unei intrari aici nu da nicio eroare: expedierea catre About You cade
+     pe „Mapeaza curierul in setari" — un mesaj care trimite omul catre un
+     control care nu exista. GLS lipsea de la 27.08, din aceeasi scapare. */
+  { code: "gls", label: "GLS" },
+  { code: "pallex", label: "Pall-Ex" },
 ];
 
 export function AboutYouCarrierMapping({

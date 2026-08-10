@@ -17,6 +17,7 @@ import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.ac
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
 import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
+import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
 import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { FanCourierPickupModal } from "@/components/dashboard/FanCourierPickupModal";
 import { DpdPickupModal } from "@/components/dashboard/DpdPickupModal";
@@ -43,7 +44,7 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -64,6 +65,8 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
   glsEnabled?: boolean;
+  pallexEnabled?: boolean;
+  pallexZile?: { ridicare: number; livrare: number };
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   businessId?: string;
@@ -84,6 +87,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [cargusModalOrder, setCargusModalOrder] = useState<Order | null>(null);
   const [dpdModalOrder, setDpdModalOrder] = useState<Order | null>(null);
   const [glsModalOrder, setGlsModalOrder] = useState<Order | null>(null);
+  const [pallexModalOrder, setPallexModalOrder] = useState<Order | null>(null);
   const [fanCourierModalOrder, setFanCourierModalOrder] = useState<Order | null>(null);
   const [fanPickupOpen, setFanPickupOpen] = useState(false);
   const [dpdPickupOpen, setDpdPickupOpen] = useState(false);
@@ -139,8 +143,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (fanCourierEnabled) list.push({ key: "fancourier", label: "FAN Courier" });
     if (dpdEnabled) list.push({ key: "dpd", label: "DPD" });
     if (glsEnabled) list.push({ key: "gls", label: "GLS" });
+    if (pallexEnabled) list.push({ key: "pallex", label: "Pall-Ex" });
     return list;
-  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled]);
+  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled]);
   const anyAwb = awbCouriers.length > 0;
 
   const pageOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);
@@ -387,6 +392,16 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
           order={glsModalOrder}
           businessId={businessId}
           onSuccess={() => { setGlsModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {pallexModalOrder && businessId && (
+        <PallexAwbModal
+          zile={pallexZile}
+          open={!!pallexModalOrder}
+          onClose={() => setPallexModalOrder(null)}
+          order={pallexModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setPallexModalOrder(null); router.refresh(); }}
         />
       )}
       {fanCourierModalOrder && businessId && (
@@ -741,6 +756,12 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     {glsEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB GLS</th>
                     )}
+                    {/* ⚠ Ordinea coloanelor din <thead> si din <tbody> trebuie sa fie
+                        ACEEASI: gardate de acelasi steag dar asezate altfel, tabelul
+                        se decaleaza pe latime si nimic nu semnaleaza asta. */}
+                    {pallexEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Partida Pall-Ex</th>
+                    )}
                     {fanCourierEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB FAN Courier</th>
                     )}
@@ -910,6 +931,29 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {pallexEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["pallex_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setPallexModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["pallex_awb_number"] as string}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setPallexModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza partida
                               </button>
                             )}
                           </td>

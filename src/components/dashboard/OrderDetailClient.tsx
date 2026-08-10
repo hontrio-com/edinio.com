@@ -33,6 +33,7 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
+import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
@@ -224,6 +225,8 @@ export function OrderDetailClient({
   cargusEnabled,
   dpdEnabled,
   glsEnabled,
+  pallexEnabled,
+  pallexZile,
   fanCourierEnabled,
   samedayEnabled,
   smsoEnabled,
@@ -246,6 +249,8 @@ export function OrderDetailClient({
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
   glsEnabled?: boolean;
+  pallexEnabled?: boolean;
+  pallexZile?: { ridicare: number; livrare: number };
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   smsoEnabled?: boolean;
@@ -325,6 +330,7 @@ export function OrderDetailClient({
   const [cargusModalOpen, setCargusModalOpen] = useState(false);
   const [dpdModalOpen, setDpdModalOpen] = useState(false);
   const [glsModalOpen, setGlsModalOpen] = useState(false);
+  const [pallexModalOpen, setPallexModalOpen] = useState(false);
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
   const [coleteModalOpen, setColeteModalOpen] = useState(false);
@@ -358,6 +364,10 @@ export function OrderDetailClient({
     { id: "cargus", name: "Cargus", logo: "/integrations/cargus.svg", enabled: !!cargusEnabled, awb: (order.cargus_awb_number as string | null) ?? null, open: () => setCargusModalOpen(true) },
     { id: "dpd", name: "DPD", logo: "/integrations/dpd.svg", enabled: !!dpdEnabled, awb: (order.dpd_awb_number as string | null) ?? null, open: () => setDpdModalOpen(true) },
     { id: "gls", name: "GLS", logo: "/integrations/gls.svg", enabled: !!glsEnabled, awb: (order.gls_awb_number as string | null) ?? null, open: () => setGlsModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
+       `shipping_address.courier` — altfel `chosenCourier` ramane nedefinit si
+       panoul arata „Curier recomandat" in loc de „Clientul a ales". */
+    { id: "pallex", name: "Pall-Ex", logo: "/integrations/pallex.avif", enabled: !!pallexEnabled, awb: (order.pallex_awb_number as string | null) ?? null, open: () => setPallexModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
     { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
@@ -1339,6 +1349,9 @@ export function OrderDetailClient({
       )}
       {glsEnabled && (
         <GlsAwbModal open={glsModalOpen} onClose={() => setGlsModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setGlsModalOpen(false); router.refresh(); }} />
+      )}
+      {pallexEnabled && (
+        <PallexAwbModal zile={pallexZile} open={pallexModalOpen} onClose={() => setPallexModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setPallexModalOpen(false); router.refresh(); }} />
       )}
 
       {/* ── Status/payment change confirmation ── */}

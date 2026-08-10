@@ -106,6 +106,7 @@ describe("acoperire", () => {
       "dpd_config",
       "fan_courier_config",
       "gls_config",
+      "pallex_config",
       "sameday_config",
       "woot_config",
     ];

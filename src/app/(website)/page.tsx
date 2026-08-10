@@ -76,7 +76,7 @@ const jsonLd = {
       },
       featureList: [
         "Creare magazin online",
-        "Integrari curierat (FAN Courier, Sameday, Cargus, DPD, GLS)",
+        "Integrari curierat (FAN Courier, Sameday, Cargus, DPD, GLS, Pall-Ex)",
         "Plati online (Stripe, Netopia)",
         "Facturare automata (SmartBill, Oblio)",
         "AWB-uri automate",

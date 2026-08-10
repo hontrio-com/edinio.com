@@ -1998,6 +1998,12 @@ export type Database = {
           offer_discount_amount: number
           order_number: string
           order_source: Json | null
+          pallex_awb_at: string | null
+          pallex_awb_number: string | null
+          pallex_bordereau_id: number | null
+          pallex_consignment_id: number | null
+          pallex_status_checked_at: string | null
+          pallex_status_id: string | null
           payment_method: string
           payment_status: string
           revolut_order_id: string | null
@@ -2080,6 +2086,12 @@ export type Database = {
           offer_discount_amount?: number
           order_number: string
           order_source?: Json | null
+          pallex_awb_at?: string | null
+          pallex_awb_number?: string | null
+          pallex_bordereau_id?: number | null
+          pallex_consignment_id?: number | null
+          pallex_status_checked_at?: string | null
+          pallex_status_id?: string | null
           payment_method?: string
           payment_status?: string
           revolut_order_id?: string | null
@@ -2162,6 +2174,12 @@ export type Database = {
           offer_discount_amount?: number
           order_number?: string
           order_source?: Json | null
+          pallex_awb_at?: string | null
+          pallex_awb_number?: string | null
+          pallex_bordereau_id?: number | null
+          pallex_consignment_id?: number | null
+          pallex_status_checked_at?: string | null
+          pallex_status_id?: string | null
           payment_method?: string
           payment_status?: string
           revolut_order_id?: string | null
@@ -2858,6 +2876,7 @@ export type Database = {
           order_counter: number
           order_number_format: string
           page_content: Json
+          pallex_config: Json | null
           payment_methods: Json
           prices_include_vat: boolean
           returns_config: Json
@@ -2920,6 +2939,7 @@ export type Database = {
           order_counter?: number
           order_number_format?: string
           page_content?: Json
+          pallex_config?: Json | null
           payment_methods?: Json
           prices_include_vat?: boolean
           returns_config?: Json
@@ -2982,6 +3002,7 @@ export type Database = {
           order_counter?: number
           order_number_format?: string
           page_content?: Json
+          pallex_config?: Json | null
           payment_methods?: Json
           prices_include_vat?: boolean
           returns_config?: Json

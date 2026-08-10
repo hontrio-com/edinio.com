@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { JUDETE, potrivesteJudet, judetDupaCodAuto, despartaLocalitateaDeCod } from "./judete";
+import { JUDETE, potrivesteJudet, judetDupaCodAuto, codAutoAlJudetului, despartaLocalitateaDeCod } from "./judete";
 import { ROMANIAN_COUNTIES } from "@/lib/validations/business";
 
 /**
@@ -103,4 +103,46 @@ test("⚠ despartirea localitatii de cod nu rupe numele din doua cuvinte", () =>
   assert.deepEqual(despartaLocalitateaDeCod("Bucuresti B"), { localitate: "Bucuresti", judet: "Municipiul Bucuresti" });
   assert.deepEqual(despartaLocalitateaDeCod(""), { localitate: "", judet: "" });
   assert.deepEqual(despartaLocalitateaDeCod(null), { localitate: "", judet: "" });
+});
+
+/**
+ * Drumul invers, cerut de Pall-Ex: numele judetului -> codul auto.
+ *
+ * ⚠ Un cod gresit nu crapa nimic — partida pleaca pur si simplu in alt judet, si
+ * se afla de la curier. De aceea se verifica si bijectia, nu doar cateva perechi.
+ */
+test("codul auto al judetului, pentru Pall-Ex", () => {
+  assert.equal(codAutoAlJudetului("Sibiu"), "SB");
+  assert.equal(codAutoAlJudetului("Brasov"), "BV");
+  assert.equal(codAutoAlJudetului("Bistrita-Nasaud"), "BN");
+  /* Formele venite din afara trec prin `potrivesteJudet`, ca peste tot. */
+  assert.equal(codAutoAlJudetului("TIMIŞ"), "TM");
+  assert.equal(codAutoAlJudetului("BISTRIŢA-NĂSĂUD"), "BN");
+  /* ⚠ Capitala e singurul cod de o litera, si e cel mai frecvent judet din tara. */
+  assert.equal(codAutoAlJudetului("Municipiul Bucuresti"), "B");
+  assert.equal(codAutoAlJudetului("Bucuresti"), "B");
+  assert.equal(codAutoAlJudetului("Sector 3"), "B");
+});
+
+test("⚠ un judet necunoscut da null, nu o ghicire", () => {
+  /* Un cod inventat trimite marfa in alt colt de tara; un camp gol se vede. */
+  assert.equal(codAutoAlJudetului("Chisinau"), null);
+  assert.equal(codAutoAlJudetului(""), null);
+  assert.equal(codAutoAlJudetului(null), null);
+  assert.equal(codAutoAlJudetului(undefined), null);
+});
+
+test("⚠ fiecare judet din lista are cod, si niciun cod nu e folosit de doua ori", () => {
+  /* Fara proba asta, un judet scapat din tabel ar pleca la Pall-Ex cu campul gol
+     — si abia comerciantul ar afla, de la curier, ca partida nu are destinatie. */
+  const coduri = new Set<string>();
+  for (const judet of JUDETE) {
+    const cod = codAutoAlJudetului(judet);
+    assert.ok(cod, `${judet} nu are cod auto`);
+    assert.ok(!coduri.has(cod!), `codul ${cod} e folosit de doua judete`);
+    coduri.add(cod!);
+    /* Si drumul se inchide: codul trebuie sa duca inapoi la acelasi judet. */
+    assert.equal(judetDupaCodAuto(cod), judet);
+  }
+  assert.equal(coduri.size, JUDETE.length);
 });

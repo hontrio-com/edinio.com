@@ -198,15 +198,26 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // DPD international services don't support cash-on-delivery — EU orders pay online.
   // Klarna is hardcoded to RO/RON (the store currency); Klarna requires the consumer
   // country to match the currency, so it can't serve non-RO orders — exclude it abroad.
-  const availablePaymentMethods = isIntl
-    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && m.type !== "klarna")
+  /*
+   * ⚠ PALL-EX NU INCASEAZA LA LIVRARE, deci rambursul nu are ce cauta pe el.
+   *
+   * API-ul ClientPlus n-are niciun camp de incasare. Lasata la vedere, combinatia
+   * „Livrare paletizata Pall-Ex" + „Plata la livrare" se putea chiar plasa:
+   * comanda iesea `unpaid`, cu taxa de ramburs incasata pentru un serviciu care
+   * nu exista, iar la emitere formularul ii cerea comerciantului sa confirme ca
+   * trimite marfa fara nicio cale de a lua banii. Clientului i se promisese ceva
+   * imposibil.
+   */
+  const faraRamburs = isIntl || courierSelection?.courier === "pallex";
+  const availablePaymentMethods = faraRamburs
+    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && (!isIntl || m.type !== "klarna"))
     : paymentMethods;
   useEffect(() => {
-    if (isIntl && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
+    if (faraRamburs && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
       setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntl]);
+  }, [isIntl, faraRamburs]);
 
   // Customization state
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});

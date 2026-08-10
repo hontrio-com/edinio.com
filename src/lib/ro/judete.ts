@@ -69,6 +69,34 @@ export function judetDupaCodAuto(cod: string | null | undefined): string | null 
 }
 
 /**
+ * Drumul invers: numele judetului → codul auto („Brasov" → „BV").
+ *
+ * ⚠ Exista pentru Pall-Ex, care primeste judetul ca ISO auto si NU ca nume:
+ * `consignor_county` si `consignee_county` sunt exemplificate in documentatia
+ * ClientPlus (OpenAPI 1.0.5) cu „SB" si „B". Trimis ca nume, campul e refuzat sau,
+ * mai rau, acceptat si ignorat — iar partida pleaca fara judet.
+ *
+ * Tabelul se intoarce din `COD_AUTO`, ca sa nu existe doua liste care se pot
+ * departa una de alta. Cele 42 de intrari sunt o bijectie (verificat de probe):
+ * daca vreodata cineva adauga un cod duplicat, proba pica in loc ca o localitate
+ * sa plece tacut in alt judet.
+ *
+ * Intrarea trece intai prin `potrivesteJudet`, deci merg si formele venite din
+ * afara — „BISTRIŢA-NĂSĂUD", „Sector 3", „bucuresti". `null` cand nu seamana cu
+ * niciun judet: mai bine un camp gol pe care omul il completeaza decat un cod
+ * ghicit, care trimite marfa in alt colt de tara.
+ */
+const DUPA_JUDET: Record<string, string> = Object.fromEntries(
+  Object.entries(COD_AUTO).map(([cod, judet]) => [judet, cod]),
+);
+
+export function codAutoAlJudetului(judet: string | null | undefined): string | null {
+  const nume = potrivesteJudet(judet);
+  if (!nume) return null;
+  return DUPA_JUDET[nume] ?? null;
+}
+
+/**
  * Desparte „Brasov BV" in localitate si judet.
  *
  * ⚠ Codul se ia in seama DOAR daca e chiar un cod de judet cunoscut. Altfel

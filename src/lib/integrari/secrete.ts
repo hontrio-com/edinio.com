@@ -49,6 +49,10 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   netopia_config: ["api_key", "pos_signature"],
   notice_config: ["api_token"],
   oblio_config: ["client_secret"],
+  /* Pall-Ex ClientPlus: autentificare HTTP Basic, deci parola pleaca la fiecare
+     cerere. `username` NU e secret — e mailul cu care intra comerciantul in
+     ClientPlus si trebuie sa se vada in formular, ca sa stie ce cont a legat. */
+  pallex_config: ["password"],
   revolut_config: ["secret_key", "signing_secret", "token"],
   sameday_config: ["password"],
   smartbill_config: ["token"],

@@ -113,6 +113,7 @@ const COURIER_LABELS: Record<string, string> = {
   woot: "Woot",
   colete: "Colete Online",
   gls: "GLS",
+  pallex: "Pall-Ex",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -131,7 +132,7 @@ const COURIER_LABELS: Record<string, string> = {
  *   2. `flatCourierIds` nu l-ar fi cuprins, si o regula de transport cu actiunea
  *      „pret fix" scrisa de comerciant pentru GLS ar fi fost ignorata TACUT.
  */
-const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls"]);
+const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex"]);
 
 /** Merchant's custom checkout label (shipping_zones[id].label) or the branded default. */
 function addrLabel(custom: string | undefined, fallback: string): string {
@@ -202,7 +203,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -745,6 +746,30 @@ export async function getShippingOptions(
           price: zone.price,
         });
       }
+    } else if (courierId === "pallex") {
+      /*
+       * ⚠ PALL-EX NU COTEAZA, si nici n-ar avea cum.
+       *
+       * API-ul ClientPlus (OpenAPI 1.0.5) n-are nicio metoda de tarif: cele noua
+       * endpointuri sunt partide, borderouri, documente si statusuri. Pretul vine
+       * dintr-un contract negociat pe volum, nu dintr-o grila publica — de aia
+       * ramura asta e SINCRONA, fara nimic impins in `promises`, si de aia
+       * `pallex` e in `FARA_API_DE_TARIF`.
+       *
+       * ⚠ Si nu face `return`: optiunile trebuie doar impinse in `options`, ca sa
+       * ajunga la semnarea unica de la sfarsitul functiei. O ramura care iese
+       * singura a mai plecat o data fara simbol, iar comenzile au cazut atunci pe
+       * transportul implicit in loc de cel cotat.
+       *
+       * ⚠ NUMAI livrare la adresa. Pall-Ex duce paleti, nu colete: nu are lockere,
+       * nu are puncte de ridicare, si de aceea nu apare in `CURIERI_CU_LOCKERE`.
+       */
+      options.push({
+        courier: "pallex",
+        courierLabel: addrLabel(zone.label, "Livrare paletizata Pall-Ex"),
+        deliveryType: "address",
+        price: zone.price,
+      });
     } else {
       // Generic courier (own) — flat price
       options.push({

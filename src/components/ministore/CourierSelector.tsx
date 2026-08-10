@@ -101,6 +101,21 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
     const thisReq = ++reqId.current;
     setLoading(true);
     setLoadError(false);
+    /*
+     * ⚠ Ce alesese clientul se tine minte peste reincarcare.
+     *
+     * Reincarcarea se declanseaza si de `cod`, adica de METODA DE PLATA — nu doar
+     * de adresa. Aruncand selectia neconditionat, un simplu clic pe alta metoda de
+     * plata ii schimba clientului si curierul, pe cel mai ieftin din lista (opts
+     * vin sortate dupa pret). La Pall-Ex asta devenea o bucla completa: alegerea
+     * lui scoate rambursul din metodele de plata (Pall-Ex nu incaseaza), schimbarea
+     * metodei schimba `cod`, iar reincercarea arunca tocmai alegerea Pall-Ex si
+     * cadea pe un curier de COLETE — care nu poate duce un palet.
+     *
+     * Se pastreaza deci cheia curenta si se re-potriveste in lista noua; abia daca
+     * optiunea a disparut cu adevarat se cade pe prima.
+     */
+    const cheieAnterioara = selectedKey;
     setSelectedKey(null);
     setSelectedLocker(null);
     onSelect(null);
@@ -109,22 +124,25 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
       .then((opts) => {
         if (thisReq !== reqId.current) return; // stale response
         setOptions(opts);
-        // Auto-select first option
+        // Auto-select: intai ce alesese clientul, si abia apoi prima optiune.
         if (opts.length > 0) {
-          const first = opts[0];
-          const k = optionKey(first);
+          const pastrata = cheieAnterioara
+            ? opts.find((o) => optionKey(o) === cheieAnterioara)
+            : undefined;
+          const ales = pastrata ?? opts[0];
+          const k = optionKey(ales);
           setSelectedKey(k);
           onSelect({
-            courier: first.courier,
-            courierLabel: first.courierLabel,
-            deliveryType: first.deliveryType,
-            price: first.price,
-            wootServiceId: first.wootServiceId,
-            wootCourierName: first.wootCourierName,
-            wootServiceName: first.wootServiceName,
-            coleteServiceId: first.coleteServiceId,
-            coleteServiceName: first.coleteServiceName,
-            token: first.token,
+            courier: ales.courier,
+            courierLabel: ales.courierLabel,
+            deliveryType: ales.deliveryType,
+            price: ales.price,
+            wootServiceId: ales.wootServiceId,
+            wootCourierName: ales.wootCourierName,
+            wootServiceName: ales.wootServiceName,
+            coleteServiceId: ales.coleteServiceId,
+            coleteServiceName: ales.coleteServiceName,
+            token: ales.token,
           });
         }
       })

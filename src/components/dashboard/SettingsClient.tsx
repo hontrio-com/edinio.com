@@ -231,6 +231,7 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "woot",         label: "Woot",              logo: "/integrations/woot.webp",         defaultPrice: 16 },
   { id: "colete",       label: "Colete Online",     logo: "/integrations/colete-online.svg", defaultPrice: 15 },
   { id: "gls",          label: "GLS",               logo: "/integrations/gls.svg",          defaultPrice: 18 },
+  { id: "pallex",       label: "Pall-Ex",           logo: "/integrations/pallex.avif",      defaultPrice: 150 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -245,6 +246,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   woot: "Woot",
   colete: "Colete Online",
   gls: "Livrare prin GLS",
+  pallex: "Livrare paletizata Pall-Ex",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -258,7 +260,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
  * fix, lasand livrarea pe zero lei. Trebuie sa ramana in pas cu
  * `FARA_API_DE_TARIF` din src/lib/actions/shipping.actions.ts.
  */
-const FARA_PRET_AUTOMAT = new Set(["gls"]);
+const FARA_PRET_AUTOMAT = new Set(["gls", "pallex"]);
 
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};

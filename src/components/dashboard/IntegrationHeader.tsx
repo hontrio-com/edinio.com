@@ -10,6 +10,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   sameday: { src: "/integrations/sameday.webp", alt: "Sameday" },
   woot: { src: "/integrations/woot.webp", alt: "Woot" },
   colete: { src: "/integrations/colete-online.svg", alt: "Colete Online" },
+  gls: { src: "/integrations/gls.svg", alt: "GLS" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },

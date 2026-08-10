@@ -43,6 +43,7 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   dpd_config: ["password"],
   fan_courier_config: ["password"],
   fgo_config: ["private_key"],
+  gls_config: ["password"],
   ipay_config: ["password"],
   klarna_config: ["password", "authorization_token"],
   netopia_config: ["api_key", "pos_signature"],

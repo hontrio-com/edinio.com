@@ -83,4 +83,38 @@ describe("acoperire", () => {
       assert.ok(cheie.endsWith("_config"), `${cheie} nu arata a coloana de config`);
     }
   });
+
+  test("fiecare curier cu parola in formular o are declarata aici", () => {
+    /*
+     * ⚠ Proba asta exista fiindca omisiunea CHIAR s-a intamplat: la adaugarea
+     * GLS, coloana intrase sub criptare in SQL (`privat.campuri_secrete`) dar
+     * lipsea din harta de aici.
+     *
+     * Consecinta nu e o scurgere de text clar — pagina de setari citeste cu
+     * clientul comerciantului, iar vederea nu decripteaza pentru
+     * `authenticated`, deci ar fi plecat `enc.v1.…`. Dar tot e defect: cifrul
+     * ajunge in browser degeaba, campul de parola afiseaza un sir de neinteles,
+     * iar `secretulEsteSalvat` raspunde gresit — asa ca formularul nu mai stie
+     * ca exista o parola salvata si prima salvare o sterge.
+     *
+     * Lista e scrisa de mana dinadins: un curier nou trebuie sa treaca pe aici,
+     * si atunci se vede ce a uitat.
+     */
+    const CURIERI_CU_PAROLA = [
+      "cargus_config",
+      "colete_config",
+      "dpd_config",
+      "fan_courier_config",
+      "gls_config",
+      "sameday_config",
+      "woot_config",
+    ];
+    for (const cheie of CURIERI_CU_PAROLA) {
+      assert.ok(
+        CAMPURI_SECRETE[cheie],
+        `${cheie} nu e in CAMPURI_SECRETE — parola ar ajunge in browser`,
+      );
+      assert.ok(CAMPURI_SECRETE[cheie].length > 0, `${cheie} n-are niciun camp secret`);
+    }
+  });
 });

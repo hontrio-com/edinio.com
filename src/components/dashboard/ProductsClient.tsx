@@ -262,8 +262,13 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <h1 className="text-xl font-semibold text-foreground">Produsele mele</h1>
+          {/*
+            `totalFiltrate`, nu `products.length`: al doilea e cat incape pe o
+            pagina (25), deci un magazin cu 3351 de produse afisa „25" langa
+            titlu si „1-25 din 3351" la subsol, in aceeasi pagina.
+          */}
           <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs font-semibold rounded-full">
-            {products.length}
+            {totalFiltrate}
           </span>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">

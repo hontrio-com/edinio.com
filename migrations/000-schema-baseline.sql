@@ -216,7 +216,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, gls_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -3170,6 +3170,7 @@ create table if not exists privat.store_settings (
   colete_config jsonb,
   oblio_config jsonb,
   fgo_config jsonb,
+  gls_config jsonb,
   cargus_config jsonb,
   dpd_config jsonb,
   fan_courier_config jsonb,
@@ -3769,6 +3770,7 @@ create table if not exists public.orders (
   oblio_storno_number text,
   oblio_storno_series text,
   fgo_invoice_number text,
+  gls_awb_number text,
   fgo_invoice_series text,
   fgo_invoice_link text,
   fgo_storno_number text,
@@ -4454,6 +4456,7 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(colete_config, '{client_secret,token}'::text[]) AS colete_config,
     privat.decripteaza_config(oblio_config, '{client_secret}'::text[]) AS oblio_config,
     privat.decripteaza_config(fgo_config, '{private_key}'::text[]) AS fgo_config,
+    privat.decripteaza_config(gls_config, '{password}'::text[]) AS gls_config,
     privat.decripteaza_config(cargus_config, '{password,subscription_key}'::text[]) AS cargus_config,
     privat.decripteaza_config(dpd_config, '{password}'::text[]) AS dpd_config,
     privat.decripteaza_config(fan_courier_config, '{password}'::text[]) AS fan_courier_config,

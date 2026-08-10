@@ -1964,6 +1964,7 @@ export type Database = {
           fan_courier_awb_number: string | null
           fgo_invoice_link: string | null
           fgo_invoice_number: string | null
+          gls_awb_number: string | null
           fgo_invoice_series: string | null
           fgo_storno_number: string | null
           fgo_storno_series: string | null
@@ -2042,6 +2043,7 @@ export type Database = {
           fan_courier_awb_number?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
+          gls_awb_number?: string | null
           fgo_invoice_series?: string | null
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null
@@ -2120,6 +2122,7 @@ export type Database = {
           fan_courier_awb_number?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
+          gls_awb_number?: string | null
           fgo_invoice_series?: string | null
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null
@@ -2822,6 +2825,7 @@ export type Database = {
           fan_courier_config: Json | null
           fgo_config: Json | null
           free_shipping_threshold: number | null
+          gls_config: Json | null
           google_analytics_config: Json
           google_merchant_config: Json
           id: string
@@ -2883,6 +2887,7 @@ export type Database = {
           fan_courier_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
+          gls_config?: Json | null
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string
@@ -2944,6 +2949,7 @@ export type Database = {
           fan_courier_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
+          gls_config?: Json | null
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string

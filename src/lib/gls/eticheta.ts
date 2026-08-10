@@ -5,12 +5,17 @@ import { createHmac } from "node:crypto";
  *
  * ═══ DE CE E NEVOIE DE ASA CEVA ═══
  *
- * MyGLS intoarce PDF-ul o SINGURA data, la creare. Nu exista „retipareste": un
- * al doilea `PrintLabels` ar crea un al doilea colet, real si facturat. Deci
- * daca nu il salvam noi in clipa aceea, eticheta se pierde definitiv — iar
- * comerciantul ramane cu un colet pe care nu-l poate eticheta.
+ * `PrintLabels` intoarce PDF-ul la creare, si NU se cheama a doua oara pentru
+ * aceeasi comanda: ar face un al DOILEA colet, real si facturat.
  *
- * Ceilalti curieri n-au problema asta: la ei PDF-ul se cere oricand, dupa AWB.
+ * ⚠ Corectare (2026-08-27, dupa documentatia MyGLS ver. 25.12.11): prima forma a
+ * fisierului spunea ca eticheta se pierde definitiv daca n-o salvam atunci. NU e
+ * adevarat — asa se poarta pluginul de WooCommerce, nu API-ul. Exista
+ * `GetPrintedLabels`, care da eticheta din nou fara sa creeze nimic; cere insa
+ * `ParcelId` (pastrat in registrul de operatii) si inca un drum pana la GLS.
+ *
+ * Salvarea pe CDN ramane deci buna, dar din alte motive decat credeam:
+ * descarcarea e instantanee, merge si cand MyGLS e picat, si nu consuma apeluri.
  *
  * ═══ ⚠ NU E O POZA DE PRODUS ═══
  *

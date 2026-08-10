@@ -268,6 +268,23 @@ export function numereColet(r: RaspunsEtichete): string[] {
     .map(String);
 }
 
+/**
+ * ID-urile interne ale coletelor (`ParcelId`).
+ *
+ * ⚠ SE PASTREAZA OBLIGATORIU, chiar daca pe comanda afisam `ParcelNumber`.
+ *
+ * Documentatia MyGLS (ver. 25.12.11) arata ca `DeleteLabels` si
+ * `GetPrintedLabels` cer amandoua `ParcelIdList` — adica ID-ul din baza GLS, NU
+ * numarul de pe eticheta. Fara el nu se poate nici anula un AWB, nici retipari
+ * eticheta. Numarul de colet, pe care il vede clientul, nu e acceptat de niciuna
+ * dintre cele doua metode.
+ */
+export function idColete(r: RaspunsEtichete): number[] {
+  return (r.PrintLabelsInfoList ?? [])
+    .map((i) => i.ParcelId)
+    .filter((n): n is number => typeof n === "number");
+}
+
 /** Erorile per colet, ca text citibil de comerciant. */
 export function eroriPeColet(r: RaspunsEtichete): string[] {
   return (r.PrintLabelsErrorList ?? []).map((e) => {

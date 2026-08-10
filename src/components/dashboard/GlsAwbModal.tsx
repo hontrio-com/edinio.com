@@ -28,14 +28,15 @@ type ShippingAddress = {
 /**
  * Emiterea AWB-ului GLS dintr-o comanda.
  *
- * ═══ ⚠ ETICHETA SE DESCARCA ACUM, NU MAI TARZIU ═══
+ * ═══ ETICHETA ═══
  *
- * MyGLS intoarce PDF-ul o SINGURA data, la creare. Nu exista „retipareste": a
- * chema iar `PrintLabels` ar crea un al DOILEA colet, real si facturat.
+ * Se descarca automat la emitere si se pastreaza pe CDN, deci se poate lua
+ * oricand din `/api/gls/awb`.
  *
- * De aceea eticheta se descarca automat imediat ce AWB-ul e emis, si modalul
- * ramane deschis cu butonul de descarcare cat timp e in memorie. Daca pagina se
- * reincarca, PDF-ul se pierde — iar coletul exista deja, deci NU se reemite.
+ * ⚠ Ce NU se face niciodata: `PrintLabels` chemat a doua oara pentru aceeasi
+ * comanda — ar crea un al DOILEA colet, real si facturat. Cand eticheta chiar
+ * lipseste din CDN, se cere de la GLS cu `GetPrintedLabels`, care primeste
+ * `ParcelId` si nu creeaza nimic.
  *
  * ⚠ GLS nu cere greutatea la emitere (spre deosebire de ceilalti cinci curieri):
  * cantareste la depozit. De aia formularul n-are camp de greutate — nu e o
@@ -107,9 +108,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   /**
    * Eticheta unui AWB emis mai demult, luata din R2.
    *
-   * ⚠ NU se cere de la GLS: MyGLS o da o singura data, iar un al doilea
-   * `PrintLabels` ar crea un al doilea colet real. Ruta doar citeste ce s-a
-   * salvat la emitere.
+   * ⚠ Ruta NU cheama `PrintLabels`: acela ar crea un al doilea colet real si
+   * facturat. Citeste ce s-a salvat pe CDN la emitere.
    */
   async function descarcaSalvata() {
     setSeDescarca(true);
@@ -180,12 +180,12 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     setAwbEmis(r.awb);
     if (r.etichetaBase64) {
       setEticheta(r.etichetaBase64);
-      /* Descarcare automata: e singura ocazie. */
+      /* Descarcare automata: comerciantul o are pe loc, fara inca un clic. */
       descarca(r.etichetaBase64, r.awb);
       toast.success(`AWB GLS ${r.awb} creat — eticheta s-a descarcat`);
     } else {
       toast.warning(
-        `AWB GLS ${r.awb} exista deja. Eticheta nu se mai poate obtine de la GLS — cauta-o in descarcari sau in MyGLS.`,
+        `AWB GLS ${r.awb} exista deja. Foloseste butonul de descarcare pentru eticheta.`,
       );
     }
     onSuccess();
@@ -223,8 +223,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               Salveaza eticheta acum
             </p>
             <p className="text-xs text-muted-foreground">
-              GLS o trimite o singura data, la emitere. Daca inchizi pagina fara sa o
-              salvezi, nu se mai poate obtine — o gasesti doar in contul MyGLS.
+Am salvat-o si noi, deci o poti descarca oricand din comanda. Butonul de mai
+              jos ti-o da imediat, fara sa mai intrebe GLS.
             </p>
             <Button size="sm" onClick={() => descarca(eticheta, awbEmis)}>
               <Download className="h-4 w-4" />

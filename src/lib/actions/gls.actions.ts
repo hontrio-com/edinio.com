@@ -10,6 +10,7 @@ import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   areEtichete,
   eroriPeColet,
+  idColete,
   numereColet,
   pdfDinEtichete,
   probaConexiune,
@@ -259,10 +260,16 @@ export async function createGlsAwbAction(
       }
 
       const numere = numereColet(raspuns);
+      /*
+       * ⚠ `ParcelId` se pastreaza in registru, nu pe comanda: `DeleteLabels` si
+       * `GetPrintedLabels` il cer pe EL, nu numarul de pe eticheta. Fara el nu
+       * se poate nici anula AWB-ul, nici retipari eticheta din GLS.
+       */
+      const ids = idColete(raspuns);
       const pdf = pdfDinEtichete(raspuns);
       return {
         referinta: numere[0],
-        detalii: { numere, avertismente: erori },
+        detalii: { numere, parcelIds: ids, avertismente: erori },
         valoare: {
           awb: numere[0],
           etichetaBase64: pdf ? pdf.toString("base64") : null,

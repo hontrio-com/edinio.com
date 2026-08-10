@@ -126,7 +126,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -242,6 +242,7 @@ async function ContinutSetari({
   const sg = storeSettings?.sameday_config as CourierCfg | null;
   const wc = storeSettings?.woot_config as CourierCfg | null;
   const cc = storeSettings?.colete_config as CourierCfg | null;
+  const gl = storeSettings?.gls_config as CourierCfg | null;
 
   const activeCourierIds: string[] = [
     ...(fc?.enabled && fc?.username && fc?.client_id ? ["fan-courier"] : []),
@@ -250,6 +251,13 @@ async function ContinutSetari({
     ...(sg?.enabled && sg?.username && sg?.pickup_point_id ? ["sameday"] : []),
     ...(wc?.enabled && wc?.public_key && wc?.secret_key ? ["woot"] : []),
     ...(cc?.enabled && cc?.client_id && cc?.client_secret ? ["colete"] : []),
+    /*
+     * Aceeasi regula de „configurat" ca in pagina comenzii si ca in checkout:
+     * `client_number` e obligatoriu fiindca fara el MyGLS nu stie pe ce contract
+     * sa emita. Cele trei locuri trebuie sa spuna acelasi lucru, altfel panoul
+     * ofera o metoda pe care magazinul n-o poate folosi.
+     */
+    ...(gl?.enabled && gl?.username && gl?.client_number ? ["gls"] : []),
     "own",
     "pickup",
   ];

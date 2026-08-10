@@ -41,6 +41,19 @@ export type GlsConfig = {
   tip_imprimanta: TipImprimanta;
   /** 1..4 pentru A4_2x2; de unde incepe tiparirea pe coala. */
   pozitie_tiparire: number;
+  /**
+   * ⚠ Codul postal al adresei de RIDICARE.
+   *
+   * Sta aici, in configurare, si nu se ia din `businesses`, fiindca acolo nu
+   * exista: tabelul are `store_address`, `store_city`, `store_county` — si
+   * niciun camp de cod postal, nici pentru magazin, nici pentru firma.
+   *
+   * Ceilalti curieri nu-l cer, fiindca ridica de la un punct inregistrat la ei
+   * (`location_id` la Cargus, `pickup_point_id` la Sameday). GLS primeste adresa
+   * intreaga la fiecare colet, iar `ZipCode` e camp cerut in clasa `Address`.
+   * Lasat gol, plecau toate expedierile cu el necompletat.
+   */
+  expeditor_cod_postal?: string;
 };
 
 /**
@@ -81,13 +94,32 @@ export type RaspunsEtichete = {
   /** PDF-ul etichetelor, ca lista de octeti. */
   Labels?: number[];
   PrintLabelsInfoList?: { ParcelId?: number; ParcelNumber?: number; ClientReference?: string }[];
-  PrintLabelsErrorList?: {
-    ErrorCode?: number;
-    ErrorDescription?: string;
-    ClientReferenceList?: string[];
-  }[];
+  PrintLabelsErrorList?: EroareColet[];
   ErrorCode?: number;
   ErrorDescription?: string;
+};
+
+/**
+ * Eroarea unei metode de ParcelService.
+ *
+ * ⚠ `ParcelIdList` e o LISTA, nu un `ParcelId`.
+ *
+ * Documentatia MyGLS (ver. 25.12.11, pagina 11, clasa `ErrorInfo`) o defineste ca
+ * „lista de ID-uri unde s-a produs eroarea". Adica o singura intrare de eroare
+ * poate acoperi mai multe colete deodata — cine o citeste ca pe o pereche
+ * eroare↔colet pierde restul coletelor din ea.
+ */
+export type EroareColet = {
+  ErrorCode?: number;
+  ErrorDescription?: string;
+  ClientReferenceList?: string[];
+  ParcelIdList?: number[];
+};
+
+export type RaspunsStergere = {
+  DeleteLabelsErrorList?: EroareColet[];
+  /** ⚠ Sub-coletele unei expedieri cu mai multe colete se sterg odata cu el. */
+  SuccessfullyDeletedList?: { ParcelId?: number; SubParcelIdList?: number[] }[];
 };
 
 export type StareColet = {
@@ -100,7 +132,8 @@ export type StareColet = {
 
 export type RaspunsStari = {
   ParcelStatusList?: StareColet[];
-  GetParcelStatusErrors?: unknown[];
+  /** Aceeasi clasa `ErrorInfo` ca peste tot, nu o forma proprie. */
+  GetParcelStatusErrors?: EroareColet[];
 };
 
 /**
@@ -147,6 +180,7 @@ async function apelMyGls<T>(
   metoda: string,
   corp: Record<string, unknown>,
   serviciu = "ParcelService",
+  asteptareMs = ASTEPTARE_MS,
 ): Promise<T> {
   const url = urlMetoda(config, metoda, serviciu);
 
@@ -164,7 +198,7 @@ async function apelMyGls<T>(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cuAcces),
-      signal: AbortSignal.timeout(ASTEPTARE_MS),
+      signal: AbortSignal.timeout(asteptareMs),
     });
   } catch (e) {
     /* Retea cazuta sau timeout: nu stim daca a ajuns. */
@@ -294,6 +328,221 @@ export function eroriPeColet(r: RaspunsEtichete): string[] {
 }
 
 /**
+ * ⚠ Cate ID-uri incap intr-o cerere de stergere.
+ *
+ * „MAX. 50 ITEMS PER REQUEST", scris chiar in tabelul lui `ParcelIdList`
+ * (documentatia MyGLS ver. 25.12.11, pagina 27). Depasirea are cod propriu in
+ * Appendix A: 22, „Count of parcels for deleting is out of limit".
+ */
+export const MAX_STERGERI_PE_CERERE = 50;
+
+/** Bucati de cel mult `MAX_STERGERI_PE_CERERE`. */
+function bucati<T>(lista: T[], marime: number): T[][] {
+  const iesire: T[][] = [];
+  for (let i = 0; i < lista.length; i += marime) iesire.push(lista.slice(i, i + marime));
+  return iesire;
+}
+
+export type RodStergere = {
+  /** ID-urile pe care GLS le-a confirmat ca sterse (inclusiv sub-coletele lor). */
+  sterse: number[];
+  /**
+   * ID-uri despre care GLS spune ca NU EXISTA (Appendix A, codul 4).
+   *
+   * ⚠ Se numara separat de erori fiindca inseamna acelasi lucru ca o stergere
+   * reusita: la GLS nu mai e nimic sub numarul ala.
+   *
+   * Cazul din care s-a nascut campul: `DeleteLabels` intra in timeout dupa ce
+   * GLS apucase sa stearga. Verdictul e „necunoscut", deci comerciantul incearca
+   * din nou — si a doua oara primeste codul 4. Fara randul asta, incercarea a
+   * doua ar fi fost citita ca esec, iar comanda ar fi ramas cu un AWB pe care
+   * nimeni nu-l mai putea scoate: nici anulat (nu mai exista la GLS), nici
+   * reemis (registrul il tinea ocupat).
+   *
+   * ID-urile vin din raspunsul GLS la emitere, deci „nu exista" chiar inseamna
+   * „a fost sters", nu „am cautat gresit".
+   */
+  inexistente: number[];
+  /** Mesajele de refuz, gata de aratat comerciantului. */
+  erori: string[];
+};
+
+/** Appendix A: coletul cerut nu exista in baza GLS. */
+const COD_INEXISTENT = 4;
+
+/**
+ * Sterge etichetele, adica ANULEAZA coletele la GLS.
+ *
+ * ═══ ⚠ CERE `ParcelId`, NU NUMARUL DE PE ETICHETA ═══
+ *
+ * `ParcelIdList` e singurul camp al cererii (documentatia ver. 25.12.11, pagina
+ * 27). Numarul de colet — cel pe care il vede clientul si pe care il tinem in
+ * `orders.gls_awb_number` — NU e acceptat.
+ *
+ * Si nu e o scapare a documentatiei: `ModifyCOD`, in acelasi document (pagina
+ * 29), primeste EXPLICIT si `ParcelId`, si `ParcelNumber`, fiecare „obligatoriu
+ * daca celalalt lipseste". Deci autorii ofera numarul de colet acolo unde merge;
+ * absenta lui aici e voita. De aceea `ParcelId` se pastreaza la emitere, in
+ * `detalii` din registrul de operatii externe.
+ *
+ * ═══ ⚠ SUCCESUL E PARTIAL ═══
+ *
+ * Raspunsul poate avea in acelasi timp si `SuccessfullyDeletedList`, si
+ * `DeleteLabelsErrorList`. Nici HTTP 200 nu inseamna „s-a sters tot", nici o
+ * lista de erori nevida nu inseamna „nu s-a sters nimic". Se reconciliaza pe
+ * `ParcelId`, si de aia functia intoarce amandoua listele in loc sa arunce.
+ *
+ * ⚠ Codul 6 („Parcel with this ID has different status than PRINTED", Appendix
+ * A) inseamna ca GLS a preluat deja coletul: stergerea e permisa doar cat timp
+ * eticheta e doar tiparita. Atunci coletul CHIAR pleaca spre client, si AWB-ul nu
+ * are voie sa dispara de pe comanda.
+ */
+export async function stergeEtichete(
+  config: GlsConfig,
+  parcelIds: number[],
+): Promise<RodStergere> {
+  const curate = [...new Set(parcelIds.filter((n) => Number.isInteger(n) && n > 0))];
+  if (curate.length === 0) throw eroareRefuz("GLS: nu s-a trimis niciun ParcelId de sters");
+
+  const sterse: number[] = [];
+  const inexistente: number[] = [];
+  const erori: string[] = [];
+
+  for (const bucata of bucati(curate, MAX_STERGERI_PE_CERERE)) {
+    /*
+     * ⚠ NU se trimite `ClientNumberList`, desi e in `APIRequestBase` (pagina 6).
+     *
+     * Changelog-ul documentatiei, intrarea 2 (21.10.2019), spune despre el
+     * literal „do not use". Contul are oricum un singur `ClientNumber`, iar
+     * drepturile pe colet le verifica GLS singur (Appendix A: 5 „Access denied
+     * for this parcel ID", 15 „User is not authorized to access parcel").
+     */
+    const r = await apelMyGls<RaspunsStergere>(config, "DeleteLabels", {
+      ParcelIdList: bucata,
+    });
+
+    for (const s of r.SuccessfullyDeletedList ?? []) {
+      if (typeof s.ParcelId === "number") sterse.push(s.ParcelId);
+      for (const sub of s.SubParcelIdList ?? []) {
+        if (typeof sub === "number") sterse.push(sub);
+      }
+    }
+    for (const e of r.DeleteLabelsErrorList ?? []) {
+      const ale = (e.ParcelIdList ?? []).filter((n): n is number => typeof n === "number");
+
+      /*
+       * ⚠ Codul 4 se ia in seama DOAR daca spune si CARE colete.
+       *
+       * Fara `ParcelIdList`, o intrare inghitita aici ar disparea complet: n-ar
+       * intra nici la disparute, nici la erori, iar comerciantul ar primi un
+       * „GLS nu a confirmat anularea" fara sa afle niciodata ce a raspuns GLS.
+       * Documentatia nu promite nicaieri ca lista e mereu completata.
+       */
+      if (e.ErrorCode === COD_INEXISTENT && ale.length > 0) {
+        /* Nu e o eroare de aratat: sub numerele alea nu mai e nimic la GLS. */
+        inexistente.push(...ale);
+        continue;
+      }
+      const ids = ale.length ? ` (colete ${ale.join(", ")})` : "";
+      erori.push(`${e.ErrorDescription ?? `eroare ${e.ErrorCode ?? "?"}`}${ids}`);
+    }
+  }
+
+  return { sterse, inexistente, erori };
+}
+
+/**
+ * ⚠ Cate ID-uri incap intr-o cerere de RETIPARIRE. Nu e acelasi numar ca la
+ * stergere: 99 aici, 50 la `DeleteLabels`, 100 la `GetParcelListStatuses`
+ * (documentatia MyGLS ver. 25.12.11, paginile 19, 27). O singura constanta
+ * „limita GLS" ar fi gresita la doua dintre cele trei.
+ */
+export const MAX_RETIPARIRI_PE_CERERE = 99;
+
+/**
+ * ⚠ Raspunsul lui `GetPrintedLabels` NU are forma celui de la `PrintLabels`.
+ *
+ * PDF-ul se cheama la fel (`Labels`, tot tablou de octeti), dar celelalte doua
+ * liste au ALTE NUME si alta forma: `PrintDataInfoList` de tip `PrintDataInfo`,
+ * nu `PrintLabelsInfoList`, si `GetPrintedLabelsErrorList`, nu
+ * `PrintLabelsErrorList` (documentatia ver. 25.12.11, paginile 19-20).
+ *
+ * De aia NU se refoloseste `RaspunsEtichete`. Ar fi compilat fara nicio plangere
+ * — campurile lipsa sunt toate optionale — si `numereColet()`/`eroriPeColet()`
+ * ar fi intors liste GOALE la fiecare apel, fara nicio eroare. Adica exact felul
+ * de defect care se descopera dupa ce a mers „bine" o luna.
+ */
+export type PrintDataInfo = {
+  ParcelId?: number;
+  /** ⚠ Numarul FARA cifra de control; cel cu ea e `ParcelNumberWithCheckdigit`. */
+  ParcelNumber?: number;
+  ParcelNumberWithCheckdigit?: number;
+  ClientReference?: string;
+};
+
+export type RaspunsRetiparire = {
+  Labels?: number[];
+  GetPrintedLabelsErrorList?: EroareColet[];
+  PrintDataInfoList?: PrintDataInfo[];
+};
+
+/**
+ * Cere DIN NOU eticheta unor colete deja emise.
+ *
+ * ═══ ⚠ CE CORECTEAZA ═══
+ *
+ * Prima forma a integrarii pornea de la ideea ca eticheta se pierde daca n-o
+ * salvezi la creare, si ca singura cale de a o mai obtine ar fi `PrintLabels` —
+ * adica un al DOILEA colet, real si facturat. Asa se poarta pluginul de
+ * WooCommerce, care nici nu cheama metoda asta; nu asa se poarta API-ul.
+ *
+ * `GetPrintedLabels` primeste `ParcelIdList`, adica ID-uri de inregistrari care
+ * EXISTA DEJA. Cererea nu are niciun camp prin care sa descrii un colet nou, deci
+ * structural nu poate crea unul.
+ *
+ * ⚠ Cu o nuanta care merita scrisa, fiindca documentatia o spune si e usor de
+ * citit gresit: metoda „genereaza numerele de colet". In fluxul in doi pasi
+ * (`PrepareLabels` → `GetPrintedLabels`), PRIMUL apel e cel care da numarul de
+ * urmarire, deci acolo nu e o retiparire. Noi insa emitem prin `PrintLabels`,
+ * care face amandoi pasii deodata: coletele noastre au deja si `ParcelId`, si
+ * `ParcelNumber`, deci aici nu mai are ce numar sa genereze.
+ *
+ * De aia se cheama DOAR cu ID-uri luate din raspunsul unei emiteri reusite, si
+ * niciodata cu ID-uri venite din alta parte.
+ */
+export async function retipareste(
+  config: GlsConfig,
+  parcelIds: number[],
+): Promise<RaspunsRetiparire> {
+  const curate = [...new Set(parcelIds.filter((n) => Number.isInteger(n) && n > 0))];
+  if (curate.length === 0) throw eroareRefuz("GLS: nu s-a trimis niciun ParcelId de retiparit");
+  if (curate.length > MAX_RETIPARIRI_PE_CERERE) {
+    throw eroareRefuz(`GLS: cel mult ${MAX_RETIPARIRI_PE_CERERE} colete pe o cerere de retiparire`);
+  }
+
+  return apelMyGls<RaspunsRetiparire>(config, "GetPrintedLabels", {
+    ParcelIdList: curate,
+    PrintPosition: config.pozitie_tiparire || 1,
+    TypeOfPrinter: config.tip_imprimanta || "A4_2x2",
+    ShowPrintDialog: false,
+  });
+}
+
+/** PDF-ul dintr-o retiparire, sau `null` daca GLS n-a trimis niciun octet. */
+export function pdfDinRetiparire(r: RaspunsRetiparire): Buffer | null {
+  if (!Array.isArray(r.Labels) || r.Labels.length === 0) return null;
+  return Buffer.from(Uint8Array.from(r.Labels));
+}
+
+/** Erorile unei retipariri, ca text citibil de comerciant. */
+export function eroriRetiparire(r: RaspunsRetiparire): string[] {
+  return (r.GetPrintedLabelsErrorList ?? []).map((e) => {
+    const ids = e.ParcelIdList?.length ? ` (colete ${e.ParcelIdList.join(", ")})` : "";
+    return `${e.ErrorDescription ?? `eroare ${e.ErrorCode ?? "?"}`}${ids}`;
+  });
+}
+
+/**
  * Starile unui colet.
  *
  * ⚠ Citire pura: nu creeaza si nu schimba nimic la GLS, deci se poate reincerca
@@ -302,6 +551,15 @@ export function eroriPeColet(r: RaspunsEtichete): string[] {
 export async function stariColet(
   config: GlsConfig,
   numarColet: string | number,
+  /**
+   * ⚠ Cat asteptam, cand apelantul nu-si poate permite implicitul de 60 de secunde.
+   *
+   * Cronul de urmarire ruleaza in cel mult 60 de secunde cu totul, adica EXACT cat
+   * asteptarea unui singur apel. Pe implicit, un colet care atarna consuma toata
+   * tura, iar paza de termen n-apuca sa intervina niciodata — si cum el ramane
+   * primul in coada, ar taia fiecare rulare la nesfarsit.
+   */
+  asteptareMs?: number,
 ): Promise<StareColet[]> {
   const numar = typeof numarColet === "number" ? numarColet : Number(numarColet);
   if (!Number.isFinite(numar)) throw eroareRefuz(`GLS: numar de colet invalid „${numarColet}"`);
@@ -309,13 +567,40 @@ export async function stariColet(
   const r = await apelMyGls<RaspunsStari>(config, "GetParcelStatuses", {
     ParcelNumber: numar,
     ReturnPOD: true,
-  });
+    /*
+     * Descrierile vin in romana. Conteaza: textul asta ajunge asa cum e in panou
+     * si in notificarea de retur catre comerciant, iar „The parcel has been
+     * returned to sender" nu spune nimic unui om care nu stie engleza — pe cand
+     * cifra singura („cod 23") nu spune nimic nimanui.
+     */
+    LanguageIsoCode: "RO",
+  }, "ParcelService", asteptareMs);
 
   if (r.GetParcelStatusErrors?.length) {
-    throw eroareRefuz(`GLS stari colet: ${JSON.stringify(r.GetParcelStatusErrors).slice(0, 300)}`);
+    /* Codurile se pastreaza in `cauze`: `probaConexiune` judeca dupa ele, nu dupa text. */
+    throw Object.assign(
+      eroareRefuz(`GLS stari colet: ${descrieErori(r.GetParcelStatusErrors)}`),
+      { cauze: r.GetParcelStatusErrors.map((e) => e.ErrorCode).filter((c): c is number => typeof c === "number") },
+    );
   }
   return r.ParcelStatusList ?? [];
 }
+
+/** Erorile unei metode, ca text scurt si citibil. */
+function descrieErori(erori: EroareColet[]): string {
+  return erori
+    .map((e) => `${e.ErrorDescription ?? "eroare"} (${e.ErrorCode ?? "?"})`)
+    .join("; ")
+    .slice(0, 300);
+}
+
+/**
+ * ⚠ Codurile care dovedesc ca GLS NE-A RECUNOSCUT si doar coletul lipseste.
+ *
+ * Appendix A: 4 = „Parcel ID not exists", 26 = „Parcel not found with current
+ * settings". Ca sa raspunda astea, cererea a trecut deja de autentificare.
+ */
+const CODURI_COLET_NEGASIT = new Set([4, 26]);
 
 /**
  * Proba de conexiune pentru panoul de configurare.
@@ -336,9 +621,24 @@ export async function probaConexiune(
     await stariColet(config, 1);
     return { ok: true };
   } catch (e) {
-    const mesaj = (e as Error).message;
-    /* Autentificarea a mers, doar coletul nu exista — exact ce speram. */
-    if (/stari colet/i.test(mesaj)) return { ok: true };
-    return { ok: false, eroare: mesaj };
+    const cauze = (e as { cauze?: number[] }).cauze ?? [];
+
+    /*
+     * ⚠ LISTA ALBA, nu neagra. Implicit: ROSU.
+     *
+     * Varianta dintai spunea „daca mesajul contine «stari colet», conexiunea e
+     * buna" — adica orice eroare venita in `GetParcelStatusErrors` trecea drept
+     * succes, fiindca toate poarta acel text. Inclusiv un refuz de autentificare:
+     * butonul „Testeaza conexiunea" iesea VERDE cu parola gresita, iar
+     * comerciantul afla ca datele sunt gresite abia la primul colet real.
+     *
+     * Acum trece doar ce DOVEDESTE ca ne-a recunoscut: „coletul nu exista". Un
+     * cod necunoscut ramane rosu, cu mesajul lui GLS cu tot — mai bine o proba
+     * prea severa, pe care omul o poate cerceta, decat una linistitoare si falsa.
+     */
+    if (cauze.length > 0 && cauze.every((c) => CODURI_COLET_NEGASIT.has(c))) {
+      return { ok: true };
+    }
+    return { ok: false, eroare: (e as Error).message };
   }
 }

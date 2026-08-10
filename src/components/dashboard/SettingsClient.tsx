@@ -230,6 +230,7 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "sameday",      label: "Sameday",           logo: "/integrations/sameday.webp",      defaultPrice: 19 },
   { id: "woot",         label: "Woot",              logo: "/integrations/woot.webp",         defaultPrice: 16 },
   { id: "colete",       label: "Colete Online",     logo: "/integrations/colete-online.svg", defaultPrice: 15 },
+  { id: "gls",          label: "GLS",               logo: "/integrations/gls.svg",          defaultPrice: 18 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -243,9 +244,21 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   cargus: "Cargus",
   woot: "Woot",
   colete: "Colete Online",
+  gls: "Livrare prin GLS",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
+
+/**
+ * Curierii integrati care totusi NU pot cota din contract.
+ *
+ * ⚠ GLS e singurul de pana acum: MyGLS n-are metoda de tarif. Fara randul asta,
+ * panoul i-ar fi aratat comerciantului butonul „Pret automat (din contract)"
+ * pentru un curier care nu coteaza — iar bifat, ar fi ascuns si campul de pret
+ * fix, lasand livrarea pe zero lei. Trebuie sa ramana in pas cu
+ * `FARA_API_DE_TARIF` din src/lib/actions/shipping.actions.ts.
+ */
+const FARA_PRET_AUTOMAT = new Set(["gls"]);
 
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};
@@ -1372,7 +1385,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     const autoPrice = zone.auto_price ?? true;
                     // Pretul automat "din contract" exista doar la curierii reali integrati prin API.
                     // "Curier propriu" si "Ridicare personala" nu au contract, deci folosesc pret fix.
-                    const supportsAutoPrice = needsIntegration && isIntegrated;
+                    const supportsAutoPrice = needsIntegration && isIntegrated && !FARA_PRET_AUTOMAT.has(method.id);
                     return (
                       <div key={method.id} className={`rounded-xl border transition-colors ${!canToggle ? "opacity-50 bg-surface border-border" : zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
                         <div className="flex items-center gap-3 p-3.5">

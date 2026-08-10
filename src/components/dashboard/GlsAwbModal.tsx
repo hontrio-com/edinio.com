@@ -106,10 +106,11 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [seDescarca, setSeDescarca] = useState(false);
 
   /**
-   * Eticheta unui AWB emis mai demult, luata din R2.
+   * Eticheta unui AWB emis mai demult: din CDN, iar daca lipseste de acolo, de la
+   * GLS cu `GetPrintedLabels`.
    *
-   * ⚠ Ruta NU cheama `PrintLabels`: acela ar crea un al doilea colet real si
-   * facturat. Citeste ce s-a salvat pe CDN la emitere.
+   * ⚠ Ruta NU cheama niciodata `PrintLabels`: acela ar crea un al doilea colet
+   * real si facturat.
    */
   async function descarcaSalvata() {
     setSeDescarca(true);

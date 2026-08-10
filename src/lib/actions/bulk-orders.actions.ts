@@ -13,6 +13,7 @@ import { createCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { createSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { createFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { createDpdShipmentAction } from "@/lib/actions/dpd.actions";
+import { createGlsAwbAction } from "@/lib/actions/gls.actions";
 import { greutateaColetului, idurileDeCantarit } from "@/lib/shipping/awb-weight";
 import type { ProdusCotat } from "@/lib/shipping/cart-weight";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -22,6 +23,7 @@ import type { CargusConfig } from "@/lib/cargus";
 import type { SamedayConfig } from "@/lib/sameday";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { DpdConfig } from "@/lib/dpd";
+import type { GlsConfig } from "@/lib/gls/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -44,12 +46,12 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
-  postal_code?: string; courier?: string; delivery_type?: string; locker_id?: string;
+  postal_code?: string; country?: string; courier?: string; delivery_type?: string; locker_id?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────────
@@ -193,9 +195,13 @@ export async function bulkGenerateInvoices(
 }
 
 // ── Bulk AWBs ────────────────────────────────────────────────────────────────────
-// Supports the address-based couriers (Cargus, Sameday, FAN, DPD) that derive the
-// service from weight/address server-side. Woot & Colete need the live checkout
+// Supports the address-based couriers (Cargus, Sameday, FAN, DPD, GLS) that derive
+// the service from weight/address server-side. Woot & Colete need the live checkout
 // quote (service/location ids) and stay per-order — those get skipped here.
+//
+// GLS intra aici desi are livrare la punct: spre deosebire de Woot si Colete, nu
+// are nevoie de cotatia din checkout ca sa emita. Punctul ales de client sta deja
+// pe comanda, in `shipping_address.locker_id`, si devine parametrul serviciului PSD.
 export async function bulkGenerateAwbs(
   businessId: string, orderIds: string[], courier: BulkCourier = "auto",
 ): Promise<BulkResult | { error: string }> {
@@ -207,17 +213,25 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
   const fc = settings?.fan_courier_config as FanCourierConfig | null;
   const dg = settings?.dpd_config as DpdConfig | null;
+  const gl = settings?.gls_config as GlsConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
     fancourier: !!(fc?.enabled && fc?.username && fc?.client_id),
     dpd: !!(dg?.enabled && dg?.username && dg?.client_id),
+    /*
+     * ⚠ Aceeasi lista de campuri ca in `configSiComanda` din gls.actions.ts. Daca
+     * aici ar lipsi `client_number`, lotul ar porni pe comenzi pe care actiunea
+     * per comanda le refuza oricum — adica 50 de esecuri raportate una cate una,
+     * in loc de un singur mesaj limpede „GLS nu e configurat".
+     */
+    gls: !!(gl?.enabled && gl?.username && gl?.password && gl?.client_number),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -227,7 +241,7 @@ export async function bulkGenerateAwbs(
 
   const { data: orders } = await admin
     .from("orders")
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -243,6 +257,7 @@ export async function bulkGenerateAwbs(
   // Map a stored checkout courier value to our supported set.
   const COURIER_ALIASES: Record<string, Exclude<BulkCourier, "auto">> = {
     cargus: "cargus", sameday: "sameday", fancourier: "fancourier", "fan-courier": "fancourier", "fan_courier": "fancourier", dpd: "dpd",
+    gls: "gls",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -262,6 +277,7 @@ export async function bulkGenerateAwbs(
       target === "cargus" ? row.cargus_awb_number
       : target === "sameday" ? row.sameday_awb_number
       : target === "fancourier" ? row.fan_courier_awb_number
+      : target === "gls" ? row.gls_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -269,7 +285,14 @@ export async function bulkGenerateAwbs(
     // Si cele PARTIALE, nu doar cele fara nicio greutate: acelea sunt cazul
     // periculos — un numar incomplet care pleaca la curier fara interventie
     // umana. `dinCatalog` e fals in amandoua situatiile.
-    if (!greutate.dinCatalog) peRezerva.push(o.order_number);
+    //
+    // ⚠ GLS e scutit, si nu din neglijenta: MyGLS NU primeste greutatea la
+    // emitere (vezi `ColetGls` din lib/gls/client.ts — nu are camp de greutate),
+    // coletul se cantareste la depozit. Semnalat aici, ar fi umplut logurile cu
+    // avertismente despre o cifra care nu pleaca nicaieri — iar un avertisment
+    // care striga mereu degeaba il face pe comerciant sa nu-l mai citeasca nici
+    // cand e adevarat, la ceilalti curieri.
+    if (target !== "gls" && !greutate.dinCatalog) peRezerva.push(o.order_number);
 
     try {
       const res = await createAwbForOrder(target, businessId, o, greutate.kg);
@@ -359,6 +382,36 @@ async function createAwbForOrder(
         recipientCity: city, recipientCounty: county || undefined, recipientStreet: street, recipientStreetNo: streetNo,
         recipientAddressNote: "", weightKg: weight, cashOnDelivery: cod, ref1: o.order_number, shipmentNote: "", content,
       });
+    case "gls": {
+      /*
+       * ⚠ GLS NU primeste greutatea: `ColetGls` n-are camp pentru ea, coletul se
+       * cantareste la depozit. De aia `weight` nu apare mai jos — nu e o omisiune.
+       *
+       * ⚠ Strada se compune EXACT ca in `GlsAwbModal`, ca lotul si emiterea pe
+       * bucata sa trimita acelasi text la curier. Doua compuneri diferite ar
+       * insemna ca aceeasi comanda pleaca cu adrese diferite dupa cum a fost
+       * apasat butonul — si diferenta s-ar vedea abia pe eticheta tiparita.
+       */
+      const laPunct = (addr.courier ?? "").toLowerCase().trim() === "gls"
+        && addr.delivery_type === "locker"
+        && !!addr.locker_id;
+      return createGlsAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          strada: [street, streetNo].filter(Boolean).join(" ").trim(),
+          oras: city,
+          judet: county || null,
+          codPostal: zip || null,
+          tara: addr.country || "RO",
+          telefon: o.customer_phone,
+          email,
+        },
+        numarColete: 1,
+        ramburs: cod,
+        continut: content,
+        servicii: laPunct ? { parcelShopId: addr.locker_id } : undefined,
+      });
+    }
     default:
       return { error: "Curier nesuportat." };
   }

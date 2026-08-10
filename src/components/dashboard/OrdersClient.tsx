@@ -138,8 +138,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (samedayEnabled) list.push({ key: "sameday", label: "Sameday" });
     if (fanCourierEnabled) list.push({ key: "fancourier", label: "FAN Courier" });
     if (dpdEnabled) list.push({ key: "dpd", label: "DPD" });
+    if (glsEnabled) list.push({ key: "gls", label: "GLS" });
     return list;
-  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled]);
+  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled]);
   const anyAwb = awbCouriers.length > 0;
 
   const pageOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);

@@ -68,6 +68,10 @@
     {
       "path": "/api/cron/domains-reconcile",
       "schedule": "23 * * * *"
+    },
+    {
+      "path": "/api/cron/gls-tracking",
+      "schedule": "41 */2 * * *"
     }
   ]
 }

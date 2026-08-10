@@ -12,6 +12,8 @@ import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootC
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
 import { getCOToken, getPrices as fetchCOPrices, type COConfig } from "@/lib/colete";
+import { type GlsConfig } from "@/lib/gls/client";
+import { puncteGls } from "@/lib/gls/puncte";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
@@ -110,9 +112,26 @@ const COURIER_LABELS: Record<string, string> = {
   cargus: "Cargus",
   woot: "Woot",
   colete: "Colete Online",
+  gls: "GLS",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
+
+/**
+ * Curierii care NU au API de tarif: pretul lor vine INTOTDEAUNA din
+ * `shipping_zones`, oricum ar fi bifat `auto_price`.
+ *
+ * ⚠ GLS e aici pentru ca MyGLS chiar nu coteaza preturi — nu exista metoda. Fara
+ * randul asta ar fi intrat in doua capcane deodata:
+ *
+ *   1. `atingeApiPlatit` l-ar fi numarat drept curier cu API si ar fi consumat
+ *      degeaba plafoanele durabile (60/IP, 600/magazin la 10 minute). Cand alea
+ *      se epuizeaza, TOTI curierii magazinului trec pe pret fix — deci un curier
+ *      care nu cheama pe nimeni ar fi stricat cotatiile celorlalti.
+ *   2. `flatCourierIds` nu l-ar fi cuprins, si o regula de transport cu actiunea
+ *      „pret fix" scrisa de comerciant pentru GLS ar fi fost ignorata TACUT.
+ */
+const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls"]);
 
 /** Merchant's custom checkout label (shipping_zones[id].label) or the branded default. */
 function addrLabel(custom: string | undefined, fallback: string): string {
@@ -181,11 +200,33 @@ export async function getShippingOptions(
   // Service role: anonymous customers trigger this; courier secrets are read
   // server-side only and never returned to the client (only computed prices are).
   const supabase = createAdminClient();
-  const { data: settings } = await supabase
+  const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
+
+  /*
+   * ⚠ CITIREA ASTA CADE PESTE CHECKOUT-UL INTREGII PLATFORME.
+   *
+   * `settings` lipsa inseamna zero optiuni de livrare, iar zero optiuni inseamna
+   * un checkout in care nu se poate comanda. Pana acum `error` nu se citea deloc,
+   * deci o coloana ceruta si inexistenta — o migratie neaplicata inaintea unui
+   * deploy — ar fi oprit vanzarea in TOATE magazinele, in tacere deplina: nicio
+   * eroare, nicio urma, doar o lista goala.
+   *
+   * Nu schimba ce se intoarce (tot lista goala, n-avem ce oferi fara zone), dar
+   * de acum se aude.
+   */
+  if (eSettings) {
+    await logError({
+      action: "getShippingOptions.setari",
+      message: `Setarile de livrare nu s-au putut citi, checkout-ul ramane FARA nicio optiune: ${eSettings.message}`,
+      details: { businessId, code: eSettings.code },
+      businessId,
+      severity: "critical",
+    });
+  }
 
   if (!settings) return [];
 
@@ -232,7 +273,7 @@ export async function getShippingOptions(
   const atingeApiPlatit = esteIntl
     ? !!zones["dpd"]?.enabled
     : enabledZones.some(
-        ([courierId, z]) => courierId !== "pickup" && courierId !== "own" && z.auto_price !== false,
+        ([courierId, z]) => !FARA_API_DE_TARIF.has(courierId) && z.auto_price !== false,
       );
   let doarTarifeFixe = false;
   if (atingeApiPlatit) {
@@ -669,6 +710,41 @@ export async function getShippingOptions(
       } else {
         options.push(flat());
       }
+    } else if (courierId === "gls") {
+      /*
+       * ⚠ GLS NU COTEAZA. MyGLS n-are metoda de tarif, deci pretul e cel din
+       * `shipping_zones` si nu se cheama nimeni — de aia ramura asta e SINCRONA,
+       * fara nimic impins in `promises`.
+       *
+       * ⚠ Si nu face `return`: optiunile trebuie doar impinse in `options`, ca sa
+       * ajunga la semnarea unica de la sfarsitul functiei. O ramura care iese
+       * singura a mai plecat o data fara simbol, iar comenzile au cazut atunci pe
+       * transportul implicit in loc de cel cotat.
+       */
+      options.push({
+        courier: "gls",
+        courierLabel: addrLabel(zone.label, "Livrare prin GLS"),
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      /*
+       * Livrarea la punct se ofera doar daca GLS e chiar conectat.
+       *
+       * Lista de puncte vine dintr-un fisier public, deci s-ar putea arata si
+       * fara datele de acces — dar atunci comerciantul n-ar avea cu ce emite
+       * AWB-ul, iar `parcelShopId` ales de client n-ar avea unde sa ajunga.
+       * Aceeasi regula de „configurat" ca in panoul comenzii.
+       */
+      const glsCfg = settings.gls_config as GlsConfig | null;
+      if (glsCfg?.enabled && glsCfg.username && glsCfg.client_number) {
+        options.push({
+          courier: "gls",
+          courierLabel: lockerLabel(zone.label, "GLS ParcelShop (punct)"),
+          deliveryType: "locker",
+          price: zone.price,
+        });
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -691,7 +767,7 @@ export async function getShippingOptions(
   if (rules.length > 0) {
     const flatCourierIds = new Set<string>();
     for (const [courierId, zone] of enabledZones) {
-      if (courierId === "own" || courierId === "pickup" || zone.auto_price === false) {
+      if (FARA_API_DE_TARIF.has(courierId) || zone.auto_price === false) {
         flatCourierIds.add(courierId);
       }
     }
@@ -887,7 +963,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls"]);
 
 export async function getLockers(
   businessId: string,
@@ -944,7 +1020,7 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config")
     .eq("business_id", businessId)
     .single();
 
@@ -1057,6 +1133,41 @@ export async function getLockers(
       return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] Cargus Ship & Go points failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "gls") {
+    const config = settings.gls_config as GlsConfig | null;
+    if (!config?.enabled) return [];
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          (await puncteGls(config.tara ?? "RO")).map((p) => ({
+            /*
+             * ⚠ `id` ramane SIR, neatins.
+             *
+             * Ceilalti curieri fac `Number(locker_id)` la emiterea AWB-ului,
+             * fiindca la ei punctul chiar are id numeric. La GLS e alfanumeric
+             * (`RO011857-PARCELSH01`) si intra ca atare in `PSDParameter
+             * .StringValue`. Copiat mecanic dupa ei, `Number(...)` ar da `NaN` si
+             * punctul s-ar pierde tacut — coletul ar pleca la domiciliu.
+             */
+            id: p.id,
+            name: p.name,
+            address: [p.address, p.city].filter(Boolean).join(", "),
+            city: p.city,
+            county: p.county,
+            lat: p.lat,
+            lng: p.lng,
+          })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
+    } catch (e) {
+      console.error("[shipping] GLS pickup points failed:", (e as Error).message);
       return [];
     }
   }

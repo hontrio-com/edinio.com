@@ -160,3 +160,97 @@ export function esteRetur(statusCode: string | null | undefined): boolean {
   const cod = codNumeric(statusCode);
   return cod === 23 || cod === 40;
 }
+
+// ─── Ce se face cu TOATA lista de stari a unui colet ──────────────────────────
+//
+// `GetParcelStatuses` nu intoarce ultimul eveniment, ci ISTORICUL intreg. Cronul
+// primeste deci un teanc, nu o stire — si trebuie sa scoata din el un singur
+// raspuns. Bucatile de mai jos sunt pure dinadins: sunt singura parte a urmaririi
+// care se poate proba fara sa vorbim cu GLS.
+
+/** O stare, redusa la ce ne trebuie ca sa hotaram. */
+export type StareCitita = {
+  cod: string | null | undefined;
+  /** Data evenimentului, deja trecuta prin `dataDinNet` (ISO), sau `null`. */
+  data: string | null;
+  /**
+   * Textul trimis de GLS. Se poate cere in romana (`LanguageIsoCode: RO`), deci
+   * merita aratat comerciantului asa cum a venit: „cod GLS 23" nu spune nimic,
+   * „coletul a fost returnat expeditorului" spune tot.
+   */
+  descriere?: string | null;
+};
+
+/**
+ * Statusul comenzii dupa ce se trece prin TOATE starile, nu doar prin ultima.
+ *
+ * ⚠ DE CE NU „ULTIMA STARE".
+ *
+ * Ar parea firesc sa luam evenimentul cel mai recent si sa-l traducem. Dar
+ * istoricul GLS contine si evenimente care NU descriu inaintarea coletului:
+ * blocaje de vama, incercari de livrare esuate, note de depozit. Un colet livrat
+ * luni poate avea marti o linie de „vama" (60-72), care se traduce „shipped" —
+ * si comanda ar cobori de la livrata la expediata.
+ *
+ * `statusUrmator` stie deja sa nu coboare. Trecand fiecare stare prin el si
+ * pastrand ce a urcat, rezultatul e treapta cea mai INALTA atinsa vreodata. Asta
+ * il face independent de ordinea in care vin starile — si chiar nu avem nicio
+ * garantie ca vin sortate.
+ *
+ * `null` = nu se schimba nimic.
+ */
+export function statusFinalDinStari(
+  statusCurent: string,
+  stari: readonly StareCitita[],
+): OrderStatus | null {
+  let curent = statusCurent;
+  for (const s of stari) {
+    const urmator = statusUrmator(curent, s.cod);
+    if (urmator) curent = urmator;
+  }
+  return curent === statusCurent ? null : (curent as OrderStatus);
+}
+
+/**
+ * Starea cea mai recenta din teanc — cea care se tine minte pe comanda.
+ *
+ * ⚠ Se tine minte ca sa nu semnalam DE DOUA ORI acelasi eveniment. Un colet
+ * returnat (cod 23) ramane returnat: fara memorie, cronul ar striga „colet
+ * returnat" la fiecare rulare, la nesfarsit — iar un avertisment care se repete
+ * la infinit nu mai e citit de nimeni.
+ *
+ * ⚠ Sortarea e dupa DATA, nu dupa pozitia in tablou. MyGLS nu promite nicaieri ca
+ * lista vine cronologic, iar daca ordinea s-ar schimba vreodata am tine minte un
+ * eveniment vechi si am resemnala unul nou la fiecare rulare.
+ *
+ * Cand datele lipsesc cu totul, se cade pe ULTIMUL element: e cea mai buna
+ * presupunere disponibila si e mai buna decat „niciuna".
+ */
+export function ultimaStare(stari: readonly StareCitita[]): StareCitita | null {
+  if (stari.length === 0) return null;
+
+  let cea: StareCitita | null = null;
+  let ceaMs = Number.NEGATIVE_INFINITY;
+  for (const s of stari) {
+    const ms = s.data ? Date.parse(s.data) : Number.NaN;
+    if (Number.isNaN(ms)) continue;
+    /* `>=` : la date egale castiga ultima din lista, adica ordinea GLS. */
+    if (ms >= ceaMs) { ceaMs = ms; cea = s; }
+  }
+  return cea ?? stari[stari.length - 1];
+}
+
+/**
+ * Coletul si-a incheiat drumul: nu mai are rost sa fie intrebat.
+ *
+ * Livrarile ies oricum din raza cronului (comanda trece pe `delivered`, iar
+ * interogarea sare peste comenzile incheiate). Aici raman sfarsiturile care NU
+ * misca statusul — retur, distrus, aruncat: comanda ramane „expediata" pentru ca
+ * decizia e a comerciantului, deci fara steagul asta cronul ar intreba de ele
+ * pana la sfarsitul lumii.
+ */
+export function eStareFinala(statusCode: string | null | undefined): boolean {
+  const cod = codNumeric(statusCode);
+  if (cod === null) return false;
+  return LIVRAT.has(cod) || NELIVRAT_FINAL.has(cod);
+}

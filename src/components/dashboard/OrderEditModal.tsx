@@ -17,6 +17,7 @@ import { deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { cancelWootAwb } from "@/lib/actions/woot.actions";
+import { deleteGlsAwbAction } from "@/lib/actions/gls.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
 import { comboTitle, findCombo } from "@/lib/storefront/variants";
@@ -186,6 +187,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     if (order.cargus_awb_number) list.push({ key: "cargus", label: "Cargus", awb: order.cargus_awb_number });
     if (order.dpd_awb_number) list.push({ key: "dpd", label: "DPD", awb: order.dpd_awb_number });
     if (order.fan_courier_awb_number) list.push({ key: "fan_courier", label: "FAN Courier", awb: order.fan_courier_awb_number });
+    if (order.gls_awb_number) list.push({ key: "gls", label: "GLS", awb: order.gls_awb_number });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -349,6 +351,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "cargus") res = await deleteCargusAwbAction(businessId, order.id);
       else if (key === "dpd") res = await cancelDpdShipmentAction(businessId, order.id);
       else if (key === "fan_courier") res = await deleteFanCourierAwbAction(businessId, order.id);
+      else if (key === "gls") res = await deleteGlsAwbAction(businessId, order.id);
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }

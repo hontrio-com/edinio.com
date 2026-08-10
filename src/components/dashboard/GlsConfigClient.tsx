@@ -65,6 +65,7 @@ export function GlsConfigClient({
     initialConfig?.tip_imprimanta ?? "A4_2x2",
   );
   const [pozitie, setPozitie] = useState(String(initialConfig?.pozitie_tiparire ?? 1));
+  const [codPostal, setCodPostal] = useState(initialConfig?.expeditor_cod_postal ?? "");
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_number);
   const areParola = password.trim() !== "" || secretulEsteSalvat(initialConfig, "password");
@@ -80,6 +81,7 @@ export function GlsConfigClient({
       sandbox,
       tip_imprimanta: tipImprimanta,
       pozitie_tiparire: Number(pozitie) || 1,
+      expeditor_cod_postal: codPostal.trim(),
     };
   }
 
@@ -202,6 +204,26 @@ export function GlsConfigClient({
               onChange={(e) => { setClientNumber(e.target.value.replace(/\D/g, "")); setTestat(false); }}
               placeholder="ex. 100123456"
             />
+          </Field>
+          <Field label="Cod postal ridicare">
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={codPostal}
+              onChange={(e) => setCodPostal(e.target.value.replace(/\D/g, "").slice(0, 9))}
+              placeholder="ex. 011857"
+            />
+            {/*
+              * ⚠ Nu e un camp decorativ: GLS cere codul postal in adresa de
+              * ridicare, iar in `businesses` nu exista niciunul — nici pentru
+              * magazin, nici pentru firma. Ceilalti curieri nu-l cer fiindca
+              * ridica de la un punct inregistrat la ei; GLS primeste adresa
+              * intreaga la fiecare colet.
+              */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Codul postal al adresei de unde ridica GLS coletele. Restul adresei se ia
+              din setarile magazinului.
+            </p>
           </Field>
           <Field label="Tara contractului" required>
             <select

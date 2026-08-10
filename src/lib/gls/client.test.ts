@@ -3,10 +3,17 @@ import { test } from "node:test";
 import {
   areEtichete,
   eroriPeColet,
+  eroriRetiparire,
   numereColet,
   pdfDinEtichete,
+  pdfDinRetiparire,
+  retipareste,
+  stergeEtichete,
   urlMetoda,
+  MAX_RETIPARIRI_PE_CERERE,
+  MAX_STERGERI_PE_CERERE,
   TARI_MYGLS,
+  type GlsConfig,
   type RaspunsEtichete,
 } from "./client";
 
@@ -139,6 +146,182 @@ test("erorile pe colet se citesc cu referinta comenzii", () => {
   assert.deepEqual(eroriPeColet({}), []);
 });
 
+// ─── Anularea si retiparirea ─────────────────────────────────────────────────
+
+const CONFIG: GlsConfig = {
+  enabled: true,
+  username: "cont@firma.ro",
+  password: "parola",
+  client_number: 100000001,
+  tara: "RO",
+  sandbox: true,
+  tip_imprimanta: "A4_2x2",
+  pozitie_tiparire: 1,
+};
+
+/**
+ * Inlocuieste `fetch` si tine minte ce s-a trimis.
+ *
+ * Nu se atinge reteaua: probele de aici verifica CE cere clientul de la MyGLS,
+ * fiindca acolo se afla regulile care nu se pot descoperi altfel decat platind un
+ * colet real.
+ */
+function fetchFals(raspunsuri: unknown[]) {
+  const cereri: Record<string, unknown>[] = [];
+  const original = globalThis.fetch;
+  let i = 0;
+  globalThis.fetch = (async (_url: string, init: { body: string }) => {
+    cereri.push(JSON.parse(init.body) as Record<string, unknown>);
+    const corp = raspunsuri[Math.min(i++, raspunsuri.length - 1)];
+    return new Response(JSON.stringify(corp), { status: 200 });
+  }) as unknown as typeof fetch;
+  return { cereri, restaureaza: () => { globalThis.fetch = original; } };
+}
+
+test("⚠ stergerea se rupe in bucati de cel mult 50", async () => {
+  /*
+   * „MAX. 50 ITEMS PER REQUEST", scris in tabelul lui `ParcelIdList`
+   * (documentatia MyGLS ver. 25.12.11, pagina 27). Peste, GLS raspunde cu codul
+   * 22 din Appendix A si NU sterge nimic — adica o comanda mare ar ramane cu
+   * toate coletele vii, dupa ce noi am raportat anulare.
+   */
+  assert.equal(MAX_STERGERI_PE_CERERE, 50);
+  const ids = Array.from({ length: 120 }, (_, i) => i + 1);
+  const f = fetchFals([{ SuccessfullyDeletedList: [] }]);
+  try {
+    await stergeEtichete(CONFIG, ids);
+  } finally {
+    f.restaureaza();
+  }
+  assert.equal(f.cereri.length, 3, "120 de ID-uri incap in trei cereri");
+  assert.deepEqual((f.cereri[0].ParcelIdList as number[]).length, 50);
+  assert.deepEqual((f.cereri[1].ParcelIdList as number[]).length, 50);
+  assert.deepEqual((f.cereri[2].ParcelIdList as number[]).length, 20);
+});
+
+test("⚠ stergerea NU trimite ClientNumberList", async () => {
+  /* Changelog-ul documentatiei, intrarea 2 (21.10.2019): „do not use". */
+  const f = fetchFals([{ SuccessfullyDeletedList: [{ ParcelId: 7 }] }]);
+  try {
+    await stergeEtichete(CONFIG, [7]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.ok(!("ClientNumberList" in f.cereri[0]), "ClientNumberList n-are ce cauta in cerere");
+  assert.ok("Username" in f.cereri[0] && "Password" in f.cereri[0], "datele de acces raman");
+});
+
+test("⚠ sub-coletele sterse se numara si ele", async () => {
+  /*
+   * O expediere cu mai multe colete are sub-colete; GLS le sterge odata cu cel
+   * principal si le raporteaza separat, in `SubParcelIdList`. Necitite, am fi
+   * crezut ca a ramas ceva viu la curier si am fi alarmat degeaba comerciantul.
+   */
+  const f = fetchFals([{
+    SuccessfullyDeletedList: [{ ParcelId: 10, SubParcelIdList: [11, 12] }],
+  }]);
+  let rod;
+  try {
+    rod = await stergeEtichete(CONFIG, [10]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.deepEqual(rod.sterse, [10, 11, 12]);
+  assert.deepEqual(rod.erori, []);
+});
+
+test("⚠ succesul e PARTIAL: si sterse, si erori, in acelasi raspuns", async () => {
+  /*
+   * Codul 6 = „Parcel with this ID has different status than PRINTED", adica GLS
+   * a preluat deja coletul. Daca am citi raspunsul ca tot-sau-nimic, am dezlega
+   * de pe comanda un colet care chiar pleaca spre client.
+   */
+  const f = fetchFals([{
+    SuccessfullyDeletedList: [{ ParcelId: 10 }],
+    DeleteLabelsErrorList: [
+      { ErrorCode: 6, ErrorDescription: "Parcel with this ID has different status than PRINTED", ParcelIdList: [11] },
+    ],
+  }]);
+  let rod;
+  try {
+    rod = await stergeEtichete(CONFIG, [10, 11]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.deepEqual(rod.sterse, [10]);
+  assert.equal(rod.erori.length, 1);
+  assert.ok(rod.erori[0].includes("colete 11"), `ID-ul lipseste din mesaj: ${rod.erori[0]}`);
+});
+
+test("ID-urile de sters se curata: duplicate, zerouri, valori imposibile", async () => {
+  const f = fetchFals([{ SuccessfullyDeletedList: [] }]);
+  try {
+    await stergeEtichete(CONFIG, [5, 5, 0, -3, 7, Number.NaN, 1.5]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.deepEqual(f.cereri[0].ParcelIdList, [5, 7]);
+});
+
+test("stergerea fara niciun ID nu ajunge la GLS", async () => {
+  await assert.rejects(() => stergeEtichete(CONFIG, []), /niciun ParcelId/);
+  await assert.rejects(() => stergeEtichete(CONFIG, [0, -1]), /niciun ParcelId/);
+});
+
+test("⚠ retiparirea cere GetPrintedLabels, cu ParcelId — nu PrintLabels", async () => {
+  /*
+   * Proba exista ca sa nu se strecoare niciodata un `PrintLabels` pe drumul de
+   * retiparire: acela ar crea un al DOILEA colet, real si facturat.
+   */
+  const f = fetchFals([{ Labels: [0x25, 0x50, 0x44, 0x46] }]);
+  let r;
+  try {
+    r = await retipareste(CONFIG, [123, 123, 456]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.deepEqual(f.cereri[0].ParcelIdList, [123, 456]);
+  assert.ok(!("ParcelList" in f.cereri[0]), "cererea n-are cum sa descrie un colet nou");
+  assert.equal(f.cereri[0].TypeOfPrinter, "A4_2x2");
+  assert.equal(f.cereri[0].PrintPosition, 1);
+  assert.equal(pdfDinRetiparire(r)?.subarray(0, 4).toString("latin1"), "%PDF");
+});
+
+test("⚠ raspunsul retiparirii are ALTE nume de liste decat al emiterii", () => {
+  /*
+   * `GetPrintedLabelsErrorList`, nu `PrintLabelsErrorList`; `PrintDataInfoList`,
+   * nu `PrintLabelsInfoList` (documentatia ver. 25.12.11, paginile 19-20).
+   *
+   * Daca cineva refoloseste cititoarele emiterii pe raspunsul asta, ele intorc
+   * liste GOALE si nicio eroare — defectul se descopera dupa ce a mers „bine" o
+   * luna. Proba tine cele doua forme despartite.
+   */
+  const raspuns = {
+    Labels: [0x25],
+    GetPrintedLabelsErrorList: [{ ErrorCode: 4, ErrorDescription: "Parcel not found", ParcelIdList: [9] }],
+  };
+  assert.deepEqual(eroriRetiparire(raspuns), ["Parcel not found (colete 9)"]);
+  /* Aceleasi date citite ca raspuns de emitere nu produc nicio eroare — dovada. */
+  assert.deepEqual(eroriPeColet(raspuns as RaspunsEtichete), []);
+});
+
+test("retiparirea fara PDF nu inventeaza un fisier gol", () => {
+  assert.equal(pdfDinRetiparire({}), null);
+  assert.equal(pdfDinRetiparire({ Labels: [] }), null);
+});
+
+test("⚠ limitele NU sunt aceleasi la stergere si la retiparire", async () => {
+  /*
+   * 50 la `DeleteLabels`, 99 la `GetPrintedLabels`, 100 la
+   * `GetParcelListStatuses`. O singura constanta „limita GLS" ar fi gresita la
+   * doua dintre cele trei.
+   */
+  assert.notEqual(MAX_STERGERI_PE_CERERE, MAX_RETIPARIRI_PE_CERERE);
+  assert.equal(MAX_RETIPARIRI_PE_CERERE, 99);
+  const preaMulte = Array.from({ length: 100 }, (_, i) => i + 1);
+  await assert.rejects(() => retipareste(CONFIG, preaMulte), /cel mult 99/);
+});
+
 test("⚠ un raspuns poate avea SI etichete, SI erori", () => {
   /*
    * Cazul care se pierde usor: la un lot de zece comenzi, opt reusesc si doua
@@ -153,4 +336,70 @@ test("⚠ un raspuns poate avea SI etichete, SI erori", () => {
   assert.ok(areEtichete(r), "etichetele exista");
   assert.deepEqual(numereColet(r), ["1234"]);
   assert.equal(eroriPeColet(r).length, 1);
+});
+
+test("⚠ „coletul nu exista” NU e o eroare de anulare", async () => {
+  /*
+   * Codul 4 din Appendix A. Cazul real: `DeleteLabels` intra in timeout DUPA ce
+   * GLS a sters. Verdictul e „necunoscut", comerciantul incearca din nou, si a
+   * doua oara primeste 4. Citit ca esec, comanda ar fi ramas cu un AWB pe care
+   * nimeni nu-l mai putea scoate: nici anulat (nu mai exista la GLS), nici reemis
+   * (registrul il tinea ocupat).
+   */
+  const f = fetchFals([{
+    DeleteLabelsErrorList: [
+      { ErrorCode: 4, ErrorDescription: "Parcel ID not exists", ParcelIdList: [77] },
+    ],
+  }]);
+  let rod;
+  try {
+    rod = await stergeEtichete(CONFIG, [77]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.deepEqual(rod.sterse, []);
+  assert.deepEqual(rod.inexistente, [77]);
+  assert.deepEqual(rod.erori, [], "nu se arata comerciantului ca eroare");
+});
+
+test("⚠ codul 6 (colet deja preluat) RAMANE eroare", async () => {
+  /*
+   * Deosebirea fata de proba de mai sus e chiar miezul: la 6, coletul EXISTA si
+   * pleaca spre client. Confundat cu „inexistent", AWB-ul s-ar sterge de pe
+   * comanda si transportul ar deveni invizibil — iar o reemitere ar factura al
+   * doilea colet.
+   */
+  const f = fetchFals([{
+    DeleteLabelsErrorList: [
+      { ErrorCode: 6, ErrorDescription: "Parcel with this ID has different status than PRINTED", ParcelIdList: [77] },
+    ],
+  }]);
+  let rod;
+  try {
+    rod = await stergeEtichete(CONFIG, [77]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.deepEqual(rod.sterse, []);
+  assert.deepEqual(rod.inexistente, [], "6 nu inseamna inexistent");
+  assert.equal(rod.erori.length, 1);
+});
+
+test("⚠ codul 4 FARA lista de colete nu dispare, devine eroare", async () => {
+  /*
+   * Documentatia nu promite ca `ParcelIdList` e mereu completata. Inghitita fara
+   * ID-uri, intrarea n-ar mai aparea nici la disparute, nici la erori, iar
+   * comerciantul ar primi „GLS nu a confirmat anularea" fara sa afle ce a spus GLS.
+   */
+  const f = fetchFals([{
+    DeleteLabelsErrorList: [{ ErrorCode: 4, ErrorDescription: "Parcel ID not exists" }],
+  }]);
+  let rod;
+  try {
+    rod = await stergeEtichete(CONFIG, [77]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.deepEqual(rod.inexistente, []);
+  assert.equal(rod.erori.length, 1, "nu se pierde");
 });

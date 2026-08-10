@@ -342,6 +342,22 @@ export function useCheckoutOrder({
     Object.assign(e, companyBilling.validateCompany());
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
     if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
+    /*
+     * ⚠ Livrarea la punct GLS cere emailul, chiar daca magazinul l-a facut
+     * optional.
+     *
+     * MyGLS il cere obligatoriu la serviciul PSD, si pe buna dreptate: coletul
+     * ajunge la un ghiseu, iar cumparatorul trebuie sa AFLE ca il poate ridica.
+     * Fara instiintare, coletul sta pana expira termenul si se intoarce la
+     * comerciant, care plateste si dusul, si intorsul.
+     *
+     * Cerut aici, la alegere, nu la emiterea AWB-ului: acolo comanda e deja
+     * plasata, iar comerciantul ar ramane cu un colet pe care nu-l poate expedia
+     * si fara nicio cale de a mai obtine emailul de la client.
+     */
+    if (courierSelection?.courier === "gls" && courierSelection?.deliveryType === "locker" && !form.email.trim()) {
+      e.email = "Emailul e obligatoriu pentru livrarea la punct GLS";
+    }
     for (const field of customFields) {
       if (field.required) {
         if (field.type === "checkbox" && customValues[field.id] !== "da") {

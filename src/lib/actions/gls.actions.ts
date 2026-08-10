@@ -134,9 +134,14 @@ async function configSiComanda(businessId: string, orderId: string) {
    * RLS — de aceea proprietatea magazinului s-a verificat mai sus.
    */
   const admin = createAdminClient();
-  const [{ data: settings }, { data: order }] = await Promise.all([
+  const [{ data: settings }, { data: order }, { data: firma }] = await Promise.all([
     admin.from("store_settings").select("gls_config").eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
+    supabase
+      .from("businesses")
+      .select("business_name, store_name, store_address, store_city, store_county, address, city, county, phone, email")
+      .eq("id", businessId)
+      .single(),
   ]);
 
   if (!order) return { error: "Comanda negasita" as const };
@@ -146,12 +151,18 @@ async function configSiComanda(businessId: string, orderId: string) {
     return { error: "GLS nu este configurat complet" as const };
   }
 
-  return { supabase, config, order };
+  return { supabase, config, order, firma };
 }
 
 export type DateAwbGls = {
   destinatar: DateExpediere["destinatar"];
-  expeditor: DateExpediere["expeditor"];
+  /*
+   * ⚠ EXPEDITORUL NU VINE DIN BROWSER.
+   *
+   * Se compune pe server, din datele magazinului. Altfel oricine cu o sesiune de
+   * comerciant ar putea emite un AWB pe contul GLS al magazinului cu orice
+   * adresa de ridicare — inclusiv una straina, pe cheltuiala lui.
+   */
   numarColete: number;
   ramburs?: number;
   valoare?: number;
@@ -168,10 +179,32 @@ export async function createGlsAwbAction(
 ): Promise<{ awb: string; etichetaBase64: string | null } | { error: string }> {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
-  const { supabase, config, order } = ctx;
+  const { supabase, config, order, firma } = ctx;
 
   const comanda = order as typeof order & { gls_awb_number?: string | null };
   if (comanda.gls_awb_number) return { error: "AWB GLS a fost deja creat" };
+
+  /*
+   * ⚠ Expeditorul se compune AICI, din datele magazinului — nu vine din browser.
+   *
+   * `store_*` sunt adresa publica a magazinului (de unde se ridica marfa); daca
+   * lipsesc, se cade pe adresa firmei. Fara niciuna, GLS ar primi o adresa de
+   * ridicare goala si ar refuza expedierea — mai bine o spunem noi, clar.
+   */
+  const expeditor = {
+    nume: firma?.store_name || firma?.business_name || "",
+    strada: firma?.store_address || firma?.address || "",
+    oras: firma?.store_city || firma?.city || "",
+    judet: firma?.store_county || firma?.county || null,
+    telefon: firma?.phone ?? null,
+    email: firma?.email ?? null,
+    tara: "RO",
+  };
+  if (!expeditor.nume || !expeditor.strada || !expeditor.oras) {
+    return {
+      error: "Completeaza adresa magazinului (nume, strada, oras) in setari — GLS o cere ca adresa de ridicare.",
+    };
+  }
 
   /*
    * Verificarile care NU ating GLS raman inaintea rezervarii: o comanda fara
@@ -196,7 +229,7 @@ export async function createGlsAwbAction(
       const colet = coletGls({
         referinta,
         destinatar: date.destinatar,
-        expeditor: date.expeditor,
+        expeditor,
         clientNumber: Number(config.client_number),
         numarColete: date.numarColete,
         ramburs: date.ramburs,

@@ -71,6 +71,7 @@ export function buildProductJsonLd(
     page_sections?: unknown;
   },
   productUrl: string,
+  /** REZERVA pentru brand: numele magazinului. Brandul produsului bate. */
   brand: string,
   shipping: { cost: number; min: number; max: number },
   /**
@@ -137,9 +138,37 @@ export function buildProductJsonLd(
    * functie ca feedurile. Cel care nu trece nu se scrie, iar comerciantul vede
    * ca lipseste si il corecteaza.
    */
-  const google = (product.page_sections as { google?: { gtin?: string; mpn?: string } } | null)?.google;
+  const google = (product.page_sections as { google?: { gtin?: string; mpn?: string; brand?: string } } | null)?.google;
   const gtin = isValidGtin(google?.gtin) ? normalizeGtin(google?.gtin) : null;
   const mpn = (google?.mpn ?? "").trim();
+
+  /*
+   * ═══ BRANDUL PRODUSULUI, NU NUMELE MAGAZINULUI ═══
+   *
+   * Pagina publica declara pana acum ca `brand` numele MAGAZINULUI, chiar cand
+   * comerciantul scrisese un producator real la Organizare. Feedurile foloseau
+   * de mult valoarea lui (`mapping.ts:109`, `catalog-feed.ts:111`), deci pagina
+   * si feedul spuneau lucruri diferite despre acelasi articol: feedul „ARDON",
+   * pagina „eSAFE".
+   *
+   * Nu era un caz rar. Masurat: 6150 din 7880 de produse active publicate au
+   * brand propriu — 78%. Adica pentru majoritatea catalogului, Google primea
+   * doua raspunsuri la aceeasi intrebare, iar cel de pe pagina era gresit:
+   * magazinul care vinde Portwest nu e producatorul lui.
+   *
+   * Aceeasi ordine ca in feeduri: brandul produsului, apoi numele magazinului.
+   * Argumentul `brand` ramane REZERVA, nu valoarea impusa — de aia nici nu s-a
+   * schimbat semnatura, si amandoi apelantii (pagina de produs si magazinul cu
+   * un singur produs) se repara odata.
+   *
+   * ⚠ RAMANE o nepotrivire mica: feedul Merchant mai are intre cele doua o
+   * valoare implicita pe magazin (`google_merchant_config.brand_default`), pe
+   * care pagina n-o citeste. O au TREI magazine din 127, si conteaza doar la
+   * produsele fara brand propriu. N-am adus coloana aia pe o pagina publica
+   * dinadins: tine si datele de conectare la Merchant, iar riscul nu merita
+   * pentru trei magazine.
+   */
+  const brandProdus = (google?.brand ?? "").trim() || brand;
 
   // Combinatiile vandabile, cate una pe titlu. Se calculeaza O DATA si se
   // folosesc de doua ori: la numarul de oferte si la forma cu variante de mai jos.
@@ -295,7 +324,7 @@ export function buildProductJsonLd(
          cele de pe variante descriu articolele. Nu se exclud. */
       ...(gtin ? { gtin } : {}),
       ...(mpn ? { mpn } : {}),
-      brand: { "@type": "Brand", name: brand },
+      brand: { "@type": "Brand", name: brandProdus },
       ...(images?.length ? { image: images } : {}),
       hasVariant,
     };
@@ -310,7 +339,7 @@ export function buildProductJsonLd(
     ...(product.sku ? { sku: product.sku } : {}),
     ...(gtin ? { gtin } : {}),
     ...(mpn ? { mpn } : {}),
-    brand: { "@type": "Brand", name: brand },
+    brand: { "@type": "Brand", name: brandProdus },
     ...(images?.length ? { image: images } : {}),
     offers: priceRange.hasRange
       ? {

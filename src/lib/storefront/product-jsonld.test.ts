@@ -269,3 +269,54 @@ test("un produs fara variante ramane exact cum era", () => {
   assert.equal(g.gtin, "5941234567899");
   assert.equal("hasVariant" in g, false);
 });
+
+/* ─── Brandul: al PRODUSULUI, nu al magazinului ──────────────────────────────
+ *
+ * Pagina declara numele magazinului chiar cand comerciantul scrisese un
+ * producator real, iar feedurile foloseau de mult valoarea lui. Deci pagina si
+ * feedul spuneau lucruri diferite despre acelasi articol: feedul „ARDON",
+ * pagina „eSAFE". Masurat: 6150 din 7880 de produse active aveau brand propriu.
+ */
+
+const cuBrand = (brandProdus?: string) => buildProductJsonLd(
+  { name: "Casca", description: null, price: 100, images: null, page_sections: { google: { brand: brandProdus } } },
+  "https://exemplu.ro/p",
+  "eSAFE",            // numele magazinului, ca rezerva
+  SHIPPING,
+) as Record<string, unknown>;
+
+/** Numele de brand din JSON-LD, indiferent de forma (Product sau ProductGroup). */
+const numeBrand = (j: Record<string, unknown>) => (j.brand as { name?: string } | undefined)?.name;
+
+test("brandul scris de comerciant bate numele magazinului", () => {
+  assert.equal(numeBrand(cuBrand("Portwest")), "Portwest");
+});
+
+test("fara brand pe produs, ramane numele magazinului", () => {
+  assert.equal(numeBrand(cuBrand(undefined)), "eSAFE");
+  assert.equal(numeBrand(cuBrand("   ")), "eSAFE", "spatiile nu sunt un brand");
+});
+
+test("si grupul de variante poarta brandul produsului", () => {
+  /* Doua forme, o singura regula: daca s-ar fi scris de doua ori, s-ar fi
+     despartit la prima corectura. */
+  const g = buildProductJsonLd(
+    {
+      id: "p1", name: "Husa", description: null, price: 100, images: null,
+      page_sections: {
+        google: { brand: "CAIAN" },
+        variants: {
+          enabled: true,
+          options: [{ id: "o1", name: "Culoare", values: ["Gri", "Bej"] }],
+          combinations: [
+            { title: "Gri", gtin: "0682643488768", enabled: true },
+            { title: "Bej", gtin: "0682643488799", enabled: true },
+          ],
+        },
+      },
+    },
+    "https://exemplu.ro/p", "Magazinul Meu", SHIPPING,
+  ) as Record<string, unknown>;
+  assert.equal(g["@type"], "ProductGroup");
+  assert.equal(numeBrand(g), "CAIAN");
+});

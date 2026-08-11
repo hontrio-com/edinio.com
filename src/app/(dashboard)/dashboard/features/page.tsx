@@ -33,9 +33,38 @@ import { trendyolGloballyEnabled } from "@/lib/trendyol/auth";
 type Integration = {
   name: string;
   logo: string;
+  /**
+   * Corectie pentru siglele desenate in ALB, pentru fundal inchis: pe cardul
+   * deschis ies invizibile. `invert(1)` le face negre. Asa stau Netopia, Oblio
+   * si Facturis — ultima e alba 100%, masurat, si cardul ei era gol.
+   */
   filter?: string;
+  /**
+   * Marire peste locasul siglei. Nimeni nu o mai foloseste azi — locasul de
+   * 64px face singur treaba pentru care fusese pusa (vezi comentariul lung de
+   * la locas, in `CardInCurand`).
+   *
+   * ⚠ Daca se pune la loc pe ceva: `scale` INMULTESTE latimea locasului, deci
+   * aceeasi valoare inseamna altceva dupa fiecare schimbare a acestuia, iar
+   * sigla intra peste nume fara sa se planga nimic. Exact asta a patit
+   * `Smso.ro`, care avea 1,3 potrivit pe locasul vechi de 40px.
+   */
   scale?: number;
   id?: string;
+  /**
+   * Anuntata, dar nelivrata inca: se vede sigla si numele, cu eticheta
+   * „IN CURAND", si cardul nu duce nicaieri.
+   *
+   * NU e acelasi lucru cu un card fara `id`, desi amandoua ajung tot pe o
+   * ramura fara link. Cardul cu LACAT spune „exista, dar nu ai tu acces" — asa
+   * arata About You si Trendyol cand steagul lor global e stins. Asta spune
+   * „vine". Cine vede lacatul cauta de unde sa-l deschida, cine vede „IN
+   * CURAND" asteapta; sunt doua mesaje diferite catre acelasi om.
+   *
+   * Cand integrarea se livreaza: se scoate `soon`, se pune `id`, si id-ul se
+   * adauga in lanturile `isUnlocked` / `href` de mai jos.
+   */
+  soon?: true;
 };
 
 const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
@@ -52,6 +81,16 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "GLS",           logo: "/integrations/gls.svg", id: "gls" },
       { name: "Pall-Ex",       logo: "/integrations/pallex.avif", id: "pallex" },
       { name: "eColet",        logo: "/integrations/ecolet.png", id: "ecolet" },
+      /* Intai transportatorii, apoi brokerii — aceeasi ordine ca mai sus, unde
+         Fan Courier si DPD stau inaintea lui Woot si eColet. */
+      { name: "DHL",           logo: "/integrations/dhl.svg", soon: true },
+      { name: "FedEx",         logo: "/integrations/fedex.svg", soon: true },
+      { name: "UPS",           logo: "/integrations/ups.svg", soon: true },
+      { name: "Posta Romana",  logo: "/integrations/posta_romana.svg", soon: true },
+      { name: "Packeta",       logo: "/integrations/packeta.png", soon: true },
+      { name: "Innoship",      logo: "/integrations/innoship.svg", soon: true },
+      { name: "SmartShip",     logo: "/integrations/smartship.png", soon: true },
+      { name: "Shipo.ro",      logo: "/integrations/shipo.ro.svg", soon: true },
     ],
   },
   {
@@ -61,6 +100,10 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "SmartBill", logo: "/integrations/smartbill.webp", id: "smartbill" },
       { name: "Oblio",     logo: "/integrations/oblio.webp",    filter: "invert(1)", id: "oblio" },
       { name: "fGo",       logo: "/integrations/fgo.svg", id: "fgo" },
+      { name: "SAGA",          logo: "/integrations/saga.svg", soon: true },
+      { name: "Facturis",      logo: "/integrations/facturis.png", filter: "invert(1)", soon: true },
+      { name: "EasyBill",      logo: "/integrations/easybill.png", soon: true },
+      { name: "Factureaza.ro", logo: "/integrations/factureaza.ro.webp", soon: true },
     ],
   },
   {
@@ -68,7 +111,10 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "SMS",
     integrations: [
       { name: "Notice.ro", logo: "/integrations/notice.ro.png", id: "notice" },
-      { name: "Smso.ro", logo: "/integrations/smso.svg", scale: 1.3, id: "smso" },
+      /* Avea `scale: 1.3`, potrivit pe locasul vechi de 40px. In cel de 64 sigla
+         iesea la 4px de nume, iar marirea nici nu mai e necesara: locasul singur
+         ii da cu 60% mai mult decat inainte. */
+      { name: "Smso.ro", logo: "/integrations/smso.svg", id: "smso" },
     ],
   },
   {
@@ -78,6 +124,9 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "Mailchimp", logo: "/integrations/mailchimp.svg", id: "mailchimp" },
       { name: "Brevo", logo: "/integrations/brevo.svg", id: "brevo" },
       { name: "Klaviyo", logo: "/integrations/klaviyo.svg", id: "klaviyo" },
+      /* TheMarketer e automatizare de marketing (email, SMS, recomandari), deci
+         sta langa Klaviyo, nu la „Marketing" — acolo sunt pixeli si feed-uri. */
+      { name: "TheMarketer", logo: "/integrations/themarketer.svg", soon: true },
     ],
   },
   {
@@ -89,6 +138,15 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "BT iPay",          logo: "/integrations/ipay.webp", id: "ipay" },
       { name: "Klarna",           logo: "/integrations/klarna.svg", id: "klarna" },
       { name: "Revolut",          logo: "/integrations/revolut.svg", id: "revolut" },
+      { name: "ING WebPay",       logo: "/integrations/ing.webp", soon: true },
+      { name: "PayU",             logo: "/integrations/payu.png", soon: true },
+      { name: "EuPlatesc",        logo: "/integrations/euplatesc.svg", soon: true },
+      { name: "TBI Bank",         logo: "/integrations/tbi.svg", soon: true },
+      { name: "UniCredit",        logo: "/integrations/unicredit.png", soon: true },
+      { name: "Viva.com",         logo: "/integrations/viva.png", soon: true },
+      { name: "Libra Pay",        logo: "/integrations/librapay.png", soon: true },
+      { name: "BCR",              logo: "/integrations/bcr.webp", soon: true },
+      { name: "Salt Bank",        logo: "/integrations/saltbank.svg", soon: true },
     ],
   },
   {
@@ -98,6 +156,19 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "OLX", logo: "/integrations/olx.svg", id: "olx" },
       { name: "About You", logo: "/integrations/aboutyou.png", id: "aboutyou" },
       { name: "Trendyol", logo: "/integrations/trendyol.svg", id: "trendyol" },
+      { name: "eMAG",        logo: "/integrations/emag.webp", soon: true },
+      { name: "Altex",       logo: "/integrations/altex.webp", soon: true },
+      { name: "Cel.ro",      logo: "/integrations/cel.ro.webp", soon: true },
+      { name: "Okazii.ro",   logo: "/integrations/okazii.ro.svg", soon: true },
+      { name: "Pepita.com",  logo: "/integrations/pepita.svg", soon: true },
+      /* Doua care nu sunt marketplace-uri in sens strict, puse aici fiindca e
+         cea mai apropiata rubrica si fiindca acolo le cauta un comerciant:
+         Compari.ro e comparator de preturi (trimite trafic in magazinul TAU,
+         ca Google Merchant Center), iar BaseLinker e un administrator de
+         comenzi peste mai multe canale. Daca se face vreodata o rubrica
+         „Canale de vanzare" sau „Comparatoare", acolo se muta amandoua. */
+      { name: "Compari.ro",  logo: "/integrations/compari.ro.png", soon: true },
+      { name: "BaseLinker",  logo: "/integrations/baselinker.png", soon: true },
     ],
   },
   {
@@ -109,6 +180,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "Google Ads",     logo: "/integrations/google-ads.svg", id: "google-ads" },
       { name: "Google Merchant Center", logo: "/integrations/google-merchant-center.svg", id: "google-merchant" },
       { name: "Facebook Catalog", logo: "/integrations/facebook-pixel.svg", id: "facebook-catalog" },
+      { name: "OptinMonster",     logo: "/integrations/optinmonster.png", soon: true },
     ],
   },
   {
@@ -116,6 +188,20 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     label: "Statistici",
     integrations: [
       { name: "Google Analytics", logo: "/integrations/google-analytics.svg", id: "google-analytics" },
+    ],
+  },
+  {
+    /* Rubrica noua: nu exista niciuna livrata inca, deci apare intreaga cu
+       „IN CURAND". Sunt ferestre de chat si sisteme de tichete, adica altceva
+       decat marketingul — acolo vorbesti TU catre client, aici clientul catre
+       tine. */
+    id: "suport",
+    label: "Suport clienti",
+    integrations: [
+      { name: "Tidio",    logo: "/integrations/tidio.png", soon: true },
+      { name: "Intercom", logo: "/integrations/intercom.svg", soon: true },
+      { name: "Zendesk",  logo: "/integrations/zendesk.svg", soon: true },
+      { name: "Tawk.to",  logo: "/integrations/tawkto.png", soon: true },
     ],
   },
 ];
@@ -254,6 +340,14 @@ export default async function IntegrationsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {section.integrations.map((integration) => {
+                /* Decis INAINTE de lanturile de mai jos. Fara `id` ar cadea
+                   oricum pe ramura fara link, dar ar iesi cu LACAT — vezi
+                   comentariul de la `soon` in tipul `Integration`: lacatul si
+                   „IN CURAND" spun doua lucruri diferite. */
+                if (integration.soon) {
+                  return <CardInCurand key={integration.name} integration={integration} />;
+                }
+
                 const isUnlocked = integration.id === "notice" || integration.id === "smso" || integration.id === "smartbill" || integration.id === "stripe" || integration.id === "netopia" || integration.id === "ipay" || integration.id === "klarna" || integration.id === "revolut" || integration.id === "woot" || integration.id === "colete" || integration.id === "gls" || integration.id === "pallex" || integration.id === "ecolet" || integration.id === "oblio" || integration.id === "fgo" || integration.id === "cargus" || integration.id === "dpd" || integration.id === "fan-courier" || integration.id === "sameday" || integration.id === "facebook-pixel" || integration.id === "tiktok-pixel" || integration.id === "google-ads" || integration.id === "facebook-catalog" || integration.id === "mailchimp" || integration.id === "brevo" || integration.id === "klaviyo" || (integration.id === "google-merchant" && gmcAvailable) || integration.id === "google-analytics" || integration.id === "olx" || (integration.id === "aboutyou" && aboutyouAvailable) || (integration.id === "trendyol" && trendyolAvailable);
                 const isActive = integration.id === "notice" ? noticeActive : integration.id === "smso" ? smsoActive : integration.id === "smartbill" ? smartbillActive : integration.id === "stripe" ? stripeActive : integration.id === "netopia" ? netopiaActive : integration.id === "ipay" ? ipayActive : integration.id === "klarna" ? klarnaActive : integration.id === "revolut" ? revolutActive : integration.id === "woot" ? wootActive : integration.id === "colete" ? coleteActive : integration.id === "gls" ? glsActive : integration.id === "pallex" ? pallexActive : integration.id === "ecolet" ? ecoletActive : integration.id === "oblio" ? oblioActive : integration.id === "fgo" ? fgoActive : integration.id === "cargus" ? cargusActive : integration.id === "dpd" ? dpdActive : integration.id === "fan-courier" ? fanCourierActive : integration.id === "sameday" ? samedayActive : integration.id === "facebook-pixel" ? fbActive : integration.id === "tiktok-pixel" ? ttActive : integration.id === "google-ads" ? googleActive : integration.id === "google-merchant" ? googleMerchantActive : integration.id === "mailchimp" ? mailchimpActive : integration.id === "brevo" ? brevoActive : integration.id === "klaviyo" ? klaviyoActive : integration.id === "google-analytics" ? googleAnalyticsActive : integration.id === "olx" ? olxActive : integration.id === "aboutyou" ? aboutyouActive : integration.id === "trendyol" ? trendyolActive : false;
                 const href = integration.id === "notice" ? "/dashboard/features/notice" : integration.id === "smso" ? "/dashboard/features/smso" : integration.id === "smartbill" ? "/dashboard/features/smartbill" : integration.id === "stripe" ? "/dashboard/features/stripe" : integration.id === "netopia" ? "/dashboard/features/netopia" : integration.id === "ipay" ? "/dashboard/features/ipay" : integration.id === "klarna" ? "/dashboard/features/klarna" : integration.id === "revolut" ? "/dashboard/features/revolut" : integration.id === "woot" ? "/dashboard/features/woot" : integration.id === "colete" ? "/dashboard/features/colete" : integration.id === "gls" ? "/dashboard/features/gls" : integration.id === "pallex" ? "/dashboard/features/pallex" : integration.id === "ecolet" ? "/dashboard/features/ecolet" : integration.id === "oblio" ? "/dashboard/features/oblio" : integration.id === "fgo" ? "/dashboard/features/fgo" : integration.id === "cargus" ? "/dashboard/features/cargus" : integration.id === "dpd" ? "/dashboard/features/dpd" : integration.id === "fan-courier" ? "/dashboard/features/fan-courier" : integration.id === "sameday" ? "/dashboard/features/sameday" : integration.id === "facebook-pixel" ? "/dashboard/features/facebook-pixel" : integration.id === "tiktok-pixel" ? "/dashboard/features/tiktok-pixel" : integration.id === "google-ads" ? "/dashboard/features/google-ads" : integration.id === "facebook-catalog" ? "/dashboard/features/facebook-catalog" : integration.id === "google-merchant" ? "/dashboard/features/google-merchant" : integration.id === "mailchimp" ? "/dashboard/features/mailchimp" : integration.id === "brevo" ? "/dashboard/features/brevo" : integration.id === "klaviyo" ? "/dashboard/features/klaviyo" : integration.id === "google-analytics" ? "/dashboard/features/google-analytics" : integration.id === "olx" ? "/dashboard/features/olx" : integration.id === "aboutyou" ? "/dashboard/features/aboutyou" : integration.id === "trendyol" ? "/dashboard/features/trendyol" : "#";
@@ -265,7 +359,7 @@ export default async function IntegrationsPage() {
                       href={href}
                       className="relative flex items-center gap-3.5 p-4 rounded-xl border border-primary/30 bg-surface hover:border-primary hover:shadow-sm transition-all group"
                     >
-                      <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center">
+                      <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
                         <img
                           src={integration.logo}
                           alt={integration.name}
@@ -306,7 +400,7 @@ export default async function IntegrationsPage() {
                     key={integration.name}
                     className="relative flex items-center gap-3.5 p-4 rounded-xl border border-border bg-surface opacity-60 cursor-not-allowed select-none"
                   >
-                    <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
                       <img
                         src={integration.logo}
                         alt={integration.name}
@@ -337,6 +431,67 @@ export default async function IntegrationsPage() {
         <p className="text-xs text-muted-foreground">
           Contacteaza-ne si o vom prioritiza in roadmap-ul nostru.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cardul unei integrari anuntate, dar nelivrate inca.
+ *
+ * Trei lucruri sunt dinadins asa:
+ *
+ * 1. **Chenar intrerupt, nu lacat.** Lacatul e semnul pentru „exista, dar nu ai
+ *    tu acces". Aici nu exista inca, deci n-are ce debloca nimeni.
+ * 2. **Sigla la culoarea ei, nestinsa.** Rostul randului asta e sa se vada ce
+ *    marci vin; o sigla pala nu se recunoaste, si atunci cardul nu mai spune
+ *    nimic. Ce recede e cardul (fundal, chenar), nu sigla.
+ * 3. **`alt=""`.** Numele e chiar langa, ca text. Cu `alt={name}` cititoarele
+ *    de ecran il spun de doua ori la rand. Cardurile de mai sus inca fac asta;
+ *    daca se umbla la ele, e de reparat si acolo.
+ */
+function CardInCurand({ integration }: { integration: Integration }) {
+  return (
+    <div className="relative flex items-center gap-3.5 p-4 rounded-xl border border-dashed border-border bg-muted/20 select-none">
+      {/*
+        ═══ LOCASUL SIGLEI: 64 lat, 40 inalt. Aceleasi numere in toate cele trei
+        feluri de card, si asta e obligatoriu. ═══
+
+        Latimea e FIXA dinadins. Daca fiecare sigla si-ar lua latimea ei, numele
+        de alaturi ar incepe fiecare in alt loc si marginea din stanga a coloanei
+        ar iesi zimtata.
+
+        De ce 64 si nu 40, cat era: locasul patrat plus `object-contain` potriveste
+        latura MARE, deci un wordmark cu raportul 6 iesea de 40 lat si 6,7 inalt —
+        o mazgalitura. Zece sigle erau sub 10px. La 64 aceleasi ajung la 10-17px.
+
+        De ce nu si mai lat: 64 e ultima treapta care nu costa nimic. Masurat pe
+        cardul real (275px la trei coloane), singurul nume care se taie la 64 e
+        „Google Merchant Center", care se taia si la 40; urmatorul cel mai lung,
+        „Netopia Payments", cere 123px si are 125. La 72 ar incepe sa se taie si
+        el.
+
+        ⚠ Ce NU rezolva latimea: peste raportul ~6 tot iese mic (OptinMonster
+        9,6px, si About You, care are raportul 9,13, ajunge la 6,5). Acolo e
+        nevoie de alt FISIER — semnul patrat al marcii in loc de wordmark.
+      */}
+      <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
+        <img
+          src={integration.logo}
+          alt=""
+          className="w-full h-full object-contain"
+          style={{
+            filter: integration.filter ?? undefined,
+            transform: integration.scale ? `scale(${integration.scale})` : undefined,
+            transformOrigin: "center",
+          }}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-foreground truncate">{integration.name}</p>
+        <span className="inline-block text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded mt-0.5">
+          In curand
+        </span>
       </div>
     </div>
   );

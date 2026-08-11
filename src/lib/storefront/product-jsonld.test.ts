@@ -144,3 +144,128 @@ test("acelasi produs, dar cu urmarirea stocului OPRITA, ramane in stoc", () => {
   const o = oferta([{ title: "S", enabled: true, price: 438, stock_quantity: 0 }]);
   assert.equal(o.availability, "https://schema.org/InStock");
 });
+
+/* ─── Coduri pe VARIANTA: `ProductGroup` + `hasVariant` ──────────────────────
+ *
+ * Reclamat de un comerciant: completase „Cod EAN" la toate cele sapte culori ale
+ * unei huse si niciunul nu aparea in datele structurate. Nici nu avea unde —
+ * pagina citea doar codul de la nivel de produs, iar un singur `Offer` n-are loc
+ * pentru sapte coduri diferite.
+ *
+ * Probele astea pazesc AMANDOUA jumatatile: ca variantele cu cod ies pe forma
+ * noua, si ca restul catalogului (2300 de produse cu variante fara coduri) NU se
+ * muta pe ea.
+ */
+
+/** Cele sapte culori reale ale produsului reclamat, cu codurile lui. */
+const CULORI = [
+  { title: "Gri", gtin: "0682643488768" },
+  { title: "Bej", gtin: "0682643488799" },
+  { title: "Bordo", gtin: "0682643488744" },
+];
+
+const cuCulori = (combinations: unknown[], optiune = "Culoare") => ({
+  id: "prod-1",
+  name: "Husa de Pat",
+  description: null,
+  price: 100,
+  images: ["/a.webp"],
+  sku: "HUSA-180",
+  page_sections: {
+    variants: { enabled: true, options: [{ id: "o1", name: optiune, values: ["Gri", "Bej", "Bordo"] }], combinations },
+  },
+});
+
+const grup = (combinations: unknown[], optiune?: string) =>
+  buildProductJsonLd(cuCulori(combinations, optiune), "https://exemplu.ro/p", "Exemplu", SHIPPING) as
+    Record<string, unknown>;
+
+test("variantele cu cod propriu produc `ProductGroup`, nu `Product`", () => {
+  const g = grup(CULORI.map((c) => ({ ...c, enabled: true })));
+  assert.equal(g["@type"], "ProductGroup");
+  assert.equal(Array.isArray(g.hasVariant), true);
+  assert.equal((g.hasVariant as unknown[]).length, 3);
+});
+
+test("FIECARE varianta isi poarta codul ei", () => {
+  const g = grup(CULORI.map((c) => ({ ...c, enabled: true })));
+  const coduri = (g.hasVariant as Record<string, unknown>[]).map((v) => v.gtin);
+  assert.deepEqual(coduri, ["0682643488768", "0682643488799", "0682643488744"]);
+});
+
+test("un cod de varianta cu cifra de control gresita NU se scrie", () => {
+  /* Acelasi principiu ca la codul de produs: un cod gresit duce la RESPINGERE,
+     unul lipsa doar saraceste listarea. Restul variantelor raman intregi. */
+  const g = grup([
+    { title: "Gri", gtin: "0682643488768", enabled: true },
+    { title: "Bej", gtin: "0682643488790", enabled: true }, // cifra de control stricata
+    { title: "Bordo", gtin: "0682643488744", enabled: true },
+  ]);
+  const v = g.hasVariant as Record<string, unknown>[];
+  assert.equal(v[0].gtin, "0682643488768");
+  assert.equal("gtin" in v[1], false, "codul invalid n-avea voie sa fie scris");
+  assert.equal(v[2].gtin, "0682643488744");
+});
+
+test("`variesBy` spune ce difera, potrivit din numele optiunii", () => {
+  const g = grup(CULORI.map((c) => ({ ...c, enabled: true })));
+  assert.deepEqual(g.variesBy, ["color"]);
+  assert.equal((g.hasVariant as Record<string, unknown>[])[0].color, "Gri");
+});
+
+test("un nume de optiune care nu se poate potrivi NU se ghiceste", () => {
+  /* In baza exista „Model", „Gramaj", „Tip print", „Bicarbonato" si unul gol. O
+     proprietate ghicita gresit e o afirmatie falsa despre marfa. */
+  const g = grup(CULORI.map((c) => ({ ...c, enabled: true })), "Tip print");
+  assert.equal("variesBy" in g, false);
+  const v = (g.hasVariant as Record<string, unknown>[])[0];
+  assert.equal("color" in v, false);
+  assert.equal("size" in v, false);
+});
+
+test("`productGroupID` leaga variantele intre ele", () => {
+  const g = grup(CULORI.map((c) => ({ ...c, enabled: true })));
+  assert.equal(g.productGroupID, "HUSA-180");
+});
+
+test("fara SKU pe produs, grupul se identifica prin id-ul din baza", () => {
+  const p = { ...cuCulori(CULORI.map((c) => ({ ...c, enabled: true }))), sku: null };
+  const g = buildProductJsonLd(p, "https://exemplu.ro/p", "Exemplu", SHIPPING) as Record<string, unknown>;
+  assert.equal(g.productGroupID, "prod-1");
+});
+
+test("o varianta epuizata se declara epuizata, nu tot grupul", () => {
+  const g = grup([
+    { title: "Gri", gtin: "0682643488768", enabled: true, stock_quantity: "0" },
+    { title: "Bej", gtin: "0682643488799", enabled: true, stock_quantity: "5" },
+    { title: "Bordo", gtin: "0682643488744", enabled: true },
+  ]);
+  const v = g.hasVariant as Record<string, Record<string, unknown>>[];
+  assert.match(String(v[0].offers.availability), /OutOfStock/);
+  assert.match(String(v[1].offers.availability), /InStock/);
+});
+
+test("⚠ FARA coduri pe variante, forma NU se schimba", () => {
+  /* 2489 de produse au variante, doar 186 au coduri pe ele. Pe celelalte,
+     `ProductGroup` ar adauga structura fara niciun fapt nou — si ar muta tot
+     catalogul pe o forma noua degeaba. */
+  const g = grup([
+    { title: "Gri", enabled: true },
+    { title: "Bej", enabled: true },
+    { title: "Bordo", enabled: true },
+  ]);
+  assert.equal(g["@type"], "Product");
+  assert.equal("hasVariant" in g, false);
+});
+
+test("o singura combinatie nu e un grup de variante", () => {
+  const g = grup([{ title: "Gri", gtin: "0682643488768", enabled: true }]);
+  assert.equal(g["@type"], "Product");
+});
+
+test("un produs fara variante ramane exact cum era", () => {
+  const g = build({ gtin: "5941234567899" });
+  assert.equal(g["@type"], "Product");
+  assert.equal(g.gtin, "5941234567899");
+  assert.equal("hasVariant" in g, false);
+});

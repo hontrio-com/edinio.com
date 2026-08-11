@@ -1,6 +1,49 @@
 import { isValidGtin, normalizeGtin } from "@/lib/gtin";
 import { getProductPriceRange } from "@/lib/utils/product-price";
-import { combinatiiActiveUnice, parseVariants, toateCombinatiileEpuizate } from "@/lib/storefront/variants";
+import {
+  combinatiiActiveUnice, comboEpuizat, comboUnitPrice, esteMarime, parseVariants,
+  toateCombinatiileEpuizate, VARIANT_TITLE_SEP, type VariantCombo, type VariantsData,
+} from "@/lib/storefront/variants";
+
+/**
+ * Numele de optiune → proprietatea schema.org care ii corespunde.
+ *
+ * Se potriveste doar ce se poate potrivi CU CERTITUDINE. Numele reale din baza
+ * sunt neregulate — „Mărime " cu spatiu la coada, „MARIME", „Marimea", dar si
+ * „Model", „Gramaj", „Tip print", „Bicarbonato" si unul complet gol. Pentru cele
+ * care nu se potrivesc nu se inventeaza nimic: `variesBy` ramane fara ele, iar
+ * varianta isi pastreaza doar identificatorii. O proprietate ghicita gresit e o
+ * afirmatie falsa despre marfa, nu o imbogatire.
+ */
+function proprietateaOptiunii(nume: string): "color" | "size" | "material" | null {
+  const curat = nume.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().trim();
+  if (!curat) return null;
+  if (curat === "culoare" || curat === "color" || curat === "culori") return "color";
+  if (curat === "material") return "material";
+  // `esteMarime` stie deja formele de marime folosite in magazine; „Dimensiune"
+  // si „Capacitate" descriu tot marimea articolului.
+  if (esteMarime(nume) || curat === "dimensiune" || curat === "dimensiuni" || curat === "capacitate") return "size";
+  return null;
+}
+
+/**
+ * Valorile unei combinatii, desfacute pe optiuni.
+ *
+ * Titlul se compune din valori legate cu „ / ", in ORDINEA optiunilor, deci se
+ * poate desface la loc. Daca numarul nu se potriveste — o valoare care contine
+ * chiar separatorul, un titlu scris de mana la import — nu se ghiceste nimic:
+ * mai bine o varianta fara `color`/`size` decat una cu culoarea pusa in marime.
+ */
+function valoriPeOptiune(variants: VariantsData, combo: VariantCombo): Record<string, string> | null {
+  const bucati = combo.title.split(VARIANT_TITLE_SEP);
+  if (bucati.length !== variants.options.length) return null;
+  const out: Record<string, string> = {};
+  variants.options.forEach((o, i) => {
+    const prop = proprietateaOptiunii(o.name);
+    if (prop) out[prop] = bucati[i].trim();
+  });
+  return out;
+}
 
 // Computed once at module load (not during render — keeps callers pure).
 const PRICE_VALID_UNTIL = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -14,6 +57,8 @@ const TODAY = new Date().toISOString().slice(0, 10);
  */
 export function buildProductJsonLd(
   product: {
+    /** Folosit ca `productGroupID` cand nu exista SKU pe produs. */
+    id?: string | null;
     name: string;
     description: string | null;
     price: number | null;
@@ -96,10 +141,14 @@ export function buildProductJsonLd(
   const gtin = isValidGtin(google?.gtin) ? normalizeGtin(google?.gtin) : null;
   const mpn = (google?.mpn ?? "").trim();
 
+  // Combinatiile vandabile, cate una pe titlu. Se calculeaza O DATA si se
+  // folosesc de doua ori: la numarul de oferte si la forma cu variante de mai jos.
+  const combos = combinatiiActiveUnice(varianteJsonLd);
+
   // Cate oferte anuntam: exact combinatiile vandabile, cate una pe titlu. Numarate
   // altfel (`enabled !== false`, fara dedup) declaram catre Google mai multe
   // oferte decat exista de vanzare.
-  const offerCount = combinatiiActiveUnice(varianteJsonLd).length;
+  const offerCount = combos.length;
 
   const shippingDetails = {
     "@type": "OfferShippingDetails",
@@ -127,6 +176,130 @@ export function buildProductJsonLd(
     // plateste returul daca se razgandeste (OUG 34/2014, art. 13 alin. 3).
     returnFees: "https://schema.org/ReturnShippingFees",
   };
+
+  /*
+   * ═══ VARIANTELE CU COD PROPRIU DEVIN `ProductGroup` + `hasVariant` ═══
+   *
+   * Reclamat de un comerciant: completase „Cod EAN" la toate cele sapte culori
+   * ale unei huse, si niciunul nu aparea in datele structurate. Verificat: nu
+   * aparea, si nici nu avea unde. Pagina citea DOAR codul de la nivel de produs
+   * (`page_sections.google.gtin`), iar acolo campul era gol — celelalte sapte
+   * coduri nu erau atinse de nicio linie.
+   *
+   * Dar chiar completat, campul de produs n-ar fi rezolvat nimic: un GTIN
+   * identifica un articol anume, nu o familie. Codul culorii „Gri" pus pe o
+   * pagina care vinde si „Bej" e o afirmatie falsa. Iar in forma de pana acum —
+   * un singur `Offer`, sau un `AggregateOffer` — nu exista loc pentru sapte
+   * coduri diferite. Lipsea structura, nu doar citirea.
+   *
+   * `ProductGroup` e singura forma schema.org care le tine: fiecare varianta
+   * devine un `Product` cu identificatorii, pretul si disponibilitatea EI.
+   *
+   * ═══ DE CE NU LA TOATE PRODUSELE CU VARIANTE ═══
+   *
+   * 2489 de produse active au doua sau mai multe combinatii, dar doar 186 au
+   * coduri pe ele (masurat). La celelalte ~2300, `ProductGroup` ar adauga
+   * structura fara sa adauge niciun FAPT nou — aceleasi preturi si aceeasi
+   * disponibilitate, spuse mai complicat — in schimbul unei schimbari de forma
+   * pe tot catalogul, adica exact felul de modificare care umple Search Console
+   * si care se descopera tarziu.
+   *
+   * Deci comutarea se face doar cand chiar aduce ceva: cel putin o varianta
+   * vandabila cu GTIN valid. Pragul se poate largi mai tarziu (preturi per
+   * varianta, SKU-uri distincte); ce nu se poate face inapoi e un catalog
+   * intreg mutat pe o forma noua fara sa fi urmarit nimeni ce iese.
+   *
+   * ⚠ Un GTIN care nu trece cifra de control NU se scrie, ca peste tot: un cod
+   * gresit duce la RESPINGERE, unul lipsa doar saraceste listarea.
+   */
+
+  const areCoduriPeVariante = combos.some((c) => isValidGtin(c.gtin));
+  const caGrupDeVariante = !!varianteJsonLd && combos.length >= 2 && areCoduriPeVariante;
+
+  if (caGrupDeVariante && varianteJsonLd) {
+    /*
+     * `productGroupID` trebuie sa fie STABIL si al grupului, nu al unei
+     * variante: SKU-ul produsului daca exista, altfel id-ul lui din baza. Fara
+     * el, Google nu poate lega intre ele variantele aceleiasi familii.
+     */
+    const productGroupID = (product.sku ?? "").trim() || (product.id ?? "").trim();
+
+    /*
+     * `variesBy` enumera CE difera intre variante, cu proprietati schema.org.
+     * Se scrie doar ce s-a putut potrivi cu certitudine din numele optiunilor —
+     * vezi `proprietateaOptiunii`. Daca nu s-a potrivit nimic, campul lipseste:
+     * e recomandat, nu obligatoriu, iar o proprietate ghicita ar fi mai rea.
+     */
+    const proprietatiCareVariaza = [
+      ...new Set(
+        varianteJsonLd.options
+          .map((o) => proprietateaOptiunii(o.name))
+          .filter((p): p is "color" | "size" | "material" => p !== null),
+      ),
+    ];
+
+    const hasVariant = combos.map((combo) => {
+      const codVarianta = isValidGtin(combo.gtin) ? normalizeGtin(combo.gtin) : null;
+      const skuVarianta = (combo.sku ?? "").trim();
+      const valori = valoriPeOptiune(varianteJsonLd, combo) ?? {};
+      const pretVarianta = comboUnitPrice(combo, Number(product.price) || 0);
+      /*
+       * Disponibilitatea se socoteste PER VARIANTA, dar marcajul de pe produs
+       * bate: cand comerciantul a pus „Stoc epuizat" sau „Precomanda", el se
+       * aplica intregii pagini. Fara asta, o pagina cu butonul stins ar fi
+       * declarat variante „InStock".
+       */
+      const varIndisponibil = outOfStock || comboEpuizat(combo);
+      return {
+        "@type": "Product",
+        /* Numele combinatiei, nu al produsului: „Husa … — Gri" se citeste ca
+           articol, iar sapte randuri cu acelasi nume nu s-ar deosebi. */
+        name: `${product.name} — ${combo.title}`,
+        ...(skuVarianta ? { sku: skuVarianta } : {}),
+        ...(codVarianta ? { gtin: codVarianta } : {}),
+        ...(mpn ? { mpn } : {}),
+        ...valori,
+        /* Poza variantei, cand are una a ei; altfel mosteneste galeria. */
+        ...(combo.image ? { image: [combo.image] } : {}),
+        offers: {
+          "@type": "Offer",
+          priceCurrency: "RON",
+          price: pretVarianta,
+          itemCondition: "https://schema.org/NewCondition",
+          availability: varIndisponibil
+            ? "https://schema.org/OutOfStock"
+            : stockStatus === "preorder"
+              ? "https://schema.org/PreOrder"
+              : "https://schema.org/InStock",
+          validFrom,
+          priceValidUntil: PRICE_VALID_UNTIL,
+          /* Aceeasi adresa la toate: pagina nu stie inca sa preselecteze o
+             varianta din adresa. Google accepta, dar daca se adauga vreodata
+             un parametru de preselectare, aici e locul care il foloseste. */
+          url: productUrl,
+          shippingDetails,
+          hasMerchantReturnPolicy,
+        },
+      };
+    });
+
+    return {
+      "@context": "https://schema.org",
+      "@type": "ProductGroup",
+      name: product.name,
+      description: desc,
+      url: productUrl,
+      ...(productGroupID ? { productGroupID } : {}),
+      ...(proprietatiCareVariaza.length ? { variesBy: proprietatiCareVariaza } : {}),
+      /* Codul de la nivel de produs ramane, cand exista: descrie familia, iar
+         cele de pe variante descriu articolele. Nu se exclud. */
+      ...(gtin ? { gtin } : {}),
+      ...(mpn ? { mpn } : {}),
+      brand: { "@type": "Brand", name: brand },
+      ...(images?.length ? { image: images } : {}),
+      hasVariant,
+    };
+  }
 
   return {
     "@context": "https://schema.org",

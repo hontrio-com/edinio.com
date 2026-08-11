@@ -39,3 +39,43 @@ export const FORMULAR: CaleDeContact = {
   href: "/contact",
   extern: false,
 };
+
+/**
+ * WhatsApp, pe același număr ca telefonul.
+ *
+ * ⚠ `wa.me` cere numărul FĂRĂ `+` și fără spații — o formă în plus față de cele
+ * două de sus. De aceea se scrie aici, o dată, și nu se compune de fiecare dată
+ * din `TELEFON.href`: a treia formă a aceluiași număr e exact locul în care apare
+ * a treia greșeală.
+ *
+ * Era scris de mână și în `StickyContact.tsx`. Acum vine tot de aici.
+ */
+export const WHATSAPP: CaleDeContact = {
+  label: "Mesaj pe WhatsApp",
+  href: "https://wa.me/40750456809",
+  extern: true,
+};
+
+/** Verdele oficial WhatsApp. Singurul loc unde se scrie. */
+export const VERDE_WHATSAPP = "#25D366";
+
+/**
+ * Programul de asistență, dat de client 2026-08-11.
+ *
+ * ⚠ ÎNCHIDE O CONTRAZICERE care era pe site: subsolul spunea „suport 7 zile din
+ * 7", iar `/contact` „Luni - Vineri, 09:00 - 18:00". Două afirmații despre
+ * același lucru, pe aceeași pagină, iar cea din subsol apare pe TOATE paginile.
+ * Forma de acum le împacă: șapte zile, cu ore.
+ *
+ * Se scrie ÎNTR-UN SINGUR LOC dinadins. Un program apare, de obicei, în trei-
+ * patru locuri și se schimbă în două — iar clientul care sună la 19:00 fiindcă
+ * așa scria undeva e o promisiune încălcată, nu o greșeală de redactare.
+ */
+export const PROGRAM = {
+  zile: "Luni - Duminică",
+  ore: "08:00 - 20:00",
+  /** Rândul întreg, pentru un singur loc de afișare. */
+  get intreg(): string {
+    return `${this.zile}, ${this.ore}`;
+  },
+};

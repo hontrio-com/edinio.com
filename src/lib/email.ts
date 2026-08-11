@@ -402,6 +402,126 @@ export async function sendPageFormEmail(
 
 const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.com";
 
+/**
+ * Unde ajung mesajele din formularul de pe `/contact`.
+ *
+ * NU e `SUPPORT_ADMIN_EMAIL`: acela e coada de tichete a clientilor care au deja
+ * cont. Aici scriu oameni care inca nu sunt clienti, si adresa e chiar cea
+ * afisata public pe site.
+ */
+const CONTACT_ADMIN_EMAIL = process.env.CONTACT_ADMIN_EMAIL ?? "contact@edinio.com";
+
+/** Escapare HTML. Nimic din ce vine dintr-un formular public nu intra neatins. */
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export interface MesajDeContact {
+  nume: string;
+  email: string;
+  telefon: string;
+  mesaj: string;
+}
+
+/**
+ * Mesajul din formularul public, catre noi.
+ *
+ * ⚠ `replyTo` e adresa OMULUI, nu a noastra. Fara el, „Raspunde" din clientul de
+ * mail deschide un raspuns catre Edinio — adica noi catre noi — si abia dupa
+ * aceea observi ca trebuie sa copiezi adresa de mana din corpul mesajului.
+ * Cu el, tot fluxul de raspuns e o singura apasare.
+ */
+export function buildContactAdminHtml(data: MesajDeContact): string {
+  const rand = (eticheta: string, valoare: string, href?: string) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
+        <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">${esc(eticheta)}</span>
+        <p style="margin:3px 0 0 0;font-size:15px;color:#18181b;font-weight:500;">${
+          href ? `<a href="${esc(href)}" style="color:#18181b;text-decoration:none;">${esc(valoare)}</a>` : esc(valoare) || "-"
+        }</p>
+      </td>
+    </tr>`;
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj nou de pe edinio.com</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Trimis din formularul de pe pagina de contact.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
+      ${rand("Nume complet", data.nume)}
+      ${rand("Email", data.email, `mailto:${data.email}`)}
+      ${rand("Telefon", data.telefon, `tel:${data.telefon.replace(/[\s.\-()]/g, "")}`)}
+    </table>
+    <p style="margin:24px 0 8px 0;font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">Mesaj</p>
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:16px 18px;">
+      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.65;white-space:pre-wrap;">${esc(data.mesaj)}</p>
+    </div>
+    <div style="text-align:center;margin-top:24px;">
+      <a href="mailto:${esc(data.email)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Raspunde clientului
+      </a>
+    </div>
+  `;
+  return baseTemplate(content);
+}
+
+export async function sendContactMessageToAdmin(data: MesajDeContact): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  await getResend().emails.send({
+    from: FROM,
+    to: CONTACT_ADMIN_EMAIL,
+    replyTo: data.email,
+    subject: `[Contact] ${data.nume || data.email}`,
+    html: buildContactAdminHtml(data),
+  });
+}
+
+/**
+ * Confirmarea catre omul care a scris.
+ *
+ * ⚠ Ii dam INAPOI mesajul lui. Nu e umplutura: cine trimite un formular nu are
+ * nicio dovada ca a plecat ceva, iar peste doua zile nu mai stie nici ce a
+ * scris, nici daca a apasat. Copia e chitanta.
+ *
+ * NU promite un termen de raspuns. Programul e o afirmatie pe care o putem
+ * sustine; „raspundem in 24 de ore" e una pe care n-a confirmat-o nimeni.
+ */
+export function buildContactConfirmationHtml(data: MesajDeContact & { program: string }): string {
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Am primit mesajul tau</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;line-height:1.6;">
+      Buna${data.nume ? `, ${esc(data.nume.split(" ")[0])}` : ""}! Multumim ca ne-ai scris.
+      Iti raspundem in programul de asistenta: <strong style="color:#18181b;">${esc(data.program)}</strong>.
+    </p>
+    <p style="margin:0 0 8px 0;font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">Ce ne-ai trimis</p>
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:16px 18px;">
+      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.65;white-space:pre-wrap;">${esc(data.mesaj)}</p>
+    </div>
+    <p style="margin:24px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">
+      Daca vrei sa adaugi ceva, raspunde direct la acest email.
+      Ne gasesti si la telefon, la <a href="tel:+40750456809" style="color:#15803d;text-decoration:none;">0750 456 809</a>.
+    </p>
+  `;
+  return baseTemplate(content);
+}
+
+export async function sendContactConfirmationToCustomer(
+  data: MesajDeContact & { program: string },
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  await getResend().emails.send({
+    from: FROM,
+    to: data.email,
+    /* Raspunsul lui vine la noi, nu la adresa de expediere. */
+    replyTo: CONTACT_ADMIN_EMAIL,
+    subject: "Am primit mesajul tau - Edinio",
+    html: buildContactConfirmationHtml(data),
+  });
+}
+
 export async function sendMigrationLeadToAdmin(data: {
   name: string;
   phone: string;

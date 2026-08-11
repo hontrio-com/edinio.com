@@ -13,8 +13,7 @@ import { Logo } from "./Logo";
  *
  * Ideea desenului: nu se enumera nimic, se ARATA cantitatea. Un om care vede
  * doua randuri de sigle trecand intelege „sunt multe si sunt marci pe care le
- * stiu" inainte sa citeasca un cuvant. Titlul spune restul in doua propozitii
- * scurte, a doua stinsa in gri, ca si cum fraza se termina in soapta.
+ * stiu" inainte sa citeasca un cuvant. Titlul spune restul intr-o propozitie.
  *
  * ═══ CE E DE STIUT DACA SE UMBLA LA EA ═══
  *
@@ -146,33 +145,24 @@ export function IntegrationsBenzi() {
             propus cinci perechi de titlu si descriere si le-a respins pe toate.
             Nu le rescrie.
 
-            Ce a ramas din desen e stingerea celei de-a doua parti: propozitia se
-            rupe la virgula, iar „intr-un singur loc." trece in `text-ink-3` si
-            `font-medium`. Nu e `<br />`, ci un `<span>` in curgerea textului —
-            asa taietura se muta singura la ecran ingust, in loc sa ramana batuta
-            in cuie unde n-are ce cauta.
+            NEGRU INTEGRAL, si e o corectura ceruta de client (2026-08-11).
+            Partea a doua, „intr-un singur loc.", statea in `text-ink-3` +
+            `font-medium` — un titlu in doua tonuri, singurul asa de pe pagina.
+            Problema, Solutia, Comparatia, Preturile si Intrebarile frecvente
+            sunt toate `text-ink` curat. Nu se reintroduce stingerea aici fara sa
+            se schimbe si acolo: capetele de sectiune se citesc ca serie numai
+            cat timp arata la fel.
+
+            Nu are `<span className="block">` per rand ca celelalte titluri, si
+            asta e dinadins: acolo clientul a dat textul rupt pe randuri, aici e
+            o singura propozitie si taietura trebuie sa cada singura la virgula.
+            Latimea de 720px de mai sus e masurata exact pentru asta.
 
             Sub 400px titlul se rupe oricum in patru randuri; nu incape altfel,
             iar prescurtarea lui ar insemna schimbarea textului clientului.
-
-            Ce era inainte aici: doua propozitii scurte, si al doilea rand stins.
-            Acelasi corp
-            de litera, dar greutate mai mica si `text-ink-3`. Diferenta de ton
-            face treaba pe care in machetele de referinta o face un font cu
-            serife — proiectul n-are asa ceva, si nu se adauga unul pentru un
-            singur titlu.
-
-            `block` pe fiecare rand, nu `<br />`: la 320px propozitiile se rup
-            oricum in cate doua randuri, iar un `<br />` ar fi adaugat inca o
-            taietura peste ruperea naturala.
-
-            Textul e scurt dinadins. „Tot ce folosesti deja." cere 347px la 32px
-            bold, adica se rupe pe orice telefon sub 390px. Perechea de acum are
-            ~254px si incape intreaga incepand de la 320.
           */}
           <h2 className="mt-6 text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
-            Toate integrările de care ai nevoie,{" "}
-            <span className="font-medium text-ink-3">într-un singur loc.</span>
+            Toate integrările de care ai nevoie, într-un singur loc.
           </h2>
 
           <p className="mx-auto mt-5 max-w-[520px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">

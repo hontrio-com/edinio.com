@@ -154,25 +154,79 @@ export function SectiuneCeInclude() {
           </div>
 
           {/* ── Panoul din dreapta ──────────────────────────────────────── */}
+          {/*
+            ILUSTRAȚIA SUS, LINIE, DESCRIEREA JOS (cerut, cu schiță).
+
+            Ordinea nu e doar aranjare: fila aleasă se vede din stânga, deci ce
+            trebuie să se schimbe vizibil în dreapta e DESENUL, nu un paragraf.
+            Pus el primul, ochiul citea de fiecare dată același bloc de text de
+            trei rânduri și abia apoi observa că s-a schimbat ceva sub el.
+
+            `overflow-hidden` ține colțurile rotunjite peste scena colorată;
+            padding-ul trece de pe placă pe cele două părți, ca linia să meargă
+            dintr-o margine în alta. O linie cu margini albe la capete arată ca
+            o scăpare, nu ca o despărțire.
+          */}
           <div
             id="panou-ce-include"
             role="tabpanel"
-            className="placa min-w-0 rounded-[16px] p-6 sm:p-8 lg:col-span-3"
+            className="placa min-w-0 overflow-hidden rounded-[16px] lg:col-span-3"
           >
             {/*
               Cheia forțează React să înlocuiască blocul la fiecare schimbare,
-              iar animația de intrare pornește de la capăt. Fără ea, textul s-ar
-              schimba pe loc, fără nicio trecere.
+              iar animația de intrare pornește de la capăt. Fără ea, conținutul
+              s-ar schimba pe loc, fără nicio trecere.
             */}
-            <div key={cardActiv.id} className="apare-lin">
-              <p className="text-[16px] leading-[1.65] text-ink-2 sm:text-[17px]">
-                {cardActiv.descriere}
-              </p>
+            {/*
+              Scena ilustrației. `min-h` FIX și conținut centrat, ca panoul să
+              nu-și schimbe înălțimea de la o filă la alta: cele patru desene au
+              186-202px, iar fără el placa ar fi săltat la fiecare trecere cu
+              mausul — exact opusul unei animații fluente. Numărul e măsurat, cu
+              o rezervă peste cel mai înalt: desenele conțin text, iar la altă
+              lățime se poate rupe pe încă un rând.
 
-              {/* Ilustrația repetă exact ce scrie deasupra, deci nu se citește. */}
-              <div aria-hidden="true" className="mt-7 flex justify-center">
-                <IlustratieMentenanta id={cardActiv.id} />
-              </div>
+              `key` doar aici: ilustrația e ce trebuie să se schimbe vizibil, deci
+              ea primește animația de intrare.
+
+              Repetă exact ce scrie sub ea, deci nu se citește.
+            */}
+            <div
+              key={cardActiv.id}
+              aria-hidden="true"
+              className="apare-lin flex min-h-[292px] items-center justify-center bg-tint px-6 py-8"
+            >
+              <IlustratieMentenanta id={cardActiv.id} />
+            </div>
+
+            {/*
+              ⚠ TOATE PATRU DESCRIERILE STAU ÎN ACEEAȘI CELULĂ DE GRILĂ, una
+              peste alta, și se vede doar cea activă.
+
+              Nu e o complicație de dragul efectului, e singurul mod de a ține
+              placa la aceeași înălțime FĂRĂ un număr scris de mână: celula se
+              dimensionează după cea mai lungă, la orice lățime. Măsurat înainte:
+              pe 1018px placa sălta între 405 și 433px, fiindcă descrierile au
+              lungimi diferite și se rup pe alt număr de rânduri. Un `min-h`
+              potrivit pe o lățime s-ar fi stricat la alta, și s-ar fi stricat din
+              nou la prima corectură de text.
+
+              Cele inactive sunt `aria-hidden`: în DOM stau toate, dar un cititor
+              de ecran trebuie să audă exact una — pe cea aleasă.
+            */}
+            <div className="grid border-t border-hairline px-6 py-6 sm:px-8 sm:py-7">
+              {MENTENANTA_CARDURI.map((card, i) => (
+                <p
+                  key={card.id}
+                  aria-hidden={i !== activ}
+                  className={cn(
+                    "col-start-1 row-start-1 text-[16px] leading-[1.65] text-ink-2 motion-reduce:transition-none sm:text-[17px]",
+                    i === activ ? "opacity-100" : "pointer-events-none opacity-0",
+                  )}
+                  style={{ transition: `opacity ${DURATA_MS}ms ease` }}
+                >
+                  {card.descriere}
+                </p>
+              ))}
             </div>
           </div>
         </div>

@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Check, ShieldCheck } from "lucide-react";
 import type { CardMentenanta } from "@/lib/website/mentenanta";
 
@@ -133,37 +136,139 @@ function Securitate() {
   );
 }
 
-function Optimizari() {
+/*
+  ═══ INDICATOARELE LIGHTHOUSE ═══
+
+  Cerute de client, „identic, cu tot cu animațiile lor". Sunt reproduse din
+  raportul Google Lighthouse: disc palid în culoarea scorului, arc care se
+  desenează peste el, numărul la mijloc, eticheta dedesubt.
+
+  ⚠ NUMERELE SUNT ILUSTRATIVE, nu o măsurătoare. Clientul a cerut „toate peste
+  93". Dacă vreodată se rulează Lighthouse pe un magazin real, valorile de aici
+  se înlocuiesc cu cele măsurate — o pagină comercială care arată un scor arată
+  o afirmație, iar afirmațiile trebuie să poată fi susținute.
+*/
+
+/** Verdele Lighthouse pentru „trecut" (scor ≥ 90). E al lor, nu al nostru. */
+const VERDE_LIGHTHOUSE = "#0CCE6B";
+
+const SCORURI = [
+  { eticheta: "Performanță", valoare: 96 },
+  { eticheta: "Accesibilitate", valoare: 98 },
+  { eticheta: "Bune practici", valoare: 95 },
+  { eticheta: "SEO", valoare: 100 },
+];
+
+/* Geometria cercului. `viewBox` de 120 ca în markup-ul lor, ca proporțiile
+   dintre grosimea inelului și rază să iasă aceleași. */
+const RAZA = 52;
+const CIRCUMFERINTA = 2 * Math.PI * RAZA;
+const DURATA_UMPLERE_MS = 1000;
+
+function Indicator({ eticheta, valoare }: { eticheta: string; valoare: number }) {
   /*
-    Coloanele NU sunt aleatorii și nici în creștere perfectă: o linie care urcă
-    impecabil se citește ca desen de prezentare, nu ca măsurătoare. Valorile
-    urcă în ansamblu, cu o săptămână în care au coborât — așa arată datele
-    adevărate. Numerele sunt scrise de mână, nu `Math.random()`: pe server ar
-    ieși altele decât în browser și s-ar rupe hidratarea.
-  */
-  const coloane = [38, 46, 41, 55, 62, 58, 71, 79];
+   * Numărul pornește de la valoarea FINALĂ, nu de la zero.
+   *
+   * Așa, ce trimite serverul e chiar ce trebuie să vadă omul: fără JavaScript
+   * rămâne scorul, nu un „0". Urcarea se pornește la montare, din
+   * `useLayoutEffect` — pus în `useEffect`, browserul ar fi apucat să vopsească
+   * o dată valoarea finală și s-ar fi văzut o clipire înainte de animație.
+   * Același tipar ca prețul care urcă din `PricingSection`.
+   */
+  const [afisat, setAfisat] = useState(valoare);
+  const [pornit, setPornit] = useState(false);
+
+  const useIzomorf = typeof window === "undefined" ? useEffect : useLayoutEffect;
+  useIzomorf(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setPornit(true);
+      return;
+    }
+    setAfisat(0);
+    setPornit(true);
+    let raf = 0;
+    const start = performance.now();
+    const pas = (acum: number) => {
+      const t = Math.min(1, (acum - start) / DURATA_UMPLERE_MS);
+      /* Aceeași curbă ca arcul, altfel numărul și inelul ajung în momente
+         diferite și se vede că sunt două animații, nu una. */
+      const eased = 1 - Math.pow(1 - t, 3);
+      setAfisat(Math.round(valoare * eased));
+      if (t < 1) raf = requestAnimationFrame(pas);
+    };
+    raf = requestAnimationFrame(pas);
+
+    /*
+     * ⚠ PLASĂ DE SIGURANȚĂ: dacă `requestAnimationFrame` nu rulează, numărul
+     * rămâne pe 0.
+     *
+     * Nu e o presupunere. Măsurat: într-o filă de fundal, Chrome nu livrează
+     * NICIUN cadru — zero în 900 ms. Deci cine deschide pagina cu clic pe rotiță
+     * și se uită la ea mai târziu ar fi găsit patru zerouri, adică exact
+     * contrariul a ce spune ilustrația. La fel orice randare fără cadre (o
+     * captură automată, un generator de imagine socială).
+     *
+     * `setTimeout` rulează și în filă ascunsă (încetinit, dar rulează), deci
+     * după ce animația ar fi trebuit să se termine, valoarea se pune pur și
+     * simplu la loc. Când fila e vizibilă, animația a ajuns deja acolo și linia
+     * asta nu schimbă nimic.
+     */
+    const plasa = window.setTimeout(() => setAfisat(valoare), DURATA_UMPLERE_MS + 250);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(plasa);
+    };
+  }, [valoare]);
+
+  const tinta = CIRCUMFERINTA * (1 - valoare / 100);
+
   return (
-    <Panou cap="Viteza de încărcare">
-      <div className="px-4 py-4">
-        <div className="flex items-end gap-1.5" style={{ height: 76 }}>
-          {coloane.map((h, i) => (
-            <span
-              key={i}
-              className="flex-1 rounded-[3px]"
-              style={{
-                height: `${h}%`,
-                /* Doar ultima e verde: ea e rezultatul, restul e drumul. Toate
-                   verzi ar fi fost culoare pe post de fundal, nu de semnal. */
-                backgroundColor: i === coloane.length - 1 ? VERDE : "var(--color-tint-2)",
-              }}
-            />
-          ))}
-        </div>
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative h-[64px] w-[64px]">
+        <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+          {/* Discul palid din spate: culoarea scorului la 10%, ca la ei. */}
+          <circle cx="60" cy="60" r="56" fill={VERDE_LIGHTHOUSE} fillOpacity="0.1" />
+          <circle
+            cx="60" cy="60" r={RAZA}
+            fill="none"
+            stroke={VERDE_LIGHTHOUSE}
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeDasharray={CIRCUMFERINTA}
+            /*
+              Inelul se desenează din `stroke-dashoffset`: plin la început
+              (nimic vizibil), până la țintă. Pornit doar după montare, ca
+              tranziția să aibă de unde pleca — pusă din prima randare, valoarea
+              ar fi fost deja cea finală și n-ar fi avut ce anima.
+            */
+            strokeDashoffset={pornit ? tinta : CIRCUMFERINTA}
+            style={{
+              transition: `stroke-dashoffset ${DURATA_UMPLERE_MS}ms cubic-bezier(0.33,1,0.68,1)`,
+            }}
+            className="motion-reduce:transition-none"
+          />
+        </svg>
+        <span
+          className="absolute inset-0 flex items-center justify-center text-[20px] font-medium tabular-nums"
+          style={{ color: VERDE_LIGHTHOUSE }}
+        >
+          {afisat}
+        </span>
       </div>
-      <Rand
-        stanga="Scor de performanță"
-        dreapta={<span style={{ color: VERDE }}>96 / 100</span>}
-      />
+      <span className="text-center text-[11px] leading-[1.3] text-ink-2">{eticheta}</span>
+    </div>
+  );
+}
+
+function Optimizari() {
+  return (
+    <Panou cap="Raport de performanță">
+      <div className="flex items-start justify-center gap-3 px-3 py-6 sm:gap-5 sm:px-4">
+        {SCORURI.map((s) => (
+          <Indicator key={s.eticheta} eticheta={s.eticheta} valoare={s.valoare} />
+        ))}
+      </div>
     </Panou>
   );
 }

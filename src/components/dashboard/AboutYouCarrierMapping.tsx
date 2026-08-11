@@ -19,6 +19,7 @@ const COURIERS: { code: string; label: string }[] = [
      control care nu exista. GLS lipsea de la 27.08, din aceeasi scapare. */
   { code: "gls", label: "GLS" },
   { code: "pallex", label: "Pall-Ex" },
+  { code: "ecolet", label: "eColet" },
 ];
 
 export function AboutYouCarrierMapping({

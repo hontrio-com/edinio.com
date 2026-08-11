@@ -19,6 +19,7 @@ import { deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { cancelWootAwb } from "@/lib/actions/woot.actions";
 import { deleteGlsAwbAction } from "@/lib/actions/gls.actions";
 import { deletePallexAwbAction } from "@/lib/actions/pallex.actions";
+import { deleteEcoletAwbAction } from "@/lib/actions/ecolet.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
 import { comboTitle, findCombo } from "@/lib/storefront/variants";
@@ -190,6 +191,15 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     if (order.fan_courier_awb_number) list.push({ key: "fan_courier", label: "FAN Courier", awb: order.fan_courier_awb_number });
     if (order.gls_awb_number) list.push({ key: "gls", label: "GLS", awb: order.gls_awb_number });
     if (order.pallex_awb_number) list.push({ key: "pallex", label: "Pall-Ex", awb: order.pallex_awb_number });
+    if (order.ecolet_awb_number) list.push({ key: "ecolet", label: "eColet", awb: order.ecolet_awb_number });
+    /* ⚠ Cazul propriu eColet: emiterea e asincrona, deci comanda poate avea o
+       expediere REALA in curs, fara AWB inca. Fara randul asta, lista ar fi
+       goala si comerciantul ar edita adresa unei comenzi care deja pleaca. */
+    if (!order.ecolet_awb_number && order.ecolet_order_to_send_id) {
+      /* ⚠ FARA `manualOnly`: acela aprinde nota scrisa anume pentru Colete Online
+         („anuleaza si din contul Colete"), care n-are nicio legatura cu eColet. */
+      list.push({ key: "ecolet", label: "eColet (se emite...)", awb: "in curs" });
+    }
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -355,6 +365,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "fan_courier") res = await deleteFanCourierAwbAction(businessId, order.id);
       else if (key === "gls") res = await deleteGlsAwbAction(businessId, order.id);
       else if (key === "pallex") res = await deletePallexAwbAction(businessId, order.id);
+      else if (key === "ecolet") res = await deleteEcoletAwbAction(businessId, order.id);
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }

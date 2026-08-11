@@ -11,6 +11,7 @@ import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
 import type { PallExConfig } from "@/lib/pallex/client";
+import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday";
 import type { SmsoConfig } from "@/lib/smso";
@@ -43,7 +44,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -74,6 +75,9 @@ export default async function OrderDetailPage({ params }: Props) {
      Pall-Ex se autentifica prin HTTP Basic, deci nu are ce cere fara cele doua. */
   const pe = settings?.pallex_config as PallExConfig | null;
   const pallexEnabled = !!(pe?.enabled && pe?.username);
+  /* Aceeasi regula ca in `ecoletGata`, in features/page.tsx si in settings. */
+  const ec = settings?.ecolet_config as EcoletConfig | null;
+  const ecoletEnabled = !!(ec?.enabled && ec?.api_token);
   /* Termenele implicite ale formularului de partida: aceleasi pe care le
      foloseste si serverul cand datele lipsesc din cerere. */
   const pallexZile = { ridicare: pe?.zile_pana_la_ridicare ?? 1, livrare: pe?.zile_pana_la_livrare ?? 2 };
@@ -112,6 +116,7 @@ export default async function OrderDetailPage({ params }: Props) {
       dpdEnabled={dpdEnabled}
       glsEnabled={glsEnabled}
       pallexEnabled={pallexEnabled}
+      ecoletEnabled={ecoletEnabled}
       pallexZile={pallexZile}
       fanCourierEnabled={fanCourierEnabled}
       samedayEnabled={samedayEnabled}

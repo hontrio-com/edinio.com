@@ -41,6 +41,9 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   cargus_config: ["password", "subscription_key"],
   colete_config: ["client_secret", "token"],
   dpd_config: ["password"],
+  /* eColet: un token de acces luat din panel.ecolet.ro si trimis ca Bearer la
+     fiecare cerere. E singura credentiala — nu exista user si parola. */
+  ecolet_config: ["api_token"],
   fan_courier_config: ["password"],
   fgo_config: ["private_key"],
   gls_config: ["password"],

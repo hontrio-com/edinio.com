@@ -769,6 +769,9 @@ export async function placeOrder(data: {
   woot_service_name?: string;
   colete_service_id?: number;
   colete_service_name?: string;
+  ecolet_service_slug?: string;
+  ecolet_courier_name?: string;
+  ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
   source?: OrderSource;
 }) {
@@ -1331,6 +1334,12 @@ export async function placeOrder(data: {
       ...(data.colete_service_id && {
         colete_service_id: data.colete_service_id,
         colete_service_name: data.colete_service_name,
+      }),
+      /* ⚠ eColet: cheia e un SLUG, deci conditia e pe sir gol, nu pe zero. */
+      ...(data.ecolet_service_slug && {
+        ecolet_service_slug: data.ecolet_service_slug,
+        ecolet_courier_name: data.ecolet_courier_name,
+        ecolet_service_name: data.ecolet_service_name,
       }),
     },
     items: allItems,
@@ -2706,6 +2715,9 @@ export async function placeCartOrder(data: {
   woot_service_name?: string;
   colete_service_id?: number;
   colete_service_name?: string;
+  ecolet_service_slug?: string;
+  ecolet_courier_name?: string;
+  ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
   source?: OrderSource;
 }) {
@@ -3126,6 +3138,12 @@ export async function placeCartOrder(data: {
       ...(data.colete_service_id && {
         colete_service_id: data.colete_service_id,
         colete_service_name: data.colete_service_name,
+      }),
+      /* ⚠ eColet: cheia e un SLUG, deci conditia e pe sir gol, nu pe zero. */
+      ...(data.ecolet_service_slug && {
+        ecolet_service_slug: data.ecolet_service_slug,
+        ecolet_courier_name: data.ecolet_courier_name,
+        ecolet_service_name: data.ecolet_service_name,
       }),
     },
     items: allItems,

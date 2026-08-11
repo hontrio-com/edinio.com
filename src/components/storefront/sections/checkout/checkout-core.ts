@@ -446,6 +446,9 @@ export function useCheckoutOrder({
         woot_service_name: courierSelection?.wootServiceName,
         colete_service_id: courierSelection?.coleteServiceId,
         colete_service_name: courierSelection?.coleteServiceName,
+        ecolet_service_slug: courierSelection?.ecoletServiceSlug,
+        ecolet_courier_name: courierSelection?.ecoletCourierName,
+        ecolet_service_name: courierSelection?.ecoletServiceName,
         source: getAttribution() ?? undefined,
       };
       // Cheia de reluare e payload-ul INTREG, metoda de plata inclusa.

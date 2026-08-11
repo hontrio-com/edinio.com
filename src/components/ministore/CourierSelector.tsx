@@ -12,7 +12,7 @@ import { getShippingOptions, getLockers, type ShippingOption, type LockerItem } 
  * nevoie de ea si la initializarea starii, inainte de corpul componentei.
  */
 function optionKey(o: ShippingOption) {
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}`;
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -32,6 +32,10 @@ export interface CourierSelection {
   wootServiceName?: string;
   coleteServiceId?: number;
   coleteServiceName?: string;
+  /* ⚠ La eColet cheia serviciului e un SLUG, nu un id numeric. */
+  ecoletServiceSlug?: string;
+  ecoletCourierName?: string;
+  ecoletServiceName?: string;
   /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
   token?: string;
 }
@@ -142,6 +146,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             wootServiceName: ales.wootServiceName,
             coleteServiceId: ales.coleteServiceId,
             coleteServiceName: ales.coleteServiceName,
+            ecoletServiceSlug: ales.ecoletServiceSlug,
+            ecoletCourierName: ales.ecoletCourierName,
+            ecoletServiceName: ales.ecoletServiceName,
             token: ales.token,
           });
         }
@@ -194,6 +201,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         wootServiceName: opt.wootServiceName,
         coleteServiceId: opt.coleteServiceId,
         coleteServiceName: opt.coleteServiceName,
+        ecoletServiceSlug: opt.ecoletServiceSlug,
+        ecoletCourierName: opt.ecoletCourierName,
+        ecoletServiceName: opt.ecoletServiceName,
         token: opt.token,
       });
     }

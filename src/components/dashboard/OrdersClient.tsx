@@ -18,6 +18,7 @@ import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
 import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
 import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
+import { EcoletAwbModal } from "@/components/dashboard/EcoletAwbModal";
 import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { FanCourierPickupModal } from "@/components/dashboard/FanCourierPickupModal";
 import { DpdPickupModal } from "@/components/dashboard/DpdPickupModal";
@@ -44,7 +45,7 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -67,6 +68,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   glsEnabled?: boolean;
   pallexEnabled?: boolean;
   pallexZile?: { ridicare: number; livrare: number };
+  ecoletEnabled?: boolean;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   businessId?: string;
@@ -88,6 +90,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [dpdModalOrder, setDpdModalOrder] = useState<Order | null>(null);
   const [glsModalOrder, setGlsModalOrder] = useState<Order | null>(null);
   const [pallexModalOrder, setPallexModalOrder] = useState<Order | null>(null);
+  const [ecoletModalOrder, setEcoletModalOrder] = useState<Order | null>(null);
   const [fanCourierModalOrder, setFanCourierModalOrder] = useState<Order | null>(null);
   const [fanPickupOpen, setFanPickupOpen] = useState(false);
   const [dpdPickupOpen, setDpdPickupOpen] = useState(false);
@@ -402,6 +405,15 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
           order={pallexModalOrder}
           businessId={businessId}
           onSuccess={() => { setPallexModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {ecoletModalOrder && businessId && (
+        <EcoletAwbModal
+          open={!!ecoletModalOrder}
+          onClose={() => setEcoletModalOrder(null)}
+          order={ecoletModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setEcoletModalOrder(null); router.refresh(); }}
         />
       )}
       {fanCourierModalOrder && businessId && (
@@ -762,6 +774,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     {pallexEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Partida Pall-Ex</th>
                     )}
+                    {ecoletEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB eColet</th>
+                    )}
                     {fanCourierEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB FAN Courier</th>
                     )}
@@ -954,6 +969,41 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza partida
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {ecoletEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["ecolet_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEcoletModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["ecolet_awb_number"] as string}
+                              </button>
+                            ) : (order as unknown as Record<string, unknown>)["ecolet_order_to_send_id"] ? (
+                              /* Starea proprie eColet: expedierea a plecat, AWB-ul inca nu exista.
+                                 Fara randul asta comerciantul ar vedea „Creeaza AWB" pe o comanda
+                                 care are deja un transport real in curs — si ar apasa. */
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEcoletModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                se emite...
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEcoletModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
                               </button>
                             )}
                           </td>

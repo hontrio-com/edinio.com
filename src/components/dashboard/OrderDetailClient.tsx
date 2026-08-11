@@ -34,6 +34,7 @@ import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
 import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
+import { EcoletAwbModal } from "@/components/dashboard/EcoletAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
@@ -227,6 +228,7 @@ export function OrderDetailClient({
   glsEnabled,
   pallexEnabled,
   pallexZile,
+  ecoletEnabled,
   fanCourierEnabled,
   samedayEnabled,
   smsoEnabled,
@@ -251,6 +253,7 @@ export function OrderDetailClient({
   glsEnabled?: boolean;
   pallexEnabled?: boolean;
   pallexZile?: { ridicare: number; livrare: number };
+  ecoletEnabled?: boolean;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   smsoEnabled?: boolean;
@@ -331,6 +334,7 @@ export function OrderDetailClient({
   const [dpdModalOpen, setDpdModalOpen] = useState(false);
   const [glsModalOpen, setGlsModalOpen] = useState(false);
   const [pallexModalOpen, setPallexModalOpen] = useState(false);
+  const [ecoletModalOpen, setEcoletModalOpen] = useState(false);
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
   const [coleteModalOpen, setColeteModalOpen] = useState(false);
@@ -368,6 +372,7 @@ export function OrderDetailClient({
        `shipping_address.courier` — altfel `chosenCourier` ramane nedefinit si
        panoul arata „Curier recomandat" in loc de „Clientul a ales". */
     { id: "pallex", name: "Pall-Ex", logo: "/integrations/pallex.avif", enabled: !!pallexEnabled, awb: (order.pallex_awb_number as string | null) ?? null, open: () => setPallexModalOpen(true) },
+    { id: "ecolet", name: "eColet", logo: "/integrations/ecolet.png", enabled: !!ecoletEnabled, awb: (order.ecolet_awb_number as string | null) ?? null, open: () => setEcoletModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
     { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
@@ -1352,6 +1357,9 @@ export function OrderDetailClient({
       )}
       {pallexEnabled && (
         <PallexAwbModal zile={pallexZile} open={pallexModalOpen} onClose={() => setPallexModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setPallexModalOpen(false); router.refresh(); }} />
+      )}
+      {ecoletEnabled && (
+        <EcoletAwbModal open={ecoletModalOpen} onClose={() => setEcoletModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setEcoletModalOpen(false); router.refresh(); }} />
       )}
 
       {/* ── Status/payment change confirmation ── */}

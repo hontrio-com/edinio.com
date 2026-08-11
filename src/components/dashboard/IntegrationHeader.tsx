@@ -12,6 +12,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   colete: { src: "/integrations/colete-online.svg", alt: "Colete Online" },
   gls: { src: "/integrations/gls.svg", alt: "GLS" },
   pallex: { src: "/integrations/pallex.avif", alt: "Pall-Ex" },
+  ecolet: { src: "/integrations/ecolet.png", alt: "eColet" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },

@@ -197,9 +197,14 @@ export async function bulkGenerateInvoices(
 }
 
 // ── Bulk AWBs ────────────────────────────────────────────────────────────────────
-// Supports the address-based couriers (Cargus, Sameday, FAN, DPD, GLS) that derive
-// the service from weight/address server-side. Woot & Colete need the live checkout
-// quote (service/location ids) and stay per-order — those get skipped here.
+// Supports the address-based couriers (Cargus, Sameday, FAN, DPD, GLS, Pall-Ex) that
+// derive the service from weight/address server-side. Woot, Colete & eColet need the
+// live checkout quote (service/location ids) and stay per-order — those get skipped.
+//
+// ⚠ eColet e exclus si dintr-un al doilea motiv, propriu lui: emiterea e
+// ASINCRONA. `send-order` da doar un `order_to_send_id`, iar AWB-ul apare mai
+// tarziu — deci un lot ar raporta „gata" pentru zeci de comenzi care inca n-au
+// niciun numar, si nimeni n-ar sti care au reusit.
 //
 // GLS intra aici desi are livrare la punct: spre deosebire de Woot si Colete, nu
 // are nevoie de cotatia din checkout ca sa emita. Punctul ales de client sta deja

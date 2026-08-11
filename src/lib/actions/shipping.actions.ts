@@ -13,6 +13,10 @@ import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type D
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
 import { getCOToken, getPrices as fetchCOPrices, type COConfig } from "@/lib/colete";
 import { type GlsConfig } from "@/lib/gls/client";
+import { catalogServicii as catalogEcolet, coteaza as coteazaEcolet, type EcoletConfig } from "@/lib/ecolet/client";
+import { corpExpediere as corpEcolet } from "@/lib/ecolet/expediere";
+import { etichetaOferta as etichetaEcolet, ofertePosibile as oferteEcolet } from "@/lib/ecolet/preturi";
+import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/cautare";
 import { puncteGls } from "@/lib/gls/puncte";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
@@ -74,6 +78,15 @@ export type ShippingOption = {
   // Colete Online is a broker too — same mechanism.
   coleteServiceId?: number;
   coleteServiceName?: string;
+  /*
+   * ⚠ eColet e tot broker, dar cheia serviciului lui e un SLUG (sir:
+   * „dpd_standard"), nu un id numeric ca la ceilalti doi. Nu se poate refolosi
+   * niciunul dintre campurile de mai sus: `Number("dpd_standard")` da `NaN`, iar
+   * alegerea clientului s-ar pierde tacut intre checkout si emitere.
+   */
+  ecoletServiceSlug?: string;
+  ecoletCourierName?: string;
+  ecoletServiceName?: string;
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
@@ -114,6 +127,7 @@ const COURIER_LABELS: Record<string, string> = {
   colete: "Colete Online",
   gls: "GLS",
   pallex: "Pall-Ex",
+  ecolet: "eColet",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -203,7 +217,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -711,6 +725,40 @@ export async function getShippingOptions(
       } else {
         options.push(flat());
       }
+    } else if (courierId === "ecolet") {
+      const ecoletCfg = settings.ecolet_config as EcoletConfig | null;
+      /*
+       * ⚠ `hasApi` cere si `expeditor.locality_id`: fara el corpul cererii e
+       * incomplet, `reload-form` respinge TOT lotul, ramura cade pe `flat()` prin
+       * `catch` — iar comerciantul vede un pret si crede ca „merge". Aceeasi
+       * capcana ca la Woot, unde conditia cere `sender.city_id`.
+       */
+      const hasApi = !!(
+        ecoletCfg?.enabled && ecoletCfg.api_token && Number(ecoletCfg.expeditor?.locality_id) > 0
+      );
+      const flat = (): ShippingOption => ({
+        courier: "ecolet",
+        courierLabel: zone.label || COURIER_LABELS.ecolet,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (hasApi && useAutoPrice) {
+        /* Broker: se aduc ofertele vii, ca sa aleaga cumparatorul. */
+        promises.push(
+          buildEcoletOptions(ecoletCfg!, destination, weight, zone.label)
+            .then((opts) => {
+              if (opts.length > 0) options.push(...opts);
+              else options.push(flat()); // localitate nepotrivita / zero oferte
+            })
+            .catch((err) => {
+              console.error("[shipping] eColet estimate failed:", (err as Error).message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
     } else if (courierId === "gls") {
       /*
        * ⚠ GLS NU COTEAZA. MyGLS n-are metoda de tarif, deci pretul e cel din
@@ -869,6 +917,97 @@ function matchByName<T extends { name: string }>(list: T[], name: string): T | u
  * (caller falls back to the flat price). Contact/phone are placeholders — the
  * quote depends only on locality, weight and COD.
  */
+/**
+ * Ofertele eColet pentru o destinatie.
+ *
+ * ⚠ Intoarce `[]` — nu arunca — cand localitatea nu se potriveste sau cand eColet
+ * n-are niciun serviciu pentru comanda asta. Apelantul cade atunci pe tariful fix
+ * din `shipping_zones`: un cumparator nu are voie sa ramana fara nicio optiune de
+ * livrare pentru ca noi n-am recunoscut un oras.
+ *
+ * ⚠ Datele destinatarului sunt substituenti (nume, telefon): cotarea depinde doar
+ * de localitate, greutate si ramburs. La fel ca la Woot.
+ */
+async function buildEcoletOptions(
+  config: EcoletConfig,
+  destination: { county: string; city: string; cod?: number; postCode?: string },
+  weightKg: number,
+  customLabel?: string,
+): Promise<ShippingOption[]> {
+  /*
+   * ⚠ „Sector 3" NU exista in nomenclatorul eColet: acolo numele localitatii e
+   * „Bucuresti", iar sectorul sta separat, in `municipality`. Trimis ca atare, nu
+   * s-ar potrivi niciodata, iar TOATE comenzile din capitala — cea mai mare piata
+   * din tara — ar cadea tacut pe tariful fix.
+   *
+   * `despartaLocalitateaDeCod` stie deja regula asta (o foloseste GLS pentru
+   * punctele lui de ridicare) si intoarce judetul capitalei pentru orice forma cu
+   * „Bucuresti"; aici ne trebuie doar numele curatat de sector.
+   */
+  const orasCautat = /sector\s*\d/i.test(destination.city) ? "Bucuresti" : destination.city;
+  const localitate = await rezolvaLocalitateEcolet(config, orasCautat, destination.county);
+  if (!localitate) return [];
+
+  const e = config.expeditor ?? {};
+  const corp = corpEcolet({
+    expeditor: {
+      nume: e.name ?? "",
+      strada: e.street_name ?? "",
+      numar: e.street_number ?? "",
+      oras: e.locality ?? "",
+      judet: e.county ?? "",
+      localityId: Number(e.locality_id) || 0,
+      codPostal: e.postal_code ?? "",
+      telefon: e.phone ?? "",
+      email: e.email ?? "",
+      persoanaContact: e.contact_person ?? null,
+    },
+    destinatar: {
+      nume: "Client",
+      strada: destination.city,
+      numar: "1",
+      oras: destination.city,
+      judet: destination.county,
+      localityId: localitate.id,
+      /* Codul postal principal al localitatii: la cotare conteaza doar zona. */
+      codPostal: destination.postCode || localitate.postal_code || "",
+      telefon: "0700000000",
+      email: "",
+    },
+    greutateKg: weightKg,
+    ramburs: destination.cod && destination.cod > 0 ? destination.cod : undefined,
+    servicii: {
+      deschidereLaLivrare: config.deschidere_la_livrare,
+      livrareSambata: config.livrare_sambata,
+      smsNotificare: config.sms_notificare,
+    },
+  });
+
+  const [raspuns, catalog] = await Promise.all([coteazaEcolet(config, corp), catalogEcolet(config)]);
+
+  const cereRamburs = !!destination.cod && destination.cod > 0;
+
+  return oferteEcolet(raspuns, catalog, config.servicii_permise)
+    /*
+     * ⚠ La un broker, rambursul e insusirea SERVICIULUI, nu a platformei — si se
+     * poate inchide chiar si pentru o suma prea mare pe un serviciu care altfel il
+     * accepta. Aratata la o comanda cu plata la livrare, o oferta fara incasare
+     * inseamna ca cumparatorul alege si plateste un transport pe care emiterea il
+     * refuza apoi: aceeasi comanda, doua verdicte diferite.
+     */
+    .filter((o) => !cereRamburs || o.acceptaRamburs)
+    .map((o): ShippingOption => ({
+    courier: "ecolet",
+    /* Cumparatorul vede CURIERUL REAL, nu numele brokerului. */
+    courierLabel: addrLabel(customLabel, etichetaEcolet(o)),
+    deliveryType: "address",
+    price: o.pret,
+    ecoletServiceSlug: o.slug,
+    ecoletCourierName: o.numeCurier,
+    ecoletServiceName: o.numeServiciu,
+  }));
+}
+
 async function buildWootOptions(
   config: WootConfig,
   destination: { county: string; city: string; cod?: number },

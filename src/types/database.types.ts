@@ -1967,6 +1967,16 @@ export type Database = {
           discount_released_at: string | null
           dpd_awb_number: string | null
           dpd_shipment_id: number | null
+          ecolet_awb_at: string | null
+          ecolet_awb_number: string | null
+          ecolet_order_id: number | null
+          ecolet_order_to_send_id: number | null
+          ecolet_send_error: string | null
+          ecolet_send_state: string | null
+          ecolet_service_name: string | null
+          ecolet_service_slug: string | null
+          ecolet_status_checked_at: string | null
+          ecolet_status_code: string | null
           fan_courier_awb_number: string | null
           fgo_invoice_link: string | null
           fgo_invoice_number: string | null
@@ -2055,6 +2065,16 @@ export type Database = {
           discount_released_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
+          ecolet_awb_at?: string | null
+          ecolet_awb_number?: string | null
+          ecolet_order_id?: number | null
+          ecolet_order_to_send_id?: number | null
+          ecolet_send_error?: string | null
+          ecolet_send_state?: string | null
+          ecolet_service_name?: string | null
+          ecolet_service_slug?: string | null
+          ecolet_status_checked_at?: string | null
+          ecolet_status_code?: string | null
           fan_courier_awb_number?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
@@ -2143,6 +2163,16 @@ export type Database = {
           discount_released_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
+          ecolet_awb_at?: string | null
+          ecolet_awb_number?: string | null
+          ecolet_order_id?: number | null
+          ecolet_order_to_send_id?: number | null
+          ecolet_send_error?: string | null
+          ecolet_send_state?: string | null
+          ecolet_service_name?: string | null
+          ecolet_service_slug?: string | null
+          ecolet_status_checked_at?: string | null
+          ecolet_status_code?: string | null
           fan_courier_awb_number?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
@@ -2854,6 +2884,7 @@ export type Database = {
           currency: string
           default_shipping_cost: number
           dpd_config: Json | null
+          ecolet_config: Json | null
           email_config: Json
           fan_courier_config: Json | null
           fgo_config: Json | null
@@ -2917,6 +2948,7 @@ export type Database = {
           currency?: string
           default_shipping_cost?: number
           dpd_config?: Json | null
+          ecolet_config?: Json | null
           email_config?: Json
           fan_courier_config?: Json | null
           fgo_config?: Json | null
@@ -2980,6 +3012,7 @@ export type Database = {
           currency?: string
           default_shipping_cost?: number
           dpd_config?: Json | null
+          ecolet_config?: Json | null
           email_config?: Json
           fan_courier_config?: Json | null
           fgo_config?: Json | null

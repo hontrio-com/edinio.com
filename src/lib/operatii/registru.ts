@@ -53,7 +53,7 @@ export type FelOperatie =
 
 /** Care furnizor. Trebuie sa ramana in pas cu `operatii_externe_furnizor_check`. */
 export type FurnizorOperatie =
-  | "cargus" | "sameday" | "fancourier" | "dpd" | "woot" | "colete" | "gls" | "pallex"
+  | "cargus" | "sameday" | "fancourier" | "dpd" | "woot" | "colete" | "gls" | "pallex" | "ecolet"
   | "smartbill" | "oblio" | "fgo"
   | "stripe" | "netopia" | "ipay" | "klarna" | "revolut"
   | "trendyol" | "aboutyou" | "olx" | "gmc"

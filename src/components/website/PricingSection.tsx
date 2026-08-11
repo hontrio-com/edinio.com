@@ -69,8 +69,19 @@ const GREEN_TEXT = "#12874A";
 export function PricingSection({ cuAntet = true }: { cuAntet?: boolean }) {
   const [interval, setInterval] = useState<BillingInterval>("monthly");
 
+  /*
+   * Fara antet, si spatiul de sus se strange.
+   *
+   * Cu antetul stins, sectiunea sta sub capul paginii, care isi aduce deja
+   * marginea lui de jos: adunate, ieseau ~170px de alb intre fraza si primul
+   * pret, adica un gol care se citeste ca o sectiune lipsa. Marginea de JOS
+   * ramane intreaga — sub ea urmeaza alta sectiune, nu un cap de pagina.
+   */
   return (
-    <section id="preturi" className="bg-white py-20 lg:py-28">
+    <section
+      id="preturi"
+      className={cn("bg-white pb-20 lg:pb-28", cuAntet ? "pt-20 lg:pt-28" : "pt-8 lg:pt-10")}
+    >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         {/*
           Pe `/preturi` capul se ascunde: pagina aia are deja un `<h1>Prețuri</h1>`

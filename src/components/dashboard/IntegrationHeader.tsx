@@ -11,6 +11,20 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   woot: { src: "/integrations/woot.webp", alt: "Woot" },
   colete: { src: "/integrations/colete-online.svg", alt: "Colete Online" },
   gls: { src: "/integrations/gls.svg", alt: "GLS" },
+  /*
+   * ⚠ `pallex.avif` E RECOLORAT DE NOI, nu e fisierul de la Pall-Ex.
+   *
+   * Cel oficial e ALB (94% din cerneala) si era invizibil peste tot, fiindca
+   * toate cele cinci locuri unde apare un logo randeaza pe alb: `bg-surface` e
+   * #FFFFFF si in `.dark`, iar pe site pastilele sunt `bg-white`.
+   *
+   * `filter: invert(1)`, cum e la Oblio si Netopia, NU merge aici: logo-ul are un
+   * accent rosu #E02020 pe care inversarea l-ar face CYAN. S-a inversat doar
+   * LUMINOZITATEA (HSL), pastrand nuanta — albul devine negru, rosul ramane rosu,
+   * iar aureolele roz deschis dintre ele devin rosu inchis si se topesc in
+   * cerneala. Originalul alb sta in `pallex-alb.avif`, pentru cand va exista o
+   * suprafata intunecata.
+   */
   pallex: { src: "/integrations/pallex.avif", alt: "Pall-Ex" },
   ecolet: { src: "/integrations/ecolet.png", alt: "eColet" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },

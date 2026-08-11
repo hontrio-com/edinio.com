@@ -6,6 +6,7 @@ import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib
 import { maybeSyncBrevoProduct, maybeSyncBrevoProductsBulk } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoProduct, maybeSyncKlaviyoProductsBulk } from "@/lib/klaviyo-sync";
 import { createClient } from "@/lib/supabase/server";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
@@ -388,10 +389,14 @@ async function dezactiveazaPacheteleCu(
   if (afectate.length === 0) return;
   // Fail-closed: mai bine un pachet ascuns decat unul publicat pe care nimeni
   // nu-l poate cumpara. Comerciantul il vede in lista de pachete, marcat.
-  const { error } = await supabase.from("products").update({ is_active: false }).in("id", afectate).eq("business_id", businessId);
-  if (error) {
-    logError({ action: "dezactiveazaPacheteleCu", message: error.message, details: { businessId, afectate }, severity: "error" });
-    return;
+  // Pe bucati, ca peste tot unde id-urile ajung in adresa (vezi `id-chunks.ts`):
+  // aici lista e de obicei scurta, dar „de obicei" nu e o limita.
+  for (const bucata of bucatiDeIduri(afectate)) {
+    const { error } = await supabase.from("products").update({ is_active: false }).in("id", bucata).eq("business_id", businessId);
+    if (error) {
+      logError({ action: "dezactiveazaPacheteleCu", message: error.message, details: { businessId, afectate: bucata }, severity: "error" });
+      return;
+    }
   }
   // Feedurile sunt cozi de PUSH: fara sincronizare, oferta ramane activa si „in
   // stoc" in Merchant Center dupa ce magazinul tocmai a stins pachetul — adica
@@ -463,7 +468,24 @@ export type BulkAction =
   | { kind: "price"; mode: "inc_pct" | "dec_pct" | "inc_amt" | "dec_amt" | "set"; amount: number }
   | { kind: "delete" };
 
-const MAX_BULK = 1000;
+/**
+ * Plafonul de siguranta, ridicat de la 1000 (2026-08-11).
+ *
+ * ⚠ Vechiul 1000 nu era doar strimt, era GRESIT: `.in("id", ids)` pleaca in
+ * ADRESA, iar marginea o respinge intre 600 si 700 de id-uri (masurat, vezi
+ * `id-chunks.ts`). Deci plafonul statea PESTE pragul la care platforma cedeaza —
+ * o selectie de exact 1000 trecea de verificare si pica dupa aceea cu „Eroare la
+ * actiunea in masa", care il trimitea pe om sa reincerce ce n-avea cum sa mearga.
+ *
+ * Acum fiecare cerere merge pe bucati de `ID_PER_CERERE`, deci lungimea adresei
+ * nu mai depinde de cate produse a ales omul. Ce ramane de pazit e TIMPUL: o
+ * bucata inseamna un dus-intors, iar functia are un buget. La 20000 ies 100 de
+ * cereri pentru pornit/oprit, ceea ce intra confortabil; peste, lucrarea
+ * trebuie mutata pe o coada, nu strecurata intr-o apasare de buton.
+ *
+ * Cel mai mare catalog de azi are 3351 de produse.
+ */
+const MAX_BULK = 20000;
 
 export async function bulkProductAction(
   businessId: string,
@@ -488,10 +510,16 @@ export async function bulkProductAction(
   try {
     if (action.kind === "active" || action.kind === "featured") {
       const patch = action.kind === "active" ? { is_active: action.value } : { is_featured: action.value };
-      const { error, count } = await supabase
-        .from("products").update({ ...patch, updated_at: now }, { count: "exact" })
-        .eq("business_id", businessId).in("id", ids);
-      if (error) throw error;
+      /* Pe bucati: `.in()` intra in adresa, iar peste ~650 de id-uri cererea e
+         respinsa la margine. Vezi `id-chunks.ts`. */
+      let count = 0;
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").update({ ...patch, updated_at: now }, { count: "exact" })
+          .eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        count += res.count ?? bucata.length;
+      }
       void enqueueGmcSyncMany(businessId, ids);
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
@@ -504,30 +532,45 @@ export async function bulkProductAction(
       else void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
-      return { success: true, count: count ?? ids.length };
+      return { success: true, count };
     }
 
     if (action.kind === "category") {
       const value = action.value?.trim() || null;
-      const { error, count } = await supabase
-        .from("products").update({ category: value, updated_at: now }, { count: "exact" })
-        .eq("business_id", businessId).in("id", ids);
-      if (error) throw error;
+      let count = 0;
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").update({ category: value, updated_at: now }, { count: "exact" })
+          .eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        count += res.count ?? bucata.length;
+      }
       void enqueueGmcSyncMany(businessId, ids);
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
       void enqueueTrendyolSyncMany(businessId, ids);
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
-      return { success: true, count: count ?? ids.length };
+      return { success: true, count };
     }
 
     if (action.kind === "delete") {
-      const { data: rows } = await supabase
-        .from("products").select("id, images").eq("business_id", businessId).in("id", ids);
-      const { error } = await supabase
-        .from("products").delete().eq("business_id", businessId).in("id", ids);
-      if (error) throw error;
+      /* Si citirea, si stergerea merg pe bucati: amandoua duc id-urile in
+         adresa. Imaginile se strang din toate bucatile INAINTE de stergere —
+         dupa aceea randurile nu mai exista si nu mai stie nimeni ce fisiere
+         erau ale lor. */
+      const rows: { id: string; images: unknown }[] = [];
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").select("id, images").eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        rows.push(...((res.data ?? []) as { id: string; images: unknown }[]));
+      }
+      for (const bucata of bucatiDeIduri(ids)) {
+        const { error } = await supabase
+          .from("products").delete().eq("business_id", businessId).in("id", bucata);
+        if (error) throw error;
+      }
       await dezactiveazaPacheteleCu(supabase, businessId, ids);
       // Reference-safe R2 cleanup + remove from Google Merchant.
       for (const r of rows ?? []) {
@@ -549,9 +592,16 @@ export async function bulkProductAction(
     if (action.kind === "price") {
       const amt = Number(action.amount);
       if (!Number.isFinite(amt) || amt < 0) return { error: "Valoare invalida." };
-      const { data: rows, error: readErr } = await supabase
-        .from("products").select("id, price").eq("business_id", businessId).in("id", ids);
-      if (readErr) throw readErr;
+      /* Scrierile erau deja pe bucati de 20, dar CITIREA lua toate id-urile
+         intr-un singur `.in()` — deci calea de pret cadea la fel de sus ca
+         celelalte, doar ca la primul pas. */
+      const rows: { id: string; price: number }[] = [];
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").select("id, price").eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        rows.push(...((res.data ?? []) as { id: string; price: number }[]));
+      }
 
       const compute = (price: number): number => {
         let p = price;

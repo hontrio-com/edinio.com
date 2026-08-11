@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
@@ -300,12 +301,26 @@ export async function publishProductsToOlx(
   const mapped = new Set(Object.keys(config.category_map ?? {}));
   if (mapped.size === 0) return { error: "Mapeaza mai intai cel putin o categorie la OLX (Integrari > OLX)." };
 
-  const ids = [...new Set((productIds ?? []).filter(Boolean))].slice(0, 1000);
+  /*
+   * ⚠ Aici era `.slice(0, 1000)`, adica o TAIERE TACUTA. Cu 3351 de produse
+   * selectate (eSAFE, azi), 2351 dispareau fara ca nimeni sa afle, iar mesajul
+   * de la final spunea „1000 trimise la OLX" — un numar adevarat despre o
+   * lucrare pe jumatate facuta. Si cele 1000 ramase cadeau oricum: `.in()` e
+   * respins peste ~650 de id-uri (vezi `id-chunks.ts`).
+   *
+   * Acum nu se mai taie nimic; citirea merge pe bucati, iar coada era deja
+   * scrisa pe bucati mai jos.
+   */
+  const ids = [...new Set((productIds ?? []).filter(Boolean))];
   if (ids.length === 0) return { error: "Niciun produs selectat." };
 
-  const { data: prods } = await g.supabase
-    .from("products").select("id, category, is_active").eq("business_id", businessId).in("id", ids);
-  const rows = (prods ?? [])
+  const prods: { id: string; category: string | null; is_active: boolean }[] = [];
+  for (const bucata of bucatiDeIduri(ids)) {
+    const { data } = await g.supabase
+      .from("products").select("id, category, is_active").eq("business_id", businessId).in("id", bucata);
+    prods.push(...((data ?? []) as typeof prods));
+  }
+  const rows = prods
     .filter((p) => p.is_active && p.category && mapped.has(p.category as string))
     .map((p) => ({ business_id: businessId, product_id: p.id, offer_id: p.id, op: "upsert" as const }));
 

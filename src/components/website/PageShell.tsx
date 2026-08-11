@@ -51,7 +51,12 @@ export function PageShell({
                 Începe gratuit
               </Link>
               <Link
-                href="/#preturi"
+                /* Pagina, nu ancora: de pe o pagina interioara, `/#preturi` te
+                   ducea pe pagina de START si te derula acolo — un ocol, acum ca
+                   `/preturi` exista si are mai mult decat sectiunea. Butonul din
+                   hero-ul paginii de start ramane pe ancora: acolo sectiunea e
+                   chiar mai jos, iar o navigare ar fi mai mult decat trebuie. */
+                href="/preturi"
                 className="group inline-flex h-12 items-center justify-center gap-1.5 rounded-[8px] border border-hairline px-6 text-[15px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2"
               >
                 Vezi prețurile

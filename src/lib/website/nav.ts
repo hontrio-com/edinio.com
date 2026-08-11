@@ -405,7 +405,19 @@ export type TopNavEntry = { label: string } & ({ menu: MenuId } | { href: string
 export const TOP_NAV: TopNavEntry[] = [
   { label: "Soluție eCommerce", menu: "solutie" },
   { label: "De ce noi?", menu: "de-ce-noi" },
-  { label: "Prețuri", href: "/#preturi" },
+  /*
+    Duce la PAGINA, nu la ancora de pe pagina de start (cerut 2026-08-11).
+
+    Cat timp `/preturi` era doar o coajă veche, ancora era alegerea buna: te
+    ducea direct la grila. Acum pagina are grila, tabelul de comparatie si
+    contactul, adica mai mult decat sectiunea — iar ancora te trimitea pe pagina
+    de start si te lasa acolo, cu restul nevazut.
+
+    Are si un efect care nu se vede de aici: intrarea din bara se APRINDE cand
+    esti pe ea. `SiteHeader` marcheaza activ cu `!href.includes("#") && pathname
+    === href`, deci cu ancora nu se aprindea niciodata.
+  */
+  { label: "Prețuri", href: "/preturi" },
   { label: "Resurse", menu: "resurse" },
   { label: "Contact", href: "/contact" },
 ];

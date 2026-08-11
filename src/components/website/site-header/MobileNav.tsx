@@ -118,7 +118,11 @@ export function MobileNav({ open, onClose }: Props) {
           ))}
         </Group>
 
-        <PlainRow href="/#preturi" label="Prețuri" onClose={onClose} />
+        {/* Aceeasi tinta ca in bara de sus: pagina, nu ancora. Vezi nota din
+            `TOP_NAV` (`lib/website/nav.ts`) — cele doua meniuri trebuie sa duca
+            in acelasi loc, altfel acelasi cuvant face doua lucruri dupa cum tii
+            telefonul. */}
+        <PlainRow href="/preturi" label="Prețuri" onClose={onClose} />
 
         <Group label="Resurse" id="resurse" openSection={section} onToggle={setSection}>
           {RESOURCES.map((item) => {

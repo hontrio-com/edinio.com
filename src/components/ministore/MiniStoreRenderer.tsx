@@ -317,9 +317,30 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Page is seeded from the URL (?page=N, read server-side as initialPage) so
   // returning from a product page (browser back) lands on the same page instead
   // of resetting to 1. goToPage keeps the URL in sync without a navigation.
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  /*
+   * ⚠ DOUA LUCRURI DIFERITE: pagina CERUTA si pagina AFISATA.
+   *
+   * Erau una singura, si de aici a iesit defectul raportat: „Inainte nu schimba
+   * pagina, doar numerele merg". Masurat in productie pe bricosmart, pe palierul
+   * server: adresa ajungea `?page=2`, produsele erau chiar ale paginii 2, dar
+   * starea din browser ramanea 1 — deci `Inainte` calcula `1 + 1` si cerea IAR
+   * pagina 2, iar `Inapoi` statea dezactivat pe pagina 2. Numerele „mergeau"
+   * fiindca sunt absolute: nu se socotesc din starea stricata.
+   *
+   * Pe palierul server pagina afisata NU e o alegere a browserului, e un fapt:
+   * serverul a trimis exact fereastra aceea. Tinuta a doua oara in stare, copia
+   * poate ramane in urma — si a ramas. Deci acolo se CITESTE din props, iar
+   * starea pastreaza doar ce a CERUT omul, ca sa stie efectul de navigare unde
+   * sa mearga.
+   *
+   * Pe palierul client lista e in memorie, felierea o face chiar starea asta,
+   * deci cele doua coincid si nu se schimba nimic.
+   */
+  const [paginaCeruta, setPaginaCeruta] = useState(initialPage);
+  const currentPage = peServer ? initialPage : paginaCeruta;
+  const setCurrentPage = setPaginaCeruta;
   const goToPage = useCallback((n: number) => {
-    setCurrentPage(n);
+    setPaginaCeruta(n);
     if (typeof window === "undefined") return;
     /*
      * Pe palierul server adresa o scrie efectul de navigare, nu functia asta.
@@ -1081,7 +1102,15 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
      */
     if (surface !== "shop" && !peServer) return;
 
-    const tinta = adresaPentru(interogareFiltre, currentPage);
+    /*
+     * Se navigheaza catre pagina CERUTA, nu catre cea afisata.
+     *
+     * Pe palierul server cea afisata vine din props, deci e mereu egala cu ce a
+     * randat serverul: folosita aici, tinta ar fi fost mereu adresa curenta si
+     * efectul n-ar fi navigat NICIODATA. Cele doua se despart exact cat tine
+     * dus-intorsul, si tocmai despartirea aia e navigarea.
+     */
+    const tinta = adresaPentru(interogareFiltre, paginaCeruta);
 
     /*
      * Prima trecere doar RETINE adresa cu care s-a randat pagina.
@@ -1117,7 +1146,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       startNavigare(() => router.push(tinta, { scroll: false }));
     }, peServer ? 400 : 250);
     return () => window.clearTimeout(id);
-  }, [surface, peServer, interogareFiltre, currentPage, adresaPentru, router]);
+  }, [surface, peServer, interogareFiltre, paginaCeruta, adresaPentru, router]);
 
   /*
    * Inapoi/Inainte aduc alte props; starea controalelor trebuie sa le urmeze.

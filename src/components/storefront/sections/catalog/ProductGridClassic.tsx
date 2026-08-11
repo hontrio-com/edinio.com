@@ -143,6 +143,10 @@ function Paginare({
       return acc;
     }, []);
 
+  /* `type="button"` explicit pe Inapoi/Inainte: un `<button>` fara `type` e
+     `submit`, deci daca grila ajunge vreodata intr-un `<form>` (bara de cautare
+     e deja unul, doar ca alaturi), apasarea ar trimite formularul si ar reincarca
+     pagina in loc sa schimbe pagina. Sora din `ShopPieces` il avea, asta nu. */
   const nav = "px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors";
   /*
    * Numerele duc la ACEEASI lista, doar la alta pagina din ea.
@@ -166,7 +170,7 @@ function Paginare({
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 mt-8">
-      <button onClick={() => onGo(Math.max(1, current - 1))} disabled={current === 1} className={nav}>
+      <button type="button" onClick={() => onGo(Math.max(1, current - 1))} disabled={current === 1} className={nav}>
         Inapoi
       </button>
       {pagini.map((p, i) =>
@@ -190,7 +194,7 @@ function Paginare({
           </a>
         ),
       )}
-      <button onClick={() => onGo(Math.min(total, current + 1))} disabled={current === total} className={nav}>
+      <button type="button" onClick={() => onGo(Math.min(total, current + 1))} disabled={current === total} className={nav}>
         Inainte
       </button>
     </div>

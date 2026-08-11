@@ -3600,7 +3600,13 @@ export type Database = {
       catalog_verifica: { Args: { p_esantion?: number }; Returns: number }
       consuma_stoc_comanda_marketplace: { Args: { p_order_id: string; p_business_id: string; p_produse: Json; p_variante: Json }; Returns: Json }
       curata_analitice_brute: { Args: { p_pastreaza_zile?: number; p_max?: number }; Returns: number }
-      editeaza_comanda_atomic: { Args: { p_order_id: string; p_business_id: string; p_patch: Json; p_produse: Json; p_variante: Json; p_status_asteptat?: string | null }; Returns: Json }
+      // `p_produse_minus` / `p_variante_minus`: ce se DA INAPOI la stoc pentru
+      // liniile scoase sau scazute. Se cleameaza in baza la ce scrie in
+      // `orders.stoc_rezervat`, deci nu se poate elibera mai mult decat s-a luat.
+      // `p_*_necesar`: cat mai datoreaza comanda DUPA editare. Eliberarea nu scade
+      // rezervarea sub el, altfel scoaterea unei linii ar manca rezervarea alteia.
+      editeaza_comanda_atomic: { Args: { p_order_id: string; p_business_id: string; p_patch: Json; p_produse: Json; p_variante: Json; p_status_asteptat?: string | null; p_produse_minus?: Json; p_variante_minus?: Json; p_produse_necesar?: Json; p_variante_necesar?: Json }; Returns: Json }
+      scade_din_rezervat: { Args: { p_rez: Json; p_produse_minus: Json; p_variante_minus: Json; p_produse_necesar?: Json; p_variante_necesar?: Json }; Returns: Json }
       elibereaza_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: undefined }
       jsonb_merge_config: { Args: { p_business_id: string; p_column: string; p_patch: Json }; Returns: undefined }
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }

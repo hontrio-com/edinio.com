@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import { computeVat, vatBase } from "@/lib/utils/vat";
 import { test } from "node:test";
 import {
+  amprentaLinii,
+  capacitatiLinii,
   cheieLinie,
   esteLinieExtra,
+  necesarDeStoc,
   planificaAdaugarea,
+  planificaEditarea,
   poateContopi,
   recalculeazaTotal,
+  reducerileDepasescMarfa,
   slabesteVariante,
   sumaExtraoptiunilor,
   variantsDinSlim,
@@ -29,6 +34,7 @@ const simplu = (over: Partial<CatalogEdit> = {}): CatalogEdit => ({
   name: "Produs simplu",
   price: 100,
   is_bundle: false,
+  activ: true,
   variante: null,
   trepte: null,
   ...over,
@@ -38,6 +44,7 @@ const variabil = (over: Partial<CatalogEdit> = {}): CatalogEdit => ({
   name: "ANTIFOANE INT UF REFILL",
   price: 156.8,
   is_bundle: false,
+  activ: true,
   variante: {
     options: [{ id: "o1", name: "Marime", values: ["S", "M"] }],
     combos: [
@@ -63,6 +70,27 @@ function plan(prev: unknown[], adaugari: Parameters<typeof planificaAdaugarea>[1
   const r = planificaAdaugarea(prev, adaugari, catalog);
   assert.ok(!("error" in r), `plan esuat: ${"error" in r ? r.error : ""}`);
   return r;
+}
+
+/** Editarea completa: modificari pe liniile existente, apoi adaugari. */
+function editare(
+  prev: unknown[],
+  modificari: Parameters<typeof planificaEditarea>[1],
+  adaugari: Parameters<typeof planificaEditarea>[2] = [],
+  catalog: Map<string, CatalogEdit> = catalogCu([["p1", simplu()]]),
+) {
+  const r = planificaEditarea(prev, modificari, adaugari, catalog);
+  assert.ok(!("error" in r), `editare esuata: ${"error" in r ? r.error : ""}`);
+  return r;
+}
+
+/** Suma liniilor de marfa, ca sa se poata verifica invariantul cu `deltaSubtotal`. */
+function sumaMarfii(items: unknown[]): number {
+  const s = items
+    .map((b) => b as LinieComanda)
+    .filter((l) => !esteLinieExtra(l))
+    .reduce((acc, l) => acc + l.price * l.quantity, 0);
+  return Math.round(s * 100) / 100;
 }
 
 // ── 4a: produsele variabile ──────────────────────────────────────────────────
@@ -532,6 +560,324 @@ test("contributia unei linii de pachet e subtotalul pachetului, nu pret x cantit
   const cat = simplu({ price: 84.99, trepte: trepteMokka });
   const r = plan([], [{ product_id: "p1", quantity: 3 }], catalogCu([["p1", cat]]));
   assert.equal(r.contributii[cheieLinie("p1", null)], 250);
+});
+
+// ── Scoaterea de linii si cantitatea liniilor existente ──────────────────────
+//
+// Pana la 11.08 se putea doar ADAUGA. Scoaterea misca marfa in celalalt sens,
+// deci fiecare regula de aici apara ori banii comenzii, ori stocul din catalog.
+
+test("SCOATERE: linia dispare, iar subtotalul scade exact cu contributia ei", () => {
+  const prev = [linie({ quantity: 2 }), linie({ product_id: "p2", name: "Al doilea", price: 30, quantity: 1 })];
+  const catalog = catalogCu([["p1", simplu()], ["p2", simplu({ name: "Al doilea", price: 30 })]]);
+  const r = editare(prev, [{ index: 0, quantity: 0 }], [], catalog);
+  assert.equal(r.items.length, 1);
+  assert.equal((r.items[0] as LinieComanda).product_id, "p2");
+  assert.equal(r.deltaSubtotal, -200);
+  assert.deepEqual(r.scoase, [{ product_id: "p1", variant_title: null, quantity: 2 }]);
+});
+
+test("SCOATERE: suma liniilor de marfa se muta exact cu deltaSubtotal", () => {
+  // Acelasi invariant care exista deja pentru adaugare — caseta de totaluri din
+  // panou compara suma randurilor cu `orders.total` si arata orice nepotrivire.
+  const prev = [linie({ quantity: 3 }), linie({ product_id: "p2", name: "Al doilea", price: 30, quantity: 4 })];
+  const catalog = catalogCu([["p1", simplu()], ["p2", simplu({ name: "Al doilea", price: 30 })]]);
+  const inainte = sumaMarfii(prev);
+  const r = editare(prev, [{ index: 0, quantity: 1 }, { index: 1, quantity: 0 }], [], catalog);
+  assert.equal(Math.round((sumaMarfii(r.items) - inainte) * 100) / 100, r.deltaSubtotal);
+});
+
+test("CANTITATE: scaderea repretuieste prin trepte — pachetul de 3 nu ramane pe 2 bucati", () => {
+  // Cazul care conteaza: 3 bucati luate ca pachet de 250 au pretul unitar 83,33.
+  // Lasat neatins la 2 bucati, clientul ar plati 166,66 pentru doua bucati care
+  // nu mai dau dreptul la pachet — pretul intreg e 200.
+  const cat = simplu({ price: 100, trepte: trepteMokka });
+  const unit = pretPeTrepte(construiesteTrepte(cat.trepte, 100), 3, 100).unitPrice;
+  const r = editare([linie({ price: unit, quantity: 3 })], [{ index: 0, quantity: 2 }], [], catalogCu([["p1", cat]]));
+  assert.equal((r.items[0] as LinieComanda).quantity, 2);
+  assert.equal(r.randuri[0].subtotal, 170, "treapta de 2 bucati");
+  assert.equal(r.deltaSubtotal, -80);
+});
+
+test("CANTITATE: cresterea repretuieste tot prin trepte, si cere stoc pentru diferenta", () => {
+  const cat = simplu({ price: 100, trepte: trepteMokka });
+  const r = editare([linie({ quantity: 1 })], [{ index: 0, quantity: 3 }], [], catalogCu([["p1", cat]]));
+  assert.equal(r.randuri[0].subtotal, 250);
+  assert.equal(r.deltaSubtotal, 150);
+  assert.deepEqual(r.adaugate, [{ product_id: "p1", variant_title: null, quantity: 2 }], "doar diferenta");
+  assert.deepEqual(r.scoase, []);
+});
+
+test("CANTITATE: cu trepte nemonotone, scaderea NU are voie sa scumpeasca linia", () => {
+  // Monotonia se verifica doar la SCRIERE, deci datele vechi pot fi nemonotone:
+  // cu [1@100, 2@98, 3@84], repretuita, taierea unei bucati din trei ar urca
+  // linia de la 84 la 98 — comerciantul scoate marfa si clientul plateste mai mult.
+  const cat = simplu({ price: 100, trepte: { enabled: true, mode: "fixed", tier2_price: 98, tier3_price: 84 } });
+  const unit = pretPeTrepte(construiesteTrepte(cat.trepte, 100), 3, 100).unitPrice;
+  const vechi = Math.round(unit * 3 * 100) / 100;
+  const r = editare([linie({ price: unit, quantity: 3 })], [{ index: 0, quantity: 2 }], [], catalogCu([["p1", cat]]));
+  assert.ok(r.randuri[0].subtotal < vechi, `${r.randuri[0].subtotal} nu e sub ${vechi}`);
+  assert.ok(r.deltaSubtotal < 0, "scaderea de cantitate nu poate creste comanda");
+});
+
+test("PRET NEDERIVABIL: linia de oferta isi pastreaza pretul la scadere", () => {
+  // 60 pe bucata pe un produs de catalog 100 = pret convenit de o oferta. Scazuta
+  // de la 3 la 2 bucati, linia trebuie sa ramana la 60, nu sa sara la catalog.
+  const r = editare([linie({ price: 60, quantity: 3 })], [{ index: 0, quantity: 2 }]);
+  assert.equal((r.items[0] as LinieComanda).price, 60);
+  assert.equal(r.deltaSubtotal, -60);
+});
+
+test("PRET NEDERIVABIL: linia de oferta NU poate creste — bucatile in plus s-ar lua la pretul ei", () => {
+  const cap = capacitatiLinii([linie({ price: 60, quantity: 3 })], catalogCu([["p1", simplu()]]));
+  assert.equal(cap[0].repretuire, false, "pretul nu e al catalogului");
+  assert.equal(cap[0].poateCreste, true, "linia e simpla, deci poate creste — la pretul CATALOGULUI");
+  const r = editare([linie({ price: 60, quantity: 3 })], [{ index: 0, quantity: 4 }]);
+  assert.equal((r.items[0] as LinieComanda).price, 60, "pretul convenit ramane");
+  assert.equal(r.deltaSubtotal, 60);
+});
+
+/** Comanda mai are o linie de marfa, ca scoaterea celei probate sa fie legala. */
+const inca = () => linie({ product_id: "p2", name: "Al doilea", price: 30, quantity: 1 });
+const cuAlDoilea = (cat: CatalogEdit) => catalogCu([["p1", cat], ["p2", simplu({ name: "Al doilea", price: 30 })]]);
+
+test("VARIANTA: se recunoaste dupa numele intreg, si stocul ei se da inapoi", () => {
+  const cat = variabil();
+  const prev = [linie({ name: "ANTIFOANE INT UF REFILL (S)", price: 438, quantity: 2 }), inca()];
+  const cap = capacitatiLinii(prev, cuAlDoilea(cat));
+  assert.equal(cap[0].variantTitle, "S");
+  assert.equal(cap[0].stocSeMisca, true);
+  const r = editare(prev, [{ index: 0, quantity: 0 }], [], cuAlDoilea(cat));
+  assert.deepEqual(r.scoase, [{ product_id: "p1", variant_title: "S", quantity: 2 }]);
+  assert.deepEqual(r.faraStoc, []);
+});
+
+test("VARIANTA NERECUNOSCUTA: se poate scoate, dar stocul NU se misca si se spune", () => {
+  // Combinatia a fost stinsa sau redenumita: nu se stie din ce marime s-a scazut.
+  // Un „pare potrivita" ar umfla stocul altei marimi, deci nu se atinge nimic —
+  // marfa ramane rezervata pe comanda si se elibereaza la o eventuala anulare.
+  const prev = [linie({ name: "ANTIFOANE INT UF REFILL (XXL)", price: 438, quantity: 2 }), inca()];
+  const catalog = cuAlDoilea(variabil());
+  const cap = capacitatiLinii(prev, catalog);
+  assert.equal(cap[0].variantTitle, null);
+  assert.equal(cap[0].stocSeMisca, false);
+  assert.equal(cap[0].poateCreste, false, "fara certitudine, nu se vinde in plus");
+  const r = editare(prev, [{ index: 0, quantity: 0 }], [], catalog);
+  assert.equal(r.items.length, 1, "linia iese din comanda");
+  assert.deepEqual(r.scoase, []);
+  assert.deepEqual(r.faraStoc, [0]);
+});
+
+test("VARIANTA NERECUNOSCUTA: cresterea se REFUZA, cu motiv", () => {
+  const prev = [linie({ name: "ANTIFOANE INT UF REFILL (XXL)", price: 438, quantity: 2 })];
+  const r = planificaEditarea(prev, [{ index: 0, quantity: 3 }], [], catalogCu([["p1", variabil()]]));
+  assert.ok("error" in r);
+  assert.match(r.error, /varianta/i);
+});
+
+test("PRODUS DISPARUT DIN CATALOG: se poate scoate, nu se poate creste", () => {
+  const prev = [linie({ quantity: 2 }), inca()];
+  const cap = capacitatiLinii(prev, new Map());
+  assert.equal(cap[0].poateCreste, false);
+  assert.equal(cap[0].stocSeMisca, false);
+  const r = planificaEditarea(prev, [{ index: 0, quantity: 1 }], [], new Map());
+  assert.ok(!("error" in r));
+  assert.equal((r.items[0] as LinieComanda).price, 100, "pretul de pe comanda ramane");
+  assert.equal(r.deltaSubtotal, -100);
+  assert.deepEqual(r.faraStoc, [0]);
+});
+
+test("LINIE CU PERSONALIZARE: se poate scadea, dar nu creste", () => {
+  const prev = [{ ...linie({ quantity: 2 }), customization: { c1: { label: "Gravura", type: "text", value: "Ana" } } }];
+  const catalog = catalogCu([["p1", simplu()]]);
+  const cap = capacitatiLinii(prev, catalog);
+  assert.equal(cap[0].poateCreste, false);
+  assert.equal(cap[0].stocSeMisca, true, "stocul se misca — doar pretul si datele liniei sunt speciale");
+  const r = editare(prev, [{ index: 0, quantity: 1 }], [], catalog);
+  assert.deepEqual((r.items[0] as { customization?: unknown }).customization,
+    { c1: { label: "Gravura", type: "text", value: "Ana" } }, "personalizarea ramane pe linie");
+  assert.deepEqual(r.scoase, [{ product_id: "p1", variant_title: null, quantity: 1 }]);
+});
+
+test("EXTRAOPTIUNE scoasa iese si din `extras`, nu doar din linii", () => {
+  // Fara asta, comanda ramane incarcata cu ambalarea cadou stearsa: totalul si
+  // baza taxei de ramburs raman umflate, iar caseta de totaluri raporteaza pe loc
+  // o „diferenta nejustificata" exact de valoarea ei.
+  const extra = { product_id: "extra_1", name: "Ambalare cadou", price: 15, quantity: 1 };
+  const prev = [linie({ quantity: 1 }), extra];
+  const r = editare(prev, [{ index: 1, quantity: 0 }]);
+  assert.equal(r.extras, 0);
+  assert.equal(r.deltaSubtotal, 0, "extraoptiunile nu intra in subtotal");
+  assert.equal(r.items.length, 1);
+  assert.deepEqual(r.scoase, [], "extraoptiunile n-au stoc");
+});
+
+test("COMANDA GOALA: nu se pot scoate toate produsele", () => {
+  const prev = [linie({ quantity: 1 }), { product_id: "extra_1", name: "Ambalare cadou", price: 15, quantity: 1 }];
+  const r = planificaEditarea(prev, [{ index: 0, quantity: 0 }], [], catalogCu([["p1", simplu()]]));
+  assert.ok("error" in r);
+  assert.match(r.error, /anuleaz/i, "trimite la anulare, care elibereaza si stocul si cuponul");
+});
+
+test("COMANDA GOALA: se poate goli daca in acelasi pas se adauga alt produs", () => {
+  const prev = [linie({ quantity: 1 })];
+  const catalog = catalogCu([["p1", simplu()], ["p2", simplu({ name: "Al doilea", price: 30 })]]);
+  const r = editare(prev, [{ index: 0, quantity: 0 }], [{ product_id: "p2", quantity: 1 }], catalog);
+  assert.equal(r.items.length, 1);
+  assert.equal((r.items[0] as LinieComanda).product_id, "p2");
+  assert.equal(r.deltaSubtotal, -70);
+});
+
+test("SCOATERE + ADAUGARE: contopirea vede comanda de DUPA scoatere, nu de dinainte", () => {
+  // Linia dusa la zero nu mai e candidat de contopire: bucatile adaugate ar fi
+  // ajuns pe o linie stearsa.
+  const prev = [linie({ quantity: 1 })];
+  const r = editare(prev, [{ index: 0, quantity: 0 }], [{ product_id: "p1", quantity: 2 }]);
+  assert.equal(r.items.length, 1, "o singura linie noua");
+  assert.equal((r.items[0] as LinieComanda).quantity, 2);
+  assert.equal(r.deltaSubtotal, 100, "-100 scos, +200 adaugat");
+});
+
+test("BUMP: cele doua linii cu acelasi produs se ating separat, pe index", () => {
+  const linii: BumpItem[] = [{ product_id: "p1", name: "Produs simplu", price: 100, quantity: 3 }];
+  aplicaBumpPeOBucata(linii, linii[0], 60);
+  assert.equal(linii.length, 2, "bump-ul chiar desface o bucata pe linia ei");
+  // Scoasa linia de bump (cea cu pretul redus), cealalta ramane neatinsa.
+  const idxBump = linii.findIndex((l) => l.price === 60);
+  const r = editare(linii as unknown[], [{ index: idxBump, quantity: 0 }], [], catalogCu([["p1", simplu()]]));
+  assert.equal(r.items.length, 1);
+  assert.equal((r.items[0] as LinieComanda).price, 100, "linia la pret intreg ramane intacta");
+  assert.equal((r.items[0] as LinieComanda).quantity, 2);
+  assert.equal(r.deltaSubtotal, -60);
+});
+
+test("ZERO modificari: nici liniile, nici cifrele nu se misca", () => {
+  const prev = [linie({ quantity: 2 }), { product_id: "extra_1", name: "Cadou", price: 5, quantity: 1 }];
+  const r = editare(prev, []);
+  assert.deepEqual(r.items, prev);
+  assert.equal(r.deltaSubtotal, 0);
+  assert.equal(r.extras, 5);
+  assert.deepEqual(r.scoase, []);
+  assert.deepEqual(r.adaugate, []);
+  assert.deepEqual(r.randuri, []);
+});
+
+test("cantitatea ceruta trece prin aceeasi regula ca la comanda: peste 999 se REFUZA", () => {
+  const r = planificaEditarea([linie({ quantity: 1 })], [{ index: 0, quantity: 1000 }], [], catalogCu([["p1", simplu()]]));
+  assert.ok("error" in r);
+  assert.match(r.error, /999/);
+});
+
+test("index din afara listei: se refuza, nu se ignora", () => {
+  const r = planificaEditarea([linie()], [{ index: 5, quantity: 0 }], [], catalogCu([["p1", simplu()]]));
+  assert.ok("error" in r);
+});
+
+// ── Ce a scos la iveala verificarea adversa a scoaterii ──────────────────────
+
+test("PRODUS DEZACTIVAT: linia se poate scoate, dar „+\" e inchis inca din capacitati", () => {
+  // Altfel butonul era aprins, iar salvarea pica abia la `expandBundleStock`, cu un
+  // mesaj despre pachete — dupa ce omul mai corectase si adresa, si telefonul.
+  const prev = [linie({ quantity: 2 }), inca()];
+  const catalog = cuAlDoilea(simplu({ activ: false }));
+  const cap = capacitatiLinii(prev, catalog);
+  assert.equal(cap[0].poateCreste, false);
+  assert.match(cap[0].motivCrestere ?? "", /dezactivat/i);
+  assert.equal(cap[0].stocSeMisca, true, "scoaterea da stocul inapoi si la un produs stins");
+  const r = editare(prev, [{ index: 0, quantity: 1 }], [], catalog);
+  assert.deepEqual(r.scoase, [{ product_id: "p1", variant_title: null, quantity: 1 }]);
+});
+
+test("MUTARE INTRE DOUA LINII: ce se ia de pe una si se pune pe alta nu mai cere stoc", () => {
+  // Tiparul lui `aplicaBumpPeOBucata`: doua linii pe acelasi produs. Necompensate,
+  // cresterea se masoara pe stocul de DINAINTE de propria ei scadere, si o mutare cu
+  // suma zero pica pe „stoc insuficient" cand produsul a ramas pe zero.
+  const prev = [linie({ quantity: 2 }), linie({ price: 60, quantity: 1 }), inca()];
+  const catalog = cuAlDoilea(simplu());
+  const r = editare(prev, [{ index: 0, quantity: 3 }, { index: 1, quantity: 0 }], [], catalog);
+  assert.deepEqual(r.adaugate, [], "nu se mai cere nimic de la stoc");
+  assert.deepEqual(r.scoase, [], "si nici nu se da nimic inapoi");
+  assert.equal(r.deltaSubtotal, 40, "banii se schimba oricum: +100 pe linia intreaga, -60 bump");
+});
+
+test("MUTARE PARTIALA: se cere de la stoc doar diferenta neta", () => {
+  const prev = [linie({ quantity: 2 }), linie({ price: 60, quantity: 3 }), inca()];
+  const catalog = cuAlDoilea(simplu());
+  const r = editare(prev, [{ index: 0, quantity: 5 }, { index: 1, quantity: 1 }], [], catalog);
+  // +3 pe prima linie, -2 pe a doua -> net +1.
+  assert.deepEqual(r.adaugate, [{ product_id: "p1", variant_title: null, quantity: 1 }]);
+  assert.deepEqual(r.scoase, []);
+});
+
+test("MARIMILE NU SE COMPENSEAZA INTRE ELE: alt raft, alta socoteala", () => {
+  const cat = variabil();
+  const prev = [
+    linie({ name: "ANTIFOANE INT UF REFILL (S)", price: 438, quantity: 2 }),
+    linie({ name: "ANTIFOANE INT UF REFILL (M)", price: 460, quantity: 2 }),
+  ];
+  const r = editare(prev, [{ index: 0, quantity: 3 }, { index: 1, quantity: 1 }], [], catalogCu([["p1", cat]]));
+  assert.deepEqual(r.adaugate, [{ product_id: "p1", variant_title: "S", quantity: 1 }]);
+  assert.deepEqual(r.scoase, [{ product_id: "p1", variant_title: "M", quantity: 1 }]);
+});
+
+test("NECESARUL DE STOC numara pachetul, nu componentele, si aduna marimile", () => {
+  // Hraneste clema din baza: eliberarea nu are voie sa scada rezervarea sub ce mai
+  // datoreaza comanda. Desfacerea pachetelor se face pe server, cu aceeasi functie
+  // ca eliberarea.
+  const cat = variabil();
+  const items = [
+    linie({ name: "ANTIFOANE INT UF REFILL (S)", price: 438, quantity: 2 }),
+    linie({ name: "ANTIFOANE INT UF REFILL (S)", price: 438, quantity: 1 }),
+    linie({ product_id: "p2", name: "Al doilea", price: 30, quantity: 4 }),
+    { product_id: "extra_1", name: "Cadou", price: 5, quantity: 1 },
+  ];
+  const n = necesarDeStoc(items, cuAlDoilea(cat));
+  assert.deepEqual(n.produse.sort((a, b) => a.product_id.localeCompare(b.product_id)),
+    [{ product_id: "p1", quantity: 3 }, { product_id: "p2", quantity: 4 }],
+    "extraoptiunea nu are stoc si nu se numara");
+  assert.deepEqual(n.variante, [{ product_id: "p1", variant_title: "S", quantity: 3 }]);
+});
+
+test("NECESARUL numara si liniile al caror stoc nu se poate misca", () => {
+  // Marfa lor e tot datorata, deci trebuie sa apere rezervarea celorlalte linii.
+  const items = [linie({ name: "ANTIFOANE INT UF REFILL (XXL)", price: 438, quantity: 2 })];
+  const n = necesarDeStoc(items, catalogCu([["p1", variabil()]]));
+  assert.deepEqual(n.produse, [{ product_id: "p1", quantity: 2 }]);
+  assert.deepEqual(n.variante, [], "varianta nu se stie, deci nu se poate numara pe combinatie");
+});
+
+test("REDUCERILE nu pot depasi marfa ramasa", () => {
+  // Cuponul ramane inghetat la ce s-a convenit, deci scoaterea de marfa il poate
+  // duce peste. `recalculeazaTotal` ar plafona totalul la 0 si comanda ar pleca
+  // gratis, in tacere.
+  assert.equal(reducerileDepasescMarfa({ subtotal: 200, extras: 0, discount: 100, cardDiscount: 0, codDiscount: 0 }), false);
+  assert.equal(reducerileDepasescMarfa({ subtotal: 50, extras: 0, discount: 100, cardDiscount: 0, codDiscount: 0 }), true);
+  assert.equal(reducerileDepasescMarfa({ subtotal: 50, extras: 60, discount: 100, cardDiscount: 0, codDiscount: 0 }), false,
+    "extraoptiunile intra si ele in ce acopera reducerea");
+  assert.equal(reducerileDepasescMarfa({ subtotal: 100, extras: 0, discount: 60, cardDiscount: 30, codDiscount: 20 }), true,
+    "se aduna toate trei");
+  assert.equal(reducerileDepasescMarfa({ subtotal: 100, extras: 0, discount: 100, cardDiscount: 0, codDiscount: 0 }), false,
+    "exact cat trebuie inca trece");
+});
+
+// ── Amprenta liniilor ────────────────────────────────────────────────────────
+
+test("amprenta se schimba la orice miscare care conteaza pentru bani sau stoc", () => {
+  const baza = [linie({ quantity: 2 }), { product_id: "extra_1", name: "Cadou", price: 5, quantity: 1 }];
+  const a = amprentaLinii(baza);
+  assert.equal(amprentaLinii([linie({ quantity: 2 }), { product_id: "extra_1", name: "Cadou", price: 5, quantity: 1 }]), a,
+    "aceleasi linii dau aceeasi amprenta");
+  assert.notEqual(amprentaLinii([linie({ quantity: 3 }), baza[1]]), a, "cantitate");
+  assert.notEqual(amprentaLinii([linie({ price: 99 }), baza[1]]), a, "pret");
+  assert.notEqual(amprentaLinii([linie({ name: "Altul" }), baza[1]]), a, "nume");
+  assert.notEqual(amprentaLinii([baza[1], baza[0]]), a, "ordinea, fiindca indexul e cheia");
+  assert.notEqual(amprentaLinii([baza[0]]), a, "o linie in minus");
+});
+
+test("amprenta nu se lasa pacalita de un nume care contine separatorul", () => {
+  const a = amprentaLinii([linie({ name: "A", price: 1, quantity: 1 }), linie({ name: "B", price: 1, quantity: 1 })]);
+  const b = amprentaLinii([linie({ name: "A1001p1B", price: 1, quantity: 1 })]);
+  assert.notEqual(a, b);
 });
 
 /* ─── Transportul in baza de TVA, si la editare ───────────────────────────── */

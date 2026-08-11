@@ -190,6 +190,57 @@ export async function expandBundleStock(
   return { decrements: [...need.entries()].map(([product_id, quantity]) => ({ product_id, quantity })) };
 }
 
+/**
+ * Aceeasi desfacere in componente, dar pentru DAREA INAPOI a stocului.
+ *
+ * ═══ DE CE NU SE REFOLOSESTE `expandBundleStock` ═══
+ *
+ * Aceea are un al doilea rol: da verdictul de disponibilitate si formuleaza
+ * mesajele omenesti („scoate pachetul din cos"). Pentru o eliberare, verdictul n-are
+ * ce inseamna — bucatile se intorc pe raft, iar o componenta dezactivata sau
+ * stearsa intre timp n-are cum sa opreasca scoaterea unei linii din comanda. Cu
+ * `expandBundleStock`, editarea ar fi picat cu „un produs din pachet nu mai este
+ * disponibil" exact pe comanda pe care comerciantul incearca sa o repare.
+ *
+ * Ce nu se mai gaseste in catalog se SARE, si atat: componenta stearsa n-are unde
+ * primi bucatile inapoi. Restul se cleameaza oricum in baza, la ce s-a rezervat
+ * chiar pe comanda aia (`scade_din_rezervat`), deci compozitia schimbata intre
+ * vanzare si editare nu poate umfla stocul.
+ */
+export async function expandBundleRelease(
+  admin: SupabaseClient<Database>,
+  businessId: string,
+  items: { product_id: string; quantity: number }[],
+): Promise<{ product_id: string; quantity: number }[]> {
+  const ids = [...new Set(items.map((i) => i.product_id))];
+  if (ids.length === 0) return [];
+
+  const { data: randuri } = await admin
+    .from("products")
+    .select("id, is_bundle, page_sections")
+    .eq("business_id", businessId)
+    .in("id", ids);
+  const dupaId = new Map((randuri ?? []).map((p) => [p.id, p]));
+
+  const need = new Map<string, number>();
+  for (const item of items) {
+    const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+    const p = dupaId.get(item.product_id);
+    const cfg = p?.is_bundle ? readBundleConfig(p.page_sections) : null;
+    if (cfg) {
+      for (const comp of cfg.items) {
+        need.set(comp.product_id, (need.get(comp.product_id) ?? 0) + comp.quantity * qty);
+      }
+    } else {
+      // Si produsul care nu mai e in catalog trece pe aici: eliberarea lui e
+      // clemata la zero in baza, deci nu strica nimic, iar un pachet devenit
+      // produs simplu isi da inapoi propriul rand.
+      need.set(item.product_id, (need.get(item.product_id) ?? 0) + qty);
+    }
+  }
+  return [...need.entries()].map(([product_id, quantity]) => ({ product_id, quantity }));
+}
+
 // Safely read a bundle config off a product's page_sections JSON.
 export function readBundleConfig(pageSections: unknown): BundleConfig | null {
   const ps = (pageSections ?? {}) as { bundle?: BundleConfig };

@@ -20,21 +20,26 @@ import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap, parseVariants } from "@/lib/storefront/variants";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import {
-  planificaAdaugarea,
+  amprentaLinii,
+  necesarDeStoc,
+  planificaEditarea,
   recalculeazaTotal,
+  reducerileDepasescMarfa,
   slabesteVariante,
   sumaExtraoptiunilor,
   type CatalogEdit,
+  type ModificareLinie,
   type VarianteSlim,
 } from "@/lib/orders/edit-pricing";
 import { verifyShippingQuote } from "@/lib/shipping/quote-token";
 import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
 import { verifyBillingCompany } from "@/lib/billing/verify";
-import { expandBundleStock } from "@/lib/bundles";
+import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
 import { stocRezervat } from "@/lib/orders/stoc-rezervat";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
+import { esteIdExtra } from "@/lib/orders/extras";
 import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
 import { inchideSesiuneaStripeVeche } from "@/lib/stripe-sesiune";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
@@ -1935,6 +1940,12 @@ export interface ProdusPentruEditare {
   stock_quantity: number | null;
   track_inventory: boolean;
   is_bundle: boolean;
+  /**
+   * Mai e in vanzare? La cautare e mereu adevarat (se cauta doar activele), dar
+   * produsele liniilor DEJA vandute se citesc fara filtru, tocmai ca o linie a unui
+   * produs stins sa se poata scoate. Vezi `CatalogEdit.activ`.
+   */
+  activ: boolean;
   /** `null` cand produsul nu e variabil; altfel optiunile si combinatiile active. */
   variante: VarianteSlim | null;
   /** Configuratia bruta de trepte, ca panoul sa arate acelasi pachet ca magazinul. */
@@ -1971,6 +1982,8 @@ export async function searchOrderProducts(businessId: string, query: string): Pr
       stock_quantity: p.stock_quantity as number | null,
       track_inventory: !!p.track_inventory,
       is_bundle: !!p.is_bundle,
+      // Cautarea filtreaza pe `is_active`, deci ce iese de aici e activ prin constructie.
+      activ: true,
       variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
       trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
     })),
@@ -1989,13 +2002,28 @@ export async function searchOrderProducts(businessId: string, query: string): Pr
  * Aceeasi verificare de proprietate ca la `searchOrderProducts`: sunt reglajele
  * magazinului propriu, pe care comerciantul le vede oricum in Setari.
  */
-export async function getOrderEditContext(businessId: string): Promise<
+export async function getOrderEditContext(businessId: string, orderId?: string): Promise<
   {
     vat_enabled: boolean;
     vat_rate: number;
     prices_include_vat: boolean;
     free_shipping_threshold: number | null;
     cod_fee_config: unknown;
+    /**
+     * Catalogul VIU al produselor care sunt DEJA pe comanda.
+     *
+     * Fara el, panoul n-ar putea nici sa repretuiasca o cantitate schimbata prin
+     * trepte, nici sa stie ce linie are voie sa creasca.
+     *
+     * ⚠ Se intoarce CATALOGUL, nu capacitatile gata calculate — desi ar fi fost la
+     * indemana, fiindca functia le calculeaza oricum. Capacitatile sunt indexate pe
+     * pozitia liniei, iar aici liniile s-ar citi A DOUA OARA din baza: intre
+     * randarea paginii si deschiderea ferestrei, un lot sau un webhook poate
+     * schimba lista, si atunci indicele 2 al panoului n-ar mai fi indicele 2 al
+     * raspunsului. Panoul cheama `capacitatiLinii` peste liniile pe care le ARATA
+     * el, deci indicii, amprenta si cifrele vin toate din acelasi vector.
+     */
+    catalogLinii: ProdusPentruEditare[];
   } | { error: string }
 > {
   const supabase = await createClient();
@@ -2010,12 +2038,48 @@ export async function getOrderEditContext(businessId: string): Promise<
     .eq("business_id", businessId)
     .single();
 
+  const catalogLinii: ProdusPentruEditare[] = [];
+  if (orderId) {
+    // Comanda se cere cu businessId in filtru, nu doar cu id: altfel un
+    // `orderId` din alt magazin ar fi intors liniile lui.
+    const { data: ord } = await supabase
+      .from("orders").select("items").eq("id", orderId).eq("business_id", businessId).single();
+    const items = Array.isArray(ord?.items) ? (ord.items as unknown[]) : [];
+    const ids = [...new Set(
+      items
+        .map((b) => (b && typeof b === "object" ? (b as { product_id?: unknown }).product_id : null))
+        .filter((x): x is string => typeof x === "string" && !esteIdExtra(x)),
+    )];
+    if (ids.length > 0) {
+      // FARA `is_active`: un produs stins intre timp ramane pe comanda, iar linia
+      // lui trebuie sa se poata scoate. Aceeasi citire ca in `updateOrderDetails`.
+      const { data: produse } = await supabase.from("products")
+        .select("id, name, price, stock_quantity, track_inventory, is_bundle, is_active, page_sections")
+        .eq("business_id", businessId)
+        .in("id", ids);
+      for (const p of produse ?? []) {
+        catalogLinii.push({
+          id: p.id as string,
+          name: String(p.name),
+          price: round2(Number(p.price)),
+          stock_quantity: p.stock_quantity as number | null,
+          track_inventory: !!p.track_inventory,
+          is_bundle: !!p.is_bundle,
+          activ: !!p.is_active,
+          variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
+          trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
+        });
+      }
+    }
+  }
+
   return {
     vat_enabled: cfg?.vat_enabled ?? false,
     vat_rate: Number(cfg?.vat_rate ?? 19),
     prices_include_vat: cfg?.prices_include_vat ?? true,
     free_shipping_threshold: cfg?.free_shipping_threshold != null ? Number(cfg.free_shipping_threshold) : null,
     cod_fee_config: cfg?.cod_fee_config ?? null,
+    catalogLinii,
   };
 }
 
@@ -2030,6 +2094,21 @@ export async function updateOrderDetails(orderId: string, data: {
   /** Products to append to the order; re-priced server-side from the live catalog. */
   added_items?: { product_id: string; variant_title?: string | null; quantity: number }[];
   /**
+   * Liniile DEJA existente, duse la o cantitate noua. `quantity: 0` = scoasa.
+   *
+   * Se cer pe INDEX, fiindca liniile din `orders.items` n-au id, iar doua linii pot
+   * avea acelasi `product_id`: `aplicaBumpPeOBucata` desprinde o bucata pe o linie
+   * separata, cu pret redus. Cheiate pe produs, o scoatere ar fi luat linia gresita.
+   */
+  linii_modificate?: ModificareLinie[];
+  /**
+   * Amprenta liniilor pe care le-a vazut panoul cand a desenat modalul.
+   *
+   * Obligatorie cand se cer modificari pe linii: indexul nu inseamna nimic daca
+   * intre timp altcineva a schimbat lista. Vezi `amprentaLinii`.
+   */
+  amprenta_items?: string;
+  /**
    * Transportul re-cotat din panou, cand comerciantul schimba destinatia.
    * Acceptat DOAR insotit de semnatura primita de la `getShippingOptions`.
    */
@@ -2037,14 +2116,18 @@ export async function updateOrderDetails(orderId: string, data: {
   shipping_token?: string;
   /** Eticheta cotatiei re-cerute. Face parte din semnatura, deci se confrunta. */
   courier_label?: string;
-}): Promise<{ success: true; newTotal: number } | { error: string }> {
+}): Promise<{ success: true; newTotal: number; faraStoc: number } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number")
+    // ⚠ Coloanele de AWB se cer TOATE. Pana la 11.08 lipseau GLS, Pall-Ex si
+    // eColet, desi exista de saptamani si modalul le si afisa: `areAwb` iesea deci
+    // FALS pe o comanda cu AWB emis la trei curieri, iar transportul re-cotat
+    // trecea peste el. La Pall-Ex borderoul validat e ireversibil.
+    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -2094,7 +2177,18 @@ export async function updateOrderDetails(orderId: string, data: {
    * Proformele nu intra: nu sunt documente fiscale.
    */
   const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number;
-  const cereProduse = (data.added_items ?? []).some((i) => i?.product_id && Number(i.quantity) > 0);
+  const cereAdaugari = (data.added_items ?? []).some((i) => i?.product_id && Number(i.quantity) > 0);
+  const cereModificari = (data.linii_modificate ?? []).length > 0;
+  /*
+   * ⚠ `cereProduse` inseamna „se misca marfa", nu „se adauga marfa".
+   *
+   * Se uita la AMANDOUA cererile. Cat timp se uita doar la `added_items`, un
+   * payload care numai scoate linii trecea nevazut de garda de mai jos, iar o
+   * comanda cu factura fiscala emisa se putea goli de produse — exact gaura pe
+   * care garda o inchide. Butonul stins din panou nu ajuta: actiunile de server
+   * sunt endpointuri publice, chemabile cu orice argumente printr-un POST direct.
+   */
+  const cereProduse = cereAdaugari || cereModificari;
   const cereTransport = data.shipping_cost != null;
   if (numarFactura && (cereProduse || cereTransport)) {
     return { error: `Comanda are factura ${numarFactura}. Suma facturata nu se mai poate schimba din panou. Emite storno la furnizorul de facturare, apoi fa o comanda noua pentru diferenta.` };
@@ -2125,45 +2219,135 @@ export async function updateOrderDetails(orderId: string, data: {
   }
   const prevItems = order.items as unknown[];
 
+  /*
+   * ═══ CE NU SE ATINGE LA LINII, SI DE CE ═══
+   *
+   * Adaugarea de produse peste un AWB emis trece de mult, cu un avertisment in
+   * panou. SCOATEREA e alt fel de risc: coletul e deja la curier CU marfa in el,
+   * declarat cu greutatea si rambursul de atunci, iar comanda ar spune ca nu s-a
+   * trimis. La Pall-Ex borderoul validat e chiar ireversibil. Deci modificarile de
+   * linii cer intai anularea AWB-ului — butoanele sunt in acelasi modal.
+   *
+   * `ecolet_order_to_send_id` fara AWB inseamna expediere REALA in curs: eColet
+   * emite asincron, deci lipsa numarului nu inseamna lipsa coletului.
+   */
+  const areAwb = !!(order.woot_awb_number || order.sameday_awb_number || order.cargus_awb_number
+    || order.dpd_awb_number || order.fan_courier_awb_number || order.colete_awb_number
+    || order.gls_awb_number || order.pallex_awb_number || order.ecolet_awb_number
+    || order.ecolet_order_to_send_id);
+  if (cereModificari && areAwb) {
+    return { error: "Comanda are AWB emis. Anuleaza-l intai (butoanele sunt in aceeasi fereastra), apoi scoate sau schimba liniile si genereaza un AWB nou." };
+  }
+
+  /*
+   * Comenzile de marketplace nu se editeaza la linii din panou.
+   *
+   * Acolo `orders.subtotal` NU e suma liniilor: la Trendyol liniile poarta pretul
+   * cu TVA si subtotalul e `total - vat`, iar la About You liniile sunt in EURO si
+   * cele anulate stau in `items` fara sa intre nici in subtotal, nici in total.
+   * Scazand contributia unei linii dintr-un subtotal calculat altfel, cifra ar iesi
+   * gresita in tacere. Peste asta, urmatorul ingest rescrie oricum liniile de la
+   * furnizor. Adresa si datele clientului se pot corecta si aici.
+   */
+  const marketplace = (order.order_source as { marketplace?: string } | null)?.marketplace;
+  if (cereModificari && marketplace) {
+    return { error: `Comanda vine din ${marketplace} si liniile ei se schimba din contul de acolo — altfel urmatoarea sincronizare le-ar scrie la loc. Datele clientului si adresa se pot corecta si de aici.` };
+  }
+
+  /*
+   * ═══ AMPRENTA: INDEXUL NU INSEAMNA NIMIC SINGUR ═══
+   *
+   * Modificarile vin pe indexul liniei. Intre desenarea modalului si apasarea pe
+   * „Salveaza" incap minute, iar in ele altcineva poate schimba liniile — si
+   * atunci indexul 2 nu mai e produsul pe care l-a apasat comerciantul. Se compara
+   * cu ACEEASI functie pe care a folosit-o si panoul.
+   */
+  if (cereModificari && data.amprenta_items !== amprentaLinii(prevItems)) {
+    return { error: "Liniile comenzii s-au schimbat intre timp. Reincarca pagina si incearca din nou." };
+  }
+
   const admin = createAdminClient();
 
   /*
-   * Produsele adaugate se repretuiesc din catalogul VIU, prin ACELEASI motoare
-   * pe care le folosesc cele doua cai de comanda: combinatiile pentru variante
-   * si treptele pentru pachete. Pana acum functia citea doar `price`, deci un
-   * produs variabil intra la pretul de baza, fara marime, iar treptele nu
-   * existau deloc.
+   * Catalogul VIU pentru toate produsele atinse — si cele adaugate, si cele care
+   * sunt DEJA pe comanda. Repretuirea trece prin ACELEASI motoare ca cele doua cai
+   * de comanda: combinatiile pentru variante si treptele pentru pachete. Pana acum
+   * functia citea doar `price`, deci un produs variabil intra la pretul de baza,
+   * fara marime, iar treptele nu existau deloc.
+   *
+   * Produsele liniilor existente se citesc FARA `is_active`: un produs stins intre
+   * timp ramane pe comanda, iar linia lui trebuie sa se poata scoate. Ce nu se
+   * gaseste lipseste pur si simplu din catalog, iar `capacitatiLinii` inchide
+   * atunci cresterea si miscarea de stoc pentru linia aia.
    */
-  const ids = [...new Set((data.added_items ?? []).map((i) => i?.product_id).filter((x): x is string => !!x))];
-  let plan: { items: unknown[]; deltaSubtotal: number; adaugate: { product_id: string; variant_title: string | null; quantity: number }[] } = {
-    items: prevItems, deltaSubtotal: 0, adaugate: [],
-  };
-  let decrements: { product_id: string; quantity: number }[] = [];
+  const idsAdaugate = [...new Set((data.added_items ?? []).map((i) => i?.product_id).filter((x): x is string => !!x))];
+  const idsLinii = [...new Set(
+    prevItems
+      .map((b) => (b && typeof b === "object" ? (b as { product_id?: unknown }).product_id : null))
+      .filter((x): x is string => typeof x === "string" && !esteIdExtra(x)),
+  )];
+  const idsToate = [...new Set([...idsAdaugate, ...idsLinii])];
 
-  if (ids.length > 0) {
+  const catalog = new Map<string, CatalogEdit>();
+  const live = new Map<string, { id: string; page_sections: unknown }>();
+  if (idsToate.length > 0) {
     const { data: products } = await admin.from("products")
       .select("id, name, price, is_active, is_bundle, page_sections")
-      .in("id", ids)
+      .in("id", idsToate)
       .eq("business_id", order.business_id);
-    const live = new Map((products ?? []).filter((p) => p.is_active).map((p) => [p.id as string, p]));
-    if (ids.some((id) => !live.has(id))) {
-      return { error: "Unul dintre produsele adaugate nu mai este disponibil. Reincarca pagina si incearca din nou." };
-    }
-
-    const catalog = new Map<string, CatalogEdit>(
-      [...live.entries()].map(([id, p]) => [id, {
+    for (const p of products ?? []) {
+      // Doar produsele adaugate trebuie sa fie ACTIVE; cele deja vandute nu.
+      if (!p.is_active && idsAdaugate.includes(p.id as string)) continue;
+      live.set(p.id as string, { id: p.id as string, page_sections: p.page_sections });
+      catalog.set(p.id as string, {
         name: String(p.name),
         price: round2(Number(p.price)),
         is_bundle: !!p.is_bundle,
+        activ: !!p.is_active,
         variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
         trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
-      }]),
-    );
+      });
+    }
+    if (idsAdaugate.some((id) => !catalog.has(id))) {
+      return { error: "Unul dintre produsele adaugate nu mai este disponibil. Reincarca pagina si incearca din nou." };
+    }
+  }
 
-    const rezultat = planificaAdaugarea(prevItems, data.added_items ?? [], catalog);
-    if ("error" in rezultat) return { error: rezultat.error };
-    plan = rezultat;
+  const plan = planificaEditarea(prevItems, data.linii_modificate ?? [], data.added_items ?? [], catalog);
+  if ("error" in plan) return { error: plan.error };
 
+  /*
+   * ═══ REDUCEREA NU POATE MANCA MAI MULT DECAT MARFA RAMASA ═══
+   *
+   * Cuponul si reducerea de card raman inghetate la ce s-a convenit la plasare —
+   * regula scrisa cand se putea doar ADAUGA, cand subtotalul nu putea decat sa
+   * creasca. De cand se scot linii, reducerea poate ajunge peste marfa: pe o
+   * comanda de 200 cu 50% reducere, scoaterea a 150 de lei de marfa lasa 50 de lei
+   * de marfa si 100 de lei de reducere. `recalculeazaTotal` plafoneaza totalul la
+   * zero — corect ca aritmetica, dar comanda s-ar fi scris cu total 0, curierul n-ar
+   * mai fi incasat nimic, si clientul ar fi primit marfa pe gratis. In tacere.
+   *
+   * Nu se rescaleaza cuponul (ar schimba o intelegere) — se refuza, si se spune ce
+   * are de facut omul. Se compara cu starea de dinainte: o comanda deja incalcata
+   * (date vechi) trebuie sa-si poata corecta mai departe adresa.
+   */
+  const reduceri = {
+    discount: Number(order.discount_amount) || 0,
+    cardDiscount: Number(order.card_discount_amount) || 0,
+    codDiscount: Number(order.cod_discount_amount) || 0,
+  };
+  const depaseaDinainte = reducerileDepasescMarfa({
+    subtotal: Number(order.subtotal), extras: sumaExtraoptiunilor(prevItems), ...reduceri,
+  });
+  const depaseAcum = reducerileDepasescMarfa({
+    subtotal: round2(Number(order.subtotal) + plan.deltaSubtotal), extras: plan.extras, ...reduceri,
+  });
+  if (depaseAcum && !depaseaDinainte) {
+    return { error: "Marfa ramasa e mai mica decat reducerile de pe comanda, deci totalul ar iesi negativ. Lasa mai multe produse pe comanda, sau anuleaz-o si fa una noua fara cupon." };
+  }
+
+  let decrements: { product_id: string; quantity: number }[] = [];
+  if (plan.adaugate.length > 0) {
     // Stocul DECLARAT pe combinatie, cu acelasi ajutor ca ambele cai de comanda.
     const eroareStoc = eroareStocPeVarianta(
       new Map([...live.entries()].map(([id, p]) => [id, comboStockMap(p.page_sections)])),
@@ -2180,6 +2364,38 @@ export async function updateOrderDetails(orderId: string, data: {
     }
     decrements = stockExp.decrements;
   }
+
+  /*
+   * Ce se da INAPOI la stoc pentru liniile scoase sau scazute.
+   *
+   * Se desface prin compozitia de AZI a pachetelor, ca la adaugare, dar fara
+   * verdict de disponibilitate (`expandBundleRelease`): bucatile se intorc pe
+   * raft, iar o componenta stinsa intre timp n-are cum sa opreasca scoaterea.
+   * Cantitatile se cleameaza oricum in baza la ce s-a rezervat chiar pe comanda
+   * asta, deci o compozitie schimbata nu poate umfla stocul.
+   */
+  const eliberari = plan.scoase.length > 0
+    ? await expandBundleRelease(admin, order.business_id, plan.scoase.map((s) => ({ product_id: s.product_id, quantity: s.quantity })))
+    : [];
+
+  /*
+   * Cat mai datoreaza comanda DUPA editare — clema care apara rezervarea liniilor
+   * ramase.
+   *
+   * Clema din baza stia doar cat luase comanda in TOTAL pe un produs. Cand acelasi
+   * produs e consumat de doua linii (o componenta de pachet plus vanzarea lui
+   * separata) si compozitia pachetului s-a schimbat intre vanzare si editare,
+   * scoaterea pachetului cerea inapoi mai mult decat i se cuvenea liniei si manca
+   * rezervarea celeilalte: stocul crestea cu marfa inca nelivrata, iar la anulare
+   * nu se mai dadea nimic inapoi.
+   *
+   * Se desface prin ACEEASI functie ca eliberarea, dinadins: doua desfaceri
+   * diferite ar readuce chiar nepotrivirea pe care clema o repara.
+   */
+  const nevoi = necesarDeStoc(plan.items, catalog);
+  const necesarProduse = nevoi.produse.length > 0
+    ? await expandBundleRelease(admin, order.business_id, nevoi.produse)
+    : [];
 
   /*
    * Totalul se RECALCULEAZA din componente, nu se aduna peste cel vechi.
@@ -2208,8 +2424,16 @@ export async function updateOrderDetails(orderId: string, data: {
   // inseamna exact zero schimbare.
   const newSubtotal = round2(Number(order.subtotal) + plan.deltaSubtotal);
 
-  // Extraoptiunile stau in `items` ca linii `extra_*` si NU intra in `subtotal`.
-  const extrasTotal = sumaExtraoptiunilor(prevItems);
+  /*
+   * Extraoptiunile stau in `items` ca linii `extra_*` si NU intra in `subtotal`.
+   *
+   * ⚠ Din liniile de DUPA editare, nu din cele dinainte. Cat timp se putea doar
+   * adauga, cele doua erau acelasi lucru; de cand se poate scoate, o extraoptiune
+   * stearsa („ambalare cadou") ar fi ramas in total si in baza taxei de ramburs,
+   * iar caseta de totaluri din panou — care isi numara extraoptiunile din liniile
+   * REALE — ar fi raportat pe loc o „diferenta nejustificata" exact de valoarea ei.
+   */
+  const extrasTotal = plan.extras;
 
   const vatCfg = {
     vat_enabled: cfgRow?.vat_enabled ?? false,
@@ -2262,9 +2486,23 @@ export async function updateOrderDetails(orderId: string, data: {
    */
   const cfgTaxa = parseCodFeeConfig(cfgRow?.cod_fee_config);
   const taxaVeche = round2(Number(order.cod_fee_amount) || 0);
-  const bazaVeche = round2(Number(order.subtotal) + extrasTotal - (Number(order.discount_amount) || 0));
+  /*
+   * ⚠ BAZA VECHE se face din extraoptiunile VECHI.
+   *
+   * `extrasTotal` a devenit suma de DUPA editare (asa trebuie: o extraoptiune
+   * scoasa iese si din total). Lasat si in `bazaVeche`, amesteca subtotalul de
+   * dinainte cu extraoptiunile de dupa — un raport intre doua momente diferite.
+   * Pe o comanda de 200 cu o ambalare cadou de 50 si taxa de 2%, scoaterea
+   * ambalarii facea serverul sa scrie alta taxa decat cea aratata in panou, iar
+   * din totalul serverului se ia rambursul pus pe AWB.
+   */
+  const extrasVechi = sumaExtraoptiunilor(prevItems);
+  const bazaVeche = round2(Number(order.subtotal) + extrasVechi - (Number(order.discount_amount) || 0));
   const bazaNoua = round2(newSubtotal + extrasTotal - (Number(order.discount_amount) || 0));
-  const codFee = cfgTaxa.type === "percent" && plan.deltaSubtotal !== 0 && taxaVeche > 0 && bazaVeche > 0
+  // Poarta e „BAZA s-a schimbat", nu „marfa s-a schimbat": extraoptiunile intra in
+  // baza taxei, dar niciodata in subtotal, deci o comanda din care se scoate doar
+  // ambalarea cadou isi pastra taxa calculata pe o baza care nu mai exista.
+  const codFee = cfgTaxa.type === "percent" && bazaNoua !== bazaVeche && taxaVeche > 0 && bazaVeche > 0
     ? round2(taxaVeche * (bazaNoua / bazaVeche))
     : taxaVeche;
 
@@ -2278,8 +2516,6 @@ export async function updateOrderDetails(orderId: string, data: {
    * pentru noua destinatie, ramane costul de azi — adica purtarea de pana acum.
    */
   const prevShip = (order.shipping_address ?? {}) as Record<string, unknown>;
-  const areAwb = !!(order.woot_awb_number || order.sameday_awb_number || order.cargus_awb_number
-    || order.dpd_awb_number || order.fan_courier_awb_number || order.colete_awb_number);
   let shippingDeBaza = Math.max(0, round2(Number(order.shipping_cost) || 0));
   let etichetaNoua: string | null = null;
   if (data.shipping_cost != null) {
@@ -2415,9 +2651,31 @@ export async function updateOrderDetails(orderId: string, data: {
      * intamplata, nu-l mai elibereaza niciodata.
      */
     p_status_asteptat: order.status,
+    /*
+     * ═══ CE SE DA INAPOI, SUB ACELASI LACAT ═══
+     *
+     * Nu se cheama `elibereaza_stoc_complet` din aplicatie, desi ar fi fost la
+     * indemana: ar fi fost a doua tranzactie, iar intre ele incape esecul care
+     * lasa marfa data inapoi si comanda nescrisa (sau invers). Functia scade din
+     * `orders.stoc_rezervat` SI pune bucatile pe raft in aceeasi instructiune, si
+     * cleameaza la ce s-a rezervat chiar pe comanda asta — deci nu se poate da
+     * inapoi mai mult decat s-a luat.
+     */
+    p_produse_minus: eliberari,
+    p_variante_minus: stocRezervat([], plan.scoase).variante,
+    // Ce ramane DATOR comenzii: sub asta, rezervarea nu se atinge.
+    p_produse_necesar: necesarProduse,
+    p_variante_necesar: nevoi.variante,
   });
 
   const rezEd = ed as { gasit?: boolean; stoc_cunoscut?: boolean; motiv?: string; status_curent?: string } | null;
+  if (rezEd?.motiv === "stoc eliberat") {
+    // Comanda si-a dat deja marfa inapoi (anulata, rambursata, sau doar cu plata
+    // trecuta pe „refunded", care elibereaza fara sa schimbe statusul). Peste ea,
+    // marfa nu se mai misca in niciun sens.
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
+    return { error: "Comanda si-a eliberat deja stocul (e anulata sau rambursata), deci liniile ei nu se mai pot schimba. Datele clientului si adresa se pot corecta." };
+  }
   if (rezEd?.motiv === "status schimbat") {
     // Nu e o eroare de sistem, e o cursa pierduta: cineva a mutat comanda intre
     // timp. Stocul rezervat se da inapoi si omul afla ce s-a intamplat.
@@ -2431,10 +2689,22 @@ export async function updateOrderDetails(orderId: string, data: {
     await logError({ action: "updateOrderDetails", message: error?.message ?? "editarea n-a raspuns valid", details: { code: error?.code, orderId, raspuns: rezEd }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la salvarea modificarilor." };
   }
-  if (rezEd.stoc_cunoscut === false && stoc.fel === "revendicat") {
-    // Comanda e dinainte de coloana `stoc_rezervat`: stocul s-a scazut, dar la
-    // anulare nu se va putea da inapoi automat. Se vede, se corecteaza de mana.
-    logError({ action: "updateOrderDetails.stocRezervat", message: "Comanda e dinainte de inregistrarea stocului rezervat; liniile adaugate NU se vor da inapoi automat la anulare.", details: { orderId }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  if (rezEd.stoc_cunoscut === false && (stoc.fel === "revendicat" || eliberari.length > 0)) {
+    // Comanda e dinainte de coloana `stoc_rezervat`: nu se stie ce a consumat,
+    // deci nici ce sa i se dea inapoi. Liniile adaugate raman scazute la anulare,
+    // iar cele scoase nu si-au putut intoarce marfa. Se vede, se corecteaza de mana.
+    logError({ action: "updateOrderDetails.stocRezervat", message: "Comanda e dinainte de inregistrarea stocului rezervat; stocul liniilor atinse NU s-a putut misca automat.", details: { orderId, adaugate: plan.adaugate.length, scoase: plan.scoase.length }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+  if (plan.faraStoc.length > 0) {
+    // Liniile la care nu s-a putut sti CE s-a consumat (varianta neidentificabila
+    // in catalogul de azi, produs sters). Comanda e corecta la bani; marfa ramane
+    // rezervata pana la o anulare, sau se corecteaza de mana din produs.
+    logError({
+      action: "updateOrderDetails.stocNemiscat",
+      message: "Linii scazute sau scoase al caror stoc nu s-a putut da inapoi automat.",
+      details: { orderId, indici: plan.faraStoc },
+      businessId: order.business_id, userId: user.id, severity: "warning",
+    });
   }
 
   /*
@@ -2475,10 +2745,20 @@ export async function updateOrderDetails(orderId: string, data: {
     }
   }
 
-  // Google Merchant availability sync for the added items (mirrors placeOrder).
-  // Stocul de produs SI cel de marime sunt deja scazute de revendicare.
-  if (plan.adaugate.length > 0) {
-    const atinse = [...new Set([...decrements.map((d) => d.product_id), ...plan.adaugate.map((a) => a.product_id)])];
+  /*
+   * Canalele externe afla ca stocul s-a miscat — in AMANDOUA sensurile.
+   *
+   * Conditia era `plan.adaugate.length > 0`, deci o editare care doar SCOATE marfa
+   * nu anunta pe nimeni: produsul se intorcea pe raft, dar Google Merchant, OLX,
+   * About You si Trendyol il tineau mai departe pe „stoc 0" pana la cronul urmator.
+   */
+  if (plan.adaugate.length > 0 || plan.scoase.length > 0) {
+    const atinse = [...new Set([
+      ...decrements.map((d) => d.product_id),
+      ...plan.adaugate.map((a) => a.product_id),
+      ...eliberari.map((e) => e.product_id),
+      ...plan.scoase.map((s) => s.product_id),
+    ])];
     void enqueueGmcSyncMany(order.business_id, atinse);
     void enqueueOlxSyncMany(order.business_id, atinse);
     void enqueueAboutYouStockMany(order.business_id, atinse);
@@ -2487,7 +2767,7 @@ export async function updateOrderDetails(orderId: string, data: {
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);
-  return { success: true, newTotal };
+  return { success: true, newTotal, faraStoc: plan.faraStoc.length };
 }
 
 export async function deleteOrder(orderId: string) {

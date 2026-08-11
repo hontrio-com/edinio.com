@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils/cn";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { firimituriJsonLd, type Firimitura } from "@/lib/website/breadcrumbs";
 
@@ -37,13 +38,28 @@ export function PageHero({
   sir,
   title,
   lead,
+  aliniere = "stanga",
 }: {
   /** Drumul până aici. Ultima intrare e pagina curentă și n-are `href`. */
   sir: Firimitura[];
   title: string;
   /** O frază, nu un paragraf. Se poate omite când titlul spune tot. */
   lead?: string;
+  /**
+   * Unde stă capul paginii.
+   *
+   * ⚠ Nu e o alegere de gust independentă: se potrivește cu CONȚINUTUL de sub
+   * el. Pe `/intrebari-frecvente` placa cu întrebări stă pe mijloc (cerut), deci
+   * capul e `centru`; sub un conținut aliniat la stânga, un cap centrat pornește
+   * din alt loc decât textul și se citește ca o scăpare — s-a văzut exact așa,
+   * cu ~130px diferență, înainte de a fi legate.
+   *
+   * Implicit `stanga`: așa arată restul paginilor interioare (`PageShell`).
+   */
+  aliniere?: "stanga" | "centru";
 }) {
+  const centrat = aliniere === "centru";
+
   return (
     <section className="border-b border-hairline bg-white">
       <script
@@ -52,8 +68,22 @@ export function PageHero({
       />
 
       {/* Același container ca restul site-ului: 1200 și aceleași margini. */}
-      <div className="mx-auto max-w-[1200px] px-5 pt-8 pb-10 sm:px-6 lg:px-8 lg:pt-10 lg:pb-14">
-        <Breadcrumbs sir={sir} />
+      <div
+        className={cn(
+          "mx-auto max-w-[1200px] px-5 pt-8 pb-10 sm:px-6 lg:px-8 lg:pt-10 lg:pb-14",
+          centrat && "text-center",
+        )}
+      >
+        {/*
+          Firimiturile se centrează ODATĂ cu restul. S-a încercat și varianta cu
+          ele lăsate la stânga, sub un titlu centrat: rândul mic rămâne singur
+          într-un colț și arată ca ceva uitat acolo, nu ca o unealtă de navigare.
+          `<ol>`-ul e `flex`, deci centrarea vine din `justify-center`, nu din
+          `text-center` moștenit.
+        */}
+        <div className={cn(centrat && "flex justify-center")}>
+          <Breadcrumbs sir={sir} />
+        </div>
 
         {/*
           34/44px, nu 38/52 ca în `PageShell`. E tot un `<h1>`, dar aici sub el
@@ -65,7 +95,12 @@ export function PageHero({
         </h1>
 
         {lead ? (
-          <p className="mt-4 max-w-[620px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
+          <p
+            className={cn(
+              "mt-4 max-w-[620px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]",
+              centrat && "mx-auto",
+            )}
+          >
             {lead}
           </p>
         ) : null}

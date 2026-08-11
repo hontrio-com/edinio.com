@@ -18,6 +18,8 @@
  * accesibil. Nu le scoate de acolo fără să le pui în altă parte.
  */
 
+import { EMAIL, TELEFON } from "./contact";
+
 export interface FooterLink {
   label: string;
   href: string;
@@ -90,13 +92,11 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   {
     title: "Contact",
     links: [
-      { prefix: "Telefon:", label: "0750 456 809", href: "tel:+40750456809", extern: true },
-      {
-        prefix: "Email:",
-        label: "contact@edinio.com",
-        href: "mailto:contact@edinio.com",
-        extern: true,
-      },
+      /* Numărul și adresa vin din `contact.ts`, nu scrise aici: aceleași valori
+         apar și în banda de sub întrebările frecvente. Două copii s-ar despărți
+         la prima schimbare de număr, și amândouă ar arăta la fel de corect. */
+      { prefix: "Telefon:", label: TELEFON.label, href: TELEFON.href, extern: true },
+      { prefix: "Email:", label: EMAIL.label, href: EMAIL.href, extern: true },
       { label: "Ia legătura cu noi", href: "/contact" },
       { label: "Centru de ajutor", href: "/ajutor" },
     ],

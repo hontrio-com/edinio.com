@@ -38,13 +38,22 @@ import { FAQS, FAQ_LEAD, FAQ_TITLE, type FaqItem } from "@/lib/website/faq";
  *
  * ⚠ Textul de aici e ȘI sursa datelor structurate `FAQPage` trimise către
  * Google — vezi `lib/website/faq.ts`. Nu-l rescrie doar aici.
+ *
+ * ═══ ACORDEONUL E SEPARAT DE SECȚIUNE ═══
+ *
+ * `FaqAccordion` e placa singură; `FAQSection` e ea plus capul centrat de pe
+ * pagina de start. Pagina `/intrebari-frecvente` folosește doar acordeonul,
+ * fiindcă titlul îl dă deja `PageHero`. Cu o singură componentă, pagina ar fi
+ * avut două titluri „Întrebări frecvente" unul sub altul — sau ar fi cerut o
+ * a doua copie a listei, exact ce s-a reparat deja o dată aici.
  */
 
 const DESCHIDERE_MS = 260;
 
-export function FAQSection() {
-  const [deschis, setDeschis] = useState<number | null>(null);
+/** Nivelul de titlu al întrebărilor. Vezi comentariul din `FaqAccordion`. */
+type NivelTitlu = "h2" | "h3";
 
+export function FAQSection() {
   return (
     <section id="faq" className="bg-white py-20 lg:py-28">
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
@@ -57,20 +66,54 @@ export function FAQSection() {
           </p>
         </div>
 
-        <div className="placa mx-auto mt-12 max-w-[820px] overflow-hidden rounded-[16px] lg:mt-16">
-          {FAQS.map((faq, i) => (
-            <Intrebare
-              key={faq.question}
-              faq={faq}
-              deschisa={deschis === i}
-              /* Una singură deschisă: cu zece răspunsuri lungi deschise deodată,
-                 rândul căutat ajunge la câteva ecrane distanță de titlu. */
-              onToggle={() => setDeschis(deschis === i ? null : i)}
-            />
-          ))}
-        </div>
+        {/* Aici titlul secțiunii e `h2`, deci întrebările sunt `h3`.
+            `mx-auto` fiindcă pe pagina de start capul secțiunii e CENTRAT. */}
+        <FaqAccordion nivelTitlu="h3" className="mx-auto mt-12 lg:mt-16" />
       </div>
     </section>
+  );
+}
+
+/**
+ * Placa cu întrebări, fără cap.
+ *
+ * `nivelTitlu` NU e o alegere de mărime — mărimea o dau clasele, aceleași în
+ * ambele cazuri. E STRUCTURA documentului: pe pagina de start întrebările stau
+ * sub un `h2`, deci sunt `h3`; pe `/intrebari-frecvente` stau direct sub `h1`-ul
+ * din `PageHero`, deci sunt `h2`. Cu un `h3` fix, pagina ar sări de la 1 la 3,
+ * iar cine navighează prin titluri cu cititorul de ecran vede o gaură în
+ * schemă și nu știe dacă i-a scăpat ceva.
+ *
+ * ⚠ Placa NU se centrează singură. Pe pagina de start capul secțiunii e centrat
+ * și placa primește `mx-auto`; pe `/intrebari-frecvente` titlul e la STÂNGA, iar
+ * o placă centrată sub el pornea vizibil din alt loc decât titlul. Centrarea e
+ * a paginii, nu a plăcii.
+ */
+export function FaqAccordion({
+  nivelTitlu,
+  className,
+}: {
+  nivelTitlu: NivelTitlu;
+  className?: string;
+}) {
+  const [deschis, setDeschis] = useState<number | null>(null);
+
+  return (
+    <div
+      className={cn("placa max-w-[820px] overflow-hidden rounded-[16px]", className)}
+    >
+      {FAQS.map((faq, i) => (
+        <Intrebare
+          key={faq.question}
+          faq={faq}
+          nivelTitlu={nivelTitlu}
+          deschisa={deschis === i}
+          /* Una singură deschisă: cu zece răspunsuri lungi deschise deodată,
+             rândul căutat ajunge la câteva ecrane distanță de titlu. */
+          onToggle={() => setDeschis(deschis === i ? null : i)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -78,11 +121,14 @@ function Intrebare({
   faq,
   deschisa,
   onToggle,
+  nivelTitlu,
 }: {
   faq: FaqItem;
   deschisa: boolean;
   onToggle: () => void;
+  nivelTitlu: NivelTitlu;
 }) {
+  const Titlu = nivelTitlu;
   /* `useId` și nu indicele: două secțiuni de întrebări pe aceeași pagină (start
      și `/preturi` o au amândouă) ar produce altfel id-uri duplicate, iar
      `aria-controls` ar trimite spre panoul greșit. */
@@ -90,7 +136,7 @@ function Intrebare({
 
   return (
     <div className="border-t border-hairline first:border-t-0">
-      <h3>
+      <Titlu>
         <button
           type="button"
           onClick={onToggle}
@@ -120,7 +166,7 @@ function Intrebare({
             )}
           />
         </button>
-      </h3>
+      </Titlu>
 
       {/*
         Învelișul care se deschide. `grid-template-rows` merge de la `0fr` la

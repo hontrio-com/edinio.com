@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
+import { SectiuneCeInclude } from "@/components/website/sections/mentenanta/SectiuneCeInclude";
 import { siteMetadata } from "@/lib/website/metadata";
 
 export const metadata: Metadata = siteMetadata({
@@ -22,21 +23,25 @@ export const metadata: Metadata = siteMetadata({
  * De aceea foloseste `HeroPagina` — chiar cadrul hero-ului de pe pagina de
  * start, nu o copie a lui. Vezi nota din `sections/Hero.tsx`.
  *
- * ⚠ NETERMINATA. Deocamdata are doar hero-ul; sectiunile de sub el vin separat,
- * la cererea clientului. Nu e o coaja „in lucru" — hero-ul e final.
+ * ⚠ NETERMINATA. Are hero-ul si „Ce include"; restul sectiunilor vin separat, la
+ * cererea clientului. Ce e pana acum e final, nu coaja.
  */
 export default function MentenantaPage() {
   return (
-    <HeroPagina
-      title="Tu te ocupi de afacere. Noi ne ocupăm de partea tehnică."
-      lead="Actualizări, securitate, optimizări și probleme tehnice. Mentenanța magazinului tău este inclusă în Edinio, fără costuri suplimentare."
-      /*
-        Textul butonului e al clientului, cu diacriticele puse: el l-a scris
-        „Testeaza", dar regula site-ului e diacritice peste tot in textele de
-        fatada, iar aici ar fi stat sub un titlu care le are. Aceleasi cuvinte,
-        nu alta formulare.
-      */
-      cta={{ label: "Testează gratuit 15 zile", href: "/register" }}
-    />
+    <>
+      <HeroPagina
+        title="Tu te ocupi de afacere. Noi ne ocupăm de partea tehnică."
+        lead="Actualizări, securitate, optimizări și probleme tehnice. Mentenanța magazinului tău este inclusă în Edinio, fără costuri suplimentare."
+        /*
+          Textul butonului e al clientului, cu diacriticele puse: el l-a scris
+          „Testeaza", dar regula site-ului e diacritice peste tot in textele de
+          fatada, iar aici ar fi stat sub un titlu care le are. Aceleasi cuvinte,
+          nu alta formulare.
+        */
+        cta={{ label: "Testează gratuit 15 zile", href: "/register" }}
+      />
+
+      <SectiuneCeInclude />
+    </>
   );
 }

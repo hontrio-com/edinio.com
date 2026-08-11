@@ -1946,10 +1946,26 @@ export interface ProdusPentruEditare {
    * produs stins sa se poata scoate. Vezi `CatalogEdit.activ`.
    */
   activ: boolean;
+  /** Prima poza a produsului, pentru lista de alegere. `null` cand n-are niciuna. */
+  imagine: string | null;
   /** `null` cand produsul nu e variabil; altfel optiunile si combinatiile active. */
   variante: VarianteSlim | null;
   /** Configuratia bruta de trepte, ca panoul sa arate acelasi pachet ca magazinul. */
   trepte: unknown;
+}
+
+/**
+ * Prima poza a produsului, sau `null`.
+ *
+ * `products.images` e jsonb si vine din import, din formular si din librarie —
+ * deci poate fi orice: lipsa, lista goala, sau elemente care nu-s siruri. Se
+ * verifica, nu se presupune: un `String(images[0])` pe un obiect ar fi trimis
+ * „[object Object]" ca `src` catre `next/image`, si randul ar fi crapat.
+ */
+function primaImagine(brut: unknown): string | null {
+  if (!Array.isArray(brut)) return null;
+  const prima = brut.find((x) => typeof x === "string" && x.trim());
+  return typeof prima === "string" ? prima : null;
 }
 
 export async function searchOrderProducts(businessId: string, query: string): Promise<
@@ -1964,8 +1980,9 @@ export async function searchOrderProducts(businessId: string, query: string): Pr
   let q = supabase.from("products")
     // `page_sections` intra ca sa se poata alege o VARIANTA din panou. Nu pleaca
     // spre browser: se slabeste mai jos la titlu + pret + stoc (vreo doua sute
-    // de octeti in loc de o mie cinci sute pe produs).
-    .select("id, name, price, stock_quantity, track_inventory, is_bundle, page_sections")
+    // de octeti in loc de o mie cinci sute pe produs). Din `images` pleaca DOAR
+    // prima, din acelasi motiv.
+    .select("id, name, price, stock_quantity, track_inventory, is_bundle, images, page_sections")
     .eq("business_id", businessId)
     .eq("is_active", true)
     .order("name")
@@ -1984,6 +2001,7 @@ export async function searchOrderProducts(businessId: string, query: string): Pr
       is_bundle: !!p.is_bundle,
       // Cautarea filtreaza pe `is_active`, deci ce iese de aici e activ prin constructie.
       activ: true,
+      imagine: primaImagine(p.images),
       variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
       trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
     })),
@@ -2054,7 +2072,7 @@ export async function getOrderEditContext(businessId: string, orderId?: string):
       // FARA `is_active`: un produs stins intre timp ramane pe comanda, iar linia
       // lui trebuie sa se poata scoate. Aceeasi citire ca in `updateOrderDetails`.
       const { data: produse } = await supabase.from("products")
-        .select("id, name, price, stock_quantity, track_inventory, is_bundle, is_active, page_sections")
+        .select("id, name, price, stock_quantity, track_inventory, is_bundle, is_active, images, page_sections")
         .eq("business_id", businessId)
         .in("id", ids);
       for (const p of produse ?? []) {
@@ -2066,6 +2084,7 @@ export async function getOrderEditContext(businessId: string, orderId?: string):
           track_inventory: !!p.track_inventory,
           is_bundle: !!p.is_bundle,
           activ: !!p.is_active,
+          imagine: primaImagine(p.images),
           variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
           trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
         });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
@@ -65,6 +66,8 @@ interface PickerProduct {
   is_bundle: boolean;
   /** Mai e produsul in vanzare? Fals doar pe linii deja vandute, stinse intre timp. */
   activ: boolean;
+  /** Prima poza a produsului. `null` cand n-are niciuna. */
+  imagine: string | null;
   /** `null` cand produsul nu are variante de ales. */
   variante: VarianteSlim | null;
   trepte: unknown;
@@ -366,8 +369,15 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       : marketplace
         ? `Comanda vine din ${marketplace}, iar liniile ei se schimba din contul de acolo — altfel urmatoarea sincronizare le-ar scrie la loc. Datele clientului si adresa se pot corecta si de aici.`
         : null;
-  /** Adaugarea ramane exact cu conditia dinainte: doar factura o opreste. */
-  const adaugareBlocata: string | null = hasInvoice ? liniiBlocate : null;
+  /*
+   * Adaugarea ramane exact cu conditia dinainte: doar factura o opreste.
+   *
+   * Cand o opreste, motivul e ACELASI cu cel al liniilor si e deja scris mai sus,
+   * asa ca sectiunea de adaugare dispare cu totul in loc sa repete acelasi paragraf
+   * la doua degete distanta. Cand liniile sunt blocate din alt motiv (AWB emis,
+   * comanda de marketplace), adaugarea merge mai departe si sectiunea ramane.
+   */
+  const adaugareBlocata = hasInvoice;
 
   /*
    * Cotatia moare odata cu destinatia pentru care a fost ceruta.
@@ -911,19 +921,12 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
           </section>
 
           {/* Add products */}
-          <section className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">Adauga produse in comanda</p>
-
-            {adaugareBlocata ? (
-              <div className="flex items-start gap-2 p-3 bg-muted/40 border border-border rounded-lg">
-                <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-muted-foreground leading-relaxed">{adaugareBlocata}</p>
-              </div>
-            ) : (
-              <>
-                {added.length > 0 && (
-                  <div className="space-y-2">
-                    {added.map((l) => {
+          {!adaugareBlocata && (
+            <section className="space-y-3">
+              <p className="text-sm font-semibold text-foreground">Adauga produse in comanda</p>
+              {added.length > 0 && (
+                <div className="space-y-2">
+                  {added.map((l) => {
                       const cheie = cheieLinie(l.id, l.variantTitle);
                       // Cat adauga LINIA ASTA la comanda, nu `pret x cantitate`:
                       // la trepte si la contopire cele doua nu sunt acelasi
@@ -946,9 +949,9 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                           onScoate={() => setQty(cheie, 0)}
                         />
                       );
-                    })}
-                  </div>
-                )}
+                  })}
+                </div>
+              )}
 
                 {/* Panoul de variante: un produs variabil nu se poate adauga fara marime. */}
                 {picking && pickVariants && (
@@ -1024,8 +1027,21 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                             addProduct(p, null, p.price);
                           }}
                           disabled={out}
-                          className="flex w-full items-start gap-2 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                          <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-[3px]" />
+                          className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                          {/*
+                            Poza produsului, ca in lista de produse din panou: cu
+                            zece nume care incep la fel, ea e singurul lucru dupa
+                            care se deosebesc dintr-o privire. Cand lipseste, ramane
+                            patratul cu iconita — nu un gol care strica alinierea.
+                          */}
+                          {p.imagine ? (
+                            <Image src={p.imagine} alt="" width={40} height={40}
+                              className="w-10 h-10 rounded-lg object-cover border border-border shrink-0" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
                           {/*
                             Numele are toata latimea si se rupe, ca la detaliile
                             comenzii. Etichetele stau SUB el, nu langa: pe acelasi
@@ -1045,15 +1061,14 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                               )}
                             </div>
                           </div>
-                          <Plus className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <Plus className="h-4 w-4 text-primary shrink-0 mt-3" />
                         </button>
                       );
                     })
                   )}
-                </div>
-              </>
-            )}
-          </section>
+              </div>
+            </section>
+          )}
 
           {/* Warnings */}
           {isPaid && diferenta > 0 && (

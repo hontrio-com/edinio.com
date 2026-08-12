@@ -1,5 +1,6 @@
 import type { ProductSection } from "@/lib/store-sections";
 import type { MenuItem } from "@/lib/pages/menu";
+import type { InsignaFooterStocata } from "@/lib/storefront/footer-badges";
 
 /**
  * Forma lui `store_settings.page_content` asa cum o citeste storefrontul.
@@ -84,6 +85,19 @@ export interface StorePageContent {
    * inaintea produselor. Ce e STINS din panou nu apare in niciunul din cazuri.
    */
   show_empty_categories?: boolean;
+  /**
+   * Insignele proprii din subsol: autorizatii, certificari, sigle de autoritate.
+   *
+   * ANPC si Netopia sunt cablate in `FooterLegal` fiindca sunt aceleasi pentru
+   * toata lumea; astea nu sunt — un magazin veterinar arata ANSVSA, altul un ISO.
+   * Regulile de citire si de siguranta stau in `lib/storefront/footer-badges.ts`,
+   * NU in randare.
+   */
+  footer_badges?: InsignaFooterStocata[];
+  /** Ce scrie deasupra lor. Golit inseamna „doar imaginile". */
+  footer_badges_title?: string;
+  /** Stins inseamna tot „doar imaginile", fara sa se piarda textul scris. */
+  footer_badges_title_enabled?: boolean;
   product_sections?: ProductSection[];
   menu?: MenuItem[];
   /** Comerciantul a sters intrarea „Acasa"; vezi `meniuCuAcasa`. */

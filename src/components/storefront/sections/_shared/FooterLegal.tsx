@@ -5,6 +5,8 @@ import { CompanyIdentity } from "@/components/ministore/CompanyIdentity";
 import { NetopiaBadge } from "@/components/ministore/NetopiaBadge";
 import { EdinioCredit } from "@/components/ministore/EdinioCredit";
 import { POLICY_LINKS } from "@/lib/storefront/policy-links";
+import { citesteInsigneFooter } from "@/lib/storefront/footer-badges";
+import { cdnImage } from "@/lib/cdn-image";
 import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { ButonSetariCookie } from "./ButonSetariCookie";
@@ -52,6 +54,65 @@ const TON = {
 } as const;
 
 export type TonFooter = keyof typeof TON;
+
+/**
+ * Insignele proprii ale magazinului: autorizatii, certificari, sigle de
+ * autoritate.
+ *
+ * Sta langa ANPC fiindca raspunde la aceeasi intrebare a cumparatorului — cine
+ * garanteaza ca magazinul asta are voie sa vanda ce vinde — si INAINTEA
+ * Netopiei, care raspunde la alta („cum se plateste"). Locul mai conteaza si
+ * practic: randul se infasoara, iar o insigna de conformitate n-are ce cauta pe
+ * al doilea rand la un magazin cu multe pagini in subsol.
+ *
+ * Toate verificarile sunt facute deja in `citesteInsigneFooter`; aici nu se mai
+ * pune nicio intrebare despre date.
+ */
+function InsigneProprii({ ton }: { ton: TonFooter }) {
+  const { pageContent } = useStoreChrome();
+  const { insigne, titlu } = citesteInsigneFooter(pageContent);
+  if (insigne.length === 0) return null;
+  const t = TON[ton];
+
+  return (
+    <div className="shrink-0">
+      {titlu ? (
+        <p className={t.titlu}>{titlu}</p>
+      ) : (
+        // Fara titlu, imaginile ar urca cu un rand fata de blocurile vecine, care
+        // au unul: randul e aliniat la varf. Locul titlului ramane gol, ca
+        // magazinul care a ales „doar imaginea" sa nu-si vada subsolul strambat.
+        <p className={t.titlu} aria-hidden="true">&nbsp;</p>
+      )}
+      <div className="flex items-center gap-3 flex-wrap">
+        {insigne.map((b) => {
+          const img = (
+            // Nu `next/image`: proportiile insignelor sunt necunoscute si foarte
+            // diferite (ANSVSA aproape patrata, ANPC de 2,5 ori mai lata decat
+            // inalta), iar aici se fixeaza INALTIMEA si se lasa latimea din
+            // proportie. Acelasi tipar ca bannerele de hero, prin `cdnImage`
+            // pentru redimensionare la margine.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={cdnImage(b.image, b.maxWidth * 2)}
+              alt={b.alt}
+              style={{ height: b.height, maxWidth: b.maxWidth }}
+              className="w-auto object-contain rounded-md"
+            />
+          );
+          return b.href ? (
+            <a key={b.id} href={b.href} target="_blank" rel="noopener noreferrer"
+              className="hover:opacity-80 transition-opacity" title={b.alt}>
+              {img}
+            </a>
+          ) : (
+            <span key={b.id}>{img}</span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function FooterLegal({ ton = "inchis", cuPagini = true }: {
   ton?: TonFooter;
@@ -123,6 +184,9 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
           </a>
         </div>
       </div>
+
+      {/* Autorizatiile proprii ale magazinului (ANSVSA, ISO, ...), cand le are. */}
+      <InsigneProprii ton={ton} />
 
       {/* Plata securizata (Netopia) — badge obligatoriu cand plata cu cardul e activa */}
       <NetopiaBadge businessId={business.id} ton={ton} />

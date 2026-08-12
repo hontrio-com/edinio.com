@@ -14,6 +14,10 @@ import { ProductSectionsEditor } from "@/components/editor/ProductSectionsEditor
 import { updateBusiness } from "@/lib/actions/business.actions";
 import { updatePageContent } from "@/lib/actions/store.actions";
 import { type ProductSection } from "@/lib/store-sections";
+import {
+  INALTIME_INSIGNA_IMPLICITA, INALTIME_INSIGNA_MAX, INALTIME_INSIGNA_MIN,
+  MAX_INSIGNE_FOOTER, TITLU_INSIGNE_IMPLICIT, type InsignaFooterStocata,
+} from "@/lib/storefront/footer-badges";
 import type { Database } from "@/types/database.types";
 
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
@@ -59,6 +63,9 @@ interface PageContent {
   hide_products_without_images?: boolean;
   hide_out_of_stock_products?: boolean;
   show_empty_categories?: boolean;
+  footer_badges?: InsignaFooterStocata[];
+  footer_badges_title?: string;
+  footer_badges_title_enabled?: boolean;
   product_sections?: ProductSection[];
   hide_edinio_badge?: boolean;
   store_bg_color?: string;
@@ -321,6 +328,66 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
       return next;
     });
   }
+  /*
+   * Insignele proprii din subsol (autorizatii, certificari).
+   *
+   * Spre deosebire de bannere, imaginea se incarca IMEDIAT, nu la salvare: lista
+   * traieste direct in `page_content`, deci n-are unde sa tina un `File` pana la
+   * apasarea butonului. Randul apare abia dupa ce urcarea a reusit, ca sa nu
+   * ramana in editor o insigna cu o adresa `blob:` care dispare la refresh.
+   */
+  const insigneInputRef = useRef<HTMLInputElement>(null);
+  const [insignePickerOpen, setInsignePickerOpen] = useState(false);
+  const [insigneUploading, setInsigneUploading] = useState(false);
+
+  function adaugaInsigna(image: string) {
+    setPageContent((p) => {
+      const lista = p.footer_badges ?? [];
+      if (lista.length >= MAX_INSIGNE_FOOTER) return p;
+      return {
+        ...p,
+        footer_badges: [...lista, {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          image,
+          href: "",
+          alt: "",
+          height: INALTIME_INSIGNA_IMPLICITA,
+        }],
+      };
+    });
+  }
+
+  async function adaugaInsignaDinFisier(file: File) {
+    if (!file.type.startsWith("image/")) { toast.error("Fisierul trebuie sa fie o imagine"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imaginea trebuie sa fie sub 5MB"); return; }
+    setInsigneUploading(true);
+    const url = await uploadFile(file, "logos");
+    setInsigneUploading(false);
+    if (!url) { toast.error("Imaginea nu s-a putut incarca"); return; }
+    adaugaInsigna(url);
+  }
+
+  function schimbaInsigna(i: number, patch: Partial<InsignaFooterStocata>) {
+    setPageContent((p) => ({
+      ...p,
+      footer_badges: (p.footer_badges ?? []).map((b, j) => (j === i ? { ...b, ...patch } : b)),
+    }));
+  }
+
+  function stergeInsigna(i: number) {
+    setPageContent((p) => ({ ...p, footer_badges: (p.footer_badges ?? []).filter((_, j) => j !== i) }));
+  }
+
+  function mutaInsigna(i: number, dir: -1 | 1) {
+    setPageContent((p) => {
+      const lista = [...(p.footer_badges ?? [])];
+      const j = i + dir;
+      if (j < 0 || j >= lista.length) return p;
+      [lista[i], lista[j]] = [lista[j], lista[i]];
+      return { ...p, footer_badges: lista };
+    });
+  }
+
   const [primaryColor, setPrimaryColor] = useState(business.primary_color);
   const [customHex, setCustomHex] = useState(business.primary_color);
 
@@ -427,6 +494,12 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     hide_products_without_images: rawPageContent.hide_products_without_images ?? false,
     hide_out_of_stock_products: rawPageContent.hide_out_of_stock_products ?? false,
     show_empty_categories: rawPageContent.show_empty_categories ?? false,
+    footer_badges: rawPageContent.footer_badges ?? [],
+    // Titlul se scrie in stare cu implicitul, ca sa se vada in caseta din prima
+    // clipa: golit de om inseamna „fara titlu", iar asta trebuie sa fie o alegere
+    // vizibila, nu efectul unui camp care pare gol fiindca n-a fost salvat inca.
+    footer_badges_title: rawPageContent.footer_badges_title ?? TITLU_INSIGNE_IMPLICIT,
+    footer_badges_title_enabled: rawPageContent.footer_badges_title_enabled ?? true,
     product_sections: rawPageContent.product_sections ?? [],
     hide_edinio_badge: rawPageContent.hide_edinio_badge ?? false,
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
@@ -435,6 +508,9 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     favicon_url: rawPageContent.favicon_url ?? null,
     hero_show_content: rawPageContent.hero_show_content ?? false,
   });
+
+  /** Insignele proprii din subsol, citite din starea de mai sus. */
+  const insigne = pageContent.footer_badges ?? [];
 
   async function savePageContent() {
     setSaving("page");
@@ -1191,6 +1267,110 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed", !pageContent.hide_edinio_badge ? "bg-primary" : "bg-muted-foreground/30")}>
               <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", !pageContent.hide_edinio_badge ? "translate-x-4" : "translate-x-0")} />
             </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Insigne proprii in subsol: autorizatii, certificari, sigle de autoritate */}
+          <div className="space-y-2">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Autorizatii si certificari in footer</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Sigle proprii care apar in subsolul magazinului, pe toate paginile, langa insignele ANPC. De exemplu insigna ANSVSA pentru magazinele veterinare sau un certificat ISO.
+              </p>
+            </div>
+
+            {insigne.map((b, i) => (
+              <div key={b.id ?? i} className="border border-border rounded-lg p-2.5 space-y-2">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-16 h-16 rounded-lg border border-border bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={b.image} alt="" className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <input type="text" value={b.href ?? ""}
+                      onChange={(e) => schimbaInsigna(i, { href: e.target.value })}
+                      placeholder="Link la apasare (optional): https://..."
+                      className={inputCls + " !py-1.5 !text-xs"} />
+                    <input type="text" value={b.alt ?? ""}
+                      onChange={(e) => schimbaInsigna(i, { alt: e.target.value })}
+                      placeholder="Text alternativ (ce citeste un cititor de ecran)"
+                      className={inputCls + " !py-1.5 !text-xs"} />
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <button type="button" aria-label="Muta sus" disabled={i === 0} onClick={() => mutaInsigna(i, -1)}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" aria-label="Muta jos" disabled={i === insigne.length - 1} onClick={() => mutaInsigna(i, 1)}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" aria-label="Sterge insigna" onClick={() => stergeInsigna(i)}
+                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-red-500 hover:bg-red-50">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {/* Marimea: se fixeaza INALTIMEA, latimea vine din proportia
+                    imaginii — insignele au forme foarte diferite, iar o latime
+                    impusa le-ar turti pe cele aproape patrate. */}
+                <div className="flex items-center gap-2.5">
+                  <label htmlFor={`insigna-h-${i}`} className="text-[10px] text-muted-foreground whitespace-nowrap">Inaltime</label>
+                  <input id={`insigna-h-${i}`} type="range"
+                    min={INALTIME_INSIGNA_MIN} max={INALTIME_INSIGNA_MAX} step={2}
+                    value={b.height ?? INALTIME_INSIGNA_IMPLICITA}
+                    onChange={(e) => schimbaInsigna(i, { height: Number(e.target.value) })}
+                    className="flex-1 accent-primary" />
+                  <input type="number"
+                    min={INALTIME_INSIGNA_MIN} max={INALTIME_INSIGNA_MAX}
+                    value={b.height ?? INALTIME_INSIGNA_IMPLICITA}
+                    onChange={(e) => schimbaInsigna(i, { height: Number(e.target.value) })}
+                    aria-label="Inaltimea insignei in pixeli"
+                    className="w-16 px-2 py-1 text-xs border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary" />
+                  <span className="text-[10px] text-muted-foreground">px</span>
+                </div>
+              </div>
+            ))}
+
+            {insigne.length < MAX_INSIGNE_FOOTER && (
+              <>
+                <button type="button" disabled={insigneUploading} onClick={() => insigneInputRef.current?.click()}
+                  className="w-full h-16 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50">
+                  {insigneUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  <span className="text-xs">Adauga o insigna ({insigne.length}/{MAX_INSIGNE_FOOTER})</span>
+                </button>
+                <input ref={insigneInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void adaugaInsignaDinFisier(f); e.target.value = ""; }} />
+                <button type="button" onClick={() => setInsignePickerOpen(true)}
+                  className="text-[11px] font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
+                <MediaPicker open={insignePickerOpen} onClose={() => setInsignePickerOpen(false)} accept="image" bucket="logos"
+                  onSelect={(urls) => { if (urls[0]) adaugaInsigna(urls[0]); }} />
+              </>
+            )}
+
+            {insigne.length > 0 && (
+              <div className="rounded-lg border border-border p-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <label className="text-xs font-semibold text-foreground">Titlu deasupra insignelor</label>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Stins, in subsol raman doar imaginile, fara niciun cuvant deasupra.</p>
+                  </div>
+                  <button type="button"
+                    onClick={() => setPageContent(p => ({ ...p, footer_badges_title_enabled: !(p.footer_badges_title_enabled !== false) }))}
+                    className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.footer_badges_title_enabled !== false ? "bg-primary" : "bg-muted-foreground/30")}>
+                    <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.footer_badges_title_enabled !== false ? "translate-x-4" : "translate-x-0")} />
+                  </button>
+                </div>
+                {pageContent.footer_badges_title_enabled !== false && (
+                  <input type="text" value={pageContent.footer_badges_title ?? ""}
+                    onChange={(e) => setPageContent(p => ({ ...p, footer_badges_title: e.target.value }))}
+                    placeholder={`${TITLU_INSIGNE_IMPLICIT} (lasa gol ca sa nu apara niciun titlu)`}
+                    maxLength={40}
+                    className={inputCls + " !py-1.5 !text-xs"} />
+                )}
+              </div>
+            )}
           </div>
 
           <hr className="border-border" />

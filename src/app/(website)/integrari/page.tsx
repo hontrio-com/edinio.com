@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
+import { BibliotecaIntegrari } from "@/components/website/sections/integrations/BibliotecaIntegrari";
 import { CampSigle } from "@/components/website/sections/integrations/CampSigle";
 import { stiluriBanda } from "@/lib/website/integrari-hero";
 import { siteMetadata } from "@/lib/website/metadata";
@@ -29,25 +30,30 @@ export const metadata: Metadata = siteMetadata({
  * ⚠ NETERMINATĂ. Are hero-ul; lista întreagă a integrărilor, pe categorii, vine
  * separat. Ce e până acum e final, nu coajă.
  *
- * ⚠ TEXTELE SUNT CELE DE DINAINTE, neatinse. Aveau și un supratitlu „Integrări",
- * scos aici: `HeroPagina` n-are pastilă deasupra titlului (vezi nota din
- * `Hero.tsx`), iar titlul spune oricum cuvântul. De confirmat cu clientul.
+ * ⚠ TITLUL ȘI DESCRIEREA SUNT ALE CLIENTULUI, date cuvânt cu cuvânt
+ * (2026-08-13). Nu se rescriu. Au înlocuit „Peste 25 de integrări…", și odată cu
+ * ele a dispărut și nepotrivirea cu banda de pe pagina de start, care zicea
+ * „Zeci de integrări": acum niciuna nu mai dă o cifră.
  *
- * ⚠ Titlul zice „Peste 25", iar secțiunea de pe pagina de start zice „Zeci de
- * integrări" — a treia formă cerută de client, tot mai puțin precisă. Nu se
- * contrazic, dar dacă se uniformizează vreodată, aici e locul rămas în urmă.
+ * ⚠ Supratitlul „Integrări" a fost scos: `HeroPagina` n-are pastilă deasupra
+ * titlului (vezi nota din `Hero.tsx`), iar titlul spune oricum cuvântul.
+ * De confirmat cu clientul.
  */
 export default function IntegrariPage() {
   return (
-    <HeroPagina
-      title="Peste 25 de integrări, pregătite din prima zi"
-      lead="Facturare, curierat, plăți, e-mail marketing, Google și marketplace-uri. Fiecare se activează cu propriile tale chei, în câteva minute."
-      cta={{ label: "Începe gratuit", href: "/register" }}
-      secundara={{ label: "Vezi prețurile", href: "/preturi" }}
-      fundal={<CampSigle />}
-      /* Spațierea vine din benzile siglelor, nu din ochi: exact zona în care
-         plutesc casetele e zona în care textul nu are voie să intre. */
-      spatiere={stiluriBanda() as CSSProperties}
-    />
+    <>
+      <HeroPagina
+        title="Toate integrările de care ai nevoie, pregătite din prima zi"
+        lead="Facturare, curierat, plăți, e-mail marketing, Google și marketplace-uri. Le conectezi direct din Edinio, folosind propriile tale conturi."
+        cta={{ label: "Începe gratuit", href: "/register" }}
+        secundara={{ label: "Vezi prețurile", href: "/preturi" }}
+        fundal={<CampSigle />}
+        /* Spațierea vine din benzile siglelor, nu din ochi: exact zona în care
+           plutesc casetele e zona în care textul nu are voie să intre. */
+        spatiere={stiluriBanda() as CSSProperties}
+      />
+
+      <BibliotecaIntegrari />
+    </>
   );
 }

@@ -20,6 +20,20 @@
  *   browserul ca să calculeze lățimea când îi dai o înălțime, deci ăsta trebuie
  *   să fie exact, altfel iese altceva decât am socotit.
  *
+ *   ⚠ ȘI E UȘOR DE CONFUNDAT CU CEL AL DESENULUI. Coincid la orice fișier tăiat
+ *   pe contur — adică la aproape toate — deci greșeala nu se vede până nu dai
+ *   peste unul care nu e. La `colete-online.svg` diferența era mare: fișierul
+ *   declară `width="256px" height="256px"`, deci CUTIA e pătrată, dar viewBox-ul
+ *   e strâns pe un desen de 0,60. Aici scria 0,60, iar sigla ieșea la 60% din
+ *   mărimea vecinelor ei, în bandă și în hero. La un SVG, cutia vine din
+ *   `width`/`height` când există, NU din viewBox.
+ *
+ *   Cum se măsoară fără greșeală: pui fișierul într-un `<img>` cu înălțime fixă
+ *   și `max-width: none` (fără el, preflight-ul Tailwind îl taie la lățimea
+ *   ferestrei și opt sigle ies cu același raport), citești
+ *   `getBoundingClientRect()` pentru CUTIE, apoi îl desenezi pe o pânză și îi
+ *   tai marginile pentru CERNEALĂ.
+ *
  * `ink` — cât din cutie e chiar desen, între 0 și 1. La un fișier tăiat pe contur
  *   e 1 și se omite. La unul cu margini goale e mai mic, iar `logoSize()` îl
  *   mărește exact cât să compenseze. Fără el, o siglă cu 25% margine iese cu un
@@ -118,7 +132,10 @@ export const PROVIDER_LOGOS = {
   sameday: { name: "Sameday", src: `${I}/sameday-mic.webp`, ratio: 0.99 },
   cargus: { name: "Cargus", src: `${I}/cargus-mic.webp`, ratio: 1.3 },
   dpd: { name: "DPD", src: `${I}/dpd.svg`, ratio: 2.38 },
-  coleteOnline: { name: "Colete Online", src: `${I}/colete-online.svg`, ratio: 0.6 },
+  /* Cutia e PĂTRATĂ (`width`/`height` 256px pe `<svg>`), iar viewBox-ul strâns
+     la 0,60 e desenul dinăuntru. Aici scria 0,60 și sigla ieșea la 60% din
+     mărimea vecinelor. Vezi avertismentul de la `ratio`. */
+  coleteOnline: { name: "Colete Online", src: `${I}/colete-online.svg`, ratio: 1, ink: 0.6 },
   /* Singura care nu e taiata: 200x200 si 3,8KB, iar reincodarea a iesit de trei
      ori mai mare. Desenul acopera 183x161 din cutie, adica 74%. */
   woot: { name: "Woot", src: `${I}/woot.webp`, ratio: 1, ink: 0.74 },
@@ -133,7 +150,7 @@ export const PROVIDER_LOGOS = {
      integrarea peste tot in platforma (`lib/ipay.ts`, mailuri, dashboard). */
   ipay: { name: "BT iPay", src: `${I}/ipay-mic.webp`, ratio: 1.68 },
   klarna: { name: "Klarna", src: `${I}/klarna.svg`, ratio: 4.49 },
-  revolut: { name: "Revolut", src: `${I}/revolut.svg`, ratio: 4.41 },
+  revolut: { name: "Revolut", src: `${I}/revolut.svg`, ratio: 4.32, ink: 0.97 },
 
   /* ── Facturare ─────────────────────────────────────────────────────────── */
   smartbill: { name: "SmartBill", src: `${I}/smartbill-mic.webp`, ratio: 0.84 },
@@ -156,12 +173,12 @@ export const PROVIDER_LOGOS = {
 
   /* ── Marketplace ───────────────────────────────────────────────────────── */
   olx: { name: "OLX", src: `${I}/olx.svg`, ratio: 1.73 },
-  aboutYou: { name: "About You", src: `${I}/aboutyou.png`, ratio: 9.13 },
+  aboutYou: { name: "About You", src: `${I}/aboutyou.png`, ratio: 9.86, ink: 0.92 },
   trendyol: { name: "Trendyol", src: `${I}/trendyol.svg`, ratio: 4.35 },
 
   /* ── Marketing și statistici ───────────────────────────────────────────── */
   facebookPixel: { name: "Facebook Pixel", src: `${I}/facebook-pixel.svg`, ratio: 1 },
-  tiktokPixel: { name: "TikTok Pixel", src: `${I}/tiktok-pixel.svg`, ratio: 0.83, ink: 0.88 },
+  tiktokPixel: { name: "TikTok Pixel", src: `${I}/tiktok-pixel.svg`, ratio: 0.73, ink: 0.88 },
   googleAds: { name: "Google Ads", src: `${I}/google-ads.svg`, ratio: 1.09 },
   googleMerchant: {
     name: "Google Merchant Center",
@@ -174,6 +191,77 @@ export const PROVIDER_LOGOS = {
     ratio: 1,
     ink: 0.81,
   },
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     RESTUL BIBLIOTECII: ce apare în „Biblioteca de integrări" de pe `/integrari`
+
+     Cele de mai sus sunt siglele din banda de pe pagina de start. Astea de aici
+     sunt restul catalogului — livrate care nu încăpuseră în bandă, plus cele 34
+     anunțate cu „În curând".
+
+     ⚠ NU sunt în `LOGO_GROUPS`, deci NU intră în bandă, și e dinadins: banda
+     spune „astea merg azi". O siglă anunțată, pusă acolo, ar fi o promisiune.
+
+     Toate numerele sunt MĂSURATE la 2026-08-13, cu rețeta din avertismentul de
+     la `ratio`: cutia din `getBoundingClientRect()` pe un `<img>` cu
+     `max-width: none`, cerneala din pânză cu marginile tăiate.
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /* ── Curieri ───────────────────────────────────────────────────────────── */
+  gls: { name: "GLS", src: `${I}/gls.svg`, ratio: 2.85, ink: 0.94 },
+  pallex: { name: "Pall-Ex", src: `${I}/pallex.avif`, ratio: 2.85, ink: 0.78 },
+  ecolet: { name: "eColet", src: `${I}/ecolet.png`, ratio: 3.23 },
+  dhl: { name: "DHL", src: `${I}/dhl.svg`, ratio: 3.23 },
+  fedex: { name: "FedEx", src: `${I}/fedex.svg`, ratio: 3.61 },
+  ups: { name: "UPS", src: `${I}/ups.svg`, ratio: 0.84 },
+  postaRomana: { name: "Poșta Română", src: `${I}/posta_romana.svg`, ratio: 2.01 },
+  packeta: { name: "Packeta", src: `${I}/packeta.png`, ratio: 0.96, ink: 0.86 },
+  innoship: { name: "Innoship", src: `${I}/innoship.svg`, ratio: 2.6, ink: 0.67 },
+  smartship: { name: "SmartShip", src: `${I}/smartship.png`, ratio: 4.72, ink: 0.84 },
+  shipo: { name: "Shipo.ro", src: `${I}/shipo.ro.svg`, ratio: 1.81 },
+
+  /* ── Facturare ─────────────────────────────────────────────────────────── */
+  saga: { name: "SAGA", src: `${I}/saga.svg`, ratio: 5.97 },
+  /* Desenată integral în ALB, măsurat: 100% din cerneală peste 225 luminozitate.
+     Fără inversare, cardul ei e literalmente gol. La fel ca Netopia. */
+  facturis: { name: "Facturis", src: `${I}/facturis.png`, ratio: 3.55, ink: 0.94, invert: true },
+  easybill: { name: "EasyBill", src: `${I}/easybill.png`, ratio: 1.25, ink: 0.55 },
+  factureaza: { name: "Factureaza.ro", src: `${I}/factureaza.ro.webp`, ratio: 5.85 },
+
+  /* ── Email marketing ───────────────────────────────────────────────────── */
+  theMarketer: { name: "TheMarketer", src: `${I}/themarketer.svg`, ratio: 5.89 },
+
+  /* ── Plăți ─────────────────────────────────────────────────────────────── */
+  ingWebPay: { name: "ING WebPay", src: `${I}/ing.webp`, ratio: 4.02 },
+  payu: { name: "PayU", src: `${I}/payu.png`, ratio: 1.99 },
+  euplatesc: { name: "EuPlătesc", src: `${I}/euplatesc.svg`, ratio: 5.56 },
+  tbi: { name: "TBI Bank", src: `${I}/tbi.svg`, ratio: 2.3 },
+  unicredit: { name: "UniCredit", src: `${I}/unicredit.png`, ratio: 5.13 },
+  viva: { name: "Viva.com", src: `${I}/viva.png`, ratio: 3.19, ink: 0.93 },
+  libraPay: { name: "Libra Pay", src: `${I}/librapay.png`, ratio: 3.57 },
+  bcr: { name: "BCR", src: `${I}/bcr.webp`, ratio: 2.73 },
+  saltBank: { name: "Salt Bank", src: `${I}/saltbank.svg`, ratio: 2.15 },
+
+  /* ── Marketplace ───────────────────────────────────────────────────────── */
+  emag: { name: "eMAG", src: `${I}/emag.webp`, ratio: 3.73, ink: 0.99 },
+  altex: { name: "Altex", src: `${I}/altex.webp`, ratio: 3.71 },
+  cel: { name: "Cel.ro", src: `${I}/cel.ro.webp`, ratio: 3.7, ink: 0.94 },
+  okazii: { name: "Okazii.ro", src: `${I}/okazii.ro.svg`, ratio: 6.05 },
+  pepita: { name: "Pepita.com", src: `${I}/pepita.svg`, ratio: 3.64, ink: 0.57 },
+  compari: { name: "Compari.ro", src: `${I}/compari.ro.png`, ratio: 4.44, ink: 0.4 },
+  baseLinker: { name: "BaseLinker", src: `${I}/baselinker.png`, ratio: 3.82, ink: 0.91 },
+
+  /* ── Marketing ─────────────────────────────────────────────────────────── */
+  /* Același fișier ca Facebook Pixel: e aceeași marcă, iar Meta n-are o siglă
+     separată pentru catalog. Numele le deosebește. */
+  facebookCatalog: { name: "Facebook Catalog", src: `${I}/facebook-pixel.svg`, ratio: 1 },
+  optinMonster: { name: "OptinMonster", src: `${I}/optinmonster.png`, ratio: 6.69 },
+
+  /* ── Suport clienți ────────────────────────────────────────────────────── */
+  tidio: { name: "Tidio", src: `${I}/tidio.png`, ratio: 2.2, ink: 0.43 },
+  intercom: { name: "Intercom", src: `${I}/intercom.svg`, ratio: 3.89 },
+  zendesk: { name: "Zendesk", src: `${I}/zendesk.svg`, ratio: 1.4 },
+  tawkto: { name: "Tawk.to", src: `${I}/tawkto.png`, ratio: 3, ink: 0.69 },
 } as const satisfies Record<string, ProviderLogo>;
 
 export type LogoKey = keyof typeof PROVIDER_LOGOS;

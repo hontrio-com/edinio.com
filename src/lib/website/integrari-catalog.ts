@@ -535,6 +535,24 @@ export function potrivire(integrare: Integrare, cautare: string): boolean {
   return cuvinte.every((c) => text.includes(c));
 }
 
+/**
+ * Aceeași listă, cu cele care merg azi înaintea celor anunțate.
+ *
+ * Cerut de client (2026-08-13) pentru „Toate". Rostul e limpede: cine intră pe
+ * pagină vrea să știe întâi ce POATE folosi. Amestecate, primele nouă carduri
+ * erau curieri — dintre care doi anunțați — și pagina începea cu o promisiune.
+ *
+ * Sortare STABILĂ: `Array.prototype.sort` e stabil peste tot din ES2019, deci
+ * ordinea pe rubrici din `INTEGRARI` rămâne întreagă înăuntrul fiecărei grupe.
+ * Se aplică și când e aleasă o singură rubrică — acolo n-are ce schimba, fiindcă
+ * lista e deja scrisă cu activele întâi, dar așa regula stă într-un singur loc.
+ */
+export function ordonate(lista: Integrare[]): Integrare[] {
+  return [...lista].sort(
+    (a, b) => (a.stare === "activa" ? 0 : 1) - (b.stare === "activa" ? 0 : 1),
+  );
+}
+
 /** Câte integrări are fiecare rubrică. */
 export function numarPeCategorie(): Record<CategorieId, number> {
   const numar = Object.fromEntries(CATEGORII.map((c) => [c.id, 0])) as Record<

@@ -11,6 +11,7 @@ import {
   faraDiacritice,
   numarPeCategorie,
   numele,
+  ordonate,
   potrivire,
   textDeCautare,
 } from "./integrari-catalog";
@@ -133,6 +134,31 @@ test("se potrivesc CUVINTELE, nu fraza", () => {
   for (const exemplu of ["Sameday", "facturare", "plăți în rate"]) {
     assert.ok(gaseste(exemplu).length > 0, `„${exemplu}" din bara de căutare nu găsește nimic`);
   }
+});
+
+test("cele care merg azi vin înaintea celor anunțate, fără să se amestece rubricile", () => {
+  const lista = ordonate(INTEGRARI);
+
+  /* Nicio „în curând" înaintea unei active. */
+  const primaAnuntata = lista.findIndex((i) => i.stare === "in-curand");
+  assert.ok(primaAnuntata > 0);
+  assert.ok(lista.slice(primaAnuntata).every((i) => i.stare === "in-curand"));
+
+  /*
+    Iar înăuntrul fiecărei grupe, ordinea pe rubrici rămâne cea din catalog —
+    asta cere ca sortarea să fie STABILĂ. O sortare instabilă ar fi amestecat
+    rubricile fără ca nimic să se plângă, iar pe pagină s-ar fi văzut ca o listă
+    la întâmplare.
+  */
+  const rubriciDinCatalog = (stare: string) =>
+    INTEGRARI.filter((i) => i.stare === stare).map((i) => i.categorie);
+  const rubriciDinListă = (stare: string) =>
+    lista.filter((i) => i.stare === stare).map((i) => i.categorie);
+  assert.deepEqual(rubriciDinListă("activa"), rubriciDinCatalog("activa"));
+  assert.deepEqual(rubriciDinListă("in-curand"), rubriciDinCatalog("in-curand"));
+
+  /* Și nu pierde și nu inventează nimic. */
+  assert.equal(lista.length, INTEGRARI.length);
 });
 
 test("numărătoarea de active și de anunțate e cea din panou", () => {

@@ -7,9 +7,8 @@ import { cn } from "@/lib/utils/cn";
 import {
   CATEGORII,
   INTEGRARI,
-  NUMAR_ACTIVE,
-  NUMAR_IN_CURAND,
   numele,
+  ordonate,
   potrivire,
   type CategorieId,
   type Integrare,
@@ -73,8 +72,17 @@ export function BibliotecaIntegrari() {
     return numar;
   }, [dupaCautare]);
 
+  /*
+    Cele care merg azi, întâi; cele anunțate, la sfârșit. Sortarea e stabilă,
+    deci ordinea pe rubrici rămâne întreagă în fiecare dintre cele două grupe.
+  */
   const rezultate = useMemo(
-    () => (rubrica === "toate" ? dupaCautare : dupaCautare.filter((i) => i.categorie === rubrica)),
+    () =>
+      ordonate(
+        rubrica === "toate"
+          ? dupaCautare
+          : dupaCautare.filter((i) => i.categorie === rubrica),
+      ),
     [dupaCautare, rubrica],
   );
 
@@ -86,9 +94,15 @@ export function BibliotecaIntegrari() {
           <h2 className="text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
             Biblioteca de integrări
           </h2>
-          <p className="mt-5 max-w-[600px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
-            {NUMAR_ACTIVE} de integrări gata de conectat și încă {NUMAR_IN_CURAND} pe
-            drum. Caută-ți furnizorul sau răsfoiește pe rubrici.
+          {/*
+            FĂRĂ CIFRE, cerut de client. Și e o alegere care se apără singură: un
+            număr scris aici s-ar fi demodat la prima integrare livrată, iar
+            atunci pagina ar fi spus altceva decât arată cardurile de sub ea.
+          */}
+          <p className="mt-5 max-w-[620px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
+            Răsfoiește biblioteca de integrări, din toate categoriile, sau caută
+            direct furnizorul cu care lucrezi deja. Cele marcate „În
+            curând&rdquo; sunt în lucru.
           </p>
         </div>
 
@@ -246,14 +260,36 @@ function NavigatieRubrici({
       </p>
 
       {/*
-        Pe telefon pastilele se ÎNFĂȘOARĂ, nu se derulează lateral. Sunt zece și
-        încap pe trei rânduri; într-o bandă derulabilă, cine nu ghicește că poate
-        trage lateral crede că astea sunt toate rubricile. Aceeași hotărâre ca la
-        tabelul de comparație.
+        Pe telefon rubricile stau într-o GRILĂ, nu într-un rând înfășurat.
+
+        Înfășurate, fiecare pastilă era exact cât textul ei, iar rândurile ieșeau
+        cu margini din dinți: „SMS" lângă „Email marketing", iar rândul următor
+        începea în alt loc. Nu era o problemă de spațiere, ci de LĂȚIMI DIFERITE
+        pe același rând — deci nu se repară cu alt `gap`. Într-o grilă de două
+        coloane toate au aceeași lățime, iar numerele se aliniază unul sub altul.
+
+        Zece rubrici, două coloane: cinci rânduri pline, fără nimic rămas singur
+        pe ultimul.
+
+        De la `md` sunt PATRU coloane, nu cinci, și numărul e măsurat. Cinci
+        împărțeau exact zece, deci păreau alegerea evidentă — dar la 768px
+        rămâneau 136px de pastilă, iar „Email marketing" cere 145 și se rupea pe
+        două rânduri. Cu patru ies 176px și încape tot pe un rând, cu prețul unui
+        ultim rând de două. Un rând mai scurt la sfârșit se citește ca listă; o
+        etichetă ruptă în două se citește ca greșeală.
+
+        ⚠ Etichetele NU primesc `whitespace-nowrap`: la 320px pastila are 133px
+        și atunci s-ar tăia textul. Mai bine se rupe pe două rânduri decât să
+        dispară o literă — iar în grilă toate pastilele rândului cresc odată, deci
+        rândul rămâne drept.
+
+        ⚠ NU se derulează lateral, la nicio lățime: cine nu ghicește că poate
+        trage crede că alea sunt toate rubricile. Aceeași hotărâre ca la tabelul
+        de comparație.
       */}
       <ul
         role="list"
-        className="mt-0 flex flex-wrap gap-2 lg:mt-3 lg:flex-col lg:gap-0.5"
+        className="mt-0 grid grid-cols-2 gap-2 md:grid-cols-4 lg:mt-3 lg:flex lg:flex-col lg:gap-0.5"
       >
         {rubrici.map((r) => {
           const cate = numar.get(r.id) ?? 0;
@@ -302,24 +338,25 @@ function NavigatieRubrici({
 /**
  * Caseta de sub rubrici — „INFO" din schiță.
  *
- * ⚠ TEXTUL E PUS DE MINE. Schița spune doar „INFO", fără să spună ce scrie
- * acolo. Am ales singurele două lucruri care i-ar folosi cuiva chiar în locul
- * ăsta: că integrările merg pe conturile LUI (deci nu plătește un intermediar),
- * și unde cere una care lipsește. De înlocuit când vine textul clientului.
+ * Textul e al clientului (2026-08-13), dat ca exemplu de sens, nu cuvânt cu
+ * cuvânt: „Lucrăm constant să acoperim toate integrările necesare. Dacă ai
+ * sugestii de integrări, ne poți contacta." Aici e aceeași idee, spusă în două
+ * rânduri scurte plus o legătură — dar dacă vrea forma lui exactă, se schimbă
+ * doar textul de mai jos.
  */
 function CasetaInformativa() {
   return (
     <div className="rounded-[12px] border border-hairline bg-tint p-4">
-      <p className="text-[13px] font-semibold text-ink">Cu conturile tale</p>
+      <p className="text-[13px] font-semibold text-ink">Lista crește</p>
       <p className="mt-1.5 text-[13px] leading-[1.55] text-ink-2">
-        Fiecare integrare se conectează cu propriul tău cont la furnizor. Nu
-        trece nimic prin noi și nu plătești un intermediar.
+        Lucrăm constant ca să acoperim toate integrările de care ai nevoie. Dacă
+        îți lipsește una, spune-ne.
       </p>
       <Link
         href="/contact"
         className="mt-3 inline-flex text-[13px] font-medium text-ink underline decoration-1 underline-offset-[5px] transition-opacity duration-200 hover:opacity-70"
       >
-        Îți lipsește una? Scrie-ne
+        Sugerează o integrare
       </Link>
     </div>
   );

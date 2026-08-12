@@ -1,12 +1,8 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
-import {
-  LOGO_AREA,
-  LOGOS_CASETA,
-  type LogoKey,
-} from "@/lib/website/logos";
-import { Logo } from "./Logo";
+import { LOGOS_CASETA, type LogoKey } from "@/lib/website/logos";
+import { CasetaSigla } from "./CasetaSigla";
 
 /**
  * Integrarile, ca doua benzi care curg in sensuri opuse.
@@ -355,26 +351,17 @@ function Banda({
 }
 
 /**
- * O caseta cu o sigla: patrat cu colturi rotunde, fond `tint-2`, fara chenar.
+ * O caseta cu o sigla: patrat cu colturi rotunde, alb, ridicat doar prin umbra.
  *
- * `maxWidth={56}` NU e stil, e latimea utila a casetei celei mai mici (68px, cu
- * 6px de respiratie de fiecare parte). Fara el, About You — raportul 9,13 — ar
- * iesi de 121px la suprafata `tile` si ar sparge randul. Cu el plus
- * `object-contain`, siglele foarte late se micsoreaza singure pana intra.
- * Se schimba DOAR odata cu latimea casetei de pe telefon.
+ * Desenul si socoteala latimii utile stau in `CasetaSigla`, folosita si de
+ * campul plutitor din hero-ul paginii „Integrari". Aici raman doar marimea si
+ * rotunjirea, adica singurele care difera intre cele doua locuri.
  */
 function Caseta({ cheie }: { cheie: LogoKey }) {
   return (
-    /*
-      `caseta-sigla` ADUCE albul si umbrele; nu se pune `bg-white` langa ea.
-      Socoteala umbrei — de ce patru straturi si nu unul — e in globals.css.
-
-      S-au incercat aici patru tratamente (granule, sticla cu refractie, crom,
-      relief) si clientul le-a respins pe toate (2026-08-07). A cerut alb curat,
-      deosebit de pagina doar prin umbra. Deci nimic in fond.
-    */
-    <div className="caseta-sigla flex h-[68px] w-[68px] items-center justify-center rounded-[16px] sm:h-[84px] sm:w-[84px]">
-      <Logo k={cheie} area={LOGO_AREA.tile} maxWidth={56} />
-    </div>
+    <CasetaSigla
+      cheie={cheie}
+      className="h-[68px] w-[68px] rounded-[16px] sm:h-[84px] sm:w-[84px]"
+    />
   );
 }

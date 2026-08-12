@@ -487,6 +487,181 @@
   box-shadow: var(--umbra-placa);
 }
 
+/* ─── Campul de sigle plutitoare (hero-ul paginii „Integrari") ────────────────
+
+   Saisprezece casete asezate ABSOLUT peste hero, fiecare plutind pe traseul ei.
+   Ferirea de cursor sta in `FerireDeCursor.tsx`; aici sunt asezarea si plutirea.
+
+   ═══ DE CE POZITIILE VIN DIN VARIABILE, NU DIN CLASE ═══
+
+   Pozitiile sunt DATE, in `lib/website/integrari-hero.ts`, fiindca sunt pazite
+   de o proba geometrica: saisprezece casete peste un text, la lãtimi de la 320
+   la 2560. Iar Tailwind nu poate genera clase din date — scanerul lui citeste
+   codul sursa, nu ce iese din el la randare. Deci fiecare caseta isi primeste
+   numerele ca variabile inline, si regulile de aici le folosesc.
+
+   Cele doua asezari (sub `lg` si de la `lg` in sus) sunt seturi DIFERITE de
+   numere, nu aceleasi micsorate: la 1024px titlul ocupa 900px si nu mai raman
+   margini laterale in care sa incapa o sigla. Motivul intreg e in fisierul de
+   date.
+
+   ═══ CENTRAREA E DIN MARGINI NEGATIVE, NU DIN `translate` ═══
+
+   E o alegere, nu un gust. `FerireDeCursor` are nevoie de centrul fiecarei
+   casete si il citeste din `offsetLeft`/`offsetTop`, adica din ASEZARE, nu din
+   `getBoundingClientRect()` — acela ar intoarce pozitia din timpul plutirii,
+   deci alta la fiecare cadru. Marginile negative intra in asezare; `translate`
+   nu intra. Pusa pe `translate`, centrarea ar fi trebuit desfacuta inapoi in
+   JavaScript, si altfel pentru casetele agatate de sus decat pentru cele agatate
+   de jos.
+
+   Ambele margini verticale se pun mereu: cea de sus n-are efect cand `top` e
+   `auto`, cea de jos n-are efect cand `bottom` e `auto`. Asa o singura regula
+   serveste amandoua ancorele. */
+.pluta {
+  /* ⚠ FLUIDA sub `lg`, si asta repara un defect masurat: cu 68px ficsi, patru
+     casete ocupa 272px dintr-un ecran de 320, deci raman 16px intre vecine — mai
+     putin decat cursa plutirii, si la un moment din tura chiar se ating. In `vw`
+     se micsoreaza in loc sa se inghesuie. Numerele sunt si in `integrari-hero.ts`
+     (`marimeaIngusta`), unde le foloseste proba de asezare. */
+  --marime: clamp(52px, 17vw, 68px);
+  /* Cat de tare pluteste, ca inmultitor al traseului. Vezi `CURSA`. */
+  --cursa: 0.7;
+  position: absolute;
+  width: var(--marime);
+  height: var(--marime);
+  margin-left: calc(var(--marime) / -2);
+  margin-top: calc(var(--marime) / -2);
+  margin-bottom: calc(var(--marime) / -2);
+  left: var(--x, 50%);
+  top: var(--sus, auto);
+  bottom: var(--jos, auto);
+}
+
+@media (min-width: 1024px) {
+  .pluta {
+    --marime: 84px;
+    --cursa: 1;
+    left: var(--x-lg, 50%);
+    top: var(--sus-lg, auto);
+    bottom: var(--jos-lg, auto);
+  }
+}
+
+/* Casetele de pe laturi se agata de MIJLOCUL inaltimii, nu de o muchie, si e
+   singurul loc unde asta e raspunsul corect: ele stau in dreptul textului, deci
+   trebuie sa ramana INTRE benzi. Masurate de sus, la un hero mai scurt ar fi
+   coborat peste banda de jos.
+
+   Regula vine dupa media query-ul de mai sus ca sa castige la aceeasi
+   specificitate; siglele astea oricum nu exista sub 1280. */
+@media (min-width: 1280px) {
+  .pluta-mijloc {
+    top: calc(50% + var(--mij, 0px));
+    bottom: auto;
+  }
+}
+
+/* Casetele care apar abia pe ecran lat. Ascunse cu `display`, nu cu `opacity` sau
+   `visibility`, si asta chiar conteaza: o imagine `loading="lazy"` dintr-un
+   element `display: none` nu ajunge niciodata in raza de incarcare, deci
+   telefonul nu descarca cele opt sigle pe care oricum nu le vede. */
+.pluta-de-la-lg { display: none; }
+@media (min-width: 1024px) { .pluta-de-la-lg { display: block; } }
+
+.pluta-de-la-xl { display: none; }
+@media (min-width: 1280px) { .pluta-de-la-xl { display: block; } }
+
+/* Plutirea. Cinci trasee, ca sa nu se vada ca e o singura animatie pusa de
+   saisprezece ori — acelasi motiv ca la petele de lumina din hero.
+
+   NUMAI `transform`: o translatie mica si o rotatie si mai mica. Fara `scale` si
+   fara `opacity`, din doua motive: o caseta care se umfla se citeste ca puls, iar
+   o umbra care se scaleaza cere repictare la fiecare cadru, pe cand una care se
+   muta ramane pe compozitor.
+
+   Cat de repede: cursa e de 7-9px pe un sfert de tura, turele au 11-17s, deci
+   vreo 3px/s in medie si vreo 5 in varf, cu `ease-in-out`. Destul cat sa se vada
+   ca traieste daca stai pe pagina, prea putin cat sa-ti ia ochii de pe titlu.
+
+   ⚠ TOTUL SE INMULTESTE CU `--cursa`, si nu e infrumusetare: pe ecran ingust
+   casetele sunt mai apropiate, iar cursa intreaga le-ar duce una peste alta.
+
+   ⚠ Nicio cheie n-are voie sa treaca de 9px sau de 3 grade. Sunt chiar
+   `CURSA_MAX` si `ROTATIE_MAX` din `lib/website/integrari-hero.ts`, adica exact
+   ce foloseste proba de asezare ca sa socoteasca unde POATE ajunge o caseta.
+   Marite aici si nu acolo, proba trece si siglele intra peste titlu. */
+@keyframes pluta-a {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  25% { transform: translate3d(calc(var(--cursa) * 5px), calc(var(--cursa) * -9px), 0) rotate(calc(var(--cursa) * 2.2deg)); }
+  50% { transform: translate3d(calc(var(--cursa) * -3px), calc(var(--cursa) * 3px), 0) rotate(calc(var(--cursa) * -1.2deg)); }
+  75% { transform: translate3d(calc(var(--cursa) * -6px), calc(var(--cursa) * 8px), 0) rotate(calc(var(--cursa) * -2.6deg)); }
+}
+
+@keyframes pluta-b {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  30% { transform: translate3d(calc(var(--cursa) * -7px), calc(var(--cursa) * 7px), 0) rotate(calc(var(--cursa) * -2.4deg)); }
+  60% { transform: translate3d(calc(var(--cursa) * 4px), calc(var(--cursa) * -6px), 0) rotate(calc(var(--cursa) * 1.8deg)); }
+  85% { transform: translate3d(calc(var(--cursa) * 6px), calc(var(--cursa) * 3px), 0) rotate(calc(var(--cursa) * 2.8deg)); }
+}
+
+@keyframes pluta-c {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  20% { transform: translate3d(calc(var(--cursa) * 6px), calc(var(--cursa) * 6px), 0) rotate(calc(var(--cursa) * 2.6deg)); }
+  45% { transform: translate3d(calc(var(--cursa) * -5px), calc(var(--cursa) * 9px), 0) rotate(calc(var(--cursa) * -1.6deg)); }
+  70% { transform: translate3d(calc(var(--cursa) * -4px), calc(var(--cursa) * -7px), 0) rotate(calc(var(--cursa) * -2.2deg)); }
+}
+
+@keyframes pluta-d {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  35% { transform: translate3d(calc(var(--cursa) * -6px), calc(var(--cursa) * -8px), 0) rotate(calc(var(--cursa) * -2.8deg)); }
+  65% { transform: translate3d(calc(var(--cursa) * 7px), calc(var(--cursa) * 4px), 0) rotate(calc(var(--cursa) * 2.1deg)); }
+  85% { transform: translate3d(calc(var(--cursa) * 2px), calc(var(--cursa) * 9px), 0) rotate(calc(var(--cursa) * 0.8deg)); }
+}
+
+@keyframes pluta-e {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  28% { transform: translate3d(calc(var(--cursa) * 8px), calc(var(--cursa) * -5px), 0) rotate(calc(var(--cursa) * 3deg)); }
+  52% { transform: translate3d(calc(var(--cursa) * -2px), calc(var(--cursa) * -9px), 0) rotate(calc(var(--cursa) * -0.9deg)); }
+  76% { transform: translate3d(calc(var(--cursa) * -7px), calc(var(--cursa) * 6px), 0) rotate(calc(var(--cursa) * -2.4deg)); }
+}
+
+/* Invelis separat pentru plutire: `transform`-ul lui `.pluta` e ocupat de ferirea
+   de cursor, iar doua animatii nu pot imparti aceeasi proprietate. */
+.pluta-leagan {
+  width: 100%;
+  height: 100%;
+  animation: var(--cale) var(--durata) ease-in-out var(--decalaj) infinite;
+  will-change: transform;
+}
+
+/* Fara miscare, casetele raman exact unde le prinde: nu se ascunde nimic si nu se
+   rearanjeaza nimic. Ferirea de cursor nici nu se cableaza — vezi componenta. */
+@media (prefers-reduced-motion: reduce) {
+  .pluta-leagan {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+/* Spatierea hero-ului cand sub el pluteste un camp de sigle.
+
+   Numerele nu se scriu aici: vin din `BANDA`, prin `stiluriBanda()`, ca sa existe
+   o singura sursa pentru „cat spatiu tin siglele" si „cat spatiu lasa textul".
+   Cu doua seturi, primul care s-ar fi schimbat ar fi lasat siglele peste titlu —
+   si abia pe ecranul cuiva. */
+.hero-banda {
+  padding-top: var(--banda-sus);
+  padding-bottom: var(--banda-jos);
+}
+
+@media (min-width: 1024px) {
+  .hero-banda {
+    padding-top: var(--banda-sus-lg);
+    padding-bottom: var(--banda-jos-lg);
+  }
+}
+
 /* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────
    Cerut de client: „Facebook" cu albastrul lor si „Instagram" cu culoarea lor.
 

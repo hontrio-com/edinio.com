@@ -32,11 +32,21 @@ export function Logo({
   area,
   maxWidth,
   className,
+  prioritara,
 }: {
   k: LogoKey;
   area: number;
   maxWidth?: number;
   className?: string;
+  /**
+   * Sigla se vede din prima clipă, deci se cere imediat, nu leneș.
+   *
+   * Implicit e `lazy`, fiindcă siglele apar mai jos pe pagină. În hero-ul paginii
+   * „Integrări" însă opt dintre ele sunt chiar primul ecran, iar `lazy` acolo le
+   * arată cu o clipă mai târziu decât titlul, ca niște casete goale care se
+   * umplu pe rând.
+   */
+  prioritara?: boolean;
 }) {
   /*
    * Adnotarea NU e de forma. `PROVIDER_LOGOS` e declarat
@@ -61,7 +71,7 @@ export function Logo({
            inversarea da aceeasi marca in negru. Vezi nota din `logos.ts`. */
         ...(logo.invert ? { filter: "invert(1)" } : null),
       }}
-      loading="lazy"
+      loading={prioritara ? "eager" : "lazy"}
       decoding="async"
       className={cn("w-auto shrink-0 object-contain", className)}
     />

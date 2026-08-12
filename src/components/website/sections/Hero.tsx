@@ -1,5 +1,7 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 import { HeroMesh } from "./hero-backgrounds";
 
 /**
@@ -33,6 +35,8 @@ function HeroCadru({
   lead,
   principala,
   secundara,
+  fundal,
+  spatiere,
 }: {
   /** Pastila de deasupra titlului. Lipsește pe paginile care n-au ce anunța. */
   eticheta?: React.ReactNode;
@@ -40,6 +44,25 @@ function HeroCadru({
   lead: string;
   principala: Actiune;
   secundara?: Actiune;
+  /**
+   * Ce se mai desenează în spatele textului, peste lumina verde.
+   *
+   * Azi îl folosește o singură pagină, „Integrări", cu câmpul ei de sigle care
+   * plutesc. Stă ca prop și nu ca o a treia copie a hero-ului din același motiv
+   * pentru care există `HeroPagina`: cadrul e unul singur, iar o corectură la
+   * titlu sau la butoane trebuie să se vadă peste tot.
+   */
+  fundal?: React.ReactNode;
+  /**
+   * Spațierea de sus și de jos, ca variabile CSS, când textul trebuie să lase
+   * loc pentru `fundal`.
+   *
+   * Numerele NU se scriu aici: vin de la cel care desenează fundalul (vezi
+   * `stiluriBanda()` din `lib/website/integrari-hero.ts`), fiindcă acolo se știe
+   * cât spațiu ocupă el. Cu două seturi de numere, primul schimbat ar fi lăsat
+   * fundalul peste titlu.
+   */
+  spatiere?: CSSProperties;
 }) {
   return (
     /*
@@ -51,14 +74,27 @@ function HeroCadru({
      */
     <section className="relative isolate -mt-18 overflow-hidden bg-white pt-18">
       <HeroMesh />
+      {fundal}
 
       {/*
         Spatiul de sus e mult mai mic pe telefon decat pe ecran mare. Pe desktop,
         o respiratie de 112px face hero-ul sa para asezat; pe un ecran de 650px
         inaltime, aceeasi respiratie manaca a cincea parte din tot ce se vede
         inainte de derulare si impinge butonul spre marginea de jos.
+
+        Cand vine spatiere din afara, clasele de padding NU se mai pun deloc.
+        Puse amandoua, ar fi ramas la mila ordinii din fisierul de stiluri — iar
+        cine ar fi citit codul n-ar fi avut de unde sa stie care castiga.
       */}
-      <div className="relative mx-auto max-w-[1200px] px-5 pt-10 pb-16 text-center sm:px-6 sm:pt-16 sm:pb-20 lg:px-8 lg:pt-28 lg:pb-32">
+      <div
+        className={cn(
+          "relative mx-auto max-w-[1200px] px-5 text-center sm:px-6 lg:px-8",
+          spatiere
+            ? "hero-banda"
+            : "pt-10 pb-16 sm:pt-16 sm:pb-20 lg:pt-28 lg:pb-32",
+        )}
+        style={spatiere}
+      >
         {eticheta}
 
         <h1 className="mx-auto mt-6 max-w-[900px] text-[38px] font-bold leading-[1.04] tracking-[-0.035em] text-ink sm:mt-7 sm:text-[56px] lg:text-[66px]">
@@ -146,11 +182,26 @@ export function HeroPagina({
   lead,
   cta,
   secundara,
+  fundal,
+  spatiere,
 }: {
   title: string;
   lead: string;
   cta: Actiune;
   secundara?: Actiune;
+  /** Vezi `HeroCadru`: ce se mai desenează în spatele textului. */
+  fundal?: React.ReactNode;
+  /** Vezi `HeroCadru`: spațierea pe care o cere fundalul. */
+  spatiere?: CSSProperties;
 }) {
-  return <HeroCadru title={title} lead={lead} principala={cta} secundara={secundara} />;
+  return (
+    <HeroCadru
+      title={title}
+      lead={lead}
+      principala={cta}
+      secundara={secundara}
+      fundal={fundal}
+      spatiere={spatiere}
+    />
+  );
 }

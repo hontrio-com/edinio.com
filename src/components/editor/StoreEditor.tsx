@@ -58,6 +58,7 @@ interface PageContent {
   show_category_badges?: boolean;
   hide_products_without_images?: boolean;
   hide_out_of_stock_products?: boolean;
+  show_empty_categories?: boolean;
   product_sections?: ProductSection[];
   hide_edinio_badge?: boolean;
   store_bg_color?: string;
@@ -425,6 +426,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     show_category_badges: rawPageContent.show_category_badges ?? true,
     hide_products_without_images: rawPageContent.hide_products_without_images ?? false,
     hide_out_of_stock_products: rawPageContent.hide_out_of_stock_products ?? false,
+    show_empty_categories: rawPageContent.show_empty_categories ?? false,
     product_sections: rawPageContent.product_sections ?? [],
     hide_edinio_badge: rawPageContent.hide_edinio_badge ?? false,
     store_bg_color: rawPageContent.store_bg_color ?? "#FFFFFF",
@@ -1158,6 +1160,21 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               onClick={() => setPageContent(p => ({ ...p, hide_out_of_stock_products: !p.hide_out_of_stock_products }))}
               className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.hide_out_of_stock_products ? "bg-primary" : "bg-muted-foreground/30")}>
               <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.hide_out_of_stock_products ? "translate-x-4" : "translate-x-0")} />
+            </button>
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Navigare: categoriile fara produse */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-xs font-semibold text-foreground">Arata si categoriile goale</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Categoriile fara niciun produs apar oricum in meniuri si in banda de categorii. Cele ascunse din Produse &gt; Categorii nu apar in niciun caz.</p>
+            </div>
+            <button type="button"
+              onClick={() => setPageContent(p => ({ ...p, show_empty_categories: !p.show_empty_categories }))}
+              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_empty_categories ? "bg-primary" : "bg-muted-foreground/30")}>
+              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_empty_categories ? "translate-x-4" : "translate-x-0")} />
             </button>
           </div>
 

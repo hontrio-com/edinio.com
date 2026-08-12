@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { categoriiVizibile } from "@/lib/categories/vizibilitate";
 import { meniuCuAcasa } from "@/lib/pages/menu";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { cartHref, cartOnPage, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
@@ -176,10 +177,13 @@ export async function loadSearchCategories(
    */
   const { data } = await createAdminClient()
     .from("categories")
-    .select("id, name, parent_id, image_url, sort_order")
+    .select("id, name, parent_id, image_url, sort_order, is_active")
     .eq("business_id", businessId)
     .order("sort_order")
     .order("id")
     .limit(300);
-  return data ?? [];
+  // Subarborii stinsi din panou nu ajung in meniuri. Taierea se face aici, dupa
+  // citire, fiindca o categorie aprinsa sub un parinte stins e tot ascunsa —
+  // lucru pe care un `.eq("is_active", true)` in interogare nu-l poate sti.
+  return categoriiVizibile(data ?? []);
 }

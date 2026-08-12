@@ -7,6 +7,7 @@ import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { logError } from "@/lib/error-logger";
+import { categoriiVizibile } from "@/lib/categories/vizibilitate";
 
 export const dynamic = "force-dynamic";
 
@@ -91,10 +92,13 @@ async function construieste(_req: Request, { params }: { params: Promise<{ slug:
      * singura interogare, iar numararea produselor pe categorie ar fi insemnat
      * citit catalogul intreg la fiecare cerere. O categorie goala e o pagina
      * corecta, doar goala.
+     *
+     * Cele STINSE din panou nu intra: pagina lor raspunde 404, iar un sitemap
+     * care trimite crawlerul in 404 e mai rau decat unul care tace.
      */
-    const categorii = await fetchAllRowsStrict("slugSitemap.categories", (from, to) =>
-      admin.from("categories").select("name").eq("business_id", biz.id).order("id").range(from, to),
-    );
+    const categorii = categoriiVizibile(await fetchAllRowsStrict("slugSitemap.categories", (from, to) =>
+      admin.from("categories").select("id, name, parent_id, is_active").eq("business_id", biz.id).order("id").range(from, to),
+    ));
     const vazute = new Set<string>();
     for (const c of categorii) {
       const seg = slugCategorie(c.name ?? "");

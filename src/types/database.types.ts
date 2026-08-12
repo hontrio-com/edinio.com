@@ -887,6 +887,7 @@ export type Database = {
           created_at: string | null
           id: string
           image_url: string | null
+          is_active: boolean
           name: string
           parent_id: string | null
           sort_order: number
@@ -897,6 +898,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           image_url?: string | null
+          is_active?: boolean
           name: string
           parent_id?: string | null
           sort_order?: number
@@ -907,6 +909,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           image_url?: string | null
+          is_active?: boolean
           name?: string
           parent_id?: string | null
           sort_order?: number
@@ -3598,6 +3601,10 @@ export type Database = {
       catalog_reface_cuvinte: { Args: { p_business: string }; Returns: number }
       catalog_scrie_rezumat: { Args: { p_randuri: Json }; Returns: number }
       catalog_verifica: { Args: { p_esantion?: number }; Returns: number }
+      // Numele de categorie stinse ale unui magazin, subarborii inclusi. Perechea
+      // din TypeScript e `numeCategoriiAscunse` (lib/categories/vizibilitate.ts);
+      // cele doua trebuie sa dea acelasi raspuns.
+      categorii_ascunse: { Args: { p_business: string }; Returns: string[] }
       consuma_stoc_comanda_marketplace: { Args: { p_order_id: string; p_business_id: string; p_produse: Json; p_variante: Json }; Returns: Json }
       curata_analitice_brute: { Args: { p_pastreaza_zile?: number; p_max?: number }; Returns: number }
       // `p_produse_minus` / `p_variante_minus`: ce se DA INAPOI la stoc pentru

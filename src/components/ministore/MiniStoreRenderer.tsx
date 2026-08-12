@@ -21,6 +21,7 @@ import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider
 import { StickyCartTab } from "@/components/storefront/cart/StickyCartTab";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
+import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 import {
   cartHref, cartOnPage, checkoutHref, checkoutOnPage, grilaRamaneAcasa, sectiuniAcasa, shopHref, shopOnPage,
 } from "@/lib/storefront/design/commerce";
@@ -567,13 +568,27 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // accesibil (deci si One Product Store e neafectat).
   const hideNoImage = pageContent.hide_products_without_images === true;
   const hideNoStock = pageContent.hide_out_of_stock_products === true;
+  /*
+   * Categoriile stinse din panou, si numele pe care le scot din magazin.
+   *
+   * Perechea din baza e `public.categorii_ascunse(p_business)`, care taie acelasi
+   * lucru pentru palierul server si pentru cautare. Aici se calculeaza din lista
+   * INTREAGA de categorii, nu din cea filtrata: subarborele unei categorii stinse
+   * nu se mai poate deduce dupa ce a fost scos.
+   */
+  const numeCategoriiStinse = useMemo(() => numeCategoriiAscunse(categories ?? []), [categories]);
   const visibleProducts = useMemo(() => {
     // Pe palierul server comutatoarele de vizibilitate au fost deja aplicate in
     // interogare; reaplicate aici n-ar strica nimic, dar ar sugera ca lista e
     // intreaga, ceea ce nu mai e adevarat.
     if (peServer) return products;
-    if (!hideNoImage && !hideNoStock) return products;
+    if (!hideNoImage && !hideNoStock && numeCategoriiStinse.size === 0) return products;
     return products.filter((p) => {
+      // Produsele dintr-o categorie stinsa ies din TOATE suprafetele vizitatorului
+      // (grila, fatete, cautare, sectiuni), exact ca produsele fara imagine cand
+      // comutatorul acela e pornit. Pagina lor de produs ramane accesibila prin
+      // link direct — pentru „nu se mai vinde deloc" exista `is_active` pe produs.
+      if (p.category && numeCategoriiStinse.has(p.category)) return false;
       if (hideNoImage) {
         const imgs = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
         if (imgs.length === 0) return false;
@@ -581,17 +596,24 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       if (hideNoStock && isProductOutOfStock(p)) return false;
       return true;
     });
-  }, [products, hideNoImage, hideNoStock, isProductOutOfStock, peServer]);
+  }, [products, hideNoImage, hideNoStock, isProductOutOfStock, peServer, numeCategoriiStinse]);
 
   // Category hierarchy — built from the categories table (parent_id) + product
-  // assignments. Only categories whose subtree contains products are shown.
+  // assignments. Only categories whose subtree contains products are shown,
+  // afara de cand comerciantul cere altfel din editor (`show_empty_categories`).
+  const arataCategoriiGoale = pageContent.show_empty_categories === true;
   const catTree = useMemo(() => {
     type Item = { key: string; id: string | null; name: string; image: string | null; hasChildren: boolean };
-    const list = categories ?? [];
+    // Subarborii stinsi ies din navigare cu totul.
+    const list = categoriiVizibile(categories ?? []);
     // Din rezumat cand exista: pe palierul server, `visibleProducts` e o singura
     // pagina, iar dedus din ea arborele ar pierde toate categoriile care n-au
-    // produse pe pagina curenta.
-    const productCatNames = new Set<string>(numeCategoriiCuProduse ?? []);
+    // produse pe pagina curenta. Rezumatul se recalculeaza pe coada dupa o
+    // stingere, deci pana atunci poate contine inca numele stinse — de aia se
+    // trec si ele prin acelasi filtru.
+    const productCatNames = new Set<string>(
+      (numeCategoriiCuProduse ?? []).filter((n) => !numeCategoriiStinse.has(n)),
+    );
     if (!numeCategoriiCuProduse) {
       visibleProducts.forEach(p => { if (p.category) productCatNames.add(p.category); });
     }
@@ -613,9 +635,19 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       return out;
     };
     const hasProducts = (c: StoreCategoryNode): boolean => subtreeNames(c).some(n => productCatNames.has(n));
+    /*
+     * Ce intra in navigare.
+     *
+     * Implicit doar categoriile care chiar duc undeva: una goala e un drum
+     * infundat printre altele care duc la produse. Cu `show_empty_categories`
+     * pornit din editor, comerciantul cere explicit ca magazinul sa-i arate
+     * raioanele asa cum le-a asezat el, goale sau nu — util cand marfa vine in
+     * valuri sau cand categoriile se fac inaintea produselor.
+     */
+    const trece = (c: StoreCategoryNode): boolean => arataCategoriiGoale || hasProducts(c);
     const toItem = (c: StoreCategoryNode): Item => ({
       key: c.id, id: c.id, name: c.name, image: c.image_url,
-      hasChildren: (childrenOf.get(c.id) ?? []).some(hasProducts),
+      hasChildren: (childrenOf.get(c.id) ?? []).some(trece),
     });
 
     const subtreeByName: Record<string, string[]> = {};
@@ -623,16 +655,27 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
     const childItemsById: Record<string, Item[]> = {};
     for (const c of list) {
-      const kids = (childrenOf.get(c.id) ?? []).filter(hasProducts).map(toItem);
+      const kids = (childrenOf.get(c.id) ?? []).filter(trece).map(toItem);
       if (kids.length) childItemsById[c.id] = kids;
     }
 
-    const topCats = list.filter(c => !c.parent_id && hasProducts(c)).sort((a, b) => a.sort_order - b.sort_order);
-    const tableNames = new Set(list.map(c => c.name));
-    const orphanItems: Item[] = Array.from(productCatNames)
-      .filter(n => !tableNames.has(n)).sort()
-      .map(n => ({ key: `orphan:${n}`, id: null, name: n, image: null, hasChildren: false }));
-    const topItems: Item[] = [...topCats.map(toItem), ...orphanItems];
+    /*
+     * NUMELE PURTATE DOAR DE PRODUSE NU MAI APAR IN NAVIGARE.
+     *
+     * Apareau, si nu ca o scapare: importurile lasa des categorii care nu ajung
+     * in tabel, iar acelea au pagini adevarate in magazin. Dar in banda ieseau ca
+     * niste cercuri gri cu o litera — fara imagine (n-au rand unde sa o tina),
+     * fara loc in ordine, si fara nimic care sa le poata atinge din panou. Pe
+     * Vetdepo asa au ajuns sapte nume maghiare langa cele douasprezece raioane
+     * ale magazinului.
+     *
+     * Cauza lor s-a inchis la radacina: stergerea si redenumirea unei categorii
+     * duc acum produsele cu ele (`category.actions.ts`). Ce ramane orfan e o
+     * ramasita, si o ramasita n-are ce cauta in meniul magazinului. Produsele ei
+     * raman in „Toate", in cautare si pe pagina lor.
+     */
+    const topCats = list.filter(c => !c.parent_id && trece(c)).sort((a, b) => a.sort_order - b.sort_order);
+    const topItems: Item[] = topCats.map(toItem);
 
     /*
      * Aceeasi lista, dar cu categoriile goale la locul lor.
@@ -643,18 +686,16 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
      * inceput de drum isi face intai categoriile si abia apoi produsele. Ascunse
      * si acolo, designul pe care tocmai l-a ales i-ar fi aratat gol.
      */
-    const toateRadacinile: Item[] = [
-      ...list.filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order)
-        .map((c) => ({
-          key: c.id, id: c.id, name: c.name, image: c.image_url,
-          hasChildren: (childrenOf.get(c.id) ?? []).length > 0,
-        })),
-      ...orphanItems,
-    ];
+    const toateRadacinile: Item[] = list
+      .filter((c) => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order)
+      .map((c) => ({
+        key: c.id, id: c.id, name: c.name, image: c.image_url,
+        hasChildren: (childrenOf.get(c.id) ?? []).length > 0,
+      }));
 
     const hasAnyImage = topItems.some(i => i.image) || Object.values(childItemsById).some(arr => arr.some(i => i.image));
     return { topItems, toateRadacinile, childItemsById, subtreeByName, byId, hasAnyImage };
-  }, [categories, visibleProducts, numeCategoriiCuProduse]);
+  }, [categories, visibleProducts, numeCategoriiCuProduse, numeCategoriiStinse, arataCategoriiGoale]);
 
   const [drillParentId, setDrillParentId] = useState<string | null>(initialDrillParentId);
   const drillParent = drillParentId ? catTree.byId.get(drillParentId) ?? null : null;

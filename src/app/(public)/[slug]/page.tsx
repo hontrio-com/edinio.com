@@ -15,6 +15,7 @@ import { resolveProductOffers } from "@/lib/offers/offers";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
 import { alegePalier } from "@/lib/storefront/catalog/tier";
+import { categoriiVizibile } from "@/lib/categories/vizibilitate";
 import { incarcaAcasaDeLaServer } from "@/lib/storefront/catalog/acasa-server";
 import type { Fateta as FatetaCatalog } from "@/lib/storefront/catalog/facets";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
@@ -281,7 +282,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
     fetchAllRows("storefront.home.categories", (from, to) =>
       supabase
         .from("categories")
-        .select("id, name, parent_id, image_url, sort_order")
+        // `is_active` vine INTREAGA, nefiltrata: subarborele unei categorii
+        // stinse se calculeaza in `lib/categories/vizibilitate.ts`, iar el nu se
+        // mai poate deduce dupa ce randul a fost scos din lista.
+        .select("id, name, parent_id, image_url, sort_order, is_active")
         .eq("business_id", business.id)
         .order("sort_order")
         .order("id")
@@ -339,12 +343,23 @@ export default async function SlugPage({ params, searchParams }: Props) {
     if (data) rezumat = data as unknown as typeof rezumat;
   }
 
+  /*
+   * Doua liste, si deosebirea conteaza.
+   *
+   * `categoriiDeNavigat` e ce are voie sa apara si sa fie ales — fara subarborii
+   * stinsi din panou. `categoriesData` ramane INTREAGA si merge asa mai departe
+   * la `MiniStoreRenderer`, care are nevoie de ea ca sa afle ce NUME sunt stinse
+   * si sa scoata produsele lor din grila. Filtrata inainte, informatia s-ar fi
+   * pierdut pe drum.
+   */
+  const categoriiDeNavigat = categoriiVizibile(categoriesData);
+
   // Categoria din adresa, rezolvata din ID in NUME ca la `initialCategory` de mai
   // jos. Se calculeaza aici fiindca palierul server are nevoie de ea INAINTE de
   // a cere pagina.
   const catRawSus = (catParam ?? "").slice(0, 100);
   const categorieAcasa =
-    (catRawSus && categoriesData.find((c) => c.id === catRawSus)?.name) || catRawSus || "";
+    (catRawSus && categoriiDeNavigat.find((c) => c.id === catRawSus)?.name) || catRawSus || "";
 
   const palier = rezumat
     ? alegePalier({ pageContent: pcCatalog, totalProduse: rezumat.total, publicat: business.is_published === true })
@@ -363,7 +378,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
       businessId: business.id,
       pagina: initialPage,
       pageContent: pcCatalog,
-      categorii: categoriesData,
+      // Subarborii de sectiune se calculeaza pe lista VIZIBILA: o subcategorie
+      // stinsa n-are ce cauta in randul parintelui ei aprins. RPC-ul taie oricum
+      // si el, pe aceeasi regula (`public.categorii_ascunse`).
+      categorii: categoriiDeNavigat,
       faraImagini,
       faraStocAscuns,
       rezumat,

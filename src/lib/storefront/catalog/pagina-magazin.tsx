@@ -15,6 +15,7 @@ import { construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefro
 import { alegePalier } from "@/lib/storefront/catalog/tier";
 import { cautaPeServer, sortareLaCautare } from "@/lib/storefront/catalog/cauta-server";
 import { numeSubarbore } from "@/lib/storefront/catalog/subarbore";
+import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
 import { radacinaMagazinCuFiltre, slugCategorie } from "@/lib/storefront/category-href";
@@ -112,8 +113,12 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   let radacinaPagina = `${radacina}/${SEGMENT_MAGAZIN}`;
   // Categoria e in cale sau in interogare; in ambele cazuri se cauta in tabel, ca
   // titlul sa fie numele adevarat si canonicalul adresa adevarata.
+  // Fara subarborii stinsi: pagina lor da 404, iar metadata unei pagini care nu
+  // exista n-are ce descrie.
   const categorii = categorieSlug || catBrut
-    ? (await admin.from("categories").select("id, name, parent_id").eq("business_id", business.id).limit(1000)).data ?? []
+    ? categoriiVizibile(
+        (await admin.from("categories").select("id, name, parent_id, is_active").eq("business_id", business.id).limit(1000)).data ?? [],
+      )
     : [];
 
   if (categorieSlug) {
@@ -281,7 +286,10 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     fetchAllRows("storefront.magazin.categories", (from, to) =>
       supabase
         .from("categories")
-        .select("id, name, parent_id, image_url, sort_order")
+        // `is_active` vine INTREAGA, nefiltrata: subarborele unei categorii
+        // stinse se calculeaza in `lib/categories/vizibilitate.ts`, iar el nu se
+        // mai poate deduce dupa ce randul a fost scos din lista.
+        .select("id, name, parent_id, image_url, sort_order, is_active")
         .eq("business_id", business.id)
         .order("sort_order")
         .order("id")
@@ -291,6 +299,18 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     total: number; price_min: number; price_max: number; categorii: string[];
     fatete: { jetoane?: string[]; fatete?: Fateta[] };
   } | null;
+
+  /*
+   * Doua liste, si deosebirea conteaza.
+   *
+   * `categoriiDeNavigat` e ce are voie sa apara si sa fie ales — fara subarborii
+   * stinsi. `categoriesData` ramane INTREAGA si merge asa mai departe la
+   * `MiniStoreRenderer`, care are nevoie de ea ca sa afle ce NUME sunt stinse si
+   * sa scoata produsele lor din grila. Filtrata inainte, informatia aia s-ar fi
+   * pierdut pe drum.
+   */
+  const categoriiDeNavigat = categoriiVizibile(categoriesData);
+  const numeStinse = numeCategoriiAscunse(categoriesData);
 
   /*
    * Fara rezumat, palierul client — si nu e un caz teoretic: un magazin nou n-are
@@ -315,23 +335,27 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   let categorieDinCale: (CategorieMinima & { areCopii: boolean; numeParinte: string | null }) | null = null;
   let numeCategorie = "";
   if (categorieSlug) {
-    const gasita = potrivesteCategorie(categoriesData, categorieSlug);
+    // Cautarea se face in lista VIZIBILA: pagina unei categorii stinse trebuie sa
+    // raspunda 404, nu sa-si arate raftul pe alta usa.
+    const gasita = potrivesteCategorie(categoriiDeNavigat, categorieSlug);
     if (gasita) {
       numeCategorie = gasita.name;
       categorieDinCale = {
         id: gasita.id,
         name: gasita.name,
         parent_id: gasita.parent_id,
-        areCopii: categoriesData.some((c) => c.parent_id === gasita.id),
-        numeParinte: categoriesData.find((c) => c.id === gasita.parent_id)?.name ?? null,
+        areCopii: categoriiDeNavigat.some((c) => c.parent_id === gasita.id),
+        numeParinte: categoriiDeNavigat.find((c) => c.id === gasita.parent_id)?.name ?? null,
       };
     } else {
       // Categoriile purtate DOAR de produse. Pe palierul server vin din rezumat;
       // pe client se citesc dintr-o interogare dedicata, ca sa nu depinda de
-      // produsele care se incarca abia mai jos.
-      const orfane = rezumat
+      // produsele care se incarca abia mai jos. Numele stinse ies si de aici,
+      // altfel o categorie stinsa si-ar fi gasit pagina pe usa din dos.
+      const orfane = (rezumat
         ? rezumat.categorii
-        : (await numeCategoriiDinProduse(business.id)).map((c) => c.name);
+        : (await numeCategoriiDinProduse(business.id)).map((c) => c.name))
+        .filter((n) => !numeStinse.has(n));
       const numeOrfan = potrivesteCategorie(orfane.map((n) => ({ name: n })), categorieSlug)?.name;
       if (!numeOrfan) notFound();
       numeCategorie = numeOrfan;
@@ -406,10 +430,13 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
      * calea bate interogarea, fiindca pagina se numeste dupa ea.
      */
     const categoriaCeruta = numeCategorie
-      || (filtre.categorie && categoriesData.find((c) => c.id === filtre.categorie)?.name)
+      || (filtre.categorie && categoriiDeNavigat.find((c) => c.id === filtre.categorie)?.name)
       || filtre.categorie
       || "";
-    const numeleFiltrate = categoriaCeruta ? numeSubarbore(categoriesData, categoriaCeruta) : null;
+    // Subarborele se ia din lista vizibila: o subcategorie stinsa n-are ce cauta
+    // in filtrul parintelui ei aprins. RPC-ul taie oricum si el, pe aceeasi
+    // regula (`public.categorii_ascunse`); aici e ca cele doua sa ceara la fel.
+    const numeleFiltrate = categoriaCeruta ? numeSubarbore(categoriiDeNavigat, categoriaCeruta) : null;
     // Grupate pe cheie: SAU inauntru, SI intre chei — ca `trecefiltrele`.
     const filtreRpc = {
       categorii: numeleFiltrate,
@@ -590,7 +617,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   // id-urile se traduc aici; altfel linkul din meniu ar duce la un catalog gol.
   // Categoria din cale bate orice `?cat=`: pagina se numeste dupa ea.
   const initialCategory = numeCategorie
-    || (filtre.categorie && categoriesData.find((c) => c.id === filtre.categorie)?.name)
+    || (filtre.categorie && categoriiDeNavigat.find((c) => c.id === filtre.categorie)?.name)
     || filtre.categorie
     || "toate";
 

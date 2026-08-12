@@ -51,7 +51,17 @@ export interface RezumatCalculat {
  *
  * Exportata separat de scriere ca sa poata fi testata fara baza.
  */
-export function rezumaRanduri(businessId: string, randuri: RandRezumat[]): RezumatCalculat[] {
+export function rezumaRanduri(
+  businessId: string,
+  randuri: RandRezumat[],
+  /**
+   * Numele de categorie stinse din panou. Nu sunt un al treilea comutator, deci
+   * nu inmultesc cele patru randuri: nu depind de ce alege vizitatorul, ci de ce
+   * a stins comerciantul. Se recalculeaza pe coada, marcata de declansatorul de
+   * pe `categories` (vezi `2026-09-01-categorii-vizibile.sql`).
+   */
+  ascunse: ReadonlySet<string> = new Set(),
+): RezumatCalculat[] {
   const out: RezumatCalculat[] = [];
   for (const faraImagini of [false, true]) {
     for (const faraStocAscuns of [false, true]) {
@@ -59,6 +69,7 @@ export function rezumaRanduri(businessId: string, randuri: RandRezumat[]): Rezum
       // proiectate: `are_imagine` in loc de `images.length`, `fara_stoc` in loc
       // de derivarea din harta catalogului.
       const vizibile = randuri.filter((r) => {
+        if (r.category && ascunse.has(r.category)) return false;
         if (faraImagini && !r.are_imagine) return false;
         if (faraStocAscuns && r.fara_stoc) return false;
         return true;
@@ -118,7 +129,23 @@ export async function rezumaCatalog(
     if (bucata.length < FEREASTRA) break;
   }
 
-  const rezumate = rezumaRanduri(businessId, randuri);
+  /*
+   * Categoriile stinse, citite din baza si nu deduse aici.
+   *
+   * Aceeasi functie pe care o folosesc `catalog_pagina` si `catalog_candidati`,
+   * deci totalul, fatetele si lista de categorii ale rezumatului descriu exact
+   * multimea pe care o pagineaza si o cauta celelalte doua. Scrisa a doua oara in
+   * TypeScript, ar fi fost o a doua regula care diverge tacut — „251 de produse"
+   * peste o grila cu 232.
+   */
+  const { data: ascunseRaw, error: eAscunse } = await admin.rpc("categorii_ascunse", { p_business: businessId });
+  if (eAscunse) {
+    console.error(`[rezumat] categoriile stinse ale lui ${businessId} n-au putut fi citite: ${eAscunse.message}`);
+    return 0;
+  }
+  const ascunse = new Set<string>((ascunseRaw as string[] | null) ?? []);
+
+  const rezumate = rezumaRanduri(businessId, randuri, ascunse);
   const { error: eScr } = await admin.rpc("catalog_scrie_rezumat", {
     p_randuri: rezumate as unknown as Record<string, unknown>[],
   });

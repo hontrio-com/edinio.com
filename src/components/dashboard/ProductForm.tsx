@@ -578,6 +578,34 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
     setForm(prev => ({ ...prev, [key]: val }));
   }
 
+  /*
+   * Categoria scrisa pe produs, dar care nu exista in lista.
+   *
+   * Se intampla dupa un import ale carui categorii au fost sterse intre timp, sau
+   * dupa o redenumire veche: `products.category` e text, nu cheie straina. Pana
+   * acum, campul aparea GOL — lista derulanta n-avea optiunea, deci browserul
+   * n-avea ce bifa — desi produsul chiar avea o categorie scrisa in baza. Cine
+   * deschidea produsul citea „fara categorie" si nu vedea nimic de reparat.
+   *
+   * Acum valoarea se arata ca atare, cu un buton care o transforma intr-o
+   * categorie adevarata (la nivelul principal, de unde poate fi mutata oriunde).
+   */
+  const categorieOrfana = useMemo(() => {
+    const nume = form.category.trim();
+    if (!nume) return null;
+    return localCategories.some((c) => c.name === nume) ? null : nume;
+  }, [form.category, localCategories]);
+
+  function creeazaCategoriaOrfana() {
+    if (!categorieOrfana) return;
+    startCatTransition(async () => {
+      const result = await createCategory({ name: categorieOrfana });
+      if ("error" in result) { toast.error(result.error); return; }
+      setLocalCategories(prev => [...prev, { id: result.id, name: categorieOrfana, parent_id: null }]);
+      toast.success("Categorie creata!");
+    });
+  }
+
   /**
    * Totalul adunat din variante, sau `null` cand produsul nu-si tine stocul asa.
    *
@@ -949,6 +977,12 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                     <label className="block text-sm font-medium text-foreground mb-1.5">Categorie</label>
                     <select value={form.category} onChange={(e) => set("category", e.target.value)} className={inputCls}>
                       <option value="">Fara categorie</option>
+                      {/* Valoarea scrisa pe produs, cand nu mai are rand in tabel.
+                          Fara optiunea asta, selectul n-avea ce bifa si campul
+                          parea gol desi produsul avea o categorie. */}
+                      {categorieOrfana && (
+                        <option value={categorieOrfana}>{categorieOrfana} (nu exista in lista)</option>
+                      )}
                       {categoryGroups.map(({ root, descendants }) =>
                         descendants.length > 0 ? (
                           <optgroup key={root.id} label={root.name}>
@@ -962,6 +996,17 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                         )
                       )}
                     </select>
+                    {categorieOrfana && (
+                      <div className="mt-1.5 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-500">
+                        <span className="flex-1">
+                          &bdquo;{categorieOrfana}&rdquo; e scrisa pe produs, dar nu exista in lista de categorii, deci nu apare in magazin ca raion.
+                        </span>
+                        <button type="button" onClick={creeazaCategoriaOrfana} disabled={isCreatingCat}
+                          className="text-primary hover:underline whitespace-nowrap disabled:opacity-50">
+                          Creeaza categoria
+                        </button>
+                      </div>
+                    )}
                     {!showAddCategory ? (
                       <button type="button" onClick={() => setShowAddCategory(true)}
                         className="mt-1.5 text-xs text-primary hover:underline flex items-center gap-1">

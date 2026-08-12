@@ -9,6 +9,7 @@ import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { categoriiVizibile } from "@/lib/categories/vizibilitate";
 
 // Un fisier de sitemap accepta maxim 50.000 de URL-uri (limita Google) —
 // peste, fisierul intreg e respins. Pastram ordinea de prioritate
@@ -87,10 +88,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.9,
       });
       // Si paginile de categorie: de cand exista, ele sunt adresele care
-      // raspund cautarilor de tip „bocanci de protectie".
-      const categorii = await fetchAllRowsStrict("sitemap.store.categories", (from, to) =>
-        supabase.from("categories").select("name").eq("business_id", biz.id).order("id").range(from, to)
-      );
+      // raspund cautarilor de tip „bocanci de protectie". Cele stinse din panou
+      // ies — pagina lor raspunde 404.
+      const categorii = categoriiVizibile(await fetchAllRowsStrict("sitemap.store.categories", (from, to) =>
+        supabase.from("categories").select("id, name, parent_id, is_active").eq("business_id", biz.id).order("id").range(from, to)
+      ));
       const vazute = new Set<string>();
       for (const c of categorii) {
         const seg = slugCategorie(c.name ?? "");

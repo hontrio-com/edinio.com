@@ -75,6 +75,15 @@ export interface StorePageContent {
   show_category_badges?: boolean;
   hide_products_without_images?: boolean;
   hide_out_of_stock_products?: boolean;
+  /**
+   * Arata in navigare si categoriile fara niciun produs.
+   *
+   * Implicit stins: o categorie goala e un drum infundat printre altele care duc
+   * la produse. Pornit, magazinul arata raioanele exact cum le-a asezat
+   * comerciantul — util cand marfa vine in valuri sau cand categoriile se fac
+   * inaintea produselor. Ce e STINS din panou nu apare in niciunul din cazuri.
+   */
+  show_empty_categories?: boolean;
   product_sections?: ProductSection[];
   menu?: MenuItem[];
   /** Comerciantul a sters intrarea „Acasa"; vezi `meniuCuAcasa`. */
@@ -121,4 +130,10 @@ export interface StoreCategoryNode {
   parent_id: string | null;
   image_url: string | null;
   sort_order: number;
+  /**
+   * Categoria se vede in magazin. Stinsa, ea si tot subarborele ei ies din
+   * navigare, din filtre si din grila — vezi `lib/categories/vizibilitate.ts`.
+   * Optionala fiindca sursele mai vechi n-o citeau; lipsa inseamna aprinsa.
+   */
+  is_active?: boolean | null;
 }

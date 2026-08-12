@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
+import { FinalCta } from "@/components/website/sections/FinalCta";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { BibliotecaIntegrari } from "@/components/website/sections/integrations/BibliotecaIntegrari";
 import { CampSigle } from "@/components/website/sections/integrations/CampSigle";
@@ -54,6 +55,21 @@ export default function IntegrariPage() {
       />
 
       <BibliotecaIntegrari />
+
+      {/*
+        Banda de final, cu harta României — cerută de client (2026-08-13), aceeași
+        ca pe pagina de start.
+
+        Se REFOLOSEȘTE, nu se scrie alta, și e aceeași hotărâre ca pe `/preturi`:
+        textul ei e al clientului și e aprobat, iar o variantă proprie ar fi
+        însemnat text inventat de mine pe o pagină comercială. Acum e a treia
+        pagină care se închide la fel — deci dacă vreodată se schimbă o vorbă
+        acolo, se schimbă pe toate trei deodată, ceea ce e chiar rostul.
+
+        Până acum pagina se termina în gol: după al 65-lea card intrai direct în
+        subsol, singura dintre paginile gata care făcea asta.
+      */}
+      <FinalCta />
     </>
   );
 }

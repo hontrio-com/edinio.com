@@ -679,7 +679,14 @@ export default async function SlugPage({ params, searchParams }: Props) {
         totalVizibileServer={totalVizibile}
         totalFiltrateServer={totalFiltrate}
         numeCategoriiCuProduse={reusitPeServer ? rezumat?.categorii : undefined}
-        numeCategoriiStinse={numeStinse}
+        /*
+         * Numai cand filtrarea chiar se face in browser.
+         *
+         * Pe palierul server produsele vin deja taiate de `catalog_pagina`, deci
+         * trimise aici numele stinse ar fi singurul loc din HTML din care s-ar
+         * afla ce raioane si-a stins comerciantul. Vezi propul.
+         */
+        numeCategoriiStinse={reusitPeServer ? undefined : numeStinse}
         intervalServer={reusitPeServer && rezumat
           ? { min: Number(rezumat.price_min), max: Number(rezumat.price_max) }
           : undefined}

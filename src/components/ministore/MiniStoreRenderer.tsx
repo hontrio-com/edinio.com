@@ -156,15 +156,22 @@ interface Props {
   /**
    * Numele categoriilor stinse din panou, calculate PE SERVER.
    *
-   * Se deduceau aici, din `categories` — dar pentru asta lista trebuia sa vina
-   * INTREAGA, cu tot cu subarborii stinsi, iar React serializeaza props-urile in
-   * HTML: numele raioanelor pe care comerciantul tocmai le scosese din magazin
-   * ajungeau in sursa paginii fiecarui vizitator, impreuna cu randurile lor, pe
-   * care browserul nu le randeaza niciodata.
+   * Trebuie DOAR pe palierul client, unde grila primeste catalogul intreg si
+   * filtrarea se face in browser. Pe palierul server nu se trimite deloc: acolo
+   * `catalog_pagina` a taiat deja produsele acelor categorii, `visibleProducts`
+   * nici nu se uita la lista, iar arborele se construieste dintr-un `categories`
+   * din care subarborii stinsi lipsesc — deci un nume stins n-are cum sa se
+   * potriveasca cu vreo categorie ramasa (`numeCategoriiAscunse` scoate din start
+   * numele purtate si de o categorie aprinsa).
    *
-   * Cu numele venite gata calculate, `categories` poate pleca deja filtrata.
-   * Optional: fara el se cade pe deducerea din lista, ca inainte, pentru
-   * apelantii care nu au de unde sa-l calculeze.
+   * Deosebirea nu e o optimizare, e ce se vede in sursa paginii: React
+   * serializeaza props-urile in HTML, iar pe palierul server asta ar fi singurul
+   * loc din care ar afla cineva ce raioane si-a stins comerciantul. Pe palierul
+   * client numele sunt oricum acolo, scrise pe produsele care calatoresc intregi.
+   *
+   * Fara el se cade pe deducerea din `categories`, dar aceea are nevoie de lista
+   * NEFILTRATA: subarborele unei categorii stinse nu se mai poate afla dupa ce a
+   * fost scos din lista.
    */
   numeCategoriiStinse?: string[];
   /**

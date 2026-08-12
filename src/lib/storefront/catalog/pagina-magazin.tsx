@@ -650,7 +650,10 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       // Numele de categorie cu produse vin din rezumat: derivate din pagina
       // curenta, ar disparea din meniu toate categoriile fara produse pe ea.
       numeCategoriiCuProduse={reusitPeServer ? rezumat?.categorii : undefined}
-      numeCategoriiStinse={[...numeStinse]}
+      // Numai cand filtrarea chiar se face in browser: pe palierul server
+      // produsele vin deja taiate de RPC, iar numele stinse ar fi singurul loc
+      // din HTML din care s-ar afla ce raioane si-a stins comerciantul.
+      numeCategoriiStinse={reusitPeServer ? undefined : [...numeStinse]}
       // Capetele filtrului de pret descriu TOT catalogul, nu pagina trimisa.
       intervalServer={reusitPeServer && rezumat
         ? { min: Number(rezumat.price_min), max: Number(rezumat.price_max) }

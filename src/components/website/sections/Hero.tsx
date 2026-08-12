@@ -40,7 +40,12 @@ function HeroCadru({
 }: {
   /** Pastila de deasupra titlului. Lipsește pe paginile care n-au ce anunța. */
   eticheta?: React.ReactNode;
-  title: string;
+  /*
+   * ⚠ NODE, nu `string`: titlul paginii „Optimizare" are înăuntru un cuvânt cu
+   * urmă de viteză și sigla Google în locul unei litere. Tot ce trebuie păzit e
+   * ca textul CITIT să rămână întreg — vezi componentele din `sections/optimizare`.
+   */
+  title: React.ReactNode;
   lead: string;
   principala: Actiune;
   secundara?: Actiune;
@@ -185,7 +190,7 @@ export function HeroPagina({
   fundal,
   spatiere,
 }: {
-  title: string;
+  title: React.ReactNode;
   lead: string;
   cta: Actiune;
   secundara?: Actiune;

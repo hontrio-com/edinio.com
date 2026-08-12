@@ -5,6 +5,7 @@ import { Check, ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
+import { NavigareCategorii } from "@/components/storefront/sections/catalog/NavigareCategorii";
 import { cdnImage } from "@/lib/cdn-image";
 import { SORTARI_CATALOG } from "@/lib/storefront/design/registry";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
@@ -779,32 +780,20 @@ export function TextSubGrila() {
   );
 }
 
-/** Pastilele de categorie de sus, cand comerciantul le cere. */
+/**
+ * Banda de categorii de deasupra catalogului.
+ *
+ * ACEEASI componenta ca pe pagina principala. Pana acum era o a doua
+ * implementare, scrisa doar cu pastile text, care nu stia de imaginile
+ * categoriilor: la un magazin cu poze pe toate raioanele, prima pagina le arata
+ * si pagina de catalog nu — iar subcategoriile care aveau poza n-o aratau
+ * NICAIERI, fiindca la ele se ajunge doar prin banda asta.
+ *
+ * Forma (cercuri cu imagini sau pastile) se alege automat din date, deci
+ * magazinele fara poze raman exact cum erau.
+ */
 export function CategoriiSus() {
-  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, categoriiRoot, categoriiPePagina, color } =
-    useStorefront();
-  if (!hasCategories) return null;
-  const pastila = "px-3.5 py-1.5 rounded-full text-[13px] border whitespace-nowrap transition-colors";
-  const inactiv = { backgroundColor: "transparent", color: "var(--st-text)", borderColor: "var(--st-border)" };
-  const activ = { backgroundColor: color, color: "#fff", borderColor: color };
-
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1">
-      <button type="button" onClick={isDrilled ? goBackCategory : resetCategory}
-        className={pastila} style={categoryFilter === "toate" ? activ : inactiv}>
-        {isDrilled ? "Inapoi" : "Toate"}
-      </button>
-      {currentCategoryItems.map((c) => (
-        <a key={c.key} href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-            e.preventDefault();
-            selectCategoryItem(c);
-          }}
-          className={pastila} style={categoryFilter === c.name ? activ : inactiv}>
-          {c.name}
-        </a>
-      ))}
-    </div>
-  );
+  // Fara margine proprie: pe pagina de catalog spatierea o da `space-y-3` al
+  // antetului, iar `mb-6` al paginii principale ar fi adaugat inca un rand gol.
+  return <NavigareCategorii />;
 }

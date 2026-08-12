@@ -15,7 +15,7 @@ import { resolveProductOffers } from "@/lib/offers/offers";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
 import { alegePalier } from "@/lib/storefront/catalog/tier";
-import { categoriiVizibile } from "@/lib/categories/vizibilitate";
+import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 import { incarcaAcasaDeLaServer } from "@/lib/storefront/catalog/acasa-server";
 import type { Fateta as FatetaCatalog } from "@/lib/storefront/catalog/facets";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
@@ -344,15 +344,16 @@ export default async function SlugPage({ params, searchParams }: Props) {
   }
 
   /*
-   * Doua liste, si deosebirea conteaza.
+   * Ce pleaca in browser: lista FARA subarborii stinsi, plus numele lor.
    *
-   * `categoriiDeNavigat` e ce are voie sa apara si sa fie ales — fara subarborii
-   * stinsi din panou. `categoriesData` ramane INTREAGA si merge asa mai departe
-   * la `MiniStoreRenderer`, care are nevoie de ea ca sa afle ce NUME sunt stinse
-   * si sa scoata produsele lor din grila. Filtrata inainte, informatia s-ar fi
-   * pierdut pe drum.
+   * Amandoua se calculeaza aici, pe server. Trimisa intreaga, lista ar fi ajuns
+   * in HTML-ul fiecarui vizitator cu tot cu raioanele scoase din magazin —
+   * randuri pe care browserul nu le randeaza niciodata, dar care se citesc din
+   * sursa paginii. Numele stinse merg separat, fiindca grila are nevoie de ele ca
+   * sa scoata produsele acelor categorii.
    */
   const categoriiDeNavigat = categoriiVizibile(categoriesData);
+  const numeStinse = [...numeCategoriiAscunse(categoriesData)];
 
   // Categoria din adresa, rezolvata din ID in NUME ca la `initialCategory` de mai
   // jos. Se calculeaza aici fiindca palierul server are nevoie de ea INAINTE de
@@ -678,6 +679,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         totalVizibileServer={totalVizibile}
         totalFiltrateServer={totalFiltrate}
         numeCategoriiCuProduse={reusitPeServer ? rezumat?.categorii : undefined}
+        numeCategoriiStinse={numeStinse}
         intervalServer={reusitPeServer && rezumat
           ? { min: Number(rezumat.price_min), max: Number(rezumat.price_max) }
           : undefined}
@@ -685,7 +687,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         sectiuniServer={sectiuniServer}
         storeSettings={setariDeTrimis}
         basePath={basePath}
-        categories={categoriesData}
+        categories={categoriiDeNavigat}
         initialPage={initialPage}
         initialSearch={filtreAcasa.cautare}
         initialCategory={initialCategory}

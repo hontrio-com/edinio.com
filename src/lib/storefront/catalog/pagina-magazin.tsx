@@ -301,13 +301,13 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   } | null;
 
   /*
-   * Doua liste, si deosebirea conteaza.
+   * Ce pleaca in browser: lista FARA subarborii stinsi, plus numele lor.
    *
-   * `categoriiDeNavigat` e ce are voie sa apara si sa fie ales — fara subarborii
-   * stinsi. `categoriesData` ramane INTREAGA si merge asa mai departe la
-   * `MiniStoreRenderer`, care are nevoie de ea ca sa afle ce NUME sunt stinse si
-   * sa scoata produsele lor din grila. Filtrata inainte, informatia aia s-ar fi
-   * pierdut pe drum.
+   * Amandoua se calculeaza aici, pe server. Trimisa intreaga, lista ar fi ajuns
+   * in HTML-ul fiecarui vizitator cu tot cu raioanele scoase din magazin —
+   * randuri pe care browserul nu le randeaza niciodata, dar care se citesc din
+   * sursa paginii. Numele stinse merg separat, fiindca grila are nevoie de ele ca
+   * sa scoata produsele acelor categorii.
    */
   const categoriiDeNavigat = categoriiVizibile(categoriesData);
   const numeStinse = numeCategoriiAscunse(categoriesData);
@@ -638,7 +638,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       products={products}
       storeSettings={setariDeTrimis as never}
       basePath={basePath}
-      categories={categoriesData}
+      categories={categoriiDeNavigat}
       design={resolved.design}
       designStyle={resolved.style}
       preview={isPreview && isOwner}
@@ -650,6 +650,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       // Numele de categorie cu produse vin din rezumat: derivate din pagina
       // curenta, ar disparea din meniu toate categoriile fara produse pe ea.
       numeCategoriiCuProduse={reusitPeServer ? rezumat?.categorii : undefined}
+      numeCategoriiStinse={[...numeStinse]}
       // Capetele filtrului de pret descriu TOT catalogul, nu pagina trimisa.
       intervalServer={reusitPeServer && rezumat
         ? { min: Number(rezumat.price_min), max: Number(rezumat.price_max) }

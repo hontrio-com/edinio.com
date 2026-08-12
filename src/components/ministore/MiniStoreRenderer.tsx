@@ -154,6 +154,20 @@ interface Props {
    */
   numeCategoriiCuProduse?: string[];
   /**
+   * Numele categoriilor stinse din panou, calculate PE SERVER.
+   *
+   * Se deduceau aici, din `categories` — dar pentru asta lista trebuia sa vina
+   * INTREAGA, cu tot cu subarborii stinsi, iar React serializeaza props-urile in
+   * HTML: numele raioanelor pe care comerciantul tocmai le scosese din magazin
+   * ajungeau in sursa paginii fiecarui vizitator, impreuna cu randurile lor, pe
+   * care browserul nu le randeaza niciodata.
+   *
+   * Cu numele venite gata calculate, `categories` poate pleca deja filtrata.
+   * Optional: fara el se cade pe deducerea din lista, ca inainte, pentru
+   * apelantii care nu au de unde sa-l calculeze.
+   */
+  numeCategoriiStinse?: string[];
+  /**
    * Capetele intervalului de pret pe TOT catalogul, din `catalog_rezumat`.
    *
    * Sugestiile din casetele de pret se derivau din lista trimisa in browser. Pe
@@ -203,7 +217,7 @@ interface Props {
   initialSort?: string;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, intervalServer, featuredServer, sectiuniServer }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -569,14 +583,22 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const hideNoImage = pageContent.hide_products_without_images === true;
   const hideNoStock = pageContent.hide_out_of_stock_products === true;
   /*
-   * Categoriile stinse din panou, si numele pe care le scot din magazin.
+   * Numele care nu au voie sa apara in magazin.
+   *
+   * Vin de pe SERVER cand apelantul le poate calcula, si atunci `categories`
+   * soseste deja fara subarborii stinsi — altfel lista intreaga ar fi trebuit sa
+   * calatoreasca pana aici, iar React o scrie in HTML-ul fiecarui vizitator.
+   *
+   * Fara ele se cade pe deducerea din lista, care are nevoie de lista NEFILTRATA:
+   * subarborele unei categorii stinse nu se mai poate afla dupa ce a fost scos.
    *
    * Perechea din baza e `public.categorii_ascunse(p_business)`, care taie acelasi
-   * lucru pentru palierul server si pentru cautare. Aici se calculeaza din lista
-   * INTREAGA de categorii, nu din cea filtrata: subarborele unei categorii stinse
-   * nu se mai poate deduce dupa ce a fost scos.
+   * lucru pentru palierul server si pentru cautare.
    */
-  const numeCategoriiStinse = useMemo(() => numeCategoriiAscunse(categories ?? []), [categories]);
+  const numeCategoriiStinse = useMemo(
+    () => (numeStinseDeLaServer ? new Set(numeStinseDeLaServer) : numeCategoriiAscunse(categories ?? [])),
+    [numeStinseDeLaServer, categories],
+  );
   const visibleProducts = useMemo(() => {
     // Pe palierul server comutatoarele de vizibilitate au fost deja aplicate in
     // interogare; reaplicate aici n-ar strica nimic, dar ar sugera ca lista e
@@ -604,7 +626,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const arataCategoriiGoale = pageContent.show_empty_categories === true;
   const catTree = useMemo(() => {
     type Item = { key: string; id: string | null; name: string; image: string | null; hasChildren: boolean };
-    // Subarborii stinsi ies din navigare cu totul.
+    // Subarborii stinsi ies din navigare cu totul. Chemata si cand apelantul a
+    // filtrat deja (cazul obisnuit): pe o lista fara noduri stinse nu are ce
+    // taia, deci se poate lasa un singur drum in loc de doua ramuri.
     const list = categoriiVizibile(categories ?? []);
     // Din rezumat cand exista: pe palierul server, `visibleProducts` e o singura
     // pagina, iar dedus din ea arborele ar pierde toate categoriile care n-au

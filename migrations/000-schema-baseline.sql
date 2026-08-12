@@ -487,6 +487,7 @@ AS $function$
            case when jsonb_typeof(p_filtre->'categorii') = 'array'
                 then (select array_agg(x #>> '{}') from jsonb_array_elements(p_filtre->'categorii') x)
                 else null end                                      as categorii,
+           public.categorii_ascunse(p_business)                     as ascunse,
            nullif(p_filtre->>'pretMin', '')::numeric               as pmin,
            nullif(p_filtre->>'pretMax', '')::numeric               as pmax,
            coalesce((p_filtre->>'reduceri')::boolean, false)        as reduceri,
@@ -501,6 +502,7 @@ AS $function$
    where c.business_id = p_business
      and (not f.fara_img or c.are_imagine)
      and (not f.fara_stoc_ascuns or not c.fara_stoc)
+     and (c.category is null or c.category <> all (f.ascunse))
      and (f.categorii is null or c.category = any (f.categorii))
      and (f.pmin is null or c.price_min >= f.pmin)
      and (f.pmax is null or c.price_min <= f.pmax)
@@ -616,22 +618,23 @@ CREATE OR REPLACE FUNCTION public.catalog_pagina(p_business uuid, p_filtre jsonb
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 declare
-  v_lim int := least(greatest(coalesce(p_limit, 20), 1), 96);
-  v_off int := greatest(coalesce(p_offset, 0), 0);
-  v_sort text := coalesce(p_filtre->>'sortare', '');
-  v_categorii text[] := case
+  v_lim        int := least(greatest(coalesce(p_limit, 20), 1), 96);
+  v_off        int := greatest(coalesce(p_offset, 0), 0);
+  v_sort       text := coalesce(p_filtre->>'sortare', '');
+  v_categorii  text[] := case
     when jsonb_typeof(p_filtre->'categorii') = 'array'
       then (select array_agg(x #>> '{}') from jsonb_array_elements(p_filtre->'categorii') x)
     else null end;
-  v_pmin numeric := nullif(p_filtre->>'pretMin', '')::numeric;
-  v_pmax numeric := nullif(p_filtre->>'pretMax', '')::numeric;
-  v_reduceri boolean := coalesce((p_filtre->>'reduceri')::boolean, false);
-  v_stoc boolean := coalesce((p_filtre->>'stoc')::boolean, false);
-  v_fara_img boolean := coalesce((p_filtre->>'faraImagini')::boolean, false);
-  v_fara_stoc boolean := coalesce((p_filtre->>'faraStocAscuns')::boolean, false);
-  v_grupuri jsonb := case when jsonb_typeof(p_filtre->'fatete') = 'array'
-                          then p_filtre->'fatete' else '[]'::jsonb end;
-  v_out jsonb;
+  v_ascunse    text[] := public.categorii_ascunse(p_business);
+  v_pmin       numeric := nullif(p_filtre->>'pretMin', '')::numeric;
+  v_pmax       numeric := nullif(p_filtre->>'pretMax', '')::numeric;
+  v_reduceri   boolean := coalesce((p_filtre->>'reduceri')::boolean, false);
+  v_stoc       boolean := coalesce((p_filtre->>'stoc')::boolean, false);
+  v_fara_img   boolean := coalesce((p_filtre->>'faraImagini')::boolean, false);
+  v_fara_stoc  boolean := coalesce((p_filtre->>'faraStocAscuns')::boolean, false);
+  v_grupuri    jsonb := case when jsonb_typeof(p_filtre->'fatete') = 'array'
+                             then p_filtre->'fatete' else '[]'::jsonb end;
+  v_out        jsonb;
 begin
   if not exists (
     select 1 from public.businesses b
@@ -641,13 +644,16 @@ begin
   end if;
 
   with vizibile as (
-    select c.* from public.catalog_produs c
+    select c.*
+      from public.catalog_produs c
      where c.business_id = p_business
        and (not v_fara_img  or c.are_imagine)
        and (not v_fara_stoc or not c.fara_stoc)
+       and (c.category is null or c.category <> all (v_ascunse))
   ),
   filtrate as (
-    select v.* from vizibile v
+    select v.*
+      from vizibile v
      where (v_categorii is null or v.category = any(v_categorii))
        and (v_pmin is null or v.price_min >= v_pmin)
        and (v_pmax is null or v.price_min <= v_pmax)
@@ -656,7 +662,8 @@ begin
        and (
          jsonb_array_length(v_grupuri) = 0
          or not exists (
-           select 1 from jsonb_array_elements(v_grupuri) g
+           select 1
+             from jsonb_array_elements(v_grupuri) g
             where jsonb_typeof(g) = 'array'
               and not (v.fatete && (select array_agg(x #>> '{}') from jsonb_array_elements(g) x))
          )
@@ -700,8 +707,14 @@ declare
   v_featured  int     := coalesce((p_spec->>'featuredLimit')::int, 0);
   v_sectiuni  jsonb   := case when jsonb_typeof(p_spec->'sectiuni') = 'array'
                               then p_spec->'sectiuni' else '[]'::jsonb end;
-  v_out jsonb := '{}'::jsonb;
-  v_randuri jsonb; s jsonb; v_mod text; v_lim int; v_ids uuid[]; v_cat text[];
+  v_ascunse   text[]  := public.categorii_ascunse(p_business);
+  v_out       jsonb   := '{}'::jsonb;
+  v_randuri   jsonb;
+  s           jsonb;
+  v_mod       text;
+  v_lim       int;
+  v_ids       uuid[];
+  v_cat       text[];
 begin
   if not exists (
     select 1 from public.businesses b
@@ -713,12 +726,16 @@ begin
   if v_featured > 0 then
     select coalesce(jsonb_agg(to_jsonb(t) - 'business_id' - 'cauta_norm' - 'proiectat_la'), '[]'::jsonb)
       into v_randuri
-      from (select c.* from public.catalog_produs c
-             where c.business_id = p_business and c.is_featured
-               and (not v_fara_img or c.are_imagine)
-               and (not v_fara_stoc or not c.fara_stoc)
-             order by c.sort_order, c.product_id
-             limit least(v_featured, 96)) t;
+      from (
+        select c.* from public.catalog_produs c
+         where c.business_id = p_business
+           and c.is_featured
+           and (not v_fara_img  or c.are_imagine)
+           and (not v_fara_stoc or not c.fara_stoc)
+           and (c.category is null or c.category <> all (v_ascunse))
+         order by c.sort_order, c.product_id
+         limit least(v_featured, 96)
+      ) t;
     v_out := jsonb_set(v_out, '{featured}', v_randuri);
   else
     v_out := jsonb_set(v_out, '{featured}', '[]'::jsonb);
@@ -732,37 +749,51 @@ begin
 
     if v_mod = 'selected' then
       v_ids := case when jsonb_typeof(s->'productIds') = 'array'
-                    then (select array_agg((x #>> '{}')::uuid) from jsonb_array_elements(s->'productIds') x) end;
+                    then (select array_agg((x #>> '{}')::uuid) from jsonb_array_elements(s->'productIds') x)
+               end;
       select coalesce(jsonb_agg(to_jsonb(t) - 'business_id' - 'cauta_norm' - 'proiectat_la'), '[]'::jsonb)
         into v_randuri
-        from (select c.* from public.catalog_produs c
-               where c.business_id = p_business
-                 and v_ids is not null and c.product_id = any(v_ids)
-                 and (not v_fara_img or c.are_imagine)
-                 and (not v_fara_stoc or not c.fara_stoc)
-               order by array_position(v_ids, c.product_id)
-               limit v_lim) t;
+        from (
+          select c.* from public.catalog_produs c
+           where c.business_id = p_business
+             and v_ids is not null and c.product_id = any(v_ids)
+             and (not v_fara_img  or c.are_imagine)
+             and (not v_fara_stoc or not c.fara_stoc)
+             and (c.category is null or c.category <> all (v_ascunse))
+           order by array_position(v_ids, c.product_id)
+           limit v_lim
+        ) t;
+
     elsif v_mod = 'category' then
       v_cat := case when jsonb_typeof(s->'categorii') = 'array'
-                    then (select array_agg(x #>> '{}') from jsonb_array_elements(s->'categorii') x) end;
+                    then (select array_agg(x #>> '{}') from jsonb_array_elements(s->'categorii') x)
+               end;
       select coalesce(jsonb_agg(to_jsonb(t) - 'business_id' - 'cauta_norm' - 'proiectat_la'), '[]'::jsonb)
         into v_randuri
-        from (select c.* from public.catalog_produs c
-               where c.business_id = p_business
-                 and v_cat is not null and c.category = any(v_cat)
-                 and (not v_fara_img or c.are_imagine)
-                 and (not v_fara_stoc or not c.fara_stoc)
-               order by (case when c.is_featured then 0 else 1 end), c.sort_order, c.product_id
-               limit v_lim) t;
+        from (
+          select c.* from public.catalog_produs c
+           where c.business_id = p_business
+             and v_cat is not null and c.category = any(v_cat)
+             and (not v_fara_img  or c.are_imagine)
+             and (not v_fara_stoc or not c.fara_stoc)
+             and (c.category is null or c.category <> all (v_ascunse))
+           order by (case when c.is_featured then 0 else 1 end), c.sort_order, c.product_id
+           limit v_lim
+        ) t;
+
     else
       select coalesce(jsonb_agg(to_jsonb(t) - 'business_id' - 'cauta_norm' - 'proiectat_la'), '[]'::jsonb)
         into v_randuri
-        from (select c.* from public.catalog_produs c
-               where c.business_id = p_business and c.is_bundle
-                 and (not v_fara_img or c.are_imagine)
-                 and (not v_fara_stoc or not c.fara_stoc)
-               order by (case when c.is_featured then 0 else 1 end), c.sort_order, c.product_id
-               limit v_lim) t;
+        from (
+          select c.* from public.catalog_produs c
+           where c.business_id = p_business
+             and c.is_bundle
+             and (not v_fara_img  or c.are_imagine)
+             and (not v_fara_stoc or not c.fara_stoc)
+             and (c.category is null or c.category <> all (v_ascunse))
+           order by (case when c.is_featured then 0 else 1 end), c.sort_order, c.product_id
+           limit v_lim
+        ) t;
     end if;
 
     v_out := jsonb_set(v_out, array['sectiuni', s->>'id'], coalesce(v_randuri, '[]'::jsonb));
@@ -891,6 +922,35 @@ begin
 
   return v_total;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.categorii_ascunse(p_business uuid)
+ RETURNS text[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with recursive ascunse as (
+    select c.id, c.name
+      from public.categories c
+     where c.business_id = p_business
+       and not c.is_active
+    union
+    select k.id, k.name
+      from public.categories k
+      join ascunse a on k.parent_id = a.id
+     where k.business_id = p_business
+  )
+  select coalesce(array_agg(distinct a.name), '{}'::text[])
+    from ascunse a
+   where not exists (
+     select 1
+       from public.categories v
+      where v.business_id = p_business
+        and v.name = a.name
+        and not exists (select 1 from ascunse b where b.id = v.id)
+   );
 $function$
 ;
 
@@ -3204,6 +3264,21 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trg_categorii_rezumat_murdar()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  insert into public.catalog_rezumat_murdar (business_id, marcat_la)
+  values (coalesce(new.business_id, old.business_id), now())
+  on conflict (business_id) do update set marcat_la = now();
+  return coalesce(new, old);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.trg_repretuieste_pachetele()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3591,7 +3666,8 @@ create table if not exists public.categories (
   sort_order integer default 0 not null,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
-  image_url text);
+  image_url text,
+  is_active boolean default true not null);
 
 create table if not exists public.custom_pages (
   id uuid default gen_random_uuid() not null,
@@ -4235,6 +4311,12 @@ create table if not exists public.users_profile (
   mfa_confirmat_la timestamp with time zone,
   mfa_sesiuni_confirmate jsonb default '[]'::jsonb not null);
 
+create table if not exists public.zz_backup_categorii_okxi_20260812 (
+  id uuid,
+  category text,
+  is_active boolean,
+  salvat_la timestamp with time zone);
+
 create table if not exists public.zz_backup_preturi_bricosmart_20260804 (
   id uuid,
   price numeric(10,2),
@@ -4658,6 +4740,7 @@ CREATE TRIGGER businesses_blocheaza_domeniu_platforma BEFORE INSERT OR UPDATE OF
 CREATE TRIGGER set_businesses_updated_at BEFORE UPDATE ON public.businesses FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER catalog_produs_cuvinte AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_cuvinte_murdar();
 CREATE TRIGGER catalog_produs_rezumat AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_rezumat_murdar();
+CREATE TRIGGER categorii_rezumat_murdar AFTER INSERT OR DELETE OR UPDATE ON public.categories FOR EACH ROW EXECUTE FUNCTION trg_categorii_rezumat_murdar();
 CREATE TRIGGER customers_touch BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION touch_customers();
 CREATE TRIGGER set_domain_orders_updated_at BEFORE UPDATE ON public.domain_orders FOR EACH ROW EXECUTE FUNCTION update_domain_orders_updated_at();
 CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -4737,6 +4820,7 @@ alter table public.trendyol_orders enable row level security;
 alter table public.trendyol_sync_queue enable row level security;
 alter table public.trendyol_variants enable row level security;
 alter table public.users_profile enable row level security;
+alter table public.zz_backup_categorii_okxi_20260812 enable row level security;
 alter table public.zz_backup_preturi_bricosmart_20260804 enable row level security;
 
 create policy "Owners can manage store settings" on privat.store_settings as PERMISSIVE for ALL to public using ((EXISTS ( SELECT 1
@@ -6214,6 +6298,27 @@ grant SELECT on table public.users_profile to service_role;
 grant TRIGGER on table public.users_profile to service_role;
 grant TRUNCATE on table public.users_profile to service_role;
 grant UPDATE on table public.users_profile to service_role;
+grant DELETE on table public.zz_backup_categorii_okxi_20260812 to anon;
+grant INSERT on table public.zz_backup_categorii_okxi_20260812 to anon;
+grant REFERENCES on table public.zz_backup_categorii_okxi_20260812 to anon;
+grant SELECT on table public.zz_backup_categorii_okxi_20260812 to anon;
+grant TRIGGER on table public.zz_backup_categorii_okxi_20260812 to anon;
+grant TRUNCATE on table public.zz_backup_categorii_okxi_20260812 to anon;
+grant UPDATE on table public.zz_backup_categorii_okxi_20260812 to anon;
+grant DELETE on table public.zz_backup_categorii_okxi_20260812 to authenticated;
+grant INSERT on table public.zz_backup_categorii_okxi_20260812 to authenticated;
+grant REFERENCES on table public.zz_backup_categorii_okxi_20260812 to authenticated;
+grant SELECT on table public.zz_backup_categorii_okxi_20260812 to authenticated;
+grant TRIGGER on table public.zz_backup_categorii_okxi_20260812 to authenticated;
+grant TRUNCATE on table public.zz_backup_categorii_okxi_20260812 to authenticated;
+grant UPDATE on table public.zz_backup_categorii_okxi_20260812 to authenticated;
+grant DELETE on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant INSERT on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant REFERENCES on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant SELECT on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant TRIGGER on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant TRUNCATE on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant UPDATE on table public.zz_backup_categorii_okxi_20260812 to service_role;
 grant DELETE on table public.zz_backup_preturi_bricosmart_20260804 to anon;
 grant INSERT on table public.zz_backup_preturi_bricosmart_20260804 to anon;
 grant REFERENCES on table public.zz_backup_preturi_bricosmart_20260804 to anon;
@@ -6357,6 +6462,7 @@ grant execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) 
 grant execute on function public.catalog_reface_cuvinte(p_business uuid) to service_role;
 grant execute on function public.catalog_scrie_rezumat(p_randuri jsonb) to service_role;
 grant execute on function public.catalog_verifica(p_esantion integer) to service_role;
+grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) to service_role;
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
@@ -6469,6 +6575,9 @@ grant execute on function public.trg_catalog_proiectie() to service_role;
 grant execute on function public.trg_catalog_rezumat_murdar() to anon;
 grant execute on function public.trg_catalog_rezumat_murdar() to authenticated;
 grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
+grant execute on function public.trg_categorii_rezumat_murdar() to anon;
+grant execute on function public.trg_categorii_rezumat_murdar() to authenticated;
+grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to anon;
 grant execute on function public.trg_repretuieste_pachetele() to authenticated;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;

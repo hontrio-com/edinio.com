@@ -521,3 +521,21 @@ grant execute on function public.catalog_randuri(uuid, jsonb) to anon, authentic
 -- Fara asta, PostgREST nu vede coloana si functia noua si raspunde cu forma
 -- veche pana la urmatorul reload de schema, care poate intarzia oricat.
 notify pgrst, 'reload schema';
+
+-- Copia de siguranta a mutarii celor 557 de produse de pe nume orfane
+-- (`zz_backup_categorii_okxi_20260812`) nu se citeste si nu se scrie de nimeni in
+-- afara cheii de serviciu.
+--
+-- Tabelele noi din `public` primesc din oficiu toate drepturile pentru `anon` si
+-- `authenticated` — deci, fara randul asta, oricine are cheia publica putea face
+-- TRUNCATE pe singurul lucru care poate anula mutarea. Fara nicio politica, RLS
+-- inchide tabelul pentru amandoua rolurile; `service_role` trece pe deasupra.
+--
+-- ⚠ `zz_backup_preturi_bricosmart_20260804` e in aceeasi situatie si a ramas
+-- neatinsa aici: e copia altei operatiuni, si nu se schimba pe furis din
+-- migratia asta.
+do $$ begin
+  if to_regclass('public.zz_backup_categorii_okxi_20260812') is not null then
+    execute 'alter table public.zz_backup_categorii_okxi_20260812 enable row level security';
+  end if;
+end $$;

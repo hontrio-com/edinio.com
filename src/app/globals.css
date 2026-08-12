@@ -646,37 +646,51 @@
 
 /* ─── Titlul paginii „Optimizare" ───────────────────────────────────────────
 
-   Doua piese cerute de client: o urma de viteza la „Rapid" si sigla Google in
-   locul literei G.
+   Trei piese cerute de client: urma de viteza la „Rapid", semnul Google in locul
+   literei G, si restul cuvantului in culorile lor, aprinzandu-se pe rand.
 
-   ⚠ REGULA CARE A DAT FORMA AMANDUROR: titlul trebuie sa ramana, ca TEXT, exact
+   ⚠ REGULA CARE A DAT FORMA TUTUROR: titlul trebuie sa ramana, ca TEXT, exact
    propozitia clientului. Nicio litera in plus, niciuna in minus — e si ce
-   indexeaza un motor de cautare, ironic chiar pe pagina asta. De aceea urma NU e
-   facuta din copii ale cuvantului, si semnul Google NU sta langa un cuvant scris
-   a doua oara. Povestea intreaga e in `sections/optimizare/TitluOptimizare.tsx`.
+   indexeaza un motor de cautare, ironic chiar pe pagina asta. De aceea urma e din
+   `text-shadow` (copii ale GLIFELOR, nu ale cuvantului), litera „G" chiar exista
+   dar e transparenta, iar fiecare litera colorata e chiar litera ei, imbracata
+   intr-un `span`. Povestea intreaga e in `sections/optimizare/TitluOptimizare.tsx`.
 
    ═══ URMA ═══
 
-   Sase umbre de text, tot mai departate si tot mai stinse: adica sase copii ale
-   GLIFELOR, desenate de motorul de redare, fara niciun nod si nicio litera in
-   plus. Distantele cresc neliniar, ca ce lasa in urma un obiect care incetineste:
-   dens langa el, rarit in coada. Toate in `em`, fiindca titlul are 38px pe
-   telefon si 66 pe desktop.
+   Zece umbre de text, tot mai departate, tot mai neclare si tot mai stinse. Zece,
+   nu sase, si asta conteaza: cu putine straturi se vad copii DISTINCTE ale
+   cuvantului, adica arata a greseala de randare; cu multe si apropiate se vede o
+   singura mangaleala continua, adica miscare. Distantele cresc geometric, ca ce
+   lasa in urma un obiect care incetineste — dens langa el, rarit in coada.
 
-   Culoarea e --color-ink (#0A0A0A) cu alfa mica. Umbrele se aduna acolo unde se
-   suprapun, deci valorile de aici nu se citesc separat: langa cuvant iese vreo
-   0,3, in coada aproape nimic. */
+   Toate in `em`: titlul are 38px pe telefon si 66 pe desktop, iar o urma fixa ar
+   fi fost o coada discreta pe ecran mare si o mazgaleala pe telefon.
+
+   `--u` scurteaza coada pe ecran ingust. Nu e gust: coada are 0,88em, adica 58px
+   la corpul de pe desktop, si iese in stanga cuvantului. Pe telefon, unde randul
+   incepe la 20px de marginea ecranului, atata coada ar fi taiata de
+   `overflow-hidden`-ul sectiunii si s-ar vedea retezata drept. */
 .rapid {
+  --u: 0.62;
   position: relative;
   display: inline-block;
   text-shadow:
-    -0.03em 0 0.01em rgba(10, 10, 10, 0.10),
-    -0.07em 0 0.02em rgba(10, 10, 10, 0.075),
-    -0.12em 0 0.03em rgba(10, 10, 10, 0.055),
-    -0.18em 0 0.05em rgba(10, 10, 10, 0.04),
-    -0.26em 0 0.07em rgba(10, 10, 10, 0.028),
-    -0.36em 0 0.10em rgba(10, 10, 10, 0.018);
+    calc(var(--u) * -0.03em) 0 calc(var(--u) * 0.010em) rgba(10, 10, 10, 0.26),
+    calc(var(--u) * -0.07em) 0 calc(var(--u) * 0.025em) rgba(10, 10, 10, 0.21),
+    calc(var(--u) * -0.12em) 0 calc(var(--u) * 0.042em) rgba(10, 10, 10, 0.17),
+    calc(var(--u) * -0.18em) 0 calc(var(--u) * 0.063em) rgba(10, 10, 10, 0.135),
+    calc(var(--u) * -0.26em) 0 calc(var(--u) * 0.091em) rgba(10, 10, 10, 0.105),
+    calc(var(--u) * -0.35em) 0 calc(var(--u) * 0.123em) rgba(10, 10, 10, 0.08),
+    calc(var(--u) * -0.46em) 0 calc(var(--u) * 0.161em) rgba(10, 10, 10, 0.058),
+    calc(var(--u) * -0.58em) 0 calc(var(--u) * 0.203em) rgba(10, 10, 10, 0.04),
+    calc(var(--u) * -0.72em) 0 calc(var(--u) * 0.252em) rgba(10, 10, 10, 0.026),
+    calc(var(--u) * -0.88em) 0 calc(var(--u) * 0.308em) rgba(10, 10, 10, 0.015);
   animation: rapid-franeaza 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (min-width: 640px) {
+  .rapid { --u: 1; }
 }
 
 /* La incarcare cuvantul soseste din stanga si urma se strange in el — adica
@@ -684,28 +698,36 @@
    Incetinirea vine din `cubic-bezier(0.16, 1, 0.3, 1)`, care porneste tare si se
    opreste lin; cu o curba simetrica ar fi parut ca pluteste, nu ca franeaza.
 
-   Cele doua liste de umbre au ACELASI numar de straturi, altfel nu se pot
-   interpola si animatia ar sari dintr-una in alta. */
+   Cele doua liste au ACELASI numar de straturi, altfel nu se pot interpola si
+   animatia ar sari dintr-una in alta. */
 @keyframes rapid-franeaza {
   from {
-    transform: translate3d(-0.22em, 0, 0);
+    transform: translate3d(calc(var(--u) * -0.3em), 0, 0);
     text-shadow:
-      -0.072em 0 0.024em rgba(10, 10, 10, 0.13),
-      -0.168em 0 0.048em rgba(10, 10, 10, 0.10),
-      -0.288em 0 0.072em rgba(10, 10, 10, 0.075),
-      -0.432em 0 0.120em rgba(10, 10, 10, 0.055),
-      -0.624em 0 0.168em rgba(10, 10, 10, 0.04),
-      -0.864em 0 0.240em rgba(10, 10, 10, 0.026);
+      calc(var(--u) * -0.075em) 0 calc(var(--u) * 0.025em) rgba(10, 10, 10, 0.30),
+      calc(var(--u) * -0.175em) 0 calc(var(--u) * 0.063em) rgba(10, 10, 10, 0.25),
+      calc(var(--u) * -0.300em) 0 calc(var(--u) * 0.105em) rgba(10, 10, 10, 0.20),
+      calc(var(--u) * -0.450em) 0 calc(var(--u) * 0.158em) rgba(10, 10, 10, 0.16),
+      calc(var(--u) * -0.650em) 0 calc(var(--u) * 0.228em) rgba(10, 10, 10, 0.125),
+      calc(var(--u) * -0.875em) 0 calc(var(--u) * 0.306em) rgba(10, 10, 10, 0.095),
+      calc(var(--u) * -1.150em) 0 calc(var(--u) * 0.403em) rgba(10, 10, 10, 0.07),
+      calc(var(--u) * -1.450em) 0 calc(var(--u) * 0.508em) rgba(10, 10, 10, 0.048),
+      calc(var(--u) * -1.800em) 0 calc(var(--u) * 0.630em) rgba(10, 10, 10, 0.031),
+      calc(var(--u) * -2.200em) 0 calc(var(--u) * 0.770em) rgba(10, 10, 10, 0.018);
   }
   to {
     transform: translate3d(0, 0, 0);
     text-shadow:
-      -0.03em 0 0.01em rgba(10, 10, 10, 0.10),
-      -0.07em 0 0.02em rgba(10, 10, 10, 0.075),
-      -0.12em 0 0.03em rgba(10, 10, 10, 0.055),
-      -0.18em 0 0.05em rgba(10, 10, 10, 0.04),
-      -0.26em 0 0.07em rgba(10, 10, 10, 0.028),
-      -0.36em 0 0.10em rgba(10, 10, 10, 0.018);
+      calc(var(--u) * -0.03em) 0 calc(var(--u) * 0.010em) rgba(10, 10, 10, 0.26),
+      calc(var(--u) * -0.07em) 0 calc(var(--u) * 0.025em) rgba(10, 10, 10, 0.21),
+      calc(var(--u) * -0.12em) 0 calc(var(--u) * 0.042em) rgba(10, 10, 10, 0.17),
+      calc(var(--u) * -0.18em) 0 calc(var(--u) * 0.063em) rgba(10, 10, 10, 0.135),
+      calc(var(--u) * -0.26em) 0 calc(var(--u) * 0.091em) rgba(10, 10, 10, 0.105),
+      calc(var(--u) * -0.35em) 0 calc(var(--u) * 0.123em) rgba(10, 10, 10, 0.08),
+      calc(var(--u) * -0.46em) 0 calc(var(--u) * 0.161em) rgba(10, 10, 10, 0.058),
+      calc(var(--u) * -0.58em) 0 calc(var(--u) * 0.203em) rgba(10, 10, 10, 0.04),
+      calc(var(--u) * -0.72em) 0 calc(var(--u) * 0.252em) rgba(10, 10, 10, 0.026),
+      calc(var(--u) * -0.88em) 0 calc(var(--u) * 0.308em) rgba(10, 10, 10, 0.015);
   }
 }
 
@@ -717,31 +739,13 @@
   }
 }
 
-/* ═══ SIGLA GOOGLE, PESTE LITERA G ═══
+/* ═══ SEMNUL GOOGLE, PESTE LITERA G ═══
 
    Litera „G" ramane in text, dar transparenta; semnul sta exact peste locul ei.
    Asa raman si textul intreg, si latimea randului — cea a cuvantului scris, la
    orice corp de litera.
 
-   Marimea se leaga de INALTIMEA MAJUSCULEI, nu de corpul literei: masurat pe
-   fontul paginii, majuscula are 0,712em din cei 1em ai corpului.
-
-   `0.78em` e mai mult decat atat, si e o DEPASIRE OPTICA, nu o scapare: un semn
-   rotund pus la fix cat o majuscula pare mai mic decat ea, fiindca isi atinge
-   inaltimea maxima intr-un singur punct, nu pe toata latimea. Aceeasi corectie
-   pe care o are „O" fata de „H" in orice font desenat cu mana. */
-.google {
-  position: relative;
-  display: inline-block;
-}
-
-/* Transparenta, nu ascunsa: `display:none` ar fi scos-o din text, iar `width:0`
-   ar fi mutat restul cuvantului peste semn. Asa isi tine locul exact. */
-.google-litera {
-  color: transparent;
-}
-
-/* ⚠ ASEZAREA E LEGATA DE LINIA DE BAZA, NU DE CUTIA RANDULUI, si asta a costat o
+   ⚠ ASEZAREA E LEGATA DE LINIA DE BAZA, NU DE CUTIA RANDULUI, si asta a costat o
    masuratoare. Prima forma il punea absolut, cu `bottom` fata de `.google` — dar
    marginea de jos a unei cutii de rand nu e linia de baza: sub ea mai sunt
    coborarea fontului si jumatatea de interlinie. Masurat, 0,382em. Semnul iesea
@@ -749,30 +753,87 @@
 
    Reteta de acum nu depinde de niciun numar al fontului:
    `vertical-align: baseline` pe un inline-block cu `line-height: 0` face ca linia
-   lui de baza sa fie chiar marginea de jos a imaginii dinauntru — deci SVG-ul se
-   aseaza pe linia de baza a textului, oricare ar fi fontul si interlinia.
+   lui de baza sa fie chiar marginea de jos a imaginii dinauntru.
 
-   `margin-right` negativ cat latimea lui: nu consuma avans, deci se suprapune
-   peste litera „G" care urmeaza. `left` il centreaza pe ea, fiindca semnul e cu
-   putin mai lat decat litera. */
+   ⚠ INALTIMEA SI DEPASIREA, dupa corectura ceruta de client („sa para ca face
+   parte din cuvant"). Prima forma avea 0,78em, cu susul FIX la inaltimea
+   majusculei si toata depasirea optica dedesubt — deci semnul parea si mai mare,
+   si cazut. Un semn rotund langa majuscule cere depasire in AMANDOUA partile,
+   egala: asa cade pe aceeasi banda optica cu literele. Majuscula fontului are
+   0,727em, masurat; semnul are 0,762 — cu 0,0175 peste ea sus si tot atat sub
+   linia de baza. */
+.google {
+  position: relative;
+  display: inline-block;
+}
+
+/* Transparenta, nu ascunsa: `display:none` ar fi scos-o din text, iar `width:0`
+   ar fi mutat restul cuvantului peste semn. Asa isi tine locul exact.
+
+   `padding-right` inapoiaza spatiul pe care semnul il fura de la litera
+   urmatoare, si numarul e MASURAT, nu ales: semnul e mai lat decat litera „G" si
+   o depaseste cu jumatate de diferenta de fiecare parte, asa ca ajungea la 0,007em
+   PESTE „o" de dupa. Golul natural dintre „G" si „o" in fontul paginii, masurat pe
+   cerneala, e 0,08em — deci trebuie adaugat exact atat cat sa se ajunga acolo.
+   Asa perechea semn+„o" respira la fel ca oricare alte doua litere din titlu. */
+.google-litera {
+  color: transparent;
+  padding-right: 0.112em;
+}
+
 .google-semn {
   display: inline-block;
   vertical-align: baseline;
   line-height: 0;
-  height: 0.78em;
-  width: 0.775em;
-  margin-right: -0.775em;
+  height: 0.762em;
+  width: 0.757em;
+  /* Nu consuma avans: se suprapune peste litera „G" care urmeaza. */
+  margin-right: -0.757em;
   position: relative;
-  /* Depasirea optica, dusa sub linia de baza — la fel ca „O" fata de „H". */
-  top: 0.055em;
-  /* (latimea semnului - latimea literei) / 2, masurate amandoua. */
-  left: -0.031em;
+  /* Depasirea optica de jos. Cea de sus iese singura, din inaltime. */
+  top: 0.0175em;
+  /* (latimea semnului - latimea literei) / 2, ca sa cada centrat pe ea. */
+  left: -0.022em;
 }
 
 .google-semn svg {
   display: block;
   height: 100%;
   width: 100%;
+}
+
+/* ═══ „oogle" IN CULORILE LOR ═══
+
+   Cerut de client. ⚠ De stiut ce s-a ales: cuvantul desenat cu fontul NOSTRU in
+   culorile lor e o redare a marcii intr-o litera care nu e a lor. Culorile si
+   ordinea sunt insa cele adevarate: o rosu, o galben, g albastru, l verde, e
+   rosu — adica exact pozitiile 2-6 din marca.
+
+   ⚠ Galbenul #FBBC05 pe alb da un contrast de 1,8:1. Sub orice prag, inclusiv cel
+   pentru text mare. Litera se citeste din context, si asa e si in marca lor, dar
+   merita stiut: e singurul loc de pe site care nu trece.
+
+   Se aprind PE RAND, o singura data, dupa ce urma lui „Rapid" s-a asezat.
+   Pornesc din negrul titlului, deci nu apar de nicaieri: cuvantul se coloreaza,
+   ca si cum ar fi recunoscut. */
+.google-lit {
+  color: var(--color-ink);
+  animation: google-se-aprinde 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(560ms + var(--i) * 90ms);
+}
+
+@keyframes google-se-aprinde {
+  from { color: var(--color-ink); }
+  to { color: var(--c); }
+}
+
+/* Fara miscare, literele sunt colorate de la inceput: culoarea e continut, nu
+   efect — ea spune ca e vorba de Google. Se pierde doar aprinderea pe rand. */
+@media (prefers-reduced-motion: reduce) {
+  .google-lit {
+    animation: none;
+    color: var(--c);
+  }
 }
 
 /* Spatierea hero-ului cand sub el pluteste un camp de sigle.

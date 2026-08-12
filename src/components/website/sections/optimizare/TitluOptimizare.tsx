@@ -1,8 +1,11 @@
+import type { CSSProperties } from "react";
+
 /**
- * Titlul paginii „Optimizare", cu cele două piese cerute de client: o urmă de
- * viteză la „Rapid" și sigla Google în locul literei G.
+ * Titlul paginii „Optimizare", cu cele trei piese cerute de client: o urmă de
+ * viteză la „Rapid", semnul Google în locul literei G, și restul cuvântului în
+ * culorile mărcii, aprinzându-se pe rând.
  *
- * ═══ REGULA CARE A DAT FORMA AMÂNDUROR EFECTELOR ═══
+ * ═══ REGULA CARE A DAT FORMA TUTUROR ═══
  *
  * Titlul trebuie să rămână, ca TEXT, exact propoziția clientului:
  * „Rapid pentru clienți. Pregătit pentru Google." Nicio literă în plus, niciuna
@@ -10,7 +13,7 @@
  *
  * Prima formă a fiecărui efect încălca regula, și numai măsurând s-a văzut:
  *
- *   - urma era făcută din ȘASE COPII ale cuvântului, puse una peste alta. Toate
+ *   - urma era făcută din COPII ale cuvântului, puse una peste alta. Toate
  *     `aria-hidden`, deci un cititor de ecran auzea bine — dar `textContent`
  *     ieșea „RapidRapidRapidRapidRapidRapidRapid pentru clienți.", iar un crawler
  *     citește textul, nu `aria-hidden`.
@@ -19,10 +22,11 @@
  *
  * Acum niciunul nu mai adaugă text:
  *
- *   - urma e din `text-shadow`, adică șase copii ale GLIFELOR, desenate de motorul
+ *   - urma e din `text-shadow`, adică zece copii ale GLIFELOR, desenate de motorul
  *     de redare. Zero noduri, zero litere în plus.
  *   - litera „G" chiar există în text, dar e desenată transparentă, iar semnul
  *     Google stă exact peste locul ei.
+ *   - literele colorate sunt chiar literele, doar îmbrăcate fiecare într-un `span`.
  */
 
 /**
@@ -35,11 +39,13 @@
  * defocalizat. Se poate obține direcția cu un filtru SVG (`stdDeviation="8 0"`),
  * dar acela rasterizează textul și îl face pastos.
  *
- * Șase umbre, tot mai depărtate și tot mai stinse, dau o urmă orizontală în care
- * literele rămân litere. Distanțele cresc neliniar, ca ce lasă în urmă un obiect
- * care încetinește: dens lângă el, rărit în coadă. Valorile sunt în `em` — titlul
- * are 38px pe telefon și 66 pe desktop, iar o urmă fixă ar fi fost o coadă
- * discretă pe ecran mare și o mânjeală pe telefon.
+ * Zece umbre, tot mai depărtate, tot mai neclare și tot mai stinse. ZECE, nu
+ * șase, și numărul contează: cu puține straturi se văd copii DISTINCTE ale
+ * cuvântului, adică arată a greșeală de randare; cu multe și apropiate se vede o
+ * singură mânjeală continuă, adică mișcare. Distanțele cresc geometric, ca ce
+ * lasă în urmă un obiect care încetinește: dens lângă el, rărit în coadă.
+ * Valorile sunt în `em` — titlul are 38px pe telefon și 66 pe desktop, iar o urmă
+ * fixă ar fi fost o coadă discretă pe ecran mare și o mânjeală pe telefon.
  *
  * La încărcare, cuvântul sosește din stânga și urma se strânge în el, adică
  * frânează. O SINGURĂ dată: mișcarea perpetuă e decor, iar decorul care nu
@@ -49,6 +55,27 @@
 export function CuvantRapid({ children }: { children: string }) {
   return <span className="rapid">{children}</span>;
 }
+
+/**
+ * Restul cuvântului, în culorile mărcii.
+ *
+ * ⚠ CULORILE ȘI ORDINEA SUNT CELE ADEVĂRATE, nu alese de mine: în marca Google,
+ * literele merg albastru, roșu, galben, albastru, verde, roșu. Prima e semnul,
+ * deci astea cinci sunt chiar pozițiile 2-6. Dacă cineva le rearanjează „ca să
+ * arate mai bine", nu mai e marca lor, e o imitație.
+ *
+ * ⚠ ȘI E TOCMAI LUCRUL PE CARE ÎL EVITASEM. Nota de mai jos, de la semn, spune de
+ * ce nu se scrie cuvântul cu fontul nostru în culorile lor: e o redare a mărcii
+ * într-o literă care nu e a lor. Clientul a cerut-o explicit (2026-08-13), i s-a
+ * spus, și a rămas așa. E scris aici ca să nu pară o scăpare.
+ */
+const LITERE: { semn: string; culoare: string }[] = [
+  { semn: "o", culoare: "#EA4335" },
+  { semn: "o", culoare: "#FBBC05" },
+  { semn: "g", culoare: "#4285F4" },
+  { semn: "l", culoare: "#34A853" },
+  { semn: "e", culoare: "#EA4335" },
+];
 
 /**
  * Cuvântul „Google", cu semnul lor în locul literei G.
@@ -96,7 +123,21 @@ export function SiglaGoogle() {
           />
         </svg>
       </span>
-      <span className="google-litera">G</span>oogle
+      <span className="google-litera">G</span>
+      {/*
+        Fiecare literă rămâne litera ei, doar îmbrăcată într-un `span`. Textul
+        cuvântului nu se schimbă cu nimic — verificat: `h1.textContent` dă exact
+        propoziția clientului.
+      */}
+      {LITERE.map((litera, i) => (
+        <span
+          key={`${litera.semn}-${i}`}
+          className="google-lit"
+          style={{ "--c": litera.culoare, "--i": i } as CSSProperties}
+        >
+          {litera.semn}
+        </span>
+      ))}
     </span>
   );
 }

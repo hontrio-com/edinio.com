@@ -295,7 +295,10 @@ function RandMail({ mail }: { mail: MailMentenanta }) {
    desenul trebuie să fie al lor. */
 const WA = {
   antet: "#F0F2F5",
-  tapet: "#EFEAE2",
+  /* ⚠ Culoarea DIN IMAGINEA clientului (colțul ei), nu cea de pe WhatsApp Web.
+     Tapetul e acum poza lor de fundal, iar culoarea asta e doar ce se vede până
+     se încarcă ea: alta, s-ar fi văzut o săritură de nuanță la încărcare. */
+  tapet: "#E2DAD2",
   balonulMeu: "#D9FDD3",
   balonulLui: "#FFFFFF",
   text: "#111B21",
@@ -388,11 +391,29 @@ function Remediere() {
           className="flex items-center gap-2.5 px-3 py-2"
           style={{ backgroundColor: WA.antet }}
         >
-          {/* Bulina contactului, cu semnul unui om — ca la ei când nu e poză. */}
-          <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#DFE5E7]">
-            <svg viewBox="0 0 24 24" className="h-[17px] w-[17px] fill-[#FFFFFF]">
-              <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5m0 2c-3.34 0-10 1.67-10 5v3h20v-3c0-3.33-6.66-5-10-5" />
-            </svg>
+          {/*
+            Poza de profil: sigla noastră, pe alb — cerută de client (13.08). A
+            luat locul semnului cenușiu de om, cel pe care WhatsApp îl pune când
+            contactul n-are poză.
+
+            ⚠ FUNDALUL E ALB, NU TRANSPARENT. Sigla are fundal străveziu, iar
+            antetul lui WhatsApp e cenușiu (#F0F2F5): lăsată așa, punga verde ar
+            fi stat direct pe cenușiu și n-ar mai fi semănat cu o poză de profil,
+            care e întotdeauna un cerc plin.
+
+            ⚠ Și e MAI MICĂ decât cercul (72%), cu spațiu în jur. O siglă lipită
+            de marginea cercului arată tăiată; pozele de profil au aer în jurul
+            lor.
+          */}
+          <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
+            <Image
+              src="/logo.png"
+              alt="Edinio"
+              width={284}
+              height={289}
+              unoptimized
+              className="h-[72%] w-auto object-contain"
+            />
           </span>
 
           <span className="min-w-0 flex-1">
@@ -441,7 +462,27 @@ function Remediere() {
         */}
         <div
           className="flex flex-col justify-end gap-[6px] px-3 py-3"
-          style={{ backgroundColor: WA.tapet, minHeight: 170 }}
+          style={{
+            backgroundColor: WA.tapet,
+            /*
+              ⚠ TAPETUL LOR, din fișierul pus de client — nu mâzgălelile desenate
+              de mine. Așa arată fundalul unei conversații pe WhatsApp, iar el e
+              lucrul pe care ochiul îl recunoaște de la distanță.
+
+              ⚠ `cover`, NU `repeat`. Fișierul e o poză de telefon (760×1396), nu
+              o dală care se leagă: repetat, s-ar fi văzut cusătura ca o dungă
+              prin mijlocul conversației. Cu `cover` intră o singură dată, se
+              întinde cât panoul și se taie pe înălțime — deci nicio cusătură.
+
+              ⚠ Se servește `.webp`: 682KB devin 75, iar diferența e sub pragul
+              vederii pe o textură atât de stinsă (0,003% din pixeli se abat cu
+              mai mult de cinci trepte). PNG-ul rămâne pe disc ca original.
+            */
+            backgroundImage: "url(/mentenanta/fundal_whatsapp.webp)",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            minHeight: 170,
+          }}
         >
           {vizibile.map((mesaj, i) => (
             <Balon

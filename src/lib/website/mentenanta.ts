@@ -162,4 +162,9 @@ export const WHATSAPP_MESAJE: MesajWhatsApp[] = [
   { dinPartea: "comerciant", text: "Nu se generează AWB-ul", ora: "10:14" },
   { dinPartea: "suport", text: "Am preluat, verificăm acum.", ora: "10:16" },
   { dinPartea: "suport", text: "Rezolvat. Încearcă din nou.", ora: "11:40" },
+  /* ⚠ Închiderea conversației, cerută de client (13.08). Nu e de umplutură: fără
+     ea, ultimul cuvânt e al suportului, iar desenul se termină cu o promisiune.
+     Cu ea, se termină cu confirmarea celui care avea problema — adică lucrul pe
+     care cardul îl susține. Și e la DREAPTA, deci deschide un șir nou, cu codiță. */
+  { dinPartea: "comerciant", text: "Mulțumesc!", ora: "11:42" },
 ];

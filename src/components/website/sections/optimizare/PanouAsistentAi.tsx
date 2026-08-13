@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils/cn";
 import {
-  ASISTENTI,
+  ASISTENTI_TEANC,
   BARA,
   BUTON_PRODUS,
   INTREBARE,
@@ -12,7 +12,39 @@ import {
   SUBTEXT_CAMP,
   SURSA,
   recomandate,
+  type Pictograma,
 } from "@/lib/website/geo";
+
+/**
+ * Semnele din bara laterală.
+ *
+ * ⚠ SUNT DESENATE, NU LUATE DINTR-O BIBLIOTECĂ. Patru căi scurte cântăresc mai
+ * puțin decât un pachet de pictograme adus pentru patru semne, iar la 13px
+ * oricum nu se vede diferența.
+ *
+ * ⚠ Prima formă N-AVEA NICIUNUL: în locul lor rămăsese un pătrat gol cu chenar,
+ * un substituent uitat, care pe ecran arăta ca o listă de căsuțe de bifat.
+ */
+const SEMNE: Record<Pictograma, string> = {
+  biblioteca:
+    "M4 6H2v14a2 2 0 0 0 2 2h14v-2H4zm16-4H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2m-1 9H9V9h10zm-4 4H9v-2h6zm4-8H9V5h10z",
+  proiecte: "M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z",
+  programate:
+    "M11.99 2A10 10 0 1 0 22 12 10 10 0 0 0 11.99 2M12 20a8 8 0 1 1 8-8 8 8 0 0 1-8 8m.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z",
+  cont: "M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5m0 2c-3.34 0-10 1.67-10 5v3h20v-3c0-3.33-6.66-5-10-5",
+};
+
+function Semn({ nume, marime = 13 }: { nume: Pictograma; marime?: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="shrink-0 fill-[#6b6b70]"
+      style={{ width: marime, height: marime }}
+    >
+      <path d={SEMNE[nume]} />
+    </svg>
+  );
+}
 
 /**
  * Fereastra de discuție cu un asistent AI, ilustrația secțiunii „GEO".
@@ -252,11 +284,11 @@ function BaraLaterala() {
       <span className="mt-1 flex flex-col">
         {BARA.meniu.map((element) => (
           <span
-            key={element}
+            key={element.eticheta}
             className="flex items-center gap-2 rounded-lg px-2 py-[7px] text-[12.5px] text-[#4b4b50]"
           >
-            <span className="h-[13px] w-[13px] shrink-0 rounded-[3px] border border-[#c7c7cc]" />
-            {element}
+            <Semn nume={element.pictograma} />
+            {element.eticheta}
           </span>
         ))}
       </span>
@@ -280,7 +312,10 @@ function BaraLaterala() {
       </span>
 
       <span className="mt-3 flex items-center gap-2 border-t border-hairline px-1 pt-3">
-        <span className="h-[20px] w-[20px] shrink-0 rounded-full bg-[#d1d1d6]" />
+        {/* Bulina contului, cu semnul unui om în ea — nu un cerc gol. */}
+        <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#ececec]">
+          <Semn nume="cont" marime={12} />
+        </span>
         <span className="truncate text-[12px] text-[#4b4b50]">{BARA.cont}</span>
       </span>
     </div>
@@ -298,12 +333,28 @@ function CampDeIntrebare({ text }: { text: string }) {
 
   return (
     <div className="px-4 pb-4 @[560px]:px-6 @[560px]:pb-6">
-      <div className="flex items-center gap-2 rounded-full border border-hairline px-3 py-[9px] @[560px]:px-4 @[560px]:py-[11px]">
-        <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] shrink-0 fill-[#8e8e93]">
+      {/*
+        ⚠ CÂMPUL CREȘTE ÎN ÎNĂLȚIME, NU TAIE TEXTUL.
+
+        Era `truncate`, și pe telefon se vedea doar începutul întrebării: se
+        scriau șaizeci și două de semne, iar din ele încăpeau vreo douăzeci. Adică
+        tocmai scrierea, singurul lucru care mișcă în desen, se oprea după o
+        treime.
+
+        Un câmp de întrebare adevărat face exact asta — se înalță pe măsură ce
+        scrii — deci reparația e și mai aproape de original decât ce era.
+
+        `items-end` ține semnele lipite de fundul câmpului când textul trece pe
+        mai multe rânduri, ca la ei; iar rotunjirea e dată în pixeli, nu
+        `rounded-full`: la un câmp înalt de trei rânduri, `full` l-ar fi făcut
+        oval.
+      */}
+      <div className="flex items-end gap-2 rounded-[20px] border border-hairline px-3 py-[9px] @[560px]:px-4 @[560px]:py-[11px]">
+        <svg viewBox="0 0 24 24" className="mb-[3px] h-[15px] w-[15px] shrink-0 fill-[#8e8e93]">
           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z" />
         </svg>
 
-        <span className="min-w-0 flex-1 truncate text-[13px] leading-[1.4] @[560px]:text-[14.5px]">
+        <span className="min-w-0 flex-1 break-words text-[13px] leading-[1.4] @[560px]:text-[14.5px]">
           {gol ? (
             <span className="text-[#8e8e93]">{SUBTEXT_CAMP}</span>
           ) : (
@@ -316,7 +367,7 @@ function CampDeIntrebare({ text }: { text: string }) {
         </span>
 
         {/* Butonul de trimitere, negru și rotund, ca la ei. */}
-        <span className="flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#1f1f22] @[560px]:h-[26px] @[560px]:w-[26px]">
+        <span className="mb-[-1px] flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[#1f1f22] @[560px]:h-[26px] @[560px]:w-[26px]">
           <svg viewBox="0 0 24 24" className="h-[13px] w-[13px] fill-white">
             <path d="M12 4l7 7-1.41 1.41L13 7.83V20h-2V7.83l-4.59 4.58L5 11z" />
           </svg>
@@ -342,7 +393,7 @@ function TeancDeSigle() {
 
   return (
     <span className="flex shrink-0 items-center pt-[2px]">
-      {ASISTENTI.map((asistent, i) => (
+      {ASISTENTI_TEANC.map((asistent, i) => (
         <span
           key={asistent.nume}
           className="relative flex items-center justify-center rounded-full border border-hairline bg-white"
@@ -350,7 +401,7 @@ function TeancDeSigle() {
             height: diametru,
             width: diametru,
             marginLeft: i === 0 ? 0 : -diametru / 2,
-            zIndex: ASISTENTI.length - i,
+            zIndex: ASISTENTI_TEANC.length - i,
           }}
         >
           <Image

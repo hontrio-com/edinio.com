@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   ASISTENTI,
   ASISTENTI_TEXT,
+  ASISTENTI_TEANC,
   BARA,
   BUTON_PRODUS,
   INTREBARE,
@@ -154,7 +155,7 @@ test("fereastra nu poartă numele niciunui asistent", () => {
     BARA.intrebareNoua,
     BARA.cont,
     BARA.recenteTitlu,
-    ...BARA.meniu,
+    ...BARA.meniu.map((m) => m.eticheta),
     ...BARA.recente,
     SUBTEXT_CAMP,
   ]
@@ -175,6 +176,15 @@ test("bara laterală are cu ce să pară o bară laterală", () => {
   assert.ok(BARA.recente.length >= 3, "prea puține discuții recente ca să pară o listă");
   assert.ok(BARA.meniu.length >= 2, "meniul e prea scurt");
 
+  /* ⚠ Fiecare rând ÎȘI POARTĂ PICTOGRAMA. Prima formă avea în locul lor un
+     pătrat gol cu chenar — un substituent uitat, care pe ecran arăta ca o listă
+     de căsuțe de bifat. Proba nu lasă să se adauge un rând fără semn. */
+  for (const element of BARA.meniu) {
+    assert.ok(element.pictograma.length > 0, `${element.eticheta} n-are pictogramă`);
+  }
+  const semne = new Set(BARA.meniu.map((m) => m.pictograma));
+  assert.equal(semne.size, BARA.meniu.length, "două rânduri cu același semn");
+
   const recente = new Set(BARA.recente);
   assert.equal(recente.size, BARA.recente.length, "două discuții recente cu același nume");
 
@@ -190,4 +200,33 @@ test("bara laterală are cu ce să pară o bară laterală", () => {
 test("butonul de pe produs spune ce face", () => {
   assert.ok(BUTON_PRODUS.length > 0);
   assert.ok(BUTON_PRODUS.length <= 16, "buton prea lung pentru rândul de produs");
+});
+
+test("teancul are trei sigle, rândul de jos are patru", () => {
+  /*
+    Amândouă sunt cerute de client (13.08), și nu e o nepotrivire: teancul din
+    capul răspunsului îi ține pe cei trei numiți de el, iar rândul de sub
+    fereastră îi arată pe toți, fiindcă acolo se spune cine poate CITI paginile,
+    iar Perplexity le citește la fel.
+
+    ⚠ Și teancul trebuie să fie un PREFIX al listei, nu o alegere răzleață:
+    ordinea lui e ordinea desenării, prima deasupra.
+  */
+  assert.equal(ASISTENTI_TEANC.length, 3, "teancul nu mai are trei sigle");
+  assert.ok(ASISTENTI.length >= 4, "rândul de jos a rămas fără sigle");
+
+  for (const [i, asistent] of ASISTENTI_TEANC.entries()) {
+    assert.equal(asistent.nume, ASISTENTI[i].nume, "teancul nu mai e începutul listei");
+  }
+  assert.equal(ASISTENTI_TEANC[0].nume, "ChatGPT", "în față stă cea mai cunoscută");
+});
+
+test("subtextul câmpului nu numește pe nimeni", () => {
+  /* Cerut de client: ceva generic. Motivul e același cu al ferestrei fără nume —
+     câmpul nu spune pe cine întrebi, fiindcă răspunsul îl poate da oricare. */
+  const jos = SUBTEXT_CAMP.toLowerCase();
+  for (const asistent of ASISTENTI) {
+    assert.equal(jos.includes(asistent.nume.toLowerCase()), false);
+  }
+  assert.ok(SUBTEXT_CAMP.length <= 24, "subtext prea lung pentru câmpul de pe telefon");
 });

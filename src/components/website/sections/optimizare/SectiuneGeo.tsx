@@ -1,4 +1,5 @@
-import { ASISTENTI_TEXT, GEO } from "@/lib/website/geo";
+import Image from "next/image";
+import { ASISTENTI, ASISTENTI_TEXT, GEO } from "@/lib/website/geo";
 import { SectionEyebrow } from "../SectionEyebrow";
 import { PanouAsistentAi } from "./PanouAsistentAi";
 
@@ -18,13 +19,17 @@ import { PanouAsistentAi } from "./PanouAsistentAi";
  *
  * ═══ SIGLELE ═══
  *
- * ⚠ NU MAI SUNT UN RÂND SUB FEREASTRĂ, ci stau ÎNCĂLECATE ÎN RĂSPUNS, în locul
- * unde ar sta semnul asistentului — cerut de client (13.08). E o mutare mică cu
- * un înțeles mare: pe un rând dedesubt, siglele erau o listă de nume; în capul
- * răspunsului, ele spun că răspunsul ăla îl poate da oricare dintre ei.
+ * ⚠ SUNT ÎN DOUĂ LOCURI, ȘI AMÂNDOUĂ SUNT CERUTE.
  *
- * Sub fereastră a rămas doar rândul de text, fiindcă el spune ce siglele nu pot
- * spune singure.
+ * TREI, încălecate, în capul răspunsului, unde ar sta semnul asistentului: acolo
+ * spun că răspunsul ăla îl poate da oricare dintre ei.
+ *
+ * PATRU, întregi, sub rândul de text: acolo se spune cine poate citi paginile
+ * magazinului, iar Perplexity le citește la fel ca ceilalți.
+ *
+ * O formă intermediară le scosese de jos, socotind că teancul e de ajuns. Nu e:
+ * în teanc se vede jumătate din fiecare siglă, deci teancul spune „mai mulți",
+ * nu „aceștia".
  *
  * ⚠ RÂNDUL SPUNE „POT FI CITITE", NU „SUNT INDEXATE".
  *
@@ -53,10 +58,44 @@ export function SectiuneGeo() {
         <div className="mx-auto mt-14 max-w-[760px] lg:mt-20">
           <PanouAsistentAi />
 
-          {/* Rândul de sub fereastră. Siglele stau în răspuns, nu aici. */}
-          <p className="mt-8 text-center text-[13px] leading-[1.5] text-ink-2 sm:text-[14px] lg:mt-10">
-            {ASISTENTI_TEXT}
-          </p>
+          <div className="mt-8 flex flex-col items-center gap-5 lg:mt-10">
+            <p className="text-center text-[13px] leading-[1.5] text-ink-2 sm:text-[14px]">
+              {ASISTENTI_TEXT}
+            </p>
+
+            {/*
+              ⚠ ÎNĂLȚIME EGALĂ, LĂȚIME DUPĂ RAPORTUL FIECĂREIA. Trei din patru
+              sunt aproape pătrate; a patra, Perplexity, e mai înaltă decât lată.
+              Cu lățime egală ar fi ieșit turtită. Raporturile sunt citite din
+              `viewBox`-ul fișierelor, iar o probă le compară cu sursa lor.
+
+              ⚠ Și numele scrie sub fiecare: siglele astea se recunosc bine în
+              lumea lor și deloc în afara ei, iar rândul de deasupra vorbește
+              chiar despre ele. Patru semne mute ar fi cerut ghicit.
+            */}
+            <ul className="flex flex-wrap items-start justify-center gap-x-8 gap-y-6 sm:gap-x-12">
+              {ASISTENTI.map((asistent) => (
+                <li key={asistent.nume} className="flex flex-col items-center gap-[10px]">
+                  <span
+                    className="relative block h-[26px] sm:h-[30px]"
+                    style={{ aspectRatio: String(asistent.raport) }}
+                  >
+                    <Image
+                      src={asistent.src}
+                      alt={asistent.nume}
+                      fill
+                      sizes="32px"
+                      unoptimized
+                      className="object-contain"
+                    />
+                  </span>
+                  <span className="text-[12px] leading-none text-ink-2 sm:text-[13px]">
+                    {asistent.nume}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </section>

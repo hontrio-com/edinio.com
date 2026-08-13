@@ -89,6 +89,8 @@ export interface Asistent {
   src: string;
   /** Lățime împărțită la înălțime, din `viewBox`-ul fișierului. */
   raport: number;
+  /** Intră în teancul încălecat din capul răspunsului. */
+  teanc?: true;
 }
 
 /**
@@ -105,21 +107,25 @@ export interface Asistent {
  * ⚠ Raporturile sunt din `viewBox`-ul fiecărui fișier, nu ghicite. Sunt aproape
  * pătrate toate, în afară de Perplexity, care e mai înalt decât lat.
  */
+/**
+ * ⚠ PATRU ÎN RÂNDUL DE JOS, TREI ÎN TEANC — și amândouă sunt cerute de client
+ * (13.08), nu o nepotrivire.
+ *
+ * Teancul din capul răspunsului îi ține pe cei trei numiți de el: ChatGPT,
+ * Claude, Gemini. Rândul de sub fereastră îi arată pe toți patru, fiindcă acolo
+ * se spune cine poate citi paginile, iar Perplexity le citește la fel.
+ *
+ * Ordinea contează la teanc: prima e deasupra, ultima dedesubt.
+ */
 export const ASISTENTI: Asistent[] = [
-  { nume: "ChatGPT", src: "/optimizare/chatgpt.svg", raport: 41.142 / 40.034 },
-  { nume: "Claude", src: "/optimizare/claude.svg", raport: 39.5 / 39.53 },
-  { nume: "Gemini", src: "/optimizare/gemini.svg", raport: 28.01 / 28 },
+  { nume: "ChatGPT", src: "/optimizare/chatgpt.svg", raport: 41.142 / 40.034, teanc: true },
+  { nume: "Claude", src: "/optimizare/claude.svg", raport: 39.5 / 39.53, teanc: true },
+  { nume: "Gemini", src: "/optimizare/gemini.svg", raport: 28.01 / 28, teanc: true },
+  { nume: "Perplexity", src: "/optimizare/perplexity.svg", raport: 21 / 24 },
 ];
 
-/*
-  ⚠ TREI, nu patru — cerute anume de client (13.08): ChatGPT, Claude, Gemini,
-  încălecate una peste alta în locul unde stă de obicei semnul asistentului.
-  `public/optimizare/perplexity.svg` a rămas pe disc; dacă se cere a patra, se
-  adaugă aici cu raportul din `viewBox`-ul ei, 21/24.
-
-  Ordinea contează la desen: prima e deasupra, ultima dedesubt. Sigla ChatGPT e
-  și cea mai cunoscută, deci stă în față.
-*/
+/** Cei din teancul încălecat, în ordinea desenării. */
+export const ASISTENTI_TEANC = ASISTENTI.filter((a) => a.teanc);
 
 export const ASISTENTI_TEXT = "Paginile magazinului pot fi citite de asistenții AI";
 
@@ -133,10 +139,24 @@ export const ASISTENTI_TEXT = "Paginile magazinului pot fi citite de asistenții
  * care poartă numele lor, cu un răspuns pe care nu l-au dat, pe pagina noastră de
  * vânzare, ar fi altceva decât o ilustrație.
  */
+export type Pictograma = "biblioteca" | "proiecte" | "programate" | "cont";
+
 export const BARA = {
   titlu: "Asistent AI",
   intrebareNoua: "Discuție nouă",
-  meniu: ["Bibliotecă", "Proiecte", "Programate"],
+  /*
+    ⚠ FIECARE RÂND ÎȘI POARTĂ PICTOGRAMA, ca DATE.
+
+    Prima formă avea în locul lor un pătrat gol cu chenar — un substituent pe
+    care l-am uitat acolo, și care pe ecran arăta ca o listă de căsuțe de bifat.
+    Numele pictogramei stă aici, lângă etichetă, ca nimeni să nu mai poată adăuga
+    un rând fără să se întrebe ce semn are.
+  */
+  meniu: [
+    { eticheta: "Bibliotecă", pictograma: "biblioteca" as Pictograma },
+    { eticheta: "Proiecte", pictograma: "proiecte" as Pictograma },
+    { eticheta: "Programate", pictograma: "programate" as Pictograma },
+  ],
   recenteTitlu: "Recente",
   recente: [
     "Cameră de supraveghere exterior",
@@ -147,8 +167,14 @@ export const BARA = {
   cont: "Contul tău",
 } as const;
 
-/** Ce scrie în câmpul de întrebare cât e gol. */
-export const SUBTEXT_CAMP = "Întreabă asistentul AI";
+/**
+ * Ce scrie în câmpul de întrebare cât e gol.
+ *
+ * ⚠ GENERIC, nu „Întreabă asistentul AI" — cerut de client (13.08). Motivul e
+ * același cu al ferestrei fără nume: câmpul nu spune pe cine întrebi, fiindcă
+ * răspunsul îl poate da oricare dintre cei din teanc.
+ */
+export const SUBTEXT_CAMP = "Pune o întrebare";
 
 /** Butonul de pe fiecare produs, cerut de client. */
 export const BUTON_PRODUS = "Vezi produsul";

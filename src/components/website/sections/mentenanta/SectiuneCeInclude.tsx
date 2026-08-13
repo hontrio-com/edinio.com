@@ -82,7 +82,24 @@ function Card({ card, lat }: { card: CardMentenanta; lat?: boolean }) {
   return (
     <article
       className={cn(
-        "flex flex-col rounded-[20px] border border-hairline bg-white p-6 sm:p-8",
+        /*
+          ⚠ UMBRA E CEA DE PE PAGINA DE START (`.feature-card-shadow`), nu una
+          nouă. Clientul a cerut carduri „mai premium", iar tentația era să scriu
+          încă o rețetă de umbră — a treia din proiect, după cea a casetelor de
+          sigle (`--umbra-placa`) și asta.
+
+          Nu se poate: nota din `globals.css` cere ca toate umbrele de pe site să
+          tragă în aceeași direcție, fiindcă o sursă de lumină care se schimbă de
+          la un obiect la altul e chiar lucrul care le face să pară desenate, nu
+          așezate. Iar aici e chiar cazul rețetei ăsteia — un card alb, mare, pe
+          o pagină albă, exact ca alea de pe pagina de start.
+
+          Trei straturi: o linie de contact de 1px, o umbră apropiată care spune
+          că e ridicat de pe pagină, și una largă și adâncă (64px, dusă în jos cu
+          34) care dă greutatea. Ultima e cea care face diferența dintre „card" și
+          „chenar".
+        */
+        "feature-card-shadow flex flex-col rounded-[22px] border border-hairline bg-white p-6 sm:p-8",
         /* Cel lat: text la stânga, ilustrație la dreapta, dar abia de la `lg`.
            Sub atât, un card lat n-are lățime de împărțit și se așază ca celelalte. */
         lat && "lg:grid lg:grid-cols-2 lg:items-center lg:gap-10 lg:p-10",

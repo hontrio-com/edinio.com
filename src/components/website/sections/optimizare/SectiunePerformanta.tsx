@@ -1,5 +1,6 @@
 import { CARDURI_PERFORMANTA, PERFORMANTA } from "@/lib/website/optimizare";
 import { SectionEyebrow } from "../SectionEyebrow";
+import { PanouImagini } from "./PanouImagini";
 import { PanouPageSpeed } from "./PanouPageSpeed";
 
 /**
@@ -21,10 +22,9 @@ import { PanouPageSpeed } from "./PanouPageSpeed";
  * interior arată prea rotund. Aceleași numere ca la „Problema" — dacă se schimbă
  * acolo, se schimbă și aici.
  *
- * ⚠ NEÎNCHEIATĂ: clientul a cerut TREI carduri și a dat textele doar pentru
- * primul. Restul se adaugă în `CARDURI_PERFORMANTA`, nu aici. Până atunci grila
- * arată un card singur pe rând, ceea ce e corect — nu se pun substituenți cu text
- * inventat pe o pagină comercială.
+ * ⚠ NEÎNCHEIATĂ: clientul a cerut TREI carduri. Sunt două; al treilea se adaugă
+ * în `CARDURI_PERFORMANTA` când vine textul, plus ilustrația lui mai jos. Nu se
+ * pun substituenți cu text inventat pe o pagină comercială.
  */
 export function SectiunePerformanta() {
   return (
@@ -60,11 +60,11 @@ export function SectiunePerformanta() {
                 <div className="relative aspect-[4/3] overflow-hidden rounded-[11px] bg-tint">
                   {/*
                     Se alege pe `id`, nu se pune aceeași ilustrație la toate:
-                    cardurile 2 și 3 vor avea ilustrațiile lor, iar un panou de
-                    scoruri pus aici fără condiție le-ar fi arătat pe toate cu
-                    viteză.
+                    fiecare card are desenul lui, iar un panou pus aici fără
+                    condiție le-ar fi arătat pe toate la fel.
                   */}
                   {card.id === "incarcare" ? <PanouPageSpeed /> : null}
+                  {card.id === "imagini" ? <PanouImagini /> : null}
                 </div>
               </div>
 

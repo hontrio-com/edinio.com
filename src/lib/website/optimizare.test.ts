@@ -66,9 +66,8 @@ test("cardurile secțiunii au tot ce le trebuie", () => {
     assert.ok(card.titlu.length > 0);
     assert.ok(card.descriere.length > 30, `${card.id}: descriere prea scurtă`);
   }
-  /* ⚠ Clientul a cerut TREI carduri si a dat textele doar pentru primul. Cand vin
-     celelalte doua, numarul de aici se ridica la 3 — pana atunci proba spune
-     limpede unde a ramas lucrul. */
+  /* ⚠ Clientul a cerut TREI carduri. Cand vine si al treilea text, numarul de
+     aici se ridica la 3 — pana atunci proba spune limpede unde a ramas lucrul. */
   assert.ok(
     CARDURI_PERFORMANTA.length >= 1 && CARDURI_PERFORMANTA.length <= 3,
     "secțiunea are între unu și trei carduri",

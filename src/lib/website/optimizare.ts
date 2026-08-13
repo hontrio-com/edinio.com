@@ -36,7 +36,38 @@ export const CARDURI_PERFORMANTA: CardPerformanta[] = [
     descriere:
       "Paginile magazinului sunt construite și optimizate pentru a se încărca cât mai rapid, fără a ține clienții să aștepte.",
   },
+  {
+    id: "imagini",
+    titlu: "Imagini optimizate",
+    descriere:
+      "Imaginile produselor sunt livrate eficient, astfel încât să păstrăm calitatea fără să încetinim inutil magazinul.",
+  },
 ];
+
+/**
+ * Ilustrația cardului „Imagini optimizate": aceeași poză de două ori, cu
+ * greutatea scrisă sub fiecare.
+ *
+ * ⚠ ACEEAȘI POZĂ, DINADINS. Ideea cardului e că imaginea ARATĂ LA FEL și doar
+ * cântărește altceva. Două fișiere diferite ar fi spus altceva — că a doua e mai
+ * mică pentru că e mai proastă.
+ *
+ * `inainte` e cifra dată de client: cât are o fotografie ieșită dintr-un telefon.
+ * `dupa` NU e scris de mână — se citește chiar din fișierul pe care îl trimitem,
+ * la construirea paginii. Vezi `PanouImagini`. Un număr scris aici ar fi rămas în
+ * urmă la prima reîncărcare a pozei, iar panoul ar fi arătat o greutate pe care
+ * n-o are nimic.
+ */
+export const IMAGINE_OPTIMIZATA = {
+  /** Fișierul trimis către vizitator. Lipsă = se vede substituentul. */
+  src: "/optimizare/produs.jpg",
+  alt: "",
+  /** Cât are aceeași poză nefolosită, direct din telefon. Cifra clientului. */
+  inainte: "5 MB",
+  /** Se folosește doar dacă fișierul lipsește de pe disc la construire. */
+  dupaDeRezerva: "câțiva KB",
+  hint: "Fotografie de produs",
+} as const;
 
 /**
  * Scorurile arătate în ilustrația cu PageSpeed Insights.

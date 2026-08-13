@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
+import { SectiunePerformanta } from "@/components/website/sections/optimizare/SectiunePerformanta";
 import { TitluOptimizare } from "@/components/website/sections/optimizare/TitluOptimizare";
 import { siteMetadata } from "@/lib/website/metadata";
 
@@ -34,11 +35,16 @@ export const metadata: Metadata = siteMetadata({
  */
 export default function OptimizarePage() {
   return (
-    <HeroPagina
-      title={<TitluOptimizare />}
-      lead="Edinio optimizează magazinele pentru viteză, performanță și SEO, astfel încât să se încarce rapid și să aibă o bază bună pentru motoarele de căutare."
-      cta={{ label: "Începe gratuit", href: "/register" }}
-      secundara={{ label: "Vezi prețurile", href: "/preturi" }}
-    />
+    <>
+      <HeroPagina
+        title={<TitluOptimizare />}
+        lead="Edinio optimizează magazinele pentru viteză, performanță și SEO, astfel încât să se încarce rapid și să aibă o bază bună pentru motoarele de căutare."
+        cta={{ label: "Începe gratuit", href: "/register" }}
+        secundara={{ label: "Vezi prețurile", href: "/preturi" }}
+      />
+
+      {/* Prima dintre cele trei secțiuni cerute: Performanță, SEO, GEO. */}
+      <SectiunePerformanta />
+    </>
   );
 }

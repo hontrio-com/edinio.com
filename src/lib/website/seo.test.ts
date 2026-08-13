@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CARDURI_SEO, CAUTARE, REZULTATE_SHOPPING } from "./seo";
+import { CARDURI_SEO, CAUTARE, REZULTATE_ORGANICE, REZULTATE_SHOPPING } from "./seo";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(AICI, "..", "..", "..", "public");
@@ -84,4 +84,91 @@ test("cardurile secțiunii au tot ce le trebuie", () => {
     CARDURI_SEO.length >= 1 && CARDURI_SEO.length <= 4,
     "secțiunea are între unu și patru carduri",
   );
+});
+
+/* ─── Cardul 2: rezultate obișnuite pe Google ─────────────────────────────── */
+
+test("unul singur e al nostru", () => {
+  /* Zero: ilustrația arată trei magazine străine și nu spune nimic. Două:
+     chenarul verde apare de două ori și comparația se destramă. */
+  const alenoastre = REZULTATE_ORGANICE.filter((r) => r.alNostru);
+  assert.equal(alenoastre.length, 1, "trebuie exact un rezultat al nostru");
+});
+
+test("adresa noastră e pe un domeniu care CHIAR e al nostru", () => {
+  /*
+    ⚠ ASTA E O PROBĂ DE SIGURANȚĂ, nu de desen.
+
+    Adresa firească pentru un exemplu românesc ar fi `magazinul-tau.ro` — dar
+    domeniul ăla EXISTĂ și e al altcuiva (verificat prin DNS, nu presupus). Scris
+    pe o pagină comercială, lângă un chenar verde și eticheta „optimizat", ar
+    lega magazinul altcuiva de reclama noastră.
+
+    `edinio.com` e al nostru, și e chiar felul în care arată adresa unui magazin
+    Edinio. Dacă cineva schimbă vreodată exemplul, proba îl oprește.
+  */
+  const alNostru = REZULTATE_ORGANICE.find((r) => r.alNostru);
+  assert.ok(alNostru, "lipsește rezultatul nostru");
+  assert.ok(
+    alNostru.cale.startsWith("edinio.com"),
+    `adresa noastră e pe ${alNostru.cale} — trebuie pe un domeniu al nostru`,
+  );
+});
+
+test("vecinii stau pe adrese care nu există", () => {
+  /*
+    Cele două rezultate slabe stau lângă cuvintele „titlu nelucrat". Dacă
+    domeniul lor ar fi al cuiva adevărat, pagina ar spune ceva despre firma aia.
+    De aceea sunt adrese care NU se rezolvă (verificat), și care sunt descrieri,
+    nu nume de firmă.
+
+    Lista de mai jos e de domenii despre care ȘTIM că sunt luate. Se mai adaugă
+    la ea dacă cineva scrie alt exemplu.
+  */
+  const LUATE = ["magazinul-tau.ro", "magazin.ro", "shop.ro"];
+  for (const r of REZULTATE_ORGANICE) {
+    if (r.alNostru) continue;
+    const gazda = r.cale.split(" ")[0];
+    assert.ok(
+      !LUATE.includes(gazda),
+      `${gazda} e un domeniu adevărat, al altcuiva — nu se pune lângă un titlu slab`,
+    );
+    assert.ok(!gazda.startsWith("edinio."), `${gazda}: un vecin slab nu stă pe domeniul nostru`);
+  }
+});
+
+test("titlul și descrierea noastră intră întregi", () => {
+  /*
+    ⚠ PRAGURILE SUNT MĂSURATE ÎN BROWSER, nu luate din ghiduri de SEO.
+
+    Panoul e de 196-438px, după lățimea ferestrei. Titlul se taie la două
+    rânduri, descrierea la trei. La 438px (calculator) încap vreo 60 de semne pe
+    rândul de titlu și vreo 62 pe cel de descriere.
+
+    Rostul: tăierea trebuie să lovească rezultatele SLABE, nu pe al nostru. Prima
+    formă avea titlul tăiat la un rând și descrierea la două, iar ce ieșea ciuntit
+    era chiar textul lucrat — adică desenul spunea pe dos față de card.
+  */
+  const alNostru = REZULTATE_ORGANICE.find((r) => r.alNostru);
+  assert.ok(alNostru);
+  assert.ok(
+    alNostru.titlu.length <= 60,
+    `titlul nostru are ${alNostru.titlu.length} semne; peste 60 se taie și pe Google`,
+  );
+  assert.ok(
+    alNostru.descriere.length <= 120,
+    `descrierea noastră are ${alNostru.descriere.length} semne; peste 120 se taie pe calculator`,
+  );
+});
+
+test("cele trei rezultate sunt deosebite între ele", () => {
+  const cai = new Set(REZULTATE_ORGANICE.map((r) => r.cale));
+  const titluri = new Set(REZULTATE_ORGANICE.map((r) => r.titlu));
+  assert.equal(cai.size, REZULTATE_ORGANICE.length, "două rezultate au aceeași adresă");
+  assert.equal(titluri.size, REZULTATE_ORGANICE.length, "două rezultate au același titlu");
+
+  for (const r of REZULTATE_ORGANICE) {
+    assert.equal(r.initiala.length, 1, `${r.site}: bulina ține o singură literă`);
+    assert.ok(r.descriere.length > 20, `${r.site}: descriere prea scurtă ca să pară adevărată`);
+  }
 });

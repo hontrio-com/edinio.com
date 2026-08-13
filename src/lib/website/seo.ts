@@ -36,6 +36,12 @@ export const CARDURI_SEO: CardSeo[] = [
     descriere:
       "Produsele și paginile magazinului sunt organizate clar, astfel încât să poată fi găsite mai ușor în căutări.",
   },
+  {
+    id: "prezentare",
+    titlu: "Titluri și descrieri pentru Google",
+    descriere:
+      "Controlezi cum sunt prezentate paginile și produsele tale în rezultatele de căutare.",
+  },
 ];
 
 /**
@@ -103,5 +109,75 @@ export const REZULTATE_SHOPPING: RezultatShopping[] = [
     pret: "549,00 RON",
     vanzator: "Magazinul tău",
     livrare: "Fără costuri",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARDUL 2 — rezultate obișnuite pe Google
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface RezultatOrganic {
+  /** Numele site-ului, pe rândul de sus, lângă pictogramă. */
+  site: string;
+  /** Firimiturile de sub el, cum le arată Google: gazda, apoi calea cu „›". */
+  cale: string;
+  titlu: string;
+  descriere: string;
+  /** Litera din bulina care ține locul pictogramei site-ului. */
+  initiala: string;
+  /** Al nostru — cel cu titlul și descrierea lucrate. Unul singur. */
+  alNostru?: true;
+}
+
+/**
+ * Trei rezultate obișnuite pe Google, pentru cardul „Titluri și descrieri".
+ *
+ * ═══ CE ARATĂ ═══
+ *
+ * Același loc în rezultate, trei feluri de a-l folosi. Cele două din jur au ce
+ * scoate un magazin lăsat pe pilot automat: un titlu care e numele categoriei,
+ * o cale cu semne de întrebare în ea, și o descriere pe care Google și-a
+ * cules-o singur din meniul paginii, fiindcă n-a găsit una scrisă. Al nostru are
+ * titlu scris pentru om și descriere care spune ce se găsește acolo.
+ *
+ * ⚠ AL NOSTRU E LA MIJLOC, NU PRIMUL — dinadins. Pus primul, desenul ar spune
+ * „cu Edinio ieși pe locul întâi", ceea ce n-are cum să fie promis de nimeni.
+ * Cardul vorbește despre CUM ARATĂ rezultatul, nu despre unde stă, iar la mijloc
+ * comparația se vede și în sus și în jos.
+ *
+ * ⚠ ADRESELE. `magazinul-tau.ro` există și e al altcuiva — verificat, nu
+ * presupus — deci nu se scrie pe o pagină comercială ca și cum ar fi un exemplu
+ * al nostru. Al nostru arată chiar cum arată un magazin Edinio: `edinio.com`
+ * plus numele magazinului. Iar cele două din jur folosesc adrese care NU EXISTĂ
+ * (verificat: nu se rezolvă) și care sunt descrieri, nu nume de firmă, ca
+ * titlul slab de lângă ele să nu cadă pe cineva adevărat.
+ */
+export const REZULTATE_ORGANICE: RezultatOrganic[] = [
+  {
+    initiala: "M",
+    site: "Magazin concurent",
+    cale: "magazin-concurent.ro › index.php?cat=12&id=482",
+    titlu: "Produse",
+    /* Ce arată Google când pagina n-are descriere scrisă: își culege singur
+       primul text pe care îl găsește, adică meniul. Se vede des, și de departe. */
+    descriere:
+      "Acasă · Despre noi · Contact · Livrare și retur · Termeni și condiții · Coșul meu (0) · Categorii · Produse noi · Promoții ·",
+  },
+  {
+    alNostru: true,
+    initiala: "M",
+    site: "Magazinul tău",
+    cale: "edinio.com › magazinul-tau › camere-supraveghere",
+    titlu: "Camere de supraveghere WiFi și 4G | Magazinul tău",
+    descriere:
+      "Camere de supraveghere pentru interior și exterior, cu vedere pe timp de noapte. Livrare în 24 de ore.",
+  },
+  {
+    initiala: "A",
+    site: "Alt magazin online",
+    cale: "alt-magazin-online.ro › categorie-1",
+    titlu: "Categorie 1 - Alt magazin online - Magazin online",
+    descriere:
+      "Vă mulțumim pentru vizită. Pentru comenzi și informații ne puteți contacta telefonic în intervalul orar 09:00 - 17:00.",
   },
 ];

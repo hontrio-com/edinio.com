@@ -50,7 +50,7 @@ export function PanouMobil() {
       era a altui aparat.
     */
     <div className="@container absolute inset-0 flex items-start justify-center">
-      <IPhoneMockup latime="48cqw" className="mt-[2cqw]">
+      <IPhoneMockup latime="42cqw" className="mt-[2cqw]">
         <PaginaProdusMobil />
       </IPhoneMockup>
     </div>

@@ -97,6 +97,30 @@ export function greutate(octeti: number): string {
 }
 
 /**
+ * Produsul arătat pe ecranul telefonului, în cardul „Optimizat pentru mobil".
+ *
+ * ⚠ ALTUL decât cel de pe pagina de start. Acolo e parfumul din ilustrația
+ * „Problema"; aici clientul a dat alt produs și alt preț (2026-08-13). Deci nu se
+ * mai împrumută `PROBLEM_PRODUCT` — două pagini care arată produse diferite e
+ * chiar mai firesc decât același obiect de două ori.
+ *
+ * ⚠ FĂRĂ RÂND DE VARIANTE. Cel de pe pagina de start are „Volum: 30/100/200 ml",
+ * potrivit unui parfum. Pentru un blender ar fi trebuit inventate niște variante,
+ * pe o pagină comercială — iar clientul n-a dat niciuna. Lipsa lor ajută și la
+ * altceva: pagina e mai scurtă, deci intră mai mult din ea în ilustrație.
+ */
+export const PRODUS_MOBIL = {
+  image: { src: "/optimizare/produs2.webp", hint: "Fotografie de produs" },
+  name: "Blender BEKO 1.5L",
+  price: "145 lei",
+  priceNote: "TVA inclus",
+  /** Media, pe cinci. Jumătățile se desenează. */
+  rating: 4.5,
+  reviews: 68,
+  cta: "Adaugă în coș",
+} as const;
+
+/**
  * Scorurile arătate în ilustrația cu PageSpeed Insights.
  *
  * ⚠⚠ NUMERELE ASTEA SUNT DE ÎNLOCUIT CU O MĂSURĂTOARE ADEVĂRATĂ.

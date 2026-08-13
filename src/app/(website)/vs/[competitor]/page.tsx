@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { HeroPagina } from "@/components/website/sections/Hero";
-import { SectionEyebrow } from "@/components/website/sections/SectionEyebrow";
+import { EticheraVersus } from "@/components/website/sections/EticheraVersus";
 import { siteMetadata } from "@/lib/website/metadata";
 import { COMPETITORS } from "@/lib/website/nav";
+import type { VersusKey } from "@/lib/website/versus-logos";
 
 /**
  * Paginile de comparatie, din aceeasi lista care alimenteaza meniul.
@@ -60,11 +61,15 @@ export default async function ComparatiePage({ params }: Props) {
       ⚠ ETICHETA spune cu cine se compară, fiindcă titlul nu mai spune. Titlurile
       sunt ale clientului și vorbesc despre ce câștigi („O alternativă românească
       la Shopify"), nu despre cine cu cine — fără eticheta de deasupra, omul n-ar
-      ști pe ce pagină a ajuns. Scrisă „vs", se citește „VS": eticheta e cu
-      majuscule din stil.
+      ști pe ce pagină a ajuns.
+
+      ⚠ De la 13.08 e cu SIGLE, nu cu text, cerut de client. Cheia siglei e chiar
+      slug-ul din adresă, deci nu se poate desincroniza: `/vs/shopify` ia sigla
+      `shopify`. Un slug fără siglă oprește build-ul, în loc să lase un gol în
+      pagină — vezi tipul `VersusKey`.
     */
     <HeroPagina
-      eticheta={<SectionEyebrow label={`Edinio vs ${found.name}`} />}
+      eticheta={<EticheraVersus cheie={competitor as VersusKey} />}
       title={found.titlu}
       lead={found.lead}
       cta={{ label: "Începe gratuit", href: "/register" }}

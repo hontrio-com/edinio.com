@@ -74,3 +74,58 @@ export function cardMentenanta(id: CardMentenanta["id"]): CardMentenanta {
   if (!card) throw new Error(`MENTENANTA_ASEZARE: nu există cardul „${id}"`);
   return card;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mailurile din ilustrația cardului „Actualizare Platformă"
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface MailMentenanta {
+  titlu: string;
+  descriere: string;
+  /** Ce scrie în dreapta rândului: ora, sau data dacă e mai vechi de azi. */
+  ora: string;
+}
+
+/** Expeditorul, la toate. */
+export const MAIL_EXPEDITOR = "Edinio";
+
+/**
+ * Cele patru mailuri, ÎN ORDINEA DE PE ECRAN: primul e cel mai nou, sus.
+ *
+ * ⚠ TEXTELE SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (13.08). Nu se rescriu.
+ *
+ * ⚠ ORDINEA DE PE ECRAN NU E ORDINEA SOSIRII, și asta e chiar ce face desenul să
+ * pară o cutie poștală adevărată. Într-o cutie, mailul nou intră SUS și le împinge
+ * pe celelalte în jos; deci sosesc de la coadă spre cap — al patrulea primul, al
+ * întâi ultimul. Lista de aici rămâne în ordinea în care a scris-o clientul, iar
+ * animația o parcurge invers.
+ *
+ * ⚠ Orele coboară odată cu lista, fiindcă sus stă cel mai nou. Cu ore amestecate,
+ * oricine a deschis vreodată un mail ar vedea că ceva nu e în regulă, fără să
+ * poată spune ce.
+ */
+export const MENTENANTA_MAILURI: MailMentenanta[] = [
+  {
+    titlu: "Integrare nouă disponibilă",
+    descriere:
+      "Am adăugat o nouă integrare în Edinio. O poți activa direct din contul tău.",
+    ora: "14:32",
+  },
+  {
+    titlu: "Problemă rezolvată",
+    descriere:
+      "Am identificat și remediat problema care afecta temporar o funcționalitate a platformei.",
+    ora: "11:05",
+  },
+  {
+    titlu: "Platforma a fost actualizată",
+    descriere:
+      "Am lansat o nouă actualizare Edinio cu îmbunătățiri de stabilitate și performanță.",
+    ora: "9:41",
+  },
+  {
+    titlu: "Funcționalitate nouă",
+    descriere: "O nouă funcționalitate este acum disponibilă în magazinul tău.",
+    ora: "12 aug.",
+  },
+];

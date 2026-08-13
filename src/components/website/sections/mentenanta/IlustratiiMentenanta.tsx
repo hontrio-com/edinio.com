@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Ripple } from "@/components/ui/ripple";
-import type { CardMentenanta } from "@/lib/website/mentenanta";
+import {
+  MAIL_EXPEDITOR,
+  MENTENANTA_MAILURI,
+  type CardMentenanta,
+  type MailMentenanta,
+} from "@/lib/website/mentenanta";
 
 /**
  * Ilustrațiile celor patru carduri de pe „Mentenanță gratuită".
@@ -50,31 +54,201 @@ function Panou({ cap, children }: { cap: string; children: React.ReactNode }) {
   );
 }
 
-/** Un rând de panou: ce e în stânga, ce e în dreapta. */
-function Rand({ stanga, dreapta }: { stanga: React.ReactNode; dreapta: React.ReactNode }) {
+/* ═══ CUTIA POȘTALĂ ═══
+
+   Cerută de client (13.08): mailuri care apar pe rând, „identic 1 la 1 ca un mail
+   de la Gmail", după o captură trimisă de el.
+
+   ⚠ CE S-A MĂSURAT DIN CAPTURĂ, cu pipeta, și e păstrat întocmai:
+     rândul                     40px înălțime
+     linia dintre rânduri       #ECEFF1
+     expeditorul, subiectul,    #202124, îngroșate (toate mailurile sunt necitite)
+       și ora
+     fragmentul de după subiect #5F6368, obișnuit
+     căsuța și steaua           #C3C4C3
+   Iar rândul e: căsuță, stea, expeditor pe o coloană a lui, apoi subiectul și
+   fragmentul pe UN SINGUR rând tăiat la capăt, cu ora la dreapta.
+
+   ⚠ FĂRĂ CELE DOUĂ BIFE din captură — clientul a spus anume că sunt de la o
+   extensie a lui, nu din Gmail.
+
+   ⚠ ORDINEA SOSIRII E INVERSĂ celei de pe ecran. Într-o cutie poștală mailul nou
+   intră SUS și le împinge pe celelalte în jos. De aceea animația pleacă de la
+   coada listei: apare al patrulea, apoi al treilea DEASUPRA lui, și tot așa.
+   Dacă ar apărea de sus în jos, ar arăta a listă care se încarcă, nu a mailuri
+   care sosesc — și tocmai asta s-a cerut.
+*/
+
+/** Cât stă între două mailuri. Sub 500ms nu se mai vede că sosesc pe rând. */
+const PAS_MAIL_MS = 780;
+
+function Actualizari() {
+  const gazda = useRef<HTMLDivElement>(null);
+  /* Câte mailuri se văd. Pleacă de la 0: cutia e goală până sosesc. */
+  const [cate, setCate] = useState(0);
+
+  useEffect(() => {
+    const el = gazda.current;
+    if (!el) return;
+
+    const fara =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const ceasuri: ReturnType<typeof setTimeout>[] = [];
+
+    const observator = new IntersectionObserver(
+      (intrari) => {
+        for (const intrare of intrari) {
+          if (!intrare.isIntersecting) continue;
+          observator.disconnect();
+
+          if (fara) {
+            ceasuri.push(setTimeout(() => setCate(MENTENANTA_MAILURI.length), 0));
+            return;
+          }
+          for (let i = 1; i <= MENTENANTA_MAILURI.length; i++) {
+            ceasuri.push(setTimeout(() => setCate(i), i * PAS_MAIL_MS));
+          }
+        }
+      },
+      { threshold: 0.3 },
+    );
+
+    observator.observe(el);
+    return () => {
+      observator.disconnect();
+      for (const ceas of ceasuri) clearTimeout(ceas);
+    };
+  }, []);
+
+  /* Se arată COADA listei: cu unul, ultimul; cu două, ultimele două; și tot așa.
+     Așa fiecare mail nou intră deasupra celor de dinainte. */
+  const vizibile = MENTENANTA_MAILURI.slice(MENTENANTA_MAILURI.length - cate);
+
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <span className="min-w-0 truncate text-[13px] text-ink">{stanga}</span>
-      <span className="shrink-0 text-[12px] font-medium text-ink-3">{dreapta}</span>
+    <div ref={gazda} className="w-full">
+      {/*
+        Ce se aude și ce se indexează. Cutia pleacă GOALĂ din HTML — mailurile
+        apar abia în browser — deci fără rândul ăsta, ce trimite serverul n-ar
+        conține niciunul dintre texte. Aceeași grijă ca la celelalte ilustrații
+        care se animă.
+      */}
+      <p className="sr-only">
+        Exemple de anunțuri primite pe e-mail de la {MAIL_EXPEDITOR}:{" "}
+        {MENTENANTA_MAILURI.map((m) => `${m.titlu} — ${m.descriere}`).join(" ")}
+      </p>
+
+      <div
+        aria-hidden="true"
+        className="w-full overflow-hidden rounded-[10px] border border-hairline bg-white"
+      >
+        <BaraGmail />
+
+        {/*
+          Înălțimea e REZERVATĂ de la început, pentru toate patru. Fără ea, panoul
+          ar crește cu fiecare mail sosit și ar împinge pagina sub el de patru ori.
+        */}
+        <div
+          className="flex w-full flex-col justify-start px-2"
+          style={{ minHeight: MENTENANTA_MAILURI.length * 40 }}
+        >
+          {vizibile.map((mail) => (
+            <RandMail key={mail.titlu} mail={mail} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-function Actualizari() {
+/**
+ * Bara de sus a lui Gmail, după a doua captură a clientului (13.08).
+ *
+ * ⚠ MĂSURAT DIN CAPTURĂ, cu pipeta: fundalul barei #F4F6F9, pastila de căutare
+ * #E9EEF6, rotunjită întreagă (era de 717x47, deci raza e chiar jumătate din
+ * înălțime). Bara ține 66 din 979 de lățime, adică o cincisprezecime — de acolo
+ * vine cât de scundă e față de rândurile de dedesubt.
+ *
+ * ⚠ SIGLA E FIȘIERUL CLIENTULUI (`public/mentenanta/gmail.svg`), nu una
+ * desenată de mine: e marca lor, iar un M desenat din memorie s-ar fi văzut că
+ * nu e al lor. Raportul 512/399,42 vine din `viewBox`-ul fișierului.
+ *
+ * ⚠ Scrisul din câmp e în ROMÂNEȘTE, deși captura clientului e în engleză: el
+ * are contul pe engleză, dar un comerciant român își deschide Gmailul în
+ * românește, iar mailurile de dedesubt sunt tot românești.
+ */
+function BaraGmail() {
   return (
-    <Panou cap="Versiuni instalate">
-      <Rand
-        stanga={<><span className="font-semibold">v3.12.0</span> — plăți și facturare</>}
-        dreapta={
-          <span className="inline-flex items-center gap-1" style={{ color: VERDE }}>
-            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-            azi
-          </span>
-        }
-      />
-      <Rand stanga={<><span className="font-semibold">v3.11.4</span> — curieri</>} dreapta="acum 6 zile" />
-      <Rand stanga={<><span className="font-semibold">v3.11.0</span> — pagina de magazin</>} dreapta="acum 2 săpt." />
-    </Panou>
+    <div className="flex items-center gap-2 border-b border-hairline bg-[#F4F6F9] px-2.5 py-2">
+      {/* Cele trei linii ale meniului. */}
+      <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] shrink-0 fill-[#5F6368]">
+        <path d="M3 18h18v-2H3zm0-5h18v-2H3zm0-7v2h18V6z" />
+      </svg>
+
+      <span className="flex shrink-0 items-center gap-[5px]">
+        <Image
+          src="/mentenanta/gmail.svg"
+          alt="Gmail"
+          width={512}
+          height={400}
+          unoptimized
+          className="h-[13px] w-auto"
+        />
+        <span className="text-[13px] leading-none text-[#5F6368]">Gmail</span>
+      </span>
+
+      {/* Câmpul de căutare: pastilă rotunjită întreagă, cu lupa la stânga și
+          semnul de filtrare la dreapta. */}
+      <span className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-[#E9EEF6] px-2.5 py-[5px]">
+        <svg viewBox="0 0 24 24" className="h-[13px] w-[13px] shrink-0 fill-[#5F6368]">
+          <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14" />
+        </svg>
+        <span className="min-w-0 flex-1 truncate text-[11.5px] leading-none text-[#5F6368]">
+          Caută în e-mailuri
+        </span>
+        <svg viewBox="0 0 24 24" className="h-[13px] w-[13px] shrink-0 fill-[#5F6368]">
+          <path d="M3 17v2h6v-2zM3 5v2h10V5zm10 16v-2h8v-2h-8v-2h-2v6zM7 9v2H3v2h4v2h2V9zm14 4v-2H11v2zm-6-4h2V7h4V5h-4V3h-2z" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
+function RandMail({ mail }: { mail: MailMentenanta }) {
+  return (
+    <div
+      className="flex h-10 shrink-0 items-center gap-2 border-b border-[#ECEFF1] duration-300 ease-out animate-in fade-in slide-in-from-top-2 last:border-b-0"
+      style={{ animationFillMode: "backwards" }}
+    >
+      {/* Căsuța de bifat, goală. */}
+      <span className="h-[13px] w-[13px] shrink-0 rounded-[2px] border border-[#C3C4C3]" />
+
+      {/* Steaua, conturată. */}
+      <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] shrink-0 fill-none stroke-[#C3C4C3]" strokeWidth={1.6}>
+        <path d="m12 3.5 2.6 5.6 6.1.8-4.5 4.2 1.2 6.1-5.4-3-5.4 3 1.2-6.1L3.3 9.9l6.1-.8z" />
+      </svg>
+
+      {/* Expeditorul, pe coloana lui. */}
+      <span className="w-[64px] shrink-0 truncate text-[11.5px] font-bold text-[#202124] @[420px]:w-[86px] @[420px]:text-[12.5px]">
+        {MAIL_EXPEDITOR}
+      </span>
+
+      {/*
+        Subiectul și fragmentul, pe UN SINGUR rând tăiat la capăt — ca la ei.
+        Subiectul îngroșat și negru, fragmentul obișnuit și cenușiu, despărțite
+        printr-o liniuță. Amândouă în același element, altfel tăierea s-ar fi
+        făcut pe fiecare în parte și ar fi ieșit două „…" pe același rând.
+      */}
+      <span className="min-w-0 flex-1 truncate text-[11.5px] leading-none @[420px]:text-[12.5px]">
+        <span className="font-bold text-[#202124]">{mail.titlu}</span>
+        <span className="text-[#5F6368]"> - {mail.descriere}</span>
+      </span>
+
+      <span className="shrink-0 text-[10.5px] font-bold text-[#202124] @[420px]:text-[11.5px]">
+        {mail.ora}
+      </span>
+    </div>
   );
 }
 

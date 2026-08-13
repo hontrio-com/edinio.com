@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { SectiuneCeInclude } from "@/components/website/sections/mentenanta/SectiuneCeInclude";
+import { TitluMentenanta } from "@/components/website/sections/mentenanta/TitluMentenanta";
 import { siteMetadata } from "@/lib/website/metadata";
 
 export const metadata: Metadata = siteMetadata({
@@ -30,7 +31,12 @@ export default function MentenantaPage() {
   return (
     <>
       <HeroPagina
-        title="Tu te ocupi de afacere. Noi ne ocupăm de partea tehnică."
+        /*
+          Titlul e o piesă, nu un șir: „tehnică" stă între paranteze drepte,
+          cerute de client (13.08). Textul e același, doar așezat altfel — vezi
+          `TitluMentenanta`, unde scrie și de ce parantezele nu par paranteze.
+        */
+        title={<TitluMentenanta />}
         lead="Actualizări, securitate, optimizări și probleme tehnice. Mentenanța magazinului tău este inclusă în Edinio, fără costuri suplimentare."
         /*
           Textul butonului e al clientului, cu diacriticele puse: el l-a scris

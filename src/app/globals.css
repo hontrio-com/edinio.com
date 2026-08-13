@@ -1518,3 +1518,49 @@
 @media (prefers-reduced-motion: reduce) {
   .apare-lin { animation: none; }
 }
+
+/* ─── Cuvântul făcut din cod binar ──────────────────────────────────────────
+
+   Pe pagina „Mentenanță gratuită", cuvântul „tehnică" e o literă plină din care
+   sunt SCOASE cifre de 0 și 1. Cerut de client (13.08).
+
+   ⚠ ORDINEA E INVERSĂ FAȚĂ DE CUM PARE FIRESC, și asta a costat două încercări.
+
+   Prima formă punea cifre negre pe gol: tăiate pe forma literei, rămâneau doar
+   ele, iar între ele era transparent. Litera ajungea acoperită cam pe o treime,
+   adică un nor de zgomot din care nu se mai citea nimic. Micșorarea cifrelor de
+   la 8px la 4 n-a rezolvat: problema nu era mărimea, era CÂTĂ CERNEALĂ rămâne.
+
+   Acum litera e plină, iar cifrele sunt albe, scoase din ea. Cuvântul se citește
+   de la prima privire, ca tot titlul; de aproape se vede că e perforat cu 0 și 1.
+
+   ⚠ Dala e de 38,4×22: patru rânduri de câte șaisprezece cifre la 5px. Cifrele
+   monospațiate au pasul de 0,6em, deci șaisprezece cifre fac exact 38,4px — cât
+   dala. La orice altă lățime, marginea ar tăia o cifră pe din două și cusătura
+   s-ar vedea ca o dungă verticală prin literă.
+
+   ⚠ `color: transparent` FĂRĂ tăiere înseamnă CUVÂNT INVIZIBIL. De aceea totul
+   stă sub `@supports`: unde tăierea pe text nu merge, cuvântul rămâne pur și
+   simplu negru, ca restul titlului. E singura scăpare care ar fi înghițit un
+   cuvânt din titlu fără ca nimic să se plângă.
+
+   ⚠ Cerneala e CERNEALĂ, nu verde. Regula site-ului e că în titluri nu se
+   colorează cuvinte; verdele stă doar pe parantezele din jur, care sunt semne.
+*/
+.cuvant-binar {
+  /* Plasa: dacă tăierea pe text nu e cunoscută, rămâne cerneală plină. */
+  color: var(--color-ink);
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .cuvant-binar {
+    /* Cifrele albe DEASUPRA, câmpul de cerneală DEDESUBT. */
+    background-image:
+      url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='38.4' height='22'><text x='0' y='5.2' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>0100111001101101</text><text x='0' y='10.7' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>1011010010010110</text><text x='0' y='16.2' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>0010110101101001</text><text x='0' y='21.7' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>1101001011010010</text></svg>"),
+      linear-gradient(var(--color-ink), var(--color-ink));
+    background-repeat: repeat, repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}

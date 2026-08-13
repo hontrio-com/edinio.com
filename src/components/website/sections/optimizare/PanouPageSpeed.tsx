@@ -1,150 +1,60 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
-import {
-  SCORURI_PAGESPEED,
-  arcOprit,
-  culoareScor,
-  pasArc,
-} from "@/lib/website/optimizare";
-import { Gauge } from "./Gauge";
+import { Gauge } from "@/components/ui/gauge-1";
+import { SCORURI_PAGESPEED, culoareScor } from "@/lib/website/optimizare";
 
 /**
  * Panoul cu rezultatele PageSpeed Insights, ca ilustrație a cardului „Încărcare
  * rapidă".
  *
- * ═══ CE FACE JAVASCRIPT-UL DE AICI, ȘI CÂT ═══
+ * ═══ CADRANELE SUNT CHIAR COMPONENTA CLIENTULUI ═══
  *
- * O singură buclă de cadre, pornită când panoul intră în ecran, care urcă toate
- * cele patru scoruri de la zero la valoarea lor. Atât. Fără bibliotecă de
- * animație: integratorul e o funcție pură din `lib/website/optimizare.ts`, cu
- * numerele arcului tot acolo — inclusiv motivul pentru care amortizarea NU e cea
- * din exemplul clientului (la 60, cadranele urcau 4,8 secunde; măsurat).
+ * `components/ui/gauge-1.tsx`, copiată literal. Prima formă era o rescriere a
+ * mea, mai ușoară; clientul a cerut de două ori componenta lui, deci asta e.
+ * Ce trebuie știut despre ea — că aduce `framer-motion` și că pornește animația
+ * la 100ms de la montare, nu când intră în ecran — e scris în capul fișierului
+ * ei.
  *
- * ⚠ O SINGURĂ buclă pentru toate patru, nu câte una de cadran. Patru bucle
- * înseamnă patru observatori, patru stări și patru serii de cadre care se
- * trezesc la momente diferite — iar pe ecran s-ar fi văzut ca patru cadrane care
- * pornesc pe rând, din întâmplare, nu ca un panou care se completează.
+ * Aici rămân doar așezarea și legătura cu datele.
  *
- * ⚠ Numerele PLEACĂ DE LA ZERO, deci HTML-ul trimis de server are patru zerouri
- * în cadrane. De aceea scorurile adevărate sunt scrise ȘI ca text, o dată, în
- * `sr-only`: aia e ce aude cine ascultă pagina și ce citește cine o indexează.
- * Fără rândul acela, tot ce pleca de pe server erau patru zerouri.
+ * ═══ COMPONENTĂ DE SERVER ═══
  *
- * Cu `prefers-reduced-motion` nu pornește nimic: scorurile se văd de la început,
- * întregi.
+ * Panoul n-are nicio stare: cadranele își poartă singure animația, iar ele sunt
+ * cele marcate `"use client"`. Deci tot restul — grila, eticheta fiecărui scor și
+ * rândul citit de cititoarele de ecran — pleacă gata randat de pe server.
  */
 
+/**
+ * Mărimea cadranului, legată de lățimea panoului.
+ *
+ * ⚠ NU e o valoare fixă pe trepte de ecran, și asta a fost o corectură măsurată.
+ * Înălțimea în care încap cadranele vine din ilustrația 4:3 a cardului, adică din
+ * LĂȚIMEA CARDULUI — iar aceea sare exact la trecerea de prag, când grila mai
+ * adaugă o coloană. Cu pixeli ficși pe trepte, la 320, 640 și 1024px conținutul
+ * ieșea cu 8-18px peste marginea ilustrației: trei lățimi din nouăsprezece
+ * încercate, toate fix după câte un prag.
+ *
+ * `size` al componentei primește `100%`, iar lățimea o dă învelișul, în procente
+ * din panou (`cqw`). Plafonul de 86 e mărimea la care e desenată; sub 48 cifra
+ * n-ar mai încăpea în inel.
+ */
+const MARIME_CADRAN = "w-[calc(37.5cqw-28px)] max-w-[86px] min-w-[48px]";
+
 export function PanouPageSpeed() {
-  const gazda = useRef<HTMLDivElement>(null);
-  const [aratate, setAratate] = useState<number[]>(() =>
-    SCORURI_PAGESPEED.map(() => 0),
-  );
-
-  useEffect(() => {
-    const el = gazda.current;
-    if (!el) return;
-
-    const tinte = SCORURI_PAGESPEED.map((s) => s.scor);
-
-    const fara =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const deIndata = fara || typeof IntersectionObserver !== "function";
-
-    let cadru = 0;
-    let ultima = 0;
-    /*
-      Când nu se animă, arcurile PORNESC de pe valoarea finală. Așa primul cadru
-      trece direct testul de oprire și scrie scorurile întregi, o singură dată.
-
-      Alternativa evidentă — un `setAratate(tinte)` aici, în efect — e chiar ce
-      interzice `react-hooks/set-state-in-effect`, și pe bună dreptate: ar fi
-      însemnat o a doua randare imediat după prima, la fiecare montare.
-    */
-    const x = deIndata ? [...tinte] : tinte.map(() => 0);
-    const viteza = tinte.map(() => 0);
-
-    const pas = (acum: number) => {
-      /* Pasul se plafonează în sus, ca o filă lăsată în fundal să nu se întoarcă
-         cu un salt; și în jos la zero, fiindcă un `dt` negativ ar integra arcul
-         înapoi în timp, iar în sensul ăla e instabil. */
-      const dt =
-        ultima === 0 ? 1 / 60 : Math.min(Math.max((acum - ultima) / 1000, 0), 1 / 30);
-      ultima = acum;
-
-      let inMiscare = false;
-      for (let i = 0; i < tinte.length; i++) {
-        /* Integratorul sta in `lib`, ca functie pura: `requestAnimationFrame` nu
-           ruleaza intr-o fila de fundal, deci miscarea nu se poate proba din
-           browser. Vezi `optimizare.test.ts`. */
-        const dupa = pasArc(x[i], viteza[i], tinte[i], dt);
-        x[i] = dupa.x;
-        viteza[i] = dupa.viteza;
-        if (arcOprit(x[i], viteza[i], tinte[i])) {
-          x[i] = tinte[i];
-          viteza[i] = 0;
-        } else {
-          inMiscare = true;
-        }
-      }
-      setAratate([...x]);
-      cadru = inMiscare ? requestAnimationFrame(pas) : 0;
-    };
-
-    const porneste = () => {
-      if (cadru === 0) {
-        ultima = 0;
-        cadru = requestAnimationFrame(pas);
-      }
-    };
-
-    if (deIndata) {
-      porneste();
-      return () => {
-        if (cadru !== 0) cancelAnimationFrame(cadru);
-      };
-    }
-
-    const observator = new IntersectionObserver(
-      (intrari) => {
-        if (!intrari.some((i) => i.isIntersecting)) return;
-        /* O singură dată: panoul nu se reia la fiecare trecere prin dreptul lui.
-           Un cadran care o ia de la zero de fiecare dată când derulezi înapoi e
-           decor, nu informație. */
-        observator.disconnect();
-        porneste();
-      },
-      /* Pornește când s-a văzut un sfert din panou: mai devreme, animația s-ar
-         termina înainte să ajungă omul cu ochii pe el. */
-      { threshold: 0.25 },
-    );
-    observator.observe(el);
-
-    return () => {
-      observator.disconnect();
-      if (cadru !== 0) cancelAnimationFrame(cadru);
-    };
-  }, []);
-
   return (
     /*
-      Umple ilustrația 4:3 a cardului. Nu-și mai desenează propria casetă: fondul
+      Umple ilustrația 4:3 a cardului. Nu-și desenează propria casetă: fondul
       `tint` și colțurile de 11px sunt deja ale ilustrației, ca la „Problema".
+
+      `@container`: cadranele se măsoară în procente din lățimea panoului. Vezi
+      nota de la `MARIME_CADRAN`.
     */
-    <div
-      ref={gazda}
-      /* `@container`: cadranele se măsoară în procente din LĂȚIMEA PANOULUI. Vezi
-         nota de la `className`-ul lor. */
-      className="@container absolute inset-0 flex flex-col justify-center gap-3 px-4 py-4 sm:px-5"
-    >
+    <div className="@container absolute inset-0 flex flex-col justify-center px-4 py-4 sm:px-5">
       {/*
         Scorurile ca TEXT, o singură dată, pentru cine ascultă pagina și pentru
         cine o indexează.
 
-        ⚠ Fără rândul ăsta, cifrele există doar în cadrane — iar cadranele pornesc
-        de la zero, deci de pe server ar pleca patru zerouri și atât. Animația se
-        întâmplă abia în browser; ce trimite serverul trebuie să spună adevărul
+        ⚠ Fără rândul ăsta, cifrele există doar în cadrane — iar cadranele
+        pornesc de la zero și urcă abia în browser, deci de pe server ar pleca
+        patru zerouri și atât. Ce trimite serverul trebuie să spună adevărul
         singur.
       */}
       <p className="sr-only">
@@ -154,42 +64,49 @@ export function PanouPageSpeed() {
 
       <div className="mx-auto grid w-full max-w-[264px] grid-cols-2 gap-x-4 gap-y-3">
         {SCORURI_PAGESPEED.map((scor, i) => (
-          <Gauge
-            key={scor.eticheta}
-            aratat={aratate[i] ?? 0}
-            eticheta={scor.eticheta}
-            culoare={culoareScor(scor.scor)}
-            /*
-              ⚠ LĂȚIMEA CADRANULUI SE LEAGĂ DE LĂȚIMEA PANOULUI, nu de treptele
-              de ecran, și asta a fost o corectură măsurată.
+          <div key={scor.eticheta} className="flex flex-col items-center">
+            {/*
+              ⚠ Lățimea stă pe ÎNVELIȘUL cadranului, nu pe blocul întreg, și e o
+              corectură măsurată: cu ea pe bloc, eticheta era strânsă la lățimea
+              cercului, iar „Accesibilitate" se rupea pe două rânduri de îndată ce
+              cercul cobora sub ~78px. Rândul în plus înălța tot panoul și îl
+              scotea din ilustrație. Așa eticheta poate folosi toată coloana.
 
-              Prima formă avea pixeli ficși pe trepte (86 / 74 / 86). Dar
-              înălțimea în care încap cadranele vine din ilustrația 4:3 a
-              cardului, adică din LĂȚIMEA CARDULUI — iar aceea sare exact la
-              trecerea de treaptă, când grila mai adaugă o coloană. Rezultatul:
-              la 360, 640 și 1024px conținutul ieșea cu 12-18px pe deasupra
-              panoului. Trei lățimi din douăsprezece încercate, toate fix după
-              câte un prag.
+              `text-ink`: componenta desenează cifra cu `fill="currentColor"`.
+            */}
+            {/* `flex`: învelișul componentei e `inline-block`, iar un inline stă pe
+                linia de bază — măsurat, rămâneau 8px de gol sub cadran, cât
+                coborârea fontului. Ca element de flex, golul dispare. */}
+            <div className={`${MARIME_CADRAN} flex text-ink`}>
+              <Gauge
+                value={scor.scor}
+                size="100%"
+                strokeWidth={9}
+                gapPercent={4}
+                gradient
+                tickMarks
+                /* Culoarea vine din pragurile uneltei, nu din `primary="success"`:
+                   dacă un scor coboară vreodată sub 90, inelul trebuie să se
+                   schimbe odată cu el. Vezi `culoareScor`. */
+                primary={culoareScor(scor.scor)}
+                /* Decalaj mic între ele, ca panoul să se completeze, nu să
+                   pornească tot deodată. */
+                transition={{ delay: i * 120 }}
+              />
+            </div>
 
-              Formula vine din măsurătoare: partea fixă a panoului (spațiere,
-              etichete, rândul de jos) e ~68px, iar înălțimea utilă e 0,75 din
-              lățime, deci cadranul poate fi cel mult `(0,75·L − 68) / 2`. În
-              procente din panou, cu marginile scăzute, iese `37,5cqw − 28px`.
-              Plafonul de 86 e mărimea desenată; sub 48 cifra n-ar mai încăpea.
-            */
-            className="w-[calc(37.5cqw-28px)] max-w-[86px] min-w-[48px] justify-self-center"
-          />
+            {/*
+              Eticheta stă SUB cadran, nu în el. Componenta o poate desena
+              înăuntru (`label`), dar acolo are 8 din 100 de unități — la un cadran
+              de 58-86px iese de 5-7px, iar „Accesibilitate" ar fi o dâră. Aici e
+              la 11px, unde se citește.
+            */}
+            <span className="mt-1.5 text-center text-[11px] leading-[1.25] text-ink-2 sm:text-[11.5px]">
+              {scor.eticheta}
+            </span>
+          </div>
         ))}
       </div>
-
-      {/*
-        Care unealtă și pe ce a fost măsurat. „Mobil", fiindcă acolo scorurile sunt
-        mai mici — deci ăla e numărul onest; un panou care nu spune pe ce a rulat
-        lasă cititorul să presupună desktop, unde e mai ușor.
-      */}
-      <p className="text-center text-[11px] leading-[1.3] text-ink-3">
-        PageSpeed Insights · mobil
-      </p>
     </div>
   );
 }

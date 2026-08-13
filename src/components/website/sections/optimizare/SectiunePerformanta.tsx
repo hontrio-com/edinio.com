@@ -1,6 +1,7 @@
 import { CARDURI_PERFORMANTA, PERFORMANTA } from "@/lib/website/optimizare";
 import { SectionEyebrow } from "../SectionEyebrow";
 import { PanouImagini } from "./PanouImagini";
+import { PanouMobil } from "./PanouMobil";
 import { PanouPageSpeed } from "./PanouPageSpeed";
 
 /**
@@ -22,9 +23,9 @@ import { PanouPageSpeed } from "./PanouPageSpeed";
  * interior arată prea rotund. Aceleași numere ca la „Problema" — dacă se schimbă
  * acolo, se schimbă și aici.
  *
- * ⚠ NEÎNCHEIATĂ: clientul a cerut TREI carduri. Sunt două; al treilea se adaugă
- * în `CARDURI_PERFORMANTA` când vine textul, plus ilustrația lui mai jos. Nu se
- * pun substituenți cu text inventat pe o pagină comercială.
+ * Cele trei carduri sunt complete: textele clientului și câte o ilustrație
+ * proprie. Fiecare se alege pe `id`, nu pe poziție — o listă reordonată n-are
+ * voie să pună scorurile de viteză sub textul despre imagini.
  */
 export function SectiunePerformanta() {
   return (
@@ -65,6 +66,7 @@ export function SectiunePerformanta() {
                   */}
                   {card.id === "incarcare" ? <PanouPageSpeed /> : null}
                   {card.id === "imagini" ? <PanouImagini /> : null}
+                  {card.id === "mobil" ? <PanouMobil /> : null}
                 </div>
               </div>
 

@@ -836,6 +836,118 @@
   }
 }
 
+/* ─── Rama de iPhone (ilustrația cardului „Optimizat pentru mobil") ──────────
+
+   Clientul a cerut „mockup 1 la 1 cu realitatea". De aceea NIMIC de aici nu e
+   ales din ochi: toate mărimile ies dintr-un singur număr, `--l` — lățimea
+   corpului — prin fracțiile măsurate ale aparatului. Așa proporțiile nu se pot
+   desincroniza: se schimbă `--l` și tot restul îl urmează.
+
+   ⚠ DE UNDE VIN CIFRELE, ȘI CÂT DE SIGURE SUNT.
+
+   Sigure, fiindcă sunt ale ecranului:
+     ecran 1320 x 2868 px la 460 ppi  →  72,89 x 158,36 mm, raport 2,1727
+
+   Din fișa aparatului (iPhone 17 Pro Max), deci de confirmat:
+     corp 78,0 x 163,4 mm  →  raport 2,0949
+
+   Din ele ies toate celelalte, ca fracții din lățimea corpului:
+     ramă      = (78,0 − 72,89) / 2 / 78,0        = 3,276%
+     ecran     = 72,89 / 78,0                     = 93,45%
+     verificare: 3,276 + 93,45 + 3,276 = 100 ✓, iar pe verticală rama iese
+     (163,4 − 158,36) / 2 = 2,52 mm față de 2,555 pe orizontală — adică aceeași
+     ramă de jur împrejur, cum și e la aparatul adevărat.
+
+   Colțurile sunt CONCENTRICE, nu două valori alese: raza ecranului plus rama dă
+   raza corpului. Raza ecranului la 16/17 Pro Max e 62pt din 440 lățime, adică
+   14,09% din ecran → 13,17% din corp; plus rama, 16,44% pentru corp. Cu două
+   numere independente, colțul interior ar fi ieșit ori prea ascuțit, ori umflat.
+
+   ⚠ Rama de 3,276% e cea FIZICĂ, măsurată între marginea sticlei și marginea
+   metalului. La aparat, o parte din ea e ramă neagră și o parte e muchia
+   metalică; aici se desenează amândouă, cu un degrade pe muchie.
+
+   `padding` în procente e MEREU față de lățime, și de-aia e folosit pentru ramă:
+   `top: 3,276%` ar fi fost față de înălțime, adică o ramă de sus de două ori mai
+   groasă decât cea din laturi. */
+.iphone {
+  --rama: 0.03276;
+  --raza-corp: 0.1644;
+  --raza-ecran: 0.1317;
+
+  position: relative;
+  width: var(--l);
+  /* 163,4 / 78,0 */
+  aspect-ratio: 1000 / 2095;
+  padding: calc(var(--l) * var(--rama));
+  border-radius: calc(var(--l) * var(--raza-corp));
+
+  /* Muchia metalică: un degrade pe latura scurtă, ca la un corp din aluminiu —
+     mai deschis pe muchii, mai închis pe fețe. Fără el, rama arată a
+     dreptunghi negru, nu a aparat. */
+  background: linear-gradient(
+    100deg,
+    #6f7276 0%,
+    #b9bcc0 6%,
+    #85888c 18%,
+    #55585c 50%,
+    #85888c 82%,
+    #b9bcc0 94%,
+    #6f7276 100%
+  );
+  box-shadow:
+    0 1px 2px rgba(10, 20, 40, 0.10),
+    0 18px 34px -18px rgba(10, 20, 40, 0.42);
+}
+
+/* Sticla: ce se vede sub ramă. Rotunjirea e cea concentrică, nu una aleasă. */
+.iphone-ecran {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  border-radius: calc(var(--l) * var(--raza-ecran));
+  background: #ffffff;
+  /* Ca textul dinăuntru să se poată măsura în procente din LĂȚIMEA ECRANULUI:
+     așa pagina de produs arată la fel la orice mărime a aparatului. */
+  container-type: inline-size;
+}
+
+/* ─── Dynamic Island ─────────────────────────────────────────────────────────
+   125 x 36,7 pt într-un ecran de 440 lățime → 28,4% din ecran, iar înălțimea tot
+   față de LĂȚIME (36,7 / 440 = 8,34%), fiindcă e o formă, nu o proporție de
+   pagină. Distanța de sus, ~11pt = 2,5% din lățimea ecranului. */
+.iphone-insula {
+  position: absolute;
+  left: 50%;
+  top: 2.5cqw;
+  width: 28.4cqw;
+  height: 8.34cqw;
+  transform: translateX(-50%);
+  border-radius: 4.17cqw;
+  background: #000000;
+  z-index: 2;
+}
+
+/* ─── Butoanele laterale ─────────────────────────────────────────────────────
+   Poziții și lungimi ca fracții din ÎNĂLȚIMEA corpului, aproximative — se văd ca
+   niște nuanțe pe muchie, iar rolul lor e doar ca silueta să nu pară un
+   dreptunghi. Ies în afara ramei cu jumătate din grosime, ca la aparat. */
+.iphone-buton {
+  position: absolute;
+  width: calc(var(--l) * 0.012);
+  background: linear-gradient(90deg, #4a4d51, #9a9da1, #4a4d51);
+  border-radius: calc(var(--l) * 0.006);
+}
+
+.iphone-buton-stanga {
+  left: calc(var(--l) * -0.006);
+}
+
+.iphone-buton-dreapta {
+  right: calc(var(--l) * -0.006);
+}
+
 /* Spatierea hero-ului cand sub el pluteste un camp de sigle.
 
    Numerele nu se scriu aici: vin din `BANDA`, prin `stiluriBanda()`, ca sa existe

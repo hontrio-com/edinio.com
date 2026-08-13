@@ -21,13 +21,8 @@ export interface CardPerformanta {
 /**
  * Cardurile secțiunii.
  *
- * ⚠ NEÎNCHEIATĂ. Clientul a cerut TREI carduri și a dat textele doar pentru
- * primul (2026-08-13). Celelalte două se adaugă aici, în ordine, când vin
- * textele — nu trebuie schimbat nimic altceva.
- *
- * ⚠ Cât timp e unul singur, teancul care se strânge la derulare nu se vede: el
- * are nevoie de cel puțin două carduri ca să aibă ce acoperi. Nu e o lipsă a
- * desenului, e o consecință a listei.
+ * Toate trei au textele clientului (2026-08-13) și ilustrația lor: scoruri
+ * PageSpeed, greutatea unei imagini, și pagina de produs într-un telefon.
  */
 export const CARDURI_PERFORMANTA: CardPerformanta[] = [
   {
@@ -41,6 +36,12 @@ export const CARDURI_PERFORMANTA: CardPerformanta[] = [
     titlu: "Imagini optimizate",
     descriere:
       "Imaginile produselor sunt livrate eficient, astfel încât să păstrăm calitatea fără să încetinim inutil magazinul.",
+  },
+  {
+    id: "mobil",
+    titlu: "Optimizat pentru mobil",
+    descriere:
+      "Magazinul rămâne rapid și ușor de folosit inclusiv de pe telefon, unde ajunge o mare parte din traficul online.",
   },
 ];
 

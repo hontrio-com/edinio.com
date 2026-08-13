@@ -68,12 +68,9 @@ test("cardurile secțiunii au tot ce le trebuie", () => {
     assert.ok(card.titlu.length > 0);
     assert.ok(card.descriere.length > 30, `${card.id}: descriere prea scurtă`);
   }
-  /* ⚠ Clientul a cerut TREI carduri. Cand vine si al treilea text, numarul de
-     aici se ridica la 3 — pana atunci proba spune limpede unde a ramas lucrul. */
-  assert.ok(
-    CARDURI_PERFORMANTA.length >= 1 && CARDURI_PERFORMANTA.length <= 3,
-    "secțiunea are între unu și trei carduri",
-  );
+  /* Trei, câte a cerut clientul. Grila e două coloane la `sm` și trei la `lg`,
+     deci un al patrulea ar rămâne singur pe al doilea rând, la orice lățime. */
+  assert.equal(CARDURI_PERFORMANTA.length, 3);
 });
 
 test("greutatea se scrie pe înțelesul omului", () => {

@@ -4,7 +4,7 @@ import { HeroPagina } from "@/components/website/sections/Hero";
 import { EticheraVersus } from "@/components/website/sections/EticheraVersus";
 import { siteMetadata } from "@/lib/website/metadata";
 import { COMPETITORS } from "@/lib/website/nav";
-import type { VersusKey } from "@/lib/website/versus-logos";
+import type { VersusKey } from "@/lib/website/versus-culori";
 
 /**
  * Paginile de comparatie, din aceeasi lista care alimenteaza meniul.
@@ -63,10 +63,11 @@ export default async function ComparatiePage({ params }: Props) {
       la Shopify"), nu despre cine cu cine — fără eticheta de deasupra, omul n-ar
       ști pe ce pagină a ajuns.
 
-      ⚠ De la 13.08 e cu SIGLE, nu cu text, cerut de client. Cheia siglei e chiar
-      slug-ul din adresă, deci nu se poate desincroniza: `/vs/shopify` ia sigla
-      `shopify`. Un slug fără siglă oprește build-ul, în loc să lase un gol în
-      pagină — vezi tipul `VersusKey`.
+      ⚠ A fost o vreme cu SIGLE (13.08), scoase la cererea clientului o zi mai
+      târziu. Acum numele celor două platforme sunt scrise, fiecare în culoarea
+      mărcii lui. Cheia e chiar slug-ul din adresă, deci nu se poate desincroniza:
+      `/vs/shopify` ia culoarea `shopify`. Un slug fără culoare oprește build-ul,
+      în loc să lase un gol în pagină — vezi tipul `VersusKey`.
     */
     <HeroPagina
       eticheta={<EticheraVersus cheie={competitor as VersusKey} />}

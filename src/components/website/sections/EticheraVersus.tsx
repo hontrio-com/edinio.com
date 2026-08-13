@@ -1,126 +1,47 @@
-import {
-  marimeaNoastra,
-  marimeVersus,
-  SIGLA_NOASTRA,
-  VERSUS_LOGOS,
-  type VersusKey,
-} from "@/lib/website/versus-logos";
+import { CULORI_MARCI, type VersusKey } from "@/lib/website/versus-culori";
 
 /**
- * Rândul de deasupra titlului pe paginile „Edinio vs …": sigla noastră, un „vs"
- * mărunt, sigla lor.
+ * Rândul de deasupra titlului pe paginile „Edinio vs …": numele celor două
+ * platforme, fiecare în culoarea mărcii lui.
  *
- * Cerut de client (13.08), în locul textului „EDINIO VS SHOPIFY".
+ * ═══ ÎNAPOI LA TEXT, DUPĂ SIGLE ═══
  *
- * ═══ DE CE NU ÎNĂLȚIME EGALĂ ═══
+ * A trecut prin trei forme, iar a treia e chiar prima: text simplu, apoi sigle,
+ * apoi iar text — de data asta colorat. Siglele au fost scoase la cererea
+ * clientului (14.08), cu tot cu fișierele lor.
  *
- * Siglele au forme foarte diferite — punga Shopify e aproape pătrată, cuvântul
- * Cartum e lung cât cinci înălțimi. Puse la aceeași ÎNĂLȚIME, Cartum ar acoperi
- * de vreo șase ori mai multă suprafață și ar strivi-o pe cealaltă. Se
- * egalizează SUPRAFAȚA, prin `marimeVersus()` — aceeași socoteală ca la siglele
- * de integrări.
+ * Merită spus de ce au fost grele, fiindcă e o lecție despre ce cere un rând de
+ * sigle: șapte mărci desenate de șapte oameni diferiți n-au nimic comun — nici
+ * proporția (0,88 la Shopify, 5,56 la Cartum), nici cât desen au în cutie (0,15
+ * la WooCommerce, 0,79 la OpenCart), nici măcar dacă fișierul e strâns pe desen
+ * sau plutește într-o cutie mai mare. Ca să pară egale a trebuit: strânse toate
+ * fișierele, măsurată cerneala fiecăreia, ales un model între „înălțime egală" și
+ * „suprafață egală", plus corecții hotărâte privind. Cu text, nimic din toate
+ * astea nu mai există — literele au deja aceeași mărime.
  *
- * ⚠ DOAR PUNGA, fără cuvântul „Edinio" de lângă — cerut de client (13.08).
- * Câștigul nu e doar de aspect: cu textul alături, ansamblul nostru avea altă
- * greutate decât sigla lor, iar echilibrul dintre cele două se potrivea din ochi.
- * Singură, punga trece prin ACEEAȘI formulă ca a lor și iese egală prin
- * construcție, nu prin nimereală.
+ * ═══ CULORILE ═══
  *
- * ⚠ „vs" NU e o siglă și nu intră în socoteala suprafeței: e semn, nu marcă.
- * Vezi nota de la el.
+ * ⚠ SUNT ALE MĂRCILOR, DAR ÎNTUNECATE CÂT SĂ SE CITEASCĂ. Verdele Shopify pe alb
+ * dă un contrast de 2,14 — sub jumătate din pragul de 4,5 cerut pentru un text
+ * mic; albastrul OpenCart, 2,24. Scrise așa, la 13px cu majuscule răsfirate, ar
+ * fi fost aproape invizibile pe hero-ul deschis. Socoteala și valorile măsurate
+ * sunt în `versus-culori.ts`.
  *
- * ⚠ `<img>` simplu, nu `next/image`: loaderul proiectului lasă fișierele locale
- * neatinse, deci n-ar produce niciun `srcset`. Aceeași hotărâre ca la `Logo` din
- * secțiunea de integrări, unde e și scrisă pe larg.
+ * ⚠ Desenul rândului e cel de la `SectionEyebrow` — aceeași mărime, aceeași
+ * răsfirare a literelor, aceeași margine de compensare la capăt. Nu se folosește
+ * chiar componenta aia fiindcă ea primește un singur șir, iar aici sunt trei
+ * bucăți cu trei culori. Dacă se schimbă acolo, se schimbă și aici.
  */
 export function EticheraVersus({ cheie }: { cheie: VersusKey }) {
-  const logo = VERSUS_LOGOS[cheie];
-  const marime = marimeVersus(cheie);
-  const noastra = marimeaNoastra();
+  const marca = CULORI_MARCI[cheie];
 
   return (
-    /*
-      ═══ AȘEZAREA: TREI COLOANE, NU UN RÂND ═══
-
-      ⚠ CERUT „exact la mijloc față de cele 2 logo-uri", și un rând simplu NU
-      poate face asta. Siglele au lățimi foarte diferite — a noastră 35px, a lui
-      Cartum 91 — iar într-un rând centrat se centrează RÂNDUL ÎNTREG: „vs" ajunge
-      împins spre stânga cu jumătate din diferența dintre ele, adică vreo 28px.
-      Se vede.
-
-      Aici sunt trei coloane: `1fr` — „vs" — `1fr`. Cele două margini sunt egale
-      prin construcție, deci „vs" cade exact pe mijloc, oricât de late ar fi
-      siglele.
-
-      ⚠ Iar siglele se lipesc de „vs", nu se centrează în coloana lor: a noastră
-      la dreapta (`justify-self-end`), a lor la stânga. Așa golul dintre fiecare
-      siglă și „vs" e ACELAȘI, în timp ce prisosul rămâne pe dinafară, unde nu-l
-      mărginește nimic. Centrate în coloane, golurile ar fi ieșit diferite.
-    */
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 sm:gap-6">
-      {/* ── Noi ── */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={SIGLA_NOASTRA.src}
-        alt={SIGLA_NOASTRA.name}
-        style={{ height: noastra.height, maxWidth: noastra.maxWidth }}
-        className="w-auto justify-self-end object-contain"
-        decoding="async"
-      />
-
-      {/*
-        ═══ VS ═══
-
-        ⚠ FĂRĂ NICIO RAMĂ, cerut de client (13.08). O formă dinainte îl punea
-        într-un disc alb cu umbră; discul îl făcea al treilea obiect din rând, în
-        loc să fie legătura dintre celelalte două.
-
-        Ce-l face să pară versus, acum că n-are ramă, sunt două lucruri:
-        MĂRIMEA — e mai înalt decât siglele, deci se citește primul — și
-        ÎNCLINAREA, de la care vine tot înțelesul, ca pe afișele de meci.
-
-        Verdele e al mărcii NOASTRE, iar asta e o alegere: semnul stă la mijloc,
-        dar pagina e a noastră.
-      */}
-      <span
-        className="text-[30px] leading-none font-extrabold uppercase italic tracking-[-0.04em] sm:text-[36px]"
-        style={{
-          color: "var(--color-brand)",
-          /*
-            ⚠ CUTIA E PE MIJLOC, DAR LITERELE NU ERAU — și clientul a văzut
-            diferența fără s-o măsoare.
-
-            Literele înclinate nu umplu cutia simetric: măsurat pe fontul și
-            grosimea de aici, „V" începe la 7px ÎNĂUNTRUL marginii din stânga
-            (piciorul lui e retras), iar „S" iese cu 5,67px ÎN AFARA marginii din
-            dreapta. Mijlocul cernelii cade astfel cu 6,33px mai la dreapta decât
-            mijlocul cutiei, iar din golul de 24px de fiecare parte ieșea unul de
-            31 la stânga și unul de 18 la dreapta.
-
-            Aici se mută DESENUL, nu cutia: `transform` nu atinge așezarea, deci
-            cele trei coloane rămân echilibrate, iar cerneala ajunge pe mijloc.
-            6,33 din 36 = 0,176em, deci merge la fel și la 30px pe telefon.
-
-            ⚠ Numărul e al FONTULUI. Dacă se schimbă familia, grosimea sau
-            înclinarea, se remăsoară: `measureText` dă `actualBoundingBoxLeft` și
-            `actualBoundingBoxRight`, iar decalajul e jumătate din diferența lor
-            față de cutie.
-          */
-          transform: "translateX(-0.176em)",
-        }}
-      >
-        vs
-      </span>
-
-      {/* ── Ei ── */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={logo.src}
-        alt={logo.name}
-        style={{ height: marime.height, maxWidth: marime.maxWidth }}
-        className="w-auto justify-self-start object-contain"
-        decoding="async"
-      />
-    </div>
+    <p className="pe-[0.18em] text-[13px] font-semibold uppercase tracking-[0.18em]">
+      {/* Numele nostru în verdele nostru, al lor în al lor. „vs" rămâne stins: e
+          legătura dintre două nume, nu un al treilea nume. */}
+      <span style={{ color: CULORI_MARCI.edinio.culoare }}>Edinio</span>
+      <span className="text-ink-3"> vs </span>
+      <span style={{ color: marca.culoare }}>{marca.nume}</span>
+    </p>
   );
 }

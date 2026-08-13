@@ -89,6 +89,32 @@ export function PaginaProdusMobil() {
         <span className="mt-[4cqw] grid h-[11.5cqw] shrink-0 place-items-center rounded-[3cqw] bg-primary text-[4.4cqw] font-semibold text-white">
           {p.cta}
         </span>
+
+        {/*
+          Rândul cu plata în rate, sub buton — la fel ca pe pagina de start, cerut
+          de client. Acolo îl pun și magazinele adevărate: după ce omul s-a
+          hotărât să cumpere, nu înainte.
+
+          Fără blocurile negru-portocaliu din bannerele TBI: alea sunt făcute
+          pentru un banner de 600x150, iar aici avem un ecran de ~137px. Două
+          dreptunghiuri colorate ar fi tras tot ochiul din pagină către o marcă
+          străină. Un rând mărunt lasă accentul pe butonul verde, care e al nostru.
+        */}
+        <span className="mt-[2.5cqw] flex items-center justify-center gap-[1.2cqw]">
+          <span className="text-[3.4cqw] leading-none text-ink-3">
+            {p.installments.label}
+          </span>
+          {/* Sigla e 1168x512. Înălțime fixă, lățime liberă — la lățime fixă s-ar
+              fi turtit. */}
+          <Image
+            src={p.installments.logo}
+            alt=""
+            width={41}
+            height={18}
+            unoptimized
+            className="h-[4.2cqw] w-auto"
+          />
+        </span>
       </div>
     </div>
   );
@@ -127,12 +153,24 @@ function BaraDeStare() {
           ))}
         </span>
 
-        {/* Bateria: contur, umplere completă, vârf. */}
-        <span className="flex items-center gap-[0.4cqw]">
-          <span className="flex h-[4.4cqw] w-[8.4cqw] items-center rounded-[1.3cqw] border-[0.55cqw] border-ink/35 p-[0.55cqw]">
+        {/*
+          Bateria: contur, umplere completă, vârf.
+
+          ⚠ FĂRĂ SPAȚIU ÎNTRE CORP ȘI VÂRF. Prima formă avea `gap`, iar clientul
+          a văzut golul imediat — la iPhone vârful e LIPIT de contur, nu alături
+          de el.
+
+          Restul numerelor vin din glifa iOS, unde corpul are ~25x13pt, conturul
+          1pt, iar vârful 1,5x4pt. În procente din corp: raport 1,92, contur 7,7%
+          din înălțime, vârf de 31% din înălțime și 6% din lățime. Conturul era
+          și el prea gros — 12,5% în loc de 7,7 — și făcea bateria să pară
+          desenată cu carioca.
+        */}
+        <span className="flex items-center">
+          <span className="flex h-[4.4cqw] w-[8.4cqw] items-center rounded-[1.35cqw] border-[0.4cqw] border-ink/35 p-[0.38cqw]">
             <span className="h-full w-full rounded-[0.7cqw] bg-ink" />
           </span>
-          <span className="h-[1.5cqw] w-[0.8cqw] rounded-r-[0.4cqw] bg-ink/35" />
+          <span className="h-[1.35cqw] w-[0.55cqw] rounded-r-[0.3cqw] bg-ink/35" />
         </span>
       </span>
     </div>

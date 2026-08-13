@@ -118,6 +118,24 @@ export const PRODUS_MOBIL = {
   rating: 4.5,
   reviews: 68,
   cta: "Adaugă în coș",
+  /**
+   * Rândul de sub buton, cerut de client — același ca pe pagina de start.
+   *
+   * Acolo îl pun și magazinele adevărate: DUPĂ ce omul s-a hotărât să cumpere,
+   * nu înainte. Fișierul siglei e chiar cel folosit de ilustrația de pe pagina de
+   * start, ca să nu ajungă două copii ale aceleiași mărci în depozit.
+   *
+   * ⚠ DEPINDE DE O INTEGRARE CARE PUTEA SĂ NU FIE GATA. La 2026-08-06, TBI Bank
+   * NU era integrat în platformă; clientul a confirmat că vine înainte de lansare.
+   * Pe o pagină comercială, „plătește în rate cu tbi bank" se citește ca o
+   * promisiune că platforma o poate face — deci dacă la lansare integrarea încă
+   * lipsește, rândul se scoate. E o singură proprietate, aici și în
+   * `PROBLEM_PRODUCT.installments`.
+   */
+  installments: {
+    label: "Plătește în rate cu",
+    logo: "/import_icons/logoTBI.webp",
+  },
 } as const;
 
 /**

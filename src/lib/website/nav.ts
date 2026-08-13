@@ -102,8 +102,14 @@ export const SOLUTION_COLUMNS: NavColumn[] = [
     heading: "Vinde",
     items: [
       {
+        /*
+          ⚠ DUCE LA PAGINA DE START, nu la o pagină a lui — cerut de client
+          (13.08): „nu mai facem o pagină separată, că nu are rost". Pagina de
+          start CHIAR e pagina despre magazinul online, deci intrarea nu trimite
+          nicăieri în plus, doar acasă.
+        */
         label: "Magazin online",
-        href: "/magazin-online",
+        href: "/",
         icon: Store,
         description: "Magazin complet, pregătit pentru vânzare din prima zi.",
       },
@@ -395,7 +401,12 @@ export const TOP_NAV: TopNavEntry[] = [
  */
 export const MENU_PREFIXES: Record<MenuId, string[]> = {
   solutie: [
-    "/magazin-online",
+    /*
+      ⚠ „/" NU INTRĂ AICI, deși intrarea „Magazin online" duce acum acolo.
+      Potrivirea de mai jos e `pathname === prefix || pathname.startsWith(prefix + "/")`,
+      iar cu „/" în listă ORICE pagină de pe site ar fi marcat „Soluție eCommerce"
+      ca fiind cea deschisă. Pagina de start nu aparține niciunui panou.
+    */
     "/integrari",
     "/optimizare",
     "/mentenanta-gratuita",

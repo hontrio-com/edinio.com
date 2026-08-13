@@ -48,7 +48,19 @@ function existaPaginaStatica(href: string): boolean {
 
 function cauta(dir: string, segmente: string[]): boolean {
   if (segmente.length === 0) {
-    return existsSync(join(dir, "page.tsx")) || existsSync(join(dir, "page.ts"));
+    if (existsSync(join(dir, "page.tsx")) || existsSync(join(dir, "page.ts"))) return true;
+    /*
+      ⚠ PAGINA DE START STĂ ÎNTR-UN GRUP DE RUTE (`app/(website)/page.tsx`), iar
+      grupurile nu apar în adresă. Fără coborârea asta, `existaPagina("/")`
+      răspundea „nu" — prins de controlul negativ, nu citind codul. Se vede doar
+      la adresa „/", fiindcă e singura fără niciun segment.
+    */
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory() && e.name.startsWith("(") && e.name.endsWith(")")) {
+        if (cauta(join(dir, e.name), [])) return true;
+      }
+    }
+    return false;
   }
   const [cap, ...coada] = segmente;
   for (const e of readdirSync(dir, { withFileTypes: true })) {

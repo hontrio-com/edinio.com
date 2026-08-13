@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Check } from "lucide-react";
+import Image from "next/image";
 import { Ripple } from "@/components/ui/ripple";
 import type { CardMentenanta } from "@/lib/website/mentenanta";
 
@@ -113,242 +114,91 @@ function Remediere() {
   );
 }
 
-/* ═══ LACĂTUL ═══
+/* ═══ SCUTUL ═══
 
-   Refăcut după o captură trimisă de client (13.08). Apoi cerut „mult mai
-   realist", cu raze pe tot panoul și fără pastilele de dedesubt.
+   Imaginea e a clientului (`public/mentenanta/securitate.png`, pusă de el pe
+   13.08). A luat locul lacătului desenat de mine în SVG — și bine a făcut: e
+   VERDE, adică în culoarea mărcii, în timp ce lacătul albastru, oricât de bine
+   ar fi fost desenat, era culoarea altcuiva pe pagina noastră.
 
-   ═══ CE FACE UN DESEN SĂ PARĂ OBIECT, NU FORMĂ ═══
+   ⚠ SE SERVEȘTE `.webp`, NU `.png`, ȘI E ACEEAȘI IMAGINE. Verificat pixel cu
+   pixel, compusă pe alb: diferență maximă 0 pe toate trei canalele. E o
+   recodare FĂRĂ PIERDERI, doar cu alt împachetat — 207KB devin 137. PNG-ul
+   rămâne pe disc ca original. (Cu pierderi, la calitate 90, ar fi ieșit 16KB,
+   dar acolo apar diferențe de până la 54 din 255 în degradeul verde, iar aia e
+   o hotărâre a clientului, nu a mea.)
 
-   Prima formă era un dreptunghi rotunjit cu un gradient și un arc gros deasupra.
-   Avea culorile potrivite și tot arăta a pictogramă. Ce lipsea nu era culoarea,
-   ci LUMINA — și anume patru lucruri, fiecare cu rolul lui:
+   ═══ CUM ÎNCONJOARĂ CERCURILE SCUTUL ═══
 
-   1. **TOARTA E UN CILINDRU, nu o linie.** Un metal rotund are pe el o dungă
-      albă îngustă (reflexia sursei), o parte luminată și o margine întunecată
-      unde se întoarce de la privitor. Gradientul de-a curmezișul ei le pune pe
-      toate trei. Cu o culoare plată, toarta arată a sârmă desenată.
-   2. **UMBRA DE SUB TOARTĂ, PE CORP.** Toarta stă ÎN FAȚA corpului și îi ia
-      lumina: fără pata aia întunecată, cele două par lipite în același plan.
-   3. **LUCIUL de sus.** O pată albă care se stinge, pe treimea de sus a corpului:
-      așa se poartă o suprafață lucioasă sub o lumină venită de sus-stânga.
-   4. **UMBRA DE CONTACT.** O elipsă întunecată chiar sub corp. E lucrul care
-      așază obiectul pe ceva; fără ea, lacătul plutește.
+   Cerut: „să-l înconjoare la perfecție". Două lucruri trebuie să se potrivească,
+   și niciunul nu se nimerește singur:
 
-   Plus muchia luminată de jos (lumina întoarsă de suprafață) și gaura cheii
-   ADÂNCITĂ — întunecată sus, cu o dungă de lumină pe buza de jos.
+   1. **ACELAȘI CENTRU.** Cercurile se așază la 50%/50% din panou, iar scutul e
+      centrat de `flex`. Merge doar pentru că spațierea panoului e simetrică —
+      cu o spațiere diferită sus față de jos, centrul imaginii și centrul
+      cercurilor s-ar fi despărțit, iar inelele ar fi ieșit strâmbe în jurul ei.
+   2. **PRIMUL CERC TRECE PE LÂNGĂ VÂRFURI.** Scutul e mai înalt decât lat, deci
+      ce contează e ÎNĂLȚIMEA lui, nu lățimea. Măsurat pe canalul alfa al
+      fișierului, desenul umple 523 din cei 565px ai imaginii, adică 92,6% din
+      înălțime — restul e transparent. Primul cerc se socotește din înălțimea
+      desenată ori partea aia plină, plus un gol de fiecare parte. Socotit din
+      înălțimea IMAGINII, cercul ar fi trecut chiar prin vârful de sus și prin
+      colțul de jos.
+*/
 
-   ⚠ Culorile de bază rămân cele MĂSURATE cu pipeta din captura clientului:
-   #B2E4FF sus pe toartă, #54BAFF aprinsul corpului, #ADC9FB stinsul spre violet,
-   #8FD4FC luminile. Ce s-a adăugat sunt tonurile de umbră și de lumină, care în
-   captură se pierd în ceață.
+const SCUT = {
+  src: "/mentenanta/securitate.webp",
+  latimeFisier: 484,
+  inaltimeFisier: 565,
+  /** Cât din înălțimea fișierului ocupă desenul. Măsurat pe alfa: 523 din 565. */
+  parteaPlina: 523 / 565,
+  /** Înălțimea la care se desenează, în pixeli. */
+  inaltime: 176,
+} as const;
 
-   ⚠ Tot ce se poate spune despre „1 la 1": originalul e o imagine matriceală, cu
-   margini topite de blur și un tipar de pătrățele în corp. Aici sunt forme și
-   gradienți, deci conturul iese curat. Pentru identic pixel cu pixel ar trebui
-   fișierul original, nu o captură. */
+/** Golul dintre marginea scutului și primul cerc. */
+const GOL_PANA_LA_CERC = 16;
+
+/** Diametrul primului cerc, ca să treacă pe lângă vârfurile scutului. */
+const PRIMUL_CERC = Math.round(SCUT.inaltime * SCUT.parteaPlina + 2 * GOL_PANA_LA_CERC);
 
 function Securitate() {
   return (
     <>
       {/*
-        ═══ CERCURILE ═══
+        `Ripple`, componenta Magic UI trimisă de client. Cercuri concentrice care
+        se strâng puțin și revin, pornind din mijlocul panoului — adică din
+        spatele scutului.
 
-        `Ripple`, componenta Magic UI trimisă de client (13.08), în locul razelor
-        de dinainte. Cercuri concentrice care se strâng puțin și revin, pornind
-        din mijlocul panoului — adică din spatele lacătului.
+        ⚠ CULOAREA E VERDE, nu albastră ca înainte: scutul e verde, iar niște
+        inele albastre în jurul lui ar fi arătat a două desene suprapuse.
 
-        ⚠ MĂSURILE SUNT ALE PANOULUI, nu cele din oficiu. Ale lor sunt socotite
-        pentru o casetă de 500px înălțime: primul cerc de 210, opt cercuri, deci
-        ultimul de 700. Panoul nostru are vreo 264px, deci din cercurile alea s-ar
-        fi văzut două arce uriașe prin colțuri. Aici primul e de 96 și sunt șapte:
-        se văd trei-patru cercuri întregi în jurul lacătului.
+        ⚠ Opacitatea de pe cerc SE ÎNMULȚEȘTE cu alfa culorii. Cu 0,2 de la ei și
+        un chenar la 45%, o formă de dinainte scotea o linie la 9% — pe alb,
+        nimic. Ori culoarea are alfa, ori opacitatea e mică; amândouă odată,
+        cercurile dispar. Aici chenarul e la culoare plină și doar opacitatea îl
+        stinge.
 
-        ⚠ CULOAREA cercurilor e dată din afară. Ale lor sunt `bg-foreground/25`,
-        adică închise — sunt făcute pentru fundal întunecat, iar panoul nostru e
-        alb. Vezi nota din `components/ui/ripple.tsx`.
-
-        ⚠ ȘI `mainCircleOpacity` E MARE (0,78), nu 0,24 ca la ei. Opacitatea de pe
-        cerc se ÎNMULȚEȘTE cu alfa culorii: cu 0,2 și un chenar la 45%, prima
-        formă scotea o linie la 9% — pe alb, nimic. Ori culoarea are alfa, ori
-        opacitatea e mică; amândouă odată, cercurile dispar. Aici chenarul e la
-        culoare plină și doar opacitatea îl stinge.
-
-        ⚠ Masca stinge efectul în TOATE părțile, nu doar în jos ca la ei: la ei
-        desenul stă sus, la noi lacătul e la mijloc.
+        ⚠ Masca stinge efectul în TOATE părțile. A lor îl stinge doar în jos,
+        fiindcă la ei desenul stă sus; la noi scutul e la mijloc.
       */}
       <Ripple
-        mainCircleSize={96}
-        mainCircleOpacity={0.78}
+        mainCircleSize={PRIMUL_CERC}
+        mainCircleOpacity={0.72}
         numCircles={7}
-        clasaCerc="border-[#6EC0F7] bg-[#54BAFF]/[0.055] shadow-none"
-        className="[mask-image:radial-gradient(120%_105%_at_50%_48%,#000_18%,rgba(0,0,0,0.55)_52%,transparent_84%)]"
+        clasaCerc="border-[#5CC98A] bg-[#1AB554]/[0.045] shadow-none"
+        className="[mask-image:radial-gradient(120%_105%_at_50%_50%,#000_16%,rgba(0,0,0,0.5)_52%,transparent_86%)]"
       />
 
-      {/* Pâcla albă din jurul lacătului, peste cercuri: le stinge în mijloc, ca
-          ele să pară că vin DIN SPATELE lui, nu că trec peste el. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "radial-gradient(21% 20% at 50% 46%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.45) 55%, rgba(255,255,255,0) 100%)",
-        }}
+      <Image
+        src={SCUT.src}
+        alt="Scut cu lacăt: platforma și magazinele sunt protejate"
+        width={SCUT.latimeFisier}
+        height={SCUT.inaltimeFisier}
+        unoptimized
+        className="relative w-auto"
+        style={{ height: SCUT.inaltime }}
       />
-
-      <svg
-        viewBox="0 0 240 224"
-        className="relative w-full max-w-[212px]"
-        role="img"
-        aria-label="Lacăt închis: magazinul e protejat"
-      >
-        <defs>
-          {/* Toarta, de-a curmezișul: margine întunecată, parte luminată, dunga
-              albă a reflexiei, apoi întuneric pe partea care se întoarce. */}
-          <linearGradient id="lacat-toarta" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="#2E7CC8" />
-            <stop offset="0.16" stopColor="#63B8F6" />
-            <stop offset="0.32" stopColor="#CFEBFF" />
-            <stop offset="0.46" stopColor="#B2E4FF" />
-            <stop offset="0.72" stopColor="#4FA0E8" />
-            <stop offset="1" stopColor="#2A6FB5" />
-          </linearGradient>
-
-          {/* Corpul. Ultimul ton e mai deschis decât cel de deasupra lui: e
-              lumina întoarsă de suprafața pe care stă. */}
-          <linearGradient id="lacat-corp" x1="0.2" y1="0" x2="0.85" y2="1">
-            <stop offset="0" stopColor="#9EDDFF" />
-            <stop offset="0.26" stopColor="#54BAFF" />
-            <stop offset="0.62" stopColor="#5AA8F6" />
-            <stop offset="0.88" stopColor="#ADC9FB" />
-            <stop offset="1" stopColor="#8FD4FC" />
-          </linearGradient>
-
-          <linearGradient id="lacat-luciu" x1="0" y1="0" x2="0.35" y2="1">
-            <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.62" />
-            <stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0.14" />
-            <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-          </linearGradient>
-
-          <linearGradient id="gaura-cheii" x1="0.5" y1="0" x2="0.5" y2="1">
-            <stop offset="0" stopColor="#1C5C9C" />
-            <stop offset="1" stopColor="#3C8FD4" />
-          </linearGradient>
-
-          <radialGradient id="umbra-contact" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0" stopColor="#2A6FB5" stopOpacity="0.34" />
-            <stop offset="1" stopColor="#2A6FB5" stopOpacity="0" />
-          </radialGradient>
-
-          <filter id="ceata-larga" x="-70%" y="-70%" width="240%" height="240%">
-            <feGaussianBlur stdDeviation="18" />
-          </filter>
-          <filter id="ceata-stransa" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="6" />
-          </filter>
-          <filter id="umbra-sub-toarta" x="-30%" y="-60%" width="160%" height="260%">
-            <feGaussianBlur stdDeviation="7" />
-          </filter>
-
-          {/* Umbra de sub toartă se taie pe forma corpului: altfel s-ar vedea
-              revărsată în afara lui, ca o pată. */}
-          <clipPath id="doar-corpul">
-            <rect x="60" y="94" width="120" height="104" rx="29" />
-          </clipPath>
-        </defs>
-
-        {/* ── Umbra de contact, sub tot ── */}
-        <ellipse cx="120" cy="205" rx="66" ry="12" fill="url(#umbra-contact)" />
-
-        {/* ── Ceața ── */}
-        <g filter="url(#ceata-larga)" opacity="0.5">
-          <FormaLacat corp="#5FBEFF" toarta="#5FBEFF" />
-        </g>
-        <g filter="url(#ceata-stransa)" opacity="0.42">
-          <FormaLacat corp="#7ACCFF" toarta="#7ACCFF" />
-        </g>
-
-        {/* ── Toarta, în spatele corpului ── */}
-        <path
-          d="M88 106 V80 a32 32 0 0 1 64 0 V106"
-          fill="none"
-          stroke="url(#lacat-toarta)"
-          strokeWidth="20"
-          strokeLinecap="round"
-        />
-        {/* Dunga de lumină, subțire și puțin la stânga de mijloc. */}
-        <path
-          d="M94.5 104 V80 a25.5 25.5 0 0 1 51 0 V104"
-          fill="none"
-          stroke="#FFFFFF"
-          strokeOpacity="0.42"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-
-        {/* ── Corpul ── */}
-        <rect x="60" y="94" width="120" height="104" rx="29" fill="url(#lacat-corp)" />
-
-        {/* Umbra pe care o aruncă toarta pe corp. */}
-        <g clipPath="url(#doar-corpul)">
-          <path
-            d="M78 84 h84 v26 h-84 z"
-            fill="#1F63A8"
-            opacity="0.34"
-            filter="url(#umbra-sub-toarta)"
-          />
-        </g>
-
-        {/* Luciul de sus și muchia luminată de jos. */}
-        <path
-          d="M60 123 a29 29 0 0 1 29 -29 h62 a29 29 0 0 1 29 29 c-30 16 -90 16 -120 0 z"
-          fill="url(#lacat-luciu)"
-        />
-        <path
-          d="M69 186 a29 29 0 0 0 20 12 h62 a29 29 0 0 0 20 -12"
-          fill="none"
-          stroke="#FFFFFF"
-          strokeOpacity="0.3"
-          strokeWidth="2.5"
-        />
-
-        {/* ── Gaura cheii, adâncită ── */}
-        <g>
-          <circle cx="120" cy="136" r="13" fill="url(#gaura-cheii)" />
-          <path d="M115 146 h10 l3.5 23 h-17 z" fill="url(#gaura-cheii)" />
-          {/* Buza de jos, luminată: fără ea, gaura arată lipită, nu scobită. */}
-          <path
-            d="M111.5 169 h17"
-            stroke="#FFFFFF"
-            strokeOpacity="0.5"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-          <circle cx="120" cy="131" r="13" fill="#0F4B86" opacity="0.22" />
-        </g>
-      </svg>
-    </>
-  );
-}
-
-/**
- * Forma lacătului, pentru cele două straturi de ceață.
- *
- * ⚠ De aceea culorile vin din afară. Cu două copii ale căilor, o îndreptare la
- * rotunjirea corpului s-ar fi făcut într-una singură, iar ceața ar fi rămas în
- * urmă cu altă formă — și tocmai ceața e cea care nu se vede că e greșită.
- */
-function FormaLacat({ corp, toarta }: { corp: string; toarta: string }) {
-  return (
-    <>
-      <path
-        d="M88 106 V80 a32 32 0 0 1 64 0 V106"
-        fill="none"
-        stroke={toarta}
-        strokeWidth="20"
-        strokeLinecap="round"
-      />
-      <rect x="60" y="94" width="120" height="104" rx="29" fill={corp} />
     </>
   );
 }

@@ -4,6 +4,7 @@ import { CARDURI_SEO, SEO } from "@/lib/website/seo";
 import { SectionEyebrow } from "../SectionEyebrow";
 import { PanouCautareGoogle } from "./PanouCautareGoogle";
 import { PanouRezultateGoogle } from "./PanouRezultateGoogle";
+import { PanouSitemap } from "./PanouSitemap";
 
 /**
  * Secțiunea „SEO" de pe pagina „Optimizare".
@@ -92,6 +93,7 @@ export function SectiuneSeo() {
                 <div className="mt-8 lg:mt-10">
                   {card.id === "gasire" ? <PanouCautareGoogle /> : null}
                   {card.id === "prezentare" ? <PanouRezultateGoogle /> : null}
+                  {card.id === "sitemap" ? <PanouSitemap /> : null}
                 </div>
 
                 {/*

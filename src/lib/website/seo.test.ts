@@ -3,7 +3,14 @@ import { test } from "node:test";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CARDURI_SEO, CAUTARE, REZULTATE_ORGANICE, REZULTATE_SHOPPING } from "./seo";
+import {
+  CARDURI_SEO,
+  CAUTARE,
+  REZULTATE_ORGANICE,
+  REZULTATE_SHOPPING,
+  SITEMAP_EXEMPLU,
+  SITEMAP_GAZDA,
+} from "./seo";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(AICI, "..", "..", "..", "public");
@@ -206,5 +213,112 @@ test("cele trei rezultate sunt deosebite între ele", () => {
   for (const r of REZULTATE_ORGANICE) {
     assert.equal(r.initiala.length, 1, `${r.site}: bulina ține o singură literă`);
     assert.ok(r.descriere.length > 20, `${r.site}: descriere prea scurtă ca să pară adevărată`);
+  }
+});
+
+/* ─── Cardul 3: sitemap ───────────────────────────────────────────────────── */
+
+test("sitemapul din ilustrație are chiar valorile generatorului", () => {
+  /*
+    ⚠ ASTA E O LISTĂ DE VERIFICAT FAȚĂ DE `app/sitemap.ts`, nu o probă de desen.
+
+    Tabelul de mai jos e CITIT dintr-un sitemap viu scos de Edinio
+    (`bricosmart.ro` prin `edinio.com`, 1169 de adrese, 13.08.2026). Clientul a
+    cerut ilustrația „identică 1 la 1 cu realitatea", iar singurul fel în care
+    asta rămâne adevărat peste șase luni e ca proba să cadă când generatorul se
+    schimbă și ilustrația nu.
+
+    Dacă proba pică după o modificare la sitemap: deschide sitemapul unui magazin
+    adevărat, citește ce scrie acum și potrivește AICI, apoi în `SITEMAP_EXEMPLU`.
+  */
+  const ASTEPTAT: Record<string, { changefreq: string; priority: string }> = {
+    acasa: { changefreq: "weekly", priority: "1" },
+    catalog: { changefreq: "daily", priority: "0.9" },
+    categorie: { changefreq: "daily", priority: "0.8" },
+    produs: { changefreq: "weekly", priority: "0.7" },
+    politica: { changefreq: "yearly", priority: "0.3" },
+  };
+
+  for (const intrare of SITEMAP_EXEMPLU) {
+    const astept = ASTEPTAT[intrare.fel];
+    assert.ok(astept, `fel necunoscut: ${intrare.fel}`);
+    assert.equal(
+      intrare.changefreq,
+      astept.changefreq,
+      `${intrare.fel}: changefreq ar trebui ${astept.changefreq}`,
+    );
+    assert.equal(
+      intrare.priority,
+      astept.priority,
+      `${intrare.fel}: priority ar trebui ${astept.priority}`,
+    );
+  }
+});
+
+test("lastmod e ISO întreg, cum îl scrie toISOString", () => {
+  /*
+    Generatorul folosește `toISOString()`, deci scrie milisecunde și `Z`. Forma
+    lungă e chiar semnul că e ieșire de mașină; scurtată la o dată simplă „ca să
+    încapă", ilustrația ar arăta ca un tabel scris de noi.
+  */
+  for (const intrare of SITEMAP_EXEMPLU) {
+    assert.match(
+      intrare.lastmod,
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      `lastmod scris altfel: ${intrare.lastmod}`,
+    );
+    assert.equal(
+      Number.isNaN(new Date(intrare.lastmod).getTime()),
+      false,
+      `lastmod nu e o dată adevărată: ${intrare.lastmod}`,
+    );
+  }
+});
+
+test("paginile magazinului împart o oră, produsul are alta", () => {
+  /*
+    În sitemapul viu, paginile magazinului poartă toate `updated_at`-ul
+    magazinului, iar fiecare produs pe al lui. E amănuntul care spune că harta se
+    reface pe bucăți, nu toată odată — și singurul care s-ar pierde dacă cineva
+    ar pune aceeași oră peste tot „ca să fie curat".
+  */
+  const alePaginilor = new Set(
+    SITEMAP_EXEMPLU.filter((i) => i.fel !== "produs").map((i) => i.lastmod),
+  );
+  const aleProduselor = new Set(
+    SITEMAP_EXEMPLU.filter((i) => i.fel === "produs").map((i) => i.lastmod),
+  );
+
+  assert.equal(alePaginilor.size, 1, "paginile magazinului ar trebui să aibă aceeași oră");
+  for (const ora of aleProduselor) {
+    assert.equal(alePaginilor.has(ora), false, "produsul are aceeași oră ca paginile");
+  }
+});
+
+test("ilustrația arată și pagini, și produse", () => {
+  /* Cerut de client: „un exemplu de sitemap cu pagini și produse în el". */
+  const feluri = new Set(SITEMAP_EXEMPLU.map((i) => i.fel));
+  assert.ok(feluri.has("produs"), "lipsește un produs din exemplu");
+  assert.ok(feluri.size >= 3, "exemplul arată prea puține feluri de pagini");
+  assert.ok(feluri.has("acasa"), "lipsește pagina de start");
+});
+
+test("adresele din sitemap sunt pe aceeași gazdă de pildă ca la cardul 2", () => {
+  /*
+    Aceeași gazdă la amândouă ilustrațiile: sunt același magazin, o dată în
+    rezultate și o dată în harta lui. Și, ca la cardul 2, e un domeniu care nu se
+    rezolvă — un sitemap plin de adrese ale cuiva adevărat, pe pagina noastră, ar
+    fi altceva decât un desen.
+  */
+  assert.equal(SITEMAP_GAZDA, "https://www.exemplu.ro");
+
+  const cai = new Set(SITEMAP_EXEMPLU.map((i) => i.cale));
+  assert.equal(cai.size, SITEMAP_EXEMPLU.length, "două intrări au aceeași cale");
+
+  for (const intrare of SITEMAP_EXEMPLU) {
+    assert.ok(
+      intrare.cale === "" || intrare.cale.startsWith("/"),
+      `calea „${intrare.cale}" nu începe cu /`,
+    );
   }
 });

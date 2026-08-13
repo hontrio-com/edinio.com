@@ -42,6 +42,12 @@ export const CARDURI_SEO: CardSeo[] = [
     descriere:
       "Controlezi cum sunt prezentate paginile și produsele tale în rezultatele de căutare.",
   },
+  {
+    id: "sitemap",
+    titlu: "Sitemap generat automat",
+    descriere:
+      "Edinio creează și actualizează automat harta magazinului, astfel încât motoarele de căutare să poată descoperi mai ușor paginile importante.",
+  },
 ];
 
 /**
@@ -199,5 +205,84 @@ export const REZULTATE_ORGANICE: RezultatOrganic[] = [
     titlu: "Produse",
     descriere:
       "Vă mulțumim pentru vizită. Pentru comenzi și informații ne puteți contacta telefonic în intervalul orar 09:00 - 17:00.",
+  },
+];
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARDUL 3 — sitemap
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Gazda din exemplu. Aceeași ca la cardul 2, dinadins: cele două ilustrații
+ * arată același magazin, o dată în rezultate și o dată în harta lui.
+ */
+export const SITEMAP_GAZDA = "https://www.exemplu.ro";
+
+export interface IntrareSitemap {
+  /** Calea, fără gazdă. Goală pentru pagina de start. */
+  cale: string;
+  lastmod: string;
+  changefreq: string;
+  priority: string;
+  /** La ce folosește: pentru probe și pentru textul citit cu voce. */
+  fel: "acasa" | "catalog" | "categorie" | "produs" | "politica";
+}
+
+/**
+ * Un sitemap de magazin, exact în forma pe care o scoate Edinio.
+ *
+ * ═══ NU E INVENTAT ═══
+ *
+ * ⚠ Câmpurile, ordinea lor, `changefreq` și `priority` sunt CITITE DINTR-UN
+ * SITEMAP VIU, nu scrise din cap: `bricosmart.ro`, prin `edinio.com`, 1169 de
+ * adrese, la 13.08.2026. De acolo vine tabelul:
+ *
+ *   pagina de start        weekly   1
+ *   pagina de catalog      daily    0.9
+ *   pagină de categorie    daily    0.8
+ *   pagină de produs       weekly   0.7
+ *   pagină proprie         monthly  0.5
+ *   pagină de politici     yearly   0.3
+ *
+ * Dacă cineva schimbă vreodată ce scrie generatorul, ilustrația de aici rămâne
+ * în urmă fără să se plângă nimeni — de asta tabelul e scris și în `seo.test.ts`,
+ * ca o probă care se citește ca o listă de verificat față de `app/sitemap.ts`.
+ *
+ * ⚠ `lastmod` e ISO ÎNTREG, cu milisecunde și `Z` — așa îl scrie `toISOString()`
+ * în generator. Nu se scurtează la o dată simplă „ca să încapă": tocmai forma
+ * lungă e semnul că e ieșire de mașină, nu un tabel desenat de noi.
+ *
+ * ⚠ Paginile magazinului împart aceeași oră (e `updated_at` al magazinului), iar
+ * produsul are alta, a lui. Așa arată și în cel viu, și e amănuntul care spune
+ * că harta se reface singură, pe bucăți.
+ */
+export const SITEMAP_EXEMPLU: IntrareSitemap[] = [
+  {
+    fel: "acasa",
+    cale: "",
+    lastmod: "2026-08-13T09:41:07.512Z",
+    changefreq: "weekly",
+    priority: "1",
+  },
+  {
+    fel: "categorie",
+    cale: "/magazin/camere-supraveghere",
+    lastmod: "2026-08-13T09:41:07.512Z",
+    changefreq: "daily",
+    priority: "0.8",
+  },
+  {
+    fel: "produs",
+    cale: "/product/camera-dome-wifi-2k",
+    lastmod: "2026-08-11T16:08:22.194Z",
+    changefreq: "weekly",
+    priority: "0.7",
+  },
+  {
+    fel: "politica",
+    cale: "/politici/termeni",
+    lastmod: "2026-08-13T09:41:07.512Z",
+    changefreq: "yearly",
+    priority: "0.3",
   },
 ];

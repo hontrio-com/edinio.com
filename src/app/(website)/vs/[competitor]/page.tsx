@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { PageShell } from "@/components/website/PageShell";
+import { HeroPagina } from "@/components/website/sections/Hero";
+import { SectionEyebrow } from "@/components/website/sections/SectionEyebrow";
 import { siteMetadata } from "@/lib/website/metadata";
 import { COMPETITORS } from "@/lib/website/nav";
 
@@ -35,7 +36,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!found) return {};
   return siteMetadata({
     title: `Edinio vs ${found.name}`,
-    description: found.description,
+    /* ⚠ Fraza LUNGĂ, nu rândul scurt din meniu. Cel din meniu are vreo șaizeci
+       de semne — ca descriere în rezultatele Google e subțire, iar ei o taie
+       oricum pe la 155. Asta e chiar textul de sub titlu, deci și cel mai
+       aproape de ce găsește omul pe pagină. */
+    description: found.lead,
     path: found.href,
   });
 }
@@ -46,10 +51,24 @@ export default async function ComparatiePage({ params }: Props) {
   if (!found) notFound();
 
   return (
-    <PageShell
-      eyebrow="Comparație"
-      title={`Edinio vs ${found.name}`}
+    /*
+      ⚠ ACELAȘI CADRU CA LA CELELALTE PAGINI (`HeroPagina`), nu `PageShell`.
+      Cerut de client (13.08). `PageShell` e capul scurt al paginilor în care
+      ajungi căutând ceva anume — ajutor, termeni, industrii; astea sunt pagini
+      care CONVING, deci primul ecran trebuie să fie afirmația, cu butoanele ei.
+
+      ⚠ ETICHETA spune cu cine se compară, fiindcă titlul nu mai spune. Titlurile
+      sunt ale clientului și vorbesc despre ce câștigi („O alternativă românească
+      la Shopify"), nu despre cine cu cine — fără eticheta de deasupra, omul n-ar
+      ști pe ce pagină a ajuns. Scrisă „vs", se citește „VS": eticheta e cu
+      majuscule din stil.
+    */
+    <HeroPagina
+      eticheta={<SectionEyebrow label={`Edinio vs ${found.name}`} />}
+      title={found.titlu}
       lead={found.lead}
+      cta={{ label: "Începe gratuit", href: "/register" }}
+      secundara={{ label: "Vezi prețurile", href: "/preturi" }}
     />
   );
 }

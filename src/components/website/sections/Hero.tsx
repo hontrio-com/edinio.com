@@ -198,8 +198,15 @@ export function Hero() {
  * FĂRĂ eticheta „Nou": aceea anunță o funcție nouă a platformei si e treaba
  * paginii de start. Pusă pe fiecare pagină, ar fi devenit ornament — și ar fi
  * trimis de pe pagina despre mentenanță la una despre magazin.
+ *
+ * ⚠ `eticheta` E ALTCEVA DECÂT PASTILA „Nou", deși intră pe același loc. Pe
+ * paginile de comparație scrie deasupra titlului cu cine se compară („Edinio vs
+ * Shopify") — fiindcă acolo titlul spune ce câștigi, nu cine cu cine. Fără ea,
+ * omul ar fi citit „O alternativă românească la Shopify" fără să știe pe ce
+ * pagină a ajuns. Nu se pune pe paginile care n-au ce anunța.
  */
 export function HeroPagina({
+  eticheta,
   title,
   lead,
   cta,
@@ -208,6 +215,8 @@ export function HeroPagina({
   spatiere,
   latimeTitlu,
 }: {
+  /** Vezi nota de sus: ce scrie deasupra titlului. */
+  eticheta?: React.ReactNode;
   title: React.ReactNode;
   lead: string;
   cta: Actiune;
@@ -221,6 +230,7 @@ export function HeroPagina({
 }) {
   return (
     <HeroCadru
+      eticheta={eticheta}
       title={title}
       lead={lead}
       principala={cta}

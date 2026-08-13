@@ -57,7 +57,15 @@ export interface NavCompare {
   href: string;
   /** Un rand, pentru mega menu. */
   description: string;
-  /** Fraza de deschidere a paginii de comparatie. */
+  /**
+   * Titlul paginii de comparație, cel mare.
+   *
+   * ⚠ NU e „Edinio vs X" — aia e eticheta de deasupra. Titlul spune ce se câștigă
+   * din comparație, nu cine cu cine se compară. Textele sunt ale clientului
+   * (13.08), date cuvânt cu cuvânt.
+   */
+  titlu: string;
+  /** Fraza de sub titlu. Tot a clientului (13.08). */
   lead: string;
 }
 
@@ -283,37 +291,49 @@ export const COMPETITORS: NavCompare[] = [
     name: "Shopify",
     href: "/vs/shopify",
     description: "Magazin pregătit pentru România, fără aplicații suplimentare.",
-    lead: "Shopify e o platformă solidă, gândită în primul rând pentru piața americană. Diferența se vede la curierii din România, la e-Factura și la costul total, unde Edinio nu îți cere o aplicație plătită separat pentru fiecare pas.",
+    titlu: "O alternativă românească la Shopify",
+    lead:
+      "Edinio pune într-un singur loc magazinul, integrările locale, mentenanța și asistența de care ai nevoie.",
   },
   {
     name: "Cartum",
     href: "/vs/cartum",
     description: "Mai multă flexibilitate și personalizare pentru magazinul tău.",
-    lead: "Amândouă sunt platforme la cheie pentru piața locală. Diferența e la editorul vizual pe secțiuni, la variantele de design și la facturarea automată, incluse la Edinio.",
+    titlu: "O platformă construită în jurul afacerii tale.",
+    lead:
+      "Am pus cele două platforme față în față ca să poți vedea mai ușor ce variantă se potrivește magazinului tău.",
   },
   {
     name: "Wix",
     href: "/vs/wix",
     description: "Construit special pentru magazine online, nu doar pentru website-uri.",
-    lead: "Wix e făcut întâi pentru site-uri de prezentare, cu un magazin adăugat pe deasupra. Edinio e construit invers: comanda, stocul și livrarea sunt în centru, nu într-un modul separat.",
+    titlu: "Când vrei să vinzi online, ai nevoie de mai mult decât un website.",
+    lead:
+      "Vezi diferențele dintre cele două atunci când scopul principal este să vinzi produse online.",
   },
   {
     name: "WooCommerce",
     href: "/vs/woocommerce",
     description: "Fără hosting, pluginuri și actualizări de administrat.",
-    lead: "WooCommerce îți dă control complet, în schimbul întreținerii. Cu Edinio nu ai pluginuri de actualizat, hosting de plătit sau versiuni care se ceartă între ele după fiecare update.",
+    titlu: "Fără grija pluginurilor, update-urilor și mentenanței.",
+    lead:
+      "Compară o platformă administrată integral cu un magazin în care hostingul, extensiile și întreținerea tehnică trebuie gestionate separat.",
   },
   {
     name: "OpenCart",
     href: "/vs/opencart",
     description: "Fără programator pentru fiecare modificare.",
-    lead: "OpenCart cere de obicei un programator pentru fiecare modificare. La Edinio schimbi design, secțiuni, prețuri și pagini singur, din editor, și vezi rezultatul pe loc.",
+    titlu: "Mai puține configurări. Mai simplu de administrat.",
+    lead:
+      "Descoperă cum se compară Edinio cu OpenCart pentru un antreprenor care nu vrea să se ocupe de partea tehnică.",
   },
   {
     name: "Magento",
     href: "/vs/magento",
     description: "Mai rapid de lansat și mai ușor de administrat.",
-    lead: "Magento acoperă cazuri foarte complexe, cu un buget de agenție pe măsură. Edinio acoperă ce are nevoie un magazin din România, la preț de abonament lunar.",
+    titlu: "Mai rapid de lansat. Mai simplu de administrat.",
+    lead:
+      "Descoperă diferențele dintre Edinio și Magento atunci când vrei un magazin online fără o infrastructură complicată.",
   },
 ];
 

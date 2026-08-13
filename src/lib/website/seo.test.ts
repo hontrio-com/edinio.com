@@ -44,18 +44,24 @@ test("prețurile sunt scrise cum le scrie Google", () => {
   }
 });
 
-test("numele intră pe trei rânduri în tigla din carusel", () => {
+test("numele intră pe două rânduri în tigla cea mai îngustă", () => {
   /*
-    Cardul taie numele la două rânduri (`line-clamp-2`), ca la Google.
+    Tigla taie numele la două rânduri (`line-clamp-2`), iar cutia are exact
+    două: așa stau cele patru prețuri pe aceeași linie.
 
-    ⚠ Pragul a trecut prin două forme. La două pe rând, cardul avea ~200px și
-    încăpeau vreo 68 de semne. Clientul a cerut caruselul adevărat — toate patru
-    pe un rând — deci tigla a coborât la ~115px, cam douăzeci de semne pe rând;
-    dar tot el a trimis reperul, unde numele stau pe TREI rânduri, nu pe două.
-    Deci vreo șaizeci de semne. Peste atât se taie cu trei puncte.
+    ⚠ PRAGUL E MĂSURAT, NU GHICIT. Tigla cea mai îngustă e de 104px (minimul din
+    `PanouCautareGoogle`), din care scăzând spațierea rămân vreo 79px de text la
+    corp de 10,4px — cam 17-18 semne pe rând. Măsurat în browser pe 320-1920,
+    toate patru numele de acum stau pe două rânduri; cel mai lung are 35 de
+    semne. Peste 36 începe să se taie cu trei puncte CHIAR PE ECRANELE MICI,
+    unde nimeni nu se uită, deci proba e singurul loc unde se vede.
+
+    ⚠ Pragul a mai fost o dată 60, când numele stăteau pe trei rânduri. Clientul
+    a cerut (13.08) ca al patrulea să intre pe două ca celelalte, deci cutia a
+    coborât la două rânduri și pragul odată cu ea.
   */
   for (const r of REZULTATE_SHOPPING) {
-    assert.ok(r.nume.length <= 60, `${r.nume}: ${r.nume.length} semne, se va tăia`);
+    assert.ok(r.nume.length <= 36, `${r.nume}: ${r.nume.length} semne, se va tăia`);
   }
 });
 

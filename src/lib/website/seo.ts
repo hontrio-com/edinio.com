@@ -99,7 +99,7 @@ export const REZULTATE_SHOPPING: RezultatShopping[] = [
   },
   {
     imagine: "/optimizare/camera1.webp",
-    nume: "Cameră solară fără fir 4G, panou inclus",
+    nume: "Cameră solară fără fir 4G",
     pret: "549,00 RON",
     vanzator: "Magazinul tău",
     livrare: "Fără costuri",

@@ -279,7 +279,18 @@ function TiglaShopping({
 
           3 rânduri x 1,3 interlinie x 10cqw corp = 39cqw.
         */}
-        <p className="line-clamp-3 min-h-[39cqw] text-[10cqw] leading-[1.3] text-[#1a0dab]">
+        {/*
+            ⚠ CUTIA E DE EXACT DOUĂ RÂNDURI, și de aici vine alinierea prețurilor.
+
+            `line-clamp-2` oprește orice nume mai lung la două rânduri, iar
+            `min-h` îl ridică la două și pe unul scurt. Deci înălțimea nu mai
+            depinde de cât de lung e numele — patru prețuri stau pe aceeași
+            linie fiindcă așa e construit, nu fiindcă s-a nimerit.
+
+            26cqw = două rânduri: corpul e 10cqw, iar rândul, 1,3 din el.
+            Cine schimbă corpul sau `leading` schimbă și numărul ăsta.
+          */}
+          <p className="line-clamp-2 min-h-[26cqw] text-[10cqw] leading-[1.3] text-[#1a0dab]">
           {rezultat.nume}
         </p>
         <p className="mt-[4cqw] text-[10.5cqw] font-bold leading-none text-[#202124]">

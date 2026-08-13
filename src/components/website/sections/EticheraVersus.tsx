@@ -26,8 +26,8 @@ import {
  * Singură, punga trece prin ACEEAȘI formulă ca a lor și iese egală prin
  * construcție, nu prin nimereală.
  *
- * ⚠ „vs" NU e o siglă și nu intră în socoteala suprafeței: e o monedă de mărime
- * fixă, pusă peste rând. Vezi nota de la el.
+ * ⚠ „vs" NU e o siglă și nu intră în socoteala suprafeței: e semn, nu marcă.
+ * Vezi nota de la el.
  *
  * ⚠ `<img>` simplu, nu `next/image`: loaderul proiectului lasă fișierele locale
  * neatinse, deci n-ar produce niciun `srcset`. Aceeași hotărâre ca la `Logo` din
@@ -39,56 +39,54 @@ export function EticheraVersus({ cheie }: { cheie: VersusKey }) {
   const noastra = marimeaNoastra();
 
   return (
-    <div className="flex items-center justify-center gap-4 sm:gap-5">
+    /*
+      ═══ AȘEZAREA: TREI COLOANE, NU UN RÂND ═══
+
+      ⚠ CERUT „exact la mijloc față de cele 2 logo-uri", și un rând simplu NU
+      poate face asta. Siglele au lățimi foarte diferite — a noastră 35px, a lui
+      Cartum 91 — iar într-un rând centrat se centrează RÂNDUL ÎNTREG: „vs" ajunge
+      împins spre stânga cu jumătate din diferența dintre ele, adică vreo 28px.
+      Se vede.
+
+      Aici sunt trei coloane: `1fr` — „vs" — `1fr`. Cele două margini sunt egale
+      prin construcție, deci „vs" cade exact pe mijloc, oricât de late ar fi
+      siglele.
+
+      ⚠ Iar siglele se lipesc de „vs", nu se centrează în coloana lor: a noastră
+      la dreapta (`justify-self-end`), a lor la stânga. Așa golul dintre fiecare
+      siglă și „vs" e ACELAȘI, în timp ce prisosul rămâne pe dinafară, unde nu-l
+      mărginește nimic. Centrate în coloane, golurile ar fi ieșit diferite.
+    */
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 sm:gap-6">
       {/* ── Noi ── */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={SIGLA_NOASTRA.src}
         alt={SIGLA_NOASTRA.name}
         style={{ height: noastra.height, maxWidth: noastra.maxWidth }}
-        className="w-auto shrink-0 object-contain"
+        className="w-auto justify-self-end object-contain"
         decoding="async"
       />
 
       {/*
         ═══ VS ═══
 
-        Cerut de client (13.08) „mult mai proeminent și cu ceva efect, să pară că
-        e VERSUS". Era un cuvințel cenușiu între două sigle; acum e o monedă.
+        ⚠ FĂRĂ NICIO RAMĂ, cerut de client (13.08). O formă dinainte îl punea
+        într-un disc alb cu umbră; discul îl făcea al treilea obiect din rând, în
+        loc să fie legătura dintre celelalte două.
 
-        Trei lucruri îl fac să pară versus, nu conjuncție:
+        Ce-l face să pară versus, acum că n-are ramă, sunt două lucruri:
+        MĂRIMEA — e mai înalt decât siglele, deci se citește primul — și
+        ÎNCLINAREA, de la care vine tot înțelesul, ca pe afișele de meci.
 
-        1. **STĂ ÎNTR-UN DISC ALB, RIDICAT.** Aceeași umbră ca la casetele de
-           sigle (`--umbra-placa`), deci discul se citește ca un obiect pus PESTE
-           rând, nu ca o literă din el. Asta desparte cele două sigle în două
-           tabere.
-        2. **E ÎNCLINAT.** Literele aplecate spun mișcare, ciocnire — de la
-           afișele de meci vine tot înțelesul. Drept, ar fi rămas o prescurtare.
-        3. **ARE O LUMINĂ VERDE ÎN SPATE.** Un halou stins, cât să ridice discul
-           de pe fundal fără să tragă ochiul de la sigle.
-
-        ⚠ Verdele e al mărcii NOASTRE, iar asta e o alegere: discul stă la mijloc,
-        dar pagina e a noastră. Un „vs" cenușiu ar fi fost neutru și mort.
+        Verdele e al mărcii NOASTRE, iar asta e o alegere: semnul stă la mijloc,
+        dar pagina e a noastră.
       */}
-      <span className="relative flex shrink-0 items-center justify-center">
-        {/* Haloul. `blur` pe un disc verde, foarte stins. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute h-[46px] w-[46px] rounded-full blur-[10px] sm:h-[52px] sm:w-[52px]"
-          style={{ backgroundColor: "var(--color-brand)", opacity: 0.18 }}
-        />
-
-        <span
-          className="relative flex h-[38px] w-[38px] items-center justify-center rounded-full bg-white sm:h-[44px] sm:w-[44px]"
-          style={{ boxShadow: "var(--umbra-placa)" }}
-        >
-          <span
-            className="text-[15px] font-extrabold uppercase italic tracking-[-0.03em] sm:text-[17px]"
-            style={{ color: "var(--color-brand)" }}
-          >
-            vs
-          </span>
-        </span>
+      <span
+        className="text-[30px] leading-none font-extrabold uppercase italic tracking-[-0.04em] sm:text-[36px]"
+        style={{ color: "var(--color-brand)" }}
+      >
+        vs
       </span>
 
       {/* ── Ei ── */}
@@ -97,7 +95,7 @@ export function EticheraVersus({ cheie }: { cheie: VersusKey }) {
         src={logo.src}
         alt={logo.name}
         style={{ height: marime.height, maxWidth: marime.maxWidth }}
-        className="w-auto shrink-0 object-contain"
+        className="w-auto justify-self-start object-contain"
         decoding="async"
       />
     </div>

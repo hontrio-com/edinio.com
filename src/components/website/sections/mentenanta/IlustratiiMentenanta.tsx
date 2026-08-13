@@ -2,10 +2,14 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { cn } from "@/lib/utils/cn";
 import { Ripple } from "@/components/ui/ripple";
 import {
   MAIL_EXPEDITOR,
   MENTENANTA_MAILURI,
+  WHATSAPP_CONTACT,
+  WHATSAPP_MESAJE,
+  type MesajWhatsApp,
   type CardMentenanta,
   type MailMentenanta,
 } from "@/lib/website/mentenanta";
@@ -36,9 +40,6 @@ import {
  * a doua oară ar fi doar zgomot pentru cine folosește un cititor de ecran.
  */
 
-/* Verdele pentru TEXT: #1AB554 are pe alb 2,6:1, sub prag. Aceeași constantă și
-   același motiv ca în `IntegrationsBenzi`, `Comparison` și `PricingSection`. */
-const VERDE = "#12874A";
 
 /** Cadrul comun. Vezi nota de mai sus — nu se ocolește. */
 function Panou({ cap, children }: { cap: string; children: React.ReactNode }) {
@@ -257,39 +258,267 @@ function RandMail({ mail }: { mail: MailMentenanta }) {
   );
 }
 
+/* ═══ CONVERSAȚIA PE WHATSAPP ═══
+
+   Cerută de client (13.08), care a ales-o dintre trei propuneri și a cerut
+   interfața „1 la 1". Ce era înainte — trei puncte legate printr-o linie,
+   „Sesizare primită / În lucru / Rezolvat" — a plecat cu totul.
+
+   ═══ CE FACE UN DESEN SĂ SE RECUNOASCĂ DREPT WHATSAPP ═══
+
+   Nu verdele. Sunt patru lucruri, și toate sunt ale lor:
+
+   1. **TAPETUL BEJ** (#EFEAE2). E lucrul pe care ochiul îl recunoaște primul, de
+      la distanță, înainte să citească un cuvânt. Pe alb, aceleași baloane ar
+      putea fi orice aplicație de mesaje.
+   2. **DOUĂ VERZURI, NU UNUL.** Balonul tău e #D9FDD3 — un verde foarte stins,
+      aproape alb. Cine îl face verde aprins strică tot: pe WhatsApp, culoarea
+      tare e a antetului pe telefon, nu a baloanelor.
+   3. **CODIȚA, DOAR LA PRIMUL BALON dintr-un șir.** Două mesaje trimise unul
+      după altul de aceeași persoană se leagă: primul are codiță, al doilea nu.
+      E amănuntul care se vede fără să poată fi numit — cu codiță la fiecare,
+      conversația arată a listă de citate.
+   4. **ORA ÎNĂUNTRUL BALONULUI**, jos-dreapta, mică și cenușie, iar la mesajele
+      tale cele două bife albastre (#53BDEB) după ea. Ora scrisă sub balon e
+      tiparul altor aplicații.
+
+   ⚠ TAPETUL E PLAT, fără mâzgălelile lor. Desenele alea sunt lucrarea lor, iar
+   un tapet plat de aceeași culoare se recunoaște oricum. Dacă se cere vreodată
+   întocmai, trebuie fișierul, nu o imitație desenată de mine.
+
+   ⚠ „scrie…" ÎN ANTET, nu într-un balon cu trei puncte. Așa arată WhatsApp Web:
+   starea de sub nume se schimbă din „online" în „scrie…" cât timp celălalt
+   scrie. Balonul cu trei puncte e tiparul altor aplicații.
+*/
+
+/* Culorile sunt ale WhatsApp Web. Nu se înlocuiesc cu tokenurile noastre: aici
+   desenul trebuie să fie al lor. */
+const WA = {
+  antet: "#F0F2F5",
+  tapet: "#EFEAE2",
+  balonulMeu: "#D9FDD3",
+  balonulLui: "#FFFFFF",
+  text: "#111B21",
+  stins: "#667781",
+  bife: "#53BDEB",
+} as const;
+
+/** Cât stă între pași. */
+const PAS_MESAJ_MS = 900;
+/** Cât „scrie" înainte de fiecare răspuns. */
+const CAT_SCRIE_MS = 1100;
+
 function Remediere() {
-  /* Drumul unei sesizări, cu punctele legate printr-o linie: pasul făcut e
-     plin, cel în lucru e inelat, cel care urmează e gol. Trei stări, un singur
-     desen — o iconiță diferită la fiecare pas ar fi rupt ritmul. */
-  const pasi = [
-    { text: "Sesizare primită", stare: "gata" as const, cand: "10:14" },
-    { text: "În lucru", stare: "acum" as const, cand: "10:21" },
-    { text: "Rezolvat", stare: "urmeaza" as const, cand: "" },
-  ];
-  return (
-    <Panou cap="Drumul unei sesizări">
-      {pasi.map((p) => (
-        <div key={p.text} className="flex items-center gap-3 px-4 py-3">
-          <span
-            className="h-2.5 w-2.5 shrink-0 rounded-full"
-            style={
-              p.stare === "gata"
-                ? { backgroundColor: VERDE }
-                : p.stare === "acum"
-                  ? { backgroundColor: "#fff", boxShadow: `inset 0 0 0 2px ${VERDE}` }
-                  : { backgroundColor: "var(--color-hairline)" }
+  const gazda = useRef<HTMLDivElement>(null);
+  /* Câte mesaje se văd. Conversația pleacă goală. */
+  const [cate, setCate] = useState(0);
+  const [scrie, setScrie] = useState(false);
+
+  useEffect(() => {
+    const el = gazda.current;
+    if (!el) return;
+
+    const fara =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const ceasuri: ReturnType<typeof setTimeout>[] = [];
+
+    const observator = new IntersectionObserver(
+      (intrari) => {
+        for (const intrare of intrari) {
+          if (!intrare.isIntersecting) continue;
+          observator.disconnect();
+
+          if (fara) {
+            ceasuri.push(setTimeout(() => setCate(WHATSAPP_MESAJE.length), 0));
+            return;
+          }
+
+          /* Fiecare mesaj al SUPORTULUI e precedat de „scrie…", ca într-o
+             conversație adevărată. Al comerciantului apare direct: el scrie de
+             pe telefonul lui, deci nu-l vede nimeni tastând. */
+          let cand = PAS_MESAJ_MS;
+          WHATSAPP_MESAJE.forEach((mesaj, i) => {
+            if (mesaj.dinPartea === "suport") {
+              const inceput = cand;
+              ceasuri.push(setTimeout(() => setScrie(true), inceput));
+              cand += CAT_SCRIE_MS;
             }
-          />
-          <span
-            className="min-w-0 flex-1 truncate text-[13px]"
-            style={{ color: p.stare === "urmeaza" ? "var(--color-ink-3)" : "var(--color-ink)" }}
-          >
-            {p.text}
+            const acum = cand;
+            ceasuri.push(
+              setTimeout(() => {
+                setScrie(false);
+                setCate(i + 1);
+              }, acum),
+            );
+            cand += PAS_MESAJ_MS;
+          });
+        }
+      },
+      { threshold: 0.3 },
+    );
+
+    observator.observe(el);
+    return () => {
+      observator.disconnect();
+      for (const ceas of ceasuri) clearTimeout(ceas);
+    };
+  }, []);
+
+  const vizibile = WHATSAPP_MESAJE.slice(0, cate);
+
+  return (
+    <div ref={gazda} className="w-full">
+      {/*
+        Ce se aude și ce se indexează. Conversația pleacă GOALĂ din HTML, deci
+        fără rândul ăsta niciun mesaj n-ar ajunge în ce trimite serverul.
+      */}
+      <p className="sr-only">
+        Exemplu de conversație cu {WHATSAPP_CONTACT}:{" "}
+        {WHATSAPP_MESAJE.map((m) => m.text).join(" ")}
+      </p>
+
+      <div
+        aria-hidden="true"
+        className="w-full overflow-hidden rounded-[10px] border border-hairline"
+      >
+        {/* ── Antetul ── */}
+        <div
+          className="flex items-center gap-2.5 px-3 py-2"
+          style={{ backgroundColor: WA.antet }}
+        >
+          {/* Bulina contactului, cu semnul unui om — ca la ei când nu e poză. */}
+          <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[#DFE5E7]">
+            <svg viewBox="0 0 24 24" className="h-[17px] w-[17px] fill-[#FFFFFF]">
+              <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5m0 2c-3.34 0-10 1.67-10 5v3h20v-3c0-3.33-6.66-5-10-5" />
+            </svg>
           </span>
-          <span className="shrink-0 text-[12px] font-medium text-ink-3">{p.cand}</span>
+
+          <span className="min-w-0 flex-1">
+            <span
+              className="block truncate text-[12.5px] leading-[1.3]"
+              style={{ color: WA.text }}
+            >
+              {WHATSAPP_CONTACT}
+            </span>
+            {/*
+              Starea. „scrie…" ia locul lui „online" cât timp celălalt tastează —
+              exact ce face WhatsApp. Locul e rezervat de la început, ca antetul
+              să nu salte când se schimbă cuvântul.
+            */}
+            <span
+              className="block h-[13px] truncate text-[10.5px] leading-[13px]"
+              style={{ color: WA.stins }}
+            >
+              {scrie ? "scrie…" : "online"}
+            </span>
+          </span>
+
+          {/* Semnele din dreapta: apel video, apel, căutare, meniu. */}
+          <span className="flex shrink-0 items-center gap-3">
+            <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] fill-[#54656F]">
+              <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11z" />
+            </svg>
+            <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] fill-[#54656F]">
+              <path d="M20 15.5c-1.25 0-2.45-.2-3.57-.57a1 1 0 0 0-1.02.24l-2.2 2.2a15.05 15.05 0 0 1-6.59-6.59l2.2-2.2a1 1 0 0 0 .25-1.02A11.4 11.4 0 0 1 8.5 4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1 17 17 0 0 0 17 17 1 1 0 0 0 1-1v-3.5a1 1 0 0 0-1-1" />
+            </svg>
+            <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] fill-[#54656F]">
+              <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14" />
+            </svg>
+          </span>
         </div>
-      ))}
-    </Panou>
+
+        {/*
+          ── Conversația ──
+
+          Înălțimea e REZERVATĂ pentru toate trei mesajele. Fără ea, panoul ar
+          crește la fiecare mesaj și ar împinge pagina sub el.
+
+          `justify-end` lipește mesajele de fund: într-o conversație, cel mai nou
+          stă jos, iar golul rămâne deasupra. Lipite de sus, ar fi arătat a listă
+          care se umple.
+        */}
+        <div
+          className="flex flex-col justify-end gap-[6px] px-3 py-3"
+          style={{ backgroundColor: WA.tapet, minHeight: 170 }}
+        >
+          {vizibile.map((mesaj, i) => (
+            <Balon
+              key={mesaj.text}
+              mesaj={mesaj}
+              /* Codiță doar la primul balon dintr-un șir al aceleiași persoane. */
+              cuCodita={i === 0 || vizibile[i - 1].dinPartea !== mesaj.dinPartea}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Balon({ mesaj, cuCodita }: { mesaj: MesajWhatsApp; cuCodita: boolean }) {
+  const alMeu = mesaj.dinPartea === "comerciant";
+
+  return (
+    <div
+      className={cn(
+        "flex duration-300 ease-out animate-in fade-in slide-in-from-bottom-1",
+        alMeu ? "justify-end" : "justify-start",
+      )}
+      style={{ animationFillMode: "backwards" }}
+    >
+      <span
+        className={cn(
+          "relative max-w-[76%] px-2 py-[5px] text-[12px] leading-[1.35]",
+          /* 7,5px peste tot, în afară de colțul unde stă codița. */
+          alMeu ? "rounded-[7.5px]" : "rounded-[7.5px]",
+          cuCodita && (alMeu ? "rounded-tr-none" : "rounded-tl-none"),
+        )}
+        style={{
+          backgroundColor: alMeu ? WA.balonulMeu : WA.balonulLui,
+          color: WA.text,
+          /* Umbra lor, foarte joasă: ridică balonul de pe tapet fără să pară o
+             carte de vizită. */
+          boxShadow: "0 1px 0.5px rgba(11,20,26,0.13)",
+        }}
+      >
+        {/* Codița: un triunghi mic, lipit de colțul de sus. */}
+        {cuCodita ? (
+          <svg
+            viewBox="0 0 8 13"
+            className={cn("absolute top-0 h-[13px] w-[8px]", alMeu ? "-right-2" : "-left-2")}
+            style={{ transform: alMeu ? undefined : "scaleX(-1)" }}
+          >
+            <path d="M0 0h8L0 13z" fill={alMeu ? WA.balonulMeu : WA.balonulLui} />
+          </svg>
+        ) : null}
+
+        {mesaj.text}
+
+        {/*
+          Ora, ÎNĂUNTRUL balonului, jos-dreapta. La mesajele mele, după ea vin
+          cele două bife albastre — semnul că a fost citit.
+        */}
+        <span
+          className="ml-2 inline-flex translate-y-[2px] items-center gap-[2px] whitespace-nowrap text-[9px] leading-none"
+          style={{ color: WA.stins }}
+        >
+          {mesaj.ora}
+          {alMeu ? (
+            <svg viewBox="0 0 16 11" className="h-[9px] w-[13px]" fill="none">
+              <path
+                d="M1 5.5 3.8 8.4 9.4 1.6M6.2 5.9 8.1 8.4 13.9 1.6"
+                stroke={WA.bife}
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : null}
+        </span>
+      </span>
+    </div>
   );
 }
 

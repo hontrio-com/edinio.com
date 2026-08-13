@@ -129,3 +129,37 @@ export const MENTENANTA_MAILURI: MailMentenanta[] = [
     ora: "12 aug.",
   },
 ];
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Conversația din ilustrația cardului „Remedierea Problemelor"
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface MesajWhatsApp {
+  text: string;
+  ora: string;
+  /** Cine scrie. Comerciantul e la dreapta, pe verde; suportul la stânga, pe alb. */
+  dinPartea: "comerciant" | "suport";
+}
+
+/** Ce scrie în capul conversației. */
+export const WHATSAPP_CONTACT = "Suport Edinio";
+
+/**
+ * Cele trei mesaje, în ordinea în care se scriu.
+ *
+ * ⚠ POVESTEA E CHIAR CEA DIN TEXTUL CARDULUI: apare o eroare, echipa o preia și
+ * o investighează, apoi o rezolvă. Trei mesaje, trei pași — nici unul în plus.
+ *
+ * ⚠ Comerciantul scrie PRIMUL și e la DREAPTA. Într-o conversație de pe telefonul
+ * tău, mesajele tale sunt la dreapta, pe verde; ale celuilalt la stânga, pe alb.
+ * Invers, desenul ar arăta conversația de pe telefonul suportului — adică din
+ * partea greșită.
+ *
+ * ⚠ Orele urcă, nu coboară: într-o conversație cel mai nou mesaj e JOS, pe dos
+ * față de cutia poștală de la cardul de alături, unde e sus.
+ */
+export const WHATSAPP_MESAJE: MesajWhatsApp[] = [
+  { dinPartea: "comerciant", text: "Nu se generează AWB-ul", ora: "10:14" },
+  { dinPartea: "suport", text: "Am preluat, verificăm acum.", ora: "10:16" },
+  { dinPartea: "suport", text: "Rezolvat. Încearcă din nou.", ora: "11:40" },
+];

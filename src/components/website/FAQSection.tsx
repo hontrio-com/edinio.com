@@ -53,22 +53,39 @@ const DESCHIDERE_MS = 260;
 /** Nivelul de titlu al întrebărilor. Vezi comentariul din `FaqAccordion`. */
 type NivelTitlu = "h2" | "h3";
 
-export function FAQSection() {
+/**
+ * ⚠ LISTA E UN PARAMETRU, cu cea de pe pagina de start din oficiu.
+ *
+ * A devenit parametru când pagina „Mentenanță gratuită" a primit propriile opt
+ * întrebări (13.08). Cealaltă ieșire ar fi fost o a doua componentă, aproape
+ * identică — iar atunci o îndreptare la deschiderea acordeonului sau la umbra
+ * plăcii s-ar fi făcut într-una singură, iar a doua ar fi rămas în urmă fără
+ * să se plângă nimic.
+ */
+export function FAQSection({
+  intrebari = FAQS,
+  titlu = FAQ_TITLE,
+  lead = FAQ_LEAD,
+}: {
+  intrebari?: FaqItem[];
+  titlu?: string;
+  lead?: string;
+} = {}) {
   return (
     <section id="faq" className="bg-white py-20 lg:py-28">
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[720px] text-center">
           <h2 className="text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
-            {FAQ_TITLE}
+            {titlu}
           </h2>
           <p className="mt-5 text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
-            {FAQ_LEAD}
+            {lead}
           </p>
         </div>
 
         {/* Aici titlul secțiunii e `h2`, deci întrebările sunt `h3`.
             `mx-auto` fiindcă pe pagina de start capul secțiunii e CENTRAT. */}
-        <FaqAccordion nivelTitlu="h3" className="mx-auto mt-12 lg:mt-16" />
+        <FaqAccordion intrebari={intrebari} nivelTitlu="h3" className="mx-auto mt-12 lg:mt-16" />
       </div>
     </section>
   );
@@ -92,9 +109,12 @@ export function FAQSection() {
 export function FaqAccordion({
   nivelTitlu,
   className,
+  intrebari = FAQS,
 }: {
   nivelTitlu: NivelTitlu;
   className?: string;
+  /** Vezi nota de la `FAQSection`. */
+  intrebari?: FaqItem[];
 }) {
   const [deschis, setDeschis] = useState<number | null>(null);
 
@@ -102,7 +122,7 @@ export function FaqAccordion({
     <div
       className={cn("placa max-w-[820px] overflow-hidden rounded-[16px]", className)}
     >
-      {FAQS.map((faq, i) => (
+      {intrebari.map((faq, i) => (
         <Intrebare
           key={faq.question}
           faq={faq}

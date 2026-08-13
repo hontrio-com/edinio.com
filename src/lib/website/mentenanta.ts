@@ -1,3 +1,5 @@
+import type { FaqItem } from "./faq";
+
 /**
  * Textele paginii „Mentenanță gratuită".
  *
@@ -167,4 +169,74 @@ export const WHATSAPP_MESAJE: MesajWhatsApp[] = [
      Cu ea, se termină cu confirmarea celui care avea problema — adică lucrul pe
      care cardul îl susține. Și e la DREAPTA, deci deschide un șir nou, cu codiță. */
   { dinPartea: "comerciant", text: "Mulțumesc!", ora: "11:42" },
+];
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Întrebări frecvente, pe pagina „Mentenanță gratuită"
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * ⚠ TITLUL E CEL OBIȘNUIT, dar DESCRIEREA E SCRISĂ DE MINE. Clientul a dat cele
+ * opt perechi întrebare-răspuns (13.08), nu și rândul de sub titlu. Cel de pe
+ * pagina de start („…despre Edinio") ar fi promis mai mult decât e aici: astea
+ * sunt doar despre mentenanță.
+ */
+export const MENTENANTA_FAQ_LEAD =
+  "Răspunsuri la cele mai comune întrebări despre mentenanța inclusă.";
+
+/**
+ * ⚠ TEXTELE SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (13.08). Nu se rescriu,
+ * nu se scurtează, nu se reordonează.
+ *
+ * ⚠ Sunt ALTELE decât cele zece de pe pagina de start (`FAQS`), și trebuie să
+ * rămână așa: acolo se răspunde la „ce e Edinio", aici doar la ce ține de
+ * mentenanță. O listă comună ar fi umplut pagina asta cu întrebări despre
+ * integrări și prețuri.
+ *
+ * ⚠ Răspunsul la a patra spune limpede că NU există un termen garantat. E al
+ * clientului și e bine că e acolo: o pagină care promite un timp de rezolvare
+ * fără să-l poată susține e chiar felul de afirmație care se întoarce împotriva
+ * ta. Nu se „îmbunătățește".
+ */
+export const MENTENANTA_FAQ: FaqItem[] = [
+  {
+    question: "Mentenanța este într-adevăr gratuită?",
+    answer:
+      "Da. Mentenanța tehnică a platformei Edinio este inclusă în abonament și nu se plătește separat.",
+  },
+  {
+    question: "Trebuie să fac eu actualizările platformei?",
+    answer:
+      "Nu. Actualizările Edinio sunt gestionate de echipa noastră și sunt aplicate direct la nivelul platformei.",
+  },
+  {
+    question: "Ce se întâmplă dacă apare o problemă tehnică?",
+    answer:
+      "Dacă problema ține de platforma Edinio, echipa noastră o investighează și lucrează la remedierea ei cât mai rapid posibil.",
+  },
+  {
+    question: "În cât timp se rezolvă o problemă?",
+    answer:
+      "Timpul de rezolvare depinde de natura și complexitatea problemei. Nu avem un termen contractual garantat, dar problemele care țin de platformă sunt investigate și tratate cât mai rapid posibil.",
+  },
+  {
+    question: "Mentenanța include și securitatea platformei?",
+    answer:
+      "Da. Ne ocupăm de întreținerea tehnică și de măsurile necesare pentru protejarea platformei și a magazinelor active.",
+  },
+  {
+    question: "Sunt incluse și optimizările de performanță?",
+    answer:
+      "Da. Lucrăm constant la performanța, stabilitatea și experiența de utilizare a platformei.",
+  },
+  {
+    question: "Ce se întâmplă dacă o integrare nu mai funcționează?",
+    answer:
+      "Dacă problema ține de integrarea Edinio, o investigăm și o actualizăm atunci când este necesar și posibil. Problemele care țin direct de serviciul extern rămân în responsabilitatea furnizorului respectiv.",
+  },
+  {
+    question: "Trebuie să am un programator pentru magazin?",
+    answer:
+      "Nu. Pentru partea tehnică standard a platformei nu ai nevoie de un programator separat. Edinio se ocupă de actualizări, mentenanță și problemele care țin de platformă.",
+  },
 ];

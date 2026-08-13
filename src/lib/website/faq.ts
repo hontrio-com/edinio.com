@@ -89,10 +89,10 @@ export const FAQS: FaqItem[] = [
  * răspunsul din datele structurate să fie același cu cel vizibil, iar o
  * nepotrivire poate duce la ignorarea întregului bloc.
  */
-export function intrebariStructurate() {
+export function intrebariStructurate(intrebari: FaqItem[] = FAQS) {
   return {
     "@type": "FAQPage",
-    mainEntity: FAQS.map((f) => ({
+    mainEntity: intrebari.map((f) => ({
       "@type": "Question",
       name: f.question,
       acceptedAnswer: {

@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import { FAQSection } from "@/components/website/FAQSection";
+import { FinalCta } from "@/components/website/sections/FinalCta";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { SectiuneCeInclude } from "@/components/website/sections/mentenanta/SectiuneCeInclude";
 import { TitluMentenanta } from "@/components/website/sections/mentenanta/TitluMentenanta";
+import { intrebariStructurate } from "@/lib/website/faq";
+import { MENTENANTA_FAQ, MENTENANTA_FAQ_LEAD } from "@/lib/website/mentenanta";
 import { siteMetadata } from "@/lib/website/metadata";
 
 export const metadata: Metadata = siteMetadata({
@@ -27,9 +31,27 @@ export const metadata: Metadata = siteMetadata({
  * ⚠ NETERMINATA. Are hero-ul si „Ce include"; restul sectiunilor vin separat, la
  * cererea clientului. Ce e pana acum e final, nu coaja.
  */
+/*
+  Datele structurate `FAQPage`, construite CHIAR DIN LISTA RANDATĂ.
+
+  ⚠ Nu se scriu de mână. Pagina de start a avut o dată întrebările copiate în
+  două locuri, iar la prima corectură Google a rămas cu întrebări care nu mai
+  existau pe pagină — regulile lui cer explicit ca datele structurate să
+  corespundă conținutului vizibil. De atunci se construiesc din listă.
+*/
+const jsonLd = {
+  "@context": "https://schema.org",
+  ...intrebariStructurate(MENTENANTA_FAQ),
+};
+
 export default function MentenantaPage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <HeroPagina
         /*
           Titlul e o piesă, nu un șir: „tehnică" stă între paranteze drepte,
@@ -58,6 +80,19 @@ export default function MentenantaPage() {
       />
 
       <SectiuneCeInclude />
+
+      {/*
+        Întrebările paginii — ALTELE decât cele de pe pagina de start. Aceeași
+        componentă, altă listă: vezi nota de la `FAQSection`.
+
+        ⚠ Titlul rămâne cel obișnuit, dar rândul de sub el e al paginii ăsteia:
+        cel de pe start promite răspunsuri „despre Edinio", iar aici sunt doar
+        despre mentenanță.
+      */}
+      <FAQSection intrebari={MENTENANTA_FAQ} lead={MENTENANTA_FAQ_LEAD} />
+
+      {/* Aceeași bandă de final ca pe pagina de start și pe „Integrări". */}
+      <FinalCta />
     </>
   );
 }

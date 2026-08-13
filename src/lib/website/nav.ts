@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { LogoKey } from "./logos";
 import {
   ArrowRightLeft,
   Car,
@@ -67,22 +68,35 @@ export interface NavFeatured {
   description: string;
   href: string;
   cta: string;
-  /** Sigle afisate in panou (cai din /public). */
-  logos?: {
-    src: string;
-    alt: string;
-    /**
-     * Inverseaza culorile siglei.
-     *
-     * Pentru fisierele desenate ALB, facute pentru fundal inchis: pe cartonul
-     * alb al meniului ar fi invizibile. Merge doar la sigle monocrome.
-     */
-    invert?: boolean;
-  }[];
+  /**
+   * Siglele din panou, ca CHEI din `PROVIDER_LOGOS`, nu ca adrese de fisier.
+   *
+   * ⚠ ERAU ADRESE, si asta le tinea in afara socotelii de marime. Fiecare sigla
+   * are in `logos.ts` raportul cutiei si cat cerneala are desenul in ea, iar de
+   * acolo se scoate marimea la care PARE egala cu vecinele. Cu adrese scrise de
+   * mana, panoul le desena pe toate la aceeasi INALTIME - si atunci Stripe, care
+   * e un cuvant lung, arata de cateva ori mai mare decat Sameday, care e patrat.
+   *
+   * Ca si cheie, sigla trece prin `Logo`, deci si `invert` (Netopia e desenata
+   * alb, pentru fundal inchis) vine de acolo, nu mai e scris aici.
+   */
+  logos?: LogoKey[];
+
 }
 
 /* ─── Soluție eCommerce ──────────────────────────────────────────────────── */
 
+/**
+ * ⚠ DOUĂ ȘI DOUĂ, nu una și trei — cerut de client (13.08).
+ *
+ * Coloana „Vinde" avea trei intrări: magazinul, plățile cu cardul și curierii.
+ * Ultimele două au fost șterse cu totul, și a rămas una singură lângă o coloană
+ * cu trei — o treaptă vizibilă în panou.
+ *
+ * ⚠ „Integrări" A TRECUT LA „VINDE", și nu la întâmplare: chiar plățile și
+ * curierii, cele două scoase de acolo, trăiesc acum în biblioteca de integrări.
+ * Coloana spune tot ce spunea și înainte, doar că printr-o singură ușă.
+ */
 export const SOLUTION_COLUMNS: NavColumn[] = [
   {
     heading: "Vinde",
@@ -93,17 +107,17 @@ export const SOLUTION_COLUMNS: NavColumn[] = [
         icon: Store,
         description: "Magazin complet, pregătit pentru vânzare din prima zi.",
       },
-    ],
-  },
-  {
-    heading: "Crește",
-    items: [
       {
         label: "Integrări",
         href: "/integrari",
         icon: Plug,
         description: "Facturare, marketing, curieri și plăți într-un singur loc.",
       },
+    ],
+  },
+  {
+    heading: "Crește",
+    items: [
       {
         label: "Optimizare",
         href: "/optimizare",
@@ -239,25 +253,13 @@ export const SOLUTION_FEATURED: NavFeatured = {
   /*
    * Șase, nu opt: pe trei coloane rămân lizibile. Restul sunt pe /integrari.
    *
-   * Alese si pentru cum arata fisierul, nu doar pentru brand. Doua capcane
-   * gasite in `public/integrations/`:
-   *   - `netopia.svg` e desenat ALB (`.st0{fill:#FFFFFF}`), pentru fundal
-   *     inchis. Pe cartonul alb de aici e complet invizibil.
-   *   - `cargus.svg` are 215KB de imagine matriceala inglobata si la 28px
-   *     devine o pata.
-   * Cele de mai jos sunt inchise sau colorate pe fundal transparent, deci se
-   * citesc pe alb. Cate una din fiecare categorie din descriere: curierat,
-   * plati, facturare.
+   * ⚠ Cate una din fiecare categorie din descriere: curierat, plati, facturare.
+   *
+   * Capcanele de fisier care erau notate aici — Netopia desenata alb, Cargus cu
+   * 215KB de imagine matriceala inglobata — sunt acum tinute in `logos.ts`,
+   * unde stau si rapoartele. De aceea aici raman doar cheile.
    */
-  logos: [
-    { src: "/integrations/fan-courier.svg", alt: "FAN Courier" },
-    { src: "/integrations/sameday.webp", alt: "Sameday" },
-    { src: "/integrations/dpd.svg", alt: "DPD" },
-    /* Desenata alb, pentru fundal inchis. Inversata, ca sa se vada pe alb. */
-    { src: "/integrations/netopia.svg", alt: "Netopia", invert: true },
-    { src: "/integrations/stripe.svg", alt: "Stripe" },
-    { src: "/integrations/smartbill.webp", alt: "SmartBill" },
-  ],
+  logos: ["fanCourier", "sameday", "dpd", "netopia", "stripe", "smartbill"],
 };
 
 /* ─── De ce noi ──────────────────────────────────────────────────────────── */

@@ -1,7 +1,10 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Phone } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import {
+  CASETA_MICA,
+  CasetaSigla,
+} from "../sections/integrations/CasetaSigla";
 import type { NavCompare, NavFeatured, NavItem, NavLink } from "@/lib/website/nav";
 
 /**
@@ -181,27 +184,41 @@ export function FeaturedPanel({
       </span>
 
       {/*
-        Fiecare siglă stă într-o casetă de aceeași înălțime, iar lățimea vine din
-        proporția ei. Siglele au forme foarte diferite — Sameday e pătrată
-        (791x801), Stripe e lungă (2500x1045) — așa că o lățime fixă le-ar turti,
-        iar înălțimea fixă cu lățime liberă le pune pe același rând optic.
+        ═══ PLĂCI, NU SIGLE ÎNTR-O CUTIE ═══
+
+        Erau șase sigle puse pe un carton alb comun, la aceeași ÎNĂLȚIME. Două
+        lucruri nu mergeau, și clientul le-a văzut pe amândouă (13.08):
+
+        1. La înălțime egală siglele NU par egale. Stripe e un cuvânt lung
+           (raport 2,39), Sameday e pătrată (0,99): la aceeași înălțime, prima
+           acoperă de vreo două ori mai multă suprafață și trage tot ochiul.
+        2. Cartonul comun le lipea într-un bloc, în loc să le arate ca pe niște
+           lucruri de sine stătătoare.
+
+        Acum e chiar piesa de pe pagina „Integrări" — `CasetaSigla` — doar mai
+        mică. Ea egalizează SUPRAFAȚA, nu înălțimea, deci siglele arată la fel de
+        mari oricât de diferite le-ar fi formele. Nu e o copie a desenului de
+        acolo: e aceeași componentă, ca prima corectură făcută într-un loc să nu
+        le despartă.
+
+        ⚠ Fără `bg-white` aici: albul și umbra vin din clasa `caseta-sigla`.
+
+        ⚠ Și mărimea e FIXĂ (56×56), nu întinsă pe coloană. Lăsată să se
+        întindă, caseta ieșea de 56px lată la 1024 și de 73 la 1280 — un
+        dreptunghi care se schimbă cu fereastra, în timp ce sigla dinăuntru,
+        socotită pentru o suprafață dată, rămânea la fel. `justify-items-center`
+        împarte prisosul între ele.
       */}
       {featured.logos ? (
-        <span className="mt-4 grid grid-cols-3 gap-x-2 gap-y-4 rounded-xl border border-hairline bg-white px-3 py-4">
-          {featured.logos.map((logo) => (
-            <span key={logo.src} className="flex h-7 items-center justify-center">
-              <Image
-                src={logo.src}
-                alt={logo.alt}
-                width={72}
-                height={28}
-                className={cn(
-                  "h-full w-auto max-w-full object-contain opacity-85 transition-opacity duration-200 group-hover:opacity-100",
-                  /* Sigla alba devine neagra. Vezi `invert` in NavFeatured. */
-                  logo.invert && "invert",
-                )}
-              />
-            </span>
+        <span className="mt-4 grid grid-cols-3 justify-items-center gap-y-2.5">
+          {featured.logos.map((cheie) => (
+            <CasetaSigla
+              key={cheie}
+              cheie={cheie}
+              suprafata={CASETA_MICA.suprafata}
+              latimeUtila={CASETA_MICA.latimeUtila}
+              className="h-14 w-14 rounded-[14px]"
+            />
           ))}
         </span>
       ) : null}

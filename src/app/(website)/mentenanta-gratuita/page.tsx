@@ -37,6 +37,16 @@ export default function MentenantaPage() {
           `TitluMentenanta`, unde scrie și de ce parantezele nu par paranteze.
         */
         title={<TitluMentenanta />}
+        /*
+          ⚠ Mai lat decât cei 900px din oficiu, și e o măsurătoare, nu un gust:
+          propoziția a doua — „Noi ne ocupăm de partea <tehnică/>." — are 1087px
+          la corpul de 66, iar clientul a cerut (13.08) să stea întreagă pe un
+          rând. La 900 se rupea, iar semnele rămâneau singure pe al treilea rând.
+
+          1120 lasă și o rezervă mică. Mai mult n-are rost: cadrul hero-ului e de
+          1200px cu spațiere, deci pe la 1136 se termină oricum locul.
+        */
+        latimeTitlu="max-w-[1120px]"
         lead="Actualizări, securitate, optimizări și probleme tehnice. Mentenanța magazinului tău este inclusă în Edinio, fără costuri suplimentare."
         /*
           Textul butonului e al clientului, cu diacriticele puse: el l-a scris

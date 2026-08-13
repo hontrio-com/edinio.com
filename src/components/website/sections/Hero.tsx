@@ -37,6 +37,7 @@ function HeroCadru({
   secundara,
   fundal,
   spatiere,
+  latimeTitlu = "max-w-[900px]",
 }: {
   /** Pastila de deasupra titlului. Lipsește pe paginile care n-au ce anunța. */
   eticheta?: React.ReactNode;
@@ -68,6 +69,17 @@ function HeroCadru({
    * fundalul peste titlu.
    */
   spatiere?: CSSProperties;
+  /**
+   * Lățimea la care se rupe titlul, când cea din oficiu nu e potrivită.
+   *
+   * ⚠ EXISTĂ PENTRU UN SINGUR MOTIV, ȘI E BINE SĂ RĂMÂNĂ AȘA. Titlul se rupe la
+   * 900px peste tot; pe „Mentenanță gratuită" clientul a cerut (13.08) ca a doua
+   * propoziție să stea întreagă pe un rând, iar ea are 1087px la corpul de 66.
+   * Fără prop, singurele ieșiri erau ori să lărgim titlul pe TOATE paginile, ori
+   * să micșorăm corpul doar pe asta — prima strică ce e bine în altă parte, a
+   * doua rupe potrivirea între pagini.
+   */
+  latimeTitlu?: string;
 }) {
   return (
     /*
@@ -102,7 +114,12 @@ function HeroCadru({
       >
         {eticheta}
 
-        <h1 className="mx-auto mt-6 max-w-[900px] text-[38px] font-bold leading-[1.04] tracking-[-0.035em] text-ink sm:mt-7 sm:text-[56px] lg:text-[66px]">
+        <h1
+          className={cn(
+            "mx-auto mt-6 text-[38px] font-bold leading-[1.04] tracking-[-0.035em] text-ink sm:mt-7 sm:text-[56px] lg:text-[66px]",
+            latimeTitlu,
+          )}
+        >
           {title}
         </h1>
 
@@ -189,6 +206,7 @@ export function HeroPagina({
   secundara,
   fundal,
   spatiere,
+  latimeTitlu,
 }: {
   title: React.ReactNode;
   lead: string;
@@ -198,6 +216,8 @@ export function HeroPagina({
   fundal?: React.ReactNode;
   /** Vezi `HeroCadru`: spațierea pe care o cere fundalul. */
   spatiere?: CSSProperties;
+  /** Vezi `HeroCadru`: lățimea la care se rupe titlul. */
+  latimeTitlu?: string;
 }) {
   return (
     <HeroCadru
@@ -207,6 +227,7 @@ export function HeroPagina({
       secundara={secundara}
       fundal={fundal}
       spatiere={spatiere}
+      latimeTitlu={latimeTitlu}
     />
   );
 }

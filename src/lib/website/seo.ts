@@ -145,19 +145,39 @@ export interface RezultatOrganic {
  * Cardul vorbește despre CUM ARATĂ rezultatul, nu despre unde stă, iar la mijloc
  * comparația se vede și în sus și în jos.
  *
- * ⚠ ADRESELE. `magazinul-tau.ro` există și e al altcuiva — verificat, nu
- * presupus — deci nu se scrie pe o pagină comercială ca și cum ar fi un exemplu
- * al nostru. Al nostru arată chiar cum arată un magazin Edinio: `edinio.com`
- * plus numele magazinului. Iar cele două din jur folosesc adrese care NU EXISTĂ
- * (verificat: nu se rezolvă) și care sunt descrieri, nu nume de firmă, ca
- * titlul slab de lângă ele să nu cadă pe cineva adevărat.
+ * ═══ ADRESELE — CITEȘTE ÎNAINTE SĂ LE SCHIMBI ═══
+ *
+ * Clientul a cerut (13.08) ca vecinii să arate a magazine adevărate, nu a
+ * substituenți: „Magazin concurent" pe `magazin-concurent.ro` se citea ca un
+ * locșor gol. Numele și adresele de acum sunt scrise SĂ PARĂ adevărate, dar NU
+ * SUNT ALE NIMĂNUI: fiecare domeniu a fost verificat prin DNS și niciunul nu se
+ * rezolvă.
+ *
+ * ⚠ ȘI NICI NU SE PUN ALE CUIVA. Aici sunt titluri slabe, scrise de noi, lângă
+ * cuvintele „prost optimizat", pe pagina noastră de vânzare. Puse pe numele unui
+ * magazin adevărat, ar fi o afirmație despre firma aia — și una inventată, de
+ * vreme ce titlul nu e al lor, ci scris de noi. Un domeniu care se rezolvă n-are
+ * ce căuta pe rândurile astea două, oricât de bine ar arăta. Proba din
+ * `seo.test.ts` păzește exact asta.
+ *
+ * ⚠ AL NOSTRU stă pe `www.exemplu.ro` — un domeniu de pildă, nu unul adevărat.
+ *
+ * A trecut prin trei forme, și ultima e a clientului: întâi `edinio.com`, apoi
+ * `www.magazinultau.ro`, cerut de el; dar domeniul ăla se rezolvă la Hetzner
+ * (128.140.228.212), nu la Vercel unde stă `edinio.com`, deci nu e al nostru —
+ * iar clientul a confirmat că nu e și a cerut ceva de pildă, standard.
+ *
+ * `acme.ro`, cel cerut, e și el luat. `exemplu.ro` NU se rezolvă (verificat) și
+ * e chiar cuvântul care spune ce e: aici scrie „exemplu", nu numele nimănui.
  */
 export const REZULTATE_ORGANICE: RezultatOrganic[] = [
   {
-    initiala: "M",
-    site: "Magazin concurent",
-    cale: "magazin-concurent.ro › index.php?cat=12&id=482",
-    titlu: "Produse",
+    initiala: "C",
+    site: "Camera Shop",
+    cale: "www.camerashop.ro › index.php?cat=12&id=482",
+    /* Scurt și gol: numele categoriei, atât. Nu spune nici ce fel de cameră, nici
+       al cui e magazinul — adică nimic din ce caută omul. */
+    titlu: "Camere",
     /* Ce arată Google când pagina n-are descriere scrisă: își culege singur
        primul text pe care îl găsește, adică meniul. Se vede des, și de departe. */
     descriere:
@@ -167,16 +187,16 @@ export const REZULTATE_ORGANICE: RezultatOrganic[] = [
     alNostru: true,
     initiala: "M",
     site: "Magazinul tău",
-    cale: "edinio.com › magazinul-tau › camere-supraveghere",
+    cale: "www.exemplu.ro › camere-supraveghere",
     titlu: "Camere de supraveghere WiFi și 4G | Magazinul tău",
     descriere:
       "Camere de supraveghere pentru interior și exterior, cu vedere pe timp de noapte. Livrare în 24 de ore.",
   },
   {
-    initiala: "A",
-    site: "Alt magazin online",
-    cale: "alt-magazin-online.ro › categorie-1",
-    titlu: "Categorie 1 - Alt magazin online - Magazin online",
+    initiala: "S",
+    site: "Supraveghere Shop",
+    cale: "www.supraveghere-shop.ro › categorie-1",
+    titlu: "Produse",
     descriere:
       "Vă mulțumim pentru vizită. Pentru comenzi și informații ne puteți contacta telefonic în intervalul orar 09:00 - 17:00.",
   },

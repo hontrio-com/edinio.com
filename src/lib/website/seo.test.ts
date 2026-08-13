@@ -95,45 +95,81 @@ test("unul singur e al nostru", () => {
   assert.equal(alenoastre.length, 1, "trebuie exact un rezultat al nostru");
 });
 
-test("adresa noastră e pe un domeniu care CHIAR e al nostru", () => {
+test("adresa noastră e una de pildă, nu a cuiva", () => {
   /*
     ⚠ ASTA E O PROBĂ DE SIGURANȚĂ, nu de desen.
 
-    Adresa firească pentru un exemplu românesc ar fi `magazinul-tau.ro` — dar
-    domeniul ăla EXISTĂ și e al altcuiva (verificat prin DNS, nu presupus). Scris
-    pe o pagină comercială, lângă un chenar verde și eticheta „optimizat", ar
-    lega magazinul altcuiva de reclama noastră.
+    Adresele firești pentru un exemplu românesc — `magazinul-tau.ro`,
+    `magazinultau.ro`, `acme.ro` — sunt TOATE LUATE. Verificat prin DNS, nu
+    presupus. Oricare dintre ele, scrisă lângă un chenar verde și eticheta
+    „optimizat", ar lega magazinul altcuiva de reclama noastră.
 
-    `edinio.com` e al nostru, și e chiar felul în care arată adresa unui magazin
-    Edinio. Dacă cineva schimbă vreodată exemplul, proba îl oprește.
+    `exemplu.ro` nu se rezolvă și spune singur ce e. Dacă cineva pune vreodată
+    altceva, proba îl oprește.
   */
   const alNostru = REZULTATE_ORGANICE.find((r) => r.alNostru);
   assert.ok(alNostru, "lipsește rezultatul nostru");
   assert.ok(
-    alNostru.cale.startsWith("edinio.com"),
-    `adresa noastră e pe ${alNostru.cale} — trebuie pe un domeniu al nostru`,
+    alNostru.cale.startsWith("www.exemplu.ro"),
+    `adresa noastră e pe ${alNostru.cale} — trebuie una de pildă, nu a cuiva`,
   );
 });
 
-test("vecinii stau pe adrese care nu există", () => {
+test("vecinii au nume care par adevărate, pe adrese care nu sunt", () => {
   /*
-    Cele două rezultate slabe stau lângă cuvintele „titlu nelucrat". Dacă
-    domeniul lor ar fi al cuiva adevărat, pagina ar spune ceva despre firma aia.
-    De aceea sunt adrese care NU se rezolvă (verificat), și care sunt descrieri,
-    nu nume de firmă.
+    ⚠ CEA MAI IMPORTANTĂ PROBĂ DIN FIȘIER.
 
-    Lista de mai jos e de domenii despre care ȘTIM că sunt luate. Se mai adaugă
-    la ea dacă cineva scrie alt exemplu.
+    Clientul a cerut ca vecinii să arate a magazine adevărate, nu a substituenți
+    — și au nume care sună a magazin. Dar titlurile lor sunt SCRISE DE NOI, scurte
+    și goale, ca să se vadă prost optimizate, iar asta se întâmplă pe pagina
+    noastră de vânzare. Pe numele unui magazin adevărat, ar fi o afirmație despre
+    firma aia, și una inventată: titlul nu e al lor.
+
+    De aceea fiecare domeniu de aici a fost verificat prin DNS și NU SE REZOLVĂ.
+    Lista de mai jos ține minte ce am găsit LUAT, ca nimeni să nu le pună înapoi
+    fiindcă „sună bine". Cine adaugă un vecin nou verifică întâi domeniul.
   */
-  const LUATE = ["magazinul-tau.ro", "magazin.ro", "shop.ro"];
+  const LUATE = [
+    "magazinul-tau.ro",
+    "www.magazinultau.ro",
+    "magazinultau.ro",
+    "acme.ro",
+    "demo.ro",
+    "tehnomarket.ro",
+    "securityshop.ro",
+    "electrocasa.ro",
+    "magazin.ro",
+    "shop.ro",
+  ];
   for (const r of REZULTATE_ORGANICE) {
     if (r.alNostru) continue;
     const gazda = r.cale.split(" ")[0];
     assert.ok(
       !LUATE.includes(gazda),
-      `${gazda} e un domeniu adevărat, al altcuiva — nu se pune lângă un titlu slab`,
+      `${gazda} e un domeniu adevărat, al altcuiva — nu se pune lângă un titlu slab scris de noi`,
     );
     assert.ok(!gazda.startsWith("edinio."), `${gazda}: un vecin slab nu stă pe domeniul nostru`);
+  }
+});
+
+test("titlurile vecinilor sunt scurte și goale", () => {
+  /*
+    Cerut de client: „titluri scurte și slabe, să pară prost optimizate față de
+    ale noastre". Aici se măsoară chiar deosebirea aia — dacă cineva le
+    îmbunătățește din greșeală, cardul nu mai are ce arăta.
+  */
+  const alNostru = REZULTATE_ORGANICE.find((r) => r.alNostru);
+  assert.ok(alNostru);
+  for (const r of REZULTATE_ORGANICE) {
+    if (r.alNostru) continue;
+    assert.ok(
+      r.titlu.length <= 22,
+      `„${r.titlu}" are ${r.titlu.length} semne — prea lung ca să treacă drept titlu nelucrat`,
+    );
+    assert.ok(
+      alNostru.titlu.length > r.titlu.length * 2,
+      `titlul nostru nu se deosebește destul de „${r.titlu}"`,
+    );
   }
 });
 

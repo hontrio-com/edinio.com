@@ -53,9 +53,9 @@ export function PanouRezultateGoogle() {
     <div className="@container">
       {/*
         Ce se aude și ce se indexează. Restul e ascuns: sunt rezultate INVENTATE,
-        puse ca desen, iar textul lor — „Produse", „Categorie 1", un meniu cules
-        de Google — n-are ce căuta în ce citește un motor de căutare despre
-        pagina asta. Cardul 1 face la fel.
+        puse ca desen, iar textul lor — „Camere", „Produse", un meniu cules de
+        Google — n-are ce căuta în ce citește un motor de căutare despre pagina
+        asta. Cardul 1 face la fel.
       */}
       <p className="sr-only">
         Exemplu de rezultate Google: două magazine cu titluri și descrieri

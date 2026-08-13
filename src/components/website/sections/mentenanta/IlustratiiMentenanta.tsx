@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Check } from "lucide-react";
+import { Ripple } from "@/components/ui/ripple";
 import type { CardMentenanta } from "@/lib/website/mentenanta";
 
 /**
@@ -151,45 +152,47 @@ function Securitate() {
   return (
     <>
       {/*
-        ═══ RAZELE ═══
+        ═══ CERCURILE ═══
 
-        ⚠ ACOPERĂ TOT PANOUL, nu doar jurul lacătului — cerut de client. Înainte
-        erau trei arce scurte de fiecare parte; acum e un evantai care pleacă din
-        spatele lacătului și se pierde spre margini.
+        `Ripple`, componenta Magic UI trimisă de client (13.08), în locul razelor
+        de dinainte. Cercuri concentrice care se strâng puțin și revin, pornind
+        din mijlocul panoului — adică din spatele lacătului.
 
-        `repeating-conic-gradient` desenează razele: o felie colorată, una goală,
-        la nesfârșit în jurul unui punct. Punctul e chiar în spatele lacătului
-        (50% 46%), deci razele par să iasă din el.
+        ⚠ MĂSURILE SUNT ALE PANOULUI, nu cele din oficiu. Ale lor sunt socotite
+        pentru o casetă de 500px înălțime: primul cerc de 210, opt cercuri, deci
+        ultimul de 700. Panoul nostru are vreo 264px, deci din cercurile alea s-ar
+        fi văzut două arce uriașe prin colțuri. Aici primul e de 96 și sunt șapte:
+        se văd trei-patru cercuri întregi în jurul lacătului.
 
-        ⚠ Fără MASCĂ, evantaiul s-ar opri brusc la marginea panoului, cu razele
-        tăiate drept — și s-ar vedea că e un tipar, nu o lumină. Masca radială îl
-        stinge spre margini.
+        ⚠ CULOAREA cercurilor e dată din afară. Ale lor sunt `bg-foreground/25`,
+        adică închise — sunt făcute pentru fundal întunecat, iar panoul nostru e
+        alb. Vezi nota din `components/ui/ripple.tsx`.
 
-        ⚠ `absolute inset-0` se agață de PANOU (care e `relative` în
-        `SectiuneCeInclude`), nu de piesa asta: de aceea aici nu e niciun
-        `relative`, iar razele ajung până la chenar, peste spațierea panoului.
+        ⚠ ȘI `mainCircleOpacity` E MARE (0,78), nu 0,24 ca la ei. Opacitatea de pe
+        cerc se ÎNMULȚEȘTE cu alfa culorii: cu 0,2 și un chenar la 45%, prima
+        formă scotea o linie la 9% — pe alb, nimic. Ori culoarea are alfa, ori
+        opacitatea e mică; amândouă odată, cercurile dispar. Aici chenarul e la
+        culoare plină și doar opacitatea îl stinge.
+
+        ⚠ Masca stinge efectul în TOATE părțile, nu doar în jos ca la ei: la ei
+        desenul stă sus, la noi lacătul e la mijloc.
       */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage:
-            "repeating-conic-gradient(from 0deg at 50% 46%, rgba(84,186,255,0.16) 0deg 1.8deg, rgba(84,186,255,0) 1.8deg 9deg)",
-          WebkitMaskImage:
-            "radial-gradient(115% 92% at 50% 46%, #000 0%, rgba(0,0,0,0.75) 32%, transparent 76%)",
-          maskImage:
-            "radial-gradient(115% 92% at 50% 46%, #000 0%, rgba(0,0,0,0.75) 32%, transparent 76%)",
-        }}
+      <Ripple
+        mainCircleSize={96}
+        mainCircleOpacity={0.78}
+        numCircles={7}
+        clasaCerc="border-[#6EC0F7] bg-[#54BAFF]/[0.055] shadow-none"
+        className="[mask-image:radial-gradient(120%_105%_at_50%_48%,#000_18%,rgba(0,0,0,0.55)_52%,transparent_84%)]"
       />
 
-      {/* Pâcla albă din jurul lacătului, peste raze: le stinge în mijloc, ca
-          razele să pară că vin DIN SPATELE lui, nu că trec peste el. */}
+      {/* Pâcla albă din jurul lacătului, peste cercuri: le stinge în mijloc, ca
+          ele să pară că vin DIN SPATELE lui, nu că trec peste el. */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           backgroundImage:
-            "radial-gradient(44% 40% at 50% 46%, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 100%)",
+            "radial-gradient(21% 20% at 50% 46%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.45) 55%, rgba(255,255,255,0) 100%)",
         }}
       />
 

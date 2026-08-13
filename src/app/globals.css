@@ -1564,3 +1564,12 @@
     color: transparent;
   }
 }
+
+/* Cadrele-cheie pentru `Ripple` (Magic UI), adusa la cererea clientului.
+   Cercurile nu se maresc: se STRANG putin si revin. Diferenta conteaza - crescute,
+   ar fi parut ca se propaga spre afara la nesfarsit, adica o unda; stranse si
+   revenite, respira pe loc, ceea ce e chiar ce arata efectul lor. */
+@keyframes ripple {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(0.9); }
+}

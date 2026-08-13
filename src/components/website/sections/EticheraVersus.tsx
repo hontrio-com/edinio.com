@@ -84,7 +84,30 @@ export function EticheraVersus({ cheie }: { cheie: VersusKey }) {
       */}
       <span
         className="text-[30px] leading-none font-extrabold uppercase italic tracking-[-0.04em] sm:text-[36px]"
-        style={{ color: "var(--color-brand)" }}
+        style={{
+          color: "var(--color-brand)",
+          /*
+            ⚠ CUTIA E PE MIJLOC, DAR LITERELE NU ERAU — și clientul a văzut
+            diferența fără s-o măsoare.
+
+            Literele înclinate nu umplu cutia simetric: măsurat pe fontul și
+            grosimea de aici, „V" începe la 7px ÎNĂUNTRUL marginii din stânga
+            (piciorul lui e retras), iar „S" iese cu 5,67px ÎN AFARA marginii din
+            dreapta. Mijlocul cernelii cade astfel cu 6,33px mai la dreapta decât
+            mijlocul cutiei, iar din golul de 24px de fiecare parte ieșea unul de
+            31 la stânga și unul de 18 la dreapta.
+
+            Aici se mută DESENUL, nu cutia: `transform` nu atinge așezarea, deci
+            cele trei coloane rămân echilibrate, iar cerneala ajunge pe mijloc.
+            6,33 din 36 = 0,176em, deci merge la fel și la 30px pe telefon.
+
+            ⚠ Numărul e al FONTULUI. Dacă se schimbă familia, grosimea sau
+            înclinarea, se remăsoară: `measureText` dă `actualBoundingBoxLeft` și
+            `actualBoundingBoxRight`, iar decalajul e jumătate din diferența lor
+            față de cutie.
+          */
+          transform: "translateX(-0.176em)",
+        }}
       >
         vs
       </span>

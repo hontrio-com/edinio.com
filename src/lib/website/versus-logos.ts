@@ -18,10 +18,33 @@
  * viewBox-ul începe la -2,4). Aceeași scăpare a costat deja o dată, la
  * biblioteca de integrări.
  *
- * ⚠ CARTUM A FOST TĂIAT. Fișierul venea 600×315 cu desenul doar în mijloc, pe
- * 108px — restul transparent. Pus așa, la înălțime dată, cuvântul ar fi ieșit la
- * o treime din cât trebuia, fiindcă `<img>` măsoară cutia, nu cerneala. Acum
- * fișierul e strâns pe desen: 600×108.
+ * ═══ TOATE FIȘIERELE SUNT STRÂNSE PE DESEN ═══
+ *
+ * ⚠ ASTA E CE FACE GOLURILE EGALE, și e lucrul care a scăpat de două ori.
+ *
+ * Un `<img>` ocupă CUTIA fișierului, nu desenul din ea. Golul străveziu dinăuntru
+ * se adaugă la spațiul dintre sigle, iar cum fiecare fișier avea alt gol, golurile
+ * de pe ecran ieșeau diferite — deși cele dintre CUTII erau egale la pixel.
+ * Măsurat înainte: la stânga lui „vs" 32,7px peste tot, la dreapta între 16,9 și
+ * 33,5, după siglă. Clientul a văzut diferența fără s-o măsoare.
+ *
+ * Cât gol avea fiecare, măsurat desenând pe o pânză și căutând marginile
+ * punctelor cu alfa > 24:
+ *
+ *   WooCommerce  17,8% pe fiecare latură (și 33% sus și jos)
+ *   Magento       7,8% pe fiecare latură
+ *   Edinio        3,1% la stânga, 4,8% la dreapta
+ *   Wix           1,5% pe fiecare latură
+ *   Shopify, OpenCart, Cartum — deja strânse
+ *
+ * Acum toate sunt strânse: la SVG-uri s-a rescris `viewBox`-ul pe marginile
+ * desenului (și `width`/`height`, altfel `<img>` ia proporția veche și desenul se
+ * turtește); la cele matriceale s-a tăiat fișierul. Verificat după: gol 0,0% la
+ * toate șapte.
+ *
+ * ⚠ Odată cutiile strânse, CERNEALA S-A SCHIMBAT și ea — WooCommerce a sărit de
+ * la 0,15 la 0,648, fiindcă înainte se socotea în raport cu o cutie cu mult gol
+ * în ea. Valorile de mai jos sunt cele de DUPĂ strângere.
  *
  * ═══ CERNEALA ═══
  *
@@ -48,12 +71,12 @@ import { logoSize, type LogoSize, type ProviderLogo } from "./logos";
 const V = "/versus";
 
 export const VERSUS_LOGOS = {
-  shopify: { name: "Shopify", src: `${V}/shopify.svg`, ratio: 2192 / 2500, ink: 0.72 },
-  cartum: { name: "Cartum", src: `${V}/cartum.webp`, ratio: 600 / 108, ink: 0.44 },
-  wix: { name: "Wix", src: `${V}/wix.svg`, ratio: 2500 / 973, ink: 0.45 },
-  woocommerce: { name: "WooCommerce", src: `${V}/woocommerce.svg`, ratio: 2, ink: 0.15 },
-  opencart: { name: "OpenCart", src: `${V}/opencart.svg`, ratio: 1, ink: 0.79 },
-  magento: { name: "Magento", src: `${V}/magento.svg`, ratio: 1, ink: 0.4 },
+  shopify: { name: "Shopify", src: `${V}/shopify.svg`, ratio: 0.881, ink: 0.716 },
+  cartum: { name: "Cartum", src: `${V}/cartum.webp`, ratio: 5.5556, ink: 0.407 },
+  wix: { name: "Wix", src: `${V}/wix.svg`, ratio: 2.489, ink: 0.474 },
+  woocommerce: { name: "WooCommerce", src: `${V}/woocommerce.svg`, ratio: 3.794, ink: 0.648 },
+  opencart: { name: "OpenCart", src: `${V}/opencart.svg`, ratio: 1, ink: 0.788 },
+  magento: { name: "Magento", src: `${V}/magento.svg`, ratio: 0.847, ink: 0.458 },
 } as const satisfies Record<string, ProviderLogo>;
 
 export type VersusKey = keyof typeof VERSUS_LOGOS;
@@ -71,10 +94,12 @@ export type VersusKey = keyof typeof VERSUS_LOGOS;
  */
 export const SIGLA_NOASTRA = {
   name: "Edinio",
-  src: "/logo.png",
-  ratio: 284 / 289,
-  /* Măsurată la fel ca ale lor. Vezi nota despre cerneală de mai sus. */
-  ink: 0.52,
+  /* ⚠ ALT FIȘIER decât `/logo.png`, și dinadins: ăsta e strâns pe desen, iar cel
+     din antet nu. `/logo.png` are vreo 5% gol străveziu în jur; strâns acolo, s-ar
+     fi mărit sigla din antet și din avatarul de WhatsApp, care sunt bine cum sunt. */
+  src: `${V}/edinio.webp`,
+  ratio: 0.9526,
+  ink: 0.591,
 } as const satisfies ProviderLogo;
 
 /**
@@ -84,7 +109,7 @@ export const SIGLA_NOASTRA = {
  * pare: la 660, sigla noastră iese de vreo 36px pe latură, cât era și înainte,
  * fiindcă din cutia ei doar jumătate e desen.
  */
-export const SUPRAFATA_VERSUS = 660;
+export const SUPRAFATA_VERSUS = 730;
 
 /** Cât de mare se desenează sigla noastră, la aceeași suprafață. */
 export function marimeaNoastra(): LogoSize {

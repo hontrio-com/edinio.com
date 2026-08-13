@@ -221,8 +221,13 @@ function RandMail({ mail }: { mail: MailMentenanta }) {
       className="flex h-10 shrink-0 items-center gap-2 border-b border-[#ECEFF1] duration-300 ease-out animate-in fade-in slide-in-from-top-2 last:border-b-0"
       style={{ animationFillMode: "backwards" }}
     >
-      {/* Căsuța de bifat, goală. */}
-      <span className="h-[13px] w-[13px] shrink-0 rounded-[2px] border border-[#C3C4C3]" />
+      {/*
+        ⚠ FĂRĂ CĂSUȚA DE BIFAT, scoasă la cererea clientului (13.08), ca să
+        rămână mai mult loc pentru text. E o abatere de la Gmail, dar una cu
+        socoteală: căsuța e o UNEALTĂ — folosește la selectat mailuri, iar aici
+        nu se selectează nimic. Într-un desen, ocupa doar lățime. Steaua rămâne,
+        fiindcă ea e semn, nu unealtă: se citește ca „mail important".
+      */}
 
       {/* Steaua, conturată. */}
       <svg viewBox="0 0 24 24" className="h-[15px] w-[15px] shrink-0 fill-none stroke-[#C3C4C3]" strokeWidth={1.6}>

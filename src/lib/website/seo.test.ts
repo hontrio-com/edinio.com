@@ -8,6 +8,8 @@ import {
   CAUTARE,
   REZULTATE_ORGANICE,
   REZULTATE_SHOPPING,
+  INDEXARE,
+  PAGINI_INDEXATE,
   SITEMAP_EXEMPLU,
   SITEMAP_GAZDA,
 } from "./seo";
@@ -84,13 +86,10 @@ test("cardurile secțiunii au tot ce le trebuie", () => {
     assert.ok(card.titlu.length > 0);
     assert.ok(card.descriere.length > 30, `${card.id}: descriere prea scurtă`);
   }
-  /* ⚠ Clientul a cerut PATRU. Când vin și celelalte trei texte, numărul de aici
-     se ridică la 4 — până atunci proba spune limpede unde a rămas lucrul. Grila e
-     de două coloane, deci orice număr impar lasă o celulă goală. */
-  assert.ok(
-    CARDURI_SEO.length >= 1 && CARDURI_SEO.length <= 4,
-    "secțiunea are între unu și patru carduri",
-  );
+  /* ⚠ PATRU, atâtea a cerut clientul, și toate patru au acum textele lui.
+     Numărul nu mai e un interval: grila e de două coloane, deci un al cincilea
+     card ar rămâne singur pe ultimul rând, iar trei ar lăsa o celulă goală. */
+  assert.equal(CARDURI_SEO.length, 4, "secțiunea are exact patru carduri");
 });
 
 /* ─── Cardul 2: rezultate obișnuite pe Google ─────────────────────────────── */
@@ -319,6 +318,77 @@ test("adresele din sitemap sunt pe aceeași gazdă de pildă ca la cardul 2", ()
     assert.ok(
       intrare.cale === "" || intrare.cale.startsWith("/"),
       `calea „${intrare.cale}" nu începe cu /`,
+    );
+  }
+});
+
+/* ─── Cardul 4: raportul de indexare ──────────────────────────────────────── */
+
+test("raportul arată un magazin sănătos, dar nu unul care se laudă", () => {
+  /*
+    În captura trimisă de client scria 1,9 mii neindexate față de 95 indexate —
+    un site pe care Google nu-l poate citi. Aici e pe dos, și asta e mesajul.
+
+    ⚠ DAR NU ZERO NEINDEXATE, și nu din modestie. Coșul și finalizarea comenzii
+    sunt `noindex` la noi dinadins: sunt pași ai cumpărării, n-au ce căuta în
+    căutări. Un raport cu zero neindexate ar fi arătat ca un magazin care nu știe
+    ce face. Dacă cineva „rotunjește" cifra la 0 ca să pară mai bine, proba cade.
+  */
+  const indexate = Number(INDEXARE.indexate.valoare);
+  const neindexate = Number(INDEXARE.neindexate.valoare);
+
+  assert.ok(Number.isFinite(indexate) && Number.isFinite(neindexate), "cifre necitibile");
+  assert.ok(indexate > neindexate * 20, "raportul nu arată destul de sănătos");
+  assert.ok(neindexate > 0, "zero neindexate: coșul și finalizarea SUNT noindex, dinadins");
+});
+
+test("lista de pagini e a aceluiași magazin ca la cardurile 2 și 3", () => {
+  /*
+    Cele patru ilustrații ale secțiunii sunt patru priviri asupra ACELUIAȘI
+    magazin: cum arată în rezultate, ce scrie în harta lui, ce vede Google când o
+    citește. Cu alt magazin la fiecare card, secțiunea s-ar citi ca patru capturi
+    adunate de pe internet.
+
+    Aici se verifică doar că paginile sunt căi, nu adrese întregi: gazda o pune
+    componenta, din `SITEMAP_GAZDA`, deci nu poate să se depărteze.
+  */
+  assert.ok(PAGINI_INDEXATE.length >= 3, "prea puține pagini în listă");
+  for (const pagina of PAGINI_INDEXATE) {
+    assert.ok(pagina.cale.startsWith("/"), `„${pagina.cale}" nu e o cale`);
+    assert.ok(
+      !pagina.cale.includes("://"),
+      `„${pagina.cale}" e o adresă întreagă; gazda o pune componenta`,
+    );
+  }
+
+  const cai = new Set(PAGINI_INDEXATE.map((p) => p.cale));
+  assert.equal(cai.size, PAGINI_INDEXATE.length, "aceeași pagină de două ori în listă");
+});
+
+test("datele din listă sunt scrise cum le scrie Search Console în românește", () => {
+  /* „13 aug. 2026" — zi, lună prescurtată cu punct, an. */
+  const LUNI = ["ian.", "feb.", "mar.", "apr.", "mai", "iun.", "iul.", "aug.", "sept.", "oct.", "nov.", "dec."];
+  for (const pagina of PAGINI_INDEXATE) {
+    const parti = pagina.accesata.split(" ");
+    assert.equal(parti.length, 3, `dată scrisă altfel: ${pagina.accesata}`);
+    assert.ok(LUNI.includes(parti[1]), `lună necunoscută: ${parti[1]}`);
+    assert.match(parti[0], /^\d{1,2}$/, `zi ciudată: ${parti[0]}`);
+    assert.match(parti[2], /^\d{4}$/, `an ciudat: ${parti[2]}`);
+  }
+});
+
+test("fiecare card SEO are ilustrația lui", () => {
+  /*
+    Ilustrațiile se aleg pe `id` în `SectiuneSeo`, nu pe poziție. Proba ține
+    minte care sunt cele patru chei: dacă cineva redenumește una în `CARDURI_SEO`,
+    cardul rămâne pe pagină cu titlu și descriere, dar FĂRĂ ilustrație — și nimic
+    nu se plânge, fiindcă `card.id === "..."` pur și simplu nu se mai potrivește.
+  */
+  const CU_ILUSTRATIE = ["gasire", "prezentare", "sitemap", "indexare"];
+  for (const id of CU_ILUSTRATIE) {
+    assert.ok(
+      CARDURI_SEO.some((c) => c.id === id),
+      `nu mai există cardul „${id}", dar SectiuneSeo încă îi caută ilustrația`,
     );
   }
 });

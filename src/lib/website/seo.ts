@@ -48,6 +48,12 @@ export const CARDURI_SEO: CardSeo[] = [
     descriere:
       "Edinio creează și actualizează automat harta magazinului, astfel încât motoarele de căutare să poată descoperi mai ușor paginile importante.",
   },
+  {
+    id: "indexare",
+    titlu: "Indexare corectă a paginilor",
+    descriere:
+      "Paginile importante ale magazinului sunt construite astfel încât să poată fi accesate, analizate și indexate de motoarele de căutare.",
+  },
 ];
 
 /**
@@ -248,6 +254,12 @@ export interface IntrareSitemap {
  * în urmă fără să se plângă nimeni — de asta tabelul e scris și în `seo.test.ts`,
  * ca o probă care se citește ca o listă de verificat față de `app/sitemap.ts`.
  *
+ * ⚠ TREI INTRĂRI, NU PATRU. Clientul a cerut (13.08) ca panoul din stânga să se
+ * termine la același nivel cu raportul din dreapta; măsurat, era cu 183px mai
+ * înalt, iar un bloc `<url>` ține șase rânduri. A patra intrare era pagina de
+ * politici. Rămân pagina de start, o categorie și un produs — adică tot „pagini
+ * și produse", cum a cerut la început.
+ *
  * ⚠ `lastmod` e ISO ÎNTREG, cu milisecunde și `Z` — așa îl scrie `toISOString()`
  * în generator. Nu se scurtează la o dată simplă „ca să încapă": tocmai forma
  * lungă e semnul că e ieșire de mașină, nu un tabel desenat de noi.
@@ -278,11 +290,55 @@ export const SITEMAP_EXEMPLU: IntrareSitemap[] = [
     changefreq: "weekly",
     priority: "0.7",
   },
-  {
-    fel: "politica",
-    cale: "/politici/termeni",
-    lastmod: "2026-08-13T09:41:07.512Z",
-    changefreq: "yearly",
-    priority: "0.3",
-  },
+];
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARDUL 4 — raportul de indexare din Google Search Console
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cele două plăci de sus din raportul „Indexarea paginilor".
+ *
+ * ⚠ NUMERELE SUNT ALE UNUI MAGAZIN SĂNĂTOS, ȘI ASTA E CHIAR MESAJUL.
+ *
+ * În captura trimisă de client scria 1,9 mii neindexate față de 95 indexate —
+ * adică un site pe care Google nu-l poate citi. Aici e pe dos: 248 indexate și 4
+ * neindexate.
+ *
+ * ⚠ Dar NU ZERO neindexate, și nu din modestie. Coșul și finalizarea comenzii
+ * sunt `noindex` dinadins la noi — sunt pași ai cumpărării, n-au ce căuta în
+ * căutări. Un raport cu zero neindexate ar fi arătat ca un magazin care nu știe
+ * ce face, nu ca unul curat. „2 motive" e chiar câte sunt.
+ */
+export const INDEXARE = {
+  neindexate: { eticheta: "Neindexate", valoare: "4", subsol: "2 motive" },
+  indexate: { eticheta: "Indexate", valoare: "248" },
+  /** Rândul de sub plăci, nebifat, ca în captură. */
+  afisari: "Afișări",
+} as const;
+
+export interface PaginaIndexata {
+  /** Calea, fără gazdă. Goală pentru pagina de start. */
+  cale: string;
+  /** Data ultimei accesări, scrisă cum o scrie Search Console în românește. */
+  accesata: string;
+}
+
+/**
+ * Lista de pagini de dedesubt, cerută de client.
+ *
+ * ⚠ ACELAȘI MAGAZIN CA LA CARDURILE 2 ȘI 3, pe `SITEMAP_GAZDA`. Cele patru
+ * ilustrații ale secțiunii sunt patru priviri asupra aceluiași magazin: cum
+ * arată în rezultate, ce scrie în harta lui, și ce vede Google când o citește.
+ * Cu alt magazin la fiecare card, secțiunea s-ar citi ca patru capturi adunate
+ * de pe internet.
+ *
+ * Datele sunt apropiate, dar nu identice: Google nu recitește tot site-ul odată.
+ */
+export const PAGINI_INDEXATE: PaginaIndexata[] = [
+  { cale: "/", accesata: "13 aug. 2026" },
+  { cale: "/magazin", accesata: "13 aug. 2026" },
+  { cale: "/magazin/camere-supraveghere", accesata: "12 aug. 2026" },
+  { cale: "/product/camera-dome-wifi-2k", accesata: "11 aug. 2026" },
+  { cale: "/politici/termeni", accesata: "9 aug. 2026" },
 ];

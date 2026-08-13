@@ -55,8 +55,8 @@ export function PanouSitemap() {
       */}
       <p className="sr-only">
         Exemplu de sitemap generat de Edinio: un fișier XML cu {SITEMAP_EXEMPLU.length}{" "}
-        adrese ale magazinului&nbsp;— pagina de start, o categorie, {produse} produs
-        și o pagină de politici&nbsp;— fiecare cu data ultimei modificări.
+        adrese ale magazinului&nbsp;— pagina de start, o categorie și {produse}{" "}
+        produs&nbsp;— fiecare cu data ultimei modificări.
       </p>
 
       <div
@@ -86,7 +86,14 @@ export function PanouSitemap() {
             de produs — exact ce trebuie să se vadă. Rupt, se vede tot, iar
             browserele fac la fel cu XML-ul.
           */}
-          <pre className="whitespace-pre-wrap break-words font-mono text-[9.5px] leading-[1.7] @[340px]:text-[10.5px]">
+          {/*
+            ⚠ RÂNDURI STRÂNSE (1,45), nu răsfirate. Erau la 1,7, iar panoul ieșea
+            cu 183px mai înalt decât raportul de alături; clientul a cerut să se
+            termine la același nivel. Dar strânsul nu e doar ca să încapă: un
+            vizualizator de XML afișează rândurile aproape lipite, iar 1,7 dădea
+            un aer de listă aerisită, adică tocmai ce nu e un fișier.
+          */}
+          <pre className="whitespace-pre-wrap break-words font-mono text-[9.5px] leading-[1.45] @[340px]:text-[10.5px]">
             <span style={{ color: MOV }}>{"<?xml "}</span>
             <span style={{ color: CAFENIU }}>version</span>
             <span style={{ color: MOV }}>=</span>

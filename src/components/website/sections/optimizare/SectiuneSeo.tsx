@@ -4,6 +4,7 @@ import { CARDURI_SEO, SEO } from "@/lib/website/seo";
 import { SectionEyebrow } from "../SectionEyebrow";
 import { PanouCautareGoogle } from "./PanouCautareGoogle";
 import { PanouRezultateGoogle } from "./PanouRezultateGoogle";
+import { PanouIndexare } from "./PanouIndexare";
 import { PanouSitemap } from "./PanouSitemap";
 
 /**
@@ -94,6 +95,7 @@ export function SectiuneSeo() {
                   {card.id === "gasire" ? <PanouCautareGoogle /> : null}
                   {card.id === "prezentare" ? <PanouRezultateGoogle /> : null}
                   {card.id === "sitemap" ? <PanouSitemap /> : null}
+                  {card.id === "indexare" ? <PanouIndexare /> : null}
                 </div>
 
                 {/*

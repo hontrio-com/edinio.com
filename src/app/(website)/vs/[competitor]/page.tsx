@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { FinalCta } from "@/components/website/sections/FinalCta";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { EticheraVersus } from "@/components/website/sections/EticheraVersus";
 import { TabelVersus } from "@/components/website/sections/TabelVersus";
@@ -81,6 +82,10 @@ export default async function ComparatiePage({ params }: Props) {
 
       {/* Tabelul, din PDF-ul clientului. Vezi `comparatii-vs.ts`. */}
       <TabelVersus cheie={competitor as VersusKey} />
+
+      {/* Aceeași bandă de final ca pe pagina de start, „Integrări" și
+          „Mentenanță gratuită". */}
+      <FinalCta />
     </>
   );
 }

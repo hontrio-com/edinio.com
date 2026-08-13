@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { SectiunePerformanta } from "@/components/website/sections/optimizare/SectiunePerformanta";
+import { SectiuneGeo } from "@/components/website/sections/optimizare/SectiuneGeo";
 import { SectiuneSeo } from "@/components/website/sections/optimizare/SectiuneSeo";
 import { TitluOptimizare } from "@/components/website/sections/optimizare/TitluOptimizare";
 import { siteMetadata } from "@/lib/website/metadata";
@@ -32,7 +33,7 @@ export const metadata: Metadata = siteMetadata({
  * ⚠ Supratitlul „Performanță" a fost scos odată cu `PageShell`: `HeroPagina`
  * n-are pastilă deasupra titlului, ca la „Mentenanță gratuită" și „Integrări".
  *
- * ⚠ NETERMINATĂ. Are doar hero-ul; restul secțiunilor vin separat.
+ * Cele trei secțiuni cerute de client sunt toate aici: Performanță, SEO, GEO.
  */
 export default function OptimizarePage() {
   return (
@@ -44,9 +45,14 @@ export default function OptimizarePage() {
         secundara={{ label: "Vezi prețurile", href: "/preturi" }}
       />
 
-      {/* Cele trei secțiuni cerute: Performanță, SEO, GEO. A treia urmează. */}
+      {/*
+        Cele trei secțiuni, în ordinea cerută. Nu e o ordine oarecare: viteza se
+        simte la primul click, SEO se vede în rezultate, iar GEO abia în ce spune
+        un asistent despre tine. De la ce atinge omul spre ce nu se vede.
+      */}
       <SectiunePerformanta />
       <SectiuneSeo />
+      <SectiuneGeo />
     </>
   );
 }

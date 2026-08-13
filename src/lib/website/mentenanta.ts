@@ -45,3 +45,32 @@ export const MENTENANTA_CARDURI: CardMentenanta[] = [
       "Lucrăm permanent la performanța, stabilitatea și experiența de utilizare a platformei.",
   },
 ];
+
+/**
+ * Cum stau cardurile pe pagină: două mari alături, unul lat sub ele.
+ *
+ * Cerut de client (13.08), după o referință trimisă de el.
+ *
+ * ⚠ TREI LOCURI, PATRU TEXTE. Unul rămâne pe dinafară, și e o alegere pe care
+ * clientul o poate întoarce dintr-un rând de aici. Am scos „Optimizări
+ * Constante", și nu la întâmplare: de când există pagina „Optimizare", cu
+ * secțiunile ei despre performanță, SEO și GEO, cardul ăla spunea pe scurt ce
+ * acolo se arată pe larg. Celelalte trei n-au altă casă.
+ *
+ * Ordinea de aici e ordinea de pe ecran: `mari[0]` la stânga sus, `mari[1]` la
+ * dreapta sus, `lat` dedesubt.
+ */
+export const MENTENANTA_ASEZARE = {
+  mari: ["actualizari", "remediere"],
+  lat: "securitate",
+} as const satisfies {
+  mari: readonly CardMentenanta["id"][];
+  lat: CardMentenanta["id"];
+};
+
+/** Cardul cu id-ul dat, sau o eroare — un id greșit n-are voie să treacă tăcut. */
+export function cardMentenanta(id: CardMentenanta["id"]): CardMentenanta {
+  const card = MENTENANTA_CARDURI.find((c) => c.id === id);
+  if (!card) throw new Error(`MENTENANTA_ASEZARE: nu există cardul „${id}"`);
+  return card;
+}

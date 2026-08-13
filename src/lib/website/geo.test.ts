@@ -126,7 +126,18 @@ test("rândul de sub sigle nu promite indexare", () => {
     îl oprește.
   */
   const jos = ASISTENTI_TEXT.toLowerCase();
-  for (const cuvant of ["indexat", "indexate", "garant", "apari", "primul"]) {
+  /* ⚠ Lista ține minte și formele care ar strecura o promisiune fără să pară:
+     „sunt recomandate" în loc de „pot fi recomandate" schimbă tot înțelesul
+     dintr-un cuvânt. */
+  for (const cuvant of [
+    "indexat",
+    "indexate",
+    "garant",
+    "apari",
+    "primul",
+    "sunt recomandate",
+    "vor apărea",
+  ]) {
     assert.equal(
       jos.includes(cuvant),
       false,
@@ -151,7 +162,6 @@ test("fereastra nu poartă numele niciunui asistent", () => {
     captură", proba îl oprește.
   */
   const tot = [
-    BARA.titlu,
     BARA.intrebareNoua,
     BARA.cont,
     BARA.recenteTitlu,

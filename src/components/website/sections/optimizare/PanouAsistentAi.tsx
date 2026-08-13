@@ -266,14 +266,12 @@ export function PanouAsistentAi() {
 function BaraLaterala() {
   return (
     <div className="hidden w-[188px] shrink-0 flex-col border-r border-hairline bg-[#f9f9f9] p-3 @[560px]:flex">
-      <div className="flex items-center justify-between px-1 pb-3">
-        <span className="text-[13px] font-semibold text-[#1f1f22]">{BARA.titlu}</span>
-        <svg viewBox="0 0 24 24" className="h-[14px] w-[14px] fill-[#8e8e93]">
-          <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14" />
-        </svg>
-      </div>
+      {/*
+        Rândul de sus, cel scos în față.
 
-      {/* Rândul de sus, cel scos în față. */}
+        ⚠ Deasupra lui nu mai e nimic — capul cu nume și lupă a fost scos la
+        cererea clientului. Bara începe direct cu ce se face în ea.
+      */}
       <span className="flex items-center gap-2 rounded-lg bg-[#ececec] px-2 py-[7px] text-[12.5px] text-[#1f1f22]">
         <svg viewBox="0 0 24 24" className="h-[13px] w-[13px] shrink-0 fill-[#1f1f22]">
           <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zm17.71-10.04a1 1 0 0 0 0-1.41l-2.51-2.51a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z" />

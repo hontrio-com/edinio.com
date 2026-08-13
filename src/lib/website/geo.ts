@@ -127,7 +127,23 @@ export const ASISTENTI: Asistent[] = [
 /** Cei din teancul încălecat, în ordinea desenării. */
 export const ASISTENTI_TEANC = ASISTENTI.filter((a) => a.teanc);
 
-export const ASISTENTI_TEXT = "Paginile magazinului pot fi citite de asistenții AI";
+/**
+ * Rândul de sub sigle.
+ *
+ * ⚠ „POT FI", NU „SUNT" — și de aici nu se mișcă.
+ *
+ * Ce iau și ce recomandă asistenții e alegerea lor; nimeni nu poate promite că
+ * un magazin ajunge în răspunsurile lor. Ce se poate spune, și se verifică în
+ * `src/app/robots.ts`, e că nimic nu-i oprește să citească. Multe platforme îi
+ * blochează, deci lucrul ăsta chiar deosebește.
+ *
+ * ⚠ Iar coada rândului — „celor care întreabă, nu doar celor care caută" — e
+ * chiar deosebirea dintre secțiunea asta și cea dinainte: SEO e pentru cine
+ * caută, GEO e pentru cine întreabă. Fără ea, rândul spunea doar că se poate
+ * citi, fără să spună la ce folosește.
+ */
+export const ASISTENTI_TEXT =
+  "Produsele din magazinul tău pot fi citite de asistenții AI și recomandate celor care întreabă, nu doar celor care caută.";
 
 /**
  * Bara laterală, ca în captura trimisă de client.
@@ -142,7 +158,12 @@ export const ASISTENTI_TEXT = "Paginile magazinului pot fi citite de asistenții
 export type Pictograma = "biblioteca" | "proiecte" | "programate" | "cont";
 
 export const BARA = {
-  titlu: "Asistent AI",
+  /*
+    ⚠ FĂRĂ CAP DE BARĂ — scos la cererea clientului (13.08). Acolo stăteau un
+    nume și o lupă. Numele era oricum o piedică: fereastra nu poartă numele
+    nimănui, iar „Asistent AI" scris în colț arăta ca o marcă inventată de noi.
+    Bara începe direct cu rândul care contează.
+  */
   intrebareNoua: "Discuție nouă",
   /*
     ⚠ FIECARE RÂND ÎȘI POARTĂ PICTOGRAMA, ca DATE.

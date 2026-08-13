@@ -59,7 +59,13 @@ export function SectiuneGeo() {
           <PanouAsistentAi />
 
           <div className="mt-8 flex flex-col items-center gap-5 lg:mt-10">
-            <p className="text-center text-[13px] leading-[1.5] text-ink-2 sm:text-[14px]">
+            {/*
+              ⚠ Nu pe toată lățimea ferestrei. La 760px, rândul ăsta iese de vreo
+              sută de semne — cu mult peste cât ține ochiul fără să piardă
+              începutul rândului următor. Strâns la 600, se rupe în două rânduri
+              de citit, sub siglele pe care le lămurește.
+            */}
+            <p className="max-w-[600px] text-center text-[13px] leading-[1.5] text-ink-2 sm:text-[14px]">
               {ASISTENTI_TEXT}
             </p>
 

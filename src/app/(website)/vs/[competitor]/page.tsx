@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { EticheraVersus } from "@/components/website/sections/EticheraVersus";
+import { TabelVersus } from "@/components/website/sections/TabelVersus";
 import { siteMetadata } from "@/lib/website/metadata";
 import { COMPETITORS } from "@/lib/website/nav";
 import type { VersusKey } from "@/lib/website/versus-culori";
@@ -69,12 +70,17 @@ export default async function ComparatiePage({ params }: Props) {
       `/vs/shopify` ia culoarea `shopify`. Un slug fără culoare oprește build-ul,
       în loc să lase un gol în pagină — vezi tipul `VersusKey`.
     */
-    <HeroPagina
-      eticheta={<EticheraVersus cheie={competitor as VersusKey} />}
-      title={found.titlu}
-      lead={found.lead}
-      cta={{ label: "Începe gratuit", href: "/register" }}
-      secundara={{ label: "Vezi prețurile", href: "/preturi" }}
-    />
+    <>
+      <HeroPagina
+        eticheta={<EticheraVersus cheie={competitor as VersusKey} />}
+        title={found.titlu}
+        lead={found.lead}
+        cta={{ label: "Începe gratuit", href: "/register" }}
+        secundara={{ label: "Vezi prețurile", href: "/preturi" }}
+      />
+
+      {/* Tabelul, din PDF-ul clientului. Vezi `comparatii-vs.ts`. */}
+      <TabelVersus cheie={competitor as VersusKey} />
+    </>
   );
 }

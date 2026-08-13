@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { SectiunePerformanta } from "@/components/website/sections/optimizare/SectiunePerformanta";
+import { SectiuneSeo } from "@/components/website/sections/optimizare/SectiuneSeo";
 import { TitluOptimizare } from "@/components/website/sections/optimizare/TitluOptimizare";
 import { siteMetadata } from "@/lib/website/metadata";
 
@@ -43,8 +44,9 @@ export default function OptimizarePage() {
         secundara={{ label: "Vezi prețurile", href: "/preturi" }}
       />
 
-      {/* Prima dintre cele trei secțiuni cerute: Performanță, SEO, GEO. */}
+      {/* Cele trei secțiuni cerute: Performanță, SEO, GEO. A treia urmează. */}
       <SectiunePerformanta />
+      <SectiuneSeo />
     </>
   );
 }

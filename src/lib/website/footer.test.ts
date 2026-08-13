@@ -104,7 +104,11 @@ test("industriile din subsol au sluguri reale si o pagina care le serveste", () 
   const linkuri = FOOTER_COLUMNS.flatMap((c) => c.links).filter((l) =>
     l.href.startsWith("/industrii/"),
   );
-  assert.equal(linkuri.length, 5, "coloana Industrii a fost ceruta cu 5 intrari");
+  /* ⚠ PATRU, nu cinci. Coloana fusese ceruta cu cinci, dar „Magazin online
+     Bijuterii" a plecat odata cu industria, la cererea clientului (13.08).
+     Numarul ramane fixat: o coloana care creste sau scade tacut e chiar lucrul
+     pe care proba il pazeste. */
+  assert.equal(linkuri.length, 4, "coloana Industrii a ramas cu 4 intrari dupa 13.08");
 
   for (const link of linkuri) {
     const slug = link.href.replace("/industrii/", "");

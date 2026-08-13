@@ -6,7 +6,7 @@ import { INDUSTRIES } from "@/lib/website/nav";
 export const metadata: Metadata = siteMetadata({
   title: "Creare magazin online pe industrii",
   description:
-    "Magazin online potrivit pe domeniul tau: piese auto, haine, bijuterii, cosmetice, mobila, electronice, petshop, suplimente si articole sport.",
+    "Magazin online potrivit pe domeniul tau: piese auto, haine, cosmetice, mobila, electronice, petshop si suplimente.",
   path: "/industrii",
 });
 

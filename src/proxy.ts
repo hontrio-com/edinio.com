@@ -29,11 +29,11 @@ const NON_STORE_SEGMENTS = new Set([
   "despre", "preturi", "contact", "termeni", "cookies", "gdpr",
   "confidentialitate", "start", "migrare", "demo",
   // Site de prezentare — paginile din mega menu. Fara ele, fiecare cerere spre
-  // /curieri sau /vs/shopify ar face o interogare Supabase degeaba, iar un
+  // /integrari sau /vs/shopify ar face o interogare Supabase degeaba, iar un
   // magazin care ar avea intamplator slug-ul "curieri" plus domeniu propriu ar
   // fura pagina: vizitatorul ar fi trimis (307) pe domeniul lui.
   // Tinut in acord cu `src/lib/website/nav.ts`.
-  "magazin-online", "plati-cu-cardul", "curieri", "integrari", "optimizare",
+  "magazin-online", "integrari", "optimizare",
   "mentenanta-gratuita", "industrii", "vs", "ajutor", "blog",
   "intrebari-frecvente",
 ]);

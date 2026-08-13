@@ -28,10 +28,18 @@ test("fiecare card trimite la o pagina care exista in meniu", () => {
      fost STEARSA (2c138eb), deci fundatura apare abia la unire. Vezi nota de la
      `/migrare` din `lib/website/footer.ts`.
      Proba ramane utila: un href scris gresit intr-un card ar duce tacut in 404. */
-  assert.ok(ETICHETE_MENIU.size >= 5, `meniul are doar ${ETICHETE_MENIU.size} pagini`);
+  /* ⚠ PRAGUL A COBORAT DE LA 5 LA 4 (13.08): „Plati cu cardul" si „Curieri si AWB"
+     au fost sterse la cererea clientului, cu tot cu paginile lor. Pragul nu e o
+     formalitate — pazeste cazul in care un import gresit ar goli meniul si proba
+     ar trece pe o lista goala. */
+  assert.ok(ETICHETE_MENIU.size >= 4, `meniul are doar ${ETICHETE_MENIU.size} pagini`);
   for (const card of FEATURE_CARDS) {
+    /* ⚠ Se compara doar CALEA, fara ancora: `/integrari#biblioteca` duce la
+       aceeasi pagina ca `/integrari`, iar meniul tine pagini, nu ancore. Fara
+       taietura asta, proba cerea ca fiecare ancora sa fie scrisa si in meniu. */
+    const cale = card.cta.href.split("#")[0];
     assert.ok(
-      ETICHETE_MENIU.has(card.cta.href),
+      ETICHETE_MENIU.has(cale),
       `cardul „${card.id}" trimite la ${card.cta.href}, care nu e in mega-meniu — ` +
         `verifica daca pagina exista`,
     );

@@ -129,9 +129,12 @@ export const FEATURE_CARDS: FeatureCard[] = [
       "Trimitere automată mail",
       "Trimitere notificări prin SMS",
     ],
-    /* Nu exista pagina „Automatizari". `/curieri` e cea mai apropiata: AWB-ul
-       generat automat e chiar prima automatizare din lista. */
-    cta: { label: "Vezi toți curierii", href: "/curieri" },
+    /* Nu exista pagina „Automatizari", iar `/curieri`, care era tinta de dinainte,
+       a fost stearsa (13.08). Curierii traiesc acum in biblioteca de integrari,
+       care are chiar o categorie „Curieri" - de aceea legatura duce la ancora ei,
+       nu la capul paginii. Cardul de deasupra duce tot la /integrari, dar la
+       pagina intreaga: doua tinte apropiate, cu doua rosturi diferite. */
+    cta: { label: "Vezi curierii disponibili", href: "/integrari#biblioteca" },
     image: {
       base: "/features/automatizari",
       alt: "Fluxul automat: comandă, factură, AWB, livrare",

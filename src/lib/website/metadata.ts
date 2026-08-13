@@ -16,7 +16,7 @@ export function siteMetadata({
 }: {
   title: string;
   description: string;
-  /** Calea, cu slash la început, ex. `/curieri`. */
+  /** Calea, cu slash la început, ex. `/integrari`. */
   path: string;
 }): Metadata {
   const url = `${SITE_URL}${path}`;

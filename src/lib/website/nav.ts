@@ -4,10 +4,7 @@ import {
   Car,
   CircleHelp,
   Cpu,
-  CreditCard,
-  Dumbbell,
   Gauge,
-  Gem,
   LifeBuoy,
   Newspaper,
   PawPrint,
@@ -18,7 +15,6 @@ import {
   Sofa,
   Sparkles,
   Store,
-  Truck,
 } from "lucide-react";
 
 /**
@@ -27,7 +23,7 @@ import {
  * Sursa unica pentru: mega menu (desktop), meniul de telefon, footer si rutele
  * paginilor noi. Cand adaugi o intrare aici:
  *   1. adauga si pagina in `src/app/(website)/`
- *   2. daca e un segment NOU de nivel intai (ex. `/curieri`), adauga-l in
+ *   2. daca e un segment NOU de nivel intai (ex. `/integrari`), adauga-l in
  *      `NON_STORE_SEGMENTS` din `src/proxy.ts` — altfel proxy-ul il trateaza ca
  *      slug de magazin si face o interogare Supabase la fiecare cerere.
  *
@@ -97,18 +93,6 @@ export const SOLUTION_COLUMNS: NavColumn[] = [
         icon: Store,
         description: "Magazin complet, pregătit pentru vânzare din prima zi.",
       },
-      {
-        label: "Plăți cu cardul",
-        href: "/plati-cu-cardul",
-        icon: CreditCard,
-        description: "Stripe, Netopia, BT iPay și multe altele.",
-      },
-      {
-        label: "Curieri și AWB",
-        href: "/curieri",
-        icon: Truck,
-        description: "Generează automat AWB-uri pentru toate comenzile.",
-      },
     ],
   },
   {
@@ -173,14 +157,6 @@ export const INDUSTRIES: Industry[] = [
     lead: "Mărimi și culori ca variante, stoc separat pe fiecare, retururi simple. Exact ce cere un magazin de haine, fără module în plus.",
   },
   {
-    label: "Bijuterii",
-    slug: "bijuterii",
-    icon: Gem,
-    seoTitle: "bijuterii",
-    h1: "Creare magazin online de bijuterii",
-    lead: "Fotografii mari, colecții și produse la comandă. Livrare cu asigurare, prin curierii cu care lucrezi deja.",
-  },
-  {
     label: "Cosmetice",
     slug: "cosmetice",
     icon: Sparkles,
@@ -220,14 +196,6 @@ export const INDUSTRIES: Industry[] = [
     h1: "Creare magazin online de suplimente",
     lead: "Gramaje, termene de valabilitate și pachete pe cure. Etichete clare, așa cum cer regulile de prezentare.",
   },
-  {
-    label: "Sport și fitness",
-    slug: "sport",
-    icon: Dumbbell,
-    seoTitle: "articole sport",
-    h1: "Creare magazin online de articole sport",
-    lead: "Mărimi, echipamente și seturi. Stoc pe fiecare variantă și livrare prin curierii tăi.",
-  },
 ];
 
 export const INDUSTRY_LINKS: NavLink[] = INDUSTRIES.map((i) => ({
@@ -239,20 +207,17 @@ export const INDUSTRY_LINKS: NavLink[] = INDUSTRIES.map((i) => ({
  * Industriile care intra in mega menu, in ordinea ceruta de client.
  *
  * Lista e scrisa explicit, nu taiata din `INDUSTRIES` cu un `slice`: asa, cine
- * reordoneaza lista mare maine nu schimba din greseala ce se vede in meniu. Sase
- * incap fara ca ele coloana sa fie mai inalta decat restul panoului; toate noua
- * raman pe /industrii.
+ * reordoneaza lista mare maine nu schimba din greseala ce se vede in meniu.
+ *
+ * ⚠ PATRU, nu sase. Erau sase - cate incap fara ca aceasta coloana sa fie mai
+ * inalta decat restul panoului - dar doua dintre ele, „Sport si fitness" si
+ * „Bijuterii", au fost scoase cu totul la cererea clientului (13.08). Coloana e
+ * acum mai scurta. Daca se vrea inapoi la sase, se aleg doua dintre cele ramase
+ * pe /industrii: cosmetice, petshop, suplimente.
  *
  * Un slug gresit opreste build-ul, in loc sa scoata tacut o intrare din meniu.
  */
-const MENU_INDUSTRY_SLUGS = [
-  "haine",
-  "electronice",
-  "piese-auto",
-  "mobila",
-  "sport",
-  "bijuterii",
-];
+const MENU_INDUSTRY_SLUGS = ["haine", "electronice", "piese-auto", "mobila"];
 
 export const MENU_INDUSTRY_LINKS: NavLink[] = MENU_INDUSTRY_SLUGS.map((slug) => {
   const industry = INDUSTRIES.find((i) => i.slug === slug);
@@ -429,8 +394,6 @@ export const TOP_NAV: TopNavEntry[] = [
 export const MENU_PREFIXES: Record<MenuId, string[]> = {
   solutie: [
     "/magazin-online",
-    "/plati-cu-cardul",
-    "/curieri",
     "/integrari",
     "/optimizare",
     "/mentenanta-gratuita",

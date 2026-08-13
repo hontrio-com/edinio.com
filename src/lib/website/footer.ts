@@ -46,8 +46,6 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
     title: "Platformă",
     links: [
       { label: "Creare magazin online", href: "/magazin-online" },
-      { label: "Integrare plăți cu cardul", href: "/plati-cu-cardul" },
-      { label: "Integrare curieri", href: "/curieri" },
       { label: "Mentenanță gratuită", href: "/mentenanta-gratuita" },
       /*
         ⚠ `/migrare` EXISTĂ PE RAMURA ASTA, DAR A FOST ȘTEARSĂ PE `main` (2c138eb).
@@ -81,12 +79,14 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       subsol ele sunt și text de căutare, nu doar etichete de listă.
     */
     title: "Industrii",
+    /* ⚠ PATRU, nu cinci: „Magazin online Bijuterii" a fost scos odata cu
+       industria, la cererea clientului (13.08). Vezi nota de la
+       `MENU_INDUSTRY_SLUGS` in `nav.ts`. */
     links: [
       { label: "Magazin online Haine și Modă", href: "/industrii/haine" },
       { label: "Magazin online Electronice", href: "/industrii/electronice" },
       { label: "Magazin online Piese auto", href: "/industrii/piese-auto" },
       { label: "Magazin online Mobilier și decor", href: "/industrii/mobila" },
-      { label: "Magazin online Bijuterii", href: "/industrii/bijuterii" },
     ],
   },
   {

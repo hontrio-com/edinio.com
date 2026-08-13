@@ -3,9 +3,11 @@ import { test } from "node:test";
 import {
   CARDURI_PERFORMANTA,
   CULORI_SCOR,
+  IMAGINE_OPTIMIZATA,
   PRAG_BUN,
   SCORURI_PAGESPEED,
   culoareScor,
+  greutate,
 } from "./optimizare";
 
 /*
@@ -72,4 +74,48 @@ test("cardurile secțiunii au tot ce le trebuie", () => {
     CARDURI_PERFORMANTA.length >= 1 && CARDURI_PERFORMANTA.length <= 3,
     "secțiunea are între unu și trei carduri",
   );
+});
+
+test("greutatea se scrie pe înțelesul omului", () => {
+  /* „5 MB", nu „5,0 MB": cifra clientului trebuie să rămână chiar cum a dat-o. */
+  assert.equal(greutate(5 * 1024 * 1024), "5 MB");
+  assert.equal(greutate(124 * 1024), "124 KB");
+  /* Sub un megaoctet, fără zecimale — nimeni nu spune „873,4 KB". */
+  assert.equal(greutate(873 * 1024 + 400), "873 KB");
+  /* Peste, cu o zecimală. */
+  assert.equal(greutate(Math.round(1.24 * 1024 * 1024)), "1,2 MB");
+});
+
+test("coborârea logaritmică trece prin toate ordinele de mărime", () => {
+  /*
+    ⚠ Aici e tot rostul animației. Între 5 MB și 124 KB sunt patruzeci de ori.
+    LINIAR, cifra ar sta aproape tot timpul în megaocteți și ar sări în kiloocteți
+    în ultima zecime de secundă — adică s-ar vedea o cifră care nu se mișcă, apoi
+    un salt. În LOGARITM petrece la fel de mult timp în fiecare ordin de mărime.
+
+    Proba numără câți pași din o sută cad sub un megaoctet. Măsurat: liniar 18,
+    logaritmic 57 — de peste trei ori mai mult timp petrecut acolo unde cifra e
+    interesantă.
+  */
+  const { inainte, dupa } = IMAGINE_OPTIMIZATA;
+  const PASI = 100;
+  const log = (t: number) =>
+    Math.exp(Math.log(inainte) + (Math.log(dupa) - Math.log(inainte)) * t);
+  const liniar = (t: number) => inainte + (dupa - inainte) * t;
+
+  const subUnMega = (f: (t: number) => number) =>
+    Array.from({ length: PASI }, (_, i) => f(i / (PASI - 1))).filter(
+      (o) => o < 1024 * 1024,
+    ).length;
+
+  const inKB = { log: subUnMega(log), liniar: subUnMega(liniar) };
+  assert.ok(inKB.log > PASI * 0.5, `logaritmic stă prea puțin în KB: ${inKB.log}%`);
+  /* Controlul negativ: fără el, proba ar fi trecut și dacă cele două ar fi
+     identice. Liniar chiar sare — stă sub un mega doar in ultima cincime. */
+  assert.ok(inKB.liniar < PASI * 0.25, `control: liniarul nu sare: ${inKB.liniar}%`);
+  assert.ok(inKB.log > inKB.liniar * 2, "cele două coborâri se poartă la fel");
+
+  /* Și ajunge exact unde trebuie, la amândouă capetele. */
+  assert.equal(Math.round(log(0)), inainte);
+  assert.equal(Math.round(log(1)), dupa);
 });

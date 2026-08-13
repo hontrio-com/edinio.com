@@ -46,28 +46,54 @@ export const CARDURI_PERFORMANTA: CardPerformanta[] = [
 
 /**
  * Ilustrația cardului „Imagini optimizate": aceeași poză de două ori, cu
- * greutatea scrisă sub fiecare.
+ * greutatea scrisă sub fiecare și o animație care coboară de la una la alta.
  *
  * ⚠ ACEEAȘI POZĂ, DINADINS. Ideea cardului e că imaginea ARATĂ LA FEL și doar
- * cântărește altceva. Două fișiere diferite ar fi spus altceva — că a doua e mai
- * mică pentru că e mai proastă.
+ * cântărește altceva. Două fișiere diferite ar fi spus exact pe dos — că a doua e
+ * mai mică pentru că e mai proastă.
  *
- * `inainte` e cifra dată de client: cât are o fotografie ieșită dintr-un telefon.
- * `dupa` NU e scris de mână — se citește chiar din fișierul pe care îl trimitem,
- * la construirea paginii. Vezi `PanouImagini`. Un număr scris aici ar fi rămas în
- * urmă la prima reîncărcare a pozei, iar panoul ar fi arătat o greutate pe care
- * n-o are nimic.
+ * ═══ DE CE NUMĂRUL AL DOILEA E SCRIS, ȘI NU CITIT DIN FIȘIER ═══
+ *
+ * Prima formă îl citea de pe disc, la construirea paginii, ca să nu poată rămâne
+ * în urmă. Părea mai onest și era greșit: fișierul pe care îl trimitem e o
+ * miniatură, arătată la ~118px. Greutatea LUI nu spune nimic despre cât cântărește
+ * o poză de produs pe un magazin adevărat, unde se vede la 800-1200px. Adică era
+ * un număr care arăta măsurat, dar măsura altceva.
+ *
+ * Acum e scris, și e reprezentativ: 124 KB e o poză de produs de ~1000px, în WebP
+ * de calitate bună. Recomandarea obișnuită pentru comerț online e sub 200 KB, cu
+ * ținta pe la 100.
+ *
+ * ⚠ De verificat cu ce livrează Edinio în realitate, ca și scorurile PageSpeed.
+ * Dacă platforma scoate alt ordin de mărime, se schimbă numărul de aici.
  */
 export const IMAGINE_OPTIMIZATA = {
   /** Fișierul trimis către vizitator. Lipsă = se vede substituentul. */
-  src: "/optimizare/produs.jpg",
+  src: "/optimizare/produs.webp",
   alt: "",
-  /** Cât are aceeași poză nefolosită, direct din telefon. Cifra clientului. */
-  inainte: "5 MB",
-  /** Se folosește doar dacă fișierul lipsește de pe disc la construire. */
-  dupaDeRezerva: "câțiva KB",
+  /**
+   * Cele două greutăți, în OCTEȚI: de acolo pleacă și numărul scris, și animația
+   * care coboară de la unul la altul. Scrise ca text, cele două n-ar fi putut fi
+   * interpolate.
+   */
+  inainte: 5 * 1024 * 1024,
+  dupa: 124 * 1024,
   hint: "Fotografie de produs",
 } as const;
+
+/**
+ * `5 MB`, `873 KB`, `1,2 MB`.
+ *
+ * Fără zecimale sub un megaoctet — nimeni nu spune „873,4 KB" — și fără `,0`
+ * peste el, ca „5 MB" să rămână chiar cifra dată de client, nu „5,0 MB".
+ */
+export function greutate(octeti: number): string {
+  if (octeti >= 1024 * 1024) {
+    const mb = (octeti / (1024 * 1024)).toFixed(1).replace(".", ",");
+    return `${mb.endsWith(",0") ? mb.slice(0, -2) : mb} MB`;
+  }
+  return `${Math.round(octeti / 1024)} KB`;
+}
 
 /**
  * Scorurile arătate în ilustrația cu PageSpeed Insights.

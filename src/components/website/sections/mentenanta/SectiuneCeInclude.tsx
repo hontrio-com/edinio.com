@@ -117,7 +117,13 @@ function Card({ card, lat }: { card: CardMentenanta; lat?: boolean }) {
       */}
       <div
         className={cn(
-          "flex items-center justify-center rounded-[14px] border border-hairline bg-white px-4 py-6 sm:px-6 sm:py-8",
+          /* ⚠ `relative` și `overflow-hidden` NU sunt de prisos: unele ilustrații
+             își pun un strat de fundal peste tot panoul (razele de la
+             „Securitate"). Un strat `absolute inset-0` se agață de primul
+             strămoș poziționat — fără `relative` aici, s-ar fi agățat de
+             secțiune și ar fi acoperit toată pagina. Iar `inset-0` acoperă și
+             spațierea panoului, deci razele ajung până la chenar. */
+          "relative flex items-center justify-center overflow-hidden rounded-[14px] border border-hairline bg-white px-4 py-6 sm:px-6 sm:py-8",
           lat ? "mt-8 lg:mt-0" : "mt-auto",
         )}
       >

@@ -114,153 +114,238 @@ function Remediere() {
 
 /* ═══ LACĂTUL ═══
 
-   Refăcut după o captură trimisă de client (13.08), care a cerut „1 la 1,
-   absolut identic". Ce era înainte — un tabel cu SSL, copii de siguranță și
-   disponibilitate — l-a nemulțumit.
+   Refăcut după o captură trimisă de client (13.08). Apoi cerut „mult mai
+   realist", cu raze pe tot panoul și fără pastilele de dedesubt.
 
-   ⚠ CÂT DE APROAPE SE POATE AJUNGE, ȘI DE CE NU MAI MULT. Originalul e o
-   imagine matriceală: lacătul are ceață în jur, un tipar de pătrățele în corp
-   (semnul unei măriri dintr-o poză mică) și margini topite de blur. Aici sunt
-   desenate cu forme și gradienți, deci conturul iese CURAT, nu ros. Se poate
-   ajunge la un desen care se citește la fel, nu la unul identic pixel cu pixel —
-   pentru asta ar trebui fișierul original, nu o captură de ecran.
+   ═══ CE FACE UN DESEN SĂ PARĂ OBIECT, NU FORMĂ ═══
 
-   Ce s-a măsurat din captură, cu pipeta, și e păstrat întocmai:
-     albastrul de sus al toartei   #B2E4FF
-     albastrul aprins al corpului  #54BAFF
-     albastrul stins, spre violet  #ADC9FB
-     luminile din mijloc           #8FD4FC
-   Iar lacătul, cu ceață cu tot, ocupă 170x176 dintr-un card de 328 — de acolo
-   vine cât de mare e desenat față de pastile.
+   Prima formă era un dreptunghi rotunjit cu un gradient și un arc gros deasupra.
+   Avea culorile potrivite și tot arăta a pictogramă. Ce lipsea nu era culoarea,
+   ci LUMINA — și anume patru lucruri, fiecare cu rolul lui:
 
-   Cele trei pastile sunt cuvintele lor, în engleză, fiindcă asta a cerut
-   („absolut identic"). Sunt singurele cuvinte în engleză de pe pagină. */
+   1. **TOARTA E UN CILINDRU, nu o linie.** Un metal rotund are pe el o dungă
+      albă îngustă (reflexia sursei), o parte luminată și o margine întunecată
+      unde se întoarce de la privitor. Gradientul de-a curmezișul ei le pune pe
+      toate trei. Cu o culoare plată, toarta arată a sârmă desenată.
+   2. **UMBRA DE SUB TOARTĂ, PE CORP.** Toarta stă ÎN FAȚA corpului și îi ia
+      lumina: fără pata aia întunecată, cele două par lipite în același plan.
+   3. **LUCIUL de sus.** O pată albă care se stinge, pe treimea de sus a corpului:
+      așa se poartă o suprafață lucioasă sub o lumină venită de sus-stânga.
+   4. **UMBRA DE CONTACT.** O elipsă întunecată chiar sub corp. E lucrul care
+      așază obiectul pe ceva; fără ea, lacătul plutește.
 
-const PASTILE_SECURITATE = ["Encrypted", "Verified", "Protected"];
+   Plus muchia luminată de jos (lumina întoarsă de suprafață) și gaura cheii
+   ADÂNCITĂ — întunecată sus, cu o dungă de lumină pe buza de jos.
+
+   ⚠ Culorile de bază rămân cele MĂSURATE cu pipeta din captura clientului:
+   #B2E4FF sus pe toartă, #54BAFF aprinsul corpului, #ADC9FB stinsul spre violet,
+   #8FD4FC luminile. Ce s-a adăugat sunt tonurile de umbră și de lumină, care în
+   captură se pierd în ceață.
+
+   ⚠ Tot ce se poate spune despre „1 la 1": originalul e o imagine matriceală, cu
+   margini topite de blur și un tipar de pătrățele în corp. Aici sunt forme și
+   gradienți, deci conturul iese curat. Pentru identic pixel cu pixel ar trebui
+   fișierul original, nu o captură. */
 
 function Securitate() {
   return (
-    <div className="flex w-full max-w-[300px] flex-col items-center">
+    <>
+      {/*
+        ═══ RAZELE ═══
+
+        ⚠ ACOPERĂ TOT PANOUL, nu doar jurul lacătului — cerut de client. Înainte
+        erau trei arce scurte de fiecare parte; acum e un evantai care pleacă din
+        spatele lacătului și se pierde spre margini.
+
+        `repeating-conic-gradient` desenează razele: o felie colorată, una goală,
+        la nesfârșit în jurul unui punct. Punctul e chiar în spatele lacătului
+        (50% 46%), deci razele par să iasă din el.
+
+        ⚠ Fără MASCĂ, evantaiul s-ar opri brusc la marginea panoului, cu razele
+        tăiate drept — și s-ar vedea că e un tipar, nu o lumină. Masca radială îl
+        stinge spre margini.
+
+        ⚠ `absolute inset-0` se agață de PANOU (care e `relative` în
+        `SectiuneCeInclude`), nu de piesa asta: de aceea aici nu e niciun
+        `relative`, iar razele ajung până la chenar, peste spațierea panoului.
+      */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "repeating-conic-gradient(from 0deg at 50% 46%, rgba(84,186,255,0.16) 0deg 1.8deg, rgba(84,186,255,0) 1.8deg 9deg)",
+          WebkitMaskImage:
+            "radial-gradient(115% 92% at 50% 46%, #000 0%, rgba(0,0,0,0.75) 32%, transparent 76%)",
+          maskImage:
+            "radial-gradient(115% 92% at 50% 46%, #000 0%, rgba(0,0,0,0.75) 32%, transparent 76%)",
+        }}
+      />
+
+      {/* Pâcla albă din jurul lacătului, peste raze: le stinge în mijloc, ca
+          razele să pară că vin DIN SPATELE lui, nu că trec peste el. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(44% 40% at 50% 46%, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.55) 52%, rgba(255,255,255,0) 100%)",
+        }}
+      />
+
       <svg
-        viewBox="0 0 240 210"
-        className="w-full max-w-[236px]"
+        viewBox="0 0 240 224"
+        className="relative w-full max-w-[212px]"
         role="img"
-        aria-label="Lacăt: magazinul e criptat, verificat și protejat"
+        aria-label="Lacăt închis: magazinul e protejat"
       >
         <defs>
-          {/* Corpul: aprins în stânga sus, spre violet la dreapta jos — cum e în
-              captură pe diagonala aia. */}
-          <linearGradient id="lacat-corp" x1="0.1" y1="0" x2="0.9" y2="1">
-            <stop offset="0" stopColor="#54BAFF" />
-            <stop offset="0.42" stopColor="#8FD4FC" />
-            <stop offset="0.78" stopColor="#ADC9FB" />
-            <stop offset="1" stopColor="#7FB6FB" />
+          {/* Toarta, de-a curmezișul: margine întunecată, parte luminată, dunga
+              albă a reflexiei, apoi întuneric pe partea care se întoarce. */}
+          <linearGradient id="lacat-toarta" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="#2E7CC8" />
+            <stop offset="0.16" stopColor="#63B8F6" />
+            <stop offset="0.32" stopColor="#CFEBFF" />
+            <stop offset="0.46" stopColor="#B2E4FF" />
+            <stop offset="0.72" stopColor="#4FA0E8" />
+            <stop offset="1" stopColor="#2A6FB5" />
           </linearGradient>
 
-          <linearGradient id="lacat-toarta" x1="0.5" y1="0" x2="0.5" y2="1">
-            <stop offset="0" stopColor="#B2E4FF" />
-            <stop offset="1" stopColor="#6EC3FE" />
+          {/* Corpul. Ultimul ton e mai deschis decât cel de deasupra lui: e
+              lumina întoarsă de suprafața pe care stă. */}
+          <linearGradient id="lacat-corp" x1="0.2" y1="0" x2="0.85" y2="1">
+            <stop offset="0" stopColor="#9EDDFF" />
+            <stop offset="0.26" stopColor="#54BAFF" />
+            <stop offset="0.62" stopColor="#5AA8F6" />
+            <stop offset="0.88" stopColor="#ADC9FB" />
+            <stop offset="1" stopColor="#8FD4FC" />
           </linearGradient>
 
-          {/* Lumina din mijlocul corpului: în captură centrul e vizibil mai
-              deschis decât marginile, ca și cum ar fi luminat dinăuntru. */}
-          <radialGradient id="lacat-lumina" cx="0.46" cy="0.4" r="0.62">
+          <linearGradient id="lacat-luciu" x1="0" y1="0" x2="0.35" y2="1">
             <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.62" />
-            <stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0.16" />
+            <stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0.14" />
             <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+          </linearGradient>
+
+          <linearGradient id="gaura-cheii" x1="0.5" y1="0" x2="0.5" y2="1">
+            <stop offset="0" stopColor="#1C5C9C" />
+            <stop offset="1" stopColor="#3C8FD4" />
+          </linearGradient>
+
+          <radialGradient id="umbra-contact" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0" stopColor="#2A6FB5" stopOpacity="0.34" />
+            <stop offset="1" stopColor="#2A6FB5" stopOpacity="0" />
           </radialGradient>
 
-          {/* Ceața. Două straturi: unul larg și palid, unul strâns și mai tare —
-              cu unul singur, ori se vede marginea norului, ori nu se vede nimic. */}
           <filter id="ceata-larga" x="-70%" y="-70%" width="240%" height="240%">
-            <feGaussianBlur stdDeviation="20" />
+            <feGaussianBlur stdDeviation="18" />
           </filter>
           <filter id="ceata-stransa" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="6" />
+          </filter>
+          <filter id="umbra-sub-toarta" x="-30%" y="-60%" width="160%" height="260%">
             <feGaussianBlur stdDeviation="7" />
           </filter>
+
+          {/* Umbra de sub toartă se taie pe forma corpului: altfel s-ar vedea
+              revărsată în afara lui, ca o pată. */}
+          <clipPath id="doar-corpul">
+            <rect x="60" y="94" width="120" height="104" rx="29" />
+          </clipPath>
         </defs>
 
-        {/* ── Undele din lateral ──
+        {/* ── Umbra de contact, sub tot ── */}
+        <ellipse cx="120" cy="205" rx="66" ry="12" fill="url(#umbra-contact)" />
 
-            Trei arce de fiecare parte, tot mai palide spre afară.
-
-            ⚠ NU TREC PESTE VÂRFUL LACĂTULUI. Prima formă le ducea până aproape
-            de ora douăsprezece și se închideau ca un coif deasupra toartei — în
-            captură se văd DOAR pe laturi, între ora opt și ora zece, ca și cum
-            lacătul ar emite ceva în părți. Unghiurile de mai jos sunt măsurate de
-            acolo: de la 8 grade sub orizontală până la 46 deasupra ei. */}
-        {[0, 1, 2].map((i) => {
-          const raza = 86 + i * 16;
-          const opacitate = 0.3 - i * 0.085;
-          const rad = (grade: number) => (grade * Math.PI) / 180;
-          const punct = (grade: number, semn: 1 | -1) => {
-            const x = 120 + semn * raza * Math.cos(rad(grade));
-            const y = 124 - raza * Math.sin(rad(grade));
-            return `${x.toFixed(1)} ${y.toFixed(1)}`;
-          };
-          return (
-            <g key={raza} stroke="#9DC9F2" strokeWidth={1.8} fill="none" opacity={opacitate}>
-              <path d={`M ${punct(-8, -1)} A ${raza} ${raza} 0 0 1 ${punct(46, -1)}`} strokeLinecap="round" />
-              <path d={`M ${punct(-8, 1)} A ${raza} ${raza} 0 0 0 ${punct(46, 1)}`} strokeLinecap="round" />
-            </g>
-          );
-        })}
-
-        {/* ── Ceața, sub lacăt ── */}
-        <g filter="url(#ceata-larga)" opacity="0.55">
+        {/* ── Ceața ── */}
+        <g filter="url(#ceata-larga)" opacity="0.5">
           <FormaLacat corp="#5FBEFF" toarta="#5FBEFF" />
         </g>
-        <g filter="url(#ceata-stransa)" opacity="0.5">
+        <g filter="url(#ceata-stransa)" opacity="0.42">
           <FormaLacat corp="#7ACCFF" toarta="#7ACCFF" />
         </g>
 
-        {/* ── Lacătul ── */}
-        <FormaLacat corp="url(#lacat-corp)" toarta="url(#lacat-toarta)" />
-        <rect x="62" y="96" width="116" height="98" rx="27" fill="url(#lacat-lumina)" />
+        {/* ── Toarta, în spatele corpului ── */}
+        <path
+          d="M88 106 V80 a32 32 0 0 1 64 0 V106"
+          fill="none"
+          stroke="url(#lacat-toarta)"
+          strokeWidth="20"
+          strokeLinecap="round"
+        />
+        {/* Dunga de lumină, subțire și puțin la stânga de mijloc. */}
+        <path
+          d="M94.5 104 V80 a25.5 25.5 0 0 1 51 0 V104"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeOpacity="0.42"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
 
-        {/* Gaura cheii: un cerc și un canal care se subțiază în jos. Nu e albă de
-            tot — în captură se vede tot albastru, doar mai deschis. */}
-        <g fill="#FFFFFF" opacity="0.72">
-          <circle cx="120" cy="136" r="12" />
-          <path d="M116 145 h8 l3 22 h-14 z" />
+        {/* ── Corpul ── */}
+        <rect x="60" y="94" width="120" height="104" rx="29" fill="url(#lacat-corp)" />
+
+        {/* Umbra pe care o aruncă toarta pe corp. */}
+        <g clipPath="url(#doar-corpul)">
+          <path
+            d="M78 84 h84 v26 h-84 z"
+            fill="#1F63A8"
+            opacity="0.34"
+            filter="url(#umbra-sub-toarta)"
+          />
+        </g>
+
+        {/* Luciul de sus și muchia luminată de jos. */}
+        <path
+          d="M60 123 a29 29 0 0 1 29 -29 h62 a29 29 0 0 1 29 29 c-30 16 -90 16 -120 0 z"
+          fill="url(#lacat-luciu)"
+        />
+        <path
+          d="M69 186 a29 29 0 0 0 20 12 h62 a29 29 0 0 0 20 -12"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeOpacity="0.3"
+          strokeWidth="2.5"
+        />
+
+        {/* ── Gaura cheii, adâncită ── */}
+        <g>
+          <circle cx="120" cy="136" r="13" fill="url(#gaura-cheii)" />
+          <path d="M115 146 h10 l3.5 23 h-17 z" fill="url(#gaura-cheii)" />
+          {/* Buza de jos, luminată: fără ea, gaura arată lipită, nu scobită. */}
+          <path
+            d="M111.5 169 h17"
+            stroke="#FFFFFF"
+            strokeOpacity="0.5"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <circle cx="120" cy="131" r="13" fill="#0F4B86" opacity="0.22" />
         </g>
       </svg>
-
-      {/* ── Pastilele ── */}
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-        {PASTILE_SECURITATE.map((eticheta) => (
-          <span
-            key={eticheta}
-            className="rounded-full border border-hairline bg-white px-3 py-[5px] text-[11px] leading-none text-ink-2"
-          >
-            {eticheta}
-          </span>
-        ))}
-      </div>
-    </div>
+    </>
   );
 }
 
 /**
- * Forma lacătului, desenată o dată și folosită de trei ori: pentru cele două
- * straturi de ceață și pentru lacătul însuși.
+ * Forma lacătului, pentru cele două straturi de ceață.
  *
- * ⚠ De aceea culorile vin din afară. Cu trei copii ale căilor, o îndreptare la
+ * ⚠ De aceea culorile vin din afară. Cu două copii ale căilor, o îndreptare la
  * rotunjirea corpului s-ar fi făcut într-una singură, iar ceața ar fi rămas în
  * urmă cu altă formă — și tocmai ceața e cea care nu se vede că e greșită.
  */
 function FormaLacat({ corp, toarta }: { corp: string; toarta: string }) {
   return (
     <>
-      {/* Toarta: un arc gros, deschis în jos, care intră sub corp. */}
       <path
-        d="M88 104 V80 a32 32 0 0 1 64 0 V104"
+        d="M88 106 V80 a32 32 0 0 1 64 0 V106"
         fill="none"
         stroke={toarta}
-        strokeWidth="19"
+        strokeWidth="20"
         strokeLinecap="round"
       />
-      <rect x="62" y="96" width="116" height="98" rx="27" fill={corp} />
+      <rect x="60" y="94" width="120" height="104" rx="29" fill={corp} />
     </>
   );
 }

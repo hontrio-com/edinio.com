@@ -136,6 +136,8 @@ export function SectionPreviewFrame({
       setSortTouched: nimic,
       effectiveSort: "newest",
       hasSearchMatches: false,
+      // Miniatura din galerie n-are asezare proprie: arata modelul, nu magazinul.
+      asezareMagazin: "",
       headerHasSearch: false,
       // Miniatura nu cere nimic de la server: e o randare statica peste produse
       // demonstrative, deci si cautarea si indicatorul de incarcare sunt inerte.

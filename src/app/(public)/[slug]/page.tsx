@@ -18,6 +18,7 @@ import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from
 import { alegePalier } from "@/lib/storefront/catalog/tier";
 import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 import { incarcaAcasaDeLaServer } from "@/lib/storefront/catalog/acasa-server";
+import { citesteAsezare, samantaAmestec, sortareaAsezarii } from "@/lib/storefront/asezare";
 import type { Fateta as FatetaCatalog } from "@/lib/storefront/catalog/facets";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { isNonProductionHost } from "@/lib/storefront/host";
@@ -368,6 +369,21 @@ export default async function SlugPage({ params, searchParams }: Props) {
     : "client";
   const peServer = palier === "server";
 
+  /*
+   * Asezarea grilei, si samanta amestecului — amandoua calculate AICI, pe server.
+   *
+   * Samanta pleaca si spre SQL, si spre browser, ca ambele paliere sa aseze la fel.
+   * Calculata in browser ar fi citit ceasul vizitatorului: HTML-ul serverului si
+   * prima randare ar fi iesit diferite, deci eroare de hidratare si o grila care
+   * sare. Motivul intreg e in `asezare.ts`.
+   */
+  const asezare = citesteAsezare(pcCatalog);
+  const samanta = samantaAmestec(new Date());
+  const sortareaGrilei = sortareaAsezarii(
+    asezare,
+    (pcCatalog.sort_options as { default_sort?: string } | undefined)?.default_sort,
+  );
+
   let products: StorefrontProduct[] = [];
   let totalVizibile = 0;
   let totalFiltrate = 0;
@@ -387,7 +403,9 @@ export default async function SlugPage({ params, searchParams }: Props) {
       faraImagini,
       faraStocAscuns,
       rezumat,
-      sortareImplicita: (pcCatalog.sort_options as { default_sort?: string } | undefined)?.default_sort || "newest",
+      sortareImplicita: sortareaGrilei,
+      asezare,
+      samanta,
       categorie: categorieAcasa,
       reduceri: saleParam === "1",
       cautare: filtreAcasa.cautare,
@@ -715,6 +733,23 @@ export default async function SlugPage({ params, searchParams }: Props) {
          * dar nici nu le scria nimeni in adresa de pe pagina principala.
          */
         initialSort={filtreAcasa.sortare}
+        /*
+         * Asezarea si samanta merg SI in browser, nu doar in RPC.
+         *
+         * Pe palierul client grila se sorteaza acolo, deci fara ele „amestecat" si
+         * „ordinea mea" ar fi fost doua optiuni care nu fac nimic pe magazinele
+         * mici — adica pe aproape toate. Iar cand palierul server pica pe calea
+         * veche, browserul trebuie sa poata reface exact aceeasi ordine.
+         *
+         * ⚠ Pe palierul server lista manuala NU se trimite: acolo `catalog_pagina`
+         * a asezat deja randurile si browserul nu mai sorteaza nimic, deci pana la
+         * o suta de UUID-uri (~3,7 kB) ar fi calatorit in HTML-ul fiecarui
+         * vizitator fara sa fie citite — si tocmai pe magazinele mari, unde
+         * palierul server exista ca sa taie din payload. `mod` ramane: din el se
+         * compune ordinea implicita si optiunea din bara de sortare.
+         */
+        asezare={reusitPeServer ? { ...asezare, ids: [] } : asezare}
+        samanta={samanta}
         initialPriceMin={filtreAcasa.pretMin}
         initialPriceMax={filtreAcasa.pretMax}
         initialInStock={filtreAcasa.stoc}

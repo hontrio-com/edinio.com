@@ -18,6 +18,8 @@
  * se repara INAINTE de paginarea pe server, nu odata cu ea.
  */
 
+import { cheieAmestec } from "@/lib/storefront/asezare";
+
 /** Exact campurile de care depinde ordonarea. Nu cere tot produsul. */
 export interface ProdusSortabil {
   id: string;
@@ -28,7 +30,24 @@ export interface ProdusSortabil {
   created_at: string;
 }
 
-export type CheieSortare = "relevance" | "price_asc" | "price_desc" | "popular" | "name_asc" | "newest";
+export type CheieSortare =
+  | "relevance" | "price_asc" | "price_desc" | "popular" | "name_asc" | "newest"
+  | "random" | "manual";
+
+/**
+ * Ce mai are nevoie o sortare in afara de produs, cand are.
+ *
+ * Sta intr-un obiect si nu in inca doi parametri pozitionali fiindca „manual" le
+ * cere pe amandoua si le paseaza mai departe catre ordinea de rezerva.
+ */
+export interface OptiuniSortare {
+  /** Samanta zilei, de la `samantaAmestec`. Doar „random" o citeste. */
+  samanta?: number;
+  /** id → pozitia ceruta de comerciant. Doar „manual" o citeste. */
+  pozitii?: ReadonlyMap<string, number> | null;
+  /** Dupa ce regula vine restul catalogului la „manual". */
+  rest?: CheieSortare;
+}
 
 /**
  * Departajarea finala. `id` e cheia primara, deci e unic prin constructie —
@@ -68,8 +87,50 @@ const laMilisecunde = (iso: string) => {
 export function comparatorSortare(
   cheie: CheieSortare,
   scoruri?: ReadonlyMap<string, number> | null,
+  optiuni?: OptiuniSortare,
 ): (a: ProdusSortabil, b: ProdusSortabil) => number {
   switch (cheie) {
+    /*
+     * „Amestecat": cheia e primii 32 de biti ai id-ului XOR samanta zilei.
+     *
+     * Perechea din SQL primeste ACEEASI samanta ca parametru si face acelasi XOR
+     * — vezi `asezare.ts`, unde e scris de ce partea amestecata se calculeaza o
+     * singura data, in TypeScript.
+     *
+     * Cheile se tin minte: comparatorul e chemat de O(n log n) ori, si fara harta
+     * fiecare produs si-ar fi recalculat cheia la fiecare comparatie.
+     */
+    case "random": {
+      const samanta = optiuni?.samanta ?? 0;
+      const chei = new Map<string, number>();
+      const cheia = (p: ProdusSortabil) => {
+        let k = chei.get(p.id);
+        if (k === undefined) { k = cheieAmestec(p.id, samanta); chei.set(p.id, k); }
+        return k;
+      };
+      return (a, b) => (cheia(a) - cheia(b)) || dupaId(a, b);
+    }
+    /*
+     * „Ordinea mea": intai produsele alese, in ordinea aleasa, apoi tot restul
+     * dupa regula de rezerva.
+     *
+     * ⚠ Comparatia se scrie cu `<`, nu ca scadere: `Infinity - Infinity` da NaN,
+     * iar un NaN intors dintr-un comparator nu strica un singur rand — face
+     * comparatiile inconsistente si strica sortarea TOATA.
+     *
+     * ⚠ Rezerva nu poate fi tot „manual": s-ar chema pe ea insasi la nesfarsit.
+     */
+    case "manual": {
+      const pozitii = optiuni?.pozitii;
+      const rest = optiuni?.rest && optiuni.rest !== "manual" ? optiuni.rest : "newest";
+      const cmpRest = comparatorSortare(rest, scoruri, optiuni);
+      return (a, b) => {
+        const pa = pozitii?.get(a.id) ?? Infinity;
+        const pb = pozitii?.get(b.id) ?? Infinity;
+        if (pa !== pb) return pa < pb ? -1 : 1;
+        return cmpRest(a, b);
+      };
+    }
     case "relevance":
       return (a, b) =>
         ((scoruri?.get(b.id) ?? 0) - (scoruri?.get(a.id) ?? 0))

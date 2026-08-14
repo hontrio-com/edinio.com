@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canonicalCatalog, citesteFiltreDinAdresa, scrieFiltre } from "./url";
+import { canonicalCatalog, citesteFiltreDinAdresa, scrieFiltre, SORTARI_IN_ADRESA } from "./url";
 import type { Fateta } from "./facets";
 
 /**
@@ -171,4 +171,32 @@ test("un pret gol scris explicit in adresa e tot nimic", () => {
 test("zero scris ANUME ramane zero", () => {
   // „de la 0" e o cerinta legitima; doar absenta trebuie sa insemne absenta.
   assert.equal(citesteFiltreDinAdresa({ pmin: "0" }, fatete).pretMin, "0");
+});
+
+test("orice sortare scrisa in adresa se citeste inapoi la fel (punct fix)", () => {
+  /*
+   * Proprietatea care lipsea si care a produs un defect real.
+   *
+   * Randerul compune adresa din stare, iar la randarea urmatoare o citeste inapoi
+   * si o compara cu bara de adrese ca sa decida daca mai navigheaza. Daca se scrie
+   * ceva ce cititorul arunca, cele doua nu mai coincid NICIODATA dupa prima
+   * navigare: pleaca inca o cerere la server si ramane o intrare de istoric din
+   * care „Inapoi" sare instant inainte.
+   */
+  for (const s of SORTARI_IN_ADRESA) {
+    const scrisa = scrieFiltre({ sortare: s });
+    const citita = citesteFiltreDinAdresa(
+      Object.fromEntries(new URLSearchParams(scrisa).entries()), fatete,
+    );
+    assert.equal(citita.sortare, s, `sortarea „${s}” nu se intoarce din adresa`);
+  }
+});
+
+test("asezarile magazinului NU sunt sortari de adresa", () => {
+  // Daca vreodata se adauga aici, `compuneInterogare` are voie sa le scrie —
+  // pana atunci, nu. Cele doua reguli trebuie sa se schimbe IMPREUNA.
+  assert.equal(SORTARI_IN_ADRESA.includes("random"), false);
+  assert.equal(SORTARI_IN_ADRESA.includes("manual"), false);
+  assert.equal(citesteFiltreDinAdresa({ sort: "random" }, fatete).sortare, "");
+  assert.equal(citesteFiltreDinAdresa({ sort: "manual" }, fatete).sortare, "");
 });

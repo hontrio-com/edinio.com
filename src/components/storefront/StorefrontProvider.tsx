@@ -240,6 +240,16 @@ export interface StorefrontContextValue extends StoreChromeValue {
   /** „relevance" cat timp exista o cautare si nu s-a ales explicit alta sortare. */
   effectiveSort: string;
   hasSearchMatches: boolean;
+  /**
+   * Asezarea aleasa de comerciant pentru grila paginii principale, cand e una
+   * dintre cele care nu se pot exprima ca sortare obisnuita („random", „manual").
+   *
+   * Bara are nevoie de ea, si nu ii ajunge `effectiveSort`: dupa ce vizitatorul
+   * alege „Pret crescator", `effectiveSort` nu mai e asezarea magazinului, dar
+   * optiunea de intoarcere la ea trebuie sa RAMANA in lista. Fara asta, un
+   * `<select>` al carui `value` nu are optiune se randeaza gol.
+   */
+  asezareMagazin: "" | "random" | "manual";
   /** Varianta de header aleasa are deja o caseta de cautare. */
   headerHasSearch: boolean;
   /**

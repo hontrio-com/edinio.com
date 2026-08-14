@@ -11,6 +11,17 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { ProductSectionsEditor } from "@/components/editor/ProductSectionsEditor";
+import { ProductPicker } from "@/components/pages/ProductPicker";
+import { MAX_ORDINE_MANUALA, type ModAsezare, type ModRest } from "@/lib/storefront/asezare";
+
+/** Numele omenesc al fiecarei asezari, pentru eticheta „Implicit (…)". */
+const ETICHETE_ASEZARE: Record<string, string> = {
+  newest: "cele mai noi",
+  price_asc: "pret crescator",
+  price_desc: "pret descrescator",
+  name_asc: "alfabetic A-Z",
+  popular: "recomandate primele",
+};
 import { updateBusiness } from "@/lib/actions/business.actions";
 import { updatePageContent } from "@/lib/actions/store.actions";
 import { type ProductSection } from "@/lib/store-sections";
@@ -51,6 +62,7 @@ interface PageContent {
   button_effect?: string;
   show_announcement_on_store?: boolean;
   sort_options?: { enabled: boolean; default_sort?: string; };
+  home_order?: { mod?: ModAsezare; ids?: string[]; rest?: ModRest };
   filter_options?: { enabled: boolean };
   sticky_cart_bar?: { enabled: boolean; };
   new_badge?: { enabled: boolean; days: number; };
@@ -481,6 +493,16 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     sort_options: {
       enabled: rawPageContent.sort_options?.enabled ?? true,
       default_sort: rawPageContent.sort_options?.default_sort ?? "newest",
+    },
+    /*
+     * Asezarea grilei de pe prima pagina. Implicitul e „" — adica „nu s-a ales
+     * nimic", nu „cele mai noi": asa un magazin care n-a deschis panoul ramane
+     * pe `sort_options.default_sort`, exact ca inainte sa existe reglajul.
+     */
+    home_order: {
+      mod: rawPageContent.home_order?.mod ?? "",
+      ids: rawPageContent.home_order?.ids ?? [],
+      rest: rawPageContent.home_order?.rest ?? "newest",
     },
     filter_options: rawPageContent.filter_options ?? { enabled: true },
     sticky_cart_bar: rawPageContent.sticky_cart_bar ?? { enabled: true },
@@ -1166,6 +1188,78 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
       title: "Pagina principala",
       content: (
         <div className="px-5 pb-5 space-y-5">
+          {/* Asezarea produselor in grila primei pagini */}
+          <div className="space-y-2">
+            <div>
+              <label htmlFor="asezare-produse" className="text-xs font-semibold text-foreground">Asezarea produselor</label>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                In ce ordine se vad produsele in grila primei pagini. Vizitatorul poate alege oricand altfel, din lista de sortare. Pagina Magazin nu e afectata.
+              </p>
+            </div>
+            <select id="asezare-produse"
+              value={pageContent.home_order?.mod ?? ""}
+              onChange={(e) => setPageContent(p => ({
+                ...p,
+                home_order: { ...p.home_order, mod: e.target.value as ModAsezare },
+              }))}
+              className={inputCls}>
+              {/*
+                * „Implicit" nu inseamna acelasi lucru la toate magazinele: cade pe
+                * `sort_options.default_sort`, care la unul e chiar „popular". Scrisa
+                * fix „(cele mai noi)", eticheta ar fi mintit exact acolo unde nu se
+                * potriveste, iar comerciantul ar fi ales pe baza ei.
+                */}
+              <option value="">Implicit ({ETICHETE_ASEZARE[pageContent.sort_options?.default_sort ?? "newest"] ?? "cele mai noi"})</option>
+              <option value="newest">Cele mai noi</option>
+              <option value="price_asc">Pret crescator</option>
+              <option value="price_desc">Pret descrescator</option>
+              <option value="name_asc">Alfabetic A-Z</option>
+              <option value="popular">Recomandate primele</option>
+              <option value="random">Amestecat</option>
+              <option value="manual">Ordinea mea</option>
+            </select>
+
+            {pageContent.home_order?.mod === "random" && (
+              <p className="text-[10px] text-muted-foreground p-2 bg-muted/40 rounded-lg">
+                Ordinea se schimba o data pe zi si e aceeasi pentru toti vizitatorii cat tine ziua. Asa produsele se rotesc, dar pagina 2 arata mai departe ce trebuie — o ordine noua la fiecare apasare ar fi facut acelasi produs sa apara pe doua pagini si pe altul pe niciuna.
+              </p>
+            )}
+
+            {pageContent.home_order?.mod === "manual" && (
+              <div className="space-y-2 pt-1">
+                <p className="text-[10px] text-muted-foreground">
+                  Produsele alese aici apar primele, in ordinea de mai jos. Restul catalogului vine dupa ele.
+                </p>
+                <ProductPicker
+                  businessId={business.id}
+                  reordonabil
+                  maxim={MAX_ORDINE_MANUALA}
+                  selectedIds={pageContent.home_order?.ids ?? []}
+                  onChange={(ids) => setPageContent(p => ({ ...p, home_order: { ...p.home_order, ids } }))}
+                />
+                <div>
+                  <label htmlFor="asezare-rest" className="text-[10px] font-medium text-muted-foreground block mb-1">Restul produselor</label>
+                  <select id="asezare-rest"
+                    value={pageContent.home_order?.rest ?? "newest"}
+                    onChange={(e) => setPageContent(p => ({
+                      ...p,
+                      home_order: { ...p.home_order, rest: e.target.value as ModRest },
+                    }))}
+                    className={cn(inputCls, "!py-1.5 !text-xs")}>
+                    <option value="newest">Cele mai noi</option>
+                    <option value="price_asc">Pret crescator</option>
+                    <option value="price_desc">Pret descrescator</option>
+                    <option value="name_asc">Alfabetic A-Z</option>
+                    <option value="popular">Recomandate primele</option>
+                    <option value="random">Amestecat</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-border" />
+
           {/* Sortarea de deasupra grilei de pe prima pagina */}
           <div className="flex items-center justify-between">
             <div>

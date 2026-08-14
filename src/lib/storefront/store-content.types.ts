@@ -63,6 +63,21 @@ export interface StorePageContent {
    * pagina: pe `/magazin` bara are propriile reglaje.
    */
   sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };
+  /**
+   * Asezarea produselor in grila paginii principale.
+   *
+   * ⚠ E o cheie NOUA, si nu o rescriere a lui `sort_options.default_sort`, fiindca
+   * aceea e citita si de `/magazin` (vezi `pagina-magazin.tsx`): pusa la lucru
+   * pentru pagina principala, ar fi schimbat pe tacute si ordinea paginii de
+   * catalog. Regulile de citire stau in `lib/storefront/asezare.ts`.
+   */
+  home_order?: {
+    mod?: "" | "newest" | "price_asc" | "price_desc" | "name_asc" | "popular" | "random" | "manual";
+    /** Doar la `manual`: produsele puse in fata, in ordinea aleasa. */
+    ids?: string[];
+    /** Doar la `manual`: dupa ce regula vine restul catalogului. */
+    rest?: "newest" | "price_asc" | "price_desc" | "name_asc" | "popular" | "random";
+  };
   filter_options?: { enabled: boolean };
   sticky_cart_bar?: { enabled: boolean };
   new_badge?: { enabled: boolean; days: number };

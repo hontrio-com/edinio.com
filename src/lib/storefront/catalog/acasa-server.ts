@@ -4,6 +4,7 @@ import { dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/
 import { cautaPeServer, sortareLaCautare, type PaginaCautata } from "@/lib/storefront/catalog/cauta-server";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
+import { hartaOrdine, type Asezare } from "@/lib/storefront/asezare";
 
 /**
  * Pagina principala, pe palierul server: o pagina de produse plus randurile ei.
@@ -54,8 +55,22 @@ export async function incarcaAcasaDeLaServer(args: {
   faraImagini: boolean;
   faraStocAscuns: boolean;
   rezumat: Rezumat;
-  /** `page_content.sort_options.default_sort`, sau „newest". Vezi mai jos de ce. */
+  /**
+   * Ordinea implicita a grilei: asezarea aleasa in editor, altfel
+   * `page_content.sort_options.default_sort`, altfel „newest". Vezi mai jos de ce.
+   */
   sortareImplicita: string;
+  /**
+   * Asezarea aleasa in editor, pentru cele doua feluri care au nevoie de mai mult
+   * decat un nume: „manual" isi duce lista de id-uri, „random" samanta zilei.
+   *
+   * Samanta se calculeaza pe SERVER (`samantaAmestec`) si se trimite gata
+   * amestecata si aici, si spre SQL. Motivul e scris pe larg in `asezare.ts`:
+   * recalculata in browser ar fi rupt hidratarea, iar recalculata la fiecare
+   * cerere ar fi rupt paginarea.
+   */
+  asezare: Asezare;
+  samanta: number;
   /**
    * `?cat=` si `?sale=`, pe care pagina principala le citeste din adresa si le
    * trimite grilei ca `initialCategory`/`initialOnSale`.
@@ -148,7 +163,23 @@ export async function incarcaAcasaDeLaServer(args: {
         // `initialSort || default_sort`, exact ce compune browserul pe pagina
         // principala (acolo nu intra si `setari.sortareImplicita`, fiindca pagina
         // principala n-are bara de filtre a magazinului).
-        p_filtre: { ...filtreGrila, sortare: args.sortareDinAdresa || args.sortareImplicita },
+        p_filtre: {
+          ...filtreGrila,
+          sortare: args.sortareDinAdresa || args.sortareImplicita,
+          /*
+           * Cele doua se trimit MEREU, nu doar cand sortarea e chiar aia.
+           *
+           * `sortareDinAdresa` bate implicitul, deci un vizitator care alege
+           * „Pret crescator" trece prin aceeasi cerere. Trimise conditionat dupa
+           * sortarea efectiva, ar fi fost inca o ramura de tinut in acord cu
+           * browserul — iar ele nu costa nimic: SQL le citeste doar pe ramura lor.
+           */
+          samanta: String(args.samanta),
+          // `{ id: pozitie }`, nu tablou: vezi `hartaOrdine` — de opt ori mai
+          // ieftin in `ORDER BY` pe un catalog mare, masurat.
+          ordine: hartaOrdine(args.asezare.ids),
+          ordineRest: args.asezare.rest,
+        },
         p_limit: PE_PAGINA_ACASA,
         p_offset: (pagina - 1) * PE_PAGINA_ACASA,
       }),

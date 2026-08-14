@@ -32,7 +32,8 @@ import {
 } from "@/lib/storefront/catalog/facets";
 import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { comparatorSortare, type CheieSortare } from "@/lib/storefront/catalog/sortare";
-import { scrieFiltre } from "@/lib/storefront/catalog/url";
+import { ASEZARE_IMPLICITA, sortareaAsezarii, type Asezare } from "@/lib/storefront/asezare";
+import { scrieFiltre, SORTARI_IN_ADRESA } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { variantMeta } from "@/lib/storefront/design/registry";
@@ -223,9 +224,27 @@ interface Props {
   initialInStock?: boolean;
   /** Sortarea din adresa. Gol = ramane cea implicita a magazinului. */
   initialSort?: string;
+  /**
+   * Asezarea grilei paginii principale, citita din `page_content` pe server.
+   *
+   * Lipsa (previzualizarea din editor, galeria de design-uri, `/magazin`) inseamna
+   * asezarea implicita, adica exact purtarea de dinainte sa existe reglajul.
+   *
+   * ⚠ Pe `surface="shop"` NU se citeste: pagina de catalog isi are propriul
+   * `sortareImplicita`, iar reglajul asta e al paginii principale.
+   */
+  asezare?: Asezare;
+  /**
+   * Samanta amestecului, calculata pe SERVER (`samantaAmestec`).
+   *
+   * Nu se calculeaza aici din `new Date()`: componenta se randeaza si pe server, si
+   * in browser, iar doua ceasuri diferite ar da doua ordini diferite pentru acelasi
+   * HTML — adica eroare de hidratare si o grila care se rearanjeaza sub ochi.
+   */
+  samanta?: number;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -534,9 +553,18 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Produse variabile: interval de pret implicit; doar pretul minim daca e dezactivat din editor.
   const priceLowestOnly = pageContent.price_range_display?.enabled === false;
 
-  // Sorting is a standard storefront feature — always shown. Honour the saved
-  // default sort if present, otherwise newest-first.
-  const defaultSort = pageContent.sort_options?.default_sort ?? "newest";
+  /*
+   * Ordinea implicita a grilei.
+   *
+   * Pe pagina principala e asezarea aleasa in editor, cu vechiul `default_sort`
+   * dedesubt. Pe `/magazin` ramane DOAR `default_sort`: asezarea e a paginii
+   * principale, iar pagina de catalog isi are propriul `sortareImplicita` in
+   * sectiunea ei de design. Amestecate, un comerciant care schimba ordinea primei
+   * pagini ar fi schimbat-o si pe cealalta fara sa ceara asta.
+   */
+  const defaultSort = surface === "shop"
+    ? (pageContent.sort_options?.default_sort ?? "newest")
+    : sortareaAsezarii(asezare, pageContent.sort_options?.default_sort);
   /*
    * Ordinea: ce cere adresa, apoi ce a ales comerciantul pentru pagina de
    * catalog, apoi implicitul magazinului.
@@ -917,6 +945,18 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const seCautaAcum = peServer ? cautareInAdresa.trim().length > 0 : searchMatches !== null;
   const effectiveSort = seCautaAcum && !sortTouched ? "relevance" : sort;
 
+  /*
+   * Lista manuala, ca harta id → pozitie.
+   *
+   * Perechea din SQL e `array_position`. Aici e o harta si nu un `indexOf` in
+   * comparator: `indexOf` ar fi facut cautarea liniara la FIECARE comparatie,
+   * adica O(n log n × lungimea listei) pe un catalog intreg.
+   */
+  const pozitiiManuale = useMemo(
+    () => new Map(asezare.ids.map((id, i) => [id, i])),
+    [asezare.ids],
+  );
+
   // Filtered products
   const filteredProducts = useMemo(() => {
     // Pe palierul server lista E deja rezultatul filtrelor, in ordinea ceruta.
@@ -961,9 +1001,17 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // TOTALA (departajare finala pe id), fiindca altfel felierea pe server ar
     // putea aseza altfel randurile egale la fiecare pagina. Motivul intreg e
     // scris acolo. "relevance" exista doar cat timp se cauta (vezi effectiveSort).
-    list.sort(comparatorSortare(effectiveSort as CheieSortare, searchMatches));
+    //
+    // `samanta` si `pozitiiManuale` sunt exact ce primeste si `catalog_pagina` in
+    // `p_filtre`: acelasi XOR si aceeasi lista, deci aceeasi ordine pe ambele
+    // paliere. Vezi `asezare.ts`.
+    list.sort(comparatorSortare(effectiveSort as CheieSortare, searchMatches, {
+      samanta,
+      pozitii: pozitiiManuale,
+      rest: asezare.rest,
+    }));
     return list;
-  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici, isProductOutOfStock, peServer, products]);
+  }, [visibleProducts, searchMatches, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieIndici, isProductOutOfStock, peServer, products, samanta, pozitiiManuale, asezare.rest]);
 
   /*
    * Cate produse intra pe o pagina, si cum se ajunge la urmatoarele.
@@ -1121,7 +1169,20 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       // interogare, ar fi dat `/magazin/bocanci?cat=Bocanci` la fiecare filtrare.
       categorie: caleCategorie ? "" : categoryFilter,
       cautare,
-      sortare: sortTouched ? sort : "",
+      /*
+       * ⚠ Numai sortarile pe care CITITORUL le accepta inapoi.
+       *
+       * Asezarile magazinului („random", „manual") nu se scriu: `citesteFiltreDinAdresa`
+       * le-ar arunca, deci randarea urmatoare ar compune o tinta FARA parametru,
+       * n-ar mai semana cu bara de adrese, si efectul de navigare ar fi plecat a
+       * doua oara. Adica un dus-intors in plus la server si o intrare de istoric
+       * din care „Inapoi" sare instant inainte.
+       *
+       * Omis, parametrul lipseste, iar serverul cade oricum pe asezarea din
+       * `page_content` — care e chiar ce a ales vizitatorul. Scrierea si citirea
+       * au din nou acelasi punct fix.
+       */
+      sortare: sortTouched && SORTARI_IN_ADRESA.includes(sort) ? sort : "",
       reduceri: onSaleOnly,
       stoc: inStockOnly,
       pretMin: priceMin,
@@ -1400,6 +1461,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     setSortTouched,
     effectiveSort,
     hasSearchMatches: seCautaAcum,
+    // Numai pe pagina principala: pe `/magazin` asezarea nu se citeste deloc, deci
+    // bara de acolo n-are ce optiune in plus sa arate.
+    asezareMagazin: surface !== "shop" && (asezare.mod === "random" || asezare.mod === "manual")
+      ? asezare.mod
+      : "",
     catalogPeServer: peServer,
     trimiteCautarea,
     catalogSeIncarca: navigheaza,

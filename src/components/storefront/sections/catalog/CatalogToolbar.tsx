@@ -21,6 +21,7 @@ export function CatalogToolbar() {
     setSort,
     effectiveSort,
     hasSearchMatches,
+    asezareMagazin,
     filtersOpen,
     setFiltersOpen,
     activeFilterCount,
@@ -117,12 +118,34 @@ export function CatalogToolbar() {
           <select aria-label="Sorteaza produsele" value={effectiveSort}
             onChange={(e) => {
               const v = e.target.value;
+              /*
+               * „Relevanta" si asezarea magazinului inseamna AMANDOUA „nicio
+               * sortare ceruta de mine", deci amandoua sting `sortTouched`.
+               *
+               * ⚠ Tratata ca o sortare obisnuita, asezarea diverge intre paliere:
+               * `sortTouched` ar fi ramas aprins, adresa n-ar fi purtat-o (cititorul
+               * o arunca), iar la intoarcerea de la server steagul s-ar fi stins
+               * oricum. Pe palierul client alegerea se vedea, pe cel server sarea
+               * inapoi pe „Relevanta" in timpul unei cautari — acelasi magazin, doua
+               * purtari, dupa marimea catalogului.
+               */
               if (v === "relevance") setSortTouched(false);
+              else if (v === asezareMagazin) { setSort(v); setSortTouched(false); }
               else { setSort(v); setSortTouched(true); }
             }}
             style={{ WebkitAppearance: "none", MozAppearance: "none" }}
             className="h-[46px] w-full md:w-auto appearance-none cursor-pointer pl-10 pr-9 text-sm border border-border rounded-2xl bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
             {hasSearchMatches && <option value="relevance">Relevanta</option>}
+            {/*
+              * Asezarea magazinului, cand comerciantul a ales una care nu e o
+              * sortare obisnuita. Sta PRIMA fiindca e ordinea implicita a paginii.
+              *
+              * Fara ea, `<select value="random">` n-ar fi avut nicio optiune
+              * potrivita si s-ar fi randat gol — iar vizitatorul care alege alta
+              * sortare n-ar mai fi avut cum sa se intoarca la ordinea magazinului.
+              */}
+            {asezareMagazin === "random" && <option value="random">Amestecat</option>}
+            {asezareMagazin === "manual" && <option value="manual">Recomandarea magazinului</option>}
             <option value="newest">Cele mai noi</option>
             <option value="price_asc">Pret crescator</option>
             <option value="price_desc">Pret descrescator</option>

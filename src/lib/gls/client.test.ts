@@ -6,13 +6,16 @@ import {
   eroriRetiparire,
   numereColet,
   pdfDinEtichete,
+  probaConexiune,
   pdfDinRetiparire,
   retipareste,
   stergeEtichete,
   urlMetoda,
+  COD_UTILIZATOR_INEXISTENT,
   MAX_RETIPARIRI_PE_CERERE,
   MAX_STERGERI_PE_CERERE,
   TARI_MYGLS,
+  TIPURI_IMPRIMANTA,
   type GlsConfig,
   type RaspunsEtichete,
 } from "./client";
@@ -402,4 +405,113 @@ test("⚠ codul 4 FARA lista de colete nu dispare, devine eroare", async () => {
   }
   assert.deepEqual(rod.inexistente, []);
   assert.equal(rod.erori.length, 1, "nu se pierde");
+});
+
+/* ─── Proba de conexiune ──────────────────────────────────────────────────────
+ *
+ * ⚠ CAZUL REAL DE LA CARE VIN PROBELE ASTEA (14.08): un comerciant care incerca
+ * sa conecteze GLS primea „Access denied for this parcel ID (5)" si butonul iesea
+ * rosu, desi datele de acces erau bune. Proba intreaba de coletul cu numarul 1,
+ * iar acela exista la GLS si e al altcuiva.
+ */
+
+const CFG_PROBA: GlsConfig = {
+  enabled: true,
+  username: "u@x.ro",
+  password: "p",
+  client_number: 100,
+  tara: "RO",
+  sandbox: false,
+  tip_imprimanta: "A4_2x2",
+  pozitie_tiparire: 1,
+  expeditor_cod_postal: "010101",
+};
+
+/** Raspunsul MyGLS pentru o eroare pe `GetParcelStatuses`. */
+function raspunsEroare(cod: number, text: string) {
+  return { GetParcelStatusErrors: [{ ErrorCode: cod, ErrorDescription: text }] };
+}
+
+test("⚠ „acces refuzat la coletul asta” inseamna ca ne-au RECUNOSCUT", async () => {
+  /*
+    Codul 5 din Appendix A. Ca sa se uite la colet si sa spuna ca nu e al nostru,
+    GLS a trecut deja de autentificare — deci conexiunea e buna.
+
+    Lista avea doar 4 si 26, iar acest raspuns scotea butonul rosu la un client
+    real cu date corecte.
+  */
+  const f = fetchFals([raspunsEroare(5, "Access denied for this parcel ID")]);
+  const r = await probaConexiune(CFG_PROBA);
+  f.restaureaza();
+  assert.deepEqual(r, { ok: true });
+});
+
+test("⚠ codurile pe NUMAR de colet trec si ele, nu doar cele pe ID", async () => {
+  /*
+    `GetParcelStatuses` primeste un ParcelNUMBER, nu un ParcelID — deci raspunsul
+    firesc e 9 („Parcel number not exists") sau 10 („not assigned yet"). Niciunul
+    nu era in lista: proba trecea doar cand GLS raspundea cu un cod de ID.
+  */
+  for (const cod of [4, 9, 10, 15, 26]) {
+    const f = fetchFals([raspunsEroare(cod, "colet negasit")]);
+    const r = await probaConexiune(CFG_PROBA);
+    f.restaureaza();
+    assert.deepEqual(r, { ok: true }, `codul ${cod} ar trebui sa treaca drept conexiune buna`);
+  }
+});
+
+test("⚠ „User not exists” RAMANE rosu — ala e chiar refuzul de autentificare", async () => {
+  /*
+    Cea mai importanta proba din grup. Daca cineva largeste lista de coduri „bune"
+    pana cuprinde si 14, butonul „Testeaza conexiunea" iese VERDE cu parola
+    gresita, iar comerciantul afla ca datele sunt gresite abia la primul colet
+    real — adica exact scaparea reparata o data.
+  */
+  const f = fetchFals([raspunsEroare(COD_UTILIZATOR_INEXISTENT, "User not exists")]);
+  const r = await probaConexiune(CFG_PROBA);
+  f.restaureaza();
+  assert.equal(r.ok, false);
+  assert.match((r as { eroare: string }).eroare, /User not exists/);
+});
+
+test("un cod necunoscut ramane rosu, cu mesajul lui GLS cu tot", async () => {
+  /* Lista ALBA, nu neagra: ce nu dovedeste recunoasterea, nu trece. */
+  const f = fetchFals([raspunsEroare(99, "ceva nou de la GLS")]);
+  const r = await probaConexiune(CFG_PROBA);
+  f.restaureaza();
+  assert.equal(r.ok, false);
+  assert.match((r as { eroare: string }).eroare, /ceva nou de la GLS/);
+});
+
+test("proba CITESTE, nu emite: nu trimite niciun colet", async () => {
+  /* Un „testeaza conexiunea" care creeaza AWB ar factura un colet real la fiecare
+     apasare, iar butonul se apasa de zece ori pana iese configurarea. */
+  const f = fetchFals([{ ParcelStatusList: [] }]);
+  await probaConexiune(CFG_PROBA);
+  f.restaureaza();
+  assert.equal(f.cereri.length, 1);
+  assert.ok("ParcelNumber" in f.cereri[0], "proba trebuie sa fie o interogare de stari");
+  assert.equal("ParcelList" in f.cereri[0], false, "proba nu are voie sa trimita colete");
+});
+
+test("formatele de tiparire sunt cele opt din documentatia MyGLS", () => {
+  /*
+    ⚠ Lista avea doar primele patru. Celelalte au fost adaugate de GLS in 2025
+    (ThermoZPL 12.02, ShipItThermoPdf 02.09, ThermoZPL_300DPI 03.09), deci un
+    comerciant cu imprimanta ZPL n-avea ce alege in panou.
+
+    Sursa: `api.mygls.ro/docs/MyGLS_API.pdf`, `GetPrintedLabelsRequest →
+    TypeOfPrinter`. Daca GLS mai adauga unul, se adauga si aici — nu se
+    inventeaza valori: una gresita e respinsa abia la primul colet real.
+  */
+  assert.deepEqual([...TIPURI_IMPRIMANTA], [
+    "A4_2x2",
+    "A4_4x1",
+    "Connect",
+    "Thermo",
+    "ThermoZPL",
+    "ThermoZPL_300DPI",
+    "ShipItThermoPdf",
+    "ShipItThermoZpl",
+  ]);
 });

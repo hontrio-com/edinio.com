@@ -26,8 +26,30 @@ import { parolaMyGls } from "./parola";
 export const TARI_MYGLS = ["CZ", "HR", "HU", "RO", "SI", "SK", "RS"] as const;
 export type TaraMyGls = (typeof TARI_MYGLS)[number];
 
-/** Formatul de tiparire a etichetei. */
-export const TIPURI_IMPRIMANTA = ["A4_2x2", "A4_4x1", "Connect", "Thermo"] as const;
+/**
+ * Formatul de tiparire a etichetei.
+ *
+ * ⚠ TOATE cele opt din documentatia oficiala (ver. 25.12.11), la
+ * `GetPrintedLabelsRequest → TypeOfPrinter`. Lista avea doar primele patru:
+ * celelalte au fost adaugate de GLS in 2025 (ThermoZPL la 12.02, ShipItThermoPdf
+ * la 02.09, ThermoZPL_300DPI la 03.09) si lipseau de la noi, deci un comerciant
+ * cu imprimanta ZPL n-avea ce alege.
+ *
+ * ⚠ ThermoZPL tipareste la 203 DPI, ThermoZPL_300DPI la 300 — sunt doua
+ * imprimante diferite, nu doua nume pentru aceeasi.
+ *
+ * ⚠ Ordinea conteaza: prima e cea implicita in formular.
+ */
+export const TIPURI_IMPRIMANTA = [
+  "A4_2x2",
+  "A4_4x1",
+  "Connect",
+  "Thermo",
+  "ThermoZPL",
+  "ThermoZPL_300DPI",
+  "ShipItThermoPdf",
+  "ShipItThermoZpl",
+] as const;
 export type TipImprimanta = (typeof TIPURI_IMPRIMANTA)[number];
 
 export type GlsConfig = {
@@ -595,12 +617,44 @@ function descrieErori(erori: EroareColet[]): string {
 }
 
 /**
- * ⚠ Codurile care dovedesc ca GLS NE-A RECUNOSCUT si doar coletul lipseste.
+ * ⚠ Codurile care dovedesc ca GLS NE-A RECUNOSCUT si doar coletul nu e al nostru.
  *
- * Appendix A: 4 = „Parcel ID not exists", 26 = „Parcel not found with current
- * settings". Ca sa raspunda astea, cererea a trecut deja de autentificare.
+ * Toate din Appendix A al documentatiei oficiale (`api.mygls.ro/docs/MyGLS_API.pdf`,
+ * ver. 25.12.11):
+ *
+ *   4  Parcel ID not exists
+ *   5  Access denied for this parcel ID
+ *   9  Parcel number not exists
+ *   10 Parcel number was not assigned yet
+ *   15 User is not authorized to access parcel
+ *   26 Parcel not found with current settings
+ *
+ * Ca sa raspunda oricare dintre ele, cererea a trecut DEJA de autentificare: GLS
+ * s-a uitat la colet, nu la cine intreaba.
+ *
+ * ⚠ LISTA AVEA DOAR 4 SI 26, iar asta a picat pe un client real (Insula Bucuriei,
+ * 14.08): MyGLS a raspuns cu 5 — „Access denied for this parcel ID" — si butonul
+ * de conectare a iesit rosu desi datele erau bune. Coletul cu numarul 1, cel cu
+ * care intreaba proba, exista la ei si e al altcuiva; de aici „acces refuzat" in
+ * loc de „nu exista".
+ *
+ * ⚠ Si mai important: `GetParcelStatuses` primeste un ParcelNUMBER, nu un
+ * ParcelID. Codurile pentru numar sunt 9 si 10 — niciunul nu era in lista.
+ * Adica proba trecea doar din noroc, cand GLS raspundea cu un cod de ID.
+ *
+ * ⚠ CE NU E AICI, dinadins: 14 = „User not exists". Ala e chiar refuzul de
+ * autentificare, adica exact ce trebuie sa iasa ROSU. La fel orice cod
+ * necunoscut: mai bine o proba prea severa, pe care omul o poate cerceta, decat
+ * una linistitoare si falsa.
  */
-const CODURI_COLET_NEGASIT = new Set([4, 26]);
+const CODURI_COLET_NEGASIT = new Set([4, 5, 9, 10, 15, 26]);
+
+/**
+ * ⚠ Codul care inseamna „nu te cunoastem". Nu e in lista de mai sus si nu are ce
+ * cauta acolo — sta scris aparte ca sa nu ajunga cineva sa-l adauge din greseala
+ * cand mai apare vreun cod de colet negasit.
+ */
+export const COD_UTILIZATOR_INEXISTENT = 14;
 
 /**
  * Proba de conexiune pentru panoul de configurare.

@@ -1043,11 +1043,37 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // filtrare, deci nu are ce reseta. Legat de `search`, fiecare litera ar fi mutat
   // pagina la 1 — adica o navigare la server pe care n-a cerut-o nimeni. Pe
   // palierul client cele doua sunt aceeasi valoare, deci nu se schimba nimic.
-  const filtersInitRef = useRef(true);
+  /*
+   * ⚠ SE COMPARA VALORILE, NU IDENTITATILE. Aici era defectul.
+   *
+   * `selectedOptions` si `selectieFatete` sunt obiecte. Resincronizarea de props
+   * (mai jos, la fiecare navigare) face `setSelectieFatete(initialSelectieFatete ?? {})`
+   * — iar `{}` e un obiect NOU de fiecare data. Deci dupa FIECARE schimbare de
+   * pagina identitatea se schimba fara ca vreun filtru sa se fi atins, efectul
+   * asta se declansa si cerea pagina 1.
+   *
+   * Nu se vedea, fiindca navigarea catre pagina 1 era inghitita de vechiul `ref`
+   * de adrese — dar ref-ul RETINEA acel „/magazin" ca adresa deja ceruta, si de
+   * aceea pagina 1 devenea apoi de neatins: orice incercare adevarata parea o
+   * cerere pe care o facusem deja. Adica raportul „nu ma pot intoarce pe pagina 1"
+   * si resetarea asta erau acelasi defect, vazut din doua parti.
+   *
+   * O semnatura pe VALORI nu se poate schimba fara ca un filtru sa se schimbe.
+   */
+  const semnaturaFiltre = JSON.stringify([
+    cautareInAdresa, categoryFilter, effectiveSort, priceMin, priceMax,
+    selectedOptions, onSaleOnly, inStockOnly, selectieFatete,
+  ]);
+  const filtreAplicate = useRef<string | null>(null);
   useEffect(() => {
-    if (filtersInitRef.current) { filtersInitRef.current = false; return; }
+    /* Prima trecere doar retine: altfel s-ar sterge pagina venita din adresa. */
+    if (filtreAplicate.current === null || filtreAplicate.current === semnaturaFiltre) {
+      filtreAplicate.current = semnaturaFiltre;
+      return;
+    }
+    filtreAplicate.current = semnaturaFiltre;
     goToPage(1);
-  }, [cautareInAdresa, categoryFilter, effectiveSort, priceMin, priceMax, selectedOptions, onSaleOnly, inStockOnly, selectieFatete, goToPage]);
+  }, [semnaturaFiltre, goToPage]);
 
   /*
    * Filtrele traiesc si in adresa, nu doar in stare.

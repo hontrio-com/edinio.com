@@ -145,7 +145,23 @@ async function construieste(req: Request, { params }: { params: Promise<{ slug: 
   return new Response(xml, {
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Cache-Control": "public, max-age=3600, s-maxage=3600",
+      /*
+       * ⚠ Feedul SEGMENTAT se pastreaza un minut, nu o ora.
+       *
+       * Masurat pe productie chiar la livrare: dupa ce am sters un feed de proba,
+       * adresa lui a continuat sa raspunda 200 cu vechile 980 de articole — cu
+       * un parametru anti-cache iesea corect 404. Deci comerciantul care schimba
+       * regulile si deschide adresa ca sa verifice ar vedea O ORA continutul
+       * vechi si ar crede ca n-a mers. Exact felul de „arata ca merge si nu
+       * merge" pe care integrarea asta il produce cel mai usor.
+       *
+       * Feedul intreg ramane la o ora: adresa lui nu se schimba niciodata, e cea
+       * pe care o citeste Meta, si nu are ce sa induca in eroare. Iar un minut nu
+       * costa nimic nici la cel segmentat: Meta citeste programat, nu continuu.
+       */
+      "Cache-Control": cheieFeed
+        ? "public, max-age=60, s-maxage=60"
+        : "public, max-age=3600, s-maxage=3600",
     },
   });
 }

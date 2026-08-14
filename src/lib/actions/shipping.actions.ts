@@ -18,6 +18,8 @@ import { corpExpediere as corpEcolet } from "@/lib/ecolet/expediere";
 import { etichetaOferta as etichetaEcolet, ofertePosibile as oferteEcolet } from "@/lib/ecolet/preturi";
 import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/cautare";
 import { puncteGls } from "@/lib/gls/puncte";
+import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
+import { normalizeazaUnitati } from "@/lib/posta/unitati";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
@@ -137,6 +139,8 @@ const COURIER_LABELS: Record<string, string> = {
   gls: "GLS",
   pallex: "Pall-Ex",
   ecolet: "eColet",
+  /* Numele firmei, cu diacritice: e marca lor, nu un text de-al nostru. */
+  posta: "Poșta Română",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -154,8 +158,12 @@ const COURIER_LABELS: Record<string, string> = {
  *      care nu cheama pe nimeni ar fi stricat cotatiile celorlalti.
  *   2. `flatCourierIds` nu l-ar fi cuprins, si o regula de transport cu actiunea
  *      „pret fix" scrisa de comerciant pentru GLS ar fi fost ignorata TACUT.
+ *
+ * ⚠ Posta Romana e aici din acelasi motiv, si e cel mai limpede dintre toate:
+ * API-ul lor are SAPTE metode (borderou, AWB, detalii, trace, ultimul status, si
+ * doua nomenclatoare) si NICIUNA nu coteaza. Tariful vine din contractul postal.
  */
-const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex"]);
+const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta"]);
 
 /** Merchant's custom checkout label (shipping_zones[id].label) or the branded default. */
 function addrLabel(custom: string | undefined, fallback: string): string {
@@ -226,7 +234,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -827,6 +835,47 @@ export async function getShippingOptions(
         deliveryType: "address",
         price: zone.price,
       });
+    } else if (courierId === "posta") {
+      /*
+       * ⚠ POSTA NU COTEAZA, si nici n-ar avea de unde.
+       *
+       * API-ul lor are sapte metode si niciuna nu e de tarif: preturile postale
+       * vin din contract. De aia ramura asta e SINCRONA, fara nimic impins in
+       * `promises`, si de aia `posta` e in `FARA_API_DE_TARIF`.
+       *
+       * ⚠ Si nu face `return`: optiunile trebuie doar impinse in `options`, ca sa
+       * ajunga la semnarea unica de la sfarsitul functiei. O ramura care iese
+       * singura a mai plecat o data fara simbol, iar comenzile au cazut atunci pe
+       * transportul implicit in loc de cel cotat.
+       */
+      options.push({
+        courier: "posta",
+        courierLabel: addrLabel(zone.label, "Livrare prin Poșta Română"),
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      /*
+       * ⚠ POST-RESTANT: livrarea la oficiu, de unde o ridica destinatarul.
+       *
+       * E primul transportator la care „ridicarea dintr-un punct" nu e o retea de
+       * lockere, ci un SERVICIU al AWB-ului (`postRestant` + `idOficiuPR`). Pentru
+       * checkout arata la fel, deci merge pe acelasi drum ca lockerele: alegerea
+       * ajunge in `shipping_address.locker_id` si de acolo in `idOficiuPR`.
+       *
+       * Se ofera doar daca Posta e chiar conectata SI comerciantul a pornit-o:
+       * lista de oficii se cere cu credentialele lui, iar fara ele n-ar avea nici
+       * ce arata, nici cu ce emite AWB-ul mai tarziu.
+       */
+      const postaCfg = settings.posta_config as PostaConfig | null;
+      if (postaGata(postaCfg) && postaCfg.post_restant) {
+        options.push({
+          courier: "posta",
+          courierLabel: lockerLabel(zone.label, "Ridicare de la oficiu poștal"),
+          deliveryType: "locker",
+          price: zone.price,
+        });
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -1136,7 +1185,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta"]);
 
 export async function getLockers(
   businessId: string,
@@ -1193,7 +1242,7 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config")
     .eq("business_id", businessId)
     .single();
 
@@ -1342,6 +1391,44 @@ export async function getLockers(
       return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] GLS pickup points failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "posta") {
+    /*
+     * ⚠ AICI „PUNCTUL" E UN OFICIU POSTAL, nu un locker.
+     *
+     * Nomenclatorul `GET /api/unitati-livrare` da unitatile in care se poate
+     * livra post-restant, iar id-ul ales ajunge in `idOficiuPR` la emiterea
+     * AWB-ului. Documentatia numeste UN SINGUR camp din rand (`id`) — restul le
+     * cauta `normalizeazaUnitati` prin mai multe nume cu putinta.
+     *
+     * ⚠ `id` ramane SIR, ca la GLS: exemplul lor il trimite ca sir („31793"), iar
+     * un `Number(...)` copiat mecanic de la ceilalti l-ar putea pierde.
+     */
+    const config = settings.posta_config as PostaConfig | null;
+    if (!postaGata(config) || !config.post_restant) return [];
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          normalizeazaUnitati(await unitatiLivrare(config)).map((p) => ({
+            id: p.id,
+            name: p.name,
+            address: [p.address, p.city].filter(Boolean).join(", "),
+            city: p.city,
+            county: p.county,
+            postCode: p.postCode,
+            lat: p.lat,
+            lng: p.lng,
+          })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
+    } catch (e) {
+      console.error("[shipping] Posta unitati-livrare failed:", (e as Error).message);
       return [];
     }
   }

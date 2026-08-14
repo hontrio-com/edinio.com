@@ -35,6 +35,7 @@ import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
 import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
 import { EcoletAwbModal } from "@/components/dashboard/EcoletAwbModal";
+import { PostaAwbModal } from "@/components/dashboard/PostaAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
@@ -229,6 +230,8 @@ export function OrderDetailClient({
   pallexEnabled,
   pallexZile,
   ecoletEnabled,
+  postaEnabled,
+  postaZilePrezentare,
   fanCourierEnabled,
   samedayEnabled,
   smsoEnabled,
@@ -254,6 +257,8 @@ export function OrderDetailClient({
   pallexEnabled?: boolean;
   pallexZile?: { ridicare: number; livrare: number };
   ecoletEnabled?: boolean;
+  postaEnabled?: boolean;
+  postaZilePrezentare?: number;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   smsoEnabled?: boolean;
@@ -335,6 +340,7 @@ export function OrderDetailClient({
   const [glsModalOpen, setGlsModalOpen] = useState(false);
   const [pallexModalOpen, setPallexModalOpen] = useState(false);
   const [ecoletModalOpen, setEcoletModalOpen] = useState(false);
+  const [postaModalOpen, setPostaModalOpen] = useState(false);
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
   const [coleteModalOpen, setColeteModalOpen] = useState(false);
@@ -373,6 +379,9 @@ export function OrderDetailClient({
        panoul arata „Curier recomandat" in loc de „Clientul a ales". */
     { id: "pallex", name: "Pall-Ex", logo: "/integrations/pallex.avif", enabled: !!pallexEnabled, awb: (order.pallex_awb_number as string | null) ?? null, open: () => setPallexModalOpen(true) },
     { id: "ecolet", name: "eColet", logo: "/integrations/ecolet.png", enabled: !!ecoletEnabled, awb: (order.ecolet_awb_number as string | null) ?? null, open: () => setEcoletModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
+       `shipping_address.courier` — vezi nota de la Pall-Ex. */
+    { id: "posta", name: "Poșta Română", logo: "/integrations/posta_romana.svg", enabled: !!postaEnabled, awb: (order.posta_awb_number as string | null) ?? null, open: () => setPostaModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
     { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
@@ -1360,6 +1369,9 @@ export function OrderDetailClient({
       )}
       {ecoletEnabled && (
         <EcoletAwbModal open={ecoletModalOpen} onClose={() => setEcoletModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setEcoletModalOpen(false); router.refresh(); }} />
+      )}
+      {postaEnabled && (
+        <PostaAwbModal zilePrezentare={postaZilePrezentare} open={postaModalOpen} onClose={() => setPostaModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setPostaModalOpen(false); router.refresh(); }} />
       )}
 
       {/* ── Status/payment change confirmation ── */}

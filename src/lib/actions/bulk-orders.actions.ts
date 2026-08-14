@@ -15,6 +15,7 @@ import { createFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { createDpdShipmentAction } from "@/lib/actions/dpd.actions";
 import { createGlsAwbAction } from "@/lib/actions/gls.actions";
 import { createPallexAwbAction } from "@/lib/actions/pallex.actions";
+import { createPostaAwbAction } from "@/lib/actions/posta.actions";
 import { greutateaColetului, idurileDeCantarit } from "@/lib/shipping/awb-weight";
 import type { ProdusCotat } from "@/lib/shipping/cart-weight";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -26,6 +27,7 @@ import type { FanCourierConfig } from "@/lib/fancourier";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
 import { pallexGata, type PallExConfig } from "@/lib/pallex/client";
+import { postaGata, type PostaConfig } from "@/lib/posta/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -48,8 +50,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -223,7 +225,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -231,6 +233,7 @@ export async function bulkGenerateAwbs(
   const dg = settings?.dpd_config as DpdConfig | null;
   const gl = settings?.gls_config as GlsConfig | null;
   const pe = settings?.pallex_config as PallExConfig | null;
+  const po = settings?.posta_config as PostaConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -246,6 +249,11 @@ export async function bulkGenerateAwbs(
     /* Aceeasi regula ca in `configSiComanda` din pallex.actions.ts, scrisa o
        singura data in `pallexGata` — vezi comentariul de acolo. */
     pallex: pallexGata(pe),
+    /* Aceeasi regula ca in `configSiComanda` din posta.actions.ts, scrisa o
+       singura data in `postaGata`. Include si `cod_trimitere`: fara el, lotul ar
+       porni pe comenzi pe care actiunea per comanda le refuza oricum — adica 50
+       de esecuri raportate unul cate unul, in loc de un mesaj limpede. */
+    posta: postaGata(po),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -255,7 +263,13 @@ export async function bulkGenerateAwbs(
 
   const { data: orders } = await admin
     .from("orders")
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number")
+    /* ⚠ Coloana de AWB trebuie CERUTA aici, nu doar tratata in `existing` mai jos:
+       ce nu se selecteaza vine `undefined`, iar verificarea de idempotenta ar trece
+       pe langa — lotul ar reincerca emiterea pe comenzi care au deja AWB. Registrul
+       ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
+       „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
+       Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -273,6 +287,7 @@ export async function bulkGenerateAwbs(
     cargus: "cargus", sameday: "sameday", fancourier: "fancourier", "fan-courier": "fancourier", "fan_courier": "fancourier", dpd: "dpd",
     gls: "gls",
     pallex: "pallex", "pall-ex": "pallex",
+    posta: "posta", "posta-romana": "posta",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -294,6 +309,7 @@ export async function bulkGenerateAwbs(
       : target === "fancourier" ? row.fan_courier_awb_number
       : target === "gls" ? row.gls_awb_number
       : target === "pallex" ? row.pallex_awb_number
+      : target === "posta" ? row.posta_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -484,6 +500,43 @@ async function createAwbForOrder(
         numarPaleti: 1,
         greutateKg: weight,
         observatii: content.slice(0, 100),
+      });
+    }
+    case "posta": {
+      /*
+       * ⚠ Adresa se compune EXACT ca in `PostaAwbModal`, ca lotul si emiterea pe
+       * bucata sa trimita acelasi text la Posta. Doua compuneri diferite ar
+       * insemna ca aceeasi comanda pleaca cu adrese diferite dupa cum a fost
+       * apasat butonul — si diferenta s-ar vedea abia pe eticheta tiparita.
+       *
+       * ⚠ Livrarea la OFICIU (post-restant) se recunoaste dupa alegerea din
+       * checkout, la fel ca punctele GLS. Acolo `locker_id` e chiar `idOficiuPR`,
+       * iar localitatea si judetul sunt ALE OFICIULUI, nu ale clientului.
+       *
+       * Data de prezentare se lasa NECOMPLETATA dinadins: actiunea o calculeaza
+       * din configurarea magazinului, deci lotul si formularul cad pe aceleasi
+       * valori implicite.
+       */
+      const laOficiu = (addr.courier ?? "").toLowerCase().trim() === "posta"
+        && addr.delivery_type === "locker"
+        && !!addr.locker_id;
+      return createPostaAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          strada: street,
+          numar: streetNo || null,
+          oras: (laOficiu ? addr.locker_city : "") || city,
+          judet: ((laOficiu ? addr.locker_county : "") || county) || null,
+          codPostal: ((laOficiu ? addr.locker_post_code : "") || zip) || null,
+          telefon: o.customer_phone,
+          email,
+        },
+        greutateKg: weight,
+        continut: content,
+        ramburs: cod,
+        valoareMarfa: Number(o.total) || 0,
+        postRestant: laOficiu,
+        idOficiuPR: laOficiu ? addr.locker_id : null,
       });
     }
     default:

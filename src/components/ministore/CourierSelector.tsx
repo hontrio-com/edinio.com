@@ -267,6 +267,22 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
   const selectedOpt = options.find((o) => optionKey(o) === selectedKey);
   const isLockerSelected = selectedOpt?.deliveryType === "locker";
 
+  /*
+   * ⚠ La Posta Romana punctul NU e un locker, e un OFICIU POSTAL.
+   *
+   * Livrarea „post-restant" merge pe acelasi drum ca lockerele (`deliveryType:
+   * "locker"`, alegerea in `locker_id`), fiindca pentru cumparator arata la fel:
+   * alege un loc de unde isi ia coletul. Dar cuvantul nu se poate imprumuta —
+   * „Selecteaza un locker" pentru un ghiseu de posta il pune pe om sa caute un
+   * dulap care nu exista.
+   *
+   * Se schimba DOAR substantivul, si doar pentru Posta: ceilalti curieri raman
+   * exact cum erau.
+   */
+  const laOficiuPostal = selectedOpt?.courier === "posta";
+  const punctul = laOficiuPostal ? "oficiu poștal" : "locker";
+  const punctele = laOficiuPostal ? "oficii poștale" : "lockere";
+
   return (
     <div className="space-y-2">
       <p className="text-sm font-semibold text-foreground">Metoda de livrare</p>
@@ -338,7 +354,10 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">{opt.courierLabel}</p>
-              <p className="text-xs text-muted-foreground">Ridicare din locker</p>
+              {/* Per OPTIUNE, nu dupa cea selectata: randul asta se vede si inainte de a alege. */}
+              <p className="text-xs text-muted-foreground">
+                {opt.courier === "posta" ? "Ridicare de la oficiu poștal" : "Ridicare din locker"}
+              </p>
             </div>
             <div className="text-right shrink-0">
               <p className="text-sm font-bold" style={{ color: selected ? color : "var(--color-foreground)" }}>
@@ -369,11 +388,11 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
           {lockersLoading ? (
             <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/40">
               <Loader2 size={14} className="animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Se incarca lockerele...</span>
+              <span className="text-xs text-muted-foreground">Se incarca {punctele}...</span>
             </div>
           ) : lockers.length === 0 ? (
             <div className="p-3 rounded-lg border border-warning/20 bg-warning/10">
-              <p className="text-xs text-warning">Nu au fost gasite lockere in aceasta localitate.</p>
+              <p className="text-xs text-warning">Nu au fost gasite {punctele} in aceasta localitate.</p>
             </div>
           ) : (
             <div className="relative">
@@ -389,7 +408,7 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
               >
                 <MapPin size={14} className="text-muted-foreground shrink-0" />
                 <span className="flex-1 text-sm truncate" style={{ color: selectedLocker ? "var(--color-foreground)" : "var(--color-muted-foreground)" }}>
-                  {selectedLocker ? selectedLocker.name : "Selecteaza un locker..."}
+                  {selectedLocker ? selectedLocker.name : `Selecteaza un ${punctul}...`}
                 </span>
                 <ChevronDown size={14} className="text-muted-foreground shrink-0" />
               </button>
@@ -408,7 +427,7 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
                       type="text"
                       value={lockerSearch}
                       onChange={(e) => setLockerSearch(e.target.value)}
-                      placeholder="Cauta locker..."
+                      placeholder={`Cauta ${punctul}...`}
                       className="flex-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none bg-transparent"
                     />
                     {lockerSearch && (
@@ -420,7 +439,7 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
                   {/* List */}
                   <div className="overflow-y-auto max-h-52">
                     {filteredLockers.length === 0 ? (
-                      <p className="text-xs text-muted-foreground p-3 text-center">Niciun locker gasit</p>
+                      <p className="text-xs text-muted-foreground p-3 text-center">Niciun rezultat</p>
                     ) : (
                       filteredLockers.slice(0, 50).map((locker) => (
                         <button

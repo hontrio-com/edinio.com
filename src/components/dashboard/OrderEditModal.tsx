@@ -20,6 +20,7 @@ import { deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { cancelWootAwb } from "@/lib/actions/woot.actions";
 import { deleteGlsAwbAction } from "@/lib/actions/gls.actions";
 import { deletePallexAwbAction } from "@/lib/actions/pallex.actions";
+import { dezleagaPostaAwbAction } from "@/lib/actions/posta.actions";
 import { deleteEcoletAwbAction } from "@/lib/actions/ecolet.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
@@ -341,6 +342,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
          („anuleaza si din contul Colete"), care n-are nicio legatura cu eColet. */
       list.push({ key: "ecolet", label: "eColet (se emite...)", awb: "in curs" });
     }
+    /* Posta: manualOnly, ca la Colete Online, dar din alt motiv — API-ul lor NU
+       are metoda de anulare. Din panou se poate doar scoate numarul de pe
+       comanda, dupa ce omul a anulat trimiterea la oficiu sau in aplicatia lor. */
+    if (order.posta_awb_number) list.push({ key: "posta", label: "Posta Romana", awb: order.posta_awb_number, manualOnly: true });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -590,6 +595,21 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   }
 
   function handleCancelAwb(key: string) {
+    /*
+     * ⚠ Posta NU se anuleaza prin API — nu exista metoda, desi statusul 56
+     * „Anulat" exista in nomenclatorul lor. Se cere confirmarea explicita a
+     * comerciantului ca a anulat la ei, si abia atunci se scoate numarul de pe
+     * comanda. Fara pasul asta, panoul ar lasa impresia ca a anulat ceva ce e inca
+     * viu la Posta — iar coletul ar pleca oricum, pe o comanda ramasa fara numar.
+     */
+    if (key === "posta") {
+      const confirmat = confirm(
+        "Posta Romana nu poate fi anulata prin API. Ai anulat deja trimiterea la oficiu "
+        + "sau in aplicatia lor?\n\nApasa OK doar daca ai facut-o — altfel coletul pleaca, "
+        + "iar comanda ramane fara numar de urmarire.",
+      );
+      if (!confirmat) return;
+    }
     if (key === "woot" && !order.woot_order_id) {
       toast.error("Comanda nu are ID-ul expedierii Woot. Anuleaza AWB-ul din contul Woot, apoi contacteaza suportul.");
       return;
@@ -605,10 +625,15 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "gls") res = await deleteGlsAwbAction(businessId, order.id);
       else if (key === "pallex") res = await deletePallexAwbAction(businessId, order.id);
       else if (key === "ecolet") res = await deleteEcoletAwbAction(businessId, order.id);
+      else if (key === "posta") res = await dezleagaPostaAwbAction(businessId, order.id, true);
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }
-      toast.success(key === "colete" ? "AWB detasat. Nu uita sa anulezi expedierea si in contul Colete Online." : "AWB anulat.");
+      toast.success(
+        key === "colete" ? "AWB detasat. Nu uita sa anulezi expedierea si in contul Colete Online."
+        : key === "posta" ? "Numarul a fost scos de pe comanda. Anularea la Posta se face separat, la ei."
+        : "AWB anulat.",
+      );
       router.refresh();
     });
   }

@@ -2020,6 +2020,12 @@ export type Database = {
           pallex_status_id: string | null
           payment_method: string
           payment_status: string
+          posta_awb_at: string | null
+          posta_awb_number: string | null
+          posta_borderou_id: number | null
+          posta_oficiu_id: string | null
+          posta_status_checked_at: string | null
+          posta_status_code: string | null
           revolut_order_id: string | null
           sameday_awb_number: string | null
           shipping_address: Json
@@ -2119,6 +2125,12 @@ export type Database = {
           pallex_status_id?: string | null
           payment_method?: string
           payment_status?: string
+          posta_awb_at?: string | null
+          posta_awb_number?: string | null
+          posta_borderou_id?: number | null
+          posta_oficiu_id?: string | null
+          posta_status_checked_at?: string | null
+          posta_status_code?: string | null
           revolut_order_id?: string | null
           sameday_awb_number?: string | null
           shipping_address: Json
@@ -2218,6 +2230,12 @@ export type Database = {
           pallex_status_id?: string | null
           payment_method?: string
           payment_status?: string
+          posta_awb_at?: string | null
+          posta_awb_number?: string | null
+          posta_borderou_id?: number | null
+          posta_oficiu_id?: string | null
+          posta_status_checked_at?: string | null
+          posta_status_code?: string | null
           revolut_order_id?: string | null
           sameday_awb_number?: string | null
           shipping_address?: Json
@@ -2337,6 +2355,47 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      posta_plaja: {
+        Row: {
+          business_id: string
+          cifre: number
+          created_at: string
+          de_la: number
+          pana_la: number
+          prefix: string
+          updated_at: string
+          urmator: number
+        }
+        Insert: {
+          business_id: string
+          cifre?: number
+          created_at?: string
+          de_la: number
+          pana_la: number
+          prefix?: string
+          updated_at?: string
+          urmator: number
+        }
+        Update: {
+          business_id?: string
+          cifre?: number
+          created_at?: string
+          de_la?: number
+          pana_la?: number
+          prefix?: string
+          updated_at?: string
+          urmator?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posta_plaja_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_import_rows: {
         Row: {
@@ -2916,6 +2975,7 @@ export type Database = {
           page_content: Json
           pallex_config: Json | null
           payment_methods: Json
+          posta_config: Json | null
           prices_include_vat: boolean
           returns_config: Json
           revolut_config: Json | null
@@ -2981,6 +3041,7 @@ export type Database = {
           page_content?: Json
           pallex_config?: Json | null
           payment_methods?: Json
+          posta_config?: Json | null
           prices_include_vat?: boolean
           returns_config?: Json
           revolut_config?: Json | null
@@ -3046,6 +3107,7 @@ export type Database = {
           page_content?: Json
           pallex_config?: Json | null
           payment_methods?: Json
+          posta_config?: Json | null
           prices_include_vat?: boolean
           returns_config?: Json
           revolut_config?: Json | null
@@ -3770,6 +3832,13 @@ export type Database = {
         }[]
       }
       reclaim_order_discount: { Args: { p_order_id: string }; Returns: string }
+      /* ⚠ `Returns: string | null` — NULL cand magazinul n-are plaja sau cand
+         s-a epuizat. Apelantul TREBUIE sa trateze cazul: vezi comentariul din
+         migrations/2026-09-02-posta-curier.sql. */
+      posta_aloca_cod: {
+        Args: { p_business_id: string }
+        Returns: string | null
+      }
       release_discount_use: {
         Args: { p_discount_id: string }
         Returns: undefined

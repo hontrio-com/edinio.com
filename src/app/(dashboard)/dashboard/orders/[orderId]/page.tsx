@@ -12,6 +12,7 @@ import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
 import type { PallExConfig } from "@/lib/pallex/client";
 import type { EcoletConfig } from "@/lib/ecolet/client";
+import type { PostaConfig } from "@/lib/posta/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday";
 import type { SmsoConfig } from "@/lib/smso";
@@ -44,7 +45,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -78,6 +79,12 @@ export default async function OrderDetailPage({ params }: Props) {
   /* Aceeasi regula ca in `ecoletGata`, in features/page.tsx si in settings. */
   const ec = settings?.ecolet_config as EcoletConfig | null;
   const ecoletEnabled = !!(ec?.enabled && ec?.api_token);
+  /* Aceeasi regula ca in `postaGata`, in orders/page.tsx si in features:
+     `cod_trimitere` intra in ea desi nu e credentiala, fiindca fara el Posta
+     respinge fiecare AWB. */
+  const po = settings?.posta_config as PostaConfig | null;
+  const postaEnabled = !!(po?.enabled && po?.username && po?.cod_trimitere);
+  const postaZilePrezentare = po?.zile_pana_la_prezentare ?? 0;
   /* Termenele implicite ale formularului de partida: aceleasi pe care le
      foloseste si serverul cand datele lipsesc din cerere. */
   const pallexZile = { ridicare: pe?.zile_pana_la_ridicare ?? 1, livrare: pe?.zile_pana_la_livrare ?? 2 };
@@ -117,6 +124,8 @@ export default async function OrderDetailPage({ params }: Props) {
       glsEnabled={glsEnabled}
       pallexEnabled={pallexEnabled}
       ecoletEnabled={ecoletEnabled}
+      postaEnabled={postaEnabled}
+      postaZilePrezentare={postaZilePrezentare}
       pallexZile={pallexZile}
       fanCourierEnabled={fanCourierEnabled}
       samedayEnabled={samedayEnabled}

@@ -234,6 +234,7 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "gls",          label: "GLS",               logo: "/integrations/gls.svg",          defaultPrice: 18 },
   { id: "pallex",       label: "Pall-Ex",           logo: "/integrations/pallex.avif",      defaultPrice: 150 },
   { id: "ecolet",       label: "eColet",            logo: "/integrations/ecolet.png",       defaultPrice: 18 },
+  { id: "posta",        label: "Posta Romana",      logo: "/integrations/posta_romana.svg", defaultPrice: 16 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -250,6 +251,10 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   gls: "Livrare prin GLS",
   pallex: "Livrare paletizata Pall-Ex",
   ecolet: "eColet",
+  /* Trebuie sa ramana in pas cu `addrLabel` din shipping.actions.ts: aici e doar
+     substituentul aratat comerciantului, iar daca cele doua se despart, campul
+     gol promite un text si checkout-ul afiseaza altul. */
+  posta: "Livrare prin Poșta Română",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -263,7 +268,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
  * fix, lasand livrarea pe zero lei. Trebuie sa ramana in pas cu
  * `FARA_API_DE_TARIF` din src/lib/actions/shipping.actions.ts.
  */
-const FARA_PRET_AUTOMAT = new Set(["gls", "pallex"]);
+const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta"]);
 
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};

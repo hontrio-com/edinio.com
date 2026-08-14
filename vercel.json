@@ -80,6 +80,10 @@
     {
       "path": "/api/cron/ecolet-tracking",
       "schedule": "17 */2 * * *"
+    },
+    {
+      "path": "/api/cron/posta-tracking",
+      "schedule": "29 */2 * * *"
     }
   ]
 }

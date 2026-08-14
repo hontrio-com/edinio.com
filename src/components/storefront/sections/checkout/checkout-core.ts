@@ -371,7 +371,11 @@ export function useCheckoutOrder({
     // muta focusul.
     Object.assign(e, companyBilling.validateCompany());
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
-    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
+    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) {
+      /* La Posta punctul e un OFICIU POSTAL, nu un locker: mesajul il trimite pe
+         cumparator sa caute un dulap care nu exista. Vezi si CourierSelector. */
+      e.courier = courierSelection.courier === "posta" ? "Alege un oficiu postal" : "Selecteaza un locker";
+    }
     /*
      * ⚠ Livrarea la punct GLS cere emailul, chiar daca magazinul l-a facut
      * optional.

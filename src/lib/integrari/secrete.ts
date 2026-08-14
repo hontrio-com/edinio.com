@@ -56,6 +56,12 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      cerere. `username` NU e secret — e mailul cu care intra comerciantul in
      ClientPlus si trebuie sa se vada in formular, ca sa stie ce cont a legat. */
   pallex_config: ["password"],
+  /* Posta Romana: autentificare HTTP Basic, deci parola pleaca la fiecare cerere.
+     `username` NU e secret — e contul cu care intra comerciantul la Posta si
+     trebuie sa se vada in formular, ca sa stie ce cont a legat. Nici
+     `cod_trimitere` nu e: e un identificator de contract pe care omul il copiaza
+     din contract si trebuie sa-l poata reciti ca sa-l verifice. */
+  posta_config: ["password"],
   revolut_config: ["secret_key", "signing_secret", "token"],
   sameday_config: ["password"],
   smartbill_config: ["token"],

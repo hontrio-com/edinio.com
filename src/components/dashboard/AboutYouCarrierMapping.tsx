@@ -20,6 +20,7 @@ const COURIERS: { code: string; label: string }[] = [
   { code: "gls", label: "GLS" },
   { code: "pallex", label: "Pall-Ex" },
   { code: "ecolet", label: "eColet" },
+  { code: "posta", label: "Poșta Română" },
 ];
 
 export function AboutYouCarrierMapping({

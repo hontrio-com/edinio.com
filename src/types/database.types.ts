@@ -2893,6 +2893,7 @@ export type Database = {
           ecolet_config: Json | null
           email_config: Json
           fan_courier_config: Json | null
+          facebook_feeds: Json | null
           fgo_config: Json | null
           free_shipping_threshold: number | null
           gls_config: Json | null
@@ -2957,6 +2958,7 @@ export type Database = {
           ecolet_config?: Json | null
           email_config?: Json
           fan_courier_config?: Json | null
+          facebook_feeds?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
@@ -3021,6 +3023,7 @@ export type Database = {
           ecolet_config?: Json | null
           email_config?: Json
           fan_courier_config?: Json | null
+          facebook_feeds?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null

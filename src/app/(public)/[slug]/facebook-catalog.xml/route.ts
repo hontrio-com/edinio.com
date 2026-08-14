@@ -2,6 +2,8 @@ import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { buildCatalogItems, serializeCatalogFeed, type CatalogBusiness, type CatalogProduct } from "@/lib/facebook/catalog-feed";
+import { numeCuDescendenti, parseFeeduri, produseDinFeed, type RegulaFeed } from "@/lib/facebook/feeduri";
+import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
 import { logError } from "@/lib/error-logger";
 
 export const dynamic = "force-dynamic";
@@ -41,9 +43,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ slug: string }>
   }
 }
 
-async function construieste(_req: Request, { params }: { params: Promise<{ slug: string }> }): Promise<Response> {
+async function construieste(req: Request, { params }: { params: Promise<{ slug: string }> }): Promise<Response> {
   const { slug } = await params;
   const admin = createAdminClient();
+  /* ⚠ Fara `?feed=`, raspunsul ramane EXACT cel de pana acum: tot catalogul.
+     Adresa veche e deja lipita in conturile Meta ale comerciantilor. */
+  const cheieFeed = new URL(req.url).searchParams.get("feed")?.trim().toLowerCase() || "";
 
   const { data: biz } = await admin
     .from("businesses")
@@ -58,6 +63,34 @@ async function construieste(_req: Request, { params }: { params: Promise<{ slug:
     store_name: biz.store_name,
     business_name: biz.business_name,
   };
+
+  /*
+   * Feedurile segmentate stau in `store_settings`, ca restul configurarilor.
+   * Se citesc doar cand chiar se cere unul: pentru feedul intreg n-are rost inca
+   * o interogare la fiecare citire a lui Meta.
+   */
+  let regula: RegulaFeed | null = null;
+  let numeCategorii = new Set<string>();
+  if (cheieFeed) {
+    const [{ data: setari }, { data: categorii }] = await Promise.all([
+      admin.from("store_settings").select("facebook_feeds").eq("business_id", biz.id).maybeSingle(),
+      admin.from("categories").select("id, name, parent_id").eq("business_id", biz.id),
+    ]);
+    regula = parseFeeduri(setari?.facebook_feeds).find((f) => f.cheie === cheieFeed) ?? null;
+    /*
+     * ⚠ 404, nu „tot catalogul".
+     *
+     * Un feed sters sau scris gresit care ar raspunde cu TOATE produsele ar
+     * umple in tacere un catalog care trebuia sa aiba treizeci de articole — si
+     * comerciantul ar afla din reclame. 404 il face pe Meta sa pastreze ce are
+     * si sa raporteze eroare la sursa de date.
+     */
+    if (!regula) return new Response("Feed inexistent", { status: 404 });
+    numeCategorii = numeCuDescendenti(
+      (categorii ?? []) as unknown as StoreCategoryNode[],
+      regula.categorii ?? [],
+    );
+  }
 
   const products = await fetchAllRowsStrict("fbCatalog.products", (from, to) =>
     admin
@@ -79,20 +112,34 @@ async function construieste(_req: Request, { params }: { params: Promise<{ slug:
    * nicio interogare in plus.
    */
   const dupaId = new Map(products.map((p) => [p.id, p]));
-  const items = products.flatMap((p) => {
-    const pachetDisponibil = p.is_bundle
-      ? disponibilitatePachet((readBundleConfig(p.page_sections)?.items ?? []).map((it) => {
-          const c = dupaId.get(it.product_id);
-          return {
-            quantity: it.quantity,
-            vandabila: !!c,
-            track_inventory: !!c?.track_inventory,
-            stock_quantity: c?.stock_quantity ?? null,
-          };
-        })).inStock
-      : undefined;
-    return buildCatalogItems(business, { ...p, pachetDisponibil } as CatalogProduct);
-  });
+
+  /*
+   * ⚠ Disponibilitatea pachetului se calculeaza INAINTE de filtrare, si din
+   * lista INTREAGA: componentele unui pachet pot fi in alta categorie decat el,
+   * deci filtrand intai, `dupaId` n-ar mai contine componentele si orice pachet
+   * ar iesi indisponibil.
+   */
+  const disponibil = (p: (typeof products)[number]) => p.is_bundle
+    ? disponibilitatePachet((readBundleConfig(p.page_sections)?.items ?? []).map((it) => {
+        const c = dupaId.get(it.product_id);
+        return {
+          quantity: it.quantity,
+          vandabila: !!c,
+          track_inventory: !!c?.track_inventory,
+          stock_quantity: c?.stock_quantity ?? null,
+        };
+      })).inStock
+    : undefined;
+
+  const alese = regula
+    ? produseDinFeed(
+        regula,
+        products.map((p) => ({ ...p, pachetDisponibil: disponibil(p) })),
+        numeCategorii,
+      )
+    : products.map((p) => ({ ...p, pachetDisponibil: disponibil(p) }));
+
+  const items = alese.flatMap((p) => buildCatalogItems(business, p as unknown as CatalogProduct));
   const xml = serializeCatalogFeed(business, items);
 
   return new Response(xml, {

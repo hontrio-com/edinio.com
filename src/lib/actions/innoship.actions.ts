@@ -228,6 +228,17 @@ export type DateAwbInnoship = {
   /** Curierul ales de cumparator in checkout. */
   courierId?: number | null;
   serviceId?: number | null;
+  /** A treia parte a cheii ofertei. Poate lipsi legitim: nu toate au varianta. */
+  optionId?: string | null;
+  /**
+   * Numele ofertei alese, doar pentru afisare.
+   *
+   * ⚠ Se duc pana pe comanda fiindca altfel panoul n-ar avea ce arata fara o
+   * citire in nomenclator: `OrderResponse` intoarce `courierServiceName`, dar nu si
+   * numele curierului. Acelasi rationament ca la `woot_service_name`.
+   */
+  courierName?: string | null;
+  serviceName?: string | null;
   ziuaExpedierii?: string | null;
 };
 
@@ -365,11 +376,20 @@ export async function createInnoshipAwbAction(
   const { error: eScriere, data: randuri } = await supabase.from("orders").update({
     innoship_awb_number: awb,
     innoship_order_id: raspuns?.clientOrderId ?? (Number(dinRegistru?.clientOrderId) || null),
-    innoship_courier_id: raspuns?.courier ?? (Number(dinRegistru?.courier) || null),
-    innoship_courier_name: null,
+    /*
+     * ⚠ CU CADERE PE CURIERUL CERUT, si nu de prisos.
+     *
+     * `innoship_courier_id` e OBLIGATORIU in adresa etichetei si a anularii. Daca
+     * raspunsul lor n-ar contine `courier` — camp optional in schema —, comanda ar
+     * ramane cu un AWB pe care nu se mai poate nici tipari, nici anula. Curierul
+     * pe care l-am CERUT e cea mai buna a doua sursa: la emitere il trimitem
+     * mereu, ales de cumparator in checkout.
+     */
+    innoship_courier_id: raspuns?.courier ?? (Number(dinRegistru?.courier) || null) ?? corp.courierId ?? null,
+    innoship_courier_name: date.courierName ?? null,
     innoship_service_id: corp.serviceId,
-    innoship_option_id: null,
-    innoship_service_name: raspuns?.courierServiceName ?? (dinRegistru?.courierServiceName as string | null) ?? null,
+    innoship_option_id: date.optionId ?? null,
+    innoship_service_name: raspuns?.courierServiceName ?? (dinRegistru?.courierServiceName as string | null) ?? date.serviceName ?? null,
     innoship_track_url: raspuns?.trackPageUrl ?? (dinRegistru?.trackPageUrl as string | null) ?? null,
     innoship_awb_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

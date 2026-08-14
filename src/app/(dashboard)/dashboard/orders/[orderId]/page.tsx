@@ -13,6 +13,7 @@ import type { GlsConfig } from "@/lib/gls/client";
 import type { PallExConfig } from "@/lib/pallex/client";
 import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { PostaConfig } from "@/lib/posta/client";
+import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday";
 import type { SmsoConfig } from "@/lib/smso";
@@ -45,7 +46,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -85,6 +86,8 @@ export default async function OrderDetailPage({ params }: Props) {
   const po = settings?.posta_config as PostaConfig | null;
   const postaEnabled = !!(po?.enabled && po?.username && po?.cod_trimitere);
   const postaZilePrezentare = po?.zile_pana_la_prezentare ?? 0;
+  const io = settings?.innoship_config as InnoshipConfig | null;
+  const innoshipEnabled = !!(io?.enabled && io?.api_key && io?.external_client_location);
   /* Termenele implicite ale formularului de partida: aceleasi pe care le
      foloseste si serverul cand datele lipsesc din cerere. */
   const pallexZile = { ridicare: pe?.zile_pana_la_ridicare ?? 1, livrare: pe?.zile_pana_la_livrare ?? 2 };
@@ -126,6 +129,7 @@ export default async function OrderDetailPage({ params }: Props) {
       ecoletEnabled={ecoletEnabled}
       postaEnabled={postaEnabled}
       postaZilePrezentare={postaZilePrezentare}
+      innoshipEnabled={innoshipEnabled}
       pallexZile={pallexZile}
       fanCourierEnabled={fanCourierEnabled}
       samedayEnabled={samedayEnabled}

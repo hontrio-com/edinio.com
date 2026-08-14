@@ -84,6 +84,10 @@
     {
       "path": "/api/cron/posta-tracking",
       "schedule": "29 */2 * * *"
+    },
+    {
+      "path": "/api/cron/innoship-tracking",
+      "schedule": "7 */6 * * *"
     }
   ]
 }

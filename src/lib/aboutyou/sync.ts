@@ -579,6 +579,7 @@ const COURIER_FIELDS: { field: string; courier: string }[] = [
   { field: "pallex_awb_number", courier: "pallex" },
   { field: "ecolet_awb_number", courier: "ecolet" },
   { field: "posta_awb_number", courier: "posta" },
+  { field: "innoship_awb_number", courier: "innoship" },
 ];
 
 export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId: string): Promise<SyncOutcome> {
@@ -588,7 +589,7 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
        se selecteaza nu ajunge in `row`, iar bucla de mai jos ar cauta un camp
        inexistent si ar iesi cu „skipped" — adica un succes raportat pentru o
        comanda ramasa neexpediata la marketplace. */
-    .select("id, tracking_number, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_awb_number, colete_awb_number, woot_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, posta_awb_number")
+    .select("id, tracking_number, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_awb_number, colete_awb_number, woot_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, posta_awb_number, innoship_awb_number")
     .eq("id", orderId).eq("business_id", ctx.businessId).maybeSingle();
   if (!order) return { ok: true, action: "skipped" };
 

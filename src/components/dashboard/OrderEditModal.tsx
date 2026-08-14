@@ -21,6 +21,7 @@ import { cancelWootAwb } from "@/lib/actions/woot.actions";
 import { deleteGlsAwbAction } from "@/lib/actions/gls.actions";
 import { deletePallexAwbAction } from "@/lib/actions/pallex.actions";
 import { dezleagaPostaAwbAction } from "@/lib/actions/posta.actions";
+import { deleteInnoshipAwbAction } from "@/lib/actions/innoship.actions";
 import { deleteEcoletAwbAction } from "@/lib/actions/ecolet.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
@@ -346,6 +347,8 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
        are metoda de anulare. Din panou se poate doar scoate numarul de pe
        comanda, dupa ce omul a anulat trimiterea la oficiu sau in aplicatia lor. */
     if (order.posta_awb_number) list.push({ key: "posta", label: "Posta Romana", awb: order.posta_awb_number, manualOnly: true });
+    /* Innoship ARE anulare in API, spre deosebire de Posta: fara `manualOnly`. */
+    if (order.innoship_awb_number) list.push({ key: "innoship", label: "Innoship", awb: order.innoship_awb_number });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -626,6 +629,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "pallex") res = await deletePallexAwbAction(businessId, order.id);
       else if (key === "ecolet") res = await deleteEcoletAwbAction(businessId, order.id);
       else if (key === "posta") res = await dezleagaPostaAwbAction(businessId, order.id, true);
+      else if (key === "innoship") res = await deleteInnoshipAwbAction(businessId, order.id);
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }

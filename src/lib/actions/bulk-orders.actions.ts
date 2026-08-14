@@ -28,6 +28,8 @@ import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
 import { pallexGata, type PallExConfig } from "@/lib/pallex/client";
 import { postaGata, type PostaConfig } from "@/lib/posta/client";
+import { innoshipGata, type InnoshipConfig } from "@/lib/innoship/client";
+import { createInnoshipAwbAction } from "@/lib/actions/innoship.actions";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -50,8 +52,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -225,7 +227,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -234,6 +236,7 @@ export async function bulkGenerateAwbs(
   const gl = settings?.gls_config as GlsConfig | null;
   const pe = settings?.pallex_config as PallExConfig | null;
   const po = settings?.posta_config as PostaConfig | null;
+  const io = settings?.innoship_config as InnoshipConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -254,6 +257,9 @@ export async function bulkGenerateAwbs(
        porni pe comenzi pe care actiunea per comanda le refuza oricum — adica 50
        de esecuri raportate unul cate unul, in loc de un mesaj limpede. */
     posta: postaGata(po),
+    /* Aceeasi regula ca in `innoshipGata`: cheia de API si id-ul depozitului.
+       Fara al doilea, fiecare comanda ar fi refuzata de actiune oricum. */
+    innoship: innoshipGata(io),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -269,7 +275,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -288,6 +294,7 @@ export async function bulkGenerateAwbs(
     gls: "gls",
     pallex: "pallex", "pall-ex": "pallex",
     posta: "posta", "posta-romana": "posta",
+    innoship: "innoship",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -310,6 +317,7 @@ export async function bulkGenerateAwbs(
       : target === "gls" ? row.gls_awb_number
       : target === "pallex" ? row.pallex_awb_number
       : target === "posta" ? row.posta_awb_number
+      : target === "innoship" ? row.innoship_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -537,6 +545,54 @@ async function createAwbForOrder(
         valoareMarfa: Number(o.total) || 0,
         postRestant: laOficiu,
         idOficiuPR: laOficiu ? addr.locker_id : null,
+      });
+    }
+    case "innoship": {
+      /*
+       * ⚠ Alegerea cumparatorului din checkout se duce INTREAGA, toate cele trei
+       * parti ale cheii. Pastrat doar curierul, lotul ar emite pe alt serviciu
+       * decat cel cotat si platit — iar diferenta o suporta comerciantul.
+       *
+       * Cand comanda n-are alegerea salvata (a fost facuta inainte de integrare,
+       * sau pe alt curier), campurile pleaca goale: atunci `corpComanda` cade pe
+       * serviciul implicit din configurare, iar Innoship alege singur curierul
+       * dupa regulile contului.
+       */
+      const laPunct = (addr.courier ?? "").toLowerCase().trim() === "innoship"
+        && addr.delivery_type === "locker"
+        && !!addr.locker_id;
+      const ales = addr as ShippingAddr & {
+        innoship_courier_id?: number;
+        innoship_service_id?: number;
+        innoship_option_id?: string;
+        innoship_courier_name?: string;
+        innoship_service_name?: string;
+      };
+
+      return createInnoshipAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          persoanaContact: o.customer_name,
+          strada: street,
+          numar: streetNo || null,
+          /* La punct, localitatea si judetul sunt ALE PUNCTULUI, nu ale clientului. */
+          oras: (laPunct ? addr.locker_city : "") || city,
+          judet: ((laPunct ? addr.locker_county : "") || county) || null,
+          codPostal: ((laPunct ? addr.locker_post_code : "") || zip) || null,
+          telefon: o.customer_phone,
+          email,
+        },
+        greutateKg: weight,
+        continut: content,
+        ramburs: cod,
+        valoareDeclarata: Number(o.total) || 0,
+        felLivrare: laPunct ? "locker" : "domiciliu",
+        fixedLocationId: laPunct ? addr.locker_id : null,
+        courierId: ales.innoship_courier_id ?? null,
+        serviceId: ales.innoship_service_id ?? null,
+        optionId: ales.innoship_option_id ?? null,
+        courierName: ales.innoship_courier_name ?? null,
+        serviceName: ales.innoship_service_name ?? null,
       });
     }
     default:

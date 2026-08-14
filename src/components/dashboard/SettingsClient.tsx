@@ -235,6 +235,7 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "pallex",       label: "Pall-Ex",           logo: "/integrations/pallex.avif",      defaultPrice: 150 },
   { id: "ecolet",       label: "eColet",            logo: "/integrations/ecolet.png",       defaultPrice: 18 },
   { id: "posta",        label: "Posta Romana",      logo: "/integrations/posta_romana.svg", defaultPrice: 16 },
+  { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -255,6 +256,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
      substituentul aratat comerciantului, iar daca cele doua se despart, campul
      gol promite un text si checkout-ul afiseaza altul. */
   posta: "Livrare prin Poșta Română",
+  innoship: "Innoship",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };

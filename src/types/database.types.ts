@@ -1992,6 +1992,18 @@ export type Database = {
           fgo_storno_number: string | null
           fgo_storno_series: string | null
           id: string
+          innoship_awb_at: string | null
+          innoship_awb_number: string | null
+          innoship_cod_status_code: string | null
+          innoship_courier_id: number | null
+          innoship_courier_name: string | null
+          innoship_option_id: string | null
+          innoship_order_id: number | null
+          innoship_service_id: number | null
+          innoship_service_name: string | null
+          innoship_status_checked_at: string | null
+          innoship_status_code: string | null
+          innoship_track_url: string | null
           internal_notes: string | null
           ipay_order_id: string | null
           ipay_order_number: string | null
@@ -2097,6 +2109,18 @@ export type Database = {
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null
           id?: string
+          innoship_awb_at?: string | null
+          innoship_awb_number?: string | null
+          innoship_cod_status_code?: string | null
+          innoship_courier_id?: number | null
+          innoship_courier_name?: string | null
+          innoship_option_id?: string | null
+          innoship_order_id?: number | null
+          innoship_service_id?: number | null
+          innoship_service_name?: string | null
+          innoship_status_checked_at?: string | null
+          innoship_status_code?: string | null
+          innoship_track_url?: string | null
           internal_notes?: string | null
           ipay_order_id?: string | null
           ipay_order_number?: string | null
@@ -2202,6 +2226,18 @@ export type Database = {
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null
           id?: string
+          innoship_awb_at?: string | null
+          innoship_awb_number?: string | null
+          innoship_cod_status_code?: string | null
+          innoship_courier_id?: number | null
+          innoship_courier_name?: string | null
+          innoship_option_id?: string | null
+          innoship_order_id?: number | null
+          innoship_service_id?: number | null
+          innoship_service_name?: string | null
+          innoship_status_checked_at?: string | null
+          innoship_status_code?: string | null
+          innoship_track_url?: string | null
           internal_notes?: string | null
           ipay_order_id?: string | null
           ipay_order_number?: string | null
@@ -2956,6 +2992,7 @@ export type Database = {
           fgo_config: Json | null
           free_shipping_threshold: number | null
           gls_config: Json | null
+          innoship_config: Json | null
           google_analytics_config: Json
           google_merchant_config: Json
           id: string
@@ -3022,6 +3059,7 @@ export type Database = {
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
+          innoship_config?: Json | null
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string
@@ -3088,6 +3126,7 @@ export type Database = {
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
+          innoship_config?: Json | null
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string

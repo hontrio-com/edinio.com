@@ -47,6 +47,12 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   fan_courier_config: ["password"],
   fgo_config: ["private_key"],
   gls_config: ["password"],
+  /* Innoship: o singura cheie de API, trimisa ca `X-Api-Key` la fiecare cerere.
+     ⚠ `webhook_secret` NU intra aici, desi se cripteaza in repaus: e partea
+     secreta din URL-ul pe care comerciantul trebuie sa-l copieze in portalul
+     Innoship. Acelasi caz ca `notice_config.webhook_secret` — vezi nota de mai
+     sus. Nici `external_client_location` nu e secret: e id-ul depozitului lui. */
+  innoship_config: ["api_key"],
   ipay_config: ["password"],
   klarna_config: ["password", "authorization_token"],
   netopia_config: ["api_key", "pos_signature"],

@@ -62,12 +62,25 @@ type Integration = {
    * „vine". Cine vede lacatul cauta de unde sa-l deschida, cine vede „IN
    * CURAND" asteapta; sunt doua mesaje diferite catre acelasi om.
    *
-   * Cand integrarea se livreaza: se scoate `soon`, se pune `id`, si id-ul se
-   * adauga in lanturile `isUnlocked` / `href` de mai jos.
+   * Cand integrarea se livreaza: se scoate `soon`, se pune `id`, id-ul se adauga
+   * in lanturile `isUnlocked` / `href` de mai jos — si cardul SE MUTA la locul
+   * lui, printre cele livrate. Vezi regula de la `SECTIONS`.
    */
   soon?: true;
 };
 
+/**
+ * ⚠ IN FIECARE RUBRICA: INTAI CE E LIVRAT, LA URMA CE E „IN CURAND".
+ *
+ * Lista se randeaza in ordinea scrisa aici, deci ordinea din fisier E ordinea de
+ * pe ecran. Un card livrat lasat printre cele „in curand" (unde statea cat timp
+ * era doar anuntat) rupe sirul: omul citeste rubrica de sus in jos, se opreste la
+ * primul „IN CURAND" si nu mai afla ca sub el mai e ceva ce poate folosi CHIAR
+ * ACUM.
+ *
+ * S-a intamplat la Posta Romana: livrata, dar ramasa intre UPS si Packeta,
+ * fiindca acolo statea inainte si acolo i s-a schimbat steagul.
+ */
 const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
   {
     id: "curieri",
@@ -82,12 +95,12 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "GLS",           logo: "/integrations/gls.svg", id: "gls" },
       { name: "Pall-Ex",       logo: "/integrations/pallex.avif", id: "pallex" },
       { name: "eColet",        logo: "/integrations/ecolet.png", id: "ecolet" },
+      { name: "Poșta Română", logo: "/integrations/posta_romana.svg", id: "posta" },
       /* Intai transportatorii, apoi brokerii — aceeasi ordine ca mai sus, unde
          Fan Courier si DPD stau inaintea lui Woot si eColet. */
       { name: "DHL",           logo: "/integrations/dhl.svg", soon: true },
       { name: "FedEx",         logo: "/integrations/fedex.svg", soon: true },
       { name: "UPS",           logo: "/integrations/ups.svg", soon: true },
-      { name: "Poșta Română", logo: "/integrations/posta_romana.svg", id: "posta" },
       { name: "Packeta",       logo: "/integrations/packeta.png", soon: true },
       { name: "Innoship",      logo: "/integrations/innoship.svg", soon: true },
       { name: "SmartShip",     logo: "/integrations/smartship.png", soon: true },
@@ -381,7 +394,17 @@ export default async function IntegrationsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <p className="text-sm font-semibold text-foreground">{integration.name}</p>
-                          {["posta", "ecolet", "pallex", "klarna", "mailchimp", "brevo", "klaviyo", "revolut", "olx", "aboutyou", "trendyol", "facebook-catalog"].includes(integration.id ?? "") && (
+                          {/*
+                            ⚠ ETICHETA „NOU" COSTA 36px DIN NUME, si aia sunt masurati.
+                            Numele are 125px pe cardul real (275px la trei coloane) — de
+                            acolo si locasul de sigla de 64px, ales tot pe masuratoare.
+                            Eticheta ia 30px plus 6px de spatiu, deci orice nume peste
+                            ~89px se rupe pe doua randuri cand o poarta.
+                            „Poșta Română" cere ~92px: incape lat, dar nu si cu eticheta.
+                            De aia nu e in lista. Inainte de a adauga un id nou aici,
+                            uita-te cat de lung e numele.
+                          */}
+                          {["ecolet", "pallex", "klarna", "mailchimp", "brevo", "klaviyo", "revolut", "olx", "aboutyou", "trendyol", "facebook-catalog"].includes(integration.id ?? "") && (
                             <span className="text-[9px] font-bold uppercase tracking-wide bg-primary text-white px-1.5 py-0.5 rounded-full leading-none">Nou</span>
                           )}
                         </div>

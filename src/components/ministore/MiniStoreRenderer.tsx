@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, us
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { ShoppingCart, X } from "lucide-react";
+import { aceeasiAdresa } from "@/lib/storefront/catalog/aceeasi-adresa";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
@@ -1163,7 +1164,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    */
   const router = useRouter();
   const [navigheaza, startNavigare] = useTransition();
-  const ceruteDeServer = useRef<string | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
     /*
@@ -1185,21 +1185,6 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     const tinta = adresaPentru(interogareFiltre, paginaCeruta);
 
     /*
-     * Prima trecere doar RETINE adresa cu care s-a randat pagina.
-     *
-     * Se face aici, sincron la montare, si NU in temporizator: o apasare in
-     * prima jumatate de secunda ar fi anulat temporizatorul, iar rularea urmatoare
-     * ar fi crezut ca tot e montarea — si prima schimbare de filtru s-ar fi
-     * pierdut in liniste. Se retine adresa COMPUSA, nu `window.location.search`:
-     * o adresa care vine cu parametrii in alta ordine ar fi aratat ca o schimbare
-     * si ar fi declansat o navigare degeaba.
-     */
-    if (peServer && ceruteDeServer.current === null) {
-      ceruteDeServer.current = tinta;
-      return;
-    }
-
-    /*
      * Cu INTARZIERE, nu la fiecare tasta.
      *
      * Pe palierul client motivul era Safari: `replaceState` de doua ori per tasta,
@@ -1213,8 +1198,23 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
         window.history.replaceState(null, "", tinta);
         return;
       }
-      if (tinta === ceruteDeServer.current) return;
-      ceruteDeServer.current = tinta;
+      /*
+       * ⚠ SE COMPARA CU ADRESA DIN BARA, NU CU O COPIE TINUTA DE NOI.
+       *
+       * Pana acum tinta se compara cu un `ref` care retinea ultima adresa ceruta.
+       * Copia aia se putea desincroniza — si se desincroniza: resincronizarea de
+       * props o punea pe `null` la fiecare schimbare de props, inclusiv la
+       * navigarile NOASTRE, iar prima rulare de dupa doar o rescria si iesea fara
+       * sa navigheze. Efectul masurat pe productie: de pe pagina 2 nu se mai putea
+       * ajunge NICIODATA pe pagina 1 — nici din `Inapoi`, nici apasand chiar pe
+       * numarul 1 — si nu pleca nicio cerere de retea.
+       *
+       * Adresa din bara nu poate ramane in urma: ea E starea navigarii. Comparatia
+       * e pe forma canonica (cale + parametri sortati), ca o alta ordine a
+       * parametrilor sa nu para o schimbare si sa declanseze o navigare degeaba —
+       * grija pentru care exista `ref`-ul la inceput, pastrata fara el.
+       */
+      if (aceeasiAdresa(tinta, window.location.href)) return;
       startNavigare(() => router.push(tinta, { scroll: false }));
     }, peServer ? 400 : 250);
     return () => window.clearTimeout(id);
@@ -1248,20 +1248,15 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     }
     propsAplicate.current = semnaturaProps;
     /*
-     * Si marcajul „ce ne-a dat serverul" se sterge, altfel Inapoi se anuleaza
-     * singur.
+     * ⚠ Nu mai e nimic de sters aici.
      *
-     * Fara linia asta: Inapoi aduce props-urile paginii vechi, resincronizarea
-     * pune starea pe ele, efectul de navigare recompune adresa veche, o compara cu
-     * `ceruteDeServer` — care tine inca adresa spre care am navigat INAINTE — le
-     * vede diferite, si navigheaza iar INAINTE. Adica butonul Inapoi nu mai
-     * functioneaza deloc pe pagina de catalog.
-     *
-     * `null` in loc de adresa nouă: asa urmatoarea rulare a efectului intra pe
-     * ramura de „montare", isi retine adresa curenta si NU navigheaza — deci nu
-     * trebuie recompusa aici a doua oara aceeasi adresa.
+     * Pana acum se punea pe `null` un `ref` cu ultima adresa ceruta, ca butonul
+     * Inapoi al browserului sa nu fie anulat de o navigare inainte. Ref-ul a
+     * DISPARUT: efectul de navigare compara acum tinta cu adresa din bara, care
+     * dupa Inapoi e chiar cea veche — deci resincronizarea pune starea pe ea,
+     * tinta iese egala cu adresa curenta si nu se navigheaza nicaieri. Acelasi
+     * rezultat, fara o copie care se putea desincroniza (si se desincroniza).
      */
-    ceruteDeServer.current = null;
     setCurrentPage(initialPage);
     setSearch(initialSearch);
     // Si cautarea APLICATA, nu doar textul din caseta: altfel `interogareFiltre` ar

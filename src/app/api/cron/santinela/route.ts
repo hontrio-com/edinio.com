@@ -291,6 +291,162 @@ export async function GET(req: NextRequest) {
       },
     },
     {
+      nume: "feedurile Facebook segmentate au produse",
+      ruleaza: async () => {
+        /*
+         * ⚠ PROBA SCRISA DUPA UN DEFECT CARE A TINUT DE LA LIVRARE.
+         *
+         * Feedurile segmentate (`?feed=<cheie>`) au iesit GOALE de cand au fost
+         * livrate, la TOATE magazinele: `Number(null)` e ZERO, deci „fara limita
+         * de pret" se citea ca „cel mult 0 lei" si taia orice produs cu pretul
+         * peste zero. Raspunsul era RSS valid, cod 200, zero articole — adica
+         * exact semnatura pentru care exista fisierul asta.
+         *
+         * S-a aflat abia cand un comerciant a incercat sa lege catalogul si Meta
+         * i-a raspuns „furnizeaza cel putin 5 produse". Pana atunci, nimic: nici
+         * `tsc`, nici probele (treceau doar numere adevarate, niciodata `null`),
+         * nici build-ul, nici santinela — care cerea pagini, dar niciun feed.
+         *
+         * ⚠ Alarma se da doar cand feedul INTREG al aceluiasi magazin ARE produse.
+         * Altfel un magazin fara marfa vandabila ar suna alarma la fiecare doua
+         * ore pentru ceva ce nu e defect — iar o alarma falsa e cel mai sigur mod
+         * de a face pe cineva sa opreasca alarma. „Segmentat gol, dar intreg
+         * plin" e chiar semnatura defectului de mai sus.
+         */
+        const { data: setari, error: eSetari } = await admin
+          .from("store_settings")
+          .select("business_id, facebook_feeds")
+          .not("facebook_feeds", "is", null);
+        if (eSetari) return `citirea feedurilor a esuat: ${eSetari.message}`;
+
+        const cuFeeduri = (setari ?? []).filter(
+          (s) => Array.isArray(s.facebook_feeds) && s.facebook_feeds.length > 0,
+        );
+        /* Niciun feed configurat: n-avem ce verifica, si nu inventam. */
+        if (cuFeeduri.length === 0) return null;
+
+        const { data: mag, error: eMag } = await admin
+          .from("businesses")
+          .select("id, slug, custom_domain, custom_domain_healthy")
+          .in("id", cuFeeduri.map((s) => s.business_id as string))
+          .eq("is_published", true)
+          .not("slug", "is", null);
+        if (eMag) return `citirea magazinelor a esuat: ${eMag.message}`;
+
+        /*
+         * ⚠ Adresa se compune pe domeniul CANONIC al magazinului, nu pe
+         * `edinio.com/{slug}`.
+         *
+         * Prima forma cerea mereu adresa de platforma, „ca sa nu masuram DNS-ul
+         * cuiva". Era o iluzie: `proxy.ts` raspunde cu 307 catre domeniul propriu
+         * pentru orice cale a unui magazin care are unul, iar `.xml` nu e scutita
+         * — deci cererea ajungea acolo oricum, doar ca prin doua salturi. Adica
+         * exact ce credeam ca evit, plus o afirmatie falsa in comentariu.
+         *
+         * Si e bine sa fie asa: adresa canonica e chiar cea pe care comerciantul
+         * o lipeste in Commerce Manager. Daca ea nu raspunde, nici Meta nu poate
+         * citi feedul — doar ca atunci se raporteaza ALTCEVA decat „feed gol"
+         * (vezi cele doua cosuri de mai jos).
+         *
+         * Magazinele cu domeniul dovedit stricat se sar: acolo defectul e
+         * cunoscut si are alt proprietar, iar o alarma din doua in doua ore
+         * despre acelasi certificat expirat e chiar felul in care o alarma
+         * ajunge sa fie ignorata.
+         */
+        const bazaDupaId = new Map<string, string>();
+        for (const b of mag ?? []) {
+          const dom = (b.custom_domain ?? "").trim();
+          if (dom && b.custom_domain_healthy === false) continue;
+          bazaDupaId.set(b.id, dom ? `https://${dom}` : `${PLATFORM_ORIGIN}/${b.slug}`);
+        }
+
+        const deProbat: { slug: string; baza: string; cheie: string }[] = [];
+        for (const s of cuFeeduri) {
+          const b = bazaDupaId.get(s.business_id as string);
+          if (!b) continue; // nepublicat (feedul da 404 dinadins) sau domeniu stricat
+          const slugMagazin = (mag ?? []).find((x) => x.id === s.business_id)?.slug as string;
+          for (const f of s.facebook_feeds as { cheie?: unknown }[]) {
+            const cheie = typeof f?.cheie === "string" ? f.cheie.trim() : "";
+            if (cheie) deProbat.push({ slug: slugMagazin, baza: b, cheie });
+          }
+        }
+        if (deProbat.length === 0) return null;
+
+        /*
+         * Se probeaza cel mult cateva pe rulare, si se ROTESC.
+         *
+         * Un feed poate avea megaocteti, iar santinela ruleaza intr-o functie cu
+         * memorie marginita — dar un plafon fix ar fi lasat mereu aceleasi feeduri
+         * neverificate. Fereastra se muta cu fiecare rulare (la doua ore), deci
+         * peste zi le acopera pe toate. Ordinea e stabila, ca fereastra sa
+         * inainteze cu adevarat.
+         */
+        deProbat.sort((a, b) => a.slug.localeCompare(b.slug) || a.cheie.localeCompare(b.cheie));
+        const PE_RULARE = 6;
+        const start = (Math.floor(Date.now() / 7_200_000) * PE_RULARE) % deProbat.length;
+        const fereastra = Array.from(
+          { length: Math.min(PE_RULARE, deProbat.length) },
+          (_, i) => deProbat[(start + i) % deProbat.length],
+        );
+
+        /*
+         * TREI cosuri, nu unul, si fiecare cu mesajul lui.
+         *
+         * Prima forma le amesteca, iar mesajul final spunea despre toate „feed
+         * gol, desi catalogul intreg are produse" — inclusiv despre cele la care
+         * catalogul intreg nu fusese cerut NICIODATA. Adica santinela, facuta
+         * impotriva raspunsurilor care mint, mintea la randul ei si trimitea omul
+         * sa caute in regulile feedului o pana de retea.
+         */
+        const goale: string[] = [];      // 200 cu zero articole, iar catalogul intreg ARE produse
+        const nuRaspund: string[] = [];  // n-am primit 200: retea, domeniu, ruta
+        const neverificate: string[] = []; // segmentat gol, dar martorul n-a putut fi citit
+
+        /** Martorul: are magazinul produse in feedul INTREG? Cerut o data, la nevoie. */
+        const martor = new Map<string, { cod: number; areProduse: boolean }>();
+
+        for (const { slug: s, baza: b, cheie } of fereastra) {
+          const { cod, text } = await ia(`${b}/facebook-catalog.xml?feed=${encodeURIComponent(cheie)}`);
+          /*
+           * 404 ar insemna „cheia nu mai exista", desi tocmai am citit-o din baza:
+           * o nepotrivire intre ce arata panoul si ce serveste ruta. 5xx sau 0
+           * (timeout, TLS, DNS) sunt pene, nu feeduri goale. Toate merg in cosul
+           * lor, cu codul in clar.
+           */
+          if (cod !== 200) { nuRaspund.push(`${s}/${cheie}: cod ${cod}`); continue; }
+          if (numara(text, /<item>/g) > 0) continue;
+
+          if (!martor.has(s)) {
+            const intreg = await ia(`${b}/facebook-catalog.xml`);
+            martor.set(s, { cod: intreg.cod, areProduse: intreg.cod === 200 && numara(intreg.text, /<item>/g) > 0 });
+          }
+          const m = martor.get(s)!;
+          /*
+           * ⚠ Martorul care NU raspunde nu inseamna „e in regula".
+           *
+           * Prima forma il trata la fel ca pe „magazin fara marfa" si arunca
+           * tacut constatarea — deci un feed chiar gol trecea neobservat tocmai
+           * cand magazinul avea si el o problema. O santinela n-are voie sa
+           * devina mai iertatoare cand vede mai putin.
+           */
+          if (m.cod !== 200) neverificate.push(`${s}/${cheie} (martorul a dat ${m.cod})`);
+          else if (m.areProduse) goale.push(`${s}/${cheie}`);
+          /* altfel: magazinul chiar n-are produse vandabile — nu e defect de feed */
+        }
+
+        const parti: string[] = [];
+        if (goale.length) {
+          parti.push(
+            `feeduri segmentate GOALE, desi catalogul intreg al magazinului are produse: ${goale.join(", ")}`
+            + ` — Meta raspunde „furnizeaza cel putin 5 produse". Verifica regulile feedului in Integrari > Meta Catalog.`,
+          );
+        }
+        if (nuRaspund.length) parti.push(`feeduri care nu raspund: ${nuRaspund.join(", ")}`);
+        if (neverificate.length) parti.push(`feeduri goale pe care nu le-am putut confirma: ${neverificate.join(", ")}`);
+        return parti.length ? parti.join(" | ") : null;
+      },
+    },
+    {
       nume: "datele structurate poarta ce s-a completat in panou",
       ruleaza: async () => {
         /*

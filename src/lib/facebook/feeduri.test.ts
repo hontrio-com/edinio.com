@@ -164,3 +164,89 @@ test("cheia din nume: fara diacritice, fara spatii, unica", () => {
   assert.equal(cheieDinNume("Scule electrice", ["scule-electrice"]), "scule-electrice-2");
   assert.equal(cheieDinNume("   ", []), "feed", "un nume gol nu produce o cheie goala");
 });
+
+// ─── ⚠ Defectul care a tinut TOATE feedurile segmentate goale ────────────────
+
+test("„fara limita de pret” ramane fara limita, oricum ar veni din panou", () => {
+  /*
+   * Defectul, gasit in productie pe VetDepo: `Number(null)` e ZERO, nu NaN.
+   * Panoul trimite `null` cand casuta e goala, deci „fara limita" se citea ca
+   * „cel mult 0 lei" — si feedul iesea GOL, cu RSS valid si cod 200. Meta
+   * raspundea „Remediaza problemele legate de sursele de date sau furnizeaza cel
+   * putin 5 produse", iar la noi nu se vedea nimic.
+   *
+   * Probele de dinainte treceau doar numere adevarate, deci n-aveau cum sa-l
+   * prinda. Aici trec toate formele in care „gol" chiar ajunge din panou.
+   */
+  for (const gol of [null, undefined, ""]) {
+    const f = parseFeeduri([{ cheie: "a", nume: "A", pretMin: gol, pretMax: gol }]);
+    assert.equal(f[0].pretMin, null, `pretMin pentru ${JSON.stringify(gol)}`);
+    assert.equal(f[0].pretMax, null, `pretMax pentru ${JSON.stringify(gol)}`);
+  }
+  // Si cheia complet absenta, cum arata un feed nou-creat.
+  const fara = parseFeeduri([{ cheie: "b", nume: "B" }]);
+  assert.equal(fara[0].pretMin, null);
+  assert.equal(fara[0].pretMax, null);
+});
+
+test("un prag de pret zero NU goleste catalogul", () => {
+  /*
+   * Zeroul ramane posibil in datele deja salvate. Citit ca limita adevarata,
+   * `pretMax = 0` scoate orice produs cu pretul peste zero — adica tot magazinul.
+   * „Cel putin 0 lei" nu filtreaza nimic, iar „cel mult 0 lei" nu poate fi o
+   * cerere adevarata; amandoua se citesc ca „fara prag".
+   */
+  const f = parseFeeduri([{ cheie: "a", nume: "A", pretMin: 0, pretMax: 0 }]);
+  assert.equal(f[0].pretMin, null);
+  assert.equal(f[0].pretMax, null);
+
+  const lista = [prod("a", "X", { price: 10 }), prod("b", "X", { price: 500 })];
+  assert.deepEqual(
+    produseDinFeed(f[0], lista, new Set()).map((p) => p.id),
+    ["a", "b"],
+    "cu praguri zero trebuie sa treaca TOT, nu nimic",
+  );
+});
+
+test("feedul pe categorie chiar intoarce produse cand pretul vine gol din panou", () => {
+  /* Reproducerea exacta a regulii salvate pe VetDepo: categorie + preturi nule. */
+  const f = parseFeeduri([{
+    nume: "Hrana uscata caini", cheie: "hrana-uscata-caini",
+    categorii: ["c1"], produse: [], excluse: [],
+    doarInStoc: false, pretMin: null, pretMax: null,
+  }]);
+  const nume = numeCuDescendenti(ARBORE, ["c1"]);
+  const r = produseDinFeed(f[0], PRODUSE, nume);
+  assert.ok(r.length > 0, "feedul nu are voie sa iasa gol cand categoria are produse");
+});
+
+test("⚠ o categorie STEARSA nu goleste feedul in tot catalogul", () => {
+  /*
+   * Defectul-oglinda al celui cu pretul, gasit proband santinela pe productie:
+   * regula cerea o categorie care nu mai exista, rezolvarea intorcea zero nume,
+   * iar conditia „are selectie?" se uita la REZULTAT — deci feedul arata ca unul
+   * fara reguli si raspundea cu TOT CATALOGUL. Masurat: 1332 de produse intr-un
+   * feed care trebuia sa aiba cateva zeci.
+   *
+   * Mai rau decat un feed gol: catalogul gol opreste reclamele si se vede, pe cand
+   * unul umplut gresit cheltuie bani pe produse nepotrivite, in tacere.
+   */
+  const nume = numeCuDescendenti(ARBORE, ["categorie-care-nu-mai-exista"]);
+  assert.equal(nume.size, 0, "premisa probei: categoria chiar nu se rezolva");
+
+  const r = produseDinFeed(
+    { cheie: "s", nume: "S", categorii: ["categorie-care-nu-mai-exista"] },
+    PRODUSE,
+    nume,
+  );
+  assert.deepEqual(r, [], "o regula care cere ceva si nu gaseste nimic intoarce ZERO, nu tot catalogul");
+});
+
+test("un feed chiar FARA reguli ramane tot catalogul", () => {
+  /* Cealalta jumatate a regulii, ca reparatia de mai sus sa nu strice implicitul:
+     „Toate produsele" e un feed legitim, iar un catalog vid ar opri reclamele. */
+  const r = produseDinFeed({ cheie: "s", nume: "S" }, PRODUSE, new Set());
+  assert.equal(r.length, PRODUSE.length);
+  const r2 = produseDinFeed({ cheie: "s", nume: "S", categorii: [], produse: [] }, PRODUSE, new Set());
+  assert.equal(r2.length, PRODUSE.length);
+});

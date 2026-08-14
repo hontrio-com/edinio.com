@@ -70,9 +70,27 @@ function text(v: unknown): string {
 function listaDeSiruri(v: unknown): string[] {
   return Array.isArray(v) ? [...new Set(v.map(text).filter(Boolean))] : [];
 }
+/**
+ * Un prag de pret, sau „fara prag".
+ *
+ * ⚠ `Number(null)` e ZERO, nu NaN. De aici a iesit defectul care a tinut TOATE
+ * feedurile segmentate goale de la livrare: panoul trimite `null` pentru „fara
+ * limita", asta devenea `0`, iar filtrul de mai jos citea zeroul ca pe o limita
+ * ADEVARATA — „cel mult 0 lei". Orice produs cu pretul peste zero era scos si
+ * feedul iesea gol: RSS valid, cod 200, zero articole.
+ *
+ * Asa arata din afara: pe VetDepo, doua cataloage vide, iar Meta raspundea
+ * „Remediaza problemele legate de sursele de date sau furnizeaza cel putin 5
+ * produse". Niciun log, nicio eroare.
+ *
+ * Se resping si valorile <= 0: „cel putin 0 lei" nu filtreaza nimic, iar „cel
+ * mult 0 lei" nu poate fi o cerere adevarata intr-un catalog de vanzare — dar
+ * poate goli tacut catalogul cuiva.
+ */
 function numarSauNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
@@ -170,7 +188,25 @@ export function produseDinFeed<T extends ProdusDeFiltrat>(
 ): T[] {
   const excluse = new Set(regula.excluse ?? []);
   const alese = new Set(regula.produse ?? []);
-  const areSelectie = numeCategorii.size > 0 || alese.size > 0;
+  /*
+   * ⚠ Conteaza ce a CERUT regula, nu ce s-a putut rezolva din ea.
+   *
+   * Prima forma se uita la `numeCategorii.size`, adica la REZULTATUL rezolvarii.
+   * Cand comerciantul stergea categoria pe care era construit feedul, rezolvarea
+   * intorcea zero nume, conditia devenea „feed fara reguli", si feedul raspundea
+   * cu TOT CATALOGUL. Masurat pe un magazin de proba: o categorie inexistenta a
+   * scos 1332 de produse intr-un feed care trebuia sa aiba cateva zeci.
+   *
+   * E chiar pericolul scris in antetul fisierului pentru cheile inexistente
+   * („altfel umple tacut un catalog care trebuia sa aiba 30 de articole"), doar
+   * ca pe alta usa. Si e mai rau decat un feed gol: catalogul gol opreste
+   * reclamele si se vede imediat, pe cand un catalog umplut gresit cheltuie bani
+   * pe produsele nepotrivite fara ca nimeni sa observe.
+   *
+   * Deci o regula care CERE ceva si nu gaseste nimic intoarce ZERO, iar santinela
+   * o raporteaza („feedurile Facebook segmentate au produse").
+   */
+  const areSelectie = (regula.categorii?.length ?? 0) > 0 || alese.size > 0;
 
   return produse.filter((p) => {
     if (excluse.has(p.id)) return false;

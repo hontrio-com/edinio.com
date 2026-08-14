@@ -39,9 +39,17 @@ function curata(brut: unknown, cheiLuate: string[]): RegulaFeed | null {
 
   const lista = (v: unknown, max: number) =>
     Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean))].slice(0, max) : [];
+  /*
+   * ⚠ Aceeasi regula ca in `feeduri.ts`, si din acelasi motiv: `Number(null)` e
+   * ZERO. Panoul trimite `null` cand casuta e goala, deci fara verificarea de
+   * mai jos „fara limita de pret" se salva ca „cel mult 0 lei" — si feedul iesea
+   * gol, fara nicio eroare. Scrisa aici pe langa citire, ca datele noi sa fie
+   * curate, nu doar interpretate corect.
+   */
   const numar = (v: unknown) => {
+    if (v === null || v === undefined || v === "") return null;
     const n = Number(v);
-    return Number.isFinite(n) && n >= 0 ? n : null;
+    return Number.isFinite(n) && n > 0 ? n : null;
   };
 
   const cheieExistenta = String(o.cheie ?? "").trim().toLowerCase();

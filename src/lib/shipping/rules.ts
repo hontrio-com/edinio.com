@@ -217,14 +217,37 @@ export function parseShippingRules(raw: unknown): ShippingRule[] {
     const o = r as Record<string, unknown>;
     const action = parseAction(o.action);
     if (!action) return;
-    const conditions = Array.isArray(o.conditions)
-      ? o.conditions.map(parseCondition).filter((c): c is ShippingCondition => c !== null)
-      : [];
+    const conditiiBrute = Array.isArray(o.conditions) ? o.conditions : [];
+    const conditions = conditiiBrute
+      .map(parseCondition)
+      .filter((c): c is ShippingCondition => c !== null);
+    /*
+     * ⚠ O CONDITIE CARE NU SE POATE CITI STINGE REGULA. NU o face universala.
+     *
+     * `conditions: []` inseamna „se potriveste mereu" (vezi tipul de mai sus), si
+     * asa si trebuie sa fie pentru o regula scrisa ANUME fara conditii. Dar pana
+     * acum orice conditie necitibila era doar aruncata din lista — deci o regula
+     * care AVEA conditii ajungea sa n-aiba niciuna, adica sa se aplice la TOATE
+     * comenzile.
+     *
+     * Drumul e chiar cel obisnuit din panou: „Transport gratuit peste 200 lei" e
+     * `{type:"subtotal", min:200}`; comerciantul sterge cifra din casuta ca sa
+     * scrie alta, casuta goala da `min: undefined`, `parseCondition` intoarce
+     * `null` (linia cu `min == null && max == null`), iar la salvare conditia
+     * dispare. Rezultatul: transport gratuit la ORICE cos, inclusiv la unul de 20
+     * de lei. Niciun log, nicio eroare — si pentru regulile presetate randul de
+     * editare nici nu se mai randeaza dupa reincarcare, deci nu se vede nici
+     * macar avertismentul din editor.
+     *
+     * Stinsa, regula ramane VIZIBILA in panou si se poate repara. Stearsa, ar fi
+     * disparut munca comerciantului; lasata aprinsa, ar fi dat marfa pe gratis.
+     */
+    const conditiiPierdute = conditiiBrute.length > conditions.length;
     const couriers = Array.isArray(o.couriers) ? toStrArr(o.couriers) : null;
     out.push({
       id: toStr(o.id).trim() || `rule-${idx}`,
       name: toStr(o.name).trim() || "Regula transport",
-      enabled: o.enabled !== false,
+      enabled: o.enabled !== false && !conditiiPierdute,
       priority: Number.isFinite(Number(o.priority)) ? Number(o.priority) : 0,
       conditions,
       action,

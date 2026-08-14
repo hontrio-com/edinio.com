@@ -11,6 +11,7 @@ import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CheckoutPageClient } from "@/components/storefront/sections/checkout/CheckoutPageClient";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 
 /**
  * Pagina de finalizare a comenzii.
@@ -109,7 +110,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
             basePath={basePath}
             businessId={business.id}
             shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
-            freeShippingThreshold={storeSettings?.free_shipping_threshold ? Number(storeSettings.free_shipping_threshold) : null}
+            freeShippingThreshold={pragTransportGratuit(storeSettings?.free_shipping_threshold)}
             emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
             initialDiscountCode={code ?? null}
           />

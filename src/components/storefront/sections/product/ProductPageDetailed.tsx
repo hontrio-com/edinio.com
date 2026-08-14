@@ -35,6 +35,7 @@ import {
   abonareMiscareRedusa, citesteMiscareRedusa, hashSir,
   SocialProof, FAQItem, CTAButton,
 } from "./_shared/pieces";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 
 /**
  * Pagina de produs, varianta „Detaliat".
@@ -261,8 +262,7 @@ export function ProductPageDetailed({
   const color = business.primary_color ?? "#1AB554";
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
-  const freeShippingThreshold = storeSettings?.free_shipping_threshold
-    ? Number(storeSettings.free_shipping_threshold) : null;
+  const freeShippingThreshold = pragTransportGratuit(storeSettings?.free_shipping_threshold);
   const minOrderAmount = storeSettings?.min_order_amount
     ? Number(storeSettings.min_order_amount) : null;
   // Eticheta de langa pret: „(TVA inclus)" sau „(fara TVA)". Textul se deduce din

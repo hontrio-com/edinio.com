@@ -11,6 +11,7 @@ import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CartPageClient } from "@/components/storefront/sections/cart/CartPageClient";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 
 /**
  * Pagina de cos.
@@ -132,7 +133,7 @@ export default async function CosPage({ params }: Props) {
             basePath={basePath}
             businessId={business.id}
             shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
-            freeShippingThreshold={storeSettings?.free_shipping_threshold ? Number(storeSettings.free_shipping_threshold) : null}
+            freeShippingThreshold={pragTransportGratuit(storeSettings?.free_shipping_threshold)}
             minOrderAmount={storeSettings?.min_order_amount ? Number(storeSettings.min_order_amount) : null}
             vat={{
               vat_enabled: storeSettings?.vat_enabled ?? false,

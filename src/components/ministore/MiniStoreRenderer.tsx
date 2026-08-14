@@ -33,6 +33,7 @@ import {
 import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { comparatorSortare, type CheieSortare } from "@/lib/storefront/catalog/sortare";
 import { ASEZARE_IMPLICITA, sortareaAsezarii, type Asezare } from "@/lib/storefront/asezare";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { scrieFiltre, SORTARI_IN_ADRESA } from "@/lib/storefront/catalog/url";
 import { ShopPageSection } from "@/components/storefront/sections/shop/ShopPageSection";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
@@ -525,9 +526,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   const color = business.primary_color ?? "#1AB554";
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
-  const freeShippingThreshold = storeSettings?.free_shipping_threshold
-    ? Number(storeSettings.free_shipping_threshold)
-    : null;
+  // Citit cu `!= null`, ca pe server: un prag salvat ca 0 inseamna „gratuit de la
+  // zero lei", nu „fara prag". Vezi `prag-transport-gratuit.ts`.
+  const freeShippingThreshold = pragTransportGratuit(storeSettings?.free_shipping_threshold);
   const minOrderAmount = storeSettings?.min_order_amount
     ? Number(storeSettings.min_order_amount)
     : null;

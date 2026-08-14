@@ -58,6 +58,7 @@ import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
 import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchimpOrderPaid, orderValueTag } from "@/lib/mailchimp-sync";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
@@ -1125,7 +1126,10 @@ export async function placeOrder(data: {
   );
 
   // Shipping clamped non-negative; zeroed when free-shipping rules apply.
-  const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
+  // Aceeasi regula ca pe toata partea vizitatorului: `0` inseamna „fara prag",
+  // nu „gratuit mereu". Vezi `prag-transport-gratuit.ts` — serverul era singurul
+  // care citea altfel, si de acolo iesea totalul afisat diferit de cel incasat.
+  const freeThreshold = pragTransportGratuit(cfgRow?.free_shipping_threshold);
   // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
   // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
   const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
@@ -2142,7 +2146,7 @@ export async function getOrderEditContext(businessId: string, orderId?: string):
     vat_enabled: cfg?.vat_enabled ?? false,
     vat_rate: Number(cfg?.vat_rate ?? 19),
     prices_include_vat: cfg?.prices_include_vat ?? true,
-    free_shipping_threshold: cfg?.free_shipping_threshold != null ? Number(cfg.free_shipping_threshold) : null,
+    free_shipping_threshold: pragTransportGratuit(cfg?.free_shipping_threshold),
     cod_fee_config: cfg?.cod_fee_config ?? null,
     catalogLinii,
   };
@@ -2649,7 +2653,7 @@ export async function updateOrderDetails(orderId: string, data: {
     codDiscount: Number(order.cod_discount_amount) || 0,
     codFee,
     shipping: shippingDeBaza,
-    freeShippingThreshold: cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null,
+    freeShippingThreshold: pragTransportGratuit(cfgRow?.free_shipping_threshold),
     vat: vatCfg,
   });
 
@@ -3339,7 +3343,10 @@ export async function placeCartOrder(data: {
     vatCfgTaxa,
   );
 
-  const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
+  // Aceeasi regula ca pe toata partea vizitatorului: `0` inseamna „fara prag",
+  // nu „gratuit mereu". Vezi `prag-transport-gratuit.ts` — serverul era singurul
+  // care citea altfel, si de acolo iesea totalul afisat diferit de cel incasat.
+  const freeThreshold = pragTransportGratuit(cfgRow?.free_shipping_threshold);
   // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
   // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
   const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);

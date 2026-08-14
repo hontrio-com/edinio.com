@@ -103,11 +103,26 @@ export async function GET() {
 
   // Shipping classes live as JSON on store_settings; map id -> name so the export
   // is human-readable and re-imports by name (see the committer's reverse lookup).
-  const { data: settings } = await supabase
+  const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
     .select("shipping_classes")
     .eq("business_id", biz.id)
     .maybeSingle();
+  /*
+   * ⚠ Acelasi dus-intors, aceeasi paguba ca la categorii.
+   *
+   * Fara `error`, o citire picata da `settings` null, harta ramane goala, si
+   * coloana „Clasa transport" iese GOALA pentru toate produsele. Reimportat,
+   * fisierul le muta pe toate pe clasa standard — adica preturile de livrare ale
+   * magazinului, rescrise in tacere. Un export incomplet e mai rau decat unul
+   * care nu se face.
+   */
+  if (eSettings) {
+    return NextResponse.json(
+      { error: "Nu am putut citi setarile magazinului. Exportul s-a oprit ca sa nu iasa un fisier cu clasele de transport pierdute." },
+      { status: 500 },
+    );
+  }
   const shipClassName = new Map<string, string>();
   for (const c of parseShippingClasses(settings?.shipping_classes ?? [])) {
     shipClassName.set(c.id, c.name);
@@ -117,12 +132,31 @@ export async function GET() {
   // Windowed: cataloagele importate pot depasi cap-ul de 1000 de randuri PostgREST.
   const catRows: Cat[] = [];
   for (let from = 0; ; from += PAGE) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("categories")
       .select("id, name, parent_id")
       .eq("business_id", biz.id)
       .order("id")
       .range(from, from + PAGE - 1);
+    /*
+     * ⚠ `error` verificat, nu doar `data`.
+     *
+     * La o citire picata, `data` e `null`, iar `?? []` il preface in „magazinul
+     * n-are categorii" — bucla se opreste la prima fereastra scurta si
+     * `categoryPath()` intoarce numele brut in loc de calea „Parinte > Copil".
+     * CSV-ul iese cu 200, cu toate produsele, si doar cu ierarhia pierduta.
+     *
+     * Fisierul e facut ANUME pentru dus-intors export/import: reimportat, ar
+     * reconstrui arborele gresit — categorii aplatizate sau duplicate. Deci un
+     * export incomplet e mai rau decat unul care nu se face. Interogarea de
+     * produse de mai jos verifica deja `error` si da 500; asta n-o facea.
+     */
+    if (error) {
+      return NextResponse.json(
+        { error: "Nu am putut citi categoriile. Exportul s-a oprit ca sa nu iasa un fisier cu ierarhia pierduta." },
+        { status: 500 },
+      );
+    }
     catRows.push(...((data ?? []) as Cat[]));
     if (!data || data.length < PAGE) break;
   }

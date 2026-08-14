@@ -291,6 +291,228 @@ export async function GET(req: NextRequest) {
       },
     },
     {
+      nume: "feedul Facebook al magazinului are produse",
+      ruleaza: async () => {
+        /*
+         * ⚠ ASTA E ADRESA PE CARE O LIPESTE FIECARE COMERCIANT in Commerce Manager.
+         *
+         * Proba surorii de mai jos cere feedul intreg DOAR ca martor, si numai cand
+         * un feed segmentat a iesit deja gol — deci magazinele fara feeduri
+         * segmentate (adica aproape toate) n-aveau nicio acoperire.
+         *
+         * Iar feedul intreg poate iesi gol fara sa cada nimic: `buildCatalogItems`
+         * sare peste produsele fara imagine, deci o migrare de imagini care goleste
+         * `images`, sau o regresie in maparea variantelor, da RSS valid, cod 200 si
+         * zero articole. Meta raspunde „furnizeaza cel putin 5 produse", reclamele
+         * dinamice se opresc, si comerciantul afla din factura de reclama.
+         *
+         * Se probeaza doar magazinele care CHIAR au produse (`catalog_rezumat`),
+         * altfel un magazin gol ar suna alarma pentru ceva ce nu e defect.
+         */
+        const { data: rez, error: eRez } = await admin
+          .from("catalog_rezumat")
+          .select("business_id, total")
+          .eq("fara_imagini", false).eq("fara_stoc_ascuns", false)
+          .gt("total", 0);
+        if (eRez) return `citirea rezumatelor a esuat: ${eRez.message}`;
+        const cuProduse = (rez ?? []).map((r) => r.business_id as string);
+        if (cuProduse.length === 0) return null;
+
+        const { data: mag, error: eMag } = await admin
+          .from("businesses")
+          .select("id, slug, custom_domain, custom_domain_healthy")
+          .in("id", cuProduse)
+          .eq("is_published", true)
+          .not("slug", "is", null);
+        if (eMag) return `citirea magazinelor a esuat: ${eMag.message}`;
+
+        const tinte = (mag ?? [])
+          .filter((b) => !((b.custom_domain ?? "").trim() && b.custom_domain_healthy === false))
+          .map((b) => {
+            const dom = (b.custom_domain ?? "").trim();
+            return { slug: b.slug as string, baza: dom ? `https://${dom}` : `${PLATFORM_ORIGIN}/${b.slug}` };
+          })
+          .sort((a, b) => a.slug.localeCompare(b.slug));
+        if (tinte.length === 0) return null;
+
+        /*
+         * TREI pe rulare, si se rotesc. Un feed intreg poate avea megaocteti (eSAFE
+         * are 3 MB), iar santinela are memorie si timp marginite. La 12 rulari pe
+         * zi, cele ~50 de magazine sunt acoperite in cateva zile — mai bine decat un
+         * plafon fix, care ar fi lasat mereu aceleasi magazine neverificate.
+         */
+        const PE_RULARE = 3;
+        const start = (Math.floor(Date.now() / 7_200_000) * PE_RULARE) % tinte.length;
+        const fereastra = Array.from(
+          { length: Math.min(PE_RULARE, tinte.length) },
+          (_, i) => tinte[(start + i) % tinte.length],
+        );
+
+        const idDupaSlug = new Map((mag ?? []).map((b) => [b.slug as string, b.id as string]));
+
+        const defecte: string[] = [];
+        const faraPoze: string[] = [];
+        const nuRaspund: string[] = [];
+        for (const t of fereastra) {
+          const { cod, text } = await ia(`${t.baza}/facebook-catalog.xml`);
+          if (cod !== 200) { nuRaspund.push(`${t.slug}: cod ${cod}`); continue; }
+          if (numara(text, /<item>/g) > 0) continue;
+
+          /*
+           * Feedul e gol. A cui e problema?
+           *
+           * Constructorul sare peste produsele fara nicio imagine, deci un magazin
+           * care n-are nicio poza da corect zero articole — nu e defectul nostru,
+           * si mesajul trebuie sa spuna asta. Masurat la scriere: `suplio` are 7
+           * produse active si ZERO imagini. Amestecate, cine citeste alarma ar
+           * invata s-o sara.
+           *
+           * ⚠ Se cere un NUMAR (`head: true`), nu randuri. O citire de randuri s-ar
+           * fi lovit de plafonul PostgREST de 1000: pe platforma sunt 7673 de randuri
+           * cu imagine, deci un magazin aflat dincolo de fereastra ar fi fost
+           * clasificat drept „fara poze" si alarma ar fi dat vina pe comerciant
+           * pentru un defect al nostru. Vezi [[postgrest-1000-row-cap]].
+           *
+           * Se intreaba doar cand feedul chiar a iesit gol — adica aproape niciodata.
+           */
+          const r = await admin
+            .from("catalog_produs")
+            .select("product_id", { count: "exact", head: true })
+            .eq("business_id", idDupaSlug.get(t.slug) ?? "")
+            .eq("are_imagine", true);
+          if (r.error) { nuRaspund.push(`${t.slug}: nu am putut numara imaginile (${r.error.message})`); continue; }
+          if ((r.count ?? 0) > 0) defecte.push(t.slug);
+          else faraPoze.push(t.slug);
+        }
+
+        const parti: string[] = [];
+        if (defecte.length) {
+          parti.push(`feedul Facebook e GOL desi magazinul are produse CU IMAGINI: ${defecte.join(", ")}`
+            + ` — Meta opreste reclamele dinamice, si asta e o defectiune la noi.`);
+        }
+        if (faraPoze.length) {
+          parti.push(`feed Facebook gol fiindca niciun produs n-are imagine: ${faraPoze.join(", ")}`
+            + ` — de rezolvat de comerciant, nu din cod.`);
+        }
+        if (nuRaspund.length) parti.push(`feeduri care nu raspund: ${nuRaspund.join(", ")}`);
+        return parti.length ? parti.join(" | ") : null;
+      },
+    },
+    {
+      nume: "pagina de produs poarta datele structurate",
+      ruleaza: async () => {
+        /*
+         * Blocul `Product`/`offers` alimenteaza rezultatele imbogatite din Google si
+         * listarile gratuite din Merchant. Proba „datele structurate…" de mai jos
+         * cere DOAR pagina principala si se uita doar dupa blocul `Store`, deci
+         * disparitia celui de produs ar fi trecut neobservata luni de zile:
+         * pagina raspunde 200 si arata normal pentru un om, iar comerciantul vede
+         * doar ca ii scade traficul organic.
+         *
+         * Se compara si PRETUL cu cel din baza, nu doar existenta blocului: un
+         * `offers` cu pretul gol sau vechi e la fel de rau ca unul lipsa, si e chiar
+         * felul de defect pe care „campuri scrise dar necitite" il produce.
+         */
+        if (!baza || !slug) return "niciun magazin de proba";
+        const { data: biz } = await admin.from("businesses").select("id").eq("slug", slug).maybeSingle();
+        if (!biz) return null;
+        const { data: prod, error: eProd } = await admin
+          .from("catalog_produs")
+          .select("slug, price_min, name")
+          .eq("business_id", biz.id)
+          .not("slug", "is", null)
+          .gt("price_min", 0)
+          .limit(1);
+        if (eProd) return `citirea produsului de proba a esuat: ${eProd.message}`;
+        const p = (prod ?? [])[0] as { slug: string; price_min: number; name: string } | undefined;
+        if (!p) return null; // magazinul n-are produse cu pret: n-avem ce compara
+
+        const { cod, text } = await ia(`${baza}/product/${p.slug}`);
+        if (cod !== 200) return `pagina produsului ${p.slug} raspunde cu ${cod}`;
+
+        /* `[\s\S]` in loc de steagul `s`: tinta de compilare a proiectului nu-l accepta. */
+        const blocuri = text.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) ?? [];
+        const dateStructurate = blocuri
+          .map((b) => b.replace(/^[^>]*>/, "").replace(/<\/script>$/, ""))
+          .map((b) => { try { return JSON.parse(b) as Record<string, unknown>; } catch { return null; } })
+          .filter((d): d is Record<string, unknown> => !!d);
+        const produs = dateStructurate.find((d) => d["@type"] === "Product" || d["@type"] === "ProductGroup");
+        if (!produs) return `pagina ${p.slug} n-are bloc JSON-LD de tip Product`;
+
+        /* `offers` poate fi obiect sau lista (ProductGroup cu variante). */
+        const oferte = Array.isArray(produs.offers) ? produs.offers : produs.offers ? [produs.offers] : [];
+        const preturi = (oferte as Record<string, unknown>[])
+          .map((o) => Number(o?.price))
+          .filter((n) => Number.isFinite(n) && n > 0);
+        if (preturi.length === 0) return `pagina ${p.slug} are bloc Product, dar fara niciun pret in offers`;
+
+        /*
+         * Pretul din pagina trebuie sa fie chiar cel din proiectie. Toleranta e de
+         * un ban: proiectia si randarea rotunjesc pe drumuri diferite.
+         */
+        const asteptat = Number(p.price_min);
+        return preturi.some((x) => Math.abs(x - asteptat) < 0.011)
+          ? null
+          : `pagina ${p.slug} anunta in JSON-LD ${preturi.join("/")} lei, iar in catalog pretul e ${asteptat}`;
+      },
+    },
+    {
+      nume: "feedurile de stoc chiar potrivesc randuri",
+      ruleaza: async () => {
+        /*
+         * Cronul de stocuri citeste orar fisierele furnizorilor. Daca un furnizor
+         * schimba antetul unei coloane sau formatul fisierului, potrivirea da ZERO
+         * randuri si rularea se incheie ca REUSITA — fara log si fara status de
+         * eroare. Stocul ingheata pe valorile vechi, iar magazinul vinde marfa care
+         * nu mai exista: supravanzare, comenzi anulate de mana, retururi.
+         *
+         * `last_totals.total` e numarul de randuri CITITE din fisier. Zero, la o
+         * rulare incheiata cu bine, inseamna fisier gol sau necitibil — nu exista
+         * furnizor care sa trimita in mod legitim un feed fara niciun rand.
+         */
+        const { data: surse, error } = await admin
+          .from("stock_feed_sources")
+          .select("name, last_status, last_run_at, last_totals")
+          .eq("enabled", true)
+          .not("last_run_at", "is", null);
+        if (error) return `citirea surselor de stoc a esuat: ${error.message}`;
+        if ((surse ?? []).length === 0) return null; // niciun feed configurat
+
+        const mute: string[] = [];
+        for (const s of surse ?? []) {
+          /*
+           * ⚠ DOUA capcane, amandoua prinse la verificare, amandoua facand proba
+           * incapabila sa esueze — adica exact ce interzice regula fisierului.
+           *
+           * 1. Starea de reusita se scrie `"ok"`, nu `"success"` (`sources.ts`:
+           *    `"ok" | "error" | null`). Comparata cu `"success"`, conditia n-ar fi
+           *    fost adevarata NICIODATA.
+           * 2. `total` sunt randurile CITITE din fisier, nu cele POTRIVITE cu
+           *    produse (`matcher.ts`: `totalRows: rows.length`). Scenariul din chiar
+           *    comentariul probei — furnizorul redenumeste o coloana — da un fisier
+           *    plin de randuri care nu se mai potrivesc cu nimic: `total` ramane
+           *    500, iar `not_found` devine 500. Proba s-ar fi uitat fix la numarul
+           *    care NU se schimba.
+           *
+           * Ce conteaza e cate randuri au ATINS un produs: scrise plus nemodificate.
+           * Zero acolo, cu fisierul necitibil sau cu potrivirea rupta, inseamna stoc
+           * inghetat pe valorile vechi — si magazinul vinde marfa care nu mai exista.
+           */
+          const t = (s.last_totals ?? null) as
+            { total?: number; written?: number; unchanged?: number } | null;
+          if (s.last_status !== "ok") continue;
+          const citite = Number(t?.total ?? 0);
+          const atinse = Number(t?.written ?? 0) + Number(t?.unchanged ?? 0);
+          if (citite === 0) mute.push(`„${s.name}" (fisierul n-a avut niciun rand)`);
+          else if (atinse === 0) mute.push(`„${s.name}" (${citite} randuri citite, niciunul potrivit cu vreun produs)`);
+        }
+        return mute.length
+          ? `feeduri de stoc care nu mai actualizeaza nimic: ${mute.join(", ")}`
+            + ` — stocul ramane inghetat pe valorile vechi. Verifica antetele fisierului furnizorului.`
+          : null;
+      },
+    },
+    {
       nume: "feedurile Facebook segmentate au produse",
       ruleaza: async () => {
         /*

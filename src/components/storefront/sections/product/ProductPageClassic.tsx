@@ -37,6 +37,7 @@ import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 
 /* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
@@ -207,8 +208,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const color = business.primary_color ?? "#1AB554";
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
-  const freeShippingThreshold = storeSettings?.free_shipping_threshold
-    ? Number(storeSettings.free_shipping_threshold) : null;
+  const freeShippingThreshold = pragTransportGratuit(storeSettings?.free_shipping_threshold);
   const minOrderAmount = storeSettings?.min_order_amount
     ? Number(storeSettings.min_order_amount) : null;
   // Eticheta de langa pret: „(TVA inclus)" sau „(fara TVA)". Textul se deduce din

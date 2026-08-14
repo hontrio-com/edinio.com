@@ -1985,6 +1985,7 @@ export type Database = {
           fgo_invoice_number: string | null
           gls_awb_at: string | null
           gls_awb_number: string | null
+          gls_evenimente_semnalate: Json | null
           gls_status_checked_at: string | null
           gls_status_code: string | null
           fgo_invoice_series: string | null
@@ -2083,6 +2084,7 @@ export type Database = {
           fgo_invoice_number?: string | null
           gls_awb_at?: string | null
           gls_awb_number?: string | null
+          gls_evenimente_semnalate?: Json | null
           gls_status_checked_at?: string | null
           gls_status_code?: string | null
           fgo_invoice_series?: string | null
@@ -2181,6 +2183,7 @@ export type Database = {
           fgo_invoice_number?: string | null
           gls_awb_at?: string | null
           gls_awb_number?: string | null
+          gls_evenimente_semnalate?: Json | null
           gls_status_checked_at?: string | null
           gls_status_code?: string | null
           fgo_invoice_series?: string | null

@@ -39,8 +39,17 @@ import type { OrderStatus } from "@/lib/orders/status";
  * curierului. Se semnaleaza, atat.
  */
 
-/** Statusuri care inchid comanda ca LIVRATA. */
-const LIVRAT = new Set([5, 54, 58]);
+/**
+ * Statusuri care inchid comanda ca LIVRATA.
+ *
+ * ⚠ `92` = „The parcel has been delivered." — acelasi inteles ca 5, cu alt
+ * numar. Lipsea, si costa exact cat o livrare nedescoperita: comanda ramanea
+ * „expediata" pentru totdeauna, facturarea automata nu pornea niciodata, iar
+ * cronul reintreba de coletul ala inca 21 de zile.
+ *
+ * `93` = „Signature confirmed." — semnatura de primire, deci coletul e la om.
+ */
+const LIVRAT = new Set([5, 54, 58, 92, 93]);
 
 /** Coletul a plecat de la comerciant si e pe drum (ori a incercat sa ajunga). */
 const EXPEDIAT = new Set([
@@ -49,6 +58,26 @@ const EXPEDIAT = new Set([
   53, 55, 56, 57, 59,
   /* Vama: coletul e in retea, doar oprit. */
   60, 61, 62, 64, 65, 66, 67, 68, 69, 70, 71, 72,
+  /* ⚠ Restul familiei de vama, care lipsea: 73 blocat in tara de origine, 74
+     inspectie, 76 date inregistrate si coletul poate merge mai departe. */
+  73, 74, 76,
+  /* `80` = redirectionat catre adresa dorita; coletul merge in continuare. */
+  80,
+  /*
+   * ⚠ `97` = „Parcel is placed to parcellocker."
+   *
+   * Acelasi rationament ca la 55 si 56: coletul e IN locker, omul inca nu l-a
+   * ridicat. La ramburs, GLS ia banii abia la ridicare — deci „livrat" ar
+   * insemna sa marcam incasat ce nu s-a incasat.
+   */
+  97,
+  /* `99` = destinatarul a fost instiintat pe email. Doar o informare. */
+  99,
+  /*
+   * ⚠ Problemele de locker: coletul E in retea, doar ca nu poate intra in
+   * dulap. Nu misca statusul, dar se SEMNALEAZA — vezi `DE_SEMNALAT`.
+   */
+  401, 402, 403, 404, 420,
 ]);
 
 /**
@@ -62,8 +91,50 @@ const EXPEDIAT = new Set([
  */
 const LA_COMERCIANT = new Set([51, 52]);
 
-/** Coletul s-a intors sau nu mai exista. Comanda NU se inchide singura. */
-const NELIVRAT_FINAL = new Set([23, 40, 28, 31, 42]);
+/**
+ * Coletul s-a intors sau nu mai exista. Comanda NU se inchide singura.
+ *
+ * ⚠ `75` = „Parcel was confiscated by the Customs authorities." Marfa nu mai
+ * ajunge nici la client, nici inapoi la comerciant: e cel mai prost sfarsit
+ * posibil, si lipsea cu totul. Fara el, cronul ar fi intrebat de coletul ala
+ * pana la capatul ferestrei, iar comerciantul n-ar fi aflat niciodata.
+ */
+const NELIVRAT_FINAL = new Set([23, 40, 28, 31, 42, 75]);
+
+/**
+ * ⚠ Codurile serviciului de RIDICARE de la comerciant (Pickup-Service), 83-91.
+ *
+ * Descriu o comanda de ridicare, nu drumul unui colet catre cumparator — iar
+ * ridicarea nu e inca implementata (`CreatePickupRequest` e pe lista de facut).
+ * Nu misca statusul comenzii: ar fi o minciuna sa spunem „expediat" fiindca
+ * soferul a primit ordinul de ridicare.
+ *
+ * Cele care inseamna ESEC (87-91: ridicare anulata, marfa nepregatita, clientul
+ * neinstiintat) intra totusi in `DE_SEMNALAT`: acolo chiar trebuie sa se miste
+ * cineva.
+ */
+const RIDICARE = new Set([83, 84, 85, 86, 87, 88, 89, 90, 91]);
+
+/**
+ * Toate codurile pe care codul le RECUNOASTE, indiferent ce face cu ele.
+ *
+ * ⚠ Exista pentru proba care compara mecanic cu Appendix G. „Recunoscut" nu e
+ * acelasi lucru cu „muta comanda": 23 (retur) si 75 (confiscat) sunt cunoscute
+ * si dinadins nu misca nimic. Fara distinctia asta, o proba scrisa pe
+ * `statusComandaDinCod(...) !== null` ar cere ca fiecare cod sa schimbe statusul
+ * — adica exact greseala pe care fisierul o evita.
+ */
+export const CODURI_TRATATE: readonly number[] = [
+  ...new Set([...LIVRAT, ...EXPEDIAT, ...LA_COMERCIANT, ...NELIVRAT_FINAL, ...RIDICARE]),
+].sort((a, b) => a - b);
+
+const TRATATE = new Set(CODURI_TRATATE);
+
+/** Stim ce inseamna codul asta? (Chiar daca raspunsul e „nu se schimba nimic".) */
+export function eCunoscut(statusCode: string | number | null | undefined): boolean {
+  const cod = typeof statusCode === "number" ? statusCode : codNumeric(statusCode);
+  return cod !== null && TRATATE.has(cod);
+}
 
 /** Ordinea pe scara comenzii. Ce nu e aici nu se compara. */
 const TREAPTA: Record<string, number> = {
@@ -110,6 +181,12 @@ export function statusComandaDinCod(statusCode: string | null | undefined): Orde
    * `trebuieSemnalat` il anunta.
    */
   if (NELIVRAT_FINAL.has(cod)) return null;
+  /*
+   * Codurile de RIDICARE de la comerciant: cunoscute, dar dinadins fara efect
+   * asupra comenzii. Scrise aparte, nu lasate sa cada in ramura de mai jos, ca
+   * sa nu para o scapare la urmatoarea citire.
+   */
+  if (RIDICARE.has(cod)) return null;
   /* Cod necunoscut: GLS poate adauga oricand. Nu ghicim. */
   return null;
 }
@@ -148,6 +225,19 @@ const DE_SEMNALAT = new Set([
   36, 38, 39, 42, 43, 44, 57, 60, 62, 66, 68, 69, 70, 71, 72,
   /* Returnat expeditorului: cel mai important dintre toate. */
   23, 40,
+  /* ⚠ Vama, restul familiei: blocat in tara de origine, inspectie, CONFISCAT. */
+  73, 74, 75,
+  /*
+   * ⚠ Lockerul care nu primeste coletul: plin (401), colet prea mare (402),
+   * avariat (403), defectiune tehnica (404), dulap stricat (420).
+   *
+   * Toate cer o decizie omeneasca — se schimba livrarea, se suna clientul, se
+   * cere despagubire. Niciunul nu era cunoscut de cod, deci coletul ramanea
+   * blocat in dulap si singurul care afla era clientul, dupa cateva zile.
+   */
+  401, 402, 403, 404, 420,
+  /* Ridicarea de la comerciant care NU s-a putut face. */
+  87, 88, 89, 90, 91,
 ]);
 
 export function trebuieSemnalat(statusCode: string | null | undefined): boolean {

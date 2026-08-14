@@ -27,6 +27,8 @@ export interface CourierSelection {
   // the locker's locality, not the customer's, so they must survive into the order.
   lockerCity?: string;
   lockerCounty?: string;
+  /** Codul postal al punctului; GLS il cere obligatoriu pe adresa de livrare. */
+  lockerPostCode?: string;
   wootServiceId?: number;
   wootCourierName?: string;
   wootServiceName?: string;
@@ -224,6 +226,7 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         lockerAddress: locker.address,
         lockerCity: locker.city,
         lockerCounty: locker.county,
+        lockerPostCode: locker.postCode,
         token: opt.token,
       });
     }

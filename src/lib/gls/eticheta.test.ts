@@ -1,6 +1,16 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { cheieEticheta } from "./eticheta";
+
+/*
+ * ⚠ Se pune INAINTE de import: `cheieEticheta` cere acum un secret si ARUNCA
+ * daca nu-l gaseste. Pana acum cadea pe sirul gol, iar semnatura iesea tot 24 de
+ * caractere hexazecimale — deci nimic nu deosebea o cheie neghicibila de una
+ * calculabila de oricine. Proba de mai jos dovedeste mecanic ca secretul chiar
+ * intra in cheie.
+ */
+process.env.SHIPPING_QUOTE_SECRET ||= "secret-de-proba";
+
+const { cheieEticheta, cheiEticheta } = await import("./eticheta");
 
 /*
  * O eticheta AWB contine numele, adresa si telefonul CUMPARATORULUI — date
@@ -57,4 +67,52 @@ test("semnatura depinde de AMANDOUA id-urile, nu doar de comanda", () => {
   const s1 = cheieEticheta(BIZ, CMD).split("-").pop();
   const s2 = cheieEticheta(altBiz, CMD).split("-").pop();
   assert.notEqual(s1, s2);
+});
+
+test("⚠ secretul CHIAR intra in cheie — dovedit mecanic", () => {
+  /*
+   * Proba care lipsea, si fara de care „cheia e neghicibila" era doar o afirmatie
+   * din comentariu. Cu secretul cazut pe sirul gol, semnatura arata la fel — 24
+   * de caractere hexazecimale — deci nimic nu tradea degradarea.
+   */
+  const cuUnul = cheieEticheta(BIZ, CMD);
+  const vechi = process.env.SHIPPING_QUOTE_SECRET;
+  process.env.SHIPPING_QUOTE_SECRET = "cu-totul-alt-secret";
+  const cuAltul = cheieEticheta(BIZ, CMD);
+  process.env.SHIPPING_QUOTE_SECRET = vechi;
+
+  assert.notEqual(cuUnul, cuAltul, "semnatura nu depinde de secret");
+  assert.equal(cheieEticheta(BIZ, CMD), cuUnul, "secretul s-a restaurat");
+});
+
+test("⚠ formatele Zebra au cheie si extensie proprii", () => {
+  /*
+   * ZPL-ul nu e PDF. Salvate sub aceeasi cheie, o schimbare de format ar
+   * suprascrie fisierul vechi cu unul de alt fel, iar cititorul de PDF ar spune
+   * „fisier deteriorat" fara ca nimeni sa lege asta de configurare.
+   */
+  const pdf = cheieEticheta(BIZ, CMD, "pdf");
+  const zpl = cheieEticheta(BIZ, CMD, "zpl");
+  assert.ok(pdf.endsWith(".pdf"), pdf);
+  assert.ok(zpl.endsWith(".zpl"), zpl);
+  assert.notEqual(
+    pdf.replace(/\.pdf$/, ""),
+    zpl.replace(/\.zpl$/, ""),
+    "extensia trebuie sa intre si in SEMNATURA, nu doar in nume",
+  );
+  assert.equal(cheieEticheta(BIZ, CMD), pdf, "implicitul ramane PDF");
+});
+
+test("⚠ stergerea acopera si cheia VECHE, nesemnata cu extensia", () => {
+  /*
+   * Etichetele emise pana la schimbarea asta stau sub cheia fara extensie in
+   * semnatura. Scoase din lista, n-ar mai putea fi sterse de nicio cale din cod:
+   * nici la anularea AWB-ului, nici la stergerea comenzii, nici la o cerere GDPR.
+   */
+  const chei = cheiEticheta(BIZ, CMD);
+  assert.equal(chei.length, 3);
+  assert.ok(chei.includes(cheieEticheta(BIZ, CMD, "pdf")));
+  assert.ok(chei.includes(cheieEticheta(BIZ, CMD, "zpl")));
+  assert.equal(new Set(chei).size, 3, "cele trei chei trebuie sa fie DIFERITE");
+  for (const k of chei) assert.ok(k.startsWith(`awb/gls/${BIZ}/`), k);
 });

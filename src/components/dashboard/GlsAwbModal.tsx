@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Download, Loader2, Package, X } from "lucide-react";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { createGlsAwbAction, type DateAwbGls } from "@/lib/actions/gls.actions";
+import { MAX_COLETE } from "@/lib/gls/expediere";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -23,6 +24,12 @@ type ShippingAddress = {
   delivery_type?: string;
   locker_id?: string;
   locker_name?: string;
+  /* ⚠ Localitatea si judetul PUNCTULUI. Nedeclarate, `tsc` nu semnala lipsa lor,
+     iar formularul trimitea orasul CLIENTULUI cu strada si codul postal ale
+     punctului — o adresa care nu exista. La FAN Courier era deja corect. */
+  locker_city?: string;
+  locker_county?: string;
+  locker_post_code?: string;
 };
 
 /**
@@ -72,17 +79,27 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const areAwb = !!comanda.gls_awb_number;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
 
-  /* Livrarea la punct GLS aleasa de client in checkout. */
-  const laPunct = addr.courier === "gls" && addr.delivery_type === "locker" && !!addr.locker_id;
+  /*
+   * Livrarea la punct GLS aleasa de client in checkout.
+   *
+   * ⚠ Curierul se NORMALIZEAZA, exact ca in lot (`bulk-orders.actions.ts`).
+   * Scris aici `addr.courier === "gls"` si acolo `.toLowerCase().trim()`, aceeasi
+   * comanda ar fi fost citita diferit dupa cum se apasa butonul: pe o valoare
+   * venita cu majuscule sau cu spatii (import, marketplace, date mai vechi),
+   * formularul ar fi trimis coletul la DOMICILIU, iar lotul la punct.
+   */
+  const laPunct = (addr.courier ?? "").toLowerCase().trim() === "gls"
+    && addr.delivery_type === "locker"
+    && !!addr.locker_id;
 
   const [nume, setNume] = useState(order.customer_name ?? "");
   const [telefon, setTelefon] = useState(order.customer_phone ?? "");
   const [email, setEmail] = useState(order.customer_email ?? "");
-  const [oras, setOras] = useState(addr.city ?? "");
+  const [oras, setOras] = useState((laPunct ? addr.locker_city : "") || addr.city || "");
   const [strada, setStrada] = useState(
     [addr.street ?? addr.address ?? "", addr.street_no ?? ""].filter(Boolean).join(" ").trim(),
   );
-  const [codPostal, setCodPostal] = useState(addr.postal_code ?? "");
+  const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || "");
   const [numarColete, setNumarColete] = useState("1");
   /*
    * Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
@@ -125,7 +142,14 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `eticheta-gls-${comanda.gls_awb_number}.pdf`;
+      /*
+       * ⚠ Numele se ia din raspuns, nu se compune aici cu „.pdf".
+       *
+       * La formatele Zebra eticheta e ZPL, nu PDF. Salvata cu extensia gresita,
+       * cititorul spune „fisier deteriorat" si comerciantul n-are cum sa lege
+       * asta de formatul ales in configurare. Serverul stie ce a trimis.
+       */
+      a.download = numeDinAntet(res) ?? `eticheta-gls-${comanda.gls_awb_number}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -133,12 +157,27 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
   }
 
+  /** `filename="..."` din `Content-Disposition`, cand serverul il trimite. */
+  function numeDinAntet(res: Response): string | null {
+    const m = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "");
+    return m ? m[1] : null;
+  }
+
   function descarca(base64: string, awb: string) {
     const octeti = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([octeti], { type: "application/pdf" }));
+    /*
+     * ⚠ Se recunoaste PDF-ul dupa continut, nu se presupune.
+     *
+     * La formatele Zebra octetii sunt ZPL — text de imprimanta, care incepe cu
+     * „^XA". Numit `.pdf`, fisierul se deschide „deteriorat". Semnatura „%PDF-"
+     * e singurul lucru care nu minte, oricare ar fi configurarea.
+     */
+    const ePdf = String.fromCharCode(...octeti.subarray(0, 5)) === "%PDF-";
+    const tip = ePdf ? "application/pdf" : "application/vnd.zebra.zpl";
+    const url = URL.createObjectURL(new Blob([octeti], { type: tip }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `eticheta-gls-${awb}.pdf`;
+    a.download = `eticheta-gls-${awb}.${ePdf ? "pdf" : "zpl"}`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -148,16 +187,18 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if (!telefon.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
     if (!oras.trim()) return toast.error("Orasul destinatarului este obligatoriu");
     if (!laPunct && !strada.trim()) return toast.error("Adresa destinatarului este obligatorie");
-
     const colete = parseInt(numarColete, 10);
     if (!Number.isFinite(colete) || colete < 1) return toast.error("Numarul de colete trebuie sa fie cel putin 1");
+    /* „Count of parcels sent in one shipment. (maximum 99)" — pagina 9; peste,
+       GLS refuza toata expedierea cu codul 29. */
+    if (colete > MAX_COLETE) return toast.error(`GLS accepta cel mult ${MAX_COLETE} colete pe o expediere`);
 
     const date: DateAwbGls = {
       destinatar: {
         nume: nume.trim(),
         strada: strada.trim(),
         oras: oras.trim(),
-        judet: addr.county ?? null,
+        judet: (laPunct ? addr.locker_county : "") || addr.county || null,
         codPostal: codPostal.trim() || null,
         tara: addr.country || "RO",
         telefon: telefon.trim(),
@@ -268,6 +309,16 @@ Am salvat-o si noi, deci o poti descarca oricand din comanda. Butonul de mai
                 <span className="mb-1 block text-muted-foreground">Cod postal</span>
                 <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={codPostal} onChange={(e) => setCodPostal(e.target.value)} />
+                {/* ⚠ GLS il cere obligatoriu, dar comenzile din Romania nu-l
+                    primesc din checkout (campul se arata doar la livrarea
+                    internationala). Lasat gol, serverul il completeaza cu al unui
+                    punct GLS din acelasi oras — corect pentru rutare, dar nu al
+                    strazii clientului. Cine il stie, il scrie aici. */}
+                {!codPostal.trim() && (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Lasat gol, se completeaza cu codul localitatii din reteaua GLS.
+                  </span>
+                )}
               </label>
               {!laPunct && (
                 <label className="text-sm sm:col-span-2">
@@ -278,7 +329,7 @@ Am salvat-o si noi, deci o poti descarca oricand din comanda. Butonul de mai
               )}
               <label className="text-sm">
                 <span className="mb-1 block text-muted-foreground">Numar de colete</span>
-                <input type="number" min={1} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                <input type="number" min={1} max={MAX_COLETE} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={numarColete} onChange={(e) => setNumarColete(e.target.value)} />
               </label>
               <label className="text-sm">

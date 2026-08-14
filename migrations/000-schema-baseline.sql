@@ -4034,7 +4034,8 @@ create table if not exists public.orders (
   ecolet_service_name text,
   ecolet_awb_at timestamp with time zone,
   ecolet_status_code text,
-  ecolet_status_checked_at timestamp with time zone);
+  ecolet_status_checked_at timestamp with time zone,
+  gls_evenimente_semnalate jsonb);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,

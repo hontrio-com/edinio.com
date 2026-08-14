@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
   codNumeric,
+  eCunoscut,
   eStareFinala,
   esteRetur,
   statusComandaDinCod,
@@ -9,8 +10,10 @@ import {
   statusUrmator,
   trebuieSemnalat,
   ultimaStare,
+  CODURI_TRATATE,
   type StareCitita,
 } from "./statusuri";
+import { APPENDIX_G } from "./appendix-g";
 
 /*
  * Codurile vin din Appendix G al documentatiei MyGLS (ver. 25.12.11) — nu
@@ -246,4 +249,74 @@ test("returul e un caz aparte al semnalarii", () => {
   assert.equal(esteRetur("23"), true);
   assert.equal(esteRetur("40"), true);
   assert.equal(esteRetur("28"), false);
+});
+
+// ─── Acoperirea fata de Appendix G ────────────────────────────────────────────
+
+test("⚠⚠ FIECARE cod din Appendix G e cunoscut de cod", () => {
+  /*
+   * ⚠ Proba care lipsea, si care costa cel mai mult.
+   *
+   * Pana la 14.08.2026, 23 din cele 90 de coduri din Appendix G nu apareau in
+   * NICIO multime. Verificarea se facuse pe ochi, iar pe ochi nu se vede ce
+   * lipseste — se vede doar ce e scris. Printre cele lipsa:
+   *
+   *   92   „The parcel has been delivered."   livrare adevarata care nu inchidea
+   *                                           comanda si nu declansa facturarea
+   *   75   colet CONFISCAT de vama
+   *   401-404, 420   lockerul plin, coletul prea mare, dulapul stricat
+   *
+   * Acum lista oficiala sta in `appendix-g.ts`, copiata mecanic din PDF, si
+   * proba asta cade daca GLS mai adauga vreunul.
+   */
+  const necunoscute = Object.keys(APPENDIX_G).map(Number).filter((cod) => !eCunoscut(cod));
+
+  assert.deepEqual(
+    necunoscute,
+    [],
+    `coduri din documentatie pe care codul nu le cunoaste: ${necunoscute
+      .map((c) => `${c} (${APPENDIX_G[c]})`)
+      .join("; ")}`,
+  );
+});
+
+test("⚠ nu inventam coduri care nu exista in documentatie", () => {
+  /*
+   * Cealalta directie: un cod scris din memorie sau copiat dintr-un alt API GLS
+   * (webhook-ul din developer portal are ALT vocabular) ar sta acolo pentru
+   * totdeauna, fara sa se potriveasca vreodata cu ceva real.
+   */
+  for (const cod of CODURI_TRATATE) {
+    assert.ok(cod in APPENDIX_G, `codul ${cod} nu exista in Appendix G`);
+  }
+});
+
+test("⚠ codul 92 chiar inchide comanda, si se si factureaza", () => {
+  /* Cazul cel mai scump dintre cele 23: o livrare pe care n-o vedea nimeni. */
+  assert.equal(APPENDIX_G[92], "The parcel has been delivered.");
+  assert.equal(statusComandaDinCod("92"), "delivered");
+  assert.equal(statusUrmator("shipped", "92"), "delivered");
+  assert.equal(eStareFinala("92"), true);
+});
+
+test("⚠ problemele de locker se semnaleaza, dar nu misca comanda", () => {
+  for (const cod of [401, 402, 403, 404, 420]) {
+    assert.equal(trebuieSemnalat(String(cod)), true, `${cod} trebuie semnalat`);
+    assert.equal(statusComandaDinCod(String(cod)), "shipped", `${cod} ramane in retea`);
+    assert.equal(eStareFinala(String(cod)), false, `${cod} nu e un sfarsit`);
+  }
+});
+
+test("⚠ coletul confiscat de vama e un sfarsit, si se striga", () => {
+  assert.equal(APPENDIX_G[75], "Parcel was confiscated by the Customs authorities.");
+  assert.equal(trebuieSemnalat("75"), true);
+  assert.equal(statusComandaDinCod("75"), null, "decizia e a comerciantului");
+  assert.equal(eStareFinala("75"), true, "nu mai are rost sa fie intrebat");
+});
+
+test("⚠ coletul pus in locker NU e livrat: banii se iau la ridicare", () => {
+  /* Acelasi rationament ca la 55 si 56. Marcat livrat, am fi spus ca s-a
+     incasat un ramburs pe care GLS il ia abia cand omul deschide dulapul. */
+  assert.equal(statusComandaDinCod("97"), "shipped");
+  assert.equal(eStareFinala("97"), false);
 });

@@ -37,9 +37,15 @@ const NUME_TARA: Record<TaraMyGls, string> = {
  * emite AWB ar factura un colet real la fiecare apasare — iar butonul asta se
  * apasa de zece ori pana ies datele bune.
  *
- * ⚠ Serviciile optionale sunt OPRITE din oficiu, si nu din prudenta decorativa:
- * fiecare dintre ele (SMS, livrare flexibila, asigurare) e un cost per colet la
- * GLS. Comerciantul le porneste stiind ce plateste.
+ * ⚠ NU exista aici comutatoare pentru serviciile optionale (SMS, livrare
+ * flexibila, asigurare), si comentariul de dinainte spunea gresit ca „sunt
+ * oprite din oficiu, comerciantul le porneste". Nu exista de unde. `OptiuniServicii`
+ * din expediere.ts stie sa le construiasca, dar singurul camp trimis vreodata de
+ * vreun apelant e `parcelShopId` (punctul ales de client in checkout).
+ *
+ * Se scrie asa cum e, ca sa nu mai caute nimeni un ecran care nu exista. Cand se
+ * vor adauga, fiecare e un cost per colet la GLS — deci implicitul trebuie sa
+ * ramana OPRIT, iar comerciantul sa vada ce plateste.
  */
 export function GlsConfigClient({
   businessId,
@@ -69,7 +75,34 @@ export function GlsConfigClient({
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_number);
   const areParola = password.trim() !== "" || secretulEsteSalvat(initialConfig, "password");
-  const completat = username.trim() !== "" && areParola && clientNumber.trim() !== "";
+  /*
+   * ⚠ Codul postal intra in „completat", deci si in conditia butoanelor.
+   *
+   * `ZipCode` e camp REQUIRED in clasa `Address` a MyGLS, pentru adresa de
+   * ridicare la fel ca pentru cea de livrare. Lasat gol, fiecare colet pleca cu
+   * el necompletat si GLS refuza cu „Parcel validation issue" — un mesaj care nu
+   * numeste niciun camp, deci comerciantul n-avea de unde sa ghiceasca ce
+   * lipseste. Campul exista de la inceput, dar nu era nici obligatoriu, nici
+   * verificat nicaieri.
+   */
+  const completat =
+    username.trim() !== "" && areParola && clientNumber.trim() !== "" && codPostal.trim() !== "";
+
+  /*
+   * ⚠ Lista oferita e cea acceptata de EMITERE, plus valoarea deja salvata.
+   *
+   * `ShipItThermoZpl` a fost scos: apare in tabelul lui `GetPrintedLabels`
+   * (pagina 19) dar NU si in al lui `PrintLabels` (pagina 23), iar Appendix A are
+   * cod propriu pentru o valoare invalida (34). Formatul se alege o data si se
+   * trimite la fiecare colet, deci un comerciant care l-ar alege n-ar mai putea
+   * emite nimic.
+   *
+   * Valoarea salvata ramane in lista daca a fost aleasa cat timp era oferita —
+   * altfel `<select>` ar aparea GOL si prima salvare i-ar schimba tacut formatul.
+   */
+  const formateDeAles = TIPURI_IMPRIMANTA.includes(tipImprimanta as never)
+    ? [...TIPURI_IMPRIMANTA]
+    : [...TIPURI_IMPRIMANTA, tipImprimanta];
 
   function construieste(): GlsConfig {
     return {
@@ -86,7 +119,9 @@ export function GlsConfigClient({
   }
 
   async function handleTest() {
-    if (!completat) return toast.error("Completeaza utilizatorul, parola si Client Number-ul");
+    if (!completat) {
+      return toast.error("Completeaza utilizatorul, parola, Client Number-ul si codul postal de ridicare");
+    }
     if (!Number.isFinite(Number(clientNumber.trim()))) {
       return toast.error("Client Number trebuie sa fie un numar");
     }
@@ -205,7 +240,7 @@ export function GlsConfigClient({
               placeholder="ex. 100123456"
             />
           </Field>
-          <Field label="Cod postal ridicare">
+          <Field label="Cod postal ridicare" required>
             <Input
               type="text"
               inputMode="numeric"
@@ -275,7 +310,7 @@ export function GlsConfigClient({
               onChange={(e) => setTipImprimanta(e.target.value as TipImprimanta)}
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             >
-              {TIPURI_IMPRIMANTA.map((t) => (
+              {formateDeAles.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>

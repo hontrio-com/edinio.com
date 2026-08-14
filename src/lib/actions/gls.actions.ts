@@ -11,6 +11,7 @@ import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   areEtichete,
   eroriPeColet,
+  felulEtichetei,
   idColete,
   numereColet,
   pdfDinEtichete,
@@ -20,9 +21,16 @@ import {
   tipareste,
   type GlsConfig,
 } from "@/lib/gls/client";
-import { coletGls, type DateExpediere, type OptiuniServicii } from "@/lib/gls/expediere";
+import {
+  avertismenteColet,
+  coletGls,
+  motivRefuzSerbia,
+  type DateExpediere,
+  type OptiuniServicii,
+} from "@/lib/gls/expediere";
 import { dataDinNet } from "@/lib/gls/data-net";
-import { cheieEticheta } from "@/lib/gls/eticheta";
+import { codPostalOras } from "@/lib/gls/puncte";
+import { cheiEticheta, cheieEticheta } from "@/lib/gls/eticheta";
 import { deleteFromR2, uploadToR2 } from "@/lib/r2";
 import type { Json } from "@/types/database.types";
 
@@ -209,11 +217,36 @@ export async function createGlsAwbAction(
     codPostal: config.expeditor_cod_postal ?? null,
     telefon: firma?.phone ?? null,
     email: firma?.email ?? null,
-    tara: "RO",
+    /*
+     * ⚠ Tara expeditorului e cea a CONTRACTULUI, nu „RO" cablat.
+     *
+     * Configurarea ofera sapte tari si compune din ele si gazda API-ului
+     * (`api.mygls.<tara>`). Cablat „RO", un comerciant cu contract unguresc
+     * trimitea colete catre `api.mygls.hu` cu adresa de ridicare declarata in
+     * Romania — adica exact felul de nepotrivire pe care curierul o descopera
+     * cand vine sa ridice.
+     */
+    tara: config.tara || "RO",
   };
   if (!expeditor.nume || !expeditor.strada || !expeditor.oras) {
     return {
       error: "Completeaza adresa magazinului (nume, strada, oras) in setari — GLS o cere ca adresa de ridicare.",
+    };
+  }
+  /*
+   * ⚠ `ZipCode` e REQUIRED in clasa `Address` (pagina 10), pentru AMANDOUA
+   * adresele. Lasat gol, GLS refuza cu „Parcel validation issue" (Appendix A,
+   * 13) — un mesaj care nu numeste niciun camp, deci comerciantul nu are de unde
+   * sa ghiceasca ce lipseste si reincearca la nesfarsit.
+   *
+   * Campul exista in configurare de la inceput, dar nu era nici obligatoriu,
+   * nici verificat.
+   */
+  if (!expeditor.codPostal?.trim()) {
+    return {
+      error:
+        "Completeaza campul Cod postal ridicare in configurarea GLS: e adresa de unde ridica "
+        + "curierul, iar GLS il cere obligatoriu.",
     };
   }
 
@@ -239,6 +272,65 @@ export async function createGlsAwbAction(
   }
 
   /*
+   * ⚠ CODUL POSTAL AL DESTINATARULUI, si de ce lipseste aproape mereu.
+   *
+   * `ZipCode` e REQUIRED la MyGLS, dar checkout-ul nu-l cere pe comenzile
+   * romanesti: campul „Cod postal" se arata doar la livrarea internationala, iar
+   * `order.actions.ts` scrie `postal_code` in `shipping_address` numai cand tara
+   * difera de RO. Deci pe intern nici nu exista in baza — si pana acum pleca
+   * SIRUL GOL la fiecare colet, fara ca nimeni sa afle pana la refuzul GLS.
+   *
+   * Aici e locul unde se poate spune limpede ce lipseste si cine il poate
+   * completa: formularul de AWB are campul, iar comerciantul il vede.
+   */
+  /*
+   * ⚠ Cand lipseste, se cauta in punctele GLS din acelasi oras — NU se refuza
+   * imediat. Masurat pe productie: din 137 de comenzi romanesti din ultimele 90
+   * de zile, ZERO aveau cod postal. Deci un refuz sec ar fi facut generarea in
+   * masa inutilizabila pentru GLS, iar emiterea pe bucata ar fi cerut de fiecare
+   * data un camp pe care comerciantul nu-l stie pe de rost.
+   *
+   * Codul vine din fisierul lui GLS, deci e unul pe care reteaua lor il ruteaza.
+   * Se trece in avertismentele operatiei, ca sa se stie ca l-am pus noi.
+   */
+  let codPostalDest = date.destinatar?.codPostal?.trim() ?? "";
+  let codPostalGhicit = false;
+  if (!codPostalDest && laPunct) {
+    /*
+     * La livrarea in punct, adresa de livrare E a punctului, iar codul lui
+     * postal a venit odata cu el din reteaua GLS. E cel exact, nu o aproximare —
+     * de aceea se incearca INAINTEA caderii pe localitate.
+     */
+    const adr = (order.shipping_address ?? {}) as { locker_post_code?: string };
+    codPostalDest = (adr.locker_post_code ?? "").trim();
+  }
+  if (!codPostalDest) {
+    codPostalDest = (await codPostalOras(
+      config.tara || "RO",
+      date.destinatar?.oras ?? "",
+      /* ⚠ Judetul NU e de ornament: 23 de nume de localitate se repeta in mai
+         multe judete, iar codul postal alege depozitul. Fara el, „Mihail
+         Kogalniceanu" din Constanta pleca pe ruta Galatiului. */
+      date.destinatar?.judet,
+    )) ?? "";
+    codPostalGhicit = !!codPostalDest;
+  }
+  if (!codPostalDest) {
+    return {
+      error:
+        "Completeaza codul postal al destinatarului: GLS il cere obligatoriu, iar comenzile "
+        + "din Romania nu il primesc din checkout.",
+    };
+  }
+
+  /* Serbia cere date pe care nu le trimitem inca — spus inainte de a chema GLS. */
+  const refuzRS = motivRefuzSerbia({
+    referinta: "", destinatar: date.destinatar, expeditor,
+    clientNumber: Number(config.client_number), numarColete: date.numarColete,
+  });
+  if (refuzRS) return { error: refuzRS };
+
+  /*
    * ⚠ La livrarea in punct, GLS cere OBLIGATORIU datele de contact ale
    * destinatarului (documentatia ver. 25.12.11, pagina 36, la serviciul PSD).
    *
@@ -258,6 +350,21 @@ export async function createGlsAwbAction(
 
   const referinta = String(order.order_number ?? orderId).slice(0, 40);
 
+  /* Se compune o singura data: si `coletGls`, si `avertismenteColet` lucreaza pe
+     exact aceleasi date, altfel avertismentele ar descrie alt colet decat cel
+     trimis. */
+  const dateColet: DateExpediere = {
+    referinta,
+    destinatar: { ...date.destinatar, codPostal: codPostalDest },
+    expeditor,
+    clientNumber: Number(config.client_number),
+    numarColete: date.numarColete,
+    ramburs: date.ramburs,
+    valoare: date.valoare,
+    continut: date.continut,
+    servicii: date.servicii,
+  };
+
   const r = await cuRegistru(
     createAdminClient(),
     {
@@ -268,47 +375,97 @@ export async function createGlsAwbAction(
       cheie: cheieOperatie("awb", "gls", orderId),
     },
     async () => {
-      const colet = coletGls({
-        referinta,
-        destinatar: date.destinatar,
-        expeditor,
-        clientNumber: Number(config.client_number),
-        numarColete: date.numarColete,
-        ramburs: date.ramburs,
-        valoare: date.valoare,
-        continut: date.continut,
-        servicii: date.servicii,
-      });
+      const colet = coletGls(dateColet);
 
       const raspuns = await tipareste(config, [colet]);
 
-      /*
-       * ⚠ Un raspuns poate avea SI etichete, SI erori. Aici insa e un singur
-       * colet: daca a picat, nu exista nimic de salvat, iar mesajul lui GLS e
-       * mult mai util decat un „a esuat" generic.
-       *
-       * E un REFUZ dovedit (validare la ei), deci reincercarea dupa corectarea
-       * datelor e libera — exact ce vrea comerciantul sa poata face.
-       */
       const erori = eroriPeColet(raspuns);
-      if (!areEtichete(raspuns) || numereColet(raspuns).length === 0) {
-        throw Object.assign(
-          new Error(erori.length ? `GLS a refuzat: ${erori.join("; ")}` : "GLS nu a intors nicio eticheta"),
-          { verdictFurnizor: "esuat" as const },
-        );
+      const numere = numereColet(raspuns);
+
+      /*
+       * ═══ ⚠⚠ COLETUL CREAT NU SE ARUNCA NICIODATA ═══
+       *
+       * Conditia de aici era `!areEtichete(raspuns) || numere.length === 0`, cu
+       * SAU — deci se arunca si atunci cand `PrintLabelsInfoList` CONTINEA
+       * numere de colet, doar fiindca lipseau octetii etichetei. Si se arunca cu
+       * `verdictFurnizor: "esuat"`, care pentru registru inseamna „nu s-a
+       * intamplat nimic acolo, reincercarea e LIBERA".
+       *
+       * Rezultatul: coletele existau la GLS, facturate; slotul se elibera; a
+       * doua apasare chema `PrintLabels` din nou si mai facea unul. Iar
+       * `ParcelId`-urile primului se pierdeau odata cu exceptia, deci nici anulat
+       * nu mai putea fi — un colet real pe care nimic din aplicatie nu-l mai
+       * cunostea.
+       *
+       * Acum: DACA AVEM NUMERE, OPERATIA A REUSIT. Eticheta lipsa e o neplacere
+       * recuperabila (`/api/gls/awb` o cere inapoi cu `GetPrintedLabels`, care nu
+       * creeaza nimic); un colet pierdut nu e.
+       */
+      if (numere.length === 0) {
+        /*
+         * Chiar si aici, „esuat" se da doar cu DOVADA: erorile pe colet vin de
+         * la validarea lor si dovedesc ca nu s-a creat nimic. Fara ele nu stim
+         * ce s-a intamplat, iar implicitul lui `verdictFurnizor` e „necunoscut" —
+         * care blocheaza, si pe buna dreptate.
+         */
+        if (erori.length > 0) {
+          throw Object.assign(new Error(`GLS a refuzat: ${erori.join("; ")}`), {
+            verdictFurnizor: "esuat" as const,
+          });
+        }
+        throw new Error("GLS nu a intors niciun numar de colet");
       }
 
-      const numere = numereColet(raspuns);
       /*
        * ⚠ `ParcelId` se pastreaza in registru, nu pe comanda: `DeleteLabels` si
        * `GetPrintedLabels` il cer pe EL, nu numarul de pe eticheta. Fara el nu
        * se poate nici anula AWB-ul, nici retipari eticheta din GLS.
        */
       const ids = idColete(raspuns);
-      const pdf = pdfDinEtichete(raspuns);
+      const pdf = areEtichete(raspuns) ? pdfDinEtichete(raspuns) : null;
+      if (!pdf) {
+        /*
+         * Coletul exista, eticheta nu a venit. Se striga, fiindca inseamna un
+         * drum in plus pentru comerciant — dar NU se arunca.
+         */
+        await logError({
+          action: "gls.createAwb",
+          message: `AWB GLS ${numere[0]} creat, dar GLS nu a intors eticheta${
+            erori.length ? `: ${erori.join("; ")}` : ""
+          }. Se poate descarca din comanda (GetPrintedLabels).`,
+          details: { orderId, businessId, numere, parcelIds: ids },
+          businessId,
+          severity: "warning",
+        });
+      }
       return {
         referinta: numere[0],
-        detalii: { numere, parcelIds: ids, avertismente: erori },
+        detalii: {
+          numere,
+          parcelIds: ids,
+          avertismente: [
+            ...erori,
+            ...avertismenteColet(dateColet),
+            ...(codPostalGhicit
+              ? [`Comanda nu avea cod postal; s-a folosit ${codPostalDest}, al unui punct GLS din ${date.destinatar?.oras ?? "aceeasi localitate"}.`]
+              : []),
+          ],
+          /*
+           * ⚠ MEDIUL IN CARE S-A EMIS. Fara el, anularea poate intreba alta baza.
+           *
+           * `api.mygls.ro` si `api.test.mygls.ro` sunt sisteme SEPARATE, la fel
+           * cele sapte tari. Daca dupa emitere comerciantul comuta pe mediul de
+           * test, `DeleteLabels` intreaba acolo de un `ParcelId` de productie,
+           * primeste codul 4 („Parcel ID not exists") si noi il citim ca „s-a
+           * sters" — golim AWB-ul de pe comanda in timp ce coletul real, cu
+           * rambursul lui, chiar pleaca spre client.
+           */
+          mediu: {
+            sandbox: !!config.sandbox,
+            tara: config.tara || "RO",
+            clientNumber: Number(config.client_number),
+          },
+        },
         valoare: {
           awb: numere[0],
           etichetaBase64: pdf ? pdf.toString("base64") : null,
@@ -371,10 +528,15 @@ export async function createGlsAwbAction(
    */
   if (r.fel === "facut" && rezultat.etichetaBase64) {
     try {
+      /* Formatul ales de comerciant hotaraste si extensia, si tipul MIME: ZPL-ul
+         salvat ca PDF se deschide „deteriorat". */
+      const fel = felulEtichetei(config.tip_imprimanta);
       await uploadToR2(
         Buffer.from(rezultat.etichetaBase64, "base64"),
-        cheieEticheta(businessId, orderId),
-        "application/pdf",
+        cheieEticheta(businessId, orderId, fel.ext),
+        fel.tipMime,
+        /* ⚠ Nu e o poza de produs: contine datele cumparatorului. Vezi `uploadToR2`. */
+        "private, no-store",
       );
     } catch (e) {
       await logError({
@@ -449,11 +611,16 @@ export async function createGlsAwbAction(
  * De aceea nu se foloseste nici `.single()`: mai multe randuri sunt normale aici,
  * iar `.single()` ar arunca exact in cazul obisnuit.
  */
+type DetaliiEmitere = {
+  parcelIds: number[];
+  mediu: { sandbox?: boolean; tara?: string; clientNumber?: number } | null;
+};
+
 async function parcelIdsDinRegistru(
   admin: ReturnType<typeof createAdminClient>,
   businessId: string,
   orderId: string,
-): Promise<number[] | null> {
+): Promise<DetaliiEmitere | null> {
   const { data, error } = await admin
     .from("operatii_externe")
     .select("detalii")
@@ -470,9 +637,127 @@ async function parcelIdsDinRegistru(
    */
   if (error) return null;
 
-  const detalii = data?.[0]?.detalii as { parcelIds?: unknown } | null;
+  const detalii = data?.[0]?.detalii as
+    | { parcelIds?: unknown; mediu?: DetaliiEmitere["mediu"] }
+    | null;
   const brute = Array.isArray(detalii?.parcelIds) ? detalii.parcelIds : [];
-  return brute.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  return {
+    parcelIds: brute.map(Number).filter((n) => Number.isInteger(n) && n > 0),
+    mediu: detalii?.mediu ?? null,
+  };
+}
+
+/**
+ * ⚠ Intrebam ACEEASI instanta MyGLS in care s-a emis coletul?
+ *
+ * Productia si mediul de test sunt baze SEPARATE, si la fel cele sapte tari. Un
+ * `ParcelId` de productie pur si simplu nu exista in mediul de test — iar acolo
+ * GLS raspunde cu codul 4, „Parcel ID not exists", pe care noi il citim (pe buna
+ * dreptate, in mod normal) drept „a fost sters".
+ *
+ * Deci un comerciant care porneste comutatorul „Mediu de test" ca sa incerce
+ * ceva, si apoi anuleaza un AWB vechi, ar goli numarul de pe comanda in timp ce
+ * coletul real — cu rambursul lui — chiar pleaca spre client. Si comanda,
+ * ramasa fara AWB, ar putea emite linistit al doilea.
+ *
+ * `null` la `mediu` inseamna un AWB emis inainte ca mediul sa fie pastrat: nu
+ * putem verifica, deci nu blocam — dar nici nu inventam o certitudine.
+ */
+function nepotrivireDeMediu(
+  mediu: DetaliiEmitere["mediu"],
+  config: GlsConfig,
+): string | null {
+  if (!mediu) return null;
+  const acum = { sandbox: !!config.sandbox, tara: (config.tara || "RO").toUpperCase() };
+  const atunci = {
+    sandbox: !!mediu.sandbox,
+    tara: (mediu.tara || "RO").toUpperCase(),
+  };
+  if (acum.sandbox === atunci.sandbox && acum.tara === atunci.tara) return null;
+
+  /*
+   * ⚠ SE BLOCHEAZA DOAR DIRECTIA PERICULOASA.
+   *
+   * Prima varianta refuza orice nepotrivire, in ambele sensuri — si asa producea
+   * chiar tiparul pe care tot fisierul il evita: un AWB emis in MEDIUL DE TEST
+   * nu mai putea fi nici anulat (nepotrivire), nici reemis (numarul e pe
+   * comanda), deci comanda ramanea infundata definitiv pentru un colet care nici
+   * macar nu exista.
+   *
+   * Riscul real e intr-o singura directie: coletul a fost emis in PRODUCTIE, deci
+   * e adevarat si costa bani, iar noi am intreba acum mediul de test. Invers,
+   * coletul de „atunci" e fictiv si nu se poate strica nimic lasand curatenia sa
+   * mearga.
+   */
+  if (atunci.sandbox) return null;
+
+  const nume = (m: { sandbox: boolean; tara: string }) =>
+    `${m.tara}, ${m.sandbox ? "mediu de test" : "productie"}`;
+  return (
+    `Coletul a fost emis pe ${nume(atunci)}, iar integrarea e acum pe ${nume(acum)}. `
+    + "Sunt sisteme separate: o operatie facuta acum nu ar atinge coletul real. "
+    + "Comuta configurarea GLS inapoi si incearca din nou."
+  );
+}
+
+/**
+ * A plecat coletul din depozit, sau inca n-a fost predat lui GLS?
+ *
+ * ⚠ Serveste la o singura intrebare: cand `DeleteLabels` raspunde cu codul 6,
+ * inseamna „l-am sters deja" sau „l-am preluat si pleaca spre client"?
+ *
+ * Codurile 51 („the parcel was not yet handed over to GLS") si 52 (datele de
+ * ramburs introduse) descriu un colet inregistrat, dar inca la comerciant. Daca
+ * ISTORICUL nu contine nimic altceva, coletul n-a plecat niciodata — deci starea
+ * „diferita de PRINTED" e chiar DELETED, adica o anulare care si-a pierdut
+ * raspunsul.
+ *
+ * `null` = nu s-a putut afla. Atunci nu se atinge nimic: mai bine o anulare de
+ * reluat decat un AWB sters de pe o comanda al carei colet chiar pleaca.
+ */
+async function coletulAPlecat(
+  config: GlsConfig,
+  numarColet: string,
+): Promise<boolean | null> {
+  try {
+    /*
+     * ⚠ Termen SCURT, ca in cron. Implicitul clientului e de 60 de secunde, iar
+     * apelul asta vine DUPA `DeleteLabels` (inca 60) — intr-o actiune de server
+     * apasata de om. Verdictul e oricum optional: la expirare iese „nu stim", si
+     * comanda ramane neatinsa.
+     */
+    const stari = await stariColet(config, numarColet, 12_000);
+
+    /*
+     * ⚠⚠ LIPSA MISCARII NU E DOVADA. Aici implicitul trebuie sa fie „nu stim".
+     *
+     * O varianta anterioara intorcea `false` („n-a plecat") pentru o lista GOALA
+     * de stari — iar `false` duce mai departe la STERGEREA AWB-ului de pe
+     * comanda. Numai ca cele doua fapte comparate vin din doua subsisteme
+     * diferite ale GLS: `DeleteLabels` citeste starea coletului, iar
+     * `GetParcelStatuses` citeste urmarirea, care publica scanarile cu ore
+     * intarziere (chiar cronul nostru descrie cazul). Un colet ridicat fizic, dar
+     * inca nescanat in urmarire, are lista goala — si l-am fi declarat „sters",
+     * stergand de pe comanda un transport real, cu rambursul pe el.
+     *
+     * Deci: doar un istoric NEVID compus EXCLUSIV din 51/52 („datele au intrat,
+     * coletul e inca la comerciant") dovedeste ca n-a plecat.
+     */
+    if (stari.length === 0) return null;
+
+    const coduri = stari
+      .map((s) => Number(String(s.StatusCode ?? "").trim()))
+      .filter((c) => Number.isInteger(c));
+    if (coduri.length === 0) return null;
+    return coduri.some((c) => c !== 51 && c !== 52);
+  } catch {
+    /*
+     * ⚠ Si un colet NEGASIT ajunge aici (`stariColet` arunca pe
+     * `GetParcelStatusErrors`). „Negasit" nu dovedeste ca n-a plecat — poate GLS
+     * nu-l are inca indexat — deci raspunsul cinstit e „nu stim".
+     */
+    return null;
+  }
 }
 
 /**
@@ -505,11 +790,17 @@ export async function deleteGlsAwbAction(
   if (!comanda.gls_awb_number) return { error: "Nu exista AWB GLS pentru aceasta comanda" };
 
   const admin = createAdminClient();
-  const parcelIds = await parcelIdsDinRegistru(admin, businessId, orderId);
+  const emitere = await parcelIdsDinRegistru(admin, businessId, orderId);
 
-  if (parcelIds === null) {
+  if (emitere === null) {
     return { error: "Nu am putut citi datele coletului. Incearca din nou peste un minut." };
   }
+
+  /* Nu se atinge nimic daca am intreba alt mediu decat cel in care s-a emis. */
+  const nepotrivire = nepotrivireDeMediu(emitere.mediu, config);
+  if (nepotrivire) return { error: nepotrivire };
+
+  const parcelIds = emitere.parcelIds;
   if (parcelIds.length === 0) {
     /*
      * Mesajul spune exact ce se poate face, fiindca noi chiar nu mai putem face
@@ -534,9 +825,9 @@ export async function deleteGlsAwbAction(
   /*
    * ⚠ NIMIC STERS INSEAMNA NIMIC SCHIMBAT.
    *
-   * Cazul care conteaza e codul 6 din Appendix A: „Parcel with this ID has
-   * different status than PRINTED", adica GLS a preluat deja coletul. Acela chiar
-   * pleaca spre client. Daca am goli `gls_awb_number` aici, comanda ar ramane cu
+   * Cazul care conteaza e codul 6 din Appendix A, tratat mai jos: cand inseamna
+   * ca GLS a preluat coletul, acela chiar pleaca spre client. Daca am goli
+   * `gls_awb_number`, comanda ar ramane cu
    * un transport real pe care nu-l mai stie nimeni — si l-am putea emite a doua
    * oara, cu al doilea colet facturat.
    *
@@ -545,7 +836,78 @@ export async function deleteGlsAwbAction(
    * DUPA ce GLS apucase sa stearga ar fi lasat comanda cu un AWB pe care nimeni
    * nu-l mai putea scoate.
    */
-  const disparute = rod.sterse.length + rod.inexistente.length;
+  /*
+   * ═══ ⚠⚠ CODUL 6, SI DE CE NU MAI E O SIMPLA EROARE ═══
+   *
+   * `DeleteLabels` e descrisa in documentatie chiar in prima ei linie ca „Set
+   * DELETED state for labels/parcels" (pagina 27). NU sterge inregistrarea, ii
+   * schimba starea. Deci la o A DOUA cerere pentru acelasi `ParcelId`, coletul
+   * EXISTA in continuare si raspunsul nu mai poate fi codul 4 („Parcel ID not
+   * exists") — e codul 6, „different status than PRINTED", fiindca starea lui e
+   * acum DELETED.
+   *
+   * Asta darama povestea pe care se sprijinea toata curatenia de dupa o anulare
+   * al carei raspuns s-a pierdut („a doua apasare ia codul 4 si se repara
+   * singur"). In realitate a doua apasare ia 6, care era tratat ca „a mai ramas
+   * un colet viu": nu se golea nimic, nu se elibera slotul, reemiterea era
+   * refuzata de numarul ramas pe comanda, iar randul `reusit` nici nu apare in
+   * supapa de operatii atarnate. Fundatura permanenta.
+   *
+   * Numai ca 6 nu inseamna DOAR asta: inseamna si „GLS a preluat coletul si
+   * chiar pleaca spre client" — cazul in care AWB-ul nu are voie sa dispara.
+   * Cele doua se deosebesc uitandu-ne la ISTORICUL coletului, care e o citire
+   * pura si nu creeaza nimic:
+   *
+   *   fara nicio miscare, sau doar 51/52   -> coletul n-a plecat niciodata din
+   *                                           depozit, deci 6 inseamna „deja sters"
+   *   cu miscari reale in retea            -> coletul e viu, se lasa in pace
+   */
+  let nesigureDeSters = 0;
+  if (rod.nesigure.length > 0) {
+    /*
+     * ⚠⚠ ISTORICUL UNUI COLET NU HOTARASTE SOARTA CELORLALTE.
+     *
+     * `gls_awb_number` poarta numarul PRIMULUI colet, iar `stariColet` lucreaza
+     * pe numar, nu pe `ParcelId` — deci pentru o expediere cu mai multe colete
+     * n-avem cum sa intrebam decat despre acela. O varianta anterioara aplica
+     * verdictul lui la TOATE ID-urile din `nesigure`: la o expediere de trei
+     * colete din care GLS il stersese pe primul si le preluase pe celelalte doua,
+     * comanda ramanea fara AWB in timp ce doua colete reale, cu rambursul pe ele,
+     * plecau spre client — si comanda putea emite linistit al doilea AWB.
+     *
+     * Cat timp nu pastram perechile `{parcelId, parcelNumber}` la emitere,
+     * scurtatura se aplica DOAR cand exista un singur colet. La mai multe, se
+     * intoarce eroarea si comanda ramane neatinsa — ca inainte.
+     */
+    const unSingurColet = parcelIds.length === 1;
+    const aPlecat = unSingurColet ? await coletulAPlecat(config, comanda.gls_awb_number) : true;
+    if (aPlecat === false) {
+      nesigureDeSters = rod.nesigure.length;
+    } else {
+      /* `true` (a plecat) sau `null` (nu s-a putut afla): nu se atinge nimic. */
+      await logError({
+        action: "gls.deleteAwb",
+        message:
+          `AWB GLS ${comanda.gls_awb_number}: GLS a raspuns cu codul 6 pentru ${rod.nesigure.length} colete`
+          + `${aPlecat === null ? ", iar istoricul coletului nu s-a putut citi" : ", iar coletul e in retea"}`
+          + ". Comanda ramane neatinsa.",
+        details: { orderId, businessId, awb: comanda.gls_awb_number, nesigure: rod.nesigure, aPlecat },
+        businessId,
+        severity: "warning",
+      });
+      return {
+        error:
+          !unSingurColet
+            ? "GLS nu a anulat toate coletele acestei expedieri. Verifica-le in contul MyGLS si anuleaza-le de acolo."
+            : aPlecat === null
+            ? "GLS nu a confirmat anularea, iar starea coletului nu s-a putut verifica. Incearca din nou peste un minut."
+            : "Coletul a fost deja preluat de GLS si pleaca spre client, deci nu mai poate fi anulat prin API. "
+              + "Opreste-l din contul MyGLS sau refuza-l la livrare.",
+      };
+    }
+  }
+
+  const disparute = rod.sterse.length + rod.inexistente.length + nesigureDeSters;
 
   /*
    * ⚠ ORICE COLET RAMAS VIU OPRESTE TOT.
@@ -629,9 +991,11 @@ export async function deleteGlsAwbAction(
     });
   }
 
-  /* Eticheta veche nu mai are voie sa ramana la cheia pe care o va folosi urmatoarea. */
+  /* Eticheta veche nu mai are voie sa ramana la cheia pe care o va folosi
+     urmatoarea. Se incearca TOATE formele: comerciantul poate fi schimbat
+     formatul de imprimanta intre emitere si anulare. */
   try {
-    await deleteFromR2(cheieEticheta(businessId, orderId));
+    await Promise.all(cheiEticheta(businessId, orderId).map((k) => deleteFromR2(k)));
   } catch (e) {
     await logError({
       action: "gls.deleteAwb",
@@ -686,6 +1050,14 @@ export async function getGlsParcelStatusAction(
 
   const awb = (order as typeof order & { gls_awb_number?: string | null }).gls_awb_number;
   if (!awb) return { error: "Comanda nu are AWB GLS" };
+
+  /*
+   * Aceeasi paza ca la anulare: intrebat in alt mediu, coletul iese „negasit" si
+   * comerciantul crede ca s-a pierdut, cand de fapt am cautat in alta baza.
+   */
+  const emitere = await parcelIdsDinRegistru(createAdminClient(), businessId, orderId);
+  const nepotrivire = emitere && nepotrivireDeMediu(emitere.mediu, config);
+  if (nepotrivire) return { error: nepotrivire };
 
   try {
     const stari = await stariColet(config, awb);

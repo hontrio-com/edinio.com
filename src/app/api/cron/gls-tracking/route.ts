@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
-import { stariColet, type GlsConfig } from "@/lib/gls/client";
+import { stariColet, CODURI_COLET_NEGASIT as CODURI_COLET_NECUNOSCUT, type GlsConfig } from "@/lib/gls/client";
 import { dataDinNet } from "@/lib/gls/data-net";
 import {
   eStareFinala,
@@ -69,12 +69,6 @@ const ZILE = 21;
  */
 const MAX_COMENZI = 120;
 
-/** Termenul rularii, sub cele 60 de secunde ale functiei. */
-const BUGET_MS = 50_000;
-
-/** Cate apeluri deodata. Secvential, 120 de colete n-ar incapea in buget. */
-const DEODATA = 4;
-
 /**
  * ⚠ Cat asteptam un singur colet.
  *
@@ -89,6 +83,29 @@ const DEODATA = 4;
  * costa nimic si nu creeaza niciun colet.
  */
 const ASTEPTARE_COLET_MS = 12_000;
+
+/**
+ * Termenul rularii.
+ *
+ * ⚠ TREBUIE SA INCAPA, IMPREUNA CU UN APEL INTREG, IN `maxDuration`.
+ *
+ * Era 50s la un `maxDuration` de 60s, cu o asteptare pe colet de 12s. Verificarea
+ * de termen se face la INCEPUTUL feliei, deci o felie pornita la 49,9s se putea
+ * intinde pana la ~62s — adica Vercel oprea functia in mijlocul ei. Iar acolo se
+ * pierdeau chiar semnalarile: marcajul „am vazut" apuca sa se scrie, notificarea
+ * nu (vezi ordinea din bucla).
+ *
+ * `maxDuration - asteptare - marja` inchide gaura din calcul, iar termenul se
+ * verifica acum si INAINTE de fiecare colet, nu doar la inceputul feliei.
+ *
+ * ⚠ Se calculeaza din `maxDuration`, nu scris de mana: altfel cele doua numere
+ * se pot departa tacut la prima marire a limitei.
+ */
+const MARJA_MS = 5_000;
+const BUGET_MS = maxDuration * 1000 - ASTEPTARE_COLET_MS - MARJA_MS;
+
+/** Cate apeluri deodata. Secvential, 120 de colete n-ar incapea in buget. */
+const DEODATA = 4;
 
 /** Aceeasi regula de „configurat complet" ca in gls.actions.ts. */
 function glsGata(c: GlsConfig | null | undefined): c is GlsConfig {
@@ -110,7 +127,7 @@ export async function GET(req: NextRequest) {
 
   const { data: orders, error: eOrders } = await admin
     .from("orders")
-    .select("id, business_id, status, order_number, payment_status, created_at, gls_awb_number, gls_awb_at, gls_status_code, gls_status_checked_at")
+    .select("id, business_id, status, order_number, payment_status, created_at, gls_awb_number, gls_awb_at, gls_status_code, gls_status_checked_at, gls_evenimente_semnalate")
     .not("gls_awb_number", "is", null)
     .neq("gls_awb_number", "")
     /*
@@ -215,8 +232,27 @@ export async function GET(req: NextRequest) {
   let ramase = 0;
   /* Comenzi cu AWB GLS dintr-un magazin care intre timp a oprit integrarea. */
   let faraConfig = 0;
+  /* Colete la care s-a ajuns, dar pentru care nu mai era timp in tura. */
+  let sarite = 0;
   /* Colete al caror drum s-a incheiat: nu se mai intreaba, doar se dau la rand. */
   let incheiate = 0;
+
+  /*
+   * ⚠ Esecurile se numara PE MAGAZIN, si pe fel.
+   *
+   * Alarma dinainte era `verificate === 0 && esuate > 0`, adica pe intreaga
+   * platforma. Cu doua magazine pe GLS, unul care isi schimba parola nu mai
+   * declansa nimic: coletele celuilalt reuseau, `verificate` iesea mai mare ca
+   * zero, iar urmarirea primului murea in tacere. Si invers, un singur magazin cu
+   * cinci AWB-uri proaspete, pe care GLS nu le are inca indexate, producea o
+   * alarma CRITICA falsa despre datele de acces.
+   */
+  const galeti = new Map<string, { negasite: number; autentificare: number; reusite: number; exemplu: string }>();
+  const galeata = (bizId: string) => {
+    let g = galeti.get(bizId);
+    if (!g) { g = { negasite: 0, autentificare: 0, reusite: 0, exemplu: "" }; galeti.set(bizId, g); }
+    return g;
+  };
 
   for (let i = 0; i < inFereastra.length; i += DEODATA) {
     if (Date.now() >= termen) {
@@ -241,17 +277,35 @@ export async function GET(req: NextRequest) {
        * Aceeasi capcana ca la marcajul de timp din ingestul de marketplace, unde
        * un singur pachet otravit ingheta fereastra intregului magazin.
        */
-      const marcheazaVerificat = async (codNou: string | null) => {
+      const marcheazaVerificat = async (
+        codNou: string | null,
+        semnalate?: string[],
+      ) => {
         const { error } = await admin
           .from("orders")
           .update({
             gls_status_code: codNou ?? o.gls_status_code,
             gls_status_checked_at: new Date().toISOString(),
+            ...(semnalate ? { gls_evenimente_semnalate: semnalate } : {}),
           })
           .eq("id", o.id)
           .eq("business_id", o.business_id);
         if (error) {
-          console.error("[gls-tracking] marcajul nu s-a scris pentru", o.id, error.message);
+          /*
+           * ⚠ In `error_logs`, nu doar in `console.error`.
+           *
+           * Marcajul e singurul lucru care face rotatia sa inainteze. Daca nu se
+           * scrie, coletul ramane vesnic in capul cozii si consuma un loc din
+           * plafon la FIECARE rulare — iar semnalarile lui se repeta la nesfarsit.
+           * Un `console.error` intr-un cron nu-l citeste nimeni niciodata.
+           */
+          await logError({
+            action: "gls-tracking",
+            message: `marcajul de verificare nu s-a scris pentru comanda ${o.order_number ?? o.id}: ${error.message}. Coletul ramane in capul cozii si va fi reluat la fiecare rulare.`,
+            details: { orderId: o.id, awb: o.gls_awb_number, code: error.code },
+            businessId: o.business_id,
+            severity: "warning",
+          });
         }
       };
 
@@ -284,6 +338,21 @@ export async function GET(req: NextRequest) {
         return;
       }
 
+      /*
+       * ⚠ Termenul se verifica si AICI, nu doar la inceputul feliei.
+       *
+       * Cele patru colete ale unei felii pornesc deodata, dar cel de-al patrulea
+       * poate ajunge la apel dupa ce primele trei au consumat aproape tot ce mai
+       * era. Fara verificarea asta, un apel de 12 secunde pornit la limita duce
+       * functia peste `maxDuration`, iar Vercel o taie exact intre semnalare si
+       * marcaj. Sarit acum, coletul isi pastreaza marcajul vechi, deci iese
+       * primul la tura urmatoare.
+       */
+      if (Date.now() >= termen) {
+        sarite++;
+        return;
+      }
+
       let stari: StareCitita[];
       try {
         const brute = await stariColet(config, o.gls_awb_number!, ASTEPTARE_COLET_MS);
@@ -298,14 +367,24 @@ export async function GET(req: NextRequest) {
          * proba de conexiune din panou. Un AWB proaspat, pe care GLS nu l-a
          * inregistrat inca, e cazul obisnuit, nu un defect. Prins per colet, ca o
          * singura exceptie sa nu omoare toata tura.
+         *
+         * ⚠ Se pun in DOUA galeti, pe magazin. Vezi alarma de la sfarsit: un
+         * „colet necunoscut" e purtare normala, o cadere de autentificare e un
+         * defect care omoara urmarirea magazinului aceluia.
          */
         esuate++;
+        const cauze = (e as { cauze?: number[] }).cauze ?? [];
+        const doarNegasit = cauze.length > 0 && cauze.every((c) => CODURI_COLET_NECUNOSCUT.has(c));
+        const g = galeata(o.business_id);
+        if (doarNegasit) g.negasite++;
+        else { g.autentificare++; g.exemplu ||= (e as Error).message; }
         console.error("[gls-tracking] colet", o.gls_awb_number, (e as Error).message);
         await marcheazaVerificat(null);
         return;
       }
 
       verificate++;
+      galeata(o.business_id).reusite++;
       const ultima = ultimaStare(stari);
       const codNou = ultima?.cod?.trim() || null;
 
@@ -337,10 +416,31 @@ export async function GET(req: NextRequest) {
            * E idempotent (iese daca exista deja orice factura), deci o a doua
            * trecere nu emite a doua factura. Cu client de SISTEM: cronul n-are
            * sesiune, exact ca la facturarea dupa plata.
+           *
+           * ⚠ SE ASTEAPTA. Era `void`, adica „porneste si uita" — numai ca intr-o
+           * functie serverless nu exista „mai tarziu": Vercel opreste executia
+           * cand se intoarce raspunsul, iar promisiunea nepornita ramane
+           * nerulata. Emiterea unei facturi cere mai multe drumuri pana la casa
+           * de facturare, deci era exact genul de lucru care nu apuca sa se
+           * termine. Si nu exista a doua trecere: comanda e deja pe `delivered`,
+           * deci rularea urmatoare n-o mai muta si n-o mai factureaza niciodata.
+           *
+           * Esecul lui NU are voie sa taie tura: comanda a fost mutata corect,
+           * iar factura se poate emite din panou.
            */
-          void maybeAutoInvoice(
-            o.business_id, o.id, tinta, o.payment_status ?? "", admin as never,
-          );
+          try {
+            await maybeAutoInvoice(
+              o.business_id, o.id, tinta, o.payment_status ?? "", admin as never,
+            );
+          } catch (e) {
+            await logError({
+              action: "gls-tracking",
+              message: `comanda ${o.order_number ?? o.id} a trecut pe ${tinta}, dar facturarea automata a esuat: ${(e as Error).message}`,
+              details: { orderId: o.id, awb: o.gls_awb_number },
+              businessId: o.business_id,
+              severity: "warning",
+            });
+          }
         }
         /*
          * ⚠ „reincearca" inseamna ca nu STIM daca s-a scris (lock, timeout): nu
@@ -352,45 +452,60 @@ export async function GET(req: NextRequest) {
       }
 
       /*
-       * ⚠ CODUL SE RETINE ABIA DUPA CE TRANZITIA A REUSIT. Ordinea, nu detaliul.
+       * ═══ ⚠ SE SEMNALEAZA CE N-AM SPUS INCA, NU CE E „MAI NOU" ═══
        *
-       * Scris inainte, un cod TERMINAL (5 = livrat, 23 = retur) ar fi ramas pe
-       * comanda chiar daca tranzitia a picat. Iar `eStareFinala` scoate pe loc
-       * coletul din urmarire — deci comanda ar fi ramas „expediata" PENTRU
-       * TOTDEAUNA, cu livrarea stiuta de noi si nescrisa nicaieri, si fara nicio
-       * rulare viitoare care s-o mai poata repara.
+       * Varianta dintai compara DATA EVENIMENTULUI (ceasul GLS) cu
+       * `gls_status_checked_at` (ceasul NOSTRU). Sunt doua ceasuri diferite, iar
+       * intre ele sta intarzierea cu care GLS publica scanarile: soferul
+       * inregistreaza refuzul la 09:12, evenimentul apare in API la 12:30, iar
+       * noi verificasem la 11:41 — deci starea, desi abia aparuta, are data mai
+       * VECHE decat marcajul si se filtreaza. Refuzul si returul, exact
+       * evenimentele care cer o decizie omeneasca, se pierdeau asa.
        *
-       * `null` pastreaza codul vechi si muta doar marcajul de verificare: rotatia
-       * inainteaza, iar tura urmatoare reia coletul de unde a ramas.
+       * Acum tinem minte CE am spus, nu CAND am intrebat. Cheia e `cod|data`.
        */
-      await marcheazaVerificat(prelucrat ? codNou : null);
+      const cheieEveniment = (st: StareCitita) => `${st.cod?.trim() ?? ""}|${st.data ?? ""}`;
+      const dejaSpuse = new Set(
+        Array.isArray(o.gls_evenimente_semnalate)
+          ? (o.gls_evenimente_semnalate as unknown[]).map(String)
+          : [],
+      );
 
       /*
-       * ⚠ SE SEMNALEAZA DUPA DATA EVENIMENTULUI, NU DUPA ULTIMUL COD.
+       * ⚠ La PRIMA vedere a coletului nu se scoate tot istoricul.
        *
-       * Varianta dintai se uita doar la `codNou`. Dar coletul primeste mai multe
-       * evenimente intre doua rulari: un refuz la livrare (25) la 10:05 si o
-       * scanare banala (3) la 10:50 inseamna ca la 11:41 ultimul cod e 3, iar
-       * refuzul — singurul care cerea o decizie omeneasca — DISPARE fara ca
-       * nimeni sa-l fi vazut vreodata.
-       *
-       * Acum se ia orice stare de semnalat mai NOUA decat ultima verificare.
-       * Marcajul face si dedupe-ul: la rularea urmatoare aceleasi stari sunt mai
-       * vechi decat el, deci nu se mai striga a doua oara. Iar la prima
-       * verificare (marcaj lipsa) se ia doar starea curenta, ca sa nu iasa la
-       * iveala tot istoricul de acum doua saptamani, demult rezolvat.
+       * Un AWB emis acum doua saptamani, ajuns abia acum in cron, are un teanc de
+       * evenimente demult rezolvate. Se semnaleaza doar starea CURENTA, iar
+       * restul se trec ca „spuse" fara sa fie strigate.
        */
-      const vazutePanaLa = o.gls_status_checked_at ? Date.parse(o.gls_status_checked_at) : NaN;
-      const deSemnalat = Number.isNaN(vazutePanaLa)
-        ? (trebuieSemnalat(codNou) ? [ultima!] : [])
-        : stari.filter((st) => {
-            if (!trebuieSemnalat(st.cod)) return false;
-            const cand = st.data ? Date.parse(st.data) : NaN;
-            /* Fara data nu putem sti daca e noua; o luam in seama doar daca
-               chiar e starea curenta, altfel s-ar repeta la fiecare rulare. */
-            return Number.isNaN(cand) ? st.cod === codNou : cand > vazutePanaLa;
-          });
+      /*
+       * ⚠ Se citeste COLOANA, nu marcajul de rotatie.
+       *
+       * Conditia era `!o.gls_status_checked_at && dejaSpuse.size === 0`. Numai ca
+       * migratia adauga coloana GOALA pe toate comenzile existente: acelea AU
+       * `gls_status_checked_at` (sunt urmarite de saptamani), deci n-ar fi fost
+       * „prima vedere", iar `dejaSpuse` gol nu filtra nimic — la prima rulare de
+       * dupa migratie fiecare colet urmarit si-ar fi strigat TOT istoricul de
+       * evenimente deodata, cate o notificare de fiecare.
+       *
+       * `null` in coloana raspunde exact la intrebarea pusa: „am inregistrat
+       * vreodata ce am spus despre coletul asta?"
+       */
+      const primaVedere = o.gls_evenimente_semnalate == null;
+      const deSemnalat = primaVedere
+        ? (trebuieSemnalat(codNou) && ultima ? [ultima] : [])
+        : stari.filter((st) => trebuieSemnalat(st.cod) && !dejaSpuse.has(cheieEveniment(st)));
 
+      /*
+       * ⚠ SEMNALAREA SE FACE INAINTE DE MARCAJ. Ordinea, nu detaliul.
+       *
+       * Scris intai marcajul, o cadere a functiei intre cele doua (Vercel taie la
+       * `maxDuration`) lasa comanda cu `gls_status_code = "23"` si fara nicio
+       * notificare — iar `eStareFinala("23")` scoate pe loc coletul din urmarire,
+       * deci nicio rulare viitoare nu mai repara nimic. Returul dispare definitiv.
+       *
+       * Invers, cel mai rau caz e o notificare repetata. Alegerea e limpede.
+       */
       for (const st of deSemnalat) {
         const cod = st.cod?.trim();
         if (!cod) continue;
@@ -405,34 +520,85 @@ export async function GET(req: NextRequest) {
           descriere: st.descriere?.trim() || "",
         });
       }
+
+      /*
+       * Lista se rescrie din TOATE starile vazute acum, nu doar din cele
+       * semnalate: altfel un eveniment care azi nu e „de semnalat" ar deveni unul
+       * nou daca maine il adaugam in lista. Taiata la 200, cu cele mai recente
+       * pastrate — istoricul unui colet are cateva zeci de linii, iar fereastra
+       * de urmarire e oricum de 21 de zile.
+       */
+      const toateCheile = [...new Set([...dejaSpuse, ...stari.map(cheieEveniment)])];
+      const pastrate = toateCheile.slice(-200);
+
+      /*
+       * ⚠ CODUL SE RETINE ABIA DUPA CE TRANZITIA A REUSIT. Ordinea, nu detaliul.
+       *
+       * Scris inainte, un cod TERMINAL (5 = livrat, 23 = retur) ar fi ramas pe
+       * comanda chiar daca tranzitia a picat. Iar `eStareFinala` scoate pe loc
+       * coletul din urmarire — deci comanda ar fi ramas „expediata" PENTRU
+       * TOTDEAUNA, cu livrarea stiuta de noi si nescrisa nicaieri, si fara nicio
+       * rulare viitoare care s-o mai poata repara.
+       *
+       * `null` pastreaza codul vechi si muta doar marcajul de verificare: rotatia
+       * inainteaza, iar tura urmatoare reia coletul de unde a ramas.
+       */
+      await marcheazaVerificat(prelucrat ? codNou : null, pastrate);
     }));
   }
 
   /*
-   * ⚠ URMARIREA NU ARE VOIE SA MOARA IN TACERE.
+   * ⚠ URMARIREA NU ARE VOIE SA MOARA IN TACERE. Dar nici sa strige degeaba.
    *
-   * Cazul: comerciantul isi schimba parola MyGLS. Fiecare apel se intoarce cu
-   * `ErrorCode -1, "Unauthorized."`, deci FIECARE colet cade pe ramura de esec —
-   * dar aceea scrie doar in `console.error`, iar cronul raspunde `ok: true`.
-   * Urmarirea s-ar opri complet si nimeni n-ar afla luni de zile: comenzile ar
-   * ramane „expediate" si niciun retur n-ar mai fi semnalat.
+   * Cazul de prins: comerciantul isi schimba parola MyGLS. Fiecare apel se
+   * intoarce cu `ErrorCode -1, "Unauthorized."`, deci fiecare colet cade pe
+   * ramura de esec — care scrie doar in `console.error`, iar cronul raspunde
+   * `ok: true`. Urmarirea magazinului aceluia se opreste complet si nimeni n-ar
+   * afla luni de zile: comenzile raman „expediate" si niciun retur nu mai e
+   * semnalat.
    *
-   * Zero reusite si macar un esec inseamna un defect de configurare, nu un colet
-   * necunoscut de GLS.
+   * ⚠ Alarma se da PE MAGAZIN, si numai pentru esecuri de AUTENTIFICARE:
+   *
+   *   - pe platforma, un magazin picat era acoperit de altul care mergea
+   *     (`verificate > 0` pe total), deci alarma nu pornea niciodata;
+   *   - iar cateva AWB-uri proaspete, pe care GLS nu le are inca indexate,
+   *     produceau o alarma CRITICA falsa despre datele de acces.
    */
-  if (verificate === 0 && esuate > 0) {
+  for (const [bizId, g] of galeti) {
+    if (g.autentificare === 0 || g.reusite > 0) continue;
     await logError({
       action: "gls-tracking",
-      message: `Urmarirea GLS a esuat pe TOATE cele ${esuate} colete incercate. Cel mai probabil datele de acces MyGLS nu mai sunt valide (GLS raspunde cu ErrorCode -1, „Unauthorized").`,
-      details: { esuate, incheiate, faraConfig },
+      message:
+        `Urmarirea GLS a esuat pe toate cele ${g.autentificare} colete ale acestui magazin, `
+        + `din motive care NU inseamna „colet necunoscut". Cel mai probabil datele de acces MyGLS `
+        + `nu mai sunt valide. Raspunsul GLS: ${g.exemplu || "necunoscut"}`,
+      details: { autentificare: g.autentificare, negasite: g.negasite, incheiate, faraConfig },
+      businessId: bizId,
       severity: "critical",
     });
   }
 
+  /*
+   * ⚠ O COADA CARE NU SE GOLESTE E TOT UN DEFECT.
+   *
+   * `ramase` ajungea doar intr-un `console.log` si in corpul raspunsului, unde nu
+   * se uita nimeni. Cand MyGLS raspunde lent, o tura apuca doar o parte din
+   * plafon, iar restul asteapta inca doua ore — la fiecare rulare. Un retur poate
+   * astepta zile intregi asa, fara ca nimic sa para stricat.
+   */
+  if (ramase + sarite > MAX_COMENZI / 3) {
+    await logError({
+      action: "gls-tracking",
+      message: `Urmarirea GLS n-a apucat ${ramase + sarite} din ${inFereastra.length} colete in tura asta (buget ${Math.round(BUGET_MS / 1000)}s). Coada creste, iar semnalarea returului intarzie.`,
+      details: { ramase, sarite, verificate, esuate, incheiate },
+      severity: "warning",
+    });
+  }
+
   console.log(
-    `[gls-tracking] verificate ${verificate}, mutate ${mutate}, semnalate ${semnalate}, esuate ${esuate}, incheiate ${incheiate}, faraConfig ${faraConfig}, ramase ${ramase}`,
+    `[gls-tracking] verificate ${verificate}, mutate ${mutate}, semnalate ${semnalate}, esuate ${esuate}, incheiate ${incheiate}, faraConfig ${faraConfig}, ramase ${ramase}, sarite ${sarite}`,
   );
-  return NextResponse.json({ ok: true, verificate, mutate, semnalate, esuate, incheiate, faraConfig, ramase });
+  return NextResponse.json({ ok: true, verificate, mutate, semnalate, esuate, incheiate, faraConfig, ramase, sarite });
 }
 
 /**

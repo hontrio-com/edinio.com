@@ -74,7 +74,7 @@ export function useCheckoutOrder({
   const extras = checkoutConfig?.extras ?? [];
   // Discount code is OFF by default — same semantics as the editor toggle and OrderModal.
   const hiddenFields = checkoutConfig?.hidden_fields ?? ["discount"];
-  const emailField = checkoutConfig?.email_field ?? emailFieldConfig;
+  const emailFieldBrut = checkoutConfig?.email_field ?? emailFieldConfig;
   // Comenzi pe firma. Implicit oprit: un magazin care nu a pornit reglajul arata
   // exact formularul de pana acum, fara niciun camp in plus.
   const companyFieldsOn = checkoutConfig?.company_fields?.enabled === true;
@@ -82,6 +82,25 @@ export function useCheckoutOrder({
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(!!preview);
+
+  /*
+   * ⚠ LIVRAREA LA PUNCT GLS PORNESTE CAMPUL DE EMAIL, nu doar il face obligatoriu.
+   *
+   * MyGLS cere emailul la serviciul PSD (pagina 36): coletul ajunge la un ghiseu,
+   * iar cumparatorul trebuie sa AFLE ca il poate ridica. Verificarea exista de
+   * mult — dar campul se randa doar cand magazinul il avea pornit
+   * (`emailField.enabled`). Intr-un magazin care l-a oprit, un client care alegea
+   * un punct GLS primea „Emailul e obligatoriu" pe un camp CARE NU EXISTA pe
+   * ecran: nu-l putea completa, nu putea trimite comanda, si nu avea nici cea mai
+   * mica idee ce sa faca. Checkout mort, fara nicio urma nicaieri.
+   *
+   * Se deriva aici, o singura data, ca formularul si validarea sa nu poata
+   * ajunge vreodata la raspunsuri diferite.
+   */
+  const laPunctGls = courierSelection?.courier === "gls" && courierSelection?.deliveryType === "locker";
+  const emailField = laPunctGls
+    ? { enabled: true, required: true }
+    : emailFieldBrut;
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
   // Comanda minima a comerciantului (Setari > Livrare). Vine din aceeasi
@@ -366,7 +385,7 @@ export function useCheckoutOrder({
      * plasata, iar comerciantul ar ramane cu un colet pe care nu-l poate expedia
      * si fara nicio cale de a mai obtine emailul de la client.
      */
-    if (courierSelection?.courier === "gls" && courierSelection?.deliveryType === "locker" && !form.email.trim()) {
+    if (laPunctGls && !form.email.trim()) {
       e.email = "Emailul e obligatoriu pentru livrarea la punct GLS";
     }
     for (const field of customFields) {
@@ -441,6 +460,10 @@ export function useCheckoutOrder({
         locker_address: courierSelection?.lockerAddress,
         locker_city: courierSelection?.lockerCity,
         locker_county: courierSelection?.lockerCounty,
+        /* ⚠ La livrarea in punct, adresa de livrare E a punctului, iar GLS cere
+           obligatoriu codul postal — pe care comenzile romanesti nu-l primesc din
+           checkout. Acolo unde curierul il da, ajunge asa pe comanda. */
+        locker_post_code: courierSelection?.lockerPostCode,
         woot_service_id: courierSelection?.wootServiceId,
         woot_courier_name: courierSelection?.wootCourierName,
         woot_service_name: courierSelection?.wootServiceName,

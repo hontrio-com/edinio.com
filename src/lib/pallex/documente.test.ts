@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { cheieDocument, numeFisier } from "./documente";
-import { cheieEticheta } from "@/lib/gls/eticheta";
+
+/* ⚠ Inainte de import: `cheieEticheta` (GLS) cere acum un secret si ARUNCA fara
+   el, in loc sa cada tacut pe sirul gol. Vezi src/lib/gls/eticheta.ts. */
+process.env.SHIPPING_QUOTE_SECRET ||= "secret-de-proba";
+const { cheieEticheta } = await import("@/lib/gls/eticheta");
 
 /*
  * Documentele de transport contin numele, adresa si telefonul DESTINATARULUI —

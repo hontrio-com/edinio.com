@@ -1,6 +1,15 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { adresaGls, coletGls, serviciiGls, taie, type DateExpediere } from "./expediere";
+import {
+  adresaGls,
+  avertismenteColet,
+  coletGls,
+  motivRefuzSerbia,
+  serviciiGls,
+  taie,
+  MAX_COLETE,
+  type DateExpediere,
+} from "./expediere";
 
 /*
  * ⚠ Prima expediere GLS va fi pe contractul REAL al unui client, in productie.
@@ -70,7 +79,10 @@ test("un cuvant mai lung decat limita se taie brutal, nu se pierde", () => {
 test("adresa se traduce in campurile MyGLS", () => {
   const a = adresaGls(DESTINATAR);
   assert.equal(a.Name, "Ion Popescu");
-  assert.equal(a.Street, "Bd. Unirii 5");
+  /* ⚠ Numarul iese in campul lui: `Street` e „Name of the street", iar
+     `HouseNumber` „ONLY NUMBER" (pagina 10). Vezi proba de taiere mai jos. */
+  assert.equal(a.Street, "Bd. Unirii");
+  assert.equal(a.HouseNumber, "5");
   assert.equal(a.City, "Bucuresti");
   assert.equal(a.ZipCode, "030167");
   assert.equal(a.CountryIsoCode, "RO");
@@ -94,9 +106,11 @@ test("⚠ Name e firma daca exista, dar ContactName ramane persoana", () => {
   assert.equal(a.ContactName, "Ion Popescu");
 });
 
-test("adresa a doua se lipeste de strada", () => {
+test("adresa a doua se desparte in numar si detalii de bloc", () => {
   const a = adresaGls({ ...DESTINATAR, stradaExtra: "Bl. A2, Ap. 15" });
-  assert.equal(a.Street, "Bd. Unirii 5 Bl. A2, Ap. 15");
+  assert.equal(a.Street, "Bd. Unirii");
+  assert.equal(a.HouseNumber, "5");
+  assert.equal(a.HouseNumberInfo, "Bl. A2, Ap. 15");
 });
 
 test("campurile lungi se taie la 40, nu se lasa pe seama GLS", () => {
@@ -110,6 +124,61 @@ test("campurile lungi se taie la 40, nu se lasa pe seama GLS", () => {
   assert.ok(a.Name.length <= 40, a.Name);
   assert.ok(a.Street.length <= 40, a.Street);
   assert.ok(a.ContactName.length <= 40);
+});
+
+test("⚠⚠ NUMARUL SUPRAVIETUIESTE TAIERII — proba care lipsea", () => {
+  /*
+   * Proba de mai sus verifica doar `length <= 40` si trece EXACT peste defect.
+   *
+   * Adresa reala: strada plus numar depaseste 40 de caractere, iar taierea se
+   * face pe granita de cuvant — deci numarul, care sta la sfarsit, pica primul:
+   *
+   *   „Bulevardul General Gheorghe Magheru 28" -> „Bulevardul General Gheorghe Magheru"
+   *
+   * Coletul pleaca cu strada fara numar, curierul nu gaseste adresa, urmeaza
+   * codul 18 sau 20 din Appendix G si apoi 23: retur. Comerciantul plateste
+   * ambele drumuri si nu incaseaza rambursul.
+   */
+  const a = adresaGls({ ...DESTINATAR, strada: "Bulevardul General Gheorghe Magheru 28" });
+  assert.equal(a.HouseNumber, "28", "numarul nu are voie sa dispara");
+  assert.ok(a.Street.length <= 40);
+  assert.ok(!a.Street.includes("28"), "numarul nu mai sta si in Street");
+
+  /* Cazul din Bucuresti, 56 de caractere, care pierdea bloc/scara/etaj/apartament. */
+  const b = adresaGls({ ...DESTINATAR, strada: "Aleea Barajul Bicaz nr. 12, bl. M21, sc. B, et. 4, ap. 63" });
+  assert.equal(b.Street, "Aleea Barajul Bicaz");
+  assert.equal(b.HouseNumber, "12");
+  assert.equal(b.HouseNumberInfo, "bl. M21, sc. B, et. 4, ap. 63");
+});
+
+test("⚠ o strada al carei NUME contine cifre nu se rupe gresit", () => {
+  /*
+   * Cealalta jumatate a regulii: o despartire gresita strica adresa mai rau
+   * decat o lasa. „Strada 13 Septembrie" nu are numarul 13.
+   */
+  const a = adresaGls({ ...DESTINATAR, strada: "Strada 13 Septembrie" });
+  assert.equal(a.Street, "Strada 13 Septembrie");
+  assert.equal(a.HouseNumber, undefined, "nu exista numar de casa aici");
+
+  /* Dar cu numar la sfarsit, tot trebuie sa iasa numarul CORECT — ultimul. */
+  const b = adresaGls({ ...DESTINATAR, strada: "Bulevardul 1 Mai 28" });
+  assert.equal(b.Street, "Bulevardul 1 Mai");
+  assert.equal(b.HouseNumber, "28");
+});
+
+test("cand apelantul are numarul separat, nu se mai ghiceste", () => {
+  /* `shipping_address.street_no` exista pe unele comenzi. Atunci e adevarul, si
+     nicio euristica nu are ce cauta peste el. */
+  const a = adresaGls({ ...DESTINATAR, strada: "Strada 13 Septembrie", numar: "90" });
+  assert.equal(a.HouseNumber, "90");
+  assert.equal(a.Street, "Strada 13 Septembrie");
+});
+
+test("adresa fara numar nu inventeaza campuri goale", () => {
+  const a = adresaGls({ ...DESTINATAR, strada: "Calea Victoriei" });
+  assert.equal(a.Street, "Calea Victoriei");
+  assert.equal("HouseNumber" in a, false);
+  assert.equal("HouseNumberInfo" in a, false);
 });
 
 test("tara lipsa inseamna Romania, si iese cu majuscule", () => {
@@ -269,4 +338,90 @@ test("expeditorul si destinatarul nu se incurca intre ei", () => {
   assert.equal(c.PickupAddress.ContactName, "Magazinul Meu SRL");
   assert.equal(c.DeliveryAddress.ContactName, "Ion Popescu");
   assert.notEqual(c.PickupAddress.City, c.DeliveryAddress.City);
+});
+
+test("⚠ numarul dat separat se curata: HouseNumber e „ONLY NUMBER”", () => {
+  /*
+   * `shipping_address.street_no` e text liber si contine des si restul. Pus
+   * intreg in `HouseNumber`, ar incalca chiar regula pentru care exista campul
+   * (pagina 10).
+   */
+  const a = adresaGls({ ...DESTINATAR, strada: "Bd. Unirii", numar: "5, bl. A2, ap. 15" });
+  assert.equal(a.Street, "Bd. Unirii");
+  assert.equal(a.HouseNumber, "5");
+  assert.equal(a.HouseNumberInfo, "bl. A2, ap. 15");
+});
+
+test("⚠⚠ cele doua cai de emitere trimit ACEEASI adresa, pe TOATE formele reale", () => {
+  /*
+   * Modalul lipeste strada si numarul intr-un singur camp editabil; lotul le are
+   * separat. Aceeasi comanda nu are voie sa plece altfel dupa cum a fost apasat
+   * butonul — diferenta s-ar vedea abia pe eticheta tiparita.
+   *
+   * ⚠ Prima forma a probei verifica doar „5" si trecea EXACT peste defect: cand
+   * `street_no` nu incepea cu o cifra („FN", „nr. 5", „bis 3"), calea lotului
+   * pierdea textul cu totul, iar calea formularului il pastra. Lista de mai jos
+   * e cea pe care s-a masurat divergenta.
+   */
+  const forme = ["5", "5A", "FN", "nr. 5", "no. 7", "bis 3", "12-14", "1 bis", "5, bl. A2, ap. 15", "-"];
+  for (const numar of forme) {
+    const caLot = adresaGls({ ...DESTINATAR, strada: "Str. Morii", numar });
+    const caModal = adresaGls({ ...DESTINATAR, strada: `Str. Morii ${numar}` });
+    assert.deepEqual(caLot, caModal, `forma „${numar}" pleaca diferit pe cele doua cai`);
+  }
+});
+
+test("⚠⚠ un numar care nu incepe cu cifra NU se pierde", () => {
+  /*
+   * „FN" (fara numar) si „nr. 5" sunt forme uzuale in datele reale. O varianta
+   * anterioara a despartirii le arunca in intregime: nici in `Street`, nici in
+   * `HouseNumber`, nici in `HouseNumberInfo` — coletul pleca spre o strada fara
+   * numar, adica exact defectul pe care despartirea trebuia sa-l repare.
+   */
+  const fn = adresaGls({ ...DESTINATAR, strada: "Str. Principala", numar: "FN" });
+  assert.ok(
+    `${fn.Street} ${fn.HouseNumber ?? ""} ${fn.HouseNumberInfo ?? ""}`.includes("FN"),
+    `„FN" a disparut: ${JSON.stringify(fn)}`,
+  );
+
+  /* Marcajul explicit e chiar cazul cel mai sigur: trebuie sa iasa numarul. */
+  const cuMarcaj = adresaGls({ ...DESTINATAR, strada: "Str. Morii", numar: "nr. 5" });
+  assert.equal(cuMarcaj.Street, "Str. Morii");
+  assert.equal(cuMarcaj.HouseNumber, "5");
+});
+
+test("plafonul de colete e cel din documentatie, si se aplica", () => {
+  const colet = coletGls({ ...BAZA, numarColete: 250 });
+  assert.equal(colet.Count, MAX_COLETE);
+  assert.equal(MAX_COLETE, 99);
+  assert.deepEqual(avertismenteColet({ ...BAZA, numarColete: 250 }).length, 1);
+});
+
+test("⚠ asigurarea nu pleaca pe o expediere cu mai multe colete", () => {
+  /* Appendix A, 28: „The Count must be 1 because of the INS service" — trimise
+     impreuna, GLS refuza TOATA expedierea. */
+  const multe = coletGls({ ...BAZA, numarColete: 3, valoare: 500, servicii: { asigurare: true } });
+  assert.equal(multe.ServiceList.some((s) => s.Code === "INS"), false);
+  assert.equal(avertismenteColet({ ...BAZA, numarColete: 3, valoare: 500, servicii: { asigurare: true } }).length, 1);
+
+  const unul = coletGls({ ...BAZA, numarColete: 1, valoare: 500, servicii: { asigurare: true } });
+  assert.equal(unul.ServiceList.some((s) => s.Code === "INS"), true);
+});
+
+test("⚠ Content pleaca INTOTDEAUNA, cu referinta pe post de rezerva", () => {
+  /* „optionally REQUIRED, depends on the user right" (pagina 9), MANDATORY in
+     Serbia, iar Appendix A are codul 33. Un cont cu dreptul pornit ar fi primit
+     refuz pe orice comanda careia i s-a sters continutul din formular. */
+  assert.equal(coletGls({ ...BAZA, continut: "Doua carti" }).Content, "Doua carti");
+  assert.equal(coletGls({ ...BAZA, continut: null }).Content, BAZA.referinta);
+  assert.equal(coletGls({ ...BAZA, continut: "" }).Content, BAZA.referinta);
+});
+
+test("⚠ Serbia se opreste inainte de apel, cu motivul spus", () => {
+  /* Trei campuri obligatorii acolo si niciunul nu se trimite: buletinul/PIB-ul
+     expeditorului, continutul si greutatea. Refuzul ar fi venit de la GLS, iar
+     comerciantul n-ar fi avut ce corecta. */
+  assert.equal(motivRefuzSerbia(BAZA), null);
+  const spreRS = { ...BAZA, destinatar: { ...BAZA.destinatar, tara: "RS" } };
+  assert.ok(motivRefuzSerbia(spreRS)?.includes("Serbia"));
 });

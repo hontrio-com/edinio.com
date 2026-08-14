@@ -112,6 +112,15 @@ export type LockerItem = {
   address: string;
   city: string;
   county: string;
+  /**
+   * ⚠ Codul postal al punctului, cand curierul il da.
+   *
+   * La livrarea in punct adresa de livrare E a punctului, iar `ZipCode` e camp
+   * REQUIRED la GLS — pe care comenzile romanesti nu-l primesc din checkout.
+   * Deci acolo unde il stim, il ducem pana pe comanda. Optional: ceilalti curieri
+   * nu-l expun, si nici nu-l cer.
+   */
+  postCode?: string;
   lat: number;
   lng: number;
 };
@@ -1323,6 +1332,7 @@ export async function getLockers(
             address: [p.address, p.city].filter(Boolean).join(", "),
             city: p.city,
             county: p.county,
+            postCode: p.codPostal,
             lat: p.lat,
             lng: p.lng,
           })),

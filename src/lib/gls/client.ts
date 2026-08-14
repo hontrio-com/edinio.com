@@ -29,11 +29,23 @@ export type TaraMyGls = (typeof TARI_MYGLS)[number];
 /**
  * Formatul de tiparire a etichetei.
  *
- * ⚠ TOATE cele opt din documentatia oficiala (ver. 25.12.11), la
- * `GetPrintedLabelsRequest → TypeOfPrinter`. Lista avea doar primele patru:
- * celelalte au fost adaugate de GLS in 2025 (ThermoZPL la 12.02, ShipItThermoPdf
- * la 02.09, ThermoZPL_300DPI la 03.09) si lipseau de la noi, deci un comerciant
- * cu imprimanta ZPL n-avea ce alege.
+ * ⚠ CELE DOUA METODE NU ACCEPTA ACELASI SET, si diferenta nu e teoretica.
+ *
+ * `GetPrintedLabelsRequest → TypeOfPrinter` (pagina 19) enumera OPT valori.
+ * `PrintLabelsRequest → TypeOfPrinter` (pagina 23) enumera doar SAPTE: lipseste
+ * `ShipItThermoZpl`, adaugat de GLS la 04.12.2025 (changelog, intrarea 25) —
+ * adica la o saptamana dupa versiunea documentului (25.12.11), deci lista lui
+ * `PrintLabels` pare pur si simplu neactualizata.
+ *
+ * Numai ca noi nu putem paria pe „pare". Appendix A are cod propriu pentru asta
+ * (34, „Value of TypeOfPrinter is invalid"), iar formatul se alege O DATA in
+ * configurare si se foloseste la FIECARE colet: daca GLS chiar il refuza, un
+ * comerciant care il alege nu mai poate emite NIMIC, si mesajul nu-i spune ca
+ * de vina e o optiune pe care i-am oferit-o noi.
+ *
+ * De aceea comerciantul alege doar dintre cele acceptate de EMITERE
+ * (`TIPURI_IMPRIMANTA`), iar retiparirea le accepta pe toate opt — inclusiv
+ * pentru configurarile salvate inainte de aceasta ingustare.
  *
  * ⚠ ThermoZPL tipareste la 203 DPI, ThermoZPL_300DPI la 300 — sunt doua
  * imprimante diferite, nu doua nume pentru aceeasi.
@@ -48,9 +60,58 @@ export const TIPURI_IMPRIMANTA = [
   "ThermoZPL",
   "ThermoZPL_300DPI",
   "ShipItThermoPdf",
+] as const;
+
+/**
+ * Ce accepta `GetPrintedLabels` in plus fata de emitere.
+ *
+ * ⚠ Tipul ramane larg (uniunea celor opt) fiindca in baza pot sta deja
+ * configurari cu `ShipItThermoZpl`, salvate cat timp era oferit. Ele se citesc
+ * fara sa cada; doar nu se mai pot ALEGE.
+ */
+export const TIPURI_IMPRIMANTA_RETIPARIRE = [
+  ...TIPURI_IMPRIMANTA,
   "ShipItThermoZpl",
 ] as const;
-export type TipImprimanta = (typeof TIPURI_IMPRIMANTA)[number];
+export type TipImprimanta = (typeof TIPURI_IMPRIMANTA_RETIPARIRE)[number];
+
+/**
+ * Formatele care produc ZPL (text pentru imprimante Zebra), nu PDF.
+ *
+ * ⚠ Nu e un amanunt de prezentare: octetii intorsi de GLS se salveaza pe CDN si
+ * se servesc mai departe. Declarati `application/pdf` si numiti `.pdf`, cum se
+ * intampla pana acum, cititorul de PDF spune „fisier deteriorat" si comerciantul
+ * n-are cum sa lege asta de formatul ales in configurare. Aceeasi lectie ca la
+ * eColet.
+ */
+const FORMATE_ZPL = new Set<string>(["ThermoZPL", "ThermoZPL_300DPI", "ShipItThermoZpl"]);
+
+/** Extensia si tipul MIME ale etichetei, dupa formatul ales de comerciant. */
+export function felulEtichetei(tip: TipImprimanta | string | null | undefined): {
+  ext: "zpl" | "pdf";
+  tipMime: string;
+} {
+  return FORMATE_ZPL.has(String(tip))
+    ? { ext: "zpl", tipMime: "application/vnd.zebra.zpl" }
+    : { ext: "pdf", tipMime: "application/pdf" };
+}
+
+/**
+ * ⚠ `PrintPosition` se trimite DOAR pentru formatele A4.
+ *
+ * Documentatia o spune la `PrintLabelsRequest` (pagina 23) si la
+ * `GetPrintedLabelsRequest` (pagina 19), cu majuscule: „ACCEPTED ONLY FOR
+ * A4-FORMAT". Trimis pe Thermo sau Connect, in cel mai bun caz e ignorat — dar
+ * „in cel mai bun caz" nu e o garantie pe care s-o dam noi, cand alternativa e
+ * sa nu-l trimitem deloc. Amandoi comerciantii cu GLS pornit azi sunt pe
+ * „Connect", deci ramura asta chiar se foloseste.
+ */
+function pozitiaDeTiparit(config: GlsConfig): Record<string, number> {
+  const esteA4 = config.tip_imprimanta === "A4_2x2" || config.tip_imprimanta === "A4_4x1";
+  if (!esteA4) return {};
+  const p = Math.trunc(Number(config.pozitie_tiparire));
+  return { PrintPosition: p >= 1 && p <= 4 ? p : 1 };
+}
 
 export type GlsConfig = {
   enabled: boolean;
@@ -88,6 +149,16 @@ export type GlsConfig = {
 export type AdresaGls = {
   Name: string;
   Street: string;
+  /**
+   * ⚠ „Number of the house. (ONLY NUMBER)" — camp separat de `Street`.
+   *
+   * Pana acum totul intra in `Street` si se taia la 40 de caractere pe granita
+   * de cuvant, deci numarul, care sta la sfarsit, era primul care pica. Vezi
+   * `despartaAdresa` din expediere.ts.
+   */
+  HouseNumber?: string;
+  /** „Additional information. (Building, stairway, etc.)" — bloc, scara, etaj. */
+  HouseNumberInfo?: string;
   City: string;
   ZipCode: string;
   CountryIsoCode: string;
@@ -254,13 +325,51 @@ async function apelMyGls<T>(
 
   /* ⚠ Refuzul din corp, pe 200. Vezi nota din antet. */
   if (typeof date.ErrorCode === "number" && date.ErrorCode !== 0) {
-    throw eroareRefuz(
-      `GLS ${metoda}: ${date.ErrorDescription ?? `eroare ${date.ErrorCode}`}`,
+    const mesaj = `GLS ${metoda}: ${date.ErrorDescription ?? `eroare ${date.ErrorCode}`}`;
+    throw Object.assign(
+      CODURI_INCERTE.has(date.ErrorCode) ? eroareNesigura(mesaj) : eroareRefuz(mesaj),
+      { cauze: [date.ErrorCode] },
     );
   }
 
   return date;
 }
+
+/**
+ * ⚠ CODURILE DUPA CARE COLETUL POATE SA EXISTE DEJA.
+ *
+ * Pana acum, ORICE `ErrorCode` diferit de 0 iesea „refuz dovedit". Pentru
+ * majoritatea codurilor e adevarat — o validare respinsa nu creeaza nimic. Dar
+ * `esuat` inseamna pentru registru „nu s-a intamplat nimic acolo, reincercarea e
+ * LIBERA", iar la `PrintLabels` reincercarea libera inseamna un al doilea colet
+ * real si facturat.
+ *
+ * Si Appendix A insusi arata ca emiterea are FAZE: „Parcel number generator
+ * failed" (19) si „Parcel numbers were not generated" (20) descriu esecuri de
+ * DUPA ce inregistrarea coletului exista — altfel n-ar avea ce numar sa
+ * genereze. La fel „Label is empty" (16) si „There are no printable labels"
+ * (21): eticheta se produce dintr-un colet care exista deja.
+ *
+ *   16   Label is empty
+ *   19   Parcel number generator failed
+ *   20   Parcel numbers were not generated
+ *   21   There are no printable labels
+ *   31   Same request sent 5 times within last 5 minutes
+ *   1000 Unexpected exception happened
+ *   1001 Internal Problem
+ *
+ * ⚠ 31 e cel mai contraintuitiv, si merita citit de doua ori: GLS spune ca a
+ * primit ACEEASI cerere de cinci ori in cinci minute. Adica primele patru au
+ * ajuns la el. Refuzul lui e despre a CINCEA, si nu spune nimic despre ce s-a
+ * intamplat cu celelalte — poate exista deja patru colete. „Refuz dovedit" ar fi
+ * exact raspunsul gresit.
+ *
+ * ⚠ Ce NU e aici, dinadins: -1 („Unauthorized."), 13 („Parcel validation
+ * issue"), 14, 22, 27, 28, 29, 30, 32, 33, 34, 43, 44, 48. Toate sunt validari
+ * dinaintea oricarui efect, deci reincercarea dupa corectarea datelor e libera —
+ * si chiar trebuie sa fie, altfel prima adresa gresita blocheaza comanda.
+ */
+const CODURI_INCERTE = new Set([16, 19, 20, 21, 31, 1000, 1001]);
 
 /**
  * Emite etichetele pentru o lista de colete.
@@ -281,7 +390,7 @@ export async function tipareste(
      */
     WebshopEngine: "edinio",
     ParcelList: colete,
-    PrintPosition: config.pozitie_tiparire || 1,
+    ...pozitiaDeTiparit(config),
     TypeOfPrinter: config.tip_imprimanta || "A4_2x2",
     ShowPrintDialog: false,
   });
@@ -383,14 +492,50 @@ export type RodStergere = {
    *
    * ID-urile vin din raspunsul GLS la emitere, deci „nu exista" chiar inseamna
    * „a fost sters", nu „am cautat gresit".
+   *
+   * ⚠ ATENTIE: presupune ca intrebam ACEEASI instanta MyGLS in care s-a emis.
+   * Productia si mediul de test sunt baze SEPARATE, la fel cele sapte tari, deci
+   * un cod 4 primit dupa ce s-a schimbat mediul nu inseamna „sters", ci „ai
+   * intrebat in alta parte". De aceea apelantul verifica mediul inainte — vezi
+   * `mediulSePotriveste` din gls.actions.ts.
    */
   inexistente: number[];
+  /**
+   * ⚠ ID-uri la care GLS a raspuns cu codul 6, „different status than PRINTED".
+   *
+   * ACESTEA SUNT AMBIGUE, si de aici se nastea fundatura. Codul 6 acopera doua
+   * situatii opuse:
+   *
+   *   a) coletul a fost DEJA sters de noi (o incercare anterioara a reusit, dar
+   *      raspunsul ei s-a pierdut) — starea lui e acum DELETED, deci „diferita
+   *      de PRINTED";
+   *   b) GLS a PRELUAT coletul si chiar pleaca spre client.
+   *
+   * ⚠ Si nu e o speculatie: documentatia descrie `DeleteLabels` chiar in prima
+   * ei linie ca „Set DELETED state for labels/parcels" (pagina 27). Deci metoda
+   * NU sterge inregistrarea, ii schimba starea — iar la a doua cerere ID-ul
+   * EXISTA in continuare si raspunsul NU mai poate fi codul 4.
+   *
+   * Asta darama argumentul pe care se sprijinea toata curatenia de dupa o
+   * anulare pierduta („a doua apasare ia codul 4 si se repara singur"): a doua
+   * apasare ia codul 6. Tratat ca eroare obisnuita, cum era pana acum, comanda
+   * ramanea cu un AWB pe care nimeni nu-l mai putea scoate — nici anulat, nici
+   * reemis, si nici macar vizibil in supapa de operatii atarnate.
+   *
+   * Se intorc deci APARTE, iar cine le primeste le deosebeste uitandu-se la
+   * ISTORICUL coletului: unul care n-a plecat niciodata din depozit e cazul (a),
+   * unul cu miscari reale in retea e cazul (b). Vezi `deleteGlsAwbAction`.
+   */
+  nesigure: number[];
   /** Mesajele de refuz, gata de aratat comerciantului. */
   erori: string[];
 };
 
 /** Appendix A: coletul cerut nu exista in baza GLS. */
 const COD_INEXISTENT = 4;
+
+/** Appendix A: „Parcel with this ID has different status than PRINTED". */
+export const COD_ALTA_STARE = 6;
 
 /**
  * Sterge etichetele, adica ANULEAZA coletele la GLS.
@@ -428,9 +573,12 @@ export async function stergeEtichete(
 
   const sterse: number[] = [];
   const inexistente: number[] = [];
+  const nesigure: number[] = [];
   const erori: string[] = [];
 
-  for (const bucata of bucati(curate, MAX_STERGERI_PE_CERERE)) {
+  const felii = bucati(curate, MAX_STERGERI_PE_CERERE);
+  for (let i = 0; i < felii.length; i++) {
+    const bucata = felii[i];
     /*
      * ⚠ NU se trimite `ClientNumberList`, desi e in `APIRequestBase` (pagina 6).
      *
@@ -439,9 +587,29 @@ export async function stergeEtichete(
      * drepturile pe colet le verifica GLS singur (Appendix A: 5 „Access denied
      * for this parcel ID", 15 „User is not authorized to access parcel").
      */
-    const r = await apelMyGls<RaspunsStergere>(config, "DeleteLabels", {
-      ParcelIdList: bucata,
-    });
+    let r: RaspunsStergere;
+    try {
+      r = await apelMyGls<RaspunsStergere>(config, "DeleteLabels", {
+        ParcelIdList: bucata,
+      });
+    } catch (e) {
+      /*
+       * ⚠ O BUCATA PICATA NU ARE VOIE SA ARUNCE REZULTATUL CELORLALTE.
+       *
+       * Pana acum exceptia urca direct din bucla, iar `deleteGlsAwbAction` o
+       * prindea si intorcea doar mesajul — deci coletele DEJA sterse in feliile
+       * dinainte se pierdeau fara urma. La reincercare ele raspund cu codul 6
+       * („already DELETED"), adica exact ambiguitatea de mai sus, si comanda
+       * ramanea infundata din cauza unei erori de retea la a doua felie.
+       *
+       * Acum esecul se noteaza si se merge mai departe: apelantul primeste si ce
+       * a reusit, si ce n-a reusit, si poate hotari in cunostinta de cauza.
+       */
+      erori.push(
+        `bucata ${i + 1} din ${felii.length} (colete ${bucata.join(", ")}): ${(e as Error).message}`,
+      );
+      continue;
+    }
 
     for (const s of r.SuccessfullyDeletedList ?? []) {
       if (typeof s.ParcelId === "number") sterse.push(s.ParcelId);
@@ -465,12 +633,21 @@ export async function stergeEtichete(
         inexistente.push(...ale);
         continue;
       }
+      /*
+       * Codul 6 pleaca aparte, nici la sterse nici la erori: singur, nu spune
+       * daca coletul a fost deja sters sau daca a plecat spre client. Vezi
+       * `nesigure`.
+       */
+      if (e.ErrorCode === COD_ALTA_STARE && ale.length > 0) {
+        nesigure.push(...ale);
+        continue;
+      }
       const ids = ale.length ? ` (colete ${ale.join(", ")})` : "";
       erori.push(`${e.ErrorDescription ?? `eroare ${e.ErrorCode ?? "?"}`}${ids}`);
     }
   }
 
-  return { sterse, inexistente, erori };
+  return { sterse, inexistente, nesigure, erori };
 }
 
 /**
@@ -544,10 +721,24 @@ export async function retipareste(
 
   return apelMyGls<RaspunsRetiparire>(config, "GetPrintedLabels", {
     ParcelIdList: curate,
-    PrintPosition: config.pozitie_tiparire || 1,
+    ...pozitiaDeTiparit(config),
     TypeOfPrinter: config.tip_imprimanta || "A4_2x2",
     ShowPrintDialog: false,
   });
+}
+
+/**
+ * ID-urile pe care GLS chiar le-a retiparit.
+ *
+ * ⚠ O retiparire poate fi PARTIALA: `Labels` vine nevid pentru coletele care au
+ * mers, iar celelalte stau in `GetPrintedLabelsErrorList`. Cine se uita doar la
+ * „am primit octeti?" ia un PDF cu doua etichete drept raspuns pentru trei
+ * colete — si il si salveaza pe CDN, de unde va fi servit la nesfarsit.
+ */
+export function idRetiparite(r: RaspunsRetiparire): number[] {
+  return (r.PrintDataInfoList ?? [])
+    .map((i) => i.ParcelId)
+    .filter((n): n is number => typeof n === "number");
 }
 
 /** PDF-ul dintr-o retiparire, sau `null` daca GLS n-a trimis niciun octet. */
@@ -588,7 +779,23 @@ export async function stariColet(
 
   const r = await apelMyGls<RaspunsStari>(config, "GetParcelStatuses", {
     ParcelNumber: numar,
-    ReturnPOD: true,
+    /*
+     * ⚠ `false`, si nu din economie de octeti.
+     *
+     * `ReturnPOD` aduce dovada de livrare: PDF-ul cu numele si SEMNATURA
+     * destinatarului — date personale ale unui TERT, serializate ca tablou de
+     * intregi (un PDF de 40 KB devine ~180 KB de JSON). Nimic din cod nu citeste
+     * campul: nu e nici macar declarat in `RaspunsStari`. Deci pana acum
+     * aduceam, la fiecare rulare a cronului si pentru fiecare colet livrat,
+     * semnatura cumparatorului pe serverul nostru ca s-o aruncam la `JSON.parse`.
+     *
+     * Si costa exact acolo unde doare: apelurile lente sunt motivul pentru care
+     * asteptarea pe colet a trebuit coborata la 12 secunde.
+     *
+     * Cand va exista un ecran care chiar arata dovada de livrare, se cere
+     * PUNCTUAL, dintr-o actiune apasata de comerciant pe o comanda anume.
+     */
+    ReturnPOD: false,
     /*
      * Descrierile vin in romana. Conteaza: textul asta ajunge asa cum e in panou
      * si in notificarea de retur catre comerciant, iar „The parcel has been
@@ -647,7 +854,7 @@ function descrieErori(erori: EroareColet[]): string {
  * necunoscut: mai bine o proba prea severa, pe care omul o poate cerceta, decat
  * una linistitoare si falsa.
  */
-const CODURI_COLET_NEGASIT = new Set([4, 5, 9, 10, 15, 26]);
+export const CODURI_COLET_NEGASIT = new Set([4, 5, 9, 10, 15, 26]);
 
 /**
  * ⚠ Codul care inseamna „nu te cunoastem". Nu e in lista de mai sus si nu are ce
@@ -655,6 +862,21 @@ const CODURI_COLET_NEGASIT = new Set([4, 5, 9, 10, 15, 26]);
  * cand mai apare vreun cod de colet negasit.
  */
 export const COD_UTILIZATOR_INEXISTENT = 14;
+
+/**
+ * ⚠ Appendix A, 31: „Same request sent 5 times within last 5 minutes".
+ *
+ * Dovedeste recunoasterea la fel de bine ca un „colet negasit": ca sa numere
+ * cererile identice, GLS le-a legat de contul nostru — deci autentificarea a
+ * trecut. Si e SIGUR ca apare aici: proba trimite de fiecare data EXACT aceeasi
+ * cerere (numarul de colet 1), iar butonul „Testeaza conexiunea" se apasa de
+ * cateva ori la rand pana ies datele bune.
+ *
+ * Fara el, a cincea apasare in cinci minute scotea buton ROSU pe o configurare
+ * perfect valida — si comerciantul incepea sa umble la datele de acces, care nu
+ * aveau nimic.
+ */
+const COD_PREA_DES = 31;
 
 /**
  * Proba de conexiune pentru panoul de configurare.
@@ -690,7 +912,7 @@ export async function probaConexiune(
      * cod necunoscut ramane rosu, cu mesajul lui GLS cu tot — mai bine o proba
      * prea severa, pe care omul o poate cerceta, decat una linistitoare si falsa.
      */
-    if (cauze.length > 0 && cauze.every((c) => CODURI_COLET_NEGASIT.has(c))) {
+    if (cauze.length > 0 && cauze.every((c) => CODURI_COLET_NEGASIT.has(c) || c === COD_PREA_DES)) {
       return { ok: true };
     }
     return { ok: false, eroare: (e as Error).message };

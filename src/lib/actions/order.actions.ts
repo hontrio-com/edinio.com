@@ -36,6 +36,8 @@ import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } fr
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
 import { stocRezervat } from "@/lib/orders/stoc-rezervat";
+import { cheiEticheta } from "@/lib/gls/eticheta";
+import { deleteFromR2 } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
@@ -767,6 +769,8 @@ export async function placeOrder(data: {
   locker_id?: string;
   locker_name?: string;
   locker_address?: string;
+  /** Codul postal al punctului de ridicare; GLS il cere pe adresa de livrare. */
+  locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
   woot_service_id?: number;
@@ -1319,6 +1323,26 @@ export async function placeOrder(data: {
         country: data.customer_country,
         postal_code: data.customer_postal_code?.trim() || "",
       }),
+      /*
+       * ⚠ Codul postal al CLIENTULUI si pe comenzile romanesti, cand chiar il avem.
+       *
+       * Ramura de mai sus il scrie DOAR pentru livrarea internationala, fiindca
+       * doar acolo il cere formularul. Rezultatul: pe intern `postal_code` nici
+       * nu exista in `shipping_address`, iar GLS — care il cere obligatoriu
+       * (`Address.ZipCode`, REQUIRED) — primea sirul gol la fiecare colet.
+       *
+       * ⚠ Codul PUNCTULUI de ridicare NU intra aici. E codul altei adrese, iar
+       * `postal_code` e citit de formularele de AWB ale TUTUROR celorlalti
+       * curieri (Cargus, Sameday, FAN, eColet…) ca fiind al destinatarului: pus
+       * aici, ar pleca un cod postal dintr-un oras alaturi de localitatea
+       * clientului. Sta langa celelalte campuri de punct, mai jos.
+       */
+      ...(!data.customer_country || data.customer_country === "RO"
+        ? (() => {
+            const cod = (data.customer_postal_code ?? "").trim();
+            return cod ? { postal_code: cod } : {};
+          })()
+        : {}),
       ...(data.selected_courier && {
         courier: data.selected_courier,
         courier_label: data.courier_label,
@@ -1328,6 +1352,10 @@ export async function placeOrder(data: {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
         locker_address: data.locker_address,
+        /* Codul postal AL PUNCTULUI. GLS il cere pe adresa de livrare, care la
+           livrarea in punct e chiar a punctului. Nu se amesteca cu `postal_code`,
+           care descrie destinatarul si e citit de toti ceilalti curieri. */
+        locker_post_code: data.locker_post_code,
         locker_city: data.locker_city,
         locker_county: data.locker_county,
       }),
@@ -2794,7 +2822,7 @@ export async function deleteOrder(orderId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: order } = await supabase.from("orders").select("business_id, discount_code").eq("id", orderId).single();
+  const { data: order } = await supabase.from("orders").select("business_id, discount_code, gls_awb_number").eq("id", orderId).single();
   if (!order) return { error: "Comanda negasita" };
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
@@ -2831,6 +2859,36 @@ export async function deleteOrder(orderId: string) {
   if ((sters as { gasit?: boolean } | null)?.gasit !== true) {
     logError({ action: "deleteOrder", message: "comanda n-a fost gasita la stergere", details: { orderId, raspuns: sters }, businessId: order.business_id, userId: user.id, severity: "warning" });
     return { error: "Comanda negasita" };
+  }
+
+  /*
+   * ⚠ ETICHETA AWB PLEACA ODATA CU COMANDA.
+   *
+   * Fisierul din R2 nu e o poza de produs: contine NUMELE, ADRESA si TELEFONUL
+   * cumparatorului. Comanda dispare din baza, dar cheia lui se calcula exclusiv
+   * din `(businessId, orderId)` — deci dupa stergere nimeni si nimic nu o mai
+   * putea compune, si fisierul ramanea in bucket pentru totdeauna: nici la o
+   * cerere GDPR de stergere n-ar mai fi fost gasit.
+   *
+   * Se face DUPA stergerea reusita si nu poate schimba rezultatul: comanda chiar
+   * s-a sters, iar o eroare aici n-are ce sa-i spuna comerciantului. Se striga in
+   * loguri, unde e treaba platformei.
+   */
+  try {
+    /* ⚠ Doar cand a existat un AWB GLS. Altfel fiecare stergere de comanda ar fi
+       asteptat trei drumuri catre R2 care in majoritatea cazurilor n-au ce sterge. */
+    if (order.gls_awb_number) {
+      await Promise.all(cheiEticheta(order.business_id, orderId).map((k) => deleteFromR2(k)));
+    }
+  } catch (e) {
+    await logError({
+      action: "deleteOrder",
+      message: `Comanda a fost stearsa, dar eticheta GLS NU s-a putut sterge din CDN: ${(e as Error).message}. Contine datele cumparatorului.`,
+      details: { orderId },
+      businessId: order.business_id,
+      userId: user.id,
+      severity: "warning",
+    });
   }
 
   revalidatePath("/dashboard/orders");
@@ -3007,6 +3065,8 @@ export async function placeCartOrder(data: {
   locker_id?: string;
   locker_name?: string;
   locker_address?: string;
+  /** Codul postal al punctului de ridicare; GLS il cere pe adresa de livrare. */
+  locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
   woot_service_id?: number;
@@ -3417,6 +3477,26 @@ export async function placeCartOrder(data: {
         country: data.customer_country,
         postal_code: data.customer_postal_code?.trim() || "",
       }),
+      /*
+       * ⚠ Codul postal al CLIENTULUI si pe comenzile romanesti, cand chiar il avem.
+       *
+       * Ramura de mai sus il scrie DOAR pentru livrarea internationala, fiindca
+       * doar acolo il cere formularul. Rezultatul: pe intern `postal_code` nici
+       * nu exista in `shipping_address`, iar GLS — care il cere obligatoriu
+       * (`Address.ZipCode`, REQUIRED) — primea sirul gol la fiecare colet.
+       *
+       * ⚠ Codul PUNCTULUI de ridicare NU intra aici. E codul altei adrese, iar
+       * `postal_code` e citit de formularele de AWB ale TUTUROR celorlalti
+       * curieri (Cargus, Sameday, FAN, eColet…) ca fiind al destinatarului: pus
+       * aici, ar pleca un cod postal dintr-un oras alaturi de localitatea
+       * clientului. Sta langa celelalte campuri de punct, mai jos.
+       */
+      ...(!data.customer_country || data.customer_country === "RO"
+        ? (() => {
+            const cod = (data.customer_postal_code ?? "").trim();
+            return cod ? { postal_code: cod } : {};
+          })()
+        : {}),
       ...(data.selected_courier && {
         courier: data.selected_courier,
         courier_label: data.courier_label,
@@ -3426,6 +3506,10 @@ export async function placeCartOrder(data: {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
         locker_address: data.locker_address,
+        /* Codul postal AL PUNCTULUI. GLS il cere pe adresa de livrare, care la
+           livrarea in punct e chiar a punctului. Nu se amesteca cu `postal_code`,
+           care descrie destinatarul si e citit de toti ceilalti curieri. */
+        locker_post_code: data.locker_post_code,
         locker_city: data.locker_city,
         locker_county: data.locker_county,
       }),

@@ -28,6 +28,78 @@ import type { AdresaGls, ColetGls, ServiciuGls } from "./client";
  *   24H  livrare garantata in 24h
  */
 
+/**
+ * Desparte numarul de casa de numele strazii.
+ *
+ * ═══ ⚠ DE CE E NEVOIE ═══
+ *
+ * MyGLS are TREI campuri (clasa `Address`, pagina 10): `Street` (numele),
+ * `HouseNumber` („ONLY NUMBER") si `HouseNumberInfo` („Building, stairway,
+ * etc."). Noi le inghesuiam pe toate in `Street` si taiam la 40 de caractere —
+ * iar taierea se face pe granita de CUVANT, deci numarul, care sta la sfarsit,
+ * era primul care pica:
+ *
+ *     „Bulevardul General Gheorghe Magheru 28"  ->  „Bulevardul General Gheorghe Magheru"
+ *
+ * Coletul pleaca cu strada fara numar, curierul nu gaseste adresa, si urmeaza
+ * codul 18 sau 20 din Appendix G, apoi 23: retur. Comerciantul plateste si dusul
+ * si intorsul, iar rambursul nu se incaseaza.
+ *
+ * ═══ ⚠ DE CE NU SE DESPARTE MEREU ═══
+ *
+ * O despartire gresita strica adresa mai rau decat o lasa. „Strada 13
+ * Septembrie" nu are numarul 13, iar „Bulevardul 1 Mai 28" are numarul 28, nu 1.
+ * Deci se taie DOAR cand e limpede:
+ *
+ *   1. exista un marcaj explicit (`nr`, `nr.`, `numarul`, `no`) — cel mai sigur;
+ *   2. altfel, numai daca numarul e la SFARSIT sau e urmat de bl/sc/et/ap;
+ *   3. in rest se lasa totul in `Street`, ca pana acum.
+ *
+ * In toate cazurile trebuie sa ramana litere inaintea numarului: altfel „28" ar
+ * deveni o strada fara nume.
+ */
+const MARCAJ_NUMAR = /\b(?:nr|no|num[aă]r(?:ul)?)\.?\s*(\d+[A-Za-z]?)\b/i;
+/** bl(oc), sc(ara), et(aj), ap(artament), tronson, corp, sector. */
+const MARCAJ_DETALIU = /\b(?:bl|sc|et|ap|tr|corp|sector|sect)\b/i;
+/**
+ * Un numar la sfarsitul textului, eventual urmat de detalii de bloc.
+ *
+ * ⚠ LACOM (`.*`, nu `.*?`), si asta e chiar miezul: pe „Bulevardul 1 Mai 28"
+ * varianta lenesa se opreste la PRIMUL numar si scoate „1" drept numar de casa,
+ * lasand „Mai 28" ca detalii. Lacom, cauta ultimul, si backtracking-ul se intoarce
+ * singur la unul mai devreme cand restul arata a bloc/scara.
+ */
+const NUMAR_LA_FINAL = /^(.*[A-Za-zĂÂÎȘȚăâîșț])[\s,]+(\d+[A-Za-z]?)\s*(.*)$/;
+
+export function despartaAdresa(text: string): {
+  strada: string;
+  numar: string;
+  detalii: string;
+} {
+  const curat = (text ?? "").trim().replace(/\s+/g, " ");
+  if (!curat) return { strada: "", numar: "", detalii: "" };
+
+  const cuMarcaj = MARCAJ_NUMAR.exec(curat);
+  if (cuMarcaj && cuMarcaj.index > 0) {
+    const inainte = curat.slice(0, cuMarcaj.index).replace(/[\s,]+$/, "");
+    const dupa = curat.slice(cuMarcaj.index + cuMarcaj[0].length).replace(/^[\s,]+/, "");
+    if (/[A-Za-zĂÂÎȘȚăâîșț]/.test(inainte)) {
+      return { strada: inainte, numar: cuMarcaj[1], detalii: dupa };
+    }
+  }
+
+  const laFinal = NUMAR_LA_FINAL.exec(curat);
+  if (laFinal) {
+    const rest = laFinal[3].replace(/^[\s,]+/, "");
+    /* Fara marcaj, numarul e credibil doar la sfarsit sau urmat de bloc/scara. */
+    if (rest === "" || MARCAJ_DETALIU.test(rest)) {
+      return { strada: laFinal[1], numar: laFinal[2], detalii: rest };
+    }
+  }
+
+  return { strada: curat, numar: "", detalii: "" };
+}
+
 /** Lungimea maxima a campurilor de adresa la GLS. */
 const MAX = {
   /*
@@ -45,6 +117,9 @@ const MAX = {
   oras: 40,
   codPostal: 9,
   contact: 40,
+  /* `HouseNumber` e „ONLY NUMBER"; restul (bloc, scara, etaj) sta separat. */
+  numar: 10,
+  detaliiAdresa: 40,
 } as const;
 
 /**
@@ -67,6 +142,16 @@ export type AdresaComanda = {
   companie?: string | null;
   strada: string;
   stradaExtra?: string | null;
+  /**
+   * Numarul de la strada, cand apelantul il are separat
+   * (`shipping_address.street_no`).
+   *
+   * ⚠ Se LIPESTE de strada si trece prin aceeasi despartire ca textul venit
+   * intr-un singur camp — nu pe un drum al lui. Vezi `adresaGls`: doua drumuri
+   * inseamna doua purtari, si aceeasi comanda ar pleca altfel dupa cum a fost
+   * apasat butonul.
+   */
+  numar?: string | null;
   oras: string;
   judet?: string | null;
   codPostal?: string | null;
@@ -81,10 +166,38 @@ export type AdresaComanda = {
  * ⚠ `Name` e firma daca exista, altfel persoana — la fel ca in integrarea
  * WooCommerce. `ContactName` ramane INTOTDEAUNA persoana: curierul suna un om,
  * nu o firma.
+ *
+ * ⚠ Strada se desparte in `Street` / `HouseNumber` / `HouseNumberInfo`, fiecare
+ * cu bugetul lui de caractere. Vezi `despartaAdresa`.
  */
 export function adresaGls(a: AdresaComanda): AdresaGls {
-  const strada = [a.strada, a.stradaExtra].filter(Boolean).join(" ");
-  return {
+  const intreaga = [a.strada, a.stradaExtra].filter(Boolean).join(" ");
+  /*
+   * Cand numarul vine separat de la apelant, nu se mai ghiceste: se ia asa cum e.
+   * Restul textului ramane numele strazii, iar detaliile eventuale (bloc, scara)
+   * ies din despartire.
+   */
+  /*
+   * ⚠⚠ O SINGURA COMPUNERE, PENTRU TOATE CAILE.
+   *
+   * Formularul de AWB tine strada si numarul intr-un singur camp editabil; lotul
+   * le are separate pe comanda. O varianta anterioara le trata diferit — numarul
+   * dat separat ocolea `despartaAdresa` — si a produs exact defectul pe care
+   * despartirea trebuia sa-l repare: pe formele care nu incep cu o cifra („FN",
+   * „nr. 5", „bis 3"), textul se pierdea COMPLET, si numai pe calea lotului.
+   * Aceeasi comanda pleca cu adrese diferite dupa cum se apasa butonul.
+   *
+   * Acum totul se lipeste si se desparte O SINGURA DATA, cu aceleasi reguli. Cele
+   * doua cai nu mai POT sa se departeze, fiindca nu mai exista doua cai — e
+   * garantie prin constructie, nu prin grija. Vezi proba care le compara pe zece
+   * forme reale de adresa.
+   */
+  const rupt = despartaAdresa([intreaga, (a.numar ?? "").trim()].filter(Boolean).join(" "));
+  const strada = rupt.strada;
+  const numar = rupt.numar;
+  const detalii = rupt.detalii;
+
+  const adr: AdresaGls = {
     Name: taie(a.companie || a.nume, MAX.nume),
     Street: taie(strada, MAX.strada),
     City: taie(a.oras, MAX.oras),
@@ -96,6 +209,12 @@ export function adresaGls(a: AdresaComanda): AdresaGls {
     ContactPhone: normalizePhone(a.telefon),
     ContactEmail: (a.email ?? "").trim(),
   };
+
+  /* Campurile optionale se trimit doar cand au continut: `HouseNumber: ""` n-ar
+     spune nimic in plus, iar documentatia are cod propriu pentru numar zero. */
+  if (numar) adr.HouseNumber = taie(numar, MAX.numar);
+  if (detalii) adr.HouseNumberInfo = taie(detalii, MAX.detaliiAdresa);
+  return adr;
 }
 
 /** Serviciile pe care le poate cere comerciantul din configurare. */
@@ -178,11 +297,78 @@ export function serviciiGls(d: DateExpediere): ServiciuGls[] {
     lista.push({ Code: "AOS", AOSParameter: { Value: taie(d.destinatar.nume, MAX.contact) } });
   }
 
-  if (s.asigurare && d.valoare && d.valoare > 0) {
+  /*
+   * ⚠ Asigurarea cere o expediere de UN SINGUR colet.
+   *
+   * Appendix A, codul 28: „The Count must be 1 because of the INS service".
+   * Trimise impreuna, GLS refuza toata expedierea — deci mai bine renuntam la
+   * serviciu decat sa nu plece coletul, si spunem asta in avertismentele care
+   * ajung la comerciant.
+   */
+  if (s.asigurare && d.valoare && d.valoare > 0 && Math.floor(d.numarColete || 1) <= 1) {
     lista.push({ Code: "INS", INSParameter: { Value: d.valoare } });
   }
 
   return lista;
+}
+
+/** „Count of parcels sent in one shipment. (maximum 99)", pagina 9. */
+export const MAX_COLETE = 99;
+
+/**
+ * ⚠ Ce NU putem trimite catre Serbia, spus inainte de a consuma un apel.
+ *
+ * Documentatia are trei cerinte proprii pentru RS, toate in clasa `Parcel`
+ * (pagina 9), si niciuna nu e indeplinita de noi:
+ *
+ *   `SenderIdentityCardNumber`  „Only in Serbia! ID card number or PIB. REQUIRED"
+ *   `Content`                   „MANDATORY in Serbia"  (acum se trimite mereu)
+ *   `ParcelPropertyList`        „For shipments to Serbia, specifying the parcel
+ *                                weight is mandatory"
+ *
+ * Appendix A le are codurile 43 („Missing senderId card number (only in RS)") si
+ * 44 („Missing content (only in RS)").
+ *
+ * Nu exista in panou niciun camp pentru buletinul/PIB-ul expeditorului si nu
+ * trimitem greutatea nicaieri, deci o expediere spre Serbia ar fi refuzata la
+ * FIECARE incercare, iar comerciantul n-ar avea ce sa corecteze. Mai bine i-o
+ * spunem noi, limpede, decat sa-l lasam sa se lupte cu un cod de eroare.
+ *
+ * Cand se va cere, reparatia e clara: un camp `expeditor_ci_pib` in configurare
+ * si greutatea in `ParcelPropertyList` — greutatea exista deja in lot
+ * (`greutateaColetului`) si se arunca doar pentru ca „GLS nu o cere", ceea ce e
+ * adevarat peste tot in afara de Serbia.
+ */
+export function motivRefuzSerbia(d: DateExpediere): string | null {
+  const tara = (d.destinatar.tara || "RO").toUpperCase();
+  if (tara !== "RS") return null;
+  return (
+    "Expedierile catre Serbia cer date pe care GLS le pretinde obligatoriu acolo "
+    + "(numarul de buletin sau PIB-ul expeditorului si greutatea coletului) si pe care "
+    + "integrarea nu le trimite inca. Foloseste contul MyGLS pentru aceasta comanda."
+  );
+}
+
+/**
+ * Ce nu se poate trimite asa cum a cerut comerciantul, spus in cuvintele lui.
+ *
+ * Se aduna INAINTE de apel si se pun in registru langa AWB, ca sa nu dispara:
+ * un serviciu care „nu s-a activat" fara ca nimeni sa fi aflat de ce e exact
+ * felul de tacere care se descopera cand clientul reclama.
+ */
+export function avertismenteColet(d: DateExpediere): string[] {
+  const av: string[] = [];
+  const cerute = Math.floor(d.numarColete || 1);
+  if (cerute > MAX_COLETE) {
+    av.push(`S-au cerut ${cerute} colete, iar GLS accepta cel mult ${MAX_COLETE}: s-au trimis ${MAX_COLETE}.`);
+  }
+  if (d.servicii?.asigurare && d.valoare && d.valoare > 0 && cerute > 1) {
+    av.push(
+      "Asigurarea GLS (INS) merge doar pe expedierile cu un singur colet, "
+      + `iar aceasta are ${cerute}: coletul a plecat NEASIGURAT.`,
+    );
+  }
+  return av;
 }
 
 /**
@@ -197,13 +383,29 @@ export function coletGls(d: DateExpediere): ColetGls {
   const colet: ColetGls = {
     ClientNumber: d.clientNumber,
     ClientReference: taie(d.referinta, 40),
-    Count: Math.max(1, Math.floor(d.numarColete || 1)),
+    /*
+     * ⚠ Plafonat la 99: „Count of parcels sent in one shipment. (maximum 99)"
+     * (pagina 9), iar Appendix A are cod propriu pentru depasire (29). Fara
+     * plafon, o greseala de tastare consuma un apel si primeste un refuz pe care
+     * il puteam da noi.
+     */
+    Count: Math.min(MAX_COLETE, Math.max(1, Math.floor(d.numarColete || 1))),
     PickupAddress: adresaGls(d.expeditor),
     DeliveryAddress: adresaGls(d.destinatar),
     ServiceList: serviciiGls(d),
   };
 
-  if (d.continut) colet.Content = taie(d.continut, 40);
+  /*
+   * ⚠ `Content` se trimite INTOTDEAUNA.
+   *
+   * Documentatia il da ca „optionally REQUIRED, depends on the user right"
+   * (pagina 9) si MANDATORY in Serbia, iar Appendix A are codul 33, „The Content
+   * field is required". Trimis doar cand comerciantul a completat ceva, un cont
+   * cu dreptul acela pornit ar fi primit refuz pe orice comanda careia i s-a
+   * sters continutul din formular. Referinta comenzii e o rezerva buna: e scurta,
+   * exista mereu si spune ceva pe eticheta.
+   */
+  colet.Content = taie(d.continut || d.referinta, 40);
 
   if (typeof d.ramburs === "number" && d.ramburs > 0) {
     /* Doi zecimali: MyGLS primeste numar, iar o suma cu erori de virgula

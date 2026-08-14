@@ -43,7 +43,27 @@ import { createHmac } from "node:crypto";
  * cheia de service role, care oricum nu paraseste serverul.
  */
 function secret(): string {
-  return process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const s = process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  /*
+   * ⚠ ARUNCA. Nu cade pe sirul gol.
+   *
+   * Cu `""`, `createHmac` merge mai departe si scoate tot 24 de caractere
+   * hexazecimale — deci nimic, nici o proba de pornire, nici testele, nu
+   * deosebeste o cheie neghicibila de una pe care o poate calcula oricine cu
+   * cele doua UUID-uri. Iar fisierul de sub cheia aia e o eticheta AWB: numele,
+   * adresa si telefonul CUMPARATORULUI, intr-un bucket servit public prin CDN.
+   *
+   * O degradare de securitate invizibila e mai rea decat o eroare zgomotoasa: aici
+   * emiterea se opreste, comerciantul vede un mesaj, si cineva pune variabila.
+   */
+  if (!s) {
+    throw new Error(
+      "Lipseste secretul de semnare a etichetelor (SHIPPING_QUOTE_SECRET sau "
+      + "SUPABASE_SERVICE_ROLE_KEY). Fara el, cheia din CDN a etichetei — care contine "
+      + "datele cumparatorului — ar fi ghicibila.",
+    );
+  }
+  return s;
 }
 
 /**
@@ -56,10 +76,43 @@ function secret(): string {
  * parametru s-ar pierde la prima copiere a linkului, si atunci ar ramane doar
  * cheia ghicibila.
  */
-export function cheieEticheta(businessId: string, orderId: string): string {
+export function cheieEticheta(
+  businessId: string,
+  orderId: string,
+  /**
+   * ⚠ Extensia intra SI in cheie, SI in sirul semnat.
+   *
+   * Formatele Zebra (`ThermoZPL`, `ThermoZPL_300DPI`, `ShipItThermoZpl`) intorc
+   * ZPL, adica text de imprimanta, nu PDF. Salvat sub `.pdf` si servit cu
+   * `application/pdf`, cititorul spune „fisier deteriorat" si comerciantul n-are
+   * cum sa lege asta de formatul ales in configurare.
+   *
+   * Si daca extensia n-ar intra in semnatura, PDF-ul si ZPL-ul aceleiasi comenzi
+   * ar avea cheia identica pana la extensie — iar o schimbare de format ar
+   * suprascrie fisierul vechi cu unul de alt fel.
+   */
+  ext: "pdf" | "zpl" = "pdf",
+): string {
   const semnatura = createHmac("sha256", secret())
-    .update(`gls:eticheta:${businessId}:${orderId}`)
+    .update(`gls:eticheta:${businessId}:${orderId}:${ext}`)
     .digest("hex")
     .slice(0, 24);
-  return `awb/gls/${businessId}/${orderId}-${semnatura}.pdf`;
+  return `awb/gls/${businessId}/${orderId}-${semnatura}.${ext}`;
+}
+
+/**
+ * Toate cheile sub care poate sta eticheta unei comenzi.
+ *
+ * ⚠ La stergere se incearca TOATE: comerciantul poate fi schimbat formatul intre
+ * emitere si anulare, iar o eticheta ramasa in urma inseamna datele unui
+ * cumparator lasate intr-un bucket public. Cheia veche, nesemnata cu extensia, e
+ * si ea in lista — altfel etichetele emise pana acum n-ar mai putea fi sterse
+ * niciodata de nicio cale din cod.
+ */
+export function cheiEticheta(businessId: string, orderId: string): string[] {
+  const vechea = `awb/gls/${businessId}/${orderId}-${createHmac("sha256", secret())
+    .update(`gls:eticheta:${businessId}:${orderId}`)
+    .digest("hex")
+    .slice(0, 24)}.pdf`;
+  return [cheieEticheta(businessId, orderId, "pdf"), cheieEticheta(businessId, orderId, "zpl"), vechea];
 }

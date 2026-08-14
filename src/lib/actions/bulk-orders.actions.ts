@@ -54,6 +54,9 @@ const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday",
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
   postal_code?: string; country?: string; courier?: string; delivery_type?: string; locker_id?: string;
+  /* Localitatea, judetul si codul postal ALE PUNCTULUI de ridicare. La livrarea
+     in punct adresa de livrare e a lui, nu a clientului. */
+  locker_city?: string; locker_county?: string; locker_post_code?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────────
@@ -408,13 +411,27 @@ async function createAwbForOrder(
       const laPunct = (addr.courier ?? "").toLowerCase().trim() === "gls"
         && addr.delivery_type === "locker"
         && !!addr.locker_id;
+      /*
+       * ⚠ Codul postal lipseste aproape mereu pe comenzile romanesti (checkout-ul
+       * il cere doar la livrarea internationala). NU se opreste lotul pentru asta:
+       * `createGlsAwbAction` il completeaza din punctele GLS ale aceluiasi oras si
+       * scrie in avertismentele operatiei ca l-a pus el. Refuzul ramane doar
+       * pentru localitatile in care GLS n-are niciun punct.
+       */
       return createGlsAwbAction(businessId, o.id, {
         destinatar: {
           nume: o.customer_name,
-          strada: [street, streetNo].filter(Boolean).join(" ").trim(),
-          oras: city,
-          judet: county || null,
-          codPostal: zip || null,
+          strada: street,
+          /* Numarul se trimite separat cand exista: asa nu mai trebuie ghicit din
+             text si nu se mai pierde la taierea strazii la 40 de caractere. */
+          numar: streetNo || null,
+          /* ⚠ La punct, localitatea, judetul si codul postal sunt ALE PUNCTULUI.
+             Strada vine oricum de acolo (checkout-ul o scrie in comanda), deci
+             amestecate cu orasul clientului ar da o adresa care nu exista.
+             Aceeasi regula ca la FAN Courier. */
+          oras: (laPunct ? addr.locker_city : "") || city,
+          judet: ((laPunct ? addr.locker_county : "") || county) || null,
+          codPostal: ((laPunct ? addr.locker_post_code : "") || zip) || null,
           tara: addr.country || "RO",
           telefon: o.customer_phone,
           email,

@@ -4,21 +4,26 @@ import {
   areEtichete,
   eroriPeColet,
   eroriRetiparire,
+  felulEtichetei,
+  idRetiparite,
   numereColet,
   pdfDinEtichete,
   probaConexiune,
   pdfDinRetiparire,
   retipareste,
   stergeEtichete,
+  tipareste,
   urlMetoda,
   COD_UTILIZATOR_INEXISTENT,
   MAX_RETIPARIRI_PE_CERERE,
   MAX_STERGERI_PE_CERERE,
   TARI_MYGLS,
   TIPURI_IMPRIMANTA,
+  TIPURI_IMPRIMANTA_RETIPARIRE,
   type GlsConfig,
   type RaspunsEtichete,
 } from "./client";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 
 /*
  * ⚠ Integrarea se probeaza DIRECT IN PRODUCTIE, pe contractul unui client real.
@@ -169,6 +174,14 @@ const CONFIG: GlsConfig = {
  * fiindca acolo se afla regulile care nu se pot descoperi altfel decat platind un
  * colet real.
  */
+/**
+ * `fetch` inlocuit, cu raspunsuri date pe rand.
+ *
+ * O intrare `Error` in lista inseamna „cererea asta CADE pe retea" — nu un corp
+ * de raspuns. Fara ea nu se putea proba deloc ramura in care o cerere dintr-un
+ * sir de cereri pica, adica exact acolo unde se pierdeau rezultatele bucatilor
+ * dinainte.
+ */
 function fetchFals(raspunsuri: unknown[]) {
   const cereri: Record<string, unknown>[] = [];
   const original = globalThis.fetch;
@@ -176,6 +189,7 @@ function fetchFals(raspunsuri: unknown[]) {
   globalThis.fetch = (async (_url: string, init: { body: string }) => {
     cereri.push(JSON.parse(init.body) as Record<string, unknown>);
     const corp = raspunsuri[Math.min(i++, raspunsuri.length - 1)];
+    if (corp instanceof Error) throw corp;
     return new Response(JSON.stringify(corp), { status: 200 });
   }) as unknown as typeof fetch;
   return { cereri, restaureaza: () => { globalThis.fetch = original; } };
@@ -233,11 +247,17 @@ test("⚠ sub-coletele sterse se numara si ele", async () => {
   assert.deepEqual(rod.erori, []);
 });
 
-test("⚠ succesul e PARTIAL: si sterse, si erori, in acelasi raspuns", async () => {
+test("⚠ succesul e PARTIAL: si sterse, si nesigure, in acelasi raspuns", async () => {
   /*
-   * Codul 6 = „Parcel with this ID has different status than PRINTED", adica GLS
-   * a preluat deja coletul. Daca am citi raspunsul ca tot-sau-nimic, am dezlega
-   * de pe comanda un colet care chiar pleaca spre client.
+   * Codul 6 = „Parcel with this ID has different status than PRINTED". Daca am
+   * citi raspunsul ca tot-sau-nimic, am dezlega de pe comanda un colet care
+   * chiar pleaca spre client.
+   *
+   * ⚠ 6 nu mai intra la `erori`, ci la `nesigure`: singur, nu spune daca coletul
+   * a plecat spre client sau daca a fost DEJA sters de o incercare anterioara
+   * (documentatia, pagina 27: `DeleteLabels` „Set DELETED state", deci nu sterge
+   * inregistrarea). Cine primeste raspunsul le deosebeste dupa istoricul
+   * coletului.
    */
   const f = fetchFals([{
     SuccessfullyDeletedList: [{ ParcelId: 10 }],
@@ -252,8 +272,33 @@ test("⚠ succesul e PARTIAL: si sterse, si erori, in acelasi raspuns", async ()
     f.restaureaza();
   }
   assert.deepEqual(rod.sterse, [10]);
-  assert.equal(rod.erori.length, 1);
-  assert.ok(rod.erori[0].includes("colete 11"), `ID-ul lipseste din mesaj: ${rod.erori[0]}`);
+  assert.deepEqual(rod.nesigure, [11]);
+  assert.deepEqual(rod.inexistente, []);
+  assert.deepEqual(rod.erori, [], "6 nu mai e o eroare oarba");
+});
+
+test("⚠ o bucata picata NU pierde coletele sterse in bucata dinainte", async () => {
+  /*
+   * 51 de ID-uri = doua cereri. Prima sterge, a doua cade pe retea.
+   *
+   * Pana acum exceptia urca direct din bucla, iar cele 50 de colete deja sterse
+   * se pierdeau fara urma: la reincercare raspund cu codul 6, deci comanda
+   * ramanea infundata din cauza unei erori de retea la a doua felie.
+   */
+  const ids = Array.from({ length: 51 }, (_, i) => i + 1);
+  const f = fetchFals([
+    { SuccessfullyDeletedList: ids.slice(0, 50).map((id) => ({ ParcelId: id })) },
+    new Error("socket hang up"),
+  ]);
+  let rod;
+  try {
+    rod = await stergeEtichete(CONFIG, ids);
+  } finally {
+    f.restaureaza();
+  }
+  assert.equal(rod.sterse.length, 50, "reusitele primei bucati trebuie sa supravietuiasca");
+  assert.equal(rod.erori.length, 1, "esecul bucatii a doua se raporteaza");
+  assert.ok(rod.erori[0].includes("51"), `bucata picata nu numeste coletul: ${rod.erori[0]}`);
 });
 
 test("ID-urile de sters se curata: duplicate, zerouri, valori imposibile", async () => {
@@ -365,12 +410,19 @@ test("⚠ „coletul nu exista” NU e o eroare de anulare", async () => {
   assert.deepEqual(rod.erori, [], "nu se arata comerciantului ca eroare");
 });
 
-test("⚠ codul 6 (colet deja preluat) RAMANE eroare", async () => {
+test("⚠ codul 6 NU e nici sters, nici inexistent, nici eroare oarba", async () => {
   /*
-   * Deosebirea fata de proba de mai sus e chiar miezul: la 6, coletul EXISTA si
-   * pleaca spre client. Confundat cu „inexistent", AWB-ul s-ar sterge de pe
-   * comanda si transportul ar deveni invizibil — iar o reemitere ar factura al
-   * doilea colet.
+   * Deosebirea fata de proba de mai sus e chiar miezul. Codul 6 acopera DOUA
+   * situatii opuse:
+   *   a) coletul a fost deja sters de o incercare anterioara (starea lui e acum
+   *      DELETED — documentatia, pagina 27: `DeleteLabels` „Set DELETED state",
+   *      deci inregistrarea NU dispare si a doua cerere nu mai poate primi 4);
+   *   b) GLS a preluat coletul si chiar pleaca spre client.
+   *
+   * Confundat cu „inexistent", AWB-ul s-ar sterge de pe comanda in cazul (b) si
+   * transportul ar deveni invizibil. Tratat ca eroare oarba, cum era pana acum,
+   * cazul (a) infunda comanda pentru totdeauna: nici anulare, nici reemitere.
+   * De aia iese aparte, si decizia se ia dupa istoricul coletului.
    */
   const f = fetchFals([{
     DeleteLabelsErrorList: [
@@ -383,9 +435,10 @@ test("⚠ codul 6 (colet deja preluat) RAMANE eroare", async () => {
   } finally {
     f.restaureaza();
   }
-  assert.deepEqual(rod.sterse, []);
+  assert.deepEqual(rod.sterse, [], "6 nu inseamna sters");
   assert.deepEqual(rod.inexistente, [], "6 nu inseamna inexistent");
-  assert.equal(rod.erori.length, 1);
+  assert.deepEqual(rod.nesigure, [77], "6 se intoarce ca ambiguu, de lamurit din istoric");
+  assert.deepEqual(rod.erori, []);
 });
 
 test("⚠ codul 4 FARA lista de colete nu dispare, devine eroare", async () => {
@@ -494,16 +547,34 @@ test("proba CITESTE, nu emite: nu trimite niciun colet", async () => {
   assert.equal("ParcelList" in f.cereri[0], false, "proba nu are voie sa trimita colete");
 });
 
-test("formatele de tiparire sunt cele opt din documentatia MyGLS", () => {
+test("⚠ formatele OFERITE sunt cele acceptate de EMITERE, nu de retiparire", () => {
   /*
-    ⚠ Lista avea doar primele patru. Celelalte au fost adaugate de GLS in 2025
-    (ThermoZPL 12.02, ShipItThermoPdf 02.09, ThermoZPL_300DPI 03.09), deci un
-    comerciant cu imprimanta ZPL n-avea ce alege in panou.
+    ⚠ Cele doua metode NU accepta acelasi set, si asta e usor de ratat fiindca
+    tabelele arata la fel:
 
-    Sursa: `api.mygls.ro/docs/MyGLS_API.pdf`, `GetPrintedLabelsRequest →
-    TypeOfPrinter`. Daca GLS mai adauga unul, se adauga si aici — nu se
-    inventeaza valori: una gresita e respinsa abia la primul colet real.
+      `GetPrintedLabelsRequest → TypeOfPrinter` (pagina 19)  OPT valori
+      `PrintLabelsRequest → TypeOfPrinter`      (pagina 23)  SAPTE
+
+    Lipsa e `ShipItThermoZpl`, adaugat de GLS la 04.12.2025 (changelog, intrarea
+    25) — la o saptamana dupa versiunea documentului. Probabil o lista
+    neactualizata, dar „probabil" nu se pune pe un camp care se alege O DATA si
+    se trimite la FIECARE colet: Appendix A are cod propriu (34, „Value of
+    TypeOfPrinter is invalid"), iar un comerciant care l-ar alege n-ar mai putea
+    emite nimic.
+
+    Deci comerciantul alege doar din cele de la EMITERE. Tipul ramane larg, ca sa
+    se poata citi configurarile salvate cat timp era oferit.
   */
+  assert.equal(
+    TIPURI_IMPRIMANTA.includes("ShipItThermoZpl" as never),
+    false,
+    "ShipItThermoZpl nu e in lista lui PrintLabels (pagina 23)",
+  );
+  assert.ok(
+    TIPURI_IMPRIMANTA_RETIPARIRE.includes("ShipItThermoZpl"),
+    "dar retiparirea il accepta (pagina 19)",
+  );
+  assert.equal(TIPURI_IMPRIMANTA_RETIPARIRE.length, TIPURI_IMPRIMANTA.length + 1);
   assert.deepEqual([...TIPURI_IMPRIMANTA], [
     "A4_2x2",
     "A4_4x1",
@@ -512,6 +583,118 @@ test("formatele de tiparire sunt cele opt din documentatia MyGLS", () => {
     "ThermoZPL",
     "ThermoZPL_300DPI",
     "ShipItThermoPdf",
-    "ShipItThermoZpl",
   ]);
+});
+
+test("⚠ formatele Zebra produc ZPL, nu PDF", () => {
+  /*
+   * Octetii se salveaza pe CDN si se servesc mai departe. Declarati
+   * `application/pdf` si numiti `.pdf`, cititorul spune „fisier deteriorat" si
+   * comerciantul n-are cum sa lege asta de formatul ales in configurare.
+   */
+  for (const t of ["ThermoZPL", "ThermoZPL_300DPI", "ShipItThermoZpl"] as const) {
+    assert.deepEqual(felulEtichetei(t), { ext: "zpl", tipMime: "application/vnd.zebra.zpl" }, t);
+  }
+  for (const t of ["A4_2x2", "A4_4x1", "Connect", "Thermo", "ShipItThermoPdf"] as const) {
+    assert.deepEqual(felulEtichetei(t), { ext: "pdf", tipMime: "application/pdf" }, t);
+  }
+  /* Configurare veche sau lipsa: PDF, ca pana acum. */
+  assert.equal(felulEtichetei(null).ext, "pdf");
+  assert.equal(felulEtichetei(undefined).ext, "pdf");
+});
+
+test("⚠ PrintPosition pleaca DOAR pe formatele A4", async () => {
+  /*
+   * „ACCEPTED ONLY FOR A4-FORMAT", cu majuscule, la amandoua metodele (paginile
+   * 19 si 23). Amandoi comerciantii cu GLS pornit azi sunt pe „Connect", deci
+   * ramura asta chiar se foloseste.
+   */
+  const cere = async (tip: string) => {
+    const f = fetchFals([{ Labels: [1], PrintDataInfoList: [{ ParcelId: 3 }] }]);
+    try {
+      await retipareste({ ...CONFIG, tip_imprimanta: tip as never, pozitie_tiparire: 3 }, [3]);
+    } finally {
+      f.restaureaza();
+    }
+    return f.cereri[0];
+  };
+  assert.equal((await cere("A4_2x2")).PrintPosition, 3);
+  assert.equal("PrintPosition" in (await cere("Connect")), false);
+  assert.equal("PrintPosition" in (await cere("ThermoZPL")), false);
+});
+
+test("⚠ o pozitie de tiparire imposibila nu pleaca asa cum a venit", async () => {
+  /* `pozitie_tiparire` vine dintr-un `<select>`, dar sta in JSON: o configurare
+     stricata ar trimite 0 sau 9, iar coala A4 are patru sferturi. */
+  const f = fetchFals([{ Labels: [1], PrintDataInfoList: [{ ParcelId: 3 }] }]);
+  try {
+    await retipareste({ ...CONFIG, tip_imprimanta: "A4_2x2", pozitie_tiparire: 9 }, [3]);
+  } finally {
+    f.restaureaza();
+  }
+  assert.equal(f.cereri[0].PrintPosition, 1);
+});
+
+// ─── Verdictele: refuz dovedit sau „nu stim"? ─────────────────────────────────
+//
+// ⚠ Aici se hotaraste daca o a doua apasare pe „Emite AWB" cheama iar
+// `PrintLabels`. `esuat` inseamna pentru registru „nu s-a intamplat nimic acolo,
+// reincercarea e LIBERA" — iar la emitere reincercarea libera inseamna un al
+// doilea colet real si facturat. Pana acum ORICE `ErrorCode` nenul iesea `esuat`.
+
+/** Verdictul cu care `tipareste` arunca pentru un `ErrorCode` dat de MyGLS. */
+async function verdictLaEmitere(cod: number): Promise<string> {
+  const f = fetchFals([{ ErrorCode: cod, ErrorDescription: `eroare ${cod}` }]);
+  try {
+    await tipareste(CONFIG, [{ ClientNumber: 1 } as never]);
+    return "fara-eroare";
+  } catch (e) {
+    return verdictFurnizor(e);
+  } finally {
+    f.restaureaza();
+  }
+}
+
+test("⚠ codurile care pot insemna „coletul exista deja\" NU sunt refuz dovedit", async () => {
+  /*
+   * Appendix A arata ca emiterea are FAZE: „Parcel number generator failed" (19)
+   * si „Parcel numbers were not generated" (20) descriu esecuri de DUPA ce
+   * inregistrarea coletului exista — altfel n-ar avea ce numar sa genereze. La
+   * fel „Label is empty" (16) si „There are no printable labels" (21).
+   *
+   * 31 e cel mai contraintuitiv: GLS spune ca a primit ACEEASI cerere de cinci
+   * ori in cinci minute, deci primele patru au ajuns la el. Refuzul e despre a
+   * cincea si nu spune nimic despre celelalte.
+   */
+  for (const cod of [16, 19, 20, 21, 31, 1000, 1001]) {
+    assert.equal(await verdictLaEmitere(cod), "necunoscut", `codul ${cod} nu e refuz dovedit`);
+  }
+});
+
+test("⚠ validarile dinaintea oricarui efect RAMAN refuz dovedit", async () => {
+  /*
+   * Cealalta jumatate a regulii, la fel de importanta: daca astea ar iesi
+   * „necunoscut", prima adresa gresita ar bloca comanda si i-ar cere omului sa
+   * caute in contul MyGLS un colet care nu exista.
+   */
+  for (const cod of [-1, 13, 14, 22, 27, 28, 29, 30, 32, 33, 34, 48]) {
+    assert.equal(await verdictLaEmitere(cod), "esuat", `codul ${cod} e o validare, nu un efect`);
+  }
+});
+
+test("⚠ retiparirea partiala se vede: ce s-a cerut fata de ce a venit", () => {
+  /*
+   * `Labels` nevid nu inseamna „toate". Cine se uita doar la „am primit octeti?"
+   * ia un fisier cu doua etichete drept raspuns pentru trei colete — si il
+   * salveaza pe CDN, de unde va fi servit la nesfarsit.
+   */
+  const r = {
+    Labels: [37, 80],
+    PrintDataInfoList: [{ ParcelId: 5512 }, { ParcelId: 5514 }],
+    GetPrintedLabelsErrorList: [{ ErrorCode: 4, ErrorDescription: "Parcel ID not exists", ParcelIdList: [5513] }],
+  };
+  assert.deepEqual(idRetiparite(r), [5512, 5514]);
+  const lipsa = [5512, 5513, 5514].filter((id) => !idRetiparite(r).includes(id));
+  assert.deepEqual(lipsa, [5513]);
+  assert.equal(eroriRetiparire(r).length, 1, "eroarea trebuie sa fie citibila, nu inghitita");
 });

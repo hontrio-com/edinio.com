@@ -2,9 +2,16 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFromR2, uploadToR2 } from "@/lib/r2";
-import { cheieEticheta } from "@/lib/gls/eticheta";
+import { cheiEticheta, cheieEticheta } from "@/lib/gls/eticheta";
 import { cheieOperatie } from "@/lib/operatii/registru";
-import { eroriRetiparire, pdfDinRetiparire, retipareste, type GlsConfig } from "@/lib/gls/client";
+import {
+  eroriRetiparire,
+  felulEtichetei,
+  idRetiparite,
+  pdfDinRetiparire,
+  retipareste,
+  type GlsConfig,
+} from "@/lib/gls/client";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -52,7 +59,9 @@ import { logError } from "@/lib/error-logger";
  * Intoarce `null` la orice esec, dinadins: apelantul are deja mesajul lui, iar un
  * PDF de rezerva nu merita sa produca o eroare care il trimite pe om altundeva.
  */
-async function dinGls(businessId: string, orderId: string): Promise<Buffer | null> {
+type EtichetaCeruta = { continut: Buffer; completa: boolean };
+
+async function dinGls(businessId: string, orderId: string): Promise<EtichetaCeruta | null> {
   try {
     const admin = createAdminClient();
 
@@ -78,19 +87,48 @@ async function dinGls(businessId: string, orderId: string): Promise<Buffer | nul
     if (ids.length === 0) return null;
 
     const raspuns = await retipareste(config, ids);
-    const pdf = pdfDinRetiparire(raspuns);
-    if (!pdf) {
+    const continut = pdfDinRetiparire(raspuns);
+    if (!continut || continut.length === 0) {
       const erori = eroriRetiparire(raspuns);
       await logError({
         action: "gls.retipareste",
-        message: `GLS nu a intors eticheta pentru comanda: ${erori.join("; ") || "raspuns fara PDF"}`,
+        message: `GLS nu a intors eticheta pentru comanda: ${erori.join("; ") || "raspuns fara continut"}`,
         details: { orderId, businessId, parcelIds: ids },
         businessId,
         severity: "warning",
       });
       return null;
     }
-    return pdf;
+
+    /*
+     * ⚠ O RETIPARIRE POATE FI PARTIALA, si asta nu se vede din „am primit octeti".
+     *
+     * La o comanda cu trei colete din care unul a fost sters din contul MyGLS,
+     * `Labels` vine cu DOUA etichete, iar al treilea sta in
+     * `GetPrintedLabelsErrorList`. Pana acum `eroriRetiparire` nici nu se chema
+     * pe drumul asta (era doar in ramura „fara PDF"), deci eroarea disparea fara
+     * log si fara mesaj — iar fisierul incomplet se urca in R2 si era servit de
+     * acolo la nesfarsit, fiindca `dinGls` nu mai era chemat niciodata.
+     *
+     * Comerciantul lipea doua etichete pe trei colete si afla de la curier.
+     */
+    const primite = idRetiparite(raspuns);
+    const lipsa = ids.filter((id) => !primite.includes(id));
+    if (lipsa.length > 0) {
+      await logError({
+        action: "gls.retipareste",
+        message:
+          `GLS a retiparit doar ${primite.length} din ${ids.length} colete pentru comanda; `
+          + `lipsesc ${lipsa.join(", ")}. ${eroriRetiparire(raspuns).join("; ")}`,
+        details: { orderId, businessId, parcelIds: ids, primite, lipsa },
+        businessId,
+        severity: "warning",
+      });
+      /* Se da omului ce a venit, dar NU se pune la loc in CDN: altfel copia
+         incompleta ar inlocui pentru totdeauna incercarea de a le cere din nou. */
+      return { continut, completa: false };
+    }
+    return { continut, completa: true };
   } catch (e) {
     await logError({
       action: "gls.retipareste",
@@ -128,38 +166,76 @@ export async function GET(req: NextRequest) {
   const awb = (order as { gls_awb_number?: string | null } | null)?.gls_awb_number;
   if (!awb) return NextResponse.json({ error: "Comanda nu are AWB GLS" }, { status: 404 });
 
-  const cheie = cheieEticheta(businessId, orderId);
-  let pdf = await getFromR2(cheie);
+  /*
+   * ⚠ Se cauta sub AMANDOUA formele. Comerciantul poate fi schimbat formatul de
+   * imprimanta dupa emitere, iar eticheta veche sta unde a fost scrisa: cheia
+   * poarta acum extensia, deci ZPL-ul si PDF-ul aceleiasi comenzi nu se mai
+   * calca unul pe altul.
+   */
+  const felConfigurat = await felulConfigurat(businessId);
+  const cheiPosibile = [
+    cheieEticheta(businessId, orderId, felConfigurat.ext),
+    ...cheiEticheta(businessId, orderId).filter(
+      (k) => k !== cheieEticheta(businessId, orderId, felConfigurat.ext),
+    ),
+  ];
 
-  if (!pdf) {
+  let continut: Buffer | null = null;
+  let fel = felConfigurat;
+  for (const k of cheiPosibile) {
+    const gasit = await getFromR2(k);
+    if (gasit && gasit.length > 0) {
+      continut = gasit;
+      fel = k.endsWith(".zpl")
+        ? { ext: "zpl" as const, tipMime: "application/vnd.zebra.zpl" }
+        : { ext: "pdf" as const, tipMime: "application/pdf" };
+      break;
+    }
+  }
+
+  if (!continut) {
     /*
      * Lipseste din CDN: AWB emis inainte de salvare, sau o urcare picata atunci.
      * Se cere de la GLS, cu `ParcelId`-urile pastrate in registrul de operatii.
      */
-    pdf = await dinGls(businessId, orderId);
-    if (!pdf) {
+    const cerut = await dinGls(businessId, orderId);
+    if (!cerut) {
       return NextResponse.json(
         { error: "Eticheta nu a putut fi obtinuta pentru aceasta comanda. O gasesti in contul MyGLS, la coletul " + awb },
         { status: 404 },
       );
     }
+    continut = cerut.continut;
+    fel = felConfigurat;
     /*
      * Se pune la loc in CDN, ca urmatoarea descarcare sa nu mai treaca pe la GLS.
-     * Esecul NU opreste raspunsul: omul are deja PDF-ul in mana, si l-am trimite
+     * Esecul NU opreste raspunsul: omul are deja fisierul in mana, si l-am trimite
      * degeaba inapoi cu o eroare despre o copie de rezerva.
+     *
+     * ⚠ DOAR daca e COMPLETA. O retiparire partiala salvata aici ar fi servita
+     * pentru totdeauna, iar `dinGls` n-ar mai fi chemat niciodata.
      */
-    try {
-      await uploadToR2(pdf, cheie, "application/pdf");
-    } catch {
-      /* Ramane doar mai lent data viitoare. */
+    if (cerut.completa) {
+      try {
+        await uploadToR2(continut, cheieEticheta(businessId, orderId, fel.ext), fel.tipMime, "private, no-store");
+      } catch {
+        /* Ramane doar mai lent data viitoare. */
+      }
     }
   }
 
-  return new NextResponse(new Uint8Array(pdf), {
+  return new NextResponse(new Uint8Array(continut), {
     headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="eticheta-gls-${awb}.pdf"`,
+      "Content-Type": fel.tipMime,
+      "Content-Disposition": `attachment; filename="eticheta-gls-${awb}.${fel.ext}"`,
       "Cache-Control": "private, no-store",
     },
   });
+}
+
+/** Ce fel de eticheta produce configurarea de ACUM a magazinului. */
+async function felulConfigurat(businessId: string): Promise<{ ext: "pdf" | "zpl"; tipMime: string }> {
+  const { data } = await createAdminClient()
+    .from("store_settings").select("gls_config").eq("business_id", businessId).single();
+  return felulEtichetei((data?.gls_config as GlsConfig | null)?.tip_imprimanta);
 }

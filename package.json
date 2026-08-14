@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./scripts/tests/register.mjs --test \"src/**/*.test.ts\"",
+    "verifica:coloane": "node scripts/tests/coloane-cerute-exista.mjs",
     "bundle": "node scripts/tests/bundle-size.mjs",
     "tipuri-db": "node scripts/verifica-tipuri-db.mjs",
     "compare": "node scripts/tests/compare-storefront.mjs"

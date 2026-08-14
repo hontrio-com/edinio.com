@@ -12,7 +12,14 @@ import { getShippingOptions, getLockers, type ShippingOption, type LockerItem } 
  * nevoie de ea si la initializarea starii, inainte de corpul componentei.
  */
 function optionKey(o: ShippingOption) {
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}`;
+  /*
+   * ⚠ Cheia trebuie sa cuprinda TOT ce deosebeste doua oferte ale aceluiasi
+   * curier. La Innoship asta inseamna trei campuri: el intoarce cate o oferta
+   * per curier real, toate sub acelasi `courier: "innoship"` si acelasi
+   * `deliveryType: "address"` — deci fara ele s-ar prabusi una peste alta, iar
+   * clientul ar alege una si ar primi alta.
+   */
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -38,6 +45,12 @@ export interface CourierSelection {
   ecoletServiceSlug?: string;
   ecoletCourierName?: string;
   ecoletServiceName?: string;
+  /* ⚠ Cheia ofertei Innoship are TREI parti. Vezi . */
+  innoshipCourierId?: number;
+  innoshipServiceId?: number;
+  innoshipOptionId?: string;
+  innoshipCourierName?: string;
+  innoshipServiceName?: string;
   /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
   token?: string;
 }
@@ -151,6 +164,11 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             ecoletServiceSlug: ales.ecoletServiceSlug,
             ecoletCourierName: ales.ecoletCourierName,
             ecoletServiceName: ales.ecoletServiceName,
+            innoshipCourierId: ales.innoshipCourierId,
+            innoshipServiceId: ales.innoshipServiceId,
+            innoshipOptionId: ales.innoshipOptionId,
+            innoshipCourierName: ales.innoshipCourierName,
+            innoshipServiceName: ales.innoshipServiceName,
             token: ales.token,
           });
         }
@@ -206,6 +224,11 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         ecoletServiceSlug: opt.ecoletServiceSlug,
         ecoletCourierName: opt.ecoletCourierName,
         ecoletServiceName: opt.ecoletServiceName,
+        innoshipCourierId: opt.innoshipCourierId,
+        innoshipServiceId: opt.innoshipServiceId,
+        innoshipOptionId: opt.innoshipOptionId,
+        innoshipCourierName: opt.innoshipCourierName,
+        innoshipServiceName: opt.innoshipServiceName,
         token: opt.token,
       });
     }

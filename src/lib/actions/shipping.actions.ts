@@ -20,6 +20,11 @@ import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/caut
 import { puncteGls } from "@/lib/gls/puncte";
 import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
 import { normalizeazaUnitati } from "@/lib/posta/unitati";
+import { coteaza as coteazaInnoship, innoshipGata, puncteFixe, type InnoshipConfig } from "@/lib/innoship/client";
+import { corpComanda as corpInnoship } from "@/lib/innoship/expediere";
+import { etichetaOferta as etichetaInnoship, ofertePosibile as oferteInnoship, termenLivrare as termenInnoship } from "@/lib/innoship/preturi";
+import { normalizeazaPuncte } from "@/lib/innoship/puncte";
+import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
@@ -89,6 +94,17 @@ export type ShippingOption = {
   ecoletServiceSlug?: string;
   ecoletCourierName?: string;
   ecoletServiceName?: string;
+  /*
+   * ⚠ La Innoship cheia unei oferte are TREI parti, nu una: care curier real,
+   * ce fel de livrare si care varianta a serviciului. Pastrat doar curierul,
+   * reemiterea dupa corectarea adresei ar pleca pe alt serviciu si alt pret.
+   * Si `serviceId` nu e decor: 1 = domiciliu, 3 = locker, 4 = PUDO.
+   */
+  innoshipCourierId?: number;
+  innoshipServiceId?: number;
+  innoshipOptionId?: string;
+  innoshipCourierName?: string;
+  innoshipServiceName?: string;
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
@@ -141,6 +157,7 @@ const COURIER_LABELS: Record<string, string> = {
   ecolet: "eColet",
   /* Numele firmei, cu diacritice: e marca lor, nu un text de-al nostru. */
   posta: "Poșta Română",
+  innoship: "Innoship",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -234,7 +251,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -876,6 +893,60 @@ export async function getShippingOptions(
           price: zone.price,
         });
       }
+    } else if (courierId === "innoship") {
+      /*
+       * ⚠ INNOSHIP E BROKER, SI COTEAZA CU ADEVARAT.
+       *
+       * `POST /api/Price` intoarce cate o oferta pentru fiecare curier al
+       * contului, cu pret, TVA si termen — deci ramura asta e ASINCRONA, ca la
+       * Woot, Colete si eColet, si intra in `promises`.
+       *
+       * ⚠ Si primeste EXACT acelasi corp ca emiterea. Un al doilea constructor
+       * ar fi insemnat ca pretul cotat si cel facturat se pot departa fara ca
+       * nimic sa se planga — vezi `corpComanda` din lib/innoship/expediere.ts.
+       */
+      const innoCfg = settings.innoship_config as InnoshipConfig | null;
+      const flat = (): ShippingOption => ({
+        courier: "innoship",
+        courierLabel: zone.label || COURIER_LABELS.innoship,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (innoshipGata(innoCfg) && useAutoPrice) {
+        promises.push(
+          buildInnoshipOptions(innoCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label)
+            .then((opts) => {
+              if (opts.length > 0) options.push(...opts);
+              /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
+                 tariful fix, ca la ceilalti brokeri. */
+              else options.push(flat());
+            })
+            .catch((err) => {
+              console.error("[shipping] Innoship estimate failed:", (err as Error).message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
+
+      /*
+       * ⚠ Lockerele si PUDO se ofera separat, la tarif fix.
+       *
+       * Nu se coteaza live: pretul unui locker depinde de PUNCTUL ales, iar
+       * punctul se alege DUPA ce cumparatorul a ales optiunea. O cotare facuta
+       * inainte ar fi pe alt serviciu (`serviceId` 3 sau 4, nu 1) si deci pe alt
+       * pret decat cel incasat.
+       */
+      if (innoshipGata(innoCfg)) {
+        options.push({
+          courier: "innoship",
+          courierLabel: lockerLabel(zone.label, "Ridicare din locker sau punct"),
+          deliveryType: "locker",
+          price: zone.price,
+        });
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -1112,6 +1183,63 @@ async function buildWootOptions(
     .sort((a, b) => a.price - b.price);
 }
 
+// ─── Innoship live courier offers ────────────────────────────────────────────
+
+/**
+ * Ofertele Innoship pentru o destinatie.
+ *
+ * ⚠ Intoarce `[]` — nu arunca — cand nu iese nicio oferta. Apelantul cade atunci
+ * pe tariful fix din `shipping_zones`: un cumparator n-are voie sa ramana fara
+ * nicio optiune de livrare fiindca un broker n-a acoperit o localitate.
+ *
+ * ⚠ Datele destinatarului sunt SUBSTITUENTI (nume, telefon): cotarea depinde doar
+ * de destinatie, greutate si ramburs. La fel ca la Woot si eColet. Numele real
+ * n-are ce cauta intr-o cerere facuta pentru un vizitator anonim.
+ */
+async function buildInnoshipOptions(
+  config: InnoshipConfig,
+  destination: { county: string; city: string; postCode?: string },
+  weightKg: number,
+  cod: number,
+  labelCustom?: string,
+): Promise<ShippingOption[]> {
+  const corp = corpInnoship(
+    {
+      destinatar: {
+        nume: "Client",
+        persoanaContact: "Client",
+        strada: "Strada",
+        oras: destination.city,
+        judet: destination.county,
+        codPostal: destination.postCode ?? null,
+        /* Numar de forma valida, ca sa treaca validarea lor de camp obligatoriu. */
+        telefon: "0700000000",
+      },
+      greutateKg: weightKg,
+      ramburs: cod,
+      felLivrare: "domiciliu",
+      ziuaExpedierii: ziuaInRomania(),
+    },
+    config,
+  );
+
+  const rates = await coteazaInnoship(config, corp);
+  return oferteInnoship(rates, config).map((o) => ({
+    courier: "innoship",
+    /* Eticheta comerciantului, cand exista, ramane deasupra numelui curierului:
+       unii isi vand livrarea sub marca proprie. */
+    courierLabel: labelCustom ? `${labelCustom} · ${etichetaInnoship({ carrier: o.courier, service: o.serviciu })}` : etichetaInnoship({ carrier: o.courier, service: o.serviciu }),
+    deliveryType: "address" as const,
+    price: o.pret,
+    estimatedDays: termenInnoship(o),
+    innoshipCourierId: o.courierId,
+    innoshipServiceId: o.serviceId,
+    innoshipOptionId: o.optionId ?? undefined,
+    innoshipCourierName: o.courier || undefined,
+    innoshipServiceName: o.serviciu || undefined,
+  }));
+}
+
 // ─── Colete Online live courier offers ───────────────────────────────────────
 
 /**
@@ -1185,7 +1313,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship"]);
 
 export async function getLockers(
   businessId: string,
@@ -1242,7 +1370,7 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config")
     .eq("business_id", businessId)
     .single();
 
@@ -1429,6 +1557,41 @@ export async function getLockers(
       return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] Posta unitati-livrare failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "innoship") {
+    /*
+     * ⚠ Innoship e singurul care poate FILTRA punctele pe server, si asta
+     * schimba costul: `FixedLocations` primeste `LocalityName`, deci nu mai
+     * aducem cateva mii de randuri ca sa taiem noi.
+     *
+     * ⚠ `id` ramane SIR: e chiar `fixedLocationId`, valoarea pe care comanda o
+     * asteapta inapoi. Un `Number(...)` copiat de la ceilalti l-ar putea pierde.
+     */
+    const config = settings.innoship_config as InnoshipConfig | null;
+    if (!innoshipGata(config)) return [];
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          normalizeazaPuncte(await puncteFixe(config, { countryCode: "RO", localityName: city || undefined })).map((p) => ({
+            id: p.id,
+            name: p.name,
+            address: [p.address, p.city].filter(Boolean).join(", "),
+            city: p.city,
+            county: p.county,
+            postCode: p.postCode,
+            lat: p.lat,
+            lng: p.lng,
+          })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
+    } catch (e) {
+      console.error("[shipping] Innoship FixedLocations failed:", (e as Error).message);
       return [];
     }
   }

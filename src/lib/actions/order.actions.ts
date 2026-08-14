@@ -779,6 +779,14 @@ export async function placeOrder(data: {
   colete_service_id?: number;
   colete_service_name?: string;
   ecolet_service_slug?: string;
+  /* ⚠ Cheia ofertei Innoship are TREI parti: curierul real, felul livrarii si
+     varianta serviciului. Pastrata partial, reemiterea dupa corectarea adresei
+     ar pleca pe alt serviciu si alt pret. */
+  innoship_courier_id?: number;
+  innoship_service_id?: number;
+  innoship_option_id?: string;
+  innoship_courier_name?: string;
+  innoship_service_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -1373,6 +1381,16 @@ export async function placeOrder(data: {
         ecolet_service_slug: data.ecolet_service_slug,
         ecolet_courier_name: data.ecolet_courier_name,
         ecolet_service_name: data.ecolet_service_name,
+      }),
+      /* ⚠ Innoship: conditia e pe CURIER, care e un intreg pozitiv. Pe
+         `innoship_option_id` n-ar merge — el poate lipsi legitim (nu toate
+         ofertele au varianta), iar atunci s-ar pierde si curierul, si serviciul. */
+      ...(data.innoship_courier_id && {
+        innoship_courier_id: data.innoship_courier_id,
+        innoship_service_id: data.innoship_service_id,
+        innoship_option_id: data.innoship_option_id,
+        innoship_courier_name: data.innoship_courier_name,
+        innoship_service_name: data.innoship_service_name,
       }),
     },
     items: allItems,
@@ -3075,6 +3093,14 @@ export async function placeCartOrder(data: {
   colete_service_id?: number;
   colete_service_name?: string;
   ecolet_service_slug?: string;
+  /* ⚠ Cheia ofertei Innoship are TREI parti: curierul real, felul livrarii si
+     varianta serviciului. Pastrata partial, reemiterea dupa corectarea adresei
+     ar pleca pe alt serviciu si alt pret. */
+  innoship_courier_id?: number;
+  innoship_service_id?: number;
+  innoship_option_id?: string;
+  innoship_courier_name?: string;
+  innoship_service_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -3527,6 +3553,16 @@ export async function placeCartOrder(data: {
         ecolet_service_slug: data.ecolet_service_slug,
         ecolet_courier_name: data.ecolet_courier_name,
         ecolet_service_name: data.ecolet_service_name,
+      }),
+      /* ⚠ Innoship: conditia e pe CURIER, care e un intreg pozitiv. Pe
+         `innoship_option_id` n-ar merge — el poate lipsi legitim (nu toate
+         ofertele au varianta), iar atunci s-ar pierde si curierul, si serviciul. */
+      ...(data.innoship_courier_id && {
+        innoship_courier_id: data.innoship_courier_id,
+        innoship_service_id: data.innoship_service_id,
+        innoship_option_id: data.innoship_option_id,
+        innoship_courier_name: data.innoship_courier_name,
+        innoship_service_name: data.innoship_service_name,
       }),
     },
     items: allItems,

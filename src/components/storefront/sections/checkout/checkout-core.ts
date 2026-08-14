@@ -476,6 +476,13 @@ export function useCheckoutOrder({
         ecolet_service_slug: courierSelection?.ecoletServiceSlug,
         ecolet_courier_name: courierSelection?.ecoletCourierName,
         ecolet_service_name: courierSelection?.ecoletServiceName,
+        /* ⚠ Cheia ofertei Innoship are TREI parti; fara toate, reemiterea ar
+           pleca pe alt serviciu si alt pret. Vezi optionKey din CourierSelector. */
+        innoship_courier_id: courierSelection?.innoshipCourierId,
+        innoship_service_id: courierSelection?.innoshipServiceId,
+        innoship_option_id: courierSelection?.innoshipOptionId,
+        innoship_courier_name: courierSelection?.innoshipCourierName,
+        innoship_service_name: courierSelection?.innoshipServiceName,
         source: getAttribution() ?? undefined,
       };
       // Cheia de reluare e payload-ul INTREG, metoda de plata inclusa.

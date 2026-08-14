@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { salveazaFeeduriFacebook, numaraProduseFeed } from "@/lib/actions/facebook-feeds.actions";
 import type { RegulaFeed } from "@/lib/facebook/feeduri";
+import { SelectorProduseFeed } from "@/components/dashboard/SelectorProduseFeed";
 
 export interface CategorieAleasa {
   id: string;
@@ -41,6 +42,8 @@ export function FacebookFeeduriClient({
   const [feeduri, setFeeduri] = useState<RegulaFeed[]>(feeduriInitiale);
   const [deschis, setDeschis] = useState<number | null>(null);
   const [numarate, setNumarate] = useState<Record<string, number>>({});
+  /* Care selector e deschis: „<index>:produse" sau „<index>:excluse". */
+  const [selector, setSelector] = useState<string | null>(null);
   const [salveaza, startSalvare] = useTransition();
 
   const copiaza = (v: string) => { navigator.clipboard?.writeText(v); toast.success("Adresa copiata."); };
@@ -179,6 +182,39 @@ export function FacebookFeeduriClient({
                       </label>
                     ))}
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-foreground">Produse</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="outline" size="sm"
+                      onClick={() => setSelector(selector === `${i}:produse` ? null : `${i}:produse`)}>
+                      Alege produse{(f.produse?.length ?? 0) > 0 ? ` (${f.produse!.length})` : ""}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm"
+                      onClick={() => setSelector(selector === `${i}:excluse` ? null : `${i}:excluse`)}>
+                      Exclude produse{(f.excluse?.length ?? 0) > 0 ? ` (${f.excluse!.length})` : ""}
+                    </Button>
+                  </div>
+
+                  {selector === `${i}:produse` && (
+                    <SelectorProduseFeed
+                      titlu="Produse incluse"
+                      descriere="Se ADUNA cu ce vine din categorii. Fara categorii si fara produse, feedul trimite tot catalogul."
+                      alese={f.produse ?? []}
+                      onSchimba={(ids) => schimba(i, { produse: ids })}
+                      onInchide={() => setSelector(null)}
+                    />
+                  )}
+                  {selector === `${i}:excluse` && (
+                    <SelectorProduseFeed
+                      titlu="Produse excluse"
+                      descriere="Exclusul bate tot: e singurul mod de a scoate un produs din reclame fara sa-l dezactivezi in magazin."
+                      alese={f.excluse ?? []}
+                      onSchimba={(ids) => schimba(i, { excluse: ids })}
+                      onInchide={() => setSelector(null)}
+                    />
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

@@ -45,6 +45,15 @@ export function citesteFiltreProduse(sp: Record<string, string | string[] | unde
 }
 
 /**
+ * Valoarea filtrului „produse fara categorie".
+ *
+ * ⚠ Un semn, nu un nume de categorie. Trece prin adresa (`?cat=`), deci trebuie
+ * sa fie ceva ce nimeni nu si-ar numi categoria — altfel un magazin cu o
+ * categorie numita asa ar vedea filtrul aratand altceva decat scrie pe el.
+ */
+export const FARA_CATEGORIE = "__fara_categorie__";
+
+/**
  * Categoria plus copiii ei DIRECTI — un singur nivel.
  *
  * Nu recursiv, si nu din greseala: asa facea `subtreeByName` in browser, iar
@@ -82,7 +91,18 @@ export function aplicaFiltreProduse(
   if (termen) {
     out = out.or(`name.ilike.%${termen}%,category.ilike.%${termen}%,sku.ilike.%${termen}%`);
   }
-  if (filtre.categorie) {
+  if (filtre.categorie === FARA_CATEGORIE) {
+    /*
+     * ⚠ Si `NULL`, si sirul gol.
+     *
+     * Azi, in productie, toate cele 584 de produse fara categorie au `NULL` —
+     * dar un import care scrie `""` in loc de nimic ar fi lasat produsele alea
+     * pe dinafara exact la filtrul facut ca sa le gaseasca. `is.null` singur nu
+     * le-ar fi prins: in SQL, `category = ''` si `category IS NULL` sunt lucruri
+     * diferite.
+     */
+    out = out.or("category.is.null,category.eq.");
+  } else if (filtre.categorie) {
     out = out.in("category", subarboreUnNivel(categories, filtre.categorie));
   }
   if (filtre.stare === "active") out = out.eq("is_active", true);

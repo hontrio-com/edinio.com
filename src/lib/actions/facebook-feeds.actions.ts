@@ -131,3 +131,81 @@ export async function numaraProduseFeed(
    */
   return { total: produseDinFeed(r, produse ?? [], nume).length };
 }
+
+export interface ProdusPentruAles {
+  id: string;
+  name: string;
+  category: string | null;
+  price: number;
+  imagine: string | null;
+}
+
+/**
+ * Produse pentru selectorul din constructorul de feeduri.
+ *
+ * ⚠ Se cauta pe SERVER, cu plafon, nu se trimite catalogul in browser: cel mai
+ * mare magazin are 3351 de produse active, iar ecranul are nevoie de cateva zeci
+ * odata. Un catalog intreg trimis la fiecare deschidere ar fi facut panoul de
+ * nefolosit exact la magazinele care au nevoie de selectie.
+ */
+export async function cautaProduseFeed(
+  q: string,
+  idAlese: string[] = [],
+): Promise<{ produse: ProdusPentruAles[]; total: number } | { error: string }> {
+  const biz = await magazinulMeu();
+  if (!biz) return { error: "Neautorizat" };
+
+  const admin = createAdminClient();
+  const termen = String(q ?? "").trim().slice(0, 80);
+
+  let cerere = admin
+    .from("products")
+    .select("id, name, category, price, images", { count: "exact" })
+    .eq("business_id", biz.id)
+    .eq("is_active", true);
+
+  /*
+   * ⚠ `%` si `_` se escapeaza: intr-un `ilike` sunt metacaractere, deci o cautare
+   * dupa „50%" ar fi intors tot catalogul in loc de nimic.
+   */
+  if (termen) {
+    const sigur = termen.replace(/[\%_]/g, (c) => `\${c}`);
+    cerere = cerere.ilike("name", `%${sigur}%`);
+  }
+
+  const { data, count, error } = await cerere.order("name").limit(40);
+  if (error) return { error: "Nu am putut citi produsele." };
+
+  const randuri = (data ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    price: Number(p.price) || 0,
+    imagine: Array.isArray(p.images) ? (p.images[0] as string | undefined) ?? null : null,
+  }));
+
+  /*
+   * Produsele DEJA alese se aduc chiar daca nu se potrivesc cautarii: altfel, cu
+   * o cautare pe ecran, ele ar disparea din lista si comerciantul ar crede ca le-a
+   * pierdut — sau le-ar bifa a doua oara.
+   */
+  const lipsa = idAlese.filter((id) => !randuri.some((r) => r.id === id)).slice(0, 60);
+  if (lipsa.length > 0) {
+    const { data: dinAles } = await admin
+      .from("products")
+      .select("id, name, category, price, images")
+      .eq("business_id", biz.id)
+      .in("id", lipsa);
+    for (const p of dinAles ?? []) {
+      randuri.push({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        price: Number(p.price) || 0,
+        imagine: Array.isArray(p.images) ? (p.images[0] as string | undefined) ?? null : null,
+      });
+    }
+  }
+
+  return { produse: randuri, total: count ?? randuri.length };
+}

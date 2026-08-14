@@ -1,5 +1,6 @@
 "use client";
 
+import { FARA_CATEGORIE } from "@/lib/dashboard/produse-filtre";
 import { useState, useMemo, useOptimistic, useTransition, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -321,6 +322,9 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
             className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
             <option value="">Toate categoriile</option>
+            {/* ⚠ Sta imediat sub „Toate", nu la coada listei: la un magazin cu 110
+                categorii, pus la sfarsit, nu l-ar gasi nimeni. */}
+            <option value={FARA_CATEGORIE}>Produse fara categorie</option>
             {parentCategories.map((parent) => {
               const children = categories.filter((c) => c.parent_id === parent.id);
               return children.length > 0 ? (

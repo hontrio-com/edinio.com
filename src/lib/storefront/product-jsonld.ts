@@ -73,7 +73,17 @@ export function buildProductJsonLd(
   productUrl: string,
   /** REZERVA pentru brand: numele magazinului. Brandul produsului bate. */
   brand: string,
-  shipping: { cost: number; min: number; max: number },
+  /**
+   * ⚠ `min`/`max` sunt `null` cand comerciantul NU a pornit estimarea de livrare.
+   *
+   * Atunci nu se emite deloc `deliveryTime` — acelasi rationament ca la taxa de
+   * retur, cateva randuri mai jos: un termen pe care omul nu l-a scris nicaieri
+   * si pe care pagina lui nu-l arata e o promisiune facuta in numele lui. Pana
+   * acum se emitea „1-3 zile" pentru oricine avea estimarea stinsa, adica pentru
+   * 53 din cele 70 de magazine publicate — si nici macar nu era implicitul
+   * propriului editor, care e 2-4.
+   */
+  shipping: { cost: number; min: number | null; max: number | null },
   /**
    * Pachetul nu se poate cumpara (o componenta lipseste sau s-a terminat).
    *
@@ -183,11 +193,16 @@ export function buildProductJsonLd(
     "@type": "OfferShippingDetails",
     shippingRate: { "@type": "MonetaryAmount", value: shipping.cost, currency: "RON" },
     shippingDestination: { "@type": "DefinedRegion", addressCountry: "RO" },
-    deliveryTime: {
-      "@type": "ShippingDeliveryTime",
-      handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 1, unitCode: "DAY" },
-      transitTime: { "@type": "QuantitativeValue", minValue: shipping.min, maxValue: shipping.max, unitCode: "DAY" },
-    },
+    /* Se declara doar ce a spus comerciantul. Vezi nota de la parametru. */
+    ...(shipping.min !== null && shipping.max !== null
+      ? {
+          deliveryTime: {
+            "@type": "ShippingDeliveryTime",
+            handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 1, unitCode: "DAY" },
+            transitTime: { "@type": "QuantitativeValue", minValue: shipping.min, maxValue: shipping.max, unitCode: "DAY" },
+          },
+        }
+      : {}),
   };
   // Fereastra de 14 zile e cea legala (dreptul de retragere), deci se poate
   // declara. Taxa de retur NU: nu exista camp in care comerciantul sa o

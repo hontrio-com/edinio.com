@@ -1,5 +1,6 @@
 "use client";
 
+import { adresaPublica } from "@/lib/storefront/identitate-publica";
 import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import {
@@ -406,9 +407,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     const templates = buildPolicyTemplates({
       businessName: businessData?.business_name ?? null,
       cui:          businessData?.cui ?? null,
-      address:      businessData?.address ?? null,
-      city:         businessData?.city ?? null,
-      county:       businessData?.county ?? null,
+      /* Aceeasi precedenta ca pe pagina publica: altfel previzualizarea din panou
+         ar arata alta adresa decat cea tiparita in Termeni. Vezi identitate-publica.ts. */
+      address:      adresaPublica(businessData ?? {}).strada || null,
+      city:         adresaPublica(businessData ?? {}).oras || null,
+      county:       adresaPublica(businessData ?? {}).judet || null,
       phone:        businessData?.phone ?? null,
       email:        businessData?.email ?? null,
     });

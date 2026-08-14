@@ -290,6 +290,72 @@ export async function GET(req: NextRequest) {
         return `${cate} operatii externe atarnate de peste o ora (${rezumat}${cate > 5 ? " …" : ""}). Se rezolva din /admin/operatii.`;
       },
     },
+    {
+      nume: "datele structurate poarta ce s-a completat in panou",
+      ruleaza: async () => {
+        /*
+         * ⚠ PROBA PENTRU O CLASA INTREAGA DE DEFECT, nu pentru un camp anume.
+         *
+         * Tiparul: comerciantul completeaza un camp in panou, campul se salveaza
+         * corect, si apoi NU ajunge nicaieri. Nimic nu cade, nimic nu se
+         * logheaza — omul se uita pe pagina lui si vede ca lipseste, fara sa afle
+         * de ce. Asa a fost cu EAN-ul care nu intra in feed, si asa a fost cu
+         * adresa: blocul `Store` citea adresa DOAR din `businesses.store_city`,
+         * desi ecranul „Datele magazinului" scrie in `address`/`city`/`county`.
+         * Trei magazine publicate aveau adresa completata si invizibila, iar
+         * emailul nu se emitea la niciunul din cele 29 care il aveau.
+         *
+         * Nici `tsc`, nici probele, nici build-ul n-aveau cum: pagina exista,
+         * compileaza si raspunde 200. Singurul lucru care prinde asa ceva e sa
+         * CERI pagina si sa compari cu ce scrie in baza.
+         *
+         * ⚠ Proba se alege un magazin care CHIAR are datele completate. Fara asta
+         * ar trece linistita pe un magazin gol — adica exact o proba care nu poate
+         * esua.
+         */
+        const { data: cuAdresa, error } = await admin
+          .from("businesses")
+          .select("slug, store_address, store_city, store_county, address, city, county, email")
+          .eq("is_published", true)
+          .not("slug", "is", null)
+          .limit(200);
+        if (error) return `citirea magazinelor a esuat: ${error.message}`;
+
+        const primul = (...v: (string | null | undefined)[]) =>
+          v.map((x) => (x ?? "").trim()).find(Boolean) ?? "";
+        const candidat = (cuAdresa ?? []).find(
+          (b) => primul(b.store_city, b.city) && primul(b.store_address, b.address),
+        );
+        /* Niciun magazin cu adresa completata: n-avem ce compara, si nu inventam. */
+        if (!candidat) return null;
+
+        const { cod, text } = await ia(`${PLATFORM_ORIGIN}/${candidat.slug}`);
+        if (cod !== 200) return `magazinul ${candidat.slug} raspunde cu ${cod}`;
+
+        /* `[\s\S]` in loc de steagul `s`: tinta de compilare a proiectului nu-l accepta. */
+        const blocuri = text.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) ?? [];
+        const store = blocuri
+          .map((b) => b.replace(/^[^>]*>/, "").replace(/<\/script>$/, ""))
+          .map((b) => { try { return JSON.parse(b) as Record<string, unknown>; } catch { return null; } })
+          .find((d) => d && d["@type"] === "Store");
+        if (!store) return `magazinul ${candidat.slug} n-are bloc JSON-LD de tip Store`;
+
+        const lipsa: string[] = [];
+        const adresa = store.address as Record<string, string> | undefined;
+        const oras = primul(candidat.store_city, candidat.city);
+        const strada = primul(candidat.store_address, candidat.address);
+        if (!adresa) lipsa.push("adresa lipseste cu totul");
+        else {
+          if (oras && !adresa.addressLocality) lipsa.push("orasul");
+          if (strada && !adresa.streetAddress) lipsa.push("strada");
+        }
+        if ((candidat.email ?? "").trim() && !store.email) lipsa.push("emailul");
+
+        return lipsa.length
+          ? `magazinul ${candidat.slug} are datele completate in panou, dar in JSON-LD lipsesc: ${lipsa.join(", ")}`
+          : null;
+      },
+    },
   ];
 
   const rezultate: { nume: string; ok: boolean; motiv?: string }[] = [];

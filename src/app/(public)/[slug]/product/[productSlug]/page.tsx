@@ -183,7 +183,7 @@ export default async function ProductDetailPage({ params }: Props) {
   const productUrl = `${storeBase}/product/${product.slug ?? productSlug}`;
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
   const de = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
-  const delivery = de?.enabled ? { min: de.min_days ?? 1, max: de.max_days ?? 3 } : { min: 1, max: 3 };
+  const delivery = de?.enabled ? { min: de.min_days ?? 2, max: de.max_days ?? 4 } : { min: null, max: null };
   const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max },
     product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);

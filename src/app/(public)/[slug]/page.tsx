@@ -1,4 +1,5 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
+import { adresaPostalaJsonLd, contactJsonLd } from "@/lib/storefront/identitate-publica";
 import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -528,7 +529,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       const opsCanonical = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
       const opsShippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
       const opsDe = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
-      const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 1, max: opsDe.max_days ?? 3 } : { min: 1, max: 3 };
+      const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 2, max: opsDe.max_days ?? 4 } : { min: null, max: null };
       const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max },
         product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
       // Modul „un singur produs": nu exista catalog in spate, deci butonul de
@@ -647,14 +648,17 @@ export default async function SlugPage({ params, searchParams }: Props) {
     ...(business.description ? { description: business.description.slice(0, 500) } : {}),
     ...(business.cover_url ? { image: business.cover_url } : {}),
     ...(business.logo_url ? { logo: business.logo_url } : {}),
-    ...(business.store_city ? {
-      address: {
-        "@type": "PostalAddress",
-        addressLocality: business.store_city,
-        addressCountry: "RO",
-      },
-    } : {}),
-    ...(business.phone ? { telephone: business.phone } : {}),
+    /*
+     * ⚠ Adresa vine din AMANDOUA familiile de coloane, nu doar din `store_city`.
+     *
+     * „Datele magazinului" (Setari > General) scrie in `address`/`city`/`county`,
+     * iar „Editeaza magazinul" in `store_*`. Blocul de aici se uita numai la
+     * `store_city`, deci un comerciant care completase integral primul ecran
+     * aparea in Google fara nicio adresa — si fara sa aiba cum sa-si dea seama de
+     * ce. Vezi `identitate-publica.ts`.
+     */
+    ...(adresaPostalaJsonLd(business) ? { address: adresaPostalaJsonLd(business) } : {}),
+    ...contactJsonLd(business),
   };
 
   return (

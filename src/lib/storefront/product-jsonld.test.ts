@@ -320,3 +320,34 @@ test("si grupul de variante poarta brandul produsului", () => {
   assert.equal(g["@type"], "ProductGroup");
   assert.equal(numeBrand(g), "CAIAN");
 });
+
+test("⚠ termenul de livrare NU se declara cand comerciantul nu l-a pornit", () => {
+  /*
+   * Inversul clasei „camp completat care nu ajunge nicaieri": o afirmatie
+   * FABRICATA. Cand estimarea de livrare e stinsa — 53 din cele 70 de magazine
+   * publicate — se emitea oricum „1-3 zile" catre Google, desi pagina nu arata
+   * nimic si comerciantul n-a scris asta niciunde. Nici macar nu era implicitul
+   * propriului editor, care e 2-4.
+   *
+   * Acelasi rationament pe care fisierul il aplica deja taxei de retur: nu
+   * declaram public o politica pe care omul n-a spus-o.
+   */
+  const fara = buildProductJsonLd(
+    produs({}), "https://exemplu.ro/p/x", "Magazin",
+    { cost: 20, min: null, max: null },
+  ) as Record<string, unknown>;
+  const oferta = (fara.offers ?? {}) as Record<string, unknown>;
+  const livrare = (oferta.shippingDetails ?? {}) as Record<string, unknown>;
+  assert.ok(livrare.shippingRate, "tariful ramane: e un fapt, nu o promisiune");
+  assert.equal("deliveryTime" in livrare, false, "termenul nu se inventeaza");
+
+  /* Pornita, se declara exact ce a scris comerciantul. */
+  const cu = buildProductJsonLd(
+    produs({}), "https://exemplu.ro/p/x", "Magazin",
+    { cost: 20, min: 5, max: 7 },
+  ) as Record<string, unknown>;
+  const dt = (((cu.offers as Record<string, unknown>).shippingDetails as Record<string, unknown>)
+    .deliveryTime ?? {}) as Record<string, Record<string, number>>;
+  assert.equal(dt.transitTime.minValue, 5);
+  assert.equal(dt.transitTime.maxValue, 7);
+});

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
 import { politicaIndexabila } from "@/lib/storefront/policy-index";
+import { adresaPublica } from "@/lib/storefront/identitate-publica";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -111,12 +112,22 @@ export default async function PolicyPage({ params }: Props) {
   // Fall back to auto-generated template if content is empty
   const isEmpty = !content.trim() || content === "<p></p>";
   if (isEmpty && enabled) {
+    /*
+     * ⚠ Adresa vine din AMANDOUA familiile de coloane.
+     *
+     * Ecranul „Datele magazinului" scrie `address`/`city`/`county`, iar „Editeaza
+     * magazinul > Locatie" scrie `store_*`. Sablonul citea doar prima familie,
+     * asa ca un comerciant care completase a doua avea tiparit pe pagina lui
+     * publica de Termeni, negru pe alb, literalul „[adresa completă]". Pe o
+     * pagina cu valoare juridica. Vezi `identitate-publica.ts`.
+     */
+    const adr = adresaPublica(business);
     const templates = buildPolicyTemplates({
       businessName: business.business_name,
       cui:          (business as Record<string, unknown>).cui as string | null ?? null,
-      address:      (business as Record<string, unknown>).address as string | null ?? null,
-      city:         (business as Record<string, unknown>).city as string | null ?? null,
-      county:       (business as Record<string, unknown>).county as string | null ?? null,
+      address:      adr.strada || null,
+      city:         adr.oras || null,
+      county:       adr.judet || null,
       phone:        (business as Record<string, unknown>).phone as string | null ?? null,
       email:        (business as Record<string, unknown>).email as string | null ?? null,
     });

@@ -216,7 +216,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -634,6 +634,14 @@ declare
   v_fara_stoc  boolean := coalesce((p_filtre->>'faraStocAscuns')::boolean, false);
   v_grupuri    jsonb := case when jsonb_typeof(p_filtre->'fatete') = 'array'
                              then p_filtre->'fatete' else '[]'::jsonb end;
+  v_samanta    bigint := coalesce(nullif(p_filtre->>'samanta', '')::bigint, 0);
+  v_ordine     jsonb := case
+    when jsonb_typeof(p_filtre->'ordine') = 'object' and p_filtre->'ordine' <> '{}'::jsonb
+      then p_filtre->'ordine'
+    else null end;
+  v_baza       text := case
+    when v_sort = 'manual' then coalesce(nullif(p_filtre->>'ordineRest', ''), 'newest')
+    else v_sort end;
   v_out        jsonb;
 begin
   if not exists (
@@ -673,13 +681,17 @@ begin
     select f.*, count(*) over () as total_filtrate
       from filtrate f
      order by
-       case when v_sort = 'price_asc'  then f.price_min end asc  nulls last,
-       case when v_sort = 'price_desc' then f.price_min end desc nulls last,
-       case when v_sort = 'name_asc'   then f.name collate public.ro_numeric end asc nulls last,
-       case when v_sort = 'newest'     then f.creat end desc nulls last,
-       case when v_sort in ('price_asc','price_desc','name_asc','newest') then null
+       case when v_sort = 'manual' and v_ordine is not null
+            then coalesce((v_ordine ->> f.product_id::text)::int, 2147483647) end asc nulls last,
+       case when v_baza = 'price_asc'  then f.price_min end asc  nulls last,
+       case when v_baza = 'price_desc' then f.price_min end desc nulls last,
+       case when v_baza = 'name_asc'   then f.name collate public.ro_numeric end asc nulls last,
+       case when v_baza = 'newest'     then f.creat end desc nulls last,
+       case when v_baza = 'random'
+            then (('x' || substr(f.product_id::text, 1, 8))::bit(32)::bigint # v_samanta) end asc nulls last,
+       case when v_baza in ('price_asc','price_desc','name_asc','newest','random') then null
             else (case when f.is_featured then 0 else 1 end) end asc nulls last,
-       case when v_sort in ('price_asc','price_desc','name_asc','newest') then null
+       case when v_baza in ('price_asc','price_desc','name_asc','newest','random') then null
             else f.sort_order end asc nulls last,
        f.product_id asc
      limit v_lim offset v_off
@@ -2122,6 +2134,34 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.posta_aloca_cod(p_business_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_numar bigint;
+  v_prefix text;
+  v_cifre smallint;
+begin
+  update public.posta_plaja
+     set urmator = urmator + 1,
+         updated_at = now()
+   where business_id = p_business_id
+     and urmator <= pana_la
+  returning urmator - 1, prefix, cifre
+    into v_numar, v_prefix, v_cifre;
+
+  if v_numar is null then
+    return null;
+  end if;
+
+  return v_prefix || lpad(v_numar::text, v_cifre, '0');
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.proba_stoc()
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -3412,7 +3452,11 @@ create table if not exists privat.store_settings (
   gls_config jsonb,
   pallex_config jsonb,
   ecolet_config jsonb,
-  facebook_feeds jsonb);
+  facebook_feeds jsonb,
+  posta_config jsonb,
+  innoship_config jsonb,
+  packeta_config jsonb,
+  smartship_config jsonb);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),
@@ -3939,33 +3983,7 @@ create table if not exists public.operatii_externe (
   creat_la timestamp with time zone default now() not null,
   actualizat_la timestamp with time zone default now() not null);
 
-create table if not exists public.orders (  innoship_awb_at timestamptz,
-  innoship_awb_number text,
-  innoship_cod_status_code text,
-  innoship_courier_id integer,
-  innoship_courier_name text,
-  innoship_option_id text,
-  innoship_order_id bigint,
-  innoship_service_id integer,
-  innoship_service_name text,
-  innoship_status_checked_at timestamptz,
-  innoship_status_code text,
-  innoship_track_url text,
-  packeta_address_id text,
-  packeta_awb_at timestamptz,
-  packeta_barcode text,
-  packeta_courier_number text,
-  packeta_external_tracking text,
-  packeta_packet_id text,
-  packeta_pickup_point text,
-  packeta_status_checked_at timestamptz,
-  packeta_status_code integer,
-  posta_awb_at timestamptz,
-  posta_awb_number text,
-  posta_borderou_id bigint,
-  posta_oficiu_id text,
-  posta_status_checked_at timestamptz,
-  posta_status_code text,
+create table if not exists public.orders (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
   order_number text not null,
@@ -4062,7 +4080,46 @@ create table if not exists public.orders (  innoship_awb_at timestamptz,
   ecolet_awb_at timestamp with time zone,
   ecolet_status_code text,
   ecolet_status_checked_at timestamp with time zone,
-  gls_evenimente_semnalate jsonb);
+  gls_evenimente_semnalate jsonb,
+  posta_awb_number text,
+  posta_awb_at timestamp with time zone,
+  posta_borderou_id bigint,
+  posta_oficiu_id text,
+  posta_status_code text,
+  posta_status_checked_at timestamp with time zone,
+  innoship_awb_number text,
+  innoship_order_id bigint,
+  innoship_courier_id integer,
+  innoship_courier_name text,
+  innoship_service_id integer,
+  innoship_option_id text,
+  innoship_service_name text,
+  innoship_awb_at timestamp with time zone,
+  innoship_status_code text,
+  innoship_cod_status_code text,
+  innoship_status_checked_at timestamp with time zone,
+  innoship_track_url text,
+  packeta_packet_id text,
+  packeta_barcode text,
+  packeta_address_id text,
+  packeta_pickup_point text,
+  packeta_courier_number text,
+  packeta_external_tracking text,
+  packeta_awb_at timestamp with time zone,
+  packeta_status_code integer,
+  packeta_status_checked_at timestamp with time zone,
+  smartship_awb_number text,
+  smartship_courier_id integer,
+  smartship_courier_name text,
+  smartship_own_contract boolean,
+  smartship_cost numeric(10,2),
+  smartship_tracking_url text,
+  smartship_awb_at timestamp with time zone,
+  smartship_status_code integer,
+  smartship_status_checked_at timestamp with time zone,
+  smartship_pickup_code text,
+  smartship_offer_ref text,
+  smartship_offer_status text);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -4079,6 +4136,16 @@ create table if not exists public.platform_settings (
   value jsonb default '{}'::jsonb not null,
   updated_at timestamp with time zone default now() not null,
   updated_by uuid);
+
+create table if not exists public.posta_plaja (
+  business_id uuid not null,
+  prefix text default ''::text not null,
+  de_la bigint not null,
+  pana_la bigint not null,
+  urmator bigint not null,
+  cifre smallint default 11 not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
 
 create table if not exists public.product_import_rows (
   id uuid default gen_random_uuid() not null,
@@ -4345,12 +4412,44 @@ create table if not exists public.zz_backup_categorii_okxi_20260812 (
   is_active boolean,
   salvat_la timestamp with time zone);
 
+create table if not exists public.zz_backup_facebook_feeds_20260814 (
+  business_id uuid,
+  facebook_feeds jsonb,
+  salvat_la timestamp with time zone);
+
 create table if not exists public.zz_backup_preturi_bricosmart_20260804 (
   id uuid,
   price numeric(10,2),
   compare_at_price numeric(10,2),
   page_sections jsonb,
   luat_la timestamp with time zone);
+
+create table if not exists public.zz_backup_preturi_parfumuri_insula_20260812 (
+  id uuid,
+  name text,
+  category text,
+  price numeric(10,2),
+  compare_at_price numeric(10,2),
+  page_sections jsonb,
+  salvat_la timestamp with time zone);
+
+create table if not exists public.zz_backup_preturi_vetdepo_categorii_20260903 (
+  id uuid,
+  name text,
+  category text,
+  price numeric(10,2),
+  compare_at_price numeric(10,2),
+  updated_at timestamp with time zone,
+  factor numeric,
+  pct integer);
+
+create table if not exists public.zz_backup_preturi_vetdepo_hrana_caini_20260903 (
+  id uuid,
+  name text,
+  category text,
+  price numeric(10,2),
+  compare_at_price numeric(10,2),
+  updated_at timestamp with time zone);
 
 -- ── CONSTRANGERI ──────────────────────────────────────────
 alter table privat.campuri_secrete add constraint campuri_secrete_pkey PRIMARY KEY (coloana, cale);
@@ -4397,6 +4496,7 @@ alter table public.operatii_externe add constraint operatii_externe_pkey PRIMARY
 alter table public.orders add constraint orders_pkey PRIMARY KEY (id);
 alter table public.page_form_submissions add constraint page_form_submissions_pkey PRIMARY KEY (id);
 alter table public.platform_settings add constraint platform_settings_pkey PRIMARY KEY (key);
+alter table public.posta_plaja add constraint posta_plaja_pkey PRIMARY KEY (business_id);
 alter table public.product_import_rows add constraint product_import_rows_pkey PRIMARY KEY (id);
 alter table public.product_imports add constraint product_imports_pkey PRIMARY KEY (id);
 alter table public.products add constraint products_pkey PRIMARY KEY (id);
@@ -4449,10 +4549,13 @@ alter table public.domain_orders add constraint domain_orders_status_check CHECK
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
 alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
-alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
+alter table public.posta_plaja add constraint posta_plaja_cifre_check CHECK (((cifre >= 1) AND (cifre <= 28)));
+alter table public.posta_plaja add constraint posta_plaja_interval_check CHECK ((de_la <= pana_la));
+alter table public.posta_plaja add constraint posta_plaja_urmator_check CHECK ((urmator >= de_la));
 alter table public.site_analytics add constraint site_analytics_device_check CHECK ((device = ANY (ARRAY['mobile'::text, 'tablet'::text, 'desktop'::text])));
 alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['sent'::text, 'partial'::text, 'failed'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_frequency_check CHECK ((frequency = ANY (ARRAY['hourly'::text, 'daily'::text])));
@@ -4531,6 +4634,7 @@ alter table public.page_form_submissions add constraint page_form_submissions_bu
 alter table public.page_form_submissions add constraint page_form_submissions_form_id_fkey FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE SET NULL;
 alter table public.page_form_submissions add constraint page_form_submissions_page_id_fkey FOREIGN KEY (page_id) REFERENCES custom_pages(id) ON DELETE SET NULL;
 alter table public.platform_settings add constraint platform_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.posta_plaja add constraint posta_plaja_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.product_import_rows add constraint product_import_rows_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.product_import_rows add constraint product_import_rows_import_id_fkey FOREIGN KEY (import_id) REFERENCES product_imports(id) ON DELETE CASCADE;
 alter table public.product_import_rows add constraint product_import_rows_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
@@ -4672,7 +4776,11 @@ CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_sta
 CREATE INDEX orders_ecolet_emitere_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_order_to_send_id IS NOT NULL) AND (ecolet_awb_number IS NULL));
 CREATE INDEX orders_ecolet_urmarire_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_gls_urmarire_idx ON public.orders USING btree (gls_status_checked_at NULLS FIRST) WHERE ((gls_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_innoship_urmarire_idx ON public.orders USING btree (innoship_status_checked_at NULLS FIRST) WHERE ((innoship_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_packeta_urmarire_idx ON public.orders USING btree (packeta_status_checked_at NULLS FIRST) WHERE ((packeta_packet_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_pallex_urmarire_idx ON public.orders USING btree (pallex_status_checked_at NULLS FIRST) WHERE ((pallex_consignment_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_posta_urmarire_idx ON public.orders USING btree (posta_status_checked_at NULLS FIRST) WHERE ((posta_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_smartship_urmarire_idx ON public.orders USING btree (smartship_status_checked_at NULLS FIRST) WHERE ((smartship_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX page_form_submissions_business_idx ON public.page_form_submissions USING btree (business_id, created_at DESC);
 CREATE INDEX product_import_rows_cursor_idx ON public.product_import_rows USING btree (import_id, status, row_index);
 CREATE INDEX product_import_rows_images_idx ON public.product_import_rows USING btree (import_id, row_index) WHERE (images_done = false);
@@ -4760,7 +4868,11 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(gls_config, '{password}'::text[]) AS gls_config,
     privat.decripteaza_config(pallex_config, '{password}'::text[]) AS pallex_config,
     privat.decripteaza_config(ecolet_config, '{api_token}'::text[]) AS ecolet_config,
-    facebook_feeds
+    facebook_feeds,
+    privat.decripteaza_config(posta_config, '{password}'::text[]) AS posta_config,
+    privat.decripteaza_config(innoship_config, '{api_key,webhook_secret}'::text[]) AS innoship_config,
+    privat.decripteaza_config(packeta_config, '{api_password,api_key}'::text[]) AS packeta_config,
+    privat.decripteaza_config(smartship_config, '{api_key}'::text[]) AS smartship_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -4830,6 +4942,7 @@ alter table public.operatii_externe enable row level security;
 alter table public.orders enable row level security;
 alter table public.page_form_submissions enable row level security;
 alter table public.platform_settings enable row level security;
+alter table public.posta_plaja enable row level security;
 alter table public.product_import_rows enable row level security;
 alter table public.product_imports enable row level security;
 alter table public.products enable row level security;
@@ -4850,7 +4963,11 @@ alter table public.trendyol_sync_queue enable row level security;
 alter table public.trendyol_variants enable row level security;
 alter table public.users_profile enable row level security;
 alter table public.zz_backup_categorii_okxi_20260812 enable row level security;
+alter table public.zz_backup_facebook_feeds_20260814 enable row level security;
 alter table public.zz_backup_preturi_bricosmart_20260804 enable row level security;
+alter table public.zz_backup_preturi_parfumuri_insula_20260812 enable row level security;
+alter table public.zz_backup_preturi_vetdepo_categorii_20260903 enable row level security;
+alter table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 enable row level security;
 
 create policy "Owners can manage store settings" on privat.store_settings as PERMISSIVE for ALL to public using ((EXISTS ( SELECT 1
    FROM businesses b
@@ -5936,6 +6053,27 @@ grant SELECT on table public.platform_settings to service_role;
 grant TRIGGER on table public.platform_settings to service_role;
 grant TRUNCATE on table public.platform_settings to service_role;
 grant UPDATE on table public.platform_settings to service_role;
+grant DELETE on table public.posta_plaja to anon;
+grant INSERT on table public.posta_plaja to anon;
+grant REFERENCES on table public.posta_plaja to anon;
+grant SELECT on table public.posta_plaja to anon;
+grant TRIGGER on table public.posta_plaja to anon;
+grant TRUNCATE on table public.posta_plaja to anon;
+grant UPDATE on table public.posta_plaja to anon;
+grant DELETE on table public.posta_plaja to authenticated;
+grant INSERT on table public.posta_plaja to authenticated;
+grant REFERENCES on table public.posta_plaja to authenticated;
+grant SELECT on table public.posta_plaja to authenticated;
+grant TRIGGER on table public.posta_plaja to authenticated;
+grant TRUNCATE on table public.posta_plaja to authenticated;
+grant UPDATE on table public.posta_plaja to authenticated;
+grant DELETE on table public.posta_plaja to service_role;
+grant INSERT on table public.posta_plaja to service_role;
+grant REFERENCES on table public.posta_plaja to service_role;
+grant SELECT on table public.posta_plaja to service_role;
+grant TRIGGER on table public.posta_plaja to service_role;
+grant TRUNCATE on table public.posta_plaja to service_role;
+grant UPDATE on table public.posta_plaja to service_role;
 grant DELETE on table public.product_import_rows to anon;
 grant INSERT on table public.product_import_rows to anon;
 grant REFERENCES on table public.product_import_rows to anon;
@@ -6348,6 +6486,27 @@ grant SELECT on table public.zz_backup_categorii_okxi_20260812 to service_role;
 grant TRIGGER on table public.zz_backup_categorii_okxi_20260812 to service_role;
 grant TRUNCATE on table public.zz_backup_categorii_okxi_20260812 to service_role;
 grant UPDATE on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant DELETE on table public.zz_backup_facebook_feeds_20260814 to anon;
+grant INSERT on table public.zz_backup_facebook_feeds_20260814 to anon;
+grant REFERENCES on table public.zz_backup_facebook_feeds_20260814 to anon;
+grant SELECT on table public.zz_backup_facebook_feeds_20260814 to anon;
+grant TRIGGER on table public.zz_backup_facebook_feeds_20260814 to anon;
+grant TRUNCATE on table public.zz_backup_facebook_feeds_20260814 to anon;
+grant UPDATE on table public.zz_backup_facebook_feeds_20260814 to anon;
+grant DELETE on table public.zz_backup_facebook_feeds_20260814 to authenticated;
+grant INSERT on table public.zz_backup_facebook_feeds_20260814 to authenticated;
+grant REFERENCES on table public.zz_backup_facebook_feeds_20260814 to authenticated;
+grant SELECT on table public.zz_backup_facebook_feeds_20260814 to authenticated;
+grant TRIGGER on table public.zz_backup_facebook_feeds_20260814 to authenticated;
+grant TRUNCATE on table public.zz_backup_facebook_feeds_20260814 to authenticated;
+grant UPDATE on table public.zz_backup_facebook_feeds_20260814 to authenticated;
+grant DELETE on table public.zz_backup_facebook_feeds_20260814 to service_role;
+grant INSERT on table public.zz_backup_facebook_feeds_20260814 to service_role;
+grant REFERENCES on table public.zz_backup_facebook_feeds_20260814 to service_role;
+grant SELECT on table public.zz_backup_facebook_feeds_20260814 to service_role;
+grant TRIGGER on table public.zz_backup_facebook_feeds_20260814 to service_role;
+grant TRUNCATE on table public.zz_backup_facebook_feeds_20260814 to service_role;
+grant UPDATE on table public.zz_backup_facebook_feeds_20260814 to service_role;
 grant DELETE on table public.zz_backup_preturi_bricosmart_20260804 to anon;
 grant INSERT on table public.zz_backup_preturi_bricosmart_20260804 to anon;
 grant REFERENCES on table public.zz_backup_preturi_bricosmart_20260804 to anon;
@@ -6369,6 +6528,69 @@ grant SELECT on table public.zz_backup_preturi_bricosmart_20260804 to service_ro
 grant TRIGGER on table public.zz_backup_preturi_bricosmart_20260804 to service_role;
 grant TRUNCATE on table public.zz_backup_preturi_bricosmart_20260804 to service_role;
 grant UPDATE on table public.zz_backup_preturi_bricosmart_20260804 to service_role;
+grant DELETE on table public.zz_backup_preturi_parfumuri_insula_20260812 to anon;
+grant INSERT on table public.zz_backup_preturi_parfumuri_insula_20260812 to anon;
+grant REFERENCES on table public.zz_backup_preturi_parfumuri_insula_20260812 to anon;
+grant SELECT on table public.zz_backup_preturi_parfumuri_insula_20260812 to anon;
+grant TRIGGER on table public.zz_backup_preturi_parfumuri_insula_20260812 to anon;
+grant TRUNCATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to anon;
+grant UPDATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to anon;
+grant DELETE on table public.zz_backup_preturi_parfumuri_insula_20260812 to authenticated;
+grant INSERT on table public.zz_backup_preturi_parfumuri_insula_20260812 to authenticated;
+grant REFERENCES on table public.zz_backup_preturi_parfumuri_insula_20260812 to authenticated;
+grant SELECT on table public.zz_backup_preturi_parfumuri_insula_20260812 to authenticated;
+grant TRIGGER on table public.zz_backup_preturi_parfumuri_insula_20260812 to authenticated;
+grant TRUNCATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to authenticated;
+grant UPDATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to authenticated;
+grant DELETE on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant INSERT on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant REFERENCES on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant SELECT on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant TRIGGER on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant TRUNCATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant UPDATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant DELETE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
+grant INSERT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
+grant SELECT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
+grant DELETE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to authenticated;
+grant INSERT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to authenticated;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_categorii_20260903 to authenticated;
+grant SELECT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to authenticated;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_categorii_20260903 to authenticated;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to authenticated;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to authenticated;
+grant DELETE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to service_role;
+grant INSERT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to service_role;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_categorii_20260903 to service_role;
+grant SELECT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to service_role;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_categorii_20260903 to service_role;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to service_role;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to service_role;
+grant DELETE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to anon;
+grant INSERT on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to anon;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to anon;
+grant SELECT on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to anon;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to anon;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to anon;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to anon;
+grant DELETE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to authenticated;
+grant INSERT on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to authenticated;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to authenticated;
+grant SELECT on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to authenticated;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to authenticated;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to authenticated;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to authenticated;
+grant DELETE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
+grant INSERT on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
+grant SELECT on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
 
 -- ── GRANTURI PE COLOANA (RLS verifica RANDURI, nu COLOANE) ─
 grant SELECT (address) on table public.businesses to anon;
@@ -6557,6 +6779,7 @@ grant execute on function public.orders_status_counts(bid uuid) to service_role;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to anon;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to authenticated;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to service_role;
+grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.release_discount_use(p_discount_id uuid) to service_role;

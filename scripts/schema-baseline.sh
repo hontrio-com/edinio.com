@@ -97,10 +97,23 @@ fi
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
 
+# ⚠ SE CITESTE SI SE SCRIE IN OCTETI, nu in text. Doua motive, amandoua platite:
+#
+#   1. Pe Windows, `sys.stdout.write` deschide iesirea in mod TEXT si traduce
+#      fiecare LF in CRLF. Dump-ul din baza are LF, deci fisierul iesea cu ALT
+#      final de linie decat cel din Git — iar `--check` raporta atunci DERIVA pe
+#      TOT fisierul (6624 randuri sterse, 6847 adaugate), pentru o schema
+#      identica. Aceeasi cauza din care md5-ul fisierului nu se potrivea cu
+#      `md5(genereaza_schema_baseline())` rulat in baza.
+#   2. `sys.stdin.read()` foloseste codificarea implicita a consolei. Dump-ul
+#      contine diacritice romanesti in comentarii, iar pe o consola cp1252 ar fi
+#      iesit stalcite — tacut.
+#
+# `.buffer` ocoleste amandoua straturile: octeti in, UTF-8 out, nimic tradus.
 curl -sS -f -X POST "$URL/rest/v1/rpc/genereaza_schema_baseline" \
   -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" -d '{}' \
-  | python -c 'import sys,json; sys.stdout.write(json.loads(sys.stdin.read()))' > "$TMP"
+  | python -c 'import sys,json; sys.stdout.buffer.write(json.loads(sys.stdin.buffer.read().decode("utf-8")).encode("utf-8"))' > "$TMP"
 
 # Un raspuns fara tabele inseamna ca generatorul a raspuns ceva, dar gresit.
 # Fara verificarea asta, o eroare ar suprascrie baseline-ul bun cu un fisier gol —

@@ -38,7 +38,10 @@ export async function saveNetopiaConfig(
   // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
   // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
   // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
-  const { data: vechi } = await supabase
+  // Configul vechi se citeste cu SERVICE ROLE: pe clientul comerciantului campurile
+  // secrete sosesc ca siruri `enc.v1.…`, iar `pastreazaSecretele` le-ar „pastra" asa.
+  // Proprietatea magazinului e dovedita mai sus. Vezi src/lib/integrari/secrete.ts.
+  const { data: vechi } = await createAdminClient()
     .from("store_settings").select("netopia_config").eq("business_id", businessId).maybeSingle();
   const cleanFinal = pastreazaSecretele("netopia_config", clean, vechi?.netopia_config);
 

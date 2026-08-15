@@ -66,10 +66,13 @@ export async function saveWootConfig(
   // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
   // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
   // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
-  // Citirea RAMANE pe clientul utilizatorului: valoarea veche doar se scrie la
-  // loc, nu pleaca spre curier. Chiar daca vine cifrata (`enc.v1.…`), criptarea
-  // e idempotenta, deci secretul se pastreaza neatins.
-  const { data: vechi } = await supabase
+  // Citirea se face cu SERVICE ROLE. De aici valoarea nu pleaca spre curier — se
+  // scrie doar la loc, si `privat.cripteaza` e idempotenta, deci randul din baza ar
+  // ramane corect si citit cifrat. Se citeste totusi decriptat fiindca asta e
+  // contractul lui `pastreazaSecretele` (secrete.ts): altfel `configFinal` tine
+  // `enc.v1.…`, si primul care adauga dupa salvare un apel catre curier sau un
+  // `return { config }` rupe integrarea in tacere. Proprietatea e dovedita mai sus.
+  const { data: vechi } = await createAdminClient()
     .from("store_settings").select("woot_config").eq("business_id", businessId).maybeSingle();
   const configFinal = pastreazaSecretele("woot_config", config, vechi?.woot_config);
 

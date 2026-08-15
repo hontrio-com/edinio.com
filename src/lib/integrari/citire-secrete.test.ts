@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -106,6 +106,71 @@ for (const { fisier, coloana, cate } of CITIRI_PUNCTUALE) {
     }
   });
 }
+
+/**
+ * A doua familie: configul VECHI care alimenteaza `pastreazaSecretele`.
+ *
+ * Aici defectul nu strica nimic in baza — `privat.cripteaza` sare peste sirurile
+ * marcate `enc.v1.`, deci rescrierea e no-op. Se strica tot ce FOLOSESTE rezultatul:
+ * un apel catre furnizor facut imediat dupa salvare, un `return { config }` catre
+ * formular, sau un URL de webhook inregistrat cu secretul cifrat in el. Adica o
+ * mina care se armeaza singura la prima linie adaugata dupa salvare.
+ *
+ * Proba e GENERICA dinadins: se uita la fiecare apel `pastreazaSecretele` din
+ * `src/lib/actions`, nu la o lista fixa. Un fisier nou care greseste pica din prima,
+ * fara sa mai fie nevoie ca cineva sa-si aminteasca de proba asta.
+ */
+test("pastreazaSecretele: configul vechi vine intotdeauna de pe service role", () => {
+  const dosar = join(process.cwd(), "src", "lib", "actions");
+  const fisiere = readdirSync(dosar).filter((f) => f.endsWith(".actions.ts"));
+
+  let verificate = 0;
+  const gresite: string[] = [];
+
+  for (const nume of fisiere) {
+    const sursa = readFileSync(join(dosar, nume), "utf8");
+    let de = 0;
+    for (;;) {
+      const idx = sursa.indexOf("pastreazaSecretele(", de);
+      if (idx === -1) break;
+      de = idx + 1;
+
+      // Al treilea argument arata mereu ca `<variabila>?.<coloana>_config`.
+      const apel = sursa.slice(idx, idx + 400);
+      const m = apel.match(/(\w+)\?\.(\w+_config)/);
+      assert.ok(m, `${nume}: nu recunosc forma apelului pastreazaSecretele — actualizeaza proba`);
+      const [, variabila, coloana] = m!;
+
+      // Unde se atribuie variabila, si cu ce client. Se cauta ULTIMA atribuire de
+      // dinaintea apelului, nu prima din fisier: `store.actions.ts` are mai multe
+      // functii care folosesc acelasi nume (`existing`), iar prima varianta a probei
+      // raporta fals pozitiv tocmai fiindca lua atribuirea altei functii.
+      const inainte = sursa.slice(0, idx);
+      const toate = [...inainte.matchAll(new RegExp(`const \\{ data: ${variabila}[ ,}][^=]*=\\s*await ([^\\n\\r;]+)`, "g"))];
+      assert.ok(toate.length > 0, `${nume}: nu gasesc de unde vine \`${variabila}\` inainte de apel`);
+      let client = toate[toate.length - 1][1].trim();
+
+      // Un nivel de alias: `const admin = createAdminClient()` apoi `await admin`.
+      if (!client.includes("createAdminClient()")) {
+        const alias = sursa.match(new RegExp(`const ${client.replace(/\W/g, "")}\\s*=\\s*createAdminClient\\(\\)`));
+        if (alias) client = "createAdminClient()";
+      }
+
+      verificate++;
+      if (!client.includes("createAdminClient()")) {
+        gresite.push(`${nume}: ${coloana} citit cu \`${client}\``);
+      }
+    }
+  }
+
+  assert.ok(verificate >= 20, `am verificat doar ${verificate} apeluri — cautarea s-a stricat`);
+  assert.deepEqual(
+    gresite,
+    [],
+    "configul vechi citit FARA service role: campurile secrete raman `enc.v1.…` in " +
+      "configul imbinat, si primul apel catre furnizor de dupa salvare esueaza tacut",
+  );
+});
 
 /**
  * Proba care ar fi prins defectul la sursa lui: ajutorul central `secretDinConfig`

@@ -408,10 +408,18 @@ export async function updateSmsoConfig(
 
   // Citit cu SERVICE ROLE: `pastreazaSecretele` are nevoie de valoarea REALA a
   // cheii, ca sa o scrie la loc. Vederea `store_settings` nu mai decripteaza
-  // pentru `authenticated`, deci cu clientul utilizatorului am lua sirul
-  // `enc.v1.…` si l-am salva peste el insusi — criptat a doua oara, cheia SMSO
-  // nu s-ar mai putea desface, si asta fara nicio eroare la salvare. Service role
-  // ocoleste RLS; dreptul asupra magazinului e verificat exact deasupra.
+  // pentru `authenticated`, deci cu clientul utilizatorului am lua sirul `enc.v1.…`
+  // si l-am pastra ca atare in configul imbinat. Service role ocoleste RLS; dreptul
+  // asupra magazinului e verificat exact deasupra.
+  //
+  // CORECTIE 15.08.2026: comentariul de aici sustinea ca rescrierea ar cripta cheia
+  // A DOUA OARA si ar face-o nedescifrabila. Nu e adevarat, si merita spus, fiindca
+  // teama asta duce la migratii de „salvare" inutile. `privat.cripteaza` iese pe
+  // prima linie pentru orice sir care incepe deja cu `enc.v1.`, deci rescrierea e
+  // no-op (2026-08-04-criptare-credentiale.sql). Verificat pe productie pe toate
+  // cele 26 de campuri secrete cu valori: zero dublu-criptate. Motivul real pentru
+  // service role e cel de mai sus — ce se strica e ce FOLOSESTE configul imbinat,
+  // nu randul din baza.
   const { data: existing } = await createAdminClient()
     .from("store_settings").select("id, smso_config").eq("business_id", businessId).single();
 

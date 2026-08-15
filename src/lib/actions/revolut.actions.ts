@@ -107,11 +107,16 @@ export async function saveRevolutConfig(
   // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
   // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
   //
-  // Citirea asta ramane DINADINS pe clientul utilizatorului, desi `existing` de
-  // mai sus vine pe service role: aici valoarea nu pleaca nicaieri, doar se scrie
-  // inapoi. `enc.v1.…` rescris peste el insusi e corect — `privat.cripteaza` sare
-  // peste ce e deja marcat — si asa nu mai scoatem o parola in clar degeaba.
-  const { data: vechi } = await supabase
+  // Citirea a stat DINADINS pe clientul utilizatorului pana la 15.08.2026, cu un
+  // argument bun: aici valoarea nu pleaca nicaieri, doar se scrie inapoi, si asa
+  // nu scoteam o parola in clar degeaba. A fost mutata pe service role fiindca
+  // `pastreazaSecretele` cere asta prin contract (secrete.ts) si fiindca fisierul
+  // asta e chiar exemplul de ce conteaza: `saveRevolutConfig` CHEAMA Revolut dupa
+  // salvare (`createWebhook` cu `secret_key`), si o face dintr-o A DOUA citire, pe
+  // `existing`. Doua citiri cu doua reguli diferite in aceeasi functie e exact
+  // capcana in care a cazut restul platformei. Expunerea in plus e in acelasi
+  // proces care oricum decripteaza `existing` cu cateva linii mai sus.
+  const { data: vechi } = await createAdminClient()
     .from("store_settings").select("revolut_config").eq("business_id", businessId).maybeSingle();
   const cleanFinal = pastreazaSecretele("revolut_config", clean, vechi?.revolut_config);
 

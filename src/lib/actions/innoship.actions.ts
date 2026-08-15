@@ -89,7 +89,10 @@ export async function saveInnoshipConfig(
   if (!ctx.ok) return { error: ctx.error };
   const { supabase } = ctx;
 
-  const { data: vechi } = await supabase
+  // Configul vechi se citeste cu SERVICE ROLE: pe clientul comerciantului campurile
+  // secrete sosesc ca siruri `enc.v1.…`, iar `pastreazaSecretele` le-ar „pastra" asa.
+  // Proprietatea magazinului e dovedita mai sus. Vezi src/lib/integrari/secrete.ts.
+  const { data: vechi } = await createAdminClient()
     .from("store_settings").select("innoship_config").eq("business_id", businessId).maybeSingle();
 
   const configFinal = pastreazaSecretele("innoship_config", config, vechi?.innoship_config) as Record<string, unknown>;

@@ -81,7 +81,10 @@ export async function saveGlsConfig(
    * primeste mascate, deci o salvare obisnuita nu trebuie sa le stearga. Fara
    * asta, mascarea ar distruge integrarea la prima apasare pe „Salveaza".
    */
-  const { data: vechi } = await supabase
+  // Configul vechi se citeste cu SERVICE ROLE: pe clientul comerciantului campurile
+  // secrete sosesc ca siruri `enc.v1.…`, iar `pastreazaSecretele` le-ar „pastra" asa.
+  // Proprietatea magazinului e dovedita mai sus. Vezi src/lib/integrari/secrete.ts.
+  const { data: vechi } = await createAdminClient()
     .from("store_settings").select("gls_config").eq("business_id", businessId).maybeSingle();
   const configFinal = pastreazaSecretele("gls_config", config, vechi?.gls_config);
 

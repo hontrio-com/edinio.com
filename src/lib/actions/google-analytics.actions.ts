@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildAuthUrl, signState, googleAnalyticsConfigured, getAccessToken } from "@/lib/google-analytics/oauth";
 import {
   listAccountSummaries, listDataStreams, batchRunReports, runRealtimeReport,
@@ -25,8 +26,25 @@ async function ownedBusiness(supabase: ServerClient, businessId: string, userId:
   return (data as OwnBiz) ?? null;
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<GoogleAnalyticsConfig> {
-  const { data } = await supabase
+/*
+ * Citirea se face cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`,
+ * deci pe clientul utilizatorului (inclusiv aici, in „use server") vederea
+ * intoarce `refresh_token` ca sirul `enc.v1.…`. Nu da eroare si nu da null: da
+ * un sir plauzibil, care pleaca asa la Google, primeste `invalid_grant`, si
+ * comerciantul vede „Sesiunea Google a expirat. Reconecteaza-te." la fiecare
+ * intrare in pagina — iar reconectarea nu repara nimic, fiindca defectul e la
+ * citire. Ruta frate `api/google-analytics/oauth/callback` face deja asa.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat. Toti cei noua apelanti cheama `ownedBusiness()` inainte.
+ *
+ * Parametrul cu clientul utilizatorului a fost SCOS dinadins: lasat pe loc, ar
+ * fi invitat pe urmatorul sa creada ca citirea se face cu el.
+ */
+async function loadConfig(businessId: string): Promise<GoogleAnalyticsConfig> {
+  const { data } = await createAdminClient()
     .from("store_settings").select("google_analytics_config").eq("business_id", businessId).single();
   return ((data?.google_analytics_config as GoogleAnalyticsConfig) ?? {}) || {};
 }
@@ -67,7 +85,7 @@ export async function getGaStatus(businessId: string): Promise<GaStatus | { erro
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   return {
     configured: googleAnalyticsConfigured(),
     connected: !!config.connected && (!!config.property_id || !!config.manual),
@@ -115,7 +133,7 @@ export async function connectGaManual(businessId: string, measurementId: string)
   // Fresh config on purpose (no spread): manual connect means "use ONLY this
   // ID" — leftover OAuth state (refresh_token without property) would otherwise
   // strand the UI on the property picker.
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const ok = await saveConfig(supabase, businessId, {
     connected: true,
     manual: true,
@@ -141,7 +159,7 @@ export async function listGaProperties(businessId: string): Promise<{ groups: Ga
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
   const token = await getAccessToken(config.refresh_token);
   if (!token) return { error: EXPIRED_MSG };
@@ -177,7 +195,7 @@ export async function selectGaProperty(
   const cleanId = propertyId.replace(/\D/g, "");
   if (!cleanId) return { error: "ID de proprietate invalid." };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
   const token = await getAccessToken(config.refresh_token);
   if (!token) return { error: EXPIRED_MSG };
@@ -224,7 +242,7 @@ export async function setGaTracking(businessId: string, enabled: boolean): Promi
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.connected) return { error: "Conecteaza mai intai Google Analytics." };
   const ok = await saveConfig(supabase, businessId, { ...config, tracking_enabled: enabled });
   if (!ok) return { error: "Eroare la salvare." };
@@ -239,7 +257,7 @@ export async function setGaApiSecret(businessId: string, apiSecret: string): Pro
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
   const secret = (apiSecret ?? "").trim();
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.connected) return { error: "Conecteaza mai intai Google Analytics." };
   const ok = await saveConfig(supabase, businessId, { ...config, api_secret: secret || undefined });
   if (!ok) return { error: "Eroare la salvare." };
@@ -253,7 +271,7 @@ export async function disconnectGoogleAnalytics(businessId: string): Promise<{ s
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (config.property_id) clearDashboardCache(config.property_id);
   await saveConfig(supabase, businessId, {});
   revalidatePath(FEATURE_PATH);
@@ -356,7 +374,7 @@ export async function getGaDashboard(
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.connected || !config.property_id || !config.refresh_token) {
     return { error: "Conecteaza mai intai Google Analytics." };
   }
@@ -463,7 +481,7 @@ export async function getGaRealtime(businessId: string): Promise<{ data: GaRealt
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.connected || !config.property_id || !config.refresh_token) {
     return { error: "Conecteaza mai intai Google Analytics." };
   }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { checkCredit, sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
@@ -24,7 +25,11 @@ async function getSmsoConfigForBiz(businessId: string): Promise<SmsoConfig | nul
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
-  const { data: settings } = await supabase
+  // Cheia se citeste cu SERVICE ROLE, dupa verificarea de proprietate de mai sus:
+  // `privat.decripteaza_config` nu decripteaza pentru `authenticated`, deci pe
+  // clientul utilizatorului `api_key` ar veni ca sirul `enc.v1.…` si SMSO ar
+  // refuza fiecare mesaj din campanie. La fel in `/api/sms/credit` si `/api/sms/test`.
+  const { data: settings } = await createAdminClient()
     .from("store_settings").select("smso_config").eq("business_id", businessId).single();
   return (settings?.smso_config as SmsoConfig | null) ?? null;
 }
@@ -75,7 +80,9 @@ export async function getSmsoCredit(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
-  const { data: settings } = await supabase
+  // Service role, dupa verificarea de proprietate de mai sus — vezi comentariul
+  // din `getSmsoConfigForBiz`.
+  const { data: settings } = await createAdminClient()
     .from("store_settings").select("smso_config").eq("business_id", businessId).single();
   const config = settings?.smso_config as SmsoConfig | null;
   if (!config?.api_key) return { error: "SMSO nu este configurat." };

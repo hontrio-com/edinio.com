@@ -26,8 +26,25 @@ async function ownedBusiness(supabase: ServerClient, businessId: string, userId:
   return (data as OwnBiz) ?? null;
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<GoogleMerchantConfig> {
-  const { data } = await supabase
+/*
+ * Citirea se face cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`,
+ * deci pe clientul utilizatorului vederea intoarce `refresh_token` ca sirul
+ * `enc.v1.…`. Trimis asa la Google, produce `invalid_grant` si mesajul
+ * „Sesiunea Google a expirat." la listarea conturilor, la selectia contului, la
+ * problemele de cont si la deconectare (unde abonamentul de notificari ramanea
+ * viu pe contul comerciantului). Callback-ul OAuth, webhook-ul si cronul
+ * `gmc-sync` citesc deja cu service role.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat. Toti apelantii cheama `ownedBusiness()` inainte.
+ *
+ * Parametrul cu clientul utilizatorului a fost SCOS dinadins: lasat pe loc, ar
+ * fi invitat pe urmatorul sa creada ca citirea se face cu el.
+ */
+async function loadConfig(businessId: string): Promise<GoogleMerchantConfig> {
+  const { data } = await createAdminClient()
     .from("store_settings").select("google_merchant_config").eq("business_id", businessId).single();
   return ((data?.google_merchant_config as GoogleMerchantConfig) ?? {}) || {};
 }
@@ -73,7 +90,7 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
   const biz = await ownedBusiness(supabase, businessId, user.id);
   if (!biz) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
 
   // Numaratori exclusiv prin count/head (exacte la orice volum) — fetch-ul de
   // randuri pentru numarat se trunchia silentios la 1000 (cap PostgREST).
@@ -123,7 +140,7 @@ export async function setCategoryMap(
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const clean: Record<string, string> = {};
   for (const [k, v] of Object.entries(map)) if (k && v) clean[k] = v;
   const ok = await saveConfig(supabase, businessId, { ...config, category_map: clean });
@@ -150,7 +167,7 @@ export async function listMerchantAccounts(businessId: string): Promise<{ accoun
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
   const token = await getAccessToken(config.refresh_token);
   if (!token) return { error: "Sesiunea Google a expirat. Reconecteaza-te." };
@@ -186,7 +203,7 @@ export async function selectMerchantAccount(
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
   const token = await getAccessToken(config.refresh_token);
   if (!token) return { error: "Sesiunea Google a expirat. Reconecteaza-te." };
@@ -271,7 +288,7 @@ export async function disconnectMerchant(businessId: string): Promise<{ success:
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (config.refresh_token && config.notification_subscription_name) {
     const token = await getAccessToken(config.refresh_token);
     if (token) await deleteNotificationSubscription(token, config.notification_subscription_name);
@@ -293,7 +310,7 @@ export async function setMerchantSettings(
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const ok = await saveConfig(supabase, businessId, {
     ...config,
     feed_label: settings.feed_label?.trim() || config.feed_label || DEFAULT_FEED_LABEL,
@@ -315,7 +332,7 @@ export async function queueSyncAll(businessId: string): Promise<{ queued: number
   if (!user) return { error: "Neautorizat" };
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.connected || !config.account_id) return { error: "Conecteaza mai intai Google Merchant." };
 
   // Windowed: catalogul intreg intra in coada, nu doar primele 1000 de produse.
@@ -382,7 +399,7 @@ export async function getMerchantAccountIssues(businessId: string): Promise<Merc
   if (!user) return [];
   if (!(await ownedBusiness(supabase, businessId, user.id))) return [];
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.connected || !config.account_id || !config.refresh_token) return [];
   const token = await getAccessToken(config.refresh_token);
   if (!token) return [];

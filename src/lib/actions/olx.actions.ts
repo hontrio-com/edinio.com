@@ -39,8 +39,24 @@ async function ownedBusiness(supabase: ServerClient, businessId: string, userId:
   return (data as OwnBiz) ?? null;
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<OlxConfig> {
-  const { data } = await supabase
+/*
+ * Citirea se face cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`,
+ * deci pe clientul utilizatorului vederea intoarce `access_token` si
+ * `refresh_token` ca siruri `enc.v1.…`. La OLX asta era mai rau decat un 401:
+ * `ensureMerchantToken` primea `invalid_grant` la reimprospatare si SCRIA
+ * `needs_reconnect: true` in config, adica marca o conexiune sanatoasa drept
+ * moarta, pe baza unui semnal fals.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat. Toti apelantii trec prin `guard()` inainte.
+ *
+ * Parametrul cu clientul utilizatorului a fost SCOS dinadins: `withToken` chiar
+ * avea `admin` la indemana pe linia de deasupra si tot cu `g.supabase` citea.
+ */
+async function loadConfig(businessId: string): Promise<OlxConfig> {
+  const { data } = await createAdminClient()
     .from("store_settings").select("olx_config").eq("business_id", businessId).single();
   return ((data?.olx_config as OlxConfig) ?? {}) || {};
 }
@@ -98,7 +114,7 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
 
   // Count-only queries (exact at any volume; avoids the 1000-row PostgREST cap).
   const rejectedStatuses = ["moderated", "blocked", "disabled", "removed_by_moderator", "error"];
@@ -176,7 +192,7 @@ export async function saveOlxSettings(businessId: string, input: OlxSettingsInpu
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const next: OlxConfig = {
     ...config,
@@ -246,7 +262,7 @@ export async function saveOlxCategoryMapEntry(
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];
   else map[edinioCategory] = entry;
@@ -260,7 +276,7 @@ export async function saveOlxCategoryMapEntry(
 export async function publishOlxProduct(businessId: string, productId: string): Promise<{ success: true; status?: string; url?: string | null } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const readiness = olxReadinessError(config);
   if (readiness) return { error: readiness };
 
@@ -295,7 +311,7 @@ export async function publishProductsToOlx(
 ): Promise<{ queued: number; skipped: number } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const readiness = olxReadinessError(config);
   if (readiness) return { error: readiness };
   const mapped = new Set(Object.keys(config.category_map ?? {}));
@@ -376,7 +392,7 @@ export async function publishAllOlx(businessId: string): Promise<{ queued: numbe
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const readiness = olxReadinessError(config);
   if (readiness) return { error: readiness };
   const mappedCategories = new Set(Object.keys(config.category_map ?? {}));
@@ -449,7 +465,7 @@ async function withToken<T>(businessId: string, fn: (token: string, config: OlxC
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
   const admin = createAdminClient();
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   if (!config.connected || !config.refresh_token) return { error: "Conecteaza mai intai contul OLX." };
   const tok = await ensureMerchantToken(admin, businessId, config);
   if ("error" in tok) return { error: tok.error };

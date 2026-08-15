@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { parseEmailConfig, smtpReady, type SmtpConfig, type EmailConfig, type EmailTemplateKind } from "@/lib/email/config";
 import { sendViaSmtp, verifySmtp } from "@/lib/email/smtp";
 
@@ -12,8 +13,24 @@ async function owns(supabase: ServerClient, businessId: string, userId: string):
   return !!data;
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<EmailConfig> {
-  const { data } = await supabase.from("store_settings").select("email_config").eq("business_id", businessId).single();
+/*
+ * Citirea se face cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`,
+ * deci pe clientul utilizatorului vederea intoarce `smtp.pass` ca sirul
+ * `enc.v1.…`. Parola e write-only (formularul o trimite goala cand nu s-a
+ * retastat), asa ca `pass: input.pass.trim() || prevPass` punea sirul cifrat pe
+ * post de parola: `verifySmtp` cadea, si cu SMTP-ul propriu ACTIV comerciantul
+ * nu mai putea salva nicio modificare, nici macar dezactivarea. Emailurile
+ * catre clienti au continuat sa plece corect — `lib/email/sender.ts` citeste
+ * deja cu service role; doar ecranul de Setari si butonul de test erau moarte.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat. Toti cei patru apelanti cheama `owns()` inainte.
+ */
+async function loadConfig(businessId: string): Promise<EmailConfig> {
+  const { data } = await createAdminClient()
+    .from("store_settings").select("email_config").eq("business_id", businessId).single();
   return parseEmailConfig(data?.email_config);
 }
 
@@ -41,7 +58,7 @@ export async function updateSmtpConfig(businessId: string, input: SmtpInput): Pr
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const prevPass = config.smtp?.pass ?? "";
   const smtp: SmtpConfig = {
     enabled: input.enabled,
@@ -74,7 +91,7 @@ export async function sendTestEmail(businessId: string): Promise<{ success: true
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const smtp = (await loadConfig(supabase, businessId)).smtp;
+  const smtp = (await loadConfig(businessId)).smtp;
   if (!smtpReady(smtp)) return { error: "Configureaza si salveaza SMTP-ul mai intai." };
 
   const from = smtp.from_name ? `${smtp.from_name} <${smtp.from_email}>` : smtp.from_email;
@@ -101,7 +118,7 @@ export async function updateEmailTemplate(
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const templates = { ...(config.templates ?? {}) };
   const subject = override.subject?.trim() || undefined;
   const heading = override.heading?.trim() || undefined;
@@ -128,7 +145,7 @@ export async function updateEmailBranding(
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const branding = { ...(config.branding ?? {}) };
   if (input.logo !== undefined) branding.logo = input.logo?.trim() ? input.logo.trim() : undefined;
   if (input.color !== undefined) branding.color = input.color?.trim() ? input.color.trim() : undefined;

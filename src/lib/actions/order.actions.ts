@@ -1908,7 +1908,11 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 
   // Send status change SMS to customer (opt-in per store via SMSO)
   if (poateInstiinta && statusChanged && order.customer_phone) {
-    const { data: st } = await supabase
+    // Service role: `privat.decripteaza_config` nu decripteaza pentru
+    // `authenticated`, deci pe clientul utilizatorului `api_key` ar veni ca
+    // `enc.v1.…` si instiintarea nu ar ajunge NICIODATA la client — tacut,
+    // fiindca trimiterea e fire-and-forget. Proprietatea e verificata mai sus.
+    const { data: st } = await createAdminClient()
       .from("store_settings")
       .select("smso_config")
       .eq("business_id", order.business_id)
@@ -3010,7 +3014,9 @@ export async function sendCustomerSms(orderId: string, message: string) {
 
   if (!order.customer_phone) return { error: "Clientul nu a lasat un numar de telefon." };
 
-  const { data: st } = await supabase
+  // Service role, dupa verificarea de proprietate de mai sus — pe clientul
+  // utilizatorului `api_key` ar veni ca `enc.v1.…` si SMSO ar refuza mesajul.
+  const { data: st } = await createAdminClient()
     .from("store_settings")
     .select("smso_config")
     .eq("business_id", order.business_id)

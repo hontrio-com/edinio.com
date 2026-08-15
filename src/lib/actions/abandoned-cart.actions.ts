@@ -444,7 +444,11 @@ export async function sendAbandonedCartSms(
     .eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data: settings } = await supabase
+  // Service role, dupa verificarea de proprietate de mai sus: pe clientul
+  // utilizatorului `smso_config.api_key` si `notice_config.api_token` ar veni ca
+  // siruri `enc.v1.…` (`privat.decripteaza_config` nu decripteaza pentru
+  // `authenticated`), iar furnizorul ar refuza fiecare SMS de recuperare.
+  const { data: settings } = await createAdminClient()
     .from("store_settings").select("smso_config, notice_config").eq("business_id", businessId).single();
   const smso = settings?.smso_config as SmsoConfig | null;
   const notice = settings?.notice_config as NoticeConfig | null;

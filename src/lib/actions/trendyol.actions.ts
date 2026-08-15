@@ -56,8 +56,24 @@ async function guard(businessId: string): Promise<{ supabase: ServerClient; user
   return { supabase, userId: user.id, biz };
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<TrendyolConfig> {
-  const { data } = await supabase
+/*
+ * Citirea se face cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`,
+ * deci pe clientul utilizatorului vederea intoarce `api_key`/`api_secret` ca
+ * siruri `enc.v1.…` si Trendyol raspunde 401 la fiecare apel. Asimetria facea
+ * defectul greu de recunoscut: publicarea produselor si fulfillment-ul MERGEAU
+ * (`loadTrendyolContext` primeste service role de la cron si de la actiuni),
+ * doar ecranele de nomenclator si dezabonarea webhook-ului cadeau.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat. Toti apelantii trec prin `guard()` inainte.
+ *
+ * Parametrul cu clientul utilizatorului a fost SCOS dinadins: lasat pe loc, ar
+ * fi invitat pe urmatorul sa creada ca citirea se face cu el.
+ */
+async function loadConfig(businessId: string): Promise<TrendyolConfig> {
+  const { data } = await createAdminClient()
     .from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
   return ((data?.trendyol_config as TrendyolConfig) ?? {}) || {};
 }
@@ -121,7 +137,7 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const [{ count: listings }, { count: approved }, { count: rejected }, { count: variants }, { count: queued }, { count: orders }] = await Promise.all([
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId),
@@ -195,7 +211,7 @@ export async function connectTrendyol(
   const test = await testConnection({ supplierId, apiKey, apiSecret, environment: env, storefront: vitrina, userAgentCompany: company });
   if (!test.ok) return { error: test.error };
 
-  const prev = await loadConfig(g.supabase, businessId);
+  const prev = await loadConfig(businessId);
   const next: TrendyolConfig = {
     ...prev,
     connected: true,
@@ -222,7 +238,7 @@ export async function disconnectTrendyol(businessId: string): Promise<{ success:
   const g = await guard(businessId);
   if ("error" in g) return g;
   // Best-effort: remove the order webhook on Trendyol before we drop the credentials.
-  const prev = await loadConfig(g.supabase, businessId);
+  const prev = await loadConfig(businessId);
   const prevAuth = authFromConfig(prev);
   if (prevAuth && prev.webhook_id) { try { await deleteWebhook(prevAuth, prev.webhook_id); } catch { /* ignore */ } }
   await saveConfig(g.supabase, businessId, {});
@@ -251,7 +267,7 @@ export async function saveTrendyolSettings(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
 
   // Curierul trebuie sa existe si sa fie valabil pe vitrina magazinului; altfel
   // AWB-ul e respins abia la expediere, cand comerciantul are coletul in mana.
@@ -338,7 +354,7 @@ async function guardedAuth(
 ): Promise<{ supabase: ServerClient; userId: string; config: TrendyolConfig; auth: TrendyolAuth } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const auth = authFromConfig(config);
   if (!auth) return { error: "Conectează mai întâi contul Trendyol." };
   return { supabase: g.supabase, userId: g.userId, config, auth };
@@ -480,7 +496,7 @@ export async function applyTrendyolCategoryMap(
   if ("error" in g) return g;
   if (intrari.length === 0) return { error: "Nu ai selectat nicio mapare." };
 
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.category_map ?? {}) };
   let aplicate = 0;
   for (const intrare of intrari) {
@@ -506,7 +522,7 @@ export async function saveTrendyolCategoryMapEntry(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];
   else map[edinioCategory] = entry;
@@ -547,7 +563,7 @@ interface StoredVariantRow {
 export async function getTrendyolListingEditor(businessId: string, productId: string): Promise<TrendyolEditorData | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const { data: product } = await g.supabase
     .from("products").select("id, name, category, images, price, compare_at_price, sku, page_sections")
@@ -680,7 +696,7 @@ export async function saveTrendyolListing(
       .from("products").select("category").eq("id", productId).eq("business_id", businessId).maybeSingle();
     const cat = (prod as { category: string | null } | null)?.category;
     if (cat) {
-      const config = await loadConfig(g.supabase, businessId);
+      const config = await loadConfig(businessId);
       const map = { ...(config.category_map ?? {}) };
       const prev = map[cat];
       if (prev) {
@@ -736,7 +752,7 @@ export async function publishTrendyolProduct(
 ): Promise<{ success: true; creatAcum: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const gata = trendyolReadinessError(config);
   if (gata) return { error: gata };
 
@@ -1020,7 +1036,7 @@ export async function bulkPublishTrendyol(
 ): Promise<{ submitted: number; failed: number; errors: { product: string; message: string }[] } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const gata = trendyolReadinessError(config);
   if (gata) return { error: gata };
 

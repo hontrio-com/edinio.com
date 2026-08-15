@@ -235,6 +235,7 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "pallex",       label: "Pall-Ex",           logo: "/integrations/pallex.avif",      defaultPrice: 150 },
   { id: "ecolet",       label: "eColet",            logo: "/integrations/ecolet.png",       defaultPrice: 18 },
   { id: "posta",        label: "Posta Romana",      logo: "/integrations/posta_romana.svg", defaultPrice: 16 },
+  { id: "packeta",      label: "Packeta",           logo: "/integrations/packeta.png", defaultPrice: 15 },
   { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
@@ -256,6 +257,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
      substituentul aratat comerciantului, iar daca cele doua se despart, campul
      gol promite un text si checkout-ul afiseaza altul. */
   posta: "Livrare prin Poșta Română",
+  packeta: "Livrare la adresa prin Packeta",
   innoship: "Innoship",
   own: "Curier propriu",
   pickup: "Ridicare personala",
@@ -270,7 +272,9 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
  * fix, lasand livrarea pe zero lei. Trebuie sa ramana in pas cu
  * `FARA_API_DE_TARIF` din src/lib/actions/shipping.actions.ts.
  */
-const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta"]);
+/* ⚠ Packeta e aici fiindca API-ul lor n-are NICIO metoda de tarif: pretul vine din
+   contract, ca la Posta si GLS. */
+const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta", "packeta"]);
 
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};

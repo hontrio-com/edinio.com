@@ -30,6 +30,8 @@ import { pallexGata, type PallExConfig } from "@/lib/pallex/client";
 import { postaGata, type PostaConfig } from "@/lib/posta/client";
 import { innoshipGata, type InnoshipConfig } from "@/lib/innoship/client";
 import { createInnoshipAwbAction } from "@/lib/actions/innoship.actions";
+import { createPacketaAwbAction } from "@/lib/actions/packeta.actions";
+import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -52,8 +54,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -227,7 +229,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -237,6 +239,7 @@ export async function bulkGenerateAwbs(
   const pe = settings?.pallex_config as PallExConfig | null;
   const po = settings?.posta_config as PostaConfig | null;
   const io = settings?.innoship_config as InnoshipConfig | null;
+  const pk = settings?.packeta_config as PacketaConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -260,6 +263,12 @@ export async function bulkGenerateAwbs(
     /* Aceeasi regula ca in `innoshipGata`: cheia de API si id-ul depozitului.
        Fara al doilea, fiecare comanda ar fi refuzata de actiune oricum. */
     innoship: innoshipGata(io),
+    /* Aceeasi regula ca in `packetaGata`: parola API si eticheta de expeditor.
+       ⚠ La Packeta lotul e mai delicat decat oriunde: API-ul lor nu are anulare,
+       deci fiecare colet creat din greseala trebuie sters de mana din contul lor.
+       De aia conditia include `eshop` — fara el actiunea refuza oricum fiecare
+       comanda, si ar iesi 50 de esecuri in loc de un mesaj limpede. */
+    packeta: packetaGata(pk),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -275,7 +284,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -295,6 +304,7 @@ export async function bulkGenerateAwbs(
     pallex: "pallex", "pall-ex": "pallex",
     posta: "posta", "posta-romana": "posta",
     innoship: "innoship",
+    packeta: "packeta",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -318,6 +328,11 @@ export async function bulkGenerateAwbs(
       : target === "pallex" ? row.pallex_awb_number
       : target === "posta" ? row.posta_awb_number
       : target === "innoship" ? row.innoship_awb_number
+      /* ⚠ Packeta n-are „awb_number", ci `packeta_packet_id`. Fara randul asta ar
+         fi cazut pe `dpd_shipment_id` — adica un lot Packeta ar fi sarit comenzile
+         care au AWB la DPD si ar fi reemis pe cele care au deja colet la Packeta.
+         La un furnizor fara anulare, al doilea colet nu se mai poate sterge. */
+      : target === "packeta" ? row.packeta_packet_id
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -510,6 +525,38 @@ async function createAwbForOrder(
         observatii: content.slice(0, 100),
       });
     }
+    case "packeta": {
+      /*
+       * ⚠ Adresa se compune EXACT ca in `PacketaAwbModal`: doua compuneri diferite
+       * ar insemna ca aceeasi comanda pleaca cu adrese diferite dupa cum a fost
+       * apasat butonul, iar la Packeta greseala nu se mai poate desface.
+       *
+       * ⚠ Destinatia (`addressId`) vine din alegerea cumparatorului. Cand comanda
+       * n-are una, lotul NU ghiceste un curier: actiunea refuza comanda cu un
+       * mesaj limpede. La un furnizor fara anulare, un colet trimis din presupunere
+       * ar fi cea mai scumpa greseala cu putinta.
+       */
+      const laPunct = (addr.courier ?? "").toLowerCase().trim() === "packeta"
+        && addr.delivery_type === "locker"
+        && !!addr.locker_id;
+      return createPacketaAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          strada: street,
+          numar: streetNo || null,
+          oras: (laPunct ? addr.locker_city : "") || city,
+          judet: ((laPunct ? addr.locker_county : "") || county) || null,
+          codPostal: ((laPunct ? addr.locker_post_code : "") || zip) || null,
+          telefon: o.customer_phone,
+          email,
+        },
+        greutateKg: weight,
+        valoare: Number(o.total) || 0,
+        ramburs: cod,
+        addressId: laPunct ? (addr.locker_id ?? "") : "",
+      });
+    }
+
     case "posta": {
       /*
        * ⚠ Adresa se compune EXACT ca in `PostaAwbModal`, ca lotul si emiterea pe

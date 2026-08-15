@@ -19,6 +19,8 @@ import { etichetaOferta as etichetaEcolet, ofertePosibile as oferteEcolet } from
 import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/cautare";
 import { puncteGls } from "@/lib/gls/puncte";
 import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
+import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
+import { puncteRomania } from "@/lib/packeta/puncte-flux";
 import { normalizeazaUnitati } from "@/lib/posta/unitati";
 import { coteaza as coteazaInnoship, innoshipGata, puncteFixe, type InnoshipConfig } from "@/lib/innoship/client";
 import { corpComanda as corpInnoship } from "@/lib/innoship/expediere";
@@ -158,6 +160,7 @@ const COURIER_LABELS: Record<string, string> = {
   /* Numele firmei, cu diacritice: e marca lor, nu un text de-al nostru. */
   posta: "Poșta Română",
   innoship: "Innoship",
+  packeta: "Packeta",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -180,7 +183,12 @@ const COURIER_LABELS: Record<string, string> = {
  * API-ul lor are SAPTE metode (borderou, AWB, detalii, trace, ultimul status, si
  * doua nomenclatoare) si NICIUNA nu coteaza. Tariful vine din contractul postal.
  */
-const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta"]);
+/*
+ * ⚠ Packeta e aici pentru ca API-ul lor nu are NICIO metoda de tarif: preturile
+ * vin din contract, la fel ca la Posta. Lista lor de 24 de metode e completa si
+ * n-are nimic de cotare.
+ */
+const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta", "packeta"]);
 
 /** Merchant's custom checkout label (shipping_zones[id].label) or the branded default. */
 function addrLabel(custom: string | undefined, fallback: string): string {
@@ -251,7 +259,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -893,6 +901,54 @@ export async function getShippingOptions(
           price: zone.price,
         });
       }
+    } else if (courierId === "packeta") {
+      /*
+       * ⚠ PACKETA NU COTEAZA, si nici n-ar avea cum.
+       *
+       * Lista lor de metode e completa (24) si n-are niciuna de tarif: preturile
+       * vin din contract. De aia ramura e SINCRONA, fara nimic in `promises`, si
+       * de aia `packeta` e in `FARA_API_DE_TARIF`.
+       *
+       * ⚠ Si nu face `return`: optiunile se impling doar in `options`, ca sa ajunga
+       * la semnarea unica de la sfarsitul functiei.
+       */
+      const packetaCfg = settings.packeta_config as PacketaConfig | null;
+
+      /*
+       * ⚠ LIVRAREA LA ADRESA se ofera doar daca exista macar un curier ALES de
+       * comerciant.
+       *
+       * La Packeta livrarea la adresa nu e un serviciu al ei, ci revanzarea unui
+       * curier local (in Romania: Cargus, FAN, DPD, Sameday), iar `addressId`
+       * trebuie sa fie id-ul ACELUI curier. Fara unul ales in panou n-am avea ce
+       * pune acolo, deci optiunea ar fi o promisiune pe care emiterea n-o poate
+       * tine.
+       */
+      if (packetaGata(packetaCfg) && (packetaCfg.curieri_permisi ?? []).length > 0) {
+        options.push({
+          courier: "packeta",
+          courierLabel: addrLabel(zone.label, "Livrare la adresa prin Packeta"),
+          deliveryType: "address",
+          price: zone.price,
+        });
+      }
+
+      /*
+       * ⚠ PUNCTELE sunt esenta serviciului Packeta, nu un caz marginal — de aia
+       * apare in `CURIERI_CU_LOCKERE`.
+       *
+       * Punctul ales ajunge in `shipping_address.locker_id` si de acolo direct in
+       * `addressId` la emitere: la Packeta un punct, un automat si un curier sunt
+       * toate id-uri din ACELASI spatiu.
+       */
+      if (packetaGata(packetaCfg) && (packetaCfg.foloseste_puncte !== false || packetaCfg.foloseste_automate !== false)) {
+        options.push({
+          courier: "packeta",
+          courierLabel: lockerLabel(zone.label, "Ridicare din punct Packeta"),
+          deliveryType: "locker",
+          price: zone.price,
+        });
+      }
     } else if (courierId === "innoship") {
       /*
        * ⚠ INNOSHIP E BROKER, SI COTEAZA CU ADEVARAT.
@@ -1313,7 +1369,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta"]);
 
 export async function getLockers(
   businessId: string,
@@ -1370,7 +1426,7 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config")
     .eq("business_id", businessId)
     .single();
 
@@ -1557,6 +1613,55 @@ export async function getLockers(
       return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] Posta unitati-livrare failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "packeta") {
+    /*
+     * ⚠ PUNCTELE PACKETA: doua fluxuri, MONDIALE, filtrate pe tara la noi.
+     *
+     * `branch.json` (magazine) si `box.json` (automate Z-BOX) nu au niciun
+     * parametru de tara — acopera toate tarile in care lucreaza Packeta. Filtrarea
+     * se face in `normalizeazaPuncte`, INAINTE ca lista sa ajunga in cache; fara
+     * ea un magazin romanesc ar tine in memorie punctele din toata Europa, iar
+     * cumparatorul ar putea alege un punct din Cehia.
+     *
+     * ⚠ `id` ramane SIR: merge direct in `addressId` la emitere, unde un punct, un
+     * automat si un curier sunt id-uri din ACELASI spatiu. Un `Number(...)` copiat
+     * mecanic de la ceilalti l-ar putea pierde.
+     *
+     * ⚠ Punctele care nu accepta ramburs se scot INAINTE de cache, ca la Cargus:
+     * steagul nu supravietuieste in `LockerItem`, deci o comanda cu ramburs si una
+     * fara nu pot imparti aceeasi lista. De aia `cod` e deja in cheia de cache.
+     */
+    const config = settings.packeta_config as PacketaConfig | null;
+    if (!packetaGata(config)) return [];
+    try {
+      const cuRamburs = !!codAmount && codAmount > 0;
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          (await puncteRomania(config))
+            .filter((p) => !(cuRamburs && !p.acceptaRamburs))
+            .map((p) => ({
+              id: p.id,
+              name: p.nume,
+              address: [p.strada, p.oras].filter(Boolean).join(", "),
+              city: p.oras,
+              /* ⚠ Fluxul nu da judetul. Gol, nu ghicit din oras: o potrivire
+                 gresita ar aseza punctul in alt judet pe eticheta. */
+              county: "",
+              postCode: p.codPostal,
+              lat: p.lat ?? 0,
+              lng: p.lng ?? 0,
+            })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
+    } catch (e) {
+      console.error("[shipping] Packeta pickup points failed:", (e as Error).message);
       return [];
     }
   }

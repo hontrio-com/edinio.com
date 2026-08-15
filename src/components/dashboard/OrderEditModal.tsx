@@ -347,6 +347,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
        are metoda de anulare. Din panou se poate doar scoate numarul de pe
        comanda, dupa ce omul a anulat trimiterea la oficiu sau in aplicatia lor. */
     if (order.posta_awb_number) list.push({ key: "posta", label: "Posta Romana", awb: order.posta_awb_number, manualOnly: true });
+    /* ⚠ `manualOnly` la Packeta nu e o alegere de comoditate: API-ul lor NU are
+       anulare, deci scoaterea de pe comanda e singurul lucru pe care il putem
+       face de aici — coletul se anuleaza de mana, din contul lor. */
+    if (order.packeta_packet_id) list.push({ key: "packeta", label: "Packeta", awb: order.packeta_packet_id, manualOnly: true });
     /* Innoship ARE anulare in API, spre deosebire de Posta: fara `manualOnly`. */
     if (order.innoship_awb_number) list.push({ key: "innoship", label: "Innoship", awb: order.innoship_awb_number });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });

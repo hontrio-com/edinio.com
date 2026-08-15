@@ -88,6 +88,10 @@
     {
       "path": "/api/cron/innoship-tracking",
       "schedule": "7 */6 * * *"
+    },
+    {
+      "path": "/api/cron/packeta-tracking",
+      "schedule": "41 */2 * * *"
     }
   ]
 }

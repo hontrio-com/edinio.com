@@ -45,7 +45,7 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -68,6 +68,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   glsEnabled?: boolean;
   pallexEnabled?: boolean;
   postaEnabled?: boolean;
+  packetaEnabled?: boolean;
   innoshipEnabled?: boolean;
   pallexZile?: { ridicare: number; livrare: number };
   ecoletEnabled?: boolean;
@@ -150,9 +151,10 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (glsEnabled) list.push({ key: "gls", label: "GLS" });
     if (pallexEnabled) list.push({ key: "pallex", label: "Pall-Ex" });
     if (postaEnabled) list.push({ key: "posta", label: "Poșta Română" });
+    if (packetaEnabled) list.push({ key: "packeta", label: "Packeta" });
     if (innoshipEnabled) list.push({ key: "innoship", label: "Innoship" });
     return list;
-  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled, postaEnabled, innoshipEnabled]);
+  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled, postaEnabled, packetaEnabled, innoshipEnabled]);
   const anyAwb = awbCouriers.length > 0;
 
   const pageOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);

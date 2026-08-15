@@ -90,6 +90,9 @@ export default async function OrdersPage({
   /* Aceeasi regula ca in `postaGata` si ca in pagina comenzii. */
   const po = settings?.posta_config as PostaConfig | null;
   const postaEnabled = !!(po?.enabled && po?.username && po?.cod_trimitere);
+  /* Aceeasi regula ca in `packetaGata`: parola API si eticheta de expeditor. */
+  const pk = settings?.packeta_config as { enabled?: boolean; api_password?: string; eshop?: string } | null;
+  const packetaEnabled = !!(pk?.enabled && pk?.api_password && pk?.eshop);
   const io = settings?.innoship_config as InnoshipConfig | null;
   const innoshipEnabled = !!(io?.enabled && io?.api_key && io?.external_client_location);
   const pallexZile = { ridicare: pe?.zile_pana_la_ridicare ?? 1, livrare: pe?.zile_pana_la_livrare ?? 2 };
@@ -100,7 +103,7 @@ export default async function OrdersPage({
 
   const integrari: Integrari = {
     smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled,
-    cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
+    cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
     fanPickup: { lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null },
   };
 
@@ -132,6 +135,7 @@ type Integrari = {
   glsEnabled: boolean;
   pallexEnabled: boolean;
   postaEnabled: boolean;
+  packetaEnabled: boolean;
   innoshipEnabled: boolean;
   pallexZile: { ridicare: number; livrare: number };
   ecoletEnabled: boolean;
@@ -249,6 +253,6 @@ async function ListaComenzi({
   const pendingCount = statusCounts.pending ?? 0;
 
   return (
-    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} packetaEnabled={integrari.packetaEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
   );
 }

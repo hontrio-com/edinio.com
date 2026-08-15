@@ -2033,6 +2033,15 @@ export type Database = {
           payment_method: string
           payment_status: string
           posta_awb_at: string | null
+          packeta_address_id: string | null
+          packeta_awb_at: string | null
+          packeta_barcode: string | null
+          packeta_courier_number: string | null
+          packeta_external_tracking: string | null
+          packeta_packet_id: string | null
+          packeta_pickup_point: string | null
+          packeta_status_checked_at: string | null
+          packeta_status_code: number | null
           posta_awb_number: string | null
           posta_borderou_id: number | null
           posta_oficiu_id: string | null
@@ -2150,6 +2159,15 @@ export type Database = {
           payment_method?: string
           payment_status?: string
           posta_awb_at?: string | null
+          packeta_address_id?: string | null
+          packeta_awb_at?: string | null
+          packeta_barcode?: string | null
+          packeta_courier_number?: string | null
+          packeta_external_tracking?: string | null
+          packeta_packet_id?: string | null
+          packeta_pickup_point?: string | null
+          packeta_status_checked_at?: string | null
+          packeta_status_code?: number | null
           posta_awb_number?: string | null
           posta_borderou_id?: number | null
           posta_oficiu_id?: string | null
@@ -2267,6 +2285,15 @@ export type Database = {
           payment_method?: string
           payment_status?: string
           posta_awb_at?: string | null
+          packeta_address_id?: string | null
+          packeta_awb_at?: string | null
+          packeta_barcode?: string | null
+          packeta_courier_number?: string | null
+          packeta_external_tracking?: string | null
+          packeta_packet_id?: string | null
+          packeta_pickup_point?: string | null
+          packeta_status_checked_at?: string | null
+          packeta_status_code?: number | null
           posta_awb_number?: string | null
           posta_borderou_id?: number | null
           posta_oficiu_id?: string | null
@@ -2993,6 +3020,7 @@ export type Database = {
           free_shipping_threshold: number | null
           gls_config: Json | null
           innoship_config: Json | null
+          packeta_config: Json | null
           google_analytics_config: Json
           google_merchant_config: Json
           id: string
@@ -3060,6 +3088,7 @@ export type Database = {
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null
+          packeta_config?: Json | null
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string
@@ -3127,6 +3156,7 @@ export type Database = {
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null
+          packeta_config?: Json | null
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string

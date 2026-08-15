@@ -58,6 +58,11 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   netopia_config: ["api_key", "pos_signature"],
   notice_config: ["api_token"],
   oblio_config: ["client_secret"],
+  /* Packeta: DOUA credentiale, si sunt lucruri diferite. `api_password` (32 hex)
+     e primul argument al fiecarei metode din API-ul XML; `api_key` (16
+     caractere) circula in CALEA adresei fluxurilor de puncte. Amandoua se
+     mascheaza: niciuna nu trebuie citita vreodata de om. */
+  packeta_config: ["api_password", "api_key"],
   /* Pall-Ex ClientPlus: autentificare HTTP Basic, deci parola pleaca la fiecare
      cerere. `username` NU e secret — e mailul cu care intra comerciantul in
      ClientPlus si trebuie sa se vada in formular, ca sa stie ce cont a legat. */

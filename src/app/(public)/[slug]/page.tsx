@@ -1,12 +1,12 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
-import { adresaPostalaJsonLd, contactJsonLd } from "@/lib/storefront/identitate-publica";
+import { graf, magazinJsonLd } from "@/lib/storefront/date-structurate";
 import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription } from "@/lib/seo";
+import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
@@ -92,7 +92,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const description = seo.description || deriveStoreDescription({ tagline: business.tagline, description: business.description, displayName });
   // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
   // also points its canonical at the store's own domain).
-  const radacina = business.custom_domain ? `https://${business.custom_domain}` : `https://www.edinio.com/${slug}`;
+  const radacina = storeBaseUrl({ slug, custom_domain: business.custom_domain });
   /*
    * Canonicalul urmeaza filtrele care CHIAR schimba continutul.
    *
@@ -544,7 +544,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       // Product structured data for the landing page. The product's canonical URL
       // is this homepage (the /product/<main> URL 301s here), so the JSON-LD points
       // at the homepage too — mirrors the shipping/delivery used on the product route.
-      const opsCanonical = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
+      const opsCanonical = storeBaseUrl(business);
       const opsShippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
       const opsDe = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
       const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 2, max: opsDe.max_days ?? 4 } : { min: null, max: null };
@@ -574,12 +574,28 @@ export default async function SlugPage({ params, searchParams }: Props) {
         hasStickyBottomBar: true,
         searchCategories: opsSearchCategories,
       });
+      /*
+       * ⚠ Si magazinul, nu doar produsul.
+       *
+       * Ramura asta emitea DOAR `Product`, deci magazinele cu un singur produs —
+       * singurele carora pagina principala le e chiar pagina de produs — erau
+       * singurele fara nicio identitate in datele structurate: fara nume de firma,
+       * fara adresa, fara telefon. Cele doua noduri stau in acelasi `@graph` si au
+       * `@id`-uri distincte, deci descriu doua lucruri, nu acelasi lucru de doua ori.
+       *
+       * NU se adauga `BreadcrumbList`: aici produsul CHIAR e radacina magazinului,
+       * deci cele doua trepte ar arata catre aceeasi adresa — firimitura pe care
+       * Search Console o raporteaza ca invalida.
+       */
+      const opsGraf = graf(magazinJsonLd(business, opsCanonical), opsJsonLd);
       return (
         <>
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: jsonLdSafe(opsJsonLd) }}
-          />
+          {opsGraf ? (
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{ __html: jsonLdSafe(opsGraf) }}
+            />
+          ) : null}
           <StorefrontThemeScope style={opsResolved.style}>
             <StorePageShell chrome={opsChrome} design={opsResolved.design} className="min-h-screen">
               <ProductPageSection
@@ -656,35 +672,37 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // duce la un catalog gol.
   const initialCategory = categorieAcasa || "toate";
 
-  const displayName = business.store_name ?? business.business_name;
-  const canonicalUrl = isCustomDomain ? `https://${business.custom_domain}` : `https://www.edinio.com/${business.slug}`;
-  const storeJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Store",
-    name: displayName,
-    url: canonicalUrl,
-    ...(business.description ? { description: business.description.slice(0, 500) } : {}),
-    ...(business.cover_url ? { image: business.cover_url } : {}),
-    ...(business.logo_url ? { logo: business.logo_url } : {}),
-    /*
-     * ⚠ Adresa vine din AMANDOUA familiile de coloane, nu doar din `store_city`.
-     *
-     * „Datele magazinului" (Setari > General) scrie in `address`/`city`/`county`,
-     * iar „Editeaza magazinul" in `store_*`. Blocul de aici se uita numai la
-     * `store_city`, deci un comerciant care completase integral primul ecran
-     * aparea in Google fara nicio adresa — si fara sa aiba cum sa-si dea seama de
-     * ce. Vezi `identitate-publica.ts`.
-     */
-    ...(adresaPostalaJsonLd(business) ? { address: adresaPostalaJsonLd(business) } : {}),
-    ...contactJsonLd(business),
-  };
+  /*
+   * ⚠ Canonicalul urmeaza MAGAZINUL, nu gazda pe care a venit cererea.
+   *
+   * `storeBaseUrl` e aceeasi functie pe care o folosesc `generateMetadata` de mai
+   * sus (prin expresia ei), pagina de catalog si paginile de politici. Calculat
+   * dupa `isCustomDomain`, `@id`-ul magazinului ar fi fost altul cand aceeasi
+   * vitrina se deschide pe edinio.com — se intampla la `?preview=1` si la
+   * domeniile pe care cronul le-a gasit moarte — deci pagina principala si
+   * paginile ei de categorie ar fi descris DOUA entitati in loc de una, iar
+   * `<link rel="canonical">` din `<head>` ar fi contrazis `url`-ul din `<script>`.
+   */
+  const canonicalUrl = storeBaseUrl(business);
+  /*
+   * Nodul de identitate al magazinului.
+   *
+   * Se construieste in `magazinJsonLd`, nu aici: aceleasi campuri le cere si
+   * ramura „un singur produs" de mai sus, iar a doua copie scrisa de mana ar fi
+   * divergent garantat — exact povestea celor doua familii de coloane de adresa
+   * din `identitate-publica.ts`. Acolo sta si de ce tipul e `Store` doar cand
+   * chiar exista o adresa, si `OnlineStore` altfel.
+   */
+  const storeJsonLd = graf(magazinJsonLd(business, canonicalUrl));
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLdSafe(storeJsonLd) }}
-      />
+      {storeJsonLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdSafe(storeJsonLd) }}
+        />
+      ) : null}
       <MiniStoreRenderer
         business={pentruBrowser(business)}
         products={products}

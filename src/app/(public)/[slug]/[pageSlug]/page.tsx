@@ -9,6 +9,12 @@ import { createClient } from "@/lib/supabase/server";
 import { Skeleton, SkeletonRanduri } from "@/components/ui/skeleton";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
+import { jsonLdSafe } from "@/lib/json-ld";
+import {
+  articolJsonLd, blogJsonLd, firimituriJsonLd, graf, intrebariJsonLd, paginaWebJsonLd,
+  type Editor, type TipPagina,
+} from "@/lib/storefront/date-structurate";
+import { autorPagina, dataPublicarii, imaginePagina, intrebariPagina, tipPagina } from "@/lib/pages/pagina-seo";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
@@ -67,6 +73,150 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       ...(ogImage ? { images: [ogImage] } : {}),
     },
   };
+}
+
+/** Randul minim al unei pagini-sora, pentru legaturile dintre blog si articole. */
+type PaginaSora = { slug: string; title: string; seo: unknown; created_at: string };
+
+const COLOANE_SORA = "slug, title, seo, created_at";
+
+/**
+ * Datele structurate ale unei pagini proprii.
+ *
+ * ═══ DE CE E O FUNCTIE SEPARATA ═══
+ *
+ * Aceeasi ruta serveste patru lucruri diferite — pagina de prezentare, articolul
+ * de blog, pagina care aduna articolele si vitrina unei familii de produse — iar
+ * pana acum le descria pe toate la fel: cu nimic. Un comerciant a reclamat exact
+ * asta: articolele lui erau indexate ca pagini oarecare, fara titlu de articol,
+ * fara imagine si fara data.
+ *
+ * Ce fel de pagina e se DECLARA din editor (`seo.tip`), nu se ghiceste din
+ * blocuri sau din slug — vezi `TipPaginaProprie`. Cine n-a declarat nimic
+ * primeste `WebPage` + firimituri, adica exact ce se poate afirma despre orice
+ * pagina: cum se numeste, unde sta si pe ce drum se ajunge la ea.
+ */
+async function dateStructuratePagina(
+  supabase: SupabaseClient<Database>,
+  business: { id: string; slug: string; custom_domain: string | null; business_name: string; store_name: string | null; logo_url: string | null },
+  page: { id: string; slug: string; title: string; seo: unknown; blocks: unknown; created_at: string; updated_at: string },
+  blocks: Block[],
+): Promise<string | null> {
+  const seo = (page.seo ?? {}) as PageSeo;
+  /*
+   * Pagina scoasa din Google n-are ce descrie. Sitemapul o sare deja
+   * (`sitemap.xml/route.ts`), deci regula exista — aici doar se oglindeste, ca
+   * `<head>` si `<script>` sa nu spuna lucruri diferite despre aceeasi adresa.
+   */
+  if (seo.noindex) return null;
+
+  const radacina = storeBaseUrl(business);
+  const url = `${radacina}/${page.slug}`;
+  const numeMagazin = business.store_name ?? business.business_name;
+  const editor: Editor = { nume: numeMagazin, url: radacina, logo: business.logo_url };
+  const titlu = (seo.title || page.title).trim();
+  const tip = tipPagina(seo);
+  const imagine = imaginePagina(seo, blocks);
+
+  const trepte = [{ nume: numeMagazin, url: radacina }];
+  let principal = null;
+
+  if (tip === "articol") {
+    /*
+     * Blogul din care face parte articolul: pagina-sora marcata drept lista.
+     *
+     * Se citeste din baza, nu dintr-un slug fixat („/blog"): comerciantul isi
+     * numeste pagina cum vrea — „ghiduri", „resurse", „noutati" — iar o
+     * conventie scrisa in cod ar fi mers doar la cei care au nimerit-o.
+     */
+    const { data: blogBrut } = await supabase
+      .from("custom_pages").select(COLOANE_SORA)
+      .eq("business_id", business.id).eq("is_published", true)
+      .eq("seo->>tip", "lista-articole")
+      .order("sort_order").limit(5);
+    // Un blog scos din Google nu poate fi parintele declarat al unui articol
+    // indexabil: adresa lui raspunde `noindex` si lipseste din sitemap, deci
+    // `isPartOf` si treapta de firimitura ar trimite catre o pagina despre care
+    // spunem singuri ca nu vrem sa fie gasita.
+    const blog = ((blogBrut ?? []) as unknown as PaginaSora[])
+      .find((b) => !((b.seo ?? {}) as PageSeo).noindex) ?? null;
+    if (blog) trepte.push({ nume: blog.title, url: `${radacina}/${blog.slug}` });
+    principal = articolJsonLd({
+      titlu,
+      url,
+      descriere: seo.description,
+      imagine,
+      dataPublicarii: dataPublicarii(seo, page.created_at),
+      dataModificarii: page.updated_at,
+      editor,
+      autor: autorPagina(seo),
+      blog: blog ? { nume: blog.title, url: `${radacina}/${blog.slug}` } : null,
+    });
+  } else if (tip === "lista-articole") {
+    const { data: articoleBrut } = await supabase
+      .from("custom_pages").select(COLOANE_SORA)
+      .eq("business_id", business.id).eq("is_published", true)
+      .eq("seo->>tip", "articol")
+      .order("created_at", { ascending: false }).limit(150);
+    /*
+     * ⚠ Articolul ascuns din motoarele de cautare NU se anunta pe pagina-parinte.
+     *
+     * Bifa „Ascunde din motoarele de cautare" si tipul „Articol de blog" sunt
+     * doua comutatoare independente in editor, deci pot fi amandoua aprinse.
+     * Adresa acelui articol raspunde `noindex, nofollow` si lipseste din sitemap
+     * — iar `blogPost` l-ar fi anuntat oricum, cu titlu, imagine si data. Al
+     * doilea semnal, care il contrazice pe primul, si singurul loc din care s-ar
+     * fi aflat ca pagina exista.
+     *
+     * Filtrul se face AICI, nu in interogare: `seo->>noindex` e NULL pe aproape
+     * toate randurile (cheia nici nu exista), iar in SQL `NULL = 'true'` nu e
+     * fals, e NULL — deci un `.not(...)` ar fi taiat tacut aproape toate
+     * articolele. De aia si limita a urcat la 150: taierea se face dupa.
+     */
+    const articole = ((articoleBrut ?? []) as unknown as PaginaSora[])
+      .filter((a) => !((a.seo ?? {}) as PageSeo).noindex);
+    principal = blogJsonLd({
+      nume: titlu,
+      url,
+      descriere: seo.description,
+      editor,
+      articole: articole.map((a) => {
+        const seoSora = (a.seo ?? {}) as PageSeo;
+        return {
+          titlu: (seoSora.title || a.title).trim(),
+          url: `${radacina}/${a.slug}`,
+          // Poza articolului din lista vine DOAR din campul declarat: blocurile
+          // surorilor nu sunt aduse (ar fi o interogare grea pe fiecare) si mai
+          // bine fara imagine decat cu una a altui articol.
+          imagine: seoSora.ogImage,
+          dataPublicarii: dataPublicarii(seoSora, a.created_at),
+        };
+      }),
+    });
+  } else {
+    const tipuri: Record<string, TipPagina> = { colectie: "CollectionPage", contact: "ContactPage" };
+    principal = paginaWebJsonLd({
+      tip: tipuri[tip] ?? "WebPage",
+      nume: titlu,
+      url,
+      descriere: seo.description,
+      imagine,
+      dataModificarii: page.updated_at,
+    });
+  }
+
+  trepte.push({ nume: page.title.trim(), url });
+
+  /*
+   * Intrebarile frecvente sunt un nod IN PLUS, nu tipul paginii.
+   *
+   * Blocul `faq` exista pe cinci pagini publicate si nu ajungea nicaieri: omul
+   * scrie intrebarile in editor, ele se afiseaza, si niciun crawler nu afla ca
+   * sunt intrebari. O pagina cu o sectiune de intrebari nu devine insa „pagina de
+   * intrebari" — de aia nodul sta langa cel principal, nu in locul lui.
+   */
+  const nod = graf(principal, firimituriJsonLd(trepte), intrebariJsonLd(intrebariPagina(blocks)));
+  return nod ? jsonLdSafe(nod) : null;
 }
 
 export default async function CustomPage({ params }: Props) {
@@ -136,6 +286,16 @@ export default async function CustomPage({ params }: Props) {
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   const blocks = prepareBlocksForPublic((page.blocks as unknown as Block[]) ?? []);
+  /*
+   * Datele structurate, dar NU pe ciorna.
+   *
+   * O pagina nepublicata se vede doar de proprietar, in previzualizare (bannerul
+   * de mai jos). Ce descrie ea nu exista public, deci n-are ce sa ajunga la un
+   * crawler care s-ar nimeri autentificat.
+   */
+  const dateStructurate = page.is_published
+    ? await dateStructuratePagina(supabase, business, page, blocks)
+    : null;
   const color = business.primary_color ?? "#1AB554";
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
@@ -185,6 +345,12 @@ export default async function CustomPage({ params }: Props) {
    */
   return (
     <StorefrontThemeScope style={resolved.style}>
+      {/* Deasupra tuturor blocurilor, deci in afara lui `<Suspense>`: nodul se
+          compune numai din randul paginii si din blocurile ei, fara nicio
+          interogare de produse, deci n-are de ce sa astepte. */}
+      {dateStructurate ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: dateStructurate }} />
+      ) : null}
       {pageCss ? <style dangerouslySetInnerHTML={{ __html: pageCss }} /> : null}
       <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
         {!page.is_published && isOwner && (

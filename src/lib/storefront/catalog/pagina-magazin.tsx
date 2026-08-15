@@ -24,7 +24,9 @@ import { resolveDesign } from "@/lib/storefront/design/parse";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { canonicalCatalog, citesteFiltreDinAdresa } from "@/lib/storefront/catalog/url";
-import { deriveStoreTitle, parseStoreSeo } from "@/lib/seo";
+import { parseStoreSeo, storeBaseUrl } from "@/lib/seo";
+// Ce declara pagina despre sine sta separat, intr-un modul pur si probat.
+import { construiesteDateCatalog, titluSiDescriere } from "@/lib/storefront/catalog/date-catalog";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { Json } from "@/types/database.types";
 
@@ -61,6 +63,7 @@ function potrivesteCategorie<T extends { name: string }>(lista: T[], segment: st
   return lista.find((c) => slugCategorie(c.name) === cautat) ?? null;
 }
 
+
 /** Numele de categorie care exista DOAR pe produse (importuri fara categorie in tabel). */
 async function numeCategoriiDinProduse(businessId: string): Promise<{ name: string }[]> {
   const randuri = await fetchAllRows("storefront.magazin.categoriiProduse", (from, to) =>
@@ -93,9 +96,9 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   const seo = parseStoreSeo(settings?.page_content ?? null);
   const displayName = business.store_name ?? business.business_name;
 
-  const radacina = business.custom_domain
-    ? `https://${business.custom_domain}`
-    : `https://www.edinio.com/${slug}`;
+  // Aceeasi formula ca peste tot in storefront, nu una scrisa a doua oara aici:
+  // pe domeniu propriu canonicalul e domeniul, altfel adresa de pe platforma.
+  const radacina = storeBaseUrl({ slug, custom_domain: business.custom_domain });
 
   /*
    * Categoria vine ori din cale, ori din `?cat=`.
@@ -158,14 +161,8 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   // Categoria nu mai are ce cauta in interogarea canonicalului: o poarta calea.
   const { url, indexabila } = canonicalCatalog(radacinaPagina, { ...sp, cat: undefined });
 
-  const title = categorie
-    ? `${categorie} | ${displayName}`
-    : `Toate produsele | ${displayName}`;
-  const description =
-    seo.description
-    || (categorie
-      ? `${categorie} de la ${displayName}. Filtreaza dupa pret, brand si atribute.`
-      : `Vezi toate produsele din ${deriveStoreTitle(displayName, business.store_city)}. Filtreaza dupa categorie, pret si atribute.`);
+  // Aceleasi doua siruri le foloseste si nodul `CollectionPage` din randare.
+  const { titlu: title, descriere: description } = titluSiDescriere(seo, categorie, displayName, business.store_city);
   const images = business.cover_url ? [business.cover_url] : [];
 
   return {
@@ -219,6 +216,9 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
+  // Citite o data, aici: le cer si felierea de pe server (`perPage`), si titlul
+  // catalogului din firimituri si din `CollectionPage`.
+  const setari = citesteSetariMagazin(resolved.design);
 
   /*
    * Magazinul cu un singur produs n-are catalog, prin definitie.
@@ -406,7 +406,6 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     // EXACT marimea pe care o calculeaza si renderer-ul (`PRODUCTS_PER_PAGE`).
     // Diferite, felierea de pe server si numarul de pagini din browser s-ar
     // contrazice: ultima pagina ar fi goala, sau ar lipsi produse de pe ea.
-    const setari = citesteSetariMagazin(resolved.design);
     const perPagina = setari.perPage;
 
     /*
@@ -631,7 +630,27 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    */
   const setariDeTrimis = storeSettings ? { ...storeSettings, storefront_design_draft: null } : null;
 
+  const dateStructurate = construiesteDateCatalog({
+    business,
+    seo: parseStoreSeo(storeSettings?.page_content ?? null),
+    setari,
+    sp,
+    // Filtrele PARSATE, nu `sp` brut: `citesteFiltreDinAdresa` a aruncat deja
+    // cheile care nu sunt fatete reale ale magazinului, deci `utm_source` si
+    // `gclid` — adica aterizarea din orice reclama — nu trec drept filtre.
+    filtre,
+    numeCategorie,
+    parinteCategorie: categorieDinCale?.numeParinte ?? null,
+    products,
+    reusitPeServer,
+    esteCiorna: isPreview || !business.is_published,
+  });
+
   return (
+    <>
+      {dateStructurate ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: dateStructurate }} />
+      ) : null}
     <MiniStoreRenderer
       surface="shop"
       business={pentruBrowser(business)}
@@ -678,5 +697,6 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
         : null}
       parinteCategorie={categorieDinCale?.numeParinte ?? null}
     />
+    </>
   );
 }

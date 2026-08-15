@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = {
   title: "Drepturile GDPR",
@@ -8,14 +10,32 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://www.edinio.com/gdpr" },
 };
 
+/*
+ * Data se scrie O SINGURA DATA si alimenteaza si textul de pe ecran, si
+ * `dateModified` din datele structurate. Tinute separat, cine actualizeaza
+ * politica ar schimba unul si ar lasa celalalt sa minta despre cat de recenta e.
+ */
+const ULTIMA_ACTUALIZARE = { iso: "2026-05-30", text: "30 mai 2026" };
+
+// Schema.org nu are tip pentru termeni sau politici de confidentialitate
+// (subtipurile de WebPage sunt AboutPage, ContactPage, CollectionPage, FAQPage,
+// ItemPage, ...). `WebPage` e raspunsul corect, si nu se inventeaza altul.
+const jsonLd = paginaSiteJsonLd({
+  cale: "gdpr",
+  nume: "Drepturile GDPR",
+  descriere: metadata.description as string,
+  actualizata: ULTIMA_ACTUALIZARE.iso,
+});
+
 export default function GDPRPage() {
   return (
     <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2">
         Drepturile dumneavoastră GDPR
       </h1>
       <p className="text-sm text-muted-foreground mb-4">
-        Ultima actualizare: 30 mai 2026
+        Ultima actualizare: {ULTIMA_ACTUALIZARE.text}
       </p>
       <p className="text-muted-foreground mb-12">
         Regulamentul General privind Protecția Datelor (Regulamentul (UE)

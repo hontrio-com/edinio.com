@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Target, Heart, Zap, Shield } from "lucide-react";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = {
   title: "Despre noi - platforma de creare magazin online",
@@ -44,9 +46,20 @@ const VALUES = [
   },
 ];
 
+// `AboutPage` + `about` catre nodul de organizatie: semnalul „pagina ASTA
+// descrie firma", care consolideaza entitatea de brand in cautare.
+const jsonLd = paginaSiteJsonLd({
+  cale: "despre",
+  nume: "Despre noi",
+  descriere: metadata.description as string,
+  tip: "AboutPage",
+  despreFirma: true,
+});
+
 export default function DesprePage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       {/* Hero */}
       <div className="pt-20 pb-12 bg-muted/30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">

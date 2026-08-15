@@ -60,6 +60,42 @@ async function ia(url: string): Promise<{ cod: number; text: string }> {
 
 const numara = (text: string, tipar: RegExp) => (text.match(tipar) ?? []).length;
 
+/**
+ * Toate nodurile de date structurate dintr-o pagina, cu `@graph` desfacut.
+ *
+ * ⚠ `@graph` NU e un amanunt de forma. O pagina poate purta mai multe noduri
+ * intr-un singur `<script>` — pagina, firimiturile, intrebarile — si atunci
+ * obiectul de la varf n-are deloc `@type`. Cine cauta `d["@type"] === "Store"`
+ * direct pe el nu gaseste nimic si raporteaza „lipseste", desi totul e la locul
+ * lui: o alarma falsa, adica exact felul de alarma pe care cineva o opreste.
+ *
+ * `[\s\S]` in loc de steagul `s`: tinta de compilare a proiectului nu-l accepta.
+ */
+function noduriJsonLd(text: string): Record<string, unknown>[] {
+  const blocuri = text.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) ?? [];
+  const out: Record<string, unknown>[] = [];
+  for (const b of blocuri) {
+    const brut = b.replace(/^[^>]*>/, "").replace(/<\/script>$/, "");
+    let parsat: unknown;
+    try { parsat = JSON.parse(brut); } catch { continue; }
+    if (!parsat || typeof parsat !== "object") continue;
+    const nod = parsat as Record<string, unknown>;
+    if (Array.isArray(nod["@graph"])) {
+      for (const n of nod["@graph"] as unknown[]) {
+        if (n && typeof n === "object") out.push(n as Record<string, unknown>);
+      }
+    } else {
+      out.push(nod);
+    }
+  }
+  return out;
+}
+
+/** Pagina poarta macar un nod de unul dintre tipurile cerute? */
+function areTip(noduri: Record<string, unknown>[], ...tipuri: string[]): boolean {
+  return noduri.some((n) => typeof n["@type"] === "string" && tipuri.includes(n["@type"] as string));
+}
+
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -430,12 +466,7 @@ export async function GET(req: NextRequest) {
         const { cod, text } = await ia(`${baza}/product/${p.slug}`);
         if (cod !== 200) return `pagina produsului ${p.slug} raspunde cu ${cod}`;
 
-        /* `[\s\S]` in loc de steagul `s`: tinta de compilare a proiectului nu-l accepta. */
-        const blocuri = text.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) ?? [];
-        const dateStructurate = blocuri
-          .map((b) => b.replace(/^[^>]*>/, "").replace(/<\/script>$/, ""))
-          .map((b) => { try { return JSON.parse(b) as Record<string, unknown>; } catch { return null; } })
-          .filter((d): d is Record<string, unknown> => !!d);
+        const dateStructurate = noduriJsonLd(text);
         const produs = dateStructurate.find((d) => d["@type"] === "Product" || d["@type"] === "ProductGroup");
         if (!produs) return `pagina ${p.slug} n-are bloc JSON-LD de tip Product`;
 
@@ -710,12 +741,14 @@ export async function GET(req: NextRequest) {
         const { cod, text } = await ia(`${PLATFORM_ORIGIN}/${candidat.slug}`);
         if (cod !== 200) return `magazinul ${candidat.slug} raspunde cu ${cod}`;
 
-        /* `[\s\S]` in loc de steagul `s`: tinta de compilare a proiectului nu-l accepta. */
-        const blocuri = text.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g) ?? [];
-        const store = blocuri
-          .map((b) => b.replace(/^[^>]*>/, "").replace(/<\/script>$/, ""))
-          .map((b) => { try { return JSON.parse(b) as Record<string, unknown>; } catch { return null; } })
-          .find((d) => d && d["@type"] === "Store");
+        /*
+         * `Store` SAU `OnlineStore`: tipul se alege dupa adresa. Candidatul de mai
+         * sus are adresa completata, deci va fi `Store` — dar proba nu are de ce
+         * sa depinda de asta, iar un magazin fara vitrina fizica e `OnlineStore`
+         * si e la fel de corect. Vezi `magazinJsonLd`.
+         */
+        const store = noduriJsonLd(text)
+          .find((d) => d["@type"] === "Store" || d["@type"] === "OnlineStore");
         if (!store) return `magazinul ${candidat.slug} n-are bloc JSON-LD de tip Store`;
 
         const lipsa: string[] = [];
@@ -732,6 +765,93 @@ export async function GET(req: NextRequest) {
         return lipsa.length
           ? `magazinul ${candidat.slug} are datele completate in panou, dar in JSON-LD lipsesc: ${lipsa.join(", ")}`
           : null;
+      },
+    },
+    {
+      nume: "fiecare fel de pagina publica poarta date structurate",
+      ruleaza: async () => {
+        /*
+         * ⚠ PROBA PENTRU O CLASA INTREAGA, nu pentru o pagina anume.
+         *
+         * Pana la 15.08.2026, JSON-LD se emitea in TREI fisiere din toata
+         * aplicatia. Paginile de categorie, catalogul, paginile proprii ale
+         * comerciantilor (deci si blogurile si articolele lor) si paginile de
+         * politici raspundeau 200 cu ZERO date structurate — desi toate au titlu
+         * propriu, canonical propriu si intrare in sitemap, adica sunt trimise
+         * ANUME la indexat. Nimeni n-a observat luni de zile; a raportat-o un
+         * comerciant care s-a uitat in sursa paginii.
+         *
+         * Exact semnatura celor patru defecte pentru care exista santinela:
+         * pagina exista, arata bine, raspunde 200, si ii lipseste tocmai partea
+         * pe care n-o vede nimeni.
+         *
+         * ═══ ADRESELE SE IAU DIN SITEMAP, NU SE SCRIU IN COD ═══
+         *
+         * Sitemapul magazinului listeaza exact adresele pe care le declaram
+         * indexabile — si le filtreaza deja pe cele `noindex`. Deci ce apare
+         * acolo TREBUIE sa poarte date structurate, iar proba nu se poate lega de
+         * un slug care maine se schimba. Ce nu apare, nu se verifica: un magazin
+         * fara pagini proprii nu e un defect.
+         */
+        if (!baza) return "niciun magazin de proba";
+        const { cod, text } = await ia(`${baza}/sitemap.xml`);
+        if (cod !== 200) return `sitemapul magazinului raspunde cu ${cod}`;
+        const locuri = [...text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+
+        const cale = (u: string) => u.slice(baza.length);
+        const categorie = locuri.find((u) => /\/magazin\/[^/]+$/.test(cale(u)));
+        const catalog = locuri.find((u) => cale(u) === "/magazin");
+        const politica = locuri.find((u) => cale(u).startsWith("/politici/"));
+
+        /*
+         * Pagina proprie: se cauta in TOATA platforma, nu doar la magazinul de
+         * proba — acela poate sa n-aiba niciuna, iar tocmai paginile proprii sunt
+         * ce a reclamat comerciantul. Se prefera una marcata drept articol, ca sa
+         * fie verificata si calea `BlogPosting`.
+         */
+        const { data: paginiProprii } = await admin
+          .from("custom_pages")
+          .select("slug, seo, businesses!inner(slug, is_published)")
+          .eq("is_published", true)
+          .eq("businesses.is_published", true)
+          .limit(200);
+        type RandPagina = { slug: string; seo: { tip?: string; noindex?: boolean } | null; businesses: { slug: string } };
+        const candidate = ((paginiProprii ?? []) as unknown as RandPagina[]).filter((p) => p.seo?.noindex !== true);
+        const paginaProprie = candidate.find((p) => p.seo?.tip === "articol")
+          ?? candidate.find((p) => p.seo?.tip === "lista-articole")
+          ?? candidate[0];
+
+        const deVerificat: { eticheta: string; url: string; tipuri: string[]; cuFirimituri: boolean }[] = [];
+        if (catalog) deVerificat.push({ eticheta: "catalog", url: catalog, tipuri: ["CollectionPage"], cuFirimituri: true });
+        if (categorie) deVerificat.push({ eticheta: "categorie", url: categorie, tipuri: ["CollectionPage"], cuFirimituri: true });
+        if (politica) deVerificat.push({ eticheta: "politica", url: politica, tipuri: ["WebPage"], cuFirimituri: true });
+        if (paginaProprie) {
+          deVerificat.push({
+            eticheta: `pagina proprie (${paginaProprie.seo?.tip ?? "pagina"})`,
+            url: `${PLATFORM_ORIGIN}/${paginaProprie.businesses.slug}/${paginaProprie.slug}`,
+            // Tipul depinde de ce a declarat comerciantul din editor; oricare
+            // dintre ele inseamna „pagina se descrie". Absenta tuturor inseamna
+            // ca emiterea s-a rupt.
+            tipuri: ["WebPage", "CollectionPage", "ContactPage", "Blog", "BlogPosting"],
+            cuFirimituri: true,
+          });
+        }
+        if (deVerificat.length === 0) return "sitemapul n-a dat nicio adresa de verificat";
+
+        const cazute: string[] = [];
+        for (const v of deVerificat) {
+          const r = await ia(v.url);
+          if (r.cod !== 200) { cazute.push(`${v.eticheta}: ${v.url} raspunde cu ${r.cod}`); continue; }
+          const noduri = noduriJsonLd(r.text);
+          if (noduri.length === 0) { cazute.push(`${v.eticheta}: ${v.url} n-are NICIUN bloc JSON-LD`); continue; }
+          if (!areTip(noduri, ...v.tipuri)) {
+            cazute.push(`${v.eticheta}: ${v.url} n-are niciun nod ${v.tipuri.join("/")} (are: ${noduri.map((n) => n["@type"]).join(", ")})`);
+          }
+          if (v.cuFirimituri && !areTip(noduri, "BreadcrumbList")) {
+            cazute.push(`${v.eticheta}: ${v.url} n-are BreadcrumbList`);
+          }
+        }
+        return cazute.length ? cazute.join(" | ") : null;
       },
     },
   ];

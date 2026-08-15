@@ -4,6 +4,8 @@ import { FAQSection } from "@/components/website/FAQSection";
 import { PlatformEvent } from "@/components/platform/PlatformEvent";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = {
   title: "Preturi creare magazin online - de la 99 lei/luna",
@@ -20,9 +22,23 @@ export const metadata: Metadata = {
   },
 };
 
+/*
+ * Doar `WebPage` + firimituri, fara oferte.
+ *
+ * Ofertele cu abonament stau pe nodul `SoftwareApplication` de pe pagina
+ * principala, si acolo raman: doua adrese care declara amandoua acelasi produs
+ * cu aceleasi preturi ar fi doua entitati care se bat pe acelasi lucru.
+ */
+const jsonLd = paginaSiteJsonLd({
+  cale: "preturi",
+  nume: "Preturi",
+  descriere: metadata.description as string,
+});
+
 export default function PreturiPage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <PlatformEvent event="ViewContent" data={{ content_name: "Preturi", content_category: "pricing" }} />
       {/* Hero */}
       <div className="pt-20 pb-8 bg-muted/30">

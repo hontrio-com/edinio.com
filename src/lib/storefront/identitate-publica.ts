@@ -39,6 +39,9 @@ export type IdentitateBusiness = {
   store_county?: string | null;
   email?: string | null;
   phone?: string | null;
+  /** `businesses.social` — vezi `StoreSocial`. Vine ca `Json`, deci netipat aici. */
+  social?: unknown;
+  website?: string | null;
 };
 
 /** Primul text nevid, dupa `trim`. */
@@ -110,4 +113,32 @@ export function contactJsonLd(b: IdentitateBusiness): Record<string, string> {
     ...(telefon ? { telephone: telefon } : {}),
     ...(email ? { email } : {}),
   };
+}
+
+/** Cheile din `businesses.social` care sunt profiluri publice, in ordinea din editor. */
+const RETELE = ["facebook", "instagram", "tiktok", "youtube", "website"] as const;
+
+/**
+ * `sameAs`: profilurile publice ale magazinului, pentru panoul de cunostinte.
+ *
+ * ⚠ Se pastreaza DOAR adresele absolute `http(s)`. Campurile astea sunt text
+ * liber intr-un formular: unii comercianti scriu „facebook.com/magazinulmeu",
+ * altii doar numele de utilizator. O valoare care nu e URL absolut e in cel mai
+ * bun caz ignorata de crawler si in cel mai rau interpretata ca adresa relativa
+ * la domeniul magazinului — adica o legatura catre o pagina care nu exista.
+ *
+ * `social.website` si `businesses.website` sunt de multe ori acelasi link, deci
+ * lista trece printr-un `Set`: `sameAs` cu aceeasi adresa de doua ori nu e
+ * invalid, dar e semnul ca nimeni nu s-a uitat.
+ */
+export function sameAsJsonLd(b: IdentitateBusiness): string[] {
+  const social = (b.social ?? {}) as Record<string, unknown>;
+  const brute = [
+    ...RETELE.map((k) => social[k]),
+    b.website,
+  ];
+  const curate = brute
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((v) => /^https?:\/\//i.test(v));
+  return [...new Set(curate)];
 }

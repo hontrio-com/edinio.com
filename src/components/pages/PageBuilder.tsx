@@ -20,8 +20,8 @@ import { SeoImageField } from "@/components/dashboard/SeoImageField";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import {
-  createBlock, BLOCK_META, BLOCK_PALETTE_ORDER,
-  type Block, type BlockType, type ColumnsBlock, type PageSeo,
+  createBlock, BLOCK_META, BLOCK_PALETTE_ORDER, TIPURI_PAGINA_PROPRIE,
+  type Block, type BlockType, type ColumnsBlock, type PageSeo, type TipPaginaProprie,
 } from "@/lib/pages/blocks.types";
 import {
   findBlock, updateBlockInTree, removeBlockFromTree, moveBlockInTree,
@@ -425,6 +425,9 @@ function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSe
   title: string; slug: string; seo: PageSeo; css: string; publicBase: string;
   onTitle: (v: string) => void; onSlug: (v: string) => void; onSeo: (v: PageSeo) => void; onCss: (v: string) => void;
 }) {
+  // `initialSeo` e un cast brut peste o coloana `Json`: o valoare veche sau
+  // necunoscuta la `tip` trebuie sa cada pe implicit, nu sa lase selectul gol.
+  const tipPaginaSelectat = TIPURI_PAGINA_PROPRIE.some((t) => t.valoare === seo.tip) ? seo.tip! : "pagina";
   return (
     <div className="space-y-5">
       <div>
@@ -438,6 +441,44 @@ function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSe
       </div>
       <div className="pt-2 border-t border-border">
         <p className="text-xs font-semibold text-foreground mb-2">SEO</p>
+
+        {/*
+          CE ESTE pagina — se declara, nu se ghiceste.
+          Din alegerea asta ies datele structurate ale paginii publice: un articol
+          primeste titlu de articol, imagine si data publicarii; o pagina de blog
+          isi listeaza automat articolele. Implicitul ramane „Pagina obisnuita",
+          deci nicio pagina existenta nu-si schimba intelesul de la sine.
+        */}
+        <div className="mb-3">
+          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Ce este aceasta pagina?</label>
+          <select
+            value={tipPaginaSelectat}
+            onChange={(e) => onSeo({ ...seo, tip: e.target.value as TipPaginaProprie })}
+            className={inputCls}
+          >
+            {TIPURI_PAGINA_PROPRIE.map((t) => (
+              <option key={t.valoare} value={t.valoare}>{t.eticheta}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {TIPURI_PAGINA_PROPRIE.find((t) => t.valoare === tipPaginaSelectat)?.ajutor}
+          </p>
+        </div>
+
+        {tipPaginaSelectat === "articol" && (
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Autor (optional)</label>
+              <input value={seo.autor ?? ""} onChange={(e) => onSeo({ ...seo, autor: e.target.value })} placeholder="Numele magazinului" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Data publicarii (optional)</label>
+              {/* Gol = data la care s-a creat pagina. Campul e pentru articolele
+                  aduse de pe un site vechi, care au o data reala, alta. */}
+              <input type="date" value={seo.dataPublicarii ?? ""} onChange={(e) => onSeo({ ...seo, dataPublicarii: e.target.value })} className={inputCls} />
+            </div>
+          </div>
+        )}
 
         <div className="mb-3">
           <GooglePreview

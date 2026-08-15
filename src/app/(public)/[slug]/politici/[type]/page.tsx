@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
 import { politicaIndexabila } from "@/lib/storefront/policy-index";
 import { adresaPublica } from "@/lib/storefront/identitate-publica";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { firimituriJsonLd, graf, paginaWebJsonLd, referintaMagazin } from "@/lib/storefront/date-structurate";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -137,6 +139,35 @@ export default async function PolicyPage({ params }: Props) {
   const color = business.primary_color ?? "#1AB554";
   const showContent = enabled && content.trim() !== "";
 
+  /*
+   * Datele structurate ale paginii de politica.
+   *
+   * Doua trepte de firimituri si un `WebPage`, atat: o politica de retur nu are
+   * entitate proprie de descris, dar are un loc in magazin si un nume — si pana
+   * acum nu le declara nicaieri, desi paginile astea SUNT indexabile anume
+   * (Merchant Center le cere ca sa valideze contul) si sunt in sitemap.
+   *
+   * ⚠ Se cheama ACEEASI functie ca `generateMetadata` (`politicaIndexabila`).
+   * Scrisa a doua oara, prima nepotrivire ar fi fost o pagina care se declara
+   * `noindex` in `<head>` si se descrie ca pagina indexabila in `<script>` —
+   * exact semnalul contradictoriu pe care Search Console il raporteaza ca eroare.
+   * Pagina care arata „nu e disponibila" nu descrie nimic, deci nici ea nu emite.
+   */
+  const urlPolitica = `${storeBaseUrl(business)}/politici/${type}`;
+  const numeMagazin = business.store_name ?? business.business_name;
+  const indexabila = politicaIndexabila(storeSettings?.page_content ?? null, storeSettings?.store_policies ?? null, type);
+  const magazinRef = referintaMagazin(business, storeBaseUrl(business));
+  const dateStructurate = indexabila && showContent
+    ? graf(
+        paginaWebJsonLd({ nume: meta.label, url: urlPolitica, parteDin: magazinRef }),
+        magazinRef,
+        firimituriJsonLd([
+          { nume: numeMagazin, url: storeBaseUrl(business) },
+          { nume: meta.label, url: urlPolitica },
+        ]),
+      )
+    : null;
+
   // Detect custom domain access
   const headersList = await headers();
   const host = (headersList.get("host") ?? "").split(":")[0];
@@ -176,6 +207,9 @@ export default async function PolicyPage({ params }: Props) {
 
   return (
     <StorefrontThemeScope style={resolved.style}>
+      {dateStructurate ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(dateStructurate) }} />
+      ) : null}
       <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
         <main className="max-w-3xl w-full mx-auto px-4 py-10 flex-1">
           <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">{meta.label}</h1>

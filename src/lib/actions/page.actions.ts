@@ -13,6 +13,7 @@ import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
 import { validatePageSlug } from "@/lib/pages/reserved-slugs";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
+import { curataSeoPagina } from "@/lib/pages/pagina-seo";
 import type { MenuItem } from "@/lib/pages/menu";
 import { sendPageFormEmail } from "@/lib/email";
 import type { Database } from "@/types/database.types";
@@ -172,7 +173,15 @@ export async function updatePage(
     update.blocks = gated;
   }
   if (patch.page_css !== undefined) update.page_css = patch.page_css;
-  if (patch.seo !== undefined) update.seo = patch.seo;
+  /*
+   * `seo` trece prin lista alba INAINTE de coloana, nu doar la citire.
+   *
+   * Coloana e `Json`, deci accepta orice; iar de acolo, campurile ajung in
+   * `<script type="application/ld+json">` pe pagina publica. Curatat doar la
+   * citire, gunoiul ar fi ramas in baza si ar fi calatorit mai departe la
+   * fiecare duplicare. Vezi `curataSeoPagina`.
+   */
+  if (patch.seo !== undefined) update.seo = curataSeoPagina(patch.seo) as never;
   if (patch.is_published !== undefined) update.is_published = patch.is_published;
 
   const { error } = await supabase.from("custom_pages").update(update as never).eq("id", pageId);
@@ -239,7 +248,16 @@ export async function duplicatePage(pageId: string): Promise<{ error: string } |
       slug,
       blocks: src.blocks as never,
       page_css: src.page_css,
-      seo: src.seo as never,
+      /*
+       * ⚠ Data publicarii NU se copiaza.
+       *
+       * Randul nou primeste `created_at`-ul lui, deci o copie care mosteneste
+       * `dataPublicarii` ar purta doua date care se contrazic — si tocmai cea
+       * declarata bate, adica articolul nou ar aparea in Google cu data
+       * articolului din care a fost copiat. Restul campurilor SEO se pastreaza:
+       * o copie porneste de la aceleasi setari, asta e rostul ei.
+       */
+      seo: curataSeoPagina({ ...((src.seo ?? {}) as PageSeo), dataPublicarii: undefined }) as never,
       is_published: false,
     })
     .select("id")

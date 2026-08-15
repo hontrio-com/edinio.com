@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Mail, MapPin, Clock } from "lucide-react";
 import { ContactForm } from "@/components/website/ContactForm";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = {
   title: "Contact - suport creare magazin online",
@@ -35,9 +37,27 @@ const CONTACT_INFO = [
   },
 ];
 
+/*
+ * ⚠ Adresa NU se emite de aici.
+ *
+ * Pagina scrie „Bucuresti, Romania", iar /termeni si subsolul scriu sediul social
+ * „Str. Progresului, Nr. 2, Matasari, Jud. Gorj". Un `PostalAddress` construit
+ * din primul ar publica structurat o localitate care contrazice actele. Adresa
+ * sta o singura data, pe nodul de organizatie din layout, luata din documentele
+ * juridice; aici pagina doar arata catre el.
+ */
+const jsonLd = paginaSiteJsonLd({
+  cale: "contact",
+  nume: "Contact",
+  descriere: metadata.description as string,
+  tip: "ContactPage",
+  despreFirma: true,
+});
+
 export default function ContactPage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       {/* Hero */}
       <div className="pt-20 pb-12 bg-muted/30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">

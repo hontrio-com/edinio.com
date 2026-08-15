@@ -10,6 +10,12 @@ import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
 import { PlatformEvent } from "@/components/platform/PlatformEvent";
 import { jsonLdSafe } from "@/lib/json-ld";
+import { PLATFORM_ORIGIN } from "@/lib/seo";
+import { ID_ORGANIZATIE, ID_SITE } from "@/lib/website-jsonld";
+import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
+
+/** Planurile care se pot cumpara. `free`/`trial` e perioada de testare, nu o oferta. */
+const PLANURI_PUBLICE = ["basic", "premium", "ultra"] as const;
 
 export const metadata: Metadata = {
   title: "Creare magazin online rapid",
@@ -20,43 +26,28 @@ export const metadata: Metadata = {
   },
 };
 
+/*
+ * ⚠ `Organization` si `WebSite` NU mai sunt aici.
+ *
+ * S-au mutat in `(website)/layout.tsx`, ca sa existe pe TOATE cele opt pagini de
+ * prezentare, nu doar pe radacina: paginile secundare se refereau la ele prin
+ * `@id`, iar un crawler care citeste /despre separat n-avea de unde sa le ia.
+ * Vezi `lib/website-jsonld.ts`.
+ */
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
-      "@type": "Organization",
-      "@id": "https://www.edinio.com/#organization",
-      name: "Edinio",
-      url: "https://www.edinio.com",
-      logo: {
-        "@type": "ImageObject",
-        url: "https://www.edinio.com/logo.png",
-      },
-      contactPoint: {
-        "@type": "ContactPoint",
-        email: "contact@edinio.com",
-        contactType: "customer service",
-        availableLanguage: "Romanian",
-      },
-      sameAs: [],
-    },
-    {
-      "@type": "WebSite",
-      "@id": "https://www.edinio.com/#website",
-      url: "https://www.edinio.com",
-      name: "Edinio",
-      publisher: { "@id": "https://www.edinio.com/#organization" },
-      inLanguage: "ro-RO",
-    },
-    {
       "@type": "WebPage",
-      "@id": "https://www.edinio.com/#webpage",
-      url: "https://www.edinio.com",
-      name: "Creare magazin online in cateva minute | Edinio",
-      isPartOf: { "@id": "https://www.edinio.com/#website" },
-      about: { "@id": "https://www.edinio.com/#organization" },
-      description:
-        "Creeaza un magazin online profesional la cheie, fara cunostinte tehnice. Plati online, integrari curierat, facturi si AWB-uri automate.",
+      "@id": `${PLATFORM_ORIGIN}/#webpage`,
+      url: PLATFORM_ORIGIN,
+      // Numele si descrierea vin din `metadata` de mai sus, nu scrise a doua
+      // oara: erau amandoua altele decat titlul si descrierea reale ale paginii,
+      // adica doua raspunsuri la aceeasi intrebare despre aceeasi adresa.
+      name: `${metadata.title as string} | Edinio`,
+      isPartOf: { "@id": ID_SITE },
+      about: { "@id": ID_ORGANIZATIE },
+      description: metadata.description as string,
       inLanguage: "ro-RO",
     },
     {
@@ -64,16 +55,38 @@ const jsonLd = {
       name: "Edinio",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
-      url: "https://www.edinio.com",
+      url: PLATFORM_ORIGIN,
       description:
         "Platforma de creare magazin online pentru afaceri locale din Romania. Fara cunostinte tehnice, cu integrari complete pentru curierat, plati si facturare.",
-      offers: {
-        "@type": "AggregateOffer",
-        lowPrice: "0",
-        highPrice: "499",
+      /*
+       * ⚠ PRET FARA PERIOADA = PRET FALS.
+       *
+       * Aici sta pana acum un `AggregateOffer` cu `lowPrice: "0"` si
+       * `highPrice: "499"`, fara nicio urma de recurenta. Citit literal — si un
+       * crawler nu citeste altfel — „499 RON" era pretul de CUMPARARE al
+       * platformei, nu abonamentul lunar. Iar `offerCount: 4` numara si perioada
+       * de testare drept oferta.
+       *
+       * `UnitPriceSpecification` cu `billingDuration: 1` si `unitCode: "MON"`
+       * spune exact ce spune si pagina: atat pe luna. Preturile vin din
+       * `PLAN_PRICES`, singura sursa de adevar din aplicatie; scrise inca o data
+       * aici, s-ar fi desincronizat la prima schimbare de tarif.
+       */
+      offers: PLANURI_PUBLICE.map((plan) => ({
+        "@type": "Offer",
+        name: PLAN_LABELS[plan],
         priceCurrency: "RON",
-        offerCount: "4",
-      },
+        price: PLAN_PRICES[plan],
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: PLAN_PRICES[plan],
+          priceCurrency: "RON",
+          billingDuration: 1,
+          billingIncrement: 1,
+          unitCode: "MON",
+        },
+        url: `${PLATFORM_ORIGIN}/preturi`,
+      })),
       featureList: [
         "Creare magazin online",
         "Integrari curierat (FAN Courier, Sameday, Cargus, DPD, GLS, Pall-Ex, eColet)",

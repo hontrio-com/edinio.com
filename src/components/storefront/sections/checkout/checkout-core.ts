@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition, useRef } from "react";
 import { computeVat, vatBase, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getAttribution } from "@/lib/storefront/attribution";
+import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
@@ -365,6 +366,18 @@ export function useCheckoutOrder({
       if (!form.county) e.county = "Selectati judetul";
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
+    /*
+     * ⚠ In Bucuresti se cere SECTORUL, nu doar un text de doua litere.
+     *
+     * Fara regula asta, o adresa salvata mai demult („Bucuresti") ar trece:
+     * selectorul de sector s-ar randa gol, dar `form.city` ar pastra vechea
+     * valoare, iar omul ar comanda cu ea. Exact valoarea pe care Sameday n-o
+     * recunoaste — si care facea sa cada noua din zece cotatii bucurestene.
+     */
+    else if (!isIntl && normalizeCountyName(form.county || "").toLowerCase() === "bucuresti"
+             && sectorBucuresti(form.city) === null) {
+      e.city = "Alegeti sectorul";
+    }
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
     // Campurile de firma stau in formular imediat dupa adresa, deci si erorile
     // lor intra aici: `Object.keys` pastreaza ordinea, iar dupa prima cheie se

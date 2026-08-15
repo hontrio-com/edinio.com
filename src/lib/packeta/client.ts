@@ -1,4 +1,5 @@
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { cerereXml, citesteXml, copii, gaseste, text, type ElementXml, type NodXml } from "./xml";
 
 /**
@@ -423,6 +424,32 @@ export type FelFlux = "branch" | "box" | "carrier";
  * ⚠ ADRESA NU SE LOGHEAZA NICIODATA: contine `api_key` in cale. Toate mesajele de
  * mai jos numesc fluxul, nu adresa.
  */
+/*
+ * Fluxurile se tin putin in memorie, pe cheie + fel + limba.
+ *
+ * ⚠ Nu e o optimizare de dragul vitezei: `carrier.json` se citea LA FIECARE
+ * emitere, ca sa se afle daca respectivul curier livreaza la adresa, cere
+ * numarul casei separat sau cere dimensiuni. Pe un lot de treizeci de comenzi
+ * asta insemna treizeci de descarcari ale ACELUIASI fisier mondial, fiecare cu
+ * propriul rond de retea — chiar in bucata de cod care are un `maxDuration` de
+ * respectat.
+ *
+ * TTL scurt (5 minute): listele lor se schimba rar, dar un curier nou-adaugat
+ * in cont trebuie sa apara fara sa astepte omul o ora.
+ *
+ * ⚠ SE TINE DOAR `carrier` — dinadins. `branch` si `box` sunt fluxuri MONDIALE,
+ * cu zeci de mii de puncte: tinute brut, ar incarca memoria functiei cu ordine
+ * de marime mai mult decat merita. Si ar fi si degeaba — punctele romanesti,
+ * deja normalizate, stau in `CACHE_LOCKERE` din `shipping.actions.ts`.
+ * `carrier.json` e in schimb o lista scurta, ceruta la FIECARE emitere.
+ *
+ * ⚠ Cheia de cache incepe cu `api_key`, deci doua magazine nu-si pot vedea
+ * fluxurile unul altuia. Ea NU se logheaza niciodata — vezi nota din capul
+ * fisierului.
+ */
+const CACHE_FLUXURI = new CacheScurt<unknown>(5 * 60_000, 8);
+const FLUXURI_IN_CACHE = new Set<FelFlux>(["carrier"]);
+
 export async function flux(cfg: ConfigPacketa, fel: FelFlux, limba = "ro"): Promise<unknown> {
   const cheie = (cfg.api_key ?? "").trim();
   if (!cheie) throw eroareRefuz("Lipseste cheia API Packeta (api_key) din configurare.");
@@ -430,6 +457,14 @@ export async function flux(cfg: ConfigPacketa, fel: FelFlux, limba = "ro"): Prom
   if (!/^[A-Za-z0-9_-]+$/.test(cheie)) throw eroareRefuz("Cheia API Packeta are caractere nepermise.");
   const lg = /^[a-z]{2}$/.test(limba) ? limba : "ro";
 
+  if (!FLUXURI_IN_CACHE.has(fel)) return aduFlux(cheie, fel, lg);
+
+  /* ⚠ Nu se pune in cache un raspuns care a ARUNCAT: `iaSau` cheama functia si
+     lasa exceptia sa treaca, deci un flux cazut se reincearca data viitoare. */
+  return CACHE_FLUXURI.iaSau(`${cheie}:${fel}:${lg}`, () => aduFlux(cheie, fel, lg));
+}
+
+async function aduFlux(cheie: string, fel: FelFlux, lg: string): Promise<unknown> {
   const ctrl = new AbortController();
   const timp = setTimeout(() => ctrl.abort(), ASTEPTARE_FLUX_MS);
   let r: Response;

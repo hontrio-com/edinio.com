@@ -1,5 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { potrivesteJudet } from "@/lib/ro/judete";
+import { normalizeLocalityName } from "@/lib/utils/ro-address";
 import type { AdresaInnoship, CorpComanda, InnoshipConfig } from "./client";
 import { SERVICIU } from "./client";
 
@@ -156,7 +157,9 @@ export function adresaInnoship(a: AdresaComanda, fel: FelLivrare, fixedLocationI
   }
 
   iesire.country = (curata(a.tara) || "RO").toUpperCase().slice(0, 2);
-  iesire.localityName = curata(a.oras);
+  /* ⚠ Bucurestiul se plieaza: checkout-ul cere acum SECTORUL, iar aici e nevoie de
+   „Bucuresti". Sectorul nu se pierde — ramane in adresa. Vezi `ro-address.ts`. */
+  iesire.localityName = normalizeLocalityName(curata(a.oras), a.judet ?? undefined);
   /*
    * ⚠ Regula lor: „either LocalityName + CountyName or LocalityName + PostalCode".
    * Se trimit amandoua cand le avem — nu se alege una, fiindca judetul dezambiguizeaza

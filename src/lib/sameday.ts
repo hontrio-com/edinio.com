@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { normalizeCountyName, localitateSameday } from "@/lib/utils/ro-address";
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const PROD_URL = "https://api.sameday.ro";
@@ -273,8 +274,21 @@ export async function createSamedayAwb(
     `awbRecipient[name]=${enc(input.recipientName)}`,
     `awbRecipient[phoneNumber]=${enc(normalizePhone(input.recipientPhone))}`,
     `awbRecipient[personType]=0`,
-    `awbRecipient[countyString]=${enc(input.recipientCounty)}`,
-    `awbRecipient[cityString]=${enc(input.recipientCity)}`,
+    /*
+     * ⚠ Judetul si orasul se NORMALIZEAZA, nu se trimit cum le-a scris omul.
+     *
+     * Sameday valideaza ambele campuri si respinge tot AWB-ul daca nu recunoaste
+     * unul. Selectorul nostru ofera „Municipiul Bucuresti", pe care ei nu-l stiu,
+     * iar la oras primeam „Bucuresti", „București", „Sec 5" — din zece comenzi
+     * bucurestene ADEVARATE, una singura era scrisa „Sector 1", singura forma
+     * pe care o accepta.
+     *
+     * ⚠ `localitateSameday`, nu `normalizeLocalityName`: pentru Sameday
+     * sectoarele SUNT orase, deci plierea lor in „Bucuresti" ar strica exact
+     * ce reparam aici.
+     */
+    `awbRecipient[countyString]=${enc(normalizeCountyName(input.recipientCounty))}`,
+    `awbRecipient[cityString]=${enc(localitateSameday(input.recipientCity, input.recipientCounty))}`,
     `awbRecipient[address]=${enc(input.recipientAddress)}`,
   ];
 
@@ -355,8 +369,11 @@ export async function estimateSamedayCost(
     `awbRecipient[name]=${enc("Estimare")}`,
     `awbRecipient[phoneNumber]=${enc("0700000000")}`,
     `awbRecipient[personType]=0`,
-    `awbRecipient[countyString]=${enc(input.recipientCounty)}`,
-    `awbRecipient[cityString]=${enc(input.recipientCity)}`,
+    /* ⚠ Aceeasi normalizare ca la emitere — vezi nota din `createSamedayAwb`.
+     * Daca cele doua s-ar despartii, pretul aratat la checkout ar fi calculat
+     * pentru alta localitate decat cea de pe colet. */
+    `awbRecipient[countyString]=${enc(normalizeCountyName(input.recipientCounty))}`,
+    `awbRecipient[cityString]=${enc(localitateSameday(input.recipientCity, input.recipientCounty))}`,
     `awbRecipient[address]=${enc(input.recipientAddress ?? "Strada 1")}`,
   ];
 

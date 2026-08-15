@@ -1,4 +1,5 @@
 import { codAutoAlJudetului } from "@/lib/ro/judete";
+import { normalizeLocalityName } from "@/lib/utils/ro-address";
 import { normalizePhone } from "@/lib/utils/phone";
 import type { PaletPallEx, PartidaPallEx, ServiciiPallEx, TipPartida } from "./client";
 
@@ -172,7 +173,9 @@ export function partidaPallEx(d: DatePartida): PartidaPallEx {
 
     consignee_name: curata(d.destinatar.companie || d.destinatar.nume),
     consignee_county: codAutoAlJudetului(d.destinatar.judet) ?? "",
-    consignee_locality: curata(d.destinatar.oras),
+    /* ⚠ Bucurestiul se plieaza: checkout-ul cere acum sectorul, iar paletul il
+       ridica un transportator romanesc, pentru care Bucurestiul e o localitate. */
+    consignee_locality: normalizeLocalityName(curata(d.destinatar.oras), d.destinatar.judet ?? undefined),
     consignee_address: strada(d.destinatar),
     consignee_postcode: curata(d.destinatar.codPostal),
 

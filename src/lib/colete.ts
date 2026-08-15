@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { normalizeLocalityName } from "@/lib/utils/ro-address";
 import { eroareCuStatus, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const CO_AUTH = "https://auth.colete-online.ro/token";
@@ -212,7 +213,9 @@ function buildOrderBody(
       },
       address: {
         countryCode: "RO",
-        city: receiver.city,
+        /* ⚠ Bucurestiul se plieaza la „Bucuresti”: checkout-ul cere acum sectorul.
+           Vezi nota din `ro-address.ts`. */
+        city: normalizeLocalityName(receiver.city, receiver.county),
         county: receiver.county,
         postalCode: receiver.postal_code,
         street: receiver.street,

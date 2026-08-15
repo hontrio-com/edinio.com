@@ -21,6 +21,7 @@ import { puncteGls } from "@/lib/gls/puncte";
 import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
 import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
 import { puncteRomania } from "@/lib/packeta/puncte-flux";
+import { puncteBune } from "@/lib/packeta/puncte";
 import { normalizeazaUnitati } from "@/lib/posta/unitati";
 import { coteaza as coteazaInnoship, innoshipGata, puncteFixe, type InnoshipConfig } from "@/lib/innoship/client";
 import { corpComanda as corpInnoship } from "@/lib/innoship/expediere";
@@ -1638,12 +1639,26 @@ export async function getLockers(
     const config = settings.packeta_config as PacketaConfig | null;
     if (!packetaGata(config)) return [];
     try {
-      const cuRamburs = !!codAmount && codAmount > 0;
+      /*
+       * ⚠ Se filtreaza DUPA RAMBURS, nu si dupa greutate — desi `puncteBune`
+       * stie s-o faca si punctele isi declara `maxKg`.
+       *
+       * Motivul e cache-ul. `cod` are doua valori (da/nu), deci incape in cheie.
+       * Greutatea e continua: pusa in cheie, aproape fiecare comanda si-ar avea
+       * propria intrare, cache-ul s-ar goli de rost si le-am descarca fluxul
+       * mondial la fiecare cumparator. Iar filtrata DUPA cache n-ar avea din ce:
+       * `maxKg` nu supravietuieste in `LockerItem`.
+       *
+       * Ce se pierde: cineva poate alege un punct prea mic pentru coletul lui.
+       * Ce prinde asta: `packetAttributesValid()` la emitere, care raspunde
+       * INAINTE sa se creeze ceva si spune chiar numele campului gresit. La un
+       * furnizor fara anulare, garda aia e oricum obligatorie — aici doar nu o
+       * dublam cu un pret pe care il platesc toti cumparatorii.
+       */
       const toate = await CACHE_LOCKERE.iaSau(
         cheieCache,
         async () =>
-          (await puncteRomania(config))
-            .filter((p) => !(cuRamburs && !p.acceptaRamburs))
+          puncteBune(await puncteRomania(config), 0, codAmount ?? 0)
             .map((p) => ({
               id: p.id,
               name: p.nume,

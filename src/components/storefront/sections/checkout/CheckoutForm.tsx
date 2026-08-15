@@ -12,6 +12,7 @@ import { CourierSelector } from "@/components/ministore/CourierSelector";
 import { CompanyFields } from "@/components/ministore/CompanyFields";
 import { OrderBump } from "@/components/ministore/OrderBump";
 import { JUDETE } from "@/lib/ro/judete";
+import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import type { CheckoutEngine } from "./checkout-core";
 import type { CheckoutPreview } from "./checkout-preview";
 import { CheckoutCartLines, CheckoutTotals } from "./CheckoutSummary";
@@ -110,6 +111,39 @@ export function CheckoutForm({
   // (miniatura din catalogul de design-uri), iar id-urile trebuie sa ramana unice.
   const uid = useId();
 
+  /*
+   * In Bucuresti, campul „Oras" devine un selector de sector — vezi nota lunga
+   * de la campul respectiv.
+   *
+   * ⚠ `sectorAles` se DERIVA din `form.city`, nu se tine separat. Daca s-ar tine
+   * separat, o adresa salvata cu „Bucuresti" ar arata selectorul gol in timp ce
+   * `form.city` pastreaza vechea valoare: omul ar vedea „Alege sectorul", ar
+   * apasa comanda, validarea ar trece (campul nu e gol) si am trimite mai
+   * departe exact valoarea stricata pe care o reparam.
+   */
+  const inBucuresti = normalizeCountyName(form.county || "").toLowerCase() === "bucuresti";
+  const sectorAles = (() => {
+    const n = sectorBucuresti(form.city);
+    return n ? `Sector ${n}` : "";
+  })();
+  /*
+   * Ramasitele se sterg la SCHIMBAREA judetului, nu la randare: un `setForm` in
+   * corpul componentei ar fi efect in timpul randarii.
+   */
+  const schimbaJudetul = (judet: string) => {
+    const spreBucuresti = normalizeCountyName(judet).toLowerCase() === "bucuresti";
+    setForm((f) => {
+      const pastreaza = spreBucuresti
+        ? sectorBucuresti(f.city) !== null      // „bucuresti sector 3" ramane Sector 3
+        : sectorBucuresti(f.city) === null;     // un sector n-are ce cauta in Cluj
+      return {
+        ...f,
+        county: judet,
+        city: pastreaza ? (spreBucuresti ? `Sector ${sectorBucuresti(f.city)}` : f.city) : "",
+      };
+    });
+  };
+
   return (
         <form onSubmit={preview ? (e) => e.preventDefault() : handleSubmit} className="px-5 pt-4 pb-6 space-y-4">
           {/* Pe pagina, rezumatul comenzii si totalurile stau in coloana din
@@ -184,7 +218,7 @@ export function CheckoutForm({
             <div>
               <label htmlFor={`${uid}-county`} className="block text-sm font-semibold text-foreground mb-1">Judet <span className="text-red-500">*</span></label>
               <FieldWrap icon={MapPin} error={!!errors.county}>
-                <select id={`${uid}-county`} name="county" autoComplete="address-level1" aria-label="Judet" aria-invalid={errors.county ? true : undefined} aria-describedby={errors.county ? `${uid}-county-err` : undefined} value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))} className={`${fieldCls} bg-surface`}>
+                <select id={`${uid}-county`} name="county" autoComplete="address-level1" aria-label="Judet" aria-invalid={errors.county ? true : undefined} aria-describedby={errors.county ? `${uid}-county-err` : undefined} value={form.county} onChange={e => schimbaJudetul(e.target.value)} className={`${fieldCls} bg-surface`}>
                   <option value="">Selecteaza judetul</option>
                   {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
                 </select>
@@ -193,9 +227,31 @@ export function CheckoutForm({
             </div>
           )}
           <div>
-            <label htmlFor={`${uid}-city`} className="block text-sm font-semibold text-foreground mb-1">Oras <span className="text-red-500">*</span></label>
+            <label htmlFor={`${uid}-city`} className="block text-sm font-semibold text-foreground mb-1">
+              {inBucuresti ? "Sector" : "Oras"} <span className="text-red-500">*</span>
+            </label>
             <FieldWrap icon={MapPin} error={!!errors.city}>
-              <input id={`${uid}-city`} name="city" autoComplete="address-level2" aria-invalid={errors.city ? true : undefined} aria-describedby={errors.city ? `${uid}-city-err` : undefined} value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Oras / Localitate" className={fieldCls} />
+              {/*
+                * ⚠ In Bucuresti orasul se ALEGE, nu se scrie.
+                *
+                * Din zece comenzi bucurestene adevarate, oamenii scrisesera
+                * „Bucuresti", „București", „bucuresti sector 3", „Sec 5" — si o
+                * singura data „Sector 1". Sameday cere exact ultima forma
+                * (sectoarele sunt orase la ei), deci noua din zece cotatii
+                * cadeau, iar checkout-ul arata tacit pretul din zona in locul
+                * tarifului real.
+                *
+                * Ceilalti curieri nu sufera: la ei „Sector N" se pliaza inapoi
+                * in „Bucuresti" prin `normalizeLocalityName`.
+                */}
+              {inBucuresti ? (
+                <select id={`${uid}-city`} name="city" autoComplete="address-level2" aria-label="Sector" aria-invalid={errors.city ? true : undefined} aria-describedby={errors.city ? `${uid}-city-err` : undefined} value={sectorAles} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} className={`${fieldCls} bg-surface`}>
+                  <option value="">Alege sectorul</option>
+                  {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={`Sector ${n}`}>{`Sector ${n}`}</option>)}
+                </select>
+              ) : (
+                <input id={`${uid}-city`} name="city" autoComplete="address-level2" aria-invalid={errors.city ? true : undefined} aria-describedby={errors.city ? `${uid}-city-err` : undefined} value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Oras / Localitate" className={fieldCls} />
+              )}
             </FieldWrap>
             {errors.city && <p id={`${uid}-city-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.city}</p>}
           </div>

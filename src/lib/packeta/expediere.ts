@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { normalizeLocalityName } from "@/lib/utils/ro-address";
 import type { NodXml } from "./xml";
 
 /**
@@ -326,7 +327,15 @@ export function construiesteAtribute(d: DateExpediere): NodXml {
     const { street, houseNumber } = despartuStrada(dest.strada, dest.numar);
     atribute.street = street;
     atribute.houseNumber = houseNumber || undefined;
-    atribute.city = taie(dest.oras, LIMITE.city);
+    /*
+     * ⚠ Se plieaza la „Bucuresti”, spre deosebire de propriile puncte.
+     *
+     * La adresa, Packeta nu livreaza cu masinile ei: revinde Cargus, FAN, DPD
+     * si Sameday, iar eticheta o citeste un curier ROMANESC, pentru care
+     * Bucurestiul e o singura localitate. Sectorul nu se pierde: ramane in
+     * strada, unde il si cauta factorul.
+     */
+    atribute.city = taie(normalizeLocalityName(dest.oras ?? "", dest.judet ?? undefined), LIMITE.city);
     atribute.zip = curata(dest.codPostal);
     atribute.province = taie(dest.judet, LIMITE.province) || undefined;
   }

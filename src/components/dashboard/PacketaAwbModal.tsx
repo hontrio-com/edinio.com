@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Loader2, MapPin, Package, Printer, Truck, X } from "lucide-react";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import {
-  createPacketaAwbAction, dezleagaPacketaAction, getPacketaLabelAction, getPacketaTrackingAction,
+  createPacketaAwbAction, dezleagaPacketaAction, getPacketaCurieriAction, getPacketaLabelAction,
+  getPacketaTrackingAction,
   type StareAfisata,
 } from "@/lib/actions/packeta.actions";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
@@ -80,6 +81,34 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [addressId, setAddressId] = useState(
     comanda.packeta_address_id ?? (laPunct ? addr.locker_id ?? "" : ""),
   );
+
+  /*
+   * ⚠ LA ADRESA, DESTINATIA SE ALEGE DINTR-O LISTA, NU SE TASTEAZA.
+   *
+   * `addressId` e id-ul unui curier local (Cargus, FAN, DPD, Sameday revanduti
+   * de Packeta), iar id-urile alea nu sunt nicaieri in documentatie si difera
+   * de la un cont la altul — se citesc din `carrier.json`, cu cheia reala.
+   * Lasat camp liber, comerciantul n-avea de unde sa stie ce sa scrie, iar un
+   * id gresit trimite coletul in ALTA TARA fara nicio eroare (tara decurge din
+   * `addressId`). La un furnizor fara anulare, aia nu se mai repara.
+   *
+   * La punct nu se incarca nimic: destinatia e deja aleasa de cumparator.
+   */
+  const [curieri, setCurieri] = useState<{ id: string; nume: string }[]>([]);
+  const [curieriEsec, setCurieriEsec] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (laPunct || packetId) return;
+    let viu = true;
+    getPacketaCurieriAction(businessId)
+      .then((r) => {
+        if (!viu) return;
+        if ("error" in r) setCurieriEsec(r.error);
+        else setCurieri(r.curieri.map((c) => ({ id: c.id, nume: c.nume })));
+      })
+      .catch((e) => { if (viu) setCurieriEsec(e instanceof Error ? e.message : "Nu am putut citi curierii."); });
+    return () => { viu = false; };
+  }, [businessId, laPunct, packetId]);
 
   const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({
     open: true, hasAwb: !!packetId, businessId, orderId: order.id,
@@ -242,16 +271,37 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <label className="mb-1 block text-xs font-medium text-foreground">
                 Destinatia (addressId)
               </label>
-              <input
-                value={addressId}
-                onChange={(e) => setAddressId(e.target.value)}
-                placeholder="Id punct Packeta sau id curier"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
-              />
+              {!laPunct && curieri.length > 0 ? (
+                <select
+                  value={addressId}
+                  onChange={(e) => setAddressId(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="">Alege curierul de livrare la adresa</option>
+                  {curieri.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nume}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={addressId}
+                  onChange={(e) => setAddressId(e.target.value)}
+                  placeholder="Id punct Packeta sau id curier"
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                />
+              )}
               <p className="mt-1 text-[11px] text-muted-foreground">
                 La Packeta punctul, automatul si curierul sunt id-uri din acelasi spatiu. Cand
                 clientul a ales un punct in checkout, se completeaza singur.
               </p>
+              {/* ⚠ Daca lista n-a putut fi citita, campul ramane liber si se SPUNE de ce —
+                  altfel comerciantul ar crede ca nu are niciun curier. */}
+              {curieriEsec && (
+                <p className="mt-1 text-[11px] text-amber-600">
+                  Nu am putut citi lista de curieri ({curieriEsec}). Scrie id-ul de mana sau
+                  incearca din nou din Setari &rarr; Packeta.
+                </p>
+              )}
             </div>
 
             <div>

@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { normalizeLocalityName } from "@/lib/utils/ro-address";
 import type { AdresaGls, ColetGls, ServiciuGls } from "./client";
 
 /**
@@ -200,7 +201,9 @@ export function adresaGls(a: AdresaComanda): AdresaGls {
   const adr: AdresaGls = {
     Name: taie(a.companie || a.nume, MAX.nume),
     Street: taie(strada, MAX.strada),
-    City: taie(a.oras, MAX.oras),
+    /* ⚠ Bucurestiul se plieaza: checkout-ul cere acum SECTORUL, iar aici e nevoie de
+    „Bucuresti". Sectorul nu se pierde — ramane in adresa. Vezi `ro-address.ts`. */
+    City: taie(normalizeLocalityName(a.oras, a.judet ?? undefined), MAX.oras),
     ZipCode: taie(a.codPostal ?? "", MAX.codPostal),
     CountryIsoCode: (a.tara || "RO").toUpperCase().slice(0, 2),
     ContactName: taie(a.nume, MAX.contact),

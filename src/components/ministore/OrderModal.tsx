@@ -23,6 +23,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { CompanyFields, useCompanyBilling } from "./CompanyFields";
 import { JUDETE } from "@/lib/ro/judete";
+import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
@@ -173,6 +174,26 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [quantity, setQuantity] = useState(1);
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  /*
+   * Bucurestiul se alege pe sectoare — vezi nota lunga din `CheckoutForm.tsx`.
+   * ⚠ `sectorAles` se DERIVA din `form.city`: tinut separat, o valoare veche ar
+   * ramane in stare in timp ce selectorul arata gol, si ar pleca pe comanda.
+   */
+  const inBucuresti = normalizeCountyName(form.county || "").toLowerCase() === "bucuresti";
+  const sectorAles = (() => {
+    const n = sectorBucuresti(form.city);
+    return n ? `Sector ${n}` : "";
+  })();
+  const schimbaJudetul = (judet: string) => {
+    const spreBucuresti = normalizeCountyName(judet).toLowerCase() === "bucuresti";
+    setForm((f) => {
+      const n = sectorBucuresti(f.city);
+      const pastreaza = spreBucuresti ? n !== null : n === null;
+      return { ...f, county: judet, city: pastreaza ? (spreBucuresti ? `Sector ${n}` : f.city) : "" };
+    });
+  };
+
   const [isPending, startTransition] = useTransition();
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
@@ -591,6 +612,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       if (!form.county) e.county = "Selectati judetul";
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
+    /* ⚠ Aceeasi regula ca in checkout-ul de pagina (`checkout-core.ts`). Cele
+       doua formulare sunt scrise separat, deci o regula pusa intr-unul singur
+       lasa cealalta jumatate din comenzi cu orasul stricat. */
+    else if (!isIntl && normalizeCountyName(form.county || "").toLowerCase() === "bucuresti"
+             && sectorBucuresti(form.city) === null) {
+      e.city = "Alegeti sectorul";
+    }
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
     Object.assign(e, companyBilling.validateCompany());
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
@@ -1183,7 +1211,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     Judet <span className="text-red-500">*</span>
                   </label>
                   <IconInput icon={MapPin} error={!!errors.county}>
-                    <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))}
+                    <select value={form.county} onChange={e => schimbaJudetul(e.target.value)}
                       className={`${inputCls} bg-surface`}>
                       <option value="">Selecteaza judetul</option>
                       {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
@@ -1195,11 +1223,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">
-                  Oras <span className="text-red-500">*</span>
+                  {inBucuresti ? "Sector" : "Oras"} <span className="text-red-500">*</span>
                 </label>
                 <IconInput icon={MapPin} error={!!errors.city}>
-                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                    placeholder="Oras / Localitate" className={inputCls} />
+                  {/* ⚠ In Bucuresti se ALEGE sectorul — vezi nota lunga din
+                      `CheckoutForm.tsx`. Sameday nu stie orasul „Bucuresti". */}
+                  {inBucuresti ? (
+                    <select value={sectorAles} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                      className={`${inputCls} bg-surface`}>
+                      <option value="">Alege sectorul</option>
+                      {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={`Sector ${n}`}>{`Sector ${n}`}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                      placeholder="Oras / Localitate" className={inputCls} />
+                  )}
                 </IconInput>
                 {errors.city && <p className="text-xs text-red-500 mt-0.5">{errors.city}</p>}
               </div>

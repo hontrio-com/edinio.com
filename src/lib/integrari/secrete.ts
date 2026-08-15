@@ -76,6 +76,13 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   revolut_config: ["secret_key", "signing_secret", "token"],
   sameday_config: ["password"],
   smartbill_config: ["token"],
+  /* SmartShip: o singura credentiala, trimisa ca `X-API-KEY` la fiecare cerere.
+     ⚠ `iban` NU intra aici, desi arata a date bancare: e IBAN-ul PROPRIU al
+     comerciantului, pe care SmartShip vireaza rambursul, si el trebuie sa-l poata
+     RECITI ca sa verifice ca banii ajung unde trebuie. Mascat, ar deveni imposibil
+     de verificat — acelasi caz cu `posta_config.cod_trimitere`. Nici expeditorul
+     nu e secret: e adresa lui de ridicare, si trebuie sa se vada in formular. */
+  smartship_config: ["api_key"],
   smso_config: ["api_key"],
   woot_config: ["public_key", "secret_key"],
 };

@@ -2059,6 +2059,18 @@ export type Database = {
           smartbill_invoice_url: string | null
           smartbill_storno_number: string | null
           smartbill_storno_series: string | null
+          smartship_awb_at: string | null
+          smartship_awb_number: string | null
+          smartship_cost: number | null
+          smartship_courier_id: number | null
+          smartship_courier_name: string | null
+          smartship_offer_ref: string | null
+          smartship_offer_status: string | null
+          smartship_own_contract: boolean | null
+          smartship_pickup_code: string | null
+          smartship_status_checked_at: string | null
+          smartship_status_code: number | null
+          smartship_tracking_url: string | null
           status: string
           stoc_eliberat_la: string | null
           stoc_marketplace_la: string | null
@@ -2185,6 +2197,18 @@ export type Database = {
           smartbill_invoice_url?: string | null
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
+          smartship_awb_at?: string | null
+          smartship_awb_number?: string | null
+          smartship_cost?: number | null
+          smartship_courier_id?: number | null
+          smartship_courier_name?: string | null
+          smartship_offer_ref?: string | null
+          smartship_offer_status?: string | null
+          smartship_own_contract?: boolean | null
+          smartship_pickup_code?: string | null
+          smartship_status_checked_at?: string | null
+          smartship_status_code?: number | null
+          smartship_tracking_url?: string | null
           status?: string
           stoc_eliberat_la?: string | null
           stoc_marketplace_la?: string | null
@@ -2311,6 +2335,18 @@ export type Database = {
           smartbill_invoice_url?: string | null
           smartbill_storno_number?: string | null
           smartbill_storno_series?: string | null
+          smartship_awb_at?: string | null
+          smartship_awb_number?: string | null
+          smartship_cost?: number | null
+          smartship_courier_id?: number | null
+          smartship_courier_name?: string | null
+          smartship_offer_ref?: string | null
+          smartship_offer_status?: string | null
+          smartship_own_contract?: boolean | null
+          smartship_pickup_code?: string | null
+          smartship_status_checked_at?: string | null
+          smartship_status_code?: number | null
+          smartship_tracking_url?: string | null
           status?: string
           stoc_eliberat_la?: string | null
           stoc_marketplace_la?: string | null
@@ -3052,6 +3088,7 @@ export type Database = {
           show_vat_breakdown: boolean
           show_vat_label: boolean
           smartbill_config: Json | null
+          smartship_config: Json | null
           smso_config: Json | null
           store_policies: Json
           storefront_design: Json
@@ -3120,6 +3157,7 @@ export type Database = {
           show_vat_breakdown?: boolean
           show_vat_label?: boolean
           smartbill_config?: Json | null
+          smartship_config?: Json | null
           smso_config?: Json | null
           store_policies?: Json
           storefront_design?: Json
@@ -3188,6 +3226,7 @@ export type Database = {
           show_vat_breakdown?: boolean
           show_vat_label?: boolean
           smartbill_config?: Json | null
+          smartship_config?: Json | null
           smso_config?: Json | null
           store_policies?: Json
           storefront_design?: Json

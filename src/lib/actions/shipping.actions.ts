@@ -27,6 +27,11 @@ import { coteaza as coteazaInnoship, innoshipGata, puncteFixe, type InnoshipConf
 import { corpComanda as corpInnoship } from "@/lib/innoship/expediere";
 import { etichetaOferta as etichetaInnoship, ofertePosibile as oferteInnoship, termenLivrare as termenInnoship } from "@/lib/innoship/preturi";
 import { normalizeazaPuncte } from "@/lib/innoship/puncte";
+import { coteaza as coteazaSmartship, lockereEasybox, lockereFanbox, smartshipGata, type SmartshipConfig } from "@/lib/smartship/client";
+import { corpCotare as corpSmartship, lipsuriConfigurare as lipsuriConfigurareSmartship, lipsuriExpediere as lipsuriSmartship } from "@/lib/smartship/expediere";
+import { rezolvaLocalitatea as rezolvaLocalitateSmartship } from "@/lib/smartship/geo";
+import { normalizeazaLockere } from "@/lib/smartship/lockere";
+import { etichetaOferta as etichetaSmartship, ofertePosibile as oferteSmartship, termenLivrare as termenSmartship } from "@/lib/smartship/preturi";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
@@ -108,6 +113,25 @@ export type ShippingOption = {
   innoshipOptionId?: string;
   innoshipCourierName?: string;
   innoshipServiceName?: string;
+  /*
+   * ⚠ La SmartShip cheia unei oferte are DOUA parti, si a doua nu e evidenta.
+   *
+   * Cu `show_byoc: 1` acelasi curier apare de DOUA ori — o data pe contractul
+   * comerciantului, o data pe cel SmartShip, la preturi diferite. Pastrat doar
+   * `courierId`, cele doua s-ar prabusi una peste alta si cumparatorul ar alege
+   * una si ar primi alta. Vezi `lib/smartship/preturi.ts`.
+   */
+  smartshipCourierId?: number;
+  smartshipCourierName?: string;
+  smartshipOwnContract?: boolean;
+  /**
+   * ⚠ Care retea de lockere: easybox (Sameday) sau FANbox (FAN Courier).
+   *
+   * Sunt nomenclatoare DIFERITE, cu id-uri din spatii diferite, si se emit cu
+   * curieri diferiti. Amestecate intr-o singura lista, un id de FANbox trimis ca
+   * easybox ar cadea cu 806 sau — mai rau — ar nimeri alt locker.
+   */
+  smartshipLockerNet?: "easybox" | "fanbox";
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
@@ -162,6 +186,7 @@ const COURIER_LABELS: Record<string, string> = {
   posta: "Poșta Română",
   innoship: "Innoship",
   packeta: "Packeta",
+  smartship: "SmartShip",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -260,7 +285,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -1004,6 +1029,84 @@ export async function getShippingOptions(
           price: zone.price,
         });
       }
+    } else if (courierId === "smartship") {
+      /*
+       * ⚠ SMARTSHIP E BROKER SI COTEAZA CU ADEVARAT.
+       *
+       * `POST /cost` intoarce cate o linie pentru fiecare curier care poate duce
+       * coletul, cu pret CU TVA si data estimata de livrare — deci ramura asta e
+       * ASINCRONA, ca la Woot, Colete, eColet si Innoship.
+       *
+       * ⚠ Si primeste EXACT aceleasi trei obiecte ca emiterea. Un al doilea
+       * constructor ar fi insemnat ca pretul cotat si cel facturat se pot departa
+       * fara ca nimic sa se planga — vezi `corpCotare`/`corpEmitere`.
+       */
+      const ssCfg = settings.smartship_config as SmartshipConfig | null;
+      const flat = (): ShippingOption => ({
+        courier: "smartship",
+        courierLabel: zone.label || COURIER_LABELS.smartship,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (smartshipGata(ssCfg) && useAutoPrice) {
+        promises.push(
+          buildSmartshipOptions(ssCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId)
+            .then((opts) => {
+              if (opts.length > 0) options.push(...opts);
+              /* Zero oferte inseamna destinatie neacoperita sau localitate
+                 nerecunoscuta, nu defect: cade pe tariful fix, ca la ceilalti brokeri. */
+              else options.push(flat());
+            })
+            .catch((err) => {
+              console.error("[shipping] SmartShip estimate failed:", (err as Error).message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
+
+      /*
+       * ⚠ LOCKERELE NU SE POT COTA LIVE, si nu din lene.
+       *
+       * Documentatia lor e limpede: „Fara locker_id, easybox nu apare la estimare
+       * si nu se poate emite", iar `curier_preferat: 12` fara locker cade cu 612.
+       * Lockerul se alege insa DUPA ce cumparatorul alege optiunea — deci in clipa
+       * cotarii nu exista ce trimite.
+       *
+       * Aceeasi hotarare ca la Innoship, si acelasi pret platit: pretul lockerului
+       * e cel fix din `shipping_zones`. Alternativa ar fi fost sa cotam cu un
+       * locker ales de noi si sa incasam apoi altul — adica un pret care nu
+       * corespunde expedierii.
+       */
+      if (smartshipGata(ssCfg) && ssCfg.foloseste_easybox) {
+        options.push({
+          courier: "smartship",
+          courierLabel: lockerLabel(zone.label, "Sameday Easybox prin SmartShip"),
+          deliveryType: "locker",
+          price: zone.price,
+          smartshipCourierId: 12,
+          smartshipLockerNet: "easybox",
+        });
+      }
+
+      /*
+       * ⚠ FANbox merge NUMAI pe contract propriu: documentatia il leaga de
+       * `courier_id: 3` (FanCourier) IMPREUNA cu `use_own_contract: 1`. Oferit
+       * fara contract propriu, ar fi o optiune pe care emiterea n-o poate onora.
+       */
+      if (smartshipGata(ssCfg) && ssCfg.foloseste_fanbox && ssCfg.contract_propriu) {
+        options.push({
+          courier: "smartship",
+          courierLabel: lockerLabel(zone.label, "FAN Courier FANbox prin SmartShip"),
+          deliveryType: "locker",
+          price: zone.price,
+          smartshipCourierId: 3,
+          smartshipOwnContract: true,
+          smartshipLockerNet: "fanbox",
+        });
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -1297,6 +1400,92 @@ async function buildInnoshipOptions(
   }));
 }
 
+// ─── SmartShip live courier offers ───────────────────────────────────────────
+
+/**
+ * Ofertele SmartShip pentru o destinatie.
+ *
+ * ⚠ Intoarce `[]` — nu arunca — cand localitatea nu se potriveste sau cand niciun
+ * curier nu poate duce coletul. Apelantul cade atunci pe tariful fix din
+ * `shipping_zones`: un cumparator n-are voie sa ramana fara nicio optiune de
+ * livrare fiindca noi n-am recunoscut un oras.
+ *
+ * ⚠ Datele destinatarului sunt SUBSTITUENTI (nume, telefon): cotarea depinde doar
+ * de destinatie, greutate si ramburs. Numele are DOUA cuvinte dinadins — e chiar
+ * regula lor de validare, si un „Client" singur ar cadea cu 999 pentru fiecare
+ * cumparator al magazinului.
+ */
+async function buildSmartshipOptions(
+  config: SmartshipConfig,
+  destination: { county: string; city: string; postCode?: string },
+  weightKg: number,
+  cod: number,
+  labelCustom: string | undefined,
+  businessId: string,
+): Promise<ShippingOption[]> {
+  const loc = await rezolvaLocalitateSmartship(config, destination.city, destination.county);
+  if (!loc) return [];
+
+  const date = {
+    destinatar: {
+      nume: "Client Nou",
+      strada: "Strada Principala",
+      numar: "1",
+      oras: destination.city,
+      judet: destination.county,
+      codPostal: destination.postCode ?? null,
+      telefon: "0700000000",
+      cityId: loc.cityId,
+      sector: loc.sector,
+    },
+    greutateKg: weightKg,
+    ramburs: cod,
+    felLivrare: "domiciliu" as const,
+    numarColete: 1,
+  };
+
+  /*
+   * ⚠ Verificarea locala e obligatorie AICI, nu doar la emitere — dar CU cele
+   * doua cauze despartite.
+   *
+   * Configurarea gresita e a MAGAZINULUI si opreste cotarea pentru toata lumea:
+   * cazul care doare e o comanda cu ramburs si un IBAN lipsa sau gresit, fiindca
+   * SmartShip il valideaza la fiecare cerere — `/cost` raspunde 201, cotarea se
+   * pierde in `catch`, si toate comenzile cu plata la livrare primesc tariful fix,
+   * tacut. Acolo comerciantul TREBUIE alertat.
+   *
+   * O adresa incompleta e insa a UNUI cumparator (tipic: „Bucuresti" fara sector).
+   * Acolo nu e nimic de reparat in magazin, iar o alerta l-ar invata pe om sa nu
+   * se mai uite la alerte. Se cade tacut pe tariful fix, ca la orice localitate
+   * nerecunoscuta.
+   */
+  const lipsuriConfig = lipsuriConfigurareSmartship(config, cod > 0);
+  if (lipsuriConfig.length > 0) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.smartshipConfig",
+      businessId,
+      `SmartShip nu poate cota: ${lipsuriConfig.join("; ")}. Pana la reparare, livrarea prin SmartShip se ofera la tariful fix.`,
+    );
+    return [];
+  }
+  if (lipsuriSmartship(date, config).length > 0) return [];
+
+  const r = await coteazaSmartship(config, corpSmartship(date, config));
+
+  return oferteSmartship(r.costs, config).map((o): ShippingOption => ({
+    courier: "smartship",
+    /* Eticheta comerciantului, cand exista, ramane deasupra numelui curierului:
+       unii isi vand livrarea sub marca proprie. */
+    courierLabel: labelCustom ? `${labelCustom} · ${etichetaSmartship(o)}` : etichetaSmartship(o),
+    deliveryType: "address",
+    price: o.pret,
+    estimatedDays: termenSmartship(o),
+    smartshipCourierId: o.courierId,
+    smartshipCourierName: o.numeCurier || undefined,
+    smartshipOwnContract: o.contractPropriu,
+  }));
+}
+
 // ─── Colete Online live courier offers ───────────────────────────────────────
 
 /**
@@ -1370,7 +1559,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship"]);
 
 export async function getLockers(
   businessId: string,
@@ -1378,6 +1567,20 @@ export async function getLockers(
   city?: string,
   /** COD amount of the order — Cargus Ship & Go points individually accept or refuse ramburs. */
   codAmount?: number,
+  /**
+   * ⚠ Reteaua de lockere, cand curierul are mai multe.
+   *
+   * Doar SmartShip are: easybox (Sameday) si FANbox (FAN Courier) sunt
+   * nomenclatoare DIFERITE, cu id-uri din spatii diferite, iar la emitere se
+   * folosesc curieri diferiti. Amestecate intr-o singura lista, cumparatorul ar
+   * putea alege un FANbox care pleaca apoi ca easybox — si ar nimeri alt punct,
+   * sau ar cadea cu 806.
+   *
+   * Valoarea vine din optiunea aleasa (`ShippingOption.smartshipLockerNet`), deci
+   * de la client — de aia intra si in cheia de cache si e ingustata mai jos la
+   * cele doua valori cunoscute.
+   */
+  retea?: string,
 ): Promise<LockerItem[]> {
   // Aceeasi expunere ca la cotatii: apel public → API platit de curier, pe
   // credentialele comerciantului. Vezi comentariul din getShippingOptions.
@@ -1390,7 +1593,13 @@ export async function getLockers(
    * `LockerItem`, deci o comanda cu ramburs si una fara nu pot imparti aceeasi
    * lista.
    */
-  const cheieCache = `${businessId}:${courier}:${codAmount && codAmount > 0 ? "cod" : "-"}`;
+  /*
+   * ⚠ `retea` se ingusteaza AICI, inainte de orice folosire: vine de la client si
+   * intra si in cheia de cache. Nefiltrata, cineva ar putea umple cache-ul cu
+   * chei inventate — acelasi rationament ca la plafonul din `CacheScurt`.
+   */
+  const reteaLockere = retea === "fanbox" ? "fanbox" : "easybox";
+  const cheieCache = `${businessId}:${courier}:${codAmount && codAmount > 0 ? "cod" : "-"}${courier === "smartship" ? `:${reteaLockere}` : ""}`;
 
   /*
    * Cache-ul se consulta INAINTE de plafon, si asta e jumatate din reparatie: un
@@ -1427,7 +1636,7 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config")
     .eq("business_id", businessId)
     .single();
 
@@ -1712,6 +1921,62 @@ export async function getLockers(
       return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] Innoship FixedLocations failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "smartship") {
+    /*
+     * ⚠ DOUA RETELE, SI NU SE AMESTECA.
+     *
+     * `easybox` (Sameday) si `fanbox` (FAN Courier) au nomenclatoare separate,
+     * cu id-uri din spatii diferite, si se emit cu curieri diferiti (12 sau 2 pe
+     * contract propriu, respectiv 3 + contract propriu). Puse in aceeasi lista,
+     * cumparatorul ar alege un punct dintr-o retea si coletul ar pleca in
+     * cealalta.
+     *
+     * ⚠ Fluxurile sunt pe TOATA tara si n-au niciun parametru de filtrare:
+     * filtrarea pe oras se face dupa cache, ca la ceilalti.
+     *
+     * ⚠ Si forma randului NU e documentata — sunt singurele doua endpointuri din
+     * tot API-ul lor fara exemplu de raspuns. `normalizeazaLockere` o citeste
+     * tolerant; butonul Diagnostic din panou arata cheile reale.
+     */
+    const config = settings.smartship_config as SmartshipConfig | null;
+    if (!smartshipGata(config)) return [];
+    /* FANbox merge numai pe contract propriu — o cerere fara el ar fi degeaba. */
+    if (reteaLockere === "fanbox" && !config.contract_propriu) return [];
+
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () => {
+          const brute = reteaLockere === "fanbox"
+            ? await lockereFanbox(config)
+            : await lockereEasybox(config);
+          return normalizeazaLockere(brute).map((p) => ({
+            /*
+             * ⚠ `id` ramane sir aici (asa il cere `LockerItem`), dar e MEREU un
+             * intreg: `content.locker_id` e „integer" la ei, iar
+             * `normalizeazaLockere` a aruncat deja tot ce nu e intreg pozitiv.
+             * Pe dos fata de GLS, Posta si Packeta, unde id-ul e alfanumeric.
+             */
+            id: p.id,
+            name: p.nume,
+            address: [p.adresa, p.oras].filter(Boolean).join(", "),
+            city: p.oras,
+            county: p.judet,
+            postCode: p.codPostal,
+            lat: p.lat,
+            lng: p.lng,
+          }));
+        },
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
+    } catch (e) {
+      console.error("[shipping] SmartShip lockere failed:", (e as Error).message);
       return [];
     }
   }

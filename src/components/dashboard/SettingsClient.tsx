@@ -237,6 +237,7 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "posta",        label: "Posta Romana",      logo: "/integrations/posta_romana.svg", defaultPrice: 16 },
   { id: "packeta",      label: "Packeta",           logo: "/integrations/packeta.png", defaultPrice: 15 },
   { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
+  { id: "smartship",    label: "SmartShip",         logo: "/integrations/smartship.png",    defaultPrice: 17 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -259,6 +260,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   posta: "Livrare prin Poșta Română",
   packeta: "Livrare la adresa prin Packeta",
   innoship: "Innoship",
+  smartship: "SmartShip",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };

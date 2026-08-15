@@ -496,6 +496,14 @@ export function useCheckoutOrder({
         innoship_option_id: courierSelection?.innoshipOptionId,
         innoship_courier_name: courierSelection?.innoshipCourierName,
         innoship_service_name: courierSelection?.innoshipServiceName,
+        /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe
+           care a fost cotata (`show_byoc` intoarce acelasi curier de doua ori, la
+           preturi diferite). Iar la locker se adauga si reteaua, fiindca easybox
+           si FANbox sunt nomenclatoare separate. */
+        smartship_courier_id: courierSelection?.smartshipCourierId,
+        smartship_courier_name: courierSelection?.smartshipCourierName,
+        smartship_own_contract: courierSelection?.smartshipOwnContract,
+        smartship_locker_net: courierSelection?.smartshipLockerNet,
         source: getAttribution() ?? undefined,
       };
       // Cheia de reluare e payload-ul INTREG, metoda de plata inclusa.

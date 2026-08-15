@@ -32,6 +32,8 @@ import { innoshipGata, type InnoshipConfig } from "@/lib/innoship/client";
 import { createInnoshipAwbAction } from "@/lib/actions/innoship.actions";
 import { createPacketaAwbAction } from "@/lib/actions/packeta.actions";
 import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
+import { createSmartshipAwbAction } from "@/lib/actions/smartship.actions";
+import { smartshipGata, type SmartshipConfig } from "@/lib/smartship/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -54,8 +56,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -229,7 +231,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -240,6 +242,7 @@ export async function bulkGenerateAwbs(
   const po = settings?.posta_config as PostaConfig | null;
   const io = settings?.innoship_config as InnoshipConfig | null;
   const pk = settings?.packeta_config as PacketaConfig | null;
+  const ss = settings?.smartship_config as SmartshipConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -269,6 +272,10 @@ export async function bulkGenerateAwbs(
        De aia conditia include `eshop` — fara el actiunea refuza oricum fiecare
        comanda, si ar iesi 50 de esecuri in loc de un mesaj limpede. */
     packeta: packetaGata(pk),
+    /* Aceeasi regula ca in `smartshipGata`: cheia de API SI adresa de ridicare cu
+       id-ul ei de localitate. Fara ea, fiecare comanda ar fi refuzata de actiune
+       oricum — adica 50 de esecuri in loc de un mesaj limpede. */
+    smartship: smartshipGata(ss),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -284,7 +291,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -305,6 +312,7 @@ export async function bulkGenerateAwbs(
     posta: "posta", "posta-romana": "posta",
     innoship: "innoship",
     packeta: "packeta",
+    smartship: "smartship",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -333,6 +341,11 @@ export async function bulkGenerateAwbs(
          care au AWB la DPD si ar fi reemis pe cele care au deja colet la Packeta.
          La un furnizor fara anulare, al doilea colet nu se mai poate sterge. */
       : target === "packeta" ? row.packeta_packet_id
+      /* ⚠ Fara randul asta, un lot SmartShip ar fi cazut pe `dpd_shipment_id`:
+         ar fi sarit comenzile cu AWB la DPD si ar fi reemis pe cele care au deja
+         AWB la SmartShip — adica un al doilea transport platit pe aceeasi comanda.
+         Registrul l-ar prinde, dar comanda ar fi numarata gresit. */
+      : target === "smartship" ? row.smartship_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -640,6 +653,57 @@ async function createAwbForOrder(
         optionId: ales.innoship_option_id ?? null,
         courierName: ales.innoship_courier_name ?? null,
         serviceName: ales.innoship_service_name ?? null,
+      });
+    }
+    case "smartship": {
+      /*
+       * ⚠ Adresa se compune EXACT ca in `SmartshipAwbModal`, ca lotul si emiterea
+       * pe bucata sa trimita acelasi text: doua compuneri diferite ar insemna ca
+       * aceeasi comanda pleaca cu adrese diferite dupa cum a fost apasat butonul.
+       *
+       * ⚠ Si adresa ramane A CLIENTULUI chiar si la locker — pe dos fata de
+       * Innoship si Posta de mai sus. SmartShip ruteaza dupa `locker_id`, iar
+       * adresa e datele de contact ale destinatarului; inlocuita cu a lockerului,
+       * curierul n-ar mai avea pe cine suna cand ceva nu merge.
+       *
+       * ⚠ Alegerea cumparatorului se duce INTREAGA: curierul SI contractul pe care
+       * a fost cotata oferta. Pastrat doar curierul, lotul ar putea emite pe
+       * celalalt contract — la alt pret decat cel platit de client.
+       */
+      const laLocker = (addr.courier ?? "").toLowerCase().trim() === "smartship"
+        && addr.delivery_type === "locker"
+        && !!addr.locker_id;
+      const ales = addr as ShippingAddr & {
+        smartship_courier_id?: number;
+        smartship_courier_name?: string;
+        smartship_own_contract?: boolean;
+      };
+
+      /*
+       * ⚠ SmartShip cere `courier_id` la emitere — nu are „alege tu". Fara alegerea
+       * clientului, lotul NU ghiceste un curier: actiunea refuza comanda cu un
+       * mesaj limpede, si comerciantul o emite din modal, unde vede preturile.
+       */
+      return createSmartshipAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          strada: street,
+          numar: streetNo || null,
+          oras: city,
+          judet: county || null,
+          codPostal: zip || null,
+          telefon: o.customer_phone,
+          email,
+        },
+        greutateKg: weight,
+        continut: content,
+        ramburs: cod,
+        valoareDeclarata: Number(o.total) || 0,
+        felLivrare: laLocker ? "locker" : "domiciliu",
+        lockerId: laLocker ? addr.locker_id : null,
+        courierId: ales.smartship_courier_id ?? null,
+        contractPropriu: ales.smartship_own_contract === true,
+        courierName: ales.smartship_courier_name ?? null,
       });
     }
     default:

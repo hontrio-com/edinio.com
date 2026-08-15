@@ -30,6 +30,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   posta: { src: "/integrations/posta_romana.svg", alt: "Poșta Română" },
   packeta: { src: "/integrations/packeta.png", alt: "Packeta" },
   innoship: { src: "/integrations/innoship.svg", alt: "Innoship" },
+  smartship: { src: "/integrations/smartship.png", alt: "SmartShip.ro" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },

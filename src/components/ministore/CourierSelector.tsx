@@ -19,7 +19,13 @@ function optionKey(o: ShippingOption) {
    * `deliveryType: "address"` — deci fara ele s-ar prabusi una peste alta, iar
    * clientul ar alege una si ar primi alta.
    */
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}`;
+  /*
+   * ⚠ La SmartShip sunt DOUA parti, si a doua e usor de trecut cu vederea: cu
+   * `show_byoc` acelasi curier apare o data pe contractul comerciantului si o
+   * data pe cel SmartShip, la preturi diferite. Iar reteaua de lockere (easybox
+   * / FANbox) tine tot de cheie: sunt nomenclatoare separate.
+   */
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -51,6 +57,13 @@ export interface CourierSelection {
   innoshipOptionId?: string;
   innoshipCourierName?: string;
   innoshipServiceName?: string;
+  /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe care a
+     fost cotata. Vezi lib/smartship/preturi.ts. */
+  smartshipCourierId?: number;
+  smartshipCourierName?: string;
+  smartshipOwnContract?: boolean;
+  /** Care retea de lockere: easybox (Sameday) sau FANbox (FAN Courier). */
+  smartshipLockerNet?: "easybox" | "fanbox";
   /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
   token?: string;
 }
@@ -169,6 +182,10 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             innoshipOptionId: ales.innoshipOptionId,
             innoshipCourierName: ales.innoshipCourierName,
             innoshipServiceName: ales.innoshipServiceName,
+            smartshipCourierId: ales.smartshipCourierId,
+            smartshipCourierName: ales.smartshipCourierName,
+            smartshipOwnContract: ales.smartshipOwnContract,
+            smartshipLockerNet: ales.smartshipLockerNet,
             token: ales.token,
           });
         }
@@ -196,7 +213,7 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
     setLockersLoading(true);
     setSelectedLocker(null);
     setLockerSearch("");
-    getLockers(businessId, opt.courier, city, cod)
+    getLockers(businessId, opt.courier, city, cod, opt.smartshipLockerNet)
       .then(setLockers)
       .catch(() => setLockers([]))
       .finally(() => setLockersLoading(false));
@@ -229,6 +246,10 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         innoshipOptionId: opt.innoshipOptionId,
         innoshipCourierName: opt.innoshipCourierName,
         innoshipServiceName: opt.innoshipServiceName,
+        smartshipCourierId: opt.smartshipCourierId,
+        smartshipCourierName: opt.smartshipCourierName,
+        smartshipOwnContract: opt.smartshipOwnContract,
+        smartshipLockerNet: opt.smartshipLockerNet,
         token: opt.token,
       });
     }
@@ -250,6 +271,13 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         lockerCity: locker.city,
         lockerCounty: locker.county,
         lockerPostCode: locker.postCode,
+        /* ⚠ La SmartShip optiunea de locker POARTA curierul (12 easybox / 3
+           FANbox) si reteaua. Pierdute aici, emiterea n-ar mai sti cu ce curier
+           sa trimita coletul in punctul ales de client. */
+        smartshipCourierId: opt.smartshipCourierId,
+        smartshipCourierName: opt.smartshipCourierName,
+        smartshipOwnContract: opt.smartshipOwnContract,
+        smartshipLockerNet: opt.smartshipLockerNet,
         token: opt.token,
       });
     }

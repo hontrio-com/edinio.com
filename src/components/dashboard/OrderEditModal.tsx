@@ -22,6 +22,7 @@ import { deleteGlsAwbAction } from "@/lib/actions/gls.actions";
 import { deletePallexAwbAction } from "@/lib/actions/pallex.actions";
 import { dezleagaPostaAwbAction } from "@/lib/actions/posta.actions";
 import { deleteInnoshipAwbAction } from "@/lib/actions/innoship.actions";
+import { deleteSmartshipAwbAction } from "@/lib/actions/smartship.actions";
 import { deleteEcoletAwbAction } from "@/lib/actions/ecolet.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
@@ -353,6 +354,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     if (order.packeta_packet_id) list.push({ key: "packeta", label: "Packeta", awb: order.packeta_packet_id, manualOnly: true });
     /* Innoship ARE anulare in API, spre deosebire de Posta: fara `manualOnly`. */
     if (order.innoship_awb_number) list.push({ key: "innoship", label: "Innoship", awb: order.innoship_awb_number });
+    /* ⚠ SmartShip ARE anulare in API, si ea propaga la curier SI intoarce costul in
+       creditul contului — deci fara `manualOnly`. Refuzul ei e insa real dupa ce
+       coletul a fost ridicat (codurile 206 si 220); actiunea spune atunci ce mai e
+       de facut, in loc sa invite la reincercare. */
+    if (order.smartship_awb_number) list.push({ key: "smartship", label: "SmartShip", awb: order.smartship_awb_number });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -623,7 +629,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     }
     setCancellingKey(key);
     startCancel(async () => {
-      let res: { success?: boolean; error?: string };
+      /* ⚠ `mesaj` nu e decor: la SmartShip el spune ce mai are de facut omul cand
+         slotul din registru n-a putut fi eliberat („apasa Verifica inainte sa
+         emiti din nou"). Inghitit, blocajul ar parea inexplicabil. */
+      let res: { success?: boolean; error?: string; mesaj?: string };
       if (key === "woot") res = await cancelWootAwb(businessId, order.id, String(order.woot_order_id ?? ""));
       else if (key === "sameday") res = await deleteSamedayAwbAction(businessId, order.id);
       else if (key === "cargus") res = await deleteCargusAwbAction(businessId, order.id);
@@ -634,13 +643,16 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "ecolet") res = await deleteEcoletAwbAction(businessId, order.id);
       else if (key === "posta") res = await dezleagaPostaAwbAction(businessId, order.id, true);
       else if (key === "innoship") res = await deleteInnoshipAwbAction(businessId, order.id);
+      else if (key === "smartship") res = await deleteSmartshipAwbAction(businessId, order.id);
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }
       toast.success(
-        key === "colete" ? "AWB detasat. Nu uita sa anulezi expedierea si in contul Colete Online."
+        res.mesaj
+        ?? (key === "colete" ? "AWB detasat. Nu uita sa anulezi expedierea si in contul Colete Online."
         : key === "posta" ? "Numarul a fost scos de pe comanda. Anularea la Posta se face separat, la ei."
-        : "AWB anulat.",
+        : "AWB anulat."),
+        res.mesaj ? { duration: 12000 } : undefined,
       );
       router.refresh();
     });

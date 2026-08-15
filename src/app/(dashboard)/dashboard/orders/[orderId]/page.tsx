@@ -46,7 +46,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -91,6 +91,16 @@ export default async function OrderDetailPage({ params }: Props) {
      gresit CREEAZA tacut un expeditor nou la ei si strica facturarea. */
   const pk = settings?.packeta_config as { enabled?: boolean; api_password?: string; eshop?: string } | null;
   const packetaEnabled = !!(pk?.enabled && pk?.api_password && pk?.eshop);
+
+  /* ⚠ Aceeasi regula ca in `smartshipGata`, in features/page.tsx si in checkout:
+     cheia de API SI adresa de ridicare cu id-ul ei de localitate. Fara `city` (id
+     numeric) fiecare cerere cade pe validare, deci butonul ar promite ceva ce nu
+     se poate face. */
+  const ss = settings?.smartship_config as { enabled?: boolean; api_key?: string; expeditor?: { name?: string; address?: string; phone?: string; city?: number } } | null;
+  const smartshipEnabled = !!(
+    ss?.enabled && ss?.api_key && ss?.expeditor?.name && ss?.expeditor?.address
+    && ss?.expeditor?.phone && Number(ss?.expeditor?.city) > 0
+  );
   const io = settings?.innoship_config as InnoshipConfig | null;
   const innoshipEnabled = !!(io?.enabled && io?.api_key && io?.external_client_location);
   /* Termenele implicite ale formularului de partida: aceleasi pe care le
@@ -134,6 +144,7 @@ export default async function OrderDetailPage({ params }: Props) {
       ecoletEnabled={ecoletEnabled}
       postaEnabled={postaEnabled}
       packetaEnabled={packetaEnabled}
+      smartshipEnabled={smartshipEnabled}
       postaZilePrezentare={postaZilePrezentare}
       innoshipEnabled={innoshipEnabled}
       pallexZile={pallexZile}

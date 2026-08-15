@@ -126,7 +126,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -247,6 +247,8 @@ async function ContinutSetari({
   const ec = storeSettings?.ecolet_config as CourierCfg | null;
   const po = storeSettings?.posta_config as CourierCfg | null;
   const io = storeSettings?.innoship_config as CourierCfg | null;
+  const pk = storeSettings?.packeta_config as CourierCfg | null;
+  const ss = storeSettings?.smartship_config as CourierCfg | null;
 
   const activeCourierIds: string[] = [
     ...(fc?.enabled && fc?.username && fc?.client_id ? ["fan-courier"] : []),
@@ -275,6 +277,29 @@ async function ContinutSetari({
     ...(po?.enabled && po?.username && po?.cod_trimitere ? ["posta"] : []),
     /* Aceeasi regula ca in `innoshipGata`: cheia si id-ul depozitului. */
     ...(io?.enabled && io?.api_key && io?.external_client_location ? ["innoship"] : []),
+    /*
+     * ⚠ PACKETA LIPSEA DE AICI, si asta o facea imposibil de pornit.
+     *
+     * Metoda ei exista in `SHIPPING_METHODS`, dar `isIntegrated` se citeste din
+     * lista asta — deci randul ramanea stins si dezactivat, iar zona `packeta` nu
+     * se putea activa niciodata. Fara zona activa, `getShippingOptions` nici nu
+     * ajunge la ramura Packeta: integrarea era livrata si totusi de neatins din
+     * checkout. Gasita 2026-09-05, la cablarea SmartShip.
+     *
+     * Aceeasi regula ca in `packetaGata`: parola API si eticheta de expeditor.
+     */
+    ...(pk?.enabled && pk?.api_password && pk?.eshop ? ["packeta"] : []),
+    /*
+     * Aceeasi regula ca in `smartshipGata`: cheia de API SI adresa de ridicare cu
+     * id-ul ei NUMERIC de localitate. Fara `city`, fiecare cerere cade pe
+     * validare, deci metoda ar aparea in checkout fara sa poata produce nimic.
+     */
+    ...(ss?.enabled && ss?.api_key
+      && (ss?.expeditor as { name?: string; address?: string; phone?: string; city?: number } | null)?.name
+      && (ss?.expeditor as { name?: string; address?: string; phone?: string; city?: number } | null)?.address
+      && (ss?.expeditor as { name?: string; address?: string; phone?: string; city?: number } | null)?.phone
+      && Number((ss?.expeditor as { city?: number } | null)?.city) > 0
+      ? ["smartship"] : []),
     "own",
     "pickup",
   ];

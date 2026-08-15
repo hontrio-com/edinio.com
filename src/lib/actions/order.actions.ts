@@ -788,6 +788,15 @@ export async function placeOrder(data: {
   innoship_option_id?: string;
   innoship_courier_name?: string;
   innoship_service_name?: string;
+  /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe care a
+     fost cotata. Cu `show_byoc`, acelasi curier apare de doua ori, la preturi
+     diferite — pastrat doar curierul, reemiterea ar putea pleca pe celalalt
+     contract. La locker se adauga si reteaua: easybox si FANbox sunt
+     nomenclatoare separate, cu curieri diferiti la emitere. */
+  smartship_courier_id?: number;
+  smartship_courier_name?: string;
+  smartship_own_contract?: boolean;
+  smartship_locker_net?: "easybox" | "fanbox";
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -1395,6 +1404,23 @@ export async function placeOrder(data: {
         innoship_option_id: data.innoship_option_id,
         innoship_courier_name: data.innoship_courier_name,
         innoship_service_name: data.innoship_service_name,
+      }),
+      /*
+       * ⚠ SmartShip: conditia e pe CURIER, ca la Innoship. Pe
+       * `smartship_own_contract` n-ar merge — el e `false` pentru ofertele de pe
+       * contractul SmartShip, adica pentru MAJORITATEA comenzilor, si atunci
+       * intreg blocul ar fi sarit. Iar pe `smartship_locker_net` n-ar merge nici
+       * atat: el lipseste la livrarea la adresa.
+       *
+       * ⚠ Si `own_contract` se scrie EXPLICIT cu `=== true`: pastrat ca
+       * `undefined`, emiterea l-ar citi drept „nu stiu" si ar putea pleca pe
+       * celalalt contract, la alt pret decat cel platit de client.
+       */
+      ...(data.smartship_courier_id && {
+        smartship_courier_id: data.smartship_courier_id,
+        smartship_courier_name: data.smartship_courier_name,
+        smartship_own_contract: data.smartship_own_contract === true,
+        ...(data.smartship_locker_net ? { smartship_locker_net: data.smartship_locker_net } : {}),
       }),
     },
     items: allItems,
@@ -3111,6 +3137,15 @@ export async function placeCartOrder(data: {
   innoship_option_id?: string;
   innoship_courier_name?: string;
   innoship_service_name?: string;
+  /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe care a
+     fost cotata. Cu `show_byoc`, acelasi curier apare de doua ori, la preturi
+     diferite — pastrat doar curierul, reemiterea ar putea pleca pe celalalt
+     contract. La locker se adauga si reteaua: easybox si FANbox sunt
+     nomenclatoare separate, cu curieri diferiti la emitere. */
+  smartship_courier_id?: number;
+  smartship_courier_name?: string;
+  smartship_own_contract?: boolean;
+  smartship_locker_net?: "easybox" | "fanbox";
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -3576,6 +3611,23 @@ export async function placeCartOrder(data: {
         innoship_option_id: data.innoship_option_id,
         innoship_courier_name: data.innoship_courier_name,
         innoship_service_name: data.innoship_service_name,
+      }),
+      /*
+       * ⚠ SmartShip: conditia e pe CURIER, ca la Innoship. Pe
+       * `smartship_own_contract` n-ar merge — el e `false` pentru ofertele de pe
+       * contractul SmartShip, adica pentru MAJORITATEA comenzilor, si atunci
+       * intreg blocul ar fi sarit. Iar pe `smartship_locker_net` n-ar merge nici
+       * atat: el lipseste la livrarea la adresa.
+       *
+       * ⚠ Si `own_contract` se scrie EXPLICIT cu `=== true`: pastrat ca
+       * `undefined`, emiterea l-ar citi drept „nu stiu" si ar putea pleca pe
+       * celalalt contract, la alt pret decat cel platit de client.
+       */
+      ...(data.smartship_courier_id && {
+        smartship_courier_id: data.smartship_courier_id,
+        smartship_courier_name: data.smartship_courier_name,
+        smartship_own_contract: data.smartship_own_contract === true,
+        ...(data.smartship_locker_net ? { smartship_locker_net: data.smartship_locker_net } : {}),
       }),
     },
     items: allItems,

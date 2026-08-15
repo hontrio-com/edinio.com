@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { adresaGls } from "@/lib/gls/expediere";
 import { adresaInnoship } from "@/lib/innoship/expediere";
 import { localitatePosta, sectorDinOras } from "@/lib/posta/expediere";
+import { localitateSmartship, sectorSmartship } from "@/lib/smartship/localitati";
 import { localitateSameday, normalizeLocalityName } from "@/lib/utils/ro-address";
 
 /**
@@ -54,6 +55,19 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
 
   test("CARGUS, DPD si FAN pliaza prin acelasi ajutor", () => {
     assert.equal(normalizeLocalityName(ADRESA.oras, ADRESA.judet), "Bucuresti");
+  });
+
+  /*
+   * ⚠ SmartShip e in tabara CEA MARE, dar cu o rasucire proprie: orasul se
+   * plieaza in „Bucuresti", iar sectorul pleaca in campul lui, `sector` (1-6).
+   * Iar cand sectorul NU se poate afla, raspunsul e `null`, nu 0 — la ei 0
+   * inseamna „nu e in Bucuresti", adica o afirmatie falsa despre adresa.
+   */
+  test("SMARTSHIP primeste „Bucuresti” plus sectorul intr-un camp separat", () => {
+    assert.equal(localitateSmartship(ADRESA.oras, ADRESA.judet), "Bucuresti");
+    assert.equal(sectorSmartship(ADRESA.oras, ADRESA.judet), 3);
+    assert.equal(sectorSmartship("Cluj-Napoca", "Cluj"), 0);
+    assert.equal(sectorSmartship("Bucuresti", "Municipiul Bucuresti"), null);
   });
 
   /*

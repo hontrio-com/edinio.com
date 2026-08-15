@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
 import { verificaLegaturaDocumentului } from "@/lib/invoicing-legatura";
@@ -302,12 +303,32 @@ export async function disconnectFgo(
   return { success: true };
 }
 
+/*
+ * Cheia privata vine din BAZA cand formularul o trimite goala.
+ *
+ * Formularul primeste `private_key` MASCAT (gol) — vezi `mascheazaConfig` — si
+ * butonul „Testeaza conexiunea" e activ tocmai cand cheia e deja salvata
+ * (`secretulEsteSalvat` in FgoConfigClient). Pana la 15.08.2026, configul pleca
+ * de aici direct la `testFgoConnection`, deci pentru un comerciant DEJA configurat
+ * care nu-si retasteaza cheia proba se facea cu cheia GOALA. Nu s-a vazut fiindca
+ * proba nu era autentificata deloc si raspundea „reusit" oricum. Oblio face corect
+ * acelasi lucru prin `secretDinConfig` (oblio.actions.ts).
+ *
+ * `secretDinConfig` da intaietate valorii din formular — asa se poate proba o cheie
+ * NOUA inainte de salvare — si abia cand vine goala cade pe cea din baza, dupa ce
+ * dovedeste proprietatea magazinului.
+ */
 export async function testFgoConfig(
+  businessId: string,
   config: FgoConfig,
-): Promise<{ ok: true; judete: number } | { error: string }> {
-  const result = await testFgoConnection(config);
+): Promise<{ ok: true } | { error: string }> {
+  const cheie = await secretDinConfig(businessId, "fgo_config", "private_key", config.private_key);
+  if (!cheie) return { error: "Completeaza cheia privata fGO." };
+  if (!config.cod_unic?.trim()) return { error: "Completeaza CUI-ul firmei." };
+
+  const result = await testFgoConnection({ ...config, private_key: cheie });
   if (!result.ok) return { error: result.error };
-  return { ok: true, judete: result.judete };
+  return { ok: true };
 }
 
 // ─── Document actions ─────────────────────────────────────────────────────────

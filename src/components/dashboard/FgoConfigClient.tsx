@@ -56,13 +56,17 @@ export function FgoConfigClient({
       return;
     }
     setTesting(true);
-    const result = await testFgoConfig(form);
+    const result = await testFgoConfig(businessId, form);
     setTesting(false);
     if ("error" in result) {
-      toast.error(`Eroare conexiune fGO: ${result.error}`);
+      toast.error(result.error);
     } else {
       setTested(true);
-      toast.success(`Conexiune reusita — ${result.judete} judete disponibile`);
+      // Mesajul spune exact ce s-a dovedit. Inainte scria „— N judete disponibile",
+      // un numar venit dintr-un nomenclator PUBLIC, care nu avea nicio legatura cu
+      // credentialele testate si dadea greutate unei confirmari care nu verificase
+      // nimic. Vezi testFgoConnection in src/lib/fgo.ts.
+      toast.success("fGO a acceptat CUI-ul si cheia privata.");
     }
   }
 

@@ -87,26 +87,31 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
     id: "curieri",
     label: "Curieri",
     integrations: [
+      /* ═══ INTAI TRANSPORTATORII (1-10), APOI BROKERII (11-17) ═══
+         Cei zece de sus duc coletul cu reteaua LOR si se conecteaza pe contractul
+         pe care il ai direct cu ei; cei sapte de jos revand transportul altora, si
+         acolo acelasi curier poate aparea a doua oara, la alt pret. De aia stau
+         despartiti, nu amestecati dupa data livrarii integrarii.
+         In prima jumatate ordinea e cea a raspandirii pe piata romaneasca, cu cei
+         patru locali inaintea celor internationali. */
       { name: "Fan Courier",   logo: "/integrations/fan-courier.svg", id: "fan-courier" },
-      { name: "DPD",           logo: "/integrations/dpd.svg", id: "dpd" },
       { name: "Cargus",        logo: "/integrations/cargus.svg", id: "cargus" },
       { name: "Sameday",       logo: "/integrations/sameday.webp", id: "sameday" },
-      { name: "Woot",          logo: "/integrations/woot.webp",    id: "woot" },
-      { name: "Colete Online", logo: "/integrations/colete-online.svg", id: "colete" },
+      { name: "DPD",           logo: "/integrations/dpd.svg", id: "dpd" },
       { name: "GLS",           logo: "/integrations/gls.svg", id: "gls" },
-      { name: "Pall-Ex",       logo: "/integrations/pallex.avif", id: "pallex" },
-      { name: "eColet",        logo: "/integrations/ecolet.png", id: "ecolet" },
       { name: "Poșta Română", logo: "/integrations/posta_romana.svg", id: "posta" },
-      { name: "Innoship",      logo: "/integrations/innoship.svg", id: "innoship" },
-      { name: "Packeta",       logo: "/integrations/packeta.png", id: "packeta" },
-      { name: "SmartShip",     logo: "/integrations/smartship.png", id: "smartship" },
-      { name: "Shipo.ro",      logo: "/integrations/shipo.ro.svg", id: "shipo" },
+      { name: "Pall-Ex",       logo: "/integrations/pallex.avif", id: "pallex" },
       { name: "FedEx",         logo: "/integrations/fedex.svg", id: "fedex" },
       { name: "UPS",           logo: "/integrations/ups.svg", id: "ups" },
       { name: "DHL",           logo: "/integrations/dhl.svg", id: "dhl" },
-      /* Intai transportatorii, apoi brokerii — aceeasi ordine ca mai sus, unde
-         Fan Courier si DPD stau inaintea lui Woot si eColet.
-         ⚠ Rubrica asta nu mai are NICIUN card „IN CURAND": DHL, ultimul anuntat, s-a
+      { name: "Colete Online", logo: "/integrations/colete-online.svg", id: "colete" },
+      { name: "Woot",          logo: "/integrations/woot.webp",    id: "woot" },
+      { name: "eColet",        logo: "/integrations/ecolet.png", id: "ecolet" },
+      { name: "SmartShip",     logo: "/integrations/smartship.png", id: "smartship" },
+      { name: "Shipo.ro",      logo: "/integrations/shipo.ro.svg", id: "shipo" },
+      { name: "Packeta",       logo: "/integrations/packeta.png", id: "packeta" },
+      { name: "Innoship",      logo: "/integrations/innoship.svg", id: "innoship" },
+      /* ⚠ Rubrica asta nu mai are NICIUN card „IN CURAND": DHL, ultimul anuntat, s-a
          livrat si a urcat aici. Urmatorul curier doar anuntat se pune SUB linia asta,
          nu pe locul unde statea cat era doar o promisiune. */
     ],
@@ -475,20 +480,38 @@ export default async function IntegrationsPage() {
                         />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
+                        {/*
+                          ⚠ ETICHETA „NOU" COSTA 38,6px DIN NUME (32,6 ea + 6 spatiu), si
+                          aia sunt MASURATI in Geist, nu aproximati: zona numelui are 122px
+                          pe cardul real de la trei coloane (274 card − 32 padding − 64 locas
+                          sigla − 14 − 14 − 28 sageata). De acolo si locasul de 64px al
+                          siglei, ales tot pe masuratoare.
+
+                          Din cei unsprezece curieri cu eticheta, ZECE incap pe un rand:
+                          GLS 27,1 · UPS 28,5 · DHL 28,3 · FedEx 41,6 · eColet 44,6 ·
+                          Pall-Ex 48,0 · Packeta 54,7 · Shipo.ro 55,4 · Innoship 57,4 ·
+                          SmartShip 71,3. Singurul care nu incape e „Poșta Română": 94,5px
+                          singur, 133,1 cu eticheta.
+
+                          De aia randul e `flex-wrap`, nu `flex`: cand cele doua nu incap
+                          impreuna, eticheta coboara INTREAGA pe randul al doilea. Fara
+                          wrap, singurele iesiri erau sa TAIEM numele („Poșta Rom…") sau
+                          sa-l lasam sa dea peste sageata — si numele taiat e mai rau decat
+                          un card cu doua randuri, fiindca omul nu mai stie ce curier e.
+                          Randurile grilei se intind oricum dupa cel mai inalt card, deci
+                          rubrica ramane aliniata; creste cu ~18px doar randul lui.
+
+                          Nu se poate stramta eticheta ca sa incapa: chiar cu `px-0.5` si
+                          spatiu de 4px ajunge la 28,6, peste cei 27,5 ramasi — si ar fi
+                          inghesuita pe toate celelalte zece carduri, ca sa se salveze unul.
+
+                          `whitespace-nowrap` pe eticheta o tine intreaga: fara el, „Nou"
+                          insusi s-ar putea rupe intre litere pe cardul ingust.
+                        */}
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                           <p className="text-sm font-semibold text-foreground">{integration.name}</p>
-                          {/*
-                            ⚠ ETICHETA „NOU" COSTA 36px DIN NUME, si aia sunt masurati.
-                            Numele are 125px pe cardul real (275px la trei coloane) — de
-                            acolo si locasul de sigla de 64px, ales tot pe masuratoare.
-                            Eticheta ia 30px plus 6px de spatiu, deci orice nume peste
-                            ~89px se rupe pe doua randuri cand o poarta.
-                            „Poșta Română" cere ~92px: incape lat, dar nu si cu eticheta.
-                            De aia nu e in lista. Inainte de a adauga un id nou aici,
-                            uita-te cat de lung e numele.
-                          */}
-                          {["dhl", "ups", "fedex", "shipo", "smartship", "innoship", "ecolet", "pallex", "klarna", "mailchimp", "brevo", "klaviyo", "revolut", "olx", "aboutyou", "trendyol", "facebook-catalog"].includes(integration.id ?? "") && (
-                            <span className="text-[9px] font-bold uppercase tracking-wide bg-primary text-white px-1.5 py-0.5 rounded-full leading-none">Nou</span>
+                          {["gls", "posta", "pallex", "fedex", "ups", "dhl", "ecolet", "smartship", "shipo", "packeta", "innoship", "klarna", "mailchimp", "brevo", "klaviyo", "revolut", "olx", "aboutyou", "trendyol", "facebook-catalog"].includes(integration.id ?? "") && (
+                            <span className="whitespace-nowrap text-[9px] font-bold uppercase tracking-wide bg-primary text-white px-1.5 py-0.5 rounded-full leading-none">Nou</span>
                           )}
                         </div>
                         {isActive ? (

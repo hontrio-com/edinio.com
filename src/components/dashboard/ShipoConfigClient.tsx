@@ -191,8 +191,8 @@ export function ShipoConfigClient({
     .map(([slug]) => curieriCont.find((c) => c.slug === slug)?.name ?? SLUGURI_DOCUMENTATE[slug] ?? slug);
 
   return (
-    <div className="space-y-5">
-      <Panel title="Conectare">
+    <div className="space-y-6">
+      <Panel step={1} title="Conectare">
         <Field label="Cheia de API" hint="O generezi din contul Shipo, la Setari → API.">
           <Input
             type="password"
@@ -202,7 +202,7 @@ export function ShipoConfigClient({
           />
         </Field>
 
-        <div className="flex flex-wrap gap-2 pt-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={proba} disabled={probeaza || !areCheie}>
             {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             Testeaza conexiunea
@@ -217,7 +217,7 @@ export function ShipoConfigClient({
         {contInfo && <Callout variant="success" icon={CheckCircle}>{contInfo}</Callout>}
       </Panel>
 
-      <Panel title="Adresa de ridicare">
+      <Panel step={2} title="Adresa de ridicare">
         <Callout variant="info" icon={Info}>
           Shipo nu primeste un <strong>nume de oras</strong> pentru ridicare, ci id-ul unei adrese salvate in contul
           tau — si tot el pleaca la cotare. De aceea se alege din lista, nu se scrie de mana: un id gresit ar cota si
@@ -252,7 +252,7 @@ export function ShipoConfigClient({
         )}
       </Panel>
 
-      <Panel title="Ce se ofera in checkout">
+      <Panel step={3} title="Ce se ofera in checkout">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Ofera si livrare in locker sau punct de ridicare</p>
@@ -261,7 +261,7 @@ export function ShipoConfigClient({
           <Switch checked={!!config.foloseste_lockere} onCheckedChange={(v) => setConfig({ ...config, foloseste_lockere: v })} />
         </div>
 
-        <div className="pt-3">
+        <div>
           <p className="text-xs font-semibold mb-2">Curierii pe care ii arati clientilor</p>
           <p className="text-[11px] text-muted-foreground mb-2">
             Nimic bifat = toti curierii pe care ii da contul tau.
@@ -300,17 +300,17 @@ export function ShipoConfigClient({
         )}
 
         {servicii.length > 0 && (
-          <p className="text-[11px] text-muted-foreground mt-3">
+          <p className="text-[11px] text-muted-foreground">
             Contul tau are {servicii.length} servicii active, dintre care{" "}
             {servicii.filter((s) => s.recipient_address_type !== "address").length} livreaza in locker sau punct PUDO.
           </p>
         )}
-        <Button type="button" variant="ghost" className="mt-2" onClick={incarcaServicii} disabled={!esteActiv}>
+        <Button type="button" variant="ghost" onClick={incarcaServicii} disabled={!esteActiv}>
           Vezi serviciile contului
         </Button>
       </Panel>
 
-      <Panel title="Servicii care costa in plus">
+      <Panel step={4} title="Servicii care costa in plus">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Asigura coletul</p>
@@ -344,9 +344,9 @@ export function ShipoConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Coletul implicit">
+      <Panel step={5} title="Coletul implicit">
         <p className="text-xs text-muted-foreground">Se folosesc cand comanda n-are dimensiuni proprii.</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-3">
           {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
@@ -379,7 +379,7 @@ export function ShipoConfigClient({
         </Field>
       </Panel>
 
-      <Panel title="Pornire">
+      <Panel step={6} title="Pornire">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Foloseste Shipo pentru livrare</p>
@@ -396,7 +396,7 @@ export function ShipoConfigClient({
           Shipo n-are mediu de proba: fiecare AWB emis e real si facturat. Inainte de emiterile in masa, datele se
           verifica automat prin validarea lor, care nu creeaza nimic.
         </Callout>
-        <Button type="button" className="mt-3" onClick={salvare} disabled={salveaza}>
+        <Button type="button" onClick={salvare} disabled={salveaza}>
           {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
         </Button>
       </Panel>

@@ -154,7 +154,7 @@ export function PacketaConfigClient({
         inainte de fiecare emitere — dar merita sa te uiti peste adresa inainte sa apesi.
       </Callout>
 
-      <Panel title="Credentiale">
+      <Panel step={1} title="Credentiale">
         <Callout variant="info" icon={Info}>
           Packeta are <strong>doua</strong> credentiale, si sunt lucruri diferite. Le gasesti in
           contul tau, la Client section {"->"} API. Parola API creeaza coletele; cheia API aduce
@@ -201,7 +201,7 @@ export function PacketaConfigClient({
         )}
       </Panel>
 
-      <Panel title="Ce se ofera in checkout">
+      <Panel step={2} title="Ce se ofera in checkout">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Puncte de ridicare Packeta</p>
@@ -284,7 +284,7 @@ export function PacketaConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Etichete si valoare">
+      <Panel step={3} title="Etichete si valoare">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Tipareste eticheta curierului</p>

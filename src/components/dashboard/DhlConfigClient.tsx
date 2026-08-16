@@ -268,8 +268,8 @@ export function DhlConfigClient({
   const permise = config.produse_permise ?? [];
 
   return (
-    <div className="space-y-5">
-      <Panel title="Conectare">
+    <div className="space-y-6">
+      <Panel step={1} title="Conectare">
         <Field
           label="Utilizator MyDHL API"
           hint="⚠ NU e „API Key” din aplicatia de pe developer.dhl.com. E utilizatorul MyDHL API, dat de consultantul tau DHL Express, adesea dupa certificarea integrarii. Nu e mascat: iti spune ce cont ai legat."
@@ -322,7 +322,7 @@ export function DhlConfigClient({
           </select>
         </Field>
 
-        <div className="flex flex-wrap gap-2 pt-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
             {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             Testeaza conexiunea
@@ -383,13 +383,13 @@ export function DhlConfigClient({
         )}
       </Panel>
 
-      <Panel title="Adresa de expeditie">
+      <Panel step={2} title="Adresa de expeditie">
         <Callout variant="info" icon={Info}>
           De aici pleaca fiecare colet, si tot de aici se calculeaza tariful. Codul postal si telefonul sunt
           amandoua obligatorii la DHL, si la expedierile interne, nu doar la cele externe: fara ele nu se face
           nicio cotare si niciun AWB.
         </Callout>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nume persoana de contact">
             <Input value={expeditor.nume ?? ""} onChange={(e) => setExpeditor({ nume: e.target.value })} />
           </Field>
@@ -409,7 +409,7 @@ export function DhlConfigClient({
         >
           <Input value={expeditor.strada ?? ""} onChange={(e) => setExpeditor({ strada: e.target.value })} />
         </Field>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Oras">
             <Input value={expeditor.oras ?? ""} onChange={(e) => setExpeditor({ oras: e.target.value })} />
           </Field>
@@ -440,14 +440,14 @@ export function DhlConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Ce se ofera in checkout">
+      <Panel step={3} title="Ce se ofera in checkout">
         <p className="text-xs font-semibold">Produsele DHL pe care le arati clientilor</p>
         <p className="text-[11px] text-muted-foreground">
           Nimic bifat = toate produsele pe care le intoarce cotarea. Filtrul adevarat e al lor: cotarea se face
           cu numarul tau de cont, deci DHL raspunde deja cu ce iti vinde pe ruta ceruta. Bifele de aici doar
           restrang lista, nu o largesc.
         </p>
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap gap-2">
           {produse.map((p) => {
             const bifat = permise.includes(p.cod);
             return (
@@ -515,7 +515,7 @@ export function DhlConfigClient({
         </Callout>
       </Panel>
 
-      <Panel title="Eticheta">
+      <Panel step={4} title="Eticheta">
         <Field
           label="Formatul etichetei"
           hint="PDF-ul e implicit fiindca se tipareste la orice imprimanta, inclusiv una obisnuita de birou. Celelalte trei sunt limbaje de imprimanta termica de etichete."
@@ -569,7 +569,7 @@ export function DhlConfigClient({
         </Callout>
       </Panel>
 
-      <Panel title="Coletul implicit si vama">
+      <Panel step={5} title="Coletul implicit si vama">
         <p className="text-xs text-muted-foreground">
           Dimensiunile se folosesc cand comanda n-are unele proprii. DHL factureaza pe maximul dintre greutatea
           fizica si cea volumetrica, iar volumetricul lor se imparte la {DIVIZOR_VOLUMETRIC}, nu la 6000 ca la
@@ -578,7 +578,7 @@ export function DhlConfigClient({
           pe o latura se adauga suprataxele lor fixe, iar intre {PRAG_NECONVENABIL_KG} si {GREUTATE_MAXIMA_KG} kg
           reali se adauga taxa de colet nemanevrabil.
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-3">
           {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
@@ -626,7 +626,7 @@ export function DhlConfigClient({
           </Callout>
         )}
 
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Asigura expedierea</p>
             <p className="text-xs text-muted-foreground">
@@ -640,7 +640,7 @@ export function DhlConfigClient({
           />
         </div>
 
-        <div className="flex items-center justify-between pt-3">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Declara valoarea comenzii la transport</p>
             <p className="text-xs text-muted-foreground">
@@ -654,7 +654,7 @@ export function DhlConfigClient({
           />
         </div>
 
-        <div className="flex items-center justify-between pt-3">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Cere ridicare de la DHL</p>
             <p className="text-xs text-muted-foreground">
@@ -670,7 +670,7 @@ export function DhlConfigClient({
           />
         </div>
 
-        <div className="flex items-center justify-between pt-3">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Anunta destinatarul pe email</p>
             <p className="text-xs text-muted-foreground">
@@ -685,7 +685,7 @@ export function DhlConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Pornire">
+      <Panel step={6} title="Pornire">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Foloseste DHL pentru livrare</p>
@@ -730,7 +730,7 @@ export function DhlConfigClient({
           </Callout>
         )}
 
-        <Button type="button" className="mt-3" onClick={salvare} disabled={salveaza}>
+        <Button type="button" onClick={salvare} disabled={salveaza}>
           {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
         </Button>
       </Panel>

@@ -201,8 +201,8 @@ export function UpsConfigClient({
   const permise = config.servicii_permise ?? [];
 
   return (
-    <div className="space-y-5">
-      <Panel title="Conectare">
+    <div className="space-y-6">
+      <Panel step={1} title="Conectare">
         <Field
           label="Client ID"
           hint="Din aplicatia ta din portalul UPS pentru dezvoltatori. Nu e mascat: iti spune ce aplicatie ai legat."
@@ -252,7 +252,7 @@ export function UpsConfigClient({
           </select>
         </Field>
 
-        <div className="flex flex-wrap gap-2 pt-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
             {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             Testeaza conexiunea
@@ -312,13 +312,13 @@ export function UpsConfigClient({
         )}
       </Panel>
 
-      <Panel title="Adresa de expeditie">
+      <Panel step={2} title="Adresa de expeditie">
         <Callout variant="info" icon={Info}>
           De aici pleaca fiecare colet, si tot de aici se calculeaza tariful. Codul postal e obligatoriu in
           practica: UPS nu are nomenclator de judete romanesti, iar cotarea lor cere un cod de judet de exact
           doua caractere — deci codul postal ramane singurul semnal dupa care pot zona ruta.
         </Callout>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nume persoana de contact">
             <Input value={expeditor.nume ?? ""} onChange={(e) => setExpeditor({ nume: e.target.value })} />
           </Field>
@@ -335,7 +335,7 @@ export function UpsConfigClient({
         <Field label="Strada si numarul" hint="Se imparte automat pe trei linii de cate 35 de caractere, cum cere UPS.">
           <Input value={expeditor.strada ?? ""} onChange={(e) => setExpeditor({ strada: e.target.value })} />
         </Field>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Oras">
             <Input value={expeditor.oras ?? ""} onChange={(e) => setExpeditor({ oras: e.target.value })} />
           </Field>
@@ -354,14 +354,14 @@ export function UpsConfigClient({
         </Callout>
       </Panel>
 
-      <Panel title="Ce se ofera in checkout">
+      <Panel step={3} title="Ce se ofera in checkout">
         <p className="text-xs font-semibold">Serviciile pe care le arati clientilor</p>
         <p className="text-[11px] text-muted-foreground">
           Nimic bifat = toate serviciile pe care le intoarce cotarea. „Intern” arata care dintre ele se pot
           folosi si pentru livrari in Romania, dupa ghidul comercial al UPS — dar filtrul real e al lor: ce
           intoarce cotarea, aia se poate expedia.
         </p>
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap gap-2">
           {servicii.map((s) => {
             const bifat = permise.includes(s.cod);
             return (
@@ -383,7 +383,7 @@ export function UpsConfigClient({
           })}
         </div>
 
-        <div className="flex items-center justify-between pt-3">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Cere tarifele contractului</p>
             <p className="text-xs text-muted-foreground">
@@ -396,7 +396,7 @@ export function UpsConfigClient({
           />
         </div>
 
-        <div className="flex items-center justify-between pt-3">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Ofera livrare in puncte UPS Access Point</p>
             <p className="text-xs text-muted-foreground">
@@ -412,7 +412,7 @@ export function UpsConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Plata la livrare (ramburs)">
+      <Panel step={4} title="Plata la livrare (ramburs)">
         <Callout variant="info" icon={Info}>
           <span className="block">
             UPS <strong>ofera</strong> ramburs pentru expedierile care pleaca din Uniunea Europeana — spre
@@ -455,7 +455,7 @@ export function UpsConfigClient({
         )}
       </Panel>
 
-      <Panel title="Eticheta">
+      <Panel step={5} title="Eticheta">
         <Field
           label="Formatul etichetei"
           hint="⚠ UPS NU da PDF la emitere — enumerarea lor e GIF, ZPL, EPL si SPL. PDF-ul exista doar la reimprimare, si il cerem de acolo cand copia noastra lipseste."
@@ -481,13 +481,13 @@ export function UpsConfigClient({
         </Callout>
       </Panel>
 
-      <Panel title="Coletul implicit">
+      <Panel step={6} title="Coletul implicit">
         <p className="text-xs text-muted-foreground">
           Se folosesc cand comanda n-are dimensiuni proprii. UPS factureaza pe maximul dintre greutatea fizica
           si cea volumetrica, deci dimensiuni prea mari scumpesc fiecare colet. Limita lor e {GREUTATE_MAXIMA_KG} kg
           pe colet; peste {PRAG_COLET_GREU_KG} kg intra-comunitar, coletul cere eticheta lor speciala de „colet greu”.
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-3">
           {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
@@ -510,7 +510,7 @@ export function UpsConfigClient({
             onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })}
           />
         </Field>
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Declara valoarea comenzii la transport</p>
             <p className="text-xs text-muted-foreground">
@@ -524,7 +524,7 @@ export function UpsConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Pornire">
+      <Panel step={7} title="Pornire">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Foloseste UPS pentru livrare</p>
@@ -551,7 +551,7 @@ export function UpsConfigClient({
             ca a esuat foloseste „Verifica la UPS” din pagina comenzii in loc sa incerci din nou.
           </Callout>
         )}
-        <Button type="button" className="mt-3" onClick={salvare} disabled={salveaza}>
+        <Button type="button" onClick={salvare} disabled={salveaza}>
           {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
         </Button>
       </Panel>

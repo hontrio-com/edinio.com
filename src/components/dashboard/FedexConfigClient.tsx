@@ -198,7 +198,7 @@ export function FedexConfigClient({
   const permise = config.servicii_permise ?? [];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/*
         ⚠ SUS DE TOT, nu la subsol. Pentru un magazin romanesc rambursul e prima
         intrebare, iar raspunsul nu se poate schimba din nicio setare.
@@ -208,7 +208,7 @@ export function FedexConfigClient({
         deloc la comenzile cu ramburs — restul curierilor raman.
       </Callout>
 
-      <Panel title="Conectare">
+      <Panel step={1} title="Conectare">
         <Field
           label="API Key (client_id)"
           hint="Din portalul FedEx pentru dezvoltatori, la proiectul tau. Nu e mascat: iti spune ce proiect ai legat."
@@ -251,7 +251,7 @@ export function FedexConfigClient({
           </select>
         </Field>
 
-        <div className="flex flex-wrap gap-2 pt-2">
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
             {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             Testeaza conexiunea
@@ -298,12 +298,12 @@ export function FedexConfigClient({
         )}
       </Panel>
 
-      <Panel title="Adresa de expeditie">
+      <Panel step={2} title="Adresa de expeditie">
         <Callout variant="info" icon={Info}>
           De aici pleaca fiecare colet, si tot de aici se calculeaza tariful. Codul postal e obligatoriu:
           Romania e tara „postal-aware” la FedEx (sase cifre), iar fara el cotarea nu se poate face deloc.
         </Callout>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nume persoana de contact">
             <Input value={expeditor.nume ?? ""} onChange={(e) => setExpeditor({ nume: e.target.value })} />
           </Field>
@@ -320,7 +320,7 @@ export function FedexConfigClient({
         <Field label="Strada si numarul" hint="Se imparte automat pe trei linii de cate 35 de caractere, cum cere FedEx.">
           <Input value={expeditor.strada ?? ""} onChange={(e) => setExpeditor({ strada: e.target.value })} />
         </Field>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Oras">
             <Input value={expeditor.oras ?? ""} onChange={(e) => setExpeditor({ oras: e.target.value })} />
           </Field>
@@ -333,14 +333,14 @@ export function FedexConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Ce se ofera in checkout">
+      <Panel step={3} title="Ce se ofera in checkout">
         <p className="text-xs font-semibold">Serviciile pe care le arati clientilor</p>
         <p className="text-[11px] text-muted-foreground">
           Nimic bifat = toate serviciile pe care le intoarce cotarea. Serviciile de marfa grea nu se ofera
           cumparatorilor cu colete sub {GREUTATE_MAXIMA_EXPRESS_KG} kg, oricum ar fi bifate — raman disponibile la
           emiterea din pagina comenzii.
         </p>
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap gap-2">
           {servicii.map((s) => {
             const bifat = permise.includes(s.cod);
             return (
@@ -363,7 +363,7 @@ export function FedexConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Ridicare si eticheta">
+      <Panel step={4} title="Ridicare si eticheta">
         <Field label="Cum ajunge coletul la FedEx">
           <select
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
@@ -427,12 +427,12 @@ export function FedexConfigClient({
         </Callout>
       </Panel>
 
-      <Panel title="Coletul implicit">
+      <Panel step={5} title="Coletul implicit">
         <p className="text-xs text-muted-foreground">
           Se folosesc cand comanda n-are dimensiuni proprii. FedEx factureaza pe maximul dintre greutatea fizica si
           cea volumetrica, deci dimensiuni prea mari scumpesc fiecare colet.
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-3">
           {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
@@ -455,7 +455,7 @@ export function FedexConfigClient({
             onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })}
           />
         </Field>
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Declara valoarea comenzii la transport</p>
             <p className="text-xs text-muted-foreground">
@@ -469,7 +469,7 @@ export function FedexConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Pornire">
+      <Panel step={6} title="Pornire">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Foloseste FedEx pentru livrare</p>
@@ -496,7 +496,7 @@ export function FedexConfigClient({
             ca a esuat foloseste „Verifica la FedEx” din pagina comenzii in loc sa incerci din nou.
           </Callout>
         )}
-        <Button type="button" className="mt-3" onClick={salvare} disabled={salveaza}>
+        <Button type="button" onClick={salvare} disabled={salveaza}>
           {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
         </Button>
       </Panel>

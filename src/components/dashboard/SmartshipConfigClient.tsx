@@ -238,7 +238,7 @@ export function SmartshipConfigClient({
         cand curierul ridica coletul.
       </Callout>
 
-      <Panel title="Cheia de API">
+      <Panel step={1} title="Cheia de API">
         <Callout variant="info" icon={Info}>
           O gasesti in platforma SmartShip, la <strong>Contul meu {"->"} Setari {"->"} API</strong>.
         </Callout>
@@ -270,7 +270,7 @@ export function SmartshipConfigClient({
         )}
       </Panel>
 
-      <Panel title="Adresa de ridicare">
+      <Panel step={2} title="Adresa de ridicare">
         {/*
           * ⚠ Aici sta cel mai usor de gresit camp din toata configurarea.
           * `sender.city` e un ID numeric din nomenclatorul lor.
@@ -313,7 +313,7 @@ export function SmartshipConfigClient({
         )}
       </Panel>
 
-      <Panel title="Ramburs">
+      <Panel step={3} title="Ramburs">
         {/*
           * ⚠ Cel mai scump camp gresit din toata configurarea: un IBAN invalid
           * face ca TOATE comenzile cu ramburs sa cada tacut pe tariful fix.
@@ -336,7 +336,7 @@ export function SmartshipConfigClient({
         )}
       </Panel>
 
-      <Panel title="Ce se ofera in checkout">
+      <Panel step={4} title="Ce se ofera in checkout">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Lockere Sameday Easybox</p>
@@ -410,7 +410,7 @@ export function SmartshipConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Contract propriu (BYOC)">
+      <Panel step={5} title="Contract propriu (BYOC)">
         <Callout variant="info" icon={Info}>
           Daca ai conturi proprii de curier legate in SmartShip („Curieri Proprii”) si abonament
           BYOC activ, expedierile pot pleca pe contractele tale, la tarifele tale.
@@ -441,7 +441,7 @@ export function SmartshipConfigClient({
         </div>
       </Panel>
 
-      <Panel title="Coletul">
+      <Panel step={6} title="Coletul">
         {/*
           * ⚠ Dimensiunile nu sunt decor: se factureaza MAXIMUL dintre greutatea
           * fizica si cea volumetrica (L×l×h / 6000).
@@ -451,7 +451,7 @@ export function SmartshipConfigClient({
           (L × l × h / 6000). Dimensiuni prea mari scumpesc fiecare colet.
         </Callout>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Lungime (cm)">
             <Input type="number" min={1} value={lungime} onChange={(e) => setLungime(e.target.value)} />
           </Field>

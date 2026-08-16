@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
-import { PLATFORM_ORIGIN } from "@/lib/seo";
+import { PLATFORM_ORIGIN, storeBaseUrl } from "@/lib/seo";
+import { isSubscriptionInactive } from "@/lib/subscription";
 
 /**
  * SANTINELA: cere paginile importante si verifica CE CONTIN, nu doar ca raspund.
@@ -30,14 +31,49 @@ import { PLATFORM_ORIGIN } from "@/lib/seo";
  * e zero. Nu inlocuieste testele — le completeaza exact acolo unde ele sunt
  * oarbe, fiindca testele judeca functii, iar asta judeca productia.
  *
- * ═══ REGULA CARE FACE SANTINELA UTILA ═══
+ * ═══ CELE DOUA REGULI CARE FAC SANTINELA UTILA ═══
  *
- * Fiecare proba trebuie sa poata ESUA. O proba care verifica doar codul HTTP e
- * chiar greseala care a lasat cele patru defecte in viata: toate raspundeau 200.
+ * 1. FIECARE PROBA TREBUIE SA POATA ESUA. O proba care verifica doar codul HTTP
+ *    e chiar greseala care a lasat cele patru defecte in viata: toate raspundeau
+ *    200.
+ *
+ * 2. FIECARE PROBA TREBUIE SA POATA TRECE. Asta a fost invatata scump, pe
+ *    16.08.2026: santinela sunase de 88 de ori, si NICIUNA din cele trei probe
+ *    care cadeau n-avea dreptate.
+ *
+ *      * „cautarea intoarce rezultate" — 85 de alarme. Termenul se lua din
+ *        vocabularul TUTUROR celor cinci magazine candidate, iar magazinul chiar
+ *        probat era altul: se cauta „protectie" (cuvantul lui eSAFE, echipamente
+ *        de protectia muncii) intr-un magazin de haine outlet. Zero rezultate era
+ *        raspunsul CORECT, in fiecare din cele 85 de dati.
+ *      * „datele structurate poarta ce s-a completat in panou" — 28 de alarme, pe
+ *        magazinul `fortis`, al carui plan expirase pe 01.07: pagina lui nu e
+ *        vitrina, ci `<SuspendedStorePage>`. N-avea de unde sa aiba JSON-LD.
+ *      * „feedul Facebook al magazinului are produse" — 9 alarme, TOATE din
+ *        ramura al carei propriu mesaj spune „de rezolvat de comerciant, nu din
+ *        cod". Santinela cerea socoteala unor comercianti pentru datele lor.
+ *
+ *    O singura proba avusese vreodata dreptate: „paginarea da ALTE produse", de
+ *    trei ori pe 09.08, si defectul ei a fost reparat in aceeasi zi (`46bc616`).
+ *
+ *    Paguba nu sunt cele trei probe. Paguba e ca dupa 88 de alarme critice
+ *    ignorate nu mai apara nimic nici celelalte unsprezece.
+ *
+ * ═══ CE URMEAZA DIN REGULA A DOUA ═══
+ *
+ * O proba nu-si alege tinta pe „is_published". Alegerea trece prin `magazineVii`,
+ * si nimic nu se probeaza in afara ei.
  */
 
 /** Cat asteptam o pagina. Peste atat, e o defectiune indiferent de continut. */
 const TIMP_MAX_MS = 20_000;
+
+/** Uuid care nu exista, pentru un `.in()` care altfel ar ramane fara argumente. */
+const NICIUN_ID = "00000000-0000-0000-0000-000000000000";
+
+const ANTET = { "user-agent": "edinio-santinela" } as const;
+
+type Admin = SupabaseClient<Database>;
 
 interface Proba {
   nume: string;
@@ -45,20 +81,98 @@ interface Proba {
   ruleaza: () => Promise<string | null>;
 }
 
-async function ia(url: string): Promise<{ cod: number; text: string }> {
+interface Raspuns {
+  cod: number;
+  text: string;
+  /** Adresa la care s-a ajuns CHIAR, dupa redirectari. Vezi `ia`. */
+  url: string;
+}
+
+/**
+ * Cere o pagina.
+ *
+ * ⚠ `url` se intoarce fiindca `fetch` urmeaza redirectarile in tacere, iar asta a
+ * facut trei probe sa masoare alta pagina decat cea din numele lor: `/{slug}/magazin`
+ * raspunde 307 catre radacina magazinului la orice magazin care n-are pagina de
+ * catalog separata, deci „catalogul randeaza carduri" numara de fapt grila de pe
+ * pagina principala. Cine citea alarma deschidea `pagina-magazin.tsx`, unde nu
+ * rulase nimic din ce se masurase.
+ */
+async function ia(url: string): Promise<Raspuns> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMP_MAX_MS);
   try {
-    const r = await fetch(url, { signal: ctrl.signal, headers: { "user-agent": "edinio-santinela" }, cache: "no-store" });
-    return { cod: r.status, text: await r.text() };
+    const r = await fetch(url, { signal: ctrl.signal, headers: ANTET, cache: "no-store" });
+    return { cod: r.status, text: await r.text(), url: r.url || url };
   } catch (e) {
-    return { cod: 0, text: e instanceof Error ? e.message : "cerere esuata" };
+    return { cod: 0, text: e instanceof Error ? e.message : "cerere esuata", url };
   } finally {
     clearTimeout(t);
   }
 }
 
 const numara = (text: string, tipar: RegExp) => (text.match(tipar) ?? []).length;
+
+/** Cate ori apare `sir` in `text`, fara suprapuneri. */
+function numaraSir(text: string, sir: string): number {
+  let n = 0;
+  for (let i = text.indexOf(sir); i !== -1; i = text.indexOf(sir, i + sir.length)) n++;
+  return n;
+}
+
+/**
+ * Cere o adresa si NUMARA un sir FARA sa tina tot corpul in memorie.
+ *
+ * ⚠ Feedurile nu sunt „cateva sute de kiloocteti". Masurat pe 16.08.2026:
+ * `esafe.ro/facebook-catalog.xml` are **93 MB** si 37.025 de articole (comentariul
+ * de dinainte spunea 3 MB — cifra aia era a lui vetdepo, de 30 de ori mai mica).
+ * `await r.text()` pe asa ceva materializeaza tot sirul in memoria functiei, doar
+ * ca sa numere `<item>`. Aici se citeste in bucati si se tine doar coada.
+ *
+ * ⚠ `sir` trebuie sa fie un sir FIX care nu se poate suprapune cu el insusi
+ * (`<item>`, `<sitemap>`, `/product/`). Coada pastrata are exact `sir.length - 1`
+ * caractere: destul cat o potrivire taiata de granita bucatii sa fie prinsa, si
+ * prea scurta cat una intreaga sa incapa in ea si sa fie numarata de doua ori.
+ */
+async function iaSiNumara(url: string, sir: string): Promise<{ cod: number; cate: number; url: string }> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMP_MAX_MS);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: ANTET, cache: "no-store" });
+    if (r.status !== 200 || !r.body) {
+      /*
+       * Corpul se ANULEAZA, nu se abandoneaza. `ia()` il golea oricum prin
+       * `r.text()`; aici, un `return` sec ar lasa socketul tinut pana la colectarea
+       * gunoiului, de pana la zece ori pe rulare cand feedurile dau 404.
+       */
+      await r.body?.cancel().catch(() => {});
+      return { cod: r.status, cate: 0, url: r.url || url };
+    }
+    const cititor = r.body.getReader();
+    const decodor = new TextDecoder();
+    let coada = "";
+    let cate = 0;
+    for (;;) {
+      const { done, value } = await cititor.read();
+      if (done) break;
+      const bucata = coada + decodor.decode(value, { stream: true });
+      cate += numaraSir(bucata, sir);
+      /*
+       * ⚠ `sir.length - 1`, dar niciodata `slice(-0)`: pentru un sir de un singur
+       * caracter, `-0` e `0`, iar `slice(0)` intoarce BUCATA INTREAGA — coada ar
+       * creste cat tot corpul (adica exact ce evitam) si fiecare potrivire ar fi
+       * numarata de doua ori. Un sir de un caracter n-are oricum nevoie de coada.
+       */
+      coada = sir.length > 1 ? bucata.slice(-(sir.length - 1)) : "";
+    }
+    return { cod: 200, cate, url: r.url || url };
+  } catch {
+    /* Flux intrerupt, TLS, DNS, timeout: `cod: 0`, si NICIODATA un numar partial. */
+    return { cod: 0, cate: 0, url };
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 /**
  * Toate nodurile de date structurate dintr-o pagina, cu `@graph` desfacut.
@@ -96,6 +210,121 @@ function areTip(noduri: Record<string, unknown>[], ...tipuri: string[]): boolean
   return noduri.some((n) => typeof n["@type"] === "string" && tipuri.includes(n["@type"] as string));
 }
 
+/** Slugurile de produs dintr-o pagina, o singura data fiecare. */
+function produseDinPagina(text: string): string[] {
+  const gasite = [...text.matchAll(/href="[^"]*\/product\/([^"?#]+)"/g)].map((m) => m[1]);
+  return [...new Set(gasite)].sort();
+}
+
+const primulNegol = (...v: (string | null | undefined)[]) =>
+  v.map((x) => (x ?? "").trim()).find(Boolean) ?? "";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * MAGAZINELE VII
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Un magazin pe care santinela are voie sa-l probeze. */
+interface MagazinViu {
+  id: string;
+  slug: string;
+  /** Adresa canonica: domeniul propriu cand exista, altfel calea de pe platforma. */
+  baza: string;
+}
+
+/**
+ * Magazinele care CHIAR randeaza o vitrina unui vizitator.
+ *
+ * ⚠ `is_published = true` NU inseamna asta. Cand abonamentul s-a stins,
+ * `[slug]/page.tsx` randeaza `<SuspendedStorePage>`: cod 200, un titlu, „Magazinul
+ * este momentan indisponibil" — si nimic altceva. Fara grila, fara carduri, fara
+ * JSON-LD, dar CU sitemap si CU feed Facebook, fiindca rutele alea nu se uita la
+ * abonament. De aici tabloul care insala: „sitemapul are produse" trece in timp ce
+ * „catalogul randeaza carduri" cade, si arata leit cu o defectiune de randare.
+ *
+ * ⚠ Masurat pe productie la 16.08.2026: din 70 de magazine publicate, 53 sunt
+ * suspendate. Trei sferturi. O proba care isi alege tinta doar dupa `is_published`
+ * are trei sanse din patru sa nimereasca o pagina care N-ARE ce sa contina — si
+ * asa au iesit cele 28 de alarme cu `fortis`.
+ *
+ * ⚠ Si nu e o poveste incheiata: chiar magazinul probat pana acum,
+ * `nordic-outlet-bucovina`, are `plan_expires_at` trecut de 14 zile si
+ * `payment_failed_at` scris pe 16.08 — e in reincercarile Stripe chiar acum. Cand
+ * gratia se termina, patru probe ar fi inceput sa acuze catalogul pentru o stare de
+ * abonament, fara nicio schimbare de cod.
+ *
+ * Regula se ia din `isSubscriptionInactive`, nu se rescrie aici. ⚠ Dar nu e chiar
+ * regula storefront-ului: storefront-ul o are scrisa DE MANA, in trei locuri
+ * ((public)/[slug]/page.tsx, [slug]/[pageSlug]/page.tsx, catalog/pagina-magazin.tsx),
+ * si niciunul dintre ele nu importa functia. Fata de ele, `isSubscriptionInactive`
+ * are in plus plasa de 45 de zile pentru abonamentele platite pierdute, iar noi mai
+ * sarim si magazinele fara profil.
+ *
+ * Abaterea e deci un SUPRASET: tot ce iese din `vii` aici ar putea inca sa randeze
+ * vitrina. Directia conteaza si e aleasa dinadins — costa acoperire (un magazin
+ * neprobat), NICIODATA o alarma falsa, care e greseala pe care fisierul asta o
+ * plateste acum. Ziua in care cele patru copii se unifica, randul asta ramane bun.
+ */
+async function magazineVii(admin: Admin): Promise<{ vii: MagazinViu[]; eroare: string | null }> {
+  const { data: mag, error } = await admin
+    .from("businesses")
+    .select("id, slug, user_id, suspended_until, custom_domain, custom_domain_healthy")
+    .eq("is_published", true)
+    .not("slug", "is", null);
+  if (error) return { vii: [], eroare: `citirea magazinelor a esuat: ${error.message}` };
+
+  const idUtilizatori = [...new Set((mag ?? []).map((b) => b.user_id))];
+  const { data: profiluri, error: eProfil } = await admin
+    .from("users_profile")
+    .select("id, plan, plan_expires_at")
+    .in("id", idUtilizatori.length ? idUtilizatori : [NICIUN_ID]);
+  if (eProfil) return { vii: [], eroare: `citirea planurilor a esuat: ${eProfil.message}` };
+  const planDupaUtilizator = new Map((profiluri ?? []).map((p) => [p.id, p]));
+
+  const vii: MagazinViu[] = [];
+  for (const b of mag ?? []) {
+    const p = planDupaUtilizator.get(b.user_id);
+    /*
+     * Fara profil nu putem sti daca abonamentul mai tine. Santinela nu proba ce nu
+     * poate confirma: mai bine o tinta in minus decat o alarma pe care n-o poate
+     * explica nimeni.
+     */
+    if (!p) continue;
+    if (isSubscriptionInactive({
+      plan: p.plan,
+      planExpiresAt: p.plan_expires_at,
+      suspendedUntils: [b.suspended_until],
+    })) continue;
+    const domeniu = (b.custom_domain ?? "").trim();
+    /*
+     * Domeniu dovedit stricat: defectul e cunoscut, are alt proprietar, si o alarma
+     * din doua in doua ore despre acelasi certificat expirat e chiar felul in care
+     * o alarma ajunge sa fie ignorata.
+     */
+    if (domeniu && b.custom_domain_healthy === false) continue;
+    vii.push({
+      id: b.id,
+      slug: b.slug,
+      baza: storeBaseUrl({ slug: b.slug, custom_domain: domeniu || null }),
+    });
+  }
+  return { vii, eroare: null };
+}
+
+/** Magazinul de proba, impreuna cu ce s-a aflat cerandu-i pagina de catalog. */
+interface MagazinProba extends MagazinViu {
+  total: number;
+  /** Adresa la care traieste CHIAR grila de produse. */
+  catalog: string;
+  /** `false` cand `/magazin` duce inapoi la radacina: grila e pe pagina principala. */
+  paginaCatalogSeparata: boolean;
+  /** Raspunsul deja primit pentru `catalog`, ca sa nu fie cerut de doua ori. */
+  primaPagina: Raspuns;
+}
+
+const acelasiLoc = (a: string, b: string) => a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -111,100 +340,280 @@ export async function GET(req: NextRequest) {
     { auth: { persistSession: false } },
   );
 
+  const { vii, eroare: eroareMagazine } = await magazineVii(admin);
+  const viuDupaId = new Map(vii.map((m) => [m.id, m]));
+
   /*
-   * Magazinul de proba se ALEGE din baza, nu se scrie in cod.
+   * ═══ MAGAZINUL DE PROBA ═══
    *
-   * Un slug fixat aici ar fi facut santinela sa tipe in ziua in care magazinul
-   * ala isi conecteaza un domeniu sau se depublica — adica alarma falsa, care e
-   * cel mai sigur mod de a face pe cineva sa opreasca alarma.
+   * Se ALEGE din baza, nu se scrie in cod. Un slug fixat aici ar fi facut santinela
+   * sa tipe in ziua in care magazinul ala isi conecteaza un domeniu sau se
+   * depublica — adica alarma falsa.
    *
-   * Se alege cel mai mare magazin de pe palierul server: acolo traiesc si
-   * paginarea in SQL, si cautarea, deci o singura pagina acopera amandoua.
+   * ⚠ Se cer TOATE rezumatele si se incruciseaza cu magazinele vii, nu invers.
+   * Forma dinainte lua `.limit(5)` din clasament si abia APOI filtra: cele cinci
+   * locuri erau ocupate de esafe.ro, vetdepo.ro, bricosmart.ro si insulabucuriei.ro,
+   * deci ramanea EXACT un candidat folosibil. In ziua in care si acela isi conecta
+   * un domeniu, sase probe ar fi raportat „niciun magazin de proba" la fiecare
+   * rulare — o alarma pe care nimeni n-o poate stinge din panou.
+   *
+   * ⚠ Magazinele cu domeniu propriu NU mai sunt excluse. Filtrul acela parea sa
+   * tina masuratoarea „pe platforma", dar `proxy.ts` raspunde oricum cu 307 catre
+   * domeniul propriu, deci cererea ajungea acolo prin doua salturi. Ce facea cu
+   * adevarat era sa taie din alegere exact magazinele mari — singurele care au
+   * palier server, pagina de catalog si categorii.
    */
-  const { data: rezumate } = await admin
+  const { data: rezumate, error: eRezumate } = await admin
     .from("catalog_rezumat")
     .select("business_id, total")
     .eq("fara_imagini", false).eq("fara_stoc_ascuns", false)
-    .order("total", { ascending: false }).limit(5);
-  const idCandidati = ((rezumate ?? []) as { business_id: string; total: number }[]).map((r) => r.business_id);
-  const { data: magazine } = await admin
-    .from("businesses").select("slug, custom_domain")
-    .in("id", idCandidati.length ? idCandidati : ["00000000-0000-0000-0000-000000000000"])
-    .eq("is_published", true).is("custom_domain", null);
-  const slug = ((magazine ?? [])[0] as { slug: string } | undefined)?.slug ?? null;
-  const baza = slug ? `${PLATFORM_ORIGIN}/${slug}` : null;
+    .gt("total", 0)
+    .order("total", { ascending: false })
+    .limit(200);
+
+  const clasament = ((rezumate ?? []) as { business_id: string; total: number }[])
+    .map((r) => {
+      const m = viuDupaId.get(r.business_id);
+      return m ? { ...m, total: r.total } : null;
+    })
+    .filter((x): x is MagazinViu & { total: number } => x !== null);
+
+  /*
+   * ═══ CARE MAGAZIN, SI DE CE SE INTREABA PRODUCTIA, NU BAZA ═══
+   *
+   * Probele de catalog, de paginare si de cautare au sens doar pe un magazin care
+   * ARE pagina de catalog. La celelalte, `/{slug}/magazin` raspunde 307 catre
+   * radacina, iar probele masurau — in tacere — grila de pe pagina principala:
+   * treceau mereu, si `pagina-magazin.tsx` (702 de linii, filtre, feliere,
+   * categorii, canonical) nu era ceruta de nimeni.
+   *
+   * Care magazin are pagina separata se AFLA cerand-o, nu deducand-o din
+   * `storefront_design`. O a doua copie a regulii aici ar fi inceput sa se abata de
+   * la storefront din prima zi in care storefront-ul se schimba — si santinela ar
+   * fi ajuns sa masoare propria ei parere.
+   *
+   * Se incearca in ordinea marimii, cel mult cateva: prima care raspunde 200 fara
+   * sa fie dusa inapoi la radacina castiga. Daca niciuna n-are, se probeaza pagina
+   * principala a celui mai mare — dar atunci mesajele o SPUN, ca sa nu mai trimita
+   * pe nimeni in fisierul gresit.
+   *
+   * ⚠ UN CANDIDAT SARIT NU SE UITA. Prima forma a buclei facea `continue` pe orice
+   * cod diferit de 200 si arunca codul odata cu el: daca pagina de catalog a celui
+   * mai mare magazin incepea sa dea 500, santinela trecea tacut la urmatorul, il
+   * gasea sanatos, si raporta VERDE — adica exact clasa de defect pentru care exista
+   * proba. Codurile se strang si le raporteaza proba de catalog.
+   */
+  const MAX_INCERCARI = 4;
+  let magazin: MagazinProba | null = null;
+  let rezerva: MagazinProba | null = null;
+  const incercariCazute: string[] = [];
+  for (const c of clasament.slice(0, MAX_INCERCARI)) {
+    const r = await ia(`${c.baza}/magazin`);
+    if (r.cod !== 200) {
+      incercariCazute.push(`${c.baza}/magazin raspunde cu ${r.cod}`);
+      continue;
+    }
+    if (!acelasiLoc(r.url, c.baza)) {
+      magazin = { ...c, catalog: `${c.baza}/magazin`, paginaCatalogSeparata: true, primaPagina: r };
+      break;
+    }
+    rezerva ??= { ...c, catalog: c.baza, paginaCatalogSeparata: false, primaPagina: r };
+  }
+  /*
+   * `const`, ca sa se poata ingusta inauntrul probelor: TypeScript nu duce
+   * ingustarea unui `let` din afara intr-o functie imbricata.
+   */
+  const magazinProba: MagazinProba | null = magazin ?? rezerva;
+
+  /*
+   * ⚠ `error` verificat si aici, nu doar `data`. Fara asta, o citire picata dadea
+   * lista goala, `slug` devenea `null`, si sase probe raportau „niciun magazin de
+   * proba" — mesaj din care nu se reconstituie daca lipsea magazinul sau lipsea baza
+   * de date.
+   *
+   * ⚠ Si motivul trebuie sa fie CEL ADEVARAT. O forma care spunea mereu „toate
+   * suspendate sau cu domeniul stricat" ar fi mintit chiar in cazul cel mai probabil:
+   * o livrare care rupe `pagina-magazin.tsx` face 500 pe toate cele patru candidate
+   * deodata (sunt servite de acelasi cod), iar cine citeste alarma ar pleca in panoul
+   * de abonamente in loc sa se uite la deploy.
+   */
+  const motivFaraMagazin =
+    eroareMagazine
+    ?? (eRezumate ? `citirea rezumatelor a esuat: ${eRezumate.message}` : null)
+    ?? (incercariCazute.length
+      ? `niciun magazin de proba: ${clasament.length} magazine vii cu produse, dar paginile lor nu raspund`
+        + ` (${incercariCazute.join(", ")})`
+      : "niciun magazin viu cu produse (toate suspendate, nepublicate, sau cu domeniul stricat)");
+
+  const slug = magazinProba?.slug ?? null;
+  /** Cum se numeste, in mesaje, pagina pe care s-a masurat CHIAR. */
+  const numeleCatalogului = magazinProba?.paginaCatalogSeparata
+    ? "pagina de catalog"
+    : "grila de pe pagina principala (magazinul n-are pagina de catalog separata)";
 
   const probe: Proba[] = [
     {
       nume: "sitemap-index are magazine",
       ruleaza: async () => {
-        const { cod, text } = await ia(`${PLATFORM_ORIGIN}/sitemap-magazine.xml`);
+        const { cod, cate } = await iaSiNumara(`${PLATFORM_ORIGIN}/sitemap-magazine.xml`, "<sitemap>");
         if (cod !== 200) return `cod ${cod}`;
-        const n = numara(text, /<sitemap>/g);
         // Zero inseamna ori interogare picata, ori filtru prea strans. Ambele au
         // acelasi efect: niciun produs al platformei nu mai ajunge la indexare.
-        return n === 0 ? "index gol: niciun magazin" : null;
+        return cate === 0 ? "index gol: niciun magazin" : null;
       },
     },
     {
       nume: "sitemap de magazin are produse",
       ruleaza: async () => {
-        if (!baza) return "niciun magazin de proba";
-        const { cod, text } = await ia(`${baza}/sitemap.xml`);
+        if (!magazinProba) return motivFaraMagazin;
+        const { cod, cate } = await iaSiNumara(`${magazinProba.baza}/sitemap.xml`, "/product/");
         if (cod !== 200) return `cod ${cod}`;
-        const n = numara(text, /\/product\//g);
-        return n === 0 ? "sitemapul magazinului n-are niciun produs" : null;
+        return cate === 0 ? `sitemapul magazinului ${magazinProba.slug} n-are niciun produs` : null;
       },
     },
     {
       nume: "catalogul randeaza carduri",
       ruleaza: async () => {
-        if (!baza) return "niciun magazin de proba";
-        const { cod, text } = await ia(`${baza}/magazin`);
-        if (cod !== 200) return `cod ${cod}`;
+        if (!magazinProba) return motivFaraMagazin;
+        const { text, url } = magazinProba.primaPagina;
         const n = numara(text, /href="[^"]*\/product\//g);
         // Exact defectul „0 din 1049 produse": pagina raspunde, contorul arata
         // numarul intreg, si grila e goala.
-        return n === 0 ? "pagina de catalog n-a randat niciun card" : null;
+        //
+        // Mesajul spune ADRESA MASURATA, nu numele rutei cerute. Cand cele doua
+        // difera (redirect catre radacina), cine citea alarma deschidea pagina de
+        // catalog si nu gasea nimic din ce se masurase.
+        const cazute = n === 0 ? [`${numeleCatalogului} (${url}) n-a randat niciun card`] : [];
+        /*
+         * ⚠ Si magazinele SARITE la alegere. Fara randul asta, un catalog rupt la
+         * primul magazin din clasament nu producea nicio alarma: alegerea trecea la
+         * urmatorul, il gasea sanatos, si proba raporta verde despre ALT magazin.
+         * Aici e singurul loc care stie ca s-a intamplat.
+         */
+        if (incercariCazute.length) {
+          cazute.push(`am sarit magazine cu pagina de catalog cazuta: ${incercariCazute.join(", ")}`);
+        }
+        return cazute.length ? cazute.join(" | ") : null;
       },
     },
     {
       nume: "paginarea da ALTE produse",
       ruleaza: async () => {
-        if (!baza) return "niciun magazin de proba";
-        const [unu, doi] = await Promise.all([ia(`${baza}/magazin`), ia(`${baza}/magazin?page=2`)]);
-        if (unu.cod !== 200 || doi.cod !== 200) return `coduri ${unu.cod}/${doi.cod}`;
-        const ids = (t: string) => [...new Set((t.match(/href="[^"]*\/product\/([^"?#]+)"/g) ?? []))];
-        const a = ids(unu.text), b = ids(doi.text);
-        if (b.length === 0) return "pagina 2 e goala";
+        if (!magazinProba) return motivFaraMagazin;
+        const unu = magazinProba.primaPagina;
+        const doi = await ia(`${magazinProba.catalog}?page=2`);
+        if (doi.cod !== 200) return `pagina 2 (${doi.url}) raspunde cu ${doi.cod}`;
+        const a = produseDinPagina(unu.text);
+        const b = produseDinPagina(doi.text);
+        /* Fiecare mesaj poarta adresa CHIAR MASURATA de el, nu pe a paginii vecine. */
+        if (a.length === 0) return `pagina 1 (${unu.url}) e goala`;
+        if (b.length === 0) return `pagina 2 (${doi.url}) e goala`;
         /*
          * Doua pagini cu ACELEASI produse inseamna ca felierea nu se aplica —
          * chiar defectul din A3, unde `?page=2` randa neschimbat primele 20.
          * Contoarele aratau corect si atunci.
          */
-        return JSON.stringify(a) === JSON.stringify(b) ? "pagina 2 arata aceleasi produse ca pagina 1" : null;
+        return JSON.stringify(a) === JSON.stringify(b)
+          ? `pagina 2 arata aceleasi produse ca pagina 1, pe ${doi.url}`
+          : null;
       },
     },
     {
       nume: "cautarea intoarce rezultate",
       ruleaza: async () => {
-        if (!baza) return "niciun magazin de proba";
+        if (!magazinProba) return motivFaraMagazin;
         /*
-         * Termenul se ia din chiar vocabularul magazinului, nu e inventat: un
-         * cuvant scris de mana ar fi putut sa nu existe in catalog, si atunci
-         * „zero rezultate" ar fi fost raspunsul CORECT — o alarma care nu poate
-         * distinge intre defect si adevar nu ajuta pe nimeni.
+         * ⚠ TERMENUL SE IA DIN VOCABULARUL MAGAZINULUI PROBAT. Nu al altuia.
+         *
+         * Asta a fost defectul care a produs 85 din cele 88 de alarme: interogarea
+         * filtra pe `idCandidati`, adica pe TOATE cele cinci magazine din clasament,
+         * si intorcea cuvantul cel mai frecvent DINTRE ELE — „protectie", cu 2034 de
+         * produse la eSAFE. Magazinul chiar cerut era insa nordic-outlet-bucovina,
+         * un outlet de haine, unde „protectie" nu apare nicaieri. Zero rezultate era
+         * raspunsul corect, si santinela l-a raportat ca defect din doua in doua ore,
+         * o saptamana intreaga.
+         *
+         * Un termen scris de mana ar avea acelasi neajuns dintr-o alta directie:
+         * putea sa nu existe in catalog, si atunci „zero rezultate" ar fi fost tot
+         * raspunsul corect.
          */
-        const { data: cuv } = await admin
+        const { data: cuv, error: eCuv } = await admin
           .from("catalog_cuvant").select("cuvant, cate")
-          .in("business_id", idCandidati.length ? idCandidati : ["00000000-0000-0000-0000-000000000000"])
-          .order("cate", { ascending: false }).limit(1);
-        const termen = ((cuv ?? [])[0] as { cuvant: string } | undefined)?.cuvant;
-        if (!termen) return "magazinul n-are vocabular de cautare";
-        const { cod, text } = await ia(`${baza}/magazin?q=${encodeURIComponent(termen)}`);
-        if (cod !== 200) return `cod ${cod}`;
-        const n = numara(text, /href="[^"]*\/product\//g);
-        return n === 0 ? `cautarea dupa „${termen}" (cel mai frecvent cuvant al magazinului) n-a gasit nimic` : null;
+          .eq("business_id", magazinProba.id)
+          .order("cate", { ascending: false }).limit(5);
+        if (eCuv) return `citirea vocabularului a esuat: ${eCuv.message}`;
+        const vocabular = (cuv ?? []) as { cuvant: string; cate: number }[];
+        /*
+         * ⚠ VOCABULAR GOL E O ALARMA, nu un motiv de tacere.
+         *
+         * Un magazin cu produse si fara niciun cuvant in index inseamna ca indexul
+         * de cautare nu s-a mai reconstruit — chiar al treilea dintre cele patru
+         * defecte pentru care exista fisierul asta (`DELETE` fara `WHERE`, respins de
+         * paza rolului, patru zile in care nimeni n-a cautat nimic cu folos). O
+         * versiune a probei care iesea tacut aici ar fi fost oarba fix la defectul
+         * care a nascut-o.
+         */
+        if (vocabular.length === 0) {
+          return `magazinul ${magazinProba.slug} are ${magazinProba.total} produse, dar ZERO cuvinte in`
+            + ` indexul de cautare (catalog_cuvant) — indexul nu se mai reconstruieste`;
+        }
+        /*
+         * ⚠ TERMENUL NU SE IA DIN `catalog_cuvant`, DESI E ACOLO — si asta e a doua
+         * jumatate a lectiei, gasita la a doua trecere peste chiar reparatia asta.
+         *
+         * Vocabularul se construieste peste TOATE randurile din `catalog_produs`
+         * (`catalog_reface_cuvinte`: `where c.business_id = p_business`, si atat), pe
+         * cand cautarea raspunde doar din produsele VIZIBILE (`catalog_candidati`:
+         * `c.category <> all (f.ascunse)`), iar `catalog_rezumat.total` la fel. Deci
+         * un cuvant care traieste numai in produsele dintr-o categorie stinsa de
+         * comerciant e „cuvant al magazinului" dupa index si intoarce corect ZERO
+         * rezultate in vitrina. Adica fix familia celor 85 de alarme false, doar ca
+         * dintr-un alt unghi — si o forma care compara `cate` cu `total` compara doua
+         * numere din universuri diferite.
+         *
+         * Se ia deci un cuvant dintr-un produs care E CHIAR PE PAGINA masurata mai
+         * sus: vizibil prin constructie, fara nicio presupunere despre index.
+         */
+        const nefiltrat = produseDinPagina(magazinProba.primaPagina.text);
+        const cuvantDinSlug = (s: string) =>
+          s.split("-").filter((w) => /^[a-z]{4,}$/.test(w)).sort((a, b) => b.length - a.length)[0];
+        const tinta = nefiltrat.find((s) => cuvantDinSlug(s));
+        /* Niciun slug cu un cuvant folosibil (doar coduri de produs): n-avem ce cauta. */
+        if (!tinta) return null;
+        const termen = cuvantDinSlug(tinta);
+
+        const r = await ia(`${magazinProba.catalog}?q=${encodeURIComponent(termen)}`);
+        if (r.cod !== 200) return `cautarea raspunde cu ${r.cod} pe ${r.url}`;
+        const gasite = produseDinPagina(r.text);
+        if (gasite.length === 0) {
+          return `cautarea dupa „${termen}" n-a gasit nimic pe ${r.url}, desi cuvantul vine chiar din`
+            + ` produsul „${tinta}", afisat acum pe ${magazinProba.primaPagina.url}`;
+        }
+        /*
+         * Produsul din care a venit cuvantul TREBUIE sa fie printre rezultate. E o
+         * aserttiune mai stransa decat „macar un card" si, spre deosebire de ea, nu
+         * poate da alarma falsa: produsul e vizibil, iar cuvantul e din numele lui.
+         */
+        if (!gasite.includes(tinta)) {
+          return `cautarea dupa „${termen}" a dat ${gasite.length} rezultate, dar NU si produsul`
+            + ` „${tinta}", din al carui nume vine chiar cuvantul cautat`;
+        }
+        /*
+         * ⚠ „Macar un card" NU e destul. Catalogul NEFILTRAT da si el carduri, deci
+         * daca `?q=` ar inceta sa se aplice — chiar defectul A3 din antetul
+         * fisierului, „cautarea scria in bara de adrese si nu schimba nimic" — pagina
+         * ar randa catalogul implicit si proba ar raporta „cautarea intoarce
+         * rezultate". Se cere de aceea si un termen care nu poate exista: zero
+         * rezultate acolo e singura dovada ca filtrul chiar se aplica, si niciun
+         * catalog adevarat nu poate contrazice asta.
+         */
+        const inexistent = await ia(`${magazinProba.catalog}?q=zzqqxxwv9`);
+        if (inexistent.cod !== 200) return `cautarea raspunde cu ${inexistent.cod} pe ${inexistent.url}`;
+        const peNimic = produseDinPagina(inexistent.text);
+        return peNimic.length > 0
+          ? `cautarea dupa un termen inexistent a intors ${peNimic.length} produse pe ${inexistent.url}:`
+            + ` filtrul „q" nu se aplica deloc`
+          : null;
       },
     },
     {
@@ -213,10 +622,10 @@ export async function GET(req: NextRequest) {
         /*
          * Singura proba care VERIFICA O SCRIERE, nu o citire.
          *
-         * Celelalte cinci cer pagini si numara ce iese. Asta cheama `proba_stoc()`,
-         * care isi face un produs cu doua marimi si o comanda, le trece prin tot
-         * ciclul — revendicare, refuz pe marimea epuizata, anulare, reactivare — si
-         * ANULEAZA TRANZACTIA la final. Nimic nu ramane in baza; verificat.
+         * Celelalte cer pagini si numara ce iese. Asta cheama `proba_stoc()`, care
+         * isi face un produs cu doua marimi si o comanda, le trece prin tot ciclul —
+         * revendicare, refuz pe marimea epuizata, anulare, reactivare — si ANULEAZA
+         * TRANZACTIA la final. Nimic nu ramane in baza; verificat.
          *
          * De ce pe date sintetice: proba scade si pune inapoi stoc. Pe marfa reala,
          * o rulare intrerupta la mijloc ar lasa stocul gresit — santinela ar deveni
@@ -230,6 +639,13 @@ export async function GET(req: NextRequest) {
          * Dovedit ca poate ESUA: rulata peste purtarea de dinainte de 18.08
          * (verificare doar pe produs, scadere plafonata la zero pe marime), a doua
          * bucata primea `{"ok": true}` si proba o prindea.
+         *
+         * ⚠ Numele spune „cursa", dar cele doua revendicari se fac SECVENTIAL, in
+         * aceeasi tranzactie: o tranzactie nu se blocheaza pe propriile lacate, deci
+         * `for update` din `revendica_stoc_complet` n-are ce apara aici. Ce verifica
+         * proba cu adevarat — si e chiar defectul din 18.08 — e ca refuzul se face PE
+         * MARIME si intoarce numele ei. Concurenta ramane neacoperita; de stiut cand
+         * cineva se bazeaza pe raportul verde.
          */
         const { data, error } = await admin.rpc("proba_stoc", {});
         if (error) return `proba n-a putut rula: ${error.message}`;
@@ -244,35 +660,62 @@ export async function GET(req: NextRequest) {
       },
     },
     {
-      nume: "cozile nu sunt blocate",
+      nume: "cozile se golesc",
       ruleaza: async () => {
         /*
-         * O coada care creste inseamna ca un cron nu-si face treaba — exact ce s-a
-         * intamplat cu vocabularul, care esua tacut de patru zile. Pragul e mare
-         * DELIBERAT: un import mare umple legitim coada de proiectie pentru cateva
-         * minute, si o alarma la fiecare import ar fi zgomot.
+         * ⚠ SE MASOARA VECHIMEA, NU MARIMEA. Forma dinainte se uita la numarul de
+         * randuri, cu praguri care nu puteau fi atinse NICIODATA:
+         *
+         *   `catalog_rezumat_murdar` si `catalog_cuvinte_murdar` au amandoua
+         *   PRIMARY KEY (business_id), deci cel mult un rand pe magazin: 127 de
+         *   randuri cu totul, la un prag de 200. `catalog_murdar` are PK pe
+         *   product_id, deci cel mult 8094, la un prag de 5000 — adica ar fi cerut ca
+         *   62% din TOATE produsele platformei sa fie murdare deodata, cand cel mai
+         *   mare reimport posibil marcheaza 3351.
+         *
+         * Deci proba scrisa ANUME pentru vocabularul care esua tacut de patru zile
+         * n-ar fi prins nici acel incident. In cele 88 de alarme din istoric, numele
+         * ei apare de ZERO ori — nu fiindca era liniste, ci fiindca nu putea suna.
+         *
+         * Ce conteaza chiar e daca un rand STA. `catalog-proiector` ruleaza la
+         * fiecare minut si goleste 1000 de randuri pe rulare, in ordinea lui
+         * `marcat_la` (cel mai vechi intai), deci pana si o reproiectare a intregii
+         * platforme se scurge in vreo noua minute. Un rand mai vechi de o jumatate de
+         * ora inseamna un lucrator oprit — si asta e adevarat si cand coada are un
+         * singur rand, adica exact cazul pe care marimea nu-l vedea.
+         */
+        const PRAG_MINUTE = 30;
+        const prag = new Date(Date.now() - PRAG_MINUTE * 60_000).toISOString();
+
+        /*
+         * Cele trei citiri se scriu pe rand, nu dintr-o bucla peste numele tabelelor:
+         * cu numele venit dintr-o variabila, `.from()` nu mai poate fi verificat de
+         * `<Database>`, si atunci un tabel redenumit ar trece nevazut — chiar felul de
+         * proba care nu poate esua.
          */
         const [pr, rez, cuv] = await Promise.all([
-          admin.from("catalog_murdar").select("product_id", { count: "exact", head: true }),
-          admin.from("catalog_rezumat_murdar").select("business_id", { count: "exact", head: true }),
-          admin.from("catalog_cuvinte_murdar").select("business_id", { count: "exact", head: true }),
+          admin.from("catalog_murdar").select("marcat_la", { count: "exact", head: true }).lt("marcat_la", prag),
+          admin.from("catalog_rezumat_murdar").select("marcat_la", { count: "exact", head: true }).lt("marcat_la", prag),
+          admin.from("catalog_cuvinte_murdar").select("marcat_la", { count: "exact", head: true }).lt("marcat_la", prag),
         ]);
-        /*
-         * `error` VERIFICAT, nu doar `count`.
-         *
-         * La o citire picata, `count` e `null`, iar `?? 0` il preface in zero —
-         * adica „cozile sunt goale", adica sanatos. Santinela ar fi raportat verde
-         * tocmai cand baza nu raspunde. O santinela trebuie sa fie mai stricta
-         * decat sistemul pe care il verifica, nu mai iertatoare.
-         */
+
+        const blocate: string[] = [];
         for (const [nume, r] of [["proiectie", pr], ["rezumat", rez], ["vocabular", cuv]] as const) {
+          /*
+           * `error` VERIFICAT, nu doar numarul.
+           *
+           * La o citire picata, `count` e `null`, iar `?? 0` il preface in zero —
+           * adica „coada e goala", adica sanatos. Santinela ar fi raportat verde
+           * tocmai cand baza nu raspunde. O santinela trebuie sa fie mai stricta
+           * decat sistemul pe care il verifica, nu mai iertatoare.
+           */
           if (r.error) return `citirea cozii ${nume} a esuat: ${r.error.message}`;
+          const cate = r.count ?? 0;
+          if (cate > 0) blocate.push(`${nume}: ${cate} randuri nescurse de peste ${PRAG_MINUTE} de minute`);
         }
-        const vechi: string[] = [];
-        if ((pr.count ?? 0) > 5000) vechi.push(`proiectie ${pr.count}`);
-        if ((rez.count ?? 0) > 200) vechi.push(`rezumat ${rez.count}`);
-        if ((cuv.count ?? 0) > 200) vechi.push(`vocabular ${cuv.count}`);
-        return vechi.length ? `cozi in crestere: ${vechi.join(", ")}` : null;
+        return blocate.length
+          ? `cozi blocate (un lucrator nu-si mai face treaba): ${blocate.join(", ")}`
+          : null;
       },
     },
     {
@@ -332,50 +775,45 @@ export async function GET(req: NextRequest) {
         /*
          * ⚠ ASTA E ADRESA PE CARE O LIPESTE FIECARE COMERCIANT in Commerce Manager.
          *
-         * Proba surorii de mai jos cere feedul intreg DOAR ca martor, si numai cand
-         * un feed segmentat a iesit deja gol — deci magazinele fara feeduri
-         * segmentate (adica aproape toate) n-aveau nicio acoperire.
-         *
-         * Iar feedul intreg poate iesi gol fara sa cada nimic: `buildCatalogItems`
-         * sare peste produsele fara imagine, deci o migrare de imagini care goleste
+         * Feedul intreg poate iesi gol fara sa cada nimic: `buildCatalogItems` sare
+         * peste produsele fara imagine, deci o migrare de imagini care goleste
          * `images`, sau o regresie in maparea variantelor, da RSS valid, cod 200 si
          * zero articole. Meta raspunde „furnizeaza cel putin 5 produse", reclamele
          * dinamice se opresc, si comerciantul afla din factura de reclama.
-         *
-         * Se probeaza doar magazinele care CHIAR au produse (`catalog_rezumat`),
-         * altfel un magazin gol ar suna alarma pentru ceva ce nu e defect.
          */
+        /*
+         * ⚠ Garda peste `magazineVii`. Proba asta nu foloseste `magazinProba`, deci
+         * fara randul de mai jos o citire picata a magazinelor ii lasa lista de tinte goala
+         * si o face sa iasa pe `return null` — adica sa RAPORTEZE TRECUT tocmai cand nu
+         * poate sti nimic. E chiar purtarea pe care fisierul si-o interzice in alte trei
+         * locuri („o santinela n-are voie sa devina mai iertatoare cand vede mai putin").
+         */
+        if (eroareMagazine) return eroareMagazine;
         const { data: rez, error: eRez } = await admin
           .from("catalog_rezumat")
-          .select("business_id, total")
+          .select("business_id")
           .eq("fara_imagini", false).eq("fara_stoc_ascuns", false)
           .gt("total", 0);
         if (eRez) return `citirea rezumatelor a esuat: ${eRez.message}`;
-        const cuProduse = (rez ?? []).map((r) => r.business_id as string);
-        if (cuProduse.length === 0) return null;
 
-        const { data: mag, error: eMag } = await admin
-          .from("businesses")
-          .select("id, slug, custom_domain, custom_domain_healthy")
-          .in("id", cuProduse)
-          .eq("is_published", true)
-          .not("slug", "is", null);
-        if (eMag) return `citirea magazinelor a esuat: ${eMag.message}`;
-
-        const tinte = (mag ?? [])
-          .filter((b) => !((b.custom_domain ?? "").trim() && b.custom_domain_healthy === false))
-          .map((b) => {
-            const dom = (b.custom_domain ?? "").trim();
-            return { slug: b.slug as string, baza: dom ? `https://${dom}` : `${PLATFORM_ORIGIN}/${b.slug}` };
-          })
+        /*
+         * ⚠ Doar magazinele VII. Masurat: din cele 41 de tinte de dinainte, 24 erau
+         * suspendate — 58% din bugetul rotatiei se ducea pe vitrine deja stinse, si
+         * toate cele 9 alarme ale probei au venit de la cinci dintre ele.
+         */
+        const tinte = (rez ?? [])
+          .map((r) => viuDupaId.get(r.business_id as string))
+          .filter((m): m is MagazinViu => m !== undefined)
           .sort((a, b) => a.slug.localeCompare(b.slug));
         if (tinte.length === 0) return null;
 
         /*
-         * TREI pe rulare, si se rotesc. Un feed intreg poate avea megaocteti (eSAFE
-         * are 3 MB), iar santinela are memorie si timp marginite. La 12 rulari pe
-         * zi, cele ~50 de magazine sunt acoperite in cateva zile — mai bine decat un
-         * plafon fix, care ar fi lasat mereu aceleasi magazine neverificate.
+         * TREI pe rulare, si se rotesc. Un feed intreg poate avea zeci de megaocteti
+         * (masurat: eSAFE are 93 MB si 37.025 de articole), iar santinela are memorie
+         * si timp marginite. La 12 rulari pe zi, magazinele sunt acoperite in cateva
+         * zile — mai bine decat un plafon fix, care ar fi lasat mereu aceleasi
+         * magazine neverificate. Corpul se numara in flux (`iaSiNumara`), deci
+         * marimea nu mai intra in memorie.
          */
         const PE_RULARE = 3;
         const start = (Math.floor(Date.now() / 7_200_000) * PE_RULARE) % tinte.length;
@@ -384,51 +822,73 @@ export async function GET(req: NextRequest) {
           (_, i) => tinte[(start + i) % tinte.length],
         );
 
-        const idDupaSlug = new Map((mag ?? []).map((b) => [b.slug as string, b.id as string]));
-
         const defecte: string[] = [];
-        const faraPoze: string[] = [];
         const nuRaspund: string[] = [];
+        /** Cate produse cu imagine are TOATA platforma. Cerut o data, doar la nevoie. */
+        let pozePePlatforma: number | null = null;
+
         for (const t of fereastra) {
-          const { cod, text } = await ia(`${t.baza}/facebook-catalog.xml`);
+          const { cod, cate } = await iaSiNumara(`${t.baza}/facebook-catalog.xml`, "<item>");
           if (cod !== 200) { nuRaspund.push(`${t.slug}: cod ${cod}`); continue; }
-          if (numara(text, /<item>/g) > 0) continue;
+          if (cate > 0) continue;
 
           /*
            * Feedul e gol. A cui e problema?
            *
            * Constructorul sare peste produsele fara nicio imagine, deci un magazin
-           * care n-are nicio poza da corect zero articole — nu e defectul nostru,
-           * si mesajul trebuie sa spuna asta. Masurat la scriere: `suplio` are 7
-           * produse active si ZERO imagini. Amestecate, cine citeste alarma ar
-           * invata s-o sara.
+           * care n-are nicio poza da corect zero articole.
+           *
+           * ⚠ ASTA NU E O ALARMA. Toate cele 9 alarme ale probei au fost exact aici
+           * — cinci comercianti care nu si-au pus poze — si fiecare purta chiar
+           * mesajul „de rezolvat de comerciant, nu din cod". O santinela care tipa
+           * `critical` din doua in doua ore pentru ceva ce ea insasi declara ca nu e
+           * defectul nostru isi cheltuie singura increderea: dupa destule, nimeni nu
+           * mai citeste nici alarmele adevarate.
            *
            * ⚠ Se cere un NUMAR (`head: true`), nu randuri. O citire de randuri s-ar
-           * fi lovit de plafonul PostgREST de 1000: pe platforma sunt 7673 de randuri
+           * fi lovit de plafonul PostgREST de 1000: pe platforma sunt 7684 de randuri
            * cu imagine, deci un magazin aflat dincolo de fereastra ar fi fost
            * clasificat drept „fara poze" si alarma ar fi dat vina pe comerciant
            * pentru un defect al nostru. Vezi [[postgrest-1000-row-cap]].
-           *
-           * Se intreaba doar cand feedul chiar a iesit gol — adica aproape niciodata.
            */
           const r = await admin
             .from("catalog_produs")
             .select("product_id", { count: "exact", head: true })
-            .eq("business_id", idDupaSlug.get(t.slug) ?? "")
+            .eq("business_id", t.id)
             .eq("are_imagine", true);
           if (r.error) { nuRaspund.push(`${t.slug}: nu am putut numara imaginile (${r.error.message})`); continue; }
-          if ((r.count ?? 0) > 0) defecte.push(t.slug);
-          else faraPoze.push(t.slug);
+          if ((r.count ?? 0) > 0) { defecte.push(t.slug); continue; }
+
+          /*
+           * ⚠ „Magazinul n-are poze" se crede doar cat timp proiectia mai stie ce e o
+           * poza. Daca `are_imagine` s-ar strica si ar raporta zero peste tot, un feed
+           * chiar rupt ar fi clasificat drept problema a comerciantului si aruncat in
+           * tacere — adica proba ar redeveni una care nu poate esua. Intrebarea se
+           * pune o singura data pe rulare, si numai cand chiar am nimerit un magazin
+           * fara poze, adica aproape niciodata.
+           */
+          if (pozePePlatforma === null) {
+            const g = await admin
+              .from("catalog_produs")
+              .select("product_id", { count: "exact", head: true })
+              .eq("are_imagine", true);
+            if (g.error) {
+              nuRaspund.push(`${t.slug}: feed gol, si n-am putut confirma proiectia (${g.error.message})`);
+              continue;
+            }
+            pozePePlatforma = g.count ?? 0;
+          }
+          if (pozePePlatforma === 0) {
+            defecte.push(`${t.slug} (si NICIUN produs de pe platforma n-are imagine in proiectie — s-a rupt `
+              + `\`are_imagine\`, nu magazinul)`);
+          }
+          /* altfel: comerciantul chiar n-are poze. Nu e defectul nostru, deci nu suna. */
         }
 
         const parti: string[] = [];
         if (defecte.length) {
           parti.push(`feedul Facebook e GOL desi magazinul are produse CU IMAGINI: ${defecte.join(", ")}`
             + ` — Meta opreste reclamele dinamice, si asta e o defectiune la noi.`);
-        }
-        if (faraPoze.length) {
-          parti.push(`feed Facebook gol fiindca niciun produs n-are imagine: ${faraPoze.join(", ")}`
-            + ` — de rezolvat de comerciant, nu din cod.`);
         }
         if (nuRaspund.length) parti.push(`feeduri care nu raspund: ${nuRaspund.join(", ")}`);
         return parti.length ? parti.join(" | ") : null;
@@ -449,33 +909,28 @@ export async function GET(req: NextRequest) {
          * `offers` cu pretul gol sau vechi e la fel de rau ca unul lipsa, si e chiar
          * felul de defect pe care „campuri scrise dar necitite" il produce.
          */
-        if (!baza || !slug) return "niciun magazin de proba";
-        const { data: biz } = await admin.from("businesses").select("id").eq("slug", slug).maybeSingle();
-        if (!biz) return null;
+        if (!magazinProba) return motivFaraMagazin;
         const { data: prod, error: eProd } = await admin
           .from("catalog_produs")
           .select("slug, price_min, name")
-          .eq("business_id", biz.id)
+          .eq("business_id", magazinProba.id)
           .not("slug", "is", null)
           .gt("price_min", 0)
+          .order("slug", { ascending: true })
           .limit(1);
         if (eProd) return `citirea produsului de proba a esuat: ${eProd.message}`;
         const p = (prod ?? [])[0] as { slug: string; price_min: number; name: string } | undefined;
         if (!p) return null; // magazinul n-are produse cu pret: n-avem ce compara
 
-        const { cod, text } = await ia(`${baza}/product/${p.slug}`);
+        const { cod, text } = await ia(`${magazinProba.baza}/product/${p.slug}`);
         if (cod !== 200) return `pagina produsului ${p.slug} raspunde cu ${cod}`;
 
         const dateStructurate = noduriJsonLd(text);
         const produs = dateStructurate.find((d) => d["@type"] === "Product" || d["@type"] === "ProductGroup");
         if (!produs) return `pagina ${p.slug} n-are bloc JSON-LD de tip Product`;
 
-        /* `offers` poate fi obiect sau lista (ProductGroup cu variante). */
-        const oferte = Array.isArray(produs.offers) ? produs.offers : produs.offers ? [produs.offers] : [];
-        const preturi = (oferte as Record<string, unknown>[])
-          .map((o) => Number(o?.price))
-          .filter((n) => Number.isFinite(n) && n > 0);
-        if (preturi.length === 0) return `pagina ${p.slug} are bloc Product, dar fara niciun pret in offers`;
+        const preturi = preturiDinProdus(produs);
+        if (preturi.length === 0) return `pagina ${p.slug} are bloc Product, dar fara niciun pret`;
 
         /*
          * Pretul din pagina trebuie sa fie chiar cel din proiectie. Toleranta e de
@@ -497,9 +952,10 @@ export async function GET(req: NextRequest) {
          * eroare. Stocul ingheata pe valorile vechi, iar magazinul vinde marfa care
          * nu mai exista: supravanzare, comenzi anulate de mana, retururi.
          *
-         * `last_totals.total` e numarul de randuri CITITE din fisier. Zero, la o
-         * rulare incheiata cu bine, inseamna fisier gol sau necitibil — nu exista
-         * furnizor care sa trimita in mod legitim un feed fara niciun rand.
+         * ⚠ Pe productie `stock_feed_sources` e GOALA la 16.08.2026, deci proba iese
+         * pe `return null` la fiecare rulare. Nu e un defect de logica — e acelasi
+         * tipar „n-avem ce compara, si nu inventam" — dar de stiut cand se citeste
+         * raportul: „14 probe trecute" inseamna azi 13 rulate si una fara subiect.
          */
         const { data: surse, error } = await admin
           .from("stock_feed_sources")
@@ -562,10 +1018,17 @@ export async function GET(req: NextRequest) {
          *
          * ⚠ Alarma se da doar cand feedul INTREG al aceluiasi magazin ARE produse.
          * Altfel un magazin fara marfa vandabila ar suna alarma la fiecare doua
-         * ore pentru ceva ce nu e defect — iar o alarma falsa e cel mai sigur mod
-         * de a face pe cineva sa opreasca alarma. „Segmentat gol, dar intreg
-         * plin" e chiar semnatura defectului de mai sus.
+         * ore pentru ceva ce nu e defect. „Segmentat gol, dar intreg plin" e chiar
+         * semnatura defectului de mai sus.
          */
+        /*
+         * ⚠ Garda peste `magazineVii`. Proba asta nu foloseste `magazinProba`, deci
+         * fara randul de mai jos o citire picata a magazinelor ii lasa lista de tinte goala
+         * si o face sa iasa pe `return null` — adica sa RAPORTEZE TRECUT tocmai cand nu
+         * poate sti nimic. E chiar purtarea pe care fisierul si-o interzice in alte trei
+         * locuri („o santinela n-are voie sa devina mai iertatoare cand vede mai putin").
+         */
+        if (eroareMagazine) return eroareMagazine;
         const { data: setari, error: eSetari } = await admin
           .from("store_settings")
           .select("business_id, facebook_feeds")
@@ -578,61 +1041,30 @@ export async function GET(req: NextRequest) {
         /* Niciun feed configurat: n-avem ce verifica, si nu inventam. */
         if (cuFeeduri.length === 0) return null;
 
-        const { data: mag, error: eMag } = await admin
-          .from("businesses")
-          .select("id, slug, custom_domain, custom_domain_healthy")
-          .in("id", cuFeeduri.map((s) => s.business_id as string))
-          .eq("is_published", true)
-          .not("slug", "is", null);
-        if (eMag) return `citirea magazinelor a esuat: ${eMag.message}`;
-
         /*
-         * ⚠ Adresa se compune pe domeniul CANONIC al magazinului, nu pe
-         * `edinio.com/{slug}`.
+         * ⚠ Adresa se compune pe domeniul CANONIC al magazinului (`magazineVii`), nu
+         * pe `edinio.com/{slug}`: `proxy.ts` raspunde oricum cu 307 catre domeniul
+         * propriu, iar `.xml` nu e scutita. Si e bine sa fie asa — adresa canonica e
+         * chiar cea pe care comerciantul o lipeste in Commerce Manager.
          *
-         * Prima forma cerea mereu adresa de platforma, „ca sa nu masuram DNS-ul
-         * cuiva". Era o iluzie: `proxy.ts` raspunde cu 307 catre domeniul propriu
-         * pentru orice cale a unui magazin care are unul, iar `.xml` nu e scutita
-         * — deci cererea ajungea acolo oricum, doar ca prin doua salturi. Adica
-         * exact ce credeam ca evit, plus o afirmatie falsa in comentariu.
-         *
-         * Si e bine sa fie asa: adresa canonica e chiar cea pe care comerciantul
-         * o lipeste in Commerce Manager. Daca ea nu raspunde, nici Meta nu poate
-         * citi feedul — doar ca atunci se raporteaza ALTCEVA decat „feed gol"
-         * (vezi cele doua cosuri de mai jos).
-         *
-         * Magazinele cu domeniul dovedit stricat se sar: acolo defectul e
-         * cunoscut si are alt proprietar, iar o alarma din doua in doua ore
-         * despre acelasi certificat expirat e chiar felul in care o alarma
-         * ajunge sa fie ignorata.
+         * Magazinele suspendate sau cu domeniul dovedit stricat nu intra deloc:
+         * acolo defectul e cunoscut si are alt proprietar.
          */
-        const bazaDupaId = new Map<string, string>();
-        for (const b of mag ?? []) {
-          const dom = (b.custom_domain ?? "").trim();
-          if (dom && b.custom_domain_healthy === false) continue;
-          bazaDupaId.set(b.id, dom ? `https://${dom}` : `${PLATFORM_ORIGIN}/${b.slug}`);
-        }
-
         const deProbat: { slug: string; baza: string; cheie: string }[] = [];
         for (const s of cuFeeduri) {
-          const b = bazaDupaId.get(s.business_id as string);
-          if (!b) continue; // nepublicat (feedul da 404 dinadins) sau domeniu stricat
-          const slugMagazin = (mag ?? []).find((x) => x.id === s.business_id)?.slug as string;
+          const m = viuDupaId.get(s.business_id as string);
+          if (!m) continue;
           for (const f of s.facebook_feeds as { cheie?: unknown }[]) {
             const cheie = typeof f?.cheie === "string" ? f.cheie.trim() : "";
-            if (cheie) deProbat.push({ slug: slugMagazin, baza: b, cheie });
+            if (cheie) deProbat.push({ slug: m.slug, baza: m.baza, cheie });
           }
         }
         if (deProbat.length === 0) return null;
 
         /*
-         * Se probeaza cel mult cateva pe rulare, si se ROTESC.
-         *
-         * Un feed poate avea megaocteti, iar santinela ruleaza intr-o functie cu
-         * memorie marginita — dar un plafon fix ar fi lasat mereu aceleasi feeduri
-         * neverificate. Fereastra se muta cu fiecare rulare (la doua ore), deci
-         * peste zi le acopera pe toate. Ordinea e stabila, ca fereastra sa
-         * inainteze cu adevarat.
+         * Se probeaza cel mult cateva pe rulare, si se ROTESC. Fereastra se muta cu
+         * fiecare rulare (la doua ore), deci peste zi le acopera pe toate. Ordinea e
+         * stabila, ca fereastra sa inainteze cu adevarat.
          */
         deProbat.sort((a, b) => a.slug.localeCompare(b.slug) || a.cheie.localeCompare(b.cheie));
         const PE_RULARE = 6;
@@ -659,7 +1091,7 @@ export async function GET(req: NextRequest) {
         const martor = new Map<string, { cod: number; areProduse: boolean }>();
 
         for (const { slug: s, baza: b, cheie } of fereastra) {
-          const { cod, text } = await ia(`${b}/facebook-catalog.xml?feed=${encodeURIComponent(cheie)}`);
+          const { cod, cate } = await iaSiNumara(`${b}/facebook-catalog.xml?feed=${encodeURIComponent(cheie)}`, "<item>");
           /*
            * 404 ar insemna „cheia nu mai exista", desi tocmai am citit-o din baza:
            * o nepotrivire intre ce arata panoul si ce serveste ruta. 5xx sau 0
@@ -667,11 +1099,11 @@ export async function GET(req: NextRequest) {
            * lor, cu codul in clar.
            */
           if (cod !== 200) { nuRaspund.push(`${s}/${cheie}: cod ${cod}`); continue; }
-          if (numara(text, /<item>/g) > 0) continue;
+          if (cate > 0) continue;
 
           if (!martor.has(s)) {
-            const intreg = await ia(`${b}/facebook-catalog.xml`);
-            martor.set(s, { cod: intreg.cod, areProduse: intreg.cod === 200 && numara(intreg.text, /<item>/g) > 0 });
+            const intreg = await iaSiNumara(`${b}/facebook-catalog.xml`, "<item>");
+            martor.set(s, { cod: intreg.cod, areProduse: intreg.cod === 200 && intreg.cate > 0 });
           }
           const m = martor.get(s)!;
           /*
@@ -711,34 +1143,45 @@ export async function GET(req: NextRequest) {
          * de ce. Asa a fost cu EAN-ul care nu intra in feed, si asa a fost cu
          * adresa: blocul `Store` citea adresa DOAR din `businesses.store_city`,
          * desi ecranul „Datele magazinului" scrie in `address`/`city`/`county`.
-         * Trei magazine publicate aveau adresa completata si invizibila, iar
-         * emailul nu se emitea la niciunul din cele 29 care il aveau.
          *
-         * Nici `tsc`, nici probele, nici build-ul n-aveau cum: pagina exista,
-         * compileaza si raspunde 200. Singurul lucru care prinde asa ceva e sa
-         * CERI pagina si sa compari cu ce scrie in baza.
+         * ⚠ CANDIDATUL SE IA DIN `magazineVii`. Cele 28 de alarme ale probei au
+         * venit toate de la `fortis`, un magazin cu abonamentul stins: pagina lui
+         * nu e vitrina, ci `<SuspendedStorePage>`, si n-are de unde sa aiba JSON-LD.
+         * Filtrul de dinainte era doar `is_published`, iar 53 din 70 de magazine
+         * publicate sunt suspendate.
          *
-         * ⚠ Proba se alege un magazin care CHIAR are datele completate. Fara asta
-         * ar trece linistita pe un magazin gol — adica exact o proba care nu poate
-         * esua.
+         * ⚠ Ordinea e FIXATA. Fara `.order()`, PostgREST intoarce ordinea de scanare
+         * a tabelei, care se muta la orice `UPDATE`: tinta se plimba singura, si o
+         * data cu ea si ce anume poate proba sa prinda, fiindca magazinele au
+         * completate familii diferite de coloane.
          */
+        /*
+         * ⚠ Garda peste `magazineVii`. Proba asta nu foloseste `magazinProba`, deci
+         * fara randul de mai jos o citire picata a magazinelor ii lasa lista de tinte goala
+         * si o face sa iasa pe `return null` — adica sa RAPORTEZE TRECUT tocmai cand nu
+         * poate sti nimic. E chiar purtarea pe care fisierul si-o interzice in alte trei
+         * locuri („o santinela n-are voie sa devina mai iertatoare cand vede mai putin").
+         */
+        if (eroareMagazine) return eroareMagazine;
         const { data: cuAdresa, error } = await admin
           .from("businesses")
-          .select("slug, store_address, store_city, store_county, address, city, county, email")
+          .select("id, slug, store_address, store_city, store_county, address, city, county, email, phone")
           .eq("is_published", true)
           .not("slug", "is", null)
-          .limit(200);
+          .order("slug", { ascending: true })
+          .limit(500);
         if (error) return `citirea magazinelor a esuat: ${error.message}`;
 
-        const primul = (...v: (string | null | undefined)[]) =>
-          v.map((x) => (x ?? "").trim()).find(Boolean) ?? "";
         const candidat = (cuAdresa ?? []).find(
-          (b) => primul(b.store_city, b.city) && primul(b.store_address, b.address),
+          (b) => viuDupaId.has(b.id)
+            && primulNegol(b.store_city, b.city)
+            && primulNegol(b.store_address, b.address),
         );
-        /* Niciun magazin cu adresa completata: n-avem ce compara, si nu inventam. */
+        /* Niciun magazin viu cu adresa completata: n-avem ce compara, si nu inventam. */
         if (!candidat) return null;
+        const m = viuDupaId.get(candidat.id)!;
 
-        const { cod, text } = await ia(`${PLATFORM_ORIGIN}/${candidat.slug}`);
+        const { cod, text } = await ia(m.baza);
         if (cod !== 200) return `magazinul ${candidat.slug} raspunde cu ${cod}`;
 
         /*
@@ -751,19 +1194,42 @@ export async function GET(req: NextRequest) {
           .find((d) => d["@type"] === "Store" || d["@type"] === "OnlineStore");
         if (!store) return `magazinul ${candidat.slug} n-are bloc JSON-LD de tip Store`;
 
-        const lipsa: string[] = [];
-        const adresa = store.address as Record<string, string> | undefined;
-        const oras = primul(candidat.store_city, candidat.city);
-        const strada = primul(candidat.store_address, candidat.address);
-        if (!adresa) lipsa.push("adresa lipseste cu totul");
-        else {
-          if (oras && !adresa.addressLocality) lipsa.push("orasul");
-          if (strada && !adresa.streetAddress) lipsa.push("strada");
-        }
-        if ((candidat.email ?? "").trim() && !store.email) lipsa.push("emailul");
+        /*
+         * ⚠ Se compara VALOAREA, nu doar prezenta cheii, si se acopera TOATE cele
+         * cinci campuri pe care `identitate-publica.ts` le emite din panou.
+         *
+         * Forma dinainte cerea doar ca `addressLocality` sa fie adevarat, si nu se
+         * uita deloc la judet si la telefon — desi amandoua se emit, si amandoua vin
+         * din aceeasi pereche de familii de coloane. Chiar regresia din care s-a
+         * nascut proba („se citea DOAR `businesses.store_city`"), aplicata judetului
+         * in loc de orasului, ar fi trecut verde. Iar pe date reale familiile chiar
+         * diverg: `sibiu` are `store_city='SIBIU'` si `city='Sat şElimbăR'`.
+         *
+         * Precedenta e aceeasi cu a lui `adresaPublica`: `primul(store_X, X)`.
+         */
+        const adresa = (store.address ?? {}) as Record<string, unknown>;
+        const asteptate: { eticheta: string; vrem: string; avem: unknown }[] = [
+          { eticheta: "strada", vrem: primulNegol(candidat.store_address, candidat.address), avem: adresa.streetAddress },
+          { eticheta: "orasul", vrem: primulNegol(candidat.store_city, candidat.city), avem: adresa.addressLocality },
+          { eticheta: "judetul", vrem: primulNegol(candidat.store_county, candidat.county), avem: adresa.addressRegion },
+          { eticheta: "emailul", vrem: (candidat.email ?? "").trim(), avem: store.email },
+          { eticheta: "telefonul", vrem: (candidat.phone ?? "").trim(), avem: store.telephone },
+        ];
 
-        return lipsa.length
-          ? `magazinul ${candidat.slug} are datele completate in panou, dar in JSON-LD lipsesc: ${lipsa.join(", ")}`
+        const lipsa: string[] = [];
+        const gresite: string[] = [];
+        for (const c of asteptate) {
+          if (!c.vrem) continue; // necompletat in panou: n-avem ce cere paginii
+          const avem = typeof c.avem === "string" ? c.avem.trim() : "";
+          if (!avem) lipsa.push(c.eticheta);
+          else if (avem !== c.vrem) gresite.push(`${c.eticheta} („${avem}" in pagina, „${c.vrem}" in panou)`);
+        }
+
+        const parti: string[] = [];
+        if (lipsa.length) parti.push(`lipsesc: ${lipsa.join(", ")}`);
+        if (gresite.length) parti.push(`nu se potrivesc: ${gresite.join(", ")}`);
+        return parti.length
+          ? `magazinul ${candidat.slug} are datele completate in panou, dar in JSON-LD ${parti.join(" | ")}`
           : null;
       },
     },
@@ -778,28 +1244,29 @@ export async function GET(req: NextRequest) {
          * comerciantilor (deci si blogurile si articolele lor) si paginile de
          * politici raspundeau 200 cu ZERO date structurate — desi toate au titlu
          * propriu, canonical propriu si intrare in sitemap, adica sunt trimise
-         * ANUME la indexat. Nimeni n-a observat luni de zile; a raportat-o un
-         * comerciant care s-a uitat in sursa paginii.
-         *
-         * Exact semnatura celor patru defecte pentru care exista santinela:
-         * pagina exista, arata bine, raspunde 200, si ii lipseste tocmai partea
-         * pe care n-o vede nimeni.
+         * ANUME la indexat.
          *
          * ═══ ADRESELE SE IAU DIN SITEMAP, NU SE SCRIU IN COD ═══
          *
          * Sitemapul magazinului listeaza exact adresele pe care le declaram
          * indexabile — si le filtreaza deja pe cele `noindex`. Deci ce apare
          * acolo TREBUIE sa poarte date structurate, iar proba nu se poate lega de
-         * un slug care maine se schimba. Ce nu apare, nu se verifica: un magazin
-         * fara pagini proprii nu e un defect.
+         * un slug care maine se schimba.
+         *
+         * ⚠ Ramurile „catalog" si „categorie" erau MOARTE. Magazinul de proba se
+         * alegea dintre cele fara domeniu propriu, iar toate cele sapte magazine cu
+         * pagina de catalog au domeniu propriu — deci sitemapul cerut n-avea nici
+         * `/magazin`, nici vreo categorie, si cele doua verificari nu se executau
+         * niciodata. Fix pe felurile de pagina din care s-a nascut proba. Alegerea
+         * de mai sus prefera acum un magazin care CHIAR are pagina de catalog.
          */
-        if (!baza) return "niciun magazin de proba";
-        const { cod, text } = await ia(`${baza}/sitemap.xml`);
+        if (!magazinProba) return motivFaraMagazin;
+        const { cod, text } = await ia(`${magazinProba.baza}/sitemap.xml`);
         if (cod !== 200) return `sitemapul magazinului raspunde cu ${cod}`;
         const locuri = [...text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
 
-        const cale = (u: string) => u.slice(baza.length);
-        const categorie = locuri.find((u) => /\/magazin\/[^/]+$/.test(cale(u)));
+        const cale = (u: string) => u.slice(magazinProba.baza.length);
+        const categorie = locuri.find((u) => /^\/magazin\/[^/]+$/.test(cale(u)));
         const catalog = locuri.find((u) => cale(u) === "/magazin");
         const politica = locuri.find((u) => cale(u).startsWith("/politici/"));
 
@@ -808,15 +1275,22 @@ export async function GET(req: NextRequest) {
          * proba — acela poate sa n-aiba niciuna, iar tocmai paginile proprii sunt
          * ce a reclamat comerciantul. Se prefera una marcata drept articol, ca sa
          * fie verificata si calea `BlogPosting`.
+         *
+         * ⚠ Doar din magazine VII, si fara embed: `businesses!inner(...)` aducea
+         * si pagini ale magazinelor suspendate, unde ruta randeaza
+         * `<SuspendedStorePage>` si n-are niciun JSON-LD. Doua din cele 26 de
+         * candidate erau chiar asa — o alarma falsa care astepta o rescriere de rand.
          */
-        const { data: paginiProprii } = await admin
+        const { data: paginiProprii, error: ePagini } = await admin
           .from("custom_pages")
-          .select("slug, seo, businesses!inner(slug, is_published)")
+          .select("slug, seo, business_id")
           .eq("is_published", true)
-          .eq("businesses.is_published", true)
-          .limit(200);
-        type RandPagina = { slug: string; seo: { tip?: string; noindex?: boolean } | null; businesses: { slug: string } };
-        const candidate = ((paginiProprii ?? []) as unknown as RandPagina[]).filter((p) => p.seo?.noindex !== true);
+          .order("slug", { ascending: true })
+          .limit(500);
+        if (ePagini) return `citirea paginilor proprii a esuat: ${ePagini.message}`;
+        type RandPagina = { slug: string; seo: { tip?: string; noindex?: boolean } | null; business_id: string };
+        const candidate = ((paginiProprii ?? []) as unknown as RandPagina[])
+          .filter((p) => p.seo?.noindex !== true && viuDupaId.has(p.business_id));
         const paginaProprie = candidate.find((p) => p.seo?.tip === "articol")
           ?? candidate.find((p) => p.seo?.tip === "lista-articole")
           ?? candidate[0];
@@ -826,9 +1300,10 @@ export async function GET(req: NextRequest) {
         if (categorie) deVerificat.push({ eticheta: "categorie", url: categorie, tipuri: ["CollectionPage"], cuFirimituri: true });
         if (politica) deVerificat.push({ eticheta: "politica", url: politica, tipuri: ["WebPage"], cuFirimituri: true });
         if (paginaProprie) {
+          const b = viuDupaId.get(paginaProprie.business_id)!;
           deVerificat.push({
             eticheta: `pagina proprie (${paginaProprie.seo?.tip ?? "pagina"})`,
-            url: `${PLATFORM_ORIGIN}/${paginaProprie.businesses.slug}/${paginaProprie.slug}`,
+            url: `${b.baza}/${paginaProprie.slug}`,
             // Tipul depinde de ce a declarat comerciantul din editor; oricare
             // dintre ele inseamna „pagina se descrie". Absenta tuturor inseamna
             // ca emiterea s-a rupt.
@@ -879,7 +1354,12 @@ export async function GET(req: NextRequest) {
     await logError({
       action: "santinela",
       message: `${cazute.length} probe cazute: ${cazute.map((c) => c.nume).join(", ")}`,
-      details: { magazin: slug, cazute },
+      /*
+       * ⚠ Cheia ramane `magazin`, nu numele variabilei. Cele 88 de randuri de dinainte
+       * o poarta asa, iar orice interogare peste `details->>'magazin'` — inclusiv cea
+       * care a dus la reparatia asta — s-ar fi oprit tacut la redenumire.
+       */
+      details: { magazin: slug, catalog: magazinProba?.catalog ?? null, cazute },
       severity: "critical",
     });
   }
@@ -887,16 +1367,60 @@ export async function GET(req: NextRequest) {
   /*
    * ⚠ COD DE STARE ADEVARAT, nu 200 cu `ok: false`.
    *
-   * Pana acum santinela raspundea 200 chiar cand toate cele sapte probe cadeau.
-   * Un monitor extern — sau chiar pagina de stare a Vercel — se uita la codul de
-   * stare, nu la corpul JSON: ar fi vazut verde in timp ce inauntru scria ca
-   * magazinul nu randeaza niciun produs.
+   * Pana acum santinela raspundea 200 chiar cand toate probele cadeau. Un monitor
+   * extern — sau chiar pagina de stare a Vercel — se uita la codul de stare, nu la
+   * corpul JSON: ar fi vazut verde in timp ce inauntru scria ca magazinul nu
+   * randeaza niciun produs.
    *
    * Adica santinela facuta impotriva raspunsurilor „200, dar continutul e gresit"
    * era ea insasi un raspuns 200 cu continutul gresit.
    */
   return NextResponse.json(
-    { ok: cazute.length === 0, magazin: slug, rezultate },
+    { ok: cazute.length === 0, magazin: slug, catalog: magazinProba?.catalog ?? null, rezultate },
     { status: cazute.length === 0 ? 200 : 503 },
   );
+}
+
+/**
+ * Toate preturile dintr-un nod `Product`/`ProductGroup`, in orice forma le-ar emite.
+ *
+ * ⚠ TREI forme, nu una. Forma dinainte citea doar `o.price`, si pe pagini corecte
+ * dadea zero preturi:
+ *
+ *   * `Offer`         — `price`, produsul cu un singur pret;
+ *   * `AggregateOffer` — `lowPrice`/`highPrice`, produsul cu variante de preturi
+ *     diferite (verificat: `esafe.ro/product/jacheta-river-h1058` n-are deloc cheia
+ *     `price`, ci `lowPrice: 110.2`);
+ *   * `ProductGroup`  — n-are deloc `offers`, ci `hasVariant[]`, fiecare varianta
+ *     cu `offers` al ei (`product-jsonld.ts`, ramura `caGrupDeVariante`).
+ *
+ * Fara asta, proba raporta „bloc Product, dar fara niciun pret" la primul produs cu
+ * pret pe marime — o capcana armata care astepta doar ca proiectia sa mute randul.
+ */
+function preturiDinProdus(produs: Record<string, unknown>): number[] {
+  const gasite: number[] = [];
+
+  const dinOferte = (o: unknown) => {
+    if (!o || typeof o !== "object") return;
+    const of = o as Record<string, unknown>;
+    for (const cheie of ["price", "lowPrice", "highPrice"]) {
+      const n = Number(of[cheie]);
+      if (Number.isFinite(n) && n > 0) gasite.push(n);
+    }
+  };
+
+  const oferte = produs.offers;
+  if (Array.isArray(oferte)) oferte.forEach(dinOferte);
+  else dinOferte(oferte);
+
+  if (Array.isArray(produs.hasVariant)) {
+    for (const v of produs.hasVariant as unknown[]) {
+      if (!v || typeof v !== "object") continue;
+      const o = (v as Record<string, unknown>).offers;
+      if (Array.isArray(o)) o.forEach(dinOferte);
+      else dinOferte(o);
+    }
+  }
+
+  return gasite;
 }

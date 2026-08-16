@@ -98,7 +98,13 @@ export function useCheckoutOrder({
    * Se deriva aici, o singura data, ca formularul si validarea sa nu poata
    * ajunge vreodata la raspunsuri diferite.
    */
-  const laPunctGls = courierSelection?.courier === "gls" && courierSelection?.deliveryType === "locker";
+  /* ⚠ Doi curieri cer emailul la livrarea in punct, si numai ei: GLS il are camp
+     obligatoriu pe adresa de livrare, iar Shipo trimite ACOLO codul de ridicare
+     („emailul este obligatoriu pentru locker/pudo" — documentatia lor). Largita la
+     toate lockerele, regula ar bloca degeaba comenzi care azi merg la SmartShip si
+     Packeta, unde emailul nu se cere. */
+  const laPunctGls = courierSelection?.deliveryType === "locker"
+    && (courierSelection?.courier === "gls" || courierSelection?.courier === "shipo");
   const emailField = laPunctGls
     ? { enabled: true, required: true }
     : emailFieldBrut;
@@ -503,6 +509,12 @@ export function useCheckoutOrder({
         smartship_courier_id: courierSelection?.smartshipCourierId,
         smartship_courier_name: courierSelection?.smartshipCourierName,
         smartship_own_contract: courierSelection?.smartshipOwnContract,
+        /* ⚠ Checkout-ul are DOUA formulare scrise separat (pagina si modalul de
+           produs). Reparat doar unul, jumatate din comenzi raman fara alegerea
+           clientului. Vezi memoria despre regula de Bucuresti. */
+        shipo_rate_id: courierSelection?.shipoRateId,
+        shipo_courier_slug: courierSelection?.shipoCourierSlug,
+        shipo_courier_name: courierSelection?.shipoCourierName,
         smartship_locker_net: courierSelection?.smartshipLockerNet,
         source: getAttribution() ?? undefined,
       };

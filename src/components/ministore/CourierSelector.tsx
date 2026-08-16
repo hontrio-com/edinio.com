@@ -25,7 +25,7 @@ function optionKey(o: ShippingOption) {
    * data pe cel SmartShip, la preturi diferite. Iar reteaua de lockere (easybox
    * / FANbox) tine tot de cheie: sunt nomenclatoare separate.
    */
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}`;
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -64,6 +64,13 @@ export interface CourierSelection {
   smartshipOwnContract?: boolean;
   /** Care retea de lockere: easybox (Sameday) sau FANbox (FAN Courier). */
   smartshipLockerNet?: "easybox" | "fanbox";
+  /* ⚠ Cheia ofertei Shipo are O SINGURA parte, dar ea nu e curierul: e serviciul.
+     Acelasi curier apare la adresa, in locker si in PUDO, la preturi diferite,
+     iar `rate_id` e si identitatea ofertei, si ce se trimite la emitere.
+     Vezi lib/shipo/preturi.ts. */
+  shipoRateId?: number;
+  shipoCourierSlug?: string;
+  shipoCourierName?: string;
   /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
   token?: string;
 }
@@ -186,6 +193,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             smartshipCourierName: ales.smartshipCourierName,
             smartshipOwnContract: ales.smartshipOwnContract,
             smartshipLockerNet: ales.smartshipLockerNet,
+            shipoRateId: ales.shipoRateId,
+            shipoCourierSlug: ales.shipoCourierSlug,
+            shipoCourierName: ales.shipoCourierName,
             token: ales.token,
           });
         }
@@ -213,7 +223,19 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
     setLockersLoading(true);
     setSelectedLocker(null);
     setLockerSearch("");
-    getLockers(businessId, opt.courier, city, cod, opt.smartshipLockerNet)
+    /*
+     * ⚠ Al cincilea argument poarta doua lucruri diferite, dupa curier.
+     *
+     * La SmartShip e RETEAUA de lockere (easybox / FANbox), fiindca sunt
+     * nomenclatoare separate. La Shipo e SERVICIUL (`rate_id`), fiindca acolo
+     * punctele nu se cer pe curier: curierul si tipul punctului sunt deduse de ei
+     * din serviciu, iar doua servicii ale aceluiasi curier dau liste diferite.
+     * Vezi `getLockers` — valoarea se ingusteaza acolo, la primire.
+     */
+    getLockers(
+      businessId, opt.courier, city, cod,
+      opt.courier === "shipo" ? String(opt.shipoRateId ?? "") : opt.smartshipLockerNet,
+    )
       .then(setLockers)
       .catch(() => setLockers([]))
       .finally(() => setLockersLoading(false));
@@ -250,6 +272,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         smartshipCourierName: opt.smartshipCourierName,
         smartshipOwnContract: opt.smartshipOwnContract,
         smartshipLockerNet: opt.smartshipLockerNet,
+        shipoRateId: opt.shipoRateId,
+        shipoCourierSlug: opt.shipoCourierSlug,
+        shipoCourierName: opt.shipoCourierName,
         token: opt.token,
       });
     }
@@ -278,6 +303,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         smartshipCourierName: opt.smartshipCourierName,
         smartshipOwnContract: opt.smartshipOwnContract,
         smartshipLockerNet: opt.smartshipLockerNet,
+        shipoRateId: opt.shipoRateId,
+        shipoCourierSlug: opt.shipoCourierSlug,
+        shipoCourierName: opt.shipoCourierName,
         token: opt.token,
       });
     }

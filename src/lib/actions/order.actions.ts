@@ -797,6 +797,13 @@ export async function placeOrder(data: {
   smartship_courier_name?: string;
   smartship_own_contract?: boolean;
   smartship_locker_net?: "easybox" | "fanbox";
+  /* ⚠ Cheia ofertei Shipo are O SINGURA parte, si NU e curierul: e SERVICIUL
+     (`rate_id`). Acelasi curier apare la adresa, in locker si in PUDO, la preturi
+     diferite, iar curierul si tipul punctului se DEDUC de ei din el. Pierdut aici,
+     alegerea clientului nu mai ajunge niciodata pe comanda. */
+  shipo_rate_id?: number;
+  shipo_courier_slug?: string;
+  shipo_courier_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -1421,6 +1428,11 @@ export async function placeOrder(data: {
         smartship_courier_name: data.smartship_courier_name,
         smartship_own_contract: data.smartship_own_contract === true,
         ...(data.smartship_locker_net ? { smartship_locker_net: data.smartship_locker_net } : {}),
+      }),
+      ...(data.shipo_rate_id && {
+        shipo_rate_id: data.shipo_rate_id,
+        shipo_courier_slug: data.shipo_courier_slug,
+        shipo_courier_name: data.shipo_courier_name,
       }),
     },
     items: allItems,
@@ -3146,6 +3158,13 @@ export async function placeCartOrder(data: {
   smartship_courier_name?: string;
   smartship_own_contract?: boolean;
   smartship_locker_net?: "easybox" | "fanbox";
+  /* ⚠ Cheia ofertei Shipo are O SINGURA parte, si NU e curierul: e SERVICIUL
+     (`rate_id`). Acelasi curier apare la adresa, in locker si in PUDO, la preturi
+     diferite, iar curierul si tipul punctului se DEDUC de ei din el. Pierdut aici,
+     alegerea clientului nu mai ajunge niciodata pe comanda. */
+  shipo_rate_id?: number;
+  shipo_courier_slug?: string;
+  shipo_courier_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -3628,6 +3647,11 @@ export async function placeCartOrder(data: {
         smartship_courier_name: data.smartship_courier_name,
         smartship_own_contract: data.smartship_own_contract === true,
         ...(data.smartship_locker_net ? { smartship_locker_net: data.smartship_locker_net } : {}),
+      }),
+      ...(data.shipo_rate_id && {
+        shipo_rate_id: data.shipo_rate_id,
+        shipo_courier_slug: data.shipo_courier_slug,
+        shipo_courier_name: data.shipo_courier_name,
       }),
     },
     items: allItems,

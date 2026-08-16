@@ -238,6 +238,7 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "packeta",      label: "Packeta",           logo: "/integrations/packeta.png", defaultPrice: 15 },
   { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
   { id: "smartship",    label: "SmartShip",         logo: "/integrations/smartship.png",    defaultPrice: 17 },
+  { id: "shipo",        label: "Shipo.ro",          logo: "/integrations/shipo.ro.svg",     defaultPrice: 17 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -261,6 +262,10 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   packeta: "Livrare la adresa prin Packeta",
   innoship: "Innoship",
   smartship: "SmartShip",
+  /* ⚠ Trebuie sa fie sir-cu-sir egal cu `COURIER_LABELS.shipo` din
+     shipping.actions.ts: campul gol din panou promite un text, iar checkout-ul
+     afiseaza fallback-ul — nepotrivirea o vede doar un cumparator. */
+  shipo: "Shipo.ro",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };

@@ -206,7 +206,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
    * care a oprit campul, verificarea de mai jos cerea un email pe un camp CARE
    * NU EXISTA pe ecran — comanda nu se putea trimite si nimic nu spunea de ce.
    */
-  const laPunctGls = courierSelection?.courier === "gls" && courierSelection?.deliveryType === "locker";
+  /* ⚠ Doi curieri cer emailul la livrarea in punct, si numai ei: GLS il are camp
+     obligatoriu pe adresa de livrare, iar Shipo trimite ACOLO codul de ridicare
+     („emailul este obligatoriu pentru locker/pudo" — documentatia lor). Largita la
+     toate lockerele, regula ar bloca degeaba comenzi care azi merg la SmartShip si
+     Packeta, unde emailul nu se cere. */
+  const laPunctGls = courierSelection?.deliveryType === "locker"
+    && (courierSelection?.courier === "gls" || courierSelection?.courier === "shipo");
   const emailField = laPunctGls ? { enabled: true, required: true } : emailFieldBrut;
   // Order created by a previous identical submit (e.g. retry after the card
   // processor errored) — reused so the retry doesn't place a duplicate order
@@ -760,6 +766,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         smartship_courier_id: courierSelection?.smartshipCourierId,
         smartship_courier_name: courierSelection?.smartshipCourierName,
         smartship_own_contract: courierSelection?.smartshipOwnContract,
+        /* ⚠ Numele astea sunt citite mai tarziu de `ShipoAwbModal`, litera cu
+           litera. Un camp scris altfel se pierde TACUT: alegerea clientului n-ar
+           ajunge niciodata pe comanda, si comerciantul ar emite pe alt serviciu. */
+        shipo_rate_id: courierSelection?.shipoRateId,
+        shipo_courier_slug: courierSelection?.shipoCourierSlug,
+        shipo_courier_name: courierSelection?.shipoCourierName,
         smartship_locker_net: courierSelection?.smartshipLockerNet,
         additional_items: allAdditional.length > 0 ? allAdditional : undefined,
         accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,

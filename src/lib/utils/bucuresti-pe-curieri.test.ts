@@ -5,6 +5,7 @@ import { adresaGls } from "@/lib/gls/expediere";
 import { adresaInnoship } from "@/lib/innoship/expediere";
 import { localitatePosta, sectorDinOras } from "@/lib/posta/expediere";
 import { localitateSmartship, sectorSmartship } from "@/lib/smartship/localitati";
+import { localitateShipo, sectorShipo } from "@/lib/shipo/localitati";
 import { localitateSameday, normalizeLocalityName } from "@/lib/utils/ro-address";
 
 /**
@@ -51,6 +52,19 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
   test("POSTA primeste „Bucuresti”, iar sectorul ramane recuperabil", () => {
     assert.equal(localitatePosta(ADRESA.oras), "Bucuresti");
     assert.equal(sectorDinOras(ADRESA.oras), "Sector 3");
+  });
+
+  test("SHIPO primeste „Bucuresti”, iar sectorul pleaca in campul lui", () => {
+    assert.equal(localitateShipo(ADRESA.oras, ADRESA.judet), "Bucuresti");
+    assert.equal(sectorShipo(ADRESA.oras, ADRESA.judet, ADRESA.strada), 3);
+  });
+
+  test("SHIPO nu trimite deloc campul de sector in afara Bucurestiului", () => {
+    /* ⚠ Deosebire fata de SmartShip, unde acelasi camp cere 0 in restul tarii:
+       la Shipo e „Conditionat", deci un zero trimis degeaba ar putea cadea la
+       validarea lor („intre 1 si 6") — pentru fiecare comanda din tara. */
+    assert.equal(sectorShipo("Cluj-Napoca", "Cluj"), undefined);
+    assert.equal(sectorSmartship("Cluj-Napoca", "Cluj"), 0);
   });
 
   test("CARGUS, DPD si FAN pliaza prin acelasi ajutor", () => {

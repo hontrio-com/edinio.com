@@ -32,6 +32,22 @@ import { corpCotare as corpSmartship, lipsuriConfigurare as lipsuriConfigurareSm
 import { rezolvaLocalitatea as rezolvaLocalitateSmartship } from "@/lib/smartship/geo";
 import { normalizeazaLockere } from "@/lib/smartship/lockere";
 import { etichetaOferta as etichetaSmartship, ofertePosibile as oferteSmartship, termenLivrare as termenSmartship } from "@/lib/smartship/preturi";
+import {
+  cautaOrase as cautaOraseShipo, coordPentruPuncte, puncte as puncteShipo,
+  servicii as serviciiShipo, shipoGata, tarife as tarifeShipo, type ShipoConfig,
+} from "@/lib/shipo/client";
+import {
+  corpTarife as corpShipo, lipsuriConfigurare as lipsuriConfigurareShipo,
+  lipsuriExpediere as lipsuriShipo,
+} from "@/lib/shipo/expediere";
+import { localitateShipo, orasulPotrivit } from "@/lib/shipo/localitati";
+import { etichetaOferta as etichetaShipo, ofertePosibile as oferteShipo } from "@/lib/shipo/preturi";
+/* ⚠ Alias: `normalizeazaPuncte` e deja luat de Innoship, mai sus. Doua importuri
+   cu acelasi nume ar fi o eroare de compilare — dar unul dintre ele redenumit
+   GRESIT ar normaliza punctele Shipo cu cititorul Innoship, tacut. */
+import {
+  MAX_PUNCTE, normalizeazaPuncte as normalizeazaPuncteShipo, RAZA_IMPLICITA_KM,
+} from "@/lib/shipo/puncte";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
@@ -132,6 +148,18 @@ export type ShippingOption = {
    * easybox ar cadea cu 806 sau — mai rau — ar nimeri alt locker.
    */
   smartshipLockerNet?: "easybox" | "fanbox";
+  /**
+   * ⚠ CHEIA unei oferte Shipo, si singura parte a ei.
+   *
+   * La Shipo acelasi curier apare de mai multe ori — la adresa, in locker, in
+   * punct PUDO — si fiecare are `rate_id`-ul lui, la alt pret. `rate_id` E
+   * identitatea serviciului si tot el se trimite la emitere, deci o cheie facuta
+   * din numele curierului ar prabusi doua sau trei oferte una peste alta:
+   * cumparatorul ar alege una si ar primi alta. Vezi `lib/shipo/preturi.ts`.
+   */
+  shipoRateId?: number;
+  shipoCourierSlug?: string;
+  shipoCourierName?: string;
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
@@ -187,6 +215,7 @@ const COURIER_LABELS: Record<string, string> = {
   innoship: "Innoship",
   packeta: "Packeta",
   smartship: "SmartShip",
+  shipo: "Shipo.ro",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -285,7 +314,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -1107,6 +1136,44 @@ export async function getShippingOptions(
           smartshipLockerNet: "fanbox",
         });
       }
+    } else if (courierId === "shipo") {
+      /*
+       * ⚠ SHIPO E BROKER SI COTEAZA CU ADEVARAT — INCLUSIV LOCKERELE.
+       *
+       * Asta e deosebirea fata de SmartShip si Innoship, unde punctele de ridicare
+       * nu se pot cota si primesc tariful fix: la Shipo un serviciu de locker are
+       * `rate_id`-ul lui si apare in `POST /rates` cu pret, ca oricare altul.
+       * Punctul se alege abia dupa aceea, din `/points?rate_id=`, iar pretul NU
+       * depinde de care punct — deci cotarea e cinstita.
+       *
+       * Prin urmare ramura de aici produce si optiunile la adresa, si pe cele in
+       * locker, dintr-un singur apel. Nu exista un al doilea bloc, ca la SmartShip.
+       */
+      const shCfg = settings.shipo_config as ShipoConfig | null;
+      const flat = (): ShippingOption => ({
+        courier: "shipo",
+        courierLabel: zone.label || COURIER_LABELS.shipo,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (shipoGata(shCfg) && useAutoPrice) {
+        promises.push(
+          buildShipoOptions(shCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId)
+            .then((opts) => {
+              if (opts.length > 0) options.push(...opts);
+              /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
+                 tariful fix, ca la ceilalti brokeri. */
+              else options.push(flat());
+            })
+            .catch((err) => {
+              console.error("[shipping] Shipo estimate failed:", (err as Error).message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -1486,6 +1553,85 @@ async function buildSmartshipOptions(
   }));
 }
 
+/**
+ * Ofertele Shipo pentru checkout.
+ *
+ * ⚠ Foloseste ACELASI constructor de corp ca emiterea (`corpTarife` alimenteaza
+ * cotarea, `corpExpediere` emiterea, si amandoua pleaca din aceleasi
+ * `DateExpediere`). Un al doilea constructor ar fi insemnat ca pretul cotat si
+ * cel facturat se pot departa fara ca nimic sa se planga.
+ *
+ * ⚠ Se citesc DOUA liste, nu una: tarifele si serviciile. Tipul adresei
+ * (`recipient_address_type`) sta doar in a doua, iar fara el n-am sti care oferta
+ * e la locker — si un serviciu de locker oferit ca livrare la domiciliu ar cadea
+ * la emitere, dupa ce clientul a platit. Vezi `ofertePosibile`.
+ */
+async function buildShipoOptions(
+  config: ShipoConfig,
+  destination: { county: string; city: string; postCode?: string },
+  weightKg: number,
+  cod: number,
+  labelCustom: string | undefined,
+  businessId: string,
+): Promise<ShippingOption[]> {
+  const date = {
+    destinatar: {
+      nume: "Client Nou",
+      strada: "Strada Principala",
+      numar: "1",
+      oras: destination.city,
+      judet: destination.county,
+      codPostal: destination.postCode ?? null,
+      telefon: "0700000000",
+      email: "client@exemplu.ro",
+    },
+    greutateKg: weightKg,
+    ramburs: cod,
+    felLivrare: "domiciliu" as const,
+    numarColete: 1,
+  };
+
+  /*
+   * ⚠ Cele doua cauze de esec sunt DESPARTITE, si nu din eleganta.
+   *
+   * Configurarea gresita e a MAGAZINULUI si opreste cotarea pentru toata lumea —
+   * acolo comerciantul TREBUIE alertat, altfel toti cumparatorii primesc tacut
+   * tariful fix in loc de cel real.
+   *
+   * O adresa incompleta e insa a UNUI cumparator (tipic: „Bucuresti" fara sector).
+   * Acolo nu e nimic de reparat in magazin, iar o alerta l-ar invata pe om sa nu
+   * se mai uite la alerte. Se cade tacut pe tariful fix.
+   */
+  const lipsuriConfig = lipsuriConfigurareShipo(config);
+  if (lipsuriConfig.length > 0) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.shipoConfig",
+      businessId,
+      `Shipo nu poate cota: ${lipsuriConfig.join("; ")}. Pana la reparare, livrarea prin Shipo se ofera la tariful fix.`,
+    );
+    return [];
+  }
+  /* La cotare nu stim inca serviciul, deci se verifica doar ce e comun: adresa. */
+  if (lipsuriShipo(date, { recipient_address_type: "address" }).length > 0) return [];
+
+  const [t, s] = await Promise.all([
+    tarifeShipo(config, corpShipo(config, date)),
+    serviciiShipo(config),
+  ]);
+
+  return oferteShipo(t, s, config, { cuRamburs: cod > 0 }).map((o): ShippingOption => ({
+    courier: "shipo",
+    /* Eticheta comerciantului, cand exista, ramane deasupra numelui curierului:
+       unii isi vand livrarea sub marca proprie. */
+    courierLabel: labelCustom ? `${labelCustom} · ${etichetaShipo(o)}` : etichetaShipo(o),
+    deliveryType: o.laPunct ? "locker" : "address",
+    price: o.pret,
+    shipoRateId: o.rateId,
+    shipoCourierSlug: o.courierSlug || undefined,
+    shipoCourierName: o.numeCurier || undefined,
+  }));
+}
+
 // ─── Colete Online live courier offers ───────────────────────────────────────
 
 /**
@@ -1559,7 +1705,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo"]);
 
 export async function getLockers(
   businessId: string,
@@ -1599,7 +1745,30 @@ export async function getLockers(
    * chei inventate — acelasi rationament ca la plafonul din `CacheScurt`.
    */
   const reteaLockere = retea === "fanbox" ? "fanbox" : "easybox";
-  const cheieCache = `${businessId}:${courier}:${codAmount && codAmount > 0 ? "cod" : "-"}${courier === "smartship" ? `:${reteaLockere}` : ""}`;
+  /*
+   * ⚠ La Shipo, `retea` poarta altceva: `rate_id`-ul serviciului ales.
+   *
+   * Punctele lor NU se cer pe curier, ci pe SERVICIU — curierul si tipul punctului
+   * (locker sau PUDO) sunt deduse de ei din `rate_id`. Doua servicii ale aceluiasi
+   * curier pot da liste diferite, deci discriminantul de cache trebuie sa fie
+   * serviciul, nu reteaua.
+   *
+   * Se ingusteaza la cifre din acelasi motiv ca `reteaLockere`: valoarea vine de
+   * la client si intra in cheia de cache.
+   */
+  const rateIdShipo = /^\d{1,9}$/.test(retea ?? "") ? Number(retea) : 0;
+  const discriminant =
+    courier === "smartship" ? `:${reteaLockere}`
+    /*
+     * ⚠ La Shipo intra SI localitatea, fiindca lista din cache e a UNUI oras si
+     * nimic n-o mai taie la iesire (vezi `filtreaza`). Fara ea, primul cumparator
+     * din Cluj ar umple cache-ul si urmatorul, din Iasi, ar primi lockerele clujene.
+     * Se normalizeaza prin `localitateShipo`, ca „Sector 3" si „Bucuresti" sa
+     * imparta aceeasi intrare in loc sa faca sase.
+     */
+    : courier === "shipo" ? `:${rateIdShipo}:${localitateShipo(city ?? "", null).toLowerCase()}`
+    : "";
+  const cheieCache = `${businessId}:${courier}:${codAmount && codAmount > 0 ? "cod" : "-"}${discriminant}`;
 
   /*
    * Cache-ul se consulta INAINTE de plafon, si asta e jumatate din reparatie: un
@@ -1608,8 +1777,21 @@ export async function getLockers(
    * ramaneau fara niciun locker de ales — tacut, fiindca lista goala nu produce
    * niciun mesaj in interfata.
    */
+  /*
+   * ⚠ La Shipo NU se mai filtreaza dupa oras, nici aici, nici la iesirea de mai jos.
+   *
+   * Filtrarea compara orasul comenzii („Bucuresti") cu cel al punctului — iar
+   * punctele lor bucurestene spun „Sectorul 4". Deci `filtreazaOras` le-ar taia pe
+   * TOATE, exact dupa ce cautarea dupa coordonate le-a gasit corect.
+   *
+   * Si trebuie sa fie aceeasi hotarare in AMANDOUA locurile: filtrat doar la cache
+   * hit, prima cerere ar fi intors lista intreaga si a doua o lista goala — adica
+   * un defect care apare abia la al doilea cumparator, si numai in Bucuresti.
+   */
+  const filtreaza = courier !== "shipo";
+
   const dinCache = CACHE_LOCKERE.get(cheieCache);
-  if (dinCache) return filtreazaOras(dinCache, city);
+  if (dinCache) return filtreaza ? filtreazaOras(dinCache, city) : dinCache;
 
   // Un nume de curier necunoscut nu ajunge la niciun API mai jos, deci nu trebuie
   // sa consume bugetul magazinului: `courier` vine de la client si e liber.
@@ -1636,7 +1818,7 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config")
     .eq("business_id", businessId)
     .single();
 
@@ -1977,6 +2159,76 @@ export async function getLockers(
       return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] SmartShip lockere failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "shipo") {
+    /*
+     * ⚠ PUNCTELE SE CER PE SERVICIU, NU PE CURIER.
+     *
+     * `GET /points` primeste `rate_id`, iar curierul si tipul punctului (locker
+     * sau PUDO) sunt deduse de ei din el. Deci fara serviciul ales nu exista
+     * intrebare de pus — si nu se poate ghici unul, fiindca doua servicii ale
+     * aceluiasi curier dau liste diferite.
+     */
+    const config = settings.shipo_config as ShipoConfig | null;
+    if (!shipoGata(config) || rateIdShipo <= 0) return [];
+
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () => {
+          /*
+           * ⚠ CAUTAREA DUPA COORDONATE E PRIMA, SI E SINGURA CARE MERGE IN BUCURESTI.
+           *
+           * Punctele lor au `city: "Sectorul 4"`, iar noi avem din comanda
+           * „Bucuresti” — un filtru `city=Bucuresti` n-ar potrivi niciun rand, si
+           * cumparatorul ar citi „nu sunt lockere in localitatea ta” intr-un oras
+           * plin de lockere.
+           *
+           * ⚠ Si tot aici se face RASUCIREA coordonatelor: `/city` da
+           * `[lng, lat]`, `/points` cere `lat,lng`. Vezi `coordPentruPuncte`.
+           */
+          const localitate = localitateShipo(city ?? "", null);
+          let coord: string | null = null;
+          if (localitate) {
+            try {
+              const orase = await cautaOraseShipo(config, localitate);
+              /* ⚠ NU primul rand: omonimele din alte judete ar trimite cautarea in
+                 cealalta parte a tarii, si raspunsul ar arata perfect valid. */
+              coord = coordPentruPuncte(orasulPotrivit(orase, city, null)?.coord);
+            } catch {
+              /* Nomenclatorul de orase nu e obligatoriu — se cade pe filtrul de nume. */
+            }
+          }
+
+          const filtru = coord
+            ? { rate_id: rateIdShipo, coord, radius: RAZA_IMPLICITA_KM, max_results: MAX_PUNCTE }
+            : localitate === "Bucuresti"
+              /* Judetul lor e „Bucuresti” chiar si pentru sectoare. */
+              ? { rate_id: rateIdShipo, county: "Bucuresti", max_results: MAX_PUNCTE }
+              : { rate_id: rateIdShipo, city: localitate || undefined, max_results: MAX_PUNCTE };
+
+          return normalizeazaPuncteShipo(await puncteShipo(config, filtru)).map((p) => ({
+            id: p.id,
+            name: p.nume,
+            address: p.adresa,
+            city: p.oras,
+            county: p.judet,
+            postCode: p.codPostal,
+            lat: p.lat,
+            lng: p.lng,
+          }));
+        },
+        (v) => v.length === 0,
+        60_000,
+      );
+      /* Vezi `filtreaza` de mai sus: la Shipo lista pleaca nefiltrata, si la fel
+         pleaca si cea din cache. */
+      return toate;
+    } catch (e) {
+      console.error("[shipping] Shipo puncte failed:", (e as Error).message);
       return [];
     }
   }

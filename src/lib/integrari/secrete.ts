@@ -75,6 +75,13 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   posta_config: ["password"],
   revolut_config: ["secret_key", "signing_secret", "token"],
   sameday_config: ["password"],
+  /* Shipo: o singura credentiala. ⚠ Ea NU pleaca la fiecare cerere — se schimba o
+     data pe ora, in antetul `auth-key` de la `/auth`, pe un token Bearer. Asta n-o
+     face mai putin secreta: cine o are poate emite si anula expedieri pe contul
+     comerciantului. `sender_address_id` NU intra aici — e adresa lui de ridicare,
+     nu o credentiala, si trebuie sa se vada in formular ca sa stie de unde pleaca
+     marfa. Acelasi caz cu `smartship_config.iban`. */
+  shipo_config: ["api_key"],
   smartbill_config: ["token"],
   /* SmartShip: o singura credentiala, trimisa ca `X-API-KEY` la fiecare cerere.
      ⚠ `iban` NU intra aici, desi arata a date bancare: e IBAN-ul PROPRIU al

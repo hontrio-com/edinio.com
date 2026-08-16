@@ -23,6 +23,7 @@ import { deletePallexAwbAction } from "@/lib/actions/pallex.actions";
 import { dezleagaPostaAwbAction } from "@/lib/actions/posta.actions";
 import { deleteInnoshipAwbAction } from "@/lib/actions/innoship.actions";
 import { deleteSmartshipAwbAction } from "@/lib/actions/smartship.actions";
+import { deleteShipoAwbAction } from "@/lib/actions/shipo.actions";
 import { deleteEcoletAwbAction } from "@/lib/actions/ecolet.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
@@ -359,6 +360,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
        coletul a fost ridicat (codurile 206 si 220); actiunea spune atunci ce mai e
        de facut, in loc sa invite la reincercare. */
     if (order.smartship_awb_number) list.push({ key: "smartship", label: "SmartShip", awb: order.smartship_awb_number });
+    if (order.shipo_awb_number) list.push({ key: "shipo", label: "Shipo.ro", awb: order.shipo_awb_number as string });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -644,6 +646,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "posta") res = await dezleagaPostaAwbAction(businessId, order.id, true);
       else if (key === "innoship") res = await deleteInnoshipAwbAction(businessId, order.id);
       else if (key === "smartship") res = await deleteSmartshipAwbAction(businessId, order.id);
+      /* ⚠ Ramura ASTA nu poate lipsi: `else` final e DETASAREA de Colete Online, nu o
+         eroare. Fara ea, „Anuleaza” pe un AWB Shipo ar fi chemat detasarea altui
+         curier — si ar fi raportat succes. */
+      else if (key === "shipo") res = await deleteShipoAwbAction(businessId, order.id);
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }

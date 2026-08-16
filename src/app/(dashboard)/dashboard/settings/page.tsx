@@ -126,7 +126,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -249,6 +249,7 @@ async function ContinutSetari({
   const io = storeSettings?.innoship_config as CourierCfg | null;
   const pk = storeSettings?.packeta_config as CourierCfg | null;
   const ss = storeSettings?.smartship_config as CourierCfg | null;
+  const sh = storeSettings?.shipo_config as CourierCfg | null;
 
   const activeCourierIds: string[] = [
     ...(fc?.enabled && fc?.username && fc?.client_id ? ["fan-courier"] : []),
@@ -300,6 +301,17 @@ async function ContinutSetari({
       && (ss?.expeditor as { name?: string; address?: string; phone?: string; city?: number } | null)?.phone
       && Number((ss?.expeditor as { city?: number } | null)?.city) > 0
       ? ["smartship"] : []),
+    /*
+     * Aceeasi regula ca in `shipoGata`: cheia de API SI adresa de ridicare.
+     *
+     * ⚠ `sender_address_id` NU e un oras, e id-ul unei adrese salvate in contul
+     * lor — si el se trimite si ca `sender_city` la cotare. Fara el, `POST /rates`
+     * nici nu se poate forma, deci metoda ar aparea in checkout fara sa poata
+     * produce vreun pret. Vezi si capcana Packeta de mai sus: o metoda adaugata
+     * in `SHIPPING_METHODS` dar NU aici ramane vesnic stinsa.
+     */
+    ...(sh?.enabled && sh?.api_key && Number((sh as { sender_address_id?: number } | null)?.sender_address_id) > 0
+      ? ["shipo"] : []),
     "own",
     "pickup",
   ];

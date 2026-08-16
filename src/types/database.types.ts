@@ -2049,6 +2049,18 @@ export type Database = {
           posta_status_code: string | null
           revolut_order_id: string | null
           sameday_awb_number: string | null
+          shipo_awb_at: string | null
+          shipo_awb_number: string | null
+          shipo_cost: number | null
+          shipo_courier_name: string | null
+          shipo_courier_slug: string | null
+          shipo_expedition_id: number | null
+          shipo_point_id: number | null
+          shipo_point_name: string | null
+          shipo_rate_id: number | null
+          shipo_status_checked_at: string | null
+          shipo_status_code: string | null
+          shipo_tracking_url: string | null
           shipping_address: Json
           shipping_cost: number
           smartbill_estimate_number: string | null
@@ -2187,6 +2199,18 @@ export type Database = {
           posta_status_code?: string | null
           revolut_order_id?: string | null
           sameday_awb_number?: string | null
+          shipo_awb_at?: string | null
+          shipo_awb_number?: string | null
+          shipo_cost?: number | null
+          shipo_courier_name?: string | null
+          shipo_courier_slug?: string | null
+          shipo_expedition_id?: number | null
+          shipo_point_id?: number | null
+          shipo_point_name?: string | null
+          shipo_rate_id?: number | null
+          shipo_status_checked_at?: string | null
+          shipo_status_code?: string | null
+          shipo_tracking_url?: string | null
           shipping_address: Json
           shipping_cost?: number
           smartbill_estimate_number?: string | null
@@ -2325,6 +2349,18 @@ export type Database = {
           posta_status_code?: string | null
           revolut_order_id?: string | null
           sameday_awb_number?: string | null
+          shipo_awb_at?: string | null
+          shipo_awb_number?: string | null
+          shipo_cost?: number | null
+          shipo_courier_name?: string | null
+          shipo_courier_slug?: string | null
+          shipo_expedition_id?: number | null
+          shipo_point_id?: number | null
+          shipo_point_name?: string | null
+          shipo_rate_id?: number | null
+          shipo_status_checked_at?: string | null
+          shipo_status_code?: string | null
+          shipo_tracking_url?: string | null
           shipping_address?: Json
           shipping_cost?: number
           smartbill_estimate_number?: string | null
@@ -3081,6 +3117,7 @@ export type Database = {
           returns_config: Json
           revolut_config: Json | null
           sameday_config: Json | null
+          shipo_config: Json | null
           shipping_classes: Json
           shipping_enabled: boolean
           shipping_rules: Json
@@ -3150,6 +3187,7 @@ export type Database = {
           returns_config?: Json
           revolut_config?: Json | null
           sameday_config?: Json | null
+          shipo_config?: Json | null
           shipping_classes?: Json
           shipping_enabled?: boolean
           shipping_rules?: Json
@@ -3219,6 +3257,7 @@ export type Database = {
           returns_config?: Json
           revolut_config?: Json | null
           sameday_config?: Json | null
+          shipo_config?: Json | null
           shipping_classes?: Json
           shipping_enabled?: boolean
           shipping_rules?: Json

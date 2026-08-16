@@ -1252,6 +1252,36 @@ export type Database = {
         }
         Relationships: []
       }
+      fedex_etichete: {
+        Row: {
+          awb_number: string
+          business_id: string
+          continut: string
+          creat_la: string
+          format: string
+          order_id: string
+          stoc: string | null
+        }
+        Insert: {
+          awb_number: string
+          business_id: string
+          continut: string
+          creat_la?: string
+          format: string
+          order_id: string
+          stoc?: string | null
+        }
+        Update: {
+          awb_number?: string
+          business_id?: string
+          continut?: string
+          creat_la?: string
+          format?: string
+          order_id?: string
+          stoc?: string | null
+        }
+        Relationships: []
+      }
       forms: {
         Row: {
           brevo_enabled: boolean | null
@@ -1981,6 +2011,16 @@ export type Database = {
           ecolet_status_checked_at: string | null
           ecolet_status_code: string | null
           fan_courier_awb_number: string | null
+          fedex_awb_at: string | null
+          fedex_awb_number: string | null
+          fedex_cost: number | null
+          fedex_currency: string | null
+          fedex_reference: string | null
+          fedex_service_name: string | null
+          fedex_service_type: string | null
+          fedex_status_checked_at: string | null
+          fedex_status_code: string | null
+          fedex_tracking_url: string | null
           fgo_invoice_link: string | null
           fgo_invoice_number: string | null
           gls_awb_at: string | null
@@ -2131,6 +2171,16 @@ export type Database = {
           ecolet_status_checked_at?: string | null
           ecolet_status_code?: string | null
           fan_courier_awb_number?: string | null
+          fedex_awb_at?: string | null
+          fedex_awb_number?: string | null
+          fedex_cost?: number | null
+          fedex_currency?: string | null
+          fedex_reference?: string | null
+          fedex_service_name?: string | null
+          fedex_service_type?: string | null
+          fedex_status_checked_at?: string | null
+          fedex_status_code?: string | null
+          fedex_tracking_url?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
           gls_awb_at?: string | null
@@ -2281,6 +2331,16 @@ export type Database = {
           ecolet_status_checked_at?: string | null
           ecolet_status_code?: string | null
           fan_courier_awb_number?: string | null
+          fedex_awb_at?: string | null
+          fedex_awb_number?: string | null
+          fedex_cost?: number | null
+          fedex_currency?: string | null
+          fedex_reference?: string | null
+          fedex_service_name?: string | null
+          fedex_service_type?: string | null
+          fedex_status_checked_at?: string | null
+          fedex_status_code?: string | null
+          fedex_tracking_url?: string | null
           fgo_invoice_link?: string | null
           fgo_invoice_number?: string | null
           gls_awb_at?: string | null
@@ -3088,6 +3148,7 @@ export type Database = {
           email_config: Json
           fan_courier_config: Json | null
           facebook_feeds: Json | null
+          fedex_config: Json | null
           fgo_config: Json | null
           free_shipping_threshold: number | null
           gls_config: Json | null
@@ -3158,6 +3219,7 @@ export type Database = {
           email_config?: Json
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
+          fedex_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
@@ -3228,6 +3290,7 @@ export type Database = {
           email_config?: Json
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
+          fedex_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null

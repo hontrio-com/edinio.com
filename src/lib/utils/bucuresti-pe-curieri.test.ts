@@ -6,10 +6,11 @@ import { adresaInnoship } from "@/lib/innoship/expediere";
 import { localitatePosta, sectorDinOras } from "@/lib/posta/expediere";
 import { localitateSmartship, sectorSmartship } from "@/lib/smartship/localitati";
 import { localitateShipo, sectorShipo } from "@/lib/shipo/localitati";
+import { orasFedex, parteFedex, sectorPentruAdresa } from "@/lib/fedex/expediere";
 import { localitateSameday, normalizeLocalityName } from "@/lib/utils/ro-address";
 
 /**
- * ═══ O COMANDA DIN BUCURESTI, UNSPREZECE CURIERI, DOUA ADEVARURI ═══
+ * ═══ O COMANDA DIN BUCURESTI, DOUASPREZECE CURIERI, DOUA ADEVARURI ═══
  *
  * Din 15.08.2026 checkout-ul nu mai lasa orasul liber in Bucuresti: se alege
  * „Sector 1"…„Sector 6". Asta a fost nevoie fiindca Sameday NU cunoaste un oras
@@ -72,6 +73,38 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
   });
 
   /*
+   * ⚠ FedEx e in tabara CEA MARE, dar fara camp de sector — si asta nu e o scapare.
+   *
+   * Cautat `sector` in toate paginile lor de documentatie, in toate JSON-urile
+   * OpenAPI si in `API_Reference_Guide.json`: singurele aparitii sunt adresa
+   * sediului lor din Bucuresti. FedEx NU documenteaza nicio regula de sector, deci
+   * nu se inventeaza una — sectorul, care ramane o informatie reala de livrare,
+   * pleaca pe adresa, iar codul postal de sase cifre (Romania e „postal-aware" la
+   * ei) il identifica oricum.
+   *
+   * ⚠ Si `stateOrProvinceCode` NU se trimite: descrierea lor spune „required for
+   * US, CA, PR and not required for other countries", iar FedEx n-are nomenclator
+   * de judete romanesti. Un „B" inventat ar putea cadea la validare pe fiecare
+   * comanda.
+   */
+  test("FEDEX primeste „Bucuresti”, iar sectorul pleaca pe adresa", () => {
+    assert.equal(orasFedex(ADRESA.oras, ADRESA.judet), "Bucuresti");
+    assert.equal(sectorPentruAdresa(ADRESA), "Sector 3");
+
+    const p = parteFedex(ADRESA);
+    assert.equal(p.address.city, "Bucuresti");
+    assert.ok(p.address.streetLines.join(" ").includes("Sector 3"));
+    assert.equal("stateOrProvinceCode" in p.address, false);
+  });
+
+  test("FEDEX nu inventeaza un sector in afara Bucurestiului", () => {
+    assert.equal(sectorPentruAdresa({ oras: "Cluj-Napoca", judet: "Cluj" }), null);
+    const p = parteFedex({ ...ADRESA, oras: "Cluj-Napoca", judet: "Cluj", codPostal: "400001" });
+    assert.equal(p.address.city, "Cluj-Napoca");
+    assert.equal(p.address.streetLines.join(" ").toLowerCase().includes("sector"), false);
+  });
+
+  /*
    * ⚠ SmartShip e in tabara CEA MARE, dar cu o rasucire proprie: orasul se
    * plieaza in „Bucuresti", iar sectorul pleaca in campul lui, `sector` (1-6).
    * Iar cand sectorul NU se poate afla, raspunsul e `null`, nu 0 — la ei 0
@@ -102,6 +135,7 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
     assert.equal(adresaInnoship(cluj, "domiciliu").localityName, "Cluj-Napoca");
     assert.equal(localitateSameday(cluj.oras, cluj.judet), "Cluj-Napoca");
     assert.equal(localitatePosta(cluj.oras), "Cluj-Napoca");
+    assert.equal(orasFedex(cluj.oras, cluj.judet), "Cluj-Napoca");
   });
 
   test("diacriticele cad peste tot, nu doar pe unde ne-am amintit", () => {
@@ -109,5 +143,6 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
     assert.equal(adresaGls(iasi).City, "Iasi");
     assert.equal(adresaInnoship(iasi, "domiciliu").localityName, "Iasi");
     assert.equal(localitateSameday(iasi.oras, iasi.judet), "Iasi");
+    assert.equal(orasFedex(iasi.oras, iasi.judet), "Iasi");
   });
 });

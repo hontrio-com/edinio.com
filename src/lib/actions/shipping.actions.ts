@@ -48,6 +48,12 @@ import { etichetaOferta as etichetaShipo, ofertePosibile as oferteShipo } from "
 import {
   MAX_PUNCTE, normalizeazaPuncte as normalizeazaPuncteShipo, RAZA_IMPLICITA_KM,
 } from "@/lib/shipo/puncte";
+import { fedexGata, tarife as tarifeFedex, type FedexConfig } from "@/lib/fedex/client";
+import {
+  corpTarife as corpFedex, lipsuriConfigurare as lipsuriConfigurareFedex,
+  lipsuriExpediere as lipsuriFedex,
+} from "@/lib/fedex/expediere";
+import { etichetaOferta as etichetaFedex, ofertePosibile as oferteFedex } from "@/lib/fedex/preturi";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
@@ -160,6 +166,17 @@ export type ShippingOption = {
   shipoRateId?: number;
   shipoCourierSlug?: string;
   shipoCourierName?: string;
+  /**
+   * ⚠ CHEIA unei oferte FedEx, si e de ajuns singura.
+   *
+   * FedEx e un TRANSPORTATOR, nu un broker: `rateReplyDetails[]` are cate o intrare
+   * pe serviciu si acelasi `serviceType` nu apare de doua ori. Deci nu exista aici
+   * problema de la SmartShip (acelasi curier pe doua contracte) sau de la Shipo
+   * (acelasi curier cu trei feluri de livrare). Pierdut insa, reemiterea ar pleca pe
+   * serviciul implicit — alt pret si alt termen decat cel ales de cumparator.
+   */
+  fedexServiceType?: string;
+  fedexServiceName?: string;
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
@@ -216,6 +233,7 @@ const COURIER_LABELS: Record<string, string> = {
   packeta: "Packeta",
   smartship: "SmartShip",
   shipo: "Shipo.ro",
+  fedex: "FedEx",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -314,7 +332,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -1174,6 +1192,47 @@ export async function getShippingOptions(
       } else {
         options.push(flat());
       }
+    } else if (courierId === "fedex") {
+      /*
+       * ⚠ SINGURA RAMURA CARE POATE SA NU PRODUCA NIMIC — SI E INTENTIONAT.
+       *
+       * FedEx nu are ramburs: retras de ei la 31.07.2023 peste tot in afara de
+       * FedEx Ground in/spre Canada. La toti ceilalti treisprezece curieri, cand
+       * cotarea nu iese, se cade pe tariful fix — aici NU se poate: o optiune FedEx
+       * la tarif fix pe o comanda cu plata la livrare ar fi aleasa de cumparator, ar
+       * bloca comanda in checkout ca „livrata prin FedEx", iar comerciantul ar
+       * descoperi abia la emitere ca AWB-ul nu se poate face DELOC. Marfa n-ar pleca
+       * si nimeni n-ar sti de ce.
+       *
+       * Deci pe ramburs FedEx dispare din lista, curat. Restul curierilor raman.
+       */
+      if (esteRamburs) continue;
+
+      const fxCfg = settings.fedex_config as FedexConfig | null;
+      const flat = (): ShippingOption => ({
+        courier: "fedex",
+        courierLabel: zone.label || COURIER_LABELS.fedex,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (fedexGata(fxCfg) && useAutoPrice) {
+        promises.push(
+          buildFedexOptions(fxCfg, destination, weight, zone.label, businessId)
+            .then((opts) => {
+              if (opts.length > 0) options.push(...opts);
+              /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
+                 tariful fix, ca la ceilalti. */
+              else options.push(flat());
+            })
+            .catch((err) => {
+              console.error("[shipping] FedEx estimate failed:", (err as Error).message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -1550,6 +1609,144 @@ async function buildSmartshipOptions(
     smartshipCourierId: o.courierId,
     smartshipCourierName: o.numeCurier || undefined,
     smartshipOwnContract: o.contractPropriu,
+  }));
+}
+
+/**
+ * Ofertele FedEx pentru checkout.
+ *
+ * ⚠ Foloseste ACELASI constructor de corp ca emiterea (`corpTarife` alimenteaza
+ * cotarea, `corpExpediere` emiterea, si amandoua pleaca din aceleasi
+ * `DateExpediere`). Un al doilea constructor ar fi insemnat ca pretul cotat si cel
+ * facturat se pot departa fara ca nimic sa se planga.
+ *
+ * ⚠ NU primeste `cod`: ramura din `getShippingOptions` nu ajunge aici cand comanda
+ * are ramburs. Parametrul ar fi fost o minciuna comoda — l-am fi trecut mai departe
+ * si cineva ar fi crezut candva ca FedEx il poate onora.
+ *
+ * ⚠ SI POATE INTOARCE GOL DIN CAUZA VALUTEI. Daca contul coteaza in EUR sau USD,
+ * `ofertePosibile` arunca toate ofertele — 12 euro scrisi ca 12 lei ar subfactura
+ * transportul de cinci ori. Comerciantul e alertat, o singura data, cu ce e de facut.
+ */
+async function buildFedexOptions(
+  config: FedexConfig,
+  destination: { county: string; city: string; postCode?: string },
+  weightKg: number,
+  labelCustom: string | undefined,
+  businessId: string,
+): Promise<ShippingOption[]> {
+  const date = {
+    destinatar: {
+      nume: "Client Nou",
+      strada: "Strada Principala",
+      numar: "1",
+      oras: destination.city,
+      judet: destination.county,
+      codPostal: destination.postCode ?? null,
+      telefon: "0700000000",
+      email: "client@exemplu.ro",
+    },
+    greutateKg: weightKg,
+  };
+
+  /*
+   * ⚠ Cele doua cauze de esec sunt DESPARTITE, si nu din eleganta.
+   *
+   * Configurarea gresita e a MAGAZINULUI si opreste cotarea pentru toata lumea —
+   * acolo comerciantul TREBUIE alertat, altfel toti cumparatorii primesc tacut
+   * tariful fix in loc de cel real.
+   *
+   * O adresa incompleta e insa a UNUI cumparator (tipic: cod postal lipsa). Acolo nu
+   * e nimic de reparat in magazin, iar o alerta l-ar invata pe om sa nu se mai uite
+   * la alerte. Se cade tacut pe tariful fix.
+   */
+  const lipsuriConfig = lipsuriConfigurareFedex(config);
+  if (lipsuriConfig.length > 0) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.fedexConfig",
+      businessId,
+      `FedEx nu poate cota: ${lipsuriConfig.join("; ")}. Pana la reparare, livrarea prin FedEx se ofera la tariful fix.`,
+    );
+    return [];
+  }
+  /*
+   * ⚠ CODUL POSTAL LIPSA NU E VINA CUMPARATORULUI — E O LIPSA A CHECKOUT-ULUI.
+   *
+   * Pe comenzile interne formularul nici nu arata campul de cod postal (il randeaza
+   * DOAR pentru livrari internationale), deci `destination.postCode` e mereu gol in
+   * Romania. Iar FedEx il cere: Romania e tara „postal-aware" la ei, cu sablonul
+   * `NNNNNN`, si fara el `POST /rate/v1/rates/quotes` raspunde
+   * `POSTALCODE.ZIPCODE.REQUIRED`.
+   *
+   * Prima varianta a functiei trata asta ca pe o adresa incompleta oarecare si cadea
+   * TACUT pe tariful fix — adica FedEx n-ar fi cotat niciodata in checkout, iar
+   * comerciantul ar fi vazut „conexiunea merge" in configurare si un pret fix in
+   * magazin, la nesfarsit, fara nicio urma care sa lege cele doua. Exact clasa
+   * „integrare care nu face nimic".
+   *
+   * ⚠ HOTARARE DE PRODUS, 16.08.2026, luata de client: checkout-ul NU se schimba.
+   *
+   * Varianta „adauga un camp de cod postal si pe comenzile interne" ar fi facut FedEx
+   * sa coteze real in magazin, dar ar fi schimbat formularul de comanda pentru TOTI
+   * cumparatorii TUTUROR celor 127 de magazine — pentru un curier pe care il
+   * foloseste o mana dintre ele. Nu merita.
+   *
+   * Deci starea de fata e cea DORITA, nu o scapare: in checkout FedEx apare cu
+   * tariful fix din `shipping_zones`, iar cotarea reala si emiterea se fac din pagina
+   * comenzii, unde comerciantul poate completa codul postal (OrderEditModal). E fix
+   * cum lucreaza GLS azi. Daca vreodata se schimba hotararea, locul de reparat e
+   * `CheckoutForm.tsx` + `OrderModal.tsx` (campul si `postCode={...}` catre
+   * `CourierSelector`), nu garda de aici.
+   *
+   * Alerta ramane, si tot ea e jumatatea care conteaza: se ridica o data (e plafonata
+   * pe magazin) si spune limpede de ce pretul e fix. Si se iese INAINTE de apel —
+   * fara cod postal cererea ar fi refuzata oricum, iar apelul consuma din cota
+   * zilnica a contului.
+   */
+  const lipsuriComanda = lipsuriFedex(config, date).comanda;
+  if (lipsuriComanda.length > 0) {
+    if (!(destination.postCode ?? "").trim()) {
+      await alertaPlafonMagazin(
+        "getShippingOptions.fedexCodPostal",
+        businessId,
+        "FedEx cere codul postal al destinatarului (Romania e tara „postal-aware” la ei), iar checkout-ul "
+        + "nu il colecteaza la livrarile interne. Pana atunci FedEx apare in checkout la tariful fix din "
+        + "Setari → Livrare, iar AWB-ul se emite din pagina comenzii, dupa ce completezi codul postal.",
+      );
+    }
+    return [];
+  }
+
+  const { detalii } = await tarifeFedex(config, corpFedex(config, date));
+  const r = oferteFedex(detalii, config, { greutateKg: weightKg });
+
+  /*
+   * ⚠ Valuta refuzata e o problema de CONT, nu de adresa — deci se alerteaza.
+   *
+   * Fara semnalul asta, comerciantul ar vedea „conexiunea merge" in configurare si
+   * tariful fix in checkout, la nesfarsit, fara nicio urma care sa lege cele doua.
+   */
+  if (r.oferte.length === 0 && r.valuteRefuzate.length > 0) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.fedexValuta",
+      businessId,
+      `Contul FedEx coteaza in ${r.valuteRefuzate.join(", ")}, iar magazinul lucreaza in lei. `
+      + "Nu convertim noi sumele — cere-i reprezentantului FedEx tarife in RON. "
+      + "Pana atunci, livrarea prin FedEx se ofera la tariful fix.",
+    );
+    return [];
+  }
+
+  return r.oferte.map((o): ShippingOption => ({
+    courier: "fedex",
+    /* Eticheta comerciantului, cand exista, ramane deasupra numelui serviciului:
+       unii isi vand livrarea sub marca proprie. */
+    courierLabel: labelCustom ? `${labelCustom} · ${etichetaFedex(o)}` : etichetaFedex(o),
+    deliveryType: "address",
+    price: o.pret,
+    estimatedDays: o.tranzit ?? undefined,
+    fedexServiceType: o.serviceType,
+    fedexServiceName: o.serviceName,
   }));
 }
 

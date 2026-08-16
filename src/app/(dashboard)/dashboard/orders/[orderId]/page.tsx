@@ -46,7 +46,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -99,6 +99,19 @@ export default async function OrderDetailPage({ params }: Props) {
   const sh = settings?.shipo_config as { enabled?: boolean; api_key?: string; sender_address_id?: number } | null;
   const shipoEnabled = !!(sh?.enabled && sh?.api_key && Number(sh?.sender_address_id) > 0);
 
+  /* ⚠ Aceeasi regula ca in `fedexGata`, in features/page.tsx si in checkout. Codul
+     postal e in ea fiindca Romania e tara „postal-aware" la FedEx: fara el cotarea
+     raspunde `POSTALCODE.ZIPCODE.REQUIRED`, deci butonul ar promite ceva ce nu se
+     poate face. */
+  const fx = settings?.fedex_config as {
+    enabled?: boolean; client_id?: string; client_secret?: string; account_number?: string;
+    expeditor?: { oras?: string; cod_postal?: string };
+  } | null;
+  const fedexEnabled = !!(
+    fx?.enabled && fx?.client_id && fx?.client_secret && fx?.account_number
+    && fx?.expeditor?.oras && fx?.expeditor?.cod_postal
+  );
+
   const ss = settings?.smartship_config as { enabled?: boolean; api_key?: string; expeditor?: { name?: string; address?: string; phone?: string; city?: number } } | null;
   const smartshipEnabled = !!(
     ss?.enabled && ss?.api_key && ss?.expeditor?.name && ss?.expeditor?.address
@@ -149,6 +162,7 @@ export default async function OrderDetailPage({ params }: Props) {
       packetaEnabled={packetaEnabled}
       smartshipEnabled={smartshipEnabled}
       shipoEnabled={shipoEnabled}
+      fedexEnabled={fedexEnabled}
       postaZilePrezentare={postaZilePrezentare}
       innoshipEnabled={innoshipEnabled}
       pallexZile={pallexZile}

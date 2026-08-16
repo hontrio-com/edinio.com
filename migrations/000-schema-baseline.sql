@@ -216,7 +216,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -3457,7 +3457,8 @@ create table if not exists privat.store_settings (
   innoship_config jsonb,
   packeta_config jsonb,
   smartship_config jsonb,
-  shipo_config jsonb);
+  shipo_config jsonb,
+  fedex_config jsonb);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),
@@ -3806,6 +3807,15 @@ create table if not exists public.error_logs (
   business_id uuid,
   severity text default 'error'::text not null);
 
+create table if not exists public.fedex_etichete (
+  order_id uuid not null,
+  business_id uuid not null,
+  awb_number text not null,
+  format text not null,
+  stoc text,
+  continut text not null,
+  creat_la timestamp with time zone default now() not null);
+
 create table if not exists public.forms (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -4132,7 +4142,17 @@ create table if not exists public.orders (
   shipo_status_code text,
   shipo_status_checked_at timestamp with time zone,
   shipo_point_id integer,
-  shipo_point_name text);
+  shipo_point_name text,
+  fedex_awb_number text,
+  fedex_status_code text,
+  fedex_status_checked_at timestamp with time zone,
+  fedex_awb_at timestamp with time zone,
+  fedex_service_type text,
+  fedex_service_name text,
+  fedex_cost numeric(10,2),
+  fedex_currency text,
+  fedex_tracking_url text,
+  fedex_reference text);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -4493,6 +4513,7 @@ alter table public.domain_orders add constraint domain_orders_pkey PRIMARY KEY (
 alter table public.domains add constraint domains_pkey PRIMARY KEY (id);
 alter table public.email_automations add constraint email_automations_pkey PRIMARY KEY (id);
 alter table public.error_logs add constraint error_logs_pkey PRIMARY KEY (id);
+alter table public.fedex_etichete add constraint fedex_etichete_pkey PRIMARY KEY (order_id);
 alter table public.forms add constraint forms_pkey PRIMARY KEY (id);
 alter table public.gmc_products add constraint gmc_products_pkey PRIMARY KEY (id);
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_pkey PRIMARY KEY (id);
@@ -4562,7 +4583,7 @@ alter table public.domain_orders add constraint domain_orders_status_check CHECK
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
 alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
-alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
@@ -4620,6 +4641,8 @@ alter table public.domain_orders add constraint domain_orders_user_id_fkey FOREI
 alter table public.domains add constraint domains_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.domains add constraint domains_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.error_logs add constraint error_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.fedex_etichete add constraint fedex_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.fedex_etichete add constraint fedex_etichete_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.forms add constraint forms_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.gmc_products add constraint gmc_products_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.gmc_products add constraint gmc_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
@@ -4700,6 +4723,7 @@ CREATE INDEX cw_semn ON public.catalog_cuvant USING btree (business_id, semnatur
 CREATE INDEX cw_trgm ON public.catalog_cuvant USING gin (cuvant extensions.gin_trgm_ops);
 CREATE UNIQUE INDEX domain_orders_stripe_session_id_key ON public.domain_orders USING btree (stripe_session_id) WHERE (stripe_session_id IS NOT NULL);
 CREATE UNIQUE INDEX domains_business_domain_key ON public.domains USING btree (business_id, domain);
+CREATE INDEX fedex_etichete_business_idx ON public.fedex_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX forms_business_idx ON public.forms USING btree (business_id);
 CREATE UNIQUE INDEX gmc_products_business_offer_uidx ON public.gmc_products USING btree (business_id, offer_id);
 CREATE INDEX gmc_products_business_product_idx ON public.gmc_products USING btree (business_id, product_id);
@@ -4788,6 +4812,7 @@ CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (
 CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_status, status, created_at) WHERE (discount_code IS NOT NULL);
 CREATE INDEX orders_ecolet_emitere_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_order_to_send_id IS NOT NULL) AND (ecolet_awb_number IS NULL));
 CREATE INDEX orders_ecolet_urmarire_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_fedex_urmarire_idx ON public.orders USING btree (fedex_status_checked_at NULLS FIRST) WHERE ((fedex_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_gls_urmarire_idx ON public.orders USING btree (gls_status_checked_at NULLS FIRST) WHERE ((gls_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_innoship_urmarire_idx ON public.orders USING btree (innoship_status_checked_at NULLS FIRST) WHERE ((innoship_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_packeta_urmarire_idx ON public.orders USING btree (packeta_status_checked_at NULLS FIRST) WHERE ((packeta_packet_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
@@ -4887,7 +4912,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(innoship_config, '{api_key,webhook_secret}'::text[]) AS innoship_config,
     privat.decripteaza_config(packeta_config, '{api_password,api_key}'::text[]) AS packeta_config,
     privat.decripteaza_config(smartship_config, '{api_key}'::text[]) AS smartship_config,
-    privat.decripteaza_config(shipo_config, '{api_key}'::text[]) AS shipo_config
+    privat.decripteaza_config(shipo_config, '{api_key}'::text[]) AS shipo_config,
+    privat.decripteaza_config(fedex_config, '{client_secret}'::text[]) AS fedex_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -4941,6 +4967,7 @@ alter table public.domain_orders enable row level security;
 alter table public.domains enable row level security;
 alter table public.email_automations enable row level security;
 alter table public.error_logs enable row level security;
+alter table public.fedex_etichete enable row level security;
 alter table public.forms enable row level security;
 alter table public.gmc_products enable row level security;
 alter table public.gmc_sync_queue enable row level security;
@@ -5755,6 +5782,13 @@ grant SELECT on table public.error_logs to service_role;
 grant TRIGGER on table public.error_logs to service_role;
 grant TRUNCATE on table public.error_logs to service_role;
 grant UPDATE on table public.error_logs to service_role;
+grant DELETE on table public.fedex_etichete to service_role;
+grant INSERT on table public.fedex_etichete to service_role;
+grant REFERENCES on table public.fedex_etichete to service_role;
+grant SELECT on table public.fedex_etichete to service_role;
+grant TRIGGER on table public.fedex_etichete to service_role;
+grant TRUNCATE on table public.fedex_etichete to service_role;
+grant UPDATE on table public.fedex_etichete to service_role;
 grant DELETE on table public.forms to anon;
 grant INSERT on table public.forms to anon;
 grant REFERENCES on table public.forms to anon;

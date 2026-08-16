@@ -45,6 +45,13 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      fiecare cerere. E singura credentiala — nu exista user si parola. */
   ecolet_config: ["api_token"],
   fan_courier_config: ["password"],
+  /* FedEx: DOUA credentiale in portalul lor („API Key" si „Secret Key"), dar numai
+     una e secreta. `client_id` NU intra aici, desi ei il numesc cheie: singur nu
+     deschide nimic (OAuth-ul lor cere si secretul), iar comerciantul trebuie sa-l
+     poata reciti ca sa stie CE PROIECT din portalul FedEx a legat. Acelasi
+     rationament ca la `oblio_config.client_id`. Nici `account_number` nu e
+     credentiala — se tipareste pe fiecare factura FedEx pe care o primeste. */
+  fedex_config: ["client_secret"],
   fgo_config: ["private_key"],
   gls_config: ["password"],
   /* Innoship: o singura cheie de API, trimisa ca `X-Api-Key` la fiecare cerere.

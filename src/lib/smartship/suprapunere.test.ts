@@ -18,7 +18,10 @@ describe("SmartShip: cine se suprapune cu integrarile directe", () => {
     assert.equal(curierulNostru("FanCourier")?.id, "fan-courier");
     assert.equal(curierulNostru("FAN Courier")?.id, "fan-courier");
     assert.equal(curierulNostru("DragonStar"), null);
-    assert.equal(curierulNostru("FedEx"), null);
+    /* ⚠ Din 16.08.2026 FedEx E integrare directa, deci SE suprapune. Pana atunci
+       randul asta astepta `null` — iar lasat asa, avertismentul de dublura n-ar mai
+       fi aparut niciodata pentru singurul curier care tocmai devenise dublura. */
+    assert.equal(curierulNostru("FedEx")?.id, "fedex");
     assert.equal(curierulNostru(""), null);
   });
 

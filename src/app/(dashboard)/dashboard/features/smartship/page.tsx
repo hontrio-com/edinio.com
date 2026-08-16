@@ -36,6 +36,9 @@ export default async function SmartshipPage() {
     activ(settings?.sameday_config, "username") ? "sameday" : "",
     activ(settings?.gls_config, "username", "client_number") ? "gls" : "",
     activ(settings?.posta_config, "username", "cod_trimitere") ? "posta" : "",
+    /* FedEx e integrare directa din 16.08.2026, iar SmartShip il revinde
+       (`courier_id: 19`) — deci se poate suprapune, ca oricare dintre ceilalti sase. */
+    activ(settings?.fedex_config, "client_id", "client_secret", "account_number") ? "fedex" : "",
   ].filter(Boolean);
 
   return (

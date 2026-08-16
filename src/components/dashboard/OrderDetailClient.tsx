@@ -39,6 +39,7 @@ import { PostaAwbModal } from "@/components/dashboard/PostaAwbModal";
 import { PacketaAwbModal } from "@/components/dashboard/PacketaAwbModal";
 import { SmartshipAwbModal } from "@/components/dashboard/SmartshipAwbModal";
 import { ShipoAwbModal } from "@/components/dashboard/ShipoAwbModal";
+import { FedexAwbModal } from "@/components/dashboard/FedexAwbModal";
 import { InnoshipAwbModal } from "@/components/dashboard/InnoshipAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
@@ -238,6 +239,7 @@ export function OrderDetailClient({
   packetaEnabled,
   smartshipEnabled,
   shipoEnabled,
+  fedexEnabled,
   postaZilePrezentare,
   innoshipEnabled,
   fanCourierEnabled,
@@ -269,6 +271,7 @@ export function OrderDetailClient({
   packetaEnabled?: boolean;
   smartshipEnabled?: boolean;
   shipoEnabled?: boolean;
+  fedexEnabled?: boolean;
   postaZilePrezentare?: number;
   innoshipEnabled?: boolean;
   fanCourierEnabled?: boolean;
@@ -356,6 +359,7 @@ export function OrderDetailClient({
   const [packetaModalOpen, setPacketaModalOpen] = useState(false);
   const [smartshipModalOpen, setSmartshipModalOpen] = useState(false);
   const [shipoModalOpen, setShipoModalOpen] = useState(false);
+  const [fedexModalOpen, setFedexModalOpen] = useState(false);
   const [innoshipModalOpen, setInnoshipModalOpen] = useState(false);
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
@@ -411,6 +415,9 @@ export function OrderDetailClient({
        `chosenCourier` ramane `undefined` si comerciantului i se propune butonul
        ALTUI curier decat cel platit de client. */
     { id: "shipo", name: "Shipo.ro", logo: "/integrations/shipo.ro.svg", enabled: !!shipoEnabled, awb: (order.shipo_awb_number as string | null) ?? null, open: () => setShipoModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
+       `shipping_address.courier` — vezi nota de la Shipo. */
+    { id: "fedex", name: "FedEx", logo: "/integrations/fedex.svg", enabled: !!fedexEnabled, awb: (order.fedex_awb_number as string | null) ?? null, open: () => setFedexModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
     { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
@@ -1404,6 +1411,9 @@ export function OrderDetailClient({
       )}
       {shipoEnabled && (
         <ShipoAwbModal open={shipoModalOpen} onClose={() => setShipoModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setShipoModalOpen(false); router.refresh(); }} />
+      )}
+      {fedexEnabled && (
+        <FedexAwbModal open={fedexModalOpen} onClose={() => setFedexModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setFedexModalOpen(false); router.refresh(); }} />
       )}
       {smartshipEnabled && (
         <SmartshipAwbModal open={smartshipModalOpen} onClose={() => setSmartshipModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setSmartshipModalOpen(false); router.refresh(); }} />

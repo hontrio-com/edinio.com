@@ -40,6 +40,7 @@ const DUPA_NUME: Record<string, { id: string; eticheta: string }> = {
   pallex: { id: "pallex", eticheta: "Pall-Ex" },
   ecolet: { id: "ecolet", eticheta: "eColet" },
   postaromana: { id: "posta", eticheta: "Poșta Română" },
+  fedex: { id: "fedex", eticheta: "FedEx" },
 };
 
 /** Cheia de comparatie: fara majuscule, fara separatoare. */

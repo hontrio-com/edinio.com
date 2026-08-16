@@ -70,6 +70,9 @@ const ECHIVALENT_DIRECT: Record<string, string> = {
   gls: "gls",
   sameday: "sameday",
   posta: "posta",
+  /* FedEx e integrare directa din 16.08.2026. Slugul vine din `/couriers`, ca toti
+     ceilalti — nu e ghicit. */
+  fedex: "fedex",
 };
 
 export function ShipoConfigClient({

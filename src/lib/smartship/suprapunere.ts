@@ -36,6 +36,12 @@ const DUPA_NUME: { fragment: string; id: string; eticheta: string }[] = [
   { fragment: "sameday", id: "sameday", eticheta: "Sameday" },
   { fragment: "gls", id: "gls", eticheta: "GLS" },
   { fragment: "postaromana", id: "posta", eticheta: "Poșta Română" },
+  /* ⚠ De la 16.08.2026 FedEx e si integrare directa (al paisprezecelea curier), deci
+     acelasi curier poate ajunge in checkout si pe contractul comerciantului, si pe
+     al SmartShip (`courier_id: 19`). Fara randul asta, suprapunerea aia ar fi ramas
+     nesemnalata, iar comerciantul ar fi vazut doua randuri „FedEx" la preturi
+     diferite si ar fi crezut ca s-a stricat ceva. */
+  { fragment: "fedex", id: "fedex", eticheta: "FedEx" },
 ];
 
 /** Cheia de comparatie: fara majuscule, fara separatoare. */

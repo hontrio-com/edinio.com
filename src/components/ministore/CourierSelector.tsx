@@ -25,7 +25,12 @@ function optionKey(o: ShippingOption) {
    * data pe cel SmartShip, la preturi diferite. Iar reteaua de lockere (easybox
    * / FANbox) tine tot de cheie: sunt nomenclatoare separate.
    */
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}`;
+  /*
+   * ⚠ La FedEx deosebirea e SERVICIUL: `FEDEX_PRIORITY`, `FEDEX_PRIORITY_EXPRESS`
+   * si `FEDEX_FIRST` vin toate sub `courier: "fedex"` si `deliveryType: "address"`,
+   * la preturi si termene diferite. Fara el, cele trei s-ar prabusi una peste alta.
+   */
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -71,6 +76,10 @@ export interface CourierSelection {
   shipoRateId?: number;
   shipoCourierSlug?: string;
   shipoCourierName?: string;
+  /* ⚠ Cheia ofertei FedEx e SERVICIUL, si e de ajuns: FedEx e transportator, nu
+     broker, deci acelasi `serviceType` nu apare de doua ori. Vezi lib/fedex/preturi.ts. */
+  fedexServiceType?: string;
+  fedexServiceName?: string;
   /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
   token?: string;
 }
@@ -196,6 +205,8 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             shipoRateId: ales.shipoRateId,
             shipoCourierSlug: ales.shipoCourierSlug,
             shipoCourierName: ales.shipoCourierName,
+            fedexServiceType: ales.fedexServiceType,
+            fedexServiceName: ales.fedexServiceName,
             token: ales.token,
           });
         }
@@ -275,6 +286,8 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         shipoRateId: opt.shipoRateId,
         shipoCourierSlug: opt.shipoCourierSlug,
         shipoCourierName: opt.shipoCourierName,
+        fedexServiceType: opt.fedexServiceType,
+        fedexServiceName: opt.fedexServiceName,
         token: opt.token,
       });
     }
@@ -306,6 +319,8 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         shipoRateId: opt.shipoRateId,
         shipoCourierSlug: opt.shipoCourierSlug,
         shipoCourierName: opt.shipoCourierName,
+        fedexServiceType: opt.fedexServiceType,
+        fedexServiceName: opt.fedexServiceName,
         token: opt.token,
       });
     }

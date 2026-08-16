@@ -239,6 +239,11 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
   { id: "smartship",    label: "SmartShip",         logo: "/integrations/smartship.png",    defaultPrice: 17 },
   { id: "shipo",        label: "Shipo.ro",          logo: "/integrations/shipo.ro.svg",     defaultPrice: 17 },
+  /* ⚠ Tariful fix e mai mare decat la ceilalti fiindca FedEx e un transportator
+     express, nu un curier de colete ieftin: cel mai ieftin serviciu intern al lor
+     (FedEx Priority) porneste mult peste tarifele locale. Un implicit de 17 lei ar
+     fi facut comerciantul sa vanda transport in pierdere pana la prima factura. */
+  { id: "fedex",        label: "FedEx",             logo: "/integrations/fedex.svg",        defaultPrice: 45 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -266,6 +271,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
      shipping.actions.ts: campul gol din panou promite un text, iar checkout-ul
      afiseaza fallback-ul — nepotrivirea o vede doar un cumparator. */
   shipo: "Shipo.ro",
+  fedex: "FedEx",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };

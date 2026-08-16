@@ -39,6 +39,9 @@ export default async function ShipoPage() {
     activ(settings?.sameday_config, "username") ? "sameday" : "",
     activ(settings?.gls_config, "username", "client_number") ? "gls" : "",
     activ(settings?.posta_config, "username", "cod_trimitere") ? "posta" : "",
+    /* FedEx e integrare directa din 16.08.2026, si Shipo il revinde — deci se poate
+       suprapune, ca oricare dintre ceilalti sase. */
+    activ(settings?.fedex_config, "client_id", "client_secret", "account_number") ? "fedex" : "",
   ].filter(Boolean);
 
   return (

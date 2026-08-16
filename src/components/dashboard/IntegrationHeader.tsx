@@ -34,6 +34,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   /* ⚠ Cheia trebuie sa fie EXACT `id`-ul pasat de pagina (`<IntegrationHeader id="shipo">`).
      Nepotrivita, pagina se randeaza fara nicio eroare, doar fara sigla. */
   shipo: { src: "/integrations/shipo.ro.svg", alt: "Shipo.ro" },
+  fedex: { src: "/integrations/fedex.svg", alt: "FedEx" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },

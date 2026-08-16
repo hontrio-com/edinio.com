@@ -804,6 +804,13 @@ export async function placeOrder(data: {
   shipo_rate_id?: number;
   shipo_courier_slug?: string;
   shipo_courier_name?: string;
+  /* ⚠ Cheia ofertei FedEx e SERVICIUL (`serviceType`), si atat: FedEx e un singur
+     transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda, iar emiterea ar pleca pe serviciul implicit — mai scump sau mai lent
+     decat cel platit. E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  fedex_service_type?: string;
+  fedex_service_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -1433,6 +1440,10 @@ export async function placeOrder(data: {
         shipo_rate_id: data.shipo_rate_id,
         shipo_courier_slug: data.shipo_courier_slug,
         shipo_courier_name: data.shipo_courier_name,
+      }),
+      ...(data.fedex_service_type && {
+        fedex_service_type: data.fedex_service_type,
+        fedex_service_name: data.fedex_service_name,
       }),
     },
     items: allItems,
@@ -3165,6 +3176,13 @@ export async function placeCartOrder(data: {
   shipo_rate_id?: number;
   shipo_courier_slug?: string;
   shipo_courier_name?: string;
+  /* ⚠ Cheia ofertei FedEx e SERVICIUL (`serviceType`), si atat: FedEx e un singur
+     transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda, iar emiterea ar pleca pe serviciul implicit — mai scump sau mai lent
+     decat cel platit. E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  fedex_service_type?: string;
+  fedex_service_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -3652,6 +3670,10 @@ export async function placeCartOrder(data: {
         shipo_rate_id: data.shipo_rate_id,
         shipo_courier_slug: data.shipo_courier_slug,
         shipo_courier_name: data.shipo_courier_name,
+      }),
+      ...(data.fedex_service_type && {
+        fedex_service_type: data.fedex_service_type,
+        fedex_service_name: data.fedex_service_name,
       }),
     },
     items: allItems,

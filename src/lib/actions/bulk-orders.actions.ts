@@ -36,6 +36,8 @@ import { createSmartshipAwbAction } from "@/lib/actions/smartship.actions";
 import { smartshipGata, type SmartshipConfig } from "@/lib/smartship/client";
 import { createShipoAwbAction } from "@/lib/actions/shipo.actions";
 import { shipoGata, type ShipoConfig } from "@/lib/shipo/client";
+import { createFedexAwbAction } from "@/lib/actions/fedex.actions";
+import { fedexGata, type FedexConfig } from "@/lib/fedex/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -58,8 +60,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -233,7 +235,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -246,6 +248,7 @@ export async function bulkGenerateAwbs(
   const pk = settings?.packeta_config as PacketaConfig | null;
   const ss = settings?.smartship_config as SmartshipConfig | null;
   const sh = settings?.shipo_config as ShipoConfig | null;
+  const fx = settings?.fedex_config as FedexConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -283,6 +286,10 @@ export async function bulkGenerateAwbs(
        ea, fiecare comanda ar fi refuzata de actiune oricum — adica 50 de esecuri
        in loc de un mesaj limpede. */
     shipo: shipoGata(sh),
+    /* Aceeasi regula ca in `fedexGata`: amandoua credentialele, contul si adresa
+       de expeditie. Fara ea, fiecare comanda ar fi refuzata de actiune oricum —
+       adica 50 de esecuri in loc de un mesaj limpede. */
+    fedex: fedexGata(fx),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -298,7 +305,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -324,6 +331,7 @@ export async function bulkGenerateAwbs(
        client" ar sari TACUT peste comenzile Shipo si le-ar raporta drept „sarite",
        nu „esuate". */
     shipo: "shipo",
+    fedex: "fedex",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -358,6 +366,7 @@ export async function bulkGenerateAwbs(
          Registrul l-ar prinde, dar comanda ar fi numarata gresit. */
       : target === "smartship" ? row.smartship_awb_number
       : target === "shipo" ? row.shipo_awb_number
+      : target === "fedex" ? row.fedex_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -764,6 +773,58 @@ async function createAwbForOrder(
         rateId: ales.shipo_rate_id ?? null,
         courierSlug: ales.shipo_courier_slug ?? null,
         courierName: ales.shipo_courier_name ?? null,
+      });
+    }
+    case "fedex": {
+      /*
+       * ⚠ Adresa se compune EXACT ca in `FedexAwbModal`, ca lotul si emiterea pe
+       * bucata sa trimita acelasi text.
+       *
+       * ⚠ CU RAMBURS NU SE EMITE, si asta se opreste aici, nu la ei: FedEx a retras
+       * C.O.D. in iulie 2023. Actiunea ar refuza oricum comanda (`lipsuriExpediere`),
+       * dar mesajul de acolo e o insiruire de lipsuri — aici iese un singur rand
+       * limpede, si comerciantul stie imediat sa treaca comanda pe alt curier.
+       *
+       * ⚠ Si lotul NU ghiceste serviciul, ca la Shipo: `serviceType` e si identitatea
+       * ofertei, si pretul. Ales de noi, comanda ar putea pleca pe FedEx First (cel
+       * mai scump) in loc de FedEx Priority, iar diferenta o suporta comerciantul.
+       * Fara alegerea clientului, `createFedexAwbAction` cade pe implicit — deci il
+       * cerem explicit aici.
+       */
+      if (cod > 0) {
+        return { error: "FedEx nu ofera ramburs. Comanda are plata la livrare — expediaz-o cu alt curier." };
+      }
+
+      const ales = addr as ShippingAddr & {
+        fedex_service_type?: string;
+        fedex_service_name?: string;
+      };
+      const serviciu = (ales.fedex_service_type ?? "").trim();
+      if (!serviciu) {
+        return {
+          error:
+            "Comanda n-are serviciul FedEx ales de client. Emite-o din pagina comenzii, "
+            + "unde vezi preturile si termenele — lotul n-are voie sa aleaga in locul tau.",
+        };
+      }
+
+      return createFedexAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          strada: street,
+          numar: streetNo || null,
+          oras: city,
+          judet: county || null,
+          codPostal: zip || null,
+          telefon: o.customer_phone,
+          email,
+          tara: addr.country || "RO",
+        },
+        greutateKg: weight,
+        continut: content,
+        valoareComanda: Number(o.total) || 0,
+        serviceType: serviciu,
+        serviceName: ales.fedex_service_name ?? null,
       });
     }
     default:

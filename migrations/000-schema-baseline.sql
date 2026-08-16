@@ -1673,6 +1673,40 @@ begin
    where n.nspname = any(c_scheme) and r.relkind = 'r';
   o := o || E'-- ── CONSTRANGERI ──────────────────────────────────────────\n' || p || E'\n\n';
 
+
+  /*
+   * ⚠ SINGURELE RANDURI DE DATE DIN TOT BASELINE-UL — SI NU SUNT DATE.
+   *
+   * `privat.campuri_secrete` spune CE COLOANE se cripteaza si pe ce cale din JSON.
+   * E citita de `reconstruieste_store_settings()` si de perechea ei `_upd`, care
+   * COMPUN vederea publica si declansatorul ei.
+   *
+   * Vederea din baseline are deja decriptarea coapta in definitie, deci o baza refacuta
+   * din el decripteaza corect DE LA INCEPUT. Capcana e a doua zi: `campuri_secrete` ar fi
+   * GOALA, iar prima chemare a lui `reconstruieste_store_settings()` — adica prima
+   * migratie care adauga o integrare — ar reconstrui vederea FARA nicio decriptare.
+   *
+   * Si rezultatul n-ar fi o eroare, ci cel mai rau lucru cu putinta: aplicatia ar citi
+   * `enc.v1.…` drept credentiala si l-ar trimite asa la toti furnizorii. Exact clasa de
+   * defecte din 15.08.2026, cand 21 de citiri ramasesera neconvertite si GA, GMC, OLX,
+   * SMSO, Notice, Trendyol si SMTP trimiteau sirul criptat pe post de cheie.
+   *
+   * Deci randurile astea nu sunt CONTINUT, sunt INTELESUL schemei — un fel de enumerare
+   * tinuta intr-un tabel. Restul tabelelor raman in afara, si nu din ezitare: comenzile,
+   * magazinele si jurnalele sunt date ale clientilor, iar `catalog_*_murdar` sunt cozi de
+   * invalidare (business_id + marcat_la), adevarate doar in clipa in care au fost scrise.
+   *
+   * ⚠ Se emite DUPA constrangeri, ca sa existe cheia primara pe care se sprijina
+   * `on conflict do nothing` — altfel o a doua aplicare ar cadea pe duplicat.
+   */
+  select coalesce(string_agg(
+           format('insert into privat.campuri_secrete (coloana, cale) values (%L, %L) on conflict do nothing;', coloana, cale),
+           E'\n' order by coloana, cale), '')
+    into p from privat.campuri_secrete;
+  o := o || E'-- ── CAMPURI CRIPTATE ──────────────────────────────────────\n'
+         || E'-- Randuri, nu date: fara ele, prima reconstruire a vederii o lasa FARA decriptare.\n'
+         || p || E'\n\n';
+
   select coalesce(string_agg(pg_get_indexdef(i.indexrelid) || ';', E'\n' order by n.nspname, ic.relname), '')
     into p from pg_index i join pg_class ic on ic.oid = i.indexrelid
     join pg_class tc on tc.oid = i.indrelid join pg_namespace n on n.oid = tc.relnamespace
@@ -4725,6 +4759,60 @@ alter table public.trendyol_variants add constraint trendyol_variants_product_id
 alter table public.ups_etichete add constraint ups_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.ups_etichete add constraint ups_etichete_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.users_profile add constraint users_profile_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- ── CAMPURI CRIPTATE ──────────────────────────────────────
+-- Randuri, nu date: fara ele, prima reconstruire a vederii o lasa FARA decriptare.
+insert into privat.campuri_secrete (coloana, cale) values ('aboutyou_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('aboutyou_config', 'webhook_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('brevo_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('brevo_config', 'webhook_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('cargus_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('cargus_config', 'subscription_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('colete_config', 'client_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('colete_config', 'token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('dpd_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('ecolet_config', 'api_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('email_config', 'smtp.pass') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('fan_courier_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('fedex_config', 'client_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('fgo_config', 'private_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('gls_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('google_analytics_config', 'api_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('google_analytics_config', 'refresh_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('google_merchant_config', 'refresh_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('innoship_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('innoship_config', 'webhook_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('ipay_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('klarna_config', 'authorization_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('klarna_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('klaviyo_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('mailchimp_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('mailchimp_config', 'webhook_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('netopia_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('netopia_config', 'pos_signature') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('notice_config', 'api_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('notice_config', 'webhook_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('oblio_config', 'client_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('olx_config', 'access_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('olx_config', 'refresh_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('packeta_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('packeta_config', 'api_password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('pallex_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('posta_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('revolut_config', 'secret_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('revolut_config', 'signing_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('revolut_config', 'token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('sameday_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('shipo_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('smartbill_config', 'token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('smartship_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('smso_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'webhook_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('ups_config', 'client_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('woot_config', 'public_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('woot_config', 'secret_key') on conflict do nothing;
 
 -- ── INDEXURI ──────────────────────────────────────────────
 CREATE INDEX abandoned_carts_business_email_idx ON public.abandoned_carts USING btree (business_id, email);

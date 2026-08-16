@@ -45,7 +45,7 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -73,6 +73,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   shipoEnabled?: boolean;
   fedexEnabled?: boolean;
   upsEnabled?: boolean;
+  dhlEnabled?: boolean;
   innoshipEnabled?: boolean;
   pallexZile?: { ridicare: number; livrare: number };
   ecoletEnabled?: boolean;
@@ -160,9 +161,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (shipoEnabled) list.push({ key: "shipo", label: "Shipo.ro" });
     if (fedexEnabled) list.push({ key: "fedex", label: "FedEx" });
     if (upsEnabled) list.push({ key: "ups", label: "UPS" });
+    if (dhlEnabled) list.push({ key: "dhl", label: "DHL Express" });
     if (innoshipEnabled) list.push({ key: "innoship", label: "Innoship" });
     return list;
-  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, innoshipEnabled]);
+    /* ⚠ Steagul nou TREBUIE trecut si in vectorul de dependinte. Lipsa lui nu produce
+       nicio eroare: `useMemo` pastreaza lista veche, deci meniul „Genereaza AWB" pe lot
+       ramane fara DHL pana la urmatoarea rerandare care schimba altceva din vector.
+       Comerciantul vede o optiune care lipseste fara motiv si crede ca nu e configurat. */
+  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled]);
   const anyAwb = awbCouriers.length > 0;
 
   const pageOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);

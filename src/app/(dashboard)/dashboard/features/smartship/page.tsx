@@ -43,6 +43,14 @@ export default async function SmartshipPage() {
        nu face nimic singur: lista de aici e cea care alimenteaza `suprapuneri()`, iar
        fara „ups" in ea avertismentul de suprapunere n-ar fi aparut NICIODATA. */
     activ(settings?.ups_config, "client_id", "client_secret", "account_number") ? "ups" : "",
+    /* ⚠ Si DHL, din 16.08.2026. Aceeasi lectie ca la UPS, unde s-a descoperit ca
+       Packeta lipsea de aici si avertismentul ei nu se putea porni deloc: randul din
+       `DUPA_NUME` (smartship/suprapunere.ts) nu face nimic singur, lista de aici e cea
+       care alimenteaza `suprapuneri()`.
+       ⚠ Campurile sunt cele ale lui DHL — `username` / `password` / `account_number`,
+       NU `client_id` / `client_secret` ca la FedEx si UPS. Copiate gresit, `activ()` ar
+       citi campuri inexistente si ar raspunde mereu „nu". */
+    activ(settings?.dhl_config, "username", "password", "account_number") ? "dhl" : "",
   ].filter(Boolean);
 
   return (

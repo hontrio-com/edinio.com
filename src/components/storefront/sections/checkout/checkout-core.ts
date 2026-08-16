@@ -519,6 +519,14 @@ export function useCheckoutOrder({
         fedex_service_name: courierSelection?.fedexServiceName,
         ups_service_code: courierSelection?.upsServiceCode,
         ups_service_name: courierSelection?.upsServiceName,
+        /* ⚠ Perechea celor trei linii din `OrderModal.tsx` (mini-store). Aceleasi chei,
+           scrise la fel: `DhlAwbModal` le citeste litera cu litera din `shipping_address`
+           ca sa preselecteze produsul cotat clientului.
+           ⚠ `productCode` e OBLIGATORIU la emiterea DHL, nu optional ca serviciul UPS de
+           deasupra: fara el AWB-ul nu se poate face deloc. */
+        dhl_product_code: courierSelection?.dhlProductCode,
+        dhl_product_name: courierSelection?.dhlProductName,
+        dhl_local_product_code: courierSelection?.dhlLocalProductCode,
         smartship_locker_net: courierSelection?.smartshipLockerNet,
         source: getAttribution() ?? undefined,
       };

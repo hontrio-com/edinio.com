@@ -36,6 +36,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   shipo: { src: "/integrations/shipo.ro.svg", alt: "Shipo.ro" },
   fedex: { src: "/integrations/fedex.svg", alt: "FedEx" },
   ups: { src: "/integrations/ups.svg", alt: "UPS" },
+  dhl: { src: "/integrations/dhl.svg", alt: "DHL Express" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },

@@ -108,6 +108,10 @@
     {
       "path": "/api/cron/ups-tracking",
       "schedule": "23 */2 * * *"
+    },
+    {
+      "path": "/api/cron/dhl-tracking",
+      "schedule": "11 */3 * * *"
     }
   ]
 }

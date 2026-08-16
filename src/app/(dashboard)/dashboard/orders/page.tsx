@@ -54,7 +54,7 @@ export default async function OrdersPage({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config)")
+    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config)")
     .eq("user_id", user.id)
     .eq("type", "ministore")
     .limit(1)
@@ -118,6 +118,24 @@ export default async function OrdersPage({
     && up?.expeditor?.oras && up?.expeditor?.cod_postal
   );
 
+  /* Aceeasi regula ca in `dhlGata` si ca in pagina comenzii: utilizatorul, parola,
+     numarul de cont, si adresa de expeditie cu cod postal. Codul postal e in ea fiindca
+     `postalCode` e cheie obligatorie in `shipperDetails` la cotare, iar tariful se
+     determina „based on city, postal code, and country code" — vezi nota mai lunga din
+     pagina comenzii.
+     ⚠ Campurile se numesc `username` / `password`, NU `client_id` / `client_secret` ca
+     la FedEx si UPS de deasupra. Copiate de acolo fara sa fie redenumite, conditia ar
+     citi campuri inexistente si steagul ar fi vesnic fals: butonul de AWB pe lot n-ar
+     aparea niciodata, fara nicio eroare. */
+  const dh = settings?.dhl_config as {
+    enabled?: boolean; username?: string; password?: string; account_number?: string;
+    expeditor?: { oras?: string; cod_postal?: string };
+  } | null;
+  const dhlEnabled = !!(
+    dh?.enabled && dh?.username && dh?.password && dh?.account_number
+    && dh?.expeditor?.oras && dh?.expeditor?.cod_postal
+  );
+
   const ss = settings?.smartship_config as { enabled?: boolean; api_key?: string; expeditor?: { name?: string; address?: string; phone?: string; city?: number } } | null;
   const smartshipEnabled = !!(
     ss?.enabled && ss?.api_key && ss?.expeditor?.name && ss?.expeditor?.address
@@ -133,7 +151,7 @@ export default async function OrdersPage({
 
   const integrari: Integrari = {
     smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled,
-    cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
+    cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
     fanPickup: { lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null },
   };
 
@@ -170,6 +188,7 @@ type Integrari = {
   shipoEnabled: boolean;
   fedexEnabled: boolean;
   upsEnabled: boolean;
+  dhlEnabled: boolean;
   innoshipEnabled: boolean;
   pallexZile: { ridicare: number; livrare: number };
   ecoletEnabled: boolean;
@@ -286,7 +305,14 @@ async function ListaComenzi({
   for (const r of statusRows ?? []) statusCounts[r.status] = Number(r.cnt);
   const pendingCount = statusCounts.pending ?? 0;
 
+  /*
+   * ⚠ Steagul CALCULAT nu ajunge nicaieri singur: trebuie si in `Integrari`, si in
+   * tipul lui, si ca ATRIBUT aici. Prop-urile lui `OrdersClient` sunt optionale, deci
+   * unul uitat aici nu produce nicio eroare de tip — produce doar un curier care
+   * lipseste tacut din meniul „Genereaza AWB" pe lot. Asa a orbit FedEx lotul de
+   * AWB-uri, si de aia se numara toate trei locurile la fiecare curier nou.
+   */
   return (
-    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
   );
 }

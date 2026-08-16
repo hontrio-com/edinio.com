@@ -1039,6 +1039,42 @@ export type Database = {
           },
         ]
       }
+      dhl_etichete: {
+        Row: {
+          awb_number: string
+          business_id: string
+          continut: string
+          creat_la: string
+          document_transport: string | null
+          factura: string | null
+          format: string
+          luna_ridicare: string | null
+          order_id: string
+        }
+        Insert: {
+          awb_number: string
+          business_id: string
+          continut: string
+          creat_la?: string
+          document_transport?: string | null
+          factura?: string | null
+          format: string
+          luna_ridicare?: string | null
+          order_id: string
+        }
+        Update: {
+          awb_number?: string
+          business_id?: string
+          continut?: string
+          creat_la?: string
+          document_transport?: string | null
+          factura?: string | null
+          format?: string
+          luna_ridicare?: string | null
+          order_id?: string
+        }
+        Relationships: []
+      }
       discounts: {
         Row: {
           business_id: string
@@ -1994,6 +2030,18 @@ export type Database = {
           customer_email: string | null
           customer_name: string
           customer_phone: string
+          dhl_awb_at: string | null
+          dhl_awb_number: string | null
+          dhl_cost: number | null
+          dhl_currency: string | null
+          dhl_dispatch_confirmation: string | null
+          dhl_local_product_code: string | null
+          dhl_product_code: string | null
+          dhl_product_name: string | null
+          dhl_reference: string | null
+          dhl_status_checked_at: string | null
+          dhl_status_code: string | null
+          dhl_tracking_url: string | null
           discount_amount: number
           discount_code: string | null
           discount_id: string | null
@@ -2165,6 +2213,18 @@ export type Database = {
           customer_email?: string | null
           customer_name: string
           customer_phone: string
+          dhl_awb_at?: string | null
+          dhl_awb_number?: string | null
+          dhl_cost?: number | null
+          dhl_currency?: string | null
+          dhl_dispatch_confirmation?: string | null
+          dhl_local_product_code?: string | null
+          dhl_product_code?: string | null
+          dhl_product_name?: string | null
+          dhl_reference?: string | null
+          dhl_status_checked_at?: string | null
+          dhl_status_code?: string | null
+          dhl_tracking_url?: string | null
           discount_amount?: number
           discount_code?: string | null
           discount_id?: string | null
@@ -2336,6 +2396,18 @@ export type Database = {
           customer_email?: string | null
           customer_name?: string
           customer_phone?: string
+          dhl_awb_at?: string | null
+          dhl_awb_number?: string | null
+          dhl_cost?: number | null
+          dhl_currency?: string | null
+          dhl_dispatch_confirmation?: string | null
+          dhl_local_product_code?: string | null
+          dhl_product_code?: string | null
+          dhl_product_name?: string | null
+          dhl_reference?: string | null
+          dhl_status_checked_at?: string | null
+          dhl_status_code?: string | null
+          dhl_tracking_url?: string | null
           discount_amount?: number
           discount_code?: string | null
           discount_id?: string | null
@@ -3176,6 +3248,7 @@ export type Database = {
           created_at: string
           currency: string
           default_shipping_cost: number
+          dhl_config: Json | null
           dpd_config: Json | null
           ecolet_config: Json | null
           email_config: Json
@@ -3248,6 +3321,7 @@ export type Database = {
           created_at?: string
           currency?: string
           default_shipping_cost?: number
+          dhl_config?: Json | null
           dpd_config?: Json | null
           ecolet_config?: Json | null
           email_config?: Json
@@ -3320,6 +3394,7 @@ export type Database = {
           created_at?: string
           currency?: string
           default_shipping_cost?: number
+          dhl_config?: Json | null
           dpd_config?: Json | null
           ecolet_config?: Json | null
           email_config?: Json

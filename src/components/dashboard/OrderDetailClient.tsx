@@ -41,6 +41,7 @@ import { SmartshipAwbModal } from "@/components/dashboard/SmartshipAwbModal";
 import { ShipoAwbModal } from "@/components/dashboard/ShipoAwbModal";
 import { FedexAwbModal } from "@/components/dashboard/FedexAwbModal";
 import { UpsAwbModal } from "@/components/dashboard/UpsAwbModal";
+import { DhlAwbModal } from "@/components/dashboard/DhlAwbModal";
 import { InnoshipAwbModal } from "@/components/dashboard/InnoshipAwbModal";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
@@ -242,6 +243,7 @@ export function OrderDetailClient({
   shipoEnabled,
   fedexEnabled,
   upsEnabled,
+  dhlEnabled,
   postaZilePrezentare,
   innoshipEnabled,
   fanCourierEnabled,
@@ -275,6 +277,7 @@ export function OrderDetailClient({
   shipoEnabled?: boolean;
   fedexEnabled?: boolean;
   upsEnabled?: boolean;
+  dhlEnabled?: boolean;
   postaZilePrezentare?: number;
   innoshipEnabled?: boolean;
   fanCourierEnabled?: boolean;
@@ -364,6 +367,7 @@ export function OrderDetailClient({
   const [shipoModalOpen, setShipoModalOpen] = useState(false);
   const [fedexModalOpen, setFedexModalOpen] = useState(false);
   const [upsModalOpen, setUpsModalOpen] = useState(false);
+  const [dhlModalOpen, setDhlModalOpen] = useState(false);
   const [innoshipModalOpen, setInnoshipModalOpen] = useState(false);
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
@@ -425,6 +429,11 @@ export function OrderDetailClient({
     /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
        `shipping_address.courier` — vezi nota de la Shipo. */
     { id: "ups", name: "UPS", logo: "/integrations/ups.svg", enabled: !!upsEnabled, awb: (order.ups_awb_number as string | null) ?? null, open: () => setUpsModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
+       `shipping_address.courier` — vezi nota de la Shipo. La DHL sirul e „dhl", scurt si
+       usor de confundat cu numele afisat „DHL Express": numele e pentru om, `id`-ul e
+       pentru `chosenCourier`. */
+    { id: "dhl", name: "DHL Express", logo: "/integrations/dhl.svg", enabled: !!dhlEnabled, awb: (order.dhl_awb_number as string | null) ?? null, open: () => setDhlModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
     { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
@@ -1421,6 +1430,9 @@ export function OrderDetailClient({
       )}
       {fedexEnabled && (
         <FedexAwbModal open={fedexModalOpen} onClose={() => setFedexModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setFedexModalOpen(false); router.refresh(); }} />
+      )}
+      {dhlEnabled && (
+        <DhlAwbModal open={dhlModalOpen} onClose={() => setDhlModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setDhlModalOpen(false); router.refresh(); }} />
       )}
       {upsEnabled && (
         <UpsAwbModal open={upsModalOpen} onClose={() => setUpsModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setUpsModalOpen(false); router.refresh(); }} />

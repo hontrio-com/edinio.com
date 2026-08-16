@@ -60,6 +60,22 @@ import {
   lipsuriConfigurare as lipsuriConfigurareUps, lipsuriExpediere as lipsuriUps, orasUps,
 } from "@/lib/ups/expediere";
 import { etichetaOferta as etichetaUps, ofertePosibile as oferteUps } from "@/lib/ups/preturi";
+/*
+ * ⚠ DHL importa MAI PUTIN decat UPS, si cele doua lipsuri sunt hotarari, nu scapari.
+ *
+ * Nu se importa `puncte`: DHL are `GET /servicepoints`, dar livrarea LA punct trece prin
+ * `onDemandDelivery`, care cere `buyerDetails` si un `servicePointId` pe care ei il dau
+ * doar prin „contact your local DHL Express Account Manager". Deci nu se poate emite ce
+ * s-ar putea afisa. Vezi ramura de mai jos si pagina de configurare.
+ *
+ * Si nu se importa nimic de ramburs: DHL Express nu-l vinde din Romania. Vezi ramura.
+ */
+import { dhlGata, tarife as tarifeDhl, type DhlConfig } from "@/lib/dhl/client";
+import {
+  corpTarife as corpDhl, lipsesteCodulPostal as lipsesteCodulPostalDhl,
+  lipsuriConfigurare as lipsuriConfigurareDhl, lipsuriExpediere as lipsuriDhl,
+} from "@/lib/dhl/expediere";
+import { etichetaOferta as etichetaDhl, ofertePosibile as oferteDhl } from "@/lib/dhl/preturi";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
@@ -197,6 +213,22 @@ export type ShippingOption = {
    */
   upsServiceCode?: string;
   upsServiceName?: string;
+  /**
+   * ⚠ CHEIA unei oferte DHL, si e singura de pe lista care are DOUA parti obligatorii.
+   *
+   * La ei nu se numesc servicii, se numesc PRODUSE, iar `productCode` e in `required` pe
+   * `POST /shipments`. Aici e deosebirea de UPS, si costa altfel: UPS fara cod de serviciu
+   * factureaza TACIT cel mai scump produs, DHL REFUZA cererea. Deci codul nu e o
+   * imbunatatire a fidelitatii, e conditia ca AWB-ul sa existe.
+   *
+   * ⚠ Iar `localProductCode` trebuie sa calatoreasca ODATA cu el, si nu se compune
+   * niciodata de noi: e codul cu care contul comerciantului are tariful (`localProductCode`
+   * din chiar oferta lor). Pierdut pe drum, emiterea pleaca pe produsul global si pretul
+   * facturat se poate departa de cel aratat cumparatorului, fara ca nimic sa cada.
+   */
+  dhlProductCode?: string;
+  dhlProductName?: string;
+  dhlLocalProductCode?: string;
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
@@ -255,6 +287,9 @@ const COURIER_LABELS: Record<string, string> = {
   shipo: "Shipo.ro",
   fedex: "FedEx",
   ups: "UPS",
+  /* Numele comercial complet: „DHL" singur inseamna si DHL Parcel, si DHL eCommerce,
+     care sunt alte retele, cu alte conturi si alte API-uri. */
+  dhl: "DHL Express",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -353,7 +388,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -494,6 +529,49 @@ export async function getShippingOptions(
   // cantarite, iar la magazinul care coteaza live prin Cargus si DPD sapte din
   // opt comenzi trecute ar fi primit alt pret decat cel de la un kilogram.
   const weight = cartWeightKg > 0 ? cartWeightKg : GREUTATE_REZERVA_KG;
+
+  /*
+   * ⚠ VALOAREA MARFII, PLAFONATA — ridicata aici fiindca de ea are nevoie si COTAREA,
+   * nu doar regulile de transport.
+   *
+   * CE ERA GRESIT: suma asta se calcula abia jos, in `ctx`-ul regulilor (`if
+   * (rules.length > 0)`), deci `buildDhlOptions` compunea `DateExpediere` fara
+   * `valoareComanda`. Urmarea: ramura din `corpTarife` care trimite
+   * `monetaryAmount[declaredValue]` nu se atingea NICIODATA din checkout, desi
+   * comentariul ei spune limpede „valoarea declarata intra in cotare fiindca ea trage
+   * suprataxele de valoare si asigurarea". La emitere, `corpExpediere` trimite si
+   * valoarea, si serviciul de asigurare `II` (cand comerciantul l-a pornit), iar DHL
+   * factureaza dupa catalogul lor romanesc „55.00 LEI or 1% of insured value, if
+   * higher". CE SE RUPEA: pretul aratat cumparatorului in checkout — si scris apoi in
+   * `dhl_cost` — era mai mic cu cel putin 55 de lei pe colet decat cel facturat.
+   * Magazinul vindea transport in pierdere, tacut, pe fiecare comanda. Cele doua
+   * corpuri pleaca dinadins din acelasi `DateExpediere` ca sa nu se poata departa;
+   * campul lipsa le departa oricum.
+   *
+   * ⚠ E VALOAREA MARFII, NU TOTALUL COMENZII, si asta e hotararea. Transportul nu are
+   * voie sa intre in suma din care iese pretul transportului: ar fi circular — pretul
+   * cotat ar umfla suprataxa de valoare, care ar umfla pretul cotat. `destination.subtotal`
+   * e chiar „goods value after promo" pe care il trimite `CourierSelector`
+   * (`Math.max(0, goodsTotal - discountAmount)` din checkout, fara livrare), deci e
+   * exact ce trebuie declarat: ce s-ar plati daca se pierde coletul.
+   *
+   * ⚠ Plafonarea ramane cea dinainte (`min(cerut, maxim din catalog)`) si acum conteaza
+   * mai mult: suma vine de la browser, iar de azi ea nu mai misca doar regulile de
+   * transport, ci si ce cerem curierului. Umflata, ar fi cumparat asigurare mai scumpa
+   * pe banii comerciantului.
+   *
+   * ⚠ Fara linii de cos declarate plafonul e ZERO, deci nu se declara nicio valoare si
+   * cotarea ramane exact cea de pana acum. Nu e o reparatie completa — la emitere
+   * valoarea se ia din `order.total`, deci un asemenea apel ar cota tot sub factura —
+   * dar in checkout nu se intampla: si `CheckoutForm`, si `OrderModal` trimit `cart`
+   * odata cu `subtotal`. Ramane deschis doar pentru apelantii care ar trimite unul fara
+   * celalalt, si acolo nu exista nimic care sa sustina suma.
+   */
+  const valoareMarfii = Math.min(
+    Math.max(0, Number(destination.subtotal) || 0),
+    subtotalMaximDinCatalog(destination.cart, produseCotate),
+  );
+
   const options: ShippingOption[] = [];
 
   // International (EU): only DPD international applies. Short-circuit here so the
@@ -1318,6 +1396,73 @@ export async function getShippingOptions(
           price: zone.price,
         });
       }
+    } else if (courierId === "dhl") {
+      /*
+       * ⚠⚠ A DOUA RAMURA DIN FISIER CARE POATE SA NU PRODUCA NIMIC, dupa FedEx — si aici
+       * motivul e mai apasat.
+       *
+       * DHL EXPRESS NU VINDE RAMBURS DIN ROMANIA. Patru dovezi, toate cautate anume, toate
+       * negative: `KB` („Cash On Delivery") exista in nomenclatorul lor GLOBAL de servicii,
+       * dar (1) nu apare in catalogul comercial DHL Express Romania — 24 de servicii
+       * enumerate, „cash" si „ramburs" zero aparitii; (2) nu apare in ghidul lor de tarife
+       * 2026, nici in editia romaneasca, nici in cea engleza; (3) nu l-a intors sonda lor de
+       * capabilitate pe niciuna dintre cele sase rute cu origine RO; (4) nu apare pe paginile
+       * de tara ale celor 40 de piete verificate. Trimis totusi, nu cade la cotare — cade la
+       * EMITERE, cu `7008`, adica dupa ce cumparatorul a comandat si a asteptat.
+       *
+       * De aceea nu exista `ramburs_activ` in configurarea DHL, asa cum exista la UPS: n-ar
+       * fi un comutator, ar fi o capcana cu doua pozitii gresite.
+       *
+       * ⚠ SI DE ACEEA NU SE CADE PE TARIFUL FIX. O optiune DHL la tarif fix pe o comanda cu
+       * plata la livrare ar fi ALEASA de cumparator (tariful fix e adesea cel mai mic din
+       * lista), comanda s-ar bloca in checkout ca „livrata prin DHL", iar comerciantul ar afla
+       * abia la emitere ca AWB-ul nu se poate face DELOC. Si n-ar avea nici cum sa repare din
+       * mers: DHL e singurul curier din cei saisprezece care NU are anulare de expediere.
+       *
+       * Deci pe ramburs DHL dispare din lista, curat. Ceilalti curieri raman.
+       */
+      if (esteRamburs) continue;
+
+      const dhlCfg = settings.dhl_config as DhlConfig | null;
+
+      const flat = (): ShippingOption => ({
+        courier: "dhl",
+        courierLabel: zone.label || COURIER_LABELS.dhl,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (dhlGata(dhlCfg) && useAutoPrice) {
+        promises.push(
+          buildDhlOptions(dhlCfg, destination, weight, valoareMarfii, zone.label, businessId)
+            .then((opts) => {
+              if (opts.length > 0) options.push(...opts);
+              /* Zero oferte inseamna destinatie neacoperita sau adresa fara cod postal, nu
+                 defect: cade pe tariful fix, ca la ceilalti. */
+              else options.push(flat());
+            })
+            .catch((err) => {
+              console.error("[shipping] DHL estimate failed:", (err as Error).message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
+
+      /*
+       * ⚠ AICI NU URMEAZA NICIO OPTIUNE DE LIVRARE IN PUNCT, spre deosebire de UPS, si nu
+       * s-a uitat nimeni: DHL n-are ramura nici in `getLockers`, nici in `CURIERI_CU_LOCKERE`.
+       *
+       * `GET /servicepoints` chiar exista si ar putea umple o harta. Dar livrarea LA punct se
+       * cere prin `onDemandDelivery`, care vrea `buyerDetails` si un `servicePointId` pe care
+       * DHL il da doar dupa „contact your local DHL Express Account Manager" — deci am fi
+       * aratat cumparatorului puncte pe care emiterea nu le poate folosi, iar acoperirea lor
+       * pentru Romania nu se poate verifica din niciun document public. O optiune care se
+       * alege si nu se poate livra costa o comanda; una care lipseste nu costa nimic.
+       *
+       * Scrie asta si in pagina de configurare a DHL, ca omul sa nu caute comutatorul.
+       */
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -1367,10 +1512,10 @@ export async function getShippingOptions(
        * livrare gratuita semnata pentru un cos ieftin. Reducerile doar coboara
        * suma, deci trec neatinse.
        */
-      subtotal: Math.min(
-        Math.max(0, Number(destination.subtotal) || 0),
-        subtotalMaximDinCatalog(destination.cart, produseCotate),
-      ),
+      /* Calculul s-a mutat sus, in `valoareMarfii`: aceeasi suma o cere si cotarea DHL,
+         iar doua copii ale plafonarii s-ar fi departat la prima schimbare. Valoarea e
+         neschimbata. */
+      subtotal: valoareMarfii,
       weightKg: cos.weightKg,
       quantity: cos.quantity,
       classIds: cos.classIds,
@@ -1978,6 +2123,231 @@ async function buildUpsOptions(
     estimatedDays: o.tranzit ?? undefined,
     upsServiceCode: o.serviceCode,
     upsServiceName: o.serviceName,
+  }));
+}
+
+/**
+ * Termenul de livrare, in cuvinte.
+ *
+ * ⚠ DHL da tranzitul ca NUMAR (`deliveryCapabilities.totalTransitDays`), spre deosebire de
+ * UPS si FedEx, care il dau deja ca text — deci trebuie formulat aici. Formularea e
+ * identica cu cea din `etichetaOferta` (`lib/dhl/preturi.ts`), care nu isi exporta ajutorul
+ * privat; daca se schimba acolo, se schimba si aici, altfel acelasi rand din checkout ar
+ * arata doua forme, una in eticheta si alta sub ea.
+ */
+function zileDhl(tranzit: number | null): string | undefined {
+  if (tranzit === null || !(tranzit > 0)) return undefined;
+  return tranzit === 1 ? "o zi lucratoare" : `${tranzit} zile lucratoare`;
+}
+
+/**
+ * Ofertele DHL Express pentru checkout.
+ *
+ * ⚠ Foloseste ACELASI constructor de corp ca emiterea (`corpTarife` alimenteaza cotarea,
+ * `corpExpediere` emiterea, si amandoua pleaca din aceleasi `DateExpediere`). Un al doilea
+ * constructor ar fi insemnat ca pretul cotat si cel facturat se pot departa fara ca nimic
+ * sa se planga.
+ *
+ * ⚠ NU PRIMESTE `cod`, spre deosebire de UPS, si nu fiindca s-ar fi uitat: ramura de
+ * deasupra iese cu `continue` pe orice comanda cu plata la livrare, fiindca DHL Express nu
+ * vinde ramburs din Romania. Un parametru de ramburs aici ar fi sugerat ca exista drum.
+ *
+ * ⚠ SI DUCE MAI DEPARTE DOUA CODURI, nu unul. `productCode` e in `required` la emitere —
+ * fara el DHL refuza cererea, spre deosebire de UPS, care fara cod de serviciu factureaza
+ * tacit cel mai scump produs. Iar `localProductCode` e cel pe care sta tariful contului si
+ * nu se poate compune: se copiaza literal din cotare si calatoreste odata cu primul.
+ */
+async function buildDhlOptions(
+  config: DhlConfig,
+  destination: { county: string; city: string; postCode?: string; country?: string },
+  weightKg: number,
+  /**
+   * Valoarea MARFII, plafonata cu ce sustine catalogul (`valoareMarfii` din apelant).
+   * Fara ea, cotarea si emiterea trimiteau doua corpuri diferite — vezi comentariul de
+   * la `valoareComanda` din obiectul de mai jos.
+   */
+  valoareMarfa: number,
+  labelCustom: string | undefined,
+  businessId: string,
+): Promise<ShippingOption[]> {
+  const date = {
+    destinatar: {
+      nume: "Client Nou",
+      strada: "Strada Principala",
+      numar: "1",
+      oras: destination.city,
+      judet: destination.county,
+      codPostal: destination.postCode ?? null,
+      /* ⚠ Telefonul de proba NU e decor: la DHL `phone` e in `required` pe
+         `contactInformation`, si intern, nu doar pe expedierile externe. Fara el cotarea
+         cade cu 422 si DHL ar disparea din checkout pe toate magazinele. */
+      telefon: "0700000000",
+      email: "client@exemplu.ro",
+      tara: destination.country || "RO",
+    },
+    greutateKg: weightKg,
+    /*
+     * ⚠ VALOAREA DECLARATA, SI LIPSEA — pretul cotat iesea mai mic decat cel facturat.
+     *
+     * Obiectul asta n-o purta deloc, deci ramura din `corpTarife` care trimite
+     * `monetaryAmount[{ typeCode: "declaredValue" }]` nu se atingea niciodata din
+     * checkout, desi comentariul ei spune „valoarea declarata intra in cotare fiindca ea
+     * trage suprataxele de valoare si asigurarea". Emiterea (`corpExpediere`) o trimite
+     * insa mereu, si odata cu ea serviciul `II` cand comerciantul are asigurarea pornita
+     * — pe care DHL il tarifeaza, in propriul lor catalog romanesc, cu „55.00 LEI or 1%
+     * of insured value, if higher". CE SE RUPEA: cumparatorul vedea in checkout un pret
+     * cu cel putin 55 de lei pe colet sub cel care ajunge pe factura DHL, iar magazinul
+     * livra in pierdere pe FIECARE comanda, fara nimic in interfata care sa lege cele
+     * doua sume. Cotarea si emiterea pleaca dinadins din acelasi `DateExpediere` tocmai
+     * ca sa nu se poata departa.
+     *
+     * ⚠ E marfa, nu totalul: transportul nu intra in suma pe care o declaram, altfel
+     * pretul cotat s-ar hrani din el insusi. Vezi `valoareMarfii` in `getShippingOptions`
+     * pentru sursa si pentru plafonare.
+     */
+    valoareComanda: valoareMarfa,
+  };
+
+  /*
+   * ⚠ Cele doua cauze de esec sunt DESPARTITE, si nu din eleganta.
+   *
+   * Configurarea gresita e a MAGAZINULUI si opreste cotarea pentru toata lumea — acolo
+   * comerciantul TREBUIE alertat, altfel toti cumparatorii primesc tacut tariful fix in loc
+   * de cel real.
+   *
+   * O adresa incompleta e insa a UNUI cumparator. Acolo nu e nimic de reparat in magazin,
+   * iar o alerta l-ar invata pe om sa nu se mai uite la alerte. Singura exceptie e codul
+   * postal, mai jos, si are motivul ei.
+   */
+  const lipsuriConfig = lipsuriConfigurareDhl(config);
+  if (lipsuriConfig.length > 0) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.dhlConfig",
+      businessId,
+      `DHL nu poate cota: ${lipsuriConfig.join("; ")}. Pana la reparare, livrarea prin DHL se ofera la tariful fix.`,
+    );
+    return [];
+  }
+
+  /*
+   * ⚠⚠ CODUL POSTAL, SI E LECTIA FEDEX REPETATA — a doua oara la fel, deci nu e intamplare.
+   *
+   * DHL cere codul postal al destinatarului si il VERIFICA: nomenclatorul lor
+   * `countryPostalcodeFormat` da pentru Romania randul `999999 | 6 | RO | ROMANIA`, iar un
+   * cod care nu iese pe format cade cu `420506 Postcode not found`. Checkout-ul Edinio nu-l
+   * colecteaza la comenzile interne — formularul randeaza campul DOAR pentru livrarile in
+   * strainatate (vezi si memoria `cod-postal-lipsa-in-checkout`) — deci pe comenzile
+   * romanesti iesim de aici de fiecare data, si asta e starea NORMALA, nu o scapare.
+   *
+   * Fara alerta, comerciantul ar vedea „conexiunea merge" in configurarea DHL si un tarif
+   * fix in magazin, la nesfarsit, fara nimic care sa lege cele doua — adica exact clasa
+   * „integrare care nu face nimic". Se ridica o data pe ora pe magazin si spune ce e de
+   * facut si ce merge totusi.
+   *
+   * ⚠ SI SE IESE INAINTE DE APEL, ca la FedEx si spre deosebire de UPS: la DHL codul postal
+   * romanesc e documentat obligatoriu, deci cererea ar fi refuzata oricum si ar consuma
+   * degeaba din cota contului. `lipsesteCodulPostal` deosebeste cazul asta de restul
+   * lipsurilor tocmai ca alerta sa nu plece si pentru o adresa fara telefon sau fara strada,
+   * care chiar sunt ale cumparatorului.
+   */
+  const l = lipsuriDhl(config, date);
+  if (l.comanda.length > 0) {
+    if (lipsesteCodulPostalDhl(l)) {
+      await alertaPlafonMagazin(
+        "getShippingOptions.dhlCodPostal",
+        businessId,
+        "DHL cere codul postal al destinatarului — sase cifre pentru Romania, si il verifica pe format — "
+        + "iar checkout-ul nu il colecteaza la livrarile interne. Pana atunci DHL apare in checkout la "
+        + "tariful fix din Setari → Livrare, iar AWB-ul se emite din pagina comenzii, dupa ce completezi "
+        + "codul postal.",
+      );
+    }
+    return [];
+  }
+
+  const { oferte, avertismente } = await tarifeDhl(config, corpDhl(config, date));
+  const r = oferteDhl(oferte, config, {
+    greutateKg: weightKg,
+    taraExpeditor: config.expeditor?.tara ?? "RO",
+    taraDestinatar: date.destinatar.tara,
+  }, avertismente);
+
+  if (r.oferte.length === 0) {
+    /*
+     * ⚠ Valuta refuzata e o problema de CONT, nu de adresa — deci se alerteaza.
+     *
+     * Un cont DHL care nu factureaza in lei nu se repara din cod si nu se repara cu un curs:
+     * 452 de euro scrisi ca 452 de lei ar subfactura transportul de cinci ori. Se rezolva la
+     * reprezentantul DHL, iar comerciantul trebuie sa afle ca acolo e drumul.
+     */
+    if (r.valuteRefuzate.length > 0) {
+      await alertaPlafonMagazin(
+        "getShippingOptions.dhlValuta",
+        businessId,
+        `Contul DHL coteaza in ${r.valuteRefuzate.join(", ")}, iar magazinul lucreaza in lei. `
+        + "Nu convertim noi sumele — cere-i reprezentantului DHL Express tarife in RON. "
+        + "Pana atunci, livrarea prin DHL se ofera la tariful fix.",
+      );
+    } else {
+      /*
+       * ⚠ ZERO PRODUSE VINE PE UN HTTP 200, nu pe o eroare, si de aia trebuie spus.
+       *
+       * Codurile lor `996`/`1001` („The requested product(s) not available based on your
+       * search criteria") si `1004` („Product not available between this origin and
+       * destination") sosesc toate cu 200 si cu `products: []`. Fara semnalul asta, cotarea
+       * „reuseste" de fiecare data si nu se vede nicaieri de ce checkout-ul arata tarif fix.
+       *
+       * Avertismentele LOR intra in mesaj cand exista: seria `410501`-`410515`
+       * („Pickup/Delivery PL fallback rule applied") inseamna ca DHL a ales singur o
+       * locatie fiindca adresa noastra era ambigua, si e singura explicatie pe care o da
+       * cineva.
+       */
+      await alertaPlafonMagazin(
+        "getShippingOptions.dhlFaraProduse",
+        businessId,
+        "DHL n-a intors niciun produs pentru destinatia asta"
+        + (r.alerte.length > 0 ? `: ${r.alerte.join("; ")}` : " (raspuns 200 cu lista goala)")
+        + ". Verifica la reprezentantul DHL ce produse iti da contul pe ruta asta, si ce ai bifat la "
+        + "„Produse permise” in configurare. Pana atunci, livrarea prin DHL se ofera la tariful fix.",
+      );
+    }
+    return [];
+  }
+
+  /*
+   * ⚠ „Cere acord prealabil" e o insusire a PRODUSULUI, nu un raspuns despre contul asta —
+   * deci nu poate fi o poarta, dar nici nu poate fi tacuta.
+   *
+   * DHL le marcheaza cu `isCustomerAgreement: true`, adica „the product only can be offered
+   * to customers with prior agreement". Daca acordul lipseste, cotarea trece si EMITEREA
+   * cade, cu `8003` („Account not allowed for this service") sau `8036` — adica pierderea e
+   * o comanda blocata pe un curier fara anulare de expediere. Merita spus inainte, nu dupa.
+   */
+  if (r.cerContract.length > 0) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.dhlAcordPrealabil",
+      businessId,
+      `DHL a intors produse care cer acord prealabil pe contul tau: ${r.cerContract.join(", ")}. `
+      + "Ele se coteaza si se arata in checkout, dar daca acordul lipseste, AWB-ul cade la emitere cu "
+      + "8003 sau 8036. Intreaba-ti reprezentantul DHL daca le ai in contract; daca nu, scoate-le din "
+      + "„Produse permise” in configurare.",
+    );
+  }
+
+  return r.oferte.map((o): ShippingOption => ({
+    courier: "dhl",
+    /* Eticheta comerciantului, cand exista, ramane deasupra numelui produsului:
+       unii isi vand livrarea sub marca proprie. */
+    courierLabel: labelCustom ? `${labelCustom} · ${etichetaDhl(o)}` : etichetaDhl(o),
+    deliveryType: "address",
+    price: o.pret,
+    estimatedDays: zileDhl(o.tranzit),
+    dhlProductCode: o.productCode,
+    dhlProductName: o.productName,
+    /* ⚠ `null` devine `undefined`, nu sirul „null": campul e optional pe `ShippingOption` si
+       calatoreste pana in `shipping_address`, unde un „null" scris ca text ar fi trimis mai
+       departe la emitere drept cod local valid. */
+    dhlLocalProductCode: o.localProductCode ?? undefined,
   }));
 }
 

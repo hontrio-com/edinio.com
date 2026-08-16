@@ -46,7 +46,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -126,6 +126,25 @@ export default async function OrderDetailPage({ params }: Props) {
     && up?.expeditor?.oras && up?.expeditor?.cod_postal
   );
 
+  /* ⚠ Aceeasi regula ca in `dhlGata`, in features/page.tsx, in Setari → Livrare si in
+     checkout. Codul postal al EXPEDITORULUI e in ea fiindca la DHL el nu e decorativ:
+     `postalCode` e CHEIE OBLIGATORIE in `shipperDetails` la cotare (lipsa cheii = 400),
+     iar tariful se determina, in cuvintele lor, „based on city, postal code, and
+     country code". Si e mai viclean de atat: schema il declara `minLength: 0`, deci
+     `""` TRECE de validare si cade abia la motorul lor, cu `340004`/`420506`. Fara el,
+     butonul ar promite ceva ce nu se poate face.
+     ⚠ Campurile sunt `username` / `password`, NU `client_id` / `client_secret` ca la
+     FedEx si UPS de deasupra — blocul asta e copiat de acolo, iar o redenumire uitata
+     ar stinge butonul de DHL pentru toata lumea, fara nicio eroare. */
+  const dh = settings?.dhl_config as {
+    enabled?: boolean; username?: string; password?: string; account_number?: string;
+    expeditor?: { oras?: string; cod_postal?: string };
+  } | null;
+  const dhlEnabled = !!(
+    dh?.enabled && dh?.username && dh?.password && dh?.account_number
+    && dh?.expeditor?.oras && dh?.expeditor?.cod_postal
+  );
+
   const ss = settings?.smartship_config as { enabled?: boolean; api_key?: string; expeditor?: { name?: string; address?: string; phone?: string; city?: number } } | null;
   const smartshipEnabled = !!(
     ss?.enabled && ss?.api_key && ss?.expeditor?.name && ss?.expeditor?.address
@@ -178,6 +197,7 @@ export default async function OrderDetailPage({ params }: Props) {
       shipoEnabled={shipoEnabled}
       fedexEnabled={fedexEnabled}
       upsEnabled={upsEnabled}
+      dhlEnabled={dhlEnabled}
       postaZilePrezentare={postaZilePrezentare}
       innoshipEnabled={innoshipEnabled}
       pallexZile={pallexZile}

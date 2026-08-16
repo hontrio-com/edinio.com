@@ -821,6 +821,20 @@ export async function placeOrder(data: {
      E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
   ups_service_code?: string;
   ups_service_name?: string;
+  /* ⚠⚠ La DHL produsul NU e un moft de pret, e o CONDITIE DE EMITERE: `productCode`
+     e in `required` la `POST /shipments`. Spre deosebire de UPS — care fara cod de
+     serviciu factureaza tacit produsul cel mai scump — DHL REFUZA cererea. Deci
+     pierdut aici, AWB-ul nu se mai poate emite deloc din lot, iar comerciantul afla
+     abia in fereastra comenzii, la mana.
+     ⚠ Se pastreaza si `dhl_local_product_code`: la livrarile interne DHL cere produsul
+     GLOBAL (`productCode`) impreuna cu cel LOCAL (`localProductCode`). Codul local NU
+     se compune niciodata de noi — se copiaza LITERAL din cotarea pe care a vazut-o
+     clientul, fiindca pana si documentatia lor se contrazice pe latimea lui (schema
+     zice 1-3 caractere, exemplele scriu unul singur, codurile publicate de DHL UK au
+     trei). Pierdut aici, nu mai are de unde fi luat. */
+  dhl_product_code?: string;
+  dhl_product_name?: string;
+  dhl_local_product_code?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -1458,6 +1472,15 @@ export async function placeOrder(data: {
       ...(data.ups_service_code && {
         ups_service_code: data.ups_service_code,
         ups_service_name: data.ups_service_name,
+      }),
+      /* ⚠ Conditia e pe `dhl_product_code`, produsul GLOBAL: el vine la fiecare
+         oferta DHL, si intern si extern. Pe `dhl_local_product_code` n-ar merge —
+         el lipseste la expedierile internationale, si atunci blocul intreg ar fi
+         sarit exact pe comenzile in afara tarii. */
+      ...(data.dhl_product_code && {
+        dhl_product_code: data.dhl_product_code,
+        dhl_product_name: data.dhl_product_name,
+        ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
       }),
     },
     items: allItems,
@@ -2272,7 +2295,7 @@ export async function updateOrderDetails(orderId: string, data: {
     // ramanea cu greutatea si rambursul vechi.
     //
     // Se adauga ORICE curier nou aici, in aceeasi apasare cu coloana lui de AWB.
-    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number")
+    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -2383,7 +2406,14 @@ export async function updateOrderDetails(orderId: string, data: {
     /* ⚠ Cei sapte care lipseau pana la 16.08.2026 — vezi nota de la select. */
     || order.posta_awb_number || order.innoship_awb_number || order.packeta_packet_id
     || order.smartship_awb_number || order.shipo_awb_number || order.fedex_awb_number
-    || order.ups_awb_number);
+    || order.ups_awb_number
+    /* ⚠ DHL Express NU are anulare de expediere in API — `delete:` apare o singura
+       data in toata specificatia lor, si aia pe ridicare. Deci aici garda e cu atat
+       mai importanta: comanda editata peste un AWB DHL viu nu se mai poate repara
+       nici macar anuland eticheta, fiindca eticheta nu se poate anula. Ce se poate
+       face e `dezleagaDhlAwbAction` — anuleaza ridicarea, daca a fost ceruta, si
+       scoate numerele de pe comanda; coletul ramane insa emis la DHL. */
+    || order.dhl_awb_number);
   if (cereModificari && areAwb) {
     return { error: "Comanda are AWB emis. Anuleaza-l intai (butoanele sunt in aceeasi fereastra), apoi scoate sau schimba liniile si genereaza un AWB nou." };
   }
@@ -3220,6 +3250,14 @@ export async function placeCartOrder(data: {
      E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
   ups_service_code?: string;
   ups_service_name?: string;
+  /* ⚠⚠ Aceleasi trei campuri ca in `placeOrder`, si din acelasi motiv: `productCode`
+     e OBLIGATORIU la emiterea DHL, iar pe intern e insotit de `localProductCode`.
+     ⚠ Sunt DOUA checkout-uri scrise separat (formularul si cosul). Completata una
+     singura, jumatate din comenzile DHL ajung fara produsul ales de client si nu se
+     pot emite din lot. */
+  dhl_product_code?: string;
+  dhl_product_name?: string;
+  dhl_local_product_code?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -3715,6 +3753,15 @@ export async function placeCartOrder(data: {
       ...(data.ups_service_code && {
         ups_service_code: data.ups_service_code,
         ups_service_name: data.ups_service_name,
+      }),
+      /* ⚠ Conditia e pe `dhl_product_code`, produsul GLOBAL: el vine la fiecare
+         oferta DHL, si intern si extern. Pe `dhl_local_product_code` n-ar merge —
+         el lipseste la expedierile internationale, si atunci blocul intreg ar fi
+         sarit exact pe comenzile in afara tarii. */
+      ...(data.dhl_product_code && {
+        dhl_product_code: data.dhl_product_code,
+        dhl_product_name: data.dhl_product_name,
+        ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
       }),
     },
     items: allItems,

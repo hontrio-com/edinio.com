@@ -42,6 +42,12 @@ const DUPA_NUME: Record<string, { id: string; eticheta: string }> = {
   postaromana: { id: "posta", eticheta: "Poșta Română" },
   fedex: { id: "fedex", eticheta: "FedEx" },
   ups: { id: "ups", eticheta: "UPS" },
+  /* ⚠ Cheia e NORMALIZATA (litere mici, fara separatoare), ca toate celelalte de
+     aici: potrivirea e pe egalitate, nu pe fragment, deci „DHL" din raspunsul lor
+     ajunge „dhl". Scrisa „DHL", intrarea n-ar prinde niciodata nimic si suprapunerea
+     ar ramane nesemnalata — comerciantul ar vedea doua randuri „DHL" la preturi
+     diferite si ar crede ca s-a stricat ceva. */
+  dhl: { id: "dhl", eticheta: "DHL" },
 };
 
 /** Cheia de comparatie: fara majuscule, fara separatoare. */

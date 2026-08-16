@@ -249,6 +249,11 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
      mult peste tarifele locale, iar un implicit de 17 lei l-ar face pe comerciant sa
      vanda transport in pierdere pana la prima factura. */
   { id: "ups",          label: "UPS",               logo: "/integrations/ups.svg",          defaultPrice: 45 },
+  /* ⚠ Acelasi rationament ca la FedEx si UPS: DHL Express e transportator express, nu
+     curier de colete ieftin. Cel mai ieftin produs intern al lor (DHL Domestic Express,
+     codul N) porneste mult peste tarifele locale, iar un implicit de 17 lei l-ar face pe
+     comerciant sa vanda transport in pierdere pana la prima factura. */
+  { id: "dhl",          label: "DHL Express",       logo: "/integrations/dhl.svg",          defaultPrice: 45 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -278,6 +283,10 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   shipo: "Shipo.ro",
   fedex: "FedEx",
   ups: "UPS",
+  /* ⚠ Sir-cu-sir egal cu `COURIER_LABELS.dhl` din shipping.actions.ts („DHL Express").
+     Aici e doar substituentul aratat comerciantului; daca cele doua se despart, campul
+     gol promite un text si checkout-ul afiseaza altul. */
+  dhl: "DHL Express",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };

@@ -40,6 +40,19 @@
 export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   cargus_config: ["password", "subscription_key"],
   colete_config: ["client_secret", "token"],
+  /* DHL Express (MyDHL API): autentificare HTTP `Basic`, deci parola pleaca la fiecare
+     cerere. `username` NU intra aici, desi e prima jumatate a acreditarii: singur nu
+     deschide nimic, iar comerciantul trebuie sa-l poata reciti ca sa stie CE CONT a
+     legat. Acelasi rationament ca la `posta_config.username` si `pallex_config.username`.
+     Nici `account_number` nu e credentiala — se tipareste pe fiecare factura DHL.
+     ⚠ Si e cu atat mai important sa se vada: DHL are DOUA perechi de credentiale cu
+     totul diferite, iar propria lor documentatie nu le distinge limpede. „API Key" si
+     „API Secret" din aplicatia de pe developer.dhl.com sunt pentru API-urile unificate
+     (urmarire, location finder); MyDHL API cere `username`/`password` date de
+     consultantul DHL Express. Un comerciant care lipeste cheia de portal primeste 401
+     fara nicio explicatie — de aia formularul le numeste „Utilizator MyDHL API" si
+     „Parola MyDHL API", nu „cheie". */
+  dhl_config: ["password"],
   dpd_config: ["password"],
   /* eColet: un token de acces luat din panel.ecolet.ro si trimis ca Bearer la
      fiecare cerere. E singura credentiala — nu exista user si parola. */

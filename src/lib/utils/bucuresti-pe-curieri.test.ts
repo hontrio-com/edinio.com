@@ -10,10 +10,13 @@ import { orasFedex, parteFedex, sectorPentruAdresa } from "@/lib/fedex/expediere
 import {
   adresaUps, judetUps, orasUps, sectorPentruAdresa as sectorUps,
 } from "@/lib/ups/expediere";
+import {
+  adresaDhl, judetDhl, orasDhl, sectorPentruAdresa as sectorDhl,
+} from "@/lib/dhl/expediere";
 import { localitateSameday, normalizeLocalityName } from "@/lib/utils/ro-address";
 
 /**
- * ═══ O COMANDA DIN BUCURESTI, TREISPREZECE CURIERI, DOUA ADEVARURI ═══
+ * ═══ O COMANDA DIN BUCURESTI, PAISPREZECE CURIERI, DOUA ADEVARURI ═══
  *
  * Din 15.08.2026 checkout-ul nu mai lasa orasul liber in Bucuresti: se alege
  * „Sector 1"…„Sector 6". Asta a fost nevoie fiindca Sameday NU cunoaste un oras
@@ -142,6 +145,62 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
   });
 
   /*
+   * ⚠ DHL e tot in tabara CEA MARE, si tot fara camp de sector — numai ca aici
+   * dovada vine din propriul lor nomenclator, nu din tacerea documentatiei.
+   *
+   * Trei lucruri independente: `sector` are ZERO aparitii in specificatia lor de
+   * 1,2 MB; tabelul lor de tari da pentru RO `divisionTypeCode = O`, adica
+   * „Country-use when no divtype identif" — Romania n-are, la ei, nicio diviziune
+   * administrativa declarata; iar propria lor adresa din ghid e „Calea Floreasca
+   * 169A, Corp A, Etaj 8, Bucharest", fara sector.
+   *
+   * ⚠ FALSUL PRIETEN care ar strica exact proba asta: codul lor de eroare
+   * `201200 Either pickup route or sector should be present`. Vorbeste despre
+   * sectorul INTERN de rutare al curierului, nu despre sectoarele bucurestene.
+   * Citit pe dos, duce „Sector 3" in `cityName` — adica muta DHL in tabara
+   * Sameday si strica zonarea pe fiecare comanda bucuresteana.
+   *
+   * ⚠ Si `provinceCode` NU pleaca niciodata: schema il descrie „province or state
+   * code", ghidul lor SOAP e transant („2 letter state code for the USA only"),
+   * iar `minLength: 2` respinge din start un „B" inventat de noi.
+   */
+  test("DHL primeste „Bucuresti”, iar sectorul pleaca pe adresa", () => {
+    assert.equal(orasDhl(ADRESA.oras, ADRESA.judet), "Bucuresti");
+    assert.equal(sectorDhl(ADRESA), "Sector 3");
+    assert.equal(judetDhl(ADRESA), "Sector 3");
+
+    const a = adresaDhl({ ...ADRESA, tara: "RO" });
+    assert.equal(a.cityName, "Bucuresti");
+    assert.ok([a.addressLine1, a.addressLine2, a.addressLine3].join(" ").includes("Sector 3"));
+    /* La DHL `countyName` e „suburb or county", deci un nivel SUB oras — acolo
+       sectorul chiar e informatia potrivita, si pleaca si pe linii, si aici. */
+    assert.equal(a.countyName, "Sector 3");
+    assert.equal("provinceCode" in a, false);
+  });
+
+  test("DHL nu inventeaza un sector in afara Bucurestiului", () => {
+    assert.equal(sectorDhl({ oras: "Cluj-Napoca", judet: "Cluj" }), null);
+    assert.equal(judetDhl({ oras: "Cluj-Napoca", judet: "Cluj" }), null);
+
+    const a = adresaDhl({
+      ...ADRESA, oras: "Cluj-Napoca", judet: "Cluj", codPostal: "400001", tara: "RO",
+    });
+    assert.equal(a.cityName, "Cluj-Napoca");
+    assert.equal(
+      [a.addressLine1, a.addressLine2, a.addressLine3].join(" ").toLowerCase().includes("sector"),
+      false,
+    );
+    assert.equal("provinceCode" in a, false);
+
+    /* ⚠ Si judetul romanesc NU are voie sa apara ca `countyName`. Campul lor e
+       „suburb or county" si sta SUB oras, deci „Cluj" pus acolo nu e o informatie
+       in plus, e una gresita — iar motorul lor nu cade: aplica tacut regula de
+       rezerva (`410502-410515 Pickup/Delivery PL fallback rule applied:
+       PS->CP->P->C`) si intoarce 200 cu alta zona si alt pret. */
+    assert.equal("countyName" in a, false);
+  });
+
+  /*
    * ⚠ SmartShip e in tabara CEA MARE, dar cu o rasucire proprie: orasul se
    * plieaza in „Bucuresti", iar sectorul pleaca in campul lui, `sector` (1-6).
    * Iar cand sectorul NU se poate afla, raspunsul e `null`, nu 0 — la ei 0
@@ -164,6 +223,13 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
       localitateSameday(ADRESA.oras, ADRESA.judet),
       normalizeLocalityName(ADRESA.oras, ADRESA.judet),
     );
+    /* ⚠ Si fiecare curier care isi are propria functie de localitate trebuie sa
+       ramana de partea LUI. DHL nu trece prin `normalizeLocalityName` direct (mai
+       taie diacriticele si lungimea), deci o uniformizare l-ar putea muta singur. */
+    assert.notEqual(
+      localitateSameday(ADRESA.oras, ADRESA.judet),
+      orasDhl(ADRESA.oras, ADRESA.judet),
+    );
   });
 
   test("in afara Bucurestiului toti primesc acelasi lucru", () => {
@@ -173,6 +239,7 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
     assert.equal(localitateSameday(cluj.oras, cluj.judet), "Cluj-Napoca");
     assert.equal(localitatePosta(cluj.oras), "Cluj-Napoca");
     assert.equal(orasFedex(cluj.oras, cluj.judet), "Cluj-Napoca");
+    assert.equal(orasDhl(cluj.oras, cluj.judet), "Cluj-Napoca");
   });
 
   test("diacriticele cad peste tot, nu doar pe unde ne-am amintit", () => {
@@ -181,5 +248,6 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
     assert.equal(adresaInnoship(iasi, "domiciliu").localityName, "Iasi");
     assert.equal(localitateSameday(iasi.oras, iasi.judet), "Iasi");
     assert.equal(orasFedex(iasi.oras, iasi.judet), "Iasi");
+    assert.equal(orasDhl(iasi.oras, iasi.judet), "Iasi");
   });
 });

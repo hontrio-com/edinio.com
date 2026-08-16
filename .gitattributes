@@ -1,0 +1,19 @@
+# ⚠ Baseline-ul de schema se compara OCTET CU OCTET, deci finalul de linie nu e cosmetic.
+#
+# `scripts/schema-baseline.sh --check` cere dump-ul din productie si face `diff` intre el si
+# fisierul din arborele de lucru. Dump-ul vine din Postgres cu LF. Depozitul are insa
+# `core.autocrlf=true`, iar fara regula de mai jos un `clone` sau un `checkout` proaspat scrie
+# fisierul pe disc cu CRLF — si atunci `--check` raporteaza DERIVA PE TOT FISIERUL (mii de
+# randuri sterse si adaugate) pentru o schema IDENTICA.
+#
+# Nu e o teama teoretica: aceeasi familie de defecte a costat deja de doua ori.
+#   * 15.08.2026 — scriptul scria prin `sys.stdout.write`, care pe Windows deschide iesirea in
+#     mod TEXT si traduce fiecare LF in CRLF. Reparat atunci cu `.buffer`, adica pe capatul de
+#     SCRIERE. Capatul de CHECKOUT a ramas deschis pana acum.
+#   * Tot atunci, md5-ul fisierului nu se potrivea cu `md5(genereaza_schema_baseline())` rulat
+#     in baza, din aceeasi cauza — si a pus pe ganduri degeaba.
+#
+# Regula e ingusta dinadins: NUMAI fisierul care se compara octet cu octet. O regula lata
+# (`*.sql text eol=lf`) ar renormaliza si celelalte ~90 de migratii la urmatorul checkout,
+# adica un diff mare si fara legatura cu nimic.
+migrations/000-schema-baseline.sql text eol=lf

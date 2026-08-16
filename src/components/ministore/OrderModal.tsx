@@ -776,6 +776,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         fedex_service_name: courierSelection?.fedexServiceName,
         ups_service_code: courierSelection?.upsServiceCode,
         ups_service_name: courierSelection?.upsServiceName,
+        /* ⚠ Sunt DOUA checkout-uri scrise separat: asta si `checkout-core.ts` din
+           storefront. Completat doar unul, jumatate din comenzile DHL ajung fara produs.
+           ⚠ Si spre deosebire de serviciul UPS de deasupra, produsul DHL nu e o
+           comoditate: `productCode` e obligatoriu la emitere, deci o comanda fara el nu
+           poate primi AWB pana cand comerciantul nu recoteaza de mana. */
+        dhl_product_code: courierSelection?.dhlProductCode,
+        dhl_product_name: courierSelection?.dhlProductName,
+        dhl_local_product_code: courierSelection?.dhlLocalProductCode,
         smartship_locker_net: courierSelection?.smartshipLockerNet,
         additional_items: allAdditional.length > 0 ? allAdditional : undefined,
         accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,

@@ -30,7 +30,15 @@ function optionKey(o: ShippingOption) {
    * si `FEDEX_FIRST` vin toate sub `courier: "fedex"` si `deliveryType: "address"`,
    * la preturi si termene diferite. Fara el, cele trei s-ar prabusi una peste alta.
    */
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}`;
+  /*
+   * ⚠ La DHL deosebirea e PRODUSUL, si acolo miza e mai mare decat o cheie duplicata:
+   * `productCode` e camp OBLIGATORIU la emitere, nu unul optional ca la UPS. Cinci
+   * produse (Express Worldwide, Economy Select, Express 9:00, Express 12:00, Domestic
+   * Express) vin toate sub `courier: "dhl"` si `deliveryType: "address"`, la preturi si
+   * termene diferite. Pierdut aici, produsul nu ajunge pe comanda si DHL REFUZA cererea
+   * de AWB — nu factureaza tacit cel mai scump, cum ar face UPS.
+   */
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}::${o.dhlProductCode ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -85,6 +93,14 @@ export interface CourierSelection {
      implicitul LOR — „UPS Express", cel mai scump produs. Vezi lib/ups/preturi.ts. */
   upsServiceCode?: string;
   upsServiceName?: string;
+  /* ⚠ Cheia ofertei DHL e CODUL PRODUSULUI, si spre deosebire de UPS nu e o comoditate:
+     `productCode` e in `required` la emitere, deci pierdut aici AWB-ul nu se mai poate
+     face deloc si comerciantul afla abia la expediere. Vezi lib/dhl/preturi.ts.
+     `dhlLocalProductCode` merge la pachet cu el: DHL intoarce si un cod local pe
+     livrarile interne, iar cele doua se trimit impreuna la creare. */
+  dhlProductCode?: string;
+  dhlProductName?: string;
+  dhlLocalProductCode?: string;
   /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
   token?: string;
 }
@@ -214,6 +230,13 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             fedexServiceName: ales.fedexServiceName,
             upsServiceCode: ales.upsServiceCode,
             upsServiceName: ales.upsServiceName,
+            /* ⚠ Cele trei campuri DHL se propaga in TOATE CELE TREI locuri de `onSelect`
+               (auto-selectia de aici, alegerea pe adresa si alegerea in punct). Un singur
+               loc uitat pierde produsul exact pe una din cai, iar comenzile venite pe ea
+               ajung la emitere fara `productCode` — adica fara AWB. */
+            dhlProductCode: ales.dhlProductCode,
+            dhlProductName: ales.dhlProductName,
+            dhlLocalProductCode: ales.dhlLocalProductCode,
             token: ales.token,
           });
         }
@@ -303,6 +326,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         fedexServiceName: opt.fedexServiceName,
         upsServiceCode: opt.upsServiceCode,
         upsServiceName: opt.upsServiceName,
+        dhlProductCode: opt.dhlProductCode,
+        dhlProductName: opt.dhlProductName,
+        dhlLocalProductCode: opt.dhlLocalProductCode,
         token: opt.token,
       });
     }
@@ -338,6 +364,13 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         fedexServiceName: opt.fedexServiceName,
         upsServiceCode: opt.upsServiceCode,
         upsServiceName: opt.upsServiceName,
+        /* ⚠ Se propaga si pe calea „punct", desi DHL nu ofera livrare in punct la noi.
+           Ramura asta se atinge cand comerciantul are activat si un curier cu lockere:
+           `opt` e mereu optiunea selectata, iar campurile goale nu strica nimic. Ce ar
+           strica e sa lipseasca, daca DHL capata vreodata puncte. */
+        dhlProductCode: opt.dhlProductCode,
+        dhlProductName: opt.dhlProductName,
+        dhlLocalProductCode: opt.dhlLocalProductCode,
         token: opt.token,
       });
     }

@@ -26,6 +26,11 @@ import { deleteSmartshipAwbAction } from "@/lib/actions/smartship.actions";
 import { deleteShipoAwbAction } from "@/lib/actions/shipo.actions";
 import { deleteFedexAwbAction } from "@/lib/actions/fedex.actions";
 import { deleteUpsAwbAction } from "@/lib/actions/ups.actions";
+import { dezleagaDhlAwbAction } from "@/lib/actions/dhl.actions";
+/* ⚠ Actiunea EXISTA de la integrarea Packeta, dar nu era chemata de nicaieri: „Detaseaza
+   AWB" pe o comanda Packeta cadea pe `else`-ul final, adica pe detasarea Colete Online.
+   Vezi comentariul lung din `handleCancelAwb`. */
+import { dezleagaPacketaAction } from "@/lib/actions/packeta.actions";
 import { deleteEcoletAwbAction } from "@/lib/actions/ecolet.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
@@ -373,9 +378,26 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
        zile, pagina lor de suport spune altceva, iar OpenAPI-ul tace. Se lasa UPS sa
        raspunda `190101` / `190102`, si actiunea spune omului ce a spus el. */
     if (order.ups_awb_number) list.push({ key: "ups", label: "UPS", awb: order.ups_awb_number as string });
+    /* ⚠⚠ DHL primeste `manualOnly`, ca Packeta si Posta, si NU e o scapare: in toata
+       specificatia lor `delete:` apare O SINGURA data, pe `/pickups/{id}` — adica pe
+       RIDICARE, nu pe expediere. O expediere emisa nu se poate anula prin API.
+       `dezleagaDhlAwbAction` anuleaza ridicarea daca a fost ceruta, scoate numerele de pe
+       comanda si elibereaza slotul din registru; eticheta tiparita ramane insa vie, si
+       daca ajunge pe un colet ea intra in reteaua lor. De aia mesajul actiunii cere
+       distrugerea ei, si de aia butonul spune „Detaseaza AWB", nu „Anuleaza AWB". */
+    if (order.dhl_awb_number) list.push({ key: "dhl", label: "DHL Express", awb: order.dhl_awb_number as string, manualOnly: true });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
+
+  /* ⚠ NOTA DE SUB LISTA NUMESTE CURIERII DIN LISTA, nu unul fix.
+     Pana acum spunea „Colete Online" pentru ORICE curier cu `manualOnly` — deci unui om
+     cu un colet Packeta sau Posta i se cerea sa intre in contul Colete Online, unde nu are
+     ce cauta. Cu DHL sunt patru, si greseala ar fi devenit regula, nu exceptia. */
+  const curieriManuali = useMemo(
+    () => activeAwbs.filter((a) => a.manualOnly).map((a) => a.label),
+    [activeAwbs],
+  );
 
   const isPaid = order.payment_status === "paid";
   const hasInvoice = !!(order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number);
@@ -664,6 +686,22 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "shipo") res = await deleteShipoAwbAction(businessId, order.id);
       else if (key === "fedex") res = await deleteFedexAwbAction(businessId, order.id);
       else if (key === "ups") res = await deleteUpsAwbAction(businessId, order.id);
+      /* ⚠ DHL NU are anulare de expediere in API — doar de ridicare. Actiunea anuleaza
+         ridicarea daca exista, apoi dezleaga comanda; `mesaj` spune ce a mers si ce a
+         ramas de facut de mana, deci NU se inghite. */
+      else if (key === "dhl") res = await dezleagaDhlAwbAction(businessId, order.id);
+      /* ⚠⚠ REPARATIE. Ramura asta LIPSEA, exact defectul descris mai sus la Shipo: fara
+         ea, „Detaseaza AWB" pe o comanda Packeta cadea pe `else`-ul final si chema
+         detasarea de COLETE ONLINE. Pe o comanda Packeta acolo nu e nimic de detasat,
+         deci raporta SUCCES, iar `packeta_packet_id` ramanea pe comanda — si cu el pe
+         comanda garda „anuleaza AWB-ul intai" nu se mai stingea niciodata, deci comanda
+         nu mai putea fi editata deloc.
+         `avertisment` se muta in `mesaj` fiindca el e singurul loc care ii spune omului ca
+         pachetul RAMANE viu in contul Packeta si trebuie anulat de mana acolo. */
+      else if (key === "packeta") {
+        const p = await dezleagaPacketaAction(businessId, order.id);
+        res = "error" in p ? p : { success: true, mesaj: p.avertisment };
+      }
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }
@@ -783,10 +821,17 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                   </Button>
                 </div>
               ))}
-              {activeAwbs.some((a) => a.manualOnly) && (
+              {curieriManuali.length === 1 && (
                 <p className="text-[11px] text-muted-foreground">
-                  Colete Online nu permite anularea prin API: anuleaza expedierea din contul tau Colete Online,
-                  apoi apasa „Detaseaza AWB" ca sa poti genera unul nou.
+                  {curieriManuali[0]} nu permite anularea prin API: anuleaza expedierea din contul tau {curieriManuali[0]},
+                  apoi apasa „Detaseaza AWB” ca sa poti genera unul nou.
+                </p>
+              )}
+              {curieriManuali.length > 1 && (
+                <p className="text-[11px] text-muted-foreground">
+                  {curieriManuali.slice(0, -1).join(", ")} si {curieriManuali[curieriManuali.length - 1]} nu permit
+                  anularea prin API: anuleaza expedierea in contul curierului care a emis-o, apoi apasa
+                  „Detaseaza AWB” ca sa poti genera unul nou.
                 </p>
               )}
             </div>

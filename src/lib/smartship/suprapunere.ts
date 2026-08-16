@@ -48,6 +48,16 @@ const DUPA_NUME: { fragment: string; id: string; eticheta: string }[] = [
      comerciantul ar fi vazut doua randuri „UPS" la preturi diferite si ar fi crezut ca
      s-a stricat ceva. */
   { fragment: "ups", id: "ups", eticheta: "UPS" },
+  /* ⚠ De la 16.08.2026 DHL e si integrare directa (al saisprezecelea curier), deci
+     acelasi curier poate ajunge in checkout si pe contractul comerciantului, si pe al
+     SmartShip. Fara randul asta, suprapunerea aia ar fi ramas nesemnalata, iar
+     comerciantul ar fi vazut doua randuri „DHL" la preturi diferite si ar fi crezut ca
+     s-a stricat ceva.
+     ⚠ Randul sta LA URMA si e sigur pe amandoua sensurile: „dhl" nu se afla in niciun
+     alt nume din tabelul de mai sus, si niciun fragment de mai sus nu se afla in
+     numele lor („dhlexpress", „dhlparcel"). Potrivirea e pe FRAGMENT si primul care
+     prinde castiga, deci ordinea nu e decorativa. */
+  { fragment: "dhl", id: "dhl", eticheta: "DHL" },
 ];
 
 /** Cheia de comparatie: fara majuscule, fara separatoare. */

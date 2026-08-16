@@ -126,7 +126,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -252,6 +252,7 @@ async function ContinutSetari({
   const sh = storeSettings?.shipo_config as CourierCfg | null;
   const fx = storeSettings?.fedex_config as CourierCfg | null;
   const up = storeSettings?.ups_config as CourierCfg | null;
+  const dh = storeSettings?.dhl_config as CourierCfg | null;
 
   const activeCourierIds: string[] = [
     ...(fc?.enabled && fc?.username && fc?.client_id ? ["fan-courier"] : []),
@@ -342,6 +343,27 @@ async function ContinutSetari({
       && (up as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.oras
       && (up as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.cod_postal
       ? ["ups"] : []),
+    /*
+     * Aceeasi regula ca in `dhlGata`: utilizatorul, parola, numarul de cont SI adresa
+     * de expeditie cu cod postal.
+     *
+     * ⚠ Campurile se numesc `username` / `password`, NU `client_id` / `client_secret`
+     * ca la FedEx si UPS de deasupra — blocul asta e copiat de acolo. O redenumire
+     * uitata face conditia vesnic falsa, iar metoda ramane stinsa pentru toata lumea
+     * fara nicio eroare de tip (`CourierCfg` e `Record<string, unknown>`).
+     *
+     * ⚠ Codul postal nu e un moft: `postalCode` e CHEIE OBLIGATORIE in `shipperDetails`
+     * la cotare (lipsa cheii = 400), iar tariful se determina, in cuvintele lor, „based
+     * on city, postal code, and country code". Si schema il declara `minLength: 0`,
+     * deci `""` trece de validare si cade abia la motorul lor (`340004`/`420506`) —
+     * adica metoda ar aparea in checkout fara sa poata produce vreun pret. Vezi si
+     * capcana Packeta de mai sus: o metoda adaugata in `SHIPPING_METHODS` dar NU aici
+     * ramane vesnic stinsa.
+     */
+    ...(dh?.enabled && dh?.username && dh?.password && dh?.account_number
+      && (dh as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.oras
+      && (dh as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.cod_postal
+      ? ["dhl"] : []),
     "own",
     "pickup",
   ];

@@ -811,6 +811,16 @@ export async function placeOrder(data: {
      decat cel platit. E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
   fedex_service_type?: string;
   fedex_service_name?: string;
+  /* ⚠ Cheia ofertei UPS e CODUL SERVICIULUI (`Service.Code`), si atat: UPS e un
+     singur transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda — iar la UPS asta e mai scump decat la ceilalti: lipsa lui `Service.Code`
+     la emitere nu e o eroare, e o factura. Ghidul lor romanesc, verbatim: „Daca nicio
+     optiune de serviciu nu este selectata de dvs., atunci expedierea se va efectua si
+     factura automat prin UPS Express" — cel mai scump produs al lor.
+     E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  ups_service_code?: string;
+  ups_service_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -1444,6 +1454,10 @@ export async function placeOrder(data: {
       ...(data.fedex_service_type && {
         fedex_service_type: data.fedex_service_type,
         fedex_service_name: data.fedex_service_name,
+      }),
+      ...(data.ups_service_code && {
+        ups_service_code: data.ups_service_code,
+        ups_service_name: data.ups_service_name,
       }),
     },
     items: allItems,
@@ -2249,7 +2263,16 @@ export async function updateOrderDetails(orderId: string, data: {
     // eColet, desi exista de saptamani si modalul le si afisa: `areAwb` iesea deci
     // FALS pe o comanda cu AWB emis la trei curieri, iar transportul re-cotat
     // trecea peste el. La Pall-Ex borderoul validat e ireversibil.
-    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id")
+    //
+    // ⚠ 16.08.2026: aceeasi scapare se repetase, si mai larg. Lipseau SAPTE —
+    // Posta, Innoship, Packeta, SmartShip, Shipo, FedEx si UPS — adica jumatate
+    // din curierii platformei. Pe oricare dintre ei, garda de mai jos („Comanda
+    // are AWB emis, anuleaza-l intai") NU se declansa: comerciantul putea scoate
+    // linii dintr-o comanda al carei colet plecase deja, iar eticheta tiparita
+    // ramanea cu greutatea si rambursul vechi.
+    //
+    // Se adauga ORICE curier nou aici, in aceeasi apasare cu coloana lui de AWB.
+    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -2356,7 +2379,11 @@ export async function updateOrderDetails(orderId: string, data: {
   const areAwb = !!(order.woot_awb_number || order.sameday_awb_number || order.cargus_awb_number
     || order.dpd_awb_number || order.fan_courier_awb_number || order.colete_awb_number
     || order.gls_awb_number || order.pallex_awb_number || order.ecolet_awb_number
-    || order.ecolet_order_to_send_id);
+    || order.ecolet_order_to_send_id
+    /* ⚠ Cei sapte care lipseau pana la 16.08.2026 — vezi nota de la select. */
+    || order.posta_awb_number || order.innoship_awb_number || order.packeta_packet_id
+    || order.smartship_awb_number || order.shipo_awb_number || order.fedex_awb_number
+    || order.ups_awb_number);
   if (cereModificari && areAwb) {
     return { error: "Comanda are AWB emis. Anuleaza-l intai (butoanele sunt in aceeasi fereastra), apoi scoate sau schimba liniile si genereaza un AWB nou." };
   }
@@ -3183,6 +3210,16 @@ export async function placeCartOrder(data: {
      decat cel platit. E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
   fedex_service_type?: string;
   fedex_service_name?: string;
+  /* ⚠ Cheia ofertei UPS e CODUL SERVICIULUI (`Service.Code`), si atat: UPS e un
+     singur transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda — iar la UPS asta e mai scump decat la ceilalti: lipsa lui `Service.Code`
+     la emitere nu e o eroare, e o factura. Ghidul lor romanesc, verbatim: „Daca nicio
+     optiune de serviciu nu este selectata de dvs., atunci expedierea se va efectua si
+     factura automat prin UPS Express" — cel mai scump produs al lor.
+     E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  ups_service_code?: string;
+  ups_service_name?: string;
   ecolet_courier_name?: string;
   ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
@@ -3674,6 +3711,10 @@ export async function placeCartOrder(data: {
       ...(data.fedex_service_type && {
         fedex_service_type: data.fedex_service_type,
         fedex_service_name: data.fedex_service_name,
+      }),
+      ...(data.ups_service_code && {
+        ups_service_code: data.ups_service_code,
+        ups_service_name: data.ups_service_name,
       }),
     },
     items: allItems,

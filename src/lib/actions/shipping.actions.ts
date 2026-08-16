@@ -54,6 +54,12 @@ import {
   lipsuriExpediere as lipsuriFedex,
 } from "@/lib/fedex/expediere";
 import { etichetaOferta as etichetaFedex, ofertePosibile as oferteFedex } from "@/lib/fedex/preturi";
+import { puncte as puncteUps, tarife as tarifeUps, upsGata, type UpsConfig } from "@/lib/ups/client";
+import {
+  AVERTISMENT_ACEEASI_LOCALITATE, corpTarife as corpUps, eAceeasiLocalitate,
+  lipsuriConfigurare as lipsuriConfigurareUps, lipsuriExpediere as lipsuriUps, orasUps,
+} from "@/lib/ups/expediere";
+import { etichetaOferta as etichetaUps, ofertePosibile as oferteUps } from "@/lib/ups/preturi";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
@@ -177,6 +183,20 @@ export type ShippingOption = {
    */
   fedexServiceType?: string;
   fedexServiceName?: string;
+  /**
+   * ⚠ CHEIA unei oferte UPS, si e de ajuns singura.
+   *
+   * UPS e un TRANSPORTATOR, nu un broker: `RatedShipment[]` are cate o intrare pe
+   * serviciu si acelasi cod nu apare de doua ori. Pierdut insa, reemiterea ar pleca pe
+   * implicitul LOR — care, verbatim din ghidul lor romanesc, e „UPS Express", cel mai
+   * scump produs, si nu produce nicio eroare.
+   *
+   * ⚠ Si se pastreaza LITERAL: `Rating.yaml` declara `minLength: 3` pentru codul de
+   * serviciu, `Shipping.yaml` declara `2`, iar exemplele lor trimit si `'11'` si `'011'`
+   * pentru acelasi lucru. Daca cele doua forme sunt echivalente nu e documentat nicaieri.
+   */
+  upsServiceCode?: string;
+  upsServiceName?: string;
   /** Semnatura pretului, verificata la plasarea comenzii. Vezi `quote-token.ts`. */
   token?: string;
 };
@@ -234,6 +254,7 @@ const COURIER_LABELS: Record<string, string> = {
   smartship: "SmartShip",
   shipo: "Shipo.ro",
   fedex: "FedEx",
+  ups: "UPS",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -332,7 +353,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, default_shipping_cost, shipping_zones, shipping_rules")
     .eq("business_id", businessId)
     .single();
 
@@ -1233,6 +1254,70 @@ export async function getShippingOptions(
       } else {
         options.push(flat());
       }
+    } else if (courierId === "ups") {
+      const upsCfg = settings.ups_config as UpsConfig | null;
+
+      /*
+       * ⚠ UPS ARE RAMBURS — spre deosebire de FedEx. Dar cu o conditie pe care API-ul
+       * nu o poate verifica: contul trebuie sa fie de tip „Daily Pickup" sau „Drop
+       * Shipping" (verbatim din schema lor). Tipul contului nu se poate citi de
+       * nicaieri, deci comerciantul are un comutator, iar proba de conexiune il si
+       * verifica printr-o cotare cu ramburs.
+       *
+       * Cand comerciantul l-a stins, UPS DISPARE din checkout pe comenzile cu plata la
+       * livrare — nu cade pe tariful fix. Acelasi rationament ca la FedEx: o optiune la
+       * tarif fix ar fi aleasa de cumparator si ar bloca o comanda pe care comerciantul
+       * n-o poate expedia deloc.
+       */
+      if (esteRamburs && upsCfg?.ramburs_activ === false) continue;
+
+      const flat = (): ShippingOption => ({
+        courier: "ups",
+        courierLabel: zone.label || COURIER_LABELS.ups,
+        deliveryType: "address",
+        price: zone.price,
+      });
+
+      if (upsGata(upsCfg) && useAutoPrice) {
+        promises.push(
+          buildUpsOptions(upsCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId)
+            .then((opts) => {
+              if (opts.length > 0) options.push(...opts);
+              /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
+                 tariful fix, ca la ceilalti. */
+              else options.push(flat());
+            })
+            .catch((err) => {
+              console.error("[shipping] UPS estimate failed:", (err as Error).message);
+              options.push(flat());
+            }),
+        );
+      } else {
+        options.push(flat());
+      }
+
+      /*
+       * ⚠ PUNCTELE UPS ACCESS POINT NU SE COTEAZA SEPARAT, si asta e o hotarare.
+       *
+       * S-ar putea: `Rating` accepta `ShipmentIndicationType` + `AlternateDeliveryAddress`.
+       * Dar ca sa coteze corect ai nevoie de ADRESA punctului, iar punctul se alege abia
+       * dupa ce cumparatorul vede pretul — deci ordinea e inversa. Iar `AlternateDeliveryAddress`
+       * din `Rating` **nu are `UPSAccessPointID`** (cautat: campul exista doar in `Shipping`),
+       * deci nici macar nu se poate cota un punct anume.
+       *
+       * Alternativa ar fi fost sa cotam cu adresa cumparatorului si sa aratam acel pret
+       * pentru livrarea in punct — adica un pret care poate sa nu fie al serviciului
+       * livrat. Se ofera deci la tariful fix din `shipping_zones`, ca la SmartShip si
+       * Innoship, si scrie de ce in pagina de configurare.
+       */
+      if (upsGata(upsCfg) && upsCfg.puncte_activate) {
+        options.push({
+          courier: "ups",
+          courierLabel: lockerLabel(zone.label, "UPS Access Point"),
+          deliveryType: "locker",
+          price: zone.price,
+        });
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -1751,6 +1836,152 @@ async function buildFedexOptions(
 }
 
 /**
+ * Ofertele UPS pentru checkout.
+ *
+ * ⚠ Foloseste ACELASI constructor de corp ca emiterea (`corpTarife` alimenteaza cotarea,
+ * `corpExpediere` emiterea, si amandoua pleaca din aceleasi `DateExpediere`). Un al
+ * doilea constructor ar fi insemnat ca pretul cotat si cel facturat se pot departa fara
+ * ca nimic sa se planga.
+ *
+ * ⚠ SI PRIMESTE `cod`, spre deosebire de FedEx. Rambursul UPS exista, si intra chiar in
+ * cotare (`ShipmentServiceOptions.COD`) — deci pretul aratat cumparatorului il include.
+ * Un `cod` netrimis ar fi cotat mai ieftin decat se factureaza.
+ *
+ * ⚠ SI POATE INTOARCE GOL DIN CAUZA VALUTEI. UPS **nu are niciun camp prin care sa ceri
+ * valuta raspunsului** — cautat in tot `Rating.yaml`. Daca contul coteaza in EUR,
+ * `ofertePosibile` arunca toate ofertele; 12 euro scrisi ca 12 lei ar subfactura
+ * transportul de cinci ori. Comerciantul e alertat, o singura data, cu ce e de facut.
+ */
+async function buildUpsOptions(
+  config: UpsConfig,
+  destination: { county: string; city: string; postCode?: string; country?: string },
+  weightKg: number,
+  cod: number,
+  labelCustom: string | undefined,
+  businessId: string,
+): Promise<ShippingOption[]> {
+  const date = {
+    destinatar: {
+      nume: "Client Nou",
+      strada: "Strada Principala",
+      numar: "1",
+      oras: destination.city,
+      judet: destination.county,
+      codPostal: destination.postCode ?? null,
+      telefon: "0700000000",
+      email: "client@exemplu.ro",
+      tara: destination.country || "RO",
+    },
+    greutateKg: weightKg,
+    ...(cod > 0 ? { ramburs: cod } : {}),
+  };
+
+  /*
+   * ⚠ Cele doua cauze de esec sunt DESPARTITE, si nu din eleganta.
+   *
+   * Configurarea gresita e a MAGAZINULUI si opreste cotarea pentru toata lumea — acolo
+   * comerciantul TREBUIE alertat, altfel toti cumparatorii primesc tacut tariful fix in
+   * loc de cel real.
+   *
+   * O adresa incompleta e insa a UNUI cumparator. Acolo nu e nimic de reparat in
+   * magazin, iar o alerta l-ar invata pe om sa nu se mai uite la alerte.
+   */
+  const lipsuriConfig = lipsuriConfigurareUps(config);
+  if (lipsuriConfig.length > 0) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.upsConfig",
+      businessId,
+      `UPS nu poate cota: ${lipsuriConfig.join("; ")}. Pana la reparare, livrarea prin UPS se ofera la tariful fix.`,
+    );
+    return [];
+  }
+  if (lipsuriUps(config, date).comanda.length > 0) return [];
+
+  /*
+   * ⚠ „Aceeasi localitate" se verifica INAINTE de apel, si e specific romanesc.
+   *
+   * Ghidul lor de servicii postale, nota 2: „UPS nu presteaza servicii postale in
+   * aceeasi localitate pe teritoriul Romaniei." Nu blocam nimic — autoritatea e cotarea
+   * lor — dar daca ea vine goala pe o ruta din acelasi oras, atunci stim de ce, si o
+   * spunem in loc sa lasam comerciantul sa caute o zi.
+   */
+  const aceeasiLocalitate = eAceeasiLocalitate(config, date.destinatar);
+
+  const { oferte, alerte } = await tarifeUps(config, corpUps(config, date));
+  const r = oferteUps(oferte, config, {
+    greutateKg: weightKg,
+    taraExpeditor: config.expeditor?.tara ?? "RO",
+    taraDestinatar: date.destinatar.tara,
+  }, alerte);
+
+  if (r.oferte.length === 0) {
+    if (r.valuteRefuzate.length > 0) {
+      await alertaPlafonMagazin(
+        "getShippingOptions.upsValuta",
+        businessId,
+        `Contul UPS coteaza in ${r.valuteRefuzate.join(", ")}, iar magazinul lucreaza in lei. `
+        + "UPS nu are niciun camp prin care sa ceri valuta raspunsului, si nu convertim noi sumele — "
+        + "cere-i reprezentantului UPS tarife in RON. Pana atunci, livrarea prin UPS se ofera la tariful fix.",
+      );
+    } else if (aceeasiLocalitate) {
+      await alertaPlafonMagazin(
+        "getShippingOptions.upsAceeasiLocalitate",
+        businessId,
+        `${AVERTISMENT_ACEEASI_LOCALITATE} Comenzile din orasul tau primesc tariful fix din Setari → Livrare.`,
+      );
+    } else if (!(destination.postCode ?? "").trim()) {
+      /*
+       * ⚠ Codul postal e „optional" in schema lor pentru Romania — dar e singurul semnal
+       * de zonare ramas, fiindca `StateProvinceCode` nu se trimite (UPS n-are nomenclator
+       * de judete romanesti, iar cotarea cere fix doua caractere).
+       *
+       * Spre deosebire de FedEx, aici NU se iese inainte de apel: la ei codul postal e
+       * documentat obligatoriu pentru Romania, la UPS nu. Se incearca deci cotarea, si
+       * abia daca ea vine goala se spune de ce ar putea fi.
+       */
+      await alertaPlafonMagazin(
+        "getShippingOptions.upsCodPostal",
+        businessId,
+        "UPS n-a intors niciun tarif, iar comenzile interne nu au cod postal — formularul il cere doar la "
+        + "livrarile in strainatate. Pana atunci UPS apare in checkout la tariful fix din Setari → Livrare, "
+        + "iar AWB-ul se emite din pagina comenzii, dupa ce completezi codul postal.",
+      );
+    }
+    return [];
+  }
+
+  /*
+   * ⚠ „Doar pret de lista" e o problema de BANI, nu o curiozitate.
+   *
+   * Fara `NegotiatedRateCharges`, pretul intors e cel public — mai mare decat cel pe
+   * care il plateste comerciantul. Cauza e mai des decat s-ar crede chiar lipsa lui
+   * `ShipFrom.StateProvinceCode`, pe care UPS il cere pentru tarifele negociate si pe
+   * care Romania nu-l are. Se spune, o data.
+   */
+  if (r.doarPretDeLista) {
+    await alertaPlafonMagazin(
+      "getShippingOptions.upsListaDePreturi",
+      businessId,
+      "UPS a cotat la preturile de LISTA, nu la tarifele contractului tau. Verifica in portalul UPS ca "
+      + "aplicatia si numarul de cont sunt legate de acelasi contract; daca UPS ti-a dat un cod de judet "
+      + "de doua caractere, pune-l in configurare la „Judet”.",
+    );
+  }
+
+  return r.oferte.map((o): ShippingOption => ({
+    courier: "ups",
+    /* Eticheta comerciantului, cand exista, ramane deasupra numelui serviciului:
+       unii isi vand livrarea sub marca proprie. */
+    courierLabel: labelCustom ? `${labelCustom} · ${etichetaUps(o)}` : etichetaUps(o),
+    deliveryType: "address",
+    price: o.pret,
+    estimatedDays: o.tranzit ?? undefined,
+    upsServiceCode: o.serviceCode,
+    upsServiceName: o.serviceName,
+  }));
+}
+
+/**
  * Ofertele Shipo pentru checkout.
  *
  * ⚠ Foloseste ACELASI constructor de corp ca emiterea (`corpTarife` alimenteaza
@@ -1902,7 +2133,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo", "ups"]);
 
 export async function getLockers(
   businessId: string,
@@ -1964,6 +2195,15 @@ export async function getLockers(
      * imparta aceeasi intrare in loc sa faca sase.
      */
     : courier === "shipo" ? `:${rateIdShipo}:${localitateShipo(city ?? "", null).toLowerCase()}`
+    /*
+     * ⚠ La UPS intra tot localitatea, si din ACELASI motiv ca la Shipo: `Locator`
+     * cauta punctele PE ORAS, deci lista din cache e a unui singur oras, si nimic
+     * n-o mai taie la iesire (vezi `filtreaza`). Fara ea, primul cumparator din Cluj
+     * ar umple cache-ul si urmatorul, din Iasi, ar primi punctele clujene.
+     * Se normalizeaza prin `orasUps`, ca „Sector 3" si „Bucuresti" sa imparta
+     * aceeasi intrare in loc sa faca sase.
+     */
+    : courier === "ups" ? `:${orasUps(city ?? "", retea ?? null).toLowerCase()}`
     : "";
   const cheieCache = `${businessId}:${courier}:${codAmount && codAmount > 0 ? "cod" : "-"}${discriminant}`;
 
@@ -1985,7 +2225,16 @@ export async function getLockers(
    * hit, prima cerere ar fi intors lista intreaga si a doua o lista goala — adica
    * un defect care apare abia la al doilea cumparator, si numai in Bucuresti.
    */
-  const filtreaza = courier !== "shipo";
+  /*
+   * ⚠ UPS e in aceeasi tabara cu Shipo, si tot pentru localitati: punctele lor
+   * bucurestene isi scriu orasul cum vor („Sector 4", un nume de cartier), iar
+   * `filtreazaOras` le-ar taia pe TOATE exact dupa ce `Locator` le-a gasit corect.
+   *
+   * ⚠ Si trebuie sa fie aceeasi hotarare in AMANDOUA locurile — la cache miss si la
+   * cache hit. Filtrat doar la hit, prima cerere ar intoarce lista intreaga si a doua
+   * o lista goala: un defect care apare abia la al doilea cumparator.
+   */
+  const filtreaza = courier !== "shipo" && courier !== "ups";
 
   const dinCache = CACHE_LOCKERE.get(cheieCache);
   if (dinCache) return filtreaza ? filtreazaOras(dinCache, city) : dinCache;
@@ -2015,11 +2264,74 @@ export async function getLockers(
   const supabase = createAdminClient();
   const { data: settings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, ups_config")
     .eq("business_id", businessId)
     .single();
 
   if (!settings) return [];
+
+  if (courier === "ups") {
+    /*
+     * ⚠ PUNCTELE UPS SE CAUTA DUPA ORAS, NU DUPA COORDONATE.
+     *
+     * `Locator` accepta si geocod, dar noi n-avem coordonatele cumparatorului in
+     * checkout — avem orasul si judetul din formular. Iar `PostcodePrimaryLow` e
+     * documentat „Required **if the user does not submit the City, State/Province
+     * address combination**", deci orasul + judetul sunt de ajuns.
+     *
+     * ⚠ Si adresa are ALTA GRAMATICA in Locator decat in restul API-ului:
+     * `PoliticalDivision2` = orasul, `PoliticalDivision1` = judetul. Traducerea se face
+     * intr-un singur loc, in `puncte()`.
+     */
+    const config = settings.ups_config as UpsConfig | null;
+    if (!upsGata(config) || !config.puncte_activate) return [];
+
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () => (await puncteUps(config, {
+          /*
+           * ⚠ ORASUL NORMALIZAT, nu cel brut din formular.
+           *
+           * Din 15.08.2026 checkout-ul cere „Sector 1"…„Sector 6" in Bucuresti, iar UPS
+           * nu stie ce e un sector: cautat `sector` in toate cele cincisprezece fisiere
+           * OpenAPI ale lor — ZERO potriviri. Trimis brut, `Locator` ar fi cautat un
+           * oras inexistent si ar fi intors lista goala **in cel mai mare oras al tarii**.
+           *
+           * ⚠ Si cheia de cache foloseste tot `orasUps`, deci netrecut prin el aici,
+           * raspunsul gol al unui cumparator din „Sector 3" ar fi fost servit si
+           * urmatorului care scrie corect „Bucuresti".
+           */
+          oras: orasUps(city ?? "", retea ?? null),
+          /* ⚠ Al cincilea parametru poarta JUDETUL la UPS — vezi `CourierSelector`. */
+          judet: (retea ?? "").trim(),
+          tara: "RO",
+        })).map((p) => ({
+          /* ⚠ `PublicAccessPointID`, nu `LocationID`: despre al doilea documentatia lor
+             spune verbatim „Do not expose the Location ID". */
+          id: p.id,
+          name: p.nume,
+          address: p.adresa,
+          city: p.oras,
+          county: p.judet,
+          postCode: p.codPostal,
+          lat: p.lat,
+          lng: p.lng,
+        })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      /*
+       * ⚠ NU se filtreaza dupa oras, aceeasi hotarare ca la Shipo: punctele lor
+       * bucurestene isi scriu orasul cum vor (sector, cartier), iar un filtru pe nume
+       * le-ar taia pe toate exact dupa ce cautarea le-a gasit corect.
+       */
+      return toate;
+    } catch (e) {
+      console.error("[shipping] UPS access points failed:", (e as Error).message);
+      return [];
+    }
+  }
 
   if (courier === "sameday") {
     const config = settings.sameday_config as SamedayConfig | null;

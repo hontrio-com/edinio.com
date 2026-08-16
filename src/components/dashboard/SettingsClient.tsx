@@ -244,6 +244,11 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
      (FedEx Priority) porneste mult peste tarifele locale. Un implicit de 17 lei ar
      fi facut comerciantul sa vanda transport in pierdere pana la prima factura. */
   { id: "fedex",        label: "FedEx",             logo: "/integrations/fedex.svg",        defaultPrice: 45 },
+  /* ⚠ Acelasi rationament ca la FedEx: UPS e transportator express, nu curier de
+     colete ieftin. Cel mai ieftin serviciu intern al lor (UPS Express Saver) porneste
+     mult peste tarifele locale, iar un implicit de 17 lei l-ar face pe comerciant sa
+     vanda transport in pierdere pana la prima factura. */
+  { id: "ups",          label: "UPS",               logo: "/integrations/ups.svg",          defaultPrice: 45 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -272,6 +277,7 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
      afiseaza fallback-ul — nepotrivirea o vede doar un cumparator. */
   shipo: "Shipo.ro",
   fedex: "FedEx",
+  ups: "UPS",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };

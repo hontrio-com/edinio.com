@@ -38,6 +38,8 @@ import { createShipoAwbAction } from "@/lib/actions/shipo.actions";
 import { shipoGata, type ShipoConfig } from "@/lib/shipo/client";
 import { createFedexAwbAction } from "@/lib/actions/fedex.actions";
 import { fedexGata, type FedexConfig } from "@/lib/fedex/client";
+import { createUpsAwbAction } from "@/lib/actions/ups.actions";
+import { upsGata, type UpsConfig } from "@/lib/ups/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
@@ -60,8 +62,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -235,7 +237,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -249,6 +251,7 @@ export async function bulkGenerateAwbs(
   const ss = settings?.smartship_config as SmartshipConfig | null;
   const sh = settings?.shipo_config as ShipoConfig | null;
   const fx = settings?.fedex_config as FedexConfig | null;
+  const up = settings?.ups_config as UpsConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -290,6 +293,10 @@ export async function bulkGenerateAwbs(
        de expeditie. Fara ea, fiecare comanda ar fi refuzata de actiune oricum —
        adica 50 de esecuri in loc de un mesaj limpede. */
     fedex: fedexGata(fx),
+    /* Aceeasi regula ca in `upsGata`: amandoua credentialele, contul de sase caractere
+       si adresa de expeditie. Fara ea, fiecare comanda ar fi refuzata de actiune oricum
+       — adica 50 de esecuri in loc de un mesaj limpede. */
+    ups: upsGata(up),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -305,7 +312,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -332,6 +339,7 @@ export async function bulkGenerateAwbs(
        nu „esuate". */
     shipo: "shipo",
     fedex: "fedex",
+    ups: "ups",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -367,6 +375,7 @@ export async function bulkGenerateAwbs(
       : target === "smartship" ? row.smartship_awb_number
       : target === "shipo" ? row.shipo_awb_number
       : target === "fedex" ? row.fedex_awb_number
+      : target === "ups" ? row.ups_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
@@ -825,6 +834,84 @@ async function createAwbForOrder(
         valoareComanda: Number(o.total) || 0,
         serviceType: serviciu,
         serviceName: ales.fedex_service_name ?? null,
+      });
+    }
+    case "ups": {
+      /*
+       * ⚠ Adresa se compune EXACT ca in `UpsAwbModal`, ca lotul si emiterea pe bucata sa
+       * trimita acelasi text.
+       *
+       * ⚠ Si lotul NU ghiceste serviciul, ca la Shipo si FedEx. La UPS asta e mai
+       * scump decat oriunde: `Service.Code` lipsa nu produce nicio eroare, produce o
+       * factura. Ghidul lor romanesc, verbatim: „Daca nicio optiune de serviciu nu este
+       * selectata de dvs., atunci expedierea se va efectua si **factura automat prin UPS
+       * Express**" — cel mai scump produs al lor. Fara alegerea clientului, comanda se
+       * emite din pagina ei, unde comerciantul vede preturile.
+       *
+       * ⚠ RAMBURSUL, in schimb, NU se opreste aici — spre deosebire de FedEx. UPS il
+       * ofera (la nivel de EXPEDIERE, doar cu origine in Uniunea Europeana), iar cand
+       * contul comerciantului nu-l suporta, `createUpsAwbAction` raspunde cu motivul lor.
+       */
+      const ales = addr as ShippingAddr & {
+        ups_service_code?: string;
+        ups_service_name?: string;
+      };
+
+      /*
+       * ⚠ COMANDA CU RIDICARE DIN PUNCT NU SE EMITE IN LOT, si asta e o poarta, nu o
+       * comoditate.
+       *
+       * `AlternateDeliveryAddress` cere NUMELE si ADRESA punctului, nu doar id-ul lui —
+       * iar in lot avem din `shipping_address` doar `locker_id` si cateva campuri.
+       * Emisa fara containerul acela, expedierea pleaca la adresa CUMPARATORULUI: nu
+       * cade nimic, nimeni nu afla, iar omul isi asteapta coletul intr-un punct in care
+       * nu ajunge niciodata. E chiar clasa de defecte pe care o evitam peste tot.
+       */
+      if (ales.delivery_type === "locker" || (ales.locker_id ?? "").trim()) {
+        return {
+          error:
+            "Comanda are livrare intr-un punct UPS Access Point. Emite-o din pagina comenzii: "
+            + "lotul n-are adresa punctului, iar fara ea coletul ar pleca la adresa clientului.",
+        };
+      }
+
+      const serviciu = (ales.ups_service_code ?? "").trim();
+      if (!serviciu) {
+        return {
+          error:
+            "Comanda n-are serviciul UPS ales de client. Emite-o din pagina comenzii, unde vezi preturile "
+            + "si termenele — lotul n-are voie sa aleaga in locul tau, iar UPS factureaza implicit cel mai "
+            + "scump serviciu cand nu i se cere unul anume.",
+        };
+      }
+
+      return createUpsAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          strada: street,
+          numar: streetNo || null,
+          oras: city,
+          judet: county || null,
+          codPostal: zip || null,
+          telefon: o.customer_phone,
+          email,
+          tara: addr.country || "RO",
+        },
+        greutateKg: weight,
+        continut: content,
+        ramburs: cod,
+        valoareComanda: Number(o.total) || 0,
+        serviceCode: serviciu,
+        serviceName: ales.ups_service_name ?? null,
+        /*
+         * ⚠ Punctul de ridicare NU se ia din lot.
+         *
+         * `AlternateDeliveryAddress` cere numele, adresa si id-ul punctului, iar in lot
+         * avem doar `locker_id` din `shipping_address` — nu si adresa lui. O emitere fara
+         * adresa punctului ar cadea la ei, sau (mai rau) ar livra la adresa
+         * cumparatorului o comanda pe care el o astepta intr-un punct.
+         */
+        punct: null,
       });
     }
     default:

@@ -98,6 +98,14 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      nu e secret: e adresa lui de ridicare, si trebuie sa se vada in formular. */
   smartship_config: ["api_key"],
   smso_config: ["api_key"],
+  /* UPS: DOUA credentiale in portalul lor („Client ID" si „Client Secret"), dar numai
+     una e secreta. `client_id` NU intra aici, desi la ei el pleaca chiar ca NUME DE
+     UTILIZATOR intr-un antet `Authorization: Basic`: singur nu deschide nimic, iar
+     comerciantul trebuie sa-l poata reciti ca sa stie CE APLICATIE din portalul UPS a
+     legat. Acelasi rationament ca la `fedex_config.client_id`. Nici `account_number`
+     („Shipper Number", sase caractere) nu e credentiala — el se tipareste pe fiecare
+     eticheta si pe fiecare factura UPS pe care o primeste. */
+  ups_config: ["client_secret"],
   woot_config: ["public_key", "secret_key"],
 };
 

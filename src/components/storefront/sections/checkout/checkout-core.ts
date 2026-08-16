@@ -517,6 +517,8 @@ export function useCheckoutOrder({
         shipo_courier_name: courierSelection?.shipoCourierName,
         fedex_service_type: courierSelection?.fedexServiceType,
         fedex_service_name: courierSelection?.fedexServiceName,
+        ups_service_code: courierSelection?.upsServiceCode,
+        ups_service_name: courierSelection?.upsServiceName,
         smartship_locker_net: courierSelection?.smartshipLockerNet,
         source: getAttribution() ?? undefined,
       };

@@ -46,7 +46,7 @@ export default async function OrderDetailPage({ params }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -112,6 +112,20 @@ export default async function OrderDetailPage({ params }: Props) {
     && fx?.expeditor?.oras && fx?.expeditor?.cod_postal
   );
 
+  /* ⚠ Aceeasi regula ca in `upsGata`, in features/page.tsx si in checkout. Codul
+     postal e in ea fiindca `StateProvinceCode` NU se trimite pentru Romania (UPS n-are
+     nomenclator de judete romanesti, iar cotarea cere fix doua caractere) — deci codul
+     postal e singurul semnal dupa care ei pot zona ruta. Fara el, butonul ar promite
+     ceva ce nu se poate face. */
+  const up = settings?.ups_config as {
+    enabled?: boolean; client_id?: string; client_secret?: string; account_number?: string;
+    expeditor?: { oras?: string; cod_postal?: string };
+  } | null;
+  const upsEnabled = !!(
+    up?.enabled && up?.client_id && up?.client_secret && up?.account_number
+    && up?.expeditor?.oras && up?.expeditor?.cod_postal
+  );
+
   const ss = settings?.smartship_config as { enabled?: boolean; api_key?: string; expeditor?: { name?: string; address?: string; phone?: string; city?: number } } | null;
   const smartshipEnabled = !!(
     ss?.enabled && ss?.api_key && ss?.expeditor?.name && ss?.expeditor?.address
@@ -163,6 +177,7 @@ export default async function OrderDetailPage({ params }: Props) {
       smartshipEnabled={smartshipEnabled}
       shipoEnabled={shipoEnabled}
       fedexEnabled={fedexEnabled}
+      upsEnabled={upsEnabled}
       postaZilePrezentare={postaZilePrezentare}
       innoshipEnabled={innoshipEnabled}
       pallexZile={pallexZile}

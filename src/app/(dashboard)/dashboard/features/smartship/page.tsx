@@ -39,6 +39,10 @@ export default async function SmartshipPage() {
     /* FedEx e integrare directa din 16.08.2026, iar SmartShip il revinde
        (`courier_id: 19`) — deci se poate suprapune, ca oricare dintre ceilalti sase. */
     activ(settings?.fedex_config, "client_id", "client_secret", "account_number") ? "fedex" : "",
+    /* ⚠ La fel si UPS, din 16.08.2026. Randul din `DUPA_NUME` (smartship/suprapunere.ts)
+       nu face nimic singur: lista de aici e cea care alimenteaza `suprapuneri()`, iar
+       fara „ups" in ea avertismentul de suprapunere n-ar fi aparut NICIODATA. */
+    activ(settings?.ups_config, "client_id", "client_secret", "account_number") ? "ups" : "",
   ].filter(Boolean);
 
   return (

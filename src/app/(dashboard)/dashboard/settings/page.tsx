@@ -126,7 +126,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -251,6 +251,7 @@ async function ContinutSetari({
   const ss = storeSettings?.smartship_config as CourierCfg | null;
   const sh = storeSettings?.shipo_config as CourierCfg | null;
   const fx = storeSettings?.fedex_config as CourierCfg | null;
+  const up = storeSettings?.ups_config as CourierCfg | null;
 
   const activeCourierIds: string[] = [
     ...(fc?.enabled && fc?.username && fc?.client_id ? ["fan-courier"] : []),
@@ -327,6 +328,20 @@ async function ContinutSetari({
       && (fx as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.oras
       && (fx as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.cod_postal
       ? ["fedex"] : []),
+    /*
+     * Aceeasi regula ca in `upsGata`: amandoua credentialele, numarul de cont SI adresa
+     * de expeditie cu cod postal.
+     *
+     * ⚠ Codul postal nu e un moft. In schema UPS el e „optional" pentru Romania — dar
+     * `StateProvinceCode` NU se trimite (ei n-au nomenclator de judete romanesti, iar
+     * cotarea cere fix doua caractere), deci codul postal ramane singurul semnal dupa
+     * care pot zona ruta. Vezi si capcana Packeta de mai sus: o metoda adaugata in
+     * `SHIPPING_METHODS` dar NU aici ramane vesnic stinsa.
+     */
+    ...(up?.enabled && up?.client_id && up?.client_secret && up?.account_number
+      && (up as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.oras
+      && (up as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.cod_postal
+      ? ["ups"] : []),
     "own",
     "pickup",
   ];

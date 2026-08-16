@@ -7,10 +7,13 @@ import { localitatePosta, sectorDinOras } from "@/lib/posta/expediere";
 import { localitateSmartship, sectorSmartship } from "@/lib/smartship/localitati";
 import { localitateShipo, sectorShipo } from "@/lib/shipo/localitati";
 import { orasFedex, parteFedex, sectorPentruAdresa } from "@/lib/fedex/expediere";
+import {
+  adresaUps, judetUps, orasUps, sectorPentruAdresa as sectorUps,
+} from "@/lib/ups/expediere";
 import { localitateSameday, normalizeLocalityName } from "@/lib/utils/ro-address";
 
 /**
- * ═══ O COMANDA DIN BUCURESTI, DOUASPREZECE CURIERI, DOUA ADEVARURI ═══
+ * ═══ O COMANDA DIN BUCURESTI, TREISPREZECE CURIERI, DOUA ADEVARURI ═══
  *
  * Din 15.08.2026 checkout-ul nu mai lasa orasul liber in Bucuresti: se alege
  * „Sector 1"…„Sector 6". Asta a fost nevoie fiindca Sameday NU cunoaste un oras
@@ -102,6 +105,40 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
     const p = parteFedex({ ...ADRESA, oras: "Cluj-Napoca", judet: "Cluj", codPostal: "400001" });
     assert.equal(p.address.city, "Cluj-Napoca");
     assert.equal(p.address.streetLines.join(" ").toLowerCase().includes("sector"), false);
+  });
+
+  /*
+   * ⚠ UPS e tot in tabara CEA MARE, si tot fara camp de sector.
+   *
+   * Cautat `sector` in TOATE cele cincisprezece fisiere OpenAPI ale lor: ZERO
+   * potriviri. La fel `bucharest` si `bucuresti`. UPS nu documenteaza nicio regula
+   * de sector, deci nu se inventeaza una — orasul se pliaza in „Bucuresti", iar
+   * sectorul pleaca pe adresa, unde chiar se tipareste: „All three Address Lines
+   * will be printed on the label", pe cand din oras se tiparesc doar 15 caractere.
+   *
+   * ⚠ Si `StateProvinceCode` NU pleaca. Textul lor, repetat in unsprezece locuri, e
+   * „Required for US, Canada, and Vietnam (VN)", iar singura tara europeana cu
+   * regula proprie e Irlanda. In plus e o capcana de lungime: emiterea accepta 1-5
+   * caractere, cotarea cere EXACT 2 — deci „Bucuresti" ar cadea la cotare, iar „B"
+   * la amandoua.
+   */
+  test("UPS primeste „Bucuresti”, iar sectorul pleaca pe adresa", () => {
+    assert.equal(orasUps(ADRESA.oras, ADRESA.judet), "Bucuresti");
+    assert.equal(sectorUps(ADRESA), "Sector 3");
+
+    const a = adresaUps({ ...ADRESA, tara: "RO" }, true);
+    assert.equal(a.City, "Bucuresti");
+    assert.ok(a.AddressLine.join(" ").includes("Sector 3"));
+    assert.equal("StateProvinceCode" in a, false);
+  });
+
+  test("UPS nu inventeaza un sector in afara Bucurestiului, si nu trimite judetul", () => {
+    assert.equal(sectorUps({ oras: "Cluj-Napoca", judet: "Cluj" }), null);
+    assert.equal(judetUps("Cluj"), null);
+    const a = adresaUps({ ...ADRESA, oras: "Cluj-Napoca", judet: "Cluj", codPostal: "400001", tara: "RO" }, true);
+    assert.equal(a.City, "Cluj-Napoca");
+    assert.equal(a.AddressLine.join(" ").toLowerCase().includes("sector"), false);
+    assert.equal("StateProvinceCode" in a, false);
   });
 
   /*

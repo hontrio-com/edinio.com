@@ -2132,6 +2132,17 @@ export type Database = {
           total: number
           tracking_number: string | null
           updated_at: string
+          ups_awb_at: string | null
+          ups_awb_number: string | null
+          ups_cost: number | null
+          ups_currency: string | null
+          ups_reference: string | null
+          ups_service_code: string | null
+          ups_service_name: string | null
+          ups_status_checked_at: string | null
+          ups_status_code: string | null
+          ups_status_type: string | null
+          ups_tracking_url: string | null
           vat_amount: number
           vat_rate: number
           woot_awb_number: string | null
@@ -2292,6 +2303,17 @@ export type Database = {
           total: number
           tracking_number?: string | null
           updated_at?: string
+          ups_awb_at?: string | null
+          ups_awb_number?: string | null
+          ups_cost?: number | null
+          ups_currency?: string | null
+          ups_reference?: string | null
+          ups_service_code?: string | null
+          ups_service_name?: string | null
+          ups_status_checked_at?: string | null
+          ups_status_code?: string | null
+          ups_status_type?: string | null
+          ups_tracking_url?: string | null
           vat_amount?: number
           vat_rate?: number
           woot_awb_number?: string | null
@@ -2452,6 +2474,17 @@ export type Database = {
           total?: number
           tracking_number?: string | null
           updated_at?: string
+          ups_awb_at?: string | null
+          ups_awb_number?: string | null
+          ups_cost?: number | null
+          ups_currency?: string | null
+          ups_reference?: string | null
+          ups_service_code?: string | null
+          ups_service_name?: string | null
+          ups_status_checked_at?: string | null
+          ups_status_code?: string | null
+          ups_status_type?: string | null
+          ups_tracking_url?: string | null
           vat_amount?: number
           vat_rate?: number
           woot_awb_number?: string | null
@@ -3195,6 +3228,7 @@ export type Database = {
           stripe_config: Json | null
           trendyol_config: Json
           updated_at: string
+          ups_config: Json | null
           vat_enabled: boolean
           vat_rate: number
           woot_config: Json | null
@@ -3266,6 +3300,7 @@ export type Database = {
           stripe_config?: Json | null
           trendyol_config?: Json
           updated_at?: string
+          ups_config?: Json | null
           vat_enabled?: boolean
           vat_rate?: number
           woot_config?: Json | null
@@ -3337,6 +3372,7 @@ export type Database = {
           stripe_config?: Json | null
           trendyol_config?: Json
           updated_at?: string
+          ups_config?: Json | null
           vat_enabled?: boolean
           vat_rate?: number
           woot_config?: Json | null
@@ -3765,6 +3801,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ups_etichete: {
+        Row: {
+          awb_number: string
+          business_id: string
+          continut: string
+          creat_la: string
+          document_ramburs: string | null
+          format: string
+          order_id: string
+          semnatura: string | null
+        }
+        Insert: {
+          awb_number: string
+          business_id: string
+          continut: string
+          creat_la?: string
+          document_ramburs?: string | null
+          format: string
+          order_id: string
+          semnatura?: string | null
+        }
+        Update: {
+          awb_number?: string
+          business_id?: string
+          continut?: string
+          creat_la?: string
+          document_ramburs?: string | null
+          format?: string
+          order_id?: string
+          semnatura?: string | null
+        }
+        Relationships: []
       }
       users_profile: {
         Row: {

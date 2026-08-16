@@ -774,6 +774,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         shipo_courier_name: courierSelection?.shipoCourierName,
         fedex_service_type: courierSelection?.fedexServiceType,
         fedex_service_name: courierSelection?.fedexServiceName,
+        ups_service_code: courierSelection?.upsServiceCode,
+        ups_service_name: courierSelection?.upsServiceName,
         smartship_locker_net: courierSelection?.smartshipLockerNet,
         additional_items: allAdditional.length > 0 ? allAdditional : undefined,
         accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,

@@ -30,7 +30,7 @@ function optionKey(o: ShippingOption) {
    * si `FEDEX_FIRST` vin toate sub `courier: "fedex"` si `deliveryType: "address"`,
    * la preturi si termene diferite. Fara el, cele trei s-ar prabusi una peste alta.
    */
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}`;
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -80,6 +80,11 @@ export interface CourierSelection {
      broker, deci acelasi `serviceType` nu apare de doua ori. Vezi lib/fedex/preturi.ts. */
   fedexServiceType?: string;
   fedexServiceName?: string;
+  /* ⚠ Cheia ofertei UPS e CODUL SERVICIULUI, si e de ajuns: UPS e transportator, nu
+     broker, deci acelasi cod nu apare de doua ori. Pierdut, reemiterea ar pleca pe
+     implicitul LOR — „UPS Express", cel mai scump produs. Vezi lib/ups/preturi.ts. */
+  upsServiceCode?: string;
+  upsServiceName?: string;
   /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
   token?: string;
 }
@@ -207,6 +212,8 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
             shipoCourierName: ales.shipoCourierName,
             fedexServiceType: ales.fedexServiceType,
             fedexServiceName: ales.fedexServiceName,
+            upsServiceCode: ales.upsServiceCode,
+            upsServiceName: ales.upsServiceName,
             token: ales.token,
           });
         }
@@ -245,7 +252,13 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
      */
     getLockers(
       businessId, opt.courier, city, cod,
-      opt.courier === "shipo" ? String(opt.shipoRateId ?? "") : opt.smartshipLockerNet,
+      /* ⚠ La UPS al cincilea parametru poarta JUDETUL, nu o retea de lockere.
+         `Locator` cere combinatia „City + State/Province" SAU codul postal, iar
+         checkout-ul intern nu cere cod postal — deci judetul e singurul al doilea
+         semnal pe care il avem. Se ingusteaza tot acolo, la primire. */
+      opt.courier === "shipo" ? String(opt.shipoRateId ?? "")
+        : opt.courier === "ups" ? county
+          : opt.smartshipLockerNet,
     )
       .then(setLockers)
       .catch(() => setLockers([]))
@@ -288,6 +301,8 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         shipoCourierName: opt.shipoCourierName,
         fedexServiceType: opt.fedexServiceType,
         fedexServiceName: opt.fedexServiceName,
+        upsServiceCode: opt.upsServiceCode,
+        upsServiceName: opt.upsServiceName,
         token: opt.token,
       });
     }
@@ -321,6 +336,8 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         shipoCourierName: opt.shipoCourierName,
         fedexServiceType: opt.fedexServiceType,
         fedexServiceName: opt.fedexServiceName,
+        upsServiceCode: opt.upsServiceCode,
+        upsServiceName: opt.upsServiceName,
         token: opt.token,
       });
     }

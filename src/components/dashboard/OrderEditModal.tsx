@@ -25,6 +25,7 @@ import { deleteInnoshipAwbAction } from "@/lib/actions/innoship.actions";
 import { deleteSmartshipAwbAction } from "@/lib/actions/smartship.actions";
 import { deleteShipoAwbAction } from "@/lib/actions/shipo.actions";
 import { deleteFedexAwbAction } from "@/lib/actions/fedex.actions";
+import { deleteUpsAwbAction } from "@/lib/actions/ups.actions";
 import { deleteEcoletAwbAction } from "@/lib/actions/ecolet.actions";
 import { detachCOAwb } from "@/lib/actions/colete.actions";
 import { VariantPicker } from "@/components/ministore/VariantPicker";
@@ -367,6 +368,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
        („the package has already been tendered to FedEx") sau dupa inchiderea zilei
        de expeditie — actiunea spune atunci ce mai e de facut. */
     if (order.fedex_awb_number) list.push({ key: "fedex", label: "FedEx", awb: order.fedex_awb_number as string });
+    /* ⚠ UPS ARE anulare in API (`DELETE /api/shipments/v2409/void/cancel/{id}`), deci
+       fara `manualOnly`. Termenul insa NU e codificat de noi: ghidul lor spune 28 de
+       zile, pagina lor de suport spune altceva, iar OpenAPI-ul tace. Se lasa UPS sa
+       raspunda `190101` / `190102`, si actiunea spune omului ce a spus el. */
+    if (order.ups_awb_number) list.push({ key: "ups", label: "UPS", awb: order.ups_awb_number as string });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -657,6 +663,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
          curier — si ar fi raportat succes. */
       else if (key === "shipo") res = await deleteShipoAwbAction(businessId, order.id);
       else if (key === "fedex") res = await deleteFedexAwbAction(businessId, order.id);
+      else if (key === "ups") res = await deleteUpsAwbAction(businessId, order.id);
       else res = await detachCOAwb(businessId, order.id);
       setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }

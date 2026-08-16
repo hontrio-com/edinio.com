@@ -42,6 +42,12 @@ const DUPA_NUME: { fragment: string; id: string; eticheta: string }[] = [
      nesemnalata, iar comerciantul ar fi vazut doua randuri „FedEx" la preturi
      diferite si ar fi crezut ca s-a stricat ceva. */
   { fragment: "fedex", id: "fedex", eticheta: "FedEx" },
+  /* ⚠ De la 16.08.2026 UPS e si integrare directa (al cincisprezecelea curier), deci
+     acelasi curier poate ajunge in checkout si pe contractul comerciantului, si pe al
+     SmartShip. Fara randul asta, suprapunerea aia ar fi ramas nesemnalata, iar
+     comerciantul ar fi vazut doua randuri „UPS" la preturi diferite si ar fi crezut ca
+     s-a stricat ceva. */
+  { fragment: "ups", id: "ups", eticheta: "UPS" },
 ];
 
 /** Cheia de comparatie: fara majuscule, fara separatoare. */

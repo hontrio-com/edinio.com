@@ -35,6 +35,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
      Nepotrivita, pagina se randeaza fara nicio eroare, doar fara sigla. */
   shipo: { src: "/integrations/shipo.ro.svg", alt: "Shipo.ro" },
   fedex: { src: "/integrations/fedex.svg", alt: "FedEx" },
+  ups: { src: "/integrations/ups.svg", alt: "UPS" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },

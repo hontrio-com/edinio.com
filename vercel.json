@@ -104,6 +104,10 @@
     {
       "path": "/api/cron/fedex-tracking",
       "schedule": "47 */2 * * *"
+    },
+    {
+      "path": "/api/cron/ups-tracking",
+      "schedule": "23 */2 * * *"
     }
   ]
 }

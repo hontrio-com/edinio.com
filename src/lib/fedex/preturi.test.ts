@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test, describe } from "node:test";
-import { cheiaOfertei, etichetaOferta, ofertePosibile, VALUTA } from "./preturi";
+import { cheiaOfertei, etichetaOferta, ofertePosibile, VALUTA, verdictTva } from "./preturi";
 
 /*
  * ⚠ CE APARA PROBELE ASTEA.
@@ -214,6 +214,95 @@ describe("FedEx: asezarea si numele", () => {
     }]);
     assert.equal(r.oferte.length, 1);
     assert.equal(r.oferte[0].pret, 25);
+  });
+});
+
+describe("FedEx: TVA-ul se DEDUCE, nu se presupune", () => {
+  /*
+   * Documentatia FedEx nu spune daca `totalNetCharge` include TVA-ul romanesc.
+   * Raspunsul lor insa aduce toate cele trei numere, iar relatia dintre ele o spune.
+   * Aici se apara chiar acea deductie — plus tacerea, acolo unde nu se poate deduce.
+   */
+  test("pret = fara TVA + TVA  →  pretul INCLUDE TVA", () => {
+    assert.equal(verdictTva(121, 100, 21), "include");
+  });
+
+  test("pret = fara TVA, iar TVA-ul e raportat pe langa  →  pretul e FARA TVA", () => {
+    assert.equal(verdictTva(100, 100, 21), "exclude");
+  });
+
+  test("⚠ TVA zero sau lipsa NU inseamna „fara TVA” — inseamna ca nu stim", () => {
+    // Un „fara TVA" afirmat gresit l-ar face pe comerciant sa-si calculeze marja pe
+    // un pret cu o cincime mai mic decat il costa.
+    assert.equal(verdictTva(100, 100, 0), "necunoscut");
+    assert.equal(verdictTva(100, 100, null), "necunoscut");
+    assert.equal(verdictTva(100, null, 21), "necunoscut");
+    assert.equal(verdictTva(null, 100, 21), "necunoscut");
+  });
+
+  test("numere care nu se leaga in niciun fel raman „necunoscut”", () => {
+    assert.equal(verdictTva(150, 100, 21), "necunoscut");
+  });
+
+  test("rotunjirea lor de doi bani nu strica verdictul", () => {
+    assert.equal(verdictTva(121.01, 100, 21), "include");
+    assert.equal(verdictTva(100.01, 100, 21), "exclude");
+  });
+
+  test("verdictul ajunge pe oferta, cu defalcarea", () => {
+    const r = ofertePosibile([{
+      serviceType: "FEDEX_PRIORITY",
+      ratedShipmentDetails: [{
+        rateType: "ACCOUNT",
+        totalNetCharge: 121,
+        totalNetFedExCharge: 100,
+        totalVatCharge: 21,
+        shipmentRateDetail: { currency: "RON" },
+      }],
+    }]);
+    assert.equal(r.oferte[0].verdictTva, "include");
+    assert.equal(r.oferte[0].tva, 21);
+    assert.equal(r.oferte[0].pretFaraTva, 100);
+    assert.equal(r.tva, "include");
+  });
+
+  test("TVA-ul se citeste si din `taxes[]`, dupa TIP, nu dupa nume", () => {
+    // `name` poarta tara („Denmark VAT"), deci n-ar potrivi nimic in Romania.
+    const r = ofertePosibile([{
+      serviceType: "FEDEX_PRIORITY",
+      ratedShipmentDetails: [{
+        rateType: "ACCOUNT",
+        totalNetCharge: 121,
+        totalNetFedExCharge: 100,
+        shipmentRateDetail: {
+          currency: "RON",
+          taxes: [{ type: "VAT", name: "Romania VAT", amount: 21 }, { type: "OTHER", amount: 5 }],
+        },
+      }],
+    }]);
+    assert.equal(r.oferte[0].tva, 21);
+    assert.equal(r.tva, "include");
+  });
+
+  test("⚠ doua servicii cu raspunsuri DIFERITE nu produc o majoritate — produc tacere", () => {
+    const r = ofertePosibile([
+      {
+        serviceType: "FEDEX_PRIORITY",
+        ratedShipmentDetails: [{ rateType: "ACCOUNT", totalNetCharge: 121, totalNetFedExCharge: 100, totalVatCharge: 21, shipmentRateDetail: { currency: "RON" } }],
+      },
+      {
+        serviceType: "FEDEX_FIRST",
+        ratedShipmentDetails: [{ rateType: "ACCOUNT", totalNetCharge: 200, totalNetFedExCharge: 200, totalVatCharge: 42, shipmentRateDetail: { currency: "RON" } }],
+      },
+    ]);
+    assert.equal(r.oferte.length, 2);
+    assert.equal(r.tva, "necunoscut");
+  });
+
+  test("fara niciun TVA raportat, verdictul pe cont e „necunoscut”", () => {
+    const r = ofertePosibile([serviciu("FEDEX_PRIORITY", [{ pret: 40 }])]);
+    assert.equal(r.oferte[0].verdictTva, "necunoscut");
+    assert.equal(r.tva, "necunoscut");
   });
 });
 

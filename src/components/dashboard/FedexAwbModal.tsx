@@ -8,7 +8,7 @@ import {
   coteazaFedexAction, createFedexAwbAction, getFedexEtichetaAction, verificaFedexAwbAction,
 } from "@/lib/actions/fedex.actions";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
-import { cheiaOfertei, etichetaOferta } from "@/lib/fedex/preturi";
+import { cheiaOfertei, etichetaOferta, EXPLICATIE_TVA } from "@/lib/fedex/preturi";
 import type { OfertaFedex } from "@/lib/fedex/client";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
@@ -101,6 +101,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [aleasa, setAleasa] = useState<OfertaFedex | null>(null);
   const [valuteRefuzate, setValuteRefuzate] = useState<string[]>([]);
   const [doarLista, setDoarLista] = useState(false);
+  const [explicatieTva, setExplicatieTva] = useState<string | null>(null);
   const [cotand, setCotand] = useState(false);
   const [emitand, setEmitand] = useState(false);
   const [verificand, setVerificand] = useState(false);
@@ -144,6 +145,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     setOferte(r.oferte);
     setValuteRefuzate(r.valuteRefuzate);
     setDoarLista(r.doarPretDeLista);
+    /* ⚠ Se arata o singura data, deasupra listei: e o proprietate a CONTULUI, nu a
+       fiecarei oferte. Repetat pe fiecare rand ar fi zgomot. */
+    setExplicatieTva(r.oferte.length > 0 ? EXPLICATIE_TVA[r.tva] : null);
 
     if (r.oferte.length === 0) {
       toast.warning(
@@ -302,6 +306,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               </p>
             )}
 
+            {explicatieTva && (
+              <p className="text-[11px] text-muted-foreground">{explicatieTva}</p>
+            )}
+
             {oferte && oferte.length > 0 && (
               <div className="space-y-1.5">
                 {alesDeClient && !oferte.some((o) => o.serviceType === alesDeClient) && (
@@ -323,7 +331,16 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                       {etichetaOferta(o)}
                       {o.serviceType === alesDeClient ? " · ales de client" : ""}
                     </span>
-                    <strong>{o.pret} {o.valuta === "RON" ? "lei" : o.valuta}</strong>
+                    <span className="text-right">
+                      <strong className="block">{o.pret} {o.valuta === "RON" ? "lei" : o.valuta}</strong>
+                      {/* Defalcarea, cand FedEx chiar o da. Fara ea randul ramane curat. */}
+                      {o.verdictTva === "include" && o.tva !== null && (
+                        <span className="block text-[10px] text-muted-foreground">din care TVA {o.tva}</span>
+                      )}
+                      {o.verdictTva === "exclude" && o.tva !== null && (
+                        <span className="block text-[10px] text-muted-foreground">+ TVA {o.tva}</span>
+                      )}
+                    </span>
                   </button>
                 ))}
               </div>

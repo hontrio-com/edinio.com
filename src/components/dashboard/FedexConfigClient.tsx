@@ -68,6 +68,8 @@ type Proba = {
   servicii: string[];
   valuta: string | null;
   virtual: boolean;
+  /** ⚠ Preturile contului includ TVA? Dedus din numerele cotarii de proba. */
+  tva: string;
 };
 
 export function FedexConfigClient({
@@ -179,6 +181,7 @@ export function FedexConfigClient({
       servicii: r.proba.cotare.servicii,
       valuta: r.proba.cotare.valuta,
       virtual: r.proba.cotare.virtual,
+      tva: r.proba.cotare.tva,
     });
 
     if (!r.proba.cotare.ok) { toast.error(r.proba.cotare.mesaj, { duration: 15000 }); return; }
@@ -279,6 +282,13 @@ export function FedexConfigClient({
                   : " — ⚠ magazinul lucreaza in lei. Nu convertim noi sumele, deci FedEx va aparea in checkout la tariful fix. Cere-i reprezentantului FedEx tarife in RON."}
               </span>
             )}
+            {/*
+              ⚠ Raspunsul la intrebarea „preturile FedEx sunt cu sau fara TVA?".
+              Documentatia lor nu o spune pentru Romania, dar raspunsul de cotare
+              aduce toate cele trei numere, deci se DEDUCE aici — o data pe cont,
+              in loc sa fie masurat de om la prima expediere.
+            */}
+            {proba.ok && <span className="block mt-1 text-xs">{proba.tva}</span>}
             {proba.virtual && (
               <span className="block mt-1 text-xs">
                 ⚠ Raspuns din sandbox-ul FedEx: preturile sunt simulate si nu depind de adresa reala.

@@ -19,7 +19,7 @@ import {
   corpExpediere, corpTarife, lipsuriExpediere, referintaComenzii,
   type AdresaComanda, type DateExpediere,
 } from "@/lib/fedex/expediere";
-import { ofertePosibile } from "@/lib/fedex/preturi";
+import { ofertePosibile, type VerdictTva } from "@/lib/fedex/preturi";
 import { serviciiPropuse } from "@/lib/fedex/servicii";
 import type { Json } from "@/types/database.types";
 
@@ -258,6 +258,14 @@ export type RezultatCotare = {
   /** Valutele in care a cotat FedEx si pe care le-am refuzat. Vezi `preturi.ts`. */
   valuteRefuzate: string[];
   doarPretDeLista: boolean;
+  /**
+   * Preturile includ TVA? DEDUS din numerele raspunsului, nu presupus.
+   *
+   * ⚠ Documentatia FedEx nu raspunde la intrebarea asta pentru Romania — dar
+   * raspunsul lor aduce si `totalNetCharge`, si `totalNetFedExCharge` (explicit
+   * fara taxe), si `totalVatCharge`. Relatia dintre ele o inchide. Vezi `verdictTva`.
+   */
+  tva: VerdictTva;
 };
 
 /**

@@ -288,6 +288,64 @@ export function ziuaAzi(acum: Date = new Date()): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Bucharest" }).format(acum);
 }
 
+// ─── TVA: intrebarea la care documentatia lor NU raspunde ─────────────────────
+
+/**
+ * ═══ ⚠ „Include `totalNetCharge` TVA-ul romanesc?" ═══
+ *
+ * Cautat in toate paginile de docs, in `Rate_RateQuotes-Resource.json` si in
+ * `API_Reference_Guide.json`. FedEx spune doar atat:
+ *   - `totalNetFedExCharge` = „totalNetFreight plus totalSurcharges **(not including
+ *     totalTaxes)**" — deci ASTA e sigur fara taxe;
+ *   - `totalVatCharge` = „total value added tax charges (VAT)" — exista separat;
+ *   - `totalNetCharge` = „net charges for the shipment" — si atat.
+ *
+ * La nivel de COLET scriu insa formula: `netCharge` = „netFreight, totalSurcharges
+ * **and** totalTaxes". Prin paralelism ar iesi `totalNetCharge = totalNetFedExCharge
+ * + taxe` — dar paralelismul e o deductie, nu o afirmatie a lor, si nu se scrie un
+ * pret pe o deductie.
+ *
+ * ⚠ SOLUTIA: nu se presupune, si nu se asteapta „prima cheie de cont". Toate trei
+ * numerele vin in ACELASI obiect, deci relatia dintre ele se verifica la fiecare
+ * cotare — codul afla singur raspunsul, pentru fiecare cont in parte.
+ */
+export type VerdictTva = "include" | "exclude" | "necunoscut";
+
+/** Sub cati bani doua sume se considera egale. Rotunjirile lor sunt la doua zecimale. */
+const TOLERANTA_TVA = 0.02;
+
+/**
+ * Pretul include TVA-ul, sau nu? PUR, si dovedit din numere:
+ *
+ *   `pret ≈ faraTva + tva`  → pretul INCLUDE TVA (si `faraTva` e baza de calcul);
+ *   `pret ≈ faraTva`        → pretul e FARA TVA, iar TVA-ul e raportat pe langa;
+ *   orice altceva            → `necunoscut`, si asa se si spune.
+ *
+ * ⚠ `tva` zero sau lipsa NU inseamna „fara TVA": inseamna ca FedEx n-a raportat
+ * niciun TVA pe cotarea aia. Poate fi o expediere scutita, sau un cont care nu
+ * primeste defalcarea. Raspunsul cinstit e `necunoscut`, nu „exclude" — un „fara
+ * TVA" afirmat gresit l-ar face pe comerciant sa-si calculeze marja pe un pret cu
+ * o cincime mai mic decat il costa.
+ */
+export function verdictTva(
+  pret: number | null,
+  faraTva: number | null,
+  tva: number | null,
+): VerdictTva {
+  if (pret === null || faraTva === null || tva === null) return "necunoscut";
+  if (!(tva > 0)) return "necunoscut";
+  if (Math.abs(pret - (faraTva + tva)) <= TOLERANTA_TVA) return "include";
+  if (Math.abs(pret - faraTva) <= TOLERANTA_TVA) return "exclude";
+  return "necunoscut";
+}
+
+/** Cum se spune verdictul unui om. */
+export const EXPLICATIE_TVA: Record<VerdictTva, string> = {
+  include: "Preturile FedEx vin CU TVA inclus.",
+  exclude: "Preturile FedEx vin FARA TVA — el se adauga la facturare.",
+  necunoscut: "FedEx n-a raportat TVA pe cotarile astea, deci nu putem spune daca pretul il include.",
+};
+
 /** Extensia de fisier pentru un format de eticheta. `ZPLII` e text, nu imagine. */
 export function extensiaEtichetei(format: string): string {
   if (format === "PNG") return "png";
@@ -309,6 +367,12 @@ export type OfertaFedex = {
   valuta: string;
   /** `rateType` de pe intrarea aleasa: `ACCOUNT`, `LIST`, `PREFERRED_CURRENCY`… */
   tipTarif: string;
+  /** `totalVatCharge` (sau suma taxelor de tip `VAT`). `null` cand n-au raportat. */
+  tva: number | null;
+  /** `totalNetFedExCharge` — singurul camp despre care FedEx spune ca e FARA taxe. */
+  pretFaraTva: number | null;
+  /** Pretul include TVA? DEDUS din cele trei numere. Vezi `preturi.ts`. */
+  verdictTva: "include" | "exclude" | "necunoscut";
   /** Textul de tranzit, cand FedEx il da („2-7 Business Days", `TWO_DAYS`). */
   tranzit: string | null;
   /** Data estimata de livrare, cand exista. */
@@ -731,7 +795,24 @@ async function apel<T>(
 export type ProbaFedex = {
   mediu: MediuFedex;
   /** Cotarea a mers? Daca da, si ce a intors. */
-  cotare: { ok: boolean; mesaj: string; servicii: string[]; valuta: string | null; virtual: boolean };
+  cotare: {
+    ok: boolean;
+    mesaj: string;
+    servicii: string[];
+    valuta: string | null;
+    virtual: boolean;
+    /**
+     * ⚠ Preturile contului includ TVA?
+     *
+     * Documentatia FedEx NU raspunde la intrebarea asta pentru Romania — dar
+     * raspunsul lor de cotare o face, fiindca aduce toate cele trei numere
+     * (`totalNetCharge`, `totalNetFedExCharge`, `totalVatCharge`). Se deduce aici, o
+     * data, la proba de conexiune: e o proprietate a CONTULUI, nu a comenzii.
+     *
+     * Textul e gata de aratat; verdictul brut vine din `preturi.ts`.
+     */
+    tva: string;
+  };
 };
 
 /**
@@ -768,14 +849,30 @@ export async function probaConexiune(
       .filter(Boolean);
 
     const valute = new Set<string>();
+    const verdicte = new Set<VerdictTva>();
     for (const d of detalii) {
       const rate = (d as { ratedShipmentDetails?: unknown }).ratedShipmentDetails;
       if (!Array.isArray(rate)) continue;
       for (const r2 of rate) {
-        const c = text(((r2 as Record<string, unknown>).shipmentRateDetail as Record<string, unknown> | undefined)?.currency);
+        const intrare = r2 as Record<string, unknown>;
+        const detaliu = intrare.shipmentRateDetail as Record<string, unknown> | undefined;
+        const c = text(detaliu?.currency);
         if (c) valute.add(c);
+
+        /*
+         * ⚠ AICI SE AFLA RASPUNSUL LA INTREBAREA CU TVA-UL, o data pe cont.
+         *
+         * Proba de conexiune chiar coteaza (nu se opreste la un token), deci are in
+         * mana toate cele trei numere. Verdictul se deduce si se arata in pagina de
+         * configurare — comerciantul nu mai trebuie sa-l masoare singur.
+         */
+        const v = verdictTva(numarSauNull(intrare.totalNetCharge), numarSauNull(intrare.totalNetFedExCharge), tvaDinIntrare(intrare));
+        if (v !== "necunoscut") verdicte.add(v);
       }
     }
+
+    /* Doua raspunsuri diferite pe acelasi cont = nu se alege niciunul. */
+    const verdict: VerdictTva = verdicte.size === 1 ? [...verdicte][0] : "necunoscut";
 
     return {
       mediu,
@@ -787,14 +884,46 @@ export async function probaConexiune(
         servicii: [...new Set(servicii)],
         valuta: valute.size > 0 ? [...valute].join(", ") : null,
         virtual: eRaspunsVirtual(alerte),
+        tva: EXPLICATIE_TVA[verdict],
       },
     };
   } catch (e) {
     return {
       mediu,
-      cotare: { ok: false, mesaj: (e as Error).message, servicii: [], valuta: null, virtual: false },
+      cotare: {
+        ok: false, mesaj: (e as Error).message, servicii: [], valuta: null, virtual: false,
+        tva: EXPLICATIE_TVA.necunoscut,
+      },
     };
   }
+}
+
+/**
+ * TVA-ul raportat pe o intrare de tarif.
+ *
+ * ⚠ Se citeste din DOUA locuri: `totalVatCharge` (campul dedicat) si, cand acela
+ * lipseste, suma taxelor de tip `VAT` din `shipmentRateDetail.taxes[]`. Se compara
+ * pe `type`, NU pe `name`: numele lor poarta tara („Denmark VAT"), deci n-ar
+ * potrivi nimic in Romania.
+ */
+export function tvaDinIntrare(intrare: Record<string, unknown>): number | null {
+  const direct = numarSauNull(intrare.totalVatCharge);
+  if (direct !== null && direct > 0) return direct;
+
+  const detaliu = intrare.shipmentRateDetail as Record<string, unknown> | undefined;
+  const taxe = detaliu?.taxes;
+  if (!Array.isArray(taxe)) return direct;
+
+  let suma = 0;
+  let gasit = false;
+  for (const t of taxe) {
+    if (!t || typeof t !== "object") continue;
+    const o = t as Record<string, unknown>;
+    if (text(o.type).toUpperCase() !== "VAT") continue;
+    const a = numarSauNull(o.amount);
+    if (a !== null) { suma += a; gasit = true; }
+  }
+  return gasit ? Math.round(suma * 100) / 100 : direct;
 }
 
 // ─── Cotarea ─────────────────────────────────────────────────────────────────

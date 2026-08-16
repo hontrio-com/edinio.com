@@ -1,4 +1,4 @@
-import type { FedexConfig, OfertaFedex } from "./client";
+import { tvaDinIntrare, verdictTva, type FedexConfig, type OfertaFedex, type VerdictTva } from "./client";
 import { eMarfaGrea, numeServiciu } from "./servicii";
 
 /**
@@ -40,6 +40,16 @@ import { eMarfaGrea, numeServiciu } from "./servicii";
 /** Valuta in care lucreaza platforma. Un singur loc, ca sa nu apara doua adevaruri. */
 export const VALUTA = "RON";
 
+/*
+ * ⚠ TVA-ul se DEDUCE din numerele raspunsului, nu se presupune — vezi antetul lui
+ * `verdictTva` din `client.ts`.
+ *
+ * Sta acolo, si se re-exporta de aici, fiindca il foloseste si `probaConexiune`,
+ * iar `client.ts` nu poate importa din modulul asta (ar fi un ciclu). Aceeasi
+ * asezare ca la `ziuaAzi`.
+ */
+export { verdictTva, EXPLICATIE_TVA, type VerdictTva } from "./client";
+
 function numar(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -62,6 +72,7 @@ function valutaIntrarii(intrare: Record<string, unknown>): string {
   const detaliu = intrare.shipmentRateDetail as Record<string, unknown> | undefined;
   return (text(detaliu?.currency) || text(intrare.currency)).toUpperCase();
 }
+
 
 /**
  * Timpul de tranzit, in forma in care il putem arata.
@@ -123,16 +134,21 @@ function livrareaEstimata(serviciu: Record<string, unknown>): string | null {
  * periculoasa decat una `LIST` in lei: prima ar scrie un numar gresit pe comanda, a
  * doua doar un pret mai mare decat trebuie.
  */
-function tarifulPotrivit(intrari: unknown[]): { pret: number; valuta: string; tipTarif: string } | null {
+type Tarif = { pret: number; valuta: string; tipTarif: string; faraTva: number | null; tva: number | null };
+
+function tarifulPotrivit(intrari: unknown[]): Tarif | null {
   const candidati = intrari
     .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
     .map((x) => ({
       pret: numar(x.totalNetCharge),
       valuta: valutaIntrarii(x),
       tipTarif: text(x.rateType).toUpperCase(),
+      /* ⚠ Singurul camp despre care FedEx spune EXPLICIT ca e fara taxe. */
+      faraTva: numar(x.totalNetFedExCharge),
+      tva: tvaDinIntrare(x),
     }))
     /* Zero sau lipsa NU inseamna „gratuit": inseamna ca n-au cotat. */
-    .filter((x): x is { pret: number; valuta: string; tipTarif: string } => x.pret !== null && x.pret > 0);
+    .filter((x): x is Tarif => x.pret !== null && x.pret > 0);
 
   const inLei = candidati.filter((x) => x.valuta === VALUTA);
   if (inLei.length === 0) return candidati[0] ?? null;
@@ -169,6 +185,14 @@ export type RezultatOferte = {
   valuteRefuzate: string[];
   /** S-a cotat doar la pret de LISTA? Atunci contul n-are tarife negociate. */
   doarPretDeLista: boolean;
+  /**
+   * ⚠ Preturile intoarse includ TVA-ul, sau nu?
+   *
+   * DEDUS din numerele raspunsului, nu presupus — vezi `verdictTva`. E o
+   * proprietate a CONTULUI, nu a comenzii, deci se afla o data si ramane valabila.
+   * Se arata in „Testeaza conexiunea" si langa fiecare oferta din panou.
+   */
+  tva: VerdictTva;
 };
 
 /**
@@ -184,7 +208,7 @@ export function ofertePosibile(
   filtru?: FiltruOferte,
 ): RezultatOferte {
   /* ⚠ Cu ramburs, FedEx nu are ce oferi. Se opreste inainte de orice altceva. */
-  if (filtru?.cuRamburs) return { oferte: [], valuteRefuzate: [], doarPretDeLista: false };
+  if (filtru?.cuRamburs) return { oferte: [], valuteRefuzate: [], doarPretDeLista: false, tva: "necunoscut" };
 
   const permise = new Set(
     (config?.servicii_permise ?? []).map((x) => String(x).trim().toUpperCase()).filter(Boolean),
@@ -192,6 +216,7 @@ export function ofertePosibile(
 
   const oferte: OfertaFedex[] = [];
   const valuteRefuzate = new Set<string>();
+  const verdicteTva = new Set<VerdictTva>();
   const vazute = new Set<string>();
   let tipuri = 0;
   let deLista = 0;
@@ -230,12 +255,18 @@ export function ofertePosibile(
     if (tarif.tipTarif === "LIST") deLista += 1;
 
     vazute.add(serviceType);
+    const verdict = verdictTva(tarif.pret, tarif.faraTva, tarif.tva);
+    if (verdict !== "necunoscut") verdicteTva.add(verdict);
+
     oferte.push({
       serviceType,
       serviceName: numeServiciu(serviceType, text(serviciu.serviceName)),
       pret: Math.round(tarif.pret * 100) / 100,
       valuta: tarif.valuta,
       tipTarif: tarif.tipTarif,
+      tva: tarif.tva,
+      pretFaraTva: tarif.faraTva,
+      verdictTva: verdict,
       tranzit: tranzitul(serviciu),
       livrareEstimata: livrareaEstimata(serviciu),
     });
@@ -245,6 +276,12 @@ export function ofertePosibile(
     oferte: oferte.sort((a, b) => a.pret - b.pret),
     valuteRefuzate: [...valuteRefuzate],
     doarPretDeLista: tipuri > 0 && deLista === tipuri,
+    /*
+     * ⚠ Un singur verdict pe cont. Daca serviciile ar da raspunsuri DIFERITE (unul
+     * cu TVA, altul fara), nu se alege niciunul: „necunoscut" e mai cinstit decat o
+     * majoritate care ascunde ca ei nu sunt consecventi.
+     */
+    tva: verdicteTva.size === 1 ? [...verdicteTva][0] : "necunoscut",
   };
 }
 

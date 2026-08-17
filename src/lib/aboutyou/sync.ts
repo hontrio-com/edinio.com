@@ -7,18 +7,23 @@
 // approval/rejection transitions About You makes on its own side.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logError } from "@/lib/error-logger";
 import type { Database } from "@/types/database.types";
 import type { AboutYouAuth, AboutYouResult } from "./client";
 import {
-  getPriceBatchResults, getProductBatchResults, getProducts, getRejectedProducts, getShipBatchResults,
-  getStatusBatchResults, getStockBatchResults, isAboutYouError, shipOrderItems, updatePrice,
-  updateProductStatus, updateStock, upsertProducts,
+  getCancelBatchResults, getPriceBatchResults, getProductBatchResults, getProducts,
+  getRejectedProducts, getReturnBatchResults, getShipBatchResults, getStatusBatchResults,
+  getStockBatchResults, isAboutYouError, shipOrderItems,
+  updatePrice, updateProductStatus, updateStock, upsertProducts,
 } from "./client";
 import {
-  atasezaPreturileRon, buildAboutYouItems, buildVariantPrices, stocVarianta,
+  atasezaPreturileRon, buildAboutYouItems, buildVariantPrices, deriveVariantSlots, effectiveCategoryId,
+  stocVarianta, validateListing,
   type AboutYouListingEnrichment, type AboutYouStoredMaterial, type AboutYouVariantData,
   type MappableProduct,
 } from "./mapping";
+import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
+import { getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";
 import type { AboutYouConfig, AboutYouRejectionReason } from "./types";
 
@@ -105,7 +110,7 @@ function toEnrichment(row: ListingRow): AboutYouListingEnrichment {
 async function getVariantData(admin: Db, listingId: string): Promise<AboutYouVariantData[]> {
   const { data } = await admin
     .from("aboutyou_variants")
-    .select("sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled")
+    .select("sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled, ay_status")
     .eq("listing_id", listingId);
   return (data ?? []).map((v) => ({
     sku: v.sku,
@@ -116,7 +121,17 @@ async function getVariantData(admin: Db, listingId: string): Promise<AboutYouVar
     quantity: v.quantity,
     retail_price_eur: v.retail_price_eur,
     sale_price_eur: v.sale_price_eur,
-    enabled: v.enabled,
+    /*
+     * DOUA INTELESURI DIFERITE, tinute in doua coloane diferite.
+     *
+     * `enabled` e VOINTA COMERCIANTULUI: a bifat sau nu varianta in editor.
+     * `ay_status` e ce am facut NOI cu ea la About You. O prima versiune stingea
+     * `enabled` la retragere si le amesteca: o varianta care revenea pe produs
+     * rămânea stinsa pe veci, fiindca nu se mai putea deosebi de una scoasa
+     * intentionat. Aici doar le compunem pentru payload — retrasa nu pleaca —, dar
+     * coloana pastreaza ce a vrut omul.
+     */
+    enabled: v.enabled && v.ay_status !== "removing" && v.ay_status !== "removed",
   }));
 }
 
@@ -129,13 +144,186 @@ async function setListingStatus(
     .eq("id", listingId);
 }
 
-async function recordBatch(
+export async function recordBatch(
   admin: Db, businessId: string, batchRequestId: string, kind: string, relatedIds: string[],
 ): Promise<void> {
+  /*
+   * Contoarele se pun pe ZERO la fiecare inregistrare.
+   *
+   * About You deduplica payload-urile identice pe acelasi `batchRequestId`, deci
+   * randul poate fi REDESCHIS pentru un lot nou. Fara resetare, un ciclu incheiat
+   * isi scurgea contoarele in urmatorul: lotul nou pornea cu esecuri mostenite si
+   * putea fi abandonat din prima.
+   */
   await admin.from("aboutyou_batches").upsert(
-    { business_id: businessId, batch_request_id: batchRequestId, kind, status: "pending", related_ids: relatedIds as never },
+    {
+      business_id: businessId, batch_request_id: batchRequestId, kind, status: "pending",
+      related_ids: relatedIds as never, attempts: 0, poll_errors: 0,
+      polled_at: null, result_summary: null,
+    },
     { onConflict: "business_id,batch_request_id" },
   );
+}
+
+/*
+ * ── Reconcilierea variantelor ────────────────────────────────────────────────
+ *
+ * `aboutyou_variants` nu se punea NICIODATA de acord cu variantele reale ale
+ * produsului. Randurile se scriau intr-un singur loc — apasarea pe „Salvează" in
+ * editor — iar trimiterea citea exclusiv de acolo. Adica:
+ *
+ *   ce pleaca la About You = setul de variante din momentul ultimei salvari,
+ *   nu setul de acum.
+ *
+ * Trei urmari, toate tacute: marimea adaugata dupa aceea nu ajungea niciodata
+ * („Missing rows are simply ignored" — documentatia lor); marimea stearsa pleca
+ * mai departe cu pretul de baza; iar o marime scoasa de la vanzare rămânea
+ * vandabila acolo. Trendyol facea deja reconcilierea corect; aici lipsea.
+ *
+ * ═══ DOUA HOTARARI CARE PAR OCOLISURI SI NU SUNT ═══
+ *
+ * 1. RANDUL LOCAL NU SE STERGE NICIODATA, doar se marcheaza. E singura urma a
+ *    maparii `sku -> product_id + variant_title`, iar `orders.ts` o foloseste ca
+ *    sa lege o comanda de produs si sa scada stocul combinatiei. Sters, o comanda
+ *    sosita pe acel SKU — About You poate trimite una si dupa retragere — intra cu
+ *    `product_id` null, fara nicio scadere de stoc si fara niciun avertisment.
+ *    Randul retras nu strica nimic: `enabled: false` il tine afara din payload.
+ *
+ * 2. SCOATEREA SE FACE PRIN STOC 0, nu prin stergere. `DELETE /products/{sku}`
+ *    exista (50 de cereri pe minut), dar documentatia lor il refuza pentru orice
+ *    varianta cu vanzari inregistrate si pentru cele in „Active"/„Pending Active" —
+ *    adica exact pentru cele pe care am vrea sa le scoatem. Iar bugetul nu ajunge:
+ *    cronul ia 30 de elemente pe rulare, deci ar iesi sute de cereri de stergere
+ *    pe minut fata de cele 50 permise, plus secunde de asteptare intr-o fereastra
+ *    de un minut. Stocul 0 e mecanismul lor propriu si e o singura cerere in lot
+ *    pentru toate SKU-urile.
+ */
+interface RandVarianta {
+  id: string; sku: string; enabled: boolean; ay_status: string | null; variant_title: string | null;
+}
+
+type RezultatReconciliere = { ok: true } | { ok: false; error: string; status?: number };
+
+async function reconciliazaVariante(
+  admin: Db, ctx: AboutYouSyncContext, listing: ListingRow, produs: MappableProduct,
+): Promise<RezultatReconciliere> {
+  const slots = deriveVariantSlots(produs);
+  const dupaSku = new Map(slots.map((s) => [s.sku, s]));
+
+  const { data, error } = await admin
+    .from("aboutyou_variants").select("id, sku, enabled, ay_status, variant_title").eq("listing_id", listing.id);
+  /*
+   * O citire cazuta nu inseamna „nu exista variante".
+   *
+   * Tratata ca lista goala, toate randurile ar aparea drept disparute de pe
+   * produs. Se raporteaza ca esec TRECATOR (`status: 0`), deci cronul reia fara
+   * sa consume o incercare — inainte ieseam tacut si scoaterea nu se mai relua.
+   */
+  if (error) return { ok: false, error: `Nu am putut citi variantele: ${error.message}`, status: 0 };
+  const randuri = (data ?? []) as RandVarianta[];
+  const dupaSkuLocal = new Map(randuri.map((r) => [r.sku, r]));
+
+  // 1) Variante aparute pe produs dupa ultima salvare.
+  const noi = slots.filter((s) => !dupaSkuLocal.has(s.sku));
+  if (noi.length > 0) {
+    const { error: eInsert } = await admin.from("aboutyou_variants").insert(noi.map((s) => ({
+      listing_id: listing.id, business_id: ctx.businessId, product_id: listing.product_id,
+      // `variantTitle`, nu `label`: dupa el se scade stocul combinatiei la o
+      // comanda. „Unic" n-ar corespunde niciunei combinatii si ar da alarme false.
+      sku: s.sku, ean: s.gtin, quantity: s.quantity, variant_title: s.variantTitle, enabled: true,
+    })) as never);
+    /*
+     * Eroarea se CITESTE. `UNIQUE (business_id, sku)` respinge intreg lotul cand
+     * un singur SKU e folosit de alt produs, iar inghitita, reconcilierea se
+     * oprea aici la fiecare rulare, la nesfarsit, fara nicio urma: variantele noi
+     * nu ajungeau niciodata pe About You si nimeni nu afla de ce.
+     */
+    if (eInsert) {
+      return { ok: false, error: `Nu am putut adăuga variantele noi: ${eInsert.message}. Verifică să nu folosești același SKU la două produse.` };
+    }
+  }
+
+  /*
+   * 2) Titlurile combinatiilor se REIMPROSPATEAZA.
+   *
+   * Se scriau o singura data, la creare. Un titlu schimbat in fisa produsului cu
+   * SKU-ul pastrat lasa in baza titlul vechi, iar scaderea de stoc pe combinatie
+   * cauta ceva ce nu mai exista — tacut.
+   */
+  for (const r of randuri) {
+    const slot = dupaSku.get(r.sku);
+    if (slot && slot.variantTitle !== r.variant_title) {
+      await admin.from("aboutyou_variants")
+        .update({ variant_title: slot.variantTitle } as never).eq("id", r.id);
+    }
+  }
+
+  /*
+   * 3) Ce nu mai are ce cauta pe About You: variantele disparute de pe produs
+   *    (inclusiv cele doar dezactivate in fisa, pentru ca `combinatii()` le
+   *    filtreaza si atunci nu mai produc slot) si cele scoase din listare.
+   *    `ay_status = "removed"` opreste repetarea; se sterge cand varianta revine.
+   */
+  /*
+   * `removing` NU opreste reincercarea — doar `removed` o face.
+   *
+   * Exclus si el, o varianta al carei lot de stoc pica rămânea „in curs de
+   * retragere" pentru totdeauna: nu mai intra in `deScos`, deci zeroul nu se mai
+   * cerea niciodata, iar `pollOpenBatches` nu marca nimic pe esec. Comentariul de
+   * mai jos sustinea contrariul. Reluarea e ieftina: acelasi payload primeste
+   * acelasi `batchRequestId`.
+   */
+  const deScos = randuri.filter((r) => (!dupaSku.has(r.sku) || !r.enabled) && r.ay_status !== "removed");
+
+  if (deScos.length > 0) {
+    if (listing.last_synced_at != null) {
+      const lot = deScos.slice(0, MAX_ITEMI_STOC_PRET);
+      const zero = await updateStock(ctx.auth, lot.map((r) => ({ sku: r.sku, quantity: 0 })));
+      if (isAboutYouError(zero)) {
+        return { ok: false, error: `Nu am putut retrage variantele scoase: ${zero.error}`, status: zero.status };
+      }
+      /*
+       * MARCAJUL „RETRAS" NU SE PUNE PE ACCEPTARE.
+       *
+       * Un 2xx spune doar ca lotul a fost PRIMIT, iar documentatia lor e explicita:
+       * „un lot cu `status: completed` poate conține items cu `success: false`".
+       * Marcat aici, un zero neaplicat rămânea nevazut — si randul nu se mai
+       * intorcea niciodata, fiindca ramura de reactivare cere `enabled: true`, exact
+       * ce tocmai stinsesem. Varianta rămânea vandabila pe About You la nesfarsit.
+       *
+       * Deci: acum se stinge doar `enabled` (ca sa nu mai plece in niciun payload),
+       * iar `ay_status = "removed"` il pune `pollOpenBatches` cand lotul se incheie
+       * cu succes. Lotul poarta tipul `stock_removal` si, in `related_ids`, ID-URILE
+       * RANDURILOR — nu `style_key`, cum face impingerea obisnuita de stoc. Pana
+       * atunci randul reintra in `deScos` si zeroul se reincearca; payload-ul
+       * identic primeste acelasi `batchRequestId`, deci reluarea e ieftina.
+       */
+      await admin.from("aboutyou_variants")
+        .update({ ay_status: "removing" } as never).in("id", lot.map((r) => r.id));
+      const idLot = zero.data?.batchRequestId;
+      if (idLot) await recordBatch(admin, ctx.businessId, idLot, "stock_removal", lot.map((r) => r.id));
+    } else {
+      // Listarea n-a plecat niciodata spre About You: nu e nimic de retras acolo,
+      // deci marcajul se poate pune direct.
+      await admin.from("aboutyou_variants")
+        .update({ ay_status: "removed" } as never).in("id", deScos.map((r) => r.id));
+    }
+  }
+
+  /*
+   * 4) Variantele revenite se retrimit, deci semnul de „retras" cade.
+   *
+   * Conditia e „slotul exista SI comerciantul o vrea activa": `enabled` a rămas
+   * neatins de retragere tocmai ca sa se poata deosebi aici o varianta revenita pe
+   * produs de una scoasa intentionat din listare.
+   */
+  const reactivate = randuri.filter((r) => dupaSku.has(r.sku) && r.enabled
+    && (r.ay_status === "removing" || r.ay_status === "removed"));
+  if (reactivate.length > 0) {
+    await admin.from("aboutyou_variants")
+      .update({ ay_status: null } as never).in("id", reactivate.map((r) => r.id));
+  }
+  return { ok: true };
 }
 
 // ── Upsert (create/update on About You) ─────────────────────────────────────────
@@ -158,20 +346,102 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: false, error: "Produsul nu are configurare About You. Completează detaliile de listare mai întâi." };
 
-  // Deactivated in Edinio -> set inactive on About You instead of relisting it.
+  /*
+   * Dezactivat in Edinio -> dezactivat si pe About You.
+   *
+   * „Exista acolo?" se citeste din `last_synced_at`, nu dintr-o lista de
+   * statusuri — aceeasi capcana pe care `stergeListare` o are explicata mai jos.
+   * Lista de dinainte omitea `error`, `problem` si `rejected`, iar de cand
+   * validarea locala poate muta o listare pe `error`, cazul devenise usor de
+   * atins: produsul scos de la vanzare in Edinio rămânea VANDABIL pe About You,
+   * elementul se stergea din coada ca reusit, si nimic nu semnala nimic. Despre
+   * `problem`, documentatia lor spune chiar ca produsul revine singur pe `active`
+   * dupa ce cauza dispare.
+   */
   if ((product as { is_active?: boolean }).is_active === false) {
-    if (["pending", "draft", "active", "pending_approval", "pending_active"].includes(listing.status)) {
-      return setRemoteStatus(admin, ctx, productId, "inactive");
+    if (listing.last_synced_at != null) {
+      /*
+       * Tinta se alege dupa unde a ajuns produsul, nu `inactive` orbeste.
+       * Documentatia: „Only previously published products can be set to
+       * `inactive`", iar un produs aflat in aprobare nu accepta decat `draft`.
+       * Cererea respinsa nu lasa nicio urma, iar About You termina aprobarea si
+       * produsul devine ACTIV — cu stocul intreg — desi comerciantul tocmai il
+       * scosese de la vanzare.
+       */
+      return setRemoteStatus(admin, ctx, productId, tintaRetragere(listing.status));
     }
     return { ok: true, action: "skipped" };
   }
 
   const produs = product as unknown as MappableProduct;
+  const enrichment = toEnrichment(listing);
+  // Intai punem randurile de acord cu variantele reale ale produsului, apoi le
+  // citim: altfel am trimite setul inghetat la ultima salvare din editor.
+  const rec = await reconciliazaVariante(admin, ctx, listing, produs);
+  if (!rec.ok) {
+    /*
+     * Esecul reconcilierii OPRESTE trimiterea si se vede.
+     *
+     * Intorcea `void`, deci un esec era complet tacit: elementul se stergea din
+     * coada ca reusit, iar variantele ramaneau nesincronizate pe vecie. Pe cauze
+     * trecatoare lasam listarea in pace, ca sa nu apara rosie degeaba.
+     */
+    const trecator = rec.status === 0 || rec.status === 429 || (rec.status ?? 0) >= 500;
+    if (!trecator) await setListingStatus(admin, listing.id, "error", { error: rec.error });
+    return { ok: false, error: rec.error, status: rec.status };
+  }
   const variants = atasezaPreturileRon(produs, await getVariantData(admin, listing.id));
+
+  /*
+   * VALIDAREA COMPLETA SE FACE SI AICI, nu doar in editor.
+   *
+   * `validateListing` era chemata dintr-un singur loc: butonul „Salvează și
+   * trimite". Calea automata — `auto_sync` pornit, o schimbare de pret, o
+   * comanda, cronul — ajungea direct la `buildAboutYouItems`, care se opreste la
+   * PRIMA problema si nu verifica deloc materialul. Asa plecau spre About You
+   * produse fara compozitie si fara EAN, iar comerciantul afla peste zile, din
+   * „produs respins", fara sa i se spuna ce lipseste.
+   */
+  const cerinta = await getCerintaMaterial(ctx.auth, effectiveCategoryId(ctx.config, produs, enrichment));
+  if (!cerinta.ok) {
+    /*
+     * DOUA FELURI DE ESEC, cu tratament opus.
+     *
+     * O limita de rata sau o pana de retea sunt trecatoare: intorcem codul HTTP,
+     * iar cronul reincearca FARA sa consume o incercare (vezi `eTrecatoare` din
+     * ruta de cron). Nu marcam listarea, ca sa nu apara rosie pentru ceva ce
+     * comerciantul nu are cum sa repare.
+     *
+     * O cheie invalidata (401), o categorie stearsa din taxonomie (404) sau un
+     * raspuns gol NU trec singure. Pe acele coduri cronul consuma incercari si,
+     * la a cincea, STERGE randul din coada — asa se pierdea sincronizarea
+     * definitiv, fara status, fara jurnal si fara nimic vizibil in panou.
+     */
+    // `200` inseamna „ne-au raspuns, dar fara nicio categorie": tot o
+    // indisponibilitate a lor. Il traducem in `0`, codul pe care ruta de cron il
+    // citeste ca trecator alaturi de 429 si 5xx.
+    const status = cerinta.status === 200 ? 0 : cerinta.status;
+    const trecatoare = status === 0 || status === 429 || status >= 500;
+    const mesaj = `Nu am putut citi taxonomia About You: ${cerinta.error}`;
+    if (!trecatoare) {
+      await setListingStatus(admin, listing.id, "error", { error: mesaj });
+    }
+    return { ok: false, error: mesaj, status };
+  }
+  const verificare = validateListing(
+    { config: ctx.config, product: produs, listing: enrichment, variants },
+    { tip: cerinta.tip, path: cerinta.path },
+  );
+  if (verificare.issues.length > 0) {
+    const rezumat = verificare.issues.slice(0, 5).join(" ").slice(0, 500);
+    await setListingStatus(admin, listing.id, "error", { error: rezumat });
+    return { ok: false, error: rezumat };
+  }
+
   const built = buildAboutYouItems({
     config: ctx.config,
     product: produs,
-    listing: toEnrichment(listing),
+    listing: enrichment,
     variants,
   });
   if ("error" in built) {
@@ -207,13 +477,34 @@ async function setRemoteStatus(
 ): Promise<SyncOutcome> {
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: false, error: "Listarea About You nu există." };
+
+  /*
+   * Nu se poate schimba statusul unui produs care nu exista pe About You.
+   *
+   * `PUT /products/status` lucreaza pe `style_key`, adica pe product master-ul
+   * creat de `POST /products/`. O listare salvata doar local nu are asa ceva,
+   * deci cererea esueaza — dar esua TACUT: elementul se reincerca de cinci ori
+   * si apoi disparea din coada cu tot cu motiv, iar comerciantul vedea „Publicat
+   * pe About You" pentru un produs care nu ajunsese niciodata acolo.
+   */
+  if (listing.last_synced_at == null) {
+    if (status === "published") {
+      return { ok: false, error: "Trimite întâi produsul pe About You, apoi publică-l." };
+    }
+    // Retragere sau dezactivare a unei listari care exista doar la noi: nu avem
+    // ce cere de la About You, doar reflectam local.
+    await setListingStatus(admin, listing.id, status === "inactive" ? "inactive" : "local", { error: null });
+    return { ok: true, action: "skipped" };
+  }
+
   const res = await updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }]);
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", { error: res.error });
     return { ok: false, error: res.error, status: res.status };
   }
   const batchRequestId = res.data?.batchRequestId;
-  await setListingStatus(admin, listing.id, status === "published" ? "pending" : "inactive", { error: null });
+  const statusLocal = status === "published" ? "pending" : status === "inactive" ? "inactive" : "draft";
+  await setListingStatus(admin, listing.id, statusLocal, { error: null });
   if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "status", [listing.style_key]);
   return { ok: true, action: "published", batchRequestId };
 }
@@ -221,8 +512,37 @@ async function setRemoteStatus(
 export function publishProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
   return setRemoteStatus(admin, ctx, productId, "published");
 }
-export function unpublishProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
-  return setRemoteStatus(admin, ctx, productId, "inactive");
+/*
+ * Retragerea: `draft` INAINTE de aprobare, `inactive` DUPA.
+ *
+ * Documentatia lor e explicita: „Reverting to `draft` is only supported before the
+ * product reaches approval, after which one should use `inactive`." Trimiteam
+ * `inactive` mereu, deci pentru un produs aflat in aprobare cererea putea fi
+ * respinsa — iar comerciantul primea „Produsul a fost retras". Ramura `draft` din
+ * `setRemoteStatus` exista de la inceput si nu era apelata de nimeni.
+ */
+/*
+ * Statusuri raportate de ABOUT YOU care inseamna „inca nu a trecut de aprobare".
+ *
+ * ⚠ Aici au voie DOAR statusurile lor. Prima varianta continea si `pending` si
+ * `error`, care sunt LOCALE si se scriu peste produse demult aprobate — un esec de
+ * articol la actualizare lasa produsul `active` la ei si `error` la noi. Pentru
+ * acelea am fi cerut `draft`, iar documentatia il refuza: „Once a product has been
+ * approved, it can no longer be set back to `draft`". Cererea cadea, se scria iar
+ * `error`, si urmatoarea incercare calcula tot `draft`: bucla infinita, cu produsul
+ * ramas vandabil.
+ */
+const INAINTE_DE_APROBARE = new Set(["draft", "pending_approval", "rejected"]);
+
+/** Ce status se cere la About You cand retragem, dupa unde a ajuns produsul. */
+function tintaRetragere(status: string): "draft" | "inactive" {
+  return INAINTE_DE_APROBARE.has(status) ? "draft" : "inactive";
+}
+
+export async function unpublishProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
+  const listing = await getListing(admin, ctx.businessId, productId);
+  if (!listing) return { ok: false, error: "Listarea About You nu există." };
+  return setRemoteStatus(admin, ctx, productId, tintaRetragere(listing.status));
 }
 
 /*
@@ -248,17 +568,53 @@ async function stergeListare(
    * se scrie o singura data, cand produsul chiar a plecat, si nu se mai retrage.
    */
   const eDoarLocala = listing.last_synced_at == null;
-  if (!eDoarLocala) {
-    const res = await updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status: "inactive" }]);
-    if (isAboutYouError(res)) {
-      await setListingStatus(admin, listing.id, "error", {
-        error: `Nu am putut dezactiva produsul pe About You: ${res.error}`,
-      });
-      return { ok: false, error: res.error, status: res.status };
-    }
+  if (eDoarLocala) {
+    await admin.from("aboutyou_listings").delete().eq("id", listing.id);
+    return { ok: true, action: "removed" };
   }
-  await admin.from("aboutyou_listings").delete().eq("id", listing.id);
-  return { ok: true, action: "removed" };
+
+  /*
+   * ⚠ ACCEPTAREA NU E REUSITA, iar aici diferenta costa cel mai mult.
+   *
+   * `PUT /products/status` e ASINCRON: 200 inseamna „am primit cererea", iar
+   * verdictul vine din `/results/status`. `isAboutYouError` e fals pentru orice
+   * cerere acceptata, deci garda descrisa mai sus nu acoperea cazul real: randul
+   * se stergea imediat, `ON DELETE CASCADE` lua cu el si `aboutyou_variants` cu
+   * toata maparea SKU, elementul ieșea din coada ca reusit — iar daca About You
+   * respingea dezactivarea, produsul rămânea ACTIV si vandabil, fara `style_key`
+   * la noi si fara niciun rand de apasat. Comenzile care intrau dupa aceea nu mai
+   * gaseau produsul si nu scadeau stoc.
+   *
+   * Acum lotul se INREGISTREAZA cu tipul `removal`, statusul listarii nu se atinge,
+   * iar `pollOpenBatches` sterge randul abia cand lotul se incheie cu bine.
+   */
+  const res = await updateProductStatus(
+    ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }]);
+  if (isAboutYouError(res)) {
+    await setListingStatus(admin, listing.id, "error", {
+      error: `Nu am putut retrage produsul de pe About You: ${res.error}`,
+    });
+    return { ok: false, error: res.error, status: res.status };
+  }
+
+  /*
+   * ⚠ STATUSUL LISTARII NU SE ATINGE AICI, deliberat.
+   *
+   * O prima varianta punea un status propriu, „removing", si astepta ca lotul sa-l
+   * gaseasca. Se agata pe SASE cai diferite: abandonul la 120 de treceri si
+   * renuntarea la sase esecuri de interogare filtreaza dupa „pending"; un raspuns
+   * fara `batchRequestId` nu inregistra niciun lot; iar `reconcileStatuses` scrie
+   * statusul venit de la About You peste el — CHIAR IN ACEEASI rulare a cronului,
+   * fiindca pasul 3 vine dupa pasul 1. Randul rămânea in panou pe vecie, dupa ce
+   * comerciantul apasase „Elimină".
+   *
+   * Acum semnul e pe LOT, nu pe listare: `kind = "removal"`. Daca lotul nu se
+   * aseaza niciodata, randul rămâne exact cum era — vizibil, cu statusul lui
+   * adevarat — si omul poate apasa din nou. Nicio stare fara ieșire.
+   */
+  const idLot = res.data?.batchRequestId;
+  if (idLot) await recordBatch(admin, ctx.businessId, idLot, "removal", [listing.style_key]);
+  return { ok: true, action: "removed", batchRequestId: idLot };
 }
 
 export async function removeProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
@@ -274,12 +630,29 @@ export async function removeByStyleKey(admin: Db, ctx: AboutYouSyncContext, styl
 }
 
 // ── Batch polling (cron) ────────────────────────────────────────────────────────
-interface BatchRow { id: string; batch_request_id: string; kind: string; related_ids: unknown; attempts: number }
+interface BatchRow {
+  id: string; batch_request_id: string; kind: string; related_ids: unknown;
+  attempts: number; poll_errors: number;
+}
+
+/** Trece pe „error" listarile unui lot care s-a inchis fara sa se fi asezat. */
+async function marcheazaListarileLotului(
+  admin: Db, ctx: AboutYouSyncContext, b: BatchRow, mesaj: string,
+): Promise<void> {
+  if (b.kind !== "product" && b.kind !== "status") return;
+  const styleKeys = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+  for (const sk of styleKeys) {
+    const listing = await getListingByStyleKey(admin, ctx.businessId, sk);
+    if (listing && listing.status === "pending") {
+      await setListingStatus(admin, listing.id, "error", { error: mesaj });
+    }
+  }
+}
 
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
   const { data } = await admin
     .from("aboutyou_batches")
-    .select("id, batch_request_id, kind, related_ids, attempts")
+    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors")
     .eq("business_id", ctx.businessId)
     .in("status", ["pending", "processing", "retry"])
     .order("submitted_at", { ascending: true })
@@ -288,21 +661,66 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
 
   for (const b of batches) {
     const res =
-      b.kind === "status" ? await getStatusBatchResults(ctx.auth, b.batch_request_id)
-      : b.kind === "stock" ? await getStockBatchResults(ctx.auth, b.batch_request_id)
+      // `removal` e tot o schimbare de status la ei; difera doar ce facem noi cu
+      // rezultatul, iar rezultatul se citeste de pe aceeasi ruta.
+      b.kind === "status" || b.kind === "removal" ? await getStatusBatchResults(ctx.auth, b.batch_request_id)
+      : b.kind === "stock" || b.kind === "stock_removal" ? await getStockBatchResults(ctx.auth, b.batch_request_id)
       : b.kind === "price" ? await getPriceBatchResults(ctx.auth, b.batch_request_id)
       : b.kind === "ship" ? await getShipBatchResults(ctx.auth, b.batch_request_id)
+      : b.kind === "cancel" ? await getCancelBatchResults(ctx.auth, b.batch_request_id)
+      : b.kind === "return" ? await getReturnBatchResults(ctx.auth, b.batch_request_id)
       : await getProductBatchResults(ctx.auth, b.batch_request_id);
     const now = new Date().toISOString();
 
     if (isAboutYouError(res)) {
+      /*
+       * CONTOR PROPRIU pentru esecurile de TRANSPORT.
+       *
+       * Amandouă buclele foloseau `attempts`, cu praguri diferite: 120 pentru „nu
+       * s-a asezat inca", 6 pentru „interogarea a picat". Deci un lot care
+       * aștepta legitim sase minute ajungea la `attempts = 6`, iar primul 429 pe
+       * `/results/products` — 200 de cereri pe minut, chemat de zeci de ori — il
+       * trecea pe `failed`. Selectia de mai sus exclude `failed`, deci lotul nu
+       * mai era interogat NICIODATA, iar listarea rămânea „pending" pe vecie: nu
+       * ajungea `draft`, „Publică toate" o sarea, si omul vedea „in curs" mereu.
+       */
+      const esecuri = b.poll_errors + 1;
+      const renuntam = esecuri >= 6;
       await admin.from("aboutyou_batches")
-        .update({ attempts: b.attempts + 1, polled_at: now, status: b.attempts + 1 >= 6 ? "failed" : "retry" } as never)
+        .update({ poll_errors: esecuri, polled_at: now, status: renuntam ? "failed" : "retry" } as never)
         .eq("id", b.id);
+      /*
+       * ⚠ LISTAREA NU SE VOPSESTE IN ROSU PENTRU O CAUZA TRECATOARE.
+       *
+       * Un 429 sau un 5xx pe ruta de rezultate nu spune NIMIC despre produs — el
+       * poate fi deja acceptat la About You. Marcata „error", listarea nu mai
+       * ajungea niciodata `draft`, deci „Publică toate" o sarea; iar „error" nu e
+       * nici in `PENDING_STATUSES`, nici in `ACTIVE_STATUSES`, deci magazinul nu
+       * mai era ales nici pentru reconciliere. Defectul pe care C6 il repara ar
+       * fi fost doar mutat din „in asteptare pe veci" in „eroare pe veci".
+       *
+       * Lasata pe „pending", listarea ramane in selectia de reconciliere, iar
+       * statusul adevarat se citeste de la About You la trecerea urmatoare. Doar
+       * cauzele PERMANENTE (cheie invalidata, lot necunoscut) se scriu pe listare.
+       */
+      const trecator = res.status === 0 || res.status === 429 || res.status >= 500;
+      if (renuntam && !trecator) {
+        await marcheazaListarileLotului(admin, ctx, b, `Nu am putut citi rezultatul de la About You: ${res.error}`);
+      }
       continue;
     }
     const result = res.data;
-    if (!result || result.status === "pending" || result.status === "processing" || result.status === "retry") {
+    /*
+     * LOTUL E INCHEIAT doar pe LISTA ALBA, nu prin excludere.
+     *
+     * Conditia era „nu e pending/processing/retry", deci un corp gol, un JSON
+     * necitibil (clientul da `{}` pe parsare esuata) sau un status nou introdus de
+     * ei cadeau toate pe ramura de INCHEIERE — cu `items` gol, deci zero erori,
+     * deci SUCCES. Listarea trecea pe „ciornă" si comerciantul o publica, desi
+     * About You nu primise nimic.
+     */
+    const incheiat = result?.status === "completed" || result?.status === "failed";
+    if (!incheiat) {
       /*
        * Un lot care nu se aseaza NU poate ramane deschis la nesfarsit.
        *
@@ -318,20 +736,18 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
       await admin.from("aboutyou_batches").update({
         attempts: incercari,
         polled_at: now,
+        /*
+         * Interogarea a RASPUNS, deci sirul de esecuri de transport s-a rupt.
+         * Fara resetare, pragul de 6 numara esecuri NECONSECUTIVE: un lot deschis
+         * legitim doua ore aduna sase hopuri raspandite si e ucis oricum.
+         */
+        poll_errors: 0,
         ...(abandonat
           ? { status: "failed", result_summary: { status: result?.status ?? "necunoscut", abandonat: true } as never }
           : {}),
       } as never).eq("id", b.id);
-      if (abandonat && (b.kind === "product" || b.kind === "status")) {
-        const styleKeys = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
-        for (const sk of styleKeys) {
-          const listing = await getListingByStyleKey(admin, ctx.businessId, sk);
-          if (listing && listing.status === "pending") {
-            await setListingStatus(admin, listing.id, "error", {
-              error: "About You nu a finalizat procesarea. Încearcă din nou.",
-            });
-          }
-        }
+      if (abandonat) {
+        await marcheazaListarileLotului(admin, ctx, b, "About You nu a finalizat procesarea. Încearcă din nou.");
       }
       continue;
     }
@@ -339,7 +755,16 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
     // Completed or failed: aggregate per-style errors and settle the batch.
     const styleKeys = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
     const errors = (result.items ?? []).filter((it) => !it.success).flatMap((it) => it.errors ?? []);
-    const hardFail = result.status === "failed" || errors.length > 0;
+    /*
+     * Verdictul se ia din `success`, nu din numarul de texte de eroare.
+     *
+     * `UpsertProductResultItemSchema` cere `errors` in raspuns, dar nimic nu
+     * garanteaza ca e nevida cand `success` e `false`. Socotit pe `errors.length`,
+     * un articol respins cu lista goala trecea drept REUSIT: listarea ajungea
+     * „ciornă", comerciantul o publica, si About You nu avea ce publica.
+     */
+    const esuate = (result.items ?? []).filter((it) => !it.success).length;
+    const hardFail = result.status === "failed" || esuate > 0;
 
     /*
      * Loturile de expediere isi aseaza propria comanda.
@@ -349,6 +774,43 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
      * reusita si nimeni n-o mai relua — clientul astepta un colet despre care
      * marketplace-ul nu stia nimic.
      */
+    /*
+     * Retragerea unei variante se confirma ABIA AICI.
+     *
+     * `reconciliazaVariante` a stins doar `enabled`; marcajul „retras" se pune cand
+     * stocul zero a fost chiar aplicat. Pe eșec nu marcam nimic: randul reintra in
+     * `deScos` la trecerea urmatoare si zeroul se reincearca. `related_ids` poarta
+     * aici id-urile RANDURILOR din `aboutyou_variants`.
+     */
+    if (b.kind === "stock_removal") {
+      if (!hardFail) {
+        const ids = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+        if (ids.length > 0) {
+          await admin.from("aboutyou_variants")
+            .update({ ay_status: "removed", updated_at: now } as never).in("id", ids);
+        }
+      }
+    }
+
+    /*
+     * Anularea si returul isi inchid propria comanda.
+     *
+     * Lotul lor nu se inregistra deloc, deci `cancel_pending` / `return_pending`
+     * erau stari fara ieșire: comerciantul vedea „in curs" pentru totdeauna, fara
+     * sa afle daca About You a acceptat. Statusul de esec il lasa vizibil, ca sa se
+     * poata relua din panou.
+     */
+    if (b.kind === "cancel" || b.kind === "return") {
+      const orderIds = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+      const reusit = b.kind === "cancel" ? "cancelled" : "returned";
+      const esuat = b.kind === "cancel" ? "cancel_failed" : "return_failed";
+      for (const oid of orderIds) {
+        await admin.from("aboutyou_orders")
+          .update({ status: hardFail ? esuat : reusit, last_synced_at: now, updated_at: now } as never)
+          .eq("business_id", ctx.businessId).eq("order_id", oid);
+      }
+    }
+
     if (b.kind === "ship") {
       const orderIds = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
       for (const oid of orderIds) {
@@ -364,12 +826,36 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
 
     // Only catalog batches (product create/update, status) reflect onto the
     // listing status; stock/price batches are transient and just settle.
-    if (b.kind === "product" || b.kind === "status") {
+    if (b.kind === "product" || b.kind === "status" || b.kind === "removal") {
       for (const sk of styleKeys) {
         const listing = await getListingByStyleKey(admin, ctx.businessId, sk);
         if (!listing) continue;
+        /*
+         * Retragerea se incheie ABIA AICI, si se recunoaste dupa TIPUL LOTULUI.
+         *
+         * `stergeListare` a cerut retragerea si a lasat randul neatins. Reusita il
+         * sterge; esecul il lasa vizibil, cu motivul, ca sa se poata relua — altfel
+         * produsul ar rămâne activ pe About You fara nicio urma la noi.
+         */
+        if (b.kind === "removal") {
+          if (hardFail) {
+            await setListingStatus(admin, listing.id, "error", {
+              error: errors.slice(0, 3).join("; ").slice(0, 500)
+                || "About You nu a acceptat retragerea produsului. Încearcă din nou.",
+            });
+          } else {
+            await admin.from("aboutyou_listings").delete().eq("id", listing.id);
+          }
+          continue;
+        }
         if (hardFail) {
-          await setListingStatus(admin, listing.id, "error", { error: errors.slice(0, 5).join("; ").slice(0, 500) || "Eroare la procesarea pe About You." });
+          // Cand About You respinge articole fara sa spuna de ce, spunem macar
+          // CATE: „Eroare la procesare" singur nu-i da omului nimic de cautat.
+          const motiv = errors.slice(0, 5).join("; ").slice(0, 500)
+            || (esuate > 0
+              ? `About You a respins ${esuate} ${esuate === 1 ? "variantă" : "variante"}, fără să precizeze motivul.`
+              : "Eroare la procesarea pe About You.");
+          await setListingStatus(admin, listing.id, "error", { error: motiv });
         } else if (b.kind === "product" && listing.status === "pending") {
           // Product accepted; it exists as a draft on About You until published.
           await setListingStatus(admin, listing.id, "draft", { error: null });
@@ -393,44 +879,114 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
  * ramanea „respins" cu lista de motive golita. Motivele vin de la
  * `GET /products/rejected`, si doar de acolo le scriem.
  */
-export async function reconcileStatuses(admin: Db, ctx: AboutYouSyncContext, maxPages = 5): Promise<void> {
+/*
+ * Cand un style are SKU-uri in stari diferite, care stare descrie produsul?
+ *
+ * `GET /products/` intoarce un rand PER SKU, iar noi tinem un status PER STYLE.
+ * Scrise pe rand, ultimul SKU din pagina castiga — deci un produs cu o marime
+ * respinsa si restul active putea aparea „Activ", la intamplare. Ordinea de mai
+ * jos e explicita: ce cere atentia bate ce merge.
+ */
+const PRIORITATE_STATUS = [
+  "rejected", "problem", "pending_approval", "pending_active", "draft", "inactive", "active",
+];
+function statusDominant(stari: Set<string>): string {
+  for (const s of PRIORITATE_STATUS) if (stari.has(s)) return s;
+  return [...stari][0] ?? "active";
+}
+
+export async function reconcileStatuses(
+  admin: Db, ctx: AboutYouSyncContext, maxPages = 50, pana?: number,
+): Promise<{ ok: boolean; error?: string; status?: number }> {
+  /*
+   * Reconcilierea are TERMEN, altfel mananca fereastra pasului urmator.
+   *
+   * Ridicand plafonul de la 5 la 50 de pagini, un catalog mare putea consuma
+   * singur toata rularea cronului — iar pasul de dupa e POLLUL DE COMENZI, adica
+   * exact ce nu are voie sa cada. Ce nu incape se reia peste un minut: nimic nu se
+   * pierde, doar se amana.
+   */
+  const expirat = () => pana != null && Date.now() > pana;
   const respinse: string[] = [];
+  // Un rand PER SKU, un status PER STYLE: se aduna intai, se scrie o data.
+  const peStyle = new Map<string, Set<string>>();
+  let trunchiat = true;
 
   for (let page = 1; page <= maxPages; page++) {
     const res = await getProducts(ctx.auth, { page, per_page: 100 });
-    if (isAboutYouError(res)) return;
+    /*
+     * Eroarea NU se mai inghite. Inainte se ieșea cu `return` gol, iar cronul
+     * numara rularea drept reusita: o cheie invalidata sau o pana lasau statusurile
+     * inghetate la nesfarsit, fara nicio urma nicaieri.
+     */
+    if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
     const items = res.data?.items ?? [];
-    if (items.length === 0) break;
-    const now = new Date().toISOString();
     for (const it of items) {
       if (!it.style_key) continue;
-      const eRespins = it.status === "rejected";
-      if (eRespins) respinse.push(it.style_key);
-      await admin.from("aboutyou_listings")
-        .update({
-          status: it.status,
-          last_status_at: now,
-          updated_at: now,
-          // Cand About You retrage respingerea, motivele vechi trebuie sa dispara:
-          // altfel produsul apare aprobat, dar cu o eroare veche lipita de el.
-          ...(eRespins ? {} : { rejection_reasons: [] as never, error: null }),
-        } as never)
-        .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
+      const set = peStyle.get(it.style_key) ?? new Set<string>();
+      set.add(String(it.status));
+      peStyle.set(it.style_key, set);
     }
-    const total = Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1);
-    if (page >= total) break;
+    /*
+     * Paginarea se opreste pe LUNGIMEA lotului, nu pe `pagination.pages`.
+     * `pages` e nulabil in schema lor, iar `Number(undefined ?? 1)` dadea 1: ne
+     * opream dupa prima suta de SKU-uri si restul catalogului nu se reconcilia
+     * niciodata. Aceeasi regula o foloseste deja `taxonomy.ts`.
+     */
+    if (items.length < 100) { trunchiat = false; break; }
+    if (expirat()) break;
     await pause(250);
   }
+  if (trunchiat) {
+    await logError({
+      action: "aboutyou/reconcile", severity: "warning",
+      message: `Reconcilierea s-a oprit la plafonul de ${maxPages} pagini; restul catalogului nu a fost citit.`,
+      details: { businessId: ctx.businessId }, businessId: ctx.businessId,
+    });
+  }
 
-  if (respinse.length === 0) return;
+  {
+    const now = new Date().toISOString();
+    for (const [styleKey, stari] of peStyle) {
+      const status = statusDominant(stari);
+      const eRespins = status === "rejected";
+      if (eRespins) respinse.push(styleKey);
+      await admin.from("aboutyou_listings")
+        .update({
+          status,
+          last_status_at: now,
+          updated_at: now,
+          /*
+           * Motivele respingerii se golesc cand About You o retrage, dar `error`
+           * NU se atinge aici.
+           *
+           * `error` e scris si de `pollOpenBatches` pentru eșecurile de ARTICOL la
+           * o actualizare. Un articol respins nu schimba statusul produsului pe
+           * About You — rămâne `active` —, deci `eRespins` era fals si mesajul
+           * dispărea in maximum un minut: comerciantul credea ca modificarea e
+           * live, iar acolo rămâneau datele vechi. Golirea lui `error` aparține
+           * exclusiv cailor care CHIAR au reusit: trimiterea (`syncProductNow`) si
+           * lotul incheiat fara erori.
+           */
+          ...(eRespins ? {} : { rejection_reasons: [] as never }),
+        } as never)
+        .eq("business_id", ctx.businessId).eq("style_key", styleKey);
+    }
+  }
+
+  if (respinse.length === 0) return { ok: true };
   await pause(250);
 
   // Limita de rata aici e 50/min, de douazeci de ori mai stransa: o singura
   // trecere paginata, nu cate o cerere per produs respins.
   const deRespins = new Set(respinse);
-  for (let page = 1; page <= maxPages; page++) {
+  // Plafon propriu: limita rutei e 50 de cereri pe minut, de douazeci de ori mai
+  // stransa decat la `/products/`. Douazeci de pagini inseamna 2000 de produse
+  // respinse — cu mult peste orice caz real — si lasa marja.
+  for (let page = 1; page <= Math.min(maxPages, 20); page++) {
+    if (expirat()) break;
     const res = await getRejectedProducts(ctx.auth, { page, per_page: 100 });
-    if (isAboutYouError(res)) return;
+    if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
     const items = res.data?.items ?? [];
     if (items.length === 0) break;
     const now = new Date().toISOString();
@@ -445,10 +1001,11 @@ export async function reconcileStatuses(admin: Db, ctx: AboutYouSyncContext, max
         } as never)
         .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
     }
-    const total = Number((res.data?.pagination as { pages?: number } | undefined)?.pages ?? 1);
-    if (page >= total) break;
+    // Ca mai sus: oprirea se ia din lungimea lotului, nu din `pagination.pages`.
+    if (items.length < 100) break;
     await pause(250);
   }
+  return { ok: true };
 }
 
 // ── Queue routing ────────────────────────────────────────────────────────────────
@@ -568,43 +1125,48 @@ export async function pushPriceNow(admin: Db, ctx: AboutYouSyncContext, productI
 // The About You order item integer IDs live in aboutyou_orders.items; the courier
 // + tracking are derived from whichever *_awb_number the merchant generated in
 // Edinio, mapped to an About You carrier_key via the store's carrier_map.
-const COURIER_FIELDS: { field: string; courier: string }[] = [
-  { field: "cargus_awb_number", courier: "cargus" },
-  { field: "sameday_awb_number", courier: "sameday" },
-  { field: "fan_courier_awb_number", courier: "fan-courier" },
-  { field: "dpd_awb_number", courier: "dpd" },
-  { field: "colete_awb_number", courier: "colete" },
-  { field: "woot_awb_number", courier: "woot" },
-  { field: "gls_awb_number", courier: "gls" },
-  { field: "pallex_awb_number", courier: "pallex" },
-  { field: "ecolet_awb_number", courier: "ecolet" },
-  { field: "posta_awb_number", courier: "posta" },
-  { field: "packeta_packet_id", courier: "packeta" },
-  { field: "innoship_awb_number", courier: "innoship" },
-  { field: "smartship_awb_number", courier: "smartship" },
-  /* ⚠ Ultimul sosit ramane ULTIMUL in lista: bucla ia primul camp nevid, deci un
-     curier nou pus in fata ar fura precedenta unui AWB emis anterior cu altul. */
-  { field: "shipo_awb_number", courier: "shipo" },
-  { field: "fedex_awb_number", courier: "fedex" },
-  { field: "ups_awb_number", courier: "ups" },
-  { field: "dhl_awb_number", courier: "dhl" },
-];
+// Lista trăiește in `./curieri`, ca ecranul de mapare sa nu mai poata rămâne in
+// urma: sase curieri lipseau de acolo, iar lipsa nu da nicio eroare.
+const COURIER_FIELDS = CURIERI_ABOUTYOU.map((c) => ({ field: c.camp, courier: c.cod }));
 
 export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId: string): Promise<SyncOutcome> {
-  const { data: order } = await admin
+  const { data: order, error: eOrder } = await admin
     .from("orders")
-    /* ⚠ Coloana trebuie ceruta AICI, nu doar adaugata in `COURIER_FIELDS`: ce nu
-       se selecteaza nu ajunge in `row`, iar bucla de mai jos ar cauta un camp
-       inexistent si ar iesi cu „skipped" — adica un succes raportat pentru o
-       comanda ramasa neexpediata la marketplace. */
-    .select("id, tracking_number, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_awb_number, colete_awb_number, woot_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
+    /* Literalul trebuie sa rămână literal (PostgREST nu poate tipiza un sir
+       calculat), dar un test verifica ca acopera fiecare curier din lista —
+       altfel coloana lipsa nu ajunge in `row`, bucla de mai jos n-o gaseste si
+       expedierea iese cu „skipped": un succes raportat pentru o comanda ramasa
+       neexpediata la marketplace. */
+    .select(SELECT_AWB_ABOUTYOU)
     .eq("id", orderId).eq("business_id", ctx.businessId).maybeSingle();
+  // Ca mai jos: o citire cazuta se reincearca, nu se raporteaza ca reusita.
+  if (eOrder) return { ok: false, error: `Nu am putut citi comanda: ${eOrder.message}`, status: 0 };
   if (!order) return { ok: true, action: "skipped" };
 
-  const { data: ayOrder } = await admin
-    .from("aboutyou_orders").select("id, items")
+  const { data: ayOrder, error: eAy } = await admin
+    .from("aboutyou_orders").select("id, items, fulfillment_type")
     .eq("business_id", ctx.businessId).eq("order_id", orderId).maybeSingle();
+  /*
+   * O citire cazuta NU inseamna „nu e comanda About You".
+   *
+   * Inghitita, ieșea `skipped` — un SUCCES — iar cronul stergea elementul din
+   * coada: AWB-ul nu mai ajungea niciodata la About You, iar clientul astepta un
+   * colet despre care marketplace-ul nu stia nimic. `status: 0` e citit de cron ca
+   * trecator, deci elementul rămâne in coada fara sa consume o incercare.
+   */
+  if (eAy) return { ok: false, error: `Nu am putut citi comanda About You: ${eAy.message}`, status: 0 };
   if (!ayOrder) return { ok: true, action: "skipped" }; // not an About You order
+
+  /*
+   * FULFILLMENT BY ABOUT YOU: nu noi expediem, deci n-avem ce raporta.
+   *
+   * Pe modelul FbAY, marfa sta in depozitul lor si tot ei o trimit. Codul nu se
+   * uita deloc la asta si incerca `POST /orders/ship` cu AWB-ul nostru — o
+   * expediere pe care About You nu o poate accepta, reincercata pana ieșea din
+   * coada. Comanda apare oricum in Edinio, doar ca fara pasul de expediere.
+   */
+  const fel = (ayOrder as { fulfillment_type?: string | null }).fulfillment_type;
+  if (fel === "fulfillment_by_marketplace") return { ok: true, action: "skipped" };
 
   const row = order as Record<string, unknown>;
   let tracking: string | undefined;

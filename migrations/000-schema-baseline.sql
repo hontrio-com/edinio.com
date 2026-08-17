@@ -3536,7 +3536,8 @@ create table if not exists public.aboutyou_batches (
   result_summary jsonb,
   submitted_at timestamp with time zone default now() not null,
   polled_at timestamp with time zone,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  poll_errors integer default 0 not null);
 
 create table if not exists public.aboutyou_listings (
   id uuid default gen_random_uuid() not null,
@@ -4656,7 +4657,7 @@ alter table public.trendyol_listings add constraint trendyol_listings_business_i
 alter table public.trendyol_orders add constraint trendyol_orders_business_id_shipment_package_id_key UNIQUE (business_id, shipment_package_id);
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
 alter table public.trendyol_variants add constraint trendyol_variants_business_id_barcode_key UNIQUE (business_id, barcode);
-alter table public.aboutyou_batches add constraint aboutyou_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'stock'::text, 'price'::text, 'status'::text, 'ship'::text, 'cancel'::text, 'return'::text])));
+alter table public.aboutyou_batches add constraint aboutyou_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'stock'::text, 'stock_removal'::text, 'price'::text, 'status'::text, 'removal'::text, 'ship'::text, 'cancel'::text, 'return'::text])));
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'publish'::text, 'stock'::text, 'price'::text, 'ship'::text])));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
@@ -4877,6 +4878,7 @@ CREATE INDEX idx_aboutyou_listings_business_status ON public.aboutyou_listings U
 CREATE INDEX idx_aboutyou_listings_product ON public.aboutyou_listings USING btree (product_id);
 CREATE INDEX idx_aboutyou_listings_stale_status ON public.aboutyou_listings USING btree (last_status_at NULLS FIRST);
 CREATE INDEX idx_aboutyou_orders_business_status ON public.aboutyou_orders USING btree (business_id, status);
+CREATE INDEX idx_aboutyou_orders_items_gin ON public.aboutyou_orders USING gin (items jsonb_path_ops);
 CREATE INDEX idx_aboutyou_orders_order ON public.aboutyou_orders USING btree (order_id);
 CREATE INDEX idx_aboutyou_queue_created ON public.aboutyou_sync_queue USING btree (created_at);
 CREATE INDEX idx_aboutyou_queue_revendicat ON public.aboutyou_sync_queue USING btree (revendicat_pana, created_at);

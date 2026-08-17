@@ -101,11 +101,39 @@ export async function handleProductMasterStatus(
   const mesaj = typeof msg.rejection_message === "string" ? msg.rejection_message : null;
   const now = new Date().toISOString();
 
+  /*
+   * `error` are TREI cazuri, nu doua.
+   *
+   * Scris necondiționat, un eveniment de status fara `rejection_message` punea
+   * `error: null` peste un mesaj de la ultima trimitere — un eșec de articol la
+   * actualizare, de exemplu — si comerciantul rămânea convins ca totul a intrat.
+   * Dar tacerea singura nu e de ajuns in celalalt sens: evenimentul de APROBARE
+   * nu aduce niciun motiv, deci mesajul respingerii de dinainte ar rămâne lipit pe
+   * un produs sanatos, si nimic altceva nu-l mai sterge. Deci: motiv nou -> scrie;
+   * status sanatos -> goleste; altfel -> nu atinge.
+   */
+  /*
+   * Golirea se face DOAR cand mesajul de acolo era chiar unul de respingere.
+   *
+   * Prima varianta golea `error` la orice status sanatos — dar in aceeasi coloana
+   * scrie si `pollOpenBatches` esecurile de ARTICOL la actualizare, iar un articol
+   * respins nu schimba statusul produsului: ramane `active`. Deci un eveniment de
+   * status stergea mesajul unei actualizari care chiar picase, si comerciantul
+   * ramanea convins ca modificarea a intrat — exact ce interzice reconcilierea.
+   * Citim statusul de dinainte: doar o listare care ERA respinsa isi pierde
+   * mesajul cand About You retrage respingerea.
+   */
+  const { data: veche } = await admin
+    .from("aboutyou_listings").select("status")
+    .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle();
+  const eraRespinsa = ["rejected", "problem"].includes((veche as { status?: string } | null)?.status ?? "");
+  const eSanatos = status != null && status !== "rejected" && status !== "problem";
+
   await admin.from("aboutyou_listings")
     .update({
       ...(status ? { status } : {}),
       rejection_reasons: motive as never,
-      error: mesaj,
+      ...(mesaj ? { error: mesaj } : eraRespinsa && eSanatos ? { error: null } : {}),
       last_status_at: now,
       updated_at: now,
     } as never)

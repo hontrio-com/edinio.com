@@ -109,6 +109,7 @@ export type Database = {
           created_at: string
           id: string
           kind: string
+          poll_errors: number
           polled_at: string | null
           related_ids: Json
           result_summary: Json | null
@@ -122,6 +123,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind: string
+          poll_errors?: number
           polled_at?: string | null
           related_ids?: Json
           result_summary?: Json | null
@@ -135,6 +137,7 @@ export type Database = {
           created_at?: string
           id?: string
           kind?: string
+          poll_errors?: number
           polled_at?: string | null
           related_ids?: Json
           result_summary?: Json | null

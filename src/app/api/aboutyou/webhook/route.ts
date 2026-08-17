@@ -6,6 +6,7 @@ import {
   handleProductMasterStatus, handleStockUpdated, readSignatureHeader, verifyAboutYouSignature,
 } from "@/lib/aboutyou/webhooks";
 import { extractOrderNumber, ingestOrderByNumber } from "@/lib/aboutyou/orders";
+import { logError } from "@/lib/error-logger";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 
 /**
@@ -30,7 +31,28 @@ export async function POST(request: NextRequest) {
   const { data: settings } = await admin
     .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
   const cfg = settings?.aboutyou_config as AboutYouConfig | null;
-  if (!cfg?.webhook_secret) return ok();
+  if (!cfg?.webhook_secret) {
+    /*
+     * Ieșirea asta stingea webhookul COMPLET, inaintea oricarui log: un secret
+     * pierdut la o resalvare de config facea ca fiecare eveniment sa fie inghitit
+     * cu 200, iar la noi nu rămânea nicio urma.
+     *
+     * ⚠ LOGUL E STRANS DIN DOUA MOTIVE, nu din delicatete. Ruta e publica si
+     * scutita de poarta, iar `businessId` vine din URL: fara conditia de mai jos,
+     * oricine putea umple `error_logs` cu un uuid inventat, o cerere = un rand.
+     * Iar About You reincearca din ora in ora doua zile, deci un singur abonament
+     * rupt ar scrie sute de intrari identice — zgomot care ingroapa alarmele reale.
+     * Deci: doar magazine CONECTATE, si cel mult o data la sase ore.
+     */
+    if (cfg?.connected && deSemnalat(businessId)) {
+      await logError({
+        action: "aboutyou/webhook",
+        message: "Eveniment ignorat: magazinul nu are secret de webhook salvat. Reactivează notificările About You.",
+        details: { businessId }, businessId, severity: "warning",
+      });
+    }
+    return ok();
+  }
 
   /*
    * DOUA INCUIETORI, pentru ca prima nu e sigura.
@@ -95,6 +117,23 @@ function egalConstant(a: string, b: string): boolean {
   try { return timingSafeEqual(x, y); } catch { return false; }
 }
 
+/*
+ * Strangulator de alarme, pe proces.
+ *
+ * Nu e o solutie perfecta — pe mai multe instante se scrie de mai multe ori — dar
+ * taie exact tiparul care conteaza: acelasi abonament rupt care reincearca din ora
+ * in ora, doua zile.
+ */
+const semnalatLa = new Map<string, number>();
+const SASE_ORE = 6 * 60 * 60 * 1000;
+function deSemnalat(cheie: string): boolean {
+  const acum = Date.now();
+  const ultim = semnalatLa.get(cheie);
+  if (ultim != null && acum - ultim < SASE_ORE) return false;
+  semnalatLa.set(cheie, acum);
+  return true;
+}
+
 async function orderNumberDinArticole(
   admin: SupabaseClient<Database>, businessId: string, event: unknown,
 ): Promise<string | null> {
@@ -106,16 +145,42 @@ async function orderNumberDinArticole(
     .filter((x): x is number => typeof x === "number");
   if (ids.length === 0) return null;
 
-  const { data } = await admin
-    .from("aboutyou_orders").select("aboutyou_order_number, items")
+  /*
+   * Corelarea se cere BAZEI, nu se caută in memorie.
+   *
+   * Se citeau ultimele 200 de comenzi si se scana lista lor de articole. Peste 200
+   * de comenzi About You, anularile si returnarile pe ARTICOL nu mai gaseau comanda
+   * si se pierdeau definitiv — iar 200 se atinge intr-o luna buna.
+   *
+   * ⚠ CONTAINMENT-UL SE SCRIE CA SIR, nu ca obiect.
+   *
+   * `contains(col, valoare)` din postgrest-js are trei ramuri: sirul pleaca
+   * verbatim, ARRAY-ul devine `cs.{${value.join(",")}}`. Un array de obiecte
+   * ajunge deci `cs.{[object Object]}` — 400 la fiecare apel, adica exact zero
+   * corelari, mai rau decat cele 200 de comenzi de dinainte. Am probat calea
+   * corecta pe API-ul real: `items=cs.[{"order_item_id":123}]` raspunde 200.
+   * Index: `idx_aboutyou_orders_items_gin`.
+   *
+   * O singura interogare pentru toate articolele: `[{"order_item_id":N}]` nu
+   * contine virgula, deci separatorul lui `or` rămâne neambiguu.
+   */
+  const conditii = ids.slice(0, 100)
+    .map((id) => `items.cs.${JSON.stringify([{ order_item_id: id }])}`).join(",");
+  const { data, error } = await admin
+    .from("aboutyou_orders").select("aboutyou_order_number")
     .eq("business_id", businessId)
-    .order("created_at", { ascending: false })
-    .limit(200);
-  for (const row of (data ?? []) as { aboutyou_order_number: string; items: unknown }[]) {
-    const ale = Array.isArray(row.items) ? (row.items as { order_item_id?: number }[]) : [];
-    if (ale.some((i) => typeof i.order_item_id === "number" && ids.includes(i.order_item_id))) {
-      return row.aboutyou_order_number;
-    }
+    .or(conditii)
+    .limit(1);
+  if (error) {
+    // O citire cazuta NU inseamna „nicio potrivire": inghitita, evenimentul se
+    // pierde definitiv, fiindca ruta raspunde oricum 200 si About You nu reia.
+    await logError({
+      action: "aboutyou/webhook",
+      message: `corelarea articolelor a eșuat: ${error.message}`,
+      details: { businessId, ids: ids.slice(0, 10) }, businessId, severity: "critical",
+    });
+    return null;
   }
-  return null;
+  const gasit = (data ?? [])[0] as { aboutyou_order_number?: string } | undefined;
+  return gasit?.aboutyou_order_number ?? null;
 }

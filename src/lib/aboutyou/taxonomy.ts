@@ -24,6 +24,7 @@ import {
 import { cautaCategorii, type PublicTinta } from "./ro-taxonomy";
 import type {
   AboutYouAttributeGroup, AboutYouBrand, AboutYouCarrier, AboutYouCategory, AboutYouCountriesResponse,
+  AboutYouMaterialType,
 } from "./types";
 
 export type Nomenclator<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
@@ -182,6 +183,40 @@ export async function searchCategories(
   const res = await listCategories(auth, { query: q, per_page: Math.min(100, limita) });
   if (isAboutYouError(res)) return { ok: false, error: toate.error, status: toate.status };
   return { ok: true, data: (res.data?.items ?? []).slice(0, limita) };
+}
+
+/*
+ * Ce compozitie de material cere categoria — dintr-un singur loc.
+ *
+ * Se citea in TREI locuri (editorul, validarea, si de nicaieri pe calea
+ * automata), fiecare cu aceeasi scapare: ramura in care taxonomia NU se poate
+ * aduce era netratata, iar rezultatul cadea pe `null`. Iar `null` inseamna, mai
+ * departe, „categoria asta nu cere material" — deci un 401, o limita de rata sau
+ * o pana de retea faceau sa dispara tacut singura cerinta pe care About You o
+ * numeste explicit obligatorie, si produsul pleca gol.
+ *
+ * De aceea rezultatul are trei stari, nu doua: cere / nu cere / NU STIM. Ultima
+ * blocheaza; nu se confunda cu a doua.
+ */
+export type CerintaMaterial =
+  | { ok: true; tip: AboutYouMaterialType | null; path: string | null }
+  | { ok: false; error: string; status: number };
+
+export async function getCerintaMaterial(
+  auth: AboutYouAuth, categoryId: number | null | undefined,
+): Promise<CerintaMaterial> {
+  // Fara categorie nu exista cerinta de material; lipsa categoriei e semnalata
+  // separat de `validateListing`, cu mesajul ei.
+  if (!categoryId) return { ok: true, tip: null, path: null };
+  const tax = await getAllCategoriesCached(auth);
+  if (!tax.ok) return { ok: false, error: tax.error, status: tax.status };
+  const cat = tax.data.find((c) => c.id === categoryId);
+  if (!cat) {
+    // Categoria mapata nu mai e in arbore: About You a restructurat taxonomia.
+    // Tot „nu stim" e, nu „nu cere".
+    return { ok: false, error: "Categoria aleasă nu mai există în taxonomia About You.", status: 404 };
+  }
+  return { ok: true, tip: cat.material_composition_type ?? null, path: cat.path ?? cat.name ?? null };
 }
 
 export async function getAttributeGroupsCached(

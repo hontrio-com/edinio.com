@@ -77,8 +77,11 @@ export interface AboutYouConfig {
 }
 
 // ── Statuses ──────────────────────────────────────────────────────────────────
+// `local` = salvat la noi, netrimis niciodata. `draft` = About You l-a acceptat
+// si asteapta publicarea. Cat timp amandoua se numeau `draft`, „Publică toate"
+// incerca sa publice si produse care nu ajunsesera niciodata acolo.
 export type AboutYouListingStatus =
-  | "draft" | "pending" | "active" | "published" | "rejected" | "inactive" | "error";
+  | "local" | "draft" | "pending" | "active" | "published" | "rejected" | "inactive" | "error";
 
 export type AboutYouOrderItemStatus = "open" | "shipped" | "cancelled" | "returned";
 export type AboutYouOrderStatus = "open" | "shipped" | "cancelled" | "returned" | "mixed";

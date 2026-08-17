@@ -229,7 +229,91 @@ export function getReturnBatchResults(auth: AboutYouAuth, batchRequestId: string
   return call<AboutYouBatchResult>(auth, "GET", `/results/return-orders?batch_request_id=${encodeURIComponent(batchRequestId)}`);
 }
 
+/*
+ * Documentele comenzii: factura si documentul de livrare.
+ *
+ * Amandouă intorc BINAR (PDF), nu JSON, deci nu trec prin `call()` — acela citeste
+ * si interpreteaza corpul. Limita lor e mult mai stransa decat la restul: 10
+ * cereri pe minut la facturi.
+ *
+ * About You e cel care emite factura catre cumparator (el detine checkout-ul si
+ * incasarea), iar comerciantul are nevoie de ea pentru contabilitate. Pana acum nu
+ * exista nicio cale sa o ia din Edinio.
+ */
+export async function getOrderDocument(
+  auth: AboutYouAuth, orderNumber: string, fel: "invoices" | "delivery-document",
+): Promise<AboutYouResult<{ continut: ArrayBuffer; tip: string }>> {
+  const apiKey = auth?.apiKey?.trim();
+  if (!apiKey) return { error: "Cheia API About You lipsește.", status: 0 };
+  if (apiKey.startsWith("enc.v1.")) {
+    return { error: "Cheia API About You a fost citită criptat (eroare internă). Reconectează contul.", status: 0 };
+  }
+  /*
+   * ⚠ `delivery_document` cu UNDERSCORE, nu cu cratima.
+   *
+   * E singura cale din tot API-ul lor care foloseste underscore, iar tabelul lor
+   * de limite o listeaza gresit, cu cratima — de acolo pare copiata. Eticheta
+   * noastra ramane cu cratima (e valoare de interfata), dar calea reala se ia din
+   * tabelul de mai jos. Cu cratima, raspunsul e 404, iar `getAboutYouOrderDocument`
+   * traduce 404 in „nu s-a emis inca": o minciuna la fiecare apel.
+   */
+  const CAI = { invoices: "invoices", "delivery-document": "delivery_document" } as const;
+  const cale = `/orders/${encodeURIComponent(orderNumber)}/${CAI[fel]}`;
+  try {
+    const res = await fetch(`${aboutyouBaseUrl(auth.environment)}${cale}`, {
+      method: "GET",
+      // Corpul e BINAR, deci nu cerem si nu interpretam JSON — de aceea nu trece
+      // prin `call()`.
+      headers: { "X-API-Key": apiKey, Accept: "application/pdf" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      let detaliu = `HTTP ${res.status}`;
+      try {
+        const obj = JSON.parse(text) as Record<string, unknown>;
+        detaliu = (typeof obj.message === "string" && obj.message)
+          || (typeof obj.detail === "string" && obj.detail) || detaliu;
+      } catch { /* raspuns nestructurat: ramane codul HTTP */ }
+      return { error: detaliu, status: res.status };
+    }
+    return {
+      data: {
+        continut: await res.arrayBuffer(),
+        tip: res.headers.get("content-type") ?? "application/pdf",
+      },
+    };
+  } catch (e) {
+    const expirat = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    return {
+      error: expirat ? "About You nu a răspuns la timp. Încearcă din nou." : "Eroare de rețea către About You.",
+      status: 0,
+    };
+  }
+}
+
 // ── Webhooks (subscription management) ────────────────────────────────────────
+/*
+ * Introspectia abonamentelor. Existau in specificatie si nu erau folosite: puteam
+ * doar sa CREAM si sa STERGEM un abonament, deci nu se putea afla daca cel din baza
+ * mai traieste, nici ce evenimente acopera. Un abonament rupt tacea la nesfarsit.
+ */
+export interface AboutYouWebhookSubscription {
+  id?: number | string | null;
+  events?: string[];
+  url?: string;
+  /** Comutatorul LOR de activare. Oprit, abonamentul exista dar nu livreaza nimic. */
+  enabled?: boolean;
+  description?: string | null;
+}
+export function listWebhookSubscriptions(auth: AboutYouAuth) {
+  return call<AboutYouWebhookSubscription[]>(auth, "GET", "/webhooks/");
+}
+export function getWebhookSubscription(auth: AboutYouAuth, id: string) {
+  return call<AboutYouWebhookSubscription>(auth, "GET", `/webhooks/${encodeURIComponent(id)}`);
+}
+
 export function createWebhookSubscription(
   auth: AboutYouAuth,
   body: { events: string[]; url: string; description?: string },

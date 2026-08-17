@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
 import {
   connectAboutYou, disconnectAboutYou, getAboutYouBrands, getAboutYouCountries,
+  getAboutYouWebhookDiagnoza,
   saveAboutYouSettings, subscribeAboutYouWebhook, unsubscribeAboutYouWebhook,
   type AboutYouStatus,
 } from "@/lib/actions/aboutyou.actions";
@@ -79,6 +80,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
   // Comutatorul de notificari se muta instant; actiunea nu are alt rezultat de
   // aratat in afara de activ/inactiv, iar la eroare React readuce starea reala.
   const [notificariActive, aplicaNotificari] = useOptimistic(status?.webhookActive ?? false, (_stare, noua: boolean) => noua);
+  const [diagnoza, setDiagnoza] = useState<{ ok: boolean; text: string } | null>(null);
 
   if (!status) {
     return <p className="text-sm text-red-600">Nu am putut încărca starea integrării. Reîncarcă pagina.</p>;
@@ -151,9 +153,37 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
       // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(noua ? "Notificări activate." : "Notificări dezactivate.");
+      setDiagnoza(null);
       router.refresh();
     });
   };
+
+  /*
+   * Intreaba About You daca abonamentul nostru mai exista si ce acopera.
+   *
+   * Steagul din baza spune doar ca l-am creat NOI candva. Sters din Seller Center
+   * sau expirat, el tace, iar comenzile intra doar prin cron, cu intarziere — si
+   * nimic nu semnaleaza asta.
+   */
+  const verificaWebhook = () => startTransition(async () => {
+    const d = await getAboutYouWebhookDiagnoza(businessId);
+    if ("error" in d) { setDiagnoza({ ok: false, text: d.error }); return; }
+    if (!d.abonamentLocal) {
+      setDiagnoza({ ok: false, text: "Nu avem niciun abonament salvat. Activează notificările." });
+    } else if (d.eroare) {
+      setDiagnoza({ ok: false, text: `Nu am putut verifica: ${d.eroare}` });
+    } else if (!d.existaLaEi) {
+      setDiagnoza({ ok: false, text: "Abonamentul nu mai există la About You. Dezactivează și activează din nou notificările." });
+    } else if (!d.activLaEi) {
+      setDiagnoza({ ok: false, text: "Abonamentul există, dar e OPRIT din Seller Center. Pornește-l acolo, sau reactivează notificările de aici." });
+    } else if (d.tokenNepotrivit) {
+      setDiagnoza({ ok: false, text: "Adresa abonamentului nu mai poartă cheia noastră de siguranță, deci evenimentele sunt respinse. Reactivează notificările ca să fie recreat." });
+    } else if (d.evenimenteLipsa.length > 0) {
+      setDiagnoza({ ok: false, text: `Abonamentul există, dar nu acoperă: ${d.evenimenteLipsa.join(", ")}. Reactivează notificările ca să fie recreat complet.` });
+    } else {
+      setDiagnoza({ ok: true, text: "Abonamentul există la About You și acoperă toate evenimentele." });
+    }
+  });
 
   return (
     <div className="space-y-6">
@@ -251,7 +281,10 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
             )}
             {status.ready && (
               <div className="mt-3 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-700">
-                Configurarea de bază este completă. Maparea produselor și listarea vin în pasul următor.
+                {/* Nu „vin in pasul urmator": sunt chiar mai jos, pe aceeasi
+                    pagina. Un om care citea asta inchidea pagina si aștepta. */}
+                Configurarea de bază este completă. Continuă mai jos, pe aceeași pagină: maparea categoriilor,
+                apoi listarea fiecărui produs.
               </div>
             )}
 
@@ -396,14 +429,33 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
                   {notificariActive ? "Active — stocul se sincronizează în ambele sensuri." : "Inactive."}
                 </p>
               </div>
-              <button
-                onClick={toggleWebhook}
-                disabled={pending}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-60"
-              >
-                {notificariActive ? "Dezactivează" : "Activează"}
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* „Activ" la noi nu inseamna „viu la ei": abonamentul poate fi
+                    sters din Seller Center sau creat cu alte evenimente, si atunci
+                    tace la nesfarsit. Acum se poate intreba. */}
+                {notificariActive && (
+                  <button onClick={verificaWebhook} disabled={pending}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-60">
+                    Verifică
+                  </button>
+                )}
+                <button
+                  onClick={toggleWebhook}
+                  disabled={pending}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-60"
+                >
+                  {notificariActive ? "Dezactivează" : "Activează"}
+                </button>
+              </div>
             </div>
+
+            {diagnoza && (
+              <div className={`mt-2 rounded-lg px-3 py-2 text-xs border ${
+                diagnoza.ok ? "bg-green-50 border-green-200 text-green-800" : "bg-amber-50 border-amber-200 text-amber-900"
+              }`}>
+                {diagnoza.text}
+              </div>
+            )}
 
             <div className="mt-4">
               <button

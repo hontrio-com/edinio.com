@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { logError } from "@/lib/error-logger";
+import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
@@ -405,13 +406,35 @@ export async function createPacketaAwbAction(
     return { error: "Packeta nu a intors id-ul coletului. Verifica in contul lor inainte de a reincerca." };
   }
 
-  await admin.from("orders").update({
+  const { error: eScriere, data: randuri } = await admin.from("orders").update({
     packeta_packet_id: packetId,
     packeta_barcode: barcode,
     packeta_address_id: addressId,
     packeta_pickup_point: punctCurier,
     packeta_awb_at: new Date().toISOString(),
-  }).eq("id", orderId).eq("business_id", businessId);
+  }).eq("id", orderId).eq("business_id", businessId).select("id");
+
+  /*
+   * Impingerea AWB-ului catre About You lipsea DOAR de aici.
+   *
+   * `curieri.ts` listeaza Packeta printre curierii care pot duce o comanda About
+   * You, iar `shipOrderNow` stie sa citeasca `packeta_packet_id` — dar nimeni nu
+   * punea elementul in coada dupa emitere. O comanda About You expediata cu
+   * Packeta rămânea, la marketplace, neexpediata. Garda pe reusita scrierii e cea
+   * din `sameday.actions.ts`: coletul exista deja, deci o eroare aici nu are voie
+   * sa treaca neobservata.
+   */
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "packeta.createAwb",
+      message: `Colet Packeta creat (${packetId}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
+  } else {
+    void enqueueAboutYouShip(businessId, orderId);
+  }
 
   return { packetId, barcode };
 }

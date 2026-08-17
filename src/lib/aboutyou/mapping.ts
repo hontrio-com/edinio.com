@@ -12,7 +12,7 @@ import {
   type VariantCombo,
 } from "@/lib/storefront/variants";
 import type {
-  AboutYouConfig, AboutYouFxConfig, AboutYouMaterialCluster, AboutYouPrice,
+  AboutYouConfig, AboutYouFxConfig, AboutYouMaterialCluster, AboutYouMaterialType, AboutYouPrice,
   AboutYouProductItem,
 } from "./types";
 import { DEFAULT_COUNTRY_OF_ORIGIN } from "./types";
@@ -120,7 +120,16 @@ export function eanValid(ean: string): boolean {
 // ── Variant slots (derived from the Edinio product for the editor) ────────────
 export interface VariantSlot {
   key: string;
+  /** Ce se afiseaza in editor. Pentru un produs fara variante, „Unic". */
   label: string;
+  /**
+   * Titlul REAL al combinatiei din Edinio, sau `null` cand produsul n-are
+   * variante. Nu se confunda cu `label`: dupa el se scade stocul combinatiei la o
+   * comanda de marketplace, deci o valoare inventata („Unic", „Variantă 2") nu
+   * s-ar potrivi cu nimic si ar raporta fals „a cerut mai mult stoc decat exista",
+   * la fiecare comanda.
+   */
+  variantTitle: string | null;
   sku: string;
   ron_price: number;
   ron_compare_at: number | null;
@@ -185,6 +194,7 @@ export function deriveVariantSlots(product: MappableProduct): VariantSlot[] {
       return {
         key: c.id || `c${i}`,
         label: (c.title || `Variantă ${i + 1}`).trim(),
+        variantTitle: c.title?.trim() || null,
         sku: (c.sku || `${product.id}-${c.id || i}`).trim(),
         ron_price: comboUnitPrice(c, product.price),
         ron_compare_at: comboCompareAtPrice(c, product.compare_at_price),
@@ -198,6 +208,8 @@ export function deriveVariantSlots(product: MappableProduct): VariantSlot[] {
   return [{
     key: "default",
     label: "Unic",
+    // Produsul n-are combinatii, deci nu exista niciun titlu de potrivit.
+    variantTitle: null,
     sku: (product.sku || product.id).trim(),
     ron_price: product.price,
     ron_compare_at: product.compare_at_price,
@@ -226,10 +238,22 @@ export function atasezaPreturileRon(
   const dupaSku = new Map(deriveVariantSlots(product).map((s) => [s.sku, s]));
   return variants.map((v) => {
     const slot = dupaSku.get(v.sku);
+    /*
+     * FARA SLOT = varianta nu mai exista pe produs.
+     *
+     * Aici se completa cu datele PRODUSULUI: pretul de baza si instantaneul de
+     * stoc salvat o data in editor. Asa pleca mai departe spre About You o marime
+     * scoasa de la vanzare — XXL de 170 de lei se relista la 100, dintr-un stoc
+     * inexistent, si fiecare comanda era pierdere plus o comanda neonorabila.
+     * Randul se DEZACTIVEAZA, deci nu intra in niciun payload (nici la produs,
+     * nici la stoc, nici la pret). Scoaterea SKU-ului de pe About You o face
+     * `reconciliazaVariante` din sync.ts.
+     */
+    if (!slot) return { ...v, enabled: false, ron_price: null, ron_compare_at: null };
     return {
       ...v,
-      ron_price: slot?.ron_price ?? product.price,
-      ron_compare_at: slot?.ron_compare_at ?? product.compare_at_price,
+      ron_price: slot.ron_price,
+      ron_compare_at: slot.ron_compare_at,
       /*
        * Stocul VIU bate numarul scris in editor.
        *
@@ -240,8 +264,8 @@ export function atasezaPreturileRon(
        * din editor conteaza doar acolo unde nu exista o sursa vie (produs fara
        * inventar urmarit).
        */
-      quantity: slot?.stocViu ? slot.quantity : (v.quantity ?? slot?.quantity ?? stocVarianta(product, null).quantity),
-      ean: v.ean ?? slot?.gtin ?? null,
+      quantity: slot.stocViu ? slot.quantity : (v.quantity ?? slot.quantity),
+      ean: v.ean ?? slot.gtin ?? null,
     };
   });
 }
@@ -314,63 +338,258 @@ function effectiveAttributes(config: AboutYouConfig, product: MappableProduct, l
   return entry?.attributes ?? [];
 }
 
+/*
+ * ── Cate grupe de material cere categoria ────────────────────────────────────
+ *
+ * About You numeste compozitia „mandatory ... for your products", dar numarul de
+ * COMPONENTE difera pe familie de categorie, si documentatia e transcrisa aici
+ * cuvant cu cuvant (user-guide/product-material.md, §„Component Requirements"):
+ *
+ *   „Lined Bags and Backpacks: A minimum of two different material components
+ *    (=clusters) are required."
+ *   „Shoes: Three components (=clusters) are required: outer material, inner
+ *    material, and sole material."
+ *   „Lined jackets: Two components are required: outer material and inner material."
+ *   „Other Accessories: Only the material needs to be specified."
+ *
+ * ATENTIE LA CUVANTUL „LINED". La genti si jachete cerinta e conditionata de
+ * captuseala — o geanta necaptusita chiar ARE o singura componenta, si a o bloca
+ * ar fi exact greseala pe care ne-o reproseaza comerciantii: un blocaj fara
+ * acoperire in documentatie. La pantofi formularea e neconditionata, deci acolo
+ * blocheaza. In rest doar avertizam, pentru ca respingerea vine tarziu si costa.
+ *
+ * PLAFONUL DE 3 NU E O REGULA DE API. Schema OpenAPI nu are `maxItems` pe
+ * `material_composition_*`. Vine din sablonul lor Excel, care are exact „Cluster
+ * Name (1), (2), or (3)" si, in aceeasi propozitie, cel mult trei materiale per
+ * grupa (coloanele .1/.2/.3). De aceea amandoua sunt AVERTISMENTE, nu blocaje:
+ * n-avem dreptul sa oprim ceva ce API-ul accepta. In editor butonul se opreste
+ * totusi la 3, ca indrumare.
+ */
+export const MAX_CLUSTERE_MATERIAL = 3;
+export const MAX_MATERIALE_PER_CLUSTER = 3;
+
+export interface RegulaClustere {
+  minim: number;
+  /** `true` = documentatia o cere neconditionat, deci blocheaza; `false` = avertisment. */
+  blocheaza: boolean;
+  mesaj: string;
+}
+
+function segmenteCale(path: string | null | undefined): string[] {
+  return (path ?? "").split("|").map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+export function regulaClustere(path: string | null | undefined): RegulaClustere {
+  const seg = segmenteCale(path);
+  const areSegment = (cuvant: string) => seg.includes(cuvant);
+  const contine = (cuvant: string) => seg.some((s) => s.includes(cuvant));
+
+  /*
+   * Blocam DOAR cand calea trece chiar prin nivelul „Shoes".
+   *
+   * Potrivirea pe subsir e utila la frunze („Sneakers", „Ankle boots"), dar
+   * prinde si „Shoe care" sau „Shoe accessories" — iar acolo un blocaj de trei
+   * grupe ar face categoria nelistabila, adica exact reprosul de la care am
+   * pornit: o cerinta pe care About You nu o are. Nivelul de categorie e o proba
+   * sigura; cuvintele de frunza doar avertizeaza.
+   */
+  if (areSegment("shoes")) {
+    return {
+      minim: 3,
+      blocheaza: true,
+      mesaj: "Încălțămintea cere trei grupe de material la About You: exterior, interior și talpă.",
+    };
+  }
+  if (contine("sneaker") || contine("trainer") || contine("boot") || contine("sandal") || contine("shoe")) {
+    return {
+      minim: 3,
+      blocheaza: false,
+      mesaj: "Dacă produsul e încălțăminte, About You cere trei grupe de material: exterior, interior și talpă.",
+    };
+  }
+  if (contine("bag") || contine("backpack") || contine("rucksack") || contine("suitcase")) {
+    return {
+      minim: 2,
+      blocheaza: false,
+      mesaj: "Gențile și rucsacurile CĂPTUȘITE cer două grupe de material la About You (exterior și căptușeală). Dacă produsul chiar nu are căptușeală, poți trimite o singură grupă.",
+    };
+  }
+  if (contine("jacket") || contine("coat") || contine("blazer") || contine("parka")) {
+    return {
+      minim: 2,
+      blocheaza: false,
+      mesaj: "Jachetele CĂPTUȘITE cer două grupe de material la About You (exterior și căptușeală). Dacă produsul nu e căptușit, o singură grupă e în regulă.",
+    };
+  }
+  return { minim: 1, blocheaza: true, mesaj: "Completează compoziția materialului." };
+}
+
+/**
+ * Ce cere categoria in materie de compozitie.
+ *
+ * `necunoscut` NU e acelasi lucru cu `tip: null`. Primul inseamna ca taxonomia
+ * nu s-a putut citi si atunci nu avem voie sa deducem nimic; al doilea inseamna
+ * ca About You chiar nu cere compozitie pentru categoria asta.
+ */
+export interface CerintaMaterialListare {
+  tip: AboutYouMaterialType | null;
+  path?: string | null;
+  necunoscut?: boolean;
+}
+
+export interface RezultatValidare {
+  /** Blocheaza trimiterea. */
+  issues: string[];
+  /** Nu blocheaza, dar About You poate respinge produsul pentru ele. */
+  warnings: string[];
+}
+
 /**
  * Tot ce blocheaza listarea, in romana, inainte de a pleca ceva spre About You.
  *
  * Functia exista de la inceput, dar nu era apelata de nicaieri: greselile se
  * aflau abia din raspunsul asincron al lotului, ca „produs respins", fara sa
- * spuna ce anume lipseste. Acum o cheama si editorul (ca sa arate lista), si
- * `buildAboutYouItems` (ca sa nu se poata ocoli).
- *
- * `cereMaterial` vine din categorie: About You cere compozitia materialului
- * pentru 849 din cele 851 de categorii, iar tipul (textil sau nu) il decide tot
- * categoria, nu comerciantul.
+ * spuna ce anume lipseste. Acum o cheama editorul (ca sa arate lista) SI
+ * `syncProductNow` (ca sa nu se poata ocoli prin sincronizarea automata —
+ * comentariul de aici sustinea, gresit, ca o cheama `buildAboutYouItems`).
  */
-export function validateListing(ctx: BuildContext, cereMaterial?: "textile" | "non-textile" | null): string[] {
+export function validateListing(ctx: BuildContext, material?: CerintaMaterialListare | null): RezultatValidare {
   const { config, product, listing } = ctx;
   const issues: string[] = [];
+  const warnings: string[] = [];
   const brand = listing.brand_id ?? config.brand_id;
   if (!brand) issues.push("Lipsește brandul About You.");
   if (!effectiveCategoryId(config, product, listing)) issues.push("Categoria nu este mapată la About You.");
-  // `buildAboutYouItems` cere culoare pe FIECARE varianta (mapping: `v.color_id ??
-  // listing.color_id`). Verificata cu `some`, o culoare pusa pe o singura varianta
-  // trecea de validare si cadea abia la trimitere, pe alta varianta.
-  if (!listing.color_id) {
-    const fara = ctx.variants.filter((v) => v.enabled && !v.color_id);
-    if (fara.length === ctx.variants.filter((v) => v.enabled).length) issues.push("Lipsește culoarea.");
-    else for (const v of fara) issues.push(`Varianta ${v.sku || "?"} nu are culoare.`);
+  /*
+   * Culoarea. `buildAboutYouItems` face `v.color_id ?? listing.color_id`, deci o
+   * varianta fara culoare o MOSTENESTE tacut pe cea a listarii.
+   *
+   * Verificarea se sarea complet cand listarea avea culoare, si atunci amestecul
+   * trecea nevazut: un produs care avea o culoare si a primit apoi inca cinci
+   * pleca cu unele SKU-uri pe culoarea lor si cu restul pe cea veche, toate cu
+   * aceleasi imagini — iar documentatia lor spune ca imaginile tin de fiecare
+   * cale de culoare. Nu cerem insa culoare pe fiecare varianta a unui produs care
+   * difera doar prin marime: acolo o singura culoare e corecta.
+   */
+  const active = ctx.variants.filter((v) => v.enabled);
+  const cuCuloare = active.filter((v) => v.color_id).length;
+  if (cuCuloare > 0 && cuCuloare < active.length) {
+    for (const v of active.filter((x) => !x.color_id)) {
+      issues.push(`Varianta ${v.sku || "?"} nu are culoare, dar altele au. Completeaz-o pe toate.`);
+    }
+  } else if (cuCuloare === 0 && !listing.color_id) {
+    issues.push("Lipsește culoarea.");
   }
   if (productImages(product).length === 0) issues.push("Produsul nu are imagini valide (URL http/https).");
   if (productWeight(product) == null) issues.push("Produsul nu are greutate. Completeaz-o în fișa produsului.");
 
-  if (cereMaterial) {
+  if (material?.necunoscut) {
+    // Taxonomia nu s-a putut citi. Tacerea de aici insemna, inainte, „categoria
+    // nu cere material" — si produsul pleca fara singurul camp pe care About You
+    // il numeste explicit obligatoriu.
+    issues.push("Nu am putut verifica ce compoziție de material cere această categorie. Încearcă din nou peste câteva momente.");
+  } else if (material?.tip) {
     const m = listing.material_composition;
-    if (!m || !Array.isArray(m.clusters) || m.clusters.length === 0) {
+    const clusters = m && Array.isArray(m.clusters) ? m.clusters : [];
+    if (clusters.length === 0) {
       issues.push("Lipsește compoziția materialului, obligatorie pentru această categorie.");
-    } else if (m.clusters.some((c) => !(c.cluster_id > 0))) {
+    } else {
       // `cluster_id` are `minimum: 1` in schema: un zero respinge toata cererea.
-      issues.push("Alege grupa de material pentru compoziție.");
-    } else if (cereMaterial === "textile") {
-      for (const cluster of m.clusters) {
-        const suma = (cluster.components ?? []).reduce((s, c) => s + (c.fraction ?? 0), 0);
-        if (Math.round(suma) !== 100) {
-          issues.push("Procentele compoziției textile trebuie să însumeze 100%.");
-          break;
+      if (clusters.some((c) => !(c.cluster_id > 0))) {
+        issues.push("Alege grupa de material pentru fiecare componentă a compoziției.");
+      }
+      if (clusters.some((c) => (c.components ?? []).length === 0)) {
+        issues.push("O grupă de material nu are niciun material ales.");
+      }
+      // Avertisment, nu blocaj: API-ul nu are `maxItems`, plafonul e al sablonului
+      // lor Excel. Nu oprim ceva ce About You accepta.
+      if (clusters.length > MAX_CLUSTERE_MATERIAL) {
+        warnings.push(`Șablonul About You are loc pentru cel mult ${MAX_CLUSTERE_MATERIAL} grupe de material, iar acum sunt ${clusters.length}.`);
+      }
+      const preaMulte = clusters.filter((c) => (c.components ?? []).length > MAX_MATERIALE_PER_CLUSTER).length;
+      if (preaMulte > 0) {
+        warnings.push(`Șablonul About You are loc pentru cel mult ${MAX_MATERIALE_PER_CLUSTER} materiale într-o grupă.`);
+      }
+      // Fiecare grupa descrie ALTA parte a produsului (exterior, captuseala,
+      // talpa). Aceeasi grupa de doua ori nu descrie nimic in plus.
+      const ids = clusters.map((c) => c.cluster_id);
+      if (new Set(ids).size !== ids.length) {
+        issues.push("Aceeași grupă de material apare de două ori. Fiecare grupă descrie altă parte a produsului.");
+      }
+      if (material.tip === "textile") {
+        // Suma e pe FIECARE grupa in parte, nu pe tot produsul: exemplul oficial
+        // are Lining 100% si Material 100%, adica 200% la un loc.
+        for (const cluster of clusters) {
+          const suma = (cluster.components ?? []).reduce((s, c) => s + (c.fraction ?? 0), 0);
+          if (Math.round(suma) !== 100) {
+            issues.push("Procentele fiecărei grupe de material trebuie să însumeze 100%.");
+            break;
+          }
         }
+      }
+      const regula = regulaClustere(material.path);
+      if (clusters.length < regula.minim) {
+        const text = `${regula.mesaj} Acum ai ${clusters.length}.`;
+        if (regula.blocheaza) issues.push(text); else warnings.push(text);
       }
     }
   }
 
-  const enabled = ctx.variants.filter((v) => v.enabled);
-  if (enabled.length === 0) issues.push("Nicio variantă activă de listat.");
-  for (const v of enabled) {
+  if (active.length === 0) issues.push("Nicio variantă activă de listat.");
+  for (const v of active) {
     if (!v.sku) { issues.push("O variantă nu are SKU."); continue; }
     const problemaSku = verificaSku(v.sku);
     if (problemaSku) issues.push(problemaSku);
     if (!v.ean) issues.push(`Varianta ${v.sku} nu are cod EAN.`);
     else if (!eanValid(v.ean)) issues.push(`Codul EAN al variantei ${v.sku} nu este un EAN-13 valid.`);
   }
-  return issues;
+
+  /*
+   * Doua variante nu pot fi identice pe (culoare, marime, a doua marime).
+   *
+   * `size_id` nu era verificat NICAIERI. Un tricou S/M/L cu selectoarele de
+   * marime neatinse pleca drept trei SKU-uri cu aceeasi culoare si `size: null` —
+   * pentru About You, trei duplicate ale aceleiasi variante. Respingerea venea
+   * asincron, cu „wrong sizes", fara sa spuna care varianta. Verificarea pe
+   * PERECHE, nu pe „are marime", nu inventeaza o cerinta: o geanta fara marime
+   * ramane valida cat timp e singura.
+   */
+  const perechi = new Map<string, string[]>();
+  for (const v of active) {
+    if (!v.sku) continue;
+    const cheie = `${v.color_id ?? listing.color_id ?? 0}|${v.size_id ?? 0}|${v.second_size_id ?? 0}`;
+    const lista = perechi.get(cheie);
+    if (lista) lista.push(v.sku); else perechi.set(cheie, [v.sku]);
+  }
+  for (const skus of perechi.values()) {
+    if (skus.length > 1) {
+      issues.push(`Variantele ${skus.slice(0, 4).join(", ")} au aceeași combinație de culoare și mărime. Alege mărimea pentru fiecare.`);
+    }
+  }
+
+  /*
+   * Marimea pusa doar pe UNELE variante e semnalata, simetric cu culoarea.
+   *
+   * Verificarea pe perechi prinde duplicatele, dar nu si cazul in care o marime
+   * NOUA, aparuta pe produs dupa ultima completare, pleaca cu `size: null` langa
+   * surorile ei completate: perechea ei e unica, deci trece — si About You o vede
+   * ca varianta fara marime.
+   */
+  const cuMarime = active.filter((v) => v.size_id).length;
+  if (cuMarime > 0 && cuMarime < active.length) {
+    for (const v of active.filter((x) => !x.size_id)) {
+      issues.push(`Varianta ${v.sku || "?"} nu are mărime, dar altele au. Completeaz-o pe toate.`);
+    }
+  }
+
+  // „If products have the 2nd size dimension (e.g. different leg lengths or
+  // cupsizes), the second size dimension is mandatory for ALL variants."
+  const cuAdoua = active.filter((v) => v.second_size_id).length;
+  if (cuAdoua > 0 && cuAdoua < active.length) {
+    issues.push("A doua dimensiune de mărime e completată doar la unele variante. About You o cere pe toate sau pe niciuna.");
+  }
+
+  return { issues, warnings };
 }
 
 export function buildAboutYouItems(ctx: BuildContext): { items: AboutYouProductItem[] } | { error: string } {

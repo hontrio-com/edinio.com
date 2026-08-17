@@ -1,5 +1,35 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
+import { logError } from "@/lib/error-logger";
 import type { AboutYouConfig } from "./types";
+
+/*
+ * Care dintre produse au deja o listare — citit PE BUCATI.
+ *
+ * `.in()` pleaca in ADRESA cererii: peste vreo sase-sapte sute de identificatori,
+ * PostgREST refuza. Apelantii vin din actiunile de comanda si pot aduce mii de
+ * produse dintr-o operatie in masa, iar eroarea era si INGHITITA (`data` null
+ * citit ca „niciunul listat"), deci nu se punea nimic la coada: pretul sau stocul
+ * schimbat in masa nu mai ajungea niciodata pe About You, tacut.
+ */
+async function idsListate(
+  admin: ReturnType<typeof createAdminClient>, businessId: string, ids: string[],
+): Promise<Set<string>> {
+  const gasite = new Set<string>();
+  for (const bucata of bucatiDeIduri(ids)) {
+    const { data, error } = await admin
+      .from("aboutyou_listings").select("product_id").eq("business_id", businessId).in("product_id", bucata);
+    if (error) {
+      await logError({
+        action: "aboutyou.enqueueMany", message: `nu am putut citi listarile: ${error.message}`,
+        details: { businessId, cate: bucata.length }, businessId, severity: "error",
+      });
+      continue;
+    }
+    for (const r of data ?? []) if (r.product_id) gasite.add(r.product_id);
+  }
+  return gasite;
+}
 
 // Enqueue an About You sync for a product when the store has About You connected
 // with auto-sync on. Fire-and-forget: never throws into the caller (used from
@@ -16,13 +46,42 @@ export async function enqueueAboutYouSync(
       .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
     const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
     if (!config.connected || !config.api_key) return;
-    if (config.auto_sync === false) return;
+    /*
+     * `auto_sync` oprit inseamna „nu trimite MODIFICARILE mele", nu „lasa
+     * produsele sterse sa se vanda mai departe".
+     *
+     * Ieșirea era inainte de examinarea operatiei, deci prinsese si `delete`. Iar
+     * cheia straina e `on delete set null`, deci listarea supravietuia cu
+     * `product_id` NULL — iar panoul porneste de la `products`, deci listarea
+     * orfana nu se mai afisa niciodata: comerciantul nu avea nici buton, nici rand
+     * de apasat, si produsul rămânea ACTIV pe About You, cu comenzi care curgeau.
+     * `enqueueAboutYouShip` face deja distincția asta, intenționat.
+     */
+    if (op === "upsert" && config.auto_sync === false) return;
     // Only enqueue an upsert for products that already have an About You listing
     // (enrichment). Un-enriched products are ignored until the merchant lists them.
     if (op === "upsert" && productId) {
       const { count } = await admin
         .from("aboutyou_listings").select("id", { count: "exact", head: true })
         .eq("business_id", businessId).eq("product_id", productId);
+      if (!count) return;
+    }
+    /*
+     * Stergerea se pune la coada DOAR pentru produse care au chiar o listare.
+     *
+     * Fara garda, orice produs sters dintr-un magazin cu About You conectat lasa
+     * un rand in coada, chiar daca produsul n-a fost listat niciodata — iar cronul
+     * il ia, il duce pana la `removeByStyleKey`, primeste „skipped" si abia atunci
+     * il sterge. Cu un import in masa curatat, coada se umple degeaba.
+     *
+     * Se verifica pe `style_key`, nu pe `product_id`: la momentul apelului cheia
+     * straina a pus deja `product_id` pe NULL (`on delete set null`), iar `offerId`
+     * ESTE `style_key`-ul.
+     */
+    if (op === "delete") {
+      const { count } = await admin
+        .from("aboutyou_listings").select("id", { count: "exact", head: true })
+        .eq("business_id", businessId).eq("style_key", offerId);
       if (!count) return;
     }
     await admin.from("aboutyou_sync_queue").upsert(
@@ -46,9 +105,7 @@ export async function enqueueAboutYouSyncMany(businessId: string, productIds: (s
     const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
     if (!config.connected || !config.api_key || config.auto_sync === false) return;
     // Restrict to products that already have an About You listing.
-    const { data: listed } = await admin
-      .from("aboutyou_listings").select("product_id").eq("business_id", businessId).in("product_id", ids);
-    const listedIds = new Set((listed ?? []).map((r) => r.product_id).filter(Boolean) as string[]);
+    const listedIds = await idsListate(admin, businessId, ids);
     const rows = ids.filter((id) => listedIds.has(id)).map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op: "upsert" as const }));
     if (rows.length === 0) return;
     await admin.from("aboutyou_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });

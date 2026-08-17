@@ -97,8 +97,17 @@ const DICTIONAR: Record<string, string> = {
   rochie: "dress", rochii: "dress",
   fusta: "skirt", fuste: "skirt",
   bluza: "blouse", bluze: "blouse",
-  camasa: "shirt", camasi: "shirt",
-  tricou: "shirt", tricouri: "shirt",
+  /*
+   * ⚠ „Cămașă" NU e `shirt`, oricat de mult ar parea.
+   *
+   * In taxonomia lor, `shirt` singur prinde intai frunzele de TRICOURI
+   * („T-shirt"), deci „Cămăși" se auto-aplica pe categoria de tricouri — iar
+   * categoria nu se mai poate schimba dupa aprobare. Frunzele corecte sunt
+   * `Blouse` la femei si `Button-up shirt` la barbati; dictionarul nu vede
+   * publicul, deci le dam pe amandoua ca sinonime si lasam scorul sa aleaga.
+   */
+  camasa: "blouse|button", camasi: "blouse|button",
+  tricou: "t + shirt|tshirt", tricouri: "t + shirt|tshirt",
   maieu: "top", maieuri: "top", maiou: "top", maiouri: "top",
   top: "top", topuri: "top",
   tunica: "tunic", tunici: "tunic",
@@ -114,7 +123,12 @@ const DICTIONAR: Record<string, string> = {
   pantaloni: "trousers", pantalon: "trousers",
   blugi: "jeans", jeans: "jeans", jeansi: "jeans", denim: "jeans",
   colanti: "leggings", colant: "leggings", leggings: "leggings",
-  sort: "shorts", sorturi: "shorts", shorts: "shorts", pantalonasi: "shorts",
+  /*
+   * ⚠ „Șort" dus la `shorts` propunea COSTUME DE BAIE: in cele 851 de frunze,
+   * `shorts` apare mai ales in `Swim shorts`, iar sorturile de strada n-au frunza
+   * proprie. Cea mai apropiata familie corecta e `Bottoms|Trousers`.
+   */
+  sort: "trousers", sorturi: "trousers", shorts: "trousers", pantalonasi: "trousers",
   salopeta: "dungarees|overall", salopete: "dungarees|overall",
   combinezon: "jumpsuit", combinezoane: "jumpsuit", jumpsuit: "jumpsuit",
   trening: "tracksuit", treninguri: "tracksuit",
@@ -138,7 +152,15 @@ const DICTIONAR: Record<string, string> = {
   slapi: "slipper", slap: "slipper",
 
   // Incaltaminte
-  incaltaminte: "shoe", incaltari: "shoe", pantofi: "shoe", pantof: "shoe",
+  /*
+   * ⚠ `shoe` singur prinde intai ACCESORIILE pentru pantofi („Shoe care",
+   * „Shoe accessories"). Frunzele reale de pantofi sunt `Low shoe|Lace-up shoe`,
+   * `Low shoe|Slip-ons` si `Pumps|Pumps`. „Încălțăminte" e termen-umbrela si nu
+   * are frunza: il lasam sa dea propuneri slabe, nu o potrivire care se aplica
+   * singura pe o categorie greșita si ireversibila.
+   */
+  incaltaminte: "lace + up + shoe", incaltari: "lace + up + shoe",
+  pantofi: "lace + up + shoe", pantof: "lace + up + shoe",
   adidasi: "trainers|sneakers", adidas: "trainers|sneakers", sneakers: "trainers|sneakers", tenisi: "trainers|sneakers",
   ghete: "bootie|booties", gheata: "bootie", botine: "bootie", botina: "bootie",
   cizme: "boots|boot", cizma: "boot|boots",
@@ -389,22 +411,62 @@ export function potrivesteCategorie(
   const publicExplicit = q.public !== null;
   const limita = optiuni.limita ?? 8;
 
+  /*
+   * DOAR FRUNZELE POT FI ALESE. Plasa de siguranta, nu reparatie.
+   *
+   * ⚠ ONESTITATE: filtrul asta a fost adaugat crezand ca `GET /categories/`
+   * intoarce si nodurile intermediare, si ca de acolo vine potrivirea „Cizme damă"
+   * pe `Fashion|Women|Shoes|Boots`. PROBA PE API-UL REAL (17.08, cheia
+   * comerciantului) spune altceva: cele 851 de randuri sunt TOATE frunze —
+   * `parent_id` trimite spre 211 noduri parinte care NU sunt in raspuns. Deci
+   * multimea de mai jos iese goala si filtrul e un no-op.
+   *
+   * Il pastram fiindca nu costa nimic (un `Set` peste o lista deja adusa) si
+   * fiindca alegerea e IREVERSIBILA: „once the product category is published &
+   * approved, there is no possibility of changing the category." Daca About You
+   * incepe vreodata sa intoarca si parintii, filtrul e deja acolo.
+   */
+  const parinti = new Set<number>();
+  for (const c of categorii) {
+    if (c.parent_id != null) parinti.add(c.parent_id);
+  }
+
   const rezultate: SugestieCategorie[] = [];
   for (const cat of categorii) {
+    if (parinti.has(cat.id)) continue;
     const p = pregateste(cat);
 
     const potrivireFrunza = scorLista(q.grupuri, p.frunza);
     if (potrivireFrunza === 0) continue;   // fara atingere pe frunza nu e categoria cautata
 
+    /*
+     * SUBSTANTIVUL trebuie atins, nu doar calificativul.
+     *
+     * Primul grup produs de `traduCategorie` e substantivul („mănuși"), restul
+     * sunt calificative („de iarnă"). Fara conditia asta, o frunza care prinde
+     * DOAR calificativul trecea: „Mănuși de iarnă" propunea „Winter coat", iar
+     * scorul putea urca destul cat sa se aplice singura — pe o categorie care nu
+     * se mai poate schimba dupa aprobare.
+     */
+    if (q.grupuri.length > 1 && scorLista([q.grupuri[0]], p.frunza) === 0) continue;
+
     let scor = 0.8 * potrivireFrunza + 0.2 * scorLista(q.grupuri, p.cale);
 
-    // Publicul tinta. Scris de comerciant in numele categoriei, o nepotrivire e
-    // eroare grava; venit din setarea magazinului, e doar o preferinta.
-    if (publicCerut) {
+    /*
+     * Publicul tinta. Scris de comerciant in numele categoriei, o nepotrivire e
+     * eroare grava; venit din setarea magazinului, e doar o preferinta.
+     *
+     * ⚠ Cand numele spune explicit „copii", setarea magazinului NU se mai aplica:
+     * altfel un magazin cu `target_audience = women` impingea in fata frunza de
+     * ADULTI pentru o categorie numita „Rochii copii", si o penalizare de 0,30 nu
+     * ajungea ca sa o intoarca. Nepotrivirea devine eliminatorie.
+     */
+    if (q.copii) {
+      if (!p.copii) continue;
+    } else if (publicCerut) {
       if (p.publicTinta === publicCerut) scor += 0.10;
       else if (p.publicTinta) scor -= publicExplicit ? 0.45 : 0.16;
     }
-    if (q.copii && !p.copii) scor -= 0.30;
     if (!q.copii && p.copii && !publicExplicit) scor -= 0.08;
 
     // „Sports X" si „Traditional X" sunt categorii distincte pe About You.

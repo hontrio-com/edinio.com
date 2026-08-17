@@ -7,8 +7,11 @@ import { AboutYouClient } from "@/components/dashboard/AboutYouClient";
 import { AboutYouCategoryMapping } from "@/components/dashboard/AboutYouCategoryMapping";
 import { AboutYouCarrierMapping } from "@/components/dashboard/AboutYouCarrierMapping";
 import { AboutYouListings } from "@/components/dashboard/AboutYouListings";
+import { AboutYouPreVerificare } from "@/components/dashboard/AboutYouPreVerificare";
+import { AboutYouOrders } from "@/components/dashboard/AboutYouOrders";
 import {
-  getAboutYouProductPage, getAboutYouStatus, type AboutYouProductPage,
+  getAboutYouOrders, getAboutYouPreVerificare, getAboutYouProductPage, getAboutYouStatus,
+  type AboutYouProductPage, type PreVerificareAboutYou, type RandComandaAboutYou,
 } from "@/lib/actions/aboutyou.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -56,6 +59,8 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
 
   let categories: string[] = [];
   let paginaProduse: AboutYouProductPage | null = null;
+  let preVerificare: PreVerificareAboutYou | null = null;
+  let comenzi: RandComandaAboutYou[] = [];
   if (connected) {
     // Distinct product categories, windowed past the 1000-row PostgREST cap.
     const catRows: { category: string | null }[] = [];
@@ -70,6 +75,10 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
 
     const p = await getAboutYouProductPage(businessId, 1, "");
     paginaProduse = "error" in p ? null : p;
+
+    const pv = await getAboutYouPreVerificare(businessId);
+    preVerificare = "error" in pv ? null : pv;
+    comenzi = await getAboutYouOrders(businessId);
   }
 
   const st = "error" in status ? null : status;
@@ -79,6 +88,8 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
       <AboutYouClient businessId={businessId} status={st} />
       {connected && st && (
         <div className="mt-6 space-y-6">
+          {/* Inainte de mapari si de editor: ce lipseste, numarat pe datele reale. */}
+          {preVerificare && <AboutYouPreVerificare date={preVerificare} />}
           <AboutYouCategoryMapping businessId={businessId} edinioCategories={categories} mapped={st.categoryMap} />
           <AboutYouCarrierMapping businessId={businessId} carrierMap={st.carrierMap} />
           {paginaProduse && (
@@ -88,6 +99,7 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
               pricing={{ mode: st.priceMode, rate: st.fxRate, marginPct: st.fxMarginPct }}
             />
           )}
+          <AboutYouOrders businessId={businessId} comenzi={comenzi} />
         </div>
       )}
     </>

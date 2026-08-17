@@ -9,6 +9,7 @@ import {
   publishAboutYouProduct, saveAboutYouListing, syncAboutYouProduct, validateAboutYouListing,
   type AboutYouEditorData, type AboutYouEditorVariant, type AboutYouListingInput,
 } from "@/lib/actions/aboutyou.actions";
+import { MAX_CLUSTERE_MATERIAL, regulaClustere } from "@/lib/aboutyou/mapping";
 import type { AboutYouAttributeGroup, AboutYouBrand, AboutYouMaterialCluster } from "@/lib/aboutyou/types";
 
 export interface AboutYouPricing { mode: "fx_from_ron" | "manual_eur"; rate?: number; marginPct?: number }
@@ -29,18 +30,48 @@ export interface AboutYouPricing { mode: "fx_from_ron" | "manual_eur"; rate?: nu
  */
 const CHEIE_CULOARE = "color";
 const CHEIE_MARIME = "size";
-const CHEIE_MARIME_2 = "second_size";
+/*
+ * A doua dimensiune de marime: lungimea cracului la pantaloni, cupa la sutiene.
+ *
+ * Cheia era rezervata, dar nu se calcula niciun grup si nu se randa niciun
+ * control, deci `second_size_id` era imposibil de completat din interfata:
+ * circula in cerc de la editor la baza si inapoi, iar campul din payload era cod
+ * mort. Documentatia o cere pe TOATE variantele daca produsul are dimensiunea a
+ * doua, iar „wrong sizes" e motiv de respingere — deci sutienele si pantalonii cu
+ * lungime de crac erau respinsi sistematic, fara ce sa repare comerciantul.
+ * Numele exact al grupului nu e documentat, deci le incercam pe cele plauzibile.
+ */
+// CONFIRMAT pe API-ul real (sandbox, 17.08): grupul se numeste exact `second_size`
+// si apare pe categoriile care chiar au a doua dimensiune — sutiene, blugi,
+// pantaloni — si lipseste pe genti. `bra_cup` exista, dar e alt atribut, obisnuit.
+const CHEI_MARIME_2 = ["second_size"];
 const CHEIE_BRAND = "brand";
 // Compozitia materialului are ecran propriu (procente, clustere), nu se alege
 // dintr-un simplu selector.
-// DOAR cele doua chei consumate de ecranul de compozitie. `material_style` si
+// DOAR cheile consumate de ecranul de compozitie. `material_style` si
 // `shoe_material_style` sunt grupuri obisnuite (stil de material, „piele"/„textil")
 // si trebuie sa ramana selectabile: rezervate, dispareau din formular si se
 // pierdeau tacut la fiecare re-salvare.
-const CHEI_MATERIAL = new Set(["material", "material_group_name"]);
-const CHEI_REZERVATE = new Set([CHEIE_CULOARE, CHEIE_MARIME, CHEIE_MARIME_2, CHEIE_BRAND, ...CHEI_MATERIAL]);
+//
+/*
+ * CONFIRMAT pe API-ul real: grupul de clustere se numeste `material_group_name`
+ * („Material group", 215 valori, singurul cu `is_default`). `material_group`, pe
+ * care il pomeneste ghidul narativ, NU EXISTA — il tineam in lista ca sa acoperim
+ * ambele forme, dar rezervat degeaba ar fi putut ascunde un atribut obisnuit cu
+ * acel nume, daca l-ar adauga vreodata.
+ */
+const CHEI_CLUSTER = ["material_group_name"];
+const CHEI_MATERIAL = new Set(["material", ...CHEI_CLUSTER]);
+const CHEI_REZERVATE = new Set([CHEIE_CULOARE, CHEIE_MARIME, CHEIE_BRAND, ...CHEI_MARIME_2, ...CHEI_MATERIAL]);
 
 const grup = (grupuri: AboutYouAttributeGroup[], cheie: string) => grupuri.find((g) => g.name === cheie);
+const primulGrup = (grupuri: AboutYouAttributeGroup[], chei: string[]) => {
+  for (const cheie of chei) {
+    const g = grup(grupuri, cheie);
+    if (g) return g;
+  }
+  return undefined;
+};
 
 function eurPreview(ron: number, pricing: AboutYouPricing): string {
   if (pricing.mode === "manual_eur" || !pricing.rate || pricing.rate <= 0) return "-";
@@ -48,7 +79,27 @@ function eurPreview(ron: number, pricing: AboutYouPricing): string {
   return `${(Math.round(eur * 100) / 100).toFixed(2)} EUR`;
 }
 
-interface ComponentaMaterial { material_id: number; fraction: number }
+/*
+ * Fiecare rand isi poarta propria identitate.
+ *
+ * Cheia lui React era derivata din VALOAREA pe care randul o editeaza
+ * (`${material_id}-${index}`), deci fiecare alegere de material schimba cheia,
+ * randul se remonta si pierdea focusul — se simte imediat la navigarea cu
+ * tastatura. Un contor simplu e de ajuns: identitatile trebuie doar sa fie
+ * stabile cat trece randul prin editor.
+ */
+let contorRand = 0;
+const idRand = () => `r${++contorRand}`;
+
+interface ComponentaMaterial { id: string; material_id: number; fraction: number }
+/**
+ * O grupa de material = o PARTE a produsului (exterior, căptușeală, talpă), cu
+ * materialele ei. Editorul tinea o singura grupa, iar About You cere doua la
+ * gentile captusite si trei la incaltaminte — deci gentile nu se puteau lista
+ * corect deloc. La incarcare se citea tot doar prima grupa, asa ca o compozitie
+ * completa pusa din alta parte se reducea la una singura la prima salvare.
+ */
+interface ClusterMaterial { id: string; cluster_id: number | null; components: ComponentaMaterial[] }
 
 export function AboutYouListingEditor({
   businessId, productId, pricing, onClose,
@@ -64,13 +115,13 @@ export function AboutYouListingEditor({
   const [eroareGrupuri, setEroareGrupuri] = useState<string | null>(null);
   const [reincarcaGrupuri, setReincarcaGrupuri] = useState(0);
   const [issues, setIssues] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const [brandId, setBrandId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [colorId, setColorId] = useState<number | null>(null);
   const [attrSel, setAttrSel] = useState<Record<number, number[]>>({});
-  const [materiale, setMateriale] = useState<ComponentaMaterial[]>([]);
-  const [clusterId, setClusterId] = useState<number | null>(null);
+  const [clustere, setClustere] = useState<ClusterMaterial[]>([]);
   const [hsCode, setHsCode] = useState("");
   const [countryOfOrigin, setCountryOfOrigin] = useState("RO");
   const [variants, setVariants] = useState<AboutYouEditorVariant[]>([]);
@@ -95,7 +146,10 @@ export function AboutYouListingEditor({
       if (!alive) return;
       if ("error" in ed) { toast.error(ed.error); onCloseRef.current(); return; }
       setData(ed);
-      setBrandId(ed.listing?.brand_id ?? null);
+      // Brandul din setari se ARATA, nu doar se aplica pe tacute. Fara asta,
+      // selectorul ramanea gol pentru un produs care oricum ar fi plecat cu
+      // brandul global — deci comerciantul nu vedea ce brand se trimite.
+      setBrandId(ed.listing?.brand_id ?? ed.defaultBrandId ?? null);
       setCategoryId(ed.listing?.category_id ?? ed.mappedCategoryId ?? null);
       setColorId(ed.listing?.color_id ?? null);
       setHsCode(ed.listing?.hs_code ?? "");
@@ -103,8 +157,13 @@ export function AboutYouListingEditor({
       setVariants(ed.variants);
       const m = ed.listing?.material ?? null;
       if (m && m.clusters?.length) {
-        setClusterId(m.clusters[0].cluster_id ?? null);
-        setMateriale(m.clusters[0].components.map((c) => ({ material_id: c.material_id, fraction: c.fraction ?? 0 })));
+        setClustere(m.clusters.map((cl) => ({
+          id: idRand(),
+          cluster_id: cl.cluster_id ?? null,
+          components: (cl.components ?? []).map((c) => ({
+            id: idRand(), material_id: c.material_id, fraction: c.fraction ?? 0,
+          })),
+        })));
       }
       if (!("error" in br)) setBrands(br.brands);
       setLoading(false);
@@ -144,43 +203,84 @@ export function AboutYouListingEditor({
 
   const colorGroup = useMemo(() => grup(groups, CHEIE_CULOARE), [groups]);
   const sizeGroup = useMemo(() => grup(groups, CHEIE_MARIME), [groups]);
+  const secondSizeGroup = useMemo(() => primulGrup(groups, CHEI_MARIME_2), [groups]);
   const materialGroup = useMemo(() => grup(groups, "material"), [groups]);
-  const clusterGroup = useMemo(() => grup(groups, "material_group_name"), [groups]);
-  const otherGroups = useMemo(() => groups.filter((g) => !CHEI_REZERVATE.has(g.name)), [groups]);
+  const clusterGroup = useMemo(() => primulGrup(groups, CHEI_CLUSTER), [groups]);
+  /*
+   * Etichetele care se repeta se desipart.
+   *
+   * Pe categoria „Handbag", TREI grupuri se cheama toate „Material" in interfata:
+   * `material` (consumat de ecranul de compozitie), `material_style` si
+   * `shoe_material_style`. Raman doua in formular, cu acelasi text, si comerciantul
+   * n-are cum sa stie care ce e. Cand doua grupuri impart eticheta, ii adaugam
+   * numele tehnic — urat, dar mai putin rau decat doua campuri identice.
+   */
+  const otherGroups = useMemo(() => {
+    const ramase = groups.filter((g) => !CHEI_REZERVATE.has(g.name));
+    const deCateOri = new Map<string, number>();
+    for (const g of ramase) deCateOri.set(g.frontend_name, (deCateOri.get(g.frontend_name) ?? 0) + 1);
+    return ramase.map((g) => ({
+      grup: g,
+      eticheta: (deCateOri.get(g.frontend_name) ?? 0) > 1
+        ? `${g.frontend_name} (${g.name.replace(/_/g, " ")})`
+        : g.frontend_name,
+    }));
+  }, [groups]);
 
   const materialType = data?.materialType ?? null;
+  // Cate grupe cere categoria — aceeasi regula pe care o aplica si validarea de
+  // pe server, ca omul sa nu afle abia la trimitere.
+  const regulaMaterial = useMemo(() => regulaClustere(data?.materialPath ?? null), [data?.materialPath]);
   const areMaiMulteCulori = variants.length > 1 && !!colorGroup;
 
   const setVariant = (key: string, patch: Partial<AboutYouEditorVariant>) =>
     setVariants((prev) => prev.map((v) => (v.key === key ? { ...v, ...patch } : v)));
 
   const buildInput = useCallback((): AboutYouListingInput => {
-    // `cluster_id` are `minimum: 1` in schema: trimis 0, respinge toata cererea.
-    // Fara grupa aleasa nu construim deloc compozitia — `validateListing` cere
-    // atunci explicit alegerea grupei.
-    const clusters: AboutYouMaterialCluster[] = materiale.length > 0 && clusterId
-      ? [{
-        cluster_id: clusterId,
-        components: materiale.map((m) => (materialType === "textile"
-          ? { material_id: m.material_id, fraction: m.fraction }
-          : { material_id: m.material_id })),
-      }]
-      : [];
+    /*
+     * Grupele se trimit AȘA CUM SUNT, inclusiv cele incomplete.
+     *
+     * Erau filtrate aici, inainte de validare, si atunci o grupa completata pe
+     * jumatate dispărea în tăcere: omul o vedea pe ecran, dar n-o primea nici
+     * validarea, nici baza. Iar cele doua verificari scrise pentru ea („alege
+     * grupa", „nu are niciun material") nu se puteau declansa NICIODATA.
+     * `cluster_id: 0` e sentinela pe care `validateListing` o respinge explicit
+     * (schema cere `minimum: 1`), si nimic invalid nu poate ajunge la About You:
+     * `syncProductNow` valideaza inainte de a construi payload-ul.
+     */
+    /*
+     * Tipul compozitiei: cand taxonomia n-a raspuns, il luam pe cel STOCAT.
+     *
+     * Altfel `materialType` era `null`, `material` devenea `null`, iar un simplu
+     * „Salvează" stergea compozitia completata anterior — exact in momentul in
+     * care sectiunea nici nu se afisa, deci fara ca omul sa vada ce pierde.
+     */
+    const tipMaterial = materialType ?? data?.listing?.material?.type ?? null;
+    const clusters: AboutYouMaterialCluster[] = clustere.map((cl) => ({
+      cluster_id: cl.cluster_id ?? 0,
+      components: cl.components.map((m) => (tipMaterial === "textile"
+        ? { material_id: m.material_id, fraction: m.fraction }
+        : { material_id: m.material_id })),
+    }));
     return {
       brand_id: brandId,
       category_id: categoryId,
       color_id: colorId,
       attributes: Object.values(attrSel).flat().filter((x): x is number => !!x),
-      material: clusters.length > 0 && materialType ? { type: materialType, clusters } : null,
+      material: clusters.length > 0 && tipMaterial ? { type: tipMaterial, clusters } : null,
       country_of_origin: countryOfOrigin.trim().toUpperCase() || "RO",
       hs_code: hsCode.trim() || null,
       variants: variants.map((v) => ({
         sku: v.sku, ean: v.ean, size_id: v.size_id, second_size_id: v.second_size_id,
         color_id: v.color_id, quantity: v.quantity, retail_price_eur: v.retail_price_eur,
         sale_price_eur: v.sale_price_eur, enabled: v.enabled,
+        // Titlul REAL al combinatiei merge in `aboutyou_variants.variant_title`:
+        // fara el, o comanda About You nu scade stocul combinatiei, ci pe al
+        // produsului. Eticheta afisata („Unic") NU e acelasi lucru.
+        variant_title: v.variantTitle,
       })),
     };
-  }, [brandId, categoryId, colorId, attrSel, materiale, clusterId, materialType, countryOfOrigin, hsCode, variants]);
+  }, [brandId, categoryId, colorId, attrSel, clustere, materialType, data, countryOfOrigin, hsCode, variants]);
 
   const save = (then?: "sync" | "publish") => {
     void (async () => {
@@ -192,11 +292,19 @@ export function AboutYouListingEditor({
         if (then) {
           const v = await validateAboutYouListing(businessId, productId, input);
           if ("error" in v) { toast.error(v.error); return; }
+          // Avertismentele NU opresc trimiterea: sunt cerinte pe care
+          // documentatia le conditioneaza (o geanta chiar poate fi necaptusita),
+          // dar pentru care About You respinge tarziu si scump.
+          setWarnings(v.warnings);
           if (v.issues.length > 0) {
             setIssues(v.issues);
             toast.error("Mai sunt lucruri de completat înainte de trimitere.");
             return;
           }
+        } else {
+          // Avertismentele si problemele de la o trimitere anterioara nu mai
+          // descriu ce e pe ecran acum: o salvare simpla nu revalideaza nimic.
+          setWarnings([]);
         }
         setIssues([]);
 
@@ -209,7 +317,9 @@ export function AboutYouListingEditor({
         } else if (then === "publish") {
           const p = await publishAboutYouProduct(businessId, productId);
           if ("error" in p) { toast.error(p.error); return; }
-          toast.success("Publicat pe About You.");
+          // NU „Publicat": pe productie produsul intra in aprobare manuala si
+          // devine vizibil abia dupa ce trece de ea. Doar pe sandbox e imediat.
+          toast.success("Trimis spre publicare. About You îl aprobă înainte să apară în magazin.");
         } else {
           toast.success("Listare salvată.");
         }
@@ -231,6 +341,14 @@ export function AboutYouListingEditor({
   if (!data) return null;
 
   const manual = pricing.mode === "manual_eur";
+  /*
+   * „Publică" nu are ce publica inainte de prima trimitere.
+   *
+   * `PUT /products/status` lucreaza pe product master-ul creat de
+   * `POST /products/`. Apasat pe o listare doar salvata local, esua tacut si
+   * totusi arata „Publicat pe About You".
+   */
+  const aFostTrimis = data.listing?.last_synced_at != null;
 
   return (
     <div className="rounded-lg border border-border bg-background p-4 space-y-4">
@@ -252,11 +370,34 @@ export function AboutYouListingEditor({
         </div>
       )}
 
+      {/* Taxonomia necitita nu inseamna „categoria nu cere material": fara ea nu
+          stim ce cere About You, iar tacerea de dinainte lasa produsul sa plece gol. */}
+      {data.taxonomyError && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700 flex items-start gap-2">
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <span className="flex-1">
+            Nu am putut citi taxonomia About You, deci nu știm ce compoziție de material cere această
+            categorie. Trimiterea rămâne blocată până se încarcă. {data.taxonomyError}
+          </span>
+        </div>
+      )}
+
       {issues.length > 0 && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
           <p className="font-semibold mb-1">Înainte de trimitere:</p>
           <ul className="space-y-0.5">
             {issues.map((it) => <li key={it}>• {it}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Doar cand nu exista blocaje: altfel „Poți trimite așa" ar contrazice
+          direct banda galbena si butonul care nu lasa trimiterea. */}
+      {issues.length === 0 && warnings.length > 0 && (
+        <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-900">
+          <p className="font-semibold mb-1">Poți trimite așa, dar About You ar putea respinge:</p>
+          <ul className="space-y-0.5">
+            {warnings.map((it) => <li key={it}>• {it}</li>)}
           </ul>
         </div>
       )}
@@ -271,6 +412,13 @@ export function AboutYouListingEditor({
             <option value="">Alege brand</option>
             {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          {/* Brandul e per PRODUS la About You, nu per magazin. Cel din setări e
+              doar valoarea implicită, iar comerciantul nu avea de unde ști asta. */}
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {data.defaultBrandId != null && brandId === data.defaultBrandId
+              ? `Implicit din setări${data.defaultBrandName ? ` (${data.defaultBrandName})` : ""}. Poți alege alt brand pentru acest produs.`
+              : "Fiecare produs poate avea alt brand. Lista conține brandurile aprobate în contul tău About You."}
+          </p>
         </div>
         {colorGroup && !areMaiMulteCulori && (
           <div>
@@ -284,10 +432,10 @@ export function AboutYouListingEditor({
             </select>
           </div>
         )}
-        {otherGroups.map((g) => (
+        {otherGroups.map(({ grup: g, eticheta }) => (
           <div key={g.id}>
             <label className="block text-xs font-medium text-muted-foreground mb-1">
-              {g.frontend_name}{g.is_multiselect ? " (mai multe)" : ""}
+              {eticheta}{g.is_multiselect ? " (mai multe)" : ""}
             </label>
             <select
               multiple={g.is_multiselect}
@@ -319,78 +467,129 @@ export function AboutYouListingEditor({
         </div>
       </div>
 
-      {/* Compozitia materialului: obligatorie pe aproape toate categoriile */}
+      {/* Compozitia materialului: obligatorie pe aproape toate categoriile.
+          O „grupă" e o PARTE a produsului (exterior, căptușeală, talpă) — About
+          You cere doua la gentile captusite si trei la incaltaminte, iar
+          editorul stia sa emita una singura. */}
       {materialType && materialGroup && (
         <div className="rounded-lg border border-border p-3">
           <p className="text-xs font-semibold text-foreground mb-1">
             Compoziția materialului {materialType === "textile" ? "(textil, cu procente)" : "(non-textil)"}
           </p>
           <p className="text-[11px] text-muted-foreground mb-2">
-            About You o cere pentru această categorie. {materialType === "textile" ? "Procentele trebuie să însumeze 100%." : ""}
+            {regulaMaterial.minim > 1
+              ? regulaMaterial.mesaj
+              : "About You o cere pentru această categorie."}
+            {materialType === "textile" ? " Procentele fiecărei grupe trebuie să însumeze 100%." : ""}
           </p>
 
-          {clusterGroup && (
-            <div className="mb-2">
-              <label className="block text-[10px] text-muted-foreground mb-0.5">Grupa de material</label>
-              <select
-                value={clusterId ?? ""} onChange={(e) => setClusterId(e.target.value ? Number(e.target.value) : null)}
-                className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
-              >
-                <option value="">Alege grupa</option>
-                {clusterGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-              </select>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            {materiale.map((m, i) => (
-              <div key={`${m.material_id}-${i}`} className="flex items-center gap-2">
-                <select
-                  value={m.material_id}
-                  onChange={(e) => setMateriale((prev) => prev.map((x, j) =>
-                    j === i ? { ...x, material_id: Number(e.target.value) } : x))}
-                  className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-xs"
-                >
-                  {materialGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-                </select>
-                {materialType === "textile" && (
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number" min="0" max="100" value={m.fraction}
-                      onChange={(e) => setMateriale((prev) => prev.map((x, j) =>
-                        j === i ? { ...x, fraction: Number(e.target.value) } : x))}
-                      className="w-16 rounded border border-border bg-background px-2 py-1.5 text-xs"
-                    />
-                    <span className="text-xs text-muted-foreground">%</span>
+          <div className="space-y-2">
+            {clustere.map((cl, ci) => {
+              const total = cl.components.reduce((s, m) => s + m.fraction, 0);
+              return (
+                <div key={cl.id} className="rounded border border-border/70 bg-muted/30 p-2">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    {clusterGroup ? (
+                      <select
+                        value={cl.cluster_id ?? ""}
+                        onChange={(e) => setClustere((prev) => prev.map((x, j) =>
+                          j === ci ? { ...x, cluster_id: e.target.value ? Number(e.target.value) : null } : x))}
+                        className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-xs"
+                      >
+                        <option value="">Alege partea produsului</option>
+                        {clusterGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
+                      </select>
+                    ) : (
+                      <span className="flex-1 text-[11px] text-amber-700">
+                        Lista grupelor de material nu a venit de la About You pentru această categorie.
+                      </span>
+                    )}
+                    <button
+                      onClick={() => setClustere((prev) => prev.filter((_, j) => j !== ci))}
+                      className="text-xs text-muted-foreground hover:text-red-600 whitespace-nowrap"
+                    >
+                      Scoate grupa
+                    </button>
                   </div>
-                )}
-                <button
-                  onClick={() => setMateriale((prev) => prev.filter((_, j) => j !== i))}
-                  className="text-xs text-muted-foreground hover:text-red-600"
-                >
-                  Scoate
-                </button>
-              </div>
-            ))}
+
+                  <div className="space-y-1.5">
+                    {cl.components.map((m, i) => (
+                      <div key={m.id} className="flex items-center gap-2">
+                        <select
+                          value={m.material_id}
+                          onChange={(e) => setClustere((prev) => prev.map((x, j) => j !== ci ? x : {
+                            ...x,
+                            components: x.components.map((y, k) =>
+                              k === i ? { ...y, material_id: Number(e.target.value) } : y),
+                          }))}
+                          className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-xs"
+                        >
+                          {materialGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
+                        </select>
+                        {materialType === "textile" && (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number" min="0" max="100" value={m.fraction}
+                              onChange={(e) => setClustere((prev) => prev.map((x, j) => j !== ci ? x : {
+                                ...x,
+                                components: x.components.map((y, k) =>
+                                  k === i ? { ...y, fraction: Number(e.target.value) } : y),
+                              }))}
+                              className="w-16 rounded border border-border bg-background px-2 py-1.5 text-xs"
+                            />
+                            <span className="text-xs text-muted-foreground">%</span>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setClustere((prev) => prev.map((x, j) => j !== ci ? x : {
+                            ...x, components: x.components.filter((_, k) => k !== i),
+                          }))}
+                          className="text-xs text-muted-foreground hover:text-red-600"
+                        >
+                          Scoate
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-1.5">
+                    <button
+                      onClick={() => setClustere((prev) => prev.map((x, j) => j !== ci ? x : {
+                        ...x,
+                        components: [
+                          ...x.components,
+                          { id: idRand(), material_id: materialGroup.attributes[0]?.id ?? 0, fraction: x.components.length === 0 ? 100 : 0 },
+                        ],
+                      }))}
+                      className="text-xs font-medium text-primary hover:underline"
+                    >
+                      + Adaugă material
+                    </button>
+                    {materialType === "textile" && cl.components.length > 0 && (
+                      <span className={`text-[11px] font-medium ${total === 100 ? "text-green-700" : "text-amber-700"}`}>
+                        Total: {total}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex items-center justify-between mt-2">
             <button
-              onClick={() => setMateriale((prev) => [
-                ...prev,
-                { material_id: materialGroup.attributes[0]?.id ?? 0, fraction: prev.length === 0 ? 100 : 0 },
-              ])}
-              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => setClustere((prev) => [...prev, { id: idRand(), cluster_id: null, components: [] }])}
+              disabled={clustere.length >= MAX_CLUSTERE_MATERIAL}
+              className="text-xs font-medium text-primary hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
             >
-              + Adaugă material
+              + Adaugă grupă de material
             </button>
-            {materialType === "textile" && materiale.length > 0 && (
-              <span className={`text-[11px] font-medium ${
-                materiale.reduce((s, m) => s + m.fraction, 0) === 100 ? "text-green-700" : "text-amber-700"
-              }`}>
-                Total: {materiale.reduce((s, m) => s + m.fraction, 0)}%
-              </span>
-            )}
+            <span className="text-[11px] text-muted-foreground">
+              {clustere.length} din maximum {MAX_CLUSTERE_MATERIAL}
+              {regulaMaterial.minim > 1
+                ? `, ${regulaMaterial.blocheaza ? "obligatoriu" : "recomandat"} cel puțin ${regulaMaterial.minim}`
+                : ""}
+            </span>
           </div>
         </div>
       )}
@@ -438,6 +637,17 @@ export function AboutYouListingEditor({
                     </select>
                   </div>
                 )}
+                {/* A doua dimensiune: se cere pe TOATE variantele sau pe niciuna. */}
+                {secondSizeGroup && (
+                  <div>
+                    <label className="block text-[10px] text-muted-foreground mb-0.5">{secondSizeGroup.frontend_name}</label>
+                    <select value={v.second_size_id ?? ""} onChange={(e) => setVariant(v.key, { second_size_id: e.target.value ? Number(e.target.value) : null })}
+                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs">
+                      <option value="">-</option>
+                      {secondSizeGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-0.5">Stoc</label>
                   <input type="number" min="0" value={v.quantity ?? ""} onChange={(e) => setVariant(v.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
@@ -471,8 +681,9 @@ export function AboutYouListingEditor({
           className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
           <Send className="h-3.5 w-3.5" /> Salvează și trimite
         </button>
-        <button onClick={() => save("publish")} disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-primary text-primary px-3 py-2 text-sm font-semibold hover:bg-primary/10 disabled:opacity-60">
+        <button onClick={() => save("publish")} disabled={pending || !aFostTrimis}
+          title={aFostTrimis ? undefined : "Trimite întâi produsul pe About You."}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary text-primary px-3 py-2 text-sm font-semibold hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
           <Upload className="h-3.5 w-3.5" /> Publică
         </button>
         <button onClick={onClose} disabled={pending}
@@ -480,6 +691,13 @@ export function AboutYouListingEditor({
           Închide
         </button>
       </div>
+
+      {!aFostTrimis && (
+        <p className="text-[11px] text-muted-foreground">
+          Ordinea e „Salvează și trimite”, apoi „Publică”: About You creează întâi produsul, iar publicarea
+          îl trece în magazin. Butonul se deblochează după ce produsul a plecat.
+        </p>
+      )}
     </div>
   );
 }

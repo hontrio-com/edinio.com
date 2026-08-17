@@ -17,6 +17,29 @@ import type { Json } from "@/types/database.types";
 
 type Admin = SupabaseClient<Database>;
 
+/*
+ * Fereastra de execuție, declarata explicit.
+ *
+ * Lipsea, deci ruta cadea pe limita implicita a platformei. Douasprezece cronuri
+ * din repo o fixeaza; aici nu. Pasii se executa in ordine, iar primii tăiați la
+ * expirare sunt exact ultimii doi: reconcilierea statusurilor si POLLUL DE
+ * COMENZI. O comanda neluata la timp inseamna un colet netrimis.
+ */
+export const maxDuration = 60;
+
+/*
+ * Buget de timp pentru primii trei pasi, ca al patrulea sa apuce sa ruleze.
+ *
+ * `maxDuration` singur nu ajuta: pasii se executa in ordine, deci la expirare cei
+ * tăiați sunt mereu ultimii — reconcilierea statusurilor si POLLUL DE COMENZI. Iar
+ * o comanda neluata la timp inseamna un colet netrimis, adica singurul lucru din
+ * tot cronul care costa bani imediat. Cronul e programat din minut in minut, deci
+ * ce nu incape acum se reia oricum peste un minut.
+ */
+const BUGET_PASI_1_3_MS = 38_000;
+/** Marginea intregii rulari: sub `maxDuration`, cu loc de incheiere. */
+const BUGET_TOTAL_MS = 52_000;
+
 // About You rate limits: products 100/min, results 200/min, categories/attrs
 // 300/min. The cron fires every minute; pace conservatively and cap per-run work.
 const QUEUE_BATCH = 30;
@@ -28,8 +51,15 @@ const POLL_ORDERS_BIZ = 10;
 // doua rulari. Trendyol o avea de mult; aici era zero.
 const ORDERS_OVERLAP_MS = 5 * 60 * 1000;
 const PACE_MS = 300;
-const PENDING_STATUSES = ["pending", "draft", "pending_approval", "pending_active"];
-const ACTIVE_STATUSES = ["active", "published", "inactive", "rejected", "problem"];
+/*
+ * Cele doua liste de statusuri au dispărut odata cu selectia care le folosea.
+ *
+ * Pasul 3 filtra magazinele dupa statusul listarilor lor, si tocmai asta era
+ * defectul: „error" nu era in nicio lista, deci un magazin ale carui listari
+ * ajunseseră toate pe eroare nu mai era ales NICIODATA pentru reconciliere — adica
+ * exact magazinul care avea cea mai mare nevoie. Mulțimea vine acum din
+ * `store_settings`, unde apartenenta nu depinde de starea produselor.
+ */
 
 function verifyCron(req: NextRequest): boolean {
   // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
@@ -47,6 +77,8 @@ export async function GET(req: NextRequest) {
   );
 
   const now = new Date().toISOString();
+  const inceput = Date.now();
+  const fereastraPlina = () => Date.now() - inceput > BUGET_PASI_1_3_MS;
   let processed = 0, failed = 0, polled = 0, reconciled = 0, ordersIngested = 0;
   const ctxCache = new Map<string, AboutYouSyncContext | null>();
   async function ctxFor(businessId: string): Promise<AboutYouSyncContext | null> {
@@ -84,6 +116,9 @@ export async function GET(req: NextRequest) {
   }
 
   for (const [businessId, items] of byBiz) {
+    // Ce nu incape in fereastra se reia peste un minut; comenzile nu au voie sa
+    // rămână pe dinafara. Randurile nerevendicate isi pierd singure lease-ul.
+    if (fereastraPlina()) break;
     const ctx = await ctxFor(businessId);
     if (ctx === null) {
       /*
@@ -103,6 +138,15 @@ export async function GET(req: NextRequest) {
     }
     let opritDinLimita = false;
     for (const item of items) {
+      /*
+       * Garda si INTRE elemente, nu doar intre magazine.
+       *
+       * Cazul obisnuit e un singur magazin cu treizeci de elemente: garda de mai
+       * sus se evalua o data, la inceput, si nu mai avea niciodata ocazia. Un
+       * element care asteapta zece secunde manca singur fereastra celorlalti pasi.
+       * Randurile neatinse raman revendicate si se reiau la minutul urmator.
+       */
+      if (fereastraPlina()) break;
       const res = await processQueueItem(admin, ctx, item);
       if (res.ok) {
         await admin.from("aboutyou_sync_queue").delete().eq("id", item.id);
@@ -127,6 +171,30 @@ export async function GET(req: NextRequest) {
           break;
         }
         if (attempts >= MAX_ATTEMPTS) {
+          /*
+           * ELEMENTUL RENUNTAT LASA O URMA acolo unde comerciantul chiar se uita.
+           *
+           * Se stergea pur si simplu din coada, cu tot cu `last_error`: contorul
+           * „În coadă" trecea prin N si revenea la 0, iar de ce n-a plecat produsul
+           * nu mai afla nimeni. Nu facem un tabel de scrisori moarte — scriem
+           * motivul pe listarea sau pe comanda careia ii apartine elementul, unde
+           * exista deja si afisare, si buton de reluare.
+           */
+          const motiv = `Renunțat după ${MAX_ATTEMPTS} încercări: ${res.error}`.slice(0, 500);
+          if (item.op === "ship") {
+            await admin.from("aboutyou_orders")
+              .update({ status: "ship_failed", updated_at: new Date().toISOString() })
+              .eq("business_id", businessId).eq("order_id", item.offer_id);
+          } else {
+            await admin.from("aboutyou_listings")
+              .update({ status: "error", error: motiv, updated_at: new Date().toISOString() })
+              .eq("business_id", businessId).eq("style_key", item.offer_id);
+          }
+          await logError({
+            action: "aboutyou-sync", severity: "warning",
+            message: `Element renunțat din coadă (${item.op}): ${res.error}`,
+            details: { businessId, offerId: item.offer_id, attempts }, businessId,
+          });
           await admin.from("aboutyou_sync_queue").delete().eq("id", item.id);
         } else {
           await admin.from("aboutyou_sync_queue").update({ attempts, last_error: res.error.slice(0, 500) }).eq("id", item.id);
@@ -138,15 +206,24 @@ export async function GET(req: NextRequest) {
     await patchConfig(admin, businessId, { last_sync_at: now });
   }
 
+  /*
+   * Multimea de magazine vine din `store_settings`, o singura data, si o folosesc
+   * pasii 2, 3 si 4.
+   *
+   * Citita din tabelele de lucru cu `.limit()` si deduplicata DUPA, un magazin cu
+   * multe randuri umplea singur fereastra si ceilalti nu mai ajungeau niciodata.
+   * Un `.order()` n-ar repara asta — ar face infometarea determinista. Apartenenta
+   * la multime nu are voie sa depinda de cate randuri are magazinul.
+   */
+  const { ids: sellerIds, error: eSelleri } = await magazineConectate(admin, "aboutyou_config");
+  if (eSelleri) {
+    await logError({ action: "aboutyou-sync", message: `magazinele conectate nu s-au putut citi: ${eSelleri}`, severity: "critical" });
+  }
+
   // ── 2) Poll open batches for businesses that have any ────────────────────────────
-  const { data: batchBiz } = await admin
-    .from("aboutyou_batches").select("business_id")
-    .in("status", ["pending", "processing", "retry"])
-    // `order` + rotatie in loc de `slice`: era singurul pas al acestui cron ramas
-    // pe taiere oarba.
-    .order("business_id", { ascending: true }).limit(1000);
-  const pollSet = alegeInRotatie([...new Set((batchBiz ?? []).map((r) => r.business_id))], MAX_BIZ);
+  const pollSet = alegeInRotatie(sellerIds, MAX_BIZ);
   for (const businessId of pollSet) {
+    if (fereastraPlina()) break;
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
     await pollOpenBatches(admin, ctx);
@@ -163,34 +240,42 @@ export async function GET(req: NextRequest) {
    * nu aflau. La fiecare al zecelea minut trecem si prin restul, in rotatie.
    */
   const rotatieLarga = new Date().getMinutes() % 10 === 0;
-  const { data: pendingBiz } = await admin
-    .from("aboutyou_listings").select("business_id")
-    .in("status", rotatieLarga ? [...PENDING_STATUSES, ...ACTIVE_STATUSES] : PENDING_STATUSES)
-    .limit(300);
-  const reconcileSet = alegeInRotatie(
-    [...new Set((pendingBiz ?? []).map((r) => r.business_id))], RECONCILE_BIZ, rotatieLarga ? 10 : 1);
+  const reconcileSet = alegeInRotatie(sellerIds, RECONCILE_BIZ, rotatieLarga ? 10 : 1);
   for (const businessId of reconcileSet) {
+    if (fereastraPlina()) break;
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
-    await reconcileStatuses(admin, ctx);
-    reconciled++;
+    // Rezultatul se CITESTE: o cheie invalidata sau o pana inghetau statusurile
+    // la nesfarsit, iar rularea se numara oricum drept reusita.
+    // Termenul e cel al pasilor 1-3: ce nu incape se reia la minutul urmator,
+    // ca pasul 4 (comenzile) sa apuce sa ruleze.
+    const rec = await reconcileStatuses(admin, ctx, 50, inceput + BUGET_PASI_1_3_MS);
+    if (!rec.ok) {
+      await logError({
+        action: "aboutyou-sync", severity: rec.status === 401 || rec.status === 403 ? "critical" : "warning",
+        message: `reconcilierea statusurilor a eșuat: ${rec.error}`,
+        details: { businessId, status: rec.status }, businessId,
+      });
+    } else {
+      reconciled++;
+    }
     await pause(PACE_MS);
   }
 
   // ── 4) Poll orders for active sellers (order.created webhook is primary) ─────────
-  /*
-   * ⚠ Pool-ul vine din `store_settings`, nu din tabela de listari: cu
-   * `.limit(500)` deduplicat DUPA aceea, un singur vanzator cu 500 de produse
-   * umplea singur fereastra si ceilalti nu-si mai luau comenzile deloc. Rotatia
-   * exista deja aici si tot nu ajuta — ea alege dintre cei ajunsi in multime,
-   * trunchierea decide cine ajunge. Vezi `magazineConectate`.
-   */
-  const { ids: sellerIds, error: eSelleri } = await magazineConectate(admin, "aboutyou_config");
-  if (eSelleri) {
-    await logError({ action: "aboutyou-sync", message: `magazinele conectate nu s-au putut citi: ${eSelleri}`, severity: "critical" });
-  }
   const orderPollSet = alegeInRotatie(sellerIds, POLL_ORDERS_BIZ);
   for (const businessId of orderPollSet) {
+    /*
+     * SINGURA bucla ramasa fara garda de timp, si tocmai cea mai scumpa.
+     *
+     * `pollOrders` parcurge cinci statusuri, fiecare cu pana la patruzeci de
+     * pagini: doua sute de cereri `GET /orders/` pe o singura cheie, fata de
+     * limita documentata de o suta pe minut. Cu zece magazine in rotatie, o
+     * singura rulare putea depasi de zeci de ori bugetul si taia totul dupa ea.
+     * Bugetul de aici e mai larg decat cel al pasilor 1-3: comenzile sunt ultimele
+     * care au voie sa cada, dar tot trebuie sa incapa in fereastra.
+     */
+    if (Date.now() - inceput > BUGET_TOTAL_MS) break;
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
     /*

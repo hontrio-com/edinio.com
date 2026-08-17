@@ -47,6 +47,87 @@ const TAXONOMIE: AboutYouCategory[] = [
   cat(2277, "Hardware|Men|Sport|Sports accessory|Sleeping bag"),
 ];
 
+/*
+ * NODURILE INTERMEDIARE NU SE POT ALEGE.
+ *
+ * Fixtura de mai sus pune `parent_id: null` pe fiecare rand, deci descrie 23 de
+ * radacini fara copii — si tocmai de aceea nimeni n-a observat ca potrivirea
+ * trecea si prin nodurile intermediare. Raspunsul real al lui `GET /categories/`
+ * le contine: „Cizme damă" se potrivea EXACT pe `Fashion|Women|Shoes|Boots`, cu
+ * scor 0,900, si se aplica singura — pe un nod care are copii, deci nu e o
+ * categorie de produs. Iar categoria nu se mai poate schimba dupa aprobare.
+ */
+const CU_PARINTI: AboutYouCategory[] = [
+  cat(900, "Fashion|Women|Shoes"),
+  cat(901, "Fashion|Women|Shoes|Boots", 900),
+  cat(902, "Fashion|Women|Shoes|Boots|Ankle boots", 901),
+  cat(903, "Fashion|Women|Shoes|Boots|Winter boots", 901),
+];
+
+test("nodul intermediar nu ajunge in sugestii, oricat de bine s-ar potrivi", () => {
+  const sugestii = potrivesteCategorie("Cizme", CU_PARINTI, { publicImplicit: "women" });
+  const ids = sugestii.map((s) => s.category_id);
+  assert.ok(!ids.includes(901), "„Boots” are copii, deci nu e categorie de produs");
+  assert.ok(!ids.includes(900));
+  assert.ok(ids.includes(902) || ids.includes(903), "frunzele raman alegeri valide");
+});
+
+test("filtrul de frunza nu schimba nimic pe o taxonomie fara parinti declarati", () => {
+  // Daca About You chiar intoarce numai frunze, multimea parintilor e goala si
+  // filtrul e no-op: nu are voie sa rupa maparile care functionau.
+  const sugestii = potrivesteCategorie("Genti", TAXONOMIE, { publicImplicit: "women" });
+  assert.equal(sugestii[0]?.category_id, 1452);
+});
+
+/*
+ * POTRIVIRI GREȘITE care se aplicau SINGURE, pe o alegere IREVERSIBILA.
+ *
+ * „once the product category is published & approved, there is no possibility of
+ * changing the category." Deci fiecare dintre cele de mai jos insemna un produs
+ * pierdut intr-o categorie greșita, fara drum inapoi.
+ */
+const CAPCANE: AboutYouCategory[] = [
+  cat(3001, "Fashion|Women|Tops|T-shirt|T-shirt"),
+  cat(3002, "Fashion|Women|Tops|Blouse|Blouse"),
+  cat(3003, "Fashion|Men|Tops|Shirt|Button-up shirt"),
+  cat(3004, "Fashion|Women|Accessories|Gloves|Winter gloves"),
+  cat(3005, "Fashion|Women|Outerwear|Coat|Winter coat"),
+  cat(3006, "Fashion|Women|Overalls|Dress|Evening dress"),
+  cat(3007, "Fashion|Kids|Girls|Overalls|Dress|Dress"),
+  cat(3008, "Fashion|Women|Swimwear|Swim shorts|Swim shorts"),
+  cat(3009, "Fashion|Women|Bottoms|Trousers|Trousers"),
+  cat(3010, "Fashion|Women|Accessories|Shoe care|Shoe care"),
+  cat(3011, "Fashion|Women|Shoes|Low shoe|Lace-up shoe"),
+];
+
+test("„Cămăși” nu ajunge pe TRICOURI", () => {
+  const s = potrivesteCategorie("Cămăși", CAPCANE, { publicImplicit: "women" });
+  assert.notEqual(s[0]?.category_id, 3001, "„shirt” singur prinde intai frunzele de tricouri");
+  assert.ok([3002, 3003].includes(s[0]?.category_id ?? 0), `a ales ${s[0]?.path}`);
+});
+
+test("un calificativ potrivit singur nu e de ajuns: „Mănuși de iarnă” nu e palton", () => {
+  const s = potrivesteCategorie("Mănuși de iarnă", CAPCANE, { publicImplicit: "women" });
+  assert.ok(!s.some((x) => x.category_id === 3005), "„Winter coat” prinde doar calificativul „iarnă”");
+  assert.equal(s[0]?.category_id, 3004);
+});
+
+test("o categorie scrisa „copii” nu primeste frunza pentru ADULTI", () => {
+  // Chiar si cu magazinul setat pe „femei": numele categoriei bate setarea.
+  const s = potrivesteCategorie("Rochii copii", CAPCANE, { publicImplicit: "women" });
+  assert.ok(!s.some((x) => x.category_id === 3006), "frunza de adulti nu are ce cauta aici");
+  assert.equal(s[0]?.category_id, 3007);
+});
+
+test("„Șorturi” nu ajunge pe costume de baie, iar „Pantofi” nu ajunge pe accesorii", () => {
+  const sorturi = potrivesteCategorie("Șorturi", CAPCANE, { publicImplicit: "women" });
+  assert.notEqual(sorturi[0]?.category_id, 3008, `a ales ${sorturi[0]?.path}`);
+
+  const pantofi = potrivesteCategorie("Pantofi", CAPCANE, { publicImplicit: "women" });
+  assert.notEqual(pantofi[0]?.category_id, 3010, "„shoe” singur prinde intai „Shoe care”");
+  assert.equal(pantofi[0]?.category_id, 3011);
+});
+
 test("traducerea desface sinonimele si retine publicul tinta", () => {
   const q = traduCategorie("Genti de dama");
   assert.deepEqual(q.grupuri, [["bag", "handbag"]]);

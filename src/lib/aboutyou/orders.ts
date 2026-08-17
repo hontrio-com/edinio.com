@@ -16,7 +16,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logError } from "@/lib/error-logger";
 import type { Database } from "@/types/database.types";
-import type { AboutYouSyncContext } from "./sync";
+import { recordBatch, type AboutYouSyncContext } from "./sync";
 import { getOrders, isAboutYouError } from "./client";
 import { cancelOrderItems, returnOrderItems } from "./client";
 import type { AboutYouOrder, AboutYouOrderStatus } from "./types";
@@ -605,7 +605,18 @@ export async function cancelOrderNow(
   const res = await cancelOrderItems(ctx.auth, ids.ids.map((id) => ({ id })));
   if (isAboutYouError(res)) return { ok: false, error: res.error };
   await marcheazaSideRow(admin, ctx, orderId, "cancel_pending");
-  return { ok: true, batchRequestId: res.data?.batchRequestId };
+  /*
+   * Lotul se INREGISTREAZA, altfel „in curs de anulare" e o stare fara ieșire.
+   *
+   * `batchRequestId` se intorcea apelantului si nu-l scria nimeni nicaieri, iar
+   * `getCancelBatchResults` nu era chemata din niciun loc din tot repo-ul. Deci
+   * comanda rămânea `cancel_pending` la nesfarsit: nu se afla niciodata daca About
+   * You a acceptat anularea, si nimeni n-o relua. Exact defectul care fusese
+   * reparat la expediere, ramas aici.
+   */
+  const id = res.data?.batchRequestId;
+  if (id) await recordBatch(admin, ctx.businessId, id, "cancel", [orderId]);
+  return { ok: true, batchRequestId: id };
 }
 
 export async function returnOrderNow(
@@ -618,7 +629,10 @@ export async function returnOrderNow(
   const res = await returnOrderItems(ctx.auth, [{ order_items: ids.ids, return_tracking_key: cheie }]);
   if (isAboutYouError(res)) return { ok: false, error: res.error };
   await marcheazaSideRow(admin, ctx, orderId, "return_pending");
-  return { ok: true, batchRequestId: res.data?.batchRequestId };
+  // Ca la anulare: fara inregistrare, „in curs de retur" nu se inchide niciodata.
+  const id = res.data?.batchRequestId;
+  if (id) await recordBatch(admin, ctx.businessId, id, "return", [orderId]);
+  return { ok: true, batchRequestId: id };
 }
 
 async function idsArticoleActive(

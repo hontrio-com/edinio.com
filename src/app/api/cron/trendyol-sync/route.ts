@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
   esteDeconectatTrendyol, eTrecatoare, loadTrendyolContext, processQueueItem, pollOpenBatches,
-  reconcileStatuses, reconcileInventory, pause,
+  reconcileRejections, reconcileStatuses, reconcileInventory, pause,
   type TrendyolQueueItem, type TrendyolSyncContext,
 } from "@/lib/trendyol/sync";
 import { marcajUrmator, pollPackages } from "@/lib/trendyol/orders";
@@ -25,7 +25,15 @@ const INVENTORY_BIZ = 4;
 const PACE_MS = 350;
 // Re-poll window overlap so a status change straddling two runs is never missed.
 const ORDERS_OVERLAP_MS = 5 * 60 * 1000;
-const PENDING_STATUSES = ["pending", "created"];
+/*
+ * Ce statusuri fac un magazin sa merite o trecere de reconciliere.
+ *
+ * `approved`/`active` sunt aici DINADINS: respingerea la revizuie vine DUPA
+ * acceptare, deci un magazin cu toate produsele „aprobate" e exact cel care are
+ * nevoie sa afle ca unul dintre ele a fost respins intre timp. Cu vechiul filtru
+ * pe „pending/created", nu l-ar fi verificat nimeni niciodata.
+ */
+const RECONCILE_STATUSES = ["pending", "created", "approved", "active", "rejected"];
 
 function verifyCron(req: NextRequest): boolean {
   // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
@@ -170,13 +178,23 @@ export async function GET(req: NextRequest) {
   // ── 3) Reconcile approval for stores with listings awaiting approval ─────────────
   const { data: pendingBiz } = await admin
     .from("trendyol_listings").select("business_id")
-    .in("status", PENDING_STATUSES)
+    .in("status", RECONCILE_STATUSES)
     .order("business_id", { ascending: true }).limit(1000);
   const reconcileSet = alegeInRotatie([...new Set((pendingBiz ?? []).map((r) => r.business_id))], RECONCILE_BIZ);
   for (const businessId of reconcileSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
     await reconcileStatuses(admin, ctx);
+    /*
+     * Si respingerile de la REVIZUIE, in aceeasi trecere.
+     *
+     * `reconcileStatuses` afla doar ce a fost APROBAT. Un produs poate insa sa
+     * treaca de lot cu `SUCCESS` si sa fie respins abia la revizuirea de
+     * continut — „Eroare de conexiune la serverul de imagini" e cazul real de la
+     * primul comerciant care a publicat. Fara pasul asta, produsul ramane
+     * „in aprobare" pentru totdeauna, desi la ei e respins si nu se vinde.
+     */
+    await reconcileRejections(admin, ctx);
     reconciled++;
     await pause(PACE_MS);
   }

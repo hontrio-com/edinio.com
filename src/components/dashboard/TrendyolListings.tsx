@@ -19,7 +19,10 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   created: { text: "În aprobare", cls: "bg-amber-100 text-amber-700" },
   draft: { text: "Ciornă", cls: "bg-muted text-muted-foreground" },
   inactive: { text: "Inactiv", cls: "bg-muted text-muted-foreground" },
-  rejected: { text: "Respins", cls: "bg-red-100 text-red-700" },
+  // „Revizuire necesară" e chiar cuvantul din panoul Trendyol: produsul e la ei,
+  // dar nu se vinde pana nu repari ce-ti cer. Nu e o respingere definitiva —
+  // odata reparat, reintra singur in aprobare.
+  rejected: { text: "Revizuire necesară", cls: "bg-amber-100 text-amber-800" },
   error: { text: "Eroare", cls: "bg-red-100 text-red-700" },
 };
 
@@ -359,7 +362,18 @@ export function TrendyolListings({
                 </div>
               </div>
 
-              {p.error && <p className="text-xs text-red-600 mt-1 ml-6">{p.error}</p>}
+              {/*
+                Motivul respingerii vine de la Trendyol tradus in romana si e
+                lung (contine si indrumarea lor). Il aratam INTREG: e singurul
+                lucru din care comerciantul poate afla ce sa repare. Pana acum
+                nu-l vedea deloc — produsul aparea „in aprobare" la nesfarsit.
+              */}
+              {p.error && (
+                <p className={`text-xs mt-1 ml-6 whitespace-pre-line ${p.status === "rejected" ? "text-amber-700" : "text-red-600"}`}>
+                  {p.status === "rejected" && <span className="font-semibold">Trendyol cere o corectură: </span>}
+                  {p.error}
+                </p>
+              )}
 
               {isOpen && (
                 <div className="mt-3 ml-6">

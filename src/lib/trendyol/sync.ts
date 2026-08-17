@@ -7,8 +7,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { TrendyolAuth } from "./client";
 import {
-  createProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, isTrendyolError,
-  setArchiveState, updatePriceInventory,
+  createProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, getUnapprovedProducts,
+  isTrendyolError, setArchiveState, updatePriceInventory, type TrendyolMotivRespingere,
 } from "./client";
 import {
   buildTrendyolItems, buildVariantPrices, deriveVariantSlots, resolveVariantQuantity, round2,
@@ -1069,6 +1069,83 @@ async function salveazaPaginaReconciliere(admin: Db, ctx: TrendyolSyncContext, p
   await admin.from("store_settings")
     .update({ trendyol_config: { ...config, reconcile_page: pagina } as never })
     .eq("business_id", ctx.businessId);
+}
+
+// ── Respingerile de la revizuie (cron) ──────────────────────────────────────────
+/**
+ * Aduce produsele RESPINSE la revizuire si scrie motivul pe listare.
+ *
+ * ⚠ DE CE E NEVOIE — si de ce n-a prins-o niciun audit de cod.
+ *
+ * Un lot poate raspunde `COMPLETED` cu articolul `SUCCESS`, deci produsul chiar
+ * a fost acceptat de API. Abia DUPA aceea Trendyol il trece prin revizuire de
+ * continut si il poate respinge: „Eroare de conexiune la serverul de imagini",
+ * titlu neconform, imagine gresita. Produsul nu se vinde, comerciantul nu stie,
+ * iar Edinio il arata „in aprobare" pe vecie — fiindca nimic nu citea starea.
+ *
+ * Vazut in productie pe contul unui comerciant, la prima publicare reala:
+ * lotul spunea SUCCESS, panoul Trendyol spunea „Revizuire necesara".
+ *
+ * Coloanele `rejection_reasons` si `issues` existau in schema de la inceput si
+ * nicio linie de cod nu le atingea.
+ */
+export async function reconcileRejections(admin: Db, ctx: TrendyolSyncContext, maxPages = 3): Promise<void> {
+  const respinse = new Map<string, TrendyolMotivRespingere[]>();
+  for (let page = 0; page < maxPages; page++) {
+    const res = await getUnapprovedProducts(ctx.auth, { page, size: 200, status: "rejected" });
+    if (isTrendyolError(res)) return;
+    const content = res.data?.content ?? [];
+    for (const p of content) {
+      // `productMainId` e chiar id-ul produsului nostru: asa il trimitem la creare.
+      if (p.productMainId && p.rejectReasonDetails?.length) {
+        respinse.set(p.productMainId, p.rejectReasonDetails);
+      }
+    }
+    const total = Number(res.data?.totalPages ?? 1);
+    if (content.length === 0 || page + 1 >= total) break;
+    await pause(250);
+  }
+
+  /*
+   * Se citesc TOATE listarile care au fost trimise vreodata, nu doar cele
+   * respinse. Motivul: un produs reparat de comerciant reintra automat in
+   * aprobare la ei („the product will re-enter the approval process"), si atunci
+   * trebuie sa-i STERGEM motivul vechi — altfel ramane in interfata o eroare
+   * care nu mai e adevarata, si omul repara ceva ce e deja bun.
+   */
+  const { data: listari } = await admin
+    .from("trendyol_listings").select("id, product_main_id, status, rejection_reasons")
+    .eq("business_id", ctx.businessId)
+    .in("status", ["pending", "created", "approved", "active", "rejected"]);
+
+  const now = new Date().toISOString();
+  for (const l of listari ?? []) {
+    const row = l as { id: string; product_main_id: string; status: string; rejection_reasons: unknown };
+    const motive = respinse.get(row.product_main_id);
+    const areMotiveVechi = Array.isArray(row.rejection_reasons) && row.rejection_reasons.length > 0;
+
+    if (motive) {
+      const text = motive
+        .map((m) => [m.rejectReason, m.rejectReasonDetail].filter(Boolean).join(" — "))
+        .join(" | ").slice(0, 1000);
+      if (row.status === "rejected" && areMotiveVechi) continue;   // deja stiut, nu rescriem
+      await admin.from("trendyol_listings").update({
+        status: "rejected",
+        rejection_reasons: motive as never,
+        // Motivul lor, in romana, ajunge acolo unde comerciantul se uita oricum.
+        error: text,
+        last_status_at: now, updated_at: now,
+      } as never).eq("id", row.id);
+    } else if (row.status === "rejected" || areMotiveVechi) {
+      // Nu mai e respins: reparat de comerciant si reintrat in aprobare.
+      await admin.from("trendyol_listings").update({
+        status: row.status === "rejected" ? "created" : row.status,
+        rejection_reasons: [] as never,
+        error: null,
+        last_status_at: now, updated_at: now,
+      } as never).eq("id", row.id);
+    }
+  }
 }
 
 // ── Reverse reconciliation (cron): correct stock/price drift on Trendyol ─────────

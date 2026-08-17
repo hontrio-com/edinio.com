@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  buildTrendyolItems, deriveVariantSlots, resolveVariantQuantity, tvaPentruVitrina,
-  verificaBarcode, type MappableProduct,
+  adresaPublicaImagine, buildTrendyolItems, deriveVariantSlots, resolveVariantQuantity,
+  tvaPentruVitrina, verificaBarcode, type MappableProduct,
 } from "./mapping";
 import { fereastraComenzi } from "./orders";
 import {
@@ -127,6 +127,26 @@ test("adresele se trimit doar cand sunt alese explicit", () => {
 
 test("imaginile http sunt sarite, fiindca Trendyol le refuza", () => {
   assert.deepEqual(itemuri()[0].images, [{ url: "https://cdn.edinio.com/a.jpg" }]);
+});
+
+test("imaginile de pe domeniul de dezvoltare al Cloudflare pleaca de pe cel public", () => {
+  /*
+   * `pub-<hash>.r2.dev` e domeniul de INCERCARI al unui bucket R2, si Cloudflare
+   * spune raspicat sa nu fie folosit in productie. Trendyol isi aduce singur
+   * imaginile de pe adresele pe care i le dam si respinge produsul cand nu le
+   * poate lua — „Eroare de conexiune la serverul de imagini", pe un produs real.
+   * Verificat: ambele domenii servesc acelasi obiect, aceeasi suma de control.
+   */
+  const cale = "products/abc/1782138246453-61i24.webp";
+  assert.equal(
+    adresaPublicaImagine(`https://pub-8ae4618934a2401a8af94e89f0371faf.r2.dev/${cale}`),
+    `https://edinio-cdn.com/${cale}`,
+  );
+  // Ce e deja pe domeniul public, sau oriunde altundeva, ramane neatins.
+  assert.equal(adresaPublicaImagine(`https://edinio-cdn.com/${cale}`), `https://edinio-cdn.com/${cale}`);
+  assert.equal(adresaPublicaImagine("https://alt-cdn.ro/x.webp"), "https://alt-cdn.ro/x.webp");
+  // Si nu confunda un domeniu care doar CONTINE „r2.dev".
+  assert.equal(adresaPublicaImagine("https://pub-x.r2.dev.altceva.ro/y.webp"), "https://pub-x.r2.dev.altceva.ro/y.webp");
 });
 
 test("TVA-ul trimis e cel al vitrinei", () => {

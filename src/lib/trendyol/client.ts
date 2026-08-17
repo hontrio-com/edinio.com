@@ -235,6 +235,46 @@ export function setArchiveState(auth: TrendyolAuth, items: { barcode: string; ar
     auth, "PUT", `/integration/product/sellers/${auth.supplierId}/products/archive-state`, { items });
 }
 
+/**
+ * Produsele NEAPROBATE: in asteptare sau RESPINSE la revizuire.
+ *
+ * ⚠ Aici se afla singurul lucru pe care lotul nu-l spune niciodata.
+ *
+ * Un lot poate raspunde `COMPLETED` cu articolul `SUCCESS` — produsul a fost
+ * acceptat — si abia dupa aceea Trendyol sa-l respinga la revizuirea de
+ * continut: „Eroare de conexiune la serverul de imagini", „titlu neconform",
+ * si asa mai departe. Produsul nu se vinde, iar noi il aratam „in aprobare" la
+ * nesfarsit, fiindca nimic nu citea starea asta.
+ *
+ * `rejectReasonDetails[]` vine cu motivul SI explicatia, traduse in limba
+ * cerută de `Accept-Language`. `status` accepta `rejected` si `pendingApproval`,
+ * deci se poate intreba tintit.
+ */
+export interface TrendyolMotivRespingere {
+  rejectReason?: string;
+  rejectReasonDetail?: string;
+}
+export function getUnapprovedProducts(
+  auth: TrendyolAuth,
+  params: { page?: number; size?: number; status?: "rejected" | "pendingApproval"; barcode?: string; productMainId?: string } = {},
+) {
+  const q = new URLSearchParams();
+  if (params.page != null) q.set("page", String(params.page));
+  // Documentat: maximum 1000 pe pagina, iar `page * size` nu poate depasi 10.000.
+  if (params.size != null) q.set("size", String(Math.max(1, Math.min(1000, params.size))));
+  if (params.status) q.set("status", params.status);
+  if (params.barcode) q.set("barcode", params.barcode);
+  if (params.productMainId) q.set("productMainId", params.productMainId);
+  const qs = q.toString();
+  return call<{
+    content: {
+      productMainId?: string; barcode?: string; title?: string;
+      rejectReasonDetails?: TrendyolMotivRespingere[];
+    }[];
+    totalElements?: number; totalPages?: number;
+  }>(auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/unapproved${qs ? `?${qs}` : ""}`);
+}
+
 // ── Products (async batch) ────────────────────────────────────────────────────
 export function createProducts(auth: TrendyolAuth, items: TrendyolProductItem[]) {
   return call<TrendyolBatchAck>(auth, "POST", `/integration/product/sellers/${auth.supplierId}/v2/products`, { items });

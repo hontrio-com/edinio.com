@@ -82,11 +82,39 @@ function stripHtml(html: string): string {
     .replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Domeniul public al imaginilor, in locul celui de dezvoltare.
+ *
+ * ⚠ `pub-<hash>.r2.dev` e domeniul pe care Cloudflare il da unui bucket R2
+ * pentru INCERCARI, si documentatia lor spune raspicat sa nu fie folosit in
+ * productie: e limitat si nu are garantii. In Edinio au ramas 1.466 de imagini
+ * pe el, pe 855 de produse din 28 de magazine — ramasite de dinaintea
+ * domeniului propriu.
+ *
+ * Trendyol isi aduce singur imaginile de pe adresele pe care i le dam, si le
+ * respinge produsul cand nu le poate lua („Eroare de conexiune la serverul de
+ * imagini"). Verificat: cele doua domenii servesc EXACT acelasi obiect, aceeasi
+ * suma de control — deci rescrierea la trimitere nu schimba ce vede clientul,
+ * doar pe unde ajunge acolo.
+ *
+ * Se face aici, la iesire, nu printr-o migrare de date: adresele salvate raman
+ * neatinse, iar daca domeniul se schimba vreodata, se schimba intr-un loc.
+ */
+const CDN_PUBLIC = "https://edinio-cdn.com";
+const R2_DEZVOLTARE = /^https:\/\/pub-[a-z0-9]+\.r2\.dev\//i;
+
+export function adresaPublicaImagine(url: string): string {
+  return R2_DEZVOLTARE.test(url) ? url.replace(R2_DEZVOLTARE, `${CDN_PUBLIC}/`) : url;
+}
+
 // Trendyol accepta DOAR https la imagini; una pe http e respinsa la validare si
 // pica tot produsul, asa ca o sarim din start.
 function productImages(product: MappableProduct): string[] {
   const raw = Array.isArray(product.images) ? product.images : [];
-  return raw.map((x) => String(x).trim()).filter((u) => /^https:\/\//i.test(u)).slice(0, 8);
+  return raw
+    .map((x) => adresaPublicaImagine(String(x).trim()))
+    .filter((u) => /^https:\/\//i.test(u))
+    .slice(0, 8);
 }
 
 /**

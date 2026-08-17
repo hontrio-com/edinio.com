@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 
 /*
- * Selector cu cautare, pentru listele lungi ale lui About You.
+ * Selector cu cautare, pentru nomenclatoarele lungi ale marketplace-urilor.
  *
- * Nomenclatoarele lor nu sunt liste de zece valori: marimile categoriei „Handbag"
- * au 696 de intrari, materialele 375, grupele de material 215, culorile 185. Puse
+ * Nu sunt liste de zece valori: la About You, marimile categoriei „Handbag" au
+ * 696 de intrari, materialele 375, grupele de material 215, culorile 185; la
+ * Trendyol, un atribut de categorie poate avea pana la 1000 de valori. Puse
  * intr-un `<select>` obisnuit, comerciantul deruleaza minute intregi ca sa
  * gaseasca „One Size" — iar noi ii ceream sa faca asta la fiecare varianta.
  *
@@ -23,7 +24,7 @@ function normalizeaza(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/\p{M}+/gu, "");
 }
 
-export function AboutYouSelectCautare({
+export function SelectCautare({
   optiuni, valoare, onSchimba, placeholder = "Alege", multiplu = false, valori = [],
   onSchimbaMultiplu, dimensiune = "normal",
 }: {

@@ -13,6 +13,9 @@
 
 import type { TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
 import { coteTvaVitrina, infoVitrina, tvaImplicitVitrina } from "./types";
+import {
+  comboStock, combinatiiActiveUnice, comboUnitPrice, parseVariants, type VariantCombo,
+} from "@/lib/storefront/variants";
 
 // ── Edinio-side shapes ────────────────────────────────────────────────────────
 export interface MappableProduct {
@@ -27,11 +30,22 @@ export interface MappableProduct {
   weight_grams: number | null;
   track_inventory?: boolean | null;
   stock_quantity?: number | null;
+  /*
+   * Sectiunile produsului, cu forma REALA a combinatiilor.
+   *
+   * Tipul de aici era o copie prescurtata care declara doar `id`, `title`,
+   * `price`, `sku` si `enabled`. Copia n-a fost niciodata gresita sintactic, dar
+   * ascundea doua campuri pe care Trendyol le cere: `gtin` (codul de bare al
+   * combinatiei) si `stock_quantity` (stocul ei). Cat timp nu erau declarate,
+   * nici nu se putea scrie codul care le citeste — se fabrica un barcode si se
+   * trimitea stocul produsului intreg pe fiecare varianta.
+   */
   page_sections?: {
     variants?: {
       enabled?: boolean;
-      combinations?: { id: string; title: string; price: string; sku: string; enabled: boolean }[];
+      combinations?: VariantCombo[];
     };
+    google?: { gtin?: string };
   } | null;
 }
 
@@ -46,6 +60,8 @@ export interface TrendyolListingEnrichment {
 export interface TrendyolVariantData {
   barcode: string;
   stock_code: string | null;
+  /** Titlul combinatiei din Edinio; leaga varianta listata de stocul care se misca. */
+  variant_title?: string | null;
   attributes: TrendyolProductAttribute[]; // per-variant (varianter, e.g. size/color)
   quantity: number | null;
   list_price: number | null;
@@ -110,21 +126,206 @@ function productWeight(product: MappableProduct, listing: TrendyolListingEnrichm
 }
 
 // ── Variant slots (derived from the Edinio product for the editor) ────────────
-export interface VariantSlot { key: string; label: string; barcode: string; ron_price: number }
+export interface VariantSlot {
+  key: string;
+  label: string;
+  /**
+   * Titlul REAL al combinatiei („S / Roșu"), pastrat separat de `label`.
+   *
+   * Pe el se scade stocul cand vine o comanda de pe Trendyol, deci trebuie sa
+   * fie exact sirul din `page_sections.variants.combinations[].title`, nu
+   * eticheta de afisat. `null` la produsul fara variante: acolo nu exista nicio
+   * combinatie de potrivit, iar stocul de produs e cel adevarat.
+   */
+  variantTitle: string | null;
+  barcode: string;
+  ron_price: number;
+  /** Stocul variantei ASTEIA, nu al produsului intreg. */
+  quantity: number;
+  /** Stocul de mai sus vine dintr-o sursa care se misca singura, nu dintr-un numar scris cu mana. */
+  stocViu: boolean;
+}
+
+/*
+ * Combinatiile produsului.
+ *
+ * `parseVariants` cere si `options`; un produs cu combinatii dar fara axe (date
+ * vechi sau import incomplet) ar cadea altfel pe „varianta unica" si si-ar
+ * schimba barcode-urile — adica ar aparea ca produs nou pe Trendyol, iar cel
+ * vechi ar ramane acolo orfan. De aceea cadem pe citirea directa.
+ *
+ * ⚠ DEDUPLICAREA PE TITLU NU E OPTIONALA.
+ *
+ * Sunt produse reale cu acelasi titlu de combinatie de doua ori — masurat: 37 de
+ * titluri duplicate pe 8 produse. `combinatiiActiveUnice` pastreaza PRIMA, si
+ * asa face toata aplicatia: `findCombo` (ce vede clientul), `comboStockMap` (ce
+ * stoc se verifica) si `consuma_stoc_comanda_marketplace` (din ce se scade).
+ *
+ * Fara ea, cele doua sloturi ies cu acelasi `variantTitle`, iar potrivirea pe
+ * titlu din editor le prabuseste pe amandoua pe acelasi rand salvat: salvarea
+ * sterge toate variantele si apoi cade pe cheia unica `(business_id, barcode)`.
+ * Listarea ramane cu ZERO variante, stocul nu mai pleaca niciodata, iar
+ * comenzile intra fara sa scada nimic.
+ */
+function combinatii(product: MappableProduct): VariantCombo[] {
+  const v = parseVariants(product.page_sections);
+  if (v) return combinatiiActiveUnice(v);
+
+  const brute = product.page_sections?.variants;
+  if (!brute?.enabled || !Array.isArray(brute.combinations)) return [];
+  const vazute = new Set<string>();
+  const out: VariantCombo[] = [];
+  for (const c of brute.combinations) {
+    if (!c || c.enabled === false) continue;
+    // Aceeasi regula si pe calea de rezerva: prima combinatie a unui titlu castiga.
+    const t = c.title?.trim();
+    if (t) {
+      if (vazute.has(t)) continue;
+      vazute.add(t);
+    }
+    out.push(c);
+  }
+  return out;
+}
+
+/** Codul de bare al produsului fara variante, de unde il pun deja feedurile Google si Facebook. */
+function gtinProdus(product: MappableProduct): string | null {
+  const g = product.page_sections?.google?.gtin;
+  return typeof g === "string" && g.trim() ? g.trim() : null;
+}
+
+/**
+ * Barcode-ul cand comerciantul n-a completat nici GTIN, nici SKU.
+ *
+ * Forma veche era `${product.id}-${c.id}`: doua uuid-uri, adica 73 de caractere
+ * peste limita de 40 pe care tot noi o verificam — deci orice produs cu variante
+ * si fara SKU-uri se oprea, cu un mesaj care da vina pe „barcode-ul tau" desi
+ * barcode-ul era fabricat de noi.
+ *
+ * Uuid-ul produsului fara cratime are exact 32 de caractere, deci ramane loc de
+ * o cratima si 7 caractere de discriminant. Discriminantul e derivat din ID-ul
+ * combinatiei, nu din pozitia ei: pozitia se schimba cand comerciantul sterge o
+ * marime, si atunci variantele ramase si-ar schimba barcode-ul, adica s-ar
+ * dubla pe Trendyol.
+ */
+const LUNGIME_MAXIMA_BARCODE = 40;
+
+export function barcodeDerivat(productId: string, comboId: string, index: number): string {
+  const baza = productId.replace(/[^A-Za-z0-9]/g, "").slice(0, 32);
+  const sufix = comboId ? comboId.replace(/[^A-Za-z0-9]/g, "").slice(0, 6) : String(index);
+  return `${baza}-${sufix}`.slice(0, LUNGIME_MAXIMA_BARCODE);
+}
 
 export function deriveVariantSlots(product: MappableProduct): VariantSlot[] {
-  const v = product.page_sections?.variants;
-  if (v?.enabled && Array.isArray(v.combinations) && v.combinations.length > 0) {
-    return v.combinations
-      .filter((c) => c.enabled !== false)
-      .map((c, i) => ({
+  const combos = combinatii(product);
+  if (combos.length > 0) {
+    const sloturi = combos.map((c, i) => {
+      const stoc = stocVarianta(product, c);
+      return {
         key: c.id || `c${i}`,
         label: (c.title || `Variantă ${i + 1}`).trim(),
-        barcode: (c.sku || `${product.id}-${c.id || i}`).trim(),
-        ron_price: Number(c.price) > 0 ? Number(c.price) : product.price,
-      }));
+        variantTitle: c.title?.trim() || null,
+        /*
+         * Ordinea: SKU, apoi GTIN, apoi o derivare scurta.
+         *
+         * ⚠ SKU-UL RAMANE PRIMUL, SI ASTA E O DECIZIE DE MIGRARE, NU DE GUST.
+         *
+         * Barcode-ul nu e o preferinta, e IDENTITATEA articolului la Trendyol:
+         * odata trimis, el leaga oferta lor de randul nostru. Pus GTIN-ul
+         * inainte, orice varianta care are si SKU si GTIN si-ar fi schimbat
+         * barcode-ul la prima salvare — adica al doilea produs pe Trendyol,
+         * primul ramas acolo orfan si VANDABIL, si fara niciun rand la noi din
+         * care sa-l mai putem pune pe zero.
+         *
+         * Asa, GTIN-ul umple exact golul pentru care a fost adus — combinatiile
+         * fara SKU, cele care pana acum primeau un barcode fabricat de 73 de
+         * caractere — si nu misca nimic din ce e deja listat.
+         */
+        barcode: (c.sku?.trim() || c.gtin?.trim() || barcodeDerivat(product.id, c.id || "", i)).trim(),
+        ron_price: comboUnitPrice(c, product.price),
+        quantity: stoc.quantity,
+        stocViu: stoc.viu,
+      };
+    });
+    return dezambiguizeazaBarcoduri(sloturi, product.id);
   }
-  return [{ key: "default", label: "Unic", barcode: (product.sku || product.id).trim(), ron_price: product.price }];
+  const stoc = stocVarianta(product, null);
+  return [{
+    key: "default",
+    label: "Unic",
+    variantTitle: null,
+    /*
+     * Si aici SKU-ul e primul, din acelasi motiv — ba chiar mai apasat.
+     *
+     * Produsul fara variante are `variantTitle: null`, deci potrivirea pe titlu
+     * din editor NU-l acopera niciodata: singura legatura intre randul salvat si
+     * slotul derivat e chiar barcode-ul. Schimbat, randul existent devine
+     * negasibil, editorul afiseaza varianta goala si salvarea creeaza un al
+     * doilea produs pe Trendyol.
+     *
+     * GTIN-ul de produs ramane a doua optiune: ajuta produsele fara SKU, care
+     * altfel plecau cu un uuid drept cod de bare.
+     */
+    barcode: (product.sku || gtinProdus(product) || product.id).trim(),
+    ron_price: product.price,
+    quantity: stoc.quantity,
+    stocViu: stoc.viu,
+  }];
+}
+
+/*
+ * Doua variante ale aceluiasi produs nu pot pleca cu acelasi barcode.
+ *
+ * Se intampla real: acelasi SKU pus pe toate marimile, sau acelasi GTIN copiat
+ * peste tot. Trendyol ar accepta prima varianta si ar suprascrie-o cu a doua,
+ * deci produsul ar aparea cu o singura marime, fara nicio eroare. Duplicatele
+ * primesc o derivare proprie, care e unica prin constructie.
+ */
+function dezambiguizeazaBarcoduri(sloturi: VariantSlot[], productId: string): VariantSlot[] {
+  const vazute = new Set<string>();
+  return sloturi.map((s, i) => {
+    if (!vazute.has(s.barcode)) { vazute.add(s.barcode); return s; }
+    const derivat = barcodeDerivat(productId, s.key, i);
+    vazute.add(derivat);
+    return { ...s, barcode: derivat };
+  });
+}
+
+/**
+ * Stocul unei variante, dintr-un singur loc.
+ *
+ * Ordinea: stocul COMBINATIEI, apoi al produsului cand se tine inventar, iar
+ * pentru produsele fara inventar o valoare mare (Trendyol cere un numar).
+ *
+ * Primul pas lipsea, si de aceea fiecare marime primea stocul TOTAL al
+ * produsului: S=5, M=5, L=5 pleca la Trendyol ca 15 pe fiecare barcode, adica 45
+ * de bucati vandabile din 15. Iar `reconcileInventory` folosea aceeasi functie,
+ * deci nu corecta abaterea — o confirma ca stare dorita.
+ */
+export const STOC_NELIMITAT = 100;
+
+export function stocVarianta(
+  product: { track_inventory?: boolean | null; stock_quantity?: number | null },
+  combo: VariantCombo | null,
+): { quantity: number; viu: boolean } {
+  const alCombinatiei = combo ? comboStock(combo) : null;
+  if (alCombinatiei != null) return { quantity: Math.max(0, alCombinatiei), viu: true };
+  /*
+   * ⚠ `viu` inseamna „stocul ACESTEI variante", nu „un numar pe care il stim".
+   *
+   * Cand combinatia exista dar n-are stoc propriu, cadem pe stocul produsului —
+   * care e un fond COMUN, nu al variantei. Marcat `viu`, ajungea in
+   * `stocuriVii.dupaTitlu` si de acolo bate cantitatea scrisa de comerciant in
+   * editor: un tricou cu 15 bucati in total si S/M/L fara stoc pe combinatie
+   * pleca la Trendyol cu 15 pe fiecare marime, peste cele 5/5/5 completate de
+   * om, si campul i se bloca in interfata ca sa nu poata corecta.
+   *
+   * Deci: doar produsul FARA combinatii isi are stocul „viu" pe varianta.
+   */
+  if (product.track_inventory) {
+    return { quantity: Math.max(0, product.stock_quantity ?? 0), viu: combo === null };
+  }
+  return { quantity: STOC_NELIMITAT, viu: false };
 }
 
 // Resolve the quantity to send for a variant. Shared by createProducts (buildTrendyolItems)
@@ -136,14 +337,67 @@ export function resolveVariantQuantity(
   variantQuantity: number | null,
   single: boolean,
   forceZero = false,
+  /**
+   * Stocul combinatiei, cand produsul are variante cu stoc propriu.
+   *
+   * Bate numarul salvat in `trendyol_variants.quantity`: acela e o fotografie
+   * facuta o data in editor si care nu se mai misca niciodata, pe cand stocul
+   * combinatiei se schimba la fiecare vanzare. Aceeasi regula exista deja mai
+   * sus pentru produsul fara variante (`single && track_inventory`).
+   */
+  comboQuantity: number | null = null,
 ): number {
   let qty: number;
   if (forceZero) qty = 0;
   else if (single && product.track_inventory) qty = product.stock_quantity ?? 0;
+  else if (comboQuantity != null) qty = comboQuantity;
   else if (variantQuantity != null) qty = variantQuantity;
   else if (product.track_inventory) qty = product.stock_quantity ?? 0;
-  else qty = 100;
+  else qty = STOC_NELIMITAT;
   return Math.max(0, Math.min(20000, Math.round(qty)));
+}
+
+/**
+ * Stocul viu al fiecarei variante, pentru cele doua cai care trimit cantitati.
+ *
+ * `buildTrendyolItems` (creare) si `computeInventoryItems` (impingere de stoc)
+ * citesc amandoua de aici, ca sa nu ajunga sa trimita numere diferite pentru
+ * acelasi barcode — exact felul de diferenta care se vede abia ca oscilatie in
+ * reconciliere, cu stocul corectat inainte si inapoi la fiecare rulare de cron.
+ *
+ * Cautarea se face INTAI dupa titlul combinatiei si abia apoi dupa barcode:
+ * variantele deja listate isi pastreaza barcode-ul dinainte, care poate sa nu
+ * mai fie cel pe care l-ar deriva codul de azi. Titlul, in schimb, e acelasi
+ * sir si in `page_sections`, si in `trendyol_variants.variant_title`.
+ */
+export interface StocuriVii {
+  dupaTitlu: Map<string, number>;
+  dupaBarcode: Map<string, number>;
+}
+
+export function stocuriVii(product: MappableProduct): StocuriVii {
+  const dupaTitlu = new Map<string, number>();
+  const dupaBarcode = new Map<string, number>();
+  for (const s of deriveVariantSlots(product)) {
+    if (!s.stocViu) continue;
+    // PRIMA combinatie a unui titlu castiga, ca peste tot in aplicatie —
+    // `deriveVariantSlots` deduplica deja, dar garda ramane: e mai ieftina
+    // decat sa afli dintr-o supravanzare ca s-a strecurat un duplicat.
+    if (s.variantTitle && !dupaTitlu.has(s.variantTitle)) dupaTitlu.set(s.variantTitle, s.quantity);
+    if (!dupaBarcode.has(s.barcode)) dupaBarcode.set(s.barcode, s.quantity);
+  }
+  return { dupaTitlu, dupaBarcode };
+}
+
+/** Stocul viu al unei variante deja salvate, cautat cum trebuie. */
+export function stocVarianteiSalvate(
+  stocuri: StocuriVii, variant: { barcode: string; variant_title?: string | null },
+): number | null {
+  if (variant.variant_title) {
+    const dupaTitlu = stocuri.dupaTitlu.get(variant.variant_title);
+    if (dupaTitlu != null) return dupaTitlu;
+  }
+  return stocuri.dupaBarcode.get(variant.barcode) ?? null;
 }
 
 // ── Price building (direct RON) ───────────────────────────────────────────────
@@ -210,6 +464,9 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
   const enabled = ctx.variants.filter((v) => v.enabled);
   if (enabled.length === 0) return { error: "Nicio variantă activă de listat." };
   const single = enabled.length === 1;
+  // Stocul viu al fiecarei combinatii, ca fiecare marime sa plece cu al ei si nu
+  // cu totalul produsului.
+  const stocuri = stocuriVii(product);
 
   const items: TrendyolProductItem[] = [];
   for (const v of enabled) {
@@ -227,7 +484,7 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
       productMainId,
       brandId,
       categoryId,
-      quantity: resolveVariantQuantity(product, v.quantity, single),
+      quantity: resolveVariantQuantity(product, v.quantity, single, false, stocVarianteiSalvate(stocuri, v)),
       stockCode: (v.stock_code || barcode).slice(0, 100),
       dimensionalWeight: weight,
       description,

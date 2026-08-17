@@ -3626,6 +3626,7 @@ export type Database = {
           dimensional_weight: number | null
           error: string | null
           id: string
+          inventory_retries: number
           issues: Json
           last_status_at: string | null
           last_synced_at: string | null
@@ -3645,6 +3646,7 @@ export type Database = {
           dimensional_weight?: number | null
           error?: string | null
           id?: string
+          inventory_retries?: number
           issues?: Json
           last_status_at?: string | null
           last_synced_at?: string | null
@@ -3664,6 +3666,7 @@ export type Database = {
           dimensional_weight?: number | null
           error?: string | null
           id?: string
+          inventory_retries?: number
           issues?: Json
           last_status_at?: string | null
           last_synced_at?: string | null
@@ -3697,6 +3700,7 @@ export type Database = {
           created_at: string
           currency: string | null
           id: string
+          last_modified_date: number | null
           last_synced_at: string | null
           lines: Json
           order_id: string | null
@@ -3711,6 +3715,7 @@ export type Database = {
           created_at?: string
           currency?: string | null
           id?: string
+          last_modified_date?: number | null
           last_synced_at?: string | null
           lines?: Json
           order_id?: string | null
@@ -3725,6 +3730,7 @@ export type Database = {
           created_at?: string
           currency?: string | null
           id?: string
+          last_modified_date?: number | null
           last_synced_at?: string | null
           lines?: Json
           order_id?: string | null

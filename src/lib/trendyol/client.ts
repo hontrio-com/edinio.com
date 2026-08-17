@@ -85,14 +85,24 @@ async function call<T>(
     let json: unknown = {};
     try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
     if (!res.ok) {
-      const obj = (json ?? {}) as { errors?: { message?: string }[]; message?: string; exception?: string };
+      const obj = (json ?? {}) as {
+        errors?: { message?: string; key?: string; errorCode?: string }[];
+        message?: string; exception?: string; key?: string;
+      };
+      const primaEroare = Array.isArray(obj.errors) ? obj.errors[0] : undefined;
       const brut =
-        (Array.isArray(obj.errors) && obj.errors[0]?.message) ||
+        primaEroare?.message ||
         (typeof obj.message === "string" && obj.message) ||
         (typeof obj.exception === "string" && obj.exception) ||
         "";
+      /*
+       * `key` e identificatorul STABIL al erorii; `message` e localizat de
+       * `Accept-Language` si se schimba sub noi. Documentatia lor cere explicit
+       * sa nu potrivim pe text.
+       */
+      const cheie = primaEroare?.key || primaEroare?.errorCode || (typeof obj.key === "string" ? obj.key : undefined);
       // Codul HTTP spune uneori mai mult decat textul; altfel traducem textul.
-      const detail = mesajDupaStatus(res.status, auth.environment) ?? traduMesajTrendyol(brut, res.status);
+      const detail = mesajDupaStatus(res.status, auth.environment) ?? traduMesajTrendyol(brut, res.status, cheie);
       return { error: detail, status: res.status, details: json };
     }
     return { data: json as T };
@@ -143,15 +153,35 @@ export function getCategoryAttributeValues(auth: TrendyolAuth, categoryId: numbe
     auth, "GET", `/integration/product/categories/${categoryId}/attributes/${attributeId}/values?page=${page}&size=${size}`);
 }
 
-// Brands (min 1000/page). by-name is case-sensitive.
+/*
+ * Lista completa de branduri, paginata.
+ *
+ * ⚠ NU incerca sa o incarci toata: pagina 200 raspunde in continuare cu 1000 de
+ * randuri, deci catalogul are peste doua sute de mii de branduri. Un cache
+ * „complet" ar insemna sute de cereri si zeci de megaocteti pentru fiecare
+ * vitrina. Pentru cautare foloseste `getBrandsByName`.
+ */
 export function getBrands(auth: TrendyolAuth, page = 0, size = 1000) {
   return call<{ brands: TrendyolBrand[] }>(auth, "GET", `/integration/product/brands?page=${page}&size=${size}`);
 }
-// Atentie: lista completa vine invelita in `{ brands: [...] }`, dar cautarea
-// dupa nume raspunde cu un ARRAY simplu. Citit gresit, cautarea de brand nu
-// returna niciodata nimic.
-export function getBrandsByName(auth: TrendyolAuth, name: string) {
-  return call<TrendyolBrand[]>(auth, "GET", `/integration/product/brands/by-name?name=${encodeURIComponent(name)}`);
+/*
+ * Cautarea dupa nume.
+ *
+ * ⚠ `size` NU e in documentatie, dar functioneaza si conteaza enorm: fara el,
+ * serviciul taie la 20 de randuri. Probat pe „Avon" — 20 de rezultate fara
+ * `size`, 31 (toate) cu `size=100`, si printre cele taiate erau chiar potrivirile
+ * exacte pe care le cauta comerciantul. Peste 100 nu se mai schimba nimic: 100 e
+ * deja intreaga multime de potriviri.
+ *
+ * Nu e sensibila la registru, desi comentariul de aici sustinea contrariul:
+ * „avon" si „Avon" intorc exact aceleasi randuri.
+ *
+ * Atentie si la forma: lista completa vine invelita in `{ brands: [...] }`, dar
+ * cautarea raspunde cu un ARRAY simplu. Citit gresit, nu returna niciodata nimic.
+ */
+export function getBrandsByName(auth: TrendyolAuth, name: string, size = 500) {
+  return call<TrendyolBrand[]>(
+    auth, "GET", `/integration/product/brands/by-name?name=${encodeURIComponent(name)}&size=${size}`);
 }
 
 // Approved products (stock/price). Presence of a productMainId here => approved;
@@ -177,8 +207,11 @@ export function getApprovedProducts(
 export function createProducts(auth: TrendyolAuth, items: TrendyolProductItem[]) {
   return call<TrendyolBatchAck>(auth, "POST", `/integration/product/sellers/${auth.supplierId}/v2/products`, { items });
 }
+// Forma lui `requestItem` difera dupa tipul lotului: `ProductV2OnBoarding` il
+// invele in `product`, iar loturile de stoc/pret trimit barcode-ul direct. Le
+// declaram pe amandoua, ca legarea rezultatului de produs sa nu depinda de tip.
 export function getBatchResult(auth: TrendyolAuth, batchRequestId: string) {
-  return call<TrendyolBatchResult<{ product?: { barcode?: string } }>>(
+  return call<TrendyolBatchResult<{ product?: { barcode?: string }; barcode?: string }>>(
     auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/batch-requests/${encodeURIComponent(batchRequestId)}`);
 }
 
@@ -200,14 +233,24 @@ export function getOrders(
   if (params.startDate != null) q.set("startDate", String(params.startDate));
   if (params.endDate != null) q.set("endDate", String(params.endDate));
   if (params.page != null) q.set("page", String(params.page));
-  if (params.size != null) q.set("size", String(params.size));
+  // Serviciul refuza peste 200 pe pagina. Necaptusit, o cerere mai mare intoarce
+  // 400 si ingestul de comenzi se opreste tacut la prima pagina.
+  if (params.size != null) q.set("size", String(Math.max(1, Math.min(200, params.size))));
   if (params.orderNumber) q.set("orderNumber", params.orderNumber);
   if (params.orderByField) q.set("orderByField", params.orderByField);
   if (params.orderByDirection) q.set("orderByDirection", params.orderByDirection);
   const qs = q.toString();
-  // Fereastra de date e limitata la 2 saptamani; vezi `fereastraComenzi` in orders.ts.
+  /*
+   * Calea V2.
+   *
+   * Documentatia lor: „The following endpoint services will be deprecated as of
+   * October 15, 2026" — si `/orders` era exact una dintre ele. Ramasa pe V1,
+   * integrarea si-ar fi pierdut comenzile peste noapte, la o data fixa si
+   * anuntata. Fereastra de date e limitata la 2 saptamani; vezi
+   * `fereastraComenzi` in orders.ts.
+   */
   return call<{ content: TrendyolShipmentPackage[]; totalElements?: number; totalPages?: number; page?: number; size?: number }>(
-    auth, "GET", `/integration/order/sellers/${auth.supplierId}/orders${qs ? `?${qs}` : ""}`);
+    auth, "GET", `/integration/order/sellers/${auth.supplierId}/v2/orders${qs ? `?${qs}` : ""}`);
 }
 // Move a package Picking -> Invoiced. Trendyol's contracted cargo handles the
 // actual shipment (tracking is assigned by Trendyol).

@@ -178,6 +178,14 @@ export interface TrendyolConfig {
   last_sync_at?: string;
   orders_synced_at?: string;
   needs_reconnect?: boolean;
+  /**
+   * Pagina de la care continua reconcilierea aprobarilor.
+   *
+   * Fara ea, fiecare rulare relua primele cinci pagini: dintr-un catalog de o
+   * mie de produse aprobate, cele de dupa a cincea suta nu erau vazute
+   * NICIODATA, oricat de des ar fi rulat cronul.
+   */
+  reconcile_page?: number;
 }
 
 // ── Statuses ──────────────────────────────────────────────────────────────────

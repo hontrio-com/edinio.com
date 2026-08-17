@@ -77,6 +77,42 @@ export function atributeObligatoriiLipsa(
   return lipsa;
 }
 
+/**
+ * Ce lipseste pe TOATE variantele produsului, nu doar pe prima.
+ *
+ * Verificarea rula pe `items[0]`, si atat. Dar tocmai atributele obligatorii de
+ * tip `varianter` — marimea si culoarea — sunt cele care difera de la o varianta
+ * la alta: prima putea fi completa, iar a treia goala. Produsul trecea de garda
+ * noastra si era respins de Trendyol pe lot, adica exact scenariul pentru care
+ * fusese scrisa garda.
+ *
+ * Eticheta variantei se intoarce langa atribut, ca sa nu caute comerciantul
+ * singur care dintre cele douasprezece marimi era goala.
+ */
+export interface AtributLipsaPeVarianta extends AtributLipsa {
+  /** Barcode-ul variantei careia ii lipseste; `null` cand lipseste peste tot. */
+  varianta: string | null;
+}
+
+export function atributeLipsaPeVariante(
+  aleCategoriei: TrendyolCategoryAttribute[],
+  articole: { barcode?: string; attributes?: TrendyolProductAttribute[] }[],
+): AtributLipsaPeVarianta[] {
+  const out: AtributLipsaPeVarianta[] = [];
+  const vazute = new Set<string>();
+  for (const item of articole ?? []) {
+    for (const l of atributeObligatoriiLipsa(aleCategoriei, item.attributes ?? [])) {
+      // Acelasi atribut lipsa pe mai multe variante se raporteaza o data:
+      // comerciantul are de completat un camp, nu douasprezece mesaje identice.
+      const cheie = String(l.attributeId);
+      if (vazute.has(cheie)) continue;
+      vazute.add(cheie);
+      out.push({ ...l, varianta: item.barcode ?? null });
+    }
+  }
+  return out;
+}
+
 /** Mesajul aratat comerciantului, in romana, cu numele atributelor. */
 export function mesajAtributeLipsa(lipsa: AtributLipsa[]): string {
   if (lipsa.length === 0) return "";

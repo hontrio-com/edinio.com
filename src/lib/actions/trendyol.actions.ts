@@ -26,7 +26,7 @@ import { indexeazaFrunze, potrivesteIndexat, type PotrivireCategorie } from "@/l
 import { sugereazaAtribute, type SugestieAtribut, type ValoriAtribut } from "@/lib/trendyol/attribute-autofill";
 import { loadTrendyolContext, removeProductNow, syncProductNow, syncProductsBulk } from "@/lib/trendyol/sync";
 import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
-import { deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
+import { barcodeDerivat, deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
 import type {
   TrendyolBrand, TrendyolCategoryAttribute, TrendyolCategoryMapEntry, TrendyolConfig,
   TrendyolEnvironment, TrendyolProductAttribute, TrendyolStoreFront, TrendyolSupplierAddress,
@@ -437,7 +437,22 @@ export async function suggestTrendyolAttributes(
 export async function searchTrendyolBrands(businessId: string, query: string): Promise<{ brands: TrendyolBrand[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const brands = await searchBrands(g.auth, query);
+  const q = query.trim();
+
+  /*
+   * Un numar curat se accepta ca ID de brand.
+   *
+   * Ultima portita a comerciantului cand cautarea dupa nume nu-i arata brandul:
+   * ia ID-ul din panoul Trendyol si il scrie aici. Nu il putem verifica —
+   * Trendyol n-are serviciu „brand dupa id", iar lista completa are peste doua
+   * sute de mii de randuri — deci il luam ca atare. Daca e gresit, refuzul vine
+   * de la ei, cu mesaj explicit, la trimitere.
+   */
+  if (/^\d{4,12}$/.test(q)) {
+    return { brands: [{ id: Number(q), name: `Brand #${q}` }] };
+  }
+
+  const brands = await searchBrands(g.auth, q);
   if (brands === null) return { error: "Nu am putut căuta brandurile." };
   return { brands };
 }
@@ -535,6 +550,10 @@ export async function saveTrendyolCategoryMapEntry(
 // ── Per-product listing editor ──────────────────────────────────────────────────
 export interface TrendyolEditorVariant {
   key: string; label: string; barcode: string; ron_price: number;
+  /** Titlul combinatiei din Edinio; trimis inapoi la salvare, ca sa nu se piarda. */
+  variant_title: string | null;
+  /** Stocul viu al combinatiei, cand exista unul. Cand e `null`, stocul e scris de mana. */
+  stoc_viu: number | null;
   stock_code: string | null; attributes: TrendyolProductAttribute[];
   quantity: number | null; list_price: number | null; sale_price: number | null; vat_rate: number | null; enabled: boolean;
 }
@@ -556,7 +575,7 @@ export interface TrendyolEditorData {
   variants: TrendyolEditorVariant[];
 }
 interface StoredVariantRow {
-  barcode: string; stock_code: string | null; attributes: unknown; quantity: number | null;
+  barcode: string; stock_code: string | null; variant_title: string | null; attributes: unknown; quantity: number | null;
   list_price: number | null; sale_price: number | null; vat_rate: number | null; enabled: boolean;
 }
 
@@ -566,7 +585,7 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
   const config = await loadConfig(businessId);
 
   const { data: product } = await g.supabase
-    .from("products").select("id, name, category, images, price, compare_at_price, sku, page_sections")
+    .from("products").select("id, name, category, images, price, compare_at_price, sku, page_sections, track_inventory, stock_quantity")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
 
@@ -581,16 +600,70 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
   if (listing) {
     const { data: vs } = await g.supabase
       .from("trendyol_variants")
-      .select("barcode, stock_code, attributes, quantity, list_price, sale_price, vat_rate, enabled")
+      .select("barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
       .eq("listing_id", (listing as { id: string }).id);
     stored = (vs ?? []) as StoredVariantRow[];
   }
   const byBarcode = new Map(stored.map((v) => [v.barcode, v]));
+  /*
+   * `byTitle` pastreaza PRIMUL rand al unui titlu, nu ultimul.
+   *
+   * `new Map(...)` pe o lista cu chei duplicate pastreaza ultima intrare — deci
+   * doua variante cu acelasi titlu ar fi primit amandoua acelasi rand.
+   */
+  const byTitle = new Map<string, StoredVariantRow>();
+  for (const v of stored) {
+    if (v.variant_title && !byTitle.has(v.variant_title)) byTitle.set(v.variant_title, v);
+  }
+  /*
+   * ⚠ UN RAND SALVAT NU POATE FI REVENDICAT DE DOUA SLOTURI.
+   *
+   * Fara evidenta asta, doua sloturi puteau iesi din editor cu ACELASI barcode.
+   * Salvarea sterge intai toate randurile listarii si abia apoi insereaza, deci
+   * insertul cadea pe cheia unica `(business_id, barcode)` DUPA stergere:
+   * listarea ramanea cu zero variante, stocul nu mai pleca niciodata la Trendyol
+   * si comenzile de acolo nu mai gaseau produsul de scazut.
+   */
+  const revendicate = new Set<string>();
+  /*
+   * Si barcodurile care IES din editor trebuie sa fie distincte intre ele.
+   *
+   * `revendicate` apara doar randurile salvate. Un slot respins de el cade pe
+   * barcode-ul derivat, care poate fi exact codul adoptat de slotul dinainte:
+   * comerciantul care corecteaza SKU-uri incrucisat („S" avea codul lui „M")
+   * vedea doua variante cu acelasi cod, fara niciun avertisment, si salvarea ii
+   * era refuzata pana ghicea singur ce camp sa schimbe.
+   */
+  const emise = new Set<string>();
 
-  const variants: TrendyolEditorVariant[] = slots.map((s) => {
-    const ex = byBarcode.get(s.barcode);
+  const variants: TrendyolEditorVariant[] = slots.map((s, i) => {
+    /*
+     * Potrivirea se face INTAI pe titlul combinatiei, si abia apoi pe barcode.
+     *
+     * Barcode-ul derivat azi poate sa nu mai fie cel de la crearea listarii —
+     * si nici nu trebuie sa fie: odata trimis la Trendyol, barcode-ul ESTE
+     * identitatea articolului acolo. Potrivit doar pe el, o varianta deja
+     * listata s-ar fi intors in editor goala (fara pretul, atributele si TVA-ul
+     * completate), iar salvarea ar fi trimis un barcode nou — adica un al doilea
+     * produs pe Trendyol, cu primul ramas orfan si vandabil.
+     */
+    const candidat = (s.variantTitle ? byTitle.get(s.variantTitle) : undefined) ?? byBarcode.get(s.barcode);
+    // Deja luat de alt slot: mai bine o varianta noua, goala, decat doua
+    // variante cu acelasi barcode si o listare golita la salvare.
+    const ex = candidat && !revendicate.has(candidat.barcode) ? candidat : undefined;
+    if (ex) revendicate.add(ex.barcode);
+    // Varianta deja salvata isi pastreaza barcode-ul; cel derivat e doar
+    // propunerea pentru variantele care inca n-au plecat nicaieri — si atunci
+    // cedeaza in fata unuia deja emis, ca sa nu iasa doua variante identice.
+    let barcode = ex?.barcode ?? s.barcode;
+    if (!ex && emise.has(barcode)) barcode = barcodeDerivat(productId, s.key, i);
+    emise.add(barcode);
     return {
-      key: s.key, label: s.label, barcode: s.barcode, ron_price: s.ron_price,
+      key: s.key, label: s.label,
+      barcode,
+      ron_price: s.ron_price,
+      variant_title: s.variantTitle,
+      stoc_viu: s.stocViu ? s.quantity : null,
       stock_code: ex?.stock_code ?? null,
       attributes: Array.isArray(ex?.attributes) ? (ex.attributes as unknown as TrendyolProductAttribute[]) : [],
       quantity: ex?.quantity ?? null, list_price: ex?.list_price ?? null, sale_price: ex?.sale_price ?? null,
@@ -633,6 +706,15 @@ export interface TrendyolListingInput {
   cargo_company_id: number | null;
   variants: {
     barcode: string; stock_code: string | null; attributes: TrendyolProductAttribute[];
+    /**
+     * Titlul combinatiei din Edinio, trimis de editor.
+     *
+     * Fara el, salvarea (care sterge si reinsereaza randurile) golea coloana
+     * scrisa la crearea listarii, iar comanda venita de pe Trendyol nu mai stia
+     * ce marime sa scada. Serverul il rededuce oricum din produs cand lipseste,
+     * ca un editor vechi sa nu poata sterge legatura.
+     */
+    variant_title?: string | null;
     quantity: number | null; list_price: number | null; sale_price: number | null; vat_rate: number | null; enabled: boolean;
   }[];
 }
@@ -643,7 +725,10 @@ export async function saveTrendyolListing(
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { data: product } = await g.supabase
-    .from("products").select("id").eq("id", productId).eq("business_id", businessId).maybeSingle();
+    // `page_sections` si `sku`: din ele se rededuc combinatiile, ca sa putem
+    // recompune titlul variantei cand editorul nu-l trimite.
+    .from("products").select("id, sku, price, page_sections")
+    .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
 
   const admin = createAdminClient();
@@ -660,13 +745,39 @@ export async function saveTrendyolListing(
   if (upErr || !up) return { error: "Eroare la salvarea listării." };
   const listingId = (up as { id: string }).id;
 
+  /*
+   * Titlul combinatiei se PASTREAZA la salvare.
+   *
+   * Salvarea sterge randurile si le reinsereaza. Cat timp `variant_title` nu era
+   * printre campurile scrise, fiecare salvare golea coloana pe care crearea
+   * listarii o completase — deci o comanda de pe Trendyol nu mai stia ce marime
+   * sa scada si scadea din stocul de produs, de unde disparea la prima editare
+   * de variante (declansatorul recalculeaza coloana din suma combinatiilor).
+   *
+   * Trei surse, in ordine: ce trimite editorul, ce deduce serverul din produs,
+   * si ce era deja salvat. Ultimele doua exista ca un editor vechi, sau un
+   * barcode schimbat de mana, sa nu poata rupe legatura in tacere.
+   */
+  const titluriDerivate = new Map(
+    deriveVariantSlots(product as unknown as MappableProduct).map((s) => [s.barcode, s.variantTitle]),
+  );
+  const { data: existente } = await admin.from("trendyol_variants")
+    .select("barcode, variant_title").eq("listing_id", listingId);
+  const titluriSalvate = new Map(
+    (existente ?? []).map((v) => [(v as { barcode: string }).barcode, (v as { variant_title: string | null }).variant_title]),
+  );
+
   // Guard against cross-product barcode clashes BEFORE deleting anything, so a
   // duplicate barcode never wipes a listing's variants.
-  const rows = input.variants.filter((v) => v.barcode?.trim()).map((v) => ({
-    listing_id: listingId, business_id: businessId, product_id: productId,
-    barcode: v.barcode.trim(), stock_code: v.stock_code, attributes: (v.attributes as unknown) as never,
-    quantity: v.quantity, list_price: v.list_price, sale_price: v.sale_price, vat_rate: v.vat_rate, enabled: v.enabled,
-  }));
+  const rows = input.variants.filter((v) => v.barcode?.trim()).map((v) => {
+    const barcode = v.barcode.trim();
+    return {
+      listing_id: listingId, business_id: businessId, product_id: productId,
+      barcode, stock_code: v.stock_code, attributes: (v.attributes as unknown) as never,
+      variant_title: v.variant_title ?? titluriDerivate.get(barcode) ?? titluriSalvate.get(barcode) ?? null,
+      quantity: v.quantity, list_price: v.list_price, sale_price: v.sale_price, vat_rate: v.vat_rate, enabled: v.enabled,
+    };
+  });
   // Barcode is Trendyol's cross-endpoint identifier (create, inventory, order match):
   // validate here so the merchant sees the problem while editing, not hours later in
   // a batch result that only names the barcode.
@@ -675,7 +786,21 @@ export async function saveTrendyolListing(
     if (problema) return { error: problema };
   }
 
+  /*
+   * ⚠ DUPLICATELE DIN ACEEASI LISTARE SE PRIND INAINTE DE STERGERE.
+   *
+   * Verificarea de mai jos cauta doar conflicte cu ALTE listari. Doua randuri cu
+   * acelasi barcode in aceeasi listare treceau de ea, se executa `delete` pe
+   * toate variantele, si abia insertul cadea pe cheia unica `(business_id,
+   * barcode)` — cu stergerea deja commitata. Listarea ramanea fara nicio
+   * varianta: stocul nu mai pleca la Trendyol, iar comenzile de acolo nu mai
+   * gaseau ce produs sa scada.
+   */
   const newBarcodes = rows.map((r) => r.barcode);
+  const duplicat = newBarcodes.find((b, i) => newBarcodes.indexOf(b) !== i);
+  if (duplicat) {
+    return { error: `Barcode-ul „${duplicat}" apare la două variante ale aceluiași produs. Fiecare variantă are nevoie de un cod unic.` };
+  }
   if (newBarcodes.length > 0) {
     const { data: clash } = await admin.from("trendyol_variants")
       .select("barcode, listing_id").eq("business_id", businessId).in("barcode", newBarcodes);
@@ -757,7 +882,7 @@ export async function publishTrendyolProduct(
   if (gata) return { error: gata };
 
   const { data: product } = await g.supabase
-    .from("products").select("id, name, category, price, sku, page_sections, is_active")
+    .from("products").select("id, name, category, price, sku, page_sections, is_active, track_inventory, stock_quantity")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
   if ((product as { is_active?: boolean }).is_active === false) {
@@ -805,6 +930,10 @@ export async function publishTrendyolProduct(
     const rows = slots.map((s) => ({
       listing_id: listingId, business_id: businessId, product_id: productId,
       barcode: s.barcode.trim(), stock_code: null, attributes: [] as unknown as never,
+      // Titlul combinatiei, fara de care o vanzare de pe Trendyol nu stie ce
+      // marime sa scada si dispare din stoc la prima editare de variante.
+      // `ensureListingFromMapping` il scria deja; calea asta nu.
+      variant_title: s.variantTitle,
       quantity: null, list_price: null, sale_price: null, vat_rate: null, enabled: true,
     }));
     // Acelasi barcode nu poate sta la doua produse: Trendyol l-ar suprascrie pe primul.

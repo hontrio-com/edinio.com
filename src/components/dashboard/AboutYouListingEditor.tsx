@@ -10,7 +10,7 @@ import {
   type AboutYouEditorData, type AboutYouEditorVariant, type AboutYouListingInput,
 } from "@/lib/actions/aboutyou.actions";
 import { MAX_CLUSTERE_MATERIAL, regulaClustere } from "@/lib/aboutyou/mapping";
-import { AboutYouSelectCautare } from "@/components/dashboard/AboutYouSelectCautare";
+import { SelectCautare } from "@/components/dashboard/SelectCautare";
 import type { AboutYouAttributeGroup, AboutYouBrand, AboutYouMaterialCluster } from "@/lib/aboutyou/types";
 
 export interface AboutYouPricing { mode: "fx_from_ron" | "manual_eur"; rate?: number; marginPct?: number }
@@ -412,7 +412,7 @@ export function AboutYouListingEditor({
         {colorGroup && !areMaiMulteCulori && (
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Culoare</label>
-            <AboutYouSelectCautare
+            <SelectCautare
               optiuni={colorGroup.attributes} valoare={colorId} onSchimba={setColorId}
               placeholder="Alege culoarea"
             />
@@ -423,7 +423,7 @@ export function AboutYouListingEditor({
             <label className="block text-xs font-medium text-muted-foreground mb-1">
               {eticheta}{g.is_multiselect ? " (mai multe)" : ""}
             </label>
-            <AboutYouSelectCautare
+            <SelectCautare
               optiuni={g.attributes}
               multiplu={g.is_multiselect}
               valori={attrSel[g.id] ?? []}
@@ -470,7 +470,7 @@ export function AboutYouListingEditor({
                   <div className="flex items-center gap-2 mb-1.5">
                     {clusterGroup ? (
                       <div className="flex-1">
-                        <AboutYouSelectCautare
+                        <SelectCautare
                           optiuni={clusterGroup.attributes} dimensiune="mic"
                           valoare={cl.cluster_id}
                           onSchimba={(id) => setClustere((prev) => prev.map((x, j) =>
@@ -495,7 +495,7 @@ export function AboutYouListingEditor({
                     {cl.components.map((m, i) => (
                       <div key={m.id} className="flex items-center gap-2">
                         <div className="flex-1">
-                          <AboutYouSelectCautare
+                          <SelectCautare
                             optiuni={materialGroup.attributes} dimensiune="mic"
                             valoare={m.material_id || null}
                             onSchimba={(id) => setClustere((prev) => prev.map((x, j) => j !== ci ? x : {
@@ -600,7 +600,7 @@ export function AboutYouListingEditor({
                 {areMaiMulteCulori && colorGroup && (
                   <div>
                     <label className="block text-[10px] text-muted-foreground mb-0.5">Culoare</label>
-                    <AboutYouSelectCautare
+                    <SelectCautare
                       optiuni={colorGroup.attributes} dimensiune="mic"
                       valoare={v.color_id} onSchimba={(id) => setVariant(v.key, { color_id: id })}
                       placeholder="-"
@@ -612,7 +612,7 @@ export function AboutYouListingEditor({
                     <label className="block text-[10px] text-muted-foreground mb-0.5">{sizeGroup.frontend_name}</label>
                     {/* 696 de valori pe categoria „Handbag". Fara cautare, „One
                         Size" se gaseste prin derulare, la fiecare varianta. */}
-                    <AboutYouSelectCautare
+                    <SelectCautare
                       optiuni={sizeGroup.attributes} dimensiune="mic"
                       valoare={v.size_id} onSchimba={(id) => setVariant(v.key, { size_id: id })}
                       placeholder="-"
@@ -623,7 +623,7 @@ export function AboutYouListingEditor({
                 {secondSizeGroup && (
                   <div>
                     <label className="block text-[10px] text-muted-foreground mb-0.5">{secondSizeGroup.frontend_name}</label>
-                    <AboutYouSelectCautare
+                    <SelectCautare
                       optiuni={secondSizeGroup.attributes} dimensiune="mic"
                       valoare={v.second_size_id} onSchimba={(id) => setVariant(v.key, { second_size_id: id })}
                       placeholder="-"

@@ -30,6 +30,17 @@ export function edinioStatusForTrendyol(status: string | undefined): string {
       return "delivered";
     case "cancelled":
     case "unsupplied":
+    /*
+     * `UnPacked` = pachetul a fost SPART, iar acesta e cel vechi.
+     *
+     * Cand Trendyol imparte o comanda in mai multe colete, pachetul initial
+     * trece pe `UnPacked` si se creeaza altele noi, pentru aceleasi linii.
+     * Netratat ca terminal, pachetul mort ramanea „activ" si liniile lui
+     * consumau stoc a doua oara — aceeasi comanda scadea marfa de doua ori, iar
+     * produsul aparea epuizat pe toate canalele fara sa se fi vandut nimic in
+     * plus. Prin definitia lor, pachetul vechi nu mai exista: e o anulare.
+     */
+    case "unpacked":
       return "cancelled";
     case "returned":
       return "refunded";

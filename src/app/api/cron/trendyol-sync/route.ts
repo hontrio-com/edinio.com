@@ -4,7 +4,8 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
-  loadTrendyolContext, processQueueItem, pollOpenBatches, reconcileStatuses, reconcileInventory, pause,
+  esteDeconectatTrendyol, eTrecatoare, loadTrendyolContext, processQueueItem, pollOpenBatches,
+  reconcileStatuses, reconcileInventory, pause,
   type TrendyolQueueItem, type TrendyolSyncContext,
 } from "@/lib/trendyol/sync";
 import { marcajUrmator, pollPackages } from "@/lib/trendyol/orders";
@@ -81,7 +82,27 @@ export async function GET(req: NextRequest) {
   for (const [businessId, items] of byBiz) {
     const ctx = await ctxFor(businessId);
     if (!ctx) {
-      await admin.from("trendyol_sync_queue").delete().in("id", items.map((i) => i.id));
+      /*
+       * `ctx` lipsa NU inseamna „magazin deconectat".
+       *
+       * `loadTrendyolContext` intoarce `null` si cand nu poate CITI configurarea
+       * — deci un hop la baza de date arunca toata munca magazinului: listari,
+       * dar si impingerile de stoc puse la coada dupa comenzi deja incasate.
+       * Fara log si fara urma, ceea ce inseamna ca nici n-ai de unde afla.
+       *
+       * Acum se verifica separat. Cand nu putem afla, coada ramane pe loc:
+       * elementele se reiau la trecerea urmatoare.
+       */
+      const deconectat = await esteDeconectatTrendyol(admin, businessId);
+      if (deconectat === true) {
+        await admin.from("trendyol_sync_queue").delete().in("id", items.map((i) => i.id));
+      } else {
+        await logError({
+          action: "trendyol-sync",
+          message: `configurarea magazinului nu s-a putut citi; coada de ${items.length} ramane neatinsa`,
+          businessId, severity: "warning",
+        });
+      }
       continue;
     }
     for (const item of items) {
@@ -97,11 +118,32 @@ export async function GET(req: NextRequest) {
           await patchConfig(admin, businessId, { needs_reconnect: true });
           break;
         }
-        const attempts = (item.attempts ?? 0) + 1;
-        if (attempts >= MAX_ATTEMPTS) {
-          await admin.from("trendyol_sync_queue").delete().eq("id", item.id);
+        /*
+         * Un 429 sau un 503 nu spune nimic despre elementul din coada.
+         *
+         * Numarate ca incercari, cinci minute de indisponibilitate la Trendyol
+         * goleau coada definitiv — produsele ramaneau nelistate si nu mai exista
+         * nici macar randul din care sa se vada ca au fost cerute. Esecurile
+         * trecatoare doar intarzie elementul, fara sa-i arda incercarile.
+         */
+        if (eTrecatoare(res.status)) {
+          await admin.from("trendyol_sync_queue")
+            .update({ last_error: res.error.slice(0, 500) }).eq("id", item.id);
         } else {
-          await admin.from("trendyol_sync_queue").update({ attempts, last_error: res.error.slice(0, 500) }).eq("id", item.id);
+          const attempts = (item.attempts ?? 0) + 1;
+          if (attempts >= MAX_ATTEMPTS) {
+            // Ultima incercare NU se pierde tacut: cine se uita in loguri trebuie
+            // sa poata afla ce produs a renuntat si de ce.
+            await logError({
+              action: "trendyol-sync",
+              message: `element abandonat dupa ${attempts} incercari (${item.op}): ${res.error}`.slice(0, 500),
+              details: { productId: item.product_id, offerId: item.offer_id },
+              businessId, severity: "warning",
+            });
+            await admin.from("trendyol_sync_queue").delete().eq("id", item.id);
+          } else {
+            await admin.from("trendyol_sync_queue").update({ attempts, last_error: res.error.slice(0, 500) }).eq("id", item.id);
+          }
         }
       }
       await pause(PACE_MS);

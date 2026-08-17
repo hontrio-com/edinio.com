@@ -4441,7 +4441,8 @@ create table if not exists public.trendyol_listings (
   last_synced_at timestamp with time zone,
   last_status_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  inventory_retries integer default 0 not null);
 
 create table if not exists public.trendyol_orders (
   id uuid default gen_random_uuid() not null,
@@ -4455,7 +4456,8 @@ create table if not exists public.trendyol_orders (
   lines jsonb default '[]'::jsonb not null,
   last_synced_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  last_modified_date bigint);
 
 create table if not exists public.trendyol_sync_queue (
   id uuid default gen_random_uuid() not null,

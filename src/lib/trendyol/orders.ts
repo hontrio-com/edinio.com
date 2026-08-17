@@ -34,14 +34,57 @@ function toSideLines(pkg: TrendyolShipmentPackage) {
   }));
 }
 
+/**
+ * Clientul si adresa, aduse la forma pe care o citeste restul aplicatiei.
+ *
+ * ⚠ Adresa se NORMALIZEAZA, nu se copiaza.
+ *
+ * Trendyol trimite `address1`, `district`, `postalCode`, `countryCode`; Edinio
+ * citeste peste tot `address`, `county`, `postal_code`, `country`. Scris ca
+ * atare, obiectul trecea de tipuri si de baza de date, dar comanda aparea cu
+ * adresa GOALA in panou, pe factura si pe AWB — adica exact acolo unde e
+ * nevoie de ea. Campurile brute raman langa cele normalizate: nu strica nimic
+ * si pastreaza ce n-am tradus (`neighborhood`, `id`).
+ */
 function parseCustomer(pkg: TrendyolShipmentPackage): { name: string; phone: string; email: string | null; address: Record<string, unknown> } {
   const a = (pkg.shipmentAddress ?? {}) as Record<string, unknown>;
-  const str = (o: Record<string, unknown>, k: string) => (typeof o[k] === "string" ? (o[k] as string) : undefined);
+  const str = (o: Record<string, unknown>, k: string) => {
+    const v = o[k];
+    return typeof v === "string" && v.trim() ? v.trim() : undefined;
+  };
   const name = [pkg.customerFirstName, pkg.customerLastName].filter(Boolean).join(" ")
     || str(a, "fullName") || [str(a, "firstName"), str(a, "lastName")].filter(Boolean).join(" ") || "Client Trendyol";
   const phone = str(a, "phone") || "";
   const email = pkg.customerEmail || null;
-  return { name, phone, email, address: a };
+
+  /*
+   * Strada: `address1` (+`address2`), nu `fullAddress`.
+   *
+   * `fullAddress` e o concatenare facuta de ei, cu orasul lipit la coada si spatii
+   * multiple in mijloc: „str. Panselutelor, nr24      Dumbravita". Pusa pe AWB,
+   * curierul primeste orasul de doua ori.
+   */
+  const strada = [str(a, "address1"), str(a, "address2")].filter(Boolean).join(", ")
+    || str(a, "fullAddress")
+    || "";
+  const address: Record<string, unknown> = {
+    ...a,
+    address: strada,
+    city: str(a, "city") ?? "",
+    /*
+     * Judetul e in `countyName`, verificat pe comenzi reale: „Timis",
+     * „Constanța", „București".
+     *
+     * NU in `district`, care doar repeta orasul („Dumbravita" / „Dumbravita"),
+     * si nici in `stateName`, care vine gol. Ghicit gresit, comenzile ar fi
+     * plecat la curier cu judetul „Dumbravita" — o localitate care exista, deci
+     * nici macar n-ar fi picat vizibil la validare.
+     */
+    county: str(a, "countyName") ?? str(a, "stateName") ?? "",
+    postal_code: str(a, "postalCode") ?? "",
+    country: str(a, "countryCode") ?? "",
+  };
+  return { name, phone, email, address };
 }
 
 /**
@@ -159,13 +202,52 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
   });
 
   const { data: existing } = await admin
-    .from("trendyol_orders").select("id, order_id")
+    .from("trendyol_orders").select("id, order_id, last_modified_date")
     .eq("business_id", ctx.businessId).eq("shipment_package_id", packageId).maybeSingle();
+  const modificatLa = Number.isFinite(Number(pkg.lastModifiedDate)) ? Number(pkg.lastModifiedDate) : null;
   if (existing) {
-    const ex = existing as { id: string; order_id: string | null };
-    await admin.from("trendyol_orders")
-      .update({ status: pkg.status ?? "Created", lines: sideLines as never, cargo_tracking_number: tracking, last_synced_at: now, updated_at: now } as never)
-      .eq("id", ex.id);
+    const ex = existing as { id: string; order_id: string | null; last_modified_date: number | null };
+    /*
+     * ⚠ UN EVENIMENT VECHI NU RESCRIE UNUL NOU.
+     *
+     * Doua surse scriu aici — cronul si webhook-ul — si nimic nu garanta
+     * ordinea intre ele. O pagina de cron pornita inainte de webhook putea
+     * ajunge dupa el si sa readuca pachetul pe „Picking" peste „Delivered": nu
+     * doar un status gresit in panou, ci si o trecere prin
+     * `tranzitieComandaMarketplace` care REZERVA din nou stocul unei comenzi
+     * deja expediate.
+     *
+     * `lastModifiedDate` e ceasul lor, singurul comun celor doua cai. Egal
+     * inseamna „acelasi eveniment", deci tot se sare: reluarea nu aduce nimic.
+     *
+     * Garda opreste STATUSUL si tranzitia, nu si consumul de stoc de mai jos:
+     * acela e idempotent si e tocmai reparatia unui consum picat anterior. O
+     * iesire devreme ar inchide o gaura deschizand alta, exact ca in cazul
+     * documentat mai jos.
+     */
+    const evenimentVechi = modificatLa != null && ex.last_modified_date != null
+      && modificatLa <= ex.last_modified_date;
+    if (!evenimentVechi) {
+      /*
+       * ⚠ `last_modified_date` NU SE SCRIE AICI.
+       *
+       * Marcajul de ordine nu are voie sa avanseze inaintea pasului pe care il
+       * protejeaza. Scris odata cu statusul, o tranzitie care pica imediat dupa
+       * (lock timeout, indisponibilitate) lasa marcajul deja avansat — iar
+       * reluarea urmatoare vede „eveniment vechi" si sare peste tranzitie
+       * pentru totdeauna. Adica exact defectul reparat mai jos, reintrodus pe
+       * alt drum: comanda ramane pe statusul vechi cu stocul REZERVAT, iar
+       * comerciantul expediaza o comanda pe care Trendyol a anulat-o.
+       *
+       * Se scrie la final, dupa ce tranzitia a raspuns.
+       */
+      await admin.from("trendyol_orders")
+        .update({
+          status: pkg.status ?? "Created", lines: sideLines as never, cargo_tracking_number: tracking,
+          last_synced_at: now, updated_at: now,
+        } as never)
+        .eq("id", ex.id);
+    }
     /*
      * Ciclul de viata trece prin ACELASI motor ca panoul si loturile.
      *
@@ -188,7 +270,7 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
      * epuizat pe toate celelalte canale.
      */
     let reiaTranzitia = false;
-    if (ex.order_id) {
+    if (ex.order_id && !evenimentVechi) {
       const t = await tranzitieComandaMarketplace(admin, {
         orderId: ex.order_id, businessId: ctx.businessId,
         status: edinioStatus, sursa: "trendyol",
@@ -213,6 +295,18 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
     if (ex.order_id) {
       const r = await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
       if (r === "failed") return "failed";
+    }
+    /*
+     * Marcajul de ordine se aseaza ABIA ACUM, cand toti pasii au trecut.
+     *
+     * Daca tranzitia cere reluare, marcajul ramane cel vechi: trecerea urmatoare
+     * reintra pe aceeasi ramura si duce treaba la capat, in loc s-o considere
+     * un eveniment deja procesat.
+     */
+    if (!evenimentVechi && !reiaTranzitia && modificatLa != null) {
+      await admin.from("trendyol_orders")
+        .update({ last_modified_date: modificatLa } as never)
+        .eq("id", ex.id);
     }
     /*
      * Iesirea pe esecul tranzitiei sta AICI, nu imediat dupa ea: un `return` mai
@@ -306,6 +400,8 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
     currency: pkg.currencyCode ?? null,
     cargo_tracking_number: tracking,
     lines: sideLines as never,
+    // Ceasul lui Trendyol, ca trecerea urmatoare sa stie ce e mai nou si ce nu.
+    last_modified_date: modificatLa,
     last_synced_at: now,
   } as never, { onConflict: "business_id,shipment_package_id" });
 

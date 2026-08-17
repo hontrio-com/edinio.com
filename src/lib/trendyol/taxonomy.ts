@@ -108,18 +108,70 @@ export async function getCategoryAttributeValuesCached(auth: TrendyolAuth, categ
   return data;
 }
 
-// Brands: the catalogue is huge, so we search by name rather than caching all.
-// Raspunsul cautarii e un array simplu (spre deosebire de lista completa, care
-// vine invelita in `{ brands }`); tolerăm ambele forme, ca sa nu se rupa daca
-// Trendyol le uniformizeaza vreodata.
-export async function searchBrands(auth: TrendyolAuth, name: string): Promise<TrendyolBrand[] | null> {
+/*
+ * ── Branduri ──────────────────────────────────────────────────────────────────
+ *
+ * Catalogul lor de branduri e imens — pagina 200 din lista completa raspunde in
+ * continuare cu 1000 de randuri, deci sunt peste doua sute de mii. Nu se poate
+ * tine in memorie si nu se poate parcurge din interfata: singura cale e cautarea
+ * dupa nume.
+ *
+ * ⚠ Iar cautarea aia taia la 20 de randuri, si taia FARA sa spuna. Probat pe
+ * teren cu „Avon": primele 20 erau „Avonova", „Avonside Publishing", „Avont"…
+ * iar potrivirile care conteaza — „AVON", „AVON PRODUCTS", „Avon Care" — cadeau
+ * sub prag sau se pierdeau in mijlocul unei liste nesortate. Comerciantul
+ * concludea, pe buna dreptate, ca brandul lui nu exista la Trendyol.
+ *
+ * Doua reparatii, amandoua verificate pe API-ul real:
+ *   1. `size` pe cautare (nedocumentat, dar functioneaza): 31 de potriviri in
+ *      loc de 20, adica TOATE.
+ *   2. sortare locala cu potrivirea exacta prima — altfel „AVON" ramane al
+ *      saptelea intr-o lista de treizeci si unu.
+ */
+function potrivesteBrand(nume: string, bucati: string[]): boolean {
+  const n = normalize(nume);
+  return bucati.every((b) => n.includes(b));
+}
+
+export async function searchBrands(auth: TrendyolAuth, name: string, limit = 100): Promise<TrendyolBrand[] | null> {
   const q = name.trim();
   if (q.length < 2) return [];
+
   const res = await getBrandsByName(auth, q);
   if (isTrendyolError(res)) return null;
   const brut = res.data as TrendyolBrand[] | { brands?: TrendyolBrand[] } | null;
-  const lista = Array.isArray(brut) ? brut : (brut?.brands ?? []);
-  return lista.slice(0, 30);
+  const lista = (Array.isArray(brut) ? brut : (brut?.brands ?? [])).filter((b) => b?.id != null);
+
+  /*
+   * Filtrarea locala prinde ce cautarea lor rateaza: diacriticele si scrierea
+   * cu mai multe cuvinte. Daca nu ramane nimic dupa filtrare, pastram ce a dat
+   * serverul — mai bine potriviri aproximative decat un camp gol.
+   */
+  const bucati = normalize(q).split(/\s+/).filter(Boolean);
+  const filtrate = lista.filter((b) => potrivesteBrand(b.name ?? "", bucati));
+  const rezultat = filtrate.length > 0 ? filtrate : lista;
+
+  const exact = normalize(q);
+  rezultat.sort((a, b) => {
+    const ea = normalize(a.name ?? "") === exact ? 0 : 1;
+    const eb = normalize(b.name ?? "") === exact ? 0 : 1;
+    if (ea !== eb) return ea - eb;
+    return (a.name ?? "").length - (b.name ?? "").length;
+  });
+  return rezultat.slice(0, limit);
+}
+
+/**
+ * Numele unui brand dupa ID.
+ *
+ * Trendyol NU are un serviciu „brand dupa id", iar lista completa e prea mare ca
+ * s-o cautam. Deci se poate raspunde doar cand brandul apare intre potrivirile
+ * unei cautari pe care o avem deja — altfel `null`, si interfata arata ID-ul.
+ */
+export async function numeBrand(auth: TrendyolAuth, brandId: number, dupaNume?: string): Promise<string | null> {
+  if (!dupaNume?.trim()) return null;
+  const lista = await searchBrands(auth, dupaNume);
+  return lista?.find((b) => b.id === brandId)?.name ?? null;
 }
 
 /**

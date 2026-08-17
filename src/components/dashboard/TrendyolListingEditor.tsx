@@ -9,6 +9,7 @@ import {
   saveTrendyolListing, searchTrendyolBrands, suggestTrendyolAttributes, syncTrendyolProduct,
   type TrendyolEditorData, type TrendyolEditorVariant,
 } from "@/lib/actions/trendyol.actions";
+import { SelectCautare } from "@/components/dashboard/SelectCautare";
 import type { TrendyolBrand, TrendyolCategoryAttribute, TrendyolProductAttribute, TrendyolStoreFront } from "@/lib/trendyol/types";
 import { coteTvaVitrina, infoVitrina, tvaImplicitVitrina } from "@/lib/trendyol/types";
 
@@ -75,21 +76,61 @@ export function TrendyolListingEditor({
       }
       setDimWeight(ed.listing?.dimensional_weight != null ? String(ed.listing.dimensional_weight) : "");
       setVariants(ed.variants);
+      /*
+       * Atributele DE VARIANTA se reincarca in stare.
+       *
+       * Lipsea pasul asta cu totul: `variantAttrSel` pornea gol si `buildInput`
+       * il citea ca atare, deci fiecare salvare trimitea `attributes: []` pe
+       * fiecare varianta. Comerciantul alegea marimea si culoarea, salva, si
+       * dispareau — iar Trendyol raspundea „Lipseste ID atribut: 47" (Culoare)
+       * la produse pe care omul le completase corect de trei ori.
+       */
+      const peVarianta: Record<string, Record<number, AttrSel>> = {};
+      for (const v of ed.variants) {
+        if (!v.attributes?.length) continue;
+        const sel: Record<number, AttrSel> = {};
+        for (const a of v.attributes) sel[a.attributeId] = { valueId: a.attributeValueId, custom: a.customAttributeValue };
+        peVarianta[v.key] = sel;
+      }
+      setVariantAttrSel(peVarianta);
       setLoading(false);
     })();
     return () => { alive = false; };
   }, [businessId, productId, onClose]);
 
-  // Load category attributes + their selectable values when the category is known.
+  /*
+   * Atributele categoriei si valorile lor.
+   *
+   * `atributeIncarcate` deosebeste „categoria n-are atribute" de „nu le-am putut
+   * incarca". Fara distinctia asta, o eroare de retea golea `groups`, iar
+   * salvarea de dupa trimitea `attributes: []` — adica stergea tot ce completase
+   * comerciantul, inclusiv atributele obligatorii, si produsul se intorcea de la
+   * Trendyol cu „Lipseste ID atribut: 47".
+   */
+  const [atributeIncarcate, setAtributeIncarcate] = useState(false);
+  const [eroareAtribute, setEroareAtribute] = useState<string | null>(null);
+
   useEffect(() => {
     if (!categoryId) return;
     let alive = true;
     (async () => {
+      // Marcarea „se incarca" sta INAUNTRU, nu in corpul efectului: pusa acolo,
+      // declanseaza o randare in cascada la fiecare trecere.
+      setAtributeIncarcate(false);
+      setEroareAtribute(null);
       const res = await getTrendyolCategoryAttributes(businessId, categoryId);
       if (!alive) return;
-      if ("error" in res) { setGroups([]); return; }
-      const gs = res.attributes.slice(0, 20);
+      if ("error" in res) { setGroups([]); setEroareAtribute(res.error); return; }
+      /*
+       * TOATE atributele, nu primele 20.
+       *
+       * Taierea ascundea atribute obligatorii — o categorie Trendyol poate avea
+       * 35 — si atunci comerciantul nu avea nici macar unde sa le completeze.
+       * Cele obligatorii urca primele: sunt singurele care blocheaza listarea.
+       */
+      const gs = [...res.attributes].sort((a, b) => Number(!!b.required) - Number(!!a.required));
       setGroups(gs);
+      setAtributeIncarcate(true);
       // Fetch values for attributes that use predefined values (not freetext-only).
       const withValues = gs.filter((g) => !(g.allowCustom && (!g.attributeValues || g.attributeValues.length === 0)));
       const map: Record<number, AttrValue[]> = {};
@@ -97,8 +138,8 @@ export function TrendyolListingEditor({
         const v = await getTrendyolAttributeValues(businessId, categoryId, g.attribute.id);
         if (!alive) return;
         if (!("error" in v)) map[g.attribute.id] = v.values;
+        setAttrValues({ ...map });
       }
-      setAttrValues(map);
     })();
     return () => { alive = false; };
   }, [businessId, categoryId]);
@@ -180,8 +221,19 @@ export function TrendyolListingEditor({
   };
 
   const buildInput = () => {
-    const listingAttributes = productAttrs
-      .map((g) => toProductAttribute(g.attribute.id, listingAttrSel[g.attribute.id]))
+    /*
+     * Atributele se construiesc din TOT ce s-a selectat, nu doar din campurile
+     * randate acum.
+     *
+     * Randarea depinde de nomenclatorul lui Trendyol, care poate lipsi: o
+     * categorie care nu si-a incarcat atributele nu randa niciun camp, iar
+     * salvarea trimitea o lista goala peste ce era salvat. Sursa e starea, care
+     * porneste de la valorile deja salvate.
+     */
+    const idVarianter = new Set(varianterAttrs.map((g) => g.attribute.id));
+    const listingAttributes = Object.entries(listingAttrSel)
+      .filter(([id]) => !idVarianter.has(Number(id)))
+      .map(([id, sel]) => toProductAttribute(Number(id), sel))
       .filter((x): x is TrendyolProductAttribute => x !== null);
     return {
       brand_id: brandId,
@@ -195,20 +247,53 @@ export function TrendyolListingEditor({
       cargo_company_id: null,
       variants: variants.map((v) => {
         const sel = variantAttrSel[v.key] ?? {};
-        const variantAttributes = varianterAttrs
-          .map((g) => toProductAttribute(g.attribute.id, sel[g.attribute.id]))
+        // Ca mai sus: din stare, nu din campurile randate.
+        const variantAttributes = Object.entries(sel)
+          .map(([id, s]) => toProductAttribute(Number(id), s))
           .filter((x): x is TrendyolProductAttribute => x !== null);
         return {
           barcode: v.barcode, stock_code: v.stock_code, attributes: variantAttributes,
+          variant_title: v.variant_title,
           quantity: v.quantity, list_price: v.list_price, sale_price: v.sale_price, vat_rate: v.vat_rate, enabled: v.enabled,
         };
       }),
     };
   };
 
+  /** Atributele obligatorii ramase necompletate, ca sa nu afle comerciantul de la Trendyol, ore mai tarziu. */
+  const obligatoriiLipsa = useMemo(() => {
+    if (!atributeIncarcate) return [];
+    const lipsaProdus = productAttrs.filter((g) => {
+      if (!g.required) return false;
+      const sel = listingAttrSel[g.attribute.id];
+      return !sel || (!sel.valueId && !sel.custom?.trim());
+    }).map((g) => g.attribute.name);
+    const lipsaVarianta = varianterAttrs.filter((g) => {
+      if (!g.required) return false;
+      return variants.some((v) => {
+        if (!v.enabled) return false;
+        const sel = variantAttrSel[v.key]?.[g.attribute.id];
+        return !sel || (!sel.valueId && !sel.custom?.trim());
+      });
+    }).map((g) => g.attribute.name);
+    return [...new Set([...lipsaProdus, ...lipsaVarianta])];
+  }, [atributeIncarcate, productAttrs, varianterAttrs, listingAttrSel, variantAttrSel, variants]);
+
   const save = (then?: "sync") => {
     if (!categoryId) { toast.error("Mapează categoria produsului mai întâi."); return; }
     if (!brandId) { toast.error("Alege brandul."); return; }
+    /*
+     * Salvarea sterge si rescrie randurile, deci nu are voie sa plece cu o lista
+     * de atribute pe care n-a apucat s-o incarce: ar sterge exact ce e salvat.
+     */
+    if (!atributeIncarcate && eroareAtribute) {
+      toast.error("Atributele categoriei nu s-au încărcat. Reîncarcă pagina — altfel salvarea ar șterge ce ai completat.");
+      return;
+    }
+    if (then === "sync" && obligatoriiLipsa.length > 0) {
+      toast.error(`Completează întâi: ${obligatoriiLipsa.slice(0, 4).join(", ")}${obligatoriiLipsa.length > 4 ? ` și încă ${obligatoriiLipsa.length - 4}` : ""}.`);
+      return;
+    }
     startTransition(async () => {
       const res = await saveTrendyolListing(businessId, productId, buildInput());
       if ("error" in res) { toast.error(res.error); return; }
@@ -236,12 +321,21 @@ export function TrendyolListingEditor({
       return <input value={sel?.custom ?? ""} onChange={(e) => onChange({ custom: e.target.value })}
         placeholder="valoare" className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" />;
     }
+    /*
+     * Selector cu cautare, nu `<select>`.
+     *
+     * Un atribut de categorie Trendyol vine cu pana la 1000 de valori: „Culoare"
+     * sau „Model" nu se parcurg deruland. Acelasi component ca la About You,
+     * care filtreaza fara diacritice si fara sensibilitate la registru.
+     */
     return (
-      <select value={sel?.valueId ?? ""} onChange={(e) => onChange({ valueId: e.target.value ? Number(e.target.value) : undefined })}
-        className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs">
-        <option value="">{g.required ? "Alege" : "-"}</option>
-        {values.map((v) => <option key={v.attributeValueId} value={v.attributeValueId}>{v.attributeValue}</option>)}
-      </select>
+      <SelectCautare
+        dimensiune="mic"
+        optiuni={values.map((v) => ({ id: v.attributeValueId, frontend_name: v.attributeValue }))}
+        valoare={sel?.valueId ?? null}
+        onSchimba={(id) => onChange({ valueId: id ?? undefined })}
+        placeholder={g.required ? "Alege" : "-"}
+      />
     );
   };
 
@@ -252,20 +346,41 @@ export function TrendyolListingEditor({
           Categoria acestui produs nu este mapată. Mapeaz-o în secțiunea de mapare categorii, apoi revino.
         </div>
       )}
+      {eroareAtribute && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800">
+          Nu am putut încărca atributele categoriei: {eroareAtribute} Reîncarcă pagina înainte să salvezi — altfel
+          salvarea ar șterge atributele deja completate.
+        </div>
+      )}
+      {obligatoriiLipsa.length > 0 && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+          Trendyol cere aceste atribute, altfel respinge produsul: <strong>{obligatoriiLipsa.join(", ")}</strong>.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="relative">
           <label className="block text-xs font-medium text-muted-foreground mb-1">Brand</label>
           <input value={brandId ? (brandName || `#${brandId}`) : brandQuery}
             onChange={(e) => { setBrandId(null); setBrandName(""); searchBrand(e.target.value); }}
-            placeholder="caută brand" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            placeholder="caută brandul sau scrie ID-ul lui" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
           {!brandId && brandResults.length > 0 && (
             <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-border bg-background divide-y divide-border shadow">
               {brandResults.map((b) => (
                 <button key={b.id} onClick={() => { setBrandId(b.id); setBrandName(b.name); setBrandResults([]); setBrandQuery(""); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted">{b.name}</button>
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted">
+                  {b.name} <span className="text-[10px] text-muted-foreground">#{b.id}</span>
+                </button>
               ))}
             </div>
+          )}
+          {/* Brandul e singura conditie de listare care nu se poate ocoli: fara el,
+              produsul nu pleaca. Merita spus unde se gaseste, nu lasat ca un camp
+              gol care refuza sa se completeze. */}
+          {!brandId && brandQuery.trim().length >= 2 && !pending && brandResults.length === 0 && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Niciun brand cu numele ăsta. Dacă îl vezi în panoul Trendyol, scrie aici ID-ul lui numeric.
+            </p>
           )}
         </div>
         <div>
@@ -348,8 +463,21 @@ export function TrendyolListingEditor({
                 </div>
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-0.5">Stoc</label>
-                  <input type="number" min="0" value={v.quantity ?? ""} onChange={(e) => setVariant(v.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
-                    className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" />
+                  {/*
+                    Cand varianta are stoc propriu in Edinio, campul nu se mai
+                    editeaza aici: numarul scris o data ramane inghetat pentru
+                    totdeauna, in timp ce stocul real se misca la fiecare vanzare.
+                    Se arata cifra care chiar pleaca la Trendyol.
+                  */}
+                  {v.stoc_viu != null ? (
+                    <div className="w-full rounded border border-border bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground"
+                      title="Se ia automat din stocul variantei din Edinio.">
+                      {v.stoc_viu} <span className="text-[10px]">(din Edinio)</span>
+                    </div>
+                  ) : (
+                    <input type="number" min="0" value={v.quantity ?? ""} onChange={(e) => setVariant(v.key, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
+                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" />
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-0.5">Preț vânzare ({moneda})</label>

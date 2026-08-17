@@ -10,6 +10,7 @@ import {
   type TrendyolEditorData, type TrendyolEditorVariant,
 } from "@/lib/actions/trendyol.actions";
 import { SelectCautare } from "@/components/dashboard/SelectCautare";
+import { deosebesteAtribut, numeRepetate } from "@/lib/trendyol/atribute-obligatorii";
 import type { TrendyolBrand, TrendyolCategoryAttribute, TrendyolProductAttribute, TrendyolStoreFront } from "@/lib/trendyol/types";
 import { coteTvaVitrina, infoVitrina, tvaImplicitVitrina } from "@/lib/trendyol/types";
 
@@ -192,6 +193,22 @@ export function TrendyolListingEditor({
 
   const productAttrs = useMemo(() => groups.filter((g) => !g.varianter), [groups]);
   const varianterAttrs = useMemo(() => groups.filter((g) => g.varianter), [groups]);
+
+  /*
+   * Eticheta unui atribut, deosebita cand categoria cere DOUA cu acelasi nume.
+   *
+   * ⚠ Se intampla real: „Genți de umăr" cere de doua ori „Culoare" — una scrisa
+   * de mana (dupa care Trendyol grupeaza variantele pe pagina lor) si una aleasa
+   * din lista lor de 26 de valori standard, folosita la filtre. Amandoua sunt
+   * obligatorii si sunt lucruri diferite, dar afisate identic pareau un camp
+   * desenat de doua ori din greseala.
+   */
+  const numeDuble = useMemo(() => numeRepetate(groups.map((g) => g.attribute.name)), [groups]);
+  const eticheta = (g: TrendyolCategoryAttribute) => {
+    const valori = attrValues[g.attribute.id] ?? [];
+    const textLiber = !!g.allowCustom && valori.length === 0;
+    return deosebesteAtribut(g.attribute.name, textLiber, numeDuble.has(g.attribute.name));
+  };
 
   const setVariant = (key: string, patch: Partial<TrendyolEditorVariant>) =>
     setVariants((prev) => prev.map((v) => (v.key === key ? { ...v, ...patch } : v)));
@@ -412,7 +429,7 @@ export function TrendyolListingEditor({
               return (
                 <div key={g.attribute.id}>
                   <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
-                    <span>{g.attribute.name}{g.required ? " *" : ""}</span>
+                    <span>{eticheta(g)}{g.required ? " *" : ""}</span>
                     {sursa && areValoare && (
                       <span className="text-[9px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-1 py-px rounded">
                         {sursa === "firma" ? "din datele firmei" : "din produs"}
@@ -499,7 +516,7 @@ export function TrendyolListingEditor({
                 </div>
                 {varianterAttrs.map((g) => (
                   <div key={g.attribute.id}>
-                    <label className="block text-[10px] text-muted-foreground mb-0.5">{g.attribute.name}{g.required ? " *" : ""}</label>
+                    <label className="block text-[10px] text-muted-foreground mb-0.5">{eticheta(g)}{g.required ? " *" : ""}</label>
                     {renderAttrSelect(g, variantAttrSel[v.key]?.[g.attribute.id], (s) =>
                       setVariantAttrSel((p) => ({ ...p, [v.key]: { ...(p[v.key] ?? {}), [g.attribute.id]: s } })))}
                   </div>

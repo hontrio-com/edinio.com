@@ -8,7 +8,7 @@ import { fereastraComenzi } from "./orders";
 import {
   barcodeArticol, eTrecatoare, grupeazaInLoturi, listariDeRepus, MAX_REPUNERI_STOC, stareLot,
 } from "./sync";
-import { atributeLipsaPeVariante } from "./atribute-obligatorii";
+import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
 import { edinioStatusForTrendyol } from "./webhooks";
 import { traduMesajTrendyol, mesajDupaStatus } from "./errors";
 import { coteTvaVitrina, curieriVitrina, esteAdresaDe, infoVitrina, tvaImplicitVitrina } from "./types";
@@ -501,6 +501,28 @@ test("repunerea la coada dupa un lot de stoc esuat se opreste la plafon", () => 
   // Si, cel mai important: plafonul chiar SE ATINGE. Un contor blocat pe zero ar
   // trece toate cele cinci si bucla ar fi tot infinita.
   assert.equal(listariDeRepus(listari.map((l) => ({ ...l, inventory_retries: 0 }))).length, 4);
+});
+
+test("doua atribute cu ACELASI nume se deosebesc, nu se repeta", () => {
+  /*
+   * Categoria „Genți de umăr" (971) cere de doua ori „Culoare", verificat pe
+   * API-ul real: id 47 — text liber, `slicer`, culoarea dupa care Trendyol
+   * grupeaza variantele pe pagina lor; id 348 — aleasa din 26 de valori
+   * standard, folosita la filtrele lor. Sunt lucruri diferite si obligatorii
+   * amandoua, dar afisate identic pareau un camp desenat de doua ori.
+   */
+  const lipsa = [
+    { attributeId: 47, nume: "Culoare", acceptaTextLiber: true },
+    { attributeId: 348, nume: "Culoare", acceptaTextLiber: false },
+    { attributeId: 338, nume: "Mărime", acceptaTextLiber: false },
+  ];
+  const m = mesajAtributeLipsa(lipsa);
+  assert.ok(m.includes("Culoare (scrisă de tine)"), m);
+  assert.ok(m.includes("Culoare (din lista Trendyol)"), m);
+  // „Mărime" apare o singura data in categorie, deci ramane neatins.
+  assert.ok(m.includes("Mărime") && !m.includes("Mărime ("), m);
+  // Si nu mai apare nicaieri „Culoare si Culoare".
+  assert.equal(/Culoare(?!\s\()/.test(m.replace(/Culoare \([^)]*\)/g, "")), false, m);
 });
 
 // ── Comenzi ───────────────────────────────────────────────────────────────────

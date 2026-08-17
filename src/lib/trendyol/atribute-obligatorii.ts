@@ -113,10 +113,35 @@ export function atributeLipsaPeVariante(
   return out;
 }
 
+/**
+ * Eticheta unui atribut, deosebita cand categoria are DOUA cu acelasi nume.
+ *
+ * ⚠ Nu e un caz teoretic: categoria „Genți de umăr" (971) cere de doua ori
+ * „Culoare" — id 47, text liber, care e si `slicer` (culoarea dupa care Trendyol
+ * grupeaza variantele pe pagina lor), si id 348, aleasa dintr-o lista de 26 de
+ * valori standard, folosita la filtrele lor. Sunt lucruri diferite si trebuie
+ * completate amandoua, dar afisate identic il pun pe comerciant sa creada ca
+ * vede acelasi camp de doua ori — sau ca noi il desenam de doua ori.
+ */
+export function deosebesteAtribut(nume: string, acceptaTextLiber: boolean, arePereche: boolean): string {
+  if (!arePereche) return nume;
+  return acceptaTextLiber ? `${nume} (scrisă de tine)` : `${nume} (din lista Trendyol)`;
+}
+
+/** Numele care apar de mai multe ori intr-o lista de atribute. */
+export function numeRepetate(nume: string[]): Set<string> {
+  const numarate = new Map<string, number>();
+  for (const n of nume) numarate.set(n, (numarate.get(n) ?? 0) + 1);
+  return new Set([...numarate].filter(([, c]) => c > 1).map(([n]) => n));
+}
+
 /** Mesajul aratat comerciantului, in romana, cu numele atributelor. */
 export function mesajAtributeLipsa(lipsa: AtributLipsa[]): string {
   if (lipsa.length === 0) return "";
-  const nume = lipsa.map((l) => l.nume);
+  // „Culoare si Culoare" nu e un mesaj: cand categoria are doua atribute cu
+  // acelasi nume, se spune care e care.
+  const repetate = numeRepetate(lipsa.map((l) => l.nume));
+  const nume = lipsa.map((l) => deosebesteAtribut(l.nume, l.acceptaTextLiber, repetate.has(l.nume)));
   /*
    * Se enumera TOATE, nu doar primul. Trimise unul cate unul, comerciantul ar fi
    * completat „Culoare", ar fi reincercat, si ar fi aflat abia atunci ca mai

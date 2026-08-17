@@ -4489,7 +4489,8 @@ create table if not exists public.trendyol_variants (
   enabled boolean default true not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  variant_title text);
+  variant_title text,
+  exista_la_ei boolean default false not null);
 
 create table if not exists public.ups_etichete (
   order_id uuid not null,
@@ -4687,7 +4688,7 @@ alter table public.support_messages add constraint support_messages_sender_type_
 alter table public.support_tickets add constraint support_tickets_category_check CHECK ((category = ANY (ARRAY['technical'::text, 'billing'::text, 'feature'::text, 'other'::text])));
 alter table public.support_tickets add constraint support_tickets_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text])));
 alter table public.support_tickets add constraint support_tickets_status_check CHECK ((status = ANY (ARRAY['open'::text, 'in_progress'::text, 'resolved'::text, 'closed'::text])));
-alter table public.trendyol_batches add constraint trendyol_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'inventory'::text, 'archive'::text])));
+alter table public.trendyol_batches add constraint trendyol_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'inventory'::text, 'archive'::text, 'update'::text])));
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'inventory'::text])));
 alter table public.users_profile add constraint users_profile_plan_check CHECK ((plan = ANY (ARRAY['free'::text, 'basic'::text, 'premium'::text, 'ultra'::text])));
 alter table public.users_profile add constraint users_profile_plan_interval_check CHECK (((plan_interval IS NULL) OR (plan_interval = ANY (ARRAY['monthly'::text, 'annual'::text]))));

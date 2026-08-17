@@ -6,7 +6,8 @@ import {
 } from "./mapping";
 import { fereastraComenzi } from "./orders";
 import {
-  barcodeArticol, eTrecatoare, grupeazaInLoturi, listariDeRepus, MAX_REPUNERI_STOC, stareLot,
+  barcodeArticol, eTrecatoare, existaLaTrendyol, faraStocSiPret, grupeazaInLoturi,
+  listariDeRepus, MAX_REPUNERI_STOC, putemSuprascrieContinutul, rutaDeTrimitere, stareLot,
 } from "./sync";
 import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
 import { edinioStatusForTrendyol } from "./webhooks";
@@ -543,6 +544,82 @@ test("doua atribute cu ACELASI nume se deosebesc, nu se repeta", () => {
   assert.ok(m.includes("Mărime") && !m.includes("Mărime ("), m);
   // Si nu mai apare nicaieri „Culoare si Culoare".
   assert.equal(/Culoare(?!\s\()/.test(m.replace(/Culoare \([^)]*\)/g, "")), false, m);
+});
+
+// ── Ruta de trimitere: creare vs actualizare ──────────────────────────────────
+test("un produs care exista deja la ei se ACTUALIZEAZA, nu se recreeaza", () => {
+  /*
+   * ⚠ Cazul care a costat: un produs respins la revizuie pentru imagini.
+   * Comerciantul apasa „Reincearca", noi il trimiteam iar prin `createProducts`,
+   * si Trendyol raspundea de fiecare data „codul de bare exista deja". Oricate
+   * reincercari, reparatia nu ajungea NICIODATA la ei.
+   */
+  assert.equal(rutaDeTrimitere({ status: "rejected", creat_de_edinio: true }), "actualizare_neaprobat");
+  assert.equal(rutaDeTrimitere({ status: "created", creat_de_edinio: true }), "actualizare_neaprobat");
+
+  // Produs aprobat: continutul se schimba pe `contentId`, nu pe barcode.
+  assert.equal(
+    rutaDeTrimitere({ status: "approved", creat_de_edinio: true, ty_content_id: 123 }),
+    "actualizare_aprobat",
+  );
+  // Fara `contentId` nu exista cheie pentru ruta aia: nu trimitem o cerere
+  // invalida, ci lasam refuzul explicit de la creare.
+  assert.equal(rutaDeTrimitere({ status: "approved", creat_de_edinio: true }), "creare");
+
+  /*
+   * ⚠ `inactive` NU merge pe ruta de continut.
+   *
+   * Inseamna „i-am pus stocul pe zero" — iar actualizarea nu duce cantitate, si
+   * niciun cron nu se uita la `inactive`. Un produs reactivat ar fi ramas
+   * invizibil la ei pentru totdeauna. Reactivarea se trateaza separat.
+   */
+  assert.notEqual(
+    rutaDeTrimitere({ status: "inactive", creat_de_edinio: true, ty_content_id: 5 }),
+    "actualizare_aprobat",
+  );
+
+  // Prima trimitere, si listarile pe eroare care n-au ajuns niciodata la ei.
+  assert.equal(rutaDeTrimitere({ status: "pending" }), "creare");
+  assert.equal(rutaDeTrimitere({ status: "draft" }), "creare");
+  assert.equal(rutaDeTrimitere({ status: "error" }), "creare");
+
+  // Listarea ADOPTATA exista la ei chiar daca n-am creat-o noi.
+  assert.equal(
+    rutaDeTrimitere({ status: "approved", creat_de_edinio: false, auto_inventory: false, ty_content_id: 9 }),
+    "actualizare_aprobat",
+  );
+});
+
+test("„exista la ei” si „avem voie sa-i scriem” sunt intrebari DIFERITE", () => {
+  /*
+   * Confundate o data, rezultatul era ca titlul, descrierea si imaginile lucrate
+   * de comerciant in panoul Trendyol se inlocuiau tacit cu cele din Edinio — la
+   * orice editare de produs, fara mesaj si fara cale de intoarcere.
+   */
+  const adoptata = { creat_de_edinio: false, auto_inventory: false };
+  assert.equal(existaLaTrendyol(adoptata), true);
+  assert.equal(putemSuprascrieContinutul(adoptata), false);
+
+  const aNoastra = { creat_de_edinio: true, auto_inventory: true };
+  assert.equal(existaLaTrendyol(aNoastra), true);
+  assert.equal(putemSuprascrieContinutul(aNoastra), true);
+
+  const netrimisa = { creat_de_edinio: false, auto_inventory: true };
+  assert.equal(existaLaTrendyol(netrimisa), false);
+});
+
+test("payload-ul de actualizare nu duce stoc si pret", () => {
+  // Documentat: alea se schimba NUMAI prin `price-and-inventory`. Trimise aici,
+  // sunt ignorate in cel mai bun caz si resping lotul in cel mai rau.
+  const item = itemuri()[0];
+  const actualizare = faraStocSiPret(item) as unknown as Record<string, unknown>;
+  assert.equal(actualizare.quantity, undefined);
+  assert.equal(actualizare.listPrice, undefined);
+  assert.equal(actualizare.salePrice, undefined);
+  // Restul ramane intreg: documentatia cere setul COMPLET la update de ciorna.
+  assert.equal(actualizare.barcode, item.barcode);
+  assert.equal(actualizare.title, item.title);
+  assert.deepEqual(actualizare.images, item.images);
 });
 
 // ── Comenzi ───────────────────────────────────────────────────────────────────

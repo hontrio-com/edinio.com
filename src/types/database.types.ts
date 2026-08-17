@@ -3823,6 +3823,7 @@ export type Database = {
           business_id: string
           created_at: string
           enabled: boolean
+          exista_la_ei: boolean
           id: string
           list_price: number | null
           listing_id: string
@@ -3841,6 +3842,7 @@ export type Database = {
           business_id: string
           created_at?: string
           enabled?: boolean
+          exista_la_ei?: boolean
           id?: string
           list_price?: number | null
           listing_id: string
@@ -3859,6 +3861,7 @@ export type Database = {
           business_id?: string
           created_at?: string
           enabled?: boolean
+          exista_la_ei?: boolean
           id?: string
           list_price?: number | null
           listing_id?: string

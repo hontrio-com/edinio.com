@@ -8,7 +8,8 @@ import type { Database } from "@/types/database.types";
 import type { TrendyolAuth } from "./client";
 import {
   createProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, getUnapprovedProducts,
-  isTrendyolError, setArchiveState, updatePriceInventory, type TrendyolMotivRespingere,
+  isTrendyolError, setArchiveState, updateApprovedContent, updatePriceInventory,
+  updateUnapprovedProducts, type TrendyolItemActualizare, type TrendyolMotivRespingere,
 } from "./client";
 import {
   buildTrendyolItems, buildVariantPrices, deriveVariantSlots, resolveVariantQuantity, round2,
@@ -107,19 +108,21 @@ interface ListingRow {
   auto_inventory?: boolean | null;
   /** Produsul de la Trendyol a fost creat de NOI (lot de creare reusit)? */
   creat_de_edinio?: boolean | null;
+  /** `contentId`-ul de la ei; singura cheie acceptata de `content-bulk-update`. */
+  ty_content_id?: number | null;
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
 async function getListingByMainId(admin: Db, businessId: string, mainId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id")
     .eq("business_id", businessId).eq("product_main_id", mainId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -213,14 +216,41 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
   }
 
   /*
-   * O listare ADOPTATA nu se mai recreeaza.
+   * ⚠ REACTIVAREA TREBUIE SA REPUNA STOCUL, ALTFEL RAMANE ZERO PE VECI.
    *
-   * Produsul exista deja in contul lor, deci `createProducts` ar raspunde iar
-   * „codul de bare exista deja" — un lot esuat la fiecare incercare, degeaba.
-   * Legatura e facuta; ce mai poate cere comerciantul de aici e impingerea de
-   * stoc, si aia se cheama explicit.
+   * `inactive` inseamna „i-am pus stocul pe zero la ei". Produsul EXISTA acolo,
+   * dar nu se vinde. Iar `inactive` nu apare in filtrul NICIUNEI reconcilieri —
+   * nici de status, nici de stoc — deci nimic nu-l mai atinge vreodata.
+   *
+   * Cat timp reactivarea trecea prin creare, se repara singura pe ocolite:
+   * lotul pica cu „codul exista deja", adoptarea il trecea pe `approved`, si
+   * reconcilierea de stoc reimpingea cantitatea. Ruta noua de actualizare NU
+   * duce cantitate, deci calea aia s-a inchis: fara pasul de fata, comerciantul
+   * reactiveaza produsul in Edinio si el ramane invizibil la Trendyol.
+   *
+   * Statusul se pune pe `created`, nu direct pe `approved`: nu stim daca a fost
+   * aprobat. Reconcilierea de status il ridica singura daca e cazul.
    */
-  if (listing.auto_inventory === false && ["created", "approved", "active"].includes(listing.status)) {
+  if (listing.status === "inactive") {
+    await setListingStatus(admin, listing.id, "created", { error: null });
+    listing = { ...listing, status: "created" };
+    const reluat = await pushInventoryNow(admin, ctx, productId);
+    if (!reluat.ok) return reluat;
+  }
+
+  /*
+   * ⚠ LISTAREA ADOPTATA NU SE REscrie DIN OFICIU.
+   *
+   * Produsul e pe Trendyol pentru ca l-a pus comerciantul acolo, cu titlul,
+   * descrierea si imaginile lui. Orice editare in Edinio pune un `upsert` la
+   * coada, si fara garda asta actualizarea i-ar fi inlocuit tacit munca — fara
+   * mesaj si fara cale de intoarcere, fiindca datele vechi nu sunt salvate
+   * nicaieri.
+   *
+   * Am legat listarea ca sa curga comenzile si sa se poata impinge stocul la
+   * cerere („Trimite stocul"), nu ca sa preluam ce a construit el.
+   */
+  if (existaLaTrendyol(listing) && !putemSuprascrieContinutul(listing)) {
     return { ok: true, action: "skipped" };
   }
 
@@ -256,17 +286,197 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
     }
   }
 
-  const res = await createProducts(ctx.auth, built.items);
-  if (isTrendyolError(res)) {
-    await setListingStatus(admin, listing.id, "error", { error: res.error });
-    return esteEroareDeChei(res.status)
-      ? { ok: false, error: res.error, authFailed: true, status: res.status }
-      : { ok: false, error: res.error, status: res.status };
+  /*
+   * ⚠ CREARE SAU ACTUALIZARE — dupa starea produsului la ei.
+   *
+   * Un produs care exista deja la Trendyol NU se poate recrea: raspunsul e
+   * mereu „codul de bare exista deja", deci reincercarea unei listari respinse
+   * nu repara niciodata nimic. Asta a fost cazul real: un produs respins pentru
+   * imagini, reincercat de comerciant, refuzat ca duplicat, la nesfarsit.
+   *
+   * Trendyol are trei drumuri diferite, si alegerea depinde de starea LOR:
+   *   - produs inexistent          -> `createProducts`
+   *   - produs NEAPROBAT (sau respins la revizuie) -> `unapproved-bulk-update`,
+   *     pe barcode, cu setul complet de date
+   *   - produs APROBAT             -> `content-bulk-update`, pe `contentId`,
+   *     si acolo nu se mai pot schimba barcode, brand, categorie, marime, culoare
+   */
+  const ruta = rutaDeTrimitere(listing);
+
+  /*
+   * ⚠ BARCODURILE NOI SE CREEAZA, CHIAR SI PE UN PRODUS CARE EXISTA DEJA.
+   *
+   * Rutele de actualizare nu pot introduce barcoduri necunoscute. Un produs
+   * listat cu marimile S si M, caruia comerciantul ii adauga L, ar fi plecat
+   * intreg prin actualizare — iar L n-ar fi ajuns NICIODATA la ei, fara niciun
+   * mesaj. Clientii ar fi vazut un produs caruia ii lipseste o marime.
+   *
+   * Deci se despart: barcodurile cunoscute pe ruta de actualizare, cele noi pe
+   * creare, cu acelasi `productMainId` — asa devin variante ale aceluiasi produs.
+   */
+  const cunoscute = new Set(
+    (await admin.from("trendyol_variants").select("barcode")
+      .eq("listing_id", listing.id).eq("exista_la_ei", true)).data?.map((v) => (v as { barcode: string }).barcode) ?? [],
+  );
+  const deCreat = ruta === "creare" ? built.items : built.items.filter((i) => !cunoscute.has(i.barcode));
+  const deActualizat = ruta === "creare" ? [] : built.items.filter((i) => cunoscute.has(i.barcode));
+
+  const trimiteri: { res: Awaited<ReturnType<typeof createProducts>>; kind: string }[] = [];
+  if (deActualizat.length > 0) {
+    trimiteri.push({
+      kind: "update",
+      res: ruta === "actualizare_aprobat"
+        ? await updateApprovedContent(ctx.auth, [{
+          contentId: listing.ty_content_id as number,
+          title: deActualizat[0]?.title,
+          description: deActualizat[0]?.description,
+          images: deActualizat[0]?.images,
+          /*
+           * ⚠ Doar atributele DE PRODUS. Cele `slicer`/`varianter` — marimea,
+           * culoarea — sunt interzise pe un produs aprobat si resping tot lotul.
+           * Iar `built.items[0].attributes` le contine pe ale PRIMEI variante,
+           * deci ar fi trimis „Mărime = S" pe cardul intregului produs.
+           */
+          attributes: await atributeDeProdus(ctx, deActualizat[0]),
+        }])
+        : await updateUnapprovedProducts(ctx.auth, deActualizat.map(faraStocSiPret)),
+    });
   }
-  const batchRequestId = res.data?.batchRequestId;
-  await setListingStatus(admin, listing.id, "pending", { error: null, last_synced_at: new Date().toISOString() });
-  if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "product", [listing.product_main_id]);
+  if (deCreat.length > 0) {
+    trimiteri.push({ kind: "product", res: await createProducts(ctx.auth, deCreat) });
+  }
+  if (trimiteri.length === 0) return { ok: true, action: "skipped" };
+
+  const picata = trimiteri.find((t) => isTrendyolError(t.res));
+  if (picata && isTrendyolError(picata.res)) {
+    const e = picata.res;
+    await setListingStatus(admin, listing.id, "error", { error: e.error });
+    return esteEroareDeChei(e.status)
+      ? { ok: false, error: e.error, authFailed: true, status: e.status }
+      : { ok: false, error: e.error, status: e.status };
+  }
+
+  /*
+   * Statusul dupa o ACTUALIZARE nu se intoarce pe „pending".
+   *
+   * Produsul e deja la ei; trimiterea doar ii schimba datele. Pus pe „pending",
+   * un produs aprobat ar aparea in interfata ca si cum ar astepta prima
+   * acceptare, iar `reconcileStatuses` l-ar „re-aproba" degeaba.
+   *
+   * Cand se creeaza barcoduri NOI pe un produs existent, statusul tot nu se
+   * schimba: produsul e acolo, doar ii adaugam variante.
+   */
+  await setListingStatus(
+    admin, listing.id,
+    ruta === "creare" ? "pending" : listing.status,
+    { error: null, last_synced_at: new Date().toISOString() },
+  );
+  let batchRequestId: string | undefined;
+  for (const t of trimiteri) {
+    if (isTrendyolError(t.res)) continue;
+    const id = t.res.data?.batchRequestId;
+    if (!id) continue;
+    batchRequestId = batchRequestId ?? id;
+    await recordBatch(admin, ctx.businessId, id, t.kind, [listing.product_main_id]);
+  }
   return { ok: true, action: "submitted", batchRequestId };
+}
+
+/**
+ * Pe ce drum pleaca produsul: creare, actualizare de ciorna, sau de continut.
+ *
+ * Sta separat ca sa poata fi probata: e o decizie cu trei ramuri, iar ramura
+ * gresita inseamna ori un refuz sigur („codul exista deja"), ori o cerere pe
+ * `contentId` cand nu-l avem.
+ */
+export type RutaTrimitere = "creare" | "actualizare_neaprobat" | "actualizare_aprobat";
+
+/** Statusurile in care produsul EXISTA deja la Trendyol, dar inca nu e aprobat. */
+const NEAPROBAT_LA_EI = new Set(["created", "rejected"]);
+/**
+ * Statusurile in care produsul e aprobat si vandabil la ei.
+ *
+ * ⚠ `inactive` NU e aici. Inseamna „i-am pus stocul pe zero", iar ruta de
+ * continut nu duce cantitate — deci un produs reactivat ar fi ramas invizibil
+ * la ei pentru totdeauna. Reactivarea se trateaza separat, in `syncProductNow`.
+ */
+const APROBAT_LA_EI = new Set(["approved", "active"]);
+
+/**
+ * Produsul exista deja in catalogul Trendyol?
+ *
+ * ⚠ Asta e o intrebare despre STARE, nu o permisiune de scriere. Vezi
+ * `putemSuprascrieContinutul` — cele doua au fost confundate o data si
+ * rezultatul era ca datele lucrate de comerciant in panoul Trendyol se
+ * inlocuiau tacit cu cele din Edinio.
+ */
+export function existaLaTrendyol(listing: { creat_de_edinio?: boolean | null; auto_inventory?: boolean | null }): boolean {
+  return listing.creat_de_edinio === true || listing.auto_inventory === false;
+}
+
+/**
+ * Avem voie sa-i rescriem continutul de la Trendyol?
+ *
+ * DA pentru produsele pe care le-am creat noi. NU pentru cele ADOPTATE: acolo
+ * titlul, descrierea si imaginile sunt munca comerciantului, facuta in panoul
+ * lor. Le-am legat ca sa curga comenzile, nu ca sa i le inlocuim.
+ */
+export function putemSuprascrieContinutul(listing: { creat_de_edinio?: boolean | null }): boolean {
+  return listing.creat_de_edinio === true;
+}
+
+export function rutaDeTrimitere(listing: {
+  status: string; creat_de_edinio?: boolean | null; ty_content_id?: number | null; auto_inventory?: boolean | null;
+}): RutaTrimitere {
+  if (!existaLaTrendyol(listing)) return "creare";
+  if (APROBAT_LA_EI.has(listing.status)) {
+    // Fara `contentId` nu se poate actualiza continutul unui produs aprobat:
+    // ruta aia nu accepta barcode. Il aflam la prima reconciliere; pana atunci
+    // incercarea de creare macar produce un refuz explicit, nu o cerere invalida.
+    return listing.ty_content_id ? "actualizare_aprobat" : "creare";
+  }
+  if (NEAPROBAT_LA_EI.has(listing.status)) return "actualizare_neaprobat";
+  return "creare";
+}
+
+/**
+ * Atributele care au voie sa plece pe `content-bulk-update`.
+ *
+ * ⚠ Pe un produs APROBAT, Trendyol interzice modificarea atributelor marcate
+ * `slicer` sau `varianter` — adica exact marimea si culoarea. Trimise, resping
+ * lotul intreg. Iar sursa noastra (`built.items[0].attributes`) le CONTINE, si
+ * inca pe ale primei variante: pentru un tricou S/M/L ar fi plecat „Mărime = S"
+ * ca atribut al intregului produs.
+ *
+ * Cand nu putem afla ce e varianter (nomenclatorul lor cazut), NU ghicim si nu
+ * trimitem nimic: mai bine o actualizare de continut fara atribute decat un lot
+ * respins sau un atribut pus gresit.
+ */
+export async function atributeDeProdus(
+  ctx: TrendyolSyncContext, item: TrendyolProductItem | undefined,
+): Promise<TrendyolProductAttribute[] | undefined> {
+  const toate = item?.attributes;
+  if (!toate?.length || typeof item?.categoryId !== "number") return undefined;
+  const aleCategoriei = await getCategoryAttributesCached(ctx.auth, item.categoryId);
+  if (!aleCategoriei) return undefined;
+  const interzise = new Set(
+    aleCategoriei
+      .filter((a) => (a as { varianter?: boolean; slicer?: boolean }).varianter === true
+        || (a as { varianter?: boolean; slicer?: boolean }).slicer === true)
+      .map((a) => a.attribute?.id)
+      .filter((id): id is number => typeof id === "number"),
+  );
+  const pastrate = toate.filter((a) => !interzise.has(a.attributeId));
+  // „Totul sau nimic": daca tot ce ramane e gol, nu trimitem un vector gol —
+  // ar sterge atributele produsului.
+  return pastrate.length > 0 ? pastrate : undefined;
+}
+
+/** Payload-ul de actualizare nu contine stoc si pret: alea merg doar prin `price-and-inventory`. */
+export function faraStocSiPret(item: TrendyolProductItem): TrendyolItemActualizare {
+  const { quantity: _q, listPrice: _l, salePrice: _s, ...rest } = item;
+  void _q; void _l; void _s;
+  return rest;
 }
 
 // ── Listare din maparea categoriei ──────────────────────────────────────────────
@@ -420,7 +630,7 @@ export async function syncProductsBulk(
   const listingIds = pregatite.map((x) => x.listingId);
   const [{ data: randuriListari }, { data: randuriVariante }] = await Promise.all([
     admin.from("trendyol_listings")
-      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio")
+      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id")
       .eq("business_id", ctx.businessId).in("id", listingIds),
     admin.from("trendyol_variants")
       .select("listing_id, barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
@@ -843,6 +1053,53 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
           // retine ca produsul de acolo e al NOSTRU: un refuz ulterior de tipul
           // „codul exista deja" e atunci propriul nostru produs, nu unul strain.
           await setListingStatus(admin, listing.id, "created", { error: null, creat_de_edinio: true });
+        }
+        /*
+         * Barcodurile acceptate se marcheaza, ca o varianta adaugata mai tarziu
+         * sa poata fi deosebita de cele deja existente si sa plece pe creare.
+         */
+        if (!motiveleLui) {
+          await admin.from("trendyol_variants").update({ exista_la_ei: true } as never)
+            .eq("listing_id", listing.id);
+        }
+      }
+    } else if (b.kind === "update") {
+      /*
+       * Lotul de ACTUALIZARE se trateaza separat, nu ca unul de creare.
+       *
+       * ⚠ Trecut prin ramura de creare, un esec de actualizare ar fi chemat
+       * `incearcaAdoptarea`, care gaseste produsul (evident, exista — tocmai de
+       * aia il actualizam), ii pune statusul pe „aprobat" si ii STERGE eroarea.
+       * Adica repararea care a picat ar fi aratat ca reusita.
+       *
+       * Aici: esecul se scrie, reusita nu atinge statusul — starea adevarata o
+       * spune reconcilierea, dupa ce Trendyol reia revizuirea.
+       */
+      const mainIds = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+      for (const mid of mainIds) {
+        const listing = await getListingByMainId(admin, ctx.businessId, mid);
+        if (!listing) continue;
+        if (hardFail) {
+          /*
+           * ⚠ Esecul de ACTUALIZARE se scrie in `issues`, nu in `error`.
+           *
+           * `error` e teritoriul reconcilierilor: `reconcileStatuses` il pune pe
+           * `null` cand produsul apare aprobat, iar `reconcileRejections` cand
+           * nu mai e respins. Amandoua ruleaza in ACEEASI trecere de cron care
+           * tocmai a scris esecul — deci mesajul disparea in aceeasi rulare, si
+           * comerciantul credea ca reparatia lui a mers.
+           */
+          const motiv = errors.length
+            ? errors.slice(0, 3).join("; ")
+            : "Trendyol nu a comunicat un motiv.";
+          await admin.from("trendyol_listings").update({
+            issues: [{ tip: "actualizare", mesaj: motiv.slice(0, 500) }] as never,
+            updated_at: new Date().toISOString(),
+          } as never).eq("id", listing.id);
+        } else {
+          // Reusita sterge urma esecului anterior si confirma barcodurile.
+          await admin.from("trendyol_listings").update({ issues: [] as never } as never).eq("id", listing.id);
+          await admin.from("trendyol_variants").update({ exista_la_ei: true } as never).eq("listing_id", listing.id);
         }
       }
     } else if (b.kind === "inventory" && !hardFail) {

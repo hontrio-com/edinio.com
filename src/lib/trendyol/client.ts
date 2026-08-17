@@ -12,8 +12,8 @@ import { basicAuthHeader, trendyolBaseUrl, userAgent } from "./auth";
 import { mesajDupaStatus, traduMesajTrendyol } from "./errors";
 import type {
   TrendyolBatchAck, TrendyolBatchResult, TrendyolBrand, TrendyolCategory,
-  TrendyolCategoryAttribute, TrendyolEnvironment, TrendyolProductItem, TrendyolShipmentPackage,
-  TrendyolSupplierAddresses, TrendyolStoreFront,
+  TrendyolCategoryAttribute, TrendyolEnvironment, TrendyolProductAttribute, TrendyolProductItem,
+  TrendyolShipmentPackage, TrendyolSupplierAddresses, TrendyolStoreFront,
 } from "./types";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 
@@ -282,6 +282,47 @@ export function createProducts(auth: TrendyolAuth, items: TrendyolProductItem[])
 // Forma lui `requestItem` difera dupa tipul lotului: `ProductV2OnBoarding` il
 // invele in `product`, iar loturile de stoc/pret trimit barcode-ul direct. Le
 // declaram pe amandoua, ca legarea rezultatului de produs sa nu depinda de tip.
+/**
+ * Actualizeaza produsele NEAPROBATE (ciorna sau respinse la revizuie).
+ *
+ * ⚠ Asta e ruta prin care se REPARA un produs respins. Recrearea nu merge:
+ * Trendyol raspunde „codul de bare exista deja", fiindca produsul chiar exista.
+ *
+ * Documentatia lor: „You can easily update any information except barcode if the
+ * product is not approved", si „as you will send the full data" — deci se trimite
+ * setul COMPLET, nu doar campul schimbat.
+ *
+ * Payload-ul e cel de creare MINUS `quantity`, `listPrice` si `salePrice`:
+ * stocul si pretul se schimba numai prin `price-and-inventory`.
+ */
+export type TrendyolItemActualizare = Omit<TrendyolProductItem, "quantity" | "listPrice" | "salePrice">;
+
+export function updateUnapprovedProducts(auth: TrendyolAuth, items: TrendyolItemActualizare[]) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/unapproved-bulk-update`, { items });
+}
+
+/**
+ * Actualizeaza CONTINUTUL unui produs deja APROBAT.
+ *
+ * ⚠ Cheia e `contentId`, NU barcode-ul — un cod care trimite barcode aici n-are
+ * cum sa functioneze. `contentId` se afla din serviciul de stare pe barcode si
+ * il pastram in `trendyol_listings.ty_content_id`.
+ *
+ * La produs aprobat NU se mai pot schimba: barcode, productMainId, brandId,
+ * categoryId, si nici atributele `slicer` sau `varianter` (marimea, culoarea).
+ *
+ * ⚠ Atributele sunt „totul sau nimic": daca trimiti unul singur modificat,
+ * trebuie sa le trimiti pe TOATE ale produsului, altfel le pierzi pe celelalte.
+ */
+export function updateApprovedContent(
+  auth: TrendyolAuth,
+  items: { contentId: number; title?: string; description?: string; images?: { url: string }[]; attributes?: TrendyolProductAttribute[] }[],
+) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/content-bulk-update`, { items });
+}
+
 export function getBatchResult(auth: TrendyolAuth, batchRequestId: string) {
   return call<TrendyolBatchResult<{ product?: { barcode?: string }; barcode?: string }>>(
     auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/batch-requests/${encodeURIComponent(batchRequestId)}`);

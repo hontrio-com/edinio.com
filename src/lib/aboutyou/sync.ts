@@ -23,7 +23,7 @@ import {
   type MappableProduct,
 } from "./mapping";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
-import { getCerintaMaterial } from "./taxonomy";
+import { cereMarime, getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";
 import type { AboutYouConfig, AboutYouRejectionReason } from "./types";
 
@@ -403,6 +403,7 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
    * „produs respins", fara sa i se spuna ce lipseste.
    */
   const cerinta = await getCerintaMaterial(ctx.auth, effectiveCategoryId(ctx.config, produs, enrichment));
+  // (`categoria` se recalculeaza mai jos pentru regula de marime.)
   if (!cerinta.ok) {
     /*
      * DOUA FELURI DE ESEC, cu tratament opus.
@@ -428,9 +429,15 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
     }
     return { ok: false, error: mesaj, status };
   }
+  const categoria = effectiveCategoryId(ctx.config, produs, enrichment);
+  const marimeCeruta = await cereMarime(ctx.auth, categoria);
+  if (marimeCeruta === null) {
+    // Nu stim daca cere marime: nu deducem „nu cere". Se reia.
+    return { ok: false, error: "Nu am putut citi atributele categoriei About You.", status: 0 };
+  }
   const verificare = validateListing(
     { config: ctx.config, product: produs, listing: enrichment, variants },
-    { tip: cerinta.tip, path: cerinta.path },
+    { tip: cerinta.tip, path: cerinta.path, cereMarime: marimeCeruta },
   );
   if (verificare.issues.length > 0) {
     const rezumat = verificare.issues.slice(0, 5).join(" ").slice(0, 500);
@@ -487,6 +494,28 @@ async function setRemoteStatus(
    * si apoi disparea din coada cu tot cu motiv, iar comerciantul vedea „Publicat
    * pe About You" pentru un produs care nu ajunsese niciodata acolo.
    */
+  /*
+   * ⚠ „A PLECAT" NU INSEAMNA „EXISTA ACOLO". Probat pe fir, 17.08.
+   *
+   * `last_synced_at` se scrie cand lotul de produs e TRIMIS, nu cand e acceptat.
+   * Comerciantul a apasat „Publică" la patru secunde dupa trimitere, iar lotul de
+   * produs picase intre timp („Size is required for this category"): publicarea a
+   * plecat spre un product master inexistent si a primit „Product master not found".
+   *
+   * Dovada ca produsul EXISTA la ei e statusul: `draft` il scrie `pollOpenBatches`
+   * abia dupa un lot incheiat fara erori, iar restul vin de la ei prin reconciliere.
+   */
+  const EXISTA_LA_EI = new Set(["draft", "active", "published", "inactive",
+    "pending_approval", "pending_active", "rejected", "problem"]);
+  if (status === "published" && !EXISTA_LA_EI.has(listing.status)) {
+    return {
+      ok: false,
+      error: listing.status === "pending"
+        ? "Produsul e încă în curs de trimitere. Așteaptă să apară „Ciornă pe About You”, apoi publică-l."
+        : "Trimite întâi produsul pe About You, apoi publică-l.",
+    };
+  }
+
   if (listing.last_synced_at == null) {
     if (status === "published") {
       return { ok: false, error: "Trimite întâi produsul pe About You, apoi publică-l." };
@@ -504,7 +533,17 @@ async function setRemoteStatus(
   }
   const batchRequestId = res.data?.batchRequestId;
   const statusLocal = status === "published" ? "pending" : status === "inactive" ? "inactive" : "draft";
-  await setListingStatus(admin, listing.id, statusLocal, { error: null });
+  /*
+   * ⚠ `error` NU se goleste aici. Probat pe fir, 17.08.
+   *
+   * Lotul de produs picase cu „Size is required for this category" si motivul era
+   * scris corect pe listare. Patru secunde mai tarziu, o apasare pe „Publică" l-a
+   * STERS si a pus statusul inapoi pe „in asteptare": ecranul arata ca totul e in
+   * regula, iar comerciantul astepta un produs care nu venea. O cerere ACCEPTATA
+   * nu spune nimic despre esecul dinainte — golirea aparține doar cailor care chiar
+   * au reusit, adica lotului incheiat fara erori.
+   */
+  await setListingStatus(admin, listing.id, statusLocal);
   if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "status", [listing.style_key]);
   return { ok: true, action: "published", batchRequestId };
 }
@@ -859,6 +898,29 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
         } else if (b.kind === "product" && listing.status === "pending") {
           // Product accepted; it exists as a draft on About You until published.
           await setListingStatus(admin, listing.id, "draft", { error: null });
+          /*
+           * PUBLICAREA SE INLANTUIE SINGURA. Aici, si nicaieri altundeva.
+           *
+           * API-ul lor are doi pasi — `POST /products/` creeaza produsul, iar
+           * `PUT /products/status` il duce spre aprobare („Newly created products
+           * start in the `draft` state") — si ii lasasem pe amandoi in interfata,
+           * ca doua butoane. Dar pasii sunt ASINCRONI: produsul apare la ei abia
+           * dupa ce lotul se aseaza, in zeci de secunde. Comerciantul a apasat
+           * „Publică" la patru secunde dupa trimitere si a primit „Product master
+           * not found" — i se cerea sa nimereasca un moment pe care nu-l poate
+           * vedea.
+           *
+           * Momentul asta il stim NOI, exact: lotul tocmai s-a incheiat cu bine.
+           * Deci punem singuri publicarea la coada. Se declanseaza doar la
+           * trecerea `pending -> draft`, adica imediat dupa o trimitere reusita —
+           * nu atinge ciornele vechi, lasate dinadins nepublicate.
+           */
+          if (listing.product_id) {
+            await admin.from("aboutyou_sync_queue").upsert(
+              { business_id: ctx.businessId, product_id: listing.product_id, offer_id: listing.style_key, op: "publish", attempts: 0, last_error: null },
+              { onConflict: "business_id,offer_id,op" },
+            );
+          }
         }
       }
     }

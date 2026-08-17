@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, Send, Upload } from "lucide-react";
+import { AlertTriangle, Loader2, Send } from "lucide-react";
 import {
   getAboutYouAttributeGroups, getAboutYouBrands, getAboutYouListingEditor,
-  publishAboutYouProduct, saveAboutYouListing, syncAboutYouProduct, validateAboutYouListing,
+  saveAboutYouListing, syncAboutYouProduct, validateAboutYouListing,
   type AboutYouEditorData, type AboutYouEditorVariant, type AboutYouListingInput,
 } from "@/lib/actions/aboutyou.actions";
 import { MAX_CLUSTERE_MATERIAL, regulaClustere } from "@/lib/aboutyou/mapping";
@@ -313,13 +313,9 @@ export function AboutYouListingEditor({
         if (then === "sync") {
           const s = await syncAboutYouProduct(businessId, productId);
           if ("error" in s) { toast.error(s.error); return; }
-          toast.success("Trimis pe About You.");
-        } else if (then === "publish") {
-          const p = await publishAboutYouProduct(businessId, productId);
-          if ("error" in p) { toast.error(p.error); return; }
-          // NU „Publicat": pe productie produsul intra in aprobare manuala si
-          // devine vizibil abia dupa ce trece de ea. Doar pe sandbox e imediat.
-          toast.success("Trimis spre publicare. About You îl aprobă înainte să apară în magazin.");
+          // NU „Publicat": produsul pleaca acum, publicarea se inlantuie cand ei il
+          // accepta, iar aprobarea lor vine dupa aceea si poate dura.
+          toast.success("Trimis pe About You. Se publică singur imediat ce îl acceptă.");
         } else {
           toast.success("Listare salvată.");
         }
@@ -341,14 +337,6 @@ export function AboutYouListingEditor({
   if (!data) return null;
 
   const manual = pricing.mode === "manual_eur";
-  /*
-   * „Publică" nu are ce publica inainte de prima trimitere.
-   *
-   * `PUT /products/status` lucreaza pe product master-ul creat de
-   * `POST /products/`. Apasat pe o listare doar salvata local, esua tacut si
-   * totusi arata „Publicat pe About You".
-   */
-  const aFostTrimis = data.listing?.last_synced_at != null;
 
   return (
     <div className="rounded-lg border border-border bg-background p-4 space-y-4">
@@ -677,14 +665,15 @@ export function AboutYouListingEditor({
           className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:opacity-60">
           Salvează
         </button>
+        {/* UN SINGUR BUTON pentru o singura intentie.
+            Erau doua, „Salvează și trimite" si „Publică", fiindca API-ul lor are
+            doi pasi. Dar pasii sunt asincroni, iar al doilea apasat prea devreme
+            raspunde „Product master not found" — i se cerea omului sa nimereasca
+            un moment pe care nu-l vede. Acum publicarea se inlantuie singura, cand
+            lotul e acceptat. */}
         <button onClick={() => save("sync")} disabled={pending}
           className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
-          <Send className="h-3.5 w-3.5" /> Salvează și trimite
-        </button>
-        <button onClick={() => save("publish")} disabled={pending || !aFostTrimis}
-          title={aFostTrimis ? undefined : "Trimite întâi produsul pe About You."}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-primary text-primary px-3 py-2 text-sm font-semibold hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
-          <Upload className="h-3.5 w-3.5" /> Publică
+          <Send className="h-3.5 w-3.5" /> Trimite pe About You
         </button>
         <button onClick={onClose} disabled={pending}
           className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-60">
@@ -692,12 +681,10 @@ export function AboutYouListingEditor({
         </button>
       </div>
 
-      {!aFostTrimis && (
-        <p className="text-[11px] text-muted-foreground">
-          Ordinea e „Salvează și trimite”, apoi „Publică”: About You creează întâi produsul, iar publicarea
-          îl trece în magazin. Butonul se deblochează după ce produsul a plecat.
-        </p>
-      )}
+      <p className="text-[11px] text-muted-foreground">
+        Produsul pleacă spre About You, iar publicarea se face singură imediat ce ei îl acceptă. Apoi intră în
+        aprobarea lor, care poate dura. Starea o vezi în listă.
+      </p>
     </div>
   );
 }

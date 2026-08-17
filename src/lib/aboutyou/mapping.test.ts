@@ -330,6 +330,26 @@ test("culoarea pusa doar pe unele variante e semnalata; mostenita de toate, nu",
   assert.deepEqual(mostenita.issues, []);
 });
 
+test("cand categoria are grup de marimi, marimea e OBLIGATORIE — chiar si la o geanta", () => {
+  /*
+   * ⚠ Probat pe fir, 17.08: primul produs real, o geanta, a fost respins de About
+   * You cu „Size is required for this category". Trimiteam `size: null` fiindca
+   * schema declara campul nulabil — dar nulabil in schema nu inseamna optional la
+   * validarea lor. Categoria „Handbag" are grup `size` cu 696 de valori, intre care
+   * „One Size".
+   */
+  const fara = verifica({}, { tip: null, path: null, cereMarime: true });
+  assert.ok(fara.issues.some((i) => i.includes("nu are mărime")), "trebuia sa ceara marimea");
+  assert.ok(fara.issues.some((i) => i.includes("One Size")), "mesajul trebuie sa spuna si CE sa aleaga");
+
+  const cu = verifica({}, { tip: null, path: null, cereMarime: true },
+    [varianta("TR-1", { ean: EAN_A, size_id: 248738 })]);
+  assert.deepEqual(cu.issues, []);
+
+  // Categorie fara grup de marimi: o singura varianta fara marime rămâne valida.
+  assert.deepEqual(verifica({}, { tip: null, path: null, cereMarime: false }).issues, []);
+});
+
 test("a doua dimensiune de marime se cere pe toate variantele sau pe niciuna", () => {
   const partial = verifica({}, { tip: null, path: null }, [
     varianta("TR-S", { ean: EAN_A, size_id: 1, second_size_id: 5 }),

@@ -435,6 +435,11 @@ export interface CerintaMaterialListare {
   tip: AboutYouMaterialType | null;
   path?: string | null;
   necunoscut?: boolean;
+  /**
+   * Categoria are grup de marimi, deci cere `size` pe FIECARE varianta.
+   * `null` = n-am putut afla, si atunci nu deducem nimic.
+   */
+  cereMarime?: boolean | null;
 }
 
 export interface RezultatValidare {
@@ -576,7 +581,19 @@ export function validateListing(ctx: BuildContext, material?: CerintaMaterialLis
    * ca varianta fara marime.
    */
   const cuMarime = active.filter((v) => v.size_id).length;
-  if (cuMarime > 0 && cuMarime < active.length) {
+  if (material?.cereMarime) {
+    /*
+     * Categoria ARE grup de marimi, deci le cere pe toate.
+     *
+     * ⚠ Probat pe fir: About You a respins o GEANTA cu „Size is required for this
+     * category", desi schema declara `size` nulabil. Chiar si acolo exista „One
+     * Size". Fara regula asta, respingerea venea de la ei, peste douazeci de
+     * secunde, fara sa spuna ce varianta.
+     */
+    for (const v of active.filter((x) => !x.size_id)) {
+      issues.push(`Varianta ${v.sku || "?"} nu are mărime, iar About You o cere pentru această categorie (dacă produsul nu are mărimi, alege „One Size”).`);
+    }
+  } else if (cuMarime > 0 && cuMarime < active.length) {
     for (const v of active.filter((x) => !x.size_id)) {
       issues.push(`Varianta ${v.sku || "?"} nu are mărime, dar altele au. Completeaz-o pe toate.`);
     }

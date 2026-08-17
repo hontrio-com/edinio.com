@@ -23,7 +23,7 @@ import {
 import { ABOUTYOU_WEBHOOK_EVENTS } from "@/lib/aboutyou/webhooks";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
-  getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
+  cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
 } from "@/lib/aboutyou/taxonomy";
 import {
   potrivesteCategorie, potrivireSigura, type PublicTinta, type SugestieCategorie,
@@ -774,7 +774,10 @@ export async function validateAboutYouListing(
    * o limita de rata faceau validarea sa treaca, si produsul pleca fara singurul
    * camp pe care About You il numeste explicit obligatoriu.
    */
-  let cerintaMaterial: { tip: "textile" | "non-textile" | null; path: string | null; necunoscut?: boolean };
+  let cerintaMaterial: {
+    tip: "textile" | "non-textile" | null; path: string | null; necunoscut?: boolean;
+    cereMarime?: boolean | null;
+  };
   if (!categorie) {
     cerintaMaterial = { tip: null, path: null };
   } else {
@@ -783,9 +786,12 @@ export async function validateAboutYouListing(
       cerintaMaterial = { tip: null, path: null, necunoscut: true };
     } else {
       const cerinta = await getCerintaMaterial(auth, categorie);
+      // Mărimea se cere cand categoria are grup `size` — probat pe fir: About You
+      // respinge cu „Size is required for this category" chiar si o geanta.
+      const marime = await cereMarime(auth, categorie);
       cerintaMaterial = cerinta.ok
-        ? { tip: cerinta.tip, path: cerinta.path }
-        : { tip: null, path: null, necunoscut: true };
+        ? { tip: cerinta.tip, path: cerinta.path, cereMarime: marime }
+        : { tip: null, path: null, necunoscut: true, cereMarime: marime };
     }
   }
 

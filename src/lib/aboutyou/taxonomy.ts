@@ -202,6 +202,26 @@ export type CerintaMaterial =
   | { ok: true; tip: AboutYouMaterialType | null; path: string | null }
   | { ok: false; error: string; status: number };
 
+/*
+ * Cere categoria o MARIME pe fiecare varianta?
+ *
+ * ⚠ PROBAT PE FIR, 17.08: About You a respins primul produs real cu „Size is
+ * required for this category" — o geanta, la care trimiteam `size: null`, fiindca
+ * schema declara campul nulabil. Nulabil in schema NU inseamna optional la
+ * validarea lor asincrona.
+ *
+ * Regula se deduce din date, nu din ghicit: daca raspunsul categoriei contine un
+ * grup `size`, atunci categoria ARE marimi si le cere. Pe „Handbag" grupul exista,
+ * cu 696 de valori, intre care „One Size" — deci pana si gentile au marime.
+ */
+export async function cereMarime(auth: AboutYouAuth, categoryId: number | null | undefined): Promise<boolean | null> {
+  if (!categoryId) return false;
+  const g = await getAttributeGroupsCached(auth, categoryId);
+  // `null` = n-am putut afla. Apelantul NU are voie sa citeasca asta ca „nu cere".
+  if (!g.ok) return null;
+  return g.data.some((x) => x.name === "size" && (x.attributes?.length ?? 0) > 0);
+}
+
 export async function getCerintaMaterial(
   auth: AboutYouAuth, categoryId: number | null | undefined,
 ): Promise<CerintaMaterial> {

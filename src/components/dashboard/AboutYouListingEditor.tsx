@@ -10,6 +10,7 @@ import {
   type AboutYouEditorData, type AboutYouEditorVariant, type AboutYouListingInput,
 } from "@/lib/actions/aboutyou.actions";
 import { MAX_CLUSTERE_MATERIAL, regulaClustere } from "@/lib/aboutyou/mapping";
+import { AboutYouSelectCautare } from "@/components/dashboard/AboutYouSelectCautare";
 import type { AboutYouAttributeGroup, AboutYouBrand, AboutYouMaterialCluster } from "@/lib/aboutyou/types";
 
 export interface AboutYouPricing { mode: "fx_from_ron" | "manual_eur"; rate?: number; marginPct?: number }
@@ -411,13 +412,10 @@ export function AboutYouListingEditor({
         {colorGroup && !areMaiMulteCulori && (
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Culoare</label>
-            <select
-              value={colorId ?? ""} onChange={(e) => setColorId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Alege culoarea</option>
-              {colorGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-            </select>
+            <AboutYouSelectCautare
+              optiuni={colorGroup.attributes} valoare={colorId} onSchimba={setColorId}
+              placeholder="Alege culoarea"
+            />
           </div>
         )}
         {otherGroups.map(({ grup: g, eticheta }) => (
@@ -425,22 +423,15 @@ export function AboutYouListingEditor({
             <label className="block text-xs font-medium text-muted-foreground mb-1">
               {eticheta}{g.is_multiselect ? " (mai multe)" : ""}
             </label>
-            <select
-              multiple={g.is_multiselect}
-              value={g.is_multiselect
-                ? (attrSel[g.id] ?? []).map(String)
-                : String(attrSel[g.id]?.[0] ?? "")}
-              onChange={(e) => {
-                const alese = g.is_multiselect
-                  ? Array.from(e.target.selectedOptions).map((o) => Number(o.value)).filter(Boolean)
-                  : (e.target.value ? [Number(e.target.value)] : []);
-                setAttrSel((prev) => ({ ...prev, [g.id]: alese }));
-              }}
-              className={`w-full rounded-lg border border-border bg-background px-3 py-2 text-sm ${g.is_multiselect ? "h-24" : ""}`}
-            >
-              {!g.is_multiselect && <option value="">-</option>}
-              {g.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-            </select>
+            <AboutYouSelectCautare
+              optiuni={g.attributes}
+              multiplu={g.is_multiselect}
+              valori={attrSel[g.id] ?? []}
+              onSchimbaMultiplu={(ids) => setAttrSel((prev) => ({ ...prev, [g.id]: ids }))}
+              valoare={attrSel[g.id]?.[0] ?? null}
+              onSchimba={(id) => setAttrSel((prev) => ({ ...prev, [g.id]: id == null ? [] : [id] }))}
+              placeholder="-"
+            />
           </div>
         ))}
         <div>
@@ -478,15 +469,15 @@ export function AboutYouListingEditor({
                 <div key={cl.id} className="rounded border border-border/70 bg-muted/30 p-2">
                   <div className="flex items-center gap-2 mb-1.5">
                     {clusterGroup ? (
-                      <select
-                        value={cl.cluster_id ?? ""}
-                        onChange={(e) => setClustere((prev) => prev.map((x, j) =>
-                          j === ci ? { ...x, cluster_id: e.target.value ? Number(e.target.value) : null } : x))}
-                        className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-xs"
-                      >
-                        <option value="">Alege partea produsului</option>
-                        {clusterGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-                      </select>
+                      <div className="flex-1">
+                        <AboutYouSelectCautare
+                          optiuni={clusterGroup.attributes} dimensiune="mic"
+                          valoare={cl.cluster_id}
+                          onSchimba={(id) => setClustere((prev) => prev.map((x, j) =>
+                            j === ci ? { ...x, cluster_id: id } : x))}
+                          placeholder="Alege partea produsului"
+                        />
+                      </div>
                     ) : (
                       <span className="flex-1 text-[11px] text-amber-700">
                         Lista grupelor de material nu a venit de la About You pentru această categorie.
@@ -503,17 +494,18 @@ export function AboutYouListingEditor({
                   <div className="space-y-1.5">
                     {cl.components.map((m, i) => (
                       <div key={m.id} className="flex items-center gap-2">
-                        <select
-                          value={m.material_id}
-                          onChange={(e) => setClustere((prev) => prev.map((x, j) => j !== ci ? x : {
-                            ...x,
-                            components: x.components.map((y, k) =>
-                              k === i ? { ...y, material_id: Number(e.target.value) } : y),
-                          }))}
-                          className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-xs"
-                        >
-                          {materialGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-                        </select>
+                        <div className="flex-1">
+                          <AboutYouSelectCautare
+                            optiuni={materialGroup.attributes} dimensiune="mic"
+                            valoare={m.material_id || null}
+                            onSchimba={(id) => setClustere((prev) => prev.map((x, j) => j !== ci ? x : {
+                              ...x,
+                              components: x.components.map((y, k) =>
+                                k === i ? { ...y, material_id: id ?? 0 } : y),
+                            }))}
+                            placeholder="Alege materialul"
+                          />
+                        </div>
                         {materialType === "textile" && (
                           <div className="flex items-center gap-1">
                             <input
@@ -608,32 +600,34 @@ export function AboutYouListingEditor({
                 {areMaiMulteCulori && colorGroup && (
                   <div>
                     <label className="block text-[10px] text-muted-foreground mb-0.5">Culoare</label>
-                    <select value={v.color_id ?? ""} onChange={(e) => setVariant(v.key, { color_id: e.target.value ? Number(e.target.value) : null })}
-                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs">
-                      <option value="">-</option>
-                      {colorGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-                    </select>
+                    <AboutYouSelectCautare
+                      optiuni={colorGroup.attributes} dimensiune="mic"
+                      valoare={v.color_id} onSchimba={(id) => setVariant(v.key, { color_id: id })}
+                      placeholder="-"
+                    />
                   </div>
                 )}
                 {sizeGroup && (
                   <div>
                     <label className="block text-[10px] text-muted-foreground mb-0.5">{sizeGroup.frontend_name}</label>
-                    <select value={v.size_id ?? ""} onChange={(e) => setVariant(v.key, { size_id: e.target.value ? Number(e.target.value) : null })}
-                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs">
-                      <option value="">-</option>
-                      {sizeGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-                    </select>
+                    {/* 696 de valori pe categoria „Handbag". Fara cautare, „One
+                        Size" se gaseste prin derulare, la fiecare varianta. */}
+                    <AboutYouSelectCautare
+                      optiuni={sizeGroup.attributes} dimensiune="mic"
+                      valoare={v.size_id} onSchimba={(id) => setVariant(v.key, { size_id: id })}
+                      placeholder="-"
+                    />
                   </div>
                 )}
                 {/* A doua dimensiune: se cere pe TOATE variantele sau pe niciuna. */}
                 {secondSizeGroup && (
                   <div>
                     <label className="block text-[10px] text-muted-foreground mb-0.5">{secondSizeGroup.frontend_name}</label>
-                    <select value={v.second_size_id ?? ""} onChange={(e) => setVariant(v.key, { second_size_id: e.target.value ? Number(e.target.value) : null })}
-                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs">
-                      <option value="">-</option>
-                      {secondSizeGroup.attributes.map((a) => <option key={a.id} value={a.id}>{a.frontend_name}</option>)}
-                    </select>
+                    <AboutYouSelectCautare
+                      optiuni={secondSizeGroup.attributes} dimensiune="mic"
+                      valoare={v.second_size_id} onSchimba={(id) => setVariant(v.key, { second_size_id: id })}
+                      placeholder="-"
+                    />
                   </div>
                 )}
                 <div>

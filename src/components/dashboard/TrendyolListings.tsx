@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, Send, X } from "lucide-react";
 import {
-  bulkPublishTrendyol, getTrendyolProductIds, getTrendyolProductPage, removeTrendyolListing, syncTrendyolProduct,
+  bulkPublishTrendyol, getTrendyolProductIds, getTrendyolProductPage, pushTrendyolInventory,
+  removeTrendyolListing, syncTrendyolProduct,
   type TrendyolProductPage, type TrendyolProductStatusFilter,
 } from "@/lib/actions/trendyol.actions";
 import { TrendyolListingEditor } from "@/components/dashboard/TrendyolListingEditor";
@@ -119,6 +120,21 @@ export function TrendyolListings({
     const res = await syncTrendyolProduct(businessId, productId);
     if ("error" in res) { toast.error(res.error); return; }
     toast.success("Retrimis pe Trendyol.");
+    await incarcaPagina();
+    router.refresh();
+  });
+  /*
+   * Preluarea stocului pe o listare adoptata.
+   *
+   * Din clipa asta, Edinio incepe sa impinga stocul si pretul si pentru produsul
+   * ala — deci merita spus, nu doar facut.
+   */
+  const impingeStocul = (productId: string) => startTransition(async () => {
+    const res = await pushTrendyolInventory(businessId, productId);
+    if ("error" in res) { toast.error(res.error); return; }
+    toast.success(res.trimis
+      ? "Stocul și prețul au plecat spre Trendyol."
+      : "Nu era nimic de trimis: produsul nu e (încă) listat pe Trendyol.");
     await incarcaPagina();
     router.refresh();
   });
@@ -314,6 +330,25 @@ export function TrendyolListings({
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${status.cls}`}>{status.text}</span>
                   ) : (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Nelistat</span>
+                  )}
+                  {/*
+                    Listare ADOPTATA: produsul exista deja in contul Trendyol al
+                    comerciantului, listat manual sau cu alt tool. L-am legat ca
+                    sa curga comenzile, dar nu-i atingem pretul si stocul puse
+                    acolo — asta o spune eticheta, iar butonul e cum preia el.
+                  */}
+                  {p.adoptata && (
+                    <>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700"
+                        title="Produsul exista deja pe Trendyol, listat pe alta cale. Edinio l-a legat, dar nu-i schimba stocul si pretul.">
+                        Preluat
+                      </span>
+                      <button onClick={() => impingeStocul(p.id)} disabled={pending}
+                        className="text-xs text-primary hover:underline disabled:opacity-60"
+                        title="Trimite acum stocul si pretul din Edinio catre Trendyol, pentru acest produs.">
+                        Trimite stocul
+                      </button>
+                    </>
                   )}
                   {p.status === "error" && (
                     <button onClick={() => retry(p.id)} disabled={pending} className="text-xs text-primary hover:underline disabled:opacity-60">Reîncearcă</button>

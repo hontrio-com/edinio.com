@@ -7,7 +7,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { TrendyolAuth } from "./client";
 import {
-  createProducts, getApprovedProducts, getBatchResult, isTrendyolError, updatePriceInventory,
+  createProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, isTrendyolError,
+  setArchiveState, updatePriceInventory,
 } from "./client";
 import {
   buildTrendyolItems, buildVariantPrices, deriveVariantSlots, resolveVariantQuantity, round2,
@@ -102,19 +103,21 @@ interface ListingRow {
   id: string; product_id: string | null; product_main_id: string; status: string;
   brand_id: number | null; category_id: number | null; attributes: unknown;
   dimensional_weight: number | null; cargo_company_id: number | null;
+  /** Edinio impinge singur stocul si pretul? Fals pe listarile ADOPTATE. */
+  auto_inventory?: boolean | null;
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
 async function getListingByMainId(admin: Db, businessId: string, mainId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory")
     .eq("business_id", businessId).eq("product_main_id", mainId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -205,6 +208,18 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
     const res = await pushInventoryNow(admin, ctx, productId, true);
     await setListingStatus(admin, listing.id, "inactive", { error: null });
     return res;
+  }
+
+  /*
+   * O listare ADOPTATA nu se mai recreeaza.
+   *
+   * Produsul exista deja in contul lor, deci `createProducts` ar raspunde iar
+   * „codul de bare exista deja" — un lot esuat la fiecare incercare, degeaba.
+   * Legatura e facuta; ce mai poate cere comerciantul de aici e impingerea de
+   * stoc, si aia se cheama explicit.
+   */
+  if (listing.auto_inventory === false && ["created", "approved", "active"].includes(listing.status)) {
+    return { ok: true, action: "skipped" };
   }
 
   const variants = await getVariantData(admin, listing.id);
@@ -403,7 +418,7 @@ export async function syncProductsBulk(
   const listingIds = pregatite.map((x) => x.listingId);
   const [{ data: randuriListari }, { data: randuriVariante }] = await Promise.all([
     admin.from("trendyol_listings")
-      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id")
+      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory")
       .eq("business_id", ctx.businessId).in("id", listingIds),
     admin.from("trendyol_variants")
       .select("listing_id, barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
@@ -520,7 +535,7 @@ export type InventoryItem = { barcode: string; quantity: number; salePrice: numb
 // forward push AND the reverse reconciliation, so both agree exactly (no oscillation).
 // Returns null when the listing isn't pushable (not on Trendyol yet, no variants).
 async function computeInventoryItems(
-  admin: Db, ctx: TrendyolSyncContext, productId: string, forceZero = false,
+  admin: Db, ctx: TrendyolSyncContext, productId: string, forceZero = false, manual = false,
 ): Promise<{ items: InventoryItem[]; listing: ListingRow } | { error: string } | null> {
   const { data: product } = await admin
     // `page_sections` NU e de decor aici: acolo stau combinatiile cu stocul lor.
@@ -536,6 +551,18 @@ async function computeInventoryItems(
   // not-yet-created listing (draft/pending/error) will get its stock+price from the
   // createProducts payload instead.
   if (!["created", "approved", "active", "inactive"].includes(listing.status)) return null;
+  /*
+   * Listarile ADOPTATE nu-si primesc stocul si pretul de la noi din oficiu.
+   *
+   * Sunt produse pe care comerciantul le are pe Trendyol de pe alta cale, cu
+   * valorile puse acolo de el. Le-am legat ca sa nu ramana blocate si ca sa
+   * curga comenzile — dar a le suprascrie tacit pretul ar fi o surpriza scumpa.
+   *
+   * `forceZero` trece oricum: scoaterea din vanzare a unui produs dezactivat in
+   * Edinio nu poate depinde de o preferinta de sincronizare. La fel si o
+   * impingere ceruta EXPLICIT de comerciant (`manual`).
+   */
+  if (listing.auto_inventory === false && !manual && !forceZero) return null;
   const variants = (await getVariantData(admin, listing.id)).filter((v) => v.enabled && v.barcode);
   if (variants.length === 0) return null;
 
@@ -556,8 +583,10 @@ async function computeInventoryItems(
   return { items, listing };
 }
 
-export async function pushInventoryNow(admin: Db, ctx: TrendyolSyncContext, productId: string, forceZero = false): Promise<SyncOutcome> {
-  const built = await computeInventoryItems(admin, ctx, productId, forceZero);
+export async function pushInventoryNow(
+  admin: Db, ctx: TrendyolSyncContext, productId: string, forceZero = false, manual = false,
+): Promise<SyncOutcome> {
+  const built = await computeInventoryItems(admin, ctx, productId, forceZero, manual);
   if (built === null) return { ok: true, action: "skipped" };
   if ("error" in built) return { ok: false, error: built.error };
 
@@ -794,10 +823,19 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
         const listing = await getListingByMainId(admin, ctx.businessId, mid);
         if (!listing) continue;
         const aleLui = motivePeListare.get(listing.id);
-        if (aleLui && aleLui.length > 0) {
-          await setListingStatus(admin, listing.id, "error", { error: aleLui.slice(0, 5).join("; ").slice(0, 500) });
-        } else if (peLot) {
-          await setListingStatus(admin, listing.id, "error", { error: errors.slice(0, 5).join("; ").slice(0, 500) || "Eroare la procesarea pe Trendyol." });
+        const motiveleLui = (aleLui && aleLui.length > 0) ? aleLui : (peLot ? errors : null);
+        if (motiveleLui) {
+          /*
+           * Inainte de a scrie „eroare", intrebam daca produsul nu cumva EXISTA
+           * deja la ei. Cel mai des motiv de refuz la creare e chiar asta, iar
+           * el nu e o eroare de reparat, ci o listare de adoptat.
+           */
+          const adoptat = await incearcaAdoptarea(admin, ctx, listing, motiveleLui);
+          if (!adoptat) {
+            await setListingStatus(admin, listing.id, "error", {
+              error: motiveleLui.slice(0, 5).join("; ").slice(0, 500) || "Eroare la procesarea pe Trendyol.",
+            });
+          }
         } else if (listing.status === "pending") {
           // Accepted; exists on Trendyol pending approval.
           await setListingStatus(admin, listing.id, "created", { error: null });
@@ -822,6 +860,68 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
       .update({ status: hardFail ? "failed" : "completed", polled_at: now, result_summary: { status: result?.status ?? null, errors: errors.slice(0, 10) } as never })
       .eq("id", b.id);
   }
+}
+
+/**
+ * Produsul exista deja in contul lor? Atunci il ADOPTAM, nu-l lasam pe eroare.
+ *
+ * ⚠ De ce e nevoie: comerciantii isi listeaza produse pe Trendyol si altfel
+ * decat prin Edinio — manual din panoul lor, sau cu un tool anterior. Trendyol
+ * refuza corect sa CREEZE un produs cu un cod de bare pe care contul il are
+ * deja, iar noi n-aveam alta cale in afara de creare. Listarea ramanea blocata
+ * pe `error` la nesfarsit, oricate reincercari, iar comenzile de pe acel produs
+ * nu se legau de nimic. Masurat live: 2 din 4 produse trimise.
+ *
+ * Verificarea NU se face pe textul erorii — documentatia lor interzice explicit
+ * potrivirea pe mesaj, iar textul e localizat. Se intreaba serviciul de stare pe
+ * barcode: 404 cu `product.not.found` inseamna „nu exista", 200 inseamna
+ * „exista", plus `approved`, `archived` si `contentId`.
+ *
+ * Ce NU face: nu-i atinge pretul si stocul. Un produs listat pe alta cale are
+ * valorile puse de comerciant acolo, si nu le suprascriem fara sa ceara —
+ * `auto_inventory` ramane fals, iar impingerea manuala merge oricand.
+ */
+async function incearcaAdoptarea(
+  admin: Db, ctx: TrendyolSyncContext, listing: ListingRow, motive: string[],
+): Promise<boolean> {
+  const { data: variante } = await admin.from("trendyol_variants")
+    .select("barcode").eq("listing_id", listing.id).eq("enabled", true).limit(1);
+  const barcode = (variante ?? [])[0] ? (variante![0] as { barcode: string }).barcode : null;
+  if (!barcode) return false;
+
+  const res = await getProductBaseInfo(ctx.auth, barcode);
+  if (isTrendyolError(res)) return false;      // 404 „product.not.found" sau retea: eroarea ramane eroare
+  const info = res.data;
+  if (!info || info.approved == null) return false;
+
+  /*
+   * Arhivat inseamna „in cont, dar nu se vinde". Comerciantul care publica din
+   * Edinio vrea exact opusul, deci il scoatem din arhiva. Daca apelul pica, tot
+   * adoptam — dar spunem in log de ce produsul nu se vede inca la ei.
+   */
+  if (info.archived === true) {
+    const dez = await setArchiveState(ctx.auth, [{ barcode, archived: false }]);
+    if (isTrendyolError(dez)) {
+      console.warn(`[trendyol] produs adoptat dar NEDEZARHIVAT (${barcode}): ${dez.error}`);
+    } else {
+      const batchRequestId = dez.data?.batchRequestId;
+      if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "archive", [listing.product_main_id]);
+    }
+  }
+
+  await setListingStatus(admin, listing.id, info.approved ? "approved" : "created", {
+    error: null,
+    // Stocul si pretul lui sunt ale comerciantului, puse pe alta cale.
+    auto_inventory: false,
+    ty_content_id: info.contentId ?? null,
+    last_synced_at: new Date().toISOString(),
+  });
+  console.warn(
+    `[trendyol] listare ADOPTATA (${barcode}): produsul exista deja in contul lor` +
+    `${info.archived === true ? ", era arhivat si l-am scos din arhiva" : ""}. ` +
+    `Stocul si pretul NU se impinge automat. Refuzul la creare a fost: ${motive.slice(0, 2).join("; ")}`,
+  );
+  return true;
 }
 
 async function jurnalLotEsuat(admin: Db, ctx: TrendyolSyncContext, b: BatchRow, errors: string[]): Promise<void> {

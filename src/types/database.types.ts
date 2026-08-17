@@ -3618,6 +3618,7 @@ export type Database = {
       trendyol_listings: {
         Row: {
           attributes: Json
+          auto_inventory: boolean
           brand_id: number | null
           business_id: string
           cargo_company_id: number | null
@@ -3634,10 +3635,12 @@ export type Database = {
           product_main_id: string
           rejection_reasons: Json
           status: string
+          ty_content_id: number | null
           updated_at: string
         }
         Insert: {
           attributes?: Json
+          auto_inventory?: boolean
           brand_id?: number | null
           business_id: string
           cargo_company_id?: number | null
@@ -3654,10 +3657,12 @@ export type Database = {
           product_main_id: string
           rejection_reasons?: Json
           status?: string
+          ty_content_id?: number | null
           updated_at?: string
         }
         Update: {
           attributes?: Json
+          auto_inventory?: boolean
           brand_id?: number | null
           business_id?: string
           cargo_company_id?: number | null
@@ -3674,6 +3679,7 @@ export type Database = {
           product_main_id?: string
           rejection_reasons?: Json
           status?: string
+          ty_content_id?: number | null
           updated_at?: string
         }
         Relationships: [

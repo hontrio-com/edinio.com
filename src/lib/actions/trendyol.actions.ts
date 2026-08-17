@@ -24,7 +24,9 @@ import {
 } from "@/lib/trendyol/taxonomy";
 import { indexeazaFrunze, potrivesteIndexat, type PotrivireCategorie } from "@/lib/trendyol/category-match";
 import { sugereazaAtribute, type SugestieAtribut, type ValoriAtribut } from "@/lib/trendyol/attribute-autofill";
-import { loadTrendyolContext, removeProductNow, syncProductNow, syncProductsBulk } from "@/lib/trendyol/sync";
+import {
+  loadTrendyolContext, pushInventoryNow, removeProductNow, syncProductNow, syncProductsBulk,
+} from "@/lib/trendyol/sync";
 import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
 import { barcodeDerivat, deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
 import type {
@@ -647,7 +649,24 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
      * completate), iar salvarea ar fi trimis un barcode nou — adica un al doilea
      * produs pe Trendyol, cu primul ramas orfan si vandabil.
      */
-    const candidat = (s.variantTitle ? byTitle.get(s.variantTitle) : undefined) ?? byBarcode.get(s.barcode);
+    /*
+     * A treia plasa, pentru produsul FARA variante.
+     *
+     * Acolo `variantTitle` e `null`, deci potrivirea pe titlu nu-l atinge, iar
+     * barcode-ul e singura legatura — exact cel care se poate schimba. Se
+     * intampla real: un produs fara SKU era listat cu uuid-ul lui drept cod, iar
+     * dupa ce comerciantul ii completeaza GTIN-ul in formular, derivarea da alt
+     * barcode. Randul salvat devine negasibil, editorul arata varianta goala, si
+     * salvarea creeaza AL DOILEA produs pe Trendyol — primul ramas acolo
+     * vandabil si fara niciun rand la noi din care sa-l mai oprim.
+     *
+     * O singura varianta si un singur rand inseamna, fara dubiu, ca ele sunt
+     * acelasi lucru. Barcode-ul ramane cel deja trimis la ei.
+     */
+    const singurul = slots.length === 1 && stored.length === 1 ? stored[0] : undefined;
+    const candidat = (s.variantTitle ? byTitle.get(s.variantTitle) : undefined)
+      ?? byBarcode.get(s.barcode)
+      ?? singurul;
     // Deja luat de alt slot: mai bine o varianta noua, goala, decat doua
     // variante cu acelasi barcode si o listare golita la salvare.
     const ex = candidat && !revendicate.has(candidat.barcode) ? candidat : undefined;
@@ -862,6 +881,28 @@ export async function syncTrendyolProduct(businessId: string, productId: string)
 }
 
 /**
+ * Împinge acum stocul și prețul din Edinio către Trendyol, pentru un produs.
+ *
+ * Există pentru listările ADOPTATE — cele legate de produse pe care comerciantul
+ * le avea deja în contul lui Trendyol, listate pe altă cale. Acolo nu
+ * suprascriem nimic din oficiu, fiindcă valorile de acolo sunt ale lui; dar
+ * trebuie să poată cere el însuși, când vrea, ca Edinio să preia.
+ */
+export async function pushTrendyolInventory(
+  businessId: string, productId: string,
+): Promise<{ success: true; trimis: boolean } | { error: string }> {
+  const res = await withContext(businessId, (admin, ctx) =>
+    pushInventoryNow(admin, ctx, productId, false, true));
+  if ("error" in res) {
+    logError({ action: "trendyol.inventory", message: res.error, details: { businessId, productId }, businessId });
+    return { error: res.error };
+  }
+  revalidatePath(FEATURE_PATH);
+  // `skipped` = listarea nu e (inca) pe Trendyol, deci n-avea ce impinge.
+  return { success: true, trimis: res.ok && res.action === "submitted" };
+}
+
+/**
  * „Publică pe Trendyol" din pagina produsului.
  *
  * Butonul echivalent pentru OLX publică dintr-un click, așa că și acesta trebuie
@@ -1011,6 +1052,11 @@ export interface TrendyolProductRow {
   status: string | null;
   error: string | null;
   lastSyncedAt: string | null;
+  /**
+   * Listare ADOPTATA: produsul exista deja in contul Trendyol al comerciantului,
+   * listat pe alta cale. Edinio l-a legat, dar NU-i suprascrie stocul si pretul.
+   */
+  adoptata: boolean;
 }
 
 export interface TrendyolProductPage {
@@ -1046,9 +1092,9 @@ export async function getTrendyolProductPage(
 
   // Listarile sunt doar cate produse a configurat comerciantul, deci se pot tine
   // in memorie fara grija; produsele nu.
-  const listari = await fetchAllRows<{ product_id: string | null; status: string; error: string | null; last_synced_at: string | null }>(
+  const listari = await fetchAllRows<{ product_id: string | null; status: string; error: string | null; last_synced_at: string | null; auto_inventory: boolean | null }>(
     "trendyol.listings", (from, to) =>
-      supabase.from("trendyol_listings").select("product_id, status, error, last_synced_at")
+      supabase.from("trendyol_listings").select("product_id, status, error, last_synced_at, auto_inventory")
         .eq("business_id", businessId).order("product_id").range(from, to),
   );
   const dupaProdus = new Map(listari.filter((l) => l.product_id).map((l) => [l.product_id as string, l]));
@@ -1063,6 +1109,7 @@ export async function getTrendyolProductPage(
       return {
         id: p.id, name: p.name, category: p.category, is_active: p.is_active,
         status: l?.status ?? null, error: l?.error ?? null, lastSyncedAt: l?.last_synced_at ?? null,
+        adoptata: l?.auto_inventory === false,
       };
     });
 

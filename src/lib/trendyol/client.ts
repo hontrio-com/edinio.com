@@ -203,6 +203,38 @@ export function getApprovedProducts(
     auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/approved/inventory-and-price${qs ? `?${qs}` : ""}`);
 }
 
+/**
+ * Starea unui produs la ei, dupa barcode.
+ *
+ * Cel mai ieftin mod de a afla trei lucruri deodata: daca produsul EXISTA in
+ * catalogul vanzatorului, daca e aprobat si daca e arhivat. Barcode-ul e in
+ * CALE, nu in query.
+ *
+ * Probat: 200 cu `{approved, archived, contentId}` cand exista; **404** cu
+ * `errors[0].key = "product.not.found"` cand nu. Discriminantul e curat, deci
+ * nu trebuie ghicit nimic din textul erorii.
+ *
+ * `contentId` de aici e singura cale catre `content-bulk-update`, care NU
+ * lucreaza pe barcode.
+ */
+export function getProductBaseInfo(auth: TrendyolAuth, barcode: string) {
+  return call<{
+    barcode: string; approved?: boolean; approvedDate?: number;
+    archived?: boolean; contentId?: number; listingId?: string;
+  }>(auth, "GET", `/integration/product/sellers/${auth.supplierId}/product/${encodeURIComponent(barcode)}`);
+}
+
+/**
+ * Arhiveaza sau scoate din arhiva produse, dupa barcode.
+ *
+ * Un produs arhivat la ei ramane in cont dar NU se vinde. Cand comerciantul il
+ * publica din Edinio, asta e ce vrea de fapt: sa reintre la vanzare.
+ */
+export function setArchiveState(auth: TrendyolAuth, items: { barcode: string; archived: boolean }[]) {
+  return call<TrendyolBatchAck>(
+    auth, "PUT", `/integration/product/sellers/${auth.supplierId}/products/archive-state`, { items });
+}
+
 // ── Products (async batch) ────────────────────────────────────────────────────
 export function createProducts(auth: TrendyolAuth, items: TrendyolProductItem[]) {
   return call<TrendyolBatchAck>(auth, "POST", `/integration/product/sellers/${auth.supplierId}/v2/products`, { items });

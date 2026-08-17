@@ -105,19 +105,21 @@ interface ListingRow {
   dimensional_weight: number | null; cargo_company_id: number | null;
   /** Edinio impinge singur stocul si pretul? Fals pe listarile ADOPTATE. */
   auto_inventory?: boolean | null;
+  /** Produsul de la Trendyol a fost creat de NOI (lot de creare reusit)? */
+  creat_de_edinio?: boolean | null;
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
 async function getListingByMainId(admin: Db, businessId: string, mainId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio")
     .eq("business_id", businessId).eq("product_main_id", mainId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -418,7 +420,7 @@ export async function syncProductsBulk(
   const listingIds = pregatite.map((x) => x.listingId);
   const [{ data: randuriListari }, { data: randuriVariante }] = await Promise.all([
     admin.from("trendyol_listings")
-      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory")
+      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio")
       .eq("business_id", ctx.businessId).in("id", listingIds),
     admin.from("trendyol_variants")
       .select("listing_id, barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
@@ -837,8 +839,10 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
             });
           }
         } else if (listing.status === "pending") {
-          // Accepted; exists on Trendyol pending approval.
-          await setListingStatus(admin, listing.id, "created", { error: null });
+          // Accepted; exists on Trendyol pending approval. `creat_de_edinio`
+          // retine ca produsul de acolo e al NOSTRU: un refuz ulterior de tipul
+          // „codul exista deja" e atunci propriul nostru produs, nu unul strain.
+          await setListingStatus(admin, listing.id, "created", { error: null, creat_de_edinio: true });
         }
       }
     } else if (b.kind === "inventory" && !hardFail) {
@@ -909,10 +913,21 @@ async function incearcaAdoptarea(
     }
   }
 
+  /*
+   * ⚠ „Codul de bare exista deja" NU inseamna mereu „produs strain".
+   *
+   * E adevarat si pentru un produs pe care tot noi l-am creat cu cinci minute
+   * inainte: comerciantul apasa „Reincearca" pe o listare de-a noastra si
+   * Trendyol raspunde exact la fel. Tratata ca listare straina, i se oprea
+   * sincronizarea de stoc si aparea „Preluat" — vazut in productie pe un produs
+   * respins la revizuie si reincercat de comerciant.
+   *
+   * Deci stocul se opreste doar cand produsul chiar NU e al nostru.
+   */
+  const alNostru = listing.creat_de_edinio === true;
   await setListingStatus(admin, listing.id, info.approved ? "approved" : "created", {
     error: null,
-    // Stocul si pretul lui sunt ale comerciantului, puse pe alta cale.
-    auto_inventory: false,
+    ...(alNostru ? {} : { auto_inventory: false }),
     ty_content_id: info.contentId ?? null,
     last_synced_at: new Date().toISOString(),
   });

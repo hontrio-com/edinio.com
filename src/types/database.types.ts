@@ -3623,6 +3623,7 @@ export type Database = {
           business_id: string
           cargo_company_id: number | null
           category_id: number | null
+          creat_de_edinio: boolean
           created_at: string
           dimensional_weight: number | null
           error: string | null
@@ -3645,6 +3646,7 @@ export type Database = {
           business_id: string
           cargo_company_id?: number | null
           category_id?: number | null
+          creat_de_edinio?: boolean
           created_at?: string
           dimensional_weight?: number | null
           error?: string | null
@@ -3667,6 +3669,7 @@ export type Database = {
           business_id?: string
           cargo_company_id?: number | null
           category_id?: number | null
+          creat_de_edinio?: boolean
           created_at?: string
           dimensional_weight?: number | null
           error?: string | null

@@ -4444,7 +4444,8 @@ create table if not exists public.trendyol_listings (
   updated_at timestamp with time zone default now() not null,
   inventory_retries integer default 0 not null,
   auto_inventory boolean default true not null,
-  ty_content_id bigint);
+  ty_content_id bigint,
+  creat_de_edinio boolean default false not null);
 
 create table if not exists public.trendyol_orders (
   id uuid default gen_random_uuid() not null,

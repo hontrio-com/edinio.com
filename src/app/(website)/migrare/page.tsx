@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { ArcMigrare } from "@/components/website/sections/migrare/ArcMigrare";
+import { PanouCategorii } from "@/components/website/sections/migrare/PanouCategorii";
 import { PanouProduse } from "@/components/website/sections/migrare/PanouProduse";
 import { SectiuneMigrare } from "@/components/website/sections/migrare/SectiuneMigrare";
-import { SECTIUNE_PRODUSE } from "@/lib/website/migrare";
+import { SECTIUNE_CATEGORII, SECTIUNE_PRODUSE } from "@/lib/website/migrare";
 import { siteMetadata } from "@/lib/website/metadata";
 
 /*
@@ -138,6 +139,21 @@ export default function MigrarePage() {
       */}
       <SectiuneMigrare text={SECTIUNE_PRODUSE}>
         <PanouProduse />
+      </SectiuneMigrare>
+
+      {/*
+        A doua secțiune, ÎNTOARSĂ: ilustrația la stânga, textul la dreapta.
+
+        Alternanța e ce s-a cerut de la început — „în stânga text, în dreapta
+        imagine, după în stânga imagine și în dreapta text". Fără ea, patru casete
+        la rând cu textul mereu în aceeași parte se citesc ca patru rânduri dintr-un
+        tabel, iar ochiul încetează să se mai uite la a treia.
+
+        ⚠ Sub `lg` NU se întoarce nimic: acolo totul e pe o coloană, iar textul
+        rămâne sus la toate patru. Vezi `SectiuneMigrare`.
+      */}
+      <SectiuneMigrare text={SECTIUNE_CATEGORII} inversat>
+        <PanouCategorii />
       </SectiuneMigrare>
     </>
   );

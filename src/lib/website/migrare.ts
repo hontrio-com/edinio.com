@@ -189,3 +189,98 @@ export const SECTIUNE_PRODUSE: SectiuneMigrareText = {
     "Produsele vin împreună cu informațiile importante: descrieri, prețuri, stocuri, variante și fotografii.",
   cta: { label: "Începe gratuit", href: "/register" },
 };
+
+/**
+ * ⚠ TITLUL ȘI DESCRIEREA SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (19.08).
+ * Nu se rescriu. Eticheta și butonul sunt ale mele, ca la „Produse".
+ */
+export const SECTIUNE_CATEGORII: SectiuneMigrareText = {
+  eticheta: "Categorii",
+  titlu: "Categoriile tale rămân organizate.",
+  descriere:
+    "Transferăm structura categoriilor și subcategoriilor, astfel încât produsele să ajungă în Edinio fără să refaci manual organizarea magazinului.",
+  cta: { label: "Începe gratuit", href: "/register" },
+};
+
+/* ─── Arborele de categorii ─────────────────────────────────────────────────── */
+
+export interface NodCategorie {
+  nume: string;
+  /** Câte produse are, cu tot cu ce e sub el. Vezi nota de la `ARBORE_CATEGORII`. */
+  produse: number;
+  copii?: NodCategorie[];
+  /**
+   * Ramura e desfăcută, deci i se văd copiii.
+   *
+   * Fără asta, toate ar fi arătat la fel — iar un arbore în care nimic nu e
+   * strâns nu arată a arbore, arată a listă indentată. Închise și deschise
+   * amestecate spun că ramurile chiar se pot închide.
+   */
+  deschis?: boolean;
+  /**
+   * Rândul pe care stă cursorul.
+   *
+   * ⚠ UNUL SINGUR în tot arborele. Două rânduri aprinse deodată n-ar mai fi un
+   * cursor, ar fi o selecție — altceva, și ceva ce nu are ce căuta într-o
+   * ilustrație care arată doar cum stau categoriile.
+   */
+  subCursor?: boolean;
+}
+
+/**
+ * Arborele din ilustrația secțiunii „Categorii".
+ *
+ * ⚠ NUMERELE SE ADUNĂ, și asta e cea mai importantă linie din fișierul ăsta.
+ *
+ *     Geci și paltoane 48 + Tricouri 63 + Pantaloni 75  =  Bărbați 186
+ *     Bărbați 186 + Femei 226                           =  Haine și modă 412
+ *     Supraveghere 96 + Smart home 132 + Audio 90       =  Electronice 318
+ *     412 + 318 + Mobilier și decor 209                 =  939, cât scrie în cap
+ *
+ * Nimeni nu le va aduna. Dar cine se uită atent la o ilustrație în care cifrele NU
+ * se adună vede imediat că e desen, nu produs — și de atunci încolo nu mai crede
+ * nimic din ce e pe ecran. Costul de a le potrivi e o înmulțire; costul de a nu le
+ * potrivi e credibilitatea întregii pagini.
+ *
+ * ⚠ Categoriile de nivel întâi sunt ACELEAȘI trei ca la cardurile de produs din
+ * secțiunea de deasupra, în aceeași ordine. Iar rândul pe care stă cursorul e
+ * „Geci și paltoane", adică exact raionul din care vine geaca de pe primul card.
+ * Cele două ilustrații arată același magazin, nu două magazine inventate separat.
+ */
+export const ARBORE_CATEGORII: NodCategorie[] = [
+  {
+    nume: "Haine și modă",
+    produse: 412,
+    deschis: true,
+    copii: [
+      {
+        nume: "Bărbați",
+        produse: 186,
+        deschis: true,
+        copii: [
+          { nume: "Geci și paltoane", produse: 48, subCursor: true },
+          { nume: "Tricouri", produse: 63 },
+          { nume: "Pantaloni", produse: 75 },
+        ],
+      },
+      { nume: "Femei", produse: 226, copii: [] },
+    ],
+  },
+  {
+    nume: "Electronice",
+    produse: 318,
+    deschis: true,
+    copii: [
+      { nume: "Supraveghere", produse: 96, copii: [] },
+      { nume: "Smart home", produse: 132, copii: [] },
+      { nume: "Audio", produse: 90, copii: [] },
+    ],
+  },
+  { nume: "Mobilier și decor", produse: 209, copii: [] },
+];
+
+/** Totalul din capul panoului. Se SOCOTEȘTE, ca să nu poată rămâne în urmă. */
+export const TOTAL_PRODUSE_ARBORE = ARBORE_CATEGORII.reduce(
+  (suma, nod) => suma + nod.produse,
+  0,
+);

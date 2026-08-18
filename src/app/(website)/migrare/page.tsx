@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { ArcMigrare } from "@/components/website/sections/migrare/ArcMigrare";
+import { PanouProduse } from "@/components/website/sections/migrare/PanouProduse";
+import { SectiuneMigrare } from "@/components/website/sections/migrare/SectiuneMigrare";
+import { SECTIUNE_PRODUSE } from "@/lib/website/migrare";
 import { siteMetadata } from "@/lib/website/metadata";
 
 /*
@@ -47,7 +50,7 @@ export const metadata: Metadata = siteMetadata({
  * ⚠ NETERMINATĂ, dinadins. Deocamdată e doar hero-ul; restul secțiunilor vin
  * separat, la cererea clientului. Ce e până acum e final, nu coajă.
  */
-export default function MigrarePage() {
+function HeroMigrare() {
   return (
     /*
       Același `HeroPagina` ca pe „Optimizare", „Mentenanță gratuită" și paginile
@@ -112,5 +115,30 @@ export default function MigrarePage() {
       cta={{ label: "Începe gratuit", href: "/register" }}
       secundara={{ label: "Vezi prețurile", href: "/preturi" }}
     />
+  );
+}
+
+export default function MigrarePage() {
+  return (
+    <>
+      <HeroMigrare />
+
+      {/*
+        Prima dintre cele patru secțiuni, una pentru fiecare fel de dată care se
+        mută. Se alternează: aici textul e la stânga și panoul la dreapta, la
+        următoarea invers. Cadrul e unul singur (`SectiuneMigrare`) — vezi acolo
+        de ce inversarea se face din `order` și doar de la `lg`.
+
+        ⚠ TEXTELE SUNT CIORNĂ, nu ale clientului: pentru secțiuni n-a venit încă
+        nimic. Stau în `lib/website/migrare.ts`, într-un loc, ca să se înlocuiască
+        fără să se atingă componentele.
+
+        ⚠ POZELE LIPSESC încă; până vin, cardurile arată ce trebuie să conțină
+        fiecare. Măsurile cerute și socoteala lor sunt tot în `migrare.ts`.
+      */}
+      <SectiuneMigrare text={SECTIUNE_PRODUSE}>
+        <PanouProduse />
+      </SectiuneMigrare>
+    </>
   );
 }

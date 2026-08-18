@@ -327,10 +327,7 @@ export async function syncProductNow(
    * Deci se despart: barcodurile cunoscute pe ruta de actualizare, cele noi pe
    * creare, cu acelasi `productMainId` — asa devin variante ale aceluiasi produs.
    */
-  const cunoscute = new Set(
-    (await admin.from("trendyol_variants").select("barcode")
-      .eq("listing_id", listing.id).eq("exista_la_ei", true)).data?.map((v) => (v as { barcode: string }).barcode) ?? [],
-  );
+  const cunoscute = await barcoduriDejaLaEi(admin, ctx, listing, built.items.map((i) => i.barcode));
   const deCreat = ruta === "creare" ? built.items : built.items.filter((i) => !cunoscute.has(i.barcode));
   const deActualizat = ruta === "creare" ? [] : built.items.filter((i) => cunoscute.has(i.barcode));
 
@@ -393,6 +390,49 @@ export async function syncProductNow(
     await recordBatch(admin, ctx.businessId, id, t.kind, [listing.product_main_id]);
   }
   return { ok: true, action: "submitted", batchRequestId };
+}
+
+/**
+ * Care dintre barcoduri exista DEJA in catalogul Trendyol.
+ *
+ * ⚠ NU se poate raspunde doar din `trendyol_variants.exista_la_ei`.
+ *
+ * Coloana aia sta pe un rand care se poate pierde: comerciantul apasa „Elimină"
+ * si retrimite, iar listarea si variantele se recreeaza de la zero, cu marcajul
+ * pe `false`. Atunci un produs care CHIAR e la Trendyol pleaca iar pe creare si
+ * primeste „codul de bare exista deja" — la nesfarsit, oricate apasari. Vazut
+ * de doua ori pe acelasi produs, in aceeasi zi.
+ *
+ * Deci pentru barcodurile nemarcate se intreaba sursa adevarata: serviciul lor
+ * de stare pe barcode (404 = nu exista, 200 = exista). Raspunsul se scrie inapoi
+ * in coloana, deci intrebarea se pune o singura data per barcode.
+ */
+export async function barcoduriDejaLaEi(
+  admin: Db, ctx: TrendyolSyncContext, listing: ListingRow, barcoduri: string[],
+): Promise<Set<string>> {
+  const { data } = await admin.from("trendyol_variants")
+    .select("barcode, exista_la_ei").eq("listing_id", listing.id);
+  const stiute = new Set(
+    (data ?? []).filter((v) => (v as { exista_la_ei: boolean }).exista_la_ei)
+      .map((v) => (v as { barcode: string }).barcode),
+  );
+  /*
+   * Se intreaba doar pentru listarile despre care stim ca sunt la ei. Pentru un
+   * produs nou, barcodurile chiar nu exista si o cerere per varianta ar fi doar
+   * risipa — plus un 404 asteptat la fiecare publicare.
+   */
+  if (!existaLaTrendyol(listing)) return stiute;
+
+  const denecunoscute = barcoduri.filter((b) => !stiute.has(b));
+  for (const barcode of denecunoscute.slice(0, 20)) {
+    const res = await getProductBaseInfo(ctx.auth, barcode);
+    if (isTrendyolError(res)) continue;             // 404 „product.not.found" = chiar nu exista
+    if (res.data?.approved == null) continue;
+    stiute.add(barcode);
+    await admin.from("trendyol_variants").update({ exista_la_ei: true } as never)
+      .eq("listing_id", listing.id).eq("barcode", barcode);
+  }
+  return stiute;
 }
 
 /**

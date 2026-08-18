@@ -284,3 +284,115 @@ export const TOTAL_PRODUSE_ARBORE = ARBORE_CATEGORII.reduce(
   (suma, nod) => suma + nod.produse,
   0,
 );
+
+/* ─── Comenzi ───────────────────────────────────────────────────────────────── */
+
+/**
+ * ⚠ TITLUL ȘI DESCRIEREA SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (19.08).
+ * Nu se rescriu. Eticheta și butonul sunt ale mele, ca la celelalte două.
+ */
+export const SECTIUNE_COMENZI: SectiuneMigrareText = {
+  eticheta: "Comenzi",
+  titlu: "Nu pierzi comenzile făcute până acum.",
+  descriere:
+    "Migrăm istoricul comenzilor împreună cu datele importante, ca să poți continua administrarea magazinului fără să o iei de la zero.",
+  cta: { label: "Începe gratuit", href: "/register" },
+};
+
+/**
+ * Stările unei comenzi, cu culorile lor.
+ *
+ * ⚠ PASTILE STINSE, NU PLINE. Într-o listă de comenzi, cinci pastile pline ar fi
+ * cel mai colorat lucru de pe pagină și ar trage ochiul de la cifre — iar culoarea
+ * e acolo ca să deosebească stările dintr-o privire, nu ca să strige. În panourile
+ * adevărate tot așa sunt: fond spălăcit, scris în tonul lui, închis.
+ *
+ * ⚠ TONUL SCRISULUI E COBORÂT ANUME, ca să se citească pe fondul lui. Verdele de
+ * brand (#1AB554) dă 2,6:1 chiar și pe alb — sub pragul de 4,5 — de aceea aici e
+ * #12874A, același ton dus mai închis. E chiar verdele folosit pentru text și în
+ * ilustrațiile de pe „Optimizare". Aceeași socoteală s-a făcut și la albastru și
+ * la chihlimbar.
+ *
+ * ⚠ „Anulată" NU e în listă, deși e o stare adevărată. Pe o pagină care promite că
+ * NU pierzi comenzile, un rând roșu cu „Anulată" e primul lucru la care se uită
+ * ochiul, și spune fix pe dos. Stările alese sunt toate din drumul normal al unei
+ * comenzi.
+ *
+ * ⚠ CELE TREI FOLOSITE SUNT DIN TREI TREPTE DIFERITE ale drumului — primită, în
+ * lucru, ajunsă. Cu trei nuanțe ale aceluiași pas, culorile ar fi fost un ornament;
+ * așa, fiecare pastilă spune unde a ajuns comanda aia.
+ */
+export const STARI_COMANDA = {
+  livrata: { text: "Livrată", fond: "#E8F9EE", cerneala: "#12874A" },
+  inLivrare: { text: "În livrare", fond: "#EFF4FF", cerneala: "#1D4ED8" },
+  inProcesare: { text: "În procesare", fond: "#FEF3C7", cerneala: "#92400E" },
+} as const;
+
+export type StareComanda = keyof typeof STARI_COMANDA;
+
+export interface Comanda {
+  /** Numărul comenzii, fără diez — îl pune componenta. */
+  numar: number;
+  client: string;
+  /** Scris cu tot cu monedă și cu punct la mii, ca în panou. */
+  total: string;
+  stare: StareComanda;
+  /**
+   * De cât timp a venit.
+   *
+   * Fără el, cele trei plăci ar fi arătat ca trei rânduri dintr-un tabel scoase
+   * din chenarul lor. O înștiințare spune întotdeauna CÂND — e chiar ce o
+   * deosebește de un rând de listă.
+   */
+  cand: string;
+}
+
+/**
+ * Comenzile din ilustrația secțiunii „Comenzi".
+ *
+ * ⚠ SUMELE SUNT COMBINAȚII ADEVĂRATE ALE PREȚURILOR DE PE CARDURILE DE PRODUS din
+ * prima secțiune — geaca 349, camera 429, scaunul 899:
+ *
+ *     349                  o geacă
+ *     1.328 = 429 + 899    o cameră și un scaun
+ *     429                  o cameră
+ *
+ * Aceeași hotărâre ca la numerele care se adună în arborele de categorii: nimeni
+ * nu va face socoteala, dar dacă cineva o face, iese. Cele trei ilustrații arată
+ * ACELAȘI magazin — aceleași raioane, aceleași produse, aceleași prețuri.
+ *
+ * ⚠ TREI, nu cinci, cerut de client (19.08) odată cu trecerea la înștiințări: cinci
+ * plăci plutitoare una sub alta nu mai sunt înștiințări, sunt tot o listă — doar
+ * una fără chenar. Trei se citesc ca „tocmai au venit astea".
+ *
+ * ⚠ Numerele scad de sus în jos, iar vremea crește la fel: #1042 acum patru
+ * minute, #1041 acum douăzeci și două, #1040 acum o oră. Într-un teanc de
+ * înștiințări, cea mai nouă stă sus — dacă vechimea n-ar merge în aceeași direcție
+ * cu numerele, teancul s-ar citi ca amestecat.
+ *
+ * Numele sunt date de umplutură, alese să sune firesc în românește. Nu trimit la
+ * nimeni: sunt perechi obișnuite de prenume și nume.
+ */
+export const COMENZI_MIGRARE: Comanda[] = [
+  {
+    numar: 1042,
+    client: "Andrei Popescu",
+    total: "349 lei",
+    stare: "livrata",
+    cand: "acum 4 min",
+  },
+  {
+    numar: 1041,
+    client: "Maria Ionescu",
+    total: "1.328 lei",
+    stare: "inLivrare",
+    cand: "acum 22 min",
+  },
+  {
+    numar: 1040,
+    client: "Cristian Dumitru",
+    total: "429 lei",
+    stare: "inProcesare",
+    cand: "acum o oră",
+  },
+];

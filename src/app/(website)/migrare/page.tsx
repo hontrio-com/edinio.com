@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { ArcMigrare } from "@/components/website/sections/migrare/ArcMigrare";
 import { PanouCategorii } from "@/components/website/sections/migrare/PanouCategorii";
+import { PanouComenzi } from "@/components/website/sections/migrare/PanouComenzi";
 import { PanouProduse } from "@/components/website/sections/migrare/PanouProduse";
 import { SectiuneMigrare } from "@/components/website/sections/migrare/SectiuneMigrare";
-import { SECTIUNE_CATEGORII, SECTIUNE_PRODUSE } from "@/lib/website/migrare";
+import {
+  SECTIUNE_CATEGORII,
+  SECTIUNE_COMENZI,
+  SECTIUNE_PRODUSE,
+} from "@/lib/website/migrare";
 import { siteMetadata } from "@/lib/website/metadata";
 
 /*
@@ -154,6 +159,11 @@ export default function MigrarePage() {
       */}
       <SectiuneMigrare text={SECTIUNE_CATEGORII} inversat>
         <PanouCategorii />
+      </SectiuneMigrare>
+
+      {/* A treia, la loc: textul la stânga, ilustrația la dreapta. */}
+      <SectiuneMigrare text={SECTIUNE_COMENZI}>
+        <PanouComenzi />
       </SectiuneMigrare>
     </>
   );

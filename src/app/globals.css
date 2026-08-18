@@ -644,6 +644,83 @@
   }
 }
 
+/* ─── Arcul de placi din hero-ul paginii „Migrare magazin" ───────────────────
+
+   Cele cinci placi nu apar, se ASEAZA: pornesc dintr-un rand drept si se lasa
+   fiecare pe locul ei de pe cerc. Miscarea DESENEAZA arcul, nu e o sosire pusa
+   peste el.
+
+   ═══ DE CE NU „APAR DE JOS, PE RAND, DE LA STANGA" ═══
+
+   Fiindca aia e miscarea pe care o are orice sectiune de pe orice site: acelasi
+   fade cu 20px de jos, aceeasi zecime de secunda intre elemente, mereu de la
+   stanga la dreapta. Se recunoaste din prima si nu spune nimic despre lucrul care
+   se misca — merge la fel de bine pe un rand de preturi sau pe trei bife.
+
+   Aici miscarea vine din desen, si de aceea n-ar putea fi mutata pe alta pagina:
+
+   - PORNESC DREPT. `rotate(0)` si aceeasi inaltime, adica exact cum ar arata
+     randul daca n-ar exista arcul. Se deschid ca un evantai, iar placa din capat
+     are cel mai mult de mers fiindca e cea mai departe de mijloc — nu fiindca
+     asa i-a venit randul.
+   - SE LASA IN JOS, nu urca. Ce coboara si se opreste are greutate; ce urca si se
+     opreste pluteste. Placile au umbra sub ele, deci trebuie sa cada pe ceva.
+   - INTARZIEREA PLEACA DIN MIJLOC. Mijlocul e cheia arcului: sta pe loc, iar
+     celelalte se desfac in jurul lui. Vine din ACELASI unghi care da si pozitia
+     (vezi `ArcMigrare.tsx`), deci cele doua nu se pot desincroniza.
+   - FARA saritura peste tinta si FARA `scale`. Un obiect care trece de locul lui
+     si se intoarce e jucaus; aici trebuie sa para asezat cu mana.
+
+   ═══ DOUA ANIMATII, NU UNA ═══
+
+   Aparitia tine 340ms, asezarea 760: transparenta se termina cand miscarea abia e
+   pe la jumatate. Cu una singura, placa ar fi fost inca palida in timp ce se
+   aseaza, si s-ar fi citit „intra ceva", nu „se aseaza ceva". Nu se bat pe aceeasi
+   proprietate — una tine `opacity`, cealalta `transform` — deci merg impreuna.
+
+   `cubic-bezier(0.16, 1, 0.3, 1)` e curba de sosire a site-ului, aceeasi ca la
+   „Rapid" din titlul paginii „Optimizare": porneste tare si se stinge lung. Din
+   cele 760ms, ochiul vede miscare vreo 250 — restul e oprirea.
+
+   ⚠ `animation-delay` STA DUPA scurtatura `animation`, nu inainte. Scurtatura pune
+   la loc tot ce nu scrie, inclusiv intarzierea; deasupra, ar fi fost stearsa si
+   toate cinci ar fi plecat deodata. */
+.arc-placa {
+  /* ⚠ Pozitia de repaus sta pe ELEMENT, iar `to` de mai jos doar o repeta. Asa,
+     cu animatia oprita (mai jos, la miscare redusa), placa e deja pe locul ei de
+     pe arc — nu la mila umplerii `both`. */
+  transform: translateY(var(--dy, 0px)) rotate(var(--rot, 0deg));
+  animation:
+    arc-apare 340ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    arc-se-aseaza 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--intarziere, 0ms);
+}
+
+@keyframes arc-apare {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Cei 6px in minus sunt pentru placa din MIJLOC, care n-are nici coborare, nici
+   rotire: fara ei ar fi ramas singura care doar se aprinde, langa patru care se
+   misca. Atat cat sa se vada ca se aseaza si ea, nu cat sa para ca sare. */
+@keyframes arc-se-aseaza {
+  from {
+    transform: translateY(-6px) rotate(0deg);
+  }
+  to {
+    transform: translateY(var(--dy, 0px)) rotate(var(--rot, 0deg));
+  }
+}
+
+/* Fara miscare, arcul e acolo de la inceput. Nu se ascunde nimic: ce se vede la
+   sfarsitul animatiei se vede si aici, din prima clipa. */
+@media (prefers-reduced-motion: reduce) {
+  .arc-placa {
+    animation: none;
+  }
+}
+
 /* ─── Titlul paginii „Optimizare" ───────────────────────────────────────────
 
    Trei piese cerute de client: urma de viteza la „Rapid", semnul Google in locul

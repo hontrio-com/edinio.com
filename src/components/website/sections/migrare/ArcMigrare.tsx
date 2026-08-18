@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Layers, Package, Plug, ShoppingCart, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -113,6 +114,44 @@ const PLACI: Placa[] = [
   { eticheta: "Integrări", Icoana: Plug, rot: 18, dy: 22 },
 ];
 
+/**
+ * Cât așteaptă prima placă înainte să plece, în milisecunde.
+ *
+ * O bătaie scurtă, cât să nu pornească mișcarea chiar în prima zugrăveală a
+ * paginii, peste schimbarea fontului. Sub o zecime de secundă nu se citește ca
+ * așteptare, dar e destul cât mișcarea să înceapă pe o pagină deja așezată.
+ */
+const INTARZIERE_BAZA = 90;
+
+/** Cât stă fiecare pereche după cea dinaintea ei. Vezi `variabile()`. */
+const PAS_INTARZIERE = 65;
+
+/**
+ * Numerele unei plăci, ca variabile CSS. Mișcarea e în `globals.css`, la
+ * `.arc-placa` — aici doar se traduc datele.
+ *
+ * Același tipar ca la câmpul de sigle de pe „Integrări" (`CampSigle`), și din
+ * același motiv: Tailwind nu poate genera clase din date, fiindcă scanerul lui
+ * citește codul sursă, nu ce iese din el la randare.
+ */
+function variabile({ rot, dy }: Placa): CSSProperties {
+  /*
+    ⚠ TREAPTA VINE DIN UNGHI, nu dintr-un câmp scris separat: 0 la mijloc, 1 la
+    plăcile de 9°, 2 la cele de 18°. Așa întârzierea și poziția sunt același
+    număr citit de două ori, deci nu se pot desincroniza. Cu o coloană în plus în
+    tabel, cine ar fi schimbat un unghi ar fi lăsat în urmă o ordine care nu mai
+    pleacă din mijloc — și e chiar felul de greșeală care nu se vede uitându-te
+    la cod.
+  */
+  const treapta = Math.abs(rot) / 9;
+
+  return {
+    "--dy": `${dy}px`,
+    "--rot": `${rot}deg`,
+    "--intarziere": `${INTARZIERE_BAZA + treapta * PAS_INTARZIERE}ms`,
+  } as CSSProperties;
+}
+
 export function ArcMigrare() {
   return (
     /*
@@ -124,17 +163,21 @@ export function ArcMigrare() {
       aria-label="Ce se transferă în Edinio"
       className="mx-auto mb-9 flex items-start justify-center gap-1.5 sm:mb-11 sm:gap-3 lg:gap-3.5"
     >
-      {PLACI.map(({ eticheta, Icoana, rot, dy }) => (
+      {PLACI.map((placa) => (
         <li
-          key={eticheta}
+          key={placa.eticheta}
           /*
             `caseta-sigla` ADUCE albul și umbra; nu se pune `bg-white` lângă ea.
+            `arc-placa` aduce așezarea pe cerc ȘI mișcarea de intrare — poziția de
+            repaus e scrisă acolo, nu aici, tocmai ca oprirea animației la
+            `prefers-reduced-motion` să nu lase plăcile în rând drept.
+
             Colțul e pe măsura plăcii, în același raport ca pe „Integrări" (20 la
             68, adică 0,29): 13 la 46, 19 la 64, 22 la 76. Un colț nescalat ar fi
             făcut plăcile mici să pară din altă familie.
           */
-          className="caseta-sigla flex h-[46px] w-[46px] items-center justify-center rounded-[13px] sm:h-16 sm:w-16 sm:rounded-[19px] lg:h-[76px] lg:w-[76px] lg:rounded-[22px]"
-          style={{ transform: `translateY(${dy}px) rotate(${rot}deg)` }}
+          className="arc-placa caseta-sigla flex h-[46px] w-[46px] items-center justify-center rounded-[13px] sm:h-16 sm:w-16 sm:rounded-[19px] lg:h-[76px] lg:w-[76px] lg:rounded-[22px]"
+          style={variabile(placa)}
         >
           {/*
             Cerneală, nu verde. Verdele de pe site e al butonului principal, iar
@@ -151,7 +194,7 @@ export function ArcMigrare() {
             0,45 din latură peste tot. Nescalată, pictograma ar fi părut că plutește
             în placa mare și că sufocă placa mică.
           */}
-          <Icoana
+          <placa.Icoana
             aria-hidden="true"
             strokeWidth={1.9}
             className="h-[21px] w-[21px] text-ink-2 sm:h-[29px] sm:w-[29px] lg:h-[34px] lg:w-[34px]"
@@ -164,7 +207,7 @@ export function ArcMigrare() {
             arbore nu se aude în niciun fel — fără rândul ăsta, cine ascultă
             pagina ar fi auzit „listă cu 5 elemente" și cinci elemente goale.
           */}
-          <span className="sr-only">{eticheta}</span>
+          <span className="sr-only">{placa.eticheta}</span>
         </li>
       ))}
     </ul>

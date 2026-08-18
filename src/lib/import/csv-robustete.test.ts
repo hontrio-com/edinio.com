@@ -100,11 +100,20 @@ test("linia sep=; nu mai devine antet", () => {
 });
 
 test("un antet cu o singura coloana ramane valid", () => {
-  /* Regula de antet nu are voie sa ceara doua celule: o foaie cu o singura
-     coloana e un caz real, si mergea. */
-  const p = parseCsv("ean\n5941234567890\n");
+  /*
+   * Regula de antet nu are voie sa ceara doua celule: o foaie cu o singura
+   * coloana e un caz real, si mergea.
+   *
+   * Proba are DOUA randuri de date dinadins. Cu unul singur trecea si daca
+   * regula chiar ar fi cerut doua celule — fiindca atunci n-ar mai fi gasit
+   * niciun rand potrivit si ar fi cazut pe plasa „ia primul rand", dand acelasi
+   * rezultat din intamplare. Adica proba n-ar fi aparat nimic.
+   */
+  const p = parseCsv("ean\n5941234567890\n5941234567891\n");
   assert.deepEqual(p.headers, ["ean"]);
-  assert.equal(p.rows.length, 1);
+  assert.equal(p.rows.length, 2);
+  assert.equal(p.rows[0].ean, "5941234567890");
+  assert.equal(p.skippedBeforeHeader, undefined, "n-are ce sari");
 });
 
 test("cand niciun rand nu arata a antet, se ia primul, ca inainte", () => {

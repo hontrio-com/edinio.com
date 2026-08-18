@@ -83,6 +83,8 @@ export function StockFeedSources({
      acesta disparea, ecranul arata exact ca inainte de apasare, deci omul nu mai
      avea ce citi si nu stia daca a apasat sau nu. */
   const [probeError, setProbeError] = useState<string | null>(null);
+  /** Coloanele sursei, asa cum erau la deschiderea formularului. Vezi mai jos. */
+  const [coloaneInitiale, setColoaneInitiale] = useState<string[]>([]);
 
   /* Reincarcare dupa o modificare. Pornita mereu dintr-un gest al omului, deci
      nu incalca regula de mai sus. */
@@ -95,8 +97,9 @@ export function StockFeedSources({
        * Inainte, orice eroare trecatoare la reincarcare (o pierdere de retea
        * dupa o stergere) inlocuia tot panoul cu un mesaj si stergea lista
        * impreuna cu butonul „Adauga o sursa" — fara nimic de apasat ca sa
-       * reincerci. Sursele afisate raman cele stiute, iar eroarea se spune
-       * deasupra lor.
+       * reincerci. Sursele afisate raman cele stiute, iar eroarea pleaca intr-un
+       * toast cu viata lunga: e o cadere trecatoare a REINCARCARII, nu o stare a
+       * sursei, deci n-are ce ancora permanenta sa primeasca pe ecran.
        */
       toast.error(res.error, { duration: 8000 });
       return;
@@ -139,11 +142,18 @@ export function StockFeedSources({
         return {
           ...d,
           mapping: ramas.identifier ? ramas : res.mapping,
-          /* Coloana de identificator arata a cod de bare: se muta si cheia, altfel
-             fiecare rand ar iesi „negasit". */
-          options: res.suggestedMatchKey
-            ? { ...d.options, match_key: res.suggestedMatchKey }
-            : d.options,
+          /*
+           * Coloana de identificator arata a cod de bare: se muta si cheia,
+           * altfel fiecare rand ar iesi „negasit".
+           *
+           * DOAR daca omul n-a ales inca nimic anume. Sugestia calca altfel
+           * peste o alegere facuta dinadins: cineva care pusese „SKU varianta"
+           * si reverifica adresa se trezea mutat inapoi pe cod de bare, tacut.
+           */
+          options:
+            res.suggestedMatchKey && d.options.match_key === DEFAULT_STOCK_OPTIONS.match_key
+              ? { ...d.options, match_key: res.suggestedMatchKey }
+              : d.options,
         };
       });
 
@@ -221,13 +231,14 @@ export function StockFeedSources({
    * sursa cu adresa picata sa ramana reglabila (nume, program, ora, pornit/oprit)
    * in loc sa se blocheze cu totul.
    */
-  const coloaneSalvate = draft
-    ? [draft.mapping.identifier, draft.mapping.stock, draft.mapping.price].filter(
-        (c): c is string => Boolean(c),
-      )
-    : [];
-  const areColoaneSalvate = Boolean(draft?.id) && coloaneSalvate.length > 0;
-  const coloaneDisponibile = probe?.headers ?? coloaneSalvate;
+  const areColoaneSalvate = Boolean(draft?.id) && coloaneInitiale.length > 0;
+  /*
+   * `coloaneInitiale` se ingheata cand se deschide formularul, NU se recalculeaza
+   * din `draft`: derivate din starea vie, o coloana golita din greseala disparea
+   * pe loc din lista si nu mai putea fi pusa la loc fara o noua verificare a
+   * adresei — care, daca adresa e picata, nu se poate face deloc.
+   */
+  const coloaneDisponibile = probe?.headers ?? coloaneInitiale;
 
   if (loadError) {
     return (
@@ -304,6 +315,10 @@ export function StockFeedSources({
                 onClick={() => {
                   setProbe(null);
                   setProbeError(null);
+                  setColoaneInitiale(
+                    [source.mapping?.identifier, source.mapping?.stock, source.mapping?.price]
+                      .filter((c): c is string => Boolean(c)),
+                  );
                   setDraft({
                     id: source.id,
                     name: source.name,
@@ -333,7 +348,7 @@ export function StockFeedSources({
       {!draft && (
         <button
           type="button"
-          onClick={() => { setDraft(emptyDraft()); setProbe(null); setProbeError(null); }}
+          onClick={() => { setDraft(emptyDraft()); setProbe(null); setProbeError(null); setColoaneInitiale([]); }}
           className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white"
         >
           <Plus className="h-4 w-4" /> Adauga o sursa

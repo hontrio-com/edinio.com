@@ -299,8 +299,37 @@ export function isDue(source: StockFeedSource, now: Date): boolean {
    * tura ratata insemna inca o zi de stocuri vechi.
    */
   if (elapsedMs >= 25 * 60 * 60 * 1000) return true;
+
+  /*
+   * O data pe ZI CALENDARISTICA, nu la fiecare 23 de ore.
+   *
+   * Pragul de timp singur lasa sursa sa se plimbe: masurat pe cod real, una cu
+   * `run_hour = 0` rula la 23:00, apoi la 22:00, apoi la 21:00 — cate o ora mai
+   * devreme in fiecare zi, fiindca `getUTCHours() < 0` nu e adevarat niciodata,
+   * deci ora ceruta nu o mai tinea in loc. In cateva zile ajungea sa citeasca
+   * feedul in mijlocul zilei de lucru a furnizorului.
+   *
+   * Ziua se compara in UTC, la fel ca `run_hour`.
+   */
+  const aceeasiZi = new Date(last).toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+  if (aceeasiZi) return false;
+
   if (now.getUTCHours() < source.run_hour) return false;
-  return elapsedMs >= 23 * 60 * 60 * 1000;
+
+  /*
+   * Prag doar impotriva dublarii, NU de 23 de ore.
+   *
+   * Cu ancorarea pe zi de mai sus, pragul mare devenea o a doua franghie care
+   * trage in partea cealalta: o sursa care ieri a rulat tarziu (recuperare la
+   * 11:30) nu mai era scadenta azi la ora ei (4:00), fiindca trecusera doar 17
+   * ore — deci recuperarea de ieri ii fura rularea de azi. Proba din
+   * `sources-programare.test.ts` a prins exact asta.
+   *
+   * Douasprezece ore lasa ziua urmatoare sa vina la rand si tot opresc cazul de
+   * colt in care o rulare tarzie de seara ar fi urmata imediat de una dupa
+   * miezul noptii.
+   */
+  return elapsedMs >= 12 * 60 * 60 * 1000;
 }
 
 export async function dueSources(

@@ -6,6 +6,8 @@ import {
   FEATURE_IMAGE_WIDTHS,
   type FeatureCard,
 } from "@/lib/website/features";
+/* Mutată în `lib` fiindcă o folosesc două locuri — vezi nota de acolo. */
+import { DASH_ON_WHITE } from "@/lib/website/linii";
 import { FeatureStack } from "./FeatureStack";
 import { SectionEyebrow } from "./SectionEyebrow";
 
@@ -55,17 +57,6 @@ import { SectionEyebrow } from "./SectionEyebrow";
  * pinat. Efectul rămâne unde chiar funcționează.
  */
 const STACK_TOP = 96;
-
-/**
- * Culoarea ramei punctate din jurul cardului.
- *
- * NU `--color-hairline` (#EAEAEE), deși aia e culoarea liniilor noastre de 1px.
- * O linie PUNCTATĂ are cam jumătate din lungime goală, deci la aceeași culoare
- * cântărește vizibil mai puțin decât una continuă și se pierde pe alb. #DCDCE3 e
- * același ton, dus destul de închis cât să ajungă la aceeași diferență de
- * luminanță pe care o are rama modelului, ~36.
- */
-const DASH_ON_WHITE = "#DCDCE3";
 
 export function Features() {
   return (

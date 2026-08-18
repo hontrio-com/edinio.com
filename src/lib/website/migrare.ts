@@ -22,22 +22,25 @@
  * ⚠ LĂȚIMILE SUNT SOCOTITE, nu alese din burtă. Caseta unei poze de produs,
  * măsurată pe scara de ecrane:
  *
- *     360  → 136      390  → 151      640 → 252
- *     1023 → 252 (maximul)            1024 → 196      1280+ → 240
+ *     360  → 118      390  → 133      640 → 242
+ *     1023 → 242 (maximul)            1024 →  96      1280+ → 121
  *
- * ⚠ Numerele sunt ale POZEI, nu ale cardului: cardul are un chenar de un fir de
- * fiecare parte, deci poza e cu 2px mai îngustă decât el. Măsurat în pagină la
- * 1920: cardul iese 242, poza 240. Doi pixeli n-ar schimba ce fișier alege
- * browserul, dar dacă `sizes` minte cu ceva se preferă să mintă în minus.
+ * ⚠ Numerele sunt ale POZEI, nu ale cardului: între ele stau chenarul cardului
+ * (un fir de fiecare parte) și rama de 5px dinăuntru, adică 12px cu totul. Măsurat
+ * în pagină la 1920: cardul iese 133, poza 121.
  *
- * Ca și la cardurile de pe pagina de start, cel mai lat NU e pe desktop, ci chiar
- * sub pragul `lg`, unde panoul e încă pe toată lățimea (îl ține un `max-w` de
- * 560px, altfel ar fi ajuns la 455 pe o tabletă și pozele ar fi fost uriașe).
+ * ⚠ Cel mai lat NU e pe desktop — e sub pragul `lg`, unde caseta secțiunii nu e
+ * încă tăiată în două și cele patru carduri se așază două câte două. De la `lg` în
+ * sus stau pe un rând, în șapte doisprezecimi de casetă, deci sunt mult mai mici.
  *
- * De acolo ies cele trei:
+ * Grila celor patru e oprită la 520px cât timp stau două câte două. Fără oprire,
+ * la 1023px — chiar sub prag — ajungeau de 449px fiecare, adică patru poze cât un
+ * ecran de telefon într-o ilustrație.
+ *
+ * Din maximul de 242 ies cele trei mărimi:
  *     320  — un ecran obișnuit la un punct pe pixel, sau un telefon la două
- *     512  — 254 la două puncte pe pixel (508), cazul cel mai des întâlnit
- *     768  — 254 la trei puncte pe pixel (762), telefonul bun ținut aproape
+ *     512  — 242 la două puncte pe pixel (484), cazul cel mai des întâlnit
+ *     768  — 242 la trei puncte pe pixel (726), telefonul bun ținut aproape
  *
  * Ca să adaugi o poză nouă: masterul PĂTRAT (1:1), minimum 768px latura, produsul
  * decupat pe alb, apoi aceeași redimensionare în trei pași, `.webp`, calitate ~78.
@@ -65,6 +68,12 @@ export interface ProdusMigrare {
  * mobilier. Așa grila arată a magazin adevărat, cu marfă din raioane diferite, și
  * nu inventează o nișă pe care platforma n-o pomenește nicăieri.
  *
+ * ⚠ SCRISE SCURT, nu cu numele lung din subsol, și e o măsurătoare: rândul
+ * categoriei are 109px în cardul de la `lg` în sus, iar la 10px cu majuscule
+ * răsfirate încap vreo cincisprezece semne. „Mobilier și decor" ieșea trunchiat cu
+ * trei puncte — adică arăta a scăpare, nu a card. Oricum așa scriu magazinele pe
+ * carduri: un cuvânt, două, nu numele întreg al raionului.
+ *
  * ⚠ Denumirile și prețurile sunt CIORNĂ. Trebuie oricum potrivite cu pozele care
  * vor veni — o poză de geacă sub numele altui produs se vede din prima.
  */
@@ -73,7 +82,7 @@ export const PRODUSE_MIGRARE: ProdusMigrare[] = [
     id: "geaca",
     nume: "Geacă de iarnă impermeabilă",
     pret: "349 lei",
-    categorie: "Haine și modă",
+    categorie: "Haine",
     descriere: "Geacă, pe fundal alb",
   },
   {
@@ -94,7 +103,7 @@ export const PRODUSE_MIGRARE: ProdusMigrare[] = [
     id: "scaun",
     nume: "Scaun de birou ergonomic",
     pret: "899 lei",
-    categorie: "Mobilier și decor",
+    categorie: "Mobilier",
     descriere: "Scaun de birou, pe fundal alb",
   },
 ];
@@ -105,18 +114,20 @@ export const LATIMI_POZA_PRODUS = [320, 512, 768];
 /**
  * `sizes` pentru pozele de produs — SOCOTIT, nu ghicit.
  *
- * Poza ia toată lățimea cardului mic MINUS chenarul lui (2px), iar cardul mic e o
- * jumătate din interiorul panoului. Desfășurat, de la ecranul mare spre cel mic:
+ * Poza ia toată lățimea cardului mic MINUS chenarul și rama lui (12px cu totul),
+ * iar cardul e un sfert din jumătatea de casetă în care stă. Desfășurat, de la
+ * ecranul mare spre cel mic:
  *
- *   ≥1280  panoul e jumătate din cei 1200 ai paginii → poza iese fix 240px
- *   ≥1024  pagina e `100vw − 64`, coloana `(100vw − 128) / 2`, iar din ea se scad
- *          cei 40 de spațiere ai panoului, cei 12 dintre carduri și chenarul:
- *          `(100vw − 128) / 4 − 28`, adică `25vw − 60px`
- *   ≥640   panoul e oprit la 560px, deci poza e fixă: `(560 − 40 − 12) / 2 − 2 = 252`
- *   restul `(100vw − 40 margini − 32 spațiere − 12 dintre carduri) / 2 − 2`
+ *   ≥1280  caseta e oprită la 1136, jumătatea ei 7/12 = 663, minus 80 spațiere și
+ *          48 între carduri, împărțit la patru → 133, deci poza 121px
+ *   ≥1024  caseta e `100vw − 64`; aceeași socoteală, desfășurată:
+ *          `((100vw − 64) × 7/48) − 32 − 12`, adică `14,6vw − 53px`
+ *   ≥640   caseta nu e încă tăiată în două, iar grila celor patru e oprită la 520,
+ *          deci poza e fixă: `(520 − 12) / 2 − 12 = 242`
+ *   restul `(100vw − 40 margini − 48 spațiere − 12 dintre carduri) / 2 − 12`
  */
 export const SIZES_POZA_PRODUS =
-  "(min-width: 1280px) 240px, (min-width: 1024px) calc(25vw - 60px), (min-width: 640px) 252px, calc((100vw - 88px) / 2)";
+  "(min-width: 1280px) 121px, (min-width: 1024px) calc(14.6vw - 53px), (min-width: 640px) 242px, calc((100vw - 100px) / 2 - 12px)";
 
 export interface SectiuneMigrareText {
   /** Rândul mic de deasupra titlului. */

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { HeroPagina } from "@/components/website/sections/Hero";
+import { ArcMigrare } from "@/components/website/sections/migrare/ArcMigrare";
 import { siteMetadata } from "@/lib/website/metadata";
 
 /*
@@ -54,15 +55,22 @@ export default function MigrarePage() {
       lui. Vezi nota din `sections/Hero.tsx`: e o singură componentă tocmai ca o
       corectură la titlu sau la butoane să se vadă pe toate paginile deodată.
 
-      Fără `eticheta`: pastila de deasupra titlului anunță ceva („Nou", sau cu
-      cine se compară pagina). Aici n-are ce anunța, iar pusă degeaba devine
-      ornament.
-
       ⚠ TITLUL ȘI DESCRIEREA SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (inclusiv
       punctul de la capătul titlului, pe care celelalte pagini nu-l au). Nu se
       rescriu.
     */
     <HeroPagina
+      /*
+        Locul de deasupra titlului, care pe alte pagini ține o pastilă — „Nou" pe
+        pagina de start, „Edinio vs Shopify" pe cele de comparație. Aici ține
+        arcul de plăci: cerut de client (14.08), după o referință cu plăci pe o
+        bandă curbă. Vezi `ArcMigrare` pentru geometrie și pentru ce s-a luat din
+        referință și ce nu.
+
+        E chiar afirmația paginii, desenată: titlul promite că păstrezi tot ce ai
+        construit, iar plăcile arată CE anume, înainte să fie citit primul cuvânt.
+      */
+      eticheta={<ArcMigrare />}
       /*
         ⚠ RUPTURĂ ADEVĂRATĂ DE RÂND, nu o lățime potrivită din ochi.
 

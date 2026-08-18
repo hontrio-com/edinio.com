@@ -98,6 +98,7 @@ export const PRODUSE_MIGRARE: ProdusMigrare[] = [
     nume: "Geacă de iarnă impermeabilă",
     pret: "349 lei",
     categorie: "Haine",
+    imagine: "/migrare/geaca",
     descriere: "Geacă, pe fundal alb",
   },
   {
@@ -105,6 +106,7 @@ export const PRODUSE_MIGRARE: ProdusMigrare[] = [
     nume: "Cameră de supraveghere solară",
     pret: "429 lei",
     categorie: "Electronice",
+    imagine: "/migrare/camera",
     descriere: "Cameră de supraveghere, pe fundal alb",
   },
   {
@@ -112,12 +114,34 @@ export const PRODUSE_MIGRARE: ProdusMigrare[] = [
     nume: "Scaun de birou ergonomic",
     pret: "899 lei",
     categorie: "Mobilier",
+    imagine: "/migrare/scaun",
     descriere: "Scaun de birou, pe fundal alb",
   },
 ];
 
-/** Mărimile generate pentru fiecare poză de produs. Vezi nota de sus. */
-export const LATIMI_POZA_PRODUS = [320, 512];
+/**
+ * Mărimile generate pentru fiecare poză de produs. Vezi nota de sus.
+ *
+ * ⚠ DEOCAMDATĂ DOAR 320, deși fișierele de 512 EXISTĂ pe disc (2026-08-19).
+ *
+ * Motivul e că nu sunt pătrate: au ieșit 512x608, iar produsul e încadrat altfel
+ * decât în cele de 320 — acolo geaca umple pătratul, aici stă cu aer în jur. Puse
+ * amândouă în `srcSet`, aceeași casetă ar fi arătat produsul la două mărimi
+ * diferite, după cât de deasă e rețeaua de puncte a ecranului: 152px lățime pe un
+ * telefon la două puncte pe pixel, 128 pe unul la trei. Nu e un lucru pe care să-l
+ * poți repara din CSS — `object-contain` nu are cum să potrivească două
+ * încadrări diferite.
+ *
+ * Cât timp lipsesc, cele de 320 acoperă tot ce se vede la un punct și la două pe
+ * pixel. Doar pe un telefon la trei puncte poza se întinde de la 320 la ~400,
+ * adică se moaie puțin — vizibil dacă te uiți după asta, nu dacă te uiți la
+ * magazin.
+ *
+ * ⚠ CA SĂ SE ÎNTOARCĂ: se exportă cele de 512 PĂTRATE (512x512), cu aceeași
+ * încadrare ca cele de 320, și se adaugă `512` înapoi în lista de aici. Nimic
+ * altceva — `srcSet` se construiește din ea.
+ */
+export const LATIMI_POZA_PRODUS = [320];
 
 /**
  * `sizes` pentru pozele de produs — SOCOTIT, nu ghicit.
@@ -149,16 +173,19 @@ export interface SectiuneMigrareText {
 }
 
 /**
- * ⚠ CIORNĂ, ca tot ce e text aici.
+ * ⚠ TITLUL ȘI DESCRIEREA SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (19.08).
+ * Le-au înlocuit pe cele scrise de mine ca să existe secțiunea („Produsele tale
+ * ajung întregi, nu doar pe listă."). Nu se rescriu.
  *
- * Butonul duce la înscriere, ca cele două din hero, și e dinadins cel mai
- * neutru lucru pe care îl pot pune: orice altă etichetă („Cere migrarea",
- * „Vorbește cu un specialist") promite un flux care încă nu există pe pagină.
+ * ⚠ ETICHETA ȘI BUTONUL SUNT ÎNCĂ ALE MELE. Butonul duce la înscriere, ca cele
+ * două din hero, și e dinadins cel mai neutru lucru pe care îl pot pune: orice
+ * altă etichetă („Cere migrarea", „Vorbește cu un specialist") promite un flux
+ * care încă nu există pe pagină.
  */
 export const SECTIUNE_PRODUSE: SectiuneMigrareText = {
   eticheta: "Produse",
-  titlu: "Produsele tale ajung întregi, nu doar pe listă.",
+  titlu: "Tot catalogul tău, mutat pe Edinio.",
   descriere:
-    "Denumiri, descrieri, prețuri, stocuri, variante și fotografii. Se așază în Edinio așa cum le-ai avut, ca să nu iei magazinul de la capăt.",
+    "Produsele vin împreună cu informațiile importante: descrieri, prețuri, stocuri, variante și fotografii.",
   cta: { label: "Începe gratuit", href: "/register" },
 };

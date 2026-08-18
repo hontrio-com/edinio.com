@@ -144,14 +144,21 @@ function Poza({ produs }: { produs: ProdusMigrare }) {
     */
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`${produs.imagine}-512.webp`}
+      /*
+        Rezerva, pentru browserele care nu știu `srcSet`: CEA MAI MARE din listă,
+        nu una scrisă de mână. Scrisă de mână, ar fi rămas în urmă exact când se
+        adaugă o mărime nouă — și chiar asta s-a întâmplat o dată, cu `-512` scris
+        aici pe când lista avea trei intrări.
+      */
+      src={`${produs.imagine}-${LATIMI_POZA_PRODUS[LATIMI_POZA_PRODUS.length - 1]}.webp`}
       srcSet={LATIMI_POZA_PRODUS.map(
         (latime) => `${produs.imagine}-${latime}.webp ${latime}w`,
       ).join(", ")}
       sizes={SIZES_POZA_PRODUS}
       alt={produs.descriere}
-      width={768}
-      height={768}
+      /* Pătrate, deci latura e și lățimea și înălțimea. Vezi `migrare.ts`. */
+      width={320}
+      height={320}
       loading="lazy"
       decoding="async"
       /*

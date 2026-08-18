@@ -15,13 +15,8 @@ import {
   DEFAULT_STOCK_OPTIONS, MATCH_KEY_LABELS, MAX_FAILURES as MAX_ESECURI,
   type StockFeedMapping, type StockFeedOptions, type StockMatchKey,
 } from "@/lib/import/stock-feed/types";
-/** Data SI ora. La un feed orar, data singura nu spune nimic. */
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("ro-RO", {
-    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-  });
-}
 import { cn } from "@/lib/utils/cn";
+import { rezumatCifre, verdictRulare } from "@/lib/import/stock-feed/verdict";
 
 /**
  * Sursele citite automat de la o adresa.
@@ -31,6 +26,13 @@ import { cn } from "@/lib/utils/cn";
  * potrivire pe niste nume de coloane inchipuite, iar greseala s-ar vedea peste
  * o zi, cand cronul scrie in catalog.
  */
+
+/** Data SI ora. La un feed orar, data singura nu spune nimic. */
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("ro-RO", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
 
 const CARD = "rounded-xl border border-border bg-card";
 const MATCH_KEYS: StockMatchKey[] = [
@@ -602,51 +604,31 @@ export function StockFeedSources({
  */
 function UltimaRulare({ source }: { source: StockFeedSource }) {
   const t = source.last_totals;
-  /* Totalurile scrise inaintea acestei versiuni n-au cheia `ignored`: fara `?? 0`
-     suma iesea NaN, iar tot randul de probleme disparea tacut. */
-  const n = (v: number | undefined) => v ?? 0;
-  const probleme = t
-    ? n(t.not_found) + n(t.ambiguous) + n(t.invalid) + n(t.duplicate) + n(t.ignored)
-    : 0;
+  /* Verdictul se calculeaza in `verdict.ts`, pur si probat. Aici doar se
+     imbraca: regula a fost deja gresita o data pe date adevarate, si acolo poate
+     fi tinuta sub probe. */
+  const v = verdictRulare(t, source.last_status);
+  const rezumat = rezumatCifre(t);
 
-  /*
-   * „Nu s-a scris nimic" NU e acelasi lucru cu „n-a fost nimic de scris".
-   *
-   * Un feed sanatos in care toate stocurile erau deja la zi are `written = 0` si
-   * e perfect in regula — de aceea se cere si sa fi existat o problema sau
-   * randuri nepotrivite. Altfel ecranul ar fi dat alarma portocalie la fiecare
-   * rulare linistita.
-   */
-  const nimicScris = t !== null && t.written === 0 && t.total > 0 && n(t.unchanged) < t.total;
-  /* Neterminata: au ramas randuri de scris. Statusul din baza nu poate purta
-     informatia asta (CHECK pe 'ok'/'error'), dar cifra o poarta. */
-  const neterminata = t !== null && n(t.pending) > 0;
-
-  const stare =
-    source.last_status === "error"
-      ? { ton: "text-destructive", pictograma: AlertTriangle, text: "Ultima rulare a esuat" }
-      : neterminata
-        ? { ton: "text-warning", pictograma: Loader2, text: `Se termina in fundal (${t.pending} randuri ramase)` }
-        : nimicScris
-          ? { ton: "text-warning", pictograma: AlertTriangle, text: "A citit fisierul, dar n-a actualizat nimic" }
-          : { ton: "text-primary", pictograma: CheckCircle2, text: "Ultima rulare reusita" };
-
-  const Pictograma = stare.pictograma;
+  const TONURI = {
+    rau: { clasa: "text-destructive", pictograma: AlertTriangle },
+    atentie: { clasa: "text-warning", pictograma: AlertTriangle },
+    bun: { clasa: "text-primary", pictograma: CheckCircle2 },
+  } as const;
+  const imbracaminte = v.fel === "in_curs"
+    ? { clasa: "text-warning", pictograma: Loader2 }
+    : TONURI[v.ton];
+  const Pictograma = imbracaminte.pictograma;
 
   return (
     <div className="mt-3 space-y-1 border-t border-border pt-2.5 text-[11px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className={cn("inline-flex items-center gap-1", stare.ton)}>
-          <Pictograma className="h-3 w-3" /> {stare.text}
+        <span className={cn("inline-flex items-center gap-1", imbracaminte.clasa)}>
+          <Pictograma className="h-3 w-3" /> {v.text}
         </span>
         {/* Cu ora, nu doar data: la un feed orar, „18.08.2026" nu spune nimic. */}
         <span className="text-muted-foreground">{source.last_run_at ? formatDateTime(source.last_run_at) : ""}</span>
-        {t && (
-          <span className="text-muted-foreground">
-            {t.written} actualizate din {t.total} randuri
-            {t.unchanged > 0 && `, ${t.unchanged} deja la zi`}
-          </span>
-        )}
+        {rezumat && <span className="text-muted-foreground">{rezumat}</span>}
         {source.last_error && <span className="text-destructive">{source.last_error}</span>}
         {source.last_import_id && source.last_status !== "error" && (
           /* Dupa un esec, `last_import_id` ramane (e manerul cu care se anuleaza
@@ -657,10 +639,10 @@ function UltimaRulare({ source }: { source: StockFeedSource }) {
         )}
       </div>
 
-      {t && probleme > 0 && (
+      {t && v.probleme > 0 && (
         <p className="text-muted-foreground">
           {[
-            t.not_found > 0 && `${t.not_found} coduri negasite`,
+            t.not_found > 0 && `${t.not_found} coduri din fisier fara produs in magazin`,
             t.ambiguous > 0 && `${t.ambiguous} ambigue`,
             t.ignored > 0 && `${t.ignored} fara efect in magazin`,
             t.invalid > 0 && `${t.invalid} cu valori gresite`,
@@ -668,7 +650,11 @@ function UltimaRulare({ source }: { source: StockFeedSource }) {
           ]
             .filter(Boolean)
             .join(" · ")}
-          {source.last_import_id ? " — vezi raportul pentru randurile exacte." : ""}
+          {v.negasiteSuntNormale
+            ? " — normal la un feed de furnizor, care acopera tot catalogul lui, nu doar ce vinzi tu."
+            : source.last_import_id
+              ? " — vezi raportul pentru randurile exacte."
+              : ""}
         </p>
       )}
     </div>

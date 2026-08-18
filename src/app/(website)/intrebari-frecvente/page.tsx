@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHero } from "@/components/website/PageHero";
 import { BandaContact } from "@/components/website/BandaContact";
 import { FaqAccordion } from "@/components/website/FAQSection";
+import { FinalCta } from "@/components/website/sections/FinalCta";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { FAQ_LEAD, FAQ_TITLE } from "@/lib/website/faq";
 import { siteMetadata } from "@/lib/website/metadata";
@@ -73,6 +74,22 @@ export default function IntrebariFrecventePage() {
           <BandaContact className="mx-auto mt-5 max-w-[820px]" />
         </div>
       </section>
+
+      {/*
+        Banda de final, aceeasi ca pe pagina de start.
+
+        Se REFOLOSESTE, nu se scrie alta: textul ei e al clientului si e aprobat,
+        iar o varianta proprie ar fi insemnat text inventat de mine. Cand se
+        schimba o vorba acolo, se schimba pe toate paginile deodata.
+
+        ⚠ Ordinea de aici e gandita, nu intamplatoare: banda de contact ramane
+        PRIMA, imediat sub intrebari. Omul a venit cu o intrebare — daca n-a
+        gasit-o in lista, urmatorul lucru de care are nevoie e o cale sa ne
+        intrebe, nu o invitatie sa se inscrie. Inscrierea vine dupa, ca incheiere
+        a paginii, la fel ca pe `/preturi`, care se termina exact la fel: text
+        scurt, `BandaContact`, apoi `FinalCta`.
+      */}
+      <FinalCta />
     </>
   );
 }

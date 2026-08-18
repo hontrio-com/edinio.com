@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FinalCta } from "@/components/website/sections/FinalCta";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { SectiunePerformanta } from "@/components/website/sections/optimizare/SectiunePerformanta";
 import { SectiuneGeo } from "@/components/website/sections/optimizare/SectiuneGeo";
@@ -53,6 +54,22 @@ export default function OptimizarePage() {
       <SectiunePerformanta />
       <SectiuneSeo />
       <SectiuneGeo />
+
+      {/*
+        Aceeași bandă de final ca pe pagina de start, „Integrări", „Prețuri" și
+        paginile vs. Se REFOLOSEȘTE, nu se scrie alta: textul e al clientului și
+        e aprobat, iar o variantă proprie ar fi însemnat text inventat de mine pe
+        o pagină comercială. Dacă se schimbă vreodată o vorbă acolo, se schimbă
+        peste tot deodată — ăsta e chiar rostul.
+
+        Fără ea pagina se termina în gol: după ultima siglă din GEO intrai direct
+        în subsol, fără să ți se spună ce ai de făcut mai departe.
+
+        `SectiuneGeo` e tot pe alb, ca banda — la fel stau lucrurile și pe
+        „Prețuri" și „Mentenanță gratuită". Nu se lipesc: banda are 96–128px de
+        aer și harta în spate, deci se citește ca alt lucru, nu ca o continuare.
+      */}
+      <FinalCta />
     </>
   );
 }

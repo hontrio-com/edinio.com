@@ -6,6 +6,7 @@ import { PageHero } from "@/components/website/PageHero";
 import { ContactForm } from "@/components/website/ContactForm";
 import { WhatsAppIcon } from "@/components/website/WhatsAppIcon";
 import { FaqAccordion } from "@/components/website/FAQSection";
+import { FinalCta } from "@/components/website/sections/FinalCta";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { EMAIL, PROGRAM, TELEFON, VERDE_WHATSAPP, WHATSAPP } from "@/lib/website/contact";
 import { FAQ_TITLE } from "@/lib/website/faq";
@@ -229,6 +230,23 @@ export default function ContactPage() {
           </p>
         </div>
       </section>
+
+      {/*
+        Banda de final, aceeasi ca pe pagina de start.
+
+        Se REFOLOSESTE, nu se scrie alta: textul ei e al clientului si e aprobat.
+        O varianta scrisa doar pentru pagina asta ar fi insemnat text inventat de
+        mine pe o pagina comerciala, si inca una care s-ar fi despartit de
+        celelalte la prima corectura.
+
+        ⚠ Vine DUPA intrebari, nu inaintea formularului. Cine deschide „Contact"
+        vrea sa ne scrie; un indemn la inscriere pus deasupra i-ar sta in drum.
+        Asezata la coada, e raspunsul la „si daca nu mai am nimic de intrebat?".
+
+        Sectiunea de deasupra e pe `bg-tint`, banda e pe alb — se despart singure,
+        deci nu mai trebuie o linie intre ele.
+      */}
+      <FinalCta />
     </>
   );
 }

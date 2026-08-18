@@ -10,6 +10,7 @@ import type { Json } from "@/types/database.types";
 import { checkoutPaymentMethods, processorReadiness, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, parseCodFeeConfig, sanitizeCodFeeConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
+import { normalizeazaTimpDeLivrare } from "@/lib/shipping/delivery-time";
 
 /**
  * Public, secret-free view of a store's checkout configuration.
@@ -525,6 +526,15 @@ export async function updateShippingConfig(
     // Clase de transport + reguli condiționale (Faza 1). Sanitizate defensiv la salvare.
     shipping_classes?: ShippingClass[];
     shipping_rules?: ShippingRule[];
+    /*
+     * Termenul de livrare: procesare + tranzit, in zile.
+     *
+     * Sta in `page_content`, nu intr-o coloana proprie, fiindca acolo era deja
+     * jumatatea veche a setarii (`delivery_estimate`, comutatorul de afisare din
+     * editor) si fiindca amandoua se citesc impreuna, dintr-un singur camp deja
+     * adus de fiecare pagina publica.
+     */
+    delivery_time?: unknown;
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -544,12 +554,29 @@ export async function updateShippingConfig(
   const rulesRow = parseShippingRules(config.shipping_rules ?? []);
 
   const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+    .from("store_settings").select("id, page_content").eq("business_id", businessId).single();
+
+  /*
+   * Termenul de livrare se imbina PESTE `page_content`, cheie cu cheie: acolo
+   * stau si meniul, si estimarea din editor, si SEO-ul magazinului, scrise de
+   * alte ecrane. Un `page_content` inlocuit intreg de pe fila de livrare le-ar
+   * sterge pe toate.
+   *
+   * Un formular invalid (max sub min, zile lipsa) intoarce `null` din
+   * normalizator si atunci randul de dinainte ramane neatins — nu se sterge in
+   * tacere un termen bun din cauza unei greseli de tastare.
+   */
+  const timpDeLivrare = normalizeazaTimpDeLivrare(config.delivery_time);
+  const pageContentActual = (existing?.page_content as Record<string, unknown> | null) ?? {};
+  const pageContentNou = timpDeLivrare
+    ? { ...pageContentActual, delivery_time: timpDeLivrare }
+    : pageContentActual;
 
   let error;
   if (existing) {
     ({ error } = await supabase.from("store_settings")
       .update({
+        ...(timpDeLivrare ? { page_content: pageContentNou as never } : {}),
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,
@@ -564,6 +591,7 @@ export async function updateShippingConfig(
     ({ error } = await supabase.from("store_settings")
       .insert({
         business_id: businessId,
+        ...(timpDeLivrare ? { page_content: pageContentNou as never } : {}),
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,

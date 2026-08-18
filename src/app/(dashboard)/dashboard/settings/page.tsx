@@ -405,6 +405,9 @@ async function ContinutSetari({
         shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
         shipping_classes: parseShippingClasses(storeSettings?.shipping_classes),
         shipping_rules: parseShippingRules(storeSettings?.shipping_rules),
+        /* Termenul de livrare sta in `page_content`, langa comutatorul de
+           afisare din editor — vezi `@/lib/shipping/delivery-time`. */
+        delivery_time: (storeSettings?.page_content as { delivery_time?: unknown } | null)?.delivery_time ?? null,
       }}
       activeCourierIds={activeCourierIds}
       paymentMethods={paymentMethods}

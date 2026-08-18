@@ -31,6 +31,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
+import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
 import { after } from "next/server";
@@ -546,9 +547,14 @@ export default async function SlugPage({ params, searchParams }: Props) {
       // at the homepage too — mirrors the shipping/delivery used on the product route.
       const opsCanonical = storeBaseUrl(business);
       const opsShippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
-      const opsDe = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
-      const opsDelivery = opsDe?.enabled ? { min: opsDe.min_days ?? 2, max: opsDe.max_days ?? 4 } : { min: null, max: null };
-      const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, { cost: opsShippingCost, min: opsDelivery.min, max: opsDelivery.max },
+      const opsTimpLivrare = parseTimpDeLivrare(storeSettings?.page_content ?? null);
+      const opsJsonLd = buildProductJsonLd(product, opsCanonical, business.store_name ?? business.business_name, {
+        cost: opsShippingCost,
+        min: opsTimpLivrare?.tranzitMin ?? null,
+        max: opsTimpLivrare?.tranzitMax ?? null,
+        handlingMin: opsTimpLivrare?.procesareMin,
+        handlingMax: opsTimpLivrare?.procesareMax,
+      },
         product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
       // Modul „un singur produs": nu exista catalog in spate, deci butonul de
       // cos din header n-are unde sa duca.

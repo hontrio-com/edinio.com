@@ -38,6 +38,7 @@ import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
+import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 
 /* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
@@ -241,6 +242,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // repeta la nesfarsit; zece iframe-uri deodata ar arde procesorul degeaba.
   const buttonEffect = demo || reduceMotion ? "none" : (pageContent.button_effect ?? "none");
   const deliveryEstimate = pageContent.delivery_estimate;
+  /* Zilele reale (Setari → Livrare); `deliveryEstimate` doar aprinde casuta. */
+  const deliveryTime = pageContent.delivery_time;
   const showQualityBadge = pageContent.show_quality_badge === true; // "Calitate verificata" badge — off unless enabled (ANPC/Omnibus: merchant opt-in)
   // Numar stabil, derivat din id-ul produsului: cu Math.random() serverul si
   // browserul scriau numere diferite in acelasi HTML (nepotrivire de hidratare).
@@ -481,6 +484,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
   const deliveryDates = useMemo(() => {
     if (!deliveryEstimate?.enabled) return null;
+    // Zilele vin din acelasi loc ca cele trimise catre Google (procesare +
+    // tranzit, Setari → Livrare), cu rezerva pe `min_days`/`max_days`. Socotite
+    // separat, casuta si microdatele aceleiasi pagini se departau la prima
+    // modificare a uneia dintre setari.
+    const timp = parseTimpDeLivrare({ delivery_time: deliveryTime, delivery_estimate: deliveryEstimate });
+    if (!timp) return null;
+    const fereastra = fereastraDeLivrare(timp);
     const acum = new Date().getTime();
     const ZI = 24 * 60 * 60 * 1000;
     // Zilele se adauga pe instant si data se formateaza ancorata in fusul
@@ -491,10 +501,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       timeZone: "Europe/Bucharest", day: "numeric", month: "long",
     });
     return {
-      min: fmt(acum + (deliveryEstimate.min_days ?? 2) * ZI),
-      max: fmt(acum + (deliveryEstimate.max_days ?? 4) * ZI),
+      min: fmt(acum + fereastra.min * ZI),
+      max: fmt(acum + fereastra.max * ZI),
     };
-  }, [deliveryEstimate]);
+  }, [deliveryEstimate, deliveryTime]);
 
   // Reset slide when variant image changes
   useEffect(() => { setActiveSlide(0); }, [variantImage]);

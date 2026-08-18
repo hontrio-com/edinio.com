@@ -74,7 +74,8 @@ export function buildProductJsonLd(
   /** REZERVA pentru brand: numele magazinului. Brandul produsului bate. */
   brand: string,
   /**
-   * ⚠ `min`/`max` sunt `null` cand comerciantul NU a pornit estimarea de livrare.
+   * ⚠ `min`/`max` sunt ZILELE DE TRANZIT, si sunt `null` cand comerciantul nu a
+   * declarat niciun termen de livrare.
    *
    * Atunci nu se emite deloc `deliveryTime` — acelasi rationament ca la taxa de
    * retur, cateva randuri mai jos: un termen pe care omul nu l-a scris nicaieri
@@ -82,8 +83,17 @@ export function buildProductJsonLd(
    * acum se emitea „1-3 zile" pentru oricine avea estimarea stinsa, adica pentru
    * 53 din cele 70 de magazine publicate — si nici macar nu era implicitul
    * propriului editor, care e 2-4.
+   *
+   * `handlingMin`/`handlingMax` sunt zilele de PROCESARE (cat sta comanda la
+   * magazin pana pleaca la curier). Lipsa lor inseamna zero, nu „0-1": Google
+   * socoteste termenul afisat ca procesare + tranzit, iar un 0-1 pus din oficiu
+   * peste intervalul pe care il arata pagina publica o zi in plus fata de
+   * casuta „Estimare livrare" de pe acelasi ecran.
+   *
+   * Zilele se calculeaza intr-un singur loc, `@/lib/shipping/delivery-time`, de
+   * unde le ia si casuta de pe pagina produsului.
    */
-  shipping: { cost: number; min: number | null; max: number | null },
+  shipping: { cost: number; min: number | null; max: number | null; handlingMin?: number; handlingMax?: number },
   /**
    * Pachetul nu se poate cumpara (o componenta lipseste sau s-a terminat).
    *
@@ -198,7 +208,12 @@ export function buildProductJsonLd(
       ? {
           deliveryTime: {
             "@type": "ShippingDeliveryTime",
-            handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 1, unitCode: "DAY" },
+            handlingTime: {
+              "@type": "QuantitativeValue",
+              minValue: shipping.handlingMin ?? 0,
+              maxValue: shipping.handlingMax ?? 0,
+              unitCode: "DAY",
+            },
             transitTime: { "@type": "QuantitativeValue", minValue: shipping.min, maxValue: shipping.max, unitCode: "DAY" },
           },
         }

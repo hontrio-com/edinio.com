@@ -351,3 +351,40 @@ test("⚠ termenul de livrare NU se declara cand comerciantul nu l-a pornit", ()
   assert.equal(dt.transitTime.minValue, 5);
   assert.equal(dt.transitTime.maxValue, 7);
 });
+
+/* ─── Procesarea + tranzitul ────────────────────────────────────────────────── */
+
+/** `deliveryTime` din oferta simpla, scurtat. */
+function termen(shipping: { cost: number; min: number | null; max: number | null; handlingMin?: number; handlingMax?: number }) {
+  const j = buildProductJsonLd(produs({}), "https://exemplu.ro/p/x", "Magazin", shipping) as Record<string, unknown>;
+  const livrare = (j.offers as Record<string, unknown>).shippingDetails as Record<string, unknown>;
+  return (livrare.deliveryTime ?? null) as Record<string, Record<string, unknown>> | null;
+}
+
+test("procesarea declarata de comerciant ajunge in `handlingTime`", () => {
+  /*
+   * Reclamat de un comerciant: Search Console ii semnala „deliveryTime lipseste"
+   * pe toate paginile de produs, iar in Setari → Livrare nu exista niciun camp
+   * pentru timpul de procesare. Acum exista, si asta e drumul lui pana in
+   * datele structurate.
+   */
+  const dt = termen({ cost: 25, min: 2, max: 4, handlingMin: 1, handlingMax: 2 })!;
+  assert.equal(dt.handlingTime.minValue, 1);
+  assert.equal(dt.handlingTime.maxValue, 2);
+  assert.equal(dt.transitTime.minValue, 2);
+  assert.equal(dt.transitTime.maxValue, 4);
+  assert.equal(dt.handlingTime.unitCode, "DAY");
+});
+
+test("⚠ fara procesare declarata se scrie ZERO, nu 0-1", () => {
+  /*
+   * Google socoteste termenul afisat ca procesare + tranzit. Cand zilele vin din
+   * estimarea veche a editorului, ele sunt TOTALUL — casuta de pe pagina arata
+   * „azi + min … azi + max". Un 0-1 pus din oficiu peste ele publica o zi in
+   * plus fata de ce scrie pe acelasi ecran, iar contradictia dintre pagina si
+   * microdate e chiar motivul de suspendare din Merchant Center.
+   */
+  const dt = termen({ cost: 25, min: 2, max: 4 })!;
+  assert.equal(dt.handlingTime.minValue, 0);
+  assert.equal(dt.handlingTime.maxValue, 0);
+});

@@ -10,6 +10,7 @@ import { storeBaseUrl } from "@/lib/seo";
 import { parseStoreMode, parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { enrichStoreProduct } from "@/lib/storefront/product-data";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
+import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import { resolveProductOffers } from "@/lib/offers/offers";
@@ -182,9 +183,16 @@ export default async function ProductDetailPage({ params }: Props) {
   const storeBase = storeBaseUrl(business);
   const productUrl = `${storeBase}/product/${product.slug ?? productSlug}`;
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
-  const de = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
-  const delivery = de?.enabled ? { min: de.min_days ?? 2, max: de.max_days ?? 4 } : { min: null, max: null };
-  const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max },
+  // Termenul de livrare: Setari → Livrare, cu rezerva pe estimarea din editor.
+  // Aceleasi zile pe care le arata casuta „Estimare livrare" de pe pagina.
+  const timpLivrare = parseTimpDeLivrare(storeSettings?.page_content ?? null);
+  const jsonLd = buildProductJsonLd(product, productUrl, brand, {
+    cost: shippingCost,
+    min: timpLivrare?.tranzitMin ?? null,
+    max: timpLivrare?.tranzitMax ?? null,
+    handlingMin: timpLivrare?.procesareMin,
+    handlingMax: timpLivrare?.procesareMax,
+  },
     product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
 

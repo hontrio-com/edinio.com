@@ -18,6 +18,7 @@ import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEnt
 import { formatPrice } from "@/lib/utils/format";
 import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
 import type { ShippingClass, ShippingRule } from "@/lib/shipping/rules";
+import { normalizeazaTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail, schimbaParola } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
@@ -222,6 +223,8 @@ interface ShippingConfig {
   shipping_zones: Record<string, ShippingMethodConfig>;
   shipping_classes: ShippingClass[];
   shipping_rules: ShippingRule[];
+  /* Brut din `page_content.delivery_time` — se curata prin normalizator. */
+  delivery_time: unknown;
 }
 
 const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice: number; filter?: string }[] = [
@@ -512,6 +515,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [shippingRules, setShippingRules] = useState<ShippingRule[]>(shippingConfig.shipping_rules);
   const [savingShipping, startShippingTransition] = useTransition();
 
+  /*
+   * Termenul de livrare: procesare + tranzit.
+   *
+   * Se tine ca SIR, ca restul campurilor numerice de pe fila: golit in timp ce
+   * scrii, un `useState<number>` ar sari inapoi la 0 sub degete. Se face numar
+   * la salvare, iar normalizatorul din `@/lib/shipping/delivery-time` are
+   * ultimul cuvant.
+   *
+   * Valoarea de pornire e cea salvata; pentru un magazin care n-a completat
+   * niciodata nimic, campurile arata implicitele 1-2 zile de procesare si 1-3 de
+   * tranzit, dar comutatorul e STINS — deci nu se declara nimic catre Google
+   * pana cand omul nu confirma ca asa e la el.
+   */
+  const timpLivrareSalvat = normalizeazaTimpDeLivrare(shippingConfig.delivery_time);
+  const [livrareTimpPornit, setLivrareTimpPornit] = useState(timpLivrareSalvat?.enabled === true);
+  const [procesareMin, setProcesareMin] = useState<string>(String(timpLivrareSalvat?.handling_min ?? 1));
+  const [procesareMax, setProcesareMax] = useState<string>(String(timpLivrareSalvat?.handling_max ?? 2));
+  const [tranzitMin, setTranzitMin] = useState<string>(String(timpLivrareSalvat?.transit_min ?? 1));
+  const [tranzitMax, setTranzitMax] = useState<string>(String(timpLivrareSalvat?.transit_max ?? 3));
+
   // Mirrors the <Input> primitive so every native input in Settings matches the
   // rest of the dashboard (border-input, transparent bg, focus-visible ring).
   const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
@@ -697,6 +720,20 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       toast.error("Comanda minima trebuie sa fie un numar pozitiv.");
       return;
     }
+    /*
+     * Termenul de livrare se verifica INAINTE de a pleca la server: acolo,
+     * intors invalid, el s-ar pastra pe randul vechi in tacere, iar
+     * comerciantul ar vedea „salvat" peste niste zile pe care nu le-a salvat.
+     */
+    const timpDeLivrare = {
+      enabled: livrareTimpPornit,
+      handling_min: Number(procesareMin), handling_max: Number(procesareMax),
+      transit_min: Number(tranzitMin), transit_max: Number(tranzitMax),
+    };
+    if (!normalizeazaTimpDeLivrare(timpDeLivrare)) {
+      toast.error("Timpul de livrare: zilele trebuie sa fie numere intre 0 si 30, iar maximul cel putin cat minimul.");
+      return;
+    }
     startShippingTransition(async () => {
       const result = await updateShippingConfig(businessId, {
         shipping_enabled: shippingEnabled,
@@ -705,6 +742,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
         shipping_zones: shippingZones,
         shipping_classes: shippingClasses,
         shipping_rules: shippingRules,
+        delivery_time: timpDeLivrare,
       });
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile de livrare au fost salvate.");
@@ -1566,6 +1604,58 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   />
                   <span className="text-sm text-muted-foreground">lei</span>
                 </div>
+              </div>
+
+              {/*
+                * Timpul de livrare — procesare + tranzit.
+                *
+                * Reclamat de un comerciant caruia Search Console ii semnala
+                * „deliveryTime lipseste" pe toate paginile de produs: cautase
+                * exact aici si nu gasise nimic. Zilele existau doar in editorul
+                * de magazin, ca setare de AFISARE, deci cine nu voia casuta pe
+                * pagina n-avea cum sa declare un termen catre Google.
+                */}
+              <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Timp de livrare</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Cat dureaza de la comanda pana la client. Se publica in datele structurate ale paginilor de produs
+                      (<span className="font-mono text-[11px]">offers.shippingDetails.deliveryTime</span>), de unde Google
+                      il ia pentru Merchant Listings. Daca ai pornit „Estimare livrare" in editorul de magazin, casuta de
+                      pe pagina produsului arata aceleasi zile.
+                    </p>
+                  </div>
+                  <Switch checked={livrareTimpPornit} onCheckedChange={setLivrareTimpPornit} />
+                </div>
+                {livrareTimpPornit && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-foreground">Timp de procesare</p>
+                      <p className="text-[11px] text-muted-foreground">Cat sta comanda la tine pana pleaca la curier. 0 = expediezi in aceeasi zi.</p>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="0" max="30" step="1" value={procesareMin}
+                          onChange={(e) => setProcesareMin(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile minime de procesare" />
+                        <span className="text-sm text-muted-foreground">-</span>
+                        <input type="number" min="0" max="30" step="1" value={procesareMax}
+                          onChange={(e) => setProcesareMax(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile maxime de procesare" />
+                        <span className="text-sm text-muted-foreground">zile</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-foreground">Timp de tranzit</p>
+                      <p className="text-[11px] text-muted-foreground">Cat sta coletul la curier, dupa ce a plecat de la tine.</p>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="0" max="30" step="1" value={tranzitMin}
+                          onChange={(e) => setTranzitMin(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile minime de tranzit" />
+                        <span className="text-sm text-muted-foreground">-</span>
+                        <input type="number" min="0" max="30" step="1" value={tranzitMax}
+                          onChange={(e) => setTranzitMax(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile maxime de tranzit" />
+                        <span className="text-sm text-muted-foreground">zile</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Minimum order value */}

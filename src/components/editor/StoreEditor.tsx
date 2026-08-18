@@ -69,6 +69,10 @@ interface PageContent {
   price_range_display?: { enabled: boolean; };
   image_zoom?: { enabled: boolean; };
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string; };
+  /* Zilele reale de livrare, din Setari → Livrare. Cand exista, ele bat
+     `min_days`/`max_days` si pe pagina, si in datele structurate — asa nu se pot
+     departa unele de altele. Vezi `@/lib/shipping/delivery-time`. */
+  delivery_time?: { enabled: boolean; handling_min: number; handling_max: number; transit_min: number; transit_max: number; };
   show_social_proof?: boolean;
   show_quality_badge?: boolean;
   show_category_badges?: boolean;
@@ -510,6 +514,10 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     price_range_display: rawPageContent.price_range_display ?? { enabled: true },
     image_zoom: rawPageContent.image_zoom ?? { enabled: true },
     delivery_estimate: rawPageContent.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
+    /* Doar de CITIT aici — se completeaza in Setari → Livrare. Se ia mai departe
+       ca sa nu fie sters la salvarea editorului si ca panoul sa poata spune de
+       unde vin zilele afisate. */
+    delivery_time: rawPageContent.delivery_time,
     show_social_proof: rawPageContent.show_social_proof ?? false,
     show_quality_badge: rawPageContent.show_quality_badge ?? false,
     show_category_badges: rawPageContent.show_category_badges ?? true,
@@ -1107,18 +1115,32 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
                 <input type="text" value={pageContent.delivery_estimate.text ?? "Estimare livrare"} className={inputCls + " !py-1.5 !text-xs"}
                   placeholder="Estimare livrare"
                   onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, text: e.target.value } }))} />
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Zile minim</label>
-                    <input type="number" min={1} max={30} value={pageContent.delivery_estimate.min_days ?? 2} className={inputCls + " !py-1.5 !text-xs"}
-                      onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, min_days: parseInt(e.target.value) || 2 } }))} />
+                {/* Cand zilele sunt declarate in Setari → Livrare, ELE se afiseaza:
+                    tot ele pleaca si catre Google, si doua seturi de numere pe
+                    acelasi ecran ar ajunge sa se contrazica. Campurile de mai jos
+                    ar arata atunci altceva decat vede clientul, deci se ascund. */}
+                {pageContent.delivery_time?.enabled ? (
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Zilele vin din <span className="font-semibold text-foreground">Setari → Livrare → Timp de livrare</span>
+                    {" "}({pageContent.delivery_time.handling_min + pageContent.delivery_time.transit_min}
+                    {"-"}
+                    {pageContent.delivery_time.handling_max + pageContent.delivery_time.transit_max} zile).
+                    Aceleasi zile sunt trimise si catre Google.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground mb-1 block">Zile minim</label>
+                      <input type="number" min={1} max={30} value={pageContent.delivery_estimate.min_days ?? 2} className={inputCls + " !py-1.5 !text-xs"}
+                        onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, min_days: parseInt(e.target.value) || 2 } }))} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground mb-1 block">Zile maxim</label>
+                      <input type="number" min={1} max={30} value={pageContent.delivery_estimate.max_days ?? 4} className={inputCls + " !py-1.5 !text-xs"}
+                        onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, max_days: parseInt(e.target.value) || 4 } }))} />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground mb-1 block">Zile maxim</label>
-                    <input type="number" min={1} max={30} value={pageContent.delivery_estimate.max_days ?? 4} className={inputCls + " !py-1.5 !text-xs"}
-                      onChange={e => setPageContent(p => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, max_days: parseInt(e.target.value) || 4 } }))} />
-                  </div>
-                </div>
+                )}
               </div>
             )}
           </div>

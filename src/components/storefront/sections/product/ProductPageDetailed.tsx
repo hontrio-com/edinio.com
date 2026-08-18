@@ -36,6 +36,7 @@ import {
   SocialProof, FAQItem, CTAButton,
 } from "./_shared/pieces";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
+import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 
 /**
  * Pagina de produs, varianta „Detaliat".
@@ -288,6 +289,8 @@ export function ProductPageDetailed({
   const reduceMotion = useSyncExternalStore(abonareMiscareRedusa, citesteMiscareRedusa, () => false);
   const buttonEffect = demo || reduceMotion ? "none" : (pageContent.button_effect ?? "none");
   const deliveryEstimate = pageContent.delivery_estimate;
+  /* Zilele reale (Setari → Livrare); `deliveryEstimate` doar aprinde casuta. */
+  const deliveryTime = pageContent.delivery_time;
   const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
   const showSocialProof = pageContent.show_social_proof === true;
 
@@ -543,13 +546,18 @@ export function ProductPageDetailed({
      intre server si browser. */
   const dateLivrare = useMemo(() => {
     if (!deliveryEstimate?.enabled) return null;
+    /* Aceleasi zile pe care le primeste Google — procesare + tranzit din Setari
+       → Livrare, cu rezerva pe estimarea veche din editor. */
+    const timp = parseTimpDeLivrare({ delivery_time: deliveryTime, delivery_estimate: deliveryEstimate });
+    if (!timp) return null;
+    const fereastra = fereastraDeLivrare(timp);
     const fmt = (zile: number) => {
       const d = new Date();
       d.setDate(d.getDate() + zile);
       return d.toLocaleDateString("ro-RO", { day: "numeric", month: "long", timeZone: "Europe/Bucharest" });
     };
-    return { de: fmt(deliveryEstimate.min_days), pana: fmt(deliveryEstimate.max_days) };
-  }, [deliveryEstimate]);
+    return { de: fmt(fereastra.min), pana: fmt(fereastra.max) };
+  }, [deliveryEstimate, deliveryTime]);
 
   /*
    * Radacina catalogului, nu a magazinului: firimiturile si linkurile de

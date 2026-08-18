@@ -33,7 +33,14 @@ export interface PageContent {
   how_it_works_section?: { enabled: boolean; title: string; steps: HowItWorksStep[]; };
   faq_section?: { enabled: boolean; title: string; items: FaqItem[]; };
   image_zoom?: { enabled: boolean };
+  /** DACA se arata casuta cu termenul de livrare, si cu ce eticheta. */
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
+  /**
+   * CAT dureaza livrarea, ca fapt despre magazin (Setari → Livrare). Cand
+   * exista, zilele de aici bat `min_days`/`max_days` si sunt aceleasi pe care le
+   * primeste Google — vezi `@/lib/shipping/delivery-time`.
+   */
+  delivery_time?: { enabled: boolean; handling_min: number; handling_max: number; transit_min: number; transit_max: number };
   price_range_display?: { enabled: boolean };
   button_effect?: string;
   show_social_proof?: boolean;

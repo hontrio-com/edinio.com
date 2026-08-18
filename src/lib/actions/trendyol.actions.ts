@@ -908,7 +908,8 @@ async function withContext<T>(businessId: string, fn: (admin: ReturnType<typeof 
 }
 
 export async function syncTrendyolProduct(businessId: string, productId: string): Promise<{ success: true } | { error: string }> {
-  const res = await withContext(businessId, (admin, ctx) => syncProductNow(admin, ctx, productId));
+  // `manual`: apasarea comerciantului trece si peste garda listarilor adoptate.
+  const res = await withContext(businessId, (admin, ctx) => syncProductNow(admin, ctx, productId, true));
   if ("error" in res) {
     logError({ action: "trendyol.sync", message: res.error, details: { businessId, productId }, businessId });
     return { error: res.error };

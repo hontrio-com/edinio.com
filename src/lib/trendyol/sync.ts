@@ -170,7 +170,11 @@ async function recordBatch(admin: Db, businessId: string, batchRequestId: string
 }
 
 // ── Upsert (create/update on Trendyol) ──────────────────────────────────────────
-export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, productId: string): Promise<SyncOutcome> {
+export async function syncProductNow(
+  admin: Db, ctx: TrendyolSyncContext, productId: string,
+  /** Comerciantul a cerut-o EXPLICIT (buton), nu e o sincronizare automata. */
+  manual = false,
+): Promise<SyncOutcome> {
   const { data: product } = await admin
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
   if (!product) return removeProductNow(admin, ctx, productId);
@@ -250,7 +254,16 @@ export async function syncProductNow(admin: Db, ctx: TrendyolSyncContext, produc
    * Am legat listarea ca sa curga comenzile si sa se poata impinge stocul la
    * cerere („Trimite stocul"), nu ca sa preluam ce a construit el.
    */
-  if (existaLaTrendyol(listing) && !putemSuprascrieContinutul(listing)) {
+  if (existaLaTrendyol(listing) && !putemSuprascrieContinutul(listing) && !manual) {
+    /*
+     * Automat: nu. La CEREREA lui: da.
+     *
+     * Garda apara munca facuta de comerciant in panoul Trendyol de sincronizarile
+     * automate declansate de orice editare. Dar aplicata si pe apasarea lui
+     * explicita, listarea adoptata devenea imposibil de reparat: butonul nu
+     * facea nimic, in tacere. Un produs marcat gresit ca „strain" ar fi ramas
+     * blocat pentru totdeauna.
+     */
     return { ok: true, action: "skipped" };
   }
 
@@ -1198,10 +1211,34 @@ async function incearcaAdoptarea(
    *
    * Deci stocul se opreste doar cand produsul chiar NU e al nostru.
    */
-  const alNostru = listing.creat_de_edinio === true;
+  /*
+   * ⚠ PROPRIETATEA NU SE CITESTE DINTR-O COLOANA CARE SE POATE PIERDE.
+   *
+   * `creat_de_edinio` sta pe listare, iar listarea se poate sterge si recrea —
+   * comerciantul apasa „Elimină" si retrimite. Randul nou porneste cu `false`,
+   * iar refuzul „codul de bare exista deja" devine atunci indistinctibil de un
+   * produs strain: il adoptam, ii oprim stocul, si — mai rau — nu-l mai putem
+   * repara, fiindca listarile adoptate nu se mai rescriu.
+   *
+   * Vazut in productie: un produs creat de noi, sters si retrimis, a ajuns
+   * marcat „Preluat" cu doua loturi de creare REUSITE in istoricul lui.
+   *
+   * Loturile nu se sterg odata cu listarea, deci ele sunt dovada care rezista.
+   *
+   * ⚠ `related_ids` e jsonb: `.contains()` PRIMESTE UN SIR JSON, nu un vector.
+   * Probat prin clientul real — cu `JSON.stringify([id])` intoarce 2, cu vectorul
+   * brut arunca eroare. Vezi [[proba-prin-clientul-real]].
+   */
+  const { count: loturiProprii } = await admin
+    .from("trendyol_batches")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", ctx.businessId).eq("kind", "product").eq("status", "completed")
+    .contains("related_ids", JSON.stringify([listing.product_main_id]));
+  const alNostru = listing.creat_de_edinio === true || (loturiProprii ?? 0) > 0;
   await setListingStatus(admin, listing.id, info.approved ? "approved" : "created", {
     error: null,
-    ...(alNostru ? {} : { auto_inventory: false }),
+    // Proprietatea redescoperita din loturi se scrie inapoi pe listare.
+    ...(alNostru ? { creat_de_edinio: true } : { auto_inventory: false }),
     ty_content_id: info.contentId ?? null,
     last_synced_at: new Date().toISOString(),
   });

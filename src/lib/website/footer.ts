@@ -49,8 +49,10 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: "Mentenanță gratuită", href: "/mentenanta-gratuita" },
       /*
         ⚠ `/migrare` EXISTĂ PE RAMURA ASTA, DAR A FOST ȘTEARSĂ PE `main` (2c138eb).
-        Pagina stă în `app/(landing)/migrare`, alt grup de rute decât restul
-        site-ului — de aceea o căutare doar prin `app/(website)` zice că lipsește.
+
+        Pagina stătea în `app/(landing)/migrare` — o pagină de campanie, în afara
+        site-ului. S-a refăcut și a trecut în `app/(website)/migrare`, lângă
+        celelalte; adresa a rămas aceeași, fiindcă grupurile de rute nu apar în ea.
 
         La unirea cu `main` sunt doar două ieșiri: ori se păstrează pagina, ori
         rândul ăsta (plus cele două linkuri din `nav.ts`) trebuie dus altundeva.

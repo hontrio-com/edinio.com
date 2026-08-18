@@ -35,9 +35,13 @@ const APP = join(AICI, "..", "..", "app");
  *
  * Acum se potrivesc doar segmentele scrise litera cu litera. Grupurile in
  * paranteze — `(website)`, `(landing)` — se traverseaza fara sa consume nimic,
- * pentru ca nu apar in adresa: `/migrare` sta in `app/(landing)/migrare`, si o
- * cautare naiva ar fi zis ca nu exista. (Exact asta scria, gresit, o nota mai
- * veche din repo.)
+ * pentru ca nu apar in adresa: NICIUN link din subsol nu sta in `app/<segment>`,
+ * toate sunt intr-un grup, si o cautare naiva ar fi zis ca niciunul nu exista.
+ * (Exact asta scria, gresit, o nota mai veche din repo.)
+ *
+ * Ca proba sa nu depinda de un singur grup, `/migrare` a fost mutata din
+ * `(landing)` in `(website)` fara ca nimic de aici sa se schimbe — chiar asta
+ * arata ca traversarea e generala, nu potrivita pe un caz anume.
  *
  * Industriile, care CHIAR trec printr-un segment dinamic, sunt verificate
  * separat, pe lista de sluguri.
@@ -81,7 +85,7 @@ test("resolverul de rute chiar poate esua", () => {
      prima forma, din cauza rutei de magazin `[slug]`. */
   assert.equal(existaPaginaStatica("/pagina-care-nu-exista-nicaieri"), false);
   assert.equal(existaPaginaStatica("/contact"), true);
-  /* Grup de rute: pagina sta in `app/(landing)/migrare`, nu in `app/migrare`. */
+  /* Grup de rute: pagina sta in `app/(website)/migrare`, nu in `app/migrare`. */
   assert.equal(existaPaginaStatica("/migrare"), true);
 });
 

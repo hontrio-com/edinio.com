@@ -781,9 +781,25 @@ export async function saveTrendyolListing(
     deriveVariantSlots(product as unknown as MappableProduct).map((s) => [s.barcode, s.variantTitle]),
   );
   const { data: existente } = await admin.from("trendyol_variants")
-    .select("barcode, variant_title").eq("listing_id", listingId);
+    .select("barcode, variant_title, exista_la_ei").eq("listing_id", listingId);
   const titluriSalvate = new Map(
     (existente ?? []).map((v) => [(v as { barcode: string }).barcode, (v as { variant_title: string | null }).variant_title]),
+  );
+  /*
+   * ⚠ „BARCODUL E DEJA LA TRENDYOL" TREBUIE SA SUPRAVIETUIASCA SALVARII.
+   *
+   * Salvarea sterge randurile si le reinsereaza, iar orice coloana lipsa din
+   * payload-ul de inserare se intoarce la valoarea implicita. Pe `variant_title`
+   * exact asta s-a intamplat o data si e reparat mai sus — apoi am introdus
+   * `exista_la_ei` cu ACELASI viciu, si a costat imediat:
+   *
+   * Un produs respins la revizuie, salvat din editor si retrimis, pleca pe
+   * CREARE in loc de actualizare (fiindca marcajul fusese sters), iar Trendyol
+   * il refuza cu „codul de bare exista deja". Adica exact bucla pe care ruta de
+   * actualizare tocmai o desfacuse. Vazut in productie, la 22:14:27.
+   */
+  const laEiSalvate = new Map(
+    (existente ?? []).map((v) => [(v as { barcode: string }).barcode, (v as { exista_la_ei: boolean | null }).exista_la_ei === true]),
   );
 
   // Guard against cross-product barcode clashes BEFORE deleting anything, so a
@@ -794,6 +810,7 @@ export async function saveTrendyolListing(
       listing_id: listingId, business_id: businessId, product_id: productId,
       barcode, stock_code: v.stock_code, attributes: (v.attributes as unknown) as never,
       variant_title: v.variant_title ?? titluriDerivate.get(barcode) ?? titluriSalvate.get(barcode) ?? null,
+      exista_la_ei: laEiSalvate.get(barcode) ?? false,
       quantity: v.quantity, list_price: v.list_price, sale_price: v.sale_price, vat_rate: v.vat_rate, enabled: v.enabled,
     };
   });
@@ -826,11 +843,32 @@ export async function saveTrendyolListing(
     const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
     if (conflict) return { error: `Barcode-ul „${(conflict as { barcode: string }).barcode}" este deja folosit de alt produs. Folosește barcode-uri unice.` };
   }
-  await admin.from("trendyol_variants").delete().eq("listing_id", listingId);
+  /*
+   * ⚠ SE FACE UPSERT, NU „STERGE TOT SI REINSEREAZA".
+   *
+   * Reinserarea readuce la valoarea implicita ORICE coloana care nu e in
+   * payload. A costat de doua ori, pe coloane diferite: intai `variant_title`
+   * (o vanzare de pe Trendyol nu mai stia ce marime sa scada), apoi
+   * `exista_la_ei` (un produs respins, salvat din editor, pleca pe creare in loc
+   * de actualizare si Trendyol il refuza ca duplicat).
+   *
+   * Reparate una cate una, urmatoarea coloana adaugata ar fi cazut la fel.
+   * `upsert` scrie doar campurile trimise si lasa restul neatinse — deci
+   * problema dispare din clasa, nu doar din cazul de fata.
+   *
+   * Randurile care nu mai sunt in payload se sterg dupa, tintit: o varianta
+   * scoasa din produs nu trebuie sa ramana agatata de listare.
+   */
   if (rows.length > 0) {
-    const { error: vErr } = await admin.from("trendyol_variants").insert(rows as never);
+    const { error: vErr } = await admin.from("trendyol_variants")
+      .upsert(rows as never, { onConflict: "business_id,barcode" });
     if (vErr) return { error: "Eroare la salvarea variantelor. Verifică barcode-urile duplicate." };
   }
+  const stergere = admin.from("trendyol_variants").delete().eq("listing_id", listingId);
+  const { error: dErr } = rows.length > 0
+    ? await stergere.not("barcode", "in", `(${rows.map((r) => `"${r.barcode}"`).join(",")})`)
+    : await stergere;
+  if (dErr) return { error: "Eroare la curățarea variantelor vechi." };
 
   // „Salvează ca implicite": munca facuta pe primul produs dintr-o categorie se
   // aplica de la sine pe urmatoarele. Explicit, nu automat — unele atribute chiar

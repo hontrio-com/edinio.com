@@ -657,3 +657,18 @@ test("atributele obligatorii se verifica pe TOATE variantele, nu doar pe prima",
   // Prima varianta singura ar fi trecut curat — exact defectul.
   assert.equal(atributeLipsaPeVariante(aleCategoriei, [articole[0]]).length, 0);
 });
+
+test("filtrul de stergere a variantelor scapate se construieste corect", () => {
+  /*
+   * `.not("barcode","in", ...)` pleaca in ADRESA cererii, ca sir. Barcodurile se
+   * ghilimeleaza: fara ghilimele, unul care contine o virgula (sau punct) ar
+   * rupe lista si ar sterge randuri care trebuiau pastrate.
+   */
+  const barcoduri = ["8720857827439", "ROCHIE-1_A.2", "ABC-1"];
+  const filtru = `(${barcoduri.map((b) => `"${b}"`).join(",")})`;
+  assert.equal(filtru, '("8720857827439","ROCHIE-1_A.2","ABC-1")');
+  // Barcode-urile permit doar litere, cifre, punct, liniuta si underscore
+  // (`verificaBarcode`), deci ghilimelele nu pot fi inchise din interior.
+  for (const b of barcoduri) assert.equal(verificaBarcode(b), null);
+  assert.equal(barcoduri.some((b) => b.includes('"')), false);
+});

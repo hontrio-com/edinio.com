@@ -685,11 +685,37 @@
    ⚠ `animation-delay` STA DUPA scurtatura `animation`, nu inainte. Scurtatura pune
    la loc tot ce nu scrie, inclusiv intarzierea; deasupra, ar fi fost stearsa si
    toate cinci ar fi plecat deodata. */
+/* ═══ TOT ARCUL SE MASOARA IN LATURA PLACII ═══
+
+   `--latura` vine din componenta si are trei valori (78px pe telefon, 92 de la
+   `sm`, 112 de la `lg`). Restul — coborarea pe cerc, rotunjirea coltului, punctul
+   din care pleaca miscarea — sunt RAPOARTE inmultite cu ea, nu pixeli.
+
+   Nu e eleganta de dragul ei. Coborarea de pe cerc e `R × (1 − cos θ)`, iar cand
+   placile cresc, creste si departarea dintre ele, deci trebuie sa creasca si R ca
+   arcul sa arate la fel. Cu pixeli ficsi, aceeasi coborare de 22px insemna un arc
+   frumos la 76px si unul aproape drept la 112 — se turteste pe masura ce placile
+   se maresc, adica exact pe ecranul mare, unde se vede cel mai bine.
+
+   Rapoartele ies din `R / latura = 450 / 76 = 5,92`, numarul cu care a fost
+   desenat arcul prima data:
+
+       ±18°  →  5,92 × (1 − cos 18°) = 5,92 × 0,0489 = 0,2895
+       ±9°   →  5,92 × (1 − cos  9°) = 5,92 × 0,0123 = 0,0729
+         0°  →                                         0
+
+   Deci daca se schimba latura, nu se schimba nimic altceva. */
 .arc-placa {
+  width: var(--latura, 78px);
+  height: var(--latura, 78px);
+  /* 0,22 din latura. Pe „Integrari" raportul e 0,29, dar acolo placa tine o sigla
+     si e o pictograma; asta tine o bucata de interfata si e un card — un colt de
+     0,29 la 112px inseamna 32, adica o forma de aplicatie, nu de card. */
+  border-radius: calc(0.22 * var(--latura, 78px));
   /* ⚠ Pozitia de repaus sta pe ELEMENT, iar `to` de mai jos doar o repeta. Asa,
      cu animatia oprita (mai jos, la miscare redusa), placa e deja pe locul ei de
      pe arc — nu la mila umplerii `both`. */
-  transform: translateY(var(--dy, 0px)) rotate(var(--rot, 0deg));
+  transform: translateY(calc(var(--coborare, 0) * var(--latura, 78px))) rotate(var(--rot, 0deg));
   animation:
     arc-apare 340ms cubic-bezier(0.16, 1, 0.3, 1) both,
     arc-se-aseaza 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -701,15 +727,16 @@
   to { opacity: 1; }
 }
 
-/* Cei 6px in minus sunt pentru placa din MIJLOC, care n-are nici coborare, nici
-   rotire: fara ei ar fi ramas singura care doar se aprinde, langa patru care se
-   misca. Atat cat sa se vada ca se aseaza si ea, nu cat sa para ca sare. */
+/* Cei 0,08 din latura in minus (6px la placa de 78) sunt pentru placa din MIJLOC,
+   care n-are nici coborare, nici rotire: fara ei ar fi ramas singura care doar se
+   aprinde, langa patru care se misca. Atat cat sa se vada ca se aseaza si ea, nu
+   cat sa para ca sare. Tot raport, din acelasi motiv ca restul. */
 @keyframes arc-se-aseaza {
   from {
-    transform: translateY(-6px) rotate(0deg);
+    transform: translateY(calc(-0.08 * var(--latura, 78px))) rotate(0deg);
   }
   to {
-    transform: translateY(var(--dy, 0px)) rotate(var(--rot, 0deg));
+    transform: translateY(calc(var(--coborare, 0) * var(--latura, 78px))) rotate(var(--rot, 0deg));
   }
 }
 

@@ -22,8 +22,8 @@
  * ⚠ LĂȚIMILE SUNT SOCOTITE, nu alese din burtă. Caseta unei poze de produs,
  * măsurată pe scara de ecrane:
  *
- *     360  → 118      390  → 133      428–639 → 152 (maximul)
- *     640  → 150      1023 → 150      1024 → 111      1280+ → 140
+ *     360  → 118      390  → 133      428–639 → 152
+ *     640–1023 → 153 (maximul)        1024 → 111      1280+ → 140
  *
  * ⚠ Numerele sunt ale POZEI, nu ale cardului: între ele stau chenarul cardului
  * (un fir de fiecare parte) și rama de 5px dinăuntru, adică 12px cu totul. Măsurat
@@ -40,12 +40,12 @@
  * (fără ea, la 1023px ajungeau de 449px fiecare), și 340px sub `sm`, unde stau
  * două câte două (fără ea, pe un ecran de 639px poza sărea la 242).
  *
- * Din maximul de 152 ies cele DOUĂ mărimi:
- *     320  — 152 la două puncte pe pixel (304), și orice ecran obișnuit la unul
- *     512  — 152 la trei puncte pe pixel (456), telefonul bun ținut aproape
+ * Din maximul de 153 ies cele DOUĂ mărimi:
+ *     320  — 153 la două puncte pe pixel (306), și orice ecran obișnuit la unul
+ *     512  — 153 la trei puncte pe pixel (459), telefonul bun ținut aproape
  *
  * A treia, de 768, a rămas fără rost: nu există nicio lățime de ecran la care
- * poza să treacă de 456 de pixeli adevărați. Un fișier pe care nu-l cere nimeni e
+ * poza să treacă de 459 de pixeli adevărați. Un fișier pe care nu-l cere nimeni e
  * doar o poză de făcut în plus.
  *
  * Ca să adaugi o poză nouă: masterul PĂTRAT (1:1), minimum 512px latura, produsul
@@ -130,14 +130,15 @@ export const LATIMI_POZA_PRODUS = [320, 512];
  *          între carduri, împărțit la trei → 152, deci poza 140px
  *   ≥1024  caseta e `100vw − 64`; aceeași socoteală, desfășurată:
  *          `((100vw − 64) / 6) − 112/3 − 12`, adică `16,7vw − 60px`
- *   ≥640   caseta nu e încă tăiată în două, iar grila celor trei e oprită la 520,
- *          deci poza e fixă: `(520 − 32) / 3 − 12 = 150`
+ *   ≥640   caseta nu e încă tăiată în două, iar grila celor trei e oprită la 520.
+ *          ⚠ Spațierea e 12px aici, nu 16: `gap-4` vine abia de la `lg`. Deci
+ *          `(520 − 24) / 3 − 12 = 153`, nu 150 — doi pași de spațiere, nu trei.
  *   ≥428   două câte două, cu grila oprită la 340: `(340 − 12) / 2 − 12 = 152`
  *   restul două câte două, pe toată lățimea:
  *          `(100vw − 40 margini − 48 spațiere − 12 dintre carduri) / 2 − 12`
  */
 export const SIZES_POZA_PRODUS =
-  "(min-width: 1280px) 140px, (min-width: 1024px) calc(16.7vw - 60px), (min-width: 640px) 150px, (min-width: 428px) 152px, calc((100vw - 100px) / 2 - 12px)";
+  "(min-width: 1280px) 140px, (min-width: 1024px) calc(16.7vw - 60px), (min-width: 640px) 153px, (min-width: 428px) 152px, calc((100vw - 100px) / 2 - 12px)";
 
 export interface SectiuneMigrareText {
   /** Rândul mic de deasupra titlului. */

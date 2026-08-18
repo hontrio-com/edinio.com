@@ -461,8 +461,13 @@ test("un lot pe care Trendyol nu-l mai recunoaste NU e un lot reusit", () => {
    */
   assert.equal(stareLot({ status: null, itemCount: null, batchRequestType: null, items: [] }), "necunoscut");
   assert.equal(stareLot(null), "necunoscut");
-  assert.equal(stareLot({ status: "COMPLETED", itemCount: 3, items: [] }), "gata");
-  assert.equal(stareLot({ status: "FAILED", itemCount: 3, items: [] }), "gata");
+  /*
+   * ⚠ Aici scria „gata", si productia a aratat ca e FALS: un lot poate raspunde
+   * `COMPLETED` cu `items` inca gol si sa raporteze esecul cateva minute mai
+   * tarziu. Vezi proba de mai jos.
+   */
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 3, items: [{ status: "SUCCESS" }] }), "gata");
+  assert.equal(stareLot({ status: "FAILED", itemCount: 3, items: [{ status: "FAILED" }] }), "gata");
   assert.equal(stareLot({ status: "IN_PROGRESS", itemCount: 3, items: [] }), "in_lucru");
 });
 
@@ -671,4 +676,23 @@ test("filtrul de stergere a variantelor scapate se construieste corect", () => {
   // (`verificaBarcode`), deci ghilimelele nu pot fi inchise din interior.
   for (const b of barcoduri) assert.equal(verificaBarcode(b), null);
   assert.equal(barcoduri.some((b) => b.includes('"')), false);
+});
+
+test("un lot „COMPLETED” fara articole raportate NU e terminat", () => {
+  /*
+   * ⚠ Probat in productie: la 5 secunde dupa trimitere, lotul raspundea
+   * `COMPLETED` cu `items: []` si `failedItemCount: 0`. Cateva minute mai
+   * tarziu, ACELASI lot raporta `failedItemCount: 1` si articolul `FAILED` cu
+   * „codul de bare exista deja".
+   *
+   * Citit ca terminal, primul raspuns inseamna „a mers" — si atunci produsul se
+   * marcheaza drept creat la Trendyol fara sa existe acolo.
+   */
+  assert.equal(stareLot({ status: "COMPLETED", items: [] }), "in_lucru");
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 1, items: [] }), "in_lucru");
+  // Raspunsul complet, cu articolul raportat: abia acum e terminat.
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 1, items: [{ status: "FAILED" }] }), "gata");
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 1, items: [{ status: "SUCCESS" }] }), "gata");
+  // Un lot care chiar n-are articole de raportat nu trebuie sa astepte degeaba.
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 0, items: [] }), "gata");
 });

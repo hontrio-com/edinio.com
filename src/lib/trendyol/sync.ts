@@ -909,9 +909,26 @@ export function stareLot(result: {
 } | null | undefined): StareLot {
   if (!result) return "necunoscut";
   const st = result.status ? String(result.status).toUpperCase() : null;
-  // Documentat: la nivel de LOT exista doar `IN_PROGRESS` si `COMPLETED`. `FAILED`
-  // il acceptam tot ca terminal, ca sa nu depindem de vocabularul lor exact.
-  if (st === "COMPLETED" || st === "FAILED") return "gata";
+  const art = Array.isArray(result.items) ? result.items : [];
+  /*
+   * ⚠ „COMPLETED" POATE SOSI INAINTE CA ARTICOLELE SA FIE COMPLETATE.
+   *
+   * Probat in productie: la 5 secunde dupa trimitere, lotul raspundea
+   * `status: "COMPLETED"` cu `items: []` si `failedItemCount: 0` — iar cateva
+   * minute mai tarziu, ACELASI lot raporta `failedItemCount: 1` si articolul
+   * `FAILED` cu „codul de bare exista deja".
+   *
+   * Citit ca terminal, primul raspuns inseamna „a mers": lotul se inchidea ca
+   * reusit, iar barcodurile se marcau ca ajunse la Trendyol — cand de fapt
+   * fusesera refuzate. Un produs putea aparea „creat" fara sa existe acolo.
+   *
+   * Deci un lot cu status terminal dar FARA articole raportate inca nu si-a spus
+   * raspunsul. Exceptia e `itemCount === 0`: acolo chiar n-are ce raporta.
+   */
+  if (st === "COMPLETED" || st === "FAILED") {
+    if (art.length === 0 && result.itemCount !== 0) return "in_lucru";
+    return "gata";
+  }
   if (st) return "in_lucru";
 
   /*

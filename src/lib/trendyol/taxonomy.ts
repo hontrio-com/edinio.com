@@ -15,6 +15,8 @@ import type {
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 
 const TTL_6H = 6 * 60 * 60 * 1000;
+/** Cate pagini de valori acceptam pentru un atribut. La 1000 pe pagina, acopera orice nomenclator real. */
+const MAX_PAGINI_VALORI = 10;
 const TTL_24H = 24 * 60 * 60 * 1000;
 
 /**
@@ -101,9 +103,26 @@ export async function getCategoryAttributeValuesCached(auth: TrendyolAuth, categ
   const key = `${cheiePublica(auth)}:${categoryId}:${attributeId}`;
   const hit = valuesCache.get(key);
   if (hit && hit.exp > Date.now()) return hit.data;
-  const res = await getCategoryAttributeValues(auth, categoryId, attributeId);
-  if (isTrendyolError(res)) return null;
-  const data = res.data?.content ?? [];
+  /*
+   * ⚠ Se citesc TOATE paginile, nu doar prima.
+   *
+   * Serviciul da cel mult 1000 de valori pe pagina. Un atribut cu mai multe —
+   * „Model", „Culoare" pe categorii mari — si-ar fi pierdut restul: valorile
+   * invizibile in editor, iar comerciantul nu poate alege ceea ce nu vede.
+   * Rezultatul ar fi o listare refuzata pentru „atribut obligatoriu lipsa",
+   * fara nicio cale de rezolvare din interfata.
+   */
+  const data: { attributeValueId: number; attributeValue: string }[] = [];
+  for (let page = 0; page < MAX_PAGINI_VALORI; page++) {
+    const res = await getCategoryAttributeValues(auth, categoryId, attributeId, page, 1000);
+    if (isTrendyolError(res)) return page === 0 ? null : data;
+    const bucata = res.data?.content ?? [];
+    data.push(...bucata);
+    // Ultima pagina: fie a venit mai putin decat plinul, fie am epuizat totalul.
+    if (bucata.length < 1000) break;
+    const total = Number(res.data?.totalElements ?? 0);
+    if (total > 0 && data.length >= total) break;
+  }
   valuesCache.set(key, { data, exp: Date.now() + TTL_6H });
   return data;
 }

@@ -3635,6 +3635,7 @@ export type Database = {
           product_id: string | null
           product_main_id: string
           rejection_reasons: Json
+          sgr_units: number | null
           status: string
           ty_content_id: number | null
           updated_at: string
@@ -3658,6 +3659,7 @@ export type Database = {
           product_id?: string | null
           product_main_id: string
           rejection_reasons?: Json
+          sgr_units?: number | null
           status?: string
           ty_content_id?: number | null
           updated_at?: string
@@ -3681,6 +3683,7 @@ export type Database = {
           product_id?: string | null
           product_main_id?: string
           rejection_reasons?: Json
+          sgr_units?: number | null
           status?: string
           ty_content_id?: number | null
           updated_at?: string

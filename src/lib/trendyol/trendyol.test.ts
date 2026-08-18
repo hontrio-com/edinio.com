@@ -12,7 +12,10 @@ import {
 import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
 import { edinioStatusForTrendyol } from "./webhooks";
 import { traduMesajTrendyol, mesajDupaStatus } from "./errors";
-import { coteTvaVitrina, curieriVitrina, esteAdresaDe, infoVitrina, tvaImplicitVitrina } from "./types";
+import {
+  coteTvaVitrina, curieriVitrina, esteAdresaDe, infoVitrina, necesitaSgr, pretSgr,
+  TRENDYOL_CATEGORII_SGR, tvaImplicitVitrina,
+} from "./types";
 import type { TrendyolConfig } from "./types";
 
 /**
@@ -695,4 +698,73 @@ test("un lot „COMPLETED” fara articole raportate NU e terminat", () => {
   assert.equal(stareLot({ status: "COMPLETED", itemCount: 1, items: [{ status: "SUCCESS" }] }), "gata");
   // Un lot care chiar n-are articole de raportat nu trebuie sa astepte degeaba.
   assert.equal(stareLot({ status: "COMPLETED", itemCount: 0, items: [] }), "gata");
+});
+
+// ── SGR (garantia de ambalaj, obligatorie in Romania) ─────────────────────────
+test("SGR se cere doar pe RO si doar pe categoriile de bauturi si uleiuri", () => {
+  // Transcrise una cate una din tabelul lor: 38 de categorii, nu un interval.
+  assert.equal(TRENDYOL_CATEGORII_SGR.size, 38);
+  assert.equal(necesitaSgr(5654, "RO"), true);    // bere
+  assert.equal(necesitaSgr(1420, "RO"), true);    // apa
+  assert.equal(necesitaSgr(1439, "RO"), true);    // uleiuri de gatit
+  // Categoria reala a comerciantului (genti) NU cere SGR.
+  assert.equal(necesitaSgr(971, "RO"), false);
+  // „SGR is valid only for the listings in Romania" — pe alta vitrina, niciodata.
+  assert.equal(necesitaSgr(5654, "BG"), false);
+  assert.equal(necesitaSgr(5654, undefined), false);
+  assert.equal(necesitaSgr(null, "RO"), false);
+});
+
+test("garantia SGR se calculeaza pe AMBALAJ, nu pe produs", () => {
+  // Un bax de sase doze inseamna 3 lei, nu 0,50.
+  assert.equal(pretSgr(6), 3);
+  assert.equal(pretSgr(1), 0.5);
+  // Lipsa, zero sau negativ inseamna o singura unitate — nu zero garantie.
+  assert.equal(pretSgr(null), 0.5);
+  assert.equal(pretSgr(0), 0.5);
+  assert.equal(pretSgr(-3), 0.5);
+});
+
+test("sgrPrice pleaca in payload doar cand categoria il cere", () => {
+  const faraSgr = itemuri({ storefront: "RO" })[0] as unknown as Record<string, unknown>;
+  assert.equal(faraSgr.sgrPrice, undefined);
+
+  const cuSgr = buildTrendyolItems({
+    config: { storefront: "RO" },
+    product: produs,
+    listing: { ...listing, category_id: 5654, sgr_units: 6 },
+    variants: [varianta],
+  });
+  if ("error" in cuSgr) throw new Error(cuSgr.error);
+  assert.equal(cuSgr.items[0].sgrPrice, 3);
+});
+
+// ── Cross Country ─────────────────────────────────────────────────────────────
+test("un vanzator ROMAN pastreaza cotele romanesti pe GR si BG", () => {
+  /*
+   * Documentat: sub Cross Country, un vanzator cu originea in Romania poate
+   * folosi si cotele RO (11 si 21) pe vitrinele de destinatie. Un tabel fix
+   * „GR ⇒ {0,6,13,24}" ar respinge cote perfect legale, iar `tvaPentruVitrina`
+   * le-ar „corecta" tacit — produsul s-ar lista cu TVA gresit si s-ar vinde asa.
+   */
+  const gr = coteTvaVitrina("GR", "RO");
+  assert.equal(gr.includes(21), true);
+  assert.equal(gr.includes(11), true);
+  assert.equal(gr.includes(24), true, "cotele locale raman valabile");
+  // 21 e legal pentru el, deci nu se mai muta la 24.
+  assert.equal(tvaPentruVitrina({ storefront: "GR", origine: "RO" }, 21), 21);
+
+  /*
+   * ⚠ Fara origine DECLARATA, vitrina isi pastreaza strict cotele ei.
+   *
+   * Presupunand „RO" pentru oricine, un comerciant cu cont inregistrat in Grecia
+   * ar fi vazut ca valide cote pe care Trendyol i le respinge — o largire a
+   * validarii bazata pe o presupunere despre altcineva.
+   */
+  assert.deepEqual(coteTvaVitrina("GR"), [0, 6, 13, 24]);
+  assert.deepEqual(coteTvaVitrina("GR", undefined), [0, 6, 13, 24]);
+  assert.equal(tvaPentruVitrina({ storefront: "GR" }, 21), 24, "fara origine, 21 nu e legal pe GR");
+  assert.deepEqual(coteTvaVitrina("GR", "DE"), [0, 6, 13, 24]);
+  // Si nu se aplica pe vitrine care nu sunt destinatii Cross Country.
+  assert.deepEqual(coteTvaVitrina("DE", "RO"), [0, 7, 19]);
 });

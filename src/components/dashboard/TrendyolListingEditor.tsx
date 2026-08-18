@@ -12,7 +12,7 @@ import {
 import { SelectCautare } from "@/components/dashboard/SelectCautare";
 import { deosebesteAtribut, numeRepetate } from "@/lib/trendyol/atribute-obligatorii";
 import type { TrendyolBrand, TrendyolCategoryAttribute, TrendyolProductAttribute, TrendyolStoreFront } from "@/lib/trendyol/types";
-import { coteTvaVitrina, infoVitrina, tvaImplicitVitrina } from "@/lib/trendyol/types";
+import { coteTvaVitrina, infoVitrina, necesitaSgr, pretSgr, tvaImplicitVitrina } from "@/lib/trendyol/types";
 
 type AttrSel = { valueId?: number; custom?: string };
 type AttrValue = { attributeValueId: number; attributeValue: string };
@@ -25,9 +25,11 @@ function toProductAttribute(attributeId: number, sel: AttrSel | undefined): Tren
 }
 
 export function TrendyolListingEditor({
-  businessId, productId, storefront, onClose, onSaved,
+  businessId, productId, storefront, origine, onClose, onSaved,
 }: {
   businessId: string; productId: string; storefront: TrendyolStoreFront;
+  /** Tara de origine a vanzatorului, cand si-a declarat-o. Vezi Cross Country. */
+  origine?: TrendyolStoreFront;
   onClose: () => void;
   /** Lista de deasupra isi reimprospateaza randul, ca starea sa nu ramana veche. */
   onSaved?: () => void | Promise<void>;
@@ -35,7 +37,12 @@ export function TrendyolListingEditor({
   // Moneda si cotele de TVA nu sunt alegerea noastra: le impune vitrina pe care
   // vinde comerciantul. Preturile trimise sunt citite in moneda ei.
   const moneda = infoVitrina(storefront).moneda;
-  const coteTva = coteTvaVitrina(storefront);
+  /*
+   * Cotele de TVA ale vitrinei, largite cu cele ale tarii de ORIGINE doar cand
+   * comerciantul si-a declarat-o (Cross Country). Presupusa, ar fi aratat drept
+   * valide cote pe care Trendyol le respinge.
+   */
+  const coteTva = coteTvaVitrina(storefront, origine);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
@@ -49,6 +56,7 @@ export function TrendyolListingEditor({
   const [brandResults, setBrandResults] = useState<TrendyolBrand[]>([]);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [dimWeight, setDimWeight] = useState("");
+  const [sgrUnits, setSgrUnits] = useState("");
   const [listingAttrSel, setListingAttrSel] = useState<Record<number, AttrSel>>({});
   // Ce a fost completat automat, ca sa i se spuna comerciantului de unde vine.
   const [completate, setCompletate] = useState<Record<number, "firma" | "produs">>({});
@@ -76,6 +84,7 @@ export function TrendyolListingEditor({
         setListingAttrSel(sel);
       }
       setDimWeight(ed.listing?.dimensional_weight != null ? String(ed.listing.dimensional_weight) : "");
+      setSgrUnits(ed.listing?.sgr_units != null ? String(ed.listing.sgr_units) : "");
       setVariants(ed.variants);
       /*
        * Atributele DE VARIANTA se reincarca in stare.
@@ -145,6 +154,14 @@ export function TrendyolListingEditor({
     return () => { alive = false; };
   }, [businessId, categoryId]);
 
+  /*
+   * Atributele categoriei, despartite dupa unde se completeaza: cele de PRODUS
+   * o data, cele `varianter` (marime, culoare) pe fiecare varianta. Stau aici,
+   * inaintea completarii automate, fiindca ea trebuie sa stie unde sa scrie.
+   */
+  const productAttrs = useMemo(() => groups.filter((g) => !g.varianter), [groups]);
+  const varianterAttrs = useMemo(() => groups.filter((g) => g.varianter), [groups]);
+
   /**
    * Completeaza atributele goale.
    *
@@ -159,18 +176,89 @@ export function TrendyolListingEditor({
       if ("error" in res) { if (!doarGoale) toast.error(res.error); return; }
       if (res.sugestii.length === 0) { if (!doarGoale) toast.info("Nu am găsit ce completa automat."); return; }
 
+      /*
+       * Numaratoarea se face PUR, inaintea scrierii in stare.
+       *
+       * Pusa in updater-ul lui `setState`, React il poate evalua mai tarziu (sau
+       * de doua ori, in modul strict), iar `puse`/`propuse` se citeau sincron
+       * imediat dupa — deci mesajul putea sa nu apara deloc, sau sa numere dublu.
+       */
+      /*
+       * ⚠ Atributele `varianter` (marimea, culoarea) NU se pun aici.
+       *
+       * Ele se completeaza PE FIECARE VARIANTA, mai jos in formular. Scrise in
+       * `listingAttrSel`, valoarea nu se randeaza nicaieri, e taiata la salvare
+       * si nu satisface verificarea de obligatorii — deci comerciantul primea
+       * „1 câmp completat", nu vedea nicio schimbare, iar butonul de trimitere
+       * ramanea blocat pe acelasi atribut. Un blocaj fara iesire.
+       */
+      const idVarianter = new Set(varianterAttrs.map((g) => g.attribute.id));
+      const deVarianta = res.sugestii.filter((s) => idVarianter.has(s.attributeId));
+      const deProdus = res.sugestii.filter((s) => !idVarianter.has(s.attributeId));
+
       let puse = 0;
+      let propuse = 0;
+      for (const s of deProdus) {
+        const acum = listingAttrSel[s.attributeId];
+        const gol = !acum || (!acum.valueId && !acum.custom?.trim());
+        if (doarGoale && !gol) continue;
+        if (s.slaba && doarGoale) { propuse++; continue; }
+        puse++;
+      }
+
       setListingAttrSel((prev) => {
         const next = { ...prev };
-        for (const s of res.sugestii) {
+        for (const s of deProdus) {
           const acum = next[s.attributeId];
           const gol = !acum || (!acum.valueId && !acum.custom?.trim());
           if (doarGoale && !gol) continue;
+          /*
+           * Deducțiile slabe pe atribute OBLIGATORII nu se aplică singure.
+           *
+           * O potrivire unică tot poate fi greșită — „Negru" apare în „husă
+           * neagră pentru telefon alb" — iar un obligatoriu greșit nu e respins
+           * de Trendyol: se publică, se vinde, și rămâne pe fișa produsului. La
+           * încărcare doar le propunem; la apăsarea explicită pe „Completează
+           * automat", comerciantul a cerut-o, deci se aplică.
+           */
+          if (s.slaba && doarGoale) continue;
           next[s.attributeId] = { valueId: s.attributeValueId, custom: s.customAttributeValue };
-          puse++;
         }
         return next;
       });
+
+      /*
+       * Sugestiile de VARIANTA merg pe fiecare varianta activa, acolo unde chiar
+       * exista campul si de unde chiar se salveaza.
+       */
+      if (deVarianta.length > 0) {
+        setVariantAttrSel((prev) => {
+          const next = { ...prev };
+          for (const v of variants) {
+            if (!v.enabled) continue;
+            const alVariantei = { ...(next[v.key] ?? {}) };
+            for (const s of deVarianta) {
+              const acum = alVariantei[s.attributeId];
+              const gol = !acum || (!acum.valueId && !acum.custom?.trim());
+              if (doarGoale && !gol) continue;
+              if (s.slaba && doarGoale) continue;
+              alVariantei[s.attributeId] = { valueId: s.attributeValueId, custom: s.customAttributeValue };
+            }
+            next[v.key] = alVariantei;
+          }
+          return next;
+        });
+        for (const s of deVarianta) {
+          if (s.slaba && doarGoale) propuse++; else puse++;
+        }
+      }
+      if (doarGoale && propuse > 0) {
+        toast.info(
+          propuse === 1
+            ? "Un atribut obligatoriu are o valoare probabilă, dar nesigură. Apasă „Completează automat” ca s-o pun, sau alege-o tu."
+            : `${propuse} atribute obligatorii au valori probabile, dar nesigure. Apasă „Completează automat” ca să le pun, sau alege-le tu.`,
+        );
+      }
       setCompletate((prev) => {
         const next = { ...prev };
         for (const s of res.sugestii) next[s.attributeId] = s.sursa;
@@ -190,9 +278,6 @@ export function TrendyolListingEditor({
     completeazaAutomat(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, groups.length]);
-
-  const productAttrs = useMemo(() => groups.filter((g) => !g.varianter), [groups]);
-  const varianterAttrs = useMemo(() => groups.filter((g) => g.varianter), [groups]);
 
   /*
    * Eticheta unui atribut, deosebita cand categoria cere DOUA cu acelasi nume.
@@ -259,6 +344,10 @@ export function TrendyolListingEditor({
       attributes: listingAttributes,
       save_as_category_defaults: salveazaImplicite,
       dimensional_weight: dimWeight.trim() === "" ? null : Number(dimWeight),
+      // Numar de AMBALAJE, deci intreg si cel putin unu. „1.5" (litri, nu
+      // ambalaje) ar fi picat altfel abia la baza de date, cu un mesaj care nu
+      // numeste campul, dupa ce omul completase tot formularul.
+      sgr_units: sgrUnits.trim() === "" ? null : Math.max(1, Math.floor(Number(sgrUnits)) || 1),
       // Curierul nu face parte din produs pe marketplace-ul international; se
       // declara la expediere, o data cu AWB-ul.
       cargo_company_id: null,
@@ -305,6 +394,15 @@ export function TrendyolListingEditor({
      */
     if (!atributeIncarcate && eroareAtribute) {
       toast.error("Atributele categoriei nu s-au încărcat. Reîncarcă pagina — altfel salvarea ar șterge ce ai completat.");
+      return;
+    }
+    /*
+     * Garantia SGR e obligatorie prin lege, dar nu e un atribut de categorie —
+     * deci `obligatoriiLipsa` n-o vede. Lasat gol, campul trimitea 0,50 lei
+     * pentru orice bax, fara nicio avertizare.
+     */
+    if (then === "sync" && necesitaSgr(categoryId, storefront) && sgrUnits.trim() === "") {
+      toast.error("Completează numărul de ambalaje pentru garanția SGR. Categoria o cere prin lege.");
       return;
     }
     if (then === "sync" && obligatoriiLipsa.length > 0) {
@@ -405,6 +503,25 @@ export function TrendyolListingEditor({
           <input type="number" step="0.1" min="0" value={dimWeight} onChange={(e) => setDimWeight(e.target.value)}
             placeholder="auto din greutatea produsului" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
         </div>
+        {/*
+          Garanția SGR: obligatorie prin lege în România, dar DOAR pe băuturi și
+          uleiuri. Câmpul apare numai când categoria chiar o cere — altfel ar fi
+          o întrebare fără sens la fiecare produs.
+        */}
+        {necesitaSgr(categoryId, storefront) && (
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">
+              Ambalaje pentru garanția SGR *
+            </label>
+            <input type="number" step="1" min="1" value={sgrUnits} onChange={(e) => setSgrUnits(e.target.value)}
+              placeholder="1" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Categoria intră sub Sistemul Garanție-Returnare. Se trimit{" "}
+              <strong>{pretSgr(sgrUnits.trim() === "" ? 1 : Number(sgrUnits)).toFixed(2)} lei</strong>{" "}
+              garanție. Un bax de 6 doze înseamnă 6 ambalaje, nu unul.
+            </p>
+          </div>
+        )}
       </div>
 
       {productAttrs.length > 0 && (

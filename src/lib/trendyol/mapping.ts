@@ -12,7 +12,7 @@
 // vitrina) si `cargoCompanyId` (curierul se declara la expediere).
 
 import type { TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
-import { coteTvaVitrina, infoVitrina, tvaImplicitVitrina } from "./types";
+import { coteTvaVitrina, infoVitrina, necesitaSgr, pretSgr, tvaImplicitVitrina } from "./types";
 import {
   comboStock, combinatiiActiveUnice, comboUnitPrice, parseVariants, type VariantCombo,
 } from "@/lib/storefront/variants";
@@ -52,6 +52,8 @@ export interface MappableProduct {
 export interface TrendyolListingEnrichment {
   brand_id: number | null;
   category_id: number | null;
+  /** Cate ambalaje are produsul, pentru garantia SGR. `null` = unul singur. */
+  sgr_units?: number | null;
   attributes: TrendyolProductAttribute[]; // product-level (non-varianter)
   dimensional_weight: number | null;
   cargo_company_id: number | null;
@@ -141,7 +143,19 @@ export function verificaBarcode(barcode: string): string | null {
  * lot intreg la refuz.
  */
 export function tvaPentruVitrina(config: TrendyolConfig, vatRate: number | null): number {
-  const permise = coteTvaVitrina(config.storefront);
+  /*
+   * Originea conteaza, dar NU se presupune.
+   *
+   * Un vanzator roman extins pe GR/BG poate folosi si cotele romanesti (11, 21):
+   * fara asta, un 21 legal ar fi „corectat" tacit la 24. Dar presupunand „RO"
+   * pentru oricine, un comerciant cu cont inregistrat in Grecia ar fi primit ca
+   * valide niste cote pe care Trendyol i le respinge — o largire a validarii
+   * bazata pe o presupunere despre altcineva.
+   *
+   * Fara origine declarata, se aplica strict cotele vitrinei: comportamentul de
+   * dinainte, care e si cel corect pentru un vanzator neextins.
+   */
+  const permise = coteTvaVitrina(config.storefront, config.origine);
   if (vatRate == null) return tvaImplicitVitrina(config.storefront);
   if (permise.includes(vatRate)) return vatRate;
   return permise.reduce((best, c) => (Math.abs(c - vatRate) < Math.abs(best - vatRate) ? c : best), permise[0]);
@@ -522,6 +536,16 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
       images: images.map((url) => ({ url })),
       attributes: [...productLevelAttrs, ...(Array.isArray(v.attributes) ? v.attributes : [])],
     };
+    /*
+     * Garantia SGR, obligatorie prin lege in Romania.
+     *
+     * Se trimite DOAR pe vitrina RO si doar pe categoriile de bauturi si uleiuri
+     * — pe restul, campul n-are ce cauta. Se calculeaza pe unitate de ambalaj,
+     * deci un bax de sase doze inseamna 3 lei, nu 0,50.
+     */
+    if (necesitaSgr(categoryId, config.storefront)) {
+      item.sgrPrice = pretSgr(listing.sgr_units);
+    }
     // Adresele sunt optionale: le trimitem doar daca vanzatorul a ales explicit
     // altele decat implicitele contului sau.
     if (config.shipment_address_id) item.shipmentAddressId = config.shipment_address_id;

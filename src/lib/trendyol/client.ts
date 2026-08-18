@@ -323,6 +323,26 @@ export function updateApprovedContent(
     auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/content-bulk-update`, { items });
 }
 
+/**
+ * Actualizeaza campurile DE VARIANTA ale unui produs aprobat.
+ *
+ * ⚠ Ruta asta e singura prin care se pot schimba `vatRate`, `stockCode`,
+ * `dimensionalWeight` si — cel mai important pentru Romania — **`sgrPrice`** pe
+ * un produs deja aprobat. `content-bulk-update` nu le are in schema, iar
+ * `createProducts` refuza un barcode existent: fara ea, garantia SGR ramane
+ * inghetata la valoarea de la prima listare, pentru totdeauna.
+ *
+ * Cheia e `barcode`, si actualizarea e PARTIALA: se trimite doar ce se schimba.
+ * Singurul camp care nu se poate modifica e chiar barcode-ul.
+ */
+export function updateApprovedVariants(
+  auth: TrendyolAuth,
+  items: { barcode: string; sgrPrice?: number; vatRate?: number; stockCode?: string; dimensionalWeight?: number }[],
+) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/variant-bulk-update`, { items });
+}
+
 export function getBatchResult(auth: TrendyolAuth, batchRequestId: string) {
   return call<TrendyolBatchResult<{ product?: { barcode?: string }; barcode?: string }>>(
     auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/batch-requests/${encodeURIComponent(batchRequestId)}`);

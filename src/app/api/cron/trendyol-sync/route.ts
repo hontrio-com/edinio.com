@@ -8,9 +8,9 @@ import {
   reconcileRejections, reconcileStatuses, reconcileInventory, pause,
   type TrendyolQueueItem, type TrendyolSyncContext,
 } from "@/lib/trendyol/sync";
-import { marcajUrmator, pollPackages } from "@/lib/trendyol/orders";
+import { marcajUrmator, pollPackagesToateVitrinele } from "@/lib/trendyol/orders";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
-import type { TrendyolConfig } from "@/lib/trendyol/types";
+import type { TrendyolConfig, TrendyolStoreFront } from "@/lib/trendyol/types";
 
 type Admin = SupabaseClient<Database>;
 
@@ -216,18 +216,45 @@ export async function GET(req: NextRequest) {
   for (const businessId of alegeInRotatie(sellerIds, ORDERS_BIZ)) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
-    const parsed = ctx.config.orders_synced_at ? Date.parse(ctx.config.orders_synced_at) : NaN;
-    const sinceMs = Number.isFinite(parsed) ? parsed - ORDERS_OVERLAP_MS : undefined;
+    /*
+     * Marcajul e PE VITRINA.
+     *
+     * `orders_synced_at` a fost dintotdeauna un singur sir, si ramane asa pentru
+     * vitrina principala — retrocompatibil, deci nimeni nu pierde pozitia la
+     * livrarea asta. Vitrinele de destinatie (Cross Country) isi tin marcajul in
+     * `orders_synced_per_storefront`, ca esecul uneia sa nu opreasca restul si
+     * nici sa nu le sara.
+     */
+    const perVitrina = ctx.config.orders_synced_per_storefront ?? {};
+    const vitrinaPrincipala = ctx.auth.storefront ?? "RO";
+    const marcaje: Partial<Record<TrendyolStoreFront, number>> = {};
+    for (const [v, iso] of Object.entries({ ...perVitrina, [vitrinaPrincipala]: perVitrina[vitrinaPrincipala] ?? ctx.config.orders_synced_at })) {
+      const t = iso ? Date.parse(iso) : NaN;
+      if (Number.isFinite(t)) marcaje[v as TrendyolStoreFront] = t - ORDERS_OVERLAP_MS;
+    }
     const runStart = Date.now();
-    const r = await pollPackages(admin, ctx, sinceMs);
+    // Si vitrinele de destinatie, cand magazinul s-a extins prin Cross Country.
+    const r = await pollPackagesToateVitrinele(admin, ctx, marcaje);
     ingested += r.ingested;
     /*
      * Regula sta in `marcajUrmator`, nu aici, fiindca are trei capcane si toate
-     * trei au fost calcate deja o data. Acolo e si probata.
+     * trei au fost calcate deja o data. Acolo e si probata. Se aplica separat
+     * pentru fiecare vitrina.
      */
-    const marcaj = marcajUrmator(r, { runStartMs: runStart, overlapMs: ORDERS_OVERLAP_MS });
-    if (marcaj != null) {
-      await patchConfig(admin, businessId, { orders_synced_at: new Date(marcaj).toISOString() });
+    const noi: Record<string, string> = { ...perVitrina };
+    let principalNou: string | undefined;
+    for (const rv of r.peVitrina) {
+      const marcaj = marcajUrmator(rv, { runStartMs: runStart, overlapMs: ORDERS_OVERLAP_MS });
+      if (marcaj == null) continue;
+      const iso = new Date(marcaj).toISOString();
+      noi[rv.vitrina] = iso;
+      if (rv.vitrina === vitrinaPrincipala) principalNou = iso;
+    }
+    if (Object.keys(noi).length > 0) {
+      await patchConfig(admin, businessId, {
+        orders_synced_per_storefront: noi,
+        ...(principalNou ? { orders_synced_at: principalNou } : {}),
+      });
     }
     await pause(PACE_MS);
   }

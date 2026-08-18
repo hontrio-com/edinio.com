@@ -8,7 +8,7 @@ import type { Database } from "@/types/database.types";
 import type { TrendyolAuth } from "./client";
 import {
   createProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, getUnapprovedProducts,
-  isTrendyolError, setArchiveState, updateApprovedContent, updatePriceInventory,
+  isTrendyolError, setArchiveState, updateApprovedContent, updateApprovedVariants, updatePriceInventory,
   updateUnapprovedProducts, type TrendyolItemActualizare, type TrendyolMotivRespingere,
 } from "./client";
 import {
@@ -104,6 +104,8 @@ interface ListingRow {
   id: string; product_id: string | null; product_main_id: string; status: string;
   brand_id: number | null; category_id: number | null; attributes: unknown;
   dimensional_weight: number | null; cargo_company_id: number | null;
+  /** Cate ambalaje are produsul, pentru garantia SGR. */
+  sgr_units?: number | null;
   /** Edinio impinge singur stocul si pretul? Fals pe listarile ADOPTATE. */
   auto_inventory?: boolean | null;
   /** Produsul de la Trendyol a fost creat de NOI (lot de creare reusit)? */
@@ -115,14 +117,14 @@ interface ListingRow {
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
 async function getListingByMainId(admin: Db, businessId: string, mainId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units")
     .eq("business_id", businessId).eq("product_main_id", mainId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -134,6 +136,7 @@ function toEnrichment(row: ListingRow): TrendyolListingEnrichment {
     attributes: Array.isArray(row.attributes) ? (row.attributes as TrendyolProductAttribute[]) : [],
     dimensional_weight: row.dimensional_weight,
     cargo_company_id: row.cargo_company_id,
+    sgr_units: row.sgr_units ?? null,
   };
 }
 
@@ -351,6 +354,27 @@ export async function syncProductNow(
         }])
         : await updateUnapprovedProducts(ctx.auth, deActualizat.map(faraStocSiPret)),
     });
+    /*
+     * ⚠ Pe produs APROBAT, ruta de continut NU duce `sgrPrice`.
+     *
+     * Iar `createProducts` refuza un barcode existent. Fara trimiterea de mai
+     * jos, garantia SGR ramanea inghetata la valoarea de la prima listare,
+     * pentru totdeauna: comerciantul isi corecta baxul in editor, vedea „Se
+     * trimit 3,00 lei", primea „Trimis pe Trendyol" — si la ei ramanea 0,50.
+     * Iar daca adauga o marime noua, aceea pleca prin creare CU valoarea
+     * corecta, deci acelasi produs avea doua garantii diferite.
+     *
+     * `variant-bulk-update` e singura ruta care o poate schimba; accepta
+     * actualizare partiala, deci se trimite doar campul.
+     */
+    if (ruta === "actualizare_aprobat") {
+      const cuSgr = deActualizat
+        .filter((i) => typeof i.sgrPrice === "number")
+        .map((i) => ({ barcode: i.barcode, sgrPrice: i.sgrPrice as number }));
+      if (cuSgr.length > 0) {
+        trimiteri.push({ kind: "update", res: await updateApprovedVariants(ctx.auth, cuSgr) });
+      }
+    }
   }
   if (deCreat.length > 0) {
     trimiteri.push({ kind: "product", res: await createProducts(ctx.auth, deCreat) });
@@ -683,7 +707,7 @@ export async function syncProductsBulk(
   const listingIds = pregatite.map((x) => x.listingId);
   const [{ data: randuriListari }, { data: randuriVariante }] = await Promise.all([
     admin.from("trendyol_listings")
-      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id")
+      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units")
       .eq("business_id", ctx.businessId).in("id", listingIds),
     admin.from("trendyol_variants")
       .select("listing_id, barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
@@ -1016,7 +1040,17 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
     .limit(limit);
   const batches = (data ?? []) as BatchRow[];
 
-  for (const b of batches) {
+  for (const [i, b] of batches.entries()) {
+    /*
+     * Ritm intre interogari.
+     *
+     * Douazeci de cereri una dupa alta, fara pauza, pe fiecare magazin: la
+     * doisprezece magazine inseamna 240 de cereri intr-o rulare care are un
+     * minut la dispozitie. Nu depaseste plafonul lor (masurat: 6,5% din cota de
+     * citire), dar suprapune rularile intre ele, iar doua rulari suprapuse
+     * reinteroga aceleasi loturi. O pauza scurta le desparte.
+     */
+    if (i > 0) await pause(120);
     const res = await getBatchResult(ctx.auth, b.batch_request_id);
     const now = new Date().toISOString();
 

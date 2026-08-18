@@ -60,9 +60,28 @@ export function infoVitrina(code: TrendyolStoreFront | undefined): TrendyolStore
   return TRENDYOL_STOREFRONTS.find((s) => s.code === code) ?? TRENDYOL_STOREFRONTS[0];
 }
 
-/** Cotele de TVA acceptate de o vitrina. Trimis altceva, produsul e respins. */
-export function coteTvaVitrina(code: TrendyolStoreFront | undefined): number[] {
-  return infoVitrina(code).tva;
+/**
+ * Cotele de TVA acceptate de o vitrina.
+ *
+ * ⚠ `origine` NU e un parametru decorativ. Sub Cross Country, un vanzator cu
+ * originea in Romania care listeaza pe GR sau BG poate folosi si cotele
+ * ROMANESTI (11 si 21), pe langa cele locale — documentatia lor o spune explicit.
+ * Un tabel fix „GR ⇒ {0,6,13,24}" ar respinge cote perfect legale, iar
+ * `tvaPentruVitrina` le-ar „corecta" tacit la altceva: produsul s-ar lista cu
+ * TVA gresit si s-ar vinde asa.
+ *
+ * Romania e SINGURA tara-sursa de Cross Country din tot v3.0, deci cazul asta e
+ * exact al comerciantilor nostri.
+ */
+export function coteTvaVitrina(
+  code: TrendyolStoreFront | undefined,
+  origine?: TrendyolStoreFront | undefined,
+): number[] {
+  const locale = infoVitrina(code).tva;
+  const esteCrossCountryRo = origine === "RO" && (code === "GR" || code === "BG");
+  if (!esteCrossCountryRo) return locale;
+  const aleOriginii = infoVitrina("RO").tva;
+  return [...new Set([...locale, ...aleOriginii])].sort((a, b) => a - b);
 }
 
 /**
@@ -149,6 +168,22 @@ export interface TrendyolConfig {
   environment?: TrendyolEnvironment;
   /** Vitrina/tara: antet `storeFrontCode`, obligatoriu pe marketplace-ul international. */
   storefront?: TrendyolStoreFront;
+  /**
+   * Vitrinele de DESTINATIE, cand comerciantul si-a extins prin Cross Country.
+   *
+   * ⚠ Sub Cross Country, antetul difera pe servicii: produsele se citesc cu
+   * vitrina de ORIGINE (RO), dar comenzile cu cea de DESTINATIE (BG/GR). Un cod
+   * care tine o singura vitrina per conexiune citeste produsele corect si NU
+   * vede niciodata comenzile din tarile in care s-a extins.
+   *
+   * Gol pentru comerciantii neextinsi, adica pentru toti azi.
+   */
+  cross_country_storefronts?: TrendyolStoreFront[];
+  /**
+   * Tara de ORIGINE a vanzatorului. Conteaza doar sub Cross Country, unde
+   * decide ce cote de TVA sunt legale pe vitrina de destinatie.
+   */
+  origine?: TrendyolStoreFront;
   user_agent_company?: string;      // User-Agent "{sellerId} - {company}" (default SelfIntegration)
   seller_name?: string;
   // Catalog defaults resolved from Trendyol.
@@ -177,6 +212,16 @@ export interface TrendyolConfig {
   auto_publish?: boolean;
   last_sync_at?: string;
   orders_synced_at?: string;
+  /**
+   * Marcajul comenzilor, PE FIECARE vitrina.
+   *
+   * Cu un singur marcaj, o vitrina cazuta le tine pe celelalte pe loc, iar una
+   * care merge inainte o poate SARI pe cea cazuta — si atunci comenzile ei se
+   * pierd definitiv dupa ce ies din fereastra de doua saptamani.
+   * `orders_synced_at` ramane pentru vitrina principala, ca nimeni sa nu-si
+   * piarda pozitia la livrarea care a introdus campul asta.
+   */
+  orders_synced_per_storefront?: Partial<Record<TrendyolStoreFront, string>>;
   needs_reconnect?: boolean;
   /**
    * Pagina de la care continua reconcilierea aprobarilor.
@@ -294,6 +339,82 @@ export interface TrendyolProductItem {
   deliveryDuration?: number;
   shipmentAddressId?: number;
   returningAddressId?: number;
+  /**
+   * Garantia SGR, in moneda vitrinei.
+   *
+   * Obligatorie in ROMANIA, si numai acolo, pe categoriile de bauturi si uleiuri.
+   * Vezi `necesitaSgr` si `pretSgr`.
+   */
+  sgrPrice?: number;
+}
+
+// ── SGR (Sistemul Garantie-Returnare) ─────────────────────────────────────────
+/*
+ * Garantia de ambalaj, obligatorie prin lege in Romania.
+ *
+ * ⚠ Se aplica DOAR pe vitrina RO — documentatia lor o spune raspicat: „SGR is
+ * valid only for the listings in Romania" — si doar pe categoriile de mai jos,
+ * transcrise una cate una din tabelul lor (38, nu un interval: `5643-5658` din
+ * rezumat ascunde randuri, iar o categorie lipsa inseamna o listare refuzata).
+ *
+ * Valoarea e 0,50 lei pe UNITATE de ambalaj: un bax de sase doze inseamna 3 lei,
+ * nu 0,50. De aceea numarul de unitati se poate scrie pe listare.
+ */
+export const TRENDYOL_CATEGORII_SGR: ReadonlySet<number> = new Set([
+  1415, // Bauturi energizante
+  1417, // Pudra pentru bauturi
+  1419, // Sucuri
+  1420, // Apa
+  1421, // Bors / suc de sfecla
+  1422, // Lapte UHT
+  1439, // Uleiuri de gatit
+  2401, // Cafea rece
+  2404, // Ayran / lapte batut
+  2405, // Salep
+  2728, // Ceai rece
+  2891, // Cola
+  2892, // Bauturi racoritoare
+  2893, // Bautura din malt
+  2894, // Sifon si apa minerala
+  2900, // Limonada
+  3541, // Ulei
+  4089, // Gheata
+  4091, // Boza
+  5067, // Chefir
+  5068, // Bauturi functionale
+  5069, // Ciocolata calda
+  5643, // Vin
+  5644, // Sampanie
+  5645, // Whisky
+  5646, // Vodca
+  5647, // Coniac
+  5648, // Gin
+  5649, // Rom
+  5650, // Lichior
+  5651, // Tequila
+  5652, // Aperitive
+  5653, // Bauturi traditionale
+  5654, // Bere
+  5655, // Cocteiluri
+  5656, // Vinars
+  5657, // Vermut
+  5658, // Alte bauturi alcoolice
+]);
+
+/** Garantia pentru o unitate de ambalaj, in lei. */
+export const SGR_PE_UNITATE = 0.5;
+
+/** Categoria asta cere SGR pe vitrina asta? */
+export function necesitaSgr(categoryId: number | null | undefined, vitrina: TrendyolStoreFront | undefined): boolean {
+  if (vitrina !== "RO") return false;
+  return typeof categoryId === "number" && TRENDYOL_CATEGORII_SGR.has(categoryId);
+}
+
+/** Garantia de trimis, pentru un produs cu `unitati` ambalaje. */
+export function pretSgr(unitati: number | null | undefined): number {
+  const n = Number(unitati);
+  const u = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+  return Math.round(u * SGR_PE_UNITATE * 100) / 100;
 }
 
 // ── Orders (shipment packages we RECEIVE) ─────────────────────────────────────

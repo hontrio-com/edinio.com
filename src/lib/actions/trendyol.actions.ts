@@ -573,6 +573,7 @@ export interface TrendyolEditorData {
   listing: {
     brand_id: number | null; category_id: number | null; attributes: TrendyolProductAttribute[];
     dimensional_weight: number | null; cargo_company_id: number | null; status: string;
+    sgr_units: number | null;
   } | null;
   variants: TrendyolEditorVariant[];
 }
@@ -595,7 +596,7 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
 
   const { data: listing } = await g.supabase
     .from("trendyol_listings")
-    .select("id, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, status")
+    .select("id, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, status, sgr_units")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
 
   let stored: StoredVariantRow[] = [];
@@ -709,6 +710,7 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
       dimensional_weight: (l.dimensional_weight as number | null) ?? null,
       cargo_company_id: (l.cargo_company_id as number | null) ?? null,
       status: (l.status as string) ?? "draft",
+      sgr_units: (l.sgr_units as number | null) ?? null,
     } : null,
     variants,
   };
@@ -723,6 +725,8 @@ export interface TrendyolListingInput {
   brand_name?: string | null;
   dimensional_weight: number | null;
   cargo_company_id: number | null;
+  /** Cate ambalaje are produsul, pentru garantia SGR (doar RO, doar bauturi si uleiuri). */
+  sgr_units?: number | null;
   variants: {
     barcode: string; stock_code: string | null; attributes: TrendyolProductAttribute[];
     /**
@@ -757,7 +761,8 @@ export async function saveTrendyolListing(
       business_id: businessId, product_id: productId, product_main_id: productId,
       brand_id: input.brand_id, category_id: input.category_id,
       attributes: (input.attributes as unknown) as never,
-      dimensional_weight: input.dimensional_weight, cargo_company_id: input.cargo_company_id, updated_at: now,
+      dimensional_weight: input.dimensional_weight, cargo_company_id: input.cargo_company_id,
+      sgr_units: input.sgr_units ?? null, updated_at: now,
     } as never,
     { onConflict: "business_id,product_main_id" },
   ).select("id").single();

@@ -15,7 +15,7 @@ import type { Database } from "@/types/database.types";
 import type { TrendyolSyncContext } from "./sync";
 import { getOrders, isTrendyolError } from "./client";
 import { edinioStatusForTrendyol } from "./webhooks";
-import type { TrendyolShipmentPackage } from "./types";
+import type { TrendyolShipmentPackage, TrendyolStoreFront } from "./types";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 // Regula marcajului e comuna cu About You, deci sta in `lib/marketplace`.
 export { marcajUrmator } from "@/lib/marketplace/marcaj";
@@ -444,6 +444,59 @@ export function fereastraComenzi(sinceMs: number | undefined, acum = Date.now())
 /** Sursa paginilor, injectabila ca sa se poata proba bucla fara reteaua Trendyol. */
 export type AducePagina = (p: { startDate: number; endDate: number; page: number }) =>
   Promise<{ content: TrendyolShipmentPackage[]; totalPages?: number } | { eroare: true }>;
+
+/**
+ * Comenzile magazinului, de pe TOATE vitrinele pe care vinde.
+ *
+ * ⚠ Sub Cross Country, antetul `storeFrontCode` difera pe servicii: produsele se
+ * citesc cu vitrina de ORIGINE (RO), dar comenzile cu cea de DESTINATIE (BG/GR).
+ * Un cod care tine o singura vitrina per conexiune citeste produsele corect si
+ * NU vede NICIODATA comenzile din tarile in care comerciantul s-a extins —
+ * clientii de acolo comanda, iar magazinul nu afla.
+ *
+ * Romania e singura tara-sursa de Cross Country din tot v3.0, deci exact
+ * comerciantii nostri sunt cazul pentru care exista complicatia asta.
+ *
+ * Lista e goala pentru cei neextinsi, adica pentru toti azi: atunci se citeste o
+ * singura vitrina si nu se schimba nimic.
+ */
+export interface RezultatPeVitrina {
+  vitrina: TrendyolStoreFront;
+  ingested: number;
+  ok: boolean;
+  cursorMs?: number;
+}
+
+export async function pollPackagesToateVitrinele(
+  admin: Db, ctx: TrendyolSyncContext, marcaje: Partial<Record<TrendyolStoreFront, number>>,
+): Promise<{ ingested: number; peVitrina: RezultatPeVitrina[] }> {
+  const origine = (ctx.auth.storefront ?? "RO") as TrendyolStoreFront;
+  const destinatii = (ctx.config.cross_country_storefronts ?? []).filter((v) => v && v !== origine);
+  const vitrine: TrendyolStoreFront[] = [origine, ...destinatii];
+
+  /*
+   * ⚠ MARCAJ PE FIECARE VITRINA, NU UNUL COMUN.
+   *
+   * Cu un singur marcaj, o vitrina care cade ii tine pe loc pe celelalte, iar
+   * una care merge inainte o poate SARI pe cea cazuta. Prima varianta lua
+   * `Math.min`, deci un 429 pe Grecia ar fi facut Romania sa reciteasca la
+   * nesfarsit aceleasi comenzi — sau, cu `max`, comenzile grecesti s-ar fi
+   * pierdut definitiv dupa ce ieseau din fereastra de doua saptamani.
+   *
+   * Fiecare vitrina isi tine pozitia ei, deci un esec pe una nu atinge restul.
+   */
+  const peVitrina: RezultatPeVitrina[] = [];
+  let ingested = 0;
+  for (const vitrina of vitrine) {
+    const ctxVitrina = vitrina === origine
+      ? ctx
+      : { ...ctx, auth: { ...ctx.auth, storefront: vitrina } };
+    const r = await pollPackages(admin, ctxVitrina, marcaje[vitrina]);
+    ingested += r.ingested;
+    peVitrina.push({ vitrina, ingested: r.ingested, ok: r.ok, cursorMs: r.cursorMs });
+  }
+  return { ingested, peVitrina };
+}
 
 export async function pollPackages(
   admin: Db, ctx: TrendyolSyncContext, sinceMs?: number,

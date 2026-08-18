@@ -29,15 +29,16 @@ function catalog(): CatalogEntry[] {
     {
       id: "p1", name: "Tricou", sku: "TRIC-001", external_id: null, gtin: null,
       price: 19.99, stock_quantity: 2, track_inventory: true,
-      variants: [{ id: "m", title: "M", sku: "TRIC-001-M", stock_quantity: 1, price: 19.99 }],
+      variantsEnabled: false,
+      variants: [{ id: "m", title: "M", sku: "TRIC-001-M", stock_quantity: 1, price: 19.99, gtin: null, enabled: true, stockNumeric: true }],
     },
     {
       id: "p2", name: "Cu EAN", sku: "EAN-TEST", external_id: null, gtin: null,
-      price: 5, stock_quantity: 0, track_inventory: true, variants: [],
+      price: 5, stock_quantity: 0, track_inventory: true, variantsEnabled: false, variants: [],
     },
     {
       id: "p3", name: "Zecimal", sku: "ZEC", external_id: null, gtin: null,
-      price: 1, stock_quantity: 1, track_inventory: true, variants: [],
+      price: 1, stock_quantity: 1, track_inventory: true, variantsEnabled: false, variants: [],
     },
   ];
 }

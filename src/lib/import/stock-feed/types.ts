@@ -5,6 +5,18 @@
 // imagini sau categorii. Ca mod separat, codul nu are cum: mai jos nu exista
 // niciun camp in care sa incapa asa ceva.
 
+/**
+ * Dupa atatea esecuri la rand, sursa se dezactiveaza singura.
+ *
+ * Sta AICI, nu in `sources.ts`, fiindca o are nevoie si ecranul, care e
+ * componenta de client. `sources.ts` importa `error-logger`, care importa
+ * clientul de ADMINISTRARE: azi lantul e taiat de tree-shaking (verificat in
+ * `.next/static/chunks`, nu presupus), dar prima folosire a oricarui alt export
+ * din `sources.ts` l-ar trage intreg in pachetul de browser. Acelasi motiv
+ * pentru care exista `tabular-formats.ts` separat de `tabular.ts`.
+ */
+export const MAX_FAILURES = 5;
+
 /** Dupa ce se potriveste un rand din feed cu un produs din catalog. */
 export type StockMatchKey =
   /** SKU-ul produsului sau al unei variante. Prima potrivire castiga. */
@@ -45,7 +57,26 @@ export interface CatalogVariant {
   id: string;
   title: string;
   sku: string | null;
+  /** Cod de bare propriu. 9.991 din 47.314 de combinatii au unul. */
+  gtin: string | null;
+  /**
+   * Combinatia e aprinsa in magazin.
+   *
+   * 8.313 din 47.314 sunt stinse. Declansatorul de suma din Postgres numara DOAR
+   * combinatiile aprinse, deci un stoc scris intr-una stinsa nu se vede nicaieri:
+   * nici pe pagina, nici in totalul produsului.
+   */
+  enabled: boolean;
   stock_quantity: number;
+  /**
+   * Stocul din JSON e un NUMAR curat, dupa masura declansatorului din Postgres
+   * (`^\s*\d+(\.\d+)?\s*$`).
+   *
+   * Declansatorul recalculeaza suma DOAR daca toate combinatiile aprinse trec
+   * proba asta. Unde nu trec, coloana de stoc a produsului ramane a noastra si
+   * o scriere pe produs chiar tine — 351 de produse in productie.
+   */
+  stockNumeric: boolean;
   price: number;
 }
 
@@ -59,6 +90,15 @@ export interface CatalogEntry {
   price: number;
   stock_quantity: number | null;
   track_inventory: boolean;
+  /**
+   * Blocul de variante e pornit pe produs.
+   *
+   * Cand e pornit si are macar o combinatie aprinsa, `products.stock_quantity`
+   * NU mai e al nostru: declansatorul `products_sync_variant_stock` il
+   * recalculeaza ca suma combinatiilor. O scriere pe produs pare ca reuseste si
+   * chiar ramane — pana cand se atinge orice varianta, si atunci dispare.
+   */
+  variantsEnabled: boolean;
   variants: CatalogVariant[];
 }
 
@@ -94,7 +134,19 @@ export interface StockChange {
   inventoryOff: boolean;
 }
 
-export type StockRowProblem = "not_found" | "ambiguous" | "invalid" | "duplicate";
+/**
+ * `ignored` = randul s-a potrivit, dar scrierea n-ar ajunge nicaieri.
+ *
+ * Nu e „negasit" (codul EXISTA in magazin) si nu e „invalid" (valoarea din
+ * fisier e in regula). Fara o categorie a lui, un asemenea rand ar fi fost
+ * numarat ca reusita, iar comerciantul ar fi crezut ca si-a rezolvat stocul.
+ *
+ * ⚠ CUPLAT: cand adaugi un tip aici, adauga-l si in `StockTotals`
+ * (`committer.ts`), in `EMPTY_STOCK_TOTALS`, in cele DOUA obiecte `byProblem`
+ * (`matcher.ts` si `committer.ts`) si in ecranele din `StockFeedWizard.tsx` si
+ * `StockFeedSources.tsx`.
+ */
+export type StockRowProblem = "not_found" | "ambiguous" | "invalid" | "duplicate" | "ignored";
 
 export interface StockRowIssue {
   rowIndex: number;

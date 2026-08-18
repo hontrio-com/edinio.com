@@ -54,16 +54,51 @@ function findVariant(target: Target): CatalogVariant | null {
 }
 
 /**
+ * Cheia, cu zerourile din fata scoase — dar NUMAI daca e numai cifre.
+ *
+ * Excel salveaza o coloana de coduri formatata ca numar pierzand zeroul din
+ * fata: un EAN-8 sau un UPC-12 care incepe cu 0 iese din fisier scurtat cu o
+ * cifra, iar randul raporta „Niciun produs din magazin nu are acest cod" — desi
+ * codul era acolo. Omul deschidea fisierul in Excel, vedea codul intreg pe ecran
+ * (Excel il afiseaza dupa formatul celulei) si nu intelegea reclamatia.
+ *
+ * Se aplica doar la chei numerice: la un SKU ca "007-ABC" zeroul din fata poate
+ * face parte din cod, si nu avem voie sa-l stergem.
+ */
+function cheieFaraZerouri(key: string): string | null {
+  if (!/^\d+$/.test(key)) return null;
+  const fara = key.replace(/^0+/, "");
+  return fara === "" ? null : fara;
+}
+
+/**
  * Indexul de cautare. Cheile care duc la mai multe tinte se tin separat, ca sa
  * poata fi raportate ca ambigue in loc sa fie rezolvate la intamplare.
  */
 class TargetIndex {
   private single = new Map<string, Target>();
-  private ambiguous = new Set<string>();
+  private ambiguous = new Map<string, Target[]>();
+  /** Acelasi index, cheiat fara zerourile din fata. Doar pentru coduri numerice. */
+  private faraZerouri = new Map<string, Target[]>();
 
   add(key: string, target: Target): void {
     if (!key) return;
-    if (this.ambiguous.has(key)) return;
+
+    const dezbracata = cheieFaraZerouri(key);
+    if (dezbracata) {
+      const lista = this.faraZerouri.get(dezbracata) ?? [];
+      lista.push(target);
+      this.faraZerouri.set(dezbracata, lista);
+    }
+
+    const ambigue = this.ambiguous.get(key);
+    if (ambigue) {
+      /* Fara verificarea asta, aceeasi tinta putea intra de mai multe ori si
+         mesajul catre om numara fantome („se potriveste cu: Tricou, Tricou"). */
+      const deja = ambigue.some((t) => t.product.id === target.product.id && t.variantId === target.variantId);
+      if (!deja) ambigue.push(target);
+      return;
+    }
 
     const existing = this.single.get(key);
     if (!existing) {
@@ -73,18 +108,64 @@ class TargetIndex {
     /* Acelasi produs si aceeasi varianta, listate de doua ori: nu e ambiguitate. */
     if (existing.product.id === target.product.id && existing.variantId === target.variantId) return;
 
+    /*
+     * Acelasi PRODUS, dar una e tinta pe produs si cealalta pe o combinatie a
+     * LUI: nu e o ambiguitate adevarata, e acelasi articol descris de doua ori.
+     *
+     * Se alege COMBINATIA, fiindca la un produs cu variante coloana de stoc a
+     * produsului e recalculata de declansatorul din Postgres ca suma
+     * combinatiilor — deci scrierea pe produs oricum n-ar tine.
+     *
+     * Masurat in productie: 382 de produse din 3 magazine au SKU-ul produsului
+     * identic cu al uneia dintre combinatiile lui. Pe cheia IMPLICITA toate
+     * ieseau „ambigue" la fiecare rulare, deci stocul lor nu se actualiza
+     * niciodata, si niciun mesaj nu spunea de ce.
+     */
+    if (existing.product.id === target.product.id) {
+      const peCombinatie = existing.variantId === null ? target : existing;
+      const peProdus = existing.variantId === null ? existing : target;
+      if (peCombinatie.variantId !== null && peProdus.variantId === null) {
+        this.single.set(key, peCombinatie);
+        return;
+      }
+    }
+
     this.single.delete(key);
-    this.ambiguous.add(key);
+    this.ambiguous.set(key, [existing, target]);
   }
 
-  lookup(key: string): { target: Target | null; ambiguous: boolean } {
-    if (this.ambiguous.has(key)) return { target: null, ambiguous: true };
-    return { target: this.single.get(key) ?? null, ambiguous: false };
+  lookup(key: string): { target: Target | null; ambiguous: boolean; coliziuni: Target[] } {
+    const ambigue = this.ambiguous.get(key);
+    if (ambigue) return { target: null, ambiguous: true, coliziuni: ambigue };
+
+    const exact = this.single.get(key);
+    if (exact) return { target: exact, ambiguous: false, coliziuni: [] };
+
+    /* Ultima incercare: codul din fisier a pierdut zerourile din fata. */
+    const dezbracata = cheieFaraZerouri(key);
+    if (dezbracata) {
+      const candidati = this.faraZerouri.get(dezbracata) ?? [];
+      const distincte = new Map(candidati.map((t) => [`${t.product.id}|${t.variantId}`, t]));
+      if (distincte.size === 1) {
+        return { target: [...distincte.values()][0], ambiguous: false, coliziuni: [] };
+      }
+      if (distincte.size > 1) {
+        return { target: null, ambiguous: true, coliziuni: [...distincte.values()] };
+      }
+    }
+
+    return { target: null, ambiguous: false, coliziuni: [] };
   }
 }
 
 function buildIndex(catalog: CatalogEntry[], matchKey: StockMatchKey): TargetIndex {
   const index = new TargetIndex();
+
+  const tintaVarianta = (product: CatalogEntry, variant: CatalogVariant): Target => ({
+    product,
+    variantId: variant.id,
+    variantSku: variant.sku,
+  });
 
   for (const product of catalog) {
     const productTarget: Target = { product, variantId: null, variantSku: null };
@@ -98,13 +179,23 @@ function buildIndex(catalog: CatalogEntry[], matchKey: StockMatchKey): TargetInd
         break;
       case "gtin":
         index.add(norm(product.gtin), productTarget);
+        /*
+         * Codul de bare sta si pe COMBINATII, si acolo sta cel mai des: 9.991 din
+         * 47.314 de combinatii au unul propriu (masurat in productie). Fara
+         * randurile de mai jos, un magazin de imbracaminte cu cod pe fiecare
+         * marime — exact cum cere Google — primea „Niciun produs din magazin nu
+         * are acest cod" pe FIECARE rand, desi codurile erau in baza.
+         */
+        for (const variant of product.variants) {
+          index.add(norm(variant.gtin), tintaVarianta(product, variant));
+        }
         break;
       case "sku":
         index.add(norm(product.sku), productTarget);
         break;
       case "variant_sku":
         for (const variant of product.variants) {
-          index.add(norm(variant.sku), { product, variantId: variant.id, variantSku: variant.sku });
+          index.add(norm(variant.sku), tintaVarianta(product, variant));
         }
         break;
       case "sku_auto":
@@ -112,7 +203,7 @@ function buildIndex(catalog: CatalogEntry[], matchKey: StockMatchKey): TargetInd
            arata si exemplul cerut: TRIC-001 pe produs, TRIC-001-M pe marime. */
         index.add(norm(product.sku), productTarget);
         for (const variant of product.variants) {
-          index.add(norm(variant.sku), { product, variantId: variant.id, variantSku: variant.sku });
+          index.add(norm(variant.sku), tintaVarianta(product, variant));
         }
         break;
     }
@@ -247,14 +338,22 @@ export function buildStockPlan(
       continue;
     }
 
-    const { target, ambiguous } = index.lookup(key);
+    const { target, ambiguous, coliziuni } = index.lookup(key);
 
     if (ambiguous) {
+      /* Numele produselor lovite, ca omul sa le poata cauta. Fara ele, raportul
+         dadea acelasi text pentru toate randurile si nu se putea repara nimic. */
+      const nume = coliziuni
+        .slice(0, 3)
+        .map((t) => (t.variantId ? `${t.product.name} / ${findVariant(t)?.title ?? t.variantId}` : t.product.name));
+      const restul = coliziuni.length > nume.length ? ` si inca ${coliziuni.length - nume.length}` : "";
       issues.push({
         rowIndex: row.rowIndex,
         identifier: row.identifier,
         problem: "ambiguous",
-        detail: "Codul se potriveste cu mai multe produse. Nu putem alege noi care e cel corect.",
+        detail: nume.length
+          ? `Codul se potriveste cu: ${nume.join(", ")}${restul}. Nu putem alege noi care e cel corect.`
+          : "Codul se potriveste cu mai multe produse. Nu putem alege noi care e cel corect.",
       });
       continue;
     }
@@ -269,6 +368,27 @@ export function buildStockPlan(
       continue;
     }
 
+    /*
+     * Combinatia STINSA: se poate scrie in ea, dar nu se vede nicaieri.
+     *
+     * Declansatorul de suma numara doar combinatiile aprinse, iar pagina nu o
+     * arata deloc — deci nici stocul, nici pretul scrise acolo nu exista pentru
+     * niciun cumparator. 8.313 din 47.314 de combinatii sunt stinse in
+     * productie, deci nu e un caz de colt.
+     */
+    if (target.variantId !== null) {
+      const combinatie = findVariant(target);
+      if (combinatie && !combinatie.enabled) {
+        issues.push({
+          rowIndex: row.rowIndex,
+          identifier: row.identifier,
+          problem: "ignored",
+          detail: `Varianta „${combinatie.title}" a produsului „${target.product.name}" e dezactivata, deci stocul ei nu se vede in magazin. Activeaz-o din editarea produsului.`,
+        });
+        continue;
+      }
+    }
+
     const current = currentValues(target);
     const stockTo = row.stock !== null && row.stock !== current.stock ? row.stock : null;
     const priceTo = wantsPrice && row.price !== current.price ? row.price : null;
@@ -276,6 +396,45 @@ export function buildStockPlan(
     if (stockTo === null && priceTo === null) {
       unchanged++;
       continue;
+    }
+
+    /*
+     * STOCUL scris pe coloana produsului, la un produs cu variante aprinse, nu
+     * tine.
+     *
+     * `products_sync_variant_stock` (declansator BEFORE INSERT/UPDATE in
+     * Postgres) recalculeaza `products.stock_quantity` ca SUMA combinatiilor
+     * aprinse. Sare doar cat timp `page_sections->'variants'` ramane neatins —
+     * iar scriitorul chiar asta face, scrie numai coloana — deci valoarea
+     * supravietuieste pana la prima vanzare a oricarei marimi si abia atunci se
+     * intoarce la suma. Intre timp raportul spune „actualizat" si nimeni nu are
+     * cum sa lege lucrurile.
+     *
+     * Se uita DOAR la stoc: PRETUL produsului-parinte e al lui si se scrie
+     * normal, deci un feed care actualizeaza numai preturi merge mai departe.
+     */
+    if (stockTo !== null && target.variantId === null && target.product.variantsEnabled) {
+      const combinatiiAprinse = target.product.variants.filter((v) => v.enabled);
+      const aprinse = combinatiiAprinse.length;
+      /*
+       * Se opreste DOAR cand declansatorul chiar ar suprascrie.
+       *
+       * `sync_product_stock_from_variants` sare cand macar o combinatie aprinsa
+       * n-are stoc numeric — si atunci scrierea pe produs chiar tine. Masurat in
+       * productie: din 3.207 produse cu variante aprinse, 351 sunt in situatia
+       * asta. O regula care nu copiaza conditia declansatorului le-ar fi refuzat
+       * pe toate, degeaba.
+       */
+      const declansatorulSuprascrie = aprinse > 0 && combinatiiAprinse.every((v) => v.stockNumeric);
+      if (declansatorulSuprascrie) {
+        issues.push({
+          rowIndex: row.rowIndex,
+          identifier: row.identifier,
+          problem: "ignored",
+          detail: `„${target.product.name}" are ${aprinse} variante, iar stocul lui e suma lor. Un stoc scris pe produs nu se pastreaza. Trimite cate un rand per varianta si alege potrivirea dupa „SKU varianta".`,
+        });
+        continue;
+      }
     }
 
     const variant = findVariant(target);
@@ -307,7 +466,7 @@ export function summarizePlan(plan: StockPlan) {
   const inventoryOff = plan.changes.filter((c) => c.inventoryOff).length;
   const toZero = plan.changes.filter((c) => c.stockTo === 0).length;
 
-  const byProblem = { not_found: 0, ambiguous: 0, invalid: 0, duplicate: 0 };
+  const byProblem = { not_found: 0, ambiguous: 0, invalid: 0, duplicate: 0, ignored: 0 };
   for (const issue of plan.issues) byProblem[issue.problem]++;
 
   return {

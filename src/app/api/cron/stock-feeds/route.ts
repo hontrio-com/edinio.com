@@ -26,6 +26,16 @@ export const maxDuration = 60;
 
 /** Ne oprim cu cateva secunde inainte de limita, sa apucam sa raspundem. */
 const BUDGET_MS = 50 * 1000;
+/**
+ * Cat din tura are voie sa manance RELUAREA joburilor ramase.
+ *
+ * Primea acelasi termen ca toata tura, fara nicio rezerva: bucla ei macina
+ * bucata dupa bucata pana la capat, iar `dueSources` de dedesubt ramanea pe
+ * uscat — bucla surselor se oprea din primul `if (Date.now() >= deadline)`. Un
+ * singur job mare, reluat la nesfarsit, putea tine toate sursele programate
+ * nerulate ora de ora, iar cronul raspundea `{ ok: true }` de fiecare data.
+ */
+const BUGET_RELUARE_MS = Math.floor(BUDGET_MS * 0.5);
 const MAX_SOURCES = 5;
 const STALE_MS = 2 * 60 * 1000;
 
@@ -43,7 +53,7 @@ export async function GET(req: NextRequest) {
 
   let resumed = 0;
   try {
-    resumed = await resumeStalledStockJobs(admin, deadline, STALE_MS);
+    resumed = await resumeStalledStockJobs(admin, Date.now() + BUGET_RELUARE_MS, STALE_MS);
   } catch (e) {
     logError({
       action: "cron.stock-feeds.resume",
@@ -53,6 +63,9 @@ export async function GET(req: NextRequest) {
 
   let started = 0;
   let failed = 0;
+  /* `false` inseamna „n-am putut citi sursele", care NU e acelasi lucru cu
+     „nicio sursa scadenta". Fara semnul asta, raspunsul era identic. */
+  let sursesCitite = true;
 
   try {
     const sources = await dueSources(admin, new Date(), MAX_SOURCES);
@@ -75,11 +88,13 @@ export async function GET(req: NextRequest) {
       }
     }
   } catch (e) {
+    sursesCitite = false;
     logError({
       action: "cron.stock-feeds",
       message: e instanceof Error ? e.message : "cron failed",
+      severity: "critical",
     });
   }
 
-  return NextResponse.json({ ok: true, resumed, started, failed });
+  return NextResponse.json({ ok: sursesCitite, resumed, started, failed, sursesCitite });
 }

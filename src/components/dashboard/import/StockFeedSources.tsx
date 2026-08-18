@@ -12,10 +12,15 @@ import {
 } from "@/lib/actions/stock-feed-sources.actions";
 import type { FeedFrequency, StockFeedSource } from "@/lib/import/stock-feed/sources";
 import {
-  DEFAULT_STOCK_OPTIONS, MATCH_KEY_LABELS,
+  DEFAULT_STOCK_OPTIONS, MATCH_KEY_LABELS, MAX_FAILURES as MAX_ESECURI,
   type StockFeedMapping, type StockFeedOptions, type StockMatchKey,
 } from "@/lib/import/stock-feed/types";
-import { formatDate } from "@/lib/utils/format";
+/** Data SI ora. La un feed orar, data singura nu spune nimic. */
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("ro-RO", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -74,33 +79,78 @@ export function StockFeedSources({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
   const [saving, setSaving] = useState(false);
+  /* Eroarea probei nu mai traieste doar intr-un toast de 1,8 secunde: dupa ce
+     acesta disparea, ecranul arata exact ca inainte de apasare, deci omul nu mai
+     avea ce citi si nu stia daca a apasat sau nu. */
+  const [probeError, setProbeError] = useState<string | null>(null);
 
   /* Reincarcare dupa o modificare. Pornita mereu dintr-un gest al omului, deci
      nu incalca regula de mai sus. */
   const load = useCallback(async () => {
     const res = await listStockFeedSources();
     if ("error" in res) {
-      setLoadError(res.error);
-      setSources([]);
-    } else {
-      setLoadError(null);
-      setSources(res);
+      /*
+       * Lista de pe ecran NU se goleste.
+       *
+       * Inainte, orice eroare trecatoare la reincarcare (o pierdere de retea
+       * dupa o stergere) inlocuia tot panoul cu un mesaj si stergea lista
+       * impreuna cu butonul „Adauga o sursa" — fara nimic de apasat ca sa
+       * reincerci. Sursele afisate raman cele stiute, iar eroarea se spune
+       * deasupra lor.
+       */
+      toast.error(res.error, { duration: 8000 });
+      return;
     }
+    setLoadError(null);
+    setSources(res);
   }, []);
 
   async function checkUrl() {
     if (!draft) return;
     setProbing(true);
+    setProbeError(null);
     try {
       const res = await probeStockFeedUrl(draft.url);
       if ("error" in res) {
-        toast.error(res.error);
+        setProbeError(res.error);
+        toast.error(res.error, { duration: 8000 });
         return;
       }
       setProbe(res);
-      /* Coloanele ghicite intra ca punct de plecare, doar daca omul n-a ales deja. */
-      setDraft((d) => (d ? { ...d, mapping: d.mapping.identifier ? d.mapping : res.mapping } : d));
-      toast.success(`Adresa raspunde: ${res.totalRows} randuri`);
+
+      setDraft((d) => {
+        if (!d) return d;
+        /*
+         * Coloanele alese raman DOAR daca mai exista in antetul nou.
+         *
+         * Cu o adresa schimbata, o alegere veche care nu se mai regaseste in
+         * lista lasa `<select>` gol, dar `draft.mapping.identifier` ramanea
+         * adevarat — deci butonul Salveaza era activ, iar sursa se salva cu o
+         * coloana pe care fisierul nu o are. Feedul rula apoi zilnic fara sa
+         * potriveasca nimic.
+         */
+        const pastreaza = (col: string | undefined) =>
+          col && res.headers.includes(col) ? col : undefined;
+        const ramas = {
+          identifier: pastreaza(d.mapping.identifier),
+          stock: pastreaza(d.mapping.stock),
+          price: pastreaza(d.mapping.price),
+        };
+        return {
+          ...d,
+          mapping: ramas.identifier ? ramas : res.mapping,
+          /* Coloana de identificator arata a cod de bare: se muta si cheia, altfel
+             fiecare rand ar iesi „negasit". */
+          options: res.suggestedMatchKey
+            ? { ...d.options, match_key: res.suggestedMatchKey }
+            : d.options,
+        };
+      });
+
+      const sarite = res.skippedBeforeHeader
+        ? ` (am sarit ${res.skippedBeforeHeader} randuri de dinaintea antetului)`
+        : "";
+      toast.success(`Adresa raspunde: ${res.totalRows} randuri${sarite}`);
     } finally {
       setProbing(false);
     }
@@ -149,6 +199,11 @@ export function StockFeedSources({
   }
 
   async function remove(source: StockFeedSource) {
+    /* Un singur clic pe o iconita stergea sursa, fara confirmare si fara
+       revenire: potrivirea coloanelor si programul se pierdeau pe loc. */
+    if (!window.confirm(`Stergi sursa „${source.name || source.url}"? Actiunea nu se poate anula.`)) {
+      return;
+    }
     setBusyId(source.id);
     try {
       const res = await deleteStockFeedSource(source.id);
@@ -159,6 +214,20 @@ export function StockFeedSources({
       setBusyId(null);
     }
   }
+
+  /*
+   * Coloanele pe care le poate alege omul: cele proaspat citite, sau — cand
+   * adresa nu raspunde — cele deja salvate pe sursa. A doua varianta exista ca o
+   * sursa cu adresa picata sa ramana reglabila (nume, program, ora, pornit/oprit)
+   * in loc sa se blocheze cu totul.
+   */
+  const coloaneSalvate = draft
+    ? [draft.mapping.identifier, draft.mapping.stock, draft.mapping.price].filter(
+        (c): c is string => Boolean(c),
+      )
+    : [];
+  const areColoaneSalvate = Boolean(draft?.id) && coloaneSalvate.length > 0;
+  const coloaneDisponibile = probe?.headers ?? coloaneSalvate;
 
   if (loadError) {
     return (
@@ -194,8 +263,20 @@ export function StockFeedSources({
               <p className="text-sm font-semibold text-foreground">
                 {source.name || "Fara nume"}
                 {!source.enabled && (
-                  <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    oprita
+                  /* Oprita de noi dupa prea multe esecuri arata altfel decat una
+                     pusa pe pauza de om: pana acum era aceeasi pastila gri, si
+                     comerciantul nu avea de unde sti ca platforma renuntase. */
+                  <span
+                    className={cn(
+                      "ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      source.consecutive_failures >= MAX_ESECURI
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {source.consecutive_failures >= MAX_ESECURI
+                      ? `oprita automat dupa ${source.consecutive_failures} esecuri`
+                      : "oprita"}
                   </span>
                 )}
               </p>
@@ -203,7 +284,12 @@ export function StockFeedSources({
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {source.frequency === "hourly"
                   ? "In fiecare ora"
-                  : `Zilnic, la ora ${String(source.run_hour).padStart(2, "0")}:00 UTC`}
+                  : `Zilnic, dupa ora ${String(source.run_hour).padStart(2, "0")}:00 UTC`}
+                {!source.last_run_at && source.enabled && (
+                  /* O sursa noua nu spunea niciodata cand porneste prima data,
+                     iar comerciantul astepta fara sa stie ce asteapta. */
+                  <span className="ml-1 text-primary">· inca n-a rulat, porneste la urmatoarea tura</span>
+                )}
                 {" · "}
                 {MATCH_KEY_LABELS[source.options.match_key ?? "sku_auto"]}
               </p>
@@ -217,6 +303,7 @@ export function StockFeedSources({
                 title="Modifica"
                 onClick={() => {
                   setProbe(null);
+                  setProbeError(null);
                   setDraft({
                     id: source.id,
                     name: source.name,
@@ -239,39 +326,14 @@ export function StockFeedSources({
             </div>
           </div>
 
-          {source.last_run_at && (
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-2.5 text-[11px]">
-              {source.last_status === "ok" ? (
-                <span className="inline-flex items-center gap-1 text-primary">
-                  <CheckCircle2 className="h-3 w-3" /> Ultima rulare reusita
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-destructive">
-                  <AlertTriangle className="h-3 w-3" /> Ultima rulare a eșuat
-                </span>
-              )}
-              <span className="text-muted-foreground">{formatDate(source.last_run_at)}</span>
-              {source.last_totals && (
-                <span className="text-muted-foreground">
-                  {source.last_totals.written} actualizate
-                  {source.last_totals.not_found > 0 && `, ${source.last_totals.not_found} negasite`}
-                </span>
-              )}
-              {source.last_error && <span className="text-destructive">{source.last_error}</span>}
-              {source.last_import_id && (
-                <a href={`/api/imports/${source.last_import_id}/error-report`} className="text-primary hover:underline">
-                  Raport
-                </a>
-              )}
-            </div>
-          )}
+          {source.last_run_at && <UltimaRulare source={source} />}
         </div>
       ))}
 
       {!draft && (
         <button
           type="button"
-          onClick={() => { setDraft(emptyDraft()); setProbe(null); }}
+          onClick={() => { setDraft(emptyDraft()); setProbe(null); setProbeError(null); }}
           className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white"
         >
           <Plus className="h-4 w-4" /> Adauga o sursa
@@ -284,7 +346,7 @@ export function StockFeedSources({
             <h3 className="text-sm font-semibold text-foreground">
               {draft.id ? "Modifica sursa" : "Sursa noua"}
             </h3>
-            <button type="button" onClick={() => { setDraft(null); setProbe(null); }} aria-label="Renunta"
+            <button type="button" onClick={() => { setDraft(null); setProbe(null); setProbeError(null); }} aria-label="Renunta"
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-border">
               <X className="h-4 w-4" />
             </button>
@@ -302,11 +364,37 @@ export function StockFeedSources({
             <Field label="Adresa fisierului (CSV sau Excel)" required>
               <input
                 value={draft.url}
-                onChange={(e) => { setDraft({ ...draft, url: e.target.value }); setProbe(null); }}
+                onChange={(e) => { setDraft({ ...draft, url: e.target.value }); setProbe(null); setProbeError(null); }}
                 placeholder="https://furnizor.ro/stoc.csv"
                 className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
               />
             </Field>
+          </div>
+
+          {/* Fara randurile astea, singurul indiciu era un exemplu din placeholder.
+              Cele doua greseli pe care le face toata lumea sunt linkul paginii de
+              descarcare in locul fisierului, si un fisier care cere autentificare. */}
+          <div className="rounded-lg border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
+            <p className="font-medium text-foreground">Ce fel de adresa merge</p>
+            <ul className="mt-1.5 space-y-1">
+              <li>
+                Trebuie sa fie linkul <strong>direct catre fisier</strong>, cel care
+                porneste descarcarea, nu linkul paginii pe care se afla fisierul.
+              </li>
+              <li>
+                Fisierul trebuie sa fie <strong>public</strong>. Daca furnizorul iti da un
+                utilizator si o parola, pune-le in adresa:{" "}
+                <code>https://utilizator:parola@furnizor.ro/stoc.csv</code>.
+              </li>
+              <li>
+                Adresa incepe cu <strong>https://</strong>. Adresele <code>http://</code> nu
+                se accepta.
+              </li>
+              <li>
+                Merge si un <strong>Google Sheets</strong> publicat: Fisier → Distribuie →
+                Publica pe web → CSV.
+              </li>
+            </ul>
           </div>
 
           <button
@@ -319,33 +407,94 @@ export function StockFeedSources({
             Verifica adresa
           </button>
 
-          {!probe && (
+          {probeError && (
+            /* Ramane pe ecran pana la urmatoarea incercare. Toastul de 1,8
+               secunde disparea si lasa ecranul exact ca inainte de apasare. */
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-[11px]">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+              <div>
+                <p className="font-medium text-destructive">Adresa nu a putut fi citita</p>
+                <p className="mt-0.5 text-muted-foreground">{probeError}</p>
+              </div>
+            </div>
+          )}
+
+          {!probe && !areColoaneSalvate && (
             <p className="text-[11px] text-muted-foreground">
               Verifica adresa ca sa putem citi antetele. Fara asta nu poti alege coloanele.
             </p>
           )}
 
-          {probe && (
+          {!probe && areColoaneSalvate && (
+            /* Sursa salvata se poate regla si cand adresa e picata: pana acum tot
+               blocul statea in spatele unei verificari reusite, deci un feed cu
+               adresa moarta nu mai putea fi nici redenumit, nici oprit din
+               program, nici mutat pe alta ora. */
+            <p className="text-[11px] text-muted-foreground">
+              Coloanele de mai jos sunt cele salvate. Ca sa le schimbi, verifica intai adresa.
+            </p>
+          )}
+
+          {probe && probe.sampleRows.length > 0 && (
+            /*
+             * `sampleRows` se calcula pe server si se trimitea in browser de la
+             * bun inceput, dar nu le folosea nimeni. Fara ele, „Adresa raspunde:
+             * 221 randuri" era tot ce vedea omul — si arata la fel si cand cele
+             * 221 de randuri erau, de fapt, o pagina de eroare.
+             */
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-[11px]">
+                <thead className="bg-muted/50">
+                  <tr>
+                    {probe.headers.slice(0, 6).map((h) => (
+                      <th key={h} className="whitespace-nowrap px-2 py-1.5 text-left font-medium text-foreground">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {probe.sampleRows.slice(0, 3).map((r, i) => (
+                    <tr key={i} className="border-t border-border">
+                      {probe.headers.slice(0, 6).map((h) => (
+                        <td key={h} className="whitespace-nowrap px-2 py-1 text-muted-foreground">
+                          {r[h]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="px-2 py-1.5 text-[10px] text-muted-foreground">
+                Primele randuri din fisier. Daca nu arata a produse, adresa nu duce la
+                fisierul bun.
+              </p>
+            </div>
+          )}
+
+          {(probe || areColoaneSalvate) && (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="Identificator" required>
                   <Select
                     value={draft.mapping.identifier}
-                    options={probe.headers}
+                    options={coloaneDisponibile}
                     onChange={(v) => setDraft({ ...draft, mapping: { ...draft.mapping, identifier: v } })}
                   />
                 </Field>
-                <Field label="Stoc">
+                {/* Serverul refuza salvarea fara ea (afara de cazul in care se
+                    actualizeaza preturi), deci steluta trebuie sa se vada. */}
+                <Field label="Stoc" required={!draft.options.update_price}>
                   <Select
                     value={draft.mapping.stock}
-                    options={probe.headers}
+                    options={coloaneDisponibile}
                     onChange={(v) => setDraft({ ...draft, mapping: { ...draft.mapping, stock: v } })}
                   />
                 </Field>
                 <Field label="Pret">
                   <Select
                     value={draft.mapping.price}
-                    options={probe.headers}
+                    options={coloaneDisponibile}
                     onChange={(v) => setDraft({ ...draft, mapping: { ...draft.mapping, price: v } })}
                   />
                 </Field>
@@ -405,13 +554,13 @@ export function StockFeedSources({
           )}
 
           <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={() => { setDraft(null); setProbe(null); }}
+            <button type="button" onClick={() => { setDraft(null); setProbe(null); setProbeError(null); }}
               className="inline-flex h-10 items-center rounded-lg border border-border px-4 text-sm font-medium">
               Renunta
             </button>
             <button
               type="button"
-              disabled={saving || !probe || !draft.mapping.identifier}
+              disabled={saving || !draft.mapping.identifier || (!probe && !areColoaneSalvate)}
               onClick={save}
               className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
             >
@@ -420,6 +569,92 @@ export function StockFeedSources({
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Verdictul ultimei rulari, citit din CIFRE, nu doar din `last_status`.
+ *
+ * Trei minciuni traiau in randul asta:
+ *  - o rulare in care NICIUN rand nu s-a potrivit iesea „reusita": `last_status`
+ *    e „ok" (adresa chiar s-a citit), iar singurele cifre afisate erau `written`
+ *    si `not_found`, amandoua 0 cand tot fisierul a fost respins;
+ *  - o rulare NETERMINATA arata la fel cu una dusa la capat;
+ *  - problemele altele decat „negasit" (ambiguu, dezactivat, invalid, duplicat)
+ *    nu se vedeau deloc, desi tocmai ele explica un feed care „nu face nimic".
+ */
+function UltimaRulare({ source }: { source: StockFeedSource }) {
+  const t = source.last_totals;
+  /* Totalurile scrise inaintea acestei versiuni n-au cheia `ignored`: fara `?? 0`
+     suma iesea NaN, iar tot randul de probleme disparea tacut. */
+  const n = (v: number | undefined) => v ?? 0;
+  const probleme = t
+    ? n(t.not_found) + n(t.ambiguous) + n(t.invalid) + n(t.duplicate) + n(t.ignored)
+    : 0;
+
+  /*
+   * „Nu s-a scris nimic" NU e acelasi lucru cu „n-a fost nimic de scris".
+   *
+   * Un feed sanatos in care toate stocurile erau deja la zi are `written = 0` si
+   * e perfect in regula — de aceea se cere si sa fi existat o problema sau
+   * randuri nepotrivite. Altfel ecranul ar fi dat alarma portocalie la fiecare
+   * rulare linistita.
+   */
+  const nimicScris = t !== null && t.written === 0 && t.total > 0 && n(t.unchanged) < t.total;
+  /* Neterminata: au ramas randuri de scris. Statusul din baza nu poate purta
+     informatia asta (CHECK pe 'ok'/'error'), dar cifra o poarta. */
+  const neterminata = t !== null && n(t.pending) > 0;
+
+  const stare =
+    source.last_status === "error"
+      ? { ton: "text-destructive", pictograma: AlertTriangle, text: "Ultima rulare a esuat" }
+      : neterminata
+        ? { ton: "text-warning", pictograma: Loader2, text: `Se termina in fundal (${t.pending} randuri ramase)` }
+        : nimicScris
+          ? { ton: "text-warning", pictograma: AlertTriangle, text: "A citit fisierul, dar n-a actualizat nimic" }
+          : { ton: "text-primary", pictograma: CheckCircle2, text: "Ultima rulare reusita" };
+
+  const Pictograma = stare.pictograma;
+
+  return (
+    <div className="mt-3 space-y-1 border-t border-border pt-2.5 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={cn("inline-flex items-center gap-1", stare.ton)}>
+          <Pictograma className="h-3 w-3" /> {stare.text}
+        </span>
+        {/* Cu ora, nu doar data: la un feed orar, „18.08.2026" nu spune nimic. */}
+        <span className="text-muted-foreground">{source.last_run_at ? formatDateTime(source.last_run_at) : ""}</span>
+        {t && (
+          <span className="text-muted-foreground">
+            {t.written} actualizate din {t.total} randuri
+            {t.unchanged > 0 && `, ${t.unchanged} deja la zi`}
+          </span>
+        )}
+        {source.last_error && <span className="text-destructive">{source.last_error}</span>}
+        {source.last_import_id && source.last_status !== "error" && (
+          /* Dupa un esec, `last_import_id` ramane (e manerul cu care se anuleaza
+             jobul vechi), dar raportul lui descrie alta rulare. Nu se arata. */
+          <a href={`/api/imports/${source.last_import_id}/error-report`} className="text-primary hover:underline">
+            Raport
+          </a>
+        )}
+      </div>
+
+      {t && probleme > 0 && (
+        <p className="text-muted-foreground">
+          {[
+            t.not_found > 0 && `${t.not_found} coduri negasite`,
+            t.ambiguous > 0 && `${t.ambiguous} ambigue`,
+            t.ignored > 0 && `${t.ignored} fara efect in magazin`,
+            t.invalid > 0 && `${t.invalid} cu valori gresite`,
+            t.duplicate > 0 && `${t.duplicate} duplicate`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          {source.last_import_id ? " — vezi raportul pentru randurile exacte." : ""}
+        </p>
       )}
     </div>
   );

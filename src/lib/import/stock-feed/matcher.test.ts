@@ -23,6 +23,7 @@ function produs(over: Partial<CatalogEntry> = {}): CatalogEntry {
     price: 100,
     stock_quantity: 5,
     track_inventory: true,
+    variantsEnabled: false,
     variants: [],
     ...over,
   };
@@ -75,15 +76,36 @@ test("acelasi identificator de doua ori IN FISIER opreste ambele randuri", () =>
   assert.equal(plan.issues[0].problem, "duplicate");
 });
 
-test("SKU de produs egal cu SKU de varianta pe acelasi produs e ambiguu", () => {
-  // Produsul si varianta lui sunt tinte DIFERITE: una scrie in coloana, cealalta
-  // in JSON. Cand acelasi cod duce la amandoua, nu avem cum sti pe care o cere
-  // fisierul, deci randul se opreste.
-  const catalog = [produs({ id: "p1", sku: "X", variants: [{ id: "v1", title: "M", sku: "X", stock_quantity: 1, price: 100 }] })];
+test("SKU de produs egal cu SKU-ul propriei combinatii: castiga COMBINATIA", () => {
+  /*
+   * A fost raportat ca „ambiguu" pana la 18.08.2026, si era o ambiguitate
+   * INCHIPUITA: nu sunt doua articole intre care sa alegem, e acelasi articol
+   * descris de doua ori. Masurat in productie, regula veche bloca 382 de produse
+   * din 3 magazine — pe cheia IMPLICITA — la fiecare rulare, la nesfarsit.
+   *
+   * Se alege combinatia fiindca la un produs cu variante coloana de stoc a
+   * produsului e oricum recalculata de `products_sync_variant_stock` ca suma
+   * combinatiilor: scrierea pe produs n-ar fi tinut.
+   */
+  const catalog = [produs({ id: "p1", sku: "X", variants: [{ id: "v1", title: "M", sku: "X", stock_quantity: 1, price: 100, gtin: null, enabled: true, stockNumeric: true }] })];
+  const plan = buildStockPlan([rand({ identifier: "X", stock: 7 })], catalog, doarStoc);
+
+  assert.equal(plan.issues.length, 0, JSON.stringify(plan.issues));
+  assert.equal(plan.changes.length, 1);
+  assert.equal(plan.changes[0].variantId, "v1");
+  assert.equal(plan.changes[0].stockTo, 7);
+});
+
+test("doua PRODUSE diferite cu acelasi cod raman ambigue", () => {
+  /* Regula slabita mai sus nu are voie sa se intinda si peste ambiguitatea
+     adevarata: acolo chiar nu stim pe care o cere fisierul. */
+  const catalog = [produs({ id: "p1", sku: "X" }), produs({ id: "p2", sku: "X" })];
   const plan = buildStockPlan([rand({ identifier: "X", stock: 7 })], catalog, doarStoc);
 
   assert.equal(plan.changes.length, 0);
   assert.equal(plan.issues[0].problem, "ambiguous");
+  /* Si spune CU CE s-a lovit, altfel raportul nu ajuta la nimic. */
+  assert.match(plan.issues[0].detail, /Tricou/);
 });
 
 // ── Potrivire pe variante ────────────────────────────────────────────────────
@@ -95,8 +117,8 @@ test("un fisier poate amesteca SKU de produs cu SKU de varianta", () => {
       sku: "TRIC-001",
       stock_quantity: 2,
       variants: [
-        { id: "m", title: "M", sku: "TRIC-001-M", stock_quantity: 1, price: 100 },
-        { id: "l", title: "L", sku: "TRIC-001-L", stock_quantity: 1, price: 100 },
+        { id: "m", title: "M", sku: "TRIC-001-M", stock_quantity: 1, price: 100, gtin: null, enabled: true, stockNumeric: true },
+        { id: "l", title: "L", sku: "TRIC-001-L", stock_quantity: 1, price: 100, gtin: null, enabled: true, stockNumeric: true },
       ],
     }),
   ];
@@ -116,7 +138,7 @@ test("un fisier poate amesteca SKU de produs cu SKU de varianta", () => {
 
 test("cheia variant_sku nu se uita la SKU-ul produsului", () => {
   const catalog = [
-    produs({ sku: "TRIC-001", variants: [{ id: "m", title: "M", sku: "TRIC-001-M", stock_quantity: 1, price: 100 }] }),
+    produs({ sku: "TRIC-001", variants: [{ id: "m", title: "M", sku: "TRIC-001-M", stock_quantity: 1, price: 100, gtin: null, enabled: true, stockNumeric: true }] }),
   ];
   const plan = buildStockPlan([rand({ identifier: "TRIC-001" })], catalog, {
     matchKey: "variant_sku",
@@ -272,9 +294,10 @@ function produsCuIdDublat(): CatalogEntry {
     price: 90,
     stock_quantity: null,
     track_inventory: true,
+    variantsEnabled: false,
     variants: [
-      { id: "galben-unic", title: "Galben", sku: "HS70553", stock_quantity: 1, price: 90 },
-      { id: "galben-unic", title: "Galben", sku: "HS70554", stock_quantity: 2, price: 95 },
+      { id: "galben-unic", title: "Galben", sku: "HS70553", stock_quantity: 1, price: 90, gtin: null, enabled: true, stockNumeric: true },
+      { id: "galben-unic", title: "Galben", sku: "HS70554", stock_quantity: 2, price: 95, gtin: null, enabled: true, stockNumeric: true },
     ],
   };
 }
@@ -336,7 +359,8 @@ function unProdus(sku: string, stoc: number): CatalogEntry {
   return {
     id: "p1", name: "Produs", sku: null, external_id: null, gtin: null,
     price: 100, stock_quantity: null, track_inventory: true,
-    variants: [{ id: "v1", title: "Unic", sku, stock_quantity: stoc, price: 100 }],
+    variantsEnabled: false,
+    variants: [{ id: "v1", title: "Unic", sku, gtin: null, enabled: true, stockNumeric: true, stock_quantity: stoc, price: 100 }],
   };
 }
 

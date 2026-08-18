@@ -31,6 +31,8 @@ interface PageSectionsShape {
       id?: string;
       title?: string;
       sku?: string;
+      gtin?: string;
+      enabled?: boolean;
       /* Poate fi si sir: vezi `readNumber`. */
       stock_quantity?: number | string;
       price?: number | string;
@@ -59,7 +61,7 @@ function readNumber(value: unknown, fallback: number): number {
 }
 
 /** Exportata pentru teste: aici a fost bug-ul cu numerele scrise ca sir. */
-export function readVariants(raw: unknown): CatalogVariant[] {
+export function readVariants(raw: unknown, productPrice = 0): CatalogVariant[] {
   const ps = raw as PageSectionsShape | null;
   const combos = ps?.variants?.combinations;
   if (!Array.isArray(combos)) return [];
@@ -72,11 +74,28 @@ export function readVariants(raw: unknown): CatalogVariant[] {
       id: c.id,
       title: typeof c.title === "string" ? c.title : c.id,
       sku: typeof c.sku === "string" && c.sku.trim() !== "" ? c.sku : null,
+      gtin: typeof c.gtin === "string" && c.gtin.trim() !== "" ? c.gtin : null,
+      /* Lipsa inseamna aprinsa: asa se poarta si declansatorul din Postgres,
+         care numara `(c->>'enabled')::boolean is true`... deci NU. Acolo lipsa
+         inseamna STINSA. Ne aliniem la declansator, fiindca el are ultimul
+         cuvant asupra stocului produsului. */
+      enabled: c.enabled === true,
       stock_quantity: readNumber(c.stock_quantity, 0),
-      price: readNumber(c.price, 0),
+      /* Aceeasi masura ca in `sync_product_stock_from_variants`: fara semn, fara
+         virgula, cu spatii ingaduite. Ce nu trece pe acolo nu intra in suma. */
+      stockNumeric: /^\s*\d+(\.\d+)?\s*$/.test(String(c.stock_quantity ?? "")),
+      /* Combinatia fara pret propriu MOSTENESTE pretul produsului. Citit ca 0,
+         previzualizarea arata o scadere inchipuita „de la 0" si feedul scria un
+         pret care oricum era deja acolo. */
+      price: readNumber(c.price, productPrice),
     });
   }
   return out;
+}
+
+/** Blocul de variante e pornit pe produs (`page_sections.variants.enabled`). */
+function readVariantsEnabled(raw: unknown): boolean {
+  return (raw as PageSectionsShape | null)?.variants?.enabled === true;
 }
 
 function readGtin(raw: unknown): string | null {
@@ -144,6 +163,7 @@ export async function loadCatalog(
     price: Number(r.price ?? 0),
     stock_quantity: r.stock_quantity == null ? null : Number(r.stock_quantity),
     track_inventory: r.track_inventory === true,
-    variants: withSections ? readVariants(r.page_sections) : [],
+    variantsEnabled: withSections ? readVariantsEnabled(r.page_sections) : false,
+    variants: withSections ? readVariants(r.page_sections, Number(r.price ?? 0)) : [],
   }));
 }

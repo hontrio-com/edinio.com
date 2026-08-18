@@ -8,11 +8,12 @@ import { logError } from "@/lib/error-logger";
 import { parseCsv, MAX_STOCK_ROWS } from "@/lib/import/csv";
 import { parseTabular, recordsToCsv } from "@/lib/import/tabular";
 import { hasAcceptedExtension } from "@/lib/import/tabular-formats";
-import { autoMapStockColumns, readFeedRows } from "@/lib/import/stock-feed/mapping";
+import { autoMapStockColumns, coloaneLipsa, readFeedRows } from "@/lib/import/stock-feed/mapping";
 import { buildStockPlan, summarizePlan } from "@/lib/import/stock-feed/matcher";
 import { loadCatalog } from "@/lib/import/stock-feed/catalog";
 import {
   EMPTY_STOCK_TOTALS,
+  numaraProbleme,
   processStockChunk,
   stageStockPlan,
   type StockTotals,
@@ -158,7 +159,17 @@ export async function createStockFeedJob(
     };
   }
 
-  const text = read.format === "csv" ? buffer.toString("utf-8") : recordsToCsv(parsed);
+  /*
+   * Copia pastrata in R2 se scrie din randurile DEJA citite, nu din octetii bruti.
+   *
+   * Ramura veche (`buffer.toString("utf-8")` pentru CSV) aducea inapoi exact
+   * problema pe care `decodeazaText` tocmai o rezolvase: un fisier cp1250 era
+   * citit corect la prima trecere, dar in R2 ajungeau octetii lui interpretati ca
+   * UTF-8 — mutilati — iar toti pasii de dupa (previzualizare, pornire, cronul de
+   * reluare) citeau versiunea stricata. Diacriticele se pierdeau intre doua
+   * ecrane, fara nicio eroare.
+   */
+  const text = recordsToCsv(parsed);
 
   const mapping = autoMapStockColumns(parsed.headers);
 
@@ -238,6 +249,16 @@ export async function previewStockFeed(
 
   try {
     const parsed = parseCsv(await fetchRawCsv(job.file_url), MAX_STOCK_ROWS);
+    /* Fisierul din R2 e scris de noi, deci n-ar trebui sa aiba ghilimele rupte.
+       „N-ar trebui" nu e o plasa: daca totusi are, `rows` e GOL, si fara
+       verificarea asta o rulare pe zero randuri s-ar raporta drept reusita. */
+    if (parsed.parseError) return { error: parsed.parseError };
+    /* Coloanele alese trebuie sa mai existe: altfel se citeste tot fisierul si
+       nu se schimba nimic, iar rularea pare reusita. */
+    const lipsa = coloaneLipsa(parsed, mapping, { updatePrice: options.update_price });
+    if (lipsa.length > 0) {
+      return { error: `Fisierul nu mai are coloanele: ${lipsa.join(", ")}. Alege-le din nou.` };
+    }
     const rows = readFeedRows(parsed, mapping, { updatePrice: options.update_price });
     const catalog = await loadCatalog(admin, businessId, options.match_key);
     const plan = buildStockPlan(rows, catalog, {
@@ -277,6 +298,16 @@ export async function startStockFeed(
      * calculat pe starea de ACUM, nu pe una de acum cinci minute.
      */
     const parsed = parseCsv(await fetchRawCsv(job.file_url), MAX_STOCK_ROWS);
+    /* Fisierul din R2 e scris de noi, deci n-ar trebui sa aiba ghilimele rupte.
+       „N-ar trebui" nu e o plasa: daca totusi are, `rows` e GOL, si fara
+       verificarea asta o rulare pe zero randuri s-ar raporta drept reusita. */
+    if (parsed.parseError) return { error: parsed.parseError };
+    /* Coloanele alese trebuie sa mai existe: altfel se citeste tot fisierul si
+       nu se schimba nimic, iar rularea pare reusita. */
+    const lipsa = coloaneLipsa(parsed, mapping, { updatePrice: options.update_price });
+    if (lipsa.length > 0) {
+      return { error: `Fisierul nu mai are coloanele: ${lipsa.join(", ")}. Alege-le din nou.` };
+    }
     const rows = readFeedRows(parsed, mapping, { updatePrice: options.update_price });
     const catalog = await loadCatalog(admin, businessId, options.match_key);
     const plan = buildStockPlan(rows, catalog, {
@@ -291,6 +322,7 @@ export async function startStockFeed(
       total: plan.totalRows,
       unchanged: plan.unchanged,
       pending,
+      ...numaraProbleme(plan.issues),
     };
 
     await admin

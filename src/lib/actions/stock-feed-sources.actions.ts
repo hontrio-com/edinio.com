@@ -6,7 +6,7 @@ import { logError } from "@/lib/error-logger";
 import { MAX_STOCK_ROWS } from "@/lib/import/csv";
 import { safeFetchFile } from "@/lib/import/ssrf";
 import { parseTabular } from "@/lib/import/tabular";
-import { autoMapStockColumns } from "@/lib/import/stock-feed/mapping";
+import { autoMapStockColumns, suggestMatchKey } from "@/lib/import/stock-feed/mapping";
 import { runSource } from "@/lib/import/stock-feed/runner";
 import {
   getSource, insertSource, listSources, patchSource, removeSource,
@@ -14,7 +14,7 @@ import {
 } from "@/lib/import/stock-feed/sources";
 import {
   DEFAULT_STOCK_OPTIONS,
-  type StockFeedMapping, type StockFeedOptions,
+  type StockFeedMapping, type StockFeedOptions, type StockMatchKey,
 } from "@/lib/import/stock-feed/types";
 
 /**
@@ -65,6 +65,23 @@ async function requireOwnedSource(id: string) {
   return { ...owner, source };
 }
 
+/**
+ * Adresa, cu parola scoasa.
+ *
+ * Feedurile de distribuitor vin des ca `https://user:parola@gazda/stoc.csv`, iar
+ * `error_logs` e citit de administratorii platformei. Adresa trebuie pastrata —
+ * fara ea nu se poate reface cazul — dar parola nu.
+ */
+function adresaFaraParola(raw: string): string {
+  try {
+    const u = new URL(raw);
+    if (u.password) u.password = "***";
+    return u.href;
+  } catch {
+    return raw;
+  }
+}
+
 function validUrl(raw: string): boolean {
   try {
     // https OBLIGATORIU. `saveStockFeedSource` NU trece prin `safeFetchFile`,
@@ -94,6 +111,16 @@ export interface ProbeResult {
   mapping: StockFeedMapping;
   sampleRows: Record<string, string>[];
   totalRows: number;
+  /**
+   * Cheia de potrivire care se potriveste cu coloana ghicita, cand e alta decat
+   * implicitul.
+   *
+   * Fara ea, un feed cu antetul „EAN" isi lua coloana corect, dar cheia ramanea
+   * „SKU (produs sau varianta)", si FIECARE rand iesea „negasit".
+   */
+  suggestedMatchKey?: StockMatchKey;
+  /** Cate randuri de preambul am sarit inaintea antetului, daca am sarit. */
+  skippedBeforeHeader?: number;
 }
 
 /**
@@ -108,20 +135,52 @@ export async function probeStockFeedUrl(url: string): Promise<ProbeResult | { er
   if (!owner.ok) return { error: owner.error };
   if (!validUrl(url)) return { error: "Adresa trebuie sa fie https (http nu e acceptat)" };
 
+  /*
+   * O proba cazuta LASA URMA.
+   *
+   * Pana acum nu lasa niciuna: proba nu salveaza nimic, deci un comerciant care
+   * se opreste la primul ecran nu ajunge nici in `stock_feed_sources`, nici in
+   * `error_logs`. Cand a venit intrebarea „de ce imi da «Descarcare esuata»",
+   * baza n-a avut ce raspunde — nici adresa incercata, nici motivul. Adresa e
+   * singurul lucru cu care se poate reface cazul.
+   */
+  const noteaza = (error: string) =>
+    logError({
+      action: "probeStockFeedUrl",
+      message: error,
+      businessId: owner.businessId,
+      details: { url: adresaFaraParola(url) },
+    });
+
   const fetched = await safeFetchFile(url);
-  if ("error" in fetched) return { error: fetched.error };
+  if ("error" in fetched) {
+    noteaza(fetched.error);
+    return { error: fetched.error };
+  }
 
   const read = await parseTabular(fetched.buffer, url, MAX_STOCK_ROWS);
-  if ("error" in read) return { error: read.error };
-  if (read.parsed.truncated) {
-    return { error: `Feedul are peste ${MAX_STOCK_ROWS.toLocaleString("ro-RO")} de randuri.` };
+  if ("error" in read) {
+    noteaza(read.error);
+    return { error: read.error };
   }
+  if (read.parsed.truncated) {
+    const error = `Feedul are peste ${MAX_STOCK_ROWS.toLocaleString("ro-RO")} de randuri.`;
+    noteaza(error);
+    return { error };
+  }
+
+  const mapping = autoMapStockColumns(read.parsed.headers);
+  const sugerata = suggestMatchKey(mapping.identifier);
 
   return {
     headers: read.parsed.headers,
-    mapping: autoMapStockColumns(read.parsed.headers),
+    mapping,
     sampleRows: read.parsed.rows.slice(0, 8),
     totalRows: read.parsed.rows.length,
+    ...(sugerata ? { suggestedMatchKey: sugerata } : {}),
+    ...(read.parsed.skippedBeforeHeader
+      ? { skippedBeforeHeader: read.parsed.skippedBeforeHeader }
+      : {}),
   };
 }
 

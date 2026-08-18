@@ -328,7 +328,9 @@ TRIC-001-L;8`}
   /* ── Pasul 3: previzualizarea ── */
   if (step === "review" && preview) {
     const s = preview.summary;
-    const problems = s.not_found + s.ambiguous + s.invalid + s.duplicate;
+    /* ⚠ CUPLAT cu `StockRowProblem`: cand se adauga un tip, se adauga si aici,
+       altfel „Probleme" ramane 0 pentru randuri care chiar au o problema. */
+    const problems = s.not_found + s.ambiguous + s.invalid + s.duplicate + s.ignored;
 
     return (
       <div className="space-y-4">
@@ -450,7 +452,7 @@ TRIC-001-L;8`}
   /* ── Pasul 5: gata ── */
   if (step === "done") {
     const hadProblems = totals.failed > 0 || totals.not_found > 0 || totals.ambiguous > 0
-      || totals.invalid > 0 || totals.duplicate > 0;
+      || totals.invalid > 0 || totals.duplicate > 0 || totals.ignored > 0;
 
     return (
       <div className="space-y-4">
@@ -465,6 +467,9 @@ TRIC-001-L;8`}
             {totals.ambiguous > 0 && <span>{totals.ambiguous} ambigue</span>}
             {totals.invalid > 0 && <span>{totals.invalid} invalide</span>}
             {totals.duplicate > 0 && <span>{totals.duplicate} duplicate</span>}
+            {totals.ignored > 0 && (
+              <span className="text-warning">{totals.ignored} fara efect in magazin</span>
+            )}
             {totals.failed > 0 && <span className="text-destructive">{totals.failed} eșuate</span>}
           </div>
 

@@ -167,6 +167,9 @@ export async function previewMapping(
   let products: StagedProduct[];
   try {
     const parsed = parseCsv(await fetchRawCsv(job.file_url));
+    /* Ghilimea rupta se opreste aici: `rows` e gol, deci fara verificare importul
+       ar merge mai departe pe zero produse si ar parea ca fisierul era gol. */
+    if (parsed.parseError) return { error: parsed.parseError };
     products = toStagedProducts(job.source as ImportSource, parsed, mapping, options);
   } catch {
     return { error: "Nu am putut reinterpreta fisierul" };
@@ -217,6 +220,9 @@ export async function startImport(
   let products: StagedProduct[];
   try {
     const parsed = parseCsv(await fetchRawCsv(job.file_url));
+    /* Ghilimea rupta se opreste aici: `rows` e gol, deci fara verificare importul
+       ar merge mai departe pe zero produse si ar parea ca fisierul era gol. */
+    if (parsed.parseError) return { error: parsed.parseError };
     products = toStagedProducts(job.source as ImportSource, parsed, mapping, options);
   } catch (e) {
     logError({ action: "startImport.adapt", message: e instanceof Error ? e.message : "adapt failed", businessId, userId: user.id });

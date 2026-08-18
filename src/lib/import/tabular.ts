@@ -1,5 +1,23 @@
 import Papa from "papaparse";
-import { MAX_CSV_ROWS, parseCsv, type ParsedCsv } from "./csv";
+import {
+  MAX_CSV_ROWS,
+  cellToText,
+  parseCsv,
+  sheetToRecords,
+  type ParsedCsv,
+  type SheetCell,
+} from "./csv";
+
+/*
+ * `sheetToRecords` si `SheetCell` s-au MUTAT in `csv.ts` si se re-exporta de
+ * aici, ca apelantii si testele sa nu se schimbe.
+ *
+ * De ce s-au mutat: CSV-ul trebuie sa treaca prin ACEEASI functie ca foaia de
+ * calcul, iar `csv.ts` nu poate importa din `tabular.ts` fara sa se invarta
+ * importurile in cerc.
+ */
+export { sheetToRecords, cellToText };
+export type { SheetCell };
 
 /**
  * Citirea fisierelor tabelare: CSV si XLSX.
@@ -41,81 +59,6 @@ export function detectTabularFormat(buffer: Buffer): TabularFormat {
     if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return "xls_vechi";
   }
   return "csv";
-}
-
-export type SheetCell = string | number | boolean | Date | null | undefined;
-
-/**
- * Transforma randurile brute ale unei foi in aceeasi forma pe care o da CSV-ul.
- *
- * Primul rand cu ceva in el devine antetul. Tot ce urmeaza devine obiect cheiat
- * pe antet, cu valorile ca text: restul conductei a fost scris pentru text, iar
- * numerele si datele se interpreteaza mai incolo, de parserele care stiu ce
- * inseamna fiecare coloana.
- */
-export function sheetToRecords(rows: SheetCell[][], maxRows: number = MAX_CSV_ROWS): ParsedCsv {
-  const headerIndex = rows.findIndex((r) => r.some((c) => cellToText(c) !== ""));
-  if (headerIndex === -1) return { headers: [], rows: [] };
-
-  const rawHeaders = rows[headerIndex].map(cellToText);
-
-  /*
-   * Antete care se repeta: pastram prima coloana, ca la CSV.
-   * A doua ramane necitita, dar asta e mai putin rau decat sa inventam un nume
-   * ("Stoc_2") pe care omul nu l-a scris si pe care apoi il vede in lista de
-   * coloane fara sa inteleaga de unde a apărut.
-   */
-  const headers: string[] = [];
-  const columnOfHeader = new Map<string, number>();
-  rawHeaders.forEach((h, i) => {
-    if (h === "" || columnOfHeader.has(h)) return;
-    columnOfHeader.set(h, i);
-    headers.push(h);
-  });
-
-  const out: Record<string, string>[] = [];
-  let truncated = false;
-  for (let r = headerIndex + 1; r < rows.length; r++) {
-    if (out.length >= maxRows) {
-      /* Mai exista randuri cu ceva in ele dincolo de plafon? Doar atunci taiem. */
-      truncated = rows
-        .slice(r)
-        .some((rest) => (rest ?? []).some((c) => cellToText(c) !== ""));
-      break;
-    }
-    const row = rows[r] ?? [];
-    const record: Record<string, string> = {};
-    let hasValue = false;
-
-    for (const header of headers) {
-      const text = cellToText(row[columnOfHeader.get(header) as number]);
-      record[header] = text;
-      if (text !== "") hasValue = true;
-    }
-
-    /* Randurile complet goale se sar, ca la `skipEmptyLines: "greedy"`. */
-    if (hasValue) out.push(record);
-  }
-
-  return { headers, rows: out, truncated };
-}
-
-/**
- * O celula, ca text.
- *
- * Numerele intregi se scriu fara zecimale, ca un cod EAN citit ca numar sa nu
- * ajunga "5941234567890.0" si sa nu mai potriveasca nimic.
- */
-function cellToText(cell: SheetCell): string {
-  if (cell === null || cell === undefined) return "";
-  if (typeof cell === "string") return cell.trim();
-  if (typeof cell === "boolean") return cell ? "true" : "false";
-  if (typeof cell === "number") {
-    if (!Number.isFinite(cell)) return "";
-    return Number.isInteger(cell) ? String(cell) : String(cell);
-  }
-  if (cell instanceof Date) return cell.toISOString().slice(0, 10);
-  return String(cell).trim();
 }
 
 /** Serializeaza inapoi in CSV, ca sa poata fi pastrat si recitit ca pana acum. */
@@ -370,12 +313,128 @@ export async function parseTabular(
 
   /* CSV. Extensia nu conteaza: daca nu e ZIP, incercam text. */
   void fileName;
+
+  /*
+   * Ce NU e nici pe departe un tabel se refuza cu numele lucrului gasit.
+   *
+   * Pana acum orice fisier care nu incepea cu `PK` era declarat CSV, iar ramura
+   * de CSV n-avea nicio verificare de bun-simt. Masurat: o pagina HTML de
+   * autentificare iesea ca `{headers:["<!DOCTYPE html>"], rows:3}` — SUCCES; un
+   * feed XML, un `.csv.gz` si un PDF, la fel. Omul primea „Adresa raspunde" si
+   * era pus sa aleaga drept identificator de produs o coloana numita `%PDF-1.4`.
+   */
+  const netabelar = recunoasteNetabelar(buffer);
+  if (netabelar) return { error: netabelar };
+
   try {
-    const parsed = parseCsv(buffer.toString("utf-8"), maxRows);
+    const decodat = decodeazaText(buffer);
+    if ("error" in decodat) return decodat;
+
+    const parsed = parseCsv(decodat.text, maxRows);
+    /* Ghilimea neinchisa: se OPRESTE aici. `rows` e gol tocmai ca nimeni sa nu
+       poata merge mai departe cu un fisier citit pe jumatate. */
+    if (parsed.parseError) return { error: parsed.parseError };
     if (parsed.headers.length === 0) return { error: "Fisierul nu are un antet valid" };
     if (parsed.rows.length === 0) return { error: "Fisierul nu contine randuri" };
     return { parsed, format: "csv" };
   } catch {
     return { error: "Nu am putut citi fisierul. Verifica formatul." };
   }
+}
+
+/**
+ * Fisiere care evident nu sunt tabele, numite pe nume.
+ *
+ * Se uita la primii octeti, nu la `content-type`: antetul e singurul lucru pe
+ * care serverul furnizorului nu-l poate declara gresit.
+ */
+function recunoasteNetabelar(buffer: Buffer): string | null {
+  if (buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
+    return "Fisierul e arhivat (.gz). Pune adresa fisierului dezarhivat.";
+  }
+  if (buffer.subarray(0, 5).toString("latin1") === "%PDF-") {
+    return "Adresa duce la un PDF, nu la un fisier cu date. Cere-i furnizorului feedul in CSV sau Excel.";
+  }
+
+  /* Doar inceputul, si doar ca text: aici nu ne intereseaza codificarea. */
+  const cap = buffer.subarray(0, 512).toString("latin1").trimStart();
+  const mic = cap.toLowerCase();
+
+  if (mic.startsWith("<!doctype html") || mic.startsWith("<html")) {
+    return "Adresa duce la o pagina web, nu la un fisier CSV sau Excel. Daca e Google Sheets, foloseste Fisier → Distribuie → Publica pe web → CSV.";
+  }
+  if (mic.startsWith("<?xml") || mic.startsWith("<rss") || mic.startsWith("<feed")) {
+    return "Adresa duce la un feed XML. Feedurile de stoc se citesc doar din CSV sau Excel.";
+  }
+  if (cap.startsWith("{") || cap.startsWith("[")) {
+    return "Adresa raspunde cu JSON. Feedurile de stoc se citesc doar din CSV sau Excel.";
+  }
+  return null;
+}
+
+/**
+ * Octetii, adusi la text, ghicind codificarea.
+ *
+ * `buffer.toString("utf-8")` nu arunca NICIODATA: octetii pe care nu-i intelege
+ * devin U+FFFD. Deci `try/catch`-ul de dedesubt nu avea ce prinde, iar un fisier
+ * in cp1250 — cum vin multe feeduri de furnizor din Romania — trecea mai departe
+ * mutilat: masurat, `Cantitate disponibilă;Preț` ajungea
+ * `Cantitate disponibil<?>;Pre<?>`, iar coloana de PRET se pierdea din maparea
+ * automata, fiindca `pre<?>` nu mai contine „pret". Fara nicio eroare nicaieri.
+ *
+ * Ordinea: BOM (care e o certitudine), apoi UTF-8 strict, apoi cele doua pagini
+ * de cod cu care se salveaza in Europa Centrala. Se alege cea care lasa cele mai
+ * putine semne imposibile intr-un feed.
+ */
+function decodeazaText(buffer: Buffer): { text: string } | { error: string } {
+  if (buffer.length >= 2) {
+    if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+      return { text: buffer.subarray(2).toString("utf16le") };
+    }
+    if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+      /* UTF-16 big-endian: Node stie doar LE, deci se intorc octetii pe dos. */
+      const intors = Buffer.from(buffer.subarray(2));
+      intors.swap16();
+      return { text: intors.toString("utf16le") };
+    }
+  }
+
+  /*
+   * UTF-8 se incearca NEFATAL si se PUNCTEAZA, nu se accepta sau se refuza.
+   *
+   * Cu `fatal: true`, un singur octet stricat — un spatiu neseparator lipit din
+   * Word, cazul cel mai des intalnit — arunca, si tot fisierul cadea pe
+   * windows-1250. Iar cp1250 decodeaza ORICE octet fara semn de inlocuire, deci
+   * scorul iesea zero „semne rele" pe un text complet gresit: „Pret" devenea
+   * „PreČ›", si tocmai coloana de pret se pierdea din maparea automata.
+   *
+   * Masurat pe un fisier de 3.001 randuri UTF-8 curat cu UN octet strain:
+   * inainte, toate diacriticele mutilate; acum, un singur semn stricat, in
+   * valoarea aceea.
+   */
+  let ceaMaiBuna: { text: string; semneRele: number } | null = null;
+  for (const codificare of ["utf-8", "windows-1250", "windows-1252"]) {
+    let text: string;
+    try {
+      text = new TextDecoder(codificare).decode(buffer);
+    } catch {
+      continue;
+    }
+    /* Semne de control si caractere de umplutura: cu cat mai putine, cu atat mai
+       probabil e codificarea buna. */
+    let semneRele = 0;
+    for (let i = 0; i < text.length; i++) {
+      const n = text.charCodeAt(i);
+      /* 0xFFFD = semnul de inlocuire, plus caracterele de control care nu au
+         ce cauta intr-un fisier cu date (tab, LF si CR sunt in regula). */
+      if (n === 0xfffd || n < 9 || (n > 13 && n < 32)) semneRele++;
+    }
+    /* Strict mai mic: la egalitate castiga prima incercata, adica UTF-8. */
+    if (!ceaMaiBuna || semneRele < ceaMaiBuna.semneRele) ceaMaiBuna = { text, semneRele };
+  }
+
+  if (!ceaMaiBuna) {
+    return { error: "Nu am putut recunoaste codificarea fisierului. Salveaza-l ca CSV UTF-8." };
+  }
+  return { text: ceaMaiBuna.text };
 }

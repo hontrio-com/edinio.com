@@ -27,7 +27,7 @@ test("parseIntOrNull din proiect ar strica un stoc zecimal", () => {
 test("un stoc zecimal ajunge respins, nu inmultit", () => {
   const catalog: CatalogEntry[] = [{
     id: "p1", name: "T", sku: "A", external_id: null, gtin: null,
-    price: 10, stock_quantity: 1, track_inventory: true, variants: [],
+    price: 10, stock_quantity: 1, track_inventory: true, variantsEnabled: false, variants: [],
   }];
   const rows = readFeedRows(
     { headers: ["sku", "stoc"], rows: [{ sku: "A", stoc: "12.5" }] },

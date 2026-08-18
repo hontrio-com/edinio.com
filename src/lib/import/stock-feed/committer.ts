@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { applyStockPlan } from "./applier";
-import type { StockChange, StockPlan } from "./types";
+import type { StockChange, StockPlan, StockRowIssue } from "./types";
 
 /**
  * Punerea planului in randuri si procesarea pe bucati.
@@ -31,6 +31,8 @@ export interface StockTotals {
   /** Potrivite, dar cu aceleasi valori. */
   unchanged: number;
   not_found: number;
+  /** Randuri potrivite a caror scriere n-ar ajunge nicaieri. Vezi `StockRowProblem`. */
+  ignored: number;
   ambiguous: number;
   invalid: number;
   duplicate: number;
@@ -45,6 +47,7 @@ export const EMPTY_STOCK_TOTALS: StockTotals = {
   written: 0,
   unchanged: 0,
   not_found: 0,
+  ignored: 0,
   ambiguous: 0,
   invalid: 0,
   duplicate: 0,
@@ -111,43 +114,87 @@ export async function stageStockPlan(
   return { pending: plan.changes.length };
 }
 
-/** Numara randurile pe status. Interogari de numarare, deci cifre exacte. */
+/** Contoarele de probleme, numarate din problemele planului. */
+export function numaraProbleme(issues: StockRowIssue[]): NumarProbleme {
+  const out: NumarProbleme = { ...FARA_PROBLEME };
+  for (const issue of issues) {
+    if (issue.problem in out) out[issue.problem as keyof NumarProbleme]++;
+  }
+  return out;
+}
+
+/** Contoarele de probleme, asa cum le-a calculat planul. */
+export type NumarProbleme = Pick<
+  StockTotals,
+  "not_found" | "ambiguous" | "invalid" | "duplicate" | "ignored"
+>;
+
+export const FARA_PROBLEME: NumarProbleme = {
+  not_found: 0,
+  ambiguous: 0,
+  invalid: 0,
+  duplicate: 0,
+  ignored: 0,
+};
+
+/**
+ * Numara randurile pe status. Interogari de numarare, deci cifre exacte.
+ *
+ * Contoarele de PROBLEME nu se mai numara din tabel: vin din plan si se poarta
+ * mai departe prin `totals`. Doua motive, amandoua masurate:
+ *
+ * - interogarea veche aducea randurile `skipped` cu `.select("parsed")` fara
+ *   paginare, iar PostgREST taie SILENTIOS la 1000 de randuri. In productie
+ *   exista deja 3.674 de randuri `skipped`, deci cifrele raportate erau mai mici
+ *   decat cele adevarate — si nu aveau cum sa arate a greseala.
+ * - se repeta la FIECARE bucata, desi randurile `skipped` se scriu o singura
+ *   data, la stagiere, si nu se mai schimba niciodata.
+ */
 async function countTotals(
   admin: Client,
   importId: string,
-  plan: { total: number; unchanged: number },
+  base: { total: number; unchanged: number } & NumarProbleme,
 ): Promise<StockTotals> {
-  const statuses = ["pending", "updated", "failed", "skipped"] as const;
+  const statuses = ["pending", "updated", "failed"] as const;
   const counts: Record<string, number> = {};
+
   for (const status of statuses) {
-    const { count: c } = await admin
+    const { count, error } = await admin
       .from("product_import_rows")
       .select("id", { count: "exact", head: true })
       .eq("import_id", importId)
       .eq("status", status);
-    counts[status] = c ?? 0;
-  }
 
-  /* Problemele se numara pe tip, din `parsed.problem`. */
-  const { data: skipped } = await admin
-    .from("product_import_rows")
-    .select("parsed")
-    .eq("import_id", importId)
-    .eq("status", "skipped");
-
-  const byProblem = { not_found: 0, ambiguous: 0, invalid: 0, duplicate: 0 };
-  for (const row of skipped ?? []) {
-    const problem = (row.parsed as { problem?: string } | null)?.problem;
-    if (problem && problem in byProblem) byProblem[problem as keyof typeof byProblem]++;
+    /*
+     * Eroarea se ARUNCA, nu se inghite.
+     *
+     * Inainte: `const { count: c } = ...; counts[status] = c ?? 0`. La orice
+     * eroare — retea, termen de instructiune, PostgREST picat — `count` iesea
+     * `null`, deci `pending` devenea 0, `done` devenea `true`, iar jobul era
+     * trecut pe „completed" cu `finished_at` pus. Randurile `pending` ramaneau in
+     * tabel si nu le mai lua nimeni niciodata: stocurile neajunse ramaneau vechi,
+     * iar ecranul spunea ca s-a terminat cu bine.
+     *
+     * Aruncarea e prinsa mai sus si lasa jobul in `importing`, deci tura
+     * urmatoare il reia — exact ce trebuie sa se intample.
+     */
+    if (error) {
+      throw new Error(`Nu am putut numara randurile (${status}): ${error.message}`);
+    }
+    counts[status] = count ?? 0;
   }
 
   return {
-    total: plan.total,
+    total: base.total,
     written: counts.updated ?? 0,
-    unchanged: plan.unchanged,
+    unchanged: base.unchanged,
     failed: counts.failed ?? 0,
     pending: counts.pending ?? 0,
-    ...byProblem,
+    not_found: base.not_found,
+    ambiguous: base.ambiguous,
+    invalid: base.invalid,
+    duplicate: base.duplicate,
+    ignored: base.ignored,
   };
 }
 
@@ -176,7 +223,16 @@ export async function processStockChunk(
   }
 
   const stored = (job.totals as Partial<StockTotals> | null) ?? {};
-  const base = { total: stored.total ?? 0, unchanged: stored.unchanged ?? 0 };
+  const base = {
+    total: stored.total ?? 0,
+    unchanged: stored.unchanged ?? 0,
+    /* Scrise o data, la stagiere. Vezi `countTotals`. */
+    not_found: stored.not_found ?? 0,
+    ambiguous: stored.ambiguous ?? 0,
+    invalid: stored.invalid ?? 0,
+    duplicate: stored.duplicate ?? 0,
+    ignored: stored.ignored ?? 0,
+  };
 
   if (job.status !== "importing") {
     return { status: job.status, totals: await countTotals(admin, importId, base), done: true };
@@ -246,6 +302,17 @@ export async function processStockChunk(
     .update({
       status,
       totals: totals as unknown as never,
+      /*
+       * `updated_at` se scrie AICI, la fiecare bucata.
+       *
+       * `resumeStalledStockJobs` alege joburile cu `.lt("updated_at", ...)`, pe
+       * premisa (imprumutata de la importul de produse) ca o bucla vie tine
+       * campul proaspat. Committer-ul de STOC nu-l scria niciodata si nu exista
+       * niciun declansator pe `product_imports`, deci `updated_at` ramanea la
+       * clipa insertului: un job viu, care tocmai scria, arata ca unul mort de
+       * ore, si putea fi luat in paralel de reluare.
+       */
+      updated_at: new Date().toISOString(),
       ...(done ? { finished_at: new Date().toISOString() } : {}),
     })
     .eq("id", importId);

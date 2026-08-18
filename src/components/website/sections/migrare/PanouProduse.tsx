@@ -26,30 +26,56 @@ import {
  * 2. **Sub casetă stau trei rânduri, nu două.** Acolo e titlu și descriere; aici
  *    e categoria, denumirea și prețul, adică fix ce scrie pe un card de magazin.
  *
- * ═══ PATRU PE UN RÂND, DOUĂ CÂTE DOUĂ PE TELEFON ═══
+ * ═══ TREI PE UN RÂND, DOUĂ PE TELEFON ═══
  *
- * Rândul de patru e ce face caseta secțiunii să fie LATĂ, cerut de client. Pe
- * telefon nu are cum: patru carduri într-o jumătate de 286px ies de 66px fiecare,
- * adică sub orice prag la care se mai citește o denumire. Acolo se așază două câte
- * două — tot patru, tot fără gol în ultimul rând.
+ * Trei, nu patru, cerut de client: cu patru, panoul se întindea prea mult și
+ * secțiunea se îngreuna. Rândul de trei ține caseta la fel de lată, dar cardurile
+ * cresc de la 133 la 152px.
  *
- * ⚠ Între `sm` și `lg` grila e oprită la 520px, și e o măsurătoare: fără oprire, la
- * 1023px — chiar sub pragul la care secțiunea se taie în două — cardurile ajung de
- * 449px fiecare, adică patru poze cât un ecran de telefon într-o ilustrație.
+ * ⚠ PE TELEFON SE VĂD DOAR DOUĂ, iar al treilea se ascunde sub `sm`. Trei pe un
+ * rând într-o jumătate de 302px ies de 95px fiecare, adică o denumire de produs
+ * tăiată după șapte litere. Iar două plus un al treilea rămas singur pe rândul de
+ * dedesubt e chiar golul pe care îl evită numărul par.
+ *
+ * Se pierde un produs pe ecran mic. E o pierdere adevărată, dar mică: cele trei
+ * carduri spun același lucru — „marfă de orice fel" — și îl spun și în doi.
+ *
+ * ⚠ DOUĂ OPRIRI DE LĂȚIME, amândouă măsurate:
+ *   - 520px cât timp cardurile stau pe un rând sub `lg`. Fără ea, la 1023px —
+ *     chiar sub pragul la care caseta se taie în două — ajungeau de 449px fiecare.
+ *   - 340px sub `sm`, unde stau două câte două. Fără ea, pe un ecran de 639px poza
+ *     sărea la 242px, adică mai mare decât ajunge vreodată pe desktop.
  */
 export function PanouProduse() {
   return (
-    <div className="mx-auto grid w-full max-w-[520px] grid-cols-2 gap-3 lg:max-w-none lg:grid-cols-4 lg:gap-4">
-      {PRODUSE_MIGRARE.map((produs) => (
-        <CardProdus key={produs.id} produs={produs} />
+    <div className="mx-auto grid w-full max-w-[340px] grid-cols-2 gap-3 sm:max-w-[520px] sm:grid-cols-3 lg:max-w-none lg:gap-4">
+      {PRODUSE_MIGRARE.map((produs, i) => (
+        <CardProdus
+          key={produs.id}
+          produs={produs}
+          /* Vezi nota de sus: al treilea pică pe telefon, ca să nu rămână singur
+             pe un rând. Pe index, nu pe un câmp în date — e o hotărâre de
+             așezare, nu o însușire a produsului. */
+          ascunsPeTelefon={i === 2}
+        />
       ))}
     </div>
   );
 }
 
-function CardProdus({ produs }: { produs: ProdusMigrare }) {
+function CardProdus({
+  produs,
+  ascunsPeTelefon,
+}: {
+  produs: ProdusMigrare;
+  ascunsPeTelefon?: boolean;
+}) {
   return (
-    <article className="flex flex-col overflow-hidden rounded-[14px] border border-hairline bg-white">
+    <article
+      className={`flex-col overflow-hidden rounded-[14px] border border-hairline bg-white ${
+        ascunsPeTelefon ? "hidden sm:flex" : "flex"
+      }`}
+    >
       {/* Rama de 5px, ca pe „Optimizare". Vezi nota de sus. */}
       <div className="p-[5px]">
         <div className="relative aspect-square overflow-hidden rounded-[10px] bg-tint">

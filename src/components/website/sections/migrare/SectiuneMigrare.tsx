@@ -40,8 +40,12 @@ import { SectionEyebrow } from "../SectionEyebrow";
  * ⚠ `order` SCHIMBĂ UNDE SE AȘAZĂ JUMĂTĂȚILE, NU CÂT DE LATE SUNT COLOANELE.
  * Lecția e luată de-a gata de la cardurile de pe pagina de start, unde a fost
  * prinsă doar măsurând: acolo, pe cardurile întoarse, imaginea nimerea în coloana
- * îngustă și ieșea mai mică decât textul. De aceea se întoarce ȘI șablonul de
- * coloane, nu doar ordinea — sunt două șabloane, nu unul.
+ * îngustă și ieșea mai mică decât textul.
+ *
+ * Aici nu mușcă, fiindcă jumătățile sunt egale — dar mușcă din prima clipă în care
+ * cineva le face inegale ca să câștige un pic de loc. Cine face asta trebuie să
+ * întoarcă ȘI șablonul de coloane, nu doar ordinea; altfel panoul ajunge în
+ * jumătatea îngustă exact pe secțiunile întoarse, adică pe jumătate din pagină.
  *
  * ⚠ În marcaj textul rămâne MEREU primul, deci și în ordinea de citire și la
  * tastatură. Cine ajunge pe pagină cu un cititor de ecran aude titlul înaintea
@@ -51,13 +55,17 @@ import { SectionEyebrow } from "../SectionEyebrow";
  * trebuie să stea SUS la toate secțiunile: pe telefon, o ilustrație pusă înaintea
  * titlului ei e o poză fără explicație.
  *
- * ═══ ÎMPĂRȚIREA 5/7, NU 6/6 ═══
+ * ═══ JUMĂTĂȚI EGALE ═══
  *
- * Panoul primește mai mult, și e o măsurătoare, nu un gust: în el intră patru
- * carduri de produs pe un rând. La jumătate-jumătate ar fi ieșit de 112px fiecare,
- * prea înguste pentru o denumire pe două rânduri; la 7/12 ies 134, unde încap.
- * Textul n-are nevoie de mai mult — rândul lui rămâne pe la 60 de semne, adică fix
- * cât se citește comod.
+ * A fost o vreme 5/7, în favoarea panoului: cu PATRU carduri de produs pe un rând,
+ * la jumătate-jumătate ieșeau de 112px fiecare, prea înguste pentru o denumire pe
+ * două rânduri. Cu trei, cerute de client, nu mai e nevoie: în jumătatea egală ies
+ * 152px, mai lați decât erau vreodată cu împărțirea strâmbă.
+ *
+ * Deci jumătățile s-au putut face egale — adică exact ce arăta și schița, două
+ * pătrate de-o seamă. Un câștig, nu o simplificare: o casetă tăiată la mijloc se
+ * vede că e tăiată la mijloc, iar una tăiată la 5/12 se vede doar că e tăiată
+ * strâmb, fără să spună de ce.
  */
 export function SectiuneMigrare({
   text,
@@ -80,13 +88,7 @@ export function SectiuneMigrare({
           chenar de spațiere.
         */}
         <div
-          className={cn(
-            "grid overflow-hidden rounded-[20px] border border-dashed lg:rounded-[24px]",
-            /* Vezi nota de sus: se întoarce și șablonul, nu doar ordinea. */
-            inversat
-              ? "lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]"
-              : "lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]",
-          )}
+          className="grid overflow-hidden rounded-[20px] border border-dashed lg:grid-cols-2 lg:rounded-[24px]"
           style={{ borderColor: DASH_ON_WHITE }}
         >
           {/* ── Textul ──────────────────────────────────────────────────── */}

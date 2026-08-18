@@ -8,10 +8,10 @@
  * când vine textul — de aceea stau toate aici, într-un fișier, nu împrăștiate prin
  * componente.
  *
- * ═══ IMAGINILE DE PRODUS VIN ÎN TREI MĂRIMI ═══
+ * ═══ IMAGINILE DE PRODUS VIN ÎN DOUĂ MĂRIMI ═══
  *
  * `imagine` NU e o cale de fișier, ci rădăcina lor: din `/migrare/produse/geaca`
- * ies `geaca-320.webp`, `-512` și `-768`, iar browserul alege. Cât lipsește, se
+ * ies `geaca-320.webp` și `geaca-512.webp`, iar browserul alege. Cât lipsește, se
  * vede substituentul cu `descriere`.
  *
  * Același motiv ca la imaginile de pe pagina de start (vezi `features.ts`):
@@ -22,29 +22,35 @@
  * ⚠ LĂȚIMILE SUNT SOCOTITE, nu alese din burtă. Caseta unei poze de produs,
  * măsurată pe scara de ecrane:
  *
- *     360  → 118      390  → 133      640 → 242
- *     1023 → 242 (maximul)            1024 →  96      1280+ → 121
+ *     360  → 118      390  → 133      428–639 → 152 (maximul)
+ *     640  → 150      1023 → 150      1024 → 111      1280+ → 140
  *
  * ⚠ Numerele sunt ale POZEI, nu ale cardului: între ele stau chenarul cardului
  * (un fir de fiecare parte) și rama de 5px dinăuntru, adică 12px cu totul. Măsurat
- * în pagină la 1920: cardul iese 133, poza 121.
+ * în pagină la 1920: cardul iese 152, poza 140.
  *
- * ⚠ Cel mai lat NU e pe desktop — e sub pragul `lg`, unde caseta secțiunii nu e
- * încă tăiată în două și cele patru carduri se așază două câte două. De la `lg` în
- * sus stau pe un rând, în șapte doisprezecimi de casetă, deci sunt mult mai mici.
+ * ⚠ MAXIMUL A COBORÂT DE LA 242 LA 152 ODATĂ CU TRECEREA DE LA PATRU CARDURI LA
+ * TREI, și pare pe dos, fiindcă la `lg` cardurile chiar au CRESCUT (133 → 152).
+ * Explicația e că maximul nu e la `lg`, ci sub el: acolo caseta nu e încă tăiată
+ * în două, iar grila e oprită la 520px. Trei coloane în 520 sunt mai înguste decât
+ * două în același 520 — deci exact acolo unde erau cele mai late poze, s-au
+ * îngustat cel mai mult.
  *
- * Grila celor patru e oprită la 520px cât timp stau două câte două. Fără oprire,
- * la 1023px — chiar sub prag — ajungeau de 449px fiecare, adică patru poze cât un
- * ecran de telefon într-o ilustrație.
+ * Opririle sunt măsurate: 520px cât timp cardurile stau pe un rând sub `lg`
+ * (fără ea, la 1023px ajungeau de 449px fiecare), și 340px sub `sm`, unde stau
+ * două câte două (fără ea, pe un ecran de 639px poza sărea la 242).
  *
- * Din maximul de 242 ies cele trei mărimi:
- *     320  — un ecran obișnuit la un punct pe pixel, sau un telefon la două
- *     512  — 242 la două puncte pe pixel (484), cazul cel mai des întâlnit
- *     768  — 242 la trei puncte pe pixel (726), telefonul bun ținut aproape
+ * Din maximul de 152 ies cele DOUĂ mărimi:
+ *     320  — 152 la două puncte pe pixel (304), și orice ecran obișnuit la unul
+ *     512  — 152 la trei puncte pe pixel (456), telefonul bun ținut aproape
  *
- * Ca să adaugi o poză nouă: masterul PĂTRAT (1:1), minimum 768px latura, produsul
- * decupat pe alb, apoi aceeași redimensionare în trei pași, `.webp`, calitate ~78.
- * Ținta de greutate: sub 20KB la 320, sub 40 la 512, sub 70 la 768.
+ * A treia, de 768, a rămas fără rost: nu există nicio lățime de ecran la care
+ * poza să treacă de 456 de pixeli adevărați. Un fișier pe care nu-l cere nimeni e
+ * doar o poză de făcut în plus.
+ *
+ * Ca să adaugi o poză nouă: masterul PĂTRAT (1:1), minimum 512px latura, produsul
+ * decupat pe alb, apoi aceeași redimensionare în doi pași, `.webp`, calitate ~78.
+ * Ținta de greutate: sub 20KB la 320, sub 40 la 512.
  */
 
 export interface ProdusMigrare {
@@ -61,12 +67,21 @@ export interface ProdusMigrare {
 }
 
 /**
- * Cele patru produse din panoul secțiunii „Produse".
+ * Cele trei produse din panoul secțiunii „Produse".
  *
- * ⚠ Categoriile nu sunt luate la întâmplare: sunt exact cele patru industrii pe
- * care site-ul le numește el însuși în subsol — haine, electronice, piese auto,
- * mobilier. Așa grila arată a magazin adevărat, cu marfă din raioane diferite, și
- * nu inventează o nișă pe care platforma n-o pomenește nicăieri.
+ * ⚠ TREI, NU PATRU, cerut de client (14.08): cu patru, panoul se întindea prea
+ * mult și secțiunea se îngreuna. Trei lasă cardurile să respire — de la `lg` în
+ * sus ies 152px în loc de 133 — și îngăduie jumătățile egale, ca în schiță.
+ *
+ * ⚠ Categoriile nu sunt luate la întâmplare: sunt industrii pe care site-ul le
+ * numește el însuși în subsol. Așa grila arată a magazin adevărat, cu marfă din
+ * raioane diferite, și nu inventează o nișă pe care platforma n-o pomenește
+ * nicăieri.
+ *
+ * Dintre cele patru industrii a căzut „Piese auto", și nu la întâmplare: rămân
+ * trei feluri de marfă cât mai depărtate între ele — ceva moale, ceva cu
+ * electronică, ceva mare. Două piese mici de metal lângă o geacă spuneau mai
+ * puțin despre „orice fel de magazin" decât spune un scaun.
  *
  * ⚠ SCRISE SCURT, nu cu numele lung din subsol, și e o măsurătoare: rândul
  * categoriei are 109px în cardul de la `lg` în sus, iar la 10px cu majuscule
@@ -93,13 +108,6 @@ export const PRODUSE_MIGRARE: ProdusMigrare[] = [
     descriere: "Cameră de supraveghere, pe fundal alb",
   },
   {
-    id: "placute",
-    nume: "Set plăcuțe de frână față",
-    pret: "189 lei",
-    categorie: "Piese auto",
-    descriere: "Plăcuțe de frână, pe fundal alb",
-  },
-  {
     id: "scaun",
     nume: "Scaun de birou ergonomic",
     pret: "899 lei",
@@ -109,25 +117,27 @@ export const PRODUSE_MIGRARE: ProdusMigrare[] = [
 ];
 
 /** Mărimile generate pentru fiecare poză de produs. Vezi nota de sus. */
-export const LATIMI_POZA_PRODUS = [320, 512, 768];
+export const LATIMI_POZA_PRODUS = [320, 512];
 
 /**
  * `sizes` pentru pozele de produs — SOCOTIT, nu ghicit.
  *
  * Poza ia toată lățimea cardului mic MINUS chenarul și rama lui (12px cu totul),
- * iar cardul e un sfert din jumătatea de casetă în care stă. Desfășurat, de la
+ * iar cardul e o treime din jumătatea de casetă în care stă. Desfășurat, de la
  * ecranul mare spre cel mic:
  *
- *   ≥1280  caseta e oprită la 1136, jumătatea ei 7/12 = 663, minus 80 spațiere și
- *          48 între carduri, împărțit la patru → 133, deci poza 121px
+ *   ≥1280  caseta e oprită la 1136, jumătatea ei 568, minus 80 spațiere și 32
+ *          între carduri, împărțit la trei → 152, deci poza 140px
  *   ≥1024  caseta e `100vw − 64`; aceeași socoteală, desfășurată:
- *          `((100vw − 64) × 7/48) − 32 − 12`, adică `14,6vw − 53px`
- *   ≥640   caseta nu e încă tăiată în două, iar grila celor patru e oprită la 520,
- *          deci poza e fixă: `(520 − 12) / 2 − 12 = 242`
- *   restul `(100vw − 40 margini − 48 spațiere − 12 dintre carduri) / 2 − 12`
+ *          `((100vw − 64) / 6) − 112/3 − 12`, adică `16,7vw − 60px`
+ *   ≥640   caseta nu e încă tăiată în două, iar grila celor trei e oprită la 520,
+ *          deci poza e fixă: `(520 − 32) / 3 − 12 = 150`
+ *   ≥428   două câte două, cu grila oprită la 340: `(340 − 12) / 2 − 12 = 152`
+ *   restul două câte două, pe toată lățimea:
+ *          `(100vw − 40 margini − 48 spațiere − 12 dintre carduri) / 2 − 12`
  */
 export const SIZES_POZA_PRODUS =
-  "(min-width: 1280px) 121px, (min-width: 1024px) calc(14.6vw - 53px), (min-width: 640px) 242px, calc((100vw - 100px) / 2 - 12px)";
+  "(min-width: 1280px) 140px, (min-width: 1024px) calc(16.7vw - 60px), (min-width: 640px) 150px, (min-width: 428px) 152px, calc((100vw - 100px) / 2 - 12px)";
 
 export interface SectiuneMigrareText {
   /** Rândul mic de deasupra titlului. */

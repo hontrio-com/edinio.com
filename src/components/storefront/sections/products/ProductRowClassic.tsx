@@ -211,8 +211,11 @@ function ProductRail({ items, prioritate }: { items: StorefrontProduct[]; priori
  */
 export function FeaturedRowClassic({ prioritate = false }: { prioritate?: boolean }) {
   const { pageContent, featuredProducts } = useStorefront();
-  if (pageContent.show_featured_section !== true) return null;
-
+  // ⚠ Fara a doua poarta pe `show_featured_section`. Sectiunea ajunge aici doar
+  // daca e `enabled` in design, iar `enabled` se deriva chiar din flagul acela
+  // cat timp editorul de design n-a spus altceva (`parse.ts`). Verificat inca o
+  // data aici, flagul bloca exact cazul in care comerciantul aprindea randul din
+  // editorul de design: ochiul se misca, si randul nu aparea niciodata.
   return (
     <ProductRowClassic
       title={pageContent.featured_section_title || "Recomandate"}

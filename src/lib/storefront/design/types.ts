@@ -100,7 +100,36 @@ export interface SectionInstance {
   id: string;
   kind: SectionKind;
   variant: string;
+  /** Starea EFECTIVA, cea pe care o citeste randarea. */
   enabled: boolean;
+  /**
+   * Ce a cerut anume comerciantul din editorul de DESIGN. Lipseste cand n-a
+   * atins niciodata ochiul sectiunii.
+   *
+   * ⚠ Trei stari, nu doua, si asta e esenta. Sectiunile derivate isi iau starea
+   * din `page_content` — acolo o pun comutatoarele din „Editeaza magazinul" — iar
+   * parserul o rescrie la fiecare citire. Cat timp exista un singur camp, cele
+   * doua editoare se calcau in picioare: ochiul din editorul de design stingea o
+   * sectiune, ea disparea instant din previzualizare, iar la prima citire de dupa
+   * salvare `page_content` o reaprindea. „Cautare si filtre", „Categorii" si
+   * „Catalog produse" nici nu puteau fi stinse vreodata, fiindca designul classic
+   * le construieste cu `enabled` scris in cod.
+   *
+   * Cu semnul asta prezent, alegerea din editorul de design castiga; fara el,
+   * comanda ramane la comutatorul din editorul magazinului. Vezi `parse.ts`.
+   */
+  enabledOverride?: boolean;
+  /**
+   * Varianta pe care a ales-o anume comerciantul din galeria de design-uri.
+   *
+   * ⚠ Simetric cu `enabledOverride`, si din acelasi motiv. Varianta hero-ului se
+   * re-deriva din „Afiseaza continutul peste banner" — un comutator care alege
+   * intre `banners` si `overlay`. Numai ca astea DOUA sunt si design-uri oferite
+   * in catalog, cu nume proprii („Doar imagini", „Imagine cu text peste"): fara
+   * semnul asta, comerciantul alegea unul din galerie, il vedea in
+   * previzualizare, publica — si magazinul randa celalalt, la nesfarsit.
+   */
+  variantOverride?: string;
   settings: Record<string, unknown>;
 }
 
@@ -199,6 +228,31 @@ export const DESIGN_VERSION = 1;
 export interface StoreDesign {
   version: typeof DESIGN_VERSION;
   style: StoreStyle;
+  /**
+   * Id-urile sectiunilor SCOASE anume din editorul de design.
+   *
+   * ⚠ Fara lista asta, stergerea se anuleaza singura. Parserul readuce din
+   * designul „classic" sectiunile aprinse care lipsesc — regula exista pentru
+   * magazinele cu un design salvat de o versiune mai veche a aplicatiei, care
+   * altfel n-ar mai vedea niciodata o sectiune noua. Numai ca „lipseste" nu
+   * spune de ce lipseste: o sectiune stearsa deliberat arata identic cu una care
+   * n-a existat vreodata, deci se intorcea la prima citire, iar cosul de gunoi
+   * parea ca nu face nimic.
+   *
+   * Aici scrie DE CE. Ce e in lista nu se mai readuce.
+   */
+  sterse?: string[];
+  /**
+   * Cineva a aranjat ordinea sectiunilor in editorul de design.
+   *
+   * Ordinea randurilor de produse se deriva din `page_content.product_sections`,
+   * unde o pune editorul magazinului cu sagetile lui — asta face ca sagetile
+   * acelea sa functioneze si dupa ce designul a fost salvat. Din clipa in care
+   * comerciantul a mutat ceva in lista de sectiuni insa, ordinea e a lui, si
+   * derivarea nu mai are voie s-o rescrie: altfel randul tras in capul paginii
+   * sarea inapoi la prima reincarcare, iar in locul lui aparea altul.
+   */
+  ordineAtinsa?: boolean;
   chrome: {
     /** null = magazinul nu are bara de anunt. */
     announcement: SectionInstance | null;

@@ -6,6 +6,7 @@ import { GoogleTag } from "@/components/public/GoogleTag";
 import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
 import { AttributionCapture } from "@/components/public/AttributionCapture";
+import { DoarInMagazinReal } from "@/components/public/DoarInMagazinReal";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
@@ -121,28 +122,40 @@ export default async function StoreLayout({ children, params }: Props) {
   // the gate is bypassed and trackers load unconditionally (merchant owns the
   // GDPR responsibility — a warning is shown in Settings → Banner Cookies).
   const requireConsent = cookieConfig.enabled;
+  /*
+   * Tot ce nu e magazinul propriu-zis sta sub `DoarInMagazinReal`.
+   *
+   * In previzualizarea din editor, bannerul de cookie-uri acoperea cadrul si
+   * fiecare reincarcare a iframe-ului trimitea un `PageView` fals in Facebook
+   * Pixel, TikTok si Google — iar iframe-ul se reincarca la fiecare salvare.
+   * Vezi componenta pentru intreaga poveste.
+   */
   return (
     <>
-      <AttributionCapture />
-      {fbPixelId && (
-        <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
-      )}
-      {ttPixelId && (
-        <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
-      )}
-      {googleTagIds.length > 0 && (
-        <ConsentGate slug={slug} category="analytics" bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} /></ConsentGate>
-      )}
+      <DoarInMagazinReal>
+        <AttributionCapture />
+        {fbPixelId && (
+          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
+        )}
+        {ttPixelId && (
+          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
+        )}
+        {googleTagIds.length > 0 && (
+          <ConsentGate slug={slug} category="analytics" bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} /></ConsentGate>
+        )}
+      </DoarInMagazinReal>
       {children}
       {cookieConfig.enabled && (
-        <CookieConsent
-          slug={slug}
-          color={color}
-          categories={consentCategories}
-          position={cookieConfig.position}
-          policyHref={`${basePath}/politici/confidentialitate`}
-          storeName={storeName}
-        />
+        <DoarInMagazinReal>
+          <CookieConsent
+            slug={slug}
+            color={color}
+            categories={consentCategories}
+            position={cookieConfig.position}
+            policyHref={`${basePath}/politici/confidentialitate`}
+            storeName={storeName}
+          />
+        </DoarInMagazinReal>
       )}
     </>
   );

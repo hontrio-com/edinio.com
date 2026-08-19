@@ -176,17 +176,23 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
 }
 
 /**
- * In editor, fiecare sectiune primeste `data-st-section` cu id-ul ei: asa
- * preview-ul stie pe ce s-a dat click si unde sa deruleze.
+ * In editorul de DESIGN, fiecare sectiune primeste `data-st-section` cu id-ul
+ * ei: asa preview-ul stie pe ce s-a dat click si unde sa deruleze.
  *
  * Pe magazinul public marcajul lipseste complet. Ar fi insemnat zeci de
  * elemente in plus fara niciun folos pentru vizitator, iar un wrapper — chiar
  * si cu `display: contents` — ramane vizibil pentru selectori de tip copil
  * direct sau `:nth-child`, deci ar putea rupe o varianta de design.
+ *
+ * ⚠ Si lipseste si in previzualizarea din „Editeaza magazinul", desi si aceea e
+ * un iframe de editor. Marcajul e ce cauta blocarea de clicuri din
+ * `useDesignPreview`: pus acolo, acoperea toata pagina — inclusiv headerul si
+ * footerul, prin `ChromeSection` — si previzualizarea nu mai raspundea la niciun
+ * click. Vezi `preview-protocol.ts`.
  */
 function Marcata({ section, estePrima = false }: { section: SectionInstance; estePrima?: boolean }) {
-  const { isPreview } = useStoreChrome();
-  if (!isPreview) return <SectionOne section={section} estePrima={estePrima} />;
+  const { esteEditorDesign } = useStoreChrome();
+  if (!esteEditorDesign) return <SectionOne section={section} estePrima={estePrima} />;
   return (
     <div {...{ [SECTION_ATTR]: section.id }} className="contents">
       <SectionOne section={section} estePrima={estePrima} />

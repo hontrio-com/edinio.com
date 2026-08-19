@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
-import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
+import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
@@ -26,8 +26,8 @@ import { hrefCatalog } from "@/lib/storefront/category-href";
 import { citesteFiltreDinAdresa, scrieFiltre } from "@/lib/storefront/catalog/url";
 import { SEGMENT_MAGAZIN, grilaRamaneAcasa, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { parseStoreDesign, resolveDesign } from "@/lib/storefront/design/parse";
+import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
-import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
@@ -49,7 +49,7 @@ import { jsonLdSafe } from "@/lib/json-ld";
 interface Props {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{
-    page?: string; preview?: string; q?: string; cat?: string; sale?: string;
+    page?: string; preview?: string; editor?: string; q?: string; cat?: string; sale?: string;
     sort?: string; pmin?: string; pmax?: string; stoc?: string;
   }>;
 }
@@ -210,6 +210,15 @@ export default async function SlugPage({ params, searchParams }: Props) {
   const acces = await incarcaMagazinul(slug, user?.id);
   if (!acces) notFound();
   const { business, esteProprietar: isOwner } = acces;
+  /*
+   * Deschisa in iframe-ul editorului de DESIGN, nu doar cu `?preview=1`.
+   *
+   * De asta atarna tot ce tine de protocol: marcarea sectiunilor, blocarea
+   * clicurilor si randarea cioarnei. Editorul vechi („Editeaza magazinul") pune
+   * doar `preview=1`, deci trebuie sa primeasca o previzualizare navigabila si
+   * versiunea publicata. Vezi `preview-protocol.ts`.
+   */
+  const esteEditorDesign = esteEditorDeDesign(sp, isOwner);
 
   if (!business.is_published && !isOwner) {
     return (
@@ -312,10 +321,32 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * migratia promitea exact contrariul. Tipul propului n-o contine, dar un tip
    * nu curata nimic la executie.
    */
-  // Ciorna se randeaza DOAR pentru proprietar si doar in preview: pana la
-  // Publica, vizitatorii vad neaparat versiunea publicata.
-  const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
+  // Ciorna se randeaza DOAR in editorul de design: pana la Publica, vizitatorii
+  // vad neaparat versiunea publicata.
+  //
+  // ⚠ Nu pe `preview=1`. Il pune si „Editeaza magazinul", care nu stie nimic
+  // despre ciorne: acolo o ciorna ramasa de la celalalt editor deturna
+  // previzualizarea, iar comerciantul isi salva modificarile si vedea in dreapta
+  // alt magazin, fara sa i se spuna de ce.
+  const useDraft = esteEditorDesign && !!storeSettings?.storefront_design_draft;
   const designDeRandat = useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design;
+
+  /*
+   * Designul se rezolva AICI, inaintea citirii datelor, nu dupa.
+   *
+   * `incarcaAcasaDeLaServer` decide ce randuri de produse cere din baza, iar
+   * decizia aia trebuie sa fie aceeasi cu cea de la randare. Cat timp o lua din
+   * `page_content`, iar randarea o lua din design, existau doua porti pentru
+   * acelasi rand: ochiul din editorul de design marca „Recomandate" vizibila si
+   * nu se intampla nimic, fiindca serverul nu ceruse produsele.
+   */
+  const resolved = resolveDesign(designDeRandat, {
+    primaryColor: business.primary_color ?? "#1AB554",
+    pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
+    features: (business.features as Record<string, unknown>) ?? {},
+    coverUrl: business.cover_url,
+    tagline: business.tagline,
+  });
 
   const setariDeTrimis = storeSettings
     ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
@@ -397,6 +428,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       businessId: business.id,
       pagina: initialPage,
       pageContent: pcCatalog,
+      design: resolved.design,
       // Subarborii de sectiune se calculeaza pe lista VIZIBILA: o subcategorie
       // stinsa n-are ce cauta in randul parintelui ei aprins. RPC-ul taie oricum
       // si el, pe aceeasi regula (`public.categorii_ascunse`).
@@ -602,11 +634,22 @@ export default async function SlugPage({ params, searchParams }: Props) {
               dangerouslySetInnerHTML={{ __html: jsonLdSafe(opsGraf) }}
             />
           ) : null}
-          <StorefrontThemeScope style={opsResolved.style}>
-            <StorePageShell chrome={opsChrome} design={opsResolved.design} className="min-h-screen">
-              <ProductPageSection
-                variant={opsResolved.design.product.page.variant}
-                setari={opsResolved.design.product.page.settings}
+          {/*
+            Scopul de tema il pune ACUM invelisul, nu randul de aici: asa culorile
+            si fonturile trimise live de editorul de design se aplica fara
+            reincarcare. Vezi `StorePageShell`.
+          */}
+          <>
+            <StorePageShell
+              chrome={opsChrome}
+              design={opsResolved.design}
+              style={opsResolved.style}
+              esteEditorDesign={esteEditorDesign}
+              className="min-h-screen"
+            >
+              <ProductPageDinDesign
+                variantImplicita={opsResolved.design.product.page.variant}
+                setariImplicite={opsResolved.design.product.page.settings}
                 business={pentruBrowser(business)}
                 product={product}
                 storeSettings={setariDeTrimis as never}
@@ -618,7 +661,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
                 isHome
               />
             </StorePageShell>
-          </StorefrontThemeScope>
+          </>
         </>
       );
     }
@@ -626,17 +669,6 @@ export default async function SlugPage({ params, searchParams }: Props) {
 
   // Designul magazinului. Ciorna se randeaza DOAR pentru proprietar si doar in
   // preview: pana la Publica, vizitatorii vad neaparat versiunea publicata.
-
-  const resolved = resolveDesign(
-    designDeRandat,
-    {
-      primaryColor: business.primary_color ?? "#1AB554",
-      pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
-      features: (business.features as Record<string, unknown>) ?? {},
-      coverUrl: business.cover_url,
-      tagline: business.tagline,
-    },
-  );
 
   /*
    * Grila a plecat de pe pagina principala: adresele ei vechi o urmeaza.
@@ -777,7 +809,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         initialPriceMin={filtreAcasa.pretMin}
         initialPriceMax={filtreAcasa.pretMax}
         initialInStock={filtreAcasa.stoc}
-        preview={isPreview}
+        editorDesign={esteEditorDesign}
         design={resolved.design}
         designStyle={resolved.style}
       />

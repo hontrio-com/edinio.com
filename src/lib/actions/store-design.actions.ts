@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/error-logger";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { ciornaAFostSchimbata } from "@/lib/storefront/design/draft-guard";
+import { faraSemnPeSectiuni } from "@/lib/storefront/design/comutatoare-vechi";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import type { Json } from "@/types/database.types";
 
@@ -100,6 +102,12 @@ async function writeSettings(businessId: string, patch: Record<string, unknown>,
  * altcineva a salvat intre timp — doua file sau doua ecrane deschise pe acelasi
  * magazin se suprascriau tacut, iar ultimul care apasa castiga tot. Fara `baza`,
  * scrierea trece neconditionat, ca pana acum.
+ *
+ * ⚠ `null` si `undefined` sunt lucruri DIFERITE aici. `undefined` inseamna „nu
+ * verifica nimic"; `null` inseamna „am pornit de la o coloana goala" — starea in
+ * care ajunge fiecare magazin dupa Publica si dupa Renunta. Un client care
+ * trimite designul de pe ecran in loc de `null` isi refuza singur prima salvare,
+ * la nesfarsit. Vezi `draft-guard.ts`.
  */
 export async function saveDesignDraft(businessId: string, raw: unknown, baza?: unknown): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
@@ -115,13 +123,10 @@ export async function saveDesignDraft(businessId: string, raw: unknown, baza?: u
       .select("storefront_design_draft")
       .eq("business_id", owned.businessId)
       .single();
-    // Compararea se face pe forma PARSATA, ca doua reprezentari echivalente ale
-    // aceleiasi cioarne sa nu para un conflict.
-    const inBaza = rand?.storefront_design_draft
-      ? JSON.stringify(parseStoreDesign(rand.storefront_design_draft, owned.ctx))
-      : null;
-    const asteptat = baza === null ? null : JSON.stringify(parseStoreDesign(baza, owned.ctx));
-    if (inBaza !== asteptat) {
+    // Regulile si capcanele stau in `draft-guard.ts`, langa testele lor. Cel mai
+    // important: coloana goala inseamna `null`, iar `baza` trebuie sa poarte ce
+    // scrie in COLOANA, nu ce se vede pe ecranul care salveaza.
+    if (ciornaAFostSchimbata(rand?.storefront_design_draft, baza, owned.ctx)) {
       return { error: "Designul a fost modificat in alta fila. Reincarca pagina ca sa nu pierzi acele modificari." };
     }
   }
@@ -187,6 +192,61 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
     revalidatePath(`/${owned.slug}/checkout`);
   }
   return { success: true };
+}
+
+/**
+ * Comutatorul vechi din „Editeaza magazinul" isi ia inapoi dreptul de a vorbi.
+ *
+ * ⚠ Aceeasi sectiune are doua controale: ochiul din editorul de design, care
+ * scrie `enabledOverride`, si comutatorul din editorul magazinului, care scrie
+ * in `page_content`. Semnul explicit bate derivarea — altfel ochiul s-ar anula
+ * singur la fiecare citire — dar consecinta era ca, dupa prima folosire a
+ * ochiului, comutatorul vechi murea TACUT: se misca, se salva, arata „Salvat",
+ * si nu schimba nimic, la nesfarsit.
+ *
+ * Se curata SI publicatul, SI ciorna: comutatorul vechi scrie direct in ce vad
+ * clientii, deci o ciorna care mai poarta semnul l-ar fi reinviat la prima
+ * publicare.
+ */
+export async function elibereazaComutatoare(
+  businessId: string,
+  sectiuni: string[],
+  variante: string[] = [],
+): Promise<ActionResult> {
+  if (sectiuni.length === 0 && variante.length === 0) return { success: true };
+  const owned = await loadOwnedStore(businessId);
+  if ("error" in owned) return owned;
+
+  const supabase = await createClient();
+  const { data: rand } = await supabase
+    .from("store_settings")
+    .select("storefront_design, storefront_design_draft")
+    .eq("business_id", owned.businessId)
+    .single();
+  // Nimic salvat inca inseamna niciun semn de scos: designul se deriva intreg.
+  if (!rand?.storefront_design && !rand?.storefront_design_draft) return { success: true };
+
+  /*
+   * Se scrie DOAR daca chiar era ceva de scos.
+   *
+   * Actiunea se cheama la fiecare salvare de panou care a atins un comutator, iar
+   * marea majoritate a comerciantilor n-au folosit niciodata ochiul din editorul
+   * de design: pentru ei n-ar exista niciun semn, si totusi am fi rescris de
+   * fiecare data ambele coloane de design. Nu doar risipa — scrisul in ciorna
+   * face garda de concurenta sa raporteze, pe drept, „modificat in alta fila"
+   * intr-un editor de design deschis in paralel.
+   */
+  const patch: Record<string, unknown> = {};
+  for (const coloana of ["storefront_design", "storefront_design_draft"] as const) {
+    const raw = rand?.[coloana];
+    if (!raw) continue;
+    const inainte = parseStoreDesign(raw, owned.ctx);
+    const dupa = faraSemnPeSectiuni(inainte, sectiuni, variante);
+    if (JSON.stringify(dupa) !== JSON.stringify(inainte)) patch[coloana] = dupa as unknown as Json;
+  }
+  if (Object.keys(patch).length === 0) return { success: true };
+
+  return writeSettings(owned.businessId, patch, "elibereazaComutatoare");
 }
 
 /** Renunta la modificarile nepublicate. Designul public ramane neatins. */

@@ -138,10 +138,17 @@ export function buildChromeData({
     // si header-ul lipit la `top-9` ar lasa o fasie goala in capul ecranului.
     // Unde designul nu e dat, calculul ramane cel de dinainte si il completeaza
     // invelisul de pagina, care il are mereu.
+    // ⚠ O SINGURA POARTA, si aceea e `enabled` din design. Flagul din
+    // `page_content` a ramas doar acolo unde designul lipseste: cerut si el,
+    // bara aprinsa din editorul de design nu se randa niciodata, dar header-ul
+    // se aseza oricum la `top-9` — adica exact fasia goala pe care comentariul
+    // de mai sus o descrie, doar ca in cealalta directie.
     hasAnnouncementBar:
       pageContent.show_announcement_on_store !== false
-      && pageContent.announcement_bar?.enabled === true
-      && (!design || standaloneAnnouncement(design)?.enabled === true),
+      && (design
+        ? standaloneAnnouncement(design)?.enabled === true
+        : pageContent.announcement_bar?.enabled === true),
+    announcementOn: design ? design.chrome.announcement?.enabled === true : undefined,
     cartMode: cosPePagina ? "page" : cosSertar ? "drawer" : cartMode,
     cartHref: cosPePagina ? cartHref(basePath) : undefined,
     comert,

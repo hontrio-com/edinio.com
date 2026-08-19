@@ -21,6 +21,7 @@ import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from
 import { radacinaMagazinCuFiltre, slugCategorie } from "@/lib/storefront/category-href";
 import { SEGMENT_MAGAZIN, shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { canonicalCatalog, citesteFiltreDinAdresa } from "@/lib/storefront/catalog/url";
@@ -205,10 +206,15 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
-  // Ciorna se randeaza DOAR pentru proprietar si doar in preview, exact ca pe
-  // pagina principala; pana la Publica, vizitatorii vad versiunea publicata.
+  // Ciorna se randeaza DOAR in editorul de design, exact ca pe pagina
+  // principala; pana la Publica, vizitatorii vad versiunea publicata.
+  //
+  // ⚠ Nu pe `preview=1`: il pune si „Editeaza magazinul", care nu stie nimic
+  // despre ciorne. Regula sta intr-un singur loc, in `preview-protocol.ts`,
+  // fiindca prima oara cele doua suprafete au divergat tacut exact aici.
   const isPreview = sp.preview === "1";
-  const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
+  const esteEditorDesign = esteEditorDeDesign(sp as { preview?: string; editor?: string }, isOwner);
+  const useDraft = esteEditorDesign && !!storeSettings?.storefront_design_draft;
   const resolved = resolveDesign(useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design, {
     primaryColor: business.primary_color ?? "#1AB554",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
@@ -660,7 +666,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       categories={categoriiDeNavigat}
       design={resolved.design}
       designStyle={resolved.style}
-      preview={isPreview && isOwner}
+      editorDesign={esteEditorDesign}
       fatete={fateteDePagina}
       jetoane={jetoaneDePagina}
       palier={palierRandat}

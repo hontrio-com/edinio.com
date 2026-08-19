@@ -44,6 +44,8 @@ import { StorefrontProvider, type StorefrontContextValue } from "@/components/st
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
 import { headerAreCautare, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { useDesignPreview } from "@/components/storefront/useDesignPreview";
+import { cuSemnePastrate } from "@/lib/storefront/preview-sticky";
+import { usePastreazaPreview } from "@/components/storefront/usePastreazaPreview";
 import type {
   StoreCategoryNode,
   StoreFeatures,
@@ -116,10 +118,27 @@ interface Props {
   design: StoreDesign;
   designStyle: ResolvedStyle;
   /**
-   * Pagina e deschisa in iframe-ul editorului. Atunci designul poate fi
+   * Pagina e deschisa in iframe-ul editorului de DESIGN. Atunci designul poate fi
    * suprascris live prin postMessage, fara salvare si fara reincarcare.
+   *
+   * ⚠ Nu se numeste `preview`, si nu din pedanterie. Cat timp s-a numit asa,
+   * primea `?preview=1` — steag pe care il pune si „Editeaza magazinul", un
+   * iframe simplu, fara niciun ascultator de mesaje. Asa a capatat editorul vechi
+   * marcarea sectiunilor si blocarea clicurilor de mai jos, iar previzualizarea
+   * lui a devenit o poza pe care nu se putea apasa nimic. Vezi
+   * `preview-protocol.ts`.
    */
-  preview?: boolean;
+  editorDesign?: boolean;
+  /**
+   * Pagina e deschisa in iframe-ul UNUI editor — cel vechi sau cel de design.
+   *
+   * Separat de `editorDesign`, si nu din pedanterie: aici nu e vorba de protocol,
+   * ci de faptul ca orice navigare trebuie sa ramana pe originea curenta. O
+   * adresa fara `preview=1` cade in redirectarile din `proxy.ts`, care sunt
+   * cross-origin, iar `X-Frame-Options` le refuza — comerciantul apasa o
+   * categorie si ramane cu un dreptunghi gol.
+   */
+  estePreviewInEditor?: boolean;
   /**
    * Care suprafata de magazin se randeaza: pagina principala sau pagina de
    * catalog.
@@ -245,9 +264,9 @@ interface Props {
   samanta?: number;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, preview = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
-  const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, preview);
+  const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, editorDesign);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
   // `SectionRenderer`: sunt panouri conduse de starea de aici, cu zece props.
   // Dispecerul lor sta la locul de montare; variantele viitoare intra in cele
@@ -298,8 +317,28 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const catalogRootPagina = surface === "shop" || catalogMutat
     ? shopHref(basePath)
     : radacinaMagazin(basePath);
-  const mergiLaCos = useCallback(() => { window.location.href = cartHref(basePath); }, [basePath]);
-  const mergiLaComanda = useCallback(() => { window.location.href = checkoutHref(basePath); }, [basePath]);
+  /*
+   * Orice navigare pornita din cod trece pe aici.
+   *
+   * In iframe-ul unui editor, adresa trebuie sa poarte mai departe `preview=1`:
+   * fara el, `proxy.ts` redirecteaza catre `www` sau catre domeniul propriu al
+   * magazinului, ambele cross-origin, iar `X-Frame-Options` refuza incadrarea.
+   * Comerciantul apasa o categorie si ramane cu un dreptunghi gol. In afara
+   * editorului, `cuSemnePastrate` intoarce adresa neatinsa.
+   */
+  const navigheazaLa = useCallback((href: string) => {
+    // Neconditionat: in afara previzualizarii, `cuSemnePastrate` intoarce adresa
+    // neatinsa. Un `if` in plus ar fi insemnat inca un prop de dus prin toate
+    // suprafetele, adica inca un loc din care se poate uita.
+    window.location.href = cuSemnePastrate(href, window.location.search);
+  }, []);
+  const mergiLaCos = useCallback(() => { navigheazaLa(cartHref(basePath)); }, [basePath, navigheazaLa]);
+  const mergiLaComanda = useCallback(() => { navigheazaLa(checkoutHref(basePath)); }, [basePath, navigheazaLa]);
+
+  // Linkurile scrise raman in previzualizare. Hook comun cu invelisul paginilor
+  // fara catalog: legat de un prop, ar fi trebuit dus prin sapte pagini publice,
+  // iar prima uitata ar fi fost invizibila pana la un click exact acolo.
+  usePastreazaPreview();
   const [cartOpen, setCartOpen] = useState(false);
 
   /*
@@ -508,9 +547,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       // din emailul de recuperare trebuie sa ajunga tot la formular, deci
       // navigheaza, ducand codul de reducere mai departe in adresa.
       if (comandaPePagina) {
-        window.location.href = code
+        navigheazaLa(code
           ? `${checkoutHref(basePath)}?code=${encodeURIComponent(code)}`
-          : checkoutHref(basePath);
+          : checkoutHref(basePath));
         return;
       }
       setCheckoutOpen(true);
@@ -545,7 +584,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const showCall = features.floating_call === true && !!business.phone;
 
-  const showAnnouncementOnStore = pageContent.show_announcement_on_store !== false && pageContent.announcement_bar?.enabled === true;
+  // Doar regula de PAGINA. Daca bara e aprinsa sau stinsa spune designul, si o
+  // spune intr-un singur loc — vezi `hasAnnouncementBar` mai jos.
+  const showAnnouncementOnStore = pageContent.show_announcement_on_store !== false;
 
   const showStickyCartBar = pageContent.sticky_cart_bar?.enabled !== false;
 
@@ -780,7 +821,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   function selectCategoryItem(item: { id: string | null; name: string; hasChildren: boolean }) {
     if (categoriileNavigheaza) {
-      window.location.href = hrefCategorie(categoriiRootPagina, item.name, true);
+      navigheazaLa(hrefCategorie(categoriiRootPagina, item.name, true));
       return;
     }
     // Drill into a category that has subcategories; otherwise just filter by it.
@@ -792,11 +833,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // navigare. Stersul filtrului pe loc ar fi aratat tot catalogul la o adresa
     // care se numeste dupa o categorie.
     if (caleCategorie) {
-      window.location.href = categoriiRootPagina;
+      navigheazaLa(categoriiRootPagina);
       return;
     }
     if (catalogMutat) {
-      window.location.href = catalogRootPagina;
+      navigheazaLa(catalogRootPagina);
       return;
     }
     setCategoryFilter("toate");
@@ -810,9 +851,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // fratilor, iar parintele listei ar fi fost cu un nivel mai sus decat se
     // asteapta oricine.
     if (caleCategorie) {
-      window.location.href = parinteCategorie
+      navigheazaLa(parinteCategorie
         ? hrefCategorie(categoriiRootPagina, parinteCategorie, true)
-        : categoriiRootPagina;
+        : categoriiRootPagina);
       return;
     }
     setDrillParentId(backTo);
@@ -848,7 +889,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // Ancora `#produse` traieste pe grila. Mutata, „Vezi toate" ar fi derulat
     // catre `null`, adica n-ar fi facut nimic si n-ar fi dat nicio eroare.
     if (categoriileNavigheaza) {
-      window.location.href = hrefCategorie(categoriiRootPagina, category, true);
+      navigheazaLa(hrefCategorie(categoriiRootPagina, category, true));
       return;
     }
     setCategoryFilter(category);
@@ -1435,9 +1476,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
      * fiindca `isHome` e fals acolo. Cu regula veche, header-ul se aseza pe
      * `top-0` ca si cum bara n-ar exista, dar bara se randa — si i se suprapunea.
      */
+    // ⚠ Fara a doua poarta pe `announcement_bar.enabled`: starea barei traieste
+    // in design, iar acolo se deriva chiar din flagul acela cand editorul de
+    // design n-a spus altceva. Ce ramane e regula de PAGINA („arata pe pagina
+    // magazinului"), care chiar e o intrebare separata.
     hasAnnouncementBar:
       (surface !== "home" || showAnnouncementOnStore)
-      && pageContent.announcement_bar?.enabled === true
       && standaloneAnnouncement(design)?.enabled === true,
     announcementOn: design.chrome.announcement?.enabled === true,
     hasHero,
@@ -1537,7 +1581,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     priceLowestOnly,
     freeShippingThreshold,
     openLightbox: setLightboxUrl,
-    isPreview: preview,
+    esteEditorDesign: editorDesign,
   };
 
   return (

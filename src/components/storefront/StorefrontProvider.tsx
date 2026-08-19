@@ -1,5 +1,6 @@
 "use client";
 
+import type { StoreDesign } from "@/lib/storefront/design/types";
 import { createContext, useContext, type ReactNode } from "react";
 import type { ProductSection } from "@/lib/store-sections";
 import type { Fateta, SelectieFatete } from "@/lib/storefront/catalog/facets";
@@ -192,11 +193,28 @@ export interface StoreChromeValue {
   /** Galeria foto poate aparea pe orice pagina, deci lightbox-ul sta aici. */
   openLightbox: (url: string) => void;
   /**
-   * Pagina e deschisa in iframe-ul editorului. Doar atunci sectiunile primesc
-   * marcajul `data-st-section`: pe magazinul public ar fi zeci de elemente in
-   * plus, degeaba, si un wrapper poate rupe selectorii CSS pe copil direct.
+   * Pagina e deschisa in iframe-ul editorului de DESIGN. Doar atunci sectiunile
+   * primesc marcajul `data-st-section`: pe magazinul public ar fi zeci de
+   * elemente in plus, degeaba, si un wrapper poate rupe selectorii CSS pe copil
+   * direct.
+   *
+   * ⚠ Nu „e deschisa cu `?preview=1`". Marcajul e ce cauta blocarea de clicuri
+   * din `useDesignPreview`, iar cat timp cele doua intelesuri au fost acelasi
+   * steag, previzualizarea din „Editeaza magazinul" — care pune si ea
+   * `preview=1` — ajungea acoperita de marcaje si nu mai raspundea la niciun
+   * click. Vezi `preview-protocol.ts`.
    */
-  isPreview?: boolean;
+  esteEditorDesign?: boolean;
+  /**
+   * Designul EFECTIV al paginii, dupa ce editorul de design si-a trimis
+   * eventualele modificari live.
+   *
+   * Exista ca sa poata fi citit de continutul paginii, nu doar de header si
+   * footer: paginile fara catalog isi aleg varianta din el, iar in previzualizare
+   * varianta se schimba fara reincarcare. Optional fiindca paginile care nu
+   * trec prin `StorePageShell` nu il pun.
+   */
+  design?: StoreDesign;
 }
 
 export interface StorefrontContextValue extends StoreChromeValue {

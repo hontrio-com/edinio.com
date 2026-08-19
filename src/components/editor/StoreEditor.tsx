@@ -1,14 +1,18 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Info, Palette, MapPin, Share2, Globe,
   ChevronDown, ChevronUp, Save, Loader2, Check, ExternalLink, Upload, X, Plus,
-  Layout, Smartphone, Paintbrush2, Home, ClipboardList, LayoutGrid,
+  Layout, Smartphone, Tablet, Monitor, Paintbrush2, Home, ClipboardList, LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
+import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPreview";
+import { SUPRAFETE, caleaSuprafetei, motivSuprafataIndisponibila, type CheieSuprafata, type SuprafeteDisponibile } from "@/components/editor/suprafete-preview";
+import { cheiSchimbate, doarCheile, scoateCheileConfirmate } from "@/components/editor/chei-atinse";
+import { insigneDeAratat } from "@/lib/storefront/insigne-implicite";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { ProductSectionsEditor } from "@/components/editor/ProductSectionsEditor";
 import { ProductPicker } from "@/components/pages/ProductPicker";
@@ -24,6 +28,8 @@ const ETICHETE_ASEZARE: Record<string, string> = {
 };
 import { updateBusiness } from "@/lib/actions/business.actions";
 import { updatePageContent } from "@/lib/actions/store.actions";
+import { elibereazaComutatoare } from "@/lib/actions/store-design.actions";
+import { sectiuniAleComutatoarelor, sectiuniAleVariantelor } from "@/lib/storefront/design/comutatoare-vechi";
 import { type ProductSection } from "@/lib/store-sections";
 import {
   INALTIME_INSIGNA_IMPLICITA, INALTIME_INSIGNA_MAX, INALTIME_INSIGNA_MIN,
@@ -235,7 +241,9 @@ function EffectPreview({ id, label, color, selected, onClick }: {
 
 type EditorCategory = { id: string; name: string; parent_id: string | null; sort_order?: number };
 
-export function StoreEditor({ business, storeSettings, plan = "free", categories = [] }: { business: Business; storeSettings: StoreSettings | null; plan?: string; categories?: EditorCategory[] }) {
+export function StoreEditor({ business, storeSettings, plan = "free", categories = [], suprafete }: { business: Business; storeSettings: StoreSettings | null; plan?: string; categories?: EditorCategory[];
+  /** Ce suprafete de magazin chiar exista, pentru selectorul previzualizarii. */
+  suprafete: SuprafeteDisponibile }) {
   const isFreePlan = plan === "free" || plan === "trial";
   const [open, setOpen] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -245,9 +253,57 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
   const [mobileView, setMobileView] = useState<"editor" | "preview">("editor");
   const [previewKey, setPreviewKey] = useState(0);
 
-  // ?preview=1 keeps the storefront on the current origin (proxy.ts skips its
-  // www/custom-domain redirects) so the iframe below isn't blocked by X-Frame-Options.
-  const previewUrl = `/${business.slug}?preview=1`;
+  const [dispozitiv, setDispozitiv] = useState<Dispozitiv>("desktop");
+  const [suprafata, setSuprafata] = useState<CheieSuprafata>("acasa");
+  const ramaPreview = useRef<HTMLIFrameElement>(null);
+
+  /**
+   * Reincarca previzualizarea dupa o salvare.
+   *
+   * ⚠ `reload()`, nu remontare prin `key`. Remontarea construia iframe-ul de la
+   * zero, deci previzualizarea sarea de fiecare data in capul paginii — iar
+   * comerciantul care regla o sectiune de la jumatatea magazinului trebuia sa
+   * deruleze pana acolo dupa FIECARE salvare. Reincarcarea pastreaza pozitia,
+   * fiindca browserul o restaureaza singur.
+   *
+   * Cade pe remontare daca reincarcarea nu e permisa: iframe-ul e same-origin
+   * cat timp poarta `?preview=1`, dar o navigare neasteptata nu trebuie sa lase
+   * previzualizarea inghetata.
+   */
+  const reincarcaPreview = useCallback(() => {
+    try {
+      const fereastra = ramaPreview.current?.contentWindow;
+      if (fereastra) { fereastra.location.reload(); return; }
+    } catch { /* cross-origin: cade pe remontare */ }
+    setPreviewKey((k) => k + 1);
+  }, []);
+
+  /**
+   * Du previzualizarea la o suprafata, chiar daca butonul ei era deja selectat.
+   *
+   * `replace`, nu `assign`: pasii prin previzualizare n-au ce cauta in istoricul
+   * ferestrei mari — butonul Inapoi al browserului ar fi inceput sa desfaca
+   * navigarea dintr-un iframe, in loc sa scoata comerciantul din editor.
+   */
+  const ducLaSuprafata = useCallback((cheie: CheieSuprafata) => {
+    const tinta = `${caleaSuprafetei(cheie, business.slug, suprafete.produsSlug)}?preview=1`;
+    try {
+      const fereastra = ramaPreview.current?.contentWindow;
+      if (fereastra) { fereastra.location.replace(tinta); return; }
+    } catch { /* cross-origin: cade pe remontare, cu `src`-ul nou */ }
+    setPreviewKey((k) => k + 1);
+  }, [business.slug, suprafete.produsSlug]);
+
+  /*
+   * ?preview=1 keeps the storefront on the current origin (proxy.ts skips its
+   * www/custom-domain redirects) so the iframe below isn't blocked by X-Frame-Options.
+   *
+   * ⚠ DOAR `preview=1`, fara semnul editorului de design. Al doilea semn
+   * porneste protocolul de acolo — marcarea sectiunilor si blocarea clicurilor —
+   * iar previzualizarea de aici trebuie sa ramana navigabila. Vezi
+   * `preview-protocol.ts`.
+   */
+  const previewUrl = `${caleaSuprafetei(suprafata, business.slug, suprafete.produsSlug)}?preview=1`;
   // Show the connected custom domain when present; otherwise the edinio.com URL.
   const publicUrl = business.custom_domain
     ? `https://${business.custom_domain}`
@@ -278,7 +334,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     const result = await updateBusiness(business.id, data);
     setSaving(null);
     if (result.error) { toast.error(result.error); }
-    else { setSaved(section); setPreviewKey(k => k + 1); setTimeout(() => setSaved(null), 2000); }
+    else { setSaved(section); reincarcaPreview(); setTimeout(() => setSaved(null), 2000); }
   }
 
   // ── General section state
@@ -432,7 +488,18 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
 
     const result = await updateBusiness(business.id, { logo_url, cover_url, primary_color: primaryColor });
     // Banners (+ their click links) + hero overlay toggle live in page_content.
-    const pcResult = await updatePageContent(business.id, { ...pageContent, hero_banners: bannerUrls, hero_banner_links: bannerLinks, favicon_url } as Record<string, unknown>);
+    // Doar cheile panoului asta, plus cele trei pe care le calculeaza el aici.
+    // Trimis intreg, `pageContent` ar fi dus in magazin si ce a schimbat
+    // comerciantul in „Pagina produs" sau in „Formular de comanda" fara sa salveze.
+    // Starea de ACUM, nu cea din clipa clicului: intre timp s-au urcat imagini,
+    // deci pot fi secunde bune in care comerciantul a mai schimbat ceva.
+    const trimisBranding = {
+      ...doarCheile(pageContentAcum.current as Record<string, unknown>, cheiAtinse.current.branding ?? []),
+      hero_banners: bannerUrls,
+      hero_banner_links: bannerLinks,
+      favicon_url,
+    };
+    const pcResult = await updatePageContent(business.id, trimisBranding);
     setSaving(null);
     if (result.error) { toast.error(result.error); }
     else if ("error" in pcResult) { toast.error(pcResult.error); }
@@ -441,8 +508,27 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
       setLogoFile(null);
       setFaviconFile(null);
       setFaviconPreview(favicon_url);
+      /*
+       * ⚠ SI IN `pageContent`, NU DOAR IN PREVIZUALIZAREA DE DEASUPRA.
+       *
+       * `favicon_url` traieste in `page_content`, iar starea aia e o COPIE facuta
+       * o singura data, la montare. Randul de mai sus improspata doar imaginea
+       * din panou; copia ramanea cu valoarea veche. Iar `savePageContent` si
+       * `saveCheckoutConfig` trimit obiectul INTREG, peste care merge-ul per
+       * cheie il scrie inapoi — deci prima salvare din orice alta sectiune sterge
+       * faviconul tocmai incarcat, fara niciun mesaj.
+       */
+      // `setPageContentBrut`, nu varianta care noteaza: asta nu e o editare a
+      // comerciantului, ci sincronizarea copiei cu ce tocmai s-a scris in baza.
+      // Notata, ar fi retrimis cheia la urmatoarea salvare a panoului, degeaba.
+      setPageContentBrut((p) => ({ ...p, favicon_url }));
+      scoateCheileConfirmate(
+        (cheiAtinse.current.branding ??= new Set()),
+        trimisBranding,
+        { ...pageContentAcum.current, favicon_url } as Record<string, unknown>,
+      );
       setBannerItems(bannerUrls.map((url, i) => ({ id: `saved-${i}`, url, file: null, link: bannerLinks[i] ?? "" })));
-      setPreviewKey(k => k + 1);
+      reincarcaPreview();
       setTimeout(() => setSaved(null), 2000);
     }
   }
@@ -465,7 +551,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
 
   // ── Page content state
   const rawPageContent = (storeSettings?.page_content as PageContent) ?? {};
-  const [pageContent, setPageContent] = useState<PageContent>({
+  const [pageContent, setPageContentBrut] = useState<PageContent>({
     announcement_bar: rawPageContent.announcement_bar ?? { enabled: false, text: "PLATA LA LIVRARE   ✦   LIVRARE RAPIDA 24-48H IN TOATA ROMANIA   ✦   RETUR 14 ZILE", bg_color: business.primary_color },
     trust_badges_enabled: rawPageContent.trust_badges_enabled ?? true,
     trust_badges: rawPageContent.trust_badges ?? [
@@ -539,23 +625,106 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     hero_show_content: rawPageContent.hero_show_content ?? false,
   });
 
+  /**
+   * Ce cheie din `page_content` a atins fiecare panou, pe id de panou.
+   *
+   * ⚠ AICI STA PROMISIUNEA DIN ANTET. Cele patru panouri scriu in acelasi obiect,
+   * si fiecare il trimitea INTREG: un comutator pornit din curiozitate intr-unul
+   * si lasat nesalvat ajungea in magazin cand comerciantul salva cu totul altceva.
+   *
+   * Nu o lista de chei scrisa de mana — aceea ar diverge de interfata la prima
+   * sectiune noua si ar pierde tacut o setare. Se tine minte ce s-a schimbat cu
+   * adevarat, si cat timp era deschis care panou.
+   */
+  const cheiAtinse = useRef<Record<string, Set<string>>>({});
+
+  /**
+   * Scrie in `pageContent` si noteaza panoul care a facut-o.
+   *
+   * `open` se citeste din randarea in care s-a construit handlerul, deci e chiar
+   * panoul deschis in clipa clicului: toate editarile se fac in panoul deschis.
+   */
+  /**
+   * Ultima valoare a lui `pageContent`, citibila dupa un `await`.
+   *
+   * ⚠ `saveBranding` urca intai imaginile, deci intre clic si scrierea in baza
+   * trec secunde. Citit din inchiderea randarii in care s-a dat clic,
+   * `pageContent` era de dinaintea a tot ce a apucat comerciantul sa mai schimbe
+   * intre timp — si valoarea VECHE ajungea in baza.
+   */
+  const pageContentAcum = useRef(pageContent);
+  // In efect, nu in randare: scrisul intr-un ref in timpul randarii nu e permis.
+  // Efectul ruleaza inaintea oricarui alt clic, deci pentru citirile de dupa un
+  // `await` valoarea e mereu cea de pe ecran.
+  useEffect(() => { pageContentAcum.current = pageContent; }, [pageContent]);
+
+  const setPageContent = useCallback(
+    (actualizare: PageContent | ((p: PageContent) => PageContent)) => {
+      const panou = open;
+      setPageContentBrut((p) => {
+        const next = typeof actualizare === "function" ? actualizare(p) : actualizare;
+        if (panou) {
+          const set = (cheiAtinse.current[panou] ??= new Set<string>());
+          for (const cheie of cheiSchimbate(p as Record<string, unknown>, next as Record<string, unknown>)) {
+            set.add(cheie);
+          }
+        }
+        return next;
+      });
+    },
+    [open],
+  );
+
   /** Insignele proprii din subsol, citite din starea de mai sus. */
   const insigne = pageContent.footer_badges ?? [];
 
-  async function savePageContent() {
-    setSaving("page");
-    const result = await updatePageContent(business.id, pageContent as Record<string, unknown>);
+  /**
+   * Salveaza UN panou: doar cheile pe care le-a atins el.
+   *
+   * `updatePageContent` face merge per cheie, deci ce nu se trimite ramane
+   * neatins in baza — inclusiv ce a schimbat comerciantul in alt panou si inca
+   * n-a salvat. Panoul isi poarta si indicatorul propriu, ca sa nu mai arate
+   * toate butoanele „Salvat" deodata.
+   */
+  async function salveazaPanou(panou: string) {
+    const chei = cheiAtinse.current[panou];
+    // Nimic de trimis: butonul confirma, dar nu mai punem o scriere in baza si o
+    // reincarcare a previzualizarii pentru zero modificari.
+    if (!chei?.size) {
+      setSaved(panou);
+      setTimeout(() => setSaved(null), 2000);
+      return;
+    }
+    setSaving(panou);
+    const trimis = doarCheile(pageContentAcum.current as Record<string, unknown>, chei);
+    const result = await updatePageContent(business.id, trimis);
+    /*
+     * Comutatoarele atinse aici isi iau inapoi dreptul de a vorbi.
+     *
+     * Ochiul din editorul de design lasa un semn care bate derivarea din
+     * `page_content` — corect, altfel s-ar anula singur — dar atunci comutatorul
+     * de aici murea tacut dupa prima folosire a lui. Un comerciant care apasa
+     * comutatorul spune ceva la fel de explicit, deci semnul mai vechi nu mai are
+     * ce apara. Vezi `comutatoare-vechi.ts`.
+     */
+    const eliberat = await elibereazaComutatoare(
+      business.id,
+      sectiuniAleComutatoarelor(Object.keys(trimis)),
+      sectiuniAleVariantelor(Object.keys(trimis)),
+    );
+    // Setarea s-a salvat, dar semnul din design a ramas: comutatorul ar parea ca
+    // n-a facut nimic. Mai bine un mesaj decat inca un buton mut.
+    if ("error" in eliberat) {
+      toast.error("Setarea s-a salvat, dar sectiunea ramane reglata din Design sectiuni.");
+    }
     setSaving(null);
-    if ("error" in result) toast.error(result.error);
-    else { setSaved("page"); setPreviewKey(k => k + 1); setTimeout(() => setSaved(null), 2000); }
-  }
-
-  async function saveCheckoutConfig() {
-    setSaving("checkout");
-    const result = await updatePageContent(business.id, pageContent as Record<string, unknown>);
-    setSaving(null);
-    if ("error" in result) toast.error(result.error);
-    else { setSaved("checkout"); setPreviewKey(k => k + 1); setTimeout(() => setSaved(null), 2000); }
+    if ("error" in result) { toast.error(result.error); return; }
+    // Se scot din set doar cheile care au ajuns in baza cu valoarea pe care o au
+    // si ACUM: ce a mai schimbat comerciantul cat timp se salva ramane de trimis.
+    scoateCheileConfirmate(chei, trimis, pageContentAcum.current as Record<string, unknown>);
+    setSaved(panou);
+    reincarcaPreview();
+    setTimeout(() => setSaved(null), 2000);
   }
 
   // ── Publish toggle
@@ -801,6 +970,14 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             </div>
             <p className="text-[10px] text-muted-foreground mt-1.5">Recomandat 16:9 (ex. 1920x1080). Cu mai multe bannere, se afiseaza ca un carusel pe magazin.</p>
           </div>
+          {/*
+            Comutatorul ramane VIU chiar daca hero-ul a fost ales din galerie.
+            El alege intre exact doua variante — „Doar imagini" si „Imagine cu
+            text peste" — pe care le ofera si galeria, iar alegerea de acolo lasa
+            un semn care bate derivarea. Ar fi devenit un buton care se misca si
+            nu schimba nimic; in loc sa-l ascundem, salvarea scoate semnul, deci
+            ultimul care vorbeste castiga. Vezi `comutatoare-vechi.ts`.
+          */}
           {bannerItems.length > 0 && (
             <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
               <div className="min-w-0">
@@ -1197,7 +1374,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             </div>
           </div>
 
-          <SaveBtn loading={saving === "page"} saved={saved === "page"} onSave={savePageContent} />
+          <SaveBtn loading={saving === "page"} saved={saved === "page"} onSave={() => salveazaPanou("page")} />
         </div>
       ),
     },
@@ -1765,7 +1942,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             </button>
           </div>
 
-          <SaveBtn loading={saving === "page"} saved={saved === "page"} onSave={savePageContent} />
+          <SaveBtn loading={saving === "store_page"} saved={saved === "store_page"} onSave={() => salveazaPanou("store_page")} />
         </div>
       ),
     },
@@ -1784,7 +1961,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             value={pageContent.product_sections ?? []}
             onChange={(next) => setPageContent(p => ({ ...p, product_sections: next }))}
           />
-          <SaveBtn loading={saving === "page"} saved={saved === "page"} onSave={savePageContent} />
+          <SaveBtn loading={saving === "product_sections"} saved={saved === "product_sections"} onSave={() => salveazaPanou("product_sections")} />
         </div>
       ),
     },
@@ -1981,7 +2158,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             </button>
           </div>
 
-          <SaveBtn loading={saving === "checkout"} saved={saved === "checkout"} onSave={saveCheckoutConfig} />
+          <SaveBtn loading={saving === "checkout"} saved={saved === "checkout"} onSave={() => salveazaPanou("checkout")} />
         </div>
       ),
     },
@@ -2019,13 +2196,25 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    /*
+      Inaltimea ecranului MINUS bara de sus a dashboard-ului (sticky, 3.5rem) si,
+      pe telefon, bara de navigare de jos (`pb-20` din layout, 5rem). Cu
+      `h-screen`, diferenta cadea sub marginea ferestrei: partea de jos a ramei se
+      taia si aparea a doua bara de derulare, a paginii.
+    */
+    <div className="flex h-[calc(100dvh-3.5rem-5rem)] lg:h-[calc(100dvh-3.5rem)] overflow-hidden">
       {/* Left panel */}
       <div className={cn("w-full lg:w-[380px] flex-shrink-0 flex flex-col border-r border-border bg-surface", mobileView === "preview" && "hidden lg:flex")}>
         <div className="px-5 py-4 border-b border-border">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="font-semibold text-foreground">Editeaza magazinul</h1>
+              {/*
+                Promisiunea asta a fost multa vreme falsa: cele patru panouri
+                scriu in acelasi `page_content` si fiecare il trimitea INTREG,
+                deci orice buton Salveaza le trimitea pe toate. Azi e adevarata —
+                vezi `salveazaPanou` si `chei-atinse.ts`.
+              */}
               <p className="text-xs text-muted-foreground mt-0.5">Modificarile se salveaza separat pentru fiecare sectiune</p>
             </div>
             {/* Mobile view switcher */}
@@ -2053,25 +2242,76 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
 
       {/* Right: preview — always visible on desktop, switchable on mobile */}
       <div className={cn("flex-1 flex-col", mobileView === "preview" ? "flex" : "hidden lg:flex")}>
-        <div className="px-5 py-3 border-b border-border bg-surface flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Mobile back to editor */}
-            <button type="button" onClick={() => setMobileView("editor")}
-              className="lg:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-              <Paintbrush2 className="h-3.5 w-3.5" />
-              Editor
-            </button>
-            <span className="text-sm font-medium text-foreground">Previzualizare</span>
+        <div className="px-5 py-3 border-b border-border bg-surface flex items-center gap-3 flex-wrap">
+          {/* Mobile back to editor */}
+          <button type="button" onClick={() => setMobileView("editor")}
+            className="lg:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <Paintbrush2 className="h-3.5 w-3.5" />
+            Editor
+          </button>
+
+          {/*
+            Ce PAGINA se previzualizeaza. Panourile „Pagina produs" si „Formular
+            de comanda" regleaza lucruri care nu apar niciodata pe pagina
+            principala; fara selectorul asta, zeci de comutatoare se salvau fara
+            ca ceva vizibil sa se schimbe.
+          */}
+          <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
+            {SUPRAFETE.map(({ cheie, eticheta }) => {
+              const motiv = motivSuprafataIndisponibila(cheie, suprafete);
+              return (
+                <button key={cheie} type="button" disabled={!!motiv} title={motiv ?? eticheta}
+                  // Butonul DUCE mereu la suprafata, nu doar schimba starea.
+                  // Previzualizarea e navigabila acum: dupa un click pe un produs
+                  // in interiorul ei, „Acasa" era deja selectat, deci `src` nu se
+                  // schimba, si nu se intampla nimic — singura iesire ramanea
+                  // reincarcarea intregului editor.
+                  onClick={() => { setSuprafata(cheie); ducLaSuprafata(cheie); }}
+                  className={cn(
+                    "h-8 px-2.5 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                    suprafata === cheie ? "bg-surface shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}>
+                  {eticheta}
+                </button>
+              );
+            })}
           </div>
+
+          {/* Telefon sau calculator: latimi de viewport reale, vezi `RamaPreview`. */}
+          <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
+            {([["mobil", Smartphone], ["tableta", Tablet], ["desktop", Monitor]] as const).map(([d, Icon]) => (
+              <button key={d} type="button" onClick={() => setDispozitiv(d)} aria-label={d} title={d}
+                className={cn(
+                  "h-8 w-9 rounded-md flex items-center justify-center transition-colors",
+                  dispozitiv === d ? "bg-surface shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}>
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+
           <a href={publicUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-primary hover:underline">
+            className="ml-auto flex items-center gap-1.5 text-xs text-primary hover:underline">
             <ExternalLink className="h-3.5 w-3.5" />
             Deschide in tab nou
           </a>
         </div>
-        <div className="flex-1 bg-muted/30 flex items-center justify-center p-4 lg:p-6">
-          <div className="w-full max-w-sm h-full max-h-[750px] bg-surface rounded-2xl border border-border shadow-lg overflow-hidden">
-            <iframe key={previewKey} src={previewUrl} className="w-full h-full" title="Previzualizare magazin" />
+        <div className="flex-1 bg-muted/30 p-4 lg:p-6 overflow-hidden">
+          {/*
+            ⚠ Fara `max-w-sm`. Cadrul avea 384 de pixeli, sub toate pragurile
+            Tailwind, deci magazinul se randa mereu in forma lui cea mai ingusta —
+            meniu hamburger, grila pe doua coloane, fara sagetile de carusel — si
+            nu exista niciun comutator care sa arate altceva. `RamaPreview`
+            randeaza la latimea reala a dispozitivului ales si micsoreaza.
+          */}
+          <div className="w-full h-full bg-surface rounded-2xl border border-border shadow-lg overflow-hidden">
+            <RamaPreview
+              src={previewUrl}
+              dispozitiv={dispozitiv}
+              cheie={previewKey}
+              rama={ramaPreview}
+              titlu="Previzualizare magazin"
+            />
           </div>
         </div>
       </div>

@@ -7,6 +7,7 @@ import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { checkoutOnPage } from "@/lib/storefront/design/commerce";
+import { cuSemnePastrate, sirDinSp } from "@/lib/storefront/preview-sticky";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
@@ -27,13 +28,17 @@ export const metadata: Metadata = { title: { absolute: "Finalizeaza comanda" }, 
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ code?: string }>;
+  searchParams: Promise<{ code?: string; preview?: string; editor?: string }>;
 }
 
 export default async function CheckoutPage({ params, searchParams }: Props) {
   const { slug } = await params;
   // Codul de reducere vine din linkul de recuperare a cosului abandonat.
-  const { code } = await searchParams;
+  // Restul sirului se citeste doar ca redirectarile de mai jos sa poata pastra
+  // semnele de previzualizare: fara ele, comerciantul care se uita la formularul
+  // de comanda din editor era scos din previzualizare la primul redirect.
+  const sp = await searchParams;
+  const { code } = sp;
 
   const supabase = await createClient();
   const [{ data: business }, { data: { user } }] = await Promise.all([
@@ -70,7 +75,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
-  if (!checkoutOnPage(resolved.design)) redirect(radacinaMagazin(basePath));
+  if (!checkoutOnPage(resolved.design)) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
 
   // Magazin suspendat sau abonament expirat: pagina magazinului arata deja
   // „suspendat", dar aici se putea comanda mai departe cu cosul din localStorage.
@@ -88,7 +93,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
         suspendat = new Date(ownerProfile.plan_expires_at) < new Date();
       }
     }
-    if (suspendat) redirect(radacinaMagazin(basePath));
+    if (suspendat) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
   }
 
   const searchCategories = await loadSearchCategories(business.id, resolved.design);

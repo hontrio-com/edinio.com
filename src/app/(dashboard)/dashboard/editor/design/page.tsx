@@ -41,10 +41,16 @@ export default async function DesignEditorPage() {
   // editor trebuie sa gaseasca exact unde a ramas. Publicatul se trimite separat,
   // ca editorul sa stie ce vad clientii acum si sa poata spune daca exista
   // modificari nepublicate.
+  //
+  // ⚠ Ciorna se trimite SI ca ea insasi, nu doar topita in `designInitial`.
+  // Salvarea o cere inapoi ca „baza", iar acolo diferenta dintre „coloana e
+  // goala" si „coloana are exact designul publicat" decide daca prima salvare
+  // trece sau pica pe veci. Vezi `draft-guard.ts`.
   const publicat = parseStoreDesign(settings?.storefront_design, ctx);
-  const design = settings?.storefront_design_draft
+  const cioarna = settings?.storefront_design_draft
     ? parseStoreDesign(settings.storefront_design_draft, ctx)
-    : publicat;
+    : null;
+  const design = cioarna ?? publicat;
 
   /*
    * Cate bannere de hero are magazinul.
@@ -62,6 +68,7 @@ export default async function DesignEditorPage() {
       slug={business.slug}
       designInitial={design}
       designPublicat={publicat}
+      cioarnaInitiala={cioarna}
       ctx={ctx}
       numarBannere={numarBannere}
     />

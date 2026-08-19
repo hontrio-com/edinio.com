@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
 import { PageIcon } from "@/components/pages/icon-registry";
+import { poateFiDuplicata } from "@/lib/storefront/design/edit";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 
@@ -187,7 +188,9 @@ function SectionRow({
             </button>
           )}
 
-          {meta?.singleton === false && (
+          {/* Aceeasi regula dupa care si executa `duplicateSection`, ca butonul
+              sa nu existe acolo unde n-ar face nimic. */}
+          {poateFiDuplicata(section.kind) && (
             <button type="button" onClick={onDuplicate} className={actiune} aria-label="Duplica sectiunea">
               <Copy className="h-4 w-4" />
             </button>

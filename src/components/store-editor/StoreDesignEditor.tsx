@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, LayoutGrid, Loader2, Monitor, Plus, Smartphone, Tablet, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, LayoutGrid, Loader2, Monitor, Plus, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageIcon } from "@/components/pages/icon-registry";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
@@ -16,14 +16,22 @@ import {
   toggleSection,
   updateSection,
 } from "@/lib/storefront/design/edit";
-import { PREVIEW_MESSAGE, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
+import { PREVIEW_MESSAGE, PREVIEW_QUERY, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
 import { sectionMeta } from "@/lib/storefront/design/registry";
 import type { DesignContext, SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { SectionList } from "./SectionList";
 import { DesignGallery } from "./DesignGallery";
 import { SectionSettings } from "./SectionSettings";
+import { RamaPreview, type Dispozitiv } from "./RamaPreview";
 
-type Dispozitiv = "mobil" | "tableta" | "desktop";
+/*
+ * Latimile stau in `RamaPreview`, nu aici, si sunt numere de VIEWPORT.
+ *
+ * Inainte, „desktop" insemna `width: 100%` — adica latimea panoului ramas dupa
+ * bara laterala si lista de sectiuni. Pe un ecran de 1440 raman vreo 780 de
+ * pixeli, sub pragul `lg` din Tailwind: comerciantul apasa „Desktop" si vedea
+ * tot o tableta, cu meniul strans si grila pe doua coloane.
+ */
 
 /**
  * Cate design-uri are sectiunea de ALES. Sub doua, galeria n-are ce arata.
@@ -38,7 +46,6 @@ const numarVariante = (s: SectionInstance) => {
   return meta?.inCatalog ? Object.keys(meta.variants).length : 0;
 };
 
-const LATIMI: Record<Dispozitiv, string> = { mobil: "390px", tableta: "768px", desktop: "100%" };
 
 /**
  * Editorul de design al magazinului.
@@ -57,6 +64,7 @@ export function StoreDesignEditor({
   slug,
   designInitial,
   designPublicat,
+  cioarnaInitiala,
   ctx,
   numarBannere,
 }: {
@@ -66,6 +74,8 @@ export function StoreDesignEditor({
   designInitial: StoreDesign;
   /** Ce vad clientii acum. Diferenta fata de el inseamna modificari nepublicate. */
   designPublicat: StoreDesign;
+  /** Ce scrie ACUM in coloana de ciorna: `null` cand coloana e goala. */
+  cioarnaInitiala: StoreDesign | null;
   ctx: DesignContext;
   /** Cate bannere de hero are magazinul; unele design-uri au nevoie de cel putin unul. */
   numarBannere: number;
@@ -81,9 +91,24 @@ export function StoreDesignEditor({
   const [galerie, setGalerie] = useState<string | null>(null);
 
   const iframe = useRef<HTMLIFrameElement>(null);
-  const gataDePreview = useRef(false);
-  /** Ultima ciorna ajunsa efectiv in baza. Ref, nu stare: nu trebuie sa re-randeze. */
+  /** Bumpat de „Reincarca previzualizarea": remonteaza iframe-ul de la zero. */
+  const [previewKey, setPreviewKey] = useState(0);
+  /** Ultimul design pe care nu mai are rost sa-l salvam. Ref, nu stare: nu re-randeaza. */
   const salvat = useRef<StoreDesign>(designInitial);
+  /**
+   * Ce scrie ACUM in coloana de ciorna. `null` cand coloana e goala.
+   *
+   * Separat de `salvat`, desi par acelasi lucru. `salvat` e ce s-a vazut pe
+   * ecran, iar la prima intrare in editor ecranul arata designul PUBLICAT, nu o
+   * ciorna — coloana e goala. Trimis asa ca „baza", verificarea de concurenta
+   * compara un obiect cu `null`, nu se potrivesc niciodata, si prima salvare de
+   * ciorna pica cu „Designul a fost modificat in alta fila". La nesfarsit, pe
+   * deasupra: pe ramura de eroare nu avanseaza nimic, deci fiecare autosalvare
+   * urmatoare pleaca de la aceeasi baza gresita. Si nu era un caz de magazin
+   * nou — coloana redevine `NULL` dupa fiecare Publica si dupa fiecare Renunta,
+   * deci editorul se rupea din nou dupa fiecare publicare reusita.
+   */
+  const cioarnaInBaza = useRef<StoreDesign | null>(cioarnaInitiala);
   /**
    * Fiecare Publica sau Renunta incepe o „epoca" noua.
    *
@@ -105,11 +130,24 @@ export function StoreDesignEditor({
     [design, publicat],
   );
 
-  // Trimite designul curent in preview. Se apeleaza la fiecare schimbare si cand
-  // iframe-ul anunta ca s-a montat.
+  /*
+   * Trimite designul curent in preview. Se apeleaza la fiecare schimbare si cand
+   * iframe-ul anunta ca s-a montat.
+   *
+   * ⚠ FARA POARTA „gata de preview". Exista una, un `ref` pus pe `true` la primul
+   * „ready" si niciodata inapoi pe `false`. Cat timp iframe-ul ramanea pe
+   * magazin, mergea; dupa o navigare — bannerul de cookie-uri, butonul flotant
+   * de telefon, orice scapa blocarii — pagina noua nu mai avea ascultator, dar
+   * poarta ramanea deschisa, deci editorul se purta ca si cum ar fi conectat.
+   * Previzualizarea ramanea inghetata definitiv, iar panoul continua sa spuna
+   * „Se salveaza".
+   *
+   * Un mesaj trimis inainte ca iframe-ul sa fie montat se pierde, si e in regula:
+   * copilul cere designul singur, prin „ready", exact pentru cazul asta. Poarta
+   * nu aducea nimic in plus — doar starea din care nu se mai iesea.
+   */
   const trimite = useCallback(
     (d: StoreDesign) => {
-      if (!gataDePreview.current) return;
       iframe.current?.contentWindow?.postMessage(
         { [PREVIEW_MESSAGE]: "design", design: d, style: resolveStyle(d.style, ctx) },
         window.location.origin,
@@ -123,7 +161,6 @@ export function StoreDesignEditor({
       if (event.origin !== window.location.origin || !isPreviewMessage(event.data)) return;
       const msg = event.data;
       if (msg[PREVIEW_MESSAGE] === "ready") {
-        gataDePreview.current = true;
         trimite(design);
       } else if (msg[PREVIEW_MESSAGE] === "select") {
         setSelectat(msg.sectionId);
@@ -144,7 +181,7 @@ export function StoreDesignEditor({
   useEffect(() => {
     if (design === salvat.current) return;
     const gen = epoca.current;
-    const baza = salvat.current;
+    const baza = cioarnaInBaza.current;
     const id = setTimeout(async () => {
       if (gen !== epoca.current) return;
       setSalvez(true);
@@ -156,6 +193,7 @@ export function StoreDesignEditor({
         return;
       }
       salvat.current = design;
+      cioarnaInBaza.current = design;
     }, 1200);
     return () => clearTimeout(id);
   }, [design, businessId]);
@@ -211,6 +249,9 @@ export function StoreDesignEditor({
     }
     setPublicat(design);
     salvat.current = design;
+    // Publicarea goleste coloana de ciorna. Fara randul asta, urmatoarea
+    // autosalvare ar porni de la ciorna dinainte de publicare si ar cadea.
+    cioarnaInBaza.current = null;
     toast.success("Designul e live in magazin");
   }
 
@@ -223,6 +264,8 @@ export function StoreDesignEditor({
     }
     aplica(publicat);
     salvat.current = publicat;
+    // La fel ca la Publica: `discardDesignDraft` pune coloana pe `NULL`.
+    cioarnaInBaza.current = null;
     toast.success("Modificarile au fost anulate");
   }
 
@@ -237,7 +280,15 @@ export function StoreDesignEditor({
   const deAdaugat = addableKinds(design);
 
   return (
-    <div className="flex h-dvh overflow-hidden">
+    /*
+      Inaltimea ecranului MINUS ce sta deja deasupra si dedesubt.
+      `h-dvh` masura tot ecranul, dar editorul incepe sub bara de sus a
+      dashboard-ului (sticky, 3.5rem) si, pe telefon, se termina deasupra barei de
+      navigare de jos (`pb-20` din layout, 5rem). Diferenta cadea sub marginea
+      ferestrei: partea de jos a ramei se taia si aparea a doua bara de derulare,
+      a paginii, peste cea a previzualizarii.
+    */
+    <div className="flex h-[calc(100dvh-3.5rem-5rem)] lg:h-[calc(100dvh-3.5rem)] overflow-hidden">
       {/* Panoul de sectiuni */}
       <div className={`w-full lg:w-[380px] shrink-0 flex flex-col border-r border-border bg-surface ${vedereMobil === "preview" ? "hidden lg:flex" : "flex"}`}>
         <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
@@ -346,7 +397,19 @@ export function StoreDesignEditor({
             className="lg:hidden h-9 px-3 rounded-lg border border-border text-sm hover:bg-muted transition-colors">
             Sectiuni
           </button>
-          <div className="flex bg-muted rounded-lg p-0.5 gap-0.5 ml-auto">
+          {/*
+            Iesirea de siguranta. Chiar daca previzualizarea nu mai are cum sa
+            navigheze singura, o pagina care s-a incurcat dintr-un motiv
+            neprevazut nu trebuie sa ceara reincarcarea intregului editor — acolo
+            se pierd si modificarile nesalvate inca.
+          */}
+          <button type="button" onClick={() => setPreviewKey((k) => k + 1)}
+            title="Reincarca previzualizarea" aria-label="Reincarca previzualizarea"
+            className="ml-auto shrink-0 h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5">
+            <RotateCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Reincarca</span>
+          </button>
+          <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
             {([["mobil", Smartphone], ["tableta", Tablet], ["desktop", Monitor]] as const).map(([d, Icon]) => (
               <button key={d} type="button" onClick={() => setDispozitiv(d)} aria-label={d}
                 className={`h-8 w-9 rounded-md flex items-center justify-center transition-colors ${
@@ -357,10 +420,21 @@ export function StoreDesignEditor({
             ))}
           </div>
         </div>
-        <div className="flex-1 overflow-auto flex justify-center p-3 lg:p-5">
-          <div className="h-full bg-surface rounded-xl border border-border shadow-sm overflow-hidden transition-[width] duration-200"
-            style={{ width: LATIMI[dispozitiv], maxWidth: "100%" }}>
-            <iframe ref={iframe} src={`/${slug}?preview=1`} title="Previzualizare magazin" className="w-full h-full" />
+        <div className="flex-1 overflow-hidden flex justify-center p-3 lg:p-5">
+          <div className="h-full w-full bg-surface rounded-xl border border-border shadow-sm overflow-hidden">
+            {/*
+              `PREVIEW_QUERY`, nu `?preview=1` scris de mana: al doilea semn e
+              cel care porneste protocolul (marcarea sectiunilor, blocarea
+              clicurilor, randarea cioarnei). Editorul vechi pune doar
+              `preview=1` si trebuie sa ramana cu o previzualizare navigabila.
+            */}
+            <RamaPreview
+              src={`/${slug}?${PREVIEW_QUERY}`}
+              dispozitiv={dispozitiv}
+              cheie={previewKey}
+              rama={iframe}
+              titlu="Previzualizare magazin"
+            />
           </div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { cautaPeServer, sortareLaCautare, type PaginaCautata } from "@/lib/store
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
 import { hartaOrdine, type Asezare } from "@/lib/storefront/asezare";
+import type { StoreDesign } from "@/lib/storefront/design/types";
 
 /**
  * Pagina principala, pe palierul server: o pagina de produse plus randurile ei.
@@ -51,6 +52,11 @@ export async function incarcaAcasaDeLaServer(args: {
   businessId: string;
   pagina: number;
   pageContent: Record<string, unknown>;
+  /**
+   * Designul REZOLVAT al magazinului: din el se afla ce randuri de produse se
+   * cer, ca decizia sa fie aceeasi cu cea de la randare.
+   */
+  design: StoreDesign;
   categorii: CategorieArbore[];
   faraImagini: boolean;
   faraStocAscuns: boolean;
@@ -103,20 +109,35 @@ export async function incarcaAcasaDeLaServer(args: {
   stoc: boolean;
   preia: (r: RezultatAcasa) => void;
 }): Promise<boolean> {
-  const { businessId, pagina, pageContent, categorii, faraImagini, faraStocAscuns } = args;
+  const { businessId, pagina, pageContent, design, categorii, faraImagini, faraStocAscuns } = args;
   const db = proiectieDb();
 
   /*
    * Sectiunile se citesc cu ACELASI parser ca in browser, si subarborele cu
    * acelasi `numeSubarbore`. In SQL pleaca doar liste de nume, gata rezolvate:
    * regulile de sectiune raman intr-un singur loc.
+   *
+   * Ce randuri se cer din baza spune insa DESIGNUL, nu `page_content`.
+   *
+   * ⚠ Aici erau doua porti pentru acelasi rand. Randarea citeste `enabled` din
+   * design; cererea de date citea flagul din `page_content`. Cat timp cele doua
+   * spuneau acelasi lucru, mergea — dar in clipa in care comerciantul aprindea
+   * „Recomandate" din editorul de design, ochiul se misca, sectiunea se declara
+   * vizibila si randul ramanea gol: nimeni nu cerusera produsele.
+   *
+   * Designul e sursa buna fiindca el le cuprinde pe amandoua: `enabled` se
+   * deriva din `page_content` cat timp editorul de design n-a spus altceva.
+   * Vezi `parse.ts`.
    */
-  const sectiuni = parseProductSections(pageContent.product_sections).filter((s) => s.enabled);
+  const aprinsaInDesign = (id: string) => design.home.some((s) => s.id === id && s.enabled);
+  const sectiuni = parseProductSections(pageContent.product_sections)
+    .filter((s) => aprinsaInDesign(s.id));
   const spec = {
     faraImagini,
     faraStocAscuns,
-    // Randul „Recomandate" se cere doar cand e pornit din editor.
-    featuredLimit: pageContent.show_featured_section === true ? 24 : 0,
+    // Randul „Recomandate" se cere doar cand e pornit. `featured` e id-ul lui in
+    // designul derivat (`defaults.ts`).
+    featuredLimit: aprinsaInDesign("featured") ? 24 : 0,
     sectiuni: sectiuni.map((s) => ({
       id: s.id,
       mode: s.mode,

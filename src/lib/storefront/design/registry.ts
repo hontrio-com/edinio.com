@@ -756,7 +756,18 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     icon: "Rows3",
     scope: "home",
     singleton: false,
-    removable: true,
+    /*
+     * ⚠ Nu se sterge de aici, si nici nu se duplica.
+     *
+     * Continutul randului traieste in `page_content.product_sections`; randul din
+     * design e doar oglinda lui. `edit.ts` refuza de mult si stergerea, si
+     * adaugarea — un rand nascut aici ar avea un id fara pereche in continut,
+     * deci n-ar aparea niciodata in magazin — dar butoanele se afisau dupa
+     * steagurile de aici, deci comerciantul apasa cosul de gunoi si nu se
+     * intampla nimic: nici lista neschimbata nu se explica, nici vreun mesaj nu
+     * aparea. Randurile se fac si se sterg din „Editeaza magazinul".
+     */
+    removable: false,
     variants: {
       grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: [] },
       carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [] },

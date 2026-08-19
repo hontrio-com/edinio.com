@@ -102,7 +102,7 @@ export function SectionPreviewFrame({
       ...chrome,
       openCart: nimic,
       openLightbox: nimic,
-      isPreview: false,
+      esteEditorDesign: false,
       // Miniatura arata sectiunea asa cum apare pe pagina principala: acolo
       // logoul e o ancora goala, nu un link care ar scoate iframe-ul din cadru.
       isHome: true,

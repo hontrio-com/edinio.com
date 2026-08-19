@@ -209,6 +209,17 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
   return {
     version: DESIGN_VERSION,
     style: {},
+    /*
+     * Goala, dar PREZENTA, si asta conteaza.
+     *
+     * Prezenta cheii e semnul dupa care parserul stie ca designul a trecut prin
+     * versiunea care noteaza intentiile comerciantului (ce a sters, ce varianta a
+     * ales, ce ordine a aranjat). Designul derivat aici n-are nicio intentie de
+     * notat — totul e derivat din `page_content` — deci lista lui e goala, dar
+     * lipsa cheii ar fi insemnat „design vechi", iar parserul ar fi incercat sa-i
+     * reconstituie intentii care nu exista. Vezi `parse.ts`.
+     */
+    sterse: [],
     chrome: {
       announcement: section("announcement", "announcement", "marquee", announcementOn),
       header: section("header", "header", "classic"),

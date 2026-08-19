@@ -3,6 +3,7 @@
 import type { ElementType } from "react";
 import { Phone, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
+import { insigneDeAratat } from "@/lib/storefront/insigne-implicite";
 
 /** Iconitele disponibile pentru insignele de incredere, alese din editor. */
 const TRUST_ICONS: Record<string, ElementType> = {
@@ -20,8 +21,17 @@ const TRUST_ICONS: Record<string, ElementType> = {
 export function UspStripIcons() {
   const { pageContent, color } = useStoreChrome();
   const pornita = pageContent.show_trust_strip_on_store === true;
-  const badges = pageContent.store_trust_badges;
-  if (!pornita || !badges || badges.length === 0) return null;
+  /*
+   * ⚠ Implicitul e AICI, nu doar in editor.
+   *
+   * Cele patru carduri traiau doar ca valoare de pornire a starii din „Editeaza
+   * magazinul", iar aici se cereau obligatoriu din `page_content`. Mergea din
+   * intamplare, cat timp orice salvare trimitea obiectul intreg; de cand fiecare
+   * panou trimite doar ce a atins, comutatorul pleca singur si banda nu se randa
+   * niciodata. Vezi `insigne-implicite.ts`.
+   */
+  const badges = insigneDeAratat(pageContent.store_trust_badges);
+  if (!pornita || badges.length === 0) return null;
 
   return (
     <section className="border-b border-border bg-surface">

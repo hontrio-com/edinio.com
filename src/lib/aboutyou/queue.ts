@@ -34,6 +34,29 @@ async function idsListate(
 // Enqueue an About You sync for a product when the store has About You connected
 // with auto-sync on. Fire-and-forget: never throws into the caller (used from
 // product/order actions, which must not break if About You is down).
+/**
+ * ⚠ ESECURILE DE AICI SE SCRIU, NU SE INGHIT.
+ *
+ * Punerea la coada e „fire-and-forget": n-are voie sa arunce in apelant, fiindca
+ * o pana la marketplace nu trebuie sa impiedice salvarea unui produs in magazin.
+ * Dar „nu arunca" a insemnat multa vreme `catch {}` gol, adica un esec fara
+ * nicio urma nicaieri.
+ *
+ * S-a vazut ce costa: un comerciant a schimbat pretul la 1051 de produse
+ * (21.08), cererea de punere la coada a cazut, si nimeni n-a aflat. Preturile
+ * s-au schimbat in magazin, la marketplace au ramas cele vechi, iar in panou nu
+ * scria nimic. A fost gasit abia cand a intrebat el, dupa o zi.
+ */
+function scrieEsecul(unde: string, businessId: string, e: unknown): void {
+  void logError({
+    action: `aboutyou.queue.${unde}`,
+    message: e instanceof Error ? e.message : "Eroare necunoscuta la punerea in coada",
+    details: { businessId },
+    businessId,
+    severity: "error",
+  });
+}
+
 export async function enqueueAboutYouSync(
   businessId: string,
   productId: string | null,
@@ -88,8 +111,8 @@ export async function enqueueAboutYouSync(
       { business_id: businessId, product_id: productId, offer_id: offerId, op },
       { onConflict: "business_id,offer_id,op" },
     );
-  } catch {
-    // ignore
+  } catch (e) {
+    scrieEsecul("coada", businessId, e);
   }
 }
 
@@ -109,8 +132,8 @@ export async function enqueueAboutYouSyncMany(businessId: string, productIds: (s
     const rows = ids.filter((id) => listedIds.has(id)).map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op: "upsert" as const }));
     if (rows.length === 0) return;
     await admin.from("aboutyou_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
-  } catch {
-    // ignore
+  } catch (e) {
+    scrieEsecul("coada", businessId, e);
   }
 }
 
@@ -125,14 +148,16 @@ export async function enqueueAboutYouStockMany(businessId: string, productIds: (
       .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
     const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
     if (!config.connected || !config.api_key || config.auto_sync === false) return;
-    const { data: listed } = await admin
-      .from("aboutyou_listings").select("product_id").eq("business_id", businessId).in("product_id", ids);
-    const listedIds = new Set((listed ?? []).map((r) => r.product_id).filter(Boolean) as string[]);
+    /* ⚠ Prin `idsListate`, care taie pe bucati. Calea asta cerea toate id-urile
+       deodata: peste ~650 adresa e respinsa la margine si nu se pune nimic in
+       coada. Acelasi defect a lasat o zi intreaga preturile nesincronizate la
+       Trendyol (21.08); acolo l-a gasit un comerciant, aici o proba. */
+    const listedIds = await idsListate(admin, businessId, ids);
     const rows = ids.filter((id) => listedIds.has(id)).map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op: "stock" as const }));
     if (rows.length === 0) return;
     await admin.from("aboutyou_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
-  } catch {
-    // ignore
+  } catch (e) {
+    scrieEsecul("coada", businessId, e);
   }
 }
 
@@ -153,7 +178,7 @@ export async function enqueueAboutYouShip(businessId: string, orderId: string): 
       { business_id: businessId, product_id: null, offer_id: orderId, op: "ship" },
       { onConflict: "business_id,offer_id,op" },
     );
-  } catch {
-    // ignore
+  } catch (e) {
+    scrieEsecul("coada", businessId, e);
   }
 }

@@ -1572,9 +1572,39 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
   }
   if (trendyol.size === 0) return { corrected: 0 };
 
+  /*
+   * ⚠ FEREASTRA SE ROTESTE. Aici a fost al doilea defect gasit pe 21.08.
+   *
+   * Era `.limit(maxProducts)` fara `order` si fara decalaj. Postgres intoarce
+   * atunci randurile in ordinea pe care o da planul, iar pentru aceeasi
+   * interogare pe o tabela neschimbata ordinea aia e practic mereu aceeasi:
+   * probat pe productie, doua rulari au dat ACELEASI 60 de randuri din 1051.
+   *
+   * Adica plasa de siguranta acoperea 5,7% din catalog, mereu aceeasi felie, iar
+   * restul de 991 de produse nu li se verifica pretul niciodata. Cand punerea in
+   * coada a cazut (vezi `queue.ts`), nimic nu a mai prins diferenta, si preturile
+   * au ramas vechi la Trendyol o zi intreaga, fara nicio urma nicaieri.
+   *
+   * Acum: ordonare stabila dupa `product_id` si o fereastra care avanseaza cu
+   * minutul, ca la rotatia magazinelor din `marketplace/rotatie.ts`. La 1051 de
+   * listari si 60 pe trecere, catalogul se parcurge intreg in vreo optsprezece
+   * treceri. E o PLASA, nu calea principala: calea principala e coada.
+   */
+  const { count: totalListari } = await admin
+    .from("trendyol_listings").select("id", { count: "exact", head: true })
+    .eq("business_id", ctx.businessId).in("status", ["approved", "active"]);
+  const total = totalListari ?? 0;
+  if (total === 0) return { corrected: 0 };
+  /* Aceeasi tura ca la rotatia magazinelor: minutul curent. Cand un magazin nu e
+     ales la o trecere, fereastra lui a avansat oricum, deci la urmatoarea ii vine
+     alta felie. */
+  const tura = Math.floor(Date.now() / 60_000);
+  const start = total > maxProducts ? (tura * maxProducts) % total : 0;
   const { data: listings } = await admin
     .from("trendyol_listings").select("product_id")
-    .eq("business_id", ctx.businessId).in("status", ["approved", "active"]).limit(maxProducts);
+    .eq("business_id", ctx.businessId).in("status", ["approved", "active"])
+    .order("product_id", { ascending: true })
+    .range(start, start + maxProducts - 1);
 
   const drifted: InventoryItem[] = [];
   for (const l of listings ?? []) {

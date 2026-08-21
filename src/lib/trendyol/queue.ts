@@ -1,5 +1,29 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
+import { logError } from "@/lib/error-logger";
 import type { TrendyolConfig } from "./types";
+
+/**
+ * ⚠ ESECURILE DE AICI SE SCRIU, NU SE INGHIT.
+ *
+ * Punerea la coada e „fire-and-forget": n-are voie sa arunce in apelant, fiindca
+ * o pana la Trendyol nu trebuie sa impiedice salvarea unui produs in magazin.
+ * Dar „nu arunca" a insemnat multa vreme `catch {}` gol, adica un esec care nu
+ * lasa nicio urma nicaieri.
+ *
+ * S-a vazut ce costa: VetDepo a schimbat preturile la 1051 de produse (21.08),
+ * cererea de punere la coada a cazut, si NIMENI n-a aflat. Preturile s-au
+ * schimbat in magazin, la Trendyol au ramas cele vechi, iar in panou nu scria
+ * nimic. A fost gasit abia cand a intrebat comerciantul, dupa o zi.
+ */
+function inghiteDarScrie(unde: string, businessId: string, e: unknown, detalii?: Record<string, unknown>): void {
+  void logError({
+    action: `trendyol.queue.${unde}`,
+    message: e instanceof Error ? e.message : "Eroare necunoscuta la punerea in coada",
+    details: { businessId, ...detalii },
+    severity: "error",
+  });
+}
 
 // Enqueue a Trendyol sync when the store has Trendyol connected with auto-sync on.
 // Fire-and-forget: never throws into the caller (used from product/order actions).
@@ -46,11 +70,33 @@ export async function enqueueTrendyolSync(
       { business_id: businessId, product_id: productId, offer_id: offerId, op },
       { onConflict: "business_id,offer_id,op" },
     );
-  } catch {
-    // ignore
+  } catch (e) {
+    inghiteDarScrie("unul", businessId, e, { productId, offerId, op });
   }
 }
 
+/**
+ * Punerea la coada a mai multor produse deodata.
+ *
+ * ═══ ⚠ ID-URILE SE TAIE PE BUCATI. AICI A FOST DEFECTUL ═══
+ *
+ * `.in("product_id", ids)` NU pleaca in corpul cererii, ci in ADRESA. Fiecare
+ * UUID adauga 37 de semne, iar marginea respinge cererea cand adresa devine prea
+ * lunga. Masuratoarea e in `supabase/id-chunks.ts`, facuta pe proiectul real:
+ * pragul e intre 600 si 700 de id-uri, iar raspunsul e un 400 in text simplu,
+ * care nu spune nimic despre id-uri.
+ *
+ * Defectul (gasit 21.08): VetDepo a schimbat pretul la 1051 de produse dintr-o
+ * actiune in masa. `bulkProductAction` isi taia deja propriile cereri pe bucati
+ * si chiar avertizeaza in comentariu despre pragul asta — dar chema coada asta
+ * cu toate cele 1051 de id-uri deodata. Cererea a picat, `catch {}` a inghitit-o,
+ * si nu s-a pus in coada NIMIC. Preturile s-au schimbat in magazin, la Trendyol
+ * au ramas cele vechi, si nu s-a vazut nicaieri.
+ *
+ * ⚠ `bucatiDeIduri` se aplica DOAR citirii. Scrierea de la sfarsit e un `upsert`
+ * cu corp, deci nu atinge limita de adresa; taiata si ea, ar fi insemnat mai
+ * multe cereri fara niciun castig.
+ */
 async function enqueueMany(businessId: string, productIds: (string | null | undefined)[], op: "upsert" | "inventory"): Promise<void> {
   try {
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
@@ -62,15 +108,23 @@ async function enqueueMany(businessId: string, productIds: (string | null | unde
     if (!config.connected || !config.api_key || config.auto_sync === false) return;
     // Actiunile in masa NU auto-publica: ele ating produse existente, iar
     // „publicare automată" e despre produsele noi. Vezi comentariul de mai sus.
-    const { data: listed } = await admin
-      .from("trendyol_listings").select("product_id").eq("business_id", businessId).in("product_id", ids);
-    const listedIds = new Set((listed ?? []).map((r) => r.product_id).filter(Boolean) as string[]);
+    const listedIds = new Set<string>();
+    for (const bucata of bucatiDeIduri(ids)) {
+      const { data: listed, error } = await admin
+        .from("trendyol_listings").select("product_id").eq("business_id", businessId).in("product_id", bucata);
+      if (error) throw error;
+      for (const r of listed ?? []) {
+        const pid = (r as { product_id: string | null }).product_id;
+        if (pid) listedIds.add(pid);
+      }
+    }
     const rows = ids.filter((id) => listedIds.has(id))
       .map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
     if (rows.length === 0) return;
-    await admin.from("trendyol_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
-  } catch {
-    // ignore
+    const { error } = await admin.from("trendyol_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
+    if (error) throw error;
+  } catch (e) {
+    inghiteDarScrie("multe", businessId, e, { cate: productIds.length, op });
   }
 }
 

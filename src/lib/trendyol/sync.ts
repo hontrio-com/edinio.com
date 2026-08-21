@@ -1554,14 +1554,63 @@ export async function reconcileRejections(admin: Db, ctx: TrendyolSyncContext, m
 // (Edinio being the source of truth), re-pushes the corrected values. Shares
 // computeInventoryItems with the forward push so a settled state produces zero
 // drift (no oscillation); only genuine differences are corrected.
+/**
+ * Scrie `ty_content_id` pe listarile care n-au unul.
+ *
+ * ⚠ Numai unde LIPSESTE. Un `contentId` deja scris nu se atinge: daca produsul a
+ * fost intre timp recreat la ei, valoarea corecta o afla adoptia, care vede
+ * refuzul; o suprascriere oarba de aici ar putea sa o strice la loc.
+ */
+async function completeazaContentIds(
+  admin: Db, businessId: string, contentIds: Map<string, number>,
+): Promise<void> {
+  if (contentIds.size === 0) return;
+  const { data: fara } = await admin
+    .from("trendyol_listings").select("id, product_main_id")
+    .eq("business_id", businessId).is("ty_content_id", null);
+  for (const l of fara ?? []) {
+    const mainId = (l as { product_main_id: string | null }).product_main_id;
+    if (!mainId) continue;
+    const cid = contentIds.get(mainId);
+    if (cid == null) continue;
+    await admin.from("trendyol_listings")
+      .update({ ty_content_id: cid } as never)
+      .eq("id", (l as { id: string }).id);
+  }
+}
+
 export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, maxProducts = 60): Promise<{ corrected: number }> {
   const trendyol = new Map<string, { quantity: number; salePrice: number; listPrice: number }>();
-  for (let page = 0; page < 10; page++) {
+  /*
+   * ⚠ SE CULEGE SI `contentId`, nu doar stocul si pretul. Aici a fost al treilea
+   * defect gasit pe 21.08, si cel care chiar tinea preturile pe loc.
+   *
+   * `rutaDeTrimitere` alege actualizarea unui produs aprobat DOAR daca listarea
+   * are `ty_content_id`; fara el cade inapoi pe creare, iar Trendyol refuza cu
+   * „Codul de bare ... există deja". La VetDepo aveau `ty_content_id` zece
+   * listari din 1061, deci practic fiecare schimbare de pret pleca pe creare si
+   * era refuzata.
+   *
+   * Exista o cale de vindecare — refuzul declanseaza adoptia, care intreaba
+   * serviciul de stare pe barcode si scrie `contentId` — dar ea costa cate un
+   * refuz de fiecare produs. Pe un catalog de o mie, o mie de refuzuri la ei ca
+   * sa aflam ce raspunsul de mai jos ne spunea oricum, din zece cereri.
+   *
+   * Raspunsul de la `approved/inventory-and-price` contine `contentId` pentru
+   * fiecare produs. Il scriem pe listare cand lipseste, si ruta de actualizare
+   * devine disponibila fara niciun refuz.
+   */
+  const contentIds = new Map<string, number>();
+  /* Zece pagini a cate o suta acopereau 1000 de produse, adica sub cate are un
+     catalog mediu de marketplace. VetDepo are 1051, deci ultimele cincizeci nu
+     erau vazute niciodata. */
+  for (let page = 0; page < 20; page++) {
     const res = await getApprovedProducts(ctx.auth, { page, size: 100 });
     if (isTrendyolError(res)) return { corrected: 0 };
     const content = res.data?.content ?? [];
     if (content.length === 0) break;
     for (const p of content) {
+      if (p.productMainId && typeof p.contentId === "number") contentIds.set(p.productMainId, p.contentId);
       for (const v of p.variants ?? []) {
         if (v.barcode) trendyol.set(v.barcode, { quantity: Number(v.quantity ?? 0), salePrice: Number(v.salePrice ?? 0), listPrice: Number(v.listPrice ?? 0) });
       }
@@ -1570,6 +1619,8 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
     if (page + 1 >= total) break;
     await pause(250);
   }
+
+  await completeazaContentIds(admin, ctx.businessId, contentIds);
   if (trendyol.size === 0) return { corrected: 0 };
 
   /*

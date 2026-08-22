@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { applyStockPlan } from "./applier";
+import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
+import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import type { StockChange, StockPlan, StockRowIssue } from "./types";
 
 /**
@@ -263,6 +265,33 @@ export async function processStockChunk(
     }
 
     const outcome = await applyStockPlan(admin, job.business_id, changes);
+
+    /*
+     * ⚠ MARKETPLACE-URILE AFLA CE S-A SCHIMBAT. Aici a fost defectul gasit 22.08.
+     *
+     * `applyStockPlan` scrie stocul (si pretul, cand sursa are voie) direct in
+     * `products` si nu anunta pe nimeni. Toate celelalte cai de modificare o fac:
+     * editarea unui produs, actiunea in masa, scaderea de stoc la o comanda.
+     * Feedul, nu.
+     *
+     * Ce a insemnat la VetDepo: listarile pe Trendyol s-au facut pe 19.08, iar de
+     * atunci feedul a schimbat stocul in fiecare zi, in Edinio. La Trendyol a
+     * ramas cantitatea de la listare, la nesfarsit. Comerciantul vedea stoc in
+     * panoul lui si zero la ei, fara nicio urma care sa explice de ce.
+     *
+     * Se anunta doar produsele CHIAR scrise (`outcome.written`), nu tot lotul:
+     * un rand care n-a schimbat nimic n-are ce impinge, iar cozile pun oricum
+     * doar produsele care au listare.
+     *
+     * `void`, ca la toate celelalte apeluri de acest fel: o pana la un
+     * marketplace n-are voie sa opreasca importul de stoc. Esecul se scrie acum
+     * in `error_logs` (vezi `trendyol/queue.ts`), deci nu mai dispare in tacere.
+     */
+    const atinse = [...new Set(outcome.written.map((c) => c.productId))];
+    if (atinse.length > 0) {
+      void enqueueTrendyolInventoryMany(job.business_id, atinse);
+      void enqueueAboutYouStockMany(job.business_id, atinse);
+    }
 
     const resolved = new Set<number>();
 

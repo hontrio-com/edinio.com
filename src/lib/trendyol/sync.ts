@@ -1658,6 +1658,22 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
     .range(start, start + maxProducts - 1);
 
   const drifted: InventoryItem[] = [];
+  /*
+   * ⚠ SE TINE MINTE AL CUI E FIECARE ARTICOL. Aici a fost defectul gasit 22.08.
+   *
+   * Loturile de reconciliere se inregistrau cu `related_ids: []`, iar
+   * `jurnalLotEsuat` incepe cu `if (mainIds.length === 0) return`. Adica toata
+   * tratarea esecului — legarea motivului de produs, contorul de reluari de pe
+   * listare, repunerea marginita la coada — exista, e bine gandita, si NU se
+   * aplica deloc loturilor venite de aici.
+   *
+   * Vazut in productie la VetDepo: un lot de reconciliere refuzat cu „Prețul și
+   * stocul produselor închise pentru vânzare nu pot fi actualizate.". Trendyol
+   * spune pentru FIECARE articol daca a trecut, deci celelalte chiar se
+   * aplicasera; dar produsul inchis la vanzare nu se afla de nicaieri, si
+   * comerciantul n-avea cum sa stie de ce ii ramane un pret vechi.
+   */
+  const mainIdPeBarcode = new Map<string, string>();
   for (const l of listings ?? []) {
     const pid = (l as { product_id: string | null }).product_id;
     if (!pid) continue;
@@ -1668,7 +1684,10 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
       if (!cur) continue; // not (yet) approved on Trendyol
       const qtyDrift = cur.quantity !== it.quantity;
       const priceDrift = Math.abs(cur.salePrice - it.salePrice) > 0.01 || Math.abs(cur.listPrice - it.listPrice) > 0.01;
-      if (qtyDrift || priceDrift) drifted.push(it);
+      if (qtyDrift || priceDrift) {
+        drifted.push(it);
+        mainIdPeBarcode.set(it.barcode, built.listing.product_main_id);
+      }
     }
   }
   if (drifted.length === 0) return { corrected: 0 };
@@ -1680,7 +1699,14 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
     if (!isTrendyolError(res)) {
       corrected += chunk.length;
       const batchRequestId = res.data?.batchRequestId;
-      if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", []);
+      if (batchRequestId) {
+        /* Produsele DIN LOTUL ASTA, nu toate cele derivate: asa motivul unui
+           refuz se leaga de produsul lui, iar reluarea nu atinge pe altcineva. */
+        const aleLotului = [...new Set(
+          chunk.map((it) => mainIdPeBarcode.get(it.barcode)).filter((x): x is string => !!x),
+        )];
+        await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", aleLotului);
+      }
     }
     await pause(300);
   }

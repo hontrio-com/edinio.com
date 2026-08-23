@@ -30,6 +30,9 @@ import {
 } from "@/lib/emag/taxonomy";
 import { ceLipsestePentruPublicare } from "@/lib/emag/sync";
 import {
+  leagaOferteleNoi, ruleazaImportEmag, type RezultatImportEmag,
+} from "@/lib/emag/import-run";
+import {
   EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
   type EmagAdresa, type EmagContCurier, type EmagCotaTva, type EmagConfig,
   type EmagTara, type EmagValoareTimpPregatire,
@@ -458,4 +461,74 @@ export async function potrivesteTimpPregatire(
   const valori = await aduTimpiPregatire(c.auth);
   if ("error" in valori) return valori;
   return { valoare: alegeTimpPregatire(valori, zileDorite) };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   IMPORTUL DIN eMAG (etapa 2)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Aduce ofertele din contul eMAG al comerciantului.
+ *
+ * Ce leaga, leaga; ce nu are corespondent, creeaza; ce nu e sigur, raporteaza si
+ * lasa in seama omului. Hotararile sunt in `emag/import.ts`, efectele in
+ * `emag/import-run.ts`; aici e doar dovada proprietatii si traducerea erorilor.
+ *
+ * ⚠ NU SE INGHITE NIMIC. Un import cazut se scrie in jurnal SI se intoarce omului,
+ * cu mesajul lui. La feedul de stocuri, o cadere tacuta a insemnat sase zile in
+ * care comerciantul credea ca merge.
+ */
+export async function importaDinEmag(
+  businessId: string,
+): Promise<RezultatImportEmag | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  if (!emagGloballyEnabled()) return { error: "Integrarea eMAG este oprită temporar." };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  try {
+    const rezultat = await ruleazaImportEmag(businessId, g.userId);
+    revalidatePath(FEATURE_PATH);
+    return rezultat;
+  } catch (e) {
+    const mesaj = e instanceof Error ? e.message : "Importul din eMAG nu a putut fi dus la capăt.";
+    void logError({
+      action: "emag.import",
+      message: mesaj,
+      details: { businessId },
+      severity: "error",
+    });
+    return { error: mesaj };
+  }
+}
+
+/**
+ * Leaga ofertele ramase fara produs, dupa ce conducta de import si-a terminat treaba.
+ *
+ * ⚠ EXISTA CA BUTON FIINDCA PASUL POATE RAMANE NEFACUT FARA VINA NIMANUI. Conducta
+ * de import lucreaza pe bucati; cand catalogul e mare, ea e dusa la capat de bucla
+ * din ecran sau de cronul de rezerva, si atunci rularea care a pornit importul s-a
+ * incheiat demult. Ofertele stau scrise, doar nelegate.
+ *
+ * Pasul e re-derivabil (afla produsul din `products.external_id`), deci apasat de
+ * doua ori nu strica nimic.
+ */
+export async function leagaOferteImportateEmag(
+  businessId: string,
+): Promise<{ legate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  try {
+    const legate = await leagaOferteleNoi(createAdminClient(), businessId);
+    if (legate > 0) revalidatePath(FEATURE_PATH);
+    return { legate };
+  } catch (e) {
+    const mesaj = e instanceof Error ? e.message : "Legarea ofertelor nu a reușit.";
+    void logError({ action: "emag.import.leaga", message: mesaj, details: { businessId }, severity: "error" });
+    return { error: mesaj };
+  }
 }

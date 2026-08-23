@@ -4395,6 +4395,10 @@ export type Database = {
       catalog_reface_cuvinte: { Args: { p_business: string }; Returns: number }
       catalog_scrie_rezumat: { Args: { p_randuri: Json }; Returns: number }
       catalog_verifica: { Args: { p_esantion?: number }; Returns: number }
+      // Impinge sirul lui `emag_offers.emag_id` deasupra unui id PRELUAT din eMAG.
+      // ⚠ In `public` fiindca PostgREST nu cheama decat de acolo, dar cu `execute`
+      // retras de la `anon` si `authenticated`: numai cheia de serviciu o poate chema.
+      emag_ridica_sirul: { Args: { p_pana_la: number }; Returns: number }
       // Numele de categorie stinse ale unui magazin, subarborii inclusi. Perechea
       // din TypeScript e `numeCategoriiAscunse` (lib/categories/vizibilitate.ts);
       // cele doua trebuie sa dea acelasi raspuns.

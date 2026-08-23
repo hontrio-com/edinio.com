@@ -42,7 +42,7 @@
    se ingusteaza nimic.
 
    ⚠ Pragul e o desprindere, nu o garantie. Daca un comerciant chiar are la eMAG o
-   oferta cu id peste prag, `privat.emag_ridica_sirul()` de mai jos impinge sirul
+   oferta cu id peste prag, `public.emag_ridica_sirul()` de mai jos impinge sirul
    deasupra ei. De aceea importul TREBUIE sa o cheme dupa ce scrie ofertele preluate.
 
    ⚠ Tabelul e gol la data acestei migratii (verificat: 0 randuri, sirul la 1), deci
@@ -85,7 +85,22 @@ alter table public.emag_offers
    Cine ar „repara" asta punand sirul inapoi ar da acelasi `emag_id` la doua oferte,
    iar la eMAG a doua ar suprascrie-o pe prima fara sa spuna nimic. */
 
-create or replace function privat.emag_ridica_sirul(p_pana_la bigint)
+/* ═══ ⚠ IN `public`, NU IN `privat`, SI E O SILA IMPUSA DE POSTGREST ═══
+
+   Prima forma o pusese in `privat`, unde stau lucrurile pe care nu le atinge nimeni
+   din afara. Dar functia asta o cheama IMPORTUL, prin PostgREST — iar PostgREST nu
+   vede decat schemele expuse. `admin.schema("privat").rpc(...)` nici macar nu se
+   compileaza: tipurile generate din baza n-au schema aceea.
+
+   Deci sta in `public`, dar cu drepturile retrase de la `anon` si `authenticated`.
+   Verificat pe productie, nu presupus:
+
+       anon: false | authenticated: false | service_role: true
+
+   Adica se poate chema numai cu cheia de serviciu, ceea ce era si rostul lui
+   `privat`. ⚠ Cine adauga aici alte functii sa nu uite `revoke`-ul: fara el, orice
+   vizitator al magazinului ar putea impinge sirul unde vrea. */
+create or replace function public.emag_ridica_sirul(p_pana_la bigint)
 returns bigint
 language plpgsql
 security definer
@@ -119,12 +134,12 @@ begin
 end;
 $$;
 
-comment on function privat.emag_ridica_sirul(bigint) is
+comment on function public.emag_ridica_sirul(bigint) is
   'Impinge sirul lui `emag_offers.emag_id` deasupra unui id PRELUAT din eMAG. Se cheama '
   'de import, dupa ce scrie ofertele adoptate, cu cel mai mare id adus. Fara ea, un '
   'comerciant cu numerotare proprie peste 1.000.000.000 s-ar ciocni cu id-urile noastre.';
 
-revoke all on function privat.emag_ridica_sirul(bigint) from public, anon, authenticated;
+revoke all on function public.emag_ridica_sirul(bigint) from public, anon, authenticated;
 
 commit;
 

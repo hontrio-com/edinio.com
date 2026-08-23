@@ -132,31 +132,6 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION privat.emag_ridica_sirul(p_pana_la bigint)
- RETURNS bigint
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-declare
-  v_acum bigint;
-begin
-  if p_pana_la is null or p_pana_la < 1 then
-    return null;
-  end if;
-
-  select last_value into v_acum from public.emag_offers_emag_id_seq;
-
-  if p_pana_la >= v_acum then
-    perform setval('public.emag_offers_emag_id_seq', p_pana_la + 1, false);
-    return p_pana_la + 1;
-  end if;
-
-  return v_acum;
-end;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION privat.reconstruieste_store_settings()
  RETURNS void
  LANGUAGE plpgsql
@@ -1613,6 +1588,31 @@ AS $function$
 begin
   perform public.elibereaza_stoc_batch(coalesce(p_produse, '[]'::jsonb));
   perform public.restaureaza_variante_batch(coalesce(p_variante, '[]'::jsonb));
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.emag_ridica_sirul(p_pana_la bigint)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_acum bigint;
+begin
+  if p_pana_la is null or p_pana_la < 1 then
+    return null;
+  end if;
+
+  select last_value into v_acum from public.emag_offers_emag_id_seq;
+
+  if p_pana_la >= v_acum then
+    perform setval('public.emag_offers_emag_id_seq', p_pana_la + 1, false);
+    return p_pana_la + 1;
+  end if;
+
+  return v_acum;
 end;
 $function$
 ;
@@ -5019,7 +5019,7 @@ CREATE INDEX emag_awb_order_idx ON public.emag_awb USING btree (order_id);
 CREATE INDEX emag_offers_business_status_idx ON public.emag_offers USING btree (business_id, status);
 CREATE INDEX emag_offers_pnk_idx ON public.emag_offers USING btree (business_id, part_number_key) WHERE (part_number_key IS NOT NULL);
 CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_id);
-CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, COALESCE(product_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(variant_title, ''::text));
+CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, product_id, COALESCE(variant_title, ''::text)) WHERE (product_id IS NOT NULL);
 CREATE INDEX emag_offers_reconciliere_idx ON public.emag_offers USING btree (business_id, last_status_at NULLS FIRST);
 CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
 CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
@@ -7261,6 +7261,7 @@ grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_busi
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
+grant execute on function public.emag_ridica_sirul(p_pana_la bigint) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
 grant execute on function public.handle_new_user() to service_role;
 grant execute on function public.handle_support_message_insert() to service_role;

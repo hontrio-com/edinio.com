@@ -280,6 +280,34 @@ export interface EmagOfertaCitita {
 }
 
 /** Filtrele lui `product_offer/read`. Se trimit ca CHEI DE NIVEL INTAI. */
+/**
+ * Starile prin care trece un rand din `emag_offers`.
+ *
+ * ═══ ⚠ COLOANA E `text` FARA `check`, DECI PAZA E AICI ═══
+ *
+ * Verificat in baza: `emag_offers.status` n-are nicio constrangere. Adica o litera
+ * gresita intr-un singur loc ar fi facut o stare noua, tacut — iar ecranul, care
+ * numara pe stari, ar fi aratat mai putine oferte decat sunt, fara nicio eroare.
+ *
+ * Scrise ca uniune, `tsc` refuza orice altceva. ⚠ Cine adauga o stare o adauga AICI
+ * si nicaieri altundeva; cine scrie sirul de mana ocoleste chiar paza asta.
+ */
+export type StareOferta =
+  /** Facuta la noi, netrimisa inca nicaieri. */
+  | "draft"
+  /** Adusa de import din contul lor. ⚠ Merge mereu cu `auto_sync: false`. */
+  | "imported"
+  /** Pusa la coada, asteapta randul. */
+  | "queued"
+  /** Trimisa la eMAG; asteptam verdictul lor de validare. */
+  | "sent"
+  /** Vandabila la ei: toate cele patru conditii deodata. Vezi `EMAG_VALIDARE_VANDABILA`. */
+  | "live"
+  /** Refuzata sau cazuta. Motivul sta in `error` si in `doc_errors`. */
+  | "error"
+  /** Oprita de la vanzare (`status: 0`). eMAG nu are stergere de oferta. */
+  | "withdrawn";
+
 export interface EmagFiltruOferte {
   id?: number;
   status?: 0 | 1;

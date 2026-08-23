@@ -539,7 +539,20 @@ export async function processImport(
    * Apelantii filtreaza deja pe sursa, dar protectia nu trebuie sa depinda de
    * disciplina apelantului: e prea scump daca cineva uita.
    */
-  if (!["shopify_csv", "woo_csv", "generic_csv"].includes(job.source)) {
+  /*
+   * ⚠ `emag_api` E AICI DINADINS, SI NU CONTRAZICE REGULA „nu facem duplicate".
+   *
+   * Bariera asta e despre FORMA jobului, nu despre politica de duplicate: ea
+   * opreste un job de stoc sa ajunga pe mana unui committer de produse. Iar
+   * randurile venite din eMAG au chiar forma pe care o asteapta — `StagedProduct`.
+   *
+   * Duplicatele se opresc mai devreme, in `import-run.ts`: prin committer trec
+   * NUMAI ofertele pentru care potrivirea a spus „nou". Cele legate nu ajung aici
+   * niciodata. Lasat pe dinafara, importul din eMAG ar fi ramas inghetat la
+   * „importing" pana l-ar fi sters cineva de mana — fiindca nimeni n-ar fi avut
+   * voie sa-l duca la capat.
+   */
+  if (!["shopify_csv", "woo_csv", "generic_csv", "emag_api"].includes(job.source)) {
     return { status: job.status as ImportStatus, totals: EMPTY_TOTALS, done: true };
   }
 

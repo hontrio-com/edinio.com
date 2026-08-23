@@ -28,8 +28,13 @@ const TERMINAL = ["completed", "completed_with_errors", "failed", "cancelled"];
  * Cu o lista permisa, orice tip de job adaugat maine e ignorat pana cand cineva
  * il trece aici in mod explicit. Cu o lista interzisa, ar fi fost procesat gresit
  * din prima zi.
+ *
+ * ⚠ `emag_api` trebuie sa fie SI aici, SI in bariera din `committer.ts`. Trecut
+ * doar intr-una, importul din eMAG s-ar fi oprit la jumatate fara nicio eroare:
+ * lipsa din committer il refuza tacut, lipsa de aici il lasa inghetat la
+ * „importing" cand omului i se inchide fila. Doua liste, aceeasi sursa.
  */
-const PRODUCT_SOURCES = ["shopify_csv", "woo_csv", "generic_csv"];
+const PRODUCT_SOURCES = ["shopify_csv", "woo_csv", "generic_csv", "emag_api"];
 
 function verifyCron(req: NextRequest): boolean {
   // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET

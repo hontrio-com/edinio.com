@@ -30,6 +30,9 @@ import {
 } from "@/lib/emag/taxonomy";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
+import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
+import { schimbaStareaReturului } from "@/lib/emag/rma";
+import { pretPentruSmartDeals } from "@/lib/emag/campanii";
 import {
   leagaOferteleNoi, ruleazaImportEmag, SURSA_EMAG, type RezultatImportEmag,
 } from "@/lib/emag/import-run";
@@ -690,4 +693,148 @@ export async function comutaSincronizareaOfertei(
 
   revalidatePath(FEATURE_PATH);
   return { success: true };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AWB SI RETURURI (etapa 5)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Emite AWB-ul de livrare pentru o comandă eMAG.
+ *
+ * ⚠ Datele destinatarului se iau din comanda SALVATA LA NOI, nu din formular. Un
+ * formular ar fi lasat loc ca cineva sa trimita coletul altundeva decat a cerut
+ * clientul — iar la eMAG adresa e a lor, nu a noastra, si nu se negociaza.
+ */
+export async function emiteAwbEmag(
+  businessId: string,
+  orderId: string,
+  optiuni?: { colete?: { weight: number; length: number; width: number; height: number }[]; observatii?: string },
+): Promise<{ numar: string | null; deja: boolean } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  const { data: rand } = await admin.from("emag_orders")
+    .select("emag_order_id, raw").eq("business_id", businessId).eq("order_id", orderId).maybeSingle();
+  const r = rand as { emag_order_id: number; raw: unknown } | null;
+  if (!r) return { error: "Comanda nu are corespondent eMAG." };
+
+  const brut = (r.raw ?? {}) as {
+    customer?: Record<string, unknown>;
+    cashed_cod?: number;
+    enforced_vendor_courier_accounts?: number[] | null;
+    details?: { locker_id?: string };
+  };
+
+  /* ⚠ Lista impusa de comanda bate preferinta din setari: eMAG refuza orice cont din
+     afara ei, iar o lista GOALA inseamna ca AWB-ul de marketplace nu se poate emite. */
+  const alegere = alegereaCurierului(brut.enforced_vendor_courier_accounts ?? null);
+  if (alegere.fel === "imposibil") {
+    return { error: "eMAG nu permite emiterea unui AWB de marketplace pentru această comandă." };
+  }
+
+  const conturi = await citesteConturiCurier(ctx.auth);
+  if (isEmagError(conturi)) return { error: conturi.error };
+
+  const cont = contPotrivit(
+    (Array.isArray(conturi.data) ? conturi.data : []) as EmagContCurier[],
+    1, alegere, ctx.config.courier_account_id ?? null,
+  );
+  if (cont == null) return { error: "Niciun cont de curier eMAG potrivit pentru livrare. Verifică-le în contul tău eMAG." };
+
+  const cl = (brut.customer ?? {}) as Record<string, string | undefined>;
+  const rez = await emiteAwb(admin, ctx, {
+    orderId,
+    emagOrderId: r.emag_order_id,
+    fel: 1,
+    awb: {
+      sender: { address_id: ctx.config.pickup_address_id },
+      receiver: {
+        name: cl.name ?? "",
+        contact: cl.shipping_contact ?? cl.name ?? "",
+        phone1: cl.shipping_phone ?? cl.phone_1 ?? "",
+        street: cl.shipping_street ?? "",
+        zipcode: cl.shipping_postal_code ?? "",
+        legal_entity: 0,
+      },
+      locker_id: brut.details?.locker_id,
+      is_oversize: 0,
+      envelope_number: 0,
+      parcel_number: optiuni?.colete?.length ?? 1,
+      /* ⚠ Rambursul e cat cere eMAG sa se incaseze, nu totalul comenzii: la plata cu
+         cardul e zero, iar trimis totalul, curierul ar fi cerut banii a doua oara. */
+      cod: Number(brut.cashed_cod ?? 0) || 0,
+      courier_account_id: cont,
+      observation: optiuni?.observatii,
+      packages: optiuni?.colete,
+    },
+  });
+
+  if (rez.fel === "esec") return { error: rez.mesaj };
+
+  if (rez.numar) {
+    await admin.from("orders").update({ tracking_number: rez.numar }).eq("id", orderId).eq("business_id", businessId);
+  }
+  revalidatePath("/dashboard/orders");
+  return { numar: rez.numar, deja: rez.fel === "deja" };
+}
+
+/**
+ * Trece un retur eMAG într-o altă stare.
+ *
+ * ⚠ Verificarea trecerii se face ÎNAINTE de a chema eMAG. Nu doar ca sa nu cheltuim
+ * o cerere din cele 3 pe secunda, ci ca mesajul de refuz sa fie al nostru, in romana,
+ * si sa spuna ce se poate face in schimb — al lor vorbeste despre un status invalid.
+ */
+export async function schimbaReturEmag(
+  businessId: string,
+  emagRmaId: number,
+  inStare: number,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  const r = await schimbaStareaReturului(admin, ctx, emagRmaId, inStare);
+  if (r.fel === "esec") return { error: r.mesaj };
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/**
+ * Ce preț cere eMAG pentru insigna Smart Deals.
+ *
+ * ⚠ NU SCHIMBĂ NIMIC. Întoarce numărul, ca să-l vadă comerciantul lângă marja lui.
+ * O integrare care taie prețuri singură „ca să iasă mai bine" face exact răul pe
+ * care nimeni nu-l cere.
+ */
+export async function pretSmartDealsEmag(
+  businessId: string,
+  emagId: number,
+  pretDeAcumFaraTva: number,
+): Promise<{ tinta: number | null; scadereProcente: number | null } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  const r = await pretPentruSmartDeals(ctx, emagId, pretDeAcumFaraTva);
+  if ("error" in r) return { error: r.error };
+  return r;
 }

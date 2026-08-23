@@ -11,6 +11,7 @@ import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/ema
 import { trimiteElement } from "@/lib/emag/trimite";
 import { aduComenzile } from "@/lib/emag/orders";
 import { urcaFacturaLaEmag, type Factura } from "@/lib/emag/facturi";
+import { aduRetururile } from "@/lib/emag/rma";
 import type { EmagConfig, EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
 import type { OpEmag } from "@/lib/emag/queue";
 import { eVandabila } from "@/lib/emag/rute";
@@ -77,6 +78,9 @@ const SUPRAPUNERE_MS = 5 * 60 * 1000;
 /** Cate magazine isi urca facturile intr-o trecere. */
 const MAGAZINE_FACTURI = 5;
 
+/** Cate magazine isi aduc retururile intr-o trecere. */
+const MAGAZINE_RETURURI = 6;
+
 /** Cate facturi se urca pentru un magazin intr-o trecere. */
 const FACTURI_PE_TRECERE = 10;
 
@@ -119,7 +123,7 @@ export async function GET(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0;
+  let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0, retururi = 0;
   const inceputulRularii = Date.now();
 
   /* Contextul unui magazin se citeste O DATA pe trecere: e o citire cu decriptare,
@@ -335,7 +339,46 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, duse, cazute, reconciliate, comenziNoi, facturi });
+  /* ── 5) Retururile ──────────────────────────────────────────────────
+   *
+   * ⚠ La sfert de ora, nu in fiecare minut. Un retur nu se naste si nu se schimba
+   * atat de des incat sa merite un sfert din cele 3 cereri pe secunda ale
+   * magazinului — iar acelea sunt cerute mult mai tare de coada si de comenzi.
+   *
+   * ⚠ `pas = 15` la rotatie, nu 1, SI E CHIAR ROSTUL ARGUMENTULUI ACELUIA.
+   *
+   * `alegeInRotatie` socoteste tura din `Date.now() / 60_000 / pas`, deci cu `pas`
+   * pe 1 tura se schimba in fiecare MINUT. Dar pasul asta ruleaza o data la 15
+   * minute — asa ca fereastra ar fi sarit cu 15 × 6 magazine intre doua rulari, in
+   * loc de 6. Cu 129 de magazine, ea n-ar fi trecut prin ele pe rand, ci ar fi sarit
+   * dupa un tipar care lasa neatinse cele mai multe la fiecare tura.
+   *
+   * `pas` egal cu ritmul rularii face tura sa avanseze O DATA pe rulare, deci
+   * fereastra chiar merge din 6 in 6 si toate magazinele ii vin randul.
+   */
+  if (new Date(inceputulRularii).getMinutes() % 15 === 0) {
+    for (const businessId of alegeInRotatie(magazine, MAGAZINE_RETURURI, 15)) {
+      const ctx = await ctxPentru(businessId);
+      if (!ctx) continue;
+
+      const marcaj = Date.parse(ctx.config.rma_synced_at ?? "");
+      const deLa = new Date(
+        Number.isFinite(marcaj) ? marcaj - SUPRAPUNERE_MS : inceputulRularii - 7 * 24 * 60 * 60 * 1000,
+      );
+
+      const rez = await aduRetururile(admin, ctx, deLa);
+      retururi += rez.scrise;
+
+      /* ⚠ Acelasi `marcajUrmator` ca la comenzi: cand nu s-a citit tot, marcajul
+         ramane pe loc. Vezi nota de la pasul 3. */
+      const urmator = marcajUrmator(rez, { runStartMs: inceputulRularii, overlapMs: SUPRAPUNERE_MS });
+      if (urmator != null) {
+        await patchConfig(admin, businessId, { rma_synced_at: new Date(urmator).toISOString() });
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, duse, cazute, reconciliate, comenziNoi, facturi, retururi });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

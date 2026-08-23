@@ -1203,6 +1203,14 @@ export interface RandOfertaEcran {
   /** ⚠ Traducerea poate bloca publicarea chiar cu restul aprobat. Vezi `rute.ts`. */
   traducereBlocheaza: boolean;
   linkEmag: string | null;
+  /**
+   * Cati vanzatori au oferta pe acelasi produs, si pe ce loc suntem.
+   *
+   * ⚠ SE ARATA, NU SE FOLOSESTE IN NICIO DECIZIE. Datele astea sunt tentatia curata
+   * pentru un pret automat care taie pana sub marja — iar lista de audit avertizeaza
+   * chiar ea sa fii atent la politica eMAG inainte de orice automatizare.
+   */
+  concurenta: { oferte: number; loc: number | null; celMaiBunPret: number | null } | null;
 }
 
 export interface FiltruOferteEcran {
@@ -1245,7 +1253,7 @@ export async function listaOferteEmag(
   let q = admin
     .from("emag_offers")
     .select(
-      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, products(name)",
+      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, products(name)",
       { count: "exact" },
     )
     .eq("business_id", businessId);
@@ -1269,6 +1277,7 @@ export async function listaOferteEmag(
     id: string; product_id: string | null; variant_title: string | null; emag_id: number;
     status: string; validation_status: number | null; translation_validation_status: number | null;
     doc_errors: unknown; error: string | null; auto_sync: boolean; part_number_key: string | null;
+    number_of_offers: number | null; buy_button_rank: number | null; best_offer_sale_price: number | null;
     products: { name: string } | { name: string }[] | null;
   };
 
@@ -1294,6 +1303,15 @@ export async function listaOferteEmag(
       /* `part_number_key` e cheia paginii lor de produs; fără ea, oferta n-are încă
          o pagină publică la eMAG și n-are unde duce link-ul. */
       linkEmag: r.part_number_key ? `https://www.emag.ro/-/pd/${r.part_number_key}` : null,
+      /* ⚠ Numai cand chiar sunt CONCURENTI. Cu un singur vanzator, „locul 1 din 1" nu
+         spune nimic si doar incarca randul. */
+      concurenta: (r.number_of_offers ?? 0) > 1
+        ? {
+            oferte: r.number_of_offers ?? 0,
+            loc: r.buy_button_rank,
+            celMaiBunPret: r.best_offer_sale_price != null ? Number(r.best_offer_sale_price) : null,
+          }
+        : null,
     };
   });
 

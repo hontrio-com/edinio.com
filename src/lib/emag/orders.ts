@@ -436,6 +436,16 @@ export async function ingereazaComanda(
       tip: c.type ?? null,
       mod_plata: c.payment_mode_id ?? null,
       livrare: c.delivery_mode ?? null,
+      /*
+       * ⚠ PENTRU ECRAN, NU PENTRU DECIZII. O comanda incompleta arata altfel in lista,
+       * ca nimeni sa n-o pregateasca de expediere.
+       *
+       * Deciziile — mai ales facturarea — citesc din `emag_orders.is_complete`, care se
+       * IMPROSPATEAZA la fiecare re-citire. Copia de aici se scrie o data, la intrare,
+       * si poate imbatrani: o comanda devenita completa ar fi ramas marcata incompleta
+       * pe veci daca cineva s-ar fi sprijinit pe ea.
+       */
+      completa: c.is_complete ?? null,
     } as never,
   } as never).select("id").single();
 

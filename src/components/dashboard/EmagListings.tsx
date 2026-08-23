@@ -282,6 +282,26 @@ function RandOferta({
             #{rand.emagId}
             {rand.validare ? ` · ${rand.validare}` : ""}
           </p>
+
+          {/*
+            ⚠ SE ARATĂ, NU SE FOLOSEȘTE ÎN NICIO DECIZIE.
+            Datele astea sunt tentația curată pentru un preț automat care taie până sub
+            marjă. Comerciantul le vede și hotărăște el; Edinio nu-i schimbă prețul.
+          */}
+          {rand.concurenta && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {rand.concurenta.loc === 1
+                ? "Ai butonul de cumpărare"
+                : rand.concurenta.loc != null
+                  ? `Locul ${rand.concurenta.loc} la butonul de cumpărare`
+                  : "În competiție"}
+              {" · "}
+              {rand.concurenta.oferte} {rand.concurenta.oferte === 1 ? "ofertă" : "oferte"} pe produs
+              {rand.concurenta.celMaiBunPret != null && (
+                <> · cel mai bun preț: <span className="tabular-nums">{rand.concurenta.celMaiBunPret.toFixed(2)}</span> fără TVA</>
+              )}
+            </p>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">

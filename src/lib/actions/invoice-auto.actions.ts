@@ -53,6 +53,41 @@ export async function maybeAutoInvoice(
     const src = o.order_source as { marketplace?: string } | null;
     const eEmag = src?.marketplace === "emag" || o.payment_method === "emag";
     if (!eEmag && (src?.marketplace || o.payment_method === "aboutyou" || o.payment_method === "trendyol")) return;
+
+    /*
+     * ═══ ⚠ O COMANDĂ eMAG INCOMPLETĂ NU SE FACTUREAZĂ ═══
+     *
+     * `is_complete: 0` înseamnă, în cuvintele lor, „incomplete order": liniile ei se
+     * mai pot schimba. Facturată așa, documentul pleacă pe cantități care apoi se
+     * modifică — iar o factură fiscală greșită nu se retrage, se stornează.
+     *
+     * ⚠ GARDA STĂ AICI, NU ÎN CALEA DE INGEST eMAG. `maybeAutoInvoice` e chemată din
+     * douăsprezece cronuri de urmărire a coletelor (GLS, DHL, FedEx, UPS, Poșta,
+     * Pallex, Ecolet, Packeta, Shipo, Smartship…), din acțiunile în masă și din
+     * schimbarea manuală de status. Iar comenzile eMAG pot fi expediate cu curierul
+     * propriu al comerciantului — deci drumul cel mai probabil către facturare NU
+     * trece prin codul eMAG deloc.
+     *
+     * Pusă doar în ingest, o comandă incompletă expediată cu GLS ar fi fost trecută
+     * „livrată" de cronul GLS și facturată pe loc.
+     *
+     * ⚠ Se citește din `emag_orders`, nu din `order_source`: acolo valoarea se
+     * ÎMPROSPĂTEAZĂ la fiecare re-citire a comenzii. Copiată o dată în `order_source`,
+     * ar fi rămas „incompletă" pe veci, iar comanda n-ar mai fi primit factură
+     * niciodată.
+     */
+    if (eEmag) {
+      const { data: randEmag } = await supabase
+        .from("emag_orders")
+        .select("is_complete")
+        .eq("business_id", businessId)
+        .eq("order_id", orderId)
+        .maybeSingle();
+      const complet = (randEmag as { is_complete: number | null } | null)?.is_complete;
+      /* ⚠ `null` = nu ne-au spus. Nu se blochează pe o necunoscută: o comandă fără
+         steag ar fi rămas fără factură fără ca nimeni să afle de ce. */
+      if (complet === 0) return;
+    }
     if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number) return;
 
     const smartbill = await import("@/lib/actions/smartbill.actions");

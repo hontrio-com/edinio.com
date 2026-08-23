@@ -123,8 +123,38 @@ export function iesireEmag(): IesireEmag {
   }
 
   if (url !== urlMemorat) {
-    dispatcherMemorat = new ProxyAgent(url);
-    urlMemorat = url;
+    /*
+     * ═══ ⚠ NU ARUNCA NICIODATA. AICI E O PAGINA A TUTUROR ═══
+     *
+     * `new ProxyAgent(url)` arunca la o adresa stricata — lipsa `http://`, un
+     * spatiu, un `%` neescapat din parola. Iar functia asta se cheama la RANDAREA
+     * hub-ului de integrari (`features/page.tsx`), ca sa se stie daca se pune
+     * lacat pe cardul eMAG.
+     *
+     * Adica o litera gresita intr-o variabila de mediu ar fi daramat pagina de
+     * integrari pentru TOTI comerciantii, nu doar pentru cine foloseste eMAG. Si
+     * nu la o cerere catre eMAG, ci la simpla deschidere a paginii.
+     *
+     * Prins inainte de primul deploy, citind unde se cheama functia. Un `catch` aici
+     * costa nimic; lipsa lui costa toata pagina.
+     */
+    try {
+      dispatcherMemorat = new ProxyAgent(url);
+      urlMemorat = url;
+    } catch {
+      dispatcherMemorat = null;
+      urlMemorat = null;
+      return {
+        dispatcher: null,
+        eroare:
+          "Adresa ieșirii către eMAG (EMAG_PROXY_URL) nu este validă. " +
+          "Se așteaptă forma http://utilizator:parolă@ip:port.",
+      };
+    }
+  }
+
+  if (!dispatcherMemorat) {
+    return { dispatcher: null, eroare: "Ieșirea către eMAG nu este configurată." };
   }
 
   return { dispatcher: dispatcherMemorat, eroare: null };

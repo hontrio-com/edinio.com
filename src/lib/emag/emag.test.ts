@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   ardeIncercare, clasificaRaspuns, mesajeEmag, poarteObservatii, sAIncheiat,
 } from "./errors";
-import { emagUrl, monedaEmag } from "./auth";
+import { emagUrl, iesireEmag, monedaEmag } from "./auth";
 import {
   alegeCotaTva, alegeTimpPregatire, caracteristiciLipsa, caracteristiciObligatorii,
   categoriiIngaduite,
@@ -277,4 +277,43 @@ test("eMAG: o categorie in care vanzatorul n-are voie NU intra in sugestii", () 
     { id: 3, name: "  ", is_allowed: 1 },
   ];
   assert.deepEqual(categoriiIngaduite(categorii), [{ id: 1, label: "Telefoane mobile" }]);
+});
+
+/* ── Iesirea catre eMAG ───────────────────────────────────────────────────── */
+
+test("eMAG: o adresa stricata a releului NU darama pagina de integrari", () => {
+  /*
+   * ⚠ CEA MAI SCUMPA PROBA DIN FISIER, si nu se vede de ce.
+   *
+   * `iesireEmag()` se cheama la RANDAREA hub-ului de integrari, ca sa se stie daca
+   * se pune lacat pe cardul eMAG. Dedesubt, `new ProxyAgent(url)` ARUNCA la o
+   * adresa stricata — verificat: `ERR_INVALID_URL` pentru „nu-e-adresa",
+   * „http://" si un sir gol.
+   *
+   * Deci o litera gresita intr-o variabila de mediu ar fi daramat pagina de
+   * integrari pentru TOTI comerciantii, nu doar pentru cine foloseste eMAG. Si nu
+   * la o cerere catre eMAG, ci la simpla deschidere a paginii.
+   */
+  const vechi = process.env.EMAG_PROXY_URL;
+  try {
+    for (const stricata of ["nu-e-adresa", "http://", "   x   "]) {
+      process.env.EMAG_PROXY_URL = stricata;
+      const r = iesireEmag();
+      assert.equal(r.dispatcher, null, `„${stricata}" nu trebuie sa dea dispatcher`);
+      assert.ok(r.eroare, `„${stricata}" trebuie sa spuna ce e in neregula`);
+    }
+
+    process.env.EMAG_PROXY_URL = "";
+    const gol = iesireEmag();
+    assert.equal(gol.dispatcher, null);
+    assert.match(gol.eroare ?? "", /EMAG_PROXY_URL/);
+
+    process.env.EMAG_PROXY_URL = "http://user:parola@127.0.0.1:3128";
+    const buna = iesireEmag();
+    assert.ok(buna.dispatcher, "o adresa buna da dispatcher");
+    assert.equal(buna.eroare, null);
+  } finally {
+    if (vechi === undefined) delete process.env.EMAG_PROXY_URL;
+    else process.env.EMAG_PROXY_URL = vechi;
+  }
 });

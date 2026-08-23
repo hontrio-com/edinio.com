@@ -343,8 +343,13 @@ async function retrage(
    */
   const acum = new Date().toISOString();
   for (const bucata of bucatiDeIduri(vii.map((x) => x.id))) {
+    /* ⚠ SI `business_id`, desi id-urile vin dintr-o citire deja legata de magazin.
+       E o scriere pe o LISTA de id-uri: daca lista ar veni vreodata dintr-o citire
+       nelegata, ar atinge randurile altui comerciant fara sa dea vreo eroare. Costa
+       o conditie; lipsa ei costa incredere care nu se mai castiga inapoi. */
     await admin.from("emag_offers")
       .update({ status: "withdrawn" satisfies StareOferta, last_synced_at: acum })
+      .eq("business_id", ctx.businessId)
       .in("id", bucata);
   }
   return { verdict: r.verdict ?? "reusit", mesaj: "" };

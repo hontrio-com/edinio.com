@@ -6,6 +6,7 @@ import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { EmagClient } from "@/components/dashboard/EmagClient";
 import { EmagCategoryMapping } from "@/components/dashboard/EmagCategoryMapping";
 import { EmagListings } from "@/components/dashboard/EmagListings";
+import { EmagReturns } from "@/components/dashboard/EmagReturns";
 import { getEmagStatus } from "@/lib/actions/emag.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -75,6 +76,8 @@ async function ContinutEmag({ businessId }: { businessId: string }) {
         <>
           <EmagCategoryMapping businessId={businessId} />
           <EmagListings businessId={businessId} />
+          {/* Se ascunde singur cand nu e niciun retur: o carte goala nu spune nimic. */}
+          <EmagReturns businessId={businessId} />
         </>
       )}
     </div>

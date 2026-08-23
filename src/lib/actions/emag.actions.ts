@@ -32,7 +32,7 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
-import { schimbaStareaReturului } from "@/lib/emag/rma";
+import { schimbaStareaReturului, treceriPosibile } from "@/lib/emag/rma";
 import { pretPentruSmartDeals } from "@/lib/emag/campanii";
 import {
   leagaOferteleNoi, ruleazaImportEmag, SURSA_EMAG, type RezultatImportEmag,
@@ -42,7 +42,7 @@ import {
   EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
   type EmagAdresa, type EmagContCurier, type EmagCotaTva, type EmagConfig,
   type EmagIntrareCategorie,
-  EMAG_ETICHETA_STARE, EMAG_VALIDARE,
+  EMAG_ETICHETA_STARE, EMAG_STATUS_RETUR, EMAG_VALIDARE,
   type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
 } from "@/lib/emag/types";
 import { traducereaPoateBloca } from "@/lib/emag/rute";
@@ -1260,4 +1260,196 @@ export async function publicaCategoriaPeEmag(
   await enqueueEmagSyncMany(businessId, produse.map((p) => p.id));
   revalidatePath(FEATURE_PATH);
   return { puse: produse.length };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AWB: CE SE ȘTIE ÎNAINTE DE APĂSARE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface PregatireAwbEmag {
+  /** Comanda are corespondent eMAG și se poate lucra la ea? */
+  emagOrderId: number;
+  /** ⚠ 2 = onorată de eMAG (FBE). Vânzătorul NU poate emite AWB pentru ea. */
+  tipComanda: number | null;
+  /** Cât cere eMAG să se încaseze la livrare. `0` la plata online. */
+  ramburs: number;
+  /** Numele curierului care va fi folosit, sau `null` dacă niciunul nu e potrivit. */
+  curier: string | null;
+  curierId: number | null;
+  /** Ce oprește emiterea, în cuvintele omului. `null` = se poate. */
+  piedica: string | null;
+  /** AWB-ul deja emis pentru comanda asta, dacă există. */
+  awbExistent: { numar: string | null; emagId: number } | null;
+  /** Livrare la easybox: adresa e a lockerului, nu a omului. */
+  locker: string | null;
+}
+
+/**
+ * Ce se știe despre AWB-ul unei comenzi eMAG, înainte să apese cineva.
+ *
+ * ═══ ⚠ DE CE NU E DE AJUNS UN BUTON ═══
+ *
+ * Emiterea unui AWB e un efect cu un singur foc care costă bani: curierul vine, iar
+ * un al doilea AWB înseamnă al doilea transport plătit. Deci ecranul trebuie să
+ * spună DINAINTE prin ce curier pleacă și cât se încasează — nu să afle omul din
+ * rezultat.
+ *
+ * ⚠ Și mai ales trebuie să spună când NU se poate, și de ce. Trei motive, toate
+ * invizibile altfel:
+ *
+ *   `type: 2` (FBE)  — comanda e onorată de eMAG din depozitele lor. Vânzătorul nu
+ *                      are ce expedia și nu poate emite nimic.
+ *   listă impusă goală — eMAG nu îngăduie AWB de marketplace pe comanda asta.
+ *   niciun cont potrivit — conturile există, dar niciunul nu e activ ȘI de tipul
+ *                      cerut (1 = retur, 2 = comandă, 3 = amândouă).
+ *
+ * Fără ele, butonul ar fi fost apăsat și ar fi întors un refuz de la eMAG despre un
+ * cont — iar omul ar fi căutat greșeala în setările lui de curierat.
+ */
+export async function pregatireAwbEmag(
+  businessId: string,
+  orderId: string,
+): Promise<PregatireAwbEmag | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const { data: rand } = await admin.from("emag_orders")
+    .select("emag_order_id, order_type, raw").eq("business_id", businessId).eq("order_id", orderId).maybeSingle();
+
+  const r = rand as { emag_order_id: number; order_type: number | null; raw: unknown } | null;
+  if (!r) return { error: "Comanda nu are corespondent eMAG." };
+
+  const brut = (r.raw ?? {}) as {
+    cashed_cod?: number;
+    enforced_vendor_courier_accounts?: number[] | null;
+    details?: { locker_id?: string; locker_name?: string };
+  };
+
+  const { data: awb } = await admin.from("emag_awb")
+    .select("emag_id, awb_number").eq("business_id", businessId).eq("order_id", orderId)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+  const existent = awb as { emag_id: number; awb_number: string | null } | null;
+
+  const baza = {
+    emagOrderId: r.emag_order_id,
+    tipComanda: r.order_type,
+    ramburs: Number(brut.cashed_cod ?? 0) || 0,
+    awbExistent: existent ? { numar: existent.awb_number, emagId: existent.emag_id } : null,
+    locker: brut.details?.locker_name ?? brut.details?.locker_id ?? null,
+  };
+
+  /* ⚠ FBE se verifică ÎNAINTE de orice apel la eMAG: e o proprietate a comenzii, nu
+     a contului, iar o cerere trimisă degeaba arde din cele 3 pe secundă. */
+  if (r.order_type === 2) {
+    return {
+      ...baza, curier: null, curierId: null,
+      piedica: "Comanda e onorată de eMAG (FBE). Ei se ocupă de livrare — tu nu emiți AWB.",
+    };
+  }
+
+  const alegere = alegereaCurierului(brut.enforced_vendor_courier_accounts ?? null);
+  if (alegere.fel === "imposibil") {
+    return {
+      ...baza, curier: null, curierId: null,
+      piedica: "eMAG nu permite AWB de marketplace pentru comanda asta. Expediaz-o cu curierul tău și trimite numărul.",
+    };
+  }
+
+  const c = await contextPentruCitire(businessId);
+  if ("error" in c) return c;
+
+  const conturi = await citesteConturiCurier(c.auth);
+  if (isEmagError(conturi)) return { error: conturi.error };
+
+  const lista = (Array.isArray(conturi.data) ? conturi.data : []) as EmagContCurier[];
+  const ales = contPotrivit(lista, 1, alegere, c.config.courier_account_id ?? null);
+
+  if (ales == null) {
+    return {
+      ...baza, curier: null, curierId: null,
+      piedica: alegere.fel === "din_lista"
+        ? "eMAG impune anumite conturi de curier pentru comanda asta, iar niciunul nu e activ în contul tău."
+        : "Niciun cont de curier eMAG activ și potrivit pentru livrare. Verifică-le în panoul eMAG.",
+    };
+  }
+
+  const contAles = lista.find((x) => x.account_id === ales);
+  return {
+    ...baza,
+    curier: (contAles?.account_display_name ?? contAles?.courier_name ?? `Cont #${ales}`).trim(),
+    curierId: ales,
+    piedica: null,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RETURURILE, PENTRU ECRAN
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface RandReturEcran {
+  emagRmaId: number;
+  emagOrderId: number | null;
+  orderId: string | null;
+  stare: number | null;
+  stareEticheta: string;
+  /** Ce se poate face acum, după chiar tabelul lor de treceri. */
+  treceri: { stare: number; eticheta: string }[];
+  produse: { nume: string; cantitate: number }[];
+  motiv: number | null;
+  actualizat: string;
+}
+
+/**
+ * Retururile magazinului.
+ *
+ * ⚠ BUTOANELE VIN DIN TABELUL LOR DE TRECERI, nu dintr-o listă scrisă de noi. O
+ * trecere nepermisă nu strică nimic la ei — o refuză — dar strică încrederea
+ * omului în panou: apasă un buton, primește o eroare în engleză despre un câmp, și
+ * nu înțelege că pur și simplu nu era rândul acelei acțiuni.
+ */
+export async function listaRetururiEmag(
+  businessId: string,
+): Promise<{ randuri: RandReturEcran[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("emag_rma")
+    .select("emag_rma_id, emag_order_id, order_id, request_status, return_reason, products, updated_at")
+    .eq("business_id", businessId)
+    .order("updated_at", { ascending: false })
+    .limit(100);
+
+  if (error) return { error: error.message };
+
+  type Rand = {
+    emag_rma_id: number; emag_order_id: number | null; order_id: string | null;
+    request_status: number | null; return_reason: number | null; products: unknown; updated_at: string;
+  };
+
+  const randuri: RandReturEcran[] = ((data ?? []) as Rand[]).map((r) => ({
+    emagRmaId: r.emag_rma_id,
+    emagOrderId: r.emag_order_id,
+    orderId: r.order_id,
+    stare: r.request_status,
+    stareEticheta: r.request_status != null
+      ? (EMAG_STATUS_RETUR[r.request_status] ?? `Stare ${r.request_status}`)
+      : "Necunoscută",
+    treceri: treceriPosibile(r.request_status).map((s) => ({
+      stare: s,
+      eticheta: EMAG_STATUS_RETUR[s] ?? `Stare ${s}`,
+    })),
+    produse: Array.isArray(r.products)
+      ? (r.products as { product_name?: string; quantity?: number }[]).map((p) => ({
+          nume: (p?.product_name ?? "").trim() || "Produs",
+          cantitate: Number(p?.quantity ?? 0) || 0,
+        }))
+      : [],
+    motiv: r.return_reason,
+    actualizat: r.updated_at,
+  }));
+
+  return { randuri };
 }

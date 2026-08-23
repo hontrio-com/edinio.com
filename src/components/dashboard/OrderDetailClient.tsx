@@ -43,6 +43,7 @@ import { FedexAwbModal } from "@/components/dashboard/FedexAwbModal";
 import { UpsAwbModal } from "@/components/dashboard/UpsAwbModal";
 import { DhlAwbModal } from "@/components/dashboard/DhlAwbModal";
 import { InnoshipAwbModal } from "@/components/dashboard/InnoshipAwbModal";
+import { EmagFulfillmentPanel } from "@/components/dashboard/EmagFulfillmentPanel";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
@@ -309,6 +310,13 @@ export function OrderDetailClient({
   const ord = order as unknown as Record<string, unknown>;
   // Trendyol ships with its own cargo (no courier AWB) — swap the shipping panel.
   const isTrendyol = (order.order_source as { marketplace?: string } | null)?.marketplace === "trendyol";
+  /*
+   * eMAG e altfel decat Trendyol: ingaduie SI AWB prin contul lor de curier, SI
+   * curierul comerciantului. Deci cartea lui se ADAUGA deasupra, nu ia locul
+   * curierilor — un comerciant cu contract propriu mai bun n-are de ce sa fie silit
+   * sa plateasca transportul lor.
+   */
+  const isEmag = (order.order_source as { marketplace?: string } | null)?.marketplace === "emag";
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -1215,6 +1223,7 @@ export function OrderDetailClient({
           )}
 
           {/* Expediere */}
+          {isEmag && <EmagFulfillmentPanel businessId={businessId} order={order} />}
           {isTrendyol ? (
             <TrendyolFulfillmentPanel businessId={businessId} orderId={order.id} />
           ) : enabledCouriers.length > 0 ? (

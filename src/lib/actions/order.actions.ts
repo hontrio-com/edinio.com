@@ -51,6 +51,7 @@ import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
+import { enqueueEmagStocMany } from "@/lib/emag/queue";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, verificaMetodaPlata, isCodPaymentMethod, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { ORDER_STATUS } from "@/lib/orders/status";
@@ -1560,6 +1561,7 @@ export async function placeOrder(data: {
   void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
   void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
   void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
+  void enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
 
   // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
   // by transaction_id; captures the conversion even when the browser tag is blocked.
@@ -2942,6 +2944,7 @@ export async function updateOrderDetails(orderId: string, data: {
     void enqueueOlxSyncMany(order.business_id, atinse);
     void enqueueAboutYouStockMany(order.business_id, atinse);
     void enqueueTrendyolInventoryMany(order.business_id, atinse);
+    void enqueueEmagStocMany(order.business_id, atinse);
   }
 
   revalidatePath("/dashboard/orders");
@@ -3832,6 +3835,7 @@ export async function placeCartOrder(data: {
   void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
+  void enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
   // Acelasi prag moale pe magazin ca la comanda din formular: peste el comanda se
   // salveaza, dar emailurile si SMS-ul nu mai pleaca. Vezi `pesteRafalaMagazinului`.
   const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeCartOrder");

@@ -17,6 +17,7 @@ import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue"
 import { enqueueOlxSync, enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouSync, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolSync, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
+import { enqueueEmagSync, enqueueEmagSyncMany } from "@/lib/emag/queue";
 
 interface ProductData {
   name: string;
@@ -186,6 +187,7 @@ export async function createProduct(businessId: string, data: ProductData) {
   if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
   if (created?.id) void enqueueAboutYouSync(businessId, created.id, created.id, "upsert");
   if (created?.id) void enqueueTrendyolSync(businessId, created.id, created.id, "upsert", true);
+  if (created?.id) void enqueueEmagSync(businessId, created.id, created.id, "oferta", true);
   if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
@@ -278,6 +280,7 @@ export async function updateProduct(productId: string, businessId: string, data:
   void enqueueOlxSync(businessId, productId, productId, "upsert");
   void enqueueAboutYouSync(businessId, productId, productId, "upsert");
   void enqueueTrendyolSync(businessId, productId, productId, "upsert");
+  void enqueueEmagSync(businessId, productId, productId, "oferta");
   void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
@@ -406,6 +409,7 @@ async function dezactiveazaPacheteleCu(
   void enqueueOlxSyncMany(businessId, afectate);
   void enqueueAboutYouSyncMany(businessId, afectate);
   void enqueueTrendyolSyncMany(businessId, afectate);
+  void enqueueEmagSyncMany(businessId, afectate);
 }
 
 export async function deleteProduct(productId: string, businessId: string) {
@@ -449,6 +453,10 @@ export async function deleteProduct(productId: string, businessId: string) {
   void enqueueOlxSync(businessId, null, productId, "delete");
   void enqueueAboutYouSync(businessId, null, productId, "delete");
   void enqueueTrendyolSync(businessId, null, productId, "delete");
+  /* ⚠ „retragere", nu „stergere": eMAG NU are stergere de oferta. Se trimite
+     `status: 0`, adica se opreste din vanzare, si oferta ramane la ei cu
+     documentatia aprobata. */
+  void enqueueEmagSync(businessId, null, productId, "retragere");
   void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncBrevoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncKlaviyoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
@@ -524,6 +532,7 @@ export async function bulkProductAction(
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
       void enqueueTrendyolSyncMany(businessId, ids);
+      void enqueueEmagSyncMany(businessId, ids);
       if (action.kind === "active" && action.value === false) void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       if (action.kind === "active" && action.value === false) void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
@@ -549,6 +558,7 @@ export async function bulkProductAction(
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
       void enqueueTrendyolSyncMany(businessId, ids);
+      void enqueueEmagSyncMany(businessId, ids);
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count };
@@ -580,6 +590,7 @@ export async function bulkProductAction(
       for (const id of ids) void enqueueOlxSync(businessId, null, id, "delete");
       for (const id of ids) void enqueueAboutYouSync(businessId, null, id, "delete");
       for (const id of ids) void enqueueTrendyolSync(businessId, null, id, "delete");
+      for (const id of ids) void enqueueEmagSync(businessId, null, id, "retragere");
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
@@ -631,6 +642,7 @@ export async function bulkProductAction(
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
       void enqueueTrendyolSyncMany(businessId, ids);
+      void enqueueEmagSyncMany(businessId, ids);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });

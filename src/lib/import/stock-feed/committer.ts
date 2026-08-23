@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { applyStockPlan } from "./applier";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
+import { enqueueEmagStocMany } from "@/lib/emag/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import type { StockChange, StockPlan, StockRowIssue } from "./types";
 
@@ -290,6 +291,7 @@ export async function processStockChunk(
     const atinse = [...new Set(outcome.written.map((c) => c.productId))];
     if (atinse.length > 0) {
       void enqueueTrendyolInventoryMany(job.business_id, atinse);
+      void enqueueEmagStocMany(job.business_id, atinse);
       void enqueueAboutYouStockMany(job.business_id, atinse);
     }
 

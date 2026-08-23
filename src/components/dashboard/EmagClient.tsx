@@ -277,9 +277,58 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         </div>
       </div>
 
+      <PanouNotificari url={status.webhookUrl} />
+
       <PanouImport businessId={businessId} />
 
       <PanouIp ip={status.ipDeAlbit} restrans />
+    </div>
+  );
+}
+
+/**
+ * Adresa la care eMAG poate trimite notificari.
+ *
+ * ═══ ⚠ SE ARATA TOCMAI FIINDCA NU SE POATE PUNE DIN COD ═══
+ *
+ * Cautat in tot OpenAPI-ul lor: nu exista nicio ruta care sa primeasca un URL de
+ * callback. Notificarile EXISTA — documentatia le enumera: comenzi noi, anulari,
+ * retururi si schimbari de stare, statusul AWB, documentatie aprobata — dar adresa
+ * se pune din partea lor, la cerere.
+ *
+ * Fara cartea asta, comerciantul n-ar fi avut de unde sti nici ca notificarile sunt
+ * cu putinta, nici ce adresa sa ceara. Iar integrarea ar fi mers la fel de bine, doar
+ * cu comenzile intrate la un minut in loc de indata — adica o lipsa pe care nimeni
+ * n-ar fi observat-o si nimeni n-ar fi reparat-o.
+ */
+function PanouNotificari({ url }: { url: string }) {
+  const [copiat, setCopiat] = useState(false);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold">Comenzi instant (optional)</h3>
+      <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+        Comenzile intra oricum singure, la fiecare minut. Daca vrei sa vina{" "}
+        <strong>in aceeasi clipa</strong>, cere-i eMAG-ului sa trimita notificari la
+        adresa de mai jos. Nu se poate pune din Edinio — numai ei o pot configura.
+      </p>
+
+      <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
+        <code className="min-w-0 flex-1 truncate text-xs">{url}</code>
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard.writeText(url);
+            setCopiat(true);
+            toast.success("Adresa a fost copiata.");
+            setTimeout(() => setCopiat(false), 2000);
+          }}
+          className="shrink-0 rounded-lg border border-border p-1.5 hover:bg-muted"
+          title="Copiaza adresa"
+        >
+          {copiat ? <CheckCircle className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+      </div>
     </div>
   );
 }

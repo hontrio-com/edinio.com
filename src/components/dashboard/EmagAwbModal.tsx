@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { AlertCircle, CheckCircle, Loader2, Package, Truck, X } from "lucide-react";
+import { AlertCircle, CheckCircle, Download, Loader2, Package, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { emiteAwbEmag, pregatireAwbEmag, type PregatireAwbEmag } from "@/lib/actions/emag.actions";
+import {
+  descarcaEtichetaAwbEmag, emiteAwbEmag, pregatireAwbEmag, type PregatireAwbEmag,
+} from "@/lib/actions/emag.actions";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import type { Database } from "@/types/database.types";
 
@@ -123,6 +125,32 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
     });
   }
 
+  /**
+   * Aduce eticheta si o deschide in fila.
+   *
+   * ⚠ SE COMPUNE UN `blob:`, NU SE CERE O ADRESA PUBLICA. O adresa spre eticheta unui
+   * colet ar fi purtat numele, adresa si telefonul CUMPARATORULUI pe internet. Asa,
+   * octetii ajung direct in fila care i-a cerut, iar legatura se elibereaza imediat.
+   */
+  function descarcaEticheta(format: "A4" | "A6") {
+    incepe(async () => {
+      const r = await descarcaEtichetaAwbEmag(businessId, order.id, format);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      const octeti = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([octeti], { type: r.tip }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = r.nume;
+      a.click();
+      /* ⚠ Se elibereaza, altfel octetii raman in memoria filei pana la reincarcare —
+         iar la un depozit care tipareste cateva sute de etichete pe zi, se aduna. */
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+  }
+
   const gata = pregatire && !pregatire.piedica && !pregatire.awbExistent;
 
   return (
@@ -168,6 +196,32 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
                   </span>
                 </span>
               </p>
+            )}
+
+            {/* ⚠ Fara eticheta, AWB-ul e un numar intr-o baza de date: coletul n-are ce
+                sa poarte si curierul nu-l ia. Lipsa n-ar fi dat nicio eroare — s-ar fi
+                vazut abia la depozit. */}
+            {pregatire.awbExistent && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => descarcaEticheta("A4")}
+                  disabled={seTrimite}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+                >
+                  {seTrimite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Etichetă A4
+                </button>
+                <button
+                  type="button"
+                  onClick={() => descarcaEticheta("A6")}
+                  disabled={seTrimite}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+                >
+                  <Download className="h-4 w-4" />
+                  Etichetă A6
+                </button>
+              </div>
             )}
 
             {/* ── Unde merge coletul ─────────────────────────────────────── */}

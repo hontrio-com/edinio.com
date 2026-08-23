@@ -497,3 +497,132 @@ export function verificaPretSmartDeals(auth: EmagAuth, productId: number) {
     auth, "GET", `/api-3/smart-deals-price-check?productId=${encodeURIComponent(String(productId))}`, undefined,
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ETICHETA AWB: RASPUNS BINAR, NU JSON
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Formatele de hartie pe care le da eMAG. */
+export type FormatAwb = "A4" | "A5" | "A6" | "ZPL";
+
+/**
+ * Eticheta AWB, ca octeti.
+ *
+ * ═══ ⚠ DE CE NU TRECE PRIN `trimite` ═══
+ *
+ * `trimite` citeste raspunsul cu `.text()` si il da lui `JSON.parse`. Un PDF trecut
+ * prin el ar fi iesit ca obiect gol, iar clasificarea ar fi spus „reusit" cu date
+ * nule: comerciantul ar fi apasat „Descarca eticheta" si ar fi primit un fisier de
+ * zero octeti, fara nicio eroare nicaieri.
+ *
+ * Deci raspunsul se ia ca `arrayBuffer`, iar erorile — care VIN ca JSON — se citesc
+ * separat, dupa antetul `content-type`.
+ *
+ * ⚠ TRECE PRIN ACELASI RELEU SI ACELASI RITM. Filtrarea pe IP a eMAG-ului se aplica
+ * si aici; plecata direct de pe Vercel, descarcarea ar fi primit un refuz care nu
+ * pomeneste nimic despre IP-uri. Iar ritmul de 3 cereri pe secunda e cumulat pe tot
+ * ce nu e comanda — o descarcare care il ocoleste face urmatoarea cerere sa ia 429.
+ *
+ * ⚠ MERGE DOAR PENTRU AWB-URILE EMISE PRIN API. Documentatia lor, cuvant cu cuvant:
+ * „Only AWBs issued via API can be read — only for them you receive the «emag_id»
+ * key, which is mandatory." Inca un motiv pentru care `emag_id` se scrie in aceeasi
+ * clipa in care il primim: fara el nu exista nici citire, nici eticheta.
+ */
+export async function descarcaEtichetaAwb(
+  auth: EmagAuth,
+  emagId: number,
+  format: FormatAwb = "A4",
+): Promise<{ octeti: ArrayBuffer; tip: string } | { error: string; status: number }> {
+  if (!auth?.username || !auth?.password) {
+    return { error: "Acreditările eMAG lipsesc.", status: 0 };
+  }
+  if (auth.password.startsWith("enc.v1.")) {
+    return { error: "Parola eMAG a fost citită criptat (eroare internă). Reconectează contul.", status: 0 };
+  }
+  if (!Number.isFinite(emagId) || emagId <= 0) {
+    return { error: "AWB-ul nu are id eMAG, deci eticheta nu se poate descărca.", status: 0 };
+  }
+
+  const iesire = iesireEmag();
+  if (iesire.eroare || !iesire.dispatcher) {
+    return { error: iesire.eroare ?? "Ieșirea către eMAG nu este configurată.", status: 0 };
+  }
+
+  const cale = `/awb/read_pdf?emag_id=${encodeURIComponent(String(emagId))}&awb_format=${encodeURIComponent(format)}`;
+  await asteaptaJeton(`${auth.businessId ?? "global"}:restul`, PE_SECUNDA_RESTUL);
+
+  try {
+    const raspuns = await fetchUndici(emagUrl(auth.tara, cale), {
+      method: "GET",
+      headers: {
+        Authorization: basicAuthHeader(auth.username, auth.password),
+        /* ⚠ Se cere si JSON: erorile lor vin tot ca JSON, nu ca PDF. */
+        Accept: "application/pdf, application/json",
+      },
+      dispatcher: iesire.dispatcher,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+
+    const tip = (raspuns.headers.get("content-type") ?? "").toLowerCase();
+
+    /*
+     * ⚠ Un raspuns JSON aici inseamna EROARE, oricat de 200 ar fi codul. eMAG
+     * intoarce `{isError: true, messages: […]}` cu status 200 la aproape orice
+     * refuz — iar salvat ca „eticheta", fisierul ar fi fost un JSON cu extensia
+     * `.pdf`, pe care comerciantul l-ar fi dus la curier.
+     */
+    if (tip.includes("json")) {
+      const text = await raspuns.text();
+      let json: unknown = {};
+      try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
+      const c = clasificaRaspuns(raspuns.status, json, cale);
+      return { error: mesajOmenesc(c.mesaj) || c.mesaj || "eMAG nu a dat eticheta.", status: raspuns.status };
+    }
+
+    if (!raspuns.ok) {
+      return { error: `eMAG a refuzat eticheta (${raspuns.status}).`, status: raspuns.status };
+    }
+
+    const octeti = await raspuns.arrayBuffer();
+    /* ⚠ Un fisier gol nu e o reusita. Salvat, ar fi ajuns la imprimanta ca o pagina
+       alba, iar coletul ar fi plecat fara eticheta. */
+    if (octeti.byteLength === 0) {
+      return { error: "eMAG a răspuns cu o etichetă goală. Încearcă din nou.", status: raspuns.status };
+    }
+
+    return { octeti, tip: tip || "application/pdf" };
+  } catch (e) {
+    const abandonat = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    return {
+      error: abandonat ? "eMAG nu a răspuns la timp." : "Nu am putut contacta eMAG.",
+      status: 0,
+    };
+  }
+}
+
+/**
+ * Eticheta in ZPL, pentru imprimantele de etichete.
+ *
+ * ═══ ⚠ E ALTA RUTA DECAT `read_pdf`, SI ALT FEL DE RASPUNS ═══
+ *
+ * `read_pdf` accepta si `awb_format=ZPL`, si de aceea am scris intai ca ruta asta „e
+ * acoperita". Nu e: documentatia lor spune despre `/awb/read_zpl` altceva — „Returns
+ * base64 encoded content". Adica JSON cu text codificat, nu octeti binari.
+ *
+ * Trecuta prin `descarcaEtichetaAwb`, care se uita la `content-type` si trateaza JSON
+ * drept EROARE, ar fi iesit un refuz pentru un raspuns perfect valid.
+ *
+ * Conteaza pentru depozitele cu imprimante Zebra: acolo eticheta se trimite ca ZPL,
+ * nu se tipareste un PDF. Fara ea, un depozit care scoate cateva sute de colete pe zi
+ * ar fi fost silit sa tipareasca A6-uri pe hartie.
+ */
+export function citesteEtichetaZpl(auth: EmagAuth, emagId: number) {
+  return trimite<unknown>(
+    auth, "GET", `/awb/read_zpl?emag_id=${encodeURIComponent(String(emagId))}`, undefined,
+  );
+}
+
+/** Numarul localitatilor, pentru paginare. */
+export function numaraLocalitati(auth: EmagAuth, filtre: Record<string, unknown> = {}) {
+  return citeste<unknown>(auth, "/locality/count", filtre);
+}

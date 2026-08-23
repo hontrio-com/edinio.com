@@ -19,10 +19,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import {
-  emagGloballyEnabled, emagIpDeAlbit, iesireEmag, maskSecret, monedaEmag,
+  emagGloballyEnabled, emagIpDeAlbit, emagWebhookUrl, iesireEmag, maskSecret, monedaEmag,
 } from "@/lib/emag/auth";
 import {
-  citesteAdrese, citesteConturiCurier, isEmagError, testeazaConexiunea, type EmagAuth,
+  citesteAdrese, citesteConturiCurier, descarcaEtichetaAwb, isEmagError, testeazaConexiunea,
+  type EmagAuth, type FormatAwb,
 } from "@/lib/emag/client";
 import {
   aduCategorie, aduCategorii, aduCoteTva, aduTimpiPregatire, alegeCotaTva, alegeTimpPregatire,
@@ -130,6 +131,15 @@ export interface StareEmag {
   autoPublish: boolean;
   /** Ce mai trebuie ales inainte de prima publicare, daca mai trebuie ceva. */
   lipsaPentruPublicare: string | null;
+  /**
+   * Adresa la care eMAG poate trimite notificari.
+   *
+   * ⚠ NU SE INREGISTREAZA PRIN API. Cautat in tot OpenAPI-ul lor: nu exista nicio
+   * ruta care sa primeasca un URL de callback. Notificarile exista, dar adresa se
+   * pune din partea LOR, la cerere. De aceea se arata pe ecran cu tot cu explicatia
+   * — altfel comerciantul ar astepta la nesfarsit ceva ce nimeni nu i-a cerut.
+   */
+  webhookUrl: string;
   vatId: number | null;
   handlingTime: number | null;
   categoriiMapate: number;
@@ -212,6 +222,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     autoSync: config.auto_sync !== false,
     autoPublish: config.auto_publish === true,
     lipsaPentruPublicare: ceLipsestePentruPublicare(config),
+    webhookUrl: emagWebhookUrl(businessId),
     vatId: config.vat_id ?? null,
     handlingTime: config.handling_time ?? null,
     categoriiMapate: Object.keys(config.category_map ?? {}).length,
@@ -1452,4 +1463,62 @@ export async function listaRetururiEmag(
   }));
 
   return { randuri };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ETICHETA AWB
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Eticheta AWB-ului, gata de tipărit.
+ *
+ * ═══ ⚠ FĂRĂ EA, AWB-UL NU FOLOSEȘTE LA NIMIC ═══
+ *
+ * Un AWB emis și fără etichetă e un număr într-o bază de date: coletul n-are ce să
+ * poarte, iar curierul nu-l ia. Lipsa asta n-ar fi dat nicio eroare — butonul de
+ * emitere ar fi spus „AWB emis", și abia la depozit s-ar fi văzut că nu e nimic de
+ * lipit.
+ *
+ * ⚠ Se întoarce ca base64, nu ca adresă. O adresă publică spre eticheta unui colet
+ * ar fi purtat numele, adresa și telefonul CUMPĂRĂTORULUI — exact ce evită ruta care
+ * servește etichetele celorlalți curieri, cu `Cache-Control: private, no-store`.
+ * Trecută prin acțiune, eticheta ajunge direct în fila care a cerut-o, iar nimic nu
+ * rămâne pe internet.
+ *
+ * ⚠ Merge NUMAI pentru AWB-uri emise prin API. Documentația lor: „Only AWBs issued
+ * via API can be read". Cele emise din panoul eMAG n-au `emag_id` la noi, deci se
+ * spune limpede, nu se încearcă degeaba.
+ */
+export async function descarcaEtichetaAwbEmag(
+  businessId: string,
+  orderId: string,
+  format: FormatAwb = "A4",
+): Promise<{ base64: string; tip: string; nume: string } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const { data } = await admin.from("emag_awb")
+    .select("emag_id, awb_number").eq("business_id", businessId).eq("order_id", orderId)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+  const awb = data as { emag_id: number; awb_number: string | null } | null;
+  if (!awb) {
+    return { error: "Comanda nu are AWB emis prin eMAG. Eticheta se descarcă doar pentru cele emise de aici." };
+  }
+
+  const c = await contextPentruCitire(businessId);
+  if ("error" in c) return c;
+
+  const r = await descarcaEtichetaAwb(c.auth, awb.emag_id, format);
+  if ("error" in r) return { error: r.error };
+
+  return {
+    base64: Buffer.from(r.octeti).toString("base64"),
+    tip: r.tip,
+    nume: `AWB-${awb.awb_number ?? awb.emag_id}.${format === "ZPL" ? "zpl" : "pdf"}`,
+  };
 }

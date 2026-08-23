@@ -49,6 +49,7 @@ import {
   type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
 } from "@/lib/emag/types";
 import { traducereaPoateBloca } from "@/lib/emag/rute";
+import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
 import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -151,6 +152,14 @@ export interface StareEmag {
   greenTax: number | null;
   stocRezervat: number | null;
   syncContinut: boolean;
+  /**
+   * Cine are ultimul cuvânt când ce e pe eMAG nu mai e ce am trimis (§69).
+   *
+   * ⚠ Două comutatoare, nu unul: aproape orice comerciant vrea ca Edinio să țină
+   * STOCUL, dar mulți își țin PREȚUL în panoul eMAG, din campanii.
+   */
+  derivaPret: "edinio" | "emag";
+  derivaStoc: "edinio" | "emag";
   categoriiMapate: number;
   oferte: {
     total: number;
@@ -163,6 +172,15 @@ export interface StareEmag {
     eroare: number;
     /** Preluate din contul lor la import. Nu li se trimite nimic automat. */
     preluate: number;
+    /**
+     * Oferte la care ce e pe eMAG nu mai e ce trimitem noi (§68).
+     *
+     * ⚠ Numărul ăsta e cel mai important din tot panoul, și e și cel mai ușor de
+     * trecut cu vederea: ofertele derivate arată perfect sănătoase — publicate,
+     * aprobate, fără nicio eroare — dar se vând la alt preț decât crede
+     * comerciantul. Până acum nu le număra nimeni.
+     */
+    derivate: number;
   };
   inCoada: number;
   /**
@@ -207,7 +225,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     admin.from("emag_offers").select("*", { count: "exact", head: true })
       .eq("business_id", businessId).eq("status", s);
 
-  const [total, active, inValidare, respinse, eroare, preluate, inCoada, abandonate] = await Promise.all([
+  const [total, active, inValidare, respinse, eroare, preluate, derivate, inCoada, abandonate] = await Promise.all([
     admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId),
     stare("live"),
     admin.from("emag_offers").select("*", { count: "exact", head: true })
@@ -219,6 +237,10 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       .eq("business_id", businessId).in("validation_status", [5, 6, 8, 10, 12]),
     stare("error"),
     stare("imported"),
+    /* ⚠ Se numără pe `deriva is not null`, care are index PARȚIAL: în starea sănătoasă
+       indexul e gol, deci numărătoarea nu costă nimic pe un catalog de zeci de mii. */
+    admin.from("emag_offers").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).not("deriva", "is", null),
     admin.from("emag_sync_queue").select("*", { count: "exact", head: true })
       .eq("business_id", businessId).is("abandonat_la", null),
     admin.from("emag_sync_queue").select("*", { count: "exact", head: true })
@@ -253,6 +275,11 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     stocRezervat: config.stoc_rezervat ?? null,
     /* ⚠ Implicit PORNIT: cine publică din Edinio se așteaptă ca fișa să vină tot de acolo. */
     syncContinut: config.sync_continut !== false,
+    /* ⚠ Prin `sursaAdevarului`, nu prin `?? "edinio"`. O valoare stricată în config ar
+       fi ajuns pe ecran ca atare, iar comutatorul ar fi arătat altceva decât face
+       cronul — care trece oricum valoarea prin aceeași funcție. */
+    derivaPret: sursaAdevarului(config.deriva_pret),
+    derivaStoc: sursaAdevarului(config.deriva_stoc),
     categoriiMapate: Object.keys(config.category_map ?? {}).length,
     oferte: {
       total: total.count ?? 0,
@@ -261,6 +288,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       respinse: respinse.count ?? 0,
       eroare: eroare.count ?? 0,
       preluate: preluate.count ?? 0,
+      derivate: derivate.count ?? 0,
     },
     inCoada: inCoada.count ?? 0,
     abandonate: abandonate.count ?? 0,
@@ -548,6 +576,9 @@ export async function salveazaSetariEmag(
     stoc_rezervat?: number | null;
     /** Rescrie Edinio si fisa produsului (nume, descriere, poze)? */
     sync_continut?: boolean;
+    /** Cine are ultimul cuvant la o derivare. Vezi `deriva.ts` (§69). */
+    deriva_pret?: "edinio" | "emag";
+    deriva_stoc?: "edinio" | "emag";
   },
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
@@ -595,6 +626,13 @@ export async function salveazaSetariEmag(
     ...(setari.green_tax !== undefined ? { green_tax: setari.green_tax ?? undefined } : {}),
     ...(setari.stoc_rezervat !== undefined ? { stoc_rezervat: setari.stoc_rezervat ?? undefined } : {}),
     ...(setari.sync_continut != null ? { sync_continut: setari.sync_continut } : {}),
+    /* ⚠ Se scrie numai valoarea RECUNOSCUTA. Un sir venit de oriunde altundeva ar
+       fi ajuns in config si l-ar fi facut pe `sursaAdevarului` sa cada pe implicit —
+       adica setarea ar fi aratat una si ar fi facut alta. */
+    ...(setari.deriva_pret === "edinio" || setari.deriva_pret === "emag"
+      ? { deriva_pret: setari.deriva_pret } : {}),
+    ...(setari.deriva_stoc === "edinio" || setari.deriva_stoc === "emag"
+      ? { deriva_stoc: setari.deriva_stoc } : {}),
   };
 
   const ok = await saveConfig(g.supabase, businessId, noua);
@@ -1220,6 +1258,21 @@ export interface RandOfertaEcran {
    * chiar ea sa fii atent la politica eMAG inainte de orice automatizare.
    */
   concurenta: { oferte: number; loc: number | null; celMaiBunPret: number | null } | null;
+  /**
+   * Ce e la eMAG fata de ce am trimite noi acum (§68).
+   *
+   * ⚠ `null` = nicio diferenta, si asta e starea obisnuita. Cand nu e `null`, randul
+   * spune ce s-a departat, cu AMANDOUA valorile: „la noi 100, la ei 89,90". Aratata
+   * ca un simplu semn de exclamare, informatia n-ar fi ajutat pe nimeni sa hotarasca
+   * daca e o campanie de-a lor sau o scriere pierduta.
+   */
+  deriva: {
+    campuri: { camp: "pret" | "stoc"; laNoi: number; laEi: number }[];
+    /** ⚠ Adevarat cand s-au terminat incercarile. Atunci nu se mai trimite nimic. */
+    renuntat: boolean;
+    /** De cand se vede diferenta, ISO. */
+    din: string;
+  } | null;
 }
 
 export interface FiltruOferteEcran {
@@ -1262,7 +1315,7 @@ export async function listaOferteEmag(
   let q = admin
     .from("emag_offers")
     .select(
-      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, products(name)",
+      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, deriva, products(name)",
       { count: "exact" },
     )
     .eq("business_id", businessId);
@@ -1270,7 +1323,15 @@ export async function listaOferteEmag(
   if (filtru.stare) q = q.eq("status", filtru.stare);
   /* „Probleme" = respinse de ei SAU căzute la noi. Două întrebări diferite, aceeași
      urgență pentru omul care se uită: ambele înseamnă „produsul nu se vinde". */
-  if (filtru.doarProbleme) q = q.or("status.eq.error,validation_status.in.(5,6,8,10,12)");
+  /*
+   * ⚠ SI DERIVA E O PROBLEMA, chiar daca oferta arata perfect sanatoasa.
+   *
+   * O oferta cu `validation_status: 9` si fara nicio eroare, dar cu pretul de la ei
+   * ramas altul decat al nostru, e chiar cazul cel mai scump: se vinde, si se vinde
+   * la alt pret decat crede comerciantul. Lasata in afara filtrului, ar fi fost
+   * singura problema pe care „Doar cu probleme" NU o arata.
+   */
+  if (filtru.doarProbleme) q = q.or("status.eq.error,validation_status.in.(5,6,8,10,12),deriva.not.is.null");
   if (filtru.cautare?.trim()) {
     const c = filtru.cautare.trim();
     q = q.or(`part_number.ilike.%${c}%,ean.ilike.%${c}%,part_number_key.ilike.%${c}%`);
@@ -1287,6 +1348,7 @@ export async function listaOferteEmag(
     status: string; validation_status: number | null; translation_validation_status: number | null;
     doc_errors: unknown; error: string | null; auto_sync: boolean; part_number_key: string | null;
     number_of_offers: number | null; buy_button_rank: number | null; best_offer_sale_price: number | null;
+    deriva: unknown;
     products: { name: string } | { name: string }[] | null;
   };
 
@@ -1314,6 +1376,14 @@ export async function listaOferteEmag(
       linkEmag: r.part_number_key ? `https://www.emag.ro/-/pd/${r.part_number_key}` : null,
       /* ⚠ Numai cand chiar sunt CONCURENTI. Cu un singur vanzator, „locul 1 din 1" nu
          spune nimic si doar incarca randul. */
+      /* ⚠ Se citeste prin `citesteMemoriaDerivei`, nu prin `as`. Un `jsonb` scris de o
+         versiune mai veche, sau atins din consola, ar fi ajuns pe ecran ca obiect
+         stalcit — si randul ar fi aratat „la noi undefined, la ei undefined". */
+      deriva: (() => {
+        const m = citesteMemoriaDerivei(r.deriva);
+        if (!m) return null;
+        return { campuri: m.campuri, renuntat: m.renuntatLa != null, din: m.prima };
+      })(),
       concurenta: (r.number_of_offers ?? 0) > 1
         ? {
             oferte: r.number_of_offers ?? 0,

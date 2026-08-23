@@ -113,6 +113,15 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
     });
   }
 
+  /* Sursa adevărului la o derivă (§69). Separată de `comuta` fiindcă nu e un
+     da/nu: e „cine hotărăște", iar cele două valori sunt amândouă legitime. */
+  function alegeSursa(camp: "deriva_pret" | "deriva_stoc", valoare: "edinio" | "emag") {
+    incepe(async () => {
+      const r = await salveazaSetariEmag(businessId, { [camp]: valoare });
+      if ("error" in r) toast.error(r.error);
+    });
+  }
+
   /* ── Neconectat ─────────────────────────────────────────────────────────── */
   if (!status.connected) {
     return (
@@ -245,6 +254,32 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
           <Cifra eticheta="De revizuit" valoare={status.oferte.respinse + status.oferte.eroare} />
         </div>
 
+        {/*
+          ═══ ⚠ DERIVA STĂ DEASUPRA CELORLALTE, ȘI E COLORATĂ ═══
+
+          E singura problemă care nu se vede din nicio altă cifră: ofertele derivate
+          intră la „Se vând pe eMAG" — publicate, aprobate, fără nicio eroare — și se
+          vând la alt preț decât crede comerciantul.
+
+          O linie ștearsă printre celelalte ar fi fost citită ca o informație
+          tehnică. E o pierdere de bani, în fiecare zi cât ține.
+        */}
+        {status.oferte.derivate > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+            <p className="text-sm font-medium">
+              {status.oferte.derivate}{" "}
+              {status.oferte.derivate === 1
+                ? "ofertă are pe eMAG altceva decât trimitem noi"
+                : "oferte au pe eMAG altceva decât trimitem noi"}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Prețul sau stocul de acolo nu mai e cel din Edinio. Se repară singure la
+              următoarele treceri; le vezi una câte una în lista de oferte, la
+              „Doar cu probleme”.
+            </p>
+          </div>
+        )}
+
         {status.oferte.preluate > 0 && (
           <p className="mt-3 text-xs text-muted-foreground">
             {status.oferte.preluate}{" "}
@@ -324,6 +359,43 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             pornit={status.syncContinut}
             dezactivat={seLucreaza}
             laSchimbare={(v) => comuta("sync_continut", v)}
+          />
+        </div>
+
+        {/*
+          ═══ ⚠ DOUĂ ÎNTREBĂRI, NU UNA ═══
+
+          Aproape orice comerciant vrea ca Edinio să țină STOCUL — ăsta e tot rostul
+          integrării: un singur inventar, ca să nu vândă de două ori aceeași bucată.
+
+          Dar mulți își țin PREȚUL în panoul eMAG, din campanii și din Smart Deals. Cu
+          un singur comutator pentru amândouă, omul ar fi fost pus să aleagă între
+          a-și pierde campaniile la fiecare trecere și a-și vinde marfa de două ori.
+
+          ⚠ Comutatoarele astea privesc numai repararea AUTOMATĂ. Când schimbi prețul
+          în Edinio, el pleacă spre eMAG oricum — aia e o hotărâre a ta, nu o derivă. Se
+          spune pe ecran, ca nimeni să nu creadă că a oprit sincronizarea cu totul.
+        */}
+        <div className="mt-5 space-y-3 border-t border-border pt-5">
+          <h3 className="text-sm font-semibold">Când eMAG are altceva decât Edinio</h3>
+          <p className="-mt-1 text-xs text-muted-foreground">
+            Verificăm periodic ce e pe eMAG față de ce trimitem. Aici spui cine are
+            ultimul cuvânt. <strong>Nu se aplică</strong> la modificările făcute de tine în
+            magazin: acelea pleacă spre eMAG oricum.
+          </p>
+          <AlegereSursa
+            eticheta="Prețul"
+            descriere="Alege «eMAG» dacă îți faci campaniile în panoul lor și nu vrei să ți le suprascriem."
+            valoare={status.derivaPret}
+            dezactivat={seLucreaza}
+            laSchimbare={(v) => alegeSursa("deriva_pret", v)}
+          />
+          <AlegereSursa
+            eticheta="Stocul"
+            descriere="Aproape mereu «Edinio»: un singur inventar e chiar rostul integrării."
+            valoare={status.derivaStoc}
+            dezactivat={seLucreaza}
+            laSchimbare={(v) => alegeSursa("deriva_stoc", v)}
           />
         </div>
 
@@ -846,6 +918,49 @@ function Cifra({ eticheta, valoare }: { eticheta: string; valoare: number }) {
     <div className="rounded-lg border border-border bg-background px-3 py-2.5">
       <div className="text-lg font-semibold tabular-nums">{valoare}</div>
       <div className="text-xs text-muted-foreground">{eticheta}</div>
+    </div>
+  );
+}
+
+/**
+ * Cine hotărăște la o derivă: Edinio sau eMAG.
+ *
+ * ⚠ DOUĂ BUTOANE, NU UN COMUTATOR. Un comutator are o stare „pornit" și una
+ * „oprit", iar aici amândouă valorile sunt alegeri legitime — „eMAG" nu înseamnă
+ * „oprit", înseamnă „ei au dreptate". Arătat ca un comutator stins, comerciantul ar
+ * fi crezut că a dezactivat ceva.
+ */
+function AlegereSursa({
+  eticheta, descriere, valoare, dezactivat, laSchimbare,
+}: {
+  eticheta: string;
+  descriere: string;
+  valoare: "edinio" | "emag";
+  dezactivat: boolean;
+  laSchimbare: (v: "edinio" | "emag") => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{eticheta}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{descriere}</p>
+      </div>
+      <div className="flex shrink-0 rounded-lg border border-border p-0.5" role="group" aria-label={eticheta}>
+        {(["edinio", "emag"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => laSchimbare(v)}
+            disabled={dezactivat}
+            aria-pressed={valoare === v}
+            className={`rounded-md px-3 py-1.5 text-xs transition-colors disabled:opacity-60 ${
+              valoare === v ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            }`}
+          >
+            {v === "edinio" ? "Edinio" : "eMAG"}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

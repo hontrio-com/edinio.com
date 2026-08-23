@@ -3942,7 +3942,8 @@ create table if not exists public.emag_offers (
   last_synced_at timestamp with time zone,
   last_status_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  deriva jsonb);
 
 create table if not exists public.emag_orders (
   id uuid default gen_random_uuid() not null,
@@ -5074,6 +5075,7 @@ CREATE UNIQUE INDEX domains_business_domain_key ON public.domains USING btree (b
 CREATE INDEX emag_awb_order_idx ON public.emag_awb USING btree (order_id);
 CREATE INDEX emag_nomenclatoare_business_idx ON public.emag_nomenclatoare USING btree (business_id);
 CREATE INDEX emag_offers_business_status_idx ON public.emag_offers USING btree (business_id, status);
+CREATE INDEX emag_offers_deriva_idx ON public.emag_offers USING btree (business_id) WHERE (deriva IS NOT NULL);
 CREATE INDEX emag_offers_pnk_idx ON public.emag_offers USING btree (business_id, part_number_key) WHERE (part_number_key IS NOT NULL);
 CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_id);
 CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, product_id, COALESCE(variant_title, ''::text)) WHERE (product_id IS NOT NULL);

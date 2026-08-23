@@ -256,7 +256,10 @@ function RandOferta({
     });
   }
 
-  const areProbleme = rand.docErrors.length > 0 || !!rand.eroare || rand.traducereBlocheaza;
+  /* ⚠ Și deriva e o problemă, chiar dacă oferta arată perfect sănătoasă: se vinde, și
+     se vinde la alt preț decât crede comerciantul. */
+  const areProbleme = rand.docErrors.length > 0 || !!rand.eroare || rand.traducereBlocheaza
+    || rand.deriva != null;
 
   return (
     <li className="py-3">
@@ -282,6 +285,46 @@ function RandOferta({
             #{rand.emagId}
             {rand.validare ? ` · ${rand.validare}` : ""}
           </p>
+
+          {/*
+            ═══ ⚠ DERIVA SE ARATĂ CU AMÂNDOUĂ VALORILE ═══
+
+            „Prețul de pe eMAG nu mai e al tău" nu ajută pe nimeni. Ca să hotărască ce
+            are de făcut, comerciantul trebuie să vadă exact CE e la el și CE e la ei:
+            89,90 față de 100 e o campanie de-a lor; 0 față de 12 e o scriere pierdută.
+            Două situații cu două reparații complet diferite.
+
+            ⚠ Când s-a renunțat, se spune limpede că NU se mai încearcă. Un rând care
+            arată o problemă fără să spună că mecanismul a renunțat l-ar fi lăsat pe om
+            să aștepte o reparare care nu mai vine.
+          */}
+          {rand.deriva && (
+            <div className="mt-1.5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2">
+              <p className="text-xs font-medium">
+                Pe eMAG e altceva decât trimitem noi
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {rand.deriva.campuri.map((d, i) => (
+                  <li key={i} className="text-xs text-muted-foreground">
+                    {d.camp === "pret" ? "Preț" : "Stoc"}: la tine{" "}
+                    <strong className="tabular-nums text-foreground">
+                      {d.camp === "pret" ? d.laNoi.toFixed(2) : d.laNoi}
+                    </strong>
+                    {" · "}pe eMAG{" "}
+                    <strong className="tabular-nums text-foreground">
+                      {d.camp === "pret" ? d.laEi.toFixed(2) : d.laEi}
+                    </strong>
+                    {d.camp === "pret" ? " (fără TVA)" : ""}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {rand.deriva.renuntat
+                  ? "eMAG nu acceptă schimbarea. Nu se mai încearcă automat — uită-te în panoul lor."
+                  : "Se repară singur la următoarele treceri."}
+              </p>
+            </div>
+          )}
 
           {/*
             ⚠ SE ARATĂ, NU SE FOLOSEȘTE ÎN NICIO DECIZIE.

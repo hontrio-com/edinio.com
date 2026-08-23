@@ -8,7 +8,12 @@ import { marcajUrmator } from "@/lib/marketplace/marcaj";
 import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
-import { trimiteElement } from "@/lib/emag/trimite";
+import { magazinDin, trimiteElement } from "@/lib/emag/trimite";
+import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
+import {
+  citesteMemoriaDerivei, derivaOfertei, hotarasteDeriva, sursaAdevarului,
+} from "@/lib/emag/deriva";
+import { enqueueEmagPretMany, enqueueEmagStocMany } from "@/lib/emag/queue";
 import { aduComenzile } from "@/lib/emag/orders";
 import { aduIpurileEmag } from "@/lib/emag/client";
 import { citesteIpuri, sAuSchimbat, CHEIE_IPURI } from "@/lib/emag/ipuri";
@@ -126,6 +131,7 @@ export async function GET(req: NextRequest) {
   );
 
   let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0, retururi = 0;
+  let derivate = 0;
   const inceputulRularii = Date.now();
 
   /* Contextul unui magazin se citeste O DATA pe trecere: e o citire cu decriptare,
@@ -316,6 +322,15 @@ export async function GET(req: NextRequest) {
     const oferte = (Array.isArray(r.data) ? r.data : []) as EmagOfertaCitita[];
     reconciliate += await scrieStatusurile(admin, businessId, oferte);
 
+    /*
+     * ⚠ PE ACEEASI PAGINA, FARA NICIO CERERE IN PLUS CATRE EI.
+     *
+     * Raspunsul de mai sus contine deja pretul si stocul lor. Masurata separat,
+     * deriva ar fi insemnat inca o citire paginata a catalogului intreg — adica
+     * dublarea cheltuielii pentru o informatie pe care o aveam in mana.
+     */
+    derivate += await masoaraDeriva(admin, ctx, oferte);
+
     /* ⚠ Pagina urmatoare, sau de la capat. Fara intoarcerea la 1, cursorul ar fi
        depasit catalogul si reconcilierea s-ar fi oprit tacut pe pagini goale. */
     await patchConfig(admin, businessId, {
@@ -429,7 +444,7 @@ export async function GET(req: NextRequest) {
     await improspateazaIpurile(admin);
   }
 
-  return NextResponse.json({ ok: true, duse, cazute, reconciliate, comenziNoi, facturi, retururi });
+  return NextResponse.json({ ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, retururi });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -552,6 +567,196 @@ async function scrieStatusurile(
     if (!error) scrise++;
   }
   return scrise;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DERIVA: CE E LA EI FATA DE CE AM TRIMITE NOI (§68, §69)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Ce se citeste din `emag_offers` ca sa se poata masura deriva. */
+interface RandPentruDeriva {
+  emag_id: number;
+  product_id: string | null;
+  variant_title: string | null;
+  deriva: unknown;
+}
+
+/**
+ * Masoara si repara deriva pe pagina de oferte deja citita.
+ *
+ * ═══ ⚠ CE PAZESTE PASUL ASTA ═══
+ *
+ * Reconcilierea de deasupra citea starile de validare si atat. Pretul si stocul —
+ * chiar lucrurile pentru care exista integrarea — nu erau verificate NICIODATA dupa
+ * trimitere. Adica exact controlul care a lipsit la Trendyol: 1051 de produse au
+ * raportat succes cu preturile neschimbate, si nimeni n-a aflat luni de zile.
+ *
+ * ⚠ Regula celor doua vederi e in `deriva.ts`, si e miezul: o singura diferenta nu
+ * repara nimic, fiindca in minutul dintre o vanzare pe eMAG si ingerarea ei la noi
+ * stocul nostru e legitim mai mare decat al lor.
+ */
+async function masoaraDeriva(
+  admin: Admin, ctx: ContextEmag, oferte: EmagOfertaCitita[],
+): Promise<number> {
+  const laEi = new Map<number, EmagOfertaCitita>();
+  for (const o of oferte) if (Number.isFinite(o.id)) laEi.set(o.id, o);
+  if (laEi.size === 0) return 0;
+
+  /*
+   * ⚠ `auto_sync = true`, si e prima dintre doua paze.
+   *
+   * O oferta preluata din contul lor la import e a COMERCIANTULUI: pretul de acolo
+   * e cel pe care si l-a pus el, nu o derivare de reparat. „Reparata", i-am fi
+   * rescris catalogul preluat cu preturile din Edinio — pe tacute, si la fiecare
+   * trecere. A doua paza e in `enqueueMany`, care filtreaza la fel.
+   *
+   * ⚠ `last_synced_at` ne-nul: o oferta pe care n-am trimis-o NICIODATA n-are fata
+   * de ce sa devieze. Fara filtrul asta, fiecare oferta nou creata ar fi aratat o
+   * derivare fata de un pret pe care nu l-am pus noi acolo.
+   */
+  const { data: randuriBrute, error: eRanduri } = await admin.from("emag_offers")
+    .select("emag_id, product_id, variant_title, deriva")
+    .eq("business_id", ctx.businessId)
+    .eq("auto_sync", true)
+    .not("product_id", "is", null)
+    .not("last_synced_at", "is", null)
+    /* ⚠ Cel mult `PE_PAGINA` id-uri, deci mult sub pragul la care `.in()` cedeaza
+       (masurat intre 600 si 700). Nu se fragmenteaza fiindca nu are ce fragmenta. */
+    .in("emag_id", [...laEi.keys()]);
+
+  if (eRanduri) {
+    await logError({
+      action: "emag-sync/deriva",
+      message: `randurile de oferta nu s-au putut citi: ${eRanduri.message}`,
+      businessId: ctx.businessId, severity: "warning",
+    });
+    return 0;
+  }
+
+  const randuri = (randuriBrute ?? []) as RandPentruDeriva[];
+  if (randuri.length === 0) return 0;
+
+  /* Ofertele se grupeaza pe produs: un produs cu variante are mai multe, iar pretul
+     si stocul fiecareia se calculeaza din combinatia ei. */
+  const peProdus = new Map<string, RandPentruDeriva[]>();
+  for (const r of randuri) {
+    if (!r.product_id) continue;
+    const lista = peProdus.get(r.product_id);
+    if (lista) lista.push(r); else peProdus.set(r.product_id, [r]);
+  }
+
+  const { data: produseBrute, error: eProduse } = await admin.from("products")
+    .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, page_sections")
+    .eq("business_id", ctx.businessId)
+    .in("id", [...peProdus.keys()]);
+
+  if (eProduse) {
+    await logError({
+      action: "emag-sync/deriva",
+      message: `produsele nu s-au putut citi: ${eProduse.message}`,
+      businessId: ctx.businessId, severity: "warning",
+    });
+    return 0;
+  }
+
+  const surse = {
+    pret: sursaAdevarului(ctx.config.deriva_pret),
+    stoc: sursaAdevarului(ctx.config.deriva_stoc),
+  };
+  const acum = new Date().toISOString();
+  const dePusLaRand = { pret: new Set<string>(), stoc: new Set<string>() };
+  let gasite = 0;
+
+  for (const produs of (produseBrute ?? []) as ProdusDeCartografiat[]) {
+    const aleLui = peProdus.get(produs.id) ?? [];
+
+    /*
+     * ⚠ SE FOLOSESTE CHIAR FUNCTIA CARE TRIMITE, nu un calcul paralel.
+     *
+     * O a doua socoteala a pretului si a stocului, scrisa aici, ar fi ramas in urma
+     * la prima schimbare din `oferteUsoare` — TVA, rezerva de stoc, pretul unitar al
+     * combinatiei. Si atunci pasul asta ar fi masurat diferenta dintre doua functii
+     * de-ale noastre, raportand derivari care nu exista si ratandu-le pe cele care
+     * exista. O plasa de siguranta care minte e mai rea decat lipsa ei.
+     */
+    const amTrimite = oferteUsoare(
+      produs,
+      magazinDin(ctx, produs),
+      aleLui.map((r) => ({ variant_title: r.variant_title, emag_id: r.emag_id })),
+    );
+
+    for (const trimisa of amTrimite) {
+      const rand = aleLui.find((r) => r.emag_id === trimisa.id);
+      const aLor = laEi.get(trimisa.id);
+      if (!rand || !aLor) continue;
+
+      /* ⚠ Stocul lor e pe depozit si se ADUNA, ca la `scrieStatusurile`. Citit numai
+         din primul depozit, un magazin cu doua depozite ar fi aratat o derivare
+         permanenta si si-ar fi rescris stocul la fiecare trecere. */
+      const stocLor = Array.isArray(aLor.stock)
+        ? aLor.stock.reduce((t, x) => t + (Number.isFinite(x?.value) ? x.value : 0), 0)
+        : null;
+
+      /* ⚠ Fara pret de-al nostru nu se masoara NIMIC, nici macar stocul luat separat.
+         Pus pe zero „ca sa avem o valoare", fiecare oferta ar fi aratat o derivare de
+         pret catre zero — si am fi pornit repararea intregului catalog pornind de la
+         un numar pe care nu l-a calculat nimeni. */
+      if (trimisa.sale_price == null) continue;
+
+      const campuri = derivaOfertei(
+        { pret: trimisa.sale_price, stoc: trimisa.stock?.[0]?.value ?? 0 },
+        { pret: aLor.sale_price ?? null, stoc: stocLor },
+      );
+
+      const veche = citesteMemoriaDerivei(rand.deriva);
+      const h = hotarasteDeriva(campuri, veche, surse, acum);
+
+      if (campuri.length > 0) gasite++;
+
+      /*
+       * ⚠ SE SCRIE NUMAI CAND S-A SCHIMBAT CEVA.
+       *
+       * In starea sanatoasa — care e aproape mereu — `deriva` e `null` si ramane
+       * `null`. O scriere neconditionata ar fi insemnat pana la o suta de UPDATE-uri
+       * pe magazin si pe minut, ca sa rescrie `null` peste `null`.
+       */
+      if (JSON.stringify(veche) !== JSON.stringify(h.memorie)) {
+        await admin.from("emag_offers")
+          .update({ deriva: (h.memorie ?? null) as never })
+          .eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+      }
+
+      for (const camp of h.deReparat) dePusLaRand[camp].add(produs.id);
+
+      /*
+       * ⚠ Renuntarea se SCRIE, tare, si O SINGURA DATA.
+       *
+       * O oferta pe care eMAG n-o lasa schimbata — pret in afara benzii min/max,
+       * oferta blocata, categorie inchisa — nu mai primeste cereri, dar nici n-are
+       * voie sa dispara in tacere.
+       *
+       * Conditia se uita la MEMORIA VECHE: scrisa la fiecare trecere de dupa
+       * renuntare, aceeasi oferta ar fi umplut jurnalul cu acelasi rand la
+       * nesfarsit, si l-ar fi facut necitibil tocmai cand e nevoie de el.
+       */
+      if (h.deScrisInJurnal) {
+        await logError({
+          action: "emag-sync/deriva",
+          message: `oferta ${rand.emag_id} nu se lasa reparata dupa toate incercarile`,
+          details: { produs: produs.id, campuri: h.memorie?.campuri },
+          businessId: ctx.businessId, severity: "warning",
+        });
+      }
+    }
+  }
+
+  /* ⚠ Puse la rand O SINGURA DATA pe operatie, nu pe oferta. Un produs cu douazeci
+     de variante derivate e tot un singur element de coada: ruta usoara retrimite
+     toate ofertele lui dintr-o data. */
+  if (dePusLaRand.pret.size) await enqueueEmagPretMany(ctx.businessId, [...dePusLaRand.pret]);
+  if (dePusLaRand.stoc.size) await enqueueEmagStocMany(ctx.businessId, [...dePusLaRand.stoc]);
+
+  return gasite;
 }
 
 /**

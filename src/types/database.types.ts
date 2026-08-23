@@ -1348,6 +1348,7 @@ export type Database = {
           category_id: number | null
           creat_de_edinio: boolean
           created_at: string
+          deriva: Json | null
           doc_errors: Json
           ean: string | null
           emag_id: number
@@ -1379,6 +1380,7 @@ export type Database = {
           category_id?: number | null
           creat_de_edinio?: boolean
           created_at?: string
+          deriva?: Json | null
           doc_errors?: Json
           ean?: string | null
           emag_id?: number
@@ -1410,6 +1412,7 @@ export type Database = {
           category_id?: number | null
           creat_de_edinio?: boolean
           created_at?: string
+          deriva?: Json | null
           doc_errors?: Json
           ean?: string | null
           emag_id?: number

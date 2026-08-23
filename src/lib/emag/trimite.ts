@@ -736,7 +736,15 @@ async function scrieEroare(admin: Admin, businessId: string, productId: string, 
    CONTEXTUL MAGAZINULUI
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
+/**
+ * Ce stie magazinul despre el insusi, in forma ceruta de cartografiere.
+ *
+ * ⚠ EXPORTAT DINADINS, ca reconcilierea sa masoare deriva fata de ce s-ar TRIMITE
+ * cu adevarat, nu fata de un calcul paralel. O a doua socoteala a pretului, scrisa
+ * langa asta, ar fi ramas in urma la prima schimbare — si atunci „deriva" ar fi
+ * masurat diferenta dintre doua functii de-ale noastre, nu dintre noi si eMAG.
+ */
+export function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
   const ps = (produs.page_sections ?? {}) as { google?: { brand?: string } };
   return {
     /* ⚠ Citite din setarile magazinului la incarcarea contextului, NU scrise aici.

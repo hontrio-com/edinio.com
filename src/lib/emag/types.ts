@@ -874,6 +874,25 @@ export interface EmagConfig {
    */
   ultimul_webhook?: string;
 
+  /*
+   * ═══ SURSA ADEVARULUI, PE CAMP (§69) ═══
+   *
+   * Cine are ultimul cuvant cand ce e la eMAG nu mai e ce am trimis noi.
+   *
+   * ⚠ DOUA COMUTATOARE, NU UNUL, si asta e chiar hotararea. Aproape orice
+   * comerciant vrea ca Edinio sa tina STOCUL — asta e tot rostul integrarii: un
+   * singur inventar. Dar multi isi tin PRETUL in panoul eMAG, din campanii si din
+   * Smart Deals.
+   *
+   * Cu un singur comutator, omul ar fi fost pus sa aleaga intre a-si pierde
+   * campaniile la fiecare trecere si a-si vinde marfa de doua ori.
+   *
+   * ⚠ Implicitul e „edinio" pentru amandoua, si dinadins: un magazin care n-a
+   * atins setarea a legat eMAG tocmai ca sa tina totul dintr-un singur loc.
+   */
+  deriva_pret?: "edinio" | "emag";
+  deriva_stoc?: "edinio" | "emag";
+
   /** Adresa de ridicare si contul de curier alese pentru AWB. */
   pickup_address_id?: string;
   return_address_id?: string;

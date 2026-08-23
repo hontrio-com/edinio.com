@@ -102,9 +102,24 @@ export async function enqueueEmagSync(
      * coada; nu pleaca nimic gresit la eMAG.
      */
     if (op !== "retragere" && productId && !(config.auto_publish && produsNou)) {
+      /*
+       * ═══ ⚠ `auto_sync` E PE OFERTA, NU DOAR PE MAGAZIN ═══
+       *
+       * Comutatorul din `configPentruCoada` e al MAGAZINULUI. Asta e al OFERTEI, si
+       * `false` inseamna „preluata din contul lor la import".
+       *
+       * Prima forma cauta doar daca exista un rand. Deci dupa primul import, orice
+       * schimbare de pret din magazin ar fi plecat si peste ofertele preluate — adica
+       * peste preturile pe care comerciantul le-a pus de mana in panoul eMAG. Exact
+       * munca pentru care a facut importul, stearsa de prima lui modificare, tacut.
+       *
+       * ⚠ Paza asta NU E SINGURA, si nici nu poate fi. Un rand poate ajunge in coada
+       * INAINTE ca `auto_sync` sa fie stins de un import care ruleaza chiar atunci.
+       * A doua paza e in `rutaDeTrimitere`, care refuza sa trimita si scrie de ce.
+       */
       const { count } = await admin
         .from("emag_offers").select("id", { count: "exact", head: true })
-        .eq("business_id", businessId).eq("product_id", productId);
+        .eq("business_id", businessId).eq("product_id", productId).eq("auto_sync", true);
       if (!count) return;
     }
 
@@ -157,9 +172,11 @@ async function enqueueMany(
      */
     const cuOferta = new Set<string>();
     for (const bucata of bucatiDeIduri(ids)) {
+      /* ⚠ `auto_sync: true` — ofertele PRELUATE nu intra in coada. Vezi nota lunga
+         din `enqueueEmagSync`; aici e aceeasi regula, pe drumul in masa. */
       const { data, error } = await admin
         .from("emag_offers").select("product_id")
-        .eq("business_id", businessId).in("product_id", bucata);
+        .eq("business_id", businessId).eq("auto_sync", true).in("product_id", bucata);
       if (error) throw error;
       for (const r of data ?? []) {
         const pid = (r as { product_id: string | null }).product_id;

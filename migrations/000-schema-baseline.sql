@@ -23,6 +23,7 @@ create type public.difficulty_level as enum ('incepator', 'intermediar', 'avansa
 create type public.pricing_type as enum ('gratuit', 'freemium', 'platit');
 
 -- ── SECVENTE ──────────────────────────────────────────────
+create sequence if not exists public.emag_offers_emag_id_seq;
 create sequence if not exists public.order_number_seq;
 
 -- ── FUNCTII ───────────────────────────────────────────────
@@ -216,7 +217,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -2569,42 +2570,41 @@ CREATE OR REPLACE FUNCTION public.revendica_din_coada(p_coada text, p_limita int
 AS $function$
 declare
   v_permise constant text[] := array[
-    'gmc_sync_queue', 'olx_sync_queue', 'trendyol_sync_queue', 'aboutyou_sync_queue'];
+    'gmc_sync_queue', 'olx_sync_queue', 'trendyol_sync_queue', 'aboutyou_sync_queue',
+    'emag_sync_queue'];
 begin
   /*
    * Ia randuri din coada SI LE INCUIE, ca doua rulari sa nu apuce aceleasi.
    *
-   * Cele patru cronuri de marketplace pornesc din minut in minut si fac apeluri
-   * externe (Google, OLX, Trendyol, About You), care pot dura. Tiparul de pana
-   * acum era: SELECT primele N -> apel extern -> DELETE. Daca o rulare depaseste
-   * un minut, urmatoarea CITESTE ACELEASI randuri si trimite a doua oara.
-   *
    * `for update skip locked` face ca al doilea lucrator sa treaca peste ce e
-   * incuiat, in loc sa astepte — deci ia randurile URMATOARE si munca merge in
-   * paralel, corect, fara sa se calce.
+   * incuiat, in loc sa astepte. `revendicat_pana` e a doua plasa: daca un
+   * lucrator moare la mijloc, lacatul dispare odata cu tranzactia, dar marcajul
+   * tine randul deoparte cinci minute.
    *
-   * `revendicat_pana` e a doua plasa: daca un lucrator moare la mijloc (limita de
-   * timp a functiei), lacatul lui dispare odata cu tranzactia, dar marcajul
-   * ramane si tine randul deoparte cinci minute. Fara el, un rand mereu picat ar
-   * fi reluat de fiecare rulare, la nesfarsit.
+   * Numele tabelei se compune dinamic, deci trece printr-o lista PERMISA.
    *
-   * Numele tabelei se compune dinamic, deci trece printr-o lista PERMISA. Cu una
-   * interzisa, o coada noua ar fi fost acceptata din prima zi fara sa se uite
-   * nimeni la ea.
+   * ATENTIE: `as materialized` nu e decor. Cu subinterogarea inline in
+   * `where id in (...)`, planificatorul o poate re-evalua in semi-join si LIMIT
+   * isi pierde intelesul — masurat candva la 6 randuri cu limit 3, revendica
+   * toate sase. Pe PostgreSQL 17.6 nu s-a mai reprodus (probat la 6 si la 500 de
+   * randuri), dar forma materializata nu depinde de alegerea planificatorului,
+   * deci ea ramane.
    */
   if not (p_coada = any(v_permise)) then
     raise exception 'coada necunoscuta: %', p_coada;
   end if;
 
   return query execute format($f$
+    with alese as materialized (
+      select c.id from public.%I c
+       where c.revendicat_pana is null or c.revendicat_pana < now()
+       order by c.created_at
+       limit $2
+       for update skip locked)
     update public.%I q
        set revendicat_pana = now() + $1
-     where q.id in (
-       select c.id from public.%I c
-        where c.revendicat_pana is null or c.revendicat_pana < now()
-        order by c.created_at
-        limit $2
-        for update skip locked)
+      from alese a
+     where q.id = a.id
     returning to_jsonb(q.*)
   $f$, p_coada, p_coada) using p_lease, p_limita;
 end;
@@ -3494,7 +3494,8 @@ create table if not exists privat.store_settings (
   shipo_config jsonb,
   fedex_config jsonb,
   ups_config jsonb,
-  dhl_config jsonb);
+  dhl_config jsonb,
+  emag_config jsonb default '{}'::jsonb not null);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),
@@ -3837,6 +3838,91 @@ create table if not exists public.domains (
   auto_renew boolean default true not null,
   source text default 'purchased'::text not null,
   created_at timestamp with time zone default now() not null);
+
+create table if not exists public.emag_awb (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  order_id uuid,
+  emag_id bigint,
+  awb_number text,
+  courier_account_id integer,
+  cash_on_delivery numeric(12,2),
+  status jsonb,
+  created_at timestamp with time zone default now() not null);
+
+create table if not exists public.emag_offers (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  product_id uuid,
+  emag_id bigint generated by default as identity not null,
+  variant_title text,
+  family_id bigint,
+  family_type_id integer,
+  part_number text,
+  part_number_key text,
+  ean text,
+  category_id integer,
+  brand text,
+  status text default 'draft'::text not null,
+  validation_status integer,
+  offer_validation_status integer,
+  translation_validation_status integer,
+  doc_errors jsonb default '[]'::jsonb not null,
+  issues jsonb default '[]'::jsonb not null,
+  error text,
+  ownership integer,
+  number_of_offers integer,
+  buy_button_rank integer,
+  best_offer_sale_price numeric(12,4),
+  auto_sync boolean default true not null,
+  creat_de_edinio boolean default false not null,
+  last_synced_at timestamp with time zone,
+  last_status_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.emag_orders (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  order_id uuid,
+  emag_order_id bigint not null,
+  order_status integer,
+  order_type integer,
+  payment_mode_id integer,
+  is_complete integer,
+  acknowledged_at timestamp with time zone,
+  lines jsonb default '[]'::jsonb not null,
+  vouchers jsonb default '[]'::jsonb not null,
+  raw jsonb,
+  last_modified timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.emag_rma (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  order_id uuid,
+  emag_rma_id bigint not null,
+  emag_order_id bigint,
+  request_status integer,
+  return_type integer,
+  return_reason integer,
+  products jsonb default '[]'::jsonb not null,
+  awbs jsonb default '[]'::jsonb not null,
+  raw jsonb,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.emag_sync_queue (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  product_id uuid,
+  offer_id text not null,
+  op text default 'oferta'::text not null,
+  attempts integer default 0 not null,
+  last_error text,
+  created_at timestamp with time zone default now() not null,
+  revendicat_pana timestamp with time zone);
 
 create table if not exists public.email_automations (
   id uuid default gen_random_uuid() not null,
@@ -4554,6 +4640,16 @@ create table if not exists public.zz_backup_preturi_parfumuri_insula_20260812 (
   page_sections jsonb,
   salvat_la timestamp with time zone);
 
+create table if not exists public.zz_backup_preturi_vetdepo_20260819 (
+  id uuid,
+  sku text,
+  name text,
+  category text,
+  price numeric(10,2),
+  compare_at_price numeric(10,2),
+  updated_at timestamp with time zone,
+  luat_la timestamp with time zone);
+
 create table if not exists public.zz_backup_preturi_vetdepo_categorii_20260903 (
   id uuid,
   name text,
@@ -4600,6 +4696,11 @@ alter table public.dhl_etichete add constraint dhl_etichete_pkey PRIMARY KEY (or
 alter table public.discounts add constraint discounts_pkey PRIMARY KEY (id);
 alter table public.domain_orders add constraint domain_orders_pkey PRIMARY KEY (id);
 alter table public.domains add constraint domains_pkey PRIMARY KEY (id);
+alter table public.emag_awb add constraint emag_awb_pkey PRIMARY KEY (id);
+alter table public.emag_offers add constraint emag_offers_pkey PRIMARY KEY (id);
+alter table public.emag_orders add constraint emag_orders_pkey PRIMARY KEY (id);
+alter table public.emag_rma add constraint emag_rma_pkey PRIMARY KEY (id);
+alter table public.emag_sync_queue add constraint emag_sync_queue_pkey PRIMARY KEY (id);
 alter table public.email_automations add constraint email_automations_pkey PRIMARY KEY (id);
 alter table public.error_logs add constraint error_logs_pkey PRIMARY KEY (id);
 alter table public.fedex_etichete add constraint fedex_etichete_pkey PRIMARY KEY (order_id);
@@ -4653,6 +4754,10 @@ alter table public.categories add constraint categories_business_id_parent_id_na
 alter table public.custom_pages add constraint custom_pages_business_id_slug_key UNIQUE (business_id, slug);
 alter table public.customers add constraint customers_business_key_unique UNIQUE (business_id, key);
 alter table public.discounts add constraint discounts_business_id_code_key UNIQUE (business_id, code);
+alter table public.emag_offers add constraint emag_offers_emag_id_key UNIQUE (emag_id);
+alter table public.emag_orders add constraint emag_orders_business_order_key UNIQUE (business_id, emag_order_id);
+alter table public.emag_rma add constraint emag_rma_business_rma_key UNIQUE (business_id, emag_rma_id);
+alter table public.emag_sync_queue add constraint emag_sync_queue_business_offer_op_key UNIQUE (business_id, offer_id, op);
 alter table public.email_automations add constraint email_automations_user_id_email_key_key UNIQUE (user_id, email_key);
 alter table public.invoices add constraint invoices_stripe_invoice_id_key UNIQUE (stripe_invoice_id);
 alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_business_id_email_key UNIQUE (business_id, email);
@@ -4670,10 +4775,11 @@ alter table public.businesses add constraint businesses_slug_format CHECK ((slug
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
+alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK ((op = ANY (ARRAY['oferta'::text, 'pret'::text, 'stoc'::text, 'retragere'::text, 'masuratori'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
 alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
-alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'emag'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
@@ -4732,6 +4838,16 @@ alter table public.domain_orders add constraint domain_orders_business_id_fkey F
 alter table public.domain_orders add constraint domain_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.domains add constraint domains_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.domains add constraint domains_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.emag_awb add constraint emag_awb_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.emag_awb add constraint emag_awb_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.emag_offers add constraint emag_offers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.emag_offers add constraint emag_offers_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+alter table public.emag_orders add constraint emag_orders_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.emag_orders add constraint emag_orders_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.emag_rma add constraint emag_rma_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.emag_rma add constraint emag_rma_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.emag_sync_queue add constraint emag_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.emag_sync_queue add constraint emag_sync_queue_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.error_logs add constraint error_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.fedex_etichete add constraint fedex_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.fedex_etichete add constraint fedex_etichete_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
@@ -4808,6 +4924,7 @@ insert into privat.campuri_secrete (coloana, cale) values ('colete_config', 'tok
 insert into privat.campuri_secrete (coloana, cale) values ('dhl_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('dpd_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('ecolet_config', 'api_token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('emag_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('email_config', 'smtp.pass') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fan_courier_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fedex_config', 'client_secret') on conflict do nothing;
@@ -4873,6 +4990,18 @@ CREATE INDEX cw_trgm ON public.catalog_cuvant USING gin (cuvant extensions.gin_t
 CREATE INDEX dhl_etichete_business_idx ON public.dhl_etichete USING btree (business_id, creat_la DESC);
 CREATE UNIQUE INDEX domain_orders_stripe_session_id_key ON public.domain_orders USING btree (stripe_session_id) WHERE (stripe_session_id IS NOT NULL);
 CREATE UNIQUE INDEX domains_business_domain_key ON public.domains USING btree (business_id, domain);
+CREATE INDEX emag_awb_order_idx ON public.emag_awb USING btree (order_id);
+CREATE INDEX emag_offers_business_status_idx ON public.emag_offers USING btree (business_id, status);
+CREATE INDEX emag_offers_pnk_idx ON public.emag_offers USING btree (business_id, part_number_key) WHERE (part_number_key IS NOT NULL);
+CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_id);
+CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, COALESCE(product_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(variant_title, ''::text));
+CREATE INDEX emag_offers_reconciliere_idx ON public.emag_offers USING btree (business_id, last_status_at NULLS FIRST);
+CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
+CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
+CREATE INDEX emag_rma_business_status_idx ON public.emag_rma USING btree (business_id, request_status);
+CREATE INDEX emag_sync_queue_created_idx ON public.emag_sync_queue USING btree (created_at);
+CREATE INDEX emag_sync_queue_product_idx ON public.emag_sync_queue USING btree (product_id);
+CREATE INDEX emag_sync_queue_revendicat_idx ON public.emag_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX fedex_etichete_business_idx ON public.fedex_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX forms_business_idx ON public.forms USING btree (business_id);
 CREATE UNIQUE INDEX gmc_products_business_offer_uidx ON public.gmc_products USING btree (business_id, offer_id);
@@ -5069,7 +5198,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(shipo_config, '{api_key}'::text[]) AS shipo_config,
     privat.decripteaza_config(fedex_config, '{client_secret}'::text[]) AS fedex_config,
     privat.decripteaza_config(ups_config, '{client_secret}'::text[]) AS ups_config,
-    privat.decripteaza_config(dhl_config, '{password}'::text[]) AS dhl_config
+    privat.decripteaza_config(dhl_config, '{password}'::text[]) AS dhl_config,
+    privat.decripteaza_config(emag_config, '{password}'::text[]) AS emag_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -5081,6 +5211,9 @@ CREATE TRIGGER catalog_produs_rezumat AFTER INSERT OR DELETE OR UPDATE ON public
 CREATE TRIGGER categorii_rezumat_murdar AFTER INSERT OR DELETE OR UPDATE ON public.categories FOR EACH ROW EXECUTE FUNCTION trg_categorii_rezumat_murdar();
 CREATE TRIGGER customers_touch BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION touch_customers();
 CREATE TRIGGER set_domain_orders_updated_at BEFORE UPDATE ON public.domain_orders FOR EACH ROW EXECUTE FUNCTION update_domain_orders_updated_at();
+CREATE TRIGGER set_emag_offers_updated_at BEFORE UPDATE ON public.emag_offers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER set_emag_orders_updated_at BEFORE UPDATE ON public.emag_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER set_emag_rma_updated_at BEFORE UPDATE ON public.emag_rma FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
 CREATE TRIGGER products_repretuieste_pachetele AFTER UPDATE OF price ON public.products FOR EACH ROW WHEN (((NOT COALESCE(new.is_bundle, false)) AND (new.price IS DISTINCT FROM old.price))) EXECUTE FUNCTION trg_repretuieste_pachetele();
@@ -5122,6 +5255,11 @@ alter table public.dhl_etichete enable row level security;
 alter table public.discounts enable row level security;
 alter table public.domain_orders enable row level security;
 alter table public.domains enable row level security;
+alter table public.emag_awb enable row level security;
+alter table public.emag_offers enable row level security;
+alter table public.emag_orders enable row level security;
+alter table public.emag_rma enable row level security;
+alter table public.emag_sync_queue enable row level security;
 alter table public.email_automations enable row level security;
 alter table public.error_logs enable row level security;
 alter table public.fedex_etichete enable row level security;
@@ -5237,6 +5375,21 @@ create policy discounts_owner_all on public.discounts as PERMISSIVE for ALL to a
   WHERE (businesses.user_id = auth.uid()))));
 create policy "Users can view own domain orders" on public.domain_orders as PERMISSIVE for SELECT to public using ((auth.uid() = user_id));
 create policy "Users manage own domains" on public.domains as PERMISSIVE for ALL to public using ((auth.uid() = user_id)) with check ((auth.uid() = user_id));
+create policy owner_select_emag_awb on public.emag_awb as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_emag_offers on public.emag_offers as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_emag_orders on public.emag_orders as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_emag_rma on public.emag_rma as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_emag_sync_queue on public.emag_sync_queue as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Admins can read error logs" on public.error_logs as PERMISSIVE for SELECT to public using (is_admin());
 create policy "Admins manage all forms" on public.forms as PERMISSIVE for ALL to public using (is_admin()) with check (is_admin());
 create policy "Owners manage own forms" on public.forms as PERMISSIVE for ALL to public using ((EXISTS ( SELECT 1
@@ -5908,6 +6061,111 @@ grant SELECT on table public.domains to service_role;
 grant TRIGGER on table public.domains to service_role;
 grant TRUNCATE on table public.domains to service_role;
 grant UPDATE on table public.domains to service_role;
+grant DELETE on table public.emag_awb to anon;
+grant INSERT on table public.emag_awb to anon;
+grant REFERENCES on table public.emag_awb to anon;
+grant SELECT on table public.emag_awb to anon;
+grant TRIGGER on table public.emag_awb to anon;
+grant TRUNCATE on table public.emag_awb to anon;
+grant UPDATE on table public.emag_awb to anon;
+grant DELETE on table public.emag_awb to authenticated;
+grant INSERT on table public.emag_awb to authenticated;
+grant REFERENCES on table public.emag_awb to authenticated;
+grant SELECT on table public.emag_awb to authenticated;
+grant TRIGGER on table public.emag_awb to authenticated;
+grant TRUNCATE on table public.emag_awb to authenticated;
+grant UPDATE on table public.emag_awb to authenticated;
+grant DELETE on table public.emag_awb to service_role;
+grant INSERT on table public.emag_awb to service_role;
+grant REFERENCES on table public.emag_awb to service_role;
+grant SELECT on table public.emag_awb to service_role;
+grant TRIGGER on table public.emag_awb to service_role;
+grant TRUNCATE on table public.emag_awb to service_role;
+grant UPDATE on table public.emag_awb to service_role;
+grant DELETE on table public.emag_offers to anon;
+grant INSERT on table public.emag_offers to anon;
+grant REFERENCES on table public.emag_offers to anon;
+grant SELECT on table public.emag_offers to anon;
+grant TRIGGER on table public.emag_offers to anon;
+grant TRUNCATE on table public.emag_offers to anon;
+grant UPDATE on table public.emag_offers to anon;
+grant DELETE on table public.emag_offers to authenticated;
+grant INSERT on table public.emag_offers to authenticated;
+grant REFERENCES on table public.emag_offers to authenticated;
+grant SELECT on table public.emag_offers to authenticated;
+grant TRIGGER on table public.emag_offers to authenticated;
+grant TRUNCATE on table public.emag_offers to authenticated;
+grant UPDATE on table public.emag_offers to authenticated;
+grant DELETE on table public.emag_offers to service_role;
+grant INSERT on table public.emag_offers to service_role;
+grant REFERENCES on table public.emag_offers to service_role;
+grant SELECT on table public.emag_offers to service_role;
+grant TRIGGER on table public.emag_offers to service_role;
+grant TRUNCATE on table public.emag_offers to service_role;
+grant UPDATE on table public.emag_offers to service_role;
+grant DELETE on table public.emag_orders to anon;
+grant INSERT on table public.emag_orders to anon;
+grant REFERENCES on table public.emag_orders to anon;
+grant SELECT on table public.emag_orders to anon;
+grant TRIGGER on table public.emag_orders to anon;
+grant TRUNCATE on table public.emag_orders to anon;
+grant UPDATE on table public.emag_orders to anon;
+grant DELETE on table public.emag_orders to authenticated;
+grant INSERT on table public.emag_orders to authenticated;
+grant REFERENCES on table public.emag_orders to authenticated;
+grant SELECT on table public.emag_orders to authenticated;
+grant TRIGGER on table public.emag_orders to authenticated;
+grant TRUNCATE on table public.emag_orders to authenticated;
+grant UPDATE on table public.emag_orders to authenticated;
+grant DELETE on table public.emag_orders to service_role;
+grant INSERT on table public.emag_orders to service_role;
+grant REFERENCES on table public.emag_orders to service_role;
+grant SELECT on table public.emag_orders to service_role;
+grant TRIGGER on table public.emag_orders to service_role;
+grant TRUNCATE on table public.emag_orders to service_role;
+grant UPDATE on table public.emag_orders to service_role;
+grant DELETE on table public.emag_rma to anon;
+grant INSERT on table public.emag_rma to anon;
+grant REFERENCES on table public.emag_rma to anon;
+grant SELECT on table public.emag_rma to anon;
+grant TRIGGER on table public.emag_rma to anon;
+grant TRUNCATE on table public.emag_rma to anon;
+grant UPDATE on table public.emag_rma to anon;
+grant DELETE on table public.emag_rma to authenticated;
+grant INSERT on table public.emag_rma to authenticated;
+grant REFERENCES on table public.emag_rma to authenticated;
+grant SELECT on table public.emag_rma to authenticated;
+grant TRIGGER on table public.emag_rma to authenticated;
+grant TRUNCATE on table public.emag_rma to authenticated;
+grant UPDATE on table public.emag_rma to authenticated;
+grant DELETE on table public.emag_rma to service_role;
+grant INSERT on table public.emag_rma to service_role;
+grant REFERENCES on table public.emag_rma to service_role;
+grant SELECT on table public.emag_rma to service_role;
+grant TRIGGER on table public.emag_rma to service_role;
+grant TRUNCATE on table public.emag_rma to service_role;
+grant UPDATE on table public.emag_rma to service_role;
+grant DELETE on table public.emag_sync_queue to anon;
+grant INSERT on table public.emag_sync_queue to anon;
+grant REFERENCES on table public.emag_sync_queue to anon;
+grant SELECT on table public.emag_sync_queue to anon;
+grant TRIGGER on table public.emag_sync_queue to anon;
+grant TRUNCATE on table public.emag_sync_queue to anon;
+grant UPDATE on table public.emag_sync_queue to anon;
+grant DELETE on table public.emag_sync_queue to authenticated;
+grant INSERT on table public.emag_sync_queue to authenticated;
+grant REFERENCES on table public.emag_sync_queue to authenticated;
+grant SELECT on table public.emag_sync_queue to authenticated;
+grant TRIGGER on table public.emag_sync_queue to authenticated;
+grant TRUNCATE on table public.emag_sync_queue to authenticated;
+grant UPDATE on table public.emag_sync_queue to authenticated;
+grant DELETE on table public.emag_sync_queue to service_role;
+grant INSERT on table public.emag_sync_queue to service_role;
+grant REFERENCES on table public.emag_sync_queue to service_role;
+grant SELECT on table public.emag_sync_queue to service_role;
+grant TRIGGER on table public.emag_sync_queue to service_role;
+grant TRUNCATE on table public.emag_sync_queue to service_role;
+grant UPDATE on table public.emag_sync_queue to service_role;
 grant DELETE on table public.email_automations to anon;
 grant INSERT on table public.email_automations to anon;
 grant REFERENCES on table public.email_automations to anon;
@@ -6770,6 +7028,27 @@ grant SELECT on table public.zz_backup_preturi_parfumuri_insula_20260812 to serv
 grant TRIGGER on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
 grant TRUNCATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
 grant UPDATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
+grant DELETE on table public.zz_backup_preturi_vetdepo_20260819 to anon;
+grant INSERT on table public.zz_backup_preturi_vetdepo_20260819 to anon;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260819 to anon;
+grant SELECT on table public.zz_backup_preturi_vetdepo_20260819 to anon;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260819 to anon;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260819 to anon;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_20260819 to anon;
+grant DELETE on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
+grant INSERT on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
+grant SELECT on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
+grant DELETE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
+grant INSERT on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
+grant SELECT on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant DELETE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
 grant INSERT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
 grant REFERENCES on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;

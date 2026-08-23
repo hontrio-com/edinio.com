@@ -1234,6 +1234,351 @@ export type Database = {
           },
         ]
       }
+      emag_awb: {
+        Row: {
+          awb_number: string | null
+          business_id: string
+          cash_on_delivery: number | null
+          courier_account_id: number | null
+          created_at: string
+          emag_id: number | null
+          id: string
+          order_id: string | null
+          status: Json | null
+        }
+        Insert: {
+          awb_number?: string | null
+          business_id: string
+          cash_on_delivery?: number | null
+          courier_account_id?: number | null
+          created_at?: string
+          emag_id?: number | null
+          id?: string
+          order_id?: string | null
+          status?: Json | null
+        }
+        Update: {
+          awb_number?: string | null
+          business_id?: string
+          cash_on_delivery?: number | null
+          courier_account_id?: number | null
+          created_at?: string
+          emag_id?: number | null
+          id?: string
+          order_id?: string | null
+          status?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emag_awb_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emag_awb_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emag_offers: {
+        Row: {
+          auto_sync: boolean
+          best_offer_sale_price: number | null
+          brand: string | null
+          business_id: string
+          buy_button_rank: number | null
+          category_id: number | null
+          creat_de_edinio: boolean
+          created_at: string
+          doc_errors: Json
+          ean: string | null
+          emag_id: number
+          error: string | null
+          family_id: number | null
+          family_type_id: number | null
+          id: string
+          issues: Json
+          last_status_at: string | null
+          last_synced_at: string | null
+          number_of_offers: number | null
+          offer_validation_status: number | null
+          ownership: number | null
+          part_number: string | null
+          part_number_key: string | null
+          product_id: string | null
+          status: string
+          translation_validation_status: number | null
+          updated_at: string
+          validation_status: number | null
+          variant_title: string | null
+        }
+        Insert: {
+          auto_sync?: boolean
+          best_offer_sale_price?: number | null
+          brand?: string | null
+          business_id: string
+          buy_button_rank?: number | null
+          category_id?: number | null
+          creat_de_edinio?: boolean
+          created_at?: string
+          doc_errors?: Json
+          ean?: string | null
+          emag_id?: number
+          error?: string | null
+          family_id?: number | null
+          family_type_id?: number | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          number_of_offers?: number | null
+          offer_validation_status?: number | null
+          ownership?: number | null
+          part_number?: string | null
+          part_number_key?: string | null
+          product_id?: string | null
+          status?: string
+          translation_validation_status?: number | null
+          updated_at?: string
+          validation_status?: number | null
+          variant_title?: string | null
+        }
+        Update: {
+          auto_sync?: boolean
+          best_offer_sale_price?: number | null
+          brand?: string | null
+          business_id?: string
+          buy_button_rank?: number | null
+          category_id?: number | null
+          creat_de_edinio?: boolean
+          created_at?: string
+          doc_errors?: Json
+          ean?: string | null
+          emag_id?: number
+          error?: string | null
+          family_id?: number | null
+          family_type_id?: number | null
+          id?: string
+          issues?: Json
+          last_status_at?: string | null
+          last_synced_at?: string | null
+          number_of_offers?: number | null
+          offer_validation_status?: number | null
+          ownership?: number | null
+          part_number?: string | null
+          part_number_key?: string | null
+          product_id?: string | null
+          status?: string
+          translation_validation_status?: number | null
+          updated_at?: string
+          validation_status?: number | null
+          variant_title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emag_offers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emag_offers_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emag_orders: {
+        Row: {
+          acknowledged_at: string | null
+          business_id: string
+          created_at: string
+          emag_order_id: number
+          id: string
+          is_complete: number | null
+          last_modified: string | null
+          lines: Json
+          order_id: string | null
+          order_status: number | null
+          order_type: number | null
+          payment_mode_id: number | null
+          raw: Json | null
+          updated_at: string
+          vouchers: Json
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          business_id: string
+          created_at?: string
+          emag_order_id: number
+          id?: string
+          is_complete?: number | null
+          last_modified?: string | null
+          lines?: Json
+          order_id?: string | null
+          order_status?: number | null
+          order_type?: number | null
+          payment_mode_id?: number | null
+          raw?: Json | null
+          updated_at?: string
+          vouchers?: Json
+        }
+        Update: {
+          acknowledged_at?: string | null
+          business_id?: string
+          created_at?: string
+          emag_order_id?: number
+          id?: string
+          is_complete?: number | null
+          last_modified?: string | null
+          lines?: Json
+          order_id?: string | null
+          order_status?: number | null
+          order_type?: number | null
+          payment_mode_id?: number | null
+          raw?: Json | null
+          updated_at?: string
+          vouchers?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emag_orders_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emag_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emag_rma: {
+        Row: {
+          awbs: Json
+          business_id: string
+          created_at: string
+          emag_order_id: number | null
+          emag_rma_id: number
+          id: string
+          order_id: string | null
+          products: Json
+          raw: Json | null
+          request_status: number | null
+          return_reason: number | null
+          return_type: number | null
+          updated_at: string
+        }
+        Insert: {
+          awbs?: Json
+          business_id: string
+          created_at?: string
+          emag_order_id?: number | null
+          emag_rma_id: number
+          id?: string
+          order_id?: string | null
+          products?: Json
+          raw?: Json | null
+          request_status?: number | null
+          return_reason?: number | null
+          return_type?: number | null
+          updated_at?: string
+        }
+        Update: {
+          awbs?: Json
+          business_id?: string
+          created_at?: string
+          emag_order_id?: number | null
+          emag_rma_id?: number
+          id?: string
+          order_id?: string | null
+          products?: Json
+          raw?: Json | null
+          request_status?: number | null
+          return_reason?: number | null
+          return_type?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emag_rma_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emag_rma_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      emag_sync_queue: {
+        Row: {
+          attempts: number
+          business_id: string
+          created_at: string
+          id: string
+          last_error: string | null
+          offer_id: string
+          op: string
+          product_id: string | null
+          revendicat_pana: string | null
+        }
+        Insert: {
+          attempts?: number
+          business_id: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id: string
+          op?: string
+          product_id?: string | null
+          revendicat_pana?: string | null
+        }
+        Update: {
+          attempts?: number
+          business_id?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          offer_id?: string
+          op?: string
+          product_id?: string | null
+          revendicat_pana?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emag_sync_queue_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "emag_sync_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_automations: {
         Row: {
           email_key: string
@@ -3254,6 +3599,7 @@ export type Database = {
           dhl_config: Json | null
           dpd_config: Json | null
           ecolet_config: Json | null
+          emag_config: Json
           email_config: Json
           fan_courier_config: Json | null
           facebook_feeds: Json | null
@@ -3327,6 +3673,7 @@ export type Database = {
           dhl_config?: Json | null
           dpd_config?: Json | null
           ecolet_config?: Json | null
+          emag_config?: Json
           email_config?: Json
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
@@ -3400,6 +3747,7 @@ export type Database = {
           dhl_config?: Json | null
           dpd_config?: Json | null
           ecolet_config?: Json | null
+          emag_config?: Json
           email_config?: Json
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null

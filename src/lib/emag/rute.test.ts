@@ -1,6 +1,9 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { eVandabila, LOT_MAXIM, rutaDeTrimitere, traducereaPoateBloca } from "./rute";
+import {
+  asteptareaUrmatoare, eVandabila, LOT_MAXIM, PRIORITATE_OP, rutaDeTrimitere,
+  traducereaPoateBloca,
+} from "./rute";
 import { oferteUsoare, stocuriDeTrimis } from "./mapping";
 
 /*
@@ -242,4 +245,50 @@ test("eMAG: stocul unei combinatii nedeclarate cade pe cel al produsului", () =>
     stocuriDeTrimis(produs, [{ variant_title: "Roșu", emag_id: 9 }]),
     [{ emagId: 9, cantitate: 12 }],
   );
+});
+
+/* ── §4/§72. Prioritati si asteptare crescatoare ───────────────────────────── */
+
+test("eMAG coada: o miscare de stoc trece inaintea unui catalog", () => {
+  /*
+   * ═══ DE CE EXISTA SCARA ═══
+   *
+   * Fara ea, coada mergea strict in ordinea intrarii — iar o miscare de stoc de dupa
+   * o vanzare statea la rand in urma unui catalog de 20.000 de produse pus la publicat
+   * cu un minut inainte. La 30 de elemente pe trecere, ar fi asteptat unsprezece ore.
+   *
+   * In orele acelea eMAG vinde mai departe marfa pe care magazinul n-o mai are.
+   */
+  assert.ok(PRIORITATE_OP.stoc < PRIORITATE_OP.oferta);
+  assert.ok(PRIORITATE_OP.retragere < PRIORITATE_OP.pret);
+  assert.ok(PRIORITATE_OP.pret < PRIORITATE_OP.oferta);
+  assert.ok(PRIORITATE_OP.oferta < PRIORITATE_OP.masuratori,
+    "publicarea e grea, dar masuratorile nu opresc nicio vanzare");
+});
+
+test("eMAG coada: fiecare `op` are o graba, si `stoc` e prima", () => {
+  const toate = Object.entries(PRIORITATE_OP);
+  assert.equal(toate.length, 5, "orice `op` nou trebuie sa primeasca o graba, nu una implicita");
+  const ceaMaiMica = Math.min(...toate.map(([, v]) => v));
+  assert.equal(PRIORITATE_OP.stoc, ceaMaiMica);
+});
+
+test("eMAG coada: asteptarea creste, si se opreste la patru ore", () => {
+  /*
+   * Un refuz nu se repara singur: acelasi produs va fi refuzat la fel si peste un
+   * minut. Dar fiecare reincercare arde o cerere din cele 3 pe secunda ale
+   * magazinului — aceleasi prin care pleaca o miscare de stoc.
+   */
+  const t = [1, 2, 3, 4, 5].map(asteptareaUrmatoare);
+  for (let i = 1; i < t.length; i++) {
+    assert.ok(t[i] > t[i - 1], `treapta ${i + 1} nu creste fata de ${i}`);
+  }
+  assert.equal(t[0], 60_000, "prima reincercare e la un minut, ca pana acum");
+  assert.equal(t[4], 4 * 60 * 60_000);
+});
+
+test("eMAG coada: peste ultima treapta nu se mai creste, si nu se strica", () => {
+  assert.equal(asteptareaUrmatoare(99), asteptareaUrmatoare(5));
+  assert.equal(asteptareaUrmatoare(0), asteptareaUrmatoare(1), "zero incercari nu da un index negativ");
+  assert.equal(asteptareaUrmatoare(-3), asteptareaUrmatoare(1));
 });

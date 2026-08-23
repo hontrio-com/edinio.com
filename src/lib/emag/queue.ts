@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import type { EmagConfig } from "./types";
+import { PRIORITATE_OP } from "./rute";
 
 /**
  * Coada de sincronizare eMAG.
@@ -123,8 +124,25 @@ export async function enqueueEmagSync(
       if (!count) return;
     }
 
+    /*
+     * ⚠ `prioritate` SI `next_retry_at: null` SE SCRIU AMANDOUA, DINADINS.
+     *
+     * Prioritatea, fiindca de ea depinde daca o miscare de stoc trece inaintea unui
+     * catalog de 20.000 (vezi `PRIORITATE_OP`).
+     *
+     * `next_retry_at: null` fiindca o cerere NOUA pe acelasi element inseamna ca s-a
+     * schimbat ceva la produs — poate chiar campul care lipsea. Pastrata, asteptarea
+     * de patru ore ar fi tinut pe loc tocmai reparatia. ⚠ Si `abandonat_la`, din
+     * acelasi motiv: un element oprit definitiv se reaprinde cand omul il atinge.
+     *
+     * ⚠ Se rescrie NUMAI randul aceluiasi `op`: unicul e pe `(business_id, offer_id,
+     * op)`, deci o miscare de stoc nu sterge asteptarea unei publicari cazute.
+     */
     await admin.from("emag_sync_queue").upsert(
-      { business_id: businessId, product_id: productId, offer_id: offerId, op },
+      {
+        business_id: businessId, product_id: productId, offer_id: offerId, op,
+        prioritate: PRIORITATE_OP[op], next_retry_at: null, abandonat_la: null, attempts: 0,
+      },
       { onConflict: "business_id,offer_id,op" },
     );
   } catch (e) {
@@ -198,7 +216,12 @@ async function enqueueMany(
 
     const randuri = ids
       .filter((id) => cuOferta.has(id))
-      .map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
+      .map((id) => ({
+        business_id: businessId, product_id: id, offer_id: id, op,
+        /* ⚠ Aceleasi patru campuri ca la elementul singur. Vezi nota de acolo: o
+           cerere noua pe acelasi element inseamna ca s-a schimbat ceva. */
+        prioritate: PRIORITATE_OP[op], next_retry_at: null, abandonat_la: null, attempts: 0,
+      }));
     if (randuri.length === 0) return 0;
 
     const { error } = await admin

@@ -158,6 +158,13 @@ export interface StareEmag {
     preluate: number;
   };
   inCoada: number;
+  /**
+   * Elemente oprite dupa ce si-au ars toate incercarile.
+   *
+   * ⚠ NU se sterg. Sterse, nimeni nu le mai putea vedea, numara sau relua — iar
+   * panoul ar fi aratat „0 in asteptare" pentru un catalog intreg care nu plecase.
+   */
+  abandonate: number;
 }
 
 export async function getEmagStatus(businessId: string): Promise<StareEmag | { error: string }> {
@@ -193,7 +200,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     admin.from("emag_offers").select("*", { count: "exact", head: true })
       .eq("business_id", businessId).eq("status", s);
 
-  const [total, active, inValidare, respinse, eroare, preluate, inCoada] = await Promise.all([
+  const [total, active, inValidare, respinse, eroare, preluate, inCoada, abandonate] = await Promise.all([
     admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId),
     stare("live"),
     admin.from("emag_offers").select("*", { count: "exact", head: true })
@@ -205,7 +212,10 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       .eq("business_id", businessId).in("validation_status", [5, 6, 8, 10, 12]),
     stare("error"),
     stare("imported"),
-    admin.from("emag_sync_queue").select("*", { count: "exact", head: true }).eq("business_id", businessId),
+    admin.from("emag_sync_queue").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).is("abandonat_la", null),
+    admin.from("emag_sync_queue").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).not("abandonat_la", "is", null),
   ]);
 
   const iesire = iesireEmag();
@@ -237,6 +247,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       preluate: preluate.count ?? 0,
     },
     inCoada: inCoada.count ?? 0,
+    abandonate: abandonate.count ?? 0,
   };
 }
 
@@ -1718,4 +1729,36 @@ export async function aduComenzileAcumEmag(
     void logError({ action: "emag.comenzi.acum", message: mesaj, details: { businessId }, severity: "error" });
     return { error: mesaj };
   }
+}
+
+/**
+ * Reia elementele oprite după ce și-au ars toate încercările.
+ *
+ * ═══ ⚠ DE CE E UN BUTON, NU O RELUARE AUTOMATĂ ═══
+ *
+ * Un element abandonat a fost refuzat de cinci ori pentru același motiv. Reluat
+ * singur, ar fi ars încă cinci cereri pentru același răspuns — și tot așa, la
+ * nesfârșit, pe cele 3 cereri pe secundă ale magazinului.
+ *
+ * Abandonul înseamnă „ceva trebuie schimbat". Butonul se apasă DUPĂ schimbare, iar
+ * apăsarea e chiar dovada că omul a făcut-o.
+ *
+ * ⚠ Contorul se pune la zero odată cu reluarea. Lăsat pe cinci, primul refuz de după
+ * reparație ar fi abandonat elementul din nou, imediat.
+ */
+export async function reiaAbandonateleEmag(
+  businessId: string,
+): Promise<{ reluate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const { data, error } = await createAdminClient().from("emag_sync_queue")
+    .update({ abandonat_la: null, attempts: 0, next_retry_at: null, revendicat_pana: null })
+    .eq("business_id", businessId).not("abandonat_la", "is", null)
+    .select("id");
+
+  if (error) return { error: error.message };
+
+  revalidatePath(FEATURE_PATH);
+  return { reluate: (data ?? []).length };
 }

@@ -300,35 +300,44 @@ export type Database = {
       }
       aboutyou_sync_queue: {
         Row: {
+          abandonat_la: string | null
           attempts: number
           business_id: string
           created_at: string
           id: string
           last_error: string | null
+          next_retry_at: string | null
           offer_id: string
           op: string
+          prioritate: number
           product_id: string | null
           revendicat_pana: string | null
         }
         Insert: {
+          abandonat_la?: string | null
           attempts?: number
           business_id: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
         Update: {
+          abandonat_la?: string | null
           attempts?: number
           business_id?: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id?: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
@@ -1580,35 +1589,44 @@ export type Database = {
       }
       emag_sync_queue: {
         Row: {
+          abandonat_la: string | null
           attempts: number
           business_id: string
           created_at: string
           id: string
           last_error: string | null
+          next_retry_at: string | null
           offer_id: string
           op: string
+          prioritate: number
           product_id: string | null
           revendicat_pana: string | null
         }
         Insert: {
+          abandonat_la?: string | null
           attempts?: number
           business_id: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
         Update: {
+          abandonat_la?: string | null
           attempts?: number
           business_id?: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id?: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
@@ -1834,32 +1852,41 @@ export type Database = {
       }
       gmc_sync_queue: {
         Row: {
+          abandonat_la: string | null
           attempts: number
           business_id: string
           created_at: string
           id: string
+          next_retry_at: string | null
           offer_id: string
           op: string
+          prioritate: number
           product_id: string | null
           revendicat_pana: string | null
         }
         Insert: {
+          abandonat_la?: string | null
           attempts?: number
           business_id: string
           created_at?: string
           id?: string
+          next_retry_at?: string | null
           offer_id: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
         Update: {
+          abandonat_la?: string | null
           attempts?: number
           business_id?: string
           created_at?: string
           id?: string
+          next_retry_at?: string | null
           offer_id?: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
@@ -2311,35 +2338,44 @@ export type Database = {
       }
       olx_sync_queue: {
         Row: {
+          abandonat_la: string | null
           attempts: number
           business_id: string
           created_at: string
           id: string
           last_error: string | null
+          next_retry_at: string | null
           offer_id: string
           op: string
+          prioritate: number
           product_id: string | null
           revendicat_pana: string | null
         }
         Insert: {
+          abandonat_la?: string | null
           attempts?: number
           business_id: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
         Update: {
+          abandonat_la?: string | null
           attempts?: number
           business_id?: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id?: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
@@ -4168,35 +4204,44 @@ export type Database = {
       }
       trendyol_sync_queue: {
         Row: {
+          abandonat_la: string | null
           attempts: number
           business_id: string
           created_at: string
           id: string
           last_error: string | null
+          next_retry_at: string | null
           offer_id: string
           op: string
+          prioritate: number
           product_id: string | null
           revendicat_pana: string | null
         }
         Insert: {
+          abandonat_la?: string | null
           attempts?: number
           business_id: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }
         Update: {
+          abandonat_la?: string | null
           attempts?: number
           business_id?: string
           created_at?: string
           id?: string
           last_error?: string | null
+          next_retry_at?: string | null
           offer_id?: string
           op?: string
+          prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
         }

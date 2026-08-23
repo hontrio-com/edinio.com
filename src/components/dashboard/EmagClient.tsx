@@ -5,7 +5,8 @@ import { AlertTriangle, CheckCircle, Copy, Download, Loader2, RefreshCw, ShieldA
 import { toast } from "sonner";
 import {
   aduComenzileAcumEmag, connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
-  leagaOferteImportateEmag, salveazaSetariEmag, sincronizeazaFelieEmag, type StareEmag,
+  leagaOferteImportateEmag, reiaAbandonateleEmag, salveazaSetariEmag, sincronizeazaFelieEmag,
+  type StareEmag,
 } from "@/lib/actions/emag.actions";
 
 /**
@@ -250,6 +251,41 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             {status.oferte.preluate === 1 ? "ofertă e preluată" : "oferte sunt preluate"} din contul
             tău eMAG. Prețul și stocul lor nu se trimit automat, ca să nu-ți suprascriem ce ai pus
             în panoul eMAG.
+          </p>
+        )}
+
+        {/*
+          ⚠ ABANDONURILE SE VĂD, ȘI SE POT RELUA.
+          Înainte se ștergeau: nimeni nu le mai putea număra, iar panoul arăta
+          „0 în așteptare" pentru un catalog întreg care nu plecase.
+        */}
+        {status.abandonate > 0 && (
+          <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <strong>{status.abandonate}</strong>{" "}
+              {status.abandonate === 1 ? "modificare s-a oprit" : "modificări s-au oprit"} după cinci
+              încercări. Vezi motivul la fiecare produs în lista de mai jos, repară-l, apoi reia.
+            </span>
+            <button
+              type="button"
+              disabled={seLucreaza}
+              onClick={() =>
+                incepe(async () => {
+                  const r = await reiaAbandonateleEmag(businessId);
+                  if ("error" in r) {
+                    toast.error(r.error);
+                    return;
+                  }
+                  toast.success(
+                    r.reluate === 1 ? "O modificare a fost reluată." : `${r.reluate} modificări au fost reluate.`,
+                  );
+                })
+              }
+              className="shrink-0 rounded-lg border border-amber-300 px-2.5 py-1.5 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:hover:bg-amber-900/40"
+            >
+              Reia-le
+            </button>
           </p>
         )}
 

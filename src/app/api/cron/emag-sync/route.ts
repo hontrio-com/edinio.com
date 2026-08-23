@@ -16,7 +16,7 @@ import { urcaFacturaLaEmag, type Factura } from "@/lib/emag/facturi";
 import { aduRetururile } from "@/lib/emag/rma";
 import type { EmagConfig, EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
 import type { OpEmag } from "@/lib/emag/queue";
-import { eVandabila } from "@/lib/emag/rute";
+import { asteptareaUrmatoare, eVandabila } from "@/lib/emag/rute";
 
 /**
  * Trecerea din minut in minut a integrarii eMAG.
@@ -236,8 +236,27 @@ export async function GET(req: NextRequest) {
 
       /* Refuz: arde o incercare si scrie motivul. */
       const incercari = (el.attempts ?? 0) + 1;
+
       if (incercari >= INCERCARI_MAXIM) {
-        await admin.from("emag_sync_queue").delete().eq("id", el.id);
+        /*
+         * ═══ ⚠ SE ABANDONEAZA, DAR NU SE STERGE ═══
+         *
+         * Prima forma stergea randul. Cu un rand in jurnal, dar sters: nimeni nu-l mai
+         * putea vedea, numara sau relua. Un catalog intreg putea disparea din coada
+         * fara ca panoul sa arate altceva decat „0 in asteptare" — iar comerciantul ar
+         * fi crezut ca totul a plecat.
+         *
+         * Acum ramane, marcat. `revendica_din_coada` il sare (`abandonat_la is null`),
+         * ecranul il numara, si o atingere a produsului il reaprinde.
+         */
+        await admin.from("emag_sync_queue")
+          .update({
+            attempts: incercari,
+            last_error: r.mesaj || null,
+            revendicat_pana: null,
+            abandonat_la: new Date().toISOString(),
+          })
+          .eq("id", el.id);
         await logError({
           action: "emag-sync",
           message: `element abandonat dupa ${incercari} incercari: ${r.mesaj}`,
@@ -247,8 +266,22 @@ export async function GET(req: NextRequest) {
         });
         continue;
       }
+
+      /*
+       * ⚠ ASTEPTARE CRESCATOARE, nu reincercare din minut in minut.
+       *
+       * Un refuz nu se repara singur: un produs caruia ii lipseste un camp va fi
+       * refuzat la fel si peste un minut. Fiecare reincercare arde insa o cerere din
+       * cele 3 pe secunda ale magazinului — aceleasi prin care pleaca o miscare de
+       * stoc dupa o vanzare.
+       */
       await admin.from("emag_sync_queue")
-        .update({ attempts: incercari, last_error: r.mesaj || null, revendicat_pana: null })
+        .update({
+          attempts: incercari,
+          last_error: r.mesaj || null,
+          revendicat_pana: null,
+          next_retry_at: new Date(Date.now() + asteptareaUrmatoare(incercari)).toISOString(),
+        })
         .eq("id", el.id);
     }
   }

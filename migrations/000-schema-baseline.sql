@@ -2623,10 +2623,19 @@ begin
    *
    * ATENTIE: `as materialized` nu e decor. Cu subinterogarea inline in
    * `where id in (...)`, planificatorul o poate re-evalua in semi-join si LIMIT
-   * isi pierde intelesul — masurat candva la 6 randuri cu limit 3, revendica
-   * toate sase. Pe PostgreSQL 17.6 nu s-a mai reprodus (probat la 6 si la 500 de
-   * randuri), dar forma materializata nu depinde de alegerea planificatorului,
-   * deci ea ramane.
+   * isi pierde intelesul.
+   *
+   * === TREI CLAUZE NOI (2026-09-25), TOATE NEUTRE PENTRU CELELALTE PATRU COZI ===
+   *
+   * next_retry_at - asteptarea crescatoare dupa un refuz. Nullabil fara implicit,
+   *   deci pentru gmc/olx/trendyol/aboutyou filtrul e mereu adevarat.
+   * abandonat_la  - elementul s-a oprit definitiv, dar NU s-a sters. Idem.
+   * prioritate    - not null default 5. Peste o coloana constanta,
+   *   order by prioritate, created_at da EXACT aceeasi ordine ca inainte.
+   *
+   * ATENTIE: parantezele din jurul primei conditii sunt OBLIGATORII. Fara ele, and
+   * leaga mai strans decat or, si orice rand nerevendicat ar fi trecut peste
+   * asteptare si peste abandon.
    */
   if not (p_coada = any(v_permise)) then
     raise exception 'coada necunoscuta: %', p_coada;
@@ -2635,8 +2644,10 @@ begin
   return query execute format($f$
     with alese as materialized (
       select c.id from public.%I c
-       where c.revendicat_pana is null or c.revendicat_pana < now()
-       order by c.created_at
+       where (c.revendicat_pana is null or c.revendicat_pana < now())
+         and (c.next_retry_at is null or c.next_retry_at <= now())
+         and c.abandonat_la is null
+       order by c.prioritate, c.created_at
        limit $2
        for update skip locked)
     update public.%I q
@@ -3623,7 +3634,10 @@ create table if not exists public.aboutyou_sync_queue (
   attempts integer default 0 not null,
   last_error text,
   created_at timestamp with time zone default now() not null,
-  revendicat_pana timestamp with time zone);
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint default 5 not null);
 
 create table if not exists public.aboutyou_variants (
   id uuid default gen_random_uuid() not null,
@@ -3973,7 +3987,10 @@ create table if not exists public.emag_sync_queue (
   attempts integer default 0 not null,
   last_error text,
   created_at timestamp with time zone default now() not null,
-  revendicat_pana timestamp with time zone);
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint default 5 not null);
 
 create table if not exists public.email_automations (
   id uuid default gen_random_uuid() not null,
@@ -4038,7 +4055,10 @@ create table if not exists public.gmc_sync_queue (
   op text default 'upsert'::text not null,
   attempts integer default 0 not null,
   created_at timestamp with time zone default now() not null,
-  revendicat_pana timestamp with time zone);
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint default 5 not null);
 
 create table if not exists public.invoices (
   id uuid default gen_random_uuid() not null,
@@ -4161,7 +4181,10 @@ create table if not exists public.olx_sync_queue (
   attempts integer default 0 not null,
   last_error text,
   created_at timestamp with time zone default now() not null,
-  revendicat_pana timestamp with time zone);
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint default 5 not null);
 
 create table if not exists public.operatii_externe (
   id uuid default gen_random_uuid() not null,
@@ -4609,7 +4632,10 @@ create table if not exists public.trendyol_sync_queue (
   attempts integer default 0 not null,
   last_error text,
   created_at timestamp with time zone default now() not null,
-  revendicat_pana timestamp with time zone);
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint default 5 not null);
 
 create table if not exists public.trendyol_variants (
   id uuid default gen_random_uuid() not null,
@@ -5026,6 +5052,7 @@ CREATE INDEX abandoned_carts_business_email_idx ON public.abandoned_carts USING 
 CREATE INDEX abandoned_carts_business_phone_idx ON public.abandoned_carts USING btree (business_id, phone);
 CREATE UNIQUE INDEX abandoned_carts_business_session_uidx ON public.abandoned_carts USING btree (business_id, session_id);
 CREATE INDEX abandoned_carts_business_status_activity_idx ON public.abandoned_carts USING btree (business_id, status, last_activity_at DESC);
+CREATE INDEX aboutyou_sync_queue_ordine_idx ON public.aboutyou_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX announcements_feed_idx ON public.announcements USING btree (is_published, is_pinned DESC, published_at DESC);
 CREATE INDEX bds_biz_zi ON public.business_daily_stats USING btree (business_id, zi DESC);
 CREATE INDEX brevo_suppressions_business_email_idx ON public.brevo_suppressions USING btree (business_id, email);
@@ -5056,6 +5083,7 @@ CREATE INDEX emag_orders_factura_de_urcat_idx ON public.emag_orders USING btree 
 CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
 CREATE INDEX emag_rma_business_status_idx ON public.emag_rma USING btree (business_id, request_status);
 CREATE INDEX emag_sync_queue_created_idx ON public.emag_sync_queue USING btree (created_at);
+CREATE INDEX emag_sync_queue_ordine_idx ON public.emag_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX emag_sync_queue_product_idx ON public.emag_sync_queue USING btree (product_id);
 CREATE INDEX emag_sync_queue_revendicat_idx ON public.emag_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX fedex_etichete_business_idx ON public.fedex_etichete USING btree (business_id, creat_la DESC);
@@ -5065,6 +5093,7 @@ CREATE INDEX gmc_products_business_product_idx ON public.gmc_products USING btre
 CREATE INDEX gmc_products_business_status_idx ON public.gmc_products USING btree (business_id, status);
 CREATE INDEX gmc_sync_queue_created_idx ON public.gmc_sync_queue USING btree (created_at);
 CREATE UNIQUE INDEX gmc_sync_queue_dedupe_uidx ON public.gmc_sync_queue USING btree (business_id, offer_id, op);
+CREATE INDEX gmc_sync_queue_ordine_idx ON public.gmc_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX idx_aboutyou_batches_open ON public.aboutyou_batches USING btree (status, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX idx_aboutyou_listings_business_status ON public.aboutyou_listings USING btree (business_id, status);
 CREATE INDEX idx_aboutyou_listings_product ON public.aboutyou_listings USING btree (product_id);
@@ -5142,6 +5171,7 @@ CREATE INDEX notice_sms_log_business_created_idx ON public.notice_sms_log USING 
 CREATE INDEX notice_sms_log_provider_id_idx ON public.notice_sms_log USING btree (provider_id) WHERE (provider_id IS NOT NULL);
 CREATE INDEX offers_business_active_idx ON public.offers USING btree (business_id, is_active);
 CREATE INDEX offers_business_type_idx ON public.offers USING btree (business_id, type);
+CREATE INDEX olx_sync_queue_ordine_idx ON public.olx_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btree (creat_la) WHERE (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text]));
 CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
 CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);
@@ -5178,6 +5208,7 @@ CREATE INDEX support_messages_ticket_id_idx ON public.support_messages USING btr
 CREATE INDEX support_tickets_business_id_idx ON public.support_tickets USING btree (business_id);
 CREATE INDEX support_tickets_status_idx ON public.support_tickets USING btree (status);
 CREATE INDEX support_tickets_user_id_idx ON public.support_tickets USING btree (user_id);
+CREATE INDEX trendyol_sync_queue_ordine_idx ON public.trendyol_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX ups_etichete_business_idx ON public.ups_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX users_profile_role_idx ON public.users_profile USING btree (role);
 

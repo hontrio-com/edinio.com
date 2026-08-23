@@ -114,6 +114,60 @@ export function rutaDeTrimitere(s: StareaOfertei): Ruta {
 }
 
 /**
+ * Cine trece primul prin coada.
+ *
+ * ═══ ⚠ MAI MIC = MAI DEVREME. SCARA E DUPA CAT COSTA INTARZIEREA ═══
+ *
+ * Fara ea, coada mergea strict in ordinea intrarii — iar o miscare de stoc de dupa o
+ * vanzare statea la rand in urma unui catalog de 20.000 de produse pus la publicat cu
+ * un minut inainte. La 30 de elemente pe trecere, ar fi asteptat unsprezece ore.
+ *
+ * Iar in orele acelea eMAG vinde mai departe marfa pe care magazinul n-o mai are.
+ *
+ *   1 `stoc`       vanzarea S-A INTAMPLAT DEJA. Fiecare minut de intarziere e o
+ *                  sansa in plus sa se vanda ceva ce nu mai exista.
+ *   2 `retragere`  produsul a fost scos din magazin si inca se vinde la ei.
+ *   3 `pret`       comerciantul a schimbat pretul si se asteapta sa plece.
+ *   5 `oferta`     publicare si documentatie. Ruta grea, si cea care poate astepta:
+ *                  un produs nepublicat inca o ora nu face rau nimanui.
+ *   6 `masuratori` dimensiuni si greutate. Nu opresc nicio vanzare.
+ *
+ * ⚠ 4 e lasat liber DINADINS, ca sa se poata strecura ceva intre pret si publicare
+ * fara sa se renumeroteze randurile care sunt deja in coada.
+ */
+export const PRIORITATE_OP: Record<OpEmag, number> = {
+  stoc: 1,
+  retragere: 2,
+  pret: 3,
+  oferta: 5,
+  masuratori: 6,
+};
+
+/**
+ * Peste cat timp se reincearca, dupa al catelea refuz.
+ *
+ * ═══ ⚠ DE CE NU SE REINCEARCA DIN MINUT IN MINUT ═══
+ *
+ * Un refuz nu se repara singur. Un produs caruia ii lipseste un camp va fi refuzat
+ * la fel si peste un minut, si peste zece — dar fiecare reincercare arde o cerere din
+ * cele 3 pe secunda ale magazinului, aceleasi prin care pleaca o miscare de stoc.
+ *
+ * Cinci reincercari la un minut distanta inseamna ca in primele cinci minute
+ * magazinul a platit de cinci ori pentru acelasi raspuns. Cu asteptare crescatoare,
+ * a cincea vine dupa un sfert de ora — destul cat comerciantul sa apuce sa repare
+ * campul, si destul de rar cat sa nu conteze.
+ *
+ * ⚠ NU se aplica verdictelor TRECATOARE. Un 429 sau un 503 nu e vina elementului, si
+ * nu arde nicio incercare — vezi `ardeIncercare`. Asteptarea de aici e numai pentru
+ * refuzuri, adica pentru lucruri care chiar au nevoie de o schimbare.
+ */
+export function asteptareaUrmatoare(incercari: number): number {
+  const trepte = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 4 * 60 * 60_000];
+  const i = Math.max(0, Math.min(trepte.length - 1, Math.floor(incercari) - 1));
+  return trepte[i];
+}
+
+/**
  * Cate elemente incap intr-o cerere, pe fiecare drum.
  *
  * ⚠ 50 E MAXIMUL LOR, SCRIS IN DOCUMENTATIE, SI NU E O RECOMANDARE. Peste el,

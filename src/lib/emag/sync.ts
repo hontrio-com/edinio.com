@@ -1,0 +1,108 @@
+/**
+ * Contextul unui magazin conectat la eMAG.
+ *
+ * ⚠ Fisierul asta va creste in etapa 3 cu fluxurile de publicare (`syncProductNow`,
+ * `pushPretNow`, `pushStocNow`, `retrageOferta`). Acum are numai ce trebuie ca sa
+ * se poata conecta un cont si citi nomenclatoarele.
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+import { logError } from "@/lib/error-logger";
+import type { EmagAuth } from "./client";
+import { EMAG_TARA_IMPLICITA, type EmagConfig } from "./types";
+
+type Db = SupabaseClient<Database>;
+
+export interface ContextEmag {
+  auth: EmagAuth;
+  config: EmagConfig;
+  businessId: string;
+}
+
+/**
+ * Contextul, sau `null` cand magazinul nu e conectat.
+ *
+ * ⚠ SE CHEAMA CU SERVICE ROLE. Pe clientul comerciantului, vederea
+ * `public.store_settings` intoarce `password` ca `enc.v1.…`, fiindca
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`.
+ * eMAG ar raspunde 401 la fiecare apel, iar asimetria face defectul greu de
+ * recunoscut: cronul (service role) ar merge, ecranele nu.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat, de apelant. Toate actiunile trec prin `guard()` inainte.
+ */
+export async function loadEmagContext(admin: Db, businessId: string): Promise<ContextEmag | null> {
+  const { data } = await admin
+    .from("store_settings").select("emag_config").eq("business_id", businessId).maybeSingle();
+
+  const config = ((data?.emag_config as EmagConfig) ?? {}) || {};
+  if (!config.connected || !config.username || !config.password) return null;
+
+  return {
+    auth: {
+      username: config.username,
+      password: config.password,
+      tara: config.tara ?? EMAG_TARA_IMPLICITA,
+      businessId,
+    },
+    config,
+    businessId,
+  };
+}
+
+/**
+ * S-a deconectat comerciantul, sau doar n-am putut citi?
+ *
+ * ⚠ TREI RASPUNSURI, NU DOUA, si asta e chiar rostul functiei. `loadEmagContext`
+ * intoarce `null` si cand magazinul s-a deconectat, si cand citirea a picat.
+ * Confundate, o pana de o secunda a bazei ar fi golit coada unui magazin conectat
+ * — iar produsele lui ar fi ramas nesincronizate fara ca nimeni sa afle.
+ *
+ * `true` = chiar s-a deconectat, se poate goli coada.
+ * `false` = e conectat, contextul a picat din alt motiv.
+ * `null` = nu stim. Nu se sterge NIMIC.
+ */
+export async function esteDeconectatEmag(admin: Db, businessId: string): Promise<boolean | null> {
+  const { data, error } = await admin
+    .from("store_settings").select("emag_config").eq("business_id", businessId).maybeSingle();
+
+  if (error) {
+    void logError({
+      action: "emag.context",
+      message: `nu s-a putut citi emag_config: ${error.message}`,
+      businessId,
+      severity: "warning",
+    });
+    return null;
+  }
+  if (!data) return true;
+
+  const config = (data.emag_config as EmagConfig) ?? {};
+  return config.connected !== true;
+}
+
+/**
+ * Ce lipseste ca sa se poata publica, daca lipseste ceva.
+ *
+ * Sta separat de `loadEmagContext` fiindca raspunde altei intrebari: contextul
+ * spune „se poate vorbi cu eMAG", asta spune „se poate TRIMITE un produs". Un cont
+ * conectat fara cota de TVA aleasa poate citi nomenclatoare, dar orice publicare
+ * ar fi refuzata cu un mesaj despre `vat_id` pe care comerciantul nu-l poate lega
+ * de nimic din ecranul lui.
+ */
+export function ceLipsestePentruPublicare(config: EmagConfig): string | null {
+  if (!config.connected || !config.username || !config.password) {
+    return "Conectează mai întâi contul eMAG (utilizator și parolă de API).";
+  }
+  if (config.needs_reconnect) {
+    return "eMAG a refuzat acreditările. Reconectează contul.";
+  }
+  if (!config.vat_id) {
+    return "Alege cota de TVA folosită pe eMAG, în setările integrării.";
+  }
+  if (config.handling_time == null) {
+    return "Alege în câte zile expediezi (timpul de pregătire), în setările integrării.";
+  }
+  return null;
+}

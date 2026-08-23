@@ -805,24 +805,32 @@ export interface EmagIntrareCategorie {
   family_type_id?: number;
 }
 
-/** Starile prin care trece o oferta la noi in tabel. */
-export type EmagStatusListare =
-  | "draft"
-  | "trimis"
-  | "in_validare"
-  | "activ"
-  | "inactiv"
-  | "respins"
-  | "eol"
-  | "eroare";
-
-export const EMAG_ETICHETA_STATUS: Record<EmagStatusListare, string> = {
+/**
+ * Eticheta omeneasca a fiecarei stari.
+ *
+ * ═══ ⚠ AICI ERAU DOUA UNIUNI PENTRU ACEEASI COLOANA ═══
+ *
+ * Pana acum, `emag_offers.status` avea DOUA tipuri care il descriau: unul scris in
+ * etapa 1 (`draft` | `trimis` | `in_validare` | `activ` | `inactiv` | `respins` |
+ * `eol` | `eroare`) si `StareOferta`, scris in etapa 3, care e cel pe care il
+ * foloseste codul CU ADEVARAT.
+ *
+ * Niciuna nu era gresita in sine. Raul a fost ca panoul numara ofertele dupa numele
+ * din prima, iar codul scria numele din a doua: toate cele patru numaratori
+ * intorceau ZERO. Un comerciant cu 400 de oferte publicate ar fi vazut „400 oferte ·
+ * 0 active · 0 în validare" si ar fi tras singura concluzie cu sens — ca integrarea
+ * nu merge. Fara nicio eroare nicaieri: o interogare care nu gaseste nimic e o
+ * interogare reusita.
+ *
+ * De aceea a ramas UNA singura, iar tabelul de mai jos e legat de ea: adaugata o
+ * stare noua fara eticheta, `tsc` refuza fisierul.
+ */
+export const EMAG_ETICHETA_STARE: Record<StareOferta, string> = {
   draft: "Nelistat",
-  trimis: "Trimis",
-  in_validare: "În validare",
-  activ: "Activ",
-  inactiv: "Inactiv",
-  respins: "Revizuire necesară",
-  eol: "Scos din vânzare",
-  eroare: "Eroare",
+  imported: "Preluat din eMAG",
+  queued: "În așteptare",
+  sent: "Trimis, în validare",
+  live: "Se vinde pe eMAG",
+  error: "Necesită revizuire",
+  withdrawn: "Oprit de la vânzare",
 };

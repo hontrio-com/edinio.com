@@ -40,7 +40,7 @@ import { processImport } from "@/lib/import/committer";
 import {
   EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
   type EmagAdresa, type EmagContCurier, type EmagCotaTva, type EmagConfig,
-  type EmagTara, type EmagValoareTimpPregatire,
+  type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
 } from "@/lib/emag/types";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -128,7 +128,18 @@ export interface StareEmag {
   vatId: number | null;
   handlingTime: number | null;
   categoriiMapate: number;
-  oferte: { total: number; active: number; inValidare: number; respinse: number; eroare: number };
+  oferte: {
+    total: number;
+    /** Vandabile la ei: toate cele patru conditii deodata. */
+    active: number;
+    /** Trimise sau in coada, asteptand verdictul lor. */
+    inValidare: number;
+    /** Respinse de ei. ⚠ Se citeste din `validation_status`, nu din `status`. */
+    respinse: number;
+    eroare: number;
+    /** Preluate din contul lor la import. Nu li se trimite nimic automat. */
+    preluate: number;
+  };
   inCoada: number;
 }
 
@@ -146,12 +157,37 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
    * oferte ar fi vazut in panou 1000, si ar fi crezut ca trei sferturi din catalog
    * n-au ajuns niciodata la eMAG.
    */
-  const [total, active, inValidare, respinse, eroare, inCoada] = await Promise.all([
+  /*
+   * ═══ ⚠ STARILE SE SCRIU CU TIPUL, NU CU SIRURI LIBERE ═══
+   *
+   * Prima forma numara dupa „activ", „in_validare", „respins", „eroare" — nume
+   * inventate inainte sa existe `StareOferta`, si care nu se potrivesc cu NICIUNA
+   * dintre starile pe care le scrie codul.
+   *
+   * Deci toate cele patru numaratori intorceau ZERO. Un comerciant cu 400 de oferte
+   * publicate ar fi vazut in panou „400 oferte · 0 active · 0 în validare" si ar fi
+   * tras singura concluzie cu sens: ca integrarea nu merge. Nicio eroare nicaieri —
+   * o interogare care nu gaseste nimic e o interogare reusita.
+   *
+   * Scrise cu `satisfies StareOferta`, `tsc` refuza de acum orice nume care nu e in
+   * uniune. Exact pentru asta a fost facuta uniunea.
+   */
+  const stare = (s: StareOferta) =>
+    admin.from("emag_offers").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("status", s);
+
+  const [total, active, inValidare, respinse, eroare, preluate, inCoada] = await Promise.all([
     admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId),
-    admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "activ"),
-    admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "in_validare"),
-    admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "respins"),
-    admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "eroare"),
+    stare("live"),
+    admin.from("emag_offers").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).in("status", ["queued", "sent"] satisfies StareOferta[]),
+    /* ⚠ Respingerea se citeste din `validation_status`, unde o spun EI, nu din
+       `status`, care e al nostru: 5 marca respinsa · 6 EAN respins · 8 documentatie
+       respinsa · 10 blocat · 12 actualizare respinsa. */
+    admin.from("emag_offers").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).in("validation_status", [5, 6, 8, 10, 12]),
+    stare("error"),
+    stare("imported"),
     admin.from("emag_sync_queue").select("*", { count: "exact", head: true }).eq("business_id", businessId),
   ]);
 
@@ -180,6 +216,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       inValidare: inValidare.count ?? 0,
       respinse: respinse.count ?? 0,
       eroare: eroare.count ?? 0,
+      preluate: preluate.count ?? 0,
     },
     inCoada: inCoada.count ?? 0,
   };

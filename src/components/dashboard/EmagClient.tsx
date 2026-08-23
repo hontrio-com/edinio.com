@@ -239,10 +239,19 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
 
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Cifra eticheta="Oferte" valoare={status.oferte.total} />
-          <Cifra eticheta="Active" valoare={status.oferte.active} />
+          <Cifra eticheta="Se vând pe eMAG" valoare={status.oferte.active} />
           <Cifra eticheta="În validare" valoare={status.oferte.inValidare} />
           <Cifra eticheta="De revizuit" valoare={status.oferte.respinse + status.oferte.eroare} />
         </div>
+
+        {status.oferte.preluate > 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {status.oferte.preluate}{" "}
+            {status.oferte.preluate === 1 ? "ofertă e preluată" : "oferte sunt preluate"} din contul
+            tău eMAG. Prețul și stocul lor nu se trimit automat, ca să nu-ți suprascriem ce ai pus
+            în panoul eMAG.
+          </p>
+        )}
 
         {status.inCoada > 0 && (
           <p className="mt-3 text-xs text-muted-foreground">

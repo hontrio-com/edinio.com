@@ -142,6 +142,10 @@ export interface StareEmag {
    * — altfel comerciantul ar astepta la nesfarsit ceva ce nimeni nu i-a cerut.
    */
   webhookUrl: string;
+  /** Cand a sunat ultima data eMAG cu o notificare. `null` = niciodata. */
+  ultimulWebhook: string | null;
+  /** Cand s-au adus ultima data comenzile. Marcajul cronului, nu o scriere in plus. */
+  ultimaSincronizare: string | null;
   vatId: number | null;
   handlingTime: number | null;
   greenTax: number | null;
@@ -238,6 +242,11 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     autoPublish: config.auto_publish === true,
     lipsaPentruPublicare: ceLipsestePentruPublicare(config),
     webhookUrl: emagWebhookUrl(businessId),
+    ultimulWebhook: config.ultimul_webhook ?? null,
+    /* ⚠ Se citeste marcajul care EXISTA deja, nu se scrie unul nou la fiecare trecere.
+       Un camp „ultima trecere" ar fi insemnat o scriere pe minut si pe magazin, pentru
+       o informatie pe care cursorul comenzilor o poarta oricum. */
+    ultimaSincronizare: config.orders_synced_at ?? null,
     vatId: config.vat_id ?? null,
     handlingTime: config.handling_time ?? null,
     greenTax: config.green_tax ?? null,

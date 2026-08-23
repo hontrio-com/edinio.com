@@ -332,7 +332,11 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
 
       <PanouSincronizare businessId={businessId} />
 
-      <PanouNotificari url={status.webhookUrl} />
+      <PanouNotificari
+        url={status.webhookUrl}
+        ultimulWebhook={status.ultimulWebhook}
+        ultimaSincronizare={status.ultimaSincronizare}
+      />
 
       <PanouImport businessId={businessId} />
 
@@ -521,7 +525,13 @@ function PanouSincronizare({ businessId }: { businessId: string }) {
  * cu comenzile intrate la un minut in loc de indata — adica o lipsa pe care nimeni
  * n-ar fi observat-o si nimeni n-ar fi reparat-o.
  */
-function PanouNotificari({ url }: { url: string }) {
+function PanouNotificari({
+  url, ultimulWebhook, ultimaSincronizare,
+}: {
+  url: string;
+  ultimulWebhook: string | null;
+  ultimaSincronizare: string | null;
+}) {
   const [copiat, setCopiat] = useState(false);
 
   return (
@@ -548,6 +558,32 @@ function PanouNotificari({ url }: { url: string }) {
         >
           {copiat ? <CheckCircle className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
+      </div>
+
+      {/*
+        ⚠ CELE DOUA MARCAJE RASPUND LA DOUA INTREBARI DIFERITE.
+        „Ultima sincronizare" spune daca integrarea traieste. „Ultimul semnal" spune
+        daca notificarile chiar au fost pornite de eMAG — intrebare care altfel n-are
+        niciun raspuns, fiindca lipsa lor nu strica nimic vizibil: comenzile intra
+        oricum, doar mai incet.
+      */}
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+        <span>
+          Ultima sincronizare:{" "}
+          <strong className="text-foreground">
+            {ultimaSincronizare
+              ? new Date(ultimaSincronizare).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })
+              : "încă niciodată"}
+          </strong>
+        </span>
+        <span>
+          Ultimul semnal de la eMAG:{" "}
+          <strong className="text-foreground">
+            {ultimulWebhook
+              ? new Date(ultimulWebhook).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })
+              : "niciunul — notificările nu sunt pornite"}
+          </strong>
+        </span>
       </div>
     </div>
   );

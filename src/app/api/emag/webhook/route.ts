@@ -7,7 +7,7 @@ import { ipuriPermise, CHEIE_IPURI } from "@/lib/emag/ipuri";
 import { loadEmagContext } from "@/lib/emag/sync";
 import { aduComenzile, ingereazaComanda } from "@/lib/emag/orders";
 import { citesteComenzi, isEmagError } from "@/lib/emag/client";
-import type { EmagComanda } from "@/lib/emag/types";
+import type { EmagComanda, EmagConfig } from "@/lib/emag/types";
 
 /**
  * Notificările eMAG.
@@ -122,6 +122,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignorat: "magazin neconectat" });
   }
 
+  /*
+   * ⚠ URMA SE LASĂ ÎNAINTE DE ORICE LUCRU, ȘI DINADINS.
+   *
+   * Panoul arată „ultimul semnal de la eMAG" ca să se poată răspunde la întrebarea
+   * „notificările chiar funcționează?". Scrisă abia după procesare, o notificare care
+   * cade la mijloc n-ar fi lăsat nicio urmă — iar comerciantul ar fi crezut că eMAG nu
+   * sună deloc, când de fapt sună și noi ne împiedicăm.
+   *
+   * ⚠ Nu se folosește `patchConfig`: e o scriere de câmp, nu de cursor, iar aici nu
+   * suntem în cron. Citire plus scriere, o dată pe notificare.
+   */
+  await noteazaSemnalul(admin, businessId);
+
   let corp: unknown = null;
   try { corp = await req.json(); } catch { corp = null; }
 
@@ -201,4 +214,26 @@ function idComenzii(corp: unknown): number | null {
  */
 export function GET() {
   return NextResponse.json({ ok: true, serviciu: "emag-webhook" });
+}
+
+/**
+ * Scrie când a sunat ultima dată eMAG.
+ *
+ * ⚠ Nereușita nu oprește nimic: e o urmă pentru ecran, nu o parte din procesare. O
+ * notificare pierdută fiindcă n-am putut scrie o dată ar fi fost un preț absurd.
+ */
+async function noteazaSemnalul(
+  admin: ReturnType<typeof createClient<Database>>,
+  businessId: string,
+): Promise<void> {
+  try {
+    const { data } = await admin.from("store_settings")
+      .select("emag_config").eq("business_id", businessId).maybeSingle();
+    const config = ((data?.emag_config as EmagConfig) ?? {}) || {};
+    await admin.from("store_settings")
+      .update({ emag_config: { ...config, ultimul_webhook: new Date().toISOString() } as never })
+      .eq("business_id", businessId);
+  } catch {
+    /* Urma nu merită să coste o notificare. */
+  }
 }

@@ -864,6 +864,15 @@ export interface EmagConfig {
   orders_synced_at?: string;
   rma_synced_at?: string;
   reconcile_page?: number;
+  /**
+   * Cand a sunat ultima data eMAG cu o notificare.
+   *
+   * ⚠ Se scrie de ruta de notificari, nu de cron. Panoul il arata ca sa se poata
+   * raspunde la „notificarile chiar functioneaza?" — intrebare care altfel n-are
+   * niciun raspuns, fiindca lipsa lor nu strica nimic vizibil: comenzile intra oricum,
+   * doar mai incet.
+   */
+  ultimul_webhook?: string;
 
   /** Adresa de ridicare si contul de curier alese pentru AWB. */
   pickup_address_id?: string;

@@ -31,6 +31,9 @@ import { citesteAwb, isEmagError, salveazaAwb } from "./client";
 import type { ContextEmag } from "./sync";
 import type { EmagAwb, EmagContCurier } from "./types";
 
+/* Reexport, ca apelantii de server sa nu trebuiasca sa stie de doua fisiere. */
+export { coleteDeTrimis, type ColetCm } from "./colete";
+
 type Db = SupabaseClient<Database>;
 
 /** 1 = livrare catre client · 2 = ridicare de la client (retur). */

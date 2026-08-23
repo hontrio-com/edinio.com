@@ -360,6 +360,29 @@ export async function ingereazaComanda(
 
   const ex = existenta as { id: string; order_id: string | null; acknowledged_at: string | null; last_modified: string | null } | null;
 
+  /*
+   * ═══ ⚠ UN EVENIMENT MAI VECHI NU SUPRASCRIE UNUL MAI NOU ═══
+   *
+   * `last_modified` era citit si NICIODATA comparat. Iar comenzile ajung la noi pe
+   * doua drumuri deodata — cronul si notificarea — care nu se asteapta unul pe
+   * altul si nu vin in ordine.
+   *
+   * Scenariul care strica: clientul anuleaza comanda; notificarea aduce „anulata";
+   * o clipa mai tarziu se incheie o citire de cron pornita INAINTE de anulare si
+   * aduce „noua". Fara comparatie, ultima scriere castiga — comanda redevine
+   * „noua" in Edinio, stocul ramane consumat, iar cineva o pregateste de expediere.
+   *
+   * Cu ea, evenimentul vechi se ignora linistit: nu e o eroare, e doar tarziu.
+   *
+   * ⚠ Se compara `>=`, nu `>`: o comanda cu ACELASI `modified` n-are ce aduce nou,
+   * iar rescrisa degeaba ar reporni tranzitia si facturarea la fiecare trecere.
+   */
+  const venitLa = Date.parse(c.modified ?? "");
+  const scrisLa = Date.parse(ex?.last_modified ?? "");
+  if (ex && Number.isFinite(venitLa) && Number.isFinite(scrisLa) && venitLa < scrisLa) {
+    return "sarita";
+  }
+
   /* ── Comanda pe care o stim deja ────────────────────────────────────────── */
   if (ex?.order_id) {
     const t = await tranzitieComandaMarketplace(admin, {

@@ -24,7 +24,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import {
-  actualizeazaStoc, isEmagError, salveazaMasuratori, salveazaOferte, salveazaProduseOferte,
+  actualizeazaStoc, cautaDupaEan, isEmagError, salveazaMasuratori, salveazaOferte,
+  salveazaProduseOferte,
 } from "./client";
 import { mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
 import {
@@ -32,6 +33,7 @@ import {
   type IdentitateUsoara, type ProdusDeCartografiat,
 } from "./mapping";
 import { rutaDeTrimitere } from "./rute";
+import { eanuriDeCautat, verdictEan, type RaspunsEan } from "./ean";
 import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
 import type { OpEmag } from "./queue";
@@ -151,6 +153,17 @@ async function duTotul(
     return { verdict: "refuz", mesaj: identitati.error };
   }
 
+  /*
+   * ⚠ SE INTREABA INAINTE DE A CREA, nu dupa. Vezi `cautaInCatalogulLor`: eMAG are
+   * catalog COMUN, iar acelasi obiect trimis ca produs nou intra a doua oara acolo —
+   * pe o pagina fara recenzii si fara vizitatori, dupa zile de validare manuala.
+   *
+   * Se cheama DUPA `asiguraIdentitatile` fiindca are nevoie de randurile scrise: cheia
+   * gasita se scrie pe ele, iar citirea de dedesubt o ia de acolo.
+   */
+  await cautaInCatalogulLor(admin, ctx, await citesteRandurile(admin, ctx.businessId, produs.id));
+  const cuCheie = await citesteRandurile(admin, ctx.businessId, produs.id);
+
   const { oferte, probleme } = construiesteOferte(
     produs,
     magazinDin(ctx, produs),
@@ -159,7 +172,13 @@ async function duTotul(
       characteristics: categorie.characteristics ?? [],
       family_type_id: categorie.family_type_id,
     },
-    identitati.identitati,
+    /* Identitatile REFACUTE, ca sa poarte `part_number_key` daca s-a gasit unul. */
+    cuCheie.map((r) => ({
+      variant_title: r.variant_title,
+      emag_id: r.emag_id,
+      part_number_key: r.part_number_key,
+      ean: r.ean,
+    })),
     identitati.familyId,
   );
 
@@ -423,6 +442,106 @@ function titluriDeTrimis(produs: ProdusDeCartografiat): (string | null)[] {
     out.push(t);
   }
   return out.length ? out : [null];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   „EXISTA DEJA PE eMAG?" — INTREBAT INAINTE DE A CREA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cauta produsul in catalogul lor dupa codul de bare si scrie `part_number_key`.
+ *
+ * ═══ ⚠ DE CE E UN PAS SEPARAT, INAINTEA TRIMITERII ═══
+ *
+ * eMAG are un catalog COMUN: un obiect e o singura pagina, pe care mai multi
+ * vanzatori isi pun ofertele. Trimis ca produs NOU, acelasi obiect intra a doua oara
+ * in catalogul lor.
+ *
+ * Ce urmeaza nu e o eroare, ci ceva mai rau: documentatia noua intra in validare
+ * manuala si sta zile, in loc ca oferta sa fie vandabila in minute pe pagina care
+ * exista; iar oferta ajunge pe o pagina fara recenzii si fara vizitatori, in loc de
+ * cea pe care o cauta oamenii. Comerciantul vede „publicat" si nu vinde nimic.
+ *
+ * ⚠ SE INTREABA O SINGURA DATA PE OFERTA. Odata scris, `part_number_key` ramane, iar
+ * la trimiterile urmatoare pasul asta se sare — altfel fiecare actualizare de pret ar
+ * fi ars inca o cerere din cele 3 pe secunda ale magazinului.
+ *
+ * ⚠ Nereusita NU opreste publicarea. Daca eMAG nu raspunde la cautare, se trimite mai
+ * departe forma cu documentatie: mai bine un produs publicat pe o pagina noua decat
+ * unul nepublicat. Se scrie in jurnal, si se reia data viitoare.
+ */
+async function cautaInCatalogulLor(
+  admin: Admin,
+  ctx: ContextEmag,
+  randuri: RandOfertaLocal[],
+): Promise<void> {
+  /* Se intreaba numai pentru ofertele care n-au inca o pagina si care chiar au cod. */
+  const deCautat = randuri.filter((r) => !r.part_number_key && (r.ean ?? "").trim());
+  if (deCautat.length === 0) return;
+
+  for (const rand of deCautat) {
+    const eanuri = eanuriDeCautat([rand.ean]);
+    if (eanuri.length === 0) continue;
+
+    const r = await cautaDupaEan(ctx.auth, eanuri);
+    if (isEmagError(r)) {
+      void logError({
+        action: "emag.ean",
+        message: `cautarea dupa cod de bare a esuat: ${r.error}`,
+        details: { emag_id: rand.emag_id, ean: rand.ean },
+        businessId: ctx.businessId,
+        severity: "warning",
+      });
+      return;
+    }
+
+    const v = verdictEan((Array.isArray(r.data) ? r.data : []) as RaspunsEan[]);
+
+    if (v.fel === "atasare") {
+      /*
+       * ⚠ Se scrie `part_number_key`, si ATAT. `mapping.ts` il trimite mai departe,
+       * iar prezenta lui schimba forma cererii din „creeaza produs" in „ataseaza-te
+       * la produsul care exista". Nu se atinge nimic altceva din rand.
+       */
+      await admin.from("emag_offers")
+        .update({ part_number_key: v.part_number_key, updated_at: new Date().toISOString() })
+        .eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+      continue;
+    }
+
+    if (v.fel === "avem_deja") {
+      /* Avem deja oferta pe pagina aceea, dar sub alt `emag_id` — de obicei publicata
+         din panoul lor, inainte de Edinio. Se scrie cheia ca sa se vada legatura;
+         importul o va potrivi la urmatoarea trecere. */
+      await admin.from("emag_offers")
+        .update({ part_number_key: v.part_number_key, updated_at: new Date().toISOString() })
+        .eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+      continue;
+    }
+
+    if (v.fel === "inchis") {
+      /*
+       * ⚠ Produsul exista, dar eMAG nu ingaduie oferte noi pe el. NU se creeaza unul
+       * nou in schimb: ar fi exact duplicatul de care fugim, si l-ar respinge oricum.
+       * Se scrie motivul, si il vede comerciantul in lista.
+       */
+      await admin.from("emag_offers").update({
+        error: `Produsul „${v.nume}" există pe eMAG, dar nu mai acceptă oferte noi (${v.part_number_key}).`,
+        updated_at: new Date().toISOString(),
+      }).eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+      continue;
+    }
+
+    if (v.fel === "nehotarat") {
+      await admin.from("emag_offers").update({
+        error: `Codul de bare duce la ${v.candidati} produse diferite pe eMAG. Verifică-l înainte de publicare.`,
+        updated_at: new Date().toISOString(),
+      }).eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+      continue;
+    }
+
+    /* `produs_nou`: nu exista la ei. Se trimite cu documentatie, ca pana acum. */
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -24,6 +24,7 @@ import { combinatiiActiveUnice, comboStock, comboUnitPrice, parseVariants } from
  * produsul cand nu le pot lua. Cele doua domenii servesc acelasi obiect.
  */
 import { adresaPublicaImagine } from "@/lib/trendyol/mapping";
+import { descriereaPentruEmag } from "./descriere";
 import type {
   EmagCaracteristica, EmagGpsrEntitate, EmagImagine, EmagOferta, EmagProdusOferta, EmagStoc,
 } from "./types";
@@ -256,7 +257,10 @@ export function construiesteOferte(
     category_id: categorie.category_id,
     source_language: magazin.source_language,
     brand: (magazin.brand ?? "").trim() || undefined,
-    description: produs.description ?? undefined,
+    /* ⚠ Trecuta prin filtru, nu de-a gata. Vezi `descriere.ts`: `div`-urile si
+       clasele storefrontului nostru ajung pe pagina LOR fara CSS-ul care le tine,
+       iar descrierea se desface — produsul se publica si arata rupt. */
+    description: descriereaPentruEmag(produs.description),
     characteristics: categorie.characteristics.length ? categorie.characteristics : undefined,
     warranty: magazin.warranty,
     vat_id: magazin.vat_id,

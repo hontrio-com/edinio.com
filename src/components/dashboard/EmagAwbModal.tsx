@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   descarcaEtichetaAwbEmag, emiteAwbEmag, pregatireAwbEmag, type PregatireAwbEmag,
 } from "@/lib/actions/emag.actions";
+import { coleteDeTrimis } from "@/lib/emag/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import type { Database } from "@/types/database.types";
 
@@ -76,6 +77,14 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
   const nota = notaGreutate(dinCatalog, liniiFaraGreutate);
   const [colete, setColete] = useState("1");
   const [observatii, setObservatii] = useState("");
+  /*
+   * ⚠ CENTIMETRI. La `/measurements/save` acelasi cuvant inseamna MILIMETRI.
+   * Vezi `coleteDeTrimis`: campurile poarta unitatea in eticheta tocmai fiindca
+   * greseala se face o data si se plateste luni intregi, in refacturari de curier.
+   */
+  const [lungime, setLungime] = useState("");
+  const [latime, setLatime] = useState("");
+  const [inaltime, setInaltime] = useState("");
 
   const adresa = (order.shipping_address ?? {}) as AdresaEmag;
 
@@ -101,15 +110,24 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
     const nrColete = Math.max(1, Math.floor(Number(colete) || 1));
     const g = Number(weight);
     incepe(async () => {
+      /*
+       * ═══ ⚠ DIMENSIUNILE NU SE INVENTEAZA ═══
+       *
+       * Prima forma trimitea `20 × 15 × 10` pentru orice colet, ca sa nu ramana campul
+       * gol. Dar `packages` e folosit de eMAG la taxarea volumetrica: un frigider
+       * declarat cutie de pantofi inseamna un cost de transport calculat gresit, iar
+       * diferenta o refactureaza curierul peste saptamani.
+       *
+       * `coleteDeTrimis` intoarce `undefined` cand nu se stiu toate trei laturile —
+       * si atunci NU se trimite nimic. `packages` e optional la ei; curierul
+       * cantareste si masoara oricum.
+       */
       const r = await emiteAwbEmag(businessId, order.id, {
-        /*
-         * ⚠ `packages` pleacă doar când greutatea e un număr adevărat. Trimis cu
-         * zero, eMAG respinge AWB-ul cu un mesaj despre colete pe care nimeni nu-l
-         * leagă de câmpul de greutate lăsat gol.
-         */
-        colete: Number.isFinite(g) && g > 0
-          ? Array.from({ length: nrColete }, () => ({ weight: g / nrColete, length: 20, width: 15, height: 10 }))
-          : undefined,
+        colete: coleteDeTrimis(g, nrColete, {
+          length: Number(lungime) || undefined,
+          width: Number(latime) || undefined,
+          height: Number(inaltime) || undefined,
+        }),
         observatii: observatii.trim() || undefined,
       });
       if ("error" in r) {
@@ -284,6 +302,26 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
                       onChange={(e) => setColete(e.target.value.replace(/\D/g, "") || "1")}
                     />
                   </label>
+                </div>
+
+                <div>
+                  <span className="mb-1 block text-xs font-medium">
+                    Dimensiunile coletului, în <strong>centimetri</strong> (opțional)
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input className={CAMP} placeholder="lungime" inputMode="decimal"
+                      value={lungime} onChange={(e) => setLungime(e.target.value)} />
+                    <input className={CAMP} placeholder="lățime" inputMode="decimal"
+                      value={latime} onChange={(e) => setLatime(e.target.value)} />
+                    <input className={CAMP} placeholder="înălțime" inputMode="decimal"
+                      value={inaltime} onChange={(e) => setInaltime(e.target.value)} />
+                  </div>
+                  {/* ⚠ Se spune ce se intampla cand le lasi goale, ca sa fie o alegere,
+                      nu o scapare. */}
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Le folosește eMAG la calculul volumetric. Dacă le lași goale, nu trimitem
+                    nicio dimensiune — curierul măsoară coletul la ridicare.
+                  </span>
                 </div>
 
                 <label className="block">

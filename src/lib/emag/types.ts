@@ -803,6 +803,24 @@ export interface EmagIntrareCategorie {
   /** Caracteristicile fixate de comerciant pentru toata categoria. */
   characteristics?: EmagCaracteristica[];
   family_type_id?: number;
+
+  /*
+   * ═══ ⚠ CE CERE CATEGORIA, PUS DEOPARTE LA MAPARE ═══
+   *
+   * Obligativitatea EAN-ului si a garantiei se afla numai din `category/read`. Fara
+   * ele scrise aici, verificarea de dinainte de trimitere (`pregatire.ts`) ar fi
+   * trebuit sa cheme eMAG pentru FIECARE produs — adica sa arda din cele 3 cereri pe
+   * secunda exact ca sa afle ca nu trebuie sa trimita.
+   *
+   * Se scriu o data, cand comerciantul leaga categoria si oricum se cere schema ei.
+   *
+   * ⚠ Pot fi „imbatranite": daca eMAG schimba cerintele unei categorii, aici ramane ce
+   * era atunci. Nu e o pierdere — verificarea locala e o PLASA, nu o inlocuire a
+   * validarii lor; ce scapa de aici tot la ei se opreste, doar mai tarziu. Se
+   * improspateaza la fiecare re-salvare a maparii.
+   */
+  ean_obligatoriu?: boolean;
+  garantie_obligatorie?: boolean;
 }
 
 /**

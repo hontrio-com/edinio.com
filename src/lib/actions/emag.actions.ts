@@ -1007,6 +1007,12 @@ export async function salveazaMapareCategorieEmag(
         category_id: mapare.category_id,
         ...(mapare.family_type_id ? { family_type_id: mapare.family_type_id } : {}),
         ...(trimise.length ? { characteristics: trimise.filter((x) => (x.value ?? "").trim()) } : {}),
+        /* ⚠ Puse deoparte ACUM, cat avem schema categoriei in mana. Vezi nota din
+           `EmagIntrareCategorie`: fara ele, verificarea de dinainte de trimitere ar fi
+           trebuit sa cheme eMAG pentru fiecare produs, ca sa afle ca nu trebuie sa
+           trimita — adica exact cererea pe care verificarea o scuteste. */
+        ean_obligatoriu: cat.is_ean_mandatory === 1,
+        garantie_obligatorie: cat.is_warranty_mandatory === 1,
       },
     },
   };

@@ -34,6 +34,7 @@ import {
 } from "./mapping";
 import { rutaDeTrimitere } from "./rute";
 import { eanuriDeCautat, verdictEan, type RaspunsEan } from "./ean";
+import { ceLipseste, type ProdusDeVerificat } from "./pregatire";
 import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
 import type { OpEmag } from "./queue";
@@ -148,6 +149,50 @@ async function duTotul(
     return { verdict: "refuz", mesaj: m };
   }
 
+  /*
+   * ═══ ⚠ SE VERIFICA LOCAL INAINTE DE A CHEMA EMAG ═══
+   *
+   * Un produs incomplet trimis costa de patru ori: arde o cerere din cele 3 pe secunda
+   * (aceleasi de care are nevoie o miscare de stoc dupa o vanzare), arde o incercare
+   * din coada, se intoarce cu o eroare de documentatie pe care comerciantul o vede
+   * abia peste ore, iar pana atunci panoul arata „trimis".
+   *
+   * Toate patru dispar cand intrebarea se pune aici, unde raspunsul e instantaneu si
+   * scris in romana. ⚠ Verificarea NU inlocuieste validarea LOR si nu o prezice: eMAG
+   * poate respinge un produs impecabil din motive pe care nu ni le spune. E o plasa,
+   * si de aceea ce trece de ea pleaca mai departe ca pana acum.
+   */
+  const lipsuri = ceLipseste(
+    produsDeVerificat(produs),
+    {
+      category_id: categorie.category_id,
+      eanObligatoriu: categorie.ean_obligatoriu === true,
+      garantieObligatorie: categorie.garantie_obligatorie === true,
+      obligatorii: [],
+      completate: categorie.characteristics ?? [],
+      areTipFamilie: categorie.family_type_id != null,
+    },
+    {
+      vat_id: ctx.config.vat_id ?? null,
+      handling_time: ctx.config.handling_time ?? null,
+      warranty_default: ctx.config.warranty_default ?? null,
+      areGpsr: !!ctx.config.gpsr?.manufacturer?.length,
+    },
+    areVariante(produs),
+  );
+
+  const blocante = lipsuri.filter((l) => l.gravitate === "blocheaza");
+  if (blocante.length > 0) {
+    /*
+     * ⚠ „refuz", nu „trecatoare": lipsa unui camp nu se repara singura, iar reincercata
+     * la nesfarsit ar manca ritmul magazinului pentru nimic. Arde o incercare, si
+     * mesajul spune EXACT ce e de facut.
+     */
+    const m = blocante.map((l) => l.eticheta).join(" ");
+    await scrieEroare(admin, ctx.businessId, produs.id, m);
+    return { verdict: "refuz", mesaj: m };
+  }
+
   const identitati = await asiguraIdentitatile(admin, ctx, produs, randuri, categorie.family_type_id ?? null);
   if ("error" in identitati) {
     return { verdict: "refuz", mesaj: identitati.error };
@@ -196,6 +241,40 @@ async function duTotul(
 /* ═══════════════════════════════════════════════════════════════════════════
    RUTA USOARA: PRET, TVA, TIMP DE PREGATIRE, STARE
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Produsul, in forma pe care o cere verificarea.
+ *
+ * ⚠ `page_sections` e `jsonb` cu forma libera: marca, codul de bare si dimensiunile
+ * stau in colturi diferite. Se scot AICI, o data, ca `pregatire.ts` sa ramana pur si
+ * sa poata fi chemat si din ecran.
+ */
+function produsDeVerificat(p: ProdusDeCartografiat): ProdusDeVerificat {
+  const ps = (p.page_sections ?? {}) as {
+    google?: { gtin?: string; brand?: string };
+    dimensions?: { length?: number; width?: number; height?: number };
+  };
+  return {
+    name: p.name,
+    price: p.price,
+    sku: p.sku,
+    category: p.category,
+    images: p.images,
+    weight_grams: p.weight_grams,
+    description: p.description,
+    gtin: ps.google?.gtin ?? null,
+    brand: ps.google?.brand ?? null,
+    dimensiuni: ps.dimensions ?? null,
+  };
+}
+
+/** Are produsul combinatii active? Din ele se naste nevoia de grup de variante. */
+function areVariante(p: ProdusDeCartografiat): boolean {
+  const ps = (p.page_sections ?? {}) as {
+    variants?: { enabled?: boolean; combinations?: { enabled?: boolean }[] };
+  };
+  return !!ps.variants?.enabled && (ps.variants.combinations ?? []).some((c) => c?.enabled);
+}
 
 /**
  * `POST /offer/save` — NU atinge documentatia.

@@ -361,19 +361,22 @@ export async function GET(req: NextRequest) {
       const ctx = await ctxPentru(businessId);
       if (!ctx) continue;
 
-      const marcaj = Date.parse(ctx.config.rma_synced_at ?? "");
-      const deLa = new Date(
-        Number.isFinite(marcaj) ? marcaj - SUPRAPUNERE_MS : inceputulRularii - 7 * 24 * 60 * 60 * 1000,
-      );
-
-      const rez = await aduRetururile(admin, ctx, deLa);
+      const rez = await aduRetururile(admin, ctx);
       retururi += rez.scrise;
 
-      /* ⚠ Acelasi `marcajUrmator` ca la comenzi: cand nu s-a citit tot, marcajul
-         ramane pe loc. Vezi nota de la pasul 3. */
-      const urmator = marcajUrmator(rez, { runStartMs: inceputulRularii, overlapMs: SUPRAPUNERE_MS });
-      if (urmator != null) {
-        await patchConfig(admin, businessId, { rma_synced_at: new Date(urmator).toISOString() });
+      /*
+       * ⚠ NU EXISTA MARCAJ DE TIMP LA RETURURI, si nici n-ar ajuta.
+       *
+       * `/rma/read` n-are `modifiedAfter` — verificat in schema lor. Are `date_start`,
+       * dar acela filtreaza dupa data DESCHIDERII cererii, nu a ultimei modificari:
+       * un retur deschis acum trei saptamani si primit in depozit azi n-ar fi intrat
+       * niciodata in fereastra, si ar fi ramas „Nou" in Edinio pe veci.
+       *
+       * De aceea `aduRetururile` citeste dupa STARE, nu dupa timp. Marcajul se scrie
+       * doar ca sa se vada in panou cand s-a uitat ultima oara.
+       */
+      if (rez.ok) {
+        await patchConfig(admin, businessId, { rma_synced_at: new Date(inceputulRularii).toISOString() });
       }
     }
   }

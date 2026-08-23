@@ -64,48 +64,80 @@ export function treceriPosibile(dinStare: number | null | undefined): number[] {
 
 /** ⚠ Maximul lor la citire. */
 const PE_PAGINA = 100;
-const PAGINI_PE_TRECERE = 3;
+const PAGINI_PE_STARE = 3;
+
+/**
+ * Starile din care un retur INCA se poate schimba.
+ *
+ * ⚠ 4 (Respins), 5 (Anulat) si 7 (Finalizat) sunt TERMINALE dupa chiar tabelul lor
+ * de treceri: din ele nu se mai merge nicaieri. Recitite la fiecare sfert de ora,
+ * ar fi mancat degeaba din cele 3 cereri pe secunda ale magazinului, iar la un
+ * comerciant vechi ar fi fost cele mai multe.
+ *
+ * 1 (Incomplet) intra la citire ca sa SE VADA, desi din el nu se ofera nicio
+ * trecere: documentatia spune ca unele statusuri sunt lasate dinadins pe dinafara
+ * si nu trebuie folosite de vanzator. Se arata, nu se atinge.
+ */
+const STARI_VII: readonly number[] = [1, 2, 3, 6];
 
 export interface RezultatRetururi {
-  /** ⚠ `false` opreste avansarea marcajului. Vezi `marcajUrmator`. */
+  /** ⚠ `false` inseamna ca nu s-a citit tot. Vezi nota din `aduRetururile`. */
   ok: boolean;
-  cursorMs?: number;
   scrise: number;
 }
 
 /**
- * Retururile schimbate de la marcaj incoace.
+ * Retururile care se mai pot schimba.
  *
- * ⚠ Nu se sterge niciodata un rand de retur. Un retur disparut din raspunsul lor nu
- * inseamna „nu a existat" — inseamna ca a iesit din fereastra. Sters, comerciantul
- * ar fi pierdut urma unei marfe care i-a venit inapoi.
+ * ═══ ⚠ NU EXISTA FEREASTRA DE MODIFICARE LA RETURURI. ASTA SCHIMBA TOT ═══
+ *
+ * Prima forma trimitea `modifiedAfter`, ca la comenzi. Verificat in schema lor
+ * (`RMAReadFilter`): filtrul acela NU EXISTA. `/rma/read` primeste `date_start` si
+ * `date_end`, iar documentatia le descrie limpede — „Only returns PLACED starting
+ * with the mentioned date": data DESCHIDERII cererii, nu a ultimei modificari.
+ *
+ * Doua rele ieseau din asta, si niciunul n-ar fi dat vreo eroare:
+ *
+ *   1. Un filtru pe care ei nu-l cunosc e IGNORAT — chiar capcana scrisa in
+ *      documentatia lor pentru oferte, unde un filtru pus gresit intoarce TOT.
+ *      Deci fiecare trecere ar fi adus tot istoricul de retururi al magazinului.
+ *
+ *   2. Chiar daca ar fi mers, o fereastra pe data DESCHIDERII nu prinde niciodata
+ *      un retur vechi caruia i s-a schimbat starea azi. Un retur deschis acum trei
+ *      saptamani si primit in depozit astazi ar fi ramas „Nou" in Edinio pe veci,
+ *      iar comerciantul n-ar fi stiut ca are marfa de procesat.
+ *
+ * Deci nu se citeste dupa timp, ci dupa STARE: numai retururile din care se mai
+ * poate merge undeva. Multimea e mica prin natura ei — un magazin are cateva
+ * retururi deschise, nu mii — si acopera si pe cele noi, fiindca un retur nou e in
+ * starea 2.
  */
-export async function aduRetururile(
-  admin: Db, ctx: ContextEmag, deLa: Date,
-): Promise<RezultatRetururi> {
+export async function aduRetururile(admin: Db, ctx: ContextEmag): Promise<RezultatRetururi> {
   const r: RezultatRetururi = { ok: true, scrise: 0 };
 
-  for (let pagina = 1; pagina <= PAGINI_PE_TRECERE; pagina++) {
-    const raspuns = await citesteRetururi(ctx.auth, {
-      modifiedAfter: deLa.toISOString().slice(0, 19).replace("T", " "),
-      currentPage: pagina,
-      itemsPerPage: PE_PAGINA,
-    });
-    if (isEmagError(raspuns)) {
-      r.ok = false;
-      return r;
-    }
+  for (const stare of STARI_VII) {
+    for (let pagina = 1; pagina <= PAGINI_PE_STARE; pagina++) {
+      const raspuns = await citesteRetururi(ctx.auth, {
+        request_status: stare,
+        currentPage: pagina,
+        itemsPerPage: PE_PAGINA,
+      });
+      if (isEmagError(raspuns)) {
+        r.ok = false;
+        break;
+      }
 
-    const retururi = (Array.isArray(raspuns.data) ? raspuns.data : []) as EmagRetur[];
-    for (const ret of retururi) {
-      if (!Number.isFinite(ret?.emag_id)) continue;
-      const scris = await scrieReturul(admin, ctx, ret);
-      if (scris) r.scrise++;
-      else r.ok = false;
-    }
+      const retururi = (Array.isArray(raspuns.data) ? raspuns.data : []) as EmagRetur[];
+      for (const ret of retururi) {
+        if (!Number.isFinite(ret?.emag_id)) continue;
+        const scris = await scrieReturul(admin, ctx, ret);
+        if (scris) r.scrise++;
+        else r.ok = false;
+      }
 
-    if (retururi.length < PE_PAGINA) return r;
-    if (pagina === PAGINI_PE_TRECERE) r.ok = false;
+      if (retururi.length < PE_PAGINA) break;
+      if (pagina === PAGINI_PE_STARE) r.ok = false;
+    }
   }
 
   return r;
@@ -131,6 +163,10 @@ async function scrieReturul(admin: Db, ctx: ContextEmag, ret: EmagRetur): Promis
     business_id: ctx.businessId,
     emag_rma_id: ret.emag_id,
     order_id: orderId,
+    /* ⚠ Se scrie SI id-ul comenzii LOR, nu doar legatura la comanda noastra. Un
+       retur pentru o vanzare dinainte de integrare n-are `order_id`, iar fara asta
+       n-ar mai fi ramas nicio urma despre ce comanda a fost — nici macar la ei. */
+    emag_order_id: Number.isFinite(ret.order_id) ? ret.order_id : null,
     request_status: ret.request_status ?? null,
     return_type: ret.return_type ?? null,
     return_reason: ret.return_reason ?? null,

@@ -26,7 +26,10 @@ import {
   actualizeazaStoc, isEmagError, salveazaMasuratori, salveazaOferte, salveazaProduseOferte,
 } from "./client";
 import { mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
-import { construiesteOferte, masuratoriEmag, type ProdusDeCartografiat } from "./mapping";
+import {
+  construiesteOferte, masuratoriEmag, oferteUsoare, stocuriDeTrimis,
+  type IdentitateUsoara, type ProdusDeCartografiat,
+} from "./mapping";
 import { rutaDeTrimitere } from "./rute";
 import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
@@ -185,45 +188,20 @@ async function duTotul(
 async function duOferta(
   admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
 ): Promise<RezultatTrimitere> {
-  const categorie = ctx.config.category_map?.[produs.category ?? ""];
-  const { oferte } = construiesteOferte(
-    produs,
-    magazinDin(ctx, produs),
-    {
-      category_id: categorie?.category_id ?? 0,
-      characteristics: [],
-      family_type_id: categorie?.family_type_id,
-    },
-    randuri.map((r) => ({
-      variant_title: r.variant_title, emag_id: r.emag_id,
-      part_number_key: r.part_number_key, ean: r.ean,
-    })),
-    randuri[0]?.family_id ?? null,
-  );
+  const usoare = oferteUsoare(produs, magazinDin(ctx, produs), identitatiUsoare(randuri));
 
   /*
-   * ⚠ SE PASTREAZA NUMAI CAMPURILE USOARE. `construiesteOferte` da documentatia
-   * intreaga, fiindca de acolo se si publica. Trimisa asa pe `offer/save`, eMAG ar
-   * fi primit campuri pe care ruta asta nu le asteapta — si, mai rau, le-ar fi putut
-   * accepta, rescriind exact ce nu voiam sa atingem.
+   * ═══ ⚠ ZERO OFERTE NU E O REUSITA ═══
    *
-   * Alegerea e ALBA, nu neagra: se enumera ce PLEACA. Cu o lista neagra, orice camp
-   * nou adaugat maine in `mapping.ts` ar fi plecat pe tacute.
+   * Fara paza asta, un produs care si-a pierdut randurile din `emag_offers` — sters
+   * si recreat, sau adus dintr-un import cazut la jumatate — ar fi iesit din coada
+   * raportand succes, cu zero cereri plecate. Raspuns de succes, zero efect, si
+   * nimeni nu afla: chiar forma incidentului VetDepo.
    */
-  const usoare: EmagOferta[] = oferte.map((o) => ({
-    id: o.id,
-    sale_price: o.sale_price,
-    recommended_price: o.recommended_price,
-    min_sale_price: o.min_sale_price,
-    max_sale_price: o.max_sale_price,
-    stock: o.stock,
-    handling_time: o.handling_time,
-    vat_id: o.vat_id,
-    status: produs.is_active ? 1 : 0,
-  }));
-
   if (usoare.length === 0) {
-    return { verdict: "sarit", mesaj: "Produsul nu are nicio ofertă de actualizat." };
+    const m = "Produsul nu are nicio ofertă eMAG de actualizat. Publică-l întâi.";
+    await scrieEroare(admin, ctx.businessId, produs.id, m);
+    return { verdict: "refuz", mesaj: m };
   }
 
   return trimiteInLoturi(admin, ctx, produs.id, usoare, (lot) =>
@@ -245,27 +223,28 @@ async function duOferta(
 async function duStocul(
   admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
 ): Promise<RezultatTrimitere> {
-  const categorie = ctx.config.category_map?.[produs.category ?? ""];
-  const { oferte } = construiesteOferte(
-    produs, magazinDin(ctx, produs),
-    { category_id: categorie?.category_id ?? 0, characteristics: [], family_type_id: categorie?.family_type_id },
-    randuri.map((r) => ({
-      variant_title: r.variant_title, emag_id: r.emag_id,
-      part_number_key: r.part_number_key, ean: r.ean,
-    })),
-    randuri[0]?.family_id ?? null,
-  );
+  const stocuri = stocuriDeTrimis(produs, identitatiUsoare(randuri));
+
+  /* ⚠ Aceeasi paza ca la pret, si aici e si mai scumpa: o miscare de stoc care
+     raporteaza succes fara sa plece nicaieri inseamna ca eMAG continua sa vanda
+     marfa pe care magazinul n-o mai are. */
+  if (stocuri.length === 0) {
+    const m = "Produsul nu are nicio ofertă eMAG al cărei stoc să fie actualizat.";
+    await scrieEroare(admin, ctx.businessId, produs.id, m);
+    return { verdict: "refuz", mesaj: m };
+  }
 
   const depozit = ctx.config.warehouse_id ?? 1;
   let ultimulMesaj = "";
   let celMaiRau: VerdictEmag = "reusit";
 
-  for (const o of oferte) {
-    const cantitate = o.stock?.[0]?.value ?? 0;
-    const r = await actualizeazaStoc(ctx.auth, o.id, [{ warehouse_id: depozit, value: cantitate }]);
+  for (const st of stocuri) {
+    const r = await actualizeazaStoc(ctx.auth, st.emagId, [{ warehouse_id: depozit, value: st.cantitate }]);
     if (isEmagError(r)) {
       celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
       ultimulMesaj = mesajOmenesc(r.error);
+      /* ⚠ La `chei` se opreste tot: acreditarile nu se repara intre doua oferte. */
+      if (celMaiRau === "chei") break;
       continue;
     }
     celMaiRau = maiRau(celMaiRau, r.verdict ?? "reusit");
@@ -273,6 +252,19 @@ async function duStocul(
 
   await scrieRezultatul(admin, ctx.businessId, produs.id, celMaiRau, ultimulMesaj);
   return { verdict: celMaiRau, mesaj: ultimulMesaj };
+}
+
+/**
+ * Randurile noastre, reduse la ce trebuie rutelor usoare.
+ *
+ * ⚠ SE IAU NUMAI CELE CARE EXISTA DEJA LA EI. Un rand fara `last_synced_at` n-a
+ * ajuns niciodata la eMAG, iar trimis pe `offer/save` ar primi un refuz despre un id
+ * inexistent — si ar arde incercarile unui produs care de fapt trebuie PUBLICAT.
+ */
+function identitatiUsoare(randuri: RandOfertaLocal[]): IdentitateUsoara[] {
+  return randuri
+    .filter((r) => r.last_synced_at != null)
+    .map((r) => ({ variant_title: r.variant_title, emag_id: r.emag_id }));
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

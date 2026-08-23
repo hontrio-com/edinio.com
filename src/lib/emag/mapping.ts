@@ -25,7 +25,7 @@ import { combinatiiActiveUnice, comboStock, comboUnitPrice, parseVariants } from
  */
 import { adresaPublicaImagine } from "@/lib/trendyol/mapping";
 import type {
-  EmagCaracteristica, EmagGpsrEntitate, EmagImagine, EmagProdusOferta, EmagStoc,
+  EmagCaracteristica, EmagGpsrEntitate, EmagImagine, EmagOferta, EmagProdusOferta, EmagStoc,
 } from "./types";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -436,4 +436,94 @@ export function masuratoriEmag(
      ar fi fost respinsa oricum. */
   if (l == null || w == null || h == null || g == null) return null;
   return { id: emagId, length: l, width: w, height: h, weight: g };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RUTELE USOARE: PRET SI STOC, FARA NICIO DOCUMENTATIE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Ce se stie despre o oferta deja publicata, cat trebuie ca sa i se schimbe pretul.
+ */
+export interface IdentitateUsoara {
+  /** `null` pentru produsul simplu. */
+  variant_title: string | null;
+  emag_id: number;
+}
+
+/**
+ * Ofertele pentru `offer/save` — pret, TVA, timp de pregatire, stoc, stare.
+ *
+ * ═══ ⚠ DE CE NU TRECE PRIN `construiesteOferte` ═══
+ *
+ * Fiindca aceea construieste DOCUMENTATIA, si de aceea se opreste cand documentatia
+ * n-are cum sa iasa bine: fara categorie mapata sau fara `family_type_id`, intoarce
+ * zero oferte si o problema. Ceea ce e chiar ce trebuie — la publicare.
+ *
+ * Dar o schimbare de PRET pe un produs deja publicat n-are nevoie de nimic din
+ * toate acelea. Prima forma a expeditorului o trecea totusi pe acolo, si iesea exact
+ * defectul pe care toata integrarea asta se straduieste sa-l evite: la un produs cu
+ * variante a carui categorie si-a pierdut `family_type_id`, schimbarea de stoc dupa
+ * o vanzare gasea zero oferte, nu trimitea nimic, si raporta REUSIT.
+ *
+ * Adica exact incidentul VetDepo, in alta deghizare: raspuns de succes, zero efect,
+ * si nimeni nu afla. De aceea rutele usoare isi construiesc singure incarcatura, din
+ * randurile care exista deja in `emag_offers`.
+ */
+export function oferteUsoare(
+  produs: ProdusDeCartografiat,
+  magazin: ContextMagazin,
+  identitati: IdentitateUsoara[],
+): EmagOferta[] {
+  const variante = parseVariants(produs.page_sections);
+  const combinatii = combinatiiActiveUnice(variante);
+  const dupaTitlu = new Map(combinatii.map((c) => [c.title, c]));
+
+  /* ⚠ Starea pleaca de la produs: oprit in magazin inseamna oprit si la ei. NU se
+     sterge oferta — eMAG n-are stergere; se trece pe `status: 0`. */
+  const stare: 0 | 1 = produs.is_active ? 1 : 0;
+
+  return identitati.map((ident) => {
+    const c = ident.variant_title ? dupaTitlu.get(ident.variant_title) : undefined;
+
+    const pretAfisat = c ? comboUnitPrice(c, produs.price) : produs.price;
+    const faraTva = pretFaraTva(pretAfisat, magazin.vat_rate, magazin.prices_include_vat);
+    const banda = bandaDePret(faraTva, magazin.price_band_pct);
+
+    /* ⚠ Stocul COMBINATIEI. `comboStock` da `null` cand nu e declarat, si atunci
+       ramane valabil cel al produsului — aceeasi regula ca la publicare. */
+    const stoc = c ? (comboStock(c) ?? produs.stock_quantity ?? 0) : (produs.stock_quantity ?? 0);
+
+    return {
+      id: ident.emag_id,
+      sale_price: faraTva,
+      min_sale_price: banda.min_sale_price,
+      max_sale_price: banda.max_sale_price,
+      vat_id: magazin.vat_id,
+      handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }],
+      stock: [{ warehouse_id: magazin.warehouse_id, value: Math.max(0, stoc) }],
+      status: stare,
+    };
+  });
+}
+
+/**
+ * Cate bucati are fiecare oferta, pentru `PATCH /offer_stock/{id}`.
+ *
+ * ⚠ Ruta cea mai usoara dintre toate: nu atinge nici pretul, nici documentatia. La o
+ * oferta pe care comerciantul a modificat-o in panoul eMAG, orice altceva i-ar fi
+ * sters modificarile la FIECARE vanzare — adica de zeci de ori pe zi.
+ */
+export function stocuriDeTrimis(
+  produs: ProdusDeCartografiat,
+  identitati: IdentitateUsoara[],
+): { emagId: number; cantitate: number }[] {
+  const variante = parseVariants(produs.page_sections);
+  const dupaTitlu = new Map(combinatiiActiveUnice(variante).map((c) => [c.title, c]));
+
+  return identitati.map((ident) => {
+    const c = ident.variant_title ? dupaTitlu.get(ident.variant_title) : undefined;
+    const stoc = c ? (comboStock(c) ?? produs.stock_quantity ?? 0) : (produs.stock_quantity ?? 0);
+    return { emagId: ident.emag_id, cantitate: Math.max(0, stoc) };
+  });
 }

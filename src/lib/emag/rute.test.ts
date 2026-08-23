@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { eVandabila, LOT_MAXIM, rutaDeTrimitere, traducereaPoateBloca } from "./rute";
+import { oferteUsoare, stocuriDeTrimis } from "./mapping";
 
 /*
  * Probele drumului pe care pleaca o modificare spre eMAG.
@@ -156,4 +157,89 @@ test("eMAG: traducerea se ARATA, nu se interpreteaza", () => {
     "n-au spus nimic despre traducere");
   assert.equal(traducereaPoateBloca({ validation_status: 1, translation_validation_status: 5 }), false,
     "cand oferta oricum nu e aprobata, traducerea nu e stirea zilei");
+});
+
+/* ── Rutele usoare nu depind de documentatie ───────────────────────────────── */
+
+test("eMAG: o schimbare de pret merge si cand categoria NU e mapata", () => {
+  /*
+   * ═══ DEFECT PRINS LA VERIFICARE, NU LA SCRIS ═══
+   *
+   * Prima forma a expeditorului construia si pretul prin `construiesteOferte` — cea
+   * care face DOCUMENTATIA. Aceea se opreste, pe drept, cand documentatia n-are cum
+   * sa iasa bine: fara categorie sau fara `family_type_id`, intoarce ZERO oferte.
+   *
+   * Dar o schimbare de pret pe un produs deja publicat n-are nevoie de nimic din
+   * toate acelea. Iesea exact defectul pe care toata integrarea se straduieste sa-l
+   * evite: zero oferte construite, nicio cerere plecata, si verdict REUSIT.
+   *
+   * Aici produsul are variante si NICIO categorie. Pretul trebuie sa plece oricum.
+   */
+  const produs = {
+    id: "p1", name: "Tricou", description: null, price: 121, compare_at_price: null,
+    images: [], category: "Categorie nemapata", sku: "TR", weight_grams: null,
+    stock_quantity: 10, is_active: true,
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ id: "marime", name: "Mărime", values: ["S", "M"] }],
+        combinations: [
+          { id: "s", title: "S", price: 121, sku: "TR-S", enabled: true, stock_quantity: 3 },
+          { id: "m", title: "M", price: 151, sku: "TR-M", enabled: true, stock_quantity: 7 },
+        ],
+      },
+    },
+  };
+  const magazin = {
+    vat_rate: 21, prices_include_vat: true, vat_id: 1, handling_time: 1, warehouse_id: 1,
+    warranty: 24, price_band_pct: 30, source_language: "ro_RO", brand: null,
+  };
+
+  const oferte = oferteUsoare(produs, magazin, [
+    { variant_title: "S", emag_id: 1000000001 },
+    { variant_title: "M", emag_id: 1000000002 },
+  ]);
+
+  assert.equal(oferte.length, 2, "amandoua marimile pleaca, desi categoria lipseste");
+  assert.equal(oferte[0].sale_price, 100, "121 cu TVA de 21% => 100 fara");
+  assert.equal(oferte[1].sale_price, 124.7934);
+  assert.equal(oferte[0].stock?.[0].value, 3, "fiecare marime cu stocul EI");
+  assert.equal(oferte[1].stock?.[0].value, 7);
+  assert.ok(oferte[0].min_sale_price! < oferte[0].sale_price!);
+  assert.ok(oferte[0].max_sale_price! > oferte[0].sale_price!);
+});
+
+test("eMAG: un produs oprit in magazin pleaca cu `status: 0`, nu dispare", () => {
+  /* eMAG NU are stergere de oferta. Un produs dezactivat trebuie oprit de la vanzare
+     acolo, altfel continua sa se vanda ceva ce magazinul nu mai arata. */
+  const produs = {
+    id: "p2", name: "X", description: null, price: 100, compare_at_price: null, images: [],
+    category: null, sku: "X", weight_grams: null, stock_quantity: 5, is_active: false,
+    page_sections: {},
+  };
+  const magazin = {
+    vat_rate: 21, prices_include_vat: false, vat_id: 1, handling_time: 1, warehouse_id: 1,
+    warranty: 24, price_band_pct: 30, source_language: "ro_RO", brand: null,
+  };
+  const oferte = oferteUsoare(produs, magazin, [{ variant_title: null, emag_id: 5 }]);
+  assert.equal(oferte[0].status, 0);
+  assert.equal(oferte[0].sale_price, 100, "magazin fara TVA in pret: pretul nu se atinge");
+});
+
+test("eMAG: stocul unei combinatii nedeclarate cade pe cel al produsului", () => {
+  const produs = {
+    id: "p3", name: "Y", description: null, price: 100, compare_at_price: null, images: [],
+    category: null, sku: "Y", weight_grams: null, stock_quantity: 12, is_active: true,
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ id: "c", name: "Culoare", values: ["Roșu"] }],
+        combinations: [{ id: "r", title: "Roșu", price: 100, sku: "Y-R", enabled: true }],
+      },
+    },
+  };
+  assert.deepEqual(
+    stocuriDeTrimis(produs, [{ variant_title: "Roșu", emag_id: 9 }]),
+    [{ emagId: 9, cantitate: 12 }],
+  );
 });

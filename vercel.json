@@ -54,6 +54,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/emag-sync",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/catalog-proiector",
       "schedule": "* * * * *"
     },

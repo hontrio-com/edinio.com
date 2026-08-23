@@ -1,0 +1,553 @@
+/**
+ * Trimiterea unei modificari catre eMAG.
+ *
+ * Drumul il alege `rute.ts`, incarcatura o construieste `mapping.ts`, verdictul il
+ * da `errors.ts`. Aici e legatura dintre ele si scrisul inapoi in baza.
+ *
+ * ═══ ⚠ CE SE INTAMPLA CU UN ELEMENT CARE NU REUSESTE ═══
+ *
+ * Nu se sterge din coada si nu se pretinde ca a mers. Verdictul hotaraste:
+ *
+ *   `reusit`               iese din coada, `last_synced_at` se scrie
+ *   `reusit_cu_observatii` iese din coada — oferta E salvata la ei — dar
+ *                          `doc_errors` se pastreaza si se arata omului
+ *   `refuz`                arde o incercare, ramane in coada, motivul se scrie
+ *   `trecatoare`           ⚠ NU arde nicio incercare. 429 sau 5xx nu sunt vina
+ *                          nimanui, iar arse, cinci minute de pana la ei ar goli
+ *                          coada unui magazin intreg
+ *   `chei`                 se opreste MAGAZINUL, nu elementul: `needs_reconnect`
+ *
+ * Ultimele doua sunt lectii scrise cu pretul lor in `src/lib/trendyol/sync.ts:81`.
+ */
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
+import {
+  actualizeazaStoc, isEmagError, salveazaMasuratori, salveazaOferte, salveazaProduseOferte,
+} from "./client";
+import { mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
+import { construiesteOferte, masuratoriEmag, type ProdusDeCartografiat } from "./mapping";
+import { rutaDeTrimitere } from "./rute";
+import type { ContextEmag } from "./sync";
+import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
+import type { OpEmag } from "./queue";
+
+type Admin = ReturnType<typeof createAdminClient>;
+
+/** Un rand `emag_offers`, cat trebuie ca sa se poata trimite. */
+interface RandOfertaLocal {
+  id: string;
+  emag_id: number;
+  variant_title: string | null;
+  family_id: number | null;
+  part_number_key: string | null;
+  ean: string | null;
+  auto_sync: boolean;
+  last_synced_at: string | null;
+}
+
+export interface RezultatTrimitere {
+  verdict: VerdictEmag | "sarit";
+  mesaj: string;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ELEMENTUL
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Un element din coada, dus pana la capat.
+ *
+ * ⚠ `fortat` vine de la apasarea comerciantului, NU din coada. Coada duce numai
+ * lucru automat; butonul „Trimite acum" trece si peste ofertele preluate, fiindca
+ * „nu trimite singur" nu inseamna „nu trimite niciodata".
+ */
+export async function trimiteElement(
+  admin: Admin,
+  ctx: ContextEmag,
+  productId: string,
+  op: OpEmag,
+  fortat = false,
+): Promise<RezultatTrimitere> {
+  const produs = await citesteProdusul(admin, productId, ctx.businessId);
+  if (!produs) {
+    /*
+     * ⚠ Produsul nu mai e la noi, iar lucrarea nu e o retragere. NU e o eroare de
+     * repetat: reincercata, ar arde cele cinci incercari si ar sta in coada zile
+     * intregi. Se incheie linistit.
+     */
+    if (op !== "retragere") return { verdict: "sarit", mesaj: "Produsul nu mai există în magazin." };
+  }
+
+  const randuri = await citesteRandurile(admin, ctx.businessId, productId);
+  const existaLaEmag = randuri.some((r) => r.last_synced_at != null);
+  const autoSync = randuri.length === 0 ? true : randuri.every((r) => r.auto_sync);
+
+  const ruta = rutaDeTrimitere({ op, existaLaEmag, autoSync, fortat });
+  if (ruta.fel === "nimic") {
+    await scrieEroare(admin, ctx.businessId, productId, ruta.motiv ?? "");
+    return { verdict: "sarit", mesaj: ruta.motiv ?? "" };
+  }
+
+  if (ruta.fel === "retrage") return retrage(admin, ctx, randuri);
+  if (!produs) return { verdict: "sarit", mesaj: "Produsul nu mai există în magazin." };
+  if (ruta.fel === "stoc") return duStocul(admin, ctx, produs, randuri);
+  if (ruta.fel === "masuratori") return duMasuratorile(ctx, produs, randuri);
+  if (ruta.fel === "oferta") return duOferta(admin, ctx, produs, randuri);
+  return duTotul(admin, ctx, produs, randuri);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CITIRILE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+async function citesteProdusul(
+  admin: Admin, productId: string, businessId: string,
+): Promise<ProdusDeCartografiat | null> {
+  const { data } = await admin.from("products")
+    .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, page_sections")
+    .eq("id", productId).eq("business_id", businessId).maybeSingle();
+  return (data as ProdusDeCartografiat | null) ?? null;
+}
+
+async function citesteRandurile(
+  admin: Admin, businessId: string, productId: string,
+): Promise<RandOfertaLocal[]> {
+  const { data } = await admin.from("emag_offers")
+    .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at")
+    .eq("business_id", businessId).eq("product_id", productId)
+    .order("emag_id", { ascending: true });
+  return (data as RandOfertaLocal[] | null) ?? [];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RUTA GREA: PRODUS + DOCUMENTATIE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * `POST /product_offer/save` — singura care creeaza.
+ *
+ * ⚠ AICI SE ALOCA IDENTITATILE, INAINTE DE ORICE TRIMITERE. `emag_id` e cheia dupa
+ * care eMAG recunoaste oferta si trebuie sa fie STABILA pe veci: generata la
+ * trimitere, fiecare trimitere ar fi creat alta oferta acolo si ar fi lasat-o pe cea
+ * veche orfana. Deci randul se scrie intai la noi, si abia apoi pleaca.
+ */
+async function duTotul(
+  admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
+): Promise<RezultatTrimitere> {
+  const categorie = ctx.config.category_map?.[produs.category ?? ""];
+  if (!categorie?.category_id) {
+    const m = `Produsul are categoria „${produs.category ?? "—"}", care nu e legată de nicio categorie eMAG.`;
+    await scrieEroare(admin, ctx.businessId, produs.id, m);
+    return { verdict: "refuz", mesaj: m };
+  }
+
+  const identitati = await asiguraIdentitatile(admin, ctx, produs, randuri, categorie.family_type_id ?? null);
+  if ("error" in identitati) {
+    return { verdict: "refuz", mesaj: identitati.error };
+  }
+
+  const { oferte, probleme } = construiesteOferte(
+    produs,
+    magazinDin(ctx, produs),
+    {
+      category_id: categorie.category_id,
+      characteristics: categorie.characteristics ?? [],
+      family_type_id: categorie.family_type_id,
+    },
+    identitati.identitati,
+    identitati.familyId,
+  );
+
+  if (oferte.length === 0) {
+    const m = probleme[0] ?? "Nu s-a putut construi nicio ofertă pentru produs.";
+    await scrieEroare(admin, ctx.businessId, produs.id, m);
+    return { verdict: "refuz", mesaj: m };
+  }
+
+  return trimiteInLoturi(admin, ctx, produs.id, oferte, (lot) =>
+    salveazaProduseOferte(ctx.auth, lot as EmagProdusOferta[]),
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RUTA USOARA: PRET, TVA, TIMP DE PREGATIRE, STARE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * `POST /offer/save` — NU atinge documentatia.
+ *
+ * ⚠ ASTA E RUTA PE CARE TREBUIE SA MEARGA O SCHIMBARE DE PRET. Trimisa pe cea grea,
+ * ar rescrie la eMAG tot ce a atins vreodata comerciantul in panoul lor — chiar
+ * defectul de la Trendyol, unde 1051 de produse au raportat succes cu preturile
+ * neschimbate.
+ */
+async function duOferta(
+  admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
+): Promise<RezultatTrimitere> {
+  const categorie = ctx.config.category_map?.[produs.category ?? ""];
+  const { oferte } = construiesteOferte(
+    produs,
+    magazinDin(ctx, produs),
+    {
+      category_id: categorie?.category_id ?? 0,
+      characteristics: [],
+      family_type_id: categorie?.family_type_id,
+    },
+    randuri.map((r) => ({
+      variant_title: r.variant_title, emag_id: r.emag_id,
+      part_number_key: r.part_number_key, ean: r.ean,
+    })),
+    randuri[0]?.family_id ?? null,
+  );
+
+  /*
+   * ⚠ SE PASTREAZA NUMAI CAMPURILE USOARE. `construiesteOferte` da documentatia
+   * intreaga, fiindca de acolo se si publica. Trimisa asa pe `offer/save`, eMAG ar
+   * fi primit campuri pe care ruta asta nu le asteapta — si, mai rau, le-ar fi putut
+   * accepta, rescriind exact ce nu voiam sa atingem.
+   *
+   * Alegerea e ALBA, nu neagra: se enumera ce PLEACA. Cu o lista neagra, orice camp
+   * nou adaugat maine in `mapping.ts` ar fi plecat pe tacute.
+   */
+  const usoare: EmagOferta[] = oferte.map((o) => ({
+    id: o.id,
+    sale_price: o.sale_price,
+    recommended_price: o.recommended_price,
+    min_sale_price: o.min_sale_price,
+    max_sale_price: o.max_sale_price,
+    stock: o.stock,
+    handling_time: o.handling_time,
+    vat_id: o.vat_id,
+    status: produs.is_active ? 1 : 0,
+  }));
+
+  if (usoare.length === 0) {
+    return { verdict: "sarit", mesaj: "Produsul nu are nicio ofertă de actualizat." };
+  }
+
+  return trimiteInLoturi(admin, ctx, produs.id, usoare, (lot) =>
+    salveazaOferte(ctx.auth, lot as EmagOferta[]),
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RUTA CEA MAI USOARA: NUMAI STOCUL
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * `PATCH /offer_stock/{id}` — o cerere pe oferta.
+ *
+ * ⚠ NU ATINGE NICI PRETUL, NICI DOCUMENTATIA. La o oferta pe care comerciantul a
+ * modificat-o in panoul lor, orice ruta mai grea i-ar fi sters modificarile la
+ * FIECARE vanzare — adica de zeci de ori pe zi, fara ca nimic sa dea eroare.
+ */
+async function duStocul(
+  admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
+): Promise<RezultatTrimitere> {
+  const categorie = ctx.config.category_map?.[produs.category ?? ""];
+  const { oferte } = construiesteOferte(
+    produs, magazinDin(ctx, produs),
+    { category_id: categorie?.category_id ?? 0, characteristics: [], family_type_id: categorie?.family_type_id },
+    randuri.map((r) => ({
+      variant_title: r.variant_title, emag_id: r.emag_id,
+      part_number_key: r.part_number_key, ean: r.ean,
+    })),
+    randuri[0]?.family_id ?? null,
+  );
+
+  const depozit = ctx.config.warehouse_id ?? 1;
+  let ultimulMesaj = "";
+  let celMaiRau: VerdictEmag = "reusit";
+
+  for (const o of oferte) {
+    const cantitate = o.stock?.[0]?.value ?? 0;
+    const r = await actualizeazaStoc(ctx.auth, o.id, [{ warehouse_id: depozit, value: cantitate }]);
+    if (isEmagError(r)) {
+      celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
+      ultimulMesaj = mesajOmenesc(r.error);
+      continue;
+    }
+    celMaiRau = maiRau(celMaiRau, r.verdict ?? "reusit");
+  }
+
+  await scrieRezultatul(admin, ctx.businessId, produs.id, celMaiRau, ultimulMesaj);
+  return { verdict: celMaiRau, mesaj: ultimulMesaj };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MASURATORI SI RETRAGERE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+async function duMasuratorile(
+  ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
+): Promise<RezultatTrimitere> {
+  const ps = (produs.page_sections ?? {}) as { dimensions?: { length?: number; width?: number; height?: number } };
+  const masuratori = randuri
+    .map((r) => masuratoriEmag(r.emag_id, ps.dimensions, produs.weight_grams))
+    .filter((m): m is NonNullable<typeof m> => m != null);
+
+  if (masuratori.length === 0) {
+    /* ⚠ „Sarit", nu „refuz". Un produs fara dimensiuni nu e o eroare — e un produs
+       caruia nimeni nu i le-a pus. Reincercat, ar arde incercarile degeaba. */
+    return { verdict: "sarit", mesaj: "Produsul nu are dimensiuni și greutate complete." };
+  }
+
+  const r = await salveazaMasuratori(ctx.auth, masuratori);
+  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
+  return { verdict: r.verdict ?? "reusit", mesaj: "" };
+}
+
+/**
+ * Oprirea de la vanzare.
+ *
+ * ⚠ eMAG NU ARE STERGERE DE OFERTA. Se trimite `status: 0` pe `offer/save`, si atat.
+ * Cine cauta un `DELETE` in documentatia lor nu-l gaseste si e tentat sa lase
+ * produsul acolo — iar magazinul continua sa vanda pe eMAG ceva ce nu mai are.
+ */
+async function retrage(
+  admin: Admin, ctx: ContextEmag, randuri: RandOfertaLocal[],
+): Promise<RezultatTrimitere> {
+  const vii = randuri.filter((r) => r.last_synced_at != null);
+  if (vii.length === 0) return { verdict: "sarit", mesaj: "Oferta nu a ajuns niciodată pe eMAG." };
+
+  const r = await salveazaOferte(ctx.auth, vii.map((x) => ({ id: x.emag_id, status: 0 as const })));
+  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
+
+  await admin.from("emag_offers")
+    .update({ status: "withdrawn" satisfies StareOferta, last_synced_at: new Date().toISOString() })
+    .in("id", vii.map((x) => x.id));
+  return { verdict: r.verdict ?? "reusit", mesaj: "" };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   IDENTITATILE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Randurile `emag_offers` ale produsului, facute daca lipsesc.
+ *
+ * ⚠ SE SCRIU INAINTE DE TRIMITERE, SI ASTA E TOT ROSTUL FUNCTIEI. `emag_id` e cheia
+ * dupa care eMAG recunoaste oferta. Alocata la trimitere si nesalvata, urmatoarea
+ * trimitere ar cere alta, iar la ei ar aparea inca un produs — cu vechiul ramas
+ * orfan, nevandabil si nestergibil.
+ *
+ * `family_id` se cere o data pe PRODUS, nu pe rand: toate combinatiile trebuie sa
+ * cada in aceeasi familie, altfel eMAG le arata ca produse fara legatura.
+ */
+async function asiguraIdentitatile(
+  admin: Admin,
+  ctx: ContextEmag,
+  produs: ProdusDeCartografiat,
+  randuri: RandOfertaLocal[],
+  familyTypeId: number | null,
+): Promise<{ identitati: { variant_title: string | null; emag_id: number; part_number_key?: string | null; ean?: string | null }[]; familyId: number | null } | { error: string }> {
+  const titluri = titluriDeTrimis(produs);
+  const dupaTitlu = new Map(randuri.map((r) => [r.variant_title ?? "", r]));
+  const lipsa = titluri.filter((t) => !dupaTitlu.has(t ?? ""));
+
+  /*
+   * Familia se cere numai cand chiar sunt variante SI categoria are un tip de
+   * familie. ⚠ Fara `family_type_id`, eMAG refuza `family.id`, iar trimis oricum
+   * intoarce un refuz despre un camp pe care comerciantul nu-l vede nicaieri.
+   */
+  let familyId = randuri.find((r) => r.family_id)?.family_id ?? null;
+  const vreaFamilie = titluri.length > 1 && familyTypeId != null;
+  if (vreaFamilie && !familyId) {
+    const { data, error } = await admin.rpc("emag_familie_noua");
+    if (error) return { error: `Nu s-a putut aloca familia de variante: ${error.message}` };
+    familyId = Number(data);
+  }
+
+  if (lipsa.length > 0) {
+    const noi = lipsa.map((t) => ({
+      business_id: ctx.businessId,
+      product_id: produs.id,
+      variant_title: t,
+      family_id: familyId,
+      family_type_id: familyTypeId,
+      status: "queued" satisfies StareOferta,
+      creat_de_edinio: true,
+    }));
+    const { error } = await admin.from("emag_offers").insert(noi);
+    if (error) return { error: `Nu s-au putut pregăti ofertele: ${error.message}` };
+  }
+
+  if (familyId && randuri.some((r) => r.family_id !== familyId)) {
+    await admin.from("emag_offers").update({ family_id: familyId, family_type_id: familyTypeId })
+      .eq("business_id", ctx.businessId).eq("product_id", produs.id);
+  }
+
+  const proaspete = await citesteRandurile(admin, ctx.businessId, produs.id);
+  return {
+    identitati: proaspete.map((r) => ({
+      variant_title: r.variant_title,
+      emag_id: r.emag_id,
+      part_number_key: r.part_number_key,
+      ean: r.ean,
+    })),
+    familyId,
+  };
+}
+
+/**
+ * Ce titluri de combinatie pleaca la eMAG.
+ *
+ * Un produs simplu da `[null]`; unul cu variante da cate un titlu pentru fiecare
+ * combinatie ACTIVA si UNICA — aceeasi regula ca `combinatiiActiveUnice()`, fiindca
+ * in datele reale exista 31 de titluri duplicate pe 7 produse.
+ */
+function titluriDeTrimis(produs: ProdusDeCartografiat): (string | null)[] {
+  const ps = (produs.page_sections ?? {}) as {
+    variants?: { enabled?: boolean; combinations?: { title?: string; enabled?: boolean }[] };
+  };
+  const v = ps.variants;
+  if (!v?.enabled || !Array.isArray(v.combinations)) return [null];
+  const vazute = new Set<string>();
+  const out: string[] = [];
+  for (const c of v.combinations) {
+    const t = (c?.title ?? "").trim();
+    if (!c?.enabled || !t || vazute.has(t)) continue;
+    vazute.add(t);
+    out.push(t);
+  }
+  return out.length ? out : [null];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOTURILE SI SCRISUL INAPOI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** ⚠ Maximul lor. Vezi `LOT_MAXIM` si nota din `errors.ts` despre „Maximum input vars". */
+const LOT = 50;
+
+/**
+ * Trimite in loturi si strange verdictul cel mai rau.
+ *
+ * ⚠ VERDICTUL LOTULUI E CEL MAI RAU DIN EL, nu ultimul si nu primul. Raspunsul lor
+ * la `product_offer/save` e generic, fara rezultate pe element (verificat in spec):
+ * nu exista niciun mod de a afla CARE dintre cele 50 au trecut. Luat ultimul, un lot
+ * cu o singura cadere la inceput ar fi iesit din coada raportand succes.
+ */
+async function trimiteInLoturi(
+  admin: Admin,
+  ctx: ContextEmag,
+  productId: string,
+  elemente: unknown[],
+  trimite: (lot: unknown[]) => Promise<{ error: string; status: number; verdict?: VerdictEmag } | { data: unknown; verdict?: VerdictEmag }>,
+): Promise<RezultatTrimitere> {
+  let celMaiRau: VerdictEmag = "reusit";
+  let mesaj = "";
+
+  for (let i = 0; i < elemente.length; i += LOT) {
+    const r = await trimite(elemente.slice(i, i + LOT));
+    if ("error" in r) {
+      celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
+      mesaj = mesajOmenesc(r.error);
+      /* ⚠ La `chei` se opreste tot: acreditarile nu se repara singure intre loturi,
+         iar mai departe n-am face decat sa ardem cererile magazinului degeaba. */
+      if (celMaiRau === "chei") break;
+      continue;
+    }
+    celMaiRau = maiRau(celMaiRau, r.verdict ?? "reusit");
+  }
+
+  await scrieRezultatul(admin, ctx.businessId, productId, celMaiRau, mesaj);
+  return { verdict: celMaiRau, mesaj };
+}
+
+/**
+ * Care verdict e mai rau.
+ *
+ * ⚠ `chei` bate tot: e o problema de CONT, si nicio reusita pe alt lot n-o sterge.
+ * Apoi `refuz`, apoi `trecatoare`. `reusit_cu_observatii` bate `reusit` fiindca are
+ * ceva de aratat omului, chiar daca amandoua inseamna „s-a salvat".
+ */
+const GREUTATE: Record<VerdictEmag, number> = {
+  reusit: 0, reusit_cu_observatii: 1, trecatoare: 2, refuz: 3, chei: 4,
+};
+
+function maiRau(a: VerdictEmag, b: VerdictEmag): VerdictEmag {
+  return GREUTATE[b] > GREUTATE[a] ? b : a;
+}
+
+/** Starea in care ramane oferta dupa un verdict. */
+function stareaDupa(v: VerdictEmag): StareOferta {
+  if (v === "reusit") return "sent";
+  if (v === "reusit_cu_observatii") return "sent";
+  return "error";
+}
+
+async function scrieRezultatul(
+  admin: Admin, businessId: string, productId: string, verdict: VerdictEmag, mesaj: string,
+): Promise<void> {
+  const acum = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    status: stareaDupa(verdict),
+    error: sAIncheiat(verdict) ? null : (mesaj || null),
+    updated_at: acum,
+  };
+  /*
+   * ⚠ `last_synced_at` SE SCRIE NUMAI LA REUSITA, si el e chiar semnalul „exista la
+   * eMAG". Scris si la refuz, urmatoarea trimitere ar fi crezut ca oferta e deja
+   * acolo si ar fi plecat pe ruta usoara — care nu creeaza nimic. Produsul ar fi
+   * ramas nepublicat pe veci, cu un mesaj despre un id inexistent.
+   */
+  if (sAIncheiat(verdict)) patch.last_synced_at = acum;
+
+  const { error } = await admin.from("emag_offers")
+    .update(patch as never).eq("business_id", businessId).eq("product_id", productId);
+  if (error) {
+    void logError({
+      action: "emag.trimite.scrie",
+      message: error.message,
+      details: { businessId, productId, verdict },
+      severity: "error",
+    });
+  }
+}
+
+async function scrieEroare(admin: Admin, businessId: string, productId: string, mesaj: string): Promise<void> {
+  await admin.from("emag_offers")
+    .update({ error: mesaj || null, updated_at: new Date().toISOString() })
+    .eq("business_id", businessId).eq("product_id", productId);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTEXTUL MAGAZINULUI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
+  const ps = (produs.page_sections ?? {}) as { google?: { brand?: string } };
+  return {
+    /* ⚠ Citite din setarile magazinului la incarcarea contextului, NU scrise aici.
+       Vezi nota din `ContextEmag`: scrise in cod, un magazin cu alta cota si-ar fi
+       publicat toate preturile gresite, tacut. */
+    vat_rate: ctx.vatRate,
+    prices_include_vat: ctx.pricesIncludeVat,
+    vat_id: ctx.config.vat_id ?? 0,
+    handling_time: ctx.config.handling_time ?? 1,
+    warehouse_id: ctx.config.warehouse_id ?? 1,
+    warranty: ctx.config.warranty_default ?? 24,
+    price_band_pct: ctx.config.price_band_pct ?? 30,
+    source_language: limbaDupaTara(ctx),
+    /* Marca produsului, nu a magazinului. eMAG o cere obligatoriu la unele categorii,
+       iar `mapping.ts` cade pe ea cand produsul n-are alta. */
+    brand: (ps.google?.brand ?? "").trim() || null,
+    gpsr: ctx.config.gpsr,
+  };
+}
+
+/**
+ * Limba documentatiei, dupa tara contului.
+ *
+ * ⚠ eMAG cere `source_language` ca sa stie in ce limba e textul trimis. Pusa gresit,
+ * traducerea lor automata porneste de la o presupunere falsa — iar
+ * `translation_validation_status` poate bloca publicarea chiar cu restul aprobat.
+ */
+function limbaDupaTara(ctx: ContextEmag): string {
+  const t = ctx.auth.tara;
+  if (t === "bg") return "bg_BG";
+  if (t === "hu") return "hu_HU";
+  return "ro_RO";
+}

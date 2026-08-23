@@ -18,6 +18,23 @@ export interface ContextEmag {
   auth: EmagAuth;
   config: EmagConfig;
   businessId: string;
+  /**
+   * Cum isi tine magazinul preturile.
+   *
+   * ═══ ⚠ SE CITESTE, NU SE PRESUPUNE ═══
+   *
+   * eMAG cere pretul FARA TVA, la toate cele patru campuri. Prima forma a
+   * expeditorului avea aici `vat_rate: 21` si `prices_include_vat: true` scrise in
+   * cod — corecte pentru magazinul obisnuit, si tacut gresite pentru oricare altul.
+   *
+   * Un magazin cu alta cota si-ar fi vazut ofertele publicate cu pretul umflat sau
+   * subtiat cu diferenta dintre cele doua cote. Nicio eroare, nicaieri: se publica,
+   * se vinde, si se afla din marja.
+   *
+   * Se citesc o data, aici, si merg mai departe cu contextul.
+   */
+  vatRate: number;
+  pricesIncludeVat: boolean;
 }
 
 /**
@@ -34,10 +51,13 @@ export interface ContextEmag {
  */
 export async function loadEmagContext(admin: Db, businessId: string): Promise<ContextEmag | null> {
   const { data } = await admin
-    .from("store_settings").select("emag_config").eq("business_id", businessId).maybeSingle();
+    .from("store_settings").select("emag_config, vat_rate, prices_include_vat")
+    .eq("business_id", businessId).maybeSingle();
 
   const config = ((data?.emag_config as EmagConfig) ?? {}) || {};
   if (!config.connected || !config.username || !config.password) return null;
+
+  const cota = Number((data as { vat_rate?: unknown } | null)?.vat_rate);
 
   return {
     auth: {
@@ -48,6 +68,11 @@ export async function loadEmagContext(admin: Db, businessId: string): Promise<Co
     },
     config,
     businessId,
+    /* ⚠ `21` numai cand chiar nu exista rand de setari. Un `NaN` ajuns in
+       `pretFaraTva` ar fi dat `NaN` la toate cele patru preturi, iar eMAG ar fi
+       raspuns cu un refuz despre pret pe care nimeni nu l-ar fi legat de TVA. */
+    vatRate: Number.isFinite(cota) ? cota : 21,
+    pricesIncludeVat: (data as { prices_include_vat?: boolean } | null)?.prices_include_vat !== false,
   };
 }
 

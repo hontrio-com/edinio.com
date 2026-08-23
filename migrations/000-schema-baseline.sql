@@ -23,6 +23,7 @@ create type public.difficulty_level as enum ('incepator', 'intermediar', 'avansa
 create type public.pricing_type as enum ('gratuit', 'freemium', 'platit');
 
 -- ── SECVENTE ──────────────────────────────────────────────
+create sequence if not exists public.emag_family_id_seq;
 create sequence if not exists public.emag_offers_emag_id_seq;
 create sequence if not exists public.order_number_seq;
 
@@ -1592,27 +1593,39 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.emag_ridica_sirul(p_pana_la bigint)
+CREATE OR REPLACE FUNCTION public.emag_familie_noua()
  RETURNS bigint
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select nextval('public.emag_family_id_seq');
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint)
+ RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 declare
-  v_acum bigint;
+  v_o bigint;
+  v_f bigint;
 begin
-  if p_pana_la is null or p_pana_la < 1 then
-    return null;
+  select last_value into v_o from public.emag_offers_emag_id_seq;
+  if p_oferta is not null and p_oferta >= v_o then
+    perform setval('public.emag_offers_emag_id_seq', p_oferta + 1, false);
+    v_o := p_oferta + 1;
   end if;
 
-  select last_value into v_acum from public.emag_offers_emag_id_seq;
-
-  if p_pana_la >= v_acum then
-    perform setval('public.emag_offers_emag_id_seq', p_pana_la + 1, false);
-    return p_pana_la + 1;
+  select last_value into v_f from public.emag_family_id_seq;
+  if p_familie is not null and p_familie >= v_f then
+    perform setval('public.emag_family_id_seq', p_familie + 1, false);
+    v_f := p_familie + 1;
   end if;
 
-  return v_acum;
+  return jsonb_build_object('oferta', v_o, 'familie', v_f);
 end;
 $function$
 ;
@@ -7261,7 +7274,8 @@ grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_busi
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
-grant execute on function public.emag_ridica_sirul(p_pana_la bigint) to service_role;
+grant execute on function public.emag_familie_noua() to service_role;
+grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
 grant execute on function public.handle_new_user() to service_role;
 grant execute on function public.handle_support_message_insert() to service_role;

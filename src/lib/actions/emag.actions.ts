@@ -28,7 +28,8 @@ import {
   aduCategorii, aduCoteTva, aduTimpiPregatire, alegeCotaTva, alegeTimpPregatire,
   sugereazaCategorie,
 } from "@/lib/emag/taxonomy";
-import { ceLipsestePentruPublicare } from "@/lib/emag/sync";
+import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
+import { trimiteElement } from "@/lib/emag/trimite";
 import {
   leagaOferteleNoi, ruleazaImportEmag, SURSA_EMAG, type RezultatImportEmag,
 } from "@/lib/emag/import-run";
@@ -577,4 +578,116 @@ export async function continuaImportEmag(
     void logError({ action: "emag.import.bucata", message: mesaj, details: { businessId, importId }, severity: "error" });
     return { error: mesaj };
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PUBLICARE SI TRIMITERE LA CERERE (etapa 3)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Trimite un produs pe eMAG ACUM, fara sa astepte trecerea cronului.
+ *
+ * ═══ ⚠ DE CE NU MERGE PRIN COADA ═══
+ *
+ * Fiindca omul se uita la ecran. Pus in coada, ar fi vazut „se trimite" si ar fi
+ * asteptat pana la un minut fara nicio veste — iar daca eMAG refuza, motivul ar fi
+ * aparut abia dupa aceea, intr-un alt ecran. Aici raspunsul lor vine inapoi in
+ * aceeasi apasare, cu tot cu motiv.
+ *
+ * ⚠ `fortat: true`. Apasarea explicita trece si peste ofertele preluate: „nu trimite
+ * singur" nu inseamna „nu trimite niciodata". Vezi `rutaDeTrimitere`.
+ */
+export async function trimiteAcumPeEmag(
+  businessId: string,
+  productId: string,
+  op: "oferta" | "pret" | "stoc" | "masuratori" = "oferta",
+): Promise<{ verdict: string; mesaj: string } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  if (!emagGloballyEnabled()) return { error: "Integrarea eMAG este oprită temporar." };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  /* ⚠ Se verifica INAINTE de a chema eMAG. Un produs fara cotă de TVA aleasa ar fi
+     primit de la ei un refuz despre `vat_id` pe care comerciantul nu-l poate lega de
+     niciun ecran de-al lui. */
+  const lipsa = ceLipsestePentruPublicare(ctx.config);
+  if (lipsa) return { error: lipsa };
+
+  try {
+    const r = await trimiteElement(admin, ctx, productId, op, true);
+    revalidatePath(FEATURE_PATH);
+    return { verdict: r.verdict, mesaj: r.mesaj };
+  } catch (e) {
+    const mesaj = e instanceof Error ? e.message : "Trimiterea către eMAG nu a reușit.";
+    void logError({
+      action: "emag.trimite",
+      message: mesaj,
+      details: { businessId, productId, op },
+      severity: "error",
+    });
+    return { error: mesaj };
+  }
+}
+
+/**
+ * Opreste o ofertă de la vânzare pe eMAG.
+ *
+ * ⚠ eMAG NU ARE STERGERE DE OFERTA. Se trimite `status: 0`, si oferta ramane acolo,
+ * nevandabila. Butonul trebuie sa spuna asta: „Retrage", nu „Șterge" — altfel
+ * comerciantul apasa asteptand sa dispara si se sperie cand o vede tot in contul lui.
+ */
+export async function retrageDePeEmag(
+  businessId: string,
+  productId: string,
+): Promise<{ verdict: string; mesaj: string } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  try {
+    const r = await trimiteElement(admin, ctx, productId, "retragere", true);
+    revalidatePath(FEATURE_PATH);
+    return { verdict: r.verdict, mesaj: r.mesaj };
+  } catch (e) {
+    const mesaj = e instanceof Error ? e.message : "Retragerea nu a reușit.";
+    void logError({ action: "emag.retrage", message: mesaj, details: { businessId, productId }, severity: "error" });
+    return { error: mesaj };
+  }
+}
+
+/**
+ * Porneste sau opreste sincronizarea automată a unei oferte preluate.
+ *
+ * ⚠ E hotararea comerciantului, si numai a lui. Importul stinge `auto_sync` pentru
+ * tot ce aduce, tocmai ca sa nu-i rescriem preturile puse in panoul eMAG. Cand vrea
+ * invers — sa conduca din Edinio — o aprinde de aici, si de atunci coada o ia.
+ */
+export async function comutaSincronizareaOfertei(
+  businessId: string,
+  productId: string,
+  pornit: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const { error } = await createAdminClient().from("emag_offers")
+    .update({ auto_sync: pornit, updated_at: new Date().toISOString() })
+    .eq("business_id", businessId).eq("product_id", productId);
+  if (error) return { error: error.message };
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
 }

@@ -447,9 +447,12 @@ export async function ruleazaImportEmag(businessId: string, userId: string): Pro
   const fara = oferte.filter((o) => potriviri.get(o.id)?.fel === "nou");
   const familii = grupeazaFamilii(fara);
   const categorii = await aduCategoriiPentru(ctx.auth, familii);
+  /* ⚠ Cota si felul preturilor vin din CONTEXT, nu dintr-o citire proprie. Doua
+     locuri care citesc aceeasi setare se departeaza mai devreme sau mai tarziu, iar
+     aici departarea ar fi insemnat produse importate cu pretul gresit cu o cota. */
   const { produse, probleme, compozitie } = produseDeCreat(familii, contextDinCategorii(categorii), {
-    vat_rate: await cotaMagazinului(admin, businessId),
-    prices_include_vat: await preturileIncludTva(admin, businessId),
+    vat_rate: ctx.vatRate,
+    prices_include_vat: ctx.pricesIncludeVat,
   });
 
   /* Titlul combinatiei se stie DE ACUM, chiar daca produsul nu exista inca. Scris
@@ -521,14 +524,21 @@ export async function ruleazaImportEmag(businessId: string, userId: string): Pro
  */
 async function ridicaSirul(admin: Admin, oferte: EmagOfertaCitita[]): Promise<void> {
   const maxim = oferte.reduce((m, o) => (o.id > m ? o.id : m), 0);
-  if (maxim <= 0) return;
+  /* ⚠ SI FAMILIILE, NU DOAR OFERTELE. Ridicat numai sirul ofertelor, prima publicare
+     de dupa un import cu familii mari ar fi cerut un `family_id` deja luat, si ar fi
+     cazut pe `duplicate key` fara sa spuna de ce. */
+  const maximFamilie = oferte.reduce((m, o) => {
+    const f = o.family?.id ?? 0;
+    return f > m ? f : m;
+  }, 0);
+  if (maxim <= 0 && maximFamilie <= 0) return;
   try {
-    await admin.rpc("emag_ridica_sirul", { p_pana_la: maxim });
+    await admin.rpc("emag_ridica_sirurile", { p_oferta: maxim, p_familie: maximFamilie });
   } catch (e) {
     void logError({
       action: "emag.import.sir",
       message: e instanceof Error ? e.message : "Nu s-a putut ridica șirul emag_id",
-      details: { maxim },
+      details: { maxim, maximFamilie },
       severity: "warning",
     });
   }
@@ -553,26 +563,6 @@ async function aduCategoriiPentru(
     out.push(...bucata);
   }
   return out;
-}
-
-/**
- * Cota de TVA a magazinului.
- *
- * ⚠ SE CITESTE CU CLIENTUL DE SERVICIU. Citita cu clientul comerciantului, vederea
- * intoarce campurile cifrate si cota ar fi iesit `NaN` — iar preturile importate
- * ar fi fost calculate cu o cota gresita, tacut.
- */
-async function cotaMagazinului(admin: Admin, businessId: string): Promise<number> {
-  const { data } = await admin.from("store_settings").select("vat_rate")
-    .eq("business_id", businessId).maybeSingle();
-  const v = Number((data as { vat_rate?: unknown } | null)?.vat_rate);
-  return Number.isFinite(v) ? v : 21;
-}
-
-async function preturileIncludTva(admin: Admin, businessId: string): Promise<boolean> {
-  const { data } = await admin.from("store_settings").select("prices_include_vat")
-    .eq("business_id", businessId).maybeSingle();
-  return (data as { prices_include_vat?: boolean } | null)?.prices_include_vat !== false;
 }
 
 /**

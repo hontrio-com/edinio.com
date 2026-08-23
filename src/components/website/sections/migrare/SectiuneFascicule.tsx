@@ -51,11 +51,13 @@ export function SectiuneFascicule() {
     /*
       `id` din aceeași constantă ca `href`-ul butoanelor din celelalte trei
       secțiuni — `ANCORA_FORMULAR` are `#`, iar `id` nu, de-aia se taie primul semn.
-      `scroll-mt` fiindcă bara de sus e lipicioasă: fără el, saltul oprește
-      titlul FIX SUB ea, iar cine apasă „Începe migrarea" ajunge la o secțiune
-      care pare să înceapă cu un formular.
+      `sub-bara` fiindcă bara de sus e lipicioasă: fără ea, saltul oprește
+      titlul FIX SUB bară, iar cine apasă „Începe migrarea" ajunge la o secțiune
+      care pare să înceapă cu un formular. Clasa e în `globals.css`, aceeași
+      pentru toate cele nouă ancore ale site-ului — aici era scrisă de mână, cu
+      96px, iar la documentele juridice cu 88.
     */
-    <section id={ANCORA_FORMULAR.slice(1)} className="scroll-mt-24 bg-white">
+    <section id={ANCORA_FORMULAR.slice(1)} className="sub-bara bg-white">
       <div className="mx-auto max-w-[1200px] px-5 py-8 sm:px-6 lg:px-8 lg:py-10">
         <div
           className="feature-card-shadow overflow-hidden rounded-[20px] border border-dashed bg-white p-6 sm:p-8 lg:rounded-[24px] lg:p-10"

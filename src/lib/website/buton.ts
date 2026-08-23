@@ -81,13 +81,48 @@ export function butonVerde(marime: MarimeButon = "normal"): string {
 }
 
 /**
- * Butonul alb cu chenar. Acțiunea secundară, lângă cea verde.
+ * ═══ ⚠ `tint-2` LA CONTROALE, `tint` LA SUPRAFEȚE ═══
+ *
+ * Nu e o alegere de gust, e o măsurătoare. `--color-tint` e #FAFAFB, adică două
+ * trepte sub alb; `--color-tint-2` e #F5F5F7, cinci trepte. Pe un card care are
+ * deja chenar și umbră, două trepte ajung — forma e desenată de altceva, iar
+ * hover-ul doar confirmă. Pe un buton, care e mic și în care omul chiar
+ * țintește, două trepte aproape nu se văd.
+ *
+ * De aceea butoanele de aici folosesc `tint-2`, iar cardurile, rândurile de
+ * întrebări și celulele benzii de contact folosesc `tint`.
+ *
+ * ⚠ Ce e DEJA pe tint (chipurile din documentele juridice, meniul din bară) trece
+ * tot pe `tint-2`: nu se poate ridica un fundal la culoarea pe care o are deja.
+ */
+
+/**
+ * Butonul alb cu chenar. Acțiunea secundară care stă singură: îndemnul din
+ * cardurile de funcționalități, planurile nerecomandate din tabelul de prețuri.
  *
  * Aceeași înălțime și același colț ca perechea lui verde: puse alături, cele
  * două trebuie să stea pe aceeași linie de sus și de jos.
  */
 export function butonAlb(marime: MarimeButon = "normal"): string {
-  return `${BAZA} ${MARIMI[marime]} border border-hairline bg-white text-ink hover:bg-tint`;
+  return `${BAZA} ${MARIMI[marime]} border border-hairline bg-white text-ink hover:bg-tint-2`;
+}
+
+/**
+ * Butonul fără chenar. Acțiunea secundară care stă LÂNGĂ cea verde.
+ *
+ * ═══ DE CE ALTUL DECÂT CEL ALB ═══
+ *
+ * Lângă butonul verde plin, cu halou sub el, unul cu chenar concureaza cu el:
+ * doua dreptunghiuri desenate, unul lângă altul, iar ochiul nu mai știe care e
+ * acțiunea principală. Fără chenar, al doilea rămâne o cale, nu o alegere.
+ *
+ * ⚠ Auditul din 23.08 a găsit TREI tratamente pentru aceeași pereche: fantomă la
+ * h-13 în hero-ul paginii de start, cu chenar la h-11 în cardurile de
+ * funcționalități, și cu chenar la h-12 în `PageShell`. Trei înălțimi, două
+ * greutăți de font, doua feluri de a arata. Acum sunt două roluri, scrise.
+ */
+export function butonFantoma(marime: MarimeButon = "normal"): string {
+  return `${BAZA} ${MARIMI[marime]} text-ink-2 hover:bg-tint-2 hover:text-ink`;
 }
 
 /**

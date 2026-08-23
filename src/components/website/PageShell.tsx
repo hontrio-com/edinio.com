@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { H1_MARE } from "@/lib/website/tipografie";
-import { butonAlb, butonVerde } from "@/lib/website/buton";
+import { butonFantoma, butonVerde } from "@/lib/website/buton";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { firimituriJsonLd, type Firimitura } from "@/lib/website/breadcrumbs";
 import { FinalCta } from "./sections/FinalCta";
@@ -101,12 +101,10 @@ export function PageShell({
                    hero-ul paginii de start ramane pe ancora: acolo sectiunea e
                    chiar mai jos, iar o navigare ar fi mai mult decat trebuie. */
                 href="/preturi"
-                /* Aceeasi reteta ca perechea lui verde, din `lib/website/buton.ts`.
-                   Era scrisa de mana si aproape la fel: `font-medium` in loc de
-                   `font-semibold` si `hover:bg-tint-2` in loc de `hover:bg-tint`.
-                   Doua butoane alaturate cu greutati diferite se citesc ca o
-                   scapare, nu ca o ierarhie. */
-                className={cn("group", butonAlb())}
+                /* Fantoma, ca perechea din hero-ul paginii de start: e aceeasi
+                   pereche, „Incepe gratuit" plus „Vezi preturile". Era cu chenar
+                   aici si fara chenar acolo. */
+                className={cn("group", butonFantoma())}
               >
                 Vezi prețurile
                 <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />

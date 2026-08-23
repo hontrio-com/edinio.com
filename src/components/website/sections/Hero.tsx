@@ -3,7 +3,8 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { HeroMesh } from "./hero-backgrounds";
-import { butonVerde } from "@/lib/website/buton";
+import { butonFantoma, butonVerde } from "@/lib/website/buton";
+import { H1_HERO } from "@/lib/website/tipografie";
 
 /**
  * Hero-ul mare: totul pe mijloc, peste un mesh de lumină verde.
@@ -117,7 +118,8 @@ function HeroCadru({
 
         <h1
           className={cn(
-            "mx-auto mt-6 text-[38px] font-bold leading-[1.04] tracking-[-0.035em] text-ink sm:mt-7 sm:text-[56px] lg:text-[66px]",
+            "mx-auto mt-6 sm:mt-7",
+            H1_HERO,
             latimeTitlu,
           )}
         >
@@ -138,7 +140,7 @@ function HeroCadru({
           {secundara ? (
             <Link
               href={secundara.href}
-              className="group inline-flex h-13 items-center gap-1.5 rounded-[8px] px-6 text-[15px] font-medium text-ink-2 transition-colors duration-200 hover:bg-tint-2 hover:text-ink"
+              className={cn("group", butonFantoma("lat"))}
             >
               {secundara.label}
               <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />

@@ -99,7 +99,11 @@ function Card({ card, lat }: { card: CardMentenanta; lat?: boolean }) {
           34) care dă greutatea. Ultima e cea care face diferența dintre „card" și
           „chenar".
         */
-        "feature-card-shadow flex flex-col rounded-[22px] border border-hairline bg-white p-6 sm:p-8",
+        /* 20/24, ca la placile de sectiune de pe „Migrare" (`SectiuneFascicule`,
+           `SectiuneMigrare`). Era 22, adica singura valoare de genul asta din tot
+           codul: aceeasi reteta — `feature-card-shadow`, chenar, alb, p-6/sm:p-8 —
+           cu alta raza pe alta pagina. */
+        "feature-card-shadow flex flex-col rounded-[20px] border border-hairline bg-white p-6 sm:p-8 lg:rounded-[24px]",
         /* Cel lat: text la stânga, ilustrație la dreapta, dar abia de la `lg`.
            Sub atât, un card lat n-are lățime de împărțit și se așază ca celelalte. */
         lat && "lg:grid lg:grid-cols-2 lg:items-center lg:gap-10 lg:p-10",

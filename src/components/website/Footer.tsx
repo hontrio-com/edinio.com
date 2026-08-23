@@ -72,7 +72,10 @@ export function Footer() {
                     */
                     rel="noopener noreferrer"
                     aria-label={`Edinio pe ${s.label}`}
-                    className="group flex h-9 w-9 items-center justify-center rounded-[8px] border border-hairline transition-colors hover:bg-tint"
+                    /* `tint-2`, nu `tint`: e un CONTROL, nu o suprafata. Doua trepte sub alb
+                       aproape nu se vad pe un patrat de 36px. Regula, cu masuratoarea,
+                       e in `lib/website/buton.ts`. */
+                    className="group flex h-9 w-9 items-center justify-center rounded-[8px] border border-hairline transition-colors duration-200 hover:bg-tint-2"
                   >
                     {/*
                       Culoarea vine la hover pe TOT butonul, nu pe siglă: ținta

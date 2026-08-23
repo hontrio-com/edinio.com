@@ -84,7 +84,7 @@ export function PricingSection({ cuAntet = true }: { cuAntet?: boolean }) {
   return (
     <section
       id="preturi"
-      className={cn("bg-white pb-20 lg:pb-28", cuAntet ? "pt-20 lg:pt-28" : "pt-8 lg:pt-10")}
+      className={cn("sub-bara bg-white pb-20 lg:pb-28", cuAntet ? "pt-20 lg:pt-28" : "pt-8 lg:pt-10")}
     >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         {/*

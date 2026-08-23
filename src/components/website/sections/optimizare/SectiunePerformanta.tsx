@@ -29,7 +29,7 @@ import { PanouPageSpeed } from "./PanouPageSpeed";
  */
 export function SectiunePerformanta() {
   return (
-    <section id="performanta" className="bg-white">
+    <section id="performanta" className="sub-bara bg-white">
       <div className="mx-auto max-w-[1200px] px-5 pt-20 pb-24 sm:px-6 lg:px-8 lg:pt-28 lg:pb-32">
         <div className="mx-auto max-w-[720px] text-center">
           <SectionEyebrow label={PERFORMANTA.eyebrow} />

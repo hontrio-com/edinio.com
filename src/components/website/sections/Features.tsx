@@ -10,6 +10,7 @@ import {
 import { DASH_ON_WHITE } from "@/lib/website/linii";
 import { FeatureStack } from "./FeatureStack";
 import { SectionEyebrow } from "./SectionEyebrow";
+import { butonAlb } from "@/lib/website/buton";
 
 /**
  * Secțiunea de funcții: carduri late, care se strâng în teanc la derulare.
@@ -320,7 +321,7 @@ function Card({
             */}
             <Link
               href={card.cta.href}
-              className="group mt-8 inline-flex h-11 items-center justify-center gap-1.5 rounded-[8px] border border-hairline px-5 text-[14.5px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2 sm:min-w-[288px]"
+              className={cn("group mt-8 sm:min-w-[288px]", butonAlb())}
             >
               {card.cta.label}
               <ArrowRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />

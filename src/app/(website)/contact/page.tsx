@@ -165,7 +165,9 @@ export default function ContactPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Edinio pe ${s.label}`}
-                      className="group flex h-9 w-9 items-center justify-center rounded-[8px] border border-hairline transition-colors hover:bg-tint"
+                      /* Acelasi buton ca in subsol, si acelasi `tint-2`: e un control, nu
+                         o suprafata. Regula, cu masuratoarea, in `lib/website/buton.ts`. */
+                      className="group flex h-9 w-9 items-center justify-center rounded-[8px] border border-hairline transition-colors duration-200 hover:bg-tint-2"
                     >
                       <Image
                         src={s.src}

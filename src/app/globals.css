@@ -557,6 +557,26 @@
    Directia e aceeasi ca la toate celelalte umbre — in jos, lumina din
    stanga-sus. Vezi doctrina scrisa mai sus; un halou care bate in alta parte ar
    fi facut butonul sa para lipit peste pagina. */
+/* ─── Ancorele de sectiune, sub bara lipicioasa ───────────────────────────────
+
+   Bara de sus e `sticky` si are 72px. Un salt catre `#preturi` duce titlul FIX
+   SUB ea: se vede continutul, dar nu se vede titlul, deci omul crede ca a nimerit
+   in mijlocul altei sectiuni. Se intampla la fiecare `href` cu diez de pe site.
+
+   ⚠ SAPTE SECTIUNI TINTITE NU AVEAU NIMIC: #preturi, #comparatie, #faq,
+   #biblioteca, #geo, #performanta, #seo. Doua care aveau foloseau valori
+   diferite — 88px la documentele juridice, 96 la formularul de migrare — adica
+   nimeni nu stabilise una.
+
+   88 = 72 (bara) + 16 (aer). Sub 16px titlul atinge bara si pare lipit de ea.
+
+   ⚠ SE SCRIE CA O CLASA, nu ca `scroll-mt-[88px]` la fiecare sectiune: daca se
+   schimba inaltimea barei, se schimba INTR-UN loc. Cu noua copii scrise de mana,
+   s-ar fi schimbat sase. */
+.sub-bara {
+  scroll-margin-top: 88px;
+}
+
 .halou-cta {
   box-shadow: 0 8px 28px -8px color-mix(in oklab, var(--primary) 55%, transparent);
 }

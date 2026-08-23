@@ -33,7 +33,7 @@ import { PanouSitemap } from "./PanouSitemap";
 
 export function SectiuneSeo() {
   return (
-    <section id="seo" className="border-t border-hairline bg-white">
+    <section id="seo" className="sub-bara border-t border-hairline bg-white">
       <div className="mx-auto max-w-[1200px] px-5 pt-20 pb-24 sm:px-6 lg:px-8 lg:pt-28 lg:pb-32">
         <div className="mx-auto max-w-[720px] text-center">
           <SectionEyebrow label={SEO.eyebrow} />

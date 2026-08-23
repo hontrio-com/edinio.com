@@ -88,7 +88,7 @@ export function BibliotecaIntegrari() {
   );
 
   return (
-    <section id="biblioteca" className="border-t border-hairline bg-white py-20 lg:py-28">
+    <section id="biblioteca" className="sub-bara border-t border-hairline bg-white py-20 lg:py-28">
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         {/* ── Antetul secțiunii ─────────────────────────────────────────── */}
         <div className="max-w-[760px]">
@@ -399,9 +399,15 @@ function CardIntegrare({ integrare }: { integrare: Integrare }) {
   );
 }
 
+/*
+  Aceeasi caseta ca la cautarea din centrul de ajutor (`ajutor/CautareGhiduri.tsx`):
+  acelasi chenar punctat, acelasi fundal, acelasi text centrat. Erau 14px si
+  `py-14` aici, 16px si `py-10` acolo — acelasi obiect, doua marimi, fiindca a
+  fost scris de doua ori, la cateva zile distanta.
+*/
 function NimicGasit({ cautare }: { cautare: string }) {
   return (
-    <div className="rounded-[14px] border border-dashed border-hairline bg-tint px-6 py-14 text-center">
+    <div className="rounded-[16px] border border-dashed border-hairline bg-tint px-6 py-10 text-center">
       {/* Ghilimele româneşti: „jos-sus". Perechea dreaptă `"` nici n-ar fi trecut
           de `react/no-unescaped-entities`, si oricum nu e semnul potrivit. */}
       <p className="text-[15px] font-semibold text-ink">

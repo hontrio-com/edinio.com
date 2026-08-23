@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Check, Loader2 } from "lucide-react";
 import { submitContactMessage } from "@/lib/actions/contact.actions";
 import { MAX } from "@/lib/website/contact-form";
@@ -143,12 +144,15 @@ export function ContactForm() {
         />
         <span className="text-[14px] leading-[1.55] text-ink-2">
           Sunt de acord cu{" "}
-          <a
+          {/* `next/link`, nu `<a>`: e o pagină a site-ului, deci se navighează fără
+              reîncărcare. Formularul de migrare, scris mai târziu după modelul
+              ăstuia, o făcea deja corect. */}
+          <Link
             href="/confidentialitate"
             className="text-ink underline decoration-1 underline-offset-[3px] transition-opacity hover:opacity-70"
           >
             Politica de confidențialitate
-          </a>
+          </Link>
           .
         </span>
       </label>

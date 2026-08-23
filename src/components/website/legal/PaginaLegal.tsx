@@ -22,9 +22,13 @@ import { H1_MIC } from "@/lib/website/tipografie";
  *
  * ═══ ANCORE ═══
  *
- * Fiecare articol are `id` din fișierul de conținut și `scroll-mt-[88px]`, cât
- * bara lipicioasă (`h-18` = 72px) plus aer. Fără el, un link către `#clauza` ar
+ * Fiecare articol are `id` din fișierul de conținut și clasa `sub-bara`, cât
+ * bara lipicioasă (`h-18` = 72px) plus aer. Fără ea, un link către `#clauza` ar
  * așeza titlul FIX SUB bară și ai crede că ai nimerit greșit.
+ *
+ * Valoarea era scrisă aici de mână. E acum în `globals.css`, aceeași pentru toate
+ * cele nouă ancore ale site-ului: șapte n-aveau nimic, iar cele două care aveau
+ * foloseau valori diferite.
  */
 export function PaginaLegal({ doc }: { doc: DocumentLegal }) {
   const intrari = doc.sectiuni.map(({ id, nr, titlu }) => ({ id, nr, titlu }));
@@ -59,7 +63,7 @@ export function PaginaLegal({ doc }: { doc: DocumentLegal }) {
                 <section
                   key={sectiune.id}
                   id={sectiune.id}
-                  className="scroll-mt-[88px] border-t border-hairline pt-8 first:border-t-0 first:pt-0 [&+section]:mt-10"
+                  className="sub-bara border-t border-hairline pt-8 first:border-t-0 first:pt-0 [&+section]:mt-10"
                 >
                   <h2 className="text-[19px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink sm:text-[21px]">
                     {/* Numărul e o adresă, nu parte din titlu: stins, ca la

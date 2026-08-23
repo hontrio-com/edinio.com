@@ -703,8 +703,22 @@ function Indicator({ eticheta, valoare }: { eticheta: string; valoare: number })
     setAfisat(0);
     setPornit(true);
     let raf = 0;
-    const start = performance.now();
+    /*
+     * ⚠ Reperul de timp e PRIMUL CADRU, nu `performance.now()` de la programare.
+     *
+     * Doua motive. Unul de corectitudine: intre clipa in care se cere cadrul si
+     * clipa in care browserul il livreaza trece un cadru intreg, deci animatia
+     * pornea deja cu ~16ms consumati si primul lucru vazut nu era 0.
+     *
+     * Unul de regula: `performance.now()` e o functie impura, iar aici sta
+     * intr-un `useIzomorf` — o VARIABILA care tine `useEffect` sau
+     * `useLayoutEffect`. Regula `react-hooks/purity` nu poate sti ca variabila
+     * aia e un hook, deci citea corpul functiei ca si cum ar rula la randare.
+     * Fara `performance.now()`, intrebarea nici nu se mai pune.
+     */
+    let start = 0;
     const pas = (acum: number) => {
+      if (start === 0) start = acum;
       const t = Math.min(1, (acum - start) / DURATA_UMPLERE_MS);
       /* Aceeași curbă ca arcul, altfel numărul și inelul ajung în momente
          diferite și se vede că sunt două animații, nu una. */

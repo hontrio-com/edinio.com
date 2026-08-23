@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils/cn";
 import { DASH_ON_WHITE } from "@/lib/website/linii";
 import type { SectiuneMigrareText } from "@/lib/website/migrare";
 import { SectionEyebrow } from "../SectionEyebrow";
+import { butonAlb } from "@/lib/website/buton";
 
 /**
  * Cadrul secțiunilor de pe pagina „Migrare magazin".
@@ -171,7 +172,7 @@ export function SectiuneMigrare({
             */}
             <Link
               href={text.cta.href}
-              className="group mt-7 inline-flex h-12 w-fit items-center justify-center gap-2 rounded-[8px] border border-hairline bg-white px-6 text-[15px] font-semibold text-ink transition-colors duration-200 hover:bg-tint"
+              className={cn("group mt-7 w-fit", butonAlb())}
             >
               {text.cta.label}
               <ArrowRight

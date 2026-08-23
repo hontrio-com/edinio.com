@@ -100,7 +100,7 @@ export function CuprinsLegal({ intrari }: { intrari: IntrareCuprins[] }) {
         onClick={() => setDeschis((d) => !d)}
         aria-expanded={deschis}
         aria-controls="cuprins-panou"
-        className="flex w-full items-center justify-between gap-3 rounded-[8px] border border-hairline px-4 py-3 text-left transition-colors hover:bg-tint lg:pointer-events-none lg:border-0 lg:px-0 lg:py-0 lg:hover:bg-transparent"
+        className="flex w-full items-center justify-between gap-3 rounded-[8px] border border-hairline px-4 py-3 text-left transition-colors duration-200 hover:bg-tint-2 lg:pointer-events-none lg:border-0 lg:px-0 lg:py-0 lg:hover:bg-transparent"
       >
         <span
           id="cuprins-titlu"

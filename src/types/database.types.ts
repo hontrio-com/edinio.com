@@ -1285,6 +1285,50 @@ export type Database = {
           },
         ]
       }
+      emag_nomenclatoare: {
+        Row: {
+          adus_la: string
+          business_id: string
+          cate: number
+          cheie: string
+          cont: string | null
+          date: Json
+          fel: string
+          tara: string
+          trunchiat: boolean
+        }
+        Insert: {
+          adus_la?: string
+          business_id: string
+          cate?: number
+          cheie?: string
+          cont?: string | null
+          date: Json
+          fel: string
+          tara: string
+          trunchiat?: boolean
+        }
+        Update: {
+          adus_la?: string
+          business_id?: string
+          cate?: number
+          cheie?: string
+          cont?: string | null
+          date?: Json
+          fel?: string
+          tara?: string
+          trunchiat?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emag_nomenclatoare_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emag_offers: {
         Row: {
           auto_sync: boolean

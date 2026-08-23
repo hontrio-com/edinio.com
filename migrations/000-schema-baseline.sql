@@ -3888,6 +3888,17 @@ create table if not exists public.emag_awb (
   status jsonb,
   created_at timestamp with time zone default now() not null);
 
+create table if not exists public.emag_nomenclatoare (
+  business_id uuid not null,
+  tara text not null,
+  fel text not null,
+  cheie text default ''::text not null,
+  cont text,
+  date jsonb not null,
+  cate integer default 0 not null,
+  trunchiat boolean default false not null,
+  adus_la timestamp with time zone default now() not null);
+
 create table if not exists public.emag_offers (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -4737,6 +4748,7 @@ alter table public.discounts add constraint discounts_pkey PRIMARY KEY (id);
 alter table public.domain_orders add constraint domain_orders_pkey PRIMARY KEY (id);
 alter table public.domains add constraint domains_pkey PRIMARY KEY (id);
 alter table public.emag_awb add constraint emag_awb_pkey PRIMARY KEY (id);
+alter table public.emag_nomenclatoare add constraint emag_nomenclatoare_pkey PRIMARY KEY (business_id, tara, fel, cheie);
 alter table public.emag_offers add constraint emag_offers_pkey PRIMARY KEY (id);
 alter table public.emag_orders add constraint emag_orders_pkey PRIMARY KEY (id);
 alter table public.emag_rma add constraint emag_rma_pkey PRIMARY KEY (id);
@@ -4881,6 +4893,7 @@ alter table public.domains add constraint domains_business_id_fkey FOREIGN KEY (
 alter table public.domains add constraint domains_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.emag_awb add constraint emag_awb_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_awb add constraint emag_awb_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.emag_nomenclatoare add constraint emag_nomenclatoare_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_offers add constraint emag_offers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_offers add constraint emag_offers_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.emag_orders add constraint emag_orders_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -5032,6 +5045,7 @@ CREATE INDEX dhl_etichete_business_idx ON public.dhl_etichete USING btree (busin
 CREATE UNIQUE INDEX domain_orders_stripe_session_id_key ON public.domain_orders USING btree (stripe_session_id) WHERE (stripe_session_id IS NOT NULL);
 CREATE UNIQUE INDEX domains_business_domain_key ON public.domains USING btree (business_id, domain);
 CREATE INDEX emag_awb_order_idx ON public.emag_awb USING btree (order_id);
+CREATE INDEX emag_nomenclatoare_business_idx ON public.emag_nomenclatoare USING btree (business_id);
 CREATE INDEX emag_offers_business_status_idx ON public.emag_offers USING btree (business_id, status);
 CREATE INDEX emag_offers_pnk_idx ON public.emag_offers USING btree (business_id, part_number_key) WHERE (part_number_key IS NOT NULL);
 CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_id);
@@ -5298,6 +5312,7 @@ alter table public.discounts enable row level security;
 alter table public.domain_orders enable row level security;
 alter table public.domains enable row level security;
 alter table public.emag_awb enable row level security;
+alter table public.emag_nomenclatoare enable row level security;
 alter table public.emag_offers enable row level security;
 alter table public.emag_orders enable row level security;
 alter table public.emag_rma enable row level security;
@@ -5420,6 +5435,9 @@ create policy "Users manage own domains" on public.domains as PERMISSIVE for ALL
 create policy owner_select_emag_awb on public.emag_awb as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_emag_nomenclatoare on public.emag_nomenclatoare as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid()))));
 create policy owner_select_emag_offers on public.emag_offers as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
@@ -6124,6 +6142,27 @@ grant SELECT on table public.emag_awb to service_role;
 grant TRIGGER on table public.emag_awb to service_role;
 grant TRUNCATE on table public.emag_awb to service_role;
 grant UPDATE on table public.emag_awb to service_role;
+grant DELETE on table public.emag_nomenclatoare to anon;
+grant INSERT on table public.emag_nomenclatoare to anon;
+grant REFERENCES on table public.emag_nomenclatoare to anon;
+grant SELECT on table public.emag_nomenclatoare to anon;
+grant TRIGGER on table public.emag_nomenclatoare to anon;
+grant TRUNCATE on table public.emag_nomenclatoare to anon;
+grant UPDATE on table public.emag_nomenclatoare to anon;
+grant DELETE on table public.emag_nomenclatoare to authenticated;
+grant INSERT on table public.emag_nomenclatoare to authenticated;
+grant REFERENCES on table public.emag_nomenclatoare to authenticated;
+grant SELECT on table public.emag_nomenclatoare to authenticated;
+grant TRIGGER on table public.emag_nomenclatoare to authenticated;
+grant TRUNCATE on table public.emag_nomenclatoare to authenticated;
+grant UPDATE on table public.emag_nomenclatoare to authenticated;
+grant DELETE on table public.emag_nomenclatoare to service_role;
+grant INSERT on table public.emag_nomenclatoare to service_role;
+grant REFERENCES on table public.emag_nomenclatoare to service_role;
+grant SELECT on table public.emag_nomenclatoare to service_role;
+grant TRIGGER on table public.emag_nomenclatoare to service_role;
+grant TRUNCATE on table public.emag_nomenclatoare to service_role;
+grant UPDATE on table public.emag_nomenclatoare to service_role;
 grant DELETE on table public.emag_offers to anon;
 grant INSERT on table public.emag_offers to anon;
 grant REFERENCES on table public.emag_offers to anon;

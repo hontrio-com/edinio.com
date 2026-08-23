@@ -30,6 +30,7 @@ import {
   caracteristiciLipsa, caracteristiciObligatorii, sugereazaCategorie,
 } from "@/lib/emag/taxonomy";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
@@ -42,7 +43,7 @@ import {
 import { processImport } from "@/lib/import/committer";
 import {
   EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
-  type EmagAdresa, type EmagContCurier, type EmagCotaTva, type EmagConfig,
+  type EmagAdresa, type EmagCategorie, type EmagContCurier, type EmagCotaTva, type EmagConfig,
   type EmagIntrareCategorie,
   EMAG_ETICHETA_STARE, EMAG_STATUS_RETUR, EMAG_VALIDARE,
   type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
@@ -326,6 +327,14 @@ export async function connectEmag(
     return { error: "Conexiunea a mers, dar salvarea a eșuat. Încearcă din nou." };
   }
 
+  /*
+   * ⚠ SE UITA CE STIAM. `is_allowed` e per vanzator si difera pe tara: un cont nou
+   * sau o tara noua inseamna alt raft. Pastrata, memoria veche ar fi aratat categorii
+   * in care comerciantul nu mai are voie sa vanda — iar produsele trimise acolo se
+   * resping cu o eroare de documentatie care nu pomeneste nimic despre acces.
+   */
+  await uitaAmintirile(createAdminClient(), businessId);
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -346,6 +355,9 @@ export async function disconnectEmag(businessId: string): Promise<{ success: tru
   const admin = createAdminClient();
   await admin.from("emag_sync_queue").delete().eq("business_id", businessId);
   await admin.from("emag_offers").delete().eq("business_id", businessId);
+  /* ⚠ Si memoria nomenclatoarelor. Nu tinem minte raftul unui cont care nu mai e
+     legat — iar la o reconectare pe alt cont, `is_allowed` e altul. */
+  await uitaAmintirile(admin, businessId);
 
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -430,14 +442,44 @@ export async function getEmagAdrese(
  */
 export async function sugereazaCategoriiEmag(
   businessId: string,
-): Promise<{ sugestii: Record<string, { id: number; label: string; scor: number; incredere: string }[]>; trunchiat: boolean } | { error: string }> {
+  optiuni: { fortat?: boolean } = {},
+): Promise<
+  | { sugestii: Record<string, { id: number; label: string; scor: number; incredere: string }[]>;
+      trunchiat: boolean; dinMemorie: boolean; adusLa: number | null; cate: number }
+  | { error: string }
+> {
   const c = await contextPentruCitire(businessId);
   if ("error" in c) return c;
 
-  const adus = await aduCategorii(c.auth);
-  if (adus.error) return { error: adus.error };
-
   const admin = createAdminClient();
+
+  /*
+   * ═══ ⚠ RAFTUL LOR SE ȚINE MINTE, NU SE CERE LA FIECARE APĂSARE ═══
+   *
+   * `aduCategorii` paginează până la 60 de pagini la 3 cereri pe secundă. Cerut de
+   * fiecare dată, ecranul aștepta până la douăzeci de secunde — și, mai rău, ținea
+   * ocupat douăzeci de secunde ritmul de care are nevoie coada: aceleași 3 cereri pe
+   * secundă prin care pleacă o mișcare de stoc după o vânzare.
+   *
+   * ⚠ `fortat` există pentru butonul „Reîmprospătează": o listă veche nu strică
+   * nimic, dar comerciantul care tocmai a cerut acces la o categorie nouă trebuie să
+   * o poată vedea fără să aștepte o săptămână.
+   */
+  const memorat = await cuMemorie<EmagCategorie[]>(
+    admin,
+    { businessId, tara: c.config.tara, cont: c.config.username, fel: "categorii" },
+    async () => {
+      const a = await aduCategorii(c.auth);
+      return { date: a.categorii, cate: a.categorii.length, trunchiat: a.trunchiat, eroare: a.error };
+    },
+    { fortat: optiuni.fortat },
+  );
+
+  /* ⚠ Fără nicio listă — nici proaspătă, nici memorată — nu se ghicește nimic. */
+  if (!memorat.date) return { error: memorat.eroare ?? "Categoriile eMAG nu s-au putut citi." };
+
+  const adus = { categorii: memorat.date, trunchiat: memorat.trunchiat };
+
   const { data: produse } = await admin
     .from("products").select("category").eq("business_id", businessId).not("category", "is", null);
 
@@ -450,7 +492,13 @@ export async function sugereazaCategoriiEmag(
     }));
   }
 
-  return { sugestii, trunchiat: adus.trunchiat };
+  return {
+    sugestii,
+    trunchiat: adus.trunchiat,
+    dinMemorie: memorat.dinMemorie,
+    adusLa: memorat.adusLa,
+    cate: memorat.date.length,
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

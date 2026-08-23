@@ -55,6 +55,7 @@ interface Sugestie {
 export function EmagCategoryMapping({ businessId }: { businessId: string }) {
   const [categorii, setCategorii] = useState<CategorieMagazin[] | null>(null);
   const [sugestii, setSugestii] = useState<Record<string, Sugestie[]>>({});
+  const [raft, setRaft] = useState<{ cate: number; adusLa: number | null; dinMemorie: boolean } | null>(null);
   const [deschisa, setDeschisa] = useState<string | null>(null);
   const [seIncarca, incepe] = useTransition();
 
@@ -82,14 +83,15 @@ export function EmagCategoryMapping({ businessId }: { businessId: string }) {
     })();
   }
 
-  function ceruSugestii() {
+  function ceruSugestii(fortat = false) {
     incepe(async () => {
-      const r = await sugereazaCategoriiEmag(businessId);
+      const r = await sugereazaCategoriiEmag(businessId, { fortat });
       if ("error" in r) {
         toast.error(r.error);
         return;
       }
       setSugestii(r.sugestii);
+      setRaft({ cate: r.cate, adusLa: r.adusLa, dinMemorie: r.dinMemorie });
       /*
        * ⚠ Trunchierea SE SPUNE. `category/read` are peste zece mii de categorii, iar
        * când n-au fost aduse toate, sugestiile sunt căutate într-o parte din ele.
@@ -129,7 +131,7 @@ export function EmagCategoryMapping({ businessId }: { businessId: string }) {
         </div>
         <button
           type="button"
-          onClick={ceruSugestii}
+          onClick={() => ceruSugestii(false)}
           disabled={seIncarca}
           className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
         >
@@ -137,6 +139,34 @@ export function EmagCategoryMapping({ businessId }: { businessId: string }) {
           Sugerează
         </button>
       </div>
+
+      {/*
+        ⚠ SE SPUNE DE UNDE VINE LISTA ȘI CÂND A FOST ADUSĂ.
+        Raftul eMAG se ține minte, ca ecranul să nu aștepte până la douăzeci de secunde
+        la fiecare apăsare — dar o listă memorată care se dă drept proaspătă e o
+        minciună mică ce devine mare exact când comerciantul tocmai a primit acces la o
+        categorie nouă și n-o găsește. Deci scrie când s-a adus, și are buton.
+      */}
+      {raft && (
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>
+            {raft.cate} categorii eMAG
+            {raft.dinMemorie && raft.adusLa
+              ? `, aduse ${new Date(raft.adusLa).toLocaleDateString("ro-RO", { day: "numeric", month: "long" })}`
+              : ", aduse acum"}
+          </span>
+          {raft.dinMemorie && (
+            <button
+              type="button"
+              onClick={() => ceruSugestii(true)}
+              disabled={seIncarca}
+              className="underline underline-offset-2 hover:text-foreground disabled:opacity-60"
+            >
+              Reîmprospătează lista
+            </button>
+          )}
+        </p>
+      )}
 
       {categorii.length === 0 ? (
         <p className="mt-5 text-sm text-muted-foreground">

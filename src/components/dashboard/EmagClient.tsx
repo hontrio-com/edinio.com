@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertTriangle, CheckCircle, Copy, Download, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle, Copy, Download, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import {
-  connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
-  leagaOferteImportateEmag, salveazaSetariEmag, type StareEmag,
+  aduComenzileAcumEmag, connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
+  leagaOferteImportateEmag, salveazaSetariEmag, sincronizeazaFelieEmag, type StareEmag,
 } from "@/lib/actions/emag.actions";
 
 /**
@@ -277,11 +277,99 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         </div>
       </div>
 
+      <PanouSincronizare businessId={businessId} />
+
       <PanouNotificari url={status.webhookUrl} />
 
       <PanouImport businessId={businessId} />
 
       <PanouIp ip={status.ipDeAlbit} restrans />
+    </div>
+  );
+}
+
+/**
+ * „Sincronizeaza acum", pe felii.
+ *
+ * ═══ ⚠ DE CE NU UN SINGUR BUTON ═══
+ *
+ * Fiindca feliile costa foarte diferit, iar omul apasa din motive foarte diferite.
+ *
+ * „Am schimbat preturile la 400 de produse si vreau sa plece acum" e o cerere de
+ * cateva secunde pe ruta usoara. „Retrimite documentatia tuturor produselor" e ruta
+ * grea, sute de cereri la 3 pe secunda, si tine ocupat ritmul magazinului minute
+ * intregi — inclusiv pentru miscarile de stoc de dupa vanzari.
+ *
+ * Un singur buton le-ar fi facut pe amandoua de fiecare data. Comerciantul care voia
+ * doar preturile ar fi platit costul intreg, n-ar fi stiut de ce dureaza, si a doua
+ * oara n-ar mai fi apasat.
+ */
+function PanouSincronizare({ businessId }: { businessId: string }) {
+  const [seLucreaza, incepe] = useTransition();
+
+  function felie(f: "preturi" | "stocuri" | "produse", nume: string) {
+    incepe(async () => {
+      const r = await sincronizeazaFelieEmag(businessId, f);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        r.puse === 0
+          ? "Nicio ofertă de sincronizat."
+          : `${r.puse} ${r.puse === 1 ? "produs pus" : "produse puse"} la rând — ${nume}.`,
+      );
+    });
+  }
+
+  function comenzi() {
+    incepe(async () => {
+      const r = await aduComenzileAcumEmag(businessId);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        r.noi === 0 && r.actualizate === 0
+          ? "Nicio comandă nouă."
+          : `${r.noi} comenzi noi, ${r.actualizate} actualizate.`,
+      );
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold">Sincronizează acum</h3>
+      <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+        Totul merge singur, din minut în minut. Butoanele de mai jos sunt pentru când nu
+        vrei să aștepți. {/* ⚠ Se spune ca nu e nevoie de ele: un buton care pare
+        obligatoriu il face pe om sa-l apese la fiecare schimbare. */}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={comenzi} disabled={seLucreaza}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60">
+          {seLucreaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Adu comenzile
+        </button>
+        <button type="button" onClick={() => felie("stocuri", "stocuri")} disabled={seLucreaza}
+          className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60">
+          Trimite stocurile
+        </button>
+        <button type="button" onClick={() => felie("preturi", "prețuri")} disabled={seLucreaza}
+          className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60">
+          Trimite prețurile
+        </button>
+        <button type="button" onClick={() => felie("produse", "produse")} disabled={seLucreaza}
+          className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+          title="Retrimite documentația — cea mai grea felie, poate dura minute">
+          Retrimite produsele
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {/* ⚠ Se spune care e scumpa, ca omul sa aleaga in cunostinta de cauza. */}
+        „Retrimite produsele” trimite documentația întreagă și poate dura minute la un
+        catalog mare. Ofertele preluate din eMAG nu sunt atinse de niciunul.
+      </p>
     </div>
   );
 }

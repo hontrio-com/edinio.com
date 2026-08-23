@@ -34,6 +34,7 @@ import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
 import { schimbaStareaReturului, treceriPosibile } from "@/lib/emag/rma";
+import { aduComenzile } from "@/lib/emag/orders";
 import { pretPentruSmartDeals } from "@/lib/emag/campanii";
 import {
   leagaOferteleNoi, ruleazaImportEmag, SURSA_EMAG, type RezultatImportEmag,
@@ -47,7 +48,7 @@ import {
   type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
 } from "@/lib/emag/types";
 import { traducereaPoateBloca } from "@/lib/emag/rute";
-import { enqueueEmagSyncMany } from "@/lib/emag/queue";
+import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/emag";
@@ -1527,4 +1528,107 @@ export async function descarcaEtichetaAwbEmag(
     tip: r.tip,
     nume: `AWB-${awb.awb_number ?? awb.emag_id}.${format === "ZPL" ? "zpl" : "pdf"}`,
   };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   „SINCRONIZEAZĂ ACUM", PE FELII
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Ce se poate cere la o sincronizare pornită de om.
+ *
+ * ═══ ⚠ DE CE NU UN SINGUR BUTON „SINCRONIZEAZĂ TOT" ═══
+ *
+ * Fiindcă feliile costă foarte diferit, iar omul apasă din motive foarte diferite.
+ *
+ * „Am schimbat prețurile la 400 de produse și vreau să plece acum" e o cerere de
+ * câteva secunde pe ruta ușoară. „Retrimite documentația tuturor produselor" e ruta
+ * grea, sute de cereri la 3 pe secundă, și ține ocupat ritmul magazinului minute
+ * întregi — inclusiv pentru mișcările de stoc de după vânzări.
+ *
+ * Un singur buton le-ar fi făcut pe amândouă de fiecare dată. Comerciantul care voia
+ * doar prețurile ar fi plătit costul întreg, n-ar fi știut de ce durează, și a doua
+ * oară n-ar mai fi apăsat.
+ */
+export type FelieSincronizare = "preturi" | "stocuri" | "produse";
+
+/**
+ * Pune la coadă o felie, pentru toate ofertele sincronizabile ale magazinului.
+ *
+ * ⚠ NUMAI OFERTELE CU `auto_sync`. Cele preluate din contul lor au prețul pus de
+ * comerciant în panoul eMAG; luate în „sincronizează prețurile", chiar apăsarea
+ * asta le-ar fi șters. Cine vrea să le trimită totuși are butonul „Trimite acum" pe
+ * fiecare, care e o cerere explicită pentru un produs anume.
+ *
+ * ⚠ NU trimite nimic pe loc: pune în coadă. O felie poate atinge mii de produse, iar
+ * trimise sincron ar fi depășit timpul funcției și ar fi ars într-o clipă tot ritmul
+ * de 3 cereri pe secundă — inclusiv cel de care are nevoie o vânzare.
+ */
+export async function sincronizeazaFelieEmag(
+  businessId: string,
+  felie: FelieSincronizare,
+): Promise<{ puse: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const config = await loadConfig(businessId);
+  if (!config.connected) return { error: "Contul eMAG nu este conectat." };
+  if (config.needs_reconnect) return { error: "eMAG a refuzat acreditările. Reconectează contul." };
+
+  const admin = createAdminClient();
+
+  /*
+   * ⚠ Se citesc ofertele, nu produsele. Un produs fără ofertă n-a fost publicat
+   * niciodată, iar pus la coadă ar fi plecat pe ruta grea — adică „sincronizează
+   * prețurile" ar fi publicat produse pe care nimeni nu ceruse să le publice.
+   */
+  const randuri = await fetchAllRowsStrict<{ product_id: string | null }>(
+    "emag.felie", (from, to) =>
+      admin.from("emag_offers").select("product_id")
+        .eq("business_id", businessId).eq("auto_sync", true).not("product_id", "is", null)
+        .order("emag_id", { ascending: true }).range(from, to),
+  );
+
+  const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
+  if (ids.length === 0) return { puse: 0 };
+
+  if (felie === "stocuri") await enqueueEmagStocMany(businessId, ids);
+  else if (felie === "preturi") await enqueueEmagPretMany(businessId, ids);
+  else await enqueueEmagSyncMany(businessId, ids);
+
+  revalidatePath(FEATURE_PATH);
+  return { puse: ids.length };
+}
+
+/**
+ * Aduce comenzile acum, fără să aștepte trecerea cronului.
+ *
+ * ⚠ NU atinge marcajul de timp al cronului. Fereastra de aici e scurtă și pornită de
+ * om; mutat de ea, cursorul cronului ar fi sărit peste comenzi pe care nu le-a citit
+ * nimeni. Se citește în PLUS, niciodată în locul lui.
+ */
+export async function aduComenzileAcumEmag(
+  businessId: string,
+): Promise<{ noi: number; actualizate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  try {
+    /* Două ore în urmă: destul cât să prindă ce a scăpat, destul de puțin cât să nu
+       ardă ritmul magazinului la fiecare apăsare. */
+    const rez = await aduComenzile(admin, ctx, new Date(Date.now() - 2 * 60 * 60 * 1000));
+    revalidatePath("/dashboard/orders");
+    return { noi: rez.noi, actualizate: rez.actualizate };
+  } catch (e) {
+    const mesaj = e instanceof Error ? e.message : "Comenzile nu s-au putut aduce.";
+    void logError({ action: "emag.comenzi.acum", message: mesaj, details: { businessId }, severity: "error" });
+    return { error: mesaj };
+  }
 }

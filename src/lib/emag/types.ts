@@ -784,6 +784,47 @@ export interface EmagConfig {
     eu_representative?: EmagGpsrEntitate[];
   };
 
+  /**
+   * Taxa verde, pe categoriile care o cer.
+   *
+   * ═══ ⚠ VALOAREA INCLUDE TVA, SPRE DEOSEBIRE DE TOATE CELELALTE PRETURI ═══
+   *
+   * Documentatia lor, cuvant cu cuvant: „The value for Green tax that will be
+   * displayed on site. This value includes VAT." Iar `sale_price`, `min_sale_price`,
+   * `max_sale_price` si `recommended_price` sunt toate FARA.
+   *
+   * Trecuta prin `pretFaraTva` din obisnuinta, taxa ar fi plecat cu o cincime mai
+   * mica — si nimeni n-ar fi observat, fiindca e o suma mica pe o linie separata.
+   *
+   * ⚠ Numai pe eMAG RO. Pe bg si hu, campul nu se trimite.
+   */
+  green_tax?: number;
+
+  /**
+   * Cate bucati se opresc pentru magazinul propriu.
+   *
+   * ⚠ Se SCADE din stocul trimis, si nu coboara sub zero. Un comerciant care are
+   * acelasi stoc pe mai multe canale isi tine asa o rezerva: eMAG vede 8 din 10, iar
+   * ultimele doua raman pentru magazinul lui.
+   */
+  stoc_rezervat?: number;
+
+  /**
+   * Trimite Edinio si CONTINUTUL (nume, descriere, imagini, caracteristici)?
+   *
+   * ═══ ⚠ ALTA INTREBARE DECAT `auto_sync` ═══
+   *
+   * `auto_sync` e „trimite pretul si stocul". Asta e „rescrie si fisa produsului".
+   *
+   * Multi comercianti isi ingrijesc fisa direct in panoul eMAG — poze mai bune, text
+   * scris pentru cumparatorul de acolo — si vor ca Edinio sa conduca numai pretul si
+   * stocul. Fara comutatorul asta, prima editare a produsului in magazin le-ar fi
+   * sters munca, si n-ar fi avut cum s-o opreasca decat oprind sincronizarea cu totul.
+   *
+   * Implicit PORNIT: cine publica din Edinio se asteapta ca fisa sa vina tot de acolo.
+   */
+  sync_continut?: boolean;
+
   /** Cat de larg e intervalul min/max fata de pretul de vanzare, in procente. */
   price_band_pct?: number;
 

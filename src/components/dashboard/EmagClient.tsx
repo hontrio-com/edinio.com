@@ -106,7 +106,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
     });
   }
 
-  function comuta(camp: "auto_sync" | "auto_publish", valoare: boolean) {
+  function comuta(camp: "auto_sync" | "auto_publish" | "sync_continut", valoare: boolean) {
     incepe(async () => {
       const r = await salveazaSetariEmag(businessId, { [camp]: valoare });
       if ("error" in r) toast.error(r.error);
@@ -310,7 +310,24 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             dezactivat={seLucreaza}
             laSchimbare={(v) => comuta("auto_publish", v)}
           />
+          {/*
+            ⚠ ALTĂ ÎNTREBARE DECÂT „trimite automat".
+            Aceea e „trimite ceva"; asta e „rescrie și fișa produsului". Mulți
+            comercianți își îngrijesc fișa în panoul eMAG — poze mai bune, text scris
+            pentru cumpărătorul de acolo — și vor ca Edinio să conducă numai prețul și
+            stocul. Fără comutatorul ăsta, prima editare a produsului le-ar fi șters
+            munca, iar singura scăpare ar fi fost oprirea sincronizării cu totul.
+          */}
+          <Comutator
+            eticheta="Trimite și fișa produsului"
+            descriere="Nume, descriere, poze, caracteristici. Oprit, Edinio trimite doar prețul și stocul, iar fișa rămâne cum ai făcut-o pe eMAG."
+            pornit={status.syncContinut}
+            dezactivat={seLucreaza}
+            laSchimbare={(v) => comuta("sync_continut", v)}
+          />
         </div>
+
+        <PanouStoculSiTaxa businessId={businessId} status={status} />
       </div>
 
       <PanouSincronizare businessId={businessId} />
@@ -320,6 +337,85 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
       <PanouImport businessId={businessId} />
 
       <PanouIp ip={status.ipDeAlbit} restrans />
+    </div>
+  );
+}
+
+/**
+ * Rezerva de stoc si taxa verde.
+ *
+ * ⚠ DOUA NUMERE CU DOUA CAPCANE DIFERITE, si amandoua se spun pe ecran.
+ *
+ * Rezerva: un numar prea mare opreste de la vanzare tot catalogul, TACUT — stocul
+ * trimis devine zero, ofertele raman publicate dar nevandabile, si nimic nu da eroare.
+ * De aceea scrie ce face, si e marginita la salvare.
+ *
+ * Taxa verde: INCLUDE TVA, spre deosebire de toate celelalte preturi din integrare.
+ * Scrisa fara, ar pleca cu o cincime mai mica — si nimeni n-ar observa, fiindca e o
+ * suma mica pe o linie separata.
+ */
+function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status: StareEmag }) {
+  const [rezerva, setRezerva] = useState(String(status.stocRezervat ?? ""));
+  const [taxa, setTaxa] = useState(String(status.greenTax ?? ""));
+  const [seSalveaza, incepe] = useTransition();
+
+  function salveaza() {
+    incepe(async () => {
+      const r = await salveazaSetariEmag(businessId, {
+        stoc_rezervat: rezerva.trim() === "" ? null : Number(rezerva),
+        green_tax: taxa.trim() === "" ? null : Number(taxa),
+      });
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Salvat.");
+    });
+  }
+
+  return (
+    <div className="mt-5 space-y-4 border-t border-border pt-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Oprește pentru magazinul tău</span>
+          <input
+            className={CAMP}
+            inputMode="numeric"
+            value={rezerva}
+            placeholder="0"
+            onChange={(e) => setRezerva(e.target.value.replace(/[^0-9]/g, ""))}
+          />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Bucăți scăzute din stocul trimis la eMAG. Cu 2 aici și 10 în depozit, eMAG vede 8.
+          </span>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Taxă verde (lei)</span>
+          <input
+            className={CAMP}
+            inputMode="decimal"
+            value={taxa}
+            placeholder="0"
+            onChange={(e) => setTaxa(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))}
+          />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {/* ⚠ Se spune pe ecran, fiindcă e singura sumă din integrare care merge cu TVA. */}
+            Doar dacă o cer categoriile tale. <strong>Se scrie cu TVA inclus</strong>, spre
+            deosebire de prețuri. Numai pe eMAG România.
+          </span>
+        </label>
+      </div>
+
+      <button
+        type="button"
+        onClick={salveaza}
+        disabled={seSalveaza}
+        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+      >
+        {seSalveaza && <Loader2 className="h-4 w-4 animate-spin" />}
+        Salvează
+      </button>
     </div>
   );
 }

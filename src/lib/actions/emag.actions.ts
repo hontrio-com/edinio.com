@@ -144,6 +144,9 @@ export interface StareEmag {
   webhookUrl: string;
   vatId: number | null;
   handlingTime: number | null;
+  greenTax: number | null;
+  stocRezervat: number | null;
+  syncContinut: boolean;
   categoriiMapate: number;
   oferte: {
     total: number;
@@ -237,6 +240,10 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     webhookUrl: emagWebhookUrl(businessId),
     vatId: config.vat_id ?? null,
     handlingTime: config.handling_time ?? null,
+    greenTax: config.green_tax ?? null,
+    stocRezervat: config.stoc_rezervat ?? null,
+    /* ⚠ Implicit PORNIT: cine publică din Edinio se așteaptă ca fișa să vină tot de acolo. */
+    syncContinut: config.sync_continut !== false,
     categoriiMapate: Object.keys(config.category_map ?? {}).length,
     oferte: {
       total: total.count ?? 0,
@@ -526,6 +533,12 @@ export async function salveazaSetariEmag(
     auto_sync?: boolean;
     auto_publish?: boolean;
     warehouse_id?: number;
+    /** ⚠ Include TVA, spre deosebire de preturi. Numai pe eMAG RO. */
+    green_tax?: number | null;
+    /** Cate bucati se opresc pentru magazinul propriu. */
+    stoc_rezervat?: number | null;
+    /** Rescrie Edinio si fisa produsului (nume, descriere, poze)? */
+    sync_continut?: boolean;
   },
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
@@ -545,6 +558,22 @@ export async function salveazaSetariEmag(
     return { error: "Marja de preț trebuie să fie între 1% și 90%." };
   }
 
+  /*
+   * ⚠ REZERVA DE STOC SE MĂRGINEȘTE. Un număr uriaș pus din greșeală ar fi oprit de la
+   * vânzare TOT catalogul, tăcut: `stocCuRezerva` dă zero, eMAG primește zero, iar
+   * ofertele rămân publicate dar nevandabile. Nimic n-ar fi dat eroare.
+   */
+  const rez = setari.stoc_rezervat;
+  if (rez != null && (!Number.isFinite(rez) || rez < 0 || rez > 10_000)) {
+    return { error: "Rezerva de stoc trebuie să fie între 0 și 10.000 de bucăți." };
+  }
+
+  /* ⚠ Taxa verde INCLUDE TVA. Negativă n-are niciun înțeles, iar eMAG o refuză. */
+  const taxa = setari.green_tax;
+  if (taxa != null && (!Number.isFinite(taxa) || taxa < 0)) {
+    return { error: "Taxa verde nu poate fi negativă." };
+  }
+
   const noua: EmagConfig = {
     ...veche,
     ...(setari.vat_id != null ? { vat_id: setari.vat_id } : {}),
@@ -554,6 +583,9 @@ export async function salveazaSetariEmag(
     ...(setari.auto_sync != null ? { auto_sync: setari.auto_sync } : {}),
     ...(setari.auto_publish != null ? { auto_publish: setari.auto_publish } : {}),
     ...(setari.warehouse_id != null ? { warehouse_id: setari.warehouse_id } : {}),
+    ...(setari.green_tax !== undefined ? { green_tax: setari.green_tax ?? undefined } : {}),
+    ...(setari.stoc_rezervat !== undefined ? { stoc_rezervat: setari.stoc_rezervat ?? undefined } : {}),
+    ...(setari.sync_continut != null ? { sync_continut: setari.sync_continut } : {}),
   };
 
   const ok = await saveConfig(g.supabase, businessId, noua);

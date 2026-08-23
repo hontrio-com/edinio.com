@@ -4,7 +4,7 @@ import {
   asteptareaUrmatoare, eVandabila, LOT_MAXIM, PRIORITATE_OP, rutaDeTrimitere,
   traducereaPoateBloca,
 } from "./rute";
-import { oferteUsoare, stocuriDeTrimis } from "./mapping";
+import { oferteUsoare, stocCuRezerva, stocuriDeTrimis } from "./mapping";
 
 /*
  * Probele drumului pe care pleaca o modificare spre eMAG.
@@ -291,4 +291,95 @@ test("eMAG coada: peste ultima treapta nu se mai creste, si nu se strica", () =>
   assert.equal(asteptareaUrmatoare(99), asteptareaUrmatoare(5));
   assert.equal(asteptareaUrmatoare(0), asteptareaUrmatoare(1), "zero incercari nu da un index negativ");
   assert.equal(asteptareaUrmatoare(-3), asteptareaUrmatoare(1));
+});
+
+/* ── §14. Timpul de pregatire nu se rescrie cu o valoare de rezerva ────────── */
+
+test("eMAG: fara timp de pregatire ales, campul NU pleaca deloc", () => {
+  /*
+   * ═══ DEFECT GASIT DE SCEPTICI ═══
+   *
+   * `oferteUsoare` trimitea MEREU `handling_time`, iar contextul punea `?? 1`. Deci
+   * fiecare schimbare de PRET a unui magazin care nu si-a ales timpul de pregatire ii
+   * rescria valoarea de la eMAG cu „o zi".
+   *
+   * Un comerciant care expediaza in trei zile si-ar fi vazut oferta promitand una,
+   * dupa o simpla modificare de pret. Fara nicio eroare: campul se accepta.
+   *
+   * `handling_time` e OPTIONAL la ei. Cand nu-l stim, nu-l trimitem — si atunci eMAG
+   * pastreaza ce are.
+   */
+  const produs = {
+    id: "p", name: "X", description: null, price: 100, compare_at_price: null, images: [],
+    category: null, sku: "X", weight_grams: null, stock_quantity: 1, is_active: true,
+    page_sections: {},
+  };
+  const faraTimp = {
+    vat_rate: 21, prices_include_vat: false, vat_id: 1, handling_time: null, warehouse_id: 1,
+    warranty: 24, price_band_pct: 30, source_language: "ro_RO", brand: null,
+  };
+  const cuTimp = { ...faraTimp, handling_time: 3 };
+
+  assert.equal(oferteUsoare(produs, faraTimp, [{ variant_title: null, emag_id: 5 }])[0].handling_time,
+    undefined, "campul lipseste cu totul, nu e trimis cu o valoare inventata");
+  assert.deepEqual(oferteUsoare(produs, cuTimp, [{ variant_title: null, emag_id: 5 }])[0].handling_time,
+    [{ warehouse_id: 1, value: 3 }], "cand se stie, pleaca ce a ales omul");
+});
+
+/* ── §12. Continutul oprit ─────────────────────────────────────────────────── */
+
+test("eMAG: cu continutul oprit, publicarea coboara pe ruta usoara", () => {
+  /*
+   * Comerciantul care isi ingrijeste fisa in panoul eMAG a spus „nu-mi rescrie fisa".
+   * O cerere de publicare pe o oferta care EXISTA nu se arunca — se face ce se poate:
+   * pretul, stocul, starea.
+   *
+   * Aruncata, o salvare obisnuita de produs n-ar mai fi dus nici pretul nou, iar omul
+   * ar fi crezut ca oprirea continutului a oprit sincronizarea cu totul.
+   */
+  assert.equal(
+    rutaDeTrimitere({ ...BAZA, op: "oferta", sincronizeazaContinut: false }).fel,
+    "oferta",
+  );
+  assert.equal(
+    rutaDeTrimitere({ ...BAZA, op: "oferta", sincronizeazaContinut: true }).fel,
+    "creeaza",
+  );
+});
+
+test("eMAG: la o oferta care NU exista, oprirea continutului nu schimba nimic", () => {
+  /* Nu e nimic de coborat: ori pleaca documentatia, ori produsul ramane nepublicat. */
+  assert.equal(
+    rutaDeTrimitere({ ...BAZA, op: "oferta", existaLaEmag: false, sincronizeazaContinut: false }).fel,
+    "creeaza",
+  );
+});
+
+test("eMAG: oprirea continutului NU opreste stocul si pretul", () => {
+  assert.equal(rutaDeTrimitere({ ...BAZA, op: "stoc", sincronizeazaContinut: false }).fel, "stoc");
+  assert.equal(rutaDeTrimitere({ ...BAZA, op: "pret", sincronizeazaContinut: false }).fel, "oferta");
+});
+
+/* ── §11. Rezerva de stoc ──────────────────────────────────────────────────── */
+
+test("eMAG: rezerva se scade din stocul trimis", () => {
+  assert.equal(stocCuRezerva(10, 2), 8);
+  assert.equal(stocCuRezerva(10, 0), 10);
+  assert.equal(stocCuRezerva(10, null), 10);
+});
+
+test("eMAG: rezerva mai mare decat stocul da ZERO, nu un numar negativ", () => {
+  /*
+   * ⚠ eMAG respinge numerele negative, iar oferta ar fi ramas neactualizata cu un
+   * mesaj despre un camp — adica ar fi continuat sa vanda cele doua bucati pe care
+   * omul le voia oprite. Zero opreste vanzarea, care e chiar ce a cerut.
+   */
+  assert.equal(stocCuRezerva(2, 3), 0);
+  assert.equal(stocCuRezerva(0, 5), 0);
+});
+
+test("eMAG: o rezerva stricata nu strica stocul", () => {
+  assert.equal(stocCuRezerva(10, Number.NaN), 10);
+  assert.equal(stocCuRezerva(10, -3), 10, "o rezerva negativa nu ADAUGA stoc");
+  assert.equal(stocCuRezerva(Number.NaN, 2), 0);
 });

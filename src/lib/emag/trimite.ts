@@ -90,7 +90,12 @@ export async function trimiteElement(
   const existaLaEmag = randuri.some((r) => r.last_synced_at != null);
   const autoSync = randuri.length === 0 ? true : randuri.every((r) => r.auto_sync);
 
-  const ruta = rutaDeTrimitere({ op, existaLaEmag, autoSync, fortat });
+  const ruta = rutaDeTrimitere({
+    op, existaLaEmag, autoSync, fortat,
+    /* ⚠ Implicit PORNIT: cine publica din Edinio se asteapta ca fisa sa vina tot de
+       acolo. Se opreste doar cand comerciantul cere asta explicit. */
+    sincronizeazaContinut: ctx.config.sync_continut !== false,
+  });
   if (ruta.fel === "nimic") {
     await scrieEroare(admin, ctx.businessId, productId, ruta.motiv ?? "");
     return { verdict: "sarit", mesaj: ruta.motiv ?? "" };
@@ -322,7 +327,7 @@ async function duOferta(
 async function duStocul(
   admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
 ): Promise<RezultatTrimitere> {
-  const stocuri = stocuriDeTrimis(produs, identitatiUsoare(randuri));
+  const stocuri = stocuriDeTrimis(produs, identitatiUsoare(randuri), ctx.config.stoc_rezervat);
 
   /* ⚠ Aceeasi paza ca la pret, si aici e si mai scumpa: o miscare de stoc care
      raporteaza succes fara sa plece nicaieri inseamna ca eMAG continua sa vanda
@@ -740,10 +745,27 @@ function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
     vat_rate: ctx.vatRate,
     prices_include_vat: ctx.pricesIncludeVat,
     vat_id: ctx.config.vat_id ?? 0,
-    handling_time: ctx.config.handling_time ?? 1,
+    /*
+     * ═══ ⚠ `null`, NU `1` ═══
+     *
+     * Prima forma punea `?? 1`. Iar `oferteUsoare` trimite MEREU `handling_time`
+     * in incarcatura — deci fiecare schimbare de PRET a unui magazin care nu si-a ales
+     * timpul de pregatire ii rescria valoarea de la eMAG cu „o zi".
+     *
+     * Un comerciant care expediaza in trei zile si-ar fi vazut oferta promitand una,
+     * dupa o simpla modificare de pret. Fara nicio eroare: campul se accepta.
+     *
+     * `handling_time` e OPTIONAL la ei. Cand nu-l stim, nu-l trimitem — si atunci eMAG
+     * pastreaza ce are. Publicarea cere oricum valoarea, prin `ceLipsestePentruPublicare`.
+     */
+    handling_time: ctx.config.handling_time ?? null,
     warehouse_id: ctx.config.warehouse_id ?? 1,
     warranty: ctx.config.warranty_default ?? 24,
     price_band_pct: ctx.config.price_band_pct ?? 30,
+    /* ⚠ Taxa verde numai pe eMAG RO: documentatia lor spune „Available only for the
+       eMAG RO platform". Trimisa pe bg sau hu, e un camp necunoscut. */
+    green_tax: ctx.auth.tara === "ro" || ctx.auth.tara == null ? ctx.config.green_tax : null,
+    stoc_rezervat: ctx.config.stoc_rezervat ?? null,
     source_language: limbaDupaTara(ctx),
     /* Marca produsului, nu a magazinului. eMAG o cere obligatoriu la unele categorii,
        iar `mapping.ts` cade pe ea cand produsul n-are alta. */

@@ -133,6 +133,22 @@ export function partNumberCombinatie(
   return baza ? `${baza}-${sufix}` : sufix;
 }
 
+/**
+ * Stocul care pleaca la eMAG, dupa ce se opreste rezerva.
+ *
+ * ═══ ⚠ NU COBOARA SUB ZERO, SI NU „REZERVA" MAI MULT DECAT EXISTA ═══
+ *
+ * Un comerciant cu 2 bucati si rezerva 3 trebuie sa trimita `0`, nu `-1`: eMAG
+ * respinge numerele negative, iar oferta ar fi ramas neactualizata cu un mesaj despre
+ * un camp — adica ar fi continuat sa vanda cele doua bucati pe care omul le voia
+ * oprite. Zero opreste vanzarea, care e chiar ce a cerut.
+ */
+export function stocCuRezerva(stoc: number, rezerva: number | null | undefined): number {
+  const s = Number.isFinite(stoc) ? Math.max(0, Math.floor(stoc)) : 0;
+  const r = Number.isFinite(Number(rezerva)) ? Math.max(0, Math.floor(Number(rezerva))) : 0;
+  return Math.max(0, s - r);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    IMAGINILE
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -192,11 +208,21 @@ export interface ContextMagazin {
   vat_rate: number;
   prices_include_vat: boolean;
   vat_id: number;
-  handling_time: number;
+  /**
+   * Zilele de pregatire alese de comerciant, sau `null` cand n-a ales.
+   *
+   * ⚠ `null` NU inseamna „pune o zi". Inseamna „nu trimite campul", ca eMAG sa
+   * pastreze ce are acolo. Vezi nota din `magazinDin`.
+   */
+  handling_time: number | null;
   warehouse_id: number;
   warranty: number;
   /** Cat de larga e banda min/max, in procente. */
   price_band_pct: number;
+  /** ⚠ Taxa verde INCLUDE TVA, spre deosebire de preturi. Numai pe eMAG RO. */
+  green_tax?: number | null;
+  /** Cate bucati se opresc pentru magazinul propriu. Se scad din stocul trimis. */
+  stoc_rezervat?: number | null;
   source_language: string;
   brand: string | null;
   gpsr?: {
@@ -264,10 +290,29 @@ export function construiesteOferte(
     characteristics: categorie.characteristics.length ? categorie.characteristics : undefined,
     warranty: magazin.warranty,
     vat_id: magazin.vat_id,
-    handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }],
+    ...(magazin.handling_time != null
+      ? { handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }] }
+      : {}),
+    /*
+     * ⚠ `images_overwrite: 1` — imaginile din Edinio le INLOCUIESC pe cele de la ei,
+     * nu se adauga peste. Cu `0`, fiecare retrimitere ar fi lipit inca un set: dupa a
+     * treia editare a produsului, fisa de la eMAG ar fi avut cincisprezece poze, dintre
+     * care zece vechi. Iar comerciantul n-ar fi avut de unde sti de ce.
+     *
+     * ⚠ Cine isi ingrijeste fisa in panoul lor opreste `sync_continut` — si atunci
+     * documentatia nu mai pleaca deloc, deci nici steagul asta nu se aplica.
+     */
+    images_overwrite: 1 as const,
     safety_information: magazin.gpsr?.safety_information,
     manufacturer: magazin.gpsr?.manufacturer,
     eu_representative: magazin.gpsr?.eu_representative,
+    /*
+     * ⚠ TAXA VERDE INCLUDE TVA, spre deosebire de toate celelalte preturi. Documentatia
+     * lor: „This value includes VAT." Trecuta prin `pretFaraTva` din obisnuinta, ar fi
+     * plecat cu o cincime mai mica — si nimeni n-ar fi observat, fiindca e o suma mica
+     * pe o linie separata. Deci se trimite EXACT cum a scris-o comerciantul.
+     */
+    ...(Number(magazin.green_tax) > 0 ? { green_tax: Number(magazin.green_tax) } : {}),
   };
 
   /* ── Produs simplu ────────────────────────────────────────────────────── */
@@ -504,8 +549,13 @@ export function oferteUsoare(
       min_sale_price: banda.min_sale_price,
       max_sale_price: banda.max_sale_price,
       vat_id: magazin.vat_id,
-      handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }],
-      stock: [{ warehouse_id: magazin.warehouse_id, value: Math.max(0, stoc) }],
+      /* ⚠ Se OMITE cand nu se stie, ca eMAG sa pastreze ce are. Trimis cu o valoare
+         de rezerva, fiecare schimbare de pret ar fi rescris timpul de pregatire al
+         comerciantului — fara nicio eroare, fiindca acela e un camp valid. */
+      ...(magazin.handling_time != null
+        ? { handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }] }
+        : {}),
+      stock: [{ warehouse_id: magazin.warehouse_id, value: stocCuRezerva(stoc, magazin.stoc_rezervat) }],
       status: stare,
     };
   });
@@ -521,6 +571,10 @@ export function oferteUsoare(
 export function stocuriDeTrimis(
   produs: ProdusDeCartografiat,
   identitati: IdentitateUsoara[],
+  /* ⚠ Rezerva pentru magazinul propriu. Cere-o si aici, nu numai pe ruta grea: altfel
+     fiecare vanzare ar fi trimis stocul INTREG si ar fi anulat rezerva la fiecare
+     miscare — adica exact pe drumul cel mai des. */
+  stocRezervat?: number | null,
 ): { emagId: number; cantitate: number }[] {
   const variante = parseVariants(produs.page_sections);
   const dupaTitlu = new Map(combinatiiActiveUnice(variante).map((c) => [c.title, c]));
@@ -528,6 +582,6 @@ export function stocuriDeTrimis(
   return identitati.map((ident) => {
     const c = ident.variant_title ? dupaTitlu.get(ident.variant_title) : undefined;
     const stoc = c ? (comboStock(c) ?? produs.stock_quantity ?? 0) : (produs.stock_quantity ?? 0);
-    return { emagId: ident.emag_id, cantitate: Math.max(0, stoc) };
+    return { emagId: ident.emag_id, cantitate: stocCuRezerva(stoc, stocRezervat) };
   });
 }

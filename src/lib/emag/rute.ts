@@ -72,6 +72,15 @@ export interface StareaOfertei {
    * n-ar fi facut nimic pe ofertele preluate, si nici n-ar fi spus de ce.
    */
   fortat?: boolean;
+  /**
+   * Trimite magazinul si CONTINUTUL, sau numai pretul si stocul?
+   *
+   * ⚠ ALTA INTREBARE DECAT `autoSync`. Aceea e „trimite ceva"; asta e „rescrie si fisa
+   * produsului". Multi comercianti isi ingrijesc fisa in panoul eMAG — poze mai bune,
+   * text scris pentru cumparatorul de acolo — si vor ca Edinio sa conduca numai pretul
+   * si stocul.
+   */
+  sincronizeazaContinut?: boolean;
 }
 
 /**
@@ -106,6 +115,20 @@ export function rutaDeTrimitere(s: StareaOfertei): Ruta {
    * fi ramas nepublicat cu un mesaj care nu spune „mai intai publica-l".
    */
   if (!s.existaLaEmag) return { fel: "creeaza" };
+
+  /*
+   * ═══ ⚠ CONTINUTUL OPRIT: PUBLICAREA COBOARA PE RUTA USOARA ═══
+   *
+   * Cand comerciantul a spus „nu-mi rescrie fisa", o cerere de publicare pe o oferta
+   * care EXISTA deja nu se arunca — se face ce se poate: pretul, stocul, starea.
+   *
+   * Aruncata, o salvare obisnuita de produs n-ar mai fi dus nici pretul nou, si omul
+   * ar fi crezut ca oprirea continutului a oprit sincronizarea cu totul.
+   *
+   * ⚠ Numai pentru ofertele care exista. La una noua nu e nimic de coborat: ori pleaca
+   * documentatia, ori nu se publica — iar cazul acela e prins mai sus.
+   */
+  if (s.op === "oferta" && s.sincronizeazaContinut === false) return { fel: "oferta" };
 
   if (s.op === "oferta") return { fel: "creeaza" };
   if (s.op === "masuratori") return { fel: "masuratori" };

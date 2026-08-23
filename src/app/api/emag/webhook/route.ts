@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { emagGloballyEnabled } from "@/lib/emag/auth";
+import { ipuriPermise, CHEIE_IPURI } from "@/lib/emag/ipuri";
 import { loadEmagContext } from "@/lib/emag/sync";
 import { aduComenzile, ingereazaComanda } from "@/lib/emag/orders";
 import { citesteComenzi, isEmagError } from "@/lib/emag/client";
@@ -43,18 +44,26 @@ import type { EmagComanda } from "@/lib/emag/types";
  */
 
 /**
- * IP-urile de la care sună eMAG, după documentația lor v4.5.1.
+ * Lista albă a apelanților, din TREI surse.
  *
- * ⚠ Se poate lărgi din mediu cu `EMAG_WEBHOOK_IPS` (separate prin virgulă), ca lista
- * să se poată repara fără o livrare de cod — ei publică și un `/public-ips.json` pe
- * care îl pot schimba oricând.
+ * ═══ ⚠ NICIUNA NU O POATE GOLI PE CEALALTĂ ═══
+ *
+ *   cele din documentația lor v4.5.1     — scrise în `ipuri.ts`, nu se șterg niciodată
+ *   cele aduse de la `/public-ips.json`  — împrospătate de cron, o dată pe oră
+ *   `EMAG_WEBHOOK_IPS`                   — reparație fără o livrare de cod
+ *
+ * Ei spun că lista se schimbă și cer să fie urmărită. Dar o aducere căzută, sau un
+ * fișier cu altă formă, NU are voie să lase integrarea fără nicio adresă permisă: asta
+ * ar refuza toate notificările, adică ar face chiar răul de care ne apărăm. De aceea
+ * cele trei se ADUNĂ, nu se înlocuiesc.
  */
-const IP_EMAG: readonly string[] = ["43.131.5.30", "91.206.37.14", "46.174.144.128"];
-
-function ipuriPermise(): string[] {
-  const dinMediu = (process.env.EMAG_WEBHOOK_IPS ?? "")
-    .split(",").map((x) => x.trim()).filter(Boolean);
-  return [...IP_EMAG, ...dinMediu];
+async function ipuriDePermis(
+  admin: ReturnType<typeof createClient<Database>>,
+): Promise<string[]> {
+  const { data } = await admin.from("platform_settings")
+    .select("value").eq("key", CHEIE_IPURI).maybeSingle();
+  const aduse = ((data?.value as { ipuri?: string[] } | null)?.ipuri) ?? null;
+  return ipuriPermise(aduse, process.env.EMAG_WEBHOOK_IPS);
 }
 
 /**
@@ -82,8 +91,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "businessId lipsește" }, { status: 400 });
   }
 
+  const admin = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  const permise = await ipuriDePermis(admin);
   const ip = ipulApelantului(req);
-  if (!ip || !ipuriPermise().includes(ip)) {
+  if (!ip || !permise.includes(ip)) {
     /*
      * ⚠ SE SCRIE, nu se trece cu vederea. Un refuz aici poate însemna două lucruri
      * foarte diferite: cineva bate la ușă degeaba, sau eMAG a schimbat lista și
@@ -93,17 +109,11 @@ export async function POST(req: NextRequest) {
     await logError({
       action: "emag/webhook",
       message: `notificare refuzată: IP necunoscut ${ip ?? "(lipsă)"}`,
-      details: { businessId, permise: ipuriPermise() },
+      details: { businessId, permise },
       severity: "warning",
     });
     return NextResponse.json({ error: "Interzis" }, { status: 403 });
   }
-
-  const admin = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  );
 
   const ctx = await loadEmagContext(admin, businessId);
   if (!ctx) {

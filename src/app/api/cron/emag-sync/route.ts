@@ -10,6 +10,8 @@ import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
 import { aduComenzile } from "@/lib/emag/orders";
+import { aduIpurileEmag } from "@/lib/emag/client";
+import { citesteIpuri, sAuSchimbat, CHEIE_IPURI } from "@/lib/emag/ipuri";
 import { urcaFacturaLaEmag, type Factura } from "@/lib/emag/facturi";
 import { aduRetururile } from "@/lib/emag/rma";
 import type { EmagConfig, EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
@@ -381,6 +383,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /* ── 6) Lista de IP-uri de la care suna ei ──────────────────────────────
+   *
+   * ⚠ O DATA PE ORA, si nu din zgarcenie: fisierul lor se schimba de cateva ori pe
+   * an. Cerut la fiecare minut, ar fi fost 1440 de cereri pe zi pentru o valoare care
+   * sta neschimbata luni intregi.
+   *
+   * ⚠ La minutul 7, nu la 0. Documentatia lor cere sa nu se cheme la ore rotunde —
+   * „use e.g. 12:04:42 instead of 12:00:00" — fiindca atunci suna toata lumea deodata.
+   */
+  if (new Date(inceputulRularii).getMinutes() === 7) {
+    await improspateazaIpurile(admin);
+  }
+
   return NextResponse.json({ ok: true, duse, cazute, reconciliate, comenziNoi, facturi, retururi });
 }
 
@@ -537,4 +552,68 @@ async function patchConfig(admin: Admin, businessId: string, patch: Partial<Emag
   await admin.from("store_settings")
     .update({ emag_config: { ...config, ...patch } as never, updated_at: new Date().toISOString() })
     .eq("business_id", businessId);
+}
+
+/**
+ * Lista de IP-uri de la care suna eMAG, adusa si tinuta minte.
+ *
+ * ═══ ⚠ DE CE NU E DE AJUNS LISTA SCRISA IN COD ═══
+ *
+ * Ei o numesc autoritara si cer explicit sa fie urmarita: „please update your firewall
+ * rules whenever this section changes", cu un `/public-ips.json` de interogat.
+ *
+ * Scrisa o data si uitata acolo, ziua in care adauga un IP nou ar fi aratat asa:
+ * notificarile se opresc, comenzile continua sa intre — dar prin cron, la un minut in
+ * loc de indata. Nimic nu se strica, totul merge putin mai incet, si nimeni n-are de
+ * ce sa se uite. Se descopera cand suna un client intreband de ce comanda lui n-a
+ * fost preluata.
+ *
+ * ⚠ O schimbare se scrie ca `warning`, nu ca `info`: e chiar semnalul pe care il
+ * asteptam de luni de zile, si merita sa se vada.
+ *
+ * ⚠ Un raspuns necitibil NU goleste lista. Intors ca lista goala, ar fi refuzat toate
+ * notificarile — adica ar fi facut chiar raul de care ne aparam.
+ */
+async function improspateazaIpurile(admin: Admin): Promise<void> {
+  const r = await aduIpurileEmag();
+  if ("error" in r) {
+    await logError({
+      action: "emag-sync.ipuri",
+      message: `lista de IP-uri nu s-a putut aduce: ${r.error}`,
+      severity: "warning",
+    });
+    return;
+  }
+
+  const noi = citesteIpuri(r.ipuri);
+  if (noi.length === 0) {
+    /* ⚠ Zero adrese citite dintr-un raspuns care a venit inseamna ca forma fisierului
+       s-a schimbat, nu ca n-au IP-uri. Se spune, si lista veche ramane. */
+    await logError({
+      action: "emag-sync.ipuri",
+      message: "lista de IP-uri a venit dar nu s-a putut citi nicio adresa din ea",
+      details: { brut: JSON.stringify(r.ipuri).slice(0, 500) },
+      severity: "warning",
+    });
+    return;
+  }
+
+  const { data } = await admin.from("platform_settings")
+    .select("value").eq("key", CHEIE_IPURI).maybeSingle();
+  const vechi = ((data?.value as { ipuri?: string[] } | null)?.ipuri) ?? null;
+
+  if (sAuSchimbat(vechi, noi)) {
+    await logError({
+      action: "emag-sync.ipuri",
+      message: `eMAG si-a schimbat lista de IP-uri pentru notificari: ${noi.join(", ")}`,
+      details: { vechi, noi },
+      severity: "warning",
+    });
+  }
+
+  await admin.from("platform_settings").upsert({
+    key: CHEIE_IPURI,
+    value: { ipuri: noi, adus_la: new Date().toISOString() } as never,
+    updated_at: new Date().toISOString(),
+  } as never, { onConflict: "key" });
 }

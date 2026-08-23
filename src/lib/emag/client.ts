@@ -9,7 +9,7 @@
  */
 
 import { fetch as fetchUndici } from "undici";
-import { basicAuthHeader, emagUrl, iesireEmag } from "./auth";
+import { basicAuthHeader, emagGazda, emagUrl, iesireEmag } from "./auth";
 import { clasificaRaspuns, mesajOmenesc, type VerdictEmag } from "./errors";
 import type {
   EmagAdresa, EmagAwb, EmagCategorie, EmagComanda, EmagContCurier, EmagCotaTva,
@@ -625,4 +625,50 @@ export function citesteEtichetaZpl(auth: EmagAuth, emagId: number) {
 /** Numarul localitatilor, pentru paginare. */
 export function numaraLocalitati(auth: EmagAuth, filtre: Record<string, unknown> = {}) {
   return citeste<unknown>(auth, "/locality/count", filtre);
+}
+
+/**
+ * Lista de IP-uri de la care suna eMAG, adusa de la ei.
+ *
+ * ═══ ⚠ SINGURA CERERE DIN TOT CLIENTUL FARA ACREDITARI SI FARA MAGAZIN ═══
+ *
+ * `/public-ips.json` e un fisier public: nu cere autentificare, nu tine de niciun
+ * comerciant, si nu intra in ritmul de 3 cereri pe secunda al niciunuia. Documentatia
+ * o numeste chiar asa — „poll this endpoint to automate firewall updates".
+ *
+ * ⚠ Trece TOTUSI prin releul cu IP fix. Nu fiindca ar cere-o ei, ci fiindca e singura
+ * cale de iesire pe care o are integrarea: o cerere care ocoleste releul ar merge in
+ * dezvoltare si ar cadea in productie, unde Vercel n-are alt drum configurat catre ei.
+ *
+ * ⚠ Nu se cheama `citeste()`: aceea e POST cu filtre si ar primi un 405. Nici
+ * `emagUrl()`: fisierul sta la radacina gazdei, nu sub `/api-3`.
+ */
+export async function aduIpurileEmag(
+  tara?: Parameters<typeof emagGazda>[0],
+): Promise<{ ipuri: unknown } | { error: string }> {
+  const iesire = iesireEmag();
+  if (iesire.eroare || !iesire.dispatcher) {
+    return { error: iesire.eroare ?? "Ieșirea către eMAG nu este configurată." };
+  }
+
+  try {
+    const raspuns = await fetchUndici(`${emagGazda(tara)}/public-ips.json`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      dispatcher: iesire.dispatcher,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!raspuns.ok) return { error: `eMAG a răspuns cu ${raspuns.status} la lista de IP-uri.` };
+
+    const text = await raspuns.text();
+    try {
+      return { ipuri: text ? JSON.parse(text) : null };
+    } catch {
+      /* ⚠ Un raspuns necitibil NU e o lista goala. Intors ca atare, ar fi golit lista
+         alba si ar fi refuzat toate notificarile. */
+      return { error: "Lista de IP-uri de la eMAG nu s-a putut citi." };
+    }
+  } catch {
+    return { error: "Nu am putut aduce lista de IP-uri de la eMAG." };
+  }
 }

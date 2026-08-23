@@ -12,13 +12,27 @@
  * apasa „Respinge" pe un retur nou, eMAG ar refuza, iar mesajul lor n-ar spune
  * „intai confirma-l" — ar spune ceva despre un status invalid.
  *
- * ═══ ⚠ UN RETUR NU E O COMANDA INTOARSA ═══
+ * ═══ ⚠ STOCUL NU SE PUNE INAPOI AUTOMAT. NICIODATA, DEOCAMDATA ═══
  *
- * `rma.products[].product_id` e id-ul NOSTRU de oferta, ca la comenzi. Dar
- * cantitatea returnata poate fi mai mica decat cea cumparata, si pot fi returnate
- * doar unele linii. Stocul se pune inapoi DOAR pentru ce s-a primit cu adevarat
- * (status 6 = „Primit"), nu la deschiderea cererii — altfel un retur anuntat si
- * neexpediat niciodata ar fi umflat stocul cu marfa care n-a venit.
+ * Prima forma a acestui antet scria ca „stocul se pune inapoi doar pentru ce s-a
+ * primit cu adevarat (status 6)". NU EXISTA niciun cod care sa faca asta. Era un
+ * comentariu care descria o purtare inexistenta — chiar felul de minciuna impotriva
+ * caruia e scris tot restul fisierului. Sters, si scris ce e adevarat:
+ *
+ * Marfa returnata NU intra singura inapoi in stoc. Comerciantul o adauga de mana,
+ * dupa ce se uita la ea.
+ *
+ * Si e o alegere, nu o scapare: marfa intoarsa nu e mereu vandabila. Vine desfacuta,
+ * zgariata, incompleta, sau pur si simplu alta decat cea trimisa. Un retur „Primit"
+ * inseamna ca a ajuns coletul, nu ca produsul e bun de pus la loc pe raft. Pus
+ * automat, magazinul ar fi vandut a doua oara ceva ce nu se mai poate vinde — iar al
+ * doilea cumparator ar fi primit marfa stricata, ceea ce e mult mai rau decat un
+ * stoc cu unu mai mic.
+ *
+ * ⚠ Cine schimba asta trebuie sa stie ce lipseste ca s-o poata face bine:
+ * `rma.products[].quantity` poate fi mai mic decat cantitatea cumparata, si pot fi
+ * returnate doar unele linii; iar `consuma_stoc_comanda_marketplace` n-are inca o
+ * pereche care sa puna inapoi o cantitate PARTIALA cu marcaj de idempotenta.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";

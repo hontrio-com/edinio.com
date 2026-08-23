@@ -810,20 +810,20 @@ export interface EmagIntrareCategorie {
  *
  * ═══ ⚠ AICI ERAU DOUA UNIUNI PENTRU ACEEASI COLOANA ═══
  *
- * Pana acum, `emag_offers.status` avea DOUA tipuri care il descriau: unul scris in
- * etapa 1 (`draft` | `trimis` | `in_validare` | `activ` | `inactiv` | `respins` |
- * `eol` | `eroare`) si `StareOferta`, scris in etapa 3, care e cel pe care il
- * foloseste codul CU ADEVARAT.
+ * Pana de curand, `emag_offers.status` avea DOUA tipuri care il descriau: unul scris
+ * in etapa 1 (`draft` | `trimis` | `in_validare` | `activ` | ...) si `StareOferta`,
+ * scris in etapa 3, care e cel pe care il foloseste codul CU ADEVARAT.
  *
  * Niciuna nu era gresita in sine. Raul a fost ca panoul numara ofertele dupa numele
- * din prima, iar codul scria numele din a doua: toate cele patru numaratori
- * intorceau ZERO. Un comerciant cu 400 de oferte publicate ar fi vazut „400 oferte ·
- * 0 active · 0 în validare" si ar fi tras singura concluzie cu sens — ca integrarea
- * nu merge. Fara nicio eroare nicaieri: o interogare care nu gaseste nimic e o
- * interogare reusita.
+ * din prima, iar codul scria numele din a doua: toate numaratorile intorceau ZERO.
  *
  * De aceea a ramas UNA singura, iar tabelul de mai jos e legat de ea: adaugata o
  * stare noua fara eticheta, `tsc` refuza fisierul.
+ *
+ * ⚠ NU E FOLOSIT INCA DE NICIUN ECRAN, si e scris aici cu buna stiinta. Lista de
+ * oferte a etapei 3 (`EmagListings`) nu exista inca; cand se scrie, ea trebuie sa ia
+ * etichetele DE AICI, nu sa-si compuna alte siruri — altfel se naste a doua sursa de
+ * adevar, adica exact defectul de mai sus, a doua oara.
  */
 export const EMAG_ETICHETA_STARE: Record<StareOferta, string> = {
   draft: "Nelistat",

@@ -57,7 +57,7 @@ export type FurnizorOperatie =
   | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl"
   | "smartbill" | "oblio" | "fgo"
   | "stripe" | "netopia" | "ipay" | "klarna" | "revolut"
-  | "trendyol" | "aboutyou" | "olx" | "gmc"
+  | "trendyol" | "aboutyou" | "olx" | "gmc" | "emag"
   | "proba";
 
 /**

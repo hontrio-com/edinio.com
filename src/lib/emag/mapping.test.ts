@@ -1,0 +1,335 @@
+import { strict as assert } from "node:assert";
+import { test } from "node:test";
+import {
+  bandaDePret, construiesteOferte, imaginiEmag, masuratoriEmag, normalizeazaPartNumber,
+  partNumberCombinatie, pretFaraTva,
+  type ContextCategorie, type ContextMagazin, type ProdusDeCartografiat,
+} from "./mapping";
+
+/*
+ * Cartografierea produs Edinio → oferta eMAG.
+ *
+ * Fisier separat de `emag.test.ts` fiindca aici se probeaza singura parte in care
+ * doua modele diferite se lovesc unul de altul: noi tinem UN produs cu combinatii
+ * intr-un JSON, eMAG vrea N OFERTE separate legate printr-o familie.
+ *
+ * Toate functiile probate sunt pure. Niciun apel de retea, nicio citire din baza.
+ */
+
+const MAGAZIN: ContextMagazin = {
+  vat_rate: 21,
+  prices_include_vat: true,
+  vat_id: 1,
+  handling_time: 1,
+  warehouse_id: 1,
+  warranty: 24,
+  price_band_pct: 30,
+  source_language: "ro_RO",
+  brand: "Edinio",
+};
+
+const CATEGORIE: ContextCategorie = { category_id: 506, characteristics: [], family_type_id: 95 };
+
+function produs(peste: Partial<ProdusDeCartografiat> = {}): ProdusDeCartografiat {
+  return {
+    id: "11111111-1111-1111-1111-111111111111",
+    name: "Tricou bumbac",
+    description: "<p>Descriere</p>",
+    price: 121,
+    compare_at_price: null,
+    images: ["https://edinio-cdn.com/a.jpg", "https://edinio-cdn.com/b.jpg"],
+    category: "Tricouri",
+    sku: "TRI 001;",
+    weight_grams: 250,
+    stock_quantity: 10,
+    is_active: true,
+    page_sections: {},
+    ...peste,
+  };
+}
+
+function cuVariante(combinatii: { title: string; sku: string; stoc: string; pret: string }[]): ProdusDeCartografiat {
+  return produs({
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ id: "o1", name: "Marime", values: combinatii.map((c) => c.title) }],
+        combinations: combinatii.map((c) => ({
+          id: c.title.toLowerCase(),
+          title: c.title,
+          price: c.pret,
+          compare_at_price: "",
+          sku: c.sku,
+          stock_quantity: c.stoc,
+          image: "",
+          enabled: true,
+        })),
+      },
+    },
+  });
+}
+
+/* ── Pretul ───────────────────────────────────────────────────────────────── */
+
+test("eMAG: pretul pleaca FARA TVA, in amandoua sensurile lui `prices_include_vat`", () => {
+  /*
+   * ⚠ Toate cele patru preturi ale lor sunt „without VAT". Trimis gresit, nu da
+   * nicio eroare: oferta se publica si se vinde cu pretul umflat sau subtiat cu
+   * cota de TVA. La 21%, o cincime din pret.
+   */
+  assert.equal(pretFaraTva(121, 21, true), 100, "121 cu TVA 21% inseamna 100 fara");
+  assert.equal(pretFaraTva(100, 21, false), 100, "cand pretul e deja fara TVA, ramane");
+  assert.equal(pretFaraTva(0, 21, true), 0);
+  assert.equal(pretFaraTva(-5, 21, true), 0);
+});
+
+test("eMAG: pretul se rotunjeste la PATRU zecimale, nu la doua", () => {
+  /*
+   * Rotunjit la doua, 99,99 cu TVA ar iesi 82,64 in loc de 82,6364, iar inapoi cu
+   * TVA ar da 99,9944 — comerciantul vede pe eMAG alt pret decat in magazin si
+   * crede ca s-a stricat ceva.
+   */
+  assert.equal(pretFaraTva(99.99, 21, true), 82.6364);
+});
+
+test("eMAG: banda min/max nu poate fi de latime zero", () => {
+  /*
+   * ⚠ Amandoua sunt obligatorii la PRIMA salvare, si eMAG cere `max > min`. Cu
+   * procent zero ar iesi min = max = pret si FIECARE produs nou al magazinului ar
+   * fi respins, cu un mesaj care nu pomeneste procentul.
+   */
+  const b0 = bandaDePret(100, 0);
+  assert.ok(b0.max_sale_price > b0.min_sale_price, "zero se ridica la 1%");
+
+  const b30 = bandaDePret(100, 30);
+  assert.equal(b30.min_sale_price, 70);
+  assert.equal(b30.max_sale_price, 130);
+});
+
+/* ── Identificatorii ──────────────────────────────────────────────────────── */
+
+test("eMAG: `part_number` pleaca fara spatii, virgula si punct-virgula", () => {
+  /*
+   * ⚠ eMAG le sterge SINGUR: documentatia da chiar exemplul „part number;" salvat
+   * ca „partnumber". Daca am tine local forma cu spatii, `ext_part_number` de pe
+   * liniile comenzii nu s-ar mai potrivi cu nimic la noi — si comanda ar sosi
+   * fara sa stim ce produs s-a vandut.
+   */
+  assert.equal(normalizeazaPartNumber("part number;"), "partnumber");
+  assert.equal(normalizeazaPartNumber("A B,C;D"), "ABCD");
+  assert.equal(normalizeazaPartNumber(null), "");
+  assert.equal(normalizeazaPartNumber(undefined), "");
+});
+
+test("eMAG: fiecare combinatie are `part_number` PROPRIU, fara bara din separator", () => {
+  /*
+   * SKU-ul combinatiei castiga cand exista. Cand nu, se compune.
+   *
+   * ⚠ Proba asta a prins un defect adevarat: eMAG sterge doar spatiile, virgula si
+   * punctul-virgula, deci „S / Rosu" iesea „S/Rosu" si bara ramanea in cod. Nu e
+   * interzis la ei, dar o bara intr-un identificator care ajunge in adrese si in
+   * exporturi e o problema care se descopera tarziu si in alta parte.
+   */
+  assert.equal(partNumberCombinatie("TRI 001", null, "S / Rosu"), "TRI001-S-Rosu");
+  assert.equal(partNumberCombinatie("TRI 001", "SKU-S-R", "S / Rosu"), "SKU-S-R");
+  assert.equal(partNumberCombinatie(null, null, "S / Rosu"), "S-Rosu");
+  assert.equal(partNumberCombinatie("TRI001", null, "42 / Albastru închis"), "TRI001-42-Albastru-nchis");
+});
+
+/* ── Produsul simplu ──────────────────────────────────────────────────────── */
+
+test("eMAG: un produs simplu da O oferta, cu prima imagine marcata principala", () => {
+  const r = construiesteOferte(produs(), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 500 }], null);
+
+  assert.deepEqual(r.probleme, []);
+  assert.equal(r.oferte.length, 1);
+
+  const o = r.oferte[0];
+  assert.equal(o.id, 500);
+  assert.equal(o.sale_price, 100);
+  assert.equal(o.part_number, "TRI001", "fara spatiu si fara punct-virgula");
+  assert.equal(o.stock[0].value, 10);
+  assert.equal(o.stock[0].warehouse_id, 1);
+  assert.equal(o.status, 1);
+  assert.equal(o.vat_id, 1);
+  assert.equal(o.images?.[0].display_type, 1, "prima e principala");
+  assert.equal(o.images?.[1].display_type, 2);
+  assert.equal(o.family, undefined, "un produs simplu n-are familie");
+  assert.ok(o.min_sale_price! < o.sale_price, "min sub pret");
+  assert.ok(o.sale_price < o.max_sale_price!, "max peste pret");
+});
+
+test("eMAG: un produs ascuns in magazin pleaca INACTIV, nu deloc", () => {
+  /* `status: 0` il opreste din vanzare la ei, dar pastreaza oferta si documentatia
+     aprobata. Nedus deloc, ar fi ramas activ pe eMAG cu magazinul inchis. */
+  const r = construiesteOferte(produs({ is_active: false }), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
+  assert.equal(r.oferte[0].status, 0);
+});
+
+/* ── Produsul cu variante ─────────────────────────────────────────────────── */
+
+test("eMAG: un produs cu patru combinatii da PATRU oferte, in aceeasi familie", () => {
+  /*
+   * ⚠ Cea mai mare deosebire de model din toata integrarea. eMAG nu are variante
+   * imbricate: fiecare marime e o oferta cu id propriu, iar singura legatura
+   * dintre ele e familia.
+   */
+  const p = cuVariante([
+    { title: "S", sku: "T-S", stoc: "3", pret: "121" },
+    { title: "M", sku: "T-M", stoc: "5", pret: "121" },
+    { title: "L", sku: "T-L", stoc: "0", pret: "133.1" },
+    { title: "XL", sku: "T-XL", stoc: "7", pret: "133.1" },
+  ]);
+  const identitati = [
+    { variant_title: "S", emag_id: 601 }, { variant_title: "M", emag_id: 602 },
+    { variant_title: "L", emag_id: 603 }, { variant_title: "XL", emag_id: 604 },
+  ];
+
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, identitati, 900);
+
+  assert.deepEqual(r.probleme, []);
+  assert.equal(r.oferte.length, 4);
+
+  const familii = new Set(r.oferte.map((o) => o.family?.id));
+  assert.deepEqual([...familii], [900], "toate patru in aceeasi familie");
+  assert.equal(r.oferte[0].family?.family_type_id, 95);
+  assert.deepEqual(r.oferte.map((o) => o.id), [601, 602, 603, 604]);
+});
+
+test("eMAG: fiecare marime pleaca cu STOCUL EI, nu cu totalul produsului", () => {
+  /*
+   * Exact defectul reparat retroactiv la Trendyol si About You prin
+   * `migrations/2026-08-19-stoc-marketplace.sql`. Produsul are `stock_quantity`
+   * 10; niciuna dintre marimi nu trebuie sa plece cu 10.
+   */
+  const p = cuVariante([
+    { title: "S", sku: "T-S", stoc: "3", pret: "121" },
+    { title: "M", sku: "T-M", stoc: "5", pret: "121" },
+    { title: "L", sku: "T-L", stoc: "0", pret: "121" },
+  ]);
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [
+    { variant_title: "S", emag_id: 1 }, { variant_title: "M", emag_id: 2 }, { variant_title: "L", emag_id: 3 },
+  ], 900);
+
+  assert.deepEqual(r.oferte.map((o) => o.stock[0].value), [3, 5, 0]);
+});
+
+test("eMAG: fiecare marime pleaca cu PRETUL EI, tot fara TVA", () => {
+  const p = cuVariante([
+    { title: "S", sku: "T-S", stoc: "1", pret: "121" },
+    { title: "L", sku: "T-L", stoc: "1", pret: "133.1" },
+  ]);
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [
+    { variant_title: "S", emag_id: 1 }, { variant_title: "L", emag_id: 2 },
+  ], 900);
+
+  assert.equal(r.oferte[0].sale_price, 100);
+  assert.equal(r.oferte[1].sale_price, 110);
+});
+
+test("eMAG: fara tip de familie, ofertele NU pleaca", () => {
+  /*
+   * ⚠ Fara `family_type_id`, eMAG PRIMESTE ofertele dar nu le grupeaza: pe site
+   * apar ca produse fara legatura intre ele, iar clientul nu poate schimba
+   * marimea. Nu da nicio eroare — de aia se opreste la noi, cu un mesaj care spune
+   * ce trebuie ales.
+   */
+  const p = cuVariante([{ title: "S", sku: "T-S", stoc: "3", pret: "121" }]);
+  const r = construiesteOferte(
+    p, MAGAZIN, { ...CATEGORIE, family_type_id: undefined }, [{ variant_title: "S", emag_id: 601 }], 900,
+  );
+  assert.equal(r.oferte.length, 0);
+  assert.match(r.probleme[0], /familie/i);
+});
+
+test("eMAG: o combinatie fara id alocat nu opreste surorile ei", () => {
+  /* Un id lipsa e o problema de o singura varianta. Oprita toata publicarea, un
+     produs cu zece marimi ar fi ramas nelistat din cauza uneia. */
+  const p = cuVariante([
+    { title: "S", sku: "T-S", stoc: "3", pret: "121" },
+    { title: "M", sku: "T-M", stoc: "5", pret: "121" },
+  ]);
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [{ variant_title: "S", emag_id: 1 }], 900);
+  assert.equal(r.oferte.length, 1);
+  assert.equal(r.probleme.length, 1);
+  assert.match(r.probleme[0], /M/);
+});
+
+/* ── Ce nu pleaca, si de ce ───────────────────────────────────────────────── */
+
+test("eMAG: un produs fara imagini sau fara SKU NU pleaca, si se spune de ce", () => {
+  const faraPoze = construiesteOferte(
+    produs({ images: [] }), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null,
+  );
+  assert.equal(faraPoze.oferte.length, 0);
+  assert.match(faraPoze.probleme[0], /imagine/i);
+
+  const faraSku = construiesteOferte(
+    produs({ sku: null, id: "" }), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null,
+  );
+  assert.equal(faraSku.oferte.length, 0);
+  assert.match(faraSku.probleme[0], /SKU/i);
+});
+
+test("eMAG: un pret taiat mai mic decat pretul de vanzare se LASA AFARA, nu respinge oferta", () => {
+  /*
+   * eMAG cere `recommended_price > sale_price`. Un `compare_at_price` gresit e o
+   * greseala a comerciantului, nu un motiv sa nu se publice nimic.
+   */
+  const gresit = construiesteOferte(
+    produs({ compare_at_price: 50 }), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null,
+  );
+  assert.equal(gresit.oferte.length, 1);
+  assert.equal(gresit.oferte[0].recommended_price, undefined);
+
+  const bun = construiesteOferte(
+    produs({ compare_at_price: 200 }), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null,
+  );
+  assert.ok(bun.oferte[0].recommended_price! > bun.oferte[0].sale_price);
+});
+
+/* ── Imaginile ────────────────────────────────────────────────────────────── */
+
+test("eMAG: imaginile de pe domeniul vechi se rescriu, iar `http` se arunca", () => {
+  /* 1466 de imagini pe 855 de produse mai stau pe `pub-*.r2.dev`. eMAG isi aduce
+     singur imaginile si respinge produsul cand nu le poate lua. */
+  const im = imaginiEmag([
+    "https://pub-abc123.r2.dev/x.jpg",
+    "http://exemplu.ro/nesigur.jpg",
+    "https://edinio-cdn.com/y.jpg",
+  ]);
+  assert.equal(im.length, 2, "cea pe http a cazut");
+  assert.equal(im[0].url, "https://edinio-cdn.com/x.jpg");
+  assert.equal(im[0].display_type, 1);
+  assert.equal(im[1].display_type, 2);
+});
+
+test("eMAG: poza combinatiei devine principala", () => {
+  /* Clientul care alege „Rosu" trebuie sa vada rosu, nu prima poza a produsului. */
+  const im = imaginiEmag(["https://edinio-cdn.com/a.jpg"], "https://edinio-cdn.com/rosu.jpg");
+  assert.equal(im[0].url, "https://edinio-cdn.com/rosu.jpg");
+  assert.equal(im[0].display_type, 1);
+  assert.equal(im.length, 2, "fara duplicate");
+});
+
+/* ── Masuratorile ─────────────────────────────────────────────────────────── */
+
+test("eMAG: masuratorile pleaca in MILIMETRI si GRAME", () => {
+  /*
+   * ⚠ Noi tinem centimetri si grame. Trimis in centimetri, un colet de 30 cm ar fi
+   * declarat 30 mm — de treizeci de ori mai mic — iar tariful de livrare calculat
+   * de eMAG ar fi gresit fara ca nimic sa semnaleze.
+   */
+  assert.deepEqual(
+    masuratoriEmag(7, { length: 30, width: 20, height: 10 }, 250),
+    { id: 7, length: 300, width: 200, height: 100, weight: 250 },
+  );
+});
+
+test("eMAG: masuratorile partiale nu se trimit deloc", () => {
+  /* eMAG le cere impreuna; o masuratoare partiala ar fi fost respinsa oricum. */
+  assert.equal(masuratoriEmag(7, { length: 30, width: 20 }, 250), null);
+  assert.equal(masuratoriEmag(7, null, 250), null);
+  assert.equal(masuratoriEmag(7, { length: 30, width: 20, height: 10 }, null), null);
+  assert.equal(masuratoriEmag(7, { length: 0, width: 20, height: 10 }, 250), null);
+});

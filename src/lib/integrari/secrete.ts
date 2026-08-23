@@ -54,6 +54,15 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      „Parola MyDHL API", nu „cheie". */
   dhl_config: ["password"],
   dpd_config: ["password"],
+  /* eMAG Marketplace: autentificare HTTP `Basic`, deci parola pleaca la fiecare
+     cerere. `username` NU intra aici, desi e prima jumatate a acreditarii: singur
+     nu deschide nimic, iar comerciantul trebuie sa-l poata reciti ca sa stie CE
+     CONT a legat. Acelasi rationament ca la `dhl_config`, `posta_config` si
+     `pallex_config`.
+     ⚠ Numele campului trebuie sa fie IDENTIC aici, in `EmagConfig`
+     (lib/emag/types.ts) si in `privat.campuri_secrete`. Nimic nu verifica
+     potrivirea, iar o nepotrivire taie tot stratul de secrete in tacere. */
+  emag_config: ["password"],
   /* eColet: un token de acces luat din panel.ecolet.ro si trimis ca Bearer la
      fiecare cerere. E singura credentiala — nu exista user si parola. */
   ecolet_config: ["api_token"],

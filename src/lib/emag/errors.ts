@@ -96,6 +96,42 @@ export function poarteObservatii(cale: string): boolean {
 }
 
 /**
+ * ═══ ⚠ REFUZURI ALE CERERII INTREGI, PE O RUTA CARE „POARTA OBSERVATII" ═══
+ *
+ * Prima forma se uita DOAR la ruta: orice `isError: true` la HTTP 200 pe
+ * `/product_offer/save` iesea `reusit_cu_observatii`, adica „oferta e salvata,
+ * nu reincerca".
+ *
+ * Dar exceptia din documentatia lor e scrisa despre o EROARE DE DOCUMENTATIE, nu
+ * despre orice eroare. Iar aceeasi ruta poate refuza CEREREA INTREAGA, si atunci
+ * nu s-a salvat NIMIC:
+ *
+ *     „Maximum 4000 elements per request — exceeding it returns «isError»: true
+ *      with the message «Maximum input vars of 4000 exceeded»"
+ *
+ * Citit ca „salvat cu observatii", un lot intreg de produse ar fi iesit din coada
+ * raportand succes, fara ca vreunul sa fi ajuns la eMAG. Exact forma incidentului
+ * VetDepo: raspuns de succes, zero efect, si nimeni nu afla.
+ *
+ * ⚠ SE POTRIVESTE PE UN SINGUR SIR, LUAT DIN DOCUMENTATIE, NU PE TEXT LIBER.
+ * Regula casei e sa nu se clasifice dupa mesaj, fiindca mesajele se traduc si se
+ * schimba. Aici nu se clasifica dupa mesaj — se recunoaste un SEMNAL documentat,
+ * enumerat, unul singur. Daca eMAG mai adauga vreunul, se adauga si aici, cu
+ * citatul lui.
+ *
+ * ⚠ Ce NU se poate face: raspunsul lui `/product_offer/save` e `ApiResponse`
+ * generic, fara rezultate per element (verificat in spec). Deci nu exista niciun
+ * mod de a afla CARE dintre cele 50 de oferte dintr-un lot au trecut. De aceea
+ * loturile se tin mici si fiecare produs isi pastreaza verdictul lui.
+ */
+const REFUZURI_ALE_CERERII: readonly string[] = ["maximum input vars"] as const;
+
+export function eRefuzAlCererii(mesaje: string[]): boolean {
+  const tot = mesaje.join(" ").toLowerCase();
+  return REFUZURI_ALE_CERERII.some((sir) => tot.includes(sir));
+}
+
+/**
  * Verdictul.
  *
  * ⚠ SE DECIDE PE CODUL HTTP SI PE FORMA CORPULUI, NICIODATA PE TEXTUL MESAJULUI.
@@ -158,6 +194,11 @@ export function clasificaRaspuns(status: number, corp: unknown, cale: string): C
    * Pe orice alta ruta, un `isError` la 200 e un refuz obisnuit.
    */
   if (poarteObservatii(cale)) {
+    /* ⚠ Un refuz al CERERII INTREGI nu e o observatie: nu s-a salvat nimic.
+       Vezi `REFUZURI_ALE_CERERII` pentru de ce si pentru citat. */
+    if (eRefuzAlCererii(mesaje)) {
+      return { verdict: "refuz", mesaje, mesaj: unRand };
+    }
     return {
       verdict: "reusit_cu_observatii",
       mesaje,

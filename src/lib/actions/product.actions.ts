@@ -17,7 +17,7 @@ import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue"
 import { enqueueOlxSync, enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouSync, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolSync, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
-import { enqueueEmagSync, enqueueEmagSyncMany } from "@/lib/emag/queue";
+import { enqueueEmagPretMany, enqueueEmagSync, enqueueEmagSyncMany } from "@/lib/emag/queue";
 
 interface ProductData {
   name: string;
@@ -409,7 +409,11 @@ async function dezactiveazaPacheteleCu(
   void enqueueOlxSyncMany(businessId, afectate);
   void enqueueAboutYouSyncMany(businessId, afectate);
   void enqueueTrendyolSyncMany(businessId, afectate);
-  void enqueueEmagSyncMany(businessId, afectate);
+  /* ⚠ „pret", nu „oferta": functia asta schimba DOAR `is_active` pe pachetele care
+     contineau produsul atins. La eMAG asta e `status` pe oferta, adica `offer/save`.
+     Pe ruta grea ar fi plecat documentatia intreaga a fiecarui pachet, ca sa se
+     schimbe un singur numar. */
+  void enqueueEmagPretMany(businessId, afectate);
 }
 
 export async function deleteProduct(productId: string, businessId: string) {
@@ -532,7 +536,17 @@ export async function bulkProductAction(
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
       void enqueueTrendyolSyncMany(businessId, ids);
-      void enqueueEmagSyncMany(businessId, ids);
+      /*
+       * ⚠ „pret", nu „oferta", si numai la ACTIVARE.
+       *
+       * `is_active` devine `status` pe oferta eMAG, iar starea se schimba prin
+       * `offer/save` — ruta usoara. Trimisa pe `product_offer/save`, ar fi plecat
+       * toata documentatia produsului ca sa se schimbe un singur numar.
+       *
+       * `is_featured` NU are corespondent la eMAG. Pus si el in coada, ar fi mancat
+       * din cele 3 cereri pe secunda ale magazinului fara sa schimbe nimic acolo.
+       */
+      if (action.kind === "active") void enqueueEmagPretMany(businessId, ids);
       if (action.kind === "active" && action.value === false) void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       if (action.kind === "active" && action.value === false) void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
@@ -642,7 +656,18 @@ export async function bulkProductAction(
       void enqueueOlxSyncMany(businessId, ids);
       void enqueueAboutYouSyncMany(businessId, ids);
       void enqueueTrendyolSyncMany(businessId, ids);
-      void enqueueEmagSyncMany(businessId, ids);
+      /*
+       * ⚠⚠ „pret", NU „oferta". AICI ERA CHIAR DEFECTUL VETDEPO, MUTAT LA eMAG.
+       *
+       * O schimbare de pret in masa punea in coada `op: "oferta"`, adica ruta
+       * `product_offer/save` — cea care trimite documentatia INTREAGA a produsului.
+       * La Trendyol, exact confuzia asta a raportat succes pe 1051 de produse fara
+       * sa schimbe niciun pret, si s-a aflat abia cand a intrebat comerciantul.
+       *
+       * Scrisesem in `queue.ts` ca „o schimbare de pret nu are CUM sa ajunga pe ruta
+       * grea". Mecanismul era bun; firul era legat gresit.
+       */
+      void enqueueEmagPretMany(businessId, ids);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });

@@ -132,6 +132,31 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION privat.emag_ridica_sirul(p_pana_la bigint)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_acum bigint;
+begin
+  if p_pana_la is null or p_pana_la < 1 then
+    return null;
+  end if;
+
+  select last_value into v_acum from public.emag_offers_emag_id_seq;
+
+  if p_pana_la >= v_acum then
+    perform setval('public.emag_offers_emag_id_seq', p_pana_la + 1, false);
+    return p_pana_la + 1;
+  end if;
+
+  return v_acum;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION privat.reconstruieste_store_settings()
  RETURNS void
  LANGUAGE plpgsql
@@ -4754,7 +4779,7 @@ alter table public.categories add constraint categories_business_id_parent_id_na
 alter table public.custom_pages add constraint custom_pages_business_id_slug_key UNIQUE (business_id, slug);
 alter table public.customers add constraint customers_business_key_unique UNIQUE (business_id, key);
 alter table public.discounts add constraint discounts_business_id_code_key UNIQUE (business_id, code);
-alter table public.emag_offers add constraint emag_offers_emag_id_key UNIQUE (emag_id);
+alter table public.emag_offers add constraint emag_offers_business_emag_key UNIQUE (business_id, emag_id);
 alter table public.emag_orders add constraint emag_orders_business_order_key UNIQUE (business_id, emag_order_id);
 alter table public.emag_rma add constraint emag_rma_business_rma_key UNIQUE (business_id, emag_rma_id);
 alter table public.emag_sync_queue add constraint emag_sync_queue_business_offer_op_key UNIQUE (business_id, offer_id, op);

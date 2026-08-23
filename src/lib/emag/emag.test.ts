@@ -4,6 +4,7 @@ import {
   ardeIncercare, clasificaRaspuns, mesajeEmag, poarteObservatii, sAIncheiat,
 } from "./errors";
 import { emagUrl, iesireEmag, monedaEmag } from "./auth";
+import { citesteNumarul } from "./client";
 import {
   alegeCotaTva, alegeTimpPregatire, caracteristiciLipsa, caracteristiciObligatorii,
   categoriiIngaduite,
@@ -316,4 +317,74 @@ test("eMAG: o adresa stricata a releului NU darama pagina de integrari", () => {
     if (vechi === undefined) delete process.env.EMAG_PROXY_URL;
     else process.env.EMAG_PROXY_URL = vechi;
   }
+});
+
+/* ── Refuzul CERERII INTREGI, pe ruta care „poarta observatii" ─────────────── */
+
+test("eMAG: «Maximum input vars» e REFUZ, nu «salvat cu observatii»", () => {
+  /*
+   * Cea mai scumpa nuanta din tot fisierul.
+   *
+   * `/product_offer/save` e ruta pe care documentatia lor spune ca `isError: true`
+   * poate insemna totusi „oferta e salvata". Prima forma a clasificarii se uita DOAR
+   * la ruta, deci orice `isError` de acolo iesea `reusit_cu_observatii` — adica „gata,
+   * scoate-l din coada, nu reincerca".
+   *
+   * Dar aceeasi ruta refuza si CEREREA INTREAGA cand lotul e prea mare, si atunci nu
+   * s-a salvat NIMIC. Citit ca observatie, un lot de 50 de produse ar fi iesit din
+   * coada raportand succes, fara ca vreunul sa fi ajuns la eMAG — forma exacta a
+   * incidentului VetDepo: raspuns de succes, zero efect, si nimeni nu afla.
+   */
+  const c = clasificaRaspuns(
+    200,
+    { isError: true, messages: ["Maximum input vars of 4000 exceeded"] },
+    "/product_offer/save",
+  );
+  assert.equal(c.verdict, "refuz");
+  assert.equal(sAIncheiat(c.verdict), false, "nu are voie sa iasa din coada");
+  assert.equal(ardeIncercare(c.verdict), true, "arde o incercare: e vina cererii, se micsoreaza lotul");
+});
+
+test("eMAG: o eroare de documentatie ramane «salvat cu observatii» pe aceeasi ruta", () => {
+  /* Cealalta jumatate a aceleiasi probe: sentinelul de mai sus e INGUST. Daca ar fi
+     fost scris larg („orice mesaj cu «maximum»"), ar fi inghitit si observatiile
+     adevarate, si atunci ofertele salvate ar fi fost retrimise la nesfarsit. */
+  const c = clasificaRaspuns(
+    200,
+    { isError: true, messages: [{ field: "characteristics", message: "Maximum length exceeded for value" }] },
+    "/product_offer/save",
+  );
+  assert.equal(c.verdict, "reusit_cu_observatii");
+  assert.equal(sAIncheiat(c.verdict), true);
+});
+
+test("eMAG: acelasi mesaj pe ALTA ruta e refuz oricum", () => {
+  const c = clasificaRaspuns(200, { isError: true, messages: ["orice"] }, "/order/acknowledge/1");
+  assert.equal(c.verdict, "refuz");
+});
+
+/* ── Numarul de oferte: forma raspunsului NU e documentata ─────────────────── */
+
+test("eMAG: numaratoarea intoarce `null` cand nu se poate citi, nu zero", () => {
+  /*
+   * Prima forma declara `{ results: { noResults } }`. Gresita de doua ori: `results`
+   * e despachetat deja de client, iar `noResults` nu apare NICAIERI in OpenAPI-ul lor
+   * — era inventat, nu citit.
+   *
+   * De ce conteaza ca `null` nu e `0`: daca paginarea si-ar lua sfarsitul dintr-un
+   * zero inventat, primul import al fiecarui comerciant s-ar fi oprit inainte de a
+   * citi ceva, si ar fi raportat „n-ai nicio oferta pe eMAG" unui om care are 400.
+   */
+  assert.equal(citesteNumarul(undefined), null);
+  assert.equal(citesteNumarul({}), null);
+  assert.equal(citesteNumarul({ results: { noResults: 7 } }), null, "nu se scotoceste in adancime");
+  assert.equal(citesteNumarul("multe"), null);
+});
+
+test("eMAG: numaratoarea citeste formele plauzibile", () => {
+  assert.equal(citesteNumarul(42), 42);
+  assert.equal(citesteNumarul([1, 2, 3]), 3, "`results` e declarat tablou in spec");
+  assert.equal(citesteNumarul({ count: 12 }), 12);
+  assert.equal(citesteNumarul({ noResults: "350" }), 350, "ei trimit numere si ca text");
+  assert.equal(citesteNumarul({ count: Number.NaN }), null, "NaN nu e un numar de oferte");
 });

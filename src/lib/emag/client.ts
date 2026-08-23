@@ -290,10 +290,52 @@ export function citesteOferte(auth: EmagAuth, filtre: EmagFiltruOferte = {}) {
   return citeste<EmagOfertaCitita[]>(auth, "/product_offer/read", filtre);
 }
 
-export function numaraOferte(auth: EmagAuth, filtre: EmagFiltruOferte = {}) {
-  return citeste<{ results?: { noResults?: number } } | Record<string, unknown>>(
-    auth, "/product_offer/count", filtre,
-  );
+/**
+ * Cate oferte are vanzatorul.
+ *
+ * ═══ ⚠ FORMA RASPUNSULUI NU E DOCUMENTATA. SE CITESTE APARAT ═══
+ *
+ * Prima forma declara `{ results?: { noResults?: number } }` si era gresita de doua
+ * ori. Intai, `trimite()` DESPACHETEAZA deja `results` — deci un al doilea `results`
+ * inauntru n-ar fi existat niciodata. Apoi, `noResults` nu apare NICIUNDE in
+ * OpenAPI-ul lor: era inventat, nu citit. Iar schema declara `ApiResponse.results`
+ * ca TABLOU, ceea ce contrazice si mai tare un obiect cu un camp.
+ *
+ * Ce se stie sigur: ruta exista si intoarce `ApiResponse`. Atat.
+ *
+ * De aceea intoarce `number | null`, iar `null` inseamna „nu stiu". Cine il
+ * foloseste NU are voie sa-l ia drept zero si NU are voie sa decida din el cand se
+ * termina paginarea — terminarea se afla dintr-o pagina mai scurta decat
+ * `itemsPerPage`, care e singurul semnal pe care ei il dau cu adevarat.
+ */
+export async function numaraOferte(
+  auth: EmagAuth,
+  filtre: EmagFiltruOferte = {},
+): Promise<{ cate: number | null } | { error: string; status: number }> {
+  const r = await citeste<unknown>(auth, "/product_offer/count", filtre);
+  if (isEmagError(r)) return { error: r.error, status: r.status };
+  return { cate: citesteNumarul(r.data) };
+}
+
+/**
+ * Numarul dintr-un raspuns de forma necunoscuta.
+ *
+ * Pur, ca sa poata fi probat cu toate formele plauzibile fara sa fie nevoie de
+ * eMAG pornit. Se incearca, in ordine: un numar simplu, un tablou (lungimea lui),
+ * si cateva denumiri obisnuite de camp. Nimic nu se ghiceste mai departe.
+ */
+export function citesteNumarul(brut: unknown): number | null {
+  if (typeof brut === "number" && Number.isFinite(brut)) return brut;
+  if (Array.isArray(brut)) return brut.length;
+  if (brut && typeof brut === "object") {
+    const o = brut as Record<string, unknown>;
+    for (const cheie of ["count", "noResults", "total", "results"]) {
+      const v = o[cheie];
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v === "string" && /^\d+$/.test(v)) return Number(v);
+    }
+  }
+  return null;
 }
 
 /**

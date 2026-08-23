@@ -45,7 +45,7 @@ import {
   EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
   type EmagAdresa, type EmagCategorie, type EmagContCurier, type EmagCotaTva, type EmagConfig,
   type EmagIntrareCategorie,
-  EMAG_ETICHETA_STARE, EMAG_STATUS_RETUR, EMAG_VALIDARE,
+  ceUrmeazaLaRetur, EMAG_ETICHETA_STARE, EMAG_STATUS_RETUR, EMAG_TIP_RETUR, EMAG_VALIDARE,
   type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
 } from "@/lib/emag/types";
 import { traducereaPoateBloca } from "@/lib/emag/rute";
@@ -1534,8 +1534,23 @@ export interface RandReturEcran {
   stareEticheta: string;
   /** Ce se poate face acum, după chiar tabelul lor de treceri. */
   treceri: { stare: number; eticheta: string }[];
-  produse: { nume: string; cantitate: number }[];
+  produse: { nume: string; cantitate: number; motiv: number | null; observatii: string | null }[];
   motiv: number | null;
+  /** Textul liber scris de client. ⚠ Singurul loc din care se afla CE anume nu i-a plăcut. */
+  observatii: string | null;
+  /** Vezi `EMAG_TIP_RETUR`. `null` = nu ne-au spus. */
+  tip: number | null;
+  tipEticheta: string | null;
+  /** Ce urmează să facă comerciantul. `null` = nu se știe, și se spune așa. */
+  ceUrmeaza: string | null;
+  /**
+   * Contul în care se întorc banii, când eMAG chiar ni l-a trimis.
+   *
+   * ⚠ SE APRINDE DE LA „EI NE-AU TRIMIS UN IBAN", nu de la tipul returului. Un tip
+   * necunoscut, sau unul nou, ar fi ascuns un IBAN pe care ei chiar ni l-au dat — iar
+   * comerciantul ar fi avut de întors bani și ecranul ar fi tăcut.
+   */
+  cont: { iban: string; banca: string | null; beneficiar: string | null } | null;
   actualizat: string;
 }
 
@@ -1555,7 +1570,7 @@ export async function listaRetururiEmag(
 
   const admin = createAdminClient();
   const { data, error } = await admin.from("emag_rma")
-    .select("emag_rma_id, emag_order_id, order_id, request_status, return_reason, products, updated_at")
+    .select("emag_rma_id, emag_order_id, order_id, request_status, return_reason, return_type, products, raw, updated_at")
     .eq("business_id", businessId)
     .order("updated_at", { ascending: false })
     .limit(100);
@@ -1564,7 +1579,8 @@ export async function listaRetururiEmag(
 
   type Rand = {
     emag_rma_id: number; emag_order_id: number | null; order_id: string | null;
-    request_status: number | null; return_reason: number | null; products: unknown; updated_at: string;
+    request_status: number | null; return_reason: number | null; return_type: number | null;
+    products: unknown; raw: unknown; updated_at: string;
   };
 
   const randuri: RandReturEcran[] = ((data ?? []) as Rand[]).map((r) => ({
@@ -1580,12 +1596,24 @@ export async function listaRetururiEmag(
       eticheta: EMAG_STATUS_RETUR[s] ?? `Stare ${s}`,
     })),
     produse: Array.isArray(r.products)
-      ? (r.products as { product_name?: string; quantity?: number }[]).map((p) => ({
-          nume: (p?.product_name ?? "").trim() || "Produs",
-          cantitate: Number(p?.quantity ?? 0) || 0,
-        }))
+      ? (r.products as { product_name?: string; quantity?: number; return_reason?: number; observations?: string }[])
+          .map((p) => ({
+            nume: (p?.product_name ?? "").trim() || "Produs",
+            cantitate: Number(p?.quantity ?? 0) || 0,
+            motiv: Number.isFinite(p?.return_reason) ? (p!.return_reason as number) : null,
+            observatii: (p?.observations ?? "").trim() || null,
+          }))
       : [],
     motiv: r.return_reason,
+    observatii: ((r.raw as { observations?: string } | null)?.observations ?? "").trim() || null,
+    tip: r.return_type,
+    tipEticheta: r.return_type != null ? (EMAG_TIP_RETUR[r.return_type] ?? null) : null,
+    ceUrmeaza: ceUrmeazaLaRetur(r.return_type),
+    /*
+     * ⚠ Se ia din `raw`, si numai cand IBAN-ul chiar e acolo. Aprins dupa tipul
+     * returului, un tip necunoscut ar fi ascuns un cont pe care ei ni l-au trimis.
+     */
+    cont: contulDinRetur(r.raw),
     actualizat: r.updated_at,
   }));
 
@@ -1811,4 +1839,24 @@ export async function reiaAbandonateleEmag(
 
   revalidatePath(FEATURE_PATH);
   return { reluate: (data ?? []).length };
+}
+
+/**
+ * Contul bancar dintr-un retur, cand eMAG chiar ni l-a trimis.
+ *
+ * ⚠ IBAN-UL E DATA PERSONALA. Se scoate din `raw` doar la cerere, si pleacă spre ecran
+ * numai el, banca și beneficiarul — nu tot obiectul brut, care poartă și numele,
+ * telefonul și adresa clientului.
+ */
+function contulDinRetur(brut: unknown): { iban: string; banca: string | null; beneficiar: string | null } | null {
+  if (!brut || typeof brut !== "object") return null;
+  const o = brut as Record<string, unknown>;
+  const iban = typeof o.customer_account_iban === "string" ? o.customer_account_iban.trim() : "";
+  if (!iban) return null;
+  return {
+    iban,
+    banca: typeof o.customer_account_bank === "string" ? o.customer_account_bank.trim() || null : null,
+    beneficiar: typeof o.customer_account_beneficiary === "string"
+      ? o.customer_account_beneficiary.trim() || null : null,
+  };
 }

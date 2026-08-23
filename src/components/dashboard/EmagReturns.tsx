@@ -130,12 +130,49 @@ function RandRetur({
           <p className="mt-0.5 text-xs text-muted-foreground">
             {rand.emagOrderId ? `Comanda eMAG #${rand.emagOrderId}` : "Fără comandă legată"}
             {bucati > 0 ? ` · ${bucati} ${bucati === 1 ? "bucată" : "bucăți"}` : ""}
+            {rand.tipEticheta ? ` · ${rand.tipEticheta}` : ""}
           </p>
+
+          {/* ⚠ Ce urmează, în cuvinte. La voucher NU se întorc bani — iar un ecran care
+              ar fi scris „rambursare" l-ar fi pus pe om să caute un IBAN inexistent. */}
+          {rand.ceUrmeaza && (
+            <p className="mt-1 text-xs font-medium">{rand.ceUrmeaza}</p>
+          )}
+
+          {/*
+            ⚠ MOTIVUL SE ARATĂ CA NUMĂR, ȘI SE SPUNE DE CE.
+            eMAG publică denumirile motivelor doar în fișiere separate, pe țară
+            (`return_reasons_RO.xlsx`). N-avem lista, deci n-o inventăm — dar textul
+            liber scris de client, care e partea folositoare, se arată întreg.
+          */}
+          {(rand.observatii || rand.motiv != null) && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {rand.observatii ? <span>„{rand.observatii}”</span> : null}
+              {rand.motiv != null && (
+                <span className="ml-1 opacity-70">(motiv eMAG #{rand.motiv})</span>
+              )}
+            </p>
+          )}
+
+          {/*
+            ⚠ Contul se aprinde de la „ei ne-au trimis un IBAN", nu de la tipul returului.
+            Un tip necunoscut ar fi ascuns un cont pe care ei chiar ni l-au dat, iar
+            comerciantul ar fi avut de întors bani și ecranul ar fi tăcut.
+          */}
+          {rand.cont && (
+            <p className="mt-1.5 rounded-lg border border-border bg-background p-2 text-xs">
+              <span className="block text-muted-foreground">Banii se întorc în contul:</span>
+              <span className="font-mono">{rand.cont.iban}</span>
+              {rand.cont.banca && <span className="text-muted-foreground"> · {rand.cont.banca}</span>}
+              {rand.cont.beneficiar && <span className="block text-muted-foreground">{rand.cont.beneficiar}</span>}
+            </p>
+          )}
           {rand.produse.length > 0 && (
             <ul className="mt-1.5 space-y-0.5">
               {rand.produse.slice(0, 4).map((p, i) => (
                 <li key={i} className="text-xs text-muted-foreground">
                   {p.cantitate} × {p.nume}
+                  {p.observatii && <span className="block pl-4 opacity-80">„{p.observatii}”</span>}
                 </li>
               ))}
               {rand.produse.length > 4 && (

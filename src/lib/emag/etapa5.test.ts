@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { alegereaCurierului, contPotrivit, primulAwb } from "./awb";
 import { trecerePermisa, treceriPosibile } from "./rma";
 import { citesteTinta } from "./campanii";
-import type { EmagContCurier } from "./types";
+import { ceUrmeazaLaRetur, EMAG_TIP_RETUR, type EmagContCurier } from "./types";
 
 /*
  * Probele etapei 5: AWB, retururi, campanii.
@@ -143,4 +143,39 @@ test("eMAG campanii: pretul-tinta se citeste din formele plauzibile", () => {
   assert.equal(citesteTinta({ target_price: 49.9 }), 49.9);
   assert.equal(citesteTinta([{ target_price: "49,90" }]), 49.9, "ei trimit numere si ca text");
   assert.equal(citesteTinta({ smart_deals_price: "100" }), 100);
+});
+
+/* ── §51/§52. Ce a cerut clientul, si ce urmeaza ───────────────────────────── */
+
+test("eMAG retur: `5` e VOUCHER, nu «altul»", () => {
+  /*
+   * ═══ COMENTARIU DE-AL MEU CARE MINTEA ═══
+   *
+   * `EmagRetur.return_type` avea scris „5 = altul". Documentatia lor enumera limpede:
+   * „5 = Voucher".
+   *
+   * Deosebirea costa: la voucher NU se intorc bani. Un ecran care ar fi scris
+   * „rambursare" l-ar fi pus pe comerciant sa caute un IBAN care nu exista, si sa
+   * creada ca eMAG a uitat sa i-l trimita.
+   */
+  assert.equal(EMAG_TIP_RETUR[5], "Voucher");
+  assert.equal(EMAG_TIP_RETUR[3], "Rambursare");
+  assert.equal(EMAG_TIP_RETUR[1], "Înlocuire cu același produs");
+});
+
+test("eMAG retur: la voucher se spune limpede ca NU se intorc bani", () => {
+  assert.match(ceUrmeazaLaRetur(5) ?? "", /nu întorci bani/i);
+  assert.match(ceUrmeazaLaRetur(3) ?? "", /banii/i);
+  assert.match(ceUrmeazaLaRetur(1) ?? "", /schimb/i);
+});
+
+test("eMAG retur: un tip NECUNOSCUT nu arata ca «nimic de facut»", () => {
+  /*
+   * ⚠ `null` inseamna „nu stiu", si nu se ascunde sub un „nu". Un tip nou la ei, sau
+   * lipsa cu totul, aratat ca „nu e nimic de facut" l-ar fi pus pe om sa inchida
+   * returul crezand ca s-a rezolvat.
+   */
+  assert.equal(ceUrmeazaLaRetur(99), null);
+  assert.equal(ceUrmeazaLaRetur(null), null);
+  assert.equal(ceUrmeazaLaRetur(undefined), null);
 });

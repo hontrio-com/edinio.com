@@ -576,6 +576,38 @@ export const EMAG_TRECERI_RETUR: Record<number, readonly number[]> = {
   7: [7],
 };
 
+/**
+ * Ce a cerut clientul cand a deschis returul.
+ *
+ * ⚠ ENUMERATE IN DOCUMENTATIA LOR, CUVANT CU CUVANT. Prima forma a comentariului din
+ * `EmagRetur` scria „5 = altul"; e VOUCHER. Deosebirea conteaza: la voucher nu se
+ * intorc bani, iar un ecran care ar fi scris „rambursare" l-ar fi pus pe comerciant sa
+ * caute un IBAN care nu exista.
+ */
+export const EMAG_TIP_RETUR: Record<number, string> = {
+  1: "Înlocuire cu același produs",
+  2: "Înlocuire cu alt produs",
+  3: "Rambursare",
+  4: "Anularea plății pentru produs",
+  5: "Voucher",
+};
+
+/**
+ * Ce urmeaza sa faca comerciantul, pe fiecare fel de retur.
+ *
+ * ⚠ `null` INSEAMNA „NU STIU", si nu se ascunde sub un „nu". Un tip necunoscut — unul
+ * nou la ei, sau lipsa cu totul — n-are voie sa arate ca „nu e nimic de facut": omul ar
+ * fi inchis returul crezand ca s-a rezolvat.
+ */
+export function ceUrmeazaLaRetur(tip: number | null | undefined): string | null {
+  if (tip == null) return null;
+  if (tip === 1 || tip === 2) return "Trimite produsul de schimb după ce îl primești pe cel returnat.";
+  if (tip === 3) return "Întoarce banii clientului după ce primești marfa.";
+  if (tip === 4) return "Anulează plata pentru produsul returnat.";
+  if (tip === 5) return "eMAG îi dă clientului un voucher. Tu nu întorci bani.";
+  return null;
+}
+
 export interface EmagRetur {
   emag_id: number;
   id?: number;
@@ -603,7 +635,7 @@ export interface EmagRetur {
   pickup_method?: 1 | 2 | 3;
   return_reason?: number;
   observations?: string;
-  /** 1 = inlocuire cu acelasi produs, 2 = cu altul, 3 = rambursare, 4 = anulare plata, 5 = altul. */
+  /** Vezi `EMAG_TIP_RETUR`. ⚠ `5` e VOUCHER, nu „altul". */
   return_type?: 1 | 2 | 3 | 4 | 5;
   return_address_id?: number;
   return_tax_value?: number;

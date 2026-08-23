@@ -31,11 +31,28 @@ export async function maybeAutoInvoice(
     if (!order) return;
 
     const o = order as Record<string, unknown>;
-    // Marketplaces (About You, Trendyol, ...) collect payment and invoice the end
-    // customer themselves, so we never auto-invoice their orders (the merchant
-    // invoices the marketplace B2B instead).
+    /*
+     * Marketplaces (About You, Trendyol, ...) collect payment and invoice the end
+     * customer themselves, so we never auto-invoice their orders (the merchant
+     * invoices the marketplace B2B instead).
+     *
+     * ═══ ⚠ eMAG E EXCEPTIA, SI E O DEOSEBIRE FISCALA, NU TEHNICA ═══
+     *
+     * La eMAG, comerciantul factureaza CLIENTUL FINAL si TREBUIE sa incarce factura
+     * inapoi la ei — documentatia lor, `/order/attachments/save`: „For invoices: use
+     * type = 1". Nu e o optiune si nu e ceva ce face eMAG in locul lui.
+     *
+     * Lasata sub regula de mai sus, fiecare comanda eMAG ar fi ramas fara factura:
+     * si la ei, si la client. Iar lipsa nu s-ar fi vazut nicaieri in Edinio, fiindca
+     * „nu facturam comenzile de marketplace" arata ca o hotarare, nu ca o scapare.
+     *
+     * Urcarea propriu-zisa nu se face de aici (ar trage modulele eMAG in fiecare
+     * schimbare de status). Se face din cronul `emag-sync`, care ia comenzile cu
+     * factura si fara `invoice_uploaded_at`.
+     */
     const src = o.order_source as { marketplace?: string } | null;
-    if (src?.marketplace || o.payment_method === "aboutyou" || o.payment_method === "trendyol") return;
+    const eEmag = src?.marketplace === "emag" || o.payment_method === "emag";
+    if (!eEmag && (src?.marketplace || o.payment_method === "aboutyou" || o.payment_method === "trendyol")) return;
     if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number) return;
 
     const smartbill = await import("@/lib/actions/smartbill.actions");

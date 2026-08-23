@@ -4,10 +4,13 @@ import type { Database } from "@/types/database.types";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
+import { marcajUrmator } from "@/lib/marketplace/marcaj";
 import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
+import { aduComenzile } from "@/lib/emag/orders";
+import { urcaFacturaLaEmag, type Factura } from "@/lib/emag/facturi";
 import type { EmagConfig, EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
 import type { OpEmag } from "@/lib/emag/queue";
 import { eVandabila } from "@/lib/emag/rute";
@@ -58,6 +61,25 @@ const INCERCARI_MAXIM = 5;
 /** Cate magazine se reconciliaza intr-o trecere. */
 const MAGAZINE_RECONCILIERE = 6;
 
+/** Cate magazine isi aduc comenzile intr-o trecere. */
+const MAGAZINE_COMENZI = 8;
+
+/**
+ * Cu cat se suprapune fereastra de comenzi peste marcajul trecut.
+ *
+ * ⚠ NU E O PRECAUTIE VAGA. Ceasul lor si al nostru nu bat la fel, iar o comanda
+ * modificata chiar in secunda marcajului ar cadea exact intre doua ferestre — citita
+ * de niciuna. Cinci minute de suprapunere costa cateva comenzi recitite (ingestul e
+ * idempotent) si inchid gaura cu totul.
+ */
+const SUPRAPUNERE_MS = 5 * 60 * 1000;
+
+/** Cate magazine isi urca facturile intr-o trecere. */
+const MAGAZINE_FACTURI = 5;
+
+/** Cate facturi se urca pentru un magazin intr-o trecere. */
+const FACTURI_PE_TRECERE = 10;
+
 /** ⚠ Maximul lor. Cerut mai mare, eMAG intoarce tot 100 fara sa spuna. */
 const PE_PAGINA = 100;
 
@@ -97,7 +119,8 @@ export async function GET(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let duse = 0, cazute = 0, reconciliate = 0;
+  let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0;
+  const inceputulRularii = Date.now();
 
   /* Contextul unui magazin se citeste O DATA pe trecere: e o citire cu decriptare,
      iar coada poate avea zeci de elemente ale aceluiasi magazin. */
@@ -261,7 +284,131 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, duse, cazute, reconciliate });
+  /* ── 3) Comenzile ─────────────────────────────────────────────────── */
+  for (const businessId of alegeInRotatie(magazine, MAGAZINE_COMENZI)) {
+    const ctx = await ctxPentru(businessId);
+    if (!ctx) continue;
+
+    const marcaj = Date.parse(ctx.config.orders_synced_at ?? "");
+    const deLa = new Date(
+      Number.isFinite(marcaj) ? marcaj - SUPRAPUNERE_MS : inceputulRularii - 24 * 60 * 60 * 1000,
+    );
+
+    const rez = await aduComenzile(admin, ctx, deLa);
+    comenziNoi += rez.noi;
+
+    /*
+     * ═══ ⚠ MARCAJUL AVANSEAZA NUMAI CAND S-A CITIT TOT ═══
+     *
+     * `marcajUrmator` intoarce `null` cand nu s-a citit tot si nu se stie nici pana
+     * unde — si atunci marcajul ramane pe loc, iar fereastra urmatoare reia de acolo.
+     *
+     * Pus la „acum" dupa o trecere trunchiata, comenzile necitite ar fi ramas in urma
+     * ferestrei si NU s-ar mai fi citit niciodata. Fara nicio eroare, fiindca fiecare
+     * trecere in parte a reusit. Asta e chiar incidentul pentru care exista
+     * `marcaj.ts`, si de aceea nu se scrie de mana aici.
+     */
+    const urmator = marcajUrmator(rez, { runStartMs: inceputulRularii, overlapMs: SUPRAPUNERE_MS });
+    if (urmator != null) {
+      await patchConfig(admin, businessId, { orders_synced_at: new Date(urmator).toISOString() });
+    }
+  }
+
+  /* ── 4) Facturile ───────────────────────────────────────────────────
+   *
+   * ═══ ⚠ eMAG CERE FACTURA, SPRE DEOSEBIRE DE CELELALTE ═══
+   *
+   * La Trendyol si About You, marketplace-ul factureaza el clientul final. La eMAG,
+   * comerciantul factureaza clientul SI trebuie sa incarce factura inapoi la ei.
+   * Nechemat pasul asta, comenzile ar fi ramas fara factura si la ei, si la client —
+   * o lipsa fiscala care nu se vede nicaieri in Edinio.
+   *
+   * ⚠ Se ia doar `getMinutes() % 5 === 0`: emiterea facturii se intampla la
+   * schimbarea de status, iar urcarea nu are de ce sa alerge in fiecare minut peste
+   * comenzile care asteapta un PDF ce inca nu exista.
+   */
+  if (new Date(inceputulRularii).getMinutes() % 5 === 0) {
+    for (const businessId of alegeInRotatie(magazine, MAGAZINE_FACTURI, 5)) {
+      const ctx = await ctxPentru(businessId);
+      if (!ctx) continue;
+      facturi += await urcaFacturile(admin, ctx);
+    }
+  }
+
+  return NextResponse.json({ ok: true, duse, cazute, reconciliate, comenziNoi, facturi });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FACTURILE
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Facturile comenzilor eMAG care inca n-au ajuns la ei.
+ *
+ * ⚠ FILTRUL E `invoice_uploaded_at is null`, PE UN INDEX PARTIAL. Corectitudinea o
+ * da `cuRegistru`, care urca o singura data; coloana e doar filtrul. Fara ea, cronul
+ * ar fi trecut la fiecare rulare prin TOATE comenzile eMAG cu factura ale fiecarui
+ * magazin — la un comerciant cu zece mii de comenzi vechi, zece mii de randuri pe
+ * minut, la nesfarsit, pentru zero lucru. Si nu s-ar fi vazut ca defect: totul merge,
+ * doar ca baza geme.
+ */
+async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
+  const { data } = await admin.from("emag_orders")
+    .select("id, order_id")
+    .eq("business_id", ctx.businessId)
+    .is("invoice_uploaded_at", null)
+    .not("order_id", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(FACTURI_PE_TRECERE);
+
+  let urcate = 0;
+  for (const r of (data ?? []) as { id: string; order_id: string | null }[]) {
+    if (!r.order_id) continue;
+
+    const rez = await urcaFacturaLaEmag(admin, ctx, r.order_id, aduPdfFacturii);
+
+    if (rez.fel === "urcata" || rez.fel === "deja") {
+      await admin.from("emag_orders")
+        .update({ invoice_uploaded_at: new Date().toISOString(), invoice_number: rez.numar })
+        .eq("id", r.id);
+      urcate++;
+      continue;
+    }
+
+    /*
+     * ⚠ „Fara factura" NU se marcheaza si NU se raporteaza ca eroare. Inseamna doar
+     * ca documentul inca nu s-a emis — comanda abia a intrat, sau facturarea automata
+     * se declanseaza la livrare. Marcata, comanda ar fi iesit definitiv din filtru si
+     * n-ar mai fi primit niciodata factura.
+     */
+    if (rez.fel === "esec") {
+      await logError({
+        action: "emag-sync",
+        message: `factura nu s-a putut urca: ${rez.mesaj}`,
+        businessId: ctx.businessId,
+        details: { orderId: r.order_id },
+        severity: "warning",
+      });
+    }
+  }
+  return urcate;
+}
+
+/**
+ * Octetii facturii, de la furnizorul care a emis-o.
+ *
+ * ⚠ Modulele de facturare se incarca LENES, la nevoie. Importate sus, fiecare
+ * rulare a cronului — inclusiv cele in care nu e nicio factura de urcat — ar fi tras
+ * dupa ea trei module de facturare cu tot cu dependintele lor.
+ */
+async function aduPdfFacturii(f: Factura): Promise<ArrayBuffer | { error: string }> {
+  try {
+    const r = await fetch(f.url, { cache: "no-store" });
+    if (!r.ok) return { error: `Nu s-a putut descarca factura (${r.status}).` };
+    return await r.arrayBuffer();
+  } catch {
+    return { error: "Eroare de retea la descarcarea facturii." };
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

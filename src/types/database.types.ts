@@ -1403,6 +1403,8 @@ export type Database = {
           created_at: string
           emag_order_id: number
           id: string
+          invoice_number: string | null
+          invoice_uploaded_at: string | null
           is_complete: number | null
           last_modified: string | null
           lines: Json
@@ -1420,6 +1422,8 @@ export type Database = {
           created_at?: string
           emag_order_id: number
           id?: string
+          invoice_number?: string | null
+          invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null
           lines?: Json
@@ -1437,6 +1441,8 @@ export type Database = {
           created_at?: string
           emag_order_id?: number
           id?: string
+          invoice_number?: string | null
+          invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null
           lines?: Json

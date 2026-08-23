@@ -3934,7 +3934,9 @@ create table if not exists public.emag_orders (
   raw jsonb,
   last_modified timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  invoice_uploaded_at timestamp with time zone,
+  invoice_number text);
 
 create table if not exists public.emag_rma (
   id uuid default gen_random_uuid() not null,
@@ -5035,6 +5037,7 @@ CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_
 CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, product_id, COALESCE(variant_title, ''::text)) WHERE (product_id IS NOT NULL);
 CREATE INDEX emag_offers_reconciliere_idx ON public.emag_offers USING btree (business_id, last_status_at NULLS FIRST);
 CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
+CREATE INDEX emag_orders_factura_de_urcat_idx ON public.emag_orders USING btree (business_id, created_at) WHERE (invoice_uploaded_at IS NULL);
 CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
 CREATE INDEX emag_rma_business_status_idx ON public.emag_rma USING btree (business_id, request_status);
 CREATE INDEX emag_sync_queue_created_idx ON public.emag_sync_queue USING btree (created_at);

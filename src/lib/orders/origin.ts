@@ -32,6 +32,11 @@ export interface OrderOrigin {
 export const MARKETPLACE_ORIGINI: Record<string, { label: string; badge: string }> = {
   trendyol: { label: "Trendyol", badge: "bg-orange-100 text-orange-700 border-orange-200" },
   aboutyou: { label: "About You", badge: "bg-neutral-900 text-white border-neutral-900" },
+  /* Albastrul eMAG. ⚠ Fara randul asta, o comanda eMAG s-ar fi vazut in tabel cu
+     eticheta implicita — adica exact ca una din magazin. Iar deosebirea e chiar ce
+     hotaraste daca omul poate factura si expedia comanda cum e obisnuit, sau daca
+     trebuie sa treaca prin panoul eMAG. */
+  emag: { label: "eMAG", badge: "bg-blue-100 text-blue-800 border-blue-200" },
 };
 
 const BADGE_IMPLICIT = "bg-muted text-muted-foreground border-transparent";

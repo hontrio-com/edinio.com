@@ -1275,9 +1275,20 @@ export async function publicaCategoriaPeEmag(
 
   if (produse.length === 0) return { puse: 0 };
 
-  await enqueueEmagSyncMany(businessId, produse.map((p) => p.id));
+  /* ⚠ Cate au INTRAT, nu cate s-au gasit — aceeasi regula ca la felii. Coada poate
+     primi zero cand sincronizarea automata e stinsa sau cand toate ofertele sunt
+     preluate, iar „N produse puse la rand" ar fi fost o reusita raportata cu efect
+     zero: chiar forma incidentului VetDepo. */
+  const puse = await enqueueEmagSyncMany(businessId, produse.map((p) => p.id));
+  if (puse === 0) {
+    return {
+      error: "Nu s-a pus nimic la rând. Verifică dacă „Trimite automat prețul și stocul” " +
+        "e pornit, sau folosește „Trimite acum” pe un produs anume.",
+    };
+  }
+
   revalidatePath(FEATURE_PATH);
-  return { puse: produse.length };
+  return { puse };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1592,12 +1603,40 @@ export async function sincronizeazaFelieEmag(
   const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
   if (ids.length === 0) return { puse: 0 };
 
-  if (felie === "stocuri") await enqueueEmagStocMany(businessId, ids);
-  else if (felie === "preturi") await enqueueEmagPretMany(businessId, ids);
-  else await enqueueEmagSyncMany(businessId, ids);
+  /*
+   * ═══ ⚠ SE RAPORTEAZĂ CÂTE AU INTRAT, NU CÂTE S-AU CERUT ═══
+   *
+   * Prima formă scria `{ puse: ids.length }` — câte găsise, nu câte pusese. Dar coada
+   * poate primi ZERO din motive întemeiate: magazinul și-a stins sincronizarea
+   * automată, sau toate ofertele sunt preluate din contul lor.
+   *
+   * În oricare dintre ele, ecranul ar fi spus „400 de produse puse la rând" și nu s-ar
+   * fi pus niciunul. Adică exact forma incidentului VetDepo — răspuns de succes, efect
+   * zero, și nimeni nu află.
+   */
+  const puse = felie === "stocuri"
+    ? await enqueueEmagStocMany(businessId, ids)
+    : felie === "preturi"
+      ? await enqueueEmagPretMany(businessId, ids)
+      : await enqueueEmagSyncMany(businessId, ids);
+
+  /*
+   * ⚠ Zero puse din N găsite cere o EXPLICAȚIE, nu un număr. Cel mai des e comutatorul
+   * de sincronizare automată, iar omul care tocmai a apăsat un buton de sincronizare
+   * n-are cum să bănuiască un comutator din altă carte a aceleiași pagini.
+   */
+  if (puse === 0) {
+    return {
+      error: config.auto_sync === false
+        ? "„Trimite automat prețul și stocul” e oprit, așa că nu s-a pus nimic la rând. " +
+          "Pornește-l, sau folosește „Trimite acum” pe produsul care te interesează."
+        : "Nu s-a pus nimic la rând: ofertele tale sunt preluate din eMAG, iar acelea nu se " +
+          "trimit automat. Folosește „Trimite acum” pe produsul care te interesează.",
+    };
+  }
 
   revalidatePath(FEATURE_PATH);
-  return { puse: ids.length };
+  return { puse };
 }
 
 /**

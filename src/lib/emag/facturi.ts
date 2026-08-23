@@ -152,11 +152,42 @@ export async function urcaFacturaLaEmag(
   const factura = facturaComenzii(o);
   if (!factura) return { fel: "fara_factura" };
 
-  const sursa = o.order_source as { emag_order_id?: number } | null;
+  const sursa = o.order_source as { emag_order_id?: number; tip?: number | null } | null;
   const emagOrderId = sursa?.emag_order_id;
   if (!Number.isFinite(emagOrderId)) {
     return { fel: "esec", mesaj: "Comanda nu are id eMAG; nu se poate atașa factura." };
   }
+
+  /*
+   * ═══ ⚠ `order_type` E OBLIGATORIU, SI NU-L TRIMITEAM ═══
+   *
+   * Schema lor: `OrderAttachment.required = ["order_type", "url"]`. Fara el, FIECARE
+   * urcare de factura ar fi fost respinsa — iar `cuRegistru` ar fi marcat-o „esuata"
+   * si ar fi reincercat-o la fiecare trecere, arzand din cele 3 cereri pe secunda ale
+   * magazinului pentru un camp lipsa.
+   *
+   * Si n-ar fi fost o cadere zgomotoasa: comenzile ar fi intrat normal, facturile s-ar
+   * fi emis normal, doar ca la eMAG n-ar fi ajuns niciuna. Comerciantul ar fi aflat
+   * cand i-ar fi cerut-o ei.
+   *
+   * ⚠ 2 = onorata de eMAG (FBE), 3 = de vanzator. Atasamentele sunt printre PUTINELE
+   * operatii ingaduite pe comenzile FBE, deci se trimite tipul ADEVARAT al comenzii,
+   * nu se sare peste ele.
+   */
+  const { data: randEmag } = await admin.from("emag_orders")
+    .select("order_type, raw").eq("business_id", ctx.businessId).eq("order_id", orderId).maybeSingle();
+  const re = randEmag as { order_type: number | null; raw: unknown } | null;
+  const tipulComenzii =
+    re?.order_type
+    ?? (re?.raw as { type?: number } | null)?.type
+    ?? sursa?.tip
+    /*
+     * ⚠ 3 ca ultima plasa, si e o alegere cantarita: blocarea urcarii ar lasa o
+     * comanda FARA factura la eMAG — o lipsa fiscala — pentru un camp pe care ei il
+     * trimit practic mereu. Vanzatorul e cazul coplesitor; daca totusi era FBE, eMAG
+     * refuza si mesajul ajunge in jurnal, unde se poate vedea.
+     */
+    ?? 3;
 
   const rez = await cuRegistru(
     admin,
@@ -181,6 +212,8 @@ export async function urcaFacturaLaEmag(
 
       const r = await salveazaAtasamente(ctx.auth, [{
         order_id: emagOrderId as number,
+        /* ⚠ OBLIGATORIU dupa schema lor. Vezi nota de mai sus. */
+        order_type: tipulComenzii as 2 | 3,
         name: `Factura ${factura.numar}`,
         url,
         /* ⚠ 1 = factura. Documentatia lor: „For invoices: use type = 1". */

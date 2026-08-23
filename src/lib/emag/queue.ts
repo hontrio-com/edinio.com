@@ -152,19 +152,31 @@ export async function enqueueEmagSync(
  * ⚠ `bucatiDeIduri` se aplica DOAR citirii. Scrierea de la sfarsit e un `upsert` cu
  * corp, deci nu atinge limita de adresa; taiata si ea, ar fi insemnat mai multe
  * cereri fara niciun castig.
+ *
+ * ═══ ⚠ INTOARCE CATE AU INTRAT CU ADEVARAT, NU CATE S-AU CERUT ═══
+ *
+ * Prima forma intorcea `void`. Iar apelantul care voia sa spuna omului cate produse
+ * au plecat n-avea de unde sti — asa ca spunea cate ceruse. Din patru motive intemeiate
+ * coada poate primi ZERO din cele cerute: magazinul si-a stins sincronizarea automata,
+ * configurarea nu s-a putut citi, niciun produs n-are inca oferta, sau toate ofertele
+ * sunt preluate din contul lor.
+ *
+ * In toate patru, ecranul ar fi scris „400 de produse puse la rand" si nu s-ar fi pus
+ * niciunul. Adica exact forma incidentului VetDepo — raspuns de succes, efect zero,
+ * si nimeni nu afla — pe care tot fisierul asta e scris ca s-o previna.
  */
 async function enqueueMany(
   businessId: string,
   productIds: (string | null | undefined)[],
   op: OpEmag,
-): Promise<void> {
+): Promise<number> {
   try {
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
-    if (ids.length === 0) return;
+    if (ids.length === 0) return 0;
 
     const admin = createAdminClient();
     const config = await configPentruCoada(admin, businessId);
-    if (!config) return;
+    if (!config) return 0;
 
     /*
      * Actiunile in masa NU auto-publica: ele ating produse care exista deja, iar
@@ -187,18 +199,20 @@ async function enqueueMany(
     const randuri = ids
       .filter((id) => cuOferta.has(id))
       .map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
-    if (randuri.length === 0) return;
+    if (randuri.length === 0) return 0;
 
     const { error } = await admin
       .from("emag_sync_queue").upsert(randuri, { onConflict: "business_id,offer_id,op" });
     if (error) throw error;
+    return randuri.length;
   } catch (e) {
     inghiteDarScrie("multe", businessId, e, { cate: productIds.length, op });
+    return 0;
   }
 }
 
 /** Retrimitere completa, dupa o editare de produs. */
-export function enqueueEmagSyncMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
+export function enqueueEmagSyncMany(businessId: string, productIds: (string | null | undefined)[]): Promise<number> {
   return enqueueMany(businessId, productIds, "oferta");
 }
 
@@ -209,11 +223,11 @@ export function enqueueEmagSyncMany(businessId: string, productIds: (string | nu
  * pretul, nici documentatia: la eMAG, o oferta preluata de comerciant din panoul
  * lor si-ar fi pierdut modificarile la fiecare vanzare.
  */
-export function enqueueEmagStocMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
+export function enqueueEmagStocMany(businessId: string, productIds: (string | null | undefined)[]): Promise<number> {
   return enqueueMany(businessId, productIds, "stoc");
 }
 
 /** Numai pretul si starea. */
-export function enqueueEmagPretMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
+export function enqueueEmagPretMany(businessId: string, productIds: (string | null | undefined)[]): Promise<number> {
   return enqueueMany(businessId, productIds, "pret");
 }

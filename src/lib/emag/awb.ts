@@ -27,6 +27,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { cuRegistru } from "@/lib/operatii/registru";
+import { ziuaInTara } from "./auth";
 import { citesteAwb, isEmagError, salveazaAwb } from "./client";
 import type { ContextEmag } from "./sync";
 import type { EmagAwb, EmagContCurier } from "./types";
@@ -136,8 +137,15 @@ export async function emiteAwb(
     /*
      * ⚠ La retur, `date` e obligatoriu. Se pune ziua de azi cand apelantul n-a dat
      * alta: un AWB de ridicare fara data e refuzat, iar mesajul lor nu spune de ce.
+     *
+     * ⚠ SI SE IA ZIUA DIN TARA CONTULUI, NU DIN UTC. Prima forma scria
+     * `new Date().toISOString().slice(0, 10)`. Masurat: la 00:30 ora Romaniei iese
+     * ZIUA DE IERI, fiindca in UTC e inca 21:30. Un curier chemat sa ridice marfa
+     * intre miezul noptii si ora trei ar fi primit o data de ridicare IN TRECUT, iar
+     * mesajul de refuz al eMAG vorbeste despre un camp, nu despre ceas — comerciantul
+     * ar fi vazut ca „uneori nu merge noaptea" si n-ar fi avut ce sa raporteze.
      */
-    ...(p.fel === 2 && !p.awb.date ? { date: new Date().toISOString().slice(0, 10) } : {}),
+    ...(p.fel === 2 && !p.awb.date ? { date: ziuaInTara(ctx.auth.tara) } : {}),
   };
 
   const rez = await cuRegistru(

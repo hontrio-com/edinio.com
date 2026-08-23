@@ -189,6 +189,48 @@ export function monedaEmag(tara: EmagTara, acum: Date = new Date()): "RON" | "EU
   return acum >= new Date("2026-01-01T00:00:00Z") ? "EUR" : "BGN";
 }
 
+/**
+ * Fusul orar al fiecarei tari in care vinde eMAG.
+ *
+ * ⚠ BULGARIA E PE ACELASI FUS CU ROMANIA, UNGARIA NU. `Europe/Budapest` e CET, cu o
+ * ora mai putin. O singura zona pentru toate trei ar fi mutat data cu o zi in Ungaria
+ * la fiecare ridicare programata intre miezul noptii si ora unu.
+ */
+const FUSURI: Record<EmagTara, string> = {
+  ro: "Europe/Bucharest",
+  bg: "Europe/Sofia",
+  hu: "Europe/Budapest",
+};
+
+/**
+ * Ziua de azi, in tara contului, ca „AAAA-LL-ZZ".
+ *
+ * ═══ ⚠ `toISOString().slice(0, 10)` DA ZIUA DE IERI TIMP DE TREI ORE PE NOAPTE ═══
+ *
+ * Masurat, nu presupus: la `2026-09-02T00:30` ora Romaniei, `toISOString()` intoarce
+ * `2026-09-01`, fiindca in UTC e inca 1 septembrie, ora 21:30.
+ *
+ * Iar `date` e OBLIGATORIU la AWB-urile de retur. Deci un curier chemat sa ridice
+ * marfa intre miezul noptii si ora trei ar fi primit o data de ridicare IN TRECUT —
+ * eMAG o refuza, si mesajul lor vorbeste despre un camp, nu despre ceas. Comerciantul
+ * ar fi vazut ca „uneori nu merge noaptea" si n-ar fi avut ce sa raporteze.
+ *
+ * Casa a invatat deja lectia asta la Pall-Ex, unde `ziuaInRomania()` din
+ * `src/lib/utils/zile-lucratoare.ts` e scrisa exact pentru ea, cu proba care afirma
+ * literal „asa ar fi iesit gresit". Aici nu se poate refolosi ca atare: contul poate
+ * fi unguresc, si atunci zona nu e a Romaniei. Deci aceeasi socoteala, pe tara.
+ */
+export function ziuaInTara(tara: EmagTara | undefined, acum: Date = new Date()): string {
+  const parti = new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSURI[tara ?? EMAG_TARA_IMPLICITA],
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(acum);
+  const ia = (tip: string) => parti.find((p) => p.type === tip)?.value ?? "";
+  return `${ia("year")}-${ia("month")}-${ia("day")}`;
+}
+
 /** Ascunde o acreditare pentru afisare. Nu se trimite niciodata valoarea intreaga. */
 export function maskSecret(secret: string): string {
   const k = (secret || "").trim();

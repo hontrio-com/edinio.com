@@ -4,6 +4,7 @@ import { coleteDeTrimis } from "./colete";
 import { eanuriDeCautat, verdictEan } from "./ean";
 import { descriereaPentruEmag } from "./descriere";
 import { statusEdinio } from "./orders";
+import { ziuaInTara } from "./auth";
 
 /*
  * Probele reparațiilor găsite la auditul complet.
@@ -166,4 +167,46 @@ test("eMAG audit: statusurile lor si ale noastre stau in doua straturi", () => {
   assert.equal(statusEdinio(0), "cancelled");
   assert.equal(statusEdinio(5), "returned");
   assert.equal(statusEdinio(99), "pending", "un status nou inventat de ei nu iese livrat");
+});
+
+/* ── §53. Data AWB-ului de retur, in fusul tarii contului ──────────────────── */
+
+test("eMAG audit: ziua se ia din tara contului, nu din UTC", () => {
+  /*
+   * ═══ GASIT DE SCEPTICI, IN COD DEJA LIVRAT ═══
+   *
+   * `date` e OBLIGATORIU la AWB-urile de retur, iar prima forma il calcula cu
+   * `new Date().toISOString().slice(0, 10)`. Masurat: la `2026-09-02T00:30` ora
+   * Romaniei, UTC-ul e inca `2026-09-01T21:30`, deci iesea ZIUA DE IERI.
+   *
+   * Un curier chemat sa ridice marfa intre miezul noptii si ora trei ar fi primit o
+   * data de ridicare IN TRECUT. eMAG o refuza, iar mesajul lor vorbeste despre un
+   * camp, nu despre ceas — comerciantul ar fi vazut ca „uneori nu merge noaptea" si
+   * n-ar fi avut ce sa raporteze.
+   *
+   * Casa invatase deja lectia la Pall-Ex (`ziuaInRomania`), dar acolo nu se putea
+   * refolosi: contul poate fi unguresc, si Ungaria e pe alt fus decat Romania.
+   */
+  const noapte = new Date("2026-09-02T00:30:00+03:00"); // 2 septembrie, 00:30 la Bucuresti
+  assert.equal(noapte.toISOString().slice(0, 10), "2026-09-01", "asa ar fi iesit gresit");
+  assert.equal(ziuaInTara("ro", noapte), "2026-09-02");
+  assert.equal(ziuaInTara("bg", noapte), "2026-09-02", "Bulgaria e pe acelasi fus cu Romania");
+});
+
+test("eMAG audit: Ungaria e pe ALT fus decat Romania", () => {
+  /*
+   * ⚠ `Europe/Budapest` e CET, cu o ora mai putin decat Bucurestiul. O singura zona
+   * pentru toate trei ar fi mutat data cu o zi in Ungaria la fiecare ridicare
+   * programata intre miezul noptii si ora unu.
+   */
+  const clipa = new Date("2026-09-02T00:30:00+03:00"); // 2 sept la Bucuresti = 1 sept, 23:30 la Budapesta
+  assert.equal(ziuaInTara("ro", clipa), "2026-09-02");
+  assert.equal(ziuaInTara("hu", clipa), "2026-09-01");
+});
+
+test("eMAG audit: la amiaza toate trei tarile dau aceeasi zi", () => {
+  const amiaza = new Date("2026-09-02T12:00:00Z");
+  for (const t of ["ro", "bg", "hu"] as const) {
+    assert.equal(ziuaInTara(t, amiaza), "2026-09-02", t);
+  }
 });

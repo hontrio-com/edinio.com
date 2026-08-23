@@ -25,9 +25,10 @@ import {
   citesteAdrese, citesteConturiCurier, isEmagError, testeazaConexiunea, type EmagAuth,
 } from "@/lib/emag/client";
 import {
-  aduCategorii, aduCoteTva, aduTimpiPregatire, alegeCotaTva, alegeTimpPregatire,
-  sugereazaCategorie,
+  aduCategorie, aduCategorii, aduCoteTva, aduTimpiPregatire, alegeCotaTva, alegeTimpPregatire,
+  caracteristiciLipsa, caracteristiciObligatorii, sugereazaCategorie,
 } from "@/lib/emag/taxonomy";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
@@ -40,8 +41,12 @@ import { processImport } from "@/lib/import/committer";
 import {
   EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
   type EmagAdresa, type EmagContCurier, type EmagCotaTva, type EmagConfig,
+  type EmagIntrareCategorie,
+  EMAG_ETICHETA_STARE, EMAG_VALIDARE,
   type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
 } from "@/lib/emag/types";
+import { traducereaPoateBloca } from "@/lib/emag/rute";
+import { enqueueEmagSyncMany } from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/emag";
@@ -874,4 +879,385 @@ export async function pretSmartDealsEmag(
   const r = await pretPentruSmartDeals(ctx, emagId, pretDeAcumFaraTva);
   if ("error" in r) return { error: r.error };
   return r;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAPAREA CATEGORIILOR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface DetaliiCategorieEmag {
+  id: number;
+  nume: string;
+  eanObligatoriu: boolean;
+  garantieObligatorie: boolean;
+  /** Ce TREBUIE completat, altfel oferta e respinsă. */
+  obligatorii: {
+    id: number;
+    nume: string;
+    valori: string[];
+    /** Categoria acceptă și valori care nu-s în listă? */
+    valoriNoi: boolean;
+  }[];
+  /** Grupurile de variante. Fără unul ales, mărimile apar ca produse separate. */
+  tipuriFamilie: { id: number; nume: string }[];
+}
+
+/**
+ * Ce cere o categorie eMAG ca să primească o ofertă.
+ *
+ * ⚠ FĂRĂ APELUL ĂSTA NU SE POATE PUBLICA NIMIC. Numai aici afli care caracteristici
+ * sunt obligatorii, ce valori acceptă fiecare, și ce tipuri de familie există.
+ *
+ * ⚠ Se cere O SINGURĂ categorie, nu toate. `category/read` are peste zece mii; aduse
+ * toate ca să se afle una, ecranul ar fi așteptat minute întregi la 3 cereri pe
+ * secundă — și ar fi mâncat ritmul de care are nevoie coada.
+ */
+export async function detaliiCategorieEmag(
+  businessId: string,
+  categoryId: number,
+): Promise<DetaliiCategorieEmag | { error: string }> {
+  const c = await contextPentruCitire(businessId);
+  if ("error" in c) return c;
+
+  const cat = await aduCategorie(c.auth, categoryId);
+  if ("error" in cat) return cat;
+
+  return {
+    id: cat.id,
+    nume: (cat.name ?? "").trim() || `Categoria ${cat.id}`,
+    eanObligatoriu: cat.is_ean_mandatory === 1,
+    garantieObligatorie: cat.is_warranty_mandatory === 1,
+    obligatorii: caracteristiciObligatorii(cat).map((x) => ({
+      id: x.id,
+      nume: (x.name ?? "").trim() || `Caracteristica ${x.id}`,
+      valori: (x.values ?? []).slice(0, 200),
+      valoriNoi: x.allow_new_value === 1,
+    })),
+    tipuriFamilie: (cat.family_types ?? []).map((f) => ({
+      id: f.id,
+      nume: (f.name ?? "").trim() || `Tip ${f.id}`,
+    })),
+  };
+}
+
+/**
+ * Leagă o categorie a magazinului de una eMAG.
+ *
+ * ⚠ CHEIA E UN NUME, NU UN ID. `products.category` e text la noi — două produse cu
+ * aceeași denumire de categorie împart maparea. Scrisă cu un id, harta n-ar fi găsit
+ * niciodată nimic, iar fiecare publicare ar fi eșuat cu „categoria nu e legată".
+ *
+ * ⚠ Se verifică aici că nu lipsește nicio caracteristică obligatorie. Trimisă
+ * incompletă, oferta pleacă, arde din cele 3 cereri pe secundă, și se întoarce cu o
+ * eroare de documentație pe care comerciantul o vede abia peste ore, în listă.
+ */
+export async function salveazaMapareCategorieEmag(
+  businessId: string,
+  numeCategorie: string,
+  mapare: { category_id: number; family_type_id?: number | null; characteristics?: { id: number; value: string }[] },
+): Promise<{ success: true } | { error: string; lipsa?: string[] }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const nume = (numeCategorie ?? "").trim();
+  if (!nume) return { error: "Categoria magazinului nu are nume." };
+
+  const c = await contextPentruCitire(businessId);
+  if ("error" in c) return c;
+
+  const cat = await aduCategorie(c.auth, mapare.category_id);
+  if ("error" in cat) return cat;
+
+  /* ⚠ `is_allowed !== 1` nu înseamnă „ascunde din listă", înseamnă „produsele
+     trimise acolo se resping" — iar respingerea arată exact ca o caracteristică
+     lipsă, deci s-ar fi căutat zile întregi în datele produsului. */
+  if (cat.is_allowed !== 1) {
+    return {
+      error: `Nu ai acces de vânzare în categoria „${cat.name ?? mapare.category_id}". ` +
+        "Cere-l din panoul eMAG sau alege alta.",
+    };
+  }
+
+  const trimise = mapare.characteristics ?? [];
+  const lipsa = caracteristiciLipsa(cat, trimise);
+  if (lipsa.length > 0) {
+    return {
+      error: "Completează caracteristicile obligatorii ale categoriei eMAG.",
+      lipsa: lipsa.map((x) => (x.name ?? "").trim() || `Caracteristica ${x.id}`),
+    };
+  }
+
+  const veche = await loadConfig(businessId);
+  const noua: EmagConfig = {
+    ...veche,
+    category_map: {
+      ...(veche.category_map ?? {}),
+      [nume]: {
+        category_id: mapare.category_id,
+        ...(mapare.family_type_id ? { family_type_id: mapare.family_type_id } : {}),
+        ...(trimise.length ? { characteristics: trimise.filter((x) => (x.value ?? "").trim()) } : {}),
+      },
+    },
+  };
+
+  const ok = await saveConfig(g.supabase, businessId, noua);
+  if (!ok) return { error: "Nu am putut salva maparea. Încearcă din nou." };
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/**
+ * Scoate o mapare.
+ *
+ * ⚠ NU retrage nimic de pe eMAG. Ofertele deja publicate rămân acolo; doar nu se mai
+ * pot publica produse noi din categoria aceea. Butonul trebuie să spună asta —
+ * altfel comerciantul apasă crezând că își curăță contul de la ei.
+ */
+export async function stergeMapareCategorieEmag(
+  businessId: string,
+  numeCategorie: string,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const veche = await loadConfig(businessId);
+  const harta = { ...(veche.category_map ?? {}) };
+  delete harta[(numeCategorie ?? "").trim()];
+
+  const ok = await saveConfig(g.supabase, businessId, { ...veche, category_map: harta });
+  if (!ok) return { error: "Nu am putut șterge maparea." };
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/**
+ * Categoriile magazinului, cu maparea lor și cu câte produse au.
+ *
+ * ⚠ Numărul de produse contează pe ecran: o categorie cu 400 de produse nemapată e
+ * o urgență, una cu unul singur e o notă de subsol. Fără el, comerciantul le-ar fi
+ * văzut pe toate la fel și ar fi început cu cea greșită.
+ */
+export async function categoriileMagazinuluiEmag(
+  businessId: string,
+): Promise<{ categorii: { nume: string; produse: number; mapare: EmagIntrareCategorie | null }[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const config = await loadConfig(businessId);
+  const admin = createAdminClient();
+
+  /* ⚠ `fetchAllRowsStrict`: PostgREST taie la 1000 FĂRĂ să spună. Un magazin cu 1200
+     de produse ar fi avut categorii întregi invizibile pe ecranul de mapare. */
+  const produse = await fetchAllRowsStrict<{ category: string | null }>(
+    "emag.categorii", (from, to) =>
+      admin.from("products").select("category")
+        .eq("business_id", businessId).order("created_at", { ascending: true }).range(from, to),
+  );
+
+  const numarate = new Map<string, number>();
+  for (const p of produse) {
+    const n = (p.category ?? "").trim();
+    if (!n) continue;
+    numarate.set(n, (numarate.get(n) ?? 0) + 1);
+  }
+
+  const harta = config.category_map ?? {};
+  const categorii = [...numarate.entries()]
+    .map(([nume, produse]) => ({ nume, produse, mapare: harta[nume] ?? null }))
+    /* Nemapate întâi, iar între ele cele cu mai multe produse. */
+    .sort((a, b) => (a.mapare ? 1 : 0) - (b.mapare ? 1 : 0) || b.produse - a.produse);
+
+  return { categorii };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LISTA DE OFERTE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface RandOfertaEcran {
+  id: string;
+  productId: string | null;
+  numeProdus: string;
+  variantTitle: string | null;
+  emagId: number;
+  stare: StareOferta;
+  stareEticheta: string;
+  /** Textul lor pentru `validation_status`, întreg. Niciodată rescris de noi. */
+  validare: string | null;
+  /** Ce trebuie reparat, cuvânt cu cuvânt de la ei. */
+  docErrors: string[];
+  eroare: string | null;
+  /** `false` = ofertă preluată din contul lor; nu i se trimite nimic automat. */
+  autoSync: boolean;
+  /** ⚠ Traducerea poate bloca publicarea chiar cu restul aprobat. Vezi `rute.ts`. */
+  traducereBlocheaza: boolean;
+  linkEmag: string | null;
+}
+
+export interface FiltruOferteEcran {
+  stare?: StareOferta;
+  /** Numai cele care au ceva de reparat. */
+  doarProbleme?: boolean;
+  cautare?: string;
+  pagina?: number;
+}
+
+const OFERTE_PE_PAGINA = 50;
+
+/**
+ * Ofertele magazinului, pentru ecran.
+ *
+ * ═══ ⚠ MOTIVUL RESPINGERII SE ARATĂ ÎNTREG, NU REZUMAT ═══
+ *
+ * `doc_errors` e SINGURUL loc din care află comerciantul ce are de reparat. La
+ * Trendyol, motivul respingerii n-a fost arătat niciodată, iar produsele au stat „în
+ * aprobare" la nesfârșit — cu comerciantul convins că noi le ținem pe loc.
+ *
+ * Deci textul lor pleacă spre ecran neatins. Un rezumat scris de noi ar fi pierdut
+ * exact detaliul care spune CE câmp și CE valoare.
+ *
+ * ⚠ Numărul total vine dintr-un `count`, nu din lungimea paginii: PostgREST taie
+ * tăcut la 1000, iar un magazin cu 4000 de oferte ar fi văzut „1000" și ar fi crezut
+ * că trei sferturi din catalog n-au ajuns niciodată la eMAG.
+ */
+export async function listaOferteEmag(
+  businessId: string,
+  filtru: FiltruOferteEcran = {},
+): Promise<{ randuri: RandOfertaEcran[]; total: number; pagina: number; pePagina: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const pagina = Math.max(1, Math.floor(filtru.pagina ?? 1));
+  const de_la = (pagina - 1) * OFERTE_PE_PAGINA;
+
+  let q = admin
+    .from("emag_offers")
+    .select(
+      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, products(name)",
+      { count: "exact" },
+    )
+    .eq("business_id", businessId);
+
+  if (filtru.stare) q = q.eq("status", filtru.stare);
+  /* „Probleme" = respinse de ei SAU căzute la noi. Două întrebări diferite, aceeași
+     urgență pentru omul care se uită: ambele înseamnă „produsul nu se vinde". */
+  if (filtru.doarProbleme) q = q.or("status.eq.error,validation_status.in.(5,6,8,10,12)");
+  if (filtru.cautare?.trim()) {
+    const c = filtru.cautare.trim();
+    q = q.or(`part_number.ilike.%${c}%,ean.ilike.%${c}%,part_number_key.ilike.%${c}%`);
+  }
+
+  const { data, count, error } = await q
+    .order("updated_at", { ascending: false })
+    .range(de_la, de_la + OFERTE_PE_PAGINA - 1);
+
+  if (error) return { error: error.message };
+
+  type Rand = {
+    id: string; product_id: string | null; variant_title: string | null; emag_id: number;
+    status: string; validation_status: number | null; translation_validation_status: number | null;
+    doc_errors: unknown; error: string | null; auto_sync: boolean; part_number_key: string | null;
+    products: { name: string } | { name: string }[] | null;
+  };
+
+  const randuri: RandOfertaEcran[] = ((data ?? []) as Rand[]).map((r) => {
+    const p = Array.isArray(r.products) ? r.products[0] : r.products;
+    const stare = r.status as StareOferta;
+    return {
+      id: r.id,
+      productId: r.product_id,
+      numeProdus: p?.name ?? "Produs șters din magazin",
+      variantTitle: r.variant_title,
+      emagId: r.emag_id,
+      stare,
+      stareEticheta: EMAG_ETICHETA_STARE[stare] ?? stare,
+      validare: r.validation_status != null ? (EMAG_VALIDARE[r.validation_status] ?? `Stare ${r.validation_status}`) : null,
+      docErrors: normalizeazaDocErrors(r.doc_errors),
+      eroare: r.error,
+      autoSync: r.auto_sync,
+      traducereBlocheaza: traducereaPoateBloca({
+        validation_status: r.validation_status,
+        translation_validation_status: r.translation_validation_status,
+      }),
+      /* `part_number_key` e cheia paginii lor de produs; fără ea, oferta n-are încă
+         o pagină publică la eMAG și n-are unde duce link-ul. */
+      linkEmag: r.part_number_key ? `https://www.emag.ro/-/pd/${r.part_number_key}` : null,
+    };
+  });
+
+  return { randuri, total: count ?? 0, pagina, pePagina: OFERTE_PE_PAGINA };
+}
+
+/**
+ * `doc_errors` adus la o listă de texte.
+ *
+ * ⚠ eMAG îl trimite când ca tablou de șiruri, când ca tablou de obiecte, când ca
+ * obiect cu chei. Citit pe o singură formă, motivul respingerii ar fi ajuns pe ecran
+ * ca „[object Object]" — adică exact la fel de nefolositor ca lipsa lui, dar cu aerul
+ * că i s-a spus omului ceva.
+ */
+function normalizeazaDocErrors(brut: unknown): string[] {
+  const unText = (x: unknown): string | null => {
+    if (typeof x === "string") return x.trim() || null;
+    if (x && typeof x === "object") {
+      const o = x as Record<string, unknown>;
+      const t = [o.message, o.text, o.error, o.description].find((v) => typeof v === "string" && v.trim());
+      if (typeof t === "string") {
+        const camp = typeof o.field === "string" && o.field.trim() ? `${o.field}: ` : "";
+        return `${camp}${t.trim()}`;
+      }
+      return JSON.stringify(x).slice(0, 300);
+    }
+    return null;
+  };
+
+  if (Array.isArray(brut)) return brut.map(unText).filter((x): x is string => !!x);
+  if (brut && typeof brut === "object") {
+    return Object.values(brut as Record<string, unknown>).flatMap((v) =>
+      Array.isArray(v) ? v.map(unText).filter((x): x is string => !!x) : [unText(v)].filter((x): x is string => !!x),
+    );
+  }
+  const singur = unText(brut);
+  return singur ? [singur] : [];
+}
+
+/**
+ * Publică pe eMAG toate produsele dintr-o categorie mapată.
+ *
+ * ⚠ TRECE PRIN COADĂ, nu prin trimitere directă. O categorie poate avea sute de
+ * produse, iar trimise pe loc ar fi depășit timpul funcției și ar fi ars într-o
+ * secundă tot ritmul de 3 cereri pe secundă al magazinului — inclusiv cel de care
+ * au nevoie mișcările de stoc după vânzări.
+ */
+export async function publicaCategoriaPeEmag(
+  businessId: string,
+  numeCategorie: string,
+): Promise<{ puse: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const config = await loadConfig(businessId);
+  const lipsa = ceLipsestePentruPublicare(config);
+  if (lipsa) return { error: lipsa };
+
+  if (!config.category_map?.[(numeCategorie ?? "").trim()]) {
+    return { error: "Categoria nu e legată de nicio categorie eMAG. Leag-o întâi." };
+  }
+
+  const admin = createAdminClient();
+  const produse = await fetchAllRowsStrict<{ id: string }>(
+    "emag.publicaCategoria", (from, to) =>
+      admin.from("products").select("id")
+        .eq("business_id", businessId).eq("category", numeCategorie.trim()).eq("is_active", true)
+        .order("created_at", { ascending: true }).range(from, to),
+  );
+
+  if (produse.length === 0) return { puse: 0 };
+
+  await enqueueEmagSyncMany(businessId, produse.map((p) => p.id));
+  revalidatePath(FEATURE_PATH);
+  return { puse: produse.length };
 }

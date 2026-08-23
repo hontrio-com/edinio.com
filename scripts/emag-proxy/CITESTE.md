@@ -63,24 +63,35 @@ suplimentare care se pot muta între mașini. Nu e nevoie acum.
 
 ## Verificare
 
-Trei probe, toate de pe server. Fiecare trebuie să dea exact ce scrie:
-
 ```bash
-# 1. cererea AJUNGE la eMAG (401 de la ei, fiindcă n-am trimis acreditări eMAG)
-curl -sS -o /dev/null -w '%{http_code}\n' -x http://edinio:PAROLA@127.0.0.1:3128 \
-     https://marketplace-api.emag.ro/api-3/vat/read -X POST -d '{}'
-
-# 2. lista de gazde ține (403 de la proxy)
-curl -sS -o /dev/null -w '%{http_code}\n' -x http://edinio:PAROLA@127.0.0.1:3128 \
-     https://example.com
-
-# 3. parola chiar e cerută (407)
-curl -sS -o /dev/null -w '%{http_code}\n' -x http://127.0.0.1:3128 \
-     https://marketplace-api.emag.ro/api-3/vat/read
+bash /root/emag-proxy/proba.sh
 ```
 
-Dacă a doua dă 200, lista de gazde nu ține și proxy-ul e deschis. Se oprește
-serviciul și se reia configurarea.
+Cere parola o dată și scrie **TRECUT** sau **CĂZUT** pentru fiecare din cele trei:
+
+| Probă | Ce dovedește |
+|---|---|
+| eMAG răspunde `401` | cererea a trecut prin releu și a ajuns la ei |
+| `example.com` refuzat cu `403` | lista de gazde ține — nu e releu deschis |
+| fără parolă, `407` | parola chiar e cerută |
+
+**A doua e cea care contează.** Dacă dă `200`, proxy-ul e deschis către tot
+internetul: `systemctl stop squid` și se reia configurarea.
+
+### ⚠ De ce un script și nu trei comenzi `curl`
+
+Fiindcă la un tunel `CONNECT` refuzat, `curl` **nu** pune codul proxy-ului în
+`%{http_code}`. Tunelul nu se deschide niciodată, deci nu există niciun răspuns *de
+la destinație*, iar acolo rămâne `000`. Codul adevărat iese în mesajul de eroare:
+
+```
+2. gazda straina refuzata: curl: (56) CONNECT tunnel failed, response 403
+000
+```
+
+Ăsta e răspunsul **corect**, și arată ca un eșec. Prima formă a instrucțiunilor cerea
+să te uiți la `%{http_code}` — cine nu știe semantica lui `CONNECT` ar fi pornit să
+repare ceva întreg. Scriptul citește unde trebuie.
 
 ## Întreținere
 

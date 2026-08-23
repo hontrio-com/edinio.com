@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { Mail, Phone, SquarePen } from "lucide-react";
-import { EMAIL, FORMULAR, TELEFON, type CaleDeContact } from "@/lib/website/contact";
+import { WhatsAppIcon } from "@/components/website/WhatsAppIcon";
+import {
+  EMAIL,
+  FORMULAR,
+  TELEFON,
+  WHATSAPP,
+  type CaleDeContact,
+} from "@/lib/website/contact";
 
 /**
- * Banda cu cele trei căi de contact: telefon, e-mail, formular.
+ * Banda cu trei căi de contact, ca o singură placă.
  *
  * ═══ O PLACĂ CU TREI CELULE, NU TREI CARDURI ═══
  *
@@ -23,6 +30,10 @@ import { EMAIL, FORMULAR, TELEFON, type CaleDeContact } from "@/lib/website/cont
  * paginii de start; trei pete de verde aici ar concura cu el și n-ar spune
  * nimic în plus — pictograma e oricum dublată de eticheta de sub ea.
  *
+ * Culoarea și trecerea stau pe ÎNVELIȘUL iconiței, nu pe fiecare iconiță în
+ * parte: altfel regula „iconițele sunt stinse" s-ar fi rescris la fiecare
+ * folosire, iar a doua oară s-ar fi scris altfel.
+ *
  * ═══ TOATĂ CELULA E ȚINTĂ ═══
  *
  * Nu doar numărul. Pe telefon, o țintă de 44px pe toată lățimea celulei e
@@ -30,15 +41,83 @@ import { EMAIL, FORMULAR, TELEFON, type CaleDeContact } from "@/lib/website/cont
  * linkului aici — spre deosebire de subsol, unde prefixul e în afara lui:
  * acolo linkul e chiar numărul și eticheta ar fi format-o din greșeală; aici
  * ținta e celula întreagă, deci eticheta face parte din ea.
+ *
+ * ═══ CĂILE SUNT ARGUMENT, NU SCRISE ÎNĂUNTRU ═══
+ *
+ * ⚠ Centrul de ajutor își avea, până la auditul din 23.08, propria bandă:
+ * `BandaAjutor`, făcută din trei carduri cu iconiță în cerc — exact tiparul pe
+ * care fișierul ăsta îl evită dinadins, și scris chiar sub comentariul care
+ * explică de ce nu se face așa. Motivul dublurii era mărunt: acolo a treia cale
+ * e WhatsApp, nu formularul.
+ *
+ * Deci lista e acum argument, cu cele trei obișnuite ca implicit. O componentă,
+ * o rețetă vizuală, iar ce diferă chiar de la o pagină la alta se dă din afară.
  */
 
-const CAI: { cale: CaleDeContact; eticheta: string; Icoana: typeof Phone }[] = [
-  { cale: TELEFON, eticheta: "Telefon", Icoana: Phone },
-  { cale: EMAIL, eticheta: "Email", Icoana: Mail },
-  { cale: FORMULAR, eticheta: "Formular", Icoana: SquarePen },
+/** O intrare din bandă: calea, cum se numește pe ecran și pictograma ei. */
+export interface IntrareBanda {
+  cale: CaleDeContact;
+  eticheta: string;
+  /* Nodul întreg, nu componenta: pictogramele din `lucide` primesc `strokeWidth`,
+     iar sigla WhatsApp e un traseu scris de noi, care nu primește. Culoarea o dă
+     învelișul, deci aici rămâne doar mărimea. */
+  icoana: React.ReactNode;
+}
+
+const MARIME_ICOANA = "h-[18px] w-[18px]";
+
+/** Telefon, e-mail, formular. Ce se vede pe `/preturi` și `/intrebari-frecvente`. */
+export const CAI_IMPLICITE: IntrareBanda[] = [
+  {
+    cale: TELEFON,
+    eticheta: "Telefon",
+    icoana: <Phone strokeWidth={1.75} className={MARIME_ICOANA} aria-hidden="true" />,
+  },
+  {
+    cale: EMAIL,
+    eticheta: "Email",
+    icoana: <Mail strokeWidth={1.75} className={MARIME_ICOANA} aria-hidden="true" />,
+  },
+  {
+    cale: FORMULAR,
+    eticheta: "Formular",
+    icoana: <SquarePen strokeWidth={1.75} className={MARIME_ICOANA} aria-hidden="true" />,
+  },
 ];
 
-export function BandaContact({ className }: { className?: string }) {
+/**
+ * Telefon, WhatsApp, e-mail. Ce cere schița centrului de ajutor, în ordinea ei.
+ *
+ * Formularul lipsește dinadins: în centrul de ajutor, omul a citit deja un ghid
+ * și n-a rezolvat. Acolo vrea pe cineva acum, nu un mesaj la care se răspunde
+ * mai târziu.
+ */
+export const CAI_AJUTOR: IntrareBanda[] = [
+  {
+    cale: TELEFON,
+    eticheta: "Telefon",
+    icoana: <Phone strokeWidth={1.75} className={MARIME_ICOANA} aria-hidden="true" />,
+  },
+  {
+    cale: WHATSAPP,
+    eticheta: "WhatsApp",
+    /* Sigla poartă `aria-hidden` în ea, deci nu se mai pune aici. */
+    icoana: <WhatsAppIcon className={MARIME_ICOANA} />,
+  },
+  {
+    cale: EMAIL,
+    eticheta: "Email",
+    icoana: <Mail strokeWidth={1.75} className={MARIME_ICOANA} aria-hidden="true" />,
+  },
+];
+
+export function BandaContact({
+  className,
+  cai = CAI_IMPLICITE,
+}: {
+  className?: string;
+  cai?: IntrareBanda[];
+}) {
   return (
     <div
       /*
@@ -48,14 +127,12 @@ export function BandaContact({ className }: { className?: string }) {
       className={`placa overflow-hidden rounded-[16px] ${className ?? ""}`}
     >
       <div className="grid sm:grid-cols-3">
-        {CAI.map(({ cale, eticheta, Icoana }, i) => {
+        {cai.map(({ cale, eticheta, icoana }, i) => {
           const continut = (
             <>
-              <Icoana
-                aria-hidden="true"
-                strokeWidth={1.75}
-                className="h-[18px] w-[18px] shrink-0 text-ink-3 transition-colors duration-200 group-hover:text-ink-2"
-              />
+              <span className="flex shrink-0 text-ink-3 transition-colors duration-200 group-hover:text-ink-2">
+                {icoana}
+              </span>
               <span className="min-w-0">
                 <span className="block text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-3">
                   {eticheta}

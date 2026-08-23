@@ -9,6 +9,8 @@ import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
+import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
 
 // Un fisier de sitemap accepta maxim 50.000 de URL-uri (limita Google) —
 // peste, fisierul intreg e respins. Pastram ordinea de prioritate
@@ -174,6 +176,32 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${PLATFORM_ORIGIN}/confidentialitate`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
     { url: `${PLATFORM_ORIGIN}/cookies`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
     { url: `${PLATFORM_ORIGIN}/gdpr`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
+    /*
+      Centrul de ajutor: pagina lui de start, categoriile si fiecare ghid.
+      Se construiesc din datele centrului, nu se scriu de mana: un ghid adaugat
+      acolo intra singur in sitemap, iar unul sters iese.
+
+      Un centru de ajutor traieste din cautare. Cele mai multe intrebari ajung la
+      el prin Google, nu prin meniul site-ului, deci ghidurile negasite de Google
+      sunt ghiduri pe care nu le citeste nimeni.
+
+      ⚠ SE SCOT DE AICI cand centrul trece pe `ajutor.edinio.com`: un sitemap nu
+      poate cuprinde adrese de pe alt domeniu. E punctul 3 din lista de mutare,
+      scrisa in capul lui `lib/website/ajutor.ts`.
+    */
+    { url: `${PLATFORM_ORIGIN}/ajutor`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.7 },
+    ...CATEGORII_AJUTOR.map((c) => ({
+      url: `${PLATFORM_ORIGIN}${adresaCategorie(c.slug)}`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
+    ...TOATE_GHIDURILE.map((g) => ({
+      url: `${PLATFORM_ORIGIN}${adresaGhid(g.categorie.slug, g.slug)}`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    })),
   ];
 
   const admin = createAdminClient();

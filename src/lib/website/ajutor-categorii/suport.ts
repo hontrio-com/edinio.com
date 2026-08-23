@@ -1,0 +1,250 @@
+import { LifeBuoy } from "lucide-react";
+import type { CategorieAjutor } from "../ajutor-tipuri";
+
+/**
+ * Categoria „Suport” din centrul de ajutor.
+ *
+ * ⚠ TEXTELE SUNT CIORNĂ, scrise dintr-un audit al codului panoului, nu din cap.
+ * Vezi `../ajutor.ts` pentru cum s-a făcut auditul și ce reguli de scriere se
+ * aplică. Clientul le corectează.
+ */
+export const SUPORT: CategorieAjutor = {
+  slug: "suport",
+  titlu: "Suport",
+  descriere: "Tichete către echipa Edinio și celelalte căi de contact.",
+  icon: LifeBuoy,
+  grupuri: [
+    {
+      titlu: "Suport",
+      ghiduri: [
+        {
+          slug: "cum-deschizi-un-tichet-de-suport",
+          titlu: "Cum deschizi un tichet de suport",
+          rezumat: "Trimiti o cerere catre echipa Edinio din panoul de administrare, cu subiect, categorie, prioritate si descriere.",
+          intro: "Tichetul este calea prin care ii scrii echipei Edinio si pastrezi toata discutia intr-un singur loc.",
+          pasi: [
+            "Intră în panoul de administrare > Suport.",
+            {
+              text: "Apasă „Tichet nou” din dreapta sus. Se deschide fereastra „Tichet nou de suport”.",
+              captura: { alt: "Fereastra „Tichet nou de suport” cu câmpurile Subiect, Categorie, Prioritate, Descriere și Atașamente.", raport: 16 / 10 },
+            },
+            "Dacă ai mai multe magazine, alege magazinul din lista „Magazin” sau alege „Cont general”.",
+            "Scrie „Subiect”, adică problema pe scurt.",
+            "Alege „Categorie”: Tehnic, Facturare, Cerere funcționalitate sau Altele.",
+            "Alege „Prioritate”: Scăzută, Normală, Mare sau Urgentă.",
+            "Scrie „Descriere”, cu detaliile problemei și pașii prin care se reproduce.",
+            "Dacă ai capturi de ecran sau documente, adaugă-le la „Atașamente”.",
+            "Apasă „Trimite tichetul”. Cât timp se trimite, butonul scrie „Se trimite...”.",
+            "Apare mesajul „Tichetul a fost creat cu succes” și ești dus direct în pagina tichetului.",
+          ],
+          detalii: [
+            { titlu: "Când apare lista „Magazin”", text: "Lista „Magazin” se vede doar dacă ai cel puțin două magazine pe cont. Primul magazin este preselectat. Dacă problema nu ține de un magazin anume, de exemplu o întrebare despre facturarea abonamentului, alege „Cont general”. Cu un singur magazin nu vezi lista, iar tichetul se leagă automat de acel magazin. Numele afișat în listă este numele magazinului, iar dacă acesta lipsește, numele firmei." },
+            { titlu: "Subiect și descriere", text: "Ambele sunt obligatorii și sunt marcate cu asterisc. „Subiect” acceptă maximum 150 de caractere, iar peste această lungime câmpul nu mai primește text. „Descriere” nu are limită impusă de formular și câmpul are cinci rânduri vizibile, dar poți scrie mai mult. Sugestia din câmp îți cere problema întâlnită, pașii pentru a o reproduce și orice alte informații relevante. Un exemplu util: „La finalizarea comenzii, după ce aleg plata cu cardul, pagina rămâne blocată. Se întâmplă pe telefon, în Chrome, la comenzile mai mari de 500 lei.”" },
+            { titlu: "Categorie și prioritate", text: "Categoria implicită este „Tehnic”, iar prioritatea implicită este „Normală”. Categoria și prioritatea apar apoi ca etichete în listă și în pagina tichetului, iar prioritatea se vede colorată în emailul care ajunge la echipa Edinio. În aplicație, prioritatea nu declanșează nimic automat." },
+            { titlu: "Dacă butonul „Trimite tichetul” este gri", text: "Butonul rămâne inactiv până când ai completat și „Subiect”, și „Descriere”. Dacă unul dintre ele ajunge gol, serverul refuză cererea cu „Subiectul este obligatoriu” sau „Descrierea este obligatorie”. La o eroare de server vezi „Eroare la crearea tichetului” sau „Eroare la salvarea mesajului”. În acest caz încearcă din nou trimiterea, iar dacă se repetă, sună la numărul de suport din caseta „Ai nevoie de ajutor urgent?”." },
+            { titlu: "Dacă te răzgândești", text: "Apeși „Anulează” sau X-ul din colțul ferestrei. Câmpurile completate se golesc, deci textul scris până atunci nu se păstrează." },
+            { titlu: "Ce se întâmplă după trimitere", text: "Tichetul pleacă mereu cu statusul „Deschis” și apare primul în lista ta. În formular vezi și o casetă care îți spune că vei primi un email la adresa contului tău când există un răspuns." },
+            { titlu: "Ce nu mai poți schimba", text: "După trimitere nu poți edita subiectul, categoria, prioritatea sau magazinul tichetului. Panoul nu are nicio acțiune de editare și nici de ștergere a unui tichet. Dacă ai greșit ceva, scrie corectura ca răspuns în tichet." },
+          ],
+          nota: "Statusul „În lucru” nu poate fi ales de tine. Îl pune echipa Edinio.",
+          termeni: ["cerere suport", "contactez echipa Edinio", "problema tehnica", "intrebare facturare", "ajutor", "ticket"],
+        },
+        {
+          slug: "cum-vezi-lista-tichetelor-tale",
+          titlu: "Cum vezi lista tichetelor tale de suport",
+          rezumat: "Zona Suport din panou iti arata toate tichetele contului tau, cu status, prioritate, categorie si ultima actualizare.",
+          pasi: [
+            "Intră în panoul de administrare > Suport, elementul cu icon colac de salvare, sub lista de meniu și deasupra secțiunii Setări.",
+            "Se deschide pagina „Suport”, cu subtitlul „Deschide un tichet și echipa noastră te va ajuta”.",
+            "Sub subtitlu vezi caseta „Ai nevoie de ajutor urgent?”, cu numărul de telefon și butonul WhatsApp.",
+            "Mai jos sunt patru contoare: „Deschise”, „În lucru”, „Rezolvate” și „Răspunsuri noi”.",
+            {
+              text: "Sub contoare este lista tichetelor tale, cel mai recent actualizat primul.",
+              captura: { alt: "Pagina Suport cu cele patru contoare și lista de tichete.", raport: 16 / 10 },
+            },
+            "Apeși pe rândul unui tichet ca să deschizi conversația.",
+          ],
+          detalii: [
+            { titlu: "Ce arată fiecare rând", text: "Rândul îți arată subiectul tichetului, eticheta de status („Deschis”, „În lucru”, „Rezolvat” sau „Închis”), prioritatea („Scăzută”, „Normală”, „Mare”, „Urgentă”) cu un bulin colorat, categoria („Tehnic”, „Facturare”, „Cerere funcționalitate”, „Altele”) și timpul trecut de la ultima actualizare." },
+            { titlu: "Cum se citește timpul afișat", text: "Timpul este relativ: „acum”, „acum 5 min”, „acum 3h”, „acum 2z”. Peste șapte zile, în loc de timp relativ se afișează data scurtă." },
+            { titlu: "Tichetele cu răspuns necitit", text: "Dacă echipa Edinio a răspuns și nu ai deschis încă tichetul, rândul are un bulin colorat în stânga și eticheta „Răspuns nou”. Aceleași tichete sunt numărate de contorul „Răspunsuri noi”." },
+            { titlu: "Ce numără contorul „Rezolvate”", text: "Contorul „Rezolvate” adună și tichetele cu statusul „Rezolvat”, și pe cele cu statusul „Închis”. Dacă numerele nu par să se potrivească, aceasta este explicația." },
+            { titlu: "Ce nu are lista", text: "Lista nu are căutare, filtre, sortare manuală sau paginare. Se afișează toate tichetele tale, ordonate după data ultimei actualizări. Nu există buton de ștergere sau de arhivare a unui tichet." },
+            { titlu: "Tichetele țin de cont, nu de magazin", text: "Tichetele sunt legate de contul tău, nu de magazinul selectat în panou. Le vezi pe toate într-o singură listă, indiferent de magazinul pe care lucrezi în acel moment." },
+            { titlu: "Dacă nu ai niciun tichet", text: "În locul listei apare o casetă punctată cu textul „Niciun tichet de suport” și „Ai o problemă sau o întrebare? Deschide un tichet și te ajutăm.”. Butonul „Deschide primul tichet” deschide același formular ca „Tichet nou”." },
+            { titlu: "Unde găsești Suport pe telefon", text: "Pe telefon deschizi meniul din bara de sus. „Suport” apare după linia despărțitoare, la finalul listei de meniu. Dacă ai SMS Marketing activat, „Suport” este sub el." },
+            { titlu: "Ce îți trebuie ca să intri", text: "Ai nevoie de un cont autentificat, cu onboarding-ul finalizat. Dacă onboarding-ul nu e completat, panoul te trimite la pașii de configurare. Dacă abonamentul sau perioada de probă a expirat ori magazinul e suspendat, tot panoul, deci și zona Suport, te trimite la pagina de reactivare." },
+          ],
+          termeni: ["istoric cereri suport", "unde vad tichetele", "status tichet", "raspuns necitit", "lista solicitari"],
+        },
+        {
+          slug: "cum-atasezi-fisiere-la-un-tichet",
+          titlu: "Cum atașezi fișiere la un tichet de suport",
+          rezumat: "Adaugi pana la cinci fisiere, la deschiderea tichetului sau intr-un raspuns, cu limita de 10MB pe fisier.",
+          pasi: [
+            "În fereastra „Tichet nou de suport”, mergi la câmpul „Atașamente (opțional, max 5 fișiere, 10MB fiecare)”.",
+            "Apasă butonul punctat „Adaugă fișier” și alege unul sau mai multe fișiere din calculator sau din telefon.",
+            {
+              text: "Fișierele acceptate apar într-o listă, fiecare cu numele și dimensiunea în KB.",
+              captura: { alt: "Câmpul Atașamente cu două fișiere adăugate, fiecare cu nume, dimensiune și X.", raport: 16 / 10 },
+            },
+            "Dacă ai ales greșit, apasă X-ul din dreapta fișierului ca să îl scoți din listă.",
+            "Într-un tichet deja deschis, folosește butonul cu agrafă de lângă caseta de răspuns, cu indiciul „Adaugă fișier”. Fișierele apar ca etichete deasupra casetei și le scoți tot cu X.",
+          ],
+          detalii: [
+            { titlu: "Câte fișiere poți trimite", text: "Maximum cinci fișiere pe tichet sau pe mesaj. Când ajungi la cinci, butonul „Adaugă fișier” dispare din formular, iar în tichet butonul cu agrafă se dezactivează. Dacă selectezi dintr-o dată mai mult de cinci fișiere, surplusul este tăiat fără niciun mesaj, deci verifică lista înainte de trimitere." },
+            { titlu: "Ce tipuri de fișiere trec", text: "Formularul acceptă JPEG, PNG, GIF, WebP, PDF, text simplu (.txt) și ZIP. Orice alt tip primește mesajul „Tipul fișierului {nume} nu este permis”. Fereastra de alegere a fișierelor propune și .heic sau .heif, dar acestea nu sunt în lista de tipuri permise, deci sunt refuzate cu același mesaj." },
+            { titlu: "Atenție la .txt și .zip", text: "Deși formularul le acceptă, serverul care primește fișierul acceptă doar imagini (JPEG, PNG, WebP, HEIC, HEIF, GIF) și PDF. Un .txt sau un .zip trece de formular, dar eșuează la trimitere cu „Tipul de fișier nu este acceptat.”. Dacă ai de trimis un text sau un jurnal de erori, pune-l direct în descriere sau trimite-l ca PDF ori ca poză." },
+            { titlu: "Limita de mărime", text: "Maximum 10MB pentru fiecare fișier. Peste această limită primești „Fișierul {nume} depășește 10MB” în formular, respectiv „{nume} depășește 10MB” în caseta de răspuns. La încărcare, serverul răspunde cu „Fișierul este prea mare. Limita este 10MB.”." },
+            { titlu: "Ce se întâmplă cu imaginile", text: "Imaginile sunt comprimate automat înainte de trimitere. Sunt redimensionate la maximum 1600x1600 și convertite în WebP, deci fișierul care ajunge la suport nu este identic cu originalul tău. Dacă un detaliu foarte fin contează, decupează zona importantă înainte de a trimite poza." },
+            { titlu: "Numele fișierului în conversație", text: "Numele afișat în conversație este ultima parte din adresa fișierului încărcat, nu numele original al fișierului tău. Dacă numele contează, scrie în mesaj la ce se referă fiecare atașament." },
+            { titlu: "Dacă fișierul este refuzat ca gol", text: "Mesajul „Fișierul pare gol. Alege poza din galeria dispozitivului (nu dintr-un link/cloud).” apare când fișierul ales are zero octeți. Descarcă întâi fișierul pe dispozitiv, apoi alege-l din galerie sau din folderul local." },
+          ],
+          nota: "Nu poți trimite un mesaj format numai din atașamente. Scrie și un rând de text, altfel serverul răspunde „Mesajul nu poate fi gol”.",
+          termeni: ["captura de ecran", "poza", "pdf", "upload", "incarcare fisier", "dovada problema"],
+        },
+        {
+          slug: "cum-citesti-conversatia-unui-tichet",
+          titlu: "Cum citești conversația dintr-un tichet",
+          rezumat: "Deschizi tichetul din lista si vezi toate mesajele tale si ale echipei Edinio, in ordine, cu data si ora.",
+          pasi: [
+            "Intră în panoul de administrare > Suport.",
+            "Apasă oriunde pe rândul tichetului. Se deschide pagina tichetului.",
+            "Citește antetul: subiectul, eticheta de status, prioritatea, categoria și numărul scurt al tichetului.",
+            "Sub antet vezi „Deschis pe” și data și ora la care a fost creat tichetul.",
+            {
+              text: "Parcurge conversația: mesajele tale sunt în dreapta, răspunsurile echipei în stânga.",
+              captura: { alt: "Pagina unui tichet cu antetul, data creării și conversația.", raport: 16 / 10 },
+            },
+            "Apasă „Înapoi la tichete” ca să revii în listă.",
+          ],
+          detalii: [
+            { titlu: "Numărul tichetului", text: "În antet apare un număr scurt, format din semnul diez și primele opt caractere din identificatorul tichetului. Este util când vorbești la telefon cu echipa și trebuie să spui despre ce tichet e vorba." },
+            { titlu: "Cine a scris fiecare mesaj", text: "Sub fiecare bulă de mesaj apare autorul și momentul: „Tu” urmat de dată și oră pentru mesajele tale, „Echipa Edinio” urmat de dată și oră pentru răspunsuri. Răspunsurile echipei au și logo-ul Edinio, în stânga." },
+            { titlu: "Atașamentele din conversație", text: "Imaginile (.jpg, .jpeg, .png, .gif, .webp) apar direct ca poze sub mesaj. Apeși pe ele și se deschid mărite într-o filă nouă. Celelalte fișiere, de exemplu un PDF, apar ca un rând cu numele fișierului și o pictogramă de descărcare. Apeși pe rând și fișierul se deschide într-o filă nouă." },
+            { titlu: "Liniile de la finalul conversației", text: "Dacă tichetul este „Rezolvat”, la finalul conversației apare o linie despărțitoare cu textul „Tichet marcat ca rezolvat”. Dacă este „Închis”, linia scrie „Tichet închis”." },
+            { titlu: "Marcarea ca citit", text: "Dacă tichetul avea „Răspuns nou”, simpla deschidere a paginii îl marchează ca citit, iar eticheta dispare. Numărul de lângă „Suport” din meniu se calculează la încărcarea panoului, deci se potrivește din nou la următoarea încărcare a paginii." },
+            { titlu: "Ce nu se poate face", text: "Un mesaj deja trimis nu poate fi șters, editat sau retras, nici de tine, nici din interfață. Nu există un buton de descărcare sau de export al conversației." },
+          ],
+          nota: "Poți deschide doar tichetele contului tău. Dacă adresa duce la un tichet care nu e al tău, primești pagina de negăsit.",
+          termeni: ["mesaje suport", "discutie cu suportul", "istoric conversatie", "numar tichet", "atasament pdf"],
+        },
+        {
+          slug: "cum-raspunzi-intr-un-tichet",
+          titlu: "Cum răspunzi într-un tichet de suport",
+          rezumat: "Scrii in caseta din josul paginii tichetului, poti atasa fisiere si trimiti cu butonul verde sau cu Ctrl+Enter.",
+          pasi: [
+            "Intră în panoul de administrare > Suport și deschide tichetul.",
+            {
+              text: "Mergi la caseta de scriere din josul paginii, cu sugestia „Scrie un mesaj... (Ctrl+Enter pentru a trimite)”.",
+              captura: { alt: "Caseta de răspuns din josul paginii, cu butonul cu agrafă și butonul verde de trimitere.", raport: 16 / 10 },
+            },
+            "Scrie mesajul. Caseta crește singură pe măsură ce scrii.",
+            "Dacă ai fișiere de trimis, apasă butonul cu agrafă și alege-le.",
+            "Trimite cu butonul verde din dreapta sau cu Ctrl+Enter, respectiv Cmd+Enter pe Mac.",
+            "Mesajul apare imediat în conversație, în dreapta, sub eticheta „Tu”.",
+          ],
+          detalii: [
+            { titlu: "Când butonul de trimitere este inactiv", text: "Butonul rămâne inactiv cât timp nu ai scris nimic și nu ai atașat niciun fișier. Devine activ și doar cu un fișier atașat, dar serverul refuză un mesaj fără text și primești „Mesajul nu poate fi gol”. Scrie măcar o propoziție care explică atașamentul." },
+            { titlu: "Atașamentele din răspuns", text: "Se aplică aceleași reguli ca la tichetul nou: maximum cinci fișiere, maximum 10MB fiecare, aceleași tipuri acceptate. Butonul cu agrafă se dezactivează când ai deja cinci fișiere. La un tip nepermis vezi „Tipul {nume} nu este permis”, iar la un fișier prea mare „{nume} depășește 10MB”." },
+            { titlu: "Dacă tichetul era marcat rezolvat", text: "Deasupra casetei scrie „Trimiterea unui mesaj va redeschide tichetul automat.”. După trimitere, statusul afișat în pagină revine la „Deschis”." },
+            { titlu: "Dacă tichetul este închis", text: "La un tichet închis caseta de răspuns nu mai există. În locul ei apare textul „Acest tichet este închis. Deschide un tichet nou dacă mai ai nevoie de ajutor.”." },
+            { titlu: "Ce faci când mesajul nu pleacă", text: "Dacă serverul refuză mesajul, vezi chiar mesajul lui: „Mesajul nu poate fi gol”, „Tichet negăsit” sau „Tichetul este închis”. În cazul „Tichetul este închis” înseamnă că echipa a închis tichetul între timp, deci deschide unul nou. Dacă apare textul general „Eroare la trimiterea mesajului”, copiază textul scris, reîncarcă pagina și trimite din nou." },
+            { titlu: "Ce se întâmplă la echipa Edinio", text: "La fiecare răspuns al tău, echipa Edinio primește un email cu mesajul, deci nu e nevoie să suni ca să anunți că ai scris." },
+          ],
+          termeni: ["trimit mesaj suport", "revin cu detalii", "completez tichetul", "ctrl enter", "agrafa"],
+        },
+        {
+          slug: "cum-marchezi-un-tichet-ca-rezolvat",
+          titlu: "Cum marchezi un tichet ca rezolvat sau îl redeschizi",
+          rezumat: "Din antetul tichetului poti pune statusul Rezolvat, iar apoi il poti readuce la Deschis.",
+          pasi: [
+            "Intră în panoul de administrare > Suport și deschide tichetul.",
+            {
+              text: "În dreapta sus, în antet, apasă „Marcare rezolvat”.",
+              captura: { alt: "Antetul tichetului cu butonul „Marcare rezolvat” în dreapta sus.", raport: 16 / 10 },
+            },
+            "Eticheta de status devine „Rezolvat”, apare mesajul „Tichetul a fost marcat ca rezolvat”, iar la finalul conversației apare linia „Tichet marcat ca rezolvat”.",
+            "Butonul este înlocuit de „Redeschide”.",
+            "Dacă problema revine, apasă „Redeschide”. Statusul devine „Deschis” și apare mesajul „Tichetul a fost redeschis”.",
+          ],
+          detalii: [
+            { titlu: "Când vezi fiecare buton", text: "„Marcare rezolvat” apare doar la tichetele care nu sunt deja „Rezolvat” sau „Închis”. „Redeschide” apare doar la tichetele cu statusul „Rezolvat”." },
+            { titlu: "Ce statusuri poți pune tu", text: "Din panou poți pune doar „Rezolvat” și, invers, „Deschis”. „În lucru” și „Închis” nu pot fi alese de tine. Ele vin dinspre echipa Edinio." },
+            { titlu: "Redeschidere prin mesaj", text: "Nu e obligatoriu să folosești butonul. La un tichet rezolvat, deasupra casetei de scriere apare textul „Trimiterea unui mesaj va redeschide tichetul automat.”, iar după trimitere statusul afișat devine „Deschis”." },
+            { titlu: "Cât timp se salvează", text: "Cât timp statusul se salvează, butonul este dezactivat și arată un cerc care se rotește. Dacă salvarea nu reușește, apare „Eroare la actualizarea statusului”. Reîncarcă pagina și încearcă din nou." },
+            { titlu: "Tichetele închise", text: "Un tichet cu statusul „Închis” nu are, în panou, niciun buton de redeschidere. În antet apare doar eticheta „Închis”. Dacă mai ai nevoie de ajutor pe același subiect, deschide un tichet nou și menționează numărul scurt al celui vechi." },
+            { titlu: "Unde se vede schimbarea", text: "Statusul nou apare și pe rândul tichetului din listă. Ține minte că în pagina Suport contorul „Rezolvate” numără la un loc tichetele rezolvate și pe cele închise." },
+          ],
+          termeni: ["inchidere tichet", "status rezolvat", "problema rezolvata", "redeschidere", "reopen"],
+        },
+        {
+          slug: "cum-afli-ca-ai-primit-raspuns-de-la-suport",
+          titlu: "Cum afli că ai primit un răspuns de la suport",
+          rezumat: "Vezi un numar langa Suport in meniu, eticheta Raspuns nou pe randul tichetului si primesti un email.",
+          pasi: [
+            {
+              text: "Verifică meniul lateral. Lângă „Suport” apare un număr pe fundal verde, cu cifra albă, cât timp ai tichete cu răspunsuri necitite.",
+              captura: { alt: "Meniul lateral cu numărul verde de răspunsuri necitite lângă Suport.", raport: 16 / 10 },
+            },
+            "Intră în panoul de administrare > Suport. Tichetul cu răspuns are un bulin în stânga și eticheta „Răspuns nou”, iar contorul „Răspunsuri noi” din capul paginii crește.",
+            "Verifică și emailul. Primești un mesaj cu subiectul „Răspuns la tichetul tău: {subiect}”, cu butonul „Răspunde sau vezi conversația”.",
+            "Deschide tichetul. Răspunsul este marcat ca citit, iar eticheta „Răspuns nou” dispare.",
+          ],
+          detalii: [
+            { titlu: "Ce numără de fapt numărul din meniu", text: "Numărul de lângă „Suport” numără tichete cu răspunsuri necitite, nu mesaje. Dacă echipa ți-a trimis trei mesaje în același tichet, numărul rămâne 1. Același număr apare și în meniul de pe telefon." },
+            { titlu: "Când se actualizează numărul", text: "Numărul se calculează la încărcarea panoului. După ce ai deschis tichetul, el se potrivește din nou la următoarea încărcare a paginii." },
+            { titlu: "Dacă ești chiar în pagina tichetului", text: "Când răspunsul sosește în timp ce ești în pagina tichetului, mesajul apare singur în conversație, fără să reîncarci, și primești notificarea „Răspuns nou de la echipa de suport”." },
+            { titlu: "Nu există marcare manuală ca citit", text: "Un tichet se marchează ca citit doar prin deschiderea lui. În listă nu există un buton de tipul „marchează ca citit”." },
+            { titlu: "Despre emailuri", text: "Emailul către tine pleacă atunci când un agent Edinio răspunde în tichet. Dacă echipa doar schimbă statusul, fără să scrie un mesaj, nu primești email. Emailul ajunge la adresa contului tău, cea afișată și în caseta informativă din formularul de tichet nou." },
+          ],
+          termeni: ["notificare suport", "email de la Edinio", "bulina verde", "mesaj necitit", "alerta raspuns"],
+        },
+        {
+          slug: "cum-recunosti-un-tichet-inchis",
+          titlu: "Cum recunoști un tichet închis și ce mai poți face",
+          rezumat: "La un tichet inchis nu mai poti scrie din panou, deci continui discutia intr-un tichet nou.",
+          pasi: [
+            "Intră în panoul de administrare > Suport și deschide tichetul.",
+            "În antet vezi eticheta „Închis”, în locul butoanelor de status.",
+            "La finalul conversației apare linia „Tichet închis”.",
+            {
+              text: "În locul casetei de răspuns citești „Acest tichet este închis. Deschide un tichet nou dacă mai ai nevoie de ajutor.”.",
+              captura: { alt: "Finalul unui tichet închis, cu linia „Tichet închis” și textul care înlocuiește caseta de răspuns.", raport: 16 / 10 },
+            },
+            "Apasă linkul verde „Tichet nou” de sub acest text. Ești dus în lista de tichete.",
+            "Din listă apasă din nou „Tichet nou” ca să se deschidă formularul.",
+          ],
+          detalii: [
+            { titlu: "De ce sunt doi pași până la formular", text: "Linkul „Tichet nou” din pagina tichetului închis doar te duce în lista de tichete. Formularul se deschide de la butonul „Tichet nou” din dreapta sus a paginii Suport." },
+            { titlu: "Nu poți scrie în tichetul închis", text: "Caseta de răspuns nu mai există, iar dacă mesajul ajunge totuși la server, răspunsul lui este „Tichetul este închis”." },
+            { titlu: "Nu ai buton de redeschidere", text: "Pentru un tichet închis, panoul nu îți oferă niciun buton de redeschidere. Antetul afișează doar eticheta „Închis”. Butonul „Redeschide” apare numai la tichetele cu statusul „Rezolvat”." },
+            { titlu: "Cum legi tichetul nou de cel vechi", text: "În descrierea tichetului nou scrie numărul scurt al tichetului închis, cel din antet, format din diez și primele opt caractere. Astfel echipa găsește repede discuția anterioară." },
+            { titlu: "Tichetul închis rămâne în listă", text: "Nu poți șterge și nu poți arhiva tichetele. Cel închis rămâne în listă, cu eticheta „Închis”, și este numărat de contorul „Rezolvate”, împreună cu tichetele rezolvate." },
+          ],
+          termeni: ["tichet blocat", "nu pot scrie", "conversatie incheiata", "continui discutia"],
+        },
+        {
+          slug: "cum-contactezi-suportul-telefonic-sau-whatsapp",
+          titlu: "Cum contactezi suportul prin telefon sau WhatsApp",
+          rezumat: "Din pagina Suport poti suna direct sau deschide o conversatie WhatsApp cu echipa Edinio.",
+          pasi: [
+            "Intră în panoul de administrare > Suport.",
+            {
+              text: "Sub subtitlul paginii găsești caseta „Ai nevoie de ajutor urgent?”, cu textul „Pentru probleme urgente, contactează-ne direct prin telefon sau WhatsApp.”.",
+              captura: { alt: "Caseta „Ai nevoie de ajutor urgent?” cu butonul de telefon și butonul WhatsApp.", raport: 16 / 10 },
+            },
+            "Apasă „0750 456 809” ca să pornești un apel telefonic.",
+            "Sau apasă „WhatsApp” ca să deschizi o conversație cu numărul 40750456809, într-o filă nouă.",
+          ],
+          detalii: [
+            { titlu: "Discuția nu ajunge în lista de tichete", text: "Cele două butoane nu creează niciun tichet. Conversația se poartă în afara aplicației și nu apare în lista ta de tichete, deci nu vei avea acolo un istoric al ei." },
+            { titlu: "Când merită să deschizi totuși un tichet", text: "Dacă problema are nevoie de capturi de ecran, de fișiere sau de o discuție pe mai multe zile, deschide un tichet din butonul „Tichet nou”. Acolo rămâne tot firul discuției, cu date, ore și atașamente." },
+            { titlu: "Apelul de pe calculator", text: "Butonul cu numărul de telefon pornește un apel prin aplicația de telefonie de pe dispozitiv. Pe un calculator fără o astfel de aplicație, formează numărul manual." },
+          ],
+          termeni: ["telefon suport", "numar de contact", "urgenta", "chat whatsapp", "sun la Edinio"],
+        },
+      ],
+    },
+  ],
+};

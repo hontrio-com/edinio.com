@@ -17,3 +17,21 @@
 # (`*.sql text eol=lf`) ar renormaliza si celelalte ~90 de migratii la urmatorul checkout,
 # adica un diff mare si fara legatura cu nimic.
 migrations/000-schema-baseline.sql text eol=lf
+
+# ⚠ A TREIA OARA, 23.08.2026: fisierele care RULEAZA PE LINUX.
+#
+# `scripts/emag-proxy/` se copiaza cu `scp` pe serverul de iesire catre eMAG si se
+# executa acolo. Cu CRLF, bash citeste prima linie a scriptului ca `set -euo pipefail`
+# si raspunde „invalid option name" — iar `` face terminalul sa SUPRASCRIE randul, deci
+# pana si mesajul de eroare iese ilizibil („: invalid option namealeaza.sh: line 19").
+#
+# Pierdut in productie, la mijlocul instalarii, tocmai fiindca regula de deasupra e
+# ingusta si nu acoperea decat un singur fisier.
+#
+# `squid.conf` intra si el: nu e executat, dar e citit de squid, iar un `` la capatul
+# unei valori ajunge PARTE DIN VALOARE — o gazda din lista alba ar fi devenit
+# „marketplace-api.emag.ro" si nu s-ar mai fi potrivit cu nimic. Adica proxy-ul ar fi
+# refuzat exact cererile pentru care exista, fara ca nimic sa dea eroare.
+#
+# Regula ramane ingusta: numai dosarul asta, nu `*.sh` peste tot.
+scripts/emag-proxy/** text eol=lf

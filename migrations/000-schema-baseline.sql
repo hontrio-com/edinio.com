@@ -4794,6 +4794,7 @@ alter table public.categories add constraint categories_business_id_parent_id_na
 alter table public.custom_pages add constraint custom_pages_business_id_slug_key UNIQUE (business_id, slug);
 alter table public.customers add constraint customers_business_key_unique UNIQUE (business_id, key);
 alter table public.discounts add constraint discounts_business_id_code_key UNIQUE (business_id, code);
+alter table public.emag_awb add constraint emag_awb_business_emag_key UNIQUE (business_id, emag_id);
 alter table public.emag_offers add constraint emag_offers_business_emag_key UNIQUE (business_id, emag_id);
 alter table public.emag_orders add constraint emag_orders_business_order_key UNIQUE (business_id, emag_order_id);
 alter table public.emag_rma add constraint emag_rma_business_rma_key UNIQUE (business_id, emag_rma_id);

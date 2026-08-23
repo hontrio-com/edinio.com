@@ -519,6 +519,18 @@ async function hartaOfertelor(
   const harta = new Map<number, { product_id: string | null; variant_title: string | null }>();
   if (ids.length === 0) return harta;
 
+  /*
+   * ⚠ `.in()` NEFRAGMENTAT, SI E IN REGULA — dar numai fiindca s-a socotit.
+   *
+   * Pragul masurat e de ~650 de UUID-uri, adica vreo 24.000 de semne de adresa.
+   * Aici id-urile sunt NUMERE de cel mult zece cifre, iar multimea e numarul de
+   * linii DISTINCTE ale UNEI comenzi. O comanda cu 650 de produse diferite ar
+   * ocupa vreo 7.000 de semne — sub prag — si oricum nu exista.
+   *
+   * Se scrie aici tocmai ca sa nu fie nevoie sa se socoteasca a doua oara: cine
+   * vede un `.in()` fara `bucatiDeIduri` in proiectul asta are dreptate sa se
+   * opreasca si sa intrebe.
+   */
   const { data } = await admin.from("emag_offers")
     .select("emag_id, product_id, variant_title")
     .eq("business_id", businessId).in("emag_id", ids);

@@ -21,6 +21,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import {
   actualizeazaStoc, isEmagError, salveazaMasuratori, salveazaOferte, salveazaProduseOferte,
@@ -306,9 +307,27 @@ async function retrage(
   const r = await salveazaOferte(ctx.auth, vii.map((x) => ({ id: x.emag_id, status: 0 as const })));
   if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
 
-  await admin.from("emag_offers")
-    .update({ status: "withdrawn" satisfies StareOferta, last_synced_at: new Date().toISOString() })
-    .in("id", vii.map((x) => x.id));
+  /*
+   * ⚠ `bucatiDeIduri`, desi „sunt doar variantele unui produs".
+   *
+   * Id-urile sunt UUID-uri, iar `.in()` NU pleaca in corpul cererii, ci in ADRESA:
+   * fiecare adauga 37 de semne, iar marginea respinge cererea peste ~650. Masurat pe
+   * proiectul real, in `supabase/id-chunks.ts`.
+   *
+   * Un produs cu 700 de combinatii active pare de nefacut — pana la un magazin de
+   * piese auto cu o singura pozitie „surub" si toate dimensiunile drept variante.
+   * Iar cand pica, pica taman la retragere: produsul ramane de vanzare pe eMAG desi
+   * a fost scos din magazin, si raspunsul e un 400 in text simplu care nu pomeneste
+   * nimic despre id-uri.
+   *
+   * Costa doua randuri. Lipsa lui costa un produs care se vinde si nu exista.
+   */
+  const acum = new Date().toISOString();
+  for (const bucata of bucatiDeIduri(vii.map((x) => x.id))) {
+    await admin.from("emag_offers")
+      .update({ status: "withdrawn" satisfies StareOferta, last_synced_at: acum })
+      .in("id", bucata);
+  }
   return { verdict: r.verdict ?? "reusit", mesaj: "" };
 }
 

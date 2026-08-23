@@ -87,8 +87,51 @@ export function SectiuneMigrare({
           dintr-o margine în cealaltă, ca în schiță, nu să se oprească într-un
           chenar de spațiere.
         */}
+        {/*
+          ═══ RIDICATĂ DE PE PAGINĂ, NU DOAR CONTURATĂ ═══
+
+          Caseta a fost o vreme transparentă, cu doar un contur punctat — și arăta
+          desenată, nu așezată. Nu era o alegere argumentată nicăieri: comentariul
+          de sus apără PUNCTATUL și împărțirea în două, nu lipsa fundalului.
+
+          `feature-card-shadow` e chiar rețeta cardurilor de funcții de pe pagina
+          de start, iar acelea sunt EXACT același obiect: aceeași lățime (1136px în
+          container), aceeași ramă punctată, aceeași culoare `DASH_ON_WHITE`. Le
+          lipseau doar fundalul alb și umbra.
+
+          ⚠ NU `.placa`, deși e cealaltă umbră a site-ului. Primul ei strat e un
+          contur plin de 1px, care s-ar așeza sub punctele ramei și le-ar lega
+          într-o linie aproape continuă, îngroșată inegal în colțuri. Aceeași
+          capcană e notată la planul recomandat din tabelul de prețuri.
+          `feature-card-shadow` n-are strat de contur — de aia stă lângă o ramă
+          punctată și pe pagina de start.
+
+          ⚠ A treia rețetă de umbră nu se scrie. Toate umbrele site-ului trag în
+          jos și puțin la dreapta, adică lumina vine din stânga-sus; o rețetă nouă
+          cu altă direcție e chiar lucrul care face obiectele să pară desenate.
+
+          ═══ ÎNĂLȚIME COMUNĂ ═══
+
+          Cerut ca toate trei casetele să aibă aceeași înălțime. Măsurate: 348 /
+          480 / 375. Diferența avea două surse, și numai una era conținut adevărat:
+          105px veneau din panoul de categorii (un `line-height` moștenit din
+          greșeală, plus trei rânduri de electronice), iar aceia s-au scos de la
+          rădăcină. Ce a rămas — 26px — e un rând de paragraf pe care descrierea
+          secțiunii „Produse" nu-l are, text al clientului, deci se acoperă aici.
+
+          ⚠ Numerele sunt MĂSURATE, nu alese: după curățarea panoului, casetele ies
+          348 / 375 / 375 de la 1280 în sus, și 348 / 401 / 375 la 1024–1279, unde
+          descrierea secțiunii „Categorii" trece pe patru rânduri. De aceea sunt
+          două trepte. Se remăsoară când se schimbă textele — o descriere care mai
+          câștigă un rând crește peste `min-h` și egalitatea se rupe fără să crape
+          nimic.
+
+          ⚠ Cu prefix `lg:`. Sub prag caseta e pe o coloană, cu text și panou
+          stivuite, și trece binișor de valorile astea; fără prefix ar fi inertă
+          azi, dar ar deveni o capcană dacă se scurtează vreodată conținutul mobil.
+        */}
         <div
-          className="grid overflow-hidden rounded-[20px] border border-dashed lg:grid-cols-2 lg:rounded-[24px]"
+          className="grid overflow-hidden rounded-[20px] border border-dashed bg-white lg:min-h-[402px] lg:grid-cols-2 lg:rounded-[24px] xl:min-h-[375px] feature-card-shadow"
           style={{ borderColor: DASH_ON_WHITE }}
         >
           {/* ── Textul ──────────────────────────────────────────────────── */}

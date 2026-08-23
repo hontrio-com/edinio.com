@@ -57,10 +57,20 @@ const MIN_MESAJ = 10;
   oameni adevarati. Ce nu se poate afla dintr-un tipar e daca adresa EXISTA;
   asta se afla abia cand pleaca emailul de confirmare.
 */
-const TIPAR_EMAIL = /^[^\s@]+@[^\s@.]+\.[^\s@]{2,}$/;
+/*
+  ⚠ EXPORTAT fiindcă îl folosește și formularul de migrare (`migrare-form.ts`).
+  Sunt două formulare publice pe același site; cu câte un tipar de fiecare
+  parte, diferența n-o observă nimeni până când o adresă e primită pe o pagină
+  și respinsă pe cealaltă.
+*/
+export const TIPAR_EMAIL = /^[^\s@]+@[^\s@.]+\.[^\s@]{2,}$/;
 
-/** Cifrele unui numar de telefon, fara spatii, puncte, liniute sau paranteze. */
-function cifre(telefon: string): string {
+/**
+ * Cifrele unui numar de telefon, fara spatii, puncte, liniute sau paranteze.
+ *
+ * ⚠ Exportat pentru `migrare-form.ts`, din acelasi motiv ca `TIPAR_EMAIL`.
+ */
+export function cifreTelefon(telefon: string): string {
   return telefon.replace(/[\s.\-()]/g, "");
 }
 
@@ -79,7 +89,7 @@ export function verificaMesajDeContact(input: MesajDeContactBrut): Verificare {
   }
 
   if (!telefon) return { ok: false, error: "Scrie-ne si un numar de telefon." };
-  if (telefon.length > MAX.telefon || !/^\+?\d{9,15}$/.test(cifre(telefon))) {
+  if (telefon.length > MAX.telefon || !/^\+?\d{9,15}$/.test(cifreTelefon(telefon))) {
     return { ok: false, error: "Numarul de telefon nu pare corect." };
   }
 

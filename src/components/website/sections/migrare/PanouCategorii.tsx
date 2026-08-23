@@ -137,7 +137,15 @@ function Ramura({ nod }: { nod: NodCategorie }) {
           {nod.nume}
         </span>
 
-        <span className="ml-auto shrink-0 text-[11.5px] tabular-nums text-ink-3">
+        {/*
+          ⚠ `leading-none`, ca perechea lui de mai sus. Fără el, numărătorul
+          moștenea `line-height: 1.6` din `body` și ieșea 18,4px — adică el, nu
+          săgeata de 14px, hotăra înălțimea rândului. Peste unsprezece rânduri
+          făcea 48px în plus, singurul motiv pentru care panoul de categorii era
+          cel mai înalt de pe pagină. Nu e o strângere de design: rândul ajunge
+          acum 26px, adică fix ce cer săgeata și spațierea de `py-[6px]`.
+        */}
+        <span className="ml-auto shrink-0 text-[11.5px] leading-none tabular-nums text-ink-3">
           {nod.produse}
         </span>
       </div>

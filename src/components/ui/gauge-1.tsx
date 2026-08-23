@@ -14,8 +14,10 @@
  * Ce trebuie știut, ca să nu surprindă:
  *
  * 1. **Aduce `framer-motion` în pachetul trimis către browser.** I s-a spus, a
- *    reconfirmat. Pe pagina „Optimizare" e singurul loc de pe site care îl
- *    folosește.
+ *    reconfirmat. Pe pagina „Optimizare" e singurul lucru care o cere, dar de la
+ *    19.08 nu mai e singurul de pe site: și `FasciculAnimat`, pe „Migrare", o
+ *    folosește. Sunt pagini diferite, deci pachete diferite — nu se împarte
+ *    nimic între ele.
  * 2. **Animația pornește la 100ms de la montare, nu când intră în ecran.**
  *    `useNumberCounter` are un `setIsInView` pe cronometru, nu un
  *    `IntersectionObserver`. Deci pe un ecran mic, unde cadranele sunt sub linia

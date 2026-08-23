@@ -124,6 +124,22 @@ export const PLATFORM_LOGOS: Record<ComparisonRival, PlatformLogo> = {
   Wix: { src: "/platforme/wix.svg", ratio: 311 / 125.2, optic: 1.1 },
 };
 
+/**
+ * Înălțimea la care se randează o siglă, ca toate să ocupe aceeași SUPRAFAȚĂ.
+ *
+ * `h = √(arie / raport) × corecție`. De ce suprafață și nu înălțime, de ce
+ * corecția optică și cum s-au ales cele două numere care nu sunt 1 — vezi nota
+ * lungă de deasupra lui `PLATFORM_LOGOS`.
+ *
+ * ⚠ Stă AICI, lângă datele pe care le citește, nu în componenta care a avut-o
+ * prima. O folosesc două locuri — antetul tabelului de comparație și cercurile de
+ * pe pagina „Migrare" — iar cu o copie de fiecare parte, prima corectură făcută
+ * într-un loc le-ar fi despărțit. Aceeași hotărâre ca la culorile din `linii.ts`.
+ */
+export function inaltimeSigla(logo: PlatformLogo, arie: number): number {
+  return Math.round(Math.sqrt(arie / logo.ratio) * logo.optic);
+}
+
 export interface ComparisonRow {
   /** Criteriul, exact ca în PDF. */
   criteriu: string;

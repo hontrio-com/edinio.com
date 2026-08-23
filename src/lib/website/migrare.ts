@@ -1,3 +1,5 @@
+import { PLATFORM_LOGOS, type PlatformLogo } from "./comparison";
+
 /**
  * Secțiunile de pe pagina „Migrare magazin", una pentru fiecare fel de dată care
  * se mută: produse, categorii, comenzi, clienți.
@@ -52,6 +54,18 @@
  * decupat pe alb, apoi aceeași redimensionare în doi pași, `.webp`, calitate ~78.
  * Ținta de greutate: sub 20KB la 320, sub 40 la 512.
  */
+
+/**
+ * Unde duc butoanele „Începe migrarea" din cele trei secțiuni: la formularul de
+ * cerere din josul paginii.
+ *
+ * ⚠ Scrisă O SINGURĂ DATĂ, aici, și folosită și de butoane, și de `id`-ul pus pe
+ * secțiunea formularului (`SectiuneFascicule`). Cu numele scris de mână în două
+ * locuri, prima redenumire lasă trei butoane care nu mai duc nicăieri — și nu se
+ * vede: un `href="#..."` care nu găsește nimic nu dă nicio eroare, doar nu face
+ * nimic.
+ */
+export const ANCORA_FORMULAR = "#cerere-migrare";
 
 export interface ProdusMigrare {
   /** Cheie stabilă pentru `key`, chiar dacă se schimbă denumirea. */
@@ -177,29 +191,38 @@ export interface SectiuneMigrareText {
  * Le-au înlocuit pe cele scrise de mine ca să existe secțiunea („Produsele tale
  * ajung întregi, nu doar pe listă."). Nu se rescriu.
  *
- * ⚠ ETICHETA ȘI BUTONUL SUNT ÎNCĂ ALE MELE. Butonul duce la înscriere, ca cele
- * două din hero, și e dinadins cel mai neutru lucru pe care îl pot pune: orice
- * altă etichetă („Cere migrarea", „Vorbește cu un specialist") promite un flux
- * care încă nu există pe pagină.
+ * ⚠ ETICHETA E ÎNCĂ A MEA. Textul butonului e al clientului (19.08): „Începe
+ * migrarea", la toate trei secțiunile.
+ *
+ * ⚠ ADRESA E ANCORA FORMULARULUI, nu `/register`.
+ *
+ * A fost o vreme `/register`, fiindcă pe pagină nu exista niciun flux de migrare la
+ * care să trimită — nota de aici prevedea că se schimbă când apare formularul.
+ * A apărut (19.08, `FormularMigrare`), deci butonul cu textul „Începe migrarea"
+ * chiar începe migrarea: coboară la cererea din josul paginii.
+ *
+ * Un buton care spune „Începe migrarea" și deschide o pagină de înscriere cu email
+ * și parolă cere altceva decât a promis. Toate trei duc în același loc, dinadins:
+ * sunt trei feluri de a spune același lucru, nu trei drumuri.
  */
 export const SECTIUNE_PRODUSE: SectiuneMigrareText = {
   eticheta: "Produse",
   titlu: "Tot catalogul tău, mutat pe Edinio.",
   descriere:
     "Produsele vin împreună cu informațiile importante: descrieri, prețuri, stocuri, variante și fotografii.",
-  cta: { label: "Începe gratuit", href: "/register" },
+  cta: { label: "Începe migrarea", href: ANCORA_FORMULAR },
 };
 
 /**
  * ⚠ TITLUL ȘI DESCRIEREA SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (19.08).
- * Nu se rescriu. Eticheta și butonul sunt ale mele, ca la „Produse".
+ * Nu se rescriu. Eticheta e a mea; textul butonului e al clientului (19.08).
  */
 export const SECTIUNE_CATEGORII: SectiuneMigrareText = {
   eticheta: "Categorii",
   titlu: "Categoriile tale rămân organizate.",
   descriere:
     "Transferăm structura categoriilor și subcategoriilor, astfel încât produsele să ajungă în Edinio fără să refaci manual organizarea magazinului.",
-  cta: { label: "Începe gratuit", href: "/register" },
+  cta: { label: "Începe migrarea", href: ANCORA_FORMULAR },
 };
 
 /* ─── Arborele de categorii ─────────────────────────────────────────────────── */
@@ -267,9 +290,29 @@ export const ARBORE_CATEGORII: NodCategorie[] = [
     ],
   },
   {
+    /*
+     * ⚠ STRÂNSĂ, deși are copii — și asta scurtează panoul cu trei rânduri.
+     *
+     * Cerut ca toate trei casetele de pe pagină să aibă aceeași înălțime, iar
+     * panoul ăsta era singurul care le împingea (480px față de 348 și 375). Cele
+     * trei rânduri de electronice nu spuneau nimic ce nu spune deja ramura de
+     * haine desfăcută alături: tot un al doilea nivel, tot cu numere care se
+     * adună.
+     *
+     * Ce apără comentariul de mai sus rămâne întreg: cele trei niveluri se văd pe
+     * Haine → Bărbați → Geci/Tricouri/Pantaloni; numerele se adună mai departe,
+     * fiindcă cei trei copii RĂMÂN în date, doar că nu se mai văd; iar „ramuri
+     * strânse și desfăcute amestecate" devine chiar mai adevărat — până acum era
+     * strânsă doar „Femei", acum sunt două.
+     *
+     * ⚠ NU strânge „Bărbați" în locul ei, deși scurtează la fel de mult: acolo
+     * dispar al treilea nivel, rândul de sub cursor și legătura cu geaca din
+     * secțiunea „Produse" — adică fix cele patru lucruri pe care comentariul de
+     * mai sus le numește dovada că arborele e adevărat.
+     */
     nume: "Electronice",
     produse: 318,
-    deschis: true,
+    deschis: false,
     copii: [
       { nume: "Supraveghere", produse: 96, copii: [] },
       { nume: "Smart home", produse: 132, copii: [] },
@@ -289,110 +332,143 @@ export const TOTAL_PRODUSE_ARBORE = ARBORE_CATEGORII.reduce(
 
 /**
  * ⚠ TITLUL ȘI DESCRIEREA SUNT ALE CLIENTULUI, date cuvânt cu cuvânt (19.08).
- * Nu se rescriu. Eticheta și butonul sunt ale mele, ca la celelalte două.
+ * Nu se rescriu. Eticheta e a mea; textul butonului e al clientului (19.08).
  */
 export const SECTIUNE_COMENZI: SectiuneMigrareText = {
   eticheta: "Comenzi",
   titlu: "Nu pierzi comenzile făcute până acum.",
   descriere:
     "Migrăm istoricul comenzilor împreună cu datele importante, ca să poți continua administrarea magazinului fără să o iei de la zero.",
-  cta: { label: "Începe gratuit", href: "/register" },
+  cta: { label: "Începe migrarea", href: ANCORA_FORMULAR },
 };
 
 /**
- * Stările unei comenzi, cu culorile lor.
+ * Comanda din fața teancului, ilustrația secțiunii „Comenzi".
  *
- * ⚠ PASTILE STINSE, NU PLINE. Într-o listă de comenzi, cinci pastile pline ar fi
- * cel mai colorat lucru de pe pagină și ar trage ochiul de la cifre — iar culoarea
- * e acolo ca să deosebească stările dintr-o privire, nu ca să strige. În panourile
- * adevărate tot așa sunt: fond spălăcit, scris în tonul lui, închis.
+ * ═══ CE A FOST ÎNAINTE ═══
  *
- * ⚠ TONUL SCRISULUI E COBORÂT ANUME, ca să se citească pe fondul lui. Verdele de
- * brand (#1AB554) dă 2,6:1 chiar și pe alb — sub pragul de 4,5 — de aceea aici e
- * #12874A, același ton dus mai închis. E chiar verdele folosit pentru text și în
- * ilustrațiile de pe „Optimizare". Aceeași socoteală s-a făcut și la albastru și
- * la chihlimbar.
+ * Trei comenzi ca niște înștiințări — nume, sumă, pastilă de stare, „acum 4 min".
+ * Spuneau altceva decât secțiunea: titlul promite istoric păstrat („comenzile
+ * făcute până acum"), iar înștiințările arătau trafic proaspăt. Iar „datele
+ * importante" din descriere nu se vedeau nicăieri: nici produse, nici plată, nici
+ * vechime.
  *
- * ⚠ „Anulată" NU e în listă, deși e o stare adevărată. Pe o pagină care promite că
- * NU pierzi comenzile, un rând roșu cu „Anulată" e primul lucru la care se uită
- * ochiul, și spune fix pe dos. Stările alese sunt toate din drumul normal al unei
- * comenzi.
+ * ⚠ Cardul de aici arată exact lucrurile alea: ce s-a cumpărat, când anume, cum
+ * s-a plătit. O comandă cu produsele ei e o comandă; un nume cu o sumă lângă el e
+ * un rând de tabel.
  *
- * ⚠ CELE TREI FOLOSITE SUNT DIN TREI TREPTE DIFERITE ale drumului — primită, în
- * lucru, ajunsă. Cu trei nuanțe ale aceluiași pas, culorile ar fi fost un ornament;
- * așa, fiecare pastilă spune unde a ajuns comanda aia.
+ * ⚠ Rândul de dedesubt NU e capul de panou scos pe 19.08 („Comenzi", „1.042 în
+ * total"). Acela era cronologia unui panou de administrare; ăsta spune cât de
+ * departe merge teancul înapoi — adică chiar lucrul pe care secțiunea îl promite.
+ * Fără el, desenul arată a trei comenzi, nu a arhivă.
+ *
+ * ⚠ FĂRĂ STARE. Pastila „Livrată" era singura culoare din desen, deci primul lucru
+ * la care se uita ochiul — și răspundea la altă întrebare decât secțiunea: unde a
+ * ajuns comanda, nu dacă istoricul vine cu tine.
+ *
+ * Suma e o combinație adevărată a prețurilor de pe cardurile de produs din prima
+ * secțiune — camera 429 plus scaunul 899 — iar produsele scrise dedesubt sunt
+ * chiar alea. Cele trei ilustrații arată ACELAȘI magazin.
  */
-export const STARI_COMANDA = {
-  livrata: { text: "Livrată", fond: "#E8F9EE", cerneala: "#12874A" },
-  inLivrare: { text: "În livrare", fond: "#EFF4FF", cerneala: "#1D4ED8" },
-  inProcesare: { text: "În procesare", fond: "#FEF3C7", cerneala: "#92400E" },
-} as const;
+export const COMANDA_TEANC = {
+  numar: 1042,
+  client: "Andrei Popescu",
+  total: "1.328 lei",
+  cand: "azi, 14:32",
+  produse: "Cameră supraveghere · Scaun ergonomic",
+  plata: "Plată la livrare",
+};
 
-export type StareComanda = keyof typeof STARI_COMANDA;
+/** Câte mai sunt sub cea din față, și de când. */
+export const TEANC_RESTUL = { cate: "1.041", din: 2021 };
 
-export interface Comanda {
-  /** Numărul comenzii, fără diez — îl pune componenta. */
-  numar: number;
-  client: string;
-  /** Scris cu tot cu monedă și cu punct la mii, ca în panou. */
-  total: string;
-  stare: StareComanda;
-  /**
-   * De cât timp a venit.
-   *
-   * Fără el, cele trei plăci ar fi arătat ca trei rânduri dintr-un tabel scoase
-   * din chenarul lor. O înștiințare spune întotdeauna CÂND — e chiar ce o
-   * deosebește de un rând de listă.
-   */
-  cand: string;
-}
+/* ─── Platforme: de unde se migrează ────────────────────────────────────────── */
 
 /**
- * Comenzile din ilustrația secțiunii „Comenzi".
+ * ⚠ TEXT CIORNĂ, ca la celelalte secțiuni: de la client a venit așezarea
+ * (ilustrația cu fascicule și cercuri), nu cuvintele.
  *
- * ⚠ SUMELE SUNT COMBINAȚII ADEVĂRATE ALE PREȚURILOR DE PE CARDURILE DE PRODUS din
- * prima secțiune — geaca 349, camera 429, scaunul 899:
+ * Titlul spune ce nu spune niciunul dintre celelalte trei: primele răspund la
+ * „CE se mută" — produse, categorii, comenzi — iar ăsta la „DE UNDE". De aceea
+ * secțiunea vine ultima: încheie argumentul, nu mai adaugă un articol la listă.
  *
- *     349                  o geacă
- *     1.328 = 429 + 899    o cameră și un scaun
- *     429                  o cameră
- *
- * Aceeași hotărâre ca la numerele care se adună în arborele de categorii: nimeni
- * nu va face socoteala, dar dacă cineva o face, iese. Cele trei ilustrații arată
- * ACELAȘI magazin — aceleași raioane, aceleași produse, aceleași prețuri.
- *
- * ⚠ TREI, nu cinci, cerut de client (19.08) odată cu trecerea la înștiințări: cinci
- * plăci plutitoare una sub alta nu mai sunt înștiințări, sunt tot o listă — doar
- * una fără chenar. Trei se citesc ca „tocmai au venit astea".
- *
- * ⚠ Numerele scad de sus în jos, iar vremea crește la fel: #1042 acum patru
- * minute, #1041 acum douăzeci și două, #1040 acum o oră. Într-un teanc de
- * înștiințări, cea mai nouă stă sus — dacă vechimea n-ar merge în aceeași direcție
- * cu numerele, teancul s-ar citi ca amestecat.
- *
- * Numele sunt date de umplutură, alese să sune firesc în românește. Nu trimit la
- * nimeni: sunt perechi obișnuite de prenume și nume.
+ * ⚠ Nu repetă titlul din hero („Schimbi platforma, păstrezi tot ce ai
+ * construit."). Acela e promisiunea; ăsta e domeniul ei.
  */
-export const COMENZI_MIGRARE: Comanda[] = [
-  {
-    numar: 1042,
-    client: "Andrei Popescu",
-    total: "349 lei",
-    stare: "livrata",
-    cand: "acum 4 min",
-  },
-  {
-    numar: 1041,
-    client: "Maria Ionescu",
-    total: "1.328 lei",
-    stare: "inLivrare",
-    cand: "acum 22 min",
-  },
-  {
-    numar: 1040,
-    client: "Cristian Dumitru",
-    total: "429 lei",
-    stare: "inProcesare",
-    cand: "acum o oră",
-  },
+export const SECTIUNE_PLATFORME: SectiuneMigrareText = {
+  eticheta: "Platforme",
+  titlu: "Mutăm magazinul tău, indiferent de platformă.",
+  descriere:
+    "Shopify, WooCommerce, OpenCart, Wix sau o soluție custom. Completează formularul, iar noi analizăm magazinul și ne ocupăm de migrarea pe Edinio.",
+  cta: { label: "Începe migrarea", href: ANCORA_FORMULAR },
+};
+
+/**
+ * O siglă din cercuri: numele platformei plus desenul ei.
+ *
+ * `logo` are exact forma din `comparison.ts` (`PlatformLogo`) fiindcă socoteala
+ * de mărime e aceeași funcție, `inaltimeSigla`. Vezi acolo de ce suprafață egală
+ * și ce e corecția optică.
+ */
+export interface CercPlatforma {
+  nume: string;
+  logo: PlatformLogo;
+}
+
+/*
+  ⚠ CELE DOUĂ ADĂUGATE (19.08, cerute de client) NU INTRĂ ÎN `PLATFORM_LOGOS`.
+
+  Acolo cheia e `ComparisonRival`, adică platformele din TABELUL de comparație și
+  din paginile `/vs`. Gomag și MerchantPro nu sunt în tabel — băgate acolo, ar fi
+  cerut câte o valoare pe fiecare dintre cele unsprezece rânduri de comparație,
+  adică unsprezece afirmații despre doi concurenți pe care nu i-a măsurat nimeni.
+  Aici e altceva: „de pe ce platforme mutăm", nu „cu cine ne comparăm" — o listă
+  mai largă, și e firesc să fie.
+
+  Corecțiile optice sunt din aceeași probă ca la celelalte patru: siglele puse una
+  lângă alta, mărite, până se citesc ca o familie.
+*/
+const GOMAG: PlatformLogo = {
+  src: "/migrare/gomag.png",
+  // Măsurat în fișier: cerneala umple toată pânza de 298x92, fără margine.
+  ratio: 298 / 92,
+  // Wordmark cu semn, ca WooCommerce: la arie egală arată scund.
+  optic: 1.05,
+};
+
+/*
+  ⚠ FIȘIER PROVIZORIU. `logomerchant.png` are 37x17 pixeli și e tăiat pe dreapta —
+  e o iconiță de favicon, nu o siglă. La mărimea la care se randează aici (50px
+  lățime) iese moale pe orice ecran, iar pe unul cu două puncte pe pixel, spălată
+  de tot. Se înlocuiește cu un SVG sau cu un PNG de cel puțin 300px lățime,
+  netăiat, și atunci se reface și proba optică.
+*/
+const MERCHANTPRO: PlatformLogo = {
+  ratio: 37 / 17,
+  src: "/migrare/logomerchant.png",
+  optic: 1,
+};
+
+/**
+ * Platformele din cercuri, în ordinea de sus în jos, pe fiecare parte.
+ *
+ * Trei pe stânga și trei pe dreapta, ca în captura clientului. Până la 19.08 erau
+ * două și două, fiindcă atâtea sigle aveam; Gomag și MerchantPro au venit atunci.
+ *
+ * ⚠ AȘEZAREA E DUPĂ LĂȚIME, nu alfabetică și nici după importanță. Siglele au
+ * rapoarte între 0,88 (Shopify, aproape pătrat) și 3,24 (Gomag, de trei ori mai
+ * lat decât înalt). Puse la întâmplare, o parte ar fi ieșit vizual mai grea decât
+ * cealaltă. Deci cea mai lată de pe stânga stă în dreptul celei mai late de pe
+ * dreapta: Gomag ↔ Wix sus, apoi perechile se echilibrează în jos.
+ */
+export const PLATFORME_STANGA: readonly CercPlatforma[] = [
+  { nume: "Gomag", logo: GOMAG },
+  { nume: "Shopify", logo: PLATFORM_LOGOS.Shopify },
+  { nume: "OpenCart", logo: PLATFORM_LOGOS.OpenCart },
+];
+
+export const PLATFORME_DREAPTA: readonly CercPlatforma[] = [
+  { nume: "Wix", logo: PLATFORM_LOGOS.Wix },
+  { nume: "MerchantPro", logo: MERCHANTPRO },
+  { nume: "WooCommerce", logo: PLATFORM_LOGOS.WooCommerce },
 ];

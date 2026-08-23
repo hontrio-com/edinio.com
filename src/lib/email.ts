@@ -522,42 +522,128 @@ export async function sendContactConfirmationToCustomer(
   });
 }
 
-export async function sendMigrationLeadToAdmin(data: {
-  name: string;
-  phone: string;
-  platform: string;
-  productsCount: string;
-}) {
-  if (!process.env.RESEND_API_KEY) return;
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const field = (label: string, value: string) => `
+export interface CerereDeMigrare {
+  nume: string;
+  email: string;
+  telefon: string;
+  platforma: string;
+  produse: string;
+  /** Poate fi gol: e singurul câmp neobligatoriu din formular. */
+  mentiuni: string;
+}
+
+/**
+ * Cererea de migrare, către noi.
+ *
+ * ⚠ MERGE LA `CONTACT_ADMIN_EMAIL`, nu la `SUPPORT_ADMIN_EMAIL`. Cel de-al doilea
+ * e coada de tichete a clienților care AU deja cont; aici scrie cineva care încă
+ * nu e client. Varianta dinainte (de pe pagina de campanie, ștearsă) trimitea la
+ * suport, adică o cerere de vânzare ateriza în coada de asistență tehnică.
+ *
+ * ⚠ `replyTo` e adresa OMULUI, nu a noastră. Fără el, „Răspunde" din clientul de
+ * mail deschide un răspuns către Edinio — noi către noi.
+ */
+export function buildMigrationLeadHtml(data: CerereDeMigrare): string {
+  const rand = (eticheta: string, valoare: string, href?: string) => `
     <tr>
       <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
-        <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">${esc(label)}</span>
-        <p style="margin:3px 0 0 0;font-size:15px;color:#18181b;font-weight:500;">${esc(value) || "-"}</p>
+        <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">${esc(eticheta)}</span>
+        <p style="margin:3px 0 0 0;font-size:15px;color:#18181b;font-weight:500;">${
+          href ? `<a href="${esc(href)}" style="color:#18181b;text-decoration:none;">${esc(valoare)}</a>` : esc(valoare) || "-"
+        }</p>
       </td>
     </tr>`;
+
+  /* Mențiunile lipsesc de tot când n-a scris nimic — un chenar gol cu titlu
+     deasupra se citește ca o rubrică pe care am uitat s-o completăm noi. */
+  const mentiuni = data.mentiuni
+    ? `
+    <p style="margin:24px 0 8px 0;font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">Alte mentiuni</p>
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:16px 18px;">
+      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.65;white-space:pre-wrap;">${esc(data.mentiuni)}</p>
+    </div>`
+    : "";
+
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cerere noua de migrare</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Un client doreste sa migreze magazinul la Edinio. Suna-l cat mai repede.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Trimisa din formularul de pe pagina de migrare.</p>
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
-      ${field("Nume complet", data.name)}
-      ${field("Numar de telefon", data.phone)}
-      ${field("Platforma actuala", data.platform)}
-      ${field("Numar aproximativ de produse", data.productsCount)}
+      ${rand("Nume complet", data.nume)}
+      ${rand("Telefon", data.telefon, `tel:${data.telefon.replace(/[\s.\-()]/g, "")}`)}
+      ${rand("Email", data.email, `mailto:${data.email}`)}
+      ${rand("Platforma actuala", data.platforma)}
+      ${rand("Numar aproximativ de produse", data.produse)}
     </table>
+    ${mentiuni}
     <div style="text-align:center;margin-top:24px;">
-      <a href="tel:${esc(data.phone.replace(/\s/g, ""))}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="tel:${esc(data.telefon.replace(/[\s.\-()]/g, ""))}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Suna clientul
       </a>
     </div>
   `;
+  return baseTemplate(content);
+}
+
+export async function sendMigrationLeadToAdmin(data: CerereDeMigrare): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
   await getResend().emails.send({
     from: FROM,
-    to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Migrare] ${data.name} — ${data.phone} (${data.platform})`,
-    html: baseTemplate(content),
+    to: CONTACT_ADMIN_EMAIL,
+    replyTo: data.email,
+    subject: `[Migrare] ${data.nume} - ${data.platforma} (${data.produse} produse)`,
+    html: buildMigrationLeadHtml(data),
+  });
+}
+
+/**
+ * Confirmarea către omul care a cerut migrarea.
+ *
+ * ⚠ Îi dăm ÎNAPOI ce a completat, ca la formularul de contact: cine trimite un
+ * formular n-are nicio dovadă că a plecat ceva.
+ *
+ * NU promite un termen. „Te sunăm în 24 de ore" e o afirmație pe care n-a
+ * confirmat-o nimeni; „ne uităm peste magazin și te căutăm" e ce chiar facem.
+ */
+export function buildMigrationConfirmationHtml(data: CerereDeMigrare): string {
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Am primit cererea ta de migrare</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;line-height:1.6;">
+      Buna${data.nume ? `, ${esc(data.nume.split(" ")[0])}` : ""}! Ne uitam peste magazinul tau de pe
+      <strong style="color:#18181b;">${esc(data.platforma)}</strong> si te cautam la telefon ca sa stabilim
+      cum si cand facem mutarea.
+    </p>
+    <p style="margin:0 0 8px 0;font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">Ce ne-ai trimis</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">
+      <tr>
+        <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
+          <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">Platforma actuala</span>
+          <p style="margin:3px 0 0 0;font-size:15px;color:#18181b;font-weight:500;">${esc(data.platforma)}</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;">
+          <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.04em;">Numar aproximativ de produse</span>
+          <p style="margin:3px 0 0 0;font-size:15px;color:#18181b;font-weight:500;">${esc(data.produse)}</p>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:24px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">
+      Daca vrei sa adaugi ceva, raspunde direct la acest email.
+      Ne gasesti si la telefon, la <a href="tel:+40750456809" style="color:#15803d;text-decoration:none;">0750 456 809</a>.
+    </p>
+  `;
+  return baseTemplate(content);
+}
+
+export async function sendMigrationConfirmationToCustomer(data: CerereDeMigrare): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  await getResend().emails.send({
+    from: FROM,
+    to: data.email,
+    /* Răspunsul lui vine la noi, nu la adresa de expediere. */
+    replyTo: CONTACT_ADMIN_EMAIL,
+    subject: "Am primit cererea ta de migrare - Edinio",
+    html: buildMigrationConfirmationHtml(data),
   });
 }
 

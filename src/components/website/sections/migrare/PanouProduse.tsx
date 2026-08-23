@@ -1,4 +1,6 @@
+import type { CSSProperties } from "react";
 import { ImageIcon } from "lucide-react";
+import { LaIntrareInEcran } from "./LaIntrareInEcran";
 import {
   LATIMI_POZA_PRODUS,
   PRODUSE_MIGRARE,
@@ -46,35 +48,66 @@ import {
  *   - 340px sub `sm`, unde stau două câte două. Fără ea, pe un ecran de 639px poza
  *     sărea la 242px, adică mai mare decât ajunge vreodată pe desktop.
  */
+/**
+ * Cât stă între două carduri, în secunde.
+ *
+ * 90ms e pasul de cascadă al site-ului — același cu al cuvintelor aprinse de pe
+ * „Optimizare" (`.google-lit`, `calc(560ms + var(--i) * 90ms)`). Nu inventez
+ * altul: două cascade cu ritmuri diferite pe același site se simt imediat, chiar
+ * dacă nimeni nu le vede una lângă alta.
+ */
+const PAS = 0.09;
+
+/** Primul nu pleacă instant: altfel pare că era deja acolo, nu că tocmai a venit. */
+const INTAI = 0.06;
+
 export function PanouProduse() {
   return (
-    <div className="mx-auto grid w-full max-w-[340px] grid-cols-2 gap-3 sm:max-w-[520px] sm:grid-cols-3 lg:max-w-none lg:gap-4">
-      {PRODUSE_MIGRARE.map((produs, i) => (
-        <CardProdus
-          key={produs.id}
-          produs={produs}
-          /* Vezi nota de sus: al treilea pică pe telefon, ca să nu rămână singur
-             pe un rând. Pe index, nu pe un câmp în date — e o hotărâre de
-             așezare, nu o însușire a produsului. */
-          ascunsPeTelefon={i === 2}
-        />
-      ))}
-    </div>
+    /*
+      Cardurile intră pe rând când grila ajunge în dreptul ochilor. Același înveliș
+      și aceeași clasă ca la teancul de comenzi — vezi `.se-aseaza` din
+      `globals.css`.
+
+      ⚠ Sub `sm` al treilea card e `display:none`, deci animația lui nici nu
+      pornește, și e bine. Indexul rămâne 0,1,2 fără gaură, fiindcă ascunsul e chiar
+      ULTIMUL din serie: pe telefon se joacă 0 și 1, pe ecran mare toate trei. Dacă
+      cineva schimbă vreodată `hidden sm:flex` pe `opacity`, cardul ascuns începe să
+      consume un pas și seria capătă o pauză din senin.
+    */
+    <LaIntrareInEcran>
+      <div className="mx-auto grid w-full max-w-[340px] grid-cols-2 gap-3 sm:max-w-[520px] sm:grid-cols-3 lg:max-w-none lg:gap-4">
+        {PRODUSE_MIGRARE.map((produs, i) => (
+          <CardProdus
+            key={produs.id}
+            produs={produs}
+            intarziere={INTAI + i * PAS}
+            /* Vezi nota de sus: al treilea pică pe telefon, ca să nu rămână singur
+               pe un rând. Pe index, nu pe un câmp în date — e o hotărâre de
+               așezare, nu o însușire a produsului. */
+            ascunsPeTelefon={i === 2}
+          />
+        ))}
+      </div>
+    </LaIntrareInEcran>
   );
 }
 
 function CardProdus({
   produs,
   ascunsPeTelefon,
+  intarziere,
 }: {
   produs: ProdusMigrare;
   ascunsPeTelefon?: boolean;
+  /** Când pornește cardul ăsta, în secunde de la intrarea grilei în ecran. */
+  intarziere: number;
 }) {
   return (
     <article
-      className={`flex-col overflow-hidden rounded-[14px] border border-hairline bg-white ${
+      className={`se-aseaza flex-col overflow-hidden rounded-[14px] border border-hairline bg-white ${
         ascunsPeTelefon ? "hidden sm:flex" : "flex"
       }`}
+      style={{ "--aseaza-intarziere": `${intarziere}s` } as CSSProperties}
     >
       {/* Rama de 5px, ca pe „Optimizare". Vezi nota de sus. */}
       <div className="p-[5px]">

@@ -6,6 +6,37 @@
 
 /* ─── Design Tokens ──────────────────────────────────────────────────────── */
 
+/* ─── ⚠ CELE DOUA VERZI ALE SITE-ULUI, SI CARE PE CE ────────────────────────
+
+   Auditul de design din 23.08 a gasit PATRU verzi in folosinta, dintre care doi
+   faceau exact acelasi lucru:
+
+     --primary        #008236   4,95:1 pe alb
+     #12874A          scris de mana in sase fisiere, 4,57:1 pe alb
+     --color-brand    #1AB554   2,70:1 pe alb
+     oklch(0.572 …)   #0C9043   varianta de tema inchisa a lui --primary
+
+   #12874A aparuse fiindca `--color-brand` e prea deschis pentru text, si e o
+   observatie corecta: 2,70:1 e sub prag in ambele sensuri. Dar `--primary` era
+   deja acolo, si e chiar mai citibil. Doua verzi inchise la 0,4 diferenta de
+   contrast, pe aceeasi pagina, nu sunt o decizie — sunt doua persoane care au
+   rezolvat aceeasi problema in doua saptamani diferite.
+
+   Deci raman DOI verzi, cu roluri care nu se ating:
+
+     --primary  #008236  TOT CE SE CITESTE. Umplerea butoanelor, textul verde,
+                         bifele, cifrele scoase in evidenta, chenarele care
+                         inseamna ceva. Are 4,95:1 pe alb si suporta text alb pe
+                         el, deci merge in amandoua sensurile.
+
+     --color-brand #1AB554  NUMAI LUMINA. Halouri, fascicule, umpleri din
+                         ilustratii, fundaluri stinse. ⚠ NU poarta niciodata text
+                         alb pe el si nu e niciodata folosit CA text: 2,70:1
+                         inseamna ca la 10px, cat avea eticheta din panoul de
+                         rezultate Google, cuvintele aproape se pierd.
+
+   Cine adauga verde alege un rol, nu o nuanta. */
+
 :root {
   /* Brand */
   --color-brand: #1AB554;
@@ -242,12 +273,39 @@
 }
 
 /* Umbra pe trei straturi: contactul apropiat, corpul, si patarea larga de
-   dedesubt. Una singura arata lipita pe fundal; trei dau volum. */
+   dedesubt. Una singura arata lipita pe fundal; trei dau volum.
+
+   ═══ AL TREILEA STRAT S-A STINS (19.08) ═══
+
+   Era `0 34px 64px -28px rgba(10,10,10,0.28)`. Pe TEANCUL de pe pagina de start,
+   pentru care a fost calibrat, nu se vedea niciodata intreg: cardurile se acopera
+   unul pe altul, deci pata cadea pe cardul de dedesubt si citea ca adancime.
+
+   Sub o caseta SINGURA, urmata de spatiu gol, aceeasi pata iese la vedere asa cum
+   e: la 34px sub caseta ramane o fasie de alb curat, si abia dupa ea incepe
+   umbra — iar pe o caseta lata de 1200px, unde umbra e practic o banda
+   orizontala, cele doua se citesc ca o LINIE DREAPTA desprinsa de obiect, nu ca o
+   umbra. Asa a si fost semnalata, pe `/migrare`, in rostul dintre ultima sectiune
+   si banda de final.
+
+   Verificat prin proba, nu din ochi: cu valorile de mai jos, teancul de pe pagina
+   de start arata IDENTIC (pata era oricum ascunsa de cardul care acopera), iar
+   banda de sub casetele singure dispare. Deci se schimba o data, aici, pentru
+   toate locurile care folosesc reteta.
+
+   ⚠ NU e o a patra reteta: aceleasi trei straturi, aceeasi directie (drept in
+   jos, lumina din stanga-sus). Doar pata s-a apropiat si s-a stins. Regula
+   „a treia reteta nu se scrie" e despre DIRECTIE, nu despre calibrare — vezi nota
+   din `SectiuneMigrare.tsx`.
+
+   ⚠ Al doilea strat NU s-a atins. Probat si el mai stins; nu schimba nimic la
+   banda, fiindca ea venea din al treilea. O valoare schimbata degeaba e o valoare
+   pe care n-o mai poate explica nimeni. */
 .feature-card-shadow {
   box-shadow:
     0 1px 1px rgba(10, 10, 10, 0.04),
     0 8px 20px -8px rgba(10, 10, 10, 0.1),
-    0 34px 64px -28px rgba(10, 10, 10, 0.28);
+    0 24px 56px -32px rgba(10, 10, 10, 0.16);
 }
 
 /* ─── Pe telefon: rândul. Un singur card e „la rând", și se vede care ────────
@@ -479,12 +537,61 @@
   box-shadow: var(--umbra-placa);
 }
 
+/* ─── Haloul de sub CTA-ul principal ──────────────────────────────────────────
+
+   Butonul verde din hero-ul paginii de start si cel din banda de final stau pe
+   alb curat, fara nimic in jur. Fara halou, verdele plutea; cu el, butonul pare
+   asezat pe pagina. E singurul buton al site-ului care il primeste, si asta e
+   chiar rostul lui: spune care e actiunea principala inainte sa se citeasca ce
+   scrie pe el.
+
+   ⚠ CULOAREA VINE DIN `--primary`, NU E SCRISA DE MANA. Era scrisa: butonul se
+   umplea cu `--primary` (un verde inchis), iar haloul de sub el era
+   `rgba(26,181,84,.55)`, adica `--color-brand` — CELALALT verde al site-ului.
+   Doua verzi la 4px distanta, pe cel mai vazut buton al paginii. Nu se observa
+   ca greseala, se observa ca murdarie: umbra parea sa apartina altui obiect.
+
+   `color-mix` tine legatura: daca se schimba vreodata verdele butonului, se
+   schimba si haloul, in aceeasi clipa.
+
+   Directia e aceeasi ca la toate celelalte umbre — in jos, lumina din
+   stanga-sus. Vezi doctrina scrisa mai sus; un halou care bate in alta parte ar
+   fi facut butonul sa para lipit peste pagina. */
+.halou-cta {
+  box-shadow: 0 8px 28px -8px color-mix(in oklab, var(--primary) 55%, transparent);
+}
+
 /* Placa tabelului de comparatie. Aceeasi ridicare ca la casetele de sigle, din
    acelasi motiv: pagina e alba, placa e alba, deci nu se poate deosebi prin
    culoare. Vezi mai sus ce face fiecare dintre cele patru straturi. */
 .placa {
   background-color: #FFFFFF;
   box-shadow: var(--umbra-placa);
+}
+
+/* ─── Insigna reCAPTCHA ───────────────────────────────────────────────────────
+
+   Google o pune singur, fixata in COLTUL DIN DREAPTA JOS, imediat ce se incarca
+   scriptul lui — adica la prima atingere a unui formular. Se ascunde, si nu e o
+   siretenie: conditiile de folosire ingaduie explicit ascunderea insignei, cu o
+   singura conditie — pagina sa spuna in text ca formularul e protejat de
+   reCAPTCHA, cu linkuri catre politica si termenii Google.
+
+   ⚠ RANDUL ACELA E CE TINE REGULA. Sta sub butonul fiecarui formular public
+   (`ContactForm`, `FormularMigrare`) si se arata exact cand reCAPTCHA e pornit.
+   Daca vreodata se sterge de acolo, regula de aici trebuie scoasa in aceeasi
+   corectura, altfel site-ul foloseste reCAPTCHA fara sa spuna nicaieri.
+
+   ⚠ Coltul din dreapta jos NU e liber pe site-ul asta: acolo stau butoanele
+   plutitoare de telefon si WhatsApp (`StickyContact`). Insigna cadea peste ele.
+   Mutata in stanga ar fi cazut peste bara de contact lipicioasa; ascunsa, nu
+   cade nicaieri, iar textul spune acelasi lucru mai clar decat un logo mic.
+
+   ⚠ `visibility`, nu `display: none`. Asa cere si documentatia Google: insigna
+   ramane in pagina si masurata, doar ca nu se vede. Cu `display: none`, unele
+   versiuni ale scriptului se poarta ca si cum n-ar fi fost pusa deloc. */
+.grecaptcha-badge {
+  visibility: hidden;
 }
 
 /* ─── Campul de sigle plutitoare (hero-ul paginii „Integrari") ────────────────
@@ -1261,6 +1368,73 @@
   }
 }
 
+/* ─── Se aseaza la intrarea in ecran (ilustratiile de pe /migrare) ────────────
+
+   Un lucru care se aseaza la locul lui cand ajunge in dreptul ochilor: pleaca
+   deviat si stins, si vine la starea de repaus. Il folosesc doua ilustratii de pe
+   /migrare — teancul de comenzi (cardul din fata, foile de dedesubt, randul cu
+   numarul) si cele trei carduri de produs, care intra pe rand.
+
+   E scrisa generic DINADINS. Prima forma se numea `.teanc-strat`, cu variabile
+   `--teanc-*`, si mergea perfect — pana in clipa in care a trebuit sa se aseze si
+   cardurile de produs. O clasa care se cheama „strat de teanc" pusa pe un card de
+   produs e o minciuna pe care o citeste urmatorul om, nu o scurtatura.
+
+   TREI VARIABILE, toate cu valoare de rezerva, deci se pune doar ce trebuie:
+     --aseaza-de-la       de unde vine, pe verticala. Negativ = coboara.
+     --aseaza-intarziere  cand porneste. Din ea se face cascada.
+     --aseaza-opacitate   opacitatea de REPAUS, nu neaparat 1.
+
+   ⚠ Opacitatea de repaus e o variabila, nu 1 in keyframe, fiindca foile din
+   spatele teancului stau stinse ca sa para mai departe. Valoarea sta pe element,
+   intr-un singur loc, si e aceeasi si cand animatia nu ruleaza deloc — fara
+   JavaScript, sau cu miscarea oprita din sistem.
+
+   ⚠ STAREA DE PORNIRE E `opacity` + `transform`, niciodata `display` sau
+   `visibility`. Un element `display:none` nu ruleaza animatii, iar o poza lenesa
+   dinauntrul lui iese din raza de preincarcare si pica peste card dupa ce s-a
+   asezat. Cu `opacity`, elementul e in layout tot timpul si poza soseste la vreme.
+
+   Ca la firul de mesaje: `IntersectionObserver` pune `data-arrive="go"` pe
+   invelis (`LaIntrareInEcran`), desenul il face foaia de stil, si se joaca O
+   SINGURA data. Acelasi atribut, dinadins — un al doilea nume pentru „a intrat in
+   ecran" ar fi fost doua feluri de a spune acelasi lucru. */
+.se-aseaza {
+  opacity: 0;
+  transform: translateY(var(--aseaza-de-la, 12px));
+}
+
+[data-arrive="go"] .se-aseaza {
+  animation-name: aseaza-la-intrare;
+  animation-duration: 520ms;
+  animation-delay: var(--aseaza-intarziere, 0s);
+  animation-fill-mode: forwards;
+  /* CURBA DE SOSIRE A SITE-ULUI, aceeasi ca la arcul de placi din hero-ul acestei
+     pagini: pleaca repede si se aseaza lung, FARA saritura peste tinta si fara
+     `scale`. Lucrurile trebuie sa para asezate cu mana, nu aruncate. */
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes aseaza-la-intrare {
+  to {
+    opacity: var(--aseaza-opacitate, 1);
+    transform: none;
+  }
+}
+
+/* Fara miscare, totul e pur si simplu acolo, la starea de repaus. Sunt
+   ilustratii, nu efecte: fara ele sectiunile ramin cu o jumatate goala. */
+@media (prefers-reduced-motion: reduce) {
+  .se-aseaza {
+    opacity: var(--aseaza-opacitate, 1);
+    transform: none;
+  }
+
+  [data-arrive="go"] .se-aseaza {
+    animation: none;
+  }
+}
+
 .dark {
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
@@ -1677,3 +1851,4 @@
   0%, 100% { transform: translate(-50%, -50%) scale(1); }
   50% { transform: translate(-50%, -50%) scale(0.9); }
 }
+

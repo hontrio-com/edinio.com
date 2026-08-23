@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { FinalCta } from "@/components/website/sections/FinalCta";
 import { HeroPagina } from "@/components/website/sections/Hero";
 import { ArcMigrare } from "@/components/website/sections/migrare/ArcMigrare";
 import { PanouCategorii } from "@/components/website/sections/migrare/PanouCategorii";
-import { PanouComenzi } from "@/components/website/sections/migrare/PanouComenzi";
+import { PanouComenziTeanc } from "@/components/website/sections/migrare/PanouComenziTeanc";
 import { PanouProduse } from "@/components/website/sections/migrare/PanouProduse";
+import { SectiuneFascicule } from "@/components/website/sections/migrare/SectiuneFascicule";
 import { SectiuneMigrare } from "@/components/website/sections/migrare/SectiuneMigrare";
 import {
   SECTIUNE_CATEGORII,
@@ -163,8 +165,33 @@ export default function MigrarePage() {
 
       {/* A treia, la loc: textul la stânga, ilustrația la dreapta. */}
       <SectiuneMigrare text={SECTIUNE_COMENZI}>
-        <PanouComenzi />
+        <PanouComenziTeanc />
       </SectiuneMigrare>
+
+      {/*
+        A patra, și ULTIMA — altă formă: fără împărțire în două, cu textul deasupra
+        și ilustrația lată dedesubt.
+
+        Stă la sfârșit fiindcă răspunde la altă întrebare decât celelalte trei.
+        Alea spun CE se mută — produse, categorii, comenzi; asta spune DE UNDE.
+        Pusă înainte, promisiunea „din orice platformă" ar fi venit înainte să se
+        știe ce se transferă, iar siglele s-ar fi citit ca decor.
+      */}
+      <SectiuneFascicule />
+
+      {/*
+        Banda de final, aceeași ca pe toate celelalte pagini de site — `/migrare`
+        era singura fără ea. Se refolosește ca atare, fără prop-uri, din motivul
+        scris pe pagina „Prețuri": textul ei e al clientului, iar o variantă
+        scrisă doar pentru pagina asta ar fi însemnat încă o promisiune de ținut
+        minte la fiecare corectură.
+
+        ⚠ Vine DUPĂ formularul de migrare, nu în locul lui, și cele două nu se
+        calcă: formularul cere magazinul de mutat, banda duce la înscriere. Cine
+        vrea să încerce singur are unde, cine vrea să-i mutăm noi a avut unde cu
+        un ecran mai sus.
+      */}
+      <FinalCta />
     </>
   );
 }

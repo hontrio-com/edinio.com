@@ -11,10 +11,16 @@
  *    vizitator, inclusiv de la cine doar citeste programul si pleaca. Legat de
  *    prima atingere a formularului, il primeste doar cine chiar il completeaza.
  *
- * ⚠ Insigna „protected by reCAPTCHA" nu mai apare de la sine daca scriptul vine
- * tarziu; Google CERE, in schimb, ca pagina sa spuna asta in text, cu linkuri
- * catre politica si termenii lor. De aia formularul are randul acela sub buton
- * — nu e podoaba, e o conditie de folosire.
+ * ⚠ INSIGNA APARE, si o ascundem noi. Aici a scris o vreme ca „nu mai apare de
+ * la sine daca scriptul vine tarziu" — nu e adevarat: Google o pune in coltul
+ * din dreapta jos ori de cate ori se incarca scriptul, oricat de tarziu ar veni.
+ * Se ascunde din `globals.css` (`.grecaptcha-badge`), unde scrie si de ce e
+ * ingaduit si ce anume tine regula.
+ *
+ * Ce ramane adevarat: Google CERE ca pagina sa spuna in text ca formularul e
+ * protejat de reCAPTCHA, cu linkuri catre politica si termenii lor. De aia
+ * fiecare formular are randul acela sub buton — nu e podoaba, e chiar conditia
+ * in schimbul careia insigna are voie sa lipseasca.
  *
  * ═══ TOKENUL SE CERE LA FIECARE APASARE ═══
  *

@@ -9,6 +9,7 @@ import { Logo } from "@/components/ui/Logo";
 import { MENU_PREFIXES, TOP_NAV, type MenuId } from "@/lib/website/nav";
 import { ComparePanel, ResourcesPanel, SolutionPanel } from "./MegaPanels";
 import { MobileNav } from "./MobileNav";
+import { butonVerde } from "@/lib/website/buton";
 
 /**
  * Bara de sus a site-ului de prezentare.
@@ -278,7 +279,7 @@ export function SiteHeader() {
           </Link>
           <Link
             href="/register"
-            className="ml-1 inline-flex h-10 items-center justify-center rounded-[8px] bg-primary px-5 text-[14px] font-semibold text-white transition-transform duration-200 hover:scale-[1.02] active:scale-100"
+            className={cn("ml-1", butonVerde("bara"))}
           >
             Începe gratuit
           </Link>

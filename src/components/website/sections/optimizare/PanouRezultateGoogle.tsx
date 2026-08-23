@@ -42,7 +42,7 @@ const ALBASTRU_LEGATURA = "#1a0dab";
   nu există. Iar o clasă de inel fără culoare nu dă nicio eroare — cade pe culoarea
   ei din oficiu. Prima formă a ieșit cu chenarul NEGRU, și doar poza a spus-o.
 */
-const VERDE = "var(--color-brand)";
+const VERDE = "var(--primary)";
 const CENUSIU_TEXT = "#4d5156";
 const NEGRU_SITE = "#202124";
 
@@ -116,7 +116,7 @@ function Rezultat({ rezultat }: { rezultat: RezultatOrganic }) {
             un chenar verde ar putea fi citit ca „ăsta e primul", adică o promisiune
             despre loc în rezultate, pe care n-o face nimeni.
           */}
-          <span className="absolute -top-2 left-3 rounded-full bg-brand px-2 py-[3px] text-[9px] font-semibold uppercase tracking-[0.04em] text-white sm:left-4 sm:text-[10px]">
+          <span className="absolute -top-2 left-3 rounded-full bg-primary px-2 py-[3px] text-[9px] font-semibold uppercase tracking-[0.04em] text-white sm:left-4 sm:text-[10px]">
             Titlu și descriere optimizate
           </span>
         </>

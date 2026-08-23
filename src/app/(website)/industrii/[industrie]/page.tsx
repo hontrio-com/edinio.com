@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageShell } from "@/components/website/PageShell";
 import { siteMetadata } from "@/lib/website/metadata";
 import { INDUSTRIES } from "@/lib/website/nav";
+import { ACASA, type Firimitura } from "@/lib/website/breadcrumbs";
 
 /**
  * O pagina pentru fiecare domeniu, din aceeasi lista care alimenteaza meniul.
@@ -49,5 +50,13 @@ export default async function IndustriePage({ params }: Props) {
   const found = INDUSTRIES.find((item) => item.slug === industrie);
   if (!found) notFound();
 
-  return <PageShell eyebrow={found.label} title={found.h1} lead={found.lead} />;
+  /* Al doilea nivel, deci primeste firimituri: „Acasa > Industrii > Haine".
+     Ultima n-are `href` — e chiar pagina pe care esti. */
+  const sir: Firimitura[] = [
+    ACASA,
+    { label: "Industrii", href: "/industrii" },
+    { label: found.label },
+  ];
+
+  return <PageShell sir={sir} eyebrow={found.label} title={found.h1} lead={found.lead} />;
 }

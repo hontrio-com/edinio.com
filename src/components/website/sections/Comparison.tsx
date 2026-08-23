@@ -8,10 +8,11 @@ import {
   COMPARISON_TITLE,
   COMPARISON_US,
   PLATFORM_LOGOS,
+  inaltimeSigla,
   type ComparisonRival,
-  type PlatformLogo,
 } from "@/lib/website/comparison";
 import { SectionEyebrow } from "./SectionEyebrow";
+import { VERDE_CITIBIL } from "@/lib/website/linii";
 
 /**
  * Tabelul de comparație: Edinio față de celelalte platforme.
@@ -62,20 +63,13 @@ import { SectionEyebrow } from "./SectionEyebrow";
  * „Necesită configurare" se rupe în trei rânduri. Tableta primește tot carduri.
  */
 
-/* Verdele pentru TEXT. Verdele de brand (#1AB554) are pe alb 2,6:1, sub pragul
-   de citibilitate; #12874A e același ton dus la 4,6:1. Aceeași constantă și
-   același motiv ca în `IntegrationsBenzi.tsx` și `TrustedProduct.tsx`. */
-const GREEN_TEXT = "#12874A";
+/* Verdele pentru TEXT, luat din `lib/website/linii.ts`.
 
-/**
- * Înălțimea siglei: aceeași suprafață pentru toate, plus corecția optică.
- *
- * Aria singură duce foarte aproape; ultimul pas îl face ochiul. Vezi
- * `comparison.ts` pentru cum s-au ales cele două numere care nu sunt 1.
- */
-function inaltimeSigla(logo: PlatformLogo, arie: number): number {
-  return Math.round(Math.sqrt(arie / logo.ratio) * logo.optic);
-}
+   Era declarat aici, si in inca patru fisiere, cu acelasi comentariu copiat
+   langa fiecare: `#12874A`, ales fiindca verdele de marca (#1AB554) are pe alb
+   2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
+   4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
+const GREEN_TEXT = VERDE_CITIBIL;
 
 function Sigla({ nume }: { nume: ComparisonRival }) {
   const logo = PLATFORM_LOGOS[nume];

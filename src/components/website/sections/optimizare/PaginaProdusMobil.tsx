@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { ChevronLeft, ImageIcon, Search, ShoppingBag } from "lucide-react";
 import { PRODUS_MOBIL } from "@/lib/website/optimizare";
+import { VERDE_CITIBIL } from "@/lib/website/linii";
 
 /**
  * Pagina de produs, așa cum arată pe telefon. Merge pe ecranul din `IPhoneMockup`.
@@ -26,10 +27,13 @@ import { PRODUS_MOBIL } from "@/lib/website/optimizare";
  * RECUNOSCUTĂ ca pagină de produs dintr-o privire, nu citită.
  */
 
-/* Verdele pentru TEXT — verdele de brand (#1AB554) are pe alb 2,6:1, sub pragul
-   de citibilitate. #12874A e același ton, dus la 4,6:1. Butonul poate rămâne pe
-   verdele de brand: acolo textul e alb pe verde, nu verde pe alb. */
-const GREEN_TEXT = "#12874A";
+/* Verdele pentru TEXT, luat din `lib/website/linii.ts`.
+
+   Era declarat aici, si in inca patru fisiere, cu acelasi comentariu copiat
+   langa fiecare: `#12874A`, ales fiindca verdele de marca (#1AB554) are pe alb
+   2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
+   4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
+const GREEN_TEXT = VERDE_CITIBIL;
 
 export function PaginaProdusMobil() {
   const p = PRODUS_MOBIL;

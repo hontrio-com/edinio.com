@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
 import { LOGOS_CASETA, type LogoKey } from "@/lib/website/logos";
 import { CasetaSigla } from "./CasetaSigla";
+import { VERDE_CITIBIL } from "@/lib/website/linii";
 
 /**
  * Integrarile, ca doua benzi care curg in sensuri opuse.
@@ -23,13 +24,13 @@ import { CasetaSigla } from "./CasetaSigla";
  *    fi ramas in urma la prima integrare noua si nimeni n-ar fi observat.
  */
 
-/*
-  Verdele pentru TEXT — verdele de brand (#1AB554) are pe alb un contrast de
-  2,6:1, sub pragul de citibilitate. #12874A e acelasi ton dus la 4,6:1. Aceeasi
-  constanta si acelasi motiv ca in `TrustedProduct.tsx`; verdele PLIN ramane
-  rezervat butonului din hero.
-*/
-const GREEN_TEXT = "#12874A";
+/* Verdele pentru TEXT, luat din `lib/website/linii.ts`.
+
+   Era declarat aici, si in inca patru fisiere, cu acelasi comentariu copiat
+   langa fiecare: `#12874A`, ales fiindca verdele de marca (#1AB554) are pe alb
+   2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
+   4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
+const GREEN_TEXT = VERDE_CITIBIL;
 
 /*
   Impartirea in doua benzi: pozitiile PARE sus, cele IMPARE jos.

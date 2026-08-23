@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
+import { H1_MARE } from "@/lib/website/tipografie";
+import { butonAlb, butonVerde } from "@/lib/website/buton";
+import { Breadcrumbs } from "./Breadcrumbs";
+import { firimituriJsonLd, type Firimitura } from "@/lib/website/breadcrumbs";
+import { FinalCta } from "./sections/FinalCta";
 
 /**
  * Capul de pagină comun al site-ului de prezentare.
@@ -8,16 +14,41 @@ import { ArrowRight } from "lucide-react";
  * care spune despre ce e vorba, două acțiuni și rândul de garanții. Nu scrie
  * nicăieri ca e in lucru: e o pagină adevărată, doar scurtă, pe care o
  * îmbogățim secțiune cu secțiune.
+ *
+ * ═══ ⚠ PAGINA SE TERMINĂ CU `FinalCta`, ȘI DE AICI ═══
+ *
+ * Auditul din 23.08 a găsit cinci pagini care se opreau brusc: `/magazin-online`,
+ * `/industrii`, `/industrii/[industrie]`, `/vs` și `/blog`. Toate cinci trec pe
+ * aici, iar celelalte unsprezece pagini ale site-ului se termină cu banda de
+ * final. Una care se oprește la hero nu arată scurtă, arată neterminată — mai
+ * ales `/magazin-online`, către care trimit deja pastila din hero-ul paginii de
+ * start și butonul din secțiunea de funcționalități.
+ *
+ * Banda vine de AICI, nu din fiecare pagină: altfel a șasea pagină scrisă pe
+ * `PageShell` ar fi uitat-o, exact cum au uitat-o astea cinci.
+ *
+ * ⚠ Cine adaugă `<FinalCta />` și în pagină o va vedea de două ori. Nu se pune
+ * în pagină.
+ *
+ * ═══ FIRIMITURILE SUNT OPȚIONALE ═══
+ *
+ * Paginile de la al doilea nivel în jos (`/industrii/haine`) le primesc; cele de
+ * la primul nivel, nu — un singur „Acasă >" deasupra titlului nu spune nimic ce
+ * nu spune deja sigla din bară. Ca la `PageHero`, șirul desenat și blocul
+ * `BreadcrumbList` ies din ACEEAȘI listă, deci nu se pot despărți.
  */
 
 const TRUST = "15 zile gratuit, fără card de credit. Anulezi oricând.";
 
 export function PageShell({
+  sir,
   eyebrow,
   title,
   lead,
   children,
 }: {
+  /** Drumul până aici. Se dă doar de la al doilea nivel în jos. */
+  sir?: Firimitura[];
   eyebrow?: string;
   title: string;
   lead: string;
@@ -26,8 +57,21 @@ export function PageShell({
   return (
     <>
       <section className="bg-white">
+        {sir ? (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: firimituriJsonLd(sir) }}
+          />
+        ) : null}
+
         <div className="mx-auto max-w-[1200px] px-5 pt-16 pb-20 sm:px-6 lg:px-8 lg:pt-24 lg:pb-28">
           <div className="max-w-[760px]">
+            {sir ? (
+              <div className="mb-5">
+                <Breadcrumbs sir={sir} />
+              </div>
+            ) : null}
+
             {/* Fara punct verde in fata, ca in panourile din bara: era ornament. */}
             {eyebrow ? (
               <span className="inline-flex items-center rounded-full border border-hairline bg-tint px-3 py-1.5 text-[12px] font-medium text-ink-2">
@@ -35,7 +79,7 @@ export function PageShell({
               </span>
             ) : null}
 
-            <h1 className="mt-5 text-[38px] font-bold leading-[1.06] tracking-[-0.025em] text-ink sm:text-[52px]">
+            <h1 className={cn("mt-5", H1_MARE)}>
               {title}
             </h1>
 
@@ -46,7 +90,7 @@ export function PageShell({
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/register"
-                className="inline-flex h-12 items-center justify-center rounded-[8px] bg-primary px-6 text-[15px] font-semibold text-white transition-transform duration-200 hover:scale-[1.02] active:scale-100"
+                className={butonVerde()}
               >
                 Începe gratuit
               </Link>
@@ -57,7 +101,12 @@ export function PageShell({
                    hero-ul paginii de start ramane pe ancora: acolo sectiunea e
                    chiar mai jos, iar o navigare ar fi mai mult decat trebuie. */
                 href="/preturi"
-                className="group inline-flex h-12 items-center justify-center gap-1.5 rounded-[8px] border border-hairline px-6 text-[15px] font-medium text-ink transition-colors duration-200 hover:bg-tint-2"
+                /* Aceeasi reteta ca perechea lui verde, din `lib/website/buton.ts`.
+                   Era scrisa de mana si aproape la fel: `font-medium` in loc de
+                   `font-semibold` si `hover:bg-tint-2` in loc de `hover:bg-tint`.
+                   Doua butoane alaturate cu greutati diferite se citesc ca o
+                   scapare, nu ca o ierarhie. */
+                className={cn("group", butonAlb())}
               >
                 Vezi prețurile
                 <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -71,6 +120,8 @@ export function PageShell({
       </section>
 
       {children}
+
+      <FinalCta />
     </>
   );
 }

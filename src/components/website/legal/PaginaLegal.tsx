@@ -2,6 +2,8 @@ import { ArrowUp } from "lucide-react";
 import { BlocuriLegal } from "./BlocuriLegal";
 import { CuprinsLegal } from "./CuprinsLegal";
 import type { DocumentLegal } from "@/lib/website/legal";
+import { cn } from "@/lib/utils/cn";
+import { H1_MIC } from "@/lib/website/tipografie";
 
 /**
  * Desenul comun al celor trei documente juridice: Termeni, Confidențialitate,
@@ -36,7 +38,7 @@ export function PaginaLegal({ doc }: { doc: DocumentLegal }) {
               Ultima actualizare: {doc.actualizare}
             </span>
 
-            <h1 className="mt-5 text-[32px] font-bold leading-[1.08] tracking-[-0.025em] text-ink sm:text-[44px]">
+            <h1 className={cn("mt-5", H1_MIC)}>
               {doc.titlu}
             </h1>
 

@@ -20,6 +20,8 @@ import {
   type PricingPlan,
 } from "@/lib/website/pricing";
 import { SectionEyebrow } from "./sections/SectionEyebrow";
+import { butonAlb, butonVerde } from "@/lib/website/buton";
+import { VERDE_CITIBIL } from "@/lib/website/linii";
 
 /**
  * Secțiunea de prețuri, adusă în limbajul vizual al site-ului refăcut.
@@ -60,11 +62,13 @@ import { SectionEyebrow } from "./sections/SectionEyebrow";
  * dată când l-a văzut.
  */
 
-/* Verdele pentru TEXT. Verdele de brand (#1AB554) are pe alb 2,6:1, sub pragul
-   de citibilitate; #12874A e același ton dus la 4,6:1. Aceeași constantă și
-   același motiv ca în `IntegrationsBenzi.tsx` și `Comparison.tsx`. Verdele PLIN
-   rămâne doar pe butonul planului recomandat. */
-const GREEN_TEXT = "#12874A";
+/* Verdele pentru TEXT, luat din `lib/website/linii.ts`.
+
+   Era declarat aici, si in inca patru fisiere, cu acelasi comentariu copiat
+   langa fiecare: `#12874A`, ales fiindca verdele de marca (#1AB554) are pe alb
+   2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
+   4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
+const GREEN_TEXT = VERDE_CITIBIL;
 
 export function PricingSection({ cuAntet = true }: { cuAntet?: boolean }) {
   const [interval, setInterval] = useState<BillingInterval>("monthly");
@@ -343,12 +347,9 @@ function CardPlan({ plan, interval }: { plan: PricingPlan; interval: BillingInte
 
       <Link
         href="/register"
-        className={cn(
-          "block w-full rounded-[8px] py-2.5 text-center text-[14px] font-semibold transition-colors",
-          plan.popular
-            ? "bg-primary text-white hover:bg-primary/90"
-            : "border border-hairline bg-white text-ink hover:bg-tint",
-        )}
+        /* Perechea verde/alb, din aceeasi reteta: puse pe carduri alaturate,
+           cele doua butoane trebuie sa stea pe aceeasi linie de sus si de jos. */
+        className={cn("w-full", plan.popular ? butonVerde() : butonAlb())}
       >
         {plan.cta}
       </Link>

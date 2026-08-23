@@ -14,6 +14,7 @@ import {
   type Integrare,
 } from "@/lib/website/integrari-catalog";
 import { Logo } from "./Logo";
+import { butonVerde } from "@/lib/website/buton";
 
 /**
  * Biblioteca de integrări: căutare, rubrici, și un card pentru fiecare serviciu.
@@ -412,7 +413,7 @@ function NimicGasit({ cautare }: { cautare: string }) {
       </p>
       <Link
         href="/contact"
-        className="mt-6 inline-flex h-11 items-center justify-center rounded-[8px] bg-primary px-6 text-[14px] font-semibold text-white transition-transform duration-200 hover:scale-[1.02] active:scale-100"
+        className={cn("mt-6", butonVerde())}
       >
         Cere o integrare
       </Link>

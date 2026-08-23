@@ -78,7 +78,7 @@ function Semn({ parte }: { parte: "deschis" | "inchis" }) {
       style={{
         fontFamily: "var(--font-mono, ui-monospace, monospace)",
         fontWeight: 400,
-        color: "var(--color-brand)",
+        color: "var(--primary)",
         /* Mai mic ca literă, dar întins pe verticală: așa ajunge mai înalt decât
            cuvântul fără să se îngroașe odată cu el. */
         fontSize: "0.72em",

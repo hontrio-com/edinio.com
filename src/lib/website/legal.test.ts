@@ -4,6 +4,7 @@ import { liniiDocument, segmenteEvidentiate, type Bloc, type DocumentLegal } fro
 import { TERMENI } from "./termeni";
 import { CONFIDENTIALITATE } from "./confidentialitate";
 import { COOKIES } from "./cookies";
+import { GDPR } from "./gdpr";
 
 /*
  * Un document juridic se strica altfel decat codul: nu crapa, doar spune
@@ -19,19 +20,36 @@ import { COOKIES } from "./cookies";
  * comparand cu originalul, cu `scripts/tests/verifica-document-legal.mjs`.
  * Ultima rulare: Termeni 598 randuri, Confidentialitate 844, Cookies 425 —
  * zero lipsa, zero in plus, la fiecare.
+ *
+ * ⚠ GDPR face exceptie, si e o exceptie DECLARATA: comparat cu textul scos din
+ * pagina veche, iese 8 lipsa si 10 in plus. Cele 8 sunt randurile in care pagina
+ * veche lipea textul („Cum procedati:Multe date", „Limitarea scopului– datele"),
+ * cele 10 sunt aceleasi randuri reparate plus etichetele celor doua trimiteri
+ * din articolul 14. Niciun cuvant schimbat in afara de spatiile alea.
  */
 
-const DOCUMENTE: { nume: string; doc: DocumentLegal; articole: number }[] = [
-  { nume: "Termeni", doc: TERMENI, articole: 50 },
-  { nume: "Confidentialitate", doc: CONFIDENTIALITATE, articole: 63 },
-  { nume: "Cookies", doc: COOKIES, articole: 42 },
+const DOCUMENTE: {
+  nume: string;
+  doc: DocumentLegal;
+  articole: number;
+  /* Daca documentul poarta FISA DE IDENTIFICARE a firmei (CUI, nr. inmatriculare).
+     Cele trei politici o au; GDPR nu a avut-o niciodata. Vezi proba de mai jos. */
+  identificare: boolean;
+}[] = [
+  { nume: "Termeni", doc: TERMENI, articole: 50, identificare: true },
+  { nume: "Confidentialitate", doc: CONFIDENTIALITATE, articole: 63, identificare: true },
+  { nume: "Cookies", doc: COOKIES, articole: 42, identificare: true },
+  /* GDPR a intrat aici la 23.08, cand pagina a fost mutata de pe desenul ei
+     propriu pe `PaginaLegal`. Are 15 articole: cele 14 dinainte, plus sectiunea
+     de contact, care n-avea numar desi toate celelalte aveau. */
+  { nume: "GDPR", doc: GDPR, articole: 15, identificare: false },
 ];
 
 function toateBlocurile(doc: DocumentLegal): Bloc[] {
   return [...doc.preambul, ...doc.sectiuni.flatMap((s) => s.blocuri)];
 }
 
-for (const { nume, doc, articole } of DOCUMENTE) {
+for (const { nume, doc, articole, identificare } of DOCUMENTE) {
   test(`${nume}: are ${articole} articole, numerotate fara goluri`, () => {
     assert.equal(doc.sectiuni.length, articole);
     doc.sectiuni.forEach((s, i) => {
@@ -141,16 +159,21 @@ for (const { nume, doc, articole } of DOCUMENTE) {
      * motivul ca apar in Politici. Paginile astea sunt singurele locuri care le
      * mai tin — iar identificarea comerciantului trebuie sa ramana accesibila,
      * inclusiv pentru procesatorii de plati.
+     *
+     * ⚠ CUI-ul si numarul de inmatriculare se cer doar de la documentele care au
+     * FISA DE IDENTIFICARE a firmei. GDPR n-a avut-o niciodata: el numeste firma
+     * si da caile de contact, atat. Nu i se adauga acum, fiindca ar insemna text
+     * nou intr-un document juridic, pus de mine — exact ce pazesc probele astea.
      */
     const text = liniiDocument(doc).join("\n");
-    for (const obligatoriu of [
+    const obligatorii = [
       "VOID SFT GAMES SRL",
-      "43474393",
-      "J18/1054/2020",
       "Mătăsari",
       "contact@edinio.com",
       "0750 456 809",
-    ]) {
+      ...(identificare ? ["43474393", "J18/1054/2020"] : []),
+    ];
+    for (const obligatoriu of obligatorii) {
       assert.ok(text.includes(obligatoriu), `„${obligatoriu}" nu mai apare in ${nume}`);
     }
   });

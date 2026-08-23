@@ -1,4 +1,5 @@
 import { segmenteEvidentiate, type Bloc } from "@/lib/website/legal";
+import Link from "next/link";
 
 /**
  * Randarea blocurilor dintr-un document juridic.
@@ -154,10 +155,11 @@ function BlocLegal({ bloc }: { bloc: Bloc }) {
       return (
         /*
           Rezervat propozițiilor prin care documentul se declară EL ÎNSUȘI
-          esențial. Verdele e #12874A, nu verdele de marcă: #1AB554 are pe alb
-          2,6:1, sub pragul pentru text — aceeași regulă ca peste tot pe site.
+          esențial. Verdele e `--primary`, nu verdele de marcă: #1AB554 are pe
+          alb 2,70:1, sub pragul pentru text — aceeași regulă ca peste tot pe
+          site. Doctrina celor doi verzi e în capul lui `globals.css`.
         */
-        <p className="mt-5 rounded-r-[8px] border-l-2 border-l-[#12874A] bg-tint px-4 py-3.5 text-[15px] font-medium leading-[1.7] text-ink">
+        <p className="mt-5 rounded-r-[8px] border-l-2 border-l-primary bg-tint px-4 py-3.5 text-[15px] font-medium leading-[1.7] text-ink">
           {bloc.text}
         </p>
       );
@@ -172,6 +174,30 @@ function BlocLegal({ bloc }: { bloc: Bloc }) {
             {bloc.adresa}
           </a>
         </p>
+      );
+
+    case "trimiteri":
+      return (
+        /*
+          Trimiteri catre alte documente ale site-ului. Randate ca o LISTA de
+          linkuri, nu inghesuite in fraza de deasupra: la GDPR sunt doua, iar
+          doua linkuri intr-un paragraf de sase randuri se pierd.
+
+          ⚠ `next/link`, nu `<a>`: sunt cai interne, deci se navigheaza fara
+          reincarcarea paginii — si asa cere si regula de lint a proiectului.
+        */
+        <ul className="mt-4 grid gap-2">
+          {bloc.items.map((t) => (
+            <li key={t.href}>
+              <Link
+                href={t.href}
+                className="inline-flex items-center rounded-[8px] border border-hairline bg-tint px-3.5 py-2 text-[14.5px] font-medium text-ink transition-colors hover:bg-tint-2"
+              >
+                {t.text}
+              </Link>
+            </li>
+          ))}
+        </ul>
       );
 
     case "tabel":

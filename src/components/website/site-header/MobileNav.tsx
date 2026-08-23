@@ -12,6 +12,7 @@ import {
   type MenuId,
 } from "@/lib/website/nav";
 import { MenuBadge, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "./MenuPieces";
+import { butonVerde } from "@/lib/website/buton";
 
 /**
  * Meniul de telefon: panou pe tot ecranul, cu grupuri care se desfășoară.
@@ -151,7 +152,7 @@ export function MobileNav({ open, onClose }: Props) {
           <Link
             href="/register"
             onClick={onClose}
-            className="flex h-12 items-center justify-center rounded-[8px] bg-primary text-[15px] font-semibold text-white"
+            className={cn("w-full", butonVerde())}
           >
             Începe gratuit
           </Link>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { HeroMesh } from "./hero-backgrounds";
+import { butonVerde } from "@/lib/website/buton";
 
 /**
  * Hero-ul mare: totul pe mijloc, peste un mesh de lumină verde.
@@ -130,7 +131,7 @@ function HeroCadru({
         <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 sm:mt-10">
           <Link
             href={principala.href}
-            className="inline-flex h-13 items-center justify-center rounded-[8px] bg-primary px-8 text-[15px] font-semibold text-white shadow-[0_8px_28px_-8px_rgba(26,181,84,0.55)] transition-transform duration-200 hover:scale-[1.02] active:scale-100"
+            className={cn("halou-cta", butonVerde("lat"))}
           >
             {principala.label}
           </Link>

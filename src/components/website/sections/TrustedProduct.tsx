@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Heart, ImageIcon } from "lucide-react";
 import { PROBLEM_PRODUCT } from "@/lib/website/problem";
+import { VERDE_CITIBIL } from "@/lib/website/linii";
 
 /**
  * Ilustrația din al treilea card: o pagină de produs care are tot ce trebuie.
@@ -17,10 +18,11 @@ import { PROBLEM_PRODUCT } from "@/lib/website/problem";
  *    8px etichete) nu sunt greșeli: ilustrația trebuie RECUNOSCUTĂ ca pagină de
  *    produs dintr-o privire, nu citită. Dacă se mărește textul, nu mai încape
  *    nimic și dispare tocmai ce o face credibilă — densitatea.
- * 2. **Verdele prețului NU e verdele de brand.** #1AB554 are pe alb un contrast
- *    de 2,6:1, adică sub prag pentru text — la 14px iese un preț pe care nu-l
- *    citești. #12874A e același ton, dus la 4,6:1. Butonul poate rămâne pe
- *    verdele de brand: acolo textul e alb pe verde, nu verde pe alb.
+ * 2. **Verdele prețului NU e verdele de marcă.** #1AB554 are pe alb un contrast
+ *    de 2,70:1, adică sub prag pentru text — la 14px iese un preț pe care nu-l
+ *    citești. Se folosește `--primary` (#008236), care are 4,95:1. Butonul verde
+ *    e tot el: 2,70:1 e sub prag și în celălalt sens, deci nici text alb pe
+ *    verdele de marcă nu se citește.
  * 3. **Fără „În stoc".** Era în macheta de la care am pornit; clientul a cerut-o
  *    scoasă, mai curat așa.
  * 4. **`aria-hidden` pe tot.** Ilustrația repetă ce scrie în descrierea cardului.
@@ -30,8 +32,13 @@ import { PROBLEM_PRODUCT } from "@/lib/website/problem";
  * Fără animație, ca și la al doilea card: primul are deja firul care sosește.
  */
 
-/* Verdele pentru TEXT — verdele de brand dus la contrast citibil. Vezi nota 2. */
-const GREEN_TEXT = "#12874A";
+/* Verdele pentru TEXT, luat din `lib/website/linii.ts`.
+
+   Era declarat aici, si in inca patru fisiere, cu acelasi comentariu copiat
+   langa fiecare: `#12874A`, ales fiindca verdele de marca (#1AB554) are pe alb
+   2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
+   4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
+const GREEN_TEXT = VERDE_CITIBIL;
 
 export function TrustedProduct() {
   const p = PROBLEM_PRODUCT;

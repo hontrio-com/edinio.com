@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils/cn";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { firimituriJsonLd, type Firimitura } from "@/lib/website/breadcrumbs";
+import { H1_MIC } from "@/lib/website/tipografie";
 
 /**
  * Capul SCURT al paginilor de conținut: unde ești, cum se cheamă pagina, o
@@ -86,11 +87,14 @@ export function PageHero({
         </div>
 
         {/*
-          34/44px, nu 38/52 ca în `PageShell`. E tot un `<h1>`, dar aici sub el
-          urmează conținut, nu o pagină de prezentare: la 52px titlul ar cântări
-          cât întreaga listă de dedesubt.
+          Treapta MICĂ, nu cea mare din `PageShell`. E tot un `<h1>`, dar aici sub
+          el urmează conținut, nu o pagină de prezentare: la 52px titlul ar
+          cântări cât întreaga listă de dedesubt.
+
+          Cele două trepte sunt scrise în `lib/website/tipografie.ts`, cu motivul
+          pentru care nu mai stau în componente.
         */}
-        <h1 className="mt-4 text-[34px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">
+        <h1 className={cn("mt-4", H1_MIC)}>
           {title}
         </h1>
 

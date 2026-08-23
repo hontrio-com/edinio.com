@@ -5,6 +5,8 @@ import { Check, Loader2 } from "lucide-react";
 import { submitContactMessage } from "@/lib/actions/contact.actions";
 import { MAX } from "@/lib/website/contact-form";
 import { incarcaRecaptcha, recaptchaActiv, tokenRecaptcha } from "@/lib/website/recaptcha-client";
+import { BUTON_INACTIV, butonVerde } from "@/lib/website/buton";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Formularul de pe `/contact`.
@@ -61,9 +63,10 @@ export function ContactForm() {
   if (trimis) {
     return (
       <div className="placa rounded-[16px] px-6 py-10 text-center">
-        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#12874A]/10">
-          {/* #12874A, nu verdele de brand: #1AB554 are pe alb 2,6:1. */}
-          <Check className="h-5 w-5 text-[#12874A]" strokeWidth={2.5} aria-hidden="true" />
+        <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+          {/* `--primary`, nu verdele de marca: #1AB554 are pe alb 2,70:1. Doctrina
+              celor doi verzi e in capul lui `globals.css`. */}
+          <Check className="h-5 w-5 text-primary" strokeWidth={2.5} aria-hidden="true" />
         </span>
         <p className="mt-4 text-[17px] font-semibold tracking-[-0.01em] text-ink">
           Am primit mesajul tău
@@ -136,7 +139,7 @@ export function ContactForm() {
           type="checkbox"
           name="acord"
           required
-          className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer rounded-[4px] accent-[#12874A]"
+          className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer rounded-[4px] accent-primary"
         />
         <span className="text-[14px] leading-[1.55] text-ink-2">
           Sunt de acord cu{" "}
@@ -164,7 +167,7 @@ export function ContactForm() {
       <button
         type="submit"
         disabled={seTrimite}
-        className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] bg-primary px-6 text-[15px] font-semibold text-white transition-all duration-200 hover:scale-[1.01] active:scale-100 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 sm:w-auto"
+        className={cn("mt-6 w-full sm:w-auto", butonVerde(), BUTON_INACTIV)}
       >
         {seTrimite ? (
           <>

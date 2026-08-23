@@ -46,6 +46,19 @@ export type Bloc =
   | { tip: "adresa"; linii: string[] }
   /** Propoziția prin care documentul se declară el însuși esențial. */
   | { tip: "accent"; text: string }
+  /**
+   * Trimiteri către alte documente ale site-ului.
+   *
+   * ⚠ E o cărămidă, nu un link scris în text, fiindcă un `paragraf` nu poate
+   * purta linkuri: `segmenteEvidentiate` taie textul doar în bucăți îngroșate.
+   * Documentul GDPR trimite la Confidențialitate și la Cookies în articolul 14,
+   * iar celelalte trei se pomenesc unele pe altele în preambul, deocamdată ca
+   * text simplu.
+   *
+   * ⚠ `href` e o cale internă, deci se randează cu `next/link`. Pentru adrese
+   * din afară există deja `date` cu `href`.
+   */
+  | { tip: "trimiteri"; items: { text: string; href: string }[] }
   | { tip: "email"; adresa: string }
   /**
    * Tabel, folosit doar la Cookies.
@@ -143,6 +156,9 @@ export function liniiDocument(doc: DocumentLegal): string[] {
           break;
         case "email":
           out.push(b.adresa);
+          break;
+        case "trimiteri":
+          out.push(...b.items.map((t) => t.text));
           break;
         case "tabel":
           out.push(b.antet.join(" "));

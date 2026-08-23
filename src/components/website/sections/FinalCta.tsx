@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { butonVerde } from "@/lib/website/buton";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Banda de final a paginii de start.
@@ -144,7 +146,7 @@ export function FinalCta() {
 
         <Link
           href="/register"
-          className="mt-10 inline-flex h-12 items-center justify-center rounded-[8px] bg-primary px-8 text-[15px] font-semibold text-white transition-colors hover:bg-primary/90"
+          className={cn("mt-10 halou-cta", butonVerde("lat"))}
         >
           Începe gratuit acum
           <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />

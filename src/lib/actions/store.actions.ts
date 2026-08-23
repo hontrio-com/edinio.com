@@ -377,7 +377,8 @@ export async function updateVatSettings(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+    .from("store_settings")
+    .select("id, vat_rate, prices_include_vat").eq("business_id", businessId).single();
 
   let error;
   if (existing) {
@@ -390,6 +391,52 @@ export async function updateVatSettings(
   }
 
   if (error) return { error: "Eroare la salvare." };
+
+  /*
+   * ═══ ⚠ O SCHIMBARE DE TVA MIȘCĂ TOATE PREȚURILE DE PE MARKETPLACE ═══
+   *
+   * eMAG cere prețul FĂRĂ TVA, la toate cele patru câmpuri. Prețul afișat în magazin
+   * nu se schimbă când comerciantul trece de la 19% la 21% cu „prețuri cu TVA incluse"
+   * — dar prețul net, adică exact ce trimitem noi, se schimbă cu două procente.
+   *
+   * Fără repunerea în coadă, ofertele rămâneau cu prețul net vechi până când cineva
+   * atingea fiecare produs în parte. Nimic n-ar fi dat eroare: ele s-ar fi vândut mai
+   * departe, cu marja mutată, iar diferența s-ar fi văzut abia în contabilitate.
+   *
+   * ⚠ Numai când chiar s-a schimbat ceva. Salvarea altor setări din aceeași carte —
+   * „arată defalcarea TVA", de pildă — n-are de ce să pună un catalog întreg la coadă.
+   *
+   * ⚠ `void`: eMAG nu are voie să întârzie sau să strice salvarea setărilor. Punerea în
+   * coadă își scrie singură eșecurile, prin `inghiteDarScrie`.
+   */
+  const vechiRate = Number((existing as { vat_rate?: unknown } | null)?.vat_rate);
+  const vechiInclus = (existing as { prices_include_vat?: boolean } | null)?.prices_include_vat;
+  const sAuSchimbatPreturile =
+    !!existing
+    && (vechiRate !== settings.vat_rate || vechiInclus !== settings.prices_include_vat);
+
+  if (sAuSchimbatPreturile) {
+    void (async () => {
+      try {
+        const { createAdminClient } = await import("@/lib/supabase/admin");
+        const { fetchAllRowsStrict } = await import("@/lib/supabase/fetch-all");
+        const { enqueueEmagPretMany } = await import("@/lib/emag/queue");
+        const admin = createAdminClient();
+        const randuri = await fetchAllRowsStrict<{ product_id: string | null }>(
+          "tva.emag", (from, to) =>
+            admin.from("emag_offers").select("product_id")
+              .eq("business_id", businessId).eq("auto_sync", true).not("product_id", "is", null)
+              .order("emag_id", { ascending: true }).range(from, to),
+        );
+        const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
+        if (ids.length) await enqueueEmagPretMany(businessId, ids);
+      } catch {
+        /* `enqueueEmagPretMany` scrie singur ce n-a mers; aici doar nu lasam o
+           exceptie sa iasa dintr-un `void` si sa cada procesul. */
+      }
+    })();
+  }
+
   revalidatePath("/dashboard/settings");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
   return { success: true };

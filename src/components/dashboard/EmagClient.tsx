@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertTriangle, CheckCircle, Copy, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle, Copy, Download, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import {
-  connectEmag, disconnectEmag, salveazaSetariEmag, type StareEmag,
+  connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
+  leagaOferteImportateEmag, salveazaSetariEmag, type StareEmag,
 } from "@/lib/actions/emag.actions";
 
 /**
@@ -267,9 +268,214 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         </div>
       </div>
 
+      <PanouImport businessId={businessId} />
+
       <PanouIp ip={status.ipDeAlbit} restrans />
     </div>
   );
+}
+
+/**
+ * Aducerea ofertelor din contul eMAG.
+ *
+ * ═══ ⚠ CE SCRIE PE BUTON E O PROMISIUNE, SI SE TINE ═══
+ *
+ * Scrie „leaga produsele care exista deja" fiindca ASTA face: potrivirea cauta
+ * intai dupa `emag_id`, apoi `part_number_key`, apoi codul de bare, apoi SKU, si
+ * creeaza produs numai cand nu gaseste nimic. Un buton care ar fi scris doar
+ * „Importa" ar fi lasat omul sa creada ca-si dubleaza catalogul, si n-ar fi apasat.
+ *
+ * ⚠ SE ARATA SI CE N-A MERS, NU DOAR CE A MERS. O oferta pe care n-am putut-o lega
+ * nu e o nereusita a comerciantului, dar e singurul lucru pe care numai el il poate
+ * limpezi — si daca nu i se spune, nu afla niciodata ca exista. La Trendyol, motivul
+ * respingerii n-a fost aratat si produsele au stat „in aprobare" la nesfarsit.
+ */
+function PanouImport({ businessId }: { businessId: string }) {
+  const [seLucreaza, incepe] = useTransition();
+  const [raport, setRaport] = useState<RaportAratat | null>(null);
+  const [faza, setFaza] = useState<Faza>("gata");
+  const [create, setCreate] = useState<{ facute: number; total: number } | null>(null);
+
+  function importa() {
+    incepe(async () => {
+      setRaport(null);
+      setCreate(null);
+      setFaza("citim");
+
+      const r = await importaDinEmag(businessId);
+      if ("error" in r) {
+        setFaza("gata");
+        toast.error(r.error);
+        return;
+      }
+
+      const problemeInPlus: string[] = [];
+
+      /*
+       * ═══ ⚠ CREAREA PRODUSELOR SE DUCE PANA LA CAPAT CHIAR AICI ═══
+       *
+       * `processImport` lucreaza pe bucati, si dinadins: un catalog mare n-ar incapea
+       * intr-o singura chemare. Lasat asa, importul s-ar fi incheiat cu un raport
+       * frumos, iar produsele ar fi aparut in magazin peste doua minute, cand le-ar
+       * fi prins cronul de rezerva. Comerciantul ar fi vazut „gata" si un catalog
+       * gol, si ar fi apasat inca o data.
+       *
+       * ⚠ Bucla e MARGINITA. Fara plafon, un job care nu se incheie niciodata — o
+       * eroare de scriere care se repeta — ar fi tinut fila invartind la nesfarsit.
+       * Cand se atinge plafonul se SPUNE, si restul chiar il duce cronul.
+       */
+      if (r.importId) {
+        setFaza("cream");
+        for (let pas = 0; pas < PASI_MAXIM; pas++) {
+          const p = await continuaImportEmag(businessId, r.importId);
+          if ("error" in p) {
+            problemeInPlus.push(`Crearea produselor s-a oprit: ${p.error}`);
+            break;
+          }
+          setCreate({ facute: p.facute, total: p.total });
+          if (p.gata) break;
+          if (pas === PASI_MAXIM - 1) {
+            problemeInPlus.push(
+              "Ai un catalog mare, iar restul produselor se creează în fundal. " +
+              "Poți închide pagina; revino în câteva minute.",
+            );
+          }
+        }
+      }
+
+      /*
+       * ⚠ Legarea se cheama SI cand crearea s-a oprit la plafon. Ce s-a creat pana
+       * atunci merita legat acum; restul il prinde apasarea urmatoare, fiindca pasul
+       * e re-derivabil si nu tine minte nimic.
+       */
+      setFaza("legam");
+      const l = await leagaOferteImportateEmag(businessId);
+      const legatePeUrma = "error" in l ? 0 : l.legate;
+      if ("error" in l) problemeInPlus.push(l.error);
+
+      setRaport({
+        legate: r.raport.legate + legatePeUrma,
+        deCreat: r.raport.deCreat,
+        cunoscute: r.raport.cunoscute,
+        nehotarate: r.raport.nehotarate,
+        ocupate: r.raport.ocupate,
+        disparute: r.raport.disparute,
+        probleme: [...r.raport.probleme, ...problemeInPlus],
+      });
+      setFaza("gata");
+      toast.success(r.mesaj);
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold">Adu ofertele din eMAG</h3>
+          <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+            Citim ce ai deja pe eMAG. Ofertele care se potrivesc cu produsele tale
+            din magazin se <strong>leagă</strong> de ele; doar cele fără corespondent
+            devin produse noi. Nu se creează duplicate.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={importa}
+          disabled={seLucreaza}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+        >
+          {seLucreaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          {ETICHETA_FAZA[faza]}
+        </button>
+      </div>
+
+      {faza === "cream" && create && create.total > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground tabular-nums">
+          Se creează produsele noi: {create.facute} din {create.total}.
+        </p>
+      )}
+
+      {raport && (
+        <div className="mt-5 border-t border-border pt-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Cifra eticheta="Legate de produse" valoare={raport.legate} />
+            <Cifra eticheta="Produse noi" valoare={raport.deCreat} />
+            <Cifra eticheta="Deja cunoscute" valoare={raport.cunoscute} />
+            <Cifra eticheta="De lămurit" valoare={raport.nehotarate + raport.ocupate} />
+          </div>
+
+          {raport.nehotarate > 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              <strong>{raport.nehotarate}</strong>{" "}
+              {raport.nehotarate === 1 ? "ofertă se potrivea" : "oferte se potriveau"} cu mai
+              multe produse din magazin, așa că nu le-am legat de niciunul. Două produse cu
+              același cod de bare sau același SKU sunt cauza obișnuită.
+            </p>
+          )}
+          {raport.ocupate > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <strong>{raport.ocupate}</strong>{" "}
+              {raport.ocupate === 1 ? "ofertă s-a potrivit" : "oferte s-au potrivit"} cu un
+              produs care e deja legat de altă ofertă eMAG. Un produs poate avea o singură
+              ofertă.
+            </p>
+          )}
+          {raport.disparute > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <strong>{raport.disparute}</strong>{" "}
+              {raport.disparute === 1 ? "ofertă pe care o știam nu mai vine" : "oferte pe care le știam nu mai vin"}{" "}
+              de la eMAG. Nu le-am șters — poate au fost doar refăcute acolo.
+            </p>
+          )}
+
+          {raport.probleme.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {raport.probleme.slice(0, 8).map((x, i) => (
+                <li key={i} className="flex gap-2 text-xs text-muted-foreground">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <span>{x}</span>
+                </li>
+              ))}
+              {raport.probleme.length > 8 && (
+                <li className="pl-5.5 text-xs text-muted-foreground">
+                  și încă {raport.probleme.length - 8}.
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cate bucati de creare se duc din fila.
+ *
+ * ⚠ E o MARGINE, nu o limita de catalog. Fiecare bucata ia sute de produse, deci 60
+ * acopera cu mult orice magazin real. Rostul ei e sa opreasca o bucla care nu se mai
+ * incheie — o scriere care cade la fel de fiecare data — din a tine fila invartind
+ * la nesfarsit. Ce ramane il duce cronul de rezerva, si asa i se si spune omului.
+ */
+const PASI_MAXIM = 60;
+
+type Faza = "gata" | "citim" | "cream" | "legam";
+
+const ETICHETA_FAZA: Record<Faza, string> = {
+  gata: "Adu ofertele",
+  citim: "Se citesc ofertele…",
+  cream: "Se creează produsele…",
+  legam: "Se leagă…",
+};
+
+interface RaportAratat {
+  legate: number;
+  deCreat: number;
+  cunoscute: number;
+  nehotarate: number;
+  ocupate: number;
+  disparute: number;
+  probleme: string[];
 }
 
 /**

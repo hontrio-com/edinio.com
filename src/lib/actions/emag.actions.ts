@@ -30,8 +30,9 @@ import {
 } from "@/lib/emag/taxonomy";
 import { ceLipsestePentruPublicare } from "@/lib/emag/sync";
 import {
-  leagaOferteleNoi, ruleazaImportEmag, type RezultatImportEmag,
+  leagaOferteleNoi, ruleazaImportEmag, SURSA_EMAG, type RezultatImportEmag,
 } from "@/lib/emag/import-run";
+import { processImport } from "@/lib/import/committer";
 import {
   EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
   type EmagAdresa, type EmagContCurier, type EmagCotaTva, type EmagConfig,
@@ -529,6 +530,51 @@ export async function leagaOferteImportateEmag(
   } catch (e) {
     const mesaj = e instanceof Error ? e.message : "Legarea ofertelor nu a reușit.";
     void logError({ action: "emag.import.leaga", message: mesaj, details: { businessId }, severity: "error" });
+    return { error: mesaj };
+  }
+}
+
+/**
+ * O bucata din crearea produselor venite de la eMAG.
+ *
+ * ═══ ⚠ DE CE NU SE FOLOSESTE `processImportChunk` DIN `import.actions` ═══
+ *
+ * Fiindca acela GHICESTE magazinul: `getOwnedBusinessId` ia primul magazin al
+ * utilizatorului, dupa `created_at`. Azi merge — verificat in productie, niciun
+ * utilizator nu are mai mult de un magazin — dar e o capcana care asteapta.
+ *
+ * In ziua in care Edinio da voie la doua magazine, importul eMAG al celui de-al
+ * doilea ar fi cazut cu „Import negasit": jobul e al magazinului B, iar verificarea
+ * il compara cu A. Iar mesajul n-ar fi pomenit nimic despre magazine, deci nimeni
+ * n-ar fi legat eroarea de cauza.
+ *
+ * Aici magazinul se PRIMESTE si se dovedeste, ca peste tot in fisierul asta.
+ */
+export async function continuaImportEmag(
+  businessId: string,
+  importId: string,
+): Promise<{ facute: number; total: number; gata: boolean } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const { data: job } = await admin
+    .from("product_imports").select("business_id, source").eq("id", importId).maybeSingle();
+  if (!job || job.business_id !== businessId) return { error: "Import negăsit" };
+  /* ⚠ Si sursa se verifica: actiunea asta n-are ce cauta pe un import din CSV. */
+  if (job.source !== SURSA_EMAG) return { error: "Import negăsit" };
+
+  try {
+    const r = await processImport(admin, importId);
+    if (r.done) revalidatePath("/dashboard/products");
+    return {
+      facute: r.totals.created + r.totals.skipped + r.totals.failed,
+      total: r.totals.total,
+      gata: r.done,
+    };
+  } catch (e) {
+    const mesaj = e instanceof Error ? e.message : "Crearea produselor s-a oprit.";
+    void logError({ action: "emag.import.bucata", message: mesaj, details: { businessId, importId }, severity: "error" });
     return { error: mesaj };
   }
 }

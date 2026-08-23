@@ -28,7 +28,7 @@ AICI="$(cd "$(dirname "$0")" && pwd)"
 echo "── 1. Pachete ────────────────────────────────────────────────────────────"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq squid apache2-utils ufw fail2ban
+apt-get install -y -qq squid apache2-utils ufw fail2ban curl ca-certificates
 
 echo "── 2. Parola proxy-ului ──────────────────────────────────────────────────"
 #

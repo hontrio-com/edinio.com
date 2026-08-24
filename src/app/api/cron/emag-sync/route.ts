@@ -568,13 +568,45 @@ export async function GET(req: NextRequest) {
  * doar ca baza geme.
  */
 async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
+  /*
+   * ═══ ⚠ FEREASTRA SE ROTESTE, ALTFEL ZECE COMENZI BLOCHEAZA TOT (24.08.2026) ═══
+   *
+   * Forma dinainte era `.order("created_at").limit(10)` — deterministica. Iar o comanda
+   * FARA factura emisa in Edinio intoarce `fara_factura`, care — dinadins, vezi nota de
+   * mai jos — nu se marcheaza si nu se raporteaza.
+   *
+   * Deci aceleasi zece randuri se intorceau la fiecare trecere, la nesfarsit, si nicio
+   * comanda mai noua nu era vazuta VREODATA. Se inchide la a zecea comanda nefacturata
+   * si nu se mai deschide singur niciodata.
+   *
+   * ⚠ CE COSTA: eMAG cere factura urcata dupa livrare. Nici blocajul, nici lipsa in sine
+   * n-aveau vreo suprafata: `invoice_uploaded_at` era scris si citit EXCLUSIV de filtrul
+   * de aici. Comerciantul ar fi aflat cand i-o cer ei.
+   *
+   * Fereastra rotativa e chiar tiparul casei (§7.5), scris dupa incidentul Trendyol unde
+   * doua rulari intorceau ACELEASI 60 de randuri din 1051.
+   */
+  const { count: bazin } = await admin.from("emag_orders")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", ctx.businessId)
+    .is("invoice_uploaded_at", null)
+    .not("order_id", "is", null);
+
+  const cate = bazin ?? 0;
+  if (cate === 0) return 0;
+
+  /* ⚠ Tura avanseaza o data la cinci minute, cat ritmul pasului: cu alt numitor,
+     fereastra ar sari peste randuri in loc sa treaca prin ele pe rand. */
+  const tura = Math.floor(Date.now() / 60_000 / 5);
+  const de_la = cate <= FACTURI_PE_TRECERE ? 0 : (tura * FACTURI_PE_TRECERE) % cate;
+
   const { data } = await admin.from("emag_orders")
     .select("id, order_id")
     .eq("business_id", ctx.businessId)
     .is("invoice_uploaded_at", null)
     .not("order_id", "is", null)
     .order("created_at", { ascending: true })
-    .limit(FACTURI_PE_TRECERE);
+    .range(de_la, de_la + FACTURI_PE_TRECERE - 1);
 
   let urcate = 0;
   for (const r of (data ?? []) as { id: string; order_id: string | null }[]) {

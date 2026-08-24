@@ -247,6 +247,19 @@ export interface StareEmag {
      */
     peStare: Record<string, number>;
   };
+  /**
+   * Comenzi livrate care n-au factura urcata la eMAG.
+   *
+   * ═══ ⚠ LIPSA ASTA N-AVEA NICIO SUPRAFATA (24.08.2026) ═══
+   *
+   * `invoice_uploaded_at` era scris si citit EXCLUSIV de filtrul cronului. Niciun ecran
+   * nu arata „comenzile astea livrate n-au factura la eMAG", desi ei o CER dupa livrare.
+   * Comerciantul ar fi aflat cand i-o cereau.
+   *
+   * ⚠ Numai cele LIVRATE. Una abia intrata n-are de ce sa aiba factura inca, iar
+   * numarata, cifra ar fi fost mereu nenula si omul ar fi invatat s-o ignore.
+   */
+  comenziFaraFactura: number;
   inCoada: number;
   /**
    * Elemente oprite dupa ce si-au ars toate incercarile.
@@ -290,7 +303,8 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     admin.from("emag_offers").select("*", { count: "exact", head: true })
       .eq("business_id", businessId).eq("status", s);
 
-  const [total, active, inValidare, respinse, eroare, preluate, derivate, inCoada, abandonate, peStare] = await Promise.all([
+  const [total, active, inValidare, respinse, eroare, preluate, derivate, inCoada, abandonate, peStare,
+         faraFactura] = await Promise.all([
     admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId),
     stare("live"),
     admin.from("emag_offers").select("*", { count: "exact", head: true })
@@ -336,6 +350,9 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
        rânduri de azi ar merge, dar la cincizeci de mii prima pagină ar aduce zeci de
        megaocteți la fiecare încărcare. */
     admin.rpc("numara_ofertele_emag", { p_business_id: businessId }),
+    admin.from("emag_orders").select("orders!inner(status)", { count: "exact", head: true })
+      .eq("business_id", businessId).is("invoice_uploaded_at", null)
+      .in("orders.status", ["delivered", "shipped"]),
   ]);
 
   const iesire = iesireEmag();
@@ -388,6 +405,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       peStare: (peStare.data ?? {}) as Record<string, number>,
       derivate: derivate.count ?? 0,
     },
+    comenziFaraFactura: faraFactura.count ?? 0,
     inCoada: inCoada.count ?? 0,
     abandonate: abandonate.count ?? 0,
   };

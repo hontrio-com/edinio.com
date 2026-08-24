@@ -467,6 +467,31 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
           </p>
         )}
 
+        {/*
+          ═══ ⚠ eMAG CERE FACTURA DUPA LIVRARE, SI LIPSA N-AVEA UNDE SA SE VADA ═══
+
+          `invoice_uploaded_at` era scris si citit EXCLUSIV de filtrul cronului. Niciun
+          ecran nu spunea „comenzile astea livrate n-au factura la ei". Iar cronul se
+          putea bloca: fereastra lui era deterministica, deci zece comenzi nefacturate
+          opreau urcarea pentru TOATE cele mai noi, la nesfarsit.
+
+          Fereastra se roteste acum. Dar o comanda livrata fara factura ramane o lipsa
+          fiscala, si aceea se repara din facturare, nu de aici. Deci se spune.
+        */}
+        {status.comenziFaraFactura > 0 && (
+          <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {status.comenziFaraFactura}{" "}
+              {status.comenziFaraFactura === 1
+                ? "comandă expediată nu are factura urcată la eMAG"
+                : "comenzi expediate nu au factura urcată la eMAG"}
+              . eMAG o cere după livrare. Emite factura din pagina comenzii, iar urcarea se
+              face singură la trecerea următoare.
+            </span>
+          </p>
+        )}
+
         {status.inCoada > 0 && (
           <p className="mt-3 text-xs text-muted-foreground">
             {status.inCoada} {status.inCoada === 1 ? "modificare așteaptă" : "modificări așteaptă"} să plece către eMAG.

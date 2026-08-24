@@ -670,6 +670,19 @@ async function scrieStatusurile(
        * lucruri diferite: primul inseamna „nu ne-au spus", al doilea „ne-au spus ca nu".
        */
       imagini_la_ei: Array.isArray(o.images) ? o.images.length : null,
+      /*
+       * ⚠ STAREA OFERTEI LA EI, si e piesa care lipsea (24.08.2026).
+       *
+       * `eVandabila` cere `status === 1` deodata cu celelalte trei conditii, dar noi n-o
+       * pastram nicaieri. Deci 3.469 de oferte APROBATE la eMAG apareau in ecran cu
+       * „Trimis, in validare" — o eticheta care il trimite pe om sa astepte ceva incheiat
+       * de mult, in loc sa se uite la ce chiar lipseste.
+       *
+       * Raspunsul lor brut a aratat `status: 2` la 8 din 9 oferte cercetate: „End of
+       * Life", scoase din vanzare. Nici stoc, nici validare — pur si simplu nu mai sunt
+       * de vanzare la ei. Fara campul asta, motivul ala nu putea fi spus niciodata.
+       */
+      status_la_ei: intregDeLaEi(o.status),
       ownership: intregDeLaEi(o.ownership),
       number_of_offers: intregDeLaEi(o.number_of_offers),
       buy_button_rank: intregDeLaEi(o.buy_button_rank),

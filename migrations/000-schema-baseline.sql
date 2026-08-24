@@ -4008,7 +4008,8 @@ create table if not exists public.emag_offers (
   deriva jsonb,
   nume_emag text,
   raspuns_brut jsonb,
-  imagini_la_ei integer);
+  imagini_la_ei integer,
+  status_la_ei integer);
 
 create table if not exists public.emag_orders (
   id uuid default gen_random_uuid() not null,

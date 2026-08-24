@@ -151,7 +151,18 @@ export interface TrendyolStatus {
   ready: boolean;
   readinessError: string | null;
   categoryMap: Record<string, TrendyolCategoryMapEntry>;
-  counts: { listings: number; approved: number; rejected: number; variants: number; queued: number; orders: number };
+  /*
+   * ⚠ `preluate` NU e o statistică, e o EXCEPȚIE de la comutatorul de mai sus.
+   *
+   * Listările adoptate au `auto_inventory = false`, iar `sync.ts:854` le oprește tăcut:
+   * `if (listing.auto_inventory === false && !manual && !forceZero) return null`.
+   * Deci bifa „Sincronizează automat schimbările de produs, stoc și preț" poate fi
+   * pornită, coada goală, zero erori, și prețul de pe Trendyol să rămână cel vechi.
+   *
+   * ⚠ Măsurat pe contul real, 24.08.2026: 29 de listări adoptate din 1287. Comerciantul
+   * a aflat dintr-o comandă vândută cu 39,99 pentru un produs care în magazin e 43,99.
+   */
+  counts: { listings: number; approved: number; rejected: number; variants: number; queued: number; orders: number; preluate: number };
 }
 
 export async function getTrendyolStatus(businessId: string): Promise<TrendyolStatus | { error: string }> {
@@ -160,13 +171,17 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
   const { supabase } = g;
   const config = await loadConfig(businessId);
 
-  const [{ count: listings }, { count: approved }, { count: rejected }, { count: variants }, { count: queued }, { count: orders }] = await Promise.all([
+  const [{ count: listings }, { count: approved }, { count: rejected }, { count: variants }, { count: queued }, { count: orders }, { count: preluate }] = await Promise.all([
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).in("status", ["approved", "active"]),
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "rejected"),
     supabase.from("trendyol_variants").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("trendyol_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("trendyol_orders").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+    /* ⚠ Chiar steagul pe care se filtrează împingerea (`sync.ts:854`), ca numărătoarea de
+       aici și fapta de acolo să citească ACELAȘI lucru. */
+    supabase.from("trendyol_listings").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("auto_inventory", false),
   ]);
 
   const vitrina = config.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
@@ -199,8 +214,46 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     counts: {
       listings: listings ?? 0, approved: approved ?? 0, rejected: rejected ?? 0,
       variants: variants ?? 0, queued: queued ?? 0, orders: orders ?? 0,
+      preluate: preluate ?? 0,
     },
   };
+}
+
+/**
+ * Pornește trimiterea automată a prețului și stocului pentru TOATE listările adoptate.
+ *
+ * ═══ ⚠ DE CE EXISTĂ (24.08.2026) ═══
+ *
+ * O listare adoptată are `auto_inventory = false`, pus dinadins: produsul exista deja în
+ * contul lui Trendyol, cu prețul pus de el acolo, și nu-l suprascriem fără să ceară.
+ *
+ * Dar cererea aia n-avea nicio formă la scara catalogului. Butonul „Trimite stocul" de pe
+ * rândul produsului face o singură împingere (`manual: true`) și NU aprinde steagul —
+ * deci la următoarea schimbare de preț se blochează iar. Ca să conducă din Edinio,
+ * comerciantul trebuia să apese pe fiecare produs, la fiecare schimbare, pentru
+ * totdeauna.
+ *
+ * ⚠ CE A COSTAT: 29 de listări înghețate la prețul din 19.08, cu bifa „Sincronizează
+ * automat schimbările de produs, stoc și preț" PORNITĂ pe pagina de setări. A aflat
+ * dintr-o comandă vândută cu 4 lei sub prețul din magazin.
+ *
+ * ⚠ Nu împinge nimic pe loc: doar aprinde steagul. Trimiterea a mii de listări deodată ar
+ * arde limita contului, aceeași prin care pleacă o mișcare de stoc după o vânzare.
+ * Prima atingere a produsului, sau deriva, le duce.
+ */
+export async function pornesteSincronizareaAdoptatelor(
+  businessId: string,
+): Promise<{ success: true; cate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+
+  const { count, error } = await g.supabase.from("trendyol_listings")
+    .update({ auto_inventory: true, updated_at: new Date().toISOString() }, { count: "exact" })
+    .eq("business_id", businessId).eq("auto_inventory", false);
+  if (error) return { error: error.message };
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true, cate: count ?? 0 };
 }
 
 // ── Connect / disconnect ────────────────────────────────────────────────────────

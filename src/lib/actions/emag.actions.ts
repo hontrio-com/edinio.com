@@ -282,7 +282,29 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     admin.from("emag_offers").select("*", { count: "exact", head: true })
       .eq("business_id", businessId).in("validation_status", [5, 6, 8, 10, 12]),
     stare("error"),
-    stare("imported"),
+    /*
+     * ═══ ⚠ „PRELUATE" SE CITEȘTE DIN `auto_sync`, NU DIN `status` (24.08.2026) ═══
+     *
+     * Aici era `stare("imported")`. Dar `imported` e o stare de TRECERE: reconcilierea
+     * mută rândul pe `live` sau `sent` în câteva minute. Măsurat pe contul real:
+     * `count(*) where status = 'imported'` = **0**, iar `count(*) where not auto_sync`
+     * = **3.714 din 3.754**.
+     *
+     * ⚠ Deci propoziția scrisă anume pentru cazul ăsta — „Prețul și stocul lor nu se
+     * trimit automat" — nu s-a afișat NICIODATĂ, tocmai când era adevărată pentru 99%
+     * din catalog. Iar comutatorul de deasupra ei e pornit și scrie „Când schimbi ceva
+     * în magazin, pleacă și către eMAG".
+     *
+     * ⚠ CE COSTĂ: tot rostul integrării e un singur inventar. Panoul îi spune că îl are;
+     * pentru 99% din catalog nu-l are. Vinde a doua oară marfă deja vândută și află din
+     * anulările eMAG. Exact forma în care s-a văzut azi pe Trendyol, unde cele 29 de
+     * listări preluate au vândut la prețul vechi.
+     *
+     * `auto_sync` e chiar steagul pe care se filtrează coada (`queue.ts`), deci
+     * numărătoarea de aici și fapta de acolo citesc acum ACELAȘI lucru.
+     */
+    admin.from("emag_offers").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("auto_sync", false),
     /* ⚠ Se numără pe `deriva is not null`, care are index PARȚIAL: în starea sănătoasă
        indexul e gol, deci numărătoarea nu costă nimic pe un catalog de zeci de mii. */
     admin.from("emag_offers").select("*", { count: "exact", head: true })
@@ -972,6 +994,41 @@ export async function comutaSincronizareaOfertei(
 
   revalidatePath(FEATURE_PATH);
   return { success: true };
+}
+
+/**
+ * Pornește sincronizarea automată pentru TOATE ofertele preluate deodată.
+ *
+ * ═══ ⚠ DE CE E NEVOIE DE „TOATE" ═══
+ *
+ * `comutaSincronizareaOfertei` merge oferta cu oferta, și e potrivită când comerciantul
+ * alege câteva. Dar măsurat pe contul real: **3.714 din 3.754** de oferte au `auto_sync`
+ * stins. Una câte una înseamnă trei mii șapte sute de apăsări — adică, practic, nu se
+ * face niciodată, și catalogul rămâne cu prețul de pe eMAG deslipit de cel din magazin.
+ *
+ * ⚠ Și NU se pornește singur, la import. Importul le stinge dinadins: un produs listat
+ * de el în panoul eMAG are prețul pus de el acolo, iar noi nu-l suprascriem fără să
+ * ceară. Butonul ăsta e cererea. Hotărârea rămâne a lui, doar că acum încape într-o
+ * apăsare.
+ *
+ * ⚠ Ofertele intră în coadă abia la următoarea atingere a produsului sau la derivă —
+ * aici doar se aprinde steagul. Trimiterea a trei mii de oferte pe loc ar fi ars limita
+ * de 3 cereri/s a magazinului, aceeași prin care pleacă o mișcare de stoc după o vânzare.
+ */
+export async function pornesteSincronizareaTuturor(
+  businessId: string,
+): Promise<{ success: true; cate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const { count, error } = await admin.from("emag_offers")
+    .update({ auto_sync: true, updated_at: new Date().toISOString() }, { count: "exact" })
+    .eq("business_id", businessId).eq("auto_sync", false);
+  if (error) return { error: error.message };
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true, cate: count ?? 0 };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

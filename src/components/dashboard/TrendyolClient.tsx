@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
 import {
-  connectTrendyol, disconnectTrendyol, getTrendyolAddresses, saveTrendyolSettings,
+  connectTrendyol, disconnectTrendyol, getTrendyolAddresses,
+  pornesteSincronizareaAdoptatelor, saveTrendyolSettings,
   subscribeTrendyolWebhook, unsubscribeTrendyolWebhook,
   type TrendyolStatus,
 } from "@/lib/actions/trendyol.actions";
@@ -26,6 +27,32 @@ type Actiune = null | "conectare" | "deconectare" | "setari" | "webhook";
 export function TrendyolClient({ businessId, status }: { businessId: string; status: TrendyolStatus | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  /*
+   * ⚠ Se confirmă înainte. Cele preluate au prețul pus de comerciant DIRECT în panoul
+   * Trendyol, poate dinadins altul decât cel din magazin (comision, concurență).
+   * Aprinderea îi șterge exact acea hotărâre, pe toate deodată.
+   */
+  function pornesteAdoptatele() {
+    /* ⚠ `status?.` fiindca ingustarea de mai jos nu trece in inchidere. */
+    const cate = status?.counts.preluate ?? 0;
+    if (!window.confirm(
+      `Preiei conducerea prețului și stocului pentru ${cate} ${cate === 1 ? "produs" : "produse"}?
+
+`
+      + "De acum valorile din Edinio le vor rescrie pe cele puse de tine în panoul Trendyol.",
+    )) return;
+    startTransition(async () => {
+      const r = await pornesteSincronizareaAdoptatelor(businessId);
+      if ("error" in r) { toast.error(r.error); return; }
+      toast.success(
+        r.cate === 0
+          ? "Nu era nimic de pornit."
+          : `Gata: ${r.cate} ${r.cate === 1 ? "produs își trimite" : "produse își trimit"} de acum prețul și stocul din Edinio.`,
+      );
+      router.refresh();
+    });
+  }
   // Care buton a pornit tranzitia. `useTransition` da un singur `pending` pe toata
   // componenta, deci fara asta salvarea setarilor punea spinner si pe butonul de
   // webhook, de parca s-ar fi intamplat doua lucruri deodata.
@@ -341,6 +368,48 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} className="rounded" />
               Sincronizează automat schimbările de produs, stoc și preț
             </label>
+
+            {/*
+              ═══ ⚠ BIFA DE DEASUPRA NU E ÎNTREGUL ADEVĂR (24.08.2026) ═══
+
+              Sunt două comutatoare, la două niveluri. Bifa hotărăște dacă integrarea
+              PORNEȘTE la o schimbare. `trendyol_listings.auto_inventory` hotărăște dacă
+              schimbarea AJUNGE la Trendyol, iar la o listare adoptată e stinsă.
+
+              Deci modificarea de preț trece de bifă, intră în coadă, ajunge la
+              `sync.ts:854` și se oprește tăcut: `return null`. Bifa rămâne bifată, coada
+              se golește, zero erori. Din panou arată identic cu „totul e sincronizat".
+
+              ⚠ CE A COSTAT: 29 de listări înghețate la prețul din 19.08, cu bifa pornită.
+              Comerciantul a aflat dintr-o comandă vândută cu 39,99 pentru un produs care
+              în magazin e 43,99. Singurul semn contrar era o bulină „Preluat" pe rândul
+              produsului, în ALTĂ listă, cu explicația într-un tooltip.
+
+              Deci excepția se scrie chiar sub comutatorul pe care îl contrazice.
+            */}
+            {status.counts.preluate > 0 && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                <p>
+                  <strong>
+                    {status.counts.preluate}{" "}
+                    {status.counts.preluate === 1 ? "produs nu ascultă" : "produse nu ascultă"} de
+                    bifa asta.
+                  </strong>{" "}
+                  {status.counts.preluate === 1 ? "E preluat" : "Sunt preluate"} din contul tău
+                  Trendyol, unde {status.counts.preluate === 1 ? "exista" : "existau"} dinainte cu
+                  prețul pus de tine acolo. Edinio nu-l suprascrie fără să ceri, deci prețul lor de
+                  pe Trendyol rămâne cel vechi oricâte modificări faci în magazin.
+                </p>
+                <button
+                  type="button"
+                  onClick={pornesteAdoptatele}
+                  disabled={pending}
+                  className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:bg-transparent dark:hover:bg-amber-900/30"
+                >
+                  Preia conducerea prețului și pentru {status.counts.preluate === 1 ? "el" : "ele"}
+                </button>
+              </div>
+            )}
 
             <label className="mt-3 flex items-start gap-2 text-sm text-foreground cursor-pointer">
               <input

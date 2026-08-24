@@ -10,7 +10,8 @@ import { EmagPregatirePublicare } from "@/components/dashboard/EmagPregatirePubl
 import { SUPPLY_LEAD_TIME_INGADUIT } from "@/lib/emag/mapping";
 import {
   aduComenzileAcumEmag, connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
-  leagaOferteImportateEmag, reiaAbandonateleEmag, salveazaSetariEmag, sincronizeazaFelieEmag,
+  leagaOferteImportateEmag, pornesteSincronizareaTuturor, reiaAbandonateleEmag,
+  salveazaSetariEmag, sincronizeazaFelieEmag,
   type StareEmag,
   importaIstoricEmag,
 } from "@/lib/actions/emag.actions";
@@ -47,6 +48,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
   const [tara, setTara] = useState<"ro" | "bg" | "hu">(status?.tara ?? "ro");
   const [vendorName, setVendorName] = useState("");
   const [seLucreaza, incepe] = useTransition();
+
 
   if (!status) {
     return (
@@ -116,6 +118,29 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
     incepe(async () => {
       const r = await salveazaSetariEmag(businessId, { [camp]: valoare });
       if ("error" in r) toast.error(r.error);
+    });
+  }
+
+  /*
+   * ⚠ Se confirmă înainte: aprinderea schimbă cine conduce prețul pe tot catalogul, iar
+   * prețurile pe care omul le-a pus de mână în panoul eMAG vor fi rescrise de ale
+   * noastre. E o apăsare cu urmări, nu o preferință de afișare.
+   */
+  function porneșteToateAutoSync() {
+    /* ⚠ `status?.` fiindca ingustarea de mai sus nu trece in inchidere. */
+    const cate = status?.oferte.preluate ?? 0;
+    if (!window.confirm(
+      `Pornești trimiterea automată pentru ${cate} ${cate === 1 ? "ofertă" : "oferte"}?\n\n`
+      + "De acum prețul și stocul din Edinio le vor rescrie pe cele puse de tine în panoul eMAG.",
+    )) return;
+    incepe(async () => {
+      const r = await pornesteSincronizareaTuturor(businessId);
+      if ("error" in r) { toast.error(r.error); return; }
+      toast.success(
+        r.cate === 0
+          ? "Nu era nimic de pornit."
+          : `Gata: ${r.cate} ${r.cate === 1 ? "ofertă își trimite" : "oferte își trimit"} de acum prețul și stocul.`,
+      );
     });
   }
 
@@ -311,13 +336,53 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
           </div>
         )}
 
+        {/*
+          ═══ ⚠ NU E O NOTĂ DE SUBSOL, E STAREA A 99% DIN CATALOG (24.08.2026) ═══
+
+          Propoziția asta se citea din `status = 'imported'`, o stare de trecere pe care
+          reconcilierea o mută în câteva minute. Măsurat: ZERO rânduri acolo, deci nu s-a
+          afișat niciodată — tocmai când era adevărată pentru 3.714 din 3.754 de oferte.
+
+          Iar comutatorul de mai jos e pornit și scrie „Când schimbi ceva în magazin,
+          pleacă și către eMAG". Cele două se contraziceau, și cea falsă era vizibilă.
+
+          ⚠ Scrisă gri, ca înainte, ar fi trecut neobservată și acum. Pe Trendyol s-a
+          văzut ce costă: 29 de listări preluate, o etichetă mică „Preluat" pe rând, și
+          comerciantul a aflat dintr-o comandă vândută cu 4 lei sub prețul din magazin.
+          Deci: culoare de avertisment, cifra în față, și butonul chiar lângă text.
+        */}
         {status.oferte.preluate > 0 && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            {status.oferte.preluate}{" "}
-            {status.oferte.preluate === 1 ? "ofertă e preluată" : "oferte sunt preluate"} din contul
-            tău eMAG. Prețul și stocul lor nu se trimit automat, ca să nu-ți suprascriem ce ai pus
-            în panoul eMAG.
-          </p>
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+            <p className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                <strong>{status.oferte.preluate}</strong>{" "}
+                {status.oferte.preluate === 1
+                  ? "ofertă nu-și trimite prețul și stocul către eMAG"
+                  : "oferte nu-și trimit prețul și stocul către eMAG"}
+                . {status.oferte.preluate === 1 ? "E preluată" : "Sunt preluate"} din contul tău, iar
+                Edinio nu suprascrie ce ai pus în panoul lor.{" "}
+                {status.oferte.total > 0 && status.oferte.preluate * 2 > status.oferte.total && (
+                  <>
+                    <strong>
+                      Asta înseamnă că pentru cea mai mare parte a catalogului prețul de pe eMAG nu
+                      e cel din magazin.
+                    </strong>{" "}
+                  </>
+                )}
+                Dacă vrei ca Edinio să conducă prețul și stocul, pornește-le de aici, sau una câte
+                una din lista de oferte.
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={porneșteToateAutoSync}
+              disabled={seLucreaza}
+              className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:bg-transparent dark:hover:bg-amber-900/30"
+            >
+              Trimite prețul și stocul și pentru {status.oferte.preluate === 1 ? "ea" : "ele"}
+            </button>
+          </div>
         )}
 
         {/*

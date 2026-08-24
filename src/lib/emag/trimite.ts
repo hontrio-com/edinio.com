@@ -31,13 +31,13 @@ import {
   actualizeazaStoc, cautaDupaEan, isEmagError, salveazaMasuratori, salveazaOferte,
   salveazaProduseOferte,
 } from "./client";
-import { mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
+import { ePreaMareLotul, mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
 import {
   construiesteOferte, masuratoriEmag, oferteUsoare, stocuriDeTrimis,
   type IdentitateUsoara, type ProdusDeCartografiat,
 } from "./mapping";
 import { rutaDeTrimitere } from "./rute";
-import { eanuriDeCautat, imparteRaspunsurilePeRanduri, verdictEan, type RaspunsEan } from "./ean";
+import { EAN_PE_CERERE, eanuriDeCautat, imparteRaspunsurilePeRanduri, verdictEan, type RaspunsEan } from "./ean";
 import { ceLipseste, type ProdusDeVerificat } from "./pregatire";
 import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
@@ -805,37 +805,63 @@ async function cautaInCatalogulLor(
   }
   if (codPeRand.size === 0) return "ok";
 
-  const toate = eanuriDeCautat([...codPeRand.values()]);
-  const raspuns = await cautaDupaEan(ctx.auth, toate);
+  /*
+   * ═══ ⚠ IN LOTURI DE 100, NU UN SINGUR LOT DE 100 (indreptat 25.08.2026) ═══
+   *
+   * Forma de ieri lua TOATE codurile, le trecea prin `eanuriDeCautat` — care taie la 100,
+   * limita lor — si impartea raspunsurile peste TOATE randurile.
+   *
+   * ⚠ Deci la un produs cu 250 de variante: primele 100 se intrebau, restul de 150 NU.
+   * Iar randurile neintrebate primeau zero raspunsuri, si `verdictEan([])` intoarce
+   * `produs_nou`. Adica exact cea mai scumpa greseala cu putinta: se CREA produsul in
+   * catalogul lor COMUN, pe o pagina noua fara recenzii si fara vizitatori, dupa zile de
+   * validare manuala. Un duplicat acolo nu se poate desface.
+   *
+   * ⚠ REGULA: „EAN neverificat" NU e acelasi lucru cu „EAN verificat si inexistent".
+   * Prima inseamna „nu stiu", si nu are voie sa devina o hotarare.
+   *
+   * Depozitul chiar are produse mari — nu e un caz teoretic.
+   */
+  const deIntrebat = [...codPeRand.keys()];
+  const peRand = new Map<RandOfertaLocal, RaspunsEan[]>();
 
-  if (isEmagError(raspuns)) {
-    /*
-     * ⚠ SE OPRESTE PUBLICAREA, NU SE CONTINUA PE ORB.
-     *
-     * Forma dinainte scria in jurnal si facea `return`, iar apelantul ignora rezultatul
-     * si mergea mai departe la `product_offer/save` — adica CREA produsul in catalogul
-     * lor fara sa stie daca exista deja. Exact duplicatul de care fuge toata functia.
-     *
-     * Acum se arunca: `duTotul` prinde si intoarce „trecatoare", deci elementul ramane in
-     * coada si se reia cand ruta lor raspunde iar.
-     */
-    void logError({
-      action: "emag.ean",
-      message: `cautarea dupa cod de bare a esuat: ${raspuns.error}`,
-      details: { cate: toate.length, businessId: ctx.businessId },
-      businessId: ctx.businessId,
-      severity: "warning",
-    });
-    /* ⚠ NU se arunca: coada n-are `try` in jurul elementului, iar o exceptie ar rupe
-       toata trecerea cronului, nu doar produsul asta. Se intoarce verdictul, iar
-       apelantul se opreste singur. */
-    return "necunoscut";
+  for (let i = 0; i < deIntrebat.length; i += EAN_PE_CERERE) {
+    const bucata = deIntrebat.slice(i, i + EAN_PE_CERERE);
+    const coduri = eanuriDeCautat(bucata.map((r) => codPeRand.get(r)));
+    if (coduri.length === 0) continue;
+
+    const raspuns = await cautaDupaEan(ctx.auth, coduri);
+
+    if (isEmagError(raspuns)) {
+      /*
+       * ⚠ SE OPRESTE PUBLICAREA INTREAGA, nu doar bucata asta.
+       *
+       * Forma dinainte scria in jurnal si mergea mai departe, iar apelantul ignora
+       * rezultatul si ajungea la `product_offer/save`: crea produsul fara sa stie daca
+       * exista deja.
+       *
+       * ⚠ Si nu se continua cu bucatile URMATOARE: ar insemna sa hotaram pentru unele
+       * variante ale aceluiasi produs si sa ghicim pentru altele.
+       */
+      void logError({
+        action: "emag.ean",
+        message: `cautarea dupa cod de bare a esuat: ${raspuns.error}`,
+        details: { cate: coduri.length, dinTotal: deIntrebat.length, businessId: ctx.businessId },
+        businessId: ctx.businessId,
+        severity: "warning",
+      });
+      /* ⚠ NU se arunca: coada n-are `try` in jurul elementului, iar o exceptie ar rupe
+         toata trecerea cronului, nu doar produsul asta. */
+      return "necunoscut";
+    }
+
+    /* ⚠ Raspunsurile bucatii se impart NUMAI peste randurile bucatii. Peste toate, un
+       raspuns al unei variante ar fi hotarat pentru alta care nici n-a fost intrebata. */
+    const alBucatii = imparteRaspunsurilePeRanduri(
+      bucata, (Array.isArray(raspuns.data) ? raspuns.data : []) as RaspunsEan[],
+    );
+    for (const [rand, lista] of alBucatii) peRand.set(rand, lista);
   }
-
-  const peRand = imparteRaspunsurilePeRanduri(
-    [...codPeRand.keys()],
-    (Array.isArray(raspuns.data) ? raspuns.data : []) as RaspunsEan[],
-  );
 
   for (const rand of codPeRand.keys()) {
     const v = verdictEan(peRand.get(rand) ?? []);
@@ -904,6 +930,63 @@ const LOT = 50;
  * nu exista niciun mod de a afla CARE dintre cele 50 au trecut. Luat ultimul, un lot
  * cu o singura cadere la inceput ar fi iesit din coada raportand succes.
  */
+/**
+ * Trimite un lot, iar daca eMAG spune ca e prea mare, il rupe in doua si incearca iar.
+ *
+ * ═══ ⚠ DOUA LIMITE, NU UNA ═══
+ *
+ * `LOT = 50` respecta limita de ENTITATI din documentatia lor. Dar mai au una, pe
+ * ELEMENTE: „Maximum input vars of 4000 exceeded". Un lot de 50 de produse simple incape
+ * linistit; 50 de variante cu caracteristici, imagini, GPSR, stoc si familie pot sa nu.
+ *
+ * ⚠ CE FACEA PANA ACUM: 50 -> refuz, reincercare 50 -> acelasi refuz, si tot asa pana la
+ * abandon. Lotul era fix, deci reincercarea nu putea schimba nimic — cinci incercari arse
+ * pe o cerere care nu avea cum sa reuseasca, si un produs care nu se publica niciodata.
+ *
+ * ⚠ SE INJUMATATESTE NUMAI LA ACEA EROARE, nu la orice refuz. Un produs caruia ii lipseste
+ * un camp va fi refuzat la fel si singur; injumatatit, am face de patru ori mai multe
+ * cereri pentru acelasi „nu".
+ *
+ * ⚠ Cand ramane O SINGURA entitate si tot nu incape, se opreste si se spune. Aia nu mai e
+ * o problema de lot, e un produs care nu poate fi trimis nicicum — iar comerciantul
+ * trebuie sa afle CARE, nu sa vada un refuz care se repeta.
+ */
+async function trimiteCuInjumatatire(
+  lot: unknown[],
+  trimite: (l: unknown[]) => Promise<
+    | { error: string; status: number; verdict?: VerdictEmag; mesaje?: string[] }
+    | { data: unknown; verdict?: VerdictEmag; mesaje?: string[] }
+  >,
+  observatii: string[],
+): Promise<
+  | { error: string; status: number; verdict?: VerdictEmag; mesaje?: string[] }
+  | { data: unknown; verdict?: VerdictEmag; mesaje?: string[] }
+> {
+  const r = await trimite(lot);
+  if (!("error" in r) || !ePreaMareLotul(r.mesaje, r.error)) return r;
+
+  if (lot.length <= 1) {
+    return {
+      ...r,
+      error: "Produsul e prea mare pentru o singură cerere eMAG (limita lor de 4000 de "
+        + "elemente). Scurtează descrierea, caracteristicile sau numărul de imagini.",
+    };
+  }
+
+  const mijloc = Math.ceil(lot.length / 2);
+  const a = await trimiteCuInjumatatire(lot.slice(0, mijloc), trimite, observatii);
+  const b = await trimiteCuInjumatatire(lot.slice(mijloc), trimite, observatii);
+
+  /* ⚠ Observatiile jumatatii care a MERS nu se pierd fiindca cealalta a picat. */
+  for (const parte of [a, b]) {
+    if (verdictIncheiat(parte.verdict)) observatii.push(...(parte.mesaje ?? []));
+  }
+  /* ⚠ Se intoarce partea REA, daca exista: un lot in care o jumatate a picat n-a reusit. */
+  if ("error" in a) return a;
+  if ("error" in b) return b;
+  return a;
+}
+
 async function trimiteInLoturi(
   admin: Admin,
   ctx: ContextEmag,
@@ -934,7 +1017,7 @@ async function trimiteInLoturi(
   const observatii: string[] = [];
 
   for (let i = 0; i < elemente.length; i += LOT) {
-    const r = await trimite(elemente.slice(i, i + LOT));
+    const r = await trimiteCuInjumatatire(elemente.slice(i, i + LOT), trimite, observatii);
     /*
      * ⚠ SE STRANG SI DE LA UN „REUSIT" CURAT (24.08.2026, a doua oara in aceeasi zi).
      *

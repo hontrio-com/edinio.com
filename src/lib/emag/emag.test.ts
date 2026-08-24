@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { BUTON_ADU_OFERTELE } from "./etichete";
 import { test } from "node:test";
 import { codDeBareCurat, eanuriDeCautat } from "./ean";
-import {
+import { ePreaMareLotul,
   ardeIncercare, clasificaRaspuns, mesajeEmag, poarteObservatii, sAIncheiat, mesajOmenesc} from "./errors";
 import { emagUrl, iesireEmag, monedaEmag } from "./auth";
 import { citesteNumarul } from "./client";
@@ -532,4 +532,55 @@ test("eMAG: un avertisment de la un «reusit» curat NU se arunca", () => {
   assert.equal(c.verdict, "reusit", "salvarea chiar a reusit");
   assert.equal(c.mesaje.length, 1, "dar mesajul lor trebuie sa ramana la indemana");
   assert.match(c.mesaje[0], /draft/i);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LOTUL PREA MARE SE INJUMATATESTE (25.08.2026)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("«Maximum input vars» se recunoaste, si numai el", () => {
+  /*
+   * ⚠ Doua limite diferite: `LOT = 50` respecta limita de ENTITATI, dar mai au una pe
+   * ELEMENTE — 4000. 50 de produse simple incap; 50 de variante cu caracteristici,
+   * imagini, GPSR si familie pot sa nu.
+   *
+   * ⚠ Se potriveste pe TEXT, si e singura data cand o facem: documentatia lor interzice
+   * in general potrivirea pe mesaj. Dar asta e o constanta de infrastructura PHP
+   * (`max_input_vars`), nu un text tradus, si e citata ca atare in documentatia lor.
+   */
+  assert.equal(ePreaMareLotul(["Maximum input vars of 4000 exceeded"]), true);
+  assert.equal(ePreaMareLotul(undefined, "Maximum input vars of 4000 exceeded"), true);
+  assert.equal(ePreaMareLotul(["maximum input VARS of 4000 exceeded"]), true, "fara sa conteze cutia");
+
+  /* ⚠ Si NU la orice refuz: un produs caruia ii lipseste un camp va fi refuzat la fel si
+     singur. Injumatatit, am face de patru ori mai multe cereri pentru acelasi „nu". */
+  assert.equal(ePreaMareLotul(["You already hold a product with this part_number"]), false);
+  assert.equal(ePreaMareLotul(["Invalid vat_id"]), false);
+  assert.equal(ePreaMareLotul([], ""), false);
+});
+
+test("injumatatirea se opreste la o singura entitate, si spune de ce", async () => {
+  /*
+   * ⚠ Cand ramane UN produs si tot nu incape, nu mai e o problema de lot: e un produs care
+   * nu poate fi trimis nicicum. Comerciantul trebuie sa afle CARE si ce sa scurteze, nu sa
+   * vada un refuz care se repeta de cinci ori pana la abandon.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/emag/trimite.ts", "utf8");
+  const i = sursa.indexOf("async function trimiteCuInjumatatire(");
+  assert.notEqual(i, -1, "injumatatirea nu exista");
+  const corp = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "}", i));
+
+  assert.match(corp, /lot\.length <= 1/, "trebuie sa se opreasca la o singura entitate");
+
+  /* ⚠ SI CA E CHEMATA. Prima forma a probei verifica doar ca functia EXISTA — o mutatie
+     care intorcea bucla la `trimite(...)` direct trecea verde. O unealta nefolosita e
+     acelasi lucru cu una care lipseste. */
+  const bucla = sursa.slice(sursa.indexOf("async function trimiteInLoturi("));
+  assert.match(
+    bucla, /await trimiteCuInjumatatire\(elemente\.slice/,
+    "bucla de loturi trebuie sa treaca prin injumatatire, nu sa cheme `trimite` direct",
+  );
+  assert.match(corp, /4000/, "si sa spuna omului care e limita");
+  assert.match(corp, /ePreaMareLotul/, "si sa se injumatateasca NUMAI la eroarea aia");
 });

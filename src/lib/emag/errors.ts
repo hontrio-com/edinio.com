@@ -300,3 +300,23 @@ export function mesajOmenesc(brut: string): string {
 
   return brut;
 }
+
+/**
+ * Raspunsul lor spune ca lotul a depasit limita de ELEMENTE, nu de entitati?
+ *
+ * ═══ ⚠ DOUA LIMITE DIFERITE, SI NUMAI UNA SE VEDE IN `LOT` ═══
+ *
+ * `LOT = 50` respecta limita de ENTITATI. Cealalta e pe elemente: „Maximum input vars of
+ * 4000 exceeded". 50 de produse simple incap; 50 de variante cu caracteristici, imagini,
+ * GPSR si familie pot sa nu incapa.
+ *
+ * ⚠ SE POTRIVESTE PE TEXT, si e singura data cand o facem — documentatia lor interzice in
+ * general potrivirea pe mesaj, fiindca e localizat. Dar mesajul asta e o constanta de
+ * infrastructura PHP (`max_input_vars`), nu un text tradus, si e citat ca atare in chiar
+ * documentatia lor. Fara el n-am avea cum sa deosebim „prea mare" de orice alt refuz — iar
+ * a injumatati la ORICE refuz ar inmulti cererile pentru un „nu" care nu se schimba.
+ */
+export function ePreaMareLotul(mesaje: string[] | undefined, eroare?: string): boolean {
+  const tot = [...(mesaje ?? []), eroare ?? ""].join(" ").toLowerCase();
+  return tot.includes("maximum input vars");
+}

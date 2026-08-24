@@ -109,6 +109,15 @@ export function verdictEan(raspunsuri: RaspunsEan[]): VerdictEan {
  * ⚠ Maximum 100 pe cerere: peste, „extra codes are ignored with a notification
  * message" — adica raspuns 200, coduri necautate, si nicio eroare. Se taie aici.
  */
+/**
+ * Cate coduri incap intr-o cerere `find_by_eans`.
+ *
+ * ⚠ 100 E MAXIMUL LOR, si documentatia spune ca ce trece peste e IGNORAT — tacut. Deci un
+ * lot mai mare nu da eroare, doar lasa randurile de dincolo de 100 fara raspuns, iar
+ * `verdictEan([])` le-ar face „produs nou". Vezi `cautaInCatalogulLor`.
+ */
+export const EAN_PE_CERERE = 100;
+
 export function eanuriDeCautat(brute: (string | null | undefined)[]): string[] {
   const curate = new Set<string>();
   for (const e of brute) {

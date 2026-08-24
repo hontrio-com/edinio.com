@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { imparteRaspunsurilePeRanduri, verdictEan } from "./ean";
+import { eanuriDeCautat, imparteRaspunsurilePeRanduri, verdictEan } from "./ean";
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -102,4 +102,42 @@ test("cautarea cazuta OPRESTE publicarea, nu creeaza pe orb", async () => {
     !/for \(const rand of deCautat\)/.test(corp),
     "nu se mai cheama o data pe oferta: ruta are 5.000 de cereri PE ZI",
   );
+});
+
+test("peste 100 de variante se intreaba in mai multe loturi, nu se taie", async () => {
+  /*
+   * ═══ CEA MAI SCUMPA GRESEALA CU PUTINTA, si a stat o zi in cod ═══
+   *
+   * `eanuriDeCautat` taie la 100 — limita LOR, si documentatia spune ca ce trece peste e
+   * IGNORAT, tacut. Forma de ieri lua toate codurile, le taia la 100, si impartea
+   * raspunsurile peste TOATE randurile.
+   *
+   * La un produs cu 250 de variante: 100 intrebate, 150 nu. Iar randurile neintrebate
+   * primeau zero raspunsuri, si `verdictEan([])` intoarce `produs_nou` — deci se CREA
+   * produsul in catalogul lor COMUN. O pagina noua acolo, fara recenzii si fara
+   * vizitatori, dupa zile de validare manuala, si nu se poate desface.
+   *
+   * ⚠ REGULA: „EAN neverificat" NU e „EAN verificat si inexistent". Prima inseamna „nu
+   * stiu", si n-are voie sa devina o hotarare.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/emag/trimite.ts", "utf8");
+  const faraNote = sursa.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ 	]*\/\/.*$/gm, "");
+
+  const i = faraNote.indexOf("async function cautaInCatalogulLor(");
+  const corp = faraNote.slice(i, faraNote.indexOf(String.fromCharCode(10) + "}", i));
+
+  assert.match(corp, /i \+= EAN_PE_CERERE/, "codurile trebuie intrebate in loturi, nu taiate");
+  assert.match(corp, /imparteRaspunsurilePeRanduri\(\s*bucata/,
+    "raspunsurile unui lot se impart NUMAI peste randurile lotului");
+  assert.ok(
+    !/cautaDupaEan\(ctx\.auth, toate\)/.test(corp),
+    "nu se mai trimite o singura cerere cu toate codurile taiate la 100",
+  );
+});
+
+test("`eanuriDeCautat` chiar taie la 100 — de aceea e nevoie de loturi", () => {
+  /* ⚠ Proba care arata DE CE: fara taiere n-ar fi fost nicio problema. */
+  const multe = Array.from({ length: 250 }, (_, i) => String(5941234560000 + i));
+  assert.equal(eanuriDeCautat(multe).length, 100);
 });

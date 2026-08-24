@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { mutaMapareaCategoriei } from "@/lib/marketplace/mapare-categorii";
 import { createClient } from "@/lib/supabase/server";
 import { collectSubtreeIds } from "@/lib/categories/tree";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
@@ -204,6 +205,14 @@ export async function updateCategory(
       .maybeSingle();
     if (!geamana) {
       produseMutate = await remapeazaProduse(supabase, businessId, [numeVechi], payload.name);
+      /*
+       * ⚠ SI MAPAREA CATRE MARKETPLACE-URI, nu doar produsele.
+       *
+       * `category_map` are drept cheie NUMELE categoriei. Mutate produsele si nu maparea,
+       * integrarea vede o categorie nemapata si opreste publicarea pentru toate produsele
+       * din ea — iar ecranul cere sa fie legata o categorie pe care omul o legase deja.
+       */
+      await mutaMapareaCategoriei(businessId, numeVechi, payload.name);
     }
   }
 

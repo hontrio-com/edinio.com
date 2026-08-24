@@ -173,7 +173,7 @@ async function citesteProdusul(
   admin: Admin, productId: string, businessId: string,
 ): Promise<ProdusDeCartografiat | null> {
   const { data } = await admin.from("products")
-    .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, page_sections")
+    .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, is_bundle, page_sections")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
   return (data as ProdusDeCartografiat | null) ?? null;
 }
@@ -421,6 +421,7 @@ function produsDeVerificat(p: ProdusDeCartografiat): ProdusDeVerificat {
   const ps = (p.page_sections ?? {}) as {
     google?: { gtin?: string; brand?: string };
     dimensions?: { length?: number; width?: number; height?: number };
+    customization?: { enabled?: boolean; fields?: { required?: boolean }[] };
   };
   return {
     name: p.name,
@@ -433,6 +434,10 @@ function produsDeVerificat(p: ProdusDeCartografiat): ProdusDeVerificat {
     gtin: ps.google?.gtin ?? null,
     brand: ps.google?.brand ?? null,
     dimensiuni: ps.dimensions ?? null,
+    /* ⚠ Doua garzi noi, vezi `ceLipseste`: personalizarea nu se poate onora prin comanda
+       lor, iar pachetul are stoc derivat pe care integrarea nu-l scade. */
+    personalizare: ps.customization ?? null,
+    estePachet: p.is_bundle === true,
   };
 }
 

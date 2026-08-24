@@ -57,6 +57,15 @@ export interface ProdusDeVerificat {
   brand?: string | null;
   /** Dimensiunile in cm, din `page_sections.dimensions`. */
   dimensiuni?: { length?: number; width?: number; height?: number } | null;
+  /**
+   * Produsul cere date de la cumparator? Din `page_sections.customization`.
+   *
+   * ⚠ Nu se poate onora prin eMAG: comanda lor n-are unde sa poarte „numele care trebuie
+   * imprimat". Vezi nota din `ceLipseste`.
+   */
+  personalizare?: { enabled?: boolean; fields?: { required?: boolean }[] } | null;
+  /** Pachet Edinio: stoc derivat din componente. Vezi nota din `ceLipseste`. */
+  estePachet?: boolean | null;
 }
 
 /** Ce cere categoria eMAG aleasa pentru produs. `null` = nicio categorie legata. */
@@ -97,6 +106,56 @@ export function ceLipseste(
   const gol = (v: unknown) => !(typeof v === "string" ? v.trim() : v);
 
   /* ── Ce opreste trimiterea ─────────────────────────────────────────────── */
+
+  /*
+   * ═══ ⚠ PRODUSELE PERSONALIZABILE NU POT FI ONORATE PRIN eMAG ═══
+   *
+   * Edinio ingaduie campuri cerute cumparatorului: „numele care trebuie imprimat",
+   * o poza de urcat, o culoare aleasa. Comanda eMAG n-are unde sa le poarte — nici
+   * `order/read`, nici atasamentele nu au un loc pentru raspunsul clientului.
+   *
+   * ⚠ CE COSTA daca produsul pleaca: clientul cumpara de pe eMAG o cana personalizata,
+   * comerciantul primeste o comanda fara sa stie ce sa scrie pe ea, si alege intre a
+   * anula (o plateste in bani si in punctaj) si a trimite ceva la intamplare.
+   *
+   * ⚠ Se opreste ORICE personalizare pornita, nu doar cele cu campuri obligatorii.
+   * Pana cand exista un model explicit pentru comenzile de marketplace, un camp
+   * „optional" tot inseamna ca vitrina promite ceva ce eMAG nu poate transmite.
+   */
+  if (produs.personalizare?.enabled) {
+    const cerute = (produs.personalizare.fields ?? []).filter((f) => f?.required).length;
+    out.push({
+      camp: "personalizare",
+      eticheta: cerute > 0
+        ? `Produsul cere ${cerute} ${cerute === 1 ? "informație" : "informații"} de la cumpărător `
+          + "(personalizare), iar comanda eMAG nu are cum să le transmită."
+        : "Produsul are personalizare activă, iar comanda eMAG nu are cum să transmită "
+          + "răspunsurile cumpărătorului.",
+      gravitate: "blocheaza",
+    });
+  }
+
+  /*
+   * ═══ ⚠ PACHETELE AU STOC DERIVAT, IAR eMAG NU STIE ASTA ═══
+   *
+   * Un pachet Edinio n-are stoc propriu (`track_inventory: false`, `stock_quantity: null`):
+   * cate se pot vinde se socoteste din componente. La o comanda, trebuie scazuta fiecare
+   * componenta cu cantitatea ei, iar la anulare pusa inapoi.
+   *
+   * Integrarea eMAG nu face asta. Publicat, pachetul ar vinde fara sa scada nimic.
+   *
+   * ⚠ Azi nu ajunge acolo oricum — `sku` si `brand` lipsesc mereu la pachete, si il opresc
+   * mai jos. Dar acela e un noroc, nu o garda: cine adauga maine SKU pe pachete deschide
+   * gaura fara sa stie ce a deschis. Se spune limpede, aici.
+   */
+  if (produs.estePachet) {
+    out.push({
+      camp: "pachet",
+      eticheta: "Pachetele nu se pot publica pe eMAG: stocul lor se calculează din "
+        + "componente, iar o comandă de acolo n-ar scădea nimic din depozit.",
+      gravitate: "blocheaza",
+    });
+  }
 
   if (!categorie) {
     out.push({

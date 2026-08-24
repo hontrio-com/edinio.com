@@ -188,3 +188,71 @@ test("eMAG pregatire: fara piedici, scorul sta peste 60 oricate recomandari ar l
   assert.ok(scorPregatire(multe) >= 60);
   assert.equal(sePoatePublica(multe), true);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CE NU POATE PLECA PE eMAG (24.08.2026)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("un produs cu personalizare NU poate fi publicat", () => {
+  /*
+   * ═══ COMANDA eMAG N-ARE UNDE SA POARTE RASPUNSUL CLIENTULUI ═══
+   *
+   * Edinio ingaduie campuri cerute cumparatorului: „numele care trebuie imprimat", o poza
+   * de urcat, o culoare. Nici `order/read`, nici atasamentele n-au un loc pentru ele.
+   *
+   * ⚠ Clientul cumpara de pe eMAG o cana personalizata, comerciantul primeste o comanda
+   * fara sa stie ce sa scrie pe ea, si alege intre a anula — pe banii si punctajul lui —
+   * si a trimite ceva la intamplare.
+   */
+  const l = ceLipseste(
+    { ...PRODUS_BUN, personalizare: { enabled: true, fields: [{ required: true }] } },
+    CATEGORIE_BUNA, MAGAZIN_BUN, false,
+  );
+  const g = l.find((x) => x.camp === "personalizare");
+  assert.ok(g, "personalizarea nu opreste publicarea");
+  assert.equal(g!.gravitate, "blocheaza");
+  assert.match(g!.eticheta, /eMAG/, "mesajul spune DE CE, nu doar ca nu se poate");
+});
+
+test("si personalizarea fara campuri obligatorii opreste", () => {
+  /*
+   * ⚠ Pana cand exista un model explicit pentru comenzile de marketplace, un camp
+   * „optional" tot inseamna ca vitrina promite ceva ce eMAG nu poate transmite.
+   */
+  const l = ceLipseste(
+    { ...PRODUS_BUN, personalizare: { enabled: true, fields: [{ required: false }] } },
+    CATEGORIE_BUNA, MAGAZIN_BUN, false,
+  );
+  assert.ok(l.some((x) => x.camp === "personalizare"));
+});
+
+test("personalizarea OPRITA nu deranjeaza pe nimeni", () => {
+  /* ⚠ Cealalta jumatate: o garda care se aprinde mereu se invata sa fie ignorata. */
+  const l = ceLipseste(
+    { ...PRODUS_BUN, personalizare: { enabled: false, fields: [{ required: true }] } },
+    CATEGORIE_BUNA, MAGAZIN_BUN, false,
+  );
+  assert.equal(l.filter((x) => x.camp === "personalizare").length, 0);
+});
+
+test("un pachet NU poate fi publicat: stocul lui e derivat", () => {
+  /*
+   * ⚠ Un pachet n-are stoc propriu — cate se pot vinde se socoteste din componente. La o
+   * comanda trebuie scazuta fiecare componenta cu cantitatea ei; integrarea nu face asta,
+   * deci pachetul ar vinde fara sa scada nimic.
+   *
+   * ⚠ Azi nu ajunge acolo oricum: `sku` si `brand` lipsesc mereu la pachete si il opresc
+   * mai jos. Dar acela e un noroc, nu o garda — cine adauga maine SKU pe pachete deschide
+   * gaura fara sa stie ce a deschis.
+   */
+  const l = ceLipseste({ ...PRODUS_BUN, estePachet: true }, CATEGORIE_BUNA, MAGAZIN_BUN, false);
+  const g = l.find((x) => x.camp === "pachet");
+  assert.ok(g, "pachetul nu e oprit");
+  assert.equal(g!.gravitate, "blocheaza");
+  assert.match(g!.eticheta, /componente/, "mesajul spune de ce, ca omul sa nu caute alt motiv");
+});
+
+test("un produs obisnuit nu e atins de niciuna din cele doua garzi", () => {
+  const l = ceLipseste(PRODUS_BUN, CATEGORIE_BUNA, MAGAZIN_BUN, false);
+  assert.equal(l.filter((x) => x.camp === "personalizare" || x.camp === "pachet").length, 0);
+});

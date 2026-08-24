@@ -218,10 +218,15 @@ export async function updateProduct(productId: string, businessId: string, data:
   const problemaTrepte = problemaTrepteProdus(data);
   if (problemaTrepte) return { error: problemaTrepte };
 
-  // Fetch old images to detect removals
+  /*
+   * ⚠ SI `is_active`, nu doar imaginile.
+   *
+   * Din el se afla daca produsul TOCMAI a fost activat — singurul moment in care un
+   * produs care n-a fost niciodata pe marketplace trebuie publicat. Vezi mai jos.
+   */
   const { data: oldProduct } = await supabase
     .from("products")
-    .select("images")
+    .select("images, is_active")
     .eq("id", productId)
     .eq("business_id", businessId)
     .single();
@@ -282,8 +287,30 @@ export async function updateProduct(productId: string, businessId: string, data:
   void enqueueGmcSync(businessId, productId, productId, "upsert");
   void enqueueOlxSync(businessId, productId, productId, "upsert");
   void enqueueAboutYouSync(businessId, productId, productId, "upsert");
-  void enqueueTrendyolSync(businessId, productId, productId, "upsert");
-  void enqueueEmagSync(businessId, productId, productId, "oferta");
+  /*
+   * ═══ ⚠ ACTIVAREA E NASTEREA, PENTRU MARKETPLACE (24.08.2026) ═══
+   *
+   * `publicaSiFaraOferta` e steagul care ingaduie publicarea automata, si e restrans
+   * dinadins: fara el, orice atingere a unui produs — o marire de pret in masa, o
+   * schimbare de categorie — ar fi trimis pe eMAG tot ce a atins.
+   *
+   * Dar `createProduct` il da, iar `updateProduct` nu — si atunci un produs care intra in
+   * magazin INACTIV nu se publica niciodata. Asta se intampla la:
+   *
+   *   duplicare      — `duplicateProduct` scrie `is_active: false` si nu anunta pe nimeni
+   *   import CSV     — produsele pot veni inactive
+   *   creare ca ciorna, activata mai tarziu
+   *
+   * ⚠ Si nu se poate da la creare in schimb: un produs inactiv NU e sarit la trimitere, e
+   * publicat cu `status: 0`. Deci am fi creat oferte in catalogul lor pentru ciorne pe
+   * care comerciantul nu s-a hotarat inca sa le vanda.
+   *
+   * Momentul corect e cel in care el spune „da": trecerea din inactiv in activ.
+   */
+  const tocmaiActivat = oldProduct?.is_active === false && data.is_active === true;
+
+  void enqueueTrendyolSync(businessId, productId, productId, "upsert", tocmaiActivat);
+  void enqueueEmagSync(businessId, productId, productId, "oferta", tocmaiActivat);
   void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });

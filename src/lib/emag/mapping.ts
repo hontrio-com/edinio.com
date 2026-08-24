@@ -281,6 +281,8 @@ export interface ProdusDeCartografiat {
   weight_grams: number | null;
   stock_quantity: number | null;
   is_active: boolean;
+  /** ⚠ Pachet Edinio: stoc derivat din componente, deci NU se publica. Vezi `ceLipseste`. */
+  is_bundle?: boolean | null;
   page_sections: unknown;
 }
 

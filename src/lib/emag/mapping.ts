@@ -143,6 +143,31 @@ export function partNumberCombinatie(
  * un camp — adica ar fi continuat sa vanda cele doua bucati pe care omul le voia
  * oprite. Zero opreste vanzarea, care e chiar ce a cerut.
  */
+/**
+ * ⚠ VALORILE INGADUITE PENTRU `supply_lead_time`, SCRISE IN SCHEMA LOR.
+ *
+ * `{"type":"integer","enum":[2,3,5,7,14,30,60,90,120],"default":14}`. Nu e un numar
+ * liber: 10 e refuzat, iar mesajul lor vorbeste despre camp, nu despre valorile
+ * ingaduite — comerciantul ar fi cautat greseala in alta parte.
+ */
+export const SUPPLY_LEAD_TIME_INGADUIT = [2, 3, 5, 7, 14, 30, 60, 90, 120] as const;
+
+/**
+ * Cate zile ii trebuie magazinului ca sa se reaprovizioneze, dintre valorile lor.
+ *
+ * ⚠ ROTUNJESTE IN SUS, ca `alegeTimpPregatire`. Un magazin care se reaprovizioneaza
+ * in zece zile si primeste `7` fiindca 7 e mai aproape decat 14 promite mai repede
+ * decat poate — iar la eMAG promisiunea neonorata se numara.
+ *
+ * ⚠ Peste cea mai mare valoare se ia cea mai mare, nu se inventeaza una.
+ */
+export function alegeSupplyLeadTime(zile: number | null | undefined): number | null {
+  const n = Number(zile);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return SUPPLY_LEAD_TIME_INGADUIT.find((v) => v >= n)
+    ?? SUPPLY_LEAD_TIME_INGADUIT[SUPPLY_LEAD_TIME_INGADUIT.length - 1];
+}
+
 export function stocCuRezerva(stoc: number, rezerva: number | null | undefined): number {
   const s = Number.isFinite(stoc) ? Math.max(0, Math.floor(stoc)) : 0;
   const r = Number.isFinite(Number(rezerva)) ? Math.max(0, Math.floor(Number(rezerva))) : 0;
@@ -204,6 +229,12 @@ export interface ProdusDeCartografiat {
 
 /** Ce stie magazinul despre el insusi. */
 export interface ContextMagazin {
+  /**
+   * Cate zile ii trebuie ca sa se reaprovizioneze (§15).
+   *
+   * ⚠ `null` = nu s-a declarat, si atunci NU se trimite. eMAG pune singur 14.
+   */
+  supply_lead_time?: number | null;
   /** Cota in PROCENTE (21 pentru 21%). */
   vat_rate: number;
   prices_include_vat: boolean;
@@ -292,6 +323,25 @@ export function construiesteOferte(
     vat_id: magazin.vat_id,
     ...(magazin.handling_time != null
       ? { handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }] }
+      : {}),
+    /*
+     * ═══ ⚠ SE OMITE CAND NU E STIUT, EXACT CA `handling_time` ═══
+     *
+     * Schema lor spune `default: 14`. Deci netrimis, eMAG pune singur 14 — iar noi
+     * n-avem de ce sa scriem peste ce a pus comerciantul in panoul LOR.
+     *
+     * Trimis cu o valoare de rezerva, fiecare republicare i-ar fi rescris timpul de
+     * reaprovizionare cu al nostru. Fara nicio eroare: 14 e o valoare perfect valida.
+     * Chiar greseala `handling_time ?? 1`, in alta deghizare.
+     */
+    /* ⚠ SE TRECE PRIN `alegeSupplyLeadTime` CHIAR DACA VINE DIN SETARI.
+       Incarcatura se inchide cu un `as EmagProdusOferta`, deci tipul ingust
+       `2 | 3 | 5 | ...` NU e verificat aici de compilator. O valoare scrisa din alta
+       parte in config — o consola, o versiune mai veche — ar fi plecat asa cum e, iar
+       eMAG ar fi respins oferta cu un mesaj despre camp, nu despre valorile ingaduite.
+       Doua incuietori: si la salvarea setarii, si aici. */
+    ...(alegeSupplyLeadTime(magazin.supply_lead_time) != null
+      ? { supply_lead_time: alegeSupplyLeadTime(magazin.supply_lead_time) as number }
       : {}),
     /*
      * ⚠ `images_overwrite: 1` — imaginile din Edinio le INLOCUIESC pe cele de la ei,

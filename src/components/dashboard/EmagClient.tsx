@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle, Copy, Download, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { SUPPLY_LEAD_TIME_INGADUIT } from "@/lib/emag/mapping";
 import {
   aduComenzileAcumEmag, connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
   leagaOferteImportateEmag, reiaAbandonateleEmag, salveazaSetariEmag, sincronizeazaFelieEmag,
@@ -433,6 +434,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
 function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status: StareEmag }) {
   const [rezerva, setRezerva] = useState(String(status.stocRezervat ?? ""));
   const [taxa, setTaxa] = useState(String(status.greenTax ?? ""));
+  const [reaprovizionare, setReaprovizionare] = useState(String(status.supplyLeadTime ?? ""));
   const [seSalveaza, incepe] = useTransition();
 
   function salveaza() {
@@ -440,6 +442,7 @@ function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status:
       const r = await salveazaSetariEmag(businessId, {
         stoc_rezervat: rezerva.trim() === "" ? null : Number(rezerva),
         green_tax: taxa.trim() === "" ? null : Number(taxa),
+        supply_lead_time: reaprovizionare.trim() === "" ? null : Number(reaprovizionare),
       });
       if ("error" in r) {
         toast.error(r.error);
@@ -463,6 +466,35 @@ function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status:
           />
           <span className="mt-1 block text-xs text-muted-foreground">
             Bucăți scăzute din stocul trimis la eMAG. Cu 2 aici și 10 în depozit, eMAG vede 8.
+          </span>
+        </label>
+
+        {/*
+          ⚠ LISTĂ, NU CÂMP LIBER, ȘI ĂSTA E TOT ROSTUL.
+
+          eMAG îngăduie doar 2, 3, 5, 7, 14, 30, 60, 90 sau 120 de zile — e un enum în
+          schema lor. Un câmp liber ar fi lăsat pe cineva să scrie 10, iar eMAG ar fi
+          refuzat oferta cu un mesaj despre numele câmpului, nu despre valorile
+          îngăduite. Comerciantul ar fi căutat greșeala în altă parte.
+
+          ⚠ „Nu spun" e prima opțiune, și e implicitul. eMAG are propriul lui 14; nu
+          i-l suprascriem pe cel pus de om în panoul lor decât dacă chiar alege aici.
+        */}
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">Reaprovizionare</span>
+          <select
+            className={CAMP}
+            value={reaprovizionare}
+            onChange={(e) => setReaprovizionare(e.target.value)}
+          >
+            <option value="">Nu spun (eMAG pune 14 zile)</option>
+            {SUPPLY_LEAD_TIME_INGADUIT.map((z) => (
+              <option key={z} value={String(z)}>{z} zile</option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            În câte zile aduci marfa înapoi când se termină. eMAG acceptă doar valorile
+            astea.
           </span>
         </label>
 

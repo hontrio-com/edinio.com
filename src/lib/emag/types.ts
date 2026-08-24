@@ -890,6 +890,17 @@ export interface EmagConfig {
    * ⚠ Implicitul e „edinio" pentru amandoua, si dinadins: un magazin care n-a
    * atins setarea a legat eMAG tocmai ca sa tina totul dintr-un singur loc.
    */
+  /**
+   * Cate zile ii trebuie magazinului ca sa se reaprovizioneze (§15).
+   *
+   * ⚠ Valorile lor sunt un ENUM: 2, 3, 5, 7, 14, 30, 60, 90, 120. Se aleg prin
+   * `alegeSupplyLeadTime`, care rotunjeste IN SUS.
+   *
+   * ⚠ Lipsa inseamna „nu trimite campul", nu „trimite 14". eMAG are deja implicitul
+   * lui, iar noi n-avem de ce sa scriem peste ce a pus comerciantul in panoul lor.
+   */
+  supply_lead_time?: number;
+
   deriva_pret?: "edinio" | "emag";
   deriva_stoc?: "edinio" | "emag";
 

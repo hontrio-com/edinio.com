@@ -94,6 +94,25 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
       const r = await pregatireAwbEmag(businessId, order.id);
       if (!viu) return;
       setSeCitesc(false);
+
+      /*
+       * ═══ ⚠ SE PRECOMPLETEAZĂ, DAR SE SCRIE DOAR PESTE GOL ═══
+       *
+       * Câmpurile rămân editabile: catalogul știe marfa, comerciantul știe cutia —
+       * aceeași regulă ca la greutate. Scris necondiționat, cineva care a tastat
+       * dimensiunile ambalajului lui și a redeschis modalul s-ar fi întors la cele
+       * din catalog, fără să înțeleagă de ce.
+       *
+       * ⚠ Și numai când propunerea e `din_catalog`. `nu_se_stie` NU umple nimic: o
+       * cutie ghicită din mai multe produse ar fi arătat exact ca o măsurătoare
+       * adevărată, iar curierul refacturează banda pe care o găsește la depozit.
+       */
+      if (!("error" in r) && r.dimensiuni.fel === "din_catalog") {
+        const d = r.dimensiuni.dimensiuni;
+        setLungime((v) => (v.trim() === "" ? String(d.length) : v));
+        setLatime((v) => (v.trim() === "" ? String(d.width) : v));
+        setInaltime((v) => (v.trim() === "" ? String(d.height) : v));
+      }
       if ("error" in r) {
         toast.error(r.error);
         setPregatire(null);
@@ -317,10 +336,16 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
                       value={inaltime} onChange={(e) => setInaltime(e.target.value)} />
                   </div>
                   {/* ⚠ Se spune ce se intampla cand le lasi goale, ca sa fie o alegere,
-                      nu o scapare. */}
+                      nu o scapare. Și se spune DE UNDE vin cifrele când vin: o valoare
+                      apărută singură în câmp, fără explicație, e mai rea decât un câmp
+                      gol — nu se știe dacă e măsurată sau ghicită. */}
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    Le folosește eMAG la calculul volumetric. Dacă le lași goale, nu trimitem
-                    nicio dimensiune — curierul măsoară coletul la ridicare.
+                    {pregatire?.dimensiuni.fel === "din_catalog"
+                      ? "Luate din fișa produsului. Schimbă-le dacă ambalajul e altfel."
+                      : pregatire?.dimensiuni.motiv
+                        ? `${pregatire.dimensiuni.motiv} Le completezi tu, sau le lași goale.`
+                        : "Le folosește eMAG la calculul volumetric."}
+                    {" "}Goale, nu trimitem nicio dimensiune — curierul măsoară coletul la ridicare.
                   </span>
                 </div>
 

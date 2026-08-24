@@ -767,6 +767,11 @@ export function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
      * pastreaza ce are. Publicarea cere oricum valoarea, prin `ceLipsestePentruPublicare`.
      */
     handling_time: ctx.config.handling_time ?? null,
+    /* ⚠ La fel ca `handling_time`: `null` cand nu s-a declarat, si atunci nu pleaca
+       deloc. Schema lor are `default: 14`; trimis din obisnuinta, ar fi rescris la
+       fiecare republicare timpul de reaprovizionare pus de comerciant in panoul lor.
+       ⚠ NU intra in `ceLipseste`: are un implicit la ei, deci nu opreste publicarea. */
+    supply_lead_time: ctx.config.supply_lead_time ?? null,
     warehouse_id: ctx.config.warehouse_id ?? 1,
     warranty: ctx.config.warranty_default ?? 24,
     price_band_pct: ctx.config.price_band_pct ?? 30,

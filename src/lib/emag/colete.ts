@@ -92,3 +92,73 @@ export function coleteDeTrimis(
     height: h,
   }));
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DIMENSIUNILE PROPUSE DIN CATALOG (§47)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** O linie de comanda, cat trebuie ca sa se stie daca se poate propune ceva. */
+export interface LinieColet {
+  productId: string | null;
+  cantitate: number;
+}
+
+/** Numai laturile. ⚠ NU `ColetCm`: acela poarta si greutatea, care se afla altfel
+    (se ADUNA din produsele comenzii) si are deja drumul ei prin `useGreutateaAwb`. */
+export interface LaturiCm {
+  length: number;
+  width: number;
+  height: number;
+}
+
+export type PropunereDimensiuni =
+  | { fel: "din_catalog"; dimensiuni: LaturiCm }
+  | { fel: "nu_se_stie"; motiv: string };
+
+/**
+ * Dimensiunile propuse pentru colet, din catalog.
+ *
+ * ═══ ⚠ SE PROPUNE DOAR CAND CHIAR SE STIE, SI ASTA E TOT ROSTUL ═══
+ *
+ * Greutatile se ADUNA. Dimensiunile NU. Doua cutii de 30×20×10 nu fac una de
+ * 60×40×20, si nici una de 30×20×20 — depinde cum le asezi, si nimeni de aici nu
+ * stie asta.
+ *
+ * O propunere calculata din maximul fiecarei laturi, sau din adunarea inaltimilor,
+ * ar fi aratat exact ca o masuratoare adevarata si ar fi fost gresita. Iar la eMAG
+ * dimensiunile intra in greutatea VOLUMETRICA: curierul cantareste la depozit,
+ * gaseste altceva, si refactureaza. Chiar raul pentru care s-au scos cele
+ * 20×15×10 scrise in cod.
+ *
+ * Deci: un singur produs, o singura bucata, cu toate trei laturile in catalog. Orice
+ * altceva intoarce „nu se stie", cu motivul scris pentru ecran.
+ *
+ * ⚠ Functie curata, fara niciun import: modalul de AWB e componenta de client.
+ */
+export function dimensiuniPropuse(
+  linii: LinieColet[],
+  dinCatalog: Map<string, { length?: number | null; width?: number | null; height?: number | null }>,
+): PropunereDimensiuni {
+  const cuMarfa = linii.filter((l) => l.productId && l.cantitate > 0);
+
+  if (cuMarfa.length === 0) {
+    return { fel: "nu_se_stie", motiv: "Comanda n-are produse din catalog." };
+  }
+  if (cuMarfa.length > 1) {
+    return { fel: "nu_se_stie", motiv: "Comanda are mai multe produse — cutia o stii doar tu." };
+  }
+  if (cuMarfa[0].cantitate !== 1) {
+    return { fel: "nu_se_stie", motiv: `Sunt ${cuMarfa[0].cantitate} bucati — cutia o stii doar tu.` };
+  }
+
+  const d = dinCatalog.get(cuMarfa[0].productId!);
+  const l = Number(d?.length), w = Number(d?.width), h = Number(d?.height);
+
+  /* ⚠ TOATE TREI, sau niciuna. `coleteDeTrimis` cere oricum toate trei; propuse pe
+     jumatate, campurile s-ar fi umplut partial si omul ar fi crezut ca a completat. */
+  if (![l, w, h].every((x) => Number.isFinite(x) && x > 0)) {
+    return { fel: "nu_se_stie", motiv: "Produsul n-are dimensiunile completate in catalog." };
+  }
+
+  return { fel: "din_catalog", dimensiuni: { length: l, width: w, height: h } };
+}

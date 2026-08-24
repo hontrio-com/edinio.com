@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { alegereaCurierului, contPotrivit, primulAwb } from "./awb";
+import { dimensiuniPropuse } from "./colete";
 import { trecerePermisa, treceriPosibile } from "./rma";
 import { citesteTinta } from "./campanii";
 import { ceUrmeazaLaRetur, EMAG_TIP_RETUR, type EmagContCurier } from "./types";
@@ -178,4 +179,79 @@ test("eMAG retur: un tip NECUNOSCUT nu arata ca «nimic de facut»", () => {
   assert.equal(ceUrmeazaLaRetur(99), null);
   assert.equal(ceUrmeazaLaRetur(null), null);
   assert.equal(ceUrmeazaLaRetur(undefined), null);
+});
+
+/* ── §47. Dimensiunile propuse din catalog ─────────────────────────── */
+
+const CATALOG = new Map([
+  ["p1", { length: 30, width: 20, height: 10 }],
+  ["fara", { length: 30, width: null, height: 10 }],
+  /* ⚠ FORMA REALA DIN PRODUCTIE, masurata pe 24.08.2026: produsele nou create au
+     `dimensions: {width: 0, height: 0, length: 0}` — ZEROURI, nu campuri lipsa. */
+  ["zerouri", { length: 0, width: 0, height: 0 }],
+]);
+
+test("eMAG colete: un singur produs, o bucata, cu toate laturile — se propune", () => {
+  const r = dimensiuniPropuse([{ productId: "p1", cantitate: 1 }], CATALOG);
+  assert.deepEqual(r, { fel: "din_catalog", dimensiuni: { length: 30, width: 20, height: 10 } });
+});
+
+test("eMAG colete: MAI MULTE produse — nu se propune nimic, si se spune de ce", () => {
+  /*
+   * ═══ GREUTATILE SE ADUNA. DIMENSIUNILE NU. ═══
+   *
+   * Doua cutii de 30×20×10 nu fac una de 60×40×20, si nici una de 30×20×20 — depinde
+   * cum le asezi, si nimeni de aici nu stie asta.
+   *
+   * O propunere calculata din maximul fiecarei laturi ar fi aratat exact ca o
+   * masuratoare adevarata si ar fi fost gresita. La eMAG dimensiunile intra in
+   * greutatea VOLUMETRICA: curierul cantareste la depozit, gaseste altceva, si
+   * refactureaza. Chiar raul pentru care s-au scos cele 20×15×10 scrise in cod.
+   */
+  const r = dimensiuniPropuse(
+    [{ productId: "p1", cantitate: 1 }, { productId: "p1", cantitate: 1 }], CATALOG);
+  assert.equal(r.fel, "nu_se_stie");
+  assert.match(r.fel === "nu_se_stie" ? r.motiv : "", /mai multe produse/i);
+});
+
+test("eMAG colete: mai multe BUCATI din acelasi produs — tot nu se stie cutia", () => {
+  const r = dimensiuniPropuse([{ productId: "p1", cantitate: 3 }], CATALOG);
+  assert.equal(r.fel, "nu_se_stie");
+  assert.match(r.fel === "nu_se_stie" ? r.motiv : "", /3 bucati/i);
+});
+
+test("eMAG colete: laturi incomplete in catalog — NICIUNA nu se propune", () => {
+  /* ⚠ Toate trei sau niciuna. Completate pe jumatate, campurile ar fi aratat pline si
+     omul ar fi crezut ca a terminat — iar `coleteDeTrimis` cere oricum toate trei. */
+  const r = dimensiuniPropuse([{ productId: "fara", cantitate: 1 }], CATALOG);
+  assert.equal(r.fel, "nu_se_stie");
+  assert.match(r.fel === "nu_se_stie" ? r.motiv : "", /dimensiunile completate/i);
+});
+
+test("eMAG colete: produs care nu e in catalog — nu se ghiceste", () => {
+  const r = dimensiuniPropuse([{ productId: "necunoscut", cantitate: 1 }], CATALOG);
+  assert.equal(r.fel, "nu_se_stie");
+});
+
+test("eMAG colete: linii fara produs se sar, nu numara ca «mai multe produse»", () => {
+  /* O linie de transport sau o reducere n-are `productId`. Numarata, ar fi facut orice
+     comanda cu un singur produs sa para cu doua — si propunerea n-ar fi aparut niciodata. */
+  const r = dimensiuniPropuse(
+    [{ productId: null, cantitate: 1 }, { productId: "p1", cantitate: 1 }], CATALOG);
+  assert.equal(r.fel, "din_catalog");
+});
+
+test("eMAG colete: dimensiuni ZERO in catalog nu sunt dimensiuni", () => {
+  /*
+   * ═══ FORMA REALA DIN PRODUCTIE, NU UNA INCHIPUITA ═══
+   *
+   * Masurat pe 24.08.2026: produsele au `dimensions: {width: 0, height: 0, length: 0}`
+   * de la crearea fisei. Nu lipsesc campurile — sunt acolo, cu zero.
+   *
+   * O verificare doar pe „exista campul" ar fi propus un colet de 0×0×0. eMAG l-ar fi
+   * primit, greutatea volumetrica ar fi iesit zero, iar curierul ar fi refacturat
+   * dupa ce masoara la depozit — exact raul pentru care exista functia asta.
+   */
+  const r = dimensiuniPropuse([{ productId: "zerouri", cantitate: 1 }], CATALOG);
+  assert.equal(r.fel, "nu_se_stie");
 });

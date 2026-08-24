@@ -51,6 +51,8 @@ import {
 import { traducereaPoateBloca } from "@/lib/emag/rute";
 import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
 import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
+import { alegeSupplyLeadTime } from "@/lib/emag/mapping";
+import { dimensiuniPropuse, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
 import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -152,6 +154,8 @@ export interface StareEmag {
   handlingTime: number | null;
   greenTax: number | null;
   stocRezervat: number | null;
+  /** Cate zile ii trebuie magazinului ca sa se reaprovizioneze. `null` = nedeclarat. */
+  supplyLeadTime: number | null;
   syncContinut: boolean;
   /**
    * Cine are ultimul cuvânt când ce e pe eMAG nu mai e ce am trimis (§69).
@@ -274,6 +278,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     handlingTime: config.handling_time ?? null,
     greenTax: config.green_tax ?? null,
     stocRezervat: config.stoc_rezervat ?? null,
+    supplyLeadTime: config.supply_lead_time ?? null,
     /* ⚠ Implicit PORNIT: cine publică din Edinio se așteaptă ca fișa să vină tot de acolo. */
     syncContinut: config.sync_continut !== false,
     /* ⚠ Prin `sursaAdevarului`, nu prin `?? "edinio"`. O valoare stricată în config ar
@@ -577,6 +582,8 @@ export async function salveazaSetariEmag(
     stoc_rezervat?: number | null;
     /** Rescrie Edinio si fisa produsului (nume, descriere, poze)? */
     sync_continut?: boolean;
+    /** Cate zile ii trebuie magazinului ca sa se reaprovizioneze (§15). */
+    supply_lead_time?: number | null;
     /** Cine are ultimul cuvant la o derivare. Vezi `deriva.ts` (§69). */
     deriva_pret?: "edinio" | "emag";
     deriva_stoc?: "edinio" | "emag";
@@ -627,6 +634,13 @@ export async function salveazaSetariEmag(
     ...(setari.green_tax !== undefined ? { green_tax: setari.green_tax ?? undefined } : {}),
     ...(setari.stoc_rezervat !== undefined ? { stoc_rezervat: setari.stoc_rezervat ?? undefined } : {}),
     ...(setari.sync_continut != null ? { sync_continut: setari.sync_continut } : {}),
+    /* ⚠ SE POTRIVESTE PE VALORILE LOR, nu se scrie numarul cerut. Enumul lor e
+       2, 3, 5, 7, 14, 30, 60, 90, 120: un 10 pus de om ar fi fost refuzat de eMAG cu
+       un mesaj despre camp, iar comerciantul ar fi cautat greseala in alta parte.
+       `alegeSupplyLeadTime` rotunjeste IN SUS — promite mai incet, nu mai repede. */
+    ...(setari.supply_lead_time !== undefined
+      ? { supply_lead_time: alegeSupplyLeadTime(setari.supply_lead_time) ?? undefined }
+      : {}),
     /* ⚠ Se scrie numai valoarea RECUNOSCUTA. Un sir venit de oriunde altundeva ar
        fi ajuns in config si l-ar fi facut pe `sursaAdevarului` sa cada pe implicit —
        adica setarea ar fi aratat una si ar fi facut alta. */
@@ -1500,6 +1514,58 @@ export interface PregatireAwbEmag {
   awbExistent: { numar: string | null; emagId: number } | null;
   /** Livrare la easybox: adresa e a lockerului, nu a omului. */
   locker: string | null;
+  /**
+   * Dimensiunile propuse din catalog (§47), în centimetri.
+   *
+   * ⚠ Se propun DOAR când chiar se știu: un singur produs, o bucată, cu toate trei
+   * laturile completate. Greutățile se adună, dimensiunile nu — vezi `dimensiuniPropuse`.
+   * Când nu se știe, vine motivul scris, ca ecranul să spună de ce câmpurile sunt goale.
+   */
+  dimensiuni: PropunereDimensiuni;
+}
+
+/**
+ * Dimensiunile propuse pentru coletul unei comenzi (§47).
+ *
+ * ⚠ HOTĂRÂREA e în `dimensiuniPropuse`, care e curată și probată. Aici e doar
+ * citirea: liniile comenzii și laturile produselor lor.
+ *
+ * ⚠ O citire căzută dă „nu se știe", nu niște dimensiuni de rezervă. Chiar defectul
+ * reparat înainte: `20×15×10` scrise în cod arătau exact ca o măsurătoare adevărată,
+ * iar curierul refactura banda pe care o găsea la depozit.
+ */
+async function dimensiunileComenzii(
+  admin: ReturnType<typeof createAdminClient>,
+  businessId: string,
+  orderId: string,
+): Promise<PropunereDimensiuni> {
+  const { data: order } = await admin.from("orders")
+    .select("items").eq("business_id", businessId).eq("id", orderId).maybeSingle();
+
+  const items = Array.isArray(order?.items) ? (order.items as unknown[]) : [];
+  const linii: LinieColet[] = items.map((x) => {
+    const o = (x ?? {}) as { product_id?: unknown; quantity?: unknown };
+    return {
+      productId: typeof o.product_id === "string" ? o.product_id : null,
+      cantitate: Number(o.quantity) || 0,
+    };
+  });
+
+  const ids = [...new Set(linii.map((l) => l.productId).filter((x): x is string => !!x))];
+  if (ids.length === 0) return dimensiuniPropuse(linii, new Map());
+
+  const { data: produse } = await admin.from("products")
+    .select("id, page_sections").eq("business_id", businessId).in("id", ids);
+
+  const catalog = new Map<string, { length?: number | null; width?: number | null; height?: number | null }>();
+  for (const p of (produse ?? []) as { id: string; page_sections: unknown }[]) {
+    /* ⚠ Dimensiunile stau în `page_sections.dimensions`, în CENTIMETRI — aceeași sursă
+       pe care o folosește `masuratoriEmag`, care le preface în milimetri pentru ei. */
+    const ps = (p.page_sections ?? {}) as { dimensions?: { length?: number; width?: number; height?: number } };
+    if (ps.dimensions) catalog.set(p.id, ps.dimensions);
+  }
+
+  return dimensiuniPropuse(linii, catalog);
 }
 
 /**
@@ -1556,6 +1622,10 @@ export async function pregatireAwbEmag(
     ramburs: Number(brut.cashed_cod ?? 0) || 0,
     awbExistent: existent ? { numar: existent.awb_number, emagId: existent.emag_id } : null,
     locker: brut.details?.locker_name ?? brut.details?.locker_id ?? null,
+    /* ⚠ PE ACELAȘI DRUM, fără o a doua chemare din modal. Formularul cerea deja
+       pregătirea; dimensiunile citite separat ar fi fost încă un dus-întors pentru o
+       informație care se află din aceleași rânduri. */
+    dimensiuni: await dimensiunileComenzii(admin, businessId, orderId),
   };
 
   /* ⚠ FBE se verifică ÎNAINTE de orice apel la eMAG: e o proprietate a comenzii, nu

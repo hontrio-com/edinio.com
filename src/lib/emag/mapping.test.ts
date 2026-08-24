@@ -1,8 +1,8 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
-  bandaDePret, construiesteOferte, imaginiEmag, masuratoriEmag, normalizeazaPartNumber,
-  partNumberCombinatie, pretFaraTva,
+  alegeSupplyLeadTime, bandaDePret, construiesteOferte, imaginiEmag, masuratoriEmag,
+  normalizeazaPartNumber, partNumberCombinatie, pretFaraTva,
   type ContextCategorie, type ContextMagazin, type ProdusDeCartografiat,
 } from "./mapping";
 
@@ -332,4 +332,60 @@ test("eMAG: masuratorile partiale nu se trimit deloc", () => {
   assert.equal(masuratoriEmag(7, null, 250), null);
   assert.equal(masuratoriEmag(7, { length: 30, width: 20, height: 10 }, null), null);
   assert.equal(masuratoriEmag(7, { length: 0, width: 20, height: 10 }, 250), null);
+});
+
+/* ── §15. Reaprovizionarea ──────────────────────────────────────── */
+
+test("eMAG supply_lead_time: se rotunjeste IN SUS pe valorile lor", () => {
+  /*
+   * ⚠ Enumul din schema lor: 2, 3, 5, 7, 14, 30, 60, 90, 120. Zece zile nu e valid.
+   *
+   * Rotunjit la cel mai APROPIAT, un magazin care se reaprovizioneaza in zece zile ar
+   * fi primit 7 — si ar fi promis mai repede decat poate. La eMAG promisiunea
+   * neonorata se numara si scade nota vanzatorului. Aceeasi regula ca la
+   * `alegeTimpPregatire`.
+   */
+  assert.equal(alegeSupplyLeadTime(10), 14);
+  assert.equal(alegeSupplyLeadTime(1), 2);
+  assert.equal(alegeSupplyLeadTime(7), 7, "o valoare exacta ramane ea insasi");
+  assert.equal(alegeSupplyLeadTime(45), 60);
+});
+
+test("eMAG supply_lead_time: peste maxim se ia maximul, nu se inventeaza o valoare", () => {
+  assert.equal(alegeSupplyLeadTime(365), 120);
+});
+
+test("eMAG supply_lead_time: nedeclarat da `null`", () => {
+  assert.equal(alegeSupplyLeadTime(null), null);
+  assert.equal(alegeSupplyLeadTime(undefined), null);
+  assert.equal(alegeSupplyLeadTime(0), null);
+  assert.equal(alegeSupplyLeadTime(-5), null);
+  assert.equal(alegeSupplyLeadTime(Number.NaN), null);
+});
+
+test("eMAG supply_lead_time: NEDECLARAT nu pleaca deloc in incarcatura", () => {
+  /*
+   * ═══ CHIAR GRESEALA `handling_time ?? 1`, IN ALTA DEGHIZARE ═══
+   *
+   * Schema lor spune `default: 14`. Trimis din obisnuinta cu o valoare de rezerva,
+   * campul ar fi rescris la FIECARE republicare timpul de reaprovizionare pus de
+   * comerciant in panoul LOR — fara nicio eroare, fiindca 14 e o valoare valida.
+   */
+  const r = construiesteOferte(produs(), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 500 }], null);
+  assert.equal("supply_lead_time" in r.oferte[0], false);
+});
+
+test("eMAG supply_lead_time: o valoare NEINGADUITA din setari se potriveste, nu pleaca asa cum e", () => {
+  /*
+   * ⚠ Incarcatura se inchide cu un `as EmagProdusOferta`, deci tipul ingust
+   * `2 | 3 | 5 | ...` NU e verificat de compilator aici. O valoare scrisa din alta
+   * parte in config — o consola, o versiune mai veche — ar fi plecat asa cum e, iar
+   * eMAG ar fi respins oferta cu un mesaj despre numele campului.
+   */
+  const r = construiesteOferte(
+    produs(),
+    { ...MAGAZIN, supply_lead_time: 10 },
+    CATEGORIE, [{ variant_title: null, emag_id: 500 }], null,
+  );
+  assert.equal(r.oferte[0].supply_lead_time, 14, "10 nu e ingaduit; se urca la 14");
 });

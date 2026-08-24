@@ -10,6 +10,7 @@
 
 import { fetch as fetchUndici } from "undici";
 import { basicAuthHeader, emagGazda, emagUrl, iesireEmag } from "./auth";
+import { scrieInJurnal } from "./jurnal-scriere";
 import { clasificaRaspuns, mesajOmenesc, type VerdictEmag } from "./errors";
 import type {
   EmagAdresa, EmagAwb, EmagCategorie, EmagComanda, EmagContCurier, EmagCotaTva,
@@ -125,6 +126,16 @@ async function trimite<T>(
   const galeata = `${auth.businessId ?? "global"}:${esteRutaDeComenzi(cale) ? "comenzi" : "restul"}`;
   await asteaptaJeton(galeata, esteRutaDeComenzi(cale) ? PE_SECUNDA_COMENZI : PE_SECUNDA_RESTUL);
 
+  /*
+   * ⚠ Cronometrul porneste DUPA asteptarea jetonului, nu inainte.
+   *
+   * Pornit inainte, „durata" ar fi cuprins si timpul in care noi ne-am tinut singuri
+   * pe loc ca sa nu depasim cele 3 cereri pe secunda. Si atunci un magazin sanatos,
+   * dar incarcat, ar fi aratat in jurnal cereri de cate cinci secunde — iar cine
+   * cauta o incetineala la eMAG ar fi gasit-o unde nu e.
+   */
+  const pornitLa = Date.now();
+
   try {
     const raspuns = await fetchUndici(emagUrl(auth.tara, cale), {
       method: metoda,
@@ -143,6 +154,15 @@ async function trimite<T>(
     try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
 
     const c = clasificaRaspuns(raspuns.status, json, cale);
+
+    await scrieInJurnal({
+      auth, metoda, cale, corp,
+      status: raspuns.status,
+      verdict: c.verdict,
+      durataMs: Date.now() - pornitLa,
+      mesaje: c.mesaje,
+      eroare: c.verdict === "reusit" ? null : (c.mesaj || null),
+    });
 
     if (c.verdict === "reusit" || c.verdict === "reusit_cu_observatii") {
       const rezultate = (json as EmagRaspuns<T> | undefined)?.results;
@@ -165,6 +185,26 @@ async function trimite<T>(
      * asteapta. Fara ea, am fi cautat zile intregi in contul comerciantului.
      */
     const releuCazut = cauza === "ECONNREFUSED" || cauza === "ECONNRESET" || cauza === "ENOTFOUND";
+
+    /*
+     * ⚠ SE SCRIE SI CAND N-AM AJUNS LA EI, si asta e chiar randul cel mai pretios din
+     * tot jurnalul. O cadere de releu nu lasa niciun alt semn: cererea se reia
+     * singura, elementul ramane in coada, si nimic nu spune ca IESIREA e cazuta, nu
+     * eMAG. `status: 0` inseamna „n-am ajuns", nu „au raspuns cu zero".
+     */
+    await scrieInJurnal({
+      auth, metoda, cale, corp,
+      status: 0,
+      verdict: "trecatoare",
+      durataMs: Date.now() - pornitLa,
+      mesaje: [],
+      eroare: abandonat
+        ? "timp expirat"
+        : releuCazut
+          ? `iesirea nu raspunde (${cauza ?? "necunoscut"})`
+          : (e instanceof Error ? e.message : "cerere cazuta"),
+    });
+
     return {
       error: abandonat
         ? "eMAG nu a răspuns la timp. Se reia singur."

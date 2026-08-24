@@ -14,6 +14,8 @@ import {
   citesteMemoriaDerivei, derivaOfertei, hotarasteDeriva, sursaAdevarului,
 } from "@/lib/emag/deriva";
 import { enqueueEmagPretMany, enqueueEmagStocMany } from "@/lib/emag/queue";
+import { cuFir, firNou, ZILE_PASTRARE } from "@/lib/emag/jurnal";
+import { curataJurnalul } from "@/lib/emag/jurnal-scriere";
 import { aduComenzile } from "@/lib/emag/orders";
 import { aduIpurileEmag } from "@/lib/emag/client";
 import { citesteIpuri, sAuSchimbat, CHEIE_IPURI } from "@/lib/emag/ipuri";
@@ -207,7 +209,22 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      const r = await trimiteElement(admin, ctx, el.product_id, el.op);
+      /*
+       * ⚠ UN FIR PE ELEMENT DE COADA, nu pe rulare (§66).
+       *
+       * Un element poate face mai multe cereri: loturi de cate 50, o reincercare
+       * dupa 429, o masuratoare separata. Cu un fir pe rulare, toate elementele
+       * rularii ar fi purtat acelasi numar, iar „arata-mi ce a facut elementul asta"
+       * ar fi intors treizeci de lucrari amestecate — adica exact nimic.
+       */
+      /* ⚠ Ingustarea se prinde intr-un `const` INAINTE de inchidere. TypeScript nu
+         duce ingustarea unei PROPRIETATI inauntrul unei functii de apel: proprietatea
+         s-ar putea schimba intre timp, din punctul lui de vedere. */
+      const productId = el.product_id;
+      const r = await cuFir(
+        firNou(`coada-${el.op}`),
+        () => trimiteElement(admin, ctx, productId, el.op),
+      );
 
       /* „Sarit" inseamna „nu era nimic de facut, si nu e o eroare". Iese din coada
          linistit: reincercat, si-ar arde incercarile pe un lucru care nu se schimba. */
@@ -313,7 +330,10 @@ export async function GET(req: NextRequest) {
     if (!ctx) continue;
 
     const pagina = Math.max(1, ctx.config.reconcile_page ?? 1);
-    const r = await citesteOferte(ctx.auth, { currentPage: pagina, itemsPerPage: PE_PAGINA });
+    const fir = firNou("reconciliere");
+
+    const r = await cuFir(fir, () =>
+      citesteOferte(ctx.auth, { currentPage: pagina, itemsPerPage: PE_PAGINA }));
     if (isEmagError(r)) {
       if (r.verdict === "chei") await patchConfig(admin, businessId, { needs_reconnect: true });
       continue;
@@ -348,7 +368,7 @@ export async function GET(req: NextRequest) {
       Number.isFinite(marcaj) ? marcaj - SUPRAPUNERE_MS : inceputulRularii - 24 * 60 * 60 * 1000,
     );
 
-    const rez = await aduComenzile(admin, ctx, deLa);
+    const rez = await cuFir(firNou("comenzi"), () => aduComenzile(admin, ctx, deLa));
     comenziNoi += rez.noi;
 
     /*
@@ -385,7 +405,7 @@ export async function GET(req: NextRequest) {
     for (const businessId of alegeInRotatie(magazine, MAGAZINE_FACTURI, 5)) {
       const ctx = await ctxPentru(businessId);
       if (!ctx) continue;
-      facturi += await urcaFacturile(admin, ctx);
+      facturi += await cuFir(firNou("facturi"), () => urcaFacturile(admin, ctx));
     }
   }
 
@@ -411,7 +431,7 @@ export async function GET(req: NextRequest) {
       const ctx = await ctxPentru(businessId);
       if (!ctx) continue;
 
-      const rez = await aduRetururile(admin, ctx);
+      const rez = await cuFir(firNou("retururi"), () => aduRetururile(admin, ctx));
       retururi += rez.scrise;
 
       /*
@@ -444,7 +464,27 @@ export async function GET(req: NextRequest) {
     await improspateazaIpurile(admin);
   }
 
-  return NextResponse.json({ ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, retururi });
+  /* ── 7) Curatarea jurnalului de cereri (§65) ─────────────────────────────
+   *
+   * ⚠ O DATA PE ZI, la o ora si un minut anume, nu la fiecare trecere.
+   *
+   * Rulata din minut in minut, ar fi fost 1440 de `delete`-uri pe zi peste un tabel
+   * care creste — dintre care 1439 nu gasesc nimic. Un `delete` care nu sterge nimic
+   * tot citeste indexul.
+   *
+   * ⚠ Ora 3 dimineata: atunci trec cele mai putine comenzi, iar stergerea nu se pune
+   * in fata lor la aceleasi cereri catre baza. Minutul 13, nu 0 — aceeasi regula ca
+   * la lista de IP-uri: nu la ore rotunde.
+   */
+  const ceas = new Date(inceputulRularii);
+  let jurnalSters = 0;
+  if (ceas.getHours() === 3 && ceas.getMinutes() === 13) {
+    jurnalSters = await curataJurnalul(ZILE_PASTRARE);
+  }
+
+  return NextResponse.json({
+    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, retururi, jurnalSters,
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

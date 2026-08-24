@@ -1939,3 +1939,116 @@ function contulDinRetur(brut: unknown): { iban: string; banca: string | null; be
       ? o.customer_account_beneficiary.trim() || null : null,
   };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   JURNALUL DE CERERI (§65, §66)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface RandJurnalEcran {
+  id: string;
+  cand: string;
+  metoda: string;
+  cale: string;
+  status: number;
+  verdict: string;
+  verdictEticheta: string;
+  durataMs: number | null;
+  emagIds: number[];
+  mesaje: string[];
+  eroare: string | null;
+  /** Firul lucrării (§66). Apăsat, arată toate cererile ei. */
+  fir: string | null;
+}
+
+/**
+ * Cum se citește un verdict, în cuvinte.
+ *
+ * ⚠ „Salvat, cu observații" NU e o eroare, și e chiar capcana eMAG: pe
+ * `product_offer/save`, `isError: true` înseamnă că oferta E salvată, cu observații de
+ * documentație. Scris „eșuat", comerciantul ar fi retrimis la nesfârșit o ofertă care
+ * există deja acolo — și ar fi făcut duplicate.
+ */
+const ETICHETA_VERDICT: Record<string, string> = {
+  reusit: "Reușit",
+  reusit_cu_observatii: "Salvat, cu observații",
+  refuz: "Refuzat",
+  trecatoare: "Nu a răspuns — se reia",
+  chei: "Acreditări",
+};
+
+const JURNAL_PE_PAGINA = 50;
+
+/**
+ * Ce a plecat spre eMAG și ce au răspuns.
+ *
+ * ═══ ⚠ CE NU ARATĂ, ȘI DE CE ═══
+ *
+ * Nu arată corpul cererii și nici al răspunsului. `awb/save` duce numele, adresa și
+ * telefonul cumpărătorului; `order/read` întoarce comenzi întregi. Păstrate, jurnalul
+ * ar fi devenit o A DOUA copie a datelor clienților — cu altă păstrare, alte drepturi
+ * de citire și niciun motiv să existe.
+ *
+ * Arată în schimb ruta, verdictul, codul, durata, ofertele atinse și mesajele LOR —
+ * care vorbesc despre câmpuri, nu despre oameni, și sunt partea folositoare.
+ *
+ * ⚠ Citirile reușite nu sunt aici, fiindcă nu se scriu deloc. Cronul bate din minut în
+ * minut; scrise, ar fi fost zeci de mii de rânduri pe zi din care niciunul nu spune
+ * nimic. Se spune pe ecran, ca nimeni să nu creadă că lipsesc din greșeală.
+ */
+export async function jurnalCereriEmag(
+  businessId: string,
+  filtru: { doarProbleme?: boolean; fir?: string; emagId?: number; pagina?: number } = {},
+): Promise<{ randuri: RandJurnalEcran[]; total: number; pagina: number; pePagina: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const pagina = Math.max(1, Math.floor(filtru.pagina ?? 1));
+  const de_la = (pagina - 1) * JURNAL_PE_PAGINA;
+
+  let q = admin.from("emag_request_log")
+    .select("id, created_at, metoda, cale, status, verdict, durata_ms, emag_ids, mesaje, eroare, corelatie",
+      { count: "exact" })
+    .eq("business_id", businessId);
+
+  /* ⚠ `neq`, nu o listă de verdicte rele. O listă ar fi rămas în urmă la primul verdict
+     nou — și verdictul nou e tocmai cel despre care nimeni nu știe încă nimic. */
+  if (filtru.doarProbleme) q = q.neq("verdict", "reusit");
+  if (filtru.fir) q = q.eq("corelatie", filtru.fir);
+  /* ⚠ `contains` pe tabloul de id-uri, care are index GIN. Fără el, căutarea după o
+     ofertă ar fi citit tabelul întreg. */
+  if (filtru.emagId != null && Number.isFinite(filtru.emagId)) {
+    q = q.contains("emag_ids", [filtru.emagId]);
+  }
+
+  const { data, count, error } = await q
+    .order("created_at", { ascending: false })
+    .range(de_la, de_la + JURNAL_PE_PAGINA - 1);
+
+  if (error) return { error: error.message };
+
+  type Rand = {
+    id: string; created_at: string; metoda: string; cale: string; status: number;
+    verdict: string; durata_ms: number | null; emag_ids: number[] | null;
+    mesaje: unknown; eroare: string | null; corelatie: string | null;
+  };
+
+  const randuri: RandJurnalEcran[] = ((data ?? []) as Rand[]).map((r) => ({
+    id: r.id,
+    cand: r.created_at,
+    metoda: r.metoda,
+    cale: r.cale,
+    status: r.status,
+    verdict: r.verdict,
+    verdictEticheta: ETICHETA_VERDICT[r.verdict] ?? r.verdict,
+    durataMs: r.durata_ms,
+    emagIds: Array.isArray(r.emag_ids) ? r.emag_ids : [],
+    /* ⚠ Mesajele lor pleacă spre ecran NEATINSE. Un rezumat scris de noi ar fi pierdut
+       exact câmpul și valoarea care spun ce e de reparat. */
+    mesaje: Array.isArray(r.mesaje) ? (r.mesaje as unknown[]).filter((m): m is string => typeof m === "string") : [],
+    eroare: r.eroare,
+    fir: r.corelatie,
+  }));
+
+  return { randuri, total: count ?? 0, pagina, pePagina: JURNAL_PE_PAGINA };
+}

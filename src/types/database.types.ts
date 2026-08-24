@@ -1527,6 +1527,59 @@ export type Database = {
           },
         ]
       }
+      emag_request_log: {
+        Row: {
+          business_id: string
+          cale: string
+          corelatie: string | null
+          created_at: string
+          durata_ms: number | null
+          emag_ids: number[] | null
+          eroare: string | null
+          id: string
+          mesaje: Json
+          metoda: string
+          status: number
+          verdict: string
+        }
+        Insert: {
+          business_id: string
+          cale: string
+          corelatie?: string | null
+          created_at?: string
+          durata_ms?: number | null
+          emag_ids?: number[] | null
+          eroare?: string | null
+          id?: string
+          mesaje?: Json
+          metoda: string
+          status?: number
+          verdict: string
+        }
+        Update: {
+          business_id?: string
+          cale?: string
+          corelatie?: string | null
+          created_at?: string
+          durata_ms?: number | null
+          emag_ids?: number[] | null
+          eroare?: string | null
+          id?: string
+          mesaje?: Json
+          metoda?: string
+          status?: number
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emag_request_log_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emag_rma: {
         Row: {
           awbs: Json

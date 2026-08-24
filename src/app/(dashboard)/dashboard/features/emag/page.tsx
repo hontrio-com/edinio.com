@@ -7,6 +7,7 @@ import { EmagClient } from "@/components/dashboard/EmagClient";
 import { EmagCategoryMapping } from "@/components/dashboard/EmagCategoryMapping";
 import { EmagListings } from "@/components/dashboard/EmagListings";
 import { EmagReturns } from "@/components/dashboard/EmagReturns";
+import { EmagJurnal } from "@/components/dashboard/EmagJurnal";
 import { getEmagStatus } from "@/lib/actions/emag.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -78,6 +79,10 @@ async function ContinutEmag({ businessId }: { businessId: string }) {
           <EmagListings businessId={businessId} />
           {/* Se ascunde singur cand nu e niciun retur: o carte goala nu spune nimic. */}
           <EmagReturns businessId={businessId} />
+          {/* ⚠ Ultimul, si inchis. Nu e un ecran de zi cu zi — se deschide cand ceva
+              pare ca n-a plecat. Pus mai sus, ar fi impins jos lucrurile pe care
+              comerciantul chiar le face in fiecare zi. */}
+          <EmagJurnal businessId={businessId} />
         </>
       )}
     </div>

@@ -3964,6 +3964,20 @@ create table if not exists public.emag_orders (
   invoice_uploaded_at timestamp with time zone,
   invoice_number text);
 
+create table if not exists public.emag_request_log (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  corelatie text,
+  metoda text not null,
+  cale text not null,
+  status integer default 0 not null,
+  verdict text not null,
+  durata_ms integer,
+  emag_ids bigint[],
+  mesaje jsonb default '[]'::jsonb not null,
+  eroare text,
+  created_at timestamp with time zone default now() not null);
+
 create table if not exists public.emag_rma (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -4778,6 +4792,7 @@ alter table public.emag_awb add constraint emag_awb_pkey PRIMARY KEY (id);
 alter table public.emag_nomenclatoare add constraint emag_nomenclatoare_pkey PRIMARY KEY (business_id, tara, fel, cheie);
 alter table public.emag_offers add constraint emag_offers_pkey PRIMARY KEY (id);
 alter table public.emag_orders add constraint emag_orders_pkey PRIMARY KEY (id);
+alter table public.emag_request_log add constraint emag_request_log_pkey PRIMARY KEY (id);
 alter table public.emag_rma add constraint emag_rma_pkey PRIMARY KEY (id);
 alter table public.emag_sync_queue add constraint emag_sync_queue_pkey PRIMARY KEY (id);
 alter table public.email_automations add constraint email_automations_pkey PRIMARY KEY (id);
@@ -4925,6 +4940,7 @@ alter table public.emag_offers add constraint emag_offers_business_id_fkey FOREI
 alter table public.emag_offers add constraint emag_offers_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.emag_orders add constraint emag_orders_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_orders add constraint emag_orders_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.emag_request_log add constraint emag_request_log_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_rma add constraint emag_rma_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_rma add constraint emag_rma_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.emag_sync_queue add constraint emag_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -5080,6 +5096,11 @@ CREATE INDEX emag_offers_pnk_idx ON public.emag_offers USING btree (business_id,
 CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_id);
 CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, product_id, COALESCE(variant_title, ''::text)) WHERE (product_id IS NOT NULL);
 CREATE INDEX emag_offers_reconciliere_idx ON public.emag_offers USING btree (business_id, last_status_at NULLS FIRST);
+CREATE INDEX emag_request_log_biz_idx ON public.emag_request_log USING btree (business_id, created_at DESC);
+CREATE INDEX emag_request_log_fir_idx ON public.emag_request_log USING btree (corelatie) WHERE (corelatie IS NOT NULL);
+CREATE INDEX emag_request_log_iduri_idx ON public.emag_request_log USING gin (emag_ids);
+CREATE INDEX emag_request_log_probleme_idx ON public.emag_request_log USING btree (business_id, created_at DESC) WHERE (verdict <> 'reusit'::text);
+CREATE INDEX emag_request_log_varsta_idx ON public.emag_request_log USING btree (created_at);
 CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
 CREATE INDEX emag_orders_factura_de_urcat_idx ON public.emag_orders USING btree (business_id, created_at) WHERE (invoice_uploaded_at IS NULL);
 CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
@@ -5348,6 +5369,7 @@ alter table public.emag_awb enable row level security;
 alter table public.emag_nomenclatoare enable row level security;
 alter table public.emag_offers enable row level security;
 alter table public.emag_orders enable row level security;
+alter table public.emag_request_log enable row level security;
 alter table public.emag_rma enable row level security;
 alter table public.emag_sync_queue enable row level security;
 alter table public.email_automations enable row level security;
@@ -5475,6 +5497,9 @@ create policy owner_select_emag_offers on public.emag_offers as PERMISSIVE for S
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_emag_orders on public.emag_orders as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_emag_request_log on public.emag_request_log as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_emag_rma on public.emag_rma as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
@@ -6238,6 +6263,15 @@ grant SELECT on table public.emag_orders to service_role;
 grant TRIGGER on table public.emag_orders to service_role;
 grant TRUNCATE on table public.emag_orders to service_role;
 grant UPDATE on table public.emag_orders to service_role;
+grant SELECT on table public.emag_request_log to anon;
+grant SELECT on table public.emag_request_log to authenticated;
+grant DELETE on table public.emag_request_log to service_role;
+grant INSERT on table public.emag_request_log to service_role;
+grant REFERENCES on table public.emag_request_log to service_role;
+grant SELECT on table public.emag_request_log to service_role;
+grant TRIGGER on table public.emag_request_log to service_role;
+grant TRUNCATE on table public.emag_request_log to service_role;
+grant UPDATE on table public.emag_request_log to service_role;
 grant DELETE on table public.emag_rma to anon;
 grant INSERT on table public.emag_rma to anon;
 grant REFERENCES on table public.emag_rma to anon;

@@ -6,6 +6,7 @@ import { emagGloballyEnabled } from "@/lib/emag/auth";
 import { ipuriPermise, CHEIE_IPURI } from "@/lib/emag/ipuri";
 import { loadEmagContext } from "@/lib/emag/sync";
 import { aduComenzile, ingereazaComanda } from "@/lib/emag/orders";
+import { cuFir, firNou } from "@/lib/emag/jurnal";
 import { citesteComenzi, isEmagError } from "@/lib/emag/client";
 import type { EmagComanda, EmagConfig } from "@/lib/emag/types";
 
@@ -150,14 +151,24 @@ export async function POST(req: NextRequest) {
    * Deci notificarea e doar un semnal: „uită-te acum". Adevărul se citește tot de la
    * `order/read`, exact ca la cron.
    */
+  /*
+   * ⚠ UN FIR PE NOTIFICARE (§66).
+   *
+   * O notificare poate declansa mai multe cereri catre ei. Cu firul, „ce s-a
+   * intamplat cand ne-a sunat pentru comanda 12345" are un raspuns dintr-o singura
+   * cautare — iar fara el, cererile notificarii ar fi fost amestecate cu cele ale
+   * cronului, care ruleaza in acelasi minut si citeste aceleasi comenzi.
+   */
+  const fir = firNou("notificare");
+
   try {
     if (orderId != null) {
-      const r = await citesteComenzi(ctx.auth, { id: orderId });
+      const r = await cuFir(fir, () => citesteComenzi(ctx.auth, { id: orderId }));
       if (isEmagError(r)) {
         return NextResponse.json({ ok: true, amanat: r.error });
       }
       const comenzi = (Array.isArray(r.data) ? r.data : []) as EmagComanda[];
-      for (const c of comenzi) await ingereazaComanda(admin, ctx, c);
+      for (const c of comenzi) await cuFir(fir, () => ingereazaComanda(admin, ctx, c));
       return NextResponse.json({ ok: true, citite: comenzi.length });
     }
 
@@ -169,13 +180,14 @@ export async function POST(req: NextRequest) {
      * mutat de ele, cursorul cronului ar fi sărit peste comenzi pe care nu le-a citit
      * nimeni. Aici se citește în plus, niciodată în locul lui.
      */
-    const rez = await aduComenzile(admin, ctx, new Date(Date.now() - 15 * 60 * 1000));
+    const rez = await cuFir(fir, () =>
+      aduComenzile(admin, ctx, new Date(Date.now() - 15 * 60 * 1000)));
     return NextResponse.json({ ok: true, noi: rez.noi, actualizate: rez.actualizate });
   } catch (e) {
     await logError({
       action: "emag/webhook",
       message: e instanceof Error ? e.message : "notificarea nu a putut fi procesată",
-      details: { businessId, orderId },
+      details: { businessId, orderId, fir },
       businessId,
       severity: "error",
     });

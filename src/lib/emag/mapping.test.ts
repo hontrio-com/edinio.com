@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
+  motivulImaginilor,
   alegeSupplyLeadTime, bandaDePret, construiesteOferte, imaginiEmag, masuratoriEmag,
   normalizeazaPartNumber, partNumberCombinatie, pretFaraTva,
   type ContextCategorie, type ContextMagazin, type ProdusDeCartografiat, oferteUsoare, stocuriDeTrimis} from "./mapping";
@@ -663,4 +664,44 @@ test("eMAG: un cod de bare bun nu produce nicio observatie", () => {
   const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
   assert.equal(r.probleme.filter((x) => /codul de bare/i.test(x)).length, 0);
   assert.equal(r.observatii.filter((x) => /codul de bare/i.test(x)).length, 0);
+});
+
+/* ── De ce n-a ramas nicio imagine (masurat 24.08.2026) ────────────────────── */
+
+test("„nu are nicio imagine https” era FALS pentru produse cu imagini https", () => {
+  /*
+   * ═══ PATRU PRODUSE BLOCATE CU UN MOTIV NEADEVARAT ═══
+   *
+   * Toate patru aveau exact o imagine, si aceea https:
+   * `https://edinio-cdn.com/…/….webp`. Filtrarea e corecta — schema lor spune „JPG,
+   * JPEG or PNG" — dar motivul raportat era altul decat cel adevarat.
+   *
+   * ⚠ Comerciantul deschide fisa, vede poza acolo, vede ca e https, si nu intelege
+   * nimic. Cauta o imagine lipsa care nu lipseste, in loc sa converteasca un fisier.
+   */
+  const m = motivulImaginilor(["https://edinio-cdn.com/x/y.webp"]);
+  assert.ok(!/nicio imagine/.test(m), `nu mai spune ca lipsesc: ${m}`);
+  assert.match(m, /JPG/i, "spune ce accepta ei");
+  assert.match(m, /\.webp/i, "si ce are el, ca sa stie ce converteste");
+});
+
+test("fara nicio imagine se spune tot asa", () => {
+  assert.match(motivulImaginilor([]), /nu are nicio imagine/);
+});
+
+test("numai http se deosebeste de format gresit", () => {
+  /* ⚠ Doua necazuri diferite, doua indrumari diferite: unul se repara mutand fisierul
+     pe https, celalalt convertindu-l. Un mesaj pentru amandoua n-ar ajuta la niciunul. */
+  const m = motivulImaginilor(["http://exemplu.ro/x.jpg"]);
+  assert.match(m, /https/);
+  assert.ok(!/JPG/i.test(m), `nu vorbi despre format cand problema e schema: ${m}`);
+});
+
+test("cu o imagine buna nu se plange nimeni", () => {
+  const r = construiesteOferte(
+    produs({ images: ["https://edinio-cdn.com/x/y.jpg"] }),
+    MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null,
+  );
+  assert.equal(r.oferte.length, 1);
+  assert.equal(r.probleme.filter((x) => /imagine/i.test(x)).length, 0);
 });

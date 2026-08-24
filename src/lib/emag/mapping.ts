@@ -219,6 +219,51 @@ export function imaginiEmag(imagini: unknown, imagineCombinatie?: string | null)
     .map((url, i) => ({ url, display_type: i === 0 ? 1 : 2 } as EmagImagine));
 }
 
+/**
+ * De ce n-a ramas nicio imagine buna, in cuvintele omului.
+ *
+ * ═══ ⚠ „NU ARE NICIO IMAGINE HTTPS" ERA FALS (masurat, 24.08.2026) ═══
+ *
+ * Patru produse blocate in coada, fiecare cu mesajul asta. Iar toate patru AVEAU exact
+ * o imagine, si aceea https: `https://edinio-cdn.com/…/….webp`.
+ *
+ * Filtrarea e corecta — schema lor, la `images[].url`, spune „JPG, JPEG or PNG", deci un
+ * `.webp` se scoate pe drept. Dar motivul raportat era altul decat cel adevarat.
+ *
+ * ⚠ CE COSTA: comerciantul deschide fisa produsului, vede poza acolo, vede ca e https, si
+ * nu intelege nimic. Cauta o zi o imagine lipsa care nu lipseste, in loc sa converteasca
+ * un fisier. Aceeasi forma cu „eMAG nu trimite motivul prin API" si cu bulina „Preluat":
+ * o stare adevarata, cu un motiv fals lipit de ea.
+ *
+ * ⚠ Se numara pe adresele DE DUPA `https`, nu pe cele brute: un produs cu o poza `http`
+ * si una `.webp` are doua necazuri, iar spuse amandoua deodata n-ar ajuta pe nimeni. Se
+ * spune cel care se repara primul.
+ */
+export function motivulImaginilor(imagini: unknown, imagineCombinatie?: string | null): string {
+  const brute = Array.isArray(imagini) ? imagini : [];
+  const aCombinatiei = (imagineCombinatie ?? "").trim();
+  const toate = [
+    ...(aCombinatiei ? [adresaPublicaImagine(aCombinatiei)] : []),
+    ...brute.map((x) => adresaPublicaImagine(String(x ?? "").trim())).filter(Boolean),
+  ];
+
+  if (toate.length === 0) return "nu are nicio imagine. eMAG cere cel puțin una.";
+
+  const sigure = toate.filter((u) => /^https:\/\//i.test(u));
+  if (sigure.length === 0) {
+    return "are imagini, dar niciuna pe https. eMAG le respinge pe cele http.";
+  }
+
+  /* ⚠ Se spune si CE format are, si care se accepta: „converteste-le" fara sa spui in ce
+     e o sarcina, nu o indrumare. */
+  const extensii = [...new Set(
+    sigure.map((u) => (u.split("?")[0].match(/\.([a-z0-9]+)$/i)?.[1] ?? "").toLowerCase())
+      .filter(Boolean),
+  )];
+  const scrise = extensii.length ? ` Ale tale sunt ${extensii.map((e) => `.${e}`).join(", ")}.` : "";
+  return `are imagini, dar eMAG acceptă doar JPG, JPEG sau PNG.${scrise} Convertește-le în fișa produsului.`;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    CE INTRA IN CARTOGRAFIERE
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -529,6 +574,7 @@ export function construiesteOferte(
       stoc: produs.stock_quantity ?? 0,
       partNumber: normalizeazaPartNumber(produs.sku) || normalizeazaPartNumber(produs.id),
       imagini: imaginiEmag(produs.images),
+      imaginiBrute: produs.images,
       titlu: produs.name,
       familie: undefined,
       probleme,
@@ -580,6 +626,8 @@ export function construiesteOferte(
       stoc: comboStock(c) ?? produs.stock_quantity ?? 0,
       partNumber: partNumberCombinatie(produs.sku, c.sku, c.title),
       imagini: imaginiEmag(produs.images, c.image),
+      imaginiBrute: produs.images,
+      imagineCombinatie: c.image,
       titlu: `${produs.name} - ${c.title}`,
       familie: {
         id: familyId,
@@ -617,6 +665,9 @@ function ofertaSingura(a: {
   stoc: number;
   partNumber: string;
   imagini: EmagImagine[];
+  /** ⚠ Pentru MESAJ, nu pentru trimitere: din ele se afla DE CE n-a ramas niciuna. */
+  imaginiBrute: unknown;
+  imagineCombinatie?: string | null;
   titlu: string;
   familie: EmagProdusOferta["family"];
   probleme: string[];
@@ -649,7 +700,9 @@ function ofertaSingura(a: {
   }
 
   if (a.imagini.length === 0) {
-    probleme.push(`„${a.titlu}" nu are nicio imagine https. eMAG cere cel puțin una.`);
+    /* ⚠ Motivul ADEVARAT, nu unul generic. Vezi `motivulImaginilor`: patru produse au
+       stat blocate cu „nu are nicio imagine https", desi aveau imagini, si https. */
+    probleme.push(`„${a.titlu}" ${motivulImaginilor(a.imaginiBrute, a.imagineCombinatie)}`);
     return null;
   }
 

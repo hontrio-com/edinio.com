@@ -1424,6 +1424,8 @@ export interface RandOfertaEcran {
   stareEticheta: string;
   /** Ce are omul de facut, cand are. Gol cand nu e nimic de facut. */
   indrumare: string;
+  /** Cate poze are eMAG. `null` = necitit inca, `0` = citit si n-are niciuna. */
+  imaginiLaEmag: number | null;
   /** Textul lor pentru `validation_status`, întreg. Niciodată rescris de noi. */
   validare: string | null;
   /** Ce trebuie reparat, cuvânt cu cuvânt de la ei. */
@@ -1514,7 +1516,7 @@ export async function listaOferteEmag(
   let q = admin
     .from("emag_offers")
     .select(
-      "id, product_id, variant_title, emag_id, status, validation_status, offer_validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, deriva, nume_emag, creat_de_edinio, status_la_ei, stoc_la_ei, products(name)",
+      "id, product_id, variant_title, emag_id, status, validation_status, offer_validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, deriva, nume_emag, creat_de_edinio, status_la_ei, stoc_la_ei, imagini_la_ei, products(name)",
       { count: "exact" },
     )
     .eq("business_id", businessId);
@@ -1549,6 +1551,7 @@ export async function listaOferteEmag(
     doc_errors: unknown; error: string | null; auto_sync: boolean; part_number_key: string | null;
     nume_emag: string | null; creat_de_edinio: boolean;
     offer_validation_status: number | null; status_la_ei: number | null; stoc_la_ei: number | null;
+    imagini_la_ei: number | null;
     number_of_offers: number | null; buy_button_rank: number | null; best_offer_sale_price: number | null;
     deriva: unknown;
     products: { name: string } | { name: string }[] | null;
@@ -1607,6 +1610,16 @@ export async function listaOferteEmag(
       stareEticheta: motivul.eticheta,
       /** Ce are omul de facut, cand are. Gol cand nu e nimic de facut. */
       indrumare: motivul.indrumare,
+      /*
+       * ⚠ CATE POZE ARE EMAG, nu cate am trimis noi.
+       *
+       * Comerciantul a intrebat pe 24.08.2026 de ce vede produsele fara imagine in
+       * panoul lor, iar raspunsul n-a putut fi dat decat dupa ce am pastrat numarul:
+       * `EmagOfertaCitita.images` exista in tipuri de la inceput si nu se scria nicaieri.
+       *
+       * `null` = n-am citit inca. Deosebit de `0` = am citit si n-au niciuna.
+       */
+      imaginiLaEmag: r.imagini_la_ei,
       validare: r.validation_status != null ? (EMAG_VALIDARE[r.validation_status] ?? `Stare ${r.validation_status}`) : null,
       docErrors: normalizeazaDocErrors(r.doc_errors),
       eroare: r.error,

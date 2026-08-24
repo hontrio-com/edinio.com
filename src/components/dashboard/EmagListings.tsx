@@ -380,6 +380,13 @@ function RandOferta({
                 vinde pe eMAG si lucruri pe care nu le tine in magazin isi cauta in
                 Edinio produse care n-au fost niciodata acolo — si crede ca le-a
                 pierdut. Pe 24.08.2026 erau 3.334 de randuri asa. */}
+            {rand.imaginiLaEmag === 0 && (
+              /* ⚠ Numai la ZERO, nu si la `null`. `null` inseamna „n-am citit inca", si
+                  aratat ca lipsa, ar fi speriat omul pentru fiecare ofertă nouă. */
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
+                eMAG n-are nicio poză
+              </span>
+            )}
             {rand.indrumare && (
               /* ⚠ Se arata si pe rand, nu doar in `title`: pe telefon nu exista hover, iar
                  „de ce nu se vinde produsul meu" e chiar intrebarea pentru care se deschide

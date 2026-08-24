@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { hrefCatalog } from "@/lib/storefront/category-href";
+import { hrefCautare } from "@/lib/storefront/design/commerce";
 import { cuSemnePastrate } from "@/lib/storefront/preview-sticky";
 import { useCatalogCautabil, useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { RezultateCautare } from "./RezultateCautare";
@@ -29,7 +29,7 @@ export function useCautareHeader(optiuni?: {
    */
   laAplicare?: () => void;
 }) {
-  const { catalogRoot, basePath } = useStoreChrome();
+  const { basePath } = useStoreChrome();
   const catalog = useCatalogCautabil();
   const [local, setLocal] = useState("");
   const [deschise, setDeschise] = useState(false);
@@ -94,8 +94,20 @@ export function useCautareHeader(optiuni?: {
      *
      * In afara previzualizarii, functia intoarce adresa neatinsa.
      */
+    /*
+     * ═══ ⚠ PAGINA DE REZULTATE, NU CATALOGUL CU UN FILTRU ═══
+     *
+     * Prima reparatie ducea pe `hrefCatalog`, adica pe radacina catalogului cu `?q=…`
+     * lipit. La magazinele care isi tin produsele pe pagina principala, radacina ALA
+     * E pagina principala — deci omul cauta, se schimba adresa, si ramane cu eroul in
+     * fata. Exact ce a raportat clientul dupa prima incercare: „sunt tot pe pagina
+     * principala si imi adauga in URL ?q=tricou+basic”.
+     *
+     * `/cautare` exista pentru ORICE magazin, indiferent de design — la fel ca bara
+     * din care se pleaca. Vezi ruta pentru de ce.
+     */
     window.location.href = cuSemnePastrate(
-      hrefCatalog(catalogRoot, p.toString()),
+      hrefCautare(basePath, p.toString()),
       window.location.search,
     );
   }

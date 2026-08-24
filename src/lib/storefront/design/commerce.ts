@@ -1,4 +1,4 @@
-import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
+import { SEGMENT_MAGAZIN, SEGMENT_CAUTARE } from "@/lib/pages/reserved-slugs";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { variantMeta } from "./registry";
 import type { SectionInstance, SectionKind, StoreDesign } from "./types";
@@ -23,7 +23,7 @@ export const SEGMENT_COS = "cos";
 export const SEGMENT_CHECKOUT = "checkout";
 // Definit langa lista de sluguri rezervate, ca ecranele de dashboard sa il poata
 // citi fara sa traga registry-ul de sectiuni in bundle-ul lor de client.
-export { SEGMENT_MAGAZIN };
+export { SEGMENT_MAGAZIN, SEGMENT_CAUTARE };
 
 /** `true` cand designul publicat pune cosul pe o pagina proprie. */
 export function cartOnPage(design: StoreDesign): boolean {
@@ -56,6 +56,23 @@ export function shopOnPage(design: StoreDesign): boolean {
     design.shop.page.enabled === true
     && variantMeta("shop_page", design.shop.page.variant)?.surface === "page"
   );
+}
+
+/**
+ * Adresa paginii de rezultate ale cautarii.
+ *
+ * ═══ ⚠ NU DEPINDE DE DESIGN, SPRE DEOSEBIRE DE `shopHref` ═══
+ *
+ * Catalogul are pagina lui doar la magazinele care si-au ales-o. Rezultatele cautarii
+ * exista MEREU: bara e in toate cele sapte headere, iar daca destinatia ar depinde de
+ * o alegere de design, aceeasi apasare ar duce la o pagina adevarata la unii si inapoi
+ * pe pagina principala — peste erou, peste randurile de produse — la altii.
+ *
+ * Chiar ce a raportat eSAFE: „sunt tot pe pagina principala".
+ */
+export function hrefCautare(basePath: string, interogare?: string): string {
+  const cale = `${basePath}/${SEGMENT_CAUTARE}`;
+  return interogare ? `${cale}?${interogare}` : cale;
 }
 
 export function shopHref(basePath: string): string {

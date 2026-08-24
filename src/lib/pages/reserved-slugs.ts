@@ -19,6 +19,16 @@ import { slugify } from "@/lib/utils/slugify";
  */
 export const SEGMENT_MAGAZIN = "magazin";
 
+/**
+ * Segmentul rutei de rezultate ale cautarii.
+ *
+ * ⚠ Rezervarea intra IN ACELASI COMMIT cu ruta, ca la catalog: ea nu repara
+ * retroactiv o pagina proprie care poarta deja numele, blocheaza doar crearile noi.
+ * Verificat inainte de livrare — niciunul dintre cele 29 de pagini proprii din
+ * productie nu se numea asa.
+ */
+export const SEGMENT_CAUTARE = "cautare";
+
 export const RESERVED_PAGE_SLUGS = new Set<string>([
   // existing public store sub-routes
   "product", "politici", "confirm", "retur",
@@ -35,6 +45,10 @@ export const RESERVED_PAGE_SLUGS = new Set<string>([
   // le foloseste, si rezervate ar fi luat comerciantilor un nume bun fara sa
   // apere nimic.
   SEGMENT_MAGAZIN, "shop",
+  // pagina de rezultate: exista pentru ORICE magazin, si de aceea perechea in
+  // engleza intra si ea — „search" ar fi un nume plauzibil de pagina proprie, iar
+  // o pagina cu numele asta ar fi fost umbrita fara sa inteleaga nimeni de ce.
+  SEGMENT_CAUTARE, "search",
   // platform / framework
   "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
   // app sections that live at the root path

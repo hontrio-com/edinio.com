@@ -19,7 +19,7 @@ import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibi
 import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
 import { radacinaMagazinCuFiltre, slugCategorie } from "@/lib/storefront/category-href";
-import { SEGMENT_MAGAZIN, shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
+import { SEGMENT_MAGAZIN, SEGMENT_CAUTARE, shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
 import { isNonProductionHost } from "@/lib/storefront/host";
@@ -48,6 +48,26 @@ interface Argumente {
   sp: Record<string, string | string[] | undefined>;
   /** Segmentul de categorie din cale, cand pagina e a unei categorii. */
   categorieSlug?: string;
+  /**
+   * Pagina de REZULTATE ale cautarii (`/cautare?q=…`).
+   *
+   * ═══ ⚠ DE CE E UN STEAG, SI NU O A DOUA PAGINA ═══
+   *
+   * Rezultatele au nevoie de exact ce are catalogul: grila, filtrele, paginarea,
+   * fatetele, ordonarea. O pagina scrisa separat ar fi fost o a doua copie a
+   * acelorasi sapte sute de randuri, care se desparte de prima la prima schimbare.
+   *
+   * ⚠ Steagul schimba DOUA lucruri, si numai doua:
+   *
+   *   1. Nu se mai redirecteaza magazinele care n-au catalog separat. Pagina de
+   *      rezultate trebuie sa existe pentru ORICARE magazin — altfel cautarea din
+   *      header, care e in toate design-urile, ar fi dus inapoi pe pagina principala
+   *      la unii si pe o pagina adevarata la altii.
+   *   2. Nu se indexeaza. Rezultatele proprii de cautare n-au ce cauta in Google —
+   *      o spun chiar ei in indrumarul pentru webmasteri — iar spatiul de adrese e
+   *      nesfarsit: un termen scris de oricine ar fi devenit o pagina.
+   */
+  esteCautare?: boolean;
 }
 
 type CategorieMinima = { id: string; name: string; parent_id: string | null };
@@ -75,7 +95,7 @@ async function numeCategoriiDinProduse(businessId: string): Promise<{ name: stri
     .map((name) => ({ name }));
 }
 
-export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): Promise<Metadata> {
+export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: Argumente): Promise<Metadata> {
   const admin = createAdminClient();
   const { data: business } = await admin
     .from("businesses")
@@ -166,6 +186,27 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   const { titlu: title, descriere: description } = titluSiDescriere(seo, categorie, displayName, business.store_city);
   const images = business.cover_url ? [business.cover_url] : [];
 
+  /*
+   * ⚠ REZULTATELE DE CAUTARE NU SE INDEXEAZA, NICIODATA.
+   *
+   * Google o cere limpede in indrumarul pentru webmasteri, si are dreptate: spatiul de
+   * adrese e nesfarsit — orice termen scris de oricine ar fi devenit o pagina — iar
+   * paginile alea n-au continut propriu, doar o felie din catalog.
+   *
+   * `follow: true` ramane: legaturile catre produse merita urmarite.
+   */
+  if (esteCautare) {
+    /* ⚠ Citit ca vecinii lui: un `?q=a&q=b` ajunge tablou, iar `.trim()` pe tablou
+       ar fi cazut in randare, nu la compilare. */
+    const termen = ((Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? "").trim().slice(0, 80);
+    return {
+      title: { absolute: termen ? `Rezultate pentru „${termen}” · ${displayName}` : `Caută · ${displayName}` },
+      description,
+      robots: { index: false, follow: true },
+      alternates: { canonical: `${radacina}/${SEGMENT_CAUTARE}` },
+    };
+  }
+
   return {
     // `absolute` scoate template-ul „%s | Edinio" al radacinii: pe domeniul
     // comerciantului, fila din browser n-are ce cauta cu numele platformei.
@@ -180,7 +221,7 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   };
 }
 
-export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
+export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: Argumente) {
   const supabase = await createClient();
   /*
    * Randul de magazin vine din citirea DEDUPLICATA a antetului, nu dintr-o a doua
@@ -239,10 +280,19 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     redirect(radacinaMagazinCuFiltre(basePath, sp));
   }
 
-  // Magazinul are produsele pe pagina principala: aici n-are ce cauta nimeni.
-  // Redirect, nu 404 — un link vechi trebuie sa duca in magazin, nu intr-o
-  // pagina de eroare.
-  if (!shopOnPage(resolved.design)) redirect(radacinaMagazinCuFiltre(basePath, sp));
+  /*
+   * Magazinul are produsele pe pagina principala: pagina de CATALOG n-are ce cauta.
+   * Redirect, nu 404 — un link vechi trebuie sa duca in magazin, nu intr-o pagina de
+   * eroare.
+   *
+   * ⚠ PAGINA DE REZULTATE FACE EXCEPTIE, si asta e chiar rostul ei.
+   *
+   * Cautarea din header e in toate cele sapte design-uri. Daca rezultatele ar depinde
+   * de o alegere de design, ar fi dus la o pagina adevarata la unii comercianti si
+   * inapoi pe pagina principala — peste erou, peste randurile de produse — la altii.
+   * Chiar ce a raportat eSAFE: „sunt tot pe pagina principala".
+   */
+  if (!esteCautare && !shopOnPage(resolved.design)) redirect(radacinaMagazinCuFiltre(basePath, sp));
 
   if (!business.is_published && !isOwner) redirect(radacinaMagazinCuFiltre(basePath, sp));
 
@@ -666,7 +716,8 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
       categories={categoriiDeNavigat}
       design={resolved.design}
       designStyle={resolved.style}
-      editorDesign={esteEditorDesign}
+      editorDesign={esteEditorDesign}
+
       fatete={fateteDePagina}
       jetoane={jetoaneDePagina}
       palier={palierRandat}

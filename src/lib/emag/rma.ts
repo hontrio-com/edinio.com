@@ -159,6 +159,37 @@ export async function aduRetururile(admin: Db, ctx: ContextEmag): Promise<Rezult
 }
 
 /**
+ * Un singur retur, citit de la ei si scris la noi.
+ *
+ * ═══ ⚠ PENTRU NOTIFICARE, NU PENTRU CRON ═══
+ *
+ * Cronul aduce retururile la sfert de ora, pe stari. Dar cand eMAG ne SUNA despre un
+ * retur anume, plasa de dinainte nu facea nimic: notificarea fara id de comanda cadea pe
+ * „citeste comenzile ultimelor cincisprezece minute", iar un retur nu e o comanda si nu
+ * apare in `order/read`.
+ *
+ * ⚠ Deci semnalul se pierdea, si returul se afla abia la trecerea urmatoare de sfert de
+ * ora. Comerciantul avea marfa inapoi in depozit si niciun rand in Edinio.
+ *
+ * ⚠ Cronul RAMANE. Asta e calea rapida, nu inlocuitorul lui: notificarile se pot pierde
+ * pe drum, iar atunci sfertul de ora e tot ce ramane.
+ */
+export async function aduUnRetur(admin: Db, ctx: ContextEmag, emagRmaId: number): Promise<boolean> {
+  const raspuns = await citesteRetururi(ctx.auth, { emag_id: emagRmaId });
+  if (isEmagError(raspuns)) return false;
+
+  const retururi = (Array.isArray(raspuns.data) ? raspuns.data : []) as EmagRetur[];
+  let scrise = 0;
+  for (const ret of retururi) {
+    /* ⚠ Se scrie NUMAI returul cerut. Ruta lor primeste filtre, dar raspunsul lor nu e in
+       schema lor — daca intoarce si altele, n-avem de ce sa le luam de bune aici. */
+    if (!Number.isFinite(ret?.emag_id) || ret.emag_id !== emagRmaId) continue;
+    if (await scrieReturul(admin, ctx, ret)) scrise++;
+  }
+  return scrise > 0;
+}
+
+/**
  * Un retur, scris la noi.
  *
  * ⚠ SE LEAGA DE COMANDA PRIN `emag_orders`, nu prin `orders`. Comanda poate lipsi de

@@ -56,16 +56,40 @@ test("nu mai exista `void enqueue…` nicaieri in cod", () => {
    * lasata pe urma inseamna o coada care se poate pierde tacut, si tocmai aia n-ar avea
    * niciun semn.
    */
-  const gasite = execSync(
-    'grep -rn "void enqueue" src/lib src/app --include=*.ts || true',
+  /*
+   * ═══ ⚠ SE CAUTA IN COD, NU IN PROZA (indreptat 25.08.2026) ═══
+   *
+   * Prima forma cauta in text si excludea pe NUME cele doua fisiere ale reparatiei, care
+   * citeaza forma veche ca s-o explice. Excluderea pe nume merge exact pana cand cineva
+   * scrie a treia oara `void enqueue(...)` intr-o nota — si atunci proba cade fara ca
+   * nimic sa fie stricat.
+   *
+   * ⚠ S-a si intamplat, in aceeasi zi: nota de sus a pasului „schimbari neplecate"
+   * povesteste chiar defectul, iar proba a cazut pe povestea lui.
+   *
+   * ⚠ O proba care cade pe cod sanatos se dezactiveaza, nu se repara — si atunci n-ar mai
+   * apara nimic. Deci se scot comentariile INAINTE de cautare: intrebarea nu era
+   * niciodata „scrie undeva `void enqueue`", ci „mai RULEAZA undeva `void enqueue`".
+   */
+  const fisiere = execSync(
+    'grep -rl "void enqueue" src/lib src/app --include=*.ts || true',
     { encoding: "utf8" },
-  )
-    .split(String.fromCharCode(10))
-    .filter((l) => l.trim() !== "")
-    /* ⚠ Cele doua fisiere ale reparatiei CITEAZA forma veche ca s-o explice — nota din
-       ambalaj, si chiar numele probei asteia. A patra oara azi cand o verificare se
-       potriveste cu propriul ei text; de aceea se exclud pe nume, nu prin ghicire. */
-    .filter((l) => !l.startsWith("src/lib/marketplace/dupa-raspuns."));
+  ).split(String.fromCharCode(10)).filter((x) => x.trim() !== "");
+
+  const gasite: string[] = [];
+  for (const f of fisiere) {
+    /* ⚠ Proba insasi poarta sirul cautat, in numele ei si in `grep`. E singurul fisier
+       exclus, si e exclus fiindca e CAUTATORUL — nu fiindca ar avea nevoie de scutire.
+       Ambalajul `dupa-raspuns.ts` se verifica la fel ca tot restul: dupa ce se scot
+       comentariile, nota lui explicativa dispare, deci n-are de ce sa fie scutit. */
+    if (f.split("\\").join("/").endsWith("src/lib/marketplace/dupa-raspuns.test.ts")) continue;
+    const cod = readFileSync(f, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^[ \t]*\/\/.*$/gm, "");
+    cod.split(String.fromCharCode(10)).forEach((l, i) => {
+      if (l.includes("void enqueue")) gasite.push(`${f}:${i + 1}: ${l.trim()}`);
+    });
+  }
 
   assert.deepEqual(gasite, [], "au ramas puneri in coada pornite si uitate");
 });

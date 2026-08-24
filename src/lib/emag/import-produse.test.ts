@@ -290,10 +290,16 @@ test("eMAG: reconcilierea foloseste ACEEASI socoteala de stoc ca importul", () =
    * ⚠ Proba se uita la SURSA cronului, nu la comportament: cele doua socoteli dau
    * amandoua un numar, deci despartirea lor nu se vede din afara.
    */
-  const sursa = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8");
+  /* ⚠ Reconcilierea s-a mutat din ruta de cron in `statusuri.ts`, ca s-o poata chema si
+     notificarea „documentatie aprobata" — scrisa a doua oara acolo, s-ar fi departat de
+     asta, iar despartirea nu s-ar fi vazut. Proba citeste amandoua fisierele: forma
+     veche, care se uita numai la ruta, ar fi trecut verde peste o reconciliere mutata si
+     stricata. */
+  const sursa = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8")
+    + readFileSync("src/lib/emag/statusuri.ts", "utf8");
   assert.equal(
     sursa.includes("const stoc = stocDeImportat(o)"), true,
-    "cronul nu mai cheama `stocDeImportat`",
+    "reconcilierea nu mai cheama `stocDeImportat`",
   );
   /* ⚠ Se cauta ORICE adunare proprie peste `stock`, nu doar forma exacta de dinainte:
      prima cautare a ratat-o pe a doua, din masurarea derivei, care era mai periculoasa

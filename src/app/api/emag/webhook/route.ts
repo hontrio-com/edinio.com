@@ -7,8 +7,11 @@ import { ipuriPermise, CHEIE_IPURI } from "@/lib/emag/ipuri";
 import { loadEmagContext } from "@/lib/emag/sync";
 import { aduComenzile, ingereazaComanda } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
-import { citesteComenzi, isEmagError } from "@/lib/emag/client";
-import type { EmagComanda } from "@/lib/emag/types";
+import { citesteComenzi, citesteOferte, isEmagError } from "@/lib/emag/client";
+import { citesteNotificarea } from "@/lib/emag/notificari";
+import { aduUnRetur } from "@/lib/emag/rma";
+import { scrieStatusurile } from "@/lib/emag/statusuri";
+import type { EmagComanda, EmagOfertaCitita } from "@/lib/emag/types";
 
 /**
  * Notificările eMAG.
@@ -139,7 +142,8 @@ export async function POST(req: NextRequest) {
   let corp: unknown = null;
   try { corp = await req.json(); } catch { corp = null; }
 
-  const orderId = idComenzii(corp);
+  const semnal = citesteNotificarea(corp);
+  const orderId = semnal.fel === "comanda" ? semnal.id : idComenzii(corp);
 
   /*
    * ═══ ⚠ CONȚINUTUL NOTIFICĂRII NU SE IA DE BUN ═══
@@ -162,6 +166,43 @@ export async function POST(req: NextRequest) {
   const fir = firNou("notificare");
 
   try {
+    /*
+     * ═══ ⚠ CAI RAPIDE PENTRU RETUR SI PENTRU DOCUMENTATIE (25.08.2026) ═══
+     *
+     * Pana acum, orice notificare FARA id de comanda cadea pe aceeasi plasa: „citeste
+     * comenzile ultimelor cincisprezece minute”. Pentru un RETUR asta nu face absolut
+     * nimic — returul nu e o comanda si nu apare in `order/read`. Deci semnalul se
+     * pierdea, iar returul se afla abia la trecerea de sfert de ora a cronului:
+     * comerciantul avea marfa inapoi in depozit si niciun rand in Edinio.
+     *
+     * ⚠ La DOCUMENTATIE APROBATA e mai subtil, dar la fel de suparator: reconcilierea
+     * merge cu un cursor prin catalog, pagina cu pagina. Pe 3.700 de oferte, o aprobare
+     * poate sta zeci de minute pana ajunge cursorul la ea — iar „de ce nu se vinde inca
+     * produsul meu?” e chiar cea mai frecventa intrebare a comerciantului.
+     *
+     * ⚠ CRONUL RAMANE, si asta nu e o formalitate. Astea sunt cai rapide, nu inlocuitori:
+     * notificarile se pot pierde pe drum, iar atunci cronul e tot ce ramane. Nicio cale de
+     * aici nu atinge marcajul lui.
+     *
+     * ⚠ Iar cand nu se recunoaste nimic, se cade pe plasa de dinainte. Forma notificarii
+     * lor NU e documentata nicaieri; o adaugare care ghiceste n-are voie sa strice ce
+     * mergea.
+     */
+    if (semnal.fel === "retur") {
+      const scris = await cuFir(fir, () => aduUnRetur(admin, ctx, semnal.id));
+      /* ⚠ Daca n-a mers, NU se raspunde cu eroare: cronul il ia oricum la sfert de ora.
+         Un 5xx i-ar pune pe ei sa reincerce in bucla pentru nimic. */
+      return NextResponse.json({ ok: true, retur: semnal.id, scris });
+    }
+
+    if (semnal.fel === "documentatie") {
+      const r = await cuFir(fir, () => citesteOferte(ctx.auth, { id: semnal.id }));
+      if (isEmagError(r)) return NextResponse.json({ ok: true, amanat: r.error });
+      const oferte = (Array.isArray(r.data) ? r.data : []) as EmagOfertaCitita[];
+      const scrise = await scrieStatusurile(admin, businessId, oferte);
+      return NextResponse.json({ ok: true, oferta: semnal.id, scrise });
+    }
+
     if (orderId != null) {
       const r = await cuFir(fir, () => citesteComenzi(ctx.auth, { id: orderId }));
       if (isEmagError(r)) {

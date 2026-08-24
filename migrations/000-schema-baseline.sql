@@ -1344,6 +1344,21 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.curata_ritm_extern()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'privat', 'pg_temp'
+AS $function$
+declare v_sterse int;
+begin
+  delete from privat.ritm_extern where actualizat_la < now() - interval '7 days';
+  get diagnostics v_sterse = row_count;
+  return v_sterse;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.customer_orders(bid uuid, cust_key text, page_limit integer DEFAULT 50, page_offset integer DEFAULT 0)
  RETURNS TABLE(id uuid, order_number text, total numeric, status text, payment_method text, payment_status text, created_at timestamp with time zone, item_count integer, total_count bigint)
  LANGUAGE sql
@@ -2075,6 +2090,53 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.ia_jeton_extern(p_cheie text, p_limita integer, p_fereastra_ms integer DEFAULT 1000)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'privat', 'pg_temp'
+AS $function$
+declare
+  v_acum     bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  v_fer      bigint;
+  v_folosite int;
+begin
+  if coalesce(btrim(p_cheie), '') = '' then
+    raise exception 'cheie de ritm lipsa';
+  end if;
+  if p_limita is null or p_limita < 1 then
+    raise exception 'limita de ritm invalida: %', p_limita;
+  end if;
+  if p_fereastra_ms is null or p_fereastra_ms < 1 then
+    raise exception 'fereastra de ritm invalida: %', p_fereastra_ms;
+  end if;
+
+  insert into privat.ritm_extern (cheie, fereastra_ms, folosite, actualizat_la)
+  values (p_cheie, v_acum, 1, now())
+  on conflict (cheie) do update
+    set fereastra_ms = case
+          when v_acum - privat.ritm_extern.fereastra_ms >= p_fereastra_ms then v_acum
+          else privat.ritm_extern.fereastra_ms end,
+        folosite = case
+          when v_acum - privat.ritm_extern.fereastra_ms >= p_fereastra_ms then 1
+          else privat.ritm_extern.folosite + 1 end,
+        actualizat_la = now()
+  returning fereastra_ms, folosite into v_fer, v_folosite;
+
+  if v_folosite <= p_limita then
+    return jsonb_build_object(
+      'ok', true, 'asteapta_ms', 0, 'folosite', v_folosite, 'limita', p_limita);
+  end if;
+
+  return jsonb_build_object(
+    'ok', false,
+    'asteapta_ms', greatest(1, (v_fer + p_fereastra_ms - v_acum))::int,
+    'folosite', v_folosite,
+    'limita', p_limita);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.inceput_fereastra_ro(p_zile integer, p_deplasare integer DEFAULT 0)
  RETURNS timestamp with time zone
  LANGUAGE sql
@@ -2648,6 +2710,29 @@ begin
     return jsonb_build_object('ok', false, 'motiv', format('[%s] %s', sqlstate, sqlerrm), 'pasi', v_pasi);
   end;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval DEFAULT '00:10:00'::interval, p_limita integer DEFAULT 50)
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select distinct p.id
+    from public.products p
+    join public.emag_offers o
+      on o.product_id = p.id
+     and o.business_id = p.business_id
+   where p.business_id = p_business_id
+     and o.auto_sync = true
+     and p.updated_at > coalesce(o.last_synced_at, 'epoch'::timestamptz)
+     and p.updated_at < now() - p_rabdare
+     and not exists (
+       select 1 from public.emag_sync_queue q
+        where q.business_id = p_business_id and q.product_id = p.id)
+   order by p.id
+   limit greatest(1, least(coalesce(p_limita, 50), 500));
 $function$
 ;
 
@@ -3754,10 +3839,38 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.vezi_ritm_extern(p_cheie text, p_fereastra_ms integer DEFAULT 1000)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'privat', 'pg_temp'
+AS $function$
+declare
+  v_acum bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  v_fer  bigint;
+  v_fol  int;
+begin
+  select fereastra_ms, folosite into v_fer, v_fol
+    from privat.ritm_extern where cheie = p_cheie;
+
+  if v_fer is null or v_acum - v_fer >= p_fereastra_ms then
+    return jsonb_build_object('folosite', 0, 'fereastra_ms', v_acum);
+  end if;
+  return jsonb_build_object('folosite', v_fol, 'fereastra_ms', v_fer);
+end;
+$function$
+;
+
 -- ── TABELE ────────────────────────────────────────────────
 create table if not exists privat.campuri_secrete (
   coloana text not null,
   cale text not null);
+
+create table if not exists privat.ritm_extern (
+  cheie text not null,
+  fereastra_ms bigint not null,
+  folosite integer default 0 not null,
+  actualizat_la timestamp with time zone default now() not null);
 
 create table if not exists privat.store_settings (
   id uuid default gen_random_uuid() not null,
@@ -5060,6 +5173,7 @@ create table if not exists public.zz_backup_preturi_vetdepo_hrana_caini_20260903
 
 -- ── CONSTRANGERI ──────────────────────────────────────────
 alter table privat.campuri_secrete add constraint campuri_secrete_pkey PRIMARY KEY (coloana, cale);
+alter table privat.ritm_extern add constraint ritm_extern_pkey PRIMARY KEY (cheie);
 alter table privat.store_settings add constraint store_settings_pkey PRIMARY KEY (id);
 alter table public.abandoned_carts add constraint abandoned_carts_pkey PRIMARY KEY (id);
 alter table public.aboutyou_batches add constraint aboutyou_batches_pkey PRIMARY KEY (id);
@@ -5363,6 +5477,7 @@ insert into privat.campuri_secrete (coloana, cale) values ('woot_config', 'publi
 insert into privat.campuri_secrete (coloana, cale) values ('woot_config', 'secret_key') on conflict do nothing;
 
 -- ── INDEXURI ──────────────────────────────────────────────
+CREATE INDEX ritm_extern_actualizat_idx ON privat.ritm_extern USING btree (actualizat_la);
 CREATE INDEX abandoned_carts_business_email_idx ON public.abandoned_carts USING btree (business_id, email);
 CREATE INDEX abandoned_carts_business_phone_idx ON public.abandoned_carts USING btree (business_id, phone);
 CREATE UNIQUE INDEX abandoned_carts_business_session_uidx ON public.abandoned_carts USING btree (business_id, session_id);
@@ -7672,6 +7787,7 @@ grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uui
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) to service_role;
 grant execute on function public.curata_limite() to service_role;
+grant execute on function public.curata_ritm_extern() to service_role;
 grant execute on function public.customer_orders(bid uuid, cust_key text, page_limit integer, page_offset integer) to anon;
 grant execute on function public.customer_orders(bid uuid, cust_key text, page_limit integer, page_offset integer) to authenticated;
 grant execute on function public.customer_orders(bid uuid, cust_key text, page_limit integer, page_offset integer) to service_role;
@@ -7696,6 +7812,7 @@ grant execute on function public.handle_support_message_insert() to service_role
 grant execute on function public.handle_updated_at() to anon;
 grant execute on function public.handle_updated_at() to authenticated;
 grant execute on function public.handle_updated_at() to service_role;
+grant execute on function public.ia_jeton_extern(p_cheie text, p_limita integer, p_fereastra_ms integer) to service_role;
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to anon;
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to authenticated;
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to service_role;
@@ -7736,6 +7853,7 @@ grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to service_role;
 grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
+grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.release_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.release_order_discount(p_order_id uuid) to service_role;
@@ -7799,6 +7917,7 @@ grant execute on function public.update_tool_avg_rating() to service_role;
 grant execute on function public.update_updated_at_column() to anon;
 grant execute on function public.update_updated_at_column() to authenticated;
 grant execute on function public.update_updated_at_column() to service_role;
+grant execute on function public.vezi_ritm_extern(p_cheie text, p_fereastra_ms integer) to service_role;
 
 -- ── REVOCARI DE LA PUBLIC ─────────────────────────────────
 -- Postgres da EXECUTE lui PUBLIC din oficiu la orice functie noua.
@@ -7828,6 +7947,7 @@ revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uu
 revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) from public;
 revoke execute on function public.curata_limite() from public;
+revoke execute on function public.curata_ritm_extern() from public;
 revoke execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) from public;
 revoke execute on function public.decrement_stock_batch(p_items jsonb) from public;
 revoke execute on function public.decrement_variant_stock_batch(p_items jsonb) from public;
@@ -7840,6 +7960,7 @@ revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_famili
 revoke execute on function public.genereaza_schema_baseline() from public;
 revoke execute on function public.handle_new_user() from public;
 revoke execute on function public.handle_support_message_insert() from public;
+revoke execute on function public.ia_jeton_extern(p_cheie text, p_limita integer, p_fereastra_ms integer) from public;
 revoke execute on function public.incheie_operatie_externa(p_id uuid, p_business_id uuid, p_stare text, p_referinta_externa text, p_detalii jsonb, p_eroare text) from public;
 revoke execute on function public.increment_discount_uses(p_discount_id uuid) from public;
 revoke execute on function public.increment_offer_stats(p_offer_id uuid, p_impressions integer, p_conversions integer, p_revenue numeric) from public;
@@ -7853,6 +7974,7 @@ revoke execute on function public.numar_produse_si_comenzi() from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
+revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
 revoke execute on function public.release_discount_use(p_discount_id uuid) from public;
 revoke execute on function public.release_order_discount(p_order_id uuid) from public;
@@ -7871,5 +7993,6 @@ revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
 revoke execute on function public.trg_generatia_cozii() from public;
 revoke execute on function public.update_support_ticket_updated_at() from public;
+revoke execute on function public.vezi_ritm_extern(p_cheie text, p_fereastra_ms integer) from public;
 
 notify pgrst, 'reload schema';

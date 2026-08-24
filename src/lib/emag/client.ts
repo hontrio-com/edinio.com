@@ -13,6 +13,9 @@ import { basicAuthHeader, emagGazda, emagUrl, iesireEmag } from "./auth";
 import { scrieInJurnal } from "./jurnal-scriere";
 import type { FelCerere } from "./jurnal";
 import { clasificaRaspuns, mesajOmenesc, type VerdictEmag } from "./errors";
+import {
+  asteaptaJetonImpartit, cheiaContului, LIMITE_RITM, maiAreBugetZilnicEan,
+} from "./ritm";
 import type {
   EmagAdresa, EmagAwb, EmagCategorie, EmagComanda, EmagContCurier, EmagCotaTva,
   EmagFiltruComenzi, EmagFiltruOferte, EmagLocalitate, EmagMasuratoare, EmagOferta,
@@ -229,8 +232,32 @@ async function trimite<T>(
     return { error: iesire.eroare ?? "Ieșirea către eMAG nu este configurată.", status: 0, verdict: "chei", mesaje: [] };
   }
 
-  const galeata = `${auth.businessId ?? "global"}:${esteRutaDeComenzi(cale) ? "comenzi" : "restul"}`;
-  await asteaptaJeton(galeata, esteRutaDeComenzi(cale) ? PE_SECUNDA_COMENZI : PE_SECUNDA_RESTUL);
+  const eComanda = esteRutaDeComenzi(cale);
+  const galeata = `${auth.businessId ?? "global"}:${eComanda ? "comenzi" : "restul"}`;
+  await asteaptaJeton(galeata, eComanda ? PE_SECUNDA_COMENZI : PE_SECUNDA_RESTUL);
+
+  /*
+   * ═══ ⚠ SI ARBITRUL, CARE E IN BAZA, NU IN MEMORIE (25.08.2026) ═══
+   *
+   * Galeata de mai sus numara ce a trimis INSTANTA ASTA. Dar aceeasi cheie de vanzator e
+   * folosita din mai multe locuri deodata — cronul pe o instanta, importul pe alta, un
+   * buton apasat de om pe a treia — si fiecare crede ca are cele 3 cereri pe secunda
+   * intregi. eMAG vede suma.
+   *
+   * ⚠ Cheia e a CONTULUI LOR, nu a magazinului nostru: limita e a vanzatorului, iar doua
+   * magazine Edinio legate la acelasi cont eMAG impart acelasi buget.
+   *
+   * ⚠ Galeata locala NU s-a scos. Ea taie varfurile fara sa coste nimic; fara ea, o bucla
+   * stransa ar fi intrebat baza de zeci de ori pe secunda ca sa i se spuna „nu”.
+   *
+   * ⚠ Si se cade DESCHIS: daca baza nu raspunde, cererea pleaca. Vezi `ritm.ts` — inchis,
+   * o pana a bazei ar opri toate cererile catre eMAG ale tuturor magazinelor, inclusiv
+   * confirmarile de comenzi.
+   */
+  const cont = cheiaContului(auth);
+  const felul = eComanda ? LIMITE_RITM.comenzi : LIMITE_RITM.restul;
+  await asteaptaJetonImpartit(
+    `emag:${cont}:${eComanda ? "comenzi" : "restul"}`, felul.limita, felul.fereastraMs);
 
   /*
    * ⚠ Cronometrul porneste DUPA asteptarea jetonului, nu inainte.
@@ -533,6 +560,38 @@ export function salveazaMasuratori(auth: EmagAuth, masuratori: EmagMasuratoare[]
 export async function cautaDupaEan(auth: EmagAuth, eanuri: string[]): Promise<EmagResult<unknown[]>> {
   const primele = eanuri.slice(0, 100);
   if (primele.length === 0) return { data: [], verdict: "reusit", mesaje: [] };
+
+  /*
+   * ═══ ⚠ RUTA ASTA ARE LIMITELE EI, SI UNA E ZILNICA ═══
+   *
+   * Documentatia lor: 5 pe secunda, 200 pe minut si **5.000 PE ZI**. Celelalte doua se pot
+   * astepta; a treia nu — o asteptare de ore n-are ce cauta intr-un cron cu `maxDuration`
+   * de 60 de secunde.
+   *
+   * ⚠ Deci pe plafonul zilnic se OPRESTE si se spune. Trecut cu vederea, am lovi plafonul
+   * lor si ruta s-ar inchide pentru tot restul zilei — inclusiv pentru publicarile care
+   * chiar contau. Iar `cautaInCatalogulLor` intoarce atunci „trecatoare”, deci publicarea
+   * NU merge mai departe sa creeze produsul pe orb.
+   *
+   * ⚠ Contorul zilnic sta in baza, nu in memorie: o instanta serverless nu apuca sa vada
+   * o zi intreaga.
+   */
+  const cont = cheiaContului(auth);
+  await asteaptaJetonImpartit(
+    `emag:${cont}:ean:s`, LIMITE_RITM.eanSecunda.limita, LIMITE_RITM.eanSecunda.fereastraMs);
+  await asteaptaJetonImpartit(
+    `emag:${cont}:ean:m`, LIMITE_RITM.eanMinut.limita, LIMITE_RITM.eanMinut.fereastraMs);
+
+  if (!(await maiAreBugetZilnicEan(auth))) {
+    return {
+      error: "S-a atins limita zilnică de căutări după cod de bare la eMAG "
+        + `(${LIMITE_RITM.eanZi.limita} pe zi). Publicarea se reia mâine.`,
+      status: 429,
+      verdict: "trecatoare",
+      mesaje: [],
+    };
+  }
+
   const q = primele.map((e) => `eans[]=${encodeURIComponent(e)}`).join("&");
   return trimite<unknown[]>(auth, "GET", `/documentation/find_by_eans?${q}`, undefined, "citire");
 }

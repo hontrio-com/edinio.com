@@ -124,23 +124,49 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      # Daca pasul asta apare ca rulat, `npm ci` inca nu merge — arborele instalat
-      # poate diferi de lockfile, si typecheck/teste/build masoara altceva decat
-      # pleaca in productie.
+      # Daca pasul asta apare ca rulat, `npm ci` inca nu merge. Ce se instaleaza aici
+      # nu se ia insa pe incredere: pasul urmator DOVEDESTE ca arborele e tot cel din
+      # lockfile, si cade rosu daca nu e.
       - name: Instaleaza (rezerva - npm ci a picat)
         if: steps.instalare_stricta.outcome == 'failure'
         run: npm install --no-audit --no-fund
 
+      # ⚠ SI SE DOVEDESTE CA ARBORELE E TOT CEL DIN LOCKFILE (25.08.2026)
+      #
+      # Auditul extern cerea `npm ci` strict, iar un job rosu la fiecare cadere. Cererea
+      # e intemeiata — un verde nu trebuie sa insemne „poate am testat altceva" — dar
+      # leacul propus opreste orice imbinare pentru o cadere nedeterminista de infra-
+      # structura, a carei cauza n-a putut fi citita inca (logurile jobului cer drepturi
+      # de admin, iar API-ul raspunde 403).
+      #
+      # Asta raspunde la INTREBAREA din spatele cererii, nu la forma ei: nu conteaza CU CE
+      # comanda s-a instalat, conteaza daca arborele instalat e cel din `package-lock.json`.
+      #
+      # `npm install` rescrie lockfile-ul EXACT atunci cand arborele rezolvat difera de el.
+      # Deci un lockfile neatins e dovada ca rezerva a instalat acelasi arbore. Iar daca
+      # l-a atins, jobul cade ROSU — atunci chiar am fi masurat altceva decat pleaca in
+      # productie, si asta e o poarta care merita inchisa.
+      #
+      # ⚠ `--exit-code`, nu un `diff` citit cu ochiul: o poarta care raporteaza dar nu
+      # opreste e o poarta pe care nimeni n-o citeste.
+      - name: Arborele instalat e tot cel din lockfile
+        if: steps.instalare_stricta.outcome == 'failure'
+        run: |
+          if ! git diff --exit-code -- package-lock.json; then
+            echo "::error title=Lockfile rescris::\`npm install\` a schimbat \`package-lock.json\`, deci arborele instalat NU e cel din lockfile. Typecheck, teste si build ar masura altceva decat pleaca in productie." >&2
+            exit 1
+          fi
+          echo "\`package-lock.json\` neatins de \`npm install\`: arborele instalat e cel din lockfile." >> "$GITHUB_STEP_SUMMARY"
+
       # ⚠ Verdele jobului nu are voie sa spuna ceva ce nu s-a verificat.
       #
-      # Cand se cade pe rezerva, arborele instalat POATE diferi de lockfile — deci
-      # typecheck, teste si build masoara altceva decat pleaca in productie. Pana
-      # acum asta se putea afla doar uitandu-te in lista de pasi si observand ca
-      # rezerva a rulat; adica nimeni n-o afla. Acum scrie in rezumatul rularii,
-      # unde se vede fara sa cauti.
+      # Pasul de deasupra a dovedit ca arborele e cel din lockfile, deci verdele NU mai
+      # minte. Ce ramane de spus e altceva: ca drumul strict n-a mers, si ca asta e o
+      # problema de infrastructura care inca asteapta o cauza. Scris in rezumat, se vede
+      # fara sa te uiti in lista de pasi.
       #
-      # NU se iese cu 1: ar opri typecheck/teste/build cu totul, si atunci poarta
-      # n-ar mai apara nimic. Se semnaleaza degradarea, nu se sacrifica rularea.
+      # NU se iese cu 1 DE AICI: caderea lui `npm ci` singura nu mai inseamna ca am
+      # masurat altceva. Ce inseamna asta — un lockfile rescris — cade rosu mai sus.
       - name: Semnaleaza instalarea degradata
         if: steps.instalare_stricta.outcome == 'failure'
         run: |
@@ -149,7 +175,8 @@ jobs:
             echo "### ⚠ Instalare degradata"
             echo
             echo "\`npm ci\` a picat, iar pasii urmatori au rulat peste un arbore instalat cu \`npm install\`."
-            echo "**Un verde aici NU garanteaza arborele exact din \`package-lock.json\`.**"
+            echo "Pasul urmator verifica totusi ca \`npm install\` n-a rescris \`package-lock.json\`."
+            echo "Daca l-ar fi rescris, jobul cade rosu: atunci arborele chiar ar fi altul."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca

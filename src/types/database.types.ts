@@ -4605,6 +4605,10 @@ export type Database = {
       proba_stoc: { Args: Record<PropertyKey, never>; Returns: Json }
       ajusteaza_stoc_comanda_marketplace: { Args: { p_order_id: string; p_business_id: string | null; p_produse: Json; p_variante: Json }; Returns: Json }
       numara_ofertele_emag: { Args: { p_business_id: string }; Returns: Json }
+      ia_jeton_extern: { Args: { p_cheie: string; p_limita: number; p_fereastra_ms?: number }; Returns: Json }
+      produse_nesincronizate_emag: { Args: { p_business_id: string; p_rabdare?: unknown; p_limita?: number }; Returns: string[] }
+      vezi_ritm_extern: { Args: { p_cheie: string; p_fereastra_ms?: number }; Returns: Json }
+      curata_ritm_extern: { Args: Record<PropertyKey, never>; Returns: number }
       revendica_din_coada: { Args: { p_coada: string; p_limita?: number; p_lease?: unknown }; Returns: Json[] }
       revendica_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: Json }
       rezerva_operatie_externa: { Args: { p_business_id: string | null; p_order_id: string | null; p_fel: string; p_furnizor: string; p_cheie: string }; Returns: Json }

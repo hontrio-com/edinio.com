@@ -3,7 +3,7 @@ import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { MAX_FAILURES } from "./types";
 import type { StockFeedMapping, StockFeedOptions } from "./types";
-import type { StockTotals } from "./committer";
+import type { StockTotals } from "./types";
 
 /**
  * Sursele de feed citite automat de la o adresa.

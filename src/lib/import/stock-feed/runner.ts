@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { EMPTY_STOCK_TOTALS, type StockTotals } from "./types";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { MAX_STOCK_ROWS } from "@/lib/import/csv";
@@ -8,12 +9,10 @@ import { loadCatalog } from "./catalog";
 import { buildStockPlan } from "./matcher";
 import { coloaneLipsa, readFeedRows } from "./mapping";
 import {
-  EMPTY_STOCK_TOTALS,
   numaraProbleme,
   processStockChunk,
   stageStockPlan,
-  type StockTotals,
-} from "./committer";
+  } from "./committer";
 import { markRun, markRunStart, patchSource, MAX_FAILURES, type StockFeedSource } from "./sources";
 
 /**

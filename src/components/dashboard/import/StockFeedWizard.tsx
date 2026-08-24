@@ -14,8 +14,8 @@ import {
 import {
   DEFAULT_STOCK_OPTIONS, MATCH_KEY_LABELS,
   type StockFeedMapping, type StockFeedOptions, type StockMatchKey,
+  EMPTY_STOCK_TOTALS, type StockTotals,
 } from "@/lib/import/stock-feed/types";
-import { EMPTY_STOCK_TOTALS, type StockTotals } from "@/lib/import/stock-feed/committer";
 import { ACCEPT_ATTRIBUTE, hasAcceptedExtension } from "@/lib/import/tabular-formats";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { EMPTY_STOCK_TOTALS, type StockTotals } from "@/lib/import/stock-feed/types";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadToR2, deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
@@ -12,12 +13,10 @@ import { autoMapStockColumns, coloaneLipsa, readFeedRows } from "@/lib/import/st
 import { buildStockPlan, summarizePlan } from "@/lib/import/stock-feed/matcher";
 import { loadCatalog } from "@/lib/import/stock-feed/catalog";
 import {
-  EMPTY_STOCK_TOTALS,
   numaraProbleme,
   processStockChunk,
   stageStockPlan,
-  type StockTotals,
-} from "@/lib/import/stock-feed/committer";
+  } from "@/lib/import/stock-feed/committer";
 import {
   DEFAULT_STOCK_OPTIONS,
   type StockChange,

@@ -184,3 +184,51 @@ export const DEFAULT_STOCK_OPTIONS: StockFeedOptions = {
   match_key: "sku_auto",
   update_price: false,
 };
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TOTALURILE, MUTATE AICI DIN `committer.ts` (25.08.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ VRAJITORUL DE IMPORT E UN COMPONENT CLIENT, si importa `EMPTY_STOCK_TOTALS`.
+   O singura constanta, dar importul tragea TOT `committer.ts` in bundle-ul de browser —
+   cu tot ce aduce el dupa: clientul de baza, cozile de marketplace, si de ieri
+   `next/server`.
+
+   ⚠ Iar `next/server` NU se poate importa in cod de client. Build-ul a picat:
+   „Ecmascript file had an error … #4 [Client Component Browser]".
+
+   Deci defectul nu era in `after()`, ci intr-o linie veche: o constanta de afisare
+   locuia intr-un modul de server. Mutata aici, clientul nu mai atinge committer-ul
+   deloc — si bundle-ul scade cu tot ce tragea dupa el.
+*/
+export interface StockTotals {
+  /** Randuri citite din fisier. */
+  total: number;
+  /** Scrieri reusite. */
+  written: number;
+  /** Potrivite, dar cu aceleasi valori. */
+  unchanged: number;
+  not_found: number;
+  /** Randuri potrivite a caror scriere n-ar ajunge nicaieri. Vezi `StockRowProblem`. */
+  ignored: number;
+  ambiguous: number;
+  invalid: number;
+  duplicate: number;
+  /** Scrieri care au esuat. */
+  failed: number;
+  /** Cate mai sunt de scris. */
+  pending: number;
+}
+
+export const EMPTY_STOCK_TOTALS: StockTotals = {
+  total: 0,
+  written: 0,
+  unchanged: 0,
+  not_found: 0,
+  ignored: 0,
+  ambiguous: 0,
+  invalid: 0,
+  duplicate: 0,
+  failed: 0,
+  pending: 0,
+};

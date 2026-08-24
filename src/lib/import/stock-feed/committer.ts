@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { EMPTY_STOCK_TOTALS, type StockTotals } from "./types";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { } from "./types";
 import type { Database } from "@/types/database.types";
 import { applyStockPlan } from "./applier";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
@@ -27,37 +29,6 @@ const STAGE_BATCH = 500;
 /** Cate scrieri se duc la capat intr-o singura trecere. */
 export const STOCK_CHUNK = 300;
 
-export interface StockTotals {
-  /** Randuri citite din fisier. */
-  total: number;
-  /** Scrieri reusite. */
-  written: number;
-  /** Potrivite, dar cu aceleasi valori. */
-  unchanged: number;
-  not_found: number;
-  /** Randuri potrivite a caror scriere n-ar ajunge nicaieri. Vezi `StockRowProblem`. */
-  ignored: number;
-  ambiguous: number;
-  invalid: number;
-  duplicate: number;
-  /** Scrieri care au esuat. */
-  failed: number;
-  /** Cate mai sunt de scris. */
-  pending: number;
-}
-
-export const EMPTY_STOCK_TOTALS: StockTotals = {
-  total: 0,
-  written: 0,
-  unchanged: 0,
-  not_found: 0,
-  ignored: 0,
-  ambiguous: 0,
-  invalid: 0,
-  duplicate: 0,
-  failed: 0,
-  pending: 0,
-};
 
 /** Numele afisat pentru un rand, in raport si in previzualizare. */
 function displayName(change: StockChange): string {

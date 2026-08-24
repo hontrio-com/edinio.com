@@ -37,6 +37,7 @@ import { cautaCategorie } from "@/lib/emag/cauta-categorie";
 import { citesteAmintirea } from "@/lib/emag/memorie";
 import { trimiteElement, magazinDin} from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
+import { participantAwb } from "@/lib/emag/awb-adresa";
 import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
 import { aduComenzile, aduIstoricul, type RezultatIstoric } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
@@ -1060,20 +1061,30 @@ export async function emiteAwbEmag(
   );
 
   const cl = (brut.customer ?? {}) as Record<string, string | undefined>;
+
+  /*
+   * ⚠ `locality_id` E OBLIGATORIU la ei, si lipsea cu totul din incarcatura. Iar
+   * `zipcode` pleca gol, ceea ce strica cererea de unul singur. Vezi `participantAwb`:
+   * amandoua motive de refuz pe aceeasi apasare, pe un buton neincercat niciodata pe
+   * date adevarate.
+   */
+  const destinatar = participantAwb({
+    name: cl.name,
+    contact: cl.shipping_contact ?? cl.name,
+    phone1: cl.shipping_phone ?? cl.phone_1,
+    street: cl.shipping_street,
+    localityId: cl.shipping_locality_id,
+    zipcode: cl.shipping_postal_code,
+  });
+  if (destinatar.fel === "lipseste") return { error: destinatar.mesaj };
+
   const rez = await emiteAwb(admin, ctx, {
     orderId,
     emagOrderId: r.emag_order_id,
     fel: 1,
     awb: {
       sender: { address_id: ctx.config.pickup_address_id },
-      receiver: {
-        name: cl.name ?? "",
-        contact: cl.shipping_contact ?? cl.name ?? "",
-        phone1: cl.shipping_phone ?? cl.phone_1 ?? "",
-        street: cl.shipping_street ?? "",
-        zipcode: cl.shipping_postal_code ?? "",
-        legal_entity: 0,
-      },
+      receiver: destinatar.participant,
       locker_id: brut.details?.locker_id,
       is_oversize: 0,
       envelope_number: 0,
@@ -2675,6 +2686,24 @@ export async function emiteAwbReturEmag(
   if (!rma.order_id) return { error: "Returul nu e legat de o comandă din Edinio." };
 
   /*
+   * ⚠ Numele și telefonul din RETUR, nu din comandă: clientul poate da alt contact
+   * pentru ridicare decât cel de la livrare. Strada nu e în retur, deci aceea rămâne din
+   * comandă — și tocmai de aia `poateAwbRetur` verifică localitatea mai sus.
+   *
+   * ⚠ Iar `locality_id` se și TRIMITE acum, nu doar se verifică: e obligatoriu la ei și
+   * lipsea din amândouă încărcăturile de AWB. Vezi `participantAwb`.
+   */
+  const expeditor = participantAwb({
+    name: brutRma.customer_name || cl.name,
+    contact: brutRma.customer_name || cl.name,
+    phone1: brutRma.customer_phone || cl.shipping_phone || cl.phone_1,
+    street: strada,
+    localityId: brutRma.pickup_locality_id ?? cl.shipping_locality_id,
+    zipcode: cl.shipping_postal_code,
+  });
+  if (expeditor.fel === "lipseste") return { error: expeditor.mesaj };
+
+  /*
    * ⚠ TIP 2 LA `contPotrivit`, nu 1. Conturile de curier au `courier_account_type`:
    * 1 = numai RMA, 2 = numai comenzi, 3 = amândouă. Un cont de livrare trimis pentru o
    * ridicare e refuzat, iar mesajul lor vorbește despre cont, nu despre tip —
@@ -2696,6 +2725,7 @@ export async function emiteAwbReturEmag(
     emagRmaId,
     fel: 2,
     awb: {
+      /* Vezi `expeditor` mai sus: se verifica INAINTE de cerere. */
       /*
        * ═══ ⚠ SENSUL E INVERS FAȚĂ DE LIVRARE ═══
        *
@@ -2704,17 +2734,7 @@ export async function emiteAwbReturEmag(
        * curierul ar fi plecat din depozitul nostru către client cu un colet gol — și
        * s-ar fi plătit oricum.
        */
-      sender: {
-        /* ⚠ Numele și telefonul din RETUR, nu din comandă: clientul poate da alt
-           contact pentru ridicare decât cel de la livrare. Strada nu e în retur, deci
-           aceea rămâne din comandă — și tocmai de aia se verifică localitatea. */
-        name: brutRma.customer_name || String(cl.name ?? ""),
-        contact: brutRma.customer_name || String(cl.name ?? ""),
-        phone1: brutRma.customer_phone || String(cl.shipping_phone ?? cl.phone_1 ?? ""),
-        street: strada,
-        zipcode: String(cl.shipping_postal_code ?? ""),
-        legal_entity: 0,
-      },
+      sender: expeditor.participant,
       receiver: { address_id: ctx.config.pickup_address_id },
       is_oversize: 0,
       envelope_number: 0,

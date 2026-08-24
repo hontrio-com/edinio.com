@@ -141,7 +141,7 @@ export async function trimiteElement(
   if (ruta.fel === "stoc") return duStocul(admin, ctx, produs, randuri);
   if (ruta.fel === "masuratori") return duMasuratorile(ctx, produs, randuri);
   if (ruta.fel === "oferta") return duOferta(admin, ctx, produs, randuri);
-  return duTotul(admin, ctx, produs, randuri);
+  return duTotul(admin, ctx, produs, randuri, fortat);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -202,6 +202,14 @@ async function citesteRandurile(
  */
 async function duTotul(
   admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
+  /**
+   * Comerciantul a apasat el pe UN produs.
+   *
+   * ⚠ Numai atunci se cere lui eMAG sa descarce iar imaginile. Vezi nota de la
+   * `force_images_download` din `mapping.ts`: au o limita stransa, atinsa din prima
+   * cerere. Coada nu forteaza niciodata.
+   */
+  fortat = false,
 ): Promise<RezultatTrimitere> {
   const categorie = ctx.config.category_map?.[produs.category ?? ""];
   if (!categorie?.category_id) {
@@ -338,6 +346,10 @@ async function duTotul(
       ean: r.ean,
     })),
     identitati.familyId,
+    /* ⚠ Numai apasarea explicita a comerciantului pe UN produs forteaza descarcarea
+       imaginilor. Vezi nota din `mapping.ts`: eMAG are o limita stransa pe
+       `force_download`, si se atinge de la prima cerere. Coada nu forteaza niciodata. */
+    fortat,
   );
 
   if (oferte.length === 0) {

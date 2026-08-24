@@ -658,6 +658,18 @@ async function scrieStatusurile(
       /* ⚠ Si numele. Comerciantul isi poate redenumi oferta in panoul lor; scris o
          singura data la import, ecranul nostru ar fi ramas cu numele vechi. */
       nume_emag: (o.name ?? "").trim() || null,
+      /*
+       * ⚠ CATE IMAGINI ARE EMAG, dupa ce ne-au spus ei (24.08.2026).
+       *
+       * `EmagOfertaCitita.images` exista in tipuri de la inceput si nu se scria nicaieri.
+       * Deci intrebarea „are eMAG poza noastra?" n-avea niciun raspuns in baza, iar cand
+       * comerciantul a intrebat de ce vede produsele fara imagine, s-a ajuns la
+       * presupuneri in loc de o privire pe un rand.
+       *
+       * ⚠ `null` cand campul lipseste din raspuns, `0` cand chiar n-au niciuna. Doua
+       * lucruri diferite: primul inseamna „nu ne-au spus", al doilea „ne-au spus ca nu".
+       */
+      imagini_la_ei: Array.isArray(o.images) ? o.images.length : null,
       ownership: intregDeLaEi(o.ownership),
       number_of_offers: intregDeLaEi(o.number_of_offers),
       buy_button_rank: intregDeLaEi(o.buy_button_rank),

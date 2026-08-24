@@ -590,14 +590,28 @@ test("eMAG: un `.webp` NU pleaca la ei", () => {
   assert.equal(imaginiEmag(["https://edinio-cdn.com/a.jpeg?v=2"]).length, 1, "cu intrebare in coada");
 });
 
-test("eMAG: imaginile se retrimit fortat, ca sa nu ramana o usa cu un singur sens", () => {
+test("eMAG: descarcarea fortata a imaginilor NU pleaca de la sine", () => {
   /*
-   * ⚠ `force_images_download` nu pleca deloc, iar implicitul lor e 0 = „downloaded only
-   * if link changed". Adresele noastre sunt IMUABILE (uuid + timp in cale).
+   * ═══ O REPARATIE GRESITA, PRINSA IN CINCI MINUTE (24.08.2026) ═══
    *
-   * Cele doua puse cap la cap: daca descarcarea pica o data, nu se mai reincearca
-   * niciodata. Produsul ramane fara poza pe veci si nimic nu spune de ce.
+   * Problema e adevarata: implicitul lor e 0 = „downloaded only if link changed", iar
+   * adresele noastre sunt IMUABILE. Deci o descarcare picata o data nu se mai reincearca
+   * niciodata.
+   *
+   * Prima reparatie a pus steagul la FIECARE trimitere, cu argumentul ca ruta grea se
+   * foloseste rar. La PRIMA cerere plecata asa, eMAG a raspuns:
+   *
+   *   „WARNING: You've exceeded the requests limit with 'force_download'."
+   *
+   * O singura cerere. Deci au o limita stransa, pe care documentatia lor n-o pomeneste
+   * nicaieri — inca un lucru care nu e in schema.
    */
-  const r = construiesteOferte(produs(), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
-  assert.equal((r.oferte[0] as unknown as { force_images_download: number }).force_images_download, 1);
+  const dinCoada = construiesteOferte(produs(), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
+  assert.equal("force_images_download" in (dinCoada.oferte[0] ?? {}), false, "coada nu forteaza");
+
+  const laApasare = construiesteOferte(produs(), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null, true);
+  assert.equal(
+    (laApasare.oferte[0] as unknown as { force_images_download: number }).force_images_download, 1,
+    "apasarea omului pe un produs forteaza",
+  );
 });

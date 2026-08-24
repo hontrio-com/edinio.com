@@ -343,6 +343,13 @@ export function construiesteOferte(
   categorie: ContextCategorie,
   identitati: IdentitateOferta[],
   familyId: number | null,
+  /**
+   * Cere-le sa descarce iar imaginile, chiar daca adresa n-a schimbat.
+   *
+   * ⚠ NUMAI de la apasarea explicita a comerciantului pe un singur produs. Vezi nota de
+   * la `force_images_download`: au o limita stransa, si se atinge repede.
+   */
+  fortaImaginile = false,
 ): RezultatCartografiere {
   const probleme: string[] = [];
   const variante = parseVariants(produs.page_sections);
@@ -400,21 +407,27 @@ export function construiesteOferte(
      */
     images_overwrite: 1 as const,
     /*
-     * ═══ ⚠ USA CU UN SINGUR SENS, INCHISA (audit 24.08.2026) ═══
+     * ═══ ⚠ SE FORTEAZA NUMAI CAND CERE OMUL, SI IATA DE CE (24.08.2026) ═══
      *
-     * Campul nu pleca deloc, iar implicitul lor e `0` = „images downloaded only if link
-     * changed". Adresele noastre sunt IMUABILE: poarta un uuid si un timp in cale, deci
-     * nu se schimba niciodata pentru aceeasi poza.
+     * PROBLEMA E ADEVARATA: implicitul lor e `0` = „images downloaded only if link
+     * changed", iar adresele noastre sunt IMUABILE (uuid + timp in cale). Cele doua puse
+     * cap la cap: daca descarcarea pica O DATA, nu se mai reincearca NICIODATA.
      *
-     * Cele doua puse cap la cap: daca descarcarea pica O DATA — o clipa de retea, o
-     * provocare de bot la CDN — nu se mai reincearca NICIODATA. Produsul ramane fara
-     * poza pe veci, si nimic nu spune de ce.
+     * ⚠ DAR PRIMA REPARATIE A FOST GRESITA, si s-a vazut in cinci minute. Am pus
+     * `force_images_download: 1` la FIECARE trimitere, cu argumentul ca „ruta grea se
+     * foloseste rar". La prima cerere care a plecat asa, eMAG a raspuns:
      *
-     * ⚠ Costa putin: campul pleaca numai pe `product_offer/save`, ruta grea, care se
-     * foloseste la publicare si la resincronizarea fisei. Preturile si stocurile merg pe
-     * rutele usoare, unde nu se trimit imagini deloc.
+     *     „WARNING: You've exceeded the requests limit with 'force_download'.
+     *      Please contact eMAG Marketplace Support team."
+     *
+     * O CERERE. Deci au o limita stransa pe descarcarile fortate, pe care documentatia
+     * n-o pomeneste nicaieri — inca un lucru care nu e in schema lor.
+     *
+     * ⚠ Asa ca pleaca numai cand comerciantul apasa el „Trimite acum" pe UN produs.
+     * Atunci se uita la o poza care lipseste si cere anume s-o luam din nou, iar
+     * numarul de cereri e marginit de cate ori apasa un om. Coada nu forteaza niciodata.
      */
-    force_images_download: 1 as const,
+    ...(fortaImaginile ? { force_images_download: 1 as const } : {}),
     safety_information: magazin.gpsr?.safety_information,
     /*
      * ⚠ GPSR ARE LIMITELE LUI, SI ELE NU ERAU PAZITE NICAIERI.

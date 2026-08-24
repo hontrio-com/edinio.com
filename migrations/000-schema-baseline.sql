@@ -4007,7 +4007,8 @@ create table if not exists public.emag_offers (
   updated_at timestamp with time zone default now() not null,
   deriva jsonb,
   nume_emag text,
-  raspuns_brut jsonb);
+  raspuns_brut jsonb,
+  imagini_la_ei integer);
 
 create table if not exists public.emag_orders (
   id uuid default gen_random_uuid() not null,

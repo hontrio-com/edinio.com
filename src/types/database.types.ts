@@ -1356,6 +1356,7 @@ export type Database = {
           family_id: number | null
           family_type_id: number | null
           id: string
+          imagini_la_ei: number | null
           issues: Json
           last_status_at: string | null
           last_synced_at: string | null
@@ -1390,6 +1391,7 @@ export type Database = {
           family_id?: number | null
           family_type_id?: number | null
           id?: string
+          imagini_la_ei?: number | null
           issues?: Json
           last_status_at?: string | null
           last_synced_at?: string | null
@@ -1424,6 +1426,7 @@ export type Database = {
           family_id?: number | null
           family_type_id?: number | null
           id?: string
+          imagini_la_ei?: number | null
           issues?: Json
           last_status_at?: string | null
           last_synced_at?: string | null

@@ -23,8 +23,7 @@ import {
 } from "@/lib/emag/auth";
 import {
   citesteAdrese, citesteConturiCurier, descarcaEtichetaAwb, isEmagError, testeazaConexiunea,
-  type EmagAuth, type FormatAwb,
-} from "@/lib/emag/client";
+  type EmagAuth, type FormatAwb, citesteFacturi, citesteCategoriiFacturi} from "@/lib/emag/client";
 import {
   aduCategorie, aduCategorii, aduCoteTva, aduTimpiPregatire, alegeCotaTva, alegeTimpPregatire,
   caracteristiciLipsa, caracteristiciObligatorii, sugereazaCategorie,
@@ -38,6 +37,10 @@ import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_P
 import { aduComenzile, aduIstoricul, type RezultatIstoric } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
 import { pretPentruSmartDeals, propuneOferte } from "@/lib/emag/campanii";
+import {
+  adunaPeCategorii, facturileLorPentruEcran, numeleCategoriilor,
+  type FacturaEcran, type TotalPeCategorie,
+} from "@/lib/emag/comisioane";
 import {
   cePiedicaAreCampania, pregatestePropunerile, type OfertaPentruCampanie,
 } from "@/lib/emag/propuneri";
@@ -2587,4 +2590,71 @@ export async function propuneInCampanieEmag(
 
   revalidatePath(FEATURE_PATH);
   return { propuse: propuneri.length, sarite };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CE ȚI-A FACTURAT eMAG (§89)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface FacturiLorEcran {
+  facturi: FacturaEcran[];
+  totaluri: TotalPeCategorie[];
+  /** Monedele întâlnite. ⚠ Nu se adună între ele; se spune când sunt mai multe. */
+  monede: string[];
+}
+
+/** Câte facturi se cer. ⚠ Maximul lor pe rută e 1000; o sută acoperă un an. */
+const FACTURI_PE_CERERE = 100;
+
+/**
+ * Facturile pe care ți le-a emis eMAG.
+ *
+ * ═══ ⚠ DE CE DIN FACTURILE LOR, ȘI NU DINTR-UN TABEL DE COMISIOANE ═══
+ *
+ * Căutat în tot OpenAPI-ul lor: NU există nicio rută care să spună cât e comisionul pe
+ * o categorie. Un tabel de procente ținut de noi ar îmbătrâni tăcut și ar arăta sume
+ * care nu se potrivesc cu extrasul de cont — cel mai prost fel de a greși cu bani.
+ *
+ * Facturile lor sunt fapte.
+ *
+ * ═══ ⚠ MARJA NU SE POATE SOCOTI, ȘI SE SPUNE PE ECRAN ═══
+ *
+ * Marja cere prețul de ACHIZIȚIE, iar `products` n-are nicio coloană de cost —
+ * verificat. „Încasări minus comision" nu e marjă; arătată drept marjă, comerciantul
+ * ar fi luat hotărâri de preț pe un număr care nu înseamnă ce scrie pe el.
+ */
+export async function facturileEmag(
+  businessId: string,
+  luni = 3,
+): Promise<FacturiLorEcran | { error: string }> {
+  const c = await contextPentruCitire(businessId);
+  if ("error" in c) return c;
+
+  const acum = new Date();
+  const de = new Date(acum);
+  de.setMonth(de.getMonth() - Math.max(1, Math.min(Math.floor(luni) || 1, 24)));
+
+  const zi = (d: Date) => d.toISOString().slice(0, 10);
+
+  /* ⚠ Numele categoriilor și facturile se cer împreună: fără nume, ecranul ar fi arătat
+     coduri („FC", „FT") pe care nu le știe nimeni. O cerere în plus, o dată. */
+  const [categorii, raspuns] = await Promise.all([
+    citesteCategoriiFacturi(c.auth),
+    citesteFacturi(c.auth, {
+      date_start: zi(de),
+      date_end: zi(acum),
+      itemsPerPage: FACTURI_PE_CERERE,
+    }),
+  ]);
+
+  if (isEmagError(raspuns)) return { error: raspuns.error };
+
+  /* ⚠ O cădere la CATEGORII nu oprește nimic: se arată codurile lor, care sunt tot
+     adevărul, doar mai scurt. Facturile sunt partea care contează. */
+  const nume = isEmagError(categorii) ? {} : numeleCategoriilor(categorii.data);
+
+  const facturi = facturileLorPentruEcran(raspuns.data, nume);
+  const monede = [...new Set(facturi.map((f) => f.moneda).filter(Boolean))];
+
+  return { facturi, totaluri: adunaPeCategorii(facturi), monede };
 }

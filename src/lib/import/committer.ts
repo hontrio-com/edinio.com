@@ -4,6 +4,11 @@
 // Driven by processImport(), which both the server action and the cron call.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
+import { enqueueOlxSyncMany } from "@/lib/olx/queue";
+import { enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
+import { enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
+import { enqueueEmagSyncMany } from "@/lib/emag/queue";
 import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import type {
   ImportOptions,
@@ -146,6 +151,78 @@ interface CommitDeltas {
  * Esecul e inghitit deliberat: o curatare care nu reuseste n-are voie sa faca un
  * import incheiat sa para picat. Randurile raman, si le ia urmatoarea trecere.
  */
+/**
+ * Spune canalelor de vanzare ce produse s-au schimbat la import.
+ *
+ * ═══ ⚠ IMPORTUL NU ANUNTA PE NIMENI (gasit 24.08.2026) ═══
+ *
+ * `grep -ci enqueue` da ZERO in toata calea de import: nici aici, nici in
+ * `import.actions.ts`, nici in cronul `process-imports`. Committer-ul scrie direct in
+ * `products` si tace.
+ *
+ * Iar calea NORMALA de salvare a produsului le anunta pe toate cinci — `product.actions.ts`
+ * la creare si la editare: GMC, OLX, About You, Trendyol, eMAG. Deci un produs editat din
+ * panou pleaca peste tot, iar acelasi produs editat prin CSV nu pleaca nicaieri.
+ *
+ * ⚠ CE PIERDE COMERCIANTUL: un produs publicat pe eMAG, actualizat prin CSV, ramane acolo
+ * cu titlul, descrierea si imaginile VECHI. Iar `sync_continut` e pornit implicit, deci
+ * continutul CHIAR ar fi plecat daca s-ar fi pus ceva in coada. Nu e o alegere, e o
+ * lipsa.
+ *
+ * ⚠ SI NU E NUMAI eMAG. Auditul extern l-a incadrat ca defect eMAG; reparat asa, ar fi
+ * ramas patru canale rupte. Committer-ul de feed de stocuri chiar anunta
+ * (`stock-feed/committer.ts`), deci gaura e a acestui committer, nu un tipar al casei.
+ *
+ * ═══ ⚠ DE CE ABIA LA SFARSIT, NU LA FIECARE BUCATA ═══
+ *
+ * Imaginile se rehosteaza DUPA scrierea produselor, intr-o faza separata. Anuntat mai
+ * devreme, marketplace-ul ar fi primit adresa de la furnizor, iar cateva secunde mai
+ * tarziu Edinio ar fi avut alta — deci ori poza straina la ei, ori inca o trimitere.
+ *
+ * Se cheama la AMANDOUA punctele terminale, ca si curatarea: importurile cu imagini se
+ * termina pe cealalta ramura, si tocmai alea au cele mai multe randuri.
+ *
+ * ⚠ Deriva NU tine locul: ea compara doar pret si stoc, iar continutul n-are nicio ruta
+ * de reparatie acolo. Un titlu gresit la ei ramane gresit pentru totdeauna.
+ */
+async function anuntaCanalele(admin: Admin, importId: string, businessId: string): Promise<void> {
+  try {
+    /* ⚠ INAINTE de curatare: `curataRandurileReusite` sterge chiar randurile astea. */
+    const ids: string[] = [];
+    for (const bucata of [["created", "updated"]] as const) {
+      const { data, error } = await admin
+        .from("product_import_rows")
+        .select("product_id")
+        .eq("import_id", importId)
+        .in("status", bucata as unknown as string[]);
+      if (error) throw error;
+      for (const r of (data ?? []) as { product_id: string | null }[]) {
+        if (r.product_id) ids.push(r.product_id);
+      }
+    }
+    const unice = [...new Set(ids)];
+    if (unice.length === 0) return;
+
+    /*
+     * ⚠ Toate cinci, in paralel, si niciuna nu poate rupe importul: fiecare `enqueue…`
+     * are deja `inghiteDarScrie` inauntru, iar `allSettled` prinde ce ar scapa printre.
+     * Un import incheiat cu bine n-are voie sa para picat fiindca o coada de marketplace
+     * n-a raspuns.
+     */
+    await Promise.allSettled([
+      enqueueGmcSyncMany(businessId, unice),
+      enqueueOlxSyncMany(businessId, unice),
+      enqueueAboutYouSyncMany(businessId, unice),
+      enqueueTrendyolSyncMany(businessId, unice),
+      enqueueEmagSyncMany(businessId, unice),
+    ]);
+  } catch (e) {
+    /* ⚠ Se scrie, nu se inghite: un import care nu si-a anuntat canalele arata identic
+       cu unul care si le-a anuntat, iar diferenta se vede abia in comenzi anulate. */
+    console.error(`[import] anuntarea canalelor pentru ${importId} a esuat:`, e);
+  }
+}
+
 async function curataRandurileReusite(admin: Admin, importId: string): Promise<void> {
   const { error } = await admin
     .from("product_import_rows")
@@ -577,7 +654,12 @@ export async function processImport(
     await admin.from("product_imports").update(patch as never).eq("id", importId);
     // Importul s-a incheiat aici (fara pas de imagini): randurile reusite nu mai
     // au cititor. Vezi `curataRandurileReusite`.
-    if (status === "completed" || status === "completed_with_errors") await curataRandurileReusite(admin, importId);
+    if (status === "completed" || status === "completed_with_errors") {
+      /* ⚠ Anuntul INAINTEA curatarii: aceasta sterge chiar randurile din care se afla ce
+         produse s-au atins. Vezi `anuntaCanalele`. */
+      await anuntaCanalele(admin, importId, job.business_id);
+      await curataRandurileReusite(admin, importId);
+    }
     return { status, totals, done: status === "completed" || status === "completed_with_errors" };
   }
 
@@ -596,7 +678,12 @@ export async function processImport(
     // Al doilea punct terminal: dupa rehostarea imaginilor. Curatarea sta la
     // AMANDOUA, nu doar la primul — altfel importurile cu imagini nu s-ar curata
     // niciodata, si tocmai alea au cele mai multe randuri.
-    if (status === "completed" || status === "completed_with_errors") await curataRandurileReusite(admin, importId);
+    if (status === "completed" || status === "completed_with_errors") {
+      /* ⚠ Anuntul INAINTEA curatarii: aceasta sterge chiar randurile din care se afla ce
+         produse s-au atins. Vezi `anuntaCanalele`. */
+      await anuntaCanalele(admin, importId, job.business_id);
+      await curataRandurileReusite(admin, importId);
+    }
     return { status, totals, done: status === "completed" || status === "completed_with_errors" };
   }
 

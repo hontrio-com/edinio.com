@@ -96,9 +96,28 @@ async function guard(businessId: string): Promise<{ supabase: ServerClient; user
  * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
  * separat. Toti apelantii de mai jos trec prin `guard()` inainte.
  */
+/*
+ * ⚠ O CITIRE CAZUTA NU ARE VOIE SA ARATE CA O CONFIGURARE GOALA.
+ *
+ * Forma dinainte ignora `error` si intorcea `{}` cand citirea dadea gres. Iar apelantii
+ * fac apoi `saveConfig(...)` cu INTREGUL obiect — deci un gol inchipuit se scria peste
+ * acreditari, si integrarea se deconecta singura, fara nicio eroare nicaieri.
+ *
+ * S-a intamplat: 24.08.2026, un magazin cu Trendyol si 1272 de listari active a ramas
+ * cu `trendyol_config = {"reconcile_page": 20}`. Comerciantul n-a atins nimic.
+ *
+ * ⚠ `maybeSingle`, nu `single`: un magazin FARA rand e o stare legitima (nou creat), si
+ * acolo `{}` e chiar raspunsul corect. Ce nu e legitim e sa nu poti citi si sa spui gol.
+ * `single` le confunda: lipsa randului iesea tot ca eroare.
+ *
+ * ⚠ Aruncarea e voita. Apelantii au deja ramuri de esec; un gol tacut n-are.
+ */
 async function loadConfig(businessId: string): Promise<EmagConfig> {
-  const { data } = await createAdminClient()
-    .from("store_settings").select("emag_config").eq("business_id", businessId).single();
+  const { data, error } = await createAdminClient()
+    .from("store_settings").select("emag_config").eq("business_id", businessId).maybeSingle();
+  if (error) {
+    throw new Error(`Configurarea nu s-a putut citi: ${error.message}`);
+  }
   return ((data?.emag_config as EmagConfig) ?? {}) || {};
 }
 

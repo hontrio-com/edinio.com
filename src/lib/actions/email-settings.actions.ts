@@ -28,9 +28,25 @@ async function owns(supabase: ServerClient, businessId: string, userId: string):
  * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
  * separat. Toti cei patru apelanti cheama `owns()` inainte.
  */
+/*
+ * ⚠ O CITIRE CAZUTA NU ARE VOIE SA ARATE CA O CONFIGURARE GOALA.
+ *
+ * Forma dinainte ignora `error`, iar apelantii scriu apoi INTREGUL obiect inapoi — deci
+ * un gol inchipuit s-ar fi scris peste parola SMTP (`email_config.smtp.pass`, camp
+ * secret inregistrat), si trimiterea de mailuri s-ar fi oprit fara nicio eroare.
+ *
+ * S-a intamplat la alta integrare: 24.08.2026, un magazin cu Trendyol si 1272 de
+ * listari active a ramas cu `trendyol_config = {"reconcile_page": 20}`.
+ *
+ * ⚠ `maybeSingle`, nu `single`: un magazin fara rand e legitim, si acolo golul e chiar
+ * raspunsul corect. Ce nu e legitim e sa nu poti citi si sa spui gol.
+ */
 async function loadConfig(businessId: string): Promise<EmailConfig> {
-  const { data } = await createAdminClient()
-    .from("store_settings").select("email_config").eq("business_id", businessId).single();
+  const { data, error } = await createAdminClient()
+    .from("store_settings").select("email_config").eq("business_id", businessId).maybeSingle();
+  if (error) {
+    throw new Error(`Configurarea de e-mail nu s-a putut citi: ${error.message}`);
+  }
   return parseEmailConfig(data?.email_config);
 }
 

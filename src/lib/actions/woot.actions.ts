@@ -46,11 +46,16 @@ async function checkAccess(businessId: string): Promise<boolean> {
 // altuia doar schimband businessId-ul.
 async function loadConfig(businessId: string): Promise<WootConfig | null> {
   const admin = adminClient();
-  const { data } = await admin
+  /* ⚠ `error` se ia si se ARUNCA. Ignorat, o citire cazuta iesea ca „nicio configurare",
+     iar `saveConfig` scrie apoi INTREGUL obiect — deci golul inchipuit s-ar fi scris
+     peste `public_key` si `secret_key`. Vezi incidentul Trendyol din 24.08.2026.
+     ⚠ `maybeSingle`: un magazin fara rand e legitim; o citire cazuta nu e. */
+  const { data, error } = await admin
     .from("store_settings")
     .select("woot_config")
     .eq("business_id", businessId)
-    .single();
+    .maybeSingle();
+  if (error) throw new Error(`Configurarea Woot nu s-a putut citi: ${error.message}`);
   return (data?.woot_config as WootConfig | null) ?? null;
 }
 

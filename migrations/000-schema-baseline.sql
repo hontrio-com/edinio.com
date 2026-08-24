@@ -133,6 +133,66 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION privat.pazeste_secretele(vechi jsonb, nou jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'privat', 'public', 'pg_temp'
+AS $function$
+declare
+  r          record;
+  parti      text[];
+  v_vechi    text;
+  v_nou      text;
+  conf_nou   jsonb;
+  rezultat   jsonb := nou;
+  salvate    text[] := '{}';
+begin
+  if vechi is null or nou is null then
+    return nou;
+  end if;
+
+  for r in select coloana, cale from privat.campuri_secrete loop
+    conf_nou := rezultat -> r.coloana;
+
+    if conf_nou is null or conf_nou = '{}'::jsonb then
+      continue;
+    end if;
+
+    parti := string_to_array(r.cale, '.');
+
+    v_vechi := vechi -> r.coloana #>> parti;
+    v_nou   := conf_nou #>> parti;
+
+    if v_vechi is not null and v_vechi <> ''
+       and (v_nou is null or v_nou = '')
+    then
+      rezultat := jsonb_set(rezultat, array[r.coloana] || parti, to_jsonb(v_vechi), true);
+      salvate := salvate || (r.coloana || '.' || r.cale);
+    end if;
+  end loop;
+
+  if array_length(salvate, 1) > 0 then
+    raise warning 'paza secretelor: am pastrat % la o scriere care le-ar fi sters', salvate;
+    begin
+      insert into public.error_logs (action, message, details, business_id, severity)
+      values (
+        'store_settings/paza-secrete',
+        'O scriere ar fi sters acreditari. Au fost pastrate; scriitorul trebuie reparat.',
+        jsonb_build_object('campuri', to_jsonb(salvate)),
+        (nou ->> 'business_id')::uuid,
+        'critical'
+      );
+    exception when others then
+      null;
+    end;
+  end if;
+
+  return rezultat;
+end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION privat.reconstruieste_store_settings()
  RETURNS void
  LANGUAGE plpgsql
@@ -216,7 +276,9 @@ CREATE OR REPLACE FUNCTION privat.store_settings_upd()
 AS $function$
     declare j jsonb;
     begin
-      j := privat.cripteaza_rand(to_jsonb(new));
+      j := privat.cripteaza_rand(
+             privat.pazeste_secretele(to_jsonb(old), to_jsonb(new))
+           );
       update privat.store_settings s
          set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
@@ -5096,14 +5158,14 @@ CREATE INDEX emag_offers_pnk_idx ON public.emag_offers USING btree (business_id,
 CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_id);
 CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, product_id, COALESCE(variant_title, ''::text)) WHERE (product_id IS NOT NULL);
 CREATE INDEX emag_offers_reconciliere_idx ON public.emag_offers USING btree (business_id, last_status_at NULLS FIRST);
+CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
+CREATE INDEX emag_orders_factura_de_urcat_idx ON public.emag_orders USING btree (business_id, created_at) WHERE (invoice_uploaded_at IS NULL);
+CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
 CREATE INDEX emag_request_log_biz_idx ON public.emag_request_log USING btree (business_id, created_at DESC);
 CREATE INDEX emag_request_log_fir_idx ON public.emag_request_log USING btree (corelatie) WHERE (corelatie IS NOT NULL);
 CREATE INDEX emag_request_log_iduri_idx ON public.emag_request_log USING gin (emag_ids);
 CREATE INDEX emag_request_log_probleme_idx ON public.emag_request_log USING btree (business_id, created_at DESC) WHERE (verdict <> 'reusit'::text);
 CREATE INDEX emag_request_log_varsta_idx ON public.emag_request_log USING btree (created_at);
-CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
-CREATE INDEX emag_orders_factura_de_urcat_idx ON public.emag_orders USING btree (business_id, created_at) WHERE (invoice_uploaded_at IS NULL);
-CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
 CREATE INDEX emag_rma_business_status_idx ON public.emag_rma USING btree (business_id, request_status);
 CREATE INDEX emag_sync_queue_created_idx ON public.emag_sync_queue USING btree (created_at);
 CREATE INDEX emag_sync_queue_ordine_idx ON public.emag_sync_queue USING btree (prioritate, created_at);

@@ -76,8 +76,13 @@ async function proprietar(businessId: string): Promise<Proprietar> {
  * de aceea proprietatea se verifica INAINTE, la fiecare apelant.
  */
 async function configDinBaza(businessId: string): Promise<InnoshipConfig | null> {
-  const { data } = await createAdminClient()
-    .from("store_settings").select("innoship_config").eq("business_id", businessId).single();
+  /* ⚠ `error` se ia si se ARUNCA. Ignorat, o citire cazuta iesea ca „nicio configurare",
+     iar apelantii scriu apoi INTREGUL obiect inapoi — deci golul inchipuit s-ar fi scris
+     peste acreditari. Vezi incidentul Trendyol din 24.08.2026 si `pazeste_secretele`.
+     ⚠ `maybeSingle`: un magazin fara rand e legitim; o citire cazuta nu e. */
+  const { data, error } = await createAdminClient()
+    .from("store_settings").select("innoship_config").eq("business_id", businessId).maybeSingle();
+  if (error) throw new Error(`Configurarea nu s-a putut citi: ${error.message}`);
   return (data?.innoship_config ?? null) as InnoshipConfig | null;
 }
 

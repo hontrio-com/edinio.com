@@ -1,4 +1,5 @@
 import type { EmagPropunereCampanie } from "./types";
+import { LIMITE_EMAG, plafonat } from "./limite";
 
 /**
  * Ce se propune intr-o campanie, si ce se intampla dupa (§56, §57).
@@ -103,9 +104,23 @@ export function pregatestePropunerile(
       sale_price: pretCampanie,
       /* ⚠ Cel mult cat are. Un stoc maxim mai mare decat cel real ar fi promis in
          campanie bucati care nu exista. */
-      stock: cerere.stocMaxim != null && cerere.stocMaxim > 0
-        ? Math.min(Math.floor(cerere.stocMaxim), Math.floor(o.stoc))
-        : Math.floor(o.stoc),
+      /*
+       * ⚠ PLAFONAT LA 255, nu la 65535 (audit 24.08.2026).
+       *
+       * `CampaignProposal.stock` are `maximum=255` in schema lor, mult sub cel al
+       * ofertei obisnuite. E acelasi cuvant, „stoc", cu doua limite diferite dupa unde
+       * pleaca — si de aceea se rateaza usor.
+       *
+       * Un magazin cu 4.863 de bucati (masurat pe date reale) trimitea o propunere in
+       * afara intervalului, iar eMAG o refuza intreaga. Adica magazinul cu cel mai mult
+       * stoc era chiar cel care nu putea intra in campanie.
+       */
+      stock: plafonat(
+        cerere.stocMaxim != null && cerere.stocMaxim > 0
+          ? Math.min(cerere.stocMaxim, o.stoc)
+          : o.stoc,
+        LIMITE_EMAG.stocCampanie,
+      ),
       campaign_id: Math.floor(cerere.campaignId),
       voucher_discount: reducere,
       /* ⚠ §57. Vezi antetul: netrimis, produsul s-ar fi intors dupa campanie la un

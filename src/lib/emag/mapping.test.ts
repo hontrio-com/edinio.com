@@ -554,3 +554,24 @@ test("eMAG: un SKU peste 25 de caractere OPRESTE produsul, cu motiv", () => {
   assert.equal(r.oferte.length, 0);
   assert.match(r.probleme.join(" "), /25/);
 });
+
+test("eMAG: o masuratoare peste intervalul lor NU se trimite plafonata", () => {
+  /*
+   * ⚠ Aici NU se face ca la stoc, si dinadins. „65535 bucati" e destul de adevarat cat
+   * sa se vanda; o cutie taiata la 999999 mm e o MASURATOARE INVENTATA. Trimisa,
+   * curierul calculeaza transportul pe ea, iar diferenta o refactureaza peste saptamani.
+   *
+   * O greutate de un milion de grame nu e o cutie mare, e o cifra gresita in fisa.
+   */
+  assert.equal(masuratoriEmag(1, { length: 10, width: 10, height: 10 }, 2_000_000), null);
+  assert.equal(masuratoriEmag(1, { length: 200_000, width: 10, height: 10 }, 500), null);
+  assert.notEqual(masuratoriEmag(1, { length: 10, width: 10, height: 10 }, 500), null);
+});
+
+test("eMAG: cm se fac mm, gramele raman grame", () => {
+  /* ⚠ `measurements/save` cere mm si g; `AWBSave.packages` cere cm si kg. Aceleasi
+     doua marimi, alte unitati, dupa unde pleaca. */
+  const m = masuratoriEmag(1, { length: 12.5, width: 3, height: 4 }, 250);
+  assert.equal(m?.length, 125);
+  assert.equal(m?.weight, 250);
+});

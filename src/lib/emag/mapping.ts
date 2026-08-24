@@ -643,6 +643,21 @@ export function masuratoriEmag(
   /* Toate patru sau niciuna: eMAG le cere impreuna, iar o masuratoare partiala
      ar fi fost respinsa oricum. */
   if (l == null || w == null || h == null || g == null) return null;
+
+  /*
+   * ⚠ PESTE INTERVALUL LOR NU SE PLAFONEAZA, SE RENUNTA (audit 24.08.2026).
+   *
+   * Schema lor: toate patru au `maximum=999999`. Aici nu se face ca la stoc, si
+   * dinadins: „65535 bucati" e destul de adevarat cat sa se vanda, dar o cutie taiata
+   * la 999999 mm e o MASURATOARE INVENTATA. Trimisa, curierul calculeaza transportul
+   * pe ea, iar diferenta o refactureaza peste saptamani.
+   *
+   * O greutate de un milion de grame nu e o cutie mare, e o cifra gresita in fisa
+   * produsului. Netrimisa, curierul masoara la ridicare — ceea ce oricum face.
+   */
+  const peste = LIMITE_EMAG.masuraMm;
+  if (l > peste || w > peste || h > peste || g > LIMITE_EMAG.masuraGrame) return null;
+
   return { id: emagId, length: l, width: w, height: h, weight: g };
 }
 

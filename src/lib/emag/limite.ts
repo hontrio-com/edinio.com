@@ -48,6 +48,23 @@ export const LIMITE_EMAG = {
   gpsrEmail: 100,
   /** „Maximum 10 sets" la manufacturer și eu_representative */
   gpsrSeturi: 10,
+  /**
+   * `CampaignProposal.stock` maximum=255.
+   *
+   * ⚠ MULT SUB CEL AL OFERTEI (65535), și asta e ușor de ratat: același cuvânt, „stoc",
+   * cu două limite diferite după unde pleacă. Un magazin cu 4.863 de bucăți (măsurat pe
+   * date reale) trimitea o propunere de campanie în afara intervalului, iar eMAG o
+   * refuza întreagă.
+   */
+  stocCampanie: 255,
+  /** `Measurement.length|width|height` maximum=999999 (mm) */
+  masuraMm: 999999,
+  /** `Measurement.weight` maximum=999999 (g) */
+  masuraGrame: 999999,
+  /** `CampaignProposal.voucher_discount` minimum=10 */
+  reducereVoucherMin: 10,
+  /** `CampaignProposal.voucher_discount` maximum=100 */
+  reducereVoucherMax: 100,
 } as const;
 
 /** Taie un text la limita lor, păstrând începutul. Pentru descrieri. */

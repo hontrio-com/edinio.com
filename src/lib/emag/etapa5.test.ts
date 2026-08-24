@@ -492,3 +492,20 @@ test("eMAG retur: un `raw` gol nu produce o cerere goala", () => {
     assert.equal(r.fel, "lipsesc", `${JSON.stringify(gol)} trebuie oprit`);
   }
 });
+
+test("eMAG campanii: stocul propunerii se plafoneaza la 255, nu la 65535", () => {
+  /*
+   * ⚠ `CampaignProposal.stock` are `maximum=255` in schema lor, mult sub cel al ofertei
+   * obisnuite (65535). E acelasi cuvant, „stoc", cu doua limite diferite dupa unde
+   * pleaca — si de aceea se rateaza usor.
+   *
+   * Masurat pe date reale in ziua auditului: magazinul avea produse cu 4.863 de bucati,
+   * deci propunerea pleca in afara intervalului si eMAG o refuza intreaga. Magazinul cu
+   * cel mai mult stoc era chiar cel care nu putea intra in campanie.
+   */
+  const r = pregatestePropunerile(
+    [{ emagId: 1, pretNet: 100, stoc: 4863 }],
+    { campaignId: 77, reducere: 20 },
+  );
+  assert.equal(r.propuneri[0]?.stock, 255);
+});

@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   contextDinCategorii, grupeazaFamilii, idExtern, imaginiDeImportat, pretDeAfisat,
@@ -272,4 +273,36 @@ test("eMAG import: o oferta fara nume nu devine produs, si se spune de ce", () =
   const { produse, probleme } = produseDeCreat(familii, CTX, PRET_CU_TVA);
   assert.equal(produse.length, 0);
   assert.match(probleme[0], /nu are nume/);
+});
+
+test("eMAG: reconcilierea foloseste ACEEASI socoteala de stoc ca importul", () => {
+  /*
+   * ═══ DOUA COPII ALE ACELEIASI CUNOASTERI, UNA GRESITA ═══
+   *
+   * `scrieStatusurile` din cron aduna doar `o.stock[]`. Dar raspunsul lui
+   * `product_offer/read` nu e in schema lor, iar ofertele vin adesea fara `stock[]`
+   * si cu `general_stock` — chiar ce vede cumparatorul la ei.
+   *
+   * Masurat pe un catalog de 3.754 de oferte: cu stocul citit ca zero, doar 27 ieseau
+   * „Se vinde pe eMAG", desi 3.469 erau aprobate la ei. Celelalte apareau „Trimis, in
+   * validare" — o eticheta care il trimite pe om sa astepte ceva incheiat de mult.
+   *
+   * ⚠ Proba se uita la SURSA cronului, nu la comportament: cele doua socoteli dau
+   * amandoua un numar, deci despartirea lor nu se vede din afara.
+   */
+  const sursa = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8");
+  assert.equal(
+    sursa.includes("const stoc = stocDeImportat(o)"), true,
+    "cronul nu mai cheama `stocDeImportat`",
+  );
+  /* ⚠ Se cauta ORICE adunare proprie peste `stock`, nu doar forma exacta de dinainte:
+     prima cautare a ratat-o pe a doua, din masurarea derivei, care era mai periculoasa
+     — acolo diferenta nu doar se ARATA, ci se si REPARA, cu scrieri catre eMAG. */
+  const adunariProprii = sursa
+    .split(String.fromCharCode(10))
+    .filter((l: string) => l.includes(".stock") && l.includes(".reduce("));
+  assert.deepEqual(
+    adunariProprii, [],
+    "adunare proprie peste `stock`, care nu stie de `general_stock`",
+  );
 });

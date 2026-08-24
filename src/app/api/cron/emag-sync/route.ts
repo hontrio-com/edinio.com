@@ -10,6 +10,7 @@ import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
 import { patchEmagConfig } from "@/lib/emag/config";
 import { intregDeLaEi, zecimalDeLaEi } from "@/lib/emag/numere";
+import { stocDeImportat } from "@/lib/emag/import-produse";
 import { magazinDin, trimiteElement } from "@/lib/emag/trimite";
 import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
@@ -583,7 +584,31 @@ async function scrieStatusurile(
 
     const validation = intregDeLaEi(o.validation_status);
     const offerValidation = intregDeLaEi(o.offer_validation_status);
-    const stoc = (o.stock ?? []).reduce((s, x) => s + (Number.isFinite(x?.value) ? x.value : 0), 0);
+    /*
+     * ═══ ⚠ ACEEASI FUNCTIE CA LA IMPORT, NU O A DOUA ADUNARE (audit 24.08.2026) ═══
+     *
+     * Aici se aduna doar `o.stock[]`. Dar raspunsul lui `product_offer/read` NU e in
+     * schema lor — e `ApiResponse` generic — iar in practica ofertele vin adesea fara
+     * `stock[]` si cu `general_stock`, care e chiar ce vede cumparatorul la ei.
+     *
+     * `stocDeImportat` stia asta de la inceput, cu tot cu proba: importul cade pe
+     * `general_stock` cand nu se poate aduna nimic pe depozite. Reconcilierea n-a
+     * primit niciodata aceeasi cunoastere.
+     *
+     * ⚠ CE A COSTAT, masurat pe catalogul unui comerciant cu 3.754 de oferte:
+     * `eVandabila` cere `stoc > 0` deodata cu celelalte trei conditii. Cu stocul citit
+     * ca ZERO, doar 27 de oferte ieseau „Se vinde pe eMAG" — desi 3.469 erau APROBATE
+     * la ei si 3.742 aveau oferta valida. Celelalte 3.727 apareau in ecran cu „Trimis,
+     * in validare": o eticheta care il trimite pe om sa astepte o validare INCHEIATA
+     * de mult, in loc sa se uite la ce chiar lipseste.
+     *
+     * Nicio eroare, nicaieri. Zero e o valoare valida pentru un stoc.
+     *
+     * ⚠ Doua copii ale aceleiasi cunoasteri se despart, iar despartirea nu se vede:
+     * amandoua raspund cu un numar. De aceea aici se CHEAMA functia importului, nu se
+     * scrie a doua adunare langa ea.
+     */
+    const stoc = stocDeImportat(o);
 
     const vandabila = eVandabila({
       stoc,
@@ -758,12 +783,27 @@ async function masoaraDeriva(
       const aLor = laEi.get(trimisa.id);
       if (!rand || !aLor) continue;
 
-      /* ⚠ Stocul lor e pe depozit si se ADUNA, ca la `scrieStatusurile`. Citit numai
-         din primul depozit, un magazin cu doua depozite ar fi aratat o derivare
-         permanenta si si-ar fi rescris stocul la fiecare trecere. */
-      const stocLor = Array.isArray(aLor.stock)
-        ? aLor.stock.reduce((t, x) => t + (Number.isFinite(x?.value) ? x.value : 0), 0)
-        : null;
+      /*
+       * ═══ ⚠ A DOUA ADUNARE PROPRIE, SI CEA MAI PERICULOASA (audit 24.08.2026) ═══
+       *
+       * Aici se compara stocul LOR cu al NOSTRU, iar cand difera de doua ori la rand,
+       * se REPARA — adica plecam sa le scriem stocul peste al lor.
+       *
+       * Adunata numai din `stock[]`, o oferta care vine cu `general_stock` (forma cea
+       * mai obisnuita la citire) iesea cu ZERO. Deci: „la ei 0, la noi 40", de doua ori
+       * la rand, si porneam sa reparam o derivare care nu exista.
+       *
+       * ⚠ Nu e doar o eticheta gresita, ca la `scrieStatusurile`: sunt SCRIERI catre
+       * eMAG, care ard din cele 3 cereri pe secunda ale magazinului si rescriu un stoc
+       * pe care comerciantul poate il tine anume altfel in panoul lor.
+       *
+       * ⚠ `null` cand nu stim NIMIC despre stocul lor ramane: `stocDeImportat` intoarce
+       * 0 si pentru „zero adevarat", si pentru „lipseste". Deosebirea conteaza — un zero
+       * adevarat E o derivare, o lipsa nu e — deci se pastreaza intrebarea de dinainte
+       * despre forma raspunsului, si abia apoi se socoteste ca la import.
+       */
+      const stiuStocul = Array.isArray(aLor.stock) || Number.isFinite(aLor.general_stock);
+      const stocLor = stiuStocul ? stocDeImportat(aLor) : null;
 
       /* ⚠ Fara pret de-al nostru nu se masoara NIMIC, nici macar stocul luat separat.
          Pus pe zero „ca sa avem o valoare", fiecare oferta ar fi aratat o derivare de

@@ -569,6 +569,39 @@ export interface IdentitateUsoara {
  * si nimeni nu afla. De aceea rutele usoare isi construiesc singure incarcatura, din
  * randurile care exista deja in `emag_offers`.
  */
+/**
+ * Stocul unei oferte deja publicate, dupa identitatea ei.
+ *
+ * ═══ ⚠ O VARIANTA CARE NU MAI EXISTA PRIMESTE ZERO, NU STOCUL PRODUSULUI ═══
+ *
+ * `emag_offers` tine `variant_title` — numele combinatiei, asa cum era la publicare.
+ * Comerciantul poate redenumi o marime, sau o poate sterge cu totul; randul de oferta
+ * ramane, fiindca oferta EXISTA in continuare la eMAG (ei n-au stergere).
+ *
+ * Prima forma cadea inapoi pe `produs.stock_quantity` de fiecare data cand nu gasea
+ * combinatia. Deci: redenumesti „M" in „Marime M", iar oferta pentru „M" — care se
+ * vinde in continuare pe eMAG — primeste dintr-o data stocul INTREG al produsului.
+ *
+ * eMAG ar fi continuat sa vanda o marime care nu mai exista, cu stocul tuturor
+ * marimilor la un loc. Fara nicio eroare: numarul e valid, cererea reuseste, panoul
+ * arata „trimis".
+ *
+ * ⚠ Zero opreste vanzarea, si asta e chiar ce a vrut comerciantul cand a scos
+ * varianta. Aceeasi regula ca la `stocCuRezerva`: cand nu se stie, se opreste.
+ *
+ * ⚠ Produsul SIMPLU (`variant_title === null`) foloseste stocul produsului, si e
+ * corect: acolo nu e nicio combinatie de gasit.
+ */
+function stoculIdentitatii(
+  variantTitle: string | null,
+  combinatie: { stock_quantity?: unknown } | undefined,
+  stocProdus: number | null | undefined,
+): number {
+  if (variantTitle == null) return stocProdus ?? 0;
+  if (!combinatie) return 0;
+  return comboStock(combinatie as never) ?? stocProdus ?? 0;
+}
+
 export function oferteUsoare(
   produs: ProdusDeCartografiat,
   magazin: ContextMagazin,
@@ -589,9 +622,10 @@ export function oferteUsoare(
     const faraTva = pretFaraTva(pretAfisat, magazin.vat_rate, magazin.prices_include_vat);
     const banda = bandaDePret(faraTva, magazin.price_band_pct);
 
-    /* ⚠ Stocul COMBINATIEI. `comboStock` da `null` cand nu e declarat, si atunci
-       ramane valabil cel al produsului — aceeasi regula ca la publicare. */
-    const stoc = c ? (comboStock(c) ?? produs.stock_quantity ?? 0) : (produs.stock_quantity ?? 0);
+    /* ⚠ Stocul COMBINATIEI, si ZERO cand combinatia nu mai exista. Vezi
+       `stoculIdentitatii`: cazuta inapoi pe stocul produsului, o marime redenumita ar
+       fi primit stocul tuturor marimilor la un loc si s-ar fi vandut mai departe. */
+    const stoc = stoculIdentitatii(ident.variant_title, c, produs.stock_quantity);
 
     return {
       id: ident.emag_id,
@@ -631,7 +665,10 @@ export function stocuriDeTrimis(
 
   return identitati.map((ident) => {
     const c = ident.variant_title ? dupaTitlu.get(ident.variant_title) : undefined;
-    const stoc = c ? (comboStock(c) ?? produs.stock_quantity ?? 0) : (produs.stock_quantity ?? 0);
+    /* ⚠ Aceeasi regula ca la pret, si aici e si mai scumpa: drumul asta se bate la
+       FIECARE vanzare. O varianta disparuta ar fi trimis stocul intregului produs de
+       zeci de ori pe zi. */
+    const stoc = stoculIdentitatii(ident.variant_title, c, produs.stock_quantity);
     return { emagId: ident.emag_id, cantitate: stocCuRezerva(stoc, stocRezervat) };
   });
 }

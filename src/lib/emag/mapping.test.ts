@@ -3,8 +3,7 @@ import { test } from "node:test";
 import {
   alegeSupplyLeadTime, bandaDePret, construiesteOferte, imaginiEmag, masuratoriEmag,
   normalizeazaPartNumber, partNumberCombinatie, pretFaraTva,
-  type ContextCategorie, type ContextMagazin, type ProdusDeCartografiat,
-} from "./mapping";
+  type ContextCategorie, type ContextMagazin, type ProdusDeCartografiat, oferteUsoare, stocuriDeTrimis} from "./mapping";
 
 /*
  * Cartografierea produs Edinio → oferta eMAG.
@@ -388,4 +387,72 @@ test("eMAG supply_lead_time: o valoare NEINGADUITA din setari se potriveste, nu 
     CATEGORIE, [{ variant_title: null, emag_id: 500 }], null,
   );
   assert.equal(r.oferte[0].supply_lead_time, 14, "10 nu e ingaduit; se urca la 14");
+});
+
+/* ── O varianta care nu mai exista ───────────────────────────────── */
+
+function cuMarimi(): ProdusDeCartografiat {
+  return produs({
+    stock_quantity: 40,
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ name: "Marime", values: ["S", "M"] }],
+        combinations: [
+          { title: "S", sku: "T-S", stock_quantity: 2, enabled: true },
+          { title: "M", sku: "T-M", stock_quantity: 5, enabled: true },
+        ],
+      },
+    },
+  });
+}
+
+test("eMAG stoc: o varianta DISPARUTA primeste ZERO, nu stocul intregului produs", () => {
+  /*
+   * ═══ DEFECT GASIT DE PROBA DE SCARA, 24.08.2026 ═══
+   *
+   * `emag_offers` tine `variant_title` — numele combinatiei, asa cum era la publicare.
+   * Comerciantul poate redenumi „M" in „Marime M", sau o poate sterge; randul de oferta
+   * ramane, fiindca oferta EXISTA in continuare la eMAG (ei n-au stergere de oferte).
+   *
+   * Prima forma cadea inapoi pe `produs.stock_quantity` de fiecare data cand nu gasea
+   * combinatia. Deci oferta pentru „M" — care se vinde in continuare acolo — primea
+   * dintr-o data stocul INTREG al produsului: patruzeci de bucati, adica toate marimile
+   * la un loc.
+   *
+   * eMAG ar fi vandut mai departe o marime care nu mai exista, si inca din stocul
+   * altora. Fara nicio eroare: numarul e valid, cererea reuseste, panoul scrie „trimis".
+   *
+   * ⚠ Zero opreste vanzarea, si asta e chiar ce a vrut comerciantul cand a scos varianta.
+   */
+  const oferte = oferteUsoare(cuMarimi(), MAGAZIN, [
+    { variant_title: "M", emag_id: 501 },
+    { variant_title: "XL care nu mai exista", emag_id: 502 },
+  ]);
+
+  assert.equal(oferte[0].stock?.[0]?.value, 5, "„M” exista: stocul ei");
+  assert.equal(oferte[1].stock?.[0]?.value, 0, "⚠ disparuta: ZERO, nu 40");
+});
+
+test("eMAG stoc: aceeasi regula si pe ruta cea mai usoara, batuta la fiecare vanzare", () => {
+  /* ⚠ Drumul asta se bate de zeci de ori pe zi. O varianta disparuta ar fi retrimis
+     stocul intregului produs la fiecare miscare de stoc. */
+  const stocuri = stocuriDeTrimis(cuMarimi(), [
+    { variant_title: "S", emag_id: 501 },
+    { variant_title: "disparuta", emag_id: 502 },
+  ]);
+  assert.deepEqual(stocuri, [
+    { emagId: 501, cantitate: 2 },
+    { emagId: 502, cantitate: 0 },
+  ]);
+});
+
+test("eMAG stoc: produsul SIMPLU foloseste stocul produsului, si e corect", () => {
+  /* ⚠ `variant_title: null` inseamna „produs fara variante" — acolo nu e nicio
+     combinatie de gasit, iar stocul produsului e chiar cel bun. Confundate, fiecare
+     produs simplu ar fi plecat cu stoc zero si magazinul n-ar mai fi vandut nimic. */
+  const oferte = oferteUsoare(produs({ stock_quantity: 10 }), MAGAZIN, [
+    { variant_title: null, emag_id: 500 },
+  ]);
+  assert.equal(oferte[0].stock?.[0]?.value, 10);
 });

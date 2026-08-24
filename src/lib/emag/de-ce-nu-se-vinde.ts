@@ -51,17 +51,25 @@ export function deCeNuSeVinde(o: StareaLaEmag): MotivulOpririi {
   /*
    * ⚠ 1. RESPINSĂ — se spune prima, fiindcă restul nu mai contează.
    *
-   * ⚠ Și se spune UNDE e motivul. Verificat pe date reale: eMAG NU trimite motivul
-   * respingerii prin `product_offer/read` — zero din cele verificate aveau `doc_errors`,
-   * nici în `content_details`, nici în `offer_details`. Lăsat gol, rândul arăta ca o
-   * respingere fără cauză, iar omul căuta la noi ceva ce e numai la ei.
+   * ═══ ⚠ CE SCRIA AICI ERA FALS, ȘI A COSTAT (îndreptat 24.08.2026) ═══
+   *
+   * Textul de rezervă spunea „eMAG nu trimite motivul prin API". Îl trimiteau: stătea
+   * la `validation_status[].errors.errors[].message.ro_RO`, iar noi ne uitam numai la
+   * chei de nivel întâi. Măsurat pe cele 154 de oferte respinse ale unui comerciant, 68
+   * au un motiv scris în română, direct acționabil — „Marime — Te rugăm să adaugi
+   * mărimea produsului…". Toate 68 primeau propoziția asta, care îi spunea să caute în
+   * altă parte ceva ce era deja la noi.
+   *
+   * ⚠ Pentru celelalte 86 chiar n-au trimis nimic (34 blocate, 52 numai cu note de
+   * tipul „valoarea a fost generată automat", care nu sunt motive). Deci se spune CE E:
+   * pentru oferta ASTA n-au scris nimic — nu că nu scriu niciodată.
    */
   if (eRespinsaDeEmag(o.validation_status)) {
     return {
       eticheta: "Respins de eMAG",
       indrumare: o.doc_errors.length > 0
         ? o.doc_errors.join(" · ")
-        : "eMAG nu trimite motivul prin API. Îl vezi în panoul lor, la „Rezolvă erori produse”.",
+        : "eMAG nu a trimis niciun motiv pentru oferta asta. Îl vezi în panoul lor, la „Rezolvă erori produse”.",
       seVinde: false,
     };
   }

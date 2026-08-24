@@ -165,7 +165,7 @@ test("eMAG audit: statusurile lor si ale noastre stau in doua straturi", () => {
      nostru. Suprapuse, o schimbare in vocabularul oricareia dintre parti ar fi
      stricat-o pe cealalta. */
   assert.equal(statusEdinio(0), "cancelled");
-  assert.equal(statusEdinio(5), "returned");
+  assert.equal(statusEdinio(5), "refunded");
   assert.equal(statusEdinio(99), "pending", "un status nou inventat de ei nu iese livrat");
 });
 

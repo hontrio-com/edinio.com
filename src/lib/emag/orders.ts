@@ -53,7 +53,30 @@ type Db = SupabaseClient<Database>;
  */
 export function statusEdinio(statusEmag: number): string {
   if (statusEmag === 0) return "cancelled";
-  if (statusEmag === 5) return "returned";
+  /*
+   * ═══ ⚠ 5 DEVINE „refunded", NU „returned" (24.08.2026) ═══
+   *
+   * „returned" NU EXISTĂ în baza noastră. `orders_status_check` permite exact:
+   * pending · confirmed · processing · shipped · delivered · cancelled · refunded.
+   * Valoarea pleca neatinsă spre `aplica_tranzitia_comenzii`, care o scria în `orders`
+   * — și primea 23514, fără prindere de excepție.
+   *
+   * ⚠ CE COSTA, în două feluri:
+   *
+   *   1. O comandă returnată RĂMÂNEA „livrată" pe veci. Comerciantul o vedea ca
+   *      vândută, factura ei stătea ca bună, iar jurnalul primea un „critical" la
+   *      fiecare trecere a cronului.
+   *   2. Mai rău: o comandă DEJA returnată la prima conectare nu intra deloc.
+   *      Insertul cădea pe același 23514, cod trecut anume în lista „permanent" — deci
+   *      comanda era sărită DEFINITIV, nu reîncercată.
+   *
+   * ⚠ Și „refunded" nu e doar valoarea care încape: e și cea cu înțelesul potrivit.
+   * `c_intoarse` din `aplica_tranzitia_comenzii` = `['refunded','cancelled']`, deci
+   * trecerea aici ELIBEREAZĂ stocul — exact ce trebuie când marfa s-a întors pe raft.
+   * About You mapează același eveniment la fel (`aboutyou/orders.ts:36`); eMAG era
+   * singura care ieșea din tabel.
+   */
+  if (statusEmag === 5) return "refunded";
   if (statusEmag === 4) return "delivered";
   if (statusEmag === 3) return "shipped";
   if (statusEmag === 2) return "processing";
@@ -78,16 +101,19 @@ export function statusEdinio(statusEmag: number): string {
  * ⚠ CÂND SE ÎNTÂMPLĂ: o comandă anulată între două treceri ale cronului, sau la prima
  * citire după conectarea contului, când fereastra aduce și comenzi deja închise.
  *
- * ⚠ „returned" NU e în lista asta, și e o alegere, nu o scăpare. La ei, 5 înseamnă că
- * marfa a plecat și s-a întors — deci a ieșit din depozit cu adevărat. Iar
- * `aplica_tranzitia_comenzii` tratează „returned" ca stare care ȚINE stocul
- * (`c_intoarse` are numai „refunded" și „cancelled"): retururile își au drumul lor.
- * Scăzut aici, stocul rămâne scăzut exact ca la o comandă proprie returnată.
+ * ⚠ ACELAȘI lucru pentru 5 (returnată la ei, „refunded" la noi), și din același motiv:
+ * `c_intoarse` din tranziție e chiar `['refunded','cancelled']`. O comandă intrată direct
+ * returnată n-are de unde să se mai schimbe, deci stocul scăzut acum ar rămâne scăzut
+ * pentru marfă care e pe raft.
+ *
+ * Regula se citește din mulțimea aceea, nu din două valori scrise de mână: dacă cineva
+ * mai adaugă o stare care întoarce stocul, aici trebuie să se afle.
  *
  * ⚠ PUR ȘI EXPORTAT: e o decizie care se strică tăcut și trebuie probată fără rețea.
  */
 export function seConsumaLaIntrare(statusEmag: number): boolean {
-  return statusEdinio(statusEmag) !== "cancelled";
+  const st = statusEdinio(statusEmag);
+  return st !== "cancelled" && st !== "refunded";
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

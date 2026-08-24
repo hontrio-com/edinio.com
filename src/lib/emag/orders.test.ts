@@ -29,7 +29,9 @@ test("eMAG comenzi: fiecare status al lor are un corespondent la noi", () => {
   assert.equal(statusEdinio(2), "processing");
   assert.equal(statusEdinio(3), "shipped");
   assert.equal(statusEdinio(4), "delivered");
-  assert.equal(statusEdinio(5), "returned");
+  /* ⚠ „returned" nu exista in `orders_status_check`: pleca neatins spre baza si
+     primea 23514, iar o comanda deja returnata la prima citire era sarita definitiv. */
+  assert.equal(statusEdinio(5), "refunded");
 });
 
 test("eMAG comenzi: un status necunoscut cade pe «nouă», nu pe «livrată»", () => {
@@ -389,9 +391,21 @@ test("celelalte stari consuma stoc la intrare", () => {
   }
 });
 
-test("o comanda intrata returnata consuma stoc, ca una proprie returnata", () => {
-  /* ⚠ Ales anume: la ei 5 inseamna ca marfa a plecat si s-a intors, deci a IESIT din
-     depozit. Iar `c_intoarse` din tranzitie are numai „refunded" si „cancelled" —
-     „returned" tine stocul scazut si la comenzile noastre obisnuite. */
-  assert.equal(seConsumaLaIntrare(5), true);
+test("o comanda intrata deja returnata NU consuma stoc", () => {
+  /* ⚠ 5 devine „refunded" la noi, iar `c_intoarse` din tranzitie e chiar
+     `['refunded','cancelled']`: marfa s-a intors pe raft. Intrata direct asa, n-are de
+     unde sa se mai schimbe, deci stocul scazut acum ar ramane scazut pe veci. */
+  assert.equal(seConsumaLaIntrare(5), false);
+});
+
+test("toate starile care intorc stocul sunt oprite la intrare", () => {
+  /* ⚠ Lista se tine langa `c_intoarse` din `aplica_tranzitia_comenzii`. Daca acolo se
+     adauga o stare si aici nu, se pierde marfa in tacere. */
+  const intorc = ["cancelled", "refunded"];
+  for (let st = 0; st <= 5; st++) {
+    assert.equal(
+      seConsumaLaIntrare(st), !intorc.includes(statusEdinio(st)),
+      `statusul eMAG ${st} (${statusEdinio(st)})`,
+    );
+  }
 });

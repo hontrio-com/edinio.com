@@ -71,3 +71,107 @@ test("eMAG motive: care stari inseamna „respins”", () => {
     assert.equal(eRespinsaDeEmag(s), false, `${s}`);
   }
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOTIVUL DIN LOCUL LUI ADEVARAT (masurat pe 154 de oferte respinse)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Forma EXACTA venita de la ei, copiata dintr-un `raspuns_brut` din productie. */
+const RASPUNS_ADEVARAT = {
+  id: 4046,
+  name: "Bluza Fitness Indi-Go Geo",
+  doc_errors: [],
+  validation_status: [{
+    value: 8,
+    errors: {
+      errors: [{
+        code: "naming:standardFailure:size",
+        value: null,
+        message: {
+          bg_BG: "...",
+          en_GB: "Size - Please add the size in the name of the product...",
+          ro_RO: "Marime - Te rugam sa adaugi marimea produsului sau sa corectezi informatiile care nu coincid cu restul documentatiei.",
+        },
+        section: "name",
+        extraInfo: "",
+        identifier: null,
+        description: null,
+      }],
+      warnings: [],
+    },
+    description: "Documentation rejected",
+  }],
+};
+
+test("motivul se culege din `validation_status[].errors.errors[].message.ro_RO`", () => {
+  /*
+   * ⚠ Chiar gaura care lasa 154 de produse respinse fara niciun motiv pe ecran.
+   * `doc_errors` la nivel de oferta e GOL la toate — motivul e ingropat aici.
+   */
+  const m = motiveDeLaEi(RASPUNS_ADEVARAT);
+  assert.equal(m.length, 1, "un motiv, nu trei traduceri ale lui");
+  assert.ok(m[0].startsWith("Marime - Te rugam"), `romana, nu engleza: ${m[0]}`);
+});
+
+test("mesajul se ia in romana, nu in toate limbile", () => {
+  /* ⚠ Fara alegerea limbii, acelasi motiv ajungea pe ecran de trei ori. */
+  const m = motiveDeLaEi(RASPUNS_ADEVARAT);
+  assert.ok(!m.some((t) => t.includes("Please add the size")), "engleza n-are ce cauta");
+  assert.ok(!m.some((t) => t === "..."), "nici bulgara");
+});
+
+test("`extraInfo` se lipeste de mesaj: fara el, motivul nu spune CE lipseste", () => {
+  /* „Caracteristici mandatory lipsa" e adevarat si nefolositor. `extraInfo` spune care. */
+  const m = motiveDeLaEi({
+    validation_status: [{
+      value: 8,
+      errors: { errors: [{
+        code: "MISSING_MANDATORY_CHARACTERISTICS",
+        message: { ro_RO: "Caracteristica/Caracteristici mandatory lipsa." },
+        extraInfo: "The product must have both size and converted size values.",
+      }] },
+    }],
+  });
+  assert.equal(
+    m[0],
+    "Caracteristica/Caracteristici mandatory lipsa. (The product must have both size and converted size values.)",
+  );
+});
+
+test("avertismentele se citesc si ele, dupa erori", () => {
+  /*
+   * ⚠ Masurat: din 114 oferte cu documentatia respinsa, 27 au NUMAI avertismente. Citite
+   * doar erorile, acelea 27 ar fi ramas tot fara motiv — desi „Brand invalid… te rugam
+   * sa o corectezi" e exact ce are omul de facut.
+   */
+  const m = motiveDeLaEi({
+    validation_status: [{
+      value: 8,
+      errors: {
+        errors: [{ message: { ro_RO: "Eroarea" } }],
+        warnings: [{ message: { ro_RO: "Avertismentul" } }],
+      },
+    }],
+  });
+  assert.deepEqual(m, ["Eroarea", "Avertismentul"], "erorile intai");
+});
+
+test("notele de tip `info` NU sunt motive", () => {
+  /*
+   * ⚠ 52 din cele 154 au numai note ca „Valoarea «Bumbac» de pe caracteristica
+   * «Material» a fost generata automat". Aratate ca motiv al respingerii, l-ar fi
+   * trimis pe om sa repare ceva ce nu e stricat. Pentru ele ecranul spune cinstit ca
+   * eMAG n-a trimis niciun motiv.
+   */
+  const m = motiveDeLaEi({
+    validation_status: [{
+      value: 8,
+      errors: { info: [{ message: { ro_RO: "Valoarea a fost generata automat." } }] },
+    }],
+  });
+  assert.deepEqual(m, []);
+});
+
+test("o oferta fara nimic scris intoarce lista goala, nu un obiect serializat", () => {
+  assert.deepEqual(motiveDeLaEi({ validation_status: [{ value: 10, errors: null, description: "Blocked" }] }), []);
+});

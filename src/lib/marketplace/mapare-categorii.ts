@@ -72,11 +72,29 @@ export async function mutaMapareaCategoriei(
        * la nivelul intai, deci un petic `{category_map: {nou: x}}` ar inlocui harta, nu ar
        * adauga in ea. Aici chiar asta vrem — harta noua, cu vechea cheie scoasa.
        */
-      await admin.rpc("jsonb_merge_config", {
+      const { error: eScriere } = await admin.rpc("jsonb_merge_config", {
         p_business_id: businessId,
         p_column: coloana,
         p_patch: { category_map: noua } as never,
       });
+
+      /*
+       * ⚠ `error` SE CITESTE. PostgREST nu ARUNCA la refuz: intoarce `{ data: null, error }`
+       * si promisiunea se implineste linistit. Deci `catch`-ul de mai jos nu s-ar fi
+       * executat niciodata pentru cazul ala.
+       *
+       * Redenumirea ar fi reusit, maparea ar fi ramas pe numele vechi, si jurnalul n-ar fi
+       * spus nimic — adica exact defectul reparat aici, doar cu un pas mai adanc.
+       */
+      if (eScriere) {
+        await logError({
+          action: "marketplace.mapareCategorii",
+          message: `maparea nu s-a mutat pe ${coloana}: ${eScriere.message}`,
+          details: { coloana, numeVechi, numeNou },
+          businessId,
+          severity: "warning",
+        });
+      }
     }
   } catch (e) {
     /* ⚠ O redenumire reusita n-are voie sa para picata fiindca o harta n-a putut fi

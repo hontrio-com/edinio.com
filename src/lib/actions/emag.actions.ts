@@ -247,6 +247,14 @@ export interface StareEmag {
      * ofertă cade într-o singură găleată, iar suma e chiar totalul, prin construcție.
      */
     peStare: Record<string, number>;
+    /**
+     * `false` cand numaratoarea pe stari N-A PUTUT FI CITITA.
+     *
+     * ⚠ Fara steagul asta, o citire picata arata identic cu un catalog gol: ecranul scria
+     * „Se vând pe eMAG: 0" pentru ca n-a putut intreba. Chiar minciuna reparata azi in
+     * alte trei locuri, facuta de mine in al patrulea.
+     */
+    starileCitite: boolean;
   };
   /**
    * Comenzi livrate care n-au factura urcata la eMAG.
@@ -401,9 +409,16 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       respinse: respinse.count ?? 0,
       eroare: eroare.count ?? 0,
       preluate: preluate.count ?? 0,
-      /* ⚠ `{}` la o citire picată, nu cifre inventate: un cartonaș lipsă se vede,
-         unul cu zero minte. */
+      /*
+       * ⚠ `{}` la o citire picată, si un STEAG care spune ca n-am putut citi.
+       *
+       * Numai `{}` nu era de ajuns: ecranul randeaza „Se vând" mereu, cu `?? 0`, deci o
+       * citire picata arata ca un catalog gol. Comentariul de aici sustinea contrariul —
+       * „un cartonaș lipsă se vede, unul cu zero minte" — dar codul de pe ecran il
+       * contrazicea.
+       */
       peStare: (peStare.data ?? {}) as Record<string, number>,
+      starileCitite: !peStare.error && peStare.data != null,
       derivate: derivate.count ?? 0,
     },
     comenziFaraFactura: faraFactura.count ?? 0,

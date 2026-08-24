@@ -646,7 +646,18 @@ async function ridicaSirul(admin: Admin, oferte: EmagOfertaCitita[]): Promise<vo
   }, 0);
   if (maxim <= 0 && maximFamilie <= 0) return;
   try {
-    await admin.rpc("emag_ridica_sirurile", { p_oferta: maxim, p_familie: maximFamilie });
+    /*
+     * ⚠ `error` SE CITESTE, si nu era. PostgREST nu ARUNCA la refuz: intoarce
+     * `{ data: null, error }` si promisiunea se implineste. Deci `catch`-ul de mai jos
+     * prindea numai caderile de retea, nu si un refuz al bazei.
+     *
+     * ⚠ Iar aici tacerea costa exact ce spune nota de deasupra: sirul nu se ridica, si
+     * prima publicare de dupa import cade pe `duplicate key` fara sa spuna de ce.
+     */
+    const { error } = await admin.rpc("emag_ridica_sirurile", {
+      p_oferta: maxim, p_familie: maximFamilie,
+    });
+    if (error) throw new Error(error.message);
   } catch (e) {
     void logError({
       action: "emag.import.sir",

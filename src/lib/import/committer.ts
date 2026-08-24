@@ -8,7 +8,7 @@ import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
-import { enqueueEmagSyncMany } from "@/lib/emag/queue";
+import { enqueueEmagSyncMany, publicaPeEmagMany } from "@/lib/emag/queue";
 import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import type {
   ImportOptions,
@@ -187,20 +187,44 @@ interface CommitDeltas {
  */
 async function anuntaCanalele(admin: Admin, importId: string, businessId: string): Promise<void> {
   try {
+    /* ⚠ Se citeste o data, si numai pentru eMAG: celelalte canale n-au publicare
+       automata legata de import. */
+    const { data: setari } = await admin
+      .from("store_settings").select("emag_config").eq("business_id", businessId).maybeSingle();
+    const autoPublish =
+      ((setari?.emag_config ?? {}) as { auto_publish?: boolean }).auto_publish === true;
+
     /* ⚠ INAINTE de curatare: `curataRandurileReusite` sterge chiar randurile astea. */
-    const ids: string[] = [];
-    for (const bucata of [["created", "updated"]] as const) {
-      const { data, error } = await admin
-        .from("product_import_rows")
-        .select("product_id")
-        .eq("import_id", importId)
-        .in("status", bucata as unknown as string[]);
-      if (error) throw error;
-      for (const r of (data ?? []) as { product_id: string | null }[]) {
-        if (r.product_id) ids.push(r.product_id);
-      }
+    const { data, error } = await admin
+      .from("product_import_rows")
+      .select("product_id, status")
+      .eq("import_id", importId)
+      .in("status", ["created", "updated"]);
+    if (error) throw error;
+
+    /*
+     * ═══ ⚠ „NOU" SI „ACTUALIZAT" NU SE ANUNTA LA FEL (25.08.2026) ═══
+     *
+     * `enqueueEmagSyncMany` sincronizeaza numai ofertele care EXISTA deja la ei — asa
+     * trebuie, altfel orice atingere in masa ar publica tot catalogul. Dar un produs NOU
+     * din import n-are inca oferta, deci pica prin filtru si nu se publica niciodata.
+     *
+     * ⚠ Iar comerciantul a bifat „Publică automat produsele noi". Pentru el, propozitia
+     * aia nu are asterisc: un produs nou e nou indiferent daca a venit din formular, din
+     * duplicare sau dintr-un CSV. Din formular mergea, din CSV nu.
+     *
+     * Cele actualizate raman pe calea obisnuita: ele au deja oferta, si `auto_sync` e
+     * intrebarea potrivita pentru ele, nu `auto_publish`.
+     */
+    const noi: string[] = [];
+    const atinse: string[] = [];
+    for (const r of (data ?? []) as { product_id: string | null; status: string }[]) {
+      if (!r.product_id) continue;
+      atinse.push(r.product_id);
+      if (r.status === "created") noi.push(r.product_id);
     }
-    const unice = [...new Set(ids)];
+    const unice = [...new Set(atinse)];
+    const uniceNoi = [...new Set(noi)];
     if (unice.length === 0) return;
 
     /*
@@ -215,6 +239,14 @@ async function anuntaCanalele(admin: Admin, importId: string, businessId: string
       enqueueAboutYouSyncMany(businessId, unice),
       enqueueTrendyolSyncMany(businessId, unice),
       enqueueEmagSyncMany(businessId, unice),
+      /*
+       * ⚠ Produsele NOI, pe calea de publicare, si NUMAI daca omul a cerut-o.
+       *
+       * `publicaPeEmagMany` are `publicaSiFaraOferta: true`, deci trece de filtrul care
+       * opreste restul. Chemata neconditionat, ar fi publicat pe eMAG orice import — chiar
+       * si al unui comerciant care n-a bifat nimic. Steagul e intrebarea, nu importul.
+       */
+      autoPublish ? publicaPeEmagMany(businessId, uniceNoi) : Promise.resolve(0),
     ]);
   } catch (e) {
     /* ⚠ Se scrie, nu se inghite: un import care nu si-a anuntat canalele arata identic

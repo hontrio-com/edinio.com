@@ -61,3 +61,40 @@ test("anuntul nu poate rupe importul", async () => {
   assert.match(corp, /Promise\.allSettled/, "cele cinci cozi nu se pot rupe una pe alta");
   assert.match(corp, /catch/, "si nimic din ele nu poate rupe importul");
 });
+
+test("produsele NOI din import respecta „Publica automat produsele noi”", async () => {
+  /*
+   * ═══ „PRODUS NOU" N-ARE ASTERISC PENTRU COMERCIANT ═══
+   *
+   * `enqueueEmagSyncMany` sincronizeaza numai ofertele care EXISTA deja la ei — asa
+   * trebuie, altfel orice atingere in masa ar publica tot catalogul. Dar un produs nou din
+   * import n-are inca oferta, deci pica prin filtru si nu se publica NICIODATA.
+   *
+   * Iar omul a bifat „Publică automat produsele noi". Din formular mergea, din CSV nu.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/import/committer.ts", "utf8");
+  const i = sursa.indexOf("async function anuntaCanalele(");
+  const corp = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "}", i));
+
+  assert.match(corp, /publicaPeEmagMany/, "produsele noi trebuie sa treaca pe calea de publicare");
+  assert.match(corp, /auto_publish/, "si NUMAI daca omul a cerut-o");
+  assert.match(
+    corp, /status === "created"/,
+    "cele noi se despart de cele actualizate: pentru actualizate intrebarea e `auto_sync`",
+  );
+});
+
+test("publicarea automata din import NU se face neconditionat", async () => {
+  /*
+   * ⚠ `publicaPeEmagMany` are `publicaSiFaraOferta: true`, deci trece de filtrul care
+   * opreste restul. Chemata neconditionat, ar fi publicat pe eMAG orice import — chiar si
+   * al unui comerciant care n-a bifat nimic. Steagul e intrebarea, nu importul.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/import/committer.ts", "utf8");
+  assert.match(
+    sursa, /autoPublish \? publicaPeEmagMany/,
+    "publicarea trebuie sa atarne de steag, nu sa fie chemata mereu",
+  );
+});

@@ -347,10 +347,17 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             neacceptat 0" e zgomot; „Se vând 0" e chiar vestea.
           */}
           <Cifra eticheta="Oferte" valoare={status.oferte.total} />
-          <Cifra
-            eticheta="Se vând pe eMAG"
-            valoare={status.oferte.peStare["Se vinde pe eMAG"] ?? 0}
-          />
+          {/* ⚠ „Nu s-a putut citi" NU e „zero". Vezi `starileCitite`. */}
+          {status.oferte.starileCitite ? (
+            <Cifra
+              eticheta="Se vând pe eMAG"
+              valoare={status.oferte.peStare["Se vinde pe eMAG"] ?? 0}
+            />
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+              Nu s-au putut citi stările ofertelor acum. Reîncarcă pagina.
+            </div>
+          )}
           {ORDINEA_STARILOR.filter(
             (e) => e !== "Se vinde pe eMAG" && (status.oferte.peStare[e] ?? 0) > 0,
           ).map((e) => (

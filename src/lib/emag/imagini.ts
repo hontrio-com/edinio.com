@@ -56,6 +56,29 @@ const PRIMITE = /\.(jpe?g|png)$/i;
  */
 const PE_TRECERE = 8;
 
+/**
+ * Cat timp, cu totul, se poate cheltui pe imaginile UNUI produs.
+ *
+ * ═══ ⚠ CRONUL ARE `maxDuration = 60`, SI IMPARTE SECUNDELE ALEA CU TOT RESTUL ═══
+ *
+ * O conversie inseamna doua intrebari „exista deja?", o descarcare si o codare. Numarate
+ * la cazul cel mai rau, opt imagini ar fi putut manca toata trecerea — si atunci nu mai
+ * pleaca NIMIC: nici comenzile, nici mișcarile de stoc dupa vanzari.
+ *
+ * Peste buget, ce ramane se amana pentru trecerea urmatoare. Cheia fiind deterministica,
+ * ce s-a facut deja nu se mai reface, deci un produs cu multe poze se termina in doua-trei
+ * treceri in loc de una — si nimic altceva nu asteapta dupa el.
+ */
+const BUGET_MS = 20_000;
+
+/**
+ * Cat se asteapta la intrebarea „exista deja copia?".
+ *
+ * ⚠ Scurt ANUME. E doar o scurtatura: daca nu raspunde la timp, se converteste din nou,
+ * si atat. O asteptare lunga aici ar fi platit scump o economie.
+ */
+const HEAD_MS = 2500;
+
 /** Adresa nu se poate converti; se spune de ce, o data. */
 interface Nereusita { adresa: string; motiv: string }
 
@@ -103,7 +126,7 @@ export function ePrimitaDeEmag(adresa: string): boolean {
  */
 async function existaDeja(adresa: string): Promise<boolean> {
   try {
-    const r = await fetch(adresa, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+    const r = await fetch(adresa, { method: "HEAD", signal: AbortSignal.timeout(HEAD_MS) });
     return r.ok;
   } catch {
     return false;
@@ -172,9 +195,16 @@ export async function imaginiPentruEmag(
   const noi = new Map<string, string>();
   const nereusite: Nereusita[] = [];
   let convertite = 0;
+  const pana = Date.now() + BUGET_MS;
 
   for (const adresa of [...new Set(adrese)]) {
     if (ePrimitaDeEmag(adresa)) { noi.set(adresa, adresa); continue; }
+
+    /* ⚠ Bugetul se verifica INAINTE de orice cerere de retea, nu dupa. */
+    if (Date.now() >= pana) {
+      nereusite.push({ adresa, motiv: "s-a amânat pentru trecerea următoare" });
+      continue;
+    }
 
     /* ⚠ Se intreaba intai daca copia exista deja — pe amandoua extensiile, fiindca nu
        stim inca daca originalul are transparenta. Un `HEAD` e mult mai ieftin decat o

@@ -256,6 +256,9 @@ async function trimite<T>(
    */
   const cont = cheiaContului(auth);
   const felul = eComanda ? LIMITE_RITM.comenzi : LIMITE_RITM.restul;
+  /* ⚠ Raspunsul se IGNORA dinadins: daca jetonul n-a venit in bugetul de asteptare,
+     cererea pleaca oricum. 429-ul lor si `franeazaDupaAntete` sunt plasa de dedesubt, iar
+     o cerere oprita aici ar fi putut fi tocmai confirmarea unei comenzi. */
   await asteaptaJetonImpartit(
     `emag:${cont}:${eComanda ? "comenzi" : "restul"}`, felul.limita, felul.fereastraMs);
 
@@ -579,8 +582,26 @@ export async function cautaDupaEan(auth: EmagAuth, eanuri: string[]): Promise<Em
   const cont = cheiaContului(auth);
   await asteaptaJetonImpartit(
     `emag:${cont}:ean:s`, LIMITE_RITM.eanSecunda.limita, LIMITE_RITM.eanSecunda.fereastraMs);
-  await asteaptaJetonImpartit(
-    `emag:${cont}:ean:m`, LIMITE_RITM.eanMinut.limita, LIMITE_RITM.eanMinut.fereastraMs);
+
+  /*
+   * ⚠ AICI raspunsul NU se ignora, si e singurul loc din client unde e asa.
+   *
+   * Fereastra e de un MINUT. O asteptare „pana se elibereaza" ar fi dormit cat toata
+   * trecerea cronului, iar plecata oricum ar fi ars din plafonul care ne trebuie ca sa
+   * NU cream produse pe orb in catalogul lor comun.
+   *
+   * Deci se raspunde „mai incearca". `cautaInCatalogulLor` intoarce atunci „trecatoare",
+   * publicarea se opreste si se reia — cea mai ieftina dintre cele trei purtari.
+   */
+  if (!(await asteaptaJetonImpartit(
+    `emag:${cont}:ean:m`, LIMITE_RITM.eanMinut.limita, LIMITE_RITM.eanMinut.fereastraMs))) {
+    return {
+      error: "Prea multe căutări după cod de bare în ultimul minut. Se reia singur.",
+      status: 429,
+      verdict: "trecatoare",
+      mesaje: [],
+    };
+  }
 
   if (!(await maiAreBugetZilnicEan(auth))) {
     return {

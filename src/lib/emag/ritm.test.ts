@@ -168,3 +168,70 @@ test("randurile uitate se curata, dar nu cele active", () => {
   const cron = faraNote("src/app/api/cron/emag-sync/route.ts");
   assert.match(cron, /rpc\("curata_ritm_extern"\)/, "altfel tabelul creste la nesfarsit");
 });
+
+test("nicio asteptare nu poate manca toata trecerea cronului", () => {
+  /*
+   * ═══ ⚠ UN LIMITATOR CARE DOARME CAT TRECEREA NU LIMITEAZA, BLOCHEAZA ═══
+   *
+   * Cronul are `maxDuration = 60`. Fereastra de la `find_by_eans` e de un MINUT, deci o
+   * asteptare „pana se elibereaza fereastra" ar fi putut dormi singura cat toata trecerea
+   * — si atunci nu mai pleaca NIMIC: nici confirmarile de comenzi, nici mișcarile de stoc
+   * dupa vanzari, care sunt cele mai grabite dintre toate.
+   *
+   * Prima forma dormea `Math.min(asteapta_ms, fereastraMs)` de treizeci de ori. Pe
+   * fereastra de un minut, asta insemna pana la o jumatate de ora intr-un singur apel.
+   */
+  const cod = faraNote("src/lib/emag/ritm.ts");
+  assert.match(cod, /ASTEPTARE_MAXIMA_MS = 5000;/, "bugetul trebuie sa fie mult sub `maxDuration`");
+  assert.match(cod, /PAS_ASTEPTARE_MS = 750;/, "si somnul dintre incercari, scurt");
+
+  const i = cod.indexOf("export async function asteaptaJetonImpartit(");
+  const corp = cod.slice(i, cod.indexOf(String.fromCharCode(10) + "}", i));
+  assert.ok(
+    !/setTimeout\([^)]*fereastraMs/.test(corp),
+    "nu se doarme niciodata o fereastra intreaga",
+  );
+  assert.match(corp, /Promise<boolean>|return false;/, "si se raspunde cinstit cand n-a venit");
+});
+
+test("cererea obisnuita pleaca oricum, cautarea EAN nu", () => {
+  /*
+   * ⚠ Doua purtari diferite pentru acelasi raspuns, si fiecare are motivul ei.
+   *
+   * O cerere obisnuita oprita aici ar fi putut fi tocmai confirmarea unei comenzi — iar
+   * 429-ul lor e plasa de dedesubt. O cautare dupa cod de bare plecata peste plafon arde
+   * din bugetul care ne trebuie ca sa NU cream produse pe orb in catalogul lor comun.
+   */
+  const cod = faraNote("src/lib/emag/client.ts");
+
+  const iEan = cod.indexOf("export async function cautaDupaEan(");
+  const corpEan = cod.slice(iEan, cod.indexOf("find_by_eans?", iEan));
+  assert.match(corpEan, /if \(!\(await asteaptaJetonImpartit\(/, "la EAN, raspunsul se citeste");
+  assert.match(corpEan, /verdict: "trecatoare"/, "si se raspunde „mai incearca”");
+
+  const iTrimite = cod.indexOf("const pornitLa = Date.now();");
+  const inainte = cod.slice(Math.max(0, iTrimite - 900), iTrimite);
+  assert.ok(
+    !/if \(!\(await asteaptaJetonImpartit\(/.test(inainte),
+    "la cererile obisnuite, raspunsul se ignora dinadins",
+  );
+});
+
+test("conversia imaginilor are buget de timp", () => {
+  /*
+   * ⚠ O conversie inseamna doua intrebari „exista deja?", o descarcare si o codare.
+   * Numarate la cazul cel mai rau, opt imagini ar fi putut manca toata trecerea cronului.
+   * Ce nu incape se amana — cheia fiind deterministica, ce s-a facut nu se mai reface.
+   */
+  const cod = faraNote("src/lib/emag/imagini.ts");
+  assert.match(cod, /BUGET_MS = 20_000;/);
+  assert.match(cod, /HEAD_MS = 2500;/, "intrebarea „exista deja?” e doar o scurtatura");
+  assert.match(cod, /if \(Date\.now\(\) >= pana\)/, "bugetul se verifica in bucla");
+
+  const i = cod.indexOf("for (const adresa of [...new Set(adrese)])");
+  const corp = cod.slice(i, i + 900);
+  assert.ok(
+    corp.indexOf("Date.now() >= pana") < corp.indexOf("adreseleGataFacute"),
+    "bugetul se verifica INAINTE de orice cerere de retea, nu dupa",
+  );
+});

@@ -102,35 +102,53 @@ export async function ceruJeton(
 }
 
 /**
- * Cate incercari se fac pe o fereastra de o secunda inainte sa se plece oricum.
+ * Cat se poate astepta, cu totul, dupa un jeton.
  *
- * ⚠ NU E UN NUMAR DE FRUMUSETE. Un limitator care asteapta la nesfarsit e mai rau decat
- * unul care lasa sa treaca o cerere in plus: ar tine pe loc trecerea cronului pana la
- * `maxDuration`, iar atunci nu mai pleaca NIMIC — nici confirmarile de comenzi, nici
- * mișcarile de stoc. Peste prag se pleaca, si 429-ul lor ramane plasa de dedesubt.
+ * ═══ ⚠ UN LIMITATOR CARE DOARME CAT TOATA TRECEREA NU LIMITEAZA, BLOCHEAZA ═══
+ *
+ * Cronul are `maxDuration = 60`. Fereastra de la `find_by_eans` e de un MINUT (200 de
+ * cereri), deci o asteptare „pana se elibereaza fereastra" ar fi putut dormi singura cat
+ * toata trecerea — si atunci nu mai pleaca NIMIC: nici confirmarile de comenzi, nici
+ * mișcarile de stoc dupa vanzari, care sunt cele mai grabite dintre toate.
+ *
+ * Deci se asteapta cel mult atat, si se raspunde cinstit daca n-a venit. Ce se intampla
+ * mai departe hotaraste apelantul: cererile obisnuite pleaca oricum (429-ul lor e plasa
+ * de dedesubt), iar cautarea dupa cod de bare se opreste si se reia — fiindca acolo „mai
+ * incearca o data" e mai ieftin decat un produs creat pe orb in catalogul lor comun.
  */
-const INCERCARI_MAXIM = 30;
+const ASTEPTARE_MAXIMA_MS = 5000;
+
+/** Cat se doarme intre doua incercari. Se recitesc des, ca sa nu se piarda o fereastra. */
+const PAS_ASTEPTARE_MS = 750;
 
 /**
  * Asteapta pana cand contul are loc pentru inca o cerere.
  *
- * ⚠ Numai pentru ferestrele SCURTE. Pe plafonul zilnic nu se asteapta: acolo raspunsul
- * corect e „nu azi", si il da `maiAreBugetZilnic`.
+ * Intoarce `false` daca n-a venit in bugetul de timp. NU e o eroare — e raspunsul.
+ *
+ * ⚠ Numai pentru ferestrele SCURTE. Pe plafonul zilnic nu se asteapta deloc: acolo
+ * raspunsul corect e „nu azi", si il da `maiAreBugetZilnicEan`.
  */
 export async function asteaptaJetonImpartit(
   cheie: string, limita: number, fereastraMs: number,
-): Promise<void> {
-  for (let i = 0; i < INCERCARI_MAXIM; i++) {
+): Promise<boolean> {
+  const pana = Date.now() + ASTEPTARE_MAXIMA_MS;
+  for (;;) {
     const r = await ceruJeton(cheie, limita, fereastraMs);
-    if (r.ok) return;
-    await new Promise((res) => setTimeout(res, Math.min(Math.max(r.asteapta_ms, 15), fereastraMs)));
+    if (r.ok) return true;
+    if (Date.now() >= pana) {
+      void logError({
+        action: "emag.ritm",
+        message: `jetonul n-a venit in ${ASTEPTARE_MAXIMA_MS} ms`,
+        details: { cheie, limita, fereastraMs, folosite: r.folosite },
+        severity: "warning",
+      });
+      return false;
+    }
+    await new Promise((res) => setTimeout(
+      res, Math.min(Math.max(r.asteapta_ms, 15), PAS_ASTEPTARE_MS, Math.max(1, pana - Date.now())),
+    ));
   }
-  void logError({
-    action: "emag.ritm",
-    message: `jetonul n-a venit dupa ${INCERCARI_MAXIM} incercari; cererea pleaca oricum`,
-    details: { cheie, limita, fereastraMs },
-    severity: "warning",
-  });
 }
 
 /**

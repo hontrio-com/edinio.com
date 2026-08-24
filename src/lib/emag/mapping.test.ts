@@ -637,7 +637,24 @@ test("eMAG: un cod de bare stricat se SPUNE, dar nu opreste produsul", () => {
 
   assert.equal(r.oferte.length, 1, "produsul pleaca mai departe");
   assert.equal(r.oferte[0]?.ean, undefined, "dar fara codul stricat");
-  assert.match(r.probleme.join(" "), /codul de bare/i, "si se spune de ce");
+
+  /*
+   * ⚠ LA `observatii`, NU LA `probleme` (indreptat 24.08.2026).
+   *
+   * `trimite.ts` raporteaza `probleme[0]` cand nu se poate construi nicio oferta, iar
+   * nota asta se impinge devreme — deci ea devenea „motivul". Masurat: patru elemente de
+   * coada isi ardeau incercarile raportand codul de bare, cand cauza era alta. Iar codul
+   * nici nu se putea repara: Excel pastrase 6 cifre din 13.
+   */
+  assert.match(r.observatii.join(" "), /codul de bare/i, "si se spune de ce");
+  assert.equal(
+    r.probleme.filter((x) => /codul de bare/i.test(x)).length, 0,
+    "o observatie n-are ce cauta printre motivele care OPRESC trimiterea",
+  );
+
+  /* ⚠ Se spune si CE l-a stricat: fara asta, omul cauta o greseala de tastare intr-o
+     valoare pe care a rescris-o Excel la salvare. */
+  assert.match(r.observatii.join(" "), /Excel/i);
 });
 
 test("eMAG: un cod de bare bun nu produce nicio observatie", () => {
@@ -645,4 +662,5 @@ test("eMAG: un cod de bare bun nu produce nicio observatie", () => {
   const p = produs({ page_sections: { google: { gtin: "8595602520183" } } });
   const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
   assert.equal(r.probleme.filter((x) => /codul de bare/i.test(x)).length, 0);
+  assert.equal(r.observatii.filter((x) => /codul de bare/i.test(x)).length, 0);
 });

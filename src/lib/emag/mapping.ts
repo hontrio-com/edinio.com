@@ -331,6 +331,19 @@ export interface RezultatCartografiere {
   oferte: EmagProdusOferta[];
   /** Ce n-a mers. O ofertă cu probleme NU se trimite. */
   probleme: string[];
+  /**
+   * Ce merită spus, dar NU oprește trimiterea.
+   *
+   * ═══ ⚠ DOUĂ LISTE, FIINDCĂ SUNT DOUĂ ÎNTREBĂRI ═══
+   *
+   * `trimite.ts` raportează `probleme[0]` când nu se poate construi nicio ofertă. Cu
+   * observațiile amestecate acolo, o notă împinsă devreme devenea „motivul" — iar
+   * comerciantul repara ce nu-l bloca, la nesfârșit.
+   *
+   * Măsurat: patru elemente de coadă își ardeau încercările raportând un cod de bare
+   * stricat de Excel, care nici măcar nu era cauza și nici nu se putea repara.
+   */
+  observatii: string[];
 }
 
 /**
@@ -354,6 +367,8 @@ export function construiesteOferte(
   fortaImaginile = false,
 ): RezultatCartografiere {
   const probleme: string[] = [];
+  /* ⚠ Separate de `probleme`: vezi `RezultatCartografiere`. */
+  const observatii: string[] = [];
   const variante = parseVariants(produs.page_sections);
   const combinatii = combinatiiActiveUnice(variante);
   const dupaTitlu = new Map(identitati.map((i) => [i.variant_title ?? "", i]));
@@ -474,9 +489,26 @@ export function construiesteOferte(
    */
   const gtinScris = (gtinProdus(produs) ?? "").trim();
   if (gtinScris && !codDeBareCurat(gtinScris)) {
-    probleme.push(
+    /*
+     * ═══ ⚠ SE PUNE LA `observatii`, NU LA `probleme` (îndreptat 24.08.2026) ═══
+     *
+     * Nota asta era împinsă în `probleme`, deși comentariul de deasupra spune limpede că
+     * e o observație și nu o oprire. Iar `trimite.ts`, când nu se poate construi nicio
+     * ofertă, raportează `probleme[0]` — PRIMA din listă.
+     *
+     * ⚠ Nota asta se împinge devreme, deci ea era prima. Măsurat în producție: patru
+     * elemente de coadă își ardeau încercările raportând „Codul de bare 5.94903E+12 nu e
+     * valid", când motivul adevărat pentru care nu ieșea nicio ofertă era cu totul altul,
+     * mai jos în listă. Comerciantul repara codul de bare și nu se schimba nimic.
+     *
+     * ⚠ Și codul acela nu se poate repara: `5.94903E+12` păstrează 6 cifre din 13. Excel
+     * l-a rescris la salvarea fișierului. Deci omul era trimis la o reparație imposibilă
+     * pentru o problemă care nici măcar nu-l bloca.
+     */
+    observatii.push(
       `Codul de bare „${gtinScris}” nu e valid, așa că oferta pleacă fără el. ` +
-      "eMAG o poate lăsa ciornă. Verifică-l în fișa produsului.",
+      "Arată ca un cod stricat de Excel la salvarea fișierului: formatează coloana ca " +
+      "Text înainte de salvare, apoi reintrodu-l în fișa produsului.",
     );
   }
 
@@ -485,7 +517,7 @@ export function construiesteOferte(
     const ident = dupaTitlu.get("");
     if (!ident) {
       probleme.push(`Produsul „${produs.name}" nu are încă un id eMAG alocat.`);
-      return { oferte: [], probleme };
+      return { oferte: [], probleme, observatii };
     }
     const oferta = ofertaSingura({
       produs, magazin, comun, ident,
@@ -501,13 +533,13 @@ export function construiesteOferte(
       familie: undefined,
       probleme,
     });
-    return { oferte: oferta ? [oferta] : [], probleme };
+    return { oferte: oferta ? [oferta] : [], probleme, observatii };
   }
 
   /* ── Produs cu combinatii ─────────────────────────────────────────────── */
   if (familyId == null) {
     probleme.push(`Produsul „${produs.name}" are variante, dar nu are încă o familie eMAG alocată.`);
-    return { oferte: [], probleme };
+    return { oferte: [], probleme, observatii };
   }
   if (!categorie.family_type_id) {
     /*
@@ -519,7 +551,7 @@ export function construiesteOferte(
       `Categoria eMAG aleasă pentru „${produs.name}" nu are un tip de familie. ` +
       "Alege-l în setările integrării, altfel mărimile apar ca produse separate.",
     );
-    return { oferte: [], probleme };
+    return { oferte: [], probleme, observatii };
   }
 
   const oferte: EmagProdusOferta[] = [];
@@ -559,7 +591,7 @@ export function construiesteOferte(
     if (oferta) oferte.push(oferta);
   }
 
-  return { oferte, probleme };
+  return { oferte, probleme, observatii };
 }
 
 function ofertaSingura(a: {

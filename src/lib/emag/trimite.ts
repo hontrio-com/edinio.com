@@ -330,7 +330,7 @@ async function duTotul(
      ar fi cautat la nesfarsit o problema care nu mai era. */
   await scrieNepotrivirile(admin, ctx.businessId, produs.id, potrivite.nepotriviri);
 
-  const { oferte, probleme } = construiesteOferte(
+  const { oferte, probleme, observatii } = construiesteOferte(
     produs,
     magazinDin(ctx, produs),
     {
@@ -353,14 +353,38 @@ async function duTotul(
   );
 
   if (oferte.length === 0) {
+    /*
+     * ⚠ MOTIVUL SE IA DIN `probleme`, NU DIN OBSERVATII (indreptat 24.08.2026)
+     *
+     * Amandoua erau in aceeasi lista, iar aici se lua PRIMA. Nota despre codul de bare se
+     * impinge devreme, deci ea devenea „motivul": patru elemente de coada isi ardeau
+     * incercarile raportand „Codul de bare 5.94903E+12 nu e valid", cand cauza adevarata
+     * era alta, mai jos in lista.
+     *
+     * ⚠ Iar codul acela nici nu se poate repara — Excel il rescrisese, si pastreaza 6
+     * cifre din 13. Deci omul era trimis la o reparatie imposibila pentru ceva ce nici
+     * nu-l bloca.
+     */
     const m = probleme[0] ?? "Nu s-a putut construi nicio ofertă pentru produs.";
     await scrieEroare(admin, ctx.businessId, produs.id, m);
     return { verdict: "refuz", mesaj: m };
   }
 
-  return trimiteInLoturi(admin, ctx, produs.id, oferte, (lot) =>
+  const r = await trimiteInLoturi(admin, ctx, produs.id, oferte, (lot) =>
     salveazaProduseOferte(ctx.auth, lot as EmagProdusOferta[]),
   );
+
+  /*
+   * ⚠ OBSERVATIILE NU SE PIERD la o trimitere reusita.
+   *
+   * „Oferta pleaca fara cod de bare" e adevarat si merita stiut: in categoriile unde EAN-ul
+   * e obligatoriu, eMAG o lasa ciorna, iar omul ar cauta motivul in panoul lor. Se lipesc
+   * de mesaj, nu se ridica la verdict: produsul CHIAR a plecat.
+   */
+  if (observatii.length > 0 && (r.verdict === "reusit" || r.verdict === "reusit_cu_observatii")) {
+    return { ...r, verdict: "reusit_cu_observatii", mesaj: [r.mesaj, ...observatii].filter(Boolean).join(" · ") };
+  }
+  return r;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

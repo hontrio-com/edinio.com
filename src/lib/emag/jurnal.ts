@@ -46,6 +46,21 @@ export const ZILE_PASTRARE = 30;
 export type MetodaJurnal = "GET" | "POST" | "PATCH";
 
 /**
+ * Citire sau scriere — spus de apelant, nu ghicit din metoda.
+ *
+ * ═══ ⚠ DE CE NU SE POATE DUPA METODA ═══
+ *
+ * La eMAG TOATE rutele sunt POST. `citeste()` face POST cu filtrele la nivelul intai;
+ * `scrie()` face POST cu incarcatura in `data`. Aceeasi metoda, doua lucruri diferite.
+ *
+ * Prima forma hotara dupa metoda si jurnaliza FIECARE citire reusita. Masurat in
+ * productie la prima conectare cu un cont adevarat: 7 din 8 randuri erau citiri, iar
+ * cronul bate la minut — adica vreo 70.000 de randuri pe zi din care niciunul nu spune
+ * nimic. Chiar ce scria in comentariul de alaturi ca se evita.
+ */
+export type FelCerere = "citire" | "scriere";
+
+/**
  * Firul care leaga cererile unei singure lucrari (§66).
  *
  * ⚠ `AsyncLocalStorage`, nu un parametru dus prin patruzeci de functii. Purtat cu
@@ -86,13 +101,15 @@ export function firNou(prefix: string): string {
  *
  * Functie curata, ca sa se poata proba fara retea si fara baza de date.
  *
- * ⚠ Regula se uita la METODA, nu la cale. O lista de rute „importante" ar fi ramas
- * in urma la prima ruta noua — si ruta noua e tocmai cea despre care nimeni nu stie
- * inca nimic, adica cea mai importanta de jurnalizat.
+ * ⚠ Regula se uita la FELUL spus de apelant, nu la metoda si nici la cale.
+ *
+ * Nu la metoda, fiindca la ei totul e POST — vezi `FelCerere`. Si nu la cale, fiindca
+ * o lista de rute ar fi ramas in urma la prima ruta noua, iar ruta noua e tocmai cea
+ * despre care nimeni nu stie inca nimic.
  */
-export function deJurnalizat(metoda: MetodaJurnal, verdict: string): boolean {
+export function deJurnalizat(fel: FelCerere, verdict: string): boolean {
   if (verdict !== "reusit") return true;
-  return metoda !== "GET";
+  return fel === "scriere";
 }
 
 /**

@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { baniiComenzii, clientComenzii, liniiEdinio, statusEdinio, valoareVouchere, onoratDeEmag, TIP_ONORAT_DE_EMAG} from "./orders";
+import { baniiComenzii, clientComenzii, liniiEdinio, statusEdinio, valoareVouchere, onoratDeEmag, TIP_ONORAT_DE_EMAG, seCereConfirmare, eDejaConfirmata, STATUS_NOUA} from "./orders";
 import type { EmagComanda } from "./types";
 
 /*
@@ -194,4 +194,62 @@ test("eMAG comenzi: un tip lipsa NU e tratat ca FBE", () => {
   assert.equal(onoratDeEmag(null), false);
   assert.equal(onoratDeEmag(undefined), false);
   assert.equal(onoratDeEmag(0), false);
+});
+
+/* ── Confirmarea comenzii ───────────────────────────────────────── */
+
+test("eMAG confirmare: se cere DOAR pentru o comanda inca „noua”", () => {
+  /*
+   * ═══ DEFECT VAZUT IN PRODUCTIE, 24.08.2026, LA PRIMA CONECTARE ═══
+   *
+   * O comanda deja „in procesare" la ei — confirmata de alta integrare, sau de
+   * comerciant din panoul lor — raspunde la `acknowledge` cu:
+   *
+   *   400  ERROR: Order is already in progress.
+   *
+   * Forma dinainte trata orice 400 ca esec: scria un warning si NU punea
+   * `acknowledged_at`. Iar ingestul reincearca confirmarea la FIECARE actualizare,
+   * tocmai fiindca `acknowledged_at` e gol.
+   *
+   * Cerere arsa → 400 → warning → campul ramane gol → se repeta. La nesfarsit.
+   * Masurat la prima conectare: 1 comanda din 2 era prinsa asa.
+   *
+   * ⚠ Raspunsul nu e sa citim mesajul lor, ci sa nu mai punem intrebarea:
+   * `acknowledge` muta comanda din „noua" in „in procesare", iar daca e deja dincolo,
+   * cererea n-are ce sa faca. Se stie din `status`, care e documentat.
+   */
+  assert.equal(STATUS_NOUA, 1);
+  assert.equal(seCereConfirmare(1), true, "noua: se confirma");
+  for (const st of [2, 3, 4, 0, 5]) {
+    assert.equal(seCereConfirmare(st), false, `starea ${st}: nu se mai cere`);
+  }
+});
+
+test("eMAG confirmare: un status LIPSA nu declanseaza cererea", () => {
+  /* ⚠ Fara status nu se stie daca e „noua". Presupusa asa, s-ar fi intors exact bucla
+     de mai sus pentru fiecare comanda careia ii lipseste campul. */
+  assert.equal(seCereConfirmare(null), false);
+  assert.equal(seCereConfirmare(undefined), false);
+});
+
+test("eMAG confirmare: plasa pentru cursa recunoaste ce spun EI", () => {
+  /*
+   * ⚠ Se uita la TEXT, si regula casei e sa nu se faca asta (vezi `errors.ts`). E o
+   * PLASA, nu regula: paza adevarata e `seCereConfirmare`, pe status. Asta prinde doar
+   * cursa — comanda era „noua" cand am citit-o si a confirmat-o altcineva intre timp.
+   *
+   * Daca ei schimba textul, plasa tace si ramane paza structurala. Degradeaza bland,
+   * ceea ce e chiar conditia in care o potrivire pe text e ingaduita.
+   */
+  assert.equal(eDejaConfirmata("ERROR: Order is already in progress."), true);
+  assert.equal(eDejaConfirmata("WARNING: Order has already been acknowledged."), true);
+  assert.equal(eDejaConfirmata("order IS ALREADY IN PROGRESS"), true, "fara majuscule");
+});
+
+test("eMAG confirmare: un refuz ADEVARAT nu se ia drept reusita", () => {
+  /* Plasa n-are voie sa inghita esecuri reale: acelea trebuie sa se vada in jurnal. */
+  assert.equal(eDejaConfirmata("ERROR: Order does not belong to seller"), false);
+  assert.equal(eDejaConfirmata("Invalid order id"), false);
+  assert.equal(eDejaConfirmata(null), false);
+  assert.equal(eDejaConfirmata(""), false);
 });

@@ -4,7 +4,8 @@ import { logError } from "@/lib/error-logger";
    obisnuit ar fi facut un ciclu la rulare. Tipul se sterge la compilare. */
 import type { EmagAuth } from "./client";
 import {
-  deJurnalizat, firulCurent, idurileAtinse, mesajeDeScris, type MetodaJurnal,
+  deJurnalizat, firulCurent, idurileAtinse, mesajeDeScris,
+  type FelCerere, type MetodaJurnal,
 } from "./jurnal";
 
 /**
@@ -21,6 +22,8 @@ import {
 export interface CerereDeJurnalizat {
   auth: EmagAuth;
   metoda: MetodaJurnal;
+  /** ⚠ Citire sau scriere, SPUS de apelant. La ei totul e POST. Vezi `FelCerere`. */
+  fel: FelCerere;
   cale: string;
   corp: unknown;
   status: number;
@@ -57,7 +60,7 @@ export interface CerereDeJurnalizat {
  * chiar e cazuta, `logError` coboara singur pe consola — are treapta aia scrisa in el.
  */
 export async function scrieInJurnal(c: CerereDeJurnalizat): Promise<void> {
-  if (!deJurnalizat(c.metoda, c.verdict)) return;
+  if (!deJurnalizat(c.fel, c.verdict)) return;
 
   /* Fara magazin, randul n-are proprietar si n-ar fi vizibil nimanui. Se intampla la
      cererile de proba dinaintea conectarii — care oricum au propriul lor raspuns. */

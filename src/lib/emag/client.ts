@@ -11,6 +11,7 @@
 import { fetch as fetchUndici } from "undici";
 import { basicAuthHeader, emagGazda, emagUrl, iesireEmag } from "./auth";
 import { scrieInJurnal } from "./jurnal-scriere";
+import type { FelCerere } from "./jurnal";
 import { clasificaRaspuns, mesajOmenesc, type VerdictEmag } from "./errors";
 import type {
   EmagAdresa, EmagAwb, EmagCategorie, EmagComanda, EmagContCurier, EmagCotaTva,
@@ -98,6 +99,22 @@ async function trimite<T>(
   metoda: "GET" | "POST" | "PATCH",
   cale: string,
   corp: unknown,
+  /*
+   * ═══ ⚠ FELUL SE SPUNE, NU SE GHICESTE DIN METODA ═══
+   *
+   * La eMAG TOATE rutele sunt POST — si citirile, si scrierile. `citeste()` face POST
+   * cu filtrele la nivelul intai; `scrie()` face POST cu incarcatura in `data`.
+   *
+   * Prima forma a jurnalului (§65) hotara dupa metoda: „scrierile mereu, citirile doar
+   * cand cad". Cu totul POST, asta insemna FIECARE citire reusita — masurat in
+   * productie la prima conectare: 7 din 8 randuri erau citiri. Cronul bate la minut,
+   * deci ~70.000 de randuri pe zi din care niciunul nu spune nimic. Adica exact ce
+   * scrie in comentariul de acolo ca se evita.
+   *
+   * Acum o spune apelantul. Nu se poate strica atunci cand ei adauga rute noi, si nici
+   * cand o ruta de citire capata alta metoda.
+   */
+  fel: FelCerere,
 ): Promise<EmagResult<T>> {
   if (!auth?.username || !auth?.password) {
     return { error: "Acreditările eMAG lipsesc.", status: 0, verdict: "chei", mesaje: [] };
@@ -156,7 +173,7 @@ async function trimite<T>(
     const c = clasificaRaspuns(raspuns.status, json, cale);
 
     await scrieInJurnal({
-      auth, metoda, cale, corp,
+      auth, metoda, cale, corp, fel,
       status: raspuns.status,
       verdict: c.verdict,
       durataMs: Date.now() - pornitLa,
@@ -193,7 +210,7 @@ async function trimite<T>(
      * eMAG. `status: 0` inseamna „n-am ajuns", nu „au raspuns cu zero".
      */
     await scrieInJurnal({
-      auth, metoda, cale, corp,
+      auth, metoda, cale, corp, fel,
       status: 0,
       verdict: "trecatoare",
       durataMs: Date.now() - pornitLa,
@@ -233,7 +250,7 @@ export async function scrie<T = unknown>(
   cale: string,
   date: unknown,
 ): Promise<EmagResult<T>> {
-  return trimite<T>(auth, "POST", cale, { data: date });
+  return trimite<T>(auth, "POST", cale, { data: date }, "scriere");
 }
 
 /**
@@ -258,7 +275,7 @@ export async function citeste<T = unknown>(
   if (typeof f.itemsPerPage === "number") {
     f.itemsPerPage = Math.max(1, Math.min(100, Math.floor(f.itemsPerPage)));
   }
-  return trimite<T>(auth, "POST", cale, f);
+  return trimite<T>(auth, "POST", cale, f, "citire");
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -406,7 +423,7 @@ export function salveazaOferte(auth: EmagAuth, oferte: EmagOferta[]) {
  * miscare de stoc, ca sa nu atingem nimic altceva din oferta.
  */
 export function actualizeazaStoc(auth: EmagAuth, emagId: number, stoc: { warehouse_id: number; value: number }[]) {
-  return trimite(auth, "PATCH", `/offer_stock/${emagId}`, { data: { stock: stoc } });
+  return trimite(auth, "PATCH", `/offer_stock/${emagId}`, { data: { stock: stoc } }, "scriere");
 }
 
 export function salveazaMasuratori(auth: EmagAuth, masuratori: EmagMasuratoare[]) {
@@ -424,7 +441,7 @@ export async function cautaDupaEan(auth: EmagAuth, eanuri: string[]): Promise<Em
   const primele = eanuri.slice(0, 100);
   if (primele.length === 0) return { data: [], verdict: "reusit", mesaje: [] };
   const q = primele.map((e) => `eans[]=${encodeURIComponent(e)}`).join("&");
-  return trimite<unknown[]>(auth, "GET", `/documentation/find_by_eans?${q}`, undefined);
+  return trimite<unknown[]>(auth, "GET", `/documentation/find_by_eans?${q}`, undefined, "citire");
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -448,7 +465,7 @@ export function numaraComenzi(auth: EmagAuth, filtre: EmagFiltruComenzi = {}) {
  * nimeni. Numai pentru comenzile 3P.
  */
 export function confirmaComanda(auth: EmagAuth, orderId: number) {
-  return trimite(auth, "POST", `/order/acknowledge/${orderId}`, undefined);
+  return trimite(auth, "POST", `/order/acknowledge/${orderId}`, undefined, "scriere");
 }
 
 /**
@@ -475,7 +492,7 @@ export function citesteVolumetrie(auth: EmagAuth, filtre: { order_id: number; ty
 }
 
 export function deblocheazaCurier(auth: EmagAuth, orderId: number) {
-  return trimite(auth, "POST", `/order/${orderId}/unlock-courier`, undefined);
+  return trimite(auth, "POST", `/order/${orderId}/unlock-courier`, undefined, "scriere");
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -534,7 +551,8 @@ export function propuneInCampanie(auth: EmagAuth, propuneri: EmagPropunereCampan
 /** ⚠ `GET`, cu parametru in adresa. */
 export function verificaPretSmartDeals(auth: EmagAuth, productId: number) {
   return trimite<Record<string, unknown>>(
-    auth, "GET", `/api-3/smart-deals-price-check?productId=${encodeURIComponent(String(productId))}`, undefined,
+    auth, "GET", `/api-3/smart-deals-price-check?productId=${encodeURIComponent(String(productId))}`,
+    undefined, "citire",
   );
 }
 
@@ -658,7 +676,7 @@ export async function descarcaEtichetaAwb(
  */
 export function citesteEtichetaZpl(auth: EmagAuth, emagId: number) {
   return trimite<unknown>(
-    auth, "GET", `/awb/read_zpl?emag_id=${encodeURIComponent(String(emagId))}`, undefined,
+    auth, "GET", `/awb/read_zpl?emag_id=${encodeURIComponent(String(emagId))}`, undefined, "citire",
   );
 }
 

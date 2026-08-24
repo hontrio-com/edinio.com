@@ -26,20 +26,42 @@ test("eMAG jurnal: o citire REUSITA nu se scrie", () => {
    *
    * Un jurnal in care nu se poate cauta nu e un jurnal, e o factura de stocare.
    */
-  assert.equal(deJurnalizat("GET", "reusit"), false);
+  assert.equal(deJurnalizat("citire", "reusit"), false);
+});
+
+test("eMAG jurnal: FELUL nu se poate ghici din metoda — la ei totul e POST", () => {
+  /*
+   * ═══ DEFECT VAZUT IN PRODUCTIE, 24.08.2026, LA PRIMA CONECTARE ═══
+   *
+   * Prima forma primea metoda HTTP si zicea „scrierile mereu, citirile doar cand cad".
+   * Dar la eMAG TOATE rutele sunt POST: `citeste()` face POST cu filtrele la nivelul
+   * intai, `scrie()` face POST cu incarcatura in `data`.
+   *
+   * Deci regula jurnaliza FIECARE citire reusita. Masurat pe cont adevarat: 7 din 8
+   * randuri erau citiri, dupa doua minute de la conectare. Cu cronul la minut, vreo
+   * 70.000 de randuri pe zi — exact ce scria in comentariu ca se evita.
+   *
+   * Proba de atunci trecea, fiindca folosea „GET" pentru citire. In cod nu exista
+   * niciun GET catre rutele lor de citire.
+   */
+  const citiriReale = ["/vat/read", "/product_offer/read", "/order/read", "/rma/read"];
+  for (const cale of citiriReale) {
+    /* Toate astea pleaca prin `citeste()`, care face POST. Felul le desparte. */
+    assert.equal(deJurnalizat("citire", "reusit"), false, cale);
+  }
+  assert.equal(deJurnalizat("scriere", "reusit"), true, "/offer/save pleaca tot prin POST");
 });
 
 test("eMAG jurnal: TOATE scrierile se scriu, chiar si cele reusite", () => {
   /* O scriere are efecte, iar efectele trebuie sa aiba urma. „Pretul ala chiar a
      plecat?" e singura intrebare care se pune despre o integrare de marketplace. */
-  assert.equal(deJurnalizat("POST", "reusit"), true);
-  assert.equal(deJurnalizat("PATCH", "reusit"), true);
+  assert.equal(deJurnalizat("scriere", "reusit"), true);
 });
 
 test("eMAG jurnal: orice NEREUSITA se scrie, si citirile la fel", () => {
   for (const v of ["refuz", "trecatoare", "chei", "reusit_cu_observatii"]) {
-    assert.equal(deJurnalizat("GET", v), true, `citire cu verdict «${v}»`);
-    assert.equal(deJurnalizat("POST", v), true, `scriere cu verdict «${v}»`);
+    assert.equal(deJurnalizat("citire", v), true, `citire cu verdict «${v}»`);
+    assert.equal(deJurnalizat("scriere", v), true, `scriere cu verdict «${v}»`);
   }
 });
 
@@ -52,7 +74,7 @@ test("eMAG jurnal: «reusit_cu_observatii» NU e tratat ca o reusita curata", ()
    * Tratat ca „reusit", el ar fi fost singurul caz in care oferta pleaca STRICATA si
    * jurnalul tace — adica exact randul dupa care s-ar fi cautat.
    */
-  assert.equal(deJurnalizat("GET", "reusit_cu_observatii"), true);
+  assert.equal(deJurnalizat("citire", "reusit_cu_observatii"), true);
 });
 
 /* ── Firul (§66) ───────────────────────────────────────────────────────────── */

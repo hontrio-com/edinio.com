@@ -500,6 +500,55 @@ export function onoratDeEmag(tip: number | null | undefined): boolean {
   return Number(tip) === TIP_ONORAT_DE_EMAG;
 }
 
+/**
+ * eMAG status: 1 = noua · 2 = in procesare · 3 = pregatita · 4 = finalizata ·
+ * 0 = anulata · 5 = returnata.
+ */
+export const STATUS_NOUA = 1;
+
+/**
+ * Are rost sa mai chemam `order/acknowledge` pentru comanda asta?
+ *
+ * ═══ ⚠ DEFECT VAZUT IN PRODUCTIE LA PRIMA CONECTARE, 24.08.2026 ═══
+ *
+ * O comanda deja „in procesare" la ei — fiindca o confirmase alta integrare, sau
+ * comerciantul din panoul lor — raspunde la `acknowledge` cu:
+ *
+ *   400  ERROR: Order is already in progress.
+ *
+ * Forma dinainte trata orice 400 ca esec: scria un warning si NU punea
+ * `acknowledged_at`. Iar `ingereazaComanda` reincearca confirmarea la FIECARE
+ * actualizare, tocmai fiindca `acknowledged_at` e gol.
+ *
+ * Deci: cerere arsa -> 400 -> warning -> campul ramane gol -> se repeta. La nesfarsit,
+ * pentru fiecare comanda ajunsa asa. Masurat la prima conectare: 1 comanda din 2.
+ *
+ * ⚠ RASPUNSUL NU E SA CITIM MESAJUL LOR, ci sa nu mai punem intrebarea. `acknowledge`
+ * muta comanda din „noua" in „in procesare". Daca e DEJA dincolo de „noua", cererea
+ * n-are ce sa faca — si asta se stie din `status`, care e documentat, nu din text.
+ *
+ * Aceeasi familie cu `isError: true` de la ei: un refuz care de fapt spune „e gata".
+ */
+export function seCereConfirmare(status: number | null | undefined): boolean {
+  return Number(status) === STATUS_NOUA;
+}
+
+/**
+ * Raspunsul lor spune ca treaba e DEJA facuta?
+ *
+ * ⚠ Se uita la TEXT, si stiu ca regula casei e sa nu se faca asta (vezi `errors.ts`).
+ * E o plasa, nu regula: paza adevarata e `seCereConfirmare`, care se uita la `status`.
+ * Asta prinde doar cursa — comanda era „noua" cand am citit-o si a fost confirmata de
+ * altcineva intre timp.
+ *
+ * Daca ei schimba textul, plasa tace si ramane paza structurala. Degradeaza bland,
+ * ceea ce e chiar conditia in care o potrivire pe text e ingaduita.
+ */
+export function eDejaConfirmata(mesaj: string | null | undefined): boolean {
+  const t = String(mesaj ?? "").toLowerCase();
+  return t.includes("already in progress") || t.includes("already been acknowledged");
+}
+
 type RezultatIngest = "noua" | "actualizata" | "sarita" | "esuata";
 
 /**
@@ -598,7 +647,7 @@ export async function ingereazaComanda(
        actualizare ar fi fost o cerere arsa pe veci, fiindca `acknowledged_at` n-ar fi
        ajuns niciodata sa se umple. */
     if (!ex.acknowledged_at && !onoratDeEmag(c.type) && !istoric) {
-      await confirmaSiNoteaza(admin, ctx, c.id, ex.id);
+      await confirmaSiNoteaza(admin, ctx, c.id, ex.id, c.status);
     }
 
     /* ⚠ „definitiv" NU e o cadere: inseamna ca tranzitia n-avea ce sa faca (starea
@@ -712,7 +761,7 @@ export async function ingereazaComanda(
   /* ⚠ ABIA ACUM. Vezi nota din antetul functiei. ⚠ Si nu la FBE: acolo livrarea o fac
      ei, iar documentatia lor spune ca doar `type: 3` se editeaza. */
   if (randEmag && !onoratDeEmag(c.type) && !istoric) {
-    await confirmaSiNoteaza(admin, ctx, c.id, (randEmag as { id: string }).id);
+    await confirmaSiNoteaza(admin, ctx, c.id, (randEmag as { id: string }).id, c.status);
   }
 
   if (!istoric) await poateFactura(admin, ctx, orderId, status);
@@ -859,17 +908,41 @@ async function consumaStocul(
  * ⚠ Nereusita NU darama ingestul: comanda e deja la noi, iar confirmarea se
  * reincearca la trecerea urmatoare, fiindca `acknowledged_at` a ramas gol.
  */
-async function confirmaSiNoteaza(admin: Db, ctx: ContextEmag, emagOrderId: number, randId: string): Promise<void> {
+async function confirmaSiNoteaza(
+  admin: Db, ctx: ContextEmag, emagOrderId: number, randId: string, status: number | null | undefined,
+): Promise<void> {
+  const noteaza = () => admin.from("emag_orders")
+    .update({ acknowledged_at: new Date().toISOString() }).eq("id", randId);
+
+  /*
+   * ⚠ NU SE CHEAMA DELOC pentru o comanda care a trecut deja de „noua". Vezi
+   * `seCereConfirmare`: cererea n-ar avea ce sa faca, iar refuzul ei ar fi tinut
+   * `acknowledged_at` gol si ar fi pus reincercarea la fiecare actualizare, pe veci.
+   *
+   * Se NOTEAZA totusi: scopul confirmarii — comanda sa fie in procesare la ei — e
+   * deja atins. Lasat gol, am fi reintrat in aceeasi bucla pe alt drum.
+   */
+  if (!seCereConfirmare(status)) {
+    await noteaza();
+    return;
+  }
+
   const r = await confirmaComanda(ctx.auth, emagOrderId);
   if (isEmagError(r)) {
+    /* Plasa pentru cursa: era „noua" cand am citit-o, a confirmat-o altcineva intre
+       timp. Nu e un esec — e acelasi rezultat, obtinut de altul. */
+    if (eDejaConfirmata(r.error) || eDejaConfirmata((r.mesaje ?? []).join(" "))) {
+      await noteaza();
+      return;
+    }
     await logError({
       action: "emag/orders",
       message: `confirmarea comenzii a esuat: ${r.error}`,
-      details: { emagOrderId },
+      details: { emagOrderId, status },
       businessId: ctx.businessId,
       severity: "warning",
     });
     return;
   }
-  await admin.from("emag_orders").update({ acknowledged_at: new Date().toISOString() }).eq("id", randId);
+  await noteaza();
 }

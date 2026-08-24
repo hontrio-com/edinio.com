@@ -8,7 +8,7 @@ import { loadEmagContext } from "@/lib/emag/sync";
 import { aduComenzile, ingereazaComanda } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
 import { citesteComenzi, isEmagError } from "@/lib/emag/client";
-import type { EmagComanda, EmagConfig } from "@/lib/emag/types";
+import type { EmagComanda } from "@/lib/emag/types";
 
 /**
  * Notificările eMAG.
@@ -239,12 +239,23 @@ async function noteazaSemnalul(
   businessId: string,
 ): Promise<void> {
   try {
-    const { data } = await admin.from("store_settings")
-      .select("emag_config").eq("business_id", businessId).maybeSingle();
-    const config = ((data?.emag_config as EmagConfig) ?? {}) || {};
-    await admin.from("store_settings")
-      .update({ emag_config: { ...config, ultimul_webhook: new Date().toISOString() } as never })
-      .eq("business_id", businessId);
+    /*
+     * ⚠ A DOUA COPIE A CITIRII-SI-SCRIERII, si cea mai periculoasa dintre toate.
+     *
+     * Ruleaza pe ritmul LOR, nu al nostru, deci poate cadea peste orice altceva: peste o
+     * trecere de cron, peste apasarea pe „Conectează", peste import. Iar forma dinainte
+     * arunca `error` la citire — o pana de o clipa reducea `emag_config` la
+     * `{"ultimul_webhook": "…"}` si magazinul aparea deconectat, pentru ca a sosit o
+     * notificare.
+     *
+     * `jsonb_merge_config` face imbinarea intr-o singura instructiune, in Postgres. Vezi
+     * `patchEmagConfig`, care s-a mutat pe ea in aceeasi zi.
+     */
+    await admin.rpc("jsonb_merge_config", {
+      p_business_id: businessId,
+      p_column: "emag_config",
+      p_patch: { ultimul_webhook: new Date().toISOString() } as never,
+    });
   } catch {
     /* Urma nu merită să coste o notificare. */
   }

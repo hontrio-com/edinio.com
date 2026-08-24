@@ -683,6 +683,9 @@ async function scrieStatusurile(
        * de vanzare la ei. Fara campul asta, motivul ala nu putea fi spus niciodata.
        */
       status_la_ei: intregDeLaEi(o.status),
+      /* ⚠ Ultima din cele patru conditii ale vandabilitatii pe care n-o pastram. Fara ea,
+         ecranul nu putea deosebi „n-are stoc la ei" de „e oprita la ei". */
+      stoc_la_ei: stoc,
       ownership: intregDeLaEi(o.ownership),
       number_of_offers: intregDeLaEi(o.number_of_offers),
       buy_button_rank: intregDeLaEi(o.buy_button_rank),

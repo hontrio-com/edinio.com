@@ -819,6 +819,24 @@ export interface EmagConfig {
   /** Un produs nou se publica singur? */
   auto_publish?: boolean;
 
+  /**
+   * Ofertele publicate din Edinio intra in programul Genius al eMAG?
+   *
+   * ═══ ⚠ IMPLICITUL LOR E `1`, SI ASTA E O CAPCANA (24.08.2026) ═══
+   *
+   * `ProductOfferSave.emag_club` are `default: 1`. Deci netrimis, FIECARE produs publicat
+   * din Edinio intra in Genius — cu comisioanele si obligatiile de livrare de acolo.
+   *
+   * ⚠ Masurat pe contul unui comerciant, in raspunsul lor brut: TOATE ofertele lui de
+   * dinainte au `emag_club: 0`. Adica produsele publicate de noi ar fi intrat in Genius
+   * pe langa restul catalogului lui, fara ca cineva sa fi ales asta.
+   *
+   * ⚠ Implicitul NOSTRU e `0`, si dinadins: intrarea intr-un program cu obligatii de
+   * livrare se cere, nu se presupune. Iar campul se trimite MEREU, ca implicitul lor sa
+   * nu mai hotarasca in locul comerciantului.
+   */
+  emag_club?: 0 | 1;
+
   /** ⚠ `products.category` e un NUME, nu un id. De aia cheia hartii e text. */
   category_map?: Record<string, EmagIntrareCategorie>;
 

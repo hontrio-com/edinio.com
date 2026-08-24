@@ -968,6 +968,9 @@ export function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
     vat_rate: ctx.vatRate,
     prices_include_vat: ctx.pricesIncludeVat,
     vat_id: ctx.config.vat_id ?? 0,
+    /* ⚠ Implicit `0`: intrarea in Genius se cere, nu se presupune. Implicitul LOR e 1,
+       iar netrimis, fiecare produs publicat ar fi intrat acolo. Vezi `types.ts`. */
+    emag_club: (ctx.config.emag_club === 1 ? 1 : 0) as 0 | 1,
     /*
      * ═══ ⚠ `null`, NU `1` ═══
      *

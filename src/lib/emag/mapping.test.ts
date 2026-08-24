@@ -19,6 +19,7 @@ const MAGAZIN: ContextMagazin = {
   vat_rate: 21,
   prices_include_vat: true,
   vat_id: 1,
+  emag_club: 0 as const,
   handling_time: 1,
   warehouse_id: 1,
   warranty: 24,

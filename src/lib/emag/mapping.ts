@@ -278,6 +278,8 @@ export interface ContextMagazin {
   vat_rate: number;
   prices_include_vat: boolean;
   vat_id: number;
+  /** ⚠ Se trimite MEREU. Vezi nota din `types.ts`: implicitul lor e 1, al nostru 0. */
+  emag_club: 0 | 1;
   /**
    * Zilele de pregatire alese de comerciant, sau `null` cand n-a ales.
    *
@@ -368,6 +370,12 @@ export function construiesteOferte(
     /* ⚠ `warranty` are `maximum=255` (luni) in schema lor. */
     warranty: plafonat(magazin.warranty, LIMITE_EMAG.garantie),
     vat_id: magazin.vat_id,
+    /*
+     * ⚠ SE TRIMITE MEREU, chiar si `0`. Implicitul lor e `1`: netrimis, fiecare produs
+     * publicat din Edinio ar intra in Genius, cu obligatiile de livrare de acolo. Vezi
+     * `emag_club` din `types.ts` pentru ce s-a masurat pe un cont adevarat.
+     */
+    emag_club: magazin.emag_club,
     /* ⚠ Plafonat la 255, ca `supply_lead_time` de mai jos si din acelasi motiv:
        incarcatura se inchide cu `as EmagProdusOferta`, deci compilatorul NU verifica
        valoarea, iar o cifra scrisa in config din alta parte ar fi plecat asa cum e. */

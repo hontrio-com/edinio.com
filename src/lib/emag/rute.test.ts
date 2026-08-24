@@ -276,6 +276,7 @@ test("eMAG: o schimbare de pret merge si cand categoria NU e mapata", () => {
   const magazin = {
     vat_rate: 21, prices_include_vat: true, vat_id: 1, handling_time: 1, warehouse_id: 1,
     warranty: 24, price_band_pct: 30, source_language: "ro_RO", brand: null,
+    emag_club: 0 as const,
   };
 
   const oferte = oferteUsoare(produs, magazin, [
@@ -303,6 +304,7 @@ test("eMAG: un produs oprit in magazin pleaca cu `status: 0`, nu dispare", () =>
   const magazin = {
     vat_rate: 21, prices_include_vat: false, vat_id: 1, handling_time: 1, warehouse_id: 1,
     warranty: 24, price_band_pct: 30, source_language: "ro_RO", brand: null,
+    emag_club: 0 as const,
   };
   const oferte = oferteUsoare(produs, magazin, [{ variant_title: null, emag_id: 5 }]);
   assert.equal(oferte[0].status, 0);
@@ -397,6 +399,7 @@ test("eMAG: fara timp de pregatire ales, campul NU pleaca deloc", () => {
   const faraTimp = {
     vat_rate: 21, prices_include_vat: false, vat_id: 1, handling_time: null, warehouse_id: 1,
     warranty: 24, price_band_pct: 30, source_language: "ro_RO", brand: null,
+    emag_club: 0 as const,
   };
   const cuTimp = { ...faraTimp, handling_time: 3 };
 

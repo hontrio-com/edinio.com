@@ -112,7 +112,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
     });
   }
 
-  function comuta(camp: "auto_sync" | "auto_publish" | "sync_continut", valoare: boolean) {
+  function comuta(camp: "auto_sync" | "auto_publish" | "sync_continut" | "emag_club", valoare: boolean) {
     incepe(async () => {
       const r = await salveazaSetariEmag(businessId, { [camp]: valoare });
       if ("error" in r) toast.error(r.error);
@@ -384,6 +384,27 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             stocul. Fără comutatorul ăsta, prima editare a produsului le-ar fi șters
             munca, iar singura scăpare ar fi fost oprirea sincronizării cu totul.
           */}
+          {/*
+            ═══ ⚠ IMPLICITUL LOR E „DA", AL NOSTRU E „NU" ═══
+
+            `emag_club` are `default: 1` în schema eMAG. Netrimis, FIECARE produs publicat
+            din Edinio ar intra în Genius, cu comisioanele și obligațiile de livrare de
+            acolo — fără ca cineva să fi ales asta.
+
+            Măsurat pe un cont adevărat: toate ofertele comerciantului de dinainte au
+            `emag_club: 0`. Deci produsele noastre ar fi intrat în Genius pe lângă restul
+            catalogului lui, iar el ar fi aflat din decont.
+
+            Se trimite mereu, ca implicitul lor să nu mai hotărască în locul lui.
+          */}
+          <Comutator
+            eticheta="Pune ofertele noi în Genius"
+            descriere="Programul eMAG cu livrare rapidă. Are comisioane și obligații de livrare proprii; verifică-le în contractul tău înainte să pornești."
+            pornit={status.inGenius}
+            dezactivat={seLucreaza}
+            laSchimbare={(v) => comuta("emag_club", v)}
+          />
+
           <Comutator
             eticheta="Trimite și fișa produsului"
             descriere="Nume, descriere, poze, caracteristici. Oprit, Edinio trimite doar prețul și stocul, iar fișa rămâne cum ai făcut-o pe eMAG."

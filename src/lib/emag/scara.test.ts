@@ -33,7 +33,7 @@ import { LOT_MAXIM } from "./rute";
 /* ── Cartografierea, la mii de variante ────────────────────────────────────── */
 
 const MAGAZIN: ContextMagazin = {
-  vat_rate: 21, prices_include_vat: true, vat_id: 1, handling_time: 1,
+  vat_rate: 21, emag_club: 0 as const, prices_include_vat: true, vat_id: 1, handling_time: 1,
   warehouse_id: 1, warranty: 24, price_band_pct: 30, source_language: "ro_RO",
   brand: "Edinio",
 };

@@ -380,6 +380,12 @@ function RandOferta({
                 vinde pe eMAG si lucruri pe care nu le tine in magazin isi cauta in
                 Edinio produse care n-au fost niciodata acolo — si crede ca le-a
                 pierdut. Pe 24.08.2026 erau 3.334 de randuri asa. */}
+            {rand.indrumare && (
+              /* ⚠ Se arata si pe rand, nu doar in `title`: pe telefon nu exista hover, iar
+                 „de ce nu se vinde produsul meu" e chiar intrebarea pentru care se deschide
+                 ecranul asta. */
+              <span className="w-full text-xs text-muted-foreground">{rand.indrumare}</span>
+            )}
             {rand.doarPeEmag && (
               <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                 doar pe eMAG
@@ -390,7 +396,12 @@ function RandOferta({
                 {rand.variantTitle}
               </span>
             )}
-            <span className={`rounded-full px-2 py-0.5 text-xs ${CULOARE_STARE[rand.stare] ?? "bg-muted"}`}>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs ${CULOARE_STARE[rand.stare] ?? "bg-muted"}`}
+              /* ⚠ Îndrumarea stă în `title`, nu pe rând: e utilă când o cauți, dar pusă pe
+                 fiecare din cele câteva mii de rânduri ar fi făcut lista de necitit. */
+              title={rand.indrumare || undefined}
+            >
               {rand.stareEticheta}
             </span>
             {!rand.autoSync && (

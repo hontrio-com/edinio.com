@@ -32,6 +32,7 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
+import { deCeNuSeVinde } from "@/lib/emag/de-ce-nu-se-vinde";
 import { trimiteElement, magazinDin} from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
 import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
@@ -53,11 +54,7 @@ import {
 } from "@/lib/emag/import-run";
 import { processImport } from "@/lib/import/committer";
 import {
-  EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI,
-  type EmagAdresa, type EmagCategorie, type EmagContCurier, type EmagCotaTva, type EmagConfig,
-  type EmagIntrareCategorie,
-  ceUrmeazaLaRetur, EMAG_ETICHETA_STARE, EMAG_STATUS_RETUR, EMAG_TIP_RETUR, EMAG_VALIDARE,
-  type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
+  EMAG_ETICHETA_TARA, EMAG_TARA_IMPLICITA, EMAG_TARI, type EmagAdresa, type EmagCategorie, type EmagContCurier, type EmagCotaTva, type EmagConfig, type EmagIntrareCategorie, ceUrmeazaLaRetur, EMAG_STATUS_RETUR, EMAG_TIP_RETUR, EMAG_VALIDARE, type EmagTara, type EmagValoareTimpPregatire, type StareOferta,
 } from "@/lib/emag/types";
 import { traducereaPoateBloca } from "@/lib/emag/rute";
 import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
@@ -165,6 +162,8 @@ export interface StareEmag {
   parolaMascata: string | null;
   autoSync: boolean;
   autoPublish: boolean;
+  /** Ofertele publicate din Edinio intra in Genius? ⚠ Implicitul lor e DA, al nostru NU. */
+  inGenius: boolean;
   /** Ce mai trebuie ales inainte de prima publicare, daca mai trebuie ceva. */
   lipsaPentruPublicare: string | null;
   /**
@@ -306,6 +305,8 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     parolaMascata: config.password ? maskSecret(config.password) : null,
     autoSync: config.auto_sync !== false,
     autoPublish: config.auto_publish === true,
+    /* ⚠ Implicitul NOSTRU e 0. Al LOR e 1. Vezi `emag_club` din `types.ts`. */
+    inGenius: config.emag_club === 1,
     lipsaPentruPublicare: ceLipsestePentruPublicare(config),
     catalogCitit: !!config.catalog_citit_la,
     webhookUrl: emagWebhookUrl(businessId),
@@ -622,6 +623,13 @@ export async function salveazaSetariEmag(
     stoc_rezervat?: number | null;
     /** Rescrie Edinio si fisa produsului (nume, descriere, poze)? */
     sync_continut?: boolean;
+    /**
+     * Ofertele publicate din Edinio intra in Genius?
+     *
+     * ⚠ Vine ca `boolean` din comutator, se tine ca `0 | 1` fiindca asa il cere eMAG.
+     * Vezi `emag_club` din `types.ts`: implicitul LOR e 1, al nostru 0.
+     */
+    emag_club?: boolean;
     /** Cate zile ii trebuie magazinului ca sa se reaprovizioneze (§15). */
     supply_lead_time?: number | null;
     /** Cine are ultimul cuvant la o derivare. Vezi `deriva.ts` (§69). */
@@ -665,6 +673,8 @@ export async function salveazaSetariEmag(
   const noua: EmagConfig = {
     ...veche,
     ...(setari.vat_id != null ? { vat_id: setari.vat_id } : {}),
+    /* ⚠ `0 | 1`, nu boolean: campul pleaca asa cum e la eMAG. */
+    ...(setari.emag_club != null ? { emag_club: (setari.emag_club ? 1 : 0) as 0 | 1 } : {}),
     ...(setari.handling_time != null ? { handling_time: setari.handling_time } : {}),
     ...(setari.warranty_default != null ? { warranty_default: setari.warranty_default } : {}),
     ...(banda != null ? { price_band_pct: banda } : {}),
@@ -1372,6 +1382,8 @@ export interface RandOfertaEcran {
   emagId: number;
   stare: StareOferta;
   stareEticheta: string;
+  /** Ce are omul de facut, cand are. Gol cand nu e nimic de facut. */
+  indrumare: string;
   /** Textul lor pentru `validation_status`, întreg. Niciodată rescris de noi. */
   validare: string | null;
   /** Ce trebuie reparat, cuvânt cu cuvânt de la ei. */
@@ -1462,7 +1474,7 @@ export async function listaOferteEmag(
   let q = admin
     .from("emag_offers")
     .select(
-      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, deriva, nume_emag, creat_de_edinio, products(name)",
+      "id, product_id, variant_title, emag_id, status, validation_status, offer_validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, deriva, nume_emag, creat_de_edinio, status_la_ei, stoc_la_ei, products(name)",
       { count: "exact" },
     )
     .eq("business_id", businessId);
@@ -1496,6 +1508,7 @@ export async function listaOferteEmag(
     status: string; validation_status: number | null; translation_validation_status: number | null;
     doc_errors: unknown; error: string | null; auto_sync: boolean; part_number_key: string | null;
     nume_emag: string | null; creat_de_edinio: boolean;
+    offer_validation_status: number | null; status_la_ei: number | null; stoc_la_ei: number | null;
     number_of_offers: number | null; buy_button_rank: number | null; best_offer_sale_price: number | null;
     deriva: unknown;
     products: { name: string } | { name: string }[] | null;
@@ -1504,6 +1517,13 @@ export async function listaOferteEmag(
   const randuri: RandOfertaEcran[] = ((data ?? []) as Rand[]).map((r) => {
     const p = Array.isArray(r.products) ? r.products[0] : r.products;
     const stare = r.status as StareOferta;
+    const motivul = deCeNuSeVinde({
+      validation_status: r.validation_status,
+      offer_validation_status: r.offer_validation_status,
+      status_la_ei: r.status_la_ei,
+      stoc_la_ei: r.stoc_la_ei,
+      doc_errors: normalizeazaDocErrors(r.doc_errors),
+    });
     return {
       id: r.id,
       productId: r.product_id,
@@ -1533,7 +1553,20 @@ export async function listaOferteEmag(
       variantTitle: r.variant_title,
       emagId: r.emag_id,
       stare,
-      stareEticheta: EMAG_ETICHETA_STARE[stare] ?? stare,
+      /*
+       * ═══ ⚠ MOTIVUL ADEVARAT, NU O ETICHETA PENTRU TOT (24.08.2026) ═══
+       *
+       * `EMAG_ETICHETA_STARE` traduce starea NOASTRA: „sent" devine „Trimis, in
+       * validare". Dar starea noastra spune doar ce am facut noi, nu ce e la ei — iar
+       * masurat in ziua aceea, 3.469 de oferte APROBATE de eMAG apareau asa, cand de
+       * fapt erau scoase din vanzare in contul lui.
+       *
+       * Acum eticheta se socoteste din ce ne-au spus EI: validare, stare, pret, stoc.
+       * Vezi `deCeNuSeVinde` pentru ordinea motivelor si de ce conteaza.
+       */
+      stareEticheta: motivul.eticheta,
+      /** Ce are omul de facut, cand are. Gol cand nu e nimic de facut. */
+      indrumare: motivul.indrumare,
       validare: r.validation_status != null ? (EMAG_VALIDARE[r.validation_status] ?? `Stare ${r.validation_status}`) : null,
       docErrors: normalizeazaDocErrors(r.doc_errors),
       eroare: r.error,

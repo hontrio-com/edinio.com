@@ -247,7 +247,22 @@ export async function pornesteSincronizareaAdoptatelor(
   const g = await guard(businessId);
   if ("error" in g) return g;
 
-  const { count, error } = await g.supabase.from("trendyol_listings")
+  /*
+   * ═══ ⚠ CLIENT DE SERVICIU, NU AL COMERCIANTULUI (indreptat 24.08.2026) ═══
+   *
+   * Prima forma folosea `g.supabase`. `trendyol_listings` are o SINGURA politica RLS,
+   * `owner_select_trendyol_listings`, si aceea numai pe SELECT — scrierile sunt service-role
+   * peste toata integrarea.
+   *
+   * ⚠ Iar un UPDATE oprit de RLS NU da eroare: atinge zero randuri si raspunde linistit.
+   * Deci butonul a raspuns „Nu era nimic de pornit" pentru 29 de listari care erau chiar
+   * acolo. Cel mai prost fel de a gresi: un mesaj de reusita pentru o fapta care n-a avut
+   * loc, pe un ecran facut anume ca sa nu mai minta.
+   *
+   * `guard()` de mai sus a verificat deja ca omul e proprietarul magazinului — el e
+   * autorizarea, nu RLS-ul.
+   */
+  const { count, error } = await createAdminClient().from("trendyol_listings")
     .update({ auto_inventory: true, updated_at: new Date().toISOString() }, { count: "exact" })
     .eq("business_id", businessId).eq("auto_inventory", false);
   if (error) return { error: error.message };

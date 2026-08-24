@@ -89,3 +89,34 @@ test("pornirea in masa cere confirmare: rescrie preturi puse de om", () => {
     assert.ok(sursa.includes("window.confirm("), `${fisier}: aprinde fara sa intrebe`);
   }
 });
+
+test("pornirea in masa scrie cu client de SERVICIU, nu cu al comerciantului", async () => {
+  /*
+   * ═══ UN UPDATE OPRIT DE RLS NU DA EROARE (24.08.2026) ═══
+   *
+   * `trendyol_listings` are o singura politica, `owner_select_trendyol_listings`, si aceea
+   * numai pe SELECT. `emag_offers` la fel: scrierile sunt service-role peste toata casa.
+   *
+   * ⚠ Un UPDATE oprit de RLS atinge ZERO randuri si raspunde linistit. Prima forma a
+   * butonului folosea clientul comerciantului si a raspuns „Nu era nimic de pornit"
+   * pentru 29 de listari care erau chiar acolo — un mesaj de reusita pentru o fapta care
+   * n-a avut loc, pe ecranul facut anume ca sa nu mai minta.
+   *
+   * `guard()` ramane autorizarea: el verifica ca omul e proprietarul magazinului.
+   */
+  const { readFileSync } = await import("node:fs");
+  for (const [fisier, functie] of [
+    ["src/lib/actions/trendyol.actions.ts", "pornesteSincronizareaAdoptatelor"],
+    ["src/lib/actions/emag.actions.ts", "pornesteSincronizareaTuturor"],
+  ] as const) {
+    const sursa = readFileSync(fisier, "utf8");
+    const i = sursa.indexOf(`export async function ${functie}(`);
+    assert.notEqual(i, -1, `${fisier}: n-am gasit ${functie}`);
+    const corp = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "}", i));
+    assert.ok(corp.includes("guard("), `${functie} scrie fara sa verifice proprietarul`);
+    assert.ok(
+      corp.includes("createAdminClient()"),
+      `${functie} scrie cu clientul comerciantului: RLS taie tacut si iese „nimic de pornit”`,
+    );
+  }
+});

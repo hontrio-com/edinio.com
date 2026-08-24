@@ -338,6 +338,116 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_biz uuid; v_marcaj timestamptz; v_eliberat timestamptz; v_rez jsonb;
+  v_cons_p jsonb := '[]'::jsonb; v_cons_v jsonb := '[]'::jsonb;
+  v_elib_p jsonb := '[]'::jsonb; v_elib_v jsonb := '[]'::jsonb;
+  v_luat jsonb; v_nou_p jsonb; v_nou_v jsonb;
+begin
+  select business_id, stoc_marketplace_la, stoc_eliberat_la, stoc_rezervat
+    into v_biz, v_marcaj, v_eliberat, v_rez
+    from public.orders where id = p_order_id for update;
+  if not found then return jsonb_build_object('gasit', false); end if;
+  if p_business_id is not null and v_biz is distinct from p_business_id then
+    return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
+  end if;
+  if v_marcaj is null then
+    return jsonb_build_object('gasit', true, 'neconsumat', true, 'schimbat', false);
+  end if;
+  if v_eliberat is not null then
+    return jsonb_build_object('gasit', true, 'eliberat', true, 'schimbat', false);
+  end if;
+
+  with vechi as (
+    select (e->>'product_id')::uuid as pid, sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as q
+      from jsonb_array_elements(coalesce(v_rez->'produse','[]'::jsonb)) e
+     where e->>'product_id' is not null group by 1
+  ), nou as (
+    select (e->>'product_id')::uuid as pid, sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as q
+      from jsonb_array_elements(coalesce(p_produse,'[]'::jsonb)) e
+     where e->>'product_id' is not null group by 1
+  ), dif as (
+    select coalesce(n.pid, v.pid) as pid, coalesce(n.q,0) - coalesce(v.q,0) as d
+      from nou n full join vechi v on v.pid = n.pid
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', d)) filter (where d > 0), '[]'::jsonb),
+         coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', -d)) filter (where d < 0), '[]'::jsonb)
+    into v_cons_p, v_elib_p from dif;
+
+  with vechi as (
+    select (e->>'product_id')::uuid as pid, e->>'variant_title' as titlu,
+           sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as q
+      from jsonb_array_elements(coalesce(v_rez->'variante','[]'::jsonb)) e
+     where e->>'product_id' is not null and e->>'variant_title' is not null group by 1,2
+  ), nou as (
+    select (e->>'product_id')::uuid as pid, e->>'variant_title' as titlu,
+           sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as q
+      from jsonb_array_elements(coalesce(p_variante,'[]'::jsonb)) e
+     where e->>'product_id' is not null and e->>'variant_title' is not null group by 1,2
+  ), dif as (
+    select coalesce(n.pid, v.pid) as pid, coalesce(n.titlu, v.titlu) as titlu,
+           coalesce(n.q,0) - coalesce(v.q,0) as d
+      from nou n full join vechi v on v.pid = n.pid and v.titlu = n.titlu
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'variant_title', titlu, 'quantity', d)) filter (where d > 0), '[]'::jsonb),
+         coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'variant_title', titlu, 'quantity', -d)) filter (where d < 0), '[]'::jsonb)
+    into v_cons_v, v_elib_v from dif;
+
+  if jsonb_array_length(v_cons_p) = 0 and jsonb_array_length(v_cons_v) = 0
+     and jsonb_array_length(v_elib_p) = 0 and jsonb_array_length(v_elib_v) = 0 then
+    return jsonb_build_object('gasit', true, 'schimbat', false);
+  end if;
+
+  perform public.elibereaza_stoc_complet(v_elib_p, v_elib_v);
+  v_luat := public.consuma_stoc_marketplace(v_cons_p, v_cons_v);
+
+  select coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', q)), '[]'::jsonb)
+    into v_nou_p from (
+      select pid, sum(q)::int as q from (
+        select (e->>'product_id')::uuid as pid, coalesce((e->>'quantity')::int,0) as q
+          from jsonb_array_elements(coalesce(v_rez->'produse','[]'::jsonb)) e where e->>'product_id' is not null
+        union all
+        select (e->>'product_id')::uuid, coalesce((e->>'quantity')::int,0)
+          from jsonb_array_elements(coalesce(v_luat->'consumat'->'produse','[]'::jsonb)) e
+        union all
+        select (e->>'product_id')::uuid, -coalesce((e->>'quantity')::int,0)
+          from jsonb_array_elements(v_elib_p) e
+      ) t group by pid having sum(q) > 0
+    ) u;
+
+  select coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'variant_title', titlu, 'quantity', q)), '[]'::jsonb)
+    into v_nou_v from (
+      select pid, titlu, sum(q)::int as q from (
+        select (e->>'product_id')::uuid as pid, e->>'variant_title' as titlu, coalesce((e->>'quantity')::int,0) as q
+          from jsonb_array_elements(coalesce(v_rez->'variante','[]'::jsonb)) e
+         where e->>'product_id' is not null and e->>'variant_title' is not null
+        union all
+        select (e->>'product_id')::uuid, e->>'variant_title', coalesce((e->>'quantity')::int,0)
+          from jsonb_array_elements(coalesce(v_luat->'consumat'->'variante','[]'::jsonb)) e
+        union all
+        select (e->>'product_id')::uuid, e->>'variant_title', -coalesce((e->>'quantity')::int,0)
+          from jsonb_array_elements(v_elib_v) e
+      ) t group by pid, titlu having sum(q) > 0
+    ) u;
+
+  update public.orders
+     set stoc_rezervat = jsonb_build_object('produse', v_nou_p, 'variante', v_nou_v), updated_at = now()
+   where id = p_order_id;
+
+  return jsonb_build_object('gasit', true, 'schimbat', true,
+    'consumat', coalesce(v_luat->'consumat','{}'::jsonb),
+    'eliberat', jsonb_build_object('produse', v_elib_p, 'variante', v_elib_v),
+    'lipsa', coalesce(v_luat->'lipsa','[]'::jsonb));
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text DEFAULT NULL::text, p_business_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2177,6 +2287,33 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.numara_ofertele_emag(p_business_id uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with etichetate as (
+    select case
+      when o.validation_status in (5, 6, 8, 10, 12) then 'Respins de eMAG'
+      when o.validation_status in (1, 2, 4) then 'În validare la eMAG'
+      when o.status_la_ei = 2 then 'Scoasă din vânzare la eMAG'
+      when o.status_la_ei = 0 then 'Oprită la eMAG'
+      when o.offer_validation_status is not null and o.offer_validation_status <> 1
+        then 'Preț neacceptat de eMAG'
+      when o.stoc_la_ei is not null and o.stoc_la_ei <= 0 then 'Fără stoc la eMAG'
+      when o.status_la_ei is null or o.stoc_la_ei is null then 'Încă necitit de la eMAG'
+      when o.validation_status is not null and o.validation_status not in (3, 9, 11, 12)
+        then 'Stare necunoscută la eMAG'
+      else 'Se vinde pe eMAG'
+    end as eticheta
+    from public.emag_offers o where o.business_id = p_business_id
+  )
+  select coalesce(jsonb_object_agg(eticheta, cate), '{}'::jsonb)
+  from (select eticheta, count(*) as cate from etichetate group by 1) t;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.order_customer_key(customer_phone text, customer_email text, order_id uuid)
  RETURNS text
  LANGUAGE sql
@@ -2659,196 +2796,6 @@ begin
     where p.id = r.pid;
   end loop;
 end;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.ajusteaza_stoc_comanda_marketplace(
-  p_order_id uuid,
-  p_business_id uuid,
-  p_produse jsonb,
-  p_variante jsonb
-) returns jsonb
-language plpgsql
-security definer
-set search_path to 'public', 'pg_temp'
-as $$
-declare
-  v_biz uuid; v_marcaj timestamptz; v_eliberat timestamptz; v_rez jsonb;
-  v_cons_p jsonb := '[]'::jsonb; v_cons_v jsonb := '[]'::jsonb;
-  v_elib_p jsonb := '[]'::jsonb; v_elib_v jsonb := '[]'::jsonb;
-  v_luat jsonb; v_nou_p jsonb; v_nou_v jsonb;
-begin
-  select business_id, stoc_marketplace_la, stoc_eliberat_la, stoc_rezervat
-    into v_biz, v_marcaj, v_eliberat, v_rez
-    from public.orders where id = p_order_id for update;
-
-  if not found then return jsonb_build_object('gasit', false); end if;
-  if p_business_id is not null and v_biz is distinct from p_business_id then
-    return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
-  end if;
-
-  /* Prima consumare n-a avut loc: o face calea obisnuita, nu asta. */
-  if v_marcaj is null then
-    return jsonb_build_object('gasit', true, 'neconsumat', true, 'schimbat', false);
-  end if;
-  /* Stocul s-a intors deja: comanda e anulata sau rambursata. */
-  if v_eliberat is not null then
-    return jsonb_build_object('gasit', true, 'eliberat', true, 'schimbat', false);
-  end if;
-
-  /* ── Diferenta pe produse ─────────────────────────────────────────────── */
-  with vechi as (
-    select (e->>'product_id')::uuid as pid,
-           sum(greatest(0, coalesce((e->>'quantity')::int, 0)))::int as q
-      from jsonb_array_elements(coalesce(v_rez->'produse', '[]'::jsonb)) e
-     where e->>'product_id' is not null group by 1
-  ), nou as (
-    select (e->>'product_id')::uuid as pid,
-           sum(greatest(0, coalesce((e->>'quantity')::int, 0)))::int as q
-      from jsonb_array_elements(coalesce(p_produse, '[]'::jsonb)) e
-     where e->>'product_id' is not null group by 1
-  ), dif as (
-    select coalesce(n.pid, v.pid) as pid, coalesce(n.q, 0) - coalesce(v.q, 0) as d
-      from nou n full join vechi v on v.pid = n.pid
-  )
-  select
-    coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', d))
-             filter (where d > 0), '[]'::jsonb),
-    coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', -d))
-             filter (where d < 0), '[]'::jsonb)
-    into v_cons_p, v_elib_p
-    from dif;
-
-  /* ── Diferenta pe variante ────────────────────────────────────────────── */
-  with vechi as (
-    select (e->>'product_id')::uuid as pid, e->>'variant_title' as titlu,
-           sum(greatest(0, coalesce((e->>'quantity')::int, 0)))::int as q
-      from jsonb_array_elements(coalesce(v_rez->'variante', '[]'::jsonb)) e
-     where e->>'product_id' is not null and e->>'variant_title' is not null group by 1, 2
-  ), nou as (
-    select (e->>'product_id')::uuid as pid, e->>'variant_title' as titlu,
-           sum(greatest(0, coalesce((e->>'quantity')::int, 0)))::int as q
-      from jsonb_array_elements(coalesce(p_variante, '[]'::jsonb)) e
-     where e->>'product_id' is not null and e->>'variant_title' is not null group by 1, 2
-  ), dif as (
-    select coalesce(n.pid, v.pid) as pid, coalesce(n.titlu, v.titlu) as titlu,
-           coalesce(n.q, 0) - coalesce(v.q, 0) as d
-      from nou n full join vechi v on v.pid = n.pid and v.titlu = n.titlu
-  )
-  select
-    coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'variant_title', titlu, 'quantity', d))
-             filter (where d > 0), '[]'::jsonb),
-    coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'variant_title', titlu, 'quantity', -d))
-             filter (where d < 0), '[]'::jsonb)
-    into v_cons_v, v_elib_v
-    from dif;
-
-  if jsonb_array_length(v_cons_p) = 0 and jsonb_array_length(v_cons_v) = 0
-     and jsonb_array_length(v_elib_p) = 0 and jsonb_array_length(v_elib_v) = 0 then
-    return jsonb_build_object('gasit', true, 'schimbat', false);
-  end if;
-
-  /*
-   * ⚠ SE ELIBEREAZA INTAI, apoi se consuma.
-   *
-   * La un schimb — o bucata scoasa de pe un produs si adaugata pe altul, sau pe alta
-   * marime a aceluiasi — ordinea inversa ar fi cerut stoc care tocmai urmeaza sa se
-   * intoarca. Pe un produs cu ultima bucata, consumul s-ar fi plafonat la zero si
-   * comanda ar fi ramas cu marfa nescazuta, desi in depozit ea exista.
-   */
-  perform public.elibereaza_stoc_complet(v_elib_p, v_elib_v);
-  v_luat := public.consuma_stoc_marketplace(v_cons_p, v_cons_v);
-
-  /*
-   * ⚠ `stoc_rezervat` primeste CE S-A INTAMPLAT, nu ce s-a cerut.
-   *
-   * Consumul se plafoneaza la cat exista pe raft, deci „cerut" si „luat" chiar difera.
-   * Scris cu ce s-a cerut, anularea de mai tarziu ar fi dat inapoi stoc care n-a
-   * existat niciodata — chiar regula scrisa la `consuma_stoc_comanda_marketplace`.
-   */
-  select coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', q)), '[]'::jsonb)
-    into v_nou_p
-    from (
-      select pid, sum(q)::int as q from (
-        select (e->>'product_id')::uuid as pid, coalesce((e->>'quantity')::int, 0) as q
-          from jsonb_array_elements(coalesce(v_rez->'produse', '[]'::jsonb)) e
-         where e->>'product_id' is not null
-        union all
-        select (e->>'product_id')::uuid, coalesce((e->>'quantity')::int, 0)
-          from jsonb_array_elements(coalesce(v_luat->'consumat'->'produse', '[]'::jsonb)) e
-        union all
-        select (e->>'product_id')::uuid, -coalesce((e->>'quantity')::int, 0)
-          from jsonb_array_elements(v_elib_p) e
-      ) t group by pid having sum(q) > 0
-    ) u;
-
-  select coalesce(jsonb_agg(jsonb_build_object(
-           'product_id', pid, 'variant_title', titlu, 'quantity', q)), '[]'::jsonb)
-    into v_nou_v
-    from (
-      select pid, titlu, sum(q)::int as q from (
-        select (e->>'product_id')::uuid as pid, e->>'variant_title' as titlu,
-               coalesce((e->>'quantity')::int, 0) as q
-          from jsonb_array_elements(coalesce(v_rez->'variante', '[]'::jsonb)) e
-         where e->>'product_id' is not null and e->>'variant_title' is not null
-        union all
-        select (e->>'product_id')::uuid, e->>'variant_title', coalesce((e->>'quantity')::int, 0)
-          from jsonb_array_elements(coalesce(v_luat->'consumat'->'variante', '[]'::jsonb)) e
-        union all
-        select (e->>'product_id')::uuid, e->>'variant_title', -coalesce((e->>'quantity')::int, 0)
-          from jsonb_array_elements(v_elib_v) e
-      ) t group by pid, titlu having sum(q) > 0
-    ) u;
-
-  update public.orders
-     set stoc_rezervat = jsonb_build_object('produse', v_nou_p, 'variante', v_nou_v),
-         updated_at = now()
-   where id = p_order_id;
-
-  return jsonb_build_object(
-    'gasit', true, 'schimbat', true,
-    'consumat', coalesce(v_luat->'consumat', '{}'::jsonb),
-    'eliberat', jsonb_build_object('produse', v_elib_p, 'variante', v_elib_v),
-    'lipsa', coalesce(v_luat->'lipsa', '[]'::jsonb));
-end;
-$$;
-;
-
-CREATE OR REPLACE FUNCTION public.numara_ofertele_emag(p_business_id uuid)
- RETURNS jsonb
- LANGUAGE sql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-  with etichetate as (
-    select case
-      /* Ordinea e chiar regula, copiata din `deCeNuSeVinde`: fiecare oferta cade
-         intr-o SINGURA ramura, deci cartonasele se aduna la total prin constructie.
-         `validation_status = 12` e si respins, si vandabil: castiga respins. */
-      when o.validation_status in (5, 6, 8, 10, 12) then 'Respins de eMAG'
-      /* ⚠ LISTA INCHISA: 1 asteapta MKTP, 2 marca, 4 documentatia. „Orice nu e vandabil
-         inseamna in validare" e o presupunere, iar ei trimit si `0`, care nu e in enumul
-         lor — 61 de oferte asa, din care 42 chiar OPRITE. Prinse aici, ecranul le spunea
-         „nu ai nimic de facut" cand aveau. Ce nu stim trece mai jos, unde se poate
-         explica adevarat. */
-      when o.validation_status in (1, 2, 4) then 'În validare la eMAG'
-      when o.status_la_ei = 2 then 'Scoasă din vânzare la eMAG'
-      when o.status_la_ei = 0 then 'Oprită la eMAG'
-      when o.offer_validation_status is not null and o.offer_validation_status <> 1
-        then 'Preț neacceptat de eMAG'
-      when o.stoc_la_ei is not null and o.stoc_la_ei <= 0 then 'Fără stoc la eMAG'
-      when o.status_la_ei is null or o.stoc_la_ei is null then 'Încă necitit de la eMAG'
-      /* ⚠ O stare pe care n-o stim NU e „in regula": ei trimit si `0`, care nu exista in
-         enumul lor. Trecuta drept vanduta, ar fi aratat verde pe ceva necunoscut. */
-      when o.validation_status is not null and o.validation_status not in (3, 9, 11, 12)
-        then 'Stare necunoscută la eMAG'
-      else 'Se vinde pe eMAG'
-    end as eticheta
-    from public.emag_offers o
-    where o.business_id = p_business_id
-  )
-  select coalesce(jsonb_object_agg(eticheta, cate), '{}'::jsonb)
-  from (select eticheta, count(*) as cate from etichetate group by 1) t;
 $function$
 ;
 
@@ -7597,6 +7544,9 @@ grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) t
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
+grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to anon;
+grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to authenticated;
+grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid) to service_role;
 grant execute on function public.blocheaza_domeniu_platforma() to anon;
 grant execute on function public.blocheaza_domeniu_platforma() to authenticated;
@@ -7669,6 +7619,9 @@ grant execute on function public.normalize_phone(raw text) to anon;
 grant execute on function public.normalize_phone(raw text) to authenticated;
 grant execute on function public.normalize_phone(raw text) to service_role;
 grant execute on function public.numar_produse_si_comenzi() to service_role;
+grant execute on function public.numara_ofertele_emag(p_business_id uuid) to anon;
+grant execute on function public.numara_ofertele_emag(p_business_id uuid) to authenticated;
+grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to anon;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to authenticated;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to service_role;
@@ -7696,8 +7649,6 @@ grant execute on function public.repretuieste_pachetele_cu(p_component_id uuid) 
 grant execute on function public.reserve_payout_balance(p_user_id uuid, p_amount integer) to service_role;
 grant execute on function public.reseteaza_limita(p_cheie text) to service_role;
 grant execute on function public.restaureaza_variante_batch(p_items jsonb) to service_role;
-grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
-grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
 grant execute on function public.revendica_din_coada(p_coada text, p_limita integer, p_lease interval) to service_role;
 grant execute on function public.revendica_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.revendica_stoc_comanda(p_order_id uuid) to service_role;

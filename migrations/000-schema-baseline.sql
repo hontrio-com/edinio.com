@@ -348,30 +348,41 @@ declare
   v_biz uuid; v_marcaj timestamptz; v_eliberat timestamptz; v_rez jsonb;
   v_cons_p jsonb := '[]'::jsonb; v_cons_v jsonb := '[]'::jsonb;
   v_elib_p jsonb := '[]'::jsonb; v_elib_v jsonb := '[]'::jsonb;
-  v_luat jsonb; v_nou_p jsonb; v_nou_v jsonb;
+  v_luat jsonb; v_nou_p jsonb; v_nou_v jsonb; v_straine int;
 begin
+  if p_business_id is null then
+    return jsonb_build_object('gasit', false, 'motiv', 'business_id lipsa');
+  end if;
+
   select business_id, stoc_marketplace_la, stoc_eliberat_la, stoc_rezervat
     into v_biz, v_marcaj, v_eliberat, v_rez
     from public.orders where id = p_order_id for update;
   if not found then return jsonb_build_object('gasit', false); end if;
-  if p_business_id is not null and v_biz is distinct from p_business_id then
+  if v_biz is distinct from p_business_id then
     return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
   end if;
-  if v_marcaj is null then
-    return jsonb_build_object('gasit', true, 'neconsumat', true, 'schimbat', false);
+
+  select count(*) into v_straine from (
+      select (e->>'product_id')::uuid as pid
+        from jsonb_array_elements(coalesce(p_produse,'[]'::jsonb)) e where e->>'product_id' is not null
+      union
+      select (e->>'product_id')::uuid
+        from jsonb_array_elements(coalesce(p_variante,'[]'::jsonb)) e where e->>'product_id' is not null
+    ) t
+   where not exists (select 1 from public.products p where p.id = t.pid and p.business_id = v_biz);
+  if v_straine > 0 then
+    return jsonb_build_object('gasit', false, 'motiv', 'produse din alt magazin', 'straine', v_straine);
   end if;
-  if v_eliberat is not null then
-    return jsonb_build_object('gasit', true, 'eliberat', true, 'schimbat', false);
-  end if;
+
+  if v_marcaj is null then return jsonb_build_object('gasit', true, 'neconsumat', true, 'schimbat', false); end if;
+  if v_eliberat is not null then return jsonb_build_object('gasit', true, 'eliberat', true, 'schimbat', false); end if;
 
   with vechi as (
     select (e->>'product_id')::uuid as pid, sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as q
-      from jsonb_array_elements(coalesce(v_rez->'produse','[]'::jsonb)) e
-     where e->>'product_id' is not null group by 1
+      from jsonb_array_elements(coalesce(v_rez->'produse','[]'::jsonb)) e where e->>'product_id' is not null group by 1
   ), nou as (
     select (e->>'product_id')::uuid as pid, sum(greatest(0, coalesce((e->>'quantity')::int,0)))::int as q
-      from jsonb_array_elements(coalesce(p_produse,'[]'::jsonb)) e
-     where e->>'product_id' is not null group by 1
+      from jsonb_array_elements(coalesce(p_produse,'[]'::jsonb)) e where e->>'product_id' is not null group by 1
   ), dif as (
     select coalesce(n.pid, v.pid) as pid, coalesce(n.q,0) - coalesce(v.q,0) as d
       from nou n full join vechi v on v.pid = n.pid
@@ -416,8 +427,7 @@ begin
         select (e->>'product_id')::uuid, coalesce((e->>'quantity')::int,0)
           from jsonb_array_elements(coalesce(v_luat->'consumat'->'produse','[]'::jsonb)) e
         union all
-        select (e->>'product_id')::uuid, -coalesce((e->>'quantity')::int,0)
-          from jsonb_array_elements(v_elib_p) e
+        select (e->>'product_id')::uuid, -coalesce((e->>'quantity')::int,0) from jsonb_array_elements(v_elib_p) e
       ) t group by pid having sum(q) > 0
     ) u;
 
@@ -7544,8 +7554,6 @@ grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) t
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
-grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to anon;
-grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to authenticated;
 grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid) to service_role;
 grant execute on function public.blocheaza_domeniu_platforma() to anon;
@@ -7619,8 +7627,6 @@ grant execute on function public.normalize_phone(raw text) to anon;
 grant execute on function public.normalize_phone(raw text) to authenticated;
 grant execute on function public.normalize_phone(raw text) to service_role;
 grant execute on function public.numar_produse_si_comenzi() to service_role;
-grant execute on function public.numara_ofertele_emag(p_business_id uuid) to anon;
-grant execute on function public.numara_ofertele_emag(p_business_id uuid) to authenticated;
 grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to anon;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to authenticated;

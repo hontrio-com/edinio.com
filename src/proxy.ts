@@ -23,7 +23,7 @@ import { poartaMfaApi, poartaMfaActiuneServer } from "@/lib/auth/poarta-mfa";
  */
 const TTL_GASIT = 60_000;
 const TTL_NEGASIT = 15_000;
-type RandDomeniu = { slug: string; custom_domain: string | null };
+type RandDomeniu = { slug: string; custom_domain: string | null; is_published: boolean };
 const cacheDomenii = new CacheScurt<RandDomeniu[]>(TTL_GASIT);
 /**
  * Domeniul propriu al unui slug, IMPREUNA cu sanatatea lui. `sanatos: null`
@@ -171,11 +171,26 @@ export async function proxy(request: NextRequest) {
     const cheieDomeniu = candidates.join("|");
     let rows = cacheDomenii.get(cheieDomeniu);
     if (rows === undefined) {
+      /*
+       * ⚠ `is_published` SE CITESTE, NU SE FILTREAZA (24.08.2026)
+       *
+       * Forma dinainte punea `.eq("is_published", true)` in interogare. Deci un magazin
+       * cu domeniul legat corect, dar inca nepublicat, iesea de aici EXACT ca un domeniu
+       * strain indreptat catre noi — si primea mesajul „nu este conectat la niciun
+       * magazin".
+       *
+       * ⚠ CE A COSTAT: pe `okxi.ro`, cu domeniul asezat corect si sanatos in Vercel,
+       * mesajul a trimis pe toata lumea sa caute o legatura rupta care nu exista. Cautat
+       * si in `businesses`, si in `domains`: domeniul era pe magazinul potrivit, singur.
+       * Lipsea o singura apasare, in cu totul alta parte a panoului.
+       *
+       * Adus aici, steagul lasa raspunsul sa spuna CARE din cele doua e cazul. Vizitatorul
+       * primeste 404 la fel — dar cel care se uita afla adevarul.
+       */
       const { data, error } = await clientAnonim()
         .from("businesses")
-        .select("slug, custom_domain")
-        .in("custom_domain", candidates)
-        .eq("is_published", true);
+        .select("slug, custom_domain, is_published")
+        .in("custom_domain", candidates);
 
       /*
        * O interogare PICATA nu inseamna „domeniul nu exista".
@@ -193,11 +208,23 @@ export async function proxy(request: NextRequest) {
         });
       }
       rows = data ?? [];
-      cacheDomenii.set(cheieDomeniu, rows, rows.length === 0 ? TTL_NEGASIT : undefined);
+      /*
+       * ⚠ „Gasit dar nepublicat" se retine SCURT, ca si „negasit".
+       *
+       * Cu TTL-ul lung, apasarea pe „Publica" n-ar fi avut efect pe domeniul propriu
+       * decat peste un minut — iar omul, care tocmai a apasat si vede tot 404, apasa din
+       * nou sau cheama pe cineva. Un rand nepublicat nu e un raspuns asezat, e o stare
+       * care se schimba chiar acum.
+       */
+      const seServeste = rows.some((r) => r.is_published === true);
+      cacheDomenii.set(cheieDomeniu, rows, seServeste ? undefined : TTL_NEGASIT);
     }
 
-    const exact = rows?.find((r) => r.custom_domain === bareHost) ?? null;
-    const apexMatch = rows?.find((r) => r.custom_domain === apexHost) ?? null;
+    /* ⚠ Numai magazinele PUBLICATE se servesc. Steagul se citeste aici, nu in
+       interogare, ca sa se poata deosebi „nepublicat" de „domeniu necunoscut". */
+    const publicate = (rows ?? []).filter((r) => r.is_published === true);
+    const exact = publicate.find((r) => r.custom_domain === bareHost) ?? null;
+    const apexMatch = publicate.find((r) => r.custom_domain === apexHost) ?? null;
 
     // www is not itself the stored canonical → redirect to the apex, keeping path.
     if (!exact && isWww && apexMatch) {
@@ -228,9 +255,19 @@ export async function proxy(request: NextRequest) {
      * suprascrie oricum (verificat in next/dist/server/lib/router-server si
      * base-server). Deci raspundem direct, cu statusul pe care il vrem.
      */
+    /*
+     * ⚠ DOUA CAZURI DIFERITE, DOUA MESAJE. Amandoua raspund 404 — vizitatorului nu i se
+     * arata un magazin care nu e gata — dar cel care CAUTA de ce afla care e situatia.
+     * Un singur mesaj pentru amandoua a costat o dupa-amiaza de cautat o legatura rupta
+     * care nu exista.
+     */
+    const nepublicat = (rows ?? []).length > 0;
     return new NextResponse(
       "<!doctype html><meta charset=utf-8><title>Domeniu neconfigurat</title>" +
-        "<p>Acest domeniu nu este conectat la niciun magazin.",
+        (nepublicat
+          ? "<p>Domeniul e legat de un magazin, dar magazinul nu e încă publicat."
+            + "<p>Publică-l din panou, la Setări, și adresa începe să funcționeze imediat."
+          : "<p>Acest domeniu nu este conectat la niciun magazin."),
       { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
     );
   }

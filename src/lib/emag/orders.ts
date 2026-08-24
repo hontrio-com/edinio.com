@@ -824,7 +824,9 @@ export async function ingereazaComanda(
         return "esuata";
       }
     }
-    await admin.from("emag_orders").update({
+    /* ⚠ Si aici se citeste `error`: vezi nota de la comanda noua. Fara `raw` proaspat,
+       facturarea si AWB-ul de mai jos ar lucra pe datele vechi ale comenzii. */
+    const { error: eRandEmag } = await admin.from("emag_orders").update({
       order_status: c.status,
       order_type: c.type ?? null,
       payment_mode_id: c.payment_mode_id ?? null,
@@ -835,6 +837,16 @@ export async function ingereazaComanda(
       last_modified: c.modified ?? null,
       updated_at: acum,
     }).eq("id", ex.id);
+    if (eRandEmag) {
+      await logError({
+        action: "emag/orders",
+        message: `randul eMAG al comenzii nu s-a actualizat: ${eRandEmag.message}`,
+        details: { emagOrderId: c.id, orderId: ex.order_id, code: eRandEmag.code },
+        businessId: ctx.businessId,
+        severity: "critical",
+      });
+      return "esuata";
+    }
 
     /* ⚠ Confirmarea se incearca si acum: daca prima oara a picat, eMAG inca trimite
        notificari pentru o comanda pe care noi o avem demult.
@@ -963,7 +975,7 @@ export async function ingereazaComanda(
     orderId = (creata as { id: string }).id;
   }
 
-  const { data: randEmag } = await admin.from("emag_orders").upsert({
+  const { data: randEmag, error: eRandEmag } = await admin.from("emag_orders").upsert({
     business_id: ctx.businessId,
     order_id: orderId,
     emag_order_id: c.id,
@@ -977,6 +989,37 @@ export async function ingereazaComanda(
     last_modified: c.modified ?? null,
     updated_at: acum,
   } as never, { onConflict: "business_id,emag_order_id" }).select("id").single();
+
+  /*
+   * ═══ ⚠ O COMANDA SCRISA PE JUMATATE NU E O COMANDA INTRATA (24.08.2026) ═══
+   *
+   * Raspunsul lui `error` nu se citea deloc. Iar cand scrierea cadea, `randEmag` ramanea
+   * `null` si urmau trei lucruri, toate tacute:
+   *
+   *   1. `confirmaSiNoteaza` se sarea — deci NICIUN `order/acknowledge`. Comanda ramanea
+   *      „noua" la eMAG si ei continuau sa notifice pentru ea.
+   *   2. Comanda nu aparea in ecranul eMAG si factura nu i se urca niciodata.
+   *   3. Functia intorcea „noua", deci cronul muta `orders_synced_at` PESTE ea — si
+   *      comanda nu mai era recitita decat daca o modifica clientul.
+   *
+   * Contrast in aceeasi functie: insertul in `orders`, cu douazeci de randuri mai sus,
+   * trateaza esecul cu `logError` critical SI cu deosebirea permanent/trecator. Aici,
+   * nimic. Comanda exista in magazin, dar jumatate din legatura cu eMAG lipsea.
+   *
+   * ⚠ Se intoarce „esuata", nu „noua": marcajul sta pe loc si comanda se reia. Randul in
+   * `orders` exista deja, iar reluarea il regaseste dupa `order_number` — deci nu se
+   * dubleaza nimic.
+   */
+  if (eRandEmag || !randEmag) {
+    await logError({
+      action: "emag/orders",
+      message: `randul eMAG al comenzii nu s-a scris: ${eRandEmag?.message ?? "raspuns gol"}`,
+      details: { emagOrderId: c.id, orderId, code: eRandEmag?.code },
+      businessId: ctx.businessId,
+      severity: "critical",
+    });
+    return "esuata";
+  }
 
   /*
    * ⚠ STOCUL NU SE CONSUMA LA FBE, si asta nu e o scutire — e o reparatie.
@@ -995,7 +1038,7 @@ export async function ingereazaComanda(
 
   /* ⚠ ABIA ACUM. Vezi nota din antetul functiei. ⚠ Si nu la FBE: acolo livrarea o fac
      ei, iar documentatia lor spune ca doar `type: 3` se editeaza. */
-  if (randEmag && !onoratDeEmag(c.type) && !istoric) {
+  if (!onoratDeEmag(c.type) && !istoric) {
     await confirmaSiNoteaza(admin, ctx, c.id, (randEmag as { id: string }).id, c.status);
   }
 

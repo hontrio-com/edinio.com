@@ -156,3 +156,41 @@ test("eMAG facturi: liniile se margineste cate se tin", () => {
   };
   assert.equal(facturileLorPentruEcran(multe)[0].linii.length, LINII_PE_FACTURA);
 });
+
+/* ── Costurile se aduna din TOATE facturile (24.08.2026) ───────────────────── */
+
+test("facturile se cer paginat, pana la `total_results`", async () => {
+  /*
+   * ═══ SE CEREA O SINGURA PAGINA DE 100 ═══
+   *
+   * Fara `currentPage`, fara sa se uite la `total_results`. Pe „Ultimul an", tot ce
+   * trecea de a 100-a factura nu se aduna — iar rezultatul arata identic cu unul corect.
+   *
+   * ⚠ E chiar ecranul „cat te costa eMAG", scris ca sa dea fapte, nu estimari. Un cost
+   * subestimat impinge preturile in jos. Toate celelalte rute paginate din integrare se
+   * parcurg pana la capat; facturile erau singura exceptie.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/actions/emag.actions.ts", "utf8");
+
+  const i = sursa.indexOf("export async function facturileEmag(");
+  assert.notEqual(i, -1, "n-am gasit citirea facturilor");
+  const corp = sursa.slice(i, i + 4200);
+
+  assert.ok(corp.includes("total_results"), "nu se uita la cate sunt de fapt");
+  assert.ok(corp.includes("currentPage: p"), "nu cere paginile urmatoare");
+  assert.ok(corp.includes("PAGINI_FACTURI_MAXIM"), "bucla n-are plafon");
+});
+
+test("un total incomplet se SPUNE, nu se arata ca intreg", async () => {
+  /* ⚠ Fara steag, cifra taiata arata la fel de credibila ca una corecta. */
+  const { readFileSync } = await import("node:fs");
+  assert.ok(
+    readFileSync("src/lib/actions/emag.actions.ts", "utf8").includes("const partial ="),
+    "actiunea nu spune niciodata ca n-a putut aduna tot",
+  );
+  assert.ok(
+    readFileSync("src/components/dashboard/EmagFacturiLor.tsx", "utf8").includes("date.partial &&"),
+    "ecranul nu arata niciodata ca totalul e partial",
+  );
+});

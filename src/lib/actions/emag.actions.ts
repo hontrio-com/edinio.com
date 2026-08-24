@@ -38,6 +38,7 @@ import { citesteAmintirea } from "@/lib/emag/memorie";
 import { trimiteElement, magazinDin} from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
 import { participantAwb } from "@/lib/emag/awb-adresa";
+import { intregDeLaEi } from "@/lib/emag/numere";
 import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
 import { aduComenzile, aduIstoricul, type RezultatIstoric } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
@@ -3057,10 +3058,45 @@ export interface FacturiLorEcran {
   totaluri: TotalPeCategorie[];
   /** Monedele întâlnite. ⚠ Nu se adună între ele; se spune când sunt mai multe. */
   monede: string[];
+  /**
+   * `true` când n-am putut aduna TOATE facturile din perioadă.
+   *
+   * ⚠ Fără steagul ăsta, un total incomplet arată identic cu unul complet — chiar
+   * greșeala care se repară aici, doar cu alt număr de pagini. Pe un ecran de costuri,
+   * asta împinge prețurile în jos și nimic nu spune de ce.
+   */
+  partial: boolean;
+  /** Câte facturi spun EI că sunt în perioadă. */
+  dinCate: number;
 }
 
-/** Câte facturi se cer. ⚠ Maximul lor pe rută e 1000; o sută acoperă un an. */
-const FACTURI_PE_CERERE = 100;
+/**
+ * Câte facturi se cer pe pagină.
+ *
+ * ⚠ ERA 100, ȘI SE CEREA O SINGURĂ PAGINĂ (îndreptat 24.08.2026)
+ *
+ * Comentariul spunea „o sută acoperă un an". Nu acoperă: eMAG emite facturi de comision,
+ * de servicii, de storno, mai multe pe lună. Pe „Ultimul an", tot ce trecea de a 100-a
+ * factură pur și simplu nu se aduna — iar rezultatul arăta identic cu unul corect.
+ *
+ * ⚠ CE COSTĂ: e chiar ecranul care spune „cât te costă eMAG", scris ca să dea fapte, nu
+ * estimări. Un cost subestimat împinge prețurile în jos. Toate celelalte rute paginate
+ * din integrare se parcurg până la capăt; facturile erau singura excepție.
+ *
+ * 1000 e maximul lor pe ruta asta, scris în schemă. Cu el, un an încape de obicei într-o
+ * cerere, iar paginarea de dedesubt e plasa pentru cine are mai multe.
+ */
+const FACTURI_PE_CERERE = 1000;
+
+/**
+ * Câte pagini se cer cel mult.
+ *
+ * ⚠ Un plafon, nu o limită așteptată: la 1000 pe pagină, zece pagini înseamnă zece mii de
+ * facturi într-un an. Există ca bucla să nu poată deveni infinită dacă `total_results`
+ * vine altfel decât credem — răspunsul lor nu e în schema lor, iar ziua în care
+ * `ownership` a venit `boolean` a arătat cât valorează o presupunere.
+ */
+const PAGINI_FACTURI_MAXIM = 10;
 
 /**
  * Facturile pe care ți le-a emis eMAG.
@@ -3094,25 +3130,60 @@ export async function facturileEmag(
 
   /* ⚠ Numele categoriilor și facturile se cer împreună: fără nume, ecranul ar fi arătat
      coduri („FC", „FT") pe care nu le știe nimeni. O cerere în plus, o dată. */
-  const [categorii, raspuns] = await Promise.all([
+  const [categorii, primaPagina] = await Promise.all([
     citesteCategoriiFacturi(c.auth),
     citesteFacturi(c.auth, {
       date_start: zi(de),
       date_end: zi(acum),
       itemsPerPage: FACTURI_PE_CERERE,
+      currentPage: 1,
     }),
   ]);
 
-  if (isEmagError(raspuns)) return { error: raspuns.error };
+  if (isEmagError(primaPagina)) return { error: primaPagina.error };
 
   /* ⚠ O cădere la CATEGORII nu oprește nimic: se arată codurile lor, care sunt tot
      adevărul, doar mai scurt. Facturile sunt partea care contează. */
   const nume = isEmagError(categorii) ? {} : numeleCategoriilor(categorii.data);
 
-  const facturi = facturileLorPentruEcran(raspuns.data, nume);
+  const facturi = facturileLorPentruEcran(primaPagina.data, nume);
+
+  /*
+   * ═══ ⚠ SE MERGE PÂNĂ LA CAPĂT, CA PE TOATE CELELALTE RUTE (24.08.2026) ═══
+   *
+   * Se cerea o singură pagină, fără `currentPage` și fără să se uite la `total_results`.
+   * Tot ce trecea de prima pagină nu se aduna, iar rezultatul arăta la fel de credibil.
+   *
+   * ⚠ Pe ecranul ăsta comerciantul își socotește prețurile. Un cost subestimat le împinge
+   * în jos, și nimic nu i-ar fi spus.
+   */
+  const cate = intregDeLaEi((primaPagina.data as { total_results?: unknown })?.total_results);
+  if (cate != null && cate > facturi.length) {
+    const pagini = Math.min(Math.ceil(cate / FACTURI_PE_CERERE), PAGINI_FACTURI_MAXIM);
+    for (let p = 2; p <= pagini; p++) {
+      const urm = await citesteFacturi(c.auth, {
+        date_start: zi(de),
+        date_end: zi(acum),
+        itemsPerPage: FACTURI_PE_CERERE,
+        currentPage: p,
+      });
+      /*
+       * ⚠ O pagină picată OPREȘTE, dar nu aruncă ce s-a strâns. Iar `partial` merge pe
+       * ecran: un total incomplet arătat drept complet e chiar greșeala care se repară
+       * aici, doar cu alt număr de pagini.
+       */
+      if (isEmagError(urm)) break;
+      const bucata = facturileLorPentruEcran(urm.data, nume);
+      if (bucata.length === 0) break;
+      facturi.push(...bucata);
+    }
+  }
+
+  /* ⚠ Se spune când NU s-a putut aduna tot: plafonul atins, sau o pagină care n-a venit. */
+  const partial = cate != null && facturi.length < cate;
   const monede = [...new Set(facturi.map((f) => f.moneda).filter(Boolean))];
 
-  return { facturi, totaluri: adunaPeCategorii(facturi), monede };
+  return { facturi, totaluri: adunaPeCategorii(facturi), monede, partial, dinCate: cate ?? facturi.length };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

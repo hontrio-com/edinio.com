@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronDown, ChevronRight, Loader2, Receipt } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { facturileEmag, type FacturiLorEcran } from "@/lib/actions/emag.actions";
 
@@ -34,7 +34,7 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
       const r = await facturileEmag(businessId, Number(peLuni));
       if ("error" in r) {
         toast.error(r.error);
-        setDate({ facturi: [], totaluri: [], monede: [] });
+        setDate({ facturi: [], totaluri: [], monede: [], partial: false, dinCate: 0 });
         return;
       }
       setDate(r);
@@ -117,6 +117,30 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
                   adună la un loc. Uită-te pe facturi una câte una.</>
                 )}
               </p>
+
+              {/*
+                ═══ ⚠ UN TOTAL INCOMPLET NU ARE VOIE SA ARATE CA UNUL COMPLET ═══
+
+                Pana pe 24.08.2026 se cerea o SINGURA pagina de 100 de facturi, fara
+                `currentPage` si fara sa se uite la `total_results`. Pe „Ultimul an",
+                tot ce trecea de a 100-a factura nu se aduna — iar cifra arata la fel de
+                credibila. Pe ecranul asta comerciantul isi socoteste preturile: un cost
+                subestimat le impinge in jos, si nimic nu i-ar fi spus de ce.
+
+                Acum se merge pana la capat. Cand tot nu se poate — plafonul de pagini,
+                sau o pagina care n-a venit — se SPUNE.
+              */}
+              {date.partial && (
+                <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Sumele de mai sus sunt socotite din {date.facturi.length} facturi, din{" "}
+                    {date.dinCate} câte are perioada. Restul nu s-au putut aduce acum, deci
+                    costul adevărat e mai mare. Încearcă din nou, sau alege o perioadă mai
+                    scurtă.
+                  </span>
+                </p>
+              )}
 
               <details className="mt-4">
                 <summary className="cursor-pointer text-xs text-muted-foreground">

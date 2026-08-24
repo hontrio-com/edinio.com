@@ -206,6 +206,16 @@ export function imaginiEmag(imagini: unknown, imagineCombinatie?: string | null)
 
   return adrese
     .filter((u) => /^https:\/\//i.test(u))
+    /*
+     * ⚠ NUMAI FORMATELE PE CARE LE ACCEPTA EI. Schema lor, la `images[].url`: „JPG,
+     * JPEG or PNG." Filtrul se uita doar la `https`, deci un `.webp` pleca linistit —
+     * si in catalogul masurat exista patru. eMAG nu se plange de o poza pe care n-o
+     * poate citi: produsul apare pur si simplu fara ea.
+     *
+     * ⚠ Adresa se taie de intrebare inainte de potrivire: fisierele noastre au uneori
+     * `?v=` sau semnaturi, iar `.jpg?v=2` nu s-ar fi potrivit cu nimic.
+     */
+    .filter((u) => /\.(jpe?g|png)$/i.test(u.split("?")[0]))
     .map((url, i) => ({ url, display_type: i === 0 ? 1 : 2 } as EmagImagine));
 }
 
@@ -389,6 +399,22 @@ export function construiesteOferte(
      * documentatia nu mai pleaca deloc, deci nici steagul asta nu se aplica.
      */
     images_overwrite: 1 as const,
+    /*
+     * ═══ ⚠ USA CU UN SINGUR SENS, INCHISA (audit 24.08.2026) ═══
+     *
+     * Campul nu pleca deloc, iar implicitul lor e `0` = „images downloaded only if link
+     * changed". Adresele noastre sunt IMUABILE: poarta un uuid si un timp in cale, deci
+     * nu se schimba niciodata pentru aceeasi poza.
+     *
+     * Cele doua puse cap la cap: daca descarcarea pica O DATA — o clipa de retea, o
+     * provocare de bot la CDN — nu se mai reincearca NICIODATA. Produsul ramane fara
+     * poza pe veci, si nimic nu spune de ce.
+     *
+     * ⚠ Costa putin: campul pleaca numai pe `product_offer/save`, ruta grea, care se
+     * foloseste la publicare si la resincronizarea fisei. Preturile si stocurile merg pe
+     * rutele usoare, unde nu se trimit imagini deloc.
+     */
+    force_images_download: 1 as const,
     safety_information: magazin.gpsr?.safety_information,
     /*
      * ⚠ GPSR ARE LIMITELE LUI, SI ELE NU ERAU PAZITE NICAIERI.

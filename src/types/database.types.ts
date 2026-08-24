@@ -1366,6 +1366,7 @@ export type Database = {
           part_number: string | null
           part_number_key: string | null
           product_id: string | null
+          raspuns_brut: Json | null
           status: string
           translation_validation_status: number | null
           updated_at: string
@@ -1399,6 +1400,7 @@ export type Database = {
           part_number?: string | null
           part_number_key?: string | null
           product_id?: string | null
+          raspuns_brut?: Json | null
           status?: string
           translation_validation_status?: number | null
           updated_at?: string
@@ -1432,6 +1434,7 @@ export type Database = {
           part_number?: string | null
           part_number_key?: string | null
           product_id?: string | null
+          raspuns_brut?: Json | null
           status?: string
           translation_validation_status?: number | null
           updated_at?: string

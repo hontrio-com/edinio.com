@@ -575,3 +575,29 @@ test("eMAG: cm se fac mm, gramele raman grame", () => {
   assert.equal(m?.length, 125);
   assert.equal(m?.weight, 250);
 });
+
+test("eMAG: un `.webp` NU pleaca la ei", () => {
+  /*
+   * ⚠ Schema lor, la `images[].url`: „JPG, JPEG or PNG." Filtrul se uita doar la
+   * `https`, deci un `.webp` pleca linistit — si in catalogul masurat exista patru.
+   *
+   * eMAG nu se plange de o poza pe care n-o poate citi: produsul apare pur si simplu
+   * fara ea, iar comerciantul intreaba de ce.
+   */
+  assert.deepEqual(imaginiEmag(["https://edinio-cdn.com/a.webp"]), []);
+  assert.equal(imaginiEmag(["https://edinio-cdn.com/a.jpg"]).length, 1);
+  assert.equal(imaginiEmag(["https://edinio-cdn.com/a.PNG"]).length, 1, "si cu litere mari");
+  assert.equal(imaginiEmag(["https://edinio-cdn.com/a.jpeg?v=2"]).length, 1, "cu intrebare in coada");
+});
+
+test("eMAG: imaginile se retrimit fortat, ca sa nu ramana o usa cu un singur sens", () => {
+  /*
+   * ⚠ `force_images_download` nu pleca deloc, iar implicitul lor e 0 = „downloaded only
+   * if link changed". Adresele noastre sunt IMUABILE (uuid + timp in cale).
+   *
+   * Cele doua puse cap la cap: daca descarcarea pica o data, nu se mai reincearca
+   * niciodata. Produsul ramane fara poza pe veci si nimic nu spune de ce.
+   */
+  const r = construiesteOferte(produs(), MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
+  assert.equal((r.oferte[0] as unknown as { force_images_download: number }).force_images_download, 1);
+});

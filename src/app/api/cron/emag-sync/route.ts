@@ -11,6 +11,7 @@ import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/ema
 import { patchEmagConfig } from "@/lib/emag/config";
 import { intregDeLaEi, zecimalDeLaEi } from "@/lib/emag/numere";
 import { stocDeImportat } from "@/lib/emag/import-produse";
+import { eRespinsaDeEmag, motiveDeLaEi } from "@/lib/emag/motive";
 import { magazinDin, trimiteElement } from "@/lib/emag/trimite";
 import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
@@ -633,7 +634,26 @@ async function scrieStatusurile(
       validation_status: validation,
       offer_validation_status: offerValidation,
       translation_validation_status: intregDeLaEi(o.translation_validation_status),
-      doc_errors: (o.doc_errors ?? []) as never,
+      /*
+       * ═══ ⚠ MOTIVUL SE CULEGE, NU SE CITESTE DINTR-O CHEIE GHICITA (24.08.2026) ═══
+       *
+       * Masurat pe contul unui comerciant: 152 de oferte RESPINSE de eMAG (112 cu
+       * documentatia respinsa, 34 blocate, 6 cu EAN respins) si la TOATE 152
+       * `doc_errors` era gol. Adica omul avea 152 de produse refuzate si niciun motiv
+       * pentru niciunul — chiar greseala §12.9, lectia Trendyol.
+       *
+       * `doc_errors` a fost o presupunere de-a noastra: raspunsul lui
+       * `product_offer/read` NU e in schema lor. Exact ca `ownership`, care s-a dovedit
+       * `boolean` acolo unde documentatia scrie 1/2.
+       *
+       * `motiveDeLaEi` cauta in toate formele plauzibile. Iar pentru ofertele respinse
+       * se pastreaza raspunsul INTREG, ca data viitoare sa existe dovada in loc de o a
+       * doua presupunere.
+       */
+      doc_errors: motiveDeLaEi(o) as never,
+      /* ⚠ Numai pentru cele respinse: pastrat pentru toate, ar fi insemnat un jsonb pe
+         fiecare din mii de randuri, rescris la fiecare trecere a cronului. */
+      raspuns_brut: (eRespinsaDeEmag(validation) ? (o as never) : null) as never,
       part_number_key: o.part_number_key ?? null,
       /* ⚠ Si numele. Comerciantul isi poate redenumi oferta in panoul lor; scris o
          singura data la import, ecranul nostru ar fi ramas cu numele vechi. */

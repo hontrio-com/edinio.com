@@ -889,6 +889,11 @@ export async function ingereazaComanda(
       /* ⚠ „esuata" opreste marcajul. Altfel comanda iese din fereastra si nimeni nu mai
          incearca — chiar gaura pe care o repara blocul asta. */
       if (consum === "esuat") return "esuata";
+
+      /* ⚠ SI ABIA APOI diferenta. Consumul de mai sus raspunde `deja: true` la o comanda
+         stiuta si nu compara nimic — deci un produs adaugat de ei, sau un storno partial,
+         ar fi trecut neatins pe langa stoc. Vezi `ajusteazaStocul`. */
+      await ajusteazaStocul(admin, ctx, ex.order_id, linii);
     }
 
     if (!istoric) await poateFactura(admin, ctx, ex.order_id, status);
@@ -1137,6 +1142,97 @@ async function hartaOfertelor(
 }
 
 /**
+ * Liniile stranse pe produs si pe varianta.
+ *
+ * ⚠ Aceeasi grupare si la consum, si la ajustare, ANUME: daca cele doua ar aduna altfel,
+ * diferenta socotita de ajustare ar fi fata de altceva decat s-a consumat, iar stocul ar
+ * derapa la fiecare modificare.
+ */
+function grupeazaLinii(linii: LinieEdinio[]): {
+  peProdus: Map<string, number>;
+  peVarianta: Map<string, { product_id: string; variant_title: string; quantity: number }>;
+} {
+  const peProdus = new Map<string, number>();
+  const peVarianta = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
+
+  for (const l of linii) {
+    if (!l.product_id || l.quantity <= 0) continue;
+    peProdus.set(l.product_id, (peProdus.get(l.product_id) ?? 0) + l.quantity);
+    if (l.variant_title) {
+      const cheie = `${l.product_id}|${l.variant_title}`;
+      const ex = peVarianta.get(cheie);
+      if (ex) ex.quantity += l.quantity;
+      else peVarianta.set(cheie, { product_id: l.product_id, variant_title: l.variant_title, quantity: l.quantity });
+    }
+  }
+  return { peProdus, peVarianta };
+}
+
+/**
+ * Stocul adus la zi cand EI au modificat comanda.
+ *
+ * ═══ ⚠ LINIILE SE RESCRIAU, STOCUL NU (24.08.2026) ═══
+ *
+ * `consuma_stoc_comanda_marketplace` e idempotenta prin `stoc_marketplace_la`: odata pus
+ * marcajul, raspunde `deja: true` si NU compara nimic. Corect pentru ce a fost scrisa —
+ * o a doua trecere peste aceeasi comanda n-are voie sa scada de doua ori.
+ *
+ * Dar liniile CHIAR se rescriu la o modificare venita de la ei: cateva randuri mai sus se
+ * actualizeaza `items`, `subtotal`, `total`, `vat_amount`. Stocul ramanea al vechilor
+ * linii, in doua feluri, amandoua tacute:
+ *
+ *   Un produs ADAUGAT pe o comanda deja preluata pleca din depozit fara sa fie scazut
+ *   vreodata. Magazinul propriu si celelalte canale vindeau mai departe ce nu mai era.
+ *
+ *   Un storno PARTIAL lasa bucati marcate „vandute" care erau de fapt pe raft si nu se
+ *   mai vindeau niciodata. Marfa ingropata, fara nicio urma.
+ *
+ * ⚠ Nu e o ipoteza: specificatia lor cere explicit amandoua („Adding a product to an
+ * existing order…", „Partial storno requires the order in status 4 and at least one
+ * product quantity reduced"), iar `storno_qty` si `initial_qty` sunt deja in raspunsul
+ * real al comenzilor magazinului.
+ *
+ * ⚠ RPC-ul nu atinge o comanda care inca nu si-a consumat stocul (acolo lucreaza calea
+ * obisnuita) si nici una care si-a ELIBERAT stocul: acolo marfa s-a intors pe raft, iar
+ * o ajustare ar scadea-o a doua oara pentru o comanda care nu mai exista.
+ */
+async function ajusteazaStocul(
+  admin: Db, ctx: ContextEmag, orderId: string, linii: LinieEdinio[],
+): Promise<void> {
+  const { peProdus, peVarianta } = grupeazaLinii(linii);
+
+  const { data, error } = await admin.rpc("ajusteaza_stoc_comanda_marketplace", {
+    p_order_id: orderId,
+    p_business_id: ctx.businessId,
+    p_produse: [...peProdus.entries()].map(([product_id, quantity]) => ({ product_id, quantity })) as never,
+    p_variante: [...peVarianta.values()] as never,
+  });
+
+  const r = data as { gasit?: boolean; schimbat?: boolean; lipsa?: unknown[] } | null;
+  if (error || r?.gasit !== true) {
+    await logError({
+      action: "emag/orders",
+      message: `ajustarea stocului n-a raspuns valid: ${error?.message ?? "raspuns gol"}`,
+      details: { orderId, raspuns: r },
+      businessId: ctx.businessId,
+      severity: "critical",
+    });
+    return;
+  }
+  if (!r.schimbat) return;
+
+  /* ⚠ Se scrie CE S-A SCHIMBAT, si numai atunci. O modificare de stoc venita de la ei e
+     rara si are urmari in depozit: fara urma, nimeni n-ar sti de ce s-au miscat cifrele. */
+  await logError({
+    action: "emag/orders",
+    message: "eMAG a modificat comanda; stocul a fost adus la zi",
+    details: { orderId, lipsa: r.lipsa ?? [] },
+    businessId: ctx.businessId,
+    severity: "info",
+  });
+}
+
+/**
  * Stocul comenzii, scazut o singura data.
  *
  * ⚠ NU SE SCADE DE MANA SI NU SE SCRIE `stoc_rezervat` DE AICI.
@@ -1151,19 +1247,7 @@ async function hartaOfertelor(
 async function consumaStocul(
   admin: Db, ctx: ContextEmag, orderId: string, linii: LinieEdinio[],
 ): Promise<"ok" | "esuat"> {
-  const peProdus = new Map<string, number>();
-  const peVarianta = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
-
-  for (const l of linii) {
-    if (!l.product_id || l.quantity <= 0) continue;
-    peProdus.set(l.product_id, (peProdus.get(l.product_id) ?? 0) + l.quantity);
-    if (l.variant_title) {
-      const cheie = `${l.product_id}|${l.variant_title}`;
-      const ex = peVarianta.get(cheie);
-      if (ex) ex.quantity += l.quantity;
-      else peVarianta.set(cheie, { product_id: l.product_id, variant_title: l.variant_title, quantity: l.quantity });
-    }
-  }
+  const { peProdus, peVarianta } = grupeazaLinii(linii);
 
   const { data, error } = await admin.rpc("consuma_stoc_comanda_marketplace", {
     p_order_id: orderId,

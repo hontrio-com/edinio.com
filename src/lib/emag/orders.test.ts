@@ -409,3 +409,45 @@ test("toate starile care intorc stocul sunt oprite la intrare", () => {
     );
   }
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MODIFICAREA UNEI COMENZI LA EI (24.08.2026)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("comanda deja stiuta isi AJUSTEAZA stocul, nu doar il reincearca", async () => {
+  /*
+   * ═══ LINIILE SE RESCRIAU, STOCUL NU ═══
+   *
+   * `consuma_stoc_comanda_marketplace` raspunde `deja: true` la a doua chemare si NU
+   * compara nimic — corect, altfel ar scadea de doua ori. Dar liniile CHIAR se rescriu
+   * cateva randuri mai sus (`items`, `subtotal`, `total`, `vat_amount`).
+   *
+   * Deci un produs adaugat de ei pe o comanda preluata pleca din depozit fara sa fie
+   * scazut vreodata, iar un storno partial lasa bucati marcate „vandute" care erau pe
+   * raft. In amandoua cazurile fiecare pas raporta reusit.
+   *
+   * ⚠ Ordinea conteaza: consumul INTAI (repara o prima incercare picata), ajustarea
+   * DUPA (aduce diferenta). Inversate, ajustarea ar compara cu un `stoc_rezervat` care
+   * inca nu exista.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/emag/orders.ts", "utf8");
+
+  const consum = sursa.indexOf("await consumaStocul(admin, ctx, ex.order_id, linii)");
+  const ajust = sursa.indexOf("await ajusteazaStocul(admin, ctx, ex.order_id, linii)");
+  assert.notEqual(consum, -1, "ramura comenzii stiute nu mai cheama consumul");
+  assert.notEqual(ajust, -1, "ramura comenzii stiute nu ajusteaza stocul la modificari");
+  assert.ok(consum < ajust, "ajustarea trebuie sa vina DUPA consum");
+});
+
+test("gruparea liniilor e aceeasi la consum si la ajustare", async () => {
+  /*
+   * ⚠ Daca cele doua ar aduna altfel, diferenta socotita de ajustare ar fi fata de
+   * altceva decat s-a consumat, iar stocul ar derapa la fiecare modificare. De aceea
+   * exista `grupeazaLinii` si nu doua bucle asemanatoare.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/emag/orders.ts", "utf8");
+  const cate = (sursa.match(/grupeazaLinii\(linii\)/g) ?? []).length;
+  assert.equal(cate, 2, "amandoua caile trebuie sa treaca prin aceeasi grupare");
+});

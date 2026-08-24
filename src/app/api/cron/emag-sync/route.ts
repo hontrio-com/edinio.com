@@ -27,7 +27,7 @@ import { urcaFacturaLaEmag, type Factura } from "@/lib/emag/facturi";
 import { aduRetururile } from "@/lib/emag/rma";
 import type { EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
 import type { OpEmag } from "@/lib/emag/queue";
-import { asteptareaUrmatoare, eVandabila } from "@/lib/emag/rute";
+import { asteptareaDupaPana, asteptareaUrmatoare, eVandabila } from "@/lib/emag/rute";
 import { ardeIncercare } from "@/lib/emag/errors";
 
 /**
@@ -107,7 +107,10 @@ interface ElementCoada {
   product_id: string | null;
   offer_id: string;
   op: OpEmag;
+  /** Refuzuri. Duce la abandon dupa `INCERCARI_MAXIM`. */
   attempts: number;
+  /** Pane trecatoare. Amana, dar NU abandoneaza niciodata. Vezi `asteptareaDupaPana`. */
+  pauze: number;
 }
 
 export async function GET(req: NextRequest) {
@@ -238,12 +241,19 @@ export async function GET(req: NextRequest) {
           duse++;
         } else {
           cazute++;
-          const incercari = (el.attempts ?? 0) + (ardeIncercare(rr.verdict as Parameters<typeof ardeIncercare>[0]) ? 1 : 0);
+          /* ⚠ Aceeasi despartire ca mai jos: o pana se numara in `pauze` si se asteapta
+             putin; un refuz arde o incercare si se asteapta mult. */
+          const arde = ardeIncercare(rr.verdict as Parameters<typeof ardeIncercare>[0]);
+          const incercari = (el.attempts ?? 0) + (arde ? 1 : 0);
+          const pauze = (el.pauze ?? 0) + (arde ? 0 : 1);
           await admin.from("emag_sync_queue").update({
             attempts: incercari,
+            pauze,
             last_error: rr.mesaj || null,
             revendicat_pana: null,
-            next_retry_at: new Date(Date.now() + asteptareaUrmatoare(incercari)).toISOString(),
+            next_retry_at: new Date(
+              Date.now() + (arde ? asteptareaUrmatoare(incercari) : asteptareaDupaPana(pauze)),
+            ).toISOString(),
           }).eq("id", el.id);
         }
         continue;
@@ -288,12 +298,28 @@ export async function GET(req: NextRequest) {
 
       if (r.verdict === "trecatoare") {
         /*
-         * ⚠ NU SE ARDE NICIO INCERCARE. Doar se elibereaza revendicarea, ca elementul
-         * sa poata fi luat la trecerea urmatoare. Numarate, cinci minute de 429 ar fi
-         * golit definitiv coada unui magazin — chiar incidentul de la Trendyol.
+         * ⚠ NU SE ARDE NICIO INCERCARE. `attempts` numara REFUZURI si duce la abandon
+         * dupa cinci; numarate acolo, cinci minute de 429 ar fi golit definitiv coada
+         * unui magazin — chiar incidentul de la Trendyol.
+         *
+         * ═══ ⚠ DAR NICI NU SE ELIBEREAZA PE LOC (24.08.2026) ═══
+         *
+         * Forma dinainte punea doar `revendicat_pana: null`, deci elementul era liber
+         * imediat: la o pana la ei sau la releul de IP fix, cronul lua in FIECARE MINUT
+         * aceleasi 30 de randuri si le trimitea iar. Documentatia lor spune ca si
+         * cererile invalide se numara in limita — bucla ardea chiar cele 3 cereri pe
+         * secunda prin care ar fi trebuit sa plece o miscare de stoc dupa o vanzare.
+         *
+         * `pauze` e al doilea contor, fara prag de abandon: o pana nu e vina elementului
+         * si nu trebuie sa-l scoata niciodata din coada.
          */
-        await admin.from("emag_sync_queue")
-          .update({ revendicat_pana: null, last_error: r.mesaj || null }).eq("id", el.id);
+        const pauze = (el.pauze ?? 0) + 1;
+        await admin.from("emag_sync_queue").update({
+          pauze,
+          revendicat_pana: null,
+          last_error: r.mesaj || null,
+          next_retry_at: new Date(Date.now() + asteptareaDupaPana(pauze)).toISOString(),
+        }).eq("id", el.id);
         continue;
       }
 

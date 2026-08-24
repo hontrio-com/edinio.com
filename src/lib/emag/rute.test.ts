@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { BUTON_ADU_OFERTELE } from "./etichete";
 import { test } from "node:test";
 import {
-  asteptareaUrmatoare, eVandabila, LOT_MAXIM, PRIORITATE_OP, rutaDeTrimitere,
+  asteptareaDupaPana, asteptareaUrmatoare, eVandabila, LOT_MAXIM, PRIORITATE_OP, rutaDeTrimitere,
   traducereaPoateBloca,
 } from "./rute";
 import { oferteUsoare, stocCuRezerva, stocuriDeTrimis } from "./mapping";
@@ -494,4 +494,51 @@ test("eMAG rute: o oferta care N-A ajuns niciodata acolo nu se retrage", () => {
      cerere trimisa pentru el ar fi fost refuzata cu un mesaj despre un id necunoscut. */
   const r = rutaDeTrimitere({ op: "retragere", existaLaEmag: false, autoSync: true, catalogCitit: true });
   assert.equal(r.fel, "nimic");
+});
+
+/* ── Pana trecatoare: se asteapta, dar nu se abandoneaza (24.08.2026) ──────── */
+
+test("o pana amana elementul: fara asta, aceleasi 30 de randuri plecau in fiecare minut", () => {
+  /*
+   * ⚠ Ramura „trecatoare" elibera randul PE LOC. La o pana la ei sau la releu, cronul
+   * lua din minut in minut aceleasi elemente si le trimitea iar — iar documentatia lor
+   * spune ca si cererile invalide se numara in limita. Bucla ardea chiar cele 3 cereri
+   * pe secunda prin care pleaca o miscare de stoc dupa o vanzare.
+   */
+  assert.ok(asteptareaDupaPana(1) > 0, "prima pana amana deja");
+});
+
+test("asteptarea dupa o pana creste, dar ramane mai scurta decat dupa un refuz", () => {
+  /*
+   * ⚠ Doua feluri de asteptare, si asta e tot rostul despartirii. Un refuz nu se repara
+   * singur: produsul caruia ii lipseste un camp e refuzat la fel si peste o ora. O pana
+   * se repara singura, si de obicei repede — se asteapta cat sa nu batem la usa inchisa,
+   * nu cat sa pierdem vanzari dupa ce s-a redeschis.
+   */
+  const p = [1, 2, 3, 4, 5].map(asteptareaDupaPana);
+  for (let i = 1; i < p.length; i++) assert.ok(p[i] > p[i - 1], `treapta ${i} nu creste`);
+  for (const n of [3, 4, 5]) {
+    assert.ok(asteptareaDupaPana(n) < asteptareaUrmatoare(n), `treapta ${n}`);
+  }
+});
+
+test("asteptarea dupa pana se plafoneaza: o pana lunga nu ingheata elementul pe ore", () => {
+  assert.equal(asteptareaDupaPana(99), asteptareaDupaPana(5));
+  assert.ok(asteptareaDupaPana(99) <= 30 * 60_000, "cel mult o jumatate de ora");
+});
+
+test("cronul amana la pana si NU arde o incercare", async () => {
+  /*
+   * ⚠ Amandoua deodata, si niciuna singura nu e de ajuns: fara amanare e bucla din
+   * minut in minut; cu incercarea arsa, cinci minute de 429 golesc definitiv coada unui
+   * magazin — chiar incidentul de la Trendyol.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8");
+  const i = sursa.indexOf('if (r.verdict === "trecatoare") {');
+  assert.notEqual(i, -1, "n-am gasit ramura trecatoare");
+  const ramura = sursa.slice(i, sursa.indexOf("continue;", i));
+  assert.ok(ramura.includes("next_retry_at"), "pana trebuie sa amane elementul");
+  assert.ok(ramura.includes("asteptareaDupaPana"), "cu asteptarea de pana, nu cu cea de refuz");
+  assert.ok(!ramura.includes("attempts:"), "o pana NU arde o incercare");
 });

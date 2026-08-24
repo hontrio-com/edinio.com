@@ -1669,6 +1669,7 @@ export type Database = {
           next_retry_at: string | null
           offer_id: string
           op: string
+          pauze: number
           prioritate: number
           product_id: string | null
           revendicat_pana: string | null
@@ -1683,6 +1684,7 @@ export type Database = {
           next_retry_at?: string | null
           offer_id: string
           op?: string
+          pauze?: number
           prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null
@@ -1697,6 +1699,7 @@ export type Database = {
           next_retry_at?: string | null
           offer_id?: string
           op?: string
+          pauze?: number
           prioritate?: number
           product_id?: string | null
           revendicat_pana?: string | null

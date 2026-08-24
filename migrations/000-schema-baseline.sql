@@ -4072,7 +4072,8 @@ create table if not exists public.emag_sync_queue (
   revendicat_pana timestamp with time zone,
   next_retry_at timestamp with time zone,
   abandonat_la timestamp with time zone,
-  prioritate smallint default 5 not null);
+  prioritate smallint default 5 not null,
+  pauze integer default 0 not null);
 
 create table if not exists public.email_automations (
   id uuid default gen_random_uuid() not null,

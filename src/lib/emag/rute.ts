@@ -238,6 +238,35 @@ export function asteptareaUrmatoare(incercari: number): number {
 }
 
 /**
+ * Cat se asteapta dupa o PANA, nu dupa un refuz.
+ *
+ * ═══ ⚠ DOUA INTREBARI DIFERITE, DOUA CONTOARE (audit 24.08.2026) ═══
+ *
+ * Verdictul „trecatoare" (429, timeout, 5xx, releul cazut) elibera randul FARA nicio
+ * amanare: `revendicat_pana: null` si atat. Deci la o pana la ei, cronul lua in fiecare
+ * MINUT aceleasi 30 de randuri si le trimitea iar.
+ *
+ * ⚠ Documentatia lor spune ca si cererile invalide se numara in limita. Bucla ardea
+ * chiar cele 3 cereri pe secunda prin care ar fi trebuit sa plece o miscare de stoc dupa
+ * o vanzare. Iar cu un timeout de 25 s, doua elemente blocate consumau singure toata
+ * trecerea si opreau capul cozii.
+ *
+ * ⚠ TREPTELE SUNT MAI SCURTE DECAT LA REFUZ, si asta e tot rostul separarii. Un refuz nu
+ * se repara singur — produsul caruia ii lipseste un camp va fi refuzat la fel si peste o
+ * ora. O pana se repara singura, si de obicei repede: se asteapta cat sa nu batem la usa
+ * inchisa, nu cat sa pierdem vanzari dupa ce s-a redeschis.
+ *
+ * ⚠ Si NU exista prag de abandon pe calea asta. O pana nu e vina elementului. Numarata
+ * ca refuz, cinci minute de 429 ar fi golit definitiv coada unui magazin — chiar
+ * incidentul de la Trendyol.
+ */
+export function asteptareaDupaPana(pauze: number): number {
+  const trepte = [60_000, 2 * 60_000, 5 * 60_000, 10 * 60_000, 30 * 60_000];
+  const i = Math.max(0, Math.min(trepte.length - 1, Math.floor(pauze) - 1));
+  return trepte[i];
+}
+
+/**
  * Cate elemente incap intr-o cerere, pe fiecare drum.
  *
  * ⚠ 50 E MAXIMUL LOR, SCRIS IN DOCUMENTATIE, SI NU E O RECOMANDARE. Peste el,

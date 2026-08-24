@@ -50,6 +50,7 @@ import {
 } from "@/lib/emag/types";
 import { traducereaPoateBloca } from "@/lib/emag/rute";
 import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
+import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
 import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -2051,4 +2052,132 @@ export async function jurnalCereriEmag(
   }));
 
   return { randuri, total: count ?? 0, pagina, pePagina: JURNAL_PE_PAGINA };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CENTRUL PROBLEMELOR (§64)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Câte rânduri se citesc ca să se facă grupele din text liber.
+ *
+ * ⚠ SE MĂRGINEȘTE, ȘI SE SPUNE PE ECRAN CÂND S-A ATINS MARGINEA.
+ *
+ * Un catalog cu zeci de mii de oferte cu probleme ar fi însemnat zeci de mii de
+ * rânduri citite la fiecare deschidere a panoului. Dar o margine TĂCUTĂ e mai rea
+ * decât una lată: „3 grupuri" calculat din primele 1000 de rânduri dintr-un catalog
+ * de 40.000 arată exact ca adevărul, și nu e.
+ *
+ * ⚠ Numărătorile pe stările de validare NU trec pe aici: ele sunt `count` exacte, pe
+ * index, fără să citească niciun rând.
+ */
+const PROBLEME_MAXIM_RANDURI = 1000;
+
+export interface CentruProblemeEcran {
+  grupuri: GrupProbleme[];
+  /** ⚠ Adevărat când grupele din text s-au făcut dintr-o parte, nu din tot. */
+  taiat: boolean;
+  /** Câte oferte au fost citite ca să se facă grupele din text. */
+  citite: number;
+}
+
+/**
+ * Ce e stricat, adunat pe feluri, ca să se repare o dată în loc de o sută.
+ *
+ * ═══ ⚠ TREI SURSE, CARE NU SE REPARĂ ÎN ACELAȘI LOC ═══
+ *
+ *   `emag`     — ei au respins ceva. Se repară în fișa produsului.
+ *   `edinio`   — n-am putut trimite: lipsește ceva la noi.
+ *   `legatura` — n-am ajuns la ei. Se reia singur; n-ai ce repara.
+ *
+ * Amestecate, comerciantul ar fi căutat în panoul greșit. De aceea sursa desparte
+ * grupele chiar și când textul e identic.
+ */
+export async function centrulProblemelorEmag(
+  businessId: string,
+): Promise<CentruProblemeEcran | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+
+  /*
+   * ⚠ NUMĂRĂTORI EXACTE pentru stările de validare, nu rânduri citite și numărate în
+   * JavaScript. PostgREST taie tăcut la 1000: un magazin cu 4000 de oferte respinse
+   * ar fi văzut „1000" și ar fi crezut că restul sunt în regulă.
+   */
+  const stariRele = Object.keys(VALIDARE_RA).map(Number);
+  const numaratori = await Promise.all(stariRele.map((s) =>
+    admin.from("emag_offers").select("*", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("validation_status", s)
+      .then((r) => ({ stare: s, cate: r.count ?? 0 }))));
+
+  /* Textul liber: al lor (`doc_errors`) și al nostru (`error`). */
+  const { data: randuri } = await admin.from("emag_offers")
+    .select("emag_id, doc_errors, error, deriva")
+    .eq("business_id", businessId)
+    .or("error.not.is.null,deriva.not.is.null,doc_errors.neq.[]")
+    .order("updated_at", { ascending: false })
+    .limit(PROBLEME_MAXIM_RANDURI);
+
+  /* Elementele abandonate din coadă: n-au ajuns niciodată la eMAG. */
+  const { data: abandonate } = await admin.from("emag_sync_queue")
+    .select("last_error, op")
+    .eq("business_id", businessId)
+    .not("abandonat_la", "is", null)
+    .limit(PROBLEME_MAXIM_RANDURI);
+
+  const necazuri: Necaz[] = [];
+
+  for (const n of numaratori) {
+    if (n.cate === 0) continue;
+    /* ⚠ Numărul se POARTĂ, nu se numără element cu element. Un magazin cu patruzeci de
+       mii de oferte respinse ar fi cerut altfel un tablou de patruzeci de mii de
+       elemente identice, construit în memorie doar ca gruparea să numere până acolo.
+       Nu se ține niciun id: n-am citit rândurile, și tocmai de aia numărătorile sunt
+       ieftine — dar starea are deja filtrul ei în lista de oferte. */
+    necazuri.push({
+      sursa: "emag",
+      cheie: `validare:${n.stare}`,
+      titlu: VALIDARE_RA[n.stare],
+      mesaj: VALIDARE_RA[n.stare],
+      cate: n.cate,
+    });
+  }
+
+  type RandProblema = { emag_id: number; doc_errors: unknown; error: string | null; deriva: unknown };
+  for (const r of (randuri ?? []) as RandProblema[]) {
+    for (const m of normalizeazaDocErrors(r.doc_errors)) {
+      necazuri.push({ sursa: "emag", mesaj: m, emagId: r.emag_id });
+    }
+    if (r.error) necazuri.push({ sursa: "edinio", mesaj: r.error, emagId: r.emag_id });
+
+    /* ⚠ Numai derivele la care S-A RENUNȚAT. Cele care încă se repară singure nu sunt
+       de făcut nimic cu ele — puse aici, ar fi umplut centrul cu treabă care se face
+       singură, și l-ar fi făcut pe om să nu se mai uite. */
+    const d = citesteMemoriaDerivei(r.deriva);
+    if (d?.renuntatLa) {
+      necazuri.push({
+        sursa: "emag",
+        cheie: "deriva-nereparata",
+        titlu: "eMAG nu acceptă prețul sau stocul pe care îl trimitem",
+        mesaj: d.campuri.map((c) => `${c.camp}: la tine ${c.laNoi}, pe eMAG ${c.laEi}`).join(" · "),
+        emagId: r.emag_id,
+      });
+    }
+  }
+
+  for (const a of (abandonate ?? []) as { last_error: string | null; op: string }[]) {
+    if (!a.last_error) continue;
+    /* ⚠ Sursa e `edinio`: un element abandonat n-a mai ajuns la ei deloc. Pus pe
+       `emag`, omul ar fi căutat reparația în panoul lor, unde nu e nimic de găsit. */
+    necazuri.push({ sursa: "edinio", mesaj: a.last_error });
+  }
+
+  const citite = (randuri ?? []).length;
+  return {
+    grupuri: grupeaza(necazuri),
+    taiat: citite >= PROBLEME_MAXIM_RANDURI,
+    citite,
+  };
 }

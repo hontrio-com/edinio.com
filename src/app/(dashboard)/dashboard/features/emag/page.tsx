@@ -6,6 +6,7 @@ import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { EmagClient } from "@/components/dashboard/EmagClient";
 import { EmagCategoryMapping } from "@/components/dashboard/EmagCategoryMapping";
 import { EmagListings } from "@/components/dashboard/EmagListings";
+import { EmagProbleme } from "@/components/dashboard/EmagProbleme";
 import { EmagReturns } from "@/components/dashboard/EmagReturns";
 import { EmagJurnal } from "@/components/dashboard/EmagJurnal";
 import { getEmagStatus } from "@/lib/actions/emag.actions";
@@ -76,6 +77,10 @@ async function ContinutEmag({ businessId }: { businessId: string }) {
       {conectat && (
         <>
           <EmagCategoryMapping businessId={businessId} />
+          {/* ⚠ DEASUPRA listei, si se ascunde singur cand nu e nimic. Rostul lui e sa
+              scuteasca citirea listei rand cu rand — pus DEDESUBT, ar fi fost gasit
+              abia dupa ce omul face chiar lucrul pe care centrul il inlocuieste. */}
+          <EmagProbleme businessId={businessId} />
           <EmagListings businessId={businessId} />
           {/* Se ascunde singur cand nu e niciun retur: o carte goala nu spune nimic. */}
           <EmagReturns businessId={businessId} />

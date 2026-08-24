@@ -43,6 +43,14 @@ export function EmagReturns({ businessId }: { businessId: string }) {
         return;
       }
       setRanduri(r.randuri);
+      /* ⚠ Trunchierea SE SPUNE. Un retur nevazut inseamna marfa care se intoarce fara ca
+         cineva sa stie, si un client care asteapta banii. */
+      if (r.atinsPlafonul) {
+        toast.warning(
+          `S-au adus cele mai noi ${r.atinsPlafonul} retururi. Ai mai multe; pe cele vechi ` +
+          "le vezi în panoul eMAG.",
+        );
+      }
     });
   }
 

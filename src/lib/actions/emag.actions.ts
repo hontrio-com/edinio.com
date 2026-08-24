@@ -1486,6 +1486,9 @@ export interface FiltruOferteEcran {
 
 const OFERTE_PE_PAGINA = 50;
 
+/** ⚠ Cate retururi aduce ecranul. Trunchierea SE SPUNE — vezi `retururileEmag`. */
+const RETURURI_PE_ECRAN = 100;
+
 /**
  * Ofertele magazinului, pentru ecran.
  *
@@ -1997,7 +2000,14 @@ export interface RandReturEcran {
  */
 export async function listaRetururiEmag(
   businessId: string,
-): Promise<{ randuri: RandReturEcran[] } | { error: string }> {
+): Promise<
+  | {
+      randuri: RandReturEcran[];
+      /** S-au adus primele N si atat, fiindca sunt mai multe. ⚠ Se ARATA. */
+      atinsPlafonul?: number;
+    }
+  | { error: string }
+> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
 
@@ -2006,7 +2016,7 @@ export async function listaRetururiEmag(
     .select("emag_rma_id, emag_order_id, order_id, request_status, return_reason, return_type, products, awbs, raw, updated_at")
     .eq("business_id", businessId)
     .order("updated_at", { ascending: false })
-    .limit(100);
+    .limit(RETURURI_PE_ECRAN);
 
   if (error) return { error: error.message };
 
@@ -2099,7 +2109,14 @@ export async function listaRetururiEmag(
     actualizat: r.updated_at,
   }));
 
-  return { randuri };
+  /*
+   * ⚠ TRUNCHIEREA SE SPUNE, ca peste tot in casa.
+   *
+   * Ecranul aduce cele mai noi 100 de retururi. Un magazin cu mai multe nu le vedea pe
+   * cele vechi si nimic nu-l anunta — iar un retur nevazut inseamna marfa care se
+   * intoarce fara ca cineva sa stie, si un client care asteapta banii.
+   */
+  return { randuri, atinsPlafonul: randuri.length >= RETURURI_PE_ECRAN ? RETURURI_PE_ECRAN : undefined };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

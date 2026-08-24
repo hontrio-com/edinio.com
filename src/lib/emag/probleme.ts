@@ -54,7 +54,18 @@ export interface GrupProbleme {
  */
 export const VALIDARE_RA: Record<number, string> = {
   2: "Așteaptă aprobarea mărcii",
-  3: "Așteaptă verificarea EAN-ului",
+  /*
+   * ═══ ⚠ `3` A IEȘIT DE AICI (24.08.2026) ═══
+   *
+   * `3` e în `EMAG_VALIDARE_VANDABILA`: documentația lor spune că o ofertă în starea
+   * asta SE VINDE. Numărată drept problemă, apărea în centrul de necazuri alături de
+   * documentații respinse și oferte blocate — 47 din cele 201 arătate, iar grupele fiind
+   * ordonate descrescător putea ajunge chiar în capul listei.
+   *
+   * ⚠ Comerciantul ar fi umblat la produse care se vând, căutând ce să repare la ele.
+   * Un centru de probleme care arată lucruri în regulă se învață să fie ignorat, iar
+   * atunci nu mai ajută nici la cele adevărate.
+   */
   4: "Așteaptă verificarea documentației",
   5: "Marcă respinsă de eMAG",
   6: "EAN respins de eMAG",

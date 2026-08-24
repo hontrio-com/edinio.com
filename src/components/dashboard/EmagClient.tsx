@@ -376,10 +376,15 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
                 ? "ofertă are pe eMAG altceva decât trimitem noi"
                 : "oferte au pe eMAG altceva decât trimitem noi"}
             </p>
+            {/* ⚠ „Se repară singure" numai dacă Edinio chiar conduce câmpul. Cu sursa pe
+                eMAG, nu se încearcă nimic niciodată, iar propoziția asta l-ar pune să
+                aștepte o reparație pe care chiar el a oprit-o. */}
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Prețul sau stocul de acolo nu mai e cel din Edinio. Se repară singure la
-              următoarele treceri; le vezi una câte una în lista de oferte, la
-              „Doar cu probleme”.
+              Prețul sau stocul de acolo nu mai e cel din Edinio.{" "}
+              {status.derivaPret === "edinio" || status.derivaStoc === "edinio"
+                ? "Cele pe care le conduce Edinio se repară singure la următoarele treceri; "
+                : "Ai ales ca eMAG să conducă și prețul, și stocul, deci nu se trimite nimic de la noi. "}
+              le vezi una câte una în lista de oferte, la „Doar cu probleme”.
             </p>
           </div>
         )}

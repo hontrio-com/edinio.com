@@ -1569,6 +1569,8 @@ export interface RandOfertaEcran {
     campuri: { camp: "pret" | "stoc"; laNoi: number; laEi: number }[];
     /** ⚠ Adevarat cand s-au terminat incercarile. Atunci nu se mai trimite nimic. */
     renuntat: boolean;
+    /** Cine conduce fiecare camp. ⚠ Cu „emag", deriva NU se repara niciodata. */
+    sursa: { pret: "edinio" | "emag"; stoc: "edinio" | "emag" };
     /** De cand se vede diferenta, ISO. */
     din: string;
   } | null;
@@ -1626,6 +1628,9 @@ export async function listaOferteEmag(
   if ("error" in g) return { error: g.error };
 
   const admin = createAdminClient();
+  /* ⚠ Se citeste config-ul ca sa se stie CINE conduce fiecare camp: cu sursa pe eMAG,
+     deriva nu se repara niciodata, si randul trebuie sa spuna asta. */
+  const config = await loadConfig(businessId);
   const pagina = Math.max(1, Math.floor(filtru.pagina ?? 1));
   const de_la = (pagina - 1) * OFERTE_PE_PAGINA;
 
@@ -1769,7 +1774,21 @@ export async function listaOferteEmag(
       deriva: (() => {
         const m = citesteMemoriaDerivei(r.deriva);
         if (!m) return null;
-        return { campuri: m.campuri, renuntat: m.renuntatLa != null, din: m.prima };
+        /*
+         * ⚠ SURSA MERGE PE RAND, si nu e decor.
+         *
+         * Cand comerciantul a ales „eMAG conduce" pentru un camp, deriva NU se repara
+         * niciodata: `deReparat` iese goala, nu se incearca nimic, iar marcajul de
+         * renuntare nici nu se aprinde. Fara valoarea asta pe rand, ecranul ii scria
+         * „Se repara singur la urmatoarele treceri" si il punea sa astepte o reparatie
+         * pe care chiar el o oprise, fara sa stie ca asta a oprit.
+         */
+        return {
+          campuri: m.campuri,
+          renuntat: m.renuntatLa != null,
+          din: m.prima,
+          sursa: { pret: sursaAdevarului(config.deriva_pret), stoc: sursaAdevarului(config.deriva_stoc) },
+        };
       })(),
       concurenta: (r.number_of_offers ?? 0) > 1
         ? {

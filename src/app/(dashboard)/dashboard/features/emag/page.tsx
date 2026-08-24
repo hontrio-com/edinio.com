@@ -16,6 +16,21 @@ import { getEmagStatus } from "@/lib/actions/emag.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
+ * ⚠ NEDECLARAT, PAGINA SE TAIA LA IMPLICIT (24.08.2026)
+ *
+ * Casa o declară în altă parte (`orders/page.tsx:27`), dar aici lipsea. Iar pagina asta
+ * face, la o singură încărcare: starea contului, numărătoarea ofertelor pe stări, lista
+ * paginată, centrul de probleme, produsele nepublicate, retururile, campaniile și
+ * facturile de la ei — unele cu drum până la eMAG, prin releul de IP fix.
+ *
+ * ⚠ La contul măsurat, importul celor 3.754 de oferte a mers în 1,38 s, deci marja e
+ * subțire, nu ruptă. Dar se subțiază cu fiecare produs adăugat, iar când se rupe, se
+ * rupe la comerciantul cu cel mai mare catalog — adică exact cel căruia îi pasă cel mai
+ * mult. Iar tăierea nu arată ca o eroare de cod, ci ca „panoul nu se încarcă".
+ */
+export const maxDuration = 300;
+
+/**
  * eMAG Marketplace.
  *
  * Antetul pleaca imediat, starea curge dupa el — aceeasi forma ca la About You, si

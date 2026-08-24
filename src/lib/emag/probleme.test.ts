@@ -1,5 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
+import { EMAG_VALIDARE_VANDABILA } from "./types";
+import { eRespinsaDeEmag } from "./motive";
 import {
   grupeaza, tiparulMesajului, VALIDARE_RA, OFERTE_PE_GRUP, type Necaz,
 } from "./probleme";
@@ -126,11 +128,35 @@ test("eMAG probleme: starile BUNE nu sunt probleme", () => {
    * centru, un catalog perfect sanatos ar fi aratat sute de „probleme" care nu sunt —
    * iar omul ar fi invatat sa nu se mai uite la ecranul asta deloc.
    */
-  for (const bun of [1, 9, 11]) {
+  /*
+   * ⚠ `3` A TRECUT AICI pe 24.08.2026, si proba veche il tinea printre cele rele.
+   *
+   * `3` e in `EMAG_VALIDARE_VANDABILA`: documentatia lor spune ca oferta SE VINDE in
+   * starea asta. Numarat ca problema, aparea langa documentatii respinse si oferte
+   * blocate — 47 din cele 201 aratate, iar grupele fiind ordonate descrescator putea
+   * ajunge in capul listei. Omul ar fi umblat la produse care se vand.
+   */
+  for (const bun of [1, 3, 9, 11]) {
     assert.equal(VALIDARE_RA[bun], undefined, `starea ${bun} nu e o problema`);
   }
-  for (const rau of [2, 3, 4, 5, 6, 8, 10, 12]) {
+  for (const rau of [2, 4, 5, 6, 8, 10, 12]) {
     assert.equal(typeof VALIDARE_RA[rau], "string", `starea ${rau} e o problema`);
+  }
+
+  /*
+   * ⚠ Legatura se face pe multimile din `types.ts` si `motive.ts`, nu pe liste scrise de
+   * mana: daca cineva schimba acolo ce se vinde, proba de aici cade, nu ecranul.
+   *
+   * ⚠ SI RESPINSA BATE VANDABILA, ca in `deCeNuSeVinde`. `12` e in AMANDOUA multimile:
+   * „actualizare respinsa" — oferta veche se mai vinde, dar schimbarea a fost refuzata,
+   * si chiar aia are omul de reparat. Cerinta e „vandabila SI nerespinsa".
+   */
+  for (const vandabil of EMAG_VALIDARE_VANDABILA) {
+    if (eRespinsaDeEmag(vandabil)) continue;
+    assert.equal(
+      VALIDARE_RA[vandabil], undefined,
+      `starea ${vandabil} se vinde si nu e respinsa, deci n-are ce cauta in centrul de probleme`,
+    );
   }
 });
 

@@ -244,14 +244,33 @@ export function EmagListings({ businessId }: { businessId: string }) {
    UN RÂND
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const CULOARE_STARE: Record<string, string> = {
-  live: "bg-primary/10 text-primary",
-  sent: "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200",
-  queued: "bg-muted text-muted-foreground",
-  imported: "bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-200",
-  error: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200",
-  withdrawn: "bg-muted text-muted-foreground",
-  draft: "bg-muted text-muted-foreground",
+/**
+ * Culoarea bulinei, din ADEVĂRUL LOR, nu din starea noastră.
+ *
+ * ═══ ⚠ BULINA ȘI TEXTUL DE PE ACELAȘI RÂND SE CONTRAZICEAU (24.08.2026) ═══
+ *
+ * Textul venea din `deCeNuSeVinde` — verdictul lor. Culoarea venea din `emag_offers.status`
+ * — starea noastră, „am trimis-o". Deci o ofertă RESPINSĂ de eMAG purta bulina albastră
+ * „în lucru", identică cu a celor 3.445 care nu cer nimic. Măsurat: 154 de rânduri așa.
+ *
+ * ⚠ Iar roșul nu se aprindea NICIODATĂ: `status = 'error'` înseamnă că trimiterea NOASTRĂ
+ * a picat, iar tabela are zero rânduri așa. Culoarea de alarmă a integrării era, practic,
+ * cod mort — pe un ecran unde omul caută tocmai ce e stricat.
+ *
+ * Acum culoarea se ia din aceeași sursă ca textul, deci nu se mai pot bate cap în cap.
+ */
+const CULOARE_VERDICT: Record<string, string> = {
+  "Se vinde pe eMAG": "bg-primary/10 text-primary",
+  "Respins de eMAG": "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200",
+  "Preț neacceptat de eMAG": "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200",
+  "Stare necunoscută la eMAG": "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200",
+  /* ⚠ Chihlimbariu, nu rosu: nu e stricat, dar CERE o apasare de-a lui in panoul eMAG. */
+  "Scoasă din vânzare la eMAG": "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  "Oprită la eMAG": "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  "Fără stoc la eMAG": "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  /* ⚠ Fara culoare: chiar n-are nimic de facut, si o culoare l-ar chema degeaba. */
+  "În validare la eMAG": "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200",
+  "Încă necitit de la eMAG": "bg-muted text-muted-foreground",
 };
 
 function RandOferta({
@@ -404,7 +423,8 @@ function RandOferta({
               </span>
             )}
             <span
-              className={`rounded-full px-2 py-0.5 text-xs ${CULOARE_STARE[rand.stare] ?? "bg-muted"}`}
+              /* ⚠ Dupa VERDICTUL lor, ca si textul de alaturi. Vezi `CULOARE_VERDICT`. */
+              className={`rounded-full px-2 py-0.5 text-xs ${CULOARE_VERDICT[rand.stareEticheta] ?? "bg-muted"}`}
               /* ⚠ Îndrumarea stă în `title`, nu pe rând: e utilă când o cauți, dar pusă pe
                  fiecare din cele câteva mii de rânduri ar fi făcut lista de necitit. */
               title={rand.indrumare || undefined}
@@ -454,10 +474,26 @@ function RandOferta({
                   </li>
                 ))}
               </ul>
+              {/*
+                ═══ ⚠ „SE REPARĂ SINGUR" ERA FALS PENTRU JUMĂTATE DIN CAZURI ═══
+
+                Sursa adevărului se alege PE CÂMP, iar comerciantul poate spune „prețul îl
+                conduce eMAG" — chiar panoul îl invită să aleagă. Când alege asta,
+                `deReparat` iese GOALĂ: nu se încearcă nimic, niciodată, iar marcajul de
+                renunțare nici nu se aprinde.
+
+                ⚠ Deci rândul îi scria „Se repară singur la următoarele treceri" pentru o
+                derivă care nu se va repara NICIODATĂ. Aștepta o reparație pe care chiar
+                el o oprise, fără să știe că asta a oprit.
+
+                Acum se spune care din cele trei e cazul.
+              */}
               <p className="mt-1 text-xs text-muted-foreground">
                 {rand.deriva.renuntat
                   ? "eMAG nu acceptă schimbarea. Nu se mai încearcă automat, uită-te în panoul lor."
-                  : "Se repară singur la următoarele treceri."}
+                  : rand.deriva.campuri.every((d) => rand.deriva!.sursa[d.camp] !== "edinio")
+                    ? "Ai ales ca eMAG să conducă valoarea asta, deci nu se trimite nimic de la noi. Schimb-o în panoul lor, sau treci sursa pe Edinio în setări."
+                    : "Se repară singur la următoarele treceri."}
               </p>
             </div>
           )}

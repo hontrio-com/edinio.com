@@ -149,3 +149,23 @@ test("marcajele cautate exista cu adevarat in configurare", () => {
     );
   }
 });
+
+test("notificarea de AWB cade ANUME pe fereastra de comenzi", () => {
+  /*
+   * ⚠ Nu e o scapare, e o hotarare — si e scrisa ca atare in `notificari.ts`.
+   *
+   * O schimbare de AWB vine odata cu o schimbare de stare a COMENZII, iar aceea se vede
+   * in `order/read` cu `modifiedAfter`: plasa de dinainte o prinde. Deosebirea fata de
+   * RETUR e tocmai asta — un retur NU apare niciodata in `order/read`.
+   *
+   * ⚠ Si nu tinem noi starea curierului: `emag_awb` se scrie la emitere si nu se
+   * improspateaza de nicaieri. O ramura care „ar actualiza AWB-ul" ar fi trebuit sa
+   * inventeze intai ce actualizeaza — adica o ramura goala care pare ca face ceva.
+   */
+  const n = citesteNotificarea({ resource: "AWB", emag_id: 555 });
+  assert.equal(n.fel === "retur" || n.fel === "documentatie", false,
+    "AWB-ul n-are cale proprie, si nu trebuie sa nimereasca pe alta");
+
+  const sursa = readFileSync("src/lib/emag/notificari.ts", "utf8");
+  assert.match(sursa, /NOTIFICARILE DE AWB/, "hotararea trebuie scrisa, nu dedusa din lipsa");
+});

@@ -31,8 +31,25 @@ export type Notificare =
   | { fel: "comanda"; id: number }
   | { fel: "retur"; id: number }
   | { fel: "documentatie"; id: number }
-  | { fel: "awb"; id: number }
-  /** Nu s-a recunoscut nimic. Se cade pe fereastra scurta de comenzi, ca pana acum. */
+  /**
+   * Nu s-a recunoscut nimic. Se cade pe fereastra scurta de comenzi, ca pana acum.
+   *
+   * ═══ ⚠ SI AICI INTRA, ANUME, SI NOTIFICARILE DE AWB ═══
+   *
+   * eMAG trimite notificari si pentru starea AWB-ului. N-au cale proprie, si NU din
+   * scapare: o schimbare de AWB vine odata cu o schimbare de stare a COMENZII, iar aceea
+   * se vede foarte bine in `order/read` cu `modifiedAfter` — adica exact ce face plasa de
+   * dinainte.
+   *
+   * ⚠ Deosebirea fata de RETUR e tocmai asta: un retur NU apare niciodata in `order/read`,
+   * deci pentru el plasa nu facea nimic. Pentru AWB face.
+   *
+   * ⚠ Si nu tinem noi starea curierului: `emag_awb` se scrie la emitere si nu se
+   * improspateaza de nicaieri. O cale rapida care „ar actualiza AWB-ul" ar fi trebuit sa
+   * inventeze intai ce anume actualizeaza. Un fel de notificare pentru care nu exista
+   * nimic de facut e mai bine sa n-aiba ramura, decat sa aiba una goala care pare ca face
+   * ceva.
+   */
   | { fel: "necunoscut" };
 
 /** Toate felurile in care poate veni un numar de la ei. */
@@ -103,11 +120,6 @@ export function citesteNotificarea(corp: unknown): Notificare {
   if (/documentation|documentatie|documentație/.test(text)) {
     const id = primulNumar(tot, ["product_id", "productId", "offer_id", "offerId", "id"]);
     if (id != null) return { fel: "documentatie", id };
-  }
-
-  if (/\bawb\b/.test(text)) {
-    const id = primulNumar(tot, ["emag_id", "emagId", "awb_id", "awbId", "id"]);
-    if (id != null) return { fel: "awb", id };
   }
 
   const idComanda = primulNumar(tot, ["order_id", "orderId", "emag_order_id", "id"]);

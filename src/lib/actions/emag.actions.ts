@@ -582,8 +582,12 @@ export async function getEmagCoteTva(
    * gresit nu da eroare, oferta se vinde cu TVA-ul altcuiva si se afla la
    * contabilitate.
    */
-  const { data } = await createAdminClient()
+  /* ⚠ Citita orbeste, o cadere dadea `rata = 0`, iar `alegeCotaTva` sugera cota de ZERO.
+     Comerciantul apasa pe ce i se sugera, iar ofertele plecau la eMAG cu TVA 0 — se
+     publica, se vinde, si se afla din marja. */
+  const { data, error: eCota } = await createAdminClient()
     .from("store_settings").select("vat_rate").eq("business_id", businessId).single();
+  if (eCota) return { error: "Cota de TVA a magazinului nu s-a putut citi. Încearcă din nou." };
   const rata = Number(data?.vat_rate ?? 0);
   const potrivita = alegeCotaTva(cote, rata);
 
@@ -1985,8 +1989,13 @@ async function dimensiunileComenzii(
   businessId: string,
   orderId: string,
 ): Promise<PropunereDimensiuni> {
-  const { data: order } = await admin.from("orders")
+  /* ⚠ Lista goala inseamna „comanda n-are produse", iar coletul ar pleca fara continut si
+     fara greutate. Citita orbeste, o cadere a bazei arata exact la fel. */
+  const { data: order, error: eComanda } = await admin.from("orders")
     .select("items").eq("business_id", businessId).eq("id", orderId).maybeSingle();
+  /* ⚠ Tipul are deja raspunsul potrivit: „nu se stie", cu motivul scris. Ecranul lasa
+     campurile goale si spune de ce, in loc sa propuna niste masuri inventate. */
+  if (eComanda) return { fel: "nu_se_stie", motiv: "Comanda nu s-a putut citi. Încearcă din nou." };
 
   const items = Array.isArray(order?.items) ? (order.items as unknown[]) : [];
   const linii: LinieColet[] = items.map((x) => {
@@ -2000,8 +2009,13 @@ async function dimensiunileComenzii(
   const ids = [...new Set(linii.map((l) => l.productId).filter((x): x is string => !!x))];
   if (ids.length === 0) return dimensiuniPropuse(linii, new Map());
 
-  const { data: produse } = await admin.from("products")
+  /* ⚠ Fara dimensiuni, coletul pleaca cu masuri lipsa — iar curierul factureaza dupa
+     volumetrie. O cadere a bazei arata identic cu „produsele n-au dimensiuni completate". */
+  const { data: produse, error: eProduse } = await admin.from("products")
     .select("id, page_sections").eq("business_id", businessId).in("id", ids);
+  if (eProduse) {
+    return { fel: "nu_se_stie", motiv: "Dimensiunile produselor nu s-au putut citi. Încearcă din nou." };
+  }
 
   const catalog = new Map<string, { length?: number | null; width?: number | null; height?: number | null }>();
   for (const p of (produse ?? []) as { id: string; page_sections: unknown }[]) {
@@ -2056,16 +2070,27 @@ export async function pregatireAwbEmag(
     details?: { locker_id?: string; locker_name?: string };
   };
 
-  const { data: awb } = await admin.from("emag_awb")
+  const { data: awb, error: eAwb } = await admin.from("emag_awb")
     .select("emag_id, awb_number").eq("business_id", businessId).eq("order_id", orderId)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  /* ⚠ `null` inseamna „comanda n-are inca AWB", iar ecranul ofera atunci emiterea unuia.
+     Peste o citire picata, comerciantul ar fi emis al DOILEA AWB pentru aceeasi comanda. */
+  if (eAwb) return { error: "AWB-ul comenzii nu s-a putut citi. Încearcă din nou." };
 
   const existent = awb as { emag_id: number; awb_number: string | null } | null;
 
   /* ⚠ Comanda NOASTRA, pentru ramburs. Vezi nota din `emiteAwbEmag`: `cashed_cod` e cat
      s-a incasat deja, deci zero inainte de livrare. */
-  const { data: comandaPentruRamburs } = await admin.from("orders")
+  const { data: comandaPentruRamburs, error: eRamburs } = await admin.from("orders")
     .select("payment_status, total").eq("id", orderId).eq("business_id", businessId).maybeSingle();
+  /*
+   * ⚠ AICI SE PIERD BANI, SI S-AU MAI PIERDUT O DATA.
+   *
+   * `rambursDeIncasat({})` intoarce zero. Deci o citire picata face ca AWB-ul sa plece cu
+   * ramburs ZERO pentru o comanda cu plata la livrare: curierul livreaza si nu incaseaza
+   * nimic. Chiar comanda #0033, 105,50 lei plecati fara nicio cale de incasare.
+   */
+  if (eRamburs) return { error: "Comanda nu s-a putut citi pentru ramburs. Încearcă din nou." };
 
   const baza = {
     emagOrderId: r.emag_order_id,
@@ -2222,8 +2247,10 @@ export async function listaRetururiEmag(
 
   const adrese = new Map<string, { strada: string; localitate: number | null }>();
   if (idComenziDeCitit.length > 0) {
-    const { data: comenzi } = await admin.from("emag_orders")
+    /* ⚠ Lista goala inseamna „nicio adresa", iar AWB-urile ar pleca fara destinatar. */
+    const { data: comenzi, error: eComenzi } = await admin.from("emag_orders")
       .select("order_id, raw").eq("business_id", businessId).in("order_id", idComenziDeCitit);
+    if (eComenzi) return { error: "Adresele comenzilor nu s-au putut citi. Încearcă din nou." };
     for (const c of (comenzi ?? []) as { order_id: string | null; raw: unknown }[]) {
       if (!c.order_id) continue;
       const cl = (((c.raw ?? {}) as { customer?: Record<string, unknown> }).customer ?? {}) as Record<string, unknown>;
@@ -2709,7 +2736,16 @@ export async function centrulProblemelorEmag(
       .then((r) => ({ stare: s, cate: r.count ?? 0 }))));
 
   /* Textul liber: al lor (`doc_errors`) și al nostru (`error`). */
-  const { data: randuri } = await admin.from("emag_offers")
+  /*
+   * ═══ ⚠ UN PANOU DE NECAZURI CARE IESE GOL LA O CADERE E CEL MAI RAU DINTRE TOATE ═══
+   *
+   * Citite orbeste, cele doua liste de mai jos ies goale la o pana a bazei — iar ecranul
+   * scrie atunci „nu e nimic de reparat" unui magazin care are 152 de oferte respinse.
+   *
+   * Un raspuns increzator si fals, chiar in locul in care comerciantul vine sa afle
+   * adevarul. Mai bine o eroare limpede decat o liniste mincinoasa.
+   */
+  const { data: randuri, error: eRanduri } = await admin.from("emag_offers")
     .select("emag_id, doc_errors, issues, error, deriva")
     .eq("business_id", businessId)
     .or("error.not.is.null,deriva.not.is.null,doc_errors.neq.[],issues.neq.[]")
@@ -2717,11 +2753,15 @@ export async function centrulProblemelorEmag(
     .limit(PROBLEME_MAXIM_RANDURI);
 
   /* Elementele abandonate din coadă: n-au ajuns niciodată la eMAG. */
-  const { data: abandonate } = await admin.from("emag_sync_queue")
+  const { data: abandonate, error: eAbandonate } = await admin.from("emag_sync_queue")
     .select("last_error, op")
     .eq("business_id", businessId)
     .not("abandonat_la", "is", null)
     .limit(PROBLEME_MAXIM_RANDURI);
+
+  if (eRanduri || eAbandonate) {
+    return { error: "Lista de probleme nu s-a putut citi. Reîncarcă pagina." };
+  }
 
   const necazuri: Necaz[] = [];
 
@@ -3045,7 +3085,9 @@ export async function propuneInCampanieEmag(
    * Aceeasi regula ca la reconciliere si la feedul de stocuri: verdictul se citeste
    * din ce s-a potrivit, iar ce n-a incaput se SPUNE.
    */
-  const { data: randuri } = await admin.from("emag_offers")
+  /* ⚠ Lista goala inseamna „n-ai nicio ofertă de propus", si asta e o hotarare. O citire
+     picata n-are voie s-o ia in locul comerciantului. */
+  const { data: randuri, error: eOferte } = await admin.from("emag_offers")
     .select("emag_id, variant_title, product_id")
     .eq("business_id", businessId)
     .eq("status", "live" satisfies StareOferta)
@@ -3053,6 +3095,8 @@ export async function propuneInCampanieEmag(
     .not("product_id", "is", null)
     .order("emag_id", { ascending: true })
     .limit(OFERTE_PE_PROPUNERE);
+
+  if (eOferte) return { error: "Ofertele nu s-au putut citi. Încearcă din nou." };
 
   type Rand = { emag_id: number; variant_title: string | null; product_id: string | null };
   const brute = (randuri ?? []) as Rand[];

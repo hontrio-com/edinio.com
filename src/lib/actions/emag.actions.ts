@@ -756,7 +756,20 @@ export async function importaDinEmag(
     void logError({
       action: "emag.import",
       message: mesaj,
-      details: { businessId },
+      /*
+       * ⚠ SI STIVA, NU DOAR MESAJUL. Pe 24.08.2026, importul a picat cu „invalid input
+       * syntax for type integer: «true»" si atat: niciun fisier, nicio linie, niciun
+       * pas. Mesajul singur spune CE, nu UNDE — iar aici „unde" erau opt locuri
+       * deopotriva de plauzibile, fiindca importul citeste si scrie in patru tabele.
+       *
+       * ⚠ Se taie la 2000 de caractere: o stiva intreaga in `error_logs` umple ecranul
+       * de erori si il face nefolositor tocmai in ziua in care e nevoie de el.
+       */
+      details: {
+        businessId,
+        creeazaProduse,
+        stiva: e instanceof Error ? (e.stack ?? "").slice(0, 2000) : String(e).slice(0, 2000),
+      },
       severity: "error",
     });
     return { error: mesaj };

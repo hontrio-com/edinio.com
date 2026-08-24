@@ -293,3 +293,37 @@ test("eMAG import: campurile goale devin `null`, nu siruri goale", () => {
   assert.equal(o.part_number, null);
   assert.deepEqual(o.ean, ["594"], "EAN-urile goale se scot inca de la citire");
 });
+
+/* ── Marcajul nu se scrie inaintea randurilor (24.08.2026) ─────────────────── */
+
+test("eMAG import: `catalog_citit_la` se scrie DUPA `scrieOferte`, nu inainte", async () => {
+  /*
+   * ═══ PROBA UNEI ORDINI, FIINDCA ORDINEA E CHIAR REGULA ═══
+   *
+   * `catalog_citit_la` deschide publicarea. Prima forma il scria imediat dupa citirea
+   * catalogului, cu argumentul ca el raspunde doar la „le-am vazut catalogul?”.
+   *
+   * Argumentul s-a darâmat in aceeasi zi: `scrieOferte` a picat pe un `ownership: true`,
+   * marcajul ramasese scris, si publicarea s-a DESCHIS cu zero oferte cunoscute — adica
+   * exact starea din care s-au nascut cele 208 apasari de dimineata.
+   *
+   * Intrebarea la care raspunde marcajul nu e „am citit”, ci „STIM ce e la ei”. A sti
+   * inseamna randuri scrise, nu un tablou care a trecut prin memorie.
+   *
+   * ⚠ Se probeaza pe sursa, nu pe comportament, si dinadins: ordinea a doua efecte in
+   * aceeasi functie nu se vede din afara decat facand sa cada chiar scrierea — adica
+   * mimand PostgREST. O proba pe text prinde regresia in intregime si nu minte despre
+   * ce verifica.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/emag/import-run.ts", "utf8");
+
+  const scrierea = sursa.indexOf("await scrieOferte(");
+  const marcajul = sursa.lastIndexOf("catalog_citit_la: new Date().toISOString()");
+  assert.notEqual(scrierea, -1, "n-am gasit `scrieOferte`");
+  assert.notEqual(marcajul, -1, "n-am gasit scrierea marcajului");
+  assert.ok(
+    scrierea < marcajul,
+    "marcajul se scrie inaintea randurilor: o cadere la scriere ar deschide publicarea pe gol",
+  );
+});

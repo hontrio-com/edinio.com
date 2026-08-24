@@ -46,6 +46,7 @@ import type { Json } from "@/types/database.types";
    ar iesi un numar scurt care arata valabil si care poate lipi oferta de fisa
    ALTUI vanzator din catalogul lor comun. Vezi `codDeBareCurat`. */
 import { codDeBareCurat } from "./ean";
+import { campuriNecitibile, intregDeLaEi, zecimalDeLaEi } from "./numere";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -252,24 +253,38 @@ type Statusuri = Pick<
   | "doc_errors" | "ownership" | "number_of_offers" | "buy_button_rank" | "best_offer_sale_price"
 >;
 
+/**
+ * Campurile pe care le scriem in coloane `integer` si care NU sunt in schema lor.
+ *
+ * ⚠ Lista e chiar suprafata de risc. Oricare dintre ele poate veni boolean, sir, sau
+ * lipsa — si oricare, netrecut prin `intregDeLaEi`, pica scrierea intregului lot.
+ */
+const CAMPURI_INTREGI_NEDOCUMENTATE = [
+  "ownership", "number_of_offers", "buy_button_rank", "best_offer_sale_price",
+] as const;
+
+/**
+ * ⚠ TOATE prin `intregDeLaEi`, nu doar statusurile de validare.
+ *
+ * Pana pe 24.08.2026, ultimele patru treceau nefiltrate: `o.ownership ?? null`. Unul
+ * dintre ele vine boolean, iar scrierea lotului a picat cu „invalid input syntax for
+ * type integer: «true»" — catalog citit intreg, zero oferte legate, si o rotita care
+ * s-a oprit fara sa spuna nimic.
+ *
+ * Statusurile aveau deja coercitie fiindca la ELE ne asteptasem la forme ciudate. Cele
+ * patru nedocumentate n-o aveau tocmai fiindca nu stiam nimic despre ele — adica exact
+ * pe dos fata de cat de mult aveau nevoie.
+ */
 function statusuriDin(o: EmagOfertaCitita): Statusuri {
-  const unNumar = (v: unknown): number | null => {
-    if (Array.isArray(v)) return unNumar(v[0]);
-    if (v && typeof v === "object") {
-      const n = (v as { value?: unknown }).value;
-      return typeof n === "number" ? n : null;
-    }
-    return typeof v === "number" ? v : null;
-  };
   return {
-    validation_status: unNumar(o.validation_status),
-    offer_validation_status: unNumar(o.offer_validation_status),
-    translation_validation_status: unNumar(o.translation_validation_status),
+    validation_status: intregDeLaEi(o.validation_status),
+    offer_validation_status: intregDeLaEi(o.offer_validation_status),
+    translation_validation_status: intregDeLaEi(o.translation_validation_status),
     doc_errors: (o.doc_errors ?? []) as Json,
-    ownership: o.ownership ?? null,
-    number_of_offers: o.number_of_offers ?? null,
-    buy_button_rank: o.buy_button_rank ?? null,
-    best_offer_sale_price: o.best_offer_sale_price ?? null,
+    ownership: intregDeLaEi(o.ownership),
+    number_of_offers: intregDeLaEi(o.number_of_offers),
+    buy_button_rank: intregDeLaEi(o.buy_button_rank),
+    best_offer_sale_price: zecimalDeLaEi(o.best_offer_sale_price),
   };
 }
 
@@ -306,10 +321,13 @@ async function scrieOferte(
       part_number: o.part_number ?? null,
       part_number_key: o.part_number_key ?? null,
       ean: (o.ean ?? [])[0] ?? null,
-      category_id: o.category_id ?? null,
+      /* ⚠ Si astea sunt coloane `integer`. `category_id` si `family_type_id` SUNT in
+         schema lor, dar trec prin aceeasi poarta: costa nimic, iar ziua in care se
+         schimba ceva la ei nu mai pica importul intreg. */
+      category_id: intregDeLaEi(o.category_id),
       brand: o.brand ?? null,
-      family_id: o.family?.id || null,
-      family_type_id: o.family?.family_type_id ?? null,
+      family_id: intregDeLaEi(o.family?.id) || null,
+      family_type_id: intregDeLaEi(o.family?.family_type_id),
       status: "imported",
       last_status_at: new Date().toISOString(),
       ...statusuriDin(o),
@@ -462,28 +480,30 @@ export async function ruleazaImportEmag(
     return { ok: false, mesaj: `Nu s-au putut citi ofertele de la eMAG: ${eroare}`, raport: { ...RAPORT_GOL }, importId: null };
   }
   /*
-   * ═══ ⚠ MARCAJUL SE SCRIE AICI, INAINTE DE ORICE ALTCEVA CARE POATE CADEA ═══
-   *
-   * `catalog_citit_la` deschide publicarea (vezi `rutaDeTrimitere`). El raspunde la o
-   * singura intrebare — „le-am vazut catalogul?” — si raspunsul e DEJA da: citirea de
-   * mai sus s-a incheiat fara eroare si fara taiere.
-   *
-   * Pus la sfarsit, l-ar fi ratat orice cadere de la pasii de dupa: crearea produselor,
-   * conducta de import, legarea. Iar comerciantul ar fi ramas cu publicarea incuiata
-   * dupa un import care CHIAR a citit tot, fara sa inteleaga de ce.
-   *
-   * ⚠ `taiat` il opreste. Trunchierea nu avanseaza marcajul — aceeasi regula ca la
-   * fereastra de comenzi, si din acelasi motiv: ce n-am citit e chiar ce se poate
-   * ciocni.
+   * ⚠ Ce trimit ei si nu putem citi. Se cauta pe PRIMA oferta, o singura data: o suta
+   * de oferte cu acelasi camp ciudat sunt o constatare, nu o suta. Vezi `numere.ts`.
    */
-  if (!taiat) {
-    await patchEmagConfig(admin, businessId, { catalog_citit_la: new Date().toISOString() });
+  const ciudate = oferte.length > 0
+    ? campuriNecitibile(oferte[0] as unknown as Record<string, unknown>, CAMPURI_INTREGI_NEDOCUMENTATE)
+    : [];
+  if (ciudate.length > 0) {
+    void logError({
+      action: "emag.import.camp-ciudat",
+      message: `eMAG trimite altceva decât un număr: ${ciudate.map((c) => `${c.camp} = ${c.primit}`).join(", ")}`,
+      details: { businessId },
+      severity: "warning",
+    });
   }
 
   if (oferte.length === 0) {
-    /* ⚠ Zero oferte e un raspuns, nu o nereusita: contul lor chiar e gol. Marcajul de
-       mai sus s-a scris, deci publicarea se deschide — altfel un comerciant nou n-ar
-       fi putut publica niciodata. */
+    /*
+     * ⚠ Zero oferte e un raspuns, nu o nereusita: contul lor chiar e gol. Marcajul se
+     * scrie, deci publicarea se deschide — altfel un comerciant nou n-ar fi putut
+     * publica niciodata.
+     */
+    if (!taiat) {
+      await patchEmagConfig(admin, businessId, { catalog_citit_la: new Date().toISOString() });
+    }
     return { ok: true, mesaj: "Contul tău eMAG nu are nicio ofertă.", raport: { ...RAPORT_GOL }, importId: null };
   }
 
@@ -529,6 +549,26 @@ export async function ruleazaImportEmag(
 
   /* ── 5. Scrierea randurilor ───────────────────────────────────────────────── */
   await scrieOferte(admin, businessId, oferte, potriviri, titluri);
+
+  /*
+   * ═══ ⚠ MARCAJUL SE SCRIE ABIA ACUM, DUPA CE RANDURILE CHIAR S-AU SCRIS ═══
+   *
+   * Prima forma il punea imediat dupa citire, cu argumentul ca el raspunde doar la
+   * „le-am vazut catalogul?”. Argumentul era gresit, si s-a vazut in aceeasi zi:
+   * `scrieOferte` a picat, marcajul ramasese scris, iar publicarea s-a DESCHIS cu zero
+   * oferte cunoscute — adica exact starea din care s-au nascut cele 208 apasari.
+   *
+   * Intrebarea la care raspunde marcajul nu e „am citit”, ci „STIM ce e la ei”. Iar a
+   * sti inseamna randuri scrise, nu un tablou care a trecut prin memorie.
+   *
+   * ⚠ Se scrie INAINTE de crearea produselor si de legare, si asta ramane: acelea pot
+   * cadea fara sa strice ce stim. Granita e `scrieOferte`, nu sfarsitul functiei.
+   *
+   * ⚠ `taiat` il opreste in continuare. Trunchierea nu avanseaza marcajul.
+   */
+  if (!taiat) {
+    await patchEmagConfig(admin, businessId, { catalog_citit_la: new Date().toISOString() });
+  }
 
   /* ── 6. Produsele noi, prin conducta casei ────────────────────────────────── */
   let importId: string | null = null;

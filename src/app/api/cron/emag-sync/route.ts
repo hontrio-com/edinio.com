@@ -9,6 +9,7 @@ import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
 import { patchEmagConfig } from "@/lib/emag/config";
+import { intregDeLaEi, zecimalDeLaEi } from "@/lib/emag/numere";
 import { magazinDin, trimiteElement } from "@/lib/emag/trimite";
 import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
@@ -580,8 +581,8 @@ async function scrieStatusurile(
   for (const o of oferte) {
     if (!Number.isFinite(o.id)) continue;
 
-    const validation = unNumar(o.validation_status);
-    const offerValidation = unNumar(o.offer_validation_status);
+    const validation = intregDeLaEi(o.validation_status);
+    const offerValidation = intregDeLaEi(o.offer_validation_status);
     const stoc = (o.stock ?? []).reduce((s, x) => s + (Number.isFinite(x?.value) ? x.value : 0), 0);
 
     const vandabila = eVandabila({
@@ -591,21 +592,44 @@ async function scrieStatusurile(
       validation_status: validation,
     });
 
+    /*
+     * ⚠ ULTIMELE PATRU TREC ACUM PRIN `intregDeLaEi` (24.08.2026).
+     *
+     * Nefiltrate, un `ownership: true` de la ei facea PostgREST sa refuze randul cu
+     * „invalid input syntax for type integer”. Iar aici caderea era TACUTA: `if
+     * (!error) scrise++` sare peste, trecerea merge mai departe, ecranul arata un
+     * numar mai mic, si nimeni n-are de ce sa se uite.
+     *
+     * La import aceeasi greseala a picat zgomotos si s-a aflat in cinci minute. Aici
+     * ar fi putut sta luni — reconcilierea e chiar controlul care ne spune ce e la ei,
+     * si ar fi tacut tocmai despre ofertele pe care nu le poate scrie.
+     */
     const { error } = await admin.from("emag_offers").update({
       validation_status: validation,
       offer_validation_status: offerValidation,
-      translation_validation_status: unNumar(o.translation_validation_status),
+      translation_validation_status: intregDeLaEi(o.translation_validation_status),
       doc_errors: (o.doc_errors ?? []) as never,
       part_number_key: o.part_number_key ?? null,
-      ownership: o.ownership ?? null,
-      number_of_offers: o.number_of_offers ?? null,
-      buy_button_rank: o.buy_button_rank ?? null,
-      best_offer_sale_price: o.best_offer_sale_price ?? null,
+      ownership: intregDeLaEi(o.ownership),
+      number_of_offers: intregDeLaEi(o.number_of_offers),
+      buy_button_rank: intregDeLaEi(o.buy_button_rank),
+      best_offer_sale_price: zecimalDeLaEi(o.best_offer_sale_price),
       status: (vandabila ? "live" : "sent") satisfies StareOferta,
       last_status_at: new Date().toISOString(),
     }).eq("business_id", businessId).eq("emag_id", o.id);
 
-    if (!error) scrise++;
+    /* ⚠ O cadere la scriere NU mai e tacuta. Nescrisa, ea arata ca „oferta n-a fost
+       atinsa" — la fel ca o oferta care chiar nu mai e a noastra. */
+    if (error) {
+      void logError({
+        action: "emag-sync.reconciliere",
+        message: `statusul ofertei ${o.id} nu s-a putut scrie: ${error.message}`,
+        details: { businessId, emag_id: o.id },
+        severity: "warning",
+      });
+      continue;
+    }
+    scrise++;
   }
   return scrise;
 }
@@ -808,15 +832,6 @@ async function masoaraDeriva(
  * forma, statusul ar fi ramas `null` pentru jumatate din oferte, iar panoul ar fi
  * aratat „în validare" la nesfarsit pentru produse aprobate demult.
  */
-function unNumar(v: unknown): number | null {
-  if (Array.isArray(v)) return unNumar(v[0]);
-  if (v && typeof v === "object") {
-    const n = (v as { value?: unknown }).value;
-    return typeof n === "number" && Number.isFinite(n) ? n : null;
-  }
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
 /**
  * Lista de IP-uri de la care suna eMAG, adusa si tinuta minte.
  *

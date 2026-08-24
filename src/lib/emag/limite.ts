@@ -65,6 +65,8 @@ export const LIMITE_EMAG = {
   reducereVoucherMin: 10,
   /** `CampaignProposal.voucher_discount` maximum=100 */
   reducereVoucherMax: 100,
+  /** `OrderAttachment.name` maxLength=60. E numele pe care il vede CUMPARATORUL. */
+  atasamentNume: 60,
 } as const;
 
 /** Taie un text la limita lor, păstrând începutul. Pentru descrieri. */

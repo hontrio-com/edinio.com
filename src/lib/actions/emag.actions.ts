@@ -2674,6 +2674,14 @@ export interface RezultatPropunereEcran {
   propuse: number;
   /** Ofertele sărite, cu motivul. ⚠ Se arată; sărite tăcut, nimeni n-ar afla. */
   sarite: { emagId: number; motiv: string }[];
+  /**
+   * S-au citit primele N oferte si atat, fiindca magazinul are mai multe.
+   *
+   * ⚠ SE ARATA. Un plafon tacut face ca raportul „1000 propuse" sa semene cu „toate
+   * propuse", iar comerciantul afla ca jumatate din catalog a ramas afara din campanie
+   * abia cand se uita in panoul lor.
+   */
+  atinsPlafonul?: number;
 }
 
 /** Câte oferte se propun dintr-o apăsare. ⚠ Loturi de 50, deci 20 de cereri. */
@@ -2733,12 +2741,28 @@ export async function propuneInCampanieEmag(
    * paralel al prețului rămâne în urmă la prima schimbare, iar aici „în urmă" înseamnă
    * marfă vândută sub cost.
    */
+  /*
+   * ═══ ⚠ CU `order`, SI CU TRUNCHIEREA SPUSA (audit 24.08.2026) ═══
+   *
+   * Forma dinainte avea `.limit(1000)` si niciun `order`. Doua lucruri rele deodata:
+   *
+   *   1. FEREASTRA ERA LA VOIA BAZEI. PostgREST intoarce o mie de randuri, dar care
+   *      o mie nu se stie si difera intre rulari. Adica ce produse intra in campanie
+   *      se hotara la intamplare — iar campania e o hotarare comerciala.
+   *   2. TRUNCHIEREA ERA TACUTA. Magazinul din ziua auditului are 3.754 de oferte.
+   *      Doua mii sapte sute cincizeci si patru ramaneau afara, iar ecranul spunea
+   *      „1000 propuse" — un raport care arata a izbanda.
+   *
+   * Aceeasi regula ca la reconciliere si la feedul de stocuri: verdictul se citeste
+   * din ce s-a potrivit, iar ce n-a incaput se SPUNE.
+   */
   const { data: randuri } = await admin.from("emag_offers")
     .select("emag_id, variant_title, product_id")
     .eq("business_id", businessId)
     .eq("status", "live" satisfies StareOferta)
     .eq("auto_sync", true)
     .not("product_id", "is", null)
+    .order("emag_id", { ascending: true })
     .limit(OFERTE_PE_PROPUNERE);
 
   type Rand = { emag_id: number; variant_title: string | null; product_id: string | null };
@@ -2792,7 +2816,12 @@ export async function propuneInCampanieEmag(
   if (r.fel === "esec") return { error: r.mesaj };
 
   revalidatePath(FEATURE_PATH);
-  return { propuse: propuneri.length, sarite };
+  /* ⚠ Plafonul atins inseamna ca au mai fost oferte pe care nici nu le-am citit. */
+  return {
+    propuse: propuneri.length,
+    sarite,
+    ...(brute.length >= OFERTE_PE_PROPUNERE ? { atinsPlafonul: OFERTE_PE_PROPUNERE } : {}),
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -29,6 +29,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { LIMITE_EMAG, taiat } from "./limite";
 import type { Database } from "@/types/database.types";
 import { uploadToR2 } from "@/lib/r2";
 import { cuRegistru } from "@/lib/operatii/registru";
@@ -214,7 +215,10 @@ export async function urcaFacturaLaEmag(
         order_id: emagOrderId as number,
         /* ⚠ OBLIGATORIU dupa schema lor. Vezi nota de mai sus. */
         order_type: tipulComenzii as 2 | 3,
-        name: `Factura ${factura.numar}`,
+        /* ⚠ `maxLength=60` la ei, si e numele pe care il vede cumparatorul in contul
+           lui. Netaiat, un numar de factura lung ar fi refuzat atasamentul intreg —
+           iar eMAG CERE factura urcata. */
+        name: taiat(`Factura ${factura.numar}`, LIMITE_EMAG.atasamentNume),
         url,
         /* ⚠ 1 = factura. Documentatia lor: „For invoices: use type = 1". */
         type: 1,

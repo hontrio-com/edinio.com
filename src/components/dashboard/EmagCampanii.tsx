@@ -56,6 +56,15 @@ export function EmagCampanii({ businessId }: { businessId: string }) {
         return;
       }
       setSarite(r.sarite);
+      /* ⚠ Plafonul se spune SEPARAT de „sărite": alea sunt oferte pe care le-am citit
+         și le-am refuzat cu un motiv, astea n-au fost citite deloc. Amestecate,
+         comerciantul ar fi căutat un motiv pentru fiecare. */
+      if (r.atinsPlafonul) {
+        toast.warning(
+          `S-au luat primele ${r.atinsPlafonul} oferte care se vând. Ai mai multe, ` +
+          "iar restul nu au intrat în această propunere. Spune-ne și ridicăm limita.",
+        );
+      }
       toast.success(
         r.sarite.length > 0
           ? `${r.propuse} oferte propuse. ${r.sarite.length} au rămas pe dinafară.`

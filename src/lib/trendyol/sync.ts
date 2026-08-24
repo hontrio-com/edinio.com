@@ -1358,6 +1358,37 @@ async function jurnalLotEsuat(admin: Db, ctx: TrendyolSyncContext, b: BatchRow, 
     console.warn(
       `[trendyol] ${abandonate} produse nu se mai repun la coada de stoc: cele ${MAX_REPUNERI_STOC} reluari s-au epuizat. Motiv: ${motiv}`,
     );
+
+    /*
+     * ═══ ⚠ SI SE SCRIE PE LISTARE, NU DOAR IN CONSOLA (24.08.2026) ═══
+     *
+     * Plafonul isi facea treaba: masurat pe contul real, 23 de listari stateau fix la
+     * `inventory_retries = 3` si nu se mai repuneau. Bine — bucla e oprita.
+     *
+     * ⚠ DAR TOATE 23 aveau `status: 'approved'`, `error: null` si `issues: []`. Adica
+     * arata perfect sanatoase pe ecran, iar de fapt nu mai primeau NICIODATA nici pret,
+     * nici stoc. Printre ele „Royal Canin Feline Health Nutrition Kitten 10 kg" — produse
+     * adevarate, pe care omul crede ca le vinde la zi.
+     *
+     * Motivele venite de la ei sunt limpezi si actionabile: „Prețul și stocul produselor
+     * închise pentru vânzare nu pot fi actualizate", „...produsului arhivat...", „Produsul
+     * nu a fost găsit cu ID-ul furnizorului". Toate trei se rezolva in panoul Trendyol.
+     *
+     * Un plafon fara urma e o tacere, nu o reparatie. `error` NU se atinge: acolo umbla
+     * reconcilierile, iar mesajul ar fi disparut in aceeasi trecere de cron. `issues`
+     * supravietuieste.
+     */
+    const abandonateAcum = randuriListari.filter((l) => !deRepus.some((d) => d.id === l.id));
+    for (const l of abandonateAcum) {
+      await admin.from("trendyol_listings").update({
+        issues: [{
+          tip: "stoc-oprit",
+          mesaj: `Trendyol a refuzat de ${MAX_REPUNERI_STOC} ori prețul și stocul, deci nu se mai încearcă. `
+            + `Produsul nu mai primește actualizări până nu rezolvi asta în panoul Trendyol. ${motiv}`.slice(0, 500),
+        }] as never,
+        updated_at: new Date().toISOString(),
+      } as never).eq("id", l.id);
+    }
   }
   if (deRepus.length === 0) return;
 

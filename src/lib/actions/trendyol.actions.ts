@@ -1188,6 +1188,21 @@ export interface TrendyolProductRow {
    * listat pe alta cale. Edinio l-a legat, dar NU-i suprascrie stocul si pretul.
    */
   adoptata: boolean;
+  /**
+   * Necazuri pe care le stim, dar care NU sunt `error`.
+   *
+   * ═══ ⚠ SE SCRIAU SI NU LE CITEA NIMENI (24.08.2026) ═══
+   *
+   * `trendyol_listings.issues` era scris de doua cai — esecul unei actualizari si, de
+   * azi, epuizarea reluarilor de stoc — si nu ajungea in niciun rand de ecran. Masurat:
+   * 23 de listari cu `status: 'approved'` si `error: null` care nu mai primeau nici pret,
+   * nici stoc, si aratau perfect sanatoase.
+   *
+   * ⚠ De ce nu se scrie in `error`: acolo umbla reconcilierile, care il pun pe `null`
+   * cand produsul apare aprobat — in ACEEASI trecere de cron. Mesajul ar fi disparut
+   * inainte sa-l vada cineva.
+   */
+  probleme: string[];
 }
 
 export interface TrendyolProductPage {
@@ -1223,9 +1238,9 @@ export async function getTrendyolProductPage(
 
   // Listarile sunt doar cate produse a configurat comerciantul, deci se pot tine
   // in memorie fara grija; produsele nu.
-  const listari = await fetchAllRows<{ product_id: string | null; status: string; error: string | null; last_synced_at: string | null; auto_inventory: boolean | null }>(
+  const listari = await fetchAllRows<{ product_id: string | null; status: string; error: string | null; last_synced_at: string | null; auto_inventory: boolean | null; issues: unknown }>(
     "trendyol.listings", (from, to) =>
-      supabase.from("trendyol_listings").select("product_id, status, error, last_synced_at, auto_inventory")
+      supabase.from("trendyol_listings").select("product_id, status, error, last_synced_at, auto_inventory, issues")
         .eq("business_id", businessId).order("product_id").range(from, to),
   );
   const dupaProdus = new Map(listari.filter((l) => l.product_id).map((l) => [l.product_id as string, l]));
@@ -1241,6 +1256,11 @@ export async function getTrendyolProductPage(
         id: p.id, name: p.name, category: p.category, is_active: p.is_active,
         status: l?.status ?? null, error: l?.error ?? null, lastSyncedAt: l?.last_synced_at ?? null,
         adoptata: l?.auto_inventory === false,
+        /* ⚠ Forma lui `issues` vine din jsonb, deci poate fi orice. Se citeste aparat: un
+           obiect stalcit ar fi ajuns pe rand ca „[object Object]". */
+        probleme: (Array.isArray(l?.issues) ? (l.issues as unknown[]) : [])
+          .map((x) => (x && typeof x === "object" ? String((x as { mesaj?: unknown }).mesaj ?? "") : String(x)))
+          .filter((t) => t.trim() !== ""),
       };
     });
 

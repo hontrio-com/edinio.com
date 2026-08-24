@@ -340,6 +340,26 @@ export function TrendyolListings({
                     sa curga comenzile, dar nu-i atingem pretul si stocul puse
                     acolo — asta o spune eticheta, iar butonul e cum preia el.
                   */}
+                  {/*
+                    ═══ ⚠ PRODUSE CARE NU MAI PRIMESC NIMIC, SI ARATA SANATOASE ═══
+
+                    Masurat pe 24.08.2026: 23 de listari cu `status: 'approved'`,
+                    `error: null` si `issues: []`, care nu mai primeau NICIODATA nici pret,
+                    nici stoc. Trendyol le refuzase de trei ori (produs inchis pentru
+                    vanzare, arhivat, sau negasit), plafonul de reluari se atinsese, si
+                    bucla se oprise — corect. Doar ca nimeni nu i-o spunea.
+
+                    ⚠ Nu se scrie in `error`: acolo umbla reconcilierile, care il pun pe
+                    `null` cand produsul apare aprobat, in ACEEASI trecere de cron.
+                  */}
+                  {p.probleme.length > 0 && (
+                    <span
+                      className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                      title={p.probleme.join(" · ")}
+                    >
+                      Nu se mai trimite
+                    </span>
+                  )}
                   {p.adoptata && (
                     <>
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700"
@@ -372,6 +392,16 @@ export function TrendyolListings({
                 <p className={`text-xs mt-1 ml-6 whitespace-pre-line ${p.status === "rejected" ? "text-amber-700" : "text-red-600"}`}>
                   {p.status === "rejected" && <span className="font-semibold">Trendyol cere o corectură: </span>}
                   {p.error}
+                </p>
+              )}
+
+              {/* ⚠ MOTIVUL SE VEDE, nu sta intr-un `title`. Bulina „Preluat" avea explicatia
+                  intr-un tooltip, si comerciantul a aflat abia dintr-o comanda vanduta cu 4
+                  lei sub pretul din magazin. Nu repetam forma aia pe acelasi ecran. */}
+              {p.probleme.length > 0 && (
+                <p className="mt-1 ml-6 whitespace-pre-line text-xs text-amber-700 dark:text-amber-300">
+                  <span className="font-semibold">Nu mai primește preț și stoc: </span>
+                  {p.probleme.join(" · ")}
                 </p>
               )}
 

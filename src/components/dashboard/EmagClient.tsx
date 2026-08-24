@@ -39,6 +39,25 @@ const TARI: { valoare: "ro" | "bg" | "hu"; eticheta: string }[] = [
   { valoare: "hu", eticheta: "eMAG Ungaria" },
 ];
 
+/**
+ * Gălețile panoului, în ordinea gravității.
+ *
+ * ⚠ ACEEAȘI ORDINE ȘI ACELEAȘI CUVINTE ca în `de-ce-nu-se-vinde.ts` și în
+ * `numara_ofertele_emag`. Nu e o repetiție de dragul simetriei: etichetele sunt CHEILE
+ * din răspunsul funcției. O literă schimbată aici, și cartonașul arată zero pentru o
+ * găleată plină. `panoul-emag.test.ts` compară cele trei locuri.
+ */
+const ORDINEA_STARILOR = [
+  "Respins de eMAG",
+  "În validare la eMAG",
+  "Scoasă din vânzare la eMAG",
+  "Oprită la eMAG",
+  "Preț neacceptat de eMAG",
+  "Fără stoc la eMAG",
+  "Încă necitit de la eMAG",
+  "Se vinde pe eMAG",
+] as const;
+
 const CAMP =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30";
 
@@ -304,10 +323,38 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/*
+            ═══ ⚠ CARTONAȘELE SE ADUNĂ LA TOTAL, ȘI ASTA E TOATĂ REPARAȚIA ═══
+
+            Forma dinainte arăta „Oferte 3754" și dedesubt 61 + 3693 + 154 = **3908**.
+            Trei motive deodată:
+
+              „În validare" număra starea NOASTRĂ (`queued`/`sent`), nu verdictul lor.
+              Din cele 3.693, 3.445 erau de fapt APROBATE și doar 4 chiar în validare.
+
+              Cartonașele se suprapuneau: cele 154 respinse intrau și la „În validare",
+              și la „De revizuit".
+
+              Iar starea care privea cel mai mult catalogul lipsea cu totul: 3.089 de
+              oferte „End of Life" plus 318 oprite, care se repornesc DOAR din panoul
+              eMAG. Omul citea „în validare" și aștepta ceva ce nu venea niciodată.
+
+            Acum vin din `numara_ofertele_emag`, care aplică exact ordinea din
+            `deCeNuSeVinde`: fiecare ofertă cade într-o singură găleată.
+
+            ⚠ Se arată numai gălețile NEGOALE, în afară de „se vând". Un cartonaș „Preț
+            neacceptat 0" e zgomot; „Se vând 0" e chiar vestea.
+          */}
           <Cifra eticheta="Oferte" valoare={status.oferte.total} />
-          <Cifra eticheta="Se vând pe eMAG" valoare={status.oferte.active} />
-          <Cifra eticheta="În validare" valoare={status.oferte.inValidare} />
-          <Cifra eticheta="De revizuit" valoare={status.oferte.respinse + status.oferte.eroare} />
+          <Cifra
+            eticheta="Se vând pe eMAG"
+            valoare={status.oferte.peStare["Se vinde pe eMAG"] ?? 0}
+          />
+          {ORDINEA_STARILOR.filter(
+            (e) => e !== "Se vinde pe eMAG" && (status.oferte.peStare[e] ?? 0) > 0,
+          ).map((e) => (
+            <Cifra key={e} eticheta={e} valoare={status.oferte.peStare[e] ?? 0} />
+          ))}
         </div>
 
         {/*

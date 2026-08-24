@@ -227,6 +227,25 @@ export interface StareEmag {
      * comerciantul. Până acum nu le număra nimeni.
      */
     derivate: number;
+    /**
+     * Câte oferte în fiecare stare de la EI, exclusiv, adunându-se la total.
+     *
+     * ═══ ⚠ DE CE E NEVOIE DE ASTA ȘI NU AJUNG CIFRELE DE MAI SUS ═══
+     *
+     * Fiindcă cele de mai sus nu se exclud și nu se adună. Măsurat pe contul real:
+     * „Oferte 3754", iar dedesubt 61 + 3693 + 154 = **3908**. „În validare" număra
+     * starea NOASTRĂ (`queued`/`sent`), nu verdictul lor: din cele 3.693, **3.445**
+     * erau de fapt aprobate și doar 4 chiar în validare. Iar cele 154 respinse erau
+     * numărate de amândouă cartonașele.
+     *
+     * ⚠ Și lipsea cu totul starea care privește cel mai mult catalogul: 3.089 de oferte
+     * „End of Life" plus 318 oprite, care se repornesc DOAR din panoul eMAG. Ecranul nu
+     * pomenea că există. Omul citea „în validare" și aștepta ceva ce nu venea.
+     *
+     * `numara_ofertele_emag` aplică EXACT ordinea din `deCeNuSeVinde`, deci fiecare
+     * ofertă cade într-o singură găleată, iar suma e chiar totalul, prin construcție.
+     */
+    peStare: Record<string, number>;
   };
   inCoada: number;
   /**
@@ -271,7 +290,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     admin.from("emag_offers").select("*", { count: "exact", head: true })
       .eq("business_id", businessId).eq("status", s);
 
-  const [total, active, inValidare, respinse, eroare, preluate, derivate, inCoada, abandonate] = await Promise.all([
+  const [total, active, inValidare, respinse, eroare, preluate, derivate, inCoada, abandonate, peStare] = await Promise.all([
     admin.from("emag_offers").select("*", { count: "exact", head: true }).eq("business_id", businessId),
     stare("live"),
     admin.from("emag_offers").select("*", { count: "exact", head: true })
@@ -313,6 +332,10 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       .eq("business_id", businessId).is("abandonat_la", null),
     admin.from("emag_sync_queue").select("*", { count: "exact", head: true })
       .eq("business_id", businessId).not("abandonat_la", "is", null),
+    /* ⚠ O singură trecere prin tabelă, în bază: citite în aplicație, cele câteva mii de
+       rânduri de azi ar merge, dar la cincizeci de mii prima pagină ar aduce zeci de
+       megaocteți la fiecare încărcare. */
+    admin.rpc("numara_ofertele_emag", { p_business_id: businessId }),
   ]);
 
   const iesire = iesireEmag();
@@ -360,6 +383,9 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       respinse: respinse.count ?? 0,
       eroare: eroare.count ?? 0,
       preluate: preluate.count ?? 0,
+      /* ⚠ `{}` la o citire picată, nu cifre inventate: un cartonaș lipsă se vede,
+         unul cu zero minte. */
+      peStare: (peStare.data ?? {}) as Record<string, number>,
       derivate: derivate.count ?? 0,
     },
     inCoada: inCoada.count ?? 0,

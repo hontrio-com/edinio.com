@@ -2662,6 +2662,36 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.numara_ofertele_emag(p_business_id uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with etichetate as (
+    select case
+      /* Ordinea e chiar regula, copiata din `deCeNuSeVinde`: fiecare oferta cade
+         intr-o SINGURA ramura, deci cartonasele se aduna la total prin constructie.
+         `validation_status = 12` e si respins, si vandabil: castiga respins. */
+      when o.validation_status in (5, 6, 8, 10, 12) then 'Respins de eMAG'
+      when o.validation_status is not null and o.validation_status not in (3, 9, 11, 12)
+        then 'În validare la eMAG'
+      when o.status_la_ei = 2 then 'Scoasă din vânzare la eMAG'
+      when o.status_la_ei = 0 then 'Oprită la eMAG'
+      when o.offer_validation_status is not null and o.offer_validation_status <> 1
+        then 'Preț neacceptat de eMAG'
+      when o.stoc_la_ei is not null and o.stoc_la_ei <= 0 then 'Fără stoc la eMAG'
+      when o.status_la_ei is null or o.stoc_la_ei is null then 'Încă necitit de la eMAG'
+      else 'Se vinde pe eMAG'
+    end as eticheta
+    from public.emag_offers o
+    where o.business_id = p_business_id
+  )
+  select coalesce(jsonb_object_agg(eticheta, cate), '{}'::jsonb)
+  from (select eticheta, count(*) as cate from etichetate group by 1) t;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.revendica_din_coada(p_coada text, p_limita integer DEFAULT 50, p_lease interval DEFAULT '00:05:00'::interval)
  RETURNS SETOF jsonb
  LANGUAGE plpgsql
@@ -7506,6 +7536,7 @@ grant execute on function public.repretuieste_pachetele_cu(p_component_id uuid) 
 grant execute on function public.reserve_payout_balance(p_user_id uuid, p_amount integer) to service_role;
 grant execute on function public.reseteaza_limita(p_cheie text) to service_role;
 grant execute on function public.restaureaza_variante_batch(p_items jsonb) to service_role;
+grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
 grant execute on function public.revendica_din_coada(p_coada text, p_limita integer, p_lease interval) to service_role;
 grant execute on function public.revendica_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.revendica_stoc_comanda(p_order_id uuid) to service_role;

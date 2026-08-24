@@ -29,6 +29,7 @@ import {
   caracteristiciLipsa, caracteristiciObligatorii, sugereazaCategorie,
 } from "@/lib/emag/taxonomy";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
@@ -60,7 +61,7 @@ import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
 import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
 import { alegeSupplyLeadTime, pretFaraTva} from "@/lib/emag/mapping";
 import { dimensiuniPropuse, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
-import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "@/lib/emag/queue";
+import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagMany} from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/emag";
@@ -1505,11 +1506,21 @@ export async function publicaCategoriaPeEmag(
      primi zero cand sincronizarea automata e stinsa sau cand toate ofertele sunt
      preluate, iar „N produse puse la rand" ar fi fost o reusita raportata cu efect
      zero: chiar forma incidentului VetDepo. */
-  const puse = await enqueueEmagSyncMany(businessId, produse.map((p) => p.id));
+  /*
+   * ⚠ `publicaPeEmagMany`, nu `enqueueEmagSyncMany`. Butonul ăsta spune „publică", deci
+   * are voie să atingă și produsele care n-au fost NICIODATĂ pe eMAG.
+   *
+   * Cu funcția obișnuită, la prima folosire nu se punea nimic la rând — coada
+   * filtrează la produsele care au deja ofertă — iar mesajul de eroare dădea vina pe
+   * comutatorul de sincronizare automată. Diagnostic greșit, care trimitea omul să
+   * caute unde nu era nimic. Măsurat pe un catalog de 1353 de produse: zero puse.
+   */
+  const puse = await publicaPeEmagMany(businessId, produse.map((p) => p.id));
   if (puse === 0) {
     return {
-      error: "Nu s-a pus nimic la rând. Verifică dacă „Trimite automat prețul și stocul” " +
-        "e pornit, sau folosește „Trimite acum” pe un produs anume.",
+      error: "Nu s-a pus nimic la rând: ofertele produselor din categoria asta sunt " +
+        "preluate din contul tău eMAG, iar acelea nu se rescriu automat. " +
+        "Folosește „Trimite acum” pe produsul care te interesează.",
     };
   }
 
@@ -2657,4 +2668,231 @@ export async function facturileEmag(
   const monede = [...new Set(facturi.map((f) => f.moneda).filter(Boolean))];
 
   return { facturi, totaluri: adunaPeCategorii(facturi), monede };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRODUSELE CARE NU-S ÎNCĂ PE eMAG
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface ProdusDePublicat {
+  id: string;
+  nume: string;
+  sku: string | null;
+  categorie: string | null;
+  /** ⚠ Fără categorie mapată, publicarea e refuzată. Se arată, nu se ascunde. */
+  categorieMapata: boolean;
+  pret: number;
+  stoc: number;
+}
+
+export interface ListaDePublicat {
+  produse: ProdusDePublicat[];
+  total: number;
+  pagina: number;
+  pePagina: number;
+  /** Categoriile magazinului, cu semn dacă sunt legate de eMAG. */
+  categorii: { nume: string; mapata: boolean; cate: number }[];
+}
+
+const DE_PUBLICAT_PE_PAGINA = 50;
+
+/**
+ * Produsele din catalog care n-au încă nicio ofertă pe eMAG.
+ *
+ * ═══ ⚠ DE CE ARE NEVOIE DE UN ECRAN AL LOR ═══
+ *
+ * Lista de oferte arată doar ce EXISTĂ deja pe eMAG. Un produs nepublicat nu apare
+ * nicăieri în ecranele eMAG — deci nu există niciun loc din care să-l trimiți.
+ *
+ * Pentru un catalog care n-a fost niciodată acolo, asta însemna că nu exista NICIO
+ * cale în masă. Măsurat: 1353 de produse, 0 oferte, niciun drum.
+ *
+ * ⚠ Se citesc produsele care NU au rând în `emag_offers`, nu cele „fără ofertă activă".
+ * Un produs retras rămâne cu rândul lui (eMAG n-are ștergere de oferte), iar arătat
+ * aici ar fi fost republicat de cineva care credea că nu e acolo.
+ */
+export async function produseDePublicatEmag(
+  businessId: string,
+  filtru: { categorie?: string; cautare?: string; pagina?: number } = {},
+): Promise<ListaDePublicat | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const config = await loadConfig(businessId);
+  const admin = createAdminClient();
+  const harta = config.category_map ?? {};
+
+  /*
+   * ⚠ Id-urile ofertelor se citesc INTEGRAL, cu `fetchAllRowsStrict`. PostgREST taie
+   * tăcut la 1000: cu o simplă interogare, un magazin cu 4000 de oferte ar fi văzut
+   * 3000 de produse „nepublicate" care sunt de fapt pe eMAG — și le-ar fi publicat a
+   * doua oară.
+   */
+  const randuriOferte = await fetchAllRowsStrict<{ product_id: string | null }>(
+    "emag.dePublicat", (from, to) =>
+      admin.from("emag_offers").select("product_id")
+        .eq("business_id", businessId).not("product_id", "is", null)
+        .order("emag_id", { ascending: true }).range(from, to),
+  );
+  const publicate = new Set(randuriOferte.map((r) => r.product_id).filter((x): x is string => !!x));
+
+  /* Catalogul activ, întreg — din el se scad cele publicate. */
+  const produse = await fetchAllRowsStrict<{
+    id: string; name: string; sku: string | null; category: string | null;
+    price: number | null; stock_quantity: number | null;
+  }>(
+    "emag.catalogDePublicat", (from, to) =>
+      admin.from("products")
+        .select("id, name, sku, category, price, stock_quantity")
+        .eq("business_id", businessId).eq("is_active", true)
+        .order("created_at", { ascending: true }).range(from, to),
+  );
+
+  const nepublicate = produse.filter((p) => !publicate.has(p.id));
+
+  /* Categoriile se numără pe TOT ce e nepublicat, nu pe pagina arătată: altfel
+     numerele din meniu s-ar fi schimbat la fiecare răsfoire. */
+  const peCategorie = new Map<string, number>();
+  for (const p of nepublicate) {
+    const c = (p.category ?? "").trim() || "—";
+    peCategorie.set(c, (peCategorie.get(c) ?? 0) + 1);
+  }
+
+  const cautare = (filtru.cautare ?? "").trim().toLowerCase();
+  const filtrate = nepublicate.filter((p) => {
+    if (filtru.categorie && (p.category ?? "").trim() !== filtru.categorie) return false;
+    if (!cautare) return true;
+    return (p.name ?? "").toLowerCase().includes(cautare)
+      || (p.sku ?? "").toLowerCase().includes(cautare);
+  });
+
+  const pagina = Math.max(1, Math.floor(filtru.pagina ?? 1));
+  const de_la = (pagina - 1) * DE_PUBLICAT_PE_PAGINA;
+
+  return {
+    produse: filtrate.slice(de_la, de_la + DE_PUBLICAT_PE_PAGINA).map((p) => ({
+      id: p.id,
+      nume: p.name,
+      sku: p.sku,
+      categorie: p.category,
+      categorieMapata: !!harta[(p.category ?? "").trim()]?.category_id,
+      pret: Number(p.price ?? 0) || 0,
+      stoc: Number(p.stock_quantity ?? 0) || 0,
+    })),
+    total: filtrate.length,
+    pagina,
+    pePagina: DE_PUBLICAT_PE_PAGINA,
+    categorii: [...peCategorie.entries()]
+      .map(([nume, cate]) => ({ nume, cate, mapata: !!harta[nume]?.category_id }))
+      .sort((a, b) => b.cate - a.cate),
+  };
+}
+
+/**
+ * Pune la rând produsele alese, ca să fie publicate pe eMAG.
+ *
+ * ⚠ Se refuză din start produsele fără categorie mapată. Trimise, eMAG le-ar fi
+ * respins una câte una, iar comerciantul ar fi văzut o sută de eșecuri identice în loc
+ * de un singur mesaj care spune ce are de legat.
+ */
+export async function publicaProduseleEmag(
+  businessId: string,
+  productIds: string[],
+): Promise<{ puse: number; faraCategorie: string[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const config = await loadConfig(businessId);
+  if (!config.connected) return { error: "Contul eMAG nu este conectat." };
+  if (config.needs_reconnect) return { error: "eMAG a refuzat acreditările. Reconectează contul." };
+
+  const lipsa = ceLipsestePentruPublicare(config);
+  if (lipsa) return { error: lipsa };
+
+  const ids = [...new Set((productIds ?? []).filter((x) => typeof x === "string" && x))];
+  if (ids.length === 0) return { error: "N-ai ales niciun produs." };
+
+  const admin = createAdminClient();
+  const harta = config.category_map ?? {};
+
+  /* ⚠ `bucatiDeIduri`: peste ~650 de id-uri, `.in()` cade cu 400 în text simplu —
+     măsurat pe proiectul real. Vezi `id-chunks.ts`. */
+  const randuri: { id: string; category: string | null }[] = [];
+  for (const bucata of bucatiDeIduri(ids)) {
+    const { data, error } = await admin.from("products")
+      .select("id, category").eq("business_id", businessId).in("id", bucata);
+    if (error) return { error: error.message };
+    randuri.push(...((data ?? []) as { id: string; category: string | null }[]));
+  }
+
+  const faraCategorie = [...new Set(
+    randuri.filter((r) => !harta[(r.category ?? "").trim()]?.category_id)
+      .map((r) => (r.category ?? "").trim() || "—"),
+  )];
+  const deTrimis = randuri
+    .filter((r) => harta[(r.category ?? "").trim()]?.category_id)
+    .map((r) => r.id);
+
+  if (deTrimis.length === 0) {
+    return {
+      error: `Niciun produs ales n-are categoria legată de eMAG. Leagă întâi: ${faraCategorie.join(", ")}.`,
+    };
+  }
+
+  const puse = await publicaPeEmagMany(businessId, deTrimis);
+  if (puse === 0) {
+    return {
+      error: "Nu s-a pus nimic la rând. Ofertele produselor alese sunt preluate din contul " +
+        "tău eMAG, iar acelea nu se rescriu automat.",
+    };
+  }
+
+  revalidatePath(FEATURE_PATH);
+  return { puse, faraCategorie };
+}
+
+/**
+ * Pune la rând ofertele alese din listă.
+ *
+ * ⚠ Trece prin COADĂ, nu prin trimitere directă. „Trimite acum" de pe un rând ține
+ * omul pe loc cât durează cererea — acceptabil pentru unul, absurd pentru cincizeci:
+ * funcția ar fi depășit limita de timp a platformei și ar fi lăsat jumătate trimise,
+ * fără să spună care.
+ *
+ * ⚠ Se folosește `enqueueEmagSyncMany`, nu `publicaPeEmagMany`: aici sunt oferte care
+ * EXISTĂ deja. Un produs fără ofertă n-are ce căuta în lista asta, iar dacă ajunge
+ * cumva, nu vrem să-l publicăm dintr-un buton care spune „retrimite".
+ */
+export async function trimiteSelectiaEmag(
+  businessId: string,
+  productIds: string[],
+  op: "oferta" | "pret" | "stoc" = "oferta",
+): Promise<{ puse: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const config = await loadConfig(businessId);
+  if (!config.connected) return { error: "Contul eMAG nu este conectat." };
+  if (config.needs_reconnect) return { error: "eMAG a refuzat acreditările. Reconectează contul." };
+
+  const ids = [...new Set((productIds ?? []).filter((x) => typeof x === "string" && x))];
+  if (ids.length === 0) return { error: "N-ai ales nicio ofertă." };
+
+  const puse = op === "stoc"
+    ? await enqueueEmagStocMany(businessId, ids)
+    : op === "pret"
+      ? await enqueueEmagPretMany(businessId, ids)
+      : await enqueueEmagSyncMany(businessId, ids);
+
+  /* ⚠ Zero puse din N alese cere o explicație, nu un număr. Cel mai des: ofertele alese
+     sunt preluate din contul lor, iar acelea nu se rescriu automat. */
+  if (puse === 0) {
+    return {
+      error: "Nu s-a pus nimic la rând. Ofertele alese sunt preluate din contul tău eMAG " +
+        "(sincronizarea lor e oprită), iar acelea nu se rescriu automat.",
+    };
+  }
+
+  revalidatePath(FEATURE_PATH);
+  return { puse };
 }

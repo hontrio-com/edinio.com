@@ -7,6 +7,7 @@ import { EmagClient } from "@/components/dashboard/EmagClient";
 import { EmagCategoryMapping } from "@/components/dashboard/EmagCategoryMapping";
 import { EmagListings } from "@/components/dashboard/EmagListings";
 import { EmagProbleme } from "@/components/dashboard/EmagProbleme";
+import { EmagDePublicat } from "@/components/dashboard/EmagDePublicat";
 import { EmagReturns } from "@/components/dashboard/EmagReturns";
 import { EmagCampanii } from "@/components/dashboard/EmagCampanii";
 import { EmagJurnal } from "@/components/dashboard/EmagJurnal";
@@ -83,6 +84,10 @@ async function ContinutEmag({ businessId }: { businessId: string }) {
               scuteasca citirea listei rand cu rand — pus DEDESUBT, ar fi fost gasit
               abia dupa ce omul face chiar lucrul pe care centrul il inlocuieste. */}
           <EmagProbleme businessId={businessId} />
+          {/* ⚠ INAINTEA listei de oferte, si se ascunde singur cand tot catalogul e
+              publicat. Cine intra prima data are catalogul intreg aici, iar lista de
+              oferte goala — deci asta e cartea care trebuie sa-i sara in ochi. */}
+          <EmagDePublicat businessId={businessId} />
           <EmagListings businessId={businessId} />
           {/* Se ascunde singur cand nu e niciun retur: o carte goala nu spune nimic. */}
           <EmagReturns businessId={businessId} />

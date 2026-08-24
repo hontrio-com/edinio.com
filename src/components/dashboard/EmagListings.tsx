@@ -7,8 +7,7 @@ import {
 import { toast } from "sonner";
 import {
   comutaSincronizareaOfertei, listaOferteEmag, retrageDePeEmag, trimiteAcumPeEmag,
-  type RandOfertaEcran,
-} from "@/lib/actions/emag.actions";
+  type RandOfertaEcran, trimiteSelectiaEmag} from "@/lib/actions/emag.actions";
 
 /**
  * Lista ofertelor de pe eMAG.
@@ -45,7 +44,30 @@ export function EmagListings({ businessId }: { businessId: string }) {
   const [pagina, setPagina] = useState(1);
   const [filtru, setFiltru] = useState<string>("");
   const [cautare, setCautare] = useState("");
+  /* ⚠ Bifele se țin pe `product_id`, nu pe `emag_id`: coada lucrează pe produse, iar un
+     produs cu variante are mai multe oferte. Ținute pe ofertă, același produs ar fi
+     intrat de cinci ori în același lot. */
+  const [alese, setAlese] = useState<Set<string>>(new Set());
   const [seIncarca, incepe] = useTransition();
+
+  /*
+   * ⚠ Trece prin COADĂ, nu prin trimitere directă. „Trimite acum" ține omul pe loc cât
+   * durează cererea — acceptabil pentru unul, absurd pentru cincizeci: funcția ar fi
+   * depășit limita de timp și ar fi lăsat jumătate trimise, fără să spună care.
+   */
+  function trimiteAlese(op: "oferta" | "pret" | "stoc") {
+    const ids = [...alese];
+    incepe(async () => {
+      const r = await trimiteSelectiaEmag(businessId, ids, op);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      setAlese(new Set());
+      toast.success(`${r.puse} ${r.puse === 1 ? "produs pus" : "produse puse"} la rând.`);
+      incarca();
+    });
+  }
 
   function incarca(p = pagina, f = filtru, c = cautare) {
     incepe(async () => {
@@ -134,6 +156,43 @@ export function EmagListings({ businessId }: { businessId: string }) {
         </div>
       </div>
 
+      {/*
+        ⚠ Bara apare doar când chiar ai ales ceva. Prezentă mereu, ar fi ocupat un rând
+        din ecran ca să spună „0 alese" — iar butoanele stinse învață pe cineva că
+        ecranul e stricat.
+      */}
+      {alese.size > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 p-2.5">
+          <span className="text-xs font-medium">
+            {alese.size} {alese.size === 1 ? "produs ales" : "produse alese"}
+          </span>
+          <button type="button" onClick={() => setAlese(new Set())}
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+            renunță
+          </button>
+          <div className="ml-auto flex flex-wrap gap-1.5">
+            {([
+              { op: "stoc", eticheta: "Trimite stocul" },
+              { op: "pret", eticheta: "Trimite prețul" },
+              { op: "oferta", eticheta: "Trimite tot" },
+            ] as const).map((b) => (
+              <button
+                key={b.op}
+                type="button"
+                onClick={() => trimiteAlese(b.op)}
+                disabled={seIncarca}
+                className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+                title={b.op === "oferta"
+                  ? "Retrimite și fișa produsului — ruta cea mai grea"
+                  : undefined}
+              >
+                {b.eticheta}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {randuri.length === 0 ? (
         <p className="mt-5 text-sm text-muted-foreground">
           Nicio ofertă aici. Leagă o categorie și publică din ea, sau adu ofertele pe care le
@@ -142,7 +201,22 @@ export function EmagListings({ businessId }: { businessId: string }) {
       ) : (
         <ul className="mt-4 divide-y divide-border">
           {randuri.map((r) => (
-            <RandOferta key={r.id} businessId={businessId} rand={r} laSchimbare={() => incarca()} />
+            <RandOferta
+              key={r.id}
+              businessId={businessId}
+              rand={r}
+              laSchimbare={() => incarca()}
+              ales={!!r.productId && alese.has(r.productId)}
+              laBifa={() => {
+                if (!r.productId) return;
+                setAlese((v) => {
+                  const nou = new Set(v);
+                  if (nou.has(r.productId!)) nou.delete(r.productId!);
+                  else nou.add(r.productId!);
+                  return nou;
+                });
+              }}
+            />
           ))}
         </ul>
       )}
@@ -189,10 +263,13 @@ const CULOARE_STARE: Record<string, string> = {
 };
 
 function RandOferta({
-  businessId, rand, laSchimbare,
+  businessId, rand, laSchimbare, ales, laBifa,
 }: {
   businessId: string;
   rand: RandOfertaEcran;
+  /** Bifat pentru o trimitere in masa. */
+  ales: boolean;
+  laBifa: () => void;
   laSchimbare: () => void;
 }) {
   const [seLucreaza, incepe] = useTransition();
@@ -264,6 +341,17 @@ function RandOferta({
   return (
     <li className="py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* ⚠ Fara `product_id` nu se poate pune la rand: coada lucreaza pe produse.
+            Se arata stinsa, nu se ascunde — altfel randul ar fi aratat ca si cum ai fi
+            uitat sa-l bifezi. */}
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 shrink-0"
+          checked={ales}
+          disabled={!rand.productId}
+          onChange={laBifa}
+          aria-label={`Alege ${rand.numeProdus}`}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium">{rand.numeProdus}</span>

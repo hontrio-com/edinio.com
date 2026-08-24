@@ -183,10 +183,63 @@ export async function enqueueEmagSync(
  * niciunul. Adica exact forma incidentului VetDepo — raspuns de succes, efect zero,
  * si nimeni nu afla — pe care tot fisierul asta e scris ca s-o previna.
  */
+/**
+ * Are voie produsul asta sa intre intr-o punere in masa?
+ *
+ * Functie curata, exportata anume ca sa poata fi probata fara baza de date. E cea mai
+ * periculoasa hotarare din tot fisierul: gresita intr-un sens, nu se publica nimic;
+ * gresita in celalalt, se urca un catalog intreg pe eMAG dintr-o apasare care promitea
+ * altceva — iar eMAG NU sterge oferte, doar le retrage.
+ *
+ * ⚠ „OPRITA" BATE „PORNITA", si asta nu e o subtilitate.
+ *
+ * Un produs cu variante poate avea o parte din oferte preluate din contul lor
+ * (`auto_sync = false`) si o parte facute de noi. Luat drept „pornit", o publicare in
+ * masa i-ar fi rescris si pe cele preluate — adica pretul pe care comerciantul si l-a
+ * pus el in panoul eMAG. Cand nu e limpede, se lasa in pace: exista „Trimite acum" pe
+ * produsul anume, unde omul stie ce face.
+ */
+export function poateIntraInCoada(
+  id: string,
+  pornite: ReadonlySet<string>,
+  oprite: ReadonlySet<string>,
+  publicaSiFaraOferta: boolean,
+): boolean {
+  if (oprite.has(id)) return false;
+  if (pornite.has(id)) return true;
+  /* Fara nicio oferta: intra DOAR pe drumurile care spun anume „publica". */
+  return publicaSiFaraOferta;
+}
+
+export interface OptiuniCoadaMulti {
+  /**
+   * Ingaduie si produsele care N-AU inca nicio oferta pe eMAG.
+   *
+   * ═══ ⚠ SE CERE ANUME, SI NUMAI DE PE DRUMURILE CARE SPUN „PUBLICĂ" ═══
+   *
+   * Implicit, actiunile in masa ating doar produsele publicate deja. Paza aia e
+   * importanta si ramane: „sincronizează prețurile" n-are voie sa PUBLICE produse pe
+   * care nimeni nu ceruse sa le publice — ar fi urcat pe eMAG jumatate de catalog
+   * dintr-o apasare care promitea altceva.
+   *
+   * Dar tot ea facea butonul „Publică categoria" sa nu poata publica nimic la prima
+   * folosire: fara oferte, lista iesea goala si mesajul de eroare dadea vina pe
+   * comutatorul de sincronizare automata — un diagnostic gresit, care trimitea omul
+   * sa caute unde nu era nimic.
+   *
+   * ⚠ Ofertele PRELUATE raman excluse chiar si asa. Un rand cu `auto_sync = false`
+   * inseamna „asta e a comerciantului, din contul lui" — iar o publicare in masa
+   * n-are voie sa i-o rescrie. Deci regula e: intra produsele cu oferta pornita SI
+   * cele fara nicio oferta; raman afara doar cele oprite anume.
+   */
+  publicaSiFaraOferta?: boolean;
+}
+
 async function enqueueMany(
   businessId: string,
   productIds: (string | null | undefined)[],
   op: OpEmag,
+  optiuni: OptiuniCoadaMulti = {},
 ): Promise<number> {
   try {
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
@@ -200,22 +253,32 @@ async function enqueueMany(
      * Actiunile in masa NU auto-publica: ele ating produse care exista deja, iar
      * „publicare automată" e despre produsele NOI. Vezi nota de mai sus.
      */
-    const cuOferta = new Set<string>();
+    /*
+     * ⚠ SE CITESC TOATE RANDURILE, cu `auto_sync` cu tot — nu doar cele pornite.
+     *
+     * Prima forma cerea `auto_sync = true` si pastra ce gasea. Ceea ce raspunde la
+     * intrebarea gresita: „care produse au oferta pornita?" in loc de „care produse
+     * NU trebuie atinse?".
+     *
+     * Deosebirea conteaza abia la publicare, unde un produs fara nicio oferta trebuie
+     * sa poata intra — dar unul cu oferta OPRITA anume nu.
+     */
+    const pornite = new Set<string>();
+    const oprite = new Set<string>();
     for (const bucata of bucatiDeIduri(ids)) {
-      /* ⚠ `auto_sync: true` — ofertele PRELUATE nu intra in coada. Vezi nota lunga
-         din `enqueueEmagSync`; aici e aceeasi regula, pe drumul in masa. */
       const { data, error } = await admin
-        .from("emag_offers").select("product_id")
-        .eq("business_id", businessId).eq("auto_sync", true).in("product_id", bucata);
+        .from("emag_offers").select("product_id, auto_sync")
+        .eq("business_id", businessId).in("product_id", bucata);
       if (error) throw error;
       for (const r of data ?? []) {
-        const pid = (r as { product_id: string | null }).product_id;
-        if (pid) cuOferta.add(pid);
+        const rand = r as { product_id: string | null; auto_sync: boolean };
+        if (!rand.product_id) continue;
+        (rand.auto_sync ? pornite : oprite).add(rand.product_id);
       }
     }
 
     const randuri = ids
-      .filter((id) => cuOferta.has(id))
+      .filter((id) => poateIntraInCoada(id, pornite, oprite, optiuni.publicaSiFaraOferta === true))
       .map((id) => ({
         business_id: businessId, product_id: id, offer_id: id, op,
         /* ⚠ Aceleasi patru campuri ca la elementul singur. Vezi nota de acolo: o
@@ -237,6 +300,21 @@ async function enqueueMany(
 /** Retrimitere completa, dupa o editare de produs. */
 export function enqueueEmagSyncMany(businessId: string, productIds: (string | null | undefined)[]): Promise<number> {
   return enqueueMany(businessId, productIds, "oferta");
+}
+
+/**
+ * PUBLICARE ceruta anume: intra si produsele care n-au fost niciodata pe eMAG.
+ *
+ * ⚠ Functie separata, cu alt nume, dinadins. Un steag pus pe `enqueueEmagSyncMany` ar
+ * fi fost usor de dat din greseala de pe un drum automat — iar atunci „sincronizează
+ * prețurile" ar fi publicat jumatate de catalog dintr-o apasare care promitea altceva.
+ *
+ * Numele spune ce face. Se cheama doar din butoane pe care scrie „publică".
+ */
+export function publicaPeEmagMany(
+  businessId: string, productIds: (string | null | undefined)[],
+): Promise<number> {
+  return enqueueMany(businessId, productIds, "oferta", { publicaSiFaraOferta: true });
 }
 
 /**

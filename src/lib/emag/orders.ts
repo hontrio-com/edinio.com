@@ -158,10 +158,27 @@ export interface BaniiComenzii {
 /**
  * Cati bani are comanda, cu TVA adaugat inapoi.
  *
- * ⚠ EMAG DA TOT FARA TVA. Cota nu vine pe linie, ci se afla din `vat` -ul bucatilor
- * de voucher — si cand nu exista niciun voucher, nu se afla deloc. De aceea cota
- * magazinului intra ca argument: e cea cu care si publicam, deci aceeasi cu care
- * eMAG a calculat pretul afisat.
+ * ⚠ EMAG DA TOT FARA TVA, in afara de `shipping_tax` si `green_tax`. Cota magazinului
+ * intra ca argument: e cea cu care si publicam, deci aceeasi cu care eMAG a calculat
+ * pretul afisat.
+ *
+ * ═══ ⚠ SI DA, `products[].vat` EXISTA — DAR NU-L FOLOSI (indreptat 24.08.2026) ═══
+ *
+ * Comentariul de aici spunea, pana azi, ca „cota nu vine pe linie". E FALS ca fapt: ei
+ * trimit `vat: "0.2100"` si `reversible_vat_charging` pe fiecare linie.
+ *
+ * Doar ca nu schimba nimic, si de aceea ramane cum e: integrarea publica o singura cota
+ * pe magazin (`vat_id` din setari) si scoate pretul net cu aceeasi cota. Deci
+ * `products[].vat` e chiar ce am declarat NOI, intors inapoi. Recalculat cu el pe comanda
+ * reala: acelasi rezultat, la ban.
+ *
+ * ⚠ IAR „REPARATIA" EVIDENTA AR STRICA BANI. `vat` vine ca FRACTIE (`0.2100`), pe cand
+ * `store_settings.vat_rate` e in PROCENTE (21.00). Dat lui `cuTva` fara conversie, fiecare
+ * comanda ar iesi cu ~21% mai ieftina, iar rambursul cerut de curier la fel. Aceeasi
+ * capcana e documentata si in `taxonomy.ts`.
+ *
+ * Comentariul fals se indreapta ANUME: lasat asa, il impinge pe urmatorul catre exact
+ * reparatia care pierde bani, cu argumentul ca „doar folosim ce trimit ei".
  *
  * ⚠ Vouchere le scad, si le scad la amandoua nivelurile. Valorile lor sunt NEGATIVE
  * la ei (documentatia: „reducerea fara TVA, negativa"), deci se ADUNA, nu se scad —

@@ -241,3 +241,115 @@ export async function schimbaStareaReturului(
 
   return { fel: "schimbat" };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AWB-UL DE RIDICARE LA RETUR (§53)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Cine ridică marfa înapoi. ⚠ Numai `2` e treaba comerciantului. */
+export const PICKUP_CURIER_EMAG = 1;
+export const PICKUP_CURIER_PROPRIU = 2;
+export const PICKUP_TRIMIS_DE_CLIENT = 3;
+
+export type PoateAwbRetur =
+  | { se_poate: true; emagOrderId: number }
+  | { se_poate: false; motiv: string };
+
+/**
+ * Se poate emite AWB de ridicare pentru returul ăsta?
+ *
+ * ═══ ⚠ FIECARE „NU" DE AICI ESTE BANI ═══
+ *
+ * Un AWB emis cheamă curierul și se plătește. Butonul arătat unde nu trebuie nu
+ * greșește un ecran — greșește o factură.
+ *
+ * Funcție curată, ca să se poată proba întreagă fără rețea și fără bază de date.
+ */
+export function poateAwbRetur(p: {
+  /** `pickup_method` din retur: 1 = curier eMAG · 2 = curierul tău · 3 = trimis de client. */
+  pickupMethod: number | null | undefined;
+  /** `request_status`: 2 nou · 3 confirmat · 4 respins · 5 anulat · 6 primit · 7 finalizat. */
+  stare: number | null | undefined;
+  /** AWB-uri deja emise pentru returul ăsta. */
+  awbs: unknown;
+  /** Comanda eMAG de care ține returul. */
+  emagOrderId: number | null | undefined;
+  /** Localitatea de ridicare cerută de client, și cea a comenzii. */
+  pickupLocalityId: number | null | undefined;
+  localitateComanda: number | null | undefined;
+  /** Are comanda o stradă în adresa de livrare? */
+  areStrada: boolean;
+}): PoateAwbRetur {
+  /*
+   * ⚠ CEA MAI SCUMPĂ VERIFICARE DIN TOATĂ FUNCȚIA.
+   *
+   * `1` înseamnă că vine curierul eMAG; `3`, că trimite clientul singur. În amândouă
+   * cazurile transportul e deja rezolvat — un AWB emis de noi ar fi un AL DOILEA
+   * curier, plătit degeaba, trimis să ridice un colet care nu mai e acolo.
+   */
+  if (p.pickupMethod === PICKUP_CURIER_EMAG) {
+    return { se_poate: false, motiv: "Ridicarea o face curierul eMAG. Nu emite tu AWB." };
+  }
+  if (p.pickupMethod === PICKUP_TRIMIS_DE_CLIENT) {
+    return { se_poate: false, motiv: "Clientul trimite el coletul. Nu e nevoie de AWB." };
+  }
+  if (p.pickupMethod !== PICKUP_CURIER_PROPRIU) {
+    /* ⚠ Necunoscut NU înseamnă „mergi înainte". eMAG poate adăuga metode; presupusă
+       permisivă, prima metodă nouă ar fi însemnat curieri plătiți degeaba. */
+    return { se_poate: false, motiv: "Nu se știe cine ridică marfa. Verifică returul în panoul eMAG." };
+  }
+
+  /* ⚠ Un AWB emis deja nu se emite a doua oară: al doilea curier vine și se plătește.
+     `cuRegistru` apără și el, dar acolo apără DUPĂ apăsare — aici nici nu se oferă. */
+  if (Array.isArray(p.awbs) && p.awbs.length > 0) {
+    return { se_poate: false, motiv: "Există deja un AWB de ridicare pentru returul ăsta." };
+  }
+
+  /*
+   * ⚠ Numai din „Confirmat". Din tabelul lor de treceri, drumul e
+   * Nou (2) → Confirmat (3) → Primit (6). Un curier chemat pe un retur încă
+   * neconfirmat pleacă după marfă pe care poate nici n-o accepți; pe unul deja primit,
+   * pleacă după un colet care e la tine în depozit.
+   */
+  if (p.stare !== 3) {
+    return {
+      se_poate: false,
+      motiv: p.stare === 2
+        ? "Confirmă întâi returul, apoi cheamă curierul."
+        : "Returul nu mai e în starea în care se cheamă un curier.",
+    };
+  }
+
+  if (!p.emagOrderId || !Number.isFinite(p.emagOrderId)) {
+    /* `AWBSave` cere `order_id` chiar și la retururi — e în lista lor de câmpuri
+       obligatorii. Fără comanda legată n-avem ce trimite. */
+    return { se_poate: false, motiv: "Returul nu e legat de o comandă eMAG cunoscută." };
+  }
+
+  if (!p.areStrada) {
+    return { se_poate: false, motiv: "Nu avem adresa clientului. Emite AWB-ul din panoul eMAG." };
+  }
+
+  /*
+   * ═══ ⚠ ADRESA DE RIDICARE POATE FI ALTA DECÂT CEA DE LIVRARE ═══
+   *
+   * Returul poartă `pickup_locality_id` — localitatea de unde cere clientul să fie
+   * ridicat coletul. Strada, în schimb, nu e nicăieri în retur: singura pe care o avem
+   * e cea din comandă.
+   *
+   * Când localitățile diferă, clientul a cerut ridicarea din altă parte. Lipite,
+   * strada din orașul A cu localitatea B fac o adresă care nu există — iar curierul
+   * pleacă acolo și se plătește oricum.
+   */
+  if (
+    p.pickupLocalityId != null && p.localitateComanda != null
+    && Number(p.pickupLocalityId) !== Number(p.localitateComanda)
+  ) {
+    return {
+      se_poate: false,
+      motiv: "Clientul cere ridicarea din altă localitate decât cea de livrare. Emite AWB-ul din panoul eMAG.",
+    };
+  }
+
+  return { se_poate: true, emagOrderId: Number(p.emagOrderId) };
+}

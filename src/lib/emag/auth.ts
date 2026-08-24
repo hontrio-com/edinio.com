@@ -231,6 +231,32 @@ export function ziuaInTara(tara: EmagTara | undefined, acum: Date = new Date()):
   return `${ia("year")}-${ia("month")}-${ia("day")}`;
 }
 
+/**
+ * Ziua de MAINE in tara contului.
+ *
+ * ═══ ⚠ LA RETUR, EMAG CERE CEL PUTIN ZIUA URMATOARE ═══
+ *
+ * Scris in schema lor, la `AWBSave.date`: „Required for AWBs belonging to returns.
+ * Must be at least the NEXT DAY of the AWB issuing."
+ *
+ * Trimis cu ziua de azi — forma pe care o aveam — AWB-ul de ridicare era refuzat de
+ * FIECARE data, iar mesajul lor vorbeste despre camp, nu despre regula. Comerciantul
+ * ar fi vazut ca „ridicarile pur si simplu nu merg" si n-ar fi avut ce sa raporteze.
+ *
+ * ⚠ Se aduna o zi peste ZIUA DIN TARA, nu peste UTC. Adunata peste UTC si formatata
+ * apoi in fusul lor, la 00:30 ora Romaniei ar fi iesit tot ziua de azi — fiindca in
+ * UTC e inca ieri seara. Adica exact greseala pe care `ziuaInTara` o repara deja, mutata
+ * cu o zi.
+ */
+export function ziuaUrmatoareInTara(tara: EmagTara | undefined, acum: Date = new Date()): string {
+  const azi = ziuaInTara(tara, acum);
+  /* `Date.UTC` peste o zi deja normalizata: nu mai depinde de niciun fus, si trece
+     corect peste sfarsitul de luna si peste anul bisect. */
+  const [an, luna, zi] = azi.split("-").map(Number);
+  const maine = new Date(Date.UTC(an, luna - 1, zi + 1));
+  return maine.toISOString().slice(0, 10);
+}
+
 /** Ascunde o acreditare pentru afisare. Nu se trimite niciodata valoarea intreaga. */
 export function maskSecret(secret: string): string {
   const k = (secret || "").trim();

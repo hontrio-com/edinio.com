@@ -4,7 +4,7 @@ import { coleteDeTrimis } from "./colete";
 import { eanuriDeCautat, verdictEan } from "./ean";
 import { descriereaPentruEmag } from "./descriere";
 import { statusEdinio } from "./orders";
-import { ziuaInTara } from "./auth";
+import { ziuaInTara, ziuaUrmatoareInTara } from "./auth";
 
 /*
  * Probele reparațiilor găsite la auditul complet.
@@ -209,4 +209,44 @@ test("eMAG audit: la amiaza toate trei tarile dau aceeasi zi", () => {
   for (const t of ["ro", "bg", "hu"] as const) {
     assert.equal(ziuaInTara(t, amiaza), "2026-09-02", t);
   }
+});
+
+/* ── §53. Data ridicarii la retur ────────────────────────────────── */
+
+test("eMAG retur: data de ridicare e ZIUA URMATOARE, nu ziua de azi", () => {
+  /*
+   * ═══ O REGULA SCRISA IN SCHEMA LOR, PE CARE O INCALCAM ═══
+   *
+   * `AWBSave.date`: „Required for AWBs belonging to returns. Must be at least the
+   * NEXT DAY of the AWB issuing."
+   *
+   * Forma dinainte punea ziua de AZI — corect in privinta fusului, gresit in privinta
+   * regulii. AWB-ul de ridicare era refuzat de FIECARE data, iar mesajul lor vorbeste
+   * despre un camp, nu despre regula: comerciantul ar fi vazut ca „ridicarile pur si
+   * simplu nu merg", si n-ar fi avut ce sa raporteze.
+   */
+  const amiaza = new Date("2026-09-02T09:00:00Z");
+  assert.equal(ziuaInTara("ro", amiaza), "2026-09-02", "azi");
+  assert.equal(ziuaUrmatoareInTara("ro", amiaza), "2026-09-03", "maine");
+});
+
+test("eMAG retur: ziua urmatoare se socoteste peste ZIUA DIN TARA, nu peste UTC", () => {
+  /*
+   * ⚠ La 00:30 ora Romaniei, in UTC e inca 21:30 ziua precedenta. O zi adunata peste
+   * UTC si formatata apoi in fusul lor ar fi dat tot ziua de AZI — adica exact
+   * greseala reparata de `ziuaInTara`, mutata cu o zi si la fel de tacuta.
+   */
+  const noapte = new Date("2026-09-01T21:30:00Z"); /* 2 septembrie, 00:30 la Bucuresti */
+  assert.equal(ziuaInTara("ro", noapte), "2026-09-02");
+  assert.equal(ziuaUrmatoareInTara("ro", noapte), "2026-09-03");
+  /* Ungaria e cu o ora in urma: acolo e inca 1 septembrie, deci maine e 2. */
+  assert.equal(ziuaInTara("hu", noapte), "2026-09-01");
+  assert.equal(ziuaUrmatoareInTara("hu", noapte), "2026-09-02");
+});
+
+test("eMAG retur: ziua urmatoare trece corect peste luna si peste anul bisect", () => {
+  /* O adunare pe sirul de text („zi + 1") ar fi dat „2026-08-32". */
+  assert.equal(ziuaUrmatoareInTara("ro", new Date("2026-08-31T09:00:00Z")), "2026-09-01");
+  assert.equal(ziuaUrmatoareInTara("ro", new Date("2026-12-31T09:00:00Z")), "2027-01-01");
+  assert.equal(ziuaUrmatoareInTara("ro", new Date("2028-02-28T09:00:00Z")), "2028-02-29", "2028 e bisect");
 });

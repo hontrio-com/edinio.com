@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { alegereaCurierului, contPotrivit, primulAwb } from "./awb";
 import { dimensiuniPropuse } from "./colete";
-import { trecerePermisa, treceriPosibile } from "./rma";
+import { poateAwbRetur, trecerePermisa, treceriPosibile } from "./rma";
 import { citesteTinta } from "./campanii";
 import { ceUrmeazaLaRetur, EMAG_TIP_RETUR, type EmagContCurier } from "./types";
 
@@ -254,4 +254,96 @@ test("eMAG colete: dimensiuni ZERO in catalog nu sunt dimensiuni", () => {
    */
   const r = dimensiuniPropuse([{ productId: "zerouri", cantitate: 1 }], CATALOG);
   assert.equal(r.fel, "nu_se_stie");
+});
+
+/* ── §53. AWB-ul de ridicare la retur ───────────────────────────── */
+
+const RIDICARE_BUNA = {
+  pickupMethod: 2, stare: 3, awbs: [], emagOrderId: 12345,
+  pickupLocalityId: 176, localitateComanda: 176, areStrada: true,
+};
+
+test("eMAG retur AWB: cazul bun trece", () => {
+  const r = poateAwbRetur(RIDICARE_BUNA);
+  assert.deepEqual(r, { se_poate: true, emagOrderId: 12345 });
+});
+
+test("eMAG retur AWB: curierul EMAG — nu emitem noi nimic", () => {
+  /*
+   * ═══ CEA MAI SCUMPA VERIFICARE DIN TOATA FUNCTIA ═══
+   *
+   * `pickup_method`: 1 = curier eMAG, 2 = curierul vanzatorului, 3 = trimis de client.
+   *
+   * La 1 si la 3, transportul e DEJA rezolvat. Un AWB emis de noi ar fi un AL DOILEA
+   * curier, platit, trimis dupa un colet care nu mai e acolo. Butonul aratat unde nu
+   * trebuie nu greseste un ecran — greseste o factura.
+   */
+  const r = poateAwbRetur({ ...RIDICARE_BUNA, pickupMethod: 1 });
+  assert.equal(r.se_poate, false);
+  assert.match(r.se_poate === false ? r.motiv : "", /curierul eMAG/i);
+});
+
+test("eMAG retur AWB: clientul trimite singur — nu e nevoie de AWB", () => {
+  const r = poateAwbRetur({ ...RIDICARE_BUNA, pickupMethod: 3 });
+  assert.equal(r.se_poate, false);
+  assert.match(r.se_poate === false ? r.motiv : "", /trimite el/i);
+});
+
+test("eMAG retur AWB: o metoda NECUNOSCUTA nu inseamna «mergi inainte»", () => {
+  /* ⚠ eMAG poate adauga metode. Presupusa permisiva, prima metoda noua ar fi insemnat
+     curieri platiti degeaba, la fiecare retur, pana ar fi observat cineva factura. */
+  for (const m of [0, 4, 99, null, undefined]) {
+    assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, pickupMethod: m }).se_poate, false, `metoda ${m}`);
+  }
+});
+
+test("eMAG retur AWB: un AWB deja emis nu se emite a doua oara", () => {
+  /* Al doilea curier vine si se plateste. `cuRegistru` apara si el, dar DUPA apasare;
+     aici nici nu se ofera. */
+  const r = poateAwbRetur({ ...RIDICARE_BUNA, awbs: [{ reservation_id: 7 }] });
+  assert.equal(r.se_poate, false);
+  assert.match(r.se_poate === false ? r.motiv : "", /deja/i);
+});
+
+test("eMAG retur AWB: numai din starea CONFIRMAT", () => {
+  /*
+   * Drumul lor: Nou (2) → Confirmat (3) → Primit (6). Un curier chemat pe un retur
+   * neconfirmat pleaca dupa marfa pe care poate nici n-o accepti; pe unul deja primit,
+   * pleaca dupa un colet care e la tine in depozit.
+   */
+  assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, stare: 3 }).se_poate, true);
+  const nou = poateAwbRetur({ ...RIDICARE_BUNA, stare: 2 });
+  assert.equal(nou.se_poate, false);
+  assert.match(nou.se_poate === false ? nou.motiv : "", /Confirma intai|Confirmă întâi/i);
+  for (const st of [4, 5, 6, 7, null]) {
+    assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, stare: st }).se_poate, false, `starea ${st}`);
+  }
+});
+
+test("eMAG retur AWB: fara comanda legata nu se poate — `order_id` le e obligatoriu", () => {
+  /* `AWBSave.required` cuprinde `order_id` CHIAR SI la retururi. */
+  assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, emagOrderId: null }).se_poate, false);
+  assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, emagOrderId: 0 }).se_poate, false);
+});
+
+test("eMAG retur AWB: alta LOCALITATE de ridicare — nu se lipeste o adresa care nu exista", () => {
+  /*
+   * ═══ ⚠ ADRESA DE RIDICARE POATE FI ALTA DECAT CEA DE LIVRARE ═══
+   *
+   * Returul poarta `pickup_locality_id`. Strada, in schimb, nu e nicaieri in retur:
+   * singura pe care o avem e cea din comanda.
+   *
+   * Lipite, strada din orasul A cu localitatea B fac o adresa care nu exista — iar
+   * curierul pleaca acolo si se plateste oricum.
+   */
+  const r = poateAwbRetur({ ...RIDICARE_BUNA, pickupLocalityId: 999 });
+  assert.equal(r.se_poate, false);
+  assert.match(r.se_poate === false ? r.motiv : "", /altă localitate|alta localitate/i);
+});
+
+test("eMAG retur AWB: localitatea necunoscuta nu blocheaza, dar strada lipsa da", () => {
+  /* Cand una dintre localitati lipseste, nu se poate spune ca DIFERA — si atunci nu se
+     inventeaza o piedica. Dar fara strada chiar n-avem ce trimite. */
+  assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, pickupLocalityId: null }).se_poate, true);
+  assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, areStrada: false }).se_poate, false);
 });

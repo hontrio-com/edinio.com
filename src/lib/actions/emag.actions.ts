@@ -34,7 +34,7 @@ import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
-import { schimbaStareaReturului, treceriPosibile } from "@/lib/emag/rma";
+import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
 import { aduComenzile } from "@/lib/emag/orders";
 import { pretPentruSmartDeals } from "@/lib/emag/campanii";
 import {
@@ -1702,6 +1702,14 @@ export interface RandReturEcran {
    */
   cont: { iban: string; banca: string | null; beneficiar: string | null } | null;
   actualizat: string;
+  /**
+   * Se poate chema curierul pentru ridicarea de la client? (§53)
+   *
+   * ⚠ Când nu se poate, vine MOTIVUL, nu doar un `false`. Un buton lipsă fără
+   * explicație l-ar fi pus pe om să caute în cod de ce nu-l vede — iar de cele mai
+   * multe ori motivul e o veste bună: ridicarea o face deja curierul eMAG.
+   */
+  ridicare: { sePoate: boolean; motiv: string | null }
 }
 
 /**
@@ -1720,7 +1728,7 @@ export async function listaRetururiEmag(
 
   const admin = createAdminClient();
   const { data, error } = await admin.from("emag_rma")
-    .select("emag_rma_id, emag_order_id, order_id, request_status, return_reason, return_type, products, raw, updated_at")
+    .select("emag_rma_id, emag_order_id, order_id, request_status, return_reason, return_type, products, awbs, raw, updated_at")
     .eq("business_id", businessId)
     .order("updated_at", { ascending: false })
     .limit(100);
@@ -1730,10 +1738,41 @@ export async function listaRetururiEmag(
   type Rand = {
     emag_rma_id: number; emag_order_id: number | null; order_id: string | null;
     request_status: number | null; return_reason: number | null; return_type: number | null;
-    products: unknown; raw: unknown; updated_at: string;
+    products: unknown; awbs: unknown; raw: unknown; updated_at: string;
   };
 
-  const randuri: RandReturEcran[] = ((data ?? []) as Rand[]).map((r) => ({
+  const brute = (data ?? []) as Rand[];
+
+  /*
+   * ═══ ⚠ SE CITESC DOAR COMENZILE CARE CHIAR TREBUIE ═══
+   *
+   * Adresa clientului stă în comandă, nu în retur — returul poartă doar localitatea.
+   * Dar `pickup_method` e de cele mai multe ori `1` (vine curierul eMAG), și pentru
+   * acelea nu se emite nimic, deci adresa nu foloseste la nimic.
+   *
+   * Citite toate, ar fi fost o interogare peste o sută de comenzi la fiecare
+   * deschidere a ecranului, pentru un buton care apare la câteva.
+   */
+  const idComenziDeCitit = [...new Set(brute
+    .filter((r) => (r.raw as { pickup_method?: number } | null)?.pickup_method === PICKUP_CURIER_PROPRIU)
+    .map((r) => r.order_id)
+    .filter((x): x is string => !!x))];
+
+  const adrese = new Map<string, { strada: string; localitate: number | null }>();
+  if (idComenziDeCitit.length > 0) {
+    const { data: comenzi } = await admin.from("emag_orders")
+      .select("order_id, raw").eq("business_id", businessId).in("order_id", idComenziDeCitit);
+    for (const c of (comenzi ?? []) as { order_id: string | null; raw: unknown }[]) {
+      if (!c.order_id) continue;
+      const cl = (((c.raw ?? {}) as { customer?: Record<string, unknown> }).customer ?? {}) as Record<string, unknown>;
+      adrese.set(c.order_id, {
+        strada: String(cl.shipping_street ?? "").trim(),
+        localitate: Number(cl.shipping_locality_id) || null,
+      });
+    }
+  }
+
+  const randuri: RandReturEcran[] = brute.map((r) => ({
     emagRmaId: r.emag_rma_id,
     emagOrderId: r.emag_order_id,
     orderId: r.order_id,
@@ -1764,6 +1803,24 @@ export async function listaRetururiEmag(
      * returului, un tip necunoscut ar fi ascuns un cont pe care ei ni l-au trimis.
      */
     cont: contulDinRetur(r.raw),
+    /* ⚠ Hotărârea e a lui `poateAwbRetur`, care e curată și probată. Aici e doar
+       adunatul datelor: fiecare „nu" de acolo înseamnă un curier neplătit degeaba. */
+    ridicare: (() => {
+      const adr = r.order_id ? adrese.get(r.order_id) : undefined;
+      const brutRma = (r.raw ?? {}) as { pickup_method?: number; pickup_locality_id?: number };
+      const v = poateAwbRetur({
+        pickupMethod: brutRma.pickup_method,
+        stare: r.request_status,
+        awbs: r.awbs,
+        emagOrderId: r.emag_order_id,
+        pickupLocalityId: brutRma.pickup_locality_id,
+        localitateComanda: adr?.localitate ?? null,
+        areStrada: !!adr?.strada,
+      });
+      return v.se_poate
+        ? { sePoate: true, motiv: null }
+        : { sePoate: false, motiv: v.motiv };
+    })(),
     actualizat: r.updated_at,
   }));
 
@@ -2250,4 +2307,127 @@ export async function centrulProblemelorEmag(
     taiat: citite >= PROBLEME_MAXIM_RANDURI,
     citite,
   };
+}
+
+/**
+ * Cheamă curierul să ridice marfa de la client (§53).
+ *
+ * ═══ ⚠ TOATE PIEDICILE SE VERIFICĂ ÎNAINTE DE ORICE CERERE ═══
+ *
+ * Un AWB emis cheamă curierul și se plătește. Deci hotărârea „se poate?" e o funcție
+ * curată, probată (`poateAwbRetur`), și se ia din datele pe care le avem deja — nu
+ * din răspunsul lor, și nu după ce am ars o cerere din cele 3 pe secundă.
+ *
+ * ⚠ Ecranul arată butonul doar când `poateAwbRetur` spune da. Verificarea de aici NU
+ * e o dublură: ecranul poate fi vechi de câteva minute, iar între timp returul își
+ * poate schimba starea sau poate primi un AWB de la ei.
+ */
+export async function emiteAwbReturEmag(
+  businessId: string,
+  emagRmaId: number,
+): Promise<{ numar: string | null; deja: boolean } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  const { data: randRma } = await admin.from("emag_rma")
+    .select("order_id, emag_order_id, request_status, awbs, raw")
+    .eq("business_id", businessId).eq("emag_rma_id", emagRmaId).maybeSingle();
+
+  const rma = randRma as {
+    order_id: string | null; emag_order_id: number | null;
+    request_status: number | null; awbs: unknown; raw: unknown;
+  } | null;
+  if (!rma) return { error: "Returul nu a fost găsit." };
+
+  const brutRma = (rma.raw ?? {}) as {
+    pickup_method?: number; pickup_locality_id?: number;
+    customer_name?: string; customer_phone?: string;
+  };
+
+  /* Adresa clientului vine din COMANDĂ: returul poartă doar localitatea, nu strada. */
+  const { data: randComanda } = rma.order_id
+    ? await admin.from("emag_orders").select("raw")
+        .eq("business_id", businessId).eq("order_id", rma.order_id).maybeSingle()
+    : { data: null };
+
+  const brutComanda = ((randComanda as { raw?: unknown } | null)?.raw ?? {}) as {
+    customer?: Record<string, string | number | undefined>;
+  };
+  const cl = (brutComanda.customer ?? {}) as Record<string, string | number | undefined>;
+  const strada = String(cl.shipping_street ?? "").trim();
+
+  const verdict = poateAwbRetur({
+    pickupMethod: brutRma.pickup_method,
+    stare: rma.request_status,
+    awbs: rma.awbs,
+    emagOrderId: rma.emag_order_id,
+    pickupLocalityId: brutRma.pickup_locality_id,
+    localitateComanda: Number(cl.shipping_locality_id) || null,
+    areStrada: strada.length > 0,
+  });
+  if (!verdict.se_poate) return { error: verdict.motiv };
+  if (!rma.order_id) return { error: "Returul nu e legat de o comandă din Edinio." };
+
+  /*
+   * ⚠ TIP 2 LA `contPotrivit`, nu 1. Conturile de curier au `courier_account_type`:
+   * 1 = numai RMA, 2 = numai comenzi, 3 = amândouă. Un cont de livrare trimis pentru o
+   * ridicare e refuzat, iar mesajul lor vorbește despre cont, nu despre tip —
+   * comerciantul ar fi căutat greșeala în altă parte.
+   */
+  const conturi = await citesteConturiCurier(ctx.auth);
+  if (isEmagError(conturi)) return { error: conturi.error };
+  const cont = contPotrivit(
+    (Array.isArray(conturi.data) ? conturi.data : []) as EmagContCurier[],
+    2, { fel: "oricare" }, ctx.config.courier_account_id ?? null,
+  );
+  if (cont == null) {
+    return { error: "Niciun cont de curier eMAG potrivit pentru ridicări. Verifică-le în contul tău eMAG." };
+  }
+
+  const rez = await emiteAwb(admin, ctx, {
+    orderId: rma.order_id,
+    emagOrderId: verdict.emagOrderId,
+    emagRmaId,
+    fel: 2,
+    awb: {
+      /*
+       * ═══ ⚠ SENSUL E INVERS FAȚĂ DE LIVRARE ═══
+       *
+       * La retur, marfa pleacă DE LA client CĂTRE noi. Deci clientul e `sender` și noi
+       * suntem `receiver`. Copiat din emiterea de livrare fără să se întoarcă sensul,
+       * curierul ar fi plecat din depozitul nostru către client cu un colet gol — și
+       * s-ar fi plătit oricum.
+       */
+      sender: {
+        /* ⚠ Numele și telefonul din RETUR, nu din comandă: clientul poate da alt
+           contact pentru ridicare decât cel de la livrare. Strada nu e în retur, deci
+           aceea rămâne din comandă — și tocmai de aia se verifică localitatea. */
+        name: brutRma.customer_name || String(cl.name ?? ""),
+        contact: brutRma.customer_name || String(cl.name ?? ""),
+        phone1: brutRma.customer_phone || String(cl.shipping_phone ?? cl.phone_1 ?? ""),
+        street: strada,
+        zipcode: String(cl.shipping_postal_code ?? ""),
+        legal_entity: 0,
+      },
+      receiver: { address_id: ctx.config.pickup_address_id },
+      is_oversize: 0,
+      envelope_number: 0,
+      parcel_number: 1,
+      /* ⚠ ZERO. La o ridicare nu se încasează nimic de la client; un ramburs copiat din
+         comandă i-ar fi cerut banii a doua oară, la ușă, pentru marfa pe care o dă înapoi. */
+      cod: 0,
+      courier_account_id: cont,
+    },
+  });
+
+  if (rez.fel === "esec") return { error: rez.mesaj };
+  revalidatePath(FEATURE_PATH);
+  return { numar: rez.numar, deja: rez.fel === "deja" };
 }

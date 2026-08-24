@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Loader2, PackageOpen, RefreshCw } from "lucide-react";
+import { Loader2, PackageOpen, RefreshCw, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { listaRetururiEmag, schimbaReturEmag, type RandReturEcran } from "@/lib/actions/emag.actions";
+import {
+  emiteAwbReturEmag, listaRetururiEmag, schimbaReturEmag, type RandReturEcran,
+} from "@/lib/actions/emag.actions";
 
 /**
  * Retururile de pe eMAG.
@@ -115,6 +117,33 @@ function RandRetur({
     });
   }
 
+  /*
+   * ⚠ CONFIRMARE ÎNAINTE, ȘI NU DINTR-UN EXCES DE PRUDENȚĂ.
+   *
+   * Un AWB emis cheamă curierul și se plătește. Butoanele de stare de alături sunt
+   * reversibile prin tabelul lor de treceri; ăsta nu e — banii au plecat.
+   */
+  function cheamaCurierul() {
+    if (!window.confirm(
+      "Chem curierul să ridice marfa de la client?\n\n"
+      + "Transportul se plătește, iar AWB-ul nu se poate anula de aici.",
+    )) return;
+
+    incepe(async () => {
+      const r = await emiteAwbReturEmag(businessId, rand.emagRmaId);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(r.deja
+        ? "AWB-ul era deja emis."
+        : r.numar
+          ? `Curierul a fost chemat. AWB ${r.numar}.`
+          : "Curierul a fost chemat.");
+      laSchimbare();
+    });
+  }
+
   const bucati = rand.produse.reduce((s, p) => s + p.cantitate, 0);
 
   return (
@@ -137,6 +166,13 @@ function RandRetur({
               ar fi scris „rambursare" l-ar fi pus pe om să caute un IBAN inexistent. */}
           {rand.ceUrmeaza && (
             <p className="mt-1 text-xs font-medium">{rand.ceUrmeaza}</p>
+          )}
+
+          {/* ⚠ Motivul se scrie doar când e o VESTE, nu la fiecare rând. „Confirmă
+              întâi returul" e deja evident din butoanele de alături; „ridicarea o face
+              curierul eMAG" nu e evident de nicăieri, și e chiar ce vrea omul să știe. */}
+          {!rand.ridicare.sePoate && rand.ridicare.motiv && rand.stare === 3 && (
+            <p className="mt-1 text-xs text-muted-foreground">{rand.ridicare.motiv}</p>
           )}
 
           {/*
@@ -186,7 +222,27 @@ function RandRetur({
           {/* ⚠ Numai trecerile pe care documentația lor le îngăduie din starea de
               ACUM. Un buton în plus n-ar fi făcut nimic la ei, dar ar fi întors o
               eroare în engleză pe care omul n-are cum s-o lege de rândul acțiunii. */}
-          {rand.treceri.length === 0 ? (
+          {/*
+            ⚠ BUTONUL APARE DOAR CÂND CHIAR SE POATE, iar când nu, se spune DE CE.
+            `pickup_method` din retur: 1 = vine curierul eMAG · 2 = curierul tău ·
+            3 = trimite clientul. La 1 și la 3, transportul e deja rezolvat — un AWB
+            emis de noi ar fi un al doilea curier, plătit, trimis după un colet care nu
+            mai e acolo. Butonul arătat unde nu trebuie nu greșește un ecran, greșește
+            o factură.
+          */}
+          {rand.ridicare.sePoate && (
+            <button
+              type="button"
+              onClick={cheamaCurierul}
+              disabled={seLucreaza}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+            >
+              {seLucreaza ? <Loader2 className="h-3 w-3 animate-spin" /> : <Truck className="h-3 w-3" />}
+              Cheamă curierul
+            </button>
+          )}
+
+          {rand.treceri.length === 0 && !rand.ridicare.sePoate ? (
             <span className="text-xs text-muted-foreground">Nimic de făcut</span>
           ) : (
             rand.treceri.map((t) => (

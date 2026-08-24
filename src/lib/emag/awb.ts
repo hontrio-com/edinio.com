@@ -27,7 +27,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { cuRegistru } from "@/lib/operatii/registru";
-import { ziuaInTara } from "./auth";
+import { ziuaUrmatoareInTara } from "./auth";
 import { citesteAwb, isEmagError, salveazaAwb } from "./client";
 import type { ContextEmag } from "./sync";
 import type { EmagAwb, EmagContCurier } from "./types";
@@ -135,17 +135,25 @@ export async function emiteAwb(
     ...(p.emagOrderId != null ? { order_id: p.emagOrderId } : {}),
     ...(p.emagRmaId != null ? { rma_id: p.emagRmaId } : {}),
     /*
-     * ⚠ La retur, `date` e obligatoriu. Se pune ziua de azi cand apelantul n-a dat
-     * alta: un AWB de ridicare fara data e refuzat, iar mesajul lor nu spune de ce.
+     * ═══ ⚠ LA RETUR, `date` E OBLIGATORIU — SI E ZIUA DE MAINE, NU DE AZI ═══
      *
-     * ⚠ SI SE IA ZIUA DIN TARA CONTULUI, NU DIN UTC. Prima forma scria
+     * Scris in schema lor, la `AWBSave.date`: „Required for AWBs belonging to returns.
+     * Must be at least the NEXT DAY of the AWB issuing."
+     *
+     * Forma dinainte punea ziua de AZI. Adica AWB-ul de ridicare era refuzat de
+     * FIECARE data, iar mesajul lor vorbeste despre un camp, nu despre regula:
+     * comerciantul ar fi vazut ca „ridicarile pur si simplu nu merg".
+     *
+     * ⚠ SI SE IA ZIUA DIN TARA CONTULUI, NU DIN UTC. O forma si mai veche scria
      * `new Date().toISOString().slice(0, 10)`. Masurat: la 00:30 ora Romaniei iese
-     * ZIUA DE IERI, fiindca in UTC e inca 21:30. Un curier chemat sa ridice marfa
-     * intre miezul noptii si ora trei ar fi primit o data de ridicare IN TRECUT, iar
-     * mesajul de refuz al eMAG vorbeste despre un camp, nu despre ceas — comerciantul
-     * ar fi vazut ca „uneori nu merge noaptea" si n-ar fi avut ce sa raporteze.
+     * ZIUA DE IERI, fiindca in UTC e inca 21:30 — deci o data de ridicare in trecut.
      */
-    ...(p.fel === 2 && !p.awb.date ? { date: ziuaInTara(ctx.auth.tara) } : {}),
+    ...(p.fel === 2 && !p.awb.date ? { date: ziuaUrmatoareInTara(ctx.auth.tara) } : {}),
+    /*
+     * ⚠ `pickup_and_return` NU se trimite la retur. Schema lor: „For an AWB belonging
+     * to a return must be 0 or not sent." Nu-l trimitem nicaieri, dar e scris aici ca
+     * sa nu-l adauge cineva pe drumul comun fara sa stie ca strica returul.
+     */
   };
 
   const rez = await cuRegistru(

@@ -616,3 +616,33 @@ test("eMAG: descarcarea fortata a imaginilor NU pleaca de la sine", () => {
     "apasarea omului pe un produs forteaza",
   );
 });
+
+test("eMAG: un cod de bare stricat se SPUNE, dar nu opreste produsul", () => {
+  /*
+   * ═══ 39 DE PRODUSE PLECAU TACUT FARA EAN (24.08.2026) ═══
+   *
+   * `codDeBareCurat` refuza pe drept codurile stalcite de Excel: `5.94903E+12`, sau un
+   * EAN-13 cu zerouri lipite. Curatate de non-cifre, ar da un cod scurt si valid la
+   * prima vedere, iar `find_by_eans` ar putea lega oferta de produsul ALTCUIVA.
+   *
+   * Dar refuzul era TACUT: oferta pleca fara EAN, eMAG o facea ciorna, si comerciantul
+   * afla din panoul lor. Masurat: 39 de produse asa, 33 cu codul pierdut definitiv.
+   *
+   * ⚠ E o OBSERVATIE, nu o oprire. In categoriile unde EAN-ul nu e obligatoriu, oferta
+   * e buna fara el; oprita, marfa n-ar mai ajunge la vanzare pentru o cifra scrisa
+   * gresit intr-un fisier.
+   */
+  const p = produs({ page_sections: { google: { gtin: "5.94903E+12" } } });
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
+
+  assert.equal(r.oferte.length, 1, "produsul pleaca mai departe");
+  assert.equal(r.oferte[0]?.ean, undefined, "dar fara codul stricat");
+  assert.match(r.probleme.join(" "), /codul de bare/i, "si se spune de ce");
+});
+
+test("eMAG: un cod de bare bun nu produce nicio observatie", () => {
+  /* ⚠ Cealalta jumatate: o observatie care apare mereu nu se mai citeste. */
+  const p = produs({ page_sections: { google: { gtin: "8595602520183" } } });
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
+  assert.equal(r.probleme.filter((x) => /codul de bare/i.test(x)).length, 0);
+});

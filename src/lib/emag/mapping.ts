@@ -457,6 +457,29 @@ export function construiesteOferte(
     ...(Number(magazin.green_tax) > 0 ? { green_tax: Number(magazin.green_tax) } : {}),
   };
 
+  /*
+   * ═══ ⚠ UN COD DE BARE STRICAT SE SPUNE, NU SE INGHITE (24.08.2026) ═══
+   *
+   * `codDeBareCurat` refuza pe drept codurile stalcite de Excel — `5.94903E+12`, sau un
+   * EAN-13 cu zerouri lipite la coada. Curatate de non-cifre, ele ar da un cod scurt si
+   * valid la prima vedere, iar `find_by_eans` ar putea lega oferta de produsul ALTCUIVA.
+   *
+   * Dar refuzul era TACUT: oferta pleca fara EAN, eMAG o facea ciorna („you need: EAN"),
+   * si comerciantul afla din panoul lor. Masurat pe un catalog: 39 de produse asa, dintre
+   * care 33 cu codul pierdut definitiv in notatie stiintifica.
+   *
+   * ⚠ E o OBSERVATIE, nu o oprire: produsul pleaca mai departe. In categoriile unde EAN-ul
+   * nu e obligatoriu, oferta e perfect buna fara el, iar oprita, marfa n-ar mai ajunge
+   * deloc la vanzare pentru o cifra scrisa gresit intr-un fisier.
+   */
+  const gtinScris = (gtinProdus(produs) ?? "").trim();
+  if (gtinScris && !codDeBareCurat(gtinScris)) {
+    probleme.push(
+      `Codul de bare „${gtinScris}” nu e valid, așa că oferta pleacă fără el. ` +
+      "eMAG o poate lăsa ciornă. Verifică-l în fișa produsului.",
+    );
+  }
+
   /* ── Produs simplu ────────────────────────────────────────────────────── */
   if (combinatii.length === 0) {
     const ident = dupaTitlu.get("");

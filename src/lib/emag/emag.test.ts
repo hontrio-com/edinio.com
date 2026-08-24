@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
+import { codDeBareCurat, eanuriDeCautat } from "./ean";
 import {
   ardeIncercare, clasificaRaspuns, mesajeEmag, poarteObservatii, sAIncheiat,
 } from "./errors";
@@ -387,4 +388,57 @@ test("eMAG: numaratoarea citeste formele plauzibile", () => {
   assert.equal(citesteNumarul({ count: 12 }), 12);
   assert.equal(citesteNumarul({ noResults: "350" }), 350, "ei trimit numere si ca text");
   assert.equal(citesteNumarul({ count: Number.NaN }), null, "NaN nu e un numar de oferte");
+});
+
+/* ── Codurile de bare stricate de Excel ────────────────────────────── */
+
+test("eMAG EAN: notatia stiintifica NU se salveaza — se refuza", () => {
+  /*
+   * ═══ GASIT PE DATE ADEVARATE, 24.08.2026 ═══
+   *
+   * 33 de produse din catalogul ANTAL INDUSTRY au codul scris `5.94903E+12`. Excel a
+   * transformat codul de bare in notatie stiintifica la un import CSV.
+   *
+   * Prima forma facea `.replace(/\D/g, "")` si pastra ce ramanea daca avea 8-14 cifre.
+   * Din `5.94903E+12` iese `59490312` — OPT CIFRE. Trecea filtrul si arata ca un cod
+   * de bare perfect valabil. Dar nu e codul produsului: e o farama din el, lipita cu
+   * exponentul.
+   *
+   * ⚠ SI NU E DOAR O CAUTARE RATATA. `find_by_eans` intreaba catalogul COMUN al eMAG.
+   * Daca numarul inventat se nimereste sa existe la alt produs, al altui vanzator,
+   * oferta noastra s-ar fi lipit de fisa ALTCUIVA — cu pozele lui, descrierea lui si
+   * recenziile lui. Dezlipirea se cere de la ei, pe mail.
+   *
+   * Mai bine un produs fara EAN — lipsa se vede — decat o potrivire gresita, care nu.
+   */
+  assert.equal(codDeBareCurat("5.94903E+12"), null);
+  assert.equal(codDeBareCurat("8.00154E+12"), null);
+  assert.equal(codDeBareCurat("5.9483E+12"), null);
+  assert.deepEqual(eanuriDeCautat(["5.94903E+12", "8.00154E+12"]), [],
+    "niciunul nu ajunge la `find_by_eans`");
+});
+
+test("eMAG EAN: codurile scrise cu spatii sau liniute raman valabile", () => {
+  /* Asa se scriu pe hartie si in fisele de produs. Refuzate, am fi pierdut coduri
+     bune — iar produsul ar fi intrat ca nou in catalogul lor comun, degeaba. */
+  assert.equal(codDeBareCurat("5949 0312 3456 7"), "5949031234567");
+  assert.equal(codDeBareCurat("5949-0312-3456"), "594903123456");
+  assert.equal(codDeBareCurat("  5941234567890  "), "5941234567890");
+});
+
+test("eMAG EAN: prea scurt sau prea lung se refuza", () => {
+  /* `12` si `123` exista chiar in catalogul masurat. Iar `4032254749080000` are 16
+     cifre — tot Excel, cu zerouri lipite: GTIN-14 e cel mai lung care exista. */
+  assert.equal(codDeBareCurat("12"), null);
+  assert.equal(codDeBareCurat("123"), null);
+  assert.equal(codDeBareCurat("4032254749080000"), null, "16 cifre");
+  assert.equal(codDeBareCurat("59412345"), "59412345", "8 cifre e valid (EAN-8)");
+  assert.equal(codDeBareCurat("59412345678901"), "59412345678901", "14 cifre e valid (GTIN-14)");
+});
+
+test("eMAG EAN: lipsa ramane lipsa, nu devine sir gol", () => {
+  assert.equal(codDeBareCurat(null), null);
+  assert.equal(codDeBareCurat(undefined), null);
+  assert.equal(codDeBareCurat("   "), null);
+  assert.equal(codDeBareCurat("fara cod"), null);
 });

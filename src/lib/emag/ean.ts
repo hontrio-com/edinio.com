@@ -112,9 +112,47 @@ export function verdictEan(raspunsuri: RaspunsEan[]): VerdictEan {
 export function eanuriDeCautat(brute: (string | null | undefined)[]): string[] {
   const curate = new Set<string>();
   for (const e of brute) {
-    const c = (e ?? "").replace(/\D/g, "");
-    /* Sub 8 cifre nu e cod de bare, iar cerut, doar arde o cerere din cele 3 pe secunda. */
-    if (c.length >= 8 && c.length <= 14) curate.add(c);
+    const c = codDeBareCurat(e);
+    if (c) curate.add(c);
   }
   return [...curate].slice(0, 100);
+}
+
+/**
+ * Un cod de bare, sau `null`.
+ *
+ * ═══ ⚠ NU SE STERG „CARACTERELE NECIFRA". SE REFUZA. ═══
+ *
+ * Prima forma facea `.replace(/\D/g, "")` si pastra ce ramanea, daca avea intre 8 si
+ * 14 cifre. Pare inofensiv — pana dai peste date trecute prin Excel.
+ *
+ * Masurat pe catalogul ANTAL INDUSTRY, 24.08.2026: 33 de produse au codul scris ca
+ * `5.94903E+12`. Excel a transformat codul de bare in notatie stiintifica la un
+ * import CSV, si asa a ramas.
+ *
+ * Sterse cifrele din el, `5.94903E+12` devine `59490312` — OPT CIFRE. Adica trece
+ * filtrul vechi si arata ca un cod de bare perfect valabil. Dar nu e codul
+ * produsului: e o farama din el, lipita cu exponentul.
+ *
+ * ⚠ SI ASTA NU E DOAR O CAUTARE RATATA. `find_by_eans` intreaba catalogul COMUN al
+ * eMAG. Daca numarul inventat se nimereste sa existe la alt produs, al altui
+ * vanzator, oferta noastra s-ar fi lipit de fisa ALTCUIVA — cu pozele lui,
+ * descrierea lui si recenziile lui. Iar dezlipirea se cere de la ei, pe mail.
+ *
+ * Deci: se ingaduie doar spatii si liniute (asa se scriu codurile pe hartie), si se
+ * refuza orice altceva. Un cod stricat NU se ghiceste; produsul pleaca fara EAN, iar
+ * asta e o lipsa care se vede, nu o potrivire gresita care nu se vede.
+ */
+export function codDeBareCurat(brut: string | null | undefined): string | null {
+  const t = (brut ?? "").trim();
+  if (!t) return null;
+
+  /* ⚠ Numai spatii si liniute se scot. Punctul, virgula, litera `E`, plusul — toate
+     inseamna ca numarul a trecut prin altceva si nu mai e ce a fost. */
+  const c = t.replace(/[\s-]/g, "");
+  if (!/^[0-9]+$/.test(c)) return null;
+
+  /* Sub 8 cifre nu e cod de bare, iar cerut, doar arde o cerere din cele 3 pe secunda.
+     Peste 14 nu exista — GTIN-14 e cel mai lung. */
+  return c.length >= 8 && c.length <= 14 ? c : null;
 }

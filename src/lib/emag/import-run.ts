@@ -41,6 +41,10 @@ import {
 } from "./import-produse";
 import type { EmagCategorie, EmagOfertaCitita, StareOferta } from "./types";
 import type { Json } from "@/types/database.types";
+/* ⚠ Codurile trecute prin Excel („5.94903E+12") NU se salveaza stergand cifrele:
+   ar iesi un numar scurt care arata valabil si care poate lipi oferta de fisa
+   ALTUI vanzator din catalogul lor comun. Vezi `codDeBareCurat`. */
+import { codDeBareCurat } from "./ean";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -156,7 +160,7 @@ async function citesteLucrurileNoastre(admin: Admin, businessId: string): Promis
     const variante = parseVariants(p.page_sections);
 
     if (!variante) {
-      randuri.push({ product_id: p.id, variant_title: null, sku: p.sku, ean: ps.google?.gtin ?? null });
+      randuri.push({ product_id: p.id, variant_title: null, sku: p.sku, ean: codDeBareCurat(ps.google?.gtin) });
       continue;
     }
 
@@ -176,12 +180,12 @@ async function citesteLucrurileNoastre(admin: Admin, businessId: string): Promis
         product_id: p.id,
         variant_title: titlu,
         sku: (c.sku ?? "").trim() || p.sku,
-        ean: (c.gtin ?? "").trim() || null,
+        ean: codDeBareCurat(c.gtin),
       });
     }
     /* Produsul intreg ramane si el potrivibil: `part_number`-ul lui poate fi la ei
        pe o oferta fara familie. */
-    randuri.push({ product_id: p.id, variant_title: null, sku: p.sku, ean: ps.google?.gtin ?? null });
+    randuri.push({ product_id: p.id, variant_title: null, sku: p.sku, ean: codDeBareCurat(ps.google?.gtin) });
   }
 
   return randuri;

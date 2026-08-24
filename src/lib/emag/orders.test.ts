@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { baniiComenzii, clientComenzii, liniiEdinio, statusEdinio, valoareVouchere, onoratDeEmag, TIP_ONORAT_DE_EMAG, seCereConfirmare, eDejaConfirmata, STATUS_NOUA} from "./orders";
+import {
+  baniiComenzii, clientComenzii, liniiEdinio, seConsumaLaIntrare, statusEdinio, valoareVouchere, onoratDeEmag, TIP_ONORAT_DE_EMAG, seCereConfirmare, eDejaConfirmata, STATUS_NOUA,
+} from "./orders";
 import type { EmagComanda } from "./types";
 
 /*
@@ -46,14 +48,23 @@ test("eMAG comenzi: preturile vin FARA TVA si se aduc inapoi cu el", () => {
    * magazin cu o cincime sub cat a incasat comerciantul — iar factura ar fi plecat
    * de la numarul mic, catre un client care a platit mai mult.
    */
+  /*
+   * ⚠ CIFRELE ASTEA S-AU SCHIMBAT PE 24.08.2026, SI PE DREPT.
+   *
+   * Proba cerea inainte `subtotal 220` si `total 266,2`, adica transportul trecut prin
+   * TVA odata cu produsele. Masurat pe comenzi adevarate, `shipping_tax` vine DEJA cu
+   * TVA: la comanda 500822531, produsele cu TVA dau 417,85, transportul 25, iar de pe
+   * cardul clientului s-au luat 442,85 — nu 448,10 cat scriam noi.
+   *
+   * Deci: produsele se inmultesc cu cota, transportul nu.
+   */
   const c = comanda({
     products: [{ id: 1, product_id: 501, status: 1, quantity: 2, sale_price: 100 }],
     shipping_tax: 20,
   });
   const b = baniiComenzii(c, 21);
-  assert.equal(b.subtotal, 220, "net: 2×100 + 20 livrare");
-  assert.equal(b.total, 266.2, "cu TVA de 21%");
-  assert.equal(b.vat_amount, 46.2);
+  assert.equal(b.total, 262, "2×100 cu TVA = 242, plus 20 transport care il are deja");
+  assert.equal(b.transport, 20, "transportul, cu TVA, pentru linia de pe factura");
   assert.equal(Math.round((b.subtotal + b.vat_amount) * 100) / 100, b.total, "cele trei se leaga");
 });
 
@@ -304,4 +315,83 @@ test("eMAG comenzi: SGR-ul unei linii stornate nu se mai incaseaza", () => {
     }],
   } as never, 21);
   assert.equal(r.total, 0);
+});
+
+/* ── Cele doua comenzi reale, pe cifrele lor (audit 24.08.2026) ────────────── */
+
+test("eMAG comenzi: `product_id` vine ca SIR si trebuie sa lege linia", () => {
+  /*
+   * ═══ CEL MAI GRAV DEFECT AL ZILEI ═══
+   *
+   * In raspunsul lor: `"product_id": "433"`. Forma dinainte filtra cu
+   * `Number.isFinite(x)` — `false` pentru un sir — deci harta ofertelor iesea GOALA.
+   *
+   * Masurat pe 2 din 2 comenzi reale: linia ramanea cu `product_id: null`, deci
+   * `consuma_stoc_comanda_marketplace` n-avea ce sa scada. Marfa pleca din depozit,
+   * stocul Edinio ramanea neatins, iar celelalte canale vindeau ce nu mai exista.
+   *
+   * ⚠ Si nu se repara singur: `stoc_marketplace_la` se scrie oricum, deci a doua
+   * trecere primeste „deja consumat". Zero randuri in `error_logs`.
+   */
+  const harta = new Map([[433, { product_id: "uuid-produs", variant_title: null }]]);
+  const linii = liniiEdinio(
+    [{ status: 1, product_id: "433" as unknown as number, quantity: 2, sale_price: 100, name: "X" }] as never,
+    harta, 21,
+  );
+  assert.equal(linii[0]?.product_id, "uuid-produs", "linia trebuie legata de produsul nostru");
+  assert.equal(linii[0]?.emag_product_id, 433, "si id-ul lor tinut ca NUMAR");
+});
+
+test("eMAG comenzi: transportul vine CU TVA si nu se mai inmulteste inca o data", () => {
+  /*
+   * ═══ MASURAT LA BAN PE COMANDA 500822531 ═══
+   *
+   * produse 345,3329 fara TVA × 1,21 = 417,85 · `shipping_tax` = 25
+   * `cashed_co`, cat s-a luat de pe cardul clientului = 442,85
+   *
+   * Noi scriam 448,10. Diferenta de 5,25 lei e chiar 25 × 21%.
+   *
+   * ⚠ CE COSTA: `rambursDeIncasat` trimite curierul sa ceara totalul NOSTRU. Clientul
+   * ar fi fost taxat peste ce a comandat, iar decontul comerciantului nu s-ar fi
+   * potrivit niciodata cu al lor. Cinci lei pe comanda — exact cat sa nu se observe.
+   */
+  const r = baniiComenzii({
+    products: [{ status: 1, sale_price: 345.3329, quantity: 1 }],
+    shipping_tax: 25,
+  } as never, 21);
+
+  assert.equal(r.total, 442.85, "cat a incasat eMAG de la client");
+  assert.equal(r.transport, 25, "transportul, cu TVA, pentru linia de pe factura");
+});
+
+test("eMAG comenzi: transportul se intoarce si separat, pentru factura", () => {
+  /* ⚠ `oblio.actions.ts` adauga linia „Transport" numai `if shipping_cost > 0`. Fara ea,
+     suma liniilor nu da `orders.total` si reconcilierea facturii refuza — comanda
+     livrata, fara document fiscal la client si fara document urcat la eMAG. */
+  const r = baniiComenzii({ products: [{ status: 1, sale_price: 100, quantity: 1 }], shipping_tax: 19.99 } as never, 21);
+  assert.equal(r.transport, 19.99);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STOCUL UNEI COMENZI VAZUTE INTAIA OARA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("o comanda intrata deja anulata NU consuma stoc", () => {
+  /* ⚠ Eliberarea sta sub `if v_status_schimbat` in `aplica_tranzitia_comenzii`, si
+     numai la trecerea INSPRE „cancelled". O comanda intrata direct asa n-are de unde
+     sa se mai schimbe: stocul scazut acum nu s-ar mai intoarce niciodata. */
+  assert.equal(seConsumaLaIntrare(0), false);
+});
+
+test("celelalte stari consuma stoc la intrare", () => {
+  for (const st of [1, 2, 3, 4]) {
+    assert.equal(seConsumaLaIntrare(st), true, `statusul ${st}`);
+  }
+});
+
+test("o comanda intrata returnata consuma stoc, ca una proprie returnata", () => {
+  /* ⚠ Ales anume: la ei 5 inseamna ca marfa a plecat si s-a intors, deci a IESIT din
+     depozit. Iar `c_intoarse` din tranzitie are numai „refunded" si „cancelled" —
+     „returned" tine stocul scazut si la comenzile noastre obisnuite. */
+  assert.equal(seConsumaLaIntrare(5), true);
 });

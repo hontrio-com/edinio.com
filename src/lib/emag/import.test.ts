@@ -327,3 +327,66 @@ test("eMAG import: `catalog_citit_la` se scrie DUPA `scrieOferte`, nu inainte", 
     "marcajul se scrie inaintea randurilor: o cadere la scriere ar deschide publicarea pe gol",
   );
 });
+
+/* ── Retragerea unui produs sters (24.08.2026) ─────────────────────────────── */
+
+test("eMAG: ofertele se citesc INAINTE de stergerea produsului", async () => {
+  /*
+   * ═══ PROBA UNEI ORDINI, CA MAI SUS, SI DIN ACELASI MOTIV ═══
+   *
+   * `emag_offers.product_id` devine `null` la stergerea produsului (`on delete set
+   * null`). Deci dupa `.from("products").delete()` nu se mai poate afla ce oferte avea:
+   * legatura se rupe exact in clipa in care ne trebuie.
+   *
+   * ⚠ CE COSTA daca ordinea se inverseaza inapoi: comerciantul sterge produsul din
+   * magazin si continua sa primeasca comenzi eMAG pentru marfa pe care n-o mai are.
+   * Anularile le plateste el, in bani si in punctaj la ei.
+   *
+   * Se probeaza pe sursa fiindca ordinea a doua efecte in aceeasi functie nu se vede
+   * din afara decat mimand PostgREST — iar o inversare e chiar felul de schimbare pe
+   * care o face cineva care „mai muta un rand".
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/actions/product.actions.ts", "utf8");
+
+  const chemari = [...sursa.matchAll(/enqueueEmagRetragereInainteDeStergere\(/g)].map((m) => m.index ?? -1);
+  const stergeri = [...sursa.matchAll(/from\("products"\)\.delete\(\)/g)].map((m) => m.index ?? -1);
+
+  assert.equal(stergeri.length, 2, "sunt doua cai de stergere: una singura si una in masa");
+  assert.equal(chemari.length, 2, "fiecare cale isi citeste ofertele inainte");
+
+  for (const st of stergeri) {
+    const inainte = chemari.filter((c) => c < st);
+    assert.ok(inainte.length > 0, "o stergere fara citirea ofertelor inaintea ei");
+  }
+
+  /* ⚠ Si se ASTEAPTA: pusa cu `void`, citirea ar porni inaintea stergerii dar s-ar
+     termina dupa ea, pe o legatura deja rupta. */
+  assert.ok(
+    !/void\s+enqueueEmagRetragereInainteDeStergere/.test(sursa),
+    "citirea ofertelor nu se pune cu `void`: trebuie asteptata inaintea stergerii",
+  );
+});
+
+test("eMAG cron: o retragere fara `product_id` NU se arunca din coada", async () => {
+  /*
+   * Retragerea unui produs sters intra ANUME cu `product_id: null` — produsul chiar nu
+   * mai exista. Forma dinainte stergea orice element fara produs, fara log si fara
+   * „cazut": toata logica scrisa pentru cazul asta era cod mort pe calea automata.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8");
+
+  const i = sursa.indexOf("if (!el.product_id) {");
+  assert.notEqual(i, -1, "n-am gasit ramura elementelor fara produs");
+
+  const ramura = sursa.slice(i, i + 900);
+  assert.ok(
+    ramura.includes("retragePeEmagId("),
+    "ramura fara produs trebuie sa incerce retragerea dupa `emag_id`",
+  );
+  assert.ok(
+    ramura.includes('el.op !== "retragere"'),
+    "numai ce NU e retragere se arunca din coada",
+  );
+});

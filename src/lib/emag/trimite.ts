@@ -521,6 +521,52 @@ async function duMasuratorile(
  * Cine cauta un `DELETE` in documentatia lor nu-l gaseste si e tentat sa lase
  * produsul acolo — iar magazinul continua sa vanda pe eMAG ceva ce nu mai are.
  */
+/**
+ * Retrage ofertele unui produs care NU MAI EXISTA in magazin.
+ *
+ * ═══ ⚠ DE CE NU MERGE PE CALEA OBISNUITA (audit 24.08.2026) ═══
+ *
+ * La stergerea unui produs, `emag_offers.product_id` devine `null` — asa cere cheia
+ * straina (`on delete set null`). Deci calea obisnuita, care cauta ofertele DUPA produs,
+ * nu mai gaseste nimic: legatura s-a rupt exact in clipa in care aveam nevoie de ea.
+ *
+ * Iar coada mergea si mai prost: elementul intra cu `product_id: null`, iar cronul il
+ * STERGEA inainte sa apuce sa trimita ceva (`route.ts:211`). Fara log, fara „dus", fara
+ * „cazut". Toata logica scrisa anume pentru cazul asta — `rutaDeTrimitere` cu
+ * `op: "retragere"` — era cod mort pe calea automata.
+ *
+ * ⚠ CE COSTA: comerciantul sterge produsul din magazin si continua sa primeasca comenzi
+ * eMAG pentru marfa pe care n-o mai are. Anularile le plateste el, in bani si in punctaj
+ * la ei. E chiar scenariul scris ca fiind de evitat in nota de la `existaLaEmag`.
+ *
+ * Aici se merge direct pe `emag_id`, care e al NOSTRU si nu se pierde la stergere.
+ */
+export async function retragePeEmagId(
+  admin: Admin, ctx: ContextEmag, emagId: number,
+): Promise<RezultatTrimitere> {
+  const { data } = await admin.from("emag_offers")
+    .select("emag_id, last_synced_at, creat_de_edinio")
+    .eq("business_id", ctx.businessId).eq("emag_id", emagId).maybeSingle();
+
+  const rand = data as { emag_id: number; last_synced_at: string | null; creat_de_edinio: boolean } | null;
+  if (!rand) return { verdict: "sarit", mesaj: "Oferta nu mai există la noi." };
+
+  /* ⚠ Aceeasi regula ca la `existaLaEmag`: o oferta PRELUATA exista la ei chiar daca
+     n-am trimis-o noi niciodata, deci si ea trebuie oprita. */
+  if (rand.last_synced_at == null && rand.creat_de_edinio !== false) {
+    return { verdict: "sarit", mesaj: "Oferta nu a ajuns niciodată pe eMAG." };
+  }
+
+  const r = await salveazaOferte(ctx.auth, [{ id: rand.emag_id, status: 0 as const }]);
+  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
+
+  await admin.from("emag_offers")
+    .update({ status: "withdrawn" satisfies StareOferta, updated_at: new Date().toISOString() })
+    .eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+
+  return { verdict: "reusit", mesaj: "Oferta a fost oprită de la vânzare pe eMAG." };
+}
+
 async function retrage(
   admin: Admin, ctx: ContextEmag, randuri: RandOfertaLocal[],
 ): Promise<RezultatTrimitere> {

@@ -28,6 +28,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { intregDeLaEi } from "./numere";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
@@ -57,6 +58,36 @@ export function statusEdinio(statusEmag: number): string {
   if (statusEmag === 3) return "shipped";
   if (statusEmag === 2) return "processing";
   return "pending";
+}
+
+/**
+ * Se scade stocul pentru o comandă VĂZUTĂ ACUM ÎNTÂIA OARĂ, în starea asta?
+ *
+ * ═══ ⚠ O COMANDĂ DEJA ANULATĂ NU-ȘI MAI POATE ELIBERA STOCUL ═══
+ *
+ * Consumul era chemat necondiționat la prima vedere. Iar eliberarea stă în
+ * `aplica_tranzitia_comenzii`, sub `if v_status_schimbat` — deci se face numai când
+ * statusul SE SCHIMBĂ, și numai la trecerea ÎNSPRE „cancelled" dinspre altceva
+ * (`v_intoarce`).
+ *
+ * O comandă intrată direct ca „cancelled" nu mai are de unde să se schimbe. Stocul
+ * scăzut acum nu se mai întoarce NICIODATĂ — nici la a doua trecere, fiindcă
+ * `stoc_marketplace_la` e deja pus și RPC-ul răspunde `deja: true`. Marfa e pe raft,
+ * dar magazinul o socotește vândută, și așa rămâne.
+ *
+ * ⚠ CÂND SE ÎNTÂMPLĂ: o comandă anulată între două treceri ale cronului, sau la prima
+ * citire după conectarea contului, când fereastra aduce și comenzi deja închise.
+ *
+ * ⚠ „returned" NU e în lista asta, și e o alegere, nu o scăpare. La ei, 5 înseamnă că
+ * marfa a plecat și s-a întors — deci a ieșit din depozit cu adevărat. Iar
+ * `aplica_tranzitia_comenzii` tratează „returned" ca stare care ȚINE stocul
+ * (`c_intoarse` are numai „refunded" și „cancelled"): retururile își au drumul lor.
+ * Scăzut aici, stocul rămâne scăzut exact ca la o comandă proprie returnată.
+ *
+ * ⚠ PUR ȘI EXPORTAT: e o decizie care se strică tăcut și trebuie probată fără rețea.
+ */
+export function seConsumaLaIntrare(statusEmag: number): boolean {
+  return statusEdinio(statusEmag) !== "cancelled";
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -90,6 +121,8 @@ export function valoareVouchere(bucati: EmagImpartireVoucher[] | undefined): { f
 }
 
 export interface BaniiComenzii {
+  /** Transportul, CU TVA. Fara el nu se poate emite factura — vezi `shipping_cost`. */
+  transport: number;
   subtotal: number;
   vat_amount: number;
   total: number;
@@ -164,7 +197,26 @@ export function baniiComenzii(c: EmagComanda, cotaProcente: number): BaniiComenz
     garantiiTva += g.tva;
   }
 
-  const netLivrare = nr(c.shipping_tax);
+  /*
+   * ═══ ⚠ `shipping_tax` VINE CU TVA INCLUS, spre deosebire de tot restul ═══
+   *
+   * Masurat la ban pe comanda 500822531: produse 345,3329 fara TVA × 1,21 = 417,85;
+   * `shipping_tax` = 25; iar `cashed_co` — cat s-a luat efectiv de pe cardul clientului
+   * — = 442,85. Adica 417,85 + 25, nu 417,85 + 25×1,21.
+   *
+   * Noi scriam 448,10. Diferenta de 5,25 lei e chiar 25 × 21%: TVA-ul transportului,
+   * socotit de doua ori.
+   *
+   * ⚠ CE COSTA: `rambursDeIncasat` trimite curierul sa ceara totalul NOSTRU. Clientul
+   * ar fi fost taxat peste ce a comandat, iar decontul comerciantului nu s-ar fi
+   * potrivit niciodata cu al lor. Cinci lei pe comanda — exact cat sa nu se observe.
+   *
+   * ⚠ Documentatia lor confirma directia: la `RMASave.return_tax_value` scrie explicit
+   * „Shipping tax for returned products (VAT included)", in timp ce la fiecare camp de
+   * pret al produsului scrie „without VAT".
+   */
+  const brutLivrare = nr(c.shipping_tax);
+  const netLivrare = cota > 0 ? brutLivrare / (1 + cota / 100) : brutLivrare;
   const vLivrare = valoareVouchere(c.shipping_tax_voucher_split);
   voucherFara += vLivrare.fara;
   voucherTva += vLivrare.tva;
@@ -176,14 +228,19 @@ export function baniiComenzii(c: EmagComanda, cotaProcente: number): BaniiComenz
   }
 
   const net = netProduse + netLivrare + voucherFara + garantiiFara;
-  /* ⚠ Garantiile NU trec prin `cuTva`: TVA-ul lor s-a socotit deja, cu cota lor. */
-  const brut = cuTva(netProduse + netLivrare) + voucherFara + voucherTva
+  /*
+   * ⚠ Transportul intra la brut ASA CUM L-AU TRIMIT, nu trecut prin `cuTva`: el vine
+   * deja cu TVA. Garantiile la fel — TVA-ul lor s-a socotit cu cota lor.
+   */
+  const brut = cuTva(netProduse) + brutLivrare + voucherFara + voucherTva
     + garantiiFara + garantiiTva;
 
   return {
     subtotal: douaZecimale(net),
     vat_amount: douaZecimale(brut - net),
     total: douaZecimale(brut),
+    /* ⚠ CU TVA, cum il tine magazinul si cum ni-l dau si ei. Vezi `shipping_cost`. */
+    transport: douaZecimale(brutLivrare),
   };
 }
 
@@ -217,15 +274,18 @@ export function liniiEdinio(
   const out: LinieEdinio[] = [];
   for (const l of linii ?? []) {
     if (!l || l.status === 0) continue;
-    const legat = l.product_id != null ? dupaEmagId.get(l.product_id) : undefined;
+    /* ⚠ Prin aceeasi poarta ca la `hartaOfertelor`: ei trimit sirul `"433"`, iar cheia
+       hartii e numarul 433. Vezi nota de acolo pentru ce a costat. */
+    const idLor = intregDeLaEi(l.product_id);
+    const legat = idLor != null ? dupaEmagId.get(idLor) : undefined;
     out.push({
       product_id: legat?.product_id ?? null,
       variant_title: legat?.variant_title ?? null,
-      name: (l.name ?? "").trim() || `Produs eMAG ${l.product_id ?? "?"}`,
+      name: (l.name ?? "").trim() || `Produs eMAG ${idLor ?? "?"}`,
       quantity: nr(l.quantity),
       /* ⚠ Pretul liniei se scrie CU TVA: asa il tine magazinul peste tot. */
       price: douaZecimale(nr(l.sale_price) * (1 + cota / 100)),
-      emag_product_id: l.product_id ?? null,
+      emag_product_id: idLor,
     });
   }
   return out;
@@ -702,6 +762,20 @@ export async function ingereazaComanda(
     if (!istoric) {
       const { error: eActualizare } = await admin.from("orders").update({
         items: linii as never,
+        /*
+         * ═══ ⚠ TRANSPORTUL, FARA CARE NU SE POATE EMITE FACTURA (24.08.2026) ═══
+         *
+         * `shipping_cost` nu se scria nicaieri. Iar `oblio.actions.ts` adauga linia
+         * „Transport" pe factura numai `if shipping_cost > 0`.
+         *
+         * Fara ea, suma liniilor nu se potriveste cu `orders.total` — 30,25 lei diferenta
+         * la un plafon de 0,015 — iar reconcilierea facturii intoarce refuz. Rezultat:
+         * comanda livrata, fara document fiscal la client SI fara document urcat la eMAG,
+         * care il cere. Nici automat, nici de mana: amandoua trec pe aceeasi cale.
+         *
+         * ⚠ Se scrie CU TVA, cum il tine magazinul peste tot si cum ni-l dau si ei.
+         */
+        shipping_cost: bani.transport,
         subtotal: bani.subtotal,
         total: bani.total,
         vat_amount: bani.vat_amount,
@@ -793,6 +867,15 @@ export async function ingereazaComanda(
     customer_email: null,
     shipping_address: client.address as never,
     items: linii as never,
+    /*
+     * ═══ ⚠ TRANSPORTUL, FARA CARE NU SE POATE EMITE FACTURA (24.08.2026) ═══
+     *
+     * `shipping_cost` nu se scria nicaieri. Iar `oblio.actions.ts` adauga linia
+     * „Transport" pe factura numai `if shipping_cost > 0`. Fara ea, suma liniilor nu se
+     * potriveste cu `orders.total`, iar reconcilierea facturii intoarce refuz: comanda
+     * livrata, fara document fiscal la client SI fara document urcat la eMAG, care il cere.
+     */
+    shipping_cost: bani.transport,
     subtotal: bani.subtotal,
     total: bani.total,
     vat_amount: bani.vat_amount,
@@ -877,7 +960,9 @@ export async function ingereazaComanda(
    * magazinul propriu ar fi ramas fara stoc pentru marfa pe care o are pe raft, si ar
    * fi refuzat comenzi adevarate.
    */
-  if (!onoratDeEmag(c.type) && !istoric) {
+  /* ⚠ Si nu daca intra DEJA anulata: stocul scazut acum nu se mai poate elibera
+     niciodata. Vezi `seConsumaLaIntrare`. */
+  if (!onoratDeEmag(c.type) && !istoric && seConsumaLaIntrare(c.status)) {
     const consum = await consumaStocul(admin, ctx, orderId, linii);
     if (consum === "esuat") return "esuata";
   }
@@ -936,7 +1021,27 @@ async function poateFactura(admin: Db, ctx: ContextEmag, orderId: string, status
 async function hartaOfertelor(
   admin: Db, businessId: string, c: EmagComanda,
 ): Promise<Map<number, { product_id: string | null; variant_title: string | null }>> {
-  const ids = [...new Set((c.products ?? []).map((l) => l?.product_id).filter((x): x is number => Number.isFinite(x)))];
+  /*
+   * ═══ ⚠ EI TRIMIT `product_id` CA SIR, NU CA NUMAR (masurat, 24.08.2026) ═══
+   *
+   * In raspunsul lor: `"product_id": "433"`. Forma dinainte filtra cu
+   * `Number.isFinite(x)` — care da `false` pentru un sir — deci lista iesea GOALA, iar
+   * `dupaEmagId.get("433")` pe un `Map<number>` intoarce `undefined` oricum.
+   *
+   * ⚠ CE A COSTAT, masurat pe 2 din 2 comenzi reale: linia comenzii ramanea cu
+   * `product_id: null`, deci `consuma_stoc_comanda_marketplace` n-avea ce sa scada.
+   * Marfa pleca din depozit, stocul Edinio ramanea neatins, iar magazinul propriu si
+   * celelalte canale vindeau mai departe ce nu mai exista.
+   *
+   * ⚠ SI NU SE REPARA SINGUR: `stoc_marketplace_la` se scrie oricum, deci la a doua
+   * trecere RPC-ul raspunde „deja consumat". Zero randuri in `error_logs` — a tacut.
+   *
+   * `intregDeLaEi` e aceeasi poarta prin care trec toate numerele lor. Raspunsul lui
+   * `order/read` nu e in schema, ca si cel de la oferte.
+   */
+  const ids = [...new Set(
+    (c.products ?? []).map((l) => intregDeLaEi(l?.product_id)).filter((x): x is number => x != null),
+  )];
   const harta = new Map<number, { product_id: string | null; variant_title: string | null }>();
   if (ids.length === 0) return harta;
 

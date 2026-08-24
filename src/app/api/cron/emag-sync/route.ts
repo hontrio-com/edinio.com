@@ -12,7 +12,7 @@ import { patchEmagConfig } from "@/lib/emag/config";
 import { intregDeLaEi, zecimalDeLaEi } from "@/lib/emag/numere";
 import { stocDeImportat } from "@/lib/emag/import-produse";
 import { eRespinsaDeEmag, motiveDeLaEi } from "@/lib/emag/motive";
-import { magazinDin, trimiteElement } from "@/lib/emag/trimite";
+import { magazinDin, retragePeEmagId, trimiteElement } from "@/lib/emag/trimite";
 import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
   citesteMemoriaDerivei, derivaOfertei, hotarasteDeriva, sursaAdevarului,
@@ -28,6 +28,7 @@ import { aduRetururile } from "@/lib/emag/rma";
 import type { EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
 import type { OpEmag } from "@/lib/emag/queue";
 import { asteptareaUrmatoare, eVandabila } from "@/lib/emag/rute";
+import { ardeIncercare } from "@/lib/emag/errors";
 
 /**
  * Trecerea din minut in minut a integrarii eMAG.
@@ -208,8 +209,43 @@ export async function GET(req: NextRequest) {
     }
 
     for (const el of elemente) {
+      /*
+       * ═══ ⚠ O RETRAGERE FARA PRODUS NU E UN GUNOI, E CHIAR ROSTUL EI ═══
+       *
+       * Forma dinainte stergea ORICE element fara `product_id`. Dar retragerea unui
+       * produs sters intra ANUME asa: la stergere, `emag_offers.product_id` devine
+       * `null` (`on delete set null`), deci legatura se rupe exact cand avem nevoie de ea.
+       *
+       * Deci elementul era sters aici, fara log, fara „dus", fara „cazut" — iar toata
+       * logica scrisa pentru cazul asta (`rutaDeTrimitere` cu `op: "retragere"`) era cod
+       * mort pe calea automata.
+       *
+       * ⚠ CE COSTA: comerciantul sterge produsul si continua sa primeasca comenzi eMAG
+       * pentru marfa pe care n-o mai are. Anularile le plateste el, in bani si in punctaj.
+       *
+       * `offer_id` poarta `emag_id`-ul, citit inainte de stergere. Vezi
+       * `enqueueEmagRetragereInainteDeStergere`.
+       */
       if (!el.product_id) {
-        await admin.from("emag_sync_queue").delete().eq("id", el.id);
+        const emagId = Number(el.offer_id);
+        if (el.op !== "retragere" || !Number.isFinite(emagId)) {
+          await admin.from("emag_sync_queue").delete().eq("id", el.id);
+          continue;
+        }
+        const rr = await cuFir(firNou("coada-retragere"), () => retragePeEmagId(admin, ctx, emagId));
+        if (rr.verdict === "sarit" || rr.verdict === "reusit" || rr.verdict === "reusit_cu_observatii") {
+          await admin.from("emag_sync_queue").delete().eq("id", el.id);
+          duse++;
+        } else {
+          cazute++;
+          const incercari = (el.attempts ?? 0) + (ardeIncercare(rr.verdict as Parameters<typeof ardeIncercare>[0]) ? 1 : 0);
+          await admin.from("emag_sync_queue").update({
+            attempts: incercari,
+            last_error: rr.mesaj || null,
+            revendicat_pana: null,
+            next_retry_at: new Date(Date.now() + asteptareaUrmatoare(incercari)).toISOString(),
+          }).eq("id", el.id);
+        }
         continue;
       }
 

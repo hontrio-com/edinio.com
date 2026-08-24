@@ -332,3 +332,59 @@ export function enqueueEmagStocMany(businessId: string, productIds: (string | nu
 export function enqueueEmagPretMany(businessId: string, productIds: (string | null | undefined)[]): Promise<number> {
   return enqueueMany(businessId, productIds, "pret");
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RETRAGEREA UNUI PRODUS STERS (audit 24.08.2026)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Pune la coada oprirea de la vanzare a ofertelor unui produs care se sterge.
+ *
+ * ═══ ⚠ SE CHEAMA INAINTE DE STERGERE, SI ASTA E TOT ROSTUL ═══
+ *
+ * Dupa stergere, `emag_offers.product_id` devine `null` (`on delete set null`), deci
+ * ofertele nu se mai pot gasi dupa produs. Iar elementul pus in coada cu
+ * `product_id: null` era STERS de cron inainte sa trimita ceva.
+ *
+ * ⚠ Rezultatul, pana azi: comerciantul stergea produsul si continua sa primeasca
+ * comenzi eMAG pentru marfa pe care n-o mai avea. Anularile le platea el.
+ *
+ * Aici se citesc `emag_id`-urile CAT INCA SE POATE si se pune cate un element pentru
+ * fiecare, cu `offer_id` = id-ul ofertei. Cronul le trimite pe cale directa.
+ */
+export async function enqueueEmagRetragereInainteDeStergere(
+  businessId: string,
+  productIds: string[],
+): Promise<void> {
+  try {
+    if (productIds.length === 0) return;
+    const admin = createAdminClient();
+    const config = await configPentruCoada(admin, businessId);
+    if (!config) return;
+
+    const emagIds: number[] = [];
+    for (const bucata of bucatiDeIduri(productIds)) {
+      const { data } = await admin.from("emag_offers")
+        .select("emag_id").eq("business_id", businessId).in("product_id", bucata);
+      for (const r of (data ?? []) as { emag_id: number }[]) emagIds.push(r.emag_id);
+    }
+    if (emagIds.length === 0) return;
+
+    const randuri = emagIds.map((id) => ({
+      business_id: businessId,
+      /* ⚠ `product_id: null` ANUME: produsul chiar dispare, iar cronul stie sa mearga
+         pe `offer_id` cand lucrarea e o retragere. */
+      product_id: null,
+      offer_id: String(id),
+      op: "retragere" as const,
+      prioritate: PRIORITATE_OP.retragere,
+      next_retry_at: null,
+      abandonat_la: null,
+      attempts: 0,
+    }));
+
+    await admin.from("emag_sync_queue").upsert(randuri, { onConflict: "business_id,offer_id,op" });
+  } catch (e) {
+    inghiteDarScrie("retragere-stergere", businessId, e, { cate: productIds.length });
+  }
+}

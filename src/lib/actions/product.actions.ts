@@ -17,7 +17,10 @@ import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue"
 import { enqueueOlxSync, enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouSync, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolSync, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
-import { enqueueEmagPretMany, enqueueEmagSync, enqueueEmagSyncMany } from "@/lib/emag/queue";
+import {
+  enqueueEmagPretMany, enqueueEmagRetragereInainteDeStergere,
+  enqueueEmagSync, enqueueEmagSyncMany,
+} from "@/lib/emag/queue";
 
 interface ProductData {
   name: string;
@@ -437,6 +440,22 @@ export async function deleteProduct(productId: string, businessId: string) {
     .eq("business_id", businessId)
     .single();
 
+  /*
+   * ═══ ⚠ OFERTELE eMAG SE CITESC ÎNAINTE DE ȘTERGERE (audit 24.08.2026) ═══
+   *
+   * `emag_offers.product_id` devine `null` la ștergere (`on delete set null`), deci după
+   * linia de mai jos nu se mai poate afla ce oferte avea produsul. Iar retragerea pusă la
+   * coadă cu `product_id: null` era ȘTEARSĂ de cron înainte să trimită ceva.
+   *
+   * ⚠ Rezultatul, până azi: comerciantul ștergea produsul din magazin și continua să
+   * primească comenzi eMAG pentru marfă pe care n-o mai avea. Anulările le plătea el, în
+   * bani și în punctaj la ei.
+   *
+   * Se face ÎNAINTE și se așteaptă: pus cu `void` după ștergere, ar fi citit o legătură
+   * deja ruptă.
+   */
+  await enqueueEmagRetragereInainteDeStergere(businessId, [productId]);
+
   const { error } = await supabase.from("products").delete()
     .eq("id", productId).eq("business_id", businessId);
 
@@ -457,10 +476,8 @@ export async function deleteProduct(productId: string, businessId: string) {
   void enqueueOlxSync(businessId, null, productId, "delete");
   void enqueueAboutYouSync(businessId, null, productId, "delete");
   void enqueueTrendyolSync(businessId, null, productId, "delete");
-  /* ⚠ „retragere", nu „stergere": eMAG NU are stergere de oferta. Se trimite
-     `status: 0`, adica se opreste din vanzare, si oferta ramane la ei cu
-     documentatia aprobata. */
-  void enqueueEmagSync(businessId, null, productId, "retragere");
+  /* ⚠ Retragerea eMAG s-a pus la coada MAI SUS, inainte de stergere: vezi nota de
+     acolo. Pusa aici, ar fi citit o legatura deja rupta si n-ar fi trimis nimic. */
   void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncBrevoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncKlaviyoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
@@ -590,6 +607,11 @@ export async function bulkProductAction(
         if (res.error) throw res.error;
         rows.push(...((res.data ?? []) as { id: string; images: unknown }[]));
       }
+      /* ⚠ Ofertele eMAG, din acelasi motiv ca imaginile de mai sus: `product_id` devine
+         `null` la stergere, deci dupa bucla urmatoare nu se mai stie ce oferte erau ale
+         lor. Se asteapta, nu se pune cu `void`. Vezi `deleteProduct`. */
+      await enqueueEmagRetragereInainteDeStergere(businessId, ids);
+
       for (const bucata of bucatiDeIduri(ids)) {
         const { error } = await supabase
           .from("products").delete().eq("business_id", businessId).in("id", bucata);
@@ -604,7 +626,6 @@ export async function bulkProductAction(
       for (const id of ids) void enqueueOlxSync(businessId, null, id, "delete");
       for (const id of ids) void enqueueAboutYouSync(businessId, null, id, "delete");
       for (const id of ids) void enqueueTrendyolSync(businessId, null, id, "delete");
-      for (const id of ids) void enqueueEmagSync(businessId, null, id, "retragere");
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });

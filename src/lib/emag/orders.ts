@@ -33,7 +33,7 @@ import { logError } from "@/lib/error-logger";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 import { citesteComenzi, confirmaComanda, isEmagError } from "./client";
 import type { ContextEmag } from "./sync";
-import type { EmagComanda, EmagImpartireVoucher, EmagLinieComanda } from "./types";
+import type { EmagComanda, EmagImpartireVoucher, EmagLinieComanda, EmagGarantieReciclare} from "./types";
 
 type Db = SupabaseClient<Database>;
 
@@ -107,12 +107,50 @@ export interface BaniiComenzii {
  * la ei (documentatia: „reducerea fara TVA, negativa"), deci se ADUNA, nu se scad —
  * scazute, reducerea s-ar fi transformat in adaos.
  */
+/**
+ * Cat fac taxele de garantie-returnare de pe o linie, cu tot cu TVA-ul lor.
+ *
+ * ═══ ⚠ SGR-UL E BANI, SI NU-L NUMARA NIMENI PANA AZI (audit 24.08.2026) ═══
+ *
+ * `recycle_warranties` era declarat `unknown[]` in tipuri si nu se citea nicaieri.
+ * Adica totalul comenzii iesea mai mic decat cat a facturat eMAG clientului.
+ *
+ * Ce costa: la plata ramburs, `rambursDeIncasat` trimite curierul sa incaseze totalul
+ * NOSTRU. Cu SGR-ul lipsa, curierul cere mai putin decat trebuie, iar diferenta o
+ * pierde comerciantul — cate 0,50 lei pe ambalaj, pe fiecare comanda, la nesfarsit.
+ * Si factura pe care o emitem iese fara linia aia, deci nu se potriveste cu decontul lor.
+ *
+ * ⚠ FIECARE GARANTIE ARE COTA EI DE TVA. Trecuta prin cota magazinului, o taxa cu alta
+ * cota ar fi iesit cu cativa bani gresit — o suma prea mica pentru a fi observata si
+ * exact de aceea nereparata niciodata.
+ *
+ * ⚠ Si ele pot avea vouchere, la nivelul lor. Valorile sunt NEGATIVE, ca peste tot la ei.
+ */
+export function valoareGarantiilor(
+  garantii: EmagGarantieReciclare[] | undefined,
+): { fara: number; tva: number } {
+  let fara = 0, tva = 0;
+  for (const g of garantii ?? []) {
+    const bucati = nr(g?.quantity) || 1;
+    const net = nr(g?.sale_price) * bucati;
+    const cota = nr(g?.vat_rate);
+    fara += net;
+    tva += net * (cota / 100);
+    const v = valoareVouchere(g?.recycle_warranty_voucher_split);
+    fara += v.fara;
+    tva += v.tva;
+  }
+  return { fara, tva };
+}
+
 export function baniiComenzii(c: EmagComanda, cotaProcente: number): BaniiComenzii {
   const cota = Number.isFinite(cotaProcente) ? cotaProcente : 0;
   const cuTva = (net: number) => net * (1 + cota / 100);
 
   let netProduse = 0;
   let voucherFara = 0, voucherTva = 0;
+  /* ⚠ Tinute SEPARAT de produse: au cota lor de TVA, deci nu pot trece prin `cuTva`. */
+  let garantiiFara = 0, garantiiTva = 0;
 
   for (const l of c.products ?? []) {
     if (l?.status === 0) continue; /* linie stornata */
@@ -120,6 +158,10 @@ export function baniiComenzii(c: EmagComanda, cotaProcente: number): BaniiComenz
     const v = valoareVouchere(l?.product_voucher_split);
     voucherFara += v.fara;
     voucherTva += v.tva;
+    /* ⚠ SGR-ul urmeaza soarta liniei: pe o linie stornata nu se mai incaseaza. */
+    const g = valoareGarantiilor(l?.recycle_warranties);
+    garantiiFara += g.fara;
+    garantiiTva += g.tva;
   }
 
   const netLivrare = nr(c.shipping_tax);
@@ -133,8 +175,10 @@ export function baniiComenzii(c: EmagComanda, cotaProcente: number): BaniiComenz
     voucherTva += nr(v?.sale_price_vat);
   }
 
-  const net = netProduse + netLivrare + voucherFara;
-  const brut = cuTva(netProduse + netLivrare) + voucherFara + voucherTva;
+  const net = netProduse + netLivrare + voucherFara + garantiiFara;
+  /* ⚠ Garantiile NU trec prin `cuTva`: TVA-ul lor s-a socotit deja, cu cota lor. */
+  const brut = cuTva(netProduse + netLivrare) + voucherFara + voucherTva
+    + garantiiFara + garantiiTva;
 
   return {
     subtotal: douaZecimale(net),

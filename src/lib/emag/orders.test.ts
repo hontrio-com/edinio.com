@@ -253,3 +253,55 @@ test("eMAG confirmare: un refuz ADEVARAT nu se ia drept reusita", () => {
   assert.equal(eDejaConfirmata(null), false);
   assert.equal(eDejaConfirmata(""), false);
 });
+
+/* ── Taxele SGR intra in bani (audit 24.08.2026) ───────────────────────────── */
+
+test("eMAG comenzi: taxa SGR intra in totalul comenzii", () => {
+  /*
+   * ═══ O GAURA DE BANI, TACUTA ═══
+   *
+   * `recycle_warranties` era declarat `unknown[]` si nu se citea nicaieri. Deci
+   * totalul nostru iesea mai mic decat cat a facturat eMAG clientului.
+   *
+   * La plata ramburs, `rambursDeIncasat` trimite curierul sa incaseze totalul NOSTRU:
+   * cu SGR-ul lipsa, cere mai putin decat trebuie, iar diferenta o pierde
+   * comerciantul. Cate 0,50 lei pe ambalaj, pe fiecare comanda, la nesfarsit.
+   */
+  const fara = baniiComenzii({
+    products: [{ status: 1, sale_price: 100, quantity: 1 }],
+  } as never, 21);
+  const cu = baniiComenzii({
+    products: [{
+      status: 1, sale_price: 100, quantity: 1,
+      recycle_warranties: [{ quantity: 2, sale_price: 0.5, vat_rate: 0 }],
+    }],
+  } as never, 21);
+
+  assert.equal(cu.subtotal - fara.subtotal, 1, "doua ambalaje x 0,50 lei");
+  assert.equal(cu.total - fara.total, 1, "SGR cu cota 0 nu adauga TVA");
+});
+
+test("eMAG comenzi: SGR-ul are COTA LUI, nu pe a magazinului", () => {
+  /* ⚠ Trecut prin cota magazinului, ar fi iesit cu cativa bani gresit — o suma prea
+     mica pentru a fi observata, si exact de aceea nereparata niciodata. */
+  const r = baniiComenzii({
+    products: [{
+      status: 1, sale_price: 0, quantity: 1,
+      recycle_warranties: [{ quantity: 1, sale_price: 10, vat_rate: 5 }],
+    }],
+  } as never, 21);
+  assert.equal(r.subtotal, 10);
+  assert.equal(r.vat_amount, 0.5, "5% din 10, nu 21%");
+});
+
+test("eMAG comenzi: SGR-ul unei linii stornate nu se mai incaseaza", () => {
+  /* ⚠ Urmeaza soarta liniei. Numarat separat, o linie anulata si-ar fi lasat taxa in
+     total, iar curierul ar fi cerut bani pentru un ambalaj care nu mai pleaca. */
+  const r = baniiComenzii({
+    products: [{
+      status: 0, sale_price: 100, quantity: 1,
+      recycle_warranties: [{ quantity: 4, sale_price: 0.5, vat_rate: 0 }],
+    }],
+  } as never, 21);
+  assert.equal(r.total, 0);
+});

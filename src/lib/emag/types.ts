@@ -448,7 +448,15 @@ export interface EmagLinieComanda {
   details?: string;
   serial_numbers?: string;
   product_voucher_split?: EmagImpartireVoucher[];
-  recycle_warranties?: unknown[];
+  /**
+   * Taxele de tip SGR (garantie-returnare) puse pe linia de comanda.
+   *
+   * ⚠ SUNT BANI, SI PANA PE 24.08.2026 NU-I NUMARA NIMENI. Vezi `valoareGarantiilor`
+   * din `orders.ts`: totalul comenzii iesea mai mic decat cat a facturat eMAG.
+   *
+   * ⚠ Fiecare are COTA EI de TVA, care nu e neaparat cea a magazinului.
+   */
+  recycle_warranties?: EmagGarantieReciclare[];
 }
 
 /**
@@ -476,6 +484,17 @@ export interface EmagVoucher {
   voucher_name?: string;
   vat?: number;
   issue_date?: string;
+}
+
+/** O taxa de garantie-returnare (SGR) de pe o linie de comanda. */
+export interface EmagGarantieReciclare {
+  quantity?: number;
+  /** Fara TVA, ca toate preturile lor. */
+  sale_price?: number;
+  /** ⚠ Cota EI, nu a magazinului. */
+  vat_rate?: number;
+  product_name?: string;
+  recycle_warranty_voucher_split?: { value?: number; vat_value?: number; vat?: number }[];
 }
 
 export interface EmagComanda {

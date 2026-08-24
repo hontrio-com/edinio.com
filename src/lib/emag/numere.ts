@@ -8,9 +8,19 @@
  *
  *     invalid input syntax for type integer: "true"
  *
- * Unul dintre câmpurile pe care le scriem în coloane `integer` — `ownership`,
- * `number_of_offers`, `buy_button_rank` — vine de la ei ca **boolean**. Zero oferte
- * legate, iar omul a văzut doar o rotiță care s-a oprit.
+ * ⚠ MĂSURAT, NU BĂNUIT: câmpul e **`ownership`, și vine `boolean: true`**. Se știe
+ * fiindcă `campuriNecitibile` l-a scris în jurnal la rularea următoare — de aceea
+ * există funcția aceea, și de aceea coerciția singură n-ar fi fost de ajuns: importul
+ * ar fi mers mai departe, iar întrebarea „ce e `ownership` la ei?" ar fi rămas fără
+ * răspuns pe veci.
+ *
+ * ⚠ ȘI TOTUȘI RĂMÂNE `null`. Acum știm CE trimit, nu CE ÎNSEAMNĂ. Documentația lor
+ * spune „1 = poți actualiza documentația, 2 = nu poți"; un `true` nu se traduce singur
+ * în asta, și nu știm dacă vine așa la toate conturile sau doar la ăsta. Nimic din
+ * aplicație nu citește coloana — verificat — deci `null` nu costă nimic, iar un 1 scris
+ * din inferență ar fi arătat drept până în ziua în care cineva ar fi hotărât ceva pe el.
+ *
+ * Zero oferte legate, iar omul a văzut doar o rotiță care s-a oprit.
  *
  * ⚠ NICIUNUL DINTRE ELE NU E ÎN SCHEMA LOR. Am căutat în tot OpenAPI-ul v4.5.1:
  * răspunsul lui `product_offer/read` e `ApiResponse` generic, iar cele patru câmpuri

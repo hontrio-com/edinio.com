@@ -1360,6 +1360,7 @@ export type Database = {
           last_status_at: string | null
           last_synced_at: string | null
           number_of_offers: number | null
+          nume_emag: string | null
           offer_validation_status: number | null
           ownership: number | null
           part_number: string | null
@@ -1392,6 +1393,7 @@ export type Database = {
           last_status_at?: string | null
           last_synced_at?: string | null
           number_of_offers?: number | null
+          nume_emag?: string | null
           offer_validation_status?: number | null
           ownership?: number | null
           part_number?: string | null
@@ -1424,6 +1426,7 @@ export type Database = {
           last_status_at?: string | null
           last_synced_at?: string | null
           number_of_offers?: number | null
+          nume_emag?: string | null
           offer_validation_status?: number | null
           ownership?: number | null
           part_number?: string | null

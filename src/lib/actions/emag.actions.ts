@@ -1353,6 +1353,14 @@ export interface RandOfertaEcran {
   id: string;
   productId: string | null;
   numeProdus: string;
+  /**
+   * Oferta exista la eMAG, dar produsul nu e in magazinul nostru.
+   *
+   * ⚠ NU inseamna „sters". Inseamna „n-a fost niciodata aici" — comerciantul vinde pe
+   * eMAG si lucruri pe care nu le tine la noi. Confundate, ecranul i-a spus pe 24.08
+   * ca i-au disparut 3.334 de produse.
+   */
+  doarPeEmag: boolean;
   variantTitle: string | null;
   emagId: number;
   stare: StareOferta;
@@ -1432,7 +1440,7 @@ export async function listaOferteEmag(
   let q = admin
     .from("emag_offers")
     .select(
-      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, deriva, products(name)",
+      "id, product_id, variant_title, emag_id, status, validation_status, translation_validation_status, doc_errors, error, auto_sync, part_number_key, number_of_offers, buy_button_rank, best_offer_sale_price, deriva, nume_emag, creat_de_edinio, products(name)",
       { count: "exact" },
     )
     .eq("business_id", businessId);
@@ -1464,6 +1472,7 @@ export async function listaOferteEmag(
     id: string; product_id: string | null; variant_title: string | null; emag_id: number;
     status: string; validation_status: number | null; translation_validation_status: number | null;
     doc_errors: unknown; error: string | null; auto_sync: boolean; part_number_key: string | null;
+    nume_emag: string | null; creat_de_edinio: boolean;
     number_of_offers: number | null; buy_button_rank: number | null; best_offer_sale_price: number | null;
     deriva: unknown;
     products: { name: string } | { name: string }[] | null;
@@ -1475,7 +1484,29 @@ export async function listaOferteEmag(
     return {
       id: r.id,
       productId: r.product_id,
-      numeProdus: p?.name ?? "Produs șters din magazin",
+      /*
+       * ═══ ⚠ TREI CAZURI, NU DOUA — ȘI PÂNĂ PE 24.08.2026 ERAU TOATE UNUL ═══
+       *
+       * Până la importul din contul comerciantului, orice rând avea un produs de-al
+       * nostru în spate, deci `product_id` gol însemna un singur lucru: produsul a
+       * fost șters. Importul a schimbat asta dintr-odată — din 3.754 de oferte
+       * preluate, 3.334 n-au pereche la noi, fiindcă omul le vinde pe eMAG și nu le
+       * ține în magazin.
+       *
+       * Ecranul le-a arătat pe toate ca „Produs șters din magazin". Comerciantul le-a
+       * văzut și a crezut că i-au dispărut produsele — apoi a apăsat săgeata și a
+       * ajuns la „un produs random care nici nu cred că e de la mine". Era chiar al
+       * lui; doar că rândul nu-i spunea care.
+       *
+       *   are produs la noi        → numele produsului
+       *   preluată de la ei        → numele LOR (`nume_emag`)
+       *   făcută de noi, fără produs → produsul chiar a fost șters
+       */
+      numeProdus:
+        p?.name ?? ((r.nume_emag ?? "").trim() || "Produs șters din magazin"),
+      /* Se spune și de unde vine numele, ca omul să nu caute în magazin ceva ce n-a
+         fost niciodată acolo. */
+      doarPeEmag: !p?.name && r.creat_de_edinio === false,
       variantTitle: r.variant_title,
       emagId: r.emag_id,
       stare,
@@ -1488,9 +1519,23 @@ export async function listaOferteEmag(
         validation_status: r.validation_status,
         translation_validation_status: r.translation_validation_status,
       }),
-      /* `part_number_key` e cheia paginii lor de produs; fără ea, oferta n-are încă
-         o pagină publică la eMAG și n-are unde duce link-ul. */
-      linkEmag: r.part_number_key ? `https://www.emag.ro/-/pd/${r.part_number_key}` : null,
+      /*
+       * ═══ ⚠ SĂGEATA E STINSĂ, ȘI ASTA E O ALEGERE (24.08.2026) ═══
+       *
+       * Ducea la `https://www.emag.ro/-/pd/{part_number_key}`. Comerciantul a apăsat-o
+       * și a ajuns la „un produs random care nici nu cred că e de la mine". Avea
+       * dreptate: din 3 chei verificate pe emag.ro, toate 3 duceau la produse străine —
+       * o folie de vidat și două mese DKD Home Decor.
+       *
+       * ⚠ Formatul adresei NU e de vină — verificat: o cheie inventată dă 404, deci
+       * `/pd/` caută exact, iar o cheie luată dintr-un link real duce fix unde trebuie.
+       * Cheile pe care le avem noi sunt reale, doar că ale altor produse.
+       *
+       * Un link care duce aiurea e mai rău decât niciun link: primul îl trimite pe om
+       * să caute o problemă unde nu e, al doilea îl lasă să întrebe. Se aprinde la loc
+       * când se lămurește de unde vin cheile — vezi nota din `mapping.ts`.
+       */
+      linkEmag: null,
       /* ⚠ Numai cand chiar sunt CONCURENTI. Cu un singur vanzator, „locul 1 din 1" nu
          spune nimic si doar incarca randul. */
       /* ⚠ Se citeste prin `citesteMemoriaDerivei`, nu prin `as`. Un `jsonb` scris de o

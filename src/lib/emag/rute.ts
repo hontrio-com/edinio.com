@@ -310,6 +310,20 @@ export function traducereaPoateBloca(o: {
   translation_validation_status: number | null;
 }): boolean {
   if (o.translation_validation_status == null) return false;
+  /*
+   * ═══ ⚠ SE AVERTIZEAZA CAND TRADUCEREA E O PROBLEMA, NU CAND CAMPUL EXISTA ═══
+   *
+   * Prima forma se uita doar daca vine campul. Dar el vine la ORICE oferta — inclusiv
+   * cu traducerea aprobata — deci avertismentul aparea pe fiecare oferta sanatoasa a
+   * magazinului. Comerciantul l-a vazut pe un catalog intreg si a intrebat ce e cu el:
+   * un „verifica produsul in panoul eMAG" pus pe 3.400 de randuri nu mai e un
+   * avertisment, e zgomot care ascunde cele cateva randuri care chiar au nevoie de el.
+   *
+   * ⚠ Aceeasi scara ca la documentatie. Traducerea are propriile ei stari, cu aceleasi
+   * numere: 9 aprobata, 10 blocata, 12 actualizare respinsa. Daca starea traducerii e
+   * una dintre cele in regula, nu e nimic de spus.
+   */
+  if (EMAG_VALIDARE_VANDABILA.includes(o.translation_validation_status)) return false;
   /* Cand oferta oricum nu e aprobata, traducerea nu e stirea zilei. */
   return o.validation_status != null && EMAG_VALIDARE_VANDABILA.includes(o.validation_status);
 }

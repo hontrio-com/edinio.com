@@ -219,6 +219,7 @@ const LOT_SCRIERE = 200;
 interface RandOferta {
   business_id: string;
   emag_id: number;
+  nume_emag: string | null;
   part_number: string | null;
   part_number_key: string | null;
   ean: string | null;
@@ -318,6 +319,11 @@ async function scrieOferte(
     const comun: BazaRand = {
       business_id: businessId,
       emag_id: o.id,
+      /* ⚠ Numele LOR. Pentru cele 3.334 de oferte fara pereche in magazin, el e
+         singurul nume pe care il avem — fara el, ecranul le arata pe toate ca
+         „Produs sters din magazin", iar sageata ducea la un produs pe care omul
+         n-avea cum sa-l recunoasca. Vezi migratia din 30.09. */
+      nume_emag: (o.name ?? "").trim() || null,
       part_number: o.part_number ?? null,
       part_number_key: o.part_number_key ?? null,
       ean: (o.ean ?? [])[0] ?? null,

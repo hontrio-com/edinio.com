@@ -17,6 +17,7 @@
  */
 
 import { combinatiiActiveUnice, comboStock, comboUnitPrice, parseVariants } from "@/lib/storefront/variants";
+import { codDeBareCurat } from "./ean";
 /*
  * ⚠ Se refoloseste rescrierea de adrese a lui Trendyol, nu se scrie a doua.
  * Motivul e acolo: 1466 de imagini pe 855 de produse mai stau pe domeniul vechi
@@ -227,6 +228,18 @@ export interface ProdusDeCartografiat {
   page_sections: unknown;
 }
 
+/**
+ * Codul de bare scris in fisa produsului.
+ *
+ * ⚠ `page_sections.google.gtin` e acelasi camp pe care il foloseste feedul Google
+ * Merchant. Un al doilea loc pentru „codul de bare" ar fi insemnat ca omul il scrie
+ * o data pentru Google si inca o data pentru eMAG, si le uita pe rand.
+ */
+function gtinProdus(produs: ProdusDeCartografiat): string | null {
+  const ps = (produs.page_sections ?? {}) as { google?: { gtin?: string } };
+  return ps.google?.gtin ?? null;
+}
+
 /** Ce stie magazinul despre el insusi. */
 export interface ContextMagazin {
   /**
@@ -374,6 +387,9 @@ export function construiesteOferte(
     }
     const oferta = ofertaSingura({
       produs, magazin, comun, ident,
+      /* ⚠ Ce stim NOI bate ce-am primit inapoi: `ident.ean` vine din raspunsul lor si
+         e gol la prima trimitere, iar fisa produsului il are de la inceput. */
+      ean: ident.ean ?? codDeBareCurat(gtinProdus(produs)),
       pretAfisat: produs.price,
       compareAt: produs.compare_at_price,
       stoc: produs.stock_quantity ?? 0,
@@ -413,6 +429,15 @@ export function construiesteOferte(
     }
     const oferta = ofertaSingura({
       produs, magazin, comun, ident,
+      /*
+       * ⚠ NUMAI codul COMBINATIEI, si niciodata al produsului.
+       *
+       * Un cod de bare identifica un ambalaj anume, nu un articol. Cazuta pe codul
+       * produsului, fiecare marime ar fi plecat cu ACELASI EAN — iar eMAG le-ar fi
+       * legat pe toate de aceeasi pagina de produs din catalogul lor, sau le-ar fi
+       * respins ca duplicate. Mai bine fara cod decat cu unul care minte.
+       */
+      ean: ident.ean ?? codDeBareCurat(c.gtin),
       pretAfisat: comboUnitPrice(c, produs.price),
       compareAt: produs.compare_at_price,
       /* ⚠ Stocul COMBINATIEI, nu al produsului. `comboStock` intoarce `null` cand
@@ -440,6 +465,19 @@ function ofertaSingura(a: {
   magazin: ContextMagazin;
   comun: Record<string, unknown>;
   ident: IdentitateOferta;
+  /**
+   * Codul de bare care pleaca, deja ales si curatat de apelant.
+   *
+   * ⚠ NU se mai citeste din `ident.ean`. Randul nostru `emag_offers` are `ean` gol la
+   * o oferta pe care n-am trimis-o inca — el se umple abia din raspunsul lor — deci
+   * PRIMA trimitere, chiar cea care creeaza produsul, pleca mereu fara cod de bare.
+   *
+   * eMAG raspunde atunci „saved as a draft … you need: EAN", si produsul ramane o
+   * ciorna care nu se vinde. Masurat pe 24.08.2026: 40 de produse asa, fiecare cu un
+   * `gtin` bun scris in fisa lui la noi. Comerciantul a spus-o direct: „la produsele
+   * alea care spunea ca nu au cod EAN, au in magazinul nostru".
+   */
+  ean: string | null;
   pretAfisat: number;
   compareAt: number | null;
   stoc: number;
@@ -489,8 +527,29 @@ function ofertaSingura(a: {
     id: ident.emag_id,
     name: a.titlu.slice(0, 255),
     part_number: a.partNumber,
-    ...(ident.part_number_key ? { part_number_key: ident.part_number_key } : {}),
-    ...(ident.ean ? { ean: [ident.ean] } : {}),
+    /*
+     * ═══ ⚠ CHEIA DE PRODUS NU SE TRIMITE INAPOI. NICIODATA. (24.08.2026) ═══
+     *
+     * Documentatia lor, cuvant cu cuvant: „eMAG part_number_key. Used for ATTACHING a
+     * product offer to an EXISTING product." Deci campul asta nu descrie oferta — el
+     * MUTA oferta pe alta pagina din catalogul eMAG.
+     *
+     * O oferta care exista deja la ei e deja atasata unde trebuie. Trimis inapoi,
+     * campul nu poate face nimic bun; poate doar sa o mute. Iar mutata gresit, marfa
+     * comerciantului ajunge pe pagina altcuiva, cu pozele si descrierea altcuiva.
+     *
+     * ⚠ SI NU E O TEAMA TEORETICA. Verificat pe date reale, in ziua importului: din 3
+     * chei luate la intamplare din cele 3.547 citite de la ei, TOATE TREI duceau la
+     * produse straine — o folie de vidat si doua mese DKD Home Decor. Iar `/pd/` chiar
+     * cauta exact: o cheie inventata da 404, deci cheile alea sunt reale, doar ca ale
+     * altor produse.
+     *
+     * De unde vin, nu se poate sti de aici — noi le scriem dintr-un singur loc, fidel,
+     * din raspunsul lor (`import-run.ts`). Dar atat timp cat nu se stie, ele NU pleaca
+     * inapoi. Singura cheie in care avem incredere e cea gasita anume prin
+     * `documentation/find_by_eans`, unde stim pe ce cod de bare s-a potrivit.
+     */
+    ...(a.ean ? { ean: [a.ean] } : {}),
     images: a.imagini,
     ...(a.familie ? { family: a.familie } : {}),
     /* 1 = activa, 0 = inactiva. Produsul ascuns in magazin nu se vinde nici acolo. */

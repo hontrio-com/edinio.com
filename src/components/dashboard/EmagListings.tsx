@@ -384,6 +384,15 @@ function RandOferta({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium">{rand.numeProdus}</span>
+            {/* ⚠ Se spune DE UNDE vine numele. Fara semnul asta, un comerciant care
+                vinde pe eMAG si lucruri pe care nu le tine in magazin isi cauta in
+                Edinio produse care n-au fost niciodata acolo — si crede ca le-a
+                pierdut. Pe 24.08.2026 erau 3.334 de randuri asa. */}
+            {rand.doarPeEmag && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                doar pe eMAG
+              </span>
+            )}
             {rand.variantTitle && (
               <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                 {rand.variantTitle}

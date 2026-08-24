@@ -610,6 +610,9 @@ async function scrieStatusurile(
       translation_validation_status: intregDeLaEi(o.translation_validation_status),
       doc_errors: (o.doc_errors ?? []) as never,
       part_number_key: o.part_number_key ?? null,
+      /* ⚠ Si numele. Comerciantul isi poate redenumi oferta in panoul lor; scris o
+         singura data la import, ecranul nostru ar fi ramas cu numele vechi. */
+      nume_emag: (o.name ?? "").trim() || null,
       ownership: intregDeLaEi(o.ownership),
       number_of_offers: intregDeLaEi(o.number_of_offers),
       buy_button_rank: intregDeLaEi(o.buy_button_rank),

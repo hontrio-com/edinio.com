@@ -456,3 +456,67 @@ test("eMAG stoc: produsul SIMPLU foloseste stocul produsului, si e corect", () =
   ]);
   assert.equal(oferte[0].stock?.[0]?.value, 10);
 });
+
+/* ── Codul de bare: din fisa produsului, nu din randul nostru (24.08.2026) ─── */
+
+test("eMAG: EAN-ul pleaca din fisa produsului la PRIMA trimitere", () => {
+  /*
+   * ═══ CE A COSTAT LIPSA LUI ═══
+   *
+   * `emag_offers.ean` se umple din raspunsul LOR, deci e gol la o oferta pe care n-am
+   * trimis-o inca. Prima trimitere — chiar cea care creeaza produsul — pleca mereu
+   * fara cod de bare, iar eMAG raspundea „saved as a draft … you need: EAN".
+   *
+   * Masurat pe 24.08.2026: 40 de produse ramase ciorne care nu se vand, fiecare cu un
+   * `gtin` bun scris in fisa lui la noi. Comerciantul a spus-o direct: „la produsele
+   * alea care spunea ca nu au cod EAN, au in magazinul nostru".
+   */
+  const p = produs({ page_sections: { google: { gtin: "8595602520183" } } });
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 500 }], null);
+  assert.deepEqual(r.oferte[0]?.ean, ["8595602520183"]);
+});
+
+test("eMAG: un cod stricat de Excel NU pleaca", () => {
+  /* ⚠ `5.9483E+12` chiar exista in datele lor. Curatat de non-cifre ar fi dat un cod
+     scurt si valid la prima vedere, iar `find_by_eans` ar fi putut lega oferta de
+     produsul ALTCUIVA. `codDeBareCurat` il refuza intreg. */
+  const p = produs({ page_sections: { google: { gtin: "5.9483E+12" } } });
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [{ variant_title: null, emag_id: 500 }], null);
+  assert.equal(r.oferte[0]?.ean, undefined);
+});
+
+test("eMAG: fiecare marime pleaca cu codul EI, nu cu al produsului", () => {
+  /*
+   * ⚠ Un cod de bare identifica un AMBALAJ, nu un articol. Cazuta pe codul produsului,
+   * fiecare marime ar fi plecat cu ACELASI EAN — iar eMAG le-ar fi legat pe toate de
+   * aceeasi pagina din catalogul lor, sau le-ar fi respins ca duplicate.
+   */
+  const p = cuVariante([
+    { title: "S", sku: "T-S", stoc: "3", pret: "121" },
+    { title: "M", sku: "T-M", stoc: "4", pret: "121" },
+  ]);
+  const ps = p.page_sections as { variants: { combinations: Record<string, unknown>[] }; google?: unknown };
+  ps.variants.combinations[0].gtin = "5941234567890";
+  ps.google = { gtin: "8595602520183" };
+
+  const r = construiesteOferte(p, MAGAZIN, CATEGORIE, [
+    { variant_title: "S", emag_id: 1 }, { variant_title: "M", emag_id: 2 },
+  ], 77);
+  assert.deepEqual(r.oferte[0]?.ean, ["5941234567890"], "S are codul ei");
+  assert.equal(r.oferte[1]?.ean, undefined, "M n-are cod al ei: pleaca FARA, nu cu al produsului");
+});
+
+test("eMAG: cheia de produs NU se trimite inapoi", () => {
+  /*
+   * ⚠ Documentatia lor: `part_number_key` „used for ATTACHING a product offer to an
+   * existing product". Nu descrie oferta — o MUTA pe alta pagina din catalog.
+   *
+   * Verificat pe date reale in ziua importului: din 3 chei luate la intamplare din
+   * cele 3.547 citite de la ei, toate trei duceau la produse straine. Trimise inapoi,
+   * ar fi mutat marfa comerciantului pe pagina altcuiva.
+   */
+  const r = construiesteOferte(produs(), MAGAZIN, CATEGORIE, [
+    { variant_title: null, emag_id: 500, part_number_key: "D4BJ0JMBM" },
+  ], null);
+  assert.equal("part_number_key" in (r.oferte[0] ?? {}), false);
+});

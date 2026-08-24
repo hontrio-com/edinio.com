@@ -162,3 +162,39 @@ export function dimensiuniPropuse(
 
   return { fel: "din_catalog", dimensiuni: { length: l, width: w, height: h } };
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CATE COLETE PLEACA (§ audit 24.08.2026)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Numărul de colete trimis la eMAG, care NU e același lucru cu numărul de dimensiuni.
+ *
+ * ═══ ⚠ CE A GĂSIT AUDITUL ═══
+ *
+ * `parcel_number` se lua din lungimea listei de dimensiuni: `colete?.length ?? 1`.
+ * Dar `coleteDeTrimis` întoarce `undefined` când nu se știu toate trei laturile, iar
+ * asta e o cale pe care ecranul nostru o oferă anume: *„Goale, nu trimitem nicio
+ * dimensiune. Curierul măsoară coletul la ridicare."*
+ *
+ * Deci comerciantul putea scrie 3 colete, lăsa dimensiunile goale, și eMAG primea
+ * `parcel_number: 1`. Curierul venea cu o singură etichetă la trei cutii, iar celelalte
+ * două plecau nemarcate sau erau refuzate la ridicare. Nimic nu dădea eroare: 1 e o
+ * valoare validă.
+ *
+ * ⚠ Cele două lucruri se despart aici: CÂTE cutii pleacă e o declarație a omului,
+ * CÂT măsoară ele e o informație pe care uneori n-o avem.
+ *
+ * ⚠ Schema lor: `parcel_number` maximum=999, iar `envelope_number` și `parcel_number`
+ * nu pot fi amândouă zero. De aceea minimul e 1, nu 0.
+ */
+export function numarDeColete(
+  cerutDeOm: number | null | undefined,
+  dimensiuni: ColetCm[] | undefined,
+): number {
+  const cerut = Math.floor(Number(cerutDeOm));
+  if (Number.isFinite(cerut) && cerut >= 1) return Math.min(999, cerut);
+  /* Fără o cerere limpede, lista de dimensiuni e a doua sursă de adevăr. */
+  if (dimensiuni && dimensiuni.length > 0) return Math.min(999, dimensiuni.length);
+  return 1;
+}

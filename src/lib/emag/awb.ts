@@ -24,18 +24,31 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { monedaEmag } from "./auth";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { cuRegistru } from "@/lib/operatii/registru";
 import { ziuaUrmatoareInTara } from "./auth";
 import { citesteAwb, isEmagError, salveazaAwb } from "./client";
 import type { ContextEmag } from "./sync";
-import type { EmagAwb, EmagContCurier } from "./types";
+import type { EmagAwb, EmagContCurier, EmagTara} from "./types";
 
 /* Reexport, ca apelantii de server sa nu trebuiasca sa stie de doua fisiere. */
 export { coleteDeTrimis, type ColetCm } from "./colete";
 
 type Db = SupabaseClient<Database>;
+
+/**
+ * Moneda pe care o accepta `AWBSave`, sau nimic.
+ *
+ * ⚠ Enum-ul lor pentru AWB e `RON | EUR | HUF`. E mai ingust decat monedele in care
+ * vand: `BGN` lipseste cu totul. Vezi nota de la `currency` in `emiteAwb`.
+ */
+export function monedaPentruAwb(tara: EmagTara | undefined): "RON" | "EUR" | "HUF" | undefined {
+  if (!tara) return undefined;
+  const m = monedaEmag(tara);
+  return m === "RON" || m === "EUR" || m === "HUF" ? m : undefined;
+}
 
 /** 1 = livrare catre client · 2 = ridicare de la client (retur). */
 export type FelAwb = 1 | 2;
@@ -149,6 +162,32 @@ export async function emiteAwb(
      * ZIUA DE IERI, fiindca in UTC e inca 21:30 — deci o data de ridicare in trecut.
      */
     ...(p.fel === 2 && !p.awb.date ? { date: ziuaUrmatoareInTara(ctx.auth.tara) } : {}),
+    /*
+     * ═══ ⚠ MONEDA SE TRIMITE ANUME, NU SE LASA PE SEAMA IMPLICITULUI (audit 24.08) ═══
+     *
+     * Schema lor, la `AWBSave.currency`: „If not sent, the default official currency is
+     * used and A WARNING IS RETURNED." Deci fiecare AWB emis se intorcea cu un
+     * avertisment, iar avertismentele care apar de fiecare data nu se mai citesc.
+     *
+     * ⚠ Si e mai mult decat curatenie. `cod` si `insured_value` sunt sume, iar moneda
+     * lor e chiar campul asta. La eMAG BG, moneda oficiala s-a schimbat din BGN in EUR
+     * pe 1 ianuarie 2026; lasata pe seama implicitului, suma de incasat ar depinde de
+     * ce cred ei ca e implicit in ziua aceea, nu de ce stim noi.
+     *
+     * `monedaEmag` e scrisa ca functie de DATA tocmai pentru schimbarea aia.
+     *
+     * ═══ ⚠ BGN NU E IN ENUM-UL LOR, SI COMPILATORUL A PRINS-O ═══
+     *
+     * `AWBSave.currency` primeste doar `RON | EUR | HUF`. `monedaEmag` poate intoarce
+     * si `BGN`, fiindca asta era moneda Bulgariei pana la 1 ianuarie 2026 — dar pentru
+     * AWB ei n-au avut niciodata valoarea aia.
+     *
+     * Trimis oricum, ar fi fost un refuz pe un camp optional, adica un AWB neemis
+     * pentru o valoare pe care n-avea rost s-o trimitem. Cand moneda nu e una dintre
+     * cele trei, se OMITE campul si ramane implicitul lor. Un avertisment e mai bun
+     * decat un refuz.
+     */
+    ...(monedaPentruAwb(ctx.auth.tara) ? { currency: monedaPentruAwb(ctx.auth.tara) } : {}),
     /*
      * ⚠ `pickup_and_return` NU se trimite la retur. Schema lor: „For an AWB belonging
      * to a return must be 0 or not sent." Nu-l trimitem nicaieri, dar e scris aici ca

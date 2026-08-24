@@ -147,6 +147,10 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
           width: Number(latime) || undefined,
           height: Number(inaltime) || undefined,
         }),
+        /* ⚠ Se trimite SEPARAT de dimensiuni. Cu dimensiunile lăsate goale,
+           `coleteDeTrimis` întoarce `undefined`, iar numărul de cutii declarat aici
+           s-ar fi pierdut: trei cutii ar fi plecat cu o singură etichetă. */
+        nrColete,
         observatii: observatii.trim() || undefined,
       });
       if ("error" in r) {

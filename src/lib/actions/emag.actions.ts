@@ -63,7 +63,7 @@ import { traducereaPoateBloca } from "@/lib/emag/rute";
 import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
 import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
 import { alegeSupplyLeadTime, oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
-import { dimensiuniPropuse, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
+import { dimensiuniPropuse, numarDeColete, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
 import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagMany} from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -975,7 +975,12 @@ export async function comutaSincronizareaOfertei(
 export async function emiteAwbEmag(
   businessId: string,
   orderId: string,
-  optiuni?: { colete?: { weight: number; length: number; width: number; height: number }[]; observatii?: string },
+  optiuni?: {
+    colete?: { weight: number; length: number; width: number; height: number }[];
+    /** Câte cutii pleacă. ⚠ Alt lucru decât câte dimensiuni știm. Vezi `numarDeColete`. */
+    nrColete?: number;
+    observatii?: string;
+  },
 ): Promise<{ numar: string | null; deja: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
@@ -1060,7 +1065,9 @@ export async function emiteAwbEmag(
       locker_id: brut.details?.locker_id,
       is_oversize: 0,
       envelope_number: 0,
-      parcel_number: optiuni?.colete?.length ?? 1,
+      /* ⚠ Din ce a DECLARAT omul, nu din câte dimensiuni știm. Vezi `numarDeColete`:
+         cu dimensiunile lăsate goale, trei cutii plecau cu o singură etichetă. */
+      parcel_number: numarDeColete(optiuni?.nrColete, optiuni?.colete),
       /* ⚠ Vezi nota de deasupra: `cashed_cod` e cat s-a INCASAT deja (zero inainte de
          livrare), nu cat trebuie incasat. Se ia din comanda noastra. */
       cod: ramburs,

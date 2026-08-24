@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { alegereaCurierului, contPotrivit, primulAwb } from "./awb";
+import { alegereaCurierului, contPotrivit, primulAwb, monedaPentruAwb} from "./awb";
 import { dimensiuniPropuse } from "./colete";
 import { poateAwbRetur, trecerePermisa, treceriPosibile } from "./rma";
 import { citesteTinta } from "./campanii";
@@ -425,4 +425,19 @@ test("eMAG campanii: fara numarul campaniei nu se trimite nimic", () => {
      Numarul se ia din panoul lor, si se cere limpede. */
   assert.notEqual(cePiedicaAreCampania({ campaignId: 0, reducere: 20 }), null);
   assert.notEqual(cePiedicaAreCampania({ campaignId: Number.NaN, reducere: 20 }), null);
+});
+
+test("eMAG AWB: moneda se trimite doar cand e una pe care o accepta", () => {
+  /*
+   * ⚠ Enum-ul lor pentru `AWBSave.currency` e `RON | EUR | HUF`. E mai ingust decat
+   * monedele in care vand: BGN lipseste cu totul, desi a fost moneda Bulgariei pana
+   * pe 1 ianuarie 2026.
+   *
+   * Trimis oricum, ar fi fost un refuz pe un camp OPTIONAL — adica un AWB neemis
+   * pentru o valoare care n-avea rost sa plece. Compilatorul a prins-o; proba o tine.
+   */
+  assert.equal(monedaPentruAwb("ro"), "RON");
+  assert.equal(monedaPentruAwb("hu"), "HUF");
+  assert.equal(monedaPentruAwb("bg"), "EUR", "din 2026 Bulgaria e pe EUR");
+  assert.equal(monedaPentruAwb(undefined), undefined, "fara tara, se omite campul");
 });

@@ -1,6 +1,7 @@
 "use server";
 
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
@@ -547,7 +548,7 @@ export async function createSmartshipAwbAction(
       severity: "critical",
     });
   } else {
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   return { awb, avertismente };
@@ -616,7 +617,7 @@ export async function verificaSmartshipAwbAction(
       return { ok: false, error: `Expedierea exista la SmartShip (${gasita.awb}), dar nu s-a putut scrie pe comanda: ${error.message}` };
     }
 
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
     return {
       ok: true, gasit: true, awb: gasita.awb,
       mesaj: `Expedierea exista la SmartShip. AWB-ul ${gasita.awb} a fost pus pe comanda.`,
@@ -1108,7 +1109,7 @@ export async function acceptaOfertaTransportAction(
       severity: "critical",
     });
   } else {
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   return { ok: true, awb };

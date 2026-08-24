@@ -1,6 +1,7 @@
 "use server";
 
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
@@ -755,7 +756,7 @@ async function finalizeaza(
      * acolo ar fi trimis mereu o comanda fara numar — „skipped", adica succes
      * raportat pentru o comanda ramasa neexpediata la marketplace.
      */
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   return { stare: "ordered", awb, eroare: null };

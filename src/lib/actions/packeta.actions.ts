@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { logError } from "@/lib/error-logger";
@@ -433,7 +434,7 @@ export async function createPacketaAwbAction(
       severity: "critical",
     });
   } else {
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   return { packetId, barcode };

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
 import { hasVariants } from "@/lib/storefront/variants";
 import { createClient } from "@/lib/supabase/server";
@@ -232,8 +233,8 @@ export async function createBundle(
     logError({ action: "createBundle", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea pachetului. Incearca din nou." };
   }
-  if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
+  if (created?.id) dupaRaspuns(() => enqueueGmcSync(businessId, created.id, created.id, "upsert"), "enqueueGmcSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueOlxSync(businessId, created.id, created.id, "upsert"), "enqueueOlxSync", businessId);
   // Sincron, inaintea revalidarii: un pachet salvat trebuie sa-si arate pretul
   // si disponibilitatea noua imediat, nu peste un minut.
   await proiecteazaImediat(businessId);
@@ -291,8 +292,8 @@ export async function updateBundle(
     void deleteOrphanImages(supabase, businessId, removed, { excludeProductId: bundleId });
   }
 
-  void enqueueGmcSync(businessId, bundleId, bundleId, "upsert");
-  void enqueueOlxSync(businessId, bundleId, bundleId, "upsert");
+  dupaRaspuns(() => enqueueGmcSync(businessId, bundleId, bundleId, "upsert"), "enqueueGmcSync", businessId);
+  dupaRaspuns(() => enqueueOlxSync(businessId, bundleId, bundleId, "upsert"), "enqueueOlxSync", businessId);
   // Sincron, inaintea revalidarii: un pachet salvat trebuie sa-si arate pretul
   // si disponibilitatea noua imediat, nu peste un minut.
   await proiecteazaImediat(businessId);

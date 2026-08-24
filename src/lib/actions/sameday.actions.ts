@@ -1,5 +1,6 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
 
@@ -215,7 +216,7 @@ export async function createSamedayAwbAction(
       severity: "critical",
     });
   } else {
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   return { awbNumber };

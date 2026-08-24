@@ -1,6 +1,7 @@
 "use server";
 
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
@@ -535,7 +536,7 @@ export async function createUpsAwbAction(
 
   /* `void`, ca la ceilalti paisprezece: coada About You e best-effort si nu are voie
      sa tina raspunsul catre comerciant sau sa rupa emiterea daca pica. */
-  void enqueueAboutYouShip(businessId, orderId);
+  dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   return { awb };
 }
 
@@ -781,7 +782,7 @@ export async function verificaUpsAwbAction(
     if (error) return { ok: false as const, error: error.message };
 
     /* Aceeasi coada ca la emitere: calea de recuperare pune tot un AWB pe comanda. */
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
     return { ok: true as const, gasit: true, awb, mesaj: `${cum} (AWB ${awb}) si a fost scrisa pe comanda.` };
   };
 

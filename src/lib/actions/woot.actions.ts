@@ -1,5 +1,6 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 
 import { revalidatePath } from "next/cache";
@@ -375,7 +376,7 @@ export async function createWootAwb(
   } else {
     // Doar cand comanda chiar poarta AWB-ul are sens sa anuntam expedierea mai
     // departe: altfel About You ar primi o expediere fara numar.
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   revalidatePath("/dashboard/orders");

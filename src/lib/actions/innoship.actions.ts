@@ -1,6 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -418,7 +419,7 @@ export async function createInnoshipAwbAction(
       severity: "critical",
     });
   } else {
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   return { awb, avertismente };
@@ -485,7 +486,7 @@ export async function verificaInnoshipAwbAction(
 
     if (error) return { ok: false, error: `Expedierea exista la Innoship (${awb}), dar nu s-a putut scrie pe comanda: ${error.message}` };
 
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
     return {
       ok: true, gasit: true, awb,
       mesaj: `Expedierea exista la Innoship. AWB-ul ${awb} a fost pus pe comanda.`,

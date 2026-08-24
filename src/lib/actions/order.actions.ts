@@ -1,6 +1,7 @@
 "use server";
 
 import { after } from "next/server";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { scrieStatisticiOferte } from "@/lib/offers/statistici";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -1557,11 +1558,11 @@ export async function placeOrder(data: {
   // inainte de insert. Nu mai exista nicio a doua cale.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
-  void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
-  void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
-  void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
-  void enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
 
   // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
   // by transaction_id; captures the conversion even when the browser tag is blocked.
@@ -2940,11 +2941,11 @@ export async function updateOrderDetails(orderId: string, data: {
       ...eliberari.map((e) => e.product_id),
       ...plan.scoase.map((s) => s.product_id),
     ])];
-    void enqueueGmcSyncMany(order.business_id, atinse);
-    void enqueueOlxSyncMany(order.business_id, atinse);
-    void enqueueAboutYouStockMany(order.business_id, atinse);
-    void enqueueTrendyolInventoryMany(order.business_id, atinse);
-    void enqueueEmagStocMany(order.business_id, atinse);
+    dupaRaspuns(() => enqueueGmcSyncMany(order.business_id, atinse), "enqueueGmcSyncMany", order.business_id);
+    dupaRaspuns(() => enqueueOlxSyncMany(order.business_id, atinse), "enqueueOlxSyncMany", order.business_id);
+    dupaRaspuns(() => enqueueAboutYouStockMany(order.business_id, atinse), "enqueueAboutYouStockMany", order.business_id);
+    dupaRaspuns(() => enqueueTrendyolInventoryMany(order.business_id, atinse), "enqueueTrendyolInventoryMany", order.business_id);
+    dupaRaspuns(() => enqueueEmagStocMany(order.business_id, atinse), "enqueueEmagStocMany", order.business_id);
   }
 
   revalidatePath("/dashboard/orders");
@@ -3831,11 +3832,11 @@ export async function placeCartOrder(data: {
   // Stocul — de produs si de marime — e deja scazut inainte de insert.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
-  void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
-  void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
-  void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
-  void enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
   // Acelasi prag moale pe magazin ca la comanda din formular: peste el comanda se
   // salveaza, dar emailurile si SMS-ul nu mai pleaca. Vezi `pesteRafalaMagazinului`.
   const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeCartOrder");

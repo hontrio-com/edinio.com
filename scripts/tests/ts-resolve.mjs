@@ -32,5 +32,31 @@ export async function resolve(specifier, context, next) {
       /* cade pe rezolvarea normala */
     }
   }
-  return next(specifier, context);
+  /*
+   * ⚠ SI PACHETELE FARA HARTA `exports`, care cer extensie in ESM.
+   *
+   * `next` n-are camp `exports` in `package.json`, deci `import { after } from
+   * "next/server"` se rezolva pe calea veche: in aplicatie merge, fiindca o face
+   * bundler-ul, dar Node curat cere `next/server.js` si arunca `ERR_MODULE_NOT_FOUND`.
+   *
+   * ⚠ CE COSTA fara asta: orice fisier al aplicatiei care importa din `next/*` devine
+   * NETESTABIL, iar logica din el pleaca in alta parte doar ca sa poata fi verificata —
+   * exact paguba scrisa in nota de mai sus, despre `./offer.types`.
+   *
+   * Se incearca `.js` doar DUPA ce rezolvarea normala a cazut, deci nu schimba nimic
+   * pentru pachetele care se rezolva singure.
+   */
+  try {
+    return await next(specifier, context);
+  } catch (e) {
+    if (!specifier.startsWith(".") && !specifier.startsWith("@/") && !specifier.startsWith("node:")) {
+      try {
+        return await next(`${specifier}.js`, context);
+      } catch {
+        /* cade cu eroarea ORIGINALA, nu cu cea de la a doua incercare: aceea ar arata
+           un specificator pe care nu l-a scris nimeni. */
+      }
+    }
+    throw e;
+  }
 }

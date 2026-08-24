@@ -1,6 +1,7 @@
 "use server";
 
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
@@ -502,7 +503,7 @@ export async function createPallexAwbAction(
      *
      * Se cheama DUPA ce scrierea a prins un rand: coada citeste numarul din baza.
      */
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   // ── Validarea borderoului, daca a cerut-o comerciantul ──────────────────────

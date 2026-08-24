@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
@@ -271,7 +272,7 @@ export async function GET(req: NextRequest) {
            * deci fara randul asta o comanda About You ar ramane neexpediata la ei,
            * cu „skipped" raportat ca succes.
            */
-          void enqueueAboutYouShip(o.business_id, o.id);
+          dupaRaspuns(() => enqueueAboutYouShip(o.business_id, o.id), "enqueueAboutYouShip", o.business_id);
         }
       } catch (e) {
         console.error("[ecolet-tracking] finalizare", o.id, (e as Error).message);

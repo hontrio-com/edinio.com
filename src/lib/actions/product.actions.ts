@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
 import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoProduct, maybeSyncBrevoProductsBulk } from "@/lib/brevo-sync";
@@ -186,11 +187,11 @@ export async function createProduct(businessId: string, data: ProductData) {
     logError({ action: "createProduct", message: error.message, details: { code: error.code, hint: error.hint, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
   }
-  if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueAboutYouSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueTrendyolSync(businessId, created.id, created.id, "upsert", true);
-  if (created?.id) void enqueueEmagSync(businessId, created.id, created.id, "oferta", true);
+  if (created?.id) dupaRaspuns(() => enqueueGmcSync(businessId, created.id, created.id, "upsert"), "enqueueGmcSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueOlxSync(businessId, created.id, created.id, "upsert"), "enqueueOlxSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueAboutYouSync(businessId, created.id, created.id, "upsert"), "enqueueAboutYouSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueTrendyolSync(businessId, created.id, created.id, "upsert", true), "enqueueTrendyolSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueEmagSync(businessId, created.id, created.id, "oferta", true), "enqueueEmagSync", businessId);
   if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
@@ -284,9 +285,9 @@ export async function updateProduct(productId: string, businessId: string, data:
     void deleteOrphanImages(supabase, businessId, removed, { excludeProductId: productId });
   }
 
-  void enqueueGmcSync(businessId, productId, productId, "upsert");
-  void enqueueOlxSync(businessId, productId, productId, "upsert");
-  void enqueueAboutYouSync(businessId, productId, productId, "upsert");
+  dupaRaspuns(() => enqueueGmcSync(businessId, productId, productId, "upsert"), "enqueueGmcSync", businessId);
+  dupaRaspuns(() => enqueueOlxSync(businessId, productId, productId, "upsert"), "enqueueOlxSync", businessId);
+  dupaRaspuns(() => enqueueAboutYouSync(businessId, productId, productId, "upsert"), "enqueueAboutYouSync", businessId);
   /*
    * ═══ ⚠ ACTIVAREA E NASTEREA, PENTRU MARKETPLACE (24.08.2026) ═══
    *
@@ -309,8 +310,8 @@ export async function updateProduct(productId: string, businessId: string, data:
    */
   const tocmaiActivat = oldProduct?.is_active === false && data.is_active === true;
 
-  void enqueueTrendyolSync(businessId, productId, productId, "upsert", tocmaiActivat);
-  void enqueueEmagSync(businessId, productId, productId, "oferta", tocmaiActivat);
+  dupaRaspuns(() => enqueueTrendyolSync(businessId, productId, productId, "upsert", tocmaiActivat), "enqueueTrendyolSync", businessId);
+  dupaRaspuns(() => enqueueEmagSync(businessId, productId, productId, "oferta", tocmaiActivat), "enqueueEmagSync", businessId);
   void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
@@ -435,15 +436,15 @@ async function dezactiveazaPacheteleCu(
   // stoc" in Merchant Center dupa ce magazinul tocmai a stins pachetul — adica
   // exact divergenta pagina-vs-feed din care ies suspendarile. Toate celelalte
   // cai de scriere din fisierul asta sincronizeaza; asta nu o facea.
-  void enqueueGmcSyncMany(businessId, afectate);
-  void enqueueOlxSyncMany(businessId, afectate);
-  void enqueueAboutYouSyncMany(businessId, afectate);
-  void enqueueTrendyolSyncMany(businessId, afectate);
+  dupaRaspuns(() => enqueueGmcSyncMany(businessId, afectate), "enqueueGmcSyncMany", businessId);
+  dupaRaspuns(() => enqueueOlxSyncMany(businessId, afectate), "enqueueOlxSyncMany", businessId);
+  dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, afectate), "enqueueAboutYouSyncMany", businessId);
+  dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, afectate), "enqueueTrendyolSyncMany", businessId);
   /* ⚠ „pret", nu „oferta": functia asta schimba DOAR `is_active` pe pachetele care
      contineau produsul atins. La eMAG asta e `status` pe oferta, adica `offer/save`.
      Pe ruta grea ar fi plecat documentatia intreaga a fiecarui pachet, ca sa se
      schimbe un singur numar. */
-  void enqueueEmagPretMany(businessId, afectate);
+  dupaRaspuns(() => enqueueEmagPretMany(businessId, afectate), "enqueueEmagPretMany", businessId);
 }
 
 export async function deleteProduct(productId: string, businessId: string) {
@@ -499,10 +500,10 @@ export async function deleteProduct(productId: string, businessId: string) {
   }
 
   // Remove from Google Merchant + OLX too (product_id is null — the row is now gone).
-  void enqueueGmcSync(businessId, null, productId, "delete");
-  void enqueueOlxSync(businessId, null, productId, "delete");
-  void enqueueAboutYouSync(businessId, null, productId, "delete");
-  void enqueueTrendyolSync(businessId, null, productId, "delete");
+  dupaRaspuns(() => enqueueGmcSync(businessId, null, productId, "delete"), "enqueueGmcSync", businessId);
+  dupaRaspuns(() => enqueueOlxSync(businessId, null, productId, "delete"), "enqueueOlxSync", businessId);
+  dupaRaspuns(() => enqueueAboutYouSync(businessId, null, productId, "delete"), "enqueueAboutYouSync", businessId);
+  dupaRaspuns(() => enqueueTrendyolSync(businessId, null, productId, "delete"), "enqueueTrendyolSync", businessId);
   /* ⚠ Retragerea eMAG s-a pus la coada MAI SUS, inainte de stergere: vezi nota de
      acolo. Pusa aici, ar fi citit o legatura deja rupta si n-ar fi trimis nimic. */
   void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
@@ -576,10 +577,10 @@ export async function bulkProductAction(
         if (res.error) throw res.error;
         count += res.count ?? bucata.length;
       }
-      void enqueueGmcSyncMany(businessId, ids);
-      void enqueueOlxSyncMany(businessId, ids);
-      void enqueueAboutYouSyncMany(businessId, ids);
-      void enqueueTrendyolSyncMany(businessId, ids);
+      dupaRaspuns(() => enqueueGmcSyncMany(businessId, ids), "enqueueGmcSyncMany", businessId);
+      dupaRaspuns(() => enqueueOlxSyncMany(businessId, ids), "enqueueOlxSyncMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
       /*
        * ⚠ „pret", nu „oferta", si numai la ACTIVARE.
        *
@@ -590,7 +591,7 @@ export async function bulkProductAction(
        * `is_featured` NU are corespondent la eMAG. Pus si el in coada, ar fi mancat
        * din cele 3 cereri pe secunda ale magazinului fara sa schimbe nimic acolo.
        */
-      if (action.kind === "active") void enqueueEmagPretMany(businessId, ids);
+      if (action.kind === "active") dupaRaspuns(() => enqueueEmagPretMany(businessId, ids), "enqueueEmagPretMany", businessId);
       if (action.kind === "active" && action.value === false) void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       if (action.kind === "active" && action.value === false) void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
@@ -612,11 +613,11 @@ export async function bulkProductAction(
         if (res.error) throw res.error;
         count += res.count ?? bucata.length;
       }
-      void enqueueGmcSyncMany(businessId, ids);
-      void enqueueOlxSyncMany(businessId, ids);
-      void enqueueAboutYouSyncMany(businessId, ids);
-      void enqueueTrendyolSyncMany(businessId, ids);
-      void enqueueEmagSyncMany(businessId, ids);
+      dupaRaspuns(() => enqueueGmcSyncMany(businessId, ids), "enqueueGmcSyncMany", businessId);
+      dupaRaspuns(() => enqueueOlxSyncMany(businessId, ids), "enqueueOlxSyncMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
+      dupaRaspuns(() => enqueueEmagSyncMany(businessId, ids), "enqueueEmagSyncMany", businessId);
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count };
@@ -649,10 +650,10 @@ export async function bulkProductAction(
       for (const r of rows ?? []) {
         if (Array.isArray(r.images)) void deleteOrphanImages(supabase, businessId, r.images as string[]);
       }
-      for (const id of ids) void enqueueGmcSync(businessId, null, id, "delete");
-      for (const id of ids) void enqueueOlxSync(businessId, null, id, "delete");
-      for (const id of ids) void enqueueAboutYouSync(businessId, null, id, "delete");
-      for (const id of ids) void enqueueTrendyolSync(businessId, null, id, "delete");
+      for (const id of ids) dupaRaspuns(() => enqueueGmcSync(businessId, null, id, "delete"), "enqueueGmcSync", businessId);
+      for (const id of ids) dupaRaspuns(() => enqueueOlxSync(businessId, null, id, "delete"), "enqueueOlxSync", businessId);
+      for (const id of ids) dupaRaspuns(() => enqueueAboutYouSync(businessId, null, id, "delete"), "enqueueAboutYouSync", businessId);
+      for (const id of ids) dupaRaspuns(() => enqueueTrendyolSync(businessId, null, id, "delete"), "enqueueTrendyolSync", businessId);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
@@ -700,10 +701,10 @@ export async function bulkProductAction(
         ));
         count += results.filter((res) => !res.error).length;
       }
-      void enqueueGmcSyncMany(businessId, ids);
-      void enqueueOlxSyncMany(businessId, ids);
-      void enqueueAboutYouSyncMany(businessId, ids);
-      void enqueueTrendyolSyncMany(businessId, ids);
+      dupaRaspuns(() => enqueueGmcSyncMany(businessId, ids), "enqueueGmcSyncMany", businessId);
+      dupaRaspuns(() => enqueueOlxSyncMany(businessId, ids), "enqueueOlxSyncMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
       /*
        * ⚠⚠ „pret", NU „oferta". AICI ERA CHIAR DEFECTUL VETDEPO, MUTAT LA eMAG.
        *
@@ -715,7 +716,7 @@ export async function bulkProductAction(
        * Scrisesem in `queue.ts` ca „o schimbare de pret nu are CUM sa ajunga pe ruta
        * grea". Mecanismul era bun; firul era legat gresit.
        */
-      void enqueueEmagPretMany(businessId, ids);
+      dupaRaspuns(() => enqueueEmagPretMany(businessId, ids), "enqueueEmagPretMany", businessId);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });

@@ -1,6 +1,7 @@
 "use server";
 
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
@@ -768,7 +769,7 @@ export async function createDhlAwbAction(
 
   /* `void`, ca la ceilalti cincisprezece: coada About You e best-effort si nu are voie
      sa tina raspunsul catre comerciant sau sa rupa emiterea daca pica. */
-  void enqueueAboutYouShip(businessId, orderId);
+  dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
 
   /*
    * ⚠ AVERTISMENTELE PLEACA MAI DEPARTE, SI PE AMANDOUA RAMURILE.
@@ -1217,7 +1218,7 @@ export async function verificaDhlAwbAction(
     if (error) return { ok: false as const, error: error.message };
 
     /* Aceeasi coada ca la emitere: calea de recuperare pune tot un AWB pe comanda. */
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
     return {
       ok: true as const,
       gasit: true,

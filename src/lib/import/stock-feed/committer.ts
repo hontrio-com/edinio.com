@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import type { Database } from "@/types/database.types";
 import { applyStockPlan } from "./applier";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
@@ -290,9 +291,9 @@ export async function processStockChunk(
      */
     const atinse = [...new Set(outcome.written.map((c) => c.productId))];
     if (atinse.length > 0) {
-      void enqueueTrendyolInventoryMany(job.business_id, atinse);
-      void enqueueEmagStocMany(job.business_id, atinse);
-      void enqueueAboutYouStockMany(job.business_id, atinse);
+      dupaRaspuns(() => enqueueTrendyolInventoryMany(job.business_id, atinse), "enqueueTrendyolInventoryMany", job.business_id);
+      dupaRaspuns(() => enqueueEmagStocMany(job.business_id, atinse), "enqueueEmagStocMany", job.business_id);
+      dupaRaspuns(() => enqueueAboutYouStockMany(job.business_id, atinse), "enqueueAboutYouStockMany", job.business_id);
     }
 
     const resolved = new Set<number>();

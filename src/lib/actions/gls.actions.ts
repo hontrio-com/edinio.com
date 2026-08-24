@@ -1,5 +1,6 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -589,7 +590,7 @@ export async function createGlsAwbAction(
      * Se cheama DUPA ce scrierea pe comanda a prins un rand: coada citeste
      * `gls_awb_number` din baza, deci inainte n-ar avea ce trimite.
      */
-    void enqueueAboutYouShip(businessId, orderId);
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
   return rezultat;

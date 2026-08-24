@@ -29,6 +29,17 @@ export const EMAG_OFERTA_ACTIVA = 1;
 export const EMAG_OFERTA_OPRITA = 0;
 export const EMAG_OFERTA_SCOASA = 2;
 
+/**
+ * Stările în care eMAG chiar se uită acum la ofertă, din documentația lor.
+ *
+ * 1 = așteaptă MKTP · 2 = așteaptă marca · 4 = așteaptă documentația.
+ *
+ * ⚠ LISTĂ ÎNCHISĂ, ANUME. „Orice nu e vandabil înseamnă în validare" e o presupunere, iar
+ * ei trimit și `0`, care nu există în enumul lor. Cu 61 de oferte așa pe un cont adevărat,
+ * din care 42 chiar OPRITE, presupunerea îi spunea omului „nu ai nimic de făcut".
+ */
+export const EMAG_VALIDARE_IN_CURS: readonly number[] = [1, 2, 4] as const;
+
 export interface StareaLaEmag {
   validation_status: number | null;
   offer_validation_status: number | null;
@@ -74,8 +85,24 @@ export function deCeNuSeVinde(o: StareaLaEmag): MotivulOpririi {
     };
   }
 
-  /* ⚠ 2. Încă în validare. Aici chiar nu e nimic de făcut, si se spune asa. */
-  if (o.validation_status != null && !EMAG_VALIDARE_VANDABILA.includes(o.validation_status)) {
+  /*
+   * ⚠ 2. Încă în validare. Aici chiar nu e nimic de făcut, si se spune asa.
+   *
+   * ═══ ⚠ NUMAI STĂRILE PE CARE LE ȘTIM DIN DOCUMENTAȚIA LOR (24.08.2026) ═══
+   *
+   * Forma dinainte era „orice nu e vandabil înseamnă în validare". Sună rezonabil și e
+   * o presupunere: eMAG trimite și `validation_status: 0`, valoare care NU EXISTĂ în
+   * enumul lor. Măsurat pe contul real, 61 de oferte așa — iar **42 dintre ele sunt
+   * OPRITE** în contul lui (`status_la_ei = 0`).
+   *
+   * ⚠ Deci ecranul le spunea la toate 42 „Validarea lor e făcută de oameni și poate
+   * dura. Nu ai nimic de făcut" — când de fapt avea ceva de făcut, o apăsare în panoul
+   * eMAG, iar altfel aștepta la nesfârșit ceva ce nu venea.
+   *
+   * Acum ramura prinde numai stările documentate ca fiind chiar în validare, iar ce nu
+   * știm trece mai departe la verificările de dedesubt, care pot explica adevărat.
+   */
+  if (o.validation_status != null && EMAG_VALIDARE_IN_CURS.includes(o.validation_status)) {
     return {
       eticheta: "În validare la eMAG",
       indrumare: "Validarea lor e făcută de oameni și poate dura. Nu ai nimic de făcut.",
@@ -133,6 +160,24 @@ export function deCeNuSeVinde(o: StareaLaEmag): MotivulOpririi {
     return {
       eticheta: "Încă necitit de la eMAG",
       indrumare: "Se citește la următoarea trecere. Revino în câteva minute.",
+      seVinde: false,
+    };
+  }
+
+  /*
+   * ⚠ O STARE PE CARE N-O ȘTIM NU E „ÎN REGULĂ".
+   *
+   * Ajunge aici o ofertă cu `validation_status` în afara enumului lor (`0` la 19 oferte
+   * active, măsurat) pe care restul verificărilor n-au putut-o explica. Trecută drept
+   * „se vinde", ar fi arătat verde pe ceva despre care nu știm nimic.
+   *
+   * ⚠ Și e chiar starea pentru care merită păstrat răspunsul brut: dacă apare des, aflăm
+   * ce înseamnă din date, nu dintr-o a doua presupunere.
+   */
+  if (o.validation_status != null && !EMAG_VALIDARE_VANDABILA.includes(o.validation_status)) {
+    return {
+      eticheta: "Stare necunoscută la eMAG",
+      indrumare: `eMAG a trimis o stare pe care documentația lor n-o descrie (${o.validation_status}). Verific-o în panoul lor.`,
       seVinde: false,
     };
   }

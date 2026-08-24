@@ -2826,14 +2826,22 @@ AS $function$
          intr-o SINGURA ramura, deci cartonasele se aduna la total prin constructie.
          `validation_status = 12` e si respins, si vandabil: castiga respins. */
       when o.validation_status in (5, 6, 8, 10, 12) then 'Respins de eMAG'
-      when o.validation_status is not null and o.validation_status not in (3, 9, 11, 12)
-        then 'În validare la eMAG'
+      /* ⚠ LISTA INCHISA: 1 asteapta MKTP, 2 marca, 4 documentatia. „Orice nu e vandabil
+         inseamna in validare" e o presupunere, iar ei trimit si `0`, care nu e in enumul
+         lor — 61 de oferte asa, din care 42 chiar OPRITE. Prinse aici, ecranul le spunea
+         „nu ai nimic de facut" cand aveau. Ce nu stim trece mai jos, unde se poate
+         explica adevarat. */
+      when o.validation_status in (1, 2, 4) then 'În validare la eMAG'
       when o.status_la_ei = 2 then 'Scoasă din vânzare la eMAG'
       when o.status_la_ei = 0 then 'Oprită la eMAG'
       when o.offer_validation_status is not null and o.offer_validation_status <> 1
         then 'Preț neacceptat de eMAG'
       when o.stoc_la_ei is not null and o.stoc_la_ei <= 0 then 'Fără stoc la eMAG'
       when o.status_la_ei is null or o.stoc_la_ei is null then 'Încă necitit de la eMAG'
+      /* ⚠ O stare pe care n-o stim NU e „in regula": ei trimit si `0`, care nu exista in
+         enumul lor. Trecuta drept vanduta, ar fi aratat verde pe ceva necunoscut. */
+      when o.validation_status is not null and o.validation_status not in (3, 9, 11, 12)
+        then 'Stare necunoscută la eMAG'
       else 'Se vinde pe eMAG'
     end as eticheta
     from public.emag_offers o

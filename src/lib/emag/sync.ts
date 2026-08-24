@@ -58,6 +58,7 @@ export async function loadEmagContext(admin: Db, businessId: string): Promise<Co
   const config = ((data?.emag_config as EmagConfig) ?? {}) || {};
   if (!config.connected || !config.username || !config.password) return null;
 
+
   const cota = Number((data as { vat_rate?: unknown } | null)?.vat_rate);
 
   return {

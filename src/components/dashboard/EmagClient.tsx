@@ -55,6 +55,7 @@ const ORDINEA_STARILOR = [
   "Preț neacceptat de eMAG",
   "Fără stoc la eMAG",
   "Încă necitit de la eMAG",
+  "Stare necunoscută la eMAG",
   "Se vinde pe eMAG",
 ] as const;
 

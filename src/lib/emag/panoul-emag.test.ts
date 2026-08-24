@@ -20,7 +20,10 @@ import { deCeNuSeVinde, EMAG_OFERTA_OPRITA, EMAG_OFERTA_SCOASA } from "./de-ce-n
 /** Toate etichetele pe care le poate da `deCeNuSeVinde`, culese din stari adevarate. */
 function toateEtichetele(): Set<string> {
   const gasite = new Set<string>();
-  for (const validation of [null, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12]) {
+  /* ⚠ `0` si `7` NU sunt in enumul lor, si tocmai de aia sunt aici: ei chiar trimit `0`
+     (61 de oferte masurate), iar o stare pe care n-o stim are eticheta ei. Fara valorile
+     astea in matrice, proba n-ar fi vazut niciodata galeata „Stare necunoscuta". */
+  for (const validation of [null, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
     for (const oferta of [null, 1, 2]) {
       for (const laEi of [null, 0, 1, EMAG_OFERTA_OPRITA, EMAG_OFERTA_SCOASA]) {
         for (const stoc of [null, 0, 5]) {
@@ -93,4 +96,44 @@ test("necitit NU se numara ca vandut", () => {
   });
   assert.equal(r.seVinde, false);
   assert.equal(r.eticheta, "Încă necitit de la eMAG");
+});
+
+test("o stare din afara enumului lor NU inseamna „in validare, nimic de facut”", () => {
+  /*
+   * ═══ 42 DE OFERTE OPRITE CARORA LE SPUNEAM SA ASTEPTE ═══
+   *
+   * Ramura era „orice nu e vandabil inseamna in validare". Suna rezonabil si e o
+   * presupunere: ei trimit si `validation_status: 0`, valoare care nu exista in enumul
+   * lor. Masurat pe contul real, 61 de oferte asa — din care 42 sunt OPRITE in contul
+   * lui, iar ecranul le spunea „Validarea lor e facuta de oameni si poate dura. Nu ai
+   * nimic de facut."
+   *
+   * Aveau ce face: o apasare in panoul eMAG. Altfel asteptau la nesfarsit.
+   */
+  const oprita = deCeNuSeVinde({
+    validation_status: 0, offer_validation_status: 1,
+    status_la_ei: EMAG_OFERTA_OPRITA, stoc_la_ei: 5, doc_errors: [],
+  });
+  assert.equal(oprita.eticheta, "Oprită la eMAG", "starea necunoscuta n-are voie sa acopere „oprita”");
+  assert.match(oprita.indrumare, /panoul lor/);
+});
+
+test("o stare necunoscuta pe care nimic n-o explica se spune ca atare", () => {
+  /* ⚠ Trecuta drept „se vinde", ar fi aratat verde pe ceva despre care nu stim nimic.
+     Sunt 19 asa, active, pe contul real. */
+  const r = deCeNuSeVinde({
+    validation_status: 0, offer_validation_status: 1, status_la_ei: 1, stoc_la_ei: 5, doc_errors: [],
+  });
+  assert.equal(r.seVinde, false);
+  assert.equal(r.eticheta, "Stare necunoscută la eMAG");
+  assert.match(r.indrumare, /0/, "se spune CE valoare au trimis, nu doar ca e necunoscuta");
+});
+
+test("starile documentate ca fiind in validare raman „in validare”", () => {
+  for (const v of [1, 2, 4]) {
+    const r = deCeNuSeVinde({
+      validation_status: v, offer_validation_status: 1, status_la_ei: 1, stoc_la_ei: 5, doc_errors: [],
+    });
+    assert.equal(r.eticheta, "În validare la eMAG", `statusul ${v}`);
+  }
 });

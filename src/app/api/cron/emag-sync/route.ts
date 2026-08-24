@@ -12,6 +12,8 @@ import { patchEmagConfig } from "@/lib/emag/config";
 import { intregDeLaEi, zecimalDeLaEi } from "@/lib/emag/numere";
 import { stocDeImportat } from "@/lib/emag/import-produse";
 import { eRespinsaDeEmag, motiveDeLaEi } from "@/lib/emag/motive";
+import { EMAG_VALIDARE_IN_CURS } from "@/lib/emag/de-ce-nu-se-vinde";
+import { EMAG_VALIDARE_VANDABILA } from "@/lib/emag/types";
 import { magazinDin, retragePeEmagId, trimiteElement } from "@/lib/emag/trimite";
 import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
@@ -113,6 +115,20 @@ interface ElementCoada {
   pauze: number;
 }
 
+/**
+ * `validation_status` pe care documentatia lor nu-l descrie.
+ *
+ * ⚠ `null` NU intra aici: acela inseamna „inca n-am citit", si e o stare a NOASTRA, nu a
+ * lor. Numarata ca necunoscuta, fiecare oferta noua ar fi cerut sa i se pastreze
+ * raspunsul intreg degeaba.
+ */
+function stareNecunoscuta(validation: number | null): boolean {
+  return validation != null
+    && !EMAG_VALIDARE_VANDABILA.includes(validation)
+    && !EMAG_VALIDARE_IN_CURS.includes(validation)
+    && !eRespinsaDeEmag(validation);
+}
+
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -150,8 +166,30 @@ export async function GET(req: NextRequest) {
   async function ctxPentru(businessId: string): Promise<ContextEmag | null> {
     if (contexte.has(businessId)) return contexte.get(businessId)!;
     const c = await loadEmagContext(admin, businessId);
-    contexte.set(businessId, c);
-    return c;
+
+    /*
+     * ═══ ⚠ ACREDITARI REFUZATE INSEAMNA „NU MAI SUNA" (24.08.2026) ═══
+     *
+     * `needs_reconnect` se SCRIA la fiecare verdict `chei` (401), cu doua randuri mai
+     * jos si in pasul comenzilor, dar nu-l citea NIMENI pe calea automata. Cronul mergea
+     * mai departe cu aceleasi acreditari refuzate, in toti pasii, din minut in minut.
+     *
+     * ⚠ Socotit pe ritmul cronului: in jur de 5.700 de autentificari respinse pe zi, la
+     * un singur magazin. Iar documentatia lor spune explicit ca si cererile invalide se
+     * numara in limita — deci contul isi arde singur cota de 3 cereri pe secunda pentru
+     * apeluri care nu pot reusi, pana cand omul reconecteaza.
+     *
+     * ⚠ SE OPRESTE AICI, nu in `loadEmagContext`. Acolo, `null` inseamna „neconectat", si
+     * chiar asta ar fi spus ecranele actiunilor de mana: „Contul eMAG nu este conectat" —
+     * fals, si l-ar fi trimis pe om sa caute in alta parte. Calea de mana are deja
+     * `ceLipsestePentruPublicare`, care spune limpede „reconecteaza contul".
+     *
+     * ⚠ Nu se sterge si nu se marcheaza nimic: coada ramane intreaga si porneste singura
+     * cand `needs_reconnect` se stinge la reconectare.
+     */
+    const bun = c && c.config.needs_reconnect === true ? null : c;
+    contexte.set(businessId, bun);
+    return bun;
   }
 
   /* ── 1) Coada ──────────────────────────────────────────────────────────────
@@ -747,7 +785,20 @@ async function scrieStatusurile(
       doc_errors: motiveDeLaEi(o) as never,
       /* ⚠ Numai pentru cele respinse: pastrat pentru toate, ar fi insemnat un jsonb pe
          fiecare din mii de randuri, rescris la fiecare trecere a cronului. */
-      raspuns_brut: (eRespinsaDeEmag(validation) ? (o as never) : null) as never,
+      /*
+       * ⚠ SI PENTRU STARILE PE CARE NU LE STIM, nu doar pentru cele respinse.
+       *
+       * Ei trimit si `validation_status: 0`, valoare care nu exista in enumul lor — 61 de
+       * oferte pe contul real. Si tocmai despre acelea n-aveam nicio dovada pastrata: 0
+       * din 61 cu raspuns brut. Adica exact starea despre care nu stim nimic era singura
+       * pentru care nu tineam nimic.
+       *
+       * Ziua in care `ownership` a venit `boolean` s-a inchis pastrand raspunsul intreg.
+       * Aici se face la fel, inainte sa fie nevoie.
+       */
+      raspuns_brut: (
+        eRespinsaDeEmag(validation) || stareNecunoscuta(validation) ? (o as never) : null
+      ) as never,
       part_number_key: o.part_number_key ?? null,
       /* ⚠ Si numele. Comerciantul isi poate redenumi oferta in panoul lor; scris o
          singura data la import, ecranul nostru ar fi ramas cu numele vechi. */

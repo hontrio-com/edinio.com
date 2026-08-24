@@ -542,3 +542,41 @@ test("cronul amana la pana si NU arde o incercare", async () => {
   assert.ok(ramura.includes("asteptareaDupaPana"), "cu asteptarea de pana, nu cu cea de refuz");
   assert.ok(!ramura.includes("attempts:"), "o pana NU arde o incercare");
 });
+
+/* ── Acreditari refuzate: cronul tace (24.08.2026) ─────────────────────────── */
+
+test("cronul NU mai suna dupa ce eMAG a refuzat acreditarile", async () => {
+  /*
+   * `needs_reconnect` se SCRIA la fiecare verdict `chei` (401), dar nu-l citea nimeni pe
+   * calea automata. Cronul mergea mai departe cu aceleasi acreditari refuzate, in toti
+   * pasii, din minut in minut: in jur de 5.700 de autentificari respinse pe zi, la un
+   * singur magazin. Iar cererile invalide se numara in limita lor.
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8");
+
+  const i = sursa.indexOf("async function ctxPentru(");
+  assert.notEqual(i, -1, "n-am gasit incarcarea contextului");
+  const corp = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "  }", i));
+  assert.ok(
+    corp.includes("needs_reconnect"),
+    "cronul incarca contextul fara sa se uite daca acreditarile au fost refuzate",
+  );
+});
+
+test("garda NU sta in `loadEmagContext`: acolo `null` inseamna „neconectat”", async () => {
+  /*
+   * ⚠ Pusa acolo, actiunile de mana ar fi spus „Contul eMAG nu este conectat" pentru un
+   * cont conectat ale carui chei au fost refuzate — fals, si l-ar fi trimis pe om sa
+   * caute in alta parte. Calea de mana are `ceLipsestePentruPublicare`, care spune
+   * limpede „reconecteaza contul".
+   */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync("src/lib/emag/sync.ts", "utf8");
+  const i = sursa.indexOf("export async function loadEmagContext(");
+  const corp = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "}", i));
+  assert.ok(
+    !corp.includes("needs_reconnect"),
+    "`loadEmagContext` n-are voie sa confunde „chei refuzate” cu „neconectat”",
+  );
+});

@@ -126,6 +126,10 @@ export async function trimiteElement(
     /* ⚠ Implicit PORNIT: cine publica din Edinio se asteapta ca fisa sa vina tot de
        acolo. Se opreste doar cand comerciantul cere asta explicit. */
     sincronizeazaContinut: ctx.config.sync_continut !== false,
+    /* ⚠ Marcajul, nu numarul de randuri preluate. Un cont eMAG gol are zero oferte
+       preluate dupa un import reusit — citit din numar, un comerciant nou n-ar fi
+       putut publica niciodata. Vezi `catalog_citit_la` in `types.ts`. */
+    catalogCitit: !!ctx.config.catalog_citit_la,
   });
   if (ruta.fel === "nimic") {
     await scrieEroare(admin, ctx.businessId, productId, ruta.motiv ?? "");
@@ -757,13 +761,33 @@ async function trimiteInLoturi(
   ctx: ContextEmag,
   productId: string,
   elemente: unknown[],
-  trimite: (lot: unknown[]) => Promise<{ error: string; status: number; verdict?: VerdictEmag } | { data: unknown; verdict?: VerdictEmag }>,
+  trimite: (lot: unknown[]) => Promise<
+    | { error: string; status: number; verdict?: VerdictEmag; mesaje?: string[] }
+    | { data: unknown; verdict?: VerdictEmag; mesaje?: string[] }
+  >,
 ): Promise<RezultatTrimitere> {
   let celMaiRau: VerdictEmag = "reusit";
   let mesaj = "";
+  /*
+   * ═══ ⚠ OBSERVATIILE LOR SE STRANG, NU SE ARUNCA ═══
+   *
+   * `reusit_cu_observatii` exista tocmai fiindca eMAG salveaza oferta SI are ceva de
+   * spus despre ea. Pana pe 24.08.2026 partea a doua se pierdea: `scrieRezultatul`
+   * punea `error: null` la orice verdict incheiat, si nimic altundeva nu tinea minte
+   * mesajele.
+   *
+   * Masurat in ziua aceea: 180 de randuri scrise „trimis", cu zero mesaje pastrate —
+   * desi eMAG raspunsese la fiecare fie „ai deja produsul asta", fie „e ciorna, ii
+   * lipseste EAN-ul". Comerciantul avea in fata un ecran care spunea ca totul a mers.
+   *
+   * Exact greseala §12.9 pe care ne-am ferit s-o facem la Trendyol — motivul
+   * respingerii neafisat — facuta la celalalt capat: motivul PRIMIT si aruncat.
+   */
+  const observatii: string[] = [];
 
   for (let i = 0; i < elemente.length; i += LOT) {
     const r = await trimite(elemente.slice(i, i + LOT));
+    if (r.verdict === "reusit_cu_observatii") observatii.push(...(r.mesaje ?? []));
     if ("error" in r) {
       celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
       mesaj = mesajOmenesc(r.error);
@@ -775,7 +799,7 @@ async function trimiteInLoturi(
     celMaiRau = maiRau(celMaiRau, r.verdict ?? "reusit");
   }
 
-  await scrieRezultatul(admin, ctx.businessId, productId, celMaiRau, mesaj);
+  await scrieRezultatul(admin, ctx.businessId, productId, celMaiRau, mesaj, observatii);
   return { verdict: celMaiRau, mesaj };
 }
 
@@ -803,6 +827,7 @@ function stareaDupa(v: VerdictEmag): StareOferta {
 
 async function scrieRezultatul(
   admin: Admin, businessId: string, productId: string, verdict: VerdictEmag, mesaj: string,
+  observatii: string[] = [],
 ): Promise<void> {
   const acum = new Date().toISOString();
   const patch: Record<string, unknown> = {
@@ -810,6 +835,24 @@ async function scrieRezultatul(
     error: sAIncheiat(verdict) ? null : (mesaj || null),
     updated_at: acum,
   };
+  /*
+   * ═══ ⚠ OBSERVATIILE MERG IN `doc_errors`, NU IN `error` ═══
+   *
+   * Trei campuri, trei intelesuri, si amestecate ar minti fiecare in alt fel:
+   *
+   *   `error`       trimiterea s-a OPRIT. Pus aici, o oferta salvata ar fi aratat
+   *                 rosu si comerciantul ar fi retrimis-o degeaba.
+   *   `issues`      ce am observat NOI in fisa lui (`scrieNepotrivirile`). Scris
+   *                 peste, s-ar fi sters ce s-a masurat inainte de trimitere.
+   *   `doc_errors`  ce spune EI despre oferta. Chiar campul pe care ecranul il arata
+   *                 intreg, cuvant cu cuvant, si singurul loc din care afla omul ce
+   *                 are de reparat.
+   *
+   * ⚠ Se scrie si cand lista e goala, la orice reusita: altfel observatiile unei
+   * trimiteri vechi ar fi ramas pe ecran dupa ce omul le-a reparat, si n-ar fi avut
+   * cum sa afle ca le-a reparat.
+   */
+  if (sAIncheiat(verdict)) patch.doc_errors = observatii;
   /*
    * ⚠ `last_synced_at` SE SCRIE NUMAI LA REUSITA, si el e chiar semnalul „exista la
    * eMAG". Scris si la refuz, urmatoarea trimitere ar fi crezut ca oferta e deja

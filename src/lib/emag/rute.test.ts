@@ -14,7 +14,13 @@ import { oferteUsoare, stocCuRezerva, stocuriDeTrimis } from "./mapping";
  * nimic. Exact asa s-a aflat la Trendyol, pe 1051 de produse.
  */
 
-const BAZA = { op: "pret" as const, existaLaEmag: true, autoSync: true };
+/*
+ * ⚠ `catalogCitit: true` in BAZA, si dinadins: probele de mai jos verifica ALEGEREA
+ * DRUMULUI, iar paza catalogului e alta intrebare, cu probele ei mai jos. Lasata pe
+ * `false`, fiecare proba de aici ar fi cazut pe paza aceea si n-ar mai fi masurat
+ * nimic din ce spune numele ei.
+ */
+const BAZA = { op: "pret" as const, existaLaEmag: true, autoSync: true, catalogCitit: true };
 
 /* ── Drumul se alege dupa CE S-A SCHIMBAT ──────────────────────────────────── */
 
@@ -95,13 +101,83 @@ test("eMAG rute: stergerea unui produs preluat ajunge TOTUSI la eMAG", () => {
    * pe eMAG un produs care nu mai exista la noi. Nimeni nu apasa „Trimite acum"
    * pentru un produs pe care tocmai l-a sters.
    */
-  assert.equal(rutaDeTrimitere({ op: "retragere", existaLaEmag: true, autoSync: false }).fel, "retrage");
+  assert.equal(rutaDeTrimitere({ op: "retragere", existaLaEmag: true, autoSync: false, catalogCitit: true }).fel, "retrage");
 });
 
 test("eMAG rute: o oferta care n-a ajuns niciodata la ei nu se retrage", () => {
-  const r = rutaDeTrimitere({ op: "retragere", existaLaEmag: false, autoSync: true });
+  const r = rutaDeTrimitere({ op: "retragere", existaLaEmag: false, autoSync: true, catalogCitit: true });
   assert.equal(r.fel, "nimic");
   assert.match(r.motiv ?? "", /niciodat/i);
+});
+
+/* ── Nu se creeaza nimic la ei inainte sa le fi citit catalogul (24.08.2026) ── */
+
+test("eMAG rute: publicarea NU pleaca inainte sa le fi citit catalogul", () => {
+  /*
+   * ═══ INCIDENTUL DIN 24.08.2026, FACUT PROBA ═══
+   *
+   * Un comerciant cu produsele deja in contul lui eMAG a pus 208 la publicat fara sa
+   * fi rulat vreodata importul. Din 150 de trimiteri masurate: doua treimi refuzate cu
+   * „You already hold a Product associated with this PN”, o treime ajunse ciorne fara
+   * EAN in contul LOR. Zero publicate.
+   *
+   * ⚠ Si niciuna n-a fost o eroare. Verdictele au fost „reusit” si „reusit cu
+   * observatii”; ecranul ar fi aratat „208 trimise”. De aceea paza sta AICI, in
+   * alegerea drumului, si nu intr-o citire a raspunsului: raspunsul lor nu spune „ai
+   * gresit”.
+   */
+  const r = rutaDeTrimitere({ ...BAZA, op: "oferta", existaLaEmag: false, catalogCitit: false });
+  assert.equal(r.fel, "nimic");
+  assert.notEqual(r.fel, "creeaza");
+  assert.match(r.motiv ?? "", /Import/i, "motivul trebuie sa spuna ce sa apese");
+});
+
+test("eMAG rute: nici stocul si nici pretul nu creeaza inainte de citirea catalogului", () => {
+  /* ⚠ Cea mai usoara lucrare din lume — o miscare de stoc — trece prin `creeaza` cand
+     oferta nu exista inca la ei. Pazita numai la `op: "oferta"`, o vanzare ar fi
+     deschis chiar usa pe care o inchidem. */
+  for (const op of ["stoc", "pret", "masuratori"] as const) {
+    const r = rutaDeTrimitere({ ...BAZA, op, existaLaEmag: false, catalogCitit: false });
+    assert.equal(r.fel, "nimic", `${op} n-are voie sa creeze`);
+  }
+});
+
+test("eMAG rute: o oferta pe care ei o STIU pleaca si fara catalogul citit", () => {
+  /*
+   * ⚠ Paza opreste CREAREA, nu sincronizarea. Cand ei cunosc deja oferta,
+   * `product_offer/save` actualizeaza si n-are cu ce se ciocni.
+   *
+   * Oprita si aici, paza ar fi inghetat pretul si stocul TUTUROR ofertelor unui
+   * magazin pana la urmatorul import — adica ar fi facut, tacut, exact raul de care
+   * ne aparam: eMAG vinde mai departe marfa la pretul vechi.
+   */
+  assert.equal(rutaDeTrimitere({ ...BAZA, op: "pret", catalogCitit: false }).fel, "oferta");
+  assert.equal(rutaDeTrimitere({ ...BAZA, op: "stoc", catalogCitit: false }).fel, "stoc");
+  assert.equal(rutaDeTrimitere({ ...BAZA, op: "oferta", catalogCitit: false }).fel, "creeaza");
+});
+
+test("eMAG rute: retragerea trece peste paza catalogului", () => {
+  /* ⚠ Aceeasi regula de ordine ca la ofertele preluate: un produs sters din magazin
+     trebuie oprit de la vanzare pe eMAG oricand, indiferent ce stim despre catalog. */
+  assert.equal(
+    rutaDeTrimitere({ op: "retragere", existaLaEmag: true, autoSync: true, catalogCitit: false }).fel,
+    "retrage",
+  );
+});
+
+test("eMAG rute: „Trimite acum” NU trece peste paza catalogului", () => {
+  /*
+   * ⚠ ALTA PAZA DECAT CEA A OFERTELOR PRELUATE, SI NU SE COMPORTA LA FEL.
+   *
+   * Acolo, `fortat` inseamna „stiu ce fac, e oferta mea”. Aici n-ar insemna nimic: nici
+   * comerciantul nu stie daca produsul e deja la ei — tocmai asta n-am citit. Trecuta
+   * cu `fortat`, paza ar fi cedat exact in locul in care a fost apasat butonul pe 208
+   * produse deodata.
+   */
+  const r = rutaDeTrimitere({
+    ...BAZA, op: "oferta", existaLaEmag: false, catalogCitit: false, fortat: true,
+  });
+  assert.equal(r.fel, "nimic");
 });
 
 /* ── Loturile ──────────────────────────────────────────────────────────────── */
@@ -401,7 +477,7 @@ test("eMAG rute: o oferta preluata din contul lor SE POATE retrage", () => {
    * pentru marfa pe care n-o mai are. Niciun mesaj de eroare, nicaieri.
    */
   const preluata = rutaDeTrimitere({
-    op: "retragere", existaLaEmag: true, autoSync: false,
+    op: "retragere", existaLaEmag: true, autoSync: false, catalogCitit: true,
   });
   assert.equal(preluata.fel, "retrage", "oferta lor exista acolo: se poate opri");
 });
@@ -409,6 +485,6 @@ test("eMAG rute: o oferta preluata din contul lor SE POATE retrage", () => {
 test("eMAG rute: o oferta care N-A ajuns niciodata acolo nu se retrage", () => {
   /* ⚠ Paza ramane: un rand facut de noi si netrimis inca n-are ce sa opreasca. O
      cerere trimisa pentru el ar fi fost refuzata cu un mesaj despre un id necunoscut. */
-  const r = rutaDeTrimitere({ op: "retragere", existaLaEmag: false, autoSync: true });
+  const r = rutaDeTrimitere({ op: "retragere", existaLaEmag: false, autoSync: true, catalogCitit: true });
   assert.equal(r.fel, "nimic");
 });

@@ -860,6 +860,35 @@ export interface EmagConfig {
   /** Cat de larg e intervalul min/max fata de pretul de vanzare, in procente. */
   price_band_pct?: number;
 
+  /**
+   * Cand am citit ULTIMA DATA catalogul lor, de la un capat la altul.
+   *
+   * ═══ ⚠ FARA EL NU SE POATE CREA NIMIC PE eMAG. VEZI 24.08.2026 ═══
+   *
+   * Un comerciant care avea deja produsele in contul lui eMAG a apasat „Publica”
+   * pe 208 dintre ele fara sa fi rulat vreodata importul. Edinio n-avea de unde sa
+   * stie ca produsele alea sunt DEJA acolo, asa ca a incercat sa le creeze din nou,
+   * cu identitati noi. Rezultatul, masurat pe 150 de trimiteri:
+   *
+   *   ~2 din 3  „You already hold a Product associated with this PN” — eMAG a
+   *             refuzat crearea. Nimic nu s-a duplicat, dar nimic nu s-a publicat.
+   *   ~1 din 3  „saved as a draft … you need: EAN” — s-au facut ciorne moarte in
+   *             contul LOR, care nu se vand si pe care le curata omul de mana.
+   *
+   * Si niciuna dintre cele 150 n-a fost o eroare: verdictul nostru a fost „reusit”
+   * sau „reusit cu observatii”. Ecranul ar fi spus „trimise 208”.
+   *
+   * ⚠ SE SCRIE NUMAI CAND CATALOGUL S-A CITIT INTREG. Taiat de limita de pagini,
+   * marcajul ar minti exact despre produsele pe care nu le-am vazut — adica despre
+   * cele care se pot ciocni. Aceeasi regula ca la fereastra de comenzi: trunchierea
+   * NU avanseaza marcajul.
+   *
+   * ⚠ Zero oferte citite ESTE un raspuns valid, si scrie marcajul. Un cont eMAG gol
+   * e o stare adevarata, nu o citire nereusita — confundate, un comerciant nou n-ar
+   * fi putut publica niciodata.
+   */
+  catalog_citit_la?: string;
+
   /** Marcaje de trecere. */
   orders_synced_at?: string;
   rma_synced_at?: string;

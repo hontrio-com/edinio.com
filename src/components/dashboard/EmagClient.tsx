@@ -223,12 +223,24 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
             <div className="text-sm text-amber-900">
             <p>{status.lipsaPentruPublicare}</p>
-            {/* ⚠ Mesajul trimitea „in setarile integrarii", dar acolo nu exista niciun
-                camp — un drum infundat, cu publicarea blocata si fara cale de iesire.
-                Acum se spune UNDE, si campurile chiar sunt acolo. */}
-            <p className="mt-1 text-xs">
-              Le găsești mai jos, la <strong>„Ce cere eMAG înainte de prima publicare”</strong>.
-            </p>
+            {/* ⚠ INDRUMARUL SE POTRIVESTE CU CE LIPSESTE, nu e unul singur pentru tot.
+                Mesajul trimitea odata „in setarile integrarii" la doua campuri care nu
+                existau nicaieri — un drum infundat, cu publicarea blocata si fara cale
+                de iesire. Scris tot asa acum, ar fi trimis in setari dupa butonul de
+                import, care nu e acolo. */}
+            {status.catalogCitit ? (
+              <p className="mt-1 text-xs">
+                Le găsești mai jos, la <strong>„Ce cere eMAG înainte de prima publicare”</strong>.
+              </p>
+            ) : (
+              <p className="mt-1 text-xs">
+                Butonul e mai jos, la{" "}
+                <a href="#emag-import" className="font-semibold underline underline-offset-2">
+                  „Produsele tale din eMAG”
+                </a>
+                . Durează un minut și nu-ți dublează catalogul — leagă ce ai deja acolo.
+              </p>
+            )}
           </div>
           </div>
         </div>
@@ -432,7 +444,11 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
 
       <PanouIstoric businessId={businessId} />
 
-      <PanouImport businessId={businessId} />
+      {/* ⚠ Ancora e ceruta de indrumarul de sus: fara ea, „butonul e mai jos" ar fi
+          fost tot un drum de cautat cu ochii intr-o pagina lunga. */}
+      <div id="emag-import" className="scroll-mt-24">
+        <PanouImport businessId={businessId} />
+      </div>
 
       <PanouIp ip={status.ipDeAlbit} restrans />
     </div>

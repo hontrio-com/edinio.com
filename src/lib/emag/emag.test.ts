@@ -2,8 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { codDeBareCurat, eanuriDeCautat } from "./ean";
 import {
-  ardeIncercare, clasificaRaspuns, mesajeEmag, poarteObservatii, sAIncheiat,
-} from "./errors";
+  ardeIncercare, clasificaRaspuns, mesajeEmag, poarteObservatii, sAIncheiat, mesajOmenesc} from "./errors";
 import { emagUrl, iesireEmag, monedaEmag } from "./auth";
 import { citesteNumarul } from "./client";
 import {
@@ -356,6 +355,35 @@ test("eMAG: o eroare de documentatie ramane «salvat cu observatii» pe aceeasi 
   );
   assert.equal(c.verdict, "reusit_cu_observatii");
   assert.equal(sAIncheiat(c.verdict), true);
+});
+
+test("eMAG: «You already hold a Product» e REFUZ, nu «salvat cu observatii»", () => {
+  /*
+   * ═══ MASURAT PE ~150 DE RASPUNSURI ADEVARATE, 24.08.2026 ═══
+   *
+   * Un comerciant cu produsele deja in contul lui eMAG a pus 208 la publicat. Doua
+   * treimi au raspuns exact asa, iar panoul lui n-avea niciun produs nou. Verdictul
+   * nostru la toate: „reusit cu observatii”.
+   *
+   * ⚠ Ce se intampla cu un rand iesit asa din coada: pastreaza un `emag_id` pe care
+   * eMAG nu l-a acceptat niciodata, si de acolo inainte fiecare schimbare de pret sau
+   * de stoc pleaca pe `offer/save` catre un id inexistent. La nesfarsit, si de fiecare
+   * data „reusit”. Chiar tiparul VetDepo, intrat pe usa exceptiei din documentatie.
+   */
+  const c = clasificaRaspuns(
+    200,
+    { isError: true, messages: ["You already hold a Product associated with this PN:100170833."] },
+    "/product_offer/save",
+  );
+  assert.equal(c.verdict, "refuz");
+  assert.equal(sAIncheiat(c.verdict), false, "n-are voie sa iasa din coada ca si cum s-ar fi publicat");
+});
+
+test("eMAG: mesajul aratat spune ce sa APESE, nu doar ce s-a intamplat", () => {
+  /* ⚠ Tradus doar ca „produsul exista deja", comerciantul n-avea nicio miscare
+     urmatoare. Lipsa aia a facut cele 208 apasari. */
+  const m = mesajOmenesc("You already hold a Product associated with this PN:115228.");
+  assert.match(m, /Import/i);
 });
 
 test("eMAG: acelasi mesaj pe ALTA ruta e refuz oricum", () => {

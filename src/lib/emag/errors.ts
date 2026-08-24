@@ -124,7 +124,35 @@ export function poarteObservatii(cale: string): boolean {
  * mod de a afla CARE dintre cele 50 de oferte dintr-un lot au trecut. De aceea
  * loturile se tin mici si fiecare produs isi pastreaza verdictul lui.
  */
-const REFUZURI_ALE_CERERII: readonly string[] = ["maximum input vars"] as const;
+/*
+ * ═══ AL DOILEA SEMNAL, ADAUGAT PE 24.08.2026, MASURAT PE 150 DE RASPUNSURI ═══
+ *
+ *     „You already hold a Product associated with this PN:100170833."
+ *
+ * Inseamna: comerciantul are DEJA un produs cu numarul asta de parte in contul lui,
+ * iar noi am cerut sa se creeze inca unul, sub o identitate noua. eMAG a refuzat —
+ * si bine a facut. NU S-A SALVAT NIMIC.
+ *
+ * ⚠ Citit ca „observatie la documentatie", randul iesea din coada cu `status: sent`
+ * si cu un `emag_id` pe care eMAG nu l-a acceptat niciodata. De acolo mai departe,
+ * fiecare schimbare de pret sau de stoc ar fi plecat pe `offer/save` catre un id
+ * inexistent — la nesfarsit, si de fiecare data „reusit". Chiar tiparul pe care il
+ * pazeste tot fisierul asta, ajuns inauntru pe usa exceptiei.
+ *
+ * Masurat in ziua incidentului: din ~150 de trimiteri, doua treimi au raspuns asa, si
+ * panoul comerciantului n-avea niciun produs nou. Verdictul nostru: „reusit cu
+ * observatii”, la toate.
+ *
+ * ⚠ REFUZA LOTUL, NU DOAR PRODUSUL — SI E VOIT. Un lot poate purta pana la 50 de
+ * oferte, iar raspunsul lor e generic: nu spune CARE s-a ciocnit. Regula casei e ca
+ * verdictul lotului e cel mai rau din el (vezi `trimiteInLoturi`), tocmai fiindca
+ * partea nestiuta trebuie citita in defavoarea noastra. Aici asta inseamna: se spune
+ * omului ca produsul lui e deja acolo, in loc sa i se spuna ca s-a publicat.
+ */
+const REFUZURI_ALE_CERERII: readonly string[] = [
+  "maximum input vars",
+  "you already hold a product",
+] as const;
 
 export function eRefuzAlCererii(mesaje: string[]): boolean {
   const tot = mesaje.join(" ").toLowerCase();
@@ -250,6 +278,13 @@ export function mesajOmenesc(brut: string): string {
   }
   if (t.includes("ean")) {
     return `eMAG are o observație la codul EAN: ${brut}`;
+  }
+  if (t.includes("you already hold a product")) {
+    /* ⚠ Se spune CE SA FACA, nu doar ce s-a intamplat. Tradus doar ca „produsul exista
+       deja", comerciantul n-avea nicio miscare urmatoare — si tocmai lipsa aia a facut
+       208 apasari de „Publica" pe 24.08.2026. */
+    return "Produsul există deja în contul tău eMAG, cu același cod (SKU). " +
+      "Apasă „Importă din eMAG” ca să-l legăm de cel de acolo, în loc să-l creăm a doua oară.";
   }
   if (t.includes("part_number_key")) {
     return `eMAG are o observație la produsul la care încerci să atașezi oferta: ${brut}`;

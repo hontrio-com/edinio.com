@@ -129,5 +129,19 @@ export function ceLipsestePentruPublicare(config: EmagConfig): string | null {
   if (config.handling_time == null) {
     return "Alege în câte zile expediezi (timpul de pregătire), în setările integrării.";
   }
+  /*
+   * ⚠ ULTIMA, SI DINADINS. Celelalte doua sunt setari de un minut; asta e o lucrare
+   * care dureaza. Pusa prima, omul ar fi facut importul si abia apoi ar fi dat de
+   * zidul TVA-ului — doua drumuri in loc de unul.
+   *
+   * ⚠ Mesajul spune ce sa APESE, nu unde sa se duca. Pe 23.08 tot fisierul asta
+   * trimitea „in setarile integrarii” la doua campuri care nu existau nicaieri; nu
+   * repetam forma aia. Butonul e chiar in ecranul unde se citeste mesajul.
+   */
+  if (!config.catalog_citit_la) {
+    return "Citește întâi lista ta de produse din eMAG — butonul „Importă din eMAG”. " +
+      "Fără ea nu putem ști care produse sunt deja în contul tău, iar eMAG le refuză " +
+      "pe cele trimise a doua oară.";
+  }
   return null;
 }

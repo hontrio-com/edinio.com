@@ -32,6 +32,7 @@ import { parseVariants } from "@/lib/storefront/variants";
 import { processImport, stageProducts } from "@/lib/import/committer";
 import { citesteCategorii, citesteOferte, isEmagError } from "./client";
 import { loadEmagContext } from "./sync";
+import { patchEmagConfig } from "./config";
 import {
   construiesteIndex, ofertaVenita, potriveste, raportImport,
   type OfertaCunoscuta, type Potrivire, type RandLocal, type RaportImport,
@@ -431,7 +432,29 @@ export async function ruleazaImportEmag(businessId: string, userId: string): Pro
   if (eroare) {
     return { ok: false, mesaj: `Nu s-au putut citi ofertele de la eMAG: ${eroare}`, raport: { ...RAPORT_GOL }, importId: null };
   }
+  /*
+   * ═══ ⚠ MARCAJUL SE SCRIE AICI, INAINTE DE ORICE ALTCEVA CARE POATE CADEA ═══
+   *
+   * `catalog_citit_la` deschide publicarea (vezi `rutaDeTrimitere`). El raspunde la o
+   * singura intrebare — „le-am vazut catalogul?” — si raspunsul e DEJA da: citirea de
+   * mai sus s-a incheiat fara eroare si fara taiere.
+   *
+   * Pus la sfarsit, l-ar fi ratat orice cadere de la pasii de dupa: crearea produselor,
+   * conducta de import, legarea. Iar comerciantul ar fi ramas cu publicarea incuiata
+   * dupa un import care CHIAR a citit tot, fara sa inteleaga de ce.
+   *
+   * ⚠ `taiat` il opreste. Trunchierea nu avanseaza marcajul — aceeasi regula ca la
+   * fereastra de comenzi, si din acelasi motiv: ce n-am citit e chiar ce se poate
+   * ciocni.
+   */
+  if (!taiat) {
+    await patchEmagConfig(admin, businessId, { catalog_citit_la: new Date().toISOString() });
+  }
+
   if (oferte.length === 0) {
+    /* ⚠ Zero oferte e un raspuns, nu o nereusita: contul lor chiar e gol. Marcajul de
+       mai sus s-a scris, deci publicarea se deschide — altfel un comerciant nou n-ar
+       fi putut publica niciodata. */
     return { ok: true, mesaj: "Contul tău eMAG nu are nicio ofertă.", raport: { ...RAPORT_GOL }, importId: null };
   }
 
@@ -502,7 +525,9 @@ export async function ruleazaImportEmag(businessId: string, userId: string): Pro
   if (taiat) {
     toateProblemele.push(
       `S-au citit primele ${PAGINI_MAXIM * PE_PAGINA} de oferte. Dacă ai mai multe, ` +
-      `restul nu au intrat în acest import — spune-ne, ridicăm limita.`,
+      `restul nu au intrat în acest import — spune-ne, ridicăm limita. Până atunci ` +
+      `publicarea produselor noi rămâne oprită: nu putem ști dacă cele necitite ` +
+      `există deja în contul tău.`,
     );
   }
 

@@ -168,6 +168,15 @@ export interface StareEmag {
   /** Ce mai trebuie ales inainte de prima publicare, daca mai trebuie ceva. */
   lipsaPentruPublicare: string | null;
   /**
+   * Le-am citit catalogul macar o data?
+   *
+   * ⚠ Se trimite SEPARAT de mesaj fiindca ecranul trebuie sa arate ALT indrumar: la
+   * TVA si la timpul de expediere se coboara in setari, la asta se apasa importul.
+   * Un singur indrumar pentru amandoua ar fi trimis omul in setari dupa un buton care
+   * nu e acolo — chiar drumul infundat reparat pe 23.08.
+   */
+  catalogCitit: boolean;
+  /**
    * Adresa la care eMAG poate trimite notificari.
    *
    * ⚠ NU SE INREGISTREAZA PRIN API. Cautat in tot OpenAPI-ul lor: nu exista nicio
@@ -298,6 +307,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     autoSync: config.auto_sync !== false,
     autoPublish: config.auto_publish === true,
     lipsaPentruPublicare: ceLipsestePentruPublicare(config),
+    catalogCitit: !!config.catalog_citit_la,
     webhookUrl: emagWebhookUrl(businessId),
     ultimulWebhook: config.ultimul_webhook ?? null,
     /* ⚠ Se citeste marcajul care EXISTA deja, nu se scrie unul nou la fiecare trecere.

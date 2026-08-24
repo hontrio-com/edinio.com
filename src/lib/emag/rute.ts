@@ -81,6 +81,17 @@ export interface StareaOfertei {
    * si stocul.
    */
   sincronizeazaContinut?: boolean;
+  /**
+   * Am citit catalogul lor eMAG de la un capat la altul, macar o data?
+   *
+   * ═══ ⚠ CAMPUL ASTA N-ARE VALOARE IMPLICITA, SI DINADINS ═══
+   *
+   * E obligatoriu tocmai ca sa nu se poata uita. Un `?` aici ar fi insemnat ca
+   * urmatorul apel scris de cineva grabit trece pe langa paza fara ca TypeScript
+   * sa spuna un cuvant — iar felul asta de scapare e chiar cum s-a nascut ce
+   * repara fisierul de fata.
+   */
+  catalogCitit: boolean;
 }
 
 /**
@@ -104,6 +115,39 @@ export function rutaDeTrimitere(s: StareaOfertei): Ruta {
       motiv:
         "Ofertă preluată din contul tău eMAG. Prețul și stocul ei nu se trimit automat, " +
         "ca să nu-ți suprascriem ce ai pus în panoul eMAG. Apasă „Trimite acum” dacă vrei.",
+    };
+  }
+
+  /*
+   * ═══ ⚠ NU SE CREEAZA NIMIC PE eMAG INAINTE SA LE FI CITIT CATALOGUL (24.08.2026) ═══
+   *
+   * Un comerciant cu produsele deja in contul lui eMAG a pus 208 la publicat fara sa
+   * fi rulat vreodata importul. Din 150 de trimiteri masurate: doua treimi refuzate cu
+   * „You already hold a Product associated with this PN”, o treime ajunse ciorne moarte
+   * in contul lor, fiindca n-aveau EAN. Zero publicate.
+   *
+   * ⚠ SI TOTUSI NICIUNA N-A FOST O EROARE. Verdictele au fost „reusit” si „reusit cu
+   * observatii” — categoriile care exista tocmai fiindca eMAG raspunde 200 la lucruri
+   * care n-au mers. Ecranul ar fi aratat „208 trimise”, iar comerciantul ar fi aflat
+   * de la eMAG, nu de la noi. Exact tiparul Trendyol, la alt furnizor.
+   *
+   * Cauza n-a fost o linie gresita, ci o INTREBARE NEPUSA: „exista deja produsul asta
+   * la ei?”. Pana nu le citim catalogul, raspunsul nu se poate sti — iar o creare pe
+   * necunoscute e singura scriere din toata integrarea care poate strica ceva in contul
+   * COMERCIANTULUI, nu in al nostru.
+   *
+   * ⚠ Paza opreste NUMAI crearea. O oferta pe care ei o cunosc deja (`existaLaEmag`)
+   * pleaca mai departe pe orice ruta, catalog citit sau nu: acolo `product_offer/save`
+   * actualizeaza, nu creeaza, si n-are cu ce se ciocni.
+   */
+  if (!s.existaLaEmag && !s.catalogCitit) {
+    return {
+      fel: "nimic",
+      motiv:
+        "Nu ți-am citit încă lista de produse din contul tău eMAG. Până n-o citim, " +
+        "n-avem cum să știm care dintre produsele tale sunt deja acolo — iar trimise " +
+        "din nou, eMAG le refuză sau le lasă ciorne. Apasă „Importă din eMAG”, " +
+        "apoi publică.",
     };
   }
 

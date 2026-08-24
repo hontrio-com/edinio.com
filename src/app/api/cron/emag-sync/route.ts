@@ -8,6 +8,7 @@ import { marcajUrmator } from "@/lib/marketplace/marcaj";
 import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
+import { patchEmagConfig } from "@/lib/emag/config";
 import { magazinDin, trimiteElement } from "@/lib/emag/trimite";
 import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
@@ -242,7 +243,7 @@ export async function GET(req: NextRequest) {
          * iar mai departe n-am face decat sa ardem cererile lui degeaba — si sa-i
          * umplem coada de esecuri care arata ca defecte de produs.
          */
-        await patchConfig(admin, businessId, { needs_reconnect: true });
+        await patchEmagConfig(admin, businessId, { needs_reconnect: true });
         break;
       }
 
@@ -335,7 +336,7 @@ export async function GET(req: NextRequest) {
     const r = await cuFir(fir, () =>
       citesteOferte(ctx.auth, { currentPage: pagina, itemsPerPage: PE_PAGINA }));
     if (isEmagError(r)) {
-      if (r.verdict === "chei") await patchConfig(admin, businessId, { needs_reconnect: true });
+      if (r.verdict === "chei") await patchEmagConfig(admin, businessId, { needs_reconnect: true });
       continue;
     }
 
@@ -353,7 +354,7 @@ export async function GET(req: NextRequest) {
 
     /* ⚠ Pagina urmatoare, sau de la capat. Fara intoarcerea la 1, cursorul ar fi
        depasit catalogul si reconcilierea s-ar fi oprit tacut pe pagini goale. */
-    await patchConfig(admin, businessId, {
+    await patchEmagConfig(admin, businessId, {
       reconcile_page: oferte.length < PE_PAGINA ? 1 : pagina + 1,
     });
   }
@@ -384,7 +385,7 @@ export async function GET(req: NextRequest) {
      */
     const urmator = marcajUrmator(rez, { runStartMs: inceputulRularii, overlapMs: SUPRAPUNERE_MS });
     if (urmator != null) {
-      await patchConfig(admin, businessId, { orders_synced_at: new Date(urmator).toISOString() });
+      await patchEmagConfig(admin, businessId, { orders_synced_at: new Date(urmator).toISOString() });
     }
   }
 
@@ -446,7 +447,7 @@ export async function GET(req: NextRequest) {
        * doar ca sa se vada in panou cand s-a uitat ultima oara.
        */
       if (rez.ok) {
-        await patchConfig(admin, businessId, { rma_synced_at: new Date(inceputulRularii).toISOString() });
+        await patchEmagConfig(admin, businessId, { rma_synced_at: new Date(inceputulRularii).toISOString() });
       }
     }
   }
@@ -814,22 +815,6 @@ function unNumar(v: unknown): number | null {
     return typeof n === "number" && Number.isFinite(n) ? n : null;
   }
   return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
-/**
- * O bucata din `emag_config`, scrisa fara sa se piarda restul.
- *
- * ⚠ SE CITESTE INTAI. `emag_config` e un singur `jsonb`: scris cu obiectul mic, ar
- * fi sters acreditarile, harta categoriilor si toate marcajele magazinului — adica
- * l-ar fi deconectat, dintr-o actualizare de cursor.
- */
-async function patchConfig(admin: Admin, businessId: string, patch: Partial<EmagConfig>): Promise<void> {
-  const { data } = await admin.from("store_settings")
-    .select("emag_config").eq("business_id", businessId).maybeSingle();
-  const config = ((data?.emag_config as EmagConfig) ?? {}) || {};
-  await admin.from("store_settings")
-    .update({ emag_config: { ...config, ...patch } as never, updated_at: new Date().toISOString() })
-    .eq("business_id", businessId);
 }
 
 /**

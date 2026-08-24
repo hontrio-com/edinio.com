@@ -37,7 +37,7 @@ import {
   type IdentitateUsoara, type ProdusDeCartografiat,
 } from "./mapping";
 import { rutaDeTrimitere } from "./rute";
-import { eanuriDeCautat, verdictEan, type RaspunsEan } from "./ean";
+import { eanuriDeCautat, imparteRaspunsurilePeRanduri, verdictEan, type RaspunsEan } from "./ean";
 import { ceLipseste, type ProdusDeVerificat } from "./pregatire";
 import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
@@ -275,7 +275,26 @@ async function duTotul(
    * Se cheama DUPA `asiguraIdentitatile` fiindca are nevoie de randurile scrise: cheia
    * gasita se scrie pe ele, iar citirea de dedesubt o ia de acolo.
    */
-  await cautaInCatalogulLor(admin, ctx, await citesteRandurile(admin, ctx.businessId, produs.id));
+  /*
+   * ⚠ DACA NU S-A PUTUT INTREBA, NU SE CREEAZA.
+   *
+   * Forma dinainte ignora rezultatul si mergea mai departe la `product_offer/save` — adica
+   * CREA produsul in catalogul lor comun fara sa stie daca exista deja. Exact duplicatul
+   * de care fuge toata functia: pagina noua, fara recenzii si fara vizitatori, dupa zile
+   * de validare manuala, si de nedesfacut.
+   *
+   * „trecatoare" fiindca chiar e: ruta lor n-a raspuns acum, elementul ramane in coada si
+   * se reia cu asteptare crescatoare.
+   */
+  const stieCatalogul = await cautaInCatalogulLor(
+    admin, ctx, await citesteRandurile(admin, ctx.businessId, produs.id),
+  );
+  if (stieCatalogul === "necunoscut") {
+    return {
+      verdict: "trecatoare",
+      mesaj: "Nu s-a putut verifica dacă produsul există deja pe eMAG. Se reia singur.",
+    };
+  }
   const cuCheie = await citesteRandurile(admin, ctx.businessId, produs.id);
 
   /*
@@ -753,28 +772,68 @@ async function cautaInCatalogulLor(
   admin: Admin,
   ctx: ContextEmag,
   randuri: RandOfertaLocal[],
-): Promise<void> {
+): Promise<"ok" | "necunoscut"> {
   /* Se intreaba numai pentru ofertele care n-au inca o pagina si care chiar au cod. */
   const deCautat = randuri.filter((r) => !r.part_number_key && (r.ean ?? "").trim());
-  if (deCautat.length === 0) return;
+  if (deCautat.length === 0) return "ok";
 
-  for (const rand of deCautat) {
-    const eanuri = eanuriDeCautat([rand.ean]);
-    if (eanuri.length === 0) continue;
+  /*
+   * ═══ ⚠ UN SINGUR LOT, NU O CERERE PE OFERTA (indreptat 24.08.2026) ═══
+   *
+   * Forma dinainte facea `for (const rand of deCautat)` si chema `cautaDupaEan` cu UN
+   * cod. Nu „aproape una pe oferta" — exact una.
+   *
+   * ⚠ CE COSTA: ruta are limite PROPRII, mai stranse decat restul API-ului — 5 pe
+   * secunda, 200 pe minut si **5.000 PE ZI**. Un catalog de 3.500 de oferte ardea 3.500
+   * din cele 5.000 numai pe cautari, si lovea plafonul de 200/min la orice publicare in
+   * masa. Iar infrastructura pentru 100 exista de la inceput si nu era folosita:
+   * `cautaDupaEan` si `eanuriDeCautat` taie amandoua la 100.
+   *
+   * ⚠ Raspunsurile se desfac inapoi pe randuri dupa campul `eans`, fiindca `verdictEan`
+   * judeca un teanc ca fiind despre UN produs: nedespartite, ar fi spus „nehotarat"
+   * pentru toate. Vezi `imparteRaspunsurilePeRanduri`.
+   */
+  const codPeRand = new Map<RandOfertaLocal, string>();
+  for (const r of deCautat) {
+    const c = eanuriDeCautat([r.ean])[0];
+    if (c) codPeRand.set(r, c);
+  }
+  if (codPeRand.size === 0) return "ok";
 
-    const r = await cautaDupaEan(ctx.auth, eanuri);
-    if (isEmagError(r)) {
-      void logError({
-        action: "emag.ean",
-        message: `cautarea dupa cod de bare a esuat: ${r.error}`,
-        details: { emag_id: rand.emag_id, ean: rand.ean },
-        businessId: ctx.businessId,
-        severity: "warning",
-      });
-      return;
-    }
+  const toate = eanuriDeCautat([...codPeRand.values()]);
+  const raspuns = await cautaDupaEan(ctx.auth, toate);
 
-    const v = verdictEan((Array.isArray(r.data) ? r.data : []) as RaspunsEan[]);
+  if (isEmagError(raspuns)) {
+    /*
+     * ⚠ SE OPRESTE PUBLICAREA, NU SE CONTINUA PE ORB.
+     *
+     * Forma dinainte scria in jurnal si facea `return`, iar apelantul ignora rezultatul
+     * si mergea mai departe la `product_offer/save` — adica CREA produsul in catalogul
+     * lor fara sa stie daca exista deja. Exact duplicatul de care fuge toata functia.
+     *
+     * Acum se arunca: `duTotul` prinde si intoarce „trecatoare", deci elementul ramane in
+     * coada si se reia cand ruta lor raspunde iar.
+     */
+    void logError({
+      action: "emag.ean",
+      message: `cautarea dupa cod de bare a esuat: ${raspuns.error}`,
+      details: { cate: toate.length, businessId: ctx.businessId },
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+    /* ⚠ NU se arunca: coada n-are `try` in jurul elementului, iar o exceptie ar rupe
+       toata trecerea cronului, nu doar produsul asta. Se intoarce verdictul, iar
+       apelantul se opreste singur. */
+    return "necunoscut";
+  }
+
+  const peRand = imparteRaspunsurilePeRanduri(
+    [...codPeRand.keys()],
+    (Array.isArray(raspuns.data) ? raspuns.data : []) as RaspunsEan[],
+  );
+
+  for (const rand of codPeRand.keys()) {
+    const v = verdictEan(peRand.get(rand) ?? []);
 
     if (v.fel === "atasare") {
       /*
@@ -821,6 +880,8 @@ async function cautaInCatalogulLor(
 
     /* `produs_nou`: nu exista la ei. Se trimite cu documentatie, ca pana acum. */
   }
+
+  return "ok";
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

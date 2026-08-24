@@ -156,3 +156,65 @@ export function codDeBareCurat(brut: string | null | undefined): string | null {
      Peste 14 nu exista — GTIN-14 e cel mai lung. */
   return c.length >= 8 && c.length <= 14 ? c : null;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOTURI (24.08.2026)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Raspunsurile unui lot, impartite inapoi pe randuri, dupa codurile lor.
+ *
+ * ═══ ⚠ DE CE E NEVOIE DE IMPARTIRE ═══
+ *
+ * `verdictEan` judeca un teanc de raspunsuri ca fiind despre UN SINGUR produs: daca vede
+ * doua `part_number_key` diferite, intoarce „nehotarat", fiindca pe un produs asta
+ * inseamna coduri amestecate. Corect — dar numai cat timp teancul e al unui singur rand.
+ *
+ * Trimise in lot, raspunsurile a douazeci de produse ar veni la gramada, iar `verdictEan`
+ * ar spune „nehotarat" pentru toate. Deci lotul se aduna la plecare si se desface la
+ * intoarcere, dupa campul `eans` din raspunsul lor.
+ *
+ * ⚠ Un raspuns fara `eans` nu se arunca si nu se da tuturor: se da randurilor al caror
+ * cod NU s-a regasit in niciun raspuns cu `eans`. Dat tuturor, un produs strain ar fi
+ * ajuns sa hotarasca pentru randuri cu care n-are nicio legatura — chiar paguba pe care
+ * o apara „nehotarat".
+ */
+export function imparteRaspunsurilePeRanduri<T extends { ean?: string | null }>(
+  randuri: T[],
+  raspunsuri: RaspunsEan[],
+): Map<T, RaspunsEan[]> {
+  const iesire = new Map<T, RaspunsEan[]>();
+  for (const r of randuri) iesire.set(r, []);
+
+  /* Codul curat al fiecarui rand, ca sa se compare cu ce ne-au intors. */
+  const codRand = new Map<T, string>();
+  for (const r of randuri) {
+    const c = codDeBareCurat(r.ean);
+    if (c) codRand.set(r, c);
+  }
+
+  const faraEans: RaspunsEan[] = [];
+  const acoperite = new Set<T>();
+
+  for (const rasp of raspunsuri ?? []) {
+    const brute = Array.isArray(rasp?.eans) ? rasp.eans : (rasp?.eans ? [rasp.eans] : []);
+    const coduri = new Set(brute.map((x) => codDeBareCurat(x)).filter((x): x is string => !!x));
+    if (coduri.size === 0) { faraEans.push(rasp); continue; }
+
+    for (const [rand, cod] of codRand) {
+      if (!coduri.has(cod)) continue;
+      iesire.get(rand)!.push(rasp);
+      acoperite.add(rand);
+    }
+  }
+
+  /* ⚠ Numai celor ramase fara raspuns identificabil. Vezi nota de mai sus. */
+  if (faraEans.length > 0) {
+    for (const rand of randuri) {
+      if (acoperite.has(rand)) continue;
+      iesire.get(rand)!.push(...faraEans);
+    }
+  }
+
+  return iesire;
+}

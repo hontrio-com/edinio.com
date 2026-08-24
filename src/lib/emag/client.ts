@@ -136,11 +136,33 @@ function esteRutaDeComenzi(cale: string): boolean {
 }
 
 async function asteaptaJeton(cheie: string, perSecunda: number): Promise<void> {
-  /* ⚠ Intai ce au spus EI, apoi socoteala noastra. Vezi `franeazaDupaAntete`. */
-  const pana = pauzePeGaleata.get(cheie) ?? 0;
-  if (pana > Date.now()) {
+  /*
+   * ⚠ Intai ce au spus EI, apoi socoteala noastra. Vezi `franeazaDupaAntete`.
+   *
+   * ═══ ⚠ SE ASTEAPTA IN BUCLA, SI NU SE STERGE ORBESTE (indreptat 24.08.2026) ═══
+   *
+   * Prima forma astepta o data si apoi facea `pauzePeGaleata.delete(cheie)`. Doua greseli
+   * intr-o linie si jumatate:
+   *
+   *   1. Pauza se putea LUNGI cat dormeam — alta cerere concurenta primeste un 429 cu un
+   *      `Retry-After` mai mare. Stearsa la trezire, toti ceilalti porneau imediat, adica
+   *      exact in momentul in care eMAG tocmai spusese „mai stai".
+   *   2. Asteptarea era plafonata la 60 s fara sa se reverifice, deci o pauza mai lunga
+   *      decat atat se sarea oricum.
+   *
+   * Acum se reia verificarea pana cand pauza chiar a trecut, si se sterge numai daca n-a
+   * crescut intre timp. O pauza care se lungeste singura la nesfarsit n-are cum sa apara:
+   * `franeazaDupaAntete` o pune din raspunsurile LOR, iar noi nu mai trimitem cat asteptam.
+   */
+  for (;;) {
+    const pana = pauzePeGaleata.get(cheie) ?? 0;
+    if (pana <= Date.now()) break;
     await new Promise((r) => setTimeout(r, Math.min(pana - Date.now(), 60_000)));
-    pauzePeGaleata.delete(cheie);
+    if ((pauzePeGaleata.get(cheie) ?? 0) <= Date.now()) {
+      /* ⚠ Numai daca inca e a NOASTRA: o pauza rescrisa intre timp ramane a celui nou. */
+      if ((pauzePeGaleata.get(cheie) ?? 0) === pana) pauzePeGaleata.delete(cheie);
+      break;
+    }
   }
 
   const acum = Date.now();

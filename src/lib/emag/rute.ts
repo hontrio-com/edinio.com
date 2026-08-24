@@ -34,6 +34,7 @@
  * decat „sincronizeaza automat", si de aceea e alt camp.
  */
 
+import { BUTON_ADU_OFERTELE } from "./etichete";
 import type { OpEmag } from "./queue";
 import { EMAG_VALIDARE_VANDABILA } from "./types";
 
@@ -143,11 +144,13 @@ export function rutaDeTrimitere(s: StareaOfertei): Ruta {
   if (!s.existaLaEmag && !s.catalogCitit) {
     return {
       fel: "nimic",
+      /* ⚠ Numele butonului se CITEAZA, nu se scrie a doua oara. Vezi `etichete.ts`
+         pentru ce a costat scrierea lui de mana, de doua ori in doua zile. */
       motiv:
         "Nu ți-am citit încă lista de produse din contul tău eMAG. Până n-o citim, " +
         "n-avem cum să știm care dintre produsele tale sunt deja acolo — iar trimise " +
-        "din nou, eMAG le refuză sau le lasă ciorne. Apasă „Importă din eMAG”, " +
-        "apoi publică.",
+        `din nou, eMAG le refuză sau le lasă ciorne. Apasă „${BUTON_ADU_OFERTELE}”: ` +
+        "doar citește și leagă, nu-ți schimbă magazinul.",
     };
   }
 

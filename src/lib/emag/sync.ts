@@ -7,6 +7,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { BUTON_ADU_OFERTELE } from "./etichete";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import type { EmagAuth } from "./client";
@@ -139,9 +140,9 @@ export function ceLipsestePentruPublicare(config: EmagConfig): string | null {
    * repetam forma aia. Butonul e chiar in ecranul unde se citeste mesajul.
    */
   if (!config.catalog_citit_la) {
-    return "Citește întâi lista ta de produse din eMAG — butonul „Importă din eMAG”. " +
-      "Fără ea nu putem ști care produse sunt deja în contul tău, iar eMAG le refuză " +
-      "pe cele trimise a doua oară.";
+    return `Apasă întâi „${BUTON_ADU_OFERTELE}”. Fără lista ta de produse de acolo nu ` +
+      "putem ști care sunt deja în contul tău, iar eMAG le refuză pe cele trimise a " +
+      "doua oară. Doar citește și leagă — nu-ți schimbă magazinul.";
   }
   return null;
 }

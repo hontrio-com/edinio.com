@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { BUTON_ADU_OFERTELE } from "./etichete";
 import { test } from "node:test";
 import { codDeBareCurat, eanuriDeCautat } from "./ean";
 import {
@@ -383,7 +384,7 @@ test("eMAG: mesajul aratat spune ce sa APESE, nu doar ce s-a intamplat", () => {
   /* ⚠ Tradus doar ca „produsul exista deja", comerciantul n-avea nicio miscare
      urmatoare. Lipsa aia a facut cele 208 apasari. */
   const m = mesajOmenesc("You already hold a Product associated with this PN:115228.");
-  assert.match(m, /Import/i);
+  assert.ok(m.includes(BUTON_ADU_OFERTELE), m);
 });
 
 test("eMAG: acelasi mesaj pe ALTA ruta e refuz oricum", () => {

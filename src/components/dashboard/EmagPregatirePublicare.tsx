@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { BLOC_PREGATIRE_PUBLICARE } from "@/lib/emag/etichete";
 import { CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -98,7 +99,7 @@ export function EmagPregatirePublicare({
     <div className="mt-5 space-y-4 border-t border-border pt-5">
       <div>
         <h3 className="flex items-center gap-2 text-sm font-semibold">
-          Ce cere eMAG înainte de prima publicare
+          {BLOC_PREGATIRE_PUBLICARE}
           {gata && <CheckCircle className="h-4 w-4 text-primary" />}
         </h3>
         <p className="mt-1 max-w-prose text-xs text-muted-foreground">

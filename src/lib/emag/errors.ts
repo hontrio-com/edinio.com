@@ -30,6 +30,7 @@
  */
 
 import type { EmagRaspuns } from "./types";
+import { BUTON_ADU_OFERTELE } from "./etichete";
 
 export type VerdictEmag =
   /** `isError: false`. S-a facut, fara observatii. */
@@ -284,7 +285,8 @@ export function mesajOmenesc(brut: string): string {
        deja", comerciantul n-avea nicio miscare urmatoare — si tocmai lipsa aia a facut
        208 apasari de „Publica" pe 24.08.2026. */
     return "Produsul există deja în contul tău eMAG, cu același cod (SKU). " +
-      "Apasă „Importă din eMAG” ca să-l legăm de cel de acolo, în loc să-l creăm a doua oară.";
+      `Apasă „${BUTON_ADU_OFERTELE}” ca să-l legăm de cel de acolo, în loc să-l creăm ` +
+      "a doua oară.";
   }
   if (t.includes("part_number_key")) {
     return `eMAG are o observație la produsul la care încerci să atașezi oferta: ${brut}`;

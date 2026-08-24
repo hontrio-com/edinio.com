@@ -722,9 +722,14 @@ export async function potrivesteTimpPregatire(
 /**
  * Aduce ofertele din contul eMAG al comerciantului.
  *
- * Ce leaga, leaga; ce nu are corespondent, creeaza; ce nu e sigur, raporteaza si
- * lasa in seama omului. Hotararile sunt in `emag/import.ts`, efectele in
- * `emag/import-run.ts`; aici e doar dovada proprietatii si traducerea erorilor.
+ * Ce leaga, leaga; ce nu e sigur, raporteaza si lasa in seama omului. Hotararile
+ * sunt in `emag/import.ts`, efectele in `emag/import-run.ts`; aici e doar dovada
+ * proprietatii si traducerea erorilor.
+ *
+ * ⚠ `creeazaProduse` e IMPLICIT `false`, si dinadins. Citirea si legarea nu ating
+ * magazinul; crearea de produse noi din ofertele fara corespondent il schimba. Sunt
+ * doua hotarari, si numai a doua e a comerciantului — de aceea nu se ia in numele lui.
+ * Vezi `OptiuniImportEmag`.
  *
  * ⚠ NU SE INGHITE NIMIC. Un import cazut se scrie in jurnal SI se intoarce omului,
  * cu mesajul lui. La feedul de stocuri, o cadere tacuta a insemnat sase zile in
@@ -732,6 +737,7 @@ export async function potrivesteTimpPregatire(
  */
 export async function importaDinEmag(
   businessId: string,
+  creeazaProduse = false,
 ): Promise<RezultatImportEmag | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
@@ -742,7 +748,7 @@ export async function importaDinEmag(
   if (iesire.eroare) return { error: iesire.eroare };
 
   try {
-    const rezultat = await ruleazaImportEmag(businessId, g.userId);
+    const rezultat = await ruleazaImportEmag(businessId, g.userId, { creeazaProduse });
     revalidatePath(FEATURE_PATH);
     return rezultat;
   } catch (e) {

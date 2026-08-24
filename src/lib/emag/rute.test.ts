@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { BUTON_ADU_OFERTELE } from "./etichete";
 import { test } from "node:test";
 import {
   asteptareaUrmatoare, eVandabila, LOT_MAXIM, PRIORITATE_OP, rutaDeTrimitere,
@@ -129,7 +130,10 @@ test("eMAG rute: publicarea NU pleaca inainte sa le fi citit catalogul", () => {
   const r = rutaDeTrimitere({ ...BAZA, op: "oferta", existaLaEmag: false, catalogCitit: false });
   assert.equal(r.fel, "nimic");
   assert.notEqual(r.fel, "creeaza");
-  assert.match(r.motiv ?? "", /Import/i, "motivul trebuie sa spuna ce sa apese");
+  /* ⚠ Se cere CONSTANTA, nu un cuvant. Cautat dupa „Import", proba trecea si cand
+     mesajul trimitea la un buton care nu exista — chiar asa s-a si intamplat, si a
+     prins-o comerciantul, nu proba. Vezi `etichete.test.ts`. */
+  assert.ok((r.motiv ?? "").includes(BUTON_ADU_OFERTELE), r.motiv);
 });
 
 test("eMAG rute: nici stocul si nici pretul nu creeaza inainte de citirea catalogului", () => {

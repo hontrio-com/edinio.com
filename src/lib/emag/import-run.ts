@@ -419,7 +419,36 @@ export async function leagaOferteleNoi(admin: Admin, businessId: string): Promis
  * `userId` e cerut fiindca `product_imports.user_id` e obligatoriu si duce la
  * `auth.users`: jobul trebuie sa aiba un om in spate, ca sa se vada in istoricul lui.
  */
-export async function ruleazaImportEmag(businessId: string, userId: string): Promise<RezultatImportEmag> {
+export interface OptiuniImportEmag {
+  /**
+   * Sa devina produse in magazin ofertele lor care n-au corespondent la noi?
+   *
+   * ═══ ⚠ IMPLICIT NU, SI ASTA E O SCHIMBARE VOITA (24.08.2026) ═══
+   *
+   * Sunt doua lucrari cu totul diferite, si pana acum erau lipite intr-un buton:
+   *
+   *   CITIT SI LEGAT   ne uitam ce are in contul eMAG si legam de produsele lui de
+   *                    la noi. Nu se atinge nimic din magazin. E lucrarea de care
+   *                    are nevoie publicarea (`catalog_citit_la`), fiindca raspunde
+   *                    exact la „exista deja produsul asta la ei?”.
+   *   CREAT            ce n-are corespondent devine PRODUS NOU in magazinul lui.
+   *
+   * Comerciantul a intrebat direct: „nu vreau sa importe produsele din eMAG in
+   * magazin”. Are dreptate sa se fereasca — unele magazine vand pe eMAG lucruri pe
+   * care nu le tin in magazinul propriu, iar crearea lor acolo nu e o reparatie, e o
+   * hotarare de-a lui.
+   *
+   * ⚠ Legarea NU are nevoie de creare. `scrieOferte` scrie un rand si pentru
+   * ofertele fara pereche — cu `product_id: null` — deci stim ca exista la ei si nu
+   * ne mai ciocnim de ele niciodata. Ăsta e chiar tot ce cerea paza.
+   */
+  creeazaProduse?: boolean;
+}
+
+export async function ruleazaImportEmag(
+  businessId: string, userId: string, optiuni: OptiuniImportEmag = {},
+): Promise<RezultatImportEmag> {
+  const creeazaProduse = optiuni.creeazaProduse === true;
   const admin = createAdminClient();
 
   const ctx = await loadEmagContext(admin, businessId);
@@ -470,10 +499,19 @@ export async function ruleazaImportEmag(businessId: string, userId: string): Pro
   );
   const raport = raportImport(potriviri);
 
-  /* ── 4. Familiile celor fara corespondent ─────────────────────────────────── */
-  const fara = oferte.filter((o) => potriviri.get(o.id)?.fel === "nou");
+  /* ── 4. Familiile celor fara corespondent ───────────────────────────────────
+   *
+   * ⚠ TOT PASUL SE SARE CAND NU SE CREEAZA NIMIC, si nu doar scrierea de la 6.
+   * `aduCategoriiPentru` face cereri catre eMAG — pana la o citire de categorie
+   * pentru fiecare familie fara corespondent. Platite pentru un raspuns pe care
+   * l-am arunca, ele ard chiar cererile din cele 3 pe secunda prin care pleaca o
+   * miscare de stoc dupa o vanzare.
+   */
+  const fara = creeazaProduse
+    ? oferte.filter((o) => potriviri.get(o.id)?.fel === "nou")
+    : [];
   const familii = grupeazaFamilii(fara);
-  const categorii = await aduCategoriiPentru(ctx.auth, familii);
+  const categorii = familii.length > 0 ? await aduCategoriiPentru(ctx.auth, familii) : [];
   /* ⚠ Cota si felul preturilor vin din CONTEXT, nu dintr-o citire proprie. Doua
      locuri care citesc aceeasi setare se departeaza mai devreme sau mai tarziu, iar
      aici departarea ar fi insemnat produse importate cu pretul gresit cu o cota. */
@@ -533,7 +571,7 @@ export async function ruleazaImportEmag(businessId: string, userId: string): Pro
 
   return {
     ok: true,
-    mesaj: mesajRaport(raport, produse.length),
+    mesaj: mesajRaport(raport, produse.length, creeazaProduse),
     raport: { ...raport, deCreat: produse.length, disparute: disparute.length, probleme: toateProblemele },
     importId,
   };
@@ -601,10 +639,22 @@ async function aduCategoriiPentru(
  * lega nu e o nereusita a lui, dar e un lucru pe care numai el il poate limpezi —
  * si daca nu i se spune, nu afla niciodata ca exista.
  */
-function mesajRaport(r: RaportImport, deCreat: number): string {
+function mesajRaport(r: RaportImport, deCreat: number, aCreat: boolean): string {
   const parti: string[] = [];
   if (r.legate) parti.push(`${r.legate} legate de produse existente`);
-  if (deCreat) parti.push(`${deCreat} produse noi`);
+  if (aCreat && deCreat) parti.push(`${deCreat} produse noi`);
+  /*
+   * ⚠ CAND NU SE CREEAZA, TACEREA AR FI O MINCIUNE.
+   *
+   * Fara randul asta, un comerciant cu 500 de oferte din care 140 se leaga ar fi
+   * citit „500 oferte citite: 140 legate” si ar fi plecat crezand ca s-a rezolvat
+   * tot. Celelalte 360 exista in continuare la eMAG si n-au pereche la el — un
+   * lucru pe care numai el il poate lamuri.
+   *
+   * Aceeasi regula ca la feedul de stocuri: verdictul se citeste din CE S-A POTRIVIT,
+   * nu din cate randuri au fost citite.
+   */
+  if (!aCreat && r.noi) parti.push(`${r.noi} fără pereche la tine (nu s-a creat nimic)`);
   if (r.cunoscute) parti.push(`${r.cunoscute} deja cunoscute`);
   if (r.nehotarate) parti.push(`${r.nehotarate} de lămurit`);
   if (r.ocupate) parti.push(`${r.ocupate} deja legate de altă ofertă`);

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import {
+  BLOC_PREGATIRE_PUBLICARE, BUTON_ADU_OFERTELE, BUTON_ADU_OFERTELE_SCURT,
+} from "@/lib/emag/etichete";
 import { AlertTriangle, CheckCircle, Copy, Download, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { EmagPregatirePublicare } from "@/components/dashboard/EmagPregatirePublicare";
@@ -230,15 +233,20 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
                 import, care nu e acolo. */}
             {status.catalogCitit ? (
               <p className="mt-1 text-xs">
-                Le găsești mai jos, la <strong>„Ce cere eMAG înainte de prima publicare”</strong>.
+                Le găsești mai jos, la <strong>„{BLOC_PREGATIRE_PUBLICARE}”</strong>.
               </p>
             ) : (
+              /* ⚠ NUMELE DE PE BUTON, CUVANT CU CUVANT. Scris „Importa din eMAG”,
+                 indrumarul trimitea la un buton care nu exista — a intrebat chiar
+                 comerciantul: „nu exista buton cu «Importa din eMag», eu il vad doar
+                 pe asta cu «Adu ofertele»”. Exact drumul infundat reparat pe 23.08,
+                 facut din nou. */
               <p className="mt-1 text-xs">
                 Butonul e mai jos, la{" "}
                 <a href="#emag-import" className="font-semibold underline underline-offset-2">
-                  „Produsele tale din eMAG”
+                  „{BUTON_ADU_OFERTELE}”
                 </a>
-                . Durează un minut și nu-ți dublează catalogul — leagă ce ai deja acolo.
+                . Doar citește și leagă — nu-ți schimbă magazinul.
               </p>
             )}
           </div>
@@ -834,6 +842,18 @@ function PanouImport({ businessId }: { businessId: string }) {
   const [raport, setRaport] = useState<RaportAratat | null>(null);
   const [faza, setFaza] = useState<Faza>("gata");
   const [create, setCreate] = useState<{ facute: number; total: number } | null>(null);
+  /*
+   * ═══ ⚠ NEBIFAT LA DESCHIDERE, SI ASTA E CHIAR HOTARAREA (24.08.2026) ═══
+   *
+   * Butonul facea doua lucruri deodata: citea ofertele SI transforma in produse noi
+   * ce n-avea pereche. Comerciantul a intrebat, inainte sa apese: „nu vreau sa
+   * importe produsele din eMAG in magazin”. Intrebarea lui era buna — unele magazine
+   * vand pe eMAG lucruri pe care nu le tin in magazinul propriu.
+   *
+   * Citirea si legarea nu ating magazinul. Crearea il schimba, si nu se desface cu un
+   * buton. Deci alegerea implicita e cea care nu strica nimic.
+   */
+  const [creeaza, setCreeaza] = useState(false);
 
   function importa() {
     incepe(async () => {
@@ -841,7 +861,7 @@ function PanouImport({ businessId }: { businessId: string }) {
       setCreate(null);
       setFaza("citim");
 
-      const r = await importaDinEmag(businessId);
+      const r = await importaDinEmag(businessId, creeaza);
       if ("error" in r) {
         setFaza("gata");
         toast.error(r.error);
@@ -910,12 +930,31 @@ function PanouImport({ businessId }: { businessId: string }) {
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold">Adu ofertele din eMAG</h3>
+          <h3 className="text-sm font-semibold">{BUTON_ADU_OFERTELE}</h3>
           <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            Citim ce ai deja pe eMAG. Ofertele care se potrivesc cu produsele tale
-            din magazin se <strong>leagă</strong> de ele; doar cele fără corespondent
-            devin produse noi. Nu se creează duplicate.
+            Citim ce ai deja pe eMAG și <strong>legăm</strong> ofertele de produsele
+            tale din magazin, după cod, cod de bare sau SKU. Magazinul nu se atinge:
+            nu se creează și nu se modifică niciun produs. Tot de aici aflăm ce ai
+            deja acolo, ca să nu-ți trimitem a doua oară un produs pe care îl ai.
           </p>
+          {/* ⚠ Bifa e SUB text si nebifata: e singurul lucru din panou care schimba
+              magazinul, iar magazinul e al lui. */}
+          <label className="mt-3 flex max-w-prose items-start gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={creeaza}
+              onChange={(e) => setCreeaza(e.target.checked)}
+              disabled={seLucreaza}
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border"
+            />
+            <span>
+              Creează în magazin și produsele de pe eMAG care nu au pereche la mine.
+              <span className="block text-[11px] opacity-80">
+                Lasă nebifat dacă vrei doar să legăm ce ai deja. Produsele create nu se
+                șterg la loc dintr-un buton.
+              </span>
+            </span>
+          </label>
         </div>
         <button
           type="button"
@@ -1001,7 +1040,7 @@ const PASI_MAXIM = 60;
 type Faza = "gata" | "citim" | "cream" | "legam";
 
 const ETICHETA_FAZA: Record<Faza, string> = {
-  gata: "Adu ofertele",
+  gata: BUTON_ADU_OFERTELE_SCURT,
   citim: "Se citesc ofertele…",
   cream: "Se creează produsele…",
   legam: "Se leagă…",

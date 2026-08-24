@@ -520,3 +520,37 @@ test("eMAG: cheia de produs NU se trimite inapoi", () => {
   ], null);
   assert.equal("part_number_key" in (r.oferte[0] ?? {}), false);
 });
+
+test("eMAG: datele GPSR se taie la limitele lor si nu trec de 10 seturi", () => {
+  /*
+   * ⚠ Datele astea se scriu O DATA in setari si pleaca la FIECARE produs. O adresa
+   * prea lunga n-ar fi oprit un produs, ci tot catalogul — iar mesajul lor ar fi
+   * vorbit despre GPSR, nu despre setarea din care vine.
+   */
+  const unSet = { name: "N".repeat(300), address: "A".repeat(700), email: "e".repeat(150) };
+  const magazin = { ...MAGAZIN, gpsr: { manufacturer: Array.from({ length: 14 }, () => unSet) } };
+  const r = construiesteOferte(produs(), magazin, CATEGORIE, [{ variant_title: null, emag_id: 1 }], null);
+  const m = (r.oferte[0] as unknown as { manufacturer: { name: string; address: string; email: string }[] }).manufacturer;
+  assert.equal(m.length, 10, "cel mult 10 seturi");
+  assert.equal(m[0].name.length, 200);
+  assert.equal(m[0].address.length, 500);
+  assert.equal(m[0].email.length, 100);
+});
+
+test("eMAG: un stoc urias nu opreste publicarea, se plafoneaza", () => {
+  /* ⚠ `stock[].value` are `maximum=65535`. Un depozit cu mai mult — hrana la sac,
+     consumabile — ar fi trimis o valoare in afara intervalului, iar eMAG refuza
+     OFERTA INTREAGA. */
+  const r = construiesteOferte(produs({ stock_quantity: 90000 }), MAGAZIN, CATEGORIE,
+    [{ variant_title: null, emag_id: 1 }], null);
+  assert.equal(r.oferte[0]?.stock?.[0]?.value, 65535);
+});
+
+test("eMAG: un SKU peste 25 de caractere OPRESTE produsul, cu motiv", () => {
+  /* ⚠ Taiat, ar fi fost ALT SKU — legat de alt produs sau duplicat, fara nicio
+     eroare. Oprit aici, omul primeste un mesaj in romana. */
+  const r = construiesteOferte(produs({ sku: "A".repeat(26) }), MAGAZIN, CATEGORIE,
+    [{ variant_title: null, emag_id: 1 }], null);
+  assert.equal(r.oferte.length, 0);
+  assert.match(r.probleme.join(" "), /25/);
+});

@@ -17,6 +17,7 @@
  */
 
 import { combinatiiActiveUnice, comboStock, comboUnitPrice, parseVariants } from "@/lib/storefront/variants";
+import { LIMITE_EMAG, partNumberPreaLung, plafonat, taiat } from "./limite";
 import { codDeBareCurat } from "./ean";
 /*
  * ⚠ Se refoloseste rescrierea de adrese a lui Trendyol, nu se scrie a doua.
@@ -229,6 +230,21 @@ export interface ProdusDeCartografiat {
 }
 
 /**
+ * Datele GPSR, aduse la limitele lor.
+ *
+ * ⚠ Se TAIE, nu se refuza: sunt date de contact, iar o adresa scurtata ramane
+ * folositoare. Refuzate, ar fi oprit publicarea intregului catalog pentru un caracter.
+ */
+function gpsrPentruEmag(lista: EmagGpsrEntitate[] | undefined): EmagGpsrEntitate[] | undefined {
+  if (!Array.isArray(lista) || lista.length === 0) return undefined;
+  return lista.slice(0, LIMITE_EMAG.gpsrSeturi).map((e) => ({
+    name: taiat(e?.name, LIMITE_EMAG.gpsrNume),
+    address: taiat(e?.address, LIMITE_EMAG.gpsrAdresa),
+    email: taiat(e?.email, LIMITE_EMAG.gpsrEmail),
+  }));
+}
+
+/**
  * Codul de bare scris in fisa produsului.
  *
  * ⚠ `page_sections.google.gtin` e acelasi camp pe care il foloseste feedul Google
@@ -332,10 +348,17 @@ export function construiesteOferte(
        iar descrierea se desface — produsul se publica si arata rupt. */
     description: descriereaPentruEmag(produs.description),
     characteristics: categorie.characteristics.length ? categorie.characteristics : undefined,
-    warranty: magazin.warranty,
+    /* ⚠ `warranty` are `maximum=255` (luni) in schema lor. */
+    warranty: plafonat(magazin.warranty, LIMITE_EMAG.garantie),
     vat_id: magazin.vat_id,
+    /* ⚠ Plafonat la 255, ca `supply_lead_time` de mai jos si din acelasi motiv:
+       incarcatura se inchide cu `as EmagProdusOferta`, deci compilatorul NU verifica
+       valoarea, iar o cifra scrisa in config din alta parte ar fi plecat asa cum e. */
     ...(magazin.handling_time != null
-      ? { handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }] }
+      ? { handling_time: [{
+          warehouse_id: magazin.warehouse_id,
+          value: plafonat(magazin.handling_time, LIMITE_EMAG.zilePregatire),
+        }] }
       : {}),
     /*
      * ═══ ⚠ SE OMITE CAND NU E STIUT, EXACT CA `handling_time` ═══
@@ -367,8 +390,17 @@ export function construiesteOferte(
      */
     images_overwrite: 1 as const,
     safety_information: magazin.gpsr?.safety_information,
-    manufacturer: magazin.gpsr?.manufacturer,
-    eu_representative: magazin.gpsr?.eu_representative,
+    /*
+     * ⚠ GPSR ARE LIMITELE LUI, SI ELE NU ERAU PAZITE NICAIERI.
+     *
+     * Schema lor: `name` 200, `address` 500, `email` 100, si „Maximum 10 sets" la
+     * amandoua listele. Datele astea le scrie comerciantul o data, in setari, si de
+     * acolo pleaca la FIECARE produs — deci o adresa prea lunga n-ar fi oprit un
+     * produs, ci toate. Iar mesajul lor ar fi vorbit despre GPSR, nu despre setarea
+     * din care vine.
+     */
+    manufacturer: gpsrPentruEmag(magazin.gpsr?.manufacturer),
+    eu_representative: gpsrPentruEmag(magazin.gpsr?.eu_representative),
     /*
      * ⚠ TAXA VERDE INCLUDE TVA, spre deosebire de toate celelalte preturi. Documentatia
      * lor: „This value includes VAT." Trecuta prin `pretFaraTva` din obisnuinta, ar fi
@@ -500,6 +532,20 @@ function ofertaSingura(a: {
     return null;
   }
 
+  /*
+   * ⚠ SE REFUZA, NU SE TAIE. `part_number` are `maxLength=25` la ei, iar un SKU taiat
+   * nu e un SKU mai scurt — e ALT SKU. Trimis, ar lega oferta de alt produs din
+   * catalogul lor sau ar face un duplicat, fara nicio eroare. Oprit aici, comerciantul
+   * primeste un mesaj in romana si isi poate scurta codul cu cap.
+   */
+  if (partNumberPreaLung(a.partNumber)) {
+    probleme.push(
+      `Codul de produs „${a.partNumber}" are ${a.partNumber.length} caractere, iar eMAG ` +
+      `acceptă cel mult ${LIMITE_EMAG.partNumber}. Scurtează-l în fișa produsului.`,
+    );
+    return null;
+  }
+
   if (a.imagini.length === 0) {
     probleme.push(`„${a.titlu}" nu are nicio imagine https. eMAG cere cel puțin una.`);
     return null;
@@ -517,15 +563,19 @@ function ofertaSingura(a: {
     ? pretFaraTva(a.compareAt, magazin.vat_rate, magazin.prices_include_vat)
     : null;
 
+  /* ⚠ `stock[].value` are `maximum=65535` in schema lor. Un depozit cu mai mult —
+     consumabile, hrana la sac — ar fi trimis un numar in afara intervalului, iar eMAG
+     refuza OFERTA INTREAGA, cu un mesaj despre stoc. Plafonat, se vinde mai departe:
+     „65535 bucati" e destul de adevarat. */
   const stoc: EmagStoc[] = [{
     warehouse_id: magazin.warehouse_id,
-    value: Math.max(0, Math.floor(Number.isFinite(a.stoc) ? a.stoc : 0)),
+    value: plafonat(a.stoc, LIMITE_EMAG.stoc),
   }];
 
   return {
     ...(a.comun as object),
     id: ident.emag_id,
-    name: a.titlu.slice(0, 255),
+    name: taiat(a.titlu, LIMITE_EMAG.nume),
     part_number: a.partNumber,
     /*
      * ═══ ⚠ CHEIA DE PRODUS NU SE TRIMITE INAPOI. NICIODATA. (24.08.2026) ═══
@@ -698,7 +748,12 @@ export function oferteUsoare(
       ...(magazin.handling_time != null
         ? { handling_time: [{ warehouse_id: magazin.warehouse_id, value: magazin.handling_time }] }
         : {}),
-      stock: [{ warehouse_id: magazin.warehouse_id, value: stocCuRezerva(stoc, magazin.stoc_rezervat) }],
+      /* ⚠ Acelasi plafon ca pe ruta grea. O singura cale plafonata ar fi insemnat ca
+         acelasi produs trece la publicare si pica la urmatoarea miscare de stoc. */
+      stock: [{
+        warehouse_id: magazin.warehouse_id,
+        value: plafonat(stocCuRezerva(stoc, magazin.stoc_rezervat), LIMITE_EMAG.stoc),
+      }],
       status: stare,
     };
   });
@@ -728,6 +783,6 @@ export function stocuriDeTrimis(
        FIECARE vanzare. O varianta disparuta ar fi trimis stocul intregului produs de
        zeci de ori pe zi. */
     const stoc = stoculIdentitatii(ident.variant_title, c, produs.stock_quantity);
-    return { emagId: ident.emag_id, cantitate: stocCuRezerva(stoc, stocRezervat) };
+    return { emagId: ident.emag_id, cantitate: plafonat(stocCuRezerva(stoc, stocRezervat), LIMITE_EMAG.stoc) };
   });
 }

@@ -1,4 +1,5 @@
 import type { EmagCaracteristica, EmagCaracteristicaCategorie } from "./types";
+import { LIMITE_EMAG, taiat } from "./limite";
 
 /**
  * Caracteristicile eMAG, completate din specificatiile produsului (§19).
@@ -135,7 +136,13 @@ export function potrivesteCaracteristici(
   }
 
   return {
-    caracteristici: [...gasite.entries()].map(([id, value]) => ({ id, value })),
+    /* ⚠ `characteristics[].value` are `maxLength=255` la ei. Netaiata, o specificatie
+       lunga — „Compozitie" la hrana de animale e adesea un paragraf intreg — face eMAG
+       sa refuze OFERTA INTREAGA, cu un mesaj despre o caracteristica. Vezi `limite.ts`
+       pentru de ce descrierile se taie si identitatile nu. */
+    caracteristici: [...gasite.entries()].map(([id, value]) => ({
+      id, value: taiat(value, LIMITE_EMAG.valoareCaracteristica),
+    })),
     nepotriviri,
   };
 }

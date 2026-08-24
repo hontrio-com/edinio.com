@@ -8,8 +8,7 @@ import { emagUrl, iesireEmag, monedaEmag } from "./auth";
 import { citesteNumarul } from "./client";
 import {
   alegeCotaTva, alegeTimpPregatire, caracteristiciLipsa, caracteristiciObligatorii,
-  categoriiIngaduite,
-} from "./taxonomy";
+  categoriiIngaduite, zileleDinTimp} from "./taxonomy";
 import { EMAG_TRECERI_RETUR, EMAG_VALIDARE_VANDABILA } from "./types";
 
 /*
@@ -441,4 +440,40 @@ test("eMAG EAN: lipsa ramane lipsa, nu devine sir gol", () => {
   assert.equal(codDeBareCurat(undefined), null);
   assert.equal(codDeBareCurat("   "), null);
   assert.equal(codDeBareCurat("fara cod"), null);
+});
+
+/* ── Timpul de pregatire: forma lor nu e in schema ─────────────────────── */
+
+test("eMAG timp de pregatire: numarul se citeste din formele plauzibile", () => {
+  /*
+   * ═══ VAZUT IN PRODUCTIE, 24.08.2026 ═══
+   *
+   * `/handling_time/read` are in OpenAPI-ul lor doar `ApiResponse` — un obiect fara
+   * niciun camp descris. Deci `{ value }` era o PRESUPUNERE de-a noastra, si nimic
+   * n-o verifica.
+   *
+   * Comerciantul a deschis „In cate zile expediezi" si a vazut o lista lunga de
+   * „undefined zile". Meniul arata a defect, iar publicarea ramanea blocata: nu putea
+   * alege nimic.
+   */
+  assert.equal(zileleDinTimp({ value: 3 }), 3);
+  assert.equal(zileleDinTimp({ id: 5 }), 5);
+  assert.equal(zileleDinTimp({ handling_time: 7 }), 7);
+  assert.equal(zileleDinTimp({ name: "2" }), 2, "ei trimit numere si ca text");
+  assert.equal(zileleDinTimp(4), 4, "sau chiar numarul gol");
+  assert.equal(zileleDinTimp("6"), 6);
+});
+
+test("eMAG timp de pregatire: ce nu se recunoaste da `null`, NU zero", () => {
+  /*
+   * ⚠ Un zero inventat ar fi insemnat „expediez in aceeasi zi" — o promisiune pe care
+   * comerciantul n-a facut-o si pe care eMAG o NUMARA. Intarzierea scade nota
+   * vanzatorului, iar el n-ar fi avut de unde sa afle de ce.
+   */
+  assert.equal(zileleDinTimp(null), null);
+  assert.equal(zileleDinTimp(undefined), null);
+  assert.equal(zileleDinTimp({}), null);
+  assert.equal(zileleDinTimp({ altceva: 3 }), null);
+  assert.equal(zileleDinTimp("doua zile"), null);
+  assert.equal(zileleDinTimp(Number.NaN), null);
 });

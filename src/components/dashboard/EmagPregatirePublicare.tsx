@@ -148,7 +148,11 @@ export function EmagPregatirePublicare({
               disabled={seSalveaza || !timpi}
             >
               <option value="">Alege…</option>
-              {(timpi ?? []).map((t) => (
+              {/* ⚠ Se filtreaza si aici, desi `aduTimpiPregatire` normalizeaza deja. Forma
+                  raspunsului lor NU e in schema (doar `ApiResponse`), iar un „undefined
+                  zile" aratat in meniu blocheaza publicarea si arata a defect — s-a
+                  intamplat pe 24.08.2026. Doua incuietori, nu una. */}
+              {(timpi ?? []).filter((t) => Number.isFinite(t?.value)).map((t) => (
                 <option key={t.value} value={String(t.value)}>
                   {t.value === 0 ? "În aceeași zi" : `${t.value} ${t.value === 1 ? "zi" : "zile"}`}
                 </option>

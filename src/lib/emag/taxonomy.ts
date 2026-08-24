@@ -208,12 +208,59 @@ export function alegeCotaTva(cote: EmagCotaTva[], rataMagazin: number): EmagCota
    TIMPUL DE PREGATIRE
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * Numarul de zile dintr-un element de raspuns, oricum l-ar numi ei.
+ *
+ * ═══ ⚠ FORMA NU E IN SCHEMA LOR ═══
+ *
+ * `/handling_time/read` are in OpenAPI doar `ApiResponse` — un obiect fara camp
+ * descris. Deci `{ value }` era o PRESUPUNERE de-a noastra.
+ *
+ * Masurat in productie, 24.08.2026: ecranul arata o lista lunga de „undefined zile",
+ * fiindca elementele n-au `value`. Presupunerea era gresita, si nimic n-o verifica.
+ *
+ * Se citeste din formele plauzibile, si se intoarce `null` cand nu se recunoaste
+ * niciuna — NU zero. Un zero inventat ar fi insemnat „expediez in aceeasi zi", adica
+ * o promisiune pe care comerciantul n-a facut-o si pe care eMAG o numara.
+ */
+export function zileleDinTimp(brut: unknown): number | null {
+  if (typeof brut === "number") return Number.isFinite(brut) ? brut : null;
+  if (typeof brut === "string" && /^\d+$/.test(brut.trim())) return Number(brut.trim());
+  if (!brut || typeof brut !== "object") return null;
+
+  const o = brut as Record<string, unknown>;
+  for (const cheie of ["value", "handling_time", "days", "zile", "id", "name"]) {
+    const v = o[cheie];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && /^\d+$/.test(v.trim())) return Number(v.trim());
+  }
+  return null;
+}
+
 export async function aduTimpiPregatire(
   auth: EmagAuth,
 ): Promise<EmagValoareTimpPregatire[] | { error: string }> {
   const r = await citesteTimpiPregatire(auth);
   if (isEmagError(r)) return { error: r.error };
-  return Array.isArray(r.data) ? r.data : [];
+  if (!Array.isArray(r.data)) return [];
+
+  /*
+   * ⚠ SE NORMALIZEAZA AICI, nu la fiecare consumator. `alegeTimpPregatire` si ecranul
+   * de setari citeau amandoua `.value`; lasata nenormalizata, forma lor ar fi trebuit
+   * ghicita in doua locuri, iar al doilea s-ar fi despartit de primul.
+   *
+   * ⚠ Se arunca ce nu se recunoaste, si se dedubleaza: „3 zile" de doua ori intr-un
+   * meniu arata a defect.
+   */
+  const vazute = new Set<number>();
+  const curate: EmagValoareTimpPregatire[] = [];
+  for (const x of r.data as unknown[]) {
+    const zile = zileleDinTimp(x);
+    if (zile == null || zile < 0 || vazute.has(zile)) continue;
+    vazute.add(zile);
+    curate.push({ ...(x && typeof x === "object" ? x : {}), value: zile });
+  }
+  return curate.sort((a, b) => a.value - b.value);
 }
 
 /**

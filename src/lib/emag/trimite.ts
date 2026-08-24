@@ -787,7 +787,27 @@ async function trimiteInLoturi(
 
   for (let i = 0; i < elemente.length; i += LOT) {
     const r = await trimite(elemente.slice(i, i + LOT));
-    if (r.verdict === "reusit_cu_observatii") observatii.push(...(r.mesaje ?? []));
+    /*
+     * ⚠ SE STRANG SI DE LA UN „REUSIT" CURAT (24.08.2026, a doua oara in aceeasi zi).
+     *
+     * Prima forma lua mesajele numai de la `reusit_cu_observatii`. Dar eMAG intoarce
+     * avertismente si pe raspunsuri fara `isError` — iar cel mai important dintre ele
+     * e chiar asta:
+     *
+     *     „WARNING: The product was saved as a draft, and you need the following
+     *      product fields to continue documenting and have the product ready for
+     *      sale: EAN."
+     *
+     * Adica: produsul TAU nu se vinde. Verdictul e `reusit`, si pe drept — salvarea a
+     * reusit. Dar aruncand mesajul, ecranul arata o oferta trimisa cu bine, iar
+     * comerciantul afla ca e ciorna abia din panoul lor.
+     *
+     * S-a vazut in aceeasi zi, uitandu-ma la retrimiterea celor 40: 39 au iesit curate,
+     * una a ramas ciorna, si NIMIC in ecran n-o deosebea de celelalte.
+     *
+     * ⚠ Nu se mai filtreaza dupa verdict, ci dupa daca EI au avut ceva de spus.
+     */
+    if (verdictIncheiat(r.verdict)) observatii.push(...(r.mesaje ?? []));
     if ("error" in r) {
       celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
       mesaj = mesajOmenesc(r.error);
@@ -813,6 +833,17 @@ async function trimiteInLoturi(
 const GREUTATE: Record<VerdictEmag, number> = {
   reusit: 0, reusit_cu_observatii: 1, trecatoare: 2, refuz: 3, chei: 4,
 };
+
+/**
+ * Lotul s-a incheiat, deci ce au spus ei despre el merita pastrat.
+ *
+ * ⚠ `undefined` inseamna „clientul n-a pus verdict", iar implicitul acolo e `reusit`.
+ * Tratat ca neincheiat, avertismentele s-ar fi pierdut tocmai pe calea cea mai
+ * obisnuita.
+ */
+function verdictIncheiat(v: VerdictEmag | undefined): boolean {
+  return v === undefined || v === "reusit" || v === "reusit_cu_observatii";
+}
 
 function maiRau(a: VerdictEmag, b: VerdictEmag): VerdictEmag {
   return GREUTATE[b] > GREUTATE[a] ? b : a;

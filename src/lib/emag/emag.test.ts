@@ -506,3 +506,30 @@ test("eMAG timp de pregatire: ce nu se recunoaste da `null`, NU zero", () => {
   assert.equal(zileleDinTimp("doua zile"), null);
   assert.equal(zileleDinTimp(Number.NaN), null);
 });
+
+test("eMAG: un avertisment de la un «reusit» curat NU se arunca", () => {
+  /*
+   * ═══ A DOUA OARA IN ACEEASI ZI, IN ALTA DEGHIZARE (24.08.2026) ═══
+   *
+   * Dimineata am reparat aruncarea observatiilor de la `reusit_cu_observatii`. Dar
+   * eMAG intoarce avertismente si pe raspunsuri FARA `isError`, iar cel mai important
+   * dintre ele e chiar acesta:
+   *
+   *     „WARNING: The product was saved as a draft, and you need the following product
+   *      fields to continue documenting and have the product ready for sale: EAN."
+   *
+   * Adica: produsul nu se vinde. Verdictul e `reusit`, si pe drept — salvarea a reusit.
+   * Dar aruncand mesajul, ecranul arata o oferta trimisa cu bine.
+   *
+   * S-a vazut privind retrimiterea a 40 de produse: 39 au iesit curate, una a ramas
+   * ciorna, si NIMIC in ecran n-o deosebea de celelalte.
+   */
+  const c = clasificaRaspuns(
+    200,
+    { isError: false, messages: ["WARNING: The product was saved as a draft, and you need the following product fields to continue documenting and have the product ready for sale: EAN."] },
+    "/product_offer/save",
+  );
+  assert.equal(c.verdict, "reusit", "salvarea chiar a reusit");
+  assert.equal(c.mesaje.length, 1, "dar mesajul lor trebuie sa ramana la indemana");
+  assert.match(c.mesaje[0], /draft/i);
+});

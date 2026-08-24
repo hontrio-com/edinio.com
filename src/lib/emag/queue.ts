@@ -57,8 +57,25 @@ async function configPentruCoada(
   admin: ReturnType<typeof createAdminClient>,
   businessId: string,
 ): Promise<EmagConfig | null> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("store_settings").select("emag_config").eq("business_id", businessId).single();
+
+  /*
+   * ═══ ⚠ „N-AM PUTUT CITI" NU E „NU E CONECTAT" (24.08.2026) ═══
+   *
+   * `error` nu se citea deloc. La o pana de o clipa a bazei, `data` vine `null`, config-ul
+   * iese gol, si functia raspunde `null` — adica exact ce raspunde pentru un magazin
+   * NECONECTAT. Apelantul se opreste linistit, si mișcarea de stoc nu mai intra in coada
+   * NICIODATA: nimeni n-o reincearca, fiindca nimeni nu stie ca s-a pierdut.
+   *
+   * ⚠ E chiar tiparul care a costat 1051 de produse la Trendyol — un `catch {}` gol.
+   * Aici nu era gol, era mai rau: arata ca o hotarare.
+   */
+  if (error) {
+    inghiteDarScrie("coada-config", businessId, error, { motiv: "config necitit" });
+    return null;
+  }
+
   const config = (data?.emag_config as EmagConfig) ?? {};
   if (!config.connected || !config.username || !config.password) return null;
   if (config.auto_sync === false) return null;
@@ -118,10 +135,21 @@ export async function enqueueEmagSync(
        * INAINTE ca `auto_sync` sa fie stins de un import care ruleaza chiar atunci.
        * A doua paza e in `rutaDeTrimitere`, care refuza sa trimita si scrie de ce.
        */
-      const { count } = await admin
+      const { count, error: eNumar } = await admin
         .from("emag_offers").select("id", { count: "exact", head: true })
         .eq("business_id", businessId).eq("product_id", productId).eq("auto_sync", true);
-      if (!count) return;
+
+      /*
+       * ⚠ O CITIRE PICATA DA `count: null`, IAR `!null` E `true`.
+       *
+       * Adica o pana a bazei arata identic cu „produsul n-are nicio ofertă care se
+       * sincronizează" — si mișcarea se arunca tacut. Se deosebesc: la eroare se lasa sa
+       * treaca mai departe, fiindca `rutaDeTrimitere` are a doua paza si refuza acolo
+       * scriind de ce. Mai bine un element in coada care se opreste zgomotos, decat unul
+       * care nu intra niciodata.
+       */
+      if (eNumar) inghiteDarScrie("coada-numar", businessId, eNumar, { productId });
+      else if (!count) return;
     }
 
     /*
@@ -138,13 +166,27 @@ export async function enqueueEmagSync(
      * ⚠ Se rescrie NUMAI randul aceluiasi `op`: unicul e pe `(business_id, offer_id,
      * op)`, deci o miscare de stoc nu sterge asteptarea unei publicari cazute.
      */
-    await admin.from("emag_sync_queue").upsert(
+    const { error: eScriere } = await admin.from("emag_sync_queue").upsert(
       {
         business_id: businessId, product_id: productId, offer_id: offerId, op,
         prioritate: PRIORITATE_OP[op], next_retry_at: null, abandonat_la: null, attempts: 0,
       },
       { onConflict: "business_id,offer_id,op" },
     );
+
+    /*
+     * ⚠ SCRIEREA CARE PICA SE SPUNE. Netratata, elementul nu intra in coada si nimeni
+     * n-o afla: nici ecranul, care numara randurile din coada si vede zero; nici cronul,
+     * care ia ce e acolo. `enqueueMany` face de mult `if (error) throw error`; calea de
+     * un singur element era singura care tacea.
+     *
+     * ⚠ Nu se ARUNCA insa: se cheama cu `void` din actiuni pe produs, iar o exceptie ar
+     * rupe salvarea produsului pentru o coada de marketplace. Se scrie in jurnal, unde
+     * centrul de necazuri o poate arata.
+     */
+    if (eScriere) {
+      inghiteDarScrie("coada-scriere", businessId, eScriere, { productId, op });
+    }
   } catch (e) {
     inghiteDarScrie("unul", businessId, e, { productId, offerId, op });
   }

@@ -10,6 +10,7 @@
 // plain decimals (Trendyol, unlike About You, does not use minor units).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { logError } from "@/lib/error-logger";
 import type { Database } from "@/types/database.types";
 import type { TrendyolSyncContext } from "./sync";
@@ -295,6 +296,14 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
     if (ex.order_id) {
       const r = await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
       if (r === "failed") return "failed";
+
+    /*
+     * ⚠ SI PE CELELALTE CANALE. Stocul tocmai s-a schimbat, iar eMAG, About You si restul inca il au
+     * pe cel vechi si continua sa-l vanda. Vezi `impingeStoculPeCeleLalteCanale`:
+     * fara pasul asta, „un singur inventar" e adevarat doar cat timp se vinde pe un
+     * singur canal.
+     */
+      await impingeStoculPeCeleLalteCanale(ctx.businessId, [...qtyByProduct.keys()], "trendyol");
     }
     /*
      * Marcajul de ordine se aseaza ABIA ACUM, cand toti pasii au trecut.

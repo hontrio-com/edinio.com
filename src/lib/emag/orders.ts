@@ -28,6 +28,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { intregDeLaEi } from "./numere";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
@@ -894,6 +895,16 @@ export async function ingereazaComanda(
          stiuta si nu compara nimic — deci un produs adaugat de ei, sau un storno partial,
          ar fi trecut neatins pe langa stoc. Vezi `ajusteazaStocul`. */
       await ajusteazaStocul(admin, ctx, ex.order_id, linii);
+
+    /*
+     * ⚠ SI PE CELELALTE CANALE. Stocul tocmai s-a schimbat, iar Trendyol, About You si restul inca il au
+     * pe cel vechi si continua sa-l vanda. Vezi `impingeStoculPeCeleLalteCanale`:
+     * fara pasul asta, „un singur inventar" e adevarat doar cat timp se vinde pe un
+     * singur canal.
+     */
+      await impingeStoculPeCeleLalteCanale(
+        ctx.businessId, linii.map((l) => l.product_id), "emag",
+      );
     }
 
     if (!istoric) await poateFactura(admin, ctx, ex.order_id, status);
@@ -1039,6 +1050,16 @@ export async function ingereazaComanda(
   if (!onoratDeEmag(c.type) && !istoric && seConsumaLaIntrare(c.status)) {
     const consum = await consumaStocul(admin, ctx, orderId, linii);
     if (consum === "esuat") return "esuata";
+
+    /*
+     * ⚠ SI PE CELELALTE CANALE. Stocul tocmai s-a schimbat, iar Trendyol, About You si restul inca il au
+     * pe cel vechi si continua sa-l vanda. Vezi `impingeStoculPeCeleLalteCanale`:
+     * fara pasul asta, „un singur inventar" e adevarat doar cat timp se vinde pe un
+     * singur canal.
+     */
+    await impingeStoculPeCeleLalteCanale(
+      ctx.businessId, linii.map((l) => l.product_id), "emag",
+    );
   }
 
   /* ⚠ ABIA ACUM. Vezi nota din antetul functiei. ⚠ Si nu la FBE: acolo livrarea o fac

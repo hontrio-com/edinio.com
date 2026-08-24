@@ -14,6 +14,7 @@
 // tolerant so ingestion keeps working as the shape is pinned down.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { logError } from "@/lib/error-logger";
 import type { Database } from "@/types/database.types";
 import { recordBatch, type AboutYouSyncContext } from "./sync";
@@ -290,6 +291,14 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      */
     if (ex.order_id) {
       await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
+
+    /*
+     * ⚠ SI PE CELELALTE CANALE. Stocul tocmai s-a schimbat, iar eMAG, Trendyol si restul inca il au
+     * pe cel vechi si continua sa-l vanda. Vezi `impingeStoculPeCeleLalteCanale`:
+     * fara pasul asta, „un singur inventar" e adevarat doar cat timp se vinde pe un
+     * singur canal.
+     */
+      await impingeStoculPeCeleLalteCanale(ctx.businessId, [...qtyByProduct.keys()], "aboutyou");
     }
     /*
      * Aruncarea vine DUPA consumul de stoc, nu inaintea lui: altfel s-ar sari

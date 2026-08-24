@@ -71,11 +71,78 @@ const PE_SECUNDA_RESTUL = 3;
 /** Ultimele momente de plecare, pe galeata. Best-effort: o instanta, un contor. */
 const galeti = new Map<string, number[]>();
 
+/**
+ * Pana cand sa NU mai plece nimic pe galeata asta, fiindca EI au spus s-o lasam mai moale.
+ *
+ * ═══ ⚠ GALEATA NOASTRA E O SOCOTEALA; ANTETUL LOR E ADEVARUL ═══
+ *
+ * Galeata numara ce am trimis DIN INSTANTA ASTA. Dar aceeasi cheie de magazin poate fi
+ * folosita din mai multe locuri deodata: cronul pe o instanta, importul pe alta, iar un
+ * buton apasat de om pe a treia. Fiecare crede ca are 3 cereri pe secunda intregi, si
+ * impreuna trec de ele.
+ *
+ * ⚠ Iar documentatia lor spune ca si cererile INVALIDE se numara — deci depasirea nu se
+ * plateste doar cu un 429, ci cu bugetul prin care trebuie sa plece mișcarile de stoc.
+ *
+ * `X-RateLimit-Remaining-3second` nu se citea NICAIERI: `headers.get` aparea o singura
+ * data in tot dosarul `emag/`, si aceea pe `content-type`. Deci singura sursa care stie
+ * cu adevarat cat mai avem era aruncata la fiecare raspuns.
+ *
+ * Acum, cand ne spun ca s-a terminat, se pune o pauza pe galeata — si aceea e vazuta de
+ * toate cererile din instanta, nu doar de cea care a primit antetul.
+ */
+const pauzePeGaleata = new Map<string, number>();
+
+/**
+ * Citeste ce ne-au spus despre limita si franeaza daca e cazul.
+ *
+ * ⚠ Se citesc mai multe forme de antet, ANUME. Raspunsul lor nu e in schema lor — chiar
+ * lectia zilei — iar numele exact al antetului nu e scris nicaieri in OpenAPI. Se ia ce
+ * se gaseste; ce nu se gaseste nu strica nimic.
+ */
+function franeazaDupaAntete(
+  cheie: string,
+  /* ⚠ Numai ce se foloseste, nu tipul `Headers` intreg: `undici` are propriul `Headers`,
+     iar cele doua nu sunt compatibile la iteratori. Ceruta asa, functia primeste si
+     antetele lui `fetch`, si pe ale lui `undici`, fara conversii. */
+  antete: { get(nume: string): string | null },
+  status: number,
+): void {
+  const numar = (nume: string): number | null => {
+    const v = antete.get(nume);
+    if (v == null) return null;
+    const n = Number(v.trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  /* ⚠ 429 se trateaza INTAI si fara conditii: e singurul raspuns care spune sigur ca am
+     trecut de limita, indiferent ce scrie in celelalte anteturi. */
+  if (status === 429) {
+    const retry = numar("retry-after");
+    const pana = Date.now() + (retry != null && retry > 0 ? Math.min(retry, 60) * 1000 : 1000);
+    pauzePeGaleata.set(cheie, Math.max(pauzePeGaleata.get(cheie) ?? 0, pana));
+    return;
+  }
+
+  const ramase = numar("x-ratelimit-remaining-3second") ?? numar("x-ratelimit-remaining");
+  /* ⚠ Zero inseamna „nu mai ai", nu „nu stiu": `?? null` de mai sus pastreaza deosebirea. */
+  if (ramase != null && ramase <= 0) {
+    pauzePeGaleata.set(cheie, Math.max(pauzePeGaleata.get(cheie) ?? 0, Date.now() + 1000));
+  }
+}
+
 function esteRutaDeComenzi(cale: string): boolean {
   return cale.startsWith("/order");
 }
 
 async function asteaptaJeton(cheie: string, perSecunda: number): Promise<void> {
+  /* ⚠ Intai ce au spus EI, apoi socoteala noastra. Vezi `franeazaDupaAntete`. */
+  const pana = pauzePeGaleata.get(cheie) ?? 0;
+  if (pana > Date.now()) {
+    await new Promise((r) => setTimeout(r, Math.min(pana - Date.now(), 60_000)));
+    pauzePeGaleata.delete(cheie);
+  }
+
   const acum = Date.now();
   const recente = (galeti.get(cheie) ?? []).filter((t) => acum - t < 1000);
 
@@ -169,6 +236,10 @@ async function trimite<T>(
     const text = await raspuns.text();
     let json: unknown = {};
     try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
+
+    /* ⚠ Ce ne-au spus despre limita se citeste INAINTE de orice altceva: si un raspuns
+       care se dovedeste refuz poarta antetul, iar aceea e chiar informatia de pastrat. */
+    franeazaDupaAntete(galeata, raspuns.headers, raspuns.status);
 
     const c = clasificaRaspuns(raspuns.status, json, cale);
 
@@ -633,6 +704,7 @@ export async function descarcaEtichetaAwb(
       const text = await raspuns.text();
       let json: unknown = {};
       try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
+      franeazaDupaAntete(`${auth.businessId ?? "global"}:restul`, raspuns.headers, raspuns.status);
       const c = clasificaRaspuns(raspuns.status, json, cale);
       return { error: mesajOmenesc(c.mesaj) || c.mesaj || "eMAG nu a dat eticheta.", status: raspuns.status };
     }

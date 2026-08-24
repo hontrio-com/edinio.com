@@ -72,7 +72,7 @@ export function EmagReturns({ businessId }: { businessId: string }) {
             <PackageOpen className="h-4 w-4" /> Retururi eMAG
           </h3>
           <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            Marfa întoarsă <strong>nu intră singură înapoi în stoc</strong> — o adaugi tu,
+            Marfa întoarsă <strong>nu intră singură înapoi în stoc</strong>. O adaugi tu,
             după ce te uiți la ea.
           </p>
         </div>

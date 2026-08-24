@@ -155,8 +155,8 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
       }
       toast.success(
         r.deja
-          ? `AWB-ul era deja emis: ${r.numar ?? "—"}`
-          : `AWB emis: ${r.numar ?? "—"}. Curierul vine să ridice coletul.`,
+          ? `AWB-ul era deja emis: ${r.numar ?? "fără număr"}`
+          : `AWB emis: ${r.numar ?? "fără număr"}. Curierul vine să ridice coletul.`,
       );
       onSuccess();
     });
@@ -225,7 +225,7 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
               <p className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs">
                 <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                 <span>
-                  Comanda are deja AWB: <strong>{pregatire.awbExistent.numar ?? "—"}</strong>.
+                  Comanda are deja AWB: <strong>{pregatire.awbExistent.numar ?? "fără număr"}</strong>.
                   {/* ⚠ Se spune de ce nu se mai poate: un al doilea AWB înseamnă al
                       doilea transport plătit și un curier care vine de două ori. */}
                   <span className="block text-muted-foreground">
@@ -288,12 +288,12 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">Curier</p>
-                <p className="mt-0.5 text-sm font-medium">{pregatire.curier ?? "—"}</p>
+                <p className="mt-0.5 text-sm font-medium">{pregatire.curier ?? "necunoscut"}</p>
               </div>
               <div className="rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">De încasat la livrare</p>
                 <p className="mt-0.5 text-sm font-medium tabular-nums">
-                  {pregatire.ramburs > 0 ? `${pregatire.ramburs.toFixed(2)} lei` : "Nimic — plătit deja"}
+                  {pregatire.ramburs > 0 ? `${pregatire.ramburs.toFixed(2)} lei` : "Nimic de încasat, comanda e plătită"}
                 </p>
               </div>
             </div>
@@ -345,7 +345,7 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
                       : pregatire?.dimensiuni.motiv
                         ? `${pregatire.dimensiuni.motiv} Le completezi tu, sau le lași goale.`
                         : "Le folosește eMAG la calculul volumetric."}
-                    {" "}Goale, nu trimitem nicio dimensiune — curierul măsoară coletul la ridicare.
+                    {" "}Goale, nu trimitem nicio dimensiune. Curierul măsoară coletul la ridicare.
                   </span>
                 </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Paginatie } from "./Paginatie";
 import { Loader2, PackagePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -81,7 +82,7 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
     const ids = [...alese];
     if (!window.confirm(
       `Public ${ids.length} ${ids.length === 1 ? "produs" : "produse"} pe eMAG.\n\n`
-      + "eMAG nu șterge oferte — o ofertă publicată se poate doar retrage de la vânzare.\n"
+      + "eMAG nu șterge oferte. O ofertă publicată se poate doar retrage de la vânzare.\n"
       + "Validarea lor durează ore.",
     )) return;
 
@@ -121,8 +122,8 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
             <PackagePlus className="h-4 w-4" /> Produse care nu-s încă pe eMAG
           </h3>
           <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            {date.total} {date.total === 1 ? "produs" : "produse"}. Alegi ce trimiți —
-            eMAG nu șterge oferte, doar le retrage de la vânzare.
+            {date.total} {date.total === 1 ? "produs" : "produse"}. Alegi tu ce trimiți.
+            Ține minte că eMAG nu șterge oferte, doar le retrage de la vânzare.
           </p>
         </div>
         <button
@@ -148,7 +149,7 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
             <option key={c.nume} value={c.nume}>
               {/* ⚠ Se spune CARE categorii nu-s legate, chiar în meniu. Altfel omul
                   alege una, bifează, apasă, și abia atunci află. */}
-              {c.nume} ({c.cate}){c.mapata ? "" : " — nelegată"}
+              {c.nume} ({c.cate}){c.mapata ? "" : " (nelegată)"}
             </option>
           ))}
         </select>
@@ -212,7 +213,7 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
                     explicație l-ar fi pus pe om să creadă că e un defect. */}
                 {!p.categorieMapata && (
                   <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
-                    Categoria „{p.categorie ?? "—"}” nu e legată de nicio categorie eMAG.
+                    Categoria „{p.categorie ?? "fără categorie"}” nu e legată de nicio categorie eMAG.
                     Leag-o mai sus, la maparea categoriilor.
                   </p>
                 )}
@@ -222,29 +223,13 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
         </ul>
       )}
 
-      {date.total > date.pePagina && (
-        <div className="mt-3 flex items-center justify-between gap-3 text-xs">
-          <button
-            type="button"
-            onClick={() => incarca(pagina - 1)}
-            disabled={pagina <= 1 || seIncarca}
-            className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted disabled:opacity-40"
-          >
-            Înapoi
-          </button>
-          <span className="text-muted-foreground">
-            {(pagina - 1) * date.pePagina + 1}–{Math.min(pagina * date.pePagina, date.total)} din {date.total}
-          </span>
-          <button
-            type="button"
-            onClick={() => incarca(pagina + 1)}
-            disabled={pagina * date.pePagina >= date.total || seIncarca}
-            className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted disabled:opacity-40"
-          >
-            Înainte
-          </button>
-        </div>
-      )}
+      <Paginatie
+        pagina={pagina}
+        pagini={Math.max(1, Math.ceil(date.total / Math.max(1, date.pePagina)))}
+        laSchimbare={(p) => incarca(p)}
+        seIncarca={seIncarca}
+        rezumat={`${(pagina - 1) * date.pePagina + 1}–${Math.min(pagina * date.pePagina, date.total)} din ${date.total}`}
+      />
 
       {/* ⚠ Bifele NU se păstrează între pagini prin întâmplare — se păstrează anume, și
           se spune. Altfel cineva bifează 40 de produse pe trei pagini, apasă, și nu

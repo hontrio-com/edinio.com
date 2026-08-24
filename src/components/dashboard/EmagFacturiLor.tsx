@@ -166,7 +166,7 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
           <p className="mt-4 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
             <strong className="text-foreground">Nu e marjă.</strong> Marja cere prețul la
             care ai cumpărat marfa, iar catalogul nu-l ține nicăieri. Ce vezi aici e ce
-            ți-a facturat eMAG — nici mai mult, nici mai puțin.
+            ți-a facturat eMAG, nici mai mult, nici mai puțin.
           </p>
         </div>
       )}

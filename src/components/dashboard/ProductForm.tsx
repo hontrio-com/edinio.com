@@ -21,6 +21,7 @@ import { MediaPicker } from "@/components/media/MediaPicker";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { publishOlxProduct } from "@/lib/actions/olx.actions";
 import { publishTrendyolProduct } from "@/lib/actions/trendyol.actions";
+import { trimiteAcumPeEmag } from "@/lib/actions/emag.actions";
 import { createCategory } from "@/lib/actions/category.actions";
 import { flattenCategoryForest } from "@/lib/categories/tree";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
@@ -501,17 +502,29 @@ interface Props {
   olxConnected?: boolean;
   // Butonul „Publică pe Trendyol" apare doar cand contul e conectat acolo.
   trendyolConnected?: boolean;
+  /** Contul eMAG e legat. Fara el, butonul n-are ce face. */
+  emagConnected?: boolean;
+  /**
+   * Produsul e DEJA pe eMAG.
+   *
+   * ⚠ Butonul dispare atunci, nu se dezactiveaza: un buton stins pe care scrie
+   * „Publica" il pune pe om sa se intrebe de ce nu merge. Cand produsul e deja acolo,
+   * pretul si stocul lui pleaca oricum singure, iar locul in care se vede starea
+   * ofertei e ecranul integrarii.
+   */
+  emagPublicat?: boolean;
   // Sectiunea Google Shopping se afiseaza doar cand contul are Google Merchant conectat.
   gmcConnected?: boolean;
   // Clasele de transport definite in Setari > Livrare (pentru selectorul de pe produs).
   shippingClasses?: { id: string; name: string }[];
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, gmcConnected = false, shippingClasses = [] }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, shippingClasses = [] }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
   const [tyPublishing, startTyPublish] = useTransition();
+  const [emagPublishing, startEmagPublish] = useTransition();
 
   // Trendyol isi construieste singur listarea din maparea categoriei daca produsul
   // nu a trecut inca prin ecranul de listare — altfel butonul ar fi o fundatura.
@@ -525,6 +538,26 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
           ? "Trimis pe Trendyol. Listarea a fost creată din maparea categoriei; intră în aprobare."
           : "Trimis pe Trendyol. Intră în aprobare.",
       );
+    });
+  }
+
+  /*
+   * ⚠ `trimiteAcumPeEmag` raspunde IN ACEEASI APASARE, cu tot cu motivul lor.
+   * Pus in coada, omul ar fi vazut „se trimite" si ar fi asteptat pana la un minut
+   * fara nicio veste, iar un refuz ar fi aparut abia in alt ecran.
+   */
+  function handlePublishEmag() {
+    if (!product) return;
+    startEmagPublish(async () => {
+      const res = await trimiteAcumPeEmag(businessId, product.id, "oferta");
+      if ("error" in res) { toast.error(res.error); return; }
+      /* ⚠ eMAG raspunde 200 si la lucruri care n-au mers: „reusit cu observatii"
+         inseamna ca oferta e salvata DAR au ceva de spus despre ea. Aratat ca reusita
+         curata, omul ar fi plecat crezand ca se vinde. */
+      if (res.verdict === "reusit") toast.success("Trimis pe eMAG. Intră în validarea lor.");
+      else if (res.verdict === "reusit_cu_observatii") {
+        toast.warning(res.mesaj || "Trimis pe eMAG, dar au observații la documentație.");
+      } else toast.error(res.mesaj || "eMAG nu a acceptat produsul.");
     });
   }
 
@@ -840,7 +873,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
             </span>
           ) : "Produs nou"}
         </h1>
-        {isEditing && (olxConnected || trendyolConnected || (product?.is_active && product?.slug && business?.is_published)) && (
+        {isEditing && (olxConnected || trendyolConnected || (emagConnected && !emagPublicat) || (product?.is_active && product?.slug && business?.is_published)) && (
           <div className="ml-auto flex items-center gap-2">
             {olxConnected && (
               <button type="button" onClick={handlePublishOlx} disabled={olxPublishing}
@@ -858,6 +891,15 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <Image src="/integrations/trendyol.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
                 Publică pe Trendyol
+              </button>
+            )}
+            {emagConnected && !emagPublicat && (
+              <button type="button" onClick={handlePublishEmag} disabled={emagPublishing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
+                {emagPublishing
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Image src="/integrations/emag.webp" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                Publică pe eMAG
               </button>
             )}
             {/* Live only when the product is active AND the store is published — otherwise the page 404s. */}

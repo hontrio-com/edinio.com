@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Paginatie } from "./Paginatie";
 import {
   AlertTriangle, ExternalLink, Loader2, PauseCircle, RefreshCw, Search, Send,
 } from "lucide-react";
@@ -34,7 +35,10 @@ const FILTRE = [
   { cheie: "", eticheta: "Toate" },
   { cheie: "live", eticheta: "Se vând" },
   { cheie: "sent", eticheta: "În validare" },
-  { cheie: "imported", eticheta: "Preluate" },
+  /* ⚠ Origine, nu stare. „Preluate" se uita la `status = imported`, care ține doar
+     până la prima reconciliere; filtrul se golea singur în câteva minute. */
+  { cheie: "din_edinio", eticheta: "Trimise din Edinio" },
+  { cheie: "doar_emag", eticheta: "Doar pe eMAG" },
   { cheie: "probleme", eticheta: "De reparat" },
 ] as const;
 
@@ -73,7 +77,9 @@ export function EmagListings({ businessId }: { businessId: string }) {
     incepe(async () => {
       const r = await listaOferteEmag(businessId, {
         pagina: p,
-        stare: f && f !== "probleme" ? (f as RandOfertaEcran["stare"]) : undefined,
+        stare: f && f !== "probleme" && f !== "din_edinio" && f !== "doar_emag"
+          ? (f as RandOfertaEcran["stare"]) : undefined,
+        origine: f === "din_edinio" ? "edinio" : f === "doar_emag" ? "emag" : undefined,
         doarProbleme: f === "probleme",
         cautare: c || undefined,
       });
@@ -183,7 +189,7 @@ export function EmagListings({ businessId }: { businessId: string }) {
                 disabled={seIncarca}
                 className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
                 title={b.op === "oferta"
-                  ? "Retrimite și fișa produsului — ruta cea mai grea"
+                  ? "Retrimite și fișa produsului. E trimiterea cea mai grea."
                   : undefined}
               >
                 {b.eticheta}
@@ -221,29 +227,15 @@ export function EmagListings({ businessId }: { businessId: string }) {
         </ul>
       )}
 
-      {pagini > 1 && (
-        <div className="mt-4 flex items-center justify-between border-t border-border pt-4 text-xs">
-          <button
-            type="button"
-            disabled={pagina <= 1 || seIncarca}
-            onClick={() => incarca(pagina - 1)}
-            className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted disabled:opacity-40"
-          >
-            Înapoi
-          </button>
-          <span className="tabular-nums text-muted-foreground">
-            Pagina {pagina} din {pagini}
-          </span>
-          <button
-            type="button"
-            disabled={pagina >= pagini || seIncarca}
-            onClick={() => incarca(pagina + 1)}
-            className="rounded-lg border border-border px-3 py-1.5 hover:bg-muted disabled:opacity-40"
-          >
-            Mai departe
-          </button>
-        </div>
-      )}
+      <div className="mt-4 border-t border-border pt-4">
+        <Paginatie
+          pagina={pagina}
+          pagini={pagini}
+          laSchimbare={(p) => incarca(p)}
+          seIncarca={seIncarca}
+          rezumat={`${(pagina - 1) * 50 + 1}–${Math.min(pagina * 50, total)} din ${total}`}
+        />
+      </div>
     </div>
   );
 }
@@ -326,7 +318,7 @@ function RandOferta({
        * contractul era stiut, doar ca aici nu s-a aplicat.
        */
       if (r.verdict === "trecatoare") {
-        toast.warning(r.mesaj || "eMAG n-a răspuns. Nu s-a oprit nimic — mai încearcă.");
+        toast.warning(r.mesaj || "eMAG n-a răspuns. Nu s-a oprit nimic, mai încearcă.");
         return;
       }
       if (r.verdict === "refuz" || r.verdict === "chei") {
@@ -446,7 +438,7 @@ function RandOferta({
               </ul>
               <p className="mt-1 text-xs text-muted-foreground">
                 {rand.deriva.renuntat
-                  ? "eMAG nu acceptă schimbarea. Nu se mai încearcă automat — uită-te în panoul lor."
+                  ? "eMAG nu acceptă schimbarea. Nu se mai încearcă automat, uită-te în panoul lor."
                   : "Se repară singur la următoarele treceri."}
               </p>
             </div>
@@ -544,7 +536,7 @@ function RandOferta({
                 {/* ⚠ NU pretindem că știm ce înseamnă valoarea: documentația lor nu o
                     enumeră nicăieri. Se arată că există, și atât. */}
                 eMAG semnalează și starea traducerii automate. Chiar cu documentația
-                aprobată, ea poate opri publicarea — verifică produsul în panoul eMAG.
+                aprobată, ea poate opri publicarea. Verifică produsul în panoul eMAG.
               </li>
             )}
           </ul>

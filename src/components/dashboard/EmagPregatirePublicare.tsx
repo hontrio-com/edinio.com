@@ -103,7 +103,7 @@ export function EmagPregatirePublicare({
           {gata && <CheckCircle className="h-4 w-4 text-primary" />}
         </h3>
         <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-          Amândouă vin din contul tău eMAG — nu sunt liste scrise de noi.
+          Amândouă vin din contul tău eMAG. Nu sunt liste scrise de noi.
         </p>
       </div>
 
@@ -129,14 +129,14 @@ export function EmagPregatirePublicare({
                        în procente, ca omul să recunoască ce alege. */
                     ? `${c.vat_rate < 1 ? Math.round(c.vat_rate * 100) : c.vat_rate}%`
                     : `Cota #${c.vat_id}`}
-                  {c.vat_id === sugerata ? " — potrivită cu magazinul tău" : ""}
+                  {c.vat_id === sugerata ? " (potrivită cu magazinul tău)" : ""}
                 </option>
               ))}
             </select>
             {/* ⚠ Se spune de ce contează. Un id greșit nu dă eroare: oferta se publică,
                 se vinde, și diferența se vede abia la contabilitate. */}
             <span className="mt-1 block text-xs text-muted-foreground">
-              eMAG cere prețul fără TVA. O cotă greșită nu dă eroare — se vinde așa.
+              eMAG cere prețul fără TVA. O cotă greșită nu dă eroare, produsul se vinde așa.
             </span>
           </label>
 

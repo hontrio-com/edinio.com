@@ -147,10 +147,10 @@ export function rutaDeTrimitere(s: StareaOfertei): Ruta {
       /* ⚠ Numele butonului se CITEAZA, nu se scrie a doua oara. Vezi `etichete.ts`
          pentru ce a costat scrierea lui de mana, de doua ori in doua zile. */
       motiv:
-        "Nu ți-am citit încă lista de produse din contul tău eMAG. Până n-o citim, " +
-        "n-avem cum să știm care dintre produsele tale sunt deja acolo — iar trimise " +
-        `din nou, eMAG le refuză sau le lasă ciorne. Apasă „${BUTON_ADU_OFERTELE}”: ` +
-        "doar citește și leagă, nu-ți schimbă magazinul.",
+        "Nu am citit încă lista produselor tale din contul eMAG. Până nu o citim, nu " +
+        "avem de unde să știm care dintre produsele tale sunt deja acolo. Trimise din " +
+        `nou, eMAG fie le refuză, fie le lasă ciorne. Apasă „${BUTON_ADU_OFERTELE}”. ` +
+        "Pasul acesta doar citește și leagă, magazinul tău nu se modifică.",
     };
   }
 

@@ -81,8 +81,8 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
           <div>
             <p className="text-sm font-semibold text-amber-900">Integrarea nu este încă pregătită</p>
             <p className="mt-1 text-sm text-amber-800">
-              Mai avem de configurat ceva pe partea noastră. Nu e nimic de făcut din contul tău —
-              revenim cu un anunț când se poate conecta.
+              Mai avem de configurat ceva pe partea noastră. Din contul tău nu e nimic de făcut.
+              Îți dăm un semn când se poate conecta.
             </p>
           </div>
         </div>
@@ -102,7 +102,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
   function deconecteaza() {
     if (!window.confirm(
       "Sigur deconectezi contul eMAG?\n\n" +
-      "Ofertele rămân pe eMAG — le oprești din vânzare separat, din panoul lor. " +
+      "Ofertele rămân pe eMAG. Le oprești din vânzare separat, din panoul lor. " +
       "Din Edinio se șterg doar legăturile locale.",
     )) return;
     incepe(async () => {
@@ -246,7 +246,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
                 <a href="#emag-import" className="font-semibold underline underline-offset-2">
                   „{BUTON_ADU_OFERTELE}”
                 </a>
-                . Doar citește și leagă — nu-ți schimbă magazinul.
+                . Doar citim și legăm, magazinul tău nu se schimbă.
               </p>
             )}
           </div>
@@ -602,7 +602,7 @@ function PanouSincronizare({ businessId }: { businessId: string }) {
       toast.success(
         r.puse === 0
           ? "Nicio ofertă de sincronizat."
-          : `${r.puse} ${r.puse === 1 ? "produs pus" : "produse puse"} la rând — ${nume}.`,
+          : `${r.puse} ${r.puse === 1 ? "produs pus" : "produse puse"} la rând: ${nume}.`,
       );
     });
   }
@@ -646,7 +646,7 @@ function PanouSincronizare({ businessId }: { businessId: string }) {
         </button>
         <button type="button" onClick={() => felie("produse", "produse")} disabled={seLucreaza}
           className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
-          title="Retrimite documentația — cea mai grea felie, poate dura minute">
+          title="Retrimite documentația completă. E trimiterea cea mai grea și poate dura câteva minute.">
           Retrimite produsele
         </button>
       </div>
@@ -694,7 +694,7 @@ function PanouIstoric({ businessId }: { businessId: string }) {
   function adu() {
     if (!window.confirm(
       `Aduc comenzile eMAG din ultimele ${zile} de zile.\n\n`
-      + "NU se scade stoc și NU se emit facturi pentru ele — au fost deja onorate și\n"
+      + "NU se scade stoc și NU se emit facturi pentru ele, fiindcă au fost deja onorate și\n"
       + "facturate atunci. Intră doar ca istoric, ca să le ai la un loc.",
     )) return;
 
@@ -720,7 +720,7 @@ function PanouIstoric({ businessId }: { businessId: string }) {
       <h3 className="text-sm font-semibold">Adu comenzile vechi</h3>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         Le vezi în Edinio la un loc cu restul. <strong>Nu se scade stoc și nu se emit
-        facturi</strong> — au fost onorate și facturate atunci, iar repetate ar da stoc
+        facturi</strong>, fiindcă au fost onorate și facturate atunci. Repetate, ar da stoc
         pe minus și facturi duplicate.
       </p>
 
@@ -773,7 +773,7 @@ function PanouNotificari({
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         Comenzile intra oricum singure, la fiecare minut. Daca vrei sa vina{" "}
         <strong>in aceeasi clipa</strong>, cere-i eMAG-ului sa trimita notificari la
-        adresa de mai jos. Nu se poate pune din Edinio — numai ei o pot configura.
+        adresa de mai jos. Nu se poate pune din Edinio, numai ei o pot configura.
       </p>
 
       <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
@@ -814,7 +814,7 @@ function PanouNotificari({
           <strong className="text-foreground">
             {ultimulWebhook
               ? new Date(ultimulWebhook).toLocaleString("ro-RO", { dateStyle: "short", timeStyle: "short" })
-              : "niciunul — notificările nu sunt pornite"}
+              : "niciunul, notificările nu sunt pornite"}
           </strong>
         </span>
       </div>
@@ -932,10 +932,13 @@ function PanouImport({ businessId }: { businessId: string }) {
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{BUTON_ADU_OFERTELE}</h3>
           <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            Citim ce ai deja pe eMAG și <strong>legăm</strong> ofertele de produsele
-            tale din magazin, după cod, cod de bare sau SKU. Magazinul nu se atinge:
-            nu se creează și nu se modifică niciun produs. Tot de aici aflăm ce ai
-            deja acolo, ca să nu-ți trimitem a doua oară un produs pe care îl ai.
+            Citim lista produselor tale de pe eMAG și o potrivim cu produsele din
+            magazin, după codul de produs, codul de bare sau SKU. Magazinul tău nu se
+            modifică: nu se creează și nu se șterge niciun produs.
+          </p>
+          <p className="mt-2 max-w-prose text-xs text-muted-foreground">
+            Fă asta înainte să publici ceva. Altfel nu avem de unde să știm care produse
+            sunt deja în contul tău, iar eMAG le refuză pe cele trimise a doua oară.
           </p>
           {/* ⚠ Bifa e SUB text si nebifata: e singurul lucru din panou care schimba
               magazinul, iar magazinul e al lui. */}
@@ -948,10 +951,10 @@ function PanouImport({ businessId }: { businessId: string }) {
               className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border"
             />
             <span>
-              Creează în magazin și produsele de pe eMAG care nu au pereche la mine.
+              Creează în magazin și produsele de pe eMAG care nu au pereche la mine
               <span className="block text-[11px] opacity-80">
-                Lasă nebifat dacă vrei doar să legăm ce ai deja. Produsele create nu se
-                șterg la loc dintr-un buton.
+                Lasă nebifat dacă vrei doar să legăm ce ai deja. Produsele create rămân
+                în magazin până le ștergi tu, unul câte unul.
               </span>
             </span>
           </label>
@@ -1002,7 +1005,7 @@ function PanouImport({ businessId }: { businessId: string }) {
             <p className="mt-2 text-xs text-muted-foreground">
               <strong>{raport.disparute}</strong>{" "}
               {raport.disparute === 1 ? "ofertă pe care o știam nu mai vine" : "oferte pe care le știam nu mai vin"}{" "}
-              de la eMAG. Nu le-am șters — poate au fost doar refăcute acolo.
+              de la eMAG. Nu le-am șters, fiindcă e posibil să fi fost doar refăcute acolo.
             </p>
           )}
 
@@ -1041,9 +1044,9 @@ type Faza = "gata" | "citim" | "cream" | "legam";
 
 const ETICHETA_FAZA: Record<Faza, string> = {
   gata: BUTON_ADU_OFERTELE_SCURT,
-  citim: "Se citesc ofertele…",
+  citim: "Se citește lista de pe eMAG…",
   cream: "Se creează produsele…",
-  legam: "Se leagă…",
+  legam: "Se leagă produsele…",
 };
 
 interface RaportAratat {
@@ -1097,7 +1100,7 @@ function PanouIp({ ip, restrans = false }: { ip: string | null; restrans?: boole
       {!restrans && (
         <p className="mt-3 text-xs text-muted-foreground">
           În panoul eMAG: <span className="font-medium">Contul meu → Setări API → adrese IP permise</span>.
-          Dacă nu găsești secțiunea, scrie-i managerului tău de cont eMAG — la unele conturi lista se
+          Dacă nu găsești secțiunea, scrie-i managerului tău de cont eMAG. La unele conturi, lista se
           completează de ei.
         </p>
       )}

@@ -272,7 +272,7 @@ function RandCategorie({
       if (r.dinFisa.length > 0) {
         toast.success(
           `„${categorie.nume}” e legată de eMAG. `
-          + `${r.dinFisa.join(", ")} vin din specificațiile fiecărui produs — `
+          + `${r.dinFisa.join(", ")} vin din specificațiile fiecărui produs, `
           + "cele fără ele nu pleacă.",
           { duration: 9000 },
         );
@@ -476,7 +476,7 @@ function CerinteleCategoriei({
         <label className="block">
           <span className="mb-1 block text-xs font-medium">Grup de variante</span>
           <select className={CAMP} value={tipFamilie} onChange={(e) => setTipFamilie(e.target.value)}>
-            <option value="">— fără grup —</option>
+            <option value="">Fără grup</option>
             {detalii.tipuriFamilie.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nume}
@@ -511,7 +511,7 @@ function CerinteleCategoriei({
                     value={valori[c.id] ?? ""}
                     onChange={(e) => setValori({ ...valori, [c.id]: e.target.value })}
                   >
-                    <option value="">— alege —</option>
+                    <option value="">Alege o valoare</option>
                     {c.valori.map((v) => (
                       <option key={v} value={v}>
                         {v}

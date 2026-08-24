@@ -43,7 +43,7 @@ export function EmagFulfillmentPanel({
         <div className="p-4 space-y-3">
           <p className="text-xs text-muted-foreground">
             Poți emite AWB pe contul de curier din eMAG, sau poți expedia cu curierul tău
-            de mai jos — eMAG le acceptă pe amândouă.
+            de mai jos. eMAG le acceptă pe amândouă.
           </p>
           <button
             type="button"

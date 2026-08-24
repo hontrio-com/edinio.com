@@ -37,7 +37,16 @@ export default async function EmagPage() {
   if (!biz) redirect("/dashboard");
 
   return (
-    <div className="p-6 max-w-4xl">
+    /*
+     * ⚠ PE TOT ECRANUL, spre deosebire de celelalte integrari.
+     *
+     * La un curier, ecranul are trei campuri si o coloana ingusta il face mai usor de
+     * citit. Aici sunt zece panouri — oferte, categorii, campanii, retururi, jurnal,
+     * facturi — iar tabelul de oferte are zece coloane. Stranse la `max-w-4xl`, ele se
+     * inghesuiau pe stanga, cu jumatate de ecran gol la dreapta si cu randurile
+     * tabelului rupte pe doua linii.
+     */
+    <div className="p-6">
       <IntegrationHeader
         id="emag"
         description="Vinde pe eMAG direct din Edinio: publici produsele, primești comenzile și trimiți facturile, fără să mai intri în panoul lor."

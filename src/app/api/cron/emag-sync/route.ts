@@ -23,7 +23,7 @@ import { aduIpurileEmag } from "@/lib/emag/client";
 import { citesteIpuri, sAuSchimbat, CHEIE_IPURI } from "@/lib/emag/ipuri";
 import { urcaFacturaLaEmag, type Factura } from "@/lib/emag/facturi";
 import { aduRetururile } from "@/lib/emag/rma";
-import type { EmagConfig, EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
+import type { EmagOfertaCitita, StareOferta } from "@/lib/emag/types";
 import type { OpEmag } from "@/lib/emag/queue";
 import { asteptareaUrmatoare, eVandabila } from "@/lib/emag/rute";
 

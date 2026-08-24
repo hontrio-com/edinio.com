@@ -120,7 +120,7 @@ export function EmagProbleme({ businessId }: { businessId: string }) {
       {centru.taiat && (
         <p className="mt-3 rounded-lg bg-muted/50 p-2.5 text-xs text-muted-foreground">
           Grupele sunt făcute din cele mai recente {centru.citite} de oferte cu probleme.
-          Dacă ai mai multe, repară-le pe astea întâi și revino — se recalculează.
+          Dacă ai mai multe, repară-le pe astea întâi și revino. Lista se recalculează.
         </p>
       )}
     </div>

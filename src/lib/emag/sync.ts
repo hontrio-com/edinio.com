@@ -140,9 +140,10 @@ export function ceLipsestePentruPublicare(config: EmagConfig): string | null {
    * repetam forma aia. Butonul e chiar in ecranul unde se citeste mesajul.
    */
   if (!config.catalog_citit_la) {
-    return `Apasă întâi „${BUTON_ADU_OFERTELE}”. Fără lista ta de produse de acolo nu ` +
-      "putem ști care sunt deja în contul tău, iar eMAG le refuză pe cele trimise a " +
-      "doua oară. Doar citește și leagă — nu-ți schimbă magazinul.";
+    return `Apasă întâi „${BUTON_ADU_OFERTELE}”. Fără lista ta de produse de acolo ` +
+      "nu avem de unde să știm care sunt deja în contul tău, iar eMAG le refuză pe " +
+      "cele trimise a doua oară. Pasul acesta doar citește și leagă, magazinul tău " +
+      "nu se modifică.";
   }
   return null;
 }

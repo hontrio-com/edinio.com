@@ -1404,6 +1404,21 @@ export interface FiltruOferteEcran {
   stare?: StareOferta;
   /** Numai cele care au ceva de reparat. */
   doarProbleme?: boolean;
+  /**
+   * De unde vine oferta.
+   *
+   * ═══ ⚠ ORIGINEA NU E O STARE, ȘI DE ACEEA E UN FILTRU SEPARAT ═══
+   *
+   * Ecranul avea „Preluate", care se uita la `status = 'imported'`. Dar starea aceea
+   * ține doar până la prima reconciliere: acolo oferta trece pe `live` sau `sent`,
+   * după cum se vinde. Adică filtrul se golea singur în câteva minute, fără ca cineva
+   * să înțeleagă de ce.
+   *
+   * `creat_de_edinio` nu se schimbă niciodată. După importul unui catalog de 3.754 de
+   * oferte, din care 180 erau ale noastre, întrebarea „care sunt ale mele, trimise din
+   * Edinio?" a devenit chiar întrebarea pe care o pune comerciantul.
+   */
+  origine?: "edinio" | "emag";
   cautare?: string;
   pagina?: number;
 }
@@ -1446,6 +1461,7 @@ export async function listaOferteEmag(
     .eq("business_id", businessId);
 
   if (filtru.stare) q = q.eq("status", filtru.stare);
+  if (filtru.origine) q = q.eq("creat_de_edinio", filtru.origine === "edinio");
   /* „Probleme" = respinse de ei SAU căzute la noi. Două întrebări diferite, aceeași
      urgență pentru omul care se uită: ambele înseamnă „produsul nu se vinde". */
   /*

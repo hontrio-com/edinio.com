@@ -70,7 +70,7 @@ export function EmagCampanii({ businessId }: { businessId: string }) {
         <Megaphone className="h-4 w-4" /> Campanii eMAG
       </h3>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-        Numărul campaniei îl iei din panoul eMAG — ei nu au de unde să ni-l dea, așa că
+        Numărul campaniei îl iei din panoul eMAG. Ei nu ni-l pot trimite prin API, așa că
         nu putem face o listă. Propunerea nu schimbă prețul din magazinul tău.
       </p>
 
@@ -137,7 +137,7 @@ export function EmagCampanii({ businessId }: { businessId: string }) {
       */}
       <p className="mt-3 rounded-lg bg-muted/50 p-2.5 text-xs text-muted-foreground">
         După campanie, ofertele se întorc la <strong>prețul de acum din Edinio</strong>.
-        Îl trimitem anume — altfel eMAG ar pune prețul pe care îl avea oferta când și-au
+        Îl trimitem anume. Altfel eMAG ar pune prețul pe care îl avea oferta când și-au
         tras ei datele, care poate fi de acum o lună.
       </p>
 
@@ -159,7 +159,7 @@ export function EmagCampanii({ businessId }: { businessId: string }) {
           <ul className="mt-1 space-y-0.5">
             {sarite.slice(0, 8).map((s) => (
               <li key={s.emagId} className="text-xs text-muted-foreground">
-                <span className="font-mono">#{s.emagId}</span> — {s.motiv}
+                <span className="font-mono">#{s.emagId}</span>: {s.motiv}
               </li>
             ))}
             {sarite.length > 8 && (

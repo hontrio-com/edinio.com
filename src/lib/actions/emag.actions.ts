@@ -37,7 +37,10 @@ import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
 import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
 import { aduComenzile, aduIstoricul, type RezultatIstoric } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
-import { pretPentruSmartDeals } from "@/lib/emag/campanii";
+import { pretPentruSmartDeals, propuneOferte } from "@/lib/emag/campanii";
+import {
+  cePiedicaAreCampania, pregatestePropunerile, type OfertaPentruCampanie,
+} from "@/lib/emag/propuneri";
 import {
   leagaOferteleNoi, ruleazaImportEmag, SURSA_EMAG, type RezultatImportEmag,
 } from "@/lib/emag/import-run";
@@ -52,7 +55,7 @@ import {
 import { traducereaPoateBloca } from "@/lib/emag/rute";
 import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
 import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
-import { alegeSupplyLeadTime } from "@/lib/emag/mapping";
+import { alegeSupplyLeadTime, pretFaraTva} from "@/lib/emag/mapping";
 import { dimensiuniPropuse, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
 import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "@/lib/emag/queue";
 
@@ -2492,4 +2495,96 @@ export async function importaIstoricEmag(
   revalidatePath(FEATURE_PATH);
   revalidatePath("/dashboard/orders");
   return r;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CAMPANIILE (§56, §57)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export interface RezultatPropunereEcran {
+  propuse: number;
+  /** Ofertele sărite, cu motivul. ⚠ Se arată; sărite tăcut, nimeni n-ar afla. */
+  sarite: { emagId: number; motiv: string }[];
+}
+
+/** Câte oferte se propun dintr-o apăsare. ⚠ Loturi de 50, deci 20 de cereri. */
+const OFERTE_PE_PROPUNERE = 1000;
+
+/**
+ * Propune ofertele magazinului într-o campanie eMAG.
+ *
+ * ═══ ⚠ NUMĂRUL CAMPANIEI SE IA DIN PANOUL LOR ═══
+ *
+ * Căutat în tot OpenAPI-ul lor: nu există nicio rută care să listeze campaniile. Deci
+ * nu se poate face un meniu, iar comerciantul trebuie să copieze numărul. E scris pe
+ * ecran ca atare — altfel ar căuta o listă care nu poate exista.
+ *
+ * ═══ ⚠ SE PROPUN DOAR OFERTELE CARE CHIAR SE VÂND ═══
+ *
+ * O ofertă în validare, respinsă sau retrasă n-are ce căuta într-o campanie: eMAG o
+ * refuză, iar refuzul contează la ei. Se filtrează aici, nu acolo.
+ */
+export async function propuneInCampanieEmag(
+  businessId: string,
+  cerere: { campaignId: number; reducere: number; stocMaxim?: number | null; maxPeComanda?: number | null },
+): Promise<RezultatPropunereEcran | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  /* ⚠ Piedicile se ridică ÎNAINTE de orice cerere: mesajele lor vorbesc despre câmpuri,
+     iar un `campaign_id` greșit întoarce ceva ce nu spune „nu există campania asta". */
+  const piedica = cePiedicaAreCampania(cerere);
+  if (piedica) return { error: piedica };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  /*
+   * ⚠ Prețul se ia din PRODUS și se trece prin `pretFaraTva`, nu din `emag_offers`.
+   * Rândul nostru nu ține prețul: ține identitatea ofertei. Citit de acolo, ar fi
+   * ieșit `undefined` și fiecare ofertă ar fi fost sărită cu „n-are preț" — un ecran
+   * care raportează zero, fără nicio eroare.
+   */
+  const { data: randuri } = await admin.from("emag_offers")
+    .select("emag_id, variant_title, products(price, stock_quantity)")
+    .eq("business_id", businessId)
+    .eq("status", "live" satisfies StareOferta)
+    .eq("auto_sync", true)
+    .not("product_id", "is", null)
+    .limit(OFERTE_PE_PROPUNERE);
+
+  type Rand = {
+    emag_id: number; variant_title: string | null;
+    products: { price: number | null; stock_quantity: number | null }
+      | { price: number | null; stock_quantity: number | null }[] | null;
+  };
+
+  const oferte: OfertaPentruCampanie[] = ((randuri ?? []) as Rand[]).map((r) => {
+    const p = Array.isArray(r.products) ? r.products[0] : r.products;
+    return {
+      emagId: r.emag_id,
+      pretNet: pretFaraTva(Number(p?.price ?? 0), ctx.vatRate, ctx.pricesIncludeVat),
+      stoc: Number(p?.stock_quantity ?? 0) || 0,
+    };
+  });
+
+  if (oferte.length === 0) {
+    return { error: "N-ai nicio ofertă care se vinde pe eMAG. Publică întâi produsele." };
+  }
+
+  const { propuneri, sarite } = pregatestePropunerile(oferte, cerere);
+  if (propuneri.length === 0) {
+    return { error: "Nicio ofertă nu poate intra în campanie. Verifică stocurile și prețurile." };
+  }
+
+  /* ⚠ Fir propriu (§66): o propunere face zeci de cereri în loturi de 50. */
+  const r = await cuFir(firNou("campanie"), () => propuneOferte(ctx, propuneri));
+  if (r.fel === "esec") return { error: r.mesaj };
+
+  revalidatePath(FEATURE_PATH);
+  return { propuse: propuneri.length, sarite };
 }

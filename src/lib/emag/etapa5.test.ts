@@ -4,6 +4,9 @@ import { alegereaCurierului, contPotrivit, primulAwb } from "./awb";
 import { dimensiuniPropuse } from "./colete";
 import { poateAwbRetur, trecerePermisa, treceriPosibile } from "./rma";
 import { citesteTinta } from "./campanii";
+import {
+  cePiedicaAreCampania, pregatestePropunerile, REDUCERE_MAXIMA, REDUCERE_MINIMA,
+} from "./propuneri";
 import { ceUrmeazaLaRetur, EMAG_TIP_RETUR, type EmagContCurier } from "./types";
 
 /*
@@ -346,4 +349,80 @@ test("eMAG retur AWB: localitatea necunoscuta nu blocheaza, dar strada lipsa da"
      inventeaza o piedica. Dar fara strada chiar n-avem ce trimite. */
   assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, pickupLocalityId: null }).se_poate, true);
   assert.equal(poateAwbRetur({ ...RIDICARE_BUNA, areStrada: false }).se_poate, false);
+});
+
+/* ── §56, §57. Propunerea in campanie ────────────────────────────── */
+
+const OFERTE = [
+  { emagId: 1, pretNet: 100, stoc: 10 },
+  { emagId: 2, pretNet: 50, stoc: 3 },
+];
+
+test("eMAG campanii: pretul de campanie se taie din cel FARA TVA", () => {
+  const r = pregatestePropunerile(OFERTE, { campaignId: 77, reducere: 20 });
+  assert.equal(r.propuneri[0].sale_price, 80);
+  assert.equal(r.propuneri[1].sale_price, 40);
+});
+
+test("eMAG campanii: `post_campaign_sale_price` se trimite MEREU (§57)", () => {
+  /*
+   * ═══ CE SE INTAMPLA DACA NU-L TRIMITI ═══
+   *
+   * Schema lor: „The automatically filled price is the sale price of the product from
+   * the moment when offers are DOWNLOADED."
+   *
+   * Adica eMAG pune el un pret — cel pe care il avea oferta cand si-au tras ei datele,
+   * care poate fi de acum o luna. Dupa campanie, produsul s-ar fi intors la pretul ala
+   * vechi, nu la cel de azi.
+   *
+   * Fara nicio eroare, si fara ca nimeni sa se uite a doua zi dupa terminarea unei
+   * campanii. Se trimite anume pretul nostru de acum: e singurul pe care il stim sigur.
+   */
+  const r = pregatestePropunerile(OFERTE, { campaignId: 77, reducere: 20 });
+  assert.equal(r.propuneri[0].post_campaign_sale_price, 100, "pretul de ACUM, nu cel taiat");
+  assert.equal(r.propuneri[1].post_campaign_sale_price, 50);
+});
+
+test("eMAG campanii: o oferta FARA STOC nu se propune, si se spune de ce", () => {
+  /* eMAG accepta stocul zero — e un numar valid — iar comerciantul ar fi vazut
+     produsul in campanie si zero vanzari, fara sa inteleaga de ce. */
+  const r = pregatestePropunerile([{ emagId: 9, pretNet: 100, stoc: 0 }], { campaignId: 77, reducere: 20 });
+  assert.deepEqual(r.propuneri, []);
+  assert.equal(r.sarite[0].motiv, "n-are stoc");
+});
+
+test("eMAG campanii: stocul propus nu poate fi mai mare decat cel real", () => {
+  /* Un stoc maxim mai mare decat cel din depozit ar fi promis in campanie bucati care
+     nu exista — iar anularile de campanie se numara la ei. */
+  const r = pregatestePropunerile(OFERTE, { campaignId: 77, reducere: 20, stocMaxim: 100 });
+  assert.equal(r.propuneri[0].stock, 10, "are doar 10");
+  assert.equal(r.propuneri[1].stock, 3, "are doar 3");
+});
+
+test("eMAG campanii: stocul maxim taie cand e mai mic", () => {
+  const r = pregatestePropunerile(OFERTE, { campaignId: 77, reducere: 20, stocMaxim: 2 });
+  assert.equal(r.propuneri[0].stock, 2);
+  assert.equal(r.propuneri[1].stock, 2);
+});
+
+test("eMAG campanii: o oferta fara pret nu se propune", () => {
+  const r = pregatestePropunerile([{ emagId: 9, pretNet: 0, stoc: 5 }], { campaignId: 77, reducere: 20 });
+  assert.deepEqual(r.propuneri, []);
+  assert.equal(r.sarite[0].motiv, "n-are pret");
+});
+
+test("eMAG campanii: reducerea in afara limitelor LOR se opreste la noi", () => {
+  /* ⚠ Mesajele lor vorbesc despre campuri; un `voucher_discount` de 5 ar fi intors
+     ceva ce nu spune „minimul e 10". Se ridica aici, unde se poate spune de ce. */
+  assert.equal(cePiedicaAreCampania({ campaignId: 77, reducere: REDUCERE_MINIMA }), null);
+  assert.equal(cePiedicaAreCampania({ campaignId: 77, reducere: REDUCERE_MAXIMA }), null);
+  assert.notEqual(cePiedicaAreCampania({ campaignId: 77, reducere: 5 }), null);
+  assert.notEqual(cePiedicaAreCampania({ campaignId: 77, reducere: 101 }), null);
+});
+
+test("eMAG campanii: fara numarul campaniei nu se trimite nimic", () => {
+  /* eMAG n-are nicio ruta care sa listeze campaniile — cautat in tot OpenAPI-ul lor.
+     Numarul se ia din panoul lor, si se cere limpede. */
+  assert.notEqual(cePiedicaAreCampania({ campaignId: 0, reducere: 20 }), null);
+  assert.notEqual(cePiedicaAreCampania({ campaignId: Number.NaN, reducere: 20 }), null);
 });

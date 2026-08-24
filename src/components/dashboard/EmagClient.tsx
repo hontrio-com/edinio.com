@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle, Copy, Download, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { EmagPregatirePublicare } from "@/components/dashboard/EmagPregatirePublicare";
 import { SUPPLY_LEAD_TIME_INGADUIT } from "@/lib/emag/mapping";
 import {
   aduComenzileAcumEmag, connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
@@ -220,7 +221,15 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex gap-3">
             <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
-            <p className="text-sm text-amber-900">{status.lipsaPentruPublicare}</p>
+            <div className="text-sm text-amber-900">
+            <p>{status.lipsaPentruPublicare}</p>
+            {/* ⚠ Mesajul trimitea „in setarile integrarii", dar acolo nu exista niciun
+                camp — un drum infundat, cu publicarea blocata si fara cale de iesire.
+                Acum se spune UNDE, si campurile chiar sunt acolo. */}
+            <p className="mt-1 text-xs">
+              Le găsești mai jos, la <strong>„Ce cere eMAG înainte de prima publicare”</strong>.
+            </p>
+          </div>
           </div>
         </div>
       )}
@@ -400,6 +409,15 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             laSchimbare={(v) => alegeSursa("deriva_stoc", v)}
           />
         </div>
+
+        {/* ⚠ INAINTEA celorlalte setari: fara astea doua nu se poate publica NIMIC, iar
+            restul (rezerva de stoc, taxa verde) sunt reglaje fine peste ceva ce inca
+            nu functioneaza. */}
+        <EmagPregatirePublicare
+          businessId={businessId}
+          vatId={status.vatId}
+          handlingTime={status.handlingTime}
+        />
 
         <PanouStoculSiTaxa businessId={businessId} status={status} />
       </div>

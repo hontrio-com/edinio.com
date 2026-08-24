@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { AlertTriangle, Check, Link2, Loader2, Send, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   categoriileMagazinuluiEmag, detaliiCategorieEmag, publicaCategoriaPeEmag,
+  cautaCategorieEmag,
   salveazaMapareCategorieEmag, stergeMapareCategorieEmag, sugereazaCategoriiEmag,
   type DetaliiCategorieEmag,
 } from "@/lib/actions/emag.actions";
@@ -219,6 +220,40 @@ function RandCategorie({
   laSchimbare: () => void;
 }) {
   const [idEmag, setIdEmag] = useState(String(categorie.mapare?.category_id ?? ""));
+  const [cautare, setCautare] = useState("");
+  const [gasite, setGasite] = useState<{ id: number; label: string }[]>([]);
+  const [seCauta, setSeCauta] = useState(false);
+
+  /*
+   * ⚠ Se caută în raftul MEMORAT, nu la ei: altfel fiecare tastă apăsată ar arde din
+   * cele 3 cereri pe secundă ale magazinului — aceleași prin care pleacă o mișcare de
+   * stoc după o vânzare.
+   *
+   * ⚠ Și se așteaptă puțin după ultima tastă. Fără pauză, „hrana pisici" ar fi pornit
+   * douăsprezece căutări, iar răspunsurile lor ar fi sosit în altă ordine decât au
+   * plecat: ecranul ar fi arătat rezultatele pentru „hrana pis".
+   */
+  const ultimaCerere = useRef(0);
+  function cautaAcum(termen: string) {
+    const alMeu = ++ultimaCerere.current;
+    if (termen.trim().length < 2) { setGasite([]); return; }
+    setSeCauta(true);
+    window.setTimeout(() => {
+      if (alMeu !== ultimaCerere.current) return;
+      void (async () => {
+        const r = await cautaCategorieEmag(businessId, termen);
+        if (alMeu !== ultimaCerere.current) return;
+        setSeCauta(false);
+        if ("error" in r) { toast.error(r.error); return; }
+        if (!r.raftAdus) {
+          toast.warning("Apasă întâi „Sugestii”, ca să aducem raftul de categorii al eMAG.");
+          return;
+        }
+        setGasite(r.gasite);
+      })();
+    }, 250);
+  }
+
   const [detalii, setDetalii] = useState<DetaliiCategorieEmag | null>(null);
   const [tipFamilie, setTipFamilie] = useState<string>(String(categorie.mapare?.family_type_id ?? ""));
   const [valori, setValori] = useState<Record<number, string>>(() =>
@@ -366,6 +401,58 @@ function RandCategorie({
                 ))}
               </div>
             </div>
+          )}
+
+          {/*
+            ═══ ⚠ CĂUTAREA DUPĂ NUME, PENTRU CĂ NUMĂRUL NU-L ȘTIE NIMENI ═══
+
+            Măsurat pe 24.08.2026: potrivirea automată a dat ZERO sugestii cu încredere
+            mare din cele 13 categorii rămase nemapate ale unui magazin de animale.
+            „Castron" → „Căști PC". „Aditivi furajeri" → „Aditivi auto". La „Șampoane" și
+            „Litieră", nimic. Comerciantul le-a ignorat pe drept și a rămas cu 346 de
+            produse nepublicabile.
+
+            Iar răspunsul bun ERA în raftul lor: „Hrana pentru pisici" există. Trebuia
+            doar căutat. Un om care știe ce vinde bate orice potrivire pe litere, dacă îi
+            dai lista.
+
+            ⚠ Câmpul cu numărul rămâne: cine îl are din panoul eMAG îl scrie direct.
+          */}
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium">Caută categoria eMAG după nume</span>
+            <input
+              className={CAMP}
+              value={cautare}
+              placeholder="ex. hrana pisici"
+              onChange={(e) => {
+                setCautare(e.target.value);
+                cautaAcum(e.target.value);
+              }}
+            />
+          </label>
+
+          {gasite.length > 0 && (
+            <ul className="max-h-56 space-y-1 overflow-auto rounded-lg border border-border p-1">
+              {gasite.map((g) => (
+                <li key={g.id}>
+                  <button
+                    type="button"
+                    onClick={() => { setIdEmag(String(g.id)); ceruDetalii(g.id); }}
+                    className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
+                  >
+                    {g.label} <span className="text-muted-foreground">#{g.id}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {cautare.trim() !== "" && gasite.length === 0 && !seCauta && (
+            /* ⚠ Se spune și când NU s-a găsit nimic. Tăcut, omul ar fi crezut că încă se
+                caută și ar fi așteptat degeaba. */
+            <p className="text-xs text-muted-foreground">
+              Nicio categorie cu numele ăsta în care ai voie să vinzi. Încearcă alt cuvânt,
+              sau apasă „Sugestii” ca să aducem din nou raftul lor.
+            </p>
           )}
 
           <div className="flex flex-wrap items-end gap-2">

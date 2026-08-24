@@ -33,6 +33,8 @@ import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { deCeNuSeVinde } from "@/lib/emag/de-ce-nu-se-vinde";
+import { cautaCategorie } from "@/lib/emag/cauta-categorie";
+import { citesteAmintirea } from "@/lib/emag/memorie";
 import { trimiteElement, magazinDin} from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
 import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
@@ -1180,6 +1182,44 @@ export interface DetaliiCategorieEmag {
  * toate ca să se afle una, ecranul ar fi așteptat minute întregi la 3 cereri pe
  * secundă — și ar fi mâncat ritmul de care are nevoie coada.
  */
+/**
+ * Cauta o categorie eMAG dupa nume, in raftul deja adus.
+ *
+ * ═══ ⚠ DE CE, cand exista deja sugestii automate ═══
+ *
+ * Masurat pe 24.08.2026: potrivirea automata a dat ZERO sugestii cu incredere mare din
+ * cele 13 categorii ramase nemapate ale unui magazin de animale — „Castron" -> „Casti PC",
+ * „Aditivi furajeri" -> „Aditivi auto", iar la „Sampoane" si „Litiera" nimic. Comerciantul
+ * le-a ignorat pe drept si a ramas cu 346 de produse nepublicabile.
+ *
+ * Raspunsul bun ERA in raftul lor. Doar ca trebuia CAUTAT, nu ghicit: omul stie ce vinde,
+ * scrie „pisici" si alege.
+ *
+ * ⚠ NU cere nimic de la eMAG. Cauta in lista memorata de `sugereazaCategoriiEmag`, deci
+ * nu arde din cele 3 cereri pe secunda ale magazinului la fiecare tasta apasata.
+ */
+export async function cautaCategorieEmag(
+  businessId: string,
+  termen: string,
+): Promise<{ gasite: { id: number; label: string }[]; raftAdus: boolean } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const admin = createAdminClient();
+  const config = await loadConfig(businessId);
+
+  /* ⚠ Se citeste amintirea, NU se cere de la ei: altfel fiecare tasta apasata ar arde
+     din cele 3 cereri pe secunda ale magazinului. */
+  const amintire = await citesteAmintirea<EmagCategorie[]>(admin, {
+    businessId, tara: config.tara, cont: config.username, fel: "categorii",
+  });
+
+  /* ⚠ Fara raft adus nu se cauta in gol: se spune omului sa apese intai „Sugestii". */
+  if (!amintire?.date) return { gasite: [], raftAdus: false };
+
+  return { gasite: cautaCategorie(termen, amintire.date, 25), raftAdus: true };
+}
+
 export async function detaliiCategorieEmag(
   businessId: string,
   categoryId: number,

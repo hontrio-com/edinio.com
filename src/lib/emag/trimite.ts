@@ -20,6 +20,10 @@
  * Ultimele doua sunt lectii scrise cu pretul lor in `src/lib/trendyol/sync.ts:81`.
  */
 
+import {
+  potrivesteCaracteristici, type Nepotrivire, type Specificatie,
+} from "./caracteristici";
+import { caracteristiciLipsa } from "./taxonomy";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
@@ -112,6 +116,27 @@ export async function trimiteElement(
 /* ═══════════════════════════════════════════════════════════════════════════
    CITIRILE
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Specificatiile din fisa produsului, in forma pe care o asteapta potrivirea.
+ *
+ * ⚠ Forma reala din productie, masurata pe 24.08.2026: `page_sections.specifications`
+ * e un tablou de `{label, value}`. Citita ca obiect sau ca text, ar fi iesit goala si
+ * potrivirea n-ar fi facut nimic — tacut, cu toate caracteristicile lipsa.
+ */
+function specificatiile(produs: ProdusDeCartografiat): Specificatie[] {
+  const ps = (produs.page_sections ?? {}) as { specifications?: unknown };
+  if (!Array.isArray(ps.specifications)) return [];
+  return ps.specifications
+    .map((x) => {
+      const o = (x ?? {}) as { label?: unknown; value?: unknown };
+      return {
+        label: typeof o.label === "string" ? o.label : "",
+        value: typeof o.value === "string" ? o.value : String(o.value ?? ""),
+      };
+    })
+    .filter((s) => s.label.trim().length > 0 && s.value.trim().length > 0);
+}
 
 async function citesteProdusul(
   admin: Admin, productId: string, businessId: string,
@@ -214,12 +239,64 @@ async function duTotul(
   await cautaInCatalogulLor(admin, ctx, await citesteRandurile(admin, ctx.businessId, produs.id));
   const cuCheie = await citesteRandurile(admin, ctx.businessId, produs.id);
 
+  /*
+   * ═══ ⚠ CARACTERISTICILE SE IAU DIN FISA PRODUSULUI, NU DOAR DIN CATEGORIE (§19) ═══
+   *
+   * Pana acum se puteau fixa doar PE CATEGORIE: o singura valoare pentru toate
+   * produsele din ea. Ceea ce e absurd tocmai la caracteristicile care conteaza — nu
+   * toate tricourile sunt „M", si tocmai `Marime` e obligatorie.
+   *
+   * ⚠ Cea fixata pe categorie NU se pierde: umple golurile, pentru produsele care n-au
+   * specificatia lor. Sterse, un magazin care si-a fixat „Material: Bumbac" pe toata
+   * categoria s-ar fi trezit ca nu mai pleaca nimic.
+   *
+   * ⚠ Nepotrivirile se SCRIU, nu se inghit. O valoare in afara listei lor face oferta
+   * INTREAGA sa fie respinsa, iar mesajul lor vorbeste despre caracteristica, nu
+   * despre valoare — comerciantul n-ar fi avut de unde sti ce sa schimbe.
+   */
+  const potrivite = potrivesteCaracteristici(
+    specificatiile(produs),
+    categorie.characteristics_categorie ?? [],
+    categorie.characteristics ?? [],
+  );
+
+  /*
+   * ═══ ⚠ PLASA S-A MUTAT DE PE CATEGORIE PE PRODUS (§19) ═══
+   *
+   * Inainte, maparea categoriei era refuzata pana cand comerciantul fixa o valoare
+   * pentru fiecare caracteristica obligatorie. Acum ele pot veni din fisa fiecarui
+   * produs — deci verificarea trebuie sa fie tot pe produs.
+   *
+   * Fara mutarea asta, §19 ar fi deschis o gaura: maparea trece, produsul fara
+   * specificatia lui pleaca la eMAG, arde o cerere din cele 3 pe secunda, arde o
+   * incercare din coada, si se intoarce cu un mesaj despre o caracteristica pe care
+   * comerciantul o vede abia peste ore.
+   *
+   * Aici raspunsul e instantaneu si spune NUMELE caracteristicii, in romana.
+   */
+  const obligatoriiLipsa = caracteristiciLipsa(
+    { id: categorie.category_id, characteristics: categorie.characteristics_categorie ?? [] },
+    potrivite.caracteristici,
+  );
+  if (obligatoriiLipsa.length > 0) {
+    const nume = obligatoriiLipsa.map((x) => (x.name ?? "").trim() || `#${x.id}`).join(", ");
+    const m = `Produsul n-are ce cere eMAG in categoria asta: ${nume}. `
+      + "Adauga-le in specificatiile produsului, sau fixeaza-le pe categorie.";
+    await scrieEroare(admin, ctx.businessId, produs.id, m);
+    return { verdict: "refuz", mesaj: m };
+  }
+
+  /* ⚠ Se scriu si cand sunt ZERO, ca sa se STEARGA cele reparate. Scrise doar cand
+     exista, o nepotrivire rezolvata ar fi ramas in panou pentru totdeauna, iar omul
+     ar fi cautat la nesfarsit o problema care nu mai era. */
+  await scrieNepotrivirile(admin, ctx.businessId, produs.id, potrivite.nepotriviri);
+
   const { oferte, probleme } = construiesteOferte(
     produs,
     magazinDin(ctx, produs),
     {
       category_id: categorie.category_id,
-      characteristics: categorie.characteristics ?? [],
+      characteristics: potrivite.caracteristici,
       family_type_id: categorie.family_type_id,
     },
     /* Identitatile REFACUTE, ca sa poarte `part_number_key` daca s-a gasit unul. */
@@ -724,6 +801,31 @@ async function scrieRezultatul(
       severity: "error",
     });
   }
+}
+
+/**
+ * Ce n-a intrat din fisa produsului in caracteristicile lor (§19).
+ *
+ * ⚠ Se scriu in `issues`, NU in `error`. Sunt doua lucruri diferite: `error` opreste
+ * trimiterea, `issues` doar spune ce s-ar putea completa mai bine. Amestecate, un
+ * produs perfect trimis ar fi aratat „eroare" pentru o specificatie in plus pe care
+ * eMAG nici n-o cere.
+ *
+ * ⚠ Se spune SI ce accepta ei. „Culoare: Turcoaz nu e o valoare acceptata" fara lista
+ * il lasa pe om sa ghiceasca; cu lista, repara din prima.
+ */
+async function scrieNepotrivirile(
+  admin: Admin, businessId: string, productId: string, nepotriviri: Nepotrivire[],
+): Promise<void> {
+  const texte = nepotriviri.map((n) =>
+    n.motiv === "valoare_neingaduita"
+      ? `„${n.eticheta}: ${n.valoare}” nu e o valoare acceptată de eMAG${
+        n.ingaduite?.length ? `. Ei acceptă: ${n.ingaduite.join(", ")}` : ""}`
+      : `„${n.eticheta}” nu are corespondent în categoria eMAG aleasă.`);
+
+  await admin.from("emag_offers")
+    .update({ issues: texte as never, updated_at: new Date().toISOString() })
+    .eq("business_id", businessId).eq("product_id", productId);
 }
 
 async function scrieEroare(admin: Admin, businessId: string, productId: string, mesaj: string): Promise<void> {

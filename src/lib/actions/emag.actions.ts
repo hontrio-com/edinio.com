@@ -1120,7 +1120,7 @@ export async function salveazaMapareCategorieEmag(
   businessId: string,
   numeCategorie: string,
   mapare: { category_id: number; family_type_id?: number | null; characteristics?: { id: number; value: string }[] },
-): Promise<{ success: true } | { error: string; lipsa?: string[] }> {
+): Promise<{ success: true; dinFisa: string[] } | { error: string; lipsa?: string[] }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
 
@@ -1144,13 +1144,25 @@ export async function salveazaMapareCategorieEmag(
   }
 
   const trimise = mapare.characteristics ?? [];
-  const lipsa = caracteristiciLipsa(cat, trimise);
-  if (lipsa.length > 0) {
-    return {
-      error: "Completează caracteristicile obligatorii ale categoriei eMAG.",
-      lipsa: lipsa.map((x) => (x.name ?? "").trim() || `Caracteristica ${x.id}`),
-    };
-  }
+
+  /*
+   * ═══ ⚠ AICI NU SE MAI REFUZĂ, ȘI E O SCHIMBARE DE FOND (§19) ═══
+   *
+   * Înainte, maparea era respinsă până când comerciantul fixa o valoare pentru fiecare
+   * caracteristică obligatorie. Ceea ce e absurd tocmai la cele care contează: nu toate
+   * tricourile sunt „M", iar `Mărime` e obligatorie.
+   *
+   * De acum, caracteristicile se iau întâi din fișa fiecărui produs
+   * (`page_sections.specifications`), iar cele fixate aici umplu golurile. Deci o
+   * caracteristică fără valoare fixată NU e o greșeală — e o caracteristică care vine
+   * din produs.
+   *
+   * ⚠ Dar NU se trece nici sub tăcere: lista se întoarce, iar ecranul spune limpede că
+   * produsele fără specificația aia vor fi oprite înainte de trimitere. Verificarea
+   * care oprește s-a mutat unde îi e locul — pe produs, nu pe categorie.
+   */
+  const dinFisa = caracteristiciLipsa(cat, trimise)
+    .map((x) => (x.name ?? "").trim() || `Caracteristica ${x.id}`);
 
   const veche = await loadConfig(businessId);
   const noua: EmagConfig = {
@@ -1167,6 +1179,10 @@ export async function salveazaMapareCategorieEmag(
            trimita — adica exact cererea pe care verificarea o scuteste. */
         ean_obligatoriu: cat.is_ean_mandatory === 1,
         garantie_obligatorie: cat.is_warranty_mandatory === 1,
+        /* ⚠ Schema caracteristicilor, cu `values[]` și `is_mandatory` cu tot (§19).
+           Fără ea, potrivirea din fișa produsului n-are cu ce compara, iar o valoare
+           în afara listei lor ar pleca și ar face oferta întreagă respinsă. */
+        characteristics_categorie: cat.characteristics ?? [],
       },
     },
   };
@@ -1175,7 +1191,7 @@ export async function salveazaMapareCategorieEmag(
   if (!ok) return { error: "Nu am putut salva maparea. Încearcă din nou." };
 
   revalidatePath(FEATURE_PATH);
-  return { success: true };
+  return { success: true, dinFisa };
 }
 
 /**
@@ -2241,9 +2257,9 @@ export async function centrulProblemelorEmag(
 
   /* Textul liber: al lor (`doc_errors`) și al nostru (`error`). */
   const { data: randuri } = await admin.from("emag_offers")
-    .select("emag_id, doc_errors, error, deriva")
+    .select("emag_id, doc_errors, issues, error, deriva")
     .eq("business_id", businessId)
-    .or("error.not.is.null,deriva.not.is.null,doc_errors.neq.[]")
+    .or("error.not.is.null,deriva.not.is.null,doc_errors.neq.[],issues.neq.[]")
     .order("updated_at", { ascending: false })
     .limit(PROBLEME_MAXIM_RANDURI);
 
@@ -2272,10 +2288,17 @@ export async function centrulProblemelorEmag(
     });
   }
 
-  type RandProblema = { emag_id: number; doc_errors: unknown; error: string | null; deriva: unknown };
+  type RandProblema = {
+    emag_id: number; doc_errors: unknown; issues: unknown; error: string | null; deriva: unknown;
+  };
   for (const r of (randuri ?? []) as RandProblema[]) {
     for (const m of normalizeazaDocErrors(r.doc_errors)) {
       necazuri.push({ sursa: "emag", mesaj: m, emagId: r.emag_id });
+    }
+    /* ⚠ `issues` sunt ce am găsit NOI în fișa produsului (§19), nu ce spun ei. De
+       aceea sursa e `edinio`: se repară în fișă, nu în panoul eMAG. */
+    for (const m of normalizeazaDocErrors(r.issues)) {
+      necazuri.push({ sursa: "edinio", mesaj: m, emagId: r.emag_id });
     }
     if (r.error) necazuri.push({ sursa: "edinio", mesaj: r.error, emagId: r.emag_id });
 

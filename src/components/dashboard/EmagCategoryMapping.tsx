@@ -257,7 +257,28 @@ function RandCategorie({
         toast.error(r.lipsa?.length ? `${r.error} Lipsesc: ${r.lipsa.join(", ")}.` : r.error);
         return;
       }
-      toast.success(`„${categorie.nume}" e legată de eMAG.`);
+      /*
+       * ═══ ⚠ CE NU E FIXAT AICI VINE DIN FISA PRODUSULUI (§19) ═══
+       *
+       * Inainte, maparea era REFUZATA pana cand se fixa o valoare pentru fiecare
+       * caracteristica obligatorie. Ceea ce e absurd tocmai la cele care conteaza: nu
+       * toate tricourile sunt „M", iar `Mărime` e obligatorie.
+       *
+       * Acum se salveaza, dar se spune limpede ce trebuie sa aiba fiecare produs in
+       * specificatiile lui — iar produsele care n-au sunt oprite INAINTE de trimitere,
+       * cu numele caracteristicii scris. Netacut, un „salvat" curat l-ar fi lasat pe om
+       * sa creada ca a terminat, si ar fi aflat din refuzuri.
+       */
+      if (r.dinFisa.length > 0) {
+        toast.success(
+          `„${categorie.nume}” e legată de eMAG. `
+          + `${r.dinFisa.join(", ")} vin din specificațiile fiecărui produs — `
+          + "cele fără ele nu pleacă.",
+          { duration: 9000 },
+        );
+      } else {
+        toast.success(`„${categorie.nume}” e legată de eMAG.`);
+      }
       laSchimbare();
     });
   }

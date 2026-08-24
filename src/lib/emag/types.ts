@@ -912,8 +912,24 @@ export interface EmagConfig {
 
 export interface EmagIntrareCategorie {
   category_id: number;
-  /** Caracteristicile fixate de comerciant pentru toata categoria. */
+  /**
+   * Caracteristicile fixate de comerciant pentru toata categoria.
+   *
+   * ⚠ Din §19 incoace acestea sunt o VALOARE DE REZERVA, nu una impusa: umplu golurile
+   * pentru produsele care n-au specificatia lor in fisa. Vezi `caracteristici.ts`.
+   */
   characteristics?: EmagCaracteristica[];
+  /**
+   * Ce cere eMAG in categoria asta, cu `values[]` si `is_mandatory` cu tot (§19).
+   *
+   * ⚠ SE PUNE DEOPARTE LA MAPARE, si nu din zgarcenie. `category/read` e o cerere din
+   * cele 3 pe secunda ale magazinului; ceruta la fiecare trimitere, ar fi luat o
+   * treime din ritm pentru un raspuns care se schimba de cateva ori pe an.
+   *
+   * ⚠ Lipsa inseamna „nu s-a mapat cu versiunea noua". Atunci potrivirea nu are cu ce
+   * lucra si raman doar cele fixate — adica purtarea de dinainte, nu o cadere.
+   */
+  characteristics_categorie?: EmagCaracteristicaCategorie[];
   family_type_id?: number;
 
   /*

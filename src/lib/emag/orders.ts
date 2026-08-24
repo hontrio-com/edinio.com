@@ -629,6 +629,57 @@ export async function ingereazaComanda(
     const t = await tranzitieComandaMarketplace(admin, {
       orderId: ex.order_id, businessId: ctx.businessId, status, sursa: "emag",
     });
+
+    /*
+     * ═══ ⚠ LINIILE SI BANII SE RESCRIU SI IN `orders`, NU DOAR IN `emag_orders` ═══
+     *
+     * `linii` si `bani` erau recalculate mai sus si apoi nefolosite pe ramura asta:
+     * scrierea atingea doar `emag_orders`. `orders` se scria O SINGURA DATA, la insert.
+     *
+     * Iar facturarea automata citeste `orders.items` si `orders.total` — nu
+     * `emag_orders`. Deci:
+     *
+     * O comanda intra cu `is_complete: 0` (chiar cazul pentru care exista garda din
+     * `invoice-auto.actions.ts`, cu nota „liniile ei se mai pot schimba"), sau clientul
+     * anuleaza ulterior o linie si eMAG trimite `products[i].status = 0`. Re-ingestul
+     * improspata `emag_orders.lines`, dar `orders` ramanea cu trei produse si cu totalul
+     * initial.
+     *
+     * Cand comanda devenea completa, garda cadea si factura pleca pe cantitatile VECHI:
+     * clientul facturat pentru marfa nelivrata, iar documentul la ANAF. Fiecare pas in
+     * parte reusise, deci nimic nu dadea eroare.
+     *
+     * ⚠ STATUSUL NU SE ATINGE de aici: el trece numai prin `tranzitieComandaMarketplace`,
+     * care stie sa elibereze stocul la anulare. Un `status` pus de mana ar fi ocolit-o.
+     *
+     * ⚠ Nici la ISTORIC: acolo nu se factureaza si nu se consuma stoc, deci nu are ce
+     * strica — dar nici n-are rost sa rescrie o comanda veche.
+     */
+    if (!istoric) {
+      const { error: eActualizare } = await admin.from("orders").update({
+        items: linii as never,
+        subtotal: bani.subtotal,
+        total: bani.total,
+        vat_amount: bani.vat_amount,
+        /* ⚠ Si plata: era scrisa tot o singura data, la insert. O comanda cu ramburs
+           platita intre timp ar fi ramas „pending" pe veci, iar AWB-ul ar fi cerut
+           banii a doua oara. */
+        payment_status: c.payment_status === 1 ? "paid" : "pending",
+        updated_at: acum,
+      }).eq("id", ex.order_id).eq("business_id", ctx.businessId);
+
+      if (eActualizare) {
+        await logError({
+          action: "emag/orders",
+          message: `liniile comenzii nu s-au putut actualiza: ${eActualizare.message}`,
+          details: { emagOrderId: c.id, orderId: ex.order_id },
+          businessId: ctx.businessId,
+          severity: "critical",
+        });
+        /* ⚠ Se opreste marcajul. Facturarea de mai jos ar fi plecat pe liniile vechi. */
+        return "esuata";
+      }
+    }
     await admin.from("emag_orders").update({
       order_status: c.status,
       order_type: c.type ?? null,
@@ -655,6 +706,35 @@ export async function ingereazaComanda(
        magazinului ar fi ramas pe loc la fiecare trecere, iar comenzile noi n-ar mai
        fi intrat niciodata — din cauza uneia care era deja in regula. */
     if (t === "reincearca") return "esuata";
+
+    /*
+     * ═══ ⚠ CONSUMUL SE REINCEARCA SI AICI, SI ASTA E TOT ROSTUL LUI ═══
+     *
+     * Ramura asta — „comanda pe care o stim deja" — nu chema NICIODATA consumul, desi
+     * comentariul de mai jos sustinea ca-l cheama. Iar `consuma_stoc_comanda_marketplace`
+     * e construita anume ca sa fie rechemata: marcajul `stoc_marketplace_la` se pune in
+     * ACEEASI instructiune cu consumul, iar cat timp e `NULL` consumul se reia. Scrie in
+     * chiar comentariul functiei: „greseala se repara singura".
+     *
+     * Fara apelul asta, un consum picat o data nu se mai repara NICIODATA: la trecerea
+     * urmatoare `ex.order_id` exista, se intra pe ramura asta, se intoarce „actualizata",
+     * marcajul avanseaza linistit si comanda iese din fereastra.
+     *
+     * Rezultatul: bucata s-a vandut pe eMAG si a plecat din depozit, dar stocul Edinio a
+     * ramas neschimbat. Magazinul propriu si celelalte canale vand mai departe marfa
+     * care nu mai exista — iar deriva „repara" in directia gresita, urcand inapoi la eMAG
+     * stocul umflat.
+     *
+     * ⚠ A doua chemare nu scade de doua ori: RPC-ul intoarce `deja: true` si nu atinge
+     * nimic. Trendyol si About You cheama exact aici; eMAG era singura care nu.
+     */
+    if (!onoratDeEmag(c.type) && !istoric) {
+      const consum = await consumaStocul(admin, ctx, ex.order_id, linii);
+      /* ⚠ „esuata" opreste marcajul. Altfel comanda iese din fereastra si nimeni nu mai
+         incearca — chiar gaura pe care o repara blocul asta. */
+      if (consum === "esuat") return "esuata";
+    }
+
     if (!istoric) await poateFactura(admin, ctx, ex.order_id, status);
     return "actualizata";
   }

@@ -383,3 +383,32 @@ test("eMAG: o rezerva stricata nu strica stocul", () => {
   assert.equal(stocCuRezerva(10, -3), 10, "o rezerva negativa nu ADAUGA stoc");
   assert.equal(stocCuRezerva(Number.NaN, 2), 0);
 });
+
+/* ── O oferta PRELUATA se poate retrage ──────────────────────────────── */
+
+test("eMAG rute: o oferta preluata din contul lor SE POATE retrage", () => {
+  /*
+   * ═══ DEFECT GASIT DE RECENZIA ADVERSARIALA, 24.08.2026 ═══
+   *
+   * `existaLaEmag` se citea DOAR din `last_synced_at`, iar importul nu-l scrie — si
+   * nici n-ar trebui: acela inseamna „cand am trimis NOI".
+   *
+   * Deci fiecare oferta preluata iesea cu `existaLaEmag: false`, iar retragerea
+   * intorcea „nimic". Stergi un produs importat din magazin, elementul intra in coada,
+   * iese „sarit", se sterge, se numara la „duse" — si oferta ramane la VANZARE pe eMAG.
+   *
+   * Comerciantul vede produsul disparut din Edinio si comenzi care continua sa vina
+   * pentru marfa pe care n-o mai are. Niciun mesaj de eroare, nicaieri.
+   */
+  const preluata = rutaDeTrimitere({
+    op: "retragere", existaLaEmag: true, autoSync: false,
+  });
+  assert.equal(preluata.fel, "retrage", "oferta lor exista acolo: se poate opri");
+});
+
+test("eMAG rute: o oferta care N-A ajuns niciodata acolo nu se retrage", () => {
+  /* ⚠ Paza ramane: un rand facut de noi si netrimis inca n-are ce sa opreasca. O
+     cerere trimisa pentru el ar fi fost refuzata cu un mesaj despre un id necunoscut. */
+  const r = rutaDeTrimitere({ op: "retragere", existaLaEmag: false, autoSync: true });
+  assert.equal(r.fel, "nimic");
+});

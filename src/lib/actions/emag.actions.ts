@@ -32,12 +32,15 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
-import { trimiteElement } from "@/lib/emag/trimite";
+import { trimiteElement, magazinDin} from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
 import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
 import { aduComenzile, aduIstoricul, type RezultatIstoric } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
 import { pretPentruSmartDeals, propuneOferte } from "@/lib/emag/campanii";
+/* ⚠ Regula casei pentru „cat incaseaza curierul", scrisa dupa comanda #0033:
+   105,50 lei plecati fara nicio cale de incasare. Vezi `orders/ramburs.ts`. */
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import {
   adunaPeCategorii, facturileLorPentruEcran, numeleCategoriilor,
   type FacturaEcran, type TotalPeCategorie,
@@ -59,7 +62,7 @@ import {
 import { traducereaPoateBloca } from "@/lib/emag/rute";
 import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
 import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
-import { alegeSupplyLeadTime, pretFaraTva} from "@/lib/emag/mapping";
+import { alegeSupplyLeadTime, oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import { dimensiuniPropuse, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
 import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagMany} from "@/lib/emag/queue";
 
@@ -983,6 +986,33 @@ export async function emiteAwbEmag(
   );
   if (cont == null) return { error: "Niciun cont de curier eMAG potrivit pentru livrare. Verifică-le în contul tău eMAG." };
 
+  /*
+   * ═══ ⚠ RAMBURSUL SE IA DIN COMANDA NOASTRĂ, NU DIN `cashed_cod` ═══
+   *
+   * `cashed_cod` e, în schema lor, „The cashed amount from Cash on Delivery payment" —
+   * adică suma DEJA încasată. Iar `payment_status` e descris ca „For COD, stays 0 until
+   * the cashed amount is received by eMAG".
+   *
+   * Deci la momentul emiterii AWB-ului — înainte de livrare — `cashed_cod` e ZERO.
+   * Iar `AWBSave.cod` e cât trebuie să ÎNCASEZE curierul.
+   *
+   * Rezultatul formei dinainte: o comandă cu plata la livrare de 249,99 lei pleca cu
+   * `cod: 0`. Curierul livrează marfa și nu cere nimic, iar comerciantul nu mai are
+   * nicio cale de încasare. Nimic nu dă eroare — zero e o valoare validă, și e chiar
+   * cea corectă pentru comenzile plătite cu cardul.
+   *
+   * ⚠ `rambursDeIncasat` e regula casei, scrisă după comanda #0033 de la
+   * Suporti-Numar.ro: 105,50 lei plecați pe 15.07.2026 fără nicio cale de încasare.
+   * Întrebarea corectă nu e „ce metodă de plată a ales clientul", ci „au intrat banii".
+   * Calea eMAG era singura care n-o folosea.
+   */
+  const { data: comandaLocala, error: eComanda } = await admin.from("orders")
+    .select("payment_status, total").eq("id", orderId).eq("business_id", businessId).maybeSingle();
+  if (eComanda) return { error: `Comanda nu s-a putut citi: ${eComanda.message}` };
+  const ramburs = rambursDeIncasat(
+    (comandaLocala ?? {}) as { payment_status?: string | null; total?: unknown },
+  );
+
   const cl = (brut.customer ?? {}) as Record<string, string | undefined>;
   const rez = await emiteAwb(admin, ctx, {
     orderId,
@@ -1002,9 +1032,9 @@ export async function emiteAwbEmag(
       is_oversize: 0,
       envelope_number: 0,
       parcel_number: optiuni?.colete?.length ?? 1,
-      /* ⚠ Rambursul e cat cere eMAG sa se incaseze, nu totalul comenzii: la plata cu
-         cardul e zero, iar trimis totalul, curierul ar fi cerut banii a doua oara. */
-      cod: Number(brut.cashed_cod ?? 0) || 0,
+      /* ⚠ Vezi nota de deasupra: `cashed_cod` e cat s-a INCASAT deja (zero inainte de
+         livrare), nu cat trebuie incasat. Se ia din comanda noastra. */
+      cod: ramburs,
       courier_account_id: cont,
       observation: optiuni?.observatii,
       packages: optiuni?.colete,
@@ -1669,10 +1699,19 @@ export async function pregatireAwbEmag(
 
   const existent = awb as { emag_id: number; awb_number: string | null } | null;
 
+  /* ⚠ Comanda NOASTRA, pentru ramburs. Vezi nota din `emiteAwbEmag`: `cashed_cod` e cat
+     s-a incasat deja, deci zero inainte de livrare. */
+  const { data: comandaPentruRamburs } = await admin.from("orders")
+    .select("payment_status, total").eq("id", orderId).eq("business_id", businessId).maybeSingle();
+
   const baza = {
     emagOrderId: r.emag_order_id,
     tipComanda: r.order_type,
-    ramburs: Number(brut.cashed_cod ?? 0) || 0,
+    /* ⚠ Acelasi izvor ca la emitere. Aratat din `cashed_cod`, ecranul spunea „Nimic —
+       platit deja" pentru o comanda cu plata la livrare, intr-un camp needitabil. */
+    ramburs: rambursDeIncasat(
+      (comandaPentruRamburs ?? {}) as { payment_status?: string | null; total?: unknown },
+    ),
     awbExistent: existent ? { numar: existent.awb_number, emagId: existent.emag_id } : null,
     locker: brut.details?.locker_name ?? brut.details?.locker_id ?? null,
     /* ⚠ PE ACELAȘI DRUM, fără o a doua chemare din modal. Formularul cerea deja
@@ -2577,33 +2616,70 @@ export async function propuneInCampanieEmag(
   if (!ctx) return { error: "Contul eMAG nu este conectat." };
 
   /*
-   * ⚠ Prețul se ia din PRODUS și se trece prin `pretFaraTva`, nu din `emag_offers`.
-   * Rândul nostru nu ține prețul: ține identitatea ofertei. Citit de acolo, ar fi
-   * ieșit `undefined` și fiecare ofertă ar fi fost sărită cu „n-are preț" — un ecran
-   * care raportează zero, fără nicio eroare.
+   * ═══ ⚠ PREȚUL ȘI STOCUL VIN DIN `oferteUsoare`, NU DIN `products` ═══
+   *
+   * Prima formă lua `products.price` și `products.stock_quantity` pentru TOATE
+   * rândurile, inclusiv cele cu `variant_title`. Adică prețul PRODUSULUI pentru
+   * fiecare variantă.
+   *
+   * Costul, măsurat pe date reale: la produsele venite din importul eMAG,
+   * `products.price` e ANUME cel mai MIC dintre combinații — vezi `import-produse.ts`,
+   * unde fișa spune „de la X lei". Deci un produs cu S la 100 și XXL la 300 are
+   * `price = 100`, iar o campanie de −20% ar fi trimis XXL cu 65,57 lei net în loc de
+   * 198,35. Se vinde XXL la o treime din preț.
+   *
+   * Și mai rău: `post_campaign_sale_price` primea același preț greșit — deci după
+   * campanie eMAG ar fi lăsat XXL definitiv la prețul lui S. eMAG acceptă tot: sunt
+   * numere valide, în schema lor. Niciun mesaj, nicăieri.
+   *
+   * ⚠ Se folosește CHIAR funcția care trimite. Aceeași regulă ca la derivă: un calcul
+   * paralel al prețului rămâne în urmă la prima schimbare, iar aici „în urmă" înseamnă
+   * marfă vândută sub cost.
    */
   const { data: randuri } = await admin.from("emag_offers")
-    .select("emag_id, variant_title, products(price, stock_quantity)")
+    .select("emag_id, variant_title, product_id")
     .eq("business_id", businessId)
     .eq("status", "live" satisfies StareOferta)
     .eq("auto_sync", true)
     .not("product_id", "is", null)
     .limit(OFERTE_PE_PROPUNERE);
 
-  type Rand = {
-    emag_id: number; variant_title: string | null;
-    products: { price: number | null; stock_quantity: number | null }
-      | { price: number | null; stock_quantity: number | null }[] | null;
-  };
+  type Rand = { emag_id: number; variant_title: string | null; product_id: string | null };
+  const brute = (randuri ?? []) as Rand[];
 
-  const oferte: OfertaPentruCampanie[] = ((randuri ?? []) as Rand[]).map((r) => {
-    const p = Array.isArray(r.products) ? r.products[0] : r.products;
-    return {
-      emagId: r.emag_id,
-      pretNet: pretFaraTva(Number(p?.price ?? 0), ctx.vatRate, ctx.pricesIncludeVat),
-      stoc: Number(p?.stock_quantity ?? 0) || 0,
-    };
-  });
+  /* Ofertele se grupează pe produs: prețul unei variante se naște din combinația ei. */
+  const peProdus = new Map<string, Rand[]>();
+  for (const r of brute) {
+    if (!r.product_id) continue;
+    const lista = peProdus.get(r.product_id);
+    if (lista) lista.push(r); else peProdus.set(r.product_id, [r]);
+  }
+
+  const oferte: OfertaPentruCampanie[] = [];
+  for (const bucata of bucatiDeIduri([...peProdus.keys()])) {
+    const { data: produse, error: eProduse } = await admin.from("products")
+      .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, page_sections")
+      .eq("business_id", businessId).in("id", bucata);
+    if (eProduse) return { error: eProduse.message };
+
+    for (const produs of (produse ?? []) as ProdusDeCartografiat[]) {
+      const aleLui = peProdus.get(produs.id) ?? [];
+      const amTrimite = oferteUsoare(
+        produs,
+        magazinDin(ctx, produs),
+        aleLui.map((r) => ({ variant_title: r.variant_title, emag_id: r.emag_id })),
+      );
+      for (const o of amTrimite) {
+        /* `sale_price` de acolo e DEJA fără TVA — chiar valoarea care pleacă la eMAG. */
+        if (o.sale_price == null) continue;
+        oferte.push({
+          emagId: o.id,
+          pretNet: o.sale_price,
+          stoc: o.stock?.[0]?.value ?? 0,
+        });
+      }
+    }
+  }
 
   if (oferte.length === 0) {
     return { error: "N-ai nicio ofertă care se vinde pe eMAG. Publică întâi produsele." };

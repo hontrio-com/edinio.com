@@ -55,6 +55,14 @@ interface RandOfertaLocal {
   ean: string | null;
   auto_sync: boolean;
   last_synced_at: string | null;
+  /**
+   * `false` = oferta a fost PRELUATA din contul lor la import.
+   *
+   * ⚠ E singurul semn ca oferta EXISTA la eMAG fara ca noi s-o fi trimis vreodata.
+   * `last_synced_at` nu spune asta: el inseamna „cand am trimis NOI", si e gol pentru
+   * tot ce s-a importat.
+   */
+  creat_de_edinio: boolean;
 }
 
 export interface RezultatTrimitere {
@@ -91,7 +99,26 @@ export async function trimiteElement(
   }
 
   const randuri = await citesteRandurile(admin, ctx.businessId, productId);
-  const existaLaEmag = randuri.some((r) => r.last_synced_at != null);
+  /*
+   * ═══ ⚠ O OFERTA PRELUATA EXISTA LA EI, CHIAR DACA N-AM TRIMIS-O NOI NICIODATA ═══
+   *
+   * Forma dinainte se uita doar la `last_synced_at`. Dar importul nu-l scrie — si nici
+   * n-ar trebui: acela inseamna „cand am trimis NOI".
+   *
+   * Deci fiecare oferta preluata din contul comerciantului iesea cu
+   * `existaLaEmag: false`, iar `rutaDeTrimitere` intorcea „nimic" la RETRAGERE. Adica:
+   * stergi un produs importat din magazin, elementul intra in coada, iese „sarit", se
+   * sterge, se numara la „duse" — si oferta ramane la VANZARE pe eMAG.
+   *
+   * Comerciantul vede produsul disparut din Edinio si comenzi care continua sa vina
+   * pentru marfa pe care n-o mai are. Niciun mesaj de eroare, nicaieri.
+   *
+   * `creat_de_edinio: false` e scris de import (`import-run.ts`) si numai de el; ce
+   * facem noi primeste `true`. Deci e semnul exact.
+   */
+  const existaLaEmag = randuri.some(
+    (r) => r.last_synced_at != null || r.creat_de_edinio === false,
+  );
   const autoSync = randuri.length === 0 ? true : randuri.every((r) => r.auto_sync);
 
   const ruta = rutaDeTrimitere({
@@ -151,7 +178,7 @@ async function citesteRandurile(
   admin: Admin, businessId: string, productId: string,
 ): Promise<RandOfertaLocal[]> {
   const { data } = await admin.from("emag_offers")
-    .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at")
+    .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at, creat_de_edinio")
     .eq("business_id", businessId).eq("product_id", productId)
     .order("emag_id", { ascending: true });
   return (data as RandOfertaLocal[] | null) ?? [];

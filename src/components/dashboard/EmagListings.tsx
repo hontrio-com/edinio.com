@@ -309,8 +309,37 @@ function RandOferta({
         toast.error(r.error);
         return;
       }
-      /* ⚠ „Oprit", nu „șters": eMAG NU are ștergere de ofertă. Spus greșit, omul s-ar
-         speria când o vede tot în contul lui. */
+      /*
+       * ═══ ⚠ VERDICTUL SE CITESTE. TOATE PATRU. ═══
+       *
+       * `retrageDePeEmag` intoarce `{ verdict, mesaj }` pentru ORICE verdict — numai
+       * exceptiile ies cu `{ error }`. Forma dinainte verifica doar `"error" in r` si
+       * apoi spunea verde „Oferta a fost oprită", indiferent ce raspunsesera ei.
+       *
+       * Deci: apesi „Retrage" pe un produs epuizat, eMAG raspunde 429 sau refuza
+       * `offer/save`, iar ecranul iti spune ca s-a oprit. Oferta ramane VANDABILA,
+       * comenzile continua sa intre pentru marfa care nu mai exista, si nimeni nu
+       * reia retragerea — butonul nu pune nimic in coada.
+       *
+       * Raspuns de succes, efect zero: chiar forma incidentului VetDepo. Iar functia
+       * sora de deasupra, `trimiteAcum`, trata deja corect toate patru — deci
+       * contractul era stiut, doar ca aici nu s-a aplicat.
+       */
+      if (r.verdict === "trecatoare") {
+        toast.warning(r.mesaj || "eMAG n-a răspuns. Nu s-a oprit nimic — mai încearcă.");
+        return;
+      }
+      if (r.verdict === "refuz" || r.verdict === "chei") {
+        toast.error(r.mesaj || "eMAG a refuzat retragerea. Oferta e în continuare la vânzare.");
+        return;
+      }
+      if (r.verdict === "sarit") {
+        toast.info(r.mesaj || "Nu era nimic de retras.");
+        laSchimbare();
+        return;
+      }
+      /* ⚠ „Oprit", nu „sters": eMAG NU are stergere de oferta. Spus gresit, omul s-ar
+         speria cand o vede tot in contul lui. */
       toast.success("Oferta a fost oprită de la vânzare. Rămâne în contul tău eMAG.");
       laSchimbare();
     });

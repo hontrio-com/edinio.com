@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { alegereaCurierului, contPotrivit, primulAwb, monedaPentruAwb} from "./awb";
 import { dimensiuniPropuse } from "./colete";
-import { poateAwbRetur, trecerePermisa, treceriPosibile } from "./rma";
+import { poateAwbRetur, trecerePermisa, treceriPosibile, incarcaturaRetur, CAMPURI_CERUTE_LA_RETUR} from "./rma";
 import { citesteTinta } from "./campanii";
 import {
   cePiedicaAreCampania, pregatestePropunerile, REDUCERE_MAXIMA, REDUCERE_MINIMA,
@@ -440,4 +440,55 @@ test("eMAG AWB: moneda se trimite doar cand e una pe care o accepta", () => {
   assert.equal(monedaPentruAwb("hu"), "HUF");
   assert.equal(monedaPentruAwb("bg"), "EUR", "din 2026 Bulgaria e pe EUR");
   assert.equal(monedaPentruAwb(undefined), undefined, "fara tara, se omite campul");
+});
+
+/* ── Incarcatura de retur, dupa auditul din 24.08.2026 ─────────────────────── */
+
+const RETUR_INTREG = {
+  emag_id: 900, order_id: 5001, type: 3, customer_name: "Ion Popescu",
+  customer_phone: "0712345678", pickup_locality_id: 1234, pickup_method: 2,
+  return_type: 3, return_reason: 21, date: "2026-08-20 10:00:00",
+  products: [{ id: 1, product_id: 77, quantity: 1, product_name: "X", return_reason: 21 }],
+};
+
+test("eMAG retur: se trimite TOT returul, nu doar starea", () => {
+  /*
+   * ═══ CE TRIMITEAM, SI CE CER EI ═══
+   *
+   * Trimiteam `{ emag_id, request_status }`. `RMASave` cere ZECE campuri obligatorii:
+   * `order_id`, `type`, `customer_name`, `customer_phone`, `pickup_locality_id`,
+   * `pickup_method`, `return_type`, `return_reason`, `date`.
+   *
+   * Deci fiecare apasare de „Acceptă returul" pleca incompleta. Comerciantul vedea
+   * starea schimbata la NOI si nimic schimbat la ei.
+   *
+   * ⚠ Regula era deja scrisa in casa, la `salveazaComenzi`: se trimit toate campurile
+   * citite initial, nu doar cele schimbate. Nu fusese urmata si aici.
+   */
+  const r = incarcaturaRetur(RETUR_INTREG, 3);
+  assert.equal(r.fel, "gata");
+  if (r.fel !== "gata") return;
+  for (const c of CAMPURI_CERUTE_LA_RETUR) {
+    assert.ok(r.date[c] !== undefined, `lipseste ${c}`);
+  }
+  assert.equal(r.date.request_status, 3, "starea ceruta");
+  assert.deepEqual(r.date.products, RETUR_INTREG.products, "liniile raman");
+});
+
+test("eMAG retur: cand lipseste un camp cerut, se OPRESTE inainte de eMAG", () => {
+  /* ⚠ Trimisa oricum, cererea s-ar fi intors cu un mesaj despre un camp, iar omul
+     n-avea de unde sa stie ca lipsa vine din ce ne-au trimis EI la citire. */
+  const fara: Record<string, unknown> = { ...RETUR_INTREG };
+  delete fara.pickup_locality_id;
+  const r = incarcaturaRetur(fara, 3);
+  assert.equal(r.fel, "lipsesc");
+  if (r.fel !== "lipsesc") return;
+  assert.deepEqual(r.campuri, ["pickup_locality_id"]);
+});
+
+test("eMAG retur: un `raw` gol nu produce o cerere goala", () => {
+  for (const gol of [null, undefined, {}, "text", 7]) {
+    const r = incarcaturaRetur(gol, 3);
+    assert.equal(r.fel, "lipsesc", `${JSON.stringify(gol)} trebuie oprit`);
+  }
 });

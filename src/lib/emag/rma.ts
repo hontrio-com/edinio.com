@@ -210,6 +210,48 @@ async function scrieReturul(admin: Db, ctx: ContextEmag, ret: EmagRetur): Promis
 export type RezultatRetur = { fel: "schimbat" } | { fel: "esec"; mesaj: string };
 
 /**
+ * Campurile pe care `rma/save` le cere OBLIGATORIU, citate din schema lor.
+ *
+ * ⚠ Sunt zece. Pana pe 24.08.2026 trimiteam doua.
+ */
+export const CAMPURI_CERUTE_LA_RETUR = [
+  "emag_id", "order_id", "type", "customer_name", "customer_phone",
+  "pickup_locality_id", "pickup_method", "return_type", "return_reason", "date",
+] as const;
+
+/**
+ * Incarcatura pentru `rma/save`, facuta din returul asa cum ni l-au dat ei.
+ *
+ * ═══ ⚠ SE TRIMITE TOT, NU DOAR CE SE SCHIMBA (audit 24.08.2026) ═══
+ *
+ * Forma dinainte trimitea `{ emag_id, request_status }` si atat. Dar `RMASave` cere
+ * ZECE campuri obligatorii: `order_id`, `type`, `customer_name`, `customer_phone`,
+ * `pickup_locality_id`, `pickup_method`, `return_type`, `return_reason`, `date`.
+ *
+ * Deci fiecare apasare de „Acceptă returul" sau „Refuză returul" pleca incompleta.
+ * Comerciantul vedea starea schimbata la NOI — o scriem local imediat dupa — si
+ * nimic schimbat la ei. Adica exact tiparul care ne-a costat cel mai mult azi.
+ *
+ * ⚠ Regula era deja scrisa in casa, la `salveazaComenzi`: „Se trimit TOATE campurile
+ * citite initial, nu doar cele schimbate." Nu fusese urmata si la retururi.
+ *
+ * ⚠ Se refuza INAINTE de a chema eMAG cand lipseste ceva. Trimisa oricum, cererea
+ * s-ar fi intors cu un mesaj despre un camp, iar comerciantul n-avea de unde sa stie
+ * ca lipsa vine din ce ne-au trimis EI la citire.
+ */
+export function incarcaturaRetur(
+  raw: unknown, inStare: number,
+): { fel: "gata"; date: Record<string, unknown> } | { fel: "lipsesc"; campuri: string[] } {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const lipsesc = CAMPURI_CERUTE_LA_RETUR.filter((c) => {
+    const v = r[c];
+    return v === undefined || v === null || v === "";
+  });
+  if (lipsesc.length > 0) return { fel: "lipsesc", campuri: [...lipsesc] };
+  return { fel: "gata", date: { ...r, request_status: inStare } };
+}
+
+/**
  * Trece returul intr-o alta stare.
  *
  * ⚠ SE VERIFICA INTAI CE STIM NOI, si abia apoi se cheama eMAG. Doua motive: nu
@@ -220,9 +262,10 @@ export async function schimbaStareaReturului(
   admin: Db, ctx: ContextEmag, emagRmaId: number, inStare: number,
 ): Promise<RezultatRetur> {
   const { data } = await admin.from("emag_rma")
-    .select("request_status").eq("business_id", ctx.businessId).eq("emag_rma_id", emagRmaId).maybeSingle();
+    .select("request_status, raw").eq("business_id", ctx.businessId).eq("emag_rma_id", emagRmaId).maybeSingle();
 
-  const acum = (data as { request_status: number | null } | null)?.request_status ?? null;
+  const rand = data as { request_status: number | null; raw: unknown } | null;
+  const acum = rand?.request_status ?? null;
   if (!trecerePermisa(acum, inStare)) {
     return {
       fel: "esec",
@@ -232,7 +275,18 @@ export async function schimbaStareaReturului(
     };
   }
 
-  const r = await salveazaRetururi(ctx.auth, [{ emag_id: emagRmaId, request_status: inStare } as EmagRetur]);
+  /* ⚠ Tot returul, nu doar starea. Vezi `incarcaturaRetur`. */
+  const incarcatura = incarcaturaRetur(rand?.raw, inStare);
+  if (incarcatura.fel === "lipsesc") {
+    return {
+      fel: "esec",
+      mesaj:
+        "Returul nu se poate trimite înapoi la eMAG: din ce ne-au trimis ei lipsesc " +
+        `${incarcatura.campuri.join(", ")}. Reîmprospătează lista de retururi și încearcă din nou.`,
+    };
+  }
+
+  const r = await salveazaRetururi(ctx.auth, [incarcatura.date as unknown as EmagRetur]);
   if (isEmagError(r)) return { fel: "esec", mesaj: r.error };
 
   await admin.from("emag_rma")

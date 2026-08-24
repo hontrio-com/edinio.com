@@ -14,7 +14,9 @@ import type { EmagComanda } from "./types";
  */
 
 const P1 = "11111111-1111-1111-1111-111111111111";
-const HARTA = new Map([[501, { product_id: P1, variant_title: "M" }]]);
+/* ⚠ `part_number` face parte din harta: legarea cere DOUA semne, nu doar id-ul.
+   Vezi `chiarEOfertaNoastra` — id-urile de ofertă de la ei se pot recicla. */
+const HARTA = new Map([[501, { product_id: P1, variant_title: "M", part_number: "SKU1" }]]);
 
 function comanda(x: Partial<EmagComanda>): EmagComanda {
   return { id: 1, status: 1, ...x };
@@ -335,7 +337,7 @@ test("eMAG comenzi: `product_id` vine ca SIR si trebuie sa lege linia", () => {
    * ⚠ Si nu se repara singur: `stoc_marketplace_la` se scrie oricum, deci a doua
    * trecere primeste „deja consumat". Zero randuri in `error_logs`.
    */
-  const harta = new Map([[433, { product_id: "uuid-produs", variant_title: null }]]);
+  const harta = new Map([[433, { product_id: "uuid-produs", variant_title: null, part_number: null }]]);
   const linii = liniiEdinio(
     [{ status: 1, product_id: "433" as unknown as number, quantity: 2, sale_price: 100, name: "X" }] as never,
     harta, 21,
@@ -450,4 +452,50 @@ test("gruparea liniilor e aceeasi la consum si la ajustare", async () => {
   const sursa = readFileSync("src/lib/emag/orders.ts", "utf8");
   const cate = (sursa.match(/grupeazaLinii\(linii\)/g) ?? []).length;
   assert.equal(cate, 2, "amandoua caile trebuie sa treaca prin aceeasi grupare");
+});
+
+/* ── Id reciclat: doua produse, acelasi id (masurat 24.08.2026) ────────────── */
+
+test("o linie cu ALT cod de produs NU se leaga, oricat de bine se potriveste id-ul", () => {
+  /*
+   * ═══ MASURAT PE CONTUL REAL ═══
+   *
+   * Comanda 500910315, din 23.08, e pentru „Vas wc Mondial scurgere cu orizontala",
+   * `part_number: "cilmondial"`, `product_id: "433"`. Iar `emag_offers` are la
+   * `emag_id = 433` produsul „Calibra Dog Life Adult Large Breed Chicken 12 kg", cu
+   * `part_number: "106027L"`. Acelasi id, doua produse: comerciantul l-a refolosit.
+   *
+   * ⚠ Legata numai dupa id, comanda pentru un vas de WC ar fi scazut stocul de hrana
+   * pentru caini. Marfa buna ar fi disparut din inventar, cea vanduta ar fi ramas
+   * socotita pe raft, si nimic n-ar fi dat eroare: potrivirea „reusise".
+   */
+  const l = liniiEdinio(
+    [{ id: 1, product_id: 501, status: 1, quantity: 1, sale_price: 100, part_number: "altceva" }],
+    HARTA, 21,
+  );
+  assert.equal(l.length, 1, "linia RAMANE in comanda");
+  assert.equal(l[0].product_id, null, "dar nu se leaga de produsul gresit");
+  assert.equal(l[0].emag_product_id, 501, "id-ul lor se pastreaza, ca sa se poata cauta");
+});
+
+test("acelasi cod, scris cu alte semne, tot se leaga", () => {
+  /* ⚠ eMAG isi scoate singur SPATIILE, virgula si punctul-virgula din `part_number` —
+     si numai pe acelea. Comparate ca atare, „SKU1" si „SKU 1" ar parea coduri diferite,
+     si am fi rupt legarea pentru comenzi bune ca sa aparam un caz rar.
+     ⚠ Cratima NU se scoate: „SKU-1" si „SKU1" chiar sunt coduri diferite la ei. */
+  const l = liniiEdinio(
+    [{ id: 1, product_id: 501, status: 1, quantity: 1, sale_price: 100, part_number: "SKU 1" }],
+    HARTA, 21,
+  );
+  assert.equal(l[0].product_id, P1);
+});
+
+test("cand unul din coduri lipseste, se leaga dupa id", () => {
+  /* ⚠ La ofertele publicate de noi codul e mereu acelasi; cerand dovada de la ambele
+     parti, am fi rupt calea obisnuita. Lipsa nu e o nepotrivire. */
+  const l = liniiEdinio(
+    [{ id: 1, product_id: 501, status: 1, quantity: 1, sale_price: 100 }],
+    HARTA, 21,
+  );
+  assert.equal(l[0].product_id, P1);
 });

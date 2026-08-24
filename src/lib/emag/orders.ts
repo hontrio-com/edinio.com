@@ -311,7 +311,7 @@ export interface LinieEdinio {
  */
 export function liniiEdinio(
   linii: EmagLinieComanda[] | undefined,
-  dupaEmagId: Map<number, { product_id: string | null; variant_title: string | null }>,
+  dupaEmagId: Map<number, { product_id: string | null; variant_title: string | null; part_number: string | null }>,
   cotaProcente: number,
 ): LinieEdinio[] {
   const cota = Number.isFinite(cotaProcente) ? cotaProcente : 0;
@@ -321,7 +321,15 @@ export function liniiEdinio(
     /* ⚠ Prin aceeasi poarta ca la `hartaOfertelor`: ei trimit sirul `"433"`, iar cheia
        hartii e numarul 433. Vezi nota de acolo pentru ce a costat. */
     const idLor = intregDeLaEi(l.product_id);
-    const legat = idLor != null ? dupaEmagId.get(idLor) : undefined;
+    const gasit = idLor != null ? dupaEmagId.get(idLor) : undefined;
+
+    /*
+     * ⚠ AL DOILEA SEMN, fiindca id-urile lor se pot recicla. Vezi `chiarEOfertaNoastra`:
+     * pe contul real, `product_id: "433"` a insemnat un vas de WC intr-o zi si hrana
+     * pentru caini in alta. Legata numai dupa id, comanda ar fi scazut stocul gresit.
+     */
+    const potrivit = gasit && chiarEOfertaNoastra(l.part_number, gasit.part_number);
+    const legat = potrivit ? gasit : undefined;
     out.push({
       product_id: legat?.product_id ?? null,
       variant_title: legat?.variant_title ?? null,
@@ -1132,7 +1140,7 @@ async function poateFactura(admin: Db, ctx: ContextEmag, orderId: string, status
  */
 async function hartaOfertelor(
   admin: Db, businessId: string, c: EmagComanda,
-): Promise<Map<number, { product_id: string | null; variant_title: string | null }>> {
+): Promise<Map<number, { product_id: string | null; variant_title: string | null; part_number: string | null }>> {
   /*
    * ═══ ⚠ EI TRIMIT `product_id` CA SIR, NU CA NUMAR (masurat, 24.08.2026) ═══
    *
@@ -1154,7 +1162,7 @@ async function hartaOfertelor(
   const ids = [...new Set(
     (c.products ?? []).map((l) => intregDeLaEi(l?.product_id)).filter((x): x is number => x != null),
   )];
-  const harta = new Map<number, { product_id: string | null; variant_title: string | null }>();
+  const harta = new Map<number, { product_id: string | null; variant_title: string | null; part_number: string | null }>();
   if (ids.length === 0) return harta;
 
   /*
@@ -1170,13 +1178,63 @@ async function hartaOfertelor(
    * opreasca si sa intrebe.
    */
   const { data } = await admin.from("emag_offers")
-    .select("emag_id, product_id, variant_title")
+    .select("emag_id, product_id, variant_title, part_number")
     .eq("business_id", businessId).in("emag_id", ids);
 
-  for (const r of (data ?? []) as { emag_id: number; product_id: string | null; variant_title: string | null }[]) {
-    harta.set(r.emag_id, { product_id: r.product_id, variant_title: r.variant_title });
+  for (const r of (data ?? []) as {
+    emag_id: number; product_id: string | null; variant_title: string | null; part_number: string | null;
+  }[]) {
+    harta.set(r.emag_id, {
+      product_id: r.product_id, variant_title: r.variant_title, part_number: r.part_number,
+    });
   }
   return harta;
+}
+
+/**
+ * Codul de produs, adus la o forma in care se poate compara.
+ *
+ * ⚠ eMAG isi scoate singur spatiile, virgula si punctul-virgula din `part_number` — vezi
+ * `mapping.ts`. Deci ce trimitem noi si ce ne intorc ei pot diferi prin exact acele semne,
+ * iar comparate ca atare, doua coduri identice ar parea diferite si legarea s-ar rupe
+ * pentru comenzi bune.
+ */
+function codDeComparat(v: unknown): string {
+  return typeof v === "string" ? v.replace(/[\s,;]/g, "").toLowerCase() : "";
+}
+
+/**
+ * E chiar oferta noastra, sau doar un id care s-a nimerit la fel?
+ *
+ * ═══ ⚠ ID-URILE LOR SE POT RECICLA (masurat, 24.08.2026) ═══
+ *
+ * Pe contul real: comanda 500910315, din 23.08, e pentru „Vas wc Mondial scurgere cu
+ * orizontala", `part_number: "cilmondial"`, `product_id: "433"`. Iar `emag_offers` are
+ * la `emag_id = 433` produsul „Calibra Dog Life Adult Large Breed Chicken 12 kg", cu
+ * `part_number: "106027L"`.
+ *
+ * Acelasi id, doua produse diferite: comerciantul a refolosit id-ul de ofertă la ei.
+ *
+ * ⚠ CE AR FI COSTAT: legata numai dupa id, comanda pentru un vas de WC ar fi scazut
+ * stocul de hrana pentru caini. Marfa buna ar fi disparut din inventar, iar cea vanduta
+ * ar fi ramas socotita pe raft. Si nimic n-ar fi dat eroare — potrivirea „reusise".
+ *
+ * ⚠ La indoiala se refuza legarea, nu se ghiceste. O linie nelegata inseamna „stocul nu
+ * se scade", ceea ce se vede si se repara. O linie legata GRESIT scade stocul altui
+ * produs, si aia nu se mai vede niciodata.
+ *
+ * ⚠ Cand unul din coduri lipseste, se leaga: la ofertele publicate de noi codul e mereu
+ * acelasi, iar cerand dovada de la ambele parti am fi rupt legarea pentru comenzile
+ * obisnuite — adica am fi stricat calea buna ca sa aparam un caz rar.
+ */
+export function chiarEOfertaNoastra(
+  codulLor: unknown,
+  codulNostru: string | null | undefined,
+): boolean {
+  const a = codDeComparat(codulLor);
+  const b = codDeComparat(codulNostru);
+  if (a === "" || b === "") return true;
+  return a === b;
 }
 
 /**

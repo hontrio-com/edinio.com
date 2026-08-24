@@ -1985,7 +1985,39 @@ begin
    where n.nspname = any(c_scheme) and x.privilege_type = 'EXECUTE'
      and a.grantee in ('anon', 'authenticated', 'service_role');
   o := o || E'-- ── GRANTURI PE FUNCTII ───────────────────────────────────\n' || p || E'\n\n'
-         || E'notify pgrst, ''reload schema'';\n';
+;
+
+  /*
+   * ⚠ REVOCARILE DE LA PUBLIC. Fara ele, restore-ul redeschide tot (25.08.2026).
+   *
+   * Postgres da EXECUTE lui PUBLIC din oficiu la ORICE functie nou creata. Generatorul
+   * serializa doar granturile catre anon, authenticated si service_role, deci pe o baza
+   * NOUA — refacuta din prelude + baseline — fiecare functie redevenea publica.
+   *
+   * Masurat pe productia de azi: 64 de functii SECURITY DEFINER ar fi fost executabile
+   * de oricine dupa un restore. Productia era reparata; refacerea ei nu.
+   *
+   * ⚠ Se emite revoke NUMAI pentru functiile care in productie chiar NU au PUBLIC. Cele
+   * 37 care il au — is_admin, chemata din politicile RLS, si celelalte — raman cum sunt.
+   * Baseline-ul reproduce realitatea, nu o politica inventata de generator.
+   */
+  select coalesce(string_agg(format('revoke execute on function %I.%I(%s) from public;',
+           n2.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid)),
+           E'\n' order by n2.nspname, pr.proname), '')
+    into p from pg_proc pr join pg_namespace n2 on n2.oid = pr.pronamespace
+   where n2.nspname = any(c_scheme)
+     and pr.prokind = 'f'
+     and not exists (
+       select 1 from aclexplode(coalesce(pr.proacl, acldefault('f', pr.proowner))) x
+        where x.privilege_type = 'EXECUTE' and x.grantee = 0
+     );
+
+  o := o || E'-- ── REVOCARI DE LA PUBLIC ─────────────────────────────────\n'
+         || E'-- Postgres da EXECUTE lui PUBLIC din oficiu la orice functie noua.\n'
+         || E'-- Fara randurile astea, un restore redeschide tot ce s-a inchis.\n'
+         || p || E'\n\n';
+
+  o := o || E'notify pgrst, ''reload schema'';\n';
   return o;
 end;
 $function$
@@ -7710,5 +7742,76 @@ grant execute on function public.update_tool_avg_rating() to service_role;
 grant execute on function public.update_updated_at_column() to anon;
 grant execute on function public.update_updated_at_column() to authenticated;
 grant execute on function public.update_updated_at_column() to service_role;
+
+-- ── REVOCARI DE LA PUBLIC ─────────────────────────────────
+-- Postgres da EXECUTE lui PUBLIC din oficiu la orice functie noua.
+-- Fara randurile astea, un restore redeschide tot ce s-a inchis.
+revoke execute on function privat.cheie_integrari() from public;
+revoke execute on function privat.cripteaza(p_val text) from public;
+revoke execute on function privat.cripteaza_rand(p_rand jsonb) from public;
+revoke execute on function privat.decripteaza(p_val text) from public;
+revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.agregeaza_analitice(p_zile integer) from public;
+revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid) from public;
+revoke execute on function public.blocheaza_escaladare_users_profile() from public;
+revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
+revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;
+revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
+revoke execute on function public.catalog_fara_stoc(p_id uuid) from public;
+revoke execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) from public;
+revoke execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) from public;
+revoke execute on function public.catalog_reface_cuvinte(p_business uuid) from public;
+revoke execute on function public.catalog_scrie_rezumat(p_randuri jsonb) from public;
+revoke execute on function public.catalog_verifica(p_esantion integer) from public;
+revoke execute on function public.categorii_ascunse(p_business uuid) from public;
+revoke execute on function public.claim_discount_use(p_discount_id uuid) from public;
+revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) from public;
+revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) from public;
+revoke execute on function public.curata_limite() from public;
+revoke execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) from public;
+revoke execute on function public.decrement_stock_batch(p_items jsonb) from public;
+revoke execute on function public.decrement_variant_stock_batch(p_items jsonb) from public;
+revoke execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
+revoke execute on function public.elibereaza_stoc_batch(p_items jsonb) from public;
+revoke execute on function public.elibereaza_stoc_comanda(p_order_id uuid) from public;
+revoke execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.emag_familie_noua() from public;
+revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
+revoke execute on function public.genereaza_schema_baseline() from public;
+revoke execute on function public.handle_new_user() from public;
+revoke execute on function public.handle_support_message_insert() from public;
+revoke execute on function public.incheie_operatie_externa(p_id uuid, p_business_id uuid, p_stare text, p_referinta_externa text, p_detalii jsonb, p_eroare text) from public;
+revoke execute on function public.increment_discount_uses(p_discount_id uuid) from public;
+revoke execute on function public.increment_offer_stats(p_offer_id uuid, p_impressions integer, p_conversions integer, p_revenue numeric) from public;
+revoke execute on function public.increment_referral_balance(p_user_id uuid, p_amount integer) from public;
+revoke execute on function public.increment_tool_views(tool_id uuid) from public;
+revoke execute on function public.jsonb_merge_config(p_business_id uuid, p_column text, p_patch jsonb) from public;
+revoke execute on function public.marcheaza_operatie_anulata(p_business_id uuid, p_cheie text) from public;
+revoke execute on function public.mark_payout_complete(p_user_id uuid, p_amount integer) from public;
+revoke execute on function public.next_order_number(p_business_id uuid) from public;
+revoke execute on function public.numar_produse_si_comenzi() from public;
+revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
+revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
+revoke execute on function public.proba_stoc() from public;
+revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
+revoke execute on function public.release_discount_use(p_discount_id uuid) from public;
+revoke execute on function public.release_order_discount(p_order_id uuid) from public;
+revoke execute on function public.repretuieste_pachetele_cu(p_component_id uuid) from public;
+revoke execute on function public.reserve_payout_balance(p_user_id uuid, p_amount integer) from public;
+revoke execute on function public.reseteaza_limita(p_cheie text) from public;
+revoke execute on function public.restaureaza_variante_batch(p_items jsonb) from public;
+revoke execute on function public.revendica_din_coada(p_coada text, p_limita integer, p_lease interval) from public;
+revoke execute on function public.revendica_stoc_batch(p_items jsonb) from public;
+revoke execute on function public.revendica_stoc_comanda(p_order_id uuid) from public;
+revoke execute on function public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text) from public;
+revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
+revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
+revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;
+revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
+revoke execute on function public.update_support_ticket_updated_at() from public;
 
 notify pgrst, 'reload schema';

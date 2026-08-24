@@ -39,6 +39,18 @@ const PUBLICE_DINADINS: Record<string, string> = {
   catalog_cauta: "cautarea din vitrina publica, fara autentificare",
   catalog_pagina: "paginarea vitrinei publice",
   catalog_randuri: "randurile vitrinei publice",
+  /*
+   * ⚠ VERIFICAT INAINTE SA FIE TRECUTA AICI, si aproape am inchis-o gresit.
+   *
+   * E chemata din `privat.store_settings_upd()` — declansatorul `INSTEAD OF UPDATE` al
+   * vederii `public.store_settings`. Iar acela NU e `SECURITY DEFINER`, deci ruleaza sub
+   * rolul celui care face UPDATE-ul. Fara EXECUTE pentru PUBLIC, orice salvare de setari
+   * facuta de un utilizator autentificat ar pica, si secretele n-ar mai fi pastrate.
+   *
+   * ⚠ Si nu expune nimic: e o transformare PURA. Primeste `vechi` si `nou` ca argumente
+   * si le imbina; secretele vin din ce a trimis apelantul, nu din datele altcuiva.
+   */
+  pazeste_secretele: "chemata din declansatorul vederii, care ruleaza sub rolul apelantului",
 };
 
 const NL = String.fromCharCode(10);
@@ -154,4 +166,71 @@ test("ajustarea stocului cere `business_id` si verifica proprietarul produselor"
     "produsele trebuie verificate ca sunt ale magazinului: `consuma_stoc_marketplace` "
     + "face `update products … where id = pid`, fara nicio legatura cu business_id.",
   );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REFACEREA BAZEI NU ARE VOIE SA REDESCHIDA CE S-A INCHIS (25.08.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ Productia era reparata; REFACEREA ei nu.
+
+   Generatorul de baseline serializa doar granturile catre `anon`, `authenticated` si
+   `service_role`. Iar Postgres da EXECUTE lui PUBLIC din oficiu la orice functie nou
+   creata. Deci pe o baza refacuta din `prelude + baseline`, fiecare functie redevenea
+   executabila de oricine.
+
+   Masurat pe productia zilei: **64 de functii SECURITY DEFINER** ar fi fost publice dupa
+   un restore, dintre care si cele doua ale integrarii eMAG, inchise cu o zi inainte.
+
+   ⚠ Nu se vedea in niciun fel: `--check` compara baseline-ul cu productia si trecea,
+   fiindca amandoua erau generate de acelasi generator orb.
+*/
+
+/** Numele functiilor `SECURITY DEFINER` din baseline. */
+function functiiSecurityDefiner(baseline: string): string[] {
+  const nume: string[] = [];
+  const bucati = baseline.split("CREATE OR REPLACE FUNCTION ");
+  for (const b of bucati.slice(1)) {
+    const antet = b.slice(0, b.indexOf("AS $function$"));
+    if (!/SECURITY DEFINER/i.test(antet)) continue;
+    const m = b.match(/^(\w+)\.(\w+)\(/);
+    if (m) nume.push(`${m[1]}.${m[2]}`);
+  }
+  return [...new Set(nume)];
+}
+
+test("fiecare `security definer` isi revoca EXECUTE de la PUBLIC in baseline", () => {
+  /*
+   * ⚠ Se citeste din baseline fiindca ACOLO e problema: el e reteta din care se reface
+   * baza. Productia poate fi inchisa corect si refacerea sa deschida tot — chiar cazul
+   * gasit de auditul extern.
+   *
+   * ⚠ Cele care CHIAR trebuie sa fie publice se recunosc singure: generatorul emite
+   * `revoke` numai pentru functiile care in productie n-au PUBLIC. Deci daca o functie
+   * n-are nici revoke, nici motiv scris aici, e o gaura.
+   */
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const secdef = functiiSecurityDefiner(baseline);
+  assert.ok(secdef.length > 30, `prea putine functii gasite (${secdef.length}): proba nu citeste`);
+
+  const fara = secdef.filter((nume) => {
+    if (nume.split(".")[1] in PUBLICE_DINADINS) return false;
+    /* Declansatoarele nu se cheama prin PostgREST. */
+    if (nume.split(".")[1].startsWith("trg_")) return false;
+    return !baseline.includes(`revoke execute on function ${nume}(`);
+  });
+
+  assert.deepEqual(
+    fara, [],
+    "functii SECURITY DEFINER care, dupa un restore din baseline, ar fi executabile de "
+    + "oricine: Postgres da EXECUTE lui PUBLIC din oficiu, iar baseline-ul nu-l revoca.",
+  );
+});
+
+test("baseline-ul chiar contine revocari, nu doar granturi", () => {
+  /* ⚠ O proba care nu gaseste nimic trece intotdeauna. Aceeasi lectie ca mai sus. */
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const cate = baseline.split(String.fromCharCode(10))
+    .filter((l) => l.startsWith("revoke execute on function ")).length;
+  assert.ok(cate > 40, `numai ${cate} revocari in baseline: generatorul le-a pierdut`);
 });

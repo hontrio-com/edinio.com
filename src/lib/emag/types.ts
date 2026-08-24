@@ -40,7 +40,7 @@ export const EMAG_LIMBA: Record<EmagTara, string> = {
 /**
  * Raspunsul, identic pe toate rutele.
  *
- * ⚠ `isError: true` NU inseamna intotdeauna „nu s-a salvat". Documentatia lor o
+ * ⚠ `isError: true` NU inseamna intotdeauna „nu s-a salvat”. Documentatia lor o
  * spune limpede: la o eroare de DOCUMENTATIE pe `product_offer/save`, raspunsul e
  * `isError: true` dar oferta E SALVATA si procesata. Vezi `clasificaRaspuns` din
  * `errors.ts` — acolo e singurul loc unde se decide ce inseamna un raspuns.
@@ -182,7 +182,7 @@ export interface EmagProdusOferta {
 }
 
 /**
- * Incarcatura pentru `offer/save` — „light API".
+ * Incarcatura pentru `offer/save` — „light API”.
  *
  * ⚠ Nu poate crea nimic si nu poate atinge documentatia produsului. Exact de aia
  * e ruta potrivita pentru o schimbare de pret: la Trendyol, o schimbare de pret
@@ -525,7 +525,7 @@ export interface EmagComanda {
   is_storno?: boolean;
   /**
    * ⚠ Daca lista e NE-GOALA, AWB-ul trebuie emis pe unul dintre curierii din ea.
-   * `null` inseamna „oricare"; o lista goala nu are acelasi inteles.
+   * `null` inseamna „oricare”; o lista goala nu are acelasi inteles.
    */
   enforced_vendor_courier_accounts?: string[] | null;
   reason_cancellation?: number;
@@ -599,8 +599,8 @@ export const EMAG_TRECERI_RETUR: Record<number, readonly number[]> = {
  * Ce a cerut clientul cand a deschis returul.
  *
  * ⚠ ENUMERATE IN DOCUMENTATIA LOR, CUVANT CU CUVANT. Prima forma a comentariului din
- * `EmagRetur` scria „5 = altul"; e VOUCHER. Deosebirea conteaza: la voucher nu se
- * intorc bani, iar un ecran care ar fi scris „rambursare" l-ar fi pus pe comerciant sa
+ * `EmagRetur` scria „5 = altul”; e VOUCHER. Deosebirea conteaza: la voucher nu se
+ * intorc bani, iar un ecran care ar fi scris „rambursare” l-ar fi pus pe comerciant sa
  * caute un IBAN care nu exista.
  */
 export const EMAG_TIP_RETUR: Record<number, string> = {
@@ -614,8 +614,8 @@ export const EMAG_TIP_RETUR: Record<number, string> = {
 /**
  * Ce urmeaza sa faca comerciantul, pe fiecare fel de retur.
  *
- * ⚠ `null` INSEAMNA „NU STIU", si nu se ascunde sub un „nu". Un tip necunoscut — unul
- * nou la ei, sau lipsa cu totul — n-are voie sa arate ca „nu e nimic de facut": omul ar
+ * ⚠ `null` INSEAMNA „NU STIU”, si nu se ascunde sub un „nu”. Un tip necunoscut — unul
+ * nou la ei, sau lipsa cu totul — n-are voie sa arate ca „nu e nimic de facut”: omul ar
  * fi inchis returul crezand ca s-a rezolvat.
  */
 export function ceUrmeazaLaRetur(tip: number | null | undefined): string | null {
@@ -654,7 +654,7 @@ export interface EmagRetur {
   pickup_method?: 1 | 2 | 3;
   return_reason?: number;
   observations?: string;
-  /** Vezi `EMAG_TIP_RETUR`. ⚠ `5` e VOUCHER, nu „altul". */
+  /** Vezi `EMAG_TIP_RETUR`. ⚠ `5` e VOUCHER, nu „altul”. */
   return_type?: 1 | 2 | 3 | 4 | 5;
   return_address_id?: number;
   return_tax_value?: number;
@@ -866,8 +866,13 @@ export interface EmagConfig {
    * mica — si nimeni n-ar fi observat, fiindca e o suma mica pe o linie separata.
    *
    * ⚠ Numai pe eMAG RO. Pe bg si hu, campul nu se trimite.
+   *
+   * ⚠ `null` INSEAMNA „STERGE-L”, si e forma pe care o cere imbinarea. Panoul trimite un
+   * PETIC, iar intr-o imbinare cheia lipsa inseamna „las-o cum e” — deci un camp golit de
+   * comerciant ar fi ramas pe loc. `null` e singurul fel de a spune „scoate-l”, si
+   * cititorii il iau deja drept lipsa.
    */
-  green_tax?: number;
+  green_tax?: number | null;
 
   /**
    * Cate bucati se opresc pentru magazinul propriu.
@@ -875,15 +880,20 @@ export interface EmagConfig {
    * ⚠ Se SCADE din stocul trimis, si nu coboara sub zero. Un comerciant care are
    * acelasi stoc pe mai multe canale isi tine asa o rezerva: eMAG vede 8 din 10, iar
    * ultimele doua raman pentru magazinul lui.
+   *
+   * ⚠ `null` INSEAMNA „STERGE-L”, si e forma pe care o cere imbinarea. Panoul trimite un
+   * PETIC, iar intr-o imbinare cheia lipsa inseamna „las-o cum e” — deci un camp golit de
+   * comerciant ar fi ramas pe loc. `null` e singurul fel de a spune „scoate-l”, si
+   * cititorii il iau deja drept lipsa.
    */
-  stoc_rezervat?: number;
+  stoc_rezervat?: number | null;
 
   /**
    * Trimite Edinio si CONTINUTUL (nume, descriere, imagini, caracteristici)?
    *
    * ═══ ⚠ ALTA INTREBARE DECAT `auto_sync` ═══
    *
-   * `auto_sync` e „trimite pretul si stocul". Asta e „rescrie si fisa produsului".
+   * `auto_sync` e „trimite pretul si stocul”. Asta e „rescrie si fisa produsului”.
    *
    * Multi comercianti isi ingrijesc fisa direct in panoul eMAG — poze mai bune, text
    * scris pentru cumparatorul de acolo — si vor ca Edinio sa conduca numai pretul si
@@ -934,7 +944,7 @@ export interface EmagConfig {
    * Cand a sunat ultima data eMAG cu o notificare.
    *
    * ⚠ Se scrie de ruta de notificari, nu de cron. Panoul il arata ca sa se poata
-   * raspunde la „notificarile chiar functioneaza?" — intrebare care altfel n-are
+   * raspunde la „notificarile chiar functioneaza?” — intrebare care altfel n-are
    * niciun raspuns, fiindca lipsa lor nu strica nimic vizibil: comenzile intra oricum,
    * doar mai incet.
    */
@@ -953,7 +963,7 @@ export interface EmagConfig {
    * Cu un singur comutator, omul ar fi fost pus sa aleaga intre a-si pierde
    * campaniile la fiecare trecere si a-si vinde marfa de doua ori.
    *
-   * ⚠ Implicitul e „edinio" pentru amandoua, si dinadins: un magazin care n-a
+   * ⚠ Implicitul e „edinio” pentru amandoua, si dinadins: un magazin care n-a
    * atins setarea a legat eMAG tocmai ca sa tina totul dintr-un singur loc.
    */
   /**
@@ -962,10 +972,15 @@ export interface EmagConfig {
    * ⚠ Valorile lor sunt un ENUM: 2, 3, 5, 7, 14, 30, 60, 90, 120. Se aleg prin
    * `alegeSupplyLeadTime`, care rotunjeste IN SUS.
    *
-   * ⚠ Lipsa inseamna „nu trimite campul", nu „trimite 14". eMAG are deja implicitul
+   * ⚠ Lipsa inseamna „nu trimite campul”, nu „trimite 14”. eMAG are deja implicitul
    * lui, iar noi n-avem de ce sa scriem peste ce a pus comerciantul in panoul lor.
+   *
+   * ⚠ `null` INSEAMNA „STERGE-L”, si e forma pe care o cere imbinarea. Panoul trimite un
+   * PETIC, iar intr-o imbinare cheia lipsa inseamna „las-o cum e” — deci un camp golit de
+   * comerciant ar fi ramas pe loc. `null` e singurul fel de a spune „scoate-l”, si
+   * cititorii il iau deja drept lipsa.
    */
-  supply_lead_time?: number;
+  supply_lead_time?: number | null;
 
   deriva_pret?: "edinio" | "emag";
   deriva_stoc?: "edinio" | "emag";
@@ -992,7 +1007,7 @@ export interface EmagIntrareCategorie {
    * cele 3 pe secunda ale magazinului; ceruta la fiecare trimitere, ar fi luat o
    * treime din ritm pentru un raspuns care se schimba de cateva ori pe an.
    *
-   * ⚠ Lipsa inseamna „nu s-a mapat cu versiunea noua". Atunci potrivirea nu are cu ce
+   * ⚠ Lipsa inseamna „nu s-a mapat cu versiunea noua”. Atunci potrivirea nu are cu ce
    * lucra si raman doar cele fixate — adica purtarea de dinainte, nu o cadere.
    */
   characteristics_categorie?: EmagCaracteristicaCategorie[];
@@ -1008,7 +1023,7 @@ export interface EmagIntrareCategorie {
    *
    * Se scriu o data, cand comerciantul leaga categoria si oricum se cere schema ei.
    *
-   * ⚠ Pot fi „imbatranite": daca eMAG schimba cerintele unei categorii, aici ramane ce
+   * ⚠ Pot fi „imbatranite”: daca eMAG schimba cerintele unei categorii, aici ramane ce
    * era atunci. Nu e o pierdere — verificarea locala e o PLASA, nu o inlocuire a
    * validarii lor; ce scapa de aici tot la ei se opreste, doar mai tarziu. Se
    * improspateaza la fiecare re-salvare a maparii.

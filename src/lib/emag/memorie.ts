@@ -204,10 +204,31 @@ export async function citesteAmintirea<T>(
 export async function scrieAmintirea<T>(db: Db, k: CheieMemorie, v: Adusa<T>): Promise<void> {
   const c = cheiaLui(k);
 
-  const { data } = await db.from("emag_nomenclatoare")
+  const { data, error: eVeche } = await db.from("emag_nomenclatoare")
     .select("cate, trunchiat")
     .eq("business_id", c.business_id).eq("tara", c.tara).eq("fel", c.fel).eq("cheie", c.cheie)
     .maybeSingle();
+
+  /*
+   * ⚠ AICI citirea picata e nevatamatoare, si se spune de ce — ca sa nu para o scapare.
+   *
+   * `veche` slujeste la o singura hotarare: „pastrez ce am, fiindca e mai bogat decat ce
+   * tocmai am citit de la ei?”. `null` inseamna „n-am nimic mai bun”, deci se scrie
+   * raspunsul proaspat. Cel mai rau lucru care se poate intampla e sa inlocuim o memorie
+   * intreaga cu una trunchiata — iar urmatoarea citire nefragmentata o pune la loc.
+   *
+   * Eroarea se scrie totusi: o baza care refuza citirile refuza si scrierile, si atunci
+   * memoria nomenclatoarelor nu se mai improspateaza deloc. Merita vazut.
+   */
+  if (eVeche) {
+    void logError({
+      action: "emag.memorie",
+      message: `memoria veche nu s-a putut citi: ${eVeche.message}`,
+      details: { fel: c.fel, tara: c.tara },
+      businessId: c.business_id,
+      severity: "warning",
+    });
+  }
 
   const veche = data ? { cate: (data as { cate: number }).cate, trunchiat: (data as { trunchiat: boolean }).trunchiat } : null;
   if (pastreazaVechea(veche, v)) return;

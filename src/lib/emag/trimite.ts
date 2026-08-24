@@ -37,8 +37,11 @@ import {
   type IdentitateUsoara, type ProdusDeCartografiat,
 } from "./mapping";
 import { rutaDeTrimitere } from "./rute";
+import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
 import { EAN_PE_CERERE, eanuriDeCautat, imparteRaspunsurilePeRanduri, verdictEan, type RaspunsEan } from "./ean";
 import { ceLipseste, type ProdusDeVerificat } from "./pregatire";
+import { EroareCitireBaza, randCitit, randuriCitite } from "./citire";
+import { ePrimitaDeEmag, imaginiPentruEmag } from "./imagini";
 import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
 import type { OpEmag } from "./queue";
@@ -59,7 +62,7 @@ interface RandOfertaLocal {
    * `false` = oferta a fost PRELUATA din contul lor la import.
    *
    * ⚠ E singurul semn ca oferta EXISTA la eMAG fara ca noi s-o fi trimis vreodata.
-   * `last_synced_at` nu spune asta: el inseamna „cand am trimis NOI", si e gol pentru
+   * `last_synced_at` nu spune asta: el inseamna „cand am trimis NOI”, si e gol pentru
    * tot ce s-a importat.
    */
   creat_de_edinio: boolean;
@@ -70,6 +73,34 @@ export interface RezultatTrimitere {
   mesaj: string;
 }
 
+/**
+ * Oferta asta exista la eMAG?
+ *
+ * ═══ ⚠ DOI MARTORI, SI SCRISI O SINGURA DATA ═══
+ *
+ *   `last_synced_at != null`    am trimis-o NOI. Cel mai limpede semn, dar nu singurul.
+ *   `creat_de_edinio === false` a fost PRELUATA din contul lui, la import. Exista acolo
+ *                               dinainte de noi, si importul nu scrie `last_synced_at` —
+ *                               nici n-ar trebui, acela inseamna „cand am trimis NOI”.
+ *
+ * ⚠ REGULA ASTA A FOST SCRISA DE TREI ORI IN FISIER, SI UNA DIN COPII A RAMAS IN URMA.
+ * `existaLaEmag` si `retragePeEmagId` aveau amandoi martori; `retrage()` avea numai
+ * primul. Deci un produs cu oferte PRELUATE trecea de alegerea rutei si pica la
+ * retragerea propriu-zisa: lista iesea goala, verdictul era `sarit`, elementul se stergea
+ * din coada si se numara la „duse” — iar oferta ramanea la VANZARE pe eMAG.
+ *
+ * ⚠ Ajungea acolo chiar de pe butonul „Retrage de pe eMAG”: comerciantul apasa, ecranul
+ * ii raspundea „Oferta nu a ajuns niciodată pe eMAG”, si produsul lui se vindea mai
+ * departe acolo. Un raspuns increzator si gresit, adica cel mai rau fel.
+ *
+ * De aceea sta aici, exportata si probata: o regula scrisa in trei locuri se desparte.
+ */
+export function ofertaEsteLaEi(
+  rand: { last_synced_at: string | null; creat_de_edinio: boolean },
+): boolean {
+  return rand.last_synced_at != null || rand.creat_de_edinio === false;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ELEMENTUL
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -78,8 +109,8 @@ export interface RezultatTrimitere {
  * Un element din coada, dus pana la capat.
  *
  * ⚠ `fortat` vine de la apasarea comerciantului, NU din coada. Coada duce numai
- * lucru automat; butonul „Trimite acum" trece si peste ofertele preluate, fiindca
- * „nu trimite singur" nu inseamna „nu trimite niciodata".
+ * lucru automat; butonul „Trimite acum” trece si peste ofertele preluate, fiindca
+ * „nu trimite singur” nu inseamna „nu trimite niciodata”.
  */
 export async function trimiteElement(
   admin: Admin,
@@ -87,6 +118,47 @@ export async function trimiteElement(
   productId: string,
   op: OpEmag,
   fortat = false,
+): Promise<RezultatTrimitere> {
+  /*
+   * ═══ ⚠ O BAZA CARE N-A RASPUNS NU E UN PRODUS CARE NU EXISTA ═══
+   *
+   * Toate citirile de dedesubt arunca `EroareCitireBaza` la o cadere reala (vezi
+   * `citire.ts`). Se prinde AICI, intr-un singur loc, si devine `trecatoare`:
+   *
+   *   `sarit`      elementul se STERGE din coada. Nimeni nu-l mai reia niciodata.
+   *   `trecatoare` ramane, nu arde nicio incercare, se reia cu asteptare crescatoare.
+   *
+   * ⚠ Prins mai adanc, fiecare citire ar fi trebuit sa stie singura ce sa faca — si
+   * prima uitata ar fi lasat gaura la loc, exact ca pana acum.
+   *
+   * ⚠ Se prinde NUMAI eroarea asta. Orice alta exceptie merge mai departe la apelant,
+   * fiindca acolo e o defectiune de cod, iar inghitita ar deveni un „reincerc la
+   * nesfarsit" tacut — chiar boala pe care o vindecam.
+   */
+  try {
+    return await dusPanaLaCapat(admin, ctx, productId, op, fortat);
+  } catch (e) {
+    if (!(e instanceof EroareCitireBaza)) throw e;
+    void logError({
+      action: "emag.trimite",
+      message: e.message,
+      details: { productId, op, businessId: ctx.businessId },
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+    return {
+      verdict: "trecatoare",
+      mesaj: "Baza de date n-a răspuns la citirea produsului. Se reia singur.",
+    };
+  }
+}
+
+async function dusPanaLaCapat(
+  admin: Admin,
+  ctx: ContextEmag,
+  productId: string,
+  op: OpEmag,
+  fortat: boolean,
 ): Promise<RezultatTrimitere> {
   const produs = await citesteProdusul(admin, productId, ctx.businessId);
   if (!produs) {
@@ -103,12 +175,12 @@ export async function trimiteElement(
    * ═══ ⚠ O OFERTA PRELUATA EXISTA LA EI, CHIAR DACA N-AM TRIMIS-O NOI NICIODATA ═══
    *
    * Forma dinainte se uita doar la `last_synced_at`. Dar importul nu-l scrie — si nici
-   * n-ar trebui: acela inseamna „cand am trimis NOI".
+   * n-ar trebui: acela inseamna „cand am trimis NOI”.
    *
    * Deci fiecare oferta preluata din contul comerciantului iesea cu
-   * `existaLaEmag: false`, iar `rutaDeTrimitere` intorcea „nimic" la RETRAGERE. Adica:
-   * stergi un produs importat din magazin, elementul intra in coada, iese „sarit", se
-   * sterge, se numara la „duse" — si oferta ramane la VANZARE pe eMAG.
+   * `existaLaEmag: false`, iar `rutaDeTrimitere` intorcea „nimic” la RETRAGERE. Adica:
+   * stergi un produs importat din magazin, elementul intra in coada, iese „sarit”, se
+   * sterge, se numara la „duse” — si oferta ramane la VANZARE pe eMAG.
    *
    * Comerciantul vede produsul disparut din Edinio si comenzi care continua sa vina
    * pentru marfa pe care n-o mai are. Niciun mesaj de eroare, nicaieri.
@@ -116,9 +188,7 @@ export async function trimiteElement(
    * `creat_de_edinio: false` e scris de import (`import-run.ts`) si numai de el; ce
    * facem noi primeste `true`. Deci e semnul exact.
    */
-  const existaLaEmag = randuri.some(
-    (r) => r.last_synced_at != null || r.creat_de_edinio === false,
-  );
+  const existaLaEmag = randuri.some(ofertaEsteLaEi);
   const autoSync = randuri.length === 0 ? true : randuri.every((r) => r.auto_sync);
 
   const ruta = rutaDeTrimitere({
@@ -169,23 +239,38 @@ function specificatiile(produs: ProdusDeCartografiat): Specificatie[] {
     .filter((s) => s.label.trim().length > 0 && s.value.trim().length > 0);
 }
 
+/*
+ * ═══ ⚠ AMANDOUA ARUNCA LA O CADERE A BAZEI, SI ASTA E TOT ROSTUL ═══
+ *
+ * Forma dinainte era `const { data } = …; return data ?? null`. Iar mai jos, `!produs`
+ * inseamna „Produsul nu mai există în magazin”, verdict `sarit` — TERMINAL: cronul
+ * sterge elementul din coada.
+ *
+ * Deci o pana de o clipa a bazei, nimerita exact peste trecerea cronului, stergea
+ * lucrarea unui produs care exista foarte bine. Pretul nou nu mai pleca la eMAG
+ * niciodata, si nimic nu spunea de ce: in coada nu mai era nimic de vazut.
+ *
+ * ⚠ La `citesteRandurile` e si mai rau, fiindca `[]` nu se vede deloc: lista goala
+ * inseamna „produsul n-are nicio oferta”, iar la o RETRAGERE inseamna „n-a ajuns
+ * niciodata pe eMAG" — deci oferta ramane la vanzare pentru marfa stearsa din magazin.
+ */
 async function citesteProdusul(
   admin: Admin, productId: string, businessId: string,
 ): Promise<ProdusDeCartografiat | null> {
-  const { data } = await admin.from("products")
+  const r = await admin.from("products")
     .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, is_bundle, page_sections")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
-  return (data as ProdusDeCartografiat | null) ?? null;
+  return randCitit<ProdusDeCartografiat>("products", r as never);
 }
 
 async function citesteRandurile(
   admin: Admin, businessId: string, productId: string,
 ): Promise<RandOfertaLocal[]> {
-  const { data } = await admin.from("emag_offers")
+  const r = await admin.from("emag_offers")
     .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at, creat_de_edinio")
     .eq("business_id", businessId).eq("product_id", productId)
     .order("emag_id", { ascending: true });
-  return (data as RandOfertaLocal[] | null) ?? [];
+  return randuriCitite<RandOfertaLocal>("emag_offers", r as never);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -213,7 +298,7 @@ async function duTotul(
 ): Promise<RezultatTrimitere> {
   const categorie = ctx.config.category_map?.[produs.category ?? ""];
   if (!categorie?.category_id) {
-    const m = `Produsul are categoria „${produs.category ?? "—"}", care nu e legată de nicio categorie eMAG.`;
+    const m = `Produsul are categoria „${produs.category ?? "—"}”, care nu e legată de nicio categorie eMAG.`;
     await scrieEroare(admin, ctx.businessId, produs.id, m);
     return { verdict: "refuz", mesaj: m };
   }
@@ -224,7 +309,7 @@ async function duTotul(
    * Un produs incomplet trimis costa de patru ori: arde o cerere din cele 3 pe secunda
    * (aceleasi de care are nevoie o miscare de stoc dupa o vanzare), arde o incercare
    * din coada, se intoarce cu o eroare de documentatie pe care comerciantul o vede
-   * abia peste ore, iar pana atunci panoul arata „trimis".
+   * abia peste ore, iar pana atunci panoul arata „trimis”.
    *
    * Toate patru dispar cand intrebarea se pune aici, unde raspunsul e instantaneu si
    * scris in romana. ⚠ Verificarea NU inlocuieste validarea LOR si nu o prezice: eMAG
@@ -253,7 +338,7 @@ async function duTotul(
   const blocante = lipsuri.filter((l) => l.gravitate === "blocheaza");
   if (blocante.length > 0) {
     /*
-     * ⚠ „refuz", nu „trecatoare": lipsa unui camp nu se repara singura, iar reincercata
+     * ⚠ „refuz”, nu „trecatoare”: lipsa unui camp nu se repara singura, iar reincercata
      * la nesfarsit ar manca ritmul magazinului pentru nimic. Arde o incercare, si
      * mesajul spune EXACT ce e de facut.
      */
@@ -283,17 +368,34 @@ async function duTotul(
    * de care fuge toata functia: pagina noua, fara recenzii si fara vizitatori, dupa zile
    * de validare manuala, si de nedesfacut.
    *
-   * „trecatoare" fiindca chiar e: ruta lor n-a raspuns acum, elementul ramane in coada si
+   * „trecatoare” fiindca chiar e: ruta lor n-a raspuns acum, elementul ramane in coada si
    * se reia cu asteptare crescatoare.
    */
   const stieCatalogul = await cautaInCatalogulLor(
     admin, ctx, await citesteRandurile(admin, ctx.businessId, produs.id),
   );
-  if (stieCatalogul === "necunoscut") {
+  if (stieCatalogul.fel === "trecatoare") {
     return {
       verdict: "trecatoare",
       mesaj: "Nu s-a putut verifica dacă produsul există deja pe eMAG. Se reia singur.",
     };
+  }
+
+  /*
+   * ═══ ⚠ UN VERDICT CARE SPUNE „NU” TREBUIE SI SA OPREASCA (25.08.2026) ═══
+   *
+   * Pana acum, `nehotarat`, `inchis` si `avem_deja` scriau motivul pe rand si raspundeau
+   * „ok” — iar linia urmatoare mergea la `product_offer/save`. Comentariile de acolo
+   * spuneau chiar „NU se creeaza unul nou”, si se crea.
+   *
+   * ⚠ `refuz`, nu `sarit`. „Sarit” ar sterge elementul din coada si comerciantul n-ar mai
+   * avea nimic de vazut; „refuz” arde o incercare, lasa motivul in coada si in panou, si
+   * dupa cinci incercari abandoneaza fara sa dispara. Motivul nu se repara singur — il
+   * repara omul, in fisa produsului — deci trebuie sa ramana sub ochii lui.
+   */
+  if (stieCatalogul.fel === "oprit") {
+    await scrieEroare(admin, ctx.businessId, produs.id, stieCatalogul.mesaj);
+    return { verdict: "refuz", mesaj: stieCatalogul.mesaj };
   }
   const cuCheie = await citesteRandurile(admin, ctx.businessId, produs.id);
 
@@ -302,10 +404,10 @@ async function duTotul(
    *
    * Pana acum se puteau fixa doar PE CATEGORIE: o singura valoare pentru toate
    * produsele din ea. Ceea ce e absurd tocmai la caracteristicile care conteaza — nu
-   * toate tricourile sunt „M", si tocmai `Marime` e obligatorie.
+   * toate tricourile sunt „M”, si tocmai `Marime` e obligatorie.
    *
    * ⚠ Cea fixata pe categorie NU se pierde: umple golurile, pentru produsele care n-au
-   * specificatia lor. Sterse, un magazin care si-a fixat „Material: Bumbac" pe toata
+   * specificatia lor. Sterse, un magazin care si-a fixat „Material: Bumbac” pe toata
    * categoria s-ar fi trezit ca nu mai pleaca nimic.
    *
    * ⚠ Nepotrivirile se SCRIU, nu se inghit. O valoare in afara listei lor face oferta
@@ -349,8 +451,29 @@ async function duTotul(
      ar fi cautat la nesfarsit o problema care nu mai era. */
   await scrieNepotrivirile(admin, ctx.businessId, produs.id, potrivite.nepotriviri);
 
+  /*
+   * ═══ ⚠ WebP-UL IL FACEM NOI, DECI TOT NOI IL CONVERTIM (25.08.2026) ═══
+   *
+   * Conducta de imagini a magazinului incearca `image/webp` prima. Schema eMAG, la
+   * `images[].url`, primeste numai „JPG, JPEG or PNG”.
+   *
+   * ⚠ Pana acum, produsul se OPREA cu un mesaj catre comerciant: „convertește imaginea”.
+   * Corect din punctul de vedere al datelor, dar e o munca pe care i-o dam noi, pentru un
+   * fisier pe care tot noi l-am facut — si pe care el nici nu-l poate schimba din Edinio,
+   * fiindca formatul il alege conducta.
+   *
+   * Acum se face o COPIE convertita in R2, sub o cheie socotita din adresa sursa. Vitrina
+   * ramane pe WebP; eMAG primeste JPEG. La a doua trecere, copia exista deja si nu se mai
+   * descarca nimic.
+   *
+   * ⚠ Se cheama NUMAI daca chiar e nevoie. In catalogul masurat (24.08.2026) erau 1348 de
+   * `.jpg`, un `.png` si patru `.webp` — deci pentru 1349 din 1353 de produse, linia de
+   * mai jos nu face nicio cerere de retea.
+   */
+  const { produs: produsCuImagini, nereusite } = await cuImaginiPrimiteDeEmag(ctx, produs);
+
   const { oferte, probleme, observatii } = construiesteOferte(
-    produs,
+    produsCuImagini,
     magazinDin(ctx, produs),
     {
       category_id: categorie.category_id,
@@ -376,8 +499,8 @@ async function duTotul(
      * ⚠ MOTIVUL SE IA DIN `probleme`, NU DIN OBSERVATII (indreptat 24.08.2026)
      *
      * Amandoua erau in aceeasi lista, iar aici se lua PRIMA. Nota despre codul de bare se
-     * impinge devreme, deci ea devenea „motivul": patru elemente de coada isi ardeau
-     * incercarile raportand „Codul de bare 5.94903E+12 nu e valid", cand cauza adevarata
+     * impinge devreme, deci ea devenea „motivul”: patru elemente de coada isi ardeau
+     * incercarile raportand „Codul de bare 5.94903E+12 nu e valid”, cand cauza adevarata
      * era alta, mai jos in lista.
      *
      * ⚠ Iar codul acela nici nu se poate repara — Excel il rescrisese, si pastreaza 6
@@ -396,14 +519,71 @@ async function duTotul(
   /*
    * ⚠ OBSERVATIILE NU SE PIERD la o trimitere reusita.
    *
-   * „Oferta pleaca fara cod de bare" e adevarat si merita stiut: in categoriile unde EAN-ul
+   * „Oferta pleaca fara cod de bare” e adevarat si merita stiut: in categoriile unde EAN-ul
    * e obligatoriu, eMAG o lasa ciorna, iar omul ar cauta motivul in panoul lor. Se lipesc
    * de mesaj, nu se ridica la verdict: produsul CHIAR a plecat.
    */
+  /* ⚠ O imagine care n-a putut fi convertita NU dispare in tacere. Produsul poate pleca
+     foarte bine fara ea, dar comerciantul trebuie sa afle: la eMAG, o poza lipsa nu da
+     nicio eroare, produsul apare pur si simplu fara ea. */
+  for (const x of nereusite) observatii.push(`Imaginea ${x.adresa} n-a plecat: ${x.motiv}.`);
+
   if (observatii.length > 0 && (r.verdict === "reusit" || r.verdict === "reusit_cu_observatii")) {
     return { ...r, verdict: "reusit_cu_observatii", mesaj: [r.mesaj, ...observatii].filter(Boolean).join(" · ") };
   }
   return r;
+}
+
+/**
+ * Produsul, cu imaginile aduse la un format pe care eMAG chiar il citeste.
+ *
+ * ⚠ Se intoarce o COPIE. Schimbat pe loc, randul citit din baza ar fi purtat mai departe
+ * adresele convertite, iar orice cod de dedesubt care se asteapta la imaginile magazinului
+ * ar fi lucrat pe altceva fara sa stie.
+ *
+ * ⚠ Se ating si pozele COMBINATIILOR: la un produs cu variante, poza combinatiei e cea
+ * principala a ofertei ei. Lasata `.webp`, marimea „Rosu” ar fi plecat fara poza — iar
+ * eMAG nu se plange, produsul apare pur si simplu asa.
+ *
+ * ⚠ Daca nu e nimic de convertit, se intoarce chiar produsul primit: nicio copie, nicio
+ * cerere de retea. Asta e cazul obisnuit, si trebuie sa ramana ieftin.
+ */
+async function cuImaginiPrimiteDeEmag(
+  ctx: ContextEmag, produs: ProdusDeCartografiat,
+): Promise<{ produs: ProdusDeCartografiat; nereusite: { adresa: string; motiv: string }[] }> {
+  const aleProdusului = (Array.isArray(produs.images) ? produs.images : [])
+    .map((x) => String(x ?? "").trim()).filter(Boolean);
+
+  const ps = (produs.page_sections ?? {}) as { variants?: unknown };
+  const aleCombinatiilor = combinatiiActiveUnice(parseVariants(ps.variants))
+    .map((c) => (c.image ?? "").trim()).filter(Boolean);
+
+  const toate = [...new Set([...aleProdusului, ...aleCombinatiilor])];
+  if (toate.every(ePrimitaDeEmag)) return { produs, nereusite: [] };
+
+  const { noi, nereusite } = await imaginiPentruEmag(ctx.businessId, toate);
+
+  /* ⚠ Copie adanca a `page_sections`: acolo stau combinatiile, iar o copie de suprafata
+     ar fi lasat obiectele lor comune cu randul original. */
+  const psNou = JSON.parse(JSON.stringify(produs.page_sections ?? {})) as {
+    variants?: { combinations?: { image?: string | null }[] };
+  };
+  for (const c of psNou.variants?.combinations ?? []) {
+    const veche = (c.image ?? "").trim();
+    const noua = veche ? noi.get(veche) : undefined;
+    /* ⚠ Ce n-a putut fi convertit se SCOATE, nu se lasa `.webp`: filtrul din `mapping.ts`
+       l-ar fi taiat oricum, iar lasat aici ar fi aratat ca merge. */
+    if (veche) c.image = noua ?? null;
+  }
+
+  return {
+    produs: {
+      ...produs,
+      images: aleProdusului.map((u) => noi.get(u)).filter((u): u is string => !!u),
+      page_sections: psNou as ProdusDeCartografiat["page_sections"],
+    },
+    nereusite,
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -552,7 +732,7 @@ async function duMasuratorile(
     .filter((m): m is NonNullable<typeof m> => m != null);
 
   if (masuratori.length === 0) {
-    /* ⚠ „Sarit", nu „refuz". Un produs fara dimensiuni nu e o eroare — e un produs
+    /* ⚠ „Sarit”, nu „refuz”. Un produs fara dimensiuni nu e o eroare — e un produs
        caruia nimeni nu i le-a pus. Reincercat, ar arde incercarile degeaba. */
     return { verdict: "sarit", mesaj: "Produsul nu are dimensiuni și greutate complete." };
   }
@@ -579,8 +759,8 @@ async function duMasuratorile(
  * nu mai gaseste nimic: legatura s-a rupt exact in clipa in care aveam nevoie de ea.
  *
  * Iar coada mergea si mai prost: elementul intra cu `product_id: null`, iar cronul il
- * STERGEA inainte sa apuce sa trimita ceva (`route.ts:211`). Fara log, fara „dus", fara
- * „cazut". Toata logica scrisa anume pentru cazul asta — `rutaDeTrimitere` cu
+ * STERGEA inainte sa apuce sa trimita ceva (`route.ts:211`). Fara log, fara „dus”, fara
+ * „cazut”. Toata logica scrisa anume pentru cazul asta — `rutaDeTrimitere` cu
  * `op: "retragere"` — era cod mort pe calea automata.
  *
  * ⚠ CE COSTA: comerciantul sterge produsul din magazin si continua sa primeasca comenzi
@@ -592,16 +772,39 @@ async function duMasuratorile(
 export async function retragePeEmagId(
   admin: Admin, ctx: ContextEmag, emagId: number,
 ): Promise<RezultatTrimitere> {
-  const { data } = await admin.from("emag_offers")
+  /*
+   * ═══ ⚠ CITIREA PICATA NU E „OFERTA NU MAI EXISTA” (25.08.2026) ═══
+   *
+   * `sarit` e terminal: cronul sterge elementul din coada. Iar elementul asta e
+   * RETRAGEREA unui produs deja sters din magazin — deci sters de aici, nimeni nu-l mai
+   * pune vreodata la loc: legatura `emag_offers.product_id` s-a rupt la stergere
+   * (`on delete set null`), asa ca nici macar nu se mai poate afla ce era de retras.
+   *
+   * Oferta ramane la VANZARE pe eMAG pentru marfa care nu mai exista, si comerciantul
+   * afla cand primeste comanda. Anularea o plateste el, in bani si in punctaj la ei.
+   *
+   * ⚠ De aceea aici raspunsul la o cadere e `trecatoare`, nu `sarit`: nu arde nicio
+   * incercare, elementul ramane in coada si se reia.
+   */
+  const r0 = await admin.from("emag_offers")
     .select("emag_id, last_synced_at, creat_de_edinio")
     .eq("business_id", ctx.businessId).eq("emag_id", emagId).maybeSingle();
 
-  const rand = data as { emag_id: number; last_synced_at: string | null; creat_de_edinio: boolean } | null;
+  let rand: { emag_id: number; last_synced_at: string | null; creat_de_edinio: boolean } | null;
+  try {
+    rand = randCitit("emag_offers", r0 as never);
+  } catch (e) {
+    if (!(e instanceof EroareCitireBaza)) throw e;
+    return {
+      verdict: "trecatoare",
+      mesaj: "Baza de date n-a răspuns la citirea ofertei. Retragerea se reia singură.",
+    };
+  }
   if (!rand) return { verdict: "sarit", mesaj: "Oferta nu mai există la noi." };
 
   /* ⚠ Aceeasi regula ca la `existaLaEmag`: o oferta PRELUATA exista la ei chiar daca
      n-am trimis-o noi niciodata, deci si ea trebuie oprita. */
-  if (rand.last_synced_at == null && rand.creat_de_edinio !== false) {
+  if (!ofertaEsteLaEi(rand)) {
     return { verdict: "sarit", mesaj: "Oferta nu a ajuns niciodată pe eMAG." };
   }
 
@@ -618,21 +821,38 @@ export async function retragePeEmagId(
 async function retrage(
   admin: Admin, ctx: ContextEmag, randuri: RandOfertaLocal[],
 ): Promise<RezultatTrimitere> {
-  const vii = randuri.filter((r) => r.last_synced_at != null);
+  /*
+   * ═══ ⚠ DOI MARTORI, CA LA `existaLaEmag` SI LA `retragePeEmagId` ═══
+   *
+   * Aici era numai unul: `last_synced_at != null`. Dar acela inseamna „cand am trimis
+   * NOI", si importul nu-l scrie — nici n-ar trebui.
+   *
+   * Deci un produs ale carui oferte au fost PRELUATE din contul comerciantului trecea de
+   * `rutaDeTrimitere` (care stie de al doilea martor) si pica aici: lista iesea goala,
+   * verdictul era `sarit`, elementul se stergea din coada si se numara la „duse” — iar
+   * oferta ramanea la VANZARE pe eMAG.
+   *
+   * ⚠ Ajungea aici chiar de pe butonul „Retrage de pe eMAG”: comerciantul apasa, ecranul
+   * spunea „Oferta nu a ajuns niciodată pe eMAG”, si produsul lui se vindea mai departe
+   * acolo. Cea mai rea forma cu putinta — un raspuns increzator si gresit.
+   *
+   * `creat_de_edinio: false` e scris NUMAI de import. Deci e semnul exact.
+   */
+  const vii = randuri.filter(ofertaEsteLaEi);
   if (vii.length === 0) return { verdict: "sarit", mesaj: "Oferta nu a ajuns niciodată pe eMAG." };
 
   const r = await salveazaOferte(ctx.auth, vii.map((x) => ({ id: x.emag_id, status: 0 as const })));
   if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
 
   /*
-   * ⚠ `bucatiDeIduri`, desi „sunt doar variantele unui produs".
+   * ⚠ `bucatiDeIduri`, desi „sunt doar variantele unui produs”.
    *
    * Id-urile sunt UUID-uri, iar `.in()` NU pleaca in corpul cererii, ci in ADRESA:
    * fiecare adauga 37 de semne, iar marginea respinge cererea peste ~650. Masurat pe
    * proiectul real, in `supabase/id-chunks.ts`.
    *
    * Un produs cu 700 de combinatii active pare de nefacut — pana la un magazin de
-   * piese auto cu o singura pozitie „surub" si toate dimensiunile drept variante.
+   * piese auto cu o singura pozitie „surub” si toate dimensiunile drept variante.
    * Iar cand pica, pica taman la retragere: produsul ramane de vanzare pe eMAG desi
    * a fost scos din magazin, si raspunsul e un 400 in text simplu care nu pomeneste
    * nimic despre id-uri.
@@ -748,7 +968,7 @@ function titluriDeTrimis(produs: ProdusDeCartografiat): (string | null)[] {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   „EXISTA DEJA PE eMAG?" — INTREBAT INAINTE DE A CREA
+   „EXISTA DEJA PE eMAG?” — INTREBAT INAINTE DE A CREA
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -763,7 +983,7 @@ function titluriDeTrimis(produs: ProdusDeCartografiat): (string | null)[] {
  * Ce urmeaza nu e o eroare, ci ceva mai rau: documentatia noua intra in validare
  * manuala si sta zile, in loc ca oferta sa fie vandabila in minute pe pagina care
  * exista; iar oferta ajunge pe o pagina fara recenzii si fara vizitatori, in loc de
- * cea pe care o cauta oamenii. Comerciantul vede „publicat" si nu vinde nimic.
+ * cea pe care o cauta oamenii. Comerciantul vede „publicat” si nu vinde nimic.
  *
  * ⚠ SE INTREABA O SINGURA DATA PE OFERTA. Odata scris, `part_number_key` ramane, iar
  * la trimiterile urmatoare pasul asta se sare — altfel fiecare actualizare de pret ar
@@ -773,20 +993,50 @@ function titluriDeTrimis(produs: ProdusDeCartografiat): (string | null)[] {
  * departe forma cu documentatie: mai bine un produs publicat pe o pagina noua decat
  * unul nepublicat. Se scrie in jurnal, si se reia data viitoare.
  */
+/**
+ * Ce se poate face dupa ce am intrebat catalogul lor.
+ *
+ * ═══ ⚠ „OK” NU MAI E DE AJUNS, SI ASTA A FOST DEFECTUL ═══
+ *
+ * Functia raspundea `"ok" | "necunoscut"`, iar apelantul intelegea din „ok” ca poate
+ * merge la `product_offer/save`. Numai ca „ok” se intorcea si pentru trei verdicte care
+ * inseamna EXACT PE DOS — si chiar comentariile de dedesubt scriau „NU se creeaza unul
+ * nou", dupa care se crea.
+ *
+ *   `nehotarat`  codul de bare duce la mai multe produse DIFERITE pe eMAG. Se trimitea
+ *                fara `part_number_key`, deci se CREA un produs nou in catalogul lor
+ *                COMUN: pagina fara recenzii si fara vizitatori, zile de validare
+ *                manuala, si de nedesfacut.
+ *   `inchis`     produsul exista, dar ei nu mai primesc oferte pe el. Se trimitea tot
+ *                fara cheie, deci acelasi duplicat — pentru un lucru despre care STIAM
+ *                deja ca nu se poate face.
+ *   `avem_deja`  avem oferta acolo sub alt id intern. A doua oferta e refuzata de ei,
+ *                dar cererea si incercarea se ard oricum.
+ *
+ * Un verdict care spune „nu” trebuie sa si OPREASCA. Altfel e doar un comentariu.
+ */
+type VerdictCatalog =
+  /** Nu s-a gasit nimic care sa opreasca. Se poate trimite. */
+  | { fel: "mergi" }
+  /** Ruta lor n-a raspuns acum. Se reia, fara sa se arda o incercare. */
+  | { fel: "trecatoare" }
+  /** S-a aflat ceva care interzice trimiterea. Mesajul e pentru comerciant. */
+  | { fel: "oprit"; mesaj: string };
+
 async function cautaInCatalogulLor(
   admin: Admin,
   ctx: ContextEmag,
   randuri: RandOfertaLocal[],
-): Promise<"ok" | "necunoscut"> {
+): Promise<VerdictCatalog> {
   /* Se intreaba numai pentru ofertele care n-au inca o pagina si care chiar au cod. */
   const deCautat = randuri.filter((r) => !r.part_number_key && (r.ean ?? "").trim());
-  if (deCautat.length === 0) return "ok";
+  if (deCautat.length === 0) return { fel: "mergi" };
 
   /*
    * ═══ ⚠ UN SINGUR LOT, NU O CERERE PE OFERTA (indreptat 24.08.2026) ═══
    *
    * Forma dinainte facea `for (const rand of deCautat)` si chema `cautaDupaEan` cu UN
-   * cod. Nu „aproape una pe oferta" — exact una.
+   * cod. Nu „aproape una pe oferta” — exact una.
    *
    * ⚠ CE COSTA: ruta are limite PROPRII, mai stranse decat restul API-ului — 5 pe
    * secunda, 200 pe minut si **5.000 PE ZI**. Un catalog de 3.500 de oferte ardea 3.500
@@ -795,7 +1045,7 @@ async function cautaInCatalogulLor(
    * `cautaDupaEan` si `eanuriDeCautat` taie amandoua la 100.
    *
    * ⚠ Raspunsurile se desfac inapoi pe randuri dupa campul `eans`, fiindca `verdictEan`
-   * judeca un teanc ca fiind despre UN produs: nedespartite, ar fi spus „nehotarat"
+   * judeca un teanc ca fiind despre UN produs: nedespartite, ar fi spus „nehotarat”
    * pentru toate. Vezi `imparteRaspunsurilePeRanduri`.
    */
   const codPeRand = new Map<RandOfertaLocal, string>();
@@ -803,7 +1053,7 @@ async function cautaInCatalogulLor(
     const c = eanuriDeCautat([r.ean])[0];
     if (c) codPeRand.set(r, c);
   }
-  if (codPeRand.size === 0) return "ok";
+  if (codPeRand.size === 0) return { fel: "mergi" };
 
   /*
    * ═══ ⚠ IN LOTURI DE 100, NU UN SINGUR LOT DE 100 (indreptat 25.08.2026) ═══
@@ -817,8 +1067,8 @@ async function cautaInCatalogulLor(
    * catalogul lor COMUN, pe o pagina noua fara recenzii si fara vizitatori, dupa zile de
    * validare manuala. Un duplicat acolo nu se poate desface.
    *
-   * ⚠ REGULA: „EAN neverificat" NU e acelasi lucru cu „EAN verificat si inexistent".
-   * Prima inseamna „nu stiu", si nu are voie sa devina o hotarare.
+   * ⚠ REGULA: „EAN neverificat” NU e acelasi lucru cu „EAN verificat si inexistent”.
+   * Prima inseamna „nu stiu”, si nu are voie sa devina o hotarare.
    *
    * Depozitul chiar are produse mari — nu e un caz teoretic.
    */
@@ -852,7 +1102,7 @@ async function cautaInCatalogulLor(
       });
       /* ⚠ NU se arunca: coada n-are `try` in jurul elementului, iar o exceptie ar rupe
          toata trecerea cronului, nu doar produsul asta. */
-      return "necunoscut";
+      return { fel: "trecatoare" };
     }
 
     /* ⚠ Raspunsurile bucatii se impart NUMAI peste randurile bucatii. Peste toate, un
@@ -863,13 +1113,22 @@ async function cautaInCatalogulLor(
     for (const [rand, lista] of alBucatii) peRand.set(rand, lista);
   }
 
+  /*
+   * ⚠ SE ADUNA MOTIVELE, NU SE IESE LA PRIMUL. Un produs cu variante trimite toate
+   * ofertele intr-o singura cerere, deci daca UNA e oprita, se opreste tot — iar
+   * comerciantul trebuie sa vada CARE si DE CE, nu doar prima gasita.
+   */
+  const opriri: string[] = [];
+
   for (const rand of codPeRand.keys()) {
     const v = verdictEan(peRand.get(rand) ?? []);
+    const care = (rand.variant_title ?? "").trim();
+    const numeleLui = care ? `„${care}”` : "Produsul";
 
     if (v.fel === "atasare") {
       /*
        * ⚠ Se scrie `part_number_key`, si ATAT. `mapping.ts` il trimite mai departe,
-       * iar prezenta lui schimba forma cererii din „creeaza produs" in „ataseaza-te
+       * iar prezenta lui schimba forma cererii din „creeaza produs” in „ataseaza-te
        * la produsul care exista". Nu se atinge nimic altceva din rand.
        */
       await admin.from("emag_offers")
@@ -879,47 +1138,98 @@ async function cautaInCatalogulLor(
     }
 
     if (v.fel === "avem_deja") {
-      /* Avem deja oferta pe pagina aceea, dar sub alt `emag_id` — de obicei publicata
-         din panoul lor, inainte de Edinio. Se scrie cheia ca sa se vada legatura;
-         importul o va potrivi la urmatoarea trecere. */
+      /* Cheia se scrie oricum: e legatura la pagina lor, si o vrem chiar daca oprim. */
       await admin.from("emag_offers")
         .update({ part_number_key: v.part_number_key, updated_at: new Date().toISOString() })
         .eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+
+      /*
+       * ═══ ⚠ „AVEM DEJA” INSEAMNA NOI, SAU EL? ═══
+       *
+       * `vendor_has_offer` spune doar ca VANZATORUL are o oferta pe pagina aceea. Dar
+       * vanzatorul suntem tot noi dupa prima publicare reusita — iar intre publicare si
+       * clipa in care reconcilierea aduce inapoi `part_number_key`, randul inca n-are
+       * cheie, deci reintra in cautare si ar iesi „avem deja”.
+       *
+       * ⚠ Oprit orbeste, orice a doua trimitere a unui produs proaspat publicat ar fi
+       * fost refuzata de noi insine, cu un mesaj despre panoul lor. Adica un defect mai
+       * suparator decat cel reparat.
+       *
+       * Aceiasi doi martori ca peste tot in fisier: daca NOI am trimis-o vreodata
+       * (`last_synced_at`), sau daca e preluata din contul lui (`creat_de_edinio: false`),
+       * atunci oferta de acolo e chiar a randului asta si nu opreste nimic. Ramane un
+       * singur caz care opreste: rand facut de noi, netrimis niciodata, iar pe pagina lor
+       * exista deja o oferta a comerciantului — publicata din panoul eMAG.
+       */
+      const eAlta = !ofertaEsteLaEi(rand);
+      if (eAlta) {
+        opriri.push(
+          `${numeleLui} are deja o ofertă pe eMAG („${v.nume}”), publicată din panoul lor. `
+          + "Fă întâi un import din eMAG, ca oferta aceea să fie preluată aici; altfel s-ar "
+          + "crea o a doua ofertă pe același produs.",
+        );
+      }
       continue;
     }
 
     if (v.fel === "inchis") {
       /*
-       * ⚠ Produsul exista, dar eMAG nu ingaduie oferte noi pe el. NU se creeaza unul
-       * nou in schimb: ar fi exact duplicatul de care fugim, si l-ar respinge oricum.
-       * Se scrie motivul, si il vede comerciantul in lista.
+       * ⚠ SE SCRIA MOTIVUL, SI SE TRIMITEA TOTUSI. Comentariul de aici spunea „NU se
+       * creeaza unul nou in schimb" — dar functia raspundea „ok”, iar apelantul mergea
+       * mai departe la `product_offer/save` FARA `part_number_key`. Adica exact ce scria
+       * ca nu face: crea produsul a doua oara in catalogul lor comun.
+       *
+       * Acum opreste. Nu se pierde nimic: `allow_to_add_offer = 0` inseamna ca nu se
+       * poate, si n-are rost sa ardem o cerere din cele 3 pe secunda ca sa aflam iar.
        */
+      const m = `${numeleLui} există pe eMAG sub „${v.nume}” (${v.part_number_key}), dar `
+        + "eMAG nu mai acceptă oferte noi pe el.";
       await admin.from("emag_offers").update({
-        error: `Produsul „${v.nume}" există pe eMAG, dar nu mai acceptă oferte noi (${v.part_number_key}).`,
-        updated_at: new Date().toISOString(),
+        error: m, updated_at: new Date().toISOString(),
       }).eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+      opriri.push(m);
       continue;
     }
 
     if (v.fel === "nehotarat") {
+      /*
+       * ═══ ⚠ CEL MAI SCUMP DINTRE TOATE, SI TOCMAI EL MERGEA MAI DEPARTE ═══
+       *
+       * Codul duce la produse DIFERITE: fie comerciantul a pus pe produs codul altuia,
+       * fie un pachet poarta si codul cutiei, si al continutului. Trimis fara cheie, se
+       * CREA un al treilea produs in catalogul lor comun — pe langa cele doua care exista
+       * deja si care sunt chiar dovada ca ceva e amestecat.
+       *
+       * Edinio n-are cum sa aleaga intre ele si nu trebuie sa incerce. Alege omul.
+       */
+      const m = `${numeleLui} are un cod de bare care duce la ${v.candidati} produse `
+        + "diferite pe eMAG. Verifică-l în fișa produsului: publicat așa, s-ar crea un "
+        + "produs nou în catalogul lor, pe o pagină fără recenzii.";
       await admin.from("emag_offers").update({
-        error: `Codul de bare duce la ${v.candidati} produse diferite pe eMAG. Verifică-l înainte de publicare.`,
-        updated_at: new Date().toISOString(),
+        error: m, updated_at: new Date().toISOString(),
       }).eq("business_id", ctx.businessId).eq("emag_id", rand.emag_id);
+      opriri.push(m);
       continue;
     }
 
     /* `produs_nou`: nu exista la ei. Se trimite cu documentatie, ca pana acum. */
   }
 
-  return "ok";
+  /* ⚠ Cel mult trei motive in mesaj: un produs cu 200 de variante stricate ar fi umplut
+     `last_error` cu o pagina de text pe care n-o citeste nimeni. */
+  if (opriri.length > 0) {
+    const cate = opriri.length > 3 ? ` (și încă ${opriri.length - 3})` : "";
+    return { fel: "oprit", mesaj: opriri.slice(0, 3).join(" · ") + cate };
+  }
+
+  return { fel: "mergi" };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LOTURILE SI SCRISUL INAPOI
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** ⚠ Maximul lor. Vezi `LOT_MAXIM` si nota din `errors.ts` despre „Maximum input vars". */
+/** ⚠ Maximul lor. Vezi `LOT_MAXIM` si nota din `errors.ts` despre „Maximum input vars”. */
 const LOT = 50;
 
 /**
@@ -936,7 +1246,7 @@ const LOT = 50;
  * ═══ ⚠ DOUA LIMITE, NU UNA ═══
  *
  * `LOT = 50` respecta limita de ENTITATI din documentatia lor. Dar mai au una, pe
- * ELEMENTE: „Maximum input vars of 4000 exceeded". Un lot de 50 de produse simple incape
+ * ELEMENTE: „Maximum input vars of 4000 exceeded”. Un lot de 50 de produse simple incape
  * linistit; 50 de variante cu caracteristici, imagini, GPSR, stoc si familie pot sa nu.
  *
  * ⚠ CE FACEA PANA ACUM: 50 -> refuz, reincercare 50 -> acelasi refuz, si tot asa pana la
@@ -945,7 +1255,7 @@ const LOT = 50;
  *
  * ⚠ SE INJUMATATESTE NUMAI LA ACEA EROARE, nu la orice refuz. Un produs caruia ii lipseste
  * un camp va fi refuzat la fel si singur; injumatatit, am face de patru ori mai multe
- * cereri pentru acelasi „nu".
+ * cereri pentru acelasi „nu”.
  *
  * ⚠ Cand ramane O SINGURA entitate si tot nu incape, se opreste si se spune. Aia nu mai e
  * o problema de lot, e un produs care nu poate fi trimis nicicum — iar comerciantul
@@ -1007,8 +1317,8 @@ async function trimiteInLoturi(
    * punea `error: null` la orice verdict incheiat, si nimic altundeva nu tinea minte
    * mesajele.
    *
-   * Masurat in ziua aceea: 180 de randuri scrise „trimis", cu zero mesaje pastrate —
-   * desi eMAG raspunsese la fiecare fie „ai deja produsul asta", fie „e ciorna, ii
+   * Masurat in ziua aceea: 180 de randuri scrise „trimis”, cu zero mesaje pastrate —
+   * desi eMAG raspunsese la fiecare fie „ai deja produsul asta”, fie „e ciorna, ii
    * lipseste EAN-ul". Comerciantul avea in fata un ecran care spunea ca totul a mers.
    *
    * Exact greseala §12.9 pe care ne-am ferit s-o facem la Trendyol — motivul
@@ -1019,7 +1329,7 @@ async function trimiteInLoturi(
   for (let i = 0; i < elemente.length; i += LOT) {
     const r = await trimiteCuInjumatatire(elemente.slice(i, i + LOT), trimite, observatii);
     /*
-     * ⚠ SE STRANG SI DE LA UN „REUSIT" CURAT (24.08.2026, a doua oara in aceeasi zi).
+     * ⚠ SE STRANG SI DE LA UN „REUSIT” CURAT (24.08.2026, a doua oara in aceeasi zi).
      *
      * Prima forma lua mesajele numai de la `reusit_cu_observatii`. Dar eMAG intoarce
      * avertismente si pe raspunsuri fara `isError` — iar cel mai important dintre ele
@@ -1059,7 +1369,7 @@ async function trimiteInLoturi(
  *
  * ⚠ `chei` bate tot: e o problema de CONT, si nicio reusita pe alt lot n-o sterge.
  * Apoi `refuz`, apoi `trecatoare`. `reusit_cu_observatii` bate `reusit` fiindca are
- * ceva de aratat omului, chiar daca amandoua inseamna „s-a salvat".
+ * ceva de aratat omului, chiar daca amandoua inseamna „s-a salvat”.
  */
 const GREUTATE: Record<VerdictEmag, number> = {
   reusit: 0, reusit_cu_observatii: 1, trecatoare: 2, refuz: 3, chei: 4,
@@ -1068,7 +1378,7 @@ const GREUTATE: Record<VerdictEmag, number> = {
 /**
  * Lotul s-a incheiat, deci ce au spus ei despre el merita pastrat.
  *
- * ⚠ `undefined` inseamna „clientul n-a pus verdict", iar implicitul acolo e `reusit`.
+ * ⚠ `undefined` inseamna „clientul n-a pus verdict”, iar implicitul acolo e `reusit`.
  * Tratat ca neincheiat, avertismentele s-ar fi pierdut tocmai pe calea cea mai
  * obisnuita.
  */
@@ -1140,10 +1450,10 @@ async function scrieRezultatul(
  *
  * ⚠ Se scriu in `issues`, NU in `error`. Sunt doua lucruri diferite: `error` opreste
  * trimiterea, `issues` doar spune ce s-ar putea completa mai bine. Amestecate, un
- * produs perfect trimis ar fi aratat „eroare" pentru o specificatie in plus pe care
+ * produs perfect trimis ar fi aratat „eroare” pentru o specificatie in plus pe care
  * eMAG nici n-o cere.
  *
- * ⚠ Se spune SI ce accepta ei. „Culoare: Turcoaz nu e o valoare acceptata" fara lista
+ * ⚠ Se spune SI ce accepta ei. „Culoare: Turcoaz nu e o valoare acceptata” fara lista
  * il lasa pe om sa ghiceasca; cu lista, repara din prima.
  */
 async function scrieNepotrivirile(
@@ -1175,7 +1485,7 @@ async function scrieEroare(admin: Admin, businessId: string, productId: string, 
  *
  * ⚠ EXPORTAT DINADINS, ca reconcilierea sa masoare deriva fata de ce s-ar TRIMITE
  * cu adevarat, nu fata de un calcul paralel. O a doua socoteala a pretului, scrisa
- * langa asta, ar fi ramas in urma la prima schimbare — si atunci „deriva" ar fi
+ * langa asta, ar fi ramas in urma la prima schimbare — si atunci „deriva” ar fi
  * masurat diferenta dintre doua functii de-ale noastre, nu dintre noi si eMAG.
  */
 export function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
@@ -1195,7 +1505,7 @@ export function magazinDin(ctx: ContextEmag, produs: ProdusDeCartografiat) {
      *
      * Prima forma punea `?? 1`. Iar `oferteUsoare` trimite MEREU `handling_time`
      * in incarcatura — deci fiecare schimbare de PRET a unui magazin care nu si-a ales
-     * timpul de pregatire ii rescria valoarea de la eMAG cu „o zi".
+     * timpul de pregatire ii rescria valoarea de la eMAG cu „o zi”.
      *
      * Un comerciant care expediaza in trei zile si-ar fi vazut oferta promitand una,
      * dupa o simpla modificare de pret. Fara nicio eroare: campul se accepta.

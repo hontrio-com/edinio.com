@@ -41,6 +41,7 @@ import { logError } from "@/lib/error-logger";
 import { citesteRetururi, isEmagError, salveazaRetururi } from "./client";
 import type { ContextEmag } from "./sync";
 import { EMAG_TRECERI_RETUR, type EmagRetur } from "./types";
+import { EroareCitireBaza, randCitit } from "./citire";
 
 type Db = SupabaseClient<Database>;
 
@@ -166,11 +167,35 @@ export async function aduRetururile(admin: Db, ctx: ContextEmag): Promise<Rezult
  * primit marfa inapoi fara nicio urma in Edinio.
  */
 async function scrieReturul(admin: Db, ctx: ContextEmag, ret: EmagRetur): Promise<boolean> {
+  try {
+    return await scrieReturulCitit(admin, ctx, ret);
+  } catch (e) {
+    if (!(e instanceof EroareCitireBaza)) throw e;
+    /*
+     * ⚠ `false`, NU o exceptie. Aruncata, ar rupe toata trecerea de retururi si ar lasa
+     * necitite si starile de dupa. Iar `false` face deja ce trebuie in apelant: stinge
+     * `ok`, deci marcajul nu avanseaza si returul se reia.
+     */
+    void logError({
+      action: "emag/rma",
+      message: e.message,
+      details: { emagRmaId: ret?.emag_id },
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+    return false;
+  }
+}
+
+async function scrieReturulCitit(admin: Db, ctx: ContextEmag, ret: EmagRetur): Promise<boolean> {
   let orderId: string | null = null;
   if (Number.isFinite(ret.order_id)) {
-    const { data } = await admin.from("emag_orders")
-      .select("order_id").eq("business_id", ctx.businessId).eq("emag_order_id", ret.order_id).maybeSingle();
-    orderId = (data as { order_id: string | null } | null)?.order_id ?? null;
+    /* ⚠ Arunca la o cadere. Citit orbeste, `null` insemna „returul nu e al vreunei comenzi
+       stiute de noi", si returul se scria NELEGAT — apoi rescris la fel la fiecare trecere,
+       fiindca upsert-ul de mai jos suprascrie `order_id` cu acelasi `null`. */
+    orderId = randCitit<{ order_id: string | null }>("emag_orders", await admin.from("emag_orders")
+      .select("order_id").eq("business_id", ctx.businessId).eq("emag_order_id", ret.order_id)
+      .maybeSingle() as never)?.order_id ?? null;
   }
 
   const { error } = await admin.from("emag_rma").upsert({
@@ -261,10 +286,28 @@ export function incarcaturaRetur(
 export async function schimbaStareaReturului(
   admin: Db, ctx: ContextEmag, emagRmaId: number, inStare: number,
 ): Promise<RezultatRetur> {
-  const { data } = await admin.from("emag_rma")
-    .select("request_status, raw").eq("business_id", ctx.businessId).eq("emag_rma_id", emagRmaId).maybeSingle();
+  try {
+    return await schimbaStareaCitita(admin, ctx, emagRmaId, inStare);
+  } catch (e) {
+    if (!(e instanceof EroareCitireBaza)) throw e;
+    /* ⚠ Actiunea vine de la un om care apasa un buton. O exceptie i-ar arata un ecran
+       de eroare fara niciun inteles; asta ii spune ce s-a intamplat si ca poate incerca. */
+    return { fel: "esec", mesaj: "Baza de date n-a răspuns. Încearcă din nou peste câteva momente." };
+  }
+}
 
-  const rand = data as { request_status: number | null; raw: unknown } | null;
+async function schimbaStareaCitita(
+  admin: Db, ctx: ContextEmag, emagRmaId: number, inStare: number,
+): Promise<RezultatRetur> {
+  /* ⚠ Arunca la o cadere: `null` inseamna „nu stiu in ce stare e returul", iar
+     `trecerePermisa(null, …)` hotaraste din asta ce trecere are voie comerciantul sa
+     faca. O pana de o clipa i-ar fi refuzat o trecere buna, sau i-ar fi ingaduit una rea. */
+  const rand = randCitit<{ request_status: number | null; raw: unknown }>(
+    "emag_rma",
+    await admin.from("emag_rma")
+      .select("request_status, raw").eq("business_id", ctx.businessId)
+      .eq("emag_rma_id", emagRmaId).maybeSingle() as never,
+  );
   const acum = rand?.request_status ?? null;
   if (!trecerePermisa(acum, inStare)) {
     return {

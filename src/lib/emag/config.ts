@@ -24,8 +24,8 @@
  * `privat.pazeste_secretele` tine parola, dar numai parola; restul se pierde.
  *
  * **2. Doua scrieri concurente se calca.** Cronul citeste, comerciantul apasa
- * „Conecteaza" cu parola noua, cronul scrie inapoi obiectul VECHI cu un cursor schimbat.
- * Parola noua dispare, ecranul spune „conectat", cererile pica pe autentificare.
+ * „Conecteaza” cu parola noua, cronul scrie inapoi obiectul VECHI cu un cursor schimbat.
+ * Parola noua dispare, ecranul spune „conectat”, cererile pica pe autentificare.
  * Scriitorii sunt reali si nu se asteapta unul pe altul: cronul (cinci apeluri, din minut
  * in minut, cu `maxDuration = 60`, deci trecerile se suprapun), webhook-ul (pe ritmul
  * lor), salvarea din panou si importul.
@@ -38,7 +38,7 @@
  * peste `privat.store_settings`, cu declansator `INSTEAD OF UPDATE`. Postgres nu incuie
  * randul de baza la scanarea vederii, deci doua apeluri simultane se pot inca pierde unul
  * pe altul. Fereastra scade de la un dus-intors de retea (zeci de ms) la interiorul unei
- * instructiuni (sub o ms). E mult mai bine, nu e „rezolvat".
+ * instructiuni (sub o ms). E mult mai bine, nu e „rezolvat”.
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -47,16 +47,24 @@ import type { EmagConfig } from "./types";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
+/**
+ * ⚠ INTOARCE DACA A MERS, dar tot NU arunca.
+ *
+ * Cronul cheama functia dupa lucrari care CHIAR au reusit si ignora raspunsul: o exceptie
+ * acolo ar rupe trecerea si ar pierde si ce a mers. Dar panoul are nevoie de raspuns —
+ * altfel i-ar scrie comerciantului „am salvat” peste o scriere picata, adica exact felul
+ * de minciuna linistita pe care o vanam peste tot in integrarea asta.
+ */
 export async function patchEmagConfig(
   admin: Admin, businessId: string, patch: Partial<EmagConfig>,
-): Promise<void> {
+): Promise<boolean> {
   /*
    * ⚠ Peticul gol nu se trimite: `|| '{}'` in RPC ar rescrie randul degeaba, si fiecare
    * scriere goala inseamna un declansator `INSTEAD OF` care reface toate cele ~70 de
    * coloane ale randului — deci o sansa in plus sa calce o salvare concurenta pe alta
    * integrare.
    */
-  if (Object.keys(patch).length === 0) return;
+  if (Object.keys(patch).length === 0) return true;
 
   const { error } = await admin.rpc("jsonb_merge_config", {
     p_business_id: businessId,
@@ -81,5 +89,8 @@ export async function patchEmagConfig(
       businessId,
       severity: "error",
     });
+    return false;
   }
+
+  return true;
 }

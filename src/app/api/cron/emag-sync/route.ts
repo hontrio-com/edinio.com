@@ -41,7 +41,7 @@ import { ardeIncercare } from "@/lib/emag/errors";
  *   2. RECONCILIEREA — ce a hotarat eMAG se aduce inapoi
  *
  * Al doilea nu e un lux. Validarea la ei dureaza ore si nu ne anunta nimeni cand se
- * incheie: fara pasul asta, panoul ar arata „trimis" la nesfarsit pentru un produs
+ * incheie: fara pasul asta, panoul ar arata „trimis” la nesfarsit pentru un produs
  * respins acum trei zile. Exact ce s-a intamplat la Trendyol.
  *
  * ═══ ⚠ RITMUL: 3 CERERI PE SECUNDA, CUMULAT ═══
@@ -113,12 +113,146 @@ interface ElementCoada {
   attempts: number;
   /** Pane trecatoare. Amana, dar NU abandoneaza niciodata. Vezi `asteptareaDupaPana`. */
   pauze: number;
+  /**
+   * Numaratorul de scrieri al randului, crescut de declansator la FIECARE atingere.
+   *
+   * ⚠ E singurul lucru care deosebeste „elementul pe care l-am luat” de „elementul care
+   * a fost pus din nou intre timp". Vezi `2026-10-09-generatia-cozilor.sql`.
+   */
+  generation: number;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SCRIERILE IN COADA SE FAC PE GENERATIE (25.08.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ CE ERA GRESIT. Lucratorul stergea `where id = X`, atat. Dar intre clipa in care a
+   citit produsul si clipa in care sterge, comerciantul poate salva produsul din nou —
+   iar punerea la coada e un `upsert` pe aceeasi cheie unica, deci rescrie chiar randul X.
+
+   Sters asa, se pierde cererea NOUA:
+
+     Edinio = Titlu B · eMAG = Titlu A · coada = goala · eroare = niciuna
+
+   Pe pret si pe stoc repara reconcilierea. Pe titlu, descriere, imagini si
+   caracteristici nu repara nimeni — nu exista o a doua sursa care sa vada deosebirea.
+
+   ⚠ Si pe calea de esec era la fel: `attempts + 1` scris peste cererea noua o facea sa
+   mosteneasca incercarile celei vechi, si putea fi ABANDONATA fara sa fi fost incercata.
+
+   Acum fiecare scriere cere generatia cu care s-a revendicat randul. Zero randuri atinse
+   nu e o eroare: e chiar raspunsul „a venit ceva mai nou”, si atunci nu se atinge nimic.
+*/
+
+/**
+ * Ce se poate scrie pe un element de coada.
+ *
+ * ⚠ Tipul din schema, nu `Record<string, unknown>`. Cu al doilea, o cheie scrisa gresit
+ * ar fi trecut de `tsc` si ar fi ajuns un `update` care nu schimba nimic — chiar felul de
+ * defect tacut din care e facuta toata ziua asta.
+ */
+type PeticCoada = Database["public"]["Tables"]["emag_sync_queue"]["Update"];
+
+/**
+ * Scoate elementul din coada, DACA nimeni nu l-a pus din nou intre timp.
+ *
+ * ⚠ `.select("id")` nu e decor: fara el, PostgREST nu spune cate randuri a sters, iar
+ * o comparatie care nu se poate citi nu e o comparatie.
+ */
+async function scoateDinCoada(admin: Admin, el: ElementCoada): Promise<void> {
+  /*
+   * ⚠ FARA GENERATIE SE STERGE CA INAINTE, si se spune de ce.
+   *
+   * Daca `revendica_din_coada` n-ar aduce coloana — o migratie neaplicata, un tabel
+   * refacut de mana — comparatia n-ar mai putea fi indeplinita NICIODATA, si atunci
+   * niciun element n-ar mai iesi din coada: aceleasi randuri retrimise la eMAG din minut
+   * in minut, la nesfarsit. E o cadere mult mai rea decat cea de care ne aparam aici.
+   */
+  if (!Number.isFinite(el.generation)) {
+    await logError({
+      action: "emag-sync",
+      message: "coada n-are `generation`; stergerea se face fara comparatie",
+      businessId: el.business_id,
+      severity: "warning",
+    });
+    await admin.from("emag_sync_queue").delete().eq("id", el.id);
+    return;
+  }
+
+  const { data, error } = await admin.from("emag_sync_queue")
+    .delete().eq("id", el.id).eq("generation", el.generation).select("id");
+
+  if (error) {
+    /* ⚠ Ramas in coada, elementul se va retrimite. Retrimiterea e nedureroasa (`emag_id`
+       e stabil, deci e o actualizare, nu o creare); pierderea tacuta n-ar fi. */
+    await logError({
+      action: "emag-sync",
+      message: `elementul de coada n-a putut fi sters: ${error.message}`,
+      businessId: el.business_id,
+      details: { productId: el.product_id, op: el.op },
+      severity: "warning",
+    });
+    return;
+  }
+
+  if ((data ?? []).length === 0) await elibereazaPentruCerereaNoua(admin, el);
+}
+
+/**
+ * Scrie pe element, DACA nimeni nu l-a pus din nou intre timp.
+ *
+ * Intoarce `false` cand cererea a fost inlocuita — atunci nu s-a scris nimic, si asa
+ * trebuie: `attempts`, `next_retry_at` si `abandonat_la` sunt ale cererii VECHI.
+ */
+async function scrieInCoada(
+  admin: Admin, el: ElementCoada, petic: PeticCoada,
+): Promise<boolean> {
+  /* ⚠ Aceeasi plasa ca la stergere, si din acelasi motiv. */
+  if (!Number.isFinite(el.generation)) {
+    await admin.from("emag_sync_queue").update(petic).eq("id", el.id);
+    return true;
+  }
+
+  const { data, error } = await admin.from("emag_sync_queue")
+    .update(petic).eq("id", el.id).eq("generation", el.generation).select("id");
+
+  if (error) {
+    await logError({
+      action: "emag-sync",
+      message: `elementul de coada n-a putut fi actualizat: ${error.message}`,
+      businessId: el.business_id,
+      details: { productId: el.product_id, op: el.op },
+      severity: "warning",
+    });
+    return false;
+  }
+
+  if ((data ?? []).length > 0) return true;
+  await elibereazaPentruCerereaNoua(admin, el);
+  return false;
+}
+
+/**
+ * Cererea noua nu asteapta expirarea inchirierii celei vechi.
+ *
+ * ⚠ Punerea la coada NU sterge `revendicat_pana` — dinadins: sters de acolo, un al
+ * doilea cron ar putea revendica randul cat timp primul e inca in aer, si acelasi produs
+ * ar pleca de doua ori. Deci curatarea o face lucratorul, DUPA ce a terminat, si numai
+ * cand chiar vede o generatie mai noua.
+ *
+ * ⚠ `gt("generation", …)` face conditia sigura: se elibereaza numai un rand care CHIAR a
+ * fost rescris. Fara ea, s-ar putea desface inchirierea altcuiva.
+ */
+async function elibereazaPentruCerereaNoua(admin: Admin, el: ElementCoada): Promise<void> {
+  await admin.from("emag_sync_queue")
+    .update({ revendicat_pana: null })
+    .eq("id", el.id).gt("generation", el.generation);
 }
 
 /**
  * `validation_status` pe care documentatia lor nu-l descrie.
  *
- * ⚠ `null` NU intra aici: acela inseamna „inca n-am citit", si e o stare a NOASTRA, nu a
+ * ⚠ `null` NU intra aici: acela inseamna „inca n-am citit”, si e o stare a NOASTRA, nu a
  * lor. Numarata ca necunoscuta, fiecare oferta noua ar fi cerut sa i se pastreze
  * raspunsul intreg degeaba.
  */
@@ -168,7 +302,7 @@ export async function GET(req: NextRequest) {
     const c = await loadEmagContext(admin, businessId);
 
     /*
-     * ═══ ⚠ ACREDITARI REFUZATE INSEAMNA „NU MAI SUNA" (24.08.2026) ═══
+     * ═══ ⚠ ACREDITARI REFUZATE INSEAMNA „NU MAI SUNA” (24.08.2026) ═══
      *
      * `needs_reconnect` se SCRIA la fiecare verdict `chei` (401), cu doua randuri mai
      * jos si in pasul comenzilor, dar nu-l citea NIMENI pe calea automata. Cronul mergea
@@ -179,10 +313,10 @@ export async function GET(req: NextRequest) {
      * numara in limita — deci contul isi arde singur cota de 3 cereri pe secunda pentru
      * apeluri care nu pot reusi, pana cand omul reconecteaza.
      *
-     * ⚠ SE OPRESTE AICI, nu in `loadEmagContext`. Acolo, `null` inseamna „neconectat", si
-     * chiar asta ar fi spus ecranele actiunilor de mana: „Contul eMAG nu este conectat" —
+     * ⚠ SE OPRESTE AICI, nu in `loadEmagContext`. Acolo, `null` inseamna „neconectat”, si
+     * chiar asta ar fi spus ecranele actiunilor de mana: „Contul eMAG nu este conectat” —
      * fals, si l-ar fi trimis pe om sa caute in alta parte. Calea de mana are deja
-     * `ceLipsestePentruPublicare`, care spune limpede „reconecteaza contul".
+     * `ceLipsestePentruPublicare`, care spune limpede „reconecteaza contul”.
      *
      * ⚠ Nu se sterge si nu se marcheaza nimic: coada ramane intreaga si porneste singura
      * cand `needs_reconnect` se stinge la reconectare.
@@ -225,7 +359,7 @@ export async function GET(req: NextRequest) {
     const ctx = await ctxPentru(businessId);
     if (!ctx) {
       /*
-       * ⚠ LIPSA CONTEXTULUI NU INSEAMNA „MAGAZIN DECONECTAT".
+       * ⚠ LIPSA CONTEXTULUI NU INSEAMNA „MAGAZIN DECONECTAT”.
        *
        * `loadEmagContext` intoarce `null` si cand configurarea NU S-A PUTUT CITI.
        * Confundate, un hop de o secunda la baza ar fi aruncat toata munca
@@ -257,7 +391,7 @@ export async function GET(req: NextRequest) {
        * produs sters intra ANUME asa: la stergere, `emag_offers.product_id` devine
        * `null` (`on delete set null`), deci legatura se rupe exact cand avem nevoie de ea.
        *
-       * Deci elementul era sters aici, fara log, fara „dus", fara „cazut" — iar toata
+       * Deci elementul era sters aici, fara log, fara „dus”, fara „cazut” — iar toata
        * logica scrisa pentru cazul asta (`rutaDeTrimitere` cu `op: "retragere"`) era cod
        * mort pe calea automata.
        *
@@ -270,12 +404,12 @@ export async function GET(req: NextRequest) {
       if (!el.product_id) {
         const emagId = Number(el.offer_id);
         if (el.op !== "retragere" || !Number.isFinite(emagId)) {
-          await admin.from("emag_sync_queue").delete().eq("id", el.id);
+          await scoateDinCoada(admin, el);
           continue;
         }
         const rr = await cuFir(firNou("coada-retragere"), () => retragePeEmagId(admin, ctx, emagId));
         if (rr.verdict === "sarit" || rr.verdict === "reusit" || rr.verdict === "reusit_cu_observatii") {
-          await admin.from("emag_sync_queue").delete().eq("id", el.id);
+          await scoateDinCoada(admin, el);
           duse++;
         } else {
           cazute++;
@@ -284,7 +418,7 @@ export async function GET(req: NextRequest) {
           const arde = ardeIncercare(rr.verdict as Parameters<typeof ardeIncercare>[0]);
           const incercari = (el.attempts ?? 0) + (arde ? 1 : 0);
           const pauze = (el.pauze ?? 0) + (arde ? 0 : 1);
-          await admin.from("emag_sync_queue").update({
+          await scrieInCoada(admin, el, {
             attempts: incercari,
             pauze,
             last_error: rr.mesaj || null,
@@ -292,7 +426,7 @@ export async function GET(req: NextRequest) {
             next_retry_at: new Date(
               Date.now() + (arde ? asteptareaUrmatoare(incercari) : asteptareaDupaPana(pauze)),
             ).toISOString(),
-          }).eq("id", el.id);
+          });
         }
         continue;
       }
@@ -302,7 +436,7 @@ export async function GET(req: NextRequest) {
        *
        * Un element poate face mai multe cereri: loturi de cate 50, o reincercare
        * dupa 429, o masuratoare separata. Cu un fir pe rulare, toate elementele
-       * rularii ar fi purtat acelasi numar, iar „arata-mi ce a facut elementul asta"
+       * rularii ar fi purtat acelasi numar, iar „arata-mi ce a facut elementul asta”
        * ar fi intors treizeci de lucrari amestecate — adica exact nimic.
        */
       /* ⚠ Ingustarea se prinde intr-un `const` INAINTE de inchidere. TypeScript nu
@@ -314,10 +448,10 @@ export async function GET(req: NextRequest) {
         () => trimiteElement(admin, ctx, productId, el.op),
       );
 
-      /* „Sarit" inseamna „nu era nimic de facut, si nu e o eroare". Iese din coada
+      /* „Sarit” inseamna „nu era nimic de facut, si nu e o eroare”. Iese din coada
          linistit: reincercat, si-ar arde incercarile pe un lucru care nu se schimba. */
       if (r.verdict === "sarit" || r.verdict === "reusit" || r.verdict === "reusit_cu_observatii") {
-        await admin.from("emag_sync_queue").delete().eq("id", el.id);
+        await scoateDinCoada(admin, el);
         duse++;
         continue;
       }
@@ -352,12 +486,12 @@ export async function GET(req: NextRequest) {
          * si nu trebuie sa-l scoata niciodata din coada.
          */
         const pauze = (el.pauze ?? 0) + 1;
-        await admin.from("emag_sync_queue").update({
+        await scrieInCoada(admin, el, {
           pauze,
           revendicat_pana: null,
           last_error: r.mesaj || null,
           next_retry_at: new Date(Date.now() + asteptareaDupaPana(pauze)).toISOString(),
-        }).eq("id", el.id);
+        });
         continue;
       }
 
@@ -370,20 +504,24 @@ export async function GET(req: NextRequest) {
          *
          * Prima forma stergea randul. Cu un rand in jurnal, dar sters: nimeni nu-l mai
          * putea vedea, numara sau relua. Un catalog intreg putea disparea din coada
-         * fara ca panoul sa arate altceva decat „0 in asteptare" — iar comerciantul ar
+         * fara ca panoul sa arate altceva decat „0 in asteptare” — iar comerciantul ar
          * fi crezut ca totul a plecat.
          *
          * Acum ramane, marcat. `revendica_din_coada` il sare (`abandonat_la is null`),
          * ecranul il numara, si o atingere a produsului il reaprinde.
          */
-        await admin.from("emag_sync_queue")
-          .update({
-            attempts: incercari,
-            last_error: r.mesaj || null,
-            revendicat_pana: null,
-            abandonat_la: new Date().toISOString(),
-          })
-          .eq("id", el.id);
+        /*
+         * ⚠ ABANDONUL E CEA MAI IMPORTANTA COMPARATIE DIN TOATE. Scris peste o cerere
+         * noua, ar opri-o definitiv fara s-o fi incercat vreodata — si `revendica_din_coada`
+         * sare peste `abandonat_la is not null`, deci n-ar mai fi luat-o nimeni.
+         */
+        const sAScris = await scrieInCoada(admin, el, {
+          attempts: incercari,
+          last_error: r.mesaj || null,
+          revendicat_pana: null,
+          abandonat_la: new Date().toISOString(),
+        });
+        if (!sAScris) continue;
         await logError({
           action: "emag-sync",
           message: `element abandonat dupa ${incercari} incercari: ${r.mesaj}`,
@@ -402,14 +540,12 @@ export async function GET(req: NextRequest) {
        * cele 3 pe secunda ale magazinului — aceleasi prin care pleaca o miscare de
        * stoc dupa o vanzare.
        */
-      await admin.from("emag_sync_queue")
-        .update({
-          attempts: incercari,
-          last_error: r.mesaj || null,
-          revendicat_pana: null,
-          next_retry_at: new Date(Date.now() + asteptareaUrmatoare(incercari)).toISOString(),
-        })
-        .eq("id", el.id);
+      await scrieInCoada(admin, el, {
+        attempts: incercari,
+        last_error: r.mesaj || null,
+        revendicat_pana: null,
+        next_retry_at: new Date(Date.now() + asteptareaUrmatoare(incercari)).toISOString(),
+      });
     }
   }
 
@@ -481,7 +617,7 @@ export async function GET(req: NextRequest) {
      * `marcajUrmator` intoarce `null` cand nu s-a citit tot si nu se stie nici pana
      * unde — si atunci marcajul ramane pe loc, iar fereastra urmatoare reia de acolo.
      *
-     * Pus la „acum" dupa o trecere trunchiata, comenzile necitite ar fi ramas in urma
+     * Pus la „acum” dupa o trecere trunchiata, comenzile necitite ar fi ramas in urma
      * ferestrei si NU s-ar mai fi citit niciodata. Fara nicio eroare, fiindca fiecare
      * trecere in parte a reusit. Asta e chiar incidentul pentru care exista
      * `marcaj.ts`, si de aceea nu se scrie de mana aici.
@@ -544,7 +680,7 @@ export async function GET(req: NextRequest) {
        * `/rma/read` n-are `modifiedAfter` — verificat in schema lor. Are `date_start`,
        * dar acela filtreaza dupa data DESCHIDERII cererii, nu a ultimei modificari:
        * un retur deschis acum trei saptamani si primit in depozit azi n-ar fi intrat
-       * niciodata in fereastra, si ar fi ramas „Nou" in Edinio pe veci.
+       * niciodata in fereastra, si ar fi ramas „Nou” in Edinio pe veci.
        *
        * De aceea `aduRetururile` citeste dupa STARE, nu dupa timp. Marcajul se scrie
        * doar ca sa se vada in panou cand s-a uitat ultima oara.
@@ -562,7 +698,7 @@ export async function GET(req: NextRequest) {
    * sta neschimbata luni intregi.
    *
    * ⚠ La minutul 7, nu la 0. Documentatia lor cere sa nu se cheme la ore rotunde —
-   * „use e.g. 12:04:42 instead of 12:00:00" — fiindca atunci suna toata lumea deodata.
+   * „use e.g. 12:04:42 instead of 12:00:00” — fiindca atunci suna toata lumea deodata.
    */
   if (new Date(inceputulRularii).getMinutes() === 7) {
     await improspateazaIpurile(admin);
@@ -661,7 +797,7 @@ async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
     }
 
     /*
-     * ⚠ „Fara factura" NU se marcheaza si NU se raporteaza ca eroare. Inseamna doar
+     * ⚠ „Fara factura” NU se marcheaza si NU se raporteaza ca eroare. Inseamna doar
      * ca documentul inca nu s-a emis — comanda abia a intrat, sau facturarea automata
      * se declanseaza la livrare. Marcata, comanda ar fi iesit definitiv din filtru si
      * n-ar mai fi primit niciodata factura.
@@ -705,7 +841,7 @@ async function aduPdfFacturii(f: Factura): Promise<ArrayBuffer | { error: string
  *
  * ⚠ SE SCRIE SI CE E RAU, INTREG. `doc_errors` e SINGURUL loc din care afla
  * comerciantul ce sa repare. La Trendyol motivul respingerii n-a fost aratat, iar
- * produsele au stat „in aprobare" la nesfarsit — cu comerciantul convins ca noi le
+ * produsele au stat „in aprobare” la nesfarsit — cu comerciantul convins ca noi le
  * tinem pe loc.
  */
 async function scrieStatusurile(
@@ -730,7 +866,7 @@ async function scrieStatusurile(
      *
      * ⚠ CE A COSTAT, masurat pe catalogul unui comerciant cu 3.754 de oferte:
      * `eVandabila` cere `stoc > 0` deodata cu celelalte trei conditii. Cu stocul citit
-     * ca ZERO, doar 27 de oferte ieseau „Se vinde pe eMAG" — desi 3.469 erau APROBATE
+     * ca ZERO, doar 27 de oferte ieseau „Se vinde pe eMAG” — desi 3.469 erau APROBATE
      * la ei si 3.742 aveau oferta valida. Celelalte 3.727 apareau in ecran cu „Trimis,
      * in validare": o eticheta care il trimite pe om sa astepte o validare INCHEIATA
      * de mult, in loc sa se uite la ce chiar lipseste.
@@ -807,12 +943,12 @@ async function scrieStatusurile(
        * ⚠ CATE IMAGINI ARE EMAG, dupa ce ne-au spus ei (24.08.2026).
        *
        * `EmagOfertaCitita.images` exista in tipuri de la inceput si nu se scria nicaieri.
-       * Deci intrebarea „are eMAG poza noastra?" n-avea niciun raspuns in baza, iar cand
+       * Deci intrebarea „are eMAG poza noastra?” n-avea niciun raspuns in baza, iar cand
        * comerciantul a intrebat de ce vede produsele fara imagine, s-a ajuns la
        * presupuneri in loc de o privire pe un rand.
        *
        * ⚠ `null` cand campul lipseste din raspuns, `0` cand chiar n-au niciuna. Doua
-       * lucruri diferite: primul inseamna „nu ne-au spus", al doilea „ne-au spus ca nu".
+       * lucruri diferite: primul inseamna „nu ne-au spus”, al doilea „ne-au spus ca nu”.
        */
       imagini_la_ei: Array.isArray(o.images) ? o.images.length : null,
       /*
@@ -820,7 +956,7 @@ async function scrieStatusurile(
        *
        * `eVandabila` cere `status === 1` deodata cu celelalte trei conditii, dar noi n-o
        * pastram nicaieri. Deci 3.469 de oferte APROBATE la eMAG apareau in ecran cu
-       * „Trimis, in validare" — o eticheta care il trimite pe om sa astepte ceva incheiat
+       * „Trimis, in validare” — o eticheta care il trimite pe om sa astepte ceva incheiat
        * de mult, in loc sa se uite la ce chiar lipseste.
        *
        * Raspunsul lor brut a aratat `status: 2` la 8 din 9 oferte cercetate: „End of
@@ -829,7 +965,7 @@ async function scrieStatusurile(
        */
       status_la_ei: intregDeLaEi(o.status),
       /* ⚠ Ultima din cele patru conditii ale vandabilitatii pe care n-o pastram. Fara ea,
-         ecranul nu putea deosebi „n-are stoc la ei" de „e oprita la ei". */
+         ecranul nu putea deosebi „n-are stoc la ei” de „e oprita la ei”. */
       stoc_la_ei: stoc,
       ownership: intregDeLaEi(o.ownership),
       number_of_offers: intregDeLaEi(o.number_of_offers),
@@ -892,7 +1028,7 @@ async function masoaraDeriva(
    * ⚠ `auto_sync = true`, si e prima dintre doua paze.
    *
    * O oferta preluata din contul lor la import e a COMERCIANTULUI: pretul de acolo
-   * e cel pe care si l-a pus el, nu o derivare de reparat. „Reparata", i-am fi
+   * e cel pe care si l-a pus el, nu o derivare de reparat. „Reparata”, i-am fi
    * rescris catalogul preluat cu preturile din Edinio — pe tacute, si la fiecare
    * trecere. A doua paza e in `enqueueMany`, care filtreaza la fel.
    *
@@ -983,7 +1119,7 @@ async function masoaraDeriva(
        * se REPARA — adica plecam sa le scriem stocul peste al lor.
        *
        * Adunata numai din `stock[]`, o oferta care vine cu `general_stock` (forma cea
-       * mai obisnuita la citire) iesea cu ZERO. Deci: „la ei 0, la noi 40", de doua ori
+       * mai obisnuita la citire) iesea cu ZERO. Deci: „la ei 0, la noi 40”, de doua ori
        * la rand, si porneam sa reparam o derivare care nu exista.
        *
        * ⚠ Nu e doar o eticheta gresita, ca la `scrieStatusurile`: sunt SCRIERI catre
@@ -991,7 +1127,7 @@ async function masoaraDeriva(
        * pe care comerciantul poate il tine anume altfel in panoul lor.
        *
        * ⚠ `null` cand nu stim NIMIC despre stocul lor ramane: `stocDeImportat` intoarce
-       * 0 si pentru „zero adevarat", si pentru „lipseste". Deosebirea conteaza — un zero
+       * 0 si pentru „zero adevarat”, si pentru „lipseste”. Deosebirea conteaza — un zero
        * adevarat E o derivare, o lipsa nu e — deci se pastreaza intrebarea de dinainte
        * despre forma raspunsului, si abia apoi se socoteste ca la import.
        */
@@ -999,7 +1135,7 @@ async function masoaraDeriva(
       const stocLor = stiuStocul ? stocDeImportat(aLor) : null;
 
       /* ⚠ Fara pret de-al nostru nu se masoara NIMIC, nici macar stocul luat separat.
-         Pus pe zero „ca sa avem o valoare", fiecare oferta ar fi aratat o derivare de
+         Pus pe zero „ca sa avem o valoare”, fiecare oferta ar fi aratat o derivare de
          pret catre zero — si am fi pornit repararea intregului catalog pornind de la
          un numar pe care nu l-a calculat nimeni. */
       if (trimisa.sale_price == null) continue;
@@ -1066,7 +1202,7 @@ async function masoaraDeriva(
  * ⚠ eMAG trimite `validation_status` cand ca tablou de obiecte, cand ca obiect, cand
  * ca numar — se vede chiar in exemplele din OpenAPI-ul lor. Citit pe o singura
  * forma, statusul ar fi ramas `null` pentru jumatate din oferte, iar panoul ar fi
- * aratat „în validare" la nesfarsit pentru produse aprobate demult.
+ * aratat „în validare” la nesfarsit pentru produse aprobate demult.
  */
 /**
  * Lista de IP-uri de la care suna eMAG, adusa si tinuta minte.

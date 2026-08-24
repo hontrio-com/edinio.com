@@ -87,7 +87,7 @@ test("cautarea cazuta OPRESTE publicarea, nu creeaza pe orb", async () => {
   const { readFileSync } = await import("node:fs");
   const sursa = readFileSync("src/lib/emag/trimite.ts", "utf8");
 
-  assert.match(sursa, /stieCatalogul === "necunoscut"/, "rezultatul cautarii trebuie citit");
+  assert.match(sursa, /stieCatalogul\.fel === "trecatoare"/, "rezultatul cautarii trebuie citit");
   assert.match(sursa, /verdict: "trecatoare"/, "si trebuie sa opreasca publicarea");
 
   /* ⚠ Fara comentarii: nota care EXPLICA reparatia pomeneste chiar forma reparata, iar

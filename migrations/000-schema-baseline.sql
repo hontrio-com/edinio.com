@@ -2205,20 +2205,55 @@ CREATE OR REPLACE FUNCTION public.jsonb_merge_config(p_business_id uuid, p_colum
  SECURITY DEFINER
  SET search_path TO 'public', 'privat', 'pg_temp'
 AS $function$
+declare
+  v_id      uuid;
+  v_curent  jsonb;
+  v_nou     jsonb;
+  v_cai     text[];
+  v_cale    text;
+  v_parti   text[];
+  v_vechi   text;
+  v_nou_val text;
 begin
-  -- Numele coloanei intra intr-un `format(%I)`, deci il marginim la coloanele de
-  -- configurare. Fara asta, apelantul ar alege orice coloana din tabel.
   if p_column is null or p_column !~ '^[a-z][a-z0-9_]*_config$' then
     raise exception 'coloana de configurare invalida: %', p_column;
   end if;
   if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
     raise exception 'peticul trebuie sa fie un obiect jsonb';
   end if;
+  if p_business_id is null then
+    raise exception 'business_id lipsa';
+  end if;
 
   execute format(
-    'update public.store_settings set %I = coalesce(%I, ''{}''::jsonb) || $1, updated_at = now() where business_id = $2',
-    p_column, p_column
-  ) using p_patch, p_business_id;
+    'select id, coalesce(%I, ''{}''::jsonb) from privat.store_settings where business_id = $1 for update',
+    p_column
+  ) into v_id, v_curent using p_business_id;
+
+  if v_id is null then
+    return;
+  end if;
+
+  v_nou := v_curent || p_patch;
+
+  select array_agg(cale) into v_cai from privat.campuri_secrete where coloana = p_column;
+
+  if v_cai is not null then
+    foreach v_cale in array v_cai loop
+      v_parti := string_to_array(v_cale, '.');
+      v_vechi   := v_curent #>> v_parti;
+      v_nou_val := v_nou    #>> v_parti;
+      if coalesce(v_nou_val, '') = '' and coalesce(v_vechi, '') <> '' then
+        v_nou := jsonb_set(v_nou, v_parti, to_jsonb(v_vechi), true);
+      end if;
+    end loop;
+    v_nou := privat.cripteaza_config(v_nou, v_cai);
+  end if;
+
+  execute format(
+    'update privat.store_settings set %I = $1, updated_at = now() where id = $2',
+    p_column
+  ) using v_nou, v_id;
 end;
 $function$
 ;
@@ -3643,6 +3678,17 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trg_generatia_cozii()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  new.generation := old.generation + 1;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.trg_repretuieste_pachetele()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3878,7 +3924,8 @@ create table if not exists public.aboutyou_sync_queue (
   revendicat_pana timestamp with time zone,
   next_retry_at timestamp with time zone,
   abandonat_la timestamp with time zone,
-  prioritate smallint default 5 not null);
+  prioritate smallint default 5 not null,
+  generation bigint default 1 not null);
 
 create table if not exists public.aboutyou_variants (
   id uuid default gen_random_uuid() not null,
@@ -4252,7 +4299,8 @@ create table if not exists public.emag_sync_queue (
   next_retry_at timestamp with time zone,
   abandonat_la timestamp with time zone,
   prioritate smallint default 5 not null,
-  pauze integer default 0 not null);
+  pauze integer default 0 not null,
+  generation bigint default 1 not null);
 
 create table if not exists public.email_automations (
   id uuid default gen_random_uuid() not null,
@@ -4320,7 +4368,8 @@ create table if not exists public.gmc_sync_queue (
   revendicat_pana timestamp with time zone,
   next_retry_at timestamp with time zone,
   abandonat_la timestamp with time zone,
-  prioritate smallint default 5 not null);
+  prioritate smallint default 5 not null,
+  generation bigint default 1 not null);
 
 create table if not exists public.invoices (
   id uuid default gen_random_uuid() not null,
@@ -4446,7 +4495,8 @@ create table if not exists public.olx_sync_queue (
   revendicat_pana timestamp with time zone,
   next_retry_at timestamp with time zone,
   abandonat_la timestamp with time zone,
-  prioritate smallint default 5 not null);
+  prioritate smallint default 5 not null,
+  generation bigint default 1 not null);
 
 create table if not exists public.operatii_externe (
   id uuid default gen_random_uuid() not null,
@@ -4897,7 +4947,8 @@ create table if not exists public.trendyol_sync_queue (
   revendicat_pana timestamp with time zone,
   next_retry_at timestamp with time zone,
   abandonat_la timestamp with time zone,
-  prioritate smallint default 5 not null);
+  prioritate smallint default 5 not null,
+  generation bigint default 1 not null);
 
 create table if not exists public.trendyol_variants (
   id uuid default gen_random_uuid() not null,
@@ -5561,6 +5612,7 @@ create or replace view public.store_settings with (security_invoker = true) as
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
 CREATE TRIGGER set_store_settings_updated_at BEFORE UPDATE ON privat.store_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.aboutyou_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER businesses_blocheaza_domeniu_platforma BEFORE INSERT OR UPDATE OF custom_domain ON public.businesses FOR EACH ROW EXECUTE FUNCTION blocheaza_domeniu_platforma();
 CREATE TRIGGER set_businesses_updated_at BEFORE UPDATE ON public.businesses FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER catalog_produs_cuvinte AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_cuvinte_murdar();
@@ -5571,6 +5623,9 @@ CREATE TRIGGER set_domain_orders_updated_at BEFORE UPDATE ON public.domain_order
 CREATE TRIGGER set_emag_offers_updated_at BEFORE UPDATE ON public.emag_offers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER set_emag_orders_updated_at BEFORE UPDATE ON public.emag_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER set_emag_rma_updated_at BEFORE UPDATE ON public.emag_rma FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.emag_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
+CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.gmc_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
+CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.olx_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
 CREATE TRIGGER products_repretuieste_pachetele AFTER UPDATE OF price ON public.products FOR EACH ROW WHEN (((NOT COALESCE(new.is_bundle, false)) AND (new.price IS DISTINCT FROM old.price))) EXECUTE FUNCTION trg_repretuieste_pachetele();
@@ -5582,6 +5637,7 @@ CREATE TRIGGER store_settings_ins INSTEAD OF INSERT ON public.store_settings FOR
 CREATE TRIGGER store_settings_upd INSTEAD OF UPDATE ON public.store_settings FOR EACH ROW EXECUTE FUNCTION privat.store_settings_upd();
 CREATE TRIGGER support_messages_after_insert AFTER INSERT ON public.support_messages FOR EACH ROW EXECUTE FUNCTION handle_support_message_insert();
 CREATE TRIGGER support_tickets_updated_at BEFORE UPDATE ON public.support_tickets FOR EACH ROW EXECUTE FUNCTION update_support_ticket_updated_at();
+CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.trendyol_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER set_users_profile_updated_at BEFORE UPDATE ON public.users_profile FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER users_profile_blocheaza_escaladare BEFORE UPDATE ON public.users_profile FOR EACH ROW EXECUTE FUNCTION blocheaza_escaladare_users_profile();
 
@@ -7729,6 +7785,7 @@ grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
 grant execute on function public.trg_categorii_rezumat_murdar() to anon;
 grant execute on function public.trg_categorii_rezumat_murdar() to authenticated;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
+grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to anon;
 grant execute on function public.trg_repretuieste_pachetele() to authenticated;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
@@ -7812,6 +7869,7 @@ revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minu
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
+revoke execute on function public.trg_generatia_cozii() from public;
 revoke execute on function public.update_support_ticket_updated_at() from public;
 
 notify pgrst, 'reload schema';

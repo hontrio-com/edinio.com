@@ -304,6 +304,7 @@ export type Database = {
           attempts: number
           business_id: string
           created_at: string
+          generation: number
           id: string
           last_error: string | null
           next_retry_at: string | null
@@ -318,6 +319,7 @@ export type Database = {
           attempts?: number
           business_id: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -332,6 +334,7 @@ export type Database = {
           attempts?: number
           business_id?: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -1664,6 +1667,7 @@ export type Database = {
           attempts: number
           business_id: string
           created_at: string
+          generation: number
           id: string
           last_error: string | null
           next_retry_at: string | null
@@ -1679,6 +1683,7 @@ export type Database = {
           attempts?: number
           business_id: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -1694,6 +1699,7 @@ export type Database = {
           attempts?: number
           business_id?: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -1930,6 +1936,7 @@ export type Database = {
           attempts: number
           business_id: string
           created_at: string
+          generation: number
           id: string
           next_retry_at: string | null
           offer_id: string
@@ -1943,6 +1950,7 @@ export type Database = {
           attempts?: number
           business_id: string
           created_at?: string
+          generation?: number
           id?: string
           next_retry_at?: string | null
           offer_id: string
@@ -1956,6 +1964,7 @@ export type Database = {
           attempts?: number
           business_id?: string
           created_at?: string
+          generation?: number
           id?: string
           next_retry_at?: string | null
           offer_id?: string
@@ -2416,6 +2425,7 @@ export type Database = {
           attempts: number
           business_id: string
           created_at: string
+          generation: number
           id: string
           last_error: string | null
           next_retry_at: string | null
@@ -2430,6 +2440,7 @@ export type Database = {
           attempts?: number
           business_id: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -2444,6 +2455,7 @@ export type Database = {
           attempts?: number
           business_id?: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -4282,6 +4294,7 @@ export type Database = {
           attempts: number
           business_id: string
           created_at: string
+          generation: number
           id: string
           last_error: string | null
           next_retry_at: string | null
@@ -4296,6 +4309,7 @@ export type Database = {
           attempts?: number
           business_id: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null
@@ -4310,6 +4324,7 @@ export type Database = {
           attempts?: number
           business_id?: string
           created_at?: string
+          generation?: number
           id?: string
           last_error?: string | null
           next_retry_at?: string | null

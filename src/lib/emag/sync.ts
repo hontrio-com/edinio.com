@@ -51,9 +51,30 @@ export interface ContextEmag {
  * separat, de apelant. Toate actiunile trec prin `guard()` inainte.
  */
 export async function loadEmagContext(admin: Db, businessId: string): Promise<ContextEmag | null> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("store_settings").select("emag_config, vat_rate, prices_include_vat")
     .eq("business_id", businessId).maybeSingle();
+
+  /*
+   * ⚠ `null` INSEAMNA DOUA LUCRURI, SI NU SE POT DESPARTI IN TIPUL DE INTOARCERE.
+   *
+   * Functia asta e chemata din vreo treizeci de locuri care toate scriu „Contul eMAG nu
+   * este conectat." — un mesaj increzator si, la o pana a bazei, fals.
+   *
+   * ⚠ Desfacerea in trei stari se face deja acolo unde CONTEAZA: cronul cheama
+   * `esteDeconectatEmag`, care are trei raspunsuri, si nu atinge coada magazinului cat
+   * timp nu stie. Aici ramane `null`, dar EROAREA SE SCRIE — altfel o pana de o clipa e
+   * nedeosebita, in jurnal, de un magazin care chiar n-a legat eMAG.
+   */
+  if (error) {
+    void logError({
+      action: "emag.context",
+      message: `contextul nu s-a putut citi: ${error.message}`,
+      businessId,
+      severity: "warning",
+    });
+    return null;
+  }
 
   const config = ((data?.emag_config as EmagConfig) ?? {}) || {};
   if (!config.connected || !config.username || !config.password) return null;

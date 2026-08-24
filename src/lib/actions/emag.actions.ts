@@ -32,6 +32,7 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
+import { patchEmagConfig } from "@/lib/emag/config";
 import { deCeNuSeVinde } from "@/lib/emag/de-ce-nu-se-vinde";
 import { cautaCategorie } from "@/lib/emag/cauta-categorie";
 import { citesteAmintirea } from "@/lib/emag/memorie";
@@ -43,7 +44,7 @@ import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_P
 import { aduComenzile, aduIstoricul, type RezultatIstoric } from "@/lib/emag/orders";
 import { cuFir, firNou } from "@/lib/emag/jurnal";
 import { pretPentruSmartDeals, propuneOferte } from "@/lib/emag/campanii";
-/* ⚠ Regula casei pentru „cat incaseaza curierul", scrisa dupa comanda #0033:
+/* ⚠ Regula casei pentru „cat incaseaza curierul”, scrisa dupa comanda #0033:
    105,50 lei plecati fara nicio cale de incasare. Vezi `orders/ramburs.ts`. */
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import {
@@ -234,14 +235,14 @@ export interface StareEmag {
      * ═══ ⚠ DE CE E NEVOIE DE ASTA ȘI NU AJUNG CIFRELE DE MAI SUS ═══
      *
      * Fiindcă cele de mai sus nu se exclud și nu se adună. Măsurat pe contul real:
-     * „Oferte 3754", iar dedesubt 61 + 3693 + 154 = **3908**. „În validare" număra
+     * „Oferte 3754”, iar dedesubt 61 + 3693 + 154 = **3908**. „În validare” număra
      * starea NOASTRĂ (`queued`/`sent`), nu verdictul lor: din cele 3.693, **3.445**
      * erau de fapt aprobate și doar 4 chiar în validare. Iar cele 154 respinse erau
      * numărate de amândouă cartonașele.
      *
      * ⚠ Și lipsea cu totul starea care privește cel mai mult catalogul: 3.089 de oferte
-     * „End of Life" plus 318 oprite, care se repornesc DOAR din panoul eMAG. Ecranul nu
-     * pomenea că există. Omul citea „în validare" și aștepta ceva ce nu venea.
+     * „End of Life” plus 318 oprite, care se repornesc DOAR din panoul eMAG. Ecranul nu
+     * pomenea că există. Omul citea „în validare” și aștepta ceva ce nu venea.
      *
      * `numara_ofertele_emag` aplică EXACT ordinea din `deCeNuSeVinde`, deci fiecare
      * ofertă cade într-o singură găleată, iar suma e chiar totalul, prin construcție.
@@ -251,7 +252,7 @@ export interface StareEmag {
      * `false` cand numaratoarea pe stari N-A PUTUT FI CITITA.
      *
      * ⚠ Fara steagul asta, o citire picata arata identic cu un catalog gol: ecranul scria
-     * „Se vând pe eMAG: 0" pentru ca n-a putut intreba. Chiar minciuna reparata azi in
+     * „Se vând pe eMAG: 0” pentru ca n-a putut intreba. Chiar minciuna reparata azi in
      * alte trei locuri, facuta de mine in al patrulea.
      */
     starileCitite: boolean;
@@ -262,7 +263,7 @@ export interface StareEmag {
    * ═══ ⚠ LIPSA ASTA N-AVEA NICIO SUPRAFATA (24.08.2026) ═══
    *
    * `invoice_uploaded_at` era scris si citit EXCLUSIV de filtrul cronului. Niciun ecran
-   * nu arata „comenzile astea livrate n-au factura la eMAG", desi ei o CER dupa livrare.
+   * nu arata „comenzile astea livrate n-au factura la eMAG”, desi ei o CER dupa livrare.
    * Comerciantul ar fi aflat cand i-o cereau.
    *
    * ⚠ Numai cele LIVRATE. Una abia intrata n-are de ce sa aiba factura inca, iar
@@ -274,7 +275,7 @@ export interface StareEmag {
    * Elemente oprite dupa ce si-au ars toate incercarile.
    *
    * ⚠ NU se sterg. Sterse, nimeni nu le mai putea vedea, numara sau relua — iar
-   * panoul ar fi aratat „0 in asteptare" pentru un catalog intreg care nu plecase.
+   * panoul ar fi aratat „0 in asteptare” pentru un catalog intreg care nu plecase.
    */
   abandonate: number;
 }
@@ -296,12 +297,12 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
   /*
    * ═══ ⚠ STARILE SE SCRIU CU TIPUL, NU CU SIRURI LIBERE ═══
    *
-   * Prima forma numara dupa „activ", „in_validare", „respins", „eroare" — nume
+   * Prima forma numara dupa „activ”, „in_validare”, „respins”, „eroare” — nume
    * inventate inainte sa existe `StareOferta`, si care nu se potrivesc cu NICIUNA
    * dintre starile pe care le scrie codul.
    *
    * Deci toate cele patru numaratori intorceau ZERO. Un comerciant cu 400 de oferte
-   * publicate ar fi vazut in panou „400 oferte · 0 active · 0 în validare" si ar fi
+   * publicate ar fi vazut in panou „400 oferte · 0 active · 0 în validare” si ar fi
    * tras singura concluzie cu sens: ca integrarea nu merge. Nicio eroare nicaieri —
    * o interogare care nu gaseste nimic e o interogare reusita.
    *
@@ -325,7 +326,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       .eq("business_id", businessId).in("validation_status", [5, 6, 8, 10, 12]),
     stare("error"),
     /*
-     * ═══ ⚠ „PRELUATE" SE CITEȘTE DIN `auto_sync`, NU DIN `status` (24.08.2026) ═══
+     * ═══ ⚠ „PRELUATE” SE CITEȘTE DIN `auto_sync`, NU DIN `status` (24.08.2026) ═══
      *
      * Aici era `stare("imported")`. Dar `imported` e o stare de TRECERE: reconcilierea
      * mută rândul pe `live` sau `sent` în câteva minute. Măsurat pe contul real:
@@ -386,7 +387,7 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     webhookUrl: emagWebhookUrl(businessId),
     ultimulWebhook: config.ultimul_webhook ?? null,
     /* ⚠ Se citeste marcajul care EXISTA deja, nu se scrie unul nou la fiecare trecere.
-       Un camp „ultima trecere" ar fi insemnat o scriere pe minut si pe magazin, pentru
+       Un camp „ultima trecere” ar fi insemnat o scriere pe minut si pe magazin, pentru
        o informatie pe care cursorul comenzilor o poarta oricum. */
     ultimaSincronizare: config.orders_synced_at ?? null,
     vatId: config.vat_id ?? null,
@@ -412,9 +413,9 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       /*
        * ⚠ `{}` la o citire picată, si un STEAG care spune ca n-am putut citi.
        *
-       * Numai `{}` nu era de ajuns: ecranul randeaza „Se vând" mereu, cu `?? 0`, deci o
+       * Numai `{}` nu era de ajuns: ecranul randeaza „Se vând” mereu, cu `?? 0`, deci o
        * citire picata arata ca un catalog gol. Comentariul de aici sustinea contrariul —
-       * „un cartonaș lipsă se vede, unul cu zero minte" — dar codul de pe ecran il
+       * „un cartonaș lipsă se vede, unul cu zero minte” — dar codul de pe ecran il
        * contrazicea.
        */
       peStare: (peStare.data ?? {}) as Record<string, number>,
@@ -472,7 +473,7 @@ export async function connectEmag(
   const veche = await loadConfig(businessId);
 
   /*
-   * ⚠ O parola goala inseamna „nu o schimba", nu „sterge-o". Fara regula asta, un
+   * ⚠ O parola goala inseamna „nu o schimba”, nu „sterge-o”. Fara regula asta, un
    * comerciant care schimba doar tara si-ar fi sters credentiala fara sa stie —
    * exact defectul descris in `lib/integrari/secrete.ts`.
    */
@@ -648,7 +649,7 @@ export async function sugereazaCategoriiEmag(
    * ocupat douăzeci de secunde ritmul de care are nevoie coada: aceleași 3 cereri pe
    * secundă prin care pleacă o mișcare de stoc după o vânzare.
    *
-   * ⚠ `fortat` există pentru butonul „Reîmprospătează": o listă veche nu strică
+   * ⚠ `fortat` există pentru butonul „Reîmprospătează”: o listă veche nu strică
    * nimic, dar comerciantul care tocmai a cerut acces la o categorie nouă trebuie să
    * o poată vedea fără să aștepte o săptămână.
    */
@@ -755,8 +756,27 @@ export async function salveazaSetariEmag(
     return { error: "Taxa verde nu poate fi negativă." };
   }
 
-  const noua: EmagConfig = {
-    ...veche,
+  /*
+   * ═══ ⚠ PETIC, NU OBIECTUL INTREG (25.08.2026) ═══
+   *
+   * Forma dinainte pornea de la `...veche` — configurarea citita cu cateva zeci de
+   * milisecunde mai devreme — si scria inapoi TOT. Intre citire si scriere, cronul poate
+   * apuca sa scrie un marcaj al lui, iar acela se pierdea.
+   *
+   * ⚠ Un cursor de comenzi intors inapoi se repara singur: dedublarea prinde comenzile
+   * recitite. `catalog_citit_la` NU se repara: se scrie o singura data, la primul import,
+   * iar pierdut face `rutaDeTrimitere` sa refuze publicarea pana la urmatorul import.
+   *
+   * Acum pleaca numai campurile pe care le-a atins omul, iar imbinarea o face Postgres pe
+   * randul INCUIAT (vezi `jsonb_merge_config`). Ce n-a atins nimeni de aici nu se mai
+   * poate pierde de aici.
+   *
+   * ⚠ CAMPUL GOLIT SE TRIMITE `null`, NU LIPSA. Intr-o imbinare, cheia absenta inseamna
+   * „las-o cum e”, deci taxa verde stearsa de comerciant ar fi ramas pe loc. `null` e
+   * singurul fel de a spune „scoate-o”, iar cititorii o iau deja drept lipsa:
+   * `Number(green_tax) > 0` si `alegeSupplyLeadTime(...) != null`.
+   */
+  const petic: Partial<EmagConfig> = {
     ...(setari.vat_id != null ? { vat_id: setari.vat_id } : {}),
     /* ⚠ `0 | 1`, nu boolean: campul pleaca asa cum e la eMAG. */
     ...(setari.emag_club != null ? { emag_club: (setari.emag_club ? 1 : 0) as 0 | 1 } : {}),
@@ -766,15 +786,15 @@ export async function salveazaSetariEmag(
     ...(setari.auto_sync != null ? { auto_sync: setari.auto_sync } : {}),
     ...(setari.auto_publish != null ? { auto_publish: setari.auto_publish } : {}),
     ...(setari.warehouse_id != null ? { warehouse_id: setari.warehouse_id } : {}),
-    ...(setari.green_tax !== undefined ? { green_tax: setari.green_tax ?? undefined } : {}),
-    ...(setari.stoc_rezervat !== undefined ? { stoc_rezervat: setari.stoc_rezervat ?? undefined } : {}),
+    ...(setari.green_tax !== undefined ? { green_tax: setari.green_tax ?? null } : {}),
+    ...(setari.stoc_rezervat !== undefined ? { stoc_rezervat: setari.stoc_rezervat ?? null } : {}),
     ...(setari.sync_continut != null ? { sync_continut: setari.sync_continut } : {}),
     /* ⚠ SE POTRIVESTE PE VALORILE LOR, nu se scrie numarul cerut. Enumul lor e
        2, 3, 5, 7, 14, 30, 60, 90, 120: un 10 pus de om ar fi fost refuzat de eMAG cu
        un mesaj despre camp, iar comerciantul ar fi cautat greseala in alta parte.
        `alegeSupplyLeadTime` rotunjeste IN SUS — promite mai incet, nu mai repede. */
     ...(setari.supply_lead_time !== undefined
-      ? { supply_lead_time: alegeSupplyLeadTime(setari.supply_lead_time) ?? undefined }
+      ? { supply_lead_time: alegeSupplyLeadTime(setari.supply_lead_time) ?? null }
       : {}),
     /* ⚠ Se scrie numai valoarea RECUNOSCUTA. Un sir venit de oriunde altundeva ar
        fi ajuns in config si l-ar fi facut pe `sursaAdevarului` sa cada pe implicit —
@@ -785,7 +805,7 @@ export async function salveazaSetariEmag(
       ? { deriva_stoc: setari.deriva_stoc } : {}),
   };
 
-  const ok = await saveConfig(g.supabase, businessId, noua);
+  const ok = await patchEmagConfig(createAdminClient(), businessId, petic);
   if (!ok) return { error: "Nu am putut salva setările. Încearcă din nou." };
 
   revalidatePath(FEATURE_PATH);
@@ -795,7 +815,7 @@ export async function salveazaSetariEmag(
 /**
  * Timpul de pregatire, ales dintre valorile INGADUITE de eMAG.
  *
- * ⚠ Rotunjeste IN SUS. Un magazin care expediaza in trei zile si primeste „2"
+ * ⚠ Rotunjeste IN SUS. Un magazin care expediaza in trei zile si primeste „2”
  * fiindca 2 e mai aproape decat 5 promite clientului mai repede decat poate, iar
  * la eMAG intarzierea se numara si scade nota vanzatorului.
  */
@@ -854,7 +874,7 @@ export async function importaDinEmag(
       /*
        * ⚠ SI STIVA, NU DOAR MESAJUL. Pe 24.08.2026, importul a picat cu „invalid input
        * syntax for type integer: «true»" si atat: niciun fisier, nicio linie, niciun
-       * pas. Mesajul singur spune CE, nu UNDE — iar aici „unde" erau opt locuri
+       * pas. Mesajul singur spune CE, nu UNDE — iar aici „unde” erau opt locuri
        * deopotriva de plauzibile, fiindca importul citeste si scrie in patru tabele.
        *
        * ⚠ Se taie la 2000 de caractere: o stiva intreaga in `error_logs` umple ecranul
@@ -909,7 +929,7 @@ export async function leagaOferteImportateEmag(
  * utilizator nu are mai mult de un magazin — dar e o capcana care asteapta.
  *
  * In ziua in care Edinio da voie la doua magazine, importul eMAG al celui de-al
- * doilea ar fi cazut cu „Import negasit": jobul e al magazinului B, iar verificarea
+ * doilea ar fi cazut cu „Import negasit”: jobul e al magazinului B, iar verificarea
  * il compara cu A. Iar mesajul n-ar fi pomenit nimic despre magazine, deci nimeni
  * n-ar fi legat eroarea de cauza.
  *
@@ -953,13 +973,13 @@ export async function continuaImportEmag(
  *
  * ═══ ⚠ DE CE NU MERGE PRIN COADA ═══
  *
- * Fiindca omul se uita la ecran. Pus in coada, ar fi vazut „se trimite" si ar fi
+ * Fiindca omul se uita la ecran. Pus in coada, ar fi vazut „se trimite” si ar fi
  * asteptat pana la un minut fara nicio veste — iar daca eMAG refuza, motivul ar fi
  * aparut abia dupa aceea, intr-un alt ecran. Aici raspunsul lor vine inapoi in
  * aceeasi apasare, cu tot cu motiv.
  *
  * ⚠ `fortat: true`. Apasarea explicita trece si peste ofertele preluate: „nu trimite
- * singur" nu inseamna „nu trimite niciodata". Vezi `rutaDeTrimitere`.
+ * singur" nu inseamna „nu trimite niciodata”. Vezi `rutaDeTrimitere`.
  */
 export async function trimiteAcumPeEmag(
   businessId: string,
@@ -1004,7 +1024,7 @@ export async function trimiteAcumPeEmag(
  * Opreste o ofertă de la vânzare pe eMAG.
  *
  * ⚠ eMAG NU ARE STERGERE DE OFERTA. Se trimite `status: 0`, si oferta ramane acolo,
- * nevandabila. Butonul trebuie sa spuna asta: „Retrage", nu „Șterge" — altfel
+ * nevandabila. Butonul trebuie sa spuna asta: „Retrage”, nu „Șterge” — altfel
  * comerciantul apasa asteptand sa dispara si se sperie cand o vede tot in contul lui.
  */
 export async function retrageDePeEmag(
@@ -1059,7 +1079,7 @@ export async function comutaSincronizareaOfertei(
 /**
  * Pornește sincronizarea automată pentru TOATE ofertele preluate deodată.
  *
- * ═══ ⚠ DE CE E NEVOIE DE „TOATE" ═══
+ * ═══ ⚠ DE CE E NEVOIE DE „TOATE” ═══
  *
  * `comutaSincronizareaOfertei` merge oferta cu oferta, și e potrivită când comerciantul
  * alege câteva. Dar măsurat pe contul real: **3.714 din 3.754** de oferte au `auto_sync`
@@ -1153,7 +1173,7 @@ export async function emiteAwbEmag(
   /*
    * ═══ ⚠ RAMBURSUL SE IA DIN COMANDA NOASTRĂ, NU DIN `cashed_cod` ═══
    *
-   * `cashed_cod` e, în schema lor, „The cashed amount from Cash on Delivery payment" —
+   * `cashed_cod` e, în schema lor, „The cashed amount from Cash on Delivery payment” —
    * adică suma DEJA încasată. Iar `payment_status` e descris ca „For COD, stays 0 until
    * the cashed amount is received by eMAG".
    *
@@ -1167,7 +1187,7 @@ export async function emiteAwbEmag(
    *
    * ⚠ `rambursDeIncasat` e regula casei, scrisă după comanda #0033 de la
    * Suporti-Numar.ro: 105,50 lei plecați pe 15.07.2026 fără nicio cale de încasare.
-   * Întrebarea corectă nu e „ce metodă de plată a ales clientul", ci „au intrat banii".
+   * Întrebarea corectă nu e „ce metodă de plată a ales clientul”, ci „au intrat banii”.
    * Calea eMAG era singura care n-o folosea.
    */
   const { data: comandaLocala, error: eComanda } = await admin.from("orders")
@@ -1259,7 +1279,7 @@ export async function schimbaReturEmag(
  * Ce preț cere eMAG pentru insigna Smart Deals.
  *
  * ⚠ NU SCHIMBĂ NIMIC. Întoarce numărul, ca să-l vadă comerciantul lângă marja lui.
- * O integrare care taie prețuri singură „ca să iasă mai bine" face exact răul pe
+ * O integrare care taie prețuri singură „ca să iasă mai bine” face exact răul pe
  * care nimeni nu-l cere.
  */
 export async function pretSmartDealsEmag(
@@ -1316,12 +1336,12 @@ export interface DetaliiCategorieEmag {
  * ═══ ⚠ DE CE, cand exista deja sugestii automate ═══
  *
  * Masurat pe 24.08.2026: potrivirea automata a dat ZERO sugestii cu incredere mare din
- * cele 13 categorii ramase nemapate ale unui magazin de animale — „Castron" -> „Casti PC",
- * „Aditivi furajeri" -> „Aditivi auto", iar la „Sampoane" si „Litiera" nimic. Comerciantul
+ * cele 13 categorii ramase nemapate ale unui magazin de animale — „Castron” -> „Casti PC”,
+ * „Aditivi furajeri” -> „Aditivi auto”, iar la „Sampoane” si „Litiera” nimic. Comerciantul
  * le-a ignorat pe drept si a ramas cu 346 de produse nepublicabile.
  *
  * Raspunsul bun ERA in raftul lor. Doar ca trebuia CAUTAT, nu ghicit: omul stie ce vinde,
- * scrie „pisici" si alege.
+ * scrie „pisici” si alege.
  *
  * ⚠ NU cere nimic de la eMAG. Cauta in lista memorata de `sugereazaCategoriiEmag`, deci
  * nu arde din cele 3 cereri pe secunda ale magazinului la fiecare tasta apasata.
@@ -1342,7 +1362,7 @@ export async function cautaCategorieEmag(
     businessId, tara: config.tara, cont: config.username, fel: "categorii",
   });
 
-  /* ⚠ Fara raft adus nu se cauta in gol: se spune omului sa apese intai „Sugestii". */
+  /* ⚠ Fara raft adus nu se cauta in gol: se spune omului sa apese intai „Sugestii”. */
   if (!amintire?.date) return { gasite: [], raftAdus: false };
 
   return { gasite: cautaCategorie(termen, amintire.date, 25), raftAdus: true };
@@ -1381,7 +1401,7 @@ export async function detaliiCategorieEmag(
  *
  * ⚠ CHEIA E UN NUME, NU UN ID. `products.category` e text la noi — două produse cu
  * aceeași denumire de categorie împart maparea. Scrisă cu un id, harta n-ar fi găsit
- * niciodată nimic, iar fiecare publicare ar fi eșuat cu „categoria nu e legată".
+ * niciodată nimic, iar fiecare publicare ar fi eșuat cu „categoria nu e legată”.
  *
  * ⚠ Se verifică aici că nu lipsește nicio caracteristică obligatorie. Trimisă
  * incompletă, oferta pleacă, arde din cele 3 cereri pe secundă, și se întoarce cu o
@@ -1404,12 +1424,12 @@ export async function salveazaMapareCategorieEmag(
   const cat = await aduCategorie(c.auth, mapare.category_id);
   if ("error" in cat) return cat;
 
-  /* ⚠ `is_allowed !== 1` nu înseamnă „ascunde din listă", înseamnă „produsele
+  /* ⚠ `is_allowed !== 1` nu înseamnă „ascunde din listă”, înseamnă „produsele
      trimise acolo se resping" — iar respingerea arată exact ca o caracteristică
      lipsă, deci s-ar fi căutat zile întregi în datele produsului. */
   if (cat.is_allowed !== 1) {
     return {
-      error: `Nu ai acces de vânzare în categoria „${cat.name ?? mapare.category_id}". ` +
+      error: `Nu ai acces de vânzare în categoria „${cat.name ?? mapare.category_id}”. ` +
         "Cere-l din panoul eMAG sau alege alta.",
     };
   }
@@ -1421,7 +1441,7 @@ export async function salveazaMapareCategorieEmag(
    *
    * Înainte, maparea era respinsă până când comerciantul fixa o valoare pentru fiecare
    * caracteristică obligatorie. Ceea ce e absurd tocmai la cele care contează: nu toate
-   * tricourile sunt „M", iar `Mărime` e obligatorie.
+   * tricourile sunt „M”, iar `Mărime` e obligatorie.
    *
    * De acum, caracteristicile se iau întâi din fișa fiecărui produs
    * (`page_sections.specifications`), iar cele fixate aici umplu golurile. Deci o
@@ -1436,8 +1456,16 @@ export async function salveazaMapareCategorieEmag(
     .map((x) => (x.name ?? "").trim() || `Caracteristica ${x.id}`);
 
   const veche = await loadConfig(businessId);
-  const noua: EmagConfig = {
-    ...veche,
+  /*
+   * ⚠ PETIC, NU OBIECTUL INTREG. Vezi nota din salvarea setarilor: `...veche` scria
+   * inapoi si marcajele pe care cronul apucase sa le schimbe intre citire si scriere.
+   *
+   * ⚠ `category_map` pleaca INTREAGA, si asa trebuie: imbinarea `||` din Postgres e la
+   * nivelul intai, deci un petic `{category_map: {noua: x}}` ar inlocui harta, nu ar
+   * adauga in ea. Se citeste harta veche, se pune intrarea noua peste, si se trimite
+   * toata. Aceeasi socoteala e scrisa si in `marketplace/mapare-categorii.ts`.
+   */
+  const petic: Partial<EmagConfig> = {
     category_map: {
       ...(veche.category_map ?? {}),
       [nume]: {
@@ -1458,7 +1486,7 @@ export async function salveazaMapareCategorieEmag(
     },
   };
 
-  const ok = await saveConfig(g.supabase, businessId, noua);
+  const ok = await patchEmagConfig(createAdminClient(), businessId, petic);
   if (!ok) return { error: "Nu am putut salva maparea. Încearcă din nou." };
 
   revalidatePath(FEATURE_PATH);
@@ -1483,7 +1511,9 @@ export async function stergeMapareCategorieEmag(
   const harta = { ...(veche.category_map ?? {}) };
   delete harta[(numeCategorie ?? "").trim()];
 
-  const ok = await saveConfig(g.supabase, businessId, { ...veche, category_map: harta });
+  /* ⚠ Tot petic, si tot cu harta INTREAGA: stergerea unei chei din ea se poate spune
+     numai trimitand harta fara acea cheie. */
+  const ok = await patchEmagConfig(createAdminClient(), businessId, { category_map: harta });
   if (!ok) return { error: "Nu am putut șterge maparea." };
 
   revalidatePath(FEATURE_PATH);
@@ -1541,7 +1571,7 @@ export interface RandOfertaEcran {
   /**
    * Oferta exista la eMAG, dar produsul nu e in magazinul nostru.
    *
-   * ⚠ NU inseamna „sters". Inseamna „n-a fost niciodata aici" — comerciantul vinde pe
+   * ⚠ NU inseamna „sters”. Inseamna „n-a fost niciodata aici” — comerciantul vinde pe
    * eMAG si lucruri pe care nu le tine la noi. Confundate, ecranul i-a spus pe 24.08
    * ca i-au disparut 3.334 de produse.
    */
@@ -1576,7 +1606,7 @@ export interface RandOfertaEcran {
    * Ce e la eMAG fata de ce am trimite noi acum (§68).
    *
    * ⚠ `null` = nicio diferenta, si asta e starea obisnuita. Cand nu e `null`, randul
-   * spune ce s-a departat, cu AMANDOUA valorile: „la noi 100, la ei 89,90". Aratata
+   * spune ce s-a departat, cu AMANDOUA valorile: „la noi 100, la ei 89,90”. Aratata
    * ca un simplu semn de exclamare, informatia n-ar fi ajutat pe nimeni sa hotarasca
    * daca e o campanie de-a lor sau o scriere pierduta.
    */
@@ -1584,7 +1614,7 @@ export interface RandOfertaEcran {
     campuri: { camp: "pret" | "stoc"; laNoi: number; laEi: number }[];
     /** ⚠ Adevarat cand s-au terminat incercarile. Atunci nu se mai trimite nimic. */
     renuntat: boolean;
-    /** Cine conduce fiecare camp. ⚠ Cu „emag", deriva NU se repara niciodata. */
+    /** Cine conduce fiecare camp. ⚠ Cu „emag”, deriva NU se repara niciodata. */
     sursa: { pret: "edinio" | "emag"; stoc: "edinio" | "emag" };
     /** De cand se vede diferenta, ISO. */
     din: string;
@@ -1600,7 +1630,7 @@ export interface FiltruOferteEcran {
    *
    * ═══ ⚠ ORIGINEA NU E O STARE, ȘI DE ACEEA E UN FILTRU SEPARAT ═══
    *
-   * Ecranul avea „Preluate", care se uita la `status = 'imported'`. Dar starea aceea
+   * Ecranul avea „Preluate”, care se uita la `status = 'imported'`. Dar starea aceea
    * ține doar până la prima reconciliere: acolo oferta trece pe `live` sau `sent`,
    * după cum se vinde. Adică filtrul se golea singur în câteva minute, fără ca cineva
    * să înțeleagă de ce.
@@ -1632,7 +1662,7 @@ const RETURURI_PE_ECRAN = 100;
  * exact detaliul care spune CE câmp și CE valoare.
  *
  * ⚠ Numărul total vine dintr-un `count`, nu din lungimea paginii: PostgREST taie
- * tăcut la 1000, iar un magazin cu 4000 de oferte ar fi văzut „1000" și ar fi crezut
+ * tăcut la 1000, iar un magazin cu 4000 de oferte ar fi văzut „1000” și ar fi crezut
  * că trei sferturi din catalog n-au ajuns niciodată la eMAG.
  */
 export async function listaOferteEmag(
@@ -1659,15 +1689,15 @@ export async function listaOferteEmag(
 
   if (filtru.stare) q = q.eq("status", filtru.stare);
   if (filtru.origine) q = q.eq("creat_de_edinio", filtru.origine === "edinio");
-  /* „Probleme" = respinse de ei SAU căzute la noi. Două întrebări diferite, aceeași
-     urgență pentru omul care se uită: ambele înseamnă „produsul nu se vinde". */
+  /* „Probleme” = respinse de ei SAU căzute la noi. Două întrebări diferite, aceeași
+     urgență pentru omul care se uită: ambele înseamnă „produsul nu se vinde”. */
   /*
    * ⚠ SI DERIVA E O PROBLEMA, chiar daca oferta arata perfect sanatoasa.
    *
    * O oferta cu `validation_status: 9` si fara nicio eroare, dar cu pretul de la ei
    * ramas altul decat al nostru, e chiar cazul cel mai scump: se vinde, si se vinde
    * la alt pret decat crede comerciantul. Lasata in afara filtrului, ar fi fost
-   * singura problema pe care „Doar cu probleme" NU o arata.
+   * singura problema pe care „Doar cu probleme” NU o arata.
    */
   if (filtru.doarProbleme) q = q.or("status.eq.error,validation_status.in.(5,6,8,10,12),deriva.not.is.null");
   if (filtru.cautare?.trim()) {
@@ -1715,9 +1745,9 @@ export async function listaOferteEmag(
        * preluate, 3.334 n-au pereche la noi, fiindcă omul le vinde pe eMAG și nu le
        * ține în magazin.
        *
-       * Ecranul le-a arătat pe toate ca „Produs șters din magazin". Comerciantul le-a
+       * Ecranul le-a arătat pe toate ca „Produs șters din magazin”. Comerciantul le-a
        * văzut și a crezut că i-au dispărut produsele — apoi a apăsat săgeata și a
-       * ajuns la „un produs random care nici nu cred că e de la mine". Era chiar al
+       * ajuns la „un produs random care nici nu cred că e de la mine”. Era chiar al
        * lui; doar că rândul nu-i spunea care.
        *
        *   are produs la noi        → numele produsului
@@ -1735,7 +1765,7 @@ export async function listaOferteEmag(
       /*
        * ═══ ⚠ MOTIVUL ADEVARAT, NU O ETICHETA PENTRU TOT (24.08.2026) ═══
        *
-       * `EMAG_ETICHETA_STARE` traduce starea NOASTRA: „sent" devine „Trimis, in
+       * `EMAG_ETICHETA_STARE` traduce starea NOASTRA: „sent” devine „Trimis, in
        * validare". Dar starea noastra spune doar ce am facut noi, nu ce e la ei — iar
        * masurat in ziua aceea, 3.469 de oferte APROBATE de eMAG apareau asa, cand de
        * fapt erau scoase din vanzare in contul lui.
@@ -1768,7 +1798,7 @@ export async function listaOferteEmag(
        * ═══ ⚠ SĂGEATA E STINSĂ, ȘI ASTA E O ALEGERE (24.08.2026) ═══
        *
        * Ducea la `https://www.emag.ro/-/pd/{part_number_key}`. Comerciantul a apăsat-o
-       * și a ajuns la „un produs random care nici nu cred că e de la mine". Avea
+       * și a ajuns la „un produs random care nici nu cred că e de la mine”. Avea
        * dreptate: din 3 chei verificate pe emag.ro, toate 3 duceau la produse străine —
        * o folie de vidat și două mese DKD Home Decor.
        *
@@ -1781,21 +1811,21 @@ export async function listaOferteEmag(
        * când se lămurește de unde vin cheile — vezi nota din `mapping.ts`.
        */
       linkEmag: null,
-      /* ⚠ Numai cand chiar sunt CONCURENTI. Cu un singur vanzator, „locul 1 din 1" nu
+      /* ⚠ Numai cand chiar sunt CONCURENTI. Cu un singur vanzator, „locul 1 din 1” nu
          spune nimic si doar incarca randul. */
       /* ⚠ Se citeste prin `citesteMemoriaDerivei`, nu prin `as`. Un `jsonb` scris de o
          versiune mai veche, sau atins din consola, ar fi ajuns pe ecran ca obiect
-         stalcit — si randul ar fi aratat „la noi undefined, la ei undefined". */
+         stalcit — si randul ar fi aratat „la noi undefined, la ei undefined”. */
       deriva: (() => {
         const m = citesteMemoriaDerivei(r.deriva);
         if (!m) return null;
         /*
          * ⚠ SURSA MERGE PE RAND, si nu e decor.
          *
-         * Cand comerciantul a ales „eMAG conduce" pentru un camp, deriva NU se repara
+         * Cand comerciantul a ales „eMAG conduce” pentru un camp, deriva NU se repara
          * niciodata: `deReparat` iese goala, nu se incearca nimic, iar marcajul de
          * renuntare nici nu se aprinde. Fara valoarea asta pe rand, ecranul ii scria
-         * „Se repara singur la urmatoarele treceri" si il punea sa astepte o reparatie
+         * „Se repara singur la urmatoarele treceri” si il punea sa astepte o reparatie
          * pe care chiar el o oprise, fara sa stie ca asta a oprit.
          */
         return {
@@ -1823,7 +1853,7 @@ export async function listaOferteEmag(
  *
  * ⚠ eMAG îl trimite când ca tablou de șiruri, când ca tablou de obiecte, când ca
  * obiect cu chei. Citit pe o singură formă, motivul respingerii ar fi ajuns pe ecran
- * ca „[object Object]" — adică exact la fel de nefolositor ca lipsa lui, dar cu aerul
+ * ca „[object Object]” — adică exact la fel de nefolositor ca lipsa lui, dar cu aerul
  * că i s-a spus omului ceva.
  */
 function normalizeazaDocErrors(brut: unknown): string[] {
@@ -1886,10 +1916,10 @@ export async function publicaCategoriaPeEmag(
 
   /* ⚠ Cate au INTRAT, nu cate s-au gasit — aceeasi regula ca la felii. Coada poate
      primi zero cand sincronizarea automata e stinsa sau cand toate ofertele sunt
-     preluate, iar „N produse puse la rand" ar fi fost o reusita raportata cu efect
+     preluate, iar „N produse puse la rand” ar fi fost o reusita raportata cu efect
      zero: chiar forma incidentului VetDepo. */
   /*
-   * ⚠ `publicaPeEmagMany`, nu `enqueueEmagSyncMany`. Butonul ăsta spune „publică", deci
+   * ⚠ `publicaPeEmagMany`, nu `enqueueEmagSyncMany`. Butonul ăsta spune „publică”, deci
    * are voie să atingă și produsele care n-au fost NICIODATĂ pe eMAG.
    *
    * Cu funcția obișnuită, la prima folosire nu se punea nimic la rând — coada
@@ -1946,7 +1976,7 @@ export interface PregatireAwbEmag {
  * ⚠ HOTĂRÂREA e în `dimensiuniPropuse`, care e curată și probată. Aici e doar
  * citirea: liniile comenzii și laturile produselor lor.
  *
- * ⚠ O citire căzută dă „nu se știe", nu niște dimensiuni de rezervă. Chiar defectul
+ * ⚠ O citire căzută dă „nu se știe”, nu niște dimensiuni de rezervă. Chiar defectul
  * reparat înainte: `20×15×10` scrise în cod arătau exact ca o măsurătoare adevărată,
  * iar curierul refactura banda pe care o găsea la depozit.
  */
@@ -2121,7 +2151,7 @@ export interface RandReturEcran {
   /**
    * Contul în care se întorc banii, când eMAG chiar ni l-a trimis.
    *
-   * ⚠ SE APRINDE DE LA „EI NE-AU TRIMIS UN IBAN", nu de la tipul returului. Un tip
+   * ⚠ SE APRINDE DE LA „EI NE-AU TRIMIS UN IBAN”, nu de la tipul returului. Un tip
    * necunoscut, sau unul nou, ar fi ascuns un IBAN pe care ei chiar ni l-au dat — iar
    * comerciantul ar fi avut de întors bani și ecranul ar fi tăcut.
    */
@@ -2236,7 +2266,7 @@ export async function listaRetururiEmag(
      */
     cont: contulDinRetur(r.raw),
     /* ⚠ Hotărârea e a lui `poateAwbRetur`, care e curată și probată. Aici e doar
-       adunatul datelor: fiecare „nu" de acolo înseamnă un curier neplătit degeaba. */
+       adunatul datelor: fiecare „nu” de acolo înseamnă un curier neplătit degeaba. */
     ridicare: (() => {
       const adr = r.order_id ? adrese.get(r.order_id) : undefined;
       const brutRma = (r.raw ?? {}) as { pickup_method?: number; pickup_locality_id?: number };
@@ -2277,7 +2307,7 @@ export async function listaRetururiEmag(
  *
  * Un AWB emis și fără etichetă e un număr într-o bază de date: coletul n-are ce să
  * poarte, iar curierul nu-l ia. Lipsa asta n-ar fi dat nicio eroare — butonul de
- * emitere ar fi spus „AWB emis", și abia la depozit s-ar fi văzut că nu e nimic de
+ * emitere ar fi spus „AWB emis”, și abia la depozit s-ar fi văzut că nu e nimic de
  * lipit.
  *
  * ⚠ Se întoarce ca base64, nu ca adresă. O adresă publică spre eticheta unui colet
@@ -2325,18 +2355,18 @@ export async function descarcaEtichetaAwbEmag(
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   „SINCRONIZEAZĂ ACUM", PE FELII
+   „SINCRONIZEAZĂ ACUM”, PE FELII
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
  * Ce se poate cere la o sincronizare pornită de om.
  *
- * ═══ ⚠ DE CE NU UN SINGUR BUTON „SINCRONIZEAZĂ TOT" ═══
+ * ═══ ⚠ DE CE NU UN SINGUR BUTON „SINCRONIZEAZĂ TOT” ═══
  *
  * Fiindcă feliile costă foarte diferit, iar omul apasă din motive foarte diferite.
  *
- * „Am schimbat prețurile la 400 de produse și vreau să plece acum" e o cerere de
- * câteva secunde pe ruta ușoară. „Retrimite documentația tuturor produselor" e ruta
+ * „Am schimbat prețurile la 400 de produse și vreau să plece acum” e o cerere de
+ * câteva secunde pe ruta ușoară. „Retrimite documentația tuturor produselor” e ruta
  * grea, sute de cereri la 3 pe secundă, și ține ocupat ritmul magazinului minute
  * întregi — inclusiv pentru mișcările de stoc de după vânzări.
  *
@@ -2350,8 +2380,8 @@ export type FelieSincronizare = "preturi" | "stocuri" | "produse";
  * Pune la coadă o felie, pentru toate ofertele sincronizabile ale magazinului.
  *
  * ⚠ NUMAI OFERTELE CU `auto_sync`. Cele preluate din contul lor au prețul pus de
- * comerciant în panoul eMAG; luate în „sincronizează prețurile", chiar apăsarea
- * asta le-ar fi șters. Cine vrea să le trimită totuși are butonul „Trimite acum" pe
+ * comerciant în panoul eMAG; luate în „sincronizează prețurile”, chiar apăsarea
+ * asta le-ar fi șters. Cine vrea să le trimită totuși are butonul „Trimite acum” pe
  * fiecare, care e o cerere explicită pentru un produs anume.
  *
  * ⚠ NU trimite nimic pe loc: pune în coadă. O felie poate atinge mii de produse, iar
@@ -2393,7 +2423,7 @@ export async function sincronizeazaFelieEmag(
    * poate primi ZERO din motive întemeiate: magazinul și-a stins sincronizarea
    * automată, sau toate ofertele sunt preluate din contul lor.
    *
-   * În oricare dintre ele, ecranul ar fi spus „400 de produse puse la rând" și nu s-ar
+   * În oricare dintre ele, ecranul ar fi spus „400 de produse puse la rând” și nu s-ar
    * fi pus niciunul. Adică exact forma incidentului VetDepo — răspuns de succes, efect
    * zero, și nimeni nu află.
    */
@@ -2464,7 +2494,7 @@ export async function aduComenzileAcumEmag(
  * singur, ar fi ars încă cinci cereri pentru același răspuns — și tot așa, la
  * nesfârșit, pe cele 3 cereri pe secundă ale magazinului.
  *
- * Abandonul înseamnă „ceva trebuie schimbat". Butonul se apasă DUPĂ schimbare, iar
+ * Abandonul înseamnă „ceva trebuie schimbat”. Butonul se apasă DUPĂ schimbare, iar
  * apăsarea e chiar dovada că omul a făcut-o.
  *
  * ⚠ Contorul se pune la zero odată cu reluarea. Lăsat pe cinci, primul refuz de după
@@ -2530,9 +2560,9 @@ export interface RandJurnalEcran {
 /**
  * Cum se citește un verdict, în cuvinte.
  *
- * ⚠ „Salvat, cu observații" NU e o eroare, și e chiar capcana eMAG: pe
+ * ⚠ „Salvat, cu observații” NU e o eroare, și e chiar capcana eMAG: pe
  * `product_offer/save`, `isError: true` înseamnă că oferta E salvată, cu observații de
- * documentație. Scris „eșuat", comerciantul ar fi retrimis la nesfârșit o ofertă care
+ * documentație. Scris „eșuat”, comerciantul ar fi retrimis la nesfârșit o ofertă care
  * există deja acolo — și ar fi făcut duplicate.
  */
 const ETICHETA_VERDICT: Record<string, string> = {
@@ -2631,7 +2661,7 @@ export async function jurnalCereriEmag(
  *
  * Un catalog cu zeci de mii de oferte cu probleme ar fi însemnat zeci de mii de
  * rânduri citite la fiecare deschidere a panoului. Dar o margine TĂCUTĂ e mai rea
- * decât una lată: „3 grupuri" calculat din primele 1000 de rânduri dintr-un catalog
+ * decât una lată: „3 grupuri” calculat din primele 1000 de rânduri dintr-un catalog
  * de 40.000 arată exact ca adevărul, și nu e.
  *
  * ⚠ Numărătorile pe stările de validare NU trec pe aici: ele sunt `count` exacte, pe
@@ -2670,7 +2700,7 @@ export async function centrulProblemelorEmag(
   /*
    * ⚠ NUMĂRĂTORI EXACTE pentru stările de validare, nu rânduri citite și numărate în
    * JavaScript. PostgREST taie tăcut la 1000: un magazin cu 4000 de oferte respinse
-   * ar fi văzut „1000" și ar fi crezut că restul sunt în regulă.
+   * ar fi văzut „1000” și ar fi crezut că restul sunt în regulă.
    */
   const stariRele = Object.keys(VALIDARE_RA).map(Number);
   const numaratori = await Promise.all(stariRele.map((s) =>
@@ -2760,7 +2790,7 @@ export async function centrulProblemelorEmag(
  *
  * ═══ ⚠ TOATE PIEDICILE SE VERIFICĂ ÎNAINTE DE ORICE CERERE ═══
  *
- * Un AWB emis cheamă curierul și se plătește. Deci hotărârea „se poate?" e o funcție
+ * Un AWB emis cheamă curierul și se plătește. Deci hotărârea „se poate?” e o funcție
  * curată, probată (`poateAwbRetur`), și se ia din datele pe care le avem deja — nu
  * din răspunsul lor, și nu după ce am ars o cerere din cele 3 pe secundă.
  *
@@ -2936,7 +2966,7 @@ export interface RezultatPropunereEcran {
   /**
    * S-au citit primele N oferte si atat, fiindca magazinul are mai multe.
    *
-   * ⚠ SE ARATA. Un plafon tacut face ca raportul „1000 propuse" sa semene cu „toate
+   * ⚠ SE ARATA. Un plafon tacut face ca raportul „1000 propuse” sa semene cu „toate
    * propuse", iar comerciantul afla ca jumatate din catalog a ramas afara din campanie
    * abia cand se uita in panoul lor.
    */
@@ -2968,7 +2998,7 @@ export async function propuneInCampanieEmag(
   if ("error" in g) return { error: g.error };
 
   /* ⚠ Piedicile se ridică ÎNAINTE de orice cerere: mesajele lor vorbesc despre câmpuri,
-     iar un `campaign_id` greșit întoarce ceva ce nu spune „nu există campania asta". */
+     iar un `campaign_id` greșit întoarce ceva ce nu spune „nu există campania asta”. */
   const piedica = cePiedicaAreCampania(cerere);
   if (piedica) return { error: piedica };
 
@@ -2988,7 +3018,7 @@ export async function propuneInCampanieEmag(
    *
    * Costul, măsurat pe date reale: la produsele venite din importul eMAG,
    * `products.price` e ANUME cel mai MIC dintre combinații — vezi `import-produse.ts`,
-   * unde fișa spune „de la X lei". Deci un produs cu S la 100 și XXL la 300 are
+   * unde fișa spune „de la X lei”. Deci un produs cu S la 100 și XXL la 300 are
    * `price = 100`, iar o campanie de −20% ar fi trimis XXL cu 65,57 lei net în loc de
    * 198,35. Se vinde XXL la o treime din preț.
    *
@@ -2997,7 +3027,7 @@ export async function propuneInCampanieEmag(
    * numere valide, în schema lor. Niciun mesaj, nicăieri.
    *
    * ⚠ Se folosește CHIAR funcția care trimite. Aceeași regulă ca la derivă: un calcul
-   * paralel al prețului rămâne în urmă la prima schimbare, iar aici „în urmă" înseamnă
+   * paralel al prețului rămâne în urmă la prima schimbare, iar aici „în urmă” înseamnă
    * marfă vândută sub cost.
    */
   /*
@@ -3010,7 +3040,7 @@ export async function propuneInCampanieEmag(
    *      se hotara la intamplare — iar campania e o hotarare comerciala.
    *   2. TRUNCHIEREA ERA TACUTA. Magazinul din ziua auditului are 3.754 de oferte.
    *      Doua mii sapte sute cincizeci si patru ramaneau afara, iar ecranul spunea
-   *      „1000 propuse" — un raport care arata a izbanda.
+   *      „1000 propuse” — un raport care arata a izbanda.
    *
    * Aceeasi regula ca la reconciliere si la feedul de stocuri: verdictul se citeste
    * din ce s-a potrivit, iar ce n-a incaput se SPUNE.
@@ -3109,11 +3139,11 @@ export interface FacturiLorEcran {
  *
  * ⚠ ERA 100, ȘI SE CEREA O SINGURĂ PAGINĂ (îndreptat 24.08.2026)
  *
- * Comentariul spunea „o sută acoperă un an". Nu acoperă: eMAG emite facturi de comision,
- * de servicii, de storno, mai multe pe lună. Pe „Ultimul an", tot ce trecea de a 100-a
+ * Comentariul spunea „o sută acoperă un an”. Nu acoperă: eMAG emite facturi de comision,
+ * de servicii, de storno, mai multe pe lună. Pe „Ultimul an”, tot ce trecea de a 100-a
  * factură pur și simplu nu se aduna — iar rezultatul arăta identic cu unul corect.
  *
- * ⚠ CE COSTĂ: e chiar ecranul care spune „cât te costă eMAG", scris ca să dea fapte, nu
+ * ⚠ CE COSTĂ: e chiar ecranul care spune „cât te costă eMAG”, scris ca să dea fapte, nu
  * estimări. Un cost subestimat împinge prețurile în jos. Toate celelalte rute paginate
  * din integrare se parcurg până la capăt; facturile erau singura excepție.
  *
@@ -3146,7 +3176,7 @@ const PAGINI_FACTURI_MAXIM = 10;
  * ═══ ⚠ MARJA NU SE POATE SOCOTI, ȘI SE SPUNE PE ECRAN ═══
  *
  * Marja cere prețul de ACHIZIȚIE, iar `products` n-are nicio coloană de cost —
- * verificat. „Încasări minus comision" nu e marjă; arătată drept marjă, comerciantul
+ * verificat. „Încasări minus comision” nu e marjă; arătată drept marjă, comerciantul
  * ar fi luat hotărâri de preț pe un număr care nu înseamnă ce scrie pe el.
  */
 export async function facturileEmag(
@@ -3163,7 +3193,7 @@ export async function facturileEmag(
   const zi = (d: Date) => d.toISOString().slice(0, 10);
 
   /* ⚠ Numele categoriilor și facturile se cer împreună: fără nume, ecranul ar fi arătat
-     coduri („FC", „FT") pe care nu le știe nimeni. O cerere în plus, o dată. */
+     coduri („FC”, „FT”) pe care nu le știe nimeni. O cerere în plus, o dată. */
   const [categorii, primaPagina] = await Promise.all([
     citesteCategoriiFacturi(c.auth),
     citesteFacturi(c.auth, {
@@ -3257,7 +3287,7 @@ const DE_PUBLICAT_PE_PAGINA = 50;
  * Pentru un catalog care n-a fost niciodată acolo, asta însemna că nu exista NICIO
  * cale în masă. Măsurat: 1353 de produse, 0 oferte, niciun drum.
  *
- * ⚠ Se citesc produsele care NU au rând în `emag_offers`, nu cele „fără ofertă activă".
+ * ⚠ Se citesc produsele care NU au rând în `emag_offers`, nu cele „fără ofertă activă”.
  * Un produs retras rămâne cu rândul lui (eMAG n-are ștergere de oferte), iar arătat
  * aici ar fi fost republicat de cineva care credea că nu e acolo.
  */
@@ -3275,7 +3305,7 @@ export async function produseDePublicatEmag(
   /*
    * ⚠ Id-urile ofertelor se citesc INTEGRAL, cu `fetchAllRowsStrict`. PostgREST taie
    * tăcut la 1000: cu o simplă interogare, un magazin cu 4000 de oferte ar fi văzut
-   * 3000 de produse „nepublicate" care sunt de fapt pe eMAG — și le-ar fi publicat a
+   * 3000 de produse „nepublicate” care sunt de fapt pe eMAG — și le-ar fi publicat a
    * doua oară.
    */
   const randuriOferte = await fetchAllRowsStrict<{ product_id: string | null }>(
@@ -3404,14 +3434,14 @@ export async function publicaProduseleEmag(
 /**
  * Pune la rând ofertele alese din listă.
  *
- * ⚠ Trece prin COADĂ, nu prin trimitere directă. „Trimite acum" de pe un rând ține
+ * ⚠ Trece prin COADĂ, nu prin trimitere directă. „Trimite acum” de pe un rând ține
  * omul pe loc cât durează cererea — acceptabil pentru unul, absurd pentru cincizeci:
  * funcția ar fi depășit limita de timp a platformei și ar fi lăsat jumătate trimise,
  * fără să spună care.
  *
  * ⚠ Se folosește `enqueueEmagSyncMany`, nu `publicaPeEmagMany`: aici sunt oferte care
  * EXISTĂ deja. Un produs fără ofertă n-are ce căuta în lista asta, iar dacă ajunge
- * cumva, nu vrem să-l publicăm dintr-un buton care spune „retrimite".
+ * cumva, nu vrem să-l publicăm dintr-un buton care spune „retrimite”.
  */
 export async function trimiteSelectiaEmag(
   businessId: string,

@@ -9,7 +9,7 @@ import { PRIORITATE_OP } from "./rute";
  *
  * ⚠ ESECURILE DE AICI SE SCRIU, NU SE INGHIT.
  *
- * Punerea la coada e „fire-and-forget": n-are voie sa arunce in apelant, fiindca
+ * Punerea la coada e „fire-and-forget”: n-are voie sa arunce in apelant, fiindca
  * o pana la eMAG nu trebuie sa impiedice salvarea unui produs in magazin. Dar „nu
  * arunca" a insemnat multa vreme `catch {}` gol, adica un esec care nu lasa nicio
  * urma nicaieri.
@@ -52,16 +52,43 @@ function inghiteDarScrie(unde: string, businessId: string, e: unknown, detalii?:
  */
 export type OpEmag = "oferta" | "pret" | "stoc" | "retragere" | "masuratori";
 
-/** Configurarea, si daca magazinul primeste lucrari in coada. */
+/**
+ * Configurarea magazinului, cu TREI raspunsuri.
+ *
+ * ═══ ⚠ „N-AM PUTUT CITI” NU E NICI „DA”, NICI „NU” ═══
+ *
+ * Doua raspunsuri erau de ajuns cat timp singurul lucru care depindea de asta era „pun
+ * sau nu pun in coada". La retragerea de dinaintea unei stergeri nu mai e: acolo, „nu se
+ * stie" trebuie sa OPREASCA stergerea, iar „magazinul nu e conectat la eMAG” trebuie s-o
+ * lase sa mearga.
+ *
+ * Confundate, o pana de o clipa a bazei ar fi aratat exact ca un magazin fara eMAG: se
+ * sterge produsul, retragerea nu se pune nicaieri, iar oferta ramane la VANZARE pe eMAG
+ * pentru marfa care nu mai exista.
+ */
+type StareaConfigului =
+  | { fel: "porneste"; config: EmagConfig }
+  /**
+   * Magazinul chiar nu primeste lucrari automate.
+   *
+   * ⚠ `deconectat` deosebeste cele doua motive, si deosebirea conteaza la retragere:
+   * „n-are cont eMAG” inseamna ca nu exista nicio oferta de oprit, dar „si-a stins
+   * sincronizarea automată" inseamna doar „nu-mi trimite singur schimbarile” — ofertele
+   * lui sunt in continuare la vanzare acolo si trebuie oprite cand sterge produsul.
+   */
+  | { fel: "nu"; deconectat: boolean; motiv: string }
+  /** Nu se stie. Nimic ireversibil nu are voie sa se sprijine pe raspunsul asta. */
+  | { fel: "necitit"; motiv: string };
+
 async function configPentruCoada(
   admin: ReturnType<typeof createAdminClient>,
   businessId: string,
-): Promise<EmagConfig | null> {
+): Promise<StareaConfigului> {
   const { data, error } = await admin
     .from("store_settings").select("emag_config").eq("business_id", businessId).single();
 
   /*
-   * ═══ ⚠ „N-AM PUTUT CITI" NU E „NU E CONECTAT" (24.08.2026) ═══
+   * ═══ ⚠ „N-AM PUTUT CITI” NU E „NU E CONECTAT” (24.08.2026) ═══
    *
    * `error` nu se citea deloc. La o pana de o clipa a bazei, `data` vine `null`, config-ul
    * iese gol, si functia raspunde `null` — adica exact ce raspunde pentru un magazin
@@ -73,13 +100,17 @@ async function configPentruCoada(
    */
   if (error) {
     inghiteDarScrie("coada-config", businessId, error, { motiv: "config necitit" });
-    return null;
+    return { fel: "necitit", motiv: error.message };
   }
 
   const config = (data?.emag_config as EmagConfig) ?? {};
-  if (!config.connected || !config.username || !config.password) return null;
-  if (config.auto_sync === false) return null;
-  return config;
+  if (!config.connected || !config.username || !config.password) {
+    return { fel: "nu", deconectat: true, motiv: "Magazinul nu are eMAG conectat." };
+  }
+  if (config.auto_sync === false) {
+    return { fel: "nu", deconectat: false, motiv: "Sincronizarea automată cu eMAG e oprită." };
+  }
+  return { fel: "porneste", config };
 }
 
 /**
@@ -98,7 +129,7 @@ export async function enqueueEmagSync(
   /**
    * Produs abia creat in magazin. DOAR asa se poate declansa publicarea automata.
    *
-   * Fara distinctia asta, „Publică automat produsele noi" ar insemna cu totul
+   * Fara distinctia asta, „Publică automat produsele noi” ar insemna cu totul
    * altceva decat scrie pe eticheta: orice atingere a unui produs — o marire de
    * pret in masa, o schimbare de categorie, o activare — ar trimite pe eMAG tot
    * ce a atins, adica intreg catalogul dintr-o apasare.
@@ -107,14 +138,17 @@ export async function enqueueEmagSync(
 ): Promise<void> {
   try {
     const admin = createAdminClient();
-    const config = await configPentruCoada(admin, businessId);
-    if (!config) return;
+    const stare = await configPentruCoada(admin, businessId);
+    /* ⚠ Aici „nu se stie” se poarta ca „nu”: punerea in coada e reversibila si se reia
+       la urmatoarea atingere a produsului. La retragere NU e, si acolo se desparte. */
+    if (stare.fel !== "porneste") return;
+    const config = stare.config;
 
     /*
      * In mod normal se pun la coada doar produsele care au deja o oferta pe eMAG:
      * un produs nou nu se trimite nicaieri pana nu-l pregateste comerciantul.
      *
-     * Cu „Publică automat" pornita, regula se inverseaza — produsul nou intra in
+     * Cu „Publică automat” pornita, regula se inverseaza — produsul nou intra in
      * coada, iar publicarea ii construieste ofertele din maparea categoriei. Daca
      * n-are categoria mapata, elementul esueaza cu un mesaj limpede si se vede in
      * coada; nu pleaca nimic gresit la eMAG.
@@ -124,7 +158,7 @@ export async function enqueueEmagSync(
        * ═══ ⚠ `auto_sync` E PE OFERTA, NU DOAR PE MAGAZIN ═══
        *
        * Comutatorul din `configPentruCoada` e al MAGAZINULUI. Asta e al OFERTEI, si
-       * `false` inseamna „preluata din contul lor la import".
+       * `false` inseamna „preluata din contul lor la import”.
        *
        * Prima forma cauta doar daca exista un rand. Deci dupa primul import, orice
        * schimbare de pret din magazin ar fi plecat si peste ofertele preluate — adica
@@ -221,7 +255,7 @@ export async function enqueueEmagSync(
  * configurarea nu s-a putut citi, niciun produs n-are inca oferta, sau toate ofertele
  * sunt preluate din contul lor.
  *
- * In toate patru, ecranul ar fi scris „400 de produse puse la rand" si nu s-ar fi pus
+ * In toate patru, ecranul ar fi scris „400 de produse puse la rand” si nu s-ar fi pus
  * niciunul. Adica exact forma incidentului VetDepo — raspuns de succes, efect zero,
  * si nimeni nu afla — pe care tot fisierul asta e scris ca s-o previna.
  */
@@ -233,12 +267,12 @@ export async function enqueueEmagSync(
  * gresita in celalalt, se urca un catalog intreg pe eMAG dintr-o apasare care promitea
  * altceva — iar eMAG NU sterge oferte, doar le retrage.
  *
- * ⚠ „OPRITA" BATE „PORNITA", si asta nu e o subtilitate.
+ * ⚠ „OPRITA” BATE „PORNITA”, si asta nu e o subtilitate.
  *
  * Un produs cu variante poate avea o parte din oferte preluate din contul lor
- * (`auto_sync = false`) si o parte facute de noi. Luat drept „pornit", o publicare in
+ * (`auto_sync = false`) si o parte facute de noi. Luat drept „pornit”, o publicare in
  * masa i-ar fi rescris si pe cele preluate — adica pretul pe care comerciantul si l-a
- * pus el in panoul eMAG. Cand nu e limpede, se lasa in pace: exista „Trimite acum" pe
+ * pus el in panoul eMAG. Cand nu e limpede, se lasa in pace: exista „Trimite acum” pe
  * produsul anume, unde omul stie ce face.
  */
 export function poateIntraInCoada(
@@ -249,7 +283,7 @@ export function poateIntraInCoada(
 ): boolean {
   if (oprite.has(id)) return false;
   if (pornite.has(id)) return true;
-  /* Fara nicio oferta: intra DOAR pe drumurile care spun anume „publica". */
+  /* Fara nicio oferta: intra DOAR pe drumurile care spun anume „publica”. */
   return publicaSiFaraOferta;
 }
 
@@ -257,20 +291,20 @@ export interface OptiuniCoadaMulti {
   /**
    * Ingaduie si produsele care N-AU inca nicio oferta pe eMAG.
    *
-   * ═══ ⚠ SE CERE ANUME, SI NUMAI DE PE DRUMURILE CARE SPUN „PUBLICĂ" ═══
+   * ═══ ⚠ SE CERE ANUME, SI NUMAI DE PE DRUMURILE CARE SPUN „PUBLICĂ” ═══
    *
    * Implicit, actiunile in masa ating doar produsele publicate deja. Paza aia e
-   * importanta si ramane: „sincronizează prețurile" n-are voie sa PUBLICE produse pe
+   * importanta si ramane: „sincronizează prețurile” n-are voie sa PUBLICE produse pe
    * care nimeni nu ceruse sa le publice — ar fi urcat pe eMAG jumatate de catalog
    * dintr-o apasare care promitea altceva.
    *
-   * Dar tot ea facea butonul „Publică categoria" sa nu poata publica nimic la prima
+   * Dar tot ea facea butonul „Publică categoria” sa nu poata publica nimic la prima
    * folosire: fara oferte, lista iesea goala si mesajul de eroare dadea vina pe
    * comutatorul de sincronizare automata — un diagnostic gresit, care trimitea omul
    * sa caute unde nu era nimic.
    *
    * ⚠ Ofertele PRELUATE raman excluse chiar si asa. Un rand cu `auto_sync = false`
-   * inseamna „asta e a comerciantului, din contul lui" — iar o publicare in masa
+   * inseamna „asta e a comerciantului, din contul lui” — iar o publicare in masa
    * n-are voie sa i-o rescrie. Deci regula e: intra produsele cu oferta pornita SI
    * cele fara nicio oferta; raman afara doar cele oprite anume.
    */
@@ -288,18 +322,18 @@ async function enqueueMany(
     if (ids.length === 0) return 0;
 
     const admin = createAdminClient();
-    const config = await configPentruCoada(admin, businessId);
-    if (!config) return 0;
+    const stare = await configPentruCoada(admin, businessId);
+    if (stare.fel !== "porneste") return 0;
 
     /*
      * Actiunile in masa NU auto-publica: ele ating produse care exista deja, iar
-     * „publicare automată" e despre produsele NOI. Vezi nota de mai sus.
+     * „publicare automată” e despre produsele NOI. Vezi nota de mai sus.
      */
     /*
      * ⚠ SE CITESC TOATE RANDURILE, cu `auto_sync` cu tot — nu doar cele pornite.
      *
      * Prima forma cerea `auto_sync = true` si pastra ce gasea. Ceea ce raspunde la
-     * intrebarea gresita: „care produse au oferta pornita?" in loc de „care produse
+     * intrebarea gresita: „care produse au oferta pornita?” in loc de „care produse
      * NU trebuie atinse?".
      *
      * Deosebirea conteaza abia la publicare, unde un produs fara nicio oferta trebuie
@@ -351,7 +385,7 @@ export function enqueueEmagSyncMany(businessId: string, productIds: (string | nu
  * fi fost usor de dat din greseala de pe un drum automat — iar atunci „sincronizează
  * prețurile" ar fi publicat jumatate de catalog dintr-o apasare care promitea altceva.
  *
- * Numele spune ce face. Se cheama doar din butoane pe care scrie „publică".
+ * Numele spune ce face. Se cheama doar din butoane pe care scrie „publică”.
  */
 export function publicaPeEmagMany(
   businessId: string, productIds: (string | null | undefined)[],
@@ -394,23 +428,73 @@ export function enqueueEmagPretMany(businessId: string, productIds: (string | nu
  * Aici se citesc `emag_id`-urile CAT INCA SE POATE si se pune cate un element pentru
  * fiecare, cu `offer_id` = id-ul ofertei. Cronul le trimite pe cale directa.
  */
+/**
+ * Raspunsul retragerii de dinaintea unei stergeri.
+ *
+ * ═══ ⚠ „GATA” INSEAMNA DOVEDIT, NU „N-A DAT EROARE” ═══
+ *
+ * Singurul lucru care conteaza pentru apelant e daca are voie sa stearga produsul. Iar
+ * are voie DOAR daca retragerea e scrisa durabil in baza (sau daca nu era nimic de
+ * retras). Nu se asteapta dupa eMAG: e de ajuns ca lucrarea sa existe in coada, fiindca
+ * de acolo cronul o duce singur pana la capat, cu reincercari.
+ */
+export type RezultatRetragere =
+  /** Ori s-a scris retragerea, ori chiar n-avea ce sa retraga. Se poate sterge. */
+  | { fel: "gata" }
+  /**
+   * Nu se poate DOVEDI ca retragerea a fost programata.
+   *
+   * ⚠ NU SE STERGE PRODUSUL. Sters aici, oferta ramane la vanzare pe eMAG pentru marfa
+   * care nu mai exista in magazin, iar legatura dupa care s-ar mai fi putut gasi
+   * (`emag_offers.product_id`) tocmai a fost rupta de `on delete set null`. Nu mai are
+   * cine s-o repare, si nimeni nu afla pana nu vine o comanda.
+   */
+  | { fel: "nesigur"; motiv: string };
+
 export async function enqueueEmagRetragereInainteDeStergere(
   businessId: string,
   productIds: string[],
-): Promise<void> {
+): Promise<RezultatRetragere> {
   try {
-    if (productIds.length === 0) return;
+    if (productIds.length === 0) return { fel: "gata" };
     const admin = createAdminClient();
-    const config = await configPentruCoada(admin, businessId);
-    if (!config) return;
+    const stare = await configPentruCoada(admin, businessId);
+
+    /*
+     * ⚠ AICI SE DESPARTE „NU E CONECTAT” DE „N-AM PUTUT CITI”.
+     *
+     * Pana acum erau acelasi `null`, deci o pana de o clipa a bazei arata exact ca un
+     * magazin fara eMAG — si stergerea mergea inainte.
+     *
+     * ⚠ `auto_sync` STINS NU E UN MOTIV SA NU RETRAGEM. Comutatorul acela spune „nu
+     * trimite singur schimbarile mele"; nu spune „lasa ofertele la vanzare dupa ce sterg
+     * produsul". Dar `configPentruCoada` le pune pe amandoua sub „nu”, deci se cere
+     * anume: singurul „nu” care ingaduie stergerea e magazinul chiar neconectat.
+     */
+    if (stare.fel === "necitit") {
+      return { fel: "nesigur", motiv: "Configurarea eMAG a magazinului nu s-a putut citi." };
+    }
+    /* ⚠ Numai magazinul FARA cont eMAG sare peste: acolo chiar n-are ce sa retraga. */
+    if (stare.fel === "nu" && stare.deconectat) return { fel: "gata" };
 
     const emagIds: number[] = [];
     for (const bucata of bucatiDeIduri(productIds)) {
-      const { data } = await admin.from("emag_offers")
+      const { data, error } = await admin.from("emag_offers")
         .select("emag_id").eq("business_id", businessId).in("product_id", bucata);
+      /*
+       * ⚠ O CITIRE PICATA DA `data: null`, IAR `(null ?? [])` E O LISTA GOALA.
+       *
+       * Adica arata exact ca „produsul n-are nicio oferta pe eMAG” — si atunci functia
+       * raspundea „gata”, produsul se stergea, iar oferta ramanea la vanzare. E chiar
+       * tiparul reparat in restul fisierului: `error` netratat care arata ca o hotarare.
+       */
+      if (error) {
+        inghiteDarScrie("retragere-citire", businessId, error, { cate: productIds.length });
+        return { fel: "nesigur", motiv: "Ofertele eMAG ale produsului nu s-au putut citi." };
+      }
       for (const r of (data ?? []) as { emag_id: number }[]) emagIds.push(r.emag_id);
     }
-    if (emagIds.length === 0) return;
+    if (emagIds.length === 0) return { fel: "gata" };
 
     const randuri = emagIds.map((id) => ({
       business_id: businessId,
@@ -425,8 +509,16 @@ export async function enqueueEmagRetragereInainteDeStergere(
       attempts: 0,
     }));
 
-    await admin.from("emag_sync_queue").upsert(randuri, { onConflict: "business_id,offer_id,op" });
+    const { error: eScriere } = await admin
+      .from("emag_sync_queue").upsert(randuri, { onConflict: "business_id,offer_id,op" });
+    if (eScriere) {
+      inghiteDarScrie("retragere-scriere", businessId, eScriere, { cate: emagIds.length });
+      return { fel: "nesigur", motiv: "Retragerea de pe eMAG nu s-a putut programa." };
+    }
+
+    return { fel: "gata" };
   } catch (e) {
     inghiteDarScrie("retragere-stergere", businessId, e, { cate: productIds.length });
+    return { fel: "nesigur", motiv: "Retragerea de pe eMAG nu s-a putut programa." };
   }
 }

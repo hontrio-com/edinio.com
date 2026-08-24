@@ -36,6 +36,7 @@ import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace"
 import { citesteComenzi, confirmaComanda, isEmagError } from "./client";
 import type { ContextEmag } from "./sync";
 import type { EmagComanda, EmagImpartireVoucher, EmagLinieComanda, EmagGarantieReciclare} from "./types";
+import { EroareCitireBaza, randCitit, randuriCitite } from "./citire";
 
 type Db = SupabaseClient<Database>;
 
@@ -739,6 +740,39 @@ export interface OptiuniIngest {
 export async function ingereazaComanda(
   admin: Db, ctx: ContextEmag, c: EmagComanda, optiuni: OptiuniIngest = {},
 ): Promise<RezultatIngest> {
+  /*
+   * ═══ ⚠ O CITIRE PICATA NU ARE VOIE SA ARATE CA „COMANDA E NOUA" (25.08.2026) ═══
+   *
+   * Doua citiri de dedesubt hotarau lucruri ireversibile din `data == null`:
+   *
+   *   `hartaOfertelor`  lista goala inseamna „nicio linie nu se leaga de un produs al
+   *                     nostru" — deci comanda intra FARA sa consume stoc. Marfa se
+   *                     vinde de doua ori, si nimic nu da eroare.
+   *   randul din `emag_orders`  `null` inseamna „n-am mai vazut comanda asta" — deci se
+   *                     ia calea de creare pentru o comanda pe care o AVEM deja.
+   *
+   * Acum amandoua arunca la o cadere reala, iar aici devin `"esuata"`. Verdictul acela
+   * exista deja si face exact ce trebuie: opreste avansarea marcajului, deci comanda
+   * ramane in fereastra si se reia la trecerea urmatoare.
+   */
+  try {
+    return await ingereazaComandaCitita(admin, ctx, c, optiuni);
+  } catch (e) {
+    if (!(e instanceof EroareCitireBaza)) throw e;
+    void logError({
+      action: "emag/orders",
+      message: e.message,
+      details: { emagOrderId: c?.id },
+      businessId: ctx.businessId,
+      severity: "error",
+    });
+    return "esuata";
+  }
+}
+
+async function ingereazaComandaCitita(
+  admin: Db, ctx: ContextEmag, c: EmagComanda, optiuni: OptiuniIngest,
+): Promise<RezultatIngest> {
   const istoric = optiuni.istoric === true;
   if (!Number.isFinite(c?.id)) return "sarita";
 
@@ -751,11 +785,11 @@ export async function ingereazaComanda(
   const bani = baniiComenzii(c, ctx.vatRate);
   const client = clientComenzii(c);
 
-  const { data: existenta } = await admin.from("emag_orders")
+  const ex = randCitit<{
+    id: string; order_id: string | null; acknowledged_at: string | null; last_modified: string | null;
+  }>("emag_orders", await admin.from("emag_orders")
     .select("id, order_id, acknowledged_at, last_modified")
-    .eq("business_id", ctx.businessId).eq("emag_order_id", c.id).maybeSingle();
-
-  const ex = existenta as { id: string; order_id: string | null; acknowledged_at: string | null; last_modified: string | null } | null;
+    .eq("business_id", ctx.businessId).eq("emag_order_id", c.id).maybeSingle() as never);
 
   /*
    * ═══ ⚠ UN EVENIMENT MAI VECHI NU SUPRASCRIE UNUL MAI NOU ═══
@@ -1116,9 +1150,12 @@ export async function ingereazaComanda(
  */
 async function poateFactura(admin: Db, ctx: ContextEmag, orderId: string, status: string): Promise<void> {
   try {
-    const { data } = await admin.from("orders")
-      .select("payment_status").eq("id", orderId).maybeSingle();
-    const platit = (data as { payment_status?: string } | null)?.payment_status ?? "";
+    /* ⚠ Arunca la o cadere, si e prins de `catch`-ul de mai jos. Citit orbeste, un `null`
+       ar fi trecut drept „comanda nu e platita" — iar `maybeAutoInvoice` hotaraste dupa
+       asta daca emite factura. O comanda platita ar fi ramas fara document fiscal. */
+    const rand = randCitit<{ payment_status?: string }>("orders", await admin.from("orders")
+      .select("payment_status").eq("id", orderId).maybeSingle() as never);
+    const platit = rand?.payment_status ?? "";
     const { maybeAutoInvoice } = await import("@/lib/actions/invoice-auto.actions");
     await maybeAutoInvoice(ctx.businessId, orderId, status, platit, admin as never);
   } catch (e) {
@@ -1177,11 +1214,13 @@ async function hartaOfertelor(
    * vede un `.in()` fara `bucatiDeIduri` in proiectul asta are dreptate sa se
    * opreasca si sa intrebe.
    */
-  const { data } = await admin.from("emag_offers")
+  /* ⚠ Arunca la o cadere: o lista goala aici inseamna „nicio linie nu e a noastra", si
+     comanda ar intra fara sa scada stocul. Vezi nota din `ingereazaComanda`. */
+  const randuri = randuriCitite("emag_offers", await admin.from("emag_offers")
     .select("emag_id, product_id, variant_title, part_number")
-    .eq("business_id", businessId).in("emag_id", ids);
+    .eq("business_id", businessId).in("emag_id", ids) as never);
 
-  for (const r of (data ?? []) as {
+  for (const r of randuri as {
     emag_id: number; product_id: string | null; variant_title: string | null; part_number: string | null;
   }[]) {
     harta.set(r.emag_id, {

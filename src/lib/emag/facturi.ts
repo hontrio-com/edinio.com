@@ -29,6 +29,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { EroareCitireBaza, randCitit } from "./citire";
 import { LIMITE_EMAG, taiat } from "./limite";
 import type { Database } from "@/types/database.types";
 import { uploadToR2 } from "@/lib/r2";
@@ -143,11 +144,37 @@ export async function urcaFacturaLaEmag(
    */
   aduPdf: (f: Factura) => Promise<ArrayBuffer | { error: string }>,
 ): Promise<RezultatFactura> {
-  const { data } = await admin.from("orders")
-    .select("id, smartbill_invoice_number, smartbill_invoice_series, smartbill_invoice_url, oblio_invoice_number, oblio_invoice_series, oblio_invoice_link, fgo_invoice_number, fgo_invoice_series, fgo_invoice_link, order_source")
-    .eq("id", orderId).eq("business_id", ctx.businessId).maybeSingle();
+  /*
+   * ═══ ⚠ O CITIRE PICATA NU E „COMANDA NU EXISTA" (25.08.2026) ═══
+   *
+   * Doua citiri de dedesubt hotarau din `data == null`, si amandoua gresit:
+   *
+   *   comanda   `null` iesea „Comanda nu a fost găsită" — un mesaj increzator si fals,
+   *             pe care omul il vedea in panou pentru o comanda care exista.
+   *   tipul ei  `null` cadea pe plasa `?? 3` („vanzator"). Pentru o comanda FBE, eMAG
+   *             refuza urcarea, si documentul fiscal ramanea neurcat.
+   *
+   * ⚠ Cronul reincearca oricum la trecerea urmatoare (`esec` nu se marcheaza), deci nu
+   * se pierde nimic — dar mesajul trebuie sa spuna ADEVARUL, altfel comerciantul cauta
+   * o comanda disparuta care e la locul ei.
+   */
+  try {
+    return await urcaFacturaCitita(admin, ctx, orderId, aduPdf);
+  } catch (e) {
+    if (!(e instanceof EroareCitireBaza)) throw e;
+    return { fel: "esec", mesaj: "Baza de date n-a răspuns. Se reia la trecerea următoare." };
+  }
+}
 
-  const o = data as RandComanda | null;
+async function urcaFacturaCitita(
+  admin: Db,
+  ctx: ContextEmag,
+  orderId: string,
+  aduPdf: (f: Factura) => Promise<ArrayBuffer | { error: string }>,
+): Promise<RezultatFactura> {
+  const o = randCitit<RandComanda>("orders", await admin.from("orders")
+    .select("id, smartbill_invoice_number, smartbill_invoice_series, smartbill_invoice_url, oblio_invoice_number, oblio_invoice_series, oblio_invoice_link, fgo_invoice_number, fgo_invoice_series, fgo_invoice_link, order_source")
+    .eq("id", orderId).eq("business_id", ctx.businessId).maybeSingle() as never);
   if (!o) return { fel: "esec", mesaj: "Comanda nu a fost găsită." };
 
   const factura = facturaComenzii(o);
@@ -175,9 +202,12 @@ export async function urcaFacturaLaEmag(
    * operatii ingaduite pe comenzile FBE, deci se trimite tipul ADEVARAT al comenzii,
    * nu se sare peste ele.
    */
-  const { data: randEmag } = await admin.from("emag_orders")
-    .select("order_type, raw").eq("business_id", ctx.businessId).eq("order_id", orderId).maybeSingle();
-  const re = randEmag as { order_type: number | null; raw: unknown } | null;
+  const re = randCitit<{ order_type: number | null; raw: unknown }>(
+    "emag_orders",
+    await admin.from("emag_orders")
+      .select("order_type, raw").eq("business_id", ctx.businessId)
+      .eq("order_id", orderId).maybeSingle() as never,
+  );
   const tipulComenzii =
     re?.order_type
     ?? (re?.raw as { type?: number } | null)?.type

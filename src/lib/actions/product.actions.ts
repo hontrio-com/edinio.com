@@ -262,7 +262,7 @@ export async function updateProduct(productId: string, businessId: string, data:
      * pretul lui inghetat, iar `expandBundleStock` scade stocul RANDULUI DE
      * PACHET in loc de componente. Filtrul pus doar pe pagina de editare acopera
      * doar ce se deschide de acolo: functia asta e export dintr-un modul
-     * „use server", deci un tab ramas deschis inainte de deploy sau o cerere
+     * „use server”, deci un tab ramas deschis inainte de deploy sau o cerere
      * reluata ajung direct aici.
      */
     .eq("is_bundle", false)
@@ -272,7 +272,7 @@ export async function updateProduct(productId: string, businessId: string, data:
     logError({ action: "updateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
   }
-  // Zero randuri inseamna ca tinta e un pachet: altfel salvarea „reuseste" mut.
+  // Zero randuri inseamna ca tinta e un pachet: altfel salvarea „reuseste” mut.
   if (!randeAtinse || randeAtinse.length === 0) {
     return { error: "Pachetele se editeaza din sectiunea Pachete, nu din formularul de produs." };
   }
@@ -306,7 +306,7 @@ export async function updateProduct(productId: string, businessId: string, data:
    * publicat cu `status: 0`. Deci am fi creat oferte in catalogul lor pentru ciorne pe
    * care comerciantul nu s-a hotarat inca sa le vanda.
    *
-   * Momentul corect e cel in care el spune „da": trecerea din inactiv in activ.
+   * Momentul corect e cel in care el spune „da”: trecerea din inactiv in activ.
    */
   const tocmaiActivat = oldProduct?.is_active === false && data.is_active === true;
 
@@ -405,8 +405,8 @@ export async function duplicateProduct(productId: string, businessId: string) {
  * Pachetele care contin produsul asta si care ar ramane incomplete fara el.
  *
  * `deleteProduct` stergea componenta si pleca: pachetul ramanea publicat, cu
- * pretul lui, listand randuri „Produs indisponibil" si refuzand orice comanda la
- * ultimul pas. Asa a ajuns „Pachet Femei" nevandabil pe 2026-07-28, fara ca
+ * pretul lui, listand randuri „Produs indisponibil” si refuzand orice comanda la
+ * ultimul pas. Asa a ajuns „Pachet Femei” nevandabil pe 2026-07-28, fara ca
  * cineva sa afle. Sunt 12 pachete in tot sistemul, deci interogarea e gratuita.
  */
 async function dezactiveazaPacheteleCu(
@@ -424,7 +424,7 @@ async function dezactiveazaPacheteleCu(
   // Fail-closed: mai bine un pachet ascuns decat unul publicat pe care nimeni
   // nu-l poate cumpara. Comerciantul il vede in lista de pachete, marcat.
   // Pe bucati, ca peste tot unde id-urile ajung in adresa (vezi `id-chunks.ts`):
-  // aici lista e de obicei scurta, dar „de obicei" nu e o limita.
+  // aici lista e de obicei scurta, dar „de obicei” nu e o limita.
   for (const bucata of bucatiDeIduri(afectate)) {
     const { error } = await supabase.from("products").update({ is_active: false }).in("id", bucata).eq("business_id", businessId);
     if (error) {
@@ -440,7 +440,7 @@ async function dezactiveazaPacheteleCu(
   dupaRaspuns(() => enqueueOlxSyncMany(businessId, afectate), "enqueueOlxSyncMany", businessId);
   dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, afectate), "enqueueAboutYouSyncMany", businessId);
   dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, afectate), "enqueueTrendyolSyncMany", businessId);
-  /* ⚠ „pret", nu „oferta": functia asta schimba DOAR `is_active` pe pachetele care
+  /* ⚠ „pret”, nu „oferta”: functia asta schimba DOAR `is_active` pe pachetele care
      contineau produsul atins. La eMAG asta e `status` pe oferta, adica `offer/save`.
      Pe ruta grea ar fi plecat documentatia intreaga a fiecarui pachet, ca sa se
      schimbe un singur numar. */
@@ -482,7 +482,29 @@ export async function deleteProduct(productId: string, businessId: string) {
    * Se face ÎNAINTE și se așteaptă: pus cu `void` după ștergere, ar fi citit o legătură
    * deja ruptă.
    */
-  await enqueueEmagRetragereInainteDeStergere(businessId, [productId]);
+  /*
+   * ═══ ⚠ SI SE OPRESTE DACA NU S-A PUTUT PROGRAMA (25.08.2026) ═══
+   *
+   * Pana acum functia intorcea `void`, deci raspunsul ei nu se putea citi: o citire
+   * picata a `emag_offers` dadea `data: null`, lista de oferte iesea goala, si totul
+   * arata exact ca „produsul asta n-a fost niciodata pe eMAG”. Produsul se stergea, iar
+   * oferta ramanea la VANZARE acolo.
+   *
+   * ⚠ Iar dupa stergere nu mai e nimic de reparat: `on delete set null` rupe
+   * `emag_offers.product_id`, deci nici macar nu se mai poate afla ce oferte erau ale
+   * lui. Comerciantul afla cand primeste o comanda pentru marfa pe care n-o mai are.
+   *
+   * ⚠ NU se asteapta dupa eMAG — ar fi o legatura de retea intre „sterg un produs” si
+   * „raspunde marketplace-ul”. Se asteapta doar ca lucrarea sa fie SCRISA in coada; de
+   * acolo cronul o duce singur, cu reincercari.
+   */
+  const retragerea = await enqueueEmagRetragereInainteDeStergere(businessId, [productId]);
+  if (retragerea.fel === "nesigur") {
+    return {
+      error: "Produsul n-a fost șters: retragerea ofertei de pe eMAG nu s-a putut programa "
+        + `(${retragerea.motiv}) Încearcă din nou peste câteva momente.`,
+    };
+  }
 
   const { error } = await supabase.from("products").delete()
     .eq("id", productId).eq("business_id", businessId);
@@ -582,7 +604,7 @@ export async function bulkProductAction(
       dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
       dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
       /*
-       * ⚠ „pret", nu „oferta", si numai la ACTIVARE.
+       * ⚠ „pret”, nu „oferta”, si numai la ACTIVARE.
        *
        * `is_active` devine `status` pe oferta eMAG, iar starea se schimba prin
        * `offer/save` — ruta usoara. Trimisa pe `product_offer/save`, ar fi plecat
@@ -638,7 +660,16 @@ export async function bulkProductAction(
       /* ⚠ Ofertele eMAG, din acelasi motiv ca imaginile de mai sus: `product_id` devine
          `null` la stergere, deci dupa bucla urmatoare nu se mai stie ce oferte erau ale
          lor. Se asteapta, nu se pune cu `void`. Vezi `deleteProduct`. */
-      await enqueueEmagRetragereInainteDeStergere(businessId, ids);
+      /* ⚠ Fail-closed, ca la stergerea unui singur produs: vezi nota lunga din
+         `deleteProduct`. Aici cantareste si mai mult, fiindca o stergere in masa poate
+         lasa sute de oferte la vanzare deodata. */
+      const retragerea = await enqueueEmagRetragereInainteDeStergere(businessId, ids);
+      if (retragerea.fel === "nesigur") {
+        return {
+          error: "Produsele n-au fost șterse: retragerea ofertelor de pe eMAG nu s-a putut "
+            + `programa (${retragerea.motiv}) Încearcă din nou peste câteva momente.`,
+        };
+      }
 
       for (const bucata of bucatiDeIduri(ids)) {
         const { error } = await supabase
@@ -706,7 +737,7 @@ export async function bulkProductAction(
       dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
       dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
       /*
-       * ⚠⚠ „pret", NU „oferta". AICI ERA CHIAR DEFECTUL VETDEPO, MUTAT LA eMAG.
+       * ⚠⚠ „pret”, NU „oferta”. AICI ERA CHIAR DEFECTUL VETDEPO, MUTAT LA eMAG.
        *
        * O schimbare de pret in masa punea in coada `op: "oferta"`, adica ruta
        * `product_offer/save` — cea care trimite documentatia INTREAGA a produsului.

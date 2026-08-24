@@ -8,6 +8,7 @@ import {
   aduComenzileAcumEmag, connectEmag, continuaImportEmag, disconnectEmag, importaDinEmag,
   leagaOferteImportateEmag, reiaAbandonateleEmag, salveazaSetariEmag, sincronizeazaFelieEmag,
   type StareEmag,
+  importaIstoricEmag,
 } from "@/lib/actions/emag.actions";
 
 /**
@@ -411,6 +412,8 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         ultimaSincronizare={status.ultimaSincronizare}
       />
 
+      <PanouIstoric businessId={businessId} />
+
       <PanouImport businessId={businessId} />
 
       <PanouIp ip={status.ipDeAlbit} restrans />
@@ -629,6 +632,90 @@ function PanouSincronizare({ businessId }: { businessId: string }) {
  * cu comenzile intrate la un minut in loc de indata — adica o lipsa pe care nimeni
  * n-ar fi observat-o si nimeni n-ar fi reparat-o.
  */
+/**
+ * Aduce comenzile vechi din eMAG (§87).
+ *
+ * ═══ ⚠ SE SPUNE LIMPEDE CE NU FACE ═══
+ *
+ * Nu scade stoc și nu emite facturi. Un comerciant care tocmai a trecut la Edinio se
+ * așteaptă la contrariul — „importă-mi comenzile" sună a „fă tot ce faci de obicei" —
+ * iar un stoc ajuns pe minus în câteva secunde, sau facturi duplicate plecate la ANAF
+ * cu serii noi, se descoperă mult prea târziu.
+ *
+ * Textul de aici e singurul loc în care poate afla ÎNAINTE.
+ */
+function PanouIstoric({ businessId }: { businessId: string }) {
+  const [zile, setZile] = useState("30");
+  const [rezultat, setRezultat] = useState<{ noi: number; actualizate: number; complet: boolean } | null>(null);
+  const [seLucreaza, incepe] = useTransition();
+
+  function adu() {
+    if (!window.confirm(
+      `Aduc comenzile eMAG din ultimele ${zile} de zile.\n\n`
+      + "NU se scade stoc și NU se emit facturi pentru ele — au fost deja onorate și\n"
+      + "facturate atunci. Intră doar ca istoric, ca să le ai la un loc.",
+    )) return;
+
+    incepe(async () => {
+      const r = await importaIstoricEmag(businessId, Number(zile));
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      setRezultat(r);
+      /* ⚠ Se spune și când N-A adus tot. Un „gata, 340 de comenzi" pe un import oprit
+         la jumătate l-ar fi lăsat pe om să creadă că are tot istoricul. */
+      toast[r.complet ? "success" : "warning"](
+        r.complet
+          ? `${r.noi} comenzi noi, ${r.actualizate} actualizate.`
+          : `${r.noi} comenzi noi, dar nu s-a adus tot. Apasă din nou.`,
+      );
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold">Adu comenzile vechi</h3>
+      <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+        Le vezi în Edinio la un loc cu restul. <strong>Nu se scade stoc și nu se emit
+        facturi</strong> — au fost onorate și facturate atunci, iar repetate ar da stoc
+        pe minus și facturi duplicate.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <select
+          className={CAMP}
+          style={{ width: "auto" }}
+          value={zile}
+          onChange={(e) => setZile(e.target.value)}
+          disabled={seLucreaza}
+        >
+          <option value="30">Ultimele 30 de zile</option>
+          <option value="90">Ultimele 90 de zile</option>
+          <option value="180">Ultimele 6 luni</option>
+          <option value="365">Ultimul an</option>
+        </select>
+        <button
+          type="button"
+          onClick={adu}
+          disabled={seLucreaza}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+        >
+          {seLucreaza && <Loader2 className="h-4 w-4 animate-spin" />}
+          Adu-le
+        </button>
+      </div>
+
+      {rezultat && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {rezultat.noi} noi · {rezultat.actualizate} actualizate
+          {!rezultat.complet && " · nu s-a adus tot, mai apasă o dată"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PanouNotificari({
   url, ultimulWebhook, ultimaSincronizare,
 }: {

@@ -282,16 +282,54 @@ export async function aduComenzile(
 ): Promise<RezultatComenzi> {
   const r: RezultatComenzi = { ok: true, noi: 0, actualizate: 0, esuate: 0 };
 
+  /*
+   * ═══ ⚠ AMÂNDOUĂ TIPURILE, ȘI DE ACEEA E O REPARAȚIE, NU O ÎMBUNĂTĂȚIRE ═══
+   *
+   * `order/read` are `type` cu IMPLICITUL 3 — comenzi onorate de vânzător. Necerut
+   * anume, filtrul e pus de EI, iar comenzile FBE (`type: 2`, onorate de eMAG) nu vin
+   * NICIODATĂ. Fără nicio eroare: răspunsul e 200 și pare complet.
+   *
+   * Un magazin cu eMAG Fulfilment ar fi văzut jumătate din vânzări lipsă din Edinio,
+   * și n-ar fi avut ce să raporteze. Se vedea deja în cod: `pregatireAwbEmag` are o
+   * ramură anume pentru `order_type === 2` — cod care nu se putea atinge, fiindcă
+   * comenzile acelea nu ajungeau niciodată aici.
+   *
+   * ⚠ Două treceri, nu o listă: schema lor dă `type` ca `enum [2, 3]`, valoare
+   * singură, nu tablou.
+   *
+   * ⚠ Comenzile au 12 cereri pe secundă, nu 3 ca restul. Dublarea încape.
+   */
+  for (const tip of TIPURI_DE_CITIT) {
+    await aduPeTip(admin, ctx, deLa, tip, r);
+  }
+
+  return r;
+}
+
+/** 3 = onorate de vânzător · 2 = onorate de eMAG (FBE). ⚠ Amândouă, vezi `aduComenzile`. */
+const TIPURI_DE_CITIT = [3, 2] as const;
+
+/**
+ * O trecere pentru un singur tip de comandă.
+ *
+ * ⚠ Scrie în ACELAȘI `r`. Cursorul se ia ca maxim peste amândouă tipurile, iar `ok`
+ * se stinge dacă oricare dintre ele n-a citit tot — altfel marcajul ar fi sărit peste
+ * comenzile tipului care s-a trunchiat.
+ */
+async function aduPeTip(
+  admin: Db, ctx: ContextEmag, deLa: Date, tip: 2 | 3, r: RezultatComenzi,
+): Promise<void> {
   for (let pagina = 1; pagina <= PAGINI_PE_TRECERE; pagina++) {
     const raspuns = await citesteComenzi(ctx.auth, {
       modifiedAfter: iso(deLa),
+      type: tip,
       currentPage: pagina,
       itemsPerPage: PE_PAGINA,
     });
     if (isEmagError(raspuns)) {
       /* ⚠ `ok: false`: nu s-a citit tot, deci marcajul NU are voie sa avanseze. */
       r.ok = false;
-      return r;
+      return;
     }
 
     const comenzi = (Array.isArray(raspuns.data) ? raspuns.data : []) as EmagComanda[];
@@ -310,14 +348,12 @@ export async function aduComenzile(
       }
     }
 
-    if (comenzi.length < PE_PAGINA) return r;
+    if (comenzi.length < PE_PAGINA) return;
     if (pagina === PAGINI_PE_TRECERE) {
       /* Mai sunt pagini, dar trecerea s-a terminat. ⚠ Nu e o reusita deplina. */
       r.ok = false;
     }
   }
-
-  return r;
 }
 
 function iso(d: Date): string {
@@ -326,8 +362,143 @@ function iso(d: Date): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   IMPORTUL DE COMENZI VECHI (§87)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * ⚠ FEREASTRA LOR E DE CEL MULT O LUNĂ, SI E SCRISĂ ÎN SCHEMA LOR.
+ *
+ * `createdBefore`: „Can only be set if createdAfter is present. Maximum 1 month
+ * difference." Cerute nouăzeci de zile dintr-o dată, eMAG refuză — iar mesajul
+ * vorbește despre un câmp, nu despre limită.
+ *
+ * Douăzeci și opt de zile, nu treizeci: „o lună" nu e definită nicăieri, iar
+ * februarie face diferența între o fereastră care merge și una care cade o dată pe an,
+ * fără ca nimeni să lege căderea de dată.
+ */
+export const ZILE_PE_FEREASTRA = 28;
+
+/** Cel mult cât se poate cere înapoi. Peste, se citește degeaba: nu ține nimeni. */
+export const ZILE_ISTORIC_MAXIM = 365;
+
+export interface RezultatIstoric {
+  noi: number;
+  actualizate: number;
+  esuate: number;
+  /** ⚠ `false` = nu s-a adus tot. Se spune, nu se ascunde sub un număr frumos. */
+  complet: boolean;
+}
+
+/**
+ * Aduce comenzile vechi, marcate ca istoric.
+ *
+ * ═══ ⚠ NU ATINGE MARCAJUL SINCRONIZĂRII ═══
+ *
+ * `orders_synced_at` e cursorul care spune „de aici înainte n-am mai citit". Importul
+ * ăsta merge ÎNAPOI. Mutat de el, cursorul ar fi sărit cu trei luni în urmă, iar
+ * cronul ar fi recitit un trimestru întreg la fiecare minut — sau, dacă se scria data
+ * cea mai nouă găsită, ar fi sărit peste comenzile dintre timp.
+ *
+ * Nu se scrie nimic în `emag_config` de aici. Dinadins.
+ */
+export async function aduIstoricul(
+  admin: Db,
+  ctx: ContextEmag,
+  zile: number,
+  /** Cât timp are voie să dureze. ⚠ Funcțiile fără stare sunt oprite de platformă. */
+  pana: number = Date.now() + 50_000,
+): Promise<RezultatIstoric> {
+  const r: RezultatIstoric = { noi: 0, actualizate: 0, esuate: 0, complet: true };
+
+  const zileCerute = Math.max(1, Math.min(Math.floor(zile) || 0, ZILE_ISTORIC_MAXIM));
+  const acum = Date.now();
+  const inceput = acum - zileCerute * 24 * 60 * 60 * 1000;
+
+  /*
+   * ⚠ SE MERGE DINSPRE VECHI SPRE NOU. Invers, o oprire la jumătate ar fi lăsat
+   * negăsită tocmai partea veche — iar o reluare ar fi trebuit să înceapă de la capăt,
+   * fiindcă nimeni n-ar fi știut până unde s-a ajuns. Așa, ce s-a adus rămâne adus.
+   */
+  for (let de = inceput; de < acum; de += ZILE_PE_FEREASTRA * 24 * 60 * 60 * 1000) {
+    const pana_la = Math.min(de + ZILE_PE_FEREASTRA * 24 * 60 * 60 * 1000, acum);
+
+    for (const tip of TIPURI_DE_CITIT) {
+      for (let pagina = 1; pagina <= PAGINI_ISTORIC; pagina++) {
+        if (Date.now() > pana) {
+          /* ⚠ Timpul s-a terminat. NU e o reușită: se spune, iar omul reia. */
+          r.complet = false;
+          return r;
+        }
+
+        const raspuns = await citesteComenzi(ctx.auth, {
+          createdAfter: iso(new Date(de)),
+          createdBefore: iso(new Date(pana_la)),
+          type: tip,
+          currentPage: pagina,
+          itemsPerPage: PE_PAGINA,
+        });
+        if (isEmagError(raspuns)) {
+          r.complet = false;
+          return r;
+        }
+
+        const comenzi = (Array.isArray(raspuns.data) ? raspuns.data : []) as EmagComanda[];
+        for (const c of comenzi) {
+          /* ⚠ `istoric: true` oprește stocul, factura și confirmarea. Vezi
+             `OptiuniIngest`: fiecare dintre ele ar fi făcut rău, iar factura duplicată
+             e cel mai greu de desfăcut din toate. */
+          const rez = await ingereazaComanda(admin, ctx, c, { istoric: true });
+          if (rez === "noua") r.noi++;
+          else if (rez === "actualizata") r.actualizate++;
+          else if (rez === "esuata") r.esuate++;
+        }
+
+        if (comenzi.length < PE_PAGINA) break;
+        if (pagina === PAGINI_ISTORIC) r.complet = false;
+      }
+    }
+  }
+
+  return r;
+}
+
+/**
+ * Câte pagini pe fereastră și pe tip.
+ *
+ * ⚠ O sută de comenzi pe pagină × douăzeci = două mii pe lună și pe tip. Peste atât,
+ * se spune `complet: false` și se reia — mai bine un import în două apăsări decât unul
+ * care se oprește la jumătate și raportează succes.
+ */
+const PAGINI_ISTORIC = 20;
+
+/* ═══════════════════════════════════════════════════════════════════════════
    O COMANDA
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Onorata de eMAG, din depozitul lor (FBE).
+ *
+ * ═══ ⚠ CE NU SE FACE PENTRU ELE, SI DE CE ═══
+ *
+ * `type: 2` inseamna ca marfa e DEJA la eMAG: comerciantul a trimis-o acolo, cu
+ * saptamani inainte de vanzare. Deci vanzarea nu misca nimic din depozitul lui.
+ *
+ * ⚠ STOCUL NU SE CONSUMA. Bucatile au plecat din Edinio atunci cand au fost trimise
+ * la ei, nu acum. Scazute a doua oara, magazinul propriu ar fi ramas fara stoc pentru
+ * marfa pe care o are pe raft — si ar fi refuzat comenzi adevarate.
+ *
+ * ⚠ NU SE CONFIRMA. `order/acknowledge` e semnalul „am preluat comanda, ma ocup de
+ * livrare". La FBE se ocupa ei. Iar documentatia lor spune limpede ca doar `type: 3`
+ * se editeaza.
+ *
+ * ⚠ FACTURA SE EMITE TOTUSI. Vanzatorul ramane comerciantul, chiar daca livrarea o
+ * face eMAG; clientul are nevoie de factura lui, nu a lor.
+ */
+export const TIP_ONORAT_DE_EMAG = 2;
+
+export function onoratDeEmag(tip: number | null | undefined): boolean {
+  return Number(tip) === TIP_ONORAT_DE_EMAG;
+}
 
 type RezultatIngest = "noua" | "actualizata" | "sarita" | "esuata";
 
@@ -340,9 +511,30 @@ type RezultatIngest = "noua" | "actualizata" | "sarita" | "esuata";
  * inexistenta la noi — iar eMAG n-ar mai fi pomenit-o niciodata. Comerciantul ar fi
  * aflat de la client.
  */
+export interface OptiuniIngest {
+  /**
+   * Comanda vine dintr-un import de ISTORIC (§87), nu din fluxul obisnuit.
+   *
+   * ═══ ⚠ TREI EFECTE SE OPRESC, SI FIECARE AR FI FACUT RAU ═══
+   *
+   * ⚠ STOCUL. O comanda de acum trei luni si-a miscat marfa atunci. Scazuta acum,
+   * catalogul ar fi ajuns pe minus in cateva secunde, iar magazinul ar fi refuzat
+   * comenzi adevarate — chiar in ziua in care comerciantul tocmai a trecut la Edinio.
+   *
+   * ⚠ FACTURA. Comenzile vechi au fost facturate demult, in sistemul de dinainte.
+   * Facturate din nou, ar fi iesit facturi duplicate cu serii noi — la ANAF, nu doar
+   * pe ecran. E raul cel mai greu de desfacut din toate.
+   *
+   * ⚠ CONFIRMAREA. `order/acknowledge` pe o comanda finalizata acum trei luni n-are
+   * niciun inteles si arde o cerere pentru fiecare rand adus.
+   */
+  istoric?: boolean;
+}
+
 export async function ingereazaComanda(
-  admin: Db, ctx: ContextEmag, c: EmagComanda,
+  admin: Db, ctx: ContextEmag, c: EmagComanda, optiuni: OptiuniIngest = {},
 ): Promise<RezultatIngest> {
+  const istoric = optiuni.istoric === true;
   if (!Number.isFinite(c?.id)) return "sarita";
 
   const numar = `EMAG-${c.id}`;
@@ -401,15 +593,20 @@ export async function ingereazaComanda(
     }).eq("id", ex.id);
 
     /* ⚠ Confirmarea se incearca si acum: daca prima oara a picat, eMAG inca trimite
-       notificari pentru o comanda pe care noi o avem demult. */
-    if (!ex.acknowledged_at) await confirmaSiNoteaza(admin, ctx, c.id, ex.id);
+       notificari pentru o comanda pe care noi o avem demult.
+       ⚠ Dar NU la FBE: acolo se ocupa ei de livrare, iar incercata la fiecare
+       actualizare ar fi fost o cerere arsa pe veci, fiindca `acknowledged_at` n-ar fi
+       ajuns niciodata sa se umple. */
+    if (!ex.acknowledged_at && !onoratDeEmag(c.type) && !istoric) {
+      await confirmaSiNoteaza(admin, ctx, c.id, ex.id);
+    }
 
     /* ⚠ „definitiv" NU e o cadere: inseamna ca tranzitia n-avea ce sa faca (starea
        era deja aceea, sau nu se poate trece de acolo). Numarata drept esec, fereastra
        magazinului ar fi ramas pe loc la fiecare trecere, iar comenzile noi n-ar mai
        fi intrat niciodata — din cauza uneia care era deja in regula. */
     if (t === "reincearca") return "esuata";
-    await poateFactura(admin, ctx, ex.order_id, status);
+    if (!istoric) await poateFactura(admin, ctx, ex.order_id, status);
     return "actualizata";
   }
 
@@ -433,6 +630,11 @@ export async function ingereazaComanda(
     order_source: {
       marketplace: "emag",
       emag_order_id: c.id,
+      /* ⚠ SE MARCHEAZA, si e singura urma ca aici NU s-a scazut stoc si NU s-a emis
+         factura. Fara ea, o comanda de istoric arata identic cu una obisnuita, iar
+         cine ar cauta peste un an de ce nu se potrivesc stocurile n-ar avea nimic de
+         gasit. */
+      ...(istoric ? { istoric: true } : {}),
       tip: c.type ?? null,
       mod_plata: c.payment_mode_id ?? null,
       livrare: c.delivery_mode ?? null,
@@ -494,13 +696,26 @@ export async function ingereazaComanda(
     updated_at: acum,
   } as never, { onConflict: "business_id,emag_order_id" }).select("id").single();
 
-  const consum = await consumaStocul(admin, ctx, orderId, linii);
-  if (consum === "esuat") return "esuata";
+  /*
+   * ⚠ STOCUL NU SE CONSUMA LA FBE, si asta nu e o scutire — e o reparatie.
+   *
+   * `type: 2` inseamna ca marfa e DEJA la eMAG: a plecat din depozitul comerciantului
+   * cand a trimis-o acolo, cu saptamani inaintea vanzarii. Scazuta din nou acum,
+   * magazinul propriu ar fi ramas fara stoc pentru marfa pe care o are pe raft, si ar
+   * fi refuzat comenzi adevarate.
+   */
+  if (!onoratDeEmag(c.type) && !istoric) {
+    const consum = await consumaStocul(admin, ctx, orderId, linii);
+    if (consum === "esuat") return "esuata";
+  }
 
-  /* ⚠ ABIA ACUM. Vezi nota din antetul functiei. */
-  if (randEmag) await confirmaSiNoteaza(admin, ctx, c.id, (randEmag as { id: string }).id);
+  /* ⚠ ABIA ACUM. Vezi nota din antetul functiei. ⚠ Si nu la FBE: acolo livrarea o fac
+     ei, iar documentatia lor spune ca doar `type: 3` se editeaza. */
+  if (randEmag && !onoratDeEmag(c.type) && !istoric) {
+    await confirmaSiNoteaza(admin, ctx, c.id, (randEmag as { id: string }).id);
+  }
 
-  await poateFactura(admin, ctx, orderId, status);
+  if (!istoric) await poateFactura(admin, ctx, orderId, status);
   return "noua";
 }
 

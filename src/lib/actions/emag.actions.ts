@@ -35,7 +35,8 @@ import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { trimiteElement } from "@/lib/emag/trimite";
 import { alegereaCurierului, contPotrivit, emiteAwb } from "@/lib/emag/awb";
 import { schimbaStareaReturului, treceriPosibile, poateAwbRetur, PICKUP_CURIER_PROPRIU} from "@/lib/emag/rma";
-import { aduComenzile } from "@/lib/emag/orders";
+import { aduComenzile, aduIstoricul, type RezultatIstoric } from "@/lib/emag/orders";
+import { cuFir, firNou } from "@/lib/emag/jurnal";
 import { pretPentruSmartDeals } from "@/lib/emag/campanii";
 import {
   leagaOferteleNoi, ruleazaImportEmag, SURSA_EMAG, type RezultatImportEmag,
@@ -2453,4 +2454,42 @@ export async function emiteAwbReturEmag(
   if (rez.fel === "esec") return { error: rez.mesaj };
   revalidatePath(FEATURE_PATH);
   return { numar: rez.numar, deja: rez.fel === "deja" };
+}
+
+/**
+ * Aduce comenzile vechi din eMAG, marcate ca istoric (§87).
+ *
+ * ═══ ⚠ NU SCADE STOC SI NU EMITE FACTURI ═══
+ *
+ * O comanda de acum trei luni si-a miscat marfa atunci si a fost facturata atunci.
+ * Repetate, stocul ar fi ajuns pe minus in cateva secunde, iar facturile duplicate ar
+ * fi plecat la ANAF cu serii noi — raul cel mai greu de desfacut din toate.
+ *
+ * Vezi `OptiuniIngest.istoric`: hotararea e acolo, langa efectele pe care le opreste.
+ *
+ * ⚠ Cursorul sincronizarii NU se atinge. Importul merge INAPOI; mutat de el,
+ * cronul ar fi recitit un trimestru la fiecare minut, sau ar fi sarit peste comenzile
+ * dintre timp.
+ */
+export async function importaIstoricEmag(
+  businessId: string,
+  zile: number,
+): Promise<RezultatIstoric | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const iesire = iesireEmag();
+  if (iesire.eroare) return { error: iesire.eroare };
+
+  const admin = createAdminClient();
+  const ctx = await loadEmagContext(admin, businessId);
+  if (!ctx) return { error: "Contul eMAG nu este conectat." };
+
+  /* ⚠ Fir propriu (§66): un import de istoric face zeci de cereri, iar amestecate cu
+     ale cronului n-ar mai fi putut fi urmarite. */
+  const r = await cuFir(firNou("istoric"), () => aduIstoricul(admin, ctx, zile));
+
+  revalidatePath(FEATURE_PATH);
+  revalidatePath("/dashboard/orders");
+  return r;
 }

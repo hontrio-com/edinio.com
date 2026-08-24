@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { baniiComenzii, clientComenzii, liniiEdinio, statusEdinio, valoareVouchere } from "./orders";
+import { baniiComenzii, clientComenzii, liniiEdinio, statusEdinio, valoareVouchere, onoratDeEmag, TIP_ONORAT_DE_EMAG} from "./orders";
 import type { EmagComanda } from "./types";
 
 /*
@@ -163,4 +163,35 @@ test("eMAG comenzi: livrarea la easybox pastreaza lockerul", () => {
   }));
   assert.equal(c.address.locker_id, "RO123");
   assert.equal(c.address.locker_name, "Easybox Piața Unirii");
+});
+
+/* ── Comenzile onorate de eMAG (FBE) ──────────────────────────────── */
+
+test("eMAG comenzi: `type: 2` inseamna onorata de EI, si se recunoaste ca atare", () => {
+  /*
+   * ═══ DE CE CONTEAZA ATAT DE MULT ═══
+   *
+   * La FBE marfa e DEJA la eMAG: a plecat din depozitul comerciantului cand a trimis-o
+   * acolo, cu saptamani inaintea vanzarii.
+   *
+   * ⚠ Stocul scazut din nou la vanzare ar fi lasat magazinul propriu fara stoc pentru
+   * marfa pe care o are pe raft — si ar fi refuzat comenzi adevarate.
+   * ⚠ `order/acknowledge` inseamna „ma ocup eu de livrare". La FBE se ocupa ei, iar
+   * documentatia lor spune ca doar `type: 3` se editeaza.
+   */
+  assert.equal(TIP_ONORAT_DE_EMAG, 2);
+  assert.equal(onoratDeEmag(2), true);
+  assert.equal(onoratDeEmag(3), false, "onorata de vanzator");
+});
+
+test("eMAG comenzi: un tip lipsa NU e tratat ca FBE", () => {
+  /*
+   * ⚠ Implicitul lor la `order/read` e 3, iar o comanda fara tip e aproape sigur una
+   * de vanzator. Presupusa FBE, stocul NU s-ar mai fi consumat — iar magazinul ar fi
+   * vandut a doua oara bucati care plecasera deja, la fiecare comanda careia ii lipsea
+   * campul. Tacut, fiindca lipsa unei scaderi nu se vede nicaieri.
+   */
+  assert.equal(onoratDeEmag(null), false);
+  assert.equal(onoratDeEmag(undefined), false);
+  assert.equal(onoratDeEmag(0), false);
 });

@@ -42,23 +42,26 @@ export function EmagFulfillmentPanel({
         </div>
         <div className="p-4 space-y-3">
           {/*
-            ⚠ TEXTUL SPUNE SI CE NU FACEM (25.08.2026).
+            ⚠ TEXTUL A FOST REPARAT DE DOUA ORI IN ACEEASI ZI (25.08.2026), si merita spus.
 
-            Forma dinainte se oprea la „eMAG le acceptă pe amândouă" — adevarat despre ei,
-            dar lasa sa se inteleaga ca Edinio inchide bucla si pe calea a doua. N-o inchide:
-            dupa un AWB emis cu curierul magazinului, nimic nu-i trimite numarul lui eMAG.
-            Nici ca atasament (`type 10`), nici pe alta cale.
+            Forma dintai se oprea la „eMAG le acceptă pe amândouă" — adevarat despre ei, dar
+            lasa sa se inteleaga ca Edinio inchide bucla si pe calea a doua. N-o inchidea.
+            Atunci textul a fost facut sa spuna si ce NU facem.
 
-            Iar comerciantul care crede ca s-a trimis nu se duce sa-l puna in panoul lor —
-            si atunci comanda ramane la ei fara numar de urmarire, ceea ce ei numara.
+            Peste un ceas, bucla s-a inchis cu adevarat: `urcaAwburile` din cronul de
+            sincronizare urca numarul ca atasament `type 10`. Deci al doilea text devenise
+            si el neadevarat, doar in cealalta directie.
+
+            ⚠ De aia sta scris aici: un text despre ce face codul trebuie sa se schimbe
+            ODATA cu codul. Amandoua formele au fost adevarate cand s-au scris.
           */}
           <p className="text-xs text-muted-foreground">
             Poți emite AWB pe contul de curier din eMAG, sau poți expedia cu curierul tău
             de mai jos. eMAG le acceptă pe amândouă.
           </p>
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            Dacă expediezi cu curierul tău, trece numărul de AWB și în contul eMAG: de aici
-            nu li se trimite singur. AWB-ul emis prin butonul de mai jos ajunge la ei direct.
+          <p className="text-xs text-muted-foreground">
+            Dacă expediezi cu curierul tău, numărul de AWB ajunge la eMAG singur, în câteva
+            minute: îl trimitem ca document atașat comenzii, ca să-l vadă și cumpărătorul.
           </p>
           <button
             type="button"

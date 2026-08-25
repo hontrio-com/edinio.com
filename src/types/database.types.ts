@@ -1481,6 +1481,7 @@ export type Database = {
           emag_order_id: number
           id: string
           invoice_number: string | null
+          awb_uploaded_at: string | null
           invoice_uploaded_at: string | null
           is_complete: number | null
           last_modified: string | null
@@ -1500,6 +1501,7 @@ export type Database = {
           emag_order_id: number
           id?: string
           invoice_number?: string | null
+          awb_uploaded_at?: string | null
           invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null
@@ -1519,6 +1521,7 @@ export type Database = {
           emag_order_id?: number
           id?: string
           invoice_number?: string | null
+          awb_uploaded_at?: string | null
           invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null

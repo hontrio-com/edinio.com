@@ -5,6 +5,7 @@ import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { marcajUrmator } from "@/lib/marketplace/marcaj";
+import { urcaAwbPropriu, awbPropriuAlComenzii, CAMPURI_AWB_DE_CITIT } from "@/lib/emag/awb-propriu";
 import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
@@ -135,6 +136,9 @@ const RABDARE_NEPLECATE = "10 minutes";
 
 /** Cate facturi se urca pentru un magazin intr-o trecere. */
 const FACTURI_PE_TRECERE = 10;
+/* ⚠ Mai putine decat la facturi: fiecare urcare inseamna un PDF construit si urcat in R2,
+   apoi o cerere la ei. Zece pe trecere, la cinci minute, inseamna 120 pe ora. */
+const AWB_PE_TRECERE = 10;
 
 /** ⚠ Maximul lor. Cerut mai mare, eMAG intoarce tot 100 fara sa spuna. */
 const PE_PAGINA = 100;
@@ -313,7 +317,7 @@ export async function GET(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0, retururi = 0;
+  let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0, retururi = 0, awburi = 0;
   let derivate = 0;
   const inceputulRularii = Date.now();
 
@@ -669,6 +673,12 @@ export async function GET(req: NextRequest) {
       const ctx = await ctxPentru(businessId);
       if (!ctx) continue;
       facturi += await cuFir(firNou("facturi"), () => urcaFacturile(admin, ctx));
+      /*
+       * ⚠ SI AWB-UL CURIERULUI PROPRIU (25.08.2026). Aceeasi tura si aceeasi rotatie:
+       * amandoua sunt documente urcate DUPA expediere, pe aceleasi comenzi, si n-are rost
+       * sa se plimbe prin doua ferestre diferite.
+       */
+      awburi += await cuFir(firNou("awb-propriu"), () => urcaAwburile(admin, ctx));
     }
   }
 
@@ -856,7 +866,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, retururi, neplecate, jurnalSters,
+    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, awburi, retururi, neplecate, jurnalSters,
   });
 }
 
@@ -874,6 +884,126 @@ export async function GET(req: NextRequest) {
  * minut, la nesfarsit, pentru zero lucru. Si nu s-ar fi vazut ca defect: totul merge,
  * doar ca baza geme.
  */
+/**
+ * AWB-ul emis cu curierul magazinului, dus si la eMAG.
+ *
+ * ═══ DE CE O TRECERE, SI NU UN CARLIG PE FIECARE CURIER ═══
+ *
+ * Sunt cincisprezece coloane de AWB in `orders`, cate una pe curier, si niciun loc comun
+ * de dupa emitere. Un carlig pe fiecare ar fi insemnat cincisprezece fire de legat si tot
+ * atatea prilejuri de regresie in fluxuri care merg azi.
+ *
+ * Intrebarea „ce comanda eMAG are AWB si n-are inca atasament" se pune o data, aici, si
+ * prinde AWB-urile facute pe ORICE cale: buton, lot, sau numar trecut de mana.
+ *
+ * ⚠ FEREASTRA E ROTATIVA, ca la facturi: fara ea, primele randuri s-ar intoarce la fiecare
+ * trecere si nimic mai nou n-ar fi vazut vreodata. Vezi nota din `urcaFacturile`.
+ */
+async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
+  const { count: bazin, error: eBazin } = await admin.from("emag_orders")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", ctx.businessId)
+    .is("awb_uploaded_at", null)
+    .not("order_id", "is", null);
+
+  if (eBazin) {
+    await logError({
+      action: "emag-sync",
+      message: `cate comenzi n-au AWB-ul urcat nu s-a putut afla: ${eBazin.message}`,
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+    return 0;
+  }
+
+  const cate = bazin ?? 0;
+  if (cate === 0) return 0;
+
+  const tura = Math.floor(Date.now() / 60_000 / 5);
+  const de_la = cate <= AWB_PE_TRECERE ? 0 : (tura * AWB_PE_TRECERE) % cate;
+
+  const { data, error: eComenzi } = await admin.from("emag_orders")
+    .select(`id, order_id, emag_order_id, order_type, orders(order_number, ${CAMPURI_AWB_DE_CITIT})`)
+    .eq("business_id", ctx.businessId)
+    .is("awb_uploaded_at", null)
+    .not("order_id", "is", null)
+    .order("created_at", { ascending: true })
+    .range(de_la, de_la + AWB_PE_TRECERE - 1);
+
+  if (eComenzi) {
+    await logError({
+      action: "emag-sync",
+      message: `comenzile fara AWB urcat nu s-au putut citi: ${eComenzi.message}`,
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+    return 0;
+  }
+
+  let urcate = 0;
+  /*
+   * ⚠ `as unknown as`: sirul de `select` e compus din `CAMPURI_AWB_DE_CITIT`, iar tipurile
+   * PostgREST nu pot citi un sablon. Scris de mana aici, lista ar fi fost a DOUA copie —
+   * si s-ar fi despartit de prima la primul curier adaugat.
+   *
+   * ⚠ Verificarea nu se pierde, se muta si se intareste: `awb-propriu.test.ts` cere ca
+   * FIECARE coloana din lista sa existe pe `orders` in tipurile generate din schema. Asta
+   * prinde si o coloana redenumita in baza, ceea ce sablonul n-ar fi prins.
+   */
+  for (const r of (data ?? []) as unknown as {
+    id: string; order_id: string | null; emag_order_id: number | null;
+    order_type: number | null; orders: Record<string, unknown> | null;
+  }[]) {
+    if (!r.order_id || !r.emag_order_id) continue;
+
+    const awb = awbPropriuAlComenzii(r.orders);
+    /*
+     * ⚠ FARA AWB NU E O EROARE, si nici nu se marcheaza. Comanda poate fi inca nepregatita,
+     * sau expediata prin AWB-ul lor — caz in care ei il stiu deja si n-avem ce trimite.
+     * Marcata, n-ar mai fi privita cand chiar apare un numar.
+     */
+    if (!awb) continue;
+
+    /* ⚠ AWB-ul emis PRIN ei nu se mai trimite inapoi la ei. */
+    const { data: alNostru } = await admin.from("emag_awb")
+      .select("awb_number").eq("business_id", ctx.businessId).eq("order_id", r.order_id)
+      .eq("awb_number", awb.awb).maybeSingle();
+    if (alNostru) {
+      await admin.from("emag_orders")
+        .update({ awb_uploaded_at: new Date().toISOString() }).eq("id", r.id);
+      continue;
+    }
+
+    const rez = await urcaAwbPropriu(admin, ctx, {
+      orderId: r.order_id,
+      emagOrderId: r.emag_order_id,
+      /* ⚠ 3 ca ultima plasa, aceeasi alegere ca la factura: atasamentele sunt ingaduite si
+         pe FBE, iar vanzatorul e cazul coplesitor. */
+      tipComanda: (r.order_type === 2 ? 2 : 3),
+      numarComanda: String((r.orders?.order_number as string) ?? `EMAG-${r.emag_order_id}`),
+      awb,
+    });
+
+    if (rez.fel === "urcat" || rez.fel === "deja") {
+      urcate += rez.fel === "urcat" ? 1 : 0;
+      await admin.from("emag_orders")
+        .update({ awb_uploaded_at: new Date().toISOString() }).eq("id", r.id);
+    } else if (rez.fel === "esuat") {
+      /* ⚠ NU se marcheaza: un esec dovedit merita reincercat la o tura urmatoare, iar
+         registrul opreste oricum un al doilea document daca primul chiar a plecat. */
+      await logError({
+        action: "emag-sync",
+        message: `AWB-ul curierului propriu nu s-a urcat: ${rez.mesaj}`,
+        details: { orderId: r.order_id, awb: awb.awb, curier: awb.curier },
+        businessId: ctx.businessId,
+        severity: "warning",
+      });
+    }
+  }
+
+  return urcate;
+}
+
 async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
   /*
    * ═══ ⚠ FEREASTRA SE ROTESTE, ALTFEL ZECE COMENZI BLOCHEAZA TOT (24.08.2026) ═══

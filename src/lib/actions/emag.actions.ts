@@ -1817,6 +1817,13 @@ export async function listaOferteEmag(
        * Un link care duce aiurea e mai rău decât niciun link: primul îl trimite pe om
        * să caute o problemă unde nu e, al doilea îl lasă să întrebe. Se aprinde la loc
        * când se lămurește de unde vin cheile — vezi nota din `mapping.ts`.
+       *
+       * ⚠ O JUMĂTATE DE RĂSPUNS, MĂSURATĂ PE 25.08.2026. Există și un al doilea izvor de
+       * chei: cele pe care eMAG le rostește chiar în mesajul de refuz („associate the
+       * offer to product with PNK …”). Două dintre ele, verificate pe emag.ro, duceau
+       * fix la produsele noastre — spre deosebire de 3 din 3 greșite luate din coloană.
+       * Deci nu formatul și nu eMAG sunt de vină, ci felul în care ajunge cheia în
+       * `part_number_key`. Vezi `pnkDinMesaj` în `errors.ts`.
        */
       linkEmag: null,
       /* ⚠ Numai cand chiar sunt CONCURENTI. Cu un singur vanzator, „locul 1 din 1” nu

@@ -150,9 +150,42 @@ export function poarteObservatii(cale: string): boolean {
  * partea nestiuta trebuie citita in defavoarea noastra. Aici asta inseamna: se spune
  * omului ca produsul lui e deja acolo, in loc sa i se spuna ca s-a publicat.
  */
+/*
+ * ═══ INCA TREI SEMNALE, MASURATE PE 25.08.2026 ═══
+ *
+ * Gasite pornind de la un refuz care nu se putea explica altfel: `offer/save` intorcea
+ * „Offer 1000000388 not found" pentru o oferta pe care noi o credeam trimisa.
+ *
+ * ⚠ MASURAT: **sapte** oferte cu `last_synced_at` scris, dar pe care reconcilierea nu le-a
+ * vazut NICIODATA la ei (`status_la_ei` si `validation_status` amandoua goale). Toate
+ * sapte purtau in `doc_errors` unul dintre mesajele de mai jos — adica ei ne spusesera
+ * limpede ca nu s-a creat nimic, iar noi am scris „trimis".
+ *
+ *   „The product you have tried to associate this offer to is a duplicated product."   5
+ *   „You already hold an offer associated with this PNK: DXT961MBM."                   1
+ *   „4032254753475 is not a valid EAN. - Product id: 1000001088"                       1
+ *
+ * ⚠ De ce n-au fost prinse de exceptia de documentatie: toate trei SUNT despre
+ * documentatie, si totusi inseamna „nu s-a salvat". Regula din documentatia lor —
+ * `isError: true` la o eroare de documentatie inseamna totusi salvat — e adevarata, dar
+ * NU universala. De aceea nu se muta categoria, se enumera semnalele.
+ *
+ * ⚠ IRONIA, si merita scrisa: primele doua sunt exact `nehotarat` si `avem_deja`, adica
+ * verdictele pe care `cautaInCatalogulLor` le-a primit pe 25.08 ca sa OPREASCA publicarea.
+ * N-au oprit-o fiindca intrebarea nici nu se punea: `emag_offers.ean` e scris numai de
+ * import, deci filtrul iesea gol si `find_by_eans` nu se chema pentru un produs nou.
+ * Reparatia aceea inchide jumatatea din fata — se intreaba inainte. Asta o inchide pe cea
+ * din spate: raspunsul lor de dupa nu mai e citit ca reusita.
+ *
+ * ⚠ „is not a valid ean" se potriveste FARA numarul din fata: mesajul poarta codul
+ * respins, care e altul de fiecare data.
+ */
 const REFUZURI_ALE_CERERII: readonly string[] = [
   "maximum input vars",
   "you already hold a product",
+  "is a duplicated product",
+  "you already hold an offer",
+  "is not a valid ean",
 ] as const;
 
 export function eRefuzAlCererii(mesaje: string[]): boolean {
@@ -260,6 +293,50 @@ export function sAIncheiat(v: VerdictEmag): boolean {
  * Se potriveste pe forme STABILE, nu pe fraze intregi, si orice nepotrivire cade
  * inapoi pe textul lor — mai bine un mesaj in engleza decat unul inventat de noi.
  */
+/**
+ * Codul paginii de produs (PNK) pe care eMAG il NUMESTE chiar in mesajul de refuz.
+ *
+ * ⚠ ASTA E PARTEA CARE SCHIMBA REFUZUL IN CEVA DE FACUT. Masurat pe cele sapte oferte de
+ * pe 24.08.2026, amandoua refuzurile de asociere spun exact unde trebuia dusa oferta:
+ *
+ *   „…is a duplicated product. Please associate the offer to product with PNK D03M9BBBM"
+ *   „You already hold an offer associated with this PNK: DXT961MBM."
+ *
+ * Fara el, mesajul nostru ar fi fost „pagina e o dublura, descurca-te". Cu el, comerciantul
+ * primeste chiar adresa: `emag.ro/-/pd/<PNK>`.
+ *
+ * ⚠ SE CAUTA IN `brut`, NU IN TEXTUL COBORAT LA LITERE MICI: codul e scris cu majuscule si
+ * asa trebuie dat mai departe, altfel linkul nu duce nicaieri.
+ *
+ * ⚠ Se cere macar 6 semne ca sa nu se agate de vreun cuvant scurt de dupa „PNK”. Cand nu
+ * se potriveste nimic, iese sir gol si mesajul isi urmeaza forma fara cod — mai bine fara
+ * decat cu unul inventat.
+ *
+ * ═══ ⚠ DE CE E VOIE SA DAM LINKUL AICI, CAND SAGEATA DIN PANOU E STINSA ═══
+ *
+ * Pe 24.08.2026 linkul `emag.ro/-/pd/{part_number_key}` a fost scos din panou fiindca
+ * ducea la produse straine: 3 chei incercate, 3 produse ale altcuiva. Nota intreaga e in
+ * `emag.actions.ts`, la `linkEmag: null`.
+ *
+ * Cheia de aici NU e aceeasi cheie. Aceea era luata din `emag_offers.part_number_key`,
+ * scrisa de noi, cu obarsia inca nelamurita. Asta o rosteste eMAG in raspunsul la CHIAR
+ * oferta asta, ca sa ne spuna unde s-o punem.
+ *
+ * ⚠ SI S-A VERIFICAT PE EMAG.RO, nu s-a presupus — 25.08.2026, amandoua cheile din cele
+ * sapte refuzuri:
+ *
+ *   D03M9BBBM  →  „Royal Canin, Medium, Adult, 15Kg”              = produsul nostru
+ *   DXT961MBM  →  „Calibra Dog Verve GF, Adult, Wild Boar…, 400g" = produsul nostru
+ *
+ * Doi martori pe fiecare, nume si marca. Deci: cheile din MESAJ sunt bune, cele din
+ * COLOANA raman nelamurite. Daca vreodata se aprinde sageata la loc, asta e jumatatea de
+ * raspuns care exista deja.
+ */
+export function pnkDinMesaj(brut: string): string {
+  const m = /\bPNK:?\s+([A-Za-z0-9]{6,20})/.exec(brut || "");
+  return m ? m[1] : "";
+}
+
 export function mesajOmenesc(brut: string): string {
   const t = (brut || "").toLowerCase();
 
@@ -277,7 +354,39 @@ export function mesajOmenesc(brut: string): string {
   if (t.includes("category") && t.includes("not allowed")) {
     return "Nu ai acces la această categorie eMAG. Cere-l din panoul eMAG sau alege altă categorie.";
   }
+  /*
+   * ⚠ CELE TREI DE MAI JOS SUNT REFUZURI, NU OBSERVATII, si stau ANUME inaintea ramurii
+   * generice de EAN. Sunt mesajele masurate pe 25.08.2026 in `REFUZURI_ALE_CERERII`:
+   * oferta NU s-a creat. Pana azi doua dintre ele cadeau in engleza bruta, iar a treia
+   * nimerea ramura generica si ii spunea comerciantului „observatie" la ceva ce era refuz.
+   *
+   * ⚠ Fiecare spune si CE SA FACA, si numeste campul asa cum scrie pe ecran — „Cod EAN /
+   * Cod de bare" in fisa produsului, „Cod EAN" la combinatie. Un mesaj care descrie
+   * necazul fara urmatoarea miscare a facut deja 208 apasari de „Publica" pe 24.08.
+   */
+  if (t.includes("is a duplicated product")) {
+    const pnk = pnkDinMesaj(brut);
+    return "Pagina de produs de pe eMAG găsită după codul de bare e o dublură, iar ei cer " +
+      "oferta pusă pe pagina originală. Oferta nu s-a creat." +
+      (pnk
+        ? ` Pagina originală e ${pnk}: https://www.emag.ro/-/pd/${pnk}`
+        : " Verifică „Cod EAN / Cod de bare” în fișa produsului.");
+  }
+  if (t.includes("you already hold an offer")) {
+    /* ⚠ Fratele lui „you already hold a product”, dar despre oferta, nu despre produs. */
+    const pnk = pnkDinMesaj(brut);
+    return "Ai deja o ofertă pe aceeași pagină de produs de pe eMAG, deci nu s-a creat a " +
+      `doua oară${pnk ? ` (pagina ${pnk})` : ""}. Apasă „${BUTON_ADU_OFERTELE}” ca să ` +
+      "legăm produsul de oferta care există deja acolo.";
+  }
+  if (t.includes("is not a valid ean")) {
+    return "eMAG a respins codul de bare, deci oferta nu s-a creat. Schimbă „Cod EAN / " +
+      `Cod de bare” în fișa produsului, sau „Cod EAN” la combinația respectivă: ${brut}`;
+  }
   if (t.includes("ean")) {
+    /* ⚠ Ce ramane aici CHIAR e o observatie: „saved as a draft … EAN”, si altele ca ea.
+       Oferta exista, ii lipseste o completare. De aceea cuvantul „observatie" e corect
+       numai dupa ce cele trei refuzuri de mai sus au fost scoase din drum. */
     return `eMAG are o observație la codul EAN: ${brut}`;
   }
   if (t.includes("you already hold a product")) {

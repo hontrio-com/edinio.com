@@ -53,6 +53,8 @@ interface RandOfertaLocal {
   id: string;
   emag_id: number;
   variant_title: string | null;
+  /** Numele ofertei LA EI, scris de reconciliere. Vezi `schimbaSiNumele`. */
+  nume_emag: string | null;
   family_id: number | null;
   part_number_key: string | null;
   ean: string | null;
@@ -267,7 +269,7 @@ async function citesteRandurile(
   admin: Admin, businessId: string, productId: string,
 ): Promise<RandOfertaLocal[]> {
   const r = await admin.from("emag_offers")
-    .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at, creat_de_edinio")
+    .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at, creat_de_edinio, nume_emag")
     .eq("business_id", businessId).eq("product_id", productId)
     .order("emag_id", { ascending: true });
   return randuriCitite<RandOfertaLocal>("emag_offers", r as never);
@@ -486,6 +488,8 @@ async function duTotul(
       emag_id: r.emag_id,
       part_number_key: r.part_number_key,
       ean: r.ean,
+      /* ⚠ Ca sa nu plece numele si codul in aceeasi cerere. Vezi `schimbaSiNumele`. */
+      nume_emag: r.nume_emag,
     })),
     identitati.familyId,
     /* ⚠ Numai apasarea explicita a comerciantului pe UN produs forteaza descarcarea
@@ -990,6 +994,8 @@ async function asiguraIdentitatile(
       emag_id: r.emag_id,
       part_number_key: r.part_number_key,
       ean: r.ean,
+      /* ⚠ Ca sa nu plece numele si codul in aceeasi cerere. Vezi `schimbaSiNumele`. */
+      nume_emag: r.nume_emag,
     })),
     familyId,
   };

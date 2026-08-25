@@ -372,6 +372,13 @@ export interface IdentitateOferta {
   emag_id: number;
   part_number_key?: string | null;
   ean?: string | null;
+  /**
+   * Numele pe care il are oferta LA EI, citit de reconciliere.
+   *
+   * ⚠ Slujeste la o singura hotarare: eMAG refuza sa schimbe `part_number` SI `name` in
+   * aceeasi cerere. Vezi `schimbaSiNumele`.
+   */
+  nume_emag?: string | null;
 }
 
 export interface RezultatCartografiere {
@@ -575,6 +582,7 @@ export function construiesteOferte(
       compareAt: produs.compare_at_price,
       stoc: produs.stock_quantity ?? 0,
       partNumber: normalizeazaPartNumber(produs.sku) || normalizeazaPartNumber(produs.id),
+      numeLaEi: ident?.nume_emag ?? null,
       imagini: imaginiEmag(produs.images),
       imaginiBrute: produs.images,
       titlu: produs.name,
@@ -627,6 +635,7 @@ export function construiesteOferte(
          nota din `variants.ts`. */
       stoc: comboStock(c) ?? produs.stock_quantity ?? 0,
       partNumber: partNumberCombinatie(produs.sku, c.sku, c.title),
+      numeLaEi: ident?.nume_emag ?? null,
       imagini: imaginiEmag(produs.images, c.image),
       imaginiBrute: produs.images,
       imagineCombinatie: c.image,
@@ -666,6 +675,13 @@ function ofertaSingura(a: {
   compareAt: number | null;
   stoc: number;
   partNumber: string;
+  /**
+   * Numele pe care il are oferta LA EI, asa cum l-a citit reconcilierea.
+   *
+   * ⚠ `null` inseamna „nu stim inca" — nu „n-are nume". Deosebirea conteaza: pe „nu
+   * stim" NU se poate hotari nimic, deci se trimite ca pana acum.
+   */
+  numeLaEi?: string | null;
   imagini: EmagImagine[];
   /** ⚠ Pentru MESAJ, nu pentru trimitere: din ele se afla DE CE n-a ramas niciuna. */
   imaginiBrute: unknown;
@@ -733,7 +749,30 @@ function ofertaSingura(a: {
     ...(a.comun as object),
     id: ident.emag_id,
     name: taiat(a.titlu, LIMITE_EMAG.nume),
-    part_number: a.partNumber,
+    /*
+     * ═══ ⚠ NUMELE SI CODUL NU SE SCHIMBA IN ACEEASI CERERE (25.08.2026) ═══
+     *
+     * Regula lor, citita din raspunsurile reale: „You are trying to change both
+     * part_number and name at the same time for id 285089. Existing part_number is
+     * [AVX-K6253-285089] and existing name is [Lesa Retractabila…]".
+     *
+     * ⚠ SI RASPUND 200. Verdictul iese `reusit_cu_observatii`, elementul PARASESTE coada
+     * si totul pare dus — dar schimbarea nu s-a aplicat, iar oferta ramane la ei cu numele
+     * si codul vechi. Masurat pe 48 de ore: cinci oferte. Putine, dar mecanismul loveste
+     * orice produs caruia i se schimba amandoua.
+     *
+     * ⚠ SE RENUNTA LA COD, NU LA NUME. Numele il vede cumparatorul in lista lor; codul e
+     * al nostru, de regasire. Cand se poate trimite doar unul, pleaca cel care conteaza
+     * pentru omul care cumpara.
+     *
+     * ⚠ Iar codul NU se pierde: la trecerea urmatoare numele va fi deja al lor, deci
+     * `numeLaEi === titlu`, conditia de mai jos cade, si codul pleaca singur. Doua treceri
+     * in loc de una, fara ca nimeni sa apese nimic.
+     *
+     * ⚠ Pe „nu stim ce nume au" (`numeLaEi` gol) se trimite ca pana acum: o oferta noua
+     * n-are ce sa intre in conflict, iar o presupunere ar opri codul degeaba.
+     */
+    ...(schimbaSiNumele(a) ? {} : { part_number: a.partNumber }),
     /*
      * ═══ ⚠ CHEIA DE PRODUS NU SE TRIMITE INAPOI. NICIODATA. (24.08.2026) ═══
      *
@@ -825,6 +864,24 @@ export function masuratoriEmag(
 /**
  * Ce se stie despre o oferta deja publicata, cat trebuie ca sa i se schimbe pretul.
  */
+/**
+ * Se schimba NUMELE fata de ce au ei acum?
+ *
+ * ⚠ PUR SI EXPORTAT, ca sa poata fi probat fara retea. E o hotarare mica dar cu doua
+ * feluri de a gresi: prea larga, si codul nu mai pleaca niciodata; prea ingusta, si
+ * schimbarea de nume se pierde tacut, cu 200 de la ei.
+ *
+ * ⚠ Se compara pe textul TAIAT la limita lor, fiindca aia e valoarea care chiar pleaca.
+ * Comparat cu numele intreg, un produs cu titlu lung ar fi parut mereu „schimbat" si
+ * codul lui n-ar mai fi plecat niciodata.
+ */
+export function schimbaSiNumele(a: { titlu: string; numeLaEi?: string | null }): boolean {
+  const laEi = (a.numeLaEi ?? "").trim();
+  /* ⚠ Nu stim ce au: nu se hotaraste nimic, se trimite ca pana acum. */
+  if (!laEi) return false;
+  return taiat(a.titlu, LIMITE_EMAG.nume).trim() !== laEi;
+}
+
 export interface IdentitateUsoara {
   /** `null` pentru produsul simplu. */
   variant_title: string | null;

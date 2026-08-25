@@ -2726,7 +2726,8 @@ AS $function$
      and o.business_id = p.business_id
    where p.business_id = p_business_id
      and o.auto_sync = true
-     and p.updated_at > coalesce(o.last_synced_at, 'epoch'::timestamptz)
+     and o.last_synced_at is not null
+     and p.updated_at > o.last_synced_at
      and p.updated_at < now() - p_rabdare
      and not exists (
        select 1 from public.emag_sync_queue q

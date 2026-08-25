@@ -9,9 +9,27 @@
  *
  * ⚠ 1 = platita LA EI, prin card sau transfer. Orice altceva — inclusiv lipsa campului —
  * inseamna „banii nu s-au incasat", deci curierul are de luat.
+ *
+ * ═══ ⚠ „unpaid", NU „pending": COMANDA NU INTRA DELOC (25.08.2026, prins de veghe) ═══
+ *
+ * `orders.payment_status` are o regula in baza: `unpaid | paid | refunded`. „pending" n-a
+ * fost NICIODATA printre ele. Deci fiecare comanda eMAG cu ramburs — adica majoritatea —
+ * pica la inserare cu `23514`, iar ingestul o pierde INTREAGA. Nu o stare gresita: o
+ * comanda inexistenta, pe care comerciantul n-o vede nicaieri si n-o expediaza.
+ *
+ * Prinsa pe comanda 501350435, la o ora dupa ce a intrat, de monitorul care se uita la
+ * erorile critice. Cele doua comenzi eMAG care sunt in sistem au trecut fiindca erau
+ * platite cu cardul, deci ieseau „paid" — regula asta le lasa sa treaca si arata sanatos.
+ *
+ * ⚠ IAR PROBA CERUSE ANUME „pending" (`plata.test.ts`), deci era verde peste un defect
+ * care oprea comenzi. A doua oara cand se intampla: cand repar cod, caut si probele care
+ * cereau purtarea veche.
+ *
+ * ⚠ PENTRU RAMBURS NU SE SCHIMBA NIMIC: `rambursDeIncasat` nu incaseaza numai la
+ * `paid`/`refunded`, iar „unpaid" e in afara acelei multimi exact ca „pending".
  */
-export function platitLaEi(payment_status: unknown): "paid" | "pending" {
-  return payment_status === 1 ? "paid" : "pending";
+export function platitLaEi(payment_status: unknown): "paid" | "unpaid" {
+  return payment_status === 1 ? "paid" : "unpaid";
 }
 
 /**
@@ -42,7 +60,7 @@ export function platitLaEi(payment_status: unknown): "paid" | "pending" {
  * locala, doar ca necopiat si neatins de mana nimanui.
  *
  * ⚠ SENSUL GRESELII E ALES DINADINS. Cand nu stim (campul lipseste din raspuns), iese
- * „pending", adica se incaseaza. O incasare in plus pe o comanda deja platita se vede la
+ * „unpaid", adica se incaseaza. O incasare in plus pe o comanda deja platita se vede la
  * usa si se repara pe loc; una lipsa se vede abia la socoteala de la sfarsitul lunii.
  */
 export function stareaPlatiiPentruRamburs(

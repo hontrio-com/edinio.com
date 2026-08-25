@@ -4887,7 +4887,9 @@ create table if not exists public.orders (
   sameday_locker_charge_code text,
   sameday_status_id integer,
   sameday_status_label text,
-  sameday_status_checked_at timestamp with time zone);
+  sameday_status_checked_at timestamp with time zone,
+  sameday_return_awb_number text,
+  sameday_return_awb_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,

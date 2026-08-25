@@ -2669,6 +2669,8 @@ export type Database = {
           sameday_awb_cost: number | null
           sameday_awb_number: string | null
           sameday_locker_charge_code: string | null
+          sameday_return_awb_at: string | null
+          sameday_return_awb_number: string | null
           sameday_status_checked_at: string | null
           sameday_status_id: number | null
           sameday_status_label: string | null
@@ -2858,6 +2860,8 @@ export type Database = {
           sameday_awb_cost?: number | null
           sameday_awb_number?: string | null
           sameday_locker_charge_code?: string | null
+          sameday_return_awb_at?: string | null
+          sameday_return_awb_number?: string | null
           sameday_status_checked_at?: string | null
           sameday_status_id?: number | null
           sameday_status_label?: string | null
@@ -3047,6 +3051,8 @@ export type Database = {
           sameday_awb_cost?: number | null
           sameday_awb_number?: string | null
           sameday_locker_charge_code?: string | null
+          sameday_return_awb_at?: string | null
+          sameday_return_awb_number?: string | null
           sameday_status_checked_at?: string | null
           sameday_status_id?: number | null
           sameday_status_label?: string | null

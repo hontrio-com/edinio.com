@@ -266,3 +266,57 @@ test("⚠ cand pasul ieftin pica, se intreaba TOTI", () => {
   assert.match(cron, /miscate\.set\(businessId, null\)/);
   assert.match(cron, /if \(setMiscate && !nicicandIntrebata && !setMiscate\.has\(/);
 });
+
+/* ── Returul ──────────────────────────────────────────────────────────────── */
+
+test("⚠ returul are CHEIE proprie in registru", () => {
+  /*
+   * Cu aceeasi cheie ca AWB-ul de tur, registrul ar fi intors „deja" si ar fi adoptat numarul
+   * coletului DUS — adica returul n-ar fi plecat niciodata, dar ar fi parut ca a plecat.
+   *
+   * Si `fel` ramane `awb`, fiindca un retur chiar e un AWB: un fel nou ar fi cerut o migratie
+   * pe `operatii_externe_fel_check`, o constrangere impartita de toti furnizorii.
+   */
+  const a = viu("src/lib/actions/sameday.actions.ts");
+  assert.match(a, /cheie: `retur:\$\{cheieOperatie\("awb", "sameday", orderId\)\}`/);
+});
+
+test("⚠ returul se scrie in coloana LUI, nu peste AWB-ul de tur", () => {
+  /* O comanda poate avea in acelasi timp un colet dus, livrat, si unul care se intoarce.
+     Scrise in aceeasi coloana, urmarirea ar raporta drumul returului drept drumul comenzii. */
+  const a = viu("src/lib/actions/sameday.actions.ts");
+  assert.match(a, /sameday_return_awb_number: awbNumber/);
+  const cron = viu("src/app/api/cron/sameday-tracking/route.ts");
+  assert.doesNotMatch(cron, /sameday_return_awb_number/, "urmarirea se uita la coletul DUS");
+});
+
+test("⚠ destinatarul returului e PUNCTUL DE RIDICARE, nu datele firmei", () => {
+  /* Acolo chiar ajung coletele si tot de acolo pleaca. Doua adrese diferite ar fi insemnat
+     un retur trimis unde nu-l asteapta nimeni. */
+  const a = viu("src/lib/actions/sameday.actions.ts");
+  assert.match(a, /const punct = cont\.pickupPoints\.find\(\(p\) => p\.id === config\.pickup_point_id\)/);
+  assert.match(a, /recipientCounty: punct\.address\.county\.name/);
+});
+
+test("⚠ serviciile de retur se cauta dupa COD, nu dupa id-urile din documentatie", () => {
+  /* Masurat pe cont real: 22 de servicii, nu 8. Numerotarea 10 si 24 nu e garantata. */
+  const a = viu("src/lib/actions/sameday.actions.ts");
+  assert.match(a, /const cod = input\.fel === "locker" \? "LR" : "RS";/);
+  assert.match(a, /s\.code\.toUpperCase\(\) === cod/);
+});
+
+test("⚠ un retur nu se incaseaza si nu se asigura", () => {
+  /* Marfa se intoarce, nu se vinde. Un ramburs pe retur ar fi cerut bani de la magazin. */
+  const a = viu("src/lib/actions/sameday.actions.ts");
+  const i = a.indexOf("createSamedayReturnAwbAction");
+  const corp = a.slice(i, a.indexOf("export async function", i + 50));
+  assert.match(corp, /cashOnDelivery: 0/);
+  assert.match(corp, /insuredValue: 0/);
+});
+
+test("⚠ data-limita se trimite la SFARSITUL zilei", () => {
+  /* Cu miezul noptii de la inceput, omul ar pierde chiar ziua pe care crede ca o are. */
+  const m = viu("src/components/dashboard/SamedayAwbModal.tsx");
+  assert.match(m, /\$\{dataLimita\} 23:59:59/);
+});
+

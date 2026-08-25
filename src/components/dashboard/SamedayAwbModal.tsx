@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import {
-  createSamedayAwbAction, deleteSamedayAwbAction, optiuniSamedayAction,
+  createSamedayAwbAction, createSamedayReturnAwbAction, deleteSamedayAwbAction,
+  optiuniSamedayAction,
 } from "@/lib/actions/sameday.actions";
 import { getLockers } from "@/lib/actions/shipping.actions";
 import { ETICHETE_COLET, potrivesteTipul } from "@/lib/sameday/colete";
@@ -46,6 +47,8 @@ export function SamedayAwbModal({
 }) {
   const orderData = order as typeof order & {
     sameday_awb_number?: string | null;
+    sameday_return_awb_number?: string | null;
+    sameday_locker_charge_code?: string | null;
   };
 
   const hasAwb = !!orderData.sameday_awb_number;
@@ -78,6 +81,13 @@ export function SamedayAwbModal({
   const [extraAlese, setExtraAlese] = useState<string[]>([]);
   /* ⚠ Ei il dau O SINGURA DATA, in raspunsul de la emitere. Se arata pe loc. */
   const [codRetur, setCodRetur] = useState<string | null>(null);
+
+  /* Returul: felul, easybox-ul si data-limita. */
+  const [felRetur, setFelRetur] = useState<"acasa" | "locker">("acasa");
+  const [lockerRetur, setLockerRetur] = useState<{ id: string; name: string; address: string; city: string; county: string } | null>(null);
+  const [cautareRetur, setCautareRetur] = useState("");
+  const [dataLimita, setDataLimita] = useState("");
+  const [creeazaRetur, setCreeazaRetur] = useState(false);
 
   const isEasyboxDelivery = laEasybox;
 
@@ -139,7 +149,9 @@ export function SamedayAwbModal({
    * cereri irosite la fiecare colet.
    */
   useEffect(() => {
-    if (!open || !laEasybox || lockerDinComanda || lockere.length > 0) return;
+    /* ⚠ Si pentru retur, nu doar pentru livrare: acolo omul alege easybox-ul in care preda. */
+    const cerute = (laEasybox && !lockerDinComanda) || felRetur === "locker";
+    if (!open || !cerute || lockere.length > 0) return;
     let anulat = false;
     (async () => {
       /* ⚠ Aprinderea se face IN interiorul functiei asincrone, nu langa efect: un `setState`
@@ -155,7 +167,7 @@ export function SamedayAwbModal({
       setLockereIncarca(false);
     })();
     return () => { anulat = true; };
-  }, [open, laEasybox, lockerDinComanda, lockere.length, businessId]);
+  }, [open, laEasybox, lockerDinComanda, felRetur, lockere.length, businessId]);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
@@ -222,6 +234,34 @@ export function SamedayAwbModal({
     }
   }
 
+  async function handleRetur() {
+    if (felRetur === "locker" && !lockerRetur) {
+      return toast.error("Alege easybox-ul in care preda clientul");
+    }
+    if (felRetur === "locker" && !dataLimita) {
+      return toast.error("Pune data pana la care clientul poate incarca coletul");
+    }
+    const weightNum = parseFloat(weight) || 0;
+    if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
+
+    setCreeazaRetur(true);
+    const r = await createSamedayReturnAwbAction(businessId, order.id, {
+      fel: felRetur,
+      weightKg: weightNum,
+      packageType,
+      lockerId: lockerRetur ? Number(lockerRetur.id) : undefined,
+      /* ⚠ Sfarsitul zilei, nu miezul noptii de la inceput: altfel omul pierde chiar ziua
+         pe care crede ca o are. Formatul e al lor. */
+      eligibilityDate: dataLimita ? `${dataLimita} 23:59:59` : undefined,
+    });
+    setCreeazaRetur(false);
+
+    if ("error" in r) return toast.error(r.error);
+    toast.success(`AWB de retur ${r.awbNumber} creat`);
+    if (r.lockerReturnChargeCode) setCodRetur(r.lockerReturnChargeCode);
+    onSuccess();
+  }
+
   async function handleDelete() {
     setDeleting(true);
     const result = await deleteSamedayAwbAction(businessId, order.id);
@@ -286,6 +326,141 @@ export function SamedayAwbModal({
                 <p className="text-xs font-semibold text-info mb-1">AWB generat</p>
                 <p className="text-lg font-mono font-bold text-foreground">{orderData.sameday_awb_number}</p>
               </div>
+
+              {/*
+                ═══ RETURUL ═══
+
+                ⚠ Se arata numai DUPA ce exista AWB-ul de tur: un retur inainte ca marfa sa fi
+                plecat n-are ce sa aduca inapoi.
+
+                ⚠ Si se tine in coloana LUI, nu peste `sameday_awb_number`: o comanda poate avea
+                in acelasi timp un colet dus, livrat, si unul care se intoarce.
+              */}
+              {orderData.sameday_return_awb_number ? (
+                <div className="p-4 rounded-xl bg-muted/40 border border-border">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">AWB de retur</p>
+                  <p className="text-base font-mono font-semibold text-foreground">
+                    {orderData.sameday_return_awb_number}
+                  </p>
+                  {orderData.sameday_locker_charge_code && (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Cod de incarcare in easybox:{" "}
+                      <span className="font-mono font-semibold text-foreground">
+                        {orderData.sameday_locker_charge_code}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border p-3 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Retur de la client
+                  </p>
+
+                  <div className="flex gap-2">
+                    {([["acasa", "Ridicare de acasa"], ["locker", "Predare in easybox"]] as const).map(
+                      ([f, eticheta]) => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setFelRetur(f)}
+                          className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                            felRetur === f
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {eticheta}
+                        </button>
+                      ),
+                    )}
+                  </div>
+
+                  {felRetur === "locker" && (
+                    <>
+                      {lockerRetur ? (
+                        <div className="flex items-start justify-between gap-3 text-sm">
+                          <div>
+                            <p className="font-medium text-foreground">{lockerRetur.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {[lockerRetur.address, lockerRetur.city].filter(Boolean).join(", ")}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLockerRetur(null)}
+                            className="text-xs text-primary hover:underline shrink-0"
+                          >
+                            Schimba
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={cautareRetur}
+                            onChange={(e) => setCautareRetur(e.target.value)}
+                            placeholder="Cauta easybox-ul unde preda clientul"
+                            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          {cautareRetur.trim().length >= 2 && (
+                            <div className="max-h-40 overflow-y-auto space-y-1">
+                              {lockere
+                                .filter((l) =>
+                                  `${l.name} ${l.address} ${l.city}`.toLowerCase()
+                                    .includes(cautareRetur.trim().toLowerCase()),
+                                )
+                                .slice(0, 20)
+                                .map((l) => (
+                                  <button
+                                    key={l.id}
+                                    type="button"
+                                    onClick={() => setLockerRetur(l)}
+                                    className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-muted text-xs"
+                                  >
+                                    <span className="block text-foreground">{l.name}</span>
+                                    <span className="block text-muted-foreground">
+                                      {[l.address, l.city].filter(Boolean).join(", ")}
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1">
+                          Pana cand poate incarca clientul
+                        </label>
+                        <input
+                          type="date"
+                          value={dataLimita}
+                          onChange={(e) => setDataLimita(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                        {/* ⚠ Nu e o formalitate: trecuta data, Sameday anuleaza singur comanda. */}
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Dupa data asta, Sameday anuleaza singur returul.
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  <Button
+                    onClick={handleRetur}
+                    disabled={creeazaRetur}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    {creeazaRetur ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Se emite...</>
+                    ) : (
+                      "Emite AWB de retur"
+                    )}
+                  </Button>
+                </div>
+              )}
+
 
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Format eticheta</label>

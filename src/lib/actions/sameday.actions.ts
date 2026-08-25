@@ -322,6 +322,159 @@ export async function optiuniSamedayAction(
   }
 }
 
+/**
+ * AWB de retur: coletul pleaca INAPOI, de la cumparator la magazin.
+ *
+ * ═══ ⚠ DE CE ERA IMPOSIBIL PANA AZI ═══
+ *
+ * Ambele servicii de retur cer ridicare de la TERT: cumparatorul preda, magazinul primeste.
+ * Noi trimiteam `thirdPartyPickup=0` scris fix, in ambele locuri din care se emitea. Deci
+ * serviciile nu erau nefolosite, erau de NEATINS.
+ *
+ * ═══ CELE DOUA FELURI ═══
+ *
+ *   `acasa`  — curierul trece pe la cumparator si ridica (serviciul `RS`).
+ *   `locker` — cumparatorul duce coletul la un easybox (serviciul `LR`). Atunci ei intorc un
+ *              COD DE INCARCARE, si trebuie o data-limita pana la care omul poate incarca;
+ *              trecuta, ei anuleaza singuri.
+ *
+ * ⚠ SERVICIILE SE CAUTA DUPA COD, nu dupa id-urile 10 si 24 din documentatie: masurat pe un
+ * cont real, acolo sunt 22 de servicii, iar numerotarea nu e garantata pe orice contract.
+ */
+export async function createSamedayReturnAwbAction(
+  businessId: string,
+  orderId: string,
+  input: {
+    fel: "acasa" | "locker";
+    weightKg: number;
+    packageType: 0 | 1 | 2;
+    observation?: string;
+    /** Numai la `locker`: easybox-ul in care preda cumparatorul. */
+    lockerId?: number;
+    /** Numai la `locker`: pana cand poate incarca. ⚠ Trecuta, ei anuleaza singuri. */
+    eligibilityDate?: string;
+  },
+): Promise<
+  | { awbNumber: string; lockerReturnChargeCode: string | null }
+  | { error: string }
+> {
+  const ctx = await getConfigAndOrder(businessId, orderId);
+  if ("error" in ctx) return { error: ctx.error as string };
+  const { supabase, config, order } = ctx;
+
+  const orderData = order as typeof order & { sameday_return_awb_number?: string | null };
+  if (orderData.sameday_return_awb_number) return { error: "AWB de retur a fost deja creat" };
+
+  if (input.fel === "locker" && !input.lockerId) {
+    return { error: "Alege easybox-ul in care preda cumparatorul" };
+  }
+
+  /*
+   * ⚠ DESTINATARUL E MAGAZINUL, si adresa lui se ia din PUNCTUL DE RIDICARE configurat, nu
+   * din datele firmei: acolo chiar ajung coletele, si tot de acolo pleaca. Doua adrese
+   * diferite ar fi insemnat un retur trimis unde nu-l asteapta nimeni.
+   */
+  const cont = await loadSamedayAccount(config.username, config.password, config.sandbox);
+  if ("error" in cont) return { error: `Contul Sameday nu s-a putut citi: ${cont.error}` };
+
+  const punct = cont.pickupPoints.find((p) => p.id === config.pickup_point_id);
+  if (!punct) return { error: "Punctul de ridicare configurat nu mai exista in contul Sameday" };
+
+  const cod = input.fel === "locker" ? "LR" : "RS";
+  const serviciu = cont.services.find((s) => s.code.toUpperCase() === cod);
+  if (!serviciu) {
+    return {
+      error: input.fel === "locker"
+        ? "Contul tau Sameday nu are serviciul Locker Retur. Cere-l departamentului comercial Sameday."
+        : "Contul tau Sameday nu are serviciul Retur Standard. Cere-l departamentului comercial Sameday.",
+    };
+  }
+
+  const adr = (order.shipping_address ?? {}) as Record<string, unknown>;
+  const strada = [adr.street ?? adr.address, adr.street_no].filter(Boolean).join(" nr. ");
+
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      /*
+       * ⚠ `fel: "awb"`, fiindca un retur CHIAR e un AWB. Un fel nou ar fi cerut si o migratie
+       * pe `operatii_externe_fel_check`, o constrangere impartita de toti furnizorii — o
+       * schimbare mare pentru o deosebire care incape in cheie.
+       *
+       * ⚠ Dar CHEIA e alta, si aia conteaza: registrul se pazeste pe cheie. Cu aceeasi cheie
+       * ca AWB-ul de tur, emiterea returului ar fi intors „deja" si ar fi adoptat numarul
+       * coletului dus — adica returul n-ar fi plecat niciodata, dar ar fi parut ca a plecat.
+       */
+      businessId, orderId, fel: "awb", furnizor: "sameday",
+      cheie: `retur:${cheieOperatie("awb", "sameday", orderId)}`,
+    },
+    async () => {
+      const creat = await createSamedayAwb(config, {
+        /* Destinatarul: magazinul. */
+        recipientName: punct.alias || "Magazin",
+        recipientPhone: order.customer_phone ?? "",
+        recipientCounty: punct.address.county.name,
+        recipientCity: punct.address.city.name,
+        recipientAddress: punct.address.street,
+        recipientPostalCode: "",
+        /* Tertul: cumparatorul, cel de la care se ridica. */
+        tert: {
+          name: order.customer_name,
+          phoneNumber: order.customer_phone ?? "",
+          email: order.customer_email ?? undefined,
+          personType: 0,
+          county: String(adr.county ?? ""),
+          city: String(adr.city ?? ""),
+          address: strada,
+          postalCode: String(adr.postal_code ?? ""),
+        },
+        serviceId: serviciu.id,
+        packageType: input.packageType,
+        packageNumber: 1,
+        weightKg: input.weightKg,
+        /* ⚠ Un retur NU se incaseaza si nu se asigura: marfa se intoarce, nu se vinde. */
+        cashOnDelivery: 0,
+        insuredValue: 0,
+        observation: input.observation ?? "",
+        clientInternalReference: `RET-${order.order_number}`,
+        ...(input.fel === "locker"
+          ? { lockerRetur: input.lockerId, eligibilityDate: input.eligibilityDate }
+          : {}),
+      });
+      return { referinta: creat.awbNumber, valoare: creat };
+    },
+    verdictFurnizor,
+  );
+
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  const creat = r.fel === "facut" ? r.valoare : null;
+  const awbNumber = creat?.awbNumber ?? (r.referinta ?? "");
+
+  const petic: Record<string, unknown> = {
+    sameday_return_awb_number: awbNumber,
+    sameday_return_awb_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  /* ⚠ Codul de incarcare: ei il dau O SINGURA DATA, aici. Nesalvat, cumparatorul nu-si mai
+     poate preda coletul niciodata. */
+  if (creat?.lockerReturnChargeCode) petic.sameday_locker_charge_code = creat.lockerReturnChargeCode;
+
+  const { error: eScriere } = await supabase.from("orders")
+    .update(petic as never).eq("id", orderId);
+
+  if (eScriere) {
+    await logError({
+      action: "sameday.createReturnAwb",
+      message: `AWB de retur creat (${awbNumber}), dar comanda NU s-a actualizat: ${eScriere.message}`,
+      details: { orderId, businessId },
+      businessId,
+      severity: "critical",
+    });
+  }
+
+  return { awbNumber, lockerReturnChargeCode: creat?.lockerReturnChargeCode ?? null };
+}
+
 export async function deleteSamedayAwbAction(
   businessId: string,
   orderId: string,

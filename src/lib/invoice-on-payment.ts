@@ -1,3 +1,4 @@
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 /**
  * Facturarea automata dupa o plata online confirmata.
  *
@@ -21,7 +22,15 @@ export function factureazaDupaPlata(
   status: string,
   paymentStatus: string,
 ): void {
-  void (async () => {
+  /*
+   * Gasit de matura de tipar din `tva-dupa-raspuns.test.ts`, nu de audit (25.08.2026).
+   * Aceeasi clasa: pornit si uitat pe server. Aici tacerea inseamna o factura care nu se
+   * mai emite niciodata — iar pentru o comanda eMAG, un document pe care ei il cer.
+   *
+   * `dupaRaspuns` are plasa: fara context de cerere face exact ce se facea pana acum,
+   * deci mutarea nu poate iesi mai rau in niciun caz.
+   */
+  dupaRaspuns(async () => {
     try {
       // Clientul de sistem se creeaza AICI si se paseaza mai departe. E si cheia
       // de acces peste RLS, si dovada ca apelul vine de pe server: dispecerul e
@@ -35,5 +44,5 @@ export function factureazaDupaPlata(
     } catch (err) {
       console.error("[facturare] auto-invoice dupa plata a esuat:", { orderId, err });
     }
-  })();
+  }, "factureazaDupaPlata", businessId);
 }

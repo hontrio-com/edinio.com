@@ -76,7 +76,13 @@ type StareaConfigului =
    * sincronizarea automată" inseamna doar „nu-mi trimite singur schimbarile” — ofertele
    * lui sunt in continuare la vanzare acolo si trebuie oprite cand sterge produsul.
    */
-  | { fel: "nu"; deconectat: boolean; motiv: string }
+  /**
+   * `config` vine si aici, cand magazinul e conectat dar si-a stins sincronizarea.
+   *
+   * Fara el, apelantul n-avea de unde sti daca „Publica automat produsele noi" e aprins:
+   * taietura se facea la `auto_sync`, iar `auto_publish` nici nu apuca sa fie citit.
+   */
+  | { fel: "nu"; deconectat: boolean; motiv: string; config?: EmagConfig }
   /** Nu se stie. Nimic ireversibil nu are voie sa se sprijine pe raspunsul asta. */
   | { fel: "necitit"; motiv: string };
 
@@ -108,7 +114,7 @@ async function configPentruCoada(
     return { fel: "nu", deconectat: true, motiv: "Magazinul nu are eMAG conectat." };
   }
   if (config.auto_sync === false) {
-    return { fel: "nu", deconectat: false, motiv: "Sincronizarea automată cu eMAG e oprită." };
+    return { fel: "nu", deconectat: false, motiv: "Sincronizarea automată cu eMAG e oprită.", config };
   }
   return { fel: "porneste", config };
 }
@@ -141,8 +147,33 @@ export async function enqueueEmagSync(
     const stare = await configPentruCoada(admin, businessId);
     /* ⚠ Aici „nu se stie” se poarta ca „nu”: punerea in coada e reversibila si se reia
        la urmatoarea atingere a produsului. La retragere NU e, si acolo se desparte. */
-    if (stare.fel !== "porneste") return;
-    const config = stare.config;
+
+    /*
+     * ═══ „TRIMITE AUTOMAT PRETUL SI STOCUL" NU E „PUBLICA PRODUSELE NOI" (25.08.2026) ═══
+     *
+     * Panoul are DOUA comutatoare, si sunt independente: se poate stinge unul si lasa
+     * celalalt aprins. Dar taietura se facea la `auto_sync`, iar `config.auto_publish` se
+     * citea abia mai jos — deci nu apuca sa fie intrebat niciodata.
+     *
+     * ⚠ CE INSEMNA PENTRU COMERCIANT: cel care spune „preturile le conduc eu din panoul
+     * eMAG, dar produsele noi sa plece singure" — o combinatie pe care interfata i-o
+     * ingaduie — nu primea NIMIC. Nici in coada, nici in jurnal: iesirea era un `return`
+     * gol. Si nu se repara singur: plasa de siguranta cere `last_synced_at is not null`,
+     * iar un produs care n-a plecat niciodata n-are asa ceva. Nici reaprinderea de mai
+     * tarziu nu-l recupereaza — coada se umple abia la urmatoarea ATINGERE.
+     *
+     * ⚠ Deosebirea era deja facuta in casa, la retragere: „`auto_sync` STINS NU E UN MOTIV
+     * SA NU RETRAGEM". Publicarea n-a primit acelasi tratament, si de aia `deconectat`
+     * exista deja pe tip.
+     *
+     * ⚠ MAGAZINUL DECONECTAT RAMANE UN „NU" ADEVARAT: acolo n-avem nici cont, nici unde
+     * trimite. Se trece numai peste „mi-am stins sincronizarea".
+     */
+    const publicareCeruta =
+      produsNou && stare.fel === "nu" && !stare.deconectat && stare.config?.auto_publish === true;
+
+    if (stare.fel !== "porneste" && !publicareCeruta) return;
+    const config = stare.fel === "porneste" ? stare.config : (stare.config as EmagConfig);
 
     /*
      * In mod normal se pun la coada doar produsele care au deja o oferta pe eMAG:
@@ -333,7 +364,24 @@ async function enqueueMany(
 
     const admin = createAdminClient();
     const stare = await configPentruCoada(admin, businessId);
-    if (stare.fel !== "porneste") return 0;
+
+    /*
+     * ═══ UN BUTON APASAT DE OM NU SE CARMUIESTE DE UN COMUTATOR AUTOMAT ═══
+     *
+     * `publicaSiFaraOferta` se pune NUMAI de pe drumurile care spun „Publică" — vezi nota
+     * de la `OptiuniCoadaMulti`. Iar acolo omul tocmai a apasat, deci a cerut-o el, acum.
+     * Comutatorul „Trimite automat prețul și stocul" vorbeste despre ce se intampla FARA
+     * ca el sa ceara; n-are ce cauta in calea unei cereri explicite.
+     *
+     * ⚠ Ce pate omul pana acum: apasa „Publică" pe zece produse si primea zero puse, cu un
+     * mesaj care dadea vina pe cu totul altceva. Vezi `publicaProduseleEmag`.
+     *
+     * ⚠ Si aici magazinul DECONECTAT ramane un „nu" adevarat.
+     */
+    const apasatDeOm = optiuni.publicaSiFaraOferta === true;
+    const trecePeApasare = apasatDeOm && stare.fel === "nu" && !stare.deconectat;
+
+    if (stare.fel !== "porneste" && !trecePeApasare) return 0;
 
     /*
      * Actiunile in masa NU auto-publica: ele ating produse care exista deja, iar

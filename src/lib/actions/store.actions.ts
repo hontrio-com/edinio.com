@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -406,8 +407,17 @@ export async function updateVatSettings(
    * ⚠ Numai când chiar s-a schimbat ceva. Salvarea altor setări din aceeași carte —
    * „arată defalcarea TVA", de pildă — n-are de ce să pună un catalog întreg la coadă.
    *
-   * ⚠ `void`: eMAG nu are voie să întârzie sau să strice salvarea setărilor. Punerea în
-   * coadă își scrie singură eșecurile, prin `inghiteDarScrie`.
+   * ⚠ NU BLOCHEAZĂ salvarea setărilor: eMAG n-are voie s-o întârzie sau s-o strice.
+   *
+   * ⚠ DAR NICI `void (async () => ...)()` (îndreptat 25.08.2026). Forma aceea pornea
+   * lucrarea și dădea drumul răspunsului; pe Vercel, instanța poate fi înghețată în clipa
+   * în care răspunsul se închide, deci repunerea în coadă putea să nu apuce să fie scrisă.
+   * Iar aici tăcerea costă: prețurile nete de pe eMAG se socotesc din cota de TVA, deci un
+   * catalog întreg ar fi rămas cu prețuri vechi la ei, fără nicio urmă.
+   *
+   * `dupaRaspuns` e chiar mecanismul scris în casă pentru asta — folosește `after()` din
+   * Next, care ține instanța vie până termină. Aceeași clasă de problemă a fost reparată
+   * în alte optzeci și patru de locuri; ăsta rămăsese.
    */
   const vechiRate = Number((existing as { vat_rate?: unknown } | null)?.vat_rate);
   const vechiInclus = (existing as { prices_include_vat?: boolean } | null)?.prices_include_vat;
@@ -416,25 +426,22 @@ export async function updateVatSettings(
     && (vechiRate !== settings.vat_rate || vechiInclus !== settings.prices_include_vat);
 
   if (sAuSchimbatPreturile) {
-    void (async () => {
-      try {
-        const { createAdminClient } = await import("@/lib/supabase/admin");
-        const { fetchAllRowsStrict } = await import("@/lib/supabase/fetch-all");
-        const { enqueueEmagPretMany } = await import("@/lib/emag/queue");
-        const admin = createAdminClient();
-        const randuri = await fetchAllRowsStrict<{ product_id: string | null }>(
-          "tva.emag", (from, to) =>
-            admin.from("emag_offers").select("product_id")
-              .eq("business_id", businessId).eq("auto_sync", true).not("product_id", "is", null)
-              .order("emag_id", { ascending: true }).range(from, to),
-        );
-        const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
-        if (ids.length) await enqueueEmagPretMany(businessId, ids);
-      } catch {
-        /* `enqueueEmagPretMany` scrie singur ce n-a mers; aici doar nu lasam o
-           exceptie sa iasa dintr-un `void` si sa cada procesul. */
-      }
-    })();
+    dupaRaspuns(async () => {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const { fetchAllRowsStrict } = await import("@/lib/supabase/fetch-all");
+      const { enqueueEmagPretMany } = await import("@/lib/emag/queue");
+      const admin = createAdminClient();
+      /* ⚠ `fetchAllRowsStrict`: PostgREST taie la 1000 FĂRĂ să spună, iar aici lista e
+         chiar catalogul. Tăiată, restul ofertelor ar fi rămas cu prețul vechi. */
+      const randuri = await fetchAllRowsStrict<{ product_id: string | null }>(
+        "tva.emag", (from, to) =>
+          admin.from("emag_offers").select("product_id")
+            .eq("business_id", businessId).eq("auto_sync", true).not("product_id", "is", null)
+            .order("emag_id", { ascending: true }).range(from, to),
+      );
+      const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
+      if (ids.length) await enqueueEmagPretMany(businessId, ids);
+    }, "tvaEmag", businessId);
   }
 
   revalidatePath("/dashboard/settings");

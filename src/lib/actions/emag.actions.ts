@@ -2008,11 +2008,25 @@ export async function publicaCategoriaPeEmag(
    * caute unde nu era nimic. Măsurat pe un catalog de 1353 de produse: zero puse.
    */
   const puse = await publicaPeEmagMany(businessId, produse.map((p) => p.id));
+  /*
+   * De ce ar putea iesi zero DUPA 25.08.2026: „Trimite automat prețul și stocul" nu mai e
+   * un motiv — o apasare pe „Publică" trece peste el (vezi `enqueueMany`). Deci raman
+   * doua, si se deosebesc, fiindca duc in locuri diferite:
+   *
+   *   magazin neconectat        -> se conecteaza contul
+   *   toate ofertele preluate   -> „Trimite acum", oferta cu oferta
+   *
+   * ⚠ Textul vechi dadea drept cauza „ofertele sunt preluate din contul tău eMAG" — pentru
+   * o lista care, prin definitie, contine produse FARA niciun rand in `emag_offers`. Adica
+   * exact singurul lucru care nu putea fi adevarat acolo.
+   */
   if (puse === 0) {
     return {
-      error: "Nu s-a pus nimic la rând: ofertele produselor din categoria asta sunt " +
-        "preluate din contul tău eMAG, iar acelea nu se rescriu automat. " +
-        "Folosește „Trimite acum” pe produsul care te interesează.",
+      error: !config.connected
+        ? "Nu s-a pus nimic la rând: contul eMAG nu e conectat. Conectează-l din setările integrării."
+        : "Nu s-a pus nimic la rând: ofertele produselor din categoria asta sunt " +
+          "preluate din contul tău eMAG, iar acelea nu se rescriu automat. " +
+          "Folosește „Trimite acum” pe produsul care te interesează.",
     };
   }
 
@@ -3571,10 +3585,25 @@ export async function publicaProduseleEmag(
   }
 
   const puse = await publicaPeEmagMany(businessId, deTrimis);
+  /*
+   * De ce ar putea iesi zero DUPA 25.08.2026: „Trimite automat prețul și stocul" nu mai e
+   * un motiv — o apasare pe „Publică" trece peste el (vezi `enqueueMany`). Deci raman
+   * doua, si se deosebesc, fiindca duc in locuri diferite:
+   *
+   *   magazin neconectat        -> se conecteaza contul
+   *   toate ofertele preluate   -> „Trimite acum", oferta cu oferta
+   *
+   * ⚠ Textul vechi dadea drept cauza „ofertele sunt preluate din contul tău eMAG" — pentru
+   * o lista care, prin definitie, contine produse FARA niciun rand in `emag_offers`. Adica
+   * exact singurul lucru care nu putea fi adevarat acolo.
+   */
   if (puse === 0) {
     return {
-      error: "Nu s-a pus nimic la rând. Ofertele produselor alese sunt preluate din contul " +
-        "tău eMAG, iar acelea nu se rescriu automat.",
+      error: !config.connected
+        ? "Nu s-a pus nimic la rând: contul eMAG nu e conectat. Conectează-l din setările integrării."
+        : "Nu s-a pus nimic la rând. Ofertele produselor alese sunt preluate din contul " +
+          "tău eMAG, iar acelea nu se rescriu automat. Folosește „Trimite acum” pe " +
+          "produsul care te interesează.",
     };
   }
 

@@ -1255,8 +1255,11 @@ export type Database = {
           created_at: string
           emag_id: number | null
           id: string
+          livrat_la: string | null
           order_id: string | null
+          raspuns_urmarire: Json | null
           status: Json | null
+          verificat_la: string | null
         }
         Insert: {
           awb_number?: string | null
@@ -1266,8 +1269,11 @@ export type Database = {
           created_at?: string
           emag_id?: number | null
           id?: string
+          livrat_la?: string | null
           order_id?: string | null
+          raspuns_urmarire?: Json | null
           status?: Json | null
+          verificat_la?: string | null
         }
         Update: {
           awb_number?: string | null
@@ -1277,8 +1283,11 @@ export type Database = {
           created_at?: string
           emag_id?: number | null
           id?: string
+          livrat_la?: string | null
           order_id?: string | null
+          raspuns_urmarire?: Json | null
           status?: Json | null
+          verificat_la?: string | null
         }
         Relationships: [
           {
@@ -4653,6 +4662,7 @@ export type Database = {
       ia_jeton_extern: { Args: { p_cheie: string; p_limita: number; p_fereastra_ms?: number }; Returns: Json }
       produse_nesincronizate_emag: { Args: { p_business_id: string; p_rabdare?: unknown; p_limita?: number }; Returns: string[] }
       emag_comenzi_de_verificat_awb: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { id: string; order_id: string | null; emag_order_id: number | null; order_type: number | null; awb_uploaded_number: string | null; awb_uploaded_numbers: string[] | null }[] }
+      emag_awburi_de_urmarit: { Args: { p_business_id: string; p_limita?: number }; Returns: { id: string; emag_id: number | null; order_id: string | null }[] }
       emag_produse_noi_nepublicate: { Args: { p_business_id: string; p_ore?: number; p_limita?: number; p_de_cand?: string | null }; Returns: { id: string; created_at: string }[] }
       emag_stinge_propagarea: { Args: { p_business_id: string; p_ceruta_la: string }; Returns: boolean }
       vezi_ritm_extern: { Args: { p_cheie: string; p_fereastra_ms?: number }; Returns: Json }

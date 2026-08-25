@@ -1787,6 +1787,28 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.emag_awburi_de_urmarit(p_business_id uuid, p_limita integer DEFAULT 10)
+ RETURNS TABLE(id uuid, emag_id bigint, order_id uuid)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select a.id, a.emag_id, a.order_id
+    from public.emag_awb a
+    join public.orders o on o.id = a.order_id
+   where a.business_id = p_business_id
+     and a.emag_id is not null
+     and a.livrat_la is null
+     -- ⚠ NUMAI AWB-UL DE TUR. `awb_type: 2` e ridicarea de la client.
+     and coalesce(a.status->>'awb_type', '1') <> '2'
+     and o.status in ('pending', 'confirmed', 'processing', 'shipped')
+     -- ⚠ SI NU LA NESFARSIT: un AWB de acum trei luni nu mai ajunge „livrat".
+     and a.created_at > now() - interval '60 days'
+   order by a.verificat_la asc nulls first, a.created_at asc
+   limit greatest(1, least(coalesce(p_limita, 10), 50));
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer DEFAULT 10, p_de_la integer DEFAULT 0)
  RETURNS TABLE(id uuid, order_id uuid, emag_order_id bigint, order_type integer, awb_uploaded_number text, awb_uploaded_numbers text[])
  LANGUAGE sql
@@ -4397,7 +4419,10 @@ create table if not exists public.emag_awb (
   courier_account_id integer,
   cash_on_delivery numeric(12,2),
   status jsonb,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  verificat_la timestamp with time zone,
+  livrat_la timestamp with time zone,
+  raspuns_urmarire jsonb);
 
 create table if not exists public.emag_nomenclatoare (
   business_id uuid not null,
@@ -5620,6 +5645,7 @@ CREATE INDEX cw_trgm ON public.catalog_cuvant USING gin (cuvant extensions.gin_t
 CREATE INDEX dhl_etichete_business_idx ON public.dhl_etichete USING btree (business_id, creat_la DESC);
 CREATE UNIQUE INDEX domain_orders_stripe_session_id_key ON public.domain_orders USING btree (stripe_session_id) WHERE (stripe_session_id IS NOT NULL);
 CREATE UNIQUE INDEX domains_business_domain_key ON public.domains USING btree (business_id, domain);
+CREATE INDEX emag_awb_de_urmarit_idx ON public.emag_awb USING btree (business_id, verificat_la NULLS FIRST) WHERE (livrat_la IS NULL);
 CREATE INDEX emag_awb_order_idx ON public.emag_awb USING btree (order_id);
 CREATE INDEX emag_nomenclatoare_business_idx ON public.emag_nomenclatoare USING btree (business_id);
 CREATE INDEX emag_offers_business_status_idx ON public.emag_offers USING btree (business_id, status);
@@ -7922,6 +7948,7 @@ grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_busi
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
+grant execute on function public.emag_awburi_de_urmarit(p_business_id uuid, p_limita integer) to service_role;
 grant execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.emag_familie_noua() to service_role;
 grant execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) to service_role;
@@ -8076,6 +8103,7 @@ revoke execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_bus
 revoke execute on function public.elibereaza_stoc_batch(p_items jsonb) from public;
 revoke execute on function public.elibereaza_stoc_comanda(p_order_id uuid) from public;
 revoke execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.emag_awburi_de_urmarit(p_business_id uuid, p_limita integer) from public;
 revoke execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.emag_familie_noua() from public;
 revoke execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) from public;

@@ -80,8 +80,26 @@ export function statusEdinio(statusEmag: number): string {
    * singura care ieșea din tabel.
    */
   if (statusEmag === 5) return "refunded";
-  if (statusEmag === 4) return "delivered";
-  if (statusEmag === 3) return "shipped";
+  /*
+   * ═══ ⚠ 4 E „FINALIZATA", NU „LIVRATA"; 3 E „PREGATITA", NU „EXPEDIATA" (25.08.2026) ═══
+   *
+   * Comerciantul VetDepo a spus-o primul: comanda EMAG-500822531 arata LIVRAT, desi coletul
+   * inca mergea spre client. Masurat: eMAG chiar trimite `status: 4` pe ea.
+   *
+   * Enumul lor e despre ciclul de viata al comenzii IN CONTUL LOR, nu despre drumul
+   * coletului. „Finalizata" inseamna ca vanzatorul a terminat-o — a emis AWB-ul si a predat
+   * coletul —, nu ca a ajuns la cumparator. „Pregatita" inseamna gata de predare.
+   *
+   * ⚠ CE COSTA: o informatie falsa la vedere, si un magazin care alege „factura la livrare"
+   * ar fi facturat prea devreme. Iar mesajele catre client („comanda ta a fost livrata")
+   * plecau cat timp coletul era in drum.
+   *
+   * ⚠ LIVRAREA SE AFLA DE LA CURIER, nu de aici: `/awb/read`, prin pasul de urmarire din
+   * cron. Fara el reparatia ar fi fost o jumatate — comenzile n-ar mai fi ajuns NICIODATA
+   * in „Livrat", si comerciantul ar fi ramas cu mai putina informatie decat avea.
+   */
+  if (statusEmag === 4) return "shipped";
+  if (statusEmag === 3) return "processing";
   if (statusEmag === 2) return "processing";
   return "pending";
 }

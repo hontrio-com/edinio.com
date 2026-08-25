@@ -5,7 +5,7 @@ import { Paginatie } from "./Paginatie";
 import { Loader2, PackagePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
-  produseDePublicatEmag, publicaProduseleEmag, type ListaDePublicat,
+  produseDePublicatEmag, publicaProduseleEmag, salveazaMarcaEmag, type ListaDePublicat,
 } from "@/lib/actions/emag.actions";
 
 /**
@@ -217,6 +217,17 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
                     Leag-o mai sus, la maparea categoriilor.
                   </p>
                 )}
+                {/*
+                  ⚠ MARCA SE SCRIE AICI, nu în fișa produsului.
+                  eMAG o cere la orice produs nou, iar fără ea publicarea se oprește. Mesajul
+                  era corect, dar drumul era lung: închizi ecranul eMAG, deschizi fișa, cauți
+                  secțiunea Google, scrii un cuvânt, salvezi, te întorci. Pentru zece produse,
+                  de zece ori.
+
+                  ⚠ Un CÂMP, nu un selector ca la Trendyol: acolo marca e un id din catalogul
+                  LOR, aici eMAG primește text liber.
+                */}
+                {!p.marca && <CampMarca businessId={businessId} produsId={p.id} />}
               </div>
             </li>
           ))}
@@ -239,6 +250,73 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
           {alese.size} alese, inclusiv de pe alte pagini.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Câmpul de marcă pentru un produs care n-are.
+ *
+ * ⚠ Se scrie în același loc ca din fișa produsului (`page_sections.google.brand`), nu
+ * într-un câmp al integrării: două locuri pentru aceeași valoare se despart, iar
+ * despărțirea s-ar vedea abia când eMAG ar primi altă marcă decât cea de pe site.
+ */
+function CampMarca({ businessId, produsId }: { businessId: string; produsId: string }) {
+  const [valoare, setValoare] = useState("");
+  const [salvata, setSalvata] = useState<string | null>(null);
+  const [seSalveaza, incepe] = useTransition();
+
+  function salveaza() {
+    const v = valoare.trim();
+    if (!v) {
+      toast.error("Scrie marca produsului.");
+      return;
+    }
+    incepe(async () => {
+      const r = await salveazaMarcaEmag(businessId, produsId, v);
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      /* ⚠ Rândul rămâne pe ecran, doar își schimbă înfățișarea: o listă care sare sub
+         degetul omului la fiecare salvare face imposibilă completarea a zece produse. */
+      setSalvata(r.marca);
+      toast.success(`Marca „${r.marca}” s-a salvat.`);
+    });
+  }
+
+  if (salvata) {
+    return (
+      <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+        Marcă salvată: <span className="font-medium">{salvata}</span>
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <span className="text-xs text-amber-700 dark:text-amber-400">
+        Produsul n-are marcă, iar eMAG o cere.
+      </span>
+      <input
+        className="w-40 rounded-lg border border-border bg-background px-2 py-1 text-xs"
+        placeholder="ex. Josera"
+        value={valoare}
+        maxLength={255}
+        disabled={seSalveaza}
+        onChange={(e) => setValoare(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") salveaza(); }}
+        aria-label="Marca produsului"
+      />
+      <button
+        type="button"
+        onClick={salveaza}
+        disabled={seSalveaza || !valoare.trim()}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-muted disabled:opacity-60"
+      >
+        {seSalveaza && <Loader2 className="h-3 w-3 animate-spin" />}
+        Salvează
+      </button>
     </div>
   );
 }

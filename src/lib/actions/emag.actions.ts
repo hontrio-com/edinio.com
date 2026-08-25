@@ -3702,6 +3702,14 @@ export interface ProdusDePublicat {
   categorieMapata: boolean;
   pret: number;
   stoc: number;
+  /**
+   * Marca, din `page_sections.google.brand`.
+   *
+   * ⚠ SE ARATA SI CAND LIPSESTE, si de-aia e in lista: eMAG cere marca la ORICE produs nou
+   * (`ceLipseste`), iar fara ea publicarea se opreste. Pana acum omul afla asta din mesaj si
+   * trebuia sa deschida fisa produsului ca s-o scrie — pentru un camp de un cuvant.
+   */
+  marca: string | null;
 }
 
 export interface ListaDePublicat {
@@ -3758,11 +3766,11 @@ export async function produseDePublicatEmag(
   /* Catalogul activ, întreg — din el se scad cele publicate. */
   const produse = await fetchAllRowsStrict<{
     id: string; name: string; sku: string | null; category: string | null;
-    price: number | null; stock_quantity: number | null;
+    price: number | null; stock_quantity: number | null; page_sections: unknown;
   }>(
     "emag.catalogDePublicat", (from, to) =>
       admin.from("products")
-        .select("id, name, sku, category, price, stock_quantity")
+        .select("id, name, sku, category, price, stock_quantity, page_sections")
         .eq("business_id", businessId).eq("is_active", true)
         .order("created_at", { ascending: true }).range(from, to),
   );
@@ -3797,6 +3805,8 @@ export async function produseDePublicatEmag(
       categorieMapata: !!harta[(p.category ?? "").trim()]?.category_id,
       pret: Number(p.price ?? 0) || 0,
       stoc: Number(p.stock_quantity ?? 0) || 0,
+      marca: (((p.page_sections ?? {}) as { google?: { brand?: unknown } })
+        .google?.brand as string | undefined)?.trim() || null,
     })),
     total: filtrate.length,
     pagina,
@@ -3814,6 +3824,76 @@ export async function produseDePublicatEmag(
  * respins una câte una, iar comerciantul ar fi văzut o sută de eșecuri identice în loc
  * de un singur mesaj care spune ce are de legat.
  */
+/**
+ * Scrie marca produsului, din chiar ecranul eMAG.
+ *
+ * ═══ ⚠ DE CE EXISTA SCURTATURA ASTA ═══
+ *
+ * eMAG cere marca la ORICE produs nou, iar fara ea publicarea se opreste cu „Produsul n-are
+ * marcă". Mesajul era corect, dar drumul era lung: omul inchidea ecranul eMAG, deschidea
+ * fisa produsului, cauta sectiunea Google, scria un cuvant, salva, se intorcea. Pentru zece
+ * produse, de zece ori.
+ *
+ * ⚠ SI NU E CA LA TRENDYOL. Acolo marca e un ID din CATALOGUL lor, deci trebuie ales dintr-o
+ * lista pe care o cauti la ei. eMAG primeste text liber, deci un camp de scris e de ajuns —
+ * un selector ar fi fost o unealta pentru o problema pe care eMAG n-o are.
+ *
+ * ⚠ SE SCRIE IN ACELASI LOC ca din fisa produsului (`page_sections.google.brand`), nu
+ * intr-un camp al integrarii. Doua locuri pentru aceeasi valoare se despart, iar despartirea
+ * s-ar fi vazut abia cand eMAG ar fi primit alta marca decat cea de pe site.
+ */
+export async function salveazaMarcaEmag(
+  businessId: string,
+  productId: string,
+  marca: string,
+): Promise<{ success: true; marca: string } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const curata = marca.trim().slice(0, 255);
+  if (!curata) return { error: "Scrie marca produsului." };
+
+  const admin = createAdminClient();
+
+  /*
+   * ⚠ SE CITESTE INTAI, si numai `page_sections`. Scris de-a gata, obiectul ar fi sters tot
+   * ce mai sta acolo — specificatii, dimensiuni, variante. Un camp de un cuvant nu are voie
+   * sa taie fisa produsului.
+   */
+  const { data: rand, error: eCitire } = await admin
+    .from("products").select("page_sections")
+    .eq("id", productId).eq("business_id", businessId).maybeSingle();
+
+  /* ⚠ O citire picata NU se citeste ca „fisa e goala": asa s-ar fi sters restul sectiunilor
+     exact in clipa in care baza nu e in apele ei. */
+  if (eCitire) return { error: "Nu am putut citi fișa produsului. Încearcă din nou." };
+  if (!rand) return { error: "Produsul nu există în magazinul tău." };
+
+  const ps = (rand.page_sections ?? {}) as Record<string, unknown>;
+  const google = (ps.google ?? {}) as Record<string, unknown>;
+
+  const { error: eScriere } = await admin.from("products")
+    .update({
+      page_sections: { ...ps, google: { ...google, brand: curata } } as never,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", productId).eq("business_id", businessId);
+
+  if (eScriere) return { error: "Marca nu s-a putut salva. Încearcă din nou." };
+
+  /*
+   * ⚠ SE PUNE LA COADA, prin calea OMULUI, nu prin cea a plaselor.
+   *
+   * Omul tocmai a atins produsul: atingerea lui chiar inseamna date noi, deci un element
+   * abandonat pe motiv de marca trebuie reaprins. Cu `reluaAutomatEmagMany` ar fi ramas
+   * abandonat, si reparatia lui n-ar fi plecat niciodata.
+   */
+  await enqueueEmagSyncMany(businessId, [productId]);
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true, marca: curata };
+}
+
 export async function publicaProduseleEmag(
   businessId: string,
   productIds: string[],

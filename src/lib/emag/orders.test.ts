@@ -29,8 +29,20 @@ test("eMAG comenzi: fiecare status al lor are un corespondent la noi", () => {
   assert.equal(statusEdinio(0), "cancelled");
   assert.equal(statusEdinio(1), "pending");
   assert.equal(statusEdinio(2), "processing");
-  assert.equal(statusEdinio(3), "shipped");
-  assert.equal(statusEdinio(4), "delivered");
+  /*
+   * ═══ INDREPTAT PE 25.08.2026: 3 SI 4 SPUNEAU MAI MULT DECAT S-A INTAMPLAT ═══
+   *
+   * Pana atunci: 3 -> `shipped`, 4 -> `delivered`. Comerciantul VetDepo a spus-o primul —
+   * comanda EMAG-500822531 arata LIVRAT, desi coletul inca mergea spre client, iar eMAG chiar
+   * trimitea `status: 4` pe ea.
+   *
+   * Enumul lor e despre ciclul de viata al comenzii IN CONTUL LOR, nu despre drumul
+   * coletului: „pregatita" = gata de predare, „finalizata" = vanzatorul a terminat-o.
+   *
+   * ⚠ Livrarea adevarata vine acum de la curierul lor, prin `/awb/read`. Vezi `livrare.ts`.
+   */
+  assert.equal(statusEdinio(3), "processing");
+  assert.equal(statusEdinio(4), "shipped");
   /* ⚠ „returned" nu exista in `orders_status_check`: pleca neatins spre baza si
      primea 23514, iar o comanda deja returnata la prima citire era sarita definitiv. */
   assert.equal(statusEdinio(5), "refunded");

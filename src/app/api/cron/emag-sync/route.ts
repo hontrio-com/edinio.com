@@ -6,6 +6,9 @@ import { logError } from "@/lib/error-logger";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { marcajUrmator } from "@/lib/marketplace/marcaj";
 import { urcaAwbPropriu, awbPropriuAlComenzii, CAMPURI_AWB_DE_CITIT } from "@/lib/emag/awb-propriu";
+import { statusAwb } from "@/lib/emag/awb";
+import { eLivratLaEi } from "@/lib/emag/livrare";
+import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
@@ -108,6 +111,9 @@ const MAGAZINE_RETURURI = 6;
  * cereri pe secunda ale comerciantului.
  */
 const MAGAZINE_NEPLECATE = 12;
+
+/** Cate AWB-uri se intreaba de magazin intr-o trecere. */
+const AWB_DE_URMARIT = 10;
 
 /**
  * Cate produse se repun intr-o trecere, pe magazin.
@@ -321,7 +327,7 @@ export async function GET(req: NextRequest) {
   );
 
   let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0, retururi = 0, awburi = 0;
-  let comenziRecuperate = 0;
+  let comenziRecuperate = 0, livrari = 0;
   let derivate = 0;
   const inceputulRularii = Date.now();
 
@@ -688,6 +694,77 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /* ── 3b) Livrarea, aflata de la curierul LOR ──────────────────────────────
+   *
+   * ═══ ⚠ „LIVRAT" NU SE AFLA DIN STATUSUL COMENZII (25.08.2026) ═══
+   *
+   * Comerciantul VetDepo a spus-o primul: comanda EMAG-500822531 arata LIVRAT, desi coletul
+   * inca mergea spre client. eMAG trimitea `status: 4` — care inseamna „finalizata" la ei,
+   * adica vanzatorul a terminat-o, NU ca a ajuns la cumparator.
+   *
+   * Maparea s-a indreptat (4 -> `shipped`), iar livrarea adevarata se afla de aici. Fara
+   * pasul asta reparatia ar fi fost o jumatate: comenzile eMAG n-ar mai fi ajuns NICIODATA
+   * in „Livrat", si comerciantul ar fi ramas cu mai putina informatie decat avea.
+   *
+   * ⚠ LA FIECARE ZECE MINUTE, si putine deodata. Un colet nu se misca din minut in minut,
+   * iar fiecare intrebare arde una din cele 3 cereri pe secunda ale magazinului — aceleasi
+   * prin care pleaca stocul dupa o vanzare. RPC-ul le da pe cele mai demult verificate
+   * intai, deci nimeni nu ramane neintrebat.
+   */
+  if (new Date(inceputulRularii).getMinutes() % 10 === 6) {
+    for (const businessId of alegeInRotatie(magazine, MAGAZINE_COMENZI, 10)) {
+      const ctx = await ctxPentru(businessId);
+      if (!ctx) continue;
+
+      const { data: deUrmarit, error: eUrmarit } = await admin.rpc("emag_awburi_de_urmarit", {
+        p_business_id: businessId, p_limita: AWB_DE_URMARIT,
+      });
+      if (eUrmarit) {
+        await logError({
+          action: "emag-sync",
+          message: `AWB-urile de urmarit nu s-au putut citi: ${eUrmarit.message}`,
+          businessId, severity: "warning",
+        });
+        continue;
+      }
+
+      for (const a of (deUrmarit ?? []) as { id: string; emag_id: number | null; order_id: string | null }[]) {
+        if (a.emag_id == null || !a.order_id) continue;
+
+        const raspuns = await cuFir(firNou("awb-status"), () => statusAwb(ctx, a.emag_id!));
+        /* ⚠ O eroare de la ei NU e „n-a ajuns": nu se scrie nimic despre livrare, dar se
+           scrie `verificat_la`, ca acelasi AWB sa nu blocheze rândul celorlalti. */
+        const eEroare = !!raspuns && typeof raspuns === "object" && "error" in (raspuns as object);
+        const livrat = eEroare ? null : eLivratLaEi(raspuns);
+
+        const { error: eScris } = await admin.from("emag_awb").update({
+          verificat_la: new Date().toISOString(),
+          /* ⚠ RASPUNSUL LOR SE PASTREAZA INTREG. Forma lui `/awb/read` nu e in schema lor —
+             aceeasi poveste ca `ownership`, venit `boolean` unde documentatia scrie 1/2.
+             Prima livrare adevarata ne da dovada din care se ascute cititorul. */
+          raspuns_urmarire: (eEroare ? null : raspuns) as never,
+          ...(livrat === true ? { livrat_la: new Date().toISOString() } : {}),
+        }).eq("id", a.id);
+        if (eScris) {
+          await logError({
+            action: "emag-sync",
+            message: `urmarirea AWB nu s-a putut scrie: ${eScris.message}`,
+            details: { awbId: a.id }, businessId, severity: "warning",
+          });
+        }
+
+        /* ⚠ Numai `true` misca comanda. `null` inseamna „nu stiu ce mi-au raspuns", si atunci
+           comanda ramane cum e — un „livrat" ghicit e chiar defectul pe care il reparam. */
+        if (livrat !== true) continue;
+
+        const t = await tranzitieComandaMarketplace(admin, {
+          orderId: a.order_id, businessId, status: "delivered", sursa: "emag",
+        });
+        if (t === "ok") livrari++;
+      }
+    }
+  }
+
   /* ── 4) Facturile ───────────────────────────────────────────────────
    *
    * ═══ ⚠ eMAG CERE FACTURA, SPRE DEOSEBIRE DE CELELALTE ═══
@@ -1049,7 +1126,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, comenziRecuperate, facturi, awburi, retururi, neplecate, jurnalSters, propagari, publicariRecuperate,
+    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, comenziRecuperate, livrari, facturi, awburi, retururi, neplecate, jurnalSters, propagari, publicariRecuperate,
   });
 }
 

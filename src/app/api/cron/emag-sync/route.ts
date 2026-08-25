@@ -843,7 +843,11 @@ export async function GET(req: NextRequest) {
    * stampilat deja. `RABDARE_PROPAGARE_MS` ii lasa trei minute sa apuce.
    */
   let propagari = 0;
-  for (const cerere of await propagariNeterminate(admin, inceputulRularii)) {
+  /* ⚠ DOUA PE TRECERE, nu cinci. Fiecare propagare citeste catalogul INTREG al unui
+     magazin si il pune in coada; cinci ar fi putut manca bugetul de 60 de secunde al
+     trecerii si ar fi lasat pasii 6 si 7 nefacuti. Restul asteapta un minut — iar cazul
+     asta e oricum rar, fiindca bratul de dupa raspuns apuca aproape mereu. */
+  for (const cerere of await propagariNeterminate(admin, inceputulRularii, 2)) {
     const ctx = await ctxPentru(cerere.businessId);
     if (!ctx) continue;
 

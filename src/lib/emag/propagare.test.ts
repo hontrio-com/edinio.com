@@ -274,6 +274,13 @@ test("⚠ bratul iute foloseste operatia ESCALADATA, nu cea ceruta acum", () => 
   assert.match(act, /propagaSetarile\(admin, businessId, intentie\.propagare_op \?\? opPropagare\)/);
 });
 
+test("⚠ cronul ia DOUA pe trecere, ca sa nu manance bugetul de 60 de secunde", () => {
+  /* Fiecare propagare citeste catalogul intreg al unui magazin. Cinci deodata ar fi putut
+     lasa pasii 6 si 7 nefacuti. Restul asteapta un minut. */
+  const cron = viu("src/app/api/cron/emag-sync/route.ts");
+  assert.match(cron, /propagariNeterminate\(admin, inceputulRularii, 2\)/);
+});
+
 test("⚠ cronul spune cand ridica ceva: numarul trebuie sa fie zero", () => {
   /* In cazul obisnuit bratul de dupa raspuns apuca sa stampileze. Un rand aici inseamna ca
      o instanta chiar a murit dupa Salvare — o constatare, nu o reparatie de rutina. */

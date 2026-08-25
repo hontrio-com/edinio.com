@@ -183,14 +183,25 @@ test("usa functiei e inchisa", () => {
 
 test("se repune prin coada obisnuita, nu se scrie de mana", () => {
   /*
-   * ⚠ In `enqueueEmagSyncMany` stau toate regulile — magazin conectat, `auto_sync` pe
-   * oferta, fragmentarea id-urilor pe bucati de 200. Scrise a doua oara aici, s-ar fi
-   * departat de ele fara sa se vada, exact ca `retrage()` fata de `existaLaEmag`.
+   * ⚠ In modulul cozii stau toate regulile — magazin conectat, `auto_sync` pe oferta,
+   * fragmentarea id-urilor pe bucati de 200. Scrise a doua oara aici, s-ar fi departat de
+   * ele fara sa se vada, exact ca `retrage()` fata de `existaLaEmag`.
+   *
+   * ═══ ⚠ NUMELE S-A SCHIMBAT PE 25.08.2026, INTELESUL PROBEI NU ═══
+   *
+   * Pana atunci se chema `enqueueEmagSyncMany`. Aceea sterge dinadins `attempts`, `pauze` si
+   * `abandonat_la` — corect pentru o atingere a OMULUI, gresit pentru o plasa care gaseste
+   * acelasi produs la fiecare zece minute cat timp trimiterea e refuzata: contorul se stergea
+   * mereu si pragul de abandon nu se atingea NICIODATA. Masurat: sapte oferte la `generation`
+   * 16 in opt ore, cu zero reusite in sase ore.
+   *
+   * Proba cere mai departe acelasi lucru — sa se treaca prin modulul cozii, nu sa se scrie de
+   * mana — doar ca pe usa potrivita pentru o plasa.
    */
   const cron = cronulFaraNote();
   const i = cron.indexOf("produse_nesincronizate_emag");
   const bloc = cron.slice(i, cron.indexOf("── 6)", i) > 0 ? cron.indexOf("── 6)", i) : i + 2500);
-  assert.match(bloc, /enqueueEmagSyncMany\(businessId, ids\)/);
+  assert.match(bloc, /reluaAutomatEmagMany\(businessId, ids, "oferta"\)/);
   assert.ok(
     !/from\("emag_sync_queue"\)\.upsert/.test(bloc),
     "n-are voie sa scrie direct in coada",

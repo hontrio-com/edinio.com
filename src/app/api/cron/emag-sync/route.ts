@@ -18,7 +18,7 @@ import {
   citesteMemoriaDerivei, derivaOfertei, hotarasteDeriva, sursaAdevarului,
 } from "@/lib/emag/deriva";
 import {
-  enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagMany,
+  publicaPeEmagMany, reluaAutomatEmagMany,
 } from "@/lib/emag/queue";
 import { cuFir, firNou, ZILE_PASTRARE } from "@/lib/emag/jurnal";
 import { curataJurnalul } from "@/lib/emag/jurnal-scriere";
@@ -841,7 +841,13 @@ export async function GET(req: NextRequest) {
        * toate regulile — magazin conectat, `auto_sync` pe oferta, fragmentarea id-urilor —
        * iar scrise a doua oara aici, s-ar fi departat de ele fara sa se vada.
        */
-      neplecate += await enqueueEmagSyncMany(businessId, ids);
+      /* ⚠ `reluaAutomatEmagMany`, NU `enqueueEmagSyncMany`: plasa asta gaseste acelasi
+         produs la fiecare trecere cat timp trimiterea e refuzata — amprenta nu se potriveste
+         niciodata, fiindca `last_synced_at` nu se scrie. Cu punerea obisnuita, contorul de
+         incercari se stergea de fiecare data si pragul de abandon nu se atingea NICIODATA.
+         Masurat: sapte oferte VetDepo, `generation` 16 in opt ore, reincercate la doua
+         minute, cu zero reusite in sase ore. */
+      neplecate += await reluaAutomatEmagMany(businessId, ids, "oferta");
 
       /* ⚠ Se SPUNE de fiecare data cand gaseste ceva. Numarul asta trebuie sa fie zero;
          daca nu e, inseamna ca punerea in coada se pierde undeva in amonte, iar asta e o
@@ -1626,8 +1632,10 @@ async function masoaraDeriva(
   /* ⚠ Puse la rand O SINGURA DATA pe operatie, nu pe oferta. Un produs cu douazeci
      de variante derivate e tot un singur element de coada: ruta usoara retrimite
      toate ofertele lui dintr-o data. */
-  if (dePusLaRand.pret.size) await enqueueEmagPretMany(ctx.businessId, [...dePusLaRand.pret]);
-  if (dePusLaRand.stoc.size) await enqueueEmagStocMany(ctx.businessId, [...dePusLaRand.stoc]);
+  /* ⚠ Si deriva e o PLASA: ea vede aceeasi nepotrivire la fiecare sfert de ora cat timp
+     trimiterea e refuzata. Aceeasi regula ca la produsele neplecate. */
+  if (dePusLaRand.pret.size) await reluaAutomatEmagMany(ctx.businessId, [...dePusLaRand.pret], "pret");
+  if (dePusLaRand.stoc.size) await reluaAutomatEmagMany(ctx.businessId, [...dePusLaRand.stoc], "stoc");
 
   return gasite;
 }

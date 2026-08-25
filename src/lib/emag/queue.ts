@@ -370,6 +370,38 @@ export interface OptiuniCoadaMulti {
    * cele fara nicio oferta; raman afara doar cele oprite anume.
    */
   publicaSiFaraOferta?: boolean;
+
+  /**
+   * Cererea vine de la o PLASA, nu de la om.
+   *
+   * ═══ ⚠ PLASA CARE RESETEAZA CONTORUL NU LASA NIMIC SA SE ABANDONEZE (25.08.2026) ═══
+   *
+   * Coada are un prag: dupa `INCERCARI_MAXIM` refuzuri, elementul se marcheaza abandonat si
+   * nu mai arde cereri. Iar o punere NOUA la coada sterge dinadins `attempts`, `pauze` si
+   * `abandonat_la` — corect, fiindca „omul a atins produsul" chiar inseamna date noi.
+   *
+   * Dar plasele pun la coada singure: `produse_nesincronizate_emag` compara amprenta de
+   * continut cu ce s-a trimis, iar deriva compara pretul si stocul. Cand trimiterea e
+   * REFUZATA, `last_synced_at` nu se scrie, amprenta nu se potriveste niciodata, si plasa
+   * repune acelasi produs la fiecare zece minute. Cu contorul sters de fiecare data, pragul
+   * nu se atinge NICIODATA.
+   *
+   * ⚠ MASURAT IN PRODUCTIE: sapte oferte VetDepo, refuzate de eMAG cu motive care cer mana
+   * omului (PNK duplicat, EAN nevalid), ajunsesera la `generation` 16 in opt ore — adica
+   * fusesera repuse la coada de saisprezece ori — si erau reincercate la fiecare doua
+   * minute. `product_offer/save` avea ZERO reusite in sase ore: 60 de cereri, 60 de
+   * refuzuri, toate pe aceleasi sapte oferte.
+   *
+   * ⚠ CE COSTA: fiecare refuz arde una din cele 3 cereri pe secunda ale magazinului —
+   * aceleasi prin care pleaca o miscare de stoc dupa o vanzare — si eMAG numara si cererile
+   * nevalide la limita lor de ritm.
+   *
+   * Cu steagul asta, plasa NU atinge un element care e deja in coada: nici nu-i sterge
+   * contorul, nici nu-l reinvie din abandon. N-are ce sa spuna nou despre o lucrare care
+   * asteapta oricum. Omul, in schimb, trece mai departe si reaprinde randul — atingerea lui
+   * chiar inseamna date noi.
+   */
+  reluareAutomata?: boolean;
 }
 
 /**
@@ -453,7 +485,29 @@ async function enqueueManyDetaliat(
       }
     }
 
+    /*
+     * ⚠ O PLASA NU ATINGE CE E DEJA IN COADA. Vezi `reluareAutomata`: altfel contorul de
+     * incercari se sterge la fiecare trecere si pragul de abandon nu se atinge niciodata.
+     *
+     * ⚠ SE CITESC TOATE RANDURILE existente pentru operatia asta, nu doar cele abandonate:
+     * unul care isi asteapta randul dupa o pauza crescatoare n-are nevoie de o repunere
+     * care sa-i stearga pauza si sa-l aduca inapoi in fata.
+     */
+    const dejaInCoada = new Set<string>();
+    if (optiuni.reluareAutomata) {
+      for (const bucata of bucatiDeIduri(ids)) {
+        const { data, error } = await admin
+          .from("emag_sync_queue").select("offer_id")
+          .eq("business_id", businessId).eq("op", op).in("offer_id", bucata);
+        /* ⚠ O citire picata NU se citeste ca „nu e nimic in coada": asa s-ar fi sters exact
+           contoarele pe care steagul le apara. Se renunta la trecerea asta; plasa revine. */
+        if (error) throw error;
+        for (const r of data ?? []) dejaInCoada.add((r as { offer_id: string }).offer_id);
+      }
+    }
+
     const randuri = ids
+      .filter((id) => !dejaInCoada.has(id))
       .filter((id) => poateIntraInCoada(id, pornite, oprite, optiuni.publicaSiFaraOferta === true))
       .map((id) => ({
         business_id: businessId, product_id: id, offer_id: id, op,
@@ -553,6 +607,20 @@ export function publicaPeEmagStrict(
  * pretul, nici documentatia: la eMAG, o oferta preluata de comerciant din panoul
  * lor si-ar fi pierdut modificarile la fiecare vanzare.
  */
+/**
+ * Repunere la coada CERUTA DE O PLASA, nu de om.
+ *
+ * ⚠ Nume separat, ca `publicaPeEmagMany` si din acelasi motiv: un steag pus pe functia
+ * obisnuita ar fi fost usor de dat din greseala de pe drumul unui om — si atunci o atingere
+ * a produsului n-ar mai fi reaprins un element abandonat, adica singura cale de a-l repune
+ * in miscare dupa ce comerciantul chiar a reparat cauza.
+ */
+export function reluaAutomatEmagMany(
+  businessId: string, productIds: (string | null | undefined)[], op: OpEmag,
+): Promise<number> {
+  return enqueueMany(businessId, productIds, op, { reluareAutomata: true });
+}
+
 export function enqueueEmagStocMany(businessId: string, productIds: (string | null | undefined)[]): Promise<number> {
   return enqueueMany(businessId, productIds, "stoc");
 }

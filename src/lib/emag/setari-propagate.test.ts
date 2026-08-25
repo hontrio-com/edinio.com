@@ -34,9 +34,18 @@ test("se compara cu configul citit la INTRARE, nu cu peticul", () => {
 test("⚠ fiecare camp cere ruta care il DUCE, nu cea mai grea", () => {
   /*
    * Regula casei (§1.3): o schimbare de pret n-are voie sa atinga `product_offer/save`.
-   * Deci numai `green_tax` si `supply_lead_time` cer ruta grea.
+   * Deci ruta grea o cer numai campurile care CHIAR pleaca pe ea.
+   *
+   * ⚠ ERA O LISTA INCOMPLETA, si asta a costat (indreptat 25.08.2026): GPSR
+   * (`safety_information`, `manufacturer`, `eu_representative`) pleaca tot pe
+   * `product_offer/save` — nu e in amprenta si nu e in deriva, deci fara randul asta nu
+   * ajungea NICIODATA singur la ofertele deja publicate. Un produs respins tocmai fiindca
+   * ii lipsea GPSR-ul ramanea respins dupa ce comerciantul completa datele.
+   *
+   * Proba a picat cand s-a adaugat, cum trebuia. Lista are voie sa creasca — dar numai cu
+   * campuri care n-au o ruta mai usoara.
    */
-  assert.match(viu, /const cereRutaGrea = sASchimbat\("green_tax"\) \|\| sASchimbat\("supply_lead_time"\);/);
+  assert.match(viu, /const cereRutaGrea = sASchimbat\("green_tax"\) \|\| sASchimbat\("supply_lead_time"\) \|\| gpsrSAChimbat;/);
   assert.match(viu, /const cerePret = sASchimbat\("vat_id"\) \|\| sASchimbat\("handling_time"\);/);
   assert.match(viu, /const cereStoc = sASchimbat\("stoc_rezervat"\) \|\| sASchimbat\("warehouse_id"\);/);
 });

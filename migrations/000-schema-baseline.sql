@@ -1790,6 +1790,29 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer DEFAULT 10, p_de_la integer DEFAULT 0)
+ RETURNS TABLE(id uuid, order_id uuid, emag_order_id bigint, order_type integer, awb_uploaded_number text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select eo.id, eo.order_id, eo.emag_order_id, eo.order_type, eo.awb_uploaded_number
+    from public.emag_orders eo
+    join public.orders o
+      on o.id = eo.order_id and o.business_id = eo.business_id
+   where eo.business_id = p_business_id
+     and eo.order_id is not null
+     and eo.order_status in (2, 3, 4)
+     and (
+       eo.awb_uploaded_at is null
+       or o.updated_at > eo.awb_uploaded_at
+     )
+   order by o.updated_at asc
+   offset greatest(0, p_de_la)
+   limit greatest(1, least(coalesce(p_limita, 10), 100));
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.emag_familie_noua()
  RETURNS bigint
  LANGUAGE sql
@@ -4378,7 +4401,8 @@ create table if not exists public.emag_orders (
   updated_at timestamp with time zone default now() not null,
   invoice_uploaded_at timestamp with time zone,
   invoice_number text,
-  awb_uploaded_at timestamp with time zone);
+  awb_uploaded_at timestamp with time zone,
+  awb_uploaded_number text);
 
 create table if not exists public.emag_request_log (
   id uuid default gen_random_uuid() not null,
@@ -5519,9 +5543,9 @@ CREATE INDEX emag_offers_pnk_idx ON public.emag_offers USING btree (business_id,
 CREATE INDEX emag_offers_product_idx ON public.emag_offers USING btree (product_id);
 CREATE UNIQUE INDEX emag_offers_produs_varianta_uidx ON public.emag_offers USING btree (business_id, product_id, COALESCE(variant_title, ''::text)) WHERE (product_id IS NOT NULL);
 CREATE INDEX emag_offers_reconciliere_idx ON public.emag_offers USING btree (business_id, last_status_at NULLS FIRST);
+CREATE INDEX emag_orders_awb_de_verificat_idx ON public.emag_orders USING btree (business_id, awb_uploaded_at) WHERE ((order_id IS NOT NULL) AND (order_status = ANY (ARRAY[2, 3, 4])));
 CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
 CREATE INDEX emag_orders_factura_de_urcat_idx ON public.emag_orders USING btree (business_id, created_at) WHERE (invoice_uploaded_at IS NULL);
-CREATE INDEX emag_orders_fara_awb_urcat_idx ON public.emag_orders USING btree (business_id, created_at) WHERE ((awb_uploaded_at IS NULL) AND (order_id IS NOT NULL) AND (order_status = ANY (ARRAY[2, 3, 4])));
 CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
 CREATE INDEX emag_request_log_biz_idx ON public.emag_request_log USING btree (business_id, created_at DESC);
 CREATE INDEX emag_request_log_fir_idx ON public.emag_request_log USING btree (corelatie) WHERE (corelatie IS NOT NULL);
@@ -7815,6 +7839,7 @@ grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_busi
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
+grant execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.emag_familie_noua() to service_role;
 grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
@@ -7966,6 +7991,7 @@ revoke execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_bus
 revoke execute on function public.elibereaza_stoc_batch(p_items jsonb) from public;
 revoke execute on function public.elibereaza_stoc_comanda(p_order_id uuid) from public;
 revoke execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.emag_familie_noua() from public;
 revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
 revoke execute on function public.genereaza_schema_baseline() from public;

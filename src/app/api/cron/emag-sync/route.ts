@@ -900,92 +900,101 @@ export async function GET(req: NextRequest) {
  * trecere si nimic mai nou n-ar fi vazut vreodata. Vezi nota din `urcaFacturile`.
  */
 async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
-  const { count: bazin, error: eBazin } = await admin.from("emag_orders")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", ctx.businessId)
-    .is("awb_uploaded_at", null)
-    .not("order_id", "is", null)
-    /*
-     * ⚠ NUMAI STARILE IN CARE UN AWB ARE ROST: 2 in procesare, 3 pregatita, 4 finalizata.
-     *
-     * O comanda ANULATA (0) sau RETURNATA (5) nu va primi niciodata un AWB. Lasate in
-     * bazin, ele n-ar fi facut rau — pasul le-ar fi citit si ar fi trecut mai departe — dar
-     * ar fi INTARZIAT lucrul adevarat: fereastra e rotativa, zece pe trecere la cinci
-     * minute, deci o mie de comenzi anulate inseamna vreo opt ore pana se ajunge la un AWB
-     * nou. Adica un cumparator care asteapta urmarirea o zi de lucru intreaga.
-     *
-     * ⚠ Starea 1 (noua) se sare si ea: acolo comanda nici n-a fost confirmata inca.
-     */
-    .in("order_status", [2, 3, 4]);
+  /*
+   * ⚠ SE INTREABA PRIN FUNCTIE, NU PRIN FILTRU (indreptat 25.08.2026).
+   *
+   * Prima forma cauta `awb_uploaded_at is null`. Prima urcare mergea; a DOUA, nu — dupa ce
+   * campul e scris, comanda nu mai era privita NICIODATA. Iar coletele chiar se reemit:
+   * adresa gresita, colet pierdut, curier schimbat. eMAG ramanea cu numarul VECHI, si
+   * cumparatorul urmarea un AWB care nu mai exista.
+   *
+   * ⚠ Si nota din `urcaAwbPropriu` spunea limpede ca cheia poarta numarul „ca la o
+   * reexpediere sa poata fi urcat din nou". Registrul chiar ingaduia. Planificatorul o
+   * anula. O intentie scrisa in cod, taiata de alt cod.
+   *
+   * Intrebarea corecta e „s-a atins comanda de cand m-am uitat ultima oara" — o comparatie
+   * intre `orders.updated_at` si `emag_orders.awb_uploaded_at`, deci doua tabele, deci nu
+   * se poate scrie in PostgREST.
+   *
+   * ⚠ SI NU MAI E NEVOIE DE FEREASTRA ROTATIVA: functia intoarce cele mai VECHI neatinse,
+   * iar stampila le scoate din bazin. Se goleste singura, deci nu mai exista riscul ca
+   * lucrul nou sa astepte in spatele unui teanc care nu se termina.
+   */
+  const { data: candidati, error: eLista } = await admin.rpc("emag_comenzi_de_verificat_awb", {
+    p_business_id: ctx.businessId,
+    p_limita: AWB_PE_TRECERE,
+    p_de_la: 0,
+  });
 
-  if (eBazin) {
+  if (eLista) {
     await logError({
       action: "emag-sync",
-      message: `cate comenzi n-au AWB-ul urcat nu s-a putut afla: ${eBazin.message}`,
+      message: `comenzile de verificat pentru AWB nu s-au putut citi: ${eLista.message}`,
       businessId: ctx.businessId,
       severity: "warning",
     });
     return 0;
   }
 
-  const cate = bazin ?? 0;
-  if (cate === 0) return 0;
+  const randuri = candidati ?? [];
+  if (randuri.length === 0) return 0;
 
-  const tura = Math.floor(Date.now() / 60_000 / 5);
-  const de_la = cate <= AWB_PE_TRECERE ? 0 : (tura * AWB_PE_TRECERE) % cate;
-
-  const { data, error: eComenzi } = await admin.from("emag_orders")
-    .select(`id, order_id, emag_order_id, order_type, orders(order_number, ${CAMPURI_AWB_DE_CITIT})`)
+  /* Numerele de AWB stau pe `orders`, in optsprezece coloane. Se citesc o data, pentru tot
+     teancul, cu lista tinuta intr-un singur loc — vezi `CAMPURI_AWB_DE_CITIT`. */
+  const ids = randuri.map((r) => r.order_id).filter((x): x is string => !!x);
+  const { data: comenzi, error: eComenzi } = await admin.from("orders")
+    .select(`id, order_number, ${CAMPURI_AWB_DE_CITIT}`)
     .eq("business_id", ctx.businessId)
-    .is("awb_uploaded_at", null)
-    .not("order_id", "is", null)
-    /* ⚠ Aceeasi ingradire ca la numaratoare — altfel bazinul si felia n-ar mai vorbi
-       despre aceleasi randuri, iar `range` ar sari peste lucruri. */
-    .in("order_status", [2, 3, 4])
-    .order("created_at", { ascending: true })
-    .range(de_la, de_la + AWB_PE_TRECERE - 1);
+    .in("id", ids);
 
   if (eComenzi) {
     await logError({
       action: "emag-sync",
-      message: `comenzile fara AWB urcat nu s-au putut citi: ${eComenzi.message}`,
+      message: `numerele de AWB nu s-au putut citi: ${eComenzi.message}`,
       businessId: ctx.businessId,
       severity: "warning",
     });
     return 0;
   }
 
+  const peId = new Map<string, Record<string, unknown>>(
+    ((comenzi ?? []) as unknown as Record<string, unknown>[]).map((o) => [String(o.id), o]),
+  );
+
+  const acum = () => new Date().toISOString();
   let urcate = 0;
-  /*
-   * ⚠ `as unknown as`: sirul de `select` e compus din `CAMPURI_AWB_DE_CITIT`, iar tipurile
-   * PostgREST nu pot citi un sablon. Scris de mana aici, lista ar fi fost a DOUA copie —
-   * si s-ar fi despartit de prima la primul curier adaugat.
-   *
-   * ⚠ Verificarea nu se pierde, se muta si se intareste: `awb-propriu.test.ts` cere ca
-   * FIECARE coloana din lista sa existe pe `orders` in tipurile generate din schema. Asta
-   * prinde si o coloana redenumita in baza, ceea ce sablonul n-ar fi prins.
-   */
-  for (const r of (data ?? []) as unknown as {
-    id: string; order_id: string | null; emag_order_id: number | null;
-    order_type: number | null; orders: Record<string, unknown> | null;
-  }[]) {
+
+  for (const r of randuri) {
     if (!r.order_id || !r.emag_order_id) continue;
 
-    const awb = awbPropriuAlComenzii(r.orders);
-    /*
-     * ⚠ FARA AWB NU E O EROARE, si nici nu se marcheaza. Comanda poate fi inca nepregatita,
-     * sau expediata prin AWB-ul lor — caz in care ei il stiu deja si n-avem ce trimite.
-     * Marcata, n-ar mai fi privita cand chiar apare un numar.
-     */
-    if (!awb) continue;
+    const awb = awbPropriuAlComenzii(peId.get(r.order_id));
 
-    /* ⚠ AWB-ul emis PRIN ei nu se mai trimite inapoi la ei. */
+    /*
+     * ⚠ FARA AWB: se STAMPILEAZA, dar fara numar. Altfel comanda ar fi ramas in bazin si ar
+     * fi fost recitita la fiecare trecere pana cand primeste unul — iar teancul acela creste
+     * cu fiecare comanda neexpediata. Stampila spune „m-am uitat"; numarul gol spune „n-am
+     * urcat nimic", deci cand chiar apare un AWB, comparatia de mai jos il vede ca schimbare.
+     */
+    if (!awb) {
+      await admin.from("emag_orders")
+        .update({ awb_uploaded_at: acum() }).eq("id", r.id);
+      continue;
+    }
+
+    /* ⚠ Acelasi numar ca data trecuta: nu s-a reemis nimic. Se stampileaza si atat. */
+    if (r.awb_uploaded_number === awb.awb) {
+      await admin.from("emag_orders")
+        .update({ awb_uploaded_at: acum() }).eq("id", r.id);
+      continue;
+    }
+
+    /* ⚠ AWB-ul emis PRIN ei nu se trimite inapoi la ei. */
     const { data: alNostru } = await admin.from("emag_awb")
       .select("awb_number").eq("business_id", ctx.businessId).eq("order_id", r.order_id)
       .eq("awb_number", awb.awb).maybeSingle();
     if (alNostru) {
       await admin.from("emag_orders")
-        .update({ awb_uploaded_at: new Date().toISOString() }).eq("id", r.id);
+        .update({ awb_uploaded_at: acum(), awb_uploaded_number: awb.awb }).eq("id", r.id);
       continue;
     }
 
@@ -995,17 +1004,19 @@ async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
       /* ⚠ 3 ca ultima plasa, aceeasi alegere ca la factura: atasamentele sunt ingaduite si
          pe FBE, iar vanzatorul e cazul coplesitor. */
       tipComanda: (r.order_type === 2 ? 2 : 3),
-      numarComanda: String((r.orders?.order_number as string) ?? `EMAG-${r.emag_order_id}`),
+      numarComanda: String((peId.get(r.order_id)?.order_number as string) ?? `EMAG-${r.emag_order_id}`),
       awb,
     });
 
     if (rez.fel === "urcat" || rez.fel === "deja") {
       urcate += rez.fel === "urcat" ? 1 : 0;
+      /* ⚠ SE SCRIE SI NUMARUL, si asta e cheia reparatiei: fara el, urmatoarea trecere
+         n-ar avea cu ce compara si ori ar reurca acelasi document, ori n-ar mai veni. */
       await admin.from("emag_orders")
-        .update({ awb_uploaded_at: new Date().toISOString() }).eq("id", r.id);
+        .update({ awb_uploaded_at: acum(), awb_uploaded_number: awb.awb }).eq("id", r.id);
     } else if (rez.fel === "esuat") {
-      /* ⚠ NU se marcheaza: un esec dovedit merita reincercat la o tura urmatoare, iar
-         registrul opreste oricum un al doilea document daca primul chiar a plecat. */
+      /* ⚠ NU se stampileaza: un esec dovedit merita reincercat. Registrul opreste oricum un
+         al doilea document daca primul chiar a plecat. */
       await logError({
         action: "emag-sync",
         message: `AWB-ul curierului propriu nu s-a urcat: ${rez.mesaj}`,

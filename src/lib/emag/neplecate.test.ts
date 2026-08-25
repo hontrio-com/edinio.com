@@ -45,10 +45,37 @@ import { readFileSync, readdirSync } from "node:fs";
    marcajul ofertei, si atunci s-a vazut.
 */
 
+/*
+ * ═══ ⚠ SE CITESTE DEFINITIA FINALA, NU FISIERUL DUPA NUME (indreptat 25.08.2026) ═══
+ *
+ * Prima forma cauta migratia dupa numele fisierului („schimbari-neplecate") si gasea
+ * `2026-10-12`. Dar functia a fost schimbata de DOUA ori dupa aceea: pe 13 octombrie, ca sa
+ * nu mai publice singura ce n-a cerut nimeni, si pe 14, cand a trecut pe amprenta de
+ * continut.
+ *
+ * ⚠ CE INSEMNA: proba trecea, dar dovedea purtarea VECHE. Mai rau — una dintre probe
+ * CEREA anume `coalesce(o.last_synced_at, 'epoch')`, adica exact forma care a publicat 116
+ * oferte fara ca nimeni sa fi apasat ceva. O proba verde care apara un defect e mai
+ * periculoasa decat lipsa ei: cine o vede presupune ca zona e acoperita.
+ *
+ * ⚠ Baseline-ul e schema INTREAGA a productiei, regenerata la fiecare schimbare
+ * (`migrations/CITESTE-INTAI.md`). Deci el, si numai el, spune ce ruleaza acum.
+ */
 function migratia(): string {
-  const f = readdirSync("migrations").filter((x) => x.includes("schimbari-neplecate"));
-  assert.ok(f.length === 1, "n-am gasit migratia");
-  return readFileSync(`migrations/${f[0]}`, "utf8");
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const i = baseline.indexOf("FUNCTION public.produse_nesincronizate_emag");
+  assert.ok(i > 0, "functia nu s-a gasit in baseline");
+  /*
+   * ⚠ `$function$` apare de DOUA ori: o data ca deschidere (`AS $function$`) si o data ca
+   * inchidere. Se ia a doua — altfel felia se opreste inainte de corp, iar probele de mai
+   * jos cad pe un cod perfect bun.
+   *
+   * ⚠ Si nu se cauta `$function$;` lipite: in baseline `;` sta pe randul urmator.
+   */
+  const deschidere = baseline.indexOf("$function$", i);
+  const j = baseline.indexOf("$function$", deschidere + 10);
+  assert.ok(j > deschidere && deschidere > i, "corpul functiei nu se inchide");
+  return baseline.slice(i, j);
 }
 
 function cronulFaraNote(): string {
@@ -65,9 +92,11 @@ test("proba insasi vede migratia si cronul", () => {
 
 test("intrebarea e chiar cea care lipsea", () => {
   const m = migratia();
+  /* ⚠ Forma de ACUM compara amprenta de continut, nu marcaje de timp. Ramura pe marcaje a
+     ramas numai pentru cazul in care nu se dau amprente. */
   assert.match(
-    m, /p\.updated_at > coalesce\(o\.last_synced_at, 'epoch'::timestamptz\)/,
-    "schimbat DUPA ultima trimitere",
+    m, /o\.amprenta_continut is distinct from/,
+    "se compara continutul, nu ora",
   );
   assert.match(
     m, /not exists \([\s\S]*?emag_sync_queue q/,
@@ -75,13 +104,34 @@ test("intrebarea e chiar cea care lipsea", () => {
   );
 });
 
-test("⚠ o oferta netrimisa NICIODATA intra si ea", () => {
+test("⚠ o oferta netrimisa NICIODATA nu intra, si asta e TOT rostul", () => {
   /*
-   * `coalesce(..., 'epoch')` nu e o formalitate: e cel mai limpede caz de „schimbare
-   * neplecata" cu putinta. Sarita fiindca marcajul e gol, plasa ar fi ratat exact
-   * produsele care n-au ajuns nicaieri.
+   * ═══ PROBA ASTA CEREA PANA AZI EXACT PE DOS ═══
+   *
+   * Textul ei spunea ca `coalesce(o.last_synced_at, 'epoch')` „nu e o formalitate" si ca
+   * fara el plasa ar rata produsele care n-au ajuns nicaieri. Suna intemeiat. Era gresit,
+   * si s-a platit: pe 24.08.2026 plasa a publicat singura 116 oferte pe care nimeni nu
+   * ceruse sa fie publicate, fiindca „n-a plecat niciodata" arata la fel ca „s-a pierdut o
+   * schimbare".
+   *
+   * ⚠ DEOSEBIREA E TOT ROSTUL PLASEI: ea repara ce s-a stricat, nu porneste ce n-a fost
+   * cerut. Un produs nepublicat e o hotarare a comerciantului, nu o scapare a noastra.
+   *
+   * Proba trecea fiindca citea fisierul din 12 octombrie, dinaintea reparatiei. Acum se
+   * uita la definitia care chiar ruleaza.
    */
-  assert.match(migratia(), /coalesce\(o\.last_synced_at, 'epoch'/);
+  const m = migratia();
+  assert.match(m, /and o\.last_synced_at is not null/, "numai ofertele TRIMISE de noi");
+  assert.doesNotMatch(
+    m, /coalesce\(o\.last_synced_at, 'epoch'/,
+    "forma care a publicat 116 oferte",
+  );
+});
+
+test("⚠ o amprenta necunoscuta NU inseamna „schimbat”", () => {
+  /* Perechea de sus. `null` la amprenta inseamna „n-am masurat", si o plasa care ar citi
+     asta drept schimbare ar retrimite tot ce n-a fost inca masurat. */
+  assert.match(migratia(), /when o\.amprenta_continut is null then false/);
 });
 
 test("un element ABANDONAT nu se reaprinde de aici", () => {
@@ -177,5 +227,19 @@ test("pasul spune singur ca NU e un outbox", () => {
    */
   const cuNote = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8");
   assert.match(cuNote, /NU E UN OUTBOX/, "pasul trebuie sa-si spuna limita");
-  assert.match(migratia(), /outbox/i, "si migratia, la fel");
+
+  /*
+   * ⚠ NU se mai cere si in `migratia()`: aceea citeste acum DEFINITIA din baseline, iar
+   * baseline-ul e un dump al productiei — Postgres nu pastreaza comentariile din corpul
+   * unei functii `sql`. Cerandu-le acolo, proba ar fi cerut ceva ce nu poate exista.
+   *
+   * Nota despre outbox traieste in fisierul de migratie si in cronul de mai sus, unde o
+   * citeste omul. Aici se pazeste doar ce se poate pazi.
+   */
+  const istoric = readdirSync("migrations").filter((x) => x.includes("schimbari-neplecate"));
+  assert.ok(istoric.length >= 1, "fisierul de migratie exista in istoric");
+  assert.match(
+    readFileSync(`migrations/${istoric[0]}`, "utf8"), /outbox/i,
+    "si migratia isi spune limita",
+  );
 });

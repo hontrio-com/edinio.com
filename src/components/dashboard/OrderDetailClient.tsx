@@ -1401,7 +1401,19 @@ export function OrderDetailClient({
         )}
       </div>
 
-      {/* ── Danger zone ── */}
+      {/*
+        ── Danger zone ──
+
+        ⚠ NU SE ARATA DELOC LA O COMANDA TINUTA DE MARKETPLACE (25.08.2026).
+
+        Serverul o refuza deja (`deleteOrder`), deci integritatea era in regula. Dar un
+        buton rosu care arata apasabil si da eroare abia dupa apasare e o cursa: omul crede
+        ca a facut o greseala, incearca din nou, si abia apoi citeste.
+
+        ⚠ Se ascunde CARTEA intreaga, nu doar butonul: un titlu „Sterge comanda" deasupra
+        unui buton mort ar fi fost la fel de mincinos.
+      */}
+      {!tinutaDeEi && (
       <div className={`${CARD} border-destructive/30 p-5 flex items-center justify-between gap-3 mt-5`}>
         <div>
           <h2 className="text-sm font-semibold text-foreground">Sterge comanda</h2>
@@ -1411,6 +1423,7 @@ export function OrderDetailClient({
           <Trash2 /> Sterge definitiv
         </Button>
       </div>
+      )}
 
       {/* ── Mobile sticky action bar (above bottom nav) ── */}
       {mobileAction && (

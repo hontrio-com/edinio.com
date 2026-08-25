@@ -136,12 +136,44 @@ test("⚠ un AWB emis PRIN eMAG nu se trimite inapoi la ei", () => {
   assert.match(cron, /from\("emag_awb"\)[\s\S]{0,200}?eq\("awb_number", awb\.awb\)/);
 });
 
-test("⚠ fara AWB nu se marcheaza nimic", () => {
-  /* Comanda poate fi inca nepregatita. Marcata, n-ar mai fi privita cand chiar apare un
-     numar — si atunci reparatia asta n-ar mai folosi la nimic. */
+test("⚠ fara AWB se stampileaza — dar NUMAI fiindca intrebarea se redeschide", () => {
+  /*
+   * ═══ PROBA ASTA CEREA PE DOS PANA PE 25.08.2026, SI AVEA DREPTATE ATUNCI ═══
+   *
+   * Textul ei spunea: „comanda poate fi inca nepregatita; marcata, n-ar mai fi privita cand
+   * chiar apare un numar”. Adevarat — CAT TIMP trecerea cauta `awb_uploaded_at is null`.
+   * Sub filtrul acela, stampila era o usa care se inchidea pe veci.
+   *
+   * ═══ CE S-A SCHIMBAT ═══
+   *
+   * Filtrul acela era el insusi defectul: un AWB REEMIS nu mai ajungea niciodata la eMAG,
+   * fiindca dupa prima urcare campul e scris si comanda iese din bazin pentru totdeauna.
+   * Acum se intreaba `emag_comenzi_de_verificat_awb`, care redeschide comanda la orice
+   * atingere (`o.updated_at > eo.awb_uploaded_at`).
+   *
+   * ═══ SI DE-ABIA ATUNCI stampila e nu doar ingaduita, ci NECESARA ═══
+   *
+   * Nestampilata, o comanda neexpediata ar fi recitita la fiecare trecere, iar teancul creste
+   * cu fiecare comanda care asteapta — lucrul nou ar astepta in spatele lui.
+   *
+   * ⚠ CELE DOUA JUMATATI NU SE POT DESPARTI, si de aceea stau in aceeasi proba: stampila
+   * fara redeschidere pierde AWB-uri; redeschiderea fara stampila infunda teancul. Cine
+   * scoate una din ele trebuie sa dea socoteala si pentru cealalta.
+   */
   const cron = readFileSync("src/app/api/cron/emag-sync/route.ts", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-  assert.match(cron, /if \(!awb\) continue;/);
+
+  /* Jumatatea intai: se stampileaza, si fara numar. */
+  const i = cron.indexOf("if (!awb) {");
+  assert.ok(i > 0, "ramura fara AWB exista");
+  const ramura = cron.slice(i, cron.indexOf("continue;", i));
+  assert.match(ramura, /awb_uploaded_at: acum\(\)/, "se stampileaza");
+  assert.doesNotMatch(ramura, /awb_uploaded_number/, "dar numarul ramane gol");
+
+  /* Jumatatea a doua, fara de care prima e o pierdere tacuta de AWB-uri. */
+  assert.match(cron, /rpc\("emag_comenzi_de_verificat_awb"/, "intrebarea care redeschide");
+  const mig = readFileSync("migrations/2026-10-16-awb-reemis.sql", "utf8");
+  assert.match(mig, /o\.updated_at > eo\.awb_uploaded_at/, "si chiar redeschide la atingere");
 });
 
 test("⚠ un esec dovedit NU marcheaza comanda ca rezolvata", () => {

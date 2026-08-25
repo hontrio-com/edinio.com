@@ -940,7 +940,39 @@ export async function salveazaSetariEmag(
     Object.prototype.hasOwnProperty.call(petic, cheie)
     && (petic as Record<string, unknown>)[cheie] !== vechi[cheie];
 
-  const cereRutaGrea = sASchimbat("green_tax") || sASchimbat("supply_lead_time");
+  /*
+   * ⚠ GPSR E UN OBIECT, deci `!==` ar fi fost mereu adevarat: peticul poarta o valoare
+   * NOUA de fiecare data, chiar cand omul n-a schimbat nimic si a apasat doar Salveaza.
+   * Atunci catalogul intreg s-ar fi pus in coada la fiecare apasare — mii de cereri grele
+   * pentru zero schimbari.
+   *
+   * Se compara pe forma scrisa, cu cheile in ordine fixa: singurul fel de a intreba
+   * „chiar s-a schimbat ceva" pentru un obiect.
+   */
+  const gpsrSAChimbat = (() => {
+    if (!Object.prototype.hasOwnProperty.call(petic, "gpsr")) return false;
+    const stabil = (o: unknown): string => {
+      const g = (o ?? {}) as { safety_information?: unknown; manufacturer?: unknown; eu_representative?: unknown };
+      return JSON.stringify([g.safety_information ?? "", g.manufacturer ?? [], g.eu_representative ?? []]);
+    };
+    return stabil((petic as Record<string, unknown>).gpsr) !== stabil(vechi.gpsr);
+  })();
+
+  /*
+   * ⚠ GPSR CERE RUTA GREA, SI LIPSEA DE AICI (indreptat 25.08.2026).
+   *
+   * `safety_information`, `manufacturer` si `eu_representative` pleaca NUMAI pe
+   * `product_offer/save`. Nu sunt in amprenta de continut si nu sunt in deriva — deci fara
+   * randul asta nu ajungeau NICIODATA singure la ofertele deja publicate.
+   *
+   * ⚠ Si ecranul promitea altceva: dupa Salvare scria „Datele pleacă la ofertele tale în
+   * câteva minute". Adica un text care spunea ce codul nu facea — scris de mine, in aceeasi
+   * zi in care reparam chiar boala asta in alte trei locuri.
+   *
+   * ⚠ CE COSTA: un produs respins de ei tocmai fiindca ii lipsea GPSR-ul ramanea respins
+   * dupa ce comerciantul completa datele. El le vedea salvate, ei nu le primeau.
+   */
+  const cereRutaGrea = sASchimbat("green_tax") || sASchimbat("supply_lead_time") || gpsrSAChimbat;
   const cerePret = sASchimbat("vat_id") || sASchimbat("handling_time");
   const cereStoc = sASchimbat("stoc_rezervat") || sASchimbat("warehouse_id");
 

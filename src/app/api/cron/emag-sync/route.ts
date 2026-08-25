@@ -893,11 +893,31 @@ async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
    * Fereastra rotativa e chiar tiparul casei (§7.5), scris dupa incidentul Trendyol unde
    * doua rulari intorceau ACELEASI 60 de randuri din 1051.
    */
-  const { count: bazin } = await admin.from("emag_orders")
+  const { count: bazin, error: eBazin } = await admin.from("emag_orders")
     .select("id", { count: "exact", head: true })
     .eq("business_id", ctx.businessId)
     .is("invoice_uploaded_at", null)
     .not("order_id", "is", null);
+
+  /*
+   * ⚠ SI NUMARATOAREA SE CITEA ORBESTE (25.08.2026). Nota de mai jos explica exact
+   * defectul asta — pentru citirea de DEDESUBT — si nu-l vedea la cea de DEASUPRA ei, la
+   * optsprezece linii distanta. E `count`, nu `data`, dar e aceeasi confuzie: `bazin ?? 0`
+   * facea dintr-o citire picata un „nicio comanda fara factura", si pasul se intorcea cu 0
+   * fara sa scrie nimic nicaieri.
+   *
+   * De aceea disciplina nu poate fi „am reparat linia care s-a vazut": se cauta TIPARUL,
+   * in toata functia.
+   */
+  if (eBazin) {
+    await logError({
+      action: "emag-sync",
+      message: `cate comenzi n-au factura nu s-a putut afla: ${eBazin.message}`,
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+    return 0;
+  }
 
   const cate = bazin ?? 0;
   if (cate === 0) return 0;

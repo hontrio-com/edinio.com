@@ -1080,6 +1080,19 @@ export async function comutaSincronizareaOfertei(
     .eq("business_id", businessId).eq("product_id", productId);
   if (error) return { error: error.message };
 
+  /*
+   * ═══ ⚠ APRINSUL STEAGULUI NU ERA O SINCRONIZARE (25.08.2026) ═══
+   *
+   * Pana azi aici se termina: UPDATE si `revalidatePath`. Butonul promite „de acum
+   * conduce Edinio", dar nimic nu pleca — oferta intra in coada abia la urmatoarea
+   * ATINGERE a produsului. Iar plasa de siguranta n-o prinde: ea cere
+   * `last_synced_at is not null`, si o oferta preluata are exact acolo gol.
+   *
+   * Deci daca pretul din Edinio era altul decat cel din panoul eMAG in clipa apasarii —
+   * adica motivul pentru care se apasa — ramanea altul pe termen nelimitat.
+   */
+  if (pornit) await enqueueEmagSyncMany(businessId, [productId]);
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -1099,9 +1112,18 @@ export async function comutaSincronizareaOfertei(
  * ceară. Butonul ăsta e cererea. Hotărârea rămâne a lui, doar că acum încape într-o
  * apăsare.
  *
- * ⚠ Ofertele intră în coadă abia la următoarea atingere a produsului sau la derivă —
- * aici doar se aprinde steagul. Trimiterea a trei mii de oferte pe loc ar fi ars limita
- * de 3 cereri/s a magazinului, aceeași prin care pleacă o mișcare de stoc după o vânzare.
+ * ⚠ ȘI INTRĂ ÎN COADĂ ACUM, NU „la următoarea atingere”. Nota de aici spunea că a le
+ * pune pe toate ar arde limita de 3 cereri/s — și era un motiv greșit: în coadă a le
+ * PUNE nu înseamnă a le TRIMITE, tocmai coada și ritmul împărțit sunt cele care
+ * măsoară plecările. Măsurat: `revendica_din_coada` ia 30 pe trecere, deci trei mii de
+ * oferte se scurg în vreo două ore, câte 3 pe secundă în cel mai rău caz.
+ *
+ * ⚠ Iar temerea că ar întârzia o vânzare nu ține nici ea: coada e sortată
+ * `order by prioritate, created_at`, iar `stoc` are prioritatea 1 față de 5 a lui
+ * `oferta`. O mișcare de stoc de după o vânzare trece PESTE tot ce s-a pus aici.
+ *
+ * Fără asta, butonul aprindea un steag și nu făcea nimic — iar prețul din Edinio rămânea
+ * deslipit de cel din panoul lor exact în cazul pentru care se apasă.
  */
 export async function pornesteSincronizareaTuturor(
   businessId: string,
@@ -1110,10 +1132,29 @@ export async function pornesteSincronizareaTuturor(
   if ("error" in g) return { error: g.error };
 
   const admin = createAdminClient();
+
+  /* ⚠ Id-urile se citesc INAINTE de UPDATE: dupa el nu mai exista niciun semn dupa care
+     sa deosebesti ofertele tocmai aprinse de cele care erau deja pornite, iar `count` da
+     un numar, nu o lista.
+     ⚠ `fetchAllRowsStrict`: PostgREST taie la 1000 FARA sa spuna, iar aici masuratoarea
+     reala e de 3.714 oferte. Citite normal, doua mii sapte sute n-ar fi intrat in coada
+     si nimeni n-ar fi aflat — chiar tiparul incidentului din §12.2. */
+  const stinse = await fetchAllRowsStrict<{ product_id: string | null }>(
+    "emag.porneste-toate", (from, to) =>
+      admin.from("emag_offers").select("product_id")
+        .eq("business_id", businessId).eq("auto_sync", false)
+        .order("id", { ascending: true }).range(from, to),
+  );
+
   const { count, error } = await admin.from("emag_offers")
     .update({ auto_sync: true, updated_at: new Date().toISOString() }, { count: "exact" })
     .eq("business_id", businessId).eq("auto_sync", false);
   if (error) return { error: error.message };
+
+  /* ⚠ Un produs poate avea mai multe oferte (o variantă = o ofertă la ei), iar coada e
+     pe PRODUS. Fara `Set`, un produs cu 40 de combinatii intra de 40 de ori. */
+  const produse = [...new Set(stinse.map((r) => r.product_id).filter((x): x is string => !!x))];
+  await enqueueEmagSyncMany(businessId, produse);
 
   revalidatePath(FEATURE_PATH);
   return { success: true, cate: count ?? 0 };
@@ -1150,8 +1191,14 @@ export async function emiteAwbEmag(
   const ctx = await loadEmagContext(admin, businessId);
   if (!ctx) return { error: "Contul eMAG nu este conectat." };
 
-  const { data: rand } = await admin.from("emag_orders")
+  const { data: rand, error: eRand } = await admin.from("emag_orders")
     .select("emag_order_id, raw").eq("business_id", businessId).eq("order_id", orderId).maybeSingle();
+  /* ⚠ „N-AM PUTUT INTREBA" NU E „NU EXISTA" (25.08.2026). PostgREST intoarce
+     `{ data: null, error }` la un refuz, deci fara `error` o cadere a bazei iesea pe
+     acelasi drum ca lipsa randului — si omul primea un motiv fals. Nu se emite nimic
+     gresit in niciunul dintre cazuri (garzile de mai jos tin), dar un motiv neadevarat
+     il trimite sa caute unde nu e. Vezi `mesajul numeste butonul adevarat`. */
+  if (eRand) return { error: "Baza de date nu a răspuns. Încearcă din nou peste puțin." };
   const r = rand as { emag_order_id: number; raw: unknown } | null;
   if (!r) return { error: "Comanda nu are corespondent eMAG." };
 
@@ -2069,9 +2116,15 @@ export async function pregatireAwbEmag(
   if ("error" in g) return { error: g.error };
 
   const admin = createAdminClient();
-  const { data: rand } = await admin.from("emag_orders")
+  const { data: rand, error: eRand } = await admin.from("emag_orders")
     .select("emag_order_id, order_type, raw").eq("business_id", businessId).eq("order_id", orderId).maybeSingle();
 
+  /* ⚠ „N-AM PUTUT INTREBA" NU E „NU EXISTA" (25.08.2026). PostgREST intoarce
+     `{ data: null, error }` la un refuz, deci fara `error` o cadere a bazei iesea pe
+     acelasi drum ca lipsa randului — si omul primea un motiv fals. Nu se emite nimic
+     gresit in niciunul dintre cazuri (garzile de mai jos tin), dar un motiv neadevarat
+     il trimite sa caute unde nu e. Vezi `mesajul numeste butonul adevarat`. */
+  if (eRand) return { error: "Baza de date nu a răspuns. Încearcă din nou peste puțin." };
   const r = rand as { emag_order_id: number; order_type: number | null; raw: unknown } | null;
   if (!r) return { error: "Comanda nu are corespondent eMAG." };
 
@@ -2370,10 +2423,16 @@ export async function descarcaEtichetaAwbEmag(
   if (iesire.eroare) return { error: iesire.eroare };
 
   const admin = createAdminClient();
-  const { data } = await admin.from("emag_awb")
+  const { data, error: eAwbRand } = await admin.from("emag_awb")
     .select("emag_id, awb_number").eq("business_id", businessId).eq("order_id", orderId)
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
 
+  /* ⚠ „N-AM PUTUT INTREBA" NU E „NU EXISTA" (25.08.2026). PostgREST intoarce
+     `{ data: null, error }` la un refuz, deci fara `error` o cadere a bazei iesea pe
+     acelasi drum ca lipsa randului — si omul primea un motiv fals. Nu se emite nimic
+     gresit in niciunul dintre cazuri (garzile de mai jos tin), dar un motiv neadevarat
+     il trimite sa caute unde nu e. Vezi `mesajul numeste butonul adevarat`. */
+  if (eAwbRand) return { error: "Baza de date nu a răspuns. Încearcă din nou peste puțin." };
   const awb = data as { emag_id: number; awb_number: string | null } | null;
   if (!awb) {
     return { error: "Comanda nu are AWB emis prin eMAG. Eticheta se descarcă doar pentru cele emise de aici." };
@@ -2863,10 +2922,16 @@ export async function emiteAwbReturEmag(
   const ctx = await loadEmagContext(admin, businessId);
   if (!ctx) return { error: "Contul eMAG nu este conectat." };
 
-  const { data: randRma } = await admin.from("emag_rma")
+  const { data: randRma, error: eRma } = await admin.from("emag_rma")
     .select("order_id, emag_order_id, request_status, awbs, raw")
     .eq("business_id", businessId).eq("emag_rma_id", emagRmaId).maybeSingle();
 
+  /* ⚠ „N-AM PUTUT INTREBA" NU E „NU EXISTA" (25.08.2026). PostgREST intoarce
+     `{ data: null, error }` la un refuz, deci fara `error` o cadere a bazei iesea pe
+     acelasi drum ca lipsa randului — si omul primea un motiv fals. Nu se emite nimic
+     gresit in niciunul dintre cazuri (garzile de mai jos tin), dar un motiv neadevarat
+     il trimite sa caute unde nu e. Vezi `mesajul numeste butonul adevarat`. */
+  if (eRma) return { error: "Baza de date nu a răspuns. Încearcă din nou peste puțin." };
   const rma = randRma as {
     order_id: string | null; emag_order_id: number | null;
     request_status: number | null; awbs: unknown; raw: unknown;
@@ -2879,10 +2944,16 @@ export async function emiteAwbReturEmag(
   };
 
   /* Adresa clientului vine din COMANDĂ: returul poartă doar localitatea, nu strada. */
-  const { data: randComanda } = rma.order_id
+  const { data: randComanda, error: eComandaRma } = rma.order_id
     ? await admin.from("emag_orders").select("raw")
         .eq("business_id", businessId).eq("order_id", rma.order_id).maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
+
+  /* ⚠ AICI CADEREA E MAI VICLEANA DECAT LA CELELALTE: fara `error`, o citire picata dadea
+     `strada` goala, iar refuzul venea de la `poateAwbRetur` cu motivul „nu are strada" —
+     adica o vina pusa pe datele clientului pentru o pana a bazei noastre. Nu se emitea un
+     AWB gresit (garda tine), dar comerciantul ar fi umblat sa repare o adresa buna. */
+  if (eComandaRma) return { error: "Baza de date nu a răspuns. Încearcă din nou peste puțin." };
 
   const brutComanda = ((randComanda as { raw?: unknown } | null)?.raw ?? {}) as {
     customer?: Record<string, string | number | undefined>;

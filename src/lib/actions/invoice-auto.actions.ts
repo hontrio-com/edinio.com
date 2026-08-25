@@ -77,12 +77,31 @@ export async function maybeAutoInvoice(
      * niciodată.
      */
     if (eEmag) {
-      const { data: randEmag } = await supabase
+      const { data: randEmag, error: eRandEmag } = await supabase
         .from("emag_orders")
         .select("is_complete")
         .eq("business_id", businessId)
         .eq("order_id", orderId)
         .maybeSingle();
+
+      /*
+       * ═══ ⚠ „BAZA N-A RĂSPUNS” NU E „NU NE-AU SPUS” (25.08.2026) ═══
+       *
+       * Forma dinainte destructura numai `data`. PostgREST nu aruncă la un refuz — întoarce
+       * `{ data: null, error }` — iar tot corpul stă într-un `try/catch` care înghite. Deci
+       * o citire picată dădea `randEmag === null`, `complet === undefined`, garda de mai jos
+       * NU se declanșa, și o comandă eMAG **incompletă pleca la facturare**.
+       *
+       * ⚠ AICI SE STĂ PE LOC, nu se merge mai departe, și e singurul loc din funcție unde
+       * o necunoscută blochează. Motivul e asimetria costului, scrisă chiar mai sus: o
+       * trecere sărită se reia — `maybeAutoInvoice` e chemată din douăsprezece cronuri de
+       * curier — dar o factură fiscală greșită nu se retrage, se stornează.
+       *
+       * ⚠ Se deosebește de `randEmag === null`, care rămâne dinadins „mergi mai departe":
+       * acela înseamnă că n-avem rând pentru comanda asta, nu că n-am putut întreba.
+       */
+      if (eRandEmag) return;
+
       const complet = (randEmag as { is_complete: number | null } | null)?.is_complete;
       /* ⚠ `null` = nu ne-au spus. Nu se blochează pe o necunoscută: o comandă fără
          steag ar fi rămas fără factură fără ca nimeni să afle de ce. */

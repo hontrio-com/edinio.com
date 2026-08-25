@@ -45,6 +45,7 @@ import { ePrimitaDeEmag, imaginiPentruEmag } from "./imagini";
 import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
 import type { OpEmag } from "./queue";
+import { enqueueEmagSyncMany } from "./queue";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -574,16 +575,35 @@ async function duTotul(
    *
    * Rezultat: la eMAG numele nou si codul VECHI, pe termen nelimitat.
    *
-   * ⚠ Leacul nu e inca un mecanism, ci o abtinere: daca a ramas ceva netrimis, NU se scrie
-   * amprenta. Atunci plasa vede continutul ca nesincronizat si repune produsul in coada —
-   * iar la trecerea aceea numele va fi deja al lor, `schimbaSiNumele` va fi fals, si codul
-   * pleaca. A doua trecere e chiar plasa, nu un al doilea mecanism care sa se strice singur.
+   * ⚠ ABTINEREA SINGURA NU AJUNGE, SI ASTA S-A DOVEDIT PE 25.08.2026. Forma dinainte doar
+   * NU scria amprenta, si se bizuia pe plasa s-o aduca inapoi. Plasa insa taie anume
+   * `when o.amprenta_continut is null then false` — iar aici amprenta e goala CHIAR fiindca
+   * ne-am abtinut s-o scriem. Deci produsul nu se intorcea niciodata, si nota de mai sus
+   * descria un mecanism care nu exista. Mai rau: se auto-intretinea, fiindca fiecare
+   * schimbare de nume reconfirma golul.
+   *
+   * ⚠ SI PRINDEA MAI MULT DECAT SE CREDEA: `mapping.ts` omite codul la ORICE schimbare de
+   * nume, nu doar cand se schimba si codul. Populatia atinsa era „nume", nu „nume + cod".
+   *
+   * Leacul de acum nu mai trece prin plasa deloc, ci face cele doua lucruri care lipseau:
+   *
+   *   1. scrie `nume_emag` cu CE AM TRIMIS. Stim exact ce am pus in cerere si stim ca ei au
+   *      raspuns cu bine; nu e o presupunere. De aici, `schimbaSiNumele` va fi fals.
+   *   2. repune produsul in coada, cu `oferta` — care pe o oferta existenta merge tot pe
+   *      ruta grea (`rute.ts`: `if (s.op === "oferta") return { fel: "creeaza" }`), singura
+   *      care poarta codul.
+   *
+   * Converge in exact doua treceri, si nu depinde nici de reconciliere, nici de amprenta.
    *
    * ⚠ Se citeste din INCARCATURA, nu se re-socoteste: `part_number` lipsa pe o ofertă
    * construita inseamna exact „am omis ceva". O a doua socoteala s-ar fi departat de prima,
    * ca de trei ori azi.
    */
   const aRamasCeva = (oferte as EmagProdusOferta[]).some((o) => !o.part_number);
+
+  if (sAIncheiat(r.verdict as VerdictEmag) && aRamasCeva) {
+    await maiTrebuieOTrecere(admin, ctx, produs.id, oferte as EmagProdusOferta[]);
+  }
 
   if (sAIncheiat(r.verdict as VerdictEmag) && !aRamasCeva) {
     const { error: eAmprenta } = await admin.from("emag_offers")
@@ -857,6 +877,47 @@ async function duStocul(
  * ajuns niciodata la eMAG, iar trimis pe `offer/save` ar primi un refuz despre un id
  * inexistent — si ar arde incercarile unui produs care de fapt trebuie PUBLICAT.
  */
+/**
+ * A plecat numele, dar codul a ramas acasa. Se pregateste trecerea a doua.
+ *
+ * ⚠ SE SCRIE `nume_emag` DIN INCARCATURA, NU DIN `produs.titlu`. Ce am trimis a fost
+ * TAIAT la limita lor, iar reconcilierea aduce inapoi exact forma taiata. Scris din
+ * titlul intreg, un produs cu nume lung ar fi parut mereu „schimbat", `schimbaSiNumele`
+ * ar fi ramas adevarat pe veci, si codul n-ar mai fi plecat NICIODATA — adica exact
+ * defectul pe care functia asta il repara, doar mutat cu un pas mai incolo.
+ *
+ * ⚠ Numai randurile carora chiar li s-a omis codul. Celelalte au plecat intregi si n-au
+ * ce cauta intr-o a doua trecere.
+ *
+ * ⚠ O scriere picata nu se ascunde, dar nici nu opreste: `enqueueEmagSyncMany` de mai jos
+ * repune oricum produsul, iar la trecerea urmatoare `nume_emag` va fi cel vechi si codul
+ * se va omite din nou — o cerere in plus, nu o pierdere.
+ */
+async function maiTrebuieOTrecere(
+  admin: Admin, ctx: ContextEmag, productId: string, oferte: EmagProdusOferta[],
+): Promise<void> {
+  const faraCod = oferte.filter((o) => !o.part_number && typeof o.id === "number");
+
+  for (const o of faraCod) {
+    const { error } = await admin.from("emag_offers")
+      .update({ nume_emag: (o.name ?? "").trim() || null })
+      .eq("business_id", ctx.businessId).eq("emag_id", o.id);
+    if (error) {
+      void logError({
+        action: "emag.nume-trimis",
+        message: `numele trimis nu s-a putut scrie inapoi: ${error.message}`,
+        details: { productId, emagId: o.id, businessId: ctx.businessId },
+        businessId: ctx.businessId,
+        severity: "warning",
+      });
+    }
+  }
+
+  /* ⚠ `oferta`, nu `pret`: pe o oferta existenta numai `oferta` urca pe ruta grea, si
+     numai ruta grea poarta `part_number`. Vezi `rutaDeTrimitere`. */
+  await enqueueEmagSyncMany(ctx.businessId, [productId]);
+}
+
 function identitatiUsoare(randuri: RandOfertaLocal[]): IdentitateUsoara[] {
   return randuri
     /*

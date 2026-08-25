@@ -364,6 +364,31 @@ export function mesajOmenesc(brut: string): string {
    * Cod de bare" in fisa produsului, „Cod EAN" la combinatie. Un mesaj care descrie
    * necazul fara urmatoarea miscare a facut deja 208 apasari de „Publica" pe 24.08.
    */
+  if (t.includes("duplicate product documentation")) {
+    /*
+     * ⚠ ALTA FORMULARE, ACELASI NECAZ, GASITA IN TRAFIC PE 25.08.2026:
+     *
+     *   „The offer is associated to a duplicate product documentation. In order to
+     *    reactivate the offer, please attach it to product documentation with
+     *    PNK D5VDPSBBM - Product id: 273"
+     *
+     * Ramura de mai jos se potriveste pe „is a duplicated product" si NU o prinde pe asta.
+     * Masurat pe tot tabelul de oferte: era SINGURUL mesaj ramas netradus, si se repeta in
+     * fata comerciantului la fiecare reincercare.
+     *
+     * ⚠ Deosebirea fata de sora ei: acolo oferta nu s-a CREAT; aici oferta EXISTA, dar nu
+     * poate fi repusa in vanzare. De aceea nu scrie „nu s-a creat", ci ce e de facut.
+     *
+     * Verdictul era deja `refuz` si e corect: mesajul vine pe `offer/save`, care nu e in
+     * `RUTE_CU_OBSERVATII`, deci `isError` la 200 iese refuz fara nicio adaugire.
+     */
+    const pnk = pnkDinMesaj(brut);
+    return "eMAG spune că fișa de produs pe care stă oferta e o dublură, și n-o repune în " +
+      "vânzare până nu o muți pe fișa originală." +
+      (pnk
+        ? ` Fișa cerută de ei e ${pnk}: https://www.emag.ro/-/pd/${pnk}`
+        : " Fișa cerută de ei e scrisă în răspunsul lor, mai jos.");
+  }
   if (t.includes("is a duplicated product")) {
     const pnk = pnkDinMesaj(brut);
     return "Pagina de produs de pe eMAG găsită după codul de bare e o dublură, iar ei cer " +

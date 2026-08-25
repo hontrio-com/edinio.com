@@ -109,6 +109,38 @@ export function deCeNuDeAici(marketplace: string, ce: "starea" | "plata" | "ster
     + "sincronizare, dar factura și înștiințările pornite între timp ar rămâne pornite.";
 }
 
+/**
+ * Ce scrie in panoul comenzii, deasupra butoanelor de stare.
+ *
+ * ═══ ⚠ NUMELE SE IA DIN COMANDA, NU SE SCRIE DE MANA (26.08.2026) ═══
+ *
+ * Textul din `OrderDetailClient` spunea „eMAG" oricare ar fi fost marketplace-ul, fiindca
+ * atunci eMAG era singurul din lista. In clipa in care a intrat si Trendyol, o comanda
+ * Trendyol si-ar fi trimis comerciantul in contul eMAG sa caute o comanda care acolo nu
+ * exista.
+ *
+ * ⚠ E A TREIA OARA IN TREI ZILE cand un text de-al meu a ramas in urma codului pe care il
+ * descria. De-aia nu mai sta in ecran: sta langa lista pe care o citeste.
+ *
+ * ⚠ SI URMATOAREA MISCARE E ALTA LA FIECARE. La eMAG, AWB-ul si factura se fac tot la noi;
+ * la Trendyol, expedierea o duce curierul lor si anularea are butonul ei in panoul de
+ * expediere. Un text comun ar fi fost adevarat pe jumatate la fiecare.
+ */
+export function cineTineComanda(marketplace: string): { titlu: string; urmator: string } {
+  const nume = MARKETPLACE_ORIGINI[marketplace]?.label ?? marketplace;
+  const titlu = `Starea și plata acestei comenzi le ține ${nume}. Se schimbă în contul ${nume}, `
+    + "iar noi le citim de acolo la fiecare trecere.";
+  if (marketplace === "trendyol") {
+    return {
+      titlu,
+      urmator: "Expedierea o pornești din panoul „Expediere Trendyol” de mai jos, tot de acolo "
+        + "trimiți AWB-ul dacă folosești curierul tău, și tot de acolo anulezi comanda dacă nu "
+        + "o poți onora.",
+    };
+  }
+  return { titlu, urmator: "AWB-ul și factura se fac de aici." };
+}
+
 const BADGE_IMPLICIT = "bg-muted text-muted-foreground border-transparent";
 
 /** Clasele etichetei de sursa pentru o comanda. */

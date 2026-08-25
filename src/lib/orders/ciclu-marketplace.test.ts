@@ -5,6 +5,7 @@ import {
   marketplaceCareTineComanda,
   deCeNuDeAici,
   MARKETPLACE_CU_CICLU_PROPRIU,
+  cineTineComanda,
 } from "./origin";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -140,9 +141,39 @@ test("⚠ si selectoarele din pagina comenzii sunt inchise", () => {
   /* Serverul refuza oricum; asta e ca sa nu fie o cursa. Regula se ia din acelasi loc,
      nu se scrie a doua oara. */
   const ui = fisier("src/components/dashboard/OrderDetailClient.tsx");
-  assert.match(ui, /marketplaceCareTineComanda\(order\.order_source\) != null/);
+  /* ⚠ Forma s-a schimbat cand textul a inceput sa-si ia numele din comanda: ecranul tine acum
+     si CINE o tine, nu doar daca o tine cineva. Regula se ia tot din acelasi loc. */
+  assert.match(ui, /const cineTine = marketplaceCareTineComanda\(order\.order_source\);/);
+  assert.match(ui, /const tinutaDeEi = cineTine != null;/);
   const fara = faraComentarii(ui);
   assert.match(fara, /disabled=\{tinutaDeEi\}/);
   /* ⚠ Butoanele raman VIZIBILE — omul trebuie sa vada in ce stare e comanda. */
   assert.match(fara, /STATUS_OPTIONS\.map/);
+});
+
+test("⚠ textul isi ia numele din comanda, nu il are scris de mana", () => {
+  /*
+   * ═══ ⚠ A TREIA OARA IN TREI ZILE (26.08.2026) ═══
+   *
+   * Panoul comenzii scria „Starea și plata acestei comenzi le ține eMAG" ORICARE ar fi fost
+   * marketplace-ul, fiindca atunci eMAG era singurul din lista. In clipa in care a intrat si
+   * Trendyol, o comanda Trendyol si-ar fi trimis comerciantul in contul eMAG sa caute o
+   * comanda care acolo nu exista.
+   *
+   * ⚠ SI URMATOAREA MISCARE E ALTA LA FIECARE: la eMAG, AWB-ul si factura se fac tot la noi;
+   * la Trendyol, expedierea o duce curierul lor, iar anularea are butonul ei. Un text comun ar
+   * fi fost adevarat pe jumatate la fiecare.
+   */
+  assert.match(cineTineComanda("emag").titlu, /le ține eMAG/);
+  assert.match(cineTineComanda("trendyol").titlu, /le ține Trendyol/);
+  assert.doesNotMatch(cineTineComanda("trendyol").titlu, /eMAG/, "nu-l trimite in contul altcuiva");
+  /* Urmatoarea miscare, pe fiecare: */
+  assert.match(cineTineComanda("emag").urmator, /AWB-ul și factura se fac de aici/);
+  assert.match(cineTineComanda("trendyol").urmator, /Expediere Trendyol/);
+  assert.match(cineTineComanda("trendyol").urmator, /anulezi comanda/);
+
+  /* ⚠ Si ecranul CHEAMA functia, nu isi scrie textul lui. */
+  const ecran = readFileSync("src/components/dashboard/OrderDetailClient.tsx", "utf8");
+  assert.match(ecran, /cineTineComanda\(cineTine!\)\.titlu/);
+  assert.doesNotMatch(ecran, /le ține eMAG\. Se schimbă din contul eMAG/, "textul vechi a plecat");
 });

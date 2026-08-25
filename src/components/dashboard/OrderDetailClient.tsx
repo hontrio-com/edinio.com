@@ -11,7 +11,7 @@ import {
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
   ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
-import { marketplaceCareTineComanda } from "@/lib/orders/origin";
+import { marketplaceCareTineComanda, cineTineComanda } from "@/lib/orders/origin";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
@@ -321,7 +321,8 @@ export function OrderDetailClient({
 
   /* ⚠ Aceeasi regula ca pe server, din acelasi loc — nu o a doua copie. Vezi
      `marketplaceCareTineComanda`: cine tine ciclul comenzii, tine si starea. */
-  const tinutaDeEi = marketplaceCareTineComanda(order.order_source) != null;
+  const cineTine = marketplaceCareTineComanda(order.order_source);
+  const tinutaDeEi = cineTine != null;
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -1171,7 +1172,12 @@ export function OrderDetailClient({
             <h2 className="text-sm font-semibold text-foreground">Status comanda</h2>
 
             {/*
-              ⚠ LA O COMANDA eMAG STAREA E A LOR, SI SE VEDE CA ATARE (25.08.2026).
+              ⚠ LA O COMANDA DE MARKETPLACE STAREA E A LOR, SI SE VEDE CA ATARE (25.08.2026).
+
+              ⚠ SI TEXTUL ISI IA NUMELE DIN COMANDA (26.08.2026). Scria „eMAG" oricare ar fi
+              fost marketplace-ul, fiindca atunci eMAG era singurul din lista. Cand a intrat
+              si Trendyol, o comanda Trendyol si-ar fi trimis comerciantul in contul eMAG sa
+              caute o comanda care acolo nu exista.
 
               Serverul refuza schimbarea (`marketplaceCareTineComanda`), dar un buton care
               arata apasabil si da eroare abia dupa apasare e o cursa. Aici se spune
@@ -1181,9 +1187,8 @@ export function OrderDetailClient({
               mai raspund la apasare.
             */}
             {tinutaDeEi && (
-              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-                Starea și plata acestei comenzi le ține eMAG. Se schimbă din contul eMAG, iar
-                noi le citim de acolo la fiecare trecere. AWB-ul și factura se fac de aici.
+              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+                {cineTineComanda(cineTine!).titlu}{" "}{cineTineComanda(cineTine!).urmator}
               </p>
             )}
 

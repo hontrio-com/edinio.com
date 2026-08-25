@@ -276,6 +276,26 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
         orderId: ex.order_id, businessId: ctx.businessId,
         status: edinioStatus, sursa: "trendyol",
         campuriSuplimentare: { tracking_number: tracking },
+        /*
+         * ═══ ⚠ „RETURNAT" NU INSEAMNA „INAPOI PE RAFT" (26.08.2026) ═══
+         *
+         * `aplica_tranzitia_comenzii` trateaza `refunded` si `cancelled` la fel: amandoua
+         * intorc vanzarea, deci elibereaza stocul INTREGII comenzi. Pentru o anulare
+         * (`Cancelled`, `Unsupplied`, `UnPacked`) e corect — marfa n-a plecat nicaieri.
+         *
+         * Pentru un RETUR nu. Trendyol are retururi pe LINIE si pe cantitate: dintr-o
+         * comanda de trei produse clientul poate intoarce unul, iar pachetul devine
+         * `Returned`. Repus automat, stocul creste cu trei.
+         *
+         * ⚠ Si marfa intoarsa nu e mereu vandabila: vine desfacuta, incompleta, ori pur si
+         * simplu alta. Aceeasi hotarare s-a luat pentru eMAG cu o zi inainte, si acolo se
+         * vede si mai limpede — modulul de retururi spune negru pe alb ca omul o pune inapoi
+         * de mana, dupa ce se uita la ea.
+         *
+         * ⚠ SE UITA LA STATUSUL EDINIO, nu la cel Trendyol: `Returned` e singurul care
+         * ajunge la `refunded`, dar daca maine mai apare unul, regula tine oricum.
+         */
+        elibereazaStoc: edinioStatus !== "refunded",
       });
       // `definitiv` NU blocheaza: un singur pachet otravit ar ingheta fereastra
       // magazinului pentru totdeauna. Vezi `RezultatTranzitie`.

@@ -5143,7 +5143,9 @@ create table if not exists public.trendyol_batches (
   result_summary jsonb,
   submitted_at timestamp with time zone default now() not null,
   polled_at timestamp with time zone,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  poll_errors integer default 0 not null,
+  next_poll_at timestamp with time zone);
 
 create table if not exists public.trendyol_listings (
   id uuid default gen_random_uuid() not null,
@@ -5793,6 +5795,7 @@ CREATE INDEX support_messages_ticket_id_idx ON public.support_messages USING btr
 CREATE INDEX support_tickets_business_id_idx ON public.support_tickets USING btree (business_id);
 CREATE INDEX support_tickets_status_idx ON public.support_tickets USING btree (status);
 CREATE INDEX support_tickets_user_id_idx ON public.support_tickets USING btree (user_id);
+CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX trendyol_sync_queue_ordine_idx ON public.trendyol_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX ups_etichete_business_idx ON public.ups_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX users_profile_role_idx ON public.users_profile USING btree (role);

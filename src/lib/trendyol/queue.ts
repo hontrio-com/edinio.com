@@ -4,6 +4,33 @@ import { logError } from "@/lib/error-logger";
 import type { TrendyolConfig } from "./types";
 
 /**
+ * Ce se pune la zero cand vine o CERERE NOUA peste un element care exista deja.
+ *
+ * ═══ ⚠ FARA ASTA, ABANDONUL AR FI FOST O USA FARA CLANTA ═══
+ *
+ * De cand lucratorul marcheaza `abandonat_la` in loc sa stearga randul (vezi cronul), un
+ * element oprit dupa cinci refuzuri e sarit de `revendica_din_coada`. Daca punerea la coada
+ * n-ar sterge marcajul, atunci comerciantul ar putea repara chiar cauza refuzului — ar pune
+ * atributul lipsa, ar lega categoria — si produsul tot n-ar mai pleca NICIODATA.
+ *
+ * ⚠ SI CONTOARELE, SI MOTIVUL VECHI. `attempts` pastrat ar fi facut ca produsul abia reparat
+ * sa mai aiba o singura incercare; `last_error` pastrat ar fi aratat in panou motivul unei
+ * incercari care nu mai are nicio legatura cu ce e in coada acum.
+ *
+ * ⚠ E IN REGULA SA FIE NECONDITIONAT, si s-a verificat: TOTI apelantii cozii Trendyol sunt
+ * drumuri pe care le porneste omul — salvarea produsului, actiunile in masa, importul, si
+ * miscarea de stoc de dupa o vanzare. Reconcilierea NU trece pe aici; ea cheama direct
+ * `syncProductNow`. La eMAG, unde plasele chiar pun la coada, deosebirea a trebuit facuta
+ * anume — altfel contorul se stergea la fiecare trecere si pragul nu se atingea niciodata.
+ */
+const CERERE_NOUA = {
+  attempts: 0,
+  next_retry_at: null,
+  abandonat_la: null,
+  last_error: null,
+} as const;
+
+/**
  * ⚠ ESECURILE DE AICI SE SCRIU, NU SE INGHIT.
  *
  * Punerea la coada e „fire-and-forget": n-are voie sa arunce in apelant, fiindca
@@ -61,13 +88,32 @@ export async function enqueueTrendyolSync(
      * clar si e vizibil in coada; nu se trimite nimic gresit la Trendyol.
      */
     if (op === "upsert" && productId && !(config.auto_publish && produsNou)) {
-      const { count } = await admin
+      const { count, error: eNumar } = await admin
         .from("trendyol_listings").select("id", { count: "exact", head: true })
         .eq("business_id", businessId).eq("product_id", productId);
-      if (!count) return;
+
+      /*
+       * ═══ ⚠ O CITIRE PICATA DA `count: null`, IAR `!null` E `true` ═══
+       *
+       * Adica o pana de o clipa a bazei arata IDENTIC cu „produsul n-are nicio listare", si
+       * miscarea se arunca tacut: nici in coada, nici in jurnal. Aceeasi forma a fost
+       * inchisa la eMAG pe 25.08.2026, cu aceleasi cuvinte.
+       *
+       * ⚠ La eroare se LASA SA TREACA, nu se opreste: mai bine un element in coada care se
+       * opreste zgomotos la `syncProductNow` (care isi are paza lui), decat unul aruncat in
+       * tacere. Un produs nelistat nu se strica de o punere la coada in plus.
+       */
+      if (eNumar) {
+        inghiteDarScrie("unul", businessId, eNumar, { productId, offerId, op, unde: "numar-listari" });
+      } else if (!count) {
+        return;
+      }
     }
     await admin.from("trendyol_sync_queue").upsert(
-      { business_id: businessId, product_id: productId, offer_id: offerId, op },
+      {
+        business_id: businessId, product_id: productId, offer_id: offerId, op,
+        ...CERERE_NOUA,
+      },
       { onConflict: "business_id,offer_id,op" },
     );
   } catch (e) {
@@ -119,7 +165,7 @@ async function enqueueMany(businessId: string, productIds: (string | null | unde
       }
     }
     const rows = ids.filter((id) => listedIds.has(id))
-      .map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
+      .map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op, ...CERERE_NOUA }));
     if (rows.length === 0) return;
     const { error } = await admin.from("trendyol_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
     if (error) throw error;

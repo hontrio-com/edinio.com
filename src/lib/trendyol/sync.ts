@@ -20,6 +20,8 @@ import type { TrendyolCategoryAttribute, TrendyolConfig, TrendyolProductAttribut
 import { getCategoryAttributesCached } from "./taxonomy";
 import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
+import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
+import { logError } from "@/lib/error-logger";
 
 type Db = SupabaseClient<Database>;
 
@@ -115,10 +117,13 @@ interface ListingRow {
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
-  const { data } = await admin
+  /* ⚠ `null` inseamna „produsul nu e listat pe Trendyol", iar apelantii hotarasc din asta —
+     inclusiv daca sa creeze o listare noua. Confundat cu o pana, s-ar crea a doua listare
+     pentru un produs care o are deja. */
+  const data = randCitit<ListingRow>("trendyol.listarea", await admin
     .from("trendyol_listings")
     .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units")
-    .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
+    .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
   return (data as ListingRow) ?? null;
 }
 async function getListingByMainId(admin: Db, businessId: string, mainId: string): Promise<ListingRow | null> {
@@ -165,11 +170,45 @@ async function setListingStatus(admin: Db, listingId: string, status: string, ex
     .eq("id", listingId);
 }
 
-async function recordBatch(admin: Db, businessId: string, batchRequestId: string, kind: string, relatedIds: string[]): Promise<void> {
-  await admin.from("trendyol_batches").upsert(
+/**
+ * Scrie in registru lotul pe care Trendyol tocmai l-a PRIMIT.
+ *
+ * ═══ ⚠ O LUCRARE ASINCRONA NU E TERMINATA PANA NU I-AM SCRIS NUMARUL (26.08.2026) ═══
+ *
+ * Forma dinainte nu citea `error`. Iar sirul de intamplari e acesta:
+ *
+ *   POST la Trendyol        -> 200, `batchRequestId: ABC`
+ *   insert in registru      -> pica (o clipa de retea)
+ *   `syncProductNow`        -> intoarce `ok: true, submitted`
+ *   cronul                  -> sterge elementul din coada
+ *
+ * Trendyol prelucreaza ABC mai departe. Daca il RESPINGE — atribut lipsa, barcode luat,
+ * categorie gresita — noi nu aflam NICIODATA: nu mai avem numarul dupa care sa intrebam, si
+ * nici randul din coada din care sa reluam. Produsul ramane nelistat, iar panoul arata
+ * „trimis".
+ *
+ * ⚠ De-aia intoarce acum `false`, iar apelantii de pe drumul cozii il citesc ca esec
+ * TRECATOR: elementul se reia, se retrimite, si abia atunci se sterge.
+ *
+ * ⚠ RETRIMITEREA E SIGURA. Toate loturile de aici sunt idempotente la ei: crearea de produs
+ * pe acelasi barcode actualizeaza, iar pretul si stocul se SETEAZA, nu se aduna. Un lot in
+ * plus costa o cerere; unul pierdut costa un produs nelistat despre care nimeni nu stie.
+ */
+async function recordBatch(admin: Db, businessId: string, batchRequestId: string, kind: string, relatedIds: string[]): Promise<boolean> {
+  const { error } = await admin.from("trendyol_batches").upsert(
     { business_id: businessId, batch_request_id: batchRequestId, kind, status: "pending", related_ids: relatedIds as never },
     { onConflict: "business_id,batch_request_id" },
   );
+  if (error) {
+    await logError({
+      action: "trendyol/batch",
+      message: `lotul a fost primit de Trendyol dar nu s-a scris in registru: ${error.message}`,
+      details: { batchRequestId, kind, relatedIds: relatedIds.slice(0, 20) },
+      businessId, severity: "critical",
+    });
+    return false;
+  }
+  return true;
 }
 
 // ── Upsert (create/update on Trendyol) ──────────────────────────────────────────
@@ -178,8 +217,20 @@ export async function syncProductNow(
   /** Comerciantul a cerut-o EXPLICIT (buton), nu e o sincronizare automata. */
   manual = false,
 ): Promise<SyncOutcome> {
-  const { data: product } = await admin
-    .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
+  /*
+   * ═══ ⚠ „N-AM PUTUT INTREBA" NU E „PRODUSUL A FOST STERS" (26.08.2026) ═══
+   *
+   * Forma dinainte nu citea `error`. PostgREST nu arunca la refuz: intoarce
+   * `{ data: null, error }`. Deci o pana de o clipa a bazei arata IDENTIC cu „produsul nu
+   * mai exista in magazin" — si de aici se pleaca pe `removeProductNow`, adica se scoate
+   * produsul de la vanzare de pe Trendyol.
+   *
+   * ⚠ E CEA MAI SCUMPA CITIRE DIN TOT MODULUL: una singura, picata la momentul nepotrivit,
+   * scoate marfa din vanzare pe un canal intreg — fara nicio eroare si fara ca cineva sa
+   * ceara asta. Aruncarea devine mai jos verdict „trecator", deci elementul se reia.
+   */
+  const product = randCitit<Record<string, unknown>>("trendyol.produsulDeSincronizat", await admin
+    .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle() as never);
   if (!product) return removeProductNow(admin, ctx, productId);
 
   /*
@@ -411,7 +462,9 @@ export async function syncProductNow(
     const id = t.res.data?.batchRequestId;
     if (!id) continue;
     batchRequestId = batchRequestId ?? id;
-    await recordBatch(admin, ctx.businessId, id, t.kind, [listing.product_main_id]);
+    const scris = await recordBatch(admin, ctx.businessId, id, t.kind, [listing.product_main_id]);
+    /* ⚠ Idem: lot primit de ei, nescris la noi, deci lucrarea NU e terminata. */
+    if (!scris) return { ok: false, error: "lotul nu s-a putut scrie in registru", status: 0 };
   }
   return { ok: true, action: "submitted", batchRequestId };
 }
@@ -602,11 +655,14 @@ export async function ensureListingFromMapping(
   // Barcode-ul e identificatorul lui Trendyol: folosit de doua produse, al doilea
   // il suprascrie pe primul in catalogul lor.
   const barcodes = slots.map((s) => s.barcode.trim());
-  const { data: clash } = await admin.from("trendyol_variants")
-    .select("barcode, listing_id").eq("business_id", ctx.businessId).in("barcode", barcodes);
-  const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
+  /* ⚠ O lista goala inseamna „niciun barcode nu e luat". Venita dintr-o pana, ar fi lasat
+     doua produse pe acelasi barcode la Trendyol — iar stocul unuia l-ar fi scris pe celalalt. */
+  const clash = randuriCitite<{ barcode: string; listing_id: string }>("trendyol.barcodeLuat", await admin
+    .from("trendyol_variants")
+    .select("barcode, listing_id").eq("business_id", ctx.businessId).in("barcode", barcodes) as never);
+  const conflict = (clash ?? []).find((c) => c.listing_id !== listingId);
   if (conflict) {
-    return { error: `Barcode-ul „${(conflict as { barcode: string }).barcode}" este deja folosit de alt produs.` };
+    return { error: `Barcode-ul „${conflict.barcode}" este deja folosit de alt produs.` };
   }
 
   await admin.from("trendyol_variants").delete().eq("listing_id", listingId);
@@ -826,13 +882,15 @@ export type InventoryItem = { barcode: string; quantity: number; salePrice: numb
 async function computeInventoryItems(
   admin: Db, ctx: TrendyolSyncContext, productId: string, forceZero = false, manual = false,
 ): Promise<{ items: InventoryItem[]; listing: ListingRow } | { error: string } | null> {
-  const { data: product } = await admin
+  /* ⚠ Aici `null` inseamna „nu se poate impinge", iar miscarea de stoc de dupa o vanzare s-ar
+     pierde tacut — marfa s-ar vinde a doua oara pe Trendyol. Se deosebeste de o pana. */
+  const product = randCitit<Record<string, unknown>>("trendyol.produsulPentruStoc", await admin
     // `page_sections` NU e de decor aici: acolo stau combinatiile cu stocul lor.
     // Fara el, impingerea de stoc n-avea de unde sti cate bucati are marimea M si
     // trimitea totalul produsului pe fiecare barcode — iar reconcilierea, care
     // foloseste exact functia asta, confirma cifra gresita in loc s-o corecteze.
     .from("products").select("id, sku, price, compare_at_price, track_inventory, stock_quantity, page_sections")
-    .eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
+    .eq("id", productId).eq("business_id", ctx.businessId).maybeSingle() as never);
   if (!product) return null;
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return null;
@@ -886,7 +944,13 @@ export async function pushInventoryNow(
       : { ok: false, error: res.error, status: res.status };
   }
   const batchRequestId = res.data?.batchRequestId;
-  if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", [built.listing.product_main_id]);
+  if (batchRequestId) {
+    const scris = await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", [built.listing.product_main_id]);
+    /* ⚠ Trendyol a primit lotul, dar nu i-am putut scrie numarul. `status: 0` il face
+       „trecator": elementul se reia FARA sa arda o incercare, si se retrimite. Vezi
+       `recordBatch` pentru de ce retrimiterea e sigura. */
+    if (!scris) return { ok: false, error: "lotul nu s-a putut scrie in registru", status: 0 };
+  }
   return { ok: true, action: "submitted", batchRequestId };
 }
 
@@ -959,7 +1023,11 @@ export async function removeByMainId(admin: Db, ctx: TrendyolSyncContext, mainId
 }
 
 // ── Batch polling (cron) ────────────────────────────────────────────────────────
-interface BatchRow { id: string; batch_request_id: string; kind: string; related_ids: unknown; attempts: number }
+interface BatchRow {
+  id: string; batch_request_id: string; kind: string; related_ids: unknown; attempts: number;
+  /** ⚠ Pene ale LEGATURII, nu ale lotului. Vezi nota din `pollOpenBatches`. */
+  poll_errors?: number | null;
+}
 
 /** Barcode-ul unui articol din raspunsul lotului, indiferent de forma. */
 export function barcodeArticol(item: { requestItem?: { product?: { barcode?: string }; barcode?: string } }): string | null {
@@ -1031,14 +1099,17 @@ export function stareLot(result: {
 }
 
 export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit = 20): Promise<void> {
-  const { data } = await admin
+  /* ⚠ O citire picata NU inseamna „niciun lot deschis": ar fi lasat loturi netratate fara
+     nicio urma. Aruncarea iese din functie si e prinsa de cron, care o scrie. */
+  const batches = randuriCitite<BatchRow>("trendyol.loturiDeschise", await admin
     .from("trendyol_batches")
-    .select("id, batch_request_id, kind, related_ids, attempts")
+    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors")
     .eq("business_id", ctx.businessId)
     .in("status", ["pending", "processing", "retry"])
+    /* ⚠ Loturile pe care o pana le-a asezat deoparte nu se intreaba inca. */
+    .or(`next_poll_at.is.null,next_poll_at.lte.${new Date().toISOString()}`)
     .order("submitted_at", { ascending: true })
-    .limit(limit);
-  const batches = (data ?? []) as BatchRow[];
+    .limit(limit) as never);
 
   for (const [i, b] of batches.entries()) {
     /*
@@ -1055,10 +1126,42 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
     const now = new Date().toISOString();
 
     if (isTrendyolError(res)) {
+      /*
+       * ═══ ⚠ O PANA A LOR NU E UN LOT ESUAT (26.08.2026) ═══
+       *
+       * Forma dinainte crestea `attempts` la ORICE raspuns nereusit si, la a sasea, inchidea
+       * lotul ca `failed`. Dar `isTrendyolError` prinde deopotriva un 429 si un raspuns
+       * limpede al lor. Sase indisponibilitati la rand inchideau ca ESUAT un lot pe care
+       * Trendyol putea sa-l fi procesat cu succes — iar comerciantul vedea produse pe
+       * „eroare" fara sa fie nimic in neregula cu ele.
+       *
+       * ⚠ CONTOR SEPARAT, SI NICIODATA TERMINAL. `poll_errors` e despre LEGATURA cu ei, nu
+       * despre lot: aseaza lotul deoparte pentru cateva minute si atat. Un lot acceptat de ei
+       * se inchide „failed" numai dupa un raspuns VALID care spune asta.
+       */
+      if (eTrecatoare(res.status)) {
+        const pene = (b.poll_errors ?? 0) + 1;
+        await admin.from("trendyol_batches").update({
+          poll_errors: pene,
+          polled_at: now,
+          /* Asteptare crescatoare, plafonata la un sfert de ora. */
+          next_poll_at: new Date(Date.now() + Math.min(pene, 5) * 3 * 60_000).toISOString(),
+        } as never).eq("id", b.id);
+        continue;
+      }
+
+      /* Un raspuns limpede al lor CHIAR spune ceva despre lot: aici contorul vechi are rost. */
       await admin.from("trendyol_batches")
         .update({ attempts: b.attempts + 1, polled_at: now, status: b.attempts + 1 >= 6 ? "failed" : "retry" } as never)
         .eq("id", b.id);
       continue;
+    }
+
+    /* ⚠ Legatura merge: contorul de pene se pune la zero, altfel cinci pene rare de-a lungul
+       unei luni ar fi asezat lotul deoparte pentru un sfert de ora degeaba. */
+    if ((b.poll_errors ?? 0) > 0) {
+      await admin.from("trendyol_batches")
+        .update({ poll_errors: 0, next_poll_at: null } as never).eq("id", b.id);
     }
     const result = res.data;
     const stare = stareLot(result);
@@ -1747,15 +1850,52 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
 // ── Queue routing ────────────────────────────────────────────────────────────────
 export interface TrendyolQueueItem {
   id: string; business_id: string; product_id: string | null; offer_id: string; op: string; attempts: number;
+  /**
+   * Generatia randului la clipa revendicarii.
+   *
+   * ⚠ EXISTA IN BAZA DE MULT, dar lucratorul n-o citea. `trendyol_sync_queue.generation` are
+   * declansator care o creste la fiecare update, iar `revendica_din_coada` intoarce randul
+   * intreg (`to_jsonb(q.*)`) — deci valoarea venea deja in raspuns si se arunca.
+   *
+   * Fara ea, o cerere noua venita cat timp lucratorul era la Trendyol era stearsa de
+   * terminarea celei vechi. Vezi `src/lib/marketplace/coada-cas.ts`.
+   *
+   * ⚠ Optionala: un apelant care nu trece prin `revendica_din_coada` n-o are, si atunci se
+   * scrie fara paza — mai bine fara paza decat deloc.
+   */
+  generation?: number | null;
 }
 
 export async function processQueueItem(admin: Db, ctx: TrendyolSyncContext, item: TrendyolQueueItem): Promise<SyncOutcome> {
-  switch (item.op) {
-    case "delete":
-      return removeByMainId(admin, ctx, item.offer_id);
-    case "inventory":
-      return item.product_id ? pushInventoryNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
-    default:
-      return item.product_id ? syncProductNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
+  /*
+   * ═══ ⚠ O CITIRE PICATA IESE „TRECATOARE", NU „ESUATA" (26.08.2026) ═══
+   *
+   * `randCitit` arunca `EroareCitireBaza` cand baza n-a raspuns, si se prinde AICI, la
+   * marginea lucrarii. Doua motive pentru care se prinde intr-un singur loc:
+   *
+   *   1. Neprinsa, aruncarea ar fi iesit din `processQueueItem` si ar fi rupt bucla
+   *      cronului — deci o pana pe UN produs ar fi oprit lucrarile TUTUROR magazinelor din
+   *      trecerea aceea.
+   *   2. Prinsa mai adanc, fiecare citire ar fi trebuit sa stie singura ce sa faca, iar una
+   *      uitata ar fi lasat gaura la loc.
+   *
+   * ⚠ `status: 0` NU E DECOR: `eTrecatoare` il citeste ca pana de retea, iar cronul atunci
+   * NU arde o incercare si nu abandoneaza elementul. Un produs nu are de ce sa-si piarda
+   * incercarile fiindca baza noastra a clipit.
+   */
+  try {
+    switch (item.op) {
+      case "delete":
+        return await removeByMainId(admin, ctx, item.offer_id);
+      case "inventory":
+        return item.product_id ? await pushInventoryNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
+      default:
+        return item.product_id ? await syncProductNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
+    }
+  } catch (e) {
+    if (e instanceof EroareCitireBaza) {
+      return { ok: false, error: e.message, status: 0 };
+    }
+    throw e;
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
+import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -18,6 +19,26 @@ type Admin = SupabaseClient<Database>;
 // per-run work; the cron fires every minute.
 const QUEUE_BATCH = 30;
 const MAX_ATTEMPTS = 5;
+
+/**
+ * Cat se asteapta dupa al n-lea REFUZ: 1, 5, 25, 60 de minute.
+ *
+ * ⚠ Plafonat la o ora: mai mult ar fi insemnat ca o reparatie facuta de comerciant sta
+ * nevazuta jumatate de zi. Iar o cerere noua sterge oricum asteptarea (vezi `queue.ts`).
+ */
+function asteptareaUrmatoare(incercari: number): number {
+  const minute = [1, 5, 25, 60][Math.min(Math.max(incercari, 1), 4) - 1];
+  return minute * 60_000;
+}
+
+/**
+ * Cat se asteapta dupa o PANA a lor (429, 5xx, retea).
+ *
+ * ⚠ Scurt si fix, nu crescator: pana nu spune nimic despre element, deci n-are ce sa creasca.
+ */
+function asteptareaDupaPana(): number {
+  return 2 * 60_000;
+}
 const MAX_BIZ = 12;
 const RECONCILE_BIZ = 6;
 const ORDERS_BIZ = 8;
@@ -116,7 +137,16 @@ export async function GET(req: NextRequest) {
     for (const item of items) {
       const res = await processQueueItem(admin, ctx, item);
       if (res.ok) {
-        await admin.from("trendyol_sync_queue").delete().eq("id", item.id);
+        /*
+         * ⚠ SE STERGE NUMAI DACA NIMENI N-A RESCRIS RANDUL. Coloana `generation` si
+         * declansatorul ei existau in baza de mult, iar `revendica_din_coada` intoarce randul
+         * intreg — dar lucratorul de aici scria `where id = X` si atat.
+         *
+         * Deci: omul schimba titlul, lucratorul pleaca la Trendyol, omul schimba si pretul
+         * (cerere noua peste acelasi rand), lucratorul se intoarce si sterge randul. A doua
+         * schimbare dispare fara sa fi plecat vreodata, si fara nicio eroare nicaieri.
+         */
+        await stergeDacaNeschimbat(admin, "trendyol_sync_queue", item);
         processed++;
       } else {
         failed++;
@@ -135,22 +165,60 @@ export async function GET(req: NextRequest) {
          * trecatoare doar intarzie elementul, fara sa-i arda incercarile.
          */
         if (eTrecatoare(res.status)) {
-          await admin.from("trendyol_sync_queue")
-            .update({ last_error: res.error.slice(0, 500) }).eq("id", item.id);
+          /* ⚠ Se elibereaza si inchirierea: altfel randul asteapta degeaba pana expira
+             termenul de cinci minute, desi stim deja ca trebuie reluat. */
+          await scrieDacaNeschimbat(admin, "trendyol_sync_queue", item, {
+            last_error: res.error.slice(0, 500),
+            revendicat_pana: null,
+            next_retry_at: new Date(Date.now() + asteptareaDupaPana()).toISOString(),
+          });
         } else {
           const attempts = (item.attempts ?? 0) + 1;
           if (attempts >= MAX_ATTEMPTS) {
-            // Ultima incercare NU se pierde tacut: cine se uita in loguri trebuie
-            // sa poata afla ce produs a renuntat si de ce.
+            /*
+             * ═══ ⚠ SE ABANDONEAZA, DAR NU SE STERGE ═══
+             *
+             * Forma dinainte stergea randul. Cu o linie in jurnal, dar stearsa din coada:
+             * nimeni nu-l mai putea vedea, numara sau relua. Un catalog intreg putea disparea
+             * fara ca panoul sa arate altceva decat „0 in asteptare", iar comerciantul ar fi
+             * crezut ca totul a plecat.
+             *
+             * ⚠ Coloana `abandonat_la` exista in `trendyol_sync_queue` DE LA INCEPUT si nu era
+             * scrisa de nicaieri — masurat: zero folosiri in tot modulul Trendyol. Iar
+             * `revendica_din_coada` o citeste deja, deci randul marcat e sarit fara nicio
+             * schimbare in baza. Aceeasi reparatie s-a facut la eMAG acum doua zile.
+             *
+             * ⚠ ABANDONUL E CEA MAI IMPORTANTA COMPARATIE DE GENERATIE. Scris peste o cerere
+             * noua, ar opri-o definitiv fara s-o fi incercat vreodata.
+             */
+            const sAScris = await scrieDacaNeschimbat(admin, "trendyol_sync_queue", item, {
+              attempts,
+              last_error: res.error.slice(0, 500),
+              revendicat_pana: null,
+              abandonat_la: new Date().toISOString(),
+            });
+            if (!sAScris) continue;
             await logError({
               action: "trendyol-sync",
               message: `element abandonat dupa ${attempts} incercari (${item.op}): ${res.error}`.slice(0, 500),
               details: { productId: item.product_id, offerId: item.offer_id },
               businessId, severity: "warning",
             });
-            await admin.from("trendyol_sync_queue").delete().eq("id", item.id);
           } else {
-            await admin.from("trendyol_sync_queue").update({ attempts, last_error: res.error.slice(0, 500) }).eq("id", item.id);
+            /*
+             * ⚠ ASTEPTARE CRESCATOARE, nu reincercare la fiecare inchiriere.
+             *
+             * Pana acum se scriau doar `attempts` si `last_error`, deci randul se relua imediat
+             * ce expira termenul de cinci minute. Dar un refuz nu se repara singur: un produs
+             * caruia ii lipseste un atribut va fi refuzat la fel si peste cinci minute, iar
+             * fiecare reincercare arde o cerere din bugetul magazinului la Trendyol.
+             */
+            await scrieDacaNeschimbat(admin, "trendyol_sync_queue", item, {
+              attempts,
+              last_error: res.error.slice(0, 500),
+              revendicat_pana: null,
+              next_retry_at: new Date(Date.now() + asteptareaUrmatoare(attempts)).toISOString(),
+            });
           }
         }
       }
@@ -170,8 +238,23 @@ export async function GET(req: NextRequest) {
   for (const businessId of pollSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
-    await pollOpenBatches(admin, ctx);
-    polled++;
+    /*
+     * ⚠ O CITIRE PICATA NU ARE VOIE SA RUPA TRECEREA CELORLALTI. `pollOpenBatches` arunca
+     * acum `EroareCitireBaza` in loc sa citeasca o pana drept „niciun lot deschis" — dar
+     * neprinsa, aruncarea ar fi iesit din bucla si ar fi lasat neintrebate loturile TUTUROR
+     * magazinelor de dupa. Se scrie si se trece la urmatorul; loturile raman deschise si se
+     * intreaba la trecerea urmatoare.
+     */
+    try {
+      await pollOpenBatches(admin, ctx);
+      polled++;
+    } catch (e) {
+      await logError({
+        action: "trendyol-sync",
+        message: `loturile deschise nu s-au putut citi: ${e instanceof Error ? e.message : String(e)}`,
+        businessId, severity: "warning",
+      });
+    }
     await pause(PACE_MS);
   }
 

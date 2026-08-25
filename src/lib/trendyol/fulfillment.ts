@@ -109,9 +109,13 @@ export async function setPackageStatus(
    * O anulare pornita de aici lasa marfa consumata, exact ca celelalte doua.
    */
   if (side.order_id) {
+    const stareEdinio = edinioStatusForTrendyol(status);
     const t = await tranzitieComandaMarketplace(admin, {
       orderId: side.order_id, businessId: ctx.businessId,
-      status: edinioStatusForTrendyol(status), sursa: "trendyol",
+      status: stareEdinio, sursa: "trendyol",
+      /* ⚠ Aceeasi regula ca la ingest: un RETUR nu pune marfa inapoi pe raft singur. Vezi
+         nota lunga din `orders.ts`. Anularile elibereaza mai departe. */
+      elibereazaStoc: stareEdinio !== "refunded",
     });
     if (t !== "ok") {
       return {

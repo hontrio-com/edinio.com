@@ -1652,9 +1652,64 @@ export function listariDeRepus<T extends { product_id: string | null; inventory_
  * des ar fi rulat cronul, fiindca fiecare rulare relua exact aceleasi pagini.
  * Restul ramaneau „created" pe veci, desi pe Trendyol erau demult aprobate.
  */
+/**
+ * Cate listari se intreaba PE NUME intr-o trecere.
+ *
+ * ⚠ Fiecare e o cerere catre ei, din grupul „citire de produs". Douazeci ajunge ca o
+ * publicare obisnuita sa se confirme in aceeasi trecere, si e departe de orice plafon.
+ */
+const INTREBARI_TINTITE = 20;
+
+/**
+ * Listarile care asteapta aprobarea se intreaba DIRECT, pe numele lor.
+ *
+ * ═══ ⚠ DE CE, CAND EXISTA DEJA SCANAREA PAGINATA ═══
+ *
+ * Scanarea citeste catalogul lor pagina cu pagina, cu un cursor care se roteste. E completa —
+ * si aici auditul a spus mai mult decat era: nimic nu ramane „nevazut niciodata", fiindca
+ * dupa ultima pagina cursorul se intoarce la zero. Dar e LENTA: la un vanzator cu sapte mii
+ * de produse, cinci pagini pe trecere inseamna vreo paisprezece minute pana ajunge cursorul
+ * la pagina care contine chiar produsul publicat acum.
+ *
+ * Iar intrebarea pe care o punem e mica: „a fost aprobat produsul ASTA?". Avem cel mult
+ * cateva listari in asteptare, si `getApprovedProducts` primeste `productMainId`. Deci se
+ * intreaba direct, si raspunsul vine in aceeasi trecere.
+ *
+ * ⚠ SCANAREA RAMANE. Ea prinde ce intrebarea tintita nu poate: produse aprobate la ei pe care
+ * noi nici nu le avem in asteptare, si nepotriviri aparute din alta parte.
+ */
+async function confirmaTintit(
+  admin: Db, ctx: TrendyolSyncContext, now: string,
+): Promise<void> {
+  const asteapta = randuriCitite<{ id: string; product_main_id: string }>(
+    "trendyol.listariInAsteptare", await admin
+      .from("trendyol_listings").select("id, product_main_id")
+      .eq("business_id", ctx.businessId).in("status", ["pending", "created"])
+      /* ⚠ Cele mai demult neverificate intai, ca sa nu ramana niciuna in urma. */
+      .order("last_status_at", { ascending: true, nullsFirst: true })
+      .limit(INTREBARI_TINTITE) as never);
+
+  for (const l of asteapta) {
+    if (!l.product_main_id) continue;
+    const res = await getApprovedProducts(ctx.auth, { productMainId: l.product_main_id, size: 1 });
+    /* ⚠ O eroare NU inseamna „nu e aprobat": se lasa pe seama scanarii, care vine oricum. */
+    if (isTrendyolError(res)) continue;
+    const gasit = (res.data?.content ?? []).length > 0;
+    if (!gasit) continue;
+    await admin.from("trendyol_listings")
+      .update({ status: "approved", error: null, last_status_at: now, updated_at: now } as never)
+      .eq("id", l.id);
+    await pause(120);
+  }
+}
+
 export async function reconcileStatuses(
   admin: Db, ctx: TrendyolSyncContext, maxPages = 5,
 ): Promise<void> {
+  /* ⚠ Intai cele in asteptare, pe nume: o publicare se confirma in aceeasi trecere, nu peste
+     un sfert de ora. Vezi `confirmaTintit`. */
+  await confirmaTintit(admin, ctx, new Date().toISOString());
+
   const approvedMainIds = new Set<string>();
   const start = Math.max(0, Number(ctx.config.reconcile_page ?? 0) || 0);
   let page = start;
@@ -1691,9 +1746,12 @@ export async function reconcileStatuses(
   if (approvedMainIds.size === 0) return;
   const now = new Date().toISOString();
   // Mark listings that appear in the approved set (and are not already approved).
-  const { data: listings } = await admin
-    .from("trendyol_listings").select("id, product_main_id, status")
-    .eq("business_id", ctx.businessId).in("status", ["pending", "created"]);
+  /* ⚠ O citire picata nu inseamna „nicio listare in asteptare": ar fi lasat produsele
+     aprobate marcate „in aprobare" pana la trecerea urmatoare, fara nicio urma de ce. */
+  const listings = randuriCitite<{ id: string; product_main_id: string; status: string }>(
+    "trendyol.listariDeConfirmat", await admin
+      .from("trendyol_listings").select("id, product_main_id, status")
+      .eq("business_id", ctx.businessId).in("status", ["pending", "created"]) as never);
   for (const l of listings ?? []) {
     if (approvedMainIds.has((l as { product_main_id: string }).product_main_id)) {
       await admin.from("trendyol_listings").update({ status: "approved", error: null, last_status_at: now, updated_at: now } as never).eq("id", (l as { id: string }).id);

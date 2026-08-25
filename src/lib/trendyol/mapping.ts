@@ -508,6 +508,38 @@ export function buildVariantPrices(
   return { listPrice: round2(list), salePrice: round2(sale) };
 }
 
+/**
+ * Atributele, in forma pe care o primeste API-ul lor.
+ *
+ * ⚠ `attributeValueId` SI `attributeValueIds` NU SE TRIMIT IMPREUNA. Cand comerciantul a ales
+ * mai multe valori (categoriile cu `allowMultipleAttributeValues`), pleaca lista si singularul
+ * se lasa deoparte — altfel trimitem doua declaratii despre acelasi atribut si nu stim pe care
+ * o citesc ei.
+ *
+ * ⚠ Si valorile goale se scot: un `attributeValueIds: []` ar fi spus „atributul asta il
+ * declar, si nu are nicio valoare", ceea ce e mai rau decat sa nu-l trimitem deloc.
+ */
+export function curataAtribute(atribute: TrendyolProductAttribute[]): TrendyolProductAttribute[] {
+  const out: TrendyolProductAttribute[] = [];
+  for (const a of atribute) {
+    if (!a || typeof a.attributeId !== "number") continue;
+    const multe = Array.isArray(a.attributeValueIds)
+      ? a.attributeValueIds.filter((x) => typeof x === "number" && x > 0)
+      : [];
+    if (multe.length > 0) {
+      out.push({ attributeId: a.attributeId, attributeValueIds: multe });
+      continue;
+    }
+    if (typeof a.attributeValueId === "number" && a.attributeValueId > 0) {
+      out.push({ attributeId: a.attributeId, attributeValueId: a.attributeValueId });
+      continue;
+    }
+    const liber = (a.customAttributeValue ?? "").trim();
+    if (liber) out.push({ attributeId: a.attributeId, customAttributeValue: liber });
+  }
+  return out;
+}
+
 // ── Item building ─────────────────────────────────────────────────────────────
 export interface BuildContext {
   config: TrendyolConfig;
@@ -588,7 +620,7 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
       salePrice: priced.salePrice,
       vatRate: tvaPentruVitrina(config, v.vat_rate),
       images: images.map((url) => ({ url })),
-      attributes: [...productLevelAttrs, ...(Array.isArray(v.attributes) ? v.attributes : [])],
+      attributes: curataAtribute([...productLevelAttrs, ...(Array.isArray(v.attributes) ? v.attributes : [])]),
     };
     /*
      * Garantia SGR, obligatorie prin lege in Romania.

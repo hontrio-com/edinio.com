@@ -92,7 +92,10 @@ test("⚠ campul nou NU inlocuieste atributul, pana la termen", () => {
    * scoate nimic din `attributes`.
    */
   const m = viu("src/lib/trendyol/mapping.ts");
-  assert.match(m, /attributes: \[\.\.\.productLevelAttrs, \.\.\.\(Array\.isArray\(v\.attributes\) \? v\.attributes : \[\]\)\]/);
+  /* ⚠ Forma s-a schimbat in aceeasi zi, cand atributele au inceput sa treaca prin
+     `curataAtribute` (multi-select). Intelesul probei e acelasi: atributele PLEACA mai
+     departe, alaturi de `origin`, nu in locul lui. */
+  assert.match(m, /attributes: curataAtribute\(\[\.\.\.productLevelAttrs, \.\.\.\(Array\.isArray\(v\.attributes\) \? v\.attributes : \[\]\)\]\)/);
 });
 
 test("⚠ si baza pazeste forma: doua litere mari, sau nimic", () => {

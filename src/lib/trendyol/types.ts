@@ -145,6 +145,19 @@ export function curieriVitrina(code: TrendyolStoreFront | undefined): TrendyolCa
 export interface TrendyolAttributeValue {
   attributeId: number;
   attributeValueId?: number;
+  /**
+   * Mai multe valori pe acelasi atribut.
+   *
+   * ⚠ EXISTA IN API-UL LOR, si taxonomia ne-o spunea deja: cand
+   * `allowMultipleAttributeValues` e `true` la o categorie, atributul acela primeste
+   * `attributeValueIds: [123, 456]`. Noi citeam steagul din taxonomie si nu-l foloseam
+   * nicaieri, deci o categorie cu un atribut multi-select OBLIGATORIU nu putea fi
+   * reprezentata: se trimitea o singura valoare, iar ei refuzau produsul.
+   *
+   * ⚠ NU SE TRIMIT AMANDOUA. `attributeValueId` si `attributeValueIds` se exclud; cand exista
+   * lista, ea pleaca si singularul se lasa deoparte.
+   */
+  attributeValueIds?: number[];
   customAttributeValue?: string;
 }
 
@@ -334,6 +347,19 @@ export interface TrendyolImage { url: string }
 export interface TrendyolProductAttribute {
   attributeId: number;
   attributeValueId?: number;
+  /**
+   * Mai multe valori pe acelasi atribut.
+   *
+   * ⚠ EXISTA IN API-UL LOR, si taxonomia ne-o spunea deja: cand
+   * `allowMultipleAttributeValues` e `true` la o categorie, atributul acela primeste
+   * `attributeValueIds: [123, 456]`. Noi citeam steagul din taxonomie si nu-l foloseam
+   * nicaieri, deci o categorie cu un atribut multi-select OBLIGATORIU nu putea fi
+   * reprezentata: se trimitea o singura valoare, iar ei refuzau produsul.
+   *
+   * ⚠ NU SE TRIMIT AMANDOUA. `attributeValueId` si `attributeValueIds` se exclud; cand exista
+   * lista, ea pleaca si singularul se lasa deoparte.
+   */
+  attributeValueIds?: number[];
   customAttributeValue?: string;
 }
 // Campurile sunt exact cele din „Product Create V2" pe marketplace-ul

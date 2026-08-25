@@ -72,11 +72,46 @@ export async function enqueueTrendyolSync(
 ): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data: ss } = await admin
+    const { data: ss, error: eConfig } = await admin
       .from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
+
+    /*
+     * ═══ ⚠ „N-AM PUTUT CITI" NU E „NU E CONECTAT" ═══
+     *
+     * `error` nu se citea deloc. La o pana de o clipa, `ss` vine `null`, configul iese gol, si
+     * functia se opreste exact ca pentru un magazin FARA Trendyol. Miscarea nu intra in coada
+     * NICIODATA: nimeni n-o reincearca, fiindca nimeni nu stie ca s-a pierdut.
+     *
+     * ⚠ E chiar tiparul care a costat 1051 de produse VetDepo pe 21.08 — un `catch {}` gol.
+     * Aici nu era gol, era mai rau: arata ca o hotarare.
+     */
+    if (eConfig) {
+      inghiteDarScrie("unul", businessId, eConfig, { productId, offerId, op, unde: "config" });
+      return;
+    }
+
     const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
     if (!config.connected || !config.api_key) return;
-    if (config.auto_sync === false) return;
+
+    /*
+     * ═══ ⚠ „TRIMITE AUTOMAT" NU E „PUBLICA PRODUSELE NOI" (26.08.2026) ═══
+     *
+     * Panoul are DOUA comutatoare, si sunt independente: se poate stinge unul si lasa celalalt
+     * aprins. Dar taietura se facea la `auto_sync`, iar `auto_publish` se citea abia mai jos —
+     * deci nu apuca sa fie intrebat niciodata.
+     *
+     * ⚠ CE INSEMNA PENTRU COMERCIANT: cel care spune „preturile le conduc eu din panoul
+     * Trendyol, dar produsele noi sa plece singure" — o combinatie pe care interfata i-o
+     * ingaduie — nu primea NIMIC. Nici in coada, nici in jurnal: iesirea era un `return` gol.
+     *
+     * ⚠ ACEEASI GAURA A FOST INCHISA LA eMAG CU O ZI INAINTE, cu aceleasi cuvinte. Aici a
+     * ramas pana a gasit-o auditul Trendyol.
+     *
+     * ⚠ RETRAGEREA TRECE ORICUM: „mi-am stins sincronizarea automata" nu inseamna „lasa
+     * produsul sters din magazin la vanzare pe Trendyol".
+     */
+    const publicareCeruta = op === "upsert" && produsNou && config.auto_publish === true;
+    if (config.auto_sync === false && op !== "delete" && !publicareCeruta) return;
     /*
      * In mod normal se pun la coada doar produsele care au deja o listare pe
      * Trendyol: un produs nou nu se trimite nicaieri pana nu-l pregateste

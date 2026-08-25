@@ -38,6 +38,12 @@ function esteObligatoriu(a: TrendyolCategoryAttribute): boolean {
 function areValoare(v: TrendyolProductAttribute | undefined): boolean {
   if (!v) return false;
   if (typeof v.attributeValueId === "number" && v.attributeValueId > 0) return true;
+  /* ⚠ SI O LISTA IMPLINESTE CERINTA. Pe categoriile cu `allowMultipleAttributeValues`,
+     valoarea aleasa de comerciant sta in `attributeValueIds` — nenumarata aici, produsul ar fi
+     fost oprit ca „fara atributul obligatoriu" desi el chiar il completase. */
+  if (Array.isArray(v.attributeValueIds) && v.attributeValueIds.some((x) => typeof x === "number" && x > 0)) {
+    return true;
+  }
   return typeof v.customAttributeValue === "string" && v.customAttributeValue.trim().length > 0;
 }
 

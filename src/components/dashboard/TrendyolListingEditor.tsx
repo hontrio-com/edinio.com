@@ -14,12 +14,22 @@ import { deosebesteAtribut, numeRepetate } from "@/lib/trendyol/atribute-obligat
 import type { TrendyolBrand, TrendyolCategoryAttribute, TrendyolProductAttribute, TrendyolStoreFront } from "@/lib/trendyol/types";
 import { coteTvaVitrina, infoVitrina, necesitaSgr, pretSgr, tvaImplicitVitrina } from "@/lib/trendyol/types";
 
-type AttrSel = { valueId?: number; custom?: string };
+/**
+ * ⚠ `valueIds` e pentru categoriile cu `allowMultipleAttributeValues`. Taxonomia lor ne
+ * spunea de mult steagul asta; noi il citeam si nu-l foloseam nicaieri, deci un atribut
+ * multi-select OBLIGATORIU nu putea fi completat — se trimitea o singura valoare si ei
+ * refuzau produsul.
+ */
+type AttrSel = { valueId?: number; valueIds?: number[]; custom?: string };
 type AttrValue = { attributeValueId: number; attributeValue: string };
 
 function toProductAttribute(attributeId: number, sel: AttrSel | undefined): TrendyolProductAttribute | null {
   if (!sel) return null;
   if (sel.custom && sel.custom.trim()) return { attributeId, customAttributeValue: sel.custom.trim() };
+  /* ⚠ Lista INAINTEA valorii singure: cele doua se exclud in incarcatura lor, si cand omul a
+     ales mai multe, aceea e alegerea lui. */
+  const multe = (sel.valueIds ?? []).filter((x) => typeof x === "number" && x > 0);
+  if (multe.length > 0) return { attributeId, attributeValueIds: multe };
   if (sel.valueId) return { attributeId, attributeValueId: sel.valueId };
   return null;
 }
@@ -80,7 +90,7 @@ export function TrendyolListingEditor({
       const salvate = ed.listing?.attributes?.length ? ed.listing.attributes : ed.mappedAttributes;
       if (salvate?.length) {
         const sel: Record<number, AttrSel> = {};
-        for (const a of salvate) sel[a.attributeId] = { valueId: a.attributeValueId, custom: a.customAttributeValue };
+        for (const a of salvate) sel[a.attributeId] = { valueId: a.attributeValueId, valueIds: a.attributeValueIds, custom: a.customAttributeValue };
         setListingAttrSel(sel);
       }
       setDimWeight(ed.listing?.dimensional_weight != null ? String(ed.listing.dimensional_weight) : "");
@@ -99,7 +109,7 @@ export function TrendyolListingEditor({
       for (const v of ed.variants) {
         if (!v.attributes?.length) continue;
         const sel: Record<number, AttrSel> = {};
-        for (const a of v.attributes) sel[a.attributeId] = { valueId: a.attributeValueId, custom: a.customAttributeValue };
+        for (const a of v.attributes) sel[a.attributeId] = { valueId: a.attributeValueId, valueIds: a.attributeValueIds, custom: a.customAttributeValue };
         peVarianta[v.key] = sel;
       }
       setVariantAttrSel(peVarianta);
@@ -222,7 +232,7 @@ export function TrendyolListingEditor({
            * automat", comerciantul a cerut-o, deci se aplică.
            */
           if (s.slaba && doarGoale) continue;
-          next[s.attributeId] = { valueId: s.attributeValueId, custom: s.customAttributeValue };
+          next[s.attributeId] = { valueId: s.attributeValueId, valueIds: s.attributeValueIds, custom: s.customAttributeValue };
         }
         return next;
       });
@@ -443,6 +453,44 @@ export function TrendyolListingEditor({
      * sau „Model" nu se parcurg deruland. Acelasi component ca la About You,
      * care filtreaza fara diacritice si fara sensibilitate la registru.
      */
+    /*
+     * ═══ ATRIBUTELE CU MAI MULTE VALORI ═══
+     *
+     * `allowMultipleAttributeValues` vine din taxonomia LOR si spune ca atributul asta
+     * primeste o lista. Cu un singur selector, o categorie care cere asa ceva nu putea fi
+     * completata deloc — produsul pleca cu o valoare si ei il refuzau.
+     *
+     * ⚠ Lista se arata ca BIFE, nu ca un al doilea selector: omul trebuie sa vada deodata ce
+     * a ales, iar valorile sunt putine la atributele multi-select (materiale, caracteristici).
+     * Cand sunt multe, cautarea de deasupra le filtreaza.
+     */
+    if (g.allowMultipleAttributeValues) {
+      const alese = new Set(sel?.valueIds ?? []);
+      return (
+        <div className="max-h-32 overflow-y-auto rounded border border-border bg-background p-1.5 space-y-1">
+          {values.map((v) => (
+            <label key={v.attributeValueId} className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded"
+                checked={alese.has(v.attributeValueId)}
+                onChange={(e) => {
+                  const next = new Set(alese);
+                  if (e.target.checked) next.add(v.attributeValueId);
+                  else next.delete(v.attributeValueId);
+                  onChange({ valueIds: [...next] });
+                }}
+              />
+              <span>{v.attributeValue}</span>
+            </label>
+          ))}
+          {values.length === 0 && (
+            <span className="text-[11px] text-muted-foreground">Fără valori de ales.</span>
+          )}
+        </div>
+      );
+    }
+
     return (
       <SelectCautare
         dimensiune="mic"
@@ -542,7 +590,7 @@ export function TrendyolListingEditor({
             {productAttrs.map((g) => {
               const sursa = completate[g.attribute.id];
               const sel = listingAttrSel[g.attribute.id];
-              const areValoare = !!sel && (!!sel.valueId || !!sel.custom?.trim());
+              const areValoare = !!sel && (!!sel.valueId || (sel.valueIds?.length ?? 0) > 0 || !!sel.custom?.trim());
               return (
                 <div key={g.attribute.id}>
                   <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">

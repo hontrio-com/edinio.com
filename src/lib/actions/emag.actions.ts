@@ -269,7 +269,8 @@ export interface StareEmag {
    * ⚠ Numai cele LIVRATE. Una abia intrata n-are de ce sa aiba factura inca, iar
    * numarata, cifra ar fi fost mereu nenula si omul ar fi invatat s-o ignore.
    */
-  comenziFaraFactura: number;
+  /** ⚠ `null` = nu s-a putut citi. Ecranul nu are voie sa scrie „0" peste „nu stiu". */
+  comenziFaraFactura: number | null;
   inCoada: number;
   /**
    * Elemente oprite dupa ce si-au ars toate incercarile.
@@ -422,7 +423,10 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
       starileCitite: !peStare.error && peStare.data != null,
       derivate: derivate.count ?? 0,
     },
-    comenziFaraFactura: faraFactura.count ?? 0,
+    /* ⚠ `?? 0` peste o citire picata scrie „0 comenzi fără factură" — chiar minciuna
+       denuntata de nota despre `starileCitite` din acelasi fisier. `null` inseamna
+       „nu stiu", si ecranul stie sa nu arate un cartonas gol. */
+    comenziFaraFactura: faraFactura.error ? null : (faraFactura.count ?? 0),
     inCoada: inCoada.count ?? 0,
     abandonate: abandonate.count ?? 0,
   };

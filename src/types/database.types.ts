@@ -1343,6 +1343,7 @@ export type Database = {
       }
       emag_offers: {
         Row: {
+          amprenta_continut: string | null
           auto_sync: boolean
           best_offer_sale_price: number | null
           brand: string | null
@@ -1380,6 +1381,7 @@ export type Database = {
           variant_title: string | null
         }
         Insert: {
+          amprenta_continut?: string | null
           auto_sync?: boolean
           best_offer_sale_price?: number | null
           brand?: string | null
@@ -1417,6 +1419,7 @@ export type Database = {
           variant_title?: string | null
         }
         Update: {
+          amprenta_continut?: string | null
           auto_sync?: boolean
           best_offer_sale_price?: number | null
           brand?: string | null

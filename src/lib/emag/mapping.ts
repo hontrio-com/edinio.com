@@ -17,6 +17,7 @@
  */
 
 import { combinatiiActiveUnice, comboStock, comboUnitPrice, parseVariants } from "@/lib/storefront/variants";
+import { createHash } from "node:crypto";
 import { LIMITE_EMAG, partNumberPreaLung, plafonat, taiat } from "./limite";
 import { codDeBareCurat } from "./ean";
 /*
@@ -313,6 +314,110 @@ function gtinProdus(produs: ProdusDeCartografiat): string | null {
   return ps.google?.gtin ?? null;
 }
 
+/**
+ * Codul de bare cu care va pleca oferta asta la eMAG.
+ *
+ * ═══ ⚠ O SINGURA SURSA PENTRU „CE TRIMIT" SI „CE VERIFIC" ═══
+ *
+ * Pana acum erau doua, si se despartisera:
+ *
+ *   ce TRIMITEM   `ident.ean ?? codDeBareCurat(gtin din fisa produsului)` — reparat 24.08
+ *   ce VERIFICAM  `randuri.filter(r => …(r.ean ?? "").trim())` — citit numai din
+ *                 `emag_offers.ean`, coloana pe care o scrie DOAR importul, din raspunsul LOR
+ *
+ * ⚠ CE COSTA: la un produs facut in Edinio, randul din `emag_offers` are `ean` NULL —
+ * `asiguraIdentitatile` insereaza sapte coloane si codul nu e printre ele. Deci filtrul
+ * dadea lista goala, `cautaInCatalogulLor` iesea cu „mergi" INAINTE de orice cerere, si
+ * `documentation/find_by_eans` nu se chema NICIODATA pentru un produs nou.
+ *
+ * Adica toata masinaria scrisa impotriva duplicatului in catalogul lor comun —
+ * `atasare`, `inchis`, `nehotarat`, `avem_deja`, plus oprirea adaugata pe 25.08 — rula
+ * numai pentru ofertele venite din import, unde duplicatul nici nu se poate produce. Si
+ * tacea exact acolo unde se putea.
+ *
+ * ⚠ Nu e „la prima publicare": e la fiecare publicare, pana cand cineva face un import
+ * complet care umple coloana din raspunsul lor.
+ *
+ * ⚠ ORDINEA E CEA DIN `ofertaSingura`, si trebuie sa ramana asa: ce ne-au spus EI bate ce
+ * stim noi, fiindca `ident.ean` e codul confirmat de ei pentru chiar oferta aceea.
+ */
+export function eanDeTrimis(
+  produs: ProdusDeCartografiat,
+  variantTitle: string | null,
+  identEan?: string | null,
+): string | null {
+  if (identEan) return identEan;
+  if (!variantTitle) return codDeBareCurat(gtinProdus(produs));
+
+  /* ⚠ Codul COMBINATIEI, niciodata al produsului: un cod de bare identifica un ambalaj
+     anume. Cazut pe cel al produsului, fiecare marime ar pleca cu ACELASI cod, iar eMAG
+     le-ar lega pe toate de aceeasi pagina sau le-ar respinge ca duplicate. */
+  /* ⚠ `parseVariants` primeste TOT `page_sections`, nu `page_sections.variants` — asa il
+     cheama si restul fisierului (liniile 528, 1050, 1108). Dat doar nodul interior,
+     intoarce `null`, lista iese goala, si fiecare combinatie ar fi plecat FARA cod. */
+  const c = combinatiiActiveUnice(parseVariants(produs.page_sections))
+    .find((x) => x.title === variantTitle);
+  return c ? codDeBareCurat(c.gtin) : null;
+}
+
+/**
+ * Amprenta CONTINUTULUI care pleaca pe ruta grea.
+ *
+ * ═══ ⚠ DE CE O AMPRENTA SI NU INCA UN MARCAJ DE TIMP ═══
+ *
+ * Plasa de siguranta intreba `p.updated_at > o.last_synced_at`. Dar `last_synced_at` se
+ * scrie la ORICE reusita, inclusiv dupa o simpla miscare de stoc — `duStocul` cheama
+ * aceeasi `scrieRezultatul`. Deci:
+ *
+ *   10:00  se schimba titlul si poza · punerea in coada se pierde
+ *   10:04  se vinde ceva · stocul pleaca si reuseste → `last_synced_at = 10:04`
+ *   10:10  plasa intreaba 10:00 > 10:04 ? NU. „Nimic neplecat."
+ *
+ * Iar la eMAG raman titlul si poza vechi. ⚠ Cu cat magazinul vinde mai bine, cu atat plasa
+ * e mai oarba: fiecare vanzare sterge urma schimbarii pierdute.
+ *
+ * ⚠ SI UN `last_content_synced_at` N-AR FI AJUNS. `products.updated_at` se misca la orice
+ * scriere pe produs, deci si la scaderea stocului dupa vanzare — iar atunci am fi retrimis
+ * toata documentatia dupa fiecare comanda.
+ *
+ * Marcajele de timp raspund la „cand". Intrebarea e „ce". Amprenta se schimba numai cand
+ * se schimba chiar campurile care pleaca; stocul si pretul n-o pot atinge.
+ *
+ * ⚠ CE INTRA IN EA: exact ce trimite ruta grea si NIMIC altceva. Pretul si stocul sunt
+ * lasate afara ANUME — ele au reconcilierea lor (`masoaraDeriva`), iar puse aici ar fi
+ * facut fiecare vanzare sa para o schimbare de continut.
+ */
+export function amprentaContinutului(produs: ProdusDeCartografiat): string {
+  const ps = (produs.page_sections ?? {}) as {
+    google?: { brand?: unknown; gtin?: unknown };
+    specifications?: unknown;
+    dimensions?: unknown;
+    variants?: unknown;
+  };
+
+  /* ⚠ Ordinea e FIXA, nu `Object.keys`: doua obiecte cu aceleasi valori in alta ordine
+     trebuie sa dea aceeasi amprenta, altfel plasa s-ar aprinde la o simpla rescriere a
+     fisei care n-a schimbat nimic. Aceeasi lectie ca la `deriva.ts`. */
+  const bucati: unknown[] = [
+    produs.name ?? null,
+    produs.description ?? null,
+    produs.category ?? null,
+    produs.sku ?? null,
+    produs.weight_grams ?? null,
+    produs.is_active ?? null,
+    Array.isArray(produs.images) ? produs.images : [],
+    ps.google?.brand ?? null,
+    ps.google?.gtin ?? null,
+    ps.specifications ?? null,
+    ps.dimensions ?? null,
+    /* ⚠ Variantele intra INTREGI: titlu, cod, gtin si poza fiecarei combinatii pleaca in
+       incarcatura, deci o schimbare acolo e o schimbare de continut. */
+    ps.variants ?? null,
+  ];
+
+  return createHash("sha256").update(JSON.stringify(bucati)).digest("hex").slice(0, 32);
+}
+
 /** Ce stie magazinul despre el insusi. */
 export interface ContextMagazin {
   /**
@@ -575,9 +680,9 @@ export function construiesteOferte(
     }
     const oferta = ofertaSingura({
       produs, magazin, comun, ident,
-      /* ⚠ Ce stim NOI bate ce-am primit inapoi: `ident.ean` vine din raspunsul lor si
-         e gol la prima trimitere, iar fisa produsului il are de la inceput. */
-      ean: ident.ean ?? codDeBareCurat(gtinProdus(produs)),
+      /* ⚠ Aceeasi functie pe care o foloseste si VERIFICAREA din catalogul lor. Doua
+         socoteli separate s-au departat o data deja; vezi `eanDeTrimis`. */
+      ean: eanDeTrimis(produs, null, ident.ean),
       pretAfisat: produs.price,
       compareAt: produs.compare_at_price,
       stoc: produs.stock_quantity ?? 0,
@@ -627,7 +732,7 @@ export function construiesteOferte(
        * legat pe toate de aceeasi pagina de produs din catalogul lor, sau le-ar fi
        * respins ca duplicate. Mai bine fara cod decat cu unul care minte.
        */
-      ean: ident.ean ?? codDeBareCurat(c.gtin),
+      ean: eanDeTrimis(produs, c.title, ident.ean),
       pretAfisat: comboUnitPrice(c, produs.price),
       compareAt: produs.compare_at_price,
       /* ⚠ Stocul COMBINATIEI, nu al produsului. `comboStock` intoarce `null` cand

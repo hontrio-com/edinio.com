@@ -43,7 +43,17 @@ test("lipsa facturii se vede pe ecran, nu doar in filtrul cronului", async () =>
   const { readFileSync } = await import("node:fs");
   const ecran = readFileSync("src/components/dashboard/EmagClient.tsx", "utf8");
   assert.ok(
-    ecran.includes("status.comenziFaraFactura > 0"),
+    /\(status\.comenziFaraFactura \?\? 0\) > 0/.test(ecran),
     "ecranul nu spune niciodata cate comenzi expediate n-au factura la eMAG",
+  );
+
+  /* ⚠ Si `?? 0` e AICI, nu la numarare. La numarare era o minciuna: `faraFactura.count ?? 0`
+     scria „0 comenzi fara factura" peste o citire PICATA, pentru un magazin care are. Acum
+     numararea raspunde `null` la cadere, iar ecranul lasa cartonasul sa dispara — mai bine
+     lipseste decat sa spuna un zero fals. */
+  const actiuni = readFileSync("src/lib/actions/emag.actions.ts", "utf8");
+  assert.match(
+    actiuni, /comenziFaraFactura: faraFactura\.error \? null : \(faraFactura\.count \?\? 0\)/,
+    "numararea trebuie sa deosebeasca „zero\" de „n-am putut citi\"",
   );
 });

@@ -33,8 +33,8 @@ import {
 } from "./client";
 import { ePreaMareLotul, mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
 import {
-  construiesteOferte, masuratoriEmag, oferteUsoare, stocuriDeTrimis,
-  type IdentitateUsoara, type ProdusDeCartografiat,
+  amprentaContinutului, construiesteOferte, eanDeTrimis, masuratoriEmag, oferteUsoare,
+  stocuriDeTrimis, type IdentitateUsoara, type ProdusDeCartografiat,
 } from "./mapping";
 import { rutaDeTrimitere } from "./rute";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
@@ -55,6 +55,14 @@ interface RandOfertaLocal {
   variant_title: string | null;
   /** Numele ofertei LA EI, scris de reconciliere. Vezi `schimbaSiNumele`. */
   nume_emag: string | null;
+  /**
+   * Starea ofertei LA EI: 1 activa, 0 oprita, 2 scoasa din vanzare („End of Life").
+   *
+   * ⚠ `null` inseamna „inca n-am citit", nu „n-are stare". Pe „nu stiu" nu se opreste
+   * nimic: mai bine o cerere in plus decat o oferta pe care nu i-o mai atingem niciodata
+   * fiindca n-am apucat s-o reconciliem.
+   */
+  status_la_ei: number | null;
   family_id: number | null;
   part_number_key: string | null;
   ean: string | null;
@@ -97,6 +105,31 @@ export interface RezultatTrimitere {
  *
  * De aceea sta aici, exportata si probata: o regula scrisa in trei locuri se desparte.
  */
+/**
+ * eMAG a scos oferta din vanzare?
+ *
+ * ═══ ⚠ `status: 2` = „END OF LIFE", SI NU E O STARE DE-A NOASTRA ═══
+ *
+ * Masurat pe contul VetDepo: **3.095 din 4.678 de oferte** sunt `status_la_ei = 2` — doua
+ * treimi din catalog, scoase din vanzare candva de comerciant sau de ei.
+ *
+ * eMAG REFUZA orice scriere de pret sau de stoc pe ele, si o spune limpede:
+ *
+ *   „ERROR: The offer status is 2 (end of life). If you want to sell this product,
+ *    please update the status to 1 (active)."
+ *
+ * ⚠ CE FACEA PANA ACUM: le trimitea oricum, la fiecare miscare de stoc, la nesfarsit.
+ * Fiecare incercare arde o cerere din cele 3 pe secunda ale magazinului — chiar cererile
+ * prin care trebuie sa plece stocul ofertelor care CHIAR se vand.
+ *
+ * ⚠ SI CE NU FACE REPARATIA ASTA: nu trimite `status: 1` ca sa le repuna la vanzare.
+ * Ar fi o hotarare a COMERCIANTULUI luata de un cron — exact greseala facuta cu plasa de
+ * siguranta, care a inceput sa publice singura un catalog. Se opreste, si se spune de ce.
+ */
+export function eScoasaDeLaVanzare(rand: { status_la_ei: number | null }): boolean {
+  return rand.status_la_ei === 2;
+}
+
 export function ofertaEsteLaEi(
   rand: { last_synced_at: string | null; creat_de_edinio: boolean },
 ): boolean {
@@ -269,7 +302,7 @@ async function citesteRandurile(
   admin: Admin, businessId: string, productId: string,
 ): Promise<RandOfertaLocal[]> {
   const r = await admin.from("emag_offers")
-    .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at, creat_de_edinio, nume_emag")
+    .select("id, emag_id, variant_title, family_id, part_number_key, ean, auto_sync, last_synced_at, creat_de_edinio, nume_emag, status_la_ei")
     .eq("business_id", businessId).eq("product_id", productId)
     .order("emag_id", { ascending: true });
   return randuriCitite<RandOfertaLocal>("emag_offers", r as never);
@@ -374,7 +407,7 @@ async function duTotul(
    * se reia cu asteptare crescatoare.
    */
   const stieCatalogul = await cautaInCatalogulLor(
-    admin, ctx, await citesteRandurile(admin, ctx.businessId, produs.id),
+    admin, ctx, await citesteRandurile(admin, ctx.businessId, produs.id), produs,
   );
   if (stieCatalogul.fel === "trecatoare") {
     return {
@@ -521,6 +554,56 @@ async function duTotul(
   );
 
   /*
+   * ═══ ⚠ AMPRENTA SE SCRIE NUMAI AICI, SI NUMAI LA REUSITA ═══
+   *
+   * Aici e SINGURUL loc din care pleaca continutul (`product_offer/save`). Scrisa si pe
+   * rutele usoare, o miscare de stoc ar fi „confirmat" un continut pe care nu l-a trimis —
+   * exact orbirea pe care amprenta o repara.
+   *
+   * ⚠ Se scrie amprenta produsului DE ACUM, nu de la inceputul trecerii: intre citire si
+   * trimitere n-a trecut nimic care s-o schimbe, iar recalculata din acelasi obiect e
+   * aceeasi. Ce se schimba DUPA trimitere ramane o schimbare neplecata, si asa trebuie.
+   */
+  /*
+   * ═══ ⚠ CE N-A PLECAT INTREG NU SE MARCHEAZA CA PLECAT (25.08.2026) ═══
+   *
+   * `schimbaSiNumele` omite `part_number` cand se schimba si numele — eMAG refuza sa le
+   * primeasca pe amandoua deodata. Nota de acolo spunea ca „la trecerea urmatoare codul
+   * pleaca singur", dar NIMIC nu crea acea trecere: dupa succes elementul iesea din coada,
+   * reconcilierea repara doar pret si stoc, iar plasa nu vedea nicio schimbare.
+   *
+   * Rezultat: la eMAG numele nou si codul VECHI, pe termen nelimitat.
+   *
+   * ⚠ Leacul nu e inca un mecanism, ci o abtinere: daca a ramas ceva netrimis, NU se scrie
+   * amprenta. Atunci plasa vede continutul ca nesincronizat si repune produsul in coada —
+   * iar la trecerea aceea numele va fi deja al lor, `schimbaSiNumele` va fi fals, si codul
+   * pleaca. A doua trecere e chiar plasa, nu un al doilea mecanism care sa se strice singur.
+   *
+   * ⚠ Se citeste din INCARCATURA, nu se re-socoteste: `part_number` lipsa pe o ofertă
+   * construita inseamna exact „am omis ceva". O a doua socoteala s-ar fi departat de prima,
+   * ca de trei ori azi.
+   */
+  const aRamasCeva = (oferte as EmagProdusOferta[]).some((o) => !o.part_number);
+
+  if (sAIncheiat(r.verdict as VerdictEmag) && !aRamasCeva) {
+    const { error: eAmprenta } = await admin.from("emag_offers")
+      .update({ amprenta_continut: amprentaContinutului(produs) })
+      .eq("business_id", ctx.businessId).eq("product_id", produs.id);
+    if (eAmprenta) {
+      /* ⚠ Nescrisa, amprenta ramane cea veche si plasa va repune produsul in coada la
+         urmatoarea trecere. Adica o cerere in plus, nu o pierdere — deci se scrie in
+         jurnal si se merge mai departe. */
+      void logError({
+        action: "emag.amprenta",
+        message: `amprenta continutului nu s-a scris: ${eAmprenta.message}`,
+        details: { productId: produs.id, businessId: ctx.businessId },
+        businessId: ctx.businessId,
+        severity: "warning",
+      });
+    }
+  }
+
+  /*
    * ⚠ OBSERVATIILE NU SE PIERD la o trimitere reusita.
    *
    * „Oferta pleaca fara cod de bare” e adevarat si merita stiut: in categoriile unde EAN-ul
@@ -655,7 +738,7 @@ async function duOferta(
    * nimeni nu afla: chiar forma incidentului VetDepo.
    */
   if (usoare.length === 0) {
-    const m = "Produsul nu are nicio ofertă eMAG de actualizat. Publică-l întâi.";
+    const m = deCeNimicDeTrimis(randuri);
     await scrieEroare(admin, ctx.businessId, produs.id, m);
     return { verdict: "refuz", mesaj: m };
   }
@@ -685,7 +768,7 @@ async function duStocul(
      raporteaza succes fara sa plece nicaieri inseamna ca eMAG continua sa vanda
      marfa pe care magazinul n-o mai are. */
   if (stocuri.length === 0) {
-    const m = "Produsul nu are nicio ofertă eMAG al cărei stoc să fie actualizat.";
+    const m = deCeNimicDeTrimis(randuri);
     await scrieEroare(admin, ctx.businessId, produs.id, m);
     return { verdict: "refuz", mesaj: m };
   }
@@ -771,8 +854,46 @@ async function duStocul(
  */
 function identitatiUsoare(randuri: RandOfertaLocal[]): IdentitateUsoara[] {
   return randuri
-    .filter((r) => r.last_synced_at != null)
+    /*
+     * ═══ ⚠ AL DOILEA MARTOR, SI AICI (25.08.2026) ═══
+     *
+     * Filtrul era `last_synced_at != null`, adica „am trimis-o NOI". Dar o oferta
+     * PRELUATA la import are `last_synced_at` gol si `creat_de_edinio: false` — exista la
+     * ei, doar ca n-am pus noi mana pe ea.
+     *
+     * ⚠ Deci dupa ce comerciantul apasa „preia-le in Edinio" si porneste `auto_sync`,
+     * prima lui vanzare raspundea „Produsul nu are nicio ofertă eMAG al cărei stoc să fie
+     * actualizat." Ofertele importate — chiar cele pentru care a cerut anume sincronizarea
+     * — ramaneau intr-un colt unde nu le atingea nici stocul, nici pretul.
+     *
+     * `ofertaEsteLaEi` e regula casei si era deja folosita la alegerea rutei si la
+     * retragere. Aici ramasese copia veche, cu un singur martor — a treia oara azi cand
+     * aceeasi regula scrisa in doua locuri se desparte.
+     */
+    .filter(ofertaEsteLaEi)
+    /* ⚠ Cele scoase de ei din vanzare NU se trimit: refuza si pretul, si stocul. Vezi
+       `eScoasaDeLaVanzare`. Mesajul pentru om il da apelantul, care stie de ce lista a
+       iesit goala. */
+    .filter((r) => !eScoasaDeLaVanzare(r))
     .map((r) => ({ variant_title: r.variant_title, emag_id: r.emag_id }));
+}
+
+/**
+ * De ce n-a ramas nicio ofertă de trimis pe ruta usoara.
+ *
+ * ⚠ „Publică-l întâi" si „eMAG l-a scos din vanzare" sunt doua lucruri complet diferite,
+ * iar spuse la fel, omul cauta unde nu e. Primul il trimite la butonul de publicare — pe
+ * care il apasa degeaba, fiindca oferta EXISTA la ei.
+ */
+function deCeNimicDeTrimis(randuri: RandOfertaLocal[]): string {
+  const laEi = randuri.filter(ofertaEsteLaEi);
+  if (laEi.length === 0) return "Produsul nu are nicio ofertă eMAG de actualizat. Publică-l întâi.";
+
+  if (laEi.every(eScoasaDeLaVanzare)) {
+    return "eMAG a scos oferta din vânzare („End of Life”), și refuză orice schimbare de preț "
+      + "sau de stoc pe ea. Ca s-o vinzi din nou, repune-o activă din panoul lor.";
+  }
+  return "Produsul nu are nicio ofertă eMAG de actualizat. Publică-l întâi.";
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1085,9 +1206,29 @@ async function cautaInCatalogulLor(
   admin: Admin,
   ctx: ContextEmag,
   randuri: RandOfertaLocal[],
+  /**
+   * Produsul, ca sa se poata afla codul care CHIAR va pleca.
+   *
+   * ⚠ Fara el, filtrul de mai jos citea `emag_offers.ean` — o coloana pe care o scrie
+   * NUMAI importul, din raspunsul LOR. La un produs facut in Edinio ea e NULL, deci lista
+   * iesea goala si `documentation/find_by_eans` nu se chema niciodata. Toata paza
+   * impotriva duplicatului rula doar pentru ofertele care veneau deja de la ei — adica
+   * exact acolo unde duplicatul nu se poate produce.
+   */
+  produs: ProdusDeCartografiat,
 ): Promise<VerdictCatalog> {
   /* Se intreaba numai pentru ofertele care n-au inca o pagina si care chiar au cod. */
-  const deCautat = randuri.filter((r) => !r.part_number_key && (r.ean ?? "").trim());
+  /*
+   * ⚠ CODUL SE IA DIN FISA PRODUSULUI, ca la trimitere. Vezi `eanDeTrimis`: aceeasi
+   * functie, ca „ce verific" si „ce trimit" sa nu se mai poata departa.
+   */
+  const codPeRandBrut = new Map<RandOfertaLocal, string>();
+  for (const r of randuri) {
+    if (r.part_number_key) continue;
+    const cod = eanDeTrimis(produs, r.variant_title, r.ean);
+    if (cod) codPeRandBrut.set(r, cod);
+  }
+  const deCautat = [...codPeRandBrut.keys()];
   if (deCautat.length === 0) return { fel: "mergi" };
 
   /*
@@ -1108,7 +1249,7 @@ async function cautaInCatalogulLor(
    */
   const codPeRand = new Map<RandOfertaLocal, string>();
   for (const r of deCautat) {
-    const c = eanuriDeCautat([r.ean])[0];
+    const c = eanuriDeCautat([codPeRandBrut.get(r)])[0];
     if (c) codPeRand.set(r, c);
   }
   if (codPeRand.size === 0) return { fel: "mergi" };
@@ -1165,10 +1306,14 @@ async function cautaInCatalogulLor(
 
     /* ⚠ Raspunsurile bucatii se impart NUMAI peste randurile bucatii. Peste toate, un
        raspuns al unei variante ar fi hotarat pentru alta care nici n-a fost intrebata. */
+    /* ⚠ Se trimite codul SOCOTIT, nu `r.ean`: coloana e goala la ofertele noastre, iar
+       impartirea s-ar fi facut pe nimic si fiecare rand ar fi primit zero raspunsuri —
+       adica `verdictEan([])` = „produs nou", chiar hotararea scumpa de care fugim. */
     const alBucatii = imparteRaspunsurilePeRanduri(
-      bucata, (Array.isArray(raspuns.data) ? raspuns.data : []) as RaspunsEan[],
+      bucata.map((r) => ({ rand: r, ean: codPeRandBrut.get(r) ?? null })),
+      (Array.isArray(raspuns.data) ? raspuns.data : []) as RaspunsEan[],
     );
-    for (const [rand, lista] of alBucatii) peRand.set(rand, lista);
+    for (const [cheie, lista] of alBucatii) peRand.set(cheie.rand, lista);
   }
 
   /*

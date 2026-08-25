@@ -491,7 +491,10 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
           Fereastra se roteste acum. Dar o comanda livrata fara factura ramane o lipsa
           fiscala, si aceea se repara din facturare, nu de aici. Deci se spune.
         */}
-        {status.comenziFaraFactura > 0 && (
+        {/* ⚠ `> 0` peste `null` e fals, deci cartonasul dispare cand nu s-a putut citi —
+            si asta e corect: mai bine lipseste decat sa scrie „0 comenzi fara factura"
+            pentru un magazin care are. Vezi nota din `getEmagStatus`. */}
+        {(status.comenziFaraFactura ?? 0) > 0 && (
           <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>

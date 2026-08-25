@@ -83,7 +83,7 @@ test("numele lor chiar ajunge pana la hotarare", () => {
    * si reparatia ar fi doar o functie frumoasa pe care n-o cheama nimeni cu date.
    */
   const t = readFileSync("src/lib/emag/trimite.ts", "utf8");
-  assert.match(t, /creat_de_edinio, nume_emag"/, "se citeste din baza");
+  assert.match(t, /creat_de_edinio, nume_emag/, "se citeste din baza");
   assert.match(t, /nume_emag: r\.nume_emag,/, "si se trece in identitate");
 
   const m = readFileSync("src/lib/emag/mapping.ts", "utf8");

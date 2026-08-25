@@ -2713,7 +2713,7 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval DEFAULT '00:10:00'::interval, p_limita integer DEFAULT 50)
+CREATE OR REPLACE FUNCTION public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval DEFAULT '00:10:00'::interval, p_limita integer DEFAULT 50, p_amprente jsonb DEFAULT NULL::jsonb)
  RETURNS SETOF uuid
  LANGUAGE sql
  STABLE SECURITY DEFINER
@@ -2727,8 +2727,15 @@ AS $function$
    where p.business_id = p_business_id
      and o.auto_sync = true
      and o.last_synced_at is not null
-     and p.updated_at > o.last_synced_at
      and p.updated_at < now() - p_rabdare
+     and (
+       case
+         when p_amprente is null then p.updated_at > o.last_synced_at
+         when not (p_amprente ? p.id::text) then false
+         when o.amprenta_continut is null then false
+         else o.amprenta_continut is distinct from (p_amprente ->> p.id::text)
+       end
+     )
      and not exists (
        select 1 from public.emag_sync_queue q
         where q.business_id = p_business_id and q.product_id = p.id)
@@ -4350,7 +4357,8 @@ create table if not exists public.emag_offers (
   raspuns_brut jsonb,
   imagini_la_ei integer,
   status_la_ei integer,
-  stoc_la_ei integer);
+  stoc_la_ei integer,
+  amprenta_continut text);
 
 create table if not exists public.emag_orders (
   id uuid default gen_random_uuid() not null,
@@ -7854,7 +7862,7 @@ grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to service_role;
 grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
-grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer) to service_role;
+grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.release_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.release_order_discount(p_order_id uuid) to service_role;
@@ -7975,7 +7983,7 @@ revoke execute on function public.numar_produse_si_comenzi() from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
-revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer) from public;
+revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
 revoke execute on function public.release_discount_use(p_discount_id uuid) from public;
 revoke execute on function public.release_order_discount(p_order_id uuid) from public;

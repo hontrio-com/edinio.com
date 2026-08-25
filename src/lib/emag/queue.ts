@@ -204,6 +204,16 @@ export async function enqueueEmagSync(
       {
         business_id: businessId, product_id: productId, offer_id: offerId, op,
         prioritate: PRIORITATE_OP[op], next_retry_at: null, abandonat_la: null, attempts: 0,
+        /* ⚠ SI CONTOARELE PENELOR, SI MOTIVUL VECHI (25.08.2026).
+
+           `pauze` nu se punea la zero niciodata — singurele lui scrieri sunt `+1` in cron.
+           Deci o cerere NOUA mostenea numarul de pene al unei generatii vechi, iar la
+           prima eroare trecatoare sarea direct la un `asteptareaDupaPana(pauze)` mare:
+           produsul abia atins de comerciant astepta ore pentru o pana de acum o saptamana.
+
+           `last_error` la fel: pana la prima incercare noua, panoul arata motivul unei
+           incercari care nu mai are nicio legatura cu ce e in coada acum. */
+        pauze: 0, last_error: null,
       },
       { onConflict: "business_id,offer_id,op" },
     );
@@ -360,6 +370,16 @@ async function enqueueMany(
         /* ⚠ Aceleasi patru campuri ca la elementul singur. Vezi nota de acolo: o
            cerere noua pe acelasi element inseamna ca s-a schimbat ceva. */
         prioritate: PRIORITATE_OP[op], next_retry_at: null, abandonat_la: null, attempts: 0,
+        /* ⚠ SI CONTOARELE PENELOR, SI MOTIVUL VECHI (25.08.2026).
+
+           `pauze` nu se punea la zero niciodata — singurele lui scrieri sunt `+1` in cron.
+           Deci o cerere NOUA mostenea numarul de pene al unei generatii vechi, iar la
+           prima eroare trecatoare sarea direct la un `asteptareaDupaPana(pauze)` mare:
+           produsul abia atins de comerciant astepta ore pentru o pana de acum o saptamana.
+
+           `last_error` la fel: pana la prima incercare noua, panoul arata motivul unei
+           incercari care nu mai are nicio legatura cu ce e in coada acum. */
+        pauze: 0, last_error: null,
       }));
     if (randuri.length === 0) return 0;
 
@@ -507,6 +527,9 @@ export async function enqueueEmagRetragereInainteDeStergere(
       next_retry_at: null,
       abandonat_la: null,
       attempts: 0,
+      /* ⚠ Vezi nota de mai sus: o cerere noua nu mosteneste memoria unei pene vechi. */
+      pauze: 0,
+      last_error: null,
     }));
 
     const { error: eScriere } = await admin

@@ -28,6 +28,8 @@ import type { OpEmag } from "@/lib/emag/queue";
 import { asteptareaDupaPana, asteptareaUrmatoare } from "@/lib/emag/rute";
 import { ardeIncercare } from "@/lib/emag/errors";
 import { scrieStatusurile } from "@/lib/emag/statusuri";
+import { amprentaContinutului } from "@/lib/emag/mapping";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 
 /**
  * Trecerea din minut in minut a integrarii eMAG.
@@ -112,6 +114,15 @@ const MAGAZINE_NEPLECATE = 12;
  * repun cate 50, iar la trecerea urmatoare urmatoarele 50.
  */
 const NEPLECATE_PE_MAGAZIN = 50;
+
+/**
+ * Cate produse se masoara intr-o trecere, pe magazin.
+ *
+ * ⚠ Masurarea inseamna citirea `page_sections` si a imaginilor, adica randuri grele. 300
+ * la zece minute acopera un catalog de 3.000 in aproape doua ore — destul pentru o plasa
+ * care prinde ce a scapat, nu pentru o cale principala.
+ */
+const FELIE_AMPRENTE = 300;
 
 /**
  * Cat se asteapta inainte ca un produs sa fie socotit „neplecat".
@@ -740,10 +751,31 @@ export async function GET(req: NextRequest) {
   let neplecate = 0;
   if (new Date(inceputulRularii).getMinutes() % 10 === 0) {
     for (const businessId of alegeInRotatie(magazine, MAGAZINE_NEPLECATE, 10)) {
+      /*
+       * ═══ ⚠ SE COMPARA AMPRENTE, NU MARCAJE DE TIMP (25.08.2026) ═══
+       *
+       * Forma dinainte intreba `p.updated_at > o.last_synced_at`. Dar `last_synced_at` se
+       * scrie la ORICE reusita, inclusiv dupa o miscare de stoc — deci o vanzare petrecuta
+       * intre schimbarea de continut si trecerea plasei stergea urma:
+       *
+       *   10:00 se schimba titlul · punerea in coada se pierde
+       *   10:04 se vinde ceva · stocul pleaca · `last_synced_at = 10:04`
+       *   10:10 plasa: 10:00 > 10:04 ? NU → „nimic neplecat"
+       *
+       * Cu cat magazinul vinde mai bine, cu atat plasa era mai oarba.
+       *
+       * ⚠ AMPRENTELE SE SOCOTESC PENTRU O FELIE, nu pentru tot catalogul: altfel ar
+       * insemna citirea `page_sections` si a imaginilor a mii de produse la fiecare zece
+       * minute. Felia se roteste, deci catalogul se acopera in cateva treceri — acelasi
+       * tipar ca la reconciliere si la derivă.
+       */
+      const amprente = await amprenteleFeliei(admin, businessId);
+
       const { data, error } = await admin.rpc("produse_nesincronizate_emag", {
         p_business_id: businessId,
         p_rabdare: RABDARE_NEPLECATE,
         p_limita: NEPLECATE_PE_MAGAZIN,
+        p_amprente: amprente as never,
       });
 
       /* ⚠ Eroarea se spune. O plasa care tace cand se rupe e mai rea decat lipsa ei:
@@ -875,13 +907,27 @@ async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
   const tura = Math.floor(Date.now() / 60_000 / 5);
   const de_la = cate <= FACTURI_PE_TRECERE ? 0 : (tura * FACTURI_PE_TRECERE) % cate;
 
-  const { data } = await admin.from("emag_orders")
+  /* ⚠ Citita orbeste, o pana a bazei dadea lista goala — adica exact ce da „nicio comanda
+     fara factura". Nu se pierde nimic (randul nu se marcheaza), dar pasul ruleaza doar la
+     `% 5 === 0` si pe magazine in rotatie, deci „urmatoarea incercare" pentru ACELASI
+     magazin nu e peste un minut, ci peste o tura intreaga. Merita spus. */
+  const { data, error: eComenzi } = await admin.from("emag_orders")
     .select("id, order_id")
     .eq("business_id", ctx.businessId)
     .is("invoice_uploaded_at", null)
     .not("order_id", "is", null)
     .order("created_at", { ascending: true })
     .range(de_la, de_la + FACTURI_PE_TRECERE - 1);
+
+  if (eComenzi) {
+    await logError({
+      action: "emag-sync",
+      message: `comenzile fara factura nu s-au putut citi: ${eComenzi.message}`,
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+    return 0;
+  }
 
   let urcate = 0;
   for (const r of (data ?? []) as { id: string; order_id: string | null }[]) {
@@ -931,6 +977,75 @@ async function aduPdfFacturii(f: Factura): Promise<ArrayBuffer | { error: string
   } catch {
     return { error: "Eroare de retea la descarcarea facturii." };
   }
+}
+
+/**
+ * Amprentele de continut ale unei felii din catalogul magazinului.
+ *
+ * ⚠ FELIE ROTATIVA, si `pas = 10` la rotatie fiindca pasul ruleaza o data la zece minute.
+ * Cu `pas = 1`, tura s-ar fi schimbat in fiecare MINUT, deci fereastra ar fi sarit cu zece
+ * felii intre doua rulari si ar fi lasat neatinse cele mai multe produse — chiar greseala
+ * reparata la retururi.
+ *
+ * ⚠ Se citesc numai produsele care CHIAR pot avea o schimbare neplecata: cele cu o oferta
+ * pornita si trimisa candva. Ofertele nepublicate n-au ce pierde, si publicarea lor e
+ * hotararea comerciantului, nu a plasei.
+ */
+async function amprenteleFeliei(
+  admin: Admin, businessId: string,
+): Promise<Record<string, string>> {
+  const { data: randuri, error: eRanduri } = await admin.from("emag_offers")
+    .select("product_id")
+    .eq("business_id", businessId)
+    .eq("auto_sync", true)
+    .not("last_synced_at", "is", null)
+    .not("product_id", "is", null)
+    .order("emag_id", { ascending: true })
+    .limit(FELIE_AMPRENTE * 4);
+
+  if (eRanduri) {
+    await logError({
+      action: "emag-sync",
+      message: `felia pentru amprente nu s-a putut citi: ${eRanduri.message}`,
+      businessId,
+      severity: "warning",
+    });
+    return {};
+  }
+
+  const ids = [...new Set(
+    ((randuri ?? []) as { product_id: string | null }[])
+      .map((r) => r.product_id).filter((x): x is string => !!x),
+  )];
+  if (ids.length === 0) return {};
+
+  const feliaAsta = alegeInRotatie(ids, FELIE_AMPRENTE, 10);
+  if (feliaAsta.length === 0) return {};
+
+  const iesire: Record<string, string> = {};
+  for (const bucata of bucatiDeIduri(feliaAsta)) {
+    const { data: produse, error: eProduse } = await admin.from("products")
+      .select("id, name, description, category, sku, weight_grams, is_active, images, page_sections")
+      .eq("business_id", businessId).in("id", bucata);
+
+    /* ⚠ O citire picata NU inseamna „nimic schimbat": se raspunde cu ce s-a strans pana
+       acum, iar produsele nemasurate raman in afara hartii — si functia din baza le sare
+       anume, in loc sa le socoteasca „schimbate". */
+    if (eProduse) {
+      await logError({
+        action: "emag-sync",
+        message: `produsele feliei nu s-au putut citi: ${eProduse.message}`,
+        businessId,
+        severity: "warning",
+      });
+      break;
+    }
+
+    for (const p of (produse ?? []) as ProdusDeCartografiat[]) {
+      iesire[p.id] = amprentaContinutului(p);
+    }
+  }
+  return iesire;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1190,8 +1305,20 @@ async function improspateazaIpurile(admin: Admin): Promise<void> {
     return;
   }
 
-  const { data } = await admin.from("platform_settings")
+  /* ⚠ Citita orbeste, o pana dadea `vechi = null`, iar `sAuSchimbat(null, noi)` aprinde
+     alarma „eMAG si-a schimbat lista de IP-uri" pentru o lista care n-a miscat. O alarma
+     falsa la o schimbare care nu s-a intamplat e mai rea decat tacerea: data viitoare
+     nimeni n-o mai citeste. */
+  const { data, error: eVechi } = await admin.from("platform_settings")
     .select("value").eq("key", CHEIE_IPURI).maybeSingle();
+  if (eVechi) {
+    await logError({
+      action: "emag-sync.ipuri",
+      message: `lista veche de IP-uri nu s-a putut citi: ${eVechi.message}`,
+      severity: "warning",
+    });
+    return;
+  }
   const vechi = ((data?.value as { ipuri?: string[] } | null)?.ipuri) ?? null;
 
   if (sAuSchimbat(vechi, noi)) {

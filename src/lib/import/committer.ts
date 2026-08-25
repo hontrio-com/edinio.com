@@ -298,7 +298,18 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
   const source = job.source;
   const deltas: CommitDeltas = { created: 0, updated: 0, skipped: 0, failed: 0 };
 
-  const { data: pending } = await admin
+  /*
+   * ═══ ⚠ O CITIRE PICATA NU INSEAMNA „NU MAI E NIMIC DE IMPORTAT" ═══
+   *
+   * Fara `error` destructurat, o pana de o clipa da `pending = null`, iar randul de mai jos
+   * intoarce `remaining: 0`. Atunci `processImport` muta jobul pe „gata", anunta canalele de
+   * vanzare si porneste publicarea — cu randuri INCA nescrise. Comerciantul vede „import
+   * terminat" si un catalog incomplet, fara nicio urma care sa spuna de ce.
+   *
+   * ⚠ E ACEEASI CITIRE PE CARE AM INCHIS-O ASTAZI LA REHOSTUL IMAGINILOR, si i-am lasat sora
+   * neatinsa. Regula casei: „nu stiu cate au ramas" inseamna REIA, niciodata zero.
+   */
+  const { data: pending, error: ePending } = await admin
     .from("product_import_rows")
     .select("id, row_index, parsed, external_id")
     .eq("import_id", job.id)
@@ -306,10 +317,15 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
     .order("row_index", { ascending: true })
     .limit(COMMIT_CHUNK);
 
+  if (ePending) throw new Error(`randurile de import nu s-au putut citi: ${ePending.message}`);
   if (!pending || pending.length === 0) return { deltas, remaining: 0 };
 
   // Plan limit + current usage.
-  const { data: profile } = await admin.from("users_profile").select("plan").eq("id", job.user_id).single();
+  /* ⚠ O citire picata ar fi facut, pentru o clipa, dintr-un plan platit unul gratuit — iar
+     limita mai mica ar fi respins randuri legitime, care apoi s-ar fi marcat „esuate". */
+  const { data: profile, error: ePlan } = await admin
+    .from("users_profile").select("plan").eq("id", job.user_id).single();
+  if (ePlan) throw new Error(`planul contului nu s-a putut citi: ${ePlan.message}`);
   const limit = getProductLimit(profile?.plan ?? "free");
   // Pe CONT, nu pe magazin: altfel al doilea magazin dubla limita la import.
   let currentCount = await numaraProduseleContului(admin, job.user_id);
@@ -448,11 +464,15 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
   await scrieProdusele(admin, businessId, deScris, deltas);
 
 
-  const { count: remaining } = await admin
+  /* ⚠ Perechea de sus: `remaining ?? 0` pe o numaratoare picata declara importul terminat.
+     `count` poate fi `null` SI cand cererea a mers, deci se verifica `error`, nu valoarea. */
+  const { count: remaining, error: eRamase } = await admin
     .from("product_import_rows")
     .select("id", { count: "exact", head: true })
     .eq("import_id", job.id)
     .eq("status", "pending");
+
+  if (eRamase) throw new Error(`randurile ramase nu s-au putut numara: ${eRamase.message}`);
 
   return { deltas, remaining: remaining ?? 0 };
 }

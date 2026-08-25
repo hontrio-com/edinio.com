@@ -62,11 +62,11 @@ test("⚠ o SINGURA operatie, cea mai grea dintre cele cerute", () => {
    */
   const prop = readFileSync("src/lib/emag/propagare.ts", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-  assert.match(prop, /op === "oferta" \? await enqueueEmagSyncMany\(businessId, ids\)/);
-  assert.match(prop, /: op === "pret" \? await enqueueEmagPretMany\(businessId, ids\)/);
-  assert.match(prop, /: await enqueueEmagStocMany\(businessId, ids\);/);
-  /* ⚠ Si se tine minte CATE s-au pus, ca zero la id-uri existente sa poata fi spus. */
-  assert.match(prop, /const puse =/);
+  /* ⚠ Alegerea marimii s-a mutat in `enqueueEmagStrict`, care primeste `op` si intoarce un
+     VERDICT — nu un numar. Trei intoarceri de `0` care insemnau lucruri diferite („n-am ce
+     pune", „magazin oprit", „am picat") faceau ca o scriere picata sa fie stinsa ca reusita. */
+  assert.match(prop, /const verdict = await enqueueEmagStrict\(businessId, ids, op\);/);
+  assert.match(prop, /const puse = verdict\.fel === "puse" \? verdict\.cate : 0;/);
 
   /* Si panoul alege marimea, nu ruta: `oferta` > `pret` > `stoc`. */
   assert.match(

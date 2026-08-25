@@ -42,7 +42,9 @@ test("⚠ apasarea pe „Publică” trece si ea", () => {
      omul tocmai a cerut-o, acum. */
   assert.match(viu, /const apasatDeOm = optiuni\.publicaSiFaraOferta === true;/);
   assert.match(viu, /const trecePeApasare = apasatDeOm && stare\.fel === "nu" && !stare\.deconectat;/);
-  assert.match(viu, /if \(stare\.fel !== "porneste" && !trecePeApasare\) return 0;/);
+  /* ⚠ Iesirea intoarce acum un VERDICT, nu `0`: `enqueueMany` nu mai poate spune „zero" si
+     pentru „n-am ce pune", si pentru „am picat" — vezi `propagare.ts`. Purtarea e aceeasi. */
+  assert.match(viu, /if \(stare\.fel !== "porneste" && !trecePeApasare\) return \{ fel: "oprit" \};/);
 });
 
 test("⚠ MAGAZINUL DECONECTAT ramane un „nu” adevarat, pe amandoua caile", () => {

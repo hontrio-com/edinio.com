@@ -1021,7 +1021,9 @@ export async function salveazaSetariEmag(
      */
     dupaRaspuns(async () => {
       const admin = createAdminClient();
-      await propagaSetarile(admin, businessId, intentie.propagare_op ?? opPropagare);
+      const rez = await propagaSetarile(admin, businessId, intentie.propagare_op ?? opPropagare);
+      /* ⚠ Daca punerea in coada a picat, intentia NU se stinge: cronul reia. Vezi pasul 5b. */
+      if (!rez.sigur) return;
       /* ⚠ Se stinge NUMAI intentia servita, prin compare-and-set in Postgres: o cerere
          venita intre timp trebuie sa ramana nestinsa, altfel a doua schimbare a
          comerciantului n-ar mai pleca niciodata. */

@@ -282,14 +282,20 @@ test("⚠ zero pus la id-uri existente se SPUNE", () => {
    * reparam. Deci nu se schimba purtarea, se numeste consecinta: `inghiteDarScrie` scrie o
    * eroare de coada fara sa spuna a cui intentie era.
    */
+  /*
+   * ═══ PROBA ASTA CEREA MAI PUTIN PANA PE 25.08.2026, SEARA ═══
+   *
+   * Cerea doar ca zeroul sa fie SPUS. Dar `enqueueMany` intorcea `0` in trei situatii care
+   * nu inseamna acelasi lucru — n-avea ce pune, magazinul e oprit, sau scrierea a picat —
+   * iar callerul stingea intentia oricum. Pentru GPSR, `green_tax` si `supply_lead_time` NU
+   * exista a doua plasa: pierdute acolo, se pierdeau de tot.
+   *
+   * Acum coada intoarce un VERDICT, si numai `eroare` opreste stingerea.
+   */
   const cod = viu("src/lib/emag/propagare.ts");
-  assert.match(cod, /if \(puse === 0\) \{/);
-  const i = cod.indexOf("propagarea setarilor n-a pus nimic in coada");
-  assert.ok(i > 0, "randul numeste ce a pierdut comerciantul");
-  assert.match(cod.slice(i, i + 200), /businessId, op, produse: ids\.length/, "si cat anume");
-  /* ⚠ Se intoarce ce s-a PUS, nu cate id-uri erau: altfel cronul ar fi raportat munca
-     nefacuta ca facuta. */
-  assert.match(cod, /return puse;/);
+  assert.match(cod, /const verdict = await enqueueEmagStrict\(businessId, ids, op\);/);
+  assert.match(cod, /if \(verdict\.fel === "eroare"\)/, "eroarea se spune");
+  assert.match(cod, /return \{ puse, sigur: verdict\.fel !== "eroare" \};/, "si opreste stingerea");
   assert.doesNotMatch(cod, /return ids\.length;/);
 });
 

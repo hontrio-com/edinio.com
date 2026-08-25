@@ -71,10 +71,25 @@ test("⚠ trecerea de AWB nu mai cauta `awb_uploaded_at is null`", () => {
   assert.doesNotMatch(corp, /\.is\("awb_uploaded_at", null\)/, "forma veche, oarba la reemitere");
 });
 
-test("⚠ se compara NUMARUL, si de aceea se si scrie", () => {
+test("⚠ se tine MULTIMEA celor urcate, nu ultimul numar", () => {
+  /*
+   * ═══ FORMA ASTA A CERUT ALTCEVA PANA PE 25.08.2026, SEARA ═══
+   *
+   * Proba cerea `if (r.awb_uploaded_number === awb.awb)`, adica „acelasi numar, sari".
+   * Mergea la o reemitere pe ACELASI curier: FAN123 -> FAN456.
+   *
+   * ⚠ Dar nu la SCHIMBAREA curierului, si aia e o gaura in chiar reparatia de dimineata:
+   * `awbPropriuAlComenzii` parcurgea coloanele in ordine fixa, cu FAN primul, deci un
+   * comerciant care renunta la FAN si emitea GLS ramanea cu FAN123 ales pe veci. Comparatia
+   * spunea „acelasi", si GLS999 nu ajungea NICIODATA la eMAG.
+   *
+   * Acum se tine multimea, iar alegerea sare peste ce e in ea. Si tot multimea e ce face
+   * bucla sa se TERMINE: cu un singur numar, doua AWB-uri s-ar fi urcat pe rand la nesfarsit.
+   */
   const cron = viu("src/app/api/cron/emag-sync/route.ts");
-  assert.match(cron, /if \(r\.awb_uploaded_number === awb\.awb\)/, "acelasi numar: nu s-a reemis");
-  assert.match(cron, /awb_uploaded_at: acum\(\), awb_uploaded_number: awb\.awb/, "si se tine minte");
+  assert.doesNotMatch(cron, /r\.awb_uploaded_number === awb\.awb/, "forma veche, oarba la alt curier");
+  assert.match(cron, /awbPropriuAlComenzii\(peId\.get\(r\.order_id\), dejaUrcate\)/);
+  assert.match(cron, /awb_uploaded_numbers: \[\.\.\.new Set\(\[\.\.\.dejaUrcate, awb\.awb\]\)\]/, "se ADAUGA");
 });
 
 test("⚠ fara AWB se STAMPILEAZA, ca teancul sa nu creasca la nesfarsit", () => {

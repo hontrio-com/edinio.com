@@ -1791,12 +1791,13 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer DEFAULT 10, p_de_la integer DEFAULT 0)
- RETURNS TABLE(id uuid, order_id uuid, emag_order_id bigint, order_type integer, awb_uploaded_number text)
+ RETURNS TABLE(id uuid, order_id uuid, emag_order_id bigint, order_type integer, awb_uploaded_number text, awb_uploaded_numbers text[])
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
-  select eo.id, eo.order_id, eo.emag_order_id, eo.order_type, eo.awb_uploaded_number
+  select eo.id, eo.order_id, eo.emag_order_id, eo.order_type,
+         eo.awb_uploaded_number, eo.awb_uploaded_numbers
     from public.emag_orders eo
     join public.orders o
       on o.id = eo.order_id and o.business_id = eo.business_id
@@ -1820,6 +1821,29 @@ CREATE OR REPLACE FUNCTION public.emag_familie_noua()
  SET search_path TO 'public', 'pg_temp'
 AS $function$
   select nextval('public.emag_family_id_seq');
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer DEFAULT 24, p_limita integer DEFAULT 50)
+ RETURNS TABLE(id uuid, created_at timestamp with time zone)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select p.id, p.created_at
+    from public.products p
+   where p.business_id = p_business_id
+     and p.is_active
+     -- ⚠ FEREASTRA E TOT ROSTUL: fara ea, un catalog vechi ar intra in publicare la prima
+     -- aprindere a comutatorului. Pe 24.08.2026 o plasa care nu deosebea „n-a plecat
+     -- niciodata" de „s-a pierdut o schimbare" a publicat singura 116 oferte.
+     and p.created_at > now() - make_interval(hours => greatest(1, least(coalesce(p_ore, 24), 72)))
+     and not exists (
+       select 1 from public.emag_offers e
+        where e.business_id = p.business_id and e.product_id = p.id
+     )
+   order by p.created_at asc
+   limit greatest(1, least(coalesce(p_limita, 50), 200));
 $function$
 ;
 
@@ -4441,7 +4465,8 @@ create table if not exists public.emag_orders (
   invoice_uploaded_at timestamp with time zone,
   invoice_number text,
   awb_uploaded_at timestamp with time zone,
-  awb_uploaded_number text);
+  awb_uploaded_number text,
+  awb_uploaded_numbers text[] default '{}'::text[] not null);
 
 create table if not exists public.emag_request_log (
   id uuid default gen_random_uuid() not null,
@@ -5233,6 +5258,14 @@ create table if not exists public.zz_backup_preturi_vetdepo_20260819 (
   compare_at_price numeric(10,2),
   updated_at timestamp with time zone,
   luat_la timestamp with time zone);
+
+create table if not exists public.zz_backup_preturi_vetdepo_20260825 (
+  id uuid,
+  business_id uuid,
+  name text,
+  pret_vechi numeric(10,2),
+  atins_la timestamp with time zone,
+  copiat_la timestamp with time zone);
 
 create table if not exists public.zz_backup_preturi_vetdepo_categorii_20260903 (
   id uuid,
@@ -7698,6 +7731,27 @@ grant SELECT on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant UPDATE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
+grant DELETE on table public.zz_backup_preturi_vetdepo_20260825 to anon;
+grant INSERT on table public.zz_backup_preturi_vetdepo_20260825 to anon;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260825 to anon;
+grant SELECT on table public.zz_backup_preturi_vetdepo_20260825 to anon;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260825 to anon;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260825 to anon;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_20260825 to anon;
+grant DELETE on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
+grant INSERT on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
+grant SELECT on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
+grant DELETE on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
+grant INSERT on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
+grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
+grant SELECT on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
+grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
+grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
+grant UPDATE on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
 grant DELETE on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
 grant INSERT on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
 grant REFERENCES on table public.zz_backup_preturi_vetdepo_categorii_20260903 to anon;
@@ -7889,6 +7943,7 @@ grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to ser
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.emag_familie_noua() to service_role;
+grant execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer) to service_role;
 grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
 grant execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
@@ -8042,6 +8097,7 @@ revoke execute on function public.elibereaza_stoc_comanda(p_order_id uuid) from 
 revoke execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.emag_familie_noua() from public;
+revoke execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer) from public;
 revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
 revoke execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) from public;
 revoke execute on function public.genereaza_schema_baseline() from public;

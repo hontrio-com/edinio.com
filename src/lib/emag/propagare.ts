@@ -54,7 +54,7 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { logError } from "@/lib/error-logger";
-import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "./queue";
+import { enqueueEmagStrict } from "./queue";
 import type { EmagConfig } from "./types";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -136,11 +136,11 @@ export async function stingePropagarea(
 /**
  * Pune tot catalogul magazinului in coada, pe operatia ceruta.
  *
- * Intoarce cate produse au fost puse la rand.
+ * Intoarce cate produse au fost puse la rand, si daca intentia poate fi stinsa.
  */
 export async function propagaSetarile(
   admin: Admin, businessId: string, op: OpPropagare,
-): Promise<number> {
+): Promise<{ puse: number; sigur: boolean }> {
   /*
    * ⚠ `fetchAllRowsStrict`: PostgREST taie la 1000 FARA sa spuna, iar aici lista e catalogul
    * intreg. Taiata, restul ofertelor ar fi ramas cu setarea veche — adica exact defectul,
@@ -154,15 +154,16 @@ export async function propagaSetarile(
   );
 
   const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
-  if (ids.length === 0) return 0;
+  /* ⚠ Niciun produs de atins e un sfarsit legitim, deci intentia se poate stinge. */
+  if (ids.length === 0) return { puse: 0, sigur: true };
 
   /* ⚠ O SINGURA operatie, cea mai grea dintre cele cerute: trei puneri in coada pe acelasi
      produs ar fi insemnat trei treceri pentru un singur efect — si trei cereri din cele 3
      pe secunda ale magazinului, aceleasi prin care pleaca o miscare de stoc dupa o vanzare. */
-  const puse =
-    op === "oferta" ? await enqueueEmagSyncMany(businessId, ids)
-    : op === "pret" ? await enqueueEmagPretMany(businessId, ids)
-    : await enqueueEmagStocMany(businessId, ids);
+  /* ⚠ Varianta cu VERDICT, nu cea cu numar: aici se hotaraste daca intentia poate fi stinsa,
+     iar un `0` nu spune daca n-a fost ce pune sau daca scrierea a picat. */
+  const verdict = await enqueueEmagStrict(businessId, ids, op);
+  const puse = verdict.fel === "puse" ? verdict.cate : 0;
 
   /*
    * ═══ ⚠ ZERO PUS LA ID-URI EXISTENTE SE SPUNE, SI ANUME AICI ═══
@@ -178,17 +179,27 @@ export async function propagaSetarile(
    * Cazul e citibil: id-urile au fost citite chiar acum cu `auto_sync = true`, deci zero
    * inseamna ori magazin oprit, ori o punere picata.
    */
-  if (puse === 0) {
+  if (verdict.fel === "eroare") {
     await logError({
       action: "emag.propagare",
-      message: `propagarea setarilor n-a pus nimic in coada, desi avea ${ids.length} produse`,
+      message: `propagarea setarilor a picat la punerea in coada (${ids.length} produse): ${verdict.mesaj}`,
       details: { businessId, op, produse: ids.length },
       businessId,
-      severity: "warning",
+      severity: "error",
     });
   }
 
-  return puse;
+  /*
+   * ⚠ `sigur` spune daca intentia poate fi STINSA.
+   *
+   * `puse` si `nimic` si `oprit` sunt toate sfarsituri legitime: s-a facut ce era de facut,
+   * ori omul insusi a oprit sincronizarea. `eroare` NU e: acolo scrierea a picat, iar
+   * stingerea ar arunca intentia comerciantului la gunoi, tacut.
+   *
+   * ⚠ Si conteaza cel mai mult pe ruta grea: pretul si stocul le repara deriva, dar GPSR,
+   * `green_tax` si `supply_lead_time` n-au a doua plasa. Pierdute aici, se pierd de tot.
+   */
+  return { puse, sigur: verdict.fel !== "eroare" };
 }
 
 /**

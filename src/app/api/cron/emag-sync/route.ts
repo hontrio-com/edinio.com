@@ -17,7 +17,9 @@ import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
   citesteMemoriaDerivei, derivaOfertei, hotarasteDeriva, sursaAdevarului,
 } from "@/lib/emag/deriva";
-import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany } from "@/lib/emag/queue";
+import {
+  enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagMany,
+} from "@/lib/emag/queue";
 import { cuFir, firNou, ZILE_PASTRARE } from "@/lib/emag/jurnal";
 import { curataJurnalul } from "@/lib/emag/jurnal-scriere";
 import { aduComenzile } from "@/lib/emag/orders";
@@ -851,11 +853,21 @@ export async function GET(req: NextRequest) {
     const ctx = await ctxPentru(cerere.businessId);
     if (!ctx) continue;
 
-    const cate = await cuFir(
+    const rez = await cuFir(
       firNou("propagare-setari"),
       () => propagaSetarile(admin, cerere.businessId, cerere.op),
     );
-    propagari += cate;
+    propagari += rez.puse;
+
+    /*
+     * ⚠ NU SE STINGE CAND PUNEREA IN COADA A PICAT.
+     *
+     * Stinsa oricum, intentia comerciantului s-ar arunca la gunoi tacut — iar pentru GPSR,
+     * `green_tax` si `supply_lead_time` nu exista a doua plasa: pretul si stocul le repara
+     * deriva, alea trei nu le repara nimeni. Nestinsa, trecerea urmatoare reia.
+     */
+    if (!rez.sigur) continue;
+    const cate = rez.puse;
 
     /* ⚠ Compare-and-set: se stinge NUMAI intentia citita. Daca intre timp a venit o cerere
        noua, o stingere oarba ar fi inghitit-o si pe aceea, iar a doua schimbare a
@@ -872,6 +884,69 @@ export async function GET(req: NextRequest) {
       businessId: cerere.businessId,
       severity: "warning",
     });
+  }
+
+  /* ── 5c) Publicarea automata care s-a pierdut pe drum ───────────────────────
+   *
+   * ═══ ⚠ COMENTARIUL DIN `queue.ts` O SPUNEA DEJA ═══
+   *
+   * La un produs NOU, daca in chiar clipa punerii in coada configul nu se poate citi,
+   * intentia nu se recupereaza mai tarziu: urmatoarea atingere e `updateProduct`, care
+   * trimite `produsNou` fals, iar garda de pe numaratoarea de oferte il opreste. „Publicarea
+   * automata se degradeaza tacit in publicare manuala" — nu e produs pierdut, dar nici ce
+   * promite comutatorul.
+   *
+   * ═══ ⚠ DE CE O INTREBARE, SI NU UN STEAG SCRIS LA CREARE ═══
+   *
+   * Un steag ar fi trebuit scris in TOATE caile care creeaza produse — panou, import, feed.
+   * O cale uitata inseamna acelasi defect, doar mutat. Aici nu se scrie nimic nou nicaieri:
+   * se intreaba daca exista un produs activ, facut in ultimele ore, fara nicio oferta eMAG.
+   *
+   * ⚠ SI FEREASTRA DE TIMP E TOT ROSTUL. Fara ea, prima aprindere a comutatorului ar trimite
+   * catalogul intreg la publicare — exact ce s-a intamplat pe 24.08.2026, cand o plasa care
+   * nu deosebea „n-a plecat niciodata" de „s-a pierdut o schimbare" a publicat singura 116
+   * oferte. Un produs vechi nu poate intra NICIODATA pe aici.
+   *
+   * ⚠ La zece minute, si numai la magazinele cu `auto_publish` APRINS. Stins, nu se face
+   * nimic: publicarea e hotararea omului, nu a noastra.
+   */
+  let publicariRecuperate = 0;
+  if (new Date(inceputulRularii).getMinutes() % 10 === 3) {
+    for (const businessId of alegeInRotatie(magazine, MAGAZINE_NEPLECATE, 10)) {
+      const ctx = await ctxPentru(businessId);
+      if (!ctx || ctx.config.auto_publish !== true) continue;
+
+      const { data: noi, error: eNoi } = await admin.rpc("emag_produse_noi_nepublicate", {
+        p_business_id: businessId, p_ore: 24, p_limita: 50,
+      });
+      if (eNoi) {
+        await logError({
+          action: "emag-sync",
+          message: `produsele noi nepublicate nu s-au putut citi: ${eNoi.message}`,
+          businessId, severity: "warning",
+        });
+        continue;
+      }
+
+      const ids = ((noi ?? []) as { id: string }[]).map((x) => x.id);
+      if (ids.length === 0) continue;
+
+      /* ⚠ Prin `publicaPeEmagMany`, nu prin scriere de mana: acolo stau toate regulile —
+         magazin conectat, produs care poate intra, fragmentarea id-urilor. */
+      const puse = await publicaPeEmagMany(businessId, ids);
+      publicariRecuperate += puse;
+
+      /* ⚠ Se SPUNE de fiecare data. Numarul trebuie sa fie zero: daca nu e, inseamna ca
+         punerea in coada la crearea produsului se pierde undeva in amonte. */
+      if (puse > 0) {
+        await logError({
+          action: "emag-sync",
+          message: `${puse} produse noi n-au ajuns in coada la creare; publicarea automata le-a recuperat`,
+          details: { businessId, cate: puse },
+          businessId, severity: "warning",
+        });
+      }
+    }
   }
 
   /* ── 6) Lista de IP-uri de la care suna ei ──────────────────────────────
@@ -917,7 +992,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, awburi, retururi, neplecate, jurnalSters, propagari,
+    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, awburi, retururi, neplecate, jurnalSters, propagari, publicariRecuperate,
   });
 }
 
@@ -1018,7 +1093,15 @@ async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
   for (const r of randuri) {
     if (!r.order_id || !r.emag_order_id) continue;
 
-    const awb = awbPropriuAlComenzii(peId.get(r.order_id));
+    /*
+     * ⚠ SE SARE PESTE CE S-A URCAT DEJA, si asta e reparatia (25.08.2026).
+     *
+     * Alegerea mergea pe ordinea fixa a coloanelor, cu FAN primul. Un comerciant care renunta
+     * la FAN si emite GLS ramanea cu FAN123 ales pe veci — iar comparatia „acelasi numar"
+     * spunea „nimic nou", deci GLS999 nu ajungea NICIODATA la eMAG.
+     */
+    const dejaUrcate = r.awb_uploaded_numbers ?? [];
+    const awb = awbPropriuAlComenzii(peId.get(r.order_id), dejaUrcate);
 
     /*
      * ⚠ FARA AWB: se STAMPILEAZA, dar fara numar. Altfel comanda ar fi ramas in bazin si ar
@@ -1027,25 +1110,39 @@ async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
      * urcat nimic", deci cand chiar apare un AWB, comparatia de mai jos il vede ca schimbare.
      */
     if (!awb) {
-      await admin.from("emag_orders")
-        .update({ awb_uploaded_at: acum() }).eq("id", r.id);
-      continue;
-    }
-
-    /* ⚠ Acelasi numar ca data trecuta: nu s-a reemis nimic. Se stampileaza si atat. */
-    if (r.awb_uploaded_number === awb.awb) {
+      /* ⚠ Aici intra DOUA cazuri, si amandoua se stampileaza: comanda n-are inca niciun AWB,
+         sau toate cele prezente sunt deja urcate. In al doilea caz stampila e chiar ce
+         opreste ciclul — cu un singur numar tinut minte, doua AWB-uri s-ar fi urcat pe rand
+         la nesfarsit, fiecare scotandu-l pe celalalt. */
       await admin.from("emag_orders")
         .update({ awb_uploaded_at: acum() }).eq("id", r.id);
       continue;
     }
 
     /* ⚠ AWB-ul emis PRIN ei nu se trimite inapoi la ei. */
-    const { data: alNostru } = await admin.from("emag_awb")
+    const { data: alNostru, error: eAlNostru } = await admin.from("emag_awb")
       .select("awb_number").eq("business_id", ctx.businessId).eq("order_id", r.order_id)
       .eq("awb_number", awb.awb).maybeSingle();
+    /* ⚠ O CITIRE PICATA NU INSEAMNA „nu e AWB emis prin ei". Luata drept negasire, am fi
+       atasat inapoi la eMAG chiar AWB-ul emis DE eMAG. Registrul ar fi oprit al doilea
+       document, dar regula casei e ca o eroare de baza nu se citeste ca lipsa. */
+    if (eAlNostru) {
+      await logError({
+        action: "emag-sync",
+        message: `nu s-a putut verifica daca AWB-ul e emis prin eMAG: ${eAlNostru.message}`,
+        details: { orderId: r.order_id, awb: awb.awb },
+        businessId: ctx.businessId,
+        severity: "warning",
+      });
+      continue;
+    }
     if (alNostru) {
       await admin.from("emag_orders")
-        .update({ awb_uploaded_at: acum(), awb_uploaded_number: awb.awb }).eq("id", r.id);
+        .update({
+          awb_uploaded_at: acum(), awb_uploaded_number: awb.awb,
+          /* ⚠ SE ADAUGA in multime, nu se inlocuieste: altfel „deja urcat" s-ar uita. */
+          awb_uploaded_numbers: [...new Set([...dejaUrcate, awb.awb])],
+        } as never).eq("id", r.id);
       continue;
     }
 
@@ -1064,7 +1161,11 @@ async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
       /* ⚠ SE SCRIE SI NUMARUL, si asta e cheia reparatiei: fara el, urmatoarea trecere
          n-ar avea cu ce compara si ori ar reurca acelasi document, ori n-ar mai veni. */
       await admin.from("emag_orders")
-        .update({ awb_uploaded_at: acum(), awb_uploaded_number: awb.awb }).eq("id", r.id);
+        .update({
+          awb_uploaded_at: acum(), awb_uploaded_number: awb.awb,
+          /* ⚠ SE ADAUGA in multime, nu se inlocuieste: altfel „deja urcat" s-ar uita. */
+          awb_uploaded_numbers: [...new Set([...dejaUrcate, awb.awb])],
+        } as never).eq("id", r.id);
     } else if (rez.fel === "esuat") {
       /* ⚠ NU se stampileaza: un esec dovedit merita reincercat. Registrul opreste oricum un
          al doilea document daca primul chiar a plecat. */

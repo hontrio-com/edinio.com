@@ -372,15 +372,37 @@ export interface OptiuniCoadaMulti {
   publicaSiFaraOferta?: boolean;
 }
 
-async function enqueueMany(
+/**
+ * Ce s-a intamplat cu o punere in coada.
+ *
+ * ═══ ⚠ DE CE UN VERDICT SI NU UN NUMAR ═══
+ *
+ * `enqueueMany` intorcea `0` in TREI situatii care nu inseamna acelasi lucru: n-avea ce pune,
+ * magazinul e oprit, sau scrierea a picat. Cel care cheama nu le putea deosebi.
+ *
+ * ⚠ CE COSTA: la propagarea setarilor, o scriere picata era stinsa ca si cum ar fi reusit —
+ * iar pentru GPSR, `green_tax` si `supply_lead_time` NU exista a doua plasa. Pretul si stocul
+ * le repara deriva; alea trei, nimeni.
+ *
+ * Invelisurile vechi raman pe `number`, ca sa nu se schimbe purtarea nicaieri altundeva.
+ */
+export type VerdictCoada =
+  | { fel: "puse"; cate: number }
+  /** N-a ramas niciun produs care sa poata intra (toate oprite, sau lista goala). */
+  | { fel: "nimic"; }
+  /** Magazinul e deconectat sau are sincronizarea stinsa: o hotarare a omului, nu un defect. */
+  | { fel: "oprit"; }
+  | { fel: "eroare"; mesaj: string };
+
+async function enqueueManyDetaliat(
   businessId: string,
   productIds: (string | null | undefined)[],
   op: OpEmag,
   optiuni: OptiuniCoadaMulti = {},
-): Promise<number> {
+): Promise<VerdictCoada> {
   try {
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
-    if (ids.length === 0) return 0;
+    if (ids.length === 0) return { fel: "nimic" };
 
     const admin = createAdminClient();
     const stare = await configPentruCoada(admin, businessId);
@@ -401,7 +423,7 @@ async function enqueueMany(
     const apasatDeOm = optiuni.publicaSiFaraOferta === true;
     const trecePeApasare = apasatDeOm && stare.fel === "nu" && !stare.deconectat;
 
-    if (stare.fel !== "porneste" && !trecePeApasare) return 0;
+    if (stare.fel !== "porneste" && !trecePeApasare) return { fel: "oprit" };
 
     /*
      * Actiunile in masa NU auto-publica: ele ating produse care exista deja, iar
@@ -449,16 +471,39 @@ async function enqueueMany(
            incercari care nu mai are nicio legatura cu ce e in coada acum. */
         pauze: 0, last_error: null,
       }));
-    if (randuri.length === 0) return 0;
+    if (randuri.length === 0) return { fel: "nimic" };
 
     const { error } = await admin
       .from("emag_sync_queue").upsert(randuri, { onConflict: "business_id,offer_id,op" });
     if (error) throw error;
-    return randuri.length;
+    return { fel: "puse", cate: randuri.length };
   } catch (e) {
     inghiteDarScrie("multe", businessId, e, { cate: productIds.length, op });
-    return 0;
+    return { fel: "eroare", mesaj: e instanceof Error ? e.message : "punere in coada esuata" };
   }
+}
+
+/** Invelisul vechi: numar, ca sa nu se schimbe nimic la cei ~10 chematori. */
+async function enqueueMany(
+  businessId: string,
+  productIds: (string | null | undefined)[],
+  op: OpEmag,
+  optiuni: OptiuniCoadaMulti = {},
+): Promise<number> {
+  const r = await enqueueManyDetaliat(businessId, productIds, op, optiuni);
+  return r.fel === "puse" ? r.cate : 0;
+}
+
+/**
+ * Punere in coada cu VERDICT, pentru cine trebuie sa stie daca a mers.
+ *
+ * ⚠ Se foloseste numai acolo unde exista o intentie durabila de stins — vezi
+ * `propagare.ts`. In rest, numarul e de ajuns.
+ */
+export function enqueueEmagStrict(
+  businessId: string, productIds: (string | null | undefined)[], op: "oferta" | "pret" | "stoc",
+): Promise<VerdictCoada> {
+  return enqueueManyDetaliat(businessId, productIds, op);
 }
 
 /** Retrimitere completa, dupa o editare de produs. */

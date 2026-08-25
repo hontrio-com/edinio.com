@@ -95,12 +95,27 @@ export interface AwbPropriu {
  * SmartShip, Shipo) numarul e emis de un curier de dedesubt, iar clientul acolo il
  * urmareste. Scris „Innoship", omul ar fi cautat pe un site care nu-l stie.
  */
-export function awbPropriuAlComenzii(rand: Record<string, unknown> | null | undefined): AwbPropriu | null {
+export function awbPropriuAlComenzii(
+  rand: Record<string, unknown> | null | undefined,
+  /*
+   * ⚠ NUMERELE DEJA URCATE LA eMAG, ca sa nu fie alese a doua oara.
+   *
+   * Fara asta, ordinea fixa a coloanelor intoarce mereu primul AWB nenul — deci un
+   * comerciant care renunta la FAN si emite GLS ramanea cu FAN123 ales pe veci, iar GLS999
+   * nu ajungea NICIODATA la ei. Vezi migratia `2026-10-20-emag-awb-multime.sql`.
+   *
+   * ⚠ Si de-aia e o MULTIME, nu ultimul numar: cu un singur numar, doua AWB-uri s-ar fi
+   * urcat pe rand la nesfarsit, fiecare scotandu-l pe celalalt din joc.
+   */
+  dejaUrcate: readonly string[] = [],
+): AwbPropriu | null {
   if (!rand) return null;
+  const duse = new Set(dejaUrcate.filter(Boolean));
   for (const { coloana, curier } of COLOANE_AWB) {
     const v = rand[coloana];
     const awb = typeof v === "string" ? v.trim() : v != null ? String(v).trim() : "";
     if (!awb) continue;
+    if (duse.has(awb)) continue;
 
     const numeReal =
       coloana.startsWith("innoship") ? rand.innoship_courier_name

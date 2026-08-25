@@ -125,3 +125,26 @@ test("⚠ si configul necitit nu mai arata ca „magazin fara Trendyol”", () =
   assert.match(q, /const \{ data: ss, error: eConfig \}/);
   assert.match(q, /if \(eConfig\) \{[\s\S]{0,200}?inghiteDarScrie/);
 });
+
+/* ── SGR pe comanda si pe linie ────────────────────────────────────────────── */
+
+test("⚠ SGR se PASTREAZA, dar nu se aduna la total", () => {
+  /*
+   * Trendyol a adaugat in 2026 `lineSgrFee` si `totalSgrFee` pe comenzi si retururi. Noi stiam
+   * SGR doar pe partea de PRODUS — cat declaram la publicare — si pe comanda nu-l citeam
+   * deloc. Deci nu puteam sti nici daca totalul il cuprinde, nici cat se intoarce la un retur.
+   *
+   * ⚠ SI NU SE ADUNA. `packageTotalPrice` e ce a platit clientul; daca garantia e deja
+   * inauntru, adunarea ar umfla comanda si ar strica si rambursul, si contabilitatea. Se
+   * pastreaza ca sa se poata VERIFICA.
+   */
+  const o = viu("src/lib/trendyol/orders.ts");
+  assert.match(o, /const sgrPachet = num\(pkg\.totalSgrFee\);/);
+  assert.match(o, /\.\.\.\(sgrPachet > 0 \? \{ sgr: sgrPachet \} : \{\}\)/);
+  assert.match(o, /const sgr = num\(l\.lineSgrFee\);/);
+
+  /* ⚠ Totalul ramane ce au spus EI, neatins. */
+  assert.match(o, /const total = num\(pkg\.packageTotalPrice\) \|\| num\(pkg\.totalPrice\)/);
+  const i = o.indexOf("const total = num(pkg.packageTotalPrice)");
+  assert.doesNotMatch(o.slice(i, i + 400), /total \+ sgr|sgr \+ total/, "nu se aduna nicaieri");
+});

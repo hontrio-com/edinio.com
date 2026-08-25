@@ -223,7 +223,12 @@ async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: Tren
       else qtyByVariant.set(k, { product_id: pid, variant_title: vt, quantity: qty });
     }
     const price = num(l.lineUnitPrice) || num(l.price);
-    return { product_id: pid, name: l.productName ?? `Barcode ${l.barcode}`, barcode: l.barcode ?? null, price, quantity: qty };
+    /* ⚠ Garantia SGR pe linie: se pastreaza, nu se aduna la pret. Vezi nota din ingest. */
+    const sgr = num(l.lineSgrFee);
+    return {
+      product_id: pid, name: l.productName ?? `Barcode ${l.barcode}`, barcode: l.barcode ?? null,
+      price, quantity: qty, ...(sgr > 0 ? { sgr } : {}),
+    };
   });
 
   /*
@@ -386,6 +391,20 @@ async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: Tren
   }
 
   const total = num(pkg.packageTotalPrice) || num(pkg.totalPrice) || edinioItems.reduce((s, i) => s + i.price * i.quantity, 0);
+
+  /*
+   * ═══ ⚠ GARANTIA SGR, PASTRATA DAR NEADUNATA (26.08.2026) ═══
+   *
+   * Trendyol a adaugat in 2026 `lineSgrFee` si `totalSgrFee` pe comenzi si pe retururi. Noi
+   * stiam SGR doar pe partea de PRODUS — cat declaram la publicare (`sgrPrice`) — si pe
+   * comanda nu-l citeam deloc.
+   *
+   * ⚠ NU SE ADUNA LA TOTAL. `packageTotalPrice` e ce a platit clientul, iar daca garantia e
+   * deja inauntru, adunarea ar umfla comanda si ar strica si rambursul, si contabilitatea. Se
+   * pastreaza ca sa se poata VERIFICA — si ca la primul retur cu SGR sa existe cifra, nu o a
+   * doua presupunere.
+   */
+  const sgrPachet = num(pkg.totalSgrFee);
   const vatAmount = round2(lines.reduce((s, l) => {
     const lineTotal = num(l.lineUnitPrice) * num(l.quantity);
     const vr = num(l.vatRate);
@@ -417,7 +436,13 @@ async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: Tren
     payment_status: "paid",
     status: edinioStatus,
     tracking_number: tracking,
-    order_source: { marketplace: "trendyol", order_number: pkg.orderNumber, shipment_package_id: packageId } as never,
+    order_source: {
+      marketplace: "trendyol", order_number: pkg.orderNumber, shipment_package_id: packageId,
+      /* ⚠ Se pastreaza, NU se aduna la total. Vezi nota de la `sgrPachet`: `packageTotalPrice`
+         e ce a platit clientul, iar garantia adunata a doua oara ar umfla comanda si ar strica
+         si rambursul, si contabilitatea. */
+      ...(sgrPachet > 0 ? { sgr: sgrPachet } : {}),
+    } as never,
   } as never).select("id").single();
 
   // Recover from a prior/partial ingest: order_number is unique per business.

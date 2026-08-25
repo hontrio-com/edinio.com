@@ -475,6 +475,8 @@ export function pretSgr(unitati: number | null | undefined): number {
 
 // ── Orders (shipment packages we RECEIVE) ─────────────────────────────────────
 export interface TrendyolOrderLine {
+  /** ⚠ Garantia SGR pe LINIE. Vezi nota de la `totalSgrFee`: se pastreaza, nu se aduna. */
+  lineSgrFee?: number;
   lineId: number;
   quantity: number;
   productName?: string;
@@ -513,6 +515,18 @@ export interface TrendyolShipmentPackage {
   invoiceAddress?: Record<string, unknown>;
   packageTotalPrice?: number;
   totalPrice?: number;
+  /**
+   * Garantia SGR incasata pe tot pachetul.
+   *
+   * ⚠ ADAUGAT DE EI IN 2026, si noi il stiam doar pe partea de PRODUS (`sgrPrice`, cat
+   * declaram la publicare). Pe comanda nu-l citeam deloc — deci nu puteam sti daca totalul
+   * pachetului il cuprinde sau nu, si nici cat se intoarce la un retur.
+   *
+   * ⚠ NU SE ADUNA LA TOTAL DE CATRE NOI. `packageTotalPrice` e ce a platit clientul; daca SGR
+   * e inauntru, adunat inca o data ar umfla comanda. Se pastreaza ca sa se POATA verifica, si
+   * pe fiecare linie separat.
+   */
+  totalSgrFee?: number;
   currencyCode?: string;
   lines: TrendyolOrderLine[];
   [k: string]: unknown;

@@ -73,6 +73,30 @@ test("⚠ o linie nelegata se scrie in jurnal, cu ce s-a vandut", () => {
   assert.match(o, /emag_product_id: l\.emag_product_id, nume: l\.name, cate: l\.quantity/);
 });
 
+test("⚠ si O SINGURA DATA pe comanda, nu la fiecare re-citire", () => {
+  /*
+   * ═══ DEFECTUL A FOST AL MEU, LA O ORA DUPA CE AM SCRIS AVERTISMENTUL ═══
+   *
+   * Prima forma scria inainte de a sti daca mai vazusem comanda. Cea de proba (501350435)
+   * sta in fereastra de suprapunere si e re-citita din minut in minut, deci acelasi rand a
+   * aparut la 19:53, 19:54, 19:55, 19:56... Am si spus, gresit, ca „s-a scris o data" —
+   * masurasem la un minut dupa prima linie, prea devreme ca sa se vada repetitia.
+   *
+   * ⚠ Un avertisment care se repeta la nesfarsit inceteaza sa mai fie citit, si atunci
+   * acopera chiar lucrul pe care voia sa-l arate.
+   *
+   * ⚠ Nimic nu se pierde din tacerea de dupa: intrarea din panou se citeste din
+   * `orders.items` si ramane acolo cat timp linia e nelegata.
+   */
+  const o = viu("src/lib/emag/orders.ts");
+  assert.match(o, /if \(nelegate\.length > 0 && !ex\?\.order_id\) \{/);
+  /* ⚠ Si hotararea vine DUPA citirea lui `ex`: scrisa inainte, n-ar fi avut cu ce deosebi
+     o comanda noua de a suta re-citire a aceleiasi. */
+  const iEx = o.indexOf("const ex = randCitit");
+  const iLog = o.indexOf("if (nelegate.length > 0 && !ex?.order_id) {");
+  assert.ok(iEx > 0 && iLog > iEx, "avertismentul vine dupa citirea comenzii existente");
+});
+
 test("⚠ si comerciantul o vede in panou, nu doar eu in jurnal", () => {
   /* Un jurnal pe care il citesc numai eu nu repara stocul nimanui. */
   const act = viu("src/lib/actions/emag.actions.ts");

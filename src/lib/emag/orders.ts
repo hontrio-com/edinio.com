@@ -808,23 +808,15 @@ async function ingereazaComandaCitita(
    * hrana pentru caini pe o comanda de vas de WC.
    *
    * Se repara ARATAND, nu ghicind.
+   *
+   * ⚠ SI O SINGURA DATA PE COMANDA, nu la fiecare re-citire (indreptat in aceeasi ora).
+   * Prima forma scria inainte de a sti daca o mai vazusem: comanda 501350435 sta in
+   * fereastra de suprapunere si e re-citita din minut in minut, deci acelasi avertisment a
+   * aparut la 19:53, 19:54, 19:55, 19:56... Am si spus, gresit, ca „s-a scris o data" —
+   * masurasem prea devreme, la un minut dupa prima linie. Un avertisment care se repeta la
+   * nesfarsit inceteaza sa mai fie citit, si atunci acopera exact ce voia sa arate.
    */
   const nelegate = linii.filter((l) => !l.product_id);
-  if (nelegate.length > 0) {
-    await logError({
-      action: "emag/orders",
-      message:
-        `comanda ${numar}: ${nelegate.length} ${nelegate.length === 1 ? "linie nu s-a legat" : "linii nu s-au legat"}`
-        + " de niciun produs, deci STOCUL NU SCADE pentru ele",
-      details: {
-        emagOrderId: c.id,
-        linii: nelegate.map((l) => ({ emag_product_id: l.emag_product_id, nume: l.name, cate: l.quantity })),
-      },
-      businessId: ctx.businessId,
-      severity: "warning",
-    });
-  }
-
   const bani = baniiComenzii(c, ctx.vatRate);
   const client = clientComenzii(c);
 
@@ -855,6 +847,24 @@ async function ingereazaComandaCitita(
   const scrisLa = Date.parse(ex?.last_modified ?? "");
   if (ex && Number.isFinite(venitLa) && Number.isFinite(scrisLa) && venitLa < scrisLa) {
     return "sarita";
+  }
+
+  /* ⚠ Numai la PRIMA scriere a comenzii. Panoul o arata mai departe cat timp linia ramane
+     nelegata (se citeste din `orders.items`), deci nimic nu se pierde din tacerea de aici —
+     se pierde doar repetitia. */
+  if (nelegate.length > 0 && !ex?.order_id) {
+    await logError({
+      action: "emag/orders",
+      message:
+        `comanda ${numar}: ${nelegate.length} ${nelegate.length === 1 ? "linie nu s-a legat" : "linii nu s-au legat"}`
+        + " de niciun produs, deci STOCUL NU SCADE pentru ele",
+      details: {
+        emagOrderId: c.id,
+        linii: nelegate.map((l) => ({ emag_product_id: l.emag_product_id, nume: l.name, cate: l.quantity })),
+      },
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
   }
 
   /* ── Comanda pe care o stim deja ────────────────────────────────────────── */

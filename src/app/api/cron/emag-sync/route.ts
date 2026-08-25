@@ -904,7 +904,19 @@ async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
     .select("id", { count: "exact", head: true })
     .eq("business_id", ctx.businessId)
     .is("awb_uploaded_at", null)
-    .not("order_id", "is", null);
+    .not("order_id", "is", null)
+    /*
+     * ⚠ NUMAI STARILE IN CARE UN AWB ARE ROST: 2 in procesare, 3 pregatita, 4 finalizata.
+     *
+     * O comanda ANULATA (0) sau RETURNATA (5) nu va primi niciodata un AWB. Lasate in
+     * bazin, ele n-ar fi facut rau — pasul le-ar fi citit si ar fi trecut mai departe — dar
+     * ar fi INTARZIAT lucrul adevarat: fereastra e rotativa, zece pe trecere la cinci
+     * minute, deci o mie de comenzi anulate inseamna vreo opt ore pana se ajunge la un AWB
+     * nou. Adica un cumparator care asteapta urmarirea o zi de lucru intreaga.
+     *
+     * ⚠ Starea 1 (noua) se sare si ea: acolo comanda nici n-a fost confirmata inca.
+     */
+    .in("order_status", [2, 3, 4]);
 
   if (eBazin) {
     await logError({
@@ -927,6 +939,9 @@ async function urcaAwburile(admin: Admin, ctx: ContextEmag): Promise<number> {
     .eq("business_id", ctx.businessId)
     .is("awb_uploaded_at", null)
     .not("order_id", "is", null)
+    /* ⚠ Aceeasi ingradire ca la numaratoare — altfel bazinul si felia n-ar mai vorbi
+       despre aceleasi randuri, iar `range` ar sari peste lucruri. */
+    .in("order_status", [2, 3, 4])
     .order("created_at", { ascending: true })
     .range(de_la, de_la + AWB_PE_TRECERE - 1);
 

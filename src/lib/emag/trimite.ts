@@ -28,7 +28,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import {
-  actualizeazaStoc, cautaDupaEan, isEmagError, salveazaMasuratori, salveazaOferte,
+  cautaDupaEan, isEmagError, salveazaMasuratori, salveazaOferte,
   salveazaProduseOferte,
 } from "./client";
 import { ePreaMareLotul, mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
@@ -687,15 +687,67 @@ async function duStocul(
   }
 
   const depozit = ctx.config.warehouse_id ?? 1;
+
+  /*
+   * ═══ ⚠ STOCUL PLEACA PE `offer/save`, NU PE `offer_stock` (25.08.2026) ═══
+   *
+   * MASURAT IN PRODUCTIE, pe contul VetDepo, in jurnalul de cereri:
+   *
+   *   PATCH /offer_stock/{id}   0 reusite,  850 de refuzuri 400   ← niciodata, nici una
+   *   POST  /product_offer/save 1145 reusite,  0 refuzuri
+   *   POST  /order/read, /category/read, /rma/read, /vat/read …   toate merg
+   *
+   * Ruta usoara de stoc N-A FUNCTIONAT NICIODATA. S-a vazut abia cand a miscat primul
+   * stoc, la 04:02, fiindca pana atunci nu fusese chemata. Din acel minut, fiecare
+   * vanzare pe Edinio a incetat sa mai scada stocul la eMAG — adica exact supravanzarea
+   * de care exista toata integrarea.
+   *
+   * ⚠ CE AM EXCLUS, cu dovezi, nu prin ghicire:
+   *
+   *   acreditarile   toate celelalte rute merg pe acelasi cont
+   *   releul, IP-ul  la fel
+   *   ofertele       active la ei (`status 1`), aprobate (`validation_status 9`), cu stoc
+   *   valorile       5, 7, 16, 25, 31 — nimic negativ, nimic urias
+   *   invelisul      `{data:{...}}` e ce cere schema LOR, si e chiar forma care merge de
+   *                  1145 de ori pe `product_offer/save`
+   *   adresa         `emagUrl` da exact `/api-3/offer_stock/{id}`
+   *
+   * ⚠ CE A RAMAS: `PATCH`. E SINGURUL loc din toata integrarea unde nu trimitem `POST` —
+   * si singurul care cade. Iar cele 850 de refuzuri n-au `mesaje`: cand eMAG refuza din
+   * logica lui, trimite `isError` cu motive, si le-am fi prins. Un 400 fara forma lor
+   * seamana a cerere oprita INAINTE sa ajunga la aplicatia lor.
+   *
+   * ⚠ N-AM PUTUT DOVEDI ASTA CU O CERERE. Releul cu IP fix traieste doar in mediul
+   * Vercel; de pe masina de lucru cererea ar pleca de pe un IP nealbit si ar primi un 403
+   * care nu spune nimic despre metoda. Deci nu se repara ghicind metoda — se ocoleste
+   * necunoscutul pe o ruta DOVEDITA.
+   *
+   * `offer/save` e tot o ruta USOARA: nu atinge documentatia, nu atinge continutul. E
+   * chiar ruta pe care documentatia lor o da pentru pret SI stoc. Iar codul se sprijina
+   * deja pe scrierea ei partiala: `retragePeEmagId` trimite doar `{id, status: 0}`.
+   *
+   * ⚠ SE TRIMITE NUMAI `{id, stock}`. Orice camp in plus ar fi o schimbare pe care
+   * nimeni n-a cerut-o — chiar lectia Trendyol, unde o miscare trimisa pe ruta grea a
+   * raportat succes fara sa schimbe pretul.
+   *
+   * ⚠ SI INTR-UN SINGUR LOT. Forma dinainte facea cate o cerere PE OFERTA: un produs cu
+   * 50 de variante ardea 50 din cele 3 cereri pe secunda ale magazinului, pentru o
+   * singura miscare de stoc. `offer/save` ia pana la 50 de oferte deodata.
+   */
+  const oferte: EmagOferta[] = stocuri.map((st) => ({
+    id: st.emagId,
+    stock: [{ warehouse_id: depozit, value: st.cantitate }],
+  }));
+
   let ultimulMesaj = "";
   let celMaiRau: VerdictEmag = "reusit";
 
-  for (const st of stocuri) {
-    const r = await actualizeazaStoc(ctx.auth, st.emagId, [{ warehouse_id: depozit, value: st.cantitate }]);
+  for (let i = 0; i < oferte.length; i += LOT) {
+    const r = await salveazaOferte(ctx.auth, oferte.slice(i, i + LOT));
     if (isEmagError(r)) {
       celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
       ultimulMesaj = mesajOmenesc(r.error);
-      /* ⚠ La `chei` se opreste tot: acreditarile nu se repara intre doua oferte. */
+      /* ⚠ La `chei` se opreste tot: acreditarile nu se repara intre doua loturi. */
       if (celMaiRau === "chei") break;
       continue;
     }

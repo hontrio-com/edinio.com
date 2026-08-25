@@ -542,8 +542,39 @@ export function salveazaOferte(auth: EmagAuth, oferte: EmagOferta[]) {
 /**
  * Numai stocul. ⚠ `PATCH`, nu `POST`, iar id-ul e in CALE.
  *
- * Cea mai usoara dintre cele trei rute de scriere: o folosim pentru fiecare
- * miscare de stoc, ca sa nu atingem nimic altceva din oferta.
+ * ═══ ⚠ NU SE FOLOSESTE. MASURAT: N-A MERS NICIODATA (25.08.2026) ═══
+ *
+ * Cea mai usoara dintre cele trei rute de scriere, si pe hartie cea potrivita pentru
+ * fiecare miscare de stoc. In jurnalul de cereri al productiei, pe contul VetDepo:
+ *
+ *   PATCH /offer_stock/{id}    0 reusite,  850 de refuzuri 400
+ *   POST  /product_offer/save  1145 reusite,  0 refuzuri
+ *   POST  /order/read, /category/read, /rma/read, /vat/read …  toate merg
+ *
+ * ⚠ NICIUN 200. Niciodata. S-a vazut abia in ziua in care a miscat primul stoc, fiindca
+ * pana atunci ruta nu fusese chemata — iar din acel minut, fiecare vanzare a incetat sa
+ * mai scada stocul la eMAG.
+ *
+ * ⚠ CE S-A EXCLUS, cu dovezi: acreditarile (restul rutelor merg pe acelasi cont),
+ * releul si IP-ul (la fel), ofertele (active la ei, aprobate, cu stoc), valorile
+ * trimise (5, 7, 16, 25, 31), invelisul `{data:{…}}` (e ce cere schema LOR, si e chiar
+ * forma care merge de 1145 de ori pe `product_offer/save`), si adresa (`emagUrl` da
+ * exact `/api-3/offer_stock/{id}`).
+ *
+ * ⚠ CE A RAMAS: metoda. E singurul loc din integrare unde nu trimitem `POST`. Iar cele
+ * 850 de refuzuri n-au `mesaje` — cand eMAG refuza din logica lui trimite `isError` cu
+ * motive, si le-am fi prins. Un 400 fara forma lor seamana a cerere oprita inainte sa
+ * ajunga la aplicatia lor.
+ *
+ * ⚠ SI DE CE N-AM DOVEDIT-O CU O CERERE: releul cu IP fix traieste doar in mediul
+ * Vercel. De pe masina de lucru, cererea ar pleca de pe un IP nealbit si ar primi un 403
+ * care nu spune nimic despre metoda. Deci ipoteza a ramas ipoteza, iar stocul s-a mutat
+ * pe o ruta DOVEDITA (`offer/save`) in loc sa se ghiceasca metoda.
+ *
+ * ⚠ SE PASTREAZA ANUME, nestearsa: cine gaseste peste un an ruta asta in documentatia
+ * lor si vrea s-o foloseasca fiindca „e cea mai usoara" trebuie sa dea peste masuratoarea
+ * de aici, nu peste un fisier gol. Daca vreodata e reincercata, se face cu o cerere
+ * adevarata din mediul cu releu, si se scrie ce a raspuns.
  */
 export function actualizeazaStoc(auth: EmagAuth, emagId: number, stoc: { warehouse_id: number; value: number }[]) {
   return trimite(auth, "PATCH", `/offer_stock/${emagId}`, { data: { stock: stoc } }, "scriere");

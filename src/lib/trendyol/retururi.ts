@@ -3,7 +3,7 @@ import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { approveClaimItems, getClaims, isTrendyolError, rejectClaimItems } from "./client";
 import type { TrendyolSyncContext } from "./sync";
-import type { TrendyolClaim } from "./types";
+import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
 import { idCererii, idPachetului, liniileReturului } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchTrendyolConfig } from "./config";
@@ -60,14 +60,13 @@ function laData(ms: unknown): string | null {
  * arata. Hotararea e a comerciantului, si trece prin `hotarasteRetur`.
  */
 export async function aduRetururile(
-  admin: Db, ctx: TrendyolSyncContext,
+  admin: Db, ctx: TrendyolSyncContext, marcajMs?: number,
 ): Promise<{ aduse: number; ok: boolean }> {
-  const marcaj = Date.parse(ctx.config.claims_synced_at ?? "");
   const acum = Date.now();
   /* ⚠ Suprapunere de cinci minute peste marcaj: ceasul lor si al nostru nu bat la fel, iar o
      cerere modificata chiar in secunda marcajului ar cadea intre doua ferestre. */
-  const de_la = Number.isFinite(marcaj)
-    ? Math.max(marcaj - 5 * 60_000, acum - FEREASTRA_MAXIMA_MS)
+  const de_la = Number.isFinite(marcajMs) && marcajMs
+    ? Math.max(marcajMs - 5 * 60_000, acum - FEREASTRA_MAXIMA_MS)
     : acum - FEREASTRA_INITIALA_MS;
 
   let aduse = 0;
@@ -79,7 +78,8 @@ export async function aduRetururile(
       await logError({
         action: "trendyol/retururi",
         message: `cererile de retur nu s-au putut citi: ${res.error}`,
-        details: { pagina, status: res.status }, businessId: ctx.businessId, severity: "warning",
+        details: { pagina, status: res.status, vitrina: ctx.auth.storefront ?? null },
+        businessId: ctx.businessId, severity: "warning",
       });
       /* ⚠ Marcajul NU avanseaza: fereastra se reia. */
       return { aduse, ok: false };
@@ -105,26 +105,61 @@ export async function aduRetururile(
 }
 
 /**
- * O trecere intreaga: aduce si muta marcajul, dar NUMAI daca s-a citit tot.
+ * O trecere intreaga, pe TOATE vitrinele magazinului.
  *
- * ⚠ MARCAJUL AVANSEAZA NUMAI LA O TRECERE INTREAGA. Pus la „acum" dupa una trunchiata,
- * cererile necitite ar ramane in urma ferestrei si NU s-ar mai citi niciodata — fara nicio
- * eroare, fiindca fiecare trecere in parte a reusit. E chiar incidentul pentru care exista
- * `marcaj.ts` la comenzi.
+ * ═══ ⚠ ERA UN SINGUR MARCAJ PENTRU TOATE (26.08.2026) ═══
+ *
+ * Comenzile isi tin de mult pozitia pe fiecare vitrina (`pollPackagesToateVitrinele`), si din
+ * motiv temeinic: cu un marcaj comun, o vitrina care cade ii tine pe loc pe celelalte, iar una
+ * care merge inainte o poate SARI pe cea cazuta. Retururile aveau exact defectul de care
+ * comenzile fusesera aparate.
+ *
+ * ⚠ CU CROSS-COUNTRY PORNIT, un 429 pe Grecia ar fi impins marcajul comun mai departe, iar
+ * retururile grecesti ar fi iesit din fereastra de doua saptamani si nu s-ar mai fi citit
+ * NICIODATA — fara nicio eroare, fiindca trecerea „a reusit".
+ *
+ * ⚠ MARCAJUL VECHI SE CITESTE CA PUNCT DE PLECARE pentru vitrina de origine: fara asta, prima
+ * trecere de dupa schimbare ar fi recitit doua saptamani de retururi pe fiecare vitrina.
  */
 export async function treceRetururile(
   admin: Db, ctx: TrendyolSyncContext,
 ): Promise<{ aduse: number }> {
   const inceput = Date.now();
-  const r = await aduRetururile(admin, ctx);
-  if (r.ok) {
-    /* ⚠ Se scrie clipa DE DINAINTE de citire, minus suprapunerea: orice s-a schimbat cat timp
-       citeam trebuie sa intre in fereastra urmatoare. */
+  const origine = (ctx.auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT) as TrendyolStoreFront;
+  const destinatii = (ctx.config.cross_country_storefronts ?? []).filter((v) => v && v !== origine);
+  const vitrine: TrendyolStoreFront[] = [origine, ...destinatii];
+
+  const marcaje = { ...(ctx.config.claims_synced_per_storefront ?? {}) };
+  const vechi = Date.parse(ctx.config.claims_synced_at ?? "");
+
+  let aduse = 0;
+  const noi: Record<string, string> = {};
+
+  for (const vitrina of vitrine) {
+    const ctxVitrina = vitrina === origine
+      ? ctx
+      : { ...ctx, auth: { ...ctx.auth, storefront: vitrina } };
+
+    const alEi = Date.parse(marcaje[vitrina] ?? "");
+    const marcaj = Number.isFinite(alEi) ? alEi
+      : (vitrina === origine && Number.isFinite(vechi) ? vechi : undefined);
+
+    const r = await aduRetururile(admin, ctxVitrina, marcaj);
+    aduse += r.aduse;
+    /* ⚠ Fiecare vitrina isi muta marcajul singura, si numai la o trecere intreaga. Un esec pe
+       una nu atinge pozitia celorlalte. */
+    if (r.ok) noi[vitrina] = new Date(inceput - 5 * 60_000).toISOString();
+  }
+
+  if (Object.keys(noi).length > 0) {
     await patchTrendyolConfig(admin, ctx.businessId, {
-      claims_synced_at: new Date(inceput - 5 * 60_000).toISOString(),
+      claims_synced_per_storefront: { ...marcaje, ...noi },
+      /* Marcajul vechi se tine la zi pentru vitrina de origine: e ce citeste orice cod care
+         inca nu stie de cel pe vitrine. */
+      ...(noi[origine] ? { claims_synced_at: noi[origine] } : {}),
     });
   }
-  return { aduse: r.aduse };
+  return { aduse };
 }
 
 /** Scrie o cerere si liniile ei. `false` = ceva n-a mers si marcajul nu are voie sa avanseze. */
@@ -149,6 +184,9 @@ async function scrieCererea(
     order_number: c.orderNumber ?? null,
     shipment_package_id: idPachetului(c),
     claim_status: c.status ?? null,
+    /* ⚠ VITRINA DE PE CARE A VENIT. Hotararea trebuie sa plece tot pe ea: Golful are cai
+       separate, iar o aprobare trimisa pe calea europeana nu gaseste cererea. */
+    storefront: ctx.auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT,
     /* ⚠ Raspunsul lor INTREG: forma cererilor nu e in schema pe care o avem. */
     raw: c as never,
     claim_date: laData(c.claimDate),
@@ -220,10 +258,20 @@ export async function hotarasteRetur(
    * ⚠ NU E DOAR IGIENA DE PANOU. Actiunile de server se pot chema cu orice argumente, printr-un
    * POST direct — verificarea trebuie sa fie AICI, nu in ecran.
    */
-  const cerere = randCitit<{ id: string }>("trendyol.cerereaDeHotarat", await admin
-    .from("trendyol_claims").select("id")
-    .eq("business_id", ctx.businessId).eq("claim_id", p.claimId).maybeSingle() as never);
+  const cerere = randCitit<{ id: string; storefront: string | null }>(
+    "trendyol.cerereaDeHotarat", await admin
+      .from("trendyol_claims").select("id, storefront")
+      .eq("business_id", ctx.businessId).eq("claim_id", p.claimId).maybeSingle() as never);
   if (!cerere) return { error: "Returul nu există în magazinul tău." };
+
+  /*
+   * ⚠ HOTARAREA PLEACA PE VITRINA DE PE CARE A VENIT RETURUL, nu pe cea de origine a
+   * magazinului. Cu Cross-Country pornit, un retur grecesc aprobat pe vitrina romaneasca ar
+   * fi cautat o cerere care acolo nu exista — iar Golful are de-a dreptul alte cai (`-gulf`).
+   */
+  const ctxCerere = cerere.storefront && cerere.storefront !== ctx.auth.storefront
+    ? { ...ctx, auth: { ...ctx.auth, storefront: cerere.storefront as TrendyolStoreFront } }
+    : ctx;
 
   const aleCererii = randuriCitite<{ claim_item_id: string }>("trendyol.liniileCererii", await admin
     .from("trendyol_claim_items").select("claim_item_id")
@@ -241,7 +289,7 @@ export async function hotarasteRetur(
   }
 
   if (p.accepta) {
-    const res = await approveClaimItems(ctx.auth, p.claimId, p.claimItemIds);
+    const res = await approveClaimItems(ctxCerere.auth, p.claimId, p.claimItemIds);
     if (isTrendyolError(res)) return { error: res.error };
   } else {
     /* ⚠ Motivul e cerut de EI, si asa si trebuie: un retur respins fara explicatie ajunge la
@@ -254,7 +302,7 @@ export async function hotarasteRetur(
     if (explicatie.length > MAX_EXPLICATIE) {
       return { error: `Explicația poate avea cel mult ${MAX_EXPLICATIE} de caractere.` };
     }
-    const res = await rejectClaimItems(ctx.auth, p.claimId, {
+    const res = await rejectClaimItems(ctxCerere.auth, p.claimId, {
       claimIssueReasonId: p.motivId,
       claimItemIdList: p.claimItemIds,
       description: explicatie,

@@ -19,6 +19,7 @@ const viu = (p: string) =>
 
 const mod = viu("src/lib/trendyol/retururi.ts");
 const client = viu("src/lib/trendyol/client.ts");
+import { eVitrinaGolf } from "./client";
 const act = viu("src/lib/actions/trendyol-retururi.actions.ts");
 const ui = viu("src/components/dashboard/TrendyolReturns.tsx");
 
@@ -37,7 +38,10 @@ test("⚠ marcajul avanseaza NUMAI la o trecere intreaga", () => {
    * s-ar mai citi niciodata — fara nicio eroare, fiindca fiecare trecere in parte a reusit.
    * E chiar incidentul pentru care exista `marcaj.ts` la comenzi.
    */
-  assert.match(mod, /if \(r\.ok\) \{[\s\S]{0,300}?claims_synced_at/);
+  /* ⚠ Forma s-a schimbat odata cu marcajele pe vitrina: nu mai e un singur `if (r.ok)` care
+     scrie configurarea, ci cate o pozitie pe fiecare vitrina. Regula e insa aceeasi. */
+  assert.match(mod, /if \(r\.ok\) noi\[vitrina\] = /);
+  assert.match(mod, /claims_synced_per_storefront: \{ \.\.\.marcaje, \.\.\.noi \}/);
   assert.match(mod, /if \(pagina \+ 1 >= PAGINI_PE_TRECERE\) ok = false;/);
   /* ⚠ Si se scrie clipa de DINAINTE de citire, minus suprapunerea. */
   assert.match(mod, /new Date\(inceput - 5 \* 60_000\)\.toISOString\(\)/);
@@ -47,7 +51,7 @@ test("⚠ fereastra lor e de cel mult doua saptamani", () => {
   /* Ceruta mai larga, serviciul raspunde 400 si nu s-ar aduce nimic — iar cronul ar parea ca
      merge. */
   assert.match(mod, /const FEREASTRA_MAXIMA_MS = 14 \* 24 \* 60 \* 60 \* 1000;/);
-  assert.match(mod, /Math\.max\(marcaj - 5 \* 60_000, acum - FEREASTRA_MAXIMA_MS\)/);
+  assert.match(mod, /Math\.max\(marcajMs - 5 \* 60_000, acum - FEREASTRA_MAXIMA_MS\)/);
 });
 
 test("⚠ hotararea se scrie DUPA raspunsul lor, nu inainte", () => {
@@ -179,4 +183,69 @@ test("⚠ tabelele au RLS, si numai proprietarul citeste", () => {
     assert.match(baseline, new RegExp(`alter table public\.${t} enable row level security;`), t);
     assert.match(baseline, new RegExp(`owner_select_${t}`), `politica pentru ${t}`);
   }
+});
+
+test("⚠ fiecare vitrina isi tine POZITIA ei, ca la comenzi", () => {
+  /*
+   * ═══ ⚠ ERA UN SINGUR MARCAJ PENTRU TOATE (26.08.2026) ═══
+   *
+   * Comenzile isi tin de mult pozitia pe fiecare vitrina, si din motiv temeinic: cu un marcaj
+   * comun, o vitrina care cade ii tine pe loc pe celelalte, iar una care merge inainte o poate
+   * SARI pe cea cazuta. Retururile aveau exact defectul de care comenzile fusesera aparate.
+   *
+   * ⚠ Cu Cross-Country pornit, un 429 pe Grecia ar fi impins marcajul comun mai departe, iar
+   * retururile grecesti ar fi iesit din fereastra de doua saptamani si nu s-ar mai fi citit
+   * NICIODATA — fara nicio eroare, fiindca trecerea „a reusit".
+   */
+  assert.match(mod, /claims_synced_per_storefront/);
+  assert.match(mod, /if \(r\.ok\) noi\[vitrina\] = /, "numai trecerea intreaga muta marcajul");
+  /* ⚠ Si marcajul vechi ramane punct de plecare pentru vitrina de origine: fara asta, prima
+     trecere de dupa schimbare ar fi recitit doua saptamani pe fiecare vitrina. */
+  assert.match(mod, /vitrina === origine && Number\.isFinite\(vechi\)/);
+});
+
+test("⚠ hotararea pleaca pe vitrina de pe care a VENIT returul", () => {
+  /*
+   * Cu Cross-Country pornit, un retur grecesc aprobat pe vitrina romaneasca ar cauta o cerere
+   * care acolo nu exista. Iar Golful are de-a dreptul alte cai.
+   */
+  assert.match(mod, /storefront: ctx\.auth\.storefront \?\? TRENDYOL_DEFAULT_STOREFRONT/, "se scrie la aducere");
+  assert.match(mod, /const ctxCerere = cerere\.storefront && cerere\.storefront !== ctx\.auth\.storefront/);
+  assert.match(mod, /approveClaimItems\(ctxCerere\.auth/);
+  assert.match(mod, /rejectClaimItems\(ctxCerere\.auth/);
+});
+
+test("⚠ Golful are capetele LUI, si Europa ramane neatinsa", () => {
+  /*
+   * Trendyol are o sectiune separata de documentatie pentru retururile din Golf, cu variante
+   * `-gulf`. Trimise pe calea europeana, cererile unui vanzator de acolo nu gasesc nimic — si
+   * asta ARATA la fel ca „n-are retururi".
+   *
+   * ⚠ NEVERIFICAT PE TRAFIC, si se spune pe fata: niciunul dintre conturile noastre nu e
+   * inregistrat in Golf. De-aia proba cere si ca vitrinele europene sa ramana pe calea veche.
+   */
+  assert.equal(eVitrinaGolf("SA"), true);
+  assert.equal(eVitrinaGolf("AE"), true);
+  assert.equal(eVitrinaGolf("RO"), false);
+  assert.equal(eVitrinaGolf("GR"), false);
+  assert.equal(eVitrinaGolf(undefined), false);
+  assert.match(client, /eVitrinaGolf\(auth\.storefront\) \? "-gulf" : ""/);
+});
+
+test("⚠ motivele de respingere se traduc, fiindca ei le dau doar in turca", () => {
+  /*
+   * Probat direct pe API-ul lor, cu `storeFrontCode: RO` si `Accept-Language: ro`, apoi cu
+   * `INT`/`en`: aceleasi propozitii turcesti de fiecare data. Ecranul ar fi aratat
+   * „Müşteriden gelen ürün defolu/zarar görmüş" unui comerciant din Romania, intr-o lista din
+   * care trebuie sa aleaga inainte sa respinga un retur.
+   *
+   * ⚠ ID-URILE RAMAN ALE LOR: se traduce doar eticheta, iar un motiv pe care ei il adauga si
+   * noi nu-l stim se arata cu numele lui turcesc — nu dispare din lista.
+   */
+  const t = readFileSync("src/lib/trendyol/types.ts", "utf8");
+  assert.match(t, /export const MOTIVE_RETUR_RO: Record<number, string> = \{/);
+  for (const id of [51, 151, 201, 251, 401, 1651, 1751, 2201]) {
+    assert.ok(t.includes(`  ${id}: "`), `motivul ${id} e tradus`);
+  }
+  assert.match(act, /MOTIVE_RETUR_RO\[m\.id\] \?\? m\.name/, "necunoscutul pastreaza numele lor");
 });

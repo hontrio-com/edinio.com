@@ -4276,6 +4276,7 @@ export type Database = {
           order_number: string | null
           raw: Json | null
           shipment_package_id: number | null
+          storefront: string | null
           updated_at: string
         }
         Insert: {
@@ -4290,6 +4291,7 @@ export type Database = {
           order_number?: string | null
           raw?: Json | null
           shipment_package_id?: number | null
+          storefront?: string | null
           updated_at?: string
         }
         Update: {
@@ -4304,6 +4306,7 @@ export type Database = {
           order_number?: string | null
           raw?: Json | null
           shipment_package_id?: number | null
+          storefront?: string | null
           updated_at?: string
         }
         Relationships: []

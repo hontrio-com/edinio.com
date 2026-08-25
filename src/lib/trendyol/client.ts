@@ -558,7 +558,8 @@ export function getClaims(
   return call<{
     content?: TrendyolClaim[];
     totalElements?: number; totalPages?: number; page?: number; size?: number;
-  }>(auth, "GET", `/integration/order/sellers/${auth.supplierId}/claims?${q.toString()}`);
+  }>(auth, "GET",
+    `/integration/order/sellers/${auth.supplierId}/claims${sufixulRegiunii(auth)}?${q.toString()}`);
 }
 
 /**
@@ -568,9 +569,35 @@ export function getClaims(
  * bucata si respinge alta din aceeasi cerere. O aprobare „pe tot" ar fi luat o hotarare pe
  * care el n-a luat-o.
  */
+/**
+ * Golful are capetele LUI pentru retururi.
+ *
+ * ═══ ⚠ EUROPA SI GOLFUL NU IMPART ACELEASI CAI ═══
+ *
+ * Trendyol are o sectiune separata de documentatie, „Returned Order Integration for GULF
+ * region", cu variante `-gulf` ale acelorasi servicii. Trimise pe calea europeana, cererile
+ * unui vanzator din Golf nu gasesc nimic — si asta ARATA la fel ca „n-are retururi".
+ *
+ * ⚠ NEVERIFICAT PE TRAFIC, si se spune pe fata: niciunul dintre conturile noastre nu e
+ * inregistrat in Golf, deci n-am avut cum sa lovim capetele astea. Numele vine din indexul lor
+ * de documentatie. Pe vitrinele europene — singurele pe care le folosim azi — nu se schimba
+ * nimic.
+ */
+const VITRINE_GOLF = new Set(["SA", "AE", "KW", "QA", "BH", "OM"]);
+
+export function eVitrinaGolf(vitrina: string | undefined): boolean {
+  return VITRINE_GOLF.has((vitrina ?? "").toUpperCase());
+}
+
+/** Sufixul cerut de regiunea vitrinei. `""` pentru Europa. */
+function sufixulRegiunii(auth: TrendyolAuth): string {
+  return eVitrinaGolf(auth.storefront) ? "-gulf" : "";
+}
+
 export function approveClaimItems(auth: TrendyolAuth, claimId: string, claimLineItemIdList: string[]) {
   return call<undefined>(
-    auth, "PUT", `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}/items/approve`,
+    auth, "PUT",
+    `/integration/order/sellers/${auth.supplierId}/claims${sufixulRegiunii(auth)}/${encodeURIComponent(claimId)}/items/approve`,
     { claimLineItemIdList });
 }
 

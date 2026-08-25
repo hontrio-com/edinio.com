@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getClaimIssueReasons, isTrendyolError } from "@/lib/trendyol/client";
 import { loadTrendyolContext } from "@/lib/trendyol/sync";
 import { hotarasteRetur, repuneInStoc } from "@/lib/trendyol/retururi";
+import { MOTIVE_RETUR_RO } from "@/lib/trendyol/types";
 
 /**
  * Retururile Trendyol, din panoul nostru.
@@ -117,9 +118,20 @@ export async function motiveRespingereTrendyol(
 
   const res = await getClaimIssueReasons(ctx.auth);
   if (isTrendyolError(res)) return { error: res.error };
-  /* ⚠ Motivele se CITESC de la ei, nu se scriu de mana: un id inventat ar fi fost refuzat
-     abia la respingere, cand comerciantul crede ca a rezolvat. */
-  return { motive: (res.data ?? []).map((m) => ({ id: m.id, nume: m.name })) };
+  /*
+   * ⚠ ID-URILE SE CITESC DE LA EI, ETICHETA SE TRADUCE AICI.
+   *
+   * Lista tot de la ei vine — un id inventat ar fi fost refuzat abia la respingere, cand
+   * comerciantul crede ca a rezolvat. Dar numele vin NUMAI in turca: probat cu
+   * `storeFrontCode: RO` si `Accept-Language: ro`, apoi cu `INT`/`en` — aceleasi propozitii
+   * turcesti de fiecare data.
+   *
+   * ⚠ Un motiv pe care ei il adauga si noi nu-l stim se arata cu numele lui turcesc, nu
+   * dispare: mai bine o eticheta pe care omul n-o intelege decat o optiune care lipseste.
+   */
+  return {
+    motive: (res.data ?? []).map((m) => ({ id: m.id, nume: MOTIVE_RETUR_RO[m.id] ?? m.name })),
+  };
 }
 
 /** Comerciantul accepta sau respinge liniile alese. */

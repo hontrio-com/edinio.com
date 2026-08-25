@@ -200,6 +200,14 @@ export interface TrendyolConfig {
   /** Marcajul ferestrei de retururi. ⚠ Fereastra lor e de cel mult doua saptamani. */
   claims_synced_at?: string;
   /**
+   * ⚠ Pozitia pe FIECARE vitrina. Cu un marcaj comun, o vitrina cazuta ii tine pe loc pe
+   * celelalte, iar una care merge inainte o poate SARI pe cea cazuta — si atunci retururile ei
+   * ies din fereastra de doua saptamani si nu se mai citesc niciodata.
+   *
+   * Comenzile aveau deja regula asta; retururile nu.
+   */
+  claims_synced_per_storefront?: Partial<Record<TrendyolStoreFront, string>>;
+  /**
    * Tara in care s-a FABRICAT produsul, implicita pentru tot magazinul.
    *
    * ⚠ NU E `origine`, care e chiar deasupra. Aceea e originea VANZATORULUI, folosita la
@@ -646,6 +654,44 @@ export const MOTIVE_ANULARE_TRENDYOL: { id: number; nume: string }[] = [
   { id: 505, nume: "Același client a cumpărat în cantitate mare, după reducere" },
   { id: 506, nume: "Forță majoră" },
 ];
+
+/**
+ * Motivele de respingere a returului, in romaneste.
+ *
+ * ═══ ⚠ EI LE DAU NUMAI IN TURCA (26.08.2026) ═══
+ *
+ * Probat direct pe API-ul lor, cu `storeFrontCode: RO` si `Accept-Language: ro`, apoi cu `INT`
+ * si `en`: aceleasi propozitii turcesti de fiecare data. Capatul `claim-issue-reasons` pur si
+ * simplu nu traduce.
+ *
+ * ⚠ DECI ECRANUL AR FI ARATAT „Müşteriden gelen ürün defolu/zarar görmüş" unui comerciant din
+ * Romania, intr-o lista din care trebuie sa aleaga inainte sa respinga un retur. Ar fi ales
+ * la nimereala, si a nimeri gresit aici inseamna un arbitraj pierdut.
+ *
+ * ⚠ ID-URILE RAMAN ALE LOR, si lista tot de la ei se citeste. Aici se traduce DOAR eticheta;
+ * un motiv nou, pe care ei il adauga si noi nu-l stim, se arata cu numele lui turcesc — mai
+ * bine asa decat sa dispara din lista.
+ */
+export const MOTIVE_RETUR_RO: Record<number, string> = {
+  51: "Produsul primit de la client e folosit",
+  151: "Produsului primit de la client îi lipsește o piesă sau un accesoriu",
+  201: "Produsul primit de la client e altul decât cel trimis",
+  251: "Produsul primit de la client e defect sau deteriorat",
+  401: "Din produsele primite de la client lipsesc bucăți",
+  451: "Trimit produsul primit de la client la analiză",
+  1651: "Coletul de retur trimis de client nu a ajuns la mine",
+  1701: "Produsul pe care l-am trimis nu e greșit",
+  1751: "Produsul pe care l-am trimis nu e defect",
+  1801: "Nu s-a găsit niciun defect de fabricație",
+  1851: "Produsul a fost înlocuit",
+  1901: "Produsul a fost reparat",
+  1951: "Clientul nu a emis factura de retur pentru firmă",
+  2001: "Clientul a emis greșit factura de retur pentru firmă",
+  2051: "Ambalajul unui produs cu risc de igienă a fost deschis",
+  2101: "Cerere de schimb venită din întrebarea la comandă (a nu se folosi fără cererea clientului)",
+  2151: "Trimit clientului factura pentru a duce produsul la service",
+  2201: "Din produsul pe care l-am trimis nu lipsește nimic",
+};
 
 /** Starile in care cererea inca asteapta o hotarare de la comerciant. */
 export const CLAIM_DE_HOTARAT = ["Created", "WaitingInAction", "InAnalysis"] as const;

@@ -5317,7 +5317,8 @@ create table if not exists public.trendyol_claims (
   claim_date timestamp with time zone,
   last_modified timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  storefront text);
 
 create table if not exists public.trendyol_listings (
   id uuid default gen_random_uuid() not null,

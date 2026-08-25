@@ -12,6 +12,7 @@ import {
 import { marcajUrmator, pollPackagesToateVitrinele } from "@/lib/trendyol/orders";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { patchTrendyolConfig } from "@/lib/trendyol/config";
+import { treceRetururile } from "@/lib/trendyol/retururi";
 import type { TrendyolConfig, TrendyolStoreFront } from "@/lib/trendyol/types";
 
 type Admin = SupabaseClient<Database>;
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
   );
 
   const now = new Date().toISOString();
-  let processed = 0, failed = 0, polled = 0, reconciled = 0;
+  let processed = 0, failed = 0, polled = 0, reconciled = 0, retururi = 0;
   const ctxCache = new Map<string, TrendyolSyncContext | null>();
   async function ctxFor(businessId: string): Promise<TrendyolSyncContext | null> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
@@ -296,6 +297,33 @@ export async function GET(req: NextRequest) {
   if (eSelleri) {
     await logError({ action: "trendyol-sync", message: `magazinele conectate nu s-au putut citi: ${eSelleri}`, severity: "critical" });
   }
+  /* ── Retururile (claims) ────────────────────────────────────────────────────
+   *
+   * ⚠ LA ZECE MINUTE, nu la fiecare trecere. O cerere de retur nu se schimba din minut in
+   * minut, iar fiecare intrebare arde o cerere din grupul „comenzi" al magazinului — acelasi
+   * din care pleaca si citirea pachetelor.
+   *
+   * ⚠ Se ADUC si se ARATA, atat. Nu se aproba, nu se respinge, si nu se atinge stocul:
+   * hotararea e a comerciantului. Vezi `retururi.ts`.
+   */
+  if (new Date().getMinutes() % 10 === 4) {
+    for (const businessId of alegeInRotatie(sellerIds, MAX_BIZ)) {
+      const ctx = await ctxFor(businessId);
+      if (!ctx) continue;
+      try {
+        const r = await treceRetururile(admin, ctx);
+        retururi += r.aduse;
+      } catch (e) {
+        await logError({
+          action: "trendyol-sync",
+          message: `retururile nu s-au putut aduce: ${e instanceof Error ? e.message : String(e)}`,
+          businessId, severity: "warning",
+        });
+      }
+      await pause(PACE_MS);
+    }
+  }
+
   let ingested = 0;
   for (const businessId of alegeInRotatie(sellerIds, ORDERS_BIZ)) {
     const ctx = await ctxFor(businessId);
@@ -362,7 +390,7 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(`[trendyol-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} ingested=${ingested} corrected=${corrected}`);
-  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ingested, corrected });
+  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ingested, corrected, retururi });
 }
 
 /**

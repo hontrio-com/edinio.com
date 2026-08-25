@@ -16,6 +16,7 @@ import type {
   TrendyolShipmentPackage, TrendyolSupplierAddresses, TrendyolStoreFront,
 } from "./types";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
+import type { TrendyolClaim } from "./types";
 import { asteaptaRandulTrendyol, grupulCaii, tineCont429 } from "./ritm";
 
 export interface TrendyolAuth {
@@ -472,6 +473,78 @@ export function updateTrackingDetails(
 }
 
 // ── Webhooks ──────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════════
+   RETURURILE (CLAIMS)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cererile de retur ale vanzatorului.
+ *
+ * ⚠ PANA AZI NU CITEAM NIMIC DIN ASTA. Tot ce stia Edinio despre un retur era statusul
+ * grosier al pachetului (`Returned`) — nu ce articol s-a intors, nu cate bucati, nu de ce, si
+ * nu daca cererea asteapta o hotarare de la comerciant.
+ *
+ * ⚠ FEREASTRA E OBLIGATORIE LA EI si e de cel mult doua saptamani, ca la comenzi. Ceruta mai
+ * larga, serviciul raspunde 400 — deci cronul cere ferestre scurte si le mata inainte cu un
+ * cursor, exact ca la comenzi.
+ */
+export function getClaims(
+  auth: TrendyolAuth,
+  params: { startDate: number; endDate: number; page?: number; size?: number; claimIds?: string[]; claimItemStatus?: string },
+) {
+  const q = new URLSearchParams();
+  q.set("startDate", String(params.startDate));
+  q.set("endDate", String(params.endDate));
+  if (params.page != null) q.set("page", String(params.page));
+  /* Serviciul lor taie la 200; cerut mai mult, raspunde 400. */
+  if (params.size != null) q.set("size", String(Math.max(1, Math.min(200, params.size))));
+  if (params.claimIds?.length) q.set("claimIds", params.claimIds.join(","));
+  if (params.claimItemStatus) q.set("claimItemStatus", params.claimItemStatus);
+  return call<{
+    content?: TrendyolClaim[];
+    totalElements?: number; totalPages?: number; page?: number; size?: number;
+  }>(auth, "GET", `/integration/order/sellers/${auth.supplierId}/claims?${q.toString()}`);
+}
+
+/**
+ * Aproba returul pentru anumite LINII ale cererii.
+ *
+ * ⚠ PE LINII, nu pe cerere: Trendyol are retururi partiale, iar comerciantul poate accepta o
+ * bucata si respinge alta din aceeasi cerere. O aprobare „pe tot" ar fi luat o hotarare pe
+ * care el n-a luat-o.
+ */
+export function approveClaimItems(auth: TrendyolAuth, claimId: string, claimLineItemIdList: string[]) {
+  return call<undefined>(
+    auth, "PUT", `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}/items/approve`,
+    { claimLineItemIdList });
+}
+
+/**
+ * Respinge liniile, cu motiv si (optional) dovezi.
+ *
+ * ⚠ MOTIVUL E OBLIGATORIU LA EI, si asa si trebuie: un retur respins fara explicatie ajunge
+ * la arbitrajul lor, si acolo tacerea vanzatorului nu ajuta pe nimeni.
+ */
+export function rejectClaimItems(
+  auth: TrendyolAuth, claimId: string,
+  p: { claimIssueReasonId: number; claimItemIdList: string[]; description: string; files?: string[] },
+) {
+  return call<undefined>(
+    auth, "POST", `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}/issue`,
+    {
+      claimIssueReasonId: p.claimIssueReasonId,
+      claimItemIdList: p.claimItemIdList,
+      description: p.description,
+      ...(p.files?.length ? { files: p.files } : {}),
+    });
+}
+
+/** Motivele pe care le accepta ei la respingere. Se citesc, nu se ghicesc. */
+export function getClaimIssueReasons(auth: TrendyolAuth) {
+  return call<{ id: number; name: string; externalReasonId?: number }[]>(
+    auth, "GET", "/integration/order/claim-issue-reasons");
+}
+
 export function createWebhook(
   auth: TrendyolAuth,
   body: { url: string; authenticationType: "BASIC_AUTHENTICATION" | "API_KEY"; username?: string; password?: string; apiKey?: string; subscribedStatuses?: string[]; countryCodes?: string[] },

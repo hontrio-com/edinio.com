@@ -5187,6 +5187,37 @@ create table if not exists public.trendyol_batches (
   poll_errors integer default 0 not null,
   next_poll_at timestamp with time zone);
 
+create table if not exists public.trendyol_claim_items (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  claim_row_id uuid not null,
+  claim_item_id text not null,
+  barcode text,
+  product_name text,
+  quantity integer default 1 not null,
+  reason text,
+  customer_note text,
+  decizie text,
+  decis_la timestamp with time zone,
+  repus_in_stoc_la timestamp with time zone,
+  raw jsonb,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.trendyol_claims (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  order_id uuid,
+  claim_id text not null,
+  order_number text,
+  shipment_package_id bigint,
+  claim_status text,
+  raw jsonb,
+  claim_date timestamp with time zone,
+  last_modified timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
 create table if not exists public.trendyol_listings (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -5428,6 +5459,8 @@ alter table public.stripe_events add constraint stripe_events_pkey PRIMARY KEY (
 alter table public.support_messages add constraint support_messages_pkey PRIMARY KEY (id);
 alter table public.support_tickets add constraint support_tickets_pkey PRIMARY KEY (id);
 alter table public.trendyol_batches add constraint trendyol_batches_pkey PRIMARY KEY (id);
+alter table public.trendyol_claim_items add constraint trendyol_claim_items_pkey PRIMARY KEY (id);
+alter table public.trendyol_claims add constraint trendyol_claims_pkey PRIMARY KEY (id);
 alter table public.trendyol_listings add constraint trendyol_listings_pkey PRIMARY KEY (id);
 alter table public.trendyol_orders add constraint trendyol_orders_pkey PRIMARY KEY (id);
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_pkey PRIMARY KEY (id);
@@ -5459,6 +5492,8 @@ alter table public.olx_adverts add constraint olx_adverts_business_id_offer_id_k
 alter table public.olx_sync_queue add constraint olx_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
 alter table public.orders add constraint orders_order_number_business_unique UNIQUE (business_id, order_number);
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_batch_request_id_key UNIQUE (business_id, batch_request_id);
+alter table public.trendyol_claim_items add constraint trendyol_claim_items_business_id_claim_item_id_key UNIQUE (business_id, claim_item_id);
+alter table public.trendyol_claims add constraint trendyol_claims_business_id_claim_id_key UNIQUE (business_id, claim_id);
 alter table public.trendyol_listings add constraint trendyol_listings_business_id_product_main_id_key UNIQUE (business_id, product_main_id);
 alter table public.trendyol_orders add constraint trendyol_orders_business_id_shipment_package_id_key UNIQUE (business_id, shipment_package_id);
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
@@ -5595,6 +5630,10 @@ alter table public.support_messages add constraint support_messages_ticket_id_fk
 alter table public.support_tickets add constraint support_tickets_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE SET NULL;
 alter table public.support_tickets add constraint support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.trendyol_claim_items add constraint trendyol_claim_items_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.trendyol_claim_items add constraint trendyol_claim_items_claim_row_id_fkey FOREIGN KEY (claim_row_id) REFERENCES trendyol_claims(id) ON DELETE CASCADE;
+alter table public.trendyol_claims add constraint trendyol_claims_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.trendyol_claims add constraint trendyol_claims_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.trendyol_listings add constraint trendyol_listings_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.trendyol_listings add constraint trendyol_listings_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.trendyol_orders add constraint trendyol_orders_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -5838,6 +5877,9 @@ CREATE INDEX support_tickets_business_id_idx ON public.support_tickets USING btr
 CREATE INDEX support_tickets_status_idx ON public.support_tickets USING btree (status);
 CREATE INDEX support_tickets_user_id_idx ON public.support_tickets USING btree (user_id);
 CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
+CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING btree (claim_row_id);
+CREATE INDEX trendyol_claims_biz_idx ON public.trendyol_claims USING btree (business_id, claim_date DESC);
+CREATE INDEX trendyol_claims_de_hotarat_idx ON public.trendyol_claims USING btree (business_id, last_modified) WHERE (claim_status = ANY (ARRAY['Created'::text, 'WaitingInAction'::text, 'InAnalysis'::text]));
 CREATE INDEX trendyol_sync_queue_ordine_idx ON public.trendyol_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX ups_etichete_business_idx ON public.ups_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX users_profile_role_idx ON public.users_profile USING btree (role);
@@ -6018,6 +6060,8 @@ alter table public.stripe_events enable row level security;
 alter table public.support_messages enable row level security;
 alter table public.support_tickets enable row level security;
 alter table public.trendyol_batches enable row level security;
+alter table public.trendyol_claim_items enable row level security;
+alter table public.trendyol_claims enable row level security;
 alter table public.trendyol_listings enable row level security;
 alter table public.trendyol_orders enable row level security;
 alter table public.trendyol_sync_queue enable row level security;
@@ -6243,6 +6287,12 @@ create policy users_insert_tickets on public.support_tickets as PERMISSIVE for I
 create policy users_select_own_tickets on public.support_tickets as PERMISSIVE for SELECT to public using ((auth.uid() = user_id));
 create policy users_update_own_tickets on public.support_tickets as PERMISSIVE for UPDATE to public using ((auth.uid() = user_id));
 create policy owner_select_trendyol_batches on public.trendyol_batches as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_trendyol_claim_items on public.trendyol_claim_items as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_trendyol_claims on public.trendyol_claims as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_trendyol_listings on public.trendyol_listings as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
@@ -7599,6 +7649,48 @@ grant SELECT on table public.trendyol_batches to service_role;
 grant TRIGGER on table public.trendyol_batches to service_role;
 grant TRUNCATE on table public.trendyol_batches to service_role;
 grant UPDATE on table public.trendyol_batches to service_role;
+grant DELETE on table public.trendyol_claim_items to anon;
+grant INSERT on table public.trendyol_claim_items to anon;
+grant REFERENCES on table public.trendyol_claim_items to anon;
+grant SELECT on table public.trendyol_claim_items to anon;
+grant TRIGGER on table public.trendyol_claim_items to anon;
+grant TRUNCATE on table public.trendyol_claim_items to anon;
+grant UPDATE on table public.trendyol_claim_items to anon;
+grant DELETE on table public.trendyol_claim_items to authenticated;
+grant INSERT on table public.trendyol_claim_items to authenticated;
+grant REFERENCES on table public.trendyol_claim_items to authenticated;
+grant SELECT on table public.trendyol_claim_items to authenticated;
+grant TRIGGER on table public.trendyol_claim_items to authenticated;
+grant TRUNCATE on table public.trendyol_claim_items to authenticated;
+grant UPDATE on table public.trendyol_claim_items to authenticated;
+grant DELETE on table public.trendyol_claim_items to service_role;
+grant INSERT on table public.trendyol_claim_items to service_role;
+grant REFERENCES on table public.trendyol_claim_items to service_role;
+grant SELECT on table public.trendyol_claim_items to service_role;
+grant TRIGGER on table public.trendyol_claim_items to service_role;
+grant TRUNCATE on table public.trendyol_claim_items to service_role;
+grant UPDATE on table public.trendyol_claim_items to service_role;
+grant DELETE on table public.trendyol_claims to anon;
+grant INSERT on table public.trendyol_claims to anon;
+grant REFERENCES on table public.trendyol_claims to anon;
+grant SELECT on table public.trendyol_claims to anon;
+grant TRIGGER on table public.trendyol_claims to anon;
+grant TRUNCATE on table public.trendyol_claims to anon;
+grant UPDATE on table public.trendyol_claims to anon;
+grant DELETE on table public.trendyol_claims to authenticated;
+grant INSERT on table public.trendyol_claims to authenticated;
+grant REFERENCES on table public.trendyol_claims to authenticated;
+grant SELECT on table public.trendyol_claims to authenticated;
+grant TRIGGER on table public.trendyol_claims to authenticated;
+grant TRUNCATE on table public.trendyol_claims to authenticated;
+grant UPDATE on table public.trendyol_claims to authenticated;
+grant DELETE on table public.trendyol_claims to service_role;
+grant INSERT on table public.trendyol_claims to service_role;
+grant REFERENCES on table public.trendyol_claims to service_role;
+grant SELECT on table public.trendyol_claims to service_role;
+grant TRIGGER on table public.trendyol_claims to service_role;
+grant TRUNCATE on table public.trendyol_claims to service_role;
+grant UPDATE on table public.trendyol_claims to service_role;
 grant DELETE on table public.trendyol_listings to anon;
 grant INSERT on table public.trendyol_listings to anon;
 grant REFERENCES on table public.trendyol_listings to anon;

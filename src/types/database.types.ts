@@ -4195,6 +4195,113 @@ export type Database = {
           },
         ]
       }
+      trendyol_claim_items: {
+        Row: {
+          barcode: string | null
+          business_id: string
+          claim_item_id: string
+          claim_row_id: string
+          created_at: string
+          customer_note: string | null
+          decis_la: string | null
+          decizie: string | null
+          id: string
+          product_name: string | null
+          quantity: number
+          raw: Json | null
+          reason: string | null
+          repus_in_stoc_la: string | null
+          updated_at: string
+        }
+        Insert: {
+          barcode?: string | null
+          business_id: string
+          claim_item_id: string
+          claim_row_id: string
+          created_at?: string
+          customer_note?: string | null
+          decis_la?: string | null
+          decizie?: string | null
+          id?: string
+          product_name?: string | null
+          quantity?: number
+          raw?: Json | null
+          reason?: string | null
+          repus_in_stoc_la?: string | null
+          updated_at?: string
+        }
+        Update: {
+          barcode?: string | null
+          business_id?: string
+          claim_item_id?: string
+          claim_row_id?: string
+          created_at?: string
+          customer_note?: string | null
+          decis_la?: string | null
+          decizie?: string | null
+          id?: string
+          product_name?: string | null
+          quantity?: number
+          raw?: Json | null
+          reason?: string | null
+          repus_in_stoc_la?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trendyol_claim_items_claim_row_id_fkey"
+            columns: ["claim_row_id"]
+            isOneToOne: false
+            referencedRelation: "trendyol_claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trendyol_claims: {
+        Row: {
+          business_id: string
+          claim_date: string | null
+          claim_id: string
+          claim_status: string | null
+          created_at: string
+          id: string
+          last_modified: string | null
+          order_id: string | null
+          order_number: string | null
+          raw: Json | null
+          shipment_package_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          claim_date?: string | null
+          claim_id: string
+          claim_status?: string | null
+          created_at?: string
+          id?: string
+          last_modified?: string | null
+          order_id?: string | null
+          order_number?: string | null
+          raw?: Json | null
+          shipment_package_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          claim_date?: string | null
+          claim_id?: string
+          claim_status?: string | null
+          created_at?: string
+          id?: string
+          last_modified?: string | null
+          order_id?: string | null
+          order_number?: string | null
+          raw?: Json | null
+          shipment_package_id?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       trendyol_listings: {
         Row: {
           attributes: Json

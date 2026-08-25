@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { TrendyolClient } from "@/components/dashboard/TrendyolClient";
+import { TrendyolReturns } from "@/components/dashboard/TrendyolReturns";
 import { TrendyolAutoMap } from "@/components/dashboard/TrendyolAutoMap";
 import { TrendyolCategoryMapping } from "@/components/dashboard/TrendyolCategoryMapping";
 import { TrendyolListings } from "@/components/dashboard/TrendyolListings";
@@ -49,6 +50,9 @@ export default async function TrendyolPage() {
           )}
           <TrendyolCategoryMapping businessId={biz.id} edinioCategories={categories} mapped={st.categoryMap} />
           <TrendyolListings businessId={biz.id} categories={categories} storefront={st.storefront} />
+          {/* ⚠ Retururile stau DUPA listari, dar pe aceeasi pagina: pana azi comerciantul afla
+              de ele din panoul Trendyol si decidea acolo. */}
+          <TrendyolReturns businessId={biz.id} />
         </div>
       )}
     </div>

@@ -197,6 +197,8 @@ export interface TrendyolConfig {
    * decide ce cote de TVA sunt legale pe vitrina de destinatie.
    */
   origine?: TrendyolStoreFront;
+  /** Marcajul ferestrei de retururi. ⚠ Fereastra lor e de cel mult doua saptamani. */
+  claims_synced_at?: string;
   /**
    * Tara in care s-a FABRICAT produsul, implicita pentru tot magazinul.
    *
@@ -515,3 +517,45 @@ export interface TrendyolShipmentPackage {
   lines: TrendyolOrderLine[];
   [k: string]: unknown;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RETURURILE (CLAIMS)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * O cerere de retur, asa cum vine de la ei.
+ *
+ * ⚠ TOATE CAMPURILE SUNT OPTIONALE, DINADINS. Forma raspunsului lor nu e in schema pe care o
+ * avem, iar la eMAG exact presupunerea asta ne-a costat: `ownership` a venit `boolean` acolo
+ * unde documentatia scria 1/2, si `doc_errors` a fost gol la toate cele 152 de oferte
+ * respinse. De-aia `raw` se pastreaza intreg pe rand, si citirea e tolerantă.
+ */
+export interface TrendyolClaim {
+  id?: string;
+  orderNumber?: string;
+  orderDate?: number;
+  claimDate?: number;
+  lastModifiedDate?: number;
+  shipmentPackageId?: number;
+  status?: string;
+  items?: TrendyolClaimItem[];
+  /** Numele pe care il poate avea in unele versiuni ale raspunsului lor. */
+  claimItems?: TrendyolClaimItem[];
+}
+
+export interface TrendyolClaimItem {
+  id?: string;
+  claimItemId?: string;
+  orderLineId?: number;
+  barcode?: string;
+  productName?: string;
+  quantity?: number;
+  customerClaimItemReason?: { name?: string; externalReasonId?: number };
+  trendyolClaimItemReason?: { name?: string };
+  customerNote?: string;
+  claimItemStatus?: { name?: string };
+  resolved?: boolean;
+}
+
+/** Starile in care cererea inca asteapta o hotarare de la comerciant. */
+export const CLAIM_DE_HOTARAT = ["Created", "WaitingInAction", "InAnalysis"] as const;

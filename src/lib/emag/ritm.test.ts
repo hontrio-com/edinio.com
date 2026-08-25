@@ -98,7 +98,10 @@ test("se cade DESCHIS: o baza cazuta nu opreste cererile catre eMAG", () => {
    * Adica un incident mult mai mare decat depasirea de care ne aparam. Iar plasa de
    * dedesubt exista deja: antetele lor si 429-ul.
    */
-  const cod = faraNote("src/lib/emag/ritm.ts");
+  /* ⚠ CORPUL S-A MUTAT pe 26.08.2026 in `@/lib/marketplace/ritm-impartit`, cand auditul
+     Trendyol a aratat ca acolo nu exista niciun limitator impartit. Hotararea e aceeasi; se
+     citeste din locul in care traieste acum. */
+  const cod = faraNote("src/lib/marketplace/ritm-impartit.ts");
   const i = cod.indexOf("export async function ceruJeton(");
   assert.ok(i > 0, "n-am gasit `ceruJeton`");
   const corp = cod.slice(i, cod.indexOf(String.fromCharCode(10) + "}", i));
@@ -181,7 +184,7 @@ test("nicio asteptare nu poate manca toata trecerea cronului", () => {
    * Prima forma dormea `Math.min(asteapta_ms, fereastraMs)` de treizeci de ori. Pe
    * fereastra de un minut, asta insemna pana la o jumatate de ora intr-un singur apel.
    */
-  const cod = faraNote("src/lib/emag/ritm.ts");
+  const cod = faraNote("src/lib/marketplace/ritm-impartit.ts");
   assert.match(cod, /ASTEPTARE_MAXIMA_MS = 5000;/, "bugetul trebuie sa fie mult sub `maxDuration`");
   assert.match(cod, /PAS_ASTEPTARE_MS = 750;/, "si somnul dintre incercari, scurt");
 

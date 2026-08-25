@@ -29,9 +29,8 @@
  *      incident mult mai mare decat cel de care ne aparam.
  */
 
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createHash } from "node:crypto";
-import { logError } from "@/lib/error-logger";
+import { ceruJeton } from "@/lib/marketplace/ritm-impartit";
 import type { EmagAuth } from "./client";
 
 /**
@@ -64,92 +63,21 @@ export const LIMITE_RITM = {
   eanZi: { limita: 5000, fereastraMs: 86_400_000 },
 } as const;
 
-interface RaspunsJeton { ok: boolean; asteapta_ms: number; folosite: number; limita: number }
-
-/**
- * Cere un jeton. Intoarce cate milisecunde sa se astepte; `0` inseamna „pleaca acum".
+/*
+ * ═══ ⚠ CORPUL GENERIC S-A MUTAT IN `@/lib/marketplace/ritm-impartit` (26.08.2026) ═══
  *
- * ⚠ La orice necaz cu baza se raspunde `0`. Vezi nota de sus: se cade DESCHIS.
+ * Auditul Trendyol a aratat ca acolo nu exista NICIUN limitator impartit — doar o pauza de
+ * 350 ms in bucla cronului, in memoria unei instante. Regula era scrisa si probata, dar statea
+ * intr-un folder pe care Trendyol n-avea cum sa-l vada. A treia oara intr-o zi cand se
+ * intampla asta (dupa `randCitit` si dupa compare-and-set-ul cozii).
+ *
+ * ⚠ Ce a ramas aici e ce e ANUME al eMAG: cheia contului (numele lor de utilizator e o adresa
+ * de e-mail), limitele lor, si plafonul ZILNIC de la `find_by_eans`, care n-are pereche la
+ * alt furnizor.
+ *
+ * ⚠ Reexportate cu acelasi nume, ca `ritm.test.ts` si apelantii sa nu se schimbe deloc.
  */
-export async function ceruJeton(
-  cheie: string, limita: number, fereastraMs: number,
-): Promise<RaspunsJeton> {
-  try {
-    const { data, error } = await createAdminClient().rpc("ia_jeton_extern", {
-      p_cheie: cheie, p_limita: limita, p_fereastra_ms: fereastraMs,
-    });
-    if (error) {
-      /* ⚠ Se scrie, dar nu se opreste nimic. Un contor de ritm cazut e o problema de
-         observat, nu una care are voie sa taie legatura cu marketplace-ul. */
-      void logError({
-        action: "emag.ritm",
-        message: `jetonul de ritm nu s-a putut lua: ${error.message}`,
-        details: { limita, fereastraMs },
-        severity: "warning",
-      });
-      return { ok: true, asteapta_ms: 0, folosite: 0, limita };
-    }
-    const r = (data ?? {}) as Partial<RaspunsJeton>;
-    return {
-      ok: r.ok !== false,
-      asteapta_ms: Number(r.asteapta_ms) || 0,
-      folosite: Number(r.folosite) || 0,
-      limita: Number(r.limita) || limita,
-    };
-  } catch {
-    return { ok: true, asteapta_ms: 0, folosite: 0, limita };
-  }
-}
-
-/**
- * Cat se poate astepta, cu totul, dupa un jeton.
- *
- * ═══ ⚠ UN LIMITATOR CARE DOARME CAT TOATA TRECEREA NU LIMITEAZA, BLOCHEAZA ═══
- *
- * Cronul are `maxDuration = 60`. Fereastra de la `find_by_eans` e de un MINUT (200 de
- * cereri), deci o asteptare „pana se elibereaza fereastra" ar fi putut dormi singura cat
- * toata trecerea — si atunci nu mai pleaca NIMIC: nici confirmarile de comenzi, nici
- * mișcarile de stoc dupa vanzari, care sunt cele mai grabite dintre toate.
- *
- * Deci se asteapta cel mult atat, si se raspunde cinstit daca n-a venit. Ce se intampla
- * mai departe hotaraste apelantul: cererile obisnuite pleaca oricum (429-ul lor e plasa
- * de dedesubt), iar cautarea dupa cod de bare se opreste si se reia — fiindca acolo „mai
- * incearca o data" e mai ieftin decat un produs creat pe orb in catalogul lor comun.
- */
-const ASTEPTARE_MAXIMA_MS = 5000;
-
-/** Cat se doarme intre doua incercari. Se recitesc des, ca sa nu se piarda o fereastra. */
-const PAS_ASTEPTARE_MS = 750;
-
-/**
- * Asteapta pana cand contul are loc pentru inca o cerere.
- *
- * Intoarce `false` daca n-a venit in bugetul de timp. NU e o eroare — e raspunsul.
- *
- * ⚠ Numai pentru ferestrele SCURTE. Pe plafonul zilnic nu se asteapta deloc: acolo
- * raspunsul corect e „nu azi", si il da `maiAreBugetZilnicEan`.
- */
-export async function asteaptaJetonImpartit(
-  cheie: string, limita: number, fereastraMs: number,
-): Promise<boolean> {
-  const pana = Date.now() + ASTEPTARE_MAXIMA_MS;
-  for (;;) {
-    const r = await ceruJeton(cheie, limita, fereastraMs);
-    if (r.ok) return true;
-    if (Date.now() >= pana) {
-      void logError({
-        action: "emag.ritm",
-        message: `jetonul n-a venit in ${ASTEPTARE_MAXIMA_MS} ms`,
-        details: { cheie, limita, fereastraMs, folosite: r.folosite },
-        severity: "warning",
-      });
-      return false;
-    }
-    await new Promise((res) => setTimeout(
-      res, Math.min(Math.max(r.asteapta_ms, 15), PAS_ASTEPTARE_MS, Math.max(1, pana - Date.now())),
-    ));
-  }
-}
+export { ceruJeton, asteaptaJetonImpartit, type RaspunsJeton } from "@/lib/marketplace/ritm-impartit";
 
 /**
  * Mai are contul cautari dupa cod de bare azi?

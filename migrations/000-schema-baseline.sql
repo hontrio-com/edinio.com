@@ -2210,6 +2210,7 @@ declare
   v_acum     bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
   v_fer      bigint;
   v_folosite int;
+  v_pauza    timestamptz;
 begin
   if coalesce(btrim(p_cheie), '') = '' then
     raise exception 'cheie de ritm lipsa';
@@ -2219,6 +2220,16 @@ begin
   end if;
   if p_fereastra_ms is null or p_fereastra_ms < 1 then
     raise exception 'fereastra de ritm invalida: %', p_fereastra_ms;
+  end if;
+
+  -- ⚠ PAUZA SE VERIFICA INTAI, si NU consuma jeton: cat timp furnizorul ne-a spus sa tacem,
+  -- o cerere in plus nu e doar inutila, ci se si numara la ei ca cerere respinsa.
+  select pauza_pana into v_pauza from privat.ritm_extern where cheie = p_cheie;
+  if v_pauza is not null and v_pauza > now() then
+    return jsonb_build_object(
+      'ok', false,
+      'asteapta_ms', greatest(1, (extract(epoch from (v_pauza - now())) * 1000)::int),
+      'folosite', 0, 'limita', p_limita, 'pauza', true);
   end if;
 
   insert into privat.ritm_extern (cheie, fereastra_ms, folosite, actualizat_la)
@@ -2851,6 +2862,34 @@ AS $function$
         where q.business_id = p_business_id and q.product_id = p.id)
    order by p.id
    limit greatest(1, least(coalesce(p_limita, 50), 500));
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.pune_pauza_ritm_extern(p_cheie text, p_ms integer)
+ RETURNS timestamp with time zone
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'privat', 'pg_temp'
+AS $function$
+declare
+  v_pana timestamptz;
+begin
+  if coalesce(btrim(p_cheie), '') = '' then
+    raise exception 'cheie de ritm lipsa';
+  end if;
+  -- ⚠ Plafon de cinci minute: un `Retry-After` urias sau stalcit n-are voie sa opreasca un
+  -- magazin pe ore intregi.
+  v_pana := now() + make_interval(secs => least(greatest(coalesce(p_ms, 0), 1000), 300000) / 1000.0);
+
+  insert into privat.ritm_extern (cheie, fereastra_ms, folosite, actualizat_la, pauza_pana)
+  values (p_cheie, (extract(epoch from clock_timestamp()) * 1000)::bigint, 0, now(), v_pana)
+  on conflict (cheie) do update
+    set pauza_pana = greatest(coalesce(privat.ritm_extern.pauza_pana, v_pana), v_pana),
+        actualizat_la = now()
+  returning pauza_pana into v_pana;
+
+  return v_pana;
+end;
 $function$
 ;
 
@@ -3988,7 +4027,8 @@ create table if not exists privat.ritm_extern (
   cheie text not null,
   fereastra_ms bigint not null,
   folosite integer default 0 not null,
-  actualizat_la timestamp with time zone default now() not null);
+  actualizat_la timestamp with time zone default now() not null,
+  pauza_pana timestamp with time zone);
 
 create table if not exists privat.store_settings (
   id uuid default gen_random_uuid() not null,
@@ -8005,6 +8045,7 @@ grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p
 grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
+grant execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.release_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.release_order_discount(p_order_id uuid) to service_role;
@@ -8130,6 +8171,7 @@ revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from 
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;
+revoke execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
 revoke execute on function public.release_discount_use(p_discount_id uuid) from public;
 revoke execute on function public.release_order_discount(p_order_id uuid) from public;

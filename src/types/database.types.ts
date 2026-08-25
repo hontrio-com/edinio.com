@@ -4672,6 +4672,7 @@ export type Database = {
       emag_produse_noi_nepublicate: { Args: { p_business_id: string; p_ore?: number; p_limita?: number; p_de_cand?: string | null }; Returns: { id: string; created_at: string }[] }
       emag_stinge_propagarea: { Args: { p_business_id: string; p_ceruta_la: string }; Returns: boolean }
       vezi_ritm_extern: { Args: { p_cheie: string; p_fereastra_ms?: number }; Returns: Json }
+      pune_pauza_ritm_extern: { Args: { p_cheie: string; p_ms: number }; Returns: string }
       curata_ritm_extern: { Args: Record<PropertyKey, never>; Returns: number }
       revendica_din_coada: { Args: { p_coada: string; p_limita?: number; p_lease?: unknown }; Returns: Json[] }
       revendica_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: Json }

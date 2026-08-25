@@ -16,6 +16,7 @@ import type {
   TrendyolShipmentPackage, TrendyolSupplierAddresses, TrendyolStoreFront,
 } from "./types";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
+import { asteaptaRandulTrendyol, grupulCaii, tineCont429 } from "./ritm";
 
 export interface TrendyolAuth {
   supplierId: string;
@@ -59,6 +60,25 @@ async function call<T>(
     return { error: "Credențialele Trendyol lipsesc.", status: 0 };
   }
   const vitrina = auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
+
+  /*
+   * ═══ ⚠ RITMUL SE NUMARA INTR-UN SINGUR LOC, PE GRUP SI PE VANZATOR ═══
+   *
+   * Pana azi clientul n-avea nicio franare: singura era `PACE_MS = 350` in bucla cronului, in
+   * memoria unei instante. Deci cronul, un buton apasat de om, importul si un webhook sosit
+   * intre timp credeau fiecare ca au bugetul intreg — iar Trendyol vedea suma.
+   *
+   * ⚠ Din 14 septembrie 2026 limitele lor trec pe GRUPURI DE SERVICII, per vanzator. De-aia
+   * cheia e `supplierId:vitrina:grup`: doua magazine Edinio pe acelasi cont impart bugetul,
+   * iar o trecere grea de catalog n-are voie sa intarzie o miscare de stoc dupa o vanzare.
+   *
+   * ⚠ CAND N-A VENIT RANDUL, CEREREA PLEACA TOTUSI. Vezi `ritm-impartit.ts`: se cade deschis.
+   * Un limitator care blocheaza e mai rau decat unul care intarzie — mai ales ca a doua plasa
+   * (429-ul lor, cu pauza impartita mai jos) e chiar sub el.
+   */
+  const grup = grupulCaii(path, method);
+  await asteaptaRandulTrendyol(auth.supplierId, vitrina, grup);
+
   try {
     const res = await fetch(`${trendyolBaseUrl(auth.environment)}${path}`, {
       method,
@@ -85,6 +105,19 @@ async function call<T>(
     let json: unknown = {};
     try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
     if (!res.ok) {
+      /*
+       * ⚠ EI AU SPUS „PREA REPEDE": TAC TOATE INSTANTELE, nu doar asta.
+       *
+       * Fara pauza impartita, prima instanta ia 429 si se opreste, iar celelalte continua sa
+       * bata la aceeasi usa — si fiecare pana isi arde propriile jetoane. Cererile respinse
+       * se numara si ele in limita lor, deci o pauza necoordonata face raul mai mare.
+       *
+       * ⚠ Nu se asteapta dupa scriere: raspunsul pentru cererea ASTA e oricum 429. Pauza e
+       * pentru cele care vin dupa.
+       */
+      if (res.status === 429) {
+        void tineCont429(auth.supplierId, vitrina, grup, res.headers);
+      }
       const obj = (json ?? {}) as {
         errors?: { message?: string; key?: string; errorCode?: string }[];
         message?: string; exception?: string; key?: string;

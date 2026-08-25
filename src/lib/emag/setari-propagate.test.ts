@@ -62,9 +62,11 @@ test("⚠ o SINGURA operatie, cea mai grea dintre cele cerute", () => {
    */
   const prop = readFileSync("src/lib/emag/propagare.ts", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
-  assert.match(prop, /if \(op === "oferta"\) await enqueueEmagSyncMany\(businessId, ids\);/);
-  assert.match(prop, /else if \(op === "pret"\) await enqueueEmagPretMany\(businessId, ids\);/);
-  assert.match(prop, /else await enqueueEmagStocMany\(businessId, ids\);/);
+  assert.match(prop, /op === "oferta" \? await enqueueEmagSyncMany\(businessId, ids\)/);
+  assert.match(prop, /: op === "pret" \? await enqueueEmagPretMany\(businessId, ids\)/);
+  assert.match(prop, /: await enqueueEmagStocMany\(businessId, ids\);/);
+  /* ⚠ Si se tine minte CATE s-au pus, ca zero la id-uri existente sa poata fi spus. */
+  assert.match(prop, /const puse =/);
 
   /* Si panoul alege marimea, nu ruta: `oferta` > `pret` > `stoc`. */
   assert.match(

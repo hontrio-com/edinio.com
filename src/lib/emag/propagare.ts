@@ -37,6 +37,18 @@
  * ⚠ REPETAREA E NEVINOVATA: `emag_sync_queue` are `unique (business_id, offer_id, op)`,
  * deci o a doua punere in coada nu face nimic. De-aia bratul lent nu trebuie sa se
  * fereasca de cel iute.
+ *
+ * ═══ ⚠ CE ACOPERA SI CE NU ═══
+ *
+ * ACOPERA: moartea instantei intre salvare si punerea in coada, si citirea catalogului
+ * picata — `fetchAllRowsStrict` chiar arunca, deci marcajul ramane nepus si cronul reia.
+ *
+ * NU ACOPERA: o punere in coada picata. `enqueueMany` isi inghite eroarea si intoarce 0,
+ * la fel ca atunci cand n-are ce pune, iar contractul lui e al multor chematori. Deci
+ * cazul asta nu se REPARA singur — dar se SPUNE, cu un rand care numeste a cui intentie
+ * era, nu doar ca a picat o coada. Vezi `propagaSetarile`.
+ *
+ * ⚠ Si numai ruta grea ramane chiar descoperita: pretul si stocul le repara deriva.
  */
 
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -147,11 +159,36 @@ export async function propagaSetarile(
   /* ⚠ O SINGURA operatie, cea mai grea dintre cele cerute: trei puneri in coada pe acelasi
      produs ar fi insemnat trei treceri pentru un singur efect — si trei cereri din cele 3
      pe secunda ale magazinului, aceleasi prin care pleaca o miscare de stoc dupa o vanzare. */
-  if (op === "oferta") await enqueueEmagSyncMany(businessId, ids);
-  else if (op === "pret") await enqueueEmagPretMany(businessId, ids);
-  else await enqueueEmagStocMany(businessId, ids);
+  const puse =
+    op === "oferta" ? await enqueueEmagSyncMany(businessId, ids)
+    : op === "pret" ? await enqueueEmagPretMany(businessId, ids)
+    : await enqueueEmagStocMany(businessId, ids);
 
-  return ids.length;
+  /*
+   * ═══ ⚠ ZERO PUS LA ID-URI EXISTENTE SE SPUNE, SI ANUME AICI ═══
+   *
+   * `enqueueMany` intoarce 0 si cand n-are ce pune, si cand a picat — le inghite pe
+   * amandoua prin `inghiteDarScrie`. Contractul lui e folosit de multi chemator, iar
+   * schimbat ca sa le deosebeasca ar fi cerut ca fiecare sa hotarasca ce face cu esecul;
+   * iar aici „nu stampila si mai incearca" ar fi insemnat reincercare la NESFARSIT pentru
+   * un magazin cu sincronizarea oprita anume de om — mai rau decat ce reparam.
+   *
+   * ⚠ Deci nu se schimba purtarea, se NUMESTE consecinta. `inghiteDarScrie` scrie o eroare
+   * de coada fara sa spuna a cui intentie era; randul asta spune ce a pierdut comerciantul.
+   * Cazul e citibil: id-urile au fost citite chiar acum cu `auto_sync = true`, deci zero
+   * inseamna ori magazin oprit, ori o punere picata.
+   */
+  if (puse === 0) {
+    await logError({
+      action: "emag.propagare",
+      message: `propagarea setarilor n-a pus nimic in coada, desi avea ${ids.length} produse`,
+      details: { businessId, op, produse: ids.length },
+      businessId,
+      severity: "warning",
+    });
+  }
+
+  return puse;
 }
 
 /**

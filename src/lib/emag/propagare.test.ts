@@ -274,6 +274,25 @@ test("⚠ bratul iute foloseste operatia ESCALADATA, nu cea ceruta acum", () => 
   assert.match(act, /propagaSetarile\(admin, businessId, intentie\.propagare_op \?\? opPropagare\)/);
 });
 
+test("⚠ zero pus la id-uri existente se SPUNE", () => {
+  /*
+   * `enqueueMany` intoarce 0 si cand n-are ce pune, si cand a picat. Contractul lui e al
+   * multor chematori, iar aici „nu stampila si mai incearca" ar fi insemnat reincercare la
+   * nesfarsit pentru un magazin cu sincronizarea oprita ANUME de om — mai rau decat ce
+   * reparam. Deci nu se schimba purtarea, se numeste consecinta: `inghiteDarScrie` scrie o
+   * eroare de coada fara sa spuna a cui intentie era.
+   */
+  const cod = viu("src/lib/emag/propagare.ts");
+  assert.match(cod, /if \(puse === 0\) \{/);
+  const i = cod.indexOf("propagarea setarilor n-a pus nimic in coada");
+  assert.ok(i > 0, "randul numeste ce a pierdut comerciantul");
+  assert.match(cod.slice(i, i + 200), /businessId, op, produse: ids\.length/, "si cat anume");
+  /* ⚠ Se intoarce ce s-a PUS, nu cate id-uri erau: altfel cronul ar fi raportat munca
+     nefacuta ca facuta. */
+  assert.match(cod, /return puse;/);
+  assert.doesNotMatch(cod, /return ids\.length;/);
+});
+
 test("⚠ cronul ia DOUA pe trecere, ca sa nu manance bugetul de 60 de secunde", () => {
   /* Fiecare propagare citeste catalogul intreg al unui magazin. Cinci deodata ar fi putut
      lasa pasii 6 si 7 nefacuti. Restul asteapta un minut. */

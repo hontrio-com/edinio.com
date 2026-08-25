@@ -994,9 +994,13 @@ export async function salveazaSetariEmag(
    * Cronul ridica ce ramane neterminat, chemand aceeasi functie.
    *
    * ⚠ CE NU ACOPERA, si merita spus: `enqueueEmag…Many` isi inghite erorile inauntru
-   * (`inghiteDarScrie`), deci o punere in coada picata tot se stampileaza ca dusa. Ce se
-   * repara aici e moartea instantei si citirea catalogului picata — `fetchAllRowsStrict`
-   * chiar arunca, deci atunci marcajul ramane nepus si cronul mai incearca o data.
+   * (`inghiteDarScrie`), deci o punere in coada picata tot se stampileaza ca dusa. Nu se
+   * REPARA singura — dar se SPUNE: `propagaSetarile` scrie un rand care numeste a cui
+   * intentie era, nu doar ca a picat o coada. Si numai ruta grea ramane chiar descoperita;
+   * pretul si stocul le repara deriva.
+   *
+   * Ce se repara aici e moartea instantei si citirea catalogului picata —
+   * `fetchAllRowsStrict` chiar arunca, deci atunci marcajul ramane nepus si cronul reia.
    */
   const opPropagare: OpPropagare | null =
     cereRutaGrea ? "oferta" : cerePret ? "pret" : cereStoc ? "stoc" : null;

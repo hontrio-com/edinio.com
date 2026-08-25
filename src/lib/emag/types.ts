@@ -122,7 +122,8 @@ export interface EmagGpsrEntitate {
  *   - actualizare de oferta: doar `id`, `status`, `sale_price`, `vat_id`,
  *     `handling_time`, `stock` — FARA documentatie
  *
- * Pentru a treia forma exista insa rute mai usoare (`offer/save`, `offer_stock`),
+ * Pentru a treia forma exista insa o ruta mai usoara (`offer/save`; `offer_stock` e
+ * masurata cu 0 reusite din 850 si nu se foloseste),
  * si ele sunt cele folosite. Vezi `rutaDeTrimitere` din `sync.ts`.
  */
 export interface EmagProdusOferta {

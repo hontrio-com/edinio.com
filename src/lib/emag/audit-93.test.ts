@@ -148,6 +148,27 @@ test("amprenta se scrie NUMAI de ruta grea, si numai la reusita deplina", () => 
   assert.ok(!/amprenta_continut/.test(corpStoc), "ruta de stoc n-are voie s-o atinga");
 });
 
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ PROBA PE CARE AUDITUL O NUMEA „ESENTIALA", FACUTA IN POSTGRES
+   ══════════════════════════════════════════════════════════════════════════
+
+   Cerinta lui, cuvant cu cuvant: „content enqueue lost → stock sync succeeds → safety net
+   MUST STILL detect lost content."
+
+   Masurata pe PRODUCTIE, pe un produs real, intr-o tranzactie intoarsa la loc
+   (25.08.2026). Aceeasi stare, doua intrebari:
+
+     amprenta trimisa = „amprenta-veche", cea de acum = „amprenta-noua"
+     `last_synced_at` mutat la ACUM, ca dupa o vanzare
+
+     pe marcaje (`p_amprente => null`)   0   ← forma veche e OARBA, exact cum spunea
+     pe amprenta                         1   ← forma noua il gaseste
+     cu o lucrare in coada               0   ← corect exclus
+
+   ⚠ Nu se poate scrie ca proba de `node:test`: logica traieste in Postgres, iar suita nu
+   are baza. Se scrie aici, cu cifrele, ca sa nu ramana doar in capul cuiva.
+*/
+
 /* ── P1 #3: a doua trecere pentru SKU ────────────────────────────────────── */
 
 test("cand codul a fost omis, amprenta NU se scrie", () => {

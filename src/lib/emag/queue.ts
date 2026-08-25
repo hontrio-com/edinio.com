@@ -39,7 +39,7 @@ function inghiteDarScrie(unde: string, businessId: string, e: unknown, detalii?:
  * ⚠ NU E O ETICHETA, E ALEGEREA RUTEI. eMAG are trei cai de scriere, de greutati
  * foarte diferite, iar felul de aici hotaraste pe care se merge:
  *
- *   `stoc`       -> `PATCH /offer_stock/{id}`  numai cantitatea. Cea mai usoara.
+ *   `stoc`       -> `POST /offer/save` cu `{id, stock}`. Numai cantitatea, in lot.
  *   `pret`       -> `POST /offer/save`         pret, TVA, timp de pregatire, stare.
  *   `oferta`     -> `POST /product_offer/save` produs + documentatie. SINGURA care creeaza.
  *   `retragere`  -> `POST /offer/save` cu `status: 0`. eMAG NU are stergere de oferta.

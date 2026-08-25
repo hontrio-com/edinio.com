@@ -5,9 +5,14 @@
  *
  * eMAG are trei cai de scriere, de greutati foarte diferite:
  *
- *   `PATCH /offer_stock/{id}`   numai cantitatea. Cea mai usoara.
- *   `POST /offer/save`          pret, TVA, timp de pregatire, stare. Max 50.
+ *   `POST /offer/save`          pret, TVA, timp de pregatire, stare, STOC. Max 50.
  *   `POST /product_offer/save`  produs + DOCUMENTATIE. Singura care creeaza.
+ *
+ * ⚠ A EXISTAT SI O A TREIA, MAI USOARA, SI NU MERGE. `PATCH /offer_stock/{id}` e ruta pe
+ * care documentatia lor o da pentru „numai cantitatea", si pe care am folosit-o pana pe
+ * 25.08.2026. Masurata in jurnalul de cereri al productiei: **0 reusite din 850**, toate
+ * 400 si fara niciun mesaj. Stocul merge de atunci tot pe `offer/save`, care e dovedita.
+ * Nu se reactiveaza fara o cerere adevarata din mediul cu releu. Vezi `actualizeazaStoc`.
  *
  * La Trendyol, `op: 'upsert'` pe un produs deja aprobat trimitea CONTINUT in loc de
  * pret: 1051 de produse au raportat succes cu preturile neschimbate, si s-a aflat
@@ -43,7 +48,7 @@ export type FelRuta =
   | "creeaza"
   /** `POST /offer/save` — pret, TVA, timp de pregatire, stare. Nu atinge documentatia. */
   | "oferta"
-  /** `PATCH /offer_stock/{id}` — numai cantitatea. */
+  /** `POST /offer/save` cu `{id, stock}` — numai cantitatea, fara pret si fara documentatie. */
   | "stoc"
   /** `POST /offer/save` cu `status: 0`. eMAG NU are stergere de oferta. */
   | "retrage"
@@ -275,7 +280,9 @@ export function asteptareaDupaPana(pauze: number): number {
  * acela e clasificat drept refuz tocmai ca sa nu iasa lotul din coada raportand
  * succes.
  *
- * `offer_stock` merge oferta cu oferta: e `PATCH` pe un id, deci n-are lot.
+ * ⚠ SI STOCUL ARE LOT ACUM. Pana pe 25.08.2026 mergea pe `PATCH /offer_stock/{id}`, o
+ * cerere pe oferta — deci un produs cu 50 de variante ardea 50 din cele 3 cereri pe secunda
+ * ale magazinului pentru O SINGURA miscare de stoc. Pe `offer/save` incap 50 deodata.
  */
 export const LOT_MAXIM: Record<FelRuta, number> = {
   creeaza: 50,

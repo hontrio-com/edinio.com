@@ -753,7 +753,12 @@ async function duOferta(
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * `PATCH /offer_stock/{id}` — o cerere pe oferta.
+ * `POST /offer/save` cu `{id, stock}` — un lot, nu o cerere pe oferta.
+ *
+ * ⚠ ANTETUL ASTA SPUNEA PANA AZI `PATCH /offer_stock/{id}`, adica exact ruta pe care
+ * functia NU mai merge. O nota care contrazice codul de sub ea e mai rea decat lipsa ei:
+ * cine o citeste pleaca cu o convingere gresita si n-are de ce s-o verifice. Ruta aceea e
+ * masurata cu 0 reusite din 850 pe contul real — vezi `actualizeazaStoc` in `client.ts`.
  *
  * ⚠ NU ATINGE NICI PRETUL, NICI DOCUMENTATIA. La o oferta pe care comerciantul a
  * modificat-o in panoul lor, orice ruta mai grea i-ar fi sters modificarile la

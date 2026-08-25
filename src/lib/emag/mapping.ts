@@ -1094,7 +1094,7 @@ export function oferteUsoare(
 }
 
 /**
- * Cate bucati are fiecare oferta, pentru `PATCH /offer_stock/{id}`.
+ * Cate bucati are fiecare oferta, pentru `POST /offer/save` cu `{id, stock}`.
  *
  * ⚠ Ruta cea mai usoara dintre toate: nu atinge nici pretul, nici documentatia. La o
  * oferta pe care comerciantul a modificat-o in panoul eMAG, orice altceva i-ar fi

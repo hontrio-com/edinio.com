@@ -2665,7 +2665,13 @@ export type Database = {
           posta_status_checked_at: string | null
           posta_status_code: string | null
           revolut_order_id: string | null
+          sameday_awb_at: string | null
+          sameday_awb_cost: number | null
           sameday_awb_number: string | null
+          sameday_locker_charge_code: string | null
+          sameday_status_checked_at: string | null
+          sameday_status_id: number | null
+          sameday_status_label: string | null
           shipo_awb_at: string | null
           shipo_awb_number: string | null
           shipo_cost: number | null
@@ -2848,7 +2854,13 @@ export type Database = {
           posta_status_checked_at?: string | null
           posta_status_code?: string | null
           revolut_order_id?: string | null
+          sameday_awb_at?: string | null
+          sameday_awb_cost?: number | null
           sameday_awb_number?: string | null
+          sameday_locker_charge_code?: string | null
+          sameday_status_checked_at?: string | null
+          sameday_status_id?: number | null
+          sameday_status_label?: string | null
           shipo_awb_at?: string | null
           shipo_awb_number?: string | null
           shipo_cost?: number | null
@@ -3031,7 +3043,13 @@ export type Database = {
           posta_status_checked_at?: string | null
           posta_status_code?: string | null
           revolut_order_id?: string | null
+          sameday_awb_at?: string | null
+          sameday_awb_cost?: number | null
           sameday_awb_number?: string | null
+          sameday_locker_charge_code?: string | null
+          sameday_status_checked_at?: string | null
+          sameday_status_id?: number | null
+          sameday_status_label?: string | null
           shipo_awb_at?: string | null
           shipo_awb_number?: string | null
           shipo_cost?: number | null

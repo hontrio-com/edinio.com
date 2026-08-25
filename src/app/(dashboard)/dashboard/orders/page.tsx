@@ -20,7 +20,7 @@ import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { PostaConfig } from "@/lib/posta/client";
 import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
-import type { SamedayConfig } from "@/lib/sameday";
+import type { SamedayConfig } from "@/lib/sameday/client";
 
 // Bulk invoice issuance runs sequentially (one document number at a time) and can
 // span dozens of orders, so give this route's server actions ample headroom.

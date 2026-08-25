@@ -9,7 +9,7 @@ import {
   disconnectSameday,
   loadSamedayAccountAction,
 } from "@/lib/actions/sameday.actions";
-import type { SamedayConfig, SamedayPickupPoint, SamedayService } from "@/lib/sameday";
+import type { SamedayConfig, SamedayPickupPoint, SamedayService } from "@/lib/sameday/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";

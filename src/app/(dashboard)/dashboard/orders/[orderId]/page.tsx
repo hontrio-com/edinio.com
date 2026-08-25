@@ -15,7 +15,7 @@ import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { PostaConfig } from "@/lib/posta/client";
 import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
-import type { SamedayConfig } from "@/lib/sameday";
+import type { SamedayConfig } from "@/lib/sameday/client";
 import type { SmsoConfig } from "@/lib/smso";
 
 interface Props {

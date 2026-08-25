@@ -17,7 +17,7 @@ import {
   type SamedayAwbInput,
   type SamedayPickupPoint,
   type SamedayService,
-} from "@/lib/sameday";
+} from "@/lib/sameday/client";
 
 // ─── Config actions ───────────────────────────────────────────────────────────
 
@@ -127,11 +127,23 @@ async function getConfigAndOrder(businessId: string, orderId: string) {
   return { supabase, config, order };
 }
 
+/** Ce alege comerciantul in fereastra de AWB, peste ce a ales cumparatorul la checkout. */
+export type LockerAles = {
+  id: number;
+  name?: string;
+  address?: string;
+  city?: string;
+  county?: string;
+};
+
 export async function createSamedayAwbAction(
   businessId: string,
   orderId: string,
-  input: SamedayAwbInput,
-): Promise<{ awbNumber: string } | { error: string }> {
+  input: SamedayAwbInput & { lockerAles?: LockerAles | null },
+): Promise<
+  | { awbNumber: string; awbCost: number | null; lockerReturnChargeCode: string | null }
+  | { error: string }
+> {
   const ctx = await getConfigAndOrder(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config, order } = ctx;
@@ -139,9 +151,20 @@ export async function createSamedayAwbAction(
   const orderData = order as typeof order & { sameday_awb_number?: string | null };
   if (orderData.sameday_awb_number) return { error: "AWB Sameday a fost deja creat" };
 
-  // Easybox delivery: derive the locker server-side from the order and use the
-  // LOCKER's locality/address on the AWB (mirrors Sameday's official module,
-  // which replaces the recipient address with the locker's).
+  /*
+   * ═══ EASYBOX: ALEGEREA CUMPARATORULUI, SAU A COMERCIANTULUI ═══
+   *
+   * Pana acum lockerul se citea DOAR din comanda, adica din ce alesese cumparatorul la
+   * checkout. Daca omul alesese livrare la adresa, comerciantul nu mai avea nicio cale sa
+   * mute coletul intr-un easybox — desi Sameday ingaduie.
+   *
+   * ⚠ ALEGEREA COMERCIANTULUI BATE COMANDA, si asa trebuie: el o face mai tarziu, stiind
+   * ceva ce cumparatorul nu stia (coletul nu incape la adresa, clientul a sunat si a cerut
+   * altfel). Dar nu se face de la sine: `lockerAles` vine numai daca a apasat anume.
+   *
+   * ⚠ Un id de locker DPD sau Cargus nu are voie sa ajunga intr-un AWB Sameday, de-aia
+   * lockerul din comanda se ia in seama doar cand `courier === "sameday"`.
+   */
   const shipping = (order.shipping_address ?? {}) as {
     courier?: string;
     delivery_type?: string;
@@ -151,28 +174,46 @@ export async function createSamedayAwbAction(
     locker_city?: string;
     locker_county?: string;
   };
-  const isEasyboxDelivery =
-    shipping.courier === "sameday" && shipping.delivery_type === "locker" && !!shipping.locker_id;
-  const lockerIdNum = isEasyboxDelivery ? Number(shipping.locker_id) : NaN;
-  const enriched: SamedayAwbInput =
-    isEasyboxDelivery && !Number.isNaN(lockerIdNum)
+
+  const lockerDinComanda =
+    shipping.courier === "sameday" && shipping.delivery_type === "locker" && shipping.locker_id
       ? {
-          ...input,
-          lockerId: lockerIdNum,
-          recipientCity: shipping.locker_city || input.recipientCity,
-          recipientCounty: shipping.locker_county || input.recipientCounty,
-          recipientAddress: [shipping.locker_address, shipping.locker_name]
-            .filter(Boolean)
-            .join(" - ") || input.recipientAddress,
+          id: Number(shipping.locker_id),
+          name: shipping.locker_name,
+          address: shipping.locker_address,
+          city: shipping.locker_city,
+          county: shipping.locker_county,
         }
-      : { ...input, lockerId: undefined };
+      : null;
+
+  const locker = input.lockerAles ?? lockerDinComanda;
+  const areLocker = !!locker && Number.isFinite(locker.id) && locker.id > 0;
+
+  /*
+   * ⚠ La livrarea in easybox, destinatarul de pe AWB e LOCKERUL, nu casa omului — la fel ca
+   * in modulul lor oficial. Iar e-mailul ramane al CUMPARATORULUI: acolo primeste codul cu
+   * care deschide dulapul.
+   */
+  const enriched: SamedayAwbInput = areLocker
+    ? {
+        ...input,
+        lockerId: locker!.id,
+        recipientCity: locker!.city || input.recipientCity,
+        recipientCounty: locker!.county || input.recipientCounty,
+        recipientAddress:
+          [locker!.address, locker!.name].filter(Boolean).join(" - ") || input.recipientAddress,
+        recipientEmail: input.recipientEmail ?? (order.customer_email ?? undefined),
+      }
+    : { ...input, lockerId: undefined, recipientEmail: input.recipientEmail ?? (order.customer_email ?? undefined) };
 
   const r = await cuRegistru(
     createAdminClient(),
     { businessId, orderId, fel: "awb", furnizor: "sameday", cheie: cheieOperatie("awb", "sameday", orderId) },
     async () => {
-      const awbNumber = await createSamedayAwb(config, enriched);
-      return { referinta: awbNumber, valoare: { awbNumber } };
+      const creat = await createSamedayAwb(config, enriched);
+      /* ⚠ Referinta din registru ramane NUMARUL, nu obiectul: pe ramura `deja` ea se adopta
+         si se scrie inapoi pe comanda, iar acolo se asteapta un sir. */
+      return { referinta: creat.awbNumber, valoare: creat };
     },
     verdictFurnizor,
     /*
@@ -198,12 +239,30 @@ export async function createSamedayAwbAction(
   );
 
   if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
-  const awbNumber = r.fel === "facut" ? r.valoare.awbNumber : (r.referinta ?? "");
 
-  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+  const creat = r.fel === "facut" ? r.valoare : null;
+  const awbNumber = creat?.awbNumber ?? (r.referinta ?? "");
+
+  /*
+   * ⚠ SE SCRIE TOT CE NE-AU DAT, nu doar numarul.
+   *
+   * `awbCost` e costul adevarat al transportului si nu se afla din nicio alta parte —
+   * estimarea de la checkout e o estimare. Iar `lockerReturnChargeCode` ei il dau O SINGURA
+   * DATA, aici: nesalvat, cumparatorul nu-si mai poate preda niciodata returul in easybox.
+   *
+   * ⚠ `sameday_awb_at` e marcajul dupa care umbla cronul de urmarire. Fara el, comanda n-ar
+   * fi privita niciodata — vezi migratia `2026-10-18-sameday-complet.sql`.
+   */
+  const petic: Record<string, unknown> = {
     sameday_awb_number: awbNumber,
+    sameday_awb_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  }).eq("id", orderId).select("id");
+  };
+  if (creat?.awbCost != null) petic.sameday_awb_cost = creat.awbCost;
+  if (creat?.lockerReturnChargeCode) petic.sameday_locker_charge_code = creat.lockerReturnChargeCode;
+
+  const { error: eScriere, data: randuri } = await supabase.from("orders")
+    .update(petic as never).eq("id", orderId).select("id");
 
   // AWB-ul exista. O eroare acum l-ar trimite pe om sa apese din nou; registrul
   // l-a inregistrat, deci a doua apasare il adopta si reface scrierea.
@@ -219,7 +278,12 @@ export async function createSamedayAwbAction(
     dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
-  return { awbNumber };
+  return {
+    awbNumber,
+    awbCost: creat?.awbCost ?? null,
+    /* ⚠ Se intoarce ca sa fie ARATAT pe loc: e singura data cand ei il dau. */
+    lockerReturnChargeCode: creat?.lockerReturnChargeCode ?? null,
+  };
 }
 
 export async function deleteSamedayAwbAction(

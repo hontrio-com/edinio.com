@@ -23,7 +23,7 @@ import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { FanCourierConfig } from "@/lib/fancourier";
-import type { SamedayConfig } from "@/lib/sameday";
+import type { SamedayConfig } from "@/lib/sameday/client";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { NoticeConfig } from "@/lib/notice";
 import type { MailchimpConfig } from "@/lib/mailchimp";

@@ -6,7 +6,7 @@ import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
-import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday";
+import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
 import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";

@@ -23,7 +23,7 @@ import type { SmartbillConfig } from "@/lib/smartbill";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
-import type { SamedayConfig } from "@/lib/sameday";
+import type { SamedayConfig } from "@/lib/sameday/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";

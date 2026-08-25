@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSamedayAwbLabel, type SamedayConfig } from "@/lib/sameday";
+import { getSamedayAwbLabel, type SamedayConfig } from "@/lib/sameday/client";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);

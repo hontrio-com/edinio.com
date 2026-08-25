@@ -4881,7 +4881,13 @@ create table if not exists public.orders (
   dhl_currency text,
   dhl_tracking_url text,
   dhl_reference text,
-  dhl_dispatch_confirmation text);
+  dhl_dispatch_confirmation text,
+  sameday_awb_at timestamp with time zone,
+  sameday_awb_cost numeric,
+  sameday_locker_charge_code text,
+  sameday_status_id integer,
+  sameday_status_label text,
+  sameday_status_checked_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -5695,6 +5701,7 @@ CREATE INDEX orders_innoship_urmarire_idx ON public.orders USING btree (innoship
 CREATE INDEX orders_packeta_urmarire_idx ON public.orders USING btree (packeta_status_checked_at NULLS FIRST) WHERE ((packeta_packet_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_pallex_urmarire_idx ON public.orders USING btree (pallex_status_checked_at NULLS FIRST) WHERE ((pallex_consignment_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_posta_urmarire_idx ON public.orders USING btree (posta_status_checked_at NULLS FIRST) WHERE ((posta_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_sameday_de_urmarit_idx ON public.orders USING btree (sameday_status_checked_at NULLS FIRST) WHERE (sameday_awb_number IS NOT NULL);
 CREATE INDEX orders_shipo_urmarire_idx ON public.orders USING btree (shipo_status_checked_at NULLS FIRST) WHERE ((shipo_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_smartship_urmarire_idx ON public.orders USING btree (smartship_status_checked_at NULLS FIRST) WHERE ((smartship_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_ups_urmarire_idx ON public.orders USING btree (ups_status_checked_at NULLS FIRST) WHERE ((ups_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));

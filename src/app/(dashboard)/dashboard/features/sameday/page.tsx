@@ -3,7 +3,7 @@ import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { SamedayConfigClient } from "@/components/dashboard/SamedayConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
-import type { SamedayConfig } from "@/lib/sameday";
+import type { SamedayConfig } from "@/lib/sameday/client";
 
 export default async function SamedayPage() {
   const user = await getCachedUser();

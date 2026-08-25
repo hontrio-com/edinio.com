@@ -1850,6 +1850,45 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'privat', 'pg_temp'
+AS $function$
+declare
+  v_id     uuid;
+  v_curent jsonb;
+begin
+  if p_business_id is null or coalesce(btrim(p_ceruta_la), '') = '' then
+    return false;
+  end if;
+
+  select id, coalesce(emag_config, '{}'::jsonb)
+    into v_id, v_curent
+    from privat.store_settings
+   where business_id = p_business_id
+   for update;
+
+  if v_id is null then
+    return false;
+  end if;
+
+  if v_curent->>'propagare_ceruta_la' is distinct from p_ceruta_la then
+    return false;
+  end if;
+
+  update privat.store_settings
+     set emag_config = (v_curent - 'propagare_ceruta_la' - 'propagare_op')
+                       || jsonb_build_object('propagare_facuta_la', p_ceruta_la),
+         updated_at  = now()
+   where id = v_id;
+
+  return true;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.genereaza_schema_baseline()
  RETURNS text
  LANGUAGE plpgsql
@@ -7842,6 +7881,7 @@ grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_vari
 grant execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.emag_familie_noua() to service_role;
 grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
+grant execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
 grant execute on function public.handle_new_user() to service_role;
 grant execute on function public.handle_support_message_insert() to service_role;
@@ -7994,6 +8034,7 @@ revoke execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_var
 revoke execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.emag_familie_noua() from public;
 revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
+revoke execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) from public;
 revoke execute on function public.genereaza_schema_baseline() from public;
 revoke execute on function public.handle_new_user() from public;
 revoke execute on function public.handle_support_message_insert() from public;

@@ -10,6 +10,7 @@ import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { citesteOferte, isEmagError } from "@/lib/emag/client";
 import { esteDeconectatEmag, loadEmagContext, type ContextEmag } from "@/lib/emag/sync";
 import { patchEmagConfig } from "@/lib/emag/config";
+import { propagariNeterminate, propagaSetarile, stingePropagarea } from "@/lib/emag/propagare";
 import { stocDeImportat } from "@/lib/emag/import-produse";
 import { magazinDin, retragePeEmagId, trimiteElement } from "@/lib/emag/trimite";
 import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
@@ -823,6 +824,52 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /* ── 5b) Propagarile de setari ramase in aer ────────────────────────────────
+   *
+   * ═══ ⚠ ASTA CHIAR E UN OUTBOX, spre deosebire de plasa de mai sus ═══
+   *
+   * Plasa de la 5) face pierderea trecatoare; nu o face imposibila, si spune asta despre
+   * ea insasi. Aici insa se poate mai mult, si merita: intentia de propagare se scrie in
+   * ACELASI rand, prin aceeasi instructiune Postgres, ca datele care au cerut-o. Deci nu
+   * exista clipa in care setarea e salvata si intentia nu.
+   *
+   * ⚠ SI ERA NEVOIE, fiindca aici plasa nu ajuta cu nimic. Ea compara amprenta de CONTINUT
+   * a produsului, iar `green_tax` sau GPSR nu schimba nicio amprenta. O propagare pierduta
+   * fiindca instanta a murit dupa Salvare nu se mai repara NICIODATA, de nicaieri — si pe
+   * ecran scrie deja „Datele pleaca la ofertele tale in cateva minute”.
+   *
+   * ⚠ In FIECARE trecere, nu la zece minute ca plasa. Interogarea e una singura, cu filtru
+   * pe `propagare_ceruta_la`, si in cazul obisnuit nu intoarce nimic: bratul iute a
+   * stampilat deja. `RABDARE_PROPAGARE_MS` ii lasa trei minute sa apuce.
+   */
+  let propagari = 0;
+  for (const cerere of await propagariNeterminate(admin, inceputulRularii)) {
+    const ctx = await ctxPentru(cerere.businessId);
+    if (!ctx) continue;
+
+    const cate = await cuFir(
+      firNou("propagare-setari"),
+      () => propagaSetarile(admin, cerere.businessId, cerere.op),
+    );
+    propagari += cate;
+
+    /* ⚠ Compare-and-set: se stinge NUMAI intentia citita. Daca intre timp a venit o cerere
+       noua, o stingere oarba ar fi inghitit-o si pe aceea, iar a doua schimbare a
+       comerciantului n-ar mai pleca niciodata. */
+    await stingePropagarea(admin, cerere.businessId, cerere.ceruta_la);
+
+    /* ⚠ Se SPUNE de fiecare data. In cazul obisnuit bratul de dupa raspuns apuca sa
+       stampileze, deci un rand aici inseamna ca o instanta chiar a murit dupa Salvare —
+       o constatare, nu o reparatie de rutina. */
+    await logError({
+      action: "emag-sync",
+      message: `propagare de setari ramasa in aer, dusa acum: ${cate} produse pe ${cerere.op}`,
+      details: { businessId: cerere.businessId, op: cerere.op, cerutaLa: cerere.ceruta_la },
+      businessId: cerere.businessId,
+      severity: "warning",
+    });
+  }
+
   /* ── 6) Lista de IP-uri de la care suna ei ──────────────────────────────
    *
    * ⚠ O DATA PE ORA, si nu din zgarcenie: fisierul lor se schimba de cateva ori pe
@@ -866,7 +913,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, awburi, retururi, neplecate, jurnalSters,
+    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, awburi, retururi, neplecate, jurnalSters, propagari,
   });
 }
 

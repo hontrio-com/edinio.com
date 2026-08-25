@@ -55,19 +55,34 @@ test("⚠ o SINGURA operatie, cea mai grea dintre cele cerute", () => {
    * `oferta` duce si pretul, si stocul. Trei puneri in coada pe acelasi produs ar fi
    * insemnat trei treceri pentru un singur efect — si trei cereri din cele 3 pe secunda
    * ale magazinului, aceleasi prin care pleaca o miscare de stoc dupa o vanzare.
+   *
+   * ⚠ ALEGEREA S-A MUTAT IN `propagare.ts` (25.08.2026), fiindca acum o cheama si cronul:
+   * o intentie ramasa in aer dupa moartea instantei trebuie dusa la capat de acolo. Doua
+   * copii ale aceleiasi alegeri s-ar fi departat — chiar lectia din antetul lui `config.ts`.
    */
-  assert.match(viu, /if \(cereRutaGrea\) await enqueueEmagSyncMany\(businessId, ids\);/);
-  assert.match(viu, /else if \(cerePret\) await enqueueEmagPretMany\(businessId, ids\);/);
-  assert.match(viu, /else await enqueueEmagStocMany\(businessId, ids\);/);
+  const prop = readFileSync("src/lib/emag/propagare.ts", "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  assert.match(prop, /if \(op === "oferta"\) await enqueueEmagSyncMany\(businessId, ids\);/);
+  assert.match(prop, /else if \(op === "pret"\) await enqueueEmagPretMany\(businessId, ids\);/);
+  assert.match(prop, /else await enqueueEmagStocMany\(businessId, ids\);/);
+
+  /* Si panoul alege marimea, nu ruta: `oferta` > `pret` > `stoc`. */
+  assert.match(
+    viu,
+    /cereRutaGrea \? "oferta" : cerePret \? "pret" : cereStoc \? "stoc" : null/,
+  );
 });
 
 test("nu se pune nimic la rand cand nu s-a schimbat nimic din ce pleaca", () => {
-  /* ⚠ Salvarea altor setari din aceeasi carte n-are de ce sa puna catalogul la coada. */
-  assert.match(viu, /if \(cereRutaGrea \|\| cerePret \|\| cereStoc\) \{/);
+  /* ⚠ Salvarea altor setari din aceeasi carte n-are de ce sa puna catalogul la coada — si
+     nici sa scrie o intentie de propagare, care ar fi trimis cronul dupa ea degeaba. */
+  assert.match(viu, /if \(opPropagare\) \{/);
+  assert.match(viu, /const intentie = opPropagare \? peticDeIntentie\(veche, opPropagare, cerutaLa\) : \{\};/);
 });
 
 test("⚠ catalogul se citeste intreg, si prin `dupaRaspuns`", () => {
-  assert.match(viu, /fetchAllRowsStrict<\{ product_id: string \| null \}>\(\s*"emag\.setari-propagate"/);
+  const prop = readFileSync("src/lib/emag/propagare.ts", "utf8");
+  assert.match(prop, /fetchAllRowsStrict<\{ product_id: string \| null \}>\(\s*"emag\.setari-propagate"/);
   assert.match(viu, /\}, "setariEmagPropagate", businessId\);/);
   /* ⚠ Si nu tine salvarea pe loc: omul primeste „Salvat." imediat. */
   const iCoada = viu.indexOf('"setariEmagPropagate"');

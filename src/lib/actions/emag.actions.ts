@@ -35,6 +35,9 @@ import { LIMITE_EMAG } from "@/lib/emag/limite";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { patchEmagConfig } from "@/lib/emag/config";
+import {
+  peticDeIntentie, propagaSetarile, stingePropagarea, type OpPropagare,
+} from "@/lib/emag/propagare";
 import { deCeNuSeVinde } from "@/lib/emag/de-ce-nu-se-vinde";
 import { cautaCategorie } from "@/lib/emag/cauta-categorie";
 import { citesteAmintirea } from "@/lib/emag/memorie";
@@ -902,9 +905,6 @@ export async function salveazaSetariEmag(
       ? { deriva_stoc: setari.deriva_stoc } : {}),
   };
 
-  const ok = await patchEmagConfig(createAdminClient(), businessId, petic);
-  if (!ok) return { error: "Nu am putut salva setările. Încearcă din nou." };
-
   /*
    * ═══ SETARILE CARE INTRA IN INCARCATURA SE SI TRIMIT (25.08.2026) ═══
    *
@@ -915,7 +915,7 @@ export async function salveazaSetariEmag(
    * ⚠ CE COSTA, PE CAMP — si nu e ce banuia auditul:
    *
    *   `green_tax`, `supply_lead_time`   pleaca NUMAI pe ruta grea, nu sunt in amprenta de
-   *                                     continut si nu sunt in deriva. Deci nu ajung
+   *   si GPSR                           continut si nu sunt in deriva. Deci nu ajung
    *                                     NICIODATA singure la ofertele deja publicate. O
    *                                     taxa verde pusa dupa publicare o plateste
    *                                     comerciantul din marja, tacut, si se vede abia la
@@ -927,8 +927,9 @@ export async function salveazaSetariEmag(
    *                                     audit e singurul care n-avea nevoie de reparatie.
    *
    * ⚠ SE ALEGE OPERATIA CEA MAI USOARA CARE DUCE CAMPUL. Regula casei (§1.3): o schimbare
-   * de pret n-are voie sa atinga `product_offer/save`. Deci numai `green_tax` si
-   * `supply_lead_time` cer ruta grea; restul merg pe rutele usoare.
+   * de pret n-are voie sa atinga `product_offer/save`. Ruta grea o cer numai campurile care
+   * chiar pleaca pe ea: `green_tax`, `supply_lead_time` si GPSR; restul merg pe rutele
+   * usoare.
    *
    * ⚠ `dupaRaspuns`, nu `void`: pe serverless instanta poate fi inghetata cand raspunsul se
    * inchide. Si nu tine salvarea pe loc — comerciantul primeste „Salvat." imediat.
@@ -976,27 +977,51 @@ export async function salveazaSetariEmag(
   const cerePret = sASchimbat("vat_id") || sASchimbat("handling_time");
   const cereStoc = sASchimbat("stoc_rezervat") || sASchimbat("warehouse_id");
 
-  if (cereRutaGrea || cerePret || cereStoc) {
+  /*
+   * ═══ SI INTENTIA SE SCRIE ODATA CU DATELE, NU DUPA ELE (25.08.2026) ═══
+   *
+   * Pana acum clasificarea de mai sus se facea DUPA salvare, iar punerea in coada traia
+   * numai in `dupaRaspuns`. Daca instanta murea intre cele doua, intentia comerciantului se
+   * pierdea FARA URMA — si nu era o pierdere pe care s-o repare altcineva mai tarziu:
+   *
+   *   ⚠ Plasa de schimbari neplecate compara AMPRENTA DE CONTINUT a produsului. O setare de
+   *   magazin nu schimba nicio amprenta, deci plasa nu vede nimic. Si asa TREBUIE sa fie —
+   *   ea repara ce s-a stricat, nu porneste ce n-a fost cerut. Deci nimic nu recupera asta.
+   *
+   * Acum intentia calatoreste in CHIAR peticul care duce datele. `patchEmagConfig` merge
+   * printr-o singura instructiune Postgres, deci `propagare_ceruta_la` devine durabil in
+   * aceeasi clipa cu `green_tax`-ul care l-a cerut: ori s-au scris amandoua, ori niciunul.
+   * Cronul ridica ce ramane neterminat, chemand aceeasi functie.
+   *
+   * ⚠ CE NU ACOPERA, si merita spus: `enqueueEmag…Many` isi inghite erorile inauntru
+   * (`inghiteDarScrie`), deci o punere in coada picata tot se stampileaza ca dusa. Ce se
+   * repara aici e moartea instantei si citirea catalogului picata — `fetchAllRowsStrict`
+   * chiar arunca, deci atunci marcajul ramane nepus si cronul mai incearca o data.
+   */
+  const opPropagare: OpPropagare | null =
+    cereRutaGrea ? "oferta" : cerePret ? "pret" : cereStoc ? "stoc" : null;
+  const cerutaLa = new Date().toISOString();
+  const intentie = opPropagare ? peticDeIntentie(veche, opPropagare, cerutaLa) : {};
+
+  const ok = await patchEmagConfig(createAdminClient(), businessId, { ...petic, ...intentie });
+  if (!ok) return { error: "Nu am putut salva setările. Încearcă din nou." };
+
+  if (opPropagare) {
+    /*
+     * ⚠ `dupaRaspuns`, nu `void`: pe serverless instanta poate fi inghetata cand raspunsul
+     * se inchide. Si nu tine salvarea pe loc — comerciantul primeste „Salvat." imediat.
+     *
+     * ⚠ SE FOLOSESTE OPERATIA ESCALADATA (`intentie.propagare_op`), nu cea ceruta acum. Daca
+     * o cerere GREA astepta inca, o salvare usoara venita peste ea n-are voie s-o stinga cu
+     * o trecere usoara: taxa verde n-ar mai pleca niciodata.
+     */
     dupaRaspuns(async () => {
       const admin = createAdminClient();
-      /* ⚠ `fetchAllRowsStrict`: PostgREST taie la 1000 FARA sa spuna, iar aici lista e
-         catalogul intreg. Taiata, restul ofertelor ar fi ramas cu setarea veche — adica
-         exact defectul, doar mai mic si mai greu de vazut. */
-      const randuri = await fetchAllRowsStrict<{ product_id: string | null }>(
-        "emag.setari-propagate", (from, to) =>
-          admin.from("emag_offers").select("product_id")
-            .eq("business_id", businessId).eq("auto_sync", true).not("product_id", "is", null)
-            .order("emag_id", { ascending: true }).range(from, to),
-      );
-      const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
-      if (ids.length === 0) return;
-
-      /* ⚠ O SINGURA operatie, cea mai grea dintre cele cerute: `oferta` duce si pretul, si
-         stocul, deci trei puneri in coada pe acelasi produs ar fi insemnat trei treceri
-         pentru un singur efect. */
-      if (cereRutaGrea) await enqueueEmagSyncMany(businessId, ids);
-      else if (cerePret) await enqueueEmagPretMany(businessId, ids);
-      else await enqueueEmagStocMany(businessId, ids);
+      await propagaSetarile(admin, businessId, intentie.propagare_op ?? opPropagare);
+      /* ⚠ Se stinge NUMAI intentia servita, prin compare-and-set in Postgres: o cerere
+         venita intre timp trebuie sa ramana nestinsa, altfel a doua schimbare a
+         comerciantului n-ar mai pleca niciodata. */
+      await stingePropagarea(admin, businessId, cerutaLa);
     }, "setariEmagPropagate", businessId);
   }
 

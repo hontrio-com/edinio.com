@@ -990,6 +990,39 @@ export interface EmagConfig {
   pickup_address_id?: string;
   return_address_id?: string;
   courier_account_id?: number;
+
+  /*
+   * ═══ INTENTIA DE PROPAGARE, SCRISA IN ACELASI RAND CU DATELE ═══
+   *
+   * Cand comerciantul schimba o setare care pleaca in incarcatura ofertelor, punerea in
+   * coada se face dupa raspuns (`dupaRaspuns`). Daca instanta moare intre salvare si
+   * punerea in coada, intentia lui se pierde FARA URMA: plasa de schimbari neplecate se
+   * uita la amprenta de CONTINUT a produsului, iar o setare de magazin nu e in ea. Nimic
+   * nu o mai recupereaza vreodata.
+   *
+   * ⚠ DE-AIA CALATORESC IN CHIAR PETICUL CARE DUCE DATELE. `patchEmagConfig` merge printr-o
+   * singura instructiune Postgres (`jsonb_merge_config`), deci intentia devine durabila in
+   * aceeasi clipa cu valoarea care a cerut-o. Nu exista fereastra intre ele.
+   *
+   * Cronul ridica ce-a ramas neterminat. Punerea in coada e oricum idempotenta:
+   * `emag_sync_queue` are `unique (business_id, offer_id, op)`.
+   */
+
+  /** Cand s-a cerut ultima propagare de setari. ISO, si totodata cheia ei. */
+  propagare_ceruta_la?: string | null;
+  /**
+   * Ce marime de operatie cere: `oferta` le duce pe toate, `pret` doar pretul, `stoc` doar
+   * stocul. La doua cereri suprapuse ramane cea mai GREA — o cerere usoara n-are voie sa
+   * inlocuiasca una grea care inca n-a apucat sa plece.
+   */
+  propagare_op?: "oferta" | "pret" | "stoc" | null;
+  /**
+   * Valoarea lui `propagare_ceruta_la` care a fost DUSA la capat.
+   *
+   * ⚠ Se scrie marcajul cerut, nu „acum”: daca intre timp a venit o cerere noua, un „acum”
+   * ar stinge-o si pe aceea, iar a doua schimbare a comerciantului n-ar mai pleca niciodata.
+   */
+  propagare_facuta_la?: string | null;
 }
 
 export interface EmagIntrareCategorie {

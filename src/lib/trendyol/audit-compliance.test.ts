@@ -92,6 +92,28 @@ test("⚠ listarile in asteptare se intreaba DIRECT, nu se asteapta cursorul", (
   assert.match(sync, /if \(isTrendyolError\(res\)\) continue;/);
 });
 
+test("⚠ si NU infometeaza restul listarilor", () => {
+  /*
+   * ═══ DEFECTUL A FOST AL MEU, IN ACEEASI ORA ═══
+   *
+   * Prima forma scria `last_status_at` NUMAI la aprobare. Dar lista se cere ordonata dupa chiar
+   * campul asta, cu nulurile intai — deci cele NEAPROBATE ramaneau cu `null`, erau alese din
+   * nou la fiecare trecere, si restul nu ajungeau niciodata la rand.
+   *
+   * ⚠ Masurat: un magazin are 97 de listari in asteptare si se intreaba 20 pe trecere. Aceleasi
+   * 20 s-ar fi intrebat la nesfarsit, iar celelalte 77 niciodata — si ar fi aratat ca merge,
+   * fiindca primele 20 chiar se confirmau.
+   */
+  const sursa = viu("src/lib/trendyol/sync.ts");
+  const i = sursa.indexOf("async function confirmaTintit(");
+  const f = sursa.slice(i, sursa.indexOf("export async function reconcileStatuses(", i));
+  assert.doesNotMatch(f, /if \(!gasit\) continue;/, "nu se mai sare fara sa se scrie marcajul");
+  assert.match(f, /\.\.\.\(gasit \? \{ status: "approved", error: null \} : \{\}\),/);
+  assert.match(f, /last_status_at: now,/);
+  /* ⚠ Si ordonarea chiar e pe campul asta, altfel rotatia n-ar avea sens. */
+  assert.match(f, /\.order\("last_status_at", \{ ascending: true, nullsFirst: true \}\)/);
+});
+
 /* ── auto_publish, independent de auto_sync ────────────────────────────────── */
 
 test("⚠ „trimite automat” stins NU mai opreste publicarea produselor noi", () => {

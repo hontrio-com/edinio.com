@@ -1695,9 +1695,25 @@ async function confirmaTintit(
     /* ⚠ O eroare NU inseamna „nu e aprobat": se lasa pe seama scanarii, care vine oricum. */
     if (isTrendyolError(res)) continue;
     const gasit = (res.data?.content ?? []).length > 0;
-    if (!gasit) continue;
+
+    /*
+     * ═══ ⚠ MARCAJUL SE SCRIE SI CAND NU S-A GASIT (indreptat in aceeasi ora) ═══
+     *
+     * Prima forma scria `last_status_at` NUMAI la aprobare. Dar lista se cere ordonata dupa
+     * chiar campul asta, cu nulurile intai — deci cele NEAPROBATE ramaneau cu `null` si erau
+     * alese din nou la fiecare trecere, iar restul nu ajungeau NICIODATA la rand.
+     *
+     * ⚠ Masurat: un magazin are 97 de listari in asteptare si se intreaba 20 pe trecere. Cu
+     * marcajul scris doar la reusita, aceleasi 20 s-ar fi intrebat la nesfarsit, iar celelalte
+     * 77 n-ar fi fost verificate niciodata pe calea tintita. Infometare — si ar fi aratat ca
+     * merge, fiindca primele 20 chiar se confirmau.
+     */
     await admin.from("trendyol_listings")
-      .update({ status: "approved", error: null, last_status_at: now, updated_at: now } as never)
+      .update({
+        ...(gasit ? { status: "approved", error: null } : {}),
+        last_status_at: now,
+        updated_at: now,
+      } as never)
       .eq("id", l.id);
     await pause(120);
   }

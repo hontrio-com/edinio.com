@@ -17,6 +17,7 @@ import {
   type SamedayAwbInput,
   type SamedayPickupPoint,
   type SamedayService,
+  getSamedayServices,
 } from "@/lib/sameday/client";
 
 // ─── Config actions ───────────────────────────────────────────────────────────
@@ -284,6 +285,41 @@ export async function createSamedayAwbAction(
     /* ⚠ Se intoarce ca sa fie ARATAT pe loc: e singura data cand ei il dau. */
     lockerReturnChargeCode: creat?.lockerReturnChargeCode ?? null,
   };
+}
+
+/**
+ * Ce servicii si ce extraoptiuni are CHIAR contul magazinului.
+ *
+ * ⚠ EXISTA CA FEREASTRA DE AWB SA NU OFERE CE NU SE POATE. Codurile sunt comune
+ * (`PDO`, `SWAP`, `OPCG`, `RDOC`, `TBC`), dar activarea lor se face la Sameday, pe cont, si
+ * nu prin API. O bifa care n-are corespondent ar fi fost sarita tacut la emitere, iar omul ar
+ * fi crezut ca a cerut ceva ce nu s-a cerut niciodata.
+ *
+ * ⚠ Si numarul lor nu e cel din documentatie: masurat pe un cont real, 22 de servicii, nu 8.
+ */
+export async function optiuniSamedayAction(
+  businessId: string,
+): Promise<{ servicii: SamedayService[] } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  const { data: settings } = await createAdminClient()
+    .from("store_settings").select("sameday_config").eq("business_id", businessId).maybeSingle();
+  const config = settings?.sameday_config as SamedayConfig | null;
+  if (!config?.enabled || !config.username || !config.password) {
+    return { error: "Sameday nu este configurat complet" };
+  }
+
+  try {
+    return { servicii: await getSamedayServices(config) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function deleteSamedayAwbAction(

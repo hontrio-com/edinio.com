@@ -4,7 +4,11 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
-import { createSamedayAwbAction, deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
+import {
+  createSamedayAwbAction, deleteSamedayAwbAction, optiuniSamedayAction,
+} from "@/lib/actions/sameday.actions";
+import { getLockers } from "@/lib/actions/shipping.actions";
+import { ETICHETE_COLET, potrivesteTipul } from "@/lib/sameday/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
@@ -50,8 +54,32 @@ export function SamedayAwbModal({
   // Easybox delivery: only for Sameday locker orders (a DPD/Cargus locker id
   // must never leak into a Sameday AWB). The AWB runs on the LN service with
   // the locker's own locality — both resolved server-side.
-  const isEasyboxDelivery =
+  const lockerDinComanda =
     addr?.courier === "sameday" && addr?.delivery_type === "locker" && !!addr?.locker_id;
+
+  /*
+   * ═══ EASYBOX: SI ALEGEREA COMERCIANTULUI, NU DOAR A CUMPARATORULUI ═══
+   *
+   * Pana acum easybox-ul se citea DOAR din comanda. Daca omul alesese livrare la adresa,
+   * comerciantul nu mai avea nicio cale sa mute coletul intr-un dulap — desi Sameday
+   * ingaduie, si desi tocmai asta ne-a fost cerut.
+   *
+   * ⚠ Comutatorul porneste APRINS cand cumparatorul a ales deja easybox, si stins altfel.
+   * Aprinderea lui e o fapta a comerciantului, nu o implicire a noastra.
+   */
+  const [laEasybox, setLaEasybox] = useState(lockerDinComanda);
+  const [lockere, setLockere] = useState<{ id: string; name: string; address: string; city: string; county: string }[]>([]);
+  const [lockereIncarca, setLockereIncarca] = useState(false);
+  const [cautare, setCautare] = useState("");
+  const [lockerAles, setLockerAles] = useState<{ id: string; name: string; address: string; city: string; county: string } | null>(null);
+
+  /* Extraoptiunile CONTULUI, nu o lista scrisa de noi: vezi `optiuniSamedayAction`. */
+  const [coduriCont, setCoduriCont] = useState<string[]>([]);
+  const [extraAlese, setExtraAlese] = useState<string[]>([]);
+  /* ⚠ Ei il dau O SINGURA DATA, in raspunsul de la emitere. Se arata pe loc. */
+  const [codRetur, setCodRetur] = useState<string | null>(null);
+
+  const isEasyboxDelivery = laEasybox;
 
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
   // `useGreutateaAwb`.
@@ -90,6 +118,45 @@ export function SamedayAwbModal({
     }
   }, [open, hasAwb, order.payment_status, order.total]);
 
+  /* Ce extraoptiuni are CHIAR contul. O bifa fara corespondent ar fi fost sarita tacut la
+     emitere, iar omul ar fi crezut ca a cerut ceva ce nu s-a cerut niciodata. */
+  useEffect(() => {
+    if (!open || hasAwb) return;
+    let anulat = false;
+    (async () => {
+      const r = await optiuniSamedayAction(businessId);
+      if (anulat || "error" in r) return;
+      setCoduriCont([...new Set(r.servicii.flatMap((sv) => sv.optiuni.map((o) => o.taxCode)))]);
+    })();
+    return () => { anulat = true; };
+  }, [open, hasAwb, businessId]);
+
+  /*
+   * Lockerele se cer DOAR cand comerciantul aprinde comutatorul.
+   *
+   * ⚠ Nu la deschiderea ferestrei: sunt peste sapte mii, in cincisprezece cereri catre ei, si
+   * marea majoritate a AWB-urilor pleaca la adresa. Cerute mereu, ar fi fost cincisprezece
+   * cereri irosite la fiecare colet.
+   */
+  useEffect(() => {
+    if (!open || !laEasybox || lockerDinComanda || lockere.length > 0) return;
+    let anulat = false;
+    (async () => {
+      /* ⚠ Aprinderea se face IN interiorul functiei asincrone, nu langa efect: un `setState`
+         sincron intr-un efect porneste o a doua randare inainte ca prima sa se aseze, si
+         regula casei il opreste ca eroare. */
+      setLockereIncarca(true);
+      const l = await getLockers(businessId, "sameday");
+      if (anulat) return;
+      setLockere(l.map((x) => ({
+        id: String(x.id), name: x.name, address: x.address ?? "",
+        city: x.city ?? "", county: x.county ?? "",
+      })));
+      setLockereIncarca(false);
+    })();
+    return () => { anulat = true; };
+  }, [open, laEasybox, lockerDinComanda, lockere.length, businessId]);
+
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!recipientPhone.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
@@ -97,9 +164,19 @@ export function SamedayAwbModal({
       if (!recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu");
       if (!recipientCity.trim()) return toast.error("Localitatea destinatarului este obligatorie");
       if (!recipientAddress.trim()) return toast.error("Adresa destinatarului este obligatorie");
+    } else if (!lockerDinComanda && !lockerAles) {
+      return toast.error("Alege easybox-ul in care se livreaza coletul");
     }
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
+
+    /*
+     * ⚠ TIPUL COLETULUI SE VERIFICA FATA DE GREUTATE, fiindca ei il impart chiar dupa ea:
+     * tip 1 pana la 1 kg, tip 0 intre 1,01 si 38, tip 2 peste 38. Pana acum orice combinatie
+     * pleca, deci un colet de 50 kg putea pleca declarat tip 0 — iar ei il taxeaza altfel.
+     */
+    const potrivit = potrivesteTipul(weightNum, packageType);
+    if (potrivit) return toast.error(potrivit);
 
     setCreating(true);
     // The locker id + its locality are derived server-side from the order.
@@ -120,13 +197,27 @@ export function SamedayAwbModal({
       insuredValue: parseFloat(insuredValue) || 0,
       observation: observation.trim(),
       clientInternalReference: order.order_number,
+      /* Alegerea comerciantului. Lipsa, serverul cade pe cea a cumparatorului din comanda. */
+      lockerAles: laEasybox && lockerAles
+        ? {
+            id: Number(lockerAles.id), name: lockerAles.name, address: lockerAles.address,
+            city: lockerAles.city, county: lockerAles.county,
+          }
+        : null,
+      extraOptiuni: extraAlese.length ? extraAlese : undefined,
     });
     setCreating(false);
 
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success(`AWB Sameday ${result.awbNumber} creat`);
+      toast.success(
+        `AWB Sameday ${result.awbNumber} creat`
+        + (result.awbCost != null ? ` · cost ${result.awbCost.toFixed(2)} lei` : ""),
+      );
+      /* ⚠ Codul de incarcare in easybox: ei il dau o singura data. Se arata pe loc, si e si
+         salvat pe comanda — altfel cumparatorul n-ar mai putea preda returul niciodata. */
+      if (result.lockerReturnChargeCode) setCodRetur(result.lockerReturnChargeCode);
       onSuccess();
     }
   }
@@ -268,9 +359,27 @@ export function SamedayAwbModal({
                       />
                     </div>
                   </div>
-                  {isEasyboxDelivery && (
+                  {/*
+                    ⚠ COMUTATORUL EXISTA CA SA POATA COMERCIANTUL, nu doar cumparatorul.
+                    Cand comanda vine deja cu easybox ales la checkout, e aprins si blocat:
+                    stins, coletul ar pleca la o adresa pe care omul n-a cerut-o.
+                  */}
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={laEasybox}
+                      disabled={lockerDinComanda}
+                      onChange={(e) => { setLaEasybox(e.target.checked); setLockerAles(null); }}
+                      className="h-4 w-4 rounded border-border accent-primary disabled:opacity-60"
+                    />
+                    <span className="text-sm font-medium text-foreground">Livrare la Easybox</span>
+                    {lockerDinComanda && (
+                      <span className="text-[11px] text-muted-foreground">ales de client la comanda</span>
+                    )}
+                  </label>
+
+                  {laEasybox && lockerDinComanda && (
                     <div className="p-3 rounded-xl bg-info/5 border border-info/20">
-                      <p className="text-xs font-semibold text-info mb-0.5">Livrare la Easybox</p>
                       <p className="text-sm font-medium text-foreground">{addr?.locker_name}</p>
                       {(addr?.locker_address || addr?.locker_city) && (
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -279,6 +388,89 @@ export function SamedayAwbModal({
                       )}
                       <p className="text-[11px] text-muted-foreground mt-1.5">
                         AWB-ul se genereaza pe serviciul LockerNextDay, cu localitatea si adresa easybox-ului.
+                      </p>
+                    </div>
+                  )}
+
+                  {laEasybox && !lockerDinComanda && (
+                    <div className="rounded-xl border border-border p-3 space-y-2">
+                      {lockerAles ? (
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{lockerAles.name}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {[lockerAles.address, lockerAles.city].filter(Boolean).join(", ")}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLockerAles(null)}
+                            className="text-xs text-primary hover:underline shrink-0"
+                          >
+                            Schimba
+                          </button>
+                        </div>
+                      ) : lockereIncarca ? (
+                        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Se incarca easybox-urile...
+                        </p>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={cautare}
+                            onChange={(e) => setCautare(e.target.value)}
+                            placeholder="Cauta dupa oras, adresa sau nume"
+                            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          />
+                          {/*
+                            ⚠ Se arata cel mult 30, si numai dupa ce omul a scris ceva.
+                            Contul are peste sapte mii de easybox-uri; insirate toate, fila ar
+                            innegri, iar alegerea ar fi imposibila.
+                          */}
+                          {cautare.trim().length < 2 ? (
+                            <p className="text-xs text-muted-foreground">
+                              Scrie cel putin doua litere ca sa cauti printre cele {lockere.length} easybox-uri.
+                            </p>
+                          ) : (
+                            <div className="max-h-56 overflow-y-auto -mx-1 px-1 space-y-1">
+                              {lockere
+                                .filter((l) => {
+                                  const q = cautare.trim().toLowerCase();
+                                  return `${l.name} ${l.address} ${l.city} ${l.county}`.toLowerCase().includes(q);
+                                })
+                                .slice(0, 30)
+                                .map((l) => (
+                                  <button
+                                    key={l.id}
+                                    type="button"
+                                    onClick={() => setLockerAles(l)}
+                                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-muted transition-colors"
+                                  >
+                                    <span className="flex items-start gap-2">
+                                      <MapPin className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                                      <span>
+                                        <span className="block text-sm text-foreground">{l.name}</span>
+                                        <span className="block text-xs text-muted-foreground">
+                                          {[l.address, l.city].filter(Boolean).join(", ")}
+                                        </span>
+                                      </span>
+                                    </span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {codRetur && (
+                    <div className="p-3 rounded-xl bg-warning/5 border border-warning/30">
+                      <p className="text-xs font-semibold text-warning mb-0.5">Cod de incarcare in easybox</p>
+                      <p className="text-lg font-mono font-semibold tracking-wider text-foreground">{codRetur}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Trimite-l cumparatorului: fara el nu poate preda coletul. Sameday il da o singura data,
+                        dar ramane salvat pe comanda.
                       </p>
                     </div>
                   )}
@@ -333,7 +525,9 @@ export function SamedayAwbModal({
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Detalii colet</p>
                 <div className="space-y-3">
                   <div className="flex gap-2">
-                    {([[0, "Colet"], [1, "Plic"], [2, "Colet mare"]] as const).map(([kind, label]) => (
+                    {/* ⚠ Etichetele vin din `ETICHETE_COLET`: ele poarta pragurile de greutate,
+                        iar „Plic" de aici nu scria nicaieri la Sameday. */}
+                    {([1, 0, 2] as const).map((kind) => (
                       <button
                         key={kind}
                         type="button"
@@ -344,10 +538,50 @@ export function SamedayAwbModal({
                             : "border-border text-muted-foreground hover:bg-muted"
                         }`}
                       >
-                        {label}
+                        {ETICHETE_COLET[kind]}
                       </button>
                     ))}
                   </div>
+                  {/*
+                    ⚠ SE ARATA DOAR CE ARE CONTUL. Codurile sunt comune la Sameday, dar
+                    activarea lor se face la ei, pe contract. O bifa fara corespondent ar fi
+                    fost sarita tacut la emitere, iar omul ar fi crezut ca a cerut ceva.
+                  */}
+                  {coduriCont.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground">Extraoptiuni</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                        {([
+                          ["PDO", "Predare personala in punct fix"],
+                          ["OPCG", "Deschidere colet"],
+                          ["SWAP", "Colet la schimb"],
+                          ["RDOC", "Retur documente"],
+                          ["TBC", "Produse din tutun"],
+                        ] as const)
+                          .filter(([cod]) => coduriCont.includes(cod))
+                          .map(([cod, eticheta]) => (
+                            <label key={cod} className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={extraAlese.includes(cod)}
+                                onChange={(e) =>
+                                  setExtraAlese((v) =>
+                                    e.target.checked ? [...v, cod] : v.filter((x) => x !== cod),
+                                  )
+                                }
+                                className="h-3.5 w-3.5 rounded border-border accent-primary"
+                              />
+                              <span className="text-xs text-foreground">{eticheta}</span>
+                            </label>
+                          ))}
+                      </div>
+                      {extraAlese.includes("PDO") && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Duci chiar tu coletul la un punct fix, in loc sa astepti curierul.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Greutate totala (kg) *</label>

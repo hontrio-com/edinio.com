@@ -458,7 +458,7 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text DEFAULT NULL::text, p_business_id uuid DEFAULT NULL::uuid)
+CREATE OR REPLACE FUNCTION public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text DEFAULT NULL::text, p_business_id uuid DEFAULT NULL::uuid, p_elibereaza_stoc boolean DEFAULT NULL::boolean)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -488,18 +488,8 @@ begin
 
   if not found then return jsonb_build_object('gasit', false); end if;
 
-  /*
-   * LIMITA DE MAGAZIN, verificata AICI si nu la apelant.
-   *
-   * Lotul din panou o avea in interogare (`.eq("business_id", ...)`) si a pierdut-o
-   * cand a trecut pe un apel per comanda: un utilizator care isi are magazinul lui
-   * putea trimite id-uri de comenzi din ALT magazin, si li s-ar fi schimbat
-   * statusul si li s-ar fi eliberat stocul. Actiunile de server se pot chema cu
-   * orice argumente, printr-un POST direct — vezi manifestul global de actiuni.
-   *
-   * `null` = apelantul a verificat deja apartenenta pe alt drum (`updateOrder`
-   * citeste comanda si magazinul cu clientul utilizatorului, sub RLS).
-   */
+  -- LIMITA DE MAGAZIN, verificata AICI si nu la apelant. Actiunile de server se pot chema cu
+  -- orice argumente, printr-un POST direct. `null` = apelantul a verificat pe alt drum.
   if p_business_id is not null and v_biz is distinct from p_business_id then
     return jsonb_build_object('gasit', false, 'motiv', 'alt magazin');
   end if;
@@ -527,7 +517,14 @@ begin
     end if;
 
     if v_intoarce then
-      v_rez_stoc := coalesce(public.elibereaza_stoc_comanda(p_order_id), 'nimic');
+      -- ⚠ AICI E TOATA REPARATIA. Un RETUR nu inseamna marfa vandabila inapoi pe raft: poate
+      -- veni desfacuta, incompleta, sau se intoarce doar o parte din comanda. Iar `rma.ts`
+      -- spune deja ca omul o pune inapoi de mana — pusa si automat de aici, s-ar fi dublat.
+      if coalesce(p_elibereaza_stoc, true) then
+        v_rez_stoc := coalesce(public.elibereaza_stoc_comanda(p_order_id), 'nimic');
+      else
+        v_rez_stoc := 'lasat-consumat';
+      end if;
     elsif v_reia then
       v_json := public.revendica_stoc_comanda(p_order_id);
       v_rez_stoc := coalesce(v_json->>'fel', 'nimic');
@@ -7879,7 +7876,7 @@ grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) t
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
 grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
-grant execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid) to service_role;
+grant execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid, p_elibereaza_stoc boolean) to service_role;
 grant execute on function public.blocheaza_domeniu_platforma() to anon;
 grant execute on function public.blocheaza_domeniu_platforma() to authenticated;
 grant execute on function public.blocheaza_domeniu_platforma() to service_role;
@@ -8053,7 +8050,7 @@ revoke execute on function privat.decripteaza(p_val text) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;
 revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
-revoke execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid) from public;
+revoke execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid, p_elibereaza_stoc boolean) from public;
 revoke execute on function public.blocheaza_escaladare_users_profile() from public;
 revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;

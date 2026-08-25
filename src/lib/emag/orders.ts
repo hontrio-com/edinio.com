@@ -783,6 +783,48 @@ async function ingereazaComandaCitita(
 
   const dupaEmagId = await hartaOfertelor(admin, ctx.businessId, c);
   const linii = liniiEdinio(c.products, dupaEmagId, ctx.vatRate);
+
+  /*
+   * ═══ ⚠ O LINIE NELEGATA E MARFA VANDUTA FARA SCADERE DE STOC (25.08.2026) ═══
+   *
+   * Refuzul legarii e CORECT si ramane: `chiarEOfertaNoastra` cere doi martori fiindca
+   * id-urile lor se pot recicla, iar o linie legata GRESIT scade stocul altui produs si
+   * aia nu se mai vede niciodata. Nota de acolo o spune limpede: „la indoiala se refuza
+   * legarea, nu se ghiceste".
+   *
+   * ⚠ DAR TACEREA NU E CORECTA. Comanda intra, se vede in panou, se poate factura si
+   * expedia — si nimeni nu afla ca stocul n-a scazut. Magazinul propriu si celelalte
+   * canale vand mai departe ce tocmai a plecat din depozit.
+   *
+   * ⚠ MASURAT PE O COMANDA REALA: 501350435, „Hrana uscata Josera Active Nature 12,5 Kg",
+   * 406,99 lei. Id-ul lor se potrivea (50014810) si pana si `part_number_key` era acelasi
+   * (D29M3DYBM) — dar `part_number` nu: ei au trimis 4032254775386, la noi era 50014810.
+   * Al doilea martor a spus nu, si a facut bine. Zero randuri in jurnal.
+   *
+   * ⚠ SI DE-AIA NU S-A SLABIT REGULA, cum eram gata s-o fac: `part_number_key` pare un
+   * martor mai tare, fiindca e pagina LOR de produs. Verificat pe datele vechi: la comenzile
+   * cu vasul de WC (id 433), PNK-ul se potrivea si el — desi produsele chiar erau diferite.
+   * Deci PNK poate fi la fel de invechit ca id-ul. Slabita, regula ar fi scazut stocul de
+   * hrana pentru caini pe o comanda de vas de WC.
+   *
+   * Se repara ARATAND, nu ghicind.
+   */
+  const nelegate = linii.filter((l) => !l.product_id);
+  if (nelegate.length > 0) {
+    await logError({
+      action: "emag/orders",
+      message:
+        `comanda ${numar}: ${nelegate.length} ${nelegate.length === 1 ? "linie nu s-a legat" : "linii nu s-au legat"}`
+        + " de niciun produs, deci STOCUL NU SCADE pentru ele",
+      details: {
+        emagOrderId: c.id,
+        linii: nelegate.map((l) => ({ emag_product_id: l.emag_product_id, nume: l.name, cate: l.quantity })),
+      },
+      businessId: ctx.businessId,
+      severity: "warning",
+    });
+  }
+
   const bani = baniiComenzii(c, ctx.vatRate);
   const client = clientComenzii(c);
 
@@ -819,6 +861,21 @@ async function ingereazaComandaCitita(
   if (ex?.order_id) {
     const t = await tranzitieComandaMarketplace(admin, {
       orderId: ex.order_id, businessId: ctx.businessId, status, sursa: "emag",
+      /*
+       * ═══ ⚠ STATUSUL 5 „RETURNED" NU PUNE MARFA INAPOI PE RAFT ═══
+       *
+       * `refunded` e starea potrivita — „returned" nu exista in `orders_status_check`, iar
+       * banii chiar se intorc. Dar efectul asupra stocului nu e potrivit deloc: marfa
+       * intoarsa vine desfacuta, incompleta, ori se intoarce doar o parte din comanda.
+       *
+       * Regula o avem deja scrisa, in `rma.ts`: omul se uita la marfa si o adauga de mana.
+       * Pusa si automat de aici, o comanda de trei produse din care s-a intors unul ar fi
+       * pus inapoi TREI — si inca o data cand comerciantul o adauga dupa verificare.
+       *
+       * ⚠ ANULAREA (status 0) ELIBEREAZA MAI DEPARTE: acolo marfa n-a plecat nicaieri, si
+       * stocul chiar trebuie sa se intoarca imediat.
+       */
+      elibereazaStoc: status !== "refunded",
     });
 
     /*

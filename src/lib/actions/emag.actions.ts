@@ -3105,7 +3105,27 @@ export async function centrulProblemelorEmag(
     .not("abandonat_la", "is", null)
     .limit(PROBLEME_MAXIM_RANDURI);
 
-  if (eRanduri || eAbandonate) {
+  /*
+   * ═══ COMENZI CU LINII NELEGATE: MARFA VANDUTA FARA SCADERE DE STOC ═══
+   *
+   * Legarea se refuza anume cand cei doi martori nu se potrivesc — o linie legata GRESIT
+   * scade stocul altui produs, si aia nu se mai vede niciodata. Refuzul e bun; tacerea nu:
+   * comanda intra, se vede, se factureaza si se expediaza, iar magazinul si celelalte canale
+   * vand mai departe ce tocmai a plecat din depozit.
+   *
+   * ⚠ Se citesc numai comenzile din ultimele 30 de zile: una veche de un an n-are ce sa mai
+   * repare nimeni, iar lista de probleme e despre ce se poate face ACUM.
+   */
+  const acum30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: comenziEmag, error: eComenzi } = await admin.from("orders")
+    .select("order_number, items")
+    .eq("business_id", businessId)
+    .like("order_number", "EMAG-%")
+    .gte("created_at", acum30)
+    .order("created_at", { ascending: false })
+    .limit(PROBLEME_MAXIM_RANDURI);
+
+  if (eRanduri || eAbandonate || eComenzi) {
     return { error: "Lista de probleme nu s-a putut citi. Reîncarcă pagina." };
   }
 
@@ -3161,6 +3181,23 @@ export async function centrulProblemelorEmag(
     /* ⚠ Sursa e `edinio`: un element abandonat n-a mai ajuns la ei deloc. Pus pe
        `emag`, omul ar fi căutat reparația în panoul lor, unde nu e nimic de găsit. */
     necazuri.push({ sursa: "edinio", mesaj: a.last_error });
+  }
+
+  for (const o of (comenziEmag ?? []) as { order_number: string; items: unknown }[]) {
+    const linii = Array.isArray(o.items) ? o.items as { product_id?: unknown; name?: unknown }[] : [];
+    const nelegate = linii.filter((l) => !l?.product_id);
+    if (nelegate.length === 0) continue;
+    /* ⚠ Sursa e `edinio`: reparatia e la noi — produsul trebuie legat de oferta, ori stocul
+       corectat de mana. In panoul eMAG nu e nimic de gasit. */
+    necazuri.push({
+      sursa: "edinio",
+      cheie: "linie-nelegata",
+      titlu: "Comenzi la care stocul NU a scăzut",
+      mesaj:
+        `${o.order_number}: `
+        + nelegate.map((l) => String(l?.name ?? "produs necunoscut")).join(", ")
+        + " — nu s-a putut lega de niciun produs din magazin, deci stocul a rămas neatins.",
+    });
   }
 
   const citite = (randuri ?? []).length;

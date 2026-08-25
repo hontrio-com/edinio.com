@@ -64,6 +64,28 @@ export async function tranzitieComandaMarketplace(
     sursa: string;
     /** Campuri care NU tin de ciclul de viata (ex. numarul de urmarire). */
     campuriSuplimentare?: Record<string, unknown>;
+    /**
+     * Marfa se intoarce pe raft odata cu vanzarea?
+     *
+     * ═══ ⚠ „ANULAT" SI „RETURNAT" NU SUNT ACELASI LUCRU PENTRU STOC (25.08.2026) ═══
+     *
+     * `aplica_tranzitia_comenzii` trateaza `refunded` si `cancelled` la fel: amandoua intorc
+     * vanzarea, deci elibereaza stocul intregii comenzi. Pentru o ANULARE e limpede corect —
+     * marfa n-a plecat nicaieri.
+     *
+     * Pentru un RETUR nu e, si aveam deja regula opusa scrisa in casa. `emag/rma.ts`:
+     * „STOCUL NU SE PUNE INAPOI AUTOMAT. NICIODATA, DEOCAMDATA" — fiindca marfa intoarsa nu
+     * e mereu vandabila, si fiindca se poate intoarce doar o parte din comanda.
+     *
+     * ⚠ CE COSTA: o comanda de trei produse din care clientul intoarce unul punea inapoi
+     * TREI. Iar comerciantul, care oricum verifica marfa si o adauga de mana, o adauga peste
+     * — deci se si dubla. Amandoua se vad abia la inventar.
+     *
+     * ⚠ LIPSA INSEAMNA „ca pana acum". Toti ceilalti apelanti raman neschimbati: o reparatie
+     * care ar fi schimbat implicitul ar fi atins fiecare anulare din aplicatie ca sa repare
+     * un singur drum de retur.
+     */
+    elibereazaStoc?: boolean;
   },
 ): Promise<RezultatTranzitie> {
   /*
@@ -95,6 +117,9 @@ export async function tranzitieComandaMarketplace(
     // rambursarea se reflecta prin STATUS (`refunded`), nu prin `payment_status`.
     p_payment_status: null,
     p_business_id: p.businessId,
+    /* ⚠ `null`, nu `false`, cand nu s-a cerut nimic: in SQL `coalesce(..., true)` pastreaza
+       purtarea de pana acum, iar `false` ar fi oprit eliberarea la TOATE anularile. */
+    p_elibereaza_stoc: p.elibereazaStoc ?? null,
   });
 
   const rez = data as { gasit?: boolean; motiv?: string; stoc?: string; negative?: unknown[] } | null;

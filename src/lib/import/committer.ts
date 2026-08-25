@@ -190,8 +190,35 @@ async function anuntaCanalele(admin: Admin, importId: string, businessId: string
   try {
     /* ⚠ Se citeste o data, si numai pentru eMAG: celelalte canale n-au publicare
        automata legata de import. */
-    const { data: setari } = await admin
+    const { data: setari, error: eSetari } = await admin
       .from("store_settings").select("emag_config").eq("business_id", businessId).maybeSingle();
+
+    /*
+     * ⚠ O CITIRE PICATA ARATA EXACT CA „AUTO_PUBLISH E STINS" (25.08.2026).
+     *
+     * Fara `error`, `setari` iesea `null`, `autoPublish` iesea `false`, si lotul de produse
+     * NOI dintr-un import nu mai intra pe calea de publicare. Nicaieri nicio urma: importul
+     * se incheia cu bine, iar comerciantul care bifase „Publică automat produsele noi"
+     * ramanea sa se uite la un catalog nepublicat fara sa stie de ce.
+     *
+     * ⚠ SI NU SE REPARA SINGUR: plasa de siguranta cere `last_synced_at is not null`, iar
+     * un produs care n-a plecat niciodata n-are asa ceva. Nici urmatoarea editare nu-l
+     * reia — acolo `produsNou` e fals.
+     *
+     * ⚠ NU SE OPRESTE ANUNTUL, se scrie doar. Celelalte canale (Google, OLX, About You,
+     * Trendyol) n-au nicio treaba cu steagul asta si trebuie anuntate oricum; iar
+     * publicarea ramane cu putinta din cardul „De publicat". Transformam o pierdere muta
+     * intr-una masurabila, fara sa luam si ce merge.
+     */
+    if (eSetari) {
+      await logError({
+        action: "import.anunta-canalele",
+        message: `setarile eMAG nu s-au putut citi, deci publicarea automata nu s-a putut hotari: ${eSetari.message}`,
+        details: { importId },
+        businessId, severity: "warning",
+      });
+    }
+
     const autoPublish =
       ((setari?.emag_config ?? {}) as { auto_publish?: boolean }).auto_publish === true;
 

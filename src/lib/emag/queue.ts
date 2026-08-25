@@ -145,8 +145,20 @@ export async function enqueueEmagSync(
   try {
     const admin = createAdminClient();
     const stare = await configPentruCoada(admin, businessId);
-    /* ⚠ Aici „nu se stie” se poarta ca „nu”: punerea in coada e reversibila si se reia
-       la urmatoarea atingere a produsului. La retragere NU e, si acolo se desparte. */
+    /*
+     * ⚠ Aici „nu se stie” se poarta ca „nu”. La retragere NU, si acolo se desparte.
+     *
+     * ⚠ SI E ADEVARAT NUMAI PENTRU UN PRODUS CARE ARE DEJA OFERTA (indreptat 25.08.2026).
+     * Nota de dinainte spunea, fara rezerve, ca „se reia la urmatoarea atingere a
+     * produsului". Pentru un produs NOU nu se reia: urmatoarea atingere e `updateProduct`,
+     * care trimite `produsNou` fals la o editare obisnuita, iar mai jos garda de pe
+     * numaratoarea de oferte il opreste. Deci intentia de publicare chiar se pierde, si nu
+     * o recupereaza nicio trecere automata — nici plasa, care cere `last_synced_at`.
+     *
+     * ⚠ Ce ramane: produsul se vede in cardul „De publicat" si se publica de acolo. Adica
+     * publicarea automata se degradeaza tacut in publicare manuala. Nu e „produs pierdut",
+     * dar nici ce promite comutatorul.
+     */
 
     /*
      * ═══ „TRIMITE AUTOMAT PRETUL SI STOCUL" NU E „PUBLICA PRODUSELE NOI" (25.08.2026) ═══
@@ -256,8 +268,16 @@ export async function enqueueEmagSync(
      * un singur element era singura care tacea.
      *
      * ⚠ Nu se ARUNCA insa: se cheama cu `void` din actiuni pe produs, iar o exceptie ar
-     * rupe salvarea produsului pentru o coada de marketplace. Se scrie in jurnal, unde
-     * centrul de necazuri o poate arata.
+     * rupe salvarea produsului pentru o coada de marketplace.
+     *
+     * ⚠ SE SCRIE IN `error_logs`, SI ATAT — nu in centrul de necazuri (indreptat
+     * 25.08.2026). Nota de dinainte spunea ca „centrul de necazuri o poate arata"; el
+     * citeste insa `emag_offers` si `emag_sync_queue`, iar un element care N-A INTRAT in
+     * coada n-are rand in niciuna. Deci comerciantul nu vede nimic; se vede doar prin
+     * jurnalul de administrator de platforma.
+     *
+     * O nota care trimite la un ecran unde lucrul nu apare e mai rea decat lipsa ei: cine
+     * o citeste se duce sa caute acolo si pleaca linistit.
      */
     if (eScriere) {
       inghiteDarScrie("coada-scriere", businessId, eScriere, { productId, op });

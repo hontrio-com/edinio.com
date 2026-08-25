@@ -272,10 +272,25 @@ export function ceLipseste(
 
   /* ── Ce nu opreste, dar costa ──────────────────────────────────────────── */
 
+  /*
+   * ⚠ AVERTISMENT FARA UNDE SA REPARI (25.08.2026).
+   *
+   * `emag_config.gpsr` exista in tipuri si `mapping.ts` chiar il trimite — dar NIMIC din
+   * Edinio nu-l scrie: nu exista formular, nu exista actiune. Cautat pe tot depozitul.
+   *
+   * Deci textul de dinainte il trimitea pe comerciant sa completeze ceva ce n-avea unde.
+   * O fundatura e mai rea decat tacerea: omul cauta prin toate cartile setarilor si pleaca
+   * incredintat ca i-a scapat lui ceva.
+   *
+   * Pana exista formularul, se spune adevarul intreg si i se da calea care CHIAR merge —
+   * datele se pun pe produs in panoul eMAG. Cand se adauga formularul, textul asta se
+   * schimba odata cu el.
+   */
   if (!magazin.areGpsr) {
     out.push({
       camp: "gpsr",
-      eticheta: "Nu sunt completate datele GPSR (producător, reprezentant UE). eMAG le cere la tot mai multe categorii.",
+      eticheta: "Datele GPSR (producător, reprezentant UE) nu se pot completa încă din Edinio. "
+        + "eMAG le cere la tot mai multe categorii — până una alta, pune-le pe produs în panoul eMAG.",
       gravitate: "recomandat",
     });
   }

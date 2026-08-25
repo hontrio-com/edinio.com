@@ -41,9 +41,24 @@ export function EmagFulfillmentPanel({
           <span className="text-sm font-semibold text-foreground">Expediere prin eMAG</span>
         </div>
         <div className="p-4 space-y-3">
+          {/*
+            ⚠ TEXTUL SPUNE SI CE NU FACEM (25.08.2026).
+
+            Forma dinainte se oprea la „eMAG le acceptă pe amândouă" — adevarat despre ei,
+            dar lasa sa se inteleaga ca Edinio inchide bucla si pe calea a doua. N-o inchide:
+            dupa un AWB emis cu curierul magazinului, nimic nu-i trimite numarul lui eMAG.
+            Nici ca atasament (`type 10`), nici pe alta cale.
+
+            Iar comerciantul care crede ca s-a trimis nu se duce sa-l puna in panoul lor —
+            si atunci comanda ramane la ei fara numar de urmarire, ceea ce ei numara.
+          */}
           <p className="text-xs text-muted-foreground">
             Poți emite AWB pe contul de curier din eMAG, sau poți expedia cu curierul tău
             de mai jos. eMAG le acceptă pe amândouă.
+          </p>
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Dacă expediezi cu curierul tău, trece numărul de AWB și în contul eMAG: de aici
+            nu li se trimite singur. AWB-ul emis prin butonul de mai jos ajunge la ei direct.
           </p>
           <button
             type="button"

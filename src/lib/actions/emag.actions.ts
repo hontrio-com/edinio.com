@@ -15,6 +15,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
@@ -816,6 +817,69 @@ export async function salveazaSetariEmag(
 
   const ok = await patchEmagConfig(createAdminClient(), businessId, petic);
   if (!ok) return { error: "Nu am putut salva setările. Încearcă din nou." };
+
+  /*
+   * ═══ SETARILE CARE INTRA IN INCARCATURA SE SI TRIMIT (25.08.2026) ═══
+   *
+   * Pana azi functia se termina la `revalidatePath`. Dar valorile astea nu sunt decor:
+   * pleaca spre eMAG in chiar incarcaturile ofertelor. Salvate si netrimise, ecranul
+   * spunea „Salvat." iar la ei ramanea vechiul.
+   *
+   * ⚠ CE COSTA, PE CAMP — si nu e ce banuia auditul:
+   *
+   *   `green_tax`, `supply_lead_time`   pleaca NUMAI pe ruta grea, nu sunt in amprenta de
+   *                                     continut si nu sunt in deriva. Deci nu ajung
+   *                                     NICIODATA singure la ofertele deja publicate. O
+   *                                     taxa verde pusa dupa publicare o plateste
+   *                                     comerciantul din marja, tacut, si se vede abia la
+   *                                     contabilitate. ASTA e paguba adevarata.
+   *
+   *   `vat_id`, `handling_time`         raman vechi pana la urmatoarea miscare de pret.
+   *
+   *   `stoc_rezervat`                   se repara singur prin deriva — chiar exemplul din
+   *                                     audit e singurul care n-avea nevoie de reparatie.
+   *
+   * ⚠ SE ALEGE OPERATIA CEA MAI USOARA CARE DUCE CAMPUL. Regula casei (§1.3): o schimbare
+   * de pret n-are voie sa atinga `product_offer/save`. Deci numai `green_tax` si
+   * `supply_lead_time` cer ruta grea; restul merg pe rutele usoare.
+   *
+   * ⚠ `dupaRaspuns`, nu `void`: pe serverless instanta poate fi inghetata cand raspunsul se
+   * inchide. Si nu tine salvarea pe loc — comerciantul primeste „Salvat." imediat.
+   */
+  /* ⚠ `veche` e configul citit la INTRAREA in functie, inainte de petic. Aia e singura
+     forma din care se poate afla ce s-a schimbat de fapt. */
+  const vechi = (veche ?? {}) as unknown as Record<string, unknown>;
+  const sASchimbat = (cheie: string) =>
+    Object.prototype.hasOwnProperty.call(petic, cheie)
+    && (petic as Record<string, unknown>)[cheie] !== vechi[cheie];
+
+  const cereRutaGrea = sASchimbat("green_tax") || sASchimbat("supply_lead_time");
+  const cerePret = sASchimbat("vat_id") || sASchimbat("handling_time");
+  const cereStoc = sASchimbat("stoc_rezervat") || sASchimbat("warehouse_id");
+
+  if (cereRutaGrea || cerePret || cereStoc) {
+    dupaRaspuns(async () => {
+      const admin = createAdminClient();
+      /* ⚠ `fetchAllRowsStrict`: PostgREST taie la 1000 FARA sa spuna, iar aici lista e
+         catalogul intreg. Taiata, restul ofertelor ar fi ramas cu setarea veche — adica
+         exact defectul, doar mai mic si mai greu de vazut. */
+      const randuri = await fetchAllRowsStrict<{ product_id: string | null }>(
+        "emag.setari-propagate", (from, to) =>
+          admin.from("emag_offers").select("product_id")
+            .eq("business_id", businessId).eq("auto_sync", true).not("product_id", "is", null)
+            .order("emag_id", { ascending: true }).range(from, to),
+      );
+      const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
+      if (ids.length === 0) return;
+
+      /* ⚠ O SINGURA operatie, cea mai grea dintre cele cerute: `oferta` duce si pretul, si
+         stocul, deci trei puneri in coada pe acelasi produs ar fi insemnat trei treceri
+         pentru un singur efect. */
+      if (cereRutaGrea) await enqueueEmagSyncMany(businessId, ids);
+      else if (cerePret) await enqueueEmagPretMany(businessId, ids);
+      else await enqueueEmagStocMany(businessId, ids);
+    }, "setariEmagPropagate", businessId);
+  }
 
   revalidatePath(FEATURE_PATH);
   return { success: true };

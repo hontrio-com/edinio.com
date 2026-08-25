@@ -165,6 +165,22 @@ test("un rand fara cheie nu se ridica", async () => {
   assert.deepEqual(r, []);
 });
 
+test("⚠ o citire picata NU tace", () => {
+  /*
+   * Inghitita, ar fi insemnat ca nicio intentie nu se mai ridica niciodata, si fara nicio
+   * urma — chiar tiparul reparat de fisierul asta, mutat cu un etaj mai sus. Si nu se
+   * arunca: o exceptie ar rupe trecerea cronului si ar pierde si ce a mers pana la pasul 5b.
+   */
+  /* ⚠ Se ancoreaza pe MESAJ, nu pe `if (error) {`: forma aia apare intai in
+     `stingePropagarea`, si proba ar fi cazut pe cod bun. A patra oara azi cand `indexOf`
+     gaseste altceva decat caut. */
+  const cod = viu("src/lib/emag/propagare.ts");
+  const i = cod.indexOf("intentiile de propagare nu s-au putut citi");
+  assert.ok(i > 0, "citirea picata se scrie in jurnal");
+  assert.match(cod.slice(i - 200, i), /logError\(/, "prin logError");
+  assert.match(cod.slice(i, i + 200), /return \[\];/, "dar nu se arunca");
+});
+
 test("⚠ una prea proaspata se lasa in seama bratului iute", () => {
   /* Nu e o paza de corectitudine — punerea in coada e idempotenta — ci una de risipa:
      citirea unui catalog de mii de oferte n-are rost facuta de doua ori. */

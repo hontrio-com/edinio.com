@@ -190,7 +190,21 @@ export async function propagariNeterminate(
     .order("business_id", { ascending: true })
     .limit(200);
 
-  if (error || !data) return [];
+  /*
+   * ⚠ EROAREA SE SPUNE. Inghitita, o citire picata ar fi insemnat ca nicio intentie nu se
+   * mai ridica NICIODATA, si fara nicio urma — adica exact tiparul reparat de fisierul asta,
+   * mutat cu un etaj mai sus. Nu se arunca: o exceptie aici ar rupe trecerea cronului si ar
+   * pierde si ce a mers pana in pasul 5b.
+   */
+  if (error) {
+    await logError({
+      action: "emag.propagare",
+      message: `intentiile de propagare nu s-au putut citi: ${error.message}`,
+      severity: "warning",
+    });
+    return [];
+  }
+  if (!data) return [];
 
   const rezultat: IntentieNeterminata[] = [];
   for (const rand of data as { business_id: string; emag_config: unknown }[]) {

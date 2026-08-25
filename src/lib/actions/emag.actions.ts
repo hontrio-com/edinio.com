@@ -18,6 +18,9 @@ import { revalidatePath } from "next/cache";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+/* ⚠ Numele butonului se CITEAZA, nu se scrie a doua oara: de doua ori in doua zile am
+   trimis comerciantul la un buton care nu exista. */
+import { BUTON_ADU_OFERTELE } from "@/lib/emag/etichete";
 import { logError } from "@/lib/error-logger";
 import {
   emagGloballyEnabled, emagIpDeAlbit, emagWebhookUrl, iesireEmag, maskSecret, monedaEmag,
@@ -3183,8 +3186,46 @@ export async function centrulProblemelorEmag(
     necazuri.push({ sursa: "edinio", mesaj: a.last_error });
   }
 
+  /*
+   * ═══ ⚠ CE OFERTE SUNT LEGATE STRAMB (26.08.2026) ═══
+   *
+   * O linie nelegata spune „stocul n-a scazut", dar nu spune DE CE. Iar masurat pe primele
+   * patru comenzi eMAG reale, toate patru aveau linia nelegata — deci nu e un caz rar, e
+   * regula. Cauza s-a vazut abia punand alaturi trei nume:
+   *
+   *   oferta 158        la ei „Set protectie jante AVEX"   la noi „Calibra Dog EN Energy"
+   *   oferta 433        la ei „Calibra Dog Life"           in comanda „Vas wc Mondial"
+   *   oferta 50014810   la ei „Josera Active"              la noi „Josera Adult Ctive"
+   *
+   * Primele doua sunt legaturi GRESITE: id-ul lor s-a reciclat, iar randul nostru arata spre
+   * alt produs. Acolo refuzul de legare a APARAT stocul — legata, comanda de vas de WC ar fi
+   * scazut hrana pentru caini. A treia e aceeasi marfa, doar codurile difera.
+   *
+   * ⚠ De-aia mesajul numeste acum cele doua nume. Fara ele, comerciantul stie doar ca ceva
+   * n-a mers; cu ele, vede dintr-o privire care oferta e legata de alt produs si o poate
+   * relega.
+   */
+  const numeOferte = new Map<number, { la_ei: string | null; al_nostru: string | null }>();
+  const idLor = new Set<number>();
+  for (const o of (comenziEmag ?? []) as { items: unknown }[]) {
+    const linii = Array.isArray(o.items) ? o.items as { product_id?: unknown; emag_product_id?: unknown }[] : [];
+    for (const l of linii) {
+      if (l?.product_id) continue;
+      const id = Number(l?.emag_product_id);
+      if (Number.isFinite(id)) idLor.add(id);
+    }
+  }
+  if (idLor.size > 0) {
+    const { data: oferte } = await admin.from("emag_offers")
+      .select("emag_id, nume_emag, products(name)")
+      .eq("business_id", businessId).in("emag_id", [...idLor].slice(0, 200));
+    for (const r of (oferte ?? []) as { emag_id: number; nume_emag: string | null; products: { name?: string } | null }[]) {
+      numeOferte.set(r.emag_id, { la_ei: r.nume_emag ?? null, al_nostru: r.products?.name ?? null });
+    }
+  }
+
   for (const o of (comenziEmag ?? []) as { order_number: string; items: unknown }[]) {
-    const linii = Array.isArray(o.items) ? o.items as { product_id?: unknown; name?: unknown }[] : [];
+    const linii = Array.isArray(o.items) ? o.items as { product_id?: unknown; name?: unknown; emag_product_id?: unknown }[] : [];
     const nelegate = linii.filter((l) => !l?.product_id);
     if (nelegate.length === 0) continue;
     /* ⚠ Sursa e `edinio`: reparatia e la noi — produsul trebuie legat de oferta, ori stocul
@@ -3195,8 +3236,17 @@ export async function centrulProblemelorEmag(
       titlu: "Comenzi la care stocul NU a scăzut",
       mesaj:
         `${o.order_number}: `
-        + nelegate.map((l) => String(l?.name ?? "produs necunoscut")).join(", ")
-        + " — nu s-a putut lega de niciun produs din magazin, deci stocul a rămas neatins.",
+        + nelegate.map((l) => {
+          const nume = String(l?.name ?? "produs necunoscut");
+          const p = numeOferte.get(Number(l?.emag_product_id));
+          /* ⚠ Numai cand chiar avem oferta si numele DIFERA: pus mereu, randul ar fi devenit
+             lung si nimeni nu l-ar mai fi citit. */
+          if (p?.al_nostru && p.la_ei && p.al_nostru.trim().toLowerCase() !== p.la_ei.trim().toLowerCase()) {
+            return `${nume} (oferta e legată la tine de „${p.al_nostru}”, dar pe eMAG e „${p.la_ei}”)`;
+          }
+          return nume;
+        }).join(", ")
+        + ". Stocul a rămas neatins. Apasă „" + BUTON_ADU_OFERTELE + "” ca să refacem legătura.",
     });
   }
 

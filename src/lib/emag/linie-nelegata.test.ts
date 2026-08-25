@@ -106,3 +106,27 @@ test("⚠ si comerciantul o vede in panou, nu doar eu in jurnal", () => {
   /* ⚠ Si citirea picata nu se citeste ca „nicio problema". */
   assert.match(act, /if \(eRanduri \|\| eAbandonate \|\| eComenzi\)/);
 });
+
+test("⚠ mesajul spune si DE CE, cand oferta e legata stramb", () => {
+  /*
+   * ═══ MASURAT PE PRIMELE PATRU COMENZI eMAG REALE: TOATE PATRU AVEAU LINIA NELEGATA ═══
+   *
+   * Deci nu e un caz rar, e regula — si niciun stoc eMAG n-a scazut vreodata. Cauza s-a vazut
+   * abia punand alaturi trei nume:
+   *
+   *   oferta 158        la ei „Set protectie jante AVEX"   la noi „Calibra Dog EN Energy"
+   *   oferta 433        la ei „Calibra Dog Life"           in comanda „Vas wc Mondial"
+   *   oferta 50014810   la ei „Josera Active"              la noi „Josera Adult Ctive"
+   *
+   * ⚠ PRIMELE DOUA SUNT LEGATURI GRESITE, si acolo refuzul a APARAT stocul: legata, comanda
+   * de vas de WC ar fi scazut hrana pentru caini. A treia e aceeasi marfa, doar codurile
+   * difera. Regula celor doi martori nu se slabeste — se spune ce e stramb.
+   */
+  const act = viu("src/lib/actions/emag.actions.ts");
+  assert.match(act, /oferta e legată la tine de „\$\{p\.al_nostru\}”, dar pe eMAG e „\$\{p\.la_ei\}”/);
+  /* ⚠ Numai cand numele CHIAR difera: pus mereu, randul ar fi devenit lung si nimeni nu l-ar
+     mai fi citit. */
+  assert.match(act, /p\.al_nostru\.trim\(\)\.toLowerCase\(\) !== p\.la_ei\.trim\(\)\.toLowerCase\(\)/);
+  /* ⚠ Si se numeste butonul adevarat, citat din `etichete.ts`. */
+  assert.match(act, /BUTON_ADU_OFERTELE/);
+});

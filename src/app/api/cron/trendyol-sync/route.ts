@@ -11,6 +11,7 @@ import {
 } from "@/lib/trendyol/sync";
 import { marcajUrmator, pollPackagesToateVitrinele } from "@/lib/trendyol/orders";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
+import { patchTrendyolConfig } from "@/lib/trendyol/config";
 import type { TrendyolConfig, TrendyolStoreFront } from "@/lib/trendyol/types";
 
 type Admin = SupabaseClient<Database>;
@@ -364,10 +365,13 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ingested, corrected });
 }
 
+/**
+ * ⚠ Nu mai citeste-modifica-scrie: imbinarea o face Postgres, pe randul incuiat.
+ *
+ * Cronul scrie cursoare si marcaje in acelasi JSON in care comerciantul isi scrie setarile.
+ * Cu forma veche, oricare dintre ei il calca pe celalalt, si se vedea abia tarziu — o
+ * fereastra de comenzi intoarsa in trecut, sau un marcaj scris o singura data si pierdut.
+ */
 async function patchConfig(admin: Admin, businessId: string, patch: Partial<TrendyolConfig>) {
-  const { data: ss } = await admin.from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
-  const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
-  await admin.from("store_settings")
-    .update({ trendyol_config: { ...config, ...patch } as never })
-    .eq("business_id", businessId);
+  await patchTrendyolConfig(admin, businessId, patch);
 }

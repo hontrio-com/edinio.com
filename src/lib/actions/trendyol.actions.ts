@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { patchTrendyolConfig } from "@/lib/trendyol/config";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { trendyolGloballyEnabled, maskSecret, trendyolWebhookUrl } from "@/lib/trendyol/auth";
 import { createWebhook, deleteWebhook, getWebhooks, isTrendyolError, testConnection, type TrendyolAuth } from "@/lib/trendyol/client";
@@ -196,13 +197,15 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     supplierId: config.supplier_id,
     apiKeyMasked: config.api_key ? maskSecret(config.api_key) : null,
     sellerName: config.seller_name,
-    shipmentAddressId: config.shipment_address_id,
-    returningAddressId: config.returning_address_id,
-    defaultCarrierCode: config.default_carrier_code,
+    /* ⚠ `?? undefined`: configul poate purta acum `null` pentru un camp GOLIT de om, iar
+       ecranul face aceeasi treaba cu amandoua. Vezi nota din `types.ts`. */
+    shipmentAddressId: config.shipment_address_id ?? undefined,
+    returningAddressId: config.returning_address_id ?? undefined,
+    defaultCarrierCode: config.default_carrier_code ?? undefined,
     // Moneda o dicteaza vitrina, nu noi: preturile trimise sunt citite in ea.
     currency: info.moneda,
-    brandId: config.brand_id,
-    brandName: config.brand_name,
+    brandId: config.brand_id ?? undefined,
+    brandName: config.brand_name ?? undefined,
     autoSync: config.auto_sync !== false,
     autoPublish: config.auto_publish === true,
     lastSyncAt: config.last_sync_at,
@@ -368,18 +371,44 @@ export async function saveTrendyolSettings(
     carrier = undefined;
   }
 
-  const next: TrendyolConfig = {
-    ...config,
-    shipment_address_id: input.shipment_address_id === null ? undefined : (input.shipment_address_id ?? config.shipment_address_id),
-    returning_address_id: input.returning_address_id === null ? undefined : (input.returning_address_id ?? config.returning_address_id),
-    default_carrier_code: carrier,
-    brand_id: input.brand_id === null ? undefined : (input.brand_id ?? config.brand_id),
-    brand_name: input.brand_name === null ? undefined : (input.brand_name ?? config.brand_name),
+  /*
+   * ═══ ⚠ PETIC, NU OBIECTUL INTREG (26.08.2026) ═══
+   *
+   * Forma dinainte pornea de la `...config` — configurarea citita cu cateva zeci de
+   * milisecunde mai devreme — si scria inapoi TOT. Intre citire si scriere, cronul apuca sa
+   * scrie marcaje de-ale lui in acelasi JSON, iar acelea se pierdeau:
+   *
+   *   cursorul de comenzi per vitrina, `reconcile_page`, `last_sync_at`, `needs_reconnect`
+   *
+   * Un cursor intors inapoi se repara singur — dedublarea prinde comenzile recitite. Dar
+   * `catalog_citit_la` si marcajele scrise O SINGURA DATA nu se repara: pierdute, raman
+   * pierdute.
+   *
+   * Acum pleaca numai campurile pe care le-a atins omul, iar imbinarea o face Postgres pe
+   * randul INCUIAT (`jsonb_merge_config`). Ce n-a atins nimeni de aici nu se mai poate pierde
+   * de aici.
+   *
+   * ⚠ CAMPUL GOLIT SE TRIMITE `null`, NU `undefined`. Intr-o imbinare, cheia absenta inseamna
+   * „las-o cum e", iar `undefined` dispare cu totul la serializare — deci adresa stearsa de
+   * comerciant ar fi ramas pe loc. Cititorii iau deja `null` drept lipsa.
+   */
+  const petic: Partial<TrendyolConfig> = {
+    ...(input.shipment_address_id !== undefined
+      ? { shipment_address_id: input.shipment_address_id ?? null } : {}),
+    ...(input.returning_address_id !== undefined
+      ? { returning_address_id: input.returning_address_id ?? null } : {}),
+    ...(input.default_carrier_code !== undefined
+      ? { default_carrier_code: carrier ?? null } : {}),
+    ...(input.brand_id !== undefined ? { brand_id: input.brand_id ?? null } : {}),
+    ...(input.brand_name !== undefined ? { brand_name: input.brand_name ?? null } : {}),
+    ...(input.auto_sync !== undefined ? { auto_sync: input.auto_sync } : {}),
+    ...(input.auto_publish !== undefined ? { auto_publish: input.auto_publish } : {}),
+    /* ⚠ Moneda NU vine de la om: se deduce din vitrina si se rescrie la fiecare salvare, ca
+       sa nu ramana o moneda veche dupa o schimbare de vitrina. */
     currency: infoVitrina(config.storefront).moneda,
-    auto_sync: input.auto_sync ?? config.auto_sync,
-    auto_publish: input.auto_publish ?? config.auto_publish,
   };
-  const ok = await saveConfig(g.supabase, businessId, next);
+
+  const ok = await patchTrendyolConfig(createAdminClient(), businessId, petic);
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -613,7 +642,8 @@ export async function applyTrendyolCategoryMap(
     aplicate++;
   }
   if (aplicate === 0) return { error: "Nicio mapare validă." };
-  if (!(await saveConfig(g.supabase, businessId, { ...config, category_map: map }))) {
+  /* ⚠ Numai harta, nu tot configul: altfel cursoarele scrise de cron intre timp se pierd. */
+  if (!(await patchTrendyolConfig(createAdminClient(), businessId, { category_map: map }))) {
     return { error: "Eroare la salvarea mapărilor." };
   }
   revalidatePath(FEATURE_PATH);
@@ -630,7 +660,8 @@ export async function saveTrendyolCategoryMapEntry(
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];
   else map[edinioCategory] = entry;
-  const ok = await saveConfig(g.supabase, businessId, { ...config, category_map: map });
+  /* ⚠ Idem: petic, nu obiectul intreg. */
+  const ok = await patchTrendyolConfig(createAdminClient(), businessId, { category_map: map });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -980,7 +1011,7 @@ export async function saveTrendyolListing(
           brand_name: input.brand_name ?? prev.brand_name,
           attributes: input.attributes,
         };
-        await saveConfig(g.supabase, businessId, { ...config, category_map: map });
+        await patchTrendyolConfig(createAdminClient(), businessId, { category_map: map });
       }
     }
   }

@@ -186,19 +186,27 @@ export interface TrendyolConfig {
   origine?: TrendyolStoreFront;
   user_agent_company?: string;      // User-Agent "{sellerId} - {company}" (default SelfIntegration)
   seller_name?: string;
-  // Catalog defaults resolved from Trendyol.
-  shipment_address_id?: number;
-  returning_address_id?: number;
+  /*
+   * Catalog defaults resolved from Trendyol.
+   *
+   * ⚠ SI `null`, NU DOAR LIPSA (26.08.2026). De cand configurarea se scrie ca PETIC imbinat
+   * in Postgres, cheia absenta inseamna „las-o cum e" — deci un camp pe care comerciantul
+   * l-a golit trebuie sa plece ca `null` ca sa se stearga cu adevarat. Cititorii il iau
+   * drept lipsa oricum, fiindca toti intreaba pe adevarat/fals, nu `!== undefined`.
+   */
+  shipment_address_id?: number | null;
+  returning_address_id?: number | null;
   /**
    * Curierul implicit, ca `providerCode` (sir). Se foloseste la trimiterea
    * AWB-ului, nu la crearea produsului.
    */
-  default_carrier_code?: string;
+  default_carrier_code?: string | null;
   /** @deprecated ID numeric turcesc; nu exista pe international. Ignorat. */
   default_cargo_company_id?: number;
   currency?: string;                // moneda vitrinei (RO -> RON)
-  brand_id?: number;
-  brand_name?: string;
+  /** ⚠ Si `null`: vezi nota de la adrese. */
+  brand_id?: number | null;
+  brand_name?: string | null;
   category_map?: Record<string, TrendyolCategoryMapEntry>;
   // Webhook (credentials WE set; Trendyol echoes them so we can verify).
   webhook_id?: string;

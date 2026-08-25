@@ -236,6 +236,30 @@ export function setArchiveState(auth: TrendyolAuth, items: { barcode: string; ar
 }
 
 /**
+ * Sterge produse din catalogul vanzatorului, dupa barcode.
+ *
+ * ═══ ⚠ TRENDYOL CHIAR ARE STERGERE, SI N-O FOLOSEAM ═══
+ *
+ * Comentariile din `sync.ts` porneau de la ideea ca ei n-au stergere, asa ca stergerea unui
+ * produs din Edinio se traducea in „stoc zero, apoi uitam listarea". Dar
+ * `DELETE /integration/product/sellers/{id}/products` exista, primeste unul sau mai multe
+ * barcode-uri si raspunde asincron cu `batchRequestId`, ca orice alta scriere de produs.
+ *
+ * ⚠ NU E O SCURTATURA CATRE „gata": raspunsul spune doar ca au PRIMIT cererea. Verdictul se
+ * afla din `getBatchResult`, ca la orice lot — de-aia se scrie in registru.
+ *
+ * ⚠ SI NU E MEREU CU PUTINTA. Un produs cu comenzi in curs, sau intr-o stare pe care ei o
+ * apara, poate fi refuzat. De-aia calea de stergere din `sync.ts` incepe cu ARHIVAREA (care
+ * il scoate din vanzare imediat) si abia apoi cere stergerea: chiar daca stergerea e
+ * refuzata, marfa nu se mai vinde.
+ */
+export function deleteProducts(auth: TrendyolAuth, barcodes: string[]) {
+  return call<TrendyolBatchAck>(
+    auth, "DELETE", `/integration/product/sellers/${auth.supplierId}/products`,
+    { items: barcodes.map((barcode) => ({ barcode })) });
+}
+
+/**
  * Produsele NEAPROBATE: in asteptare sau RESPINSE la revizuire.
  *
  * ⚠ Aici se afla singurul lucru pe care lotul nu-l spune niciodata.

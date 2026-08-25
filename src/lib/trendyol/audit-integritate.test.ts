@@ -207,3 +207,101 @@ test("⚠ „Returned” nu mai pune marfa inapoi pe raft singur", () => {
   assert.match(orders, /elibereazaStoc: edinioStatus !== "refunded",/);
   assert.match(ful, /elibereazaStoc: stareEdinio !== "refunded",/);
 });
+
+/* ── 6) Stergerea nu mai lasa marfa vandabila la ei ────────────────────────── */
+
+test("⚠ listarea se uita NUMAI dupa ce marfa nu se mai vinde", () => {
+  /*
+   * ═══ CE ERA ═══
+   *
+   *   `zeroizeazaStocul` -> `console.warn` la esec (nici macar jurnal), apoi `return`
+   *   apelantul          -> `delete from trendyol_listings` ORICUM
+   *
+   * Deci la Trendyol ramanea produsul, cu stoc > 0, IN CONTINUARE DE VANZARE, iar la noi nu
+   * mai exista nicio urma ca a fost vreodata acolo. Se vinde marfa stearsa din magazin, si
+   * nimeni nu mai are de unde afla.
+   *
+   * ⚠ ORDINEA E TOATA REPARATIA: arhivare (scoate din vanzare imediat), stoc zero (a doua
+   * plasa), stergere adevarata, si abia apoi se uita listarea.
+   */
+  assert.match(sync, /async function scoateDeLaVanzare\(/);
+  const i = sync.indexOf("async function scoateDeLaVanzare(");
+  const f = sync.slice(i, i + 3000);
+  const iArh = f.indexOf("setArchiveState(");
+  const iSter = f.indexOf("deleteProducts(");
+  const iUita = f.lastIndexOf('from("trendyol_listings").delete()');
+  assert.ok(iArh > 0 && iSter > iArh, "arhivarea vine INAINTEA stergerii");
+  assert.ok(iUita > iSter, "uitarea listarii vine ultima");
+});
+
+test("⚠ cand marfa e inca vandabila, randul RAMANE ca piatra de mormant", () => {
+  /* Sters, n-am mai fi stiut nimic. Ramas, coada reia stergerea si panoul il poate arata. */
+  const i = sync.indexOf("async function scoateDeLaVanzare(");
+  const f = sync.slice(i, i + 3000);
+  assert.match(f, /if \(!arhivat && zero\.verdict !== "gata"\) \{/);
+  assert.match(f, /status: "removing"/);
+  assert.match(f, /status: zero\.verdict === "trecatoare" \? 0 : undefined,/);
+});
+
+test("⚠ zeroizarea are TREI verdicte si scrie in jurnal, nu in consola", () => {
+  assert.match(sync, /type VerdictScoatere = "gata" \| "trecatoare" \| "refuz";/);
+  assert.match(sync, /stocul nu s-a putut pune pe zero/);
+  assert.doesNotMatch(sync, /console\.warn\(`\[trendyol\] zeroizarea/);
+});
+
+test("⚠ si Trendyol chiar are stergere, pe care n-o foloseam", () => {
+  /* Comentariile porneau de la ideea ca ei n-au stergere. Au: `DELETE /products`, cu
+     `batchRequestId` ca orice alta scriere de produs. */
+  const client = viu("src/lib/trendyol/client.ts");
+  assert.match(client, /export function deleteProducts\(auth: TrendyolAuth, barcodes: string\[\]\)/);
+  assert.match(client, /"DELETE", `\/integration\/product\/sellers\/\$\{auth\.supplierId\}\/products`/);
+  /* ⚠ Si lotul de stergere intra in registru, ca sa se poata afla verdictul lor. */
+  assert.match(sync, /recordBatch\(admin, ctx\.businessId, ster\.data\.batchRequestId, "delete", zero\.barcoduri\)/);
+});
+
+/* ── 7) Configurarea nu se mai rescrie intreaga ────────────────────────────── */
+
+test("⚠ configurarea se imbina in Postgres, pe randul incuiat", () => {
+  /*
+   * In acelasi JSON scriu oameni diferiti in acelasi timp: comerciantul (setari), cronul
+   * (cursoare, `last_sync_at`), reconcilierea (`reconcile_page`), webhook-ul. Cu
+   * citire-modificare-scriere, oricare il calca pe celalalt.
+   *
+   * ⚠ Un cursor intors inapoi se repara singur; un marcaj scris O SINGURA DATA, nu.
+   */
+  const cfg = viu("src/lib/trendyol/config.ts");
+  assert.match(cfg, /export async function patchTrendyolConfig\(/);
+  assert.match(cfg, /p_column: "trendyol_config"/);
+  /* ⚠ Peticul gol nu se trimite: ar rescrie randul degeaba. */
+  assert.match(cfg, /if \(Object\.keys\(patch\)\.length === 0\) return true;/);
+});
+
+test("⚠ si cronul, si panoul trec pe acolo", () => {
+  /* Reparata doar o parte, cursa ar fi ramas intreaga: e nevoie de AMANDOI ca sa se piarda
+     ceva. */
+  assert.match(cron, /await patchTrendyolConfig\(admin, businessId, patch\);/);
+  assert.match(sync, /await patchTrendyolConfig\(admin, ctx\.businessId, \{ reconcile_page: pagina \}\);/);
+  const act = viu("src/lib/actions/trendyol.actions.ts");
+  assert.match(act, /const petic: Partial<TrendyolConfig> = \{/);
+  assert.match(act, /await patchTrendyolConfig\(createAdminClient\(\), businessId, petic\)/);
+  /* ⚠ Si harta de categorii, care se scria tot cu obiectul intreg. */
+  assert.equal(
+    (act.match(/patchTrendyolConfig\(createAdminClient\(\), businessId, \{ category_map: map \}\)/g) ?? []).length,
+    3, "toate cele trei scrieri de harta",
+  );
+});
+
+test("⚠ campul golit pleaca `null`, nu lipsa", () => {
+  /*
+   * Cea mai usor de gresit parte a trecerii la petic. Intr-o imbinare, cheia absenta inseamna
+   * „las-o cum e", iar `undefined` dispare la serializare — deci adresa stearsa de comerciant
+   * ar fi ramas pe loc, si nimeni n-ar fi inteles de ce.
+   */
+  const act = viu("src/lib/actions/trendyol.actions.ts");
+  assert.match(act, /shipment_address_id: input\.shipment_address_id \?\? null/);
+  assert.match(act, /brand_id: input\.brand_id \?\? null/);
+  /* ⚠ Iar tipul spune adevarul, ca sa nu se sprijine nimeni pe `!== undefined`. */
+  const tipuri = readFileSync("src/lib/trendyol/types.ts", "utf8");
+  assert.match(tipuri, /shipment_address_id\?: number \| null;/);
+  assert.match(tipuri, /brand_name\?: string \| null;/);
+});

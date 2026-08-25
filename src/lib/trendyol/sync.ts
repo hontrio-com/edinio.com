@@ -7,7 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { TrendyolAuth } from "./client";
 import {
-  createProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, getUnapprovedProducts,
+  createProducts, deleteProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, getUnapprovedProducts,
   isTrendyolError, setArchiveState, updateApprovedContent, updateApprovedVariants, updatePriceInventory,
   updateUnapprovedProducts, type TrendyolItemActualizare, type TrendyolMotivRespingere,
 } from "./client";
@@ -22,6 +22,7 @@ import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligato
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { logError } from "@/lib/error-logger";
+import { patchTrendyolConfig } from "./config";
 
 type Db = SupabaseClient<Database>;
 
@@ -974,12 +975,25 @@ export async function pushInventoryNow(
  * ulterioara), deci tocmai produsele listate si stricate ramaneau la vanzare.
  * Trendyol accepta fara sa se planga barcoduri pe care nu le cunoaste.
  */
-async function zeroizeazaStocul(admin: Db, ctx: TrendyolSyncContext, listingId: string): Promise<void> {
-  const { data } = await admin.from("trendyol_variants")
-    .select("barcode, quantity, list_price, sale_price, vat_rate, enabled, stock_code, variant_title")
-    .eq("listing_id", listingId);
+/**
+ * Verdictul unei incercari de a scoate marfa din vanzare la ei.
+ *
+ * ⚠ TREI, nu doua: „n-am reusit acum" si „nu se poate" duc in locuri diferite. Prima cere
+ * reluare, a doua cere omul.
+ */
+type VerdictScoatere = "gata" | "trecatoare" | "refuz";
+
+async function zeroizeazaStocul(
+  admin: Db, ctx: TrendyolSyncContext, listingId: string,
+): Promise<{ verdict: VerdictScoatere; barcoduri: string[]; motiv?: string }> {
+  const data = randuriCitite<{ barcode: string; list_price: number | null; sale_price: number | null }>(
+    "trendyol.varianteleDeZeroizat", await admin.from("trendyol_variants")
+      .select("barcode, quantity, list_price, sale_price, vat_rate, enabled, stock_code, variant_title")
+      .eq("listing_id", listingId) as never);
   const barcoduri = (data ?? []).map((v) => (v as { barcode: string }).barcode).filter(Boolean);
-  if (barcoduri.length === 0) return;
+  /* ⚠ Fara barcode-uri n-avem ce zeroiza SI nici ce sterge: listarea n-a ajuns niciodata la
+     ei sub o forma pe care s-o putem numi. Se lasa sa treaca. */
+  if (barcoduri.length === 0) return { verdict: "gata", barcoduri: [] };
   // Preturile trebuie sa ramana valide (`listPrice >= salePrice > 0`), altfel
   // Trendyol refuza tot lotul si stocul NU ajunge pe zero.
   const items: InventoryItem[] = (data ?? []).map((v) => {
@@ -991,35 +1005,124 @@ async function zeroizeazaStocul(admin: Db, ctx: TrendyolSyncContext, listingId: 
   for (let i = 0; i < items.length; i += 100) {
     const res = await updatePriceInventory(ctx.auth, items.slice(i, i + 100));
     if (isTrendyolError(res)) {
-      console.warn(`[trendyol] zeroizarea stocului a esuat la stergere: ${res.error}`);
-      return;
+      /*
+       * ═══ ⚠ AICI SE PIERDEA MARFA DIN VEDERE (26.08.2026) ═══
+       *
+       * Forma dinainte scria un `console.warn` — care nu ajunge nici macar in jurnal — si se
+       * intorcea. Iar apelantul stergea listarea din `trendyol_listings` ORICUM. Deci:
+       *
+       *   la Trendyol: produsul, cu stoc > 0, in continuare DE VANZARE
+       *   la Edinio:   nicio urma ca a existat vreodata acolo
+       *
+       * Se vinde marfa stearsa din magazin, si nimeni nu mai are de unde afla.
+       */
+      await logError({
+        action: "trendyol/stergere",
+        message: `stocul nu s-a putut pune pe zero: ${res.error}`,
+        details: { listingId, barcoduri: barcoduri.slice(0, 20), status: res.status },
+        businessId: ctx.businessId, severity: "critical",
+      });
+      return {
+        verdict: eTrecatoare(res.status) ? "trecatoare" : "refuz",
+        barcoduri, motiv: res.error,
+      };
     }
     const batchRequestId = res.data?.batchRequestId;
     if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", []);
   }
+  return { verdict: "gata", barcoduri };
+}
+
+/**
+ * Scoate produsul de la vanzare la ei, si abia apoi uita listarea.
+ *
+ * ═══ ⚠ ORDINEA E TOATA REPARATIA ═══
+ *
+ *   1. ARHIVARE  — il scoate din vanzare IMEDIAT si sigur. Chiar daca tot ce urmeaza pica,
+ *                  marfa nu se mai vinde.
+ *   2. STOC ZERO — a doua plasa, pentru cazul in care arhivarea e refuzata.
+ *   3. STERGERE  — `DELETE /products`, cererea adevarata pe care n-o foloseam.
+ *   4. Abia daca marfa nu se mai vinde, se uita listarea la noi.
+ *
+ * ⚠ CAND NU SE POATE, RANDUL RAMANE, marcat `removing`. E o piatra de mormant, nu un defect:
+ * atat timp cat exista, coada reia stergerea, panoul il poate arata, iar noi stim ca la ei a
+ * mai ramas ceva. Sters, n-am mai fi stiut nimic.
+ */
+async function scoateDeLaVanzare(
+  admin: Db, ctx: TrendyolSyncContext, listing: ListingRow,
+): Promise<SyncOutcome> {
+  /* `draft` n-a plecat niciodata la ei: n-are ce arhiva, ce zeroiza sau ce sterge. */
+  if (listing.status === "draft") {
+    await admin.from("trendyol_listings").delete().eq("id", listing.id);
+    return { ok: true, action: "removed" };
+  }
+
+  const zero = await zeroizeazaStocul(admin, ctx, listing.id);
+
+  if (zero.barcoduri.length === 0) {
+    await admin.from("trendyol_listings").delete().eq("id", listing.id);
+    return { ok: true, action: "removed" };
+  }
+
+  /* ⚠ ARHIVAREA INAINTE DE ORICE: e singura care scoate marfa din vanzare fara sa depinda de
+     un lot pe care trebuie sa-l mai si urmarim. */
+  const arh = await setArchiveState(ctx.auth, zero.barcoduri.map((barcode) => ({ barcode, archived: true })));
+  const arhivat = !isTrendyolError(arh);
+  if (!arhivat) {
+    await logError({
+      action: "trendyol/stergere",
+      message: `arhivarea la stergere a esuat: ${arh.error}`,
+      details: { listingId: listing.id, status: arh.status },
+      businessId: ctx.businessId, severity: "warning",
+    });
+  }
+
+  /*
+   * ⚠ DACA MARFA E INCA VANDABILA, NU SE STERGE NIMIC LA NOI. Randul ramane ca urma, iar
+   * verdictul trimite elementul inapoi in coada — trecator daca a fost o pana, altfel omul
+   * il vede in panou pe `removing`.
+   */
+  if (!arhivat && zero.verdict !== "gata") {
+    await admin.from("trendyol_listings").update({ status: "removing" } as never).eq("id", listing.id);
+    return {
+      ok: false,
+      error: `Produsul e inca de vanzare pe Trendyol: ${zero.motiv ?? arh.error}`,
+      status: zero.verdict === "trecatoare" ? 0 : undefined,
+    };
+  }
+
+  /*
+   * ⚠ STERGEREA ADEVARATA, si numai dupa ce marfa nu se mai vinde. Un refuz aici NU mai e
+   * grav: produsul e arhivat sau pe stoc zero, deci nimeni nu-l mai cumpara. De-aia nu tine
+   * elementul in coada — se scrie si se merge mai departe.
+   */
+  const ster = await deleteProducts(ctx.auth, zero.barcoduri);
+  if (isTrendyolError(ster)) {
+    await logError({
+      action: "trendyol/stergere",
+      message: `stergerea la Trendyol a fost refuzata (produsul ramane scos din vanzare): ${ster.error}`,
+      details: { listingId: listing.id, barcoduri: zero.barcoduri.slice(0, 20), status: ster.status },
+      businessId: ctx.businessId, severity: "warning",
+    });
+  } else if (ster.data?.batchRequestId) {
+    await recordBatch(admin, ctx.businessId, ster.data.batchRequestId, "delete", zero.barcoduri);
+  }
+
+  await admin.from("trendyol_listings").delete().eq("id", listing.id);
+  return { ok: true, action: "removed" };
 }
 
 export async function removeProductNow(admin: Db, ctx: TrendyolSyncContext, productId: string): Promise<SyncOutcome> {
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: true, action: "skipped" };
-  // `draft` nu a plecat niciodata la ei, deci n-are ce zeroiza. Orice altceva, da
-  // — inclusiv `error`, care poate insemna „creat, dar cu o eroare ulterioara".
-  if (listing.status !== "draft") {
-    await zeroizeazaStocul(admin, ctx, listing.id);
-  }
-  await admin.from("trendyol_listings").delete().eq("id", listing.id);
-  return { ok: true, action: "removed" };
+  return scoateDeLaVanzare(admin, ctx, listing);
 }
 export async function removeByMainId(admin: Db, ctx: TrendyolSyncContext, mainId: string): Promise<SyncOutcome> {
   const listing = await getListingByMainId(admin, ctx.businessId, mainId);
   if (!listing) return { ok: true, action: "skipped" };
-  // Aceeasi regula si aici: calea din coada (produs sters din Edinio) trecea
-  // direct la stergerea randului, deci lasa produsul viu si vandabil la ei.
-  if (listing.status !== "draft") {
-    await zeroizeazaStocul(admin, ctx, listing.id);
-  }
-  await admin.from("trendyol_listings").delete().eq("id", listing.id);
-  return { ok: true, action: "removed" };
+  /* Aceeasi cale, si din acelasi motiv: drumul din coada (produs sters din Edinio) trecea
+     direct la stergerea randului, deci lasa produsul viu si vandabil la ei. */
+  return scoateDeLaVanzare(admin, ctx, listing);
 }
 
 // ── Batch polling (cron) ────────────────────────────────────────────────────────
@@ -1596,13 +1699,10 @@ export async function reconcileStatuses(
 
 async function salveazaPaginaReconciliere(admin: Db, ctx: TrendyolSyncContext, pagina: number): Promise<void> {
   if ((ctx.config.reconcile_page ?? 0) === pagina) return;
-  const { data: ss } = await admin
-    .from("store_settings").select("trendyol_config").eq("business_id", ctx.businessId).maybeSingle();
-  const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
+  /* ⚠ Numai campul atins. Cu obiectul intreg, cursorul de comenzi scris de cealalta bucata a
+     cronului, cu o clipa inainte, se pierdea. */
   ctx.config.reconcile_page = pagina;
-  await admin.from("store_settings")
-    .update({ trendyol_config: { ...config, reconcile_page: pagina } as never })
-    .eq("business_id", ctx.businessId);
+  await patchTrendyolConfig(admin, ctx.businessId, { reconcile_page: pagina });
 }
 
 // ── Respingerile de la revizuie (cron) ──────────────────────────────────────────

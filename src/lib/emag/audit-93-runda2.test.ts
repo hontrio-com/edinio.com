@@ -172,3 +172,42 @@ test("cele doua dubluri raman despartite", () => {
   assert.match(existent, /AAAAAA1BM/);
   assert.match(nou, /BBBBBB2BM/);
 });
+
+/* ── Gasit tot in trafic, dupa desfasurare ───────────────────────────────── */
+
+test("⚠ mesajul nu se mai traduce de doua ori", () => {
+  /*
+   * VAZUT PE ECRANUL COMERCIANTULUI, 25.08.2026, la 11:24:42:
+   *
+   *   „eMAG a respins codul de bare … la combinația respectivă: eMAG a respins codul de
+   *    bare … Schimbă „Cod EAN”
+   *
+   * `client.ts` trece raspunsul lor prin `mesajOmenesc` chiar cand construieste eroarea.
+   * `trimite.ts` il trecea INCA O DATA. Iar ramurile care lipesc raspunsul lor la coada
+   * isi regasesc propriul tipar in propriul rezultat — deci se dubla singura.
+   */
+  const cod = faraComentarii(fisier("src/lib/emag/trimite.ts"));
+  assert.doesNotMatch(cod, /mesajOmenesc\(/, "traducerea nu se mai face si aici");
+
+  /* ⚠ Si chiar se face la granita, o data. Fara asta, „am scos-o din trimite" ar
+     insemna „nu se mai traduce deloc". */
+  const client = faraComentarii(fisier("src/lib/emag/client.ts"));
+  assert.match(client, /error: mesajOmenesc\(c\.mesaj\) \|\| c\.mesaj/);
+});
+
+test("⚠ si de ce NU s-a facut `mesajOmenesc` idempotent", () => {
+  /*
+   * Ar fi fost tentant sa punem o paza „are diacritice, deci e deja al nostru". Proba asta
+   * fixeaza de ce nu: functia CHIAR nu e idempotenta, si asta e in regula atata vreme cat
+   * se cheama o singura data. O paza pe diacritice ar fi sarit peste traducere la un mesaj
+   * englezesc al lor care poarta un nume de produs romanesc.
+   */
+  const brut = "4032254753475 is not a valid EAN. - Product id: 1";
+  const oData = mesajOmenesc(brut);
+  const deDouaOri = mesajOmenesc(oData);
+  assert.notEqual(deDouaOri, oData, "nu e idempotenta, si nu ne bizuim pe asta");
+
+  /* ⚠ Cazul de care ne-am ferit: engleza lor cu un nume romanesc in ea trebuie tradusa. */
+  const cuDiacritice = mesajOmenesc("Product „Hrană uscată” — 4032254753475 is not a valid EAN.");
+  assert.match(cuDiacritice, /Cod EAN \/ Cod de bare/, "diacriticele nu opresc traducerea");
+});

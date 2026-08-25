@@ -31,7 +31,7 @@ import {
   cautaDupaEan, isEmagError, salveazaMasuratori, salveazaOferte,
   salveazaProduseOferte,
 } from "./client";
-import { ePreaMareLotul, mesajOmenesc, sAIncheiat, type VerdictEmag } from "./errors";
+import { ePreaMareLotul, sAIncheiat, type VerdictEmag } from "./errors";
 import {
   amprentaContinutului, construiesteOferte, eanDeTrimis, masuratoriEmag, oferteUsoare,
   stocuriDeTrimis, type IdentitateUsoara, type ProdusDeCartografiat,
@@ -858,7 +858,8 @@ async function duStocul(
     const r = await salveazaOferte(ctx.auth, oferte.slice(i, i + LOT));
     if (isEmagError(r)) {
       celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
-      ultimulMesaj = mesajOmenesc(r.error);
+      /* Deja trecut prin `mesajOmenesc` in `client.ts`. Vezi nota de mai sus. */
+      ultimulMesaj = r.error;
       /* ⚠ La `chei` se opreste tot: acreditarile nu se repara intre doua loturi. */
       if (celMaiRau === "chei") break;
       continue;
@@ -981,7 +982,7 @@ async function duMasuratorile(
   }
 
   const r = await salveazaMasuratori(ctx.auth, masuratori);
-  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
+  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: r.error };
   return { verdict: r.verdict ?? "reusit", mesaj: "" };
 }
 
@@ -1052,7 +1053,7 @@ export async function retragePeEmagId(
   }
 
   const r = await salveazaOferte(ctx.auth, [{ id: rand.emag_id, status: 0 as const }]);
-  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
+  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: r.error };
 
   await admin.from("emag_offers")
     .update({ status: "withdrawn" satisfies StareOferta, updated_at: new Date().toISOString() })
@@ -1085,7 +1086,7 @@ async function retrage(
   if (vii.length === 0) return { verdict: "sarit", mesaj: "Oferta nu a ajuns niciodată pe eMAG." };
 
   const r = await salveazaOferte(ctx.auth, vii.map((x) => ({ id: x.emag_id, status: 0 as const })));
-  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: mesajOmenesc(r.error) };
+  if (isEmagError(r)) return { verdict: r.verdict ?? "refuz", mesaj: r.error };
 
   /*
    * ⚠ `bucatiDeIduri`, desi „sunt doar variantele unui produs”.
@@ -1566,6 +1567,23 @@ async function trimiteCuInjumatatire(
   return a;
 }
 
+/*
+ * ═══ ⚠ TRADUCEREA SE FACE O SINGURA DATA, LA GRANITA (25.08.2026) ═══
+ *
+ * `client.ts` trece raspunsul lor prin `mesajOmenesc` chiar cand construieste eroarea
+ * (`error: mesajOmenesc(c.mesaj) || c.mesaj`). Aplicata inca o data aici, pe un text deja
+ * tradus, se dubla singura — fiindca ramurile care lipesc raspunsul lor la coada
+ * (`... la combinația respectivă: ${brut}`) isi regasesc propriul tipar in propriul
+ * rezultat. Vazut in trafic, pe ecranul comerciantului:
+ *
+ *   „eMAG a respins codul de bare … la combinația respectivă: eMAG a respins codul de
+ *    bare … Schimbă „Cod EAN”
+ *
+ * ⚠ NU s-a facut `mesajOmenesc` idempotent, desi ar fi fost tentant. Singura verificare
+ * ieftina ar fi fost „are diacritice, deci e deja al nostru" — dar un nume de produs
+ * romanesc intr-un mesaj englezesc al lor („Product 'Hrană uscată' is invalid") ar fi
+ * sarit atunci peste traducere cu totul. Mai bine se traduce intr-un singur loc.
+ */
 async function trimiteInLoturi(
   admin: Admin,
   ctx: ContextEmag,
@@ -1620,7 +1638,8 @@ async function trimiteInLoturi(
     if (verdictIncheiat(r.verdict)) observatii.push(...(r.mesaje ?? []));
     if ("error" in r) {
       celMaiRau = maiRau(celMaiRau, r.verdict ?? "refuz");
-      mesaj = mesajOmenesc(r.error);
+      /* Deja trecut prin `mesajOmenesc` in `client.ts`. */
+      mesaj = r.error;
       /* ⚠ La `chei` se opreste tot: acreditarile nu se repara singure intre loturi,
          iar mai departe n-am face decat sa ardem cererile magazinului degeaba. */
       if (celMaiRau === "chei") break;

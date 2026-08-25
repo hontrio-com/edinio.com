@@ -55,12 +55,54 @@ test("⚠ hotararea se scrie DUPA raspunsul lor, nu inainte", () => {
    * Cea mai importanta ordine din fisier. Marcata la noi si netrimisa la ei, comerciantul
    * crede ca a rezolvat, iar cererea le expira netratata — si atunci decide Trendyol in locul
    * lui.
+   *
+   * ⚠ SE MASOARA SCRIEREA, NU ORICE ATINGERE A TABELEI. Proba cauta pana azi prima aparitie a
+   * tabelei si iesea gresit de indata ce a aparut CITIREA de verificare a apartenentei — care
+   * trebuie sa fie inaintea apelului, nu dupa.
    */
   const i = mod.indexOf("export async function hotarasteRetur(");
   const f = mod.slice(i, mod.indexOf("export async function repuneInStoc(", i));
   const iTrimis = Math.max(f.indexOf("approveClaimItems("), f.indexOf("rejectClaimItems("));
-  const iScris = f.indexOf('from("trendyol_claim_items")');
+  const iScris = f.indexOf("decizie: p.accepta");
   assert.ok(iTrimis > 0 && iScris > iTrimis, "intai la ei, apoi la noi");
+});
+
+test("⚠ liniile bifate TREBUIE sa fie ale cererii din apel", () => {
+  /*
+   * Panoul tinea o singura lista de bifate peste toate cererile de pe ecran: cu doua deschise,
+   * „Acceptă" de la prima trimitea si liniile bifate la a doua. Iar noi le trimiteam mai
+   * departe fara sa ne uitam.
+   *
+   * ⚠ VERIFICAREA E PE SERVER, nu in ecran: actiunile se pot chema cu orice argumente, printr-un
+   * POST direct.
+   *
+   * ⚠ Si scrierea locala e legata de cerere (`claim_row_id`), nu doar de id-uri — altfel ce
+   * refuza ei ramane marcat hotarat la noi.
+   */
+  const i = mod.indexOf("export async function hotarasteRetur(");
+  const f = mod.slice(i, mod.indexOf("export async function repuneInStoc(", i));
+  const iPaza = f.indexOf("const straine = p.claimItemIds.filter");
+  const iTrimis = Math.max(f.indexOf("approveClaimItems("), f.indexOf("rejectClaimItems("));
+  assert.ok(iPaza > 0 && iPaza < iTrimis, "se verifica INAINTE de apelul catre ei");
+  assert.match(f, /if \(straine\.length > 0\) \{/);
+  assert.match(f, /\.eq\("claim_row_id", cerere\.id\)/);
+});
+
+test("⚠ respingerea pleaca in forma CERUTA de ei: multipart, lista prin virgula", () => {
+  /*
+   * Trimiteam JSON cu `claimItemIdList` ca tablou. Referinta lor cere `multipart/form-data`,
+   * lista ca SIR despartit prin virgula, si explicatie de cel mult 500 de caractere. In forma
+   * veche, serviciul refuza cererea intreaga — iar comerciantul ramane cu „am respins" apasat
+   * si cu returul netratat la ei, care le expira in favoarea clientului.
+   */
+  assert.match(client, /const corp = new FormData\(\);/);
+  assert.match(client, /corp\.set\("claimItemIdList", p\.claimItemIdList\.join\(","\)\);/);
+  assert.match(client, /corp\.set\("description", p\.description\.slice\(0, 500\)\);/);
+  /* ⚠ Antetul NU se scrie de mana: `fetch` il pune singur, cu granita. Scris de noi, granita
+     ar lipsi si corpul n-ar putea fi despartit de nimeni. */
+  assert.match(client, /!\(body instanceof FormData\)/);
+  /* ⚠ Si plafonul e verificat si sus, ca omul sa afle inainte de trimitere, nu dupa refuz. */
+  assert.match(mod, /const MAX_EXPLICATIE = 500;/);
 });
 
 test("⚠ respingerea cere motiv SI explicatie", () => {
@@ -72,26 +114,44 @@ test("⚠ respingerea cere motiv SI explicatie", () => {
   assert.match(client, /export function getClaimIssueReasons\(/);
 });
 
-test("⚠ repunerea in stoc e IDEMPOTENTA pe linie", () => {
-  /* Fara `repus_in_stoc_la`, doua clicuri ar fi umflat stocul si nimeni n-ar fi stiut de unde
-     vine diferenta. */
-  assert.match(mod, /if \(linie\.repus_in_stoc_la\) return \{ ok: true, pus: 0 \};/);
-  assert.match(mod, /repus_in_stoc_la: new Date\(\)\.toISOString\(\)/);
+test("⚠ repunerea in stoc e o SINGURA tranzactie, cu randul blocat", () => {
+  /*
+   * ═══ ⚠ PROBA ASTA CEREA PANA AZI PREA PUTIN ═══
+   *
+   * Cerea doar sa existe marcajul `repus_in_stoc_la` si o citire a lui. Dar flow-ul era in trei
+   * pasi — citeste marcajul, aduna stocul, scrie marcajul — iar cei trei pasi nu erau legati.
+   * Doua apasari repezi treceau amandoua de citire cu marcajul gol si adunau amandoua. Sau
+   * adunarea reusea si scrierea marcajului pica, iar omul incerca din nou.
+   *
+   * „Idempotent" scris in comentariu nu tine loc de blocare.
+   */
+  const mig = readFileSync("migrations/2026-11-01-retur-repunere-atomica.sql", "utf8");
+  assert.match(mig, /for update;/, "randul se ia blocat");
+  const iSelect = mig.indexOf("for update;");
+  const iMarcaj = mig.indexOf("if v_linie.repus_in_stoc_la is not null then");
+  const iStoc = mig.indexOf("elibereaza_stoc_complet");
+  assert.ok(iSelect > 0 && iMarcaj > iSelect && iStoc > iMarcaj,
+    "blocare, apoi marcajul, apoi stocul");
+  /* ⚠ Si codul cheama RPC-ul, nu mai face pasii singur. */
+  assert.match(mod, /admin\.rpc\("trendyol_repune_stoc_retur"/);
+  assert.doesNotMatch(mod, /elibereaza_stoc_complet/, "adunarea nu mai e in TypeScript");
 });
 
 test("⚠ se pune inapoi CANTITATEA LINIEI, si prin functia casei", () => {
   /*
-   * Retururile Trendyol sunt partiale: `quantity` pe linie poate fi mai mic decat cat s-a
-   * cumparat. Un „pune inapoi toata comanda" ar fi gresit de doua ori.
+   * ⚠ Se cheama `elibereaza_stoc_complet`, functia prin care se intoarce stocul la anulari. O a
+   * doua adunare scrisa alaturi s-ar fi despartit de prima la prima schimbare — si stocul e
+   * ultimul loc unde iti permiti doua socoteli.
    *
-   * ⚠ Si se cheama `elibereaza_stoc_complet`, functia prin care se intoarce stocul la anulari.
-   * O a doua adunare scrisa aici s-ar fi despartit de prima la prima schimbare.
+   * ⚠ Variantele pe `variant_title`, nu pe un indice: indicii se muta cand comerciantul
+   * rearanjeaza combinatiile, titlurile nu.
    */
-  assert.match(mod, /quantity: linie\.quantity/);
-  assert.match(mod, /admin\.rpc\("elibereaza_stoc_complet"/);
-  /* ⚠ Variantele pe `variant_title`, nu pe un indice: indicii se muta cand comerciantul
-     rearanjeaza combinatiile. */
-  assert.match(mod, /variant_title: varianta\.variant_title/);
+  const mig = readFileSync("migrations/2026-11-01-retur-repunere-atomica.sql", "utf8");
+  assert.match(mig, /'quantity', v_linie\.quantity/);
+  assert.match(mig, /'variant_title', v_variant_title/);
+  assert.match(mig, /perform public\.elibereaza_stoc_complet\(/);
+  /* ⚠ Usa functiei e inchisa: `security definer` peste stocul oricui. */
+  assert.match(mig, /revoke execute on function public\.trendyol_repune_stoc_retur\(uuid, text\) from public, anon, authenticated;/);
 });
 
 test("⚠ fiecare actiune isi verifica magazinul", () => {

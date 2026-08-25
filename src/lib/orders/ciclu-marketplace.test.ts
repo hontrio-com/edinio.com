@@ -34,18 +34,39 @@ test("eMAG isi tine comanda; magazinul propriu nu", () => {
   assert.equal(marketplaceCareTineComanda(undefined), null);
 });
 
-test("⚠ Trendyol NU e in lista, si e o alegere, nu o scapare", () => {
+test("⚠ Trendyol E in lista, si numai fiindca are iesire adevarata", () => {
   /*
-   * Scaparea e aceeasi la toate trei: nici la Trendyol selectorul generic nu duce nimic
-   * afara — iesirea de acolo merge prin actiuni PROPRII (`setPackageStatus`,
-   * `sendTrackingNumber`). Dar a opri butonul si acolo e o hotarare de produs, nu o
-   * reparatie: ar lua ceva ce comerciantii folosesc azi. Se adauga cand se hotaraste.
+   * ═══ ⚠ PROBA ASTA CEREA PANA AZI EXACT PE DOS ═══
    *
-   * Proba asta exista ca sa nu para o omisiune celui care citeste peste sase luni.
+   * Scria: „a opri butonul si la Trendyol e o hotarare de produs, nu o reparatie". Argumentul
+   * era bun cat timp singura cale de anulare era selectorul generic — luat, comerciantul ar fi
+   * ramas cu o comanda pe care n-o poate nici onora, nici anula.
+   *
+   * ⚠ A INCETAT SA FIE BUN CAND A APARUT `nuPotFurniza`: anuleaza INTAI la ei, cu motiv din
+   * lista lor, si abia daca ei au primit-o o inchide si la noi, cu stocul intors pe raft.
+   *
+   * ⚠ CE FACEA „ANULAT" DIN SELECTOR: elibera stocul la noi, iar la ei comanda ramanea activa
+   * si pleca la client. Recitirea o aducea inapoi si revendica marfa — vanduta intre timp,
+   * stocul intra pe minus.
+   *
+   * Ordinea a contat, si se scrie aici ca sa nu se repete pe dos: intai calea oficiala, pe
+   * urma blocarea celei gresite.
    */
-  assert.equal(marketplaceCareTineComanda({ marketplace: "trendyol" }), null);
+  assert.equal(marketplaceCareTineComanda({ marketplace: "trendyol" }), "trendyol");
+  /* About You a ramas pe dinafara, si ASTA e acum alegerea nescrisa: n-are inca o cale proprie
+     de anulare. Se adauga aici cand o capata. */
   assert.equal(marketplaceCareTineComanda({ marketplace: "aboutyou" }), null);
-  assert.deepEqual([...MARKETPLACE_CU_CICLU_PROPRIU], ["emag"]);
+  assert.deepEqual([...MARKETPLACE_CU_CICLU_PROPRIU], ["emag", "trendyol"]);
+});
+
+test("⚠ blocarea vine cu inlocuitor: butonul de anulare exista in panou", () => {
+  /* O blocare fara iesire ar fi lasat comenzi pe care omul nu le poate nici onora, nici
+     anula. Proba leaga cele doua schimbari una de alta, ca sa nu poata fi despartite. */
+  const panou = readFileSync("src/components/dashboard/TrendyolFulfillmentPanel.tsx", "utf8");
+  assert.match(panou, /anuleazaComandaTrendyol\(businessId, orderId, Number\(motivAnulare\)\)/);
+  assert.match(panou, /Nu pot furniza comanda asta/);
+  /* ⚠ Si NU se arata dupa expediere: coletul e la curier, iar ei refuza anularea. */
+  assert.match(panou, /\{!shipped && !terminal && \(/);
 });
 
 test("⚠ mesajul spune UNDE se face, nu doar ca nu se poate", () => {

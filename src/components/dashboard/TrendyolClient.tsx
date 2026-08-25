@@ -70,6 +70,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [carrierCode, setCarrierCode] = useState(status?.defaultCarrierCode ?? "");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
   const [autoPublish, setAutoPublish] = useState(status?.autoPublish ?? false);
+  const [taraOrigine, setTaraOrigine] = useState(status?.defaultCountryOfOrigin ?? "");
   const [addresses, setAddresses] = useState<TrendyolSupplierAddress[]>([]);
   // Eticheta si butonul de webhook se schimba instant; actiunea reuseste sau nu,
   // nu are alt rezultat de aratat. La eroare React readuce singur starea reala.
@@ -141,9 +142,22 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
         shipment_address_id: ship, returning_address_id: ret,
         default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
         auto_sync: autoSync,
-        // Publicarea automata nu are sens fara sincronizare: fara ea nimic nu
-        // ajunge in coada, deci nici produsele noi.
-        auto_publish: autoSync && autoPublish,
+        /*
+         * ⚠ SE TRIMITE CE A BIFAT OMUL (26.08.2026).
+         *
+         * Era `autoSync && autoPublish`, cu explicatia ca „publicarea automata n-are sens fara
+         * sincronizare". A fost adevarat, si a incetat sa fie: coada lasa acum sa treaca un
+         * produs NOU cand `auto_publish` e aprins, chiar cu `auto_sync` stins (`queue.ts`).
+         *
+         * ⚠ Deci ecranul mintea: omul bifa „Publicare automata", vedea bifa ramasa bifata dupa
+         * salvare, si in baza se scria `false`. Comentariul de aici a supravietuit codului pe
+         * care il descria — chiar felul de defect care nu da nicio eroare.
+         *
+         * Cele doua comutatoare sunt acum ce par: unul pentru schimbarile la produsele DEJA
+         * publicate, altul pentru produsele NOI.
+         */
+        auto_publish: autoPublish,
+        default_country_of_origin: taraOrigine,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
@@ -364,6 +378,40 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               „plătiți de Trendyol” își completează singuri AWB-ul; la cei plătiți de tine, trimiți tu numărul AWB din pagina comenzii.
             </p>
 
+            {/*
+              ═══ ⚠ CONDUCTA EXISTA DE-O SAPTAMANA, ROBINETUL NU (26.08.2026) ═══
+
+              `trendyol_listings.country_of_origin`, `config.default_country_of_origin` si
+              `payload.origin` erau toate scrise si legate. Dar nicaieri in panoul Trendyol nu
+              se putea COMPLETA vreuna — deci campul pleca gol la toata lumea, mereu.
+
+              ⚠ Din 23.10.2026 ei il cer obligatoriu. Pana atunci lipsa lui nu strica nimic, si
+              de-aia nu se blocheaza publicarea azi: ar opri magazine care merg, pentru o regula
+              care inca nu e in vigoare.
+
+              ⚠ SI NU SE PUNE „RO" DE LA SINE. Un magazin din Romania vinde hrana facuta in
+              Germania si jucarii facute in China; un „RO" pus de noi peste tot ar fi o
+              declaratie falsa despre marfa lui, nu o completare la indemana.
+            */}
+            <div className="mt-4">
+              <label className="block text-sm text-foreground">
+                Țara de fabricație implicită
+                <input
+                  value={taraOrigine}
+                  onChange={(e) => setTaraOrigine(e.target.value.toUpperCase().slice(0, 2))}
+                  placeholder="ex. DE"
+                  maxLength={2}
+                  className="mt-1 w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono uppercase"
+                />
+              </label>
+              <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                Codul de țară din două litere unde se fabrică marfa, nu unde ești tu. Se
+                folosește la produsele care n-au una a lor. Trendyol o cere obligatoriu de la
+                23 octombrie 2026; lasă câmpul gol dacă produsele tale vin din țări diferite și
+                completeaz-o pe fiecare listare în parte.
+              </p>
+            </div>
+
             <label className="mt-4 flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} className="rounded" />
               Sincronizează automat schimbările de produs, stoc și preț
@@ -415,8 +463,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               <input
                 type="checkbox" checked={autoPublish}
                 onChange={(e) => setAutoPublish(e.target.checked)}
-                disabled={!autoSync}
-                className="rounded mt-0.5 disabled:opacity-50"
+                className="rounded mt-0.5"
               />
               <span>
                 Publicare automată
@@ -424,6 +471,18 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   Fiecare produs nou din magazin pleacă singur pe Trendyol, folosind categoria mapată și brandul ei.
                   Produsele cu categoria nemapată rămân pe loc și îți apar ca eroare aici.
                 </span>
+                {/*
+                  ⚠ BIFA ASTA MERGE SI FARA CEA DE DEASUPRA, si asta se spune pe fata: pana
+                  azi era stinsa cand sincronizarea era stinsa, desi coada le trata deja
+                  separat. Cine vrea sa listeze produse noi fara sa lase Edinio sa umble la
+                  preturile celor vechi are chiar nevoie de combinatia asta.
+                */}
+                {!autoSync && autoPublish && (
+                  <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
+                    Cu sincronizarea stinsă, produsele noi tot pleacă pe Trendyol, dar
+                    schimbările de preț și stoc de la cele deja publicate nu mai pleacă.
+                  </span>
+                )}
               </span>
             </label>
 

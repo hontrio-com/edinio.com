@@ -210,7 +210,9 @@ export interface TrendyolConfig {
    * vinde hrana facuta in Germania si jucarii facute in China. O valoare pusa peste tot ar
    * fi o declaratie falsa, nu o comoditate.
    */
-  default_country_of_origin?: string;
+  /* ⚠ `null` inseamna „scoate-o", si de-aia tipul il ingaduie: fara el, comerciantul care si-a
+     pus tara gresit n-ar mai fi putut s-o SCOATA — doar s-o inlocuiasca. Vezi `jsonb_merge_config`. */
+  default_country_of_origin?: string | null;
   user_agent_company?: string;      // User-Agent "{sellerId} - {company}" (default SelfIntegration)
   seller_name?: string;
   /*
@@ -546,30 +548,104 @@ export interface TrendyolShipmentPackage {
  */
 export interface TrendyolClaim {
   id?: string;
+  /** Numele din referinta lor; `id` e cel din raspunsul viu. Se citesc amandoua. */
+  claimId?: string;
   orderNumber?: string;
   orderDate?: number;
   claimDate?: number;
   lastModifiedDate?: number;
+  /**
+   * ⚠ ASTA E DENUMIREA LOR ADEVARATA (verificat in referinta `getClaims`).
+   * `shipmentPackageId` nu exista in raspuns; il citeam si iesea mereu gol.
+   */
+  orderShipmentPackageId?: number;
+  orderOutboundPackageId?: number;
   shipmentPackageId?: number;
+  cargoTrackingNumber?: string | number;
+  cargoProviderName?: string;
   status?: string;
-  items?: TrendyolClaimItem[];
-  /** Numele pe care il poate avea in unele versiuni ale raspunsului lor. */
+  /**
+   * ⚠ NU SUNT LINIILE. Fiecare element e un INVELIS: `orderLine` (ce produs) plus
+   * `claimItems[]` (ce bucati s-au intors din el). Vezi `liniileReturului`.
+   */
+  items?: TrendyolClaimGrup[];
+  /** Forma plata, pe care unele raspunsuri ale lor o mai dau. Se citeste tot. */
   claimItems?: TrendyolClaimItem[];
 }
 
-export interface TrendyolClaimItem {
+/** Invelisul din `items[]`: produsul o data, bucatile intoarse din el separat. */
+export interface TrendyolClaimGrup {
+  orderLine?: TrendyolClaimOrderLine;
+  claimItems?: TrendyolClaimItem[];
+  /* Campurile de mai jos apar cand raspunsul vine plat, nu invelit. */
   id?: string;
   claimItemId?: string;
-  orderLineId?: number;
   barcode?: string;
   productName?: string;
   quantity?: number;
   customerClaimItemReason?: { name?: string; externalReasonId?: number };
   trendyolClaimItemReason?: { name?: string };
   customerNote?: string;
-  claimItemStatus?: { name?: string };
-  resolved?: boolean;
+  claimItemStatus?: { name?: string } | string;
 }
+
+/** Linia de comanda din care s-a intors marfa. Aici stau codul de bare si numele. */
+export interface TrendyolClaimOrderLine {
+  id?: number | string;
+  productName?: string;
+  barcode?: string;
+  merchantSku?: string;
+  productColor?: string;
+  productSize?: string;
+  price?: number;
+  vatBaseAmount?: number;
+  salesCampaignId?: number;
+  productCategory?: string;
+}
+
+/**
+ * O bucata intoarsa.
+ *
+ * ⚠ N-AU CAMP DE CANTITATE, si asta nu e o scapare: un retur de trei bucati vine ca TREI
+ * elemente cu id-uri diferite. Deci o linie inseamna o bucata, iar repunerea in stoc aduna 1.
+ */
+export interface TrendyolClaimItem {
+  id?: string;
+  claimItemId?: string;
+  orderLineItemId?: number | string;
+  orderLineId?: number;
+  barcode?: string;
+  productName?: string;
+  quantity?: number;
+  customerClaimItemReason?: { name?: string; externalReasonId?: number };
+  trendyolClaimItemReason?: { name?: string };
+  note?: string;
+  customerNote?: string;
+  claimItemStatus?: { name?: string } | string;
+  resolved?: boolean;
+  autoAccepted?: boolean;
+  acceptedBySeller?: boolean;
+}
+
+/**
+ * Motivele pe care le primeste Trendyol la o anulare de linii.
+ *
+ * ⚠ ID-URILE SUNT ALE LOR, si nu se inventeaza: un id gresit e refuzat abia la trimitere, cand
+ * comerciantul crede ca a anulat comanda — iar la ei ramane activa si pleaca la client.
+ *
+ * ⚠ NU SE POT CITI DE LA EI. Spre deosebire de motivele de respingere a returului
+ * (`claim-issue-reasons`, care raspunde), niciun capat de anulare nu raspunde pe contul nostru
+ * (probat: 556 si 401 pe trei cai). Deci lista e cea publicata de ei, scrisa aici o data.
+ */
+export const MOTIVE_ANULARE_TRENDYOL: { id: number; nume: string }[] = [
+  { id: 500, nume: "Nu mai am produsul pe stoc" },
+  { id: 501, nume: "Produsul e defect sau deteriorat" },
+  { id: 502, nume: "Prețul era greșit" },
+  { id: 503, nume: "Poza, codul de bare sau cantitatea erau greșite" },
+  { id: 504, nume: "Eroare de integrare (preț sau stoc transferat greșit)" },
+  { id: 505, nume: "Același client a cumpărat în cantitate mare, după reducere" },
+  { id: 506, nume: "Forță majoră" },
+];
 
 /** Starile in care cererea inca asteapta o hotarare de la comerciant. */
 export const CLAIM_DE_HOTARAT = ["Created", "WaitingInAction", "InAnalysis"] as const;

@@ -113,6 +113,8 @@ test("⚠ si e ALT lucru decat originea vanzatorului", () => {
    * Romania".
    */
   const t = readFileSync("src/lib/trendyol/types.ts", "utf8");
-  assert.match(t, /default_country_of_origin\?: string;/);
+  /* ⚠ Tipul ingaduie acum si `null`, si nu din neglijenta: fara el, comerciantul care si-a pus
+     tara gresit n-ar mai fi putut s-o SCOATA — doar s-o inlocuiasca. */
+  assert.match(t, /default_country_of_origin\?: string \| null;/);
   assert.match(t, /NU E `origine`/);
 });

@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
-import { enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
+import { enqueueTrendyolSyncMany, publicaProduseNoiTrendyolMany } from "@/lib/trendyol/queue";
 import { enqueueEmagSyncMany, publicaPeEmagMany } from "@/lib/emag/queue";
 import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import type {
@@ -188,8 +188,8 @@ interface CommitDeltas {
  */
 async function anuntaCanalele(admin: Admin, importId: string, businessId: string): Promise<void> {
   try {
-    /* ⚠ Se citeste o data, si numai pentru eMAG: celelalte canale n-au publicare
-       automata legata de import. */
+    /* ⚠ Se citeste o data, pentru eMAG SI Trendyol: amandoua au bifa „Publică automat
+       produsele noi", si amandoua o inteleg la fel. Restul canalelor n-au asa ceva. */
     const { data: setari, error: eSetari } = await admin
       .from("store_settings").select("emag_config").eq("business_id", businessId).maybeSingle();
 
@@ -275,6 +275,13 @@ async function anuntaCanalele(admin: Admin, importId: string, businessId: string
        * si al unui comerciant care n-a bifat nimic. Steagul e intrebarea, nu importul.
        */
       autoPublish ? publicaPeEmagMany(businessId, uniceNoi) : Promise.resolve(0),
+      /*
+       * ⚠ SI TRENDYOL, DE PE 26.08.2026. Are aceeasi bifa si aceeasi gaura: `enqueueTrendyolSyncMany`
+       * trece numai produsele care au DEJA listare, deci cele noi dintr-un import nu ajungeau
+       * niciodata la ei. Steagul si-l citeste singura functia, din `trendyol_config` — nu din
+       * `autoPublish` de mai sus, care e al eMAG-ului si numai al lui.
+       */
+      publicaProduseNoiTrendyolMany(businessId, uniceNoi),
     ]);
   } catch (e) {
     /* ⚠ Se scrie, nu se inghite: un import care nu si-a anuntat canalele arata identic

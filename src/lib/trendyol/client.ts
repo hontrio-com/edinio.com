@@ -73,12 +73,32 @@ async function call<T>(
    * cheia e `supplierId:vitrina:grup`: doua magazine Edinio pe acelasi cont impart bugetul,
    * iar o trecere grea de catalog n-are voie sa intarzie o miscare de stoc dupa o vanzare.
    *
-   * ⚠ CAND N-A VENIT RANDUL, CEREREA PLEACA TOTUSI. Vezi `ritm-impartit.ts`: se cade deschis.
-   * Un limitator care blocheaza e mai rau decat unul care intarzie — mai ales ca a doua plasa
-   * (429-ul lor, cu pauza impartita mai jos) e chiar sub el.
+   * ═══ ⚠ SI CAND N-A VENIT RANDUL, CEREREA NU MAI PLEACA (26.08.2026) ═══
+   *
+   * Pana azi pleca. Argumentul scris aici era ca un limitator care blocheaza ar opri
+   * confirmarile de comenzi si miscarile de stoc ale tuturor magazinelor — un incident mai
+   * mare decat depasirea de care ne aparam.
+   *
+   * ⚠ ARGUMENTUL NU MAI STA, si nu fiindca s-a razgandit cineva: `ceruJeton` intoarce
+   * `ok: true` la ORICE necaz cu baza. Deci `false` de aici nu mai poate insemna „contorul e
+   * cazut" — inseamna strict „galeata e plina si dupa cinci secunde de asteptare". Iar in
+   * cazul ala a trimite oricum inseamna ca limitatorul nu limiteaza nimic tocmai cand ar
+   * trebui: la inghesuiala.
+   *
+   * ⚠ SI CE ERA DE APARAT E APARAT PE ALTA CALE. Galetile sunt pe grup: o trecere grea de
+   * catalog nu poate goli galeata comenzilor, fiindca n-o atinge.
+   *
+   * ⚠ SE INTOARCE 429, NU O EROARE OARECARE. Casa citeste 429 ca trecator peste tot
+   * (`eTrecatoare` in `sync.ts`): coada reincearca si NU arde o incercare. O eroare cu alt cod
+   * ar fi golit cozi — chiar incidentul Trendyol de acum o luna.
    */
   const grup = grupulCaii(path, method);
-  await asteaptaRandulTrendyol(auth.supplierId, vitrina, grup);
+  if (!await asteaptaRandulTrendyol(auth.supplierId, vitrina, grup)) {
+    return {
+      error: "Prea multe cereri catre Trendyol chiar acum. Se reia singur peste putin.",
+      status: 429,
+    };
+  }
 
   try {
     const res = await fetch(`${trendyolBaseUrl(auth.environment)}${path}`, {
@@ -93,9 +113,14 @@ async function call<T>(
         // Nomenclatoarele (categorii, atribute) vin in limba ceruta aici.
         "Accept-Language": limbaVitrinei(vitrina),
         Accept: "application/json",
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        /* ⚠ La `FormData` NU se pune antetul: `fetch` il scrie singur, cu granita. Scris de
+           noi, granita ar lipsi si corpul n-ar putea fi despartit de nimeni. */
+        ...(body !== undefined && !(body instanceof FormData)
+          ? { "Content-Type": "application/json" } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined
+        : body instanceof FormData ? body
+        : JSON.stringify(body),
       cache: "no-store",
       // Fara asta, o cerere blocata consuma tot bugetul functiei si esueaza
       // fara mesaj util — apelurile astea ruleaza si din cron-uri.
@@ -454,6 +479,36 @@ export function updatePackage(
 }
 
 /**
+ * „Nu pot furniza": anuleaza linii dintr-un pachet, cu motiv.
+ *
+ * ═══ ⚠ E SINGURA CALE ADEVARATA DE ANULARE (26.08.2026) ═══
+ *
+ * Pana azi comerciantul anula o comanda Trendyol din selectorul generic al comenzii. Aia
+ * schimba starea DOAR la noi: elibera stocul local, iar la Trendyol comanda ramanea activa —
+ * si la prima recitire revendica marfa inapoi. Daca intre timp se vanduse, stocul intra pe
+ * minus si ramanea doar un rand in jurnal.
+ *
+ * ⚠ `shouldKeepPreviousStatus: true`, si nu din comoditate. Ei SPARG pachetul cand se anuleaza
+ * o parte din el si dau un `shipmentPackageId` NOU restului. Cu `false`, ce ramane porneste pe
+ * „created" — adica o comanda deja pregatita s-ar intoarce la inceput. Cu `true`, isi tine
+ * starea. (Spargerea se intampla oricum; noul pachet ne vine la urmatoarea recitire, fiindca
+ * anularea modifica comanda si intra singura in fereastra de citire.)
+ */
+export function unsupplyPackageItems(
+  auth: TrendyolAuth, packageId: number,
+  p: { lines: { lineId: number; quantity: number }[]; reasonId: number; shouldKeepPreviousStatus?: boolean },
+) {
+  return call<undefined>(
+    auth, "PUT",
+    `/integration/order/sellers/${auth.supplierId}/shipment-packages/${packageId}/items/unsupplied`,
+    {
+      lines: p.lines,
+      reasonId: p.reasonId,
+      shouldKeepPreviousStatus: p.shouldKeepPreviousStatus ?? true,
+    });
+}
+
+/**
  * Trimite AWB-ul propriu catre Trendyol.
  *
  * Pe marketplace-ul international, jumatate din curieri sunt platiti de vanzator
@@ -522,21 +577,34 @@ export function approveClaimItems(auth: TrendyolAuth, claimId: string, claimLine
 /**
  * Respinge liniile, cu motiv si (optional) dovezi.
  *
- * ⚠ MOTIVUL E OBLIGATORIU LA EI, si asa si trebuie: un retur respins fara explicatie ajunge
- * la arbitrajul lor, si acolo tacerea vanzatorului nu ajuta pe nimeni.
+ * ═══ ⚠ NU E JSON, SI LISTA NU E O LISTA (26.08.2026) ═══
+ *
+ * Trimiteam un corp JSON cu `claimItemIdList` ca tablou. Referinta lor cere altceva, si
+ * amandoua deosebirile conteaza:
+ *
+ *   - `multipart/form-data`, fiindca la aceeasi cerere se pot atasa si dovezi (poze, PDF-uri);
+ *   - `claimItemIdList` ca SIR despartit prin virgula, nu ca tablou;
+ *   - `description` de cel mult 500 de caractere.
+ *
+ * ⚠ Trimis in forma veche, serviciul refuza cererea intreaga — iar comerciantul ramane cu
+ * „am respins" apasat si cu returul netratat la ei, care le expira in favoarea clientului.
+ *
+ * ⚠ ANTETUL NU SE SCRIE DE MANA. `fetch` pune singur `Content-Type: multipart/form-data` CU
+ * granita, cand corpul e un `FormData`; scris de noi, granita ar lipsi si corpul n-ar putea fi
+ * despartit de nimeni.
  */
 export function rejectClaimItems(
   auth: TrendyolAuth, claimId: string,
-  p: { claimIssueReasonId: number; claimItemIdList: string[]; description: string; files?: string[] },
+  p: { claimIssueReasonId: number; claimItemIdList: string[]; description: string; files?: Blob[] },
 ) {
+  const corp = new FormData();
+  corp.set("claimIssueReasonId", String(p.claimIssueReasonId));
+  corp.set("claimItemIdList", p.claimItemIdList.join(","));
+  corp.set("description", p.description.slice(0, 500));
+  for (const f of p.files ?? []) corp.append("files", f);
   return call<undefined>(
     auth, "POST", `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}/issue`,
-    {
-      claimIssueReasonId: p.claimIssueReasonId,
-      claimItemIdList: p.claimItemIdList,
-      description: p.description,
-      ...(p.files?.length ? { files: p.files } : {}),
-    });
+    corp);
 }
 
 /** Motivele pe care le accepta ei la respingere. Se citesc, nu se ghicesc. */

@@ -55,14 +55,46 @@ test("⚠ grupul se citeste din CALE, si `price-and-inventory` are grupul lui", 
   assert.equal(grupulCaii("/integration/sellers/1/addresses", "GET"), "altele");
 });
 
-test("⚠ comenzile au fereastra LOR, mult mai lunga", () => {
+test("⚠ TOATE grupurile se numara pe MINUT, cum numara si ei", () => {
+  /*
+   * ═══ ⚠ PROBA ASTA CEREA PANA AZI EXACT PE DOS ═══
+   *
+   * Cerea `fereastraMs === 1000` la produse si stoc, fiindca asa erau scrise limitele: „10 pe
+   * secunda" la scrierea de produs. Suna prudent si nu era — sustinut, inseamna 600 pe minut,
+   * de cateva ori peste orice cifra publicata pentru grupul ala. Proba apara chiar cifra
+   * gresita, si trecea verde.
+   *
+   * ⚠ ACUM SUNT DOUA FERESTRE: una pe minut (cum numara ei) si o rafala pe secunda (ca sa nu
+   * plece toata fereastra deodata). Amandoua jetoanele se cer, in ordinea asta.
+   */
+  for (const g of Object.keys(LIMITE_TRENDYOL) as (keyof typeof LIMITE_TRENDYOL)[]) {
+    assert.equal(LIMITE_TRENDYOL[g].fereastraMs, 60_000, `${g} se numara pe minut`);
+    assert.ok(LIMITE_TRENDYOL[g].rafala >= 1, `${g} are si o rafala`);
+    /* ⚠ Rafala nu are voie sa fie mai larga decat minutul: ar fi facut plafonul de sus o
+       decoratie. */
+    assert.ok(LIMITE_TRENDYOL[g].rafala <= LIMITE_TRENDYOL[g].limita, `${g}: rafala sub plafon`);
+  }
   /* Cel mai stramt masurat public: „get shipment packages" porneste pe la 30/minut la
      vanzatorii mici. Se tine sub el cu bunastiinta. */
-  assert.equal(LIMITE_TRENDYOL.orders.fereastraMs, 60_000);
   assert.ok(LIMITE_TRENDYOL.orders.limita <= 30, "sub pragul lor cunoscut");
-  for (const g of ["product-read", "product-write", "inventory"] as const) {
-    assert.equal(LIMITE_TRENDYOL[g].fereastraMs, 1000, `${g} se numara pe secunda`);
-  }
+  /* ⚠ Si scrierea de produs sub citirea lui: la ei scrierile sunt mereu mai stramte. */
+  assert.ok(LIMITE_TRENDYOL["product-write"].limita <= LIMITE_TRENDYOL["product-read"].limita);
+});
+
+test("⚠ retururile au galeata LOR, nu a comenzilor", () => {
+  /*
+   * Caile de retur contin tot `/order/`, deci regula generala le inghitea si mancau din
+   * bugetul comenzilor — trei pagini la fiecare trecere, luate chiar de la citirea comenzilor,
+   * care e cea mai grabita dintre toate.
+   *
+   * ⚠ Si aprobarea/respingerea sunt separate de citire: la ei sunt cele mai stramte dintre
+   * toate, si sunt apasari de om, cateva pe zi.
+   */
+  assert.equal(grupulCaii("/integration/order/sellers/1/claims?page=0", "GET"), "claims-read");
+  assert.equal(grupulCaii("/integration/order/claim-issue-reasons", "GET"), "claims-read");
+  assert.equal(grupulCaii("/integration/order/sellers/1/claims/abc/items/approve", "PUT"), "claims-write");
+  assert.equal(grupulCaii("/integration/order/sellers/1/claims/abc/issue", "POST"), "claims-write");
+  assert.ok(LIMITE_TRENDYOL["claims-write"].limita < LIMITE_TRENDYOL["claims-read"].limita);
 });
 
 test("⚠ `Retry-After` se citeste SI in secunde, SI ca data", () => {
@@ -88,18 +120,28 @@ test("⚠ clientul cere randul INAINTE de fetch, si spune tuturor la 429", () =>
   assert.match(client, /if \(res\.status === 429\) \{\s*void tineCont429\(/);
 });
 
-test("⚠ se cade DESCHIS: cand n-a venit randul, cererea pleaca totusi", () => {
+test("⚠ se cade INCHIS: fara rand, cererea NU mai pleaca — si intoarce 429", () => {
   /*
-   * Cea mai importanta hotarare, si e usor de inversat din greseala. Un limitator care
-   * BLOCHEAZA ar opri confirmarile de comenzi si miscarile de stoc ale tuturor magazinelor —
-   * un incident mai mare decat depasirea de care ne aparam. Plasa de dedesubt e chiar 429-ul
-   * lor, cu pauza impartita.
+   * ═══ ⚠ PROBA ASTA CEREA PANA AZI EXACT PE DOS ═══
+   *
+   * Cerea ca cererea sa plece si cand limitatorul a spus nu. Argumentul scris aici era ca un
+   * limitator care BLOCHEAZA ar opri confirmarile de comenzi si miscarile de stoc ale tuturor
+   * magazinelor — un incident mai mare decat depasirea de care ne aparam.
+   *
+   * ⚠ ARGUMENTUL NU MAI STA, si nu fiindca s-a razgandit cineva: `ceruJeton` intoarce
+   * `ok: true` la ORICE necaz cu baza. Deci un `false` nu poate insemna „contorul e cazut" —
+   * inseamna strict „galeata e plina si dupa cinci secunde de asteptare". A trimite atunci
+   * inseamna ca limitatorul nu limiteaza nimic tocmai la inghesuiala.
+   *
+   * ⚠ SI CE ERA DE APARAT E APARAT PE ALTA CALE: galetile sunt pe grup, deci o trecere grea de
+   * catalog nu poate goli galeata comenzilor, fiindca n-o atinge.
    */
   const client = viu("src/lib/trendyol/client.ts");
-  const i = client.indexOf("await asteaptaRandulTrendyol(");
-  const linie = client.slice(i - 60, i + 120);
-  assert.doesNotMatch(linie, /if \(!\s*await asteaptaRandulTrendyol/, "raspunsul NU opreste cererea");
-  assert.doesNotMatch(linie, /return \{ error/, "si nu se intoarce cu eroare de aici");
+  assert.match(client, /if \(!await asteaptaRandulTrendyol\(auth\.supplierId, vitrina, grup\)\) \{/);
+  /* ⚠ 429, NU o eroare oarecare: casa citeste 429 ca trecator peste tot, deci coada
+     reincearca si NU arde o incercare. Alt cod ar fi golit cozi. */
+  const i = client.indexOf("asteaptaRandulTrendyol(auth.supplierId");
+  assert.match(client.slice(i, i + 320), /status: 429,/);
 });
 
 test("⚠ pauza nu se scurteaza, si are plafon", () => {

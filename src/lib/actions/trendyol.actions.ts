@@ -28,7 +28,10 @@ import { sugereazaAtribute, type SugestieAtribut, type ValoriAtribut } from "@/l
 import {
   loadTrendyolContext, pushInventoryNow, removeProductNow, syncProductNow, syncProductsBulk,
 } from "@/lib/trendyol/sync";
-import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
+import {
+  setPackageStatus, sendTrackingNumber, getFulfillmentState, nuPotFurniza,
+  type TrendyolFulfillmentState,
+} from "@/lib/trendyol/fulfillment";
 import { barcodeDerivat, deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
 import type {
   TrendyolBrand, TrendyolCategoryAttribute, TrendyolCategoryMapEntry, TrendyolConfig,
@@ -146,6 +149,8 @@ export interface TrendyolStatus {
   brandName?: string;
   autoSync: boolean;
   autoPublish: boolean;
+  /** Tara de FABRICATIE implicita a magazinului (ISO2), sau `""` daca n-a ales niciuna. */
+  defaultCountryOfOrigin: string;
   lastSyncAt?: string;
   webhookActive: boolean;
   ordersSyncedAt?: string;
@@ -208,6 +213,9 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     brandName: config.brand_name ?? undefined,
     autoSync: config.auto_sync !== false,
     autoPublish: config.auto_publish === true,
+    /* ⚠ Se intoarce GOL cand nu s-a ales, nu „RO": ecranul trebuie sa arate ca lipseste, nu
+       sa para completat. */
+    defaultCountryOfOrigin: (config.default_country_of_origin ?? "").toUpperCase(),
     lastSyncAt: config.last_sync_at,
     webhookActive: !!config.webhook_id && !!config.webhook_secret,
     ordersSyncedAt: config.orders_synced_at,
@@ -352,6 +360,15 @@ export interface TrendyolSettingsInput {
   brand_name?: string | null;
   auto_sync?: boolean;
   auto_publish?: boolean;
+  /**
+   * ⚠ Tara de FABRICATIE implicita, ISO2. Din 23.10.2026 ei cer campul `origin` la nivel de
+   * produs; pana atunci, unele categorii il cer si ca atribut.
+   *
+   * ⚠ NU SE PUNE „RO" DE LA SINE. Un magazin din Romania vinde in mare parte marfa fabricata
+   * altundeva, iar o tara de origine declarata gresit e o declaratie vamala falsa, nu o
+   * scapare de completare. Lipsa opreste publicarea cu mesaj; ghicita, ar fi trecut tacut.
+   */
+  default_country_of_origin?: string | null;
 }
 
 export async function saveTrendyolSettings(
@@ -403,6 +420,12 @@ export async function saveTrendyolSettings(
     ...(input.brand_name !== undefined ? { brand_name: input.brand_name ?? null } : {}),
     ...(input.auto_sync !== undefined ? { auto_sync: input.auto_sync } : {}),
     ...(input.auto_publish !== undefined ? { auto_publish: input.auto_publish } : {}),
+    /* ⚠ Golita dinadins => `null`, nu „lasa cum era": altfel comerciantul nu si-ar putea SCOATE
+       niciodata o tara pusa gresit. */
+    ...(input.default_country_of_origin !== undefined ? {
+      default_country_of_origin:
+        (input.default_country_of_origin ?? "").trim().toUpperCase() || null,
+    } : {}),
     /* ⚠ Moneda NU vine de la om: se deduce din vitrina si se rescrie la fiecare salvare, ca
        sa nu ramana o moneda veche dupa o schimbare de vitrina. */
     currency: infoVitrina(config.storefront).moneda,
@@ -692,6 +715,7 @@ export interface TrendyolEditorData {
     brand_id: number | null; category_id: number | null; attributes: TrendyolProductAttribute[];
     dimensional_weight: number | null; cargo_company_id: number | null; status: string;
     sgr_units: number | null;
+    country_of_origin: string | null;
   } | null;
   variants: TrendyolEditorVariant[];
 }
@@ -714,7 +738,7 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
 
   const { data: listing } = await g.supabase
     .from("trendyol_listings")
-    .select("id, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, status, sgr_units")
+    .select("id, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, status, sgr_units, country_of_origin")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
 
   let stored: StoredVariantRow[] = [];
@@ -829,6 +853,7 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
       cargo_company_id: (l.cargo_company_id as number | null) ?? null,
       status: (l.status as string) ?? "draft",
       sgr_units: (l.sgr_units as number | null) ?? null,
+      country_of_origin: (l.country_of_origin as string | null) ?? null,
     } : null,
     variants,
   };
@@ -845,6 +870,11 @@ export interface TrendyolListingInput {
   cargo_company_id: number | null;
   /** Cate ambalaje are produsul, pentru garantia SGR (doar RO, doar bauturi si uleiuri). */
   sgr_units?: number | null;
+  /**
+   * ⚠ Tara in care s-a FABRICAT produsul (ISO2), nu tara vanzatorului. Goala, se cade pe cea
+   * din setarile magazinului. Ceruta de ei la nivel de produs din 23.10.2026.
+   */
+  country_of_origin?: string | null;
   variants: {
     barcode: string; stock_code: string | null; attributes: TrendyolProductAttribute[];
     /**
@@ -880,7 +910,11 @@ export async function saveTrendyolListing(
       brand_id: input.brand_id, category_id: input.category_id,
       attributes: (input.attributes as unknown) as never,
       dimensional_weight: input.dimensional_weight, cargo_company_id: input.cargo_company_id,
-      sgr_units: input.sgr_units ?? null, updated_at: now,
+      sgr_units: input.sgr_units ?? null,
+      /* ⚠ Tara de FABRICATIE a produsului. Goala aici, se foloseste cea din setari; lipsind si
+         aia, publicarea se opreste cu mesaj in loc sa declare ceva neadevarat. */
+      country_of_origin: (input.country_of_origin ?? "").trim().toUpperCase() || null,
+      updated_at: now,
     } as never,
     { onConflict: "business_id,product_main_id" },
   ).select("id").single();
@@ -1499,6 +1533,27 @@ export async function markTrendyolInvoiced(
   businessId: string, orderId: string, invoiceNumber?: string,
 ): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => setPackageStatus(admin, ctx, orderId, "Invoiced", invoiceNumber?.trim() || undefined));
+  if ("error" in res) return { error: res.error };
+  revalidatePath("/dashboard/orders");
+  return { success: true, status: res.status, avertisment: res.avertisment };
+}
+
+/**
+ * „Nu pot furniza comanda asta": anulare adevarata, la ei si la noi.
+ *
+ * ═══ ⚠ ASTA INLOCUIESTE „ANULAT" DIN SELECTORUL GENERIC ═══
+ *
+ * Selectorul generic schimba starea doar la noi. Comanda ramanea activa la Trendyol si pleca
+ * la client, iar recitirea revendica marfa inapoi in stoc. De azi comenzile Trendyol sunt in
+ * `MARKETPLACE_CU_CICLU_PROPRIU`, deci selectorul nu le mai atinge — si asta e iesirea.
+ *
+ * ⚠ MOTIVUL E OBLIGATORIU LA EI, si e si drept: o anulare fara motiv le ramane in socoteala
+ * vanzatorului fara sa se stie de ce.
+ */
+export async function anuleazaComandaTrendyol(
+  businessId: string, orderId: string, reasonId: number,
+): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
+  const res = await withContext(businessId, (admin, ctx) => nuPotFurniza(admin, ctx, orderId, reasonId));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
   return { success: true, status: res.status, avertisment: res.avertisment };

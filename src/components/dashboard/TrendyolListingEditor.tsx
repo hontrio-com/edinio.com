@@ -67,6 +67,7 @@ export function TrendyolListingEditor({
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [dimWeight, setDimWeight] = useState("");
   const [sgrUnits, setSgrUnits] = useState("");
+  const [taraOrigine, setTaraOrigine] = useState("");
   const [listingAttrSel, setListingAttrSel] = useState<Record<number, AttrSel>>({});
   // Ce a fost completat automat, ca sa i se spuna comerciantului de unde vine.
   const [completate, setCompletate] = useState<Record<number, "firma" | "produs">>({});
@@ -95,6 +96,7 @@ export function TrendyolListingEditor({
       }
       setDimWeight(ed.listing?.dimensional_weight != null ? String(ed.listing.dimensional_weight) : "");
       setSgrUnits(ed.listing?.sgr_units != null ? String(ed.listing.sgr_units) : "");
+      setTaraOrigine((ed.listing?.country_of_origin ?? "").toUpperCase());
       setVariants(ed.variants);
       /*
        * Atributele DE VARIANTA se reincarca in stare.
@@ -358,6 +360,9 @@ export function TrendyolListingEditor({
       // ambalaje) ar fi picat altfel abia la baza de date, cu un mesaj care nu
       // numeste campul, dupa ce omul completase tot formularul.
       sgr_units: sgrUnits.trim() === "" ? null : Math.max(1, Math.floor(Number(sgrUnits)) || 1),
+      // ⚠ Tara de FABRICATIE a acestui produs. Goala, se foloseste cea din setarile
+      // magazinului — si de-aia campul are voie sa ramana gol.
+      country_of_origin: taraOrigine.trim() === "" ? null : taraOrigine.trim().toUpperCase(),
       // Curierul nu face parte din produs pe marketplace-ul international; se
       // declara la expediere, o data cu AWB-ul.
       cargo_company_id: null,
@@ -550,6 +555,31 @@ export function TrendyolListingEditor({
           <label className="block text-xs font-medium text-muted-foreground mb-1">Greutate (desi/kg, opțional)</label>
           <input type="number" step="0.1" min="0" value={dimWeight} onChange={(e) => setDimWeight(e.target.value)}
             placeholder="auto din greutatea produsului" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+        </div>
+        {/*
+          ⚠ ȚARA DE FABRICAȚIE: conducta exista de-o săptămână, robinetul nu (26.08.2026).
+
+          `country_of_origin` pe listare, `default_country_of_origin` în config și `origin` în
+          payload erau toate scrise și legate — dar nicăieri în panou nu se putea completa
+          vreuna, deci câmpul pleca gol la toată lumea.
+
+          ⚠ Nu e obligatoriu: gol aici, se folosește cel din setările magazinului. Trendyol îl
+          cere obligatoriu de la 23.10.2026, iar până atunci lipsa lui nu strică nimic.
+        */}
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Țara de fabricație (opțional)
+          </label>
+          <input
+            value={taraOrigine}
+            onChange={(e) => setTaraOrigine(e.target.value.toUpperCase().slice(0, 2))}
+            placeholder="ex. DE" maxLength={2}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono uppercase"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Unde se fabrică produsul, nu unde ești tu. Lăsat gol, se folosește țara implicită
+            din setările Trendyol.
+          </p>
         </div>
         {/*
           Garanția SGR: obligatorie prin lege în România, dar DOAR pe băuturi și

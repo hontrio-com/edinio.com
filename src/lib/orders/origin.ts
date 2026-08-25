@@ -60,14 +60,22 @@ export const MARKETPLACE_ORIGINI: Record<string, { label: string; badge: string 
  * ⚠ SI NU EXISTA DRUM INAPOI: `salveazaComenzi` (POST /order/save) e scrisa in client si
  * n-are niciun apelant. Deci nimic din ce se apasa aici nu ajunge vreodata la ei.
  *
- * ⚠ DE CE NUMAI eMAG DEOCAMDATA, desi scaparea e aceeasi la toate trei. La Trendyol
- * iesirea exista si merge — dar prin actiuni PROPRII (`setPackageStatus`,
- * `sendTrackingNumber`), nu prin selectorul generic. Deci si acolo selectorul schimba doar
- * starea locala. A opri si acolo e insa o hotarare de produs, nu o reparatie: ar lua un
- * buton pe care comerciantii il folosesc azi. Se adauga aici cand se hotaraste, si e un
- * singur cuvant.
+ * ═══ ⚠ SI TRENDYOL, DE PE 26.08.2026 ═══
+ *
+ * A stat pe dinafara o zi, si nota de aici spunea de ce: „ar lua un buton pe care comerciantii
+ * il folosesc azi". Argumentul era bun si a incetat sa fie, fiindca butonul are acum inlocuitor
+ * adevarat — `nuPotFurniza`, care anuleaza INTAI la ei si abia apoi la noi.
+ *
+ * ⚠ SI ASTA E ORDINEA CARE CONTEAZA: intai calea oficiala, pe urma blocarea celei gresite.
+ * Invers, comerciantul ar fi ramas fara nicio cale de a spune „nu pot furniza" — iar o comanda
+ * pe care n-o poti nici onora, nici anula e mai rea decat una anulata stramb.
+ *
+ * ⚠ CE FACEA „ANULAT" DIN SELECTOR PE O COMANDA TRENDYOL: elibera stocul la noi, iar la ei
+ * comanda ramanea activa si pleca la client. La prima recitire, reconcilierea o aducea inapoi
+ * si revendica marfa — daca intre timp se vanduse, stocul intra pe minus si ramanea doar un
+ * rand in jurnal.
  */
-export const MARKETPLACE_CU_CICLU_PROPRIU = new Set(["emag"]);
+export const MARKETPLACE_CU_CICLU_PROPRIU = new Set(["emag", "trendyol"]);
 
 /**
  * Cheia marketplace-ului care tine ciclul comenzii, sau `null` daca il tinem noi.

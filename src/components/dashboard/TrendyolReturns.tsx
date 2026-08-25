@@ -41,7 +41,17 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
   const [retururi, setRetururi] = useState<RandRetur[] | null>(null);
   const [motive, setMotive] = useState<{ id: number; nume: string }[]>([]);
   const [doarDeHotarat, setDoarDeHotarat] = useState(true);
-  const [alese, setAlese] = useState<Set<string>>(new Set());
+  /*
+   * ⚠ BIFATELE SE TIN PE CERERE, NU LA GRAMADA (26.08.2026).
+   *
+   * Era o singura multime peste tot ecranul. Cu doua retururi deschise, „Acceptă" de la primul
+   * trimitea si liniile bifate la al doilea — iar serverul le lua ca atare.
+   *
+   * ⚠ Serverul le verifica acum oricum (o actiune se poate chema si fara ecran), dar ecranul
+   * n-are voie sa CEARA ceva gresit: altfel omul apasa si primeste un refuz pe care nu-l
+   * intelege, in loc sa nu poata gresi.
+   */
+  const [alese, setAlese] = useState<Record<string, Set<string>>>({});
   const [motivAles, setMotivAles] = useState<string>("");
   const [explicatie, setExplicatie] = useState("");
   const [seIncarca, incepe] = useTransition();
@@ -59,17 +69,17 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { incarca(); }, [businessId]);
 
-  function comuta(id: string) {
+  function comuta(claimId: string, id: string) {
     setAlese((p) => {
-      const n = new Set(p);
+      const n = new Set(p[claimId] ?? []);
       if (n.has(id)) n.delete(id); else n.add(id);
-      return n;
+      return { ...p, [claimId]: n };
     });
   }
 
   function hotaraste(claimId: string, accepta: boolean) {
-    const ids = [...alese];
-    if (ids.length === 0) { toast.error("Bifează întâi liniile."); return; }
+    const ids = [...(alese[claimId] ?? [])];
+    if (ids.length === 0) { toast.error("Bifează întâi liniile din acest retur."); return; }
     incepe(async () => {
       const r = await hotarasteReturTrendyol(businessId, {
         claimId, claimItemIds: ids, accepta,
@@ -78,7 +88,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
       });
       if ("error" in r) { toast.error(r.error); return; }
       toast.success(accepta ? "Returul a fost acceptat." : "Returul a fost respins.");
-      setAlese(new Set());
+      setAlese((p) => ({ ...p, [claimId]: new Set() }));
       setExplicatie("");
       incarca();
     });
@@ -148,8 +158,8 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                   <input
                     type="checkbox"
                     className="mt-0.5"
-                    checked={alese.has(l.claimItemId)}
-                    onChange={() => comuta(l.claimItemId)}
+                    checked={alese[r.claimId]?.has(l.claimItemId) ?? false}
+                    onChange={() => comuta(r.claimId, l.claimItemId)}
                     aria-label={`Alege ${l.numeProdus ?? l.barcode ?? "linia"}`}
                   />
                   <span className="min-w-0 flex-1">
@@ -223,7 +233,10 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                   <button
                     type="button"
                     onClick={() => hotaraste(r.claimId, false)}
-                    disabled={seIncarca || !motivAles || !explicatie.trim()}
+                    disabled={
+                      seIncarca || !motivAles || !explicatie.trim()
+                      || (alese[r.claimId]?.size ?? 0) === 0
+                    }
                     className="rounded-lg border border-red-300 px-3 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
                   >
                     Trimite respingerea

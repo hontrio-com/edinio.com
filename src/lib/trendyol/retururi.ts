@@ -3,7 +3,8 @@ import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { approveClaimItems, getClaims, isTrendyolError, rejectClaimItems } from "./client";
 import type { TrendyolSyncContext } from "./sync";
-import type { TrendyolClaim, TrendyolClaimItem } from "./types";
+import type { TrendyolClaim } from "./types";
+import { idCererii, idPachetului, liniileReturului } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchTrendyolConfig } from "./config";
 
@@ -41,20 +42,11 @@ const FEREASTRA_INITIALA_MS = 14 * 24 * 60 * 60 * 1000;
  */
 const FEREASTRA_MAXIMA_MS = 14 * 24 * 60 * 60 * 1000;
 
+/** ⚠ Plafonul LOR pentru explicatia respingerii. Peste el, cererea e refuzata intreaga. */
+const MAX_EXPLICATIE = 500;
+
 /** Cate pagini se citesc intr-o trecere. */
 const PAGINI_PE_TRECERE = 3;
-
-/** Liniile cererii, oricare ar fi numele campului in raspunsul lor. */
-function liniile(c: TrendyolClaim): TrendyolClaimItem[] {
-  const brute = Array.isArray(c.items) ? c.items : Array.isArray(c.claimItems) ? c.claimItems : [];
-  return brute.filter((x): x is TrendyolClaimItem => !!x && typeof x === "object");
-}
-
-/** Id-ul unei linii, oricare ar fi numele lui. */
-function idLinie(l: TrendyolClaimItem): string | null {
-  const brut = l.claimItemId ?? l.id;
-  return typeof brut === "string" && brut.trim() ? brut.trim() : null;
-}
 
 function laData(ms: unknown): string | null {
   const n = Number(ms);
@@ -95,7 +87,7 @@ export async function aduRetururile(
 
     const continut = res.data?.content ?? [];
     for (const c of continut) {
-      const idCerere = typeof c.id === "string" && c.id.trim() ? c.id.trim() : null;
+      const idCerere = idCererii(c);
       if (!idCerere) continue;
       const scris = await scrieCererea(admin, ctx, c, idCerere);
       if (!scris) { ok = false; continue; }
@@ -155,7 +147,7 @@ async function scrieCererea(
     order_id: orderId,
     claim_id: idCerere,
     order_number: c.orderNumber ?? null,
-    shipment_package_id: Number.isFinite(Number(c.shipmentPackageId)) ? Number(c.shipmentPackageId) : null,
+    shipment_package_id: idPachetului(c),
     claim_status: c.status ?? null,
     /* ⚠ Raspunsul lor INTREG: forma cererilor nu e in schema pe care o avem. */
     raw: c as never,
@@ -174,28 +166,28 @@ async function scrieCererea(
   }
 
   const claimRowId = (cerere as { id: string }).id;
-  for (const l of liniile(c)) {
-    const idl = idLinie(l);
-    if (!idl) continue;
+  for (const l of liniileReturului(c)) {
     const { error: eLinie } = await admin.from("trendyol_claim_items").upsert({
       business_id: ctx.businessId,
       claim_row_id: claimRowId,
-      claim_item_id: idl,
-      barcode: l.barcode ?? null,
-      product_name: l.productName ?? null,
-      /* ⚠ Implicit 1, nu 0: o linie fara cantitate e tot o bucata intoarsa, iar zero ar fi
-         facut-o sa para o cerere goala. */
-      quantity: Number.isFinite(Number(l.quantity)) && Number(l.quantity) > 0 ? Number(l.quantity) : 1,
-      reason: l.customerClaimItemReason?.name ?? l.trendyolClaimItemReason?.name ?? null,
-      customer_note: l.customerNote ?? null,
-      raw: l as never,
+      claim_item_id: l.claimItemId,
+      order_line_id: l.orderLineId,
+      barcode: l.barcode,
+      product_name: l.numeProdus,
+      quantity: l.cantitate,
+      reason: l.motiv,
+      customer_note: l.notaClient,
+      /* ⚠ Starea LINIEI, nu a cererii: o cerere „in analiza" poate avea deja bucati hotarate. */
+      claim_item_status: l.stare,
+      raw: l.brut as never,
       updated_at: new Date().toISOString(),
     } as never, { onConflict: "business_id,claim_item_id" });
     if (eLinie) {
       await logError({
         action: "trendyol/retururi",
         message: `linia returului nu s-a putut scrie: ${eLinie.message}`,
-        details: { claimId: idCerere, claimItemId: idl }, businessId: ctx.businessId, severity: "warning",
+        details: { claimId: idCerere, claimItemId: l.claimItemId },
+        businessId: ctx.businessId, severity: "warning",
       });
       return false;
     }
@@ -215,6 +207,39 @@ export async function hotarasteRetur(
 ): Promise<{ ok: true } | { error: string }> {
   if (p.claimItemIds.length === 0) return { error: "Alege întâi liniile de retur." };
 
+  /*
+   * ═══ ⚠ LINIILE TREBUIE SA FIE CHIAR ALE CERERII ASTEIA (26.08.2026) ═══
+   *
+   * Panoul tinea o singura lista de bifate peste toate cererile de pe ecran. Cu doua cereri
+   * deschise, apasarea pe „Acceptă" de la prima trimitea si liniile bifate la a doua — iar noi
+   * le trimiteam mai departe fara sa ne uitam.
+   *
+   * ⚠ Si scrierea locala se face pe `claim_row_id`, nu doar pe id-uri: altfel ce refuza ei
+   * ramane marcat hotarat la noi, si cele doua parti pleaca una de langa alta.
+   *
+   * ⚠ NU E DOAR IGIENA DE PANOU. Actiunile de server se pot chema cu orice argumente, printr-un
+   * POST direct — verificarea trebuie sa fie AICI, nu in ecran.
+   */
+  const cerere = randCitit<{ id: string }>("trendyol.cerereaDeHotarat", await admin
+    .from("trendyol_claims").select("id")
+    .eq("business_id", ctx.businessId).eq("claim_id", p.claimId).maybeSingle() as never);
+  if (!cerere) return { error: "Returul nu există în magazinul tău." };
+
+  const aleCererii = randuriCitite<{ claim_item_id: string }>("trendyol.liniileCererii", await admin
+    .from("trendyol_claim_items").select("claim_item_id")
+    .eq("business_id", ctx.businessId).eq("claim_row_id", cerere.id) as never);
+  const ingaduite = new Set(aleCererii.map((l) => l.claim_item_id));
+  const straine = p.claimItemIds.filter((id) => !ingaduite.has(id));
+  if (straine.length > 0) {
+    await logError({
+      action: "trendyol/retururi",
+      message: "s-au cerut linii care nu sunt ale returului; hotararea nu s-a trimis",
+      details: { claimId: p.claimId, straine: straine.slice(0, 10) },
+      businessId: ctx.businessId, severity: "warning",
+    });
+    return { error: "Unele linii bifate nu sunt din acest retur. Reîncarcă pagina și încearcă din nou." };
+  }
+
   if (p.accepta) {
     const res = await approveClaimItems(ctx.auth, p.claimId, p.claimItemIds);
     if (isTrendyolError(res)) return { error: res.error };
@@ -224,6 +249,11 @@ export async function hotarasteRetur(
     if (!p.motivId) return { error: "Alege motivul respingerii." };
     const explicatie = (p.explicatie ?? "").trim();
     if (!explicatie) return { error: "Scrie de ce respingi returul." };
+    /* ⚠ 500 de caractere e plafonul LOR. Taiata aici, explicatia pleaca; netaiata, cererea e
+       refuzata intreaga si comerciantul nu afla de ce. */
+    if (explicatie.length > MAX_EXPLICATIE) {
+      return { error: `Explicația poate avea cel mult ${MAX_EXPLICATIE} de caractere.` };
+    }
     const res = await rejectClaimItems(ctx.auth, p.claimId, {
       claimIssueReasonId: p.motivId,
       claimItemIdList: p.claimItemIds,
@@ -240,7 +270,9 @@ export async function hotarasteRetur(
       decis_la: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     } as never)
-    .eq("business_id", ctx.businessId).in("claim_item_id", p.claimItemIds);
+    .eq("business_id", ctx.businessId)
+    .eq("claim_row_id", cerere.id)
+    .in("claim_item_id", p.claimItemIds);
 
   if (error) {
     await logError({
@@ -261,54 +293,42 @@ export async function hotarasteRetur(
 export async function repuneInStoc(
   admin: Db, ctx: TrendyolSyncContext, claimItemId: string,
 ): Promise<{ ok: true; pus: number } | { error: string }> {
-  const linie = randCitit<{
-    id: string; barcode: string | null; quantity: number; repus_in_stoc_la: string | null;
-  }>("trendyol.liniaDeRepus", await admin
-    .from("trendyol_claim_items").select("id, barcode, quantity, repus_in_stoc_la")
-    .eq("business_id", ctx.businessId).eq("claim_item_id", claimItemId).maybeSingle() as never);
-
-  if (!linie) return { error: "Linia de retur nu există." };
-  if (linie.repus_in_stoc_la) return { ok: true, pus: 0 };
-  if (!linie.barcode) return { error: "Linia n-are cod de bare, deci nu știm ce produs să punem înapoi." };
-
-  /* Barcode -> varianta -> produs. Tot ce leaga marfa lor de a noastra. */
-  const varianta = randCitit<{ listing_id: string; variant_title: string | null }>(
-    "trendyol.variantaReturului", await admin
-      .from("trendyol_variants").select("listing_id, variant_title")
-      .eq("business_id", ctx.businessId).eq("barcode", linie.barcode).maybeSingle() as never);
-  if (!varianta) return { error: "Codul de bare nu e legat de niciun produs din magazin." };
-
-  const listare = randCitit<{ product_id: string | null }>("trendyol.listareaReturului", await admin
-    .from("trendyol_listings").select("product_id").eq("id", varianta.listing_id).maybeSingle() as never);
-  if (!listare?.product_id) return { error: "Listarea nu mai are produs legat." };
-
   /*
-   * ⚠ SE FOLOSESTE FUNCTIA CASEI, nu una scrisa aici. `elibereaza_stoc_complet` e chiar cea
-   * prin care se intoarce stocul la anulari, si stie amandoua felurile: produsul intreg si
-   * combinatia. O a doua adunare scrisa langa ea s-ar fi despartit de prima la prima
-   * schimbare — si stocul e ultimul loc unde iti permiti doua socoteli.
+   * ═══ ⚠ ERA IN TREI PASI, DECI SE PUTEA DUBLA (26.08.2026) ═══
    *
-   * ⚠ Variantele merg pe `variant_title`, nu pe un id: aceeasi lectie ca la marketplace-uri —
-   * indicii se muta cand comerciantul rearanjeaza combinatiile, titlurile nu.
+   * Citeste marcajul → aduna stocul → scrie marcajul. Doua apasari repezi treceau amandoua de
+   * citire cu marcajul gol si adunau amandoua. Sau adunarea reusea si scrierea marcajului pica,
+   * iar omul incerca din nou — cu acelasi capat.
+   *
+   * ⚠ ACUM E O SINGURA TRANZACTIE, cu randul luat `for update` inauntru. A doua apasare
+   * asteapta, apoi vede marcajul si nu mai adauga nimic. Stocul e ultimul loc unde iti permiti
+   * doua socoteli, si „idempotent" scris in comentariu nu tine loc de blocare.
    */
-  const peProdus = varianta.variant_title
-    ? []
-    : [{ product_id: listare.product_id, quantity: linie.quantity }];
-  const peVarianta = varianta.variant_title
-    ? [{ product_id: listare.product_id, variant_title: varianta.variant_title, quantity: linie.quantity }]
-    : [];
-
-  const { error } = await admin.rpc("elibereaza_stoc_complet", {
-    p_produse: peProdus as never,
-    p_variante: peVarianta as never,
+  const { data, error } = await admin.rpc("trendyol_repune_stoc_retur", {
+    p_business_id: ctx.businessId,
+    p_claim_item_id: claimItemId,
   });
-  if (error) return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
 
-  await admin.from("trendyol_claim_items")
-    .update({ repus_in_stoc_la: new Date().toISOString(), updated_at: new Date().toISOString() } as never)
-    .eq("id", linie.id);
+  if (error) {
+    await logError({
+      action: "trendyol/retururi",
+      message: `repunerea in stoc a picat: ${error.message}`,
+      details: { claimItemId }, businessId: ctx.businessId, severity: "warning",
+    });
+    return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
+  }
 
-  return { ok: true, pus: linie.quantity };
+  const r = (data ?? {}) as { stare?: string; pus?: number };
+  switch (r.stare) {
+    case "pus": return { ok: true, pus: Number(r.pus) || 0 };
+    /* Nu e o eroare: e chiar raspunsul corect la a doua apasare. */
+    case "deja": return { ok: true, pus: 0 };
+    case "lipsa": return { error: "Linia de retur nu există." };
+    case "fara-cod": return { error: "Linia n-are cod de bare, deci nu știm ce produs să punem înapoi." };
+    case "cod-nelegat": return { error: "Codul de bare nu e legat de niciun produs din magazin." };
+    case "fara-produs": return { error: "Listarea nu mai are produs legat." };
+    default: return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
+  }
 }
 
 /** Cate cereri asteapta o hotarare. Pentru pastila din panou. */

@@ -68,7 +68,21 @@ test("⚠ o cerere noua reaprinde randul abandonat", () => {
   for (const camp of ["attempts: 0", "next_retry_at: null", "abandonat_la: null", "last_error: null"]) {
     assert.match(coada, new RegExp(camp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), camp);
   }
-  assert.equal((coada.match(/\.\.\.CERERE_NOUA/g) ?? []).length, 2, "si la unul, si la mai multe");
+  /*
+   * ⚠ SE NUMARA CAILE, NU APARITIILE. Proba cerea pana azi exact doua aparitii, si a picat
+   * cand a aparut a treia — `publicaProduseNoiTrendyolMany`, o cale NOUA si corecta. Un numar
+   * fix ar fi pedepsit tocmai adaugarea pe care regula o cere.
+   *
+   * Regula adevarata e: ORICE cale care pune la coada trebuie sa stearga marcajul de abandon.
+   */
+  for (const cale of ["enqueueTrendyolSync", "enqueueMany", "publicaProduseNoiTrendyolMany"]) {
+    const i = coada.indexOf(`function ${cale}(`);
+    assert.ok(i > 0, `exista ${cale}`);
+    /* Corpul functiei: de la ea pana la urmatorul `export`, oricare ar fi el. */
+    const urm = coada.slice(i + 10).search(/^export /m);
+    const corp = urm > 0 ? coada.slice(i, i + 10 + urm) : coada.slice(i);
+    assert.match(corp, /\.\.\.CERERE_NOUA/, `${cale} sterge marcajul de abandon`);
+  }
 });
 
 test("⚠ un refuz asteapta crescator, nu se reia din cinci in cinci minute", () => {
@@ -238,9 +252,21 @@ test("⚠ cand marfa e inca vandabila, randul RAMANE ca piatra de mormant", () =
   /* Sters, n-am mai fi stiut nimic. Ramas, coada reia stergerea si panoul il poate arata. */
   const i = sync.indexOf("async function scoateDeLaVanzare(");
   const f = sync.slice(i, i + 3000);
-  assert.match(f, /if \(!arhivat && zero\.verdict !== "gata"\) \{/);
+  /*
+   * ⚠ PAZA CEREA PANA AZI DOUA CONDITII, si a doua o slabea. `zero.verdict === "gata"` inseamna
+   * doar ca lotul de stoc a fost PRIMIT de ei — iar in registrul nostru loturile de stoc pica
+   * la ei de trei ori din zece (632 esuate din 1954, masurat pe traficul real). Deci „SI
+   * zeroizarea n-a iesit gata" lasa sa treaca tocmai cazul in care nici arhivarea n-a mers.
+   *
+   * Arhivarea e singura care scoate marfa din vanzare fara sa depinda de un lot de urmarit.
+   * Atunci ea singura poate fi si conditia.
+   */
+  assert.match(f, /if \(!arhivat\) \{/);
+  assert.doesNotMatch(f, /!arhivat && zero\.verdict/, "a doua conditie nu se intoarce");
   assert.match(f, /status: "removing"/);
-  assert.match(f, /status: zero\.verdict === "trecatoare" \? 0 : undefined,/);
+  /* ⚠ Si e TRECATOR de la oricare din cele doua: o pana de retea la arhivare merita reincercata
+     fara sa arda o incercare, la fel ca una la zeroizare. */
+  assert.match(f, /eTrecatoare\(arh\.status\) \|\| zero\.verdict === "trecatoare"/);
 });
 
 test("⚠ zeroizarea are TREI verdicte si scrie in jurnal, nu in consola", () => {
@@ -256,7 +282,16 @@ test("⚠ si Trendyol chiar are stergere, pe care n-o foloseam", () => {
   assert.match(client, /export function deleteProducts\(auth: TrendyolAuth, barcodes: string\[\]\)/);
   assert.match(client, /"DELETE", `\/integration\/product\/sellers\/\$\{auth\.supplierId\}\/products`/);
   /* ⚠ Si lotul de stergere intra in registru, ca sa se poata afla verdictul lor. */
-  assert.match(sync, /recordBatch\(admin, ctx\.businessId, ster\.data\.batchRequestId, "delete", zero\.barcoduri\)/);
+  /*
+   * ⚠ SI LOTUL POARTA ID-UL LISTARII, nu barcodurile: la confirmare trebuie sa stim ce rand sa
+   * uitam, iar barcodurile n-ar duce inapoi la el decat printr-o a doua citire.
+   *
+   * ⚠ Randul NU se mai sterge la primirea lotului. „Primit de ei" nu e „facut": in registrul
+   * nostru loturile pica la ei des (632 esuate din 1954 la stoc, 78 din 150 la produs). Sta pe
+   * `removing` pana cand `pollOpenBatches` afla ce s-a intamplat cu adevarat.
+   */
+  assert.match(sync, /recordBatch\(admin, ctx\.businessId, idLot, "delete", \[listing\.id\]\)/);
+  assert.match(sync, /\} else if \(b\.kind === "delete"\) \{/, "si lotul se citeste la sondare");
 });
 
 /* ── 7) Configurarea nu se mai rescrie intreaga ────────────────────────────── */

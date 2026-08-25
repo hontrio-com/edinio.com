@@ -87,8 +87,10 @@ export function eTrecatoare(status: number | undefined): boolean {
 }
 
 export async function loadTrendyolContext(admin: Db, businessId: string): Promise<TrendyolSyncContext | null> {
-  const { data: ss } = await admin
-    .from("store_settings").select("trendyol_config").eq("business_id", businessId).maybeSingle();
+  /* ⚠ `null` de aici insemna „magazinul nu e conectat", si toti cei opt apelanti sar peste el
+     in tacere. O pana de o clipa oprea deci tot Trendyol-ul unui magazin, fara nicio urma. */
+  const ss = randCitit<{ trendyol_config: unknown }>("trendyol.context", await admin
+    .from("store_settings").select("trendyol_config").eq("business_id", businessId).maybeSingle() as never);
   const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
   if (!config.connected || !config.api_key || !config.api_secret || !config.supplier_id) return null;
   return {
@@ -130,11 +132,13 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
   return (data as ListingRow) ?? null;
 }
 async function getListingByMainId(admin: Db, businessId: string, mainId: string): Promise<ListingRow | null> {
-  const { data } = await admin
+  /* ⚠ `removeByMainId` citeste `null` ca „n-are listare, deci n-am ce retrage" si sare. O pana
+     de o clipa arata identic — si retragerea se pierde tacut, cu produsul ramas la vanzare pe
+     Trendyol dupa ce a fost scos din magazin. */
+  return randCitit<ListingRow>("trendyol.listareDupaMainId", await admin
     .from("trendyol_listings")
     .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units, country_of_origin")
-    .eq("business_id", businessId).eq("product_main_id", mainId).maybeSingle();
-  return (data as ListingRow) ?? null;
+    .eq("business_id", businessId).eq("product_main_id", mainId).maybeSingle() as never);
 }
 
 function toEnrichment(row: ListingRow): TrendyolListingEnrichment {
@@ -149,11 +153,16 @@ function toEnrichment(row: ListingRow): TrendyolListingEnrichment {
 }
 
 async function getVariantData(admin: Db, listingId: string): Promise<TrendyolVariantData[]> {
-  const { data } = await admin
+  /* ⚠ O lista goala inseamna „produsul n-are variante", si de-acolo pleaca mai departe un
+     produs fara niciun articol. Picata, citirea arata la fel. */
+  const data = randuriCitite<Record<string, never>>("trendyol.varianteleListarii", await admin
     .from("trendyol_variants")
     .select("barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
-    .eq("listing_id", listingId);
-  return (data ?? []).map((v) => ({
+    .eq("listing_id", listingId) as never) as unknown as {
+      barcode: string; stock_code: string | null; variant_title: string | null; attributes: unknown;
+      quantity: number; list_price: number | null; sale_price: number | null; vat_rate: number | null; enabled: boolean;
+    }[];
+  return data.map((v) => ({
     barcode: v.barcode,
     stock_code: v.stock_code,
     variant_title: v.variant_title,
@@ -490,10 +499,11 @@ export async function syncProductNow(
 export async function barcoduriDejaLaEi(
   admin: Db, ctx: TrendyolSyncContext, listing: ListingRow, barcoduri: string[],
 ): Promise<Set<string>> {
-  const { data } = await admin.from("trendyol_variants")
-    .select("barcode, exista_la_ei").eq("listing_id", listing.id);
+  const data = randuriCitite<{ barcode: string; exista_la_ei: boolean }>(
+    "trendyol.barcoduriStiute", await admin.from("trendyol_variants")
+      .select("barcode, exista_la_ei").eq("listing_id", listing.id) as never);
   const stiute = new Set(
-    (data ?? []).filter((v) => (v as { exista_la_ei: boolean }).exista_la_ei)
+    data.filter((v) => (v as { exista_la_ei: boolean }).exista_la_ei)
       .map((v) => (v as { barcode: string }).barcode),
   );
   /*
@@ -743,9 +753,11 @@ export async function syncProductsBulk(
   const ids = [...new Set(productIds.filter(Boolean))];
   if (ids.length === 0) return out;
 
-  const { data: produse } = await admin
-    .from("products").select(PRODUCT_FIELDS).eq("business_id", ctx.businessId).in("id", ids);
-  const lista = (produse ?? []) as unknown as MappableProduct[];
+  /* ⚠ Lista goala inseamna „niciun produs de pregatit", si lotul se incheie ca reusit fara sa
+     fi trimis nimic. */
+  const lista = randuriCitite<Record<string, never>>("trendyol.produseDePregatit", await admin
+    .from("products").select(PRODUCT_FIELDS).eq("business_id", ctx.businessId).in("id", ids) as never
+  ) as unknown as MappableProduct[];
 
   // Fiecare produs isi pregateste listarea; erorile sunt per produs, ca sa nu
   // pice toata selectia din cauza unuia fara categorie mapata.
@@ -1086,12 +1098,26 @@ async function scoateDeLaVanzare(
    * verdictul trimite elementul inapoi in coada — trecator daca a fost o pana, altfel omul
    * il vede in panou pe `removing`.
    */
-  if (!arhivat && zero.verdict !== "gata") {
+  /*
+   * ⚠ PAZA STA NUMAI PE ARHIVARE (26.08.2026).
+   *
+   * Cerea pana azi „arhivarea a picat SI zeroizarea n-a iesit `gata`". Dar `gata` de la
+   * `zeroizeazaStocul` inseamna doar ca lotul a fost PRIMIT — iar in registrul nostru loturile
+   * de stoc pica la ei de trei ori din zece (632 esuate din 1954). Deci a doua conditie lasa sa
+   * treaca tocmai cazul in care nici arhivarea n-a mers, si nici stocul n-a ajuns pe zero.
+   *
+   * Nota de deasupra o spunea deja, cu alte cuvinte: arhivarea e SINGURA care scoate marfa din
+   * vanzare fara sa depinda de un lot pe care trebuie sa-l mai si urmarim. Atunci ea singura
+   * poate fi si conditia.
+   */
+  if (!arhivat) {
     await admin.from("trendyol_listings").update({ status: "removing" } as never).eq("id", listing.id);
     return {
       ok: false,
-      error: `Produsul e inca de vanzare pe Trendyol: ${zero.motiv ?? arh.error}`,
-      status: zero.verdict === "trecatoare" ? 0 : undefined,
+      error: `Produsul e inca de vanzare pe Trendyol: ${arh.error}`,
+      /* ⚠ Trecatoare de la ORICARE dintre cele doua: o pana de retea la arhivare merita
+         reincercata fara sa arda o incercare, la fel ca una la zeroizare. */
+      status: (eTrecatoare(arh.status) || zero.verdict === "trecatoare") ? 0 : undefined,
     };
   }
 
@@ -1108,11 +1134,47 @@ async function scoateDeLaVanzare(
       details: { listingId: listing.id, barcoduri: zero.barcoduri.slice(0, 20), status: ster.status },
       businessId: ctx.businessId, severity: "warning",
     });
-  } else if (ster.data?.batchRequestId) {
-    await recordBatch(admin, ctx.businessId, ster.data.batchRequestId, "delete", zero.barcoduri);
+    /* Refuzata pe loc, dar marfa e arhivata sau pe stoc zero: nu se mai vinde. Randul se uita,
+       ca pana acum — n-avem ce astepta, fiindca nu s-a deschis niciun lot. */
+    await admin.from("trendyol_listings").delete().eq("id", listing.id);
+    return { ok: true, action: "removed" };
   }
 
-  await admin.from("trendyol_listings").delete().eq("id", listing.id);
+  const idLot = ster.data?.batchRequestId;
+  if (!idLot) {
+    /* Fara id de lot n-avem ce urmari; ca mai sus, marfa nu se mai vinde. */
+    await admin.from("trendyol_listings").delete().eq("id", listing.id);
+    return { ok: true, action: "removed" };
+  }
+
+  /*
+   * ═══ ⚠ „PRIMIT DE EI" NU E „FACUT" (26.08.2026) ═══
+   *
+   * Randul se stergea aici, pe increderea ca lotul a fost PRIMIT. Dar la Trendyol toate
+   * miscarile astea sunt loturi asincrone, iar rezultatul adevarat se afla abia din
+   * `getBatchResult`.
+   *
+   * ⚠ MASURAT PE REGISTRUL NOSTRU, pe traficul real al contului:
+   *
+   *     inventory   1322 reusite   632 ESUATE   (32%)
+   *     product       72 reusite    78 ESUATE   (52%)
+   *     update      2451 reusite   148 esuate
+   *
+   * Adica tocmai lotul pe care `zeroizeazaStocul` il declara „gata" de indata ce e primit
+   * pica la ei de trei ori din zece. Sters randul, la noi nu mai ramanea nicio urma ca
+   * produsul a existat vreodata acolo — iar la ei se vindea mai departe.
+   *
+   * ⚠ DECI RANDUL RAMANE `removing` PANA CAND LOTUL CONFIRMA. Nu e o stare de asteptare
+   * inventata: `removing` exista deja si e chiar piatra de mormant pe care o punem cand marfa
+   * e inca vandabila. `pollOpenBatches` o ridica atunci cand lotul de stergere se incheie.
+   *
+   * ⚠ Iar `related_ids` poarta ID-UL LISTARII, nu barcodurile: la confirmare trebuie sa stim
+   * ce rand sa uitam, iar barcodurile nu ne duc inapoi la el decat printr-o a doua citire.
+   */
+  await recordBatch(admin, ctx.businessId, idLot, "delete", [listing.id]);
+  await admin.from("trendyol_listings")
+    .update({ status: "removing", updated_at: new Date().toISOString() } as never)
+    .eq("id", listing.id);
   return { ok: true, action: "removed" };
 }
 
@@ -1420,6 +1482,30 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
       // Lotul de stoc a trecut: contorul de reluari se sterge, ca produsul sa
       // nu ramana cu o datorie veche care sa-l blocheze la urmatoarea problema.
       await reseteazaReluarileDeStoc(admin, ctx, Array.isArray(b.related_ids) ? (b.related_ids as string[]) : []);
+    } else if (b.kind === "delete") {
+      /*
+       * ⚠ ABIA ACUM SE UITA LISTAREA. Pana la confirmarea lotului, randul a stat pe `removing`:
+       * marfa e arhivata si pe stoc zero, deci nu se vinde, dar noi inca nu stiam daca s-a si
+       * sters la ei.
+       *
+       * ⚠ SI LA ESEC SE UITA TOT, dinadins. Stergerea e ultimul pas si cel mai putin important:
+       * produsul e deja scos din vanzare de arhivare si de stocul zero. Tinut pe `removing` la
+       * nesfarsit, i-ar fi ramas comerciantului in panou un rand pe care nu-l poate limpezi cu
+       * nimic. Se scrie in jurnal si se merge mai departe.
+       */
+      const listariDeUitat = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+      if (hardFail) {
+        await logError({
+          action: "trendyol/stergere",
+          message: `lotul de stergere a esuat la ei; produsul ramane arhivat si pe stoc zero: ${errors.slice(0, 2).join("; ")}`,
+          details: { batchRequestId: b.batch_request_id, listari: listariDeUitat.slice(0, 20) },
+          businessId: ctx.businessId, severity: "warning",
+        });
+      }
+      if (listariDeUitat.length > 0) {
+        await admin.from("trendyol_listings")
+          .delete().eq("business_id", ctx.businessId).in("id", listariDeUitat);
+      }
     } else if (b.kind === "inventory" && hardFail) {
       /*
        * Esecul unui lot de stoc nu mai dispare in tacere.
@@ -1540,10 +1626,11 @@ async function jurnalLotEsuat(admin: Db, ctx: TrendyolSyncContext, b: BatchRow, 
     `[trendyol] lot de stoc esuat ${b.batch_request_id} (${mainIds.length} produse): ${errors.slice(0, 3).join("; ")}`,
   );
   if (mainIds.length === 0) return;
-  const { data: listari } = await admin.from("trendyol_listings")
-    .select("id, product_id, inventory_retries")
-    .eq("business_id", ctx.businessId).in("product_main_id", mainIds.slice(0, 200));
-  const randuriListari = (listari ?? []) as { id: string; product_id: string | null; inventory_retries: number | null }[];
+  /* ⚠ Goala, inseamna „n-am ce repune la coada" — si un lot de stoc esuat ramane esuat. */
+  const randuriListari = randuriCitite<{ id: string; product_id: string | null; inventory_retries: number | null }>(
+    "trendyol.listariLotEsuat", await admin.from("trendyol_listings")
+      .select("id, product_id, inventory_retries")
+      .eq("business_id", ctx.businessId).in("product_main_id", mainIds.slice(0, 200)) as never);
   if (randuriListari.length === 0) return;
 
   /*
@@ -1963,11 +2050,16 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
      alta felie. */
   const tura = Math.floor(Date.now() / 60_000);
   const start = total > maxProducts ? (tura * maxProducts) % total : 0;
-  const { data: listings } = await admin
+  /*
+   * ⚠ CEA MAI PERICULOASA TACERE DIN FISIER. Goala, fereastra inseamna „nicio deriva gasita" —
+   * adica exact ce raporteaza si un catalog perfect sincronizat. O pana de o clipa aici arata
+   * din panou ca sanatate.
+   */
+  const listings = randuriCitite<{ product_id: string | null }>("trendyol.fereastraDeriva", await admin
     .from("trendyol_listings").select("product_id")
     .eq("business_id", ctx.businessId).in("status", ["approved", "active"])
     .order("product_id", { ascending: true })
-    .range(start, start + maxProducts - 1);
+    .range(start, start + maxProducts - 1) as never);
 
   const drifted: InventoryItem[] = [];
   /*

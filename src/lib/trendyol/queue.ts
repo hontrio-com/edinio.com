@@ -144,13 +144,29 @@ export async function enqueueTrendyolSync(
         return;
       }
     }
-    await admin.from("trendyol_sync_queue").upsert(
+    /*
+     * ═══ ⚠ SCRIEREA ASTA NU ERA VERIFICATA (26.08.2026) ═══
+     *
+     * PostgREST NU arunca: la refuz raspunde `{ data: null, error }`, iar `await` se termina
+     * linistit. Deci un refuz — plan depasit, politica, o pana de o clipa — insemna: omul
+     * schimba pretul, `await` trece, in coada nu intra nimic, in jurnal nu scrie nimic. Pretul
+     * ramanea vechi pe Trendyol si nimeni n-avea de unde sa afle.
+     *
+     * ⚠ Fratele ei de mai jos (`enqueueMany`) verifica de la inceput. Asta a scapat — chiar
+     * forma de defect pe care casa o vaneaza de o luna, si tot intr-o coada.
+     *
+     * ⚠ `throw` merge in `catch`-ul de dedesubt, deci ajunge la `inghiteDarScrie`: pierderea
+     * ramane pierdere, dar inceteaza sa fie TACUTA. O punere la coada nu are cui sa-i fie
+     * intoarsa — cine a chemat-o e un efect lateral al unei salvari deja facute.
+     */
+    const { error: eCoada } = await admin.from("trendyol_sync_queue").upsert(
       {
         business_id: businessId, product_id: productId, offer_id: offerId, op,
         ...CERERE_NOUA,
       },
       { onConflict: "business_id,offer_id,op" },
     );
+    if (eCoada) throw eCoada;
   } catch (e) {
     inghiteDarScrie("unul", businessId, e, { productId, offerId, op });
   }
@@ -183,8 +199,11 @@ async function enqueueMany(businessId: string, productIds: (string | null | unde
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
     if (ids.length === 0) return;
     const admin = createAdminClient();
-    const { data: ss } = await admin
+    /* ⚠ Picata, citirea da `config = {}`, iar `!config.connected` iese adevarat: tot lotul se
+       arunca tacut, ca si cum magazinul n-ar fi legat. `throw` il duce in `inghiteDarScrie`. */
+    const { data: ss, error: eSetari } = await admin
       .from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
+    if (eSetari) throw eSetari;
     const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
     if (!config.connected || !config.api_key || config.auto_sync === false) return;
     // Actiunile in masa NU auto-publica: ele ating produse existente, iar
@@ -206,6 +225,57 @@ async function enqueueMany(businessId: string, productIds: (string | null | unde
     if (error) throw error;
   } catch (e) {
     inghiteDarScrie("multe", businessId, e, { cate: productIds.length, op });
+  }
+}
+
+/**
+ * Produsele NOI dintr-un import, pe calea de publicare.
+ *
+ * ═══ ⚠ „NOU" SI „ATINS" NU SE ANUNTA LA FEL (26.08.2026) ═══
+ *
+ * `enqueueTrendyolSyncMany` pune la coada numai produsele care au DEJA o listare la ei — asa
+ * si trebuie, altfel orice atingere in masa ar publica tot catalogul. Dar un produs NOU dintr-un
+ * import n-are inca listare, deci pica prin filtru si nu se publica niciodata.
+ *
+ * ⚠ CE INSEMNA PENTRU COMERCIANT: bifa „Publicare automată" pornita, un CSV cu 500 de produse
+ * noi importat — si la Trendyol zero. Nicio eroare, nicaieri. Din formular mergea; din CSV nu.
+ *
+ * ⚠ ACEEASI GAURA A FOST INCHISA LA eMAG CU O ZI INAINTE (`publicaPeEmagMany`). Aici a ramas
+ * pana a gasit-o auditul.
+ *
+ * ⚠ INTREBAREA E `auto_publish`, NU `auto_sync`. Cine spune „preturile le conduc eu din panoul
+ * Trendyol, dar produsele noi sa plece singure" — o combinatie pe care panoul i-o ingaduie —
+ * trebuie sa primeasca exact asta.
+ */
+export async function publicaProduseNoiTrendyolMany(
+  businessId: string, productIds: (string | null | undefined)[],
+): Promise<void> {
+  try {
+    const ids = [...new Set(productIds.filter((x): x is string => !!x))];
+    if (ids.length === 0) return;
+    const admin = createAdminClient();
+    const { data: ss, error: eSetari } = await admin
+      .from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
+    /* ⚠ O citire picata NU se citeste ca „bifa e stinsa": ar fi aruncat tacut tot lotul, iar
+       plasa de siguranta nu-l prinde — cere `last_synced_at`, si un produs nepublicat n-are. */
+    if (eSetari) throw eSetari;
+    const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
+    if (!config.connected || !config.api_key) return;
+    if (config.auto_publish !== true) return;
+
+    /*
+     * ⚠ FARA FILTRUL DE LISTARE, si tocmai asta e rostul: produsele astea NU au listare, si de-aia
+     * sunt aici. `syncProductNow` le construieste listarea din maparea categoriei; cele fara
+     * categorie mapata esueaza zgomotos in coada, cu mesaj, si nu pleaca nimic gresit la ei.
+     */
+    const rows = ids.map((id) => ({
+      business_id: businessId, product_id: id, offer_id: id, op: "upsert" as const, ...CERERE_NOUA,
+    }));
+    const { error } = await admin
+      .from("trendyol_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
+    if (error) throw error;
+  } catch (e) {
+    inghiteDarScrie("multe", businessId, e, { cate: productIds.length, op: "publicare" });
   }
 }
 

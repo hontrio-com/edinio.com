@@ -24,12 +24,24 @@ import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
  *     numarate separat, ar fi trecut de el impreuna fara sa vada nimeni;
  *   - o scriere de produs si o citire de comenzi NU se franeaza una pe alta.
  *
- * ═══ ⚠ SI DE CE LIMITELE SUNT PRUDENTE, NU EXACTE ═══
+ * ═══ ⚠ SI DE CE SUNT DOUA FERESTRE, NU UNA ═══
  *
- * Limitele lor depind de vanzator si nu sunt publicate ca numere pe care sa te poti sprijini.
- * Un numar inventat prea mare nu apara nimic; unul prea mic ar incetini un magazin sanatos.
- * Deci cifrele de mai jos sunt prudente SI, mai important, adevarata aparare e cealalta:
- * cand ei spun 429, `spunePauza` opreste toate instantele pentru cat cer ei.
+ * Limitele lor se numara PE MINUT. Pana azi le tineam pe secunda — „10 pe secunda" la scrierea
+ * de produs — ceea ce suna prudent si nu era: sustinut, inseamna 600 pe minut, adica de cateva
+ * ori peste orice cifra publicata pentru grupul asta. Nu s-a vazut fiindca nu scriem niciodata
+ * un minut la rand; s-ar fi vazut la primul import mare.
+ *
+ * ⚠ Deci fiecare grup are AMANDOUA: un plafon pe minut (cum numara ei) si unul pe secunda (ca
+ * sa nu plece toata fereastra deodata). Se cer amandoua jetoanele, in ordinea asta.
+ *
+ * ⚠ CIFRELE SUNT CELE MAI STRAMTE DINTRE CELE PUBLICATE, si dinadins: sursele publice nu se
+ * potrivesc intre ele, iar limita adevarata e a vanzatorului si difera de la unul la altul.
+ * Cand nu poti sti, alegi partea care nu strica — mai ales ca scrierile de produs si de stoc
+ * pleaca in loturi de pana la o mie de articole, deci un plafon mic de CERERI nu incetineste
+ * aproape nimic.
+ *
+ * ⚠ Iar adevarata aparare ramane cealalta: cand ei spun 429, `spunePauza` opreste toate
+ * instantele pentru cat cer ei.
  */
 
 /**
@@ -37,17 +49,28 @@ import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
  *
  * ⚠ `orders` e separat dinadins: o trecere grea de catalog n-are voie sa intarzie
  * confirmarea unei comenzi sau o miscare de stoc dupa o vanzare.
+ *
+ * ⚠ SI RETURURILE ISI AU GRUPUL LOR. Caile lor trec tot prin `/order/`, deci pana azi cadeau
+ * in galeata comenzilor si mancau din bugetul ei — trei pagini de retururi la fiecare trecere,
+ * luate chiar de la citirea comenzilor, care e cea mai grabita dintre toate.
  */
-export type GrupTrendyol = "product-read" | "product-write" | "inventory" | "orders" | "altele";
+export type GrupTrendyol =
+  | "product-read" | "product-write" | "inventory"
+  | "orders" | "claims-read" | "claims-write" | "altele";
 
-export const LIMITE_TRENDYOL: Record<GrupTrendyol, { limita: number; fereastraMs: number }> = {
-  "product-read": { limita: 20, fereastraMs: 1000 },
-  "product-write": { limita: 10, fereastraMs: 1000 },
-  inventory: { limita: 10, fereastraMs: 1000 },
+export const LIMITE_TRENDYOL: Record<GrupTrendyol, { limita: number; fereastraMs: number; rafala: number }> = {
+  "product-read": { limita: 60, fereastraMs: 60_000, rafala: 5 },
+  "product-write": { limita: 60, fereastraMs: 60_000, rafala: 3 },
+  inventory: { limita: 100, fereastraMs: 60_000, rafala: 5 },
   /* ⚠ Cel mai stramt masurat public: „get shipment packages" porneste pe la 30/minut la
-     vanzatorii mici. Se tine sub el cu bunastiinta. */
-  orders: { limita: 20, fereastraMs: 60_000 },
-  altele: { limita: 5, fereastraMs: 1000 },
+     vanzatorii mici. Se tine sub el cu bunastiinta, si merge asa de o luna. */
+  orders: { limita: 20, fereastraMs: 60_000, rafala: 3 },
+  /* Citirea retururilor: trei pagini la fiecare trecere, si nimic grabit. */
+  "claims-read": { limita: 20, fereastraMs: 60_000, rafala: 2 },
+  /* ⚠ Aprobarea si respingerea sunt apasari de om, cateva pe zi — si sunt cele mai stramte
+     dintre toate la ei. Nu au ce cauta in aceeasi galeata cu citirile. */
+  "claims-write": { limita: 10, fereastraMs: 60_000, rafala: 1 },
+  altele: { limita: 30, fereastraMs: 60_000, rafala: 3 },
 };
 
 /**
@@ -71,6 +94,11 @@ export function cheiaVanzatorului(
  * INAINTEA regulii generale de produs.
  */
 export function grupulCaii(cale: string, metoda: string): GrupTrendyol {
+  /* ⚠ RETURURILE SE INTREABA INAINTEA COMENZILOR: caile lor contin tot `/order/`, deci regula
+     generala le-ar fi inghitit — si asa si facea. */
+  if (cale.includes("/claims") || cale.includes("claim-issue-reasons")) {
+    return metoda === "GET" ? "claims-read" : "claims-write";
+  }
   if (cale.includes("/order/") || cale.includes("/orders") || cale.includes("shipment-packages")) {
     return "orders";
   }
@@ -81,12 +109,20 @@ export function grupulCaii(cale: string, metoda: string): GrupTrendyol {
   return "altele";
 }
 
-/** Asteapta randul pentru o cerere. `false` = n-a venit in bugetul de timp. */
+/**
+ * Asteapta randul pentru o cerere. `false` = n-a venit in bugetul de timp.
+ *
+ * ⚠ SE CER AMANDOUA JETOANELE: cel pe minut (cum numara ei) si cel pe secunda (ca sa nu plece
+ * toata fereastra intr-o clipa). Intai cel pe minut — daca acolo nu e loc, n-are rost sa mai
+ * ardem si o rafala.
+ */
 export async function asteaptaRandulTrendyol(
   supplierId: number | string | undefined, vitrina: string | undefined, grup: GrupTrendyol,
 ): Promise<boolean> {
   const l = LIMITE_TRENDYOL[grup];
-  return asteaptaJetonImpartit(cheiaVanzatorului(supplierId, vitrina, grup), l.limita, l.fereastraMs, "trendyol");
+  const cheie = cheiaVanzatorului(supplierId, vitrina, grup);
+  if (!await asteaptaJetonImpartit(cheie, l.limita, l.fereastraMs, "trendyol")) return false;
+  return asteaptaJetonImpartit(`${cheie}:s`, l.rafala, 1000, "trendyol");
 }
 
 /**

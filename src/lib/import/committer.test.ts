@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -97,4 +98,81 @@ test("publicarea automata din import NU se face neconditionat", async () => {
     sursa, /autoPublish \? publicaPeEmagMany/,
     "publicarea trebuie sa atarne de steag, nu sa fie chemata mereu",
   );
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AUDITUL 9.6 (25.08.2026, seara tarziu) — DOUA DEFECTE DIN CALEA DE IMPORT
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ⚠ `import`, nu `require`: fisierul e ESM. Cu `require`, `npx tsx --test` trecea vesel si
+   `npm test` cadea cu „require is not defined" — adica proba ar fi fost verde la mine si
+   rosie in integrare. */
+const sursaCommitter = () => readFileSync("src/lib/import/committer.ts", "utf8");
+
+test("⚠ produsul poarta randul care l-a creat, si de-aia reluarea nu-l dubleaza", () => {
+  /*
+   * ═══ INSERTUL SI MARCAREA RANDULUI NU SUNT ATOMICE ═══
+   *
+   * Se scrie produsul, apoi se marcheaza randul „created". Cada a doua scriere pica — o
+   * pana de retea, o repornire, un timeout — randul ramane `pending`, trecerea urmatoare
+   * il ia de la capat, si se creeaza AL DOILEA produs identic.
+   *
+   * ⚠ UNICITATEA CARE EXISTA DEJA NU AJUTA: `products_source_external_uidx` cere
+   * `external_id`, iar importurile din fisier n-au. Slugul se dedubleaza singur, deci al
+   * doilea primeste alt slug si trece nestingherit.
+   *
+   * ⚠ MASURAT IN PRODUCTIE, intr-o tranzactie intoarsa inapoi: cu acelasi `import_row_id`
+   * si slug diferit, a doua inserare a fost refuzata cu
+   * `duplicate key value violates unique constraint "products_import_row_uidx"`, iar
+   * citirea pe `(business_id, import_row_id)` a intors chiar produsul dintai.
+   */
+  const c = sursaCommitter();
+  assert.match(c, /import_row_id: it\.rowId/, "cheia pleaca in insert");
+  assert.match(c, /products_import_row_uidx/, "si `23505` pe ea se recunoaste");
+  /* ⚠ Numele indexului sta uneori in `details`, nu in `message`. Cautat doar in `message`,
+     tocmai cazul pentru care s-a facut cheia ar fi fost raportat drept slug duplicat. */
+  assert.match(c, /error\.message \?\? ""\} \$\{error\.details \?\? ""/);
+  /* ⚠ Recuperarea se face pe magazin SI pe rand: fara `business_id`, o citire scapata ar
+     fi putut adopta produsul altcuiva. */
+  assert.match(c, /\.eq\("business_id", businessId\)\.eq\("import_row_id", it\.rowId\)/);
+});
+
+test("⚠ randurile peste limita planului nu se mai marcheaza tacut", () => {
+  /*
+   * `update ... status: "skipped"` fara citirea erorii. O pana lasa randurile `pending`,
+   * iar jobul le numara la nesfarsit ca „mai am de facut" — sau, si mai rau, o trecere
+   * ulterioara cu alt plan le scrie ca produse pe care omul nu le-a platit.
+   */
+  const c = sursaCommitter();
+  assert.match(c, /\{ count, error: eSarite \}/);
+  /* ⚠ Aruncarea sta pe randul urmator, deci potrivirea trece peste spatiul alb: o proba
+     scrisa pe o singura linie ar fi cazut la prima reformatare, nu la un defect. */
+  assert.match(c, /if \(eSarite\) \{\s*throw new Error\(/);
+});
+
+test("⚠ marcarea randului picata se scrie in jurnal, nu se pierde", () => {
+  /* Cu cheia de idempotenta, o marcare picata nu mai dubleaza nimic — dar tot tine jobul
+     in loc. Trebuie sa se vada CE nu se poate scrie, nu doar ca nu se termina. */
+  const c = sursaCommitter();
+  assert.match(c, /\{ error: eMarcaj \}/);
+  assert.match(c, /produsul s-a creat dar randul n-a putut fi marcat/);
+});
+
+test("⚠ jobul necitit nu mai e job sters", () => {
+  /*
+   * `const { data: jobRaw } = ...` fara `error`. La o pana de o clipa, `jobRaw` vine `null`
+   * si functia raspundea `status: "failed", done: true` — adica exact ce raspunde pentru un
+   * import CHIAR sters. Si `done: true` nu opreste doar bucla: pe calea din panou, apelantul
+   * sterge apoi FISIERUL BRUT. Un import intreg pierdut, nici macar reluabil, dintr-o
+   * secunda de retea.
+   *
+   * ⚠ Aruncarea e alegerea buna, nu intoarcerea: din cron e prinsa si scrisa, jobul ramane
+   * `importing` si se reia; din panou e prinsa de apelant, care marcheaza esecul DAR nu mai
+   * sterge fisierul.
+   */
+  const c = sursaCommitter();
+  assert.match(c, /const \{ data: jobRaw, error: eJob \}/);
+  assert.match(c, /if \(eJob\) throw new Error\(`jobul de import nu s-a putut citi/);
+  /* ⚠ Lipsa ADEVARATA ramane `failed`: un job sters chiar n-are ce continua. */
+  assert.match(c, /if \(!jobRaw\) return \{ status: "failed"/);
 });

@@ -916,8 +916,29 @@ export async function GET(req: NextRequest) {
       const ctx = await ctxPentru(businessId);
       if (!ctx || ctx.config.auto_publish !== true) continue;
 
+      /*
+       * ═══ ⚠ „APRINS ACUM" NU E „ERA APRINS CAND S-A FACUT PRODUSUL" (25.08.2026) ═══
+       *
+       * Fereastra de 24 de ore spune cat de departe se uita plasa inapoi. Nu spune de cand
+       * are voie sa se uite. Intre cele doua incape asta:
+       *
+       *   10:00  omul face un produs, cu comutatorul STINS. Nu vrea sa-l publice.
+       *   11:00  aprinde comutatorul, gandindu-se la produsele de MAINE.
+       *   11:03  plasa vede un produs de acum o ora, fara oferta, la un magazin cu
+       *          `auto_publish` aprins — si il trimite la eMAG.
+       *
+       * Marca `auto_publish_since` se scrie o data, la trecerea stins → aprins, si taie
+       * exact asta. E intentia omului, si nu se poate ghici din produse.
+       *
+       * ⚠ LIPSA INSEAMNA NU, si se trece mai departe TACUT: nu e o pana, e un magazin care
+       * n-a aprins niciodata comutatorul de cand exista marca. Functia din baza refuza si
+       * ea, dar garda de aici scuteste cererea.
+       */
+      const deCand = ctx.config.auto_publish_since;
+      if (!deCand) continue;
+
       const { data: noi, error: eNoi } = await admin.rpc("emag_produse_noi_nepublicate", {
-        p_business_id: businessId, p_ore: 24, p_limita: 50,
+        p_business_id: businessId, p_ore: 24, p_limita: 50, p_de_cand: deCand,
       });
       if (eNoi) {
         await logError({

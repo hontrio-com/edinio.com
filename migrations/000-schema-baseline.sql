@@ -1824,7 +1824,7 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer DEFAULT 24, p_limita integer DEFAULT 50)
+CREATE OR REPLACE FUNCTION public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer DEFAULT 24, p_limita integer DEFAULT 50, p_de_cand timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS TABLE(id uuid, created_at timestamp with time zone)
  LANGUAGE sql
  STABLE SECURITY DEFINER
@@ -1832,12 +1832,17 @@ CREATE OR REPLACE FUNCTION public.emag_produse_noi_nepublicate(p_business_id uui
 AS $function$
   select p.id, p.created_at
     from public.products p
-   where p.business_id = p_business_id
+   -- ⚠ FARA „DE CAND", NIMIC. Marca se scrie la trecerea stins -> aprins a comutatorului
+   -- „Publica automat". Lipsa ei nu se citeste ca „da": ar publica marfa in numele omului.
+   where p_de_cand is not null
+     and p.business_id = p_business_id
      and p.is_active
      -- ⚠ FEREASTRA E TOT ROSTUL: fara ea, un catalog vechi ar intra in publicare la prima
      -- aprindere a comutatorului. Pe 24.08.2026 o plasa care nu deosebea „n-a plecat
      -- niciodata" de „s-a pierdut o schimbare" a publicat singura 116 oferte.
      and p.created_at > now() - make_interval(hours => greatest(1, least(coalesce(p_ore, 24), 72)))
+     -- ⚠ SI A DOUA TAIETURA: un produs facut INAINTE de aprindere n-a fost cerut de nimeni.
+     and p.created_at > p_de_cand
      and not exists (
        select 1 from public.emag_offers e
         where e.business_id = p.business_id and e.product_id = p.id
@@ -4996,7 +5001,8 @@ create table if not exists public.products (
   source text,
   external_id text,
   is_bundle boolean default false not null,
-  shipping_class text);
+  shipping_class text,
+  import_row_id uuid);
 
 create table if not exists public.rate_limits (
   cheie text not null,
@@ -5747,6 +5753,7 @@ CREATE INDEX product_imports_active_idx ON public.product_imports USING btree (s
 CREATE INDEX product_imports_business_idx ON public.product_imports USING btree (business_id, created_at DESC);
 CREATE INDEX products_business_is_bundle_idx ON public.products USING btree (business_id) WHERE is_bundle;
 CREATE UNIQUE INDEX products_business_slug_unique ON public.products USING btree (business_id, slug) WHERE (slug IS NOT NULL);
+CREATE UNIQUE INDEX products_import_row_uidx ON public.products USING btree (import_row_id) WHERE (import_row_id IS NOT NULL);
 CREATE UNIQUE INDEX products_source_external_uidx ON public.products USING btree (business_id, source, external_id) WHERE ((source IS NOT NULL) AND (external_id IS NOT NULL));
 CREATE INDEX rate_limits_curatare_idx ON public.rate_limits USING btree (actualizat_la);
 CREATE UNIQUE INDEX recovery_optout_business_email_uidx ON public.recovery_optout USING btree (business_id, lower(email));
@@ -5950,6 +5957,8 @@ alter table public.zz_backup_categorii_okxi_20260812 enable row level security;
 alter table public.zz_backup_facebook_feeds_20260814 enable row level security;
 alter table public.zz_backup_preturi_bricosmart_20260804 enable row level security;
 alter table public.zz_backup_preturi_parfumuri_insula_20260812 enable row level security;
+alter table public.zz_backup_preturi_vetdepo_20260819 enable row level security;
+alter table public.zz_backup_preturi_vetdepo_20260825 enable row level security;
 alter table public.zz_backup_preturi_vetdepo_categorii_20260903 enable row level security;
 alter table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 enable row level security;
 
@@ -7710,20 +7719,6 @@ grant SELECT on table public.zz_backup_preturi_parfumuri_insula_20260812 to serv
 grant TRIGGER on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
 grant TRUNCATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
 grant UPDATE on table public.zz_backup_preturi_parfumuri_insula_20260812 to service_role;
-grant DELETE on table public.zz_backup_preturi_vetdepo_20260819 to anon;
-grant INSERT on table public.zz_backup_preturi_vetdepo_20260819 to anon;
-grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260819 to anon;
-grant SELECT on table public.zz_backup_preturi_vetdepo_20260819 to anon;
-grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260819 to anon;
-grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260819 to anon;
-grant UPDATE on table public.zz_backup_preturi_vetdepo_20260819 to anon;
-grant DELETE on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
-grant INSERT on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
-grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
-grant SELECT on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
-grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
-grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
-grant UPDATE on table public.zz_backup_preturi_vetdepo_20260819 to authenticated;
 grant DELETE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant INSERT on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
@@ -7731,20 +7726,6 @@ grant SELECT on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
 grant UPDATE on table public.zz_backup_preturi_vetdepo_20260819 to service_role;
-grant DELETE on table public.zz_backup_preturi_vetdepo_20260825 to anon;
-grant INSERT on table public.zz_backup_preturi_vetdepo_20260825 to anon;
-grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260825 to anon;
-grant SELECT on table public.zz_backup_preturi_vetdepo_20260825 to anon;
-grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260825 to anon;
-grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260825 to anon;
-grant UPDATE on table public.zz_backup_preturi_vetdepo_20260825 to anon;
-grant DELETE on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
-grant INSERT on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
-grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
-grant SELECT on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
-grant TRIGGER on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
-grant TRUNCATE on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
-grant UPDATE on table public.zz_backup_preturi_vetdepo_20260825 to authenticated;
 grant DELETE on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
 grant INSERT on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
 grant REFERENCES on table public.zz_backup_preturi_vetdepo_20260825 to service_role;
@@ -7943,7 +7924,7 @@ grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to ser
 grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.emag_familie_noua() to service_role;
-grant execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer) to service_role;
+grant execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) to service_role;
 grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
 grant execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
@@ -8097,7 +8078,7 @@ revoke execute on function public.elibereaza_stoc_comanda(p_order_id uuid) from 
 revoke execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.emag_familie_noua() from public;
-revoke execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer) from public;
+revoke execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) from public;
 revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
 revoke execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) from public;
 revoke execute on function public.genereaza_schema_baseline() from public;

@@ -527,6 +527,26 @@ export function publicaPeEmagMany(
 }
 
 /**
+ * Aceeasi publicare, dar cu VERDICT — pentru butoanele apasate de om.
+ *
+ * ═══ ⚠ UN `0` NU E O EXPLICATIE (25.08.2026, auditul 9.6) ═══
+ *
+ * Butoanele „Publica" isi construiau mesajul de esec din numarul intors: zero insemna, dupa
+ * caz, „magazinul nu e conectat" sau „ofertele sunt preluate din contul tau eMAG". Dar zero
+ * mai inseamna si „scrierea in coada a picat" — iar atunci comerciantului i se spunea o
+ * cauza care nu era adevarata, si era trimis sa caute unde nu e nimic.
+ *
+ * ⚠ E chiar defectul reparat dimineata la propagarea setarilor, ramas nereparat pe drumul
+ * pe care apasa OMUL — adica exact acolo unde un diagnostic gresit costa cel mai mult:
+ * el vede mesajul, il crede, si nu mai reincearca.
+ */
+export function publicaPeEmagStrict(
+  businessId: string, productIds: (string | null | undefined)[],
+): Promise<VerdictCoada> {
+  return enqueueManyDetaliat(businessId, productIds, "oferta", { publicaSiFaraOferta: true });
+}
+
+/**
  * Numai stocul, dupa ce o comanda l-a scazut.
  *
  * ⚠ Ruta cea mai usoara, dinadins. O miscare de stoc nu are voie sa atinga nici

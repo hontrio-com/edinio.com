@@ -39,15 +39,21 @@ test("⚠ FEREASTRA DE TIMP e tot rostul, si e in SQL", () => {
   /*
    * Fara ea, prima aprindere a comutatorului ar trimite catalogul intreg la publicare. Un
    * produs vechi nu poate intra pe aici NICIODATA.
+   *
+   * ⚠ SE CITESTE MIGRATIA CEA NOUA, nu cea din 2026-10-20 in care s-a nascut functia.
+   * Aceea si-a pastrat textul, dar semnatura ei nu mai exista in baza: `2026-10-23` a
+   * sters-o si a pus una cu patru argumente. O proba lipita de fisierul vechi ar fi trecut
+   * verde despre o functie care nu mai e acolo.
    */
-  const mig = readFileSync("migrations/2026-10-20-emag-awb-multime.sql", "utf8");
+  const mig = readFileSync("migrations/2026-10-23-publicare-de-cand.sql", "utf8");
   assert.match(mig, /p\.created_at > now\(\) - make_interval\(hours =>/);
   assert.match(mig, /not exists \([\s\S]{0,200}?emag_offers e/, "si numai ce n-are oferta");
   /* ⚠ `security definer` peste produsele oricui: fara revoke, o cheie anonima ar citi
-     catalogul altui magazin. */
+     catalogul altui magazin. Iar EXECUTE se intoarce la PUBLIC dupa FIECARE
+     `create or replace`, deci revoke-ul trebuie sa fie in aceeasi migratie cu functia. */
   assert.match(
     mig,
-    /revoke execute on function public\.emag_produse_noi_nepublicate\(uuid, int, int\) from public, anon, authenticated;/,
+    /revoke execute on function public\.emag_produse_noi_nepublicate\(uuid, int, int, timestamptz\) from public, anon, authenticated;/,
   );
 });
 

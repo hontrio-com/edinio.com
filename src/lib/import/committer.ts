@@ -426,11 +426,24 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       await scrieMarcaje(admin, deEsuat);
       deltas.failed += deEsuat.length;
       await scrieProdusele(admin, businessId, deScris, deltas);
-      const { count } = await admin
+      const { count, error: eSarite } = await admin
         .from("product_import_rows")
         .update({ status: "skipped", error: "Limita de plan atinsa" }, { count: "exact" })
         .eq("import_id", job.id)
         .eq("status", "pending");
+      /*
+       * ⚠ A TREIA SORA DIN ACEEASI FAMILIE, si ultima (25.08.2026, seara).
+       *
+       * Fara `error`, o scriere picata lasa randurile pe `pending`, dar `remaining: 0` de mai
+       * jos declara importul TERMINAT. Se anunta canalele de vanzare, porneste publicarea, iar
+       * randurile raman nescrise — exact tiparul inchis dimineata la rehostul imaginilor si
+       * dupa-amiaza la citirea randurilor.
+       *
+       * ⚠ „Nu stiu daca s-a scris" inseamna REIA, niciodata zero.
+       */
+      if (eSarite) {
+        throw new Error(`randurile peste limita planului nu s-au putut marca: ${eSarite.message}`);
+      }
       deltas.skipped += count ?? 0;
       return { deltas, remaining: 0 };
     }
@@ -559,13 +572,46 @@ async function scrieProdusele(
         return;
       }
 
+      /*
+       * ═══ ⚠ INSERTUL SI MARCAREA RANDULUI NU SUNT ATOMICE ═══
+       *
+       * Produsul se scrie, apoi randul de import se marcheaza „created". Daca a doua scriere
+       * pica, randul ramane `pending`, iar trecerea urmatoare il ia de la capat si creeaza AL
+       * DOILEA produs. Unicitatea `(business_id, source, external_id)` nu ajuta: ea cere
+       * `external_id`, iar importurile generice n-au. Slugul se dedubleaza, deci al doilea
+       * primeste alt slug si trece nestingherit.
+       *
+       * ⚠ SE REPARA CU O CHEIE DE IDEMPOTENTA, nu cu o tranzactie distribuita. `import_row_id`
+       * poarta randul care a creat produsul, cu index unic partial. Atunci reluarea nu mai
+       * POATE crea un al doilea: se loveste de unicitate, iar mai jos se recupereaza id-ul
+       * produsului care exista deja si se marcheaza randul.
+       *
+       * Alternativa era un RPC care sa faca ambele intr-o tranzactie — corect, dar ar fi mutat
+       * toata calea de import in SQL: mult risc pe un drum care merge, pentru o pana care
+       * trebuie sa cada exact intre doua scrieri.
+       */
       const { data: inserted, error } = await admin
         .from("products")
-        .insert({ ...it.payload, slug: it.slug })
+        .insert({ ...it.payload, slug: it.slug, import_row_id: it.rowId } as never)
         .select("id")
         .single();
 
-      if (error || !inserted) {
+      let productId = inserted?.id ?? null;
+
+      /* ⚠ Numele indexului se cauta in TOT ce trimite PostgREST, nu doar in `message`:
+         la unele versiuni el sta in `details`, iar o cautare doar pe `message` ar fi ratat
+         chiar cazul pentru care s-a facut cheia — si l-ar fi raportat drept slug duplicat. */
+      const spuneCheia = error?.code === "23505"
+        && `${error.message ?? ""} ${error.details ?? ""}`.includes("products_import_row_uidx");
+
+      if (spuneCheia) {
+        /* ⚠ Produsul CHIAR s-a creat la o trecere dinainte, doar marcarea randului s-a pierdut.
+           Nu e un duplicat de slug: e chiar reluarea pe care cheia o face inofensiva. */
+        const { data: deja } = await admin
+          .from("products").select("id")
+          .eq("business_id", businessId).eq("import_row_id", it.rowId).maybeSingle();
+        productId = deja?.id ?? null;
+      } else if (error || !inserted) {
         const cause = error?.code === "23505"
           ? "Produs duplicat (slug deja existent)"
           : `Eroare la salvare: ${(error?.message ?? "necunoscuta").slice(0, 120)}`;
@@ -573,8 +619,28 @@ async function scrieProdusele(
         deltas.failed++;
         return;
       }
-      await admin.from("product_import_rows")
-        .update({ status: "created", product_id: inserted.id, error: null }).eq("id", it.rowId);
+
+      if (!productId) {
+        await failRow(admin, it.rowId, "Produsul s-a creat, dar id-ul nu s-a putut citi");
+        deltas.failed++;
+        return;
+      }
+
+      /* ⚠ Daca marcarea pica ACUM, randul ramane `pending` si se reia — dar cheia de mai sus
+         face ca reluarea sa adopte produsul existent, nu sa creeze inca unul. Se scrie totusi
+         in jurnal: o pana care se repeta ar tine jobul in `committing` la nesfarsit, si atunci
+         trebuie sa se vada CE anume nu se poate scrie, nu doar ca nu se termina. */
+      const { error: eMarcaj } = await admin.from("product_import_rows")
+        .update({ status: "created", product_id: productId, error: null }).eq("id", it.rowId);
+      if (eMarcaj) {
+        await logError({
+          action: "import.commit",
+          message: `produsul s-a creat dar randul n-a putut fi marcat: ${eMarcaj.message}`,
+          details: { rowId: it.rowId, productId },
+          businessId, severity: "warning",
+        });
+        return;
+      }
       deltas.created++;
     }));
   }
@@ -760,11 +826,28 @@ export async function processImport(
   admin: Admin,
   importId: string,
 ): Promise<{ status: ImportStatus; totals: ImportTotals; done: boolean }> {
-  const { data: jobRaw } = await admin
+  const { data: jobRaw, error: eJob } = await admin
     .from("product_imports")
     .select("id, business_id, user_id, source, status, options, totals")
     .eq("id", importId)
     .single();
+
+  /*
+   * ═══ ⚠ „N-AM PUTUT CITI JOBUL" NU E „JOBUL NU EXISTA" (25.08.2026, auditul 9.6) ═══
+   *
+   * `error` nu se citea. La o pana de o clipa a bazei, `jobRaw` vine `null`, iar functia
+   * raspundea `status: "failed", done: true` — adica exact ce raspunde pentru un import
+   * chiar sters. Si `done: true` nu opreste doar bucla: pe calea din panou, apelantul
+   * sterge apoi FISIERUL BRUT. Un import intreg pierdut, si nici macar reluabil, dintr-o
+   * secunda de retea — iar comerciantul citeste „importul a esuat" despre un fisier bun.
+   *
+   * ⚠ ARUNCA, nu intoarce. Din cron, aruncarea e prinsa si scrisa, jobul ramane `importing`
+   * si se reia la minutul urmator — de unde a ramas. Din panou, apelantul o prinde si
+   * marcheaza importul picat, DAR nu mai sterge fisierul, deci se poate relua.
+   *
+   * ⚠ Lipsa adevarata ramane `failed`: un job sters chiar nu mai are ce continua.
+   */
+  if (eJob) throw new Error(`jobul de import nu s-a putut citi: ${eJob.message}`);
 
   if (!jobRaw) return { status: "failed", totals: EMPTY_TOTALS, done: true };
   const job = jobRaw as JobRow;

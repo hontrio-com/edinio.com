@@ -72,7 +72,7 @@ import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
 import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
 import { alegeSupplyLeadTime, oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import { dimensiuniPropuse, numarDeColete, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
-import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagMany} from "@/lib/emag/queue";
+import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagStrict } from "@/lib/emag/queue";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/emag";
@@ -870,6 +870,20 @@ export async function salveazaSetariEmag(
     ...(banda != null ? { price_band_pct: banda } : {}),
     ...(setari.auto_sync != null ? { auto_sync: setari.auto_sync } : {}),
     ...(setari.auto_publish != null ? { auto_publish: setari.auto_publish } : {}),
+    /*
+     * ═══ ⚠ „DE CAND", SCRIS LA APRINDERE ═══
+     *
+     * Plasa de recuperare cauta produse facute in ultimele ore, fara oferta, la magazine cu
+     * `auto_publish` aprins ACUM. Fara marca asta, un produs facut cu comutatorul STINS si
+     * prins de aprinderea de peste o ora ar fi plecat la eMAG — desi omul se gandea la
+     * produsele de MAINE cand a apasat. Vezi `2026-10-23-publicare-de-cand.sql`.
+     *
+     * ⚠ NUMAI LA TRECEREA STINS → APRINS. Rescris la fiecare salvare, ar fi impins marca
+     * inainte si ar fi ascuns tocmai produsele pe care plasa TREBUIE sa le prinda: cele
+     * facute dupa aprindere, carora li s-a pierdut punerea in coada.
+     */
+    ...(setari.auto_publish === true && veche.auto_publish !== true
+      ? { auto_publish_since: new Date().toISOString() } : {}),
     ...(setari.warehouse_id != null ? { warehouse_id: setari.warehouse_id } : {}),
     ...(setari.green_tax !== undefined ? { green_tax: setari.green_tax ?? null } : {}),
     ...(setari.stoc_rezervat !== undefined ? { stoc_rezervat: setari.stoc_rezervat ?? null } : {}),
@@ -2221,7 +2235,7 @@ export async function publicaCategoriaPeEmag(
    * comutatorul de sincronizare automată. Diagnostic greșit, care trimitea omul să
    * caute unde nu era nimic. Măsurat pe un catalog de 1353 de produse: zero puse.
    */
-  const puse = await publicaPeEmagMany(businessId, produse.map((p) => p.id));
+  const verdict = await publicaPeEmagStrict(businessId, produse.map((p) => p.id));
   /*
    * De ce ar putea iesi zero DUPA 25.08.2026: „Trimite automat prețul și stocul" nu mai e
    * un motiv — o apasare pe „Publică" trece peste el (vezi `enqueueMany`). Deci raman
@@ -2234,6 +2248,15 @@ export async function publicaCategoriaPeEmag(
    * o lista care, prin definitie, contine produse FARA niciun rand in `emag_offers`. Adica
    * exact singurul lucru care nu putea fi adevarat acolo.
    */
+  /*
+   * ⚠ VERDICT, NU NUMAR (25.08.2026, auditul 9.6). Zero mai poate insemna si „scrierea in
+   * coada a picat" — iar atunci mesajele de mai jos ar fi dat o cauza care nu e adevarata
+   * si l-ar fi trimis pe om sa caute unde nu e nimic. O pana se spune ca pana.
+   */
+  if (verdict.fel === "eroare") {
+    return { error: "Nu am putut pune produsele la rând. Încearcă din nou." };
+  }
+  const puse = verdict.fel === "puse" ? verdict.cate : 0;
   if (puse === 0) {
     return {
       error: !config.connected
@@ -3798,7 +3821,7 @@ export async function publicaProduseleEmag(
     };
   }
 
-  const puse = await publicaPeEmagMany(businessId, deTrimis);
+  const verdict = await publicaPeEmagStrict(businessId, deTrimis);
   /*
    * De ce ar putea iesi zero DUPA 25.08.2026: „Trimite automat prețul și stocul" nu mai e
    * un motiv — o apasare pe „Publică" trece peste el (vezi `enqueueMany`). Deci raman
@@ -3811,6 +3834,15 @@ export async function publicaProduseleEmag(
    * o lista care, prin definitie, contine produse FARA niciun rand in `emag_offers`. Adica
    * exact singurul lucru care nu putea fi adevarat acolo.
    */
+  /*
+   * ⚠ VERDICT, NU NUMAR (25.08.2026, auditul 9.6). Zero mai poate insemna si „scrierea in
+   * coada a picat" — iar atunci mesajele de mai jos ar fi dat o cauza care nu e adevarata
+   * si l-ar fi trimis pe om sa caute unde nu e nimic. O pana se spune ca pana.
+   */
+  if (verdict.fel === "eroare") {
+    return { error: "Nu am putut pune produsele la rând. Încearcă din nou." };
+  }
+  const puse = verdict.fel === "puse" ? verdict.cate : 0;
   if (puse === 0) {
     return {
       error: !config.connected

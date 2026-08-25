@@ -819,6 +819,24 @@ export interface EmagConfig {
   auto_sync?: boolean;
   /** Un produs nou se publica singur? */
   auto_publish?: boolean;
+  /**
+   * Cand a fost APRINS ultima oara `auto_publish`. ISO 8601.
+   *
+   * ═══ ⚠ FARA EL, PLASA PUBLICA CE N-A CERUT NIMENI (25.08.2026) ═══
+   *
+   * Plasa de recuperare (`emag_produse_noi_nepublicate`) cauta produse facute in ultimele
+   * ore, fara oferta, la magazine cu `auto_publish` aprins ACUM. Un produs facut cu
+   * comutatorul stins si prins de aprinderea de peste o ora trecea drept „cerut", desi
+   * omul se gandea la produsele de MAINE cand a apasat.
+   *
+   * Fereastra de ore spune cat de departe se uita plasa inapoi. Campul asta spune DE CAND
+   * are voie sa se uite — si aia e o intrebare despre intentia omului, care nu se poate
+   * ghici din produse.
+   *
+   * ⚠ LIPSA INSEAMNA NU. Fara el, functia din baza nu intoarce nimic si cronul nici n-o
+   * cheama. „Nu se stie" nu se citeste ca „da" cand raspunsul gresit pune marfa la vanzare.
+   */
+  auto_publish_since?: string | null;
 
   /**
    * Ofertele publicate din Edinio intra in programul Genius al eMAG?

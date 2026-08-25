@@ -1483,6 +1483,7 @@ export type Database = {
           invoice_number: string | null
           awb_uploaded_at: string | null
           awb_uploaded_number: string | null
+          awb_uploaded_numbers: string[]
           invoice_uploaded_at: string | null
           is_complete: number | null
           last_modified: string | null
@@ -1504,6 +1505,7 @@ export type Database = {
           invoice_number?: string | null
           awb_uploaded_at?: string | null
           awb_uploaded_number?: string | null
+          awb_uploaded_numbers?: string[]
           invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null
@@ -1525,6 +1527,7 @@ export type Database = {
           invoice_number?: string | null
           awb_uploaded_at?: string | null
           awb_uploaded_number?: string | null
+          awb_uploaded_numbers?: string[]
           invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null
@@ -3387,6 +3390,7 @@ export type Database = {
           id: string
           images: Json
           is_active: boolean
+          import_row_id: string | null
           is_bundle: boolean
           is_featured: boolean
           name: string
@@ -3413,6 +3417,7 @@ export type Database = {
           id?: string
           images?: Json
           is_active?: boolean
+          import_row_id?: string | null
           is_bundle?: boolean
           is_featured?: boolean
           name: string
@@ -3439,6 +3444,7 @@ export type Database = {
           id?: string
           images?: Json
           is_active?: boolean
+          import_row_id?: string | null
           is_bundle?: boolean
           is_featured?: boolean
           name?: string
@@ -4641,7 +4647,7 @@ export type Database = {
       ia_jeton_extern: { Args: { p_cheie: string; p_limita: number; p_fereastra_ms?: number }; Returns: Json }
       produse_nesincronizate_emag: { Args: { p_business_id: string; p_rabdare?: unknown; p_limita?: number }; Returns: string[] }
       emag_comenzi_de_verificat_awb: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { id: string; order_id: string | null; emag_order_id: number | null; order_type: number | null; awb_uploaded_number: string | null; awb_uploaded_numbers: string[] | null }[] }
-      emag_produse_noi_nepublicate: { Args: { p_business_id: string; p_ore?: number; p_limita?: number }; Returns: { id: string; created_at: string }[] }
+      emag_produse_noi_nepublicate: { Args: { p_business_id: string; p_ore?: number; p_limita?: number; p_de_cand?: string | null }; Returns: { id: string; created_at: string }[] }
       emag_stinge_propagarea: { Args: { p_business_id: string; p_ceruta_la: string }; Returns: boolean }
       vezi_ritm_extern: { Args: { p_cheie: string; p_fereastra_ms?: number }; Returns: Json }
       curata_ritm_extern: { Args: Record<PropertyKey, never>; Returns: number }

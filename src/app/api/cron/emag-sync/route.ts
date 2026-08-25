@@ -22,7 +22,7 @@ import {
 } from "@/lib/emag/queue";
 import { cuFir, firNou, ZILE_PASTRARE } from "@/lib/emag/jurnal";
 import { curataJurnalul } from "@/lib/emag/jurnal-scriere";
-import { aduComenzile } from "@/lib/emag/orders";
+import { aduComenzile, reiaComenzileParcate } from "@/lib/emag/orders";
 import { aduIpurileEmag } from "@/lib/emag/client";
 import { citesteIpuri, sAuSchimbat, CHEIE_IPURI } from "@/lib/emag/ipuri";
 import { urcaFacturaLaEmag, type Factura } from "@/lib/emag/facturi";
@@ -321,6 +321,7 @@ export async function GET(req: NextRequest) {
   );
 
   let duse = 0, cazute = 0, reconciliate = 0, comenziNoi = 0, facturi = 0, retururi = 0, awburi = 0;
+  let comenziRecuperate = 0;
   let derivate = 0;
   const inceputulRularii = Date.now();
 
@@ -655,6 +656,35 @@ export async function GET(req: NextRequest) {
     const urmator = marcajUrmator(rez, { runStartMs: inceputulRularii, overlapMs: SUPRAPUNERE_MS });
     if (urmator != null) {
       await patchEmagConfig(admin, businessId, { orders_synced_at: new Date(urmator).toISOString() });
+    }
+
+    /*
+     * ═══ COMENZILE PARCATE, RELUATE (25.08.2026) ═══
+     *
+     * O comanda respinsa de o constrangere lasa marcajul sa treaca peste ea — altfel un
+     * singur rand imposibil ar ingheta fereastra intregului magazin. Dar constrangerea nu e
+     * incalcata de datele lor, ci de codul NOSTRU care le potriveste: `statusEdinio(5)` pe
+     * 24.08, `platitLaEi(0)` pe 25.08. Amandoua reparate in cateva ore, iar comenzile
+     * respinse intre timp ar fi ramas pierdute pentru totdeauna.
+     *
+     * De-aia comanda se parcheaza cu `raw` intreg, iar aici se reincearca din el.
+     *
+     * ⚠ LA FIECARE TRECERE, nu la un minut anume: cand exista o comanda parcata, ea e o
+     * comanda a comerciantului care nu se vede in panou. Lista e goala in mod normal, deci
+     * costul obisnuit e o citire care nu gaseste nimic.
+     *
+     * ⚠ SE SPUNE de fiecare data cand chiar recupereaza ceva: numarul trebuie sa fie zero,
+     * iar daca nu e, inseamna ca o reparatie de-a mea a lasat comenzi pe dinafara.
+     */
+    const parcate = await reiaComenzileParcate(admin, ctx);
+    if (parcate.reluate > 0) {
+      comenziRecuperate += parcate.reluate;
+      await logError({
+        action: "emag-sync",
+        message: `${parcate.reluate} comenzi parcate au intrat dupa o reparatie de cod`,
+        details: { businessId, reluate: parcate.reluate, ramase: parcate.ramase },
+        businessId, severity: "warning",
+      });
     }
   }
 
@@ -1013,7 +1043,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, facturi, awburi, retururi, neplecate, jurnalSters, propagari, publicariRecuperate,
+    ok: true, duse, cazute, reconciliate, derivate, comenziNoi, comenziRecuperate, facturi, awburi, retururi, neplecate, jurnalSters, propagari, publicariRecuperate,
   });
 }
 

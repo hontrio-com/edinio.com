@@ -1037,13 +1037,66 @@ async function ingereazaComandaCitita(
        */
       const cod = error?.code ?? eCautare?.code;
       const permanent = cod === "23502" || cod === "23514" || cod === "22001" || cod === "22P02";
+      const motiv = error?.message ?? eCautare?.message ?? "motiv necunoscut";
       await logError({
         action: "emag/orders",
-        message: `comanda nu s-a putut salva si nici regasi: ${error?.message ?? eCautare?.message ?? "motiv necunoscut"}`,
+        message: `comanda nu s-a putut salva si nici regasi: ${motiv}`,
         details: { emagOrderId: c.id, code: cod, permanent },
         businessId: ctx.businessId,
         severity: "critical",
       });
+
+      /*
+       * ═══ ⚠ „PERMANENT" INSEAMNA „NU CU CODUL DE AZI", NU „NICIODATA" (25.08.2026) ═══
+       *
+       * Marcajul avanseaza peste comanda asta — si asa trebuie, altfel o singura comanda cu
+       * date imposibile ar ingheta fereastra INTREGULUI magazin si nicio comanda noua n-ar
+       * mai intra. Dar atunci comanda cade din fereastra de suprapunere in cateva minute si
+       * nimeni n-o mai cere VREODATA. Ramanea o linie de jurnal, care se pierde in scroll.
+       *
+       * ⚠ IAR CONSTRANGEREA NU E INCALCATA DE DATELE LOR, CI DE CODUL NOSTRU care le
+       * potriveste. Pe 24.08 `statusEdinio(5)` intorcea „returned"; pe 25.08 `platitLaEi(0)`
+       * intorcea „pending". Amandoua reparate in cateva ore — dar comenzile respinse intre
+       * timp erau deja pierdute. Adica fiecare defect al meu se transforma in pierdere
+       * DEFINITIVA de comenzi ale comerciantului.
+       *
+       * Deci comanda se PARCHEAZA: `emag_orders` cu `order_id` null si `raw` intreg. Exista,
+       * se vede, si se reia din ea cand codul se indreapta (vezi pasul de reluare din cron).
+       *
+       * ⚠ NU SE CHEAMA `order/acknowledge`: comanda n-a intrat, iar netrimis, eMAG continua
+       * s-o anunte. E a doua plasa, si e a lor.
+       *
+       * ⚠ Parcarea nu are voie sa schimbe verdictul. Daca si ea pica, tot „sarita" iese —
+       * altfel o pana in plasa ar ingheta fereastra pe care ramura asta exista s-o apere.
+       */
+      if (permanent) {
+        const { error: eParcare } = await admin.from("emag_orders").upsert({
+          business_id: ctx.businessId,
+          order_id: null,
+          emag_order_id: c.id,
+          order_status: c.status,
+          order_type: c.type ?? null,
+          payment_mode_id: c.payment_mode_id ?? null,
+          is_complete: c.is_complete ?? null,
+          lines: (c.products ?? []) as never,
+          vouchers: (c.vouchers ?? []) as never,
+          raw: c as never,
+          last_modified: c.modified ?? null,
+          ingest_error: `${cod ?? "?"}: ${motiv}`.slice(0, 500),
+          ingest_failed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as never, { onConflict: "business_id,emag_order_id" });
+
+        if (eParcare) {
+          await logError({
+            action: "emag/orders",
+            message: `comanda respinsa nu s-a putut nici macar parca: ${eParcare.message}`,
+            details: { emagOrderId: c.id },
+            businessId: ctx.businessId, severity: "critical",
+          });
+        }
+      }
+
       return permanent ? "sarita" : "esuata";
     }
     orderId = (gasita as { id: string }).id;
@@ -1463,4 +1516,66 @@ async function confirmaSiNoteaza(
     return;
   }
   await noteaza();
+}
+
+/**
+ * Reia comenzile PARCATE — cele respinse de o constrangere si scrise cu `order_id` null.
+ *
+ * ═══ ⚠ DE CE EXISTA ═══
+ *
+ * `ingereazaComanda` lasa marcajul sa treaca peste o comanda respinsa de baza, ca sa nu
+ * inghete fereastra intregului magazin. Fara plasa asta, comanda ar cadea din fereastra in
+ * cateva minute si nimeni n-ar mai cere-o VREODATA. Iar constrangerea nu e incalcata de
+ * datele lor, ci de codul NOSTRU care le potriveste — deci se repara, si atunci comanda
+ * chiar poate intra.
+ *
+ * ⚠ SE RELUA DIN `raw`, nu de la eMAG: raspunsul lor e pastrat intreg pe rand, deci reluarea
+ * nu costa nicio cerere si merge si daca ei au sters intre timp comanda din fereastra.
+ *
+ * ⚠ Reusita se citeste din `order_id`, nu din verdict: `ingereazaComanda` face `upsert` pe
+ * `(business_id, emag_order_id)`, deci ea insasi sterge parcarea cand comanda intra. Aici se
+ * intreaba doar daca a intrat, si se curata motivul.
+ */
+export async function reiaComenzileParcate(
+  admin: Db,
+  ctx: ContextEmag,
+  limita = 10,
+): Promise<{ reluate: number; ramase: number }> {
+  const { data, error } = await admin
+    .from("emag_orders")
+    .select("emag_order_id, raw")
+    .eq("business_id", ctx.businessId)
+    .is("order_id", null)
+    .not("ingest_error", "is", null)
+    .order("ingest_failed_at", { ascending: true })
+    .limit(limita);
+
+  /* ⚠ O citire picata nu inseamna „n-a ramas nimic parcat": s-ar fi raportat zero, si zeroul
+     acela arata identic cu „totul e in regula". Se iese fara sa se pretinda vreun numar. */
+  if (error) {
+    await logError({
+      action: "emag/orders",
+      message: `comenzile parcate nu s-au putut citi: ${error.message}`,
+      businessId: ctx.businessId, severity: "warning",
+    });
+    return { reluate: 0, ramase: 0 };
+  }
+
+  const parcate = (data ?? []) as { emag_order_id: number; raw: unknown }[];
+  let reluate = 0;
+
+  for (const p of parcate) {
+    if (!p.raw || typeof p.raw !== "object") continue;
+    const rez = await ingereazaComanda(admin, ctx, p.raw as EmagComanda);
+    if (rez === "noua" || rez === "actualizata") {
+      reluate++;
+      /* ⚠ Motivul se sterge NUMAI dupa ce comanda chiar a intrat. Sters mai devreme, randul
+         ar fi iesit din lista parcatelor si n-ar mai fi fost reluat de nimeni. */
+      await admin.from("emag_orders")
+        .update({ ingest_error: null, ingest_failed_at: null } as never)
+        .eq("business_id", ctx.businessId).eq("emag_order_id", p.emag_order_id);
+    }
+  }
+
+  return { reluate, ramase: parcate.length - reluate };
 }

@@ -1484,6 +1484,8 @@ export type Database = {
           awb_uploaded_at: string | null
           awb_uploaded_number: string | null
           awb_uploaded_numbers: string[]
+          ingest_error: string | null
+          ingest_failed_at: string | null
           invoice_uploaded_at: string | null
           is_complete: number | null
           last_modified: string | null
@@ -1506,6 +1508,8 @@ export type Database = {
           awb_uploaded_at?: string | null
           awb_uploaded_number?: string | null
           awb_uploaded_numbers?: string[]
+          ingest_error?: string | null
+          ingest_failed_at?: string | null
           invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null
@@ -1528,6 +1532,8 @@ export type Database = {
           awb_uploaded_at?: string | null
           awb_uploaded_number?: string | null
           awb_uploaded_numbers?: string[]
+          ingest_error?: string | null
+          ingest_failed_at?: string | null
           invoice_uploaded_at?: string | null
           is_complete?: number | null
           last_modified?: string | null

@@ -4471,7 +4471,9 @@ create table if not exists public.emag_orders (
   invoice_number text,
   awb_uploaded_at timestamp with time zone,
   awb_uploaded_number text,
-  awb_uploaded_numbers text[] default '{}'::text[] not null);
+  awb_uploaded_numbers text[] default '{}'::text[] not null,
+  ingest_error text,
+  ingest_failed_at timestamp with time zone);
 
 create table if not exists public.emag_request_log (
   id uuid default gen_random_uuid() not null,
@@ -5633,6 +5635,7 @@ CREATE INDEX emag_orders_awb_de_verificat_idx ON public.emag_orders USING btree 
 CREATE INDEX emag_orders_business_status_idx ON public.emag_orders USING btree (business_id, order_status);
 CREATE INDEX emag_orders_factura_de_urcat_idx ON public.emag_orders USING btree (business_id, created_at) WHERE (invoice_uploaded_at IS NULL);
 CREATE INDEX emag_orders_order_idx ON public.emag_orders USING btree (order_id);
+CREATE INDEX emag_orders_parcate_idx ON public.emag_orders USING btree (business_id, ingest_failed_at) WHERE (order_id IS NULL);
 CREATE INDEX emag_request_log_biz_idx ON public.emag_request_log USING btree (business_id, created_at DESC);
 CREATE INDEX emag_request_log_fir_idx ON public.emag_request_log USING btree (corelatie) WHERE (corelatie IS NOT NULL);
 CREATE INDEX emag_request_log_iduri_idx ON public.emag_request_log USING gin (emag_ids);

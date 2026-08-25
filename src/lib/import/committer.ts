@@ -3,6 +3,7 @@
 // insert/upsert by external_id, and the background image-rehost phase.
 // Driven by processImport(), which both the server action and the cron call.
 
+import { logError } from "@/lib/error-logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
@@ -534,13 +535,37 @@ async function scrieProdusele(
 
 // ── Image rehost phase ───────────────────────────────────────────────────────
 
-async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; failed: number; remaining: number }> {
+/*
+ * =========== N-AM PUTUT INTREBA NU INSEAMNA NU MAI E NIMIC DE FACUT (25.08.2026) ===========
+ *
+ * Toate cele patru atingeri de baza din functia asta erau oarbe: `{ data }` fara `error`,
+ * iar PostgREST nu arunca la un refuz - intoarce `{ data: null, error }`. Deci o singura
+ * interogare picata facea ca faza sa se declare INCHEIATA.
+ *
+ * CE URMEAZA DUPA INCHEIERE: apelantul vede `remaining === 0`, pune importul pe
+ * "completed" si cheama `anuntaCanalele` - adica eMAG primeste produsul inainte ca starea
+ * lui la noi sa fie sigura. Cu `auto_publish` bifat, produsele NOI se si publica asa.
+ *
+ * CE RAMANE STRICAT, si nu se repara singur: `images_done = true` si `status =
+ * "completed"` sunt fapte false scrise pe disc, iar randurile care le-ar fi putut
+ * contrazice se sterg doua linii mai jos (`curataRandurileReusite`). Nu exista trecere
+ * urmatoare: cronul nu mai ridica jobul, si nimic nu recauta produse cu adrese externe.
+ * Produsele raman cu pozele furnizorului - merg azi, se sparg in ziua in care el le muta.
+ *
+ * CARE DINTRE CELE PATRU E CEL MAI PROBABIL, masurat pe biblioteca: postgrest-js
+ * reincearca singura de trei ori, dar NUMAI pentru GET/HEAD. Cele trei citiri au deci
+ * plasa; `update`-ul (PATCH) e explicit exclus. Adica tocmai scrierea - singura care
+ * pierde o adresa R2 deja platita - e cea fara plasa.
+ *
+ * `incert` spune "nu stiu daca s-a terminat". Apelantul incheie numai cand stie.
+ */
+async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; failed: number; remaining: number; incert?: boolean }> {
   const businessId = job.business_id;
   const cache: CacheRehostare = new Map();
   let imagesDone = 0;
   let imagesFailed = 0;
 
-  const { data: rows } = await admin
+  const { data: rows, error: eRows } = await admin
     .from("product_import_rows")
     .select("id, product_id")
     .eq("import_id", job.id)
@@ -548,6 +573,18 @@ async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; f
     .in("status", ["created", "updated"])
     .order("row_index", { ascending: true })
     .limit(REHOST_CHUNK);
+
+  if (eRows) {
+    /* `remaining: 1` tine jobul in `rehosting_images`, deci cronul il ridica din nou.
+       Zero ar fi insemnat "gata", si ar fi pornit anuntul catre canale. */
+    await logError({
+      action: "import.rehost",
+      message: `randurile de rehostat nu s-au putut citi: ${eRows.message}`,
+      details: { importId: job.id },
+      businessId, severity: "warning",
+    });
+    return { done: 0, failed: 0, remaining: 1, incert: true };
+  }
 
   if (!rows || rows.length === 0) return { done: 0, failed: 0, remaining: 0 };
 
@@ -576,7 +613,20 @@ async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; f
       await admin.from("product_import_rows").update({ images_done: true }).eq("id", row.id);
       return;
     }
-    const { data: product } = await admin.from("products").select("images, page_sections").eq("id", row.product_id).single();
+    const { data: product, error: eProdus } = await admin.from("products").select("images, page_sections").eq("id", row.product_id).single();
+    /* Fara asta, o citire picata dadea `product = null`, deci zero imagini, deci "nimic
+       de rehostat" - si randul se marca `images_done: true` cateva linii mai jos. Randul
+       se lasa NEATINS ca sa fie luat din nou la trecerea urmatoare. */
+    if (eProdus) {
+      imagesFailed += 1;
+      await logError({
+        action: "import.rehost",
+        message: `produsul nu s-a putut citi pentru rehostare: ${eProdus.message}`,
+        details: { importId: job.id, productId: row.product_id },
+        businessId, severity: "warning",
+      });
+      return;
+    }
     const images = Array.isArray(product?.images) ? (product!.images as string[]) : [];
     const update: Record<string, unknown> = {};
 
@@ -604,18 +654,51 @@ async function rehostChunk(admin: Admin, job: JobRow): Promise<{ done: number; f
     }
 
     if (Object.keys(update).length > 0) {
-      await admin.from("products").update(update as never).eq("id", row.product_id);
+      const { error: eScriere } = await admin.from("products").update(update as never).eq("id", row.product_id);
+      /*
+       * CEL MAI SCUMP DINTRE CELE PATRU, SI SINGURUL FARA PLASA.
+       *
+       * Imaginile sunt DEJA urcate in R2 si platite. Daca scrierea adreselor pica si
+       * randul s-ar marca totusi "gata", adresele acelea s-ar pierde pentru totdeauna:
+       * cheia R2 se compune din `Date.now()` si `Math.random()` (`image-rehost.ts`), iar
+       * cache-ul traieste doar cat o bucata. Deci nu se pot nici regasi, nici recalcula -
+       * raman obiecte platite pe care nu le mai stie nimeni.
+       *
+       * Iar PATCH e chiar metoda pe care biblioteca NU o reincearca singura.
+       */
+      if (eScriere) {
+        imagesFailed += 1;
+        await logError({
+          action: "import.rehost",
+          message: `adresele rehostate nu s-au putut scrie: ${eScriere.message}`,
+          details: { importId: job.id, productId: row.product_id },
+          businessId, severity: "error",
+        });
+        return;
+      }
     }
     await admin.from("product_import_rows").update({ images_done: true }).eq("id", row.id);
     }));
   }
 
-  const { count: remaining } = await admin
+  const { count: remaining, error: eRest } = await admin
     .from("product_import_rows")
     .select("id", { count: "exact", head: true })
     .eq("import_id", job.id)
     .eq("images_done", false)
     .in("status", ["created", "updated"]);
+
+  /* `remaining ?? 0` facea dintr-o numaratoare picata un "zero ramase", adica sfarsitul
+     fazei. Aici se spune "nu stiu", si apelantul mai trece o data. */
+  if (eRest) {
+    await logError({
+      action: "import.rehost",
+      message: `cate randuri mai au imagini de rehostat nu s-a putut afla: ${eRest.message}`,
+      details: { importId: job.id },
+      businessId, severity: "warning",
+    });
+    return { done: imagesDone, failed: imagesFailed, remaining: 1, incert: true };
+  }
 
   return { done: imagesDone, failed: imagesFailed, remaining: remaining ?? 0 };
 }
@@ -696,12 +779,15 @@ export async function processImport(
   }
 
   if (job.status === "rehosting_images") {
-    const { done, failed, remaining } = await rehostChunk(admin, job);
+    const { done, failed, remaining, incert } = await rehostChunk(admin, job);
     totals.images_done += done + failed; // count attempts so the bar reaches 100%
 
     let status: ImportStatus = "rehosting_images";
     const patch: Record<string, unknown> = { totals: totals as unknown as never, updated_at: new Date().toISOString() };
-    if (remaining === 0) {
+    /* `!incert`: faza se incheie numai cand chiar STIM ca nu mai e nimic. Vezi nota din
+       `rehostChunk` - de aici pleaca `anuntaCanalele`, deci o incheiere pripita trimite
+       produsul la eMAG inainte sa fie gata. */
+    if (remaining === 0 && !incert) {
       status = totals.failed > 0 ? "completed_with_errors" : "completed";
       patch.status = status;
       patch.finished_at = new Date().toISOString();

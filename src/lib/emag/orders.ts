@@ -29,6 +29,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
+import { platitLaEi } from "./plata";
 import { intregDeLaEi } from "./numere";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
@@ -868,7 +869,7 @@ async function ingereazaComandaCitita(
         /* ⚠ Si plata: era scrisa tot o singura data, la insert. O comanda cu ramburs
            platita intre timp ar fi ramas „pending" pe veci, iar AWB-ul ar fi cerut
            banii a doua oara. */
-        payment_status: c.payment_status === 1 ? "paid" : "pending",
+        payment_status: platitLaEi(c.payment_status),
         updated_at: acum,
       }).eq("id", ex.order_id).eq("business_id", ctx.businessId);
 
@@ -994,7 +995,7 @@ async function ingereazaComandaCitita(
     vat_amount: bani.vat_amount,
     payment_method: "emag",
     /* 1 = platita la ei (card sau transfer); ramburs se incaseaza la livrare. */
-    payment_status: c.payment_status === 1 ? "paid" : "pending",
+    payment_status: platitLaEi(c.payment_status),
     status,
     order_source: {
       marketplace: "emag",

@@ -39,6 +39,68 @@ export const MARKETPLACE_ORIGINI: Record<string, { label: string; badge: string 
   emag: { label: "eMAG", badge: "bg-blue-100 text-blue-800 border-blue-200" },
 };
 
+/*
+ * ═══ ⚠ CINE TINE CICLUL DE VIATA AL COMENZII ═══
+ *
+ * La o comanda din magazin, adevarul despre stare e la noi. La una de marketplace, nu:
+ * acolo furnizorul e cel care stie daca s-a livrat si daca s-au incasat banii, iar
+ * reconcilierea ne aduce raspunsul lui la fiecare citire.
+ *
+ * ⚠ CE S-A INTAMPLAT FARA REGULA ASTA. Selectorul generic de status si cel de plata se
+ * randau si pe comenzile eMAG, iar `updateOrder` le ducea pana la baza fara sa se uite la
+ * origine. Trei feluri de pagube, toate tacute:
+ *
+ *   - „Platit" pus de mana pe o comanda cu ramburs golea rambursul AWB-ului. Banii nu se
+ *     mai incasau la usa. (Inchis separat, in `stareaPlatiiPentruRamburs`.)
+ *   - „Anulat" elibera stocul local, iar recitirea revendica marfa inapoi — daca intre
+ *     timp se vanduse, stocul intra pe minus si ramanea doar un rand in jurnal.
+ *   - Orice stare pusa de om era stearsa la prima recitire, fara nicio eroare pe ecran.
+ *     Dar carligele pornite intre timp — factura, instiintarea — RAMANEAU pornite.
+ *
+ * ⚠ SI NU EXISTA DRUM INAPOI: `salveazaComenzi` (POST /order/save) e scrisa in client si
+ * n-are niciun apelant. Deci nimic din ce se apasa aici nu ajunge vreodata la ei.
+ *
+ * ⚠ DE CE NUMAI eMAG DEOCAMDATA, desi scaparea e aceeasi la toate trei. La Trendyol
+ * iesirea exista si merge — dar prin actiuni PROPRII (`setPackageStatus`,
+ * `sendTrackingNumber`), nu prin selectorul generic. Deci si acolo selectorul schimba doar
+ * starea locala. A opri si acolo e insa o hotarare de produs, nu o reparatie: ar lua un
+ * buton pe care comerciantii il folosesc azi. Se adauga aici cand se hotaraste, si e un
+ * singur cuvant.
+ */
+export const MARKETPLACE_CU_CICLU_PROPRIU = new Set(["emag"]);
+
+/**
+ * Cheia marketplace-ului care tine ciclul comenzii, sau `null` daca il tinem noi.
+ *
+ * ⚠ Se citeste din `order_source`, care e scris la ingest si nu se mai schimba. Nu din
+ * `payment_method`: acolo o comanda eMAG scrie „emag", dar una Trendyol nu neaparat.
+ */
+export function marketplaceCareTineComanda(orderSource: unknown): string | null {
+  const m = (orderSource as { marketplace?: string } | null)?.marketplace;
+  return m && MARKETPLACE_CU_CICLU_PROPRIU.has(m) ? m : null;
+}
+
+/**
+ * Ce i se spune omului cand incearca sa schimbe de aici o comanda tinuta de ei.
+ *
+ * ⚠ Mesajul SPUNE UNDE SE FACE, nu doar ca nu se poate. Un „nu se poate" fara urmatoarea
+ * miscare l-a pus deja pe comerciant sa apese de 208 ori un buton care n-avea cum sa
+ * meargă. Vezi `etichete.ts`.
+ */
+export function deCeNuDeAici(marketplace: string, ce: "starea" | "plata" | "stergerea"): string {
+  const nume = MARKETPLACE_ORIGINI[marketplace]?.label ?? marketplace;
+  /* ⚠ Text pe care il citeste comerciantul: cu diacritice, si fara linii de dialog. */
+  if (ce === "stergerea") {
+    return `Comanda vine din ${nume} și nu se poate șterge de aici: la ei rămâne. `
+      + "Ștearsă la noi, s-ar rupe legătura cu factura și s-ar întoarce pe raft marfă "
+      + "care a plecat deja la client. Ca s-o scoți din listele tale, folosește filtrele.";
+  }
+  const lucrul = ce === "plata" ? "Starea plății" : "Starea";
+  return `${lucrul} unei comenzi ${nume} se schimbă în contul ${nume}, nu de aici — noi o `
+    + "citim de la ei la fiecare trecere. Schimbată aici, ar fi ștearsă la prima "
+    + "sincronizare, dar factura și înștiințările pornite între timp ar rămâne pornite.";
+}
+
 const BADGE_IMPLICIT = "bg-muted text-muted-foreground border-transparent";
 
 /** Clasele etichetei de sursa pentru o comanda. */

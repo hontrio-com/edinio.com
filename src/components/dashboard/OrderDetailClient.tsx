@@ -11,6 +11,7 @@ import {
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
   ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
+import { marketplaceCareTineComanda } from "@/lib/orders/origin";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
@@ -317,6 +318,10 @@ export function OrderDetailClient({
    * sa plateasca transportul lor.
    */
   const isEmag = (order.order_source as { marketplace?: string } | null)?.marketplace === "emag";
+
+  /* ⚠ Aceeasi regula ca pe server, din acelasi loc — nu o a doua copie. Vezi
+     `marketplaceCareTineComanda`: cine tine ciclul comenzii, tine si starea. */
+  const tinutaDeEi = marketplaceCareTineComanda(order.order_source) != null;
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -1164,12 +1169,31 @@ export function OrderDetailClient({
           {/* Status & plata */}
           <div className={`${CARD} p-5 space-y-4`}>
             <h2 className="text-sm font-semibold text-foreground">Status comanda</h2>
+
+            {/*
+              ⚠ LA O COMANDA eMAG STAREA E A LOR, SI SE VEDE CA ATARE (25.08.2026).
+
+              Serverul refuza schimbarea (`marketplaceCareTineComanda`), dar un buton care
+              arata apasabil si da eroare abia dupa apasare e o cursa. Aici se spune
+              dinainte, si se spune UNDE se face — nu doar ca nu se poate.
+
+              Butoanele raman VIZIBILE, ca omul sa vada in ce stare e comanda; doar ca nu
+              mai raspund la apasare.
+            */}
+            {tinutaDeEi && (
+              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                Starea și plata acestei comenzi le ține eMAG. Se schimbă din contul eMAG, iar
+                noi le citim de acolo la fiecare trecere. AWB-ul și factura se fac de aici.
+              </p>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {STATUS_OPTIONS.map(opt => (
-                <button key={opt.value} type="button" onClick={() => setStatus(opt.value)}
+                <button key={opt.value} type="button" disabled={tinutaDeEi}
+                  onClick={() => setStatus(opt.value)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                     status === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                  }`}>
+                  } ${tinutaDeEi ? "cursor-not-allowed opacity-60" : ""}`}>
                   {opt.label}
                 </button>
               ))}
@@ -1178,18 +1202,21 @@ export function OrderDetailClient({
               <label className="block text-xs font-medium text-muted-foreground mb-2">Status plata</label>
               <div className="flex flex-wrap gap-2">
                 {PAYMENT_OPTIONS.map(opt => (
-                  <button key={opt.value} type="button" onClick={() => setPaymentStatus(opt.value)}
+                  <button key={opt.value} type="button" disabled={tinutaDeEi}
+                    onClick={() => setPaymentStatus(opt.value)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       paymentStatus === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                    }`}>
+                    } ${tinutaDeEi ? "cursor-not-allowed opacity-60" : ""}`}>
                     <CreditCard className="h-3 w-3" />{opt.label}
                   </button>
                 ))}
               </div>
             </div>
-            <Button onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges} className="w-full">
-              {isPending ? "Se salveaza..." : "Salveaza modificarile"}
-            </Button>
+            {!tinutaDeEi && (
+              <Button onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges} className="w-full">
+                {isPending ? "Se salveaza..." : "Salveaza modificarile"}
+              </Button>
+            )}
           </div>
 
           {/* Facturare (unified) */}

@@ -47,6 +47,7 @@ import { pretPentruSmartDeals, propuneOferte } from "@/lib/emag/campanii";
 /* ⚠ Regula casei pentru „cat incaseaza curierul”, scrisa dupa comanda #0033:
    105,50 lei plecati fara nicio cale de incasare. Vezi `orders/ramburs.ts`. */
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
+import { stareaPlatiiPentruRamburs } from "@/lib/emag/plata";
 import {
   adunaPeCategorii, facturileLorPentruEcran, numeleCategoriilor,
   type FacturaEcran, type TotalPeCategorie,
@@ -1248,9 +1249,26 @@ export async function emiteAwbEmag(
   const { data: comandaLocala, error: eComanda } = await admin.from("orders")
     .select("payment_status, total").eq("id", orderId).eq("business_id", businessId).maybeSingle();
   if (eComanda) return { error: `Comanda nu s-a putut citi: ${eComanda.message}` };
-  const ramburs = rambursDeIncasat(
-    (comandaLocala ?? {}) as { payment_status?: string | null; total?: unknown },
-  );
+
+  /*
+   * ⚠ STAREA PLATII SE IA DE LA EI, TOTALUL DE LA NOI (25.08.2026).
+   *
+   * `orders.payment_status` e editabil din selectorul generic al Edinio, iar pe o comanda
+   * eMAG banii nu-i incaseaza magazinul, ii incaseaza ei. Un „Platit" pus de mana facea ca
+   * AWB-ul sa plece cu `cod: 0` pe o comanda cu ramburs — si spre deosebire de toti
+   * ceilalti curieri, aici suma nu se poate indrepta din formular, e text.
+   * Vezi `stareaPlatiiPentruRamburs` pentru toata socoteala.
+   *
+   * Totalul ramane al nostru: e derivat tot din comanda lor, si e cel pe care il stie si
+   * factura.
+   */
+  const ramburs = rambursDeIncasat({
+    payment_status: stareaPlatiiPentruRamburs(
+      brut as { payment_status?: unknown },
+      comandaLocala as { payment_status?: string | null } | null,
+    ),
+    total: (comandaLocala as { total?: unknown } | null)?.total,
+  });
 
   const cl = (brut.customer ?? {}) as Record<string, string | undefined>;
 
@@ -2161,9 +2179,16 @@ export async function pregatireAwbEmag(
     tipComanda: r.order_type,
     /* ⚠ Acelasi izvor ca la emitere. Aratat din `cashed_cod`, ecranul spunea „Nimic —
        platit deja" pentru o comanda cu plata la livrare, intr-un camp needitabil. */
-    ramburs: rambursDeIncasat(
-      (comandaPentruRamburs ?? {}) as { payment_status?: string | null; total?: unknown },
-    ),
+    /* ⚠ ACELASI IZVOR CA LA EMITERE, si trebuie sa ramana asa: ecranul arata suma
+       needitabil, deci daca cele doua socoteli s-ar departa, omul ar vedea o cifra si ar
+       pleca alta. Vezi `stareaPlatiiPentruRamburs`. */
+    ramburs: rambursDeIncasat({
+      payment_status: stareaPlatiiPentruRamburs(
+        brut as { payment_status?: unknown },
+        comandaPentruRamburs as { payment_status?: string | null } | null,
+      ),
+      total: (comandaPentruRamburs as { total?: unknown } | null)?.total,
+    }),
     awbExistent: existent ? { numar: existent.awb_number, emagId: existent.emag_id } : null,
     locker: brut.details?.locker_name ?? brut.details?.locker_id ?? null,
     /* ⚠ PE ACELAȘI DRUM, fără o a doua chemare din modal. Formularul cerea deja

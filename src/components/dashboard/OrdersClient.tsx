@@ -239,8 +239,17 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
        * readuce adevarul din server, dar nimeni nu se uita la un rand care
        * „tocmai a mers".
        */
+      /*
+       * ⚠ SI CATE AU FOST SARITE. Comenzile ținute de un marketplace nu se mută de aici —
+       * starea lor vine de la ei. Fără vorba asta, o selecție de 30 din care 10 sunt eMAG
+       * ar fi arătat „20 comenzi → Livrat" și atât, iar omul ar fi căutat celelalte zece
+       * prin filtre.
+       */
+      const sarite = res.sarite ? ` ${res.sarite} sunt din marketplace și se schimbă din contul de acolo.` : "";
       if (res.esuate) {
-        toast.error(`${res.updated} comenzi → ${label}. ${res.esuate} NU s-au putut muta — vezi Jurnalul.`);
+        toast.error(`${res.updated} comenzi → ${label}. ${res.esuate} NU s-au putut muta — vezi Jurnalul.${sarite}`);
+      } else if (res.sarite) {
+        toast.warning(`${res.updated} comenzi → ${label}.${sarite}`);
       } else {
         toast.success(`${res.updated} comenzi → ${label}`);
       }

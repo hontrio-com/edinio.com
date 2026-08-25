@@ -1,6 +1,7 @@
 "use server";
 
 import { after } from "next/server";
+import { marketplaceCareTineComanda, deCeNuDeAici } from "@/lib/orders/origin";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { scrieStatisticiOferte } from "@/lib/offers/statistici";
 import { revalidatePath } from "next/cache";
@@ -1891,6 +1892,23 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   const storeName = biz.store_name || biz.business_name;
 
   /*
+   * ═══ ⚠ CICLUL COMENZII LOR NU SE SCHIMBA DE AICI (25.08.2026) ═══
+   *
+   * Vezi `marketplaceCareTineComanda` pentru cele trei pagube masurate. Paza sta pe
+   * SERVER, nu in componenta: butoanele se pot ocoli cu un POST pe actiune, si oricum
+   * `bulkUpdateOrderStatus` ajungea la acelasi RPC pe alt drum.
+   *
+   * ⚠ SE REFUZA NUMAI CE CHIAR SE ATINGE. `updateOrder` primeste si `awb`, iar o salvare
+   * care duce doar numarul de AWB n-are de ce sa fie oprita — altfel comerciantul ar
+   * ramane fara nicio cale de a-l scrie pe o comanda eMAG expediata cu curierul lui.
+   */
+  const tineEl = marketplaceCareTineComanda(order.order_source);
+  if (tineEl) {
+    if (data.status !== order.status) return { error: deCeNuDeAici(tineEl, "starea") };
+    if (data.payment_status !== order.payment_status) return { error: deCeNuDeAici(tineEl, "plata") };
+  }
+
+  /*
    * STATUSUL, CUPONUL SI STOCUL — INTR-O SINGURA TRANZACTIE.
    *
    * Erau trei drumuri separate la baza: un UPDATE, apoi `release_order_discount`,
@@ -2958,11 +2976,35 @@ export async function deleteOrder(orderId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: order } = await supabase.from("orders").select("business_id, discount_code, gls_awb_number").eq("id", orderId).single();
+  const { data: order } = await supabase.from("orders").select("business_id, discount_code, gls_awb_number, order_source").eq("id", orderId).single();
   if (!order) return { error: "Comanda negasita" };
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
+
+  /*
+   * ═══ ⚠ O COMANDA A LOR NU SE STERGE DE AICI (25.08.2026) ═══
+   *
+   * La ei comanda ramane. Stearsa la noi, se rup patru lucruri deodata, si toate tacut:
+   *
+   *   - `emag_orders.order_id` devine NULL, deci randul ramane orfan;
+   *   - stocul comenzii se intoarce pe raft desi marfa a plecat la client;
+   *   - daca factura nu era inca urcata, cronul n-o mai vede NICIODATA, iar eMAG ramane
+   *     fara documentul pe care il cere dupa livrare;
+   *   - iar daca ei ating comanda din nou, ea reintra ca rand NOU si poate primi a doua
+   *     factura fiscala pentru aceeasi vanzare.
+   *
+   * ⚠ SI NU E NEVOIE DE O MODIFICARE LA EI CA SA REINVIE: butonul de istoric
+   * (`importaIstoricEmag`) pagineaza pe data, pana la un an in urma, fara sa se uite la
+   * `modified`. Adica omul care sterge o comanda si apoi apasa „adu istoricul" si-o aduce
+   * inapoi — dar pe drumul de istoric, care nu consuma stoc si nu factureaza.
+   *
+   * ⚠ Acelasi tipar exista deja in casa la produse: `deleteProduct` nu sterge pana cand
+   * retragerea ofertei nu e scrisa durabil in coada. Aici nu exista un echivalent de
+   * trimis la ei, deci se opreste de tot.
+   */
+  const tineEl = marketplaceCareTineComanda(order.order_source);
+  if (tineEl) return { error: deCeNuDeAici(tineEl, "stergerea") };
 
   /*
    * CUPONUL, STOCUL SI STERGEREA — ORI TOT, ORI NIMIC.

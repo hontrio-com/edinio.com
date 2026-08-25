@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { marketplaceCareTineComanda } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
@@ -1016,14 +1017,43 @@ async function createAwbForOrder(
 // bulk status change should not silently mass-message customers.
 export async function bulkUpdateOrderStatus(
   businessId: string, orderIds: string[], status: string,
-): Promise<{ updated: number; esuate?: number } | { error: string }> {
+): Promise<{ updated: number; esuate?: number; sarite?: number } | { error: string }> {
   const g = await guardBusiness(businessId);
   if ("error" in g) return g;
   if (!(status in ORDER_STATUS)) return { error: "Status invalid." };
-  const ids = cleanIds(orderIds);
-  if (ids.length === 0) return { error: "Nicio comanda selectata." };
+  const idsCerute = cleanIds(orderIds);
+  if (idsCerute.length === 0) return { error: "Nicio comanda selectata." };
 
   const admin = createAdminClient();
+
+  /*
+   * ═══ ⚠ COMENZILE TINUTE DE MARKETPLACE SE SAR (25.08.2026) ═══
+   *
+   * Lotul mergea direct in acelasi RPC ca panoul, fara sa se uite la origine. Deci o
+   * anulare in masa care prindea si comenzi eMAG elibera stocul unor comenzi VII la ei —
+   * marfa deja vanduta se reoferea in magazinul propriu — iar un „livrata" in masa putea
+   * emite factura fiscala inainte de termen. Statusul se indrepta la urmatoarea citire;
+   * factura, nu.
+   *
+   * ⚠ SE SAR, NU SE REFUZA TOT LOTUL. Selectia amestecata e cazul obisnuit: 20 din magazin
+   * si 10 de la ei. Refuzand tot, omul ar fi ramas fara nicio cale de a le muta pe ale lui.
+   *
+   * ⚠ SI SE SPUNE CATE. Un „20 comenzi → Livrat" pentru 30 selectate, fara nicio vorba
+   * despre celelalte zece, e chiar felul de tacere pe care il reparam peste tot.
+   */
+  const { data: origini, error: eOrigini } = await admin.from("orders")
+    .select("id, order_source").eq("business_id", businessId).in("id", idsCerute);
+  if (eOrigini) return { error: `Comenzile nu s-au putut citi: ${eOrigini.message}` };
+
+  const tinuteDeEi = new Set(
+    ((origini ?? []) as { id: string; order_source: unknown }[])
+      .filter((o) => marketplaceCareTineComanda(o.order_source))
+      .map((o) => o.id),
+  );
+  const ids = idsCerute.filter((id) => !tinuteDeEi.has(id));
+  if (ids.length === 0) {
+    return { error: "Toate comenzile selectate vin dintr-un marketplace care le ține starea. Schimb-o din contul de acolo." };
+  }
   /*
    * FIECARE COMANDA TRECE PRIN ACEEASI TRANZACTIE CA IN PANOU.
    *
@@ -1078,5 +1108,11 @@ export async function bulkUpdateOrderStatus(
   }
 
   revalidatePath("/dashboard/orders");
-  return { updated: reusite.length, ...(cazute.length ? { esuate: cazute.length } : {}) };
+  return {
+    updated: reusite.length,
+    ...(cazute.length ? { esuate: cazute.length } : {}),
+    /* ⚠ Numai cand chiar s-a sarit ceva: un camp mereu prezent ar fi pus UI-ul sa
+       spuna „0 sarite" la fiecare lot obisnuit. */
+    ...(tinuteDeEi.size ? { sarite: tinuteDeEi.size } : {}),
+  };
 }

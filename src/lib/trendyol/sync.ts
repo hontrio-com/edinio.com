@@ -109,6 +109,8 @@ interface ListingRow {
   dimensional_weight: number | null; cargo_company_id: number | null;
   /** Cate ambalaje are produsul, pentru garantia SGR. */
   sgr_units?: number | null;
+  /** ⚠ Tara in care s-a FABRICAT produsul, nu originea vanzatorului. Ceruta de ei din 23.10.2026. */
+  country_of_origin?: string | null;
   /** Edinio impinge singur stocul si pretul? Fals pe listarile ADOPTATE. */
   auto_inventory?: boolean | null;
   /** Produsul de la Trendyol a fost creat de NOI (lot de creare reusit)? */
@@ -123,14 +125,14 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
      pentru un produs care o are deja. */
   const data = randCitit<ListingRow>("trendyol.listarea", await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units, country_of_origin")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
   return (data as ListingRow) ?? null;
 }
 async function getListingByMainId(admin: Db, businessId: string, mainId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units, country_of_origin")
     .eq("business_id", businessId).eq("product_main_id", mainId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -764,7 +766,7 @@ export async function syncProductsBulk(
   const listingIds = pregatite.map((x) => x.listingId);
   const [{ data: randuriListari }, { data: randuriVariante }] = await Promise.all([
     admin.from("trendyol_listings")
-      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units")
+      .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units, country_of_origin")
       .eq("business_id", ctx.businessId).in("id", listingIds),
     admin.from("trendyol_variants")
       .select("listing_id, barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
@@ -919,7 +921,9 @@ async function computeInventoryItems(
   const stocuri = stocuriVii(prod);
   const items: InventoryItem[] = [];
   for (const v of variants) {
-    const priced = buildVariantPrices(prod, v);
+    /* ⚠ Si aici trece configul: pe o vitrina cu alta moneda, lipsa pretului explicit
+       trebuie sa opreasca trimiterea, nu sa cada inapoi pe pretul in lei. */
+    const priced = buildVariantPrices(prod, v, ctx.config);
     if ("error" in priced) return { error: priced.error };
     items.push({
       barcode: v.barcode,

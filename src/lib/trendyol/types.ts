@@ -184,6 +184,18 @@ export interface TrendyolConfig {
    * decide ce cote de TVA sunt legale pe vitrina de destinatie.
    */
   origine?: TrendyolStoreFront;
+  /**
+   * Tara in care s-a FABRICAT produsul, implicita pentru tot magazinul.
+   *
+   * ⚠ NU E `origine`, care e chiar deasupra. Aceea e originea VANZATORULUI, folosita la
+   * cotele de TVA sub Cross Country. Asta e tara de fabricatie a marfii, ceruta de Trendyol
+   * ca `origin` de nivel intai — optionala de pe 17.08.2026, OBLIGATORIE din 23.10.2026.
+   *
+   * ⚠ E doar un implicit, si de-aia se poate scrie si pe listare: un magazin din Romania
+   * vinde hrana facuta in Germania si jucarii facute in China. O valoare pusa peste tot ar
+   * fi o declaratie falsa, nu o comoditate.
+   */
+  default_country_of_origin?: string;
   user_agent_company?: string;      // User-Agent "{sellerId} - {company}" (default SelfIntegration)
   seller_name?: string;
   /*
@@ -330,6 +342,14 @@ export interface TrendyolProductAttribute {
 // separat, la expediere. Trimise degeaba, ingreuneaza payload-ul si pot fi
 // respinse la validare.
 export interface TrendyolProductItem {
+  /**
+   * Tara de fabricatie, ISO 3166-1 alpha-2.
+   *
+   * ⚠ CAMP NOU DE NIVEL INTAI, adaugat de ei pe 17.08.2026. Optional pana pe 23.10.2026,
+   * apoi obligatoriu. In perioada dintre ele, o categorie care cere „origine" si ca ATRIBUT
+   * trebuie sa primeasca in continuare si atributul — deci cele doua NU se exclud.
+   */
+  origin?: string;
   barcode: string;                  // max 40, the variant identifier
   title: string;                    // max 100
   productMainId: string;            // max 40, groups variants

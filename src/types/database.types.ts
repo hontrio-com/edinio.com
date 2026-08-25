@@ -4204,6 +4204,7 @@ export type Database = {
           cargo_company_id: number | null
           category_id: number | null
           creat_de_edinio: boolean
+          country_of_origin: string | null
           created_at: string
           dimensional_weight: number | null
           error: string | null
@@ -4228,6 +4229,7 @@ export type Database = {
           cargo_company_id?: number | null
           category_id?: number | null
           creat_de_edinio?: boolean
+          country_of_origin?: string | null
           created_at?: string
           dimensional_weight?: number | null
           error?: string | null
@@ -4252,6 +4254,7 @@ export type Database = {
           cargo_company_id?: number | null
           category_id?: number | null
           creat_de_edinio?: boolean
+          country_of_origin?: string | null
           created_at?: string
           dimensional_weight?: number | null
           error?: string | null

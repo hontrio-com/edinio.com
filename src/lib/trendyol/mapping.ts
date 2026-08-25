@@ -50,6 +50,8 @@ export interface MappableProduct {
 }
 
 export interface TrendyolListingEnrichment {
+  /** ⚠ Tara de FABRICATIE a produsului, nu a vanzatorului. Vezi `default_country_of_origin`. */
+  country_of_origin?: string | null;
   brand_id: number | null;
   category_id: number | null;
   /** Cate ambalaje are produsul, pentru garantia SGR. `null` = unul singur. */
@@ -443,12 +445,64 @@ export function stocVarianteiSalvate(
 }
 
 // ── Price building (direct RON) ───────────────────────────────────────────────
-export function buildVariantPrices(product: MappableProduct, variant: TrendyolVariantData): { listPrice: number; salePrice: number } | { error: string } {
+/**
+ * Moneda in care sunt scrise preturile magazinului.
+ *
+ * ⚠ `MappableProduct.price` e documentat „RON" chiar in tipul lui, si asa si e: pretul din
+ * fisa produsului. Nu se converteste nicaieri.
+ */
+const MONEDA_MAGAZINULUI = "RON";
+
+/**
+ * Preturile unei variante, in moneda VITRINEI.
+ *
+ * ═══ ⚠ UN PRET IN RON TRIMIS PE O VITRINA IN EURO (26.08.2026) ═══
+ *
+ * Trendyol citeste numarul in moneda vitrinei alese; noi nu convertim nimic, si e in regula
+ * atat timp cat vitrina e RO. Dar sub Cross Country acelasi produs se listeaza si pe GR, SA,
+ * AE, KW — iar cand varianta n-avea pret Trendyol propriu, se cadea inapoi pe `product.price`:
+ *
+ *   product.price = 100      (RON, adica vreo 20 EUR)
+ *   vitrina GR               -> Trendyol citeste „100 EUR"
+ *
+ * Marfa pleaca la de cinci ori pretul, sau la o cincime — dupa moneda. Si NU DA NICIO EROARE:
+ * numarul e valid, doar intelesul e altul. Se vede abia la prima comanda.
+ *
+ * ⚠ DE-AIA NU SE MAI CADE INAPOI TACUT. Pe o vitrina cu alta moneda, lipsa pretului explicit
+ * e o piedica, nu o valoare implicita: comerciantul o vede si o completeaza. O conversie
+ * facuta de noi ar fi fost si mai rea — ar fi cerut un curs, un moment al cursului si o
+ * marja, adica trei hotarari comerciale luate in locul lui.
+ */
+export function buildVariantPrices(
+  product: MappableProduct,
+  variant: TrendyolVariantData,
+  /**
+   * ⚠ Optional, ca sa nu se rupa apelantii care listeaza pe vitrina de acasa. Lipsa lui
+   * inseamna „vitrina implicita", adica RON — purtarea de pana acum.
+   */
+  config?: Pick<TrendyolConfig, "storefront">,
+): { listPrice: number; salePrice: number } | { error: string } {
+  const vitrina = infoVitrina(config?.storefront);
+  const alta = vitrina.moneda !== MONEDA_MAGAZINULUI;
+
+  const areSale = variant.sale_price != null && variant.sale_price > 0;
+  const areList = variant.list_price != null && variant.list_price > 0;
+
+  if (alta && !areSale) {
+    return {
+      error: `Completează prețul Trendyol pentru ${vitrina.tara} în ${vitrina.moneda}, `
+        + `la varianta ${variant.barcode}. Prețul din magazin e în ${MONEDA_MAGAZINULUI} `
+        + `și ar pleca la ei ca și cum ar fi ${vitrina.moneda}.`,
+    };
+  }
+
   const onSale = product.compare_at_price != null && product.compare_at_price > product.price;
-  const sale = variant.sale_price != null && variant.sale_price > 0 ? variant.sale_price : product.price;
-  let list = variant.list_price != null && variant.list_price > 0
-    ? variant.list_price
-    : (onSale ? (product.compare_at_price as number) : product.price);
+  const sale = areSale ? (variant.sale_price as number) : product.price;
+  let list = areList
+    ? (variant.list_price as number)
+    /* ⚠ Si pretul taiat: pe alta moneda se ia tot cel explicit, iar cand lipseste se
+       foloseste chiar pretul de vanzare — nu cel din magazin, care e in alta moneda. */
+    : (alta ? sale : (onSale ? (product.compare_at_price as number) : product.price));
   if (!(sale > 0)) return { error: `Prețul variantei ${variant.barcode} este 0.` };
   if (list < sale) list = sale; // Trendyol requires listPrice >= salePrice
   return { listPrice: round2(list), salePrice: round2(sale) };
@@ -517,7 +571,7 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
     const barcode = (v.barcode || "").trim();
     const problema = verificaBarcode(barcode);
     if (problema) return { error: problema };
-    const priced = buildVariantPrices(product, v);
+    const priced = buildVariantPrices(product, v, config);
     if ("error" in priced) return priced;
 
     const item: TrendyolProductItem = {
@@ -546,6 +600,26 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
     if (necesitaSgr(categoryId, config.storefront)) {
       item.sgrPrice = pretSgr(listing.sgr_units);
     }
+    /*
+     * ═══ TARA DE FABRICATIE, CERUTA DE EI DIN 23.10.2026 ═══
+     *
+     * Camp nou de nivel intai, adaugat pe 17.08.2026 si optional pana atunci. Se ia de pe
+     * listare, iar cand lipseste, din implicitul magazinului.
+     *
+     * ⚠ NU SE PUNE UN IMPLICIT INVENTAT. Fara nicio valoare aleasa de comerciant, campul NU
+     * pleaca — un magazin din Romania vinde hrana facuta in Germania si jucarii facute in
+     * China, iar un „RO" pus de noi peste tot ar fi o declaratie falsa despre marfa lui.
+     * Cat timp campul e optional la ei, lipsa lui nu strica nimic; cand devine obligatoriu,
+     * refuzul lor va numi chiar campul, si comerciantul stie ce sa completeze.
+     *
+     * ⚠ SI NU INLOCUIESTE ATRIBUTUL. Pana la 23.10.2026, o categorie care cere „origine" ca
+     * atribut trebuie sa primeasca in continuare si atributul — ele merg impreuna, nu unul
+     * in locul celuilalt. De-aia nu se scoate nimic din `attributes`.
+     */
+    const taraFabricatiei = (listing.country_of_origin || config.default_country_of_origin || "")
+      .trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(taraFabricatiei)) item.origin = taraFabricatiei;
+
     // Adresele sunt optionale: le trimitem doar daca vanzatorul a ales explicit
     // altele decat implicitele contului sau.
     if (config.shipment_address_id) item.shipmentAddressId = config.shipment_address_id;

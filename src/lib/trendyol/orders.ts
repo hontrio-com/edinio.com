@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { logError } from "@/lib/error-logger";
+import { EroareCitireBaza, randCitit } from "@/lib/supabase/rand-citit";
 import type { Database } from "@/types/database.types";
 import type { TrendyolSyncContext } from "./sync";
 import { getOrders, isTrendyolError } from "./client";
@@ -129,7 +130,30 @@ async function consumaStoculComenzii(
   return "ok";
 }
 
+/**
+ * ⚠ Marginea la care o citire picata devine `"failed"`, nu o hotarare gresita.
+ *
+ * `"failed"` opreste avansarea cursorului (vezi `pollPackages`), deci pachetul se reciteste.
+ * Prinsa mai adanc, fiecare citire ar fi trebuit sa stie singura ce sa faca; neprinsa deloc,
+ * o pana pe UN pachet ar fi rupt pagina intreaga.
+ */
 export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: TrendyolShipmentPackage): Promise<"created" | "updated" | "skipped" | "failed"> {
+  try {
+    return await ingestPackageCitit(admin, ctx, pkg);
+  } catch (e) {
+    if (e instanceof EroareCitireBaza) {
+      await logError({
+        action: "trendyol/orders",
+        message: `pachetul nu s-a putut citi din baza: ${e.message}`,
+        details: { shipmentPackageId: pkg?.id }, businessId: ctx.businessId, severity: "warning",
+      });
+      return "failed";
+    }
+    throw e;
+  }
+}
+
+async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: TrendyolShipmentPackage): Promise<"created" | "updated" | "skipped" | "failed"> {
   const packageId = pkg.shipmentPackageId != null ? String(pkg.shipmentPackageId) : undefined;
   if (!packageId) return "skipped";
   const now = new Date().toISOString();
@@ -202,9 +226,24 @@ export async function ingestPackage(admin: Db, ctx: TrendyolSyncContext, pkg: Tr
     return { product_id: pid, name: l.productName ?? `Barcode ${l.barcode}`, barcode: l.barcode ?? null, price, quantity: qty };
   });
 
-  const { data: existing } = await admin
-    .from("trendyol_orders").select("id, order_id, last_modified_date")
-    .eq("business_id", ctx.businessId).eq("shipment_package_id", packageId).maybeSingle();
+  /*
+   * ═══ ⚠ „N-AM PUTUT INTREBA" NU E „PACHET NOU" (26.08.2026) ═══
+   *
+   * Forma dinainte nu citea `error`. O pana de o clipa dadea `existing = null`, iar de acolo
+   * se pleaca pe calea de PACHET NOU pentru unul pe care il avem deja:
+   *
+   *   - se creeaza a doua comanda pentru acelasi colet;
+   *   - se consuma stocul inca o data;
+   *   - iar garda „un eveniment vechi nu rescrie unul nou" nu mai are cu ce compara, deci
+   *     un `Delivered` poate fi readus pe `Picking`.
+   *
+   * Aruncarea e prinsa la marginea lui `ingestPackage` si devine `"failed"` — verdictul care
+   * OPRESTE avansarea cursorului, deci pachetul se reciteste la trecerea urmatoare.
+   */
+  const existing = randCitit<{ id: string; order_id: string | null; last_modified_date: number | null }>(
+    "trendyol.pachetulCunoscut", await admin
+      .from("trendyol_orders").select("id, order_id, last_modified_date")
+      .eq("business_id", ctx.businessId).eq("shipment_package_id", packageId).maybeSingle() as never);
   const modificatLa = Number.isFinite(Number(pkg.lastModifiedDate)) ? Number(pkg.lastModifiedDate) : null;
   if (existing) {
     const ex = existing as { id: string; order_id: string | null; last_modified_date: number | null };

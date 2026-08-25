@@ -31,6 +31,7 @@ import {
 } from "@/lib/emag/taxonomy";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
+import { LIMITE_EMAG } from "@/lib/emag/limite";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
 import { ceLipsestePentruPublicare, loadEmagContext } from "@/lib/emag/sync";
 import { patchEmagConfig } from "@/lib/emag/config";
@@ -201,6 +202,23 @@ export interface StareEmag {
   stocRezervat: number | null;
   /** Cate zile ii trebuie magazinului ca sa se reaprovizioneze. `null` = nedeclarat. */
   supplyLeadTime: number | null;
+  /**
+   * Datele GPSR ale magazinului.
+   *
+   * ⚠ Se dau ecranului DESPACHETATE, cate un camp: forma lor e o lista de entitati
+   * (pana la zece), dar la nivel de magazin exista un singur producator si un singur
+   * reprezentant. Trimisa ca lista, componenta ar fi trebuit sa stie sa despacheteze —
+   * si atunci regula „unde stau datele" ar fi fost scrisa in doua locuri.
+   */
+  gpsr: {
+    safety_information: string;
+    producatorNume: string;
+    producatorAdresa: string;
+    producatorEmail: string;
+    reprezentantNume: string;
+    reprezentantAdresa: string;
+    reprezentantEmail: string;
+  };
   syncContinut: boolean;
   /**
    * Cine are ultimul cuvânt când ce e pe eMAG nu mai e ce am trimis (§69).
@@ -398,6 +416,15 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     greenTax: config.green_tax ?? null,
     stocRezervat: config.stoc_rezervat ?? null,
     supplyLeadTime: config.supply_lead_time ?? null,
+    gpsr: {
+      safety_information: config.gpsr?.safety_information ?? "",
+      producatorNume: config.gpsr?.manufacturer?.[0]?.name ?? "",
+      producatorAdresa: config.gpsr?.manufacturer?.[0]?.address ?? "",
+      producatorEmail: config.gpsr?.manufacturer?.[0]?.email ?? "",
+      reprezentantNume: config.gpsr?.eu_representative?.[0]?.name ?? "",
+      reprezentantAdresa: config.gpsr?.eu_representative?.[0]?.address ?? "",
+      reprezentantEmail: config.gpsr?.eu_representative?.[0]?.email ?? "",
+    },
     /* ⚠ Implicit PORNIT: cine publică din Edinio se așteaptă ca fișa să vină tot de acolo. */
     syncContinut: config.sync_continut !== false,
     /* ⚠ Prin `sursaAdevarului`, nu prin `?? "edinio"`. O valoare stricată în config ar
@@ -703,6 +730,36 @@ export async function sugereazaCategoriiEmag(
    SETARI
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * Din campurile ecranului in forma pe care o cere eMAG.
+ *
+ * ⚠ Se taie la limitele LOR chiar aici, nu doar la trimitere: un nume de 300 de semne
+ * salvat intreg ar fi aratat pe ecran ca acceptat si ar fi fost taiat abia in drum spre
+ * ei — iar comerciantul n-ar fi stiut care jumatate a ajuns.
+ */
+function gpsrDinCampuri(g: {
+  safety_information?: string;
+  producatorNume?: string; producatorAdresa?: string; producatorEmail?: string;
+  reprezentantNume?: string; reprezentantAdresa?: string; reprezentantEmail?: string;
+}): EmagConfig["gpsr"] {
+  const entitate = (nume?: string, adresa?: string, email?: string) => {
+    const n = (nume ?? "").trim();
+    /* ⚠ Fara nume nu e o entitate. Vezi nota de la apelant. */
+    if (!n) return [];
+    return [{
+      name: n.slice(0, LIMITE_EMAG.gpsrNume),
+      address: (adresa ?? "").trim().slice(0, LIMITE_EMAG.gpsrAdresa),
+      email: (email ?? "").trim().slice(0, LIMITE_EMAG.gpsrEmail),
+    }];
+  };
+
+  return {
+    safety_information: (g.safety_information ?? "").trim().slice(0, LIMITE_EMAG.gpsrSiguranta),
+    manufacturer: entitate(g.producatorNume, g.producatorAdresa, g.producatorEmail),
+    eu_representative: entitate(g.reprezentantNume, g.reprezentantAdresa, g.reprezentantEmail),
+  };
+}
+
 export async function salveazaSetariEmag(
   businessId: string,
   setari: {
@@ -717,6 +774,21 @@ export async function salveazaSetariEmag(
     green_tax?: number | null;
     /** Cate bucati se opresc pentru magazinul propriu. */
     stoc_rezervat?: number | null;
+    /**
+     * Datele GPSR, in forma DESPACHETATA a ecranului.
+     *
+     * ⚠ Se primeste asa, si se impacheteaza aici, ca sa existe UN SINGUR loc care stie
+     * cum arata `emag_config.gpsr`. Componenta trimite campuri, nu structura lor.
+     */
+    gpsr?: {
+      safety_information?: string;
+      producatorNume?: string;
+      producatorAdresa?: string;
+      producatorEmail?: string;
+      reprezentantNume?: string;
+      reprezentantAdresa?: string;
+      reprezentantEmail?: string;
+    };
     /** Rescrie Edinio si fisa produsului (nume, descriere, poze)? */
     sync_continut?: boolean;
     /**
@@ -798,6 +870,21 @@ export async function salveazaSetariEmag(
     ...(setari.warehouse_id != null ? { warehouse_id: setari.warehouse_id } : {}),
     ...(setari.green_tax !== undefined ? { green_tax: setari.green_tax ?? null } : {}),
     ...(setari.stoc_rezervat !== undefined ? { stoc_rezervat: setari.stoc_rezervat ?? null } : {}),
+    /*
+     * ═══ GPSR: SE IMPACHETEAZA AICI, INTR-UN SINGUR LOC ═══
+     *
+     * `mapping.ts` asteapta liste de entitati (pana la zece la ei). La nivel de magazin
+     * exista insa un singur producator si un singur reprezentant, deci ecranul trimite
+     * campuri simple si aici se face forma.
+     *
+     * ⚠ O ENTITATE FARA NUME NU SE TRIMITE. eMAG cere `name` pe fiecare set; o adresa
+     * completata si un nume uitat ar fi facut ca oferta INTREAGA sa fie refuzata, cu un
+     * mesaj despre GPSR pe care omul l-ar fi citit ca „lipsesc datele", desi el le pusese.
+     *
+     * ⚠ LISTA GOALA, NU `undefined`: peticul se imbina, iar o cheie lipsa inseamna
+     * „las-o cum e". Un comerciant care sterge datele trebuie sa le poata sterge.
+     */
+    ...(setari.gpsr !== undefined ? { gpsr: gpsrDinCampuri(setari.gpsr) } : {}),
     ...(setari.sync_continut != null ? { sync_continut: setari.sync_continut } : {}),
     /* ⚠ SE POTRIVESTE PE VALORILE LOR, nu se scrie numarul cerut. Enumul lor e
        2, 3, 5, 7, 14, 30, 60, 90, 120: un 10 pus de om ar fi fost refuzat de eMAG cu

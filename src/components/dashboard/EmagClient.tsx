@@ -614,6 +614,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         />
 
         <PanouStoculSiTaxa businessId={businessId} status={status} />
+        <PanouGpsr businessId={businessId} status={status} />
       </div>
 
       <PanouSincronizare businessId={businessId} />
@@ -650,6 +651,115 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
  * Scrisa fara, ar pleca cu o cincime mai mica — si nimeni n-ar observa, fiindca e o
  * suma mica pe o linie separata.
  */
+/**
+ * Datele GPSR ale magazinului.
+ *
+ * ═══ ⚠ PANA AZI ERA O FUNDATURA (25.08.2026) ═══
+ *
+ * `emag_config.gpsr` exista in tipuri, `mapping.ts` chiar il trimitea, iar preflight-ul
+ * spunea „Nu sunt completate datele GPSR". Dar NIMIC din Edinio nu-l scria: nici formular,
+ * nici actiune. Deci comerciantul era trimis sa completeze ceva ce n-avea unde — si cauta
+ * prin toate cartile setarilor, plecand incredintat ca i-a scapat lui ceva.
+ *
+ * ═══ ⚠ UN SINGUR PRODUCATOR, SI DE CE ═══
+ *
+ * eMAG ingaduie pana la zece seturi. Dar astea sunt datele MAGAZINULUI, iar un magazin are
+ * un producator si un reprezentant. Un magazin care vinde marci diferite are nevoie de date
+ * PE PRODUS — si aia e altceva, care inca nu exista. Scris aici ca o lista cu adaugare, ar
+ * fi parut ca rezolva cazul acela si nu l-ar fi rezolvat.
+ *
+ * ⚠ Se spune limpede pe ecran, ca omul sa stie ce a rezolvat si ce nu.
+ */
+function PanouGpsr({ businessId, status }: { businessId: string; status: StareEmag }) {
+  const [g, setG] = useState(status.gpsr);
+  const [seSalveaza, incepe] = useTransition();
+
+  const pune = (cheie: keyof typeof g) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setG((v) => ({ ...v, [cheie]: e.target.value }));
+
+  function salveaza() {
+    incepe(async () => {
+      const r = await salveazaSetariEmag(businessId, { gpsr: g });
+      if ("error" in r) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Salvat. Datele pleacă la ofertele tale în câteva minute.");
+    });
+  }
+
+  return (
+    <div className="mt-5 space-y-4 border-t border-border pt-5">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">Date GPSR</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Regulamentul european cere producătorul și un reprezentant din UE pentru tot mai
+          multe categorii. eMAG refuză ofertele fără ele acolo unde le cere.
+        </p>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium">Avertismente de siguranță</span>
+        <textarea
+          className={`${CAMP} min-h-[76px]`}
+          value={g.safety_information}
+          placeholder="Ex.: A nu se lăsa la îndemâna copiilor sub 3 ani."
+          onChange={pune("safety_information")}
+        />
+        <span className="mt-1 block text-xs text-muted-foreground">
+          Pleacă la fiecare ofertă a magazinului. Scrie doar ce e valabil pentru toate.
+        </span>
+      </label>
+
+      {[
+        { titlu: "Producător", n: "producatorNume", a: "producatorAdresa", e: "producatorEmail" },
+        { titlu: "Reprezentant în UE", n: "reprezentantNume", a: "reprezentantAdresa", e: "reprezentantEmail" },
+      ].map((sect) => (
+        <div key={sect.titlu} className="rounded-lg border border-border p-3 space-y-3">
+          <p className="text-sm font-medium">{sect.titlu}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Nume</span>
+              <input className={CAMP} value={g[sect.n as keyof typeof g]} onChange={pune(sect.n as keyof typeof g)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Adresă</span>
+              <input className={CAMP} value={g[sect.a as keyof typeof g]} onChange={pune(sect.a as keyof typeof g)} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">E-mail</span>
+              <input className={CAMP} value={g[sect.e as keyof typeof g]} onChange={pune(sect.e as keyof typeof g)} />
+            </label>
+          </div>
+          {/*
+            ⚠ SE SPUNE CE FACE UN NUME GOL. eMAG cere `name` pe fiecare set: o adresă
+            completată și un nume uitat ar fi făcut ca oferta ÎNTREAGĂ să fie refuzată, cu
+            un mesaj despre GPSR pe care omul l-ar fi citit ca „lipsesc datele", deși el
+            le pusese. Aici se spune dinainte, nu se află de la ei.
+          */}
+          <p className="text-xs text-muted-foreground">
+            Fără nume, setul nu se trimite deloc.
+          </p>
+        </div>
+      ))}
+
+      <p className="text-xs text-muted-foreground">
+        Datele astea sunt ale magazinului și pleacă la toate ofertele. Dacă vinzi mărci cu
+        producători diferiți, deocamdată le pui pe produs, în panoul eMAG.
+      </p>
+
+      <button
+        type="button"
+        onClick={salveaza}
+        disabled={seSalveaza}
+        className="px-4 py-2 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-60"
+      >
+        {seSalveaza ? "Se salvează..." : "Salvează datele GPSR"}
+      </button>
+    </div>
+  );
+}
+
 function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status: StareEmag }) {
   const [rezerva, setRezerva] = useState(String(status.stocRezervat ?? ""));
   const [taxa, setTaxa] = useState(String(status.greenTax ?? ""));

@@ -49,6 +49,16 @@ export const LIMITE_EMAG = {
   /** „Maximum 10 sets" la manufacturer și eu_representative */
   gpsrSeturi: 10,
   /**
+   * `safety_information` maxLength=16777215 în schema lor — adică practic nemărginit.
+   *
+   * ⚠ Se taie totuși, la 4.000. Limita lor e de tip „text lung în baza de date", nu o
+   * hotărâre despre ce e rezonabil; iar un câmp fără margine în panou e o invitație să se
+   * lipească acolo o fișă tehnică întreagă, care apoi pleacă la FIECARE ofertă a
+   * magazinului, în fiecare încărcătură. Patru mii de semne înseamnă vreo două pagini de
+   * avertismente, mai mult decât are orice produs.
+   */
+  gpsrSiguranta: 4000,
+  /**
    * `CampaignProposal.stock` maximum=255.
    *
    * ⚠ MULT SUB CEL AL OFERTEI (65535), și asta e ușor de ratat: același cuvânt, „stoc",

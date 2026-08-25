@@ -25,6 +25,8 @@ import {
 } from "@/lib/emag/queue";
 import { cuFir, firNou, ZILE_PASTRARE } from "@/lib/emag/jurnal";
 import { curataJurnalul } from "@/lib/emag/jurnal-scriere";
+/* ⚠ Numele butonului se CITEAZA, nu se scrie a doua oara. */
+import { BUTON_ADU_OFERTELE } from "@/lib/emag/etichete";
 import { aduComenzile, reiaComenzileParcate } from "@/lib/emag/orders";
 import { aduIpurileEmag } from "@/lib/emag/client";
 import { citesteIpuri, sAuSchimbat, CHEIE_IPURI } from "@/lib/emag/ipuri";
@@ -1080,6 +1082,71 @@ export async function GET(req: NextRequest) {
           businessId, severity: "warning",
         });
       }
+    }
+  }
+
+  /* ── 5d) Ofertele legate stramb ──────────────────────────────────────────
+   *
+   * ═══ ⚠ O OFERTA LEGATA STRAMB SCRIE PRETUL ALTUI PRODUS (26.08.2026) ═══
+   *
+   * Masurat pe un cont real: oferta lui `2` se numeste la eMAG „Masa de Cafea Dkd Home
+   * Decor", iar la noi era legata de „DOOGIE VITA X 10 kg". Cu `auto_sync` pornit, ii scriam
+   * 55,99 lei — pretul hranei pentru caini — peste listarea lui de mobila. La fiecare trecere
+   * a cronului, si fara ca ceva sa dea eroare. Erau 31 de asemenea oferte.
+   *
+   * ⚠ CAUZA: id-urile ofertelor din contul LUI nu sunt ale noastre. Randurile s-au legat dupa
+   * `emag_id`, iar acel id la ei inseamna azi alt produs decat cand s-a facut legatura.
+   *
+   * ⚠ SE OPRESTE TRIMITEREA, NU SE GHICESTE LEGATURA. `auto_sync = false` e chiar steagul
+   * casei pentru „asta e a comerciantului, n-o rescrie", iar mesajul il trimite la butonul
+   * care reface legatura. O re-mapare automata ar fi insemnat sa ghicim ce produs a vrut, si
+   * greseala aia scade stocul altuia.
+   *
+   * ⚠ NUMAI OFERTELE PRELUATE. La cele publicate de noi legatura e corecta prin constructie —
+   * masurat: din 41 de nepotriviri de nume, 10 erau ale noastre si doar denumite altfel in
+   * romaneste la ei („Recompense pentru pisici, din Vita uscata" pentru „Carnilove Cat Freeze
+   * Dried Beef"). Oprite si acelea, i-am fi taiat sincronizarea degeaba.
+   *
+   * ⚠ La jumatate de ora: nu e o urgenta de fiecare minut, iar interogarea trece peste toate
+   * ofertele magazinului.
+   */
+  if (new Date(inceputulRularii).getMinutes() % 30 === 9) {
+    for (const businessId of alegeInRotatie(magazine, MAGAZINE_NEPLECATE, 30)) {
+      const { data: stramb, error: eStramb } = await admin.rpc("emag_oferte_legate_stramb", {
+        p_business_id: businessId, p_limita: 200,
+      });
+      if (eStramb) {
+        await logError({
+          action: "emag-sync",
+          message: `ofertele legate stramb nu s-au putut cauta: ${eStramb.message}`,
+          businessId, severity: "warning",
+        });
+        continue;
+      }
+
+      const randuri = (stramb ?? []) as { id: string; emag_id: number; nume_emag: string | null; nume_produs: string | null }[];
+      if (randuri.length === 0) continue;
+
+      for (const r of randuri) {
+        /* ⚠ Mesajul numeste AMANDOUA numele si butonul adevarat: fara ele, comerciantul stie
+           doar ca ceva s-a oprit, nu si ce anume e stramb sau ce sa apese. */
+        await admin.from("emag_offers").update({
+          auto_sync: false,
+          error:
+            `Oferta ta de pe eMAG cu id-ul ${r.emag_id} se numește acolo „${(r.nume_emag ?? "?").slice(0, 60)}”, `
+            + `dar la noi e legată de „${(r.nume_produs ?? "?").slice(0, 60)}”. `
+            + `Am oprit trimiterea automată ca să nu-i scriem prețul altui produs. `
+            + `Apasă „${BUTON_ADU_OFERTELE}” ca să refacem legătura.`,
+          updated_at: new Date().toISOString(),
+        } as never).eq("id", r.id);
+      }
+
+      await logError({
+        action: "emag-sync",
+        message: `${randuri.length} oferte legate stramb: trimiterea automata s-a oprit`,
+        details: { businessId, cate: randuri.length, exemple: randuri.slice(0, 5).map((r) => r.emag_id) },
+        businessId, severity: "warning",
+      });
     }
   }
 

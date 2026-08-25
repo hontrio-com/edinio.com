@@ -1843,6 +1843,36 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.emag_oferte_legate_stramb(p_business_id uuid, p_limita integer DEFAULT 200)
+ RETURNS TABLE(id uuid, emag_id bigint, nume_emag text, nume_produs text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with n as (
+    select o.id, o.emag_id, o.nume_emag, p.name as nume_produs,
+           array(select w from unnest(string_to_array(
+                   lower(regexp_replace(coalesce(o.nume_emag,''), '[^a-z0-9]+', ' ', 'gi')), ' ')) w
+                  where length(w) >= 3) as a,
+           array(select w from unnest(string_to_array(
+                   lower(regexp_replace(coalesce(p.name,''), '[^a-z0-9]+', ' ', 'gi')), ' ')) w
+                  where length(w) >= 3) as b
+      from public.emag_offers o
+      join public.products p on p.id = o.product_id
+     where o.business_id = p_business_id
+       and o.creat_de_edinio = false
+       and o.auto_sync = true
+       and coalesce(o.nume_emag, '') <> ''
+       and coalesce(p.name, '') <> ''
+  )
+  select n.id, n.emag_id, n.nume_emag, n.nume_produs
+    from n
+   where cardinality(n.a) > 0 and cardinality(n.b) > 0 and not (n.a && n.b)
+   order by n.emag_id
+   limit greatest(1, least(coalesce(p_limita, 200), 1000));
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer DEFAULT 24, p_limita integer DEFAULT 50, p_de_cand timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS TABLE(id uuid, created_at timestamp with time zone)
  LANGUAGE sql
@@ -5332,6 +5362,16 @@ create table if not exists public.zz_backup_categorii_okxi_20260812 (
   is_active boolean,
   salvat_la timestamp with time zone);
 
+create table if not exists public.zz_backup_emag_autosync_20260826 (
+  id uuid,
+  business_id uuid,
+  emag_id bigint,
+  auto_sync boolean,
+  error text,
+  nume_emag text,
+  nume_produs text,
+  facut_la timestamp with time zone);
+
 create table if not exists public.zz_backup_facebook_feeds_20260814 (
   business_id uuid,
   facebook_feeds jsonb,
@@ -6069,6 +6109,7 @@ alter table public.trendyol_variants enable row level security;
 alter table public.ups_etichete enable row level security;
 alter table public.users_profile enable row level security;
 alter table public.zz_backup_categorii_okxi_20260812 enable row level security;
+alter table public.zz_backup_emag_autosync_20260826 enable row level security;
 alter table public.zz_backup_facebook_feeds_20260814 enable row level security;
 alter table public.zz_backup_preturi_bricosmart_20260804 enable row level security;
 alter table public.zz_backup_preturi_parfumuri_insula_20260812 enable row level security;
@@ -7819,6 +7860,13 @@ grant SELECT on table public.zz_backup_categorii_okxi_20260812 to service_role;
 grant TRIGGER on table public.zz_backup_categorii_okxi_20260812 to service_role;
 grant TRUNCATE on table public.zz_backup_categorii_okxi_20260812 to service_role;
 grant UPDATE on table public.zz_backup_categorii_okxi_20260812 to service_role;
+grant DELETE on table public.zz_backup_emag_autosync_20260826 to service_role;
+grant INSERT on table public.zz_backup_emag_autosync_20260826 to service_role;
+grant REFERENCES on table public.zz_backup_emag_autosync_20260826 to service_role;
+grant SELECT on table public.zz_backup_emag_autosync_20260826 to service_role;
+grant TRIGGER on table public.zz_backup_emag_autosync_20260826 to service_role;
+grant TRUNCATE on table public.zz_backup_emag_autosync_20260826 to service_role;
+grant UPDATE on table public.zz_backup_emag_autosync_20260826 to service_role;
 grant DELETE on table public.zz_backup_facebook_feeds_20260814 to anon;
 grant INSERT on table public.zz_backup_facebook_feeds_20260814 to anon;
 grant REFERENCES on table public.zz_backup_facebook_feeds_20260814 to anon;
@@ -8088,6 +8136,7 @@ grant execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_vari
 grant execute on function public.emag_awburi_de_urmarit(p_business_id uuid, p_limita integer) to service_role;
 grant execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.emag_familie_noua() to service_role;
+grant execute on function public.emag_oferte_legate_stramb(p_business_id uuid, p_limita integer) to service_role;
 grant execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) to service_role;
 grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
 grant execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) to service_role;
@@ -8244,6 +8293,7 @@ revoke execute on function public.elibereaza_stoc_complet(p_produse jsonb, p_var
 revoke execute on function public.emag_awburi_de_urmarit(p_business_id uuid, p_limita integer) from public;
 revoke execute on function public.emag_comenzi_de_verificat_awb(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.emag_familie_noua() from public;
+revoke execute on function public.emag_oferte_legate_stramb(p_business_id uuid, p_limita integer) from public;
 revoke execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) from public;
 revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
 revoke execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) from public;

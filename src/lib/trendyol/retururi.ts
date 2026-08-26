@@ -668,14 +668,28 @@ const CERERI_DE_REINTREBAT = 60;
 export async function reconciliazaRetururile(
   admin: Db, ctx: TrendyolSyncContext,
 ): Promise<{ verificate: number }> {
-  const vii = randuriCitite<{ claim_id: string; storefront: string | null; dont_ship_back: boolean | null }>(
+  const vii = randuriCitite<{ claim_id: string; storefront: string | null }>(
     "trendyol.cereriIncaVii", await admin
-      .from("trendyol_claims").select("claim_id, storefront, dont_ship_back")
+      .from("trendyol_claims").select("claim_id, storefront")
       .eq("business_id", ctx.businessId)
       .in("claim_status", STARI_INCA_VII as unknown as string[])
-      /* ⚠ Cele mai demult atinse intai, ca sa nu ramana niciuna in urma — aceeasi regula ca la
-         confirmarea tintita a listarilor, unde lipsa ei a produs infometare. */
-      .order("last_modified", { ascending: true, nullsFirst: true })
+      /*
+       * ═══ ⚠ ROTATIA NU SE POATE FACE PE UN CAMP CARE NU SE MISCA (26.08.2026) ═══
+       *
+       * Aici scria `last_modified`, si ar fi fost gresit. Acela e valoarea LOR: se scrie din
+       * raspuns si se schimba doar cand cererea chiar s-a schimbat. O cerere care sta in
+       * `WaitingInAction` cat timp comerciantul se hotaraste — pana la doua zile lucratoare, in
+       * Romania — isi pastreaza `last_modified`-ul neatins.
+       *
+       * ⚠ DECI UN MAGAZIN CU PESTE 60 DE CERERI VII AR FI REINTREBAT ACELEASI 60, la fiecare
+       * cinci minute, pentru totdeauna. Restul, niciodata. Exact infometarea pe care reconcilierea
+       * venea s-o inlature — aceeasi ca la confirmarea tintita a listarilor.
+       *
+       * ⚠ `reintrebat_la` E AL NOSTRU si se scrie la FIECARE citire, chiar si cand n-a venit nimic
+       * nou. Ordonat pe el, cel mai demult atins e mereu primul si roata se invarte singura.
+       * `nullsFirst` pune cererile niciodata atinse inaintea tuturor.
+       */
+      .order("reintrebat_la", { ascending: true, nullsFirst: true })
       .limit(CERERI_DE_REINTREBAT) as never);
 
   if (vii.length === 0) return { verificate: 0 };
@@ -709,6 +723,16 @@ export async function reconciliazaRetururile(
           details: { vitrina, cate: bucata.length, status: res.status },
           businessId: ctx.businessId, severity: "warning",
         });
+        /*
+         * ⚠ ROATA SE INVARTE SI LA ESEC, si e o alegere, nu o scapare. Nemarcata, o bucata care
+         * pica de fiecare data — o vitrina careia i-au expirat cheile, un id pe care ei il refuza
+         * — ar fi ramas vesnic prima in rand si ar fi tinut toate celelalte cereri nevazute.
+         * Marcata, ea se muta la coada si vine iar la rand peste o tura; cererea se reia, doar
+         * ca nu blocheaza pe nimeni. Esecul se vede oricum in jurnal.
+         */
+        await admin.from("trendyol_claims")
+          .update({ reintrebat_la: new Date().toISOString() } as never)
+          .eq("business_id", ctx.businessId).in("claim_id", bucata);
         continue;
       }
       for (const c of res.data?.content ?? []) {
@@ -717,6 +741,27 @@ export async function reconciliazaRetururile(
         /* ⚠ Acelasi drum ca la aducere: aceeasi scriere, aceleasi reguli, un singur loc. */
         await scrieCererea(admin, ctxVitrina, c, idCerere);
         verificate++;
+      }
+
+      /*
+       * ⚠ SE MARCHEAZA TOATA BUCATA CERUTA, nu doar ce a raspuns. O cerere pe care ei n-o mai
+       * intorc — stearsa la ei, sau un id care nu mai inseamna nimic — ar ramane cu
+       * `reintrebat_la` gol, ar fi mereu prima in rand, si ar tine roata pe loc la nesfarsit.
+       * Ceruta si nereturnata inseamna tot „am intrebat".
+       *
+       * ⚠ Si nu se atinge `updated_at`: aici nu s-a schimbat nimic din cerere, doar am intrebat
+       * de ea. Cele doua intrebari raman despartite.
+       */
+      const { error: eRoata } = await admin.from("trendyol_claims")
+        .update({ reintrebat_la: new Date().toISOString() } as never)
+        .eq("business_id", ctx.businessId).in("claim_id", bucata);
+      if (eRoata) {
+        await logError({
+          action: "trendyol/retururi",
+          message: `roata reconcilierii nu s-a putut invarti: ${eRoata.message}`,
+          details: { vitrina, cate: bucata.length },
+          businessId: ctx.businessId, severity: "warning",
+        });
       }
     }
   }

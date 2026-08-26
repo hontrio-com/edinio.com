@@ -4364,6 +4364,7 @@ export type Database = {
           order_id: string | null
           order_number: string | null
           raw: Json | null
+          reintrebat_la: string | null
           shipment_package_id: number | null
           storefront: string | null
           updated_at: string
@@ -4381,6 +4382,7 @@ export type Database = {
           order_id?: string | null
           order_number?: string | null
           raw?: Json | null
+          reintrebat_la?: string | null
           shipment_package_id?: number | null
           storefront?: string | null
           updated_at?: string
@@ -4398,6 +4400,7 @@ export type Database = {
           order_id?: string | null
           order_number?: string | null
           raw?: Json | null
+          reintrebat_la?: string | null
           shipment_package_id?: number | null
           storefront?: string | null
           updated_at?: string

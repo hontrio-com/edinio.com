@@ -67,10 +67,41 @@ test("⚠ grupate pe VITRINA, si taiate in bucati", () => {
   assert.match(mod, /i \+= 20/);
 });
 
-test("⚠ cele mai demult atinse intai", () => {
-  /* Aceeasi regula ca la confirmarea tintita a listarilor, unde lipsa ei a produs infometare:
-     aceleasi douazeci se reintrebau la nesfarsit, iar restul niciodata. */
-  assert.match(mod, /\.order\("last_modified", \{ ascending: true, nullsFirst: true \}\)/);
+test("⚠ roata se invarte pe un camp AL NOSTRU, nu pe unul de-al lor", () => {
+  /*
+   * ═══ ⚠ ROTATIA NU SE POATE FACE PE UN CAMP CARE NU SE MISCA (26.08.2026) ═══
+   *
+   * Aici scria `last_modified`, si ar fi fost gresit. Acela e valoarea LOR: se scrie din raspuns
+   * si se schimba doar cand cererea chiar s-a schimbat. O cerere care sta in `WaitingInAction`
+   * cat timp comerciantul se hotaraste — pana la doua zile lucratoare, in Romania — isi
+   * pastreaza `last_modified`-ul neatins.
+   *
+   * ⚠ DECI UN MAGAZIN CU PESTE 60 DE CERERI VII AR FI REINTREBAT ACELEASI 60, la fiecare cinci
+   * minute, pentru totdeauna. Restul, niciodata. Exact infometarea pe care reconcilierea venea
+   * s-o inlature.
+   */
+  assert.match(mod, /\.order\("reintrebat_la", \{ ascending: true, nullsFirst: true \}\)/);
+  assert.doesNotMatch(mod, /\.order\("last_modified"/);
+});
+
+test("⚠ si se invarte pe TOATA bucata ceruta, si la reusita si la esec", () => {
+  /*
+   * O cerere pe care ei n-o mai intorc — stearsa la ei, un id care nu mai inseamna nimic — ar fi
+   * ramas cu `reintrebat_la` gol, ar fi fost mereu prima in rand, si ar fi tinut roata pe loc.
+   * La fel o bucata care pica de fiecare data: o vitrina cu chei expirate ar fi tinut toate
+   * celelalte cereri nevazute. Ceruta si nereturnata inseamna tot „am intrebat".
+   */
+  const i = mod.indexOf("export async function reconciliazaRetururile(");
+  const f = mod.slice(i);
+  const scrieri = f.match(/reintrebat_la: new Date\(\)\.toISOString\(\)/g) ?? [];
+  assert.equal(scrieri.length, 2, "si pe calea reusita, si pe cea de esec");
+  for (const bucata of f.split("reintrebat_la: new Date().toISOString()").slice(1)) {
+    assert.match(bucata.slice(0, 200), /\.in\("claim_id", bucata\)/, "pe toata bucata, nu pe ce a raspuns");
+  }
+
+  /* ⚠ Si nu atinge `updated_at`: aici nu s-a schimbat nimic din cerere, doar am intrebat de ea. */
+  const dinScriere = f.slice(f.indexOf("reintrebat_la: new Date()"));
+  assert.doesNotMatch(dinScriere.slice(0, 300), /updated_at/);
 });
 
 test("⚠ si scrierea trece prin ACELASI drum ca aducerea", () => {

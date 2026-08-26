@@ -5448,7 +5448,8 @@ create table if not exists public.trendyol_claims (
   updated_at timestamp with time zone default now() not null,
   storefront text,
   dont_ship_back boolean,
-  colet_respins jsonb);
+  colet_respins jsonb,
+  reintrebat_la timestamp with time zone);
 
 create table if not exists public.trendyol_listings (
   id uuid default gen_random_uuid() not null,
@@ -6141,6 +6142,7 @@ CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING b
 CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING btree (claim_row_id);
 CREATE INDEX trendyol_claims_biz_idx ON public.trendyol_claims USING btree (business_id, claim_date DESC);
 CREATE INDEX trendyol_claims_de_hotarat_idx ON public.trendyol_claims USING btree (business_id, last_modified) WHERE (claim_status = ANY (ARRAY['Created'::text, 'WaitingInAction'::text, 'InAnalysis'::text]));
+CREATE INDEX trendyol_claims_reintrebat_idx ON public.trendyol_claims USING btree (business_id, claim_status, reintrebat_la NULLS FIRST);
 CREATE INDEX trendyol_listings_de_sters_idx ON public.trendyol_listings USING btree (business_id, arhivat_la) WHERE (status = 'removing'::text);
 CREATE INDEX trendyol_orders_fara_factura_idx ON public.trendyol_orders USING btree (business_id, updated_at) WHERE (invoice_uploaded_at IS NULL);
 CREATE INDEX trendyol_sync_queue_ordine_idx ON public.trendyol_sync_queue USING btree (prioritate, created_at);

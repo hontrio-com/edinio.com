@@ -7,7 +7,7 @@ import { getClaimIssueReasons, isTrendyolError } from "@/lib/trendyol/client";
 import { loadTrendyolContext } from "@/lib/trendyol/sync";
 import { hotarasteRetur, repuneInStoc } from "@/lib/trendyol/retururi";
 import { MOTIVE_RETUR_RO } from "@/lib/trendyol/types";
-import { STARI_DE_HOTARAT } from "@/lib/trendyol/retur-forma";
+import { marfaAAjuns, sePoateHotari, STARI_DE_HOTARAT } from "@/lib/trendyol/retur-forma";
 
 /**
  * Retururile Trendyol, din panoul nostru.
@@ -69,6 +69,10 @@ export interface RandRetur {
     motiv: string | null;
     notaClient: string | null;
     decizie: string | null;
+    /** Se mai poate cere o hotarare pe linia asta? Vezi `sePoateHotari`. */
+    sePoateHotari: boolean;
+    /** A ajuns marfa fizic la comerciant? Vezi `marfaAAjuns`. */
+    marfaAAjuns: boolean;
     repusInStoc: boolean;
   }[];
 }
@@ -82,7 +86,7 @@ export async function retururiTrendyol(
 
   const admin = createAdminClient();
   let q = admin.from("trendyol_claims")
-    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, trendyol_claim_items(claim_item_id, barcode, product_name, quantity, reason, customer_note, decizie, repus_in_stoc_la)")
+    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, trendyol_claim_items(claim_item_id, claim_item_status, barcode, product_name, quantity, reason, customer_note, decizie, repus_in_stoc_la)")
     .eq("business_id", businessId)
     .order("claim_date", { ascending: false })
     .limit(100);
@@ -123,7 +127,8 @@ export async function retururiTrendyol(
     dont_ship_back: boolean | null;
     colet_respins: Record<string, unknown> | null;
     trendyol_claim_items: {
-      claim_item_id: string; barcode: string | null; product_name: string | null; quantity: number;
+      claim_item_id: string; claim_item_status: string | null;
+      barcode: string | null; product_name: string | null; quantity: number;
       reason: string | null; customer_note: string | null; decizie: string | null; repus_in_stoc_la: string | null;
     }[] | null;
   };
@@ -153,6 +158,15 @@ export async function retururiTrendyol(
         notaClient: l.customer_note,
         decizie: l.decizie,
         repusInStoc: !!l.repus_in_stoc_la,
+        /*
+         * ⚠ ECRANUL NU ARE VOIE SA OFERE UN BUTON CARE VA FI REFUZAT (26.08.2026).
+         *
+         * Serverul opreste deja — si acolo e paza adevarata, fiindca un buton se poate ocoli cu
+         * un POST direct. Dar aratat activ, butonul promite ceva ce nu se poate face, iar omul
+         * afla abia dupa apasare. Vezi `sePoateHotari` si `marfaAAjuns`.
+         */
+        sePoateHotari: sePoateHotari(l.claim_item_status),
+        marfaAAjuns: marfaAAjuns(l.claim_item_status),
       })),
     })),
   };

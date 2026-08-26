@@ -233,10 +233,17 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
             <ul className="space-y-1.5">
               {r.linii.map((l) => (
                 <li key={l.claimItemId} className="flex flex-wrap items-start gap-2 text-xs">
+                  {/*
+                    ⚠ O linie care nu mai poate primi o hotărâre nu se poate nici bifa. Serverul
+                    o oprește oricum, dar bifată aici ar fi blocat apăsarea pentru TOATE
+                    celelalte: verificarea e pe toată lista, nu pe fiecare linie. Omul ar fi
+                    primit „reîncarcă pagina" fără să înțeleagă care linie l-a oprit.
+                  */}
                   <input
                     type="checkbox"
                     className="mt-0.5"
                     checked={alese[r.claimId]?.has(l.claimItemId) ?? false}
+                    disabled={!l.sePoateHotari}
                     onChange={() => comuta(r.claimId, l.claimItemId)}
                     aria-label={`Alege ${l.numeProdus ?? l.barcode ?? "linia"}`}
                   />
@@ -246,6 +253,12 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     {l.motiv && <span className="text-muted-foreground"> · {l.motiv}</span>}
                     {l.notaClient && (
                       <span className="block text-muted-foreground">„{l.notaClient}”</span>
+                    )}
+                    {/* ⚠ Se spune si DE CE nu se poate bifa, altfel o bifa stinsa arata a defect. */}
+                    {!l.sePoateHotari && !l.decizie && (
+                      <span className="block text-[11px] text-muted-foreground">
+                        nu mai așteaptă un răspuns de la tine
+                      </span>
                     )}
                     {l.decizie && (
                       <span className="block text-[11px] text-muted-foreground">
@@ -260,6 +273,16 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                   {l.repusInStoc ? (
                     <span className="text-[11px] text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
                       <PackageCheck className="h-3 w-3" /> pusă în stoc
+                    </span>
+                  ) : !l.marfaAAjuns ? (
+                    /*
+                      ⚠ NU SE ARATA UN BUTON CARE VA FI REFUZAT. Pe „Created", din definiția lor,
+                      clientul abia a apăsat butonul de retur, iar coletul e încă la el. Serverul
+                      oprește oricum — acolo e paza adevărată — dar aici se spune DE CE, ca omul
+                      să nu apese și să afle pe urmă.
+                    */
+                    <span className="text-[11px] text-muted-foreground">
+                      clientul abia a cerut returul; coletul n-a ajuns încă la tine
                     </span>
                   ) : (
                     <button

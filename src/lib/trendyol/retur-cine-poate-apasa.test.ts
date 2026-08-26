@@ -109,3 +109,29 @@ test("⚠ la podea se citeste pana la capatul pe care il spun EI", () => {
   /* ⚠ `let`, nu `const`: bucla se intinde dupa ce afla cat e de citit. */
   assert.match(mod, /let paginiDeCitit = laStramtoare/);
 });
+
+test("⚠ si ecranul nu ofera butoane care vor fi refuzate", () => {
+  /*
+   * ⚠ Serverul opreste deja, si acolo e paza adevarata — un buton se poate ocoli cu un POST
+   * direct. Dar aratat activ, butonul PROMITE ceva ce nu se poate face, iar omul afla abia dupa
+   * apasare. E chiar tiparul pe care l-am gresit de doua ori in doua zile: mesajul trebuie sa
+   * numeasca butonul adevarat, iar butonul trebuie sa poata face ce spune.
+   */
+  const act = viu("src/lib/actions/trendyol-retururi.actions.ts");
+  assert.match(act, /claim_item_id, claim_item_status,/, "starea liniei se citeste");
+  assert.match(act, /sePoateHotari: sePoateHotari\(l\.claim_item_status\)/);
+  assert.match(act, /marfaAAjuns: marfaAAjuns\(l\.claim_item_status\)/);
+
+  const ui = readFileSync("src/components/dashboard/TrendyolReturns.tsx", "utf8");
+  /* ⚠ Butonul de repunere se ascunde, si in locul lui se spune DE CE. */
+  assert.match(ui, /: !l\.marfaAAjuns \? \(/);
+  assert.match(ui, /coletul n-a ajuns încă la tine/);
+
+  /*
+   * ⚠ Si bifa se stinge. Bifata, o linie deja hotarata ar fi blocat apasarea pentru TOATE
+   * celelalte — verificarea de pe server e pe toata lista, nu pe fiecare linie — iar omul ar fi
+   * primit „reincarca pagina" fara sa inteleaga care linie l-a oprit.
+   */
+  assert.match(ui, /disabled=\{!l\.sePoateHotari\}/);
+  assert.match(ui, /nu mai așteaptă un răspuns de la tine/);
+});

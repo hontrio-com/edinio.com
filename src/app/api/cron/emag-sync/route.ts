@@ -37,6 +37,9 @@ import type { OpEmag } from "@/lib/emag/queue";
 import { asteptareaDupaPana, asteptareaUrmatoare } from "@/lib/emag/rute";
 import { ardeIncercare } from "@/lib/emag/errors";
 import { scrieStatusurile } from "@/lib/emag/statusuri";
+import { intregDeLaEi } from "@/lib/emag/numere";
+import { eRespinsaDeEmag, motiveDeLaEi } from "@/lib/emag/motive";
+import { deCeNuSeVinde } from "@/lib/emag/de-ce-nu-se-vinde";
 import { amprentaContinutului } from "@/lib/emag/mapping";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 
@@ -1763,10 +1766,58 @@ async function masoaraDeriva(
        * nesfarsit, si l-ar fi facut necitibil tocmai cand e nevoie de el.
        */
       if (h.deScrisInJurnal) {
+        /*
+         * ═══ ⚠ „NU SE LASA REPARATA" NU E UN MOTIV, E O CONSTATARE (26.08.2026) ═══
+         *
+         * Mesajul de pana azi ii spunea comerciantului ca ceva nu merge, si atat. Masurat pe
+         * contul real: singura oferta ajunsa aici, 273, are `validation_status = 10` — BLOCATA
+         * la ei. Aveam motivul in mana, in chiar raspunsul din care masuram deriva, si nu-l
+         * spuneam. Alarma se repeta, nu se putea rezolva, si nu ducea nicaieri.
+         *
+         * ⚠ SE CITESTE DIN RASPUNSUL LOR, nu din randul nostru: `masoaraDeriva` lucreaza pe
+         * pagina proaspat adusa, iar randul nostru poate fi cu o trecere in urma. Cand omul se
+         * uita in jurnal, vrea starea de la clipa in care s-a renuntat.
+         *
+         * ⚠ SI NU SE SCHIMBA CE SE INCEARCA, doar ce se spune. O documentatie respinsa (110
+         * oferte in bazin) poate fi numai avertismente, iar oferta sa primeasca totusi pretul;
+         * taiate din incercari, le-am fi inghetat pe toate ca sa reparam o alarma.
+         */
+        const dinRaspuns = {
+          validation_status: intregDeLaEi(aLor.validation_status),
+          offer_validation_status: intregDeLaEi(aLor.offer_validation_status),
+          status_la_ei: intregDeLaEi(aLor.status),
+          stoc_la_ei: stocLor,
+          doc_errors: motiveDeLaEi(aLor),
+        };
+        const deCe = deCeNuSeVinde(dinRaspuns);
+        /*
+         * ⚠ SCURT IN MESAJ, INTREG IN `details`. Motivele lor pot avea cinci sute de caractere de
+         * text juridic („dreptul la o cale de atac prin folosirea Mesageriei..."), iar un jurnal
+         * din care nu se mai vede a doua linie nu mai e un jurnal.
+         */
+        const primulMotiv = deCe.indrumare.length > 160
+          ? `${deCe.indrumare.slice(0, 157)}…`
+          : deCe.indrumare;
+
         await logError({
           action: "emag-sync/deriva",
-          message: `oferta ${rand.emag_id} nu se lasa reparata dupa toate incercarile`,
-          details: { produs: produs.id, campuri: h.memorie?.campuri },
+          /*
+           * ⚠ SE SPUNE CE S-A VAZUT, nu ce deducem. „Nu primeste schimbarea" ar fi o cauzalitate
+           * pe care n-o pot proba pentru toate starile: o documentatie respinsa poate fi numai
+           * avertismente, iar oferta sa primeasca totusi pretul. Ce STIM e ca s-au epuizat
+           * incercarile si ca ei tin oferta intr-o stare respinsa. Atat se scrie.
+           */
+          message: eRespinsaDeEmag(dinRaspuns.validation_status)
+            ? `oferta ${rand.emag_id}: s-au epuizat incercarile, iar ei o tin ${deCe.eticheta}. ${primulMotiv}`
+            : `oferta ${rand.emag_id} nu se lasa reparata dupa toate incercarile`,
+          details: {
+            produs: produs.id, campuri: h.memorie?.campuri,
+            /* ⚠ Starea intreaga, ca sa nu fie nevoie de o a doua cautare cand se citeste. */
+            validationStatus: dinRaspuns.validation_status,
+            offerValidationStatus: dinRaspuns.offer_validation_status,
+            statusLaEi: dinRaspuns.status_la_ei,
+            motiveleLor: dinRaspuns.doc_errors.slice(0, 5),
+          },
           businessId: ctx.businessId, severity: "warning",
         });
       }
@@ -1784,14 +1835,6 @@ async function masoaraDeriva(
   return gasite;
 }
 
-/**
- * Numarul dintr-un status care vine in trei forme.
- *
- * ⚠ eMAG trimite `validation_status` cand ca tablou de obiecte, cand ca obiect, cand
- * ca numar — se vede chiar in exemplele din OpenAPI-ul lor. Citit pe o singura
- * forma, statusul ar fi ramas `null` pentru jumatate din oferte, iar panoul ar fi
- * aratat „în validare” la nesfarsit pentru produse aprobate demult.
- */
 /**
  * Lista de IP-uri de la care suna eMAG, adusa si tinuta minte.
  *

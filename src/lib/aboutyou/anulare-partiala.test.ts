@@ -132,7 +132,22 @@ test("⚠ AWB-ul de retur se trimite cand chiar avem unul", () => {
    */
   const sync = viu("src/lib/aboutyou/sync.ts");
   assert.match(sync, /sameday_return_awb_number/);
-  assert.match(sync, /return_tracking_key: awbRetur \|\| tracking/);
+
+  /*
+   * ═══ ⚠ SI REZERVA A DISPARUT (27.08.2026) ═══
+   *
+   * Era `return_tracking_key: awbRetur || tracking`. Rationamentul de mai sus — „mai bine
+   * eticheta gresita decat 16 curieri blocati" — avea o a treia iesire, pe care n-o vazusem:
+   * campul e OPTIONAL, deci se poate OMITE. Nici blocaj, nici minciuna.
+   *
+   * Ca e optional nu e o presupunere: `shipOrderItems` il are `?` in semnatura, iar
+   * `AboutYouOrderItem.return_tracking_key` e `?: string | null` in schema lor de citire.
+   *
+   * Iar daca totusi il cer, un refuz limpede (4xx) se reia O SINGURA data cu numarul de tur, si
+   * se scrie de ce — deci nici asa nu se blocheaza nimic. Vezi `expedierea.test.ts`.
+   */
+  assert.doesNotMatch(sync, /return_tracking_key: awbRetur \|\| tracking/);
+  assert.match(sync, /\.\.\.\(cuRetur \? \{ return_tracking_key: cuRetur \} : \{\}\)/);
 
   /* ⚠ Si coloana e CERUTA in `select`: fara ea iesea mereu `undefined`, iar rezerva se aplica pe
      tacute chiar si acolo unde exista un document adevarat. */

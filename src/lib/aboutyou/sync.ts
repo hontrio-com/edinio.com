@@ -1859,7 +1859,7 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
   if (!order) return { ok: true, action: "skipped" };
 
   const { data: ayOrder, error: eAy } = await admin
-    .from("aboutyou_orders").select("id, items, fulfillment_type")
+    .from("aboutyou_orders").select("id, items, fulfillment_type, raw")
     .eq("business_id", ctx.businessId).eq("order_id", orderId).maybeSingle();
   /*
    * O citire cazuta NU inseamna „nu e comanda About You".
@@ -1893,7 +1893,36 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
   if (!tracking && typeof row.tracking_number === "string" && row.tracking_number.trim()) tracking = row.tracking_number.trim();
   if (!tracking) return { ok: true, action: "skipped" }; // no AWB generated yet
 
-  const carrierKey = (courier ? ctx.config.carrier_map?.[courier] : undefined) ?? ctx.config.default_carrier_key;
+  const alNostru = (courier ? ctx.config.carrier_map?.[courier] : undefined) ?? ctx.config.default_carrier_key;
+
+  /*
+   * ═══ ⚠ TRANSPORTATORUL ATRIBUIT DE EI BATE MAPAREA NOASTRA (27.08.2026) ═══
+   *
+   * Expedierea pleca mereu cu `carrier_key` socotit din curierul Edinio si din harta din setari,
+   * fara sa se uite vreodata la ce a atribuit About You comenzii. Cand cele doua difera, coletul
+   * pleaca declarat la alt transportator decat cel pe care il asteapta ei.
+   *
+   * ⚠ NU SE GHICESTE NUMELE CAMPULUI. Se citeste din raspunsul BRUT al comenzii (vezi migratia
+   * 2026-11-24) si numai daca e chiar acolo. Lipsa lui inseamna „ei nu atribuie nimic", si atunci
+   * ramane exact purtarea de pana acum — deci nicio expediere nu se strica din reparatia asta.
+   *
+   * ⚠ CAND EXISTA SI DIFERA, SE OPRESTE. Nu se trimite nici al lor cu AWB-ul nostru (numarul
+   * apartine curierului nostru), nici al nostru peste hotararea lor. Se cere omului sa lamureasca,
+   * fiindca amandoua variantele tacute produc un colet pe care nu-l gaseste nimeni.
+   */
+  const brut = (ayOrder as { raw?: unknown }).raw as Record<string, unknown> | null | undefined;
+  const alLor = typeof brut?.carrier_key === "string" && brut.carrier_key.trim()
+    ? brut.carrier_key.trim()
+    : null;
+
+  if (alLor && alNostru && alLor !== alNostru) {
+    return {
+      ok: false,
+      error: `About You a atribuit comenzii transportatorul „${alLor}”, iar AWB-ul e de la „${alNostru}”.`
+        + " Emite AWB-ul la transportatorul lor sau corectează maparea curierilor în setări.",
+    };
+  }
+  const carrierKey = alLor ?? alNostru;
   if (!carrierKey) return { ok: false, error: "Mapează curierul la un carrier About You în setări." };
 
   const rawItems = (ayOrder as { items?: unknown }).items;
@@ -1927,8 +1956,19 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
    * singur are azi AWB de retur. Oprita expedierea pana cand exista, s-ar fi blocat 16 din 17 —
    * mult mai rau decat eticheta gresita pe care o reparam.
    *
-   * ⚠ DECI: cand avem un AWB de retur adevarat, se trimite el. Cand nu, ramane cel de tur si se
-   * spune pe fata ca e o rezerva, ca sa nu para o hotarare verificata.
+   * ═══ ⚠ SI TOTUSI NU SE MAI TRIMITE CEL DE TUR (27.08.2026) ═══
+   *
+   * Rezerva era `return_tracking_key: awbRetur || tracking`: fara AWB de retur, pleca numarul de
+   * TUR. Clientul primeste atunci o eticheta de retur care nu duce nicaieri — un document valid
+   * pentru alt drum. Nu e o lipsa, e o informatie FALSA, si e mai rea decat lipsa.
+   *
+   * ⚠ CAMPUL E OPTIONAL, si nu e o presupunere: `shipOrderItems` il are `?` in semnatura, iar
+   * `AboutYouOrderItem.return_tracking_key` e `?: string | null` in schema lor de citire. Doua
+   * semne independente. Deci cand nu avem unul adevarat, se OMITE.
+   *
+   * ⚠ SI DACA TOTUSI IL CER: un refuz limpede (4xx, deci „nu s-a intamplat nimic" dupa chiar
+   * regula noastra din `eRefuzLimpede`) se reia O SINGURA DATA cu numarul de tur, si se scrie de
+   * ce. Asa nu se blocheaza nicio expediere, dar nici nu se minte din prima.
    */
   const awbRetur = typeof (row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number === "string"
     ? String((row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number).trim()
@@ -1938,11 +1978,25 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
    * comerciantul crede ca a plecat. De aceea trece prin `cuLotDurabil`, iar cand intentia nu se
    * poate scrie, cererea NU se face deloc.
    */
-  const res = await cuLotDurabil(admin, ctx.businessId, "ship", [orderId], () => shipOrderItems(ctx.auth, [{
-    order_items: orderItemIds, carrier_key: carrierKey,
-    shipment_tracking_key: tracking, return_tracking_key: awbRetur || tracking,
-  }]));
+  const trimiteExpedierea = (cuRetur: string | undefined) =>
+    cuLotDurabil(admin, ctx.businessId, "ship", [orderId], () => shipOrderItems(ctx.auth, [{
+      order_items: orderItemIds, carrier_key: carrierKey,
+      shipment_tracking_key: tracking as string,
+      ...(cuRetur ? { return_tracking_key: cuRetur } : {}),
+    }]));
+
+  let res = await trimiteExpedierea(awbRetur || undefined);
   if (res === null) return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou." };
+  if (isAboutYouError(res) && !awbRetur && eRefuzLimpede(res.status)) {
+    /* Vezi nota de mai sus: o singura reluare, cu numarul de tur, si scrisa. */
+    await logError({
+      action: "aboutyou/expediere", severity: "warning",
+      message: "About You a refuzat expedierea fara AWB de retur: s-a retrimis cu numarul de tur, care NU e o eticheta de retur valabila",
+      details: { orderId, carrierKey, raspuns: res.error }, businessId: ctx.businessId,
+    });
+    res = await trimiteExpedierea(tracking);
+    if (res === null) return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou." };
+  }
   if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
   const batchRequestId = res.data?.batchRequestId;
   const now = new Date().toISOString();

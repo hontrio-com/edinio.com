@@ -4476,7 +4476,8 @@ create table if not exists public.aboutyou_orders (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   anulate_eliberate jsonb default '[]'::jsonb not null,
-  reintrebat_la timestamp with time zone);
+  reintrebat_la timestamp with time zone,
+  raw jsonb);
 
 create table if not exists public.aboutyou_retururi (
   id uuid default gen_random_uuid() not null,

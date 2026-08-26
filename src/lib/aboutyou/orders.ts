@@ -479,8 +479,13 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     .eq("business_id", ctx.businessId).eq("aboutyou_order_number", ayNumber).maybeSingle());
   if (existing) {
     const ex = existing;
+    /* ⚠ Si raspunsul BRUT, ca sa se poata raspunde la intrebari pe care schema noastra nu le
+       cunoaste inca. Vezi migratia 2026-11-24. */
     await admin.from("aboutyou_orders")
-      .update({ items: ayItems as never, status: order.status ?? "open", last_synced_at: now, updated_at: now } as never)
+      .update({
+        items: ayItems as never, status: order.status ?? "open",
+        raw: order as never, last_synced_at: now, updated_at: now,
+      } as never)
       .eq("id", ex.id);
     /*
      * Starile terminale trec prin motorul comun: o anulare sau un retur trebuie sa
@@ -709,6 +714,8 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     fulfillment_type: (typeof order.fulfillment_type === "string" ? order.fulfillment_type : null),
     status: order.status ?? "open",
     items: ayItems as never,
+    /* ⚠ Vezi migratia 2026-11-24: ce nu pastram nu se mai poate intreba niciodata. */
+    raw: order as never,
     last_synced_at: now,
   } as never, { onConflict: "business_id,aboutyou_order_number" });
   if (eLateral) {

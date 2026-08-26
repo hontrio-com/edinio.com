@@ -73,6 +73,8 @@ export interface RandRetur {
     sePoateHotari: boolean;
     /** A ajuns marfa fizic la comerciant? Vezi `marfaAAjuns`. */
     marfaAAjuns: boolean;
+    /** ⚠ Nu i-am putut citi starea. Altceva decat „s-a hotarat deja". */
+    stareNecunoscuta: boolean;
     repusInStoc: boolean;
   }[];
 }
@@ -167,6 +169,18 @@ export async function retururiTrendyol(
          */
         sePoateHotari: sePoateHotari(l.claim_item_status),
         marfaAAjuns: marfaAAjuns(l.claim_item_status),
+        /*
+         * ⚠ „NU STIM" NU E ACELASI LUCRU CU „S-A HOTARAT DEJA" (26.08.2026).
+         *
+         * De cand hotararea se cere numai din `WaitingInAction`, o linie a carei stare n-am
+         * putut-o citi iese si ea nebifabila — corect, fiindca n-avem voie sa pariem pe un apel
+         * ireversibil. Dar cererea ei APARE in lista „așteaptă răspunsul tău", anume, ca sa nu
+         * dispara. Iar ecranul ii spunea „nu mai așteaptă un răspuns de la tine" — adica taman
+         * contrariul listei in care statea, si neadevarat pe deasupra.
+         *
+         * Ecranul trebuie sa poata spune care din doua e.
+         */
+        stareNecunoscuta: !l.claim_item_status,
       })),
     })),
   };

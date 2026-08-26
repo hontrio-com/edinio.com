@@ -164,3 +164,30 @@ test("⚠ si ecranul nu ofera butoane care vor fi refuzate", () => {
   assert.match(ui, /disabled=\{!l\.sePoateHotari\}/);
   assert.match(ui, /nu mai așteaptă un răspuns de la tine/);
 });
+
+test("⚠ „nu stim” nu se mai spune ca „s-a hotarat deja”", () => {
+  /*
+   * ═══ ⚠ O CONTRAZICERE PE CARE AM FACUT-O CHIAR EU (26.08.2026) ═══
+   *
+   * De cand hotararea se cere numai din `WaitingInAction`, o linie a carei stare n-am putut-o
+   * citi iese si ea nebifabila — corect, fiindca n-avem voie sa pariem pe un apel ireversibil,
+   * plafonat la 5 pe minut, al carui rezultat se vede abia mai tarziu.
+   *
+   * ⚠ DAR CEREREA EI APARE IN LISTA „așteaptă răspunsul tău", anume, ca sa nu dispara — vezi
+   * paza `claim_status.is.null` din panou. Iar ecranul ii spunea „nu mai așteaptă un răspuns de
+   * la tine": taman contrariul listei in care statea, si neadevarat pe deasupra.
+   *
+   * ⚠ Un ecran care se contrazice singur il invata pe om sa nu-l creada. Se spune care din doua e.
+   */
+  const act = viu("src/lib/actions/trendyol-retururi.actions.ts");
+  assert.match(act, /stareNecunoscuta: !l\.claim_item_status/);
+
+  const ui = readFileSync("src/components/dashboard/TrendyolReturns.tsx", "utf8");
+  assert.match(ui, /l\.stareNecunoscuta/);
+  assert.match(ui, /nu i-am putut citi starea de la Trendyol/);
+  assert.match(ui, /nu mai așteaptă un răspuns de la tine/);
+
+  /* ⚠ Si textul spune si CE URMEAZA, nu doar ce nu merge: se reia singur. Altfel omul ramane cu
+     un mesaj care nu-i cere nimic si nu-i promite nimic. */
+  assert.match(ui, /se reîncearcă la următoarea sincronizare/);
+});

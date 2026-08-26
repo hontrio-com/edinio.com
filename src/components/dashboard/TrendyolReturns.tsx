@@ -254,10 +254,18 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     {l.notaClient && (
                       <span className="block text-muted-foreground">„{l.notaClient}”</span>
                     )}
-                    {/* ⚠ Se spune si DE CE nu se poate bifa, altfel o bifa stinsa arata a defect. */}
+                    {/*
+                      ⚠ Se spune si DE CE nu se poate bifa, altfel o bifa stinsa arata a defect.
+                      Si se spune ADEVĂRUL: „nu știm" nu e același lucru cu „s-a hotărât deja".
+                      O linie a cărei stare n-am putut-o citi stă într-o cerere care apare anume
+                      în lista „așteaptă răspunsul tău" — iar „nu mai așteaptă" ar fi contrazis
+                      chiar lista în care se află.
+                    */}
                     {!l.sePoateHotari && !l.decizie && (
                       <span className="block text-[11px] text-muted-foreground">
-                        nu mai așteaptă un răspuns de la tine
+                        {l.stareNecunoscuta
+                          ? "nu i-am putut citi starea de la Trendyol; se reîncearcă la următoarea sincronizare"
+                          : "nu mai așteaptă un răspuns de la tine"}
                       </span>
                     )}
                     {l.decizie && (

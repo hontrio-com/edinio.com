@@ -71,8 +71,13 @@ test("⚠ un retur PARTIAL trage toata cererea in „de hotarat”", () => {
     "cea la care omul chiar poate apasa trage, nu cea abia initiata");
   assert.equal(stareaCererii(cerere("Cancelled", "Accepted", "WaitingInAction")), "WaitingInAction");
 
-  /* ⚠ Fara nicio linie de hotarat, se ia prima inca vie — si `Created` e vie, doar ca nu e a lui. */
-  assert.equal(stareaCererii(cerere("Rejected", "Created")), "Rejected");
+  /*
+   * ⚠ FARA NICIO LINIE DE HOTARAT, CASTIGA CEA MAI DESCHISA — nu prima din tablou (indreptat
+   * 26.08.2026). `Rejected` e HOTARATA (s-a respins; mai asteptam doar coletul), iar `Created` NU
+   * e: se poate schimba in orice. Deci cea nehotarata trage, oricum ar veni ele in raspuns.
+   */
+  assert.equal(stareaCererii(cerere("Rejected", "Created")), "Created");
+  assert.equal(stareaCererii(cerere("Created", "Rejected")), "Created", "si invers, la fel");
   assert.equal(stareaCererii(cerere("Cancelled", "Accepted", "Created")), "Created");
 });
 
@@ -184,9 +189,14 @@ test("⚠ o cerere pe care n-o citim INTREAGA nu e incheiata", () => {
   assert.equal(iese(cerere("Accepted", "Accepted")), true);
   assert.equal(iese(cerere("Accepted", "Cancelled")), true);
 
-  /* ⚠ Si o stare inca vie bate necunoscutul: acolo chiar stim ceva de spus. */
+  /* ⚠ Mingea la comerciant bate orice, inclusiv necunoscutul: acolo chiar are ce apasa. */
   assert.equal(stareaCererii(cerere("Accepted", "WaitingInAction")), "WaitingInAction");
-  assert.equal(stareaCererii(cerere("Rejected", null as never)), "Rejected");
+  assert.equal(stareaCererii(cerere("WaitingInAction", null as never)), "WaitingInAction");
+
+  /* ⚠ Dar `Rejected` NU bate necunoscutul: una e hotarata, cealalta se poate schimba in orice.
+     Iar daca `Rejected` ar castiga si coletul de retur-respins ar aparea, cererea ar IESI din
+     bazin — si linia necitibila ar ramane inghetata pe veci. */
+  assert.equal(stareaCererii(cerere("Rejected", null as never)), null);
 });
 
 test("⚠ si aflam cand forma starii lor se schimba", () => {
@@ -201,4 +211,61 @@ test("⚠ si aflam cand forma starii lor se schimba", () => {
   assert.match(mod, /const nedescifrate = liniileReturului\(c\)\.filter/);
   assert.match(mod, /brut\.claimItemStatus != null && brut\.claimItemStatus !== ""/);
   assert.match(mod, /forma lor s-a schimbat/);
+});
+
+test("⚠ soarta cererii NU atarna de ordinea in care ne dau ei liniile", () => {
+  /*
+   * ═══ ⚠ FUNDUL DE SAC ADUS DE REGULA „NUMAI ACCEPTED" (26.08.2026) ═══
+   *
+   * `stareaCererii` lua PRIMA linie neincheiata din tablou, iar `Rejected` si `InAnalysis` erau
+   * amandoua „neincheiate". Deci aceeasi cerere primea doua stari dupa cum le trimiteau ei:
+   *
+   *     [Rejected, InAnalysis] -> „Rejected"      [InAnalysis, Rejected] -> „InAnalysis"
+   *
+   * ⚠ SI DE ASTA ATARNA O SOARTA. Cererea `Rejected` careia i-a aparut coletul de retur-respins
+   * IESE din bazinul de reconciliere; aducerea pe fereastra filtreaza dupa data CREARII, deci
+   * n-o mai vede niciodata. Linia `InAnalysis` ramanea inghetata pe veci — si de cand repunerea
+   * cere `Accepted`, marfa de pe raftul comerciantului nu se mai putea repune NICIODATA.
+   *
+   * ⚠ Ghidul lor nu documenteaza nicio sortare a lui `items[]`. Deci cam jumatate din cererile
+   * partiale de felul asta cadeau in capcana — si care jumatate, la intamplare.
+   */
+  const perechi: [string, string][] = [
+    ["Rejected", "InAnalysis"],
+    ["Rejected", "WaitingFraudCheck"],
+    ["Rejected", "Unresolved"],
+    ["Rejected", "Created"],
+    ["Rejected", "WaitingInAction"],
+    ["Accepted", "Rejected"],
+    ["Cancelled", "InAnalysis"],
+  ];
+  for (const [a, b] of perechi) {
+    assert.equal(
+      stareaCererii(cerere(a, b)), stareaCererii(cerere(b, a)),
+      `[${a}, ${b}] si [${b}, ${a}] trebuie sa dea acelasi lucru`,
+    );
+  }
+
+  /* ⚠ Si o linie NECITIBILA are acelasi rang cu una nehotarata: cat stim noi, se poate schimba
+     in orice. Deci nici ea nu poate fi batuta de `Rejected`. */
+  assert.equal(stareaCererii(cerere("Rejected", null as never)), null);
+  assert.equal(stareaCererii(cerere(null as never, "Rejected")), null);
+});
+
+test("⚠ `Rejected` pierde in fata oricarei linii NEHOTARATE, si castiga in fata celor incheiate", () => {
+  /*
+   * Amandoua sunt „neincheiate", dar una e HOTARATA (s-a respins; mai asteptam doar coletul) si
+   * cealalta NU (se poate schimba in orice). Cea nehotarata trebuie sa traga cererea, ca sa ramana
+   * in bazin si sa se poata inca rezolva.
+   */
+  for (const nehotarata of ["Created", "InAnalysis", "WaitingFraudCheck", "Unresolved"]) {
+    assert.equal(stareaCererii(cerere("Rejected", nehotarata)), nehotarata, nehotarata);
+  }
+  /* ⚠ Dar fata de cele incheiate castiga: dupa o respingere poate inca aparea `rejectedPackageInfo`,
+     si aia e chiar informatia dupa care ii spunem daca are un colet de trimis inapoi. */
+  for (const incheiata of ["Accepted", "Cancelled"]) {
+    assert.equal(stareaCererii(cerere(incheiata, "Rejected")), "Rejected", incheiata);
+  }
+  /* ⚠ Si mingea la comerciant bate tot. */
+  assert.equal(stareaCererii(cerere("Rejected", "WaitingInAction")), "WaitingInAction");
 });

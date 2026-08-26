@@ -297,43 +297,64 @@ export function sePoateHotari(stare: string | null | undefined): boolean {
  * acceptata si una care inca asteapta. Ce conteaza pentru comerciant e daca MAI ARE CEVA DE
  * FACUT — deci o singura linie care asteapta trage toata cererea in „de hotarat".
  */
+/**
+ * Cat de DESCHISA e o linie. Mai mic inseamna „mai are ceva de spus".
+ *
+ * ═══ ⚠ ORDINEA IN CARE NE DAU EI LINIILE NU E O HOTARARE (26.08.2026) ═══
+ *
+ * `stareaCererii` lua PRIMA linie neincheiata din tablou. Deci aceeasi cerere, cu aceleasi linii,
+ * primea doua stari diferite dupa cum le trimiteau ei:
+ *
+ *     [Rejected, InAnalysis] -> „Rejected"      [InAnalysis, Rejected] -> „InAnalysis"
+ *
+ * ⚠ SI DE ASTA ATARNA O SOARTA, nu o eticheta. Cererea `Rejected` careia i-a aparut coletul de
+ * retur-respins IESE din bazinul de reconciliere — iar aducerea pe fereastra filtreaza dupa data
+ * CREARII, deci n-o mai vede niciodata. Linia `InAnalysis` ramanea inghetata pe veci: nu mai
+ * putea ajunge `Accepted`, deci de cand repunerea cere `Accepted`, marfa de pe raftul
+ * comerciantului nu se mai putea repune NICIODATA.
+ *
+ * ⚠ NIMIC NU GARANTEAZA ORDINEA: ghidul lor nu documenteaza nicio sortare a lui `items[]`. Deci
+ * cam jumatate din cererile partiale de felul asta cadeau in capcana — si care jumatate, la
+ * intamplare.
+ *
+ * ⚠ `Rejected` NU E LA FEL CU `InAnalysis`. Amandoua sunt „neincheiate", dar una e HOTARATA (s-a
+ * respins; mai asteptam doar coletul) si cealalta NU (se poate schimba in orice). O linie
+ * nehotarata trebuie sa bata o linie hotarata, oricum ar veni ele in tablou.
+ *
+ * ⚠ Si o linie NECITIBILA are acelasi rang cu una nehotarata: cat stim noi, se poate schimba in
+ * orice.
+ */
+function catDeDeschisa(stare: string | null): number {
+  if (stare !== null && LINII_DE_HOTARAT.has(stare)) return 0;   // mingea la comerciant
+  if (stare !== null && LINII_INCHEIATE.has(stare)) return 3;    // incheiata
+  if (stare === "Rejected") return 2;                            // hotarata, dar mai poate spune ceva
+  return 1;                                                      // nehotarata, sau necitibila
+}
+
 export function stareaCererii(c: TrendyolClaim): string | null {
   const toate = liniileReturului(c).map((l) => l.stare);
-  const stari = toate.filter((s): s is string => !!s);
-  if (stari.length === 0) {
-    /* ⚠ Fara linii citibile NU se ghiceste. `null` inseamna „nu stim", iar reconcilierea il
-       trateaza anume ca pe o cerere de reintrebat — vezi `STARI_INCHEIATE`. */
-    return null;
-  }
-  /* ⚠ Mingea la comerciant bate orice altceva. */
-  const deHotarat = stari.find((s) => LINII_DE_HOTARAT.has(s));
-  if (deHotarat) return deHotarat;
-  /* ⚠ Apoi orice linie neincheiata: cererea inca se poate schimba. */
-  const vie = stari.find((s) => !LINII_INCHEIATE.has(s));
-  if (vie) return vie;
+  if (toate.length === 0) return null;
 
   /*
-   * ═══ ⚠ O CERERE PE CARE N-O CITIM INTREAGA NU E INCHEIATA (26.08.2026) ═══
+   * ⚠ SE ALEGE CEA MAI DESCHISA, nu prima din tablou. Vezi nota de la `catDeDeschisa`: cu „prima
+   * din tablou", soarta cererii atarna de ordinea in care ne trimit ei liniile.
    *
-   * Aici se intorcea `stari[0]` de indata ce liniile CITIBILE erau toate incheiate — iar cele
-   * necitibile fusesera filtrate cu doua randuri mai sus, deci nu se puneau in cumpana. Un retur
-   * partial cu linia A pe `Accepted` si linia B necitibila iesea `Accepted`.
-   *
-   * ⚠ SI DE-ACOLO NU MAI EXISTA INTOARCERE. `Accepted` e in `STARI_INCHEIATE`, deci reconcilierea
-   * scoate cererea din bazin si n-o mai reintreaba; iar aducerea pe fereastra filtreaza dupa data
-   * CREARII, care a trecut demult. Starea liniei B ramanea NULL pe veci — si de cand repunerea in
-   * stoc e fail-closed, comerciantul avea marfa pe raft si nu o mai putea repune NICIODATA.
-   *
-   * ⚠ E chiar pretul pe care fail-closed-ul trebuia sa-l plateasca cu o cale de iesire, si n-o
-   * avea. Calea de iesire e asta: cat timp o linie ne scapa, cererea ramane in bazin si se
-   * reintreaba — pana cand ei ne dau o stare citibila, sau pana la `ZILE_DE_REINTREBAT`.
-   *
-   * ⚠ Se intoarce `null`, nu starea cunoscuta: `null` inseamna „nu stim", si asta e adevarul.
+   * ⚠ La rang egal ramane prima — si acolo chiar e totuna, fiindca spun acelasi lucru.
    */
-  if (stari.length < toate.length) return null;
+  let aleasa = toate[0];
+  let rangAles = catDeDeschisa(aleasa);
+  for (const s of toate.slice(1)) {
+    const r = catDeDeschisa(s);
+    if (r < rangAles) { aleasa = s; rangAles = r; }
+  }
 
-  /* Toate citibile si toate incheiate: se ia prima, si toate spun acelasi lucru. */
-  return stari[0];
+  /*
+   * ⚠ O CERERE PE CARE N-O CITIM INTREAGA NU E INCHEIATA. Daca cea mai deschisa linie e una
+   * necitibila, se intoarce `null` — „nu stim" — iar reconcilierea o tine anume in bazin. Fara
+   * asta, un retur partial cu o linie necitibila si restul incheiate iesea `Accepted`, si de-acolo
+   * nu mai exista intoarcere.
+   */
+  return aleasa ?? null;
 }
 
 /** Cererea asta mai asteapta o apasare de-a comerciantului? */

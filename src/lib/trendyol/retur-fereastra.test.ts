@@ -50,7 +50,8 @@ test("⚠ si ingustarea se TINE MINTE intre treceri", () => {
 });
 
 test("⚠ dar se LARGESTE inapoi cand incape", () => {
-  /* Un varf de retururi trece. N-are rost sa ramanem pe ferestre de-o ora pentru totdeauna. */
+  /* Un varf de retururi trece. N-are rost sa ramanem pe ferestre de cinci minute pentru
+     totdeauna — cu atat mai putin pe cele de un minut, la care se coboara sub podea. */
   assert.match(mod, /Math\.min\(latime \* 2, FEREASTRA_MAXIMA_MS\)/);
 });
 

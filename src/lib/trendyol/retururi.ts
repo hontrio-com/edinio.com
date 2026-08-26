@@ -5,7 +5,7 @@ import { approveClaimItems, getClaims, isTrendyolError, rejectClaimItems } from 
 import type { TrendyolSyncContext } from "./sync";
 import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
 import {
-  coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului,
+  coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului, marfaAAjuns,
   nuSeTrimiteInapoi, sePoateHotari, STARI_DE_HOTARAT, stareaCererii,
 } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
@@ -192,7 +192,7 @@ export async function aduRetururile(
    * ═══ ⚠ SI SFARSITUL SE TAIE, NU DOAR INCEPUTUL (26.08.2026) ═══
    *
    * Aceeasi gaura ca la comenzi, si tot atat de tacuta. Un magazin oprit o luna cerea ultimele
-   * doua saptamani — corect, altfel serviciul refuza — dar dupa o trecere reusita marcajul
+   * doua saptamani — cat cerem noi intr-o trecere, vezi `FEREASTRA_MAXIMA_MS` — dar dupa o trecere reusita marcajul
    * sarea la „acum". Cele saisprezece zile dintre ele nu se mai citeau NICIODATA.
    *
    * ⚠ Fereastra e acum cel mult doua saptamani de la inceputul EI, iar marcajul se opreste la
@@ -220,7 +220,9 @@ export async function aduRetururile(
        cererile de retur — si le-ar pierde pe cele mai vechi fara sa afle vreodata. */
     await logError({
       action: "trendyol/retururi",
-      message: "sincronizarea a lipsit mai mult decat tin ei cererile; retururile mai vechi nu se mai pot aduce",
+      /* ⚠ Orizontul de trei luni e MARGINEA NOASTRA, nu regula lor — vezi `ORIZONT_RETURURI_MS`.
+         Mesajul spunea „cat tin ei cererile", adica exact tiparul reparat azi la fereastra. */
+      message: "sincronizarea a lipsit mai mult decat cerem noi in urma; retururile mai vechi nu se aduc",
       details: {
         ultimaSincronizare: marcajMs ? new Date(marcajMs).toISOString() : null,
         seCitesteDeLa: new Date(de_la).toISOString(),
@@ -244,8 +246,9 @@ export async function aduRetururile(
    * dimineata reintrodusa exact acolo unde nu mai avea unde sa ingusteze. Un magazin cu peste 150
    * de cereri intr-o ora nu mai citea NICIODATA nimic, nici macar retururile de maine.
    *
-   * ⚠ CAND NU MAI POTI INGUSTA, CITESTE MAI MULT. Douazeci de pagini pe o fereastra de-o ora
-   * inseamna o mie de cereri intr-o ora la un singur magazin. `page` n-are plafon documentat, iar
+   * ⚠ CAND NU MAI POTI INGUSTA, CITESTE MAI MULT. Douazeci de pagini pe o fereastra de CINCI
+   * MINUTE inseamna o mie de cereri in cinci minute la un singur magazin — iar de-acolo bucla se
+   * intinde pana la `totalPages`, marginita doar de timp. `page` n-are plafon documentat, iar
    * citirea are 1000 de cereri pe minut — deci calea asta e ieftina si e deschisa.
    */
   const laStramtoare = latime <= FEREASTRA_MINIMA_MS;
@@ -254,7 +257,8 @@ export async function aduRetururile(
   const inceputulCitirii = Date.now();
   /*
    * ⚠ SE INTINDE DUPA CE AFLAM CAT E DE CITIT. Prima pagina ne aduce `totalPages`; de-acolo, la
-   * podea, se merge pana la capatul pe care ni-l spun ei. Vezi `PAGINI_MAXIME_LA_PODEA`.
+   * podea, se merge pana la capatul pe care ni-l spun ei, marginit doar de timp. Vezi
+   * `BUGET_MS_LA_PODEA`.
    */
   let paginiDeCitit = laStramtoare ? PAGINI_LA_STRAMTOARE : PAGINI_PE_TRECERE;
 
@@ -289,7 +293,7 @@ export async function aduRetururile(
     if (continut.length === 0 || pagina + 1 >= totalPagini) {
       /*
        * ⚠ A INCAPUT TOT. Fereastra se poate LARGI inapoi, incet: un varf de retururi trece, si
-       * n-are rost sa ramanem pe ferestre de-o ora pentru totdeauna.
+       * n-are rost sa ramanem pe ferestre de cinci minute pentru totdeauna.
        */
       return {
         aduse, ok, fereastraSfarsitMs: pana_la,
@@ -484,7 +488,9 @@ async function scrieCererea(
   if (inlocuire && typeof inlocuire === "object" && stiutInainte?.colet_inlocuire == null) {
     await logError({
       action: "trendyol/retururi",
-      message: "retur cu colet de INLOCUIRE (schimb): il aducem si il pastram, dar inca nu stim ce sa-i aratam comerciantului",
+      /* ⚠ Nu mai e „nu stim ce sa-i aratam": faptele coletului se arata acum in panou. Ce inca
+         nu stim e ce are DE FACUT, fiindca ghidul lor nu pomeneste schimburile deloc. */
+      message: "retur de tip SCHIMB: coletul de inlocuire se arata in panou, dar ghidul lor nu spune ce are comerciantul de facut",
       details: { claimId: idCerere, orderNumber: c.orderNumber ?? null, inlocuire },
       businessId: ctx.businessId, severity: "warning",
     });
@@ -665,8 +671,16 @@ export async function hotarasteRetur(
       },
       businessId: ctx.businessId, severity: "warning",
     });
+    /*
+     * ⚠ MESAJUL TREBUIE SA SPUNA CARE DIN DOUA E. Pleaca pentru orice linie care nu e
+     * `WaitingInAction`, iar pe `Created` „nu MAI asteapta" e de-a dreptul pe dos: returul nici
+     * n-a INCEPUT sa astepte, fiindca marfa e inca la client.
+     */
+    const abiaCerute = inchise.filter((id) => !marfaAAjuns(stari.get(id)));
     return {
-      error: "Returul nu mai așteaptă un răspuns de la tine — între timp s-a schimbat. Reîncarcă pagina.",
+      error: abiaCerute.length === inchise.length
+        ? "Clientul abia a cerut returul, iar coletul n-a ajuns încă la tine. Nu ai ce răspunde până atunci."
+        : "Returul nu mai așteaptă un răspuns de la tine — între timp s-a schimbat. Reîncarcă pagina.",
     };
   }
 

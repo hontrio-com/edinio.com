@@ -137,7 +137,13 @@ test("⚠ si un status pe care NU-L STIM se arata, nu se ascunde", () => {
    *
    * ⚠ MASURAT pe sase cazuri, in tranzactie anulata pe schema adevarata:
    *     forma veche  ->  InAnalysis, WaitingInAction, Created      (GOLUL LIPSESTE)
-   *     forma noua   ->  WaitingInAction, Created, GOL             (si fara InAnalysis)
+   *     forma noua   ->  WaitingInAction, GOL                      (fara InAnalysis SI fara Created)
+   *
+   * ⚠ Masuratoarea de mai sus a fost luata in starea INTERMEDIARA a listei, cand mai continea
+   * `Created`. Randul ei spunea, negru pe alb, ca lista „Așteaptă răspunsul tău" contine si
+   * retururi abia initiate de client — iar proba trecea, fiindca asertiunile se uita la sintaxa
+   * filtrului, nu la randurile intoarse. Un numar masurat care ramane in urma e mai rau decat
+   * niciun numar: se citeste ca dovada.
    */
   const act = readFileSync("src/lib/actions/trendyol-retururi.actions.ts", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "");

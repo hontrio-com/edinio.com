@@ -67,6 +67,23 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
   /* ⚠ Motivul e tinut ca sir in `<select>`; `dovadaCeruta` vrea numar, si `Number("")` e 0 —
      adica exact „niciun motiv ales", care nu cere nimic. */
   const ceruta = (claimId: string) => dovadaCeruta(Number(motivAles[claimId]) || null);
+
+  /*
+   * ⚠ „Bifează întâi liniile" e o apăsare IMPOSIBILĂ pe cererile pe care lista le ține anume.
+   * Când nicio linie n-are stare citibilă, toate bifele sunt stinse — iar cererea apare totuși în
+   * „Așteaptă răspunsul tău", fiindcă necunoscutul se arată, nu se ascunde. Omul ar fi căutat la
+   * nesfârșit o bifă care nu se poate apăsa.
+   *
+   * ⚠ SCRISA O DATA, chemata din amândouă căile. Prima oară am pus-o doar în `respinge`, iar
+   * `hotaraste` a rămas cu textul vechi — două căi care fac același lucru se despart la prima
+   * reparație care le atinge pe rând.
+   */
+  function deCeNuSePoateBifa(claimId: string): string {
+    const linii = retururi?.find((x) => x.claimId === claimId)?.linii ?? [];
+    return linii.length > 0 && linii.every((l) => !l.sePoateHotari)
+      ? "Nicio linie din returul ăsta nu mai poate primi un răspuns acum. Vezi motivul scris sub fiecare."
+      : "Bifează întâi liniile din acest retur.";
+  }
   const [seIncarca, incepe] = useTransition();
 
   function incarca(doar = doarDeHotarat) {
@@ -98,7 +115,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
    */
   function respinge(claimId: string) {
     const ids = [...(alese[claimId] ?? [])];
-    if (ids.length === 0) { toast.error("Bifează întâi liniile din acest retur."); return; }
+    if (ids.length === 0) { toast.error(deCeNuSePoateBifa(claimId)); return; }
     const fd = new FormData();
     fd.set("claimId", claimId);
     fd.set("claimItemIds", ids.join(","));
@@ -108,7 +125,8 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
     incepe(async () => {
       const r = await respingeReturTrendyolCuDovezi(businessId, fd);
       if ("error" in r) { toast.error(r.error); return; }
-      toast.success("Returul a fost respins.");
+      /* ⚠ Pe LINII, ca la `hotaraste`: retururile lor sunt partiale. */
+      toast.success(`${ids.length === 1 ? "Linia a fost respinsă" : `${ids.length} linii au fost respinse`}.`);
       setAlese((p) => ({ ...p, [claimId]: new Set() }));
       setExplicatie((p) => ({ ...p, [claimId]: "" }));
       setDovezi((p) => ({ ...p, [claimId]: [] }));
@@ -118,7 +136,9 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
 
   function hotaraste(claimId: string, accepta: boolean) {
     const ids = [...(alese[claimId] ?? [])];
-    if (ids.length === 0) { toast.error("Bifează întâi liniile din acest retur."); return; }
+    /* ⚠ Aceeasi paza ca la `respinge`: vezi nota de acolo. Cand nicio linie nu se poate bifa,
+       „Bifează întâi liniile" e o apasare imposibila. */
+    if (ids.length === 0) { toast.error(deCeNuSePoateBifa(claimId)); return; }
     incepe(async () => {
       const r = await hotarasteReturTrendyol(businessId, {
         claimId, claimItemIds: ids, accepta,
@@ -126,7 +146,16 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
         explicatie: accepta ? undefined : explicatie[claimId],
       });
       if ("error" in r) { toast.error(r.error); return; }
-      toast.success(accepta ? "Returul a fost acceptat." : "Returul a fost respins.");
+      /*
+        ⚠ HOTĂRÂREA E PE LINII, iar retururile Trendyol sunt PARȚIALE: omul poate accepta o bucată
+        și respinge alta din aceeași cerere. „Returul a fost acceptat" spunea despre tot ce se
+        întâmplase doar cu liniile bifate — iar dacă mai rămâneau linii nehotărâte, îl trimitea
+        acasă crezând că a terminat.
+      */
+      const cate = ids.length;
+      toast.success(accepta
+        ? `${cate === 1 ? "Linia a fost acceptată" : `${cate} linii au fost acceptate`}.`
+        : `${cate === 1 ? "Linia a fost respinsă" : `${cate} linii au fost respinse`}.`);
       setAlese((p) => ({ ...p, [claimId]: new Set() }));
       setExplicatie((p) => ({ ...p, [claimId]: "" }));
       incarca();
@@ -224,9 +253,15 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                 )}
               </div>
             )}
+            {/*
+              ⚠ `dontShipBack` vine pe COLETUL de retur-respins, care e la nivel de cerere — dar
+              o cerere poate avea linii acceptate și linii respinse deodată. „Respins." spus
+              despre tot îl contrazicea pe omul care tocmai acceptase o linie. Se spune doar ce
+              știm sigur: că nu are nimic de expediat.
+            */}
             {r.nuTrimiteInapoi === true && (
               <p className="mb-2 text-[11px] text-muted-foreground">
-                Respins. Nu trebuie să trimiți nimic înapoi clientului.
+                Nu trebuie să trimiți nimic înapoi clientului.
               </p>
             )}
             {/*
@@ -296,7 +331,9 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                       <span className="block text-[11px] text-muted-foreground">
                         {l.stareNecunoscuta
                           ? "nu i-am putut citi starea de la Trendyol; se reîncearcă la următoarea sincronizare"
-                          : "nu mai așteaptă un răspuns de la tine"}
+                          : !l.marfaAAjuns
+                            ? "clientul abia a cerut returul; nu ai ce răspunde până nu ajunge la tine"
+                            : "nu mai așteaptă un răspuns de la tine"}
                       </span>
                     )}
                     {l.decizie && (

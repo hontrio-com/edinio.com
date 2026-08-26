@@ -57,10 +57,17 @@ test("⚠ aprinderea e pe TRANZITIE, gol -> plin", () => {
   assert.ok(i > 0 && j > i, "citirea trebuie sa fie INAINTEA scrierii, altfel tranzitia se pierde");
 });
 
-test("⚠ si mesajul spune pe fata ca nu stim", () => {
-  /* Un jurnal care pretinde ca intelege ce s-a intamplat e mai rau decat unul care recunoaste ca
-     nu. Cine il citeste peste o luna trebuie sa stie exact cat stiam. */
-  assert.match(brut, /inca nu stim ce sa-i aratam comerciantului/);
+test("⚠ si mesajul spune pe fata CE anume nu stim", () => {
+  /*
+   * Un jurnal care pretinde ca intelege ce s-a intamplat e mai rau decat unul care recunoaste ca
+   * nu. Dar el trebuie sa ramana adevarat si cand codul se schimba: pana acum spunea „nu stim ce
+   * sa-i aratam comerciantului", iar de-atunci faptele coletului CHIAR i se arata in panou.
+   *
+   * ⚠ Ce inca nu stim e ce are DE FACUT — fiindca ghidul lor nu pomeneste schimburile deloc. Aia
+   * se scrie.
+   */
+  assert.match(brut, /ghidul lor nu spune ce are comerciantul de facut/);
+  assert.doesNotMatch(brut, /inca nu stim ce sa-i aratam/);
 });
 
 test("⚠ faptele coletului de inlocuire ajung in ecran, fara instructiune", () => {

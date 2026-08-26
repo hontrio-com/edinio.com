@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
    reintrodusa exact acolo unde nu mai avea unde sa ingusteze.
 
    ⚠ CAND NU MAI POTI INGUSTA, CITESTE MAI MULT. `page` n-are plafon documentat, iar citirea
-   cererilor are 1000 pe minut la ei. Douazeci de pagini pe o ora inseamna o mie de cereri intr-o
+   cererilor are 1000 pe minut la ei. Douazeci de pagini pe cinci minute inseamna o mie de cereri in
    ora la un singur magazin.
 */
 

@@ -64,14 +64,15 @@ test("⚠ DOUA plafoane, nu unul: latimea cererii si cat de mult in urma", () =>
    * LATIME a cererii, si ca ORIZONT. Confundate, un magazin oprit o luna pornea de la
    * `acum - 14 zile` si pierdea restul, iar marcajul sarea apoi la „acum".
    *
-   * Latimea ramane doua saptamani, fiindca atat ingaduie ei intr-o cerere. Orizontul e alta
+   * Latimea ramane doua saptamani, fiindca atat cerem NOI intr-o trecere — e precautia noastra,
+   * nu regula lor, vezi `FEREASTRA_MAXIMA_MS`. Orizontul e alta
    * socoteala, si se merge fereastra cu fereastra pana se ajunge din urma.
    */
   assert.match(mod, /const FEREASTRA_MAXIMA_MS = 14 \* 24 \* 60 \* 60 \* 1000;/);
   assert.match(mod, /const ORIZONT_RETURURI_MS = 90 \* 24 \* 60 \* 60 \* 1000;/);
   assert.match(mod, /const de_la = Math\.min\(Math\.max\(cerut, celMaiDevreme\), acum\);/);
   /* ⚠ Latimea e acum o VARIABILA, ca fereastra sa se poata ingusta cand nu incape — vezi
-     `retur-fereastra.test.ts`. Plafonul ei ramane cel al lor. */
+     `retur-fereastra.test.ts`. Plafonul ei ramane al NOSTRU. */
   assert.match(mod, /const pana_la = Math\.min\(de_la \+ latime, acum\);/);
   /* ⚠ Marginea de jos e `FEREASTRA_ULTIMA_MS`, ca fereastra sa poata cobori sub podea cand
      bugetul de la podea nu ajunge. Podeaua obisnuita ramane in `stransa`. */

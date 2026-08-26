@@ -6158,7 +6158,7 @@ CREATE INDEX support_tickets_user_id_idx ON public.support_tickets USING btree (
 CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING btree (claim_row_id);
 CREATE INDEX trendyol_claims_biz_idx ON public.trendyol_claims USING btree (business_id, claim_date DESC);
-CREATE INDEX trendyol_claims_de_hotarat_idx ON public.trendyol_claims USING btree (business_id, last_modified) WHERE (claim_status = ANY (ARRAY['Created'::text, 'WaitingInAction'::text, 'InAnalysis'::text]));
+CREATE INDEX trendyol_claims_de_hotarat_idx ON public.trendyol_claims USING btree (business_id, claim_date DESC) WHERE ((claim_status IS NULL) OR (claim_status = 'WaitingInAction'::text));
 CREATE INDEX trendyol_claims_reintrebat_idx ON public.trendyol_claims USING btree (business_id, claim_status, reintrebat_la NULLS FIRST);
 CREATE INDEX trendyol_listings_de_sters_idx ON public.trendyol_listings USING btree (business_id, arhivat_la) WHERE (status = 'removing'::text);
 CREATE INDEX trendyol_orders_fara_factura_idx ON public.trendyol_orders USING btree (business_id, updated_at) WHERE (invoice_uploaded_at IS NULL);

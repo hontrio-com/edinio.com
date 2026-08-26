@@ -816,5 +816,16 @@ export const MOTIVE_RETUR_RO: Record<number, string> = {
   2201: "Din produsul pe care l-am trimis nu lipsește nimic",
 };
 
-/** Starile in care cererea inca asteapta o hotarare de la comerciant. */
-export const CLAIM_DE_HOTARAT = ["Created", "WaitingInAction", "InAnalysis"] as const;
+/*
+ * ⚠ AICI A STAT `CLAIM_DE_HOTARAT = ["Created", "WaitingInAction", "InAnalysis"]` (scos 26.08.2026).
+ *
+ * Exportata, nechemata de nicaieri, si gresita de doua ori dupa indreptarile de azi: `Created`
+ * inseamna ca marfa e inca la client, iar pe `InAnalysis` se uita EI.
+ *
+ * ⚠ ERA A DOUA LISTA CARE SPUNEA ACELASI LUCRU CU PRIMA, si se despartisera deja. Lista in
+ * vigoare e una singura: `STARI_DE_HOTARAT` din `retur-forma.ts`, derivata din `LINII_DE_HOTARAT`
+ * si fixata de doua probe.
+ *
+ * ⚠ Nu s-a inlocuit cu un alias, s-a STERS. Un al doilea nume pentru acelasi lucru e chiar
+ * mecanismul prin care s-au despartit.
+ */

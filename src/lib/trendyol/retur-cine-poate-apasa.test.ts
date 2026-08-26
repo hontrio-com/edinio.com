@@ -93,8 +93,10 @@ test("⚠ repunerea in stoc cere ca marfa sa fi AJUNS", () => {
   }
 
   /* ⚠ Si paza sta in RPC, nu in ecran: butonul se poate ocoli cu un POST direct, functia nu. */
-  const mig = readFileSync("migrations/2026-11-11-repunerea-cere-marfa-ajunsa.sql", "utf8");
-  assert.match(mig, /v_linie\.claim_item_status = 'Created' or v_stare_cerere = 'Created'/);
+  const mig = readFileSync("migrations/2026-11-13-repunerea-se-uita-la-linia-ei.sql", "utf8");
+  /* ⚠ Adevarul e AL LINIEI; starea cererii ramane doar plasa, cand starea liniei lipseste. */
+  assert.match(mig, /if v_linie\.claim_item_status = 'Created' then/);
+  assert.match(mig, /if v_linie\.claim_item_status is null then/);
   assert.match(mig, /'stare', 'marfa-n-a-ajuns'/);
 
   /* ⚠ Si mesajul spune DE CE si CAND se poate, nu doar ca nu merge. */

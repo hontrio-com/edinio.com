@@ -13,6 +13,19 @@ import type { AboutYouConfig } from "@/lib/aboutyou/types";
  * answers 200 so About You does not retry-storm (it retries hourly for up to 2
  * days). Order events are handled starting in Faza 3.
  */
+/*
+ * ⚠ FEREASTRA DE EXECUTIE, DECLARATA (26.08.2026).
+ *
+ * Ruta face apel EXTERN inauntrul cererii lor: `prelucreazaEveniment` cheama `ingestOrderByNumber`,
+ * care intreaba About You, apoi scrie comanda, retururile si consuma stocul — tot sincron. Fara
+ * `maxDuration`, cadea pe limita implicita a platformei, iar o taiere la mijloc ar fi lasat
+ * ingestia pe jumatate.
+ *
+ * ⚠ Acum e mai putin grav decat era: evenimentul e deja scris in inbox inainte de prelucrare, deci
+ * o taiere nu-l mai pierde — cronul il reia. Dar tot n-are rost sa fie taiat.
+ */
+export const maxDuration = 30;
+
 export async function POST(request: NextRequest) {
   const ok = () => NextResponse.json({ received: true });
   const businessId = request.nextUrl.searchParams.get("businessId");

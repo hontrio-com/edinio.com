@@ -39,7 +39,13 @@ type Db = SupabaseClient<Database>;
  * (deci generatia venea deja in raspuns), si toate cinci scrierile lui erau `.eq("id", ...)`
  * goale. Exact starea in care era Trendyol in dimineata aceleiasi zile.
  */
-export type NumeCoada = "trendyol_sync_queue" | "emag_sync_queue" | "aboutyou_sync_queue";
+export type NumeCoada =
+  | "trendyol_sync_queue" | "emag_sync_queue" | "aboutyou_sync_queue"
+  /* ⚠ Ultimele doua, pe 26.08.2026. Migratia `2026-10-09-generatia-cozilor` a pus coloana si
+     declansatorul pe TOATE CINCI cozile, anume ca sa nu ramana niciuna in urma — nota ei
+     spune „Un leac pus doar pe una ar fi lasat celelalte patru cu acelasi defect si cu
+     impresia ca s-a rezolvat". Apararea acoperea doua. */
+  | "gmc_sync_queue" | "olx_sync_queue";
 
 /** Ce trebuie sa poarte un element ca sa poata fi scris in siguranta. */
 export interface ElementRevendicat {

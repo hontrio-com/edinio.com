@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
+import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -27,6 +28,9 @@ function verifyCron(req: NextRequest): boolean {
   // lipsea din mediu (undefined === undefined).
   return verificaCron(req);
 }
+
+/** ⚠ Scris o data: fiecare scriere in coada trece prin CAS pe generatie. */
+const COADA = "olx_sync_queue" as const;
 
 export async function GET(req: NextRequest) {
   if (!verifyCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -79,7 +83,7 @@ export async function GET(req: NextRequest) {
     const ctx = await ctxFor(businessId);
     if (!ctx) {
       // Not connected / token dead — drop queued work so it doesn't pile up.
-      await admin.from("olx_sync_queue").delete().in("id", items.map((i) => i.id));
+      for (const it of items) await stergeDacaNeschimbat(admin, COADA, it);
       continue;
     }
 
@@ -95,18 +99,18 @@ export async function GET(req: NextRequest) {
       const product = item.product_id ? productMap.get(item.product_id) ?? null : null;
       const res = await processQueueItem(admin, ctx, item, product);
       if (res.ok) {
-        await admin.from("olx_sync_queue").delete().eq("id", item.id);
+        await stergeDacaNeschimbat(admin, COADA, item);
         processed++;
       } else if (res.permanent) {
-        await admin.from("olx_sync_queue").delete().eq("id", item.id);
+        await stergeDacaNeschimbat(admin, COADA, item);
         failed++;
       } else {
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
         if (attempts >= MAX_ATTEMPTS) {
-          await admin.from("olx_sync_queue").delete().eq("id", item.id);
+          await stergeDacaNeschimbat(admin, COADA, item);
         } else {
-          await admin.from("olx_sync_queue").update({ attempts, last_error: res.error.slice(0, 500) }).eq("id", item.id);
+          await scrieDacaNeschimbat(admin, COADA, item, { attempts, last_error: res.error.slice(0, 500) });
         }
       }
       await pause(PACE_MS);

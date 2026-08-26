@@ -1,5 +1,6 @@
 import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { logError } from "@/lib/error-logger";
+import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import { verificaCron } from "@/lib/cron-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -19,6 +20,9 @@ function verifyCron(req: NextRequest): boolean {
   // lipsea din mediu (undefined === undefined).
   return verificaCron(req);
 }
+
+/** ⚠ Scris o data: fiecare scriere in coada trece prin CAS pe generatie. */
+const COADA = "gmc_sync_queue" as const;
 
 export async function GET(req: NextRequest) {
   if (!verifyCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,7 +72,7 @@ export async function GET(req: NextRequest) {
     const ctx = await loadBusinessContext(admin, businessId);
     if (!ctx) {
       // Not connected — drop its queue items.
-      await admin.from("gmc_sync_queue").delete().in("id", (items ?? []).map((i) => i.id));
+      for (const it of (items ?? [])) await stergeDacaNeschimbat(admin, COADA, it);
       continue;
     }
     const { token, config, business } = ctx;
@@ -103,7 +107,7 @@ export async function GET(req: NextRequest) {
           }
           await admin.from("gmc_products").delete().eq("business_id", businessId)
             .or(`product_id.eq.${productKey},offer_id.eq.${item.offer_id}`);
-          await admin.from("gmc_sync_queue").delete().eq("id", item.id);
+          await stergeDacaNeschimbat(admin, COADA, item);
           deleted++;
         } else {
           // Expand into one offer (simple) or one per enabled variant (linked by
@@ -156,13 +160,13 @@ export async function GET(req: NextRequest) {
             if ("error" in res && res.status !== 404) continue; // best-effort; retried next pass
             await admin.from("gmc_products").delete().eq("business_id", businessId).eq("offer_id", row.offer_id);
           }
-          await admin.from("gmc_sync_queue").delete().eq("id", item.id);
+          await stergeDacaNeschimbat(admin, COADA, item);
         }
       } catch (e) {
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
         if (attempts >= MAX_ATTEMPTS) {
-          await admin.from("gmc_sync_queue").delete().eq("id", item.id);
+          await stergeDacaNeschimbat(admin, COADA, item);
           if (item.product_id) {
             await admin.from("gmc_products").upsert(
               { business_id: businessId, product_id: item.product_id, offer_id: item.offer_id, status: "error", error: String((e as Error).message).slice(0, 500), updated_at: now },
@@ -170,7 +174,7 @@ export async function GET(req: NextRequest) {
             );
           }
         } else {
-          await admin.from("gmc_sync_queue").update({ attempts }).eq("id", item.id);
+          await scrieDacaNeschimbat(admin, COADA, item, { attempts });
         }
       }
     }

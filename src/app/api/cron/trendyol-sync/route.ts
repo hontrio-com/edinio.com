@@ -157,7 +157,17 @@ export async function GET(req: NextRequest) {
        */
       const deconectat = await esteDeconectatTrendyol(admin, businessId);
       if (deconectat === true) {
-        await admin.from("trendyol_sync_queue").delete().in("id", items.map((i) => i.id));
+        /*
+         * ⚠ CATE UNUL, CU PAZA PE GENERATIE (26.08.2026).
+         *
+         * Un `delete ... in (ids)` nu poate fi pazit: sterge tot ce nimereste, inclusiv randurile
+         * rescrise intre timp. Magazinul e deconectat, deci cererile n-au unde pleca — dar daca
+         * cineva tocmai l-a reconectat si a pus ceva la coada, aia trebuie sa ramana.
+         *
+         * ⚠ Gasit de o proba scrisa pentru About You, care a maturat toate cronurile: acelasi loc
+         * era nepazit si aici, si la eMAG. Restul scrierilor treceau de mult prin CAS.
+         */
+        for (const it of items) await stergeDacaNeschimbat(admin, "trendyol_sync_queue", it);
       } else {
         await logError({
           action: "trendyol-sync",

@@ -84,6 +84,8 @@ export interface AboutYouConfig {
    * la un punct fiecare rulare ar cere pagini goale.
    */
   reconcile_page?: number;
+  /** Unde a ajuns roata pe `/products/rejected`. Vezi nota din `reconcileStatuses`. */
+  rejected_page?: number;
   orders_synced_at?: string;
   needs_reconnect?: boolean;
 }

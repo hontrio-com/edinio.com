@@ -46,9 +46,26 @@ test("⚠ un raspuns bun sterge si amanarea, si sirul de esecuri", () => {
      apare tot, si prima potrivire ar fi cazut pe fisierul gresit. */
   const i = sync.indexOf("attempts: incercari,");
   assert.ok(i > 0, "resetarea din bucla de sondare exista");
-  const f = sync.slice(i, i + 300);
-  assert.match(f, /next_poll_at: null/);
-  assert.match(f, /tranzient_de_la: null/);
+  const f = sync.slice(i, i + 700);
+  assert.match(f, /tranzient_de_la: null/, "sirul de esecuri de transport se rupe intotdeauna");
+
+  /*
+   * ═══ ⚠ AMANAREA NU MAI E MEREU STEARSA (27.08.2026) ═══
+   *
+   * Era: „un raspuns bun sterge si amanarea". Adevarat cat timp singura amanare venea din esecuri
+   * de TRANSPORT. Acum mai exista una, voita: un lot pe care About You il macina de peste doua ore
+   * se intreaba mai rar, ca sa nu ocupe un loc in selectia celor mai vechi si sa infometeze
+   * loturile noi. Inainte, unul ca asta era declarat `failed` la 120 de treceri — un verdict pe
+   * care ei nu-l dadusera niciodata.
+   *
+   * Deci: `tranzient_de_la` se sterge intotdeauna; `next_poll_at` numai cand lotul nu e incetinit.
+   */
+  assert.match(f, /next_poll_at: incetinit/);
+  assert.match(f, /: null,/);
+  assert.match(sync, /const AMANARE_LOT_LENT_MS = 30 \* 60 \* 1000;/);
+  /* ⚠ Si nu se mai inventeaza „a esuat": la capat, mesajul spune ca NOI am incetat sa intrebam. */
+  assert.match(sync, /amIncetatSaIntrebam: true/);
+  assert.match(sync, /am incetat sa intrebam/);
 });
 
 test("⚠ tacerea nu e o optiune cand lotul ramane deschis la nesfarsit", () => {

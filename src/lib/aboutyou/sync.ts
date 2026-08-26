@@ -162,13 +162,22 @@ async function getVariantData(admin: Db, listingId: string): Promise<AboutYouVar
   }));
 }
 
+/**
+ * Scrie starea listarii. Intoarce `false` daca n-a putut.
+ *
+ * ⚠ RASPUNSUL CONTEAZA LA ASEZAREA LOTULUI. Lotul se inchidea pe `completed` chiar cand scrierea
+ * de aici picase: rezultatul lui About You e citit O SINGURA DATA, iar dupa inchidere nu se mai
+ * intreaba niciodata. Deci listarea ramanea pe `pending` la nesfarsit, cu adevarul pierdut
+ * definitiv — sau, si mai rau, un produs respins ramanea aratand ca merge.
+ */
 async function setListingStatus(
   admin: Db, listingId: string, status: string, extra: Record<string, unknown> = {},
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date().toISOString();
-  await admin.from("aboutyou_listings")
+  const { error } = await admin.from("aboutyou_listings")
     .update({ status, last_status_at: now, updated_at: now, ...extra } as never)
     .eq("id", listingId);
+  return !error;
 }
 
 /**
@@ -952,6 +961,9 @@ async function marcheazaListarileLotului(
   }
 }
 
+/** Cat de rar se intreaba un lot care e in lucru la ei de peste doua ore. */
+const AMANARE_LOT_LENT_MS = 30 * 60 * 1000;
+
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
   const batches = randuriCitite<BatchRow>("aboutyou.loturiDeschise", await admin
     .from("aboutyou_batches")
@@ -1087,7 +1099,32 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
        * raspunda. Dupa atat, lotul se inchide ca esuat si eliberam locul.
        */
       const incercari = b.attempts + 1;
-      const abandonat = incercari >= 120;
+      /*
+       * ═══ ⚠ „INCA PROCESEAZA" NU E „A ESUAT" (27.08.2026) ═══
+       *
+       * La 120 de treceri lotul se inchidea ca `failed`, iar listarile lui primeau „About You nu
+       * a finalizat procesarea". Numai ca About You nu spusese asta niciodata: `pending`,
+       * `processing` si `retry` sunt starile LOR de lucru, si nu exista nicaieri o intelegere
+       * dupa care doua ore ar insemna esec. Am inventat un verdict.
+       *
+       * ⚠ TEMEIUL DE ATUNCI ERA REAL, si nu se pierde: selectia ia cele mai VECHI loturi
+       * deschise, in limita `limit`, deci un lot ramas deschis ocupa un loc pentru totdeauna si
+       * cele noi nu mai ajungeau sa fie interogate. Dar leacul pentru infometare nu e uciderea
+       * lotului — e AMANAREA, si unealta exista deja: `next_poll_at` taie selectia.
+       *
+       * Deci: pana la prag se intreaba din minut in minut; dupa prag, mult mai rar, si se scrie
+       * o data ca sa se vada. Listarea ramane pe `pending`, fiindca asta e adevarul.
+       *
+       * ⚠ SI TOTUSI EXISTA UN CAPAT. Un lot deschis la nesfarsit e o stare fara iesire, iar
+       * `batchRequestId` poate fi si pierdut de ei. Dupa sapte zile se inchide — dar mesajul
+       * spune ce s-a intamplat cu adevarat: noi am incetat sa intrebam, nu ei au raspuns „esuat".
+       */
+      const PRAG_INCETINIRE = 120;
+      const SAPTE_ZILE_MS = 7 * 24 * 60 * 60 * 1000;
+      const vechimeMs = Date.now() - new Date(b.submitted_at).getTime();
+      const amIncetatSaIntreb = vechimeMs > SAPTE_ZILE_MS;
+      const incetinit = incercari >= PRAG_INCETINIRE;
+
       await admin.from("aboutyou_batches").update({
         attempts: incercari,
         polled_at: now,
@@ -1097,15 +1134,36 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
          * legitim doua ore aduna sase hopuri raspandite si e ucis oricum.
          */
         poll_errors: 0,
-        /* ⚠ Si amanarea, si sirul de esecuri de transport: interogarea A RASPUNS. */
-        next_poll_at: null,
+        /* ⚠ Sirul de esecuri de transport se rupe; amanarea, insa, o pune incetinirea de mai jos. */
         tranzient_de_la: null,
-        ...(abandonat
-          ? { status: "failed", result_summary: { status: result?.status ?? "necunoscut", abandonat: true } as never }
+        next_poll_at: incetinit
+          ? new Date(Date.now() + AMANARE_LOT_LENT_MS).toISOString()
+          : null,
+        ...(amIncetatSaIntreb
+          ? {
+            status: "failed",
+            result_summary: {
+              status: result?.status ?? "necunoscut",
+              /* ⚠ „Am incetat sa intrebam", nu „ei au esuat". Cuvantul conteaza pentru cine citeste. */
+              amIncetatSaIntrebam: true, zile: 7,
+            } as never,
+          }
           : {}),
       } as never).eq("id", b.id);
-      if (abandonat) {
-        await marcheazaListarileLotului(admin, ctx, b, "About You nu a finalizat procesarea. Încearcă din nou.");
+
+      if (amIncetatSaIntreb) {
+        await marcheazaListarileLotului(admin, ctx,
+          b, "About You nu a terminat procesarea in sapte zile si am incetat sa intrebam. Trimite produsul din nou.");
+      } else if (incetinit && b.alarma_scrisa_la == null) {
+        /* ⚠ O SINGURA DATA pe lot: cronul de minut ar scrie altfel acelasi rand la nesfarsit. */
+        await logError({
+          action: "aboutyou-sync/lot-lent", severity: "warning",
+          message: `lotul ${b.kind} e in lucru la About You de peste doua ore: se intreaba mai rar, dar nu se abandoneaza`,
+          details: { batchRequestId: b.batch_request_id, incercari, relatedIds: b.related_ids },
+          businessId: ctx.businessId,
+        });
+        await admin.from("aboutyou_batches")
+          .update({ alarma_scrisa_la: now } as never).eq("id", b.id);
       }
       continue;
     }
@@ -1239,6 +1297,15 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
 
     // Only catalog batches (product create/update, status) reflect onto the
     // listing status; stock/price batches are transient and just settle.
+    /*
+     * ⚠ SCRIERILE LOCALE PICATE TIN LOTUL DESCHIS.
+     *
+     * Rezultatul lui About You se citeste O SINGURA DATA: lotul inchis pe `completed` nu se mai
+     * intreaba niciodata. Deci o scriere locala picata inseamna ca adevarul lor e pierdut
+     * definitiv — listarea ramane pe `pending` pe veci, sau un produs respins arata ca merge.
+     * Lasat pe `retry`, lotul se reinterogheaza si asezarea se reface.
+     */
+    let asezat = true;
     if (b.kind === "product" || b.kind === "status" || b.kind === "removal") {
       for (const sk of styleKeys) {
         const listing = await getListingByStyleKey(admin, ctx.businessId, sk);
@@ -1252,12 +1319,14 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
          */
         if (b.kind === "removal") {
           if (hardFail) {
-            await setListingStatus(admin, listing.id, "error", {
+            if (!await setListingStatus(admin, listing.id, "error", {
               error: errors.slice(0, 3).join("; ").slice(0, 500)
                 || "About You nu a acceptat retragerea produsului. Încearcă din nou.",
-            });
+            })) asezat = false;
           } else {
-            await admin.from("aboutyou_listings").delete().eq("id", listing.id);
+            const { error: eSters } = await admin.from("aboutyou_listings").delete().eq("id", listing.id);
+            /* ⚠ Randul nesters inseamna ca produsul apare mai departe in panou desi e retras. */
+            if (eSters) asezat = false;
           }
           continue;
         }
@@ -1278,11 +1347,11 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
           const coada = eraLaEi
             ? ` La About You produsul rămâne „${listing.stare_dinainte}”, cu varianta dinainte de modificare.`
             : "";
-          await setListingStatus(admin, listing.id, "error", {
+          if (!await setListingStatus(admin, listing.id, "error", {
             error: (motiv + coada).slice(0, 500),
             /* Si-a facut treaba: urmatoarea trimitere isi scrie propria stare de dinainte. */
             stare_dinainte: null,
-          });
+          })) asezat = false;
         } else if (b.kind === "product" && listing.status === "pending") {
           /*
            * ═══ ⚠ UN PRODUS CU PESTE 100 DE VARIANTE PLEACA IN MAI MULTE LOTURI ═══
@@ -1346,10 +1415,13 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            */
           const urmare = urmareaLotului(listing.stare_dinainte);
           if (urmare.status != null) {
-            await setListingStatus(admin, listing.id, urmare.status, { error: null, stare_dinainte: null });
+            if (!await setListingStatus(admin, listing.id, urmare.status, { error: null, stare_dinainte: null })) {
+              asezat = false;
+            }
           } else {
-            await admin.from("aboutyou_listings")
+            const { error: eStare } = await admin.from("aboutyou_listings")
               .update({ error: null, stare_dinainte: null } as never).eq("id", listing.id);
+            if (eStare) asezat = false;
           }
           /*
            * PUBLICAREA SE INLANTUIE SINGURA. Aici, si nicaieri altundeva.
@@ -1387,8 +1459,24 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
         }
       }
     }
+    /*
+     * ⚠ `retry`, NU `completed`, cand asezarea locala n-a mers: lotul se reinterogheaza la
+     * trecerea urmatoare si se aseaza atunci. Inchis, rezultatul lor s-ar fi pierdut pentru
+     * totdeauna — el nu se mai poate cere a doua oara dupa ce randul e marcat gata.
+     */
+    if (!asezat) {
+      await logError({
+        action: "aboutyou-sync/loturi", severity: "warning",
+        message: "rezultatul lotului n-a putut fi asezat local: lotul ramane deschis si se reia",
+        details: { batchRequestId: b.batch_request_id, kind: b.kind }, businessId: ctx.businessId,
+      });
+    }
     await admin.from("aboutyou_batches")
-      .update({ status: hardFail ? "failed" : "completed", polled_at: now, result_summary: { status: result.status, errors: errors.slice(0, 10) } as never })
+      .update({
+        status: !asezat ? "retry" : hardFail ? "failed" : "completed",
+        polled_at: now,
+        result_summary: { status: result.status, errors: errors.slice(0, 10) } as never,
+      })
       .eq("id", b.id);
   }
 }
@@ -1536,15 +1624,34 @@ export async function reconcileStatuses(
   // Limita de rata aici e 50/min, de douazeci de ori mai stransa: o singura
   // trecere paginata, nu cate o cerere per produs respins.
   const deRespins = new Set(respinse);
-  // Plafon propriu: limita rutei e 50 de cereri pe minut, de douazeci de ori mai
-  // stransa decat la `/products/`. Douazeci de pagini inseamna 2000 de produse
-  // respinse — cu mult peste orice caz real — si lasa marja.
-  for (let page = 1; page <= Math.min(maxPages, 20); page++) {
+  /*
+   * ═══ ⚠ MOTIVELE PORNEAU MEREU DE LA PAGINA 1, SI SE OPREAU LA 20 (27.08.2026) ═══
+   *
+   * Peste 2000 de produse respinse, un style aflat mai departe nu-si primea NICIODATA motivul:
+   * comerciantul vedea „respins" fara sa afle de ce, si nu mai avea cum sa afle. E acelasi
+   * defect reparat luna asta la catalogul principal si la Trendyol — „scanarea fixa de la zero
+   * n-a vazut niciodata nimic dupa produsul 500" — ramas aici.
+   *
+   * Doua leacuri, si primul face aproape toata treaba:
+   *
+   * ⚠ SE IESE CAND S-A GASIT TOT CE CAUTAM. Bucla mergea mai departe si dupa ce fiecare style
+   * cerut isi primise motivul — pagini cerute degeaba, pe o ruta cu 50 de cereri pe minut. Cu
+   * iesirea, plafonul de 20 aproape nu mai are cand sa muste.
+   *
+   * ⚠ SI SE TINE MINTE UNDE S-A AJUNS, ca roata sa se invarta si in cazul rau. Cand catalogul de
+   * respinse se termina, se porneste iar de la 1.
+   */
+  const dePeLaR = Math.max(1, Number(ctx.config.rejected_page ?? 1) || 1);
+  let urmatoareaR = dePeLaR;
+  let gasiteToate = false;
+  for (let page = dePeLaR; page < dePeLaR + Math.min(maxPages, 20); page++) {
+    urmatoareaR = page + 1;
     if (expirat()) break;
     const res = await getRejectedProducts(ctx.auth, { page, per_page: 100 });
     if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
     const items = res.data?.items ?? [];
-    if (items.length === 0) break;
+    /* Catalogul s-a terminat: roata se intoarce la inceput. */
+    if (items.length === 0) { urmatoareaR = 1; break; }
     const now = new Date().toISOString();
     for (const it of items) {
       if (!it.style_key || !deRespins.has(it.style_key)) continue;
@@ -1556,10 +1663,20 @@ export async function reconcileStatuses(
           updated_at: now,
         } as never)
         .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
+      /* ⚠ Scos din multime: cand se goleste, n-avem ce mai cauta. */
+      deRespins.delete(it.style_key);
     }
+    if (deRespins.size === 0) { gasiteToate = true; break; }
     // Ca mai sus: oprirea se ia din lungimea lotului, nu din `pagination.pages`.
-    if (items.length < 100) break;
+    if (items.length < 100) { urmatoareaR = 1; break; }
     await pause(250);
+  }
+  /*
+   * ⚠ CURSORUL NU SE MUTA CAND AM GASIT TOT. Mutat si atunci, urmatoarea trecere ar sari peste
+   * paginile de la inceput fara motiv — iar cele mai multe treceri se termina asa.
+   */
+  if (!gasiteToate && urmatoareaR !== dePeLaR) {
+    await patchAboutYouConfig(admin, ctx.businessId, { rejected_page: urmatoareaR });
   }
   return { ok: true };
 }

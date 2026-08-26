@@ -4458,7 +4458,8 @@ create table if not exists public.aboutyou_listings (
   last_status_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  attributes jsonb default '[]'::jsonb not null);
+  attributes jsonb default '[]'::jsonb not null,
+  stare_dinainte text);
 
 create table if not exists public.aboutyou_orders (
   id uuid default gen_random_uuid() not null,

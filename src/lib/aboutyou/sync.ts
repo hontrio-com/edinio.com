@@ -79,12 +79,14 @@ interface ListingRow {
   hs_code: string | null;
   /** Momentul in care produsul chiar a plecat spre About You. `null` = doar local. */
   last_synced_at: string | null;
+  /** Ce stiam despre el INAINTE de trimiterea in curs. Vezi `urmareaLotului`. */
+  stare_dinainte: string | null;
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -92,7 +94,7 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
 async function getListingByStyleKey(admin: Db, businessId: string, styleKey: string): Promise<ListingRow | null> {
   const { data } = await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte")
     .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle();
   return (data as ListingRow) ?? null;
 }
@@ -530,7 +532,14 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
     return { ok: false, error: motiv };
   }
   const now = new Date().toISOString();
-  await setListingStatus(admin, listing.id, "pending", { error: null, last_synced_at: now });
+  /*
+   * ⚠ SE TINE MINTE INAINTE DE A ACOPERI. `pending` sterge `status`, iar `last_synced_at: now`
+   * sterge si celalalt fapt de care e nevoie la incheierea lotului: „exista la ei dinainte?".
+   * Vezi `urmareaLotului`.
+   */
+  await setListingStatus(admin, listing.id, "pending", {
+    error: null, last_synced_at: now, stare_dinainte: stareaDeTinutMinte(listing),
+  });
   return { ok: true, action: "submitted", batchRequestId };
 }
 
@@ -628,6 +637,50 @@ export function publishProductNow(admin: Db, ctx: AboutYouSyncContext, productId
  * ramas vandabil.
  */
 const INAINTE_DE_APROBARE = new Set(["draft", "pending_approval", "rejected"]);
+
+/*
+ * ═══ ⚠ O MODIFICARE LA UN PRODUS APROBAT IL DADEA INAPOI LA „CIORNA" (27.08.2026) ═══
+ *
+ * `pollOpenBatches` scria `draft` la fiecare lot de produs incheiat cu bine, cu comentariul
+ * „exists as a draft on About You until published". Adevarat, dar NUMAI la prima trimitere:
+ * documentatia lor spune „Newly created products start in the `draft` state", si tot ea spune ca
+ * un produs aprobat nu se mai poate intoarce acolo. Deci, dupa orice modificare a unui produs
+ * ACTIV, panoul arata „Ciorna" pentru un produs care se vinde, se punea la coada o publicare pe
+ * care n-o ceruse nimeni, iar retragerea cerea `draft` si primea refuz.
+ *
+ * ⚠ SI CIORNELE LASATE DINADINS: lantul de publicare se declanseaza pe trecerea
+ * `pending -> draft` tocmai ca „sa nu atinga ciornele vechi, lasate dinadins nepublicate" — dar o
+ * retrimitere trecea exact pe-acolo, deci le publica la prima modificare.
+ *
+ * Ce se stia inainte de trimitere se tine minte in `stare_dinainte`, fiindca la momentul lotului
+ * `status` e deja `pending` si `last_synced_at` a fost rescris: tocmai cele doua fapte de care e
+ * nevoie sunt sterse chiar de trimitere.
+ */
+export const STARI_ALE_LOR = new Set([
+  "draft", "active", "published", "inactive", "pending_approval", "pending_active",
+  "rejected", "problem",
+]);
+
+/** Ce se tine minte inainte de a acoperi starea cu `pending`. */
+export function stareaDeTinutMinte(listing: { status: string; last_synced_at: string | null }): string {
+  if (listing.last_synced_at == null) return "prima";
+  return STARI_ALE_LOR.has(listing.status) ? listing.status : "necunoscut";
+}
+
+/**
+ * Ce se face cu listarea cand lotul ei de produs s-a incheiat cu bine.
+ *
+ * `status: null` inseamna „nu se atinge": ramane pe `pending`, iar reconcilierea — care oricum
+ * trece prin tot catalogul lor — scrie starea adevarata. Mai bine asa decat un `draft` inventat.
+ */
+export function urmareaLotului(stareDinainte: string | null): { status: string | null; publica: boolean } {
+  /* Prima trimitere: produsul chiar s-a nascut ciorna, si publicarea se inlantuie singura. */
+  if (stareDinainte == null || stareDinainte === "prima") return { status: "draft", publica: true };
+  /* Retrimitere cu starea lor stiuta: se pune inapoi, si nu se publica nimic nou. */
+  if (STARI_ALE_LOR.has(stareDinainte)) return { status: stareDinainte, publica: false };
+  /* Retrimitere fara sa stim unde ajunsese: nu se inventeaza. */
+  return { status: null, publica: false };
+}
 
 /** Ce status se cere la About You cand retragem, dupa unde a ajuns produsul. */
 function tintaRetragere(status: string): "draft" | "inactive" {
@@ -1075,7 +1128,21 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             || (esuate > 0
               ? `About You a respins ${esuate} ${esuate === 1 ? "variantă" : "variante"}, fără să precizeze motivul.`
               : "Eroare la procesarea pe About You.");
-          await setListingStatus(admin, listing.id, "error", { error: motiv });
+          /*
+           * ⚠ CE VEDE CUMPARATORUL ACUM. Un esec la o MODIFICARE nu opreste produsul de la ei:
+           * acolo ramane varianta dinainte, si se vinde mai departe. Scris asa, „eroare" singur il
+           * lasa pe comerciant sa creada ca produsul e cazut — iar el se uita in alta parte in loc
+           * sa retrimita. Se spune, cat timp mai stim starea.
+           */
+          const eraLaEi = STARI_ALE_LOR.has(listing.stare_dinainte ?? "");
+          const coada = eraLaEi
+            ? ` La About You produsul rămâne „${listing.stare_dinainte}”, cu varianta dinainte de modificare.`
+            : "";
+          await setListingStatus(admin, listing.id, "error", {
+            error: (motiv + coada).slice(0, 500),
+            /* Si-a facut treaba: urmatoarea trimitere isi scrie propria stare de dinainte. */
+            stare_dinainte: null,
+          });
         } else if (b.kind === "product" && listing.status === "pending") {
           /*
            * ═══ ⚠ UN PRODUS CU PESTE 100 DE VARIANTE PLEACA IN MAI MULTE LOTURI ═══
@@ -1100,8 +1167,18 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
               .in("status", ["pending", "processing", "retry"])
               .neq("id", b.id) as never);
 
-          // Product accepted; it exists as a draft on About You until published.
-          await setListingStatus(admin, listing.id, "draft", { error: null });
+          /*
+           * ⚠ „Ciorna" DOAR LA PRIMA TRIMITERE. Vezi `urmareaLotului`: la o modificare a unui
+           * produs deja aprobat se pune inapoi starea lui de la ei, iar cand n-o stim ramane pe
+           * `pending` si o scrie reconcilierea.
+           */
+          const urmare = urmareaLotului(listing.stare_dinainte);
+          if (urmare.status != null) {
+            await setListingStatus(admin, listing.id, urmare.status, { error: null, stare_dinainte: null });
+          } else {
+            await admin.from("aboutyou_listings")
+              .update({ error: null, stare_dinainte: null } as never).eq("id", listing.id);
+          }
 
           if (fratiNeterminati.length > 0) {
             /* ⚠ Se spune, ca sa nu para ca s-a pierdut ceva: publicarea vine la ultimul lot. */
@@ -1130,7 +1207,7 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * trecerea `pending -> draft`, adica imediat dupa o trimitere reusita —
            * nu atinge ciornele vechi, lasate dinadins nepublicate.
            */
-          if (listing.product_id) {
+          if (listing.product_id && urmare.publica) {
             /* ⚠ Si aici se verifica `error`: fara el, publicarea nu se punea la coada si produsul
                ramanea ciorna la ei pentru totdeauna, fara nicio urma. */
             const { error: ePub } = await admin.from("aboutyou_sync_queue").upsert(

@@ -183,6 +183,7 @@ export type Database = {
           product_id: string | null
           rejection_reasons: Json
           size_option_name: string | null
+          stare_dinainte: string | null
           status: string
           style_key: string
           updated_at: string
@@ -206,6 +207,7 @@ export type Database = {
           product_id?: string | null
           rejection_reasons?: Json
           size_option_name?: string | null
+          stare_dinainte?: string | null
           status?: string
           style_key: string
           updated_at?: string
@@ -229,6 +231,7 @@ export type Database = {
           product_id?: string | null
           rejection_reasons?: Json
           size_option_name?: string | null
+          stare_dinainte?: string | null
           status?: string
           style_key?: string
           updated_at?: string

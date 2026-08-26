@@ -75,3 +75,49 @@ test("⚠ cronul chiar o cheama, pe o tura proprie", () => {
   /* ⚠ Si sub bugetul rularii: pasul asta nu are voie sa manance fereastra celorlalti. */
   assert.match(cron, /if \(Date\.now\(\) - inceput > BUGET_TOTAL_MS\) break;/);
 });
+
+test("⚠ reconcilierea catalogului nu mai porneste de la pagina 1", () => {
+  /*
+   * ═══ ⚠ CU PLAFON DE 50 DE PAGINI SI UN BUGET DE TIMP, ULTIMELE NU VENEAU NICIODATA ═══
+   *
+   * Bugetul se termina de obicei mai devreme decat plafonul, deci un catalog mare nu ajungea
+   * NICIODATA la sfarsit: primele pagini se reconciliau de zeci de ori pe ora, ultimele niciodata.
+   * Un produs respins de ei, aflat pe pagina 60, ramanea la noi „activ" pentru totdeauna — si
+   * comerciantul nu afla de ce nu se vinde.
+   *
+   * ⚠ E CHIAR DEFECTUL REPARAT LA TRENDYOL: „scanarea fixa de 5 pagini de la zero n-a vazut
+   * niciodata nimic dupa produsul 500 intr-un catalog de 1033". eMAG are de mult `reconcile_page`;
+   * aici lipsea.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /const dePeLa = Math\.max\(1, Number\(ctx\.config\.reconcile_page \?\? 1\) \|\| 1\);/);
+  assert.match(sync, /for \(let page = dePeLa; page < dePeLa \+ maxPages; page\+\+\)/);
+
+  /* ⚠ Cursorul se scrie SI cand s-a oprit din buget, nu doar la capat — tocmai oprirea din buget
+     e cazul obisnuit, si singurul in care „de la 1" insemna sa nu se ajunga niciodata mai departe. */
+  assert.match(sync, /await patchAboutYouConfig\(admin, ctx\.businessId, \{ reconcile_page: urmatoarea \}\)/);
+
+  /* ⚠ Si cand catalogul se termina, roata se intoarce la 1: altfel cursorul ar creste la
+     nesfarsit si fiecare rulare ar cere pagini goale. */
+  assert.match(sync, /trunchiat = false; urmatoarea = 1; break;/);
+});
+
+test("⚠ si petecul de configurare are un singur loc", () => {
+  /* Scris a doua oara, cele doua s-ar fi despartit la prima schimbare — chiar tiparul care a lasat
+     cinci cozi cu apararea pusa pe doua. */
+  const cron = viu("src/app/api/cron/aboutyou-sync/route.ts");
+  assert.match(cron, /from "@\/lib\/aboutyou\/config"/);
+  assert.doesNotMatch(cron, /async function patchConfig\(/);
+});
+
+test("⚠ anularea si returul pornite din Edinio sunt marcate ca nechemate", () => {
+  /*
+   * Cautat in tot depozitul: singurele aparitii sunt definitiile. Nu exista nici actiune de
+   * server, nici buton — deci fluxul nu exista in practica, oricat de complet ar arata codul.
+   *
+   * ⚠ Nu se sterg: sunt scrise cu grija si azi li s-au strans si filtrele de stare. Ce lipseste e
+   * o hotarare de ecran, nu cod.
+   */
+  const brut = readFileSync("src/lib/aboutyou/orders.ts", "utf8");
+  assert.match(brut, /NIMENI NU CHEAMA `cancelOrderNow` SI `returnOrderNow`/);
+});

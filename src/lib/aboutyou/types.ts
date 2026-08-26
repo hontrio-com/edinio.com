@@ -72,6 +72,18 @@ export interface AboutYouConfig {
   category_map?: Record<string, AboutYouCategoryMapEntry>;
   auto_sync?: boolean;
   last_sync_at?: string;
+  /**
+   * De la ce pagina reia reconcilierea catalogului.
+   *
+   * ⚠ FARA EA SE PORNEA MEREU DE LA 1. Cu plafon de 50 de pagini si un buget de timp care se
+   * termina de obicei mai devreme, un catalog mare nu ajungea NICIODATA la sfarsit: primele
+   * pagini se reconciliau de zeci de ori pe ora, ultimele niciodata. Un produs respins de ei,
+   * aflat pe pagina 60, ramanea la noi „activ" pentru totdeauna.
+   *
+   * ⚠ Cand catalogul se termina, se intoarce la 1: altfel cursorul ar creste la nesfarsit si de
+   * la un punct fiecare rulare ar cere pagini goale.
+   */
+  reconcile_page?: number;
   orders_synced_at?: string;
   needs_reconnect?: boolean;
 }

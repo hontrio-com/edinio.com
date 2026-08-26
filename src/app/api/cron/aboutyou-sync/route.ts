@@ -9,13 +9,13 @@ import {
 } from "@/lib/aboutyou/sync";
 import { pollOrders, reconciliazaComenzile } from "@/lib/aboutyou/orders";
 import { reiaEvenimenteleNeprelucrate } from "@/lib/aboutyou/inbox";
+import { patchAboutYouConfig } from "@/lib/aboutyou/config";
 // Mutata in `lib/marketplace/rotatie` ca s-o poata folosi si cronul Trendyol,
 // care taia inca cu `.slice()`.
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { marcajUrmator } from "@/lib/marketplace/marcaj";
 import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
-import type { Json } from "@/types/database.types";
 
 type Admin = SupabaseClient<Database>;
 
@@ -223,7 +223,7 @@ export async function GET(req: NextRequest) {
       await pause(PACE_MS);
     }
     if (opritDinLimita) await pause(PACE_MS * 3);
-    await patchConfig(admin, businessId, { last_sync_at: now });
+    await patchAboutYouConfig(admin, businessId, { last_sync_at: now });
   }
 
   /*
@@ -322,7 +322,7 @@ export async function GET(req: NextRequest) {
      */
     const marcajNou = marcajUrmator(pr, { runStartMs: Date.parse(now), overlapMs: ORDERS_OVERLAP_MS });
     if (marcajNou != null) {
-      await patchConfig(admin, businessId, { orders_synced_at: new Date(marcajNou).toISOString() });
+      await patchAboutYouConfig(admin, businessId, { orders_synced_at: new Date(marcajNou).toISOString() });
     }
     await pause(PACE_MS);
   }
@@ -398,21 +398,6 @@ export async function GET(req: NextRequest) {
  * schimbate, anuland-o. `jsonb_merge_config` face imbinarea in Postgres, intr-o
  * singura instructiune, deci nu mai exista fereastra.
  */
-async function patchConfig(admin: Admin, businessId: string, patch: Partial<AboutYouConfig>) {
-  const { error } = await admin.rpc("jsonb_merge_config", {
-    p_business_id: businessId,
-    p_column: "aboutyou_config",
-    // `AboutYouConfig` e jsonb valid, dar tipul lui nu are semnatura de index.
-    p_patch: patch as unknown as Json,
-  });
-  if (!error) return;
-  // Cadere de siguranta daca functia lipseste inca din baza.
-  const { data: ss } = await admin.from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
-  const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
-  await admin.from("store_settings")
-    .update({ aboutyou_config: { ...config, ...patch } as never })
-    .eq("business_id", businessId);
-}
 
 /**
  * `true` = magazinul chiar nu are About You conectat; `false` = are; `null` = nu

@@ -23,6 +23,7 @@ import {
   type MappableProduct,
 } from "./mapping";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
+import { patchAboutYouConfig } from "./config";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";
@@ -1143,7 +1144,26 @@ export async function reconcileStatuses(
   const peStyle = new Map<string, Set<string>>();
   let trunchiat = true;
 
-  for (let page = 1; page <= maxPages; page++) {
+  /*
+   * ═══ ⚠ SE PORNEA DE LA PAGINA 1 LA FIECARE RULARE (26.08.2026) ═══
+   *
+   * Cu plafon de 50 de pagini si un buget de timp care se termina de obicei mai devreme, un
+   * catalog mare nu ajungea NICIODATA la sfarsit: aceleasi prime pagini se reconciliau de zeci de
+   * ori pe ora, iar ultimele niciodata. Un produs respins de ei, aflat pe pagina 60, ramanea la
+   * noi „activ" pentru totdeauna — si comerciantul nu afla de ce nu se vinde.
+   *
+   * ⚠ E CHIAR DEFECTUL REPARAT LA TRENDYOL, unde „scanarea fixa de 5 pagini de la zero n-a vazut
+   * niciodata nimic dupa produsul 500 intr-un catalog de 1033". eMAG are de mult
+   * `reconcile_page`; aici lipsea.
+   *
+   * ⚠ SE TINE MINTE UNDE S-A AJUNS, si se reia de-acolo. Cand catalogul se termina, se intoarce
+   * la 1 — deci roata se invarte si fiecare pagina isi vine la rand.
+   */
+  const dePeLa = Math.max(1, Number(ctx.config.reconcile_page ?? 1) || 1);
+  let urmatoarea = dePeLa;
+
+  for (let page = dePeLa; page < dePeLa + maxPages; page++) {
+    urmatoarea = page + 1;
     const res = await getProducts(ctx.auth, { page, per_page: 100 });
     /*
      * Eroarea NU se mai inghite. Inainte se ieșea cu `return` gol, iar cronul
@@ -1164,15 +1184,27 @@ export async function reconcileStatuses(
      * opream dupa prima suta de SKU-uri si restul catalogului nu se reconcilia
      * niciodata. Aceeasi regula o foloseste deja `taxonomy.ts`.
      */
-    if (items.length < 100) { trunchiat = false; break; }
+    /*
+     * ⚠ CATALOGUL S-A TERMINAT: roata se intoarce la inceput. Fara asta, cursorul ar creste la
+     * nesfarsit si de la un punct incolo fiecare rulare ar cere pagini goale.
+     */
+    if (items.length < 100) { trunchiat = false; urmatoarea = 1; break; }
     if (expirat()) break;
     await pause(250);
   }
+
+  /*
+   * ⚠ CURSORUL SE SCRIE SI CAND S-A OPRIT DIN BUGET, nu doar la capat. Tocmai oprirea din buget e
+   * cazul obisnuit la un catalog mare — si singurul in care „de la 1" insemna sa nu se ajunga
+   * niciodata mai departe.
+   */
+  await patchAboutYouConfig(admin, ctx.businessId, { reconcile_page: urmatoarea });
+
   if (trunchiat) {
     await logError({
-      action: "aboutyou/reconcile", severity: "warning",
-      message: `Reconcilierea s-a oprit la plafonul de ${maxPages} pagini; restul catalogului nu a fost citit.`,
-      details: { businessId: ctx.businessId }, businessId: ctx.businessId,
+      action: "aboutyou/reconcile", severity: "info",
+      message: `Reconcilierea s-a oprit la pagina ${urmatoarea - 1}; se reia de-acolo la trecerea urmatoare.`,
+      details: { businessId: ctx.businessId, dePeLa, urmatoarea }, businessId: ctx.businessId,
     });
   }
 

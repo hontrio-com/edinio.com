@@ -877,6 +877,23 @@ export async function pollOrders(
  * implementate nicaieri: comerciantul care nu mai avea marfa era nevoit sa intre
  * in Seller Center, iar Edinio ramanea cu o comanda pe care o credea in lucru.
  */
+/*
+ * ═══ ⚠ NIMENI NU CHEAMA `cancelOrderNow` SI `returnOrderNow` (26.08.2026) ═══
+ *
+ * Cautat in tot depozitul, fara excluderi: singurele aparitii sunt chiar definitiile lor. Nu
+ * exista nici actiune de server, nici buton. Deci anularea si returul pornite DIN EDINIO nu
+ * exista in practica, oricat de complet ar arata codul de dedesubt.
+ *
+ * ⚠ SE SCRIE AICI, NU SE STERG. Amandoua sunt scrise cu grija — inregistreaza lotul, ca „in curs
+ * de anulare" sa nu fie o stare fara iesire — si azi li s-au strans si filtrele de stare (`open`
+ * pentru anulare, `shipped` pentru retur). Sterse, munca asta s-ar pierde; lasate nemarcate, cine
+ * citeste fisierul crede ca fluxul merge.
+ *
+ * ⚠ CE LIPSESTE E O HOTARARE DE ECRAN, nu cod: care linii se aleg, ce confirmare cere o anulare
+ * (e ireversibila), si de unde vine AWB-ul de retur — `returnOrderNow` il cere ca argument, iar
+ * din cei 17 curieri unul singur are azi asa ceva. Alea sunt hotarari ale comerciantului, nu ale
+ * mele, deci nu le iau in locul lui.
+ */
 export async function cancelOrderNow(
   admin: Db, ctx: AboutYouSyncContext, orderId: string,
 ): Promise<{ ok: true; batchRequestId?: string } | { ok: false; error: string }> {

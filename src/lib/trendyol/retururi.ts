@@ -859,6 +859,15 @@ export async function repuneInStoc(
       error: "Returul nu e încă hotărât. Pui marfa înapoi în stoc după ce îl accepți.",
     };
     /*
+     * ⚠ FEREASTRA DINTRE APASARE SI CONFIRMARE. `hotarasteRetur` scrie `decizie` de indata ce ei
+     * raspund, dar `claim_item_status` vine abia la reconciliere — pana la cinci minute mai
+     * tarziu. In fereastra aia, „pui marfa înapoi după ce îl accepți" ii cerea sa faca ce tocmai
+     * facuse. Un ecran care nu tine minte ce-a apasat omul acum un minut il invata sa nu-l creada.
+     */
+    case "asteapta-confirmarea": return {
+      error: "Am trimis acceptarea la Trendyol și așteptăm confirmarea lor. Pui marfa înapoi în stoc de îndată ce o primim — de obicei în câteva minute.",
+    };
+    /*
      * ⚠ Si aici e chiar capcana: la un retur RESPINS cu `dontShipBack: false`, marfa trebuie sa
      * plece INAPOI la client. Repusa in stoc, ar ramane stoc fantoma pe care nimic nu-l scade.
      * Exceptia — respins, dar marfa ramane la el — se face de mana, si i se spune cum.

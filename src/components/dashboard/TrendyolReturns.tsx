@@ -366,9 +366,11 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                         ? "nu i-am putut confirma starea la Trendyol; se reîncearcă la fiecare sincronizare"
                         : l.deCeNuSeRepune === "abia-cerut"
                           ? "clientul abia a cerut returul; coletul n-a ajuns încă la tine"
-                          : l.deCeNuSeRepune === "nehotarat"
-                            ? "returul nu e încă hotărât; poți pune marfa înapoi după ce îl accepți"
-                            : "returul nu s-a acceptat, deci nu punem marfa înapoi automat — dacă totuși o păstrezi, corectează stocul din fișa produsului"}
+                          : l.asteaptaConfirmarea
+                            ? "am trimis acceptarea; așteptăm confirmarea Trendyol, apoi poți pune marfa înapoi"
+                            : l.deCeNuSeRepune === "nehotarat"
+                              ? "returul nu e încă hotărât; poți pune marfa înapoi după ce îl accepți"
+                              : "returul nu s-a acceptat, deci nu punem marfa înapoi automat — dacă totuși o păstrezi, corectează stocul din fișa produsului"}
                     </span>
                   ) : (
                     <button

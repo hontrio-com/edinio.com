@@ -264,3 +264,47 @@ test("⚠ si niciun comentariu nu mai spune ca necunoscutul trece", () => {
   assert.doesNotMatch(brut, /LINII_FARA_HOTARARE/);
   assert.match(brut, /TRECE NUMAI `WaitingInAction`, si e regula LOR, scrisa/);
 });
+
+test("⚠ „l-ai acceptat, asteptam confirmarea” nu e „nu l-ai hotarat”", () => {
+  /*
+   * ═══ ⚠ FEREASTRA DINTRE APASARE SI CONFIRMARE (26.08.2026) ═══
+   *
+   * `hotarasteRetur` scrie `decizie = 'accepted'` de indata ce ei raspund, dar NU scrie
+   * `claim_item_status`: acela vine numai din raspunsul LOR, la reconciliere — pana la cinci
+   * minute mai tarziu.
+   *
+   * In fereastra aia, omul care tocmai apasase „Acceptă returul" si apoi „Am primit marfa și e
+   * bună" primea „pui marfa înapoi după ce îl accepți" — adica i se cerea sa faca ce tocmai
+   * facuse. Un ecran care nu tine minte ce-a apasat omul acum un minut il invata sa nu-l creada.
+   *
+   * ⚠ SI TOTUSI NU SE REPUNE STOCUL PE `decizie`. Ghidul lor spune ca rezultatul unei hotarari se
+   * urmareste ABIA pe urma, pe `claimItemStatus` — un `200` la apel nu dovedeste ca a prins.
+   * Acelasi rationament ca la `sePoateHotari`. Se schimba doar CE SE SPUNE, nu ce se face.
+   *
+   * ⚠ MASURAT pe RPC-ul adevarat, in tranzactie anulata, patru linii:
+   *     WaitingInAction + decizie='accepted' -> {stare: "asteapta-confirmarea", pus: 0}
+   *     WaitingInAction + decizie=null       -> {stare: "retur-nehotarat", pus: 0}
+   *     WaitingInAction + decizie='rejected' -> {stare: "retur-nehotarat", pus: 0}
+   *     Accepted        + decizie='accepted' -> {stare: "pus", pus: 1}
+   */
+  const mig = readFileSync("migrations/2026-11-17-am-acceptat-asteptam-confirmarea.sql", "utf8");
+  assert.match(mig, /when v_linie\.decizie = 'accepted' then 'asteapta-confirmarea'/);
+
+  /* ⚠ Si e ramura DINAINTEA celorlalte doua: altfel un `WaitingInAction` tocmai acceptat ar fi
+     cazut pe „nehotarat", exact mesajul gresit. */
+  const i = mig.indexOf("'asteapta-confirmarea'");
+  const j = mig.indexOf("'retur-incheiat-altfel'");
+  assert.ok(i > 0 && j > i, "confirmarea se verifica INAINTEA celorlalte");
+
+  const sursa = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
+  assert.match(sursa, /case "asteapta-confirmarea"/);
+  assert.match(sursa, /Am trimis acceptarea la Trendyol și așteptăm confirmarea lor/);
+
+  const ui = readFileSync("src/components/dashboard/TrendyolReturns.tsx", "utf8");
+  assert.match(ui, /l\.asteaptaConfirmarea/);
+  assert.match(ui, /am trimis acceptarea; așteptăm confirmarea Trendyol/);
+
+  /* ⚠ Si semnalul se calculeaza din amandoua: „am hotarat noi" SI „ei inca n-au confirmat". */
+  const act = readFileSync("src/lib/actions/trendyol-retururi.actions.ts", "utf8");
+  assert.match(act, /l\.decizie === "accepted" && l\.claim_item_status !== "Accepted"/);
+});

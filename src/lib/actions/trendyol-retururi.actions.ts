@@ -85,6 +85,8 @@ export interface RandRetur {
     sePoateRepune: boolean;
     /** Si DE CE nu, cand nu se poate. Vezi `deCeNuSeRepune`. */
     deCeNuSeRepune: MotivFaraRepunere | null;
+    /** I-am trimis acceptarea si asteptam confirmarea lor. */
+    asteaptaConfirmarea: boolean;
     /** ⚠ Nu i-am putut citi starea. Altceva decat „s-a hotarat deja". */
     stareNecunoscuta: boolean;
     repusInStoc: boolean;
@@ -200,6 +202,9 @@ export async function retururiTrendyol(
         sePoateHotari: sePoateHotari(l.claim_item_status),
         sePoateRepune: sePoateRepune(l.claim_item_status),
         deCeNuSeRepune: deCeNuSeRepune(l.claim_item_status),
+        /* ⚠ I-am trimis acceptarea, dar ei nu ne-au confirmat-o inca. Nu schimba ce se poate
+           face — schimba doar ce i se spune. Vezi nota din RPC. */
+        asteaptaConfirmarea: l.decizie === "accepted" && l.claim_item_status !== "Accepted",
         /*
          * ⚠ „NU STIM" NU E ACELASI LUCRU CU „S-A HOTARAT DEJA" (26.08.2026).
          *

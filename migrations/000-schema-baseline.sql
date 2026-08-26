@@ -3921,6 +3921,7 @@ declare
   v_listing_id uuid;
   v_variant_title text;
   v_product_id uuid;
+  v_stare_cerere text;
 begin
   -- for update: fara el, doua apasari citesc amandoua un marcaj gol si aduna amandoua.
   select * into v_linie
@@ -3935,6 +3936,16 @@ begin
 
   if v_linie.repus_in_stoc_la is not null then
     return jsonb_build_object('stare', 'deja', 'pus', 0);
+  end if;
+
+  -- Marfa trebuie sa fi ajuns. `Created` inseamna, din definitia lor, ca abia clientul a apasat
+  -- butonul si coletul e inca la el. Repus atunci, stocul creste pentru marfa care nu e la raft.
+  select c.claim_status into v_stare_cerere
+    from public.trendyol_claims c
+   where c.id = v_linie.claim_row_id;
+
+  if v_linie.claim_item_status = 'Created' or v_stare_cerere = 'Created' then
+    return jsonb_build_object('stare', 'marfa-n-a-ajuns', 'pus', 0);
   end if;
 
   if coalesce(v_linie.barcode, '') = '' then

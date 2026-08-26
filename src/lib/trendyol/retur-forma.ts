@@ -148,7 +148,20 @@ export function idPachetului(c: TrendyolClaim): number | null {
  * exista niciun colet. Iar cand alarma suna mereu, nu mai suna deloc.
  */
 export function coletDeTrimisInapoi(c: TrendyolClaim): TrendyolColetRespins | null {
-  const p = c.rejectedPackageInfo;
+  /*
+   * ═══ ⚠ EI SCRIU CHEIA CU `p` MIC, NOI O CITEAM CU `P` MARE (26.08.2026) ═══
+   *
+   * In raspunsul-exemplu din `reference/getclaims`: `"rejectedpackageinfo"`. Schema lor
+   * foloseste alta scriere decat exemplul lor, deci NU SE POATE STI care vine in trafic — si
+   * n-avem cum sa masuram, fiindca niciun cont al nostru n-are inca vreun retur.
+   *
+   * ⚠ CE AR FI COSTAT sa ghicesc gresit: `colet_respins` si `dont_ship_back` raman goale, deci
+   * comerciantul nu afla NICIODATA ca are un colet de trimis inapoi clientului. Netrimis, returul
+   * se intoarce impotriva lui — chiar paguba pentru care s-a scris toata bucata asta.
+   *
+   * ⚠ Se citesc amandoua. Costa un `??`, si scoate ghicitul din drum.
+   */
+  const p = c.rejectedPackageInfo ?? c.rejectedpackageinfo;
   return p && typeof p === "object" ? p : null;
 }
 
@@ -209,8 +222,59 @@ export const MOTIV_BLOCAT_24H = 1651;
  */
 const LINII_INCHEIATE = new Set(["Accepted", "Cancelled"]);
 
-/** Starile in care mingea e la COMERCIANT: el are de apasat ceva. */
-const LINII_DE_HOTARAT = new Set(["Created", "WaitingInAction"]);
+/**
+ * Starile in care mingea e la COMERCIANT: el are de apasat ceva.
+ *
+ * ═══ ⚠ `Created` NU E AICI, SI ASTA E CHIAR DEFINITIA LOR (26.08.2026) ═══
+ *
+ * Citat din ghidul lor, cuvant cu cuvant:
+ *   Created         — „The first status of the orders returns. This occurs when the customer
+ *                      presses the return button."
+ *   WaitingInAction — „This statu returns when the returned orders reaches the supplier."
+ *
+ * ⚠ DEOSEBIREA E FIZICA, nu de eticheta: pe `Created` clientul abia a apasat butonul, iar marfa
+ * e inca la el. Comerciantul n-are ce hotari despre un colet pe care nu l-a primit — si mai ales
+ * n-are cum sa spuna „am primit marfa si e buna".
+ *
+ * ⚠ Aratata ca „așteaptă răspunsul tău", l-ar fi pus sa se uite intr-un colet inexistent, sau
+ * l-ar fi impins sa apese repunerea in stoc pentru marfa care inca e in drum. Vezi
+ * `SE_POATE_REPUNE_IN_STOC`.
+ */
+const LINII_DE_HOTARAT = new Set(["WaitingInAction"]);
+
+/**
+ * Starile din care se poate cere lui Trendyol o aprobare sau o respingere.
+ *
+ * ═══ ⚠ SE NUMESC CELE OPRITE, SI NUMAI ALEA ═══
+ *
+ * Ghidul lor NU spune ca aprobarea se poate face doar din `WaitingInAction` — asa ca nici noi
+ * n-o spunem. Se opresc numai cele in care e SIGUR gresit:
+ *
+ *   `Created`    marfa nu a ajuns la comerciant; n-are ce hotari.
+ *   `Accepted`   `Rejected`   `Cancelled`   s-a hotarat deja, si nu de aici.
+ *
+ * ⚠ ASTA APARA SI DE O CURSA ADEVARATA: ecranul arata `WaitingInAction` la 10:00, Trendyol
+ * accepta singur la 10:01, iar omul apasa „Respinge" la 10:02. Fara verificare, plecam cu o
+ * respingere pentru ceva deja acceptat — si ghidul lor spune ca rezultatul respingerii se vede
+ * abia mai tarziu, pe `claimItemStatus`, deci nici macar n-am fi aflat pe loc.
+ *
+ * ⚠ `InAnalysis`, `Unresolved`, `WaitingFraudCheck` si necunoscutul TREC. Oprite, l-am fi blocat
+ * pe baza unei reguli pe care ei n-au scris-o; lasate sa treaca, cel mai rau caz e un refuz de
+ * la ei, pe care il aratam.
+ */
+const LINII_FARA_HOTARARE = new Set(["Created", "Accepted", "Rejected", "Cancelled"]);
+
+/**
+ * Starile din care marfa a ajuns fizic la comerciant, deci se poate repune in stoc.
+ *
+ * ⚠ SE OPRESTE DOAR `Created`, si tot din definitia lor: acolo clientul abia a apasat butonul,
+ * iar coletul e inca la el. Repus atunci, stocul creste pentru marfa care nu exista la raft —
+ * si se vinde ce nu e. Restul starilor vin toate DUPA ce returul a ajuns la furnizor.
+ *
+ * ⚠ Necunoscutul TRECE: omul se uita la marfa in clipa in care apasa, iar oprit pe un status pe
+ * care noi nu l-am putut citi, n-ar mai putea repune nimic niciodata.
+ */
+const LINII_FARA_REPUNERE = new Set(["Created"]);
 
 /**
  * Starea cererii, adunata din starile LINIILOR ei.
@@ -262,5 +326,18 @@ export function asteaptaHotarare(stare: string | null | undefined): boolean {
   return !!stare && LINII_DE_HOTARAT.has(stare);
 }
 
-/** ⚠ Pentru filtrul din panou. `InAnalysis` NU e aici: acolo se uita EI, nu comerciantul. */
+/** Se poate cere lui Trendyol o hotarare pe linia asta? Vezi `LINII_FARA_HOTARARE`. */
+export function sePoateHotari(stare: string | null | undefined): boolean {
+  return !stare || !LINII_FARA_HOTARARE.has(stare);
+}
+
+/** A ajuns marfa fizic la comerciant? Vezi `LINII_FARA_REPUNERE`. */
+export function marfaAAjuns(stare: string | null | undefined): boolean {
+  return !stare || !LINII_FARA_REPUNERE.has(stare);
+}
+
+/**
+ * ⚠ Pentru filtrul din panou. Doar `WaitingInAction`: `InAnalysis` inseamna ca se uita EI, iar
+ * `Created` ca marfa e inca la client. Vezi `LINII_DE_HOTARAT`.
+ */
 export const STARI_DE_HOTARAT = [...LINII_DE_HOTARAT];

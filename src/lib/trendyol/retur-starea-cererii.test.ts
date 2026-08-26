@@ -61,9 +61,18 @@ test("⚠ un retur PARTIAL trage toata cererea in „de hotarat”", () => {
   /*
    * Ordinea e o hotarare, nu o socoteala: ce conteaza pentru comerciant e daca MAI ARE CEVA DE
    * FACUT. O singura linie care asteapta trage toata cererea.
+   *
+   * ⚠ IAR „DE HOTARAT" INSEAMNA `WaitingInAction`, NU `Created` (indreptat 26.08.2026). Din
+   * ghidul lor: `Created` e „when the customer presses the return button", iar `WaitingInAction`
+   * „when the returned orders reaches the supplier". Pe `Created` marfa e inca la client.
    */
   assert.equal(stareaCererii(cerere("Accepted", "WaitingInAction")), "WaitingInAction");
-  assert.equal(stareaCererii(cerere("Rejected", "Created")), "Created");
+  assert.equal(stareaCererii(cerere("Created", "WaitingInAction")), "WaitingInAction",
+    "cea la care omul chiar poate apasa trage, nu cea abia initiata");
+  assert.equal(stareaCererii(cerere("Cancelled", "Accepted", "WaitingInAction")), "WaitingInAction");
+
+  /* ⚠ Fara nicio linie de hotarat, se ia prima inca vie — si `Created` e vie, doar ca nu e a lui. */
+  assert.equal(stareaCererii(cerere("Rejected", "Created")), "Rejected");
   assert.equal(stareaCererii(cerere("Cancelled", "Accepted", "Created")), "Created");
 });
 
@@ -88,13 +97,18 @@ test("⚠ fara linii citibile NU se ghiceste", () => {
   assert.equal(stareaCererii(cerere()), null);
 });
 
-test("⚠ `InAnalysis` NU e „așteaptă răspunsul tău”: acolo se uita EI", () => {
-  /* Aratata asa, comerciantul ar fi trimis sa caute un buton care nu exista. */
+test("⚠ nici `InAnalysis`, nici `Created` nu sunt „așteaptă răspunsul tău”", () => {
+  /*
+   * `InAnalysis`: acolo se uita EI. `Created`: din definitia lor, clientul abia a apasat butonul
+   * si coletul e inca la el — vezi `retur-cine-poate-apasa.test.ts`. Amandoua aratate asa, l-ar
+   * fi trimis pe comerciant sa caute un buton care nu exista, sau sa se uite intr-un colet care
+   * nu a sosit.
+   */
   assert.equal(asteaptaHotarare("InAnalysis"), false);
-  assert.equal(asteaptaHotarare("Created"), true);
+  assert.equal(asteaptaHotarare("Created"), false);
   assert.equal(asteaptaHotarare("WaitingInAction"), true);
   assert.equal(asteaptaHotarare(null), false);
-  assert.deepEqual([...STARI_DE_HOTARAT].sort(), ["Created", "WaitingInAction"]);
+  assert.deepEqual([...STARI_DE_HOTARAT], ["WaitingInAction"]);
 });
 
 test("⚠ si nimeni nu mai scrie `c.status` in baza", () => {

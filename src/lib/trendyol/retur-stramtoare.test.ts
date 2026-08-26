@@ -28,7 +28,9 @@ const viu = brut.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, ""
 
 test("⚠ la fundul ferestrei se citesc mai multe pagini, nu tot trei", () => {
   assert.match(viu, /const laStramtoare = latime <= FEREASTRA_MINIMA_MS;/);
-  assert.match(viu, /const paginiDeCitit = laStramtoare \? PAGINI_LA_STRAMTOARE : PAGINI_PE_TRECERE;/);
+  /* ⚠ `let`, nu `const`: la podea bucla se INTINDE dupa ce afla din `totalPages` cat e de
+     citit. Vezi `retur-cine-poate-apasa.test.ts`. */
+  assert.match(viu, /let paginiDeCitit = laStramtoare \? PAGINI_LA_STRAMTOARE : PAGINI_PE_TRECERE;/);
   assert.match(viu, /for \(let pagina = 0; pagina < paginiDeCitit; pagina\+\+\)/);
 
   const laStramtoare = Number(/const PAGINI_LA_STRAMTOARE = (\d+);/.exec(viu)?.[1]);

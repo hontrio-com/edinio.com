@@ -6,7 +6,7 @@ import type { TrendyolSyncContext } from "./sync";
 import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
 import {
   coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului,
-  nuSeTrimiteInapoi, stareaCererii,
+  nuSeTrimiteInapoi, sePoateHotari, stareaCererii,
 } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchTrendyolConfig } from "./config";
@@ -79,6 +79,27 @@ const PAGINI_PE_TRECERE = 3;
  * mai putin. `page` n-are plafon documentat, iar citirea cererilor are un buget larg (1000/minut).
  */
 const PAGINI_LA_STRAMTOARE = 20;
+
+/**
+ * Cat de adanc se poate merge, la podea, cand stim din `totalPages` ca mai e.
+ *
+ * ═══ ⚠ PIERDEREA NU SE FACE MAI PUTIN PROBABILA, SE FACE INACCESIBILA (26.08.2026) ═══
+ *
+ * La podea nu se mai poate ingusta, deci raman trei purtari: sa stau pe loc (si atunci se pierde
+ * TOT, de-acum inainte), sa trec mai departe (si se pierde coada ferestrei), sau — asta — sa
+ * CITESC PANA LA CAPAT.
+ *
+ * ⚠ Si stim exact cat e capatul: `totalPages` vine in fiecare raspuns. Nu se ghiceste, se
+ * citeste. Deci la podea bucla nu se mai opreste la douazeci de pagini, ci merge pana unde spun
+ * ei ca e sfarsitul — pana la plafonul asta, pus doar ca sa nu poata un raspuns anapoda sa tina
+ * cronul o vesnicie.
+ *
+ * ⚠ CE MAI RAMANE: 200 de pagini a 50 inseamna 10.000 de cereri de retur intr-o fereastra de
+ * CINCI MINUTE, la un singur magazin — 120.000 pe ora. Trecerea mai departe ramane scrisa
+ * dedesubt fiindca o purtare terminala trebuie sa existe, dar nu mai e un prag pe care ceva real
+ * il poate atinge.
+ */
+const PAGINI_MAXIME_LA_PODEA = 200;
 
 /**
  * Cate cereri pe pagina.
@@ -211,7 +232,11 @@ export async function aduRetururile(
    * citirea are 1000 de cereri pe minut — deci calea asta e ieftina si e deschisa.
    */
   const laStramtoare = latime <= FEREASTRA_MINIMA_MS;
-  const paginiDeCitit = laStramtoare ? PAGINI_LA_STRAMTOARE : PAGINI_PE_TRECERE;
+  /*
+   * ⚠ SE INTINDE DUPA CE AFLAM CAT E DE CITIT. Prima pagina ne aduce `totalPages`; de-acolo, la
+   * podea, se merge pana la capatul pe care ni-l spun ei. Vezi `PAGINI_MAXIME_LA_PODEA`.
+   */
+  let paginiDeCitit = laStramtoare ? PAGINI_LA_STRAMTOARE : PAGINI_PE_TRECERE;
 
   for (let pagina = 0; pagina < paginiDeCitit; pagina++) {
     const res = await getClaims(ctx.auth, { startDate: de_la, endDate: pana_la, page: pagina, size: PE_PAGINA });
@@ -236,6 +261,13 @@ export async function aduRetururile(
     }
 
     const totalPagini = Math.max(1, Number(res.data?.totalPages ?? 1));
+
+    /* ⚠ La podea, bucla se intinde pana la capatul pe care ni-l spun EI — nu pana la o cifra
+       scrisa de noi. `totalPages` vine in fiecare raspuns, deci nu se ghiceste nimic. */
+    if (laStramtoare && totalPagini > paginiDeCitit) {
+      paginiDeCitit = Math.min(totalPagini, PAGINI_MAXIME_LA_PODEA);
+    }
+
     if (continut.length === 0 || pagina + 1 >= totalPagini) {
       /*
        * ⚠ A INCAPUT TOT. Fereastra se poate LARGI inapoi, incet: un varf de retururi trece, si
@@ -533,9 +565,10 @@ export async function hotarasteRetur(
     ? { ...ctx, auth: { ...ctx.auth, storefront: cerere.storefront as TrendyolStoreFront } }
     : ctx;
 
-  const aleCererii = randuriCitite<{ claim_item_id: string }>("trendyol.liniileCererii", await admin
-    .from("trendyol_claim_items").select("claim_item_id")
-    .eq("business_id", ctx.businessId).eq("claim_row_id", cerere.id) as never);
+  const aleCererii = randuriCitite<{ claim_item_id: string; claim_item_status: string | null }>(
+    "trendyol.liniileCererii", await admin
+      .from("trendyol_claim_items").select("claim_item_id, claim_item_status")
+      .eq("business_id", ctx.businessId).eq("claim_row_id", cerere.id) as never);
   const ingaduite = new Set(aleCererii.map((l) => l.claim_item_id));
   const straine = p.claimItemIds.filter((id) => !ingaduite.has(id));
   if (straine.length > 0) {
@@ -546,6 +579,39 @@ export async function hotarasteRetur(
       businessId: ctx.businessId, severity: "warning",
     });
     return { error: "Unele linii bifate nu sunt din acest retur. Reîncarcă pagina și încearcă din nou." };
+  }
+
+  /*
+   * ═══ ⚠ SI LINIA TREBUIE SA MAI POATA PRIMI O HOTARARE (26.08.2026) ═══
+   *
+   * Pana azi se verifica doar ca linia e a cererii — corect, dar nu de ajuns. Nimic nu se uita la
+   * STAREA ei, deci se putea trimite o hotarare pentru o linie deja hotarata, sau pentru una unde
+   * marfa nici n-a plecat de la client.
+   *
+   * ⚠ CURSA E ADEVARATA, si nu e teoretica: ecranul arata `WaitingInAction` la 10:00, Trendyol
+   * accepta singur la 10:01, iar omul apasa „Respinge" la 10:02. Ghidul lor spune ca rezultatul
+   * unei respingeri se urmareste ABIA pe urma, pe `claimItemStatus` — deci nici macar n-am fi
+   * aflat pe loc ca n-a prins. Comerciantul ar fi crezut ca a respins; banii plecasera deja.
+   *
+   * ⚠ SE OPRESC NUMAI CELE SIGUR GRESITE. Vezi `LINII_FARA_HOTARARE`: ghidul lor NU spune ca
+   * aprobarea se poate face doar din `WaitingInAction`, deci nici noi n-o spunem. `InAnalysis`,
+   * `Unresolved` si necunoscutul trec.
+   */
+  const stari = new Map(aleCererii.map((l) => [l.claim_item_id, l.claim_item_status]));
+  const inchise = p.claimItemIds.filter((id) => !sePoateHotari(stari.get(id)));
+  if (inchise.length > 0) {
+    await logError({
+      action: "trendyol/retururi",
+      message: "s-a cerut o hotarare pe linii care nu mai pot primi una; nu s-a trimis nimic",
+      details: {
+        claimId: p.claimId,
+        linii: inchise.slice(0, 10).map((id) => ({ id, stare: stari.get(id) ?? null })),
+      },
+      businessId: ctx.businessId, severity: "warning",
+    });
+    return {
+      error: "Returul nu mai așteaptă un răspuns de la tine — între timp s-a schimbat. Reîncarcă pagina.",
+    };
   }
 
   if (p.accepta) {
@@ -654,6 +720,14 @@ export async function repuneInStoc(
     case "fara-cod": return { error: "Linia n-are cod de bare, deci nu știm ce produs să punem înapoi." };
     case "cod-nelegat": return { error: "Codul de bare nu e legat de niciun produs din magazin." };
     case "fara-produs": return { error: "Listarea nu mai are produs legat." };
+    /*
+     * ⚠ Mesajul spune DE CE si CAND se poate, nu doar ca nu merge. Vezi
+     * `LINII_FARA_REPUNERE`: pe `Created` clientul abia a apasat butonul de retur, iar coletul
+     * e inca la el. Repus atunci, stocul creste pentru marfa care nu e la raft.
+     */
+    case "marfa-n-a-ajuns": return {
+      error: "Returul e abia inițiat de client, iar coletul n-a ajuns încă la tine. Poți pune marfa înapoi în stoc după ce o primești.",
+    };
     default: return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
   }
 }

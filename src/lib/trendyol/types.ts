@@ -622,6 +622,26 @@ export interface TrendyolClaim {
    * package, this field will not appear." Absenta e a treia stare.
    */
   rejectedPackageInfo?: TrendyolColetRespins;
+  /**
+   * ⚠ ACEEASI CHEIE, SCRISA CU `p` MIC (26.08.2026).
+   *
+   * In raspunsul-exemplu din `reference/getclaims` scrie `"rejectedpackageinfo"`, tot cu litere
+   * mici, iar pentru schimb `"replacementOutboundpackageinfo"`. Schema lor foloseste ALTA scriere
+   * decat exemplul lor — deci nu se poate sti care vine in trafic. Se citesc amandoua.
+   */
+  rejectedpackageinfo?: TrendyolColetRespins;
+  /**
+   * ⚠ NU EXISTA IN RASPUNSUL LOR. Verificat in raspunsul-exemplu din `reference/getclaims`:
+   * campurile de nivel intai ale unei cereri sunt `id`, `claimId`, `orderNumber`, `orderDate`,
+   * `customerFirstName`, `customerLastName`, `claimDate`, `cargoTrackingNumber`,
+   * `cargoTrackingLink`, `cargoSenderNumber`, `cargoProviderName`, `orderShipmentPackageId`,
+   * `replacementOutboundpackageinfo`, `rejectedpackageinfo`, `items`, `lastModifiedDate`,
+   * `orderOutboundPackageId`. `status` NU e printre ele.
+   *
+   * ⚠ SE PASTREAZA DOAR CA SA NU FIE RECITIT DIN GRESEALA. Starea unei cereri se ia din liniile
+   * ei — vezi `stareaCererii`. Scris in baza de aici, `claim_status` iesea NULL la fiecare rand,
+   * iar panoul care filtra pe el ramanea gol.
+   */
   status?: string;
   /**
    * ⚠ NU SUNT LINIILE. Fiecare element e un INVELIS: `orderLine` (ce produs) plus

@@ -270,15 +270,6 @@ export function sePoateHotari(stare: string | null | undefined): boolean {
 }
 
 /**
- * Starile din care marfa NU a ajuns inca la comerciant, deci nu se poate repune in stoc.
- *
- * ⚠ `Created`, din definitia lor: acolo clientul abia a apasat butonul de retur, iar coletul e
- * inca la el. Repus atunci, stocul creste pentru marfa care nu e la raft — si se vinde ce nu e.
- * Restul starilor vin toate DUPA ce returul a ajuns la furnizor.
- */
-const LINII_FARA_REPUNERE = new Set(["Created"]);
-
-/**
  * Starea cererii, adunata din starile LINIILOR ei.
  *
  * ═══ ⚠ EI NU TRIMIT NICIUN STATUS LA NIVEL DE CERERE (26.08.2026) ═══
@@ -351,25 +342,46 @@ export function asteaptaHotarare(stare: string | null | undefined): boolean {
 }
 
 /**
- * A ajuns marfa fizic la comerciant?
+ * Se poate repune marfa in stoc pe linia asta?
  *
- * ═══ ⚠ NECUNOSCUTUL SE OPRESTE, CA PESTE TOT (indreptat 26.08.2026) ═══
+ * ═══ ⚠ NUMAI `Accepted`. „MARFA A AJUNS" NU E ACELASI LUCRU CU „E A TA" (26.08.2026) ═══
  *
- * Aici scria `!stare || ...`, adica un status pe care nu l-am putut citi TRECEA. Explicatia era
- * ca „omul se uita la marfa in clipa in care apasa" — adevarata, dar cantarita gresit.
+ * Functia se numea `marfaAAjuns` si oprea doar `Created` plus necunoscutul. Numele spunea
+ * adevarul — pe `WaitingInAction` marfa CHIAR a ajuns la comerciant — dar intrebarea era gresita.
  *
- * ⚠ CELE DOUA GRESELI NU SE PLATESC LA FEL. Un „nu" gresit e vizibil si se repara singur: omul
- * vede motivul si incearca dupa urmatoarea sincronizare. Un „da" gresit umfla stocul TACUT, iar
- * pretul lui il plateste un client care cumpara ce nu exista — si abia pe urma comerciantul,
- * anuland comanda.
+ * ⚠ CE CONTEAZA NU E UNDE E MARFA, CI A CUI RAMANE:
  *
- * ⚠ SI E ACEEASI NECUNOSCUTA CA LA `sePoateHotari`, unde alesesem deja sa OPRIM. Doua raspunsuri
- * diferite la aceeasi intrebare, in acelasi fisier, e un defect in sine: cine citeste unul din
- * ele nu mai stie care e regula casei.
+ *   `WaitingInAction`   coletul e la el, dar n-a hotarat inca. Poate ajunge si respins.
+ *   `InAnalysis`        `WaitingFraudCheck`   `Unresolved`   se uita EI; poate iesi oricum.
+ *   `Rejected`          si aici e capcana: cu `dontShipBack: false`, marfa trebuie sa plece
+ *                       INAPOI LA CLIENT. Repusa in stoc, ramane stoc fantoma pe care nimic
+ *                       nu-l scade — si se vinde ce a plecat deja.
+ *   `Cancelled`         returul s-a anulat; marfa poate nici sa nu fi plecat de la client.
+ *   `Accepted`          singura in care banii s-au intors si marfa ramane a comerciantului.
+ *
+ * ⚠ EXCEPTIA NU SE AUTOMATIZEAZA. Un retur respins cu `dontShipBack: true` chiar lasa marfa la
+ * comerciant — dar steagul ala e pe CERERE, iar repunerea e pe LINIE, si tocmai am reparat de
+ * doua ori azi decizii de linie luate cu date de cerere. Cine chiar pastreaza marfa isi
+ * corecteaza stocul din fisa produsului, si i se spune asta pe fata.
  */
-export function marfaAAjuns(stare: string | null | undefined): boolean {
-  if (!stare) return false;
-  return !LINII_FARA_REPUNERE.has(stare);
+export function sePoateRepune(stare: string | null | undefined): boolean {
+  return stare === "Accepted";
+}
+
+/**
+ * De ce nu se poate repune, ca sa i se spuna omului adevarul si nu o formula.
+ *
+ * ⚠ PATRU CAZURI, NU UNUL. Un singur „nu se poate" l-ar trimite sa caute o problema care nu
+ * exista — sau, mai rau, sa astepte ceva ce nu vine (la `Rejected` nu mai vine nimic).
+ */
+export type MotivFaraRepunere = "necunoscut" | "abia-cerut" | "nehotarat" | "incheiat-altfel";
+
+export function deCeNuSeRepune(stare: string | null | undefined): MotivFaraRepunere | null {
+  if (stare === "Accepted") return null;
+  if (!stare) return "necunoscut";
+  if (stare === "Created") return "abia-cerut";
+  if (stare === "Rejected" || stare === "Cancelled") return "incheiat-altfel";
+  return "nehotarat";
 }
 
 /**

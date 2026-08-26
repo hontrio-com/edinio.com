@@ -850,6 +850,22 @@ export async function repuneInStoc(
     case "status-necunoscut": return {
       error: "Nu am putut confirma starea liniei la Trendyol, deci nu punem marfa înapoi pe ghicite. Se reîncearcă la fiecare sincronizare; dacă rămâne așa, corectează stocul din fișa produsului.",
     };
+    /*
+     * ⚠ DOUA RASPUNSURI DEOSEBITE, si asta e tot rostul lor: unul spune „mai asteapta", celalalt
+     * „n-ai ce astepta". Puse la un loc, comerciantul ar fi asteptat degeaba pe un retur respins,
+     * unde nu mai vine nimic.
+     */
+    case "retur-nehotarat": return {
+      error: "Returul nu e încă hotărât. Pui marfa înapoi în stoc după ce îl accepți.",
+    };
+    /*
+     * ⚠ Si aici e chiar capcana: la un retur RESPINS cu `dontShipBack: false`, marfa trebuie sa
+     * plece INAPOI la client. Repusa in stoc, ar ramane stoc fantoma pe care nimic nu-l scade.
+     * Exceptia — respins, dar marfa ramane la el — se face de mana, si i se spune cum.
+     */
+    case "retur-incheiat-altfel": return {
+      error: "Returul nu s-a acceptat, deci nu punem marfa înapoi automat. Dacă Trendyol ți-a spus că nu trimiți nimic înapoi și chiar păstrezi produsul, corectează stocul din fișa lui.",
+    };
     default: return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
   }
 }

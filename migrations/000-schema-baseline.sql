@@ -3936,14 +3936,24 @@ begin
     return jsonb_build_object('stare', 'deja', 'pus', 0);
   end if;
 
-  -- Fara starea LINIEI n-avem nicio dovada ca marfa a ajuns. Se opreste, si se spune de ce.
+  -- Fara starea LINIEI n-avem nicio dovada.
   if v_linie.claim_item_status is null then
     return jsonb_build_object('stare', 'status-necunoscut', 'pus', 0);
   end if;
 
-  -- `Created` = clientul abia a apasat butonul de retur; coletul e inca la el.
+  -- `Created` = clientul abia a apasat butonul; coletul e inca la el.
   if v_linie.claim_item_status = 'Created' then
     return jsonb_build_object('stare', 'marfa-n-a-ajuns', 'pus', 0);
+  end if;
+
+  -- Tot ce nu e `Accepted` inseamna ca marfa nu e (inca) a comerciantului. `Rejected` cu
+  -- dontShipBack=false trebuie sa plece INAPOI la client: repusa, ar fi stoc fantoma.
+  if v_linie.claim_item_status <> 'Accepted' then
+    return jsonb_build_object(
+      'stare',
+      case when v_linie.claim_item_status in ('Rejected', 'Cancelled')
+           then 'retur-incheiat-altfel' else 'retur-nehotarat' end,
+      'pus', 0);
   end if;
 
   if coalesce(v_linie.barcode, '') = '' then

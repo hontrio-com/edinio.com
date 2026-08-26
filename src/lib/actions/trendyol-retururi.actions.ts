@@ -7,7 +7,10 @@ import { getClaimIssueReasons, isTrendyolError } from "@/lib/trendyol/client";
 import { loadTrendyolContext } from "@/lib/trendyol/sync";
 import { hotarasteRetur, repuneInStoc } from "@/lib/trendyol/retururi";
 import { MOTIVE_RETUR_RO } from "@/lib/trendyol/types";
-import { marfaAAjuns, sePoateHotari, STARI_DE_HOTARAT } from "@/lib/trendyol/retur-forma";
+import {
+  deCeNuSeRepune, sePoateHotari, sePoateRepune, STARI_DE_HOTARAT,
+  type MotivFaraRepunere,
+} from "@/lib/trendyol/retur-forma";
 
 /**
  * Retururile Trendyol, din panoul nostru.
@@ -78,8 +81,10 @@ export interface RandRetur {
     decizie: string | null;
     /** Se mai poate cere o hotarare pe linia asta? Vezi `sePoateHotari`. */
     sePoateHotari: boolean;
-    /** A ajuns marfa fizic la comerciant? Vezi `marfaAAjuns`. */
-    marfaAAjuns: boolean;
+    /** Se poate repune marfa in stoc? Numai pe `Accepted` — vezi `sePoateRepune`. */
+    sePoateRepune: boolean;
+    /** Si DE CE nu, cand nu se poate. Vezi `deCeNuSeRepune`. */
+    deCeNuSeRepune: MotivFaraRepunere | null;
     /** ⚠ Nu i-am putut citi starea. Altceva decat „s-a hotarat deja". */
     stareNecunoscuta: boolean;
     repusInStoc: boolean;
@@ -190,10 +195,11 @@ export async function retururiTrendyol(
          *
          * Serverul opreste deja — si acolo e paza adevarata, fiindca un buton se poate ocoli cu
          * un POST direct. Dar aratat activ, butonul promite ceva ce nu se poate face, iar omul
-         * afla abia dupa apasare. Vezi `sePoateHotari` si `marfaAAjuns`.
+         * afla abia dupa apasare. Vezi `sePoateHotari` si `sePoateRepune`.
          */
         sePoateHotari: sePoateHotari(l.claim_item_status),
-        marfaAAjuns: marfaAAjuns(l.claim_item_status),
+        sePoateRepune: sePoateRepune(l.claim_item_status),
+        deCeNuSeRepune: deCeNuSeRepune(l.claim_item_status),
         /*
          * ⚠ „NU STIM" NU E ACELASI LUCRU CU „S-A HOTARAT DEJA" (26.08.2026).
          *

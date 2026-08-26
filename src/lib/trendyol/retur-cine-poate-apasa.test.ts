@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { asteaptaHotarare, marfaAAjuns, sePoateHotari, STARI_DE_HOTARAT } from "./retur-forma";
+import {
+  asteaptaHotarare, deCeNuSeRepune, sePoateHotari, sePoateRepune, STARI_DE_HOTARAT,
+} from "./retur-forma";
 
 /* ══════════════════════════════════════════════════════════════════════════
    `Created` NU INSEAMNA „AȘTEAPTĂ RĂSPUNSUL TĂU" (26.08.2026)
@@ -75,70 +77,65 @@ test("⚠ si oprirea e pe SERVER, inaintea apelului ireversibil", () => {
   }
 });
 
-test("⚠ repunerea in stoc cere ca marfa sa fi AJUNS", () => {
+test("⚠ repunerea in stoc se face NUMAI pe `Accepted`", () => {
   /*
-   * Butonul spune „Am primit marfa și e bună", dar nimic nu verifica asta: functia se uita doar
-   * la `repus_in_stoc_la`. Apasat pe `Created`, stocul creste pentru marfa care nu e la raft —
-   * si se vinde ce nu exista.
+   * ═══ ⚠ „MARFA A AJUNS" NU E ACELASI LUCRU CU „E A TA" (26.08.2026) ═══
    *
-   * ⚠ MASURAT pe RPC-ul adevarat, in tranzactie anulata, pe o listare adevarata:
-   *     Created         -> {stare: "marfa-n-a-ajuns", pus: 0}
-   *     WaitingInAction -> {stare: "pus", pus: 1}
-   *     ...a doua oara  -> {stare: "deja", pus: 0}      (idempotenta se pastreaza)
-   *     Accepted        -> {stare: "pus", pus: 1}
+   * Functia se numea `marfaAAjuns` si oprea doar `Created` plus necunoscutul. Numele spunea
+   * adevarul — pe `WaitingInAction` marfa CHIAR a ajuns — dar intrebarea era gresita: conteaza
+   * a cui RAMANE.
+   *
+   * ⚠ CAPCANA E `Rejected`. Cu `dontShipBack: false`, marfa trebuie sa plece INAPOI LA CLIENT.
+   * Repusa in stoc, ramane stoc fantoma pe care NIMIC nu-l scade — si se vinde ce a plecat deja
+   * de pe raft. Nici `WaitingInAction` nu e sigur: coletul e la el, dar poate ajunge si respins.
+   *
+   * ⚠ MASURAT pe RPC-ul adevarat, in tranzactie anulata, pe o listare adevarata, noua stari:
+   *     Accepted          -> {stare: "pus", pus: 1}
+   *     ...a doua oara    -> {stare: "deja", pus: 0}            (idempotenta se pastreaza)
+   *     Rejected          -> {stare: "retur-incheiat-altfel", pus: 0}
+   *     Cancelled         -> {stare: "retur-incheiat-altfel", pus: 0}
+   *     WaitingInAction   -> {stare: "retur-nehotarat", pus: 0}
+   *     InAnalysis        -> {stare: "retur-nehotarat", pus: 0}
+   *     WaitingFraudCheck -> {stare: "retur-nehotarat", pus: 0}
+   *     Unresolved        -> {stare: "retur-nehotarat", pus: 0}
+   *     Created           -> {stare: "marfa-n-a-ajuns", pus: 0}
+   *     (fara stare)      -> {stare: "status-necunoscut", pus: 0}
    */
-  assert.equal(marfaAAjuns("Created"), false);
-  for (const s of ["WaitingInAction", "InAnalysis", "Accepted", "Rejected", "Unresolved", "WaitingFraudCheck"]) {
-    assert.equal(marfaAAjuns(s), true, `${s}`);
+  assert.equal(sePoateRepune("Accepted"), true);
+  for (const st of [
+    "WaitingInAction", "InAnalysis", "WaitingFraudCheck", "Unresolved",
+    "Rejected", "Cancelled", "Created", null, undefined, "",
+  ]) {
+    assert.equal(sePoateRepune(st), false, `${st} trebuie oprit`);
   }
 
   /*
-   * ═══ ⚠ SI NECUNOSCUTUL SE OPRESTE (indreptat 26.08.2026) ═══
-   *
-   * Aici scria ca `null` TRECE, cu explicatia ca „omul se uita la marfa in clipa in care apasa".
-   * Adevarata, dar cantarita gresit: cele doua greseli nu se platesc la fel. Un „nu" gresit e
-   * vizibil si se repara singur — omul vede motivul si incearca dupa urmatoarea sincronizare. Un
-   * „da" gresit umfla stocul TACUT, iar pretul il plateste un client care cumpara ce nu exista.
-   *
-   * ⚠ Si e aceeasi necunoscuta ca la `sePoateHotari`, unde alesesem deja sa OPRIM. Doua
-   * raspunsuri diferite la aceeasi intrebare, in acelasi fisier, e un defect in sine.
+   * ⚠ SI PATRU MOTIVE DEOSEBITE, nu unul. Un singur „nu se poate" l-ar trimite sa astepte ceva
+   * ce nu vine: pe `Rejected` nu mai vine nimic.
    */
-  for (const s of [null, undefined, ""]) {
-    assert.equal(marfaAAjuns(s), false, `${s} trebuie oprit`);
+  assert.equal(deCeNuSeRepune("Accepted"), null);
+  assert.equal(deCeNuSeRepune(null), "necunoscut");
+  assert.equal(deCeNuSeRepune("Created"), "abia-cerut");
+  assert.equal(deCeNuSeRepune("Rejected"), "incheiat-altfel");
+  assert.equal(deCeNuSeRepune("Cancelled"), "incheiat-altfel");
+  for (const st of ["WaitingInAction", "InAnalysis", "WaitingFraudCheck", "Unresolved"]) {
+    assert.equal(deCeNuSeRepune(st), "nehotarat", `${st}`);
   }
 
   /* ⚠ Si paza sta in RPC, nu in ecran: butonul se poate ocoli cu un POST direct, functia nu. */
-  const mig = readFileSync("migrations/2026-11-15-repunerea-fara-stare-nu-pleaca.sql", "utf8");
-  assert.match(mig, /if v_linie\.claim_item_status = 'Created' then/);
-  assert.match(mig, /'stare', 'marfa-n-a-ajuns'/);
+  const mig = readFileSync("migrations/2026-11-16-repunerea-numai-pe-acceptat.sql", "utf8");
+  assert.match(mig, /if v_linie\.claim_item_status <> 'Accepted' then/);
+  assert.match(mig, /'retur-incheiat-altfel'/);
+  assert.match(mig, /'retur-nehotarat'/);
 
-  /*
-   * ⚠ FARA STAREA LINIEI NU PLEACA NIMIC, si plasa pe cerere a iesit cu totul: operatia e pe
-   * `claim_item_id`, deci daca starea LINIEI nu se stie n-avem nicio dovada despre bucata aia,
-   * oricat ar spune starea adunata a cererii.
-   *
-   * ⚠ MASURAT pe RPC-ul adevarat, in tranzactie anulata, cu cererea pe `WaitingInAction`:
-   *     WaitingInAction   -> {stare: "pus", pus: 1}
-   *     Accepted          -> {stare: "pus", pus: 1}
-   *     WaitingFraudCheck -> {stare: "pus", pus: 1}
-   *     Created           -> {stare: "marfa-n-a-ajuns", pus: 0}
-   *     (fara stare)      -> {stare: "status-necunoscut", pus: 0}   <- desi cererea era buna
-   *     a doua apasare    -> {stare: "deja", pus: 0}
-   */
-  assert.match(mig, /'stare', 'status-necunoscut'/);
-  assert.doesNotMatch(mig, /v_stare_cerere/, "plasa pe cerere a iesit");
-
-  /* ⚠ Si mesajul spune ca e o ASTEPTARE, nu un refuz. */
-  const sursaModulului = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
-  assert.match(sursaModulului, /case "status-necunoscut"/);
-  assert.match(sursaModulului, /Nu am putut confirma starea liniei la Trendyol/);
-  /* ⚠ Si mesajul da o cale de iesire, fiindca fail-closed-ul fara una e un fund de sac. */
-  assert.match(sursaModulului, /corectează stocul din fișa produsului/);
-
-  /* ⚠ Si mesajul spune DE CE si CAND se poate, nu doar ca nu merge. */
-  const mod = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
-  assert.match(mod, /case "marfa-n-a-ajuns"/);
-  assert.match(mod, /după ce o primești/);
+  /* ⚠ Si fiecare stare intoarsa de RPC are un mesaj: una fara `case` ar cadea pe „încearcă din
+     nou", care aici ar fi un sfat gresit. */
+  const sursa = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
+  for (const st of ["status-necunoscut", "marfa-n-a-ajuns", "retur-nehotarat", "retur-incheiat-altfel"]) {
+    assert.match(sursa, new RegExp(`case "${st}"`), st);
+  }
+  /* ⚠ Si exceptia are o cale de iesire scrisa, nu un fund de sac. */
+  assert.match(sursa, /corectează stocul din fișa lui/);
 });
 
 test("⚠ NICIO ramura nu mai avanseaza marcajul fara sa fi citit tot", () => {
@@ -187,12 +184,19 @@ test("⚠ si ecranul nu ofera butoane care vor fi refuzate", () => {
   const act = viu("src/lib/actions/trendyol-retururi.actions.ts");
   assert.match(act, /claim_item_id, claim_item_status,/, "starea liniei se citeste");
   assert.match(act, /sePoateHotari: sePoateHotari\(l\.claim_item_status\)/);
-  assert.match(act, /marfaAAjuns: marfaAAjuns\(l\.claim_item_status\)/);
+  assert.match(act, /sePoateRepune: sePoateRepune\(l\.claim_item_status\)/);
+  assert.match(act, /deCeNuSeRepune: deCeNuSeRepune\(l\.claim_item_status\)/);
 
   const ui = readFileSync("src/components/dashboard/TrendyolReturns.tsx", "utf8");
   /* ⚠ Butonul de repunere se ascunde, si in locul lui se spune DE CE. */
-  assert.match(ui, /: !l\.marfaAAjuns \? \(/);
+  /* ⚠ Butonul se arata NUMAI pe `Accepted`; in rest se spune care din patru motive e. */
+  assert.match(ui, /: !l\.sePoateRepune \? \(/);
+  assert.match(ui, /l\.deCeNuSeRepune === "necunoscut"/);
+  assert.match(ui, /l\.deCeNuSeRepune === "abia-cerut"/);
+  assert.match(ui, /l\.deCeNuSeRepune === "nehotarat"/);
   assert.match(ui, /coletul n-a ajuns încă la tine/);
+  assert.match(ui, /returul nu e încă hotărât; poți pune marfa înapoi după ce îl accepți/);
+  assert.match(ui, /corectează stocul din fișa produsului/);
 
   /*
    * ⚠ Si bifa se stinge. Bifata, o linie deja hotarata ar fi blocat apasarea pentru TOATE

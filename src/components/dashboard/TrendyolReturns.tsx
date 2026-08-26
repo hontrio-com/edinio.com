@@ -331,7 +331,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                       <span className="block text-[11px] text-muted-foreground">
                         {l.stareNecunoscuta
                           ? "nu i-am putut citi starea de la Trendyol; se reîncearcă la fiecare sincronizare"
-                          : !l.marfaAAjuns
+                          : l.deCeNuSeRepune === "abia-cerut"
                             ? "clientul abia a cerut returul; nu ai ce răspunde până nu ajunge la tine"
                             : "nu mai așteaptă un răspuns de la tine"}
                       </span>
@@ -350,20 +350,25 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     <span className="text-[11px] text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1">
                       <PackageCheck className="h-3 w-3" /> pusă în stoc
                     </span>
-                  ) : !l.marfaAAjuns ? (
+                  ) : !l.sePoateRepune ? (
                     /*
                       ⚠ NU SE ARATA UN BUTON CARE VA FI REFUZAT. Serverul oprește oricum — acolo e
                       paza adevărată — dar aici se spune DE CE, ca omul să nu apese și să afle pe
                       urmă.
 
-                      ⚠ Și se spune CARE din două e. Pe „Created" clientul abia a apăsat butonul,
-                      iar coletul e la el. Cu starea necitibilă nu știm nimic — iar necunoscutul
-                      oprește, ca peste tot: un „da" greșit umflă stocul tăcut. Vezi `marfaAAjuns`.
+                      ⚠ PATRU MOTIVE, NU UNUL. Un singur „nu se poate" l-ar trimite să caute o
+                      problemă care nu există — sau, mai rău, să aștepte ceva ce nu vine: pe
+                      „Rejected" nu mai vine nimic, iar dacă marfa pleacă înapoi la client,
+                      repunerea ar fi fost de-a dreptul greșită. Vezi `deCeNuSeRepune`.
                     */
                     <span className="text-[11px] text-muted-foreground">
-                      {l.stareNecunoscuta
+                      {l.deCeNuSeRepune === "necunoscut"
                         ? "nu i-am putut confirma starea la Trendyol; se reîncearcă la fiecare sincronizare"
-                        : "clientul abia a cerut returul; coletul n-a ajuns încă la tine"}
+                        : l.deCeNuSeRepune === "abia-cerut"
+                          ? "clientul abia a cerut returul; coletul n-a ajuns încă la tine"
+                          : l.deCeNuSeRepune === "nehotarat"
+                            ? "returul nu e încă hotărât; poți pune marfa înapoi după ce îl accepți"
+                            : "returul nu s-a acceptat, deci nu punem marfa înapoi automat — dacă totuși o păstrezi, corectează stocul din fișa produsului"}
                     </span>
                   ) : (
                     <button

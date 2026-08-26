@@ -21,6 +21,7 @@ import {
   type AboutYouAuth,
 } from "@/lib/aboutyou/client";
 import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
+import { cancelOrderNow, returnOrderNow } from "@/lib/aboutyou/orders";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
   cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
@@ -1328,6 +1329,19 @@ export interface RandComandaAboutYou {
   fulfillment: string | null;
   ultimaSincronizare: string | null;
   creata: string;
+  /**
+   * Ce se poate cere la About You pentru comanda asta.
+   *
+   * ⚠ SE SOCOTESC DIN LINII, nu din statusul comenzii. La ei starea sta pe LINIE, iar comanda cu
+   * linii in stari diferite e „mixed" — deci un buton legat de statusul comenzii ar fi fost si
+   * ascuns cand trebuia, si aratat cand nu trebuia. Regula lor: anularea merge numai pe `open`,
+   * returul numai pe `shipped`.
+   *
+   * ⚠ E ACEEASI regula pe care o pazeste si `idsArticoleInStarea` la trimitere. Aici doar nu se
+   * arata un buton care oricum ar fi refuzat; hotararea adevarata ramane pe server.
+   */
+  sePoateAnula: boolean;
+  sePoateReturna: boolean;
 }
 
 export async function getAboutYouOrders(businessId: string, doarProbleme = false): Promise<RandComandaAboutYou[]> {
@@ -1335,14 +1349,28 @@ export async function getAboutYouOrders(businessId: string, doarProbleme = false
   if ("error" in g) return [];
   let q = g.supabase
     .from("aboutyou_orders")
-    .select("order_id, aboutyou_order_number, status, shop_country, fulfillment_type, last_synced_at, created_at, orders(order_number)")
+    .select("order_id, aboutyou_order_number, status, shop_country, fulfillment_type, items, last_synced_at, created_at, orders(order_number)")
     .eq("business_id", businessId);
   if (doarProbleme) q = q.in("status", ["ship_failed", "cancel_failed", "return_failed"]);
-  const { data } = await q.order("created_at", { ascending: false }).limit(100);
+  /* ⚠ Eroarea se citeste: inghitita, un hop al bazei ar fi aratat „nicio comanda About You". */
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(100);
+  if (error) {
+    logError({
+      action: "aboutyou.getOrders", message: `lista comenzilor nu s-a putut citi: ${error.message}`,
+      details: { businessId }, businessId,
+    });
+    return [];
+  }
 
   return (data ?? []).map((r) => {
     const o = r.orders as { order_number?: string } | { order_number?: string }[] | null;
     const numarEdinio = Array.isArray(o) ? o[0]?.order_number : o?.order_number;
+    /*
+     * ⚠ Din LINII, nu din statusul comenzii. Vezi nota de pe `RandComandaAboutYou`. Iar
+     * comenzile onorate de ei nu se ating deloc: acolo marfa nici nu e la comerciant.
+     */
+    const linii = Array.isArray(r.items) ? (r.items as { status?: string }[]) : [];
+    const aleLor = r.fulfillment_type === "fulfillment_by_marketplace";
     return {
       orderId: r.order_id,
       numarAy: r.aboutyou_order_number,
@@ -1352,6 +1380,8 @@ export async function getAboutYouOrders(businessId: string, doarProbleme = false
       fulfillment: r.fulfillment_type,
       ultimaSincronizare: r.last_synced_at,
       creata: r.created_at,
+      sePoateAnula: !aleLor && linii.some((l) => l.status === "open"),
+      sePoateReturna: !aleLor && linii.some((l) => l.status === "shipped"),
     };
   });
 }
@@ -1369,6 +1399,46 @@ export async function reincearcaExpediereaAboutYou(businessId: string, orderId: 
   await admin.from("aboutyou_orders")
     .update({ status: "ship_pending", updated_at: new Date().toISOString() })
     .eq("business_id", businessId).eq("order_id", orderId);
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/*
+ * ═══ ⚠ ANULAREA SI RETURUL EXISTAU SI NU LE CHEMA NIMENI (27.08.2026) ═══
+ *
+ * `cancelOrderNow` si `returnOrderNow` erau scrise, cu garzile lor pe stari, si nu aveau NICIUN
+ * punct de chemare in tot depozitul. Adica: comerciantul nu putea nici anula, nici marca un
+ * retur din Edinio — trebuia sa intre in Seller Center, iar la noi comanda ramanea cum era.
+ *
+ * ⚠ AMANDOUA SUNT EFECTE EXTERNE CU UN SINGUR FOC, deci trec prin `cuLotDurabil`: urma se scrie
+ * inaintea cererii. Vezi nota de acolo.
+ */
+export async function anuleazaComandaAboutYou(
+  businessId: string, orderId: string,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const ctx = await loadAboutYouContext(admin, businessId);
+  if (!ctx) return { error: "Contul About You nu este conectat." };
+  const r = await cancelOrderNow(admin, ctx, orderId);
+  if (!r.ok) return { error: r.error };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+export async function returneazaComandaAboutYou(
+  businessId: string, orderId: string, awbRetur: string,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+  /* ⚠ Verificat AICI, nu doar in ecran: o actiune de server e o ruta, si oricine o poate chema. */
+  if (!awbRetur.trim()) return { error: "Completează numărul AWB de retur." };
+  const admin = createAdminClient();
+  const ctx = await loadAboutYouContext(admin, businessId);
+  if (!ctx) return { error: "Contul About You nu este conectat." };
+  const r = await returnOrderNow(admin, ctx, orderId, awbRetur);
+  if (!r.ok) return { error: r.error };
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }

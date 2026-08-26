@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { AboutYouClient } from "@/components/dashboard/AboutYouClient";
+import { AboutYouReturns } from "@/components/dashboard/AboutYouReturns";
 import { AboutYouCategoryMapping } from "@/components/dashboard/AboutYouCategoryMapping";
 import { AboutYouCarrierMapping } from "@/components/dashboard/AboutYouCarrierMapping";
 import { AboutYouListings } from "@/components/dashboard/AboutYouListings";
@@ -100,6 +101,12 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
             />
           )}
           <AboutYouOrders businessId={businessId} comenzi={comenzi} />
+          {/*
+            ⚠ SUB COMENZI, si nu intamplator: un retur se citeste dupa comanda din care vine.
+            Ecranul exista fiindca repunerea automata in stoc s-a oprit — taiata fara el, marfa
+            intoarsa n-ar mai fi ajuns niciodata inapoi.
+          */}
+          <AboutYouReturns businessId={businessId} />
         </div>
       )}
     </>

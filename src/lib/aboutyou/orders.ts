@@ -38,6 +38,40 @@ function edinioStatusFor(ayStatus: string | undefined): string {
   return "pending";
 }
 
+/**
+ * Scrie liniile intoarse, ca sa poata fi repuse in stoc de mana.
+ *
+ * ⚠ SE FOLOSESTE `ignoreDuplicates`, nu un upsert care rescrie: `repus_in_stoc_la` e pe randul
+ * asta, iar o recitire a comenzii de la ei l-ar fi sters — si marfa ar fi intrat in stoc a doua
+ * oara la urmatoarea apasare. La ei statusul liniei nu se mai schimba dupa retur, deci n-avem
+ * ce actualiza.
+ *
+ * ⚠ NU OPRESTE INGESTUL daca pica: o comanda citita fara randul de retur e mai buna decat una
+ * necitita. Se scrie in jurnal, si urmatoarea trecere o reia.
+ */
+async function scrieRetururile(
+  admin: Db, ctx: AboutYouSyncContext, ayNumber: string, orderId: string | null,
+  intoarse: { sku: string; product_id: string | null; variant_title: string | null; nume_produs: string | null; quantity: number }[],
+): Promise<void> {
+  if (intoarse.length === 0) return;
+  const { error } = await admin.from("aboutyou_retururi").upsert(
+    intoarse.map((r) => ({
+      business_id: ctx.businessId, aboutyou_order_number: ayNumber, order_id: orderId,
+      sku: r.sku, product_id: r.product_id, variant_title: r.variant_title,
+      nume_produs: r.nume_produs, quantity: r.quantity,
+    })) as never,
+    { onConflict: "business_id,aboutyou_order_number,sku", ignoreDuplicates: true },
+  );
+  if (error) {
+    await logError({
+      action: "aboutyou/retururi",
+      message: `liniile intoarse nu s-au putut scrie: ${error.message}`,
+      details: { ayNumber, cate: intoarse.length },
+      businessId: ctx.businessId, severity: "warning",
+    });
+  }
+}
+
 /*
  * Tara comenzii. `GetOrderSchema` NU are `shop_country` — are `shop`, care e un
  * intreg (id-ul magazinului About You), si `shipping_country_code`. Codul citea
@@ -245,6 +279,27 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     };
   });
 
+  /*
+   * ⚠ LINIILE INTOARSE SE TIN MINTE, ca sa aiba omul ce apasa.
+   *
+   * Statusul lor sta pe LINIE la About You (nu exista un serviciu de retururi ca la Trendyol),
+   * deci se citeste chiar de aici. Fara asta, oprirea repunerii automate ar fi insemnat ca
+   * marfa intoarsa nu mai ajunge NICIODATA in stoc — o paguba mai mare decat cea reparata.
+   */
+  const intoarse = items
+    .filter((it) => it.status === "returned")
+    .map((it) => {
+      const meta = info.get(it.sku);
+      const q = (it as { quantity?: number }).quantity;
+      return {
+        sku: it.sku,
+        product_id: meta?.productId ?? null,
+        variant_title: meta?.variantTitle ?? null,
+        nume_produs: meta?.name ?? null,
+        quantity: typeof q === "number" && q > 0 ? q : 1,
+      };
+    });
+
   const subtotal = money(activeItems.reduce((s, it) => s + num(it.price_without_tax), 0));
   const { data: existing } = await admin
     .from("aboutyou_orders").select("id, order_id")
@@ -274,9 +329,29 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      */
     let reiaTranzitia = false;
     if (ex.order_id && (order.status === "cancelled" || order.status === "returned")) {
+      const stareNoua = edinioStatusFor(order.status);
       const t = await tranzitieComandaMarketplace(admin, {
         orderId: ex.order_id, businessId: ctx.businessId,
-        status: edinioStatusFor(order.status), sursa: "aboutyou",
+        status: stareNoua, sursa: "aboutyou",
+        /*
+         * ═══ ⚠ UN RETUR NU PUNE MARFA INAPOI PE RAFT SINGUR (26.08.2026) ═══
+         *
+         * A treia si ultima integrare cu aceeasi scapare — la eMAG s-a taiat pe 25.08, la
+         * Trendyol pe 26.08. Aici a ramas o zi fiindca taiata FARA inlocuitor, marfa intoarsa
+         * n-ar mai fi ajuns niciodata inapoi in stoc.
+         *
+         * ⚠ CE FACEA: fara `elibereazaStoc`, implicitul din baza e `true`, deci statusul
+         * „returned" de la ei punea AUTOMAT toata comanda inapoi pe raft. Marfa intoarsa vine
+         * insa desfacuta, zgariata, incompleta, sau pur si simplu alta — iar stocul umflat se
+         * vinde, si se vinde ce nu exista.
+         *
+         * ⚠ ANULARILE ELIBEREAZA MAI DEPARTE, si e o deosebire de fond: la o anulare marfa
+         * n-a plecat nicaieri, deci e chiar pe raft.
+         *
+         * Inlocuitorul e ecranul de retururi: omul apasa „Am primit marfa si e buna" pe linia
+         * lui, dupa ce se uita la ce a primit. Vezi `aboutyou_retururi`.
+         */
+        elibereazaStoc: stareNoua !== "refunded",
       });
       // `definitiv` NU blocheaza fereastra: ar ingheta magazinul intreg pentru o
       // singura comanda imposibila.
@@ -289,6 +364,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      * de stoc — iar tocmai consumul poate pica singur. Functia din baza e
      * reparabila prin marcajul `stoc_marketplace_la`; apelantul sarea reparatia.
      */
+    await scrieRetururile(admin, ctx, ayNumber, ex.order_id, intoarse);
     if (ex.order_id) {
       await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
 

@@ -298,6 +298,51 @@ export type Database = {
           },
         ]
       }
+      aboutyou_retururi: {
+        Row: {
+          aboutyou_order_number: string
+          business_id: string
+          created_at: string
+          id: string
+          nume_produs: string | null
+          order_id: string | null
+          product_id: string | null
+          quantity: number
+          repus_in_stoc_la: string | null
+          sku: string
+          updated_at: string
+          variant_title: string | null
+        }
+        Insert: {
+          aboutyou_order_number: string
+          business_id: string
+          created_at?: string
+          id?: string
+          nume_produs?: string | null
+          order_id?: string | null
+          product_id?: string | null
+          quantity?: number
+          repus_in_stoc_la?: string | null
+          sku: string
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Update: {
+          aboutyou_order_number?: string
+          business_id?: string
+          created_at?: string
+          id?: string
+          nume_produs?: string | null
+          order_id?: string | null
+          product_id?: string | null
+          quantity?: number
+          repus_in_stoc_la?: string | null
+          sku?: string
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Relationships: []
+      }
       aboutyou_sync_queue: {
         Row: {
           abandonat_la: string | null
@@ -4799,6 +4844,7 @@ export type Database = {
       rezerva_operatie_externa: { Args: { p_business_id: string | null; p_order_id: string | null; p_fel: string; p_furnizor: string; p_cheie: string }; Returns: Json }
       incheie_operatie_externa: { Args: { p_id: string; p_business_id: string | null; p_stare: string; p_referinta_externa?: string | null; p_detalii?: Json; p_eroare?: string | null }; Returns: Json }
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
+      aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
       trendyol_repune_stoc_retur: { Args: { p_business_id: string; p_claim_item_id: string }; Returns: Json }
       scrie_variante_daca_neschimbat: { Args: { p_business: string; p_product: string; p_asteptat: Json; p_nou: Json }; Returns: string }
       site_analytics_breakdown_zile: { Args: { bid: string; p_zile: number }; Returns: unknown }

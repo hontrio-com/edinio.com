@@ -54,10 +54,19 @@ test("⚠ dar se LARGESTE inapoi cand incape", () => {
   assert.match(mod, /Math\.min\(latime \* 2, FEREASTRA_MAXIMA_MS\)/);
 });
 
-test("⚠ si nu coboara sub o ora", () => {
-  /* Sub atat, ar insemna peste 150 de cereri intr-o ora la un singur magazin — si atunci
-     problema nu mai e paginarea. */
-  assert.match(mod, /const FEREASTRA_MINIMA_MS = 60 \* 60 \* 1000;/);
+test("⚠ si are o podea, dar pusa JOS", () => {
+  /*
+   * ⚠ PODEAUA E CHIAR LOCUL UNDE SE POT PIERDE DATE (26.08.2026). A fost o ora, cu explicatia
+   * „sub o ora n-are rost". Numai ca ajunsi la podea cu paginile pline, marcajul trece mai
+   * departe si coada ferestrei ramane necitita — singurul loc din tot pasul unde se pierde ceva.
+   *
+   * La 20 de pagini a 50 de cereri:
+   *     podea de o ora    ->  se pierde ceva peste 1.000 de cereri intr-o ORA la un magazin
+   *     podea de 5 minute ->  peste 1.000 in CINCI MINUTE, adica 12.000 pe ora
+   *
+   * Si ingustarea castiga de douasprezece ori mai mult loc inainte sa dea de fund.
+   */
+  assert.match(mod, /const FEREASTRA_MINIMA_MS = 5 \* 60 \* 1000;/);
   assert.match(mod, /Math\.max\(\s*FEREASTRA_MINIMA_MS,/);
   assert.match(mod, /Math\.max\(latimeCeruta \?\? FEREASTRA_MAXIMA_MS, FEREASTRA_MINIMA_MS\)/);
 });

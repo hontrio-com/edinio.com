@@ -42,13 +42,66 @@ test("⚠ cererile inca vii se reintreaba pe ID, nu pe timp", () => {
   assert.match(client, /if \(params\.startDate != null\)/);
 });
 
-test("⚠ `Rejected` e printre starile vii, si e cheia intregii reparatii", () => {
+test("⚠ se numesc starile INCHEIATE, nu cele vii", () => {
   /*
-   * Dupa o respingere, ei pot crea un colet de retur catre client, iar `rejectedPackageInfo`
-   * apare ABIA ATUNCI. Scos din lista, exact cazul in care comerciantul mai are de expediat
-   * ceva ar fi ramas nevazut — adica taman paguba pe care o reparam.
+   * ═══ ⚠ O LISTA DE STARI VII LASA PE DINAFARA TOT CE NU CUNOASTEM ═══
+   *
+   * Aici statea `["Created","WaitingInAction","InAnalysis","Rejected"]` — starile vii. Suna la
+   * fel si nu e la fel: reconcilierea exista tocmai ca sa nu ramana nimic nevazut.
+   *
+   * ⚠ SI STIM CA NU LE CUNOASTEM PE TOATE. Enumul din specificatia lor turceasca are
+   * `WaitingFraudCheck`; lista din ghidul international nu-l are deloc. O cerere ajunsa acolo
+   * n-ar mai fi fost reintrebata niciodata — chiar paguba pentru care s-a scris reconcilierea.
    */
-  assert.match(mod, /const STARI_INCA_VII = \["Created", "WaitingInAction", "InAnalysis", "Rejected"\]/);
+  assert.match(mod, /const STARI_INCHEIATE = \["Accepted", "Cancelled"\]/);
+  assert.doesNotMatch(mod, /STARI_INCA_VII/);
+
+  /* ⚠ `Rejected` NU e incheiata: dupa o respingere ei pot crea un colet catre client, iar
+     `rejectedPackageInfo` apare abia atunci. */
+  assert.doesNotMatch(mod, /STARI_INCHEIATE = \[[^\]]*Rejected/);
+});
+
+test("⚠ dar o respinsa care si-a ARATAT coletul iese din bazin", () => {
+  /*
+   * Odata aparut `colet_respins`, s-a aflat ce voiam sa aflam. Tinute in bazin, se aduna cu
+   * timpul si ii inghesuie pe cei vii: roata face un tur mai lung, si o hotarare adevarata se
+   * vede mai tarziu.
+   *
+   * ⚠ ABSENTA NU E ACELASI LUCRU — poate aparea maine — deci se iese numai cand a APARUT sau
+   * cand ei au spus limpede ca nu se trimite nimic inapoi.
+   *
+   * ⚠ MASURAT pe noua cazuri, in tranzactie anulata pe schema adevarata:
+   *     intra:  gol · Created · WaitingFraudCheck · Unresolved · Rejected-fara-colet
+   *     ies:    Rejected-cu-colet · Rejected-fara-trimitere · Accepted · Cancelled
+   */
+  assert.match(mod, /and\(colet_respins\.is\.null,dont_ship_back\.not\.is\.true\)/);
+});
+
+test("⚠ si taierea e in INTEROGARE, nu dupa `limit`", () => {
+  /*
+   * Filtrat in cod dupa citire, o serie de 60 de cereri respinse-cu-colet ar fi golit bazinul,
+   * `reintrebat_la` nu s-ar fi scris pe niciuna, iar trecerea urmatoare ar fi luat exact
+   * aceleasi 60 — chiar blocajul reparat azi dimineata, reintrodus cu un rand mai jos.
+   */
+  const i = mod.indexOf("export async function reconciliazaRetururile(");
+  const q = mod.slice(i, mod.indexOf("if (vii.length === 0)", i));
+  assert.ok(q.indexOf("colet_respins.is.null") < q.indexOf(".limit(CERERI_DE_REINTREBAT)"),
+    "filtrul trebuie sa fie inaintea taierii");
+  assert.doesNotMatch(mod, /vii\.filter\(/, "nimic nu se mai taie in cod dupa citire");
+});
+
+test("⚠ si bazinul e marginit in timp, ca sa nu se umple de morti", () => {
+  /*
+   * De cand se scot starile incheiate in loc sa se aleaga cele vii, in bazin intra tot ce nu e
+   * `Accepted`/`Cancelled`. Nemarginit, un magazin cu trei mii de cereri respinse stranse intr-un
+   * an ar face roata sa se invarta o data la patru ORE — adica hotararea de acum s-ar vedea
+   * diseara.
+   *
+   * ⚠ Pe `created_at`, care e AL NOSTRU si nu e niciodata gol — nu pe `last_modified`, unde
+   * acelasi `null` ar fi scos randurile despre care stim cel mai putin.
+   */
+  assert.match(mod, /const ZILE_DE_REINTREBAT = 45;/);
+  assert.match(mod, /\.gte\("created_at",/);
 });
 
 test("⚠ nu muta niciun marcaj", () => {

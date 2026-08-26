@@ -7,6 +7,7 @@ import { getClaimIssueReasons, isTrendyolError } from "@/lib/trendyol/client";
 import { loadTrendyolContext } from "@/lib/trendyol/sync";
 import { hotarasteRetur, repuneInStoc } from "@/lib/trendyol/retururi";
 import { MOTIVE_RETUR_RO } from "@/lib/trendyol/types";
+import { STARI_DE_HOTARAT } from "@/lib/trendyol/retur-forma";
 
 /**
  * Retururile Trendyol, din panoul nostru.
@@ -86,9 +87,20 @@ export async function retururiTrendyol(
     .order("claim_date", { ascending: false })
     .limit(100);
 
-  /* ⚠ Cele care asteapta o hotarare se pot cere separat: ele sunt singurele la care
-     comerciantul mai are ceva de facut. */
-  if (doarDeHotarat) q = q.in("claim_status", ["Created", "WaitingInAction", "InAnalysis"]);
+  /*
+   * ⚠ Cele care asteapta o hotarare se pot cere separat: ele sunt singurele la care
+   * comerciantul mai are ceva de facut.
+   *
+   * ═══ ⚠ LISTA DE AICI ERA GRESITA DE DOUA ORI (26.08.2026) ═══
+   *
+   * Intai: `claim_status` iesea NULL la fiecare cerere, fiindca il luam dintr-un camp pe care ei
+   * nu-l trimit — vezi nota de la `stareaCererii`. Un `in(...)` nu potriveste niciodata un NULL,
+   * deci lista asta era GOALA oricate retururi ar fi fost.
+   *
+   * Apoi: `InAnalysis` nu e o stare in care comerciantul are ceva de facut — acolo se uita EI.
+   * Aratata ca „așteaptă răspunsul tău", l-ar fi trimis sa caute un buton care nu exista.
+   */
+  if (doarDeHotarat) q = q.in("claim_status", STARI_DE_HOTARAT);
 
   const { data, error } = await q;
   if (error) return { error: "Retururile nu s-au putut citi. Reîncarcă pagina." };

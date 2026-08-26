@@ -6,7 +6,7 @@ import type { TrendyolSyncContext } from "./sync";
 import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
 import {
   coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului,
-  nuSeTrimiteInapoi,
+  nuSeTrimiteInapoi, stareaCererii,
 } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchTrendyolConfig } from "./config";
@@ -95,10 +95,26 @@ const PE_PAGINA = 50;
 /**
  * Cea mai ingusta fereastra la care coboram.
  *
- * ⚠ Sub o ora n-are rost: ar insemna peste 150 de cereri de retur intr-o ora la un singur
- * magazin, iar atunci problema nu mai e paginarea.
+ * ═══ ⚠ PODEAUA E CHIAR LOCUL UNDE SE PIERD DATE, DECI SE PUNE JOS (26.08.2026) ═══
+ *
+ * A fost o ora, cu explicatia „sub o ora n-are rost". Numai ca podeaua e singurul loc din tot
+ * pasul unde se poate pierde ceva: ajunsi acolo cu paginile pline, marcajul trece mai departe si
+ * coada ferestrei ramane necitita. Cu cat podeaua e mai jos, cu atat cazul ala e mai departe.
+ *
+ * Socoteala, la 20 de pagini a 50 de cereri:
+ *
+ *     podea de o ora    ->  se pierde ceva peste 1.000 de cereri intr-o ORA la un magazin
+ *     podea de 5 minute ->  se pierde ceva peste 1.000 de cereri in 5 MINUTE (12.000/ora)
+ *
+ * ⚠ SI INGUSTAREA CASTIGA DE DOUASPREZECE ORI MAI MULT LOC inainte sa dea de fund — adica de
+ * douasprezece ori mai multe sanse sa incapa fara sa piarda nimic.
+ *
+ * ⚠ CE COSTA: o fereastra ingusta acopera mai putin, deci un magazin ramas in urma ar avea de
+ * facut mai multe treceri. Dar largirea e geometrica (×2 la fiecare trecere incaputa), deci de
+ * la 5 minute pana inapoi la doua saptamani sunt vreo douasprezece treceri — doua ore. Si numai
+ * in cazul in care s-a ingustat pana la fund, care n-a aparut niciodata.
  */
-const FEREASTRA_MINIMA_MS = 60 * 60 * 1000;
+const FEREASTRA_MINIMA_MS = 5 * 60 * 1000;
 
 function laData(ms: unknown): string | null {
   const n = Number(ms);
@@ -253,18 +269,19 @@ export async function aduRetururile(
     if (pagina + 1 >= paginiDeCitit) {
       /*
        * ⚠ LA FUND, „NU MUT MARCAJUL" AR INSEMNA SA NU MAI CITESC NIMIC, NICIODATA. Fereastra e
-       * deja de-o ora, s-au citit douazeci de pagini — adica peste o mie de cereri intr-o ora la
-       * un singur magazin — si tot mai sunt. Oprit aici, marcajul ramane infipt si TOATE
-       * retururile de maine incolo se pierd, nu doar coada orei asteia.
+       * deja la podea, s-au citit douazeci de pagini — adica peste o mie de cereri in CINCI
+       * MINUTE la un singur magazin — si tot mai sunt. Oprit aici, marcajul ramane infipt si
+       * TOATE retururile de maine incolo se pierd, nu doar coada ferestrei asteia.
        *
-       * ⚠ DECI SE TRECE MAI DEPARTE SI SE SPUNE PE FATA. Se pierde coada unei ore; alternativa
-       * era sa se piarda tot, de-acum inainte. Se scrie `critical` fiindca e chiar genul de
-       * pierdere pe care comerciantul trebuie s-o afle de la noi, nu de la clientul lui.
+       * ⚠ DECI SE TRECE MAI DEPARTE SI SE SPUNE PE FATA. Se pierde coada unei ferestre de cinci
+       * minute; alternativa era sa se piarda tot, de-acum inainte. Se scrie `critical` fiindca e
+       * chiar genul de pierdere pe care comerciantul trebuie s-o afle de la noi, nu de la
+       * clientul lui.
        */
       if (laStramtoare) {
         await logError({
           action: "trendyol/retururi",
-          message: `fereastra minima are ${totalPagini} pagini si s-au citit ${paginiDeCitit}: restul orei nu se mai poate citi, dar se merge mai departe`,
+          message: `fereastra minima are ${totalPagini} pagini si s-au citit ${paginiDeCitit}: coada ferestrei nu se mai poate citi, dar se merge mai departe`,
           details: {
             deLa: new Date(de_la).toISOString(), panaLa: new Date(pana_la).toISOString(),
             totalPagini, citite: paginiDeCitit, vitrina: ctx.auth.storefront ?? null,
@@ -394,7 +411,19 @@ async function scrieCererea(
     claim_id: idCerere,
     order_number: c.orderNumber ?? null,
     shipment_package_id: idPachetului(c),
-    claim_status: c.status ?? null,
+    /*
+     * ═══ ⚠ EI NU TRIMIT NICIUN STATUS LA NIVEL DE CERERE (26.08.2026) ═══
+     *
+     * Aici scria `c.status ?? null`, iar `status` era un camp pe care nu-l verificase nimeni.
+     * VERIFICAT ACUM in raspunsul-exemplu din `reference/getclaims`: nu exista. Starea sta la
+     * `items[].claimItems[].claimItemStatus.name`.
+     *
+     * ⚠ DECI `claim_status` IESEA NULL LA FIECARE CERERE, iar panoul cerea
+     * `in("claim_status", [...])` — care nu potriveste niciodata un NULL. Lista „Așteaptă
+     * răspunsul tău" ar fi fost GOALA oricat de multe retururi ar fi fost, si nimic n-ar fi
+     * aratat a defect. Vezi nota lunga de la `stareaCererii`.
+     */
+    claim_status: stareaCererii(c),
     /* ⚠ VITRINA DE PE CARE A VENIT. Hotararea trebuie sa plece tot pe ea: Golful are cai
        separate, iar o aprobare trimisa pe calea europeana nu gaseste cererea. */
     storefront: ctx.auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT,
@@ -630,16 +659,52 @@ export async function repuneInStoc(
 }
 
 /**
- * Starile in care o cerere de retur inca se poate schimba.
+ * Starile din care o cerere de retur NU mai are ce sa ne spuna.
  *
- * ⚠ `Rejected` E AICI DINADINS, si nu e o scapare: dupa o respingere, ei pot crea un colet de
- * retur catre client, iar `rejectedPackageInfo` apare abia atunci. Cat timp lipseste, cererea
- * inca are ceva de spus.
+ * ═══ ⚠ SE NUMESC CELE INCHEIATE, NU CELE VII (26.08.2026) ═══
+ *
+ * Aici statea lista pe dos: `["Created", "WaitingInAction", "InAnalysis", "Rejected"]`, adica
+ * starile vii. Suna la fel si nu e la fel — o lista de stari vii lasa pe dinafara TOT ce nu
+ * cunoastem, iar reconcilierea exista tocmai ca sa nu ramana nimic nevazut.
+ *
+ * ⚠ SI STIM CA NU LE CUNOASTEM PE TOATE. Enumul din specificatia lor turceasca are
+ * `WaitingFraudCheck`; lista din ghidul international nu-l are deloc. E un status pe care il
+ * poti PRIMI fara sa fie explicat — iar in forma dinainte o cerere ajunsa acolo n-ar mai fi
+ * fost reintrebata niciodata. Exact paguba pentru care s-a scris reconcilierea, reintrodusa
+ * printr-o lista scrisa in sensul gresit.
+ *
+ * ⚠ `Rejected` NU e incheiata, si nu e o scapare: dupa o respingere ei pot crea un colet de
+ * retur catre client, iar `rejectedPackageInfo` apare abia atunci.
+ *
+ * ⚠ `Unresolved` NU e incheiata nici ea, fiindca nu stim daca e. Cand nu stim, se reintreaba:
+ * costa o citire dintr-un buget de o mie pe minut, iar cealalta greseala costa returul.
+ *
+ * ⚠ Si o cerere cu statusul GOL intra tot aici — adica se reintreaba. E chiar cea despre care
+ * stim cel mai putin.
  */
-const STARI_INCA_VII = ["Created", "WaitingInAction", "InAnalysis", "Rejected"] as const;
+const STARI_INCHEIATE = ["Accepted", "Cancelled"] as const;
 
 /** Cate cereri se reintreaba intr-o trecere. Ei ingaduie 1000 de citiri pe minut. */
 const CERERI_DE_REINTREBAT = 60;
+
+/**
+ * Cat timp mai are rost sa reintrebi de o cerere care nu s-a incheiat.
+ *
+ * ═══ ⚠ INVERSAREA LISTEI DE STARI ARE UN COST, SI SE MARGINESTE AICI ═══
+ *
+ * De cand se scot starile incheiate in loc sa se aleaga cele vii, in bazin intra TOT ce nu e
+ * `Accepted` sau `Cancelled` — inclusiv `Rejected`, care poate ramane asa pentru totdeauna.
+ *
+ * ⚠ NEMARGINIT, BAZINUL CRESTE LA NESFARSIT. Un magazin cu trei mii de cereri respinse stranse
+ * intr-un an: la 60 pe trecere si o trecere la cinci minute, roata face un tur in patru ORE.
+ * Adica hotararea pe care comerciantul o ia acum s-ar vedea la noi diseara. Bazinul ar fi plin
+ * de morti, iar cei vii ar astepta dupa ei.
+ *
+ * ⚠ Se margineste pe `created_at`, care e AL NOSTRU si nu e niciodata gol — nu pe
+ * `last_modified`, unde acelasi `null` ar fi scos randurile despre care stim cel mai putin. O
+ * cerere pe care o stim de peste sase saptamani si care tot nu s-a incheiat nu se mai schimba.
+ */
+const ZILE_DE_REINTREBAT = 45;
 
 /**
  * Reintreaba cererile pe care le stim si care inca se pot schimba.
@@ -668,11 +733,53 @@ const CERERI_DE_REINTREBAT = 60;
 export async function reconciliazaRetururile(
   admin: Db, ctx: TrendyolSyncContext,
 ): Promise<{ verificate: number }> {
-  const vii = randuriCitite<{ claim_id: string; storefront: string | null }>(
+  const vii = randuriCitite<{
+    claim_id: string; storefront: string | null;
+    claim_status: string | null; colet_respins: unknown; dont_ship_back: boolean | null;
+  }>(
     "trendyol.cereriIncaVii", await admin
-      .from("trendyol_claims").select("claim_id, storefront")
+      .from("trendyol_claims").select("claim_id, storefront, claim_status, colet_respins, dont_ship_back")
       .eq("business_id", ctx.businessId)
-      .in("claim_status", STARI_INCA_VII as unknown as string[])
+      /*
+       * ⚠ Pe dos fata de cum era: se scot cele incheiate, nu se aleg cele vii. Vezi nota de la
+       * `STARI_INCHEIATE` — o lista de stari vii lasa pe dinafara tot ce nu cunoastem.
+       *
+       * ═══ ⚠ SI `NOT IN` SINGUR AR FI SCOS RANDURILE CU STATUS GOL ═══
+       *
+       * `null not in ('Accepted','Cancelled')` nu e TRUE, e NULL — deci randul cade. Masurat pe
+       * baza adevarata, in tranzactie anulata, cu sapte randuri de proba:
+       *
+       *     fara paza:  creat, frauda, nerezolvat, respins            (GOLUL LIPSESTE)
+       *     cu paza:    creat, frauda, gol, nerezolvat, respins
+       *
+       * Amandoua scot corect `Accepted` si `Cancelled`. Deosebirea e numai golul — adica exact
+       * cererea despre care stim cel mai putin, si singura pe care comentariul de deasupra
+       * promitea ca o reintreaba. Fara `or`, promisiunea ar fi fost falsa.
+       */
+      .or(`claim_status.is.null,claim_status.not.in.(${STARI_INCHEIATE.join(",")})`)
+      /* ⚠ Si marginit in timp, altfel bazinul se umple de cereri care nu se mai schimba si le
+         inghesuie pe cele vii. Vezi nota de la `ZILE_DE_REINTREBAT`. */
+      .gte("created_at", new Date(Date.now() - ZILE_DE_REINTREBAT * 24 * 60 * 60 * 1000).toISOString())
+      /*
+       * ═══ ⚠ O CERERE RESPINSA CARE SI-A ARATAT COLETUL NU MAI ARE CE SA SPUNA ═══
+       *
+       * `Rejected` se reintreaba anume: dupa o respingere ei POT crea un colet catre client, iar
+       * `rejectedPackageInfo` apare abia atunci — si aia e chiar informatia dupa care ii spunem
+       * comerciantului daca mai are ceva de expediat. Odata aparuta insa, s-a aflat.
+       *
+       * ⚠ ABSENTA NU E ACELASI LUCRU: cand `colet_respins` lipseste inca, poate aparea maine. Se
+       * iese numai cand a APARUT, sau cand ei au spus limpede ca nu se trimite nimic inapoi.
+       *
+       * ⚠ SI TAIEREA E AICI, NU DUPA `limit`. Filtrata in cod dupa citire, o serie de 60 de
+       * cereri respinse-cu-colet ar fi golit bazinul, `reintrebat_la` nu s-ar fi scris pe niciuna,
+       * iar trecerea urmatoare ar fi luat exact aceleasi 60 — chiar blocajul reparat azi
+       * dimineata, reintrodus printr-un filtru pus cu un rand mai jos.
+       *
+       * ⚠ MASURAT pe noua cazuri, in tranzactie anulata: intra gol, Created, WaitingFraudCheck,
+       * Unresolved si respinsa-fara-colet; ies respinsa-cu-colet, respinsa-fara-trimitere,
+       * Accepted si Cancelled.
+       */
+      .or("claim_status.is.null,claim_status.neq.Rejected,and(colet_respins.is.null,dont_ship_back.not.is.true)")
       /*
        * ═══ ⚠ ROTATIA NU SE POATE FACE PE UN CAMP CARE NU SE MISCA (26.08.2026) ═══
        *

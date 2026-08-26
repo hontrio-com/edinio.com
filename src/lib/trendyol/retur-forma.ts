@@ -199,3 +199,68 @@ export function dovadaCeruta(motivId: number | null | undefined): boolean {
  * ar primi un refuz al carui text nu explica nimic. Se spune in ecran, inainte de apasare.
  */
 export const MOTIV_BLOCAT_24H = 1651;
+
+/**
+ * Starile din care o LINIE de retur nu mai are ce sa ne spuna.
+ *
+ * ⚠ Aceleasi ca la cerere, si dinadins acelasi rationament: se numesc cele incheiate, nu cele
+ * vii. `Rejected` nu e aici — dupa o respingere ei pot crea un colet catre client, iar
+ * `rejectedPackageInfo` apare abia atunci.
+ */
+const LINII_INCHEIATE = new Set(["Accepted", "Cancelled"]);
+
+/** Starile in care mingea e la COMERCIANT: el are de apasat ceva. */
+const LINII_DE_HOTARAT = new Set(["Created", "WaitingInAction"]);
+
+/**
+ * Starea cererii, adunata din starile LINIILOR ei.
+ *
+ * ═══ ⚠ EI NU TRIMIT NICIUN STATUS LA NIVEL DE CERERE (26.08.2026) ═══
+ *
+ * Pana azi se scria `claim_status: c.status ?? null`, iar `status` era un camp pe care nu-l
+ * verificase nimeni. VERIFICAT ACUM in raspunsul-exemplu din `reference/getclaims`: campurile de
+ * nivel intai ale unei cereri sunt
+ *
+ *     id · claimId · orderNumber · orderDate · customerFirstName · customerLastName · claimDate
+ *     cargoTrackingNumber · cargoTrackingLink · cargoSenderNumber · cargoProviderName
+ *     orderShipmentPackageId · replacementOutboundpackageinfo · rejectedpackageinfo · items
+ *     lastModifiedDate · orderOutboundPackageId
+ *
+ * `status` NU e printre ele. Starea sta la `items[].claimItems[].claimItemStatus.name` — de-aia
+ * si parametrul lor de cautare se numeste `claimItemStatus`, si de-aia ghidul spune ca rezultatul
+ * unei respingeri se urmareste „on claimItemStatus status".
+ *
+ * ⚠ CE COSTA: `claim_status` iesea NULL la FIECARE cerere. Iar panoul cerea
+ * `in("claim_status", ["Created","WaitingInAction","InAnalysis"])` — care nu potriveste niciodata
+ * un NULL. Deci lista „Așteaptă răspunsul tău" ar fi fost GOALA oricat de multe retururi ar fi
+ * avut comerciantul, si nimic n-ar fi aratat a defect: nici eroare, nici jurnal, doar un ecran
+ * linistit. Retururile lui expirau netratate.
+ *
+ * ⚠ ORDINEA DE MAI JOS E O HOTARARE, nu o socoteala. Un retur partial poate avea o linie
+ * acceptata si una care inca asteapta. Ce conteaza pentru comerciant e daca MAI ARE CEVA DE
+ * FACUT — deci o singura linie care asteapta trage toata cererea in „de hotarat".
+ */
+export function stareaCererii(c: TrendyolClaim): string | null {
+  const stari = liniileReturului(c).map((l) => l.stare).filter((s): s is string => !!s);
+  if (stari.length === 0) {
+    /* ⚠ Fara linii citibile NU se ghiceste. `null` inseamna „nu stim", iar reconcilierea il
+       trateaza anume ca pe o cerere de reintrebat — vezi `STARI_INCHEIATE`. */
+    return null;
+  }
+  /* ⚠ Mingea la comerciant bate orice altceva. */
+  const deHotarat = stari.find((s) => LINII_DE_HOTARAT.has(s));
+  if (deHotarat) return deHotarat;
+  /* ⚠ Apoi orice linie neincheiata: cererea inca se poate schimba. */
+  const vie = stari.find((s) => !LINII_INCHEIATE.has(s));
+  if (vie) return vie;
+  /* Toate incheiate: se ia prima, si toate spun acelasi lucru. */
+  return stari[0];
+}
+
+/** Cererea asta mai asteapta o apasare de-a comerciantului? */
+export function asteaptaHotarare(stare: string | null | undefined): boolean {
+  return !!stare && LINII_DE_HOTARAT.has(stare);
+}
+
+/** ⚠ Pentru filtrul din panou. `InAnalysis` NU e aici: acolo se uita EI, nu comerciantul. */
+export const STARI_DE_HOTARAT = [...LINII_DE_HOTARAT];

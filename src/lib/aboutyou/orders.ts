@@ -47,8 +47,20 @@ function edinioStatusFor(ayStatus: string | undefined): string {
  * oara la urmatoarea apasare. La ei statusul liniei nu se mai schimba dupa retur, deci n-avem
  * ce actualiza.
  *
- * ⚠ NU OPRESTE INGESTUL daca pica: o comanda citita fara randul de retur e mai buna decat una
- * necitita. Se scrie in jurnal, si urmatoarea trecere o reia.
+ * ═══ ⚠ ERA „BEST EFFORT", SI TEMEIUL NU STATEA IN PICIOARE (27.08.2026) ═══
+ *
+ * Scria: „NU OPRESTE INGESTUL daca pica: o comanda citita fara randul de retur e mai buna decat
+ * una necitita". Presupunerea de dedesubt — ca o aruncare PIERDE comanda — e falsa: `pollOrders`
+ * prinde fiecare comanda separat si INGHEATA cursorul la prima picata, deci o aruncare AMANA, nu
+ * pierde. Verificat in `pollOrders`, unde `cazutStatus` opreste inaintarea cursorului.
+ *
+ * Iar pretul tacerii e mare si ireversibil: cand comanda ajunge complet `returned`, ea iese din
+ * ferestrele de aducere si din reintrebarea comenzilor deschise. Randul de retur nelipsit atunci
+ * nu se mai scrie NICIODATA, deci marfa intoarsa nu mai are pe unde sa se intoarca pe raft — cu
+ * atat mai grav de cand repunerea automata e oprita dinadins.
+ *
+ * ⚠ ARUNCA, si scrie `critical` inainte: o aruncare care se repeta tine cursorul pe loc, deci
+ * trebuie sa se VADA, nu sa incetineasca magazinul in tacere.
  */
 async function scrieRetururile(
   admin: Db, ctx: AboutYouSyncContext, ayNumber: string, orderId: string | null,
@@ -72,9 +84,10 @@ async function scrieRetururile(
     await logError({
       action: "aboutyou/retururi",
       message: `liniile intoarse nu s-au putut scrie: ${error.message}`,
-      details: { ayNumber, cate: intoarse.length },
-      businessId: ctx.businessId, severity: "warning",
+      details: { ayNumber, cate: intoarse.length, orderId },
+      businessId: ctx.businessId, severity: "critical",
     });
+    throw new Error(`Liniile intoarse ale comenzii ${ayNumber} nu s-au putut scrie: ${error.message}`);
   }
 }
 
@@ -331,8 +344,10 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     const prodIds = [...new Set(randuri.map((v) => v.product_id).filter(Boolean) as string[])];
     const prodName = new Map<string, string>();
     if (prodIds.length > 0) {
-      const { data: ps } = await admin.from("products").select("id, name").in("id", prodIds);
-      for (const p of ps ?? []) prodName.set(p.id, p.name);
+      /* ⚠ Strict: inghitita, pana scria „Produs About You" pe linii dintr-o comanda adevarata. */
+      const ps = randuriCitite<{ id: string; name: string }>("aboutyou.numeleProduselor",
+        await admin.from("products").select("id, name").in("id", prodIds) as never);
+      for (const p of ps) prodName.set(p.id, p.name);
     }
     for (const v of randuri) {
       info.set(v.sku, {
@@ -453,11 +468,17 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      totalul cand About You anuleaza o linie. Vezi nota de la actualizarea comenzii. */
   const total = money(activeItems.reduce((s, it) => s + num(it.price_with_tax), 0));
   const vatAmount = Math.round((total - subtotal) * 100) / 100;
-  const { data: existing } = await admin
+  /*
+   * ⚠ STRICT. „Randul lateral nu exista" trimite pe calea de CREARE, adica la un `insert` in
+   * `orders` pentru o comanda care e deja la noi. Ne salveaza indexul unic
+   * `orders_order_number_business_unique` — dar asta e o plasa a bazei, nu o hotarare a codului,
+   * si nu se sprijina nimeni pe ea.
+   */
+  const existing = randCitit<{ id: string; order_id: string | null }>("aboutyou.randulLateral", await admin
     .from("aboutyou_orders").select("id, order_id")
-    .eq("business_id", ctx.businessId).eq("aboutyou_order_number", ayNumber).maybeSingle();
+    .eq("business_id", ctx.businessId).eq("aboutyou_order_number", ayNumber).maybeSingle());
   if (existing) {
-    const ex = existing as { id: string; order_id: string | null };
+    const ex = existing;
     await admin.from("aboutyou_orders")
       .update({ items: ayItems as never, status: order.status ?? "open", last_synced_at: now, updated_at: now } as never)
       .eq("id", ex.id);
@@ -653,18 +674,34 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
   let orderId: string;
   let isNew = true;
   if (error || !created) {
-    const { data: found } = await admin.from("orders").select("id")
-      .eq("business_id", ctx.businessId).eq("order_number", `AY-${ayNumber}`).maybeSingle();
+    /* ⚠ Strict: inghitita, o pana aici ar fi ascuns motivul ADEVARAT sub cel de la `insert`. */
+    const found = randCitit<{ id: string }>("aboutyou.comandaDupaNumar", await admin
+      .from("orders").select("id")
+      .eq("business_id", ctx.businessId).eq("order_number", `AY-${ayNumber}`).maybeSingle());
     if (!found) {
       throw new Error(`Comanda About You ${ayNumber} nu a putut fi salvată: ${error?.message ?? "motiv necunoscut"}`);
     }
-    orderId = (found as { id: string }).id;
+    orderId = found.id;
     isNew = false;
   } else {
     orderId = (created as { id: string }).id;
   }
 
-  await admin.from("aboutyou_orders").upsert({
+  /*
+   * ═══ ⚠ RANDUL LATERAL PUTEA LIPSI DE PE O COMANDA DEJA CREATA (27.08.2026) ═══
+   *
+   * Rezultatul upsertului nu se citea. Iesea asa:
+   *
+   *   `orders` scrisa ✅ · stocul consumat ✅ · `aboutyou_orders` ❌
+   *
+   * si ingestul raporta „created". De-acolo se pierd id-urile articolelor lor, deci nu se mai
+   * poate nici expedia, nici anula, nici returna. Mai rau: `reconciliazaComenzile` PORNESTE
+   * chiar din `aboutyou_orders`, deci comanda iese din singurul mecanism care ar fi reparat-o.
+   *
+   * ⚠ SE ARUNCA INAINTE DE CONSUMUL DE STOC. Reluarea reface totul de la capat, iar consumul e
+   * idempotent prin `stoc_marketplace_la`; asa nu ramane nimic pe jumatate.
+   */
+  const { error: eLateral } = await admin.from("aboutyou_orders").upsert({
     business_id: ctx.businessId,
     order_id: orderId,
     aboutyou_order_number: ayNumber,
@@ -674,6 +711,9 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     items: ayItems as never,
     last_synced_at: now,
   } as never, { onConflict: "business_id,aboutyou_order_number" });
+  if (eLateral) {
+    throw new Error(`Randul About You al comenzii ${ayNumber} nu s-a putut scrie: ${eLateral.message}`);
+  }
 
   /*
    * ⚠ SI AICI, NU DOAR PE RAMURA „EXISTA DEJA" (26.08.2026).
@@ -790,16 +830,32 @@ export async function reconciliazaComenzile(
   return { verificate };
 }
 
+/**
+ * ═══ ⚠ EVENIMENTUL PAREA PRELUCRAT DESI NU SE INTAMPLASE NIMIC (27.08.2026) ═══
+ *
+ * Functia inghitea toate cele trei feluri de a nu reusi: cererea catre ei picata, comanda
+ * negasita, si ingestul cazut. Iesea linistita, `prelucreazaEveniment` parea reusit, iar
+ * `reiaEvenimenteleNeprelucrate` scria `prelucrat_la` pe randul din inbox.
+ *
+ * Adica exact ce inbox-ul fusese facut sa impiedice: o expediere sau o anulare marcata drept
+ * prelucrata, fara sa se fi intamplat. Si nu se mai reia niciodata, fiindca randul e „gata".
+ *
+ * ⚠ ARUNCA acum pe TOATE trei, inclusiv pe „negasita". Ar fi fost tentant s-o iau drept un
+ * raspuns bun — le-am cerut, au zis ca n-o au — dar o lista goala poate veni si dintr-o clipa in
+ * care comanda inca nu s-a asezat la ei. Reincercarea e marginita: `MAX_INCERCARI_INBOX`
+ * incercari, apoi randul se abandoneaza ZGOMOTOS, cu `critical` in jurnal.
+ */
 export async function ingestOrderByNumber(admin: Db, ctx: AboutYouSyncContext, orderNumber: string): Promise<void> {
   const res = await getOrders(ctx.auth, { order_number: orderNumber, per_page: 5 });
-  if (isAboutYouError(res)) return;
-  const order = (res.data?.items ?? []).find((o) => o.order_number === orderNumber) ?? res.data?.items?.[0];
-  if (!order) return;
-  try {
-    await ingestOrder(admin, ctx, order);
-  } catch (e) {
-    console.error("[aboutyou] ingest comanda esuat", orderNumber, e instanceof Error ? e.message : e);
+  if (isAboutYouError(res)) {
+    throw new Error(`Comanda ${orderNumber} nu s-a putut citi de la About You: ${res.error}`);
   }
+  const order = (res.data?.items ?? []).find((o) => o.order_number === orderNumber) ?? res.data?.items?.[0];
+  if (!order) {
+    throw new Error(`About You nu a intors comanda ${orderNumber}.`);
+  }
+  /* Fara `catch`: cine cheama trebuie sa afle. Vezi nota de mai sus. */
+  await ingestOrder(admin, ctx, order);
 }
 
 /*

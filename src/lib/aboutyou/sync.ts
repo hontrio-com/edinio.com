@@ -22,7 +22,7 @@ import {
   type AboutYouListingEnrichment, type AboutYouStoredMaterial, type AboutYouVariantData,
   type MappableProduct,
 } from "./mapping";
-import { randuriCitite } from "@/lib/supabase/rand-citit";
+import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchAboutYouConfig } from "./config";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
@@ -56,9 +56,22 @@ export function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Configurarea magazinului, sau `null` daca nu e conectat.
+ *
+ * ═══ ⚠ O PANA A BAZEI ARATA CA UN MAGAZIN NECONECTAT (27.08.2026) ═══
+ *
+ * `const { data: ss }` inghitea eroarea, iar `?? {}` o prefacea in „nu e conectat". Pasii 2, 3
+ * si 4 din cron fac `if (!ctx) continue`, deci un hop de-o clipa al bazei sarea TACUT peste
+ * sondarea loturilor, reconciliere si ingestul comenzilor magazinului — iar rularea se numara
+ * drept reusita. Exact tiparul din regula casei: „lista goala e cea mai inselatoare forma".
+ *
+ * Acum arunca `EroareCitireBaza`. Cine cheama alege ce face; ce nu mai poate face nimeni e sa
+ * confunde „nu e conectat" cu „n-am putut intreba".
+ */
 export async function loadAboutYouContext(admin: Db, businessId: string): Promise<AboutYouSyncContext | null> {
-  const { data: ss } = await admin
-    .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
+  const ss = randCitit<{ aboutyou_config: unknown }>("aboutyou.config", await admin
+    .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single());
   const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
   if (!config.connected || !config.api_key) return null;
   return { auth: { apiKey: config.api_key, environment: config.environment }, config, businessId };
@@ -84,19 +97,19 @@ interface ListingRow {
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
-  const { data } = await admin
+  /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
+  return randCitit<ListingRow>("aboutyou.getListing", await admin
     .from("aboutyou_listings")
     .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte")
-    .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
-  return (data as ListingRow) ?? null;
+    .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
 }
 
 async function getListingByStyleKey(admin: Db, businessId: string, styleKey: string): Promise<ListingRow | null> {
-  const { data } = await admin
+  /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
+  return randCitit<ListingRow>("aboutyou.getListingByStyleKey", await admin
     .from("aboutyou_listings")
     .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte")
-    .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle();
-  return (data as ListingRow) ?? null;
+    .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle() as never);
 }
 
 function toEnrichment(row: ListingRow): AboutYouListingEnrichment {
@@ -112,11 +125,20 @@ function toEnrichment(row: ListingRow): AboutYouListingEnrichment {
 }
 
 async function getVariantData(admin: Db, listingId: string): Promise<AboutYouVariantData[]> {
-  const { data } = await admin
+  /*
+   * ⚠ Arunca la pana. O lista goala inseamna „produsul n-are nicio varianta", iar de-acolo
+   * pleaca doua cai rele: trimiterea cade cu „Nicio varianta activa de listat" si scrie o eroare
+   * care arata permanenta, iar retragerea variantelor ar crede ca s-au sters TOATE.
+   */
+  const data = randuriCitite<{
+    sku: string; ean: string | null; size_id: number | null; second_size_id: number | null;
+    color_id: number | null; quantity: number | null; retail_price_eur: number | null;
+    sale_price_eur: number | null; enabled: boolean; ay_status: string | null;
+  }>("aboutyou.getVariantData", await admin
     .from("aboutyou_variants")
     .select("sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled, ay_status")
-    .eq("listing_id", listingId);
-  return (data ?? []).map((v) => ({
+    .eq("listing_id", listingId) as never);
+  return data.map((v) => ({
     sku: v.sku,
     ean: v.ean,
     size_id: v.size_id,

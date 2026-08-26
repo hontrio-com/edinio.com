@@ -88,9 +88,35 @@ export async function GET(req: NextRequest) {
   const ctxCache = new Map<string, AboutYouSyncContext | null>();
   async function ctxFor(businessId: string): Promise<AboutYouSyncContext | null> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
+    /* ⚠ Poate ARUNCA: `loadAboutYouContext` nu mai preface o pana in „nu e conectat". */
     const ctx = await loadAboutYouContext(admin, businessId);
     ctxCache.set(businessId, ctx);
     return ctx;
+  }
+
+  /*
+   * ═══ ⚠ UN HOP AL BAZEI SAREA TACUT PESTE UN MAGAZIN INTREG (27.08.2026) ═══
+   *
+   * Pasii 2, 3 si 4 faceau `if (!ctx) continue`, iar `loadAboutYouContext` intorcea `null` si
+   * cand configul nu se putea CITI. Deci o clipa proasta a bazei sarea peste sondarea loturilor,
+   * peste reconciliere si peste ingestul comenzilor magazinului — si rularea se numara oricum
+   * drept reusita. Nimeni n-avea de unde afla.
+   *
+   * ⚠ SE SARE MAI DEPARTE, dar SE SCRIE. Un magazin cu configul necitibil nu are voie sa opreasca
+   * cronul celorlalte; ce n-are voie e sa taca.
+   */
+  async function ctxSauScrie(businessId: string, pas: string): Promise<AboutYouSyncContext | null> {
+    try {
+      return await ctxFor(businessId);
+    } catch (e) {
+      failed++;
+      await logError({
+        action: "aboutyou-sync", severity: "warning",
+        message: `configul magazinului nu s-a putut citi la pasul „${pas}”: ${e instanceof Error ? e.message : String(e)}`,
+        details: { businessId, pas }, businessId,
+      });
+      return null;
+    }
   }
 
   // ── 1) Drain the sync queue, grouped by business ────────────────────────────────
@@ -124,16 +150,21 @@ export async function GET(req: NextRequest) {
     // Ce nu incape in fereastra se reia peste un minut; comenzile nu au voie sa
     // rămână pe dinafara. Randurile nerevendicate isi pierd singure lease-ul.
     if (fereastraPlina()) break;
-    const ctx = await ctxFor(businessId);
+    const ctx = await ctxSauScrie(businessId, "coada");
     if (ctx === null) {
       /*
-       * ATENTIE: `loadAboutYouContext` intoarce `null` si cand magazinul nu e
+       * ATENTIE: `loadAboutYouContext` intorcea `null` si cand magazinul nu e
        * conectat, si cand citirea configului a esuat. Stergeam coada in ambele
        * cazuri — deci un hop la baza de date arunca TOATA munca magazinului,
        * inclusiv impingerile de AWB catre comenzi deja platite.
        *
-       * Acum verificam separat daca magazinul chiar e deconectat. Daca nu putem
+       * Verificam separat daca magazinul chiar e deconectat. Daca nu putem
        * afla, lasam coada in pace: elementele se reiau la urmatoarea trecere.
+       *
+       * ⚠ DE CE RAMANE VERIFICAREA, desi `loadAboutYouContext` arunca acum la pana: `null` mai
+       * inseamna si „conectat, dar fara cheie" — iar de-acolo se ajungea tot la stergerea cozii.
+       * Iar `ctxSauScrie` preface aruncarea inapoi in `null`, ca sa nu opreasca celelalte
+       * magazine; deci verificarea de dedesubt e chiar ce deosebeste cele doua drumuri.
        */
       const deconectat = await esteDeconectat(admin, businessId);
       if (deconectat === true) {
@@ -244,7 +275,7 @@ export async function GET(req: NextRequest) {
   const pollSet = alegeInRotatie(sellerIds, MAX_BIZ);
   for (const businessId of pollSet) {
     if (fereastraPlina()) break;
-    const ctx = await ctxFor(businessId);
+    const ctx = await ctxSauScrie(businessId, "loturi");
     if (!ctx) continue;
     await pollOpenBatches(admin, ctx);
     polled++;
@@ -263,7 +294,7 @@ export async function GET(req: NextRequest) {
   const reconcileSet = alegeInRotatie(sellerIds, RECONCILE_BIZ, rotatieLarga ? 10 : 1);
   for (const businessId of reconcileSet) {
     if (fereastraPlina()) break;
-    const ctx = await ctxFor(businessId);
+    const ctx = await ctxSauScrie(businessId, "reconciliere");
     if (!ctx) continue;
     // Rezultatul se CITESTE: o cheie invalidata sau o pana inghetau statusurile
     // la nesfarsit, iar rularea se numara oricum drept reusita.
@@ -296,7 +327,7 @@ export async function GET(req: NextRequest) {
      * care au voie sa cada, dar tot trebuie sa incapa in fereastra.
      */
     if (Date.now() - inceput > BUGET_TOTAL_MS) break;
-    const ctx = await ctxFor(businessId);
+    const ctx = await ctxSauScrie(businessId, "comenzi");
     if (!ctx) continue;
     /*
      * ⚠ O MARJA DE SUPRAPUNERE, ca la Trendyol. Aici era ZERO.
@@ -344,7 +375,7 @@ export async function GET(req: NextRequest) {
   if (new Date().getMinutes() % 5 === 2) {
     for (const businessId of alegeInRotatie(sellerIds, POLL_ORDERS_BIZ)) {
       if (Date.now() - inceput > BUGET_TOTAL_MS) break;
-      const ctx = await ctxFor(businessId);
+      const ctx = await ctxSauScrie(businessId, "comenzi-reintrebate");
       if (!ctx) continue;
       try {
         const r = await reconciliazaComenzile(admin, ctx);
@@ -373,7 +404,7 @@ export async function GET(req: NextRequest) {
    */
   for (const businessId of alegeInRotatie(sellerIds, POLL_ORDERS_BIZ)) {
     if (Date.now() - inceput > BUGET_TOTAL_MS) break;
-    const ctx = await ctxFor(businessId);
+    const ctx = await ctxSauScrie(businessId, "inbox");
     if (!ctx) continue;
     try {
       reluate += await reiaEvenimenteleNeprelucrate(admin, businessId, ctx.config);

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { randCitit } from "@/lib/supabase/rand-citit";
 import type { Database, Json } from "@/types/database.types";
 import type { AboutYouConfig } from "./types";
 
@@ -20,9 +21,17 @@ export async function patchAboutYouConfig(admin: Db, businessId: string, patch: 
   });
   if (!error) return;
   // Cadere de siguranta daca functia lipseste inca din baza.
-  const { data: ss } = await admin.from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
+  /*
+   * ⚠ STRICT, si aici mai mult ca oriunde: calea asta face CITESTE-MODIFICA-SCRIE. Inghitita,
+   * o citire picata dadea `{}`, iar scrierea de dedesubt ar fi pus peste configul intreg un
+   * obiect din care lipseste TOT — cheia API, secretul de webhook, nomenclatoarele. Adica
+   * deconectarea magazinului, dintr-o clipa proasta a bazei.
+   */
+  const ss = randCitit<{ aboutyou_config: unknown }>("aboutyou.configDeCarpit", await admin
+    .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single());
   const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
-  await admin.from("store_settings")
+  const { error: eScriere } = await admin.from("store_settings")
     .update({ aboutyou_config: { ...config, ...patch } as never })
     .eq("business_id", businessId);
+  if (eScriere) throw new Error(`configul About You nu s-a putut scrie: ${eScriere.message}`);
 }

@@ -31,8 +31,16 @@ import { readFileSync } from "node:fs";
    pazea FORMA remediului, nu efectul lui.
 */
 
+/*
+ * ⚠ COMENTARIILE DE LINIE SE STERG PRIMELE, si ordinea nu e o preferinta.
+ *
+ * Invers, o secventa de deschidere de bloc aflata intr-un comentariu de LINIE (in `client.ts`
+ * sta scrisa asa o cale de API cu stelut la sfarsit) porneste stergatorul de blocuri, care
+ * inghite tot pana la urmatoarea inchidere — 835 de caractere de cod adevarat, masurat. Iar o
+ * proba care cauta ceva in bucata inghitita trece linistita, pe gol.
+ */
 const viu = (p: string) =>
-  readFileSync(p, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  readFileSync(p, "utf8").replace(/^[ \t]*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 
 const coada = viu("src/lib/aboutyou/queue.ts");
 
@@ -121,4 +129,62 @@ test("⚠ publicarea asteapta ULTIMUL lot al produsului, nu primul", () => {
   const i = sync.indexOf("const fratiNeterminati");
   const j = sync.indexOf('op: "publish"');
   assert.ok(i > 0 && j > i, "verificarea fratilor trebuie sa fie inaintea publicarii");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SI ACUM REGULA E PESTE TOT DOSARUL, NU DOAR PE COADA (27.08.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Proba pazea `queue.ts`. Restul integrarii avea noua citiri inghitite, gasite la audit:
+
+     `loadAboutYouContext`   pana citita ca „magazinul nu e conectat" -> pasii 2, 3 si 4 din cron
+                             sareau TACUT peste magazin, iar rularea se numara reusita
+     `getVariantData`        pana citita ca „produsul n-are variante"
+     `getListing…`           pana citita ca „listarea nu exista"
+     randul lateral al comenzii   pana citita ca „comanda e noua" -> calea de CREARE
+     configul din `patchAboutYouConfig`   citeste-modifica-scrie: `{}` peste configul intreg
+     configul din ruta de webhook         raspundea `200`, inaintea oricarei scrieri
+
+   ⚠ De-aia nu se mai repara caz cu caz: fisierele se scaneaza, si unul nou intra sub aceeasi
+   regula fara sa i-o ceara nimeni.
+*/
+
+import { readdirSync } from "node:fs";
+
+/** Locurile in care `const { data }` fara `error` e chiar in regula. */
+const IERTATE = new Set([
+  /* Nu e o citire: se citeste `error`-ul unui `insert`, iar `data` e randul creat. */
+  "orders.ts:created",
+]);
+
+test("⚠ niciun fisier din `src/lib/aboutyou` nu mai citeste `const { data }` fara `error`", () => {
+  const fisiere = readdirSync("src/lib/aboutyou")
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"));
+  assert.ok(fisiere.length >= 8, `prea putine fisiere scanate: ${fisiere.length}`);
+
+  const gasite: string[] = [];
+  for (const f of fisiere) {
+    const src = viu(`src/lib/aboutyou/${f}`);
+    for (const linie of src.split("\n")) {
+      /* `const { data }` sau `const { data: x }` FARA `error` pe aceeasi destructurare. */
+      const m = /const\s*\{\s*data(?:\s*:\s*\w+)?\s*\}\s*=/.exec(linie);
+      if (m && !IERTATE.has(`${f}:${/data\s*:\s*(\w+)/.exec(linie)?.[1] ?? ""}`)) {
+        gasite.push(`${f}: ${linie.trim().slice(0, 90)}`);
+      }
+    }
+  }
+  assert.deepEqual(gasite, [], `citiri inghitite:\n${gasite.join("\n")}`);
+});
+
+test("⚠ si ruta de webhook deosebeste pana de configul lipsa", () => {
+  /*
+   * Cele patru raspunsuri nu se mai confunda: pana -> 503, config lipsa -> 200 (hotarare veche
+   * si buna), autentificare rea -> 200, scris in inbox -> 200. Inainte, primul cadea pe al doilea
+   * si evenimentul se pierdea inainte sa apuce sa ajunga in inbox.
+   */
+  const ruta = viu("src/app/api/aboutyou/webhook/route.ts");
+  assert.ok(ruta.includes('if (eSettings && eSettings.code !== "PGRST116") {'), "pana nu se deosebeste");
+  assert.ok(ruta.includes('{ status: 503 }'), "nu raspunde 503");
+  /* Si 503-ul de la config vine INAINTEA ramurii care raspunde 200 pe secret lipsa. */
+  assert.ok(ruta.indexOf('{ status: 503 }') < ruta.indexOf("cfg?.webhook_secret"));
 });

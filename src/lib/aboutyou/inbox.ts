@@ -44,7 +44,13 @@ export async function prelucreazaEveniment(
     // Singura cale prin care motivele de respingere ajung la noi fara sa mai
     // intrebam: `GET /products/` nu le contine deloc.
     await handleProductMasterStatus(admin, businessId, event as never);
-  } else if (name && name.startsWith("order") && ctx) {
+  } else if (name && name.startsWith("order")) {
+    /*
+     * ⚠ FARA CHEIE, EVENIMENTUL NU SE PIERDE IN TACERE. Conditia era `&& ctx`: un magazin caruia
+     * i s-a invalidat cheia trecea prin toate ramurile fara sa faca nimic, iar randul din inbox
+     * primea `prelucrat_la`. Se arunca, deci evenimentul asteapta reconectarea.
+     */
+    if (!ctx) throw new Error("magazinul nu are cheie About You: evenimentul de comanda ramane neprelucrat");
     const orderNumber = extractOrderNumber(event as never);
     if (orderNumber) {
       await ingestOrderByNumber(admin, ctx, orderNumber);
@@ -57,7 +63,15 @@ export async function prelucreazaEveniment(
        * Comanda o gasim dupa id-urile articolelor, pe care le avem deja salvate.
        */
       const numar = await orderNumberDinArticole(admin, businessId, event);
-      if (numar) await ingestOrderByNumber(admin, ctx, numar);
+      /*
+       * ⚠ NECORELAT NU INSEAMNA PRELUCRAT. Un `order_items.*` pentru o comanda pe care n-am
+       * ingerat-o inca (evenimentele lor pot veni inaintea comenzii) iesea tacut si randul se
+       * inchidea. Se arunca: sondarea aduce comanda intre timp, si reluarea o gaseste.
+       */
+      if (!numar) {
+        throw new Error("evenimentul pe articole nu s-a putut lega de nicio comanda cunoscuta");
+      }
+      await ingestOrderByNumber(admin, ctx, numar);
     }
   }
 }
@@ -162,14 +176,21 @@ async function orderNumberDinArticole(
     .or(conditii)
     .limit(1);
   if (error) {
-    // O citire cazuta NU inseamna „nicio potrivire": inghitita, evenimentul se
-    // pierde definitiv, fiindca ruta raspunde oricum 200 si About You nu reia.
+    /*
+     * ⚠ O CITIRE CAZUTA NU INSEAMNA „NICIO POTRIVIRE".
+     *
+     * Se scria in jurnal si se intorcea `null`, iar cine chema citea `null` drept „n-am ce
+     * prelucra" si mergea mai departe — deci randul din inbox primea `prelucrat_la`. Un articol
+     * anulat sau expediat, pierdut pentru totdeauna dintr-o clipa proasta a bazei.
+     *
+     * Se ARUNCA. Randul ramane neprelucrat si cronul il reia.
+     */
     await logError({
       action: "aboutyou/webhook",
       message: `corelarea articolelor a eșuat: ${error.message}`,
       details: { businessId, ids: ids.slice(0, 10) }, businessId, severity: "critical",
     });
-    return null;
+    throw new Error(`corelarea articolelor a esuat: ${error.message}`);
   }
   const gasit = (data ?? [])[0] as { aboutyou_order_number?: string } | undefined;
   return gasit?.aboutyou_order_number ?? null;

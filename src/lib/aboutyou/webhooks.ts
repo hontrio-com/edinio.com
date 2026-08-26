@@ -14,6 +14,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { randCitit } from "@/lib/supabase/rand-citit";
 
 /*
  * ═══ ⚠ TREI EVENIMENTE INVECHITE PUTEAU DARAMA TOT ABONAMENTUL (27.08.2026) ═══
@@ -93,9 +94,18 @@ export async function handleStockUpdated(
     const qtyRaw = linie.quantity ?? linie.stock;
     const qty = typeof qtyRaw === "number" ? qtyRaw : undefined;
     if (!sku || qty == null) continue;
-    await admin.from("aboutyou_variants")
+    const { error } = await admin.from("aboutyou_variants")
       .update({ quantity: Math.max(0, Math.round(qty)), updated_at: now } as never)
       .eq("business_id", businessId).eq("sku", sku);
+    /*
+     * ⚠ SCRIEREA PICATA ARUNCA. Rezultatul nu se citea, deci handlerul iesea linistit si randul
+     * din inbox primea `prelucrat_la`: stocul lor ramanea altul decat cel scris la noi, si nimic
+     * n-o mai spunea. Regula e simpla — orice efect obligatoriu al evenimentului care n-a fost
+     * scris inseamna ca evenimentul NU s-a prelucrat.
+     *
+     * ⚠ „Zero randuri atinse" NU e o eroare: e un SKU pe care nu-l avem, si acolo n-avem ce face.
+     */
+    if (error) throw new Error(`stocul SKU-ului ${sku} nu s-a putut scrie: ${error.message}`);
   }
 }
 
@@ -144,13 +154,14 @@ export async function handleProductMasterStatus(
    * Citim statusul de dinainte: doar o listare care ERA respinsa isi pierde
    * mesajul cand About You retrage respingerea.
    */
-  const { data: veche } = await admin
+  /* ⚠ Strict: inghitita, o pana lua „era respinsa" drept fals si nu mai golea mesajul niciodata. */
+  const veche = randCitit<{ status: string }>("aboutyou.statusulDinainte", await admin
     .from("aboutyou_listings").select("status")
-    .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle();
-  const eraRespinsa = ["rejected", "problem"].includes((veche as { status?: string } | null)?.status ?? "");
+    .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle());
+  const eraRespinsa = ["rejected", "problem"].includes(veche?.status ?? "");
   const eSanatos = status != null && status !== "rejected" && status !== "problem";
 
-  await admin.from("aboutyou_listings")
+  const { error: eScriere } = await admin.from("aboutyou_listings")
     .update({
       ...(status ? { status } : {}),
       rejection_reasons: motive as never,
@@ -159,4 +170,10 @@ export async function handleProductMasterStatus(
       updated_at: now,
     } as never)
     .eq("business_id", businessId).eq("style_key", styleKey);
+  /*
+   * ⚠ ARUNCA. Asta e SINGURA cale prin care motivele respingerii ajung la noi fara sa mai
+   * intrebam — `GET /products/` nu le are deloc in schema. Pierdut tacut, comerciantul vede
+   * „respins" fara sa afle de ce, si nu mai are cum sa afle.
+   */
+  if (eScriere) throw new Error(`statusul produsului ${styleKey} nu s-a putut scrie: ${eScriere.message}`);
 }

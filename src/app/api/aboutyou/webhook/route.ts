@@ -38,8 +38,26 @@ export async function POST(request: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const { data: settings } = await admin
+  /*
+   * ═══ ⚠ O PANA A BAZEI RASPUNDEA `200`, INAINTE DE ORICE SCRIERE (27.08.2026) ═══
+   *
+   * Eroarea citirii se inghitea, `cfg` iesea `null`, si codul cadea pe ramura „magazinul n-are
+   * secret de webhook" — care raspunde `200` DINADINS, fiindca acolo reincercarea lor n-ar ajuta
+   * cu nimic. Numai ca aici ar fi ajutat: evenimentul nici nu apucase sa ajunga in inbox, deci
+   * `200` il pierdea definitiv. Sondarea nu-l recupereaza: filtreaza dupa data CREARII comenzii.
+   *
+   * Cele patru raspunsuri, si nu se mai confunda intre ele:
+   *   citirea a picat   → 503, ca ei sa reincerce
+   *   config lipsa      → 200, hotarare veche si buna
+   *   autentificare rea → 200, o reincercare n-ar schimba nimic
+   *   scris in inbox    → 200
+   */
+  const { data: settings, error: eSettings } = await admin
     .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
+  if (eSettings && eSettings.code !== "PGRST116") {
+    console.error("[aboutyou/webhook] configul nu s-a putut citi", businessId, eSettings.message);
+    return NextResponse.json({ error: "configurare indisponibila" }, { status: 503 });
+  }
   const cfg = settings?.aboutyou_config as AboutYouConfig | null;
   if (!cfg?.webhook_secret) {
     /*

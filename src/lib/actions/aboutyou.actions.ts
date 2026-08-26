@@ -17,10 +17,10 @@ import { logError } from "@/lib/error-logger";
 import { aboutyouGloballyEnabled, aboutyouWebhookUrl, maskApiKey } from "@/lib/aboutyou/auth";
 import {
   createWebhookSubscription, deleteWebhookSubscription, getOrderDocument, getWebhookSubscription,
-  isAboutYouError, mesajEroare, testConnection,
+  isAboutYouError, listWebhookSubscriptions, mesajEroare, testConnection,
   type AboutYouAuth,
 } from "@/lib/aboutyou/client";
-import { ABOUTYOU_WEBHOOK_EVENTS } from "@/lib/aboutyou/webhooks";
+import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
   cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
@@ -1421,7 +1421,13 @@ export async function getAboutYouWebhookDiagnoza(businessId: string): Promise<Di
      * peste unul oprit — cu contrariul chiar in raspunsul pe care il citea.
      */
     activLaEi: s.enabled !== false,
-    evenimenteLipsa: ABOUTYOU_WEBHOOK_EVENTS.filter((e) => !evenimente.includes(e)),
+    /*
+     * ⚠ SE COMPARA CU CELE ESENTIALE, NU CU TOATE. About You poate primi abonamentul si sa taie
+     * tacut evenimentele invechite din el. Comparat cu lista intreaga, panoul ar fi aratat pe veci
+     * „trei evenimente lipsa", iar comerciantul s-ar fi reabonat la nesfarsit ca sa repare ceva ce
+     * nu era stricat.
+     */
+    evenimenteLipsa: EVENIMENTE_ESENTIALE.filter((e) => !evenimente.includes(e)),
     // Tokenul din URL e a doua incuietoare a rutei. Daca URL-ul lor nu-l mai
     // poarta, fiecare eveniment va fi respins de noi, tacut.
     tokenNepotrivit: !!g.config.webhook_token && !!url && !url.includes(g.config.webhook_token),
@@ -1443,8 +1449,33 @@ export async function subscribeAboutYouWebhook(businessId: string): Promise<{ su
    */
   const token = randomBytes(24).toString("base64url");
   const url = `${aboutyouWebhookUrl()}?businessId=${encodeURIComponent(businessId)}&token=${token}`;
-  const res = await createWebhookSubscription(g.auth, { events: ABOUTYOU_WEBHOOK_EVENTS, url, description: "Edinio sync" });
-  if (isAboutYouError(res)) return { error: res.error };
+  /*
+   * ⚠ LISTA INTREAGA, APOI DOAR CELE ESENTIALE. Vezi `EVENIMENTE_INVECHITE`: un singur nume pe
+   * care ei nu-l mai recunosc face cererea sa pice toata, si comerciantul ramane fara NICIUN
+   * webhook. Reluarea nu pierde nimic — cele trei duceau la aceeasi recitire a comenzii.
+   */
+  const corp = { url, description: "Edinio sync" };
+  let res = await createWebhookSubscription(g.auth, { ...corp, events: ABOUTYOU_WEBHOOK_EVENTS });
+  if (isAboutYouError(res)) {
+    /*
+     * ⚠ „A PICAT" NU INSEAMNA „NU S-A CREAT". Lectia eMAG, unde un raspuns de eroare lasa totusi
+     * oferta salvata: o reluare oarba ar face al doilea abonament, si fiecare eveniment ar veni de
+     * doua ori. Se cauta dupa URL — care poarta un token generat acum, deci e al nostru si numai
+     * al acestei incercari — si orfanul se sterge inainte de a relua.
+     */
+    const toate = await listWebhookSubscriptions(g.auth);
+    if (!isAboutYouError(toate)) {
+      const orfan = (toate.data ?? []).find((w) => w.url === url);
+      if (orfan?.id != null) await deleteWebhookSubscription(g.auth, String(orfan.id));
+    }
+    res = await createWebhookSubscription(g.auth, { ...corp, events: EVENIMENTE_ESENTIALE });
+    if (isAboutYouError(res)) return { error: res.error };
+    await logError({
+      action: "aboutyou/webhook", severity: "warning",
+      message: "abonamentul cu lista intreaga a fost refuzat; s-a facut numai cu evenimentele esentiale",
+      details: { businessId }, businessId,
+    });
+  }
   const next: AboutYouConfig = {
     ...g.config,
     webhook_token: token,

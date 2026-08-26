@@ -15,13 +15,34 @@ import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
-// Subscribe to the full set now so the merchant does not re-subscribe later; order
-// events are handled starting in Faza 3.
-export const ABOUTYOU_WEBHOOK_EVENTS = [
-  "order.created", "order.updated", "order.cancelled", "order.shipped", "order.returned",
+/*
+ * ═══ ⚠ TREI EVENIMENTE INVECHITE PUTEAU DARAMA TOT ABONAMENTUL (27.08.2026) ═══
+ *
+ * `order.shipped`, `order.cancelled` si `order.returned` sunt inlocuite la ei de `order.updated`
+ * si `order_items.*`. Cerute intr-o lista in care un singur nume nerecunoscut face cererea sa
+ * pice INTREAGA, ele nu ne aduceau nimic in plus — dar puteau lasa comerciantul fara NICIUN
+ * webhook, si fara sa afle de ce.
+ *
+ * ⚠ NU SE STERG PUR SI SIMPLU: n-avem cum sa citim documentatia lor (e in spatele contului de
+ * partener), deci „sunt invechite" e o informatie, nu o certitudine. Se cer mai departe, dar
+ * SEPARAT: daca cererea intreaga cade, se reia numai cu cele esentiale. Asa iese bine in
+ * amandoua lumile — si daca inca merg, si daca nu mai sunt primite.
+ *
+ * ⚠ SI NU NE LIPSESTE NIMIC FARA ELE. Orice eveniment de comanda duce la aceeasi fapta:
+ * `ingestOrderByNumber`, adica o RECITIRE intreaga a comenzii de la ei. Trei nume in plus pentru
+ * aceeasi recitire nu aduc nicio informatie noua. Ce s-ar pierde e doar clipa in care se afla, iar
+ * acolo e `reconciliazaComenzile`, care reintreaba comenzile deschise din ultimele 60 de zile.
+ */
+export const EVENIMENTE_ESENTIALE = [
+  "order.created", "order.updated",
   "order_items.shipped", "order_items.cancelled", "order_items.returned",
   "stock.updated", "product_master.status_updated",
 ];
+
+/** Cerute din prisos: daca ei le refuza, abonamentul se face fara ele. */
+export const EVENIMENTE_INVECHITE = ["order.cancelled", "order.shipped", "order.returned"];
+
+export const ABOUTYOU_WEBHOOK_EVENTS = [...EVENIMENTE_ESENTIALE, ...EVENIMENTE_INVECHITE];
 
 const SIGNATURE_HEADERS = ["x-signature", "x-aboutyou-signature", "x-scayle-signature", "signature"];
 

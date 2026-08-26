@@ -1228,9 +1228,28 @@ export async function processQueueItem(admin: Db, ctx: AboutYouSyncContext, item
  * mapping.ts). Erau doua reguli diferite pentru acelasi lucru — una la creare,
  * alta aici — iar cele doua puteau devia oricat fara ca nimic sa semnaleze.
  *
- * `valid_at` NU se trimite: fara el, About You aplica valoarea imediat, ceea ce
- * e exact ce vrem dupa o comanda. Cu el am programa o valoare in viitor si o
- * comanda intre timp ar fi suprascrisa de programare.
+ * ═══ ⚠ `valid_at` NU SE TRIMITE, SI MOTIVUL SCRIS AICI ERA O PRESUPUNERE (26.08.2026) ═══
+ *
+ * Scria ca „cu el am programa o valoare in viitor". Nu stim asta. Numele campului si contextul in
+ * care apare la ei sugereaza contrariul — clipa in care valoarea comerciantului A DEVENIT valida,
+ * folosita ca o actualizare veche sa nu suprascrie una noua. Documentatia lor e in spatele
+ * autentificarii de partener, deci n-am putut citi contractul.
+ *
+ * ⚠ NU SE GHICESTE PE UN CAMP CARE PLEACA LA EI. Daca semantica noastra e gresita in celalalt
+ * sens — de pilda daca ei cer `valid_at` in viitor si resping o marca de timp din trecut —
+ * impingerea de stoc s-ar opri pentru TOATE magazinele, si asta e mai rau decat lipsa campului.
+ *
+ * ⚠ CE FACEM IN LOC, si acopera aceeasi paguba fara sa depinda de contractul lor:
+ *
+ *   1. Valoarea se citeste PROASPAT la trimitere (vezi `pushStockNow` mai jos), nu la punerea in
+ *      coada — deci nu plecam niciodata cu o cifra invechita de la noi.
+ *   2. Ce ramane e reordonarea la ei, intre doua loturi trimise la secunde distanta. Pentru aia
+ *      trebuie o verificare de deriva — citim inapoi ce au ei si reimpingem la nepotrivire —
+ *      exact ca `masoaraDeriva` de la eMAG. E singura care prinde si derivele venite din alte
+ *      cauze, nu doar din reordonare.
+ *
+ * ⚠ DE CERUT DE LA EI, in scris: ce inseamna exact `valid_at`, ce se intampla cu o marca de timp
+ * din trecut, si daca lipsa lui inseamna „aplica acum". Pana atunci nu se pune.
  */
 const MAX_ITEMI_STOC_PRET = 1000;
 

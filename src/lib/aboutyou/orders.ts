@@ -195,6 +195,42 @@ async function consumaStoculComenzii(
   }
 }
 
+/**
+ * Elibereaza stocul liniilor ANULATE, o singura data pe linie.
+ *
+ * ⚠ ARUNCA la esec, ca `consumaStoculComenzii`: e protocolul fisierului, iar `pollOrders` prinde
+ * si pune `ok = false`. O eliberare picata NU are voie sa mute fereastra — altfel linia anulata
+ * ramane cu stocul consumat pentru totdeauna, si nimeni nu mai afla.
+ *
+ * ⚠ IDEMPOTENTA STA IN BAZA, nu aici: functia tine minte ce linii a eliberat deja, in aceeasi
+ * tranzactie in care elibereaza. Vezi `aboutyou_elibereaza_anulari`.
+ */
+async function elibereazaAnularile(
+  admin: Db, ctx: AboutYouSyncContext, ayNumber: string,
+  linii: { linie_cheie: string; product_id: string | null; variant_title: string | null; quantity: number }[],
+): Promise<void> {
+  if (linii.length === 0) return;
+  const { data, error } = await admin.rpc("aboutyou_elibereaza_anulari", {
+    p_business_id: ctx.businessId, p_order_number: ayNumber, p_linii: linii as never,
+  });
+  const r = data as { stare?: string; eliberate?: number } | null;
+  if (error || !r?.stare) {
+    await logError({
+      action: "aboutyou/orders", severity: "critical",
+      message: `eliberarea stocului pentru liniile anulate a picat: ${error?.message ?? "raspuns nevalid"}`,
+      details: { ayNumber, linii: linii.length }, businessId: ctx.businessId,
+    });
+    throw new Error(error?.message ?? "eliberarea anularilor n-a raspuns valid");
+  }
+  if ((r.eliberate ?? 0) > 0) {
+    await logError({
+      action: "aboutyou/orders", severity: "info",
+      message: `anulare partiala: s-a eliberat stocul pentru ${r.eliberate} ${r.eliberate === 1 ? "linie" : "linii"}`,
+      details: { ayNumber }, businessId: ctx.businessId,
+    });
+  }
+}
+
 export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: AboutYouOrder): Promise<"created" | "updated" | "skipped"> {
   const ayNumber = typeof order.order_number === "string" ? order.order_number : undefined;
   if (!ayNumber) return "skipped";
@@ -325,6 +361,34 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
       };
     });
 
+  /*
+   * ═══ ⚠ ANULAREA UNEI SINGURE LINII (26.08.2026) ═══
+   *
+   * La ei statusul sta pe LINIE; comanda devine `mixed` cand liniile nu spun acelasi lucru. Poarta
+   * de mai jos se deschide numai cand TOATA comanda ajunge `cancelled` sau `returned`, deci o
+   * anulare partiala nu elibera nimic — iar `consuma_stoc_comanda_marketplace` e idempotenta prin
+   * `stoc_marketplace_la`, deci consumul nu se mai reface niciodata. Stocul liniei anulate ramanea
+   * consumat pentru totdeauna, pentru marfa care n-a plecat nicaieri.
+   *
+   * ⚠ Se aduna aici, dar se ELIBEREAZA dupa ce stim `order_id` — si numai prin functia din baza,
+   * care face eliberarea si marcarea in acelasi pas. Vezi `aboutyou_elibereaza_anulari`.
+   */
+  const anulate = items
+    .map((it, indice) => ({ it, indice }))
+    .filter(({ it }) => it.status === "cancelled")
+    .map(({ it, indice }) => {
+      const meta = info.get(it.sku);
+      const q = (it as { quantity?: number }).quantity;
+      return {
+        /* ⚠ Aceeasi cheie ca la retururi: id-ul liniei, cu rezerva determinista pe indice. */
+        linie_cheie: it.id != null ? String(it.id) : `sku:${it.sku}:${indice}`,
+        product_id: meta?.productId ?? null,
+        variant_title: meta?.variantTitle ?? null,
+        quantity: typeof q === "number" ? q : 1,
+      };
+    })
+    .filter((l) => l.product_id);
+
   const subtotal = money(activeItems.reduce((s, it) => s + num(it.price_without_tax), 0));
   const { data: existing } = await admin
     .from("aboutyou_orders").select("id, order_id")
@@ -392,6 +456,11 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     await scrieRetururile(admin, ctx, ayNumber, ex.order_id, intoarse);
     if (ex.order_id) {
       await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
+      /*
+       * ⚠ DUPA consum, nu inainte: consumul e cel care aseaza `stoc_marketplace_la`, iar
+       * eliberarea unei linii anulate n-are sens inaintea lui. Vezi nota de la `anulate`.
+       */
+      await elibereazaAnularile(admin, ctx, ayNumber, anulate);
 
     /*
      * ⚠ SI PE CELELALTE CANALE. Stocul tocmai s-a schimbat, iar eMAG, Trendyol si restul inca il au

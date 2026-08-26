@@ -286,6 +286,75 @@ AS $function$
     end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_rand public.aboutyou_orders%rowtype;
+  v_deja jsonb;
+  v_noi jsonb;
+  v_produse jsonb;
+  v_variante jsonb;
+begin
+  select * into v_rand
+    from public.aboutyou_orders
+   where business_id = p_business_id
+     and aboutyou_order_number = p_order_number
+   for update;
+
+  if not found then
+    return jsonb_build_object('stare', 'lipsa', 'eliberate', 0);
+  end if;
+
+  v_deja := coalesce(v_rand.anulate_eliberate, '[]'::jsonb);
+
+  select coalesce(jsonb_agg(l), '[]'::jsonb) into v_noi
+    from jsonb_array_elements(coalesce(p_linii, '[]'::jsonb)) as l
+   where not (v_deja @> to_jsonb(array[l->>'linie_cheie']));
+
+  if jsonb_array_length(v_noi) = 0 then
+    return jsonb_build_object('stare', 'deja', 'eliberate', 0);
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', q)), '[]'::jsonb)
+    into v_produse
+    from (
+      select l->>'product_id' as pid, sum((l->>'quantity')::int) as q
+        from jsonb_array_elements(v_noi) as l
+       where l->>'product_id' is not null
+       group by l->>'product_id'
+    ) s;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'product_id', pid, 'variant_title', vt, 'quantity', q)), '[]'::jsonb)
+    into v_variante
+    from (
+      select l->>'product_id' as pid, l->>'variant_title' as vt, sum((l->>'quantity')::int) as q
+        from jsonb_array_elements(v_noi) as l
+       where l->>'product_id' is not null
+         and coalesce(l->>'variant_title', '') <> ''
+       group by l->>'product_id', l->>'variant_title'
+    ) s;
+
+  perform public.elibereaza_stoc_complet(
+    case when jsonb_array_length(v_variante) > 0 then '[]'::jsonb else v_produse end,
+    v_variante);
+
+  update public.aboutyou_orders
+     set anulate_eliberate = v_deja || (
+           select coalesce(jsonb_agg(l->>'linie_cheie'), '[]'::jsonb)
+             from jsonb_array_elements(v_noi) as l),
+         updated_at = now()
+   where id = v_rand.id;
+
+  return jsonb_build_object('stare', 'eliberat', 'eliberate', jsonb_array_length(v_noi));
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -4399,7 +4468,8 @@ create table if not exists public.aboutyou_orders (
   items jsonb default '[]'::jsonb not null,
   last_synced_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  anulate_eliberate jsonb default '[]'::jsonb not null);
 
 create table if not exists public.aboutyou_retururi (
   id uuid default gen_random_uuid() not null,
@@ -8378,6 +8448,9 @@ grant execute on function privat.decripteaza(p_val text) to service_role;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to anon;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to authenticated;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to service_role;
+grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to anon;
+grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to authenticated;
+grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
@@ -8560,6 +8633,7 @@ revoke execute on function privat.cheie_integrari() from public;
 revoke execute on function privat.cripteaza(p_val text) from public;
 revoke execute on function privat.cripteaza_rand(p_rand jsonb) from public;
 revoke execute on function privat.decripteaza(p_val text) from public;
+revoke execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;

@@ -244,6 +244,7 @@ export type Database = {
       aboutyou_orders: {
         Row: {
           aboutyou_order_number: string
+          anulate_eliberate: Json
           business_id: string
           created_at: string
           fulfillment_type: string | null
@@ -257,6 +258,7 @@ export type Database = {
         }
         Insert: {
           aboutyou_order_number: string
+          anulate_eliberate: Json
           business_id: string
           created_at?: string
           fulfillment_type?: string | null
@@ -270,6 +272,7 @@ export type Database = {
         }
         Update: {
           aboutyou_order_number?: string
+          anulate_eliberate?: Json
           business_id?: string
           created_at?: string
           fulfillment_type?: string | null
@@ -4916,6 +4919,7 @@ export type Database = {
       rezerva_operatie_externa: { Args: { p_business_id: string | null; p_order_id: string | null; p_fel: string; p_furnizor: string; p_cheie: string }; Returns: Json }
       incheie_operatie_externa: { Args: { p_id: string; p_business_id: string | null; p_stare: string; p_referinta_externa?: string | null; p_detalii?: Json; p_eroare?: string | null }; Returns: Json }
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
+      aboutyou_elibereaza_anulari: { Args: { p_business_id: string; p_order_number: string; p_linii: Json }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
       trendyol_comenzi_de_facturat: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { order_id: string; shipment_package_id: string }[] }
       trendyol_magazine_cu_loturi_deschise: { Args: Record<string, never>; Returns: { business_id: string; cate: number }[] }

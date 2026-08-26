@@ -727,7 +727,7 @@ export async function removeByStyleKey(admin: Db, ctx: AboutYouSyncContext, styl
 // ── Batch polling (cron) ────────────────────────────────────────────────────────
 interface BatchRow {
   id: string; batch_request_id: string; kind: string; related_ids: unknown;
-  attempts: number; poll_errors: number;
+  attempts: number; poll_errors: number; submitted_at: string;
   tranzient_de_la: string | null; alarma_scrisa_la: string | null;
 }
 
@@ -762,7 +762,7 @@ async function marcheazaListarileLotului(
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
   const batches = randuriCitite<BatchRow>("aboutyou.loturiDeschise", await admin
     .from("aboutyou_batches")
-    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, tranzient_de_la, alarma_scrisa_la")
+    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la")
     .eq("business_id", ctx.businessId)
     .in("status", ["pending", "processing", "retry"])
     /* ⚠ Loturile amanate dupa un esec de transport se sar: vezi `amanare`. Fara asta, un lot in
@@ -986,6 +986,61 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             updated_at: now,
           } as never)
           .eq("business_id", ctx.businessId).eq("order_id", oid);
+      }
+    }
+
+    if (b.kind === "stock" || b.kind === "price") {
+      for (const sk of styleKeys) {
+        const randListare = await getListingByStyleKey(admin, ctx.businessId, sk);
+        if (!randListare) continue;
+        /*
+         * ═══ ⚠ DOUA LOTURI DE STOC POT SA SE ASEZE IN ORDINE INVERSA (26.08.2026) ═══
+         *
+         * Loturile lor se prelucreaza ASINCRON. Trimitem stocul 5, apoi la o secunda stocul 3; daca
+         * al doilea se aseaza primul si primul dupa el, la ei ramane 5 — iar la noi coada e goala,
+         * deci nimic nu mai reimpinge. Se vinde marfa care nu exista.
+         *
+         * ⚠ EI AU UN CAMP ANUME PENTRU ASTA — `valid_at` — dar nu-l putem folosi: documentatia lor
+         * cere autentificare de partener, iar o marca de timp gresita ar putea opri impingerea de
+         * stoc pentru toate magazinele. Vezi nota de la `MAX_ITEMI_STOC_PRET`.
+         *
+         * ⚠ SI NU EXISTA NICIUN CAPAT DE CITIRE a stocului sau pretului: `GET /products/` da doar
+         * `style_key`, `sku` si `status`. Deci nici deriva fata de ei nu se poate masura.
+         *
+         * ⚠ DAR REORDONAREA SE VEDE DIN DATELE NOASTRE. Daca un lot mai NOU pentru acelasi produs
+         * s-a incheiat deja, inseamna ca asta se aseaza dupa el — deci poate sa-l fi suprascris cu
+         * o valoare mai veche. Atunci se pune la coada o impingere proaspata, care citeste stocul
+         * de acum. Nu stim daca s-a stricat ceva; stim ca S-AR FI PUTUT, si costa o cerere.
+         */
+        if (!hardFail && randListare.product_id) {
+          const maiNou = randuriCitite<{ id: string }>(
+            "aboutyou.lotMaiNouIncheiat", await admin
+              .from("aboutyou_batches").select("id")
+              .eq("business_id", ctx.businessId).eq("kind", b.kind)
+              .contains("related_ids", [sk])
+              .eq("status", "completed")
+              .gt("submitted_at", b.submitted_at)
+              .neq("id", b.id).limit(1) as never);
+
+          if (maiNou.length > 0) {
+            const { error: eReimpins } = await admin.from("aboutyou_sync_queue").upsert(
+              {
+                business_id: ctx.businessId, product_id: randListare.product_id,
+                offer_id: sk, op: b.kind === "stock" ? "stock" : "upsert",
+                attempts: 0, last_error: null,
+              },
+              { onConflict: "business_id,offer_id,op" },
+            );
+            await logError({
+              action: "aboutyou-sync/loturi", severity: eReimpins ? "error" : "info",
+              message: eReimpins
+                ? `lot asezat dupa unul mai nou, iar reimpingerea n-a putut fi pusa la coada: ${eReimpins.message}`
+                : `lot ${b.kind} asezat dupa unul mai nou al aceluiasi produs: se reimpinge valoarea de acum`,
+              details: { styleKey: sk, batchRequestId: b.batch_request_id },
+              businessId: ctx.businessId,
+            });
+          }
+        }
       }
     }
 

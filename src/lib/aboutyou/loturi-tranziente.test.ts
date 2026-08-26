@@ -75,3 +75,45 @@ test("⚠ indexul urmeaza chiar interogarea de sondare", () => {
   assert.match(mig, /create index if not exists aboutyou_batches_deschise_idx/);
   assert.match(mig, /where status in \('pending', 'processing', 'retry'\)/);
 });
+
+test("⚠ un lot asezat dupa unul mai nou reimpinge valoarea de acum", () => {
+  /*
+   * ═══ ⚠ DOUA LOTURI DE STOC POT SA SE ASEZE IN ORDINE INVERSA (26.08.2026) ═══
+   *
+   * Loturile lor se prelucreaza ASINCRON. Trimitem stocul 5, apoi la o secunda stocul 3; daca al
+   * doilea se aseaza primul si primul dupa el, la ei ramane 5 — iar la noi coada e goala, deci
+   * nimic nu mai reimpinge. Se vinde marfa care nu exista.
+   *
+   * ⚠ EI AU UN CAMP ANUME PENTRU ASTA — `valid_at` — dar nu-l putem folosi: documentatia lor cere
+   * autentificare de partener, iar o marca de timp gresita ar putea opri impingerea de stoc
+   * pentru toate magazinele.
+   *
+   * ⚠ SI NU EXISTA NICIUN CAPAT DE CITIRE a stocului sau pretului: `GET /products/` da doar
+   * `style_key`, `sku` si `status` — verificat in `types.ts` si in tot clientul. Deci nici deriva
+   * fata de ei nu se poate masura.
+   *
+   * ⚠ DAR REORDONAREA SE VEDE DIN DATELE NOASTRE, si asta nu cere nimic de la ei.
+   */
+  assert.match(sync, /if \(b\.kind === "stock" \|\| b\.kind === "price"\) \{/);
+  assert.match(sync, /\.gt\("submitted_at", b\.submitted_at\)/);
+  assert.match(sync, /\.eq\("status", "completed"\)/);
+  assert.match(sync, /\.neq\("id", b\.id\)/, "lotul curent nu se numara pe sine");
+
+  /* ⚠ Si reimpingerea intra pe calea potrivita: stocul pe `stock`, pretul pe `upsert`. */
+  assert.match(sync, /op: b\.kind === "stock" \? "stock" : "upsert"/);
+
+  /* ⚠ Numai la lot REUSIT: unul respins n-a suprascris nimic. */
+  assert.match(sync, /if \(!hardFail && randListare\.product_id\)/);
+});
+
+test("⚠ si nu exista niciun capat de citire a stocului sau pretului", () => {
+  /*
+   * Proba asta pazeste o AFIRMATIE, nu un comportament: daca maine apare un `getStock`, nota de
+   * mai sus devine mincinoasa, si atunci se poate face o verificare de deriva adevarata.
+   */
+  const client = readFileSync("src/lib/aboutyou/client.ts", "utf8");
+  for (const nume of ["getStock(", "getPrices(", "getProductStock(", "getProductPrices("]) {
+    assert.ok(!client.includes(`export function ${nume}`), `a aparut ${nume}: se poate masura deriva`);
+    assert.ok(!client.includes(`export async function ${nume}`), `a aparut ${nume}: se poate masura deriva`);
+  }
+});

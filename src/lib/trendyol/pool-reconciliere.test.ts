@@ -37,8 +37,20 @@ test("⚠ pool-ul de reconciliere NU se mai citeste ca randuri de listari", () =
 });
 
 test("⚠ se numara in Postgres: un rand pe MAGAZIN, nu unul pe listare", () => {
-  /* Un `group by` intoarce cate un rand pe magazin, deci nu mai exista nimic de trunchiat.
-     Numarate ca randuri de listari, PostgREST taie la 1000 si tace. */
+  /*
+   * Un `group by` intoarce cate un rand pe magazin, deci nu mai exista nimic de trunchiat.
+   * Numarate ca randuri de listari, PostgREST taie la 1000 si tace.
+   *
+   * ⚠ MASURAT IN PRODUCTIE dupa reparatie (26.08.2026) — functia intoarce TOATE patru:
+   *
+   *     19c5146c     14
+   *     635bc524   1301   singur depaseste plafonul de 1000
+   *     bdba3cc6     76   era invizibil
+   *     fa126de4      1   era invizibil
+   *
+   * Taietura cadea IN INTERIORUL randurilor lui 635bc524, deci celelalte doua nici nu apucau
+   * sa existe pentru pasul de reconciliere.
+   */
   assert.match(mig, /group by l\.business_id/);
   assert.match(mig, /count\(\*\) as cate/);
 });

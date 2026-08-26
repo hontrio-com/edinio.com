@@ -243,37 +243,32 @@ const LINII_INCHEIATE = new Set(["Accepted", "Cancelled"]);
 const LINII_DE_HOTARAT = new Set(["WaitingInAction"]);
 
 /**
- * Starile din care se poate cere lui Trendyol o aprobare sau o respingere.
+ * Se poate cere lui Trendyol o hotarare pe linia asta?
  *
- * ═══ ⚠ SE NUMESC CELE OPRITE, SI NUMAI ALEA ═══
+ * ═══ ⚠ NUMAI `WaitingInAction`. E REGULA LOR, SCRISA (indreptat 26.08.2026) ═══
  *
- * Ghidul lor NU spune ca aprobarea se poate face doar din `WaitingInAction` — asa ca nici noi
- * n-o spunem. Se opresc numai cele in care e SIGUR gresit:
+ * Aici a stat, cateva ore, o lista de stari OPRITE, cu explicatia ca „ghidul lor NU spune ca
+ * aprobarea se poate face doar din `WaitingInAction`". Afirmatia era FALSA, si e chiar sortul de
+ * afirmatie neverificata pe care o reparam in aceeasi zi.
  *
- *   `Created`    marfa nu a ajuns la comerciant; n-are ce hotari.
- *   `Accepted`   `Rejected`   `Cancelled`   s-a hotarat deja, si nu de aici.
+ * ⚠ CUM AM GRESIT: am cautat regula in pagina `2-getting-returned-orders` — pagina care descrie
+ * CITIREA — si n-am gasit-o, apoi am scris ca nu exista. Ea sta in paginile de aprobare si de
+ * respingere, unde ii era locul. Citat verbatim, si din una, si din cealalta:
  *
- * ⚠ ASTA APARA SI DE O CURSA ADEVARATA: ecranul arata `WaitingInAction` la 10:00, Trendyol
- * accepta singur la 10:01, iar omul apasa „Respinge" la 10:02. Fara verificare, plecam cu o
- * respingere pentru ceva deja acceptat — si ghidul lor spune ca rezultatul respingerii se vede
- * abia mai tarziu, pe `claimItemStatus`, deci nici macar n-am fi aflat pe loc.
+ *     „You can only create a rejection request for returned orders with «WaitingInAction» status."
  *
- * ⚠ `InAnalysis`, `Unresolved`, `WaitingFraudCheck` si necunoscutul TREC. Oprite, l-am fi blocat
- * pe baza unei reguli pe care ei n-au scris-o; lasate sa treaca, cel mai rau caz e un refuz de
- * la ei, pe care il aratam.
+ * ⚠ DECI NU SE MAI GHICESTE NIMIC: se cere fix starea pe care o cer ei. Ce nu e `WaitingInAction`
+ * se opreste inainte de apel — inclusiv necunoscutul, fiindca o hotarare e ireversibila si e
+ * plafonata la 5 pe minut, iar rezultatul unei respingeri se vede abia mai tarziu, pe
+ * `claimItemStatus`. Trimisa in gol, comerciantul ar crede ca a respins.
+ *
+ * ⚠ Si asta acopera si cursa: ecranul arata `WaitingInAction` la 10:00, Trendyol accepta singur
+ * la 10:01, omul apasa „Respinge" la 10:02 — starea nu mai e `WaitingInAction`, deci nu pleaca.
  */
-const LINII_FARA_HOTARARE = new Set(["Created", "Accepted", "Rejected", "Cancelled"]);
+export function sePoateHotari(stare: string | null | undefined): boolean {
+  return stare === "WaitingInAction";
+}
 
-/**
- * Starile din care marfa a ajuns fizic la comerciant, deci se poate repune in stoc.
- *
- * ⚠ SE OPRESTE DOAR `Created`, si tot din definitia lor: acolo clientul abia a apasat butonul,
- * iar coletul e inca la el. Repus atunci, stocul creste pentru marfa care nu exista la raft —
- * si se vinde ce nu e. Restul starilor vin toate DUPA ce returul a ajuns la furnizor.
- *
- * ⚠ Necunoscutul TRECE: omul se uita la marfa in clipa in care apasa, iar oprit pe un status pe
- * care noi nu l-am putut citi, n-ar mai putea repune nimic niciodata.
- */
 const LINII_FARA_REPUNERE = new Set(["Created"]);
 
 /**
@@ -324,11 +319,6 @@ export function stareaCererii(c: TrendyolClaim): string | null {
 /** Cererea asta mai asteapta o apasare de-a comerciantului? */
 export function asteaptaHotarare(stare: string | null | undefined): boolean {
   return !!stare && LINII_DE_HOTARAT.has(stare);
-}
-
-/** Se poate cere lui Trendyol o hotarare pe linia asta? Vezi `LINII_FARA_HOTARARE`. */
-export function sePoateHotari(stare: string | null | undefined): boolean {
-  return !stare || !LINII_FARA_HOTARARE.has(stare);
 }
 
 /** A ajuns marfa fizic la comerciant? Vezi `LINII_FARA_REPUNERE`. */

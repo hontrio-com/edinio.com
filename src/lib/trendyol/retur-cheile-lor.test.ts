@@ -68,6 +68,9 @@ test("⚠ fiecare camp pe care il citim e ori in lista lor, ori numit ca abatere
     "rejectedPackageInfo",   // cealalta scriere, fiindca schema lor difera de exemplul lor
     "status",                // NU exista; pastrat doar ca sa nu fie recitit din greseala
     "claimItems",            // forma plata, pe care unele raspunsuri o mai dau
+    // ⚠ Cealalta scriere a coletului de inlocuire: schema lor difera de exemplul lor, ca la
+    // `rejectedpackageinfo`. Se citesc amandoua, si niciuna nu se interpreteaza.
+    "replacementOutboundPackageInfo",
   ]);
 
   const t = readFileSync("src/lib/trendyol/types.ts", "utf8");

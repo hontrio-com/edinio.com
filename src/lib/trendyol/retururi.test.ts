@@ -45,7 +45,8 @@ test("⚠ marcajul avanseaza NUMAI la o trecere intreaga", () => {
      urmatoare relua aceleasi pagini la nesfarsit. */
   /* ⚠ Numarul de pagini nu mai e fix: la fundul ferestrei se citesc mai multe, fiindca acolo
      „mai ingusteaza" nu mai inseamna nimic. Vezi `retur-stramtoare.test.ts`. */
-  assert.match(mod, /if \(pagina \+ 1 >= paginiDeCitit\) \{/);
+  /* ⚠ Si bugetul de timp de la podea inchide bucla la fel: vezi `BUGET_MS_LA_PODEA`. */
+  assert.match(mod, /if \(pagina \+ 1 >= paginiDeCitit \|\| faraBuget\) \{/);
   assert.match(mod, /return \{ aduse, ok: false, fereastraSfarsitMs: pana_la, latimeUrmatoare: stransa \};/);
   /* ⚠ Si se scrie clipa de DINAINTE de citire, minus suprapunerea. */
   /* ⚠ Se scrie clipa de DINAINTE de citire, minus suprapunerea — dar nu mai departe decat s-a
@@ -72,7 +73,9 @@ test("⚠ DOUA plafoane, nu unul: latimea cererii si cat de mult in urma", () =>
   /* ⚠ Latimea e acum o VARIABILA, ca fereastra sa se poata ingusta cand nu incape — vezi
      `retur-fereastra.test.ts`. Plafonul ei ramane cel al lor. */
   assert.match(mod, /const pana_la = Math\.min\(de_la \+ latime, acum\);/);
-  assert.match(mod, /Math\.min\(\s*Math\.max\(latimeCeruta \?\? FEREASTRA_MAXIMA_MS, FEREASTRA_MINIMA_MS\),\s*FEREASTRA_MAXIMA_MS,\s*\);/);
+  /* ⚠ Marginea de jos e `FEREASTRA_ULTIMA_MS`, ca fereastra sa poata cobori sub podea cand
+     bugetul de la podea nu ajunge. Podeaua obisnuita ramane in `stransa`. */
+  assert.match(mod, /Math\.min\(\s*Math\.max\(latimeCeruta \?\? FEREASTRA_MAXIMA_MS, FEREASTRA_ULTIMA_MS\),\s*FEREASTRA_MAXIMA_MS,\s*\);/);
   /* ⚠ Iar ce nu se poate lua se SPUNE, nu se ascunde. */
   assert.match(mod, /if \(taiat\) \{/);
   assert.match(mod, /severity: "critical"/);

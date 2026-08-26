@@ -3923,7 +3923,6 @@ declare
   v_product_id uuid;
   v_stare_cerere text;
 begin
-  -- for update: fara el, doua apasari citesc amandoua un marcaj gol si aduna amandoua.
   select * into v_linie
     from public.trendyol_claim_items
    where business_id = p_business_id
@@ -3938,14 +3937,20 @@ begin
     return jsonb_build_object('stare', 'deja', 'pus', 0);
   end if;
 
-  -- Marfa trebuie sa fi ajuns. `Created` inseamna, din definitia lor, ca abia clientul a apasat
-  -- butonul si coletul e inca la el. Repus atunci, stocul creste pentru marfa care nu e la raft.
-  select c.claim_status into v_stare_cerere
-    from public.trendyol_claims c
-   where c.id = v_linie.claim_row_id;
-
-  if v_linie.claim_item_status = 'Created' or v_stare_cerere = 'Created' then
+  -- Adevarul e al LINIEI: operatia e pe claim_item_id. Starea cererii e doar plasa pentru cazul
+  -- in care starea liniei lipseste.
+  if v_linie.claim_item_status = 'Created' then
     return jsonb_build_object('stare', 'marfa-n-a-ajuns', 'pus', 0);
+  end if;
+
+  if v_linie.claim_item_status is null then
+    select c.claim_status into v_stare_cerere
+      from public.trendyol_claims c
+     where c.id = v_linie.claim_row_id;
+
+    if v_stare_cerere = 'Created' then
+      return jsonb_build_object('stare', 'marfa-n-a-ajuns', 'pus', 0);
+    end if;
   end if;
 
   if coalesce(v_linie.barcode, '') = '' then
@@ -5460,7 +5465,8 @@ create table if not exists public.trendyol_claims (
   storefront text,
   dont_ship_back boolean,
   colet_respins jsonb,
-  reintrebat_la timestamp with time zone);
+  reintrebat_la timestamp with time zone,
+  colet_inlocuire jsonb);
 
 create table if not exists public.trendyol_listings (
   id uuid default gen_random_uuid() not null,

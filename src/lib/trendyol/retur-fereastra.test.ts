@@ -68,7 +68,10 @@ test("⚠ si are o podea, dar pusa JOS", () => {
    */
   assert.match(mod, /const FEREASTRA_MINIMA_MS = 5 \* 60 \* 1000;/);
   assert.match(mod, /Math\.max\(\s*FEREASTRA_MINIMA_MS,/);
-  assert.match(mod, /Math\.max\(latimeCeruta \?\? FEREASTRA_MAXIMA_MS, FEREASTRA_MINIMA_MS\)/);
+    /* ⚠ Marginea de jos e `FEREASTRA_ULTIMA_MS`, nu podeaua obisnuita: altfel o fereastra
+     ceruta sub podea ar fi fost ridicata inapoi, si ingustarea de sub podea n-ar face nimic.
+     Vezi `retur-cine-poate-apasa.test.ts`. */
+  assert.match(mod, /Math\.max\(latimeCeruta \?\? FEREASTRA_MAXIMA_MS, FEREASTRA_ULTIMA_MS\)/);
 });
 
 test("⚠ suprapunerea se aplica O SINGURA data", () => {

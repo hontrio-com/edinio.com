@@ -33,17 +33,28 @@ test("⚠ doar `WaitingInAction` asteapta o apasare de-a comerciantului", () => 
   }
 });
 
-test("⚠ hotararea se opreste doar pe cele SIGUR gresite", () => {
+test("⚠ hotararea se cere NUMAI din `WaitingInAction`, si e regula lor scrisa", () => {
   /*
-   * ⚠ Ghidul lor NU spune ca aprobarea se poate face doar din `WaitingInAction` — verificat, nu
-   * presupus — asa ca nici noi n-o spunem. Oprite, l-am fi blocat pe comerciant pe baza unei
-   * reguli pe care ei n-au scris-o.
+   * ═══ ⚠ PROBA ASTA A CODIFICAT CATEVA ORE REGULA GRESITA (indreptat 26.08.2026) ═══
+   *
+   * Aici scria ca `InAnalysis`, `Unresolved`, `WaitingFraudCheck` si necunoscutul TREC, cu
+   * explicatia ca „ghidul lor nu spune ca aprobarea se poate face doar din WaitingInAction".
+   *
+   * ⚠ CUM AM GRESIT: am cautat regula in pagina care descrie CITIREA
+   * (`2-getting-returned-orders`), n-am gasit-o, si am scris ca nu exista. Ea sta in paginile de
+   * aprobare si de respingere, unde ii era locul. Citat verbatim, si din una, si din cealalta:
+   *
+   *     „You can only create a rejection request for returned orders with «WaitingInAction» status."
+   *
+   * ⚠ SI NECUNOSCUTUL SE OPRESTE ACUM. O hotarare e ireversibila si e plafonata la 5 pe minut,
+   * iar rezultatul unei respingeri se vede abia mai tarziu, pe `claimItemStatus` — trimisa in
+   * gol, comerciantul ar crede ca a respins.
    */
-  for (const s of ["WaitingInAction", "InAnalysis", "Unresolved", "WaitingFraudCheck", null]) {
-    assert.equal(sePoateHotari(s), true, `${s} trebuie sa treaca`);
-  }
-  /* Marfa nu a ajuns, sau s-a hotarat deja — si nu de aici. */
-  for (const s of ["Created", "Accepted", "Rejected", "Cancelled"]) {
+  assert.equal(sePoateHotari("WaitingInAction"), true);
+  for (const s of [
+    "Created", "InAnalysis", "Unresolved", "WaitingFraudCheck",
+    "Accepted", "Rejected", "Cancelled", null, undefined, "",
+  ]) {
     assert.equal(sePoateHotari(s), false, `${s} trebuie oprit`);
   }
 });
@@ -92,23 +103,41 @@ test("⚠ repunerea in stoc cere ca marfa sa fi AJUNS", () => {
   assert.match(mod, /după ce o primești/);
 });
 
-test("⚠ la podea se citeste pana la capatul pe care il spun EI", () => {
+test("⚠ NICIO ramura nu mai avanseaza marcajul fara sa fi citit tot", () => {
   /*
-   * ⚠ PIERDEREA NU SE FACE MAI PUTIN PROBABILA, SE FACE INACCESIBILA. La podea nu se mai poate
-   * ingusta, deci raman trei purtari: sa stai pe loc (se pierde TOT, de-acum inainte), sa treci
-   * mai departe (se pierde coada), sau sa citesti pana la capat. `totalPages` vine in fiecare
-   * raspuns — deci capatul nu se ghiceste, se citeste.
+   * ═══ ⚠ INTEGRITATEA NU ARE PRAG (26.08.2026) ═══
    *
-   * Ce ramane: 200 de pagini a 50 inseamna 10.000 de cereri intr-o fereastra de CINCI MINUTE la
-   * un singur magazin, adica 120.000 pe ora.
+   * Aici a fost un plafon de 200 de pagini, iar dincolo de el marcajul TRECEA MAI DEPARTE cu o
+   * eroare `critical`. Adica pierdere de date scrisa in cod — improbabila, dar scrisa. Un pas
+   * care aduce retururi n-are voie sa aiba o asemenea ramura deloc.
+   *
+   * ⚠ ACUM: se citeste pana la `totalPages`, oricat ar fi; singura margine e TIMPUL; iar cand
+   * bugetul se termina, MARCAJUL RAMANE PE LOC si fereastra se ingusteaza mai departe, sub
+   * podeaua obisnuita. Cu fiecare trecere e mai mica, deci la un moment dat incape. Se intarzie,
+   * nu se pierde.
    */
   const mod = viu("src/lib/trendyol/retururi.ts");
-  assert.match(mod, /const PAGINI_MAXIME_LA_PODEA = 200;/);
-  assert.match(mod, /if \(laStramtoare && totalPagini > paginiDeCitit\) \{/);
-  assert.match(mod, /paginiDeCitit = Math\.min\(totalPagini, PAGINI_MAXIME_LA_PODEA\);/);
-  /* ⚠ `let`, nu `const`: bucla se intinde dupa ce afla cat e de citit. */
-  assert.match(mod, /let paginiDeCitit = laStramtoare/);
+  assert.doesNotMatch(mod, /PAGINI_MAXIME_LA_PODEA/, "plafonul de pagini a disparut");
+  assert.match(mod, /if \(laStramtoare && totalPagini > paginiDeCitit\) paginiDeCitit = totalPagini;/);
+  assert.match(mod, /const BUGET_MS_LA_PODEA = 20_000;/);
+  assert.match(mod, /const faraBuget = laStramtoare && Date\.now\(\) - inceputulCitirii > BUGET_MS_LA_PODEA;/);
+
+  /* ⚠ Ramura de la podea intoarce `ok: false` — adica marcajul NU se misca. */
+  const i = mod.indexOf("if (laStramtoare) {");
+  const ramura = mod.slice(i, i + 900);
+  assert.match(ramura, /ok: false/);
+  assert.doesNotMatch(ramura, /ok: true/);
+  assert.match(ramura, /latimeUrmatoare: siMaiStransa/);
+
+  /*
+   * ⚠ SI CLAMPUL LASA FEREASTRA SA COBOARE. Cu `FEREASTRA_MINIMA_MS` acolo, o fereastra ceruta de
+   * un minut ar fi fost ridicata inapoi la cinci — deci ingustarea de sub podea n-ar fi facut
+   * nimic, si trecerea urmatoare ar fi dat de acelasi perete.
+   */
+  assert.match(mod, /Math\.max\(latimeCeruta \?\? FEREASTRA_MAXIMA_MS, FEREASTRA_ULTIMA_MS\)/);
+  assert.match(mod, /const FEREASTRA_ULTIMA_MS = 60 \* 1000;/);
 });
+
 
 test("⚠ si ecranul nu ofera butoane care vor fi refuzate", () => {
   /*

@@ -38,18 +38,29 @@ test("⚠ la fundul ferestrei se citesc mai multe pagini, nu tot trei", () => {
   assert.ok(laStramtoare > peTrecere, "la stramtoare se citeste MAI MULT, nu mai putin");
 });
 
-test("⚠ si la fund marcajul AVANSEAZA, cu `critical` scris", () => {
+test("⚠ si la fund marcajul RAMANE PE LOC (indreptat 26.08.2026)", () => {
   /*
-   * ⚠ Alegere grea, si se numeste ce e: se pierde coada unei ore. Alternativa era sa se piarda
-   * tot, de-acum inainte. O mie de cereri intr-o ora la un singur magazin nu mai e o problema de
-   * paginare, si nici nu s-a intamplat vreodata — dar daca s-ar intampla, nu poate opri cronul.
+   * ═══ ⚠ PROBA ASTA A APARAT O RAMURA DE PIERDERE DE DATE ═══
+   *
+   * Aici scria ca la fund marcajul AVANSEAZA, cu un `critical` scris, si numea alegerea „grea dar
+   * cinstita": se pierde coada, ca sa nu se piarda tot. Argumentul avea o gaura — presupunea ca
+   * singurele doua purtari sunt „pierd coada" si „stau pe loc pentru totdeauna".
+   *
+   * ⚠ EXISTA O A TREIA: citesti pana la `totalPages`, iar cand se termina bugetul de timp,
+   * marcajul ramane pe loc SI fereastra se ingusteaza mai departe, sub podeaua obisnuita. Cu
+   * fiecare trecere e mai mica, deci la un moment dat incape. Se intarzie, nu se pierde, si nu se
+   * blocheaza.
+   *
+   * ⚠ Un pas care aduce retururi n-are voie sa aiba nicio ramura care spune „n-am citit tot, dar
+   * avansez" — oricat de improbabil ar fi pragul.
    */
   const i = viu.indexOf("if (laStramtoare) {");
-  assert.ok(i > 0, "ramura de fund exista");
+  assert.ok(i > 0, "ramura de la podea exista");
   const ramura = viu.slice(i, i + 900);
-  assert.match(ramura, /severity: "critical"/);
-  assert.match(ramura, /ok: true/);
-  assert.match(ramura, /latimeUrmatoare: FEREASTRA_MINIMA_MS/);
+  assert.match(ramura, /ok: false/, "marcajul NU se misca");
+  assert.doesNotMatch(ramura, /ok: true/);
+  assert.match(ramura, /latimeUrmatoare: siMaiStransa/, "si fereastra se ingusteaza mai departe");
+  assert.doesNotMatch(viu, /PAGINI_MAXIME_LA_PODEA/, "plafonul de pagini a disparut");
 });
 
 test("⚠ ingustarea obisnuita imparte la CATE pagini s-au citit chiar", () => {

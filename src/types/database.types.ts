@@ -4357,6 +4357,7 @@ export type Database = {
           claim_id: string
           claim_status: string | null
           created_at: string
+          colet_inlocuire: Json | null
           colet_respins: Json | null
           dont_ship_back: boolean | null
           id: string
@@ -4375,6 +4376,7 @@ export type Database = {
           claim_id: string
           claim_status?: string | null
           created_at?: string
+          colet_inlocuire?: Json | null
           colet_respins?: Json | null
           dont_ship_back?: boolean | null
           id?: string
@@ -4393,6 +4395,7 @@ export type Database = {
           claim_id?: string
           claim_status?: string | null
           created_at?: string
+          colet_inlocuire?: Json | null
           colet_respins?: Json | null
           dont_ship_back?: boolean | null
           id?: string

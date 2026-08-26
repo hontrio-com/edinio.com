@@ -81,25 +81,32 @@ const PAGINI_PE_TRECERE = 3;
 const PAGINI_LA_STRAMTOARE = 20;
 
 /**
- * Cat de adanc se poate merge, la podea, cand stim din `totalPages` ca mai e.
+ * Cat timp se mai citeste, la podea, cand stim din `totalPages` ca mai e.
  *
- * ═══ ⚠ PIERDEREA NU SE FACE MAI PUTIN PROBABILA, SE FACE INACCESIBILA (26.08.2026) ═══
+ * ═══ ⚠ NICIO RAMURA NU MAI SPUNE „N-AM CITIT TOT, DAR AVANSEZ" (26.08.2026) ═══
  *
- * La podea nu se mai poate ingusta, deci raman trei purtari: sa stau pe loc (si atunci se pierde
- * TOT, de-acum inainte), sa trec mai departe (si se pierde coada ferestrei), sau — asta — sa
- * CITESC PANA LA CAPAT.
+ * Aici a fost un plafon de 200 de pagini, iar dincolo de el marcajul TRECEA MAI DEPARTE, cu o
+ * eroare `critical`. Adica pierdere de date — improbabila, dar scrisa in cod. Un pas care aduce
+ * retururi n-are voie sa aiba o asemenea ramura deloc.
  *
- * ⚠ Si stim exact cat e capatul: `totalPages` vine in fiecare raspuns. Nu se ghiceste, se
- * citeste. Deci la podea bucla nu se mai opreste la douazeci de pagini, ci merge pana unde spun
- * ei ca e sfarsitul — pana la plafonul asta, pus doar ca sa nu poata un raspuns anapoda sa tina
- * cronul o vesnicie.
+ * ⚠ ACUM SE CITESTE PANA LA `totalPages`, oricat ar fi. Singura margine e TIMPUL, fiindca un cron
+ * are un buget de secunde, nu de ore — iar cand bugetul se termina, MARCAJUL RAMANE PE LOC si
+ * trecerea urmatoare reia. Nu se pierde nimic, doar se intarzie.
  *
- * ⚠ CE MAI RAMANE: 200 de pagini a 50 inseamna 10.000 de cereri de retur intr-o fereastra de
- * CINCI MINUTE, la un singur magazin — 120.000 pe ora. Trecerea mai departe ramane scrisa
- * dedesubt fiindca o purtare terminala trebuie sa existe, dar nu mai e un prag pe care ceva real
- * il poate atinge.
+ * ⚠ SI CA SA NU SE REIA LA NESFARSIT ACELASI LUCRU, fereastra se ingusteaza mai departe, sub
+ * podeaua obisnuita, pana la `FEREASTRA_ULTIMA_MS`. Cu fiecare trecere e mai mica, deci la un
+ * moment dat incape in buget — si atunci se citeste tot si marcajul avanseaza cinstit.
  */
-const PAGINI_MAXIME_LA_PODEA = 200;
+const BUGET_MS_LA_PODEA = 20_000;
+
+/**
+ * Cea mai ingusta fereastra la care se poate coborî, cand nici podeaua obisnuita nu incape.
+ *
+ * ⚠ Un minut inseamna ca ar trebui sa se creeze peste zece mii de cereri de retur INTR-UN MINUT
+ * la un singur magazin ca sa nu incapa nici asa. Sub atat n-are ce cauta: cererile au marci de
+ * timp discrete, iar o fereastra si mai mica nu mai desparte nimic.
+ */
+const FEREASTRA_ULTIMA_MS = 60 * 1000;
 
 /**
  * Cate cereri pe pagina.
@@ -192,8 +199,18 @@ export async function aduRetururile(
    * sfarsitul ei adevarat. Trecerea urmatoare porneste de-acolo, fereastra cu fereastra, pana
    * se ajunge din urma.
    */
+  /*
+   * ⚠ MARGINEA DE JOS E `FEREASTRA_ULTIMA_MS`, NU PODEAUA OBISNUITA (26.08.2026).
+   *
+   * Aici scria `FEREASTRA_MINIMA_MS`, si ar fi facut degeaba toata ingustarea de sub podea: o
+   * fereastra ceruta de un minut ar fi fost ridicata inapoi la cinci, deci trecerea urmatoare ar
+   * fi dat de acelasi perete si ar fi ramas acolo pe veci.
+   *
+   * ⚠ Podeaua obisnuita ramane unde e — vezi `stransa` mai jos, care nu coboara sub ea. Sub podea
+   * se ajunge NUMAI pe calea bugetului epuizat, adica atunci cand chiar nu incape altfel.
+   */
   const latime = Math.min(
-    Math.max(latimeCeruta ?? FEREASTRA_MAXIMA_MS, FEREASTRA_MINIMA_MS),
+    Math.max(latimeCeruta ?? FEREASTRA_MAXIMA_MS, FEREASTRA_ULTIMA_MS),
     FEREASTRA_MAXIMA_MS,
   );
   const pana_la = Math.min(de_la + latime, acum);
@@ -232,6 +249,9 @@ export async function aduRetururile(
    * citirea are 1000 de cereri pe minut — deci calea asta e ieftina si e deschisa.
    */
   const laStramtoare = latime <= FEREASTRA_MINIMA_MS;
+  /* ⚠ Ceasul bugetului porneste ODATA cu bucla, nu la prima pagina: si citirea primei pagini
+     costa timp, iar un buget care nu-l numara ar fi mai mare decat spune. */
+  const inceputulCitirii = Date.now();
   /*
    * ⚠ SE INTINDE DUPA CE AFLAM CAT E DE CITIT. Prima pagina ne aduce `totalPages`; de-acolo, la
    * podea, se merge pana la capatul pe care ni-l spun ei. Vezi `PAGINI_MAXIME_LA_PODEA`.
@@ -264,9 +284,7 @@ export async function aduRetururile(
 
     /* ⚠ La podea, bucla se intinde pana la capatul pe care ni-l spun EI — nu pana la o cifra
        scrisa de noi. `totalPages` vine in fiecare raspuns, deci nu se ghiceste nimic. */
-    if (laStramtoare && totalPagini > paginiDeCitit) {
-      paginiDeCitit = Math.min(totalPagini, PAGINI_MAXIME_LA_PODEA);
-    }
+    if (laStramtoare && totalPagini > paginiDeCitit) paginiDeCitit = totalPagini;
 
     if (continut.length === 0 || pagina + 1 >= totalPagini) {
       /*
@@ -298,29 +316,33 @@ export async function aduRetururile(
      * proportional, cu o marja. Fereastra mai mica incape, marcajul avanseaza, si se merge mai
      * departe — bucata cu bucata, in loc sa se stea pe loc.
      */
-    if (pagina + 1 >= paginiDeCitit) {
+    /* ⚠ La podea se citeste pana la capat SAU pana se termina bugetul de timp — si atunci
+       marcajul ramane pe loc. Vezi `BUGET_MS_LA_PODEA`. */
+    const faraBuget = laStramtoare && Date.now() - inceputulCitirii > BUGET_MS_LA_PODEA;
+
+    if (pagina + 1 >= paginiDeCitit || faraBuget) {
       /*
-       * ⚠ LA FUND, „NU MUT MARCAJUL" AR INSEMNA SA NU MAI CITESC NIMIC, NICIODATA. Fereastra e
-       * deja la podea, s-au citit douazeci de pagini — adica peste o mie de cereri in CINCI
-       * MINUTE la un singur magazin — si tot mai sunt. Oprit aici, marcajul ramane infipt si
-       * TOATE retururile de maine incolo se pierd, nu doar coada ferestrei asteia.
+       * ⚠ LA PODEA NU SE MAI PIERDE NIMIC. Bucla de deasupra merge pana la `totalPages`, deci
+       * aici se ajunge numai cand s-a terminat BUGETUL DE TIMP — vezi `BUGET_MS_LA_PODEA`.
        *
-       * ⚠ DECI SE TRECE MAI DEPARTE SI SE SPUNE PE FATA. Se pierde coada unei ferestre de cinci
-       * minute; alternativa era sa se piarda tot, de-acum inainte. Se scrie `critical` fiindca e
-       * chiar genul de pierdere pe care comerciantul trebuie s-o afle de la noi, nu de la
-       * clientul lui.
+       * ⚠ MARCAJUL RAMANE PE LOC, si asta e toata deosebirea fata de forma de acum o ora: nimic
+       * necitit nu ramane in urma lui. Trecerea urmatoare reia aceeasi fereastra, dar mai ingusta
+       * — si tot mai ingusta, pana incape in buget. Se intarzie, nu se pierde.
        */
       if (laStramtoare) {
+        const siMaiStransa = Math.max(FEREASTRA_ULTIMA_MS, Math.floor((pana_la - de_la) / 4));
         await logError({
           action: "trendyol/retururi",
-          message: `fereastra minima are ${totalPagini} pagini si s-au citit ${paginiDeCitit}: coada ferestrei nu se mai poate citi, dar se merge mai departe`,
+          message: `fereastra minima are ${totalPagini} pagini si bugetul s-a terminat la ${pagina + 1}: marcajul RAMANE pe loc si fereastra se ingusteaza`,
           details: {
             deLa: new Date(de_la).toISOString(), panaLa: new Date(pana_la).toISOString(),
-            totalPagini, citite: paginiDeCitit, vitrina: ctx.auth.storefront ?? null,
+            totalPagini, citite: pagina + 1,
+            latimeVeche: pana_la - de_la, latimeNoua: siMaiStransa,
+            vitrina: ctx.auth.storefront ?? null,
           },
-          businessId: ctx.businessId, severity: "critical",
+          businessId: ctx.businessId, severity: "warning",
         });
-        return { aduse, ok: true, fereastraSfarsitMs: pana_la, latimeUrmatoare: FEREASTRA_MINIMA_MS };
+        return { aduse, ok: false, fereastraSfarsitMs: pana_la, latimeUrmatoare: siMaiStransa };
       }
 
       const depasire = totalPagini / paginiDeCitit;
@@ -437,6 +459,37 @@ async function scrieCererea(
     orderId = rand?.order_id ?? null;
   }
 
+  /*
+   * ═══ ⚠ UN RETUR DE TIP SCHIMB: IL VEDEM, DAR NU STIM CE SA-I SPUNEM OMULUI ═══
+   *
+   * `replacementOutboundpackageinfo` apare in raspunsul-exemplu al lui `getClaims`, cu AWB si
+   * `packageid`. Cautat in ghidul lor: nicio propozitie despre schimburi, nici despre ce are
+   * comerciantul de facut, nici vreun camp care sa deosebeasca un schimb de o restituire.
+   *
+   * ⚠ NU SE GHICESTE O INSTRUCTIUNE. Aratat ca „trimite un produs de schimb" cand de fapt
+   * inseamna altceva, l-am pune sa expedieze marfa degeaba. Tacut cu totul, n-am afla niciodata
+   * ca exista.
+   *
+   * ⚠ SE APRINDE PE TRANZITIE, gol -> plin, ca la deriva eMAG. Scris la fiecare trecere, acelasi
+   * rand ar fi umplut jurnalul la cinci minute si l-ar fi facut necitibil taman cand e nevoie de
+   * el. Iar coletul poate aparea si DUPA ce stim cererea, deci „numai la prima scriere" ar fi
+   * ratat chiar cazul obisnuit.
+   */
+  const inlocuire = c.replacementOutboundpackageinfo ?? c.replacementOutboundPackageInfo ?? null;
+  const stiutInainte = randCitit<{ colet_inlocuire: unknown }>(
+    "trendyol.coletulDeInlocuire", await admin
+      .from("trendyol_claims").select("colet_inlocuire")
+      .eq("business_id", ctx.businessId).eq("claim_id", idCerere).maybeSingle() as never);
+
+  if (inlocuire && typeof inlocuire === "object" && stiutInainte?.colet_inlocuire == null) {
+    await logError({
+      action: "trendyol/retururi",
+      message: "retur cu colet de INLOCUIRE (schimb): il aducem si il pastram, dar inca nu stim ce sa-i aratam comerciantului",
+      details: { claimId: idCerere, orderNumber: c.orderNumber ?? null, inlocuire },
+      businessId: ctx.businessId, severity: "warning",
+    });
+  }
+
   const { data: cerere, error: eCerere } = await admin.from("trendyol_claims").upsert({
     business_id: ctx.businessId,
     order_id: orderId,
@@ -469,6 +522,8 @@ async function scrieCererea(
      */
     dont_ship_back: nuSeTrimiteInapoi(c),
     colet_respins: (coletDeTrimisInapoi(c) ?? null) as never,
+    /* ⚠ Se pastreaza intreg, NU se interpreteaza. Vezi nota de mai sus. */
+    colet_inlocuire: inlocuire as never,
     /* ⚠ Raspunsul lor INTREG: forma cererilor nu e in schema pe care o avem. */
     raw: c as never,
     claim_date: laData(c.claimDate),

@@ -631,6 +631,25 @@ export interface TrendyolClaim {
    */
   rejectedpackageinfo?: TrendyolColetRespins;
   /**
+   * Coletul de INLOCUIRE, la un retur de tip schimb.
+   *
+   * ═══ ⚠ EXISTA IN EXEMPLUL LOR, DAR NU E EXPLICAT NICAIERI ═══
+   *
+   * Apare in raspunsul-exemplu al lui `getClaims`, cu numar de AWB, `packageid` si lista de
+   * `claimItem.Id`. Cautat in ghid: nu exista nicio propozitie despre schimburi („değişim"), nici
+   * despre ce are comerciantul de facut, nici vreun camp care sa deosebeasca un schimb de o
+   * restituire.
+   *
+   * ⚠ NU SE CONSTRUIESTE PE O GHICIRE. Nu-l aratam ca instructiune, fiindca n-avem ce instructiune
+   * sa dam — dar prezenta lui se SCRIE IN JURNAL, ca prima aparitie reala sa se afle imediat, nu
+   * niciodata. Vezi `scrieCererea`.
+   *
+   * ⚠ Amandoua scrierile, ca la `rejectedpackageinfo`: schema lor si exemplul lor nu se potrivesc
+   * pe majuscule, si n-avem cum sa masuram care vine.
+   */
+  replacementOutboundpackageinfo?: Record<string, unknown>;
+  replacementOutboundPackageInfo?: Record<string, unknown>;
+  /**
    * ⚠ NU EXISTA IN RASPUNSUL LOR. Verificat in raspunsul-exemplu din `reference/getclaims`:
    * campurile de nivel intai ale unei cereri sunt `id`, `claimId`, `orderNumber`, `orderDate`,
    * `customerFirstName`, `customerLastName`, `claimDate`, `cargoTrackingNumber`,

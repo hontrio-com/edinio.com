@@ -1569,6 +1569,40 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
             issues: [{ tip: "actualizare", mesaj: motiv.slice(0, 500) }] as never,
             updated_at: new Date().toISOString(),
           } as never).eq("id", listing.id);
+
+          /*
+           * ═══ ⚠ „NU EXISTA LA EI" TREBUIE SA STINGA STEAGUL CARE SPUNE CA EXISTA (26.08.2026) ═══
+           *
+           * Masurat pe un cont real: 14 listari stateau in `created` din 19 august, deci de o
+           * saptamana, iar `issues` purta chiar raspunsul lor:
+           *
+           *     „Produsul nu a fost găsit cu ID-ul furnizorului 1182665 și codul de bare 139231."
+           *
+           * Verificat direct pe API-ul lor: barcodurile alea chiar NU exista in catalog. Iar la
+           * noi, `trendyol_variants.exista_la_ei` era `true` pe toate.
+           *
+           * ⚠ SI DE-AIA NU SE REPARA NICIODATA SINGUR. `barcoduriDejaLaEi` porneste de la steagul
+           * ala; cu el aprins, `deCreat` iese GOL si tot produsul pleaca pe calea de ACTUALIZARE.
+           * Ei raspund „nu exista", noi scriem raspunsul in `issues`, si mergem mai departe — la
+           * urmatoarea trecere, exact la fel. O minciuna care se autointretine: chiar mesajul
+           * care dovedeste lipsa nu atingea steagul care impiedica recrearea.
+           *
+           * ⚠ SE STINGE NUMAI PE ACEST MESAJ, nu pe orice esec. Un refuz de continut, o imagine
+           * respinsa, un atribut lipsa — toate inseamna ca produsul CHIAR e acolo, si stins
+           * steagul, l-am fi trimis pe calea de creare, unde ei raspund „codul de bare exista
+           * deja". Ar fi fost celalalt fel de bucla.
+           */
+          if (/nu a fost g[ăa]sit|not found/i.test(motiv)) {
+            await admin.from("trendyol_variants")
+              .update({ exista_la_ei: false } as never)
+              .eq("listing_id", listing.id);
+            await logError({
+              action: "trendyol/actualizare",
+              message: "produsul nu exista la ei; se va reincerca prin CREARE, nu prin actualizare",
+              details: { listingId: listing.id, motiv: motiv.slice(0, 200) },
+              businessId: ctx.businessId, severity: "warning",
+            });
+          }
         } else {
           // Reusita sterge urma esecului anterior si confirma barcodurile.
           await admin.from("trendyol_listings").update({ issues: [] as never } as never).eq("id", listing.id);

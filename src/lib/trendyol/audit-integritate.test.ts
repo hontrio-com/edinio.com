@@ -410,3 +410,40 @@ test("⚠ campul golit pleaca `null`, nu lipsa", () => {
   assert.match(tipuri, /shipment_address_id\?: number \| null;/);
   assert.match(tipuri, /brand_name\?: string \| null;/);
 });
+
+test("⚠ „nu exista la ei” stinge steagul care spune ca exista", () => {
+  /*
+   * ═══ ⚠ O MINCIUNA CARE SE AUTOINTRETINEA (26.08.2026) ═══
+   *
+   * Masurat pe un cont real: 14 listari stateau in `created` din 19 august — o saptamana — iar
+   * `issues` purta chiar raspunsul lor:
+   *
+   *     „Produsul nu a fost găsit cu ID-ul furnizorului 1182665 și codul de bare 139231."
+   *
+   * Verificat direct pe API-ul lor: barcodurile alea chiar NU exista in catalog. Iar la noi,
+   * `trendyol_variants.exista_la_ei` era `true` pe toate.
+   *
+   * ⚠ SI DE-AIA NU SE REPARA NICIODATA SINGUR. `barcoduriDejaLaEi` porneste de la steagul ala;
+   * cu el aprins, `deCreat` iese GOL si tot produsul pleaca pe calea de ACTUALIZARE. Ei raspund
+   * „nu exista", noi scriem raspunsul in `issues`, si mergem mai departe — la urmatoarea trecere,
+   * exact la fel. Chiar mesajul care dovedea lipsa nu atingea steagul care impiedica recrearea.
+   */
+  const i = sync.indexOf('tip: "actualizare"');
+  const f = sync.slice(i, i + 900);
+  assert.match(f, /nu a fost g\[ăa\]sit\|not found/, "se recunoaste mesajul lor");
+  assert.match(f, /exista_la_ei: false/);
+  assert.match(f, /\.eq\("listing_id", listing\.id\)/);
+});
+
+test("⚠ dar NUMAI pe mesajul ala, nu pe orice esec", () => {
+  /*
+   * Un refuz de continut, o imagine respinsa, un atribut lipsa — toate inseamna ca produsul
+   * CHIAR e acolo. Stins steagul, l-am fi trimis pe calea de CREARE, unde ei raspund „codul de
+   * bare exista deja". Ar fi fost celalalt fel de bucla, la fel de fara iesire.
+   */
+  const i = sync.indexOf('tip: "actualizare"');
+  const f = sync.slice(i, i + 900);
+  const iCond = f.indexOf("if (/nu a fost");
+  const iStinge = f.indexOf("exista_la_ei: false");
+  assert.ok(iCond > 0 && iStinge > iCond, "stingerea e SUB conditie, nu langa ea");
+});

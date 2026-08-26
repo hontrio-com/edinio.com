@@ -7,6 +7,14 @@ import type { Database } from "@/types/database.types";
 import {
   esteDeconectatTrendyol, eTrecatoare, loadTrendyolContext, processQueueItem, pollOpenBatches,
   reconcileRejections, reconcileStatuses, reconcileInventory, stergeCePoateFiSters, pause,
+} from "@/lib/trendyol/sync";
+import { comenziDeFacturat, urcaFacturaLaTrendyol } from "@/lib/trendyol/facturi";
+import { publicaProduseNoiTrendyolMany } from "@/lib/trendyol/queue";
+import {
+  inchideIntentia, insemneazaIncercarea, intentiiNeimplinite,
+} from "@/lib/marketplace/intentie-publicare";
+import type { Factura } from "@/lib/billing/factura-comenzii";
+import {
   type TrendyolQueueItem, type TrendyolSyncContext,
 } from "@/lib/trendyol/sync";
 import { marcajUrmator, pollPackagesToateVitrinele } from "@/lib/trendyol/orders";
@@ -369,6 +377,109 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /* ── Publicarile cerute care n-au ajuns nicaieri ────────────────────────────
+   *
+   * ═══ ⚠ O PUNERE LA COADA PICATA PIERDEA CEREREA PENTRU TOTDEAUNA ═══
+   *
+   * Punerea la coada e un efect lateral al unei salvari deja facute. Refuzata, produsul ramanea
+   * nepublicat pentru totdeauna: n-are listare, iar „produs fara listare, deci publica-l" nu se
+   * poate presupune — cele mai multe produse fara listare sunt chiar cele pe care comerciantul
+   * nu le-a vrut acolo.
+   *
+   * ⚠ De-aia se tine minte CEREREA, separat de coada. Plasa asta ia cererile neimplinite si le
+   * repune la coada; cele care chiar au ajuns se inchid.
+   *
+   * ⚠ La zece minute, si cu plafon de incercari: un produs care nu se poate publica (fara
+   * categorie mapata, fara marca) n-are rost reluat la nesfarsit — ar arde bugetul magazinului
+   * pentru ceva ce numai omul poate repara.
+   */
+  if (new Date().getMinutes() % 10 === 3) {
+    for (const businessId of alegeInRotatie(sellerIds, MAX_BIZ)) {
+      try {
+        const cereri = await intentiiNeimplinite(admin, businessId, "trendyol");
+        if (cereri.length === 0) continue;
+
+        /* ⚠ INTAI SE INCHID CELE CARE AU AJUNS. Fara asta, plasa ar repune la coada produse
+           deja publicate si ar arde cereri degeaba. */
+        const { data: listate, error: eListate } = await admin
+          .from("trendyol_listings").select("product_id")
+          .eq("business_id", businessId)
+          .in("product_id", cereri.map((c) => c.product_id));
+        if (eListate) throw eListate;
+        const gata = new Set((listate ?? []).map((l) => (l as { product_id: string | null }).product_id).filter(Boolean) as string[]);
+        if (gata.size > 0) await inchideIntentia(admin, businessId, [...gata], "trendyol");
+
+        const ramase = cereri.filter((c) => !gata.has(c.product_id));
+        if (ramase.length === 0) continue;
+
+        await logError({
+          action: "trendyol-sync",
+          message: `${ramase.length} publicari cerute n-au ajuns in coada; se reiau`,
+          details: { businessId, exemple: ramase.slice(0, 5).map((c) => c.product_id) },
+          businessId, severity: "warning",
+        });
+
+        for (const c of ramase) {
+          try {
+            await publicaProduseNoiTrendyolMany(businessId, [c.product_id]);
+            await insemneazaIncercarea(admin, c.id, c.incercari, null);
+          } catch (e) {
+            await insemneazaIncercarea(admin, c.id, c.incercari, e instanceof Error ? e.message : String(e));
+          }
+          await pause(PACE_MS);
+        }
+      } catch (e) {
+        await logError({
+          action: "trendyol-sync",
+          message: `plasa publicarilor cerute a picat: ${e instanceof Error ? e.message : String(e)}`,
+          businessId, severity: "warning",
+        });
+      }
+    }
+  }
+
+  /* ── Facturile catre ei ─────────────────────────────────────────────────────
+   *
+   * ═══ ⚠ LA TRENDYOL, COMERCIANTUL FACTUREAZA CLIENTUL FINAL ═══
+   *
+   * Codul casei credea opusul, si de-aia niciuna dintre comenzile Trendyol ale comerciantului
+   * n-a fost vreodata facturata. Masurat pe API-ul lor: `invoiceStatus: "NotInvoiced"` si
+   * `invoiceNumber: ""` pe toate, iar `invoiceAddress` poarta numele CLIENTULUI.
+   *
+   * ⚠ NU PORNESTE SINGURA: `factureaza_clientul` e stins din start, si `urcaFacturaLaTrendyol`
+   * il verifica la fiecare chemare. Raspunderea fiscala e a comerciantului.
+   *
+   * ⚠ La cinci minute: o factura nu se grabeste, iar fiecare urcare inseamna si o aducere de
+   * PDF de la furnizorul de facturare.
+   */
+  if (new Date().getMinutes() % 5 === 2) {
+    for (const businessId of alegeInRotatie(sellerIds, MAX_BIZ)) {
+      const ctx = await ctxFor(businessId);
+      if (!ctx || ctx.config.factureaza_clientul !== true) continue;
+      try {
+        for (const orderId of await comenziDeFacturat(admin, businessId)) {
+          const rez = await urcaFacturaLaTrendyol(admin, ctx, orderId, aduPdfFacturii);
+          /* ⚠ `fara_factura` si `oprit` NU sunt esecuri: prima inseamna ca inca nu s-a emis, a
+             doua ca omul n-a cerut-o. Nu se scrie nimic pentru ele. */
+          if (rez.fel === "esec") {
+            await logError({
+              action: "trendyol-sync",
+              message: `factura nu s-a putut trimite la Trendyol: ${rez.mesaj}`,
+              details: { orderId }, businessId, severity: "warning",
+            });
+          }
+          await pause(PACE_MS);
+        }
+      } catch (e) {
+        await logError({
+          action: "trendyol-sync",
+          message: `pasul de facturi a picat: ${e instanceof Error ? e.message : String(e)}`,
+          businessId, severity: "warning",
+        });
+      }
+    }
+  }
+
   /* ── Retururile (claims) ────────────────────────────────────────────────────
    *
    * ⚠ LA ZECE MINUTE, nu la fiecare trecere. O cerere de retur nu se schimba din minut in
@@ -474,4 +585,22 @@ export async function GET(req: NextRequest) {
  */
 async function patchConfig(admin: Admin, businessId: string, patch: Partial<TrendyolConfig>) {
   await patchTrendyolConfig(admin, businessId, patch);
+}
+
+
+/**
+ * Aduce octetii facturii de la furnizorul care a emis-o.
+ *
+ * ⚠ ADRESA E A COMERCIANTULUI, si de-aia se aduce de la noi, cu acreditarile lui deja folosite
+ * la emitere. Data mai departe catre Trendyol ca atare, ei n-ar putea-o deschide — sta in
+ * spatele unei autentificari.
+ */
+async function aduPdfFacturii(f: Factura): Promise<ArrayBuffer | { error: string }> {
+  try {
+    const r = await fetch(f.url, { cache: "no-store" });
+    if (!r.ok) return { error: `Nu s-a putut descarca factura (${r.status}).` };
+    return await r.arrayBuffer();
+  } catch {
+    return { error: "Eroare de retea la descarcarea facturii." };
+  }
 }

@@ -2062,6 +2062,45 @@ export type Database = {
           },
         ]
       }
+      intentii_publicare: {
+        Row: {
+          business_id: string
+          cerut_la: string
+          id: string
+          incercari: number
+          marketplace: string
+          product_id: string
+          rezolvat_la: string | null
+          sursa: string
+          ultima_eroare: string | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          cerut_la?: string
+          id?: string
+          incercari?: number
+          marketplace: string
+          product_id: string
+          rezolvat_la?: string | null
+          sursa?: string
+          ultima_eroare?: string | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          cerut_la?: string
+          id?: string
+          incercari?: number
+          marketplace?: string
+          product_id?: string
+          rezolvat_la?: string | null
+          sursa?: string
+          ultima_eroare?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       invoices: {
         Row: {
           amount: number
@@ -4471,6 +4510,9 @@ export type Database = {
           created_at: string
           currency: string | null
           id: string
+          invoice_error: string | null
+          invoice_number: string | null
+          invoice_uploaded_at: string | null
           last_modified_date: number | null
           last_synced_at: string | null
           lines: Json
@@ -4486,6 +4528,9 @@ export type Database = {
           created_at?: string
           currency?: string | null
           id?: string
+          invoice_error?: string | null
+          invoice_number?: string | null
+          invoice_uploaded_at?: string | null
           last_modified_date?: number | null
           last_synced_at?: string | null
           lines?: Json
@@ -4501,6 +4546,9 @@ export type Database = {
           created_at?: string
           currency?: string | null
           id?: string
+          invoice_error?: string | null
+          invoice_number?: string | null
+          invoice_uploaded_at?: string | null
           last_modified_date?: number | null
           last_synced_at?: string | null
           lines?: Json

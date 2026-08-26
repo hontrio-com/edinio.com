@@ -226,13 +226,25 @@ export async function getFulfillmentState(admin: Db, ctx: TrendyolSyncContext, o
  * ⚠ ORDINEA E TOT ROSTUL: intai la EI, si numai daca ei au primit-o, la noi. Invers, o
  * comanda anulata la noi si activa la ei pleaca la client cu marfa pe care n-o mai avem.
  *
- * ⚠ SE ANULEAZA TOT PACHETUL, nu linii alese. Anularea partiala e cu putinta la ei, dar ei
- * SPARG pachetul si dau alt id restului, iar stocul liniei anulate ar trebui intors pe bucata
- * — doua lucruri pe care nu le facem inca. Un buton care ar parea ca stie sa faca asta si n-ar
- * sti ar fi mai rau decat lipsa lui.
+ * ⚠ SE POATE SI PARTIAL, de pe 26.08.2026. Fara `liniiAlese` se anuleaza tot pachetul, ca pana
+ * acum. Cu ele, se anuleaza doar ce s-a ales — iar comanda NU se inchide la noi, fiindca restul
+ * pleaca mai departe la client. Ei sparg pachetul si dau alt id restului; noul pachet ne vine la
+ * urmatoarea citire, deci starea o aseaza reconcilierea, nu noi.
  */
 export async function nuPotFurniza(
   admin: Db, ctx: TrendyolSyncContext, orderId: string, reasonId: number,
+  /**
+   * Numai anumite linii, si numai atatea bucati.
+   *
+   * ═══ ⚠ CAZUL ADEVARAT DIN DEPOZIT (26.08.2026) ═══
+   *
+   * Comanda are 2 × produsul A si 1 × produsul B. B nu mai e. Comerciantul nu vrea sa anuleze
+   * tot pachetul — vrea sa trimita A si sa anuleze B. Pana azi putea doar sa anuleze tot.
+   *
+   * ⚠ LIPSA INSEAMNA „TOT PACHETUL", ca pana acum: e cazul cel mai des, si nu se schimba pentru
+   * nimeni.
+   */
+  liniiAlese?: { lineId: number; quantity: number }[],
 ): Promise<FulfillOutcome> {
   /* ⚠ Motivul se verifica fata de lista LOR: un id inventat e refuzat abia la trimitere, cand
      comerciantul crede deja ca a anulat. */
@@ -251,15 +263,57 @@ export async function nuPotFurniza(
     return { ok: false, error: `Comanda e deja „${side.status}" la Trendyol și nu se mai poate anula de aici.` };
   }
 
-  const lines = packageLines(side);
-  if (lines.length === 0) return { ok: false, error: "Pachetul Trendyol nu are linii de anulat." };
+  const toate = packageLines(side);
+  if (toate.length === 0) return { ok: false, error: "Pachetul Trendyol nu are linii de anulat." };
 
-  const res = await unsupplyPackageItems(ctx.auth, packageId, {
-    lines, reasonId, shouldKeepPreviousStatus: true,
-  });
+  /*
+   * ⚠ LINIILE ALESE SE VERIFICA FATA DE PACHET, si cantitatea la fel. O linie strainǎ sau o
+   * cantitate mai mare decat cea din pachet ar fi fost refuzata de ei cu un mesaj care nu spune
+   * CARE linie — iar comerciantul ar fi ramas cu o comanda pe care crede ca a anulat-o.
+   */
+  let lines = toate;
+  let partiala = false;
+  if (liniiAlese && liniiAlese.length > 0) {
+    const dupaId = new Map(toate.map((l) => [l.lineId, l.quantity]));
+    const curatate: { lineId: number; quantity: number }[] = [];
+    for (const a of liniiAlese) {
+      const max = dupaId.get(a.lineId);
+      if (max == null) return { ok: false, error: `Linia ${a.lineId} nu e în acest pachet.` };
+      const q = Math.max(1, Math.min(Math.floor(a.quantity) || 1, max));
+      curatate.push({ lineId: a.lineId, quantity: q });
+    }
+    lines = curatate;
+    /* Partiala inseamna: mai putine linii, SAU mai putine bucati pe vreuna. */
+    partiala = curatate.length < toate.length
+      || curatate.some((c) => c.quantity < (dupaId.get(c.lineId) ?? c.quantity));
+  }
+
+  const res = await unsupplyPackageItems(ctx.auth, packageId, { lines, reasonId });
   if (isTrendyolError(res)) return { ok: false, error: res.error };
 
   const now = new Date().toISOString();
+
+  /*
+   * ═══ ⚠ O ANULARE PARTIALA NU INCHIDE COMANDA ═══
+   *
+   * Restul liniilor pleaca mai departe la client. Marcata „UnSupplied" si trecuta pe „anulata"
+   * la noi, comanda ar fi eliberat TOT stocul — inclusiv al marfii care chiar se expediaza — si
+   * i-ar fi spus comerciantului ca n-are ce livra.
+   *
+   * ⚠ Si ei SPARG pachetul la o anulare partiala, dand alt `shipmentPackageId` restului. Noul
+   * pachet ne vine la urmatoarea citire, fiindca anularea modifica comanda si intra singura in
+   * fereastra. De-aia aici nu se scrie nicio stare: se lasa reconcilierea sa aduca adevarul.
+   */
+  if (partiala) {
+    await admin.from("trendyol_orders")
+      .update({ last_synced_at: now, updated_at: now } as never).eq("id", side.id);
+    return {
+      ok: true, status: "UnSupplied",
+      avertisment: "Liniile alese au fost anulate la Trendyol. Restul comenzii pleacă mai "
+        + "departe, iar starea ei se așază la următoarea citire.",
+    };
+  }
+
   await admin.from("trendyol_orders")
     .update({ status: "UnSupplied", last_synced_at: now, updated_at: now } as never).eq("id", side.id);
 

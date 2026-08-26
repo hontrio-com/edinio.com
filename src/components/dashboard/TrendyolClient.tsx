@@ -71,6 +71,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
   const [autoPublish, setAutoPublish] = useState(status?.autoPublish ?? false);
   const [taraOrigine, setTaraOrigine] = useState(status?.defaultCountryOfOrigin ?? "");
+  const [facturam, setFacturam] = useState(status?.factureazaClientul ?? false);
   const [addresses, setAddresses] = useState<TrendyolSupplierAddress[]>([]);
   // Eticheta si butonul de webhook se schimba instant; actiunea reuseste sau nu,
   // nu are alt rezultat de aratat. La eroare React readuce singur starea reala.
@@ -158,6 +159,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
          */
         auto_publish: autoPublish,
         default_country_of_origin: taraOrigine,
+        factureaza_clientul: facturam,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
@@ -458,6 +460,41 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                 </button>
               </div>
             )}
+
+            {/*
+              ═══ ⚠ LA TRENDYOL, COMERCIANTUL FACTUREAZĂ CLIENTUL FINAL (26.08.2026) ═══
+
+              Codul casei credea opusul — „marketplace-urile facturează ele clientul" — și de-aia
+              niciuna dintre comenzile Trendyol ale comerciantului n-a fost vreodată facturată.
+              Măsurat pe API-ul lor: `invoiceStatus: "NotInvoiced"` și `invoiceNumber: ""` pe
+              toate, iar `invoiceAddress` poartă numele CLIENTULUI.
+
+              ⚠ STINS DIN START, și rămâne alegerea lui: răspunderea fiscală e a comerciantului,
+              iar el poate emite deja facturile astea de mână în altă parte. Pornit de noi, ar
+              ieși două documente fiscale pentru aceeași marfă.
+
+              ⚠ Și se spune că nu se poate desface: ei n-au niciun capăt de corecție sau
+              ștergere, iar la a doua trimitere pe același pachet răspund 409.
+            */}
+            <label className="mt-4 flex items-start gap-2 text-sm text-foreground cursor-pointer">
+              <input
+                type="checkbox" checked={facturam}
+                onChange={(e) => setFacturam(e.target.checked)}
+                className="rounded mt-0.5"
+              />
+              <span>
+                Emite și trimite facturile către Trendyol
+                <span className="block text-[11px] text-muted-foreground">
+                  La Trendyol tu facturezi clientul final, nu marketplace-ul. Cu bifa asta,
+                  Edinio emite factura prin SmartBill, Oblio sau fGO și îi trimite linkul lui
+                  Trendyol, care o arată clientului.
+                </span>
+                <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
+                  Bifeaz-o doar dacă nu emiți deja facturile astea în altă parte: o factură
+                  trimisă la ei nu se mai poate corecta sau șterge.
+                </span>
+              </span>
+            </label>
 
             <label className="mt-3 flex items-start gap-2 text-sm text-foreground cursor-pointer">
               <input

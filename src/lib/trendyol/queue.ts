@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import type { TrendyolConfig } from "./types";
+import { noteazaIntentia } from "@/lib/marketplace/intentie-publicare";
 
 /**
  * Ce se pune la zero cand vine o CERERE NOUA peste un element care exista deja.
@@ -111,6 +112,23 @@ export async function enqueueTrendyolSync(
      * produsul sters din magazin la vanzare pe Trendyol".
      */
     const publicareCeruta = op === "upsert" && produsNou && config.auto_publish === true;
+
+    /*
+     * ═══ ⚠ INTENTIA SE SCRIE INAINTEA COZII (26.08.2026) ═══
+     *
+     * Punerea la coada e un efect lateral al unei salvari deja facute. Refuzata — plan depasit,
+     * politica, o pana de o clipa — produsul ramanea nepublicat pentru totdeauna: n-are listare,
+     * iar „produs fara listare, deci publica-l" nu se poate presupune, fiindca cele mai multe
+     * produse fara listare sunt chiar cele pe care comerciantul nu le-a vrut acolo.
+     *
+     * ⚠ INAINTE, nu dupa. Invers, o pana intre cele doua ar pierde exact cazul pentru care
+     * exista tabela.
+     */
+    if (publicareCeruta && productId) {
+      await noteazaIntentia(admin, {
+        businessId, productIds: [productId], marketplace: "trendyol", sursa: "auto_publish",
+      });
+    }
     if (config.auto_sync === false && op !== "delete" && !publicareCeruta) return;
     /*
      * In mod normal se pun la coada doar produsele care au deja o listare pe
@@ -262,6 +280,12 @@ export async function publicaProduseNoiTrendyolMany(
     const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
     if (!config.connected || !config.api_key) return;
     if (config.auto_publish !== true) return;
+
+    /* ⚠ Si la lotul din import, din acelasi motiv: o scriere picata aici ar fi lasat cinci sute
+       de produse nepublicate, fara nicio urma a cererii. */
+    await noteazaIntentia(admin, {
+      businessId, productIds: ids, marketplace: "trendyol", sursa: "import",
+    });
 
     /*
      * ⚠ FARA FILTRUL DE LISTARE, si tocmai asta e rostul: produsele astea NU au listare, si de-aia

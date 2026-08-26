@@ -33,6 +33,7 @@ import { EroareCitireBaza, randCitit } from "./citire";
 import { LIMITE_EMAG, taiat } from "./limite";
 import type { Database } from "@/types/database.types";
 import { uploadToR2 } from "@/lib/r2";
+import { cheiaPdfFactura, facturaComenzii, type Factura } from "@/lib/billing/factura-comenzii";
 import { cuRegistru } from "@/lib/operatii/registru";
 import { salveazaAtasamente, isEmagError } from "./client";
 import type { ContextEmag } from "./sync";
@@ -53,60 +54,19 @@ interface RandComanda {
   order_source: unknown;
 }
 
-export interface Factura {
-  furnizor: "smartbill" | "oblio" | "fgo";
-  numar: string;
-  url: string;
-}
-
-/**
- * Care factura are comanda, si de unde se ia.
+/*
+ * ⚠ `Factura`, `facturaComenzii` si cheia de R2 AU PLECAT IN `@/lib/billing/factura-comenzii`
+ * (26.08.2026). Trendyol are nevoie de exact aceeasi socoteala, iar importata de-aici ar fi
+ * tras clientul eMAG cu tot cu dependintele lui in pachetul Trendyol.
  *
- * ⚠ PUR SI EXPORTAT. Ordinea furnizorilor e aceeasi ca in `invoice-auto.actions.ts`;
- * o comanda nu poate avea doua facturi, dar daca ar avea, se ia prima gasita — nu se
- * incarca amandoua la eMAG, fiindca acolo ar aparea ca doua documente fiscale pentru
- * aceeasi comanda.
+ * Se reexporta pentru ca apelantii de pana acum sa nu se schimbe.
  */
-export function facturaComenzii(o: {
-  smartbill_invoice_number?: string | null; smartbill_invoice_series?: string | null; smartbill_invoice_url?: string | null;
-  oblio_invoice_number?: string | null; oblio_invoice_series?: string | null; oblio_invoice_link?: string | null;
-  fgo_invoice_number?: string | null; fgo_invoice_series?: string | null; fgo_invoice_link?: string | null;
-}): Factura | null {
-  const numar = (serie?: string | null, nr?: string | null) =>
-    [(serie ?? "").trim(), (nr ?? "").trim()].filter(Boolean).join("");
+export type { Factura } from "@/lib/billing/factura-comenzii";
+export { facturaComenzii } from "@/lib/billing/factura-comenzii";
 
-  if (o.smartbill_invoice_number && o.smartbill_invoice_url) {
-    return {
-      furnizor: "smartbill",
-      numar: numar(o.smartbill_invoice_series, o.smartbill_invoice_number),
-      url: o.smartbill_invoice_url,
-    };
-  }
-  if (o.oblio_invoice_number && o.oblio_invoice_link) {
-    return { furnizor: "oblio", numar: numar(o.oblio_invoice_series, o.oblio_invoice_number), url: o.oblio_invoice_link };
-  }
-  if (o.fgo_invoice_number && o.fgo_invoice_link) {
-    return { furnizor: "fgo", numar: numar(o.fgo_invoice_series, o.fgo_invoice_number), url: o.fgo_invoice_link };
-  }
-  return null;
-}
-
-/**
- * Cheia sub care sta PDF-ul in R2.
- *
- * ⚠ DE NEGHICIT, SI STABILA. De neghicit fiindca adresa e singura paza a unui
- * document cu datele cumparatorului: eMAG trebuie sa poata veni sa-l ia, deci nu
- * exista autentificare la mijloc. Stabila fiindca a doua incercare, dupa o cadere de
- * retea, trebuie sa scrie in ACELASI loc — altfel fiecare reincercare ar lasa in
- * urma inca o copie a facturii, pe veci.
- *
- * `orderId` e un UUID, deci are deja 122 de biti de nedeterminare. Numarul facturii
- * intra si el: dupa un storno si o reemitere, documentul e ALTUL si trebuie sa aiba
- * alta adresa, altfel eMAG ar fi luat din memorie versiunea desfiintata.
- */
+/** Cheia sub care sta PDF-ul in R2, pentru eMAG. */
 export function cheiaPdf(businessId: string, orderId: string, numarFactura: string): string {
-  const curat = numarFactura.replace(/[^A-Za-z0-9._-]/g, "");
-  return `facturi-emag/${businessId}/${orderId}-${curat}.pdf`;
+  return cheiaPdfFactura("facturi-emag", businessId, orderId, numarFactura);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

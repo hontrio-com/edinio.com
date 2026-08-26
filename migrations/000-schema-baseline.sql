@@ -4838,6 +4838,18 @@ create table if not exists public.gmc_sync_queue (
   prioritate smallint default 5 not null,
   generation bigint default 1 not null);
 
+create table if not exists public.intentii_publicare (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  product_id uuid not null,
+  marketplace text not null,
+  sursa text default 'auto_publish'::text not null,
+  cerut_la timestamp with time zone default now() not null,
+  rezolvat_la timestamp with time zone,
+  incercari integer default 0 not null,
+  ultima_eroare text,
+  updated_at timestamp with time zone default now() not null);
+
 create table if not exists public.invoices (
   id uuid default gen_random_uuid() not null,
   user_id uuid not null,
@@ -5451,7 +5463,10 @@ create table if not exists public.trendyol_orders (
   last_synced_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  last_modified_date bigint);
+  last_modified_date bigint,
+  invoice_uploaded_at timestamp with time zone,
+  invoice_number text,
+  invoice_error text);
 
 create table if not exists public.trendyol_sync_queue (
   id uuid default gen_random_uuid() not null,
@@ -5637,6 +5652,7 @@ alter table public.fedex_etichete add constraint fedex_etichete_pkey PRIMARY KEY
 alter table public.forms add constraint forms_pkey PRIMARY KEY (id);
 alter table public.gmc_products add constraint gmc_products_pkey PRIMARY KEY (id);
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_pkey PRIMARY KEY (id);
+alter table public.intentii_publicare add constraint intentii_publicare_pkey PRIMARY KEY (id);
 alter table public.invoices add constraint invoices_pkey PRIMARY KEY (id);
 alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_pkey PRIMARY KEY (id);
 alter table public.media_library add constraint media_library_pkey PRIMARY KEY (id);
@@ -5693,6 +5709,7 @@ alter table public.emag_orders add constraint emag_orders_business_order_key UNI
 alter table public.emag_rma add constraint emag_rma_business_rma_key UNIQUE (business_id, emag_rma_id);
 alter table public.emag_sync_queue add constraint emag_sync_queue_business_offer_op_key UNIQUE (business_id, offer_id, op);
 alter table public.email_automations add constraint email_automations_user_id_email_key_key UNIQUE (user_id, email_key);
+alter table public.intentii_publicare add constraint intentii_publicare_business_id_product_id_marketplace_key UNIQUE (business_id, product_id, marketplace);
 alter table public.invoices add constraint invoices_stripe_invoice_id_key UNIQUE (stripe_invoice_id);
 alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_business_id_email_key UNIQUE (business_id, email);
 alter table public.olx_adverts add constraint olx_adverts_business_id_offer_id_key UNIQUE (business_id, offer_id);
@@ -5713,6 +5730,8 @@ alter table public.discounts add constraint discounts_type_check CHECK ((type = 
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK ((op = ANY (ARRAY['oferta'::text, 'pret'::text, 'stoc'::text, 'retragere'::text, 'masuratori'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
+alter table public.intentii_publicare add constraint intentii_publicare_marketplace_check CHECK ((marketplace = ANY (ARRAY['trendyol'::text, 'emag'::text, 'aboutyou'::text])));
+alter table public.intentii_publicare add constraint intentii_publicare_sursa_check CHECK ((sursa = ANY (ARRAY['auto_publish'::text, 'import'::text, 'manual'::text])));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
 alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'emag'::text, 'proba'::text])));
@@ -5798,6 +5817,8 @@ alter table public.gmc_products add constraint gmc_products_business_id_fkey FOR
 alter table public.gmc_products add constraint gmc_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+alter table public.intentii_publicare add constraint intentii_publicare_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.intentii_publicare add constraint intentii_publicare_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
 alter table public.invoices add constraint invoices_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.media_library add constraint media_library_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -6039,6 +6060,7 @@ CREATE INDEX idx_trendyol_queue_revendicat ON public.trendyol_sync_queue USING b
 CREATE INDEX idx_trendyol_variants_business_barcode ON public.trendyol_variants USING btree (business_id, barcode);
 CREATE INDEX idx_trendyol_variants_listing ON public.trendyol_variants USING btree (listing_id);
 CREATE INDEX idx_trendyol_variants_product ON public.trendyol_variants USING btree (product_id);
+CREATE INDEX intentii_publicare_nerezolvate_idx ON public.intentii_publicare USING btree (marketplace, business_id, cerut_la) WHERE (rezolvat_la IS NULL);
 CREATE INDEX mailchimp_suppressions_business_email_idx ON public.mailchimp_suppressions USING btree (business_id, email);
 CREATE INDEX media_library_business_created_idx ON public.media_library USING btree (business_id, created_at DESC);
 CREATE UNIQUE INDEX media_library_business_key_uidx ON public.media_library USING btree (business_id, r2_key);
@@ -6092,6 +6114,7 @@ CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING
 CREATE INDEX trendyol_claims_biz_idx ON public.trendyol_claims USING btree (business_id, claim_date DESC);
 CREATE INDEX trendyol_claims_de_hotarat_idx ON public.trendyol_claims USING btree (business_id, last_modified) WHERE (claim_status = ANY (ARRAY['Created'::text, 'WaitingInAction'::text, 'InAnalysis'::text]));
 CREATE INDEX trendyol_listings_de_sters_idx ON public.trendyol_listings USING btree (business_id, arhivat_la) WHERE (status = 'removing'::text);
+CREATE INDEX trendyol_orders_fara_factura_idx ON public.trendyol_orders USING btree (business_id, updated_at) WHERE (invoice_uploaded_at IS NULL);
 CREATE INDEX trendyol_sync_queue_ordine_idx ON public.trendyol_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX ups_etichete_business_idx ON public.ups_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX users_profile_role_idx ON public.users_profile USING btree (role);
@@ -6245,6 +6268,7 @@ alter table public.fedex_etichete enable row level security;
 alter table public.forms enable row level security;
 alter table public.gmc_products enable row level security;
 alter table public.gmc_sync_queue enable row level security;
+alter table public.intentii_publicare enable row level security;
 alter table public.invoices enable row level security;
 alter table public.mailchimp_suppressions enable row level security;
 alter table public.media_library enable row level security;
@@ -6396,6 +6420,9 @@ create policy owner_select_gmc_products on public.gmc_products as PERMISSIVE for
 create policy owner_select_gmc_sync_queue on public.gmc_sync_queue as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
+create policy owner_select_intentii_publicare on public.intentii_publicare as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Users can view own invoices" on public.invoices as PERMISSIVE for SELECT to authenticated using ((auth.uid() = user_id));
 create policy "Owners read own mailchimp suppressions" on public.mailchimp_suppressions as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
    FROM businesses b
@@ -7323,6 +7350,27 @@ grant SELECT on table public.gmc_sync_queue to service_role;
 grant TRIGGER on table public.gmc_sync_queue to service_role;
 grant TRUNCATE on table public.gmc_sync_queue to service_role;
 grant UPDATE on table public.gmc_sync_queue to service_role;
+grant DELETE on table public.intentii_publicare to anon;
+grant INSERT on table public.intentii_publicare to anon;
+grant REFERENCES on table public.intentii_publicare to anon;
+grant SELECT on table public.intentii_publicare to anon;
+grant TRIGGER on table public.intentii_publicare to anon;
+grant TRUNCATE on table public.intentii_publicare to anon;
+grant UPDATE on table public.intentii_publicare to anon;
+grant DELETE on table public.intentii_publicare to authenticated;
+grant INSERT on table public.intentii_publicare to authenticated;
+grant REFERENCES on table public.intentii_publicare to authenticated;
+grant SELECT on table public.intentii_publicare to authenticated;
+grant TRIGGER on table public.intentii_publicare to authenticated;
+grant TRUNCATE on table public.intentii_publicare to authenticated;
+grant UPDATE on table public.intentii_publicare to authenticated;
+grant DELETE on table public.intentii_publicare to service_role;
+grant INSERT on table public.intentii_publicare to service_role;
+grant REFERENCES on table public.intentii_publicare to service_role;
+grant SELECT on table public.intentii_publicare to service_role;
+grant TRIGGER on table public.intentii_publicare to service_role;
+grant TRUNCATE on table public.intentii_publicare to service_role;
+grant UPDATE on table public.intentii_publicare to service_role;
 grant DELETE on table public.invoices to anon;
 grant INSERT on table public.invoices to anon;
 grant REFERENCES on table public.invoices to anon;

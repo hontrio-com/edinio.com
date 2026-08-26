@@ -151,6 +151,8 @@ export interface TrendyolStatus {
   autoPublish: boolean;
   /** Tara de FABRICATIE implicita a magazinului (ISO2), sau `""` daca n-a ales niciuna. */
   defaultCountryOfOrigin: string;
+  /** Emitem si urcam facturile catre clientii lui de pe Trendyol? Stins din start. */
+  factureazaClientul: boolean;
   lastSyncAt?: string;
   webhookActive: boolean;
   ordersSyncedAt?: string;
@@ -216,6 +218,7 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     /* ⚠ Se intoarce GOL cand nu s-a ales, nu „RO": ecranul trebuie sa arate ca lipseste, nu
        sa para completat. */
     defaultCountryOfOrigin: (config.default_country_of_origin ?? "").toUpperCase(),
+    factureazaClientul: config.factureaza_clientul === true,
     lastSyncAt: config.last_sync_at,
     webhookActive: !!config.webhook_id && !!config.webhook_secret,
     ordersSyncedAt: config.orders_synced_at,
@@ -369,6 +372,14 @@ export interface TrendyolSettingsInput {
    * scapare de completare. Lipsa opreste publicarea cu mesaj; ghicita, ar fi trecut tacut.
    */
   default_country_of_origin?: string | null;
+  /**
+   * Comerciantul vrea ca Edinio sa emita si sa urce facturile catre clientii lui de pe Trendyol.
+   *
+   * ⚠ STINS DIN START, si nu din nehotarare: raspunderea fiscala e a lui, iar el poate emite
+   * deja facturile astea de mana in alta parte. Pornit de noi, ar iesi doua documente fiscale
+   * pentru aceeasi marfa.
+   */
+  factureaza_clientul?: boolean;
 }
 
 export async function saveTrendyolSettings(
@@ -422,6 +433,7 @@ export async function saveTrendyolSettings(
     ...(input.auto_publish !== undefined ? { auto_publish: input.auto_publish } : {}),
     /* ⚠ Golita dinadins => `null`, nu „lasa cum era": altfel comerciantul nu si-ar putea SCOATE
        niciodata o tara pusa gresit. */
+    ...(input.factureaza_clientul !== undefined ? { factureaza_clientul: input.factureaza_clientul } : {}),
     ...(input.default_country_of_origin !== undefined ? {
       default_country_of_origin:
         (input.default_country_of_origin ?? "").trim().toUpperCase() || null,
@@ -1552,8 +1564,11 @@ export async function markTrendyolInvoiced(
  */
 export async function anuleazaComandaTrendyol(
   businessId: string, orderId: string, reasonId: number,
+  /* ⚠ Lipsa inseamna „tot pachetul", ca pana acum. Cu linii, se anuleaza doar ele, iar restul
+     comenzii pleaca mai departe la client. */
+  liniiAlese?: { lineId: number; quantity: number }[],
 ): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
-  const res = await withContext(businessId, (admin, ctx) => nuPotFurniza(admin, ctx, orderId, reasonId));
+  const res = await withContext(businessId, (admin, ctx) => nuPotFurniza(admin, ctx, orderId, reasonId, liniiAlese));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
   return { success: true, status: res.status, avertisment: res.avertisment };

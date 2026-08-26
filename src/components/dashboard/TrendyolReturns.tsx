@@ -5,7 +5,7 @@ import { Loader2, PackageCheck, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import {
   hotarasteReturTrendyol, motiveRespingereTrendyol, repuneInStocTrendyol, retururiTrendyol,
-  type RandRetur,
+  respingeReturTrendyolCuDovezi, type RandRetur,
 } from "@/lib/actions/trendyol-retururi.actions";
 
 /**
@@ -54,6 +54,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
   const [alese, setAlese] = useState<Record<string, Set<string>>>({});
   const [motivAles, setMotivAles] = useState<string>("");
   const [explicatie, setExplicatie] = useState("");
+  const [dovezi, setDovezi] = useState<File[]>([]);
   const [seIncarca, incepe] = useTransition();
 
   function incarca(doar = doarDeHotarat) {
@@ -74,6 +75,32 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
       const n = new Set(p[claimId] ?? []);
       if (n.has(id)) n.delete(id); else n.add(id);
       return { ...p, [claimId]: n };
+    });
+  }
+
+  /**
+   * Respingerea, cu dovezi.
+   *
+   * ⚠ MERGE PRIN `FormData`: o actiune de server nu poate primi `File` printre argumente
+   * serializate. De-aia respingerea are calea ei, iar acceptarea ramane pe cea obisnuita.
+   */
+  function respinge(claimId: string) {
+    const ids = [...(alese[claimId] ?? [])];
+    if (ids.length === 0) { toast.error("Bifează întâi liniile din acest retur."); return; }
+    const fd = new FormData();
+    fd.set("claimId", claimId);
+    fd.set("claimItemIds", ids.join(","));
+    fd.set("motivId", motivAles);
+    fd.set("explicatie", explicatie);
+    for (const f of dovezi) fd.append("dovezi", f);
+    incepe(async () => {
+      const r = await respingeReturTrendyolCuDovezi(businessId, fd);
+      if ("error" in r) { toast.error(r.error); return; }
+      toast.success("Returul a fost respins.");
+      setAlese((p) => ({ ...p, [claimId]: new Set() }));
+      setExplicatie("");
+      setDovezi([]);
+      incarca();
     });
   }
 
@@ -269,9 +296,26 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     placeholder="Scrie de ce respingi"
                     className="min-w-40 flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
                   />
+                  {/*
+                    ⚠ DOVEZILE SUNT OPTIONALE, si asa scrie si in schema lor. Dar până azi nu
+                    puteau fi trimise DELOC — iar o respingere fără dovadă ajunge la arbitrajul
+                    lor cu mâinile goale.
+                  */}
+                  <label className="flex w-full flex-col gap-0.5">
+                    <input
+                      type="file" multiple accept="application/pdf,image/jpeg,image/png"
+                      onChange={(e) => setDovezi([...(e.target.files ?? [])])}
+                      className="text-[11px] file:mr-2 file:rounded file:border file:border-border file:bg-muted file:px-2 file:py-0.5 file:text-[11px]"
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      Poze cu marfa primită sau documente, dacă ai. Cel mult 5 fișiere, PDF, JPEG
+                      sau PNG, până în 10 MB fiecare.
+                      {dovezi.length > 0 && ` Ai ales ${dovezi.length}.`}
+                    </span>
+                  </label>
                   <button
                     type="button"
-                    onClick={() => hotaraste(r.claimId, false)}
+                    onClick={() => respinge(r.claimId)}
                     disabled={
                       seIncarca || !motivAles || !explicatie.trim()
                       || (alese[r.claimId]?.size ?? 0) === 0

@@ -691,6 +691,11 @@ export interface TrendyolClaimItem {
  * ⚠ ID-URILE SUNT ALE LOR, si nu se inventeaza: un id gresit e refuzat abia la trimitere, cand
  * comerciantul crede ca a anulat comanda — iar la ei ramane activa si pleaca la client.
  *
+ * ⚠ 503 NU EXISTA, si il aveam (26.08.2026). Il luasem dintr-o pagina care il listeaza, iar
+ * verificarea pe tabelul lor oficial l-a infirmat de doua ori: sunt 500, 501, 502, 504, 505,
+ * 506 — fara 503. Un comerciant care l-ar fi ales primea un refuz pe care nu-l putea intelege,
+ * si comanda ii ramanea neanulata la ei.
+ *
  * ⚠ NU SE POT CITI DE LA EI. Spre deosebire de motivele de respingere a returului
  * (`claim-issue-reasons`, care raspunde), niciun capat de anulare nu raspunde pe contul nostru
  * (probat: 556 si 401 pe trei cai). Deci lista e cea publicata de ei, scrisa aici o data.
@@ -699,7 +704,6 @@ export const MOTIVE_ANULARE_TRENDYOL: { id: number; nume: string }[] = [
   { id: 500, nume: "Nu mai am produsul pe stoc" },
   { id: 501, nume: "Produsul e defect sau deteriorat" },
   { id: 502, nume: "Prețul era greșit" },
-  { id: 503, nume: "Poza, codul de bare sau cantitatea erau greșite" },
   { id: 504, nume: "Eroare de integrare (preț sau stoc transferat greșit)" },
   { id: 505, nume: "Același client a cumpărat în cantitate mare, după reducere" },
   { id: 506, nume: "Forță majoră" },

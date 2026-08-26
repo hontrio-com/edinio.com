@@ -253,7 +253,18 @@ async function scrieCererea(
  */
 export async function hotarasteRetur(
   admin: Db, ctx: TrendyolSyncContext,
-  p: { claimId: string; claimItemIds: string[]; accepta: boolean; motivId?: number; explicatie?: string },
+  p: {
+    claimId: string; claimItemIds: string[]; accepta: boolean;
+    motivId?: number; explicatie?: string;
+    /**
+     * Dovezi pentru respingere: poze cu marfa primita, PDF-uri.
+     *
+     * ⚠ OPTIONALE IN SCHEMA LOR — verificat in OpenAPI: `files (array of files, optional)`.
+     * Nu se cer, deci nu se cer nici aici. Dar pana azi comerciantul nu le putea trimite DELOC,
+     * iar o respingere fara dovada ajunge la arbitrajul lor cu mainile goale.
+     */
+    dovezi?: Blob[];
+  },
 ): Promise<{ ok: true } | { error: string }> {
   if (p.claimItemIds.length === 0) return { error: "Alege întâi liniile de retur." };
 
@@ -318,6 +329,7 @@ export async function hotarasteRetur(
       claimIssueReasonId: p.motivId,
       claimItemIdList: p.claimItemIds,
       description: explicatie,
+      files: p.dovezi,
     });
     if (isTrendyolError(res)) return { error: res.error };
   }

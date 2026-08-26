@@ -168,7 +168,12 @@ test("⚠ se pune inapoi CANTITATEA LINIEI, si prin functia casei", () => {
 test("⚠ fiecare actiune isi verifica magazinul", () => {
   /* Actiunile de server se pot chema cu orice argumente, printr-un POST direct: fara garda,
      cineva ar putea aproba retururile altui comerciant. */
-  assert.equal((act.match(/const g = await guard\(businessId\);/g) ?? []).length, 4);
+  /* ⚠ NUMARUL CRESTE ODATA CU ACTIUNILE, si de-aia se cere „toate", nu „patru": o actiune noua
+     fara garda ar fi trecut nevazuta printr-un numar fix. */
+  const cateActiuni = (act.match(/export async function \w+\(/g) ?? []).length;
+  assert.equal((act.match(/const g = await guard\(businessId\);/g) ?? []).length, cateActiuni,
+    "fiecare actiune exportata isi verifica magazinul");
+  assert.ok(cateActiuni >= 5, "si sunt cel putin cinci");
   /* ⚠ Si o citire picata nu se citeste ca „nu e magazinul lui". */
   assert.match(act, /if \(error\) return \{ error: "Nu am putut verifica magazinul/);
 });

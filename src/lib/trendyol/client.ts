@@ -504,7 +504,20 @@ export function unsupplyPackageItems(
     {
       lines: p.lines,
       reasonId: p.reasonId,
-      shouldKeepPreviousStatus: p.shouldKeepPreviousStatus ?? true,
+      /*
+       * ⚠ SE TRIMITE DOAR CAND E CERUT ANUME (26.08.2026).
+       *
+       * Paginile lor nu se potrivesc: cea internationala il documenteaza, cea turceasca nu-l
+       * pomeneste deloc. Cand doua pagini ale aceluiasi serviciu spun lucruri diferite, campul
+       * OMIS e partea sigura — implicitul lor e `false`, iar trimiterea unui camp pe care un
+       * capat nu-l cunoaste e riscul necunoscut.
+       *
+       * ⚠ Trimiteam `true` din oficiu, ca sa nu se intoarca la „created" ce ramane din pachet.
+       * Grija era buna; certitudinea, nu.
+       */
+      ...(p.shouldKeepPreviousStatus !== undefined
+        ? { shouldKeepPreviousStatus: p.shouldKeepPreviousStatus }
+        : {}),
     });
 }
 
@@ -525,6 +538,62 @@ export function updateTrackingDetails(
 ) {
   return call<undefined>(
     auth, "PUT", `/integration/order/sellers/${auth.supplierId}/shipment-packages/${packageId}/tracking-details`, body);
+}
+
+/**
+ * Trimite catre Trendyol LINKUL facturii emise de comerciant.
+ *
+ * ═══ ⚠ VARIANTA INTERNATIONALA CERE DOAR DOUA CAMPURI ═══
+ *
+ * Documentatia lor are DOUA seturi, cu contracte diferite:
+ *
+ *   TURCIA         invoiceLink, shipmentPackageId, invoiceDateTime, invoiceNumber
+ *                  cu `invoiceNumber` de fix 16 semne: [3 alfanumerice][an 2020-2099][9 cifre]
+ *   INTERNATIONAL  invoiceLink, shipmentPackageId. ATAT.
+ *
+ * Citat din OpenAPI-ul lor international: „Only requires invoice link and shipment package ID
+ * (no invoice number or date fields)."
+ *
+ * ⚠ ASTA SCHIMBA TOT CE CREDEAM. Amanasem functia fiindca o serie romaneasca („EDN1234") nu
+ * incape in formatul de 16 semne. Formatul ala e al TURCIEI. Pentru marketplace-ul international
+ * — al nostru — nu se cere niciun numar de factura, deci nu exista nimic de potrivit si nimic de
+ * inventat.
+ *
+ * ⚠ UN SINGUR FOC. La al doilea trimis pe acelasi pachet raspund 409 („The invoice for the
+ * package number {N} has already been sent"), si NU au niciun capat de corectie sau stergere.
+ * De-aia urcarea trece prin `cuRegistru`, iar 409-ul se citeste ca reusita, nu ca esec.
+ *
+ * ⚠ LINKUL TREBUIE SA RAMANA VIU MULT TIMP: ei cer 10 ani in Arabia Saudita si 5 in Emirate.
+ * Pentru Romania nu scriu niciun termen. De-aia PDF-ul se rehosteaza la noi, sub o cheie
+ * stabila si de neghicit — nu se da adresa furnizorului de facturare, care e in spatele
+ * acreditarilor comerciantului si poate expira.
+ */
+export function sendInvoiceLink(
+  auth: TrendyolAuth, p: { invoiceLink: string; shipmentPackageId: number },
+) {
+  return call<undefined>(
+    auth, "POST", `/integration/sellers/${auth.supplierId}/seller-invoice-links`,
+    { invoiceLink: p.invoiceLink, shipmentPackageId: p.shipmentPackageId });
+}
+
+/**
+ * Urca FISIERUL facturii, cand linkul nu e o cale buna.
+ *
+ * ⚠ `multipart/form-data`, cu `shipmentPackageId` si `file`. Doar PDF, JPEG sau PNG, cel mult
+ * 10 MB — mesajul lor de eroare le numeste pe toate trei.
+ *
+ * ⚠ Si aici varianta internationala NU cere `invoiceNumber`/`invoiceDateTime`. Cere insa
+ * `storeFrontCode` ca ANTET obligatoriu, spre deosebire de trimiterea prin link. `call` il pune
+ * oricum pe toate cererile.
+ */
+export function uploadInvoiceFile(
+  auth: TrendyolAuth, p: { shipmentPackageId: number; file: Blob; numeFisier?: string },
+) {
+  const corp = new FormData();
+  corp.set("shipmentPackageId", String(p.shipmentPackageId));
+  corp.set("file", p.file, p.numeFisier ?? "factura.pdf");
+  return call<undefined>(
+    auth, "POST", `/integration/sellers/${auth.supplierId}/seller-invoice-file`, corp);
 }
 
 // ── Webhooks ──────────────────────────────────────────────────────────────────

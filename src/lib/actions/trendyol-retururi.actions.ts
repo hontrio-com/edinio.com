@@ -18,6 +18,11 @@ import { MOTIVE_RETUR_RO } from "@/lib/trendyol/types";
 
 const FEATURE_PATH = "/dashboard/features/trendyol";
 
+/** ⚠ Marginile dovezilor. Cele de la ei: 10 MB pe fisier, si doar PDF, JPEG sau PNG. */
+const MAX_DOVEZI = 5;
+const MAX_MB_DOVADA = 10;
+const TIPURI_DOVADA = ["application/pdf", "image/jpeg", "image/png"];
+
 /**
  * ⚠ TIPUL SE SCRIE, nu se lasa dedus. Dedus din `as const`, iesea o uniune in care `error`
  * putea fi si `undefined`, iar apelantii nu-l puteau intoarce mai departe fara sa se planga
@@ -181,6 +186,58 @@ export async function hotarasteReturTrendyol(
  * ⚠ E O A DOUA APASARE, ANUME. Acceptarea returului inseamna ca banii se intorc, nu ca
  * produsul e bun de pus la loc pe raft — vine desfacut, incomplet, sau pur si simplu altul.
  */
+/**
+ * Respinge returul, cu dovezi.
+ *
+ * === FISIERELE CER `FormData`, NU ARGUMENTE OBISNUITE ===
+ *
+ * O actiune de server nu poate primi `File` printre argumente serializate; trebuie sa vina
+ * intr-un `FormData`. De-aia respingerea cu dovezi are actiunea ei, in loc sa umfle
+ * `hotarasteReturTrendyol`.
+ *
+ * ⚠ DOVEZILE SUNT OPTIONALE, si asa scrie si in schema lor: `files (array of files, optional)`.
+ * Nu se cer, deci nu se cer nici aici — dar pana azi comerciantul nu le putea trimite deloc,
+ * iar o respingere fara dovada ajunge la arbitrajul lor cu mainile goale.
+ *
+ * ⚠ SE MARGINESC AICI, nu la ei: cel mult cinci fisiere, cel mult 10 MB fiecare, si numai
+ * PDF/JPEG/PNG. Altfel refuzul ar fi venit de la ei dupa ce omul a apasat, iar mesajul lor nu
+ * spune CARE fisier a fost de vina.
+ */
+export async function respingeReturTrendyolCuDovezi(
+  businessId: string, formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+
+  const claimId = String(formData.get("claimId") ?? "");
+  const motivId = Number(formData.get("motivId") ?? 0);
+  const explicatie = String(formData.get("explicatie") ?? "");
+  const claimItemIds = String(formData.get("claimItemIds") ?? "").split(",").filter(Boolean);
+  if (!claimId || claimItemIds.length === 0) return { error: "Alege întâi liniile de retur." };
+
+  const brute = formData.getAll("dovezi").filter((f): f is File => f instanceof File && f.size > 0);
+  if (brute.length > MAX_DOVEZI) return { error: `Poți atașa cel mult ${MAX_DOVEZI} fișiere.` };
+  for (const f of brute) {
+    if (f.size > MAX_MB_DOVADA * 1024 * 1024) {
+      return { error: `Fișierul ${f.name} depășește ${MAX_MB_DOVADA} MB.` };
+    }
+    if (!TIPURI_DOVADA.includes(f.type)) {
+      return { error: `Fișierul ${f.name} nu e PDF, JPEG sau PNG.` };
+    }
+  }
+
+  const admin = createAdminClient();
+  const ctx = await loadTrendyolContext(admin, businessId);
+  if (!ctx) return { error: "Contul Trendyol nu este conectat." };
+
+  const r = await hotarasteRetur(admin, ctx, {
+    claimId, claimItemIds, accepta: false, motivId, explicatie, dovezi: brute,
+  });
+  if ("error" in r) return r;
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
 export async function repuneInStocTrendyol(
   businessId: string, claimItemId: string,
 ): Promise<{ success: true; pus: number } | { error: string }> {

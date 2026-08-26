@@ -143,6 +143,29 @@ function parseAddress(order: AboutYouOrder): ParsedAddress {
   };
 }
 
+/**
+ * Ce se face cu comanda din Edinio cand About You ne da liniile din nou.
+ *
+ * Scoasa din `ingestOrder` ca sa poata fi PROBATA fara retea si fara baza: e o hotarare, nu o
+ * scriere. Tiparul e al casei — vezi `rutaDeTrimitere` si `stareLot`.
+ *
+ * ⚠ „facturata" NU inseamna „nu s-a schimbat nimic": inseamna ca schimbarea nu se face TACUT.
+ * De aceea sunt trei raspunsuri, nu doua.
+ */
+export type HotarareaActualizarii = "scrie" | "doar-jurnal" | "nimic";
+export function hotarareaActualizarii(a: {
+  facturata: boolean;
+  itemsVechi: unknown; totalVechi: number | null;
+  itemsNoi: unknown; totalNou: number;
+}): HotarareaActualizarii {
+  /* Comparat pe continut: amandoua liniile vin din acelasi mapaj, deci diferenta e reala. */
+  const schimbat = JSON.stringify(a.itemsVechi ?? null) !== JSON.stringify(a.itemsNoi)
+    /* Banii se compara cu o toleranta: sunt socotiti din intregi, dar tin virgula. */
+    || Math.abs(num(a.totalVechi) - a.totalNou) > 0.001;
+  if (!schimbat) return "nimic";
+  return a.facturata ? "doar-jurnal" : "scrie";
+}
+
 function toAyItems(order: AboutYouOrder) {
   const items = Array.isArray(order.order_items) ? order.order_items : [];
   return items.map((it) => ({
@@ -391,6 +414,10 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     .filter((l) => l.product_id);
 
   const subtotal = money(activeItems.reduce((s, it) => s + num(it.price_without_tax), 0));
+  /* ⚠ Socotite AICI, nu mai jos: le foloseste si calea de ACTUALIZARE, care trebuie sa rescrie
+     totalul cand About You anuleaza o linie. Vezi nota de la actualizarea comenzii. */
+  const total = money(activeItems.reduce((s, it) => s + num(it.price_with_tax), 0));
+  const vatAmount = Math.round((total - subtotal) * 100) / 100;
   const { data: existing } = await admin
     .from("aboutyou_orders").select("id, order_id")
     .eq("business_id", ctx.businessId).eq("aboutyou_order_number", ayNumber).maybeSingle();
@@ -454,6 +481,74 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      * de stoc — iar tocmai consumul poate pica singur. Functia din baza e
      * reparabila prin marcajul `stoc_marketplace_la`; apelantul sarea reparatia.
      */
+    /*
+     * ═══ ⚠ COMANDA DIN EDINIO NU SE SCHIMBA DELOC LA O ANULARE PARTIALA (27.08.2026) ═══
+     *
+     * Pe calea de actualizare se scria numai randul lateral. `orders` ramanea cu liniile si
+     * totalul de la CREARE — inclusiv linia pe care clientul a anulat-o intre timp. Deci:
+     *
+     *   - raportarile arata o valoare pe care nimeni n-a platit-o;
+     *   - fisa comenzii ii arata comerciantului un produs care nu se mai trimite;
+     *   - iar el il poate pregati si expedia degeaba.
+     *
+     * Calea de CREARE socoteste deja corect, si se scrie exact aceeasi socoteala: `edinioItems`
+     * PASTREAZA liniile anulate, dar le pune un `status` pe ele (deci omul vede ce s-a anulat,
+     * nu-i dispare din fisa), iar `subtotal`/`total`/`vat_amount` numara doar `activeItems`.
+     * Asta tine si la o comanda anulata in intregime: liniile raman scrise, totalul cade la 0.
+     *
+     * ⚠ SI NU SE ATINGE O COMANDA DEJA FACTURATA. Un document fiscal emis nu se corecteaza
+     * schimband tacut totalul dedesubt: se STORNEAZA, si aia e hotararea comerciantului, nu a
+     * mea. Cand exista factura, se scrie in jurnal si se lasa asa.
+     *
+     * ⚠ SI NU SE SCRIE CAND N-A SCHIMBAT NIMIC. Ingestul trece peste aceleasi comenzi la
+     * fiecare reconciliere; o scriere neconditionata ar impinge `updated_at` inainte de fiecare
+     * data, adica fiecare comanda ar parea „atinsa acum" in liste sortate dupa el.
+     */
+    if (ex.order_id) {
+      const comanda = randCitit<{
+        smartbill_invoice_number: string | null;
+        oblio_invoice_number: string | null;
+        fgo_invoice_number: string | null;
+        items: unknown;
+        total: number | null;
+      }>("aboutyou.comandaDeActualizat", await admin
+        .from("orders")
+        .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, items, total")
+        .eq("id", ex.order_id).eq("business_id", ctx.businessId).maybeSingle());
+
+      /* ⚠ Comanda necitibila NU se rescrie orbeste: fara ea nu stim daca are factura. */
+      const hotarare = comanda == null ? "nimic" : hotarareaActualizarii({
+        facturata: !!(comanda.smartbill_invoice_number
+          ?? comanda.oblio_invoice_number ?? comanda.fgo_invoice_number),
+        itemsVechi: comanda.items, totalVechi: comanda.total,
+        itemsNoi: edinioItems, totalNou: total,
+      });
+
+      if (hotarare === "doar-jurnal") {
+        await logError({
+          action: "aboutyou/orders", severity: "warning",
+          message: "comanda are factura emisa, iar la About You s-au schimbat liniile: totalul din Edinio ramane neschimbat",
+          details: { ayNumber, orderId: ex.order_id, anulate: anulate.length, totalLaEi: total },
+          businessId: ctx.businessId,
+        });
+      } else if (hotarare === "scrie") {
+        const { error: eComanda } = await admin.from("orders")
+          .update({
+            items: edinioItems as never,
+            subtotal, total, vat_amount: vatAmount,
+            updated_at: now,
+          } as never)
+          .eq("id", ex.order_id).eq("business_id", ctx.businessId);
+        if (eComanda) {
+          await logError({
+            action: "aboutyou/orders", severity: "warning",
+            message: `liniile comenzii nu s-au putut actualiza: ${eComanda.message}`,
+            details: { ayNumber }, businessId: ctx.businessId,
+          });
+        }
+      }
+    }
+
     await scrieRetururile(admin, ctx, ayNumber, ex.order_id, intoarse);
     if (ex.order_id) {
       await consumaStoculComenzii(admin, ctx, ex.order_id, qtyByProduct, qtyByVariant);
@@ -482,8 +577,6 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     return "updated";
   }
 
-  const total = money(activeItems.reduce((s, it) => s + num(it.price_with_tax), 0));
-  const vatAmount = Math.round((total - subtotal) * 100) / 100;
   const addr = parseAddress(order);
   // Comenzile de pe About You sunt in EURO, iar `orders.total` e citit peste tot
   // ca lei. Marcam moneda in `order_source` ca sa nu para o comanda de 40 de lei.

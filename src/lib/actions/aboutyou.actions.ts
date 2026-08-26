@@ -32,7 +32,7 @@ import {
   loadAboutYouContext, publishProductNow, removeProductNow, syncProductNow, unpublishProductNow,
 } from "@/lib/aboutyou/sync";
 import {
-  atasezaPreturileRon, deriveVariantSlots, validateListing,
+  atasezaPreturileRon, deriveVariantSlots, TARI_EURO, validateListing,
   type AboutYouStoredMaterial, type MappableProduct,
 } from "@/lib/aboutyou/mapping";
 import { traduMotive, type MotivAfisat } from "@/lib/aboutyou/respingeri";
@@ -317,11 +317,26 @@ export interface AboutYouSettingsInput {
 async function tariNeEuro(auth: AboutYouAuth, coduri: string[]): Promise<string[]> {
   if (coduri.length === 0) return [];
   const r = await getCountriesCached(auth);
-  if (!r.ok) return [];   // fara nomenclator nu inventam un blocaj
+  if (!r.ok) {
+    /*
+     * ═══ ⚠ AICI CADEA DESCHIS, SI ASTA E CHIAR SLABICIUNEA (26.08.2026) ═══
+     *
+     * Scria `return []` — „fara nomenclator nu inventam un blocaj". Suna prudent si nu e: o paza
+     * care se stinge singura la o pana nu e o paza. O clipa proasta la cererea de nomenclator, si
+     * Polonia intra in lista; de-acolo, 20 EUR pleaca drept 20 de ZLOTI, la fiecare vanzare, tacut.
+     *
+     * ⚠ Se cade pe lista ZONEI EURO, care e un fapt public si nu depinde de nicio cerere. Ce nu e
+     * acolo se opreste — iar mesajul spune limpede ce sa scoata din selectie.
+     */
+    return coduri.filter((c) => !TARI_EURO.has(c.toUpperCase()));
+  }
   const moneda = new Map((r.data.currencies ?? []).map((c) => [c.country_code, c.code]));
   return coduri.filter((c) => {
     const m = moneda.get(c);
-    return m != null && m !== "EUR";
+    /* ⚠ Si cand nomenclatorul lor NU stie tara, se cade tot pe lista noastra: `m == null` insemna
+       „treci", adica exact aceeasi cadere deschisa, pe alt drum. */
+    if (m == null) return !TARI_EURO.has(c.toUpperCase());
+    return m !== "EUR";
   });
 }
 

@@ -271,6 +271,24 @@ export function atasezaPreturileRon(
 }
 
 // ── Price building ────────────────────────────────────────────────────────────
+
+/**
+ * Tarile in care se plateste in EURO.
+ *
+ * ⚠ E UN FAPT PUBLIC, NU UN RASPUNS DE API — si de-aia sta aici, scris. Paza de la configurare se
+ * sprijinea pe nomenclatorul lor si CADEA DESCHIS cand cererea pica: „fara nomenclator nu inventam
+ * un blocaj". O paza care se stinge singura la o pana nu e o paza, mai ales cand greseala pe care
+ * o apara e de bani.
+ *
+ * ⚠ NUMAI ZONA EURO PROPRIU-ZISA. Statele care folosesc euro fara sa fie in ea (Monaco, Muntenegru,
+ * Kosovo…) nu sunt piete About You, iar o lista mai larga inseamna mai multe feluri de a gresi. Ce
+ * lipseste de aici se opreste — si asta e directia buna.
+ */
+export const TARI_EURO = new Set([
+  "AT", "BE", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE",
+  "IT", "LV", "LT", "LU", "MT", "NL", "PT", "SK", "SI", "ES",
+]);
+
 export function buildVariantPrices(
   config: AboutYouConfig, product: MappableProduct, variant: AboutYouVariantData,
 ): { prices: AboutYouPrice[] } | { error: string } {
@@ -307,6 +325,33 @@ export function buildVariantPrices(
     retail = ronToEur(onSale ? (ronTaiat as number) : ronVanzare, config.fx);
     sale = onSale ? ronToEur(ronVanzare, config.fx) : null;
     if (retail == null) return { error: `Nu am putut calcula prețul în euro pentru varianta ${variant.sku}.` };
+  }
+
+  /*
+   * ═══ ⚠ ACELASI NUMAR PLECA LA FIECARE TARA, ORICARE I-AR FI MONEDA (26.08.2026) ═══
+   *
+   * Pretul se socoteste in EURO, si atat: `countries.map` il punea ca atare in fiecare tara. Cu
+   * Polonia in lista, 20 EUR pleca drept `retail_price: 20` — iar acolo cifra se citeste in
+   * ZLOTI. Aproape un sfert din pret, la fiecare vanzare, tacut.
+   *
+   * ⚠ EXISTA O PAZA LA CONFIGURARE, DAR CADEA DESCHIS: cand nomenclatorul lor nu se putea citi,
+   * `tariNeEuro` intorcea lista goala („fara nomenclator nu inventam un blocaj") si orice tara
+   * trecea. Iar aici, la trimitere, nu era nicio verificare — deci o configurare salvata intr-o
+   * clipa proasta ramanea gresita pentru totdeauna.
+   *
+   * ⚠ SE VERIFICA PE UN FAPT PUBLIC, NU PE API-UL LOR. Zona euro e o lista stabila si cunoscuta;
+   * nu depinde de o cerere care poate pica. Asa paza nu mai are cum sa cada deschis.
+   *
+   * ⚠ SI SE OPRESTE, NU SE CONVERTESTE. O conversie ar cere un curs pe fiecare moneda, o data de
+   * referinta si o hotarare despre rotunjire — trei lucruri pe care nu le luam in locul
+   * comerciantului. Se spune ce e de facut si se opreste.
+   */
+  const neEuro = countries.filter((c) => !TARI_EURO.has(c.toUpperCase()));
+  if (neEuro.length > 0) {
+    return {
+      error: `Prețurile se trimit în euro, iar ${neEuro.join(", ")} folosesc altă monedă. `
+        + "Scoate țările astea din setările About You până când adăugăm conversia pe monedă.",
+    };
   }
 
   const prices = countries.map<AboutYouPrice>((c) => ({

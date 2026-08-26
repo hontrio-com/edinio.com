@@ -230,6 +230,16 @@ export interface TrendyolConfig {
    */
   claims_synced_per_storefront?: Partial<Record<TrendyolStoreFront, string>>;
   /**
+   * Cat de lata sa fie fereastra de retururi, pe fiecare vitrina.
+   *
+   * ⚠ EXISTA CA SA POATA PROGRESA. Retururile n-au cursor, iar `getClaims` n-are parametru de
+   * sortare documentat — deci un cursor cladit pe ordinea paginilor ar sari peste cereri. Cand
+   * o fereastra are mai multe pagini decat citim intr-o trecere, se ingusteaza si se tine minte
+   * ingustata; altfel trecerea urmatoare ar cere iar doua saptamani si ar relua ACELEASI pagini,
+   * la nesfarsit.
+   */
+  claims_fereastra_per_storefront?: Partial<Record<TrendyolStoreFront, number>>;
+  /**
    * Tara in care s-a FABRICAT produsul, implicita pentru tot magazinul.
    *
    * ⚠ NU E `origine`, care e chiar deasupra. Aceea e originea VANZATORULUI, folosita la

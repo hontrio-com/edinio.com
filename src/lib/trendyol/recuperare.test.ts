@@ -127,7 +127,7 @@ test("⚠ trunchierea are in continuare ultimul cuvant", () => {
 
 test("⚠ si retururile recupereaza la fel", () => {
   const mod = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
-  assert.match(mod, /const pana_la = Math\.min\(de_la \+ FEREASTRA_MAXIMA_MS, acum\);/);
+  assert.match(mod, /const pana_la = Math\.min\(de_la \+ latime, acum\);/);
   assert.match(mod, /endDate: pana_la/);
   assert.match(mod, /const panaLa = Math\.min\(inceput, r\.fereastraSfarsitMs\);/);
 });

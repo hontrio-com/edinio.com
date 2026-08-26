@@ -59,6 +59,17 @@ const MAX_EXPLICATIE = 500;
 /** Cate pagini se citesc intr-o trecere. */
 const PAGINI_PE_TRECERE = 3;
 
+/** Cate cereri pe pagina. Implicitul lor. */
+const PE_PAGINA = 50;
+
+/**
+ * Cea mai ingusta fereastra la care coboram.
+ *
+ * ⚠ Sub o ora n-are rost: ar insemna peste 150 de cereri de retur intr-o ora la un singur
+ * magazin, iar atunci problema nu mai e paginarea.
+ */
+const FEREASTRA_MINIMA_MS = 60 * 60 * 1000;
+
 function laData(ms: unknown): string | null {
   const n = Number(ms);
   return Number.isFinite(n) && n > 0 ? new Date(n).toISOString() : null;
@@ -72,7 +83,14 @@ function laData(ms: unknown): string | null {
  */
 export async function aduRetururile(
   admin: Db, ctx: TrendyolSyncContext, marcajMs?: number,
-): Promise<{ aduse: number; ok: boolean; fereastraSfarsitMs: number }> {
+  /**
+   * Cat de lata sa fie fereastra ceruta.
+   *
+   * ⚠ EXISTA CA SA SE POATA INGUSTA. Vezi nota lunga de la `ok = false`: fara ea, un magazin cu
+   * peste 150 de cereri intr-o fereastra ramanea blocat pe primele 150, la nesfarsit.
+   */
+  latimeCeruta?: number,
+): Promise<{ aduse: number; ok: boolean; fereastraSfarsitMs: number; latimeUrmatoare?: number }> {
   const acum = Date.now();
   /* ⚠ Suprapunere de cinci minute peste marcaj: ceasul lor si al nostru nu bat la fel, iar o
      cerere modificata chiar in secunda marcajului ar cadea intre doua ferestre. */
@@ -81,8 +99,16 @@ export async function aduRetururile(
    * urma se poate cere e alta socoteala. Confundate, un magazin oprit o luna pornea de la
    * `acum - 14 zile` si pierdea restul.
    */
+  /*
+   * ⚠ SUPRAPUNEREA SE APLICA O SINGURA DATA (26.08.2026).
+   *
+   * Marcajul se SCRIE deja compensat cu cinci minute (vezi `treceRetururile`). Scazute inca o
+   * data aici, ieseau zece minute de suprapunere la fiecare trecere. Nu se pierdea nimic —
+   * upsert-urile fac recitirea sigura — dar erau cereri si munca degeaba, la fiecare zece minute,
+   * pentru totdeauna.
+   */
   const cerut = Number.isFinite(marcajMs) && marcajMs
-    ? marcajMs - 5 * 60_000
+    ? marcajMs
     : acum - FEREASTRA_INITIALA_MS;
   const celMaiDevreme = acum - ORIZONT_RETURURI_MS;
   const taiat = cerut < celMaiDevreme;
@@ -99,7 +125,11 @@ export async function aduRetururile(
    * sfarsitul ei adevarat. Trecerea urmatoare porneste de-acolo, fereastra cu fereastra, pana
    * se ajunge din urma.
    */
-  const pana_la = Math.min(de_la + FEREASTRA_MAXIMA_MS, acum);
+  const latime = Math.min(
+    Math.max(latimeCeruta ?? FEREASTRA_MAXIMA_MS, FEREASTRA_MINIMA_MS),
+    FEREASTRA_MAXIMA_MS,
+  );
+  const pana_la = Math.min(de_la + latime, acum);
 
   if (taiat) {
     /* ⚠ O pierdere pe care n-o putem evita se SPUNE. Ascunsa, comerciantul ar crede ca are toate
@@ -120,7 +150,7 @@ export async function aduRetururile(
   let ok = true;
 
   for (let pagina = 0; pagina < PAGINI_PE_TRECERE; pagina++) {
-    const res = await getClaims(ctx.auth, { startDate: de_la, endDate: pana_la, page: pagina, size: 50 });
+    const res = await getClaims(ctx.auth, { startDate: de_la, endDate: pana_la, page: pagina, size: PE_PAGINA });
     if (isTrendyolError(res)) {
       await logError({
         action: "trendyol/retururi",
@@ -129,7 +159,7 @@ export async function aduRetururile(
         businessId: ctx.businessId, severity: "warning",
       });
       /* ⚠ Marcajul NU avanseaza: fereastra se reia. */
-      return { aduse, ok: false, fereastraSfarsitMs: pana_la };
+      return { aduse, ok: false, fereastraSfarsitMs: pana_la, latimeUrmatoare: latime };
     }
 
     const continut = res.data?.content ?? [];
@@ -142,13 +172,56 @@ export async function aduRetururile(
     }
 
     const totalPagini = Math.max(1, Number(res.data?.totalPages ?? 1));
-    if (continut.length === 0 || pagina + 1 >= totalPagini) return { aduse, ok, fereastraSfarsitMs: pana_la };
-    /* ⚠ S-au terminat paginile ingaduite intr-o trecere, dar mai sunt: marcajul NU are voie sa
-       sara la „acum", altfel cererile necitite raman in urma ferestrei pentru totdeauna. */
-    if (pagina + 1 >= PAGINI_PE_TRECERE) ok = false;
+    if (continut.length === 0 || pagina + 1 >= totalPagini) {
+      /*
+       * ⚠ A INCAPUT TOT. Fereastra se poate LARGI inapoi, incet: un varf de retururi trece, si
+       * n-are rost sa ramanem pe ferestre de-o ora pentru totdeauna.
+       */
+      return {
+        aduse, ok, fereastraSfarsitMs: pana_la,
+        latimeUrmatoare: Math.min(latime * 2, FEREASTRA_MAXIMA_MS),
+      };
+    }
+
+    /*
+     * ═══ ⚠ „NU MUT MARCAJUL" NU E ACELASI LUCRU CU „VOI PROGRESA" (26.08.2026) ═══
+     *
+     * Cand fereastra are mai multe pagini decat citim intr-o trecere, `ok = false` opreste
+     * marcajul — corect, altfel cererile necitite ar ramane in urma lui.
+     *
+     * ⚠ DAR RETURURILE N-AU CURSOR. Comenzile au: acolo `cursorMs` tine minte pana unde s-a
+     * ajuns si trecerea urmatoare continua. Aici, trecerea urmatoare relua paginile 0, 1, 2 —
+     * ACELEASI. Un magazin cu peste 150 de cereri intr-o fereastra ramanea blocat pe primele
+     * 150 pentru totdeauna, iar restul nu se citeau NICIODATA.
+     *
+     * ⚠ SI NU SE POATE FACE CURSOR TEMPORAL AICI. `getClaims` n-are parametru de sortare
+     * documentat, deci ordinea paginilor nu e garantata; un cursor cladit pe ea ar fi sarit
+     * peste cereri fara sa se vada.
+     *
+     * ⚠ DECI SE INGUSTEAZA FEREASTRA. Stim din `totalPages` cat de mult depaseste, deci taiem
+     * proportional, cu o marja. Fereastra mai mica incape, marcajul avanseaza, si se merge mai
+     * departe — bucata cu bucata, in loc sa se stea pe loc.
+     */
+    if (pagina + 1 >= PAGINI_PE_TRECERE) {
+      const depasire = totalPagini / PAGINI_PE_TRECERE;
+      const stransa = Math.max(
+        FEREASTRA_MINIMA_MS,
+        Math.floor((pana_la - de_la) / Math.max(2, Math.ceil(depasire * 1.5))),
+      );
+      await logError({
+        action: "trendyol/retururi",
+        message: `fereastra are ${totalPagini} pagini si citim ${PAGINI_PE_TRECERE}; se ingusteaza ca sa poata avansa`,
+        details: {
+          latimeVeche: pana_la - de_la, latimeNoua: stransa,
+          vitrina: ctx.auth.storefront ?? null,
+        },
+        businessId: ctx.businessId, severity: "warning",
+      });
+      return { aduse, ok: false, fereastraSfarsitMs: pana_la, latimeUrmatoare: stransa };
+    }
   }
 
-  return { aduse, ok, fereastraSfarsitMs: pana_la };
+  return { aduse, ok, fereastraSfarsitMs: pana_la, latimeUrmatoare: latime };
 }
 
 /**
@@ -178,9 +251,16 @@ export async function treceRetururile(
 
   const marcaje = { ...(ctx.config.claims_synced_per_storefront ?? {}) };
   const vechi = Date.parse(ctx.config.claims_synced_at ?? "");
+  /*
+   * ⚠ LATIMEA SE TINE MINTE PE VITRINA. Ingustata doar in memoria unei treceri, n-ar fi folosit
+   * la nimic: trecerea urmatoare ar fi cerut iar doua saptamani, ar fi gasit iar prea multe
+   * pagini, si tot asa — exact bucla pe care o reparam.
+   */
+  const latimi = { ...(ctx.config.claims_fereastra_per_storefront ?? {}) };
 
   let aduse = 0;
   const noi: Record<string, string> = {};
+  const latimiNoi: Record<string, number> = {};
 
   for (const vitrina of vitrine) {
     const ctxVitrina = vitrina === origine
@@ -191,8 +271,9 @@ export async function treceRetururile(
     const marcaj = Number.isFinite(alEi) ? alEi
       : (vitrina === origine && Number.isFinite(vechi) ? vechi : undefined);
 
-    const r = await aduRetururile(admin, ctxVitrina, marcaj);
+    const r = await aduRetururile(admin, ctxVitrina, marcaj, latimi[vitrina]);
     aduse += r.aduse;
+    if (r.latimeUrmatoare != null) latimiNoi[vitrina] = r.latimeUrmatoare;
     /*
      * ⚠ Fiecare vitrina isi muta marcajul singura, si numai la o trecere intreaga. Un esec pe
      * una nu atinge pozitia celorlalte.
@@ -207,9 +288,12 @@ export async function treceRetururile(
     }
   }
 
-  if (Object.keys(noi).length > 0) {
+  if (Object.keys(noi).length > 0 || Object.keys(latimiNoi).length > 0) {
     await patchTrendyolConfig(admin, ctx.businessId, {
       claims_synced_per_storefront: { ...marcaje, ...noi },
+      /* ⚠ Se scrie SI cand marcajul n-a avansat: tocmai atunci s-a ingustat fereastra, si
+         tocmai atunci trebuie tinuta minte. */
+      claims_fereastra_per_storefront: { ...latimi, ...latimiNoi },
       /* Marcajul vechi se tine la zi pentru vitrina de origine: e ce citeste orice cod care
          inca nu stie de cel pe vitrine. */
       ...(noi[origine] ? { claims_synced_at: noi[origine] } : {}),

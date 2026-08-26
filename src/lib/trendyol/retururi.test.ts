@@ -41,7 +41,10 @@ test("⚠ marcajul avanseaza NUMAI la o trecere intreaga", () => {
      scrie configurarea, ci cate o pozitie pe fiecare vitrina. Regula e insa aceeasi. */
   assert.match(mod, /if \(r\.ok\) \{/);
   assert.match(mod, /claims_synced_per_storefront: \{ \.\.\.marcaje, \.\.\.noi \}/);
-  assert.match(mod, /if \(pagina \+ 1 >= PAGINI_PE_TRECERE\) ok = false;/);
+  /* ⚠ Trunchierea opreste marcajul SI ingusteaza fereastra: fara a doua parte, trecerea
+     urmatoare relua aceleasi pagini la nesfarsit. */
+  assert.match(mod, /if \(pagina \+ 1 >= PAGINI_PE_TRECERE\) \{/);
+  assert.match(mod, /return \{ aduse, ok: false, fereastraSfarsitMs: pana_la, latimeUrmatoare: stransa \};/);
   /* ⚠ Si se scrie clipa de DINAINTE de citire, minus suprapunerea. */
   /* ⚠ Se scrie clipa de DINAINTE de citire, minus suprapunerea — dar nu mai departe decat s-a
      citit: fereastra e taiata la doua saptamani, iar sarit la „acum", marcajul ar lasa in urma o
@@ -64,7 +67,10 @@ test("⚠ DOUA plafoane, nu unul: latimea cererii si cat de mult in urma", () =>
   assert.match(mod, /const FEREASTRA_MAXIMA_MS = 14 \* 24 \* 60 \* 60 \* 1000;/);
   assert.match(mod, /const ORIZONT_RETURURI_MS = 90 \* 24 \* 60 \* 60 \* 1000;/);
   assert.match(mod, /const de_la = Math\.min\(Math\.max\(cerut, celMaiDevreme\), acum\);/);
-  assert.match(mod, /const pana_la = Math\.min\(de_la \+ FEREASTRA_MAXIMA_MS, acum\);/);
+  /* ⚠ Latimea e acum o VARIABILA, ca fereastra sa se poata ingusta cand nu incape — vezi
+     `retur-fereastra.test.ts`. Plafonul ei ramane cel al lor. */
+  assert.match(mod, /const pana_la = Math\.min\(de_la \+ latime, acum\);/);
+  assert.match(mod, /Math\.min\(\s*Math\.max\(latimeCeruta \?\? FEREASTRA_MAXIMA_MS, FEREASTRA_MINIMA_MS\),\s*FEREASTRA_MAXIMA_MS,\s*\);/);
   /* ⚠ Iar ce nu se poate lua se SPUNE, nu se ascunde. */
   assert.match(mod, /if \(taiat\) \{/);
   assert.match(mod, /severity: "critical"/);

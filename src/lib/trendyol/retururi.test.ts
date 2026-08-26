@@ -19,7 +19,6 @@ const viu = (p: string) =>
 
 const mod = viu("src/lib/trendyol/retururi.ts");
 const client = viu("src/lib/trendyol/client.ts");
-import { eVitrinaGolf } from "./client";
 const act = viu("src/lib/actions/trendyol-retururi.actions.ts");
 const ui = viu("src/components/dashboard/TrendyolReturns.tsx");
 
@@ -223,21 +222,18 @@ test("⚠ hotararea pleaca pe vitrina de pe care a VENIT returul", () => {
   assert.match(mod, /rejectClaimItems\(ctxCerere\.auth/);
 });
 
-test("⚠ Golful are capetele LUI, si Europa ramane neatinsa", () => {
+test("⚠ Golful are capetele LUI — vezi `cai-golf.test.ts`", () => {
   /*
-   * Trendyol are o sectiune separata de documentatie pentru retururile din Golf, cu variante
-   * `-gulf`. Trimise pe calea europeana, cererile unui vanzator de acolo nu gasesc nimic — si
-   * asta ARATA la fel ca „n-are retururi".
+   * ⚠ PROBA S-A MUTAT, si nu din comoditate. Cea de aici cerea doar ca sufixul „-gulf" sa fie
+   * lipit dupa „claims" — si trecea verde peste chiar defectul urmator: ei nu pun marcajul in
+   * acelasi loc la toate capetele. `/claims-gulf/{id}/items/approve` contine „gulf" si e gresit.
    *
-   * ⚠ NEVERIFICAT PE TRAFIC, si se spune pe fata: niciunul dintre conturile noastre nu e
-   * inregistrat in Golf. De-aia proba cere si ca vitrinele europene sa ramana pe calea veche.
+   * Proba adevarata, pe URL-uri exacte, sta in `cai-golf.test.ts`. Aici ramane doar legatura,
+   * ca sa nu para ca s-a pierdut.
    */
-  assert.equal(eVitrinaGolf("SA"), true);
-  assert.equal(eVitrinaGolf("AE"), true);
-  assert.equal(eVitrinaGolf("RO"), false);
-  assert.equal(eVitrinaGolf("GR"), false);
-  assert.equal(eVitrinaGolf(undefined), false);
-  assert.match(client, /eVitrinaGolf\(auth\.storefront\) \? "-gulf" : ""/);
+  const golf = readFileSync("src/lib/trendyol/cai-golf.test.ts", "utf8");
+  assert.match(golf, /APROBAREA: marcajul vine la SFARSITUL caii/);
+  assert.match(golf, /RESPINGEREA: are marcaj, si tot la sfarsit/);
 });
 
 test("⚠ motivele de respingere se traduc, fiindca ei le dau doar in turca", () => {

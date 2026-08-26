@@ -4358,6 +4358,7 @@ export type Database = {
       }
       trendyol_listings: {
         Row: {
+          arhivat_la: string | null
           attributes: Json
           auto_inventory: boolean
           brand_id: number | null
@@ -4378,11 +4379,14 @@ export type Database = {
           product_main_id: string
           rejection_reasons: Json
           sgr_units: number | null
+          sters_cerut_la: string | null
+          sters_eroare: string | null
           status: string
           ty_content_id: number | null
           updated_at: string
         }
         Insert: {
+          arhivat_la?: string | null
           attributes?: Json
           auto_inventory?: boolean
           brand_id?: number | null
@@ -4403,11 +4407,14 @@ export type Database = {
           product_main_id: string
           rejection_reasons?: Json
           sgr_units?: number | null
+          sters_cerut_la?: string | null
+          sters_eroare?: string | null
           status?: string
           ty_content_id?: number | null
           updated_at?: string
         }
         Update: {
+          arhivat_la?: string | null
           attributes?: Json
           auto_inventory?: boolean
           brand_id?: number | null
@@ -4428,6 +4435,8 @@ export type Database = {
           product_main_id?: string
           rejection_reasons?: Json
           sgr_units?: number | null
+          sters_cerut_la?: string | null
+          sters_eroare?: string | null
           status?: string
           ty_content_id?: number | null
           updated_at?: string

@@ -558,8 +558,7 @@ export function getClaims(
   return call<{
     content?: TrendyolClaim[];
     totalElements?: number; totalPages?: number; page?: number; size?: number;
-  }>(auth, "GET",
-    `/integration/order/sellers/${auth.supplierId}/claims${sufixulRegiunii(auth)}?${q.toString()}`);
+  }>(auth, "GET", `${caleaClaims(auth)}?${q.toString()}`);
 }
 
 /**
@@ -589,16 +588,43 @@ export function eVitrinaGolf(vitrina: string | undefined): boolean {
   return VITRINE_GOLF.has((vitrina ?? "").toUpperCase());
 }
 
-/** Sufixul cerut de regiunea vitrinei. `""` pentru Europa. */
-function sufixulRegiunii(auth: TrendyolAuth): string {
-  return eVitrinaGolf(auth.storefront) ? "-gulf" : "";
+/**
+ * ⚠ NU EXISTA „SUFIXUL REGIUNII". Chiar ideea asta a produs defectul (26.08.2026).
+ *
+ * Prima forma lipea `-gulf` dupa `claims` la toate capetele, fiindca asa arata la CITIRE. Dar
+ * ei nu pun marcajul in acelasi loc:
+ *
+ *   citire     /claims-gulf                          marcajul dupa „claims"
+ *   aprobare   /claims/{id}/items/approve-gulf       marcajul la SFARSITUL caii
+ *   respingere /claims/{id}/issue-gulf               la fel
+ *
+ * Deci un vanzator din Golf citea retururile, dar nu le putea nici aproba, nici respinge — si
+ * amandoua ar fi picat cu 404, adica exact ca „n-are ce aproba".
+ *
+ * ⚠ SI LA RESPINGERE NU ERA NICI MACAR SUFIXUL GRESIT: peticul care il adauga nu s-a aplicat,
+ * fiindca `replace` nu gaseste si tace. De-aia fiecare cale se scrie acum INTREAGA, o data,
+ * langa perechea ei europeana — se vede din privire care unde merge.
+ *
+ * ⚠ NEVERIFICAT PE TRAFIC, si se spune pe fata: niciunul dintre conturile noastre nu e
+ * inregistrat in Golf. Caile vin din documentatia lor. Pe vitrinele europene nu se schimba nimic.
+ */
+function caleaClaims(auth: TrendyolAuth): string {
+  const baza = `/integration/order/sellers/${auth.supplierId}`;
+  return eVitrinaGolf(auth.storefront) ? `${baza}/claims-gulf` : `${baza}/claims`;
+}
+
+function caleaAprobare(auth: TrendyolAuth, claimId: string): string {
+  const baza = `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}/items`;
+  return eVitrinaGolf(auth.storefront) ? `${baza}/approve-gulf` : `${baza}/approve`;
+}
+
+function caleaRespingere(auth: TrendyolAuth, claimId: string): string {
+  const baza = `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}`;
+  return eVitrinaGolf(auth.storefront) ? `${baza}/issue-gulf` : `${baza}/issue`;
 }
 
 export function approveClaimItems(auth: TrendyolAuth, claimId: string, claimLineItemIdList: string[]) {
-  return call<undefined>(
-    auth, "PUT",
-    `/integration/order/sellers/${auth.supplierId}/claims${sufixulRegiunii(auth)}/${encodeURIComponent(claimId)}/items/approve`,
-    { claimLineItemIdList });
+  return call<undefined>(auth, "PUT", caleaAprobare(auth, claimId), { claimLineItemIdList });
 }
 
 /**
@@ -629,9 +655,7 @@ export function rejectClaimItems(
   corp.set("claimItemIdList", p.claimItemIdList.join(","));
   corp.set("description", p.description.slice(0, 500));
   for (const f of p.files ?? []) corp.append("files", f);
-  return call<undefined>(
-    auth, "POST", `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}/issue`,
-    corp);
+  return call<undefined>(auth, "POST", caleaRespingere(auth, claimId), corp);
 }
 
 /** Motivele pe care le accepta ei la respingere. Se citesc, nu se ghicesc. */

@@ -6,7 +6,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
   esteDeconectatTrendyol, eTrecatoare, loadTrendyolContext, processQueueItem, pollOpenBatches,
-  reconcileRejections, reconcileStatuses, reconcileInventory, pause,
+  reconcileRejections, reconcileStatuses, reconcileInventory, stergeCePoateFiSters, pause,
   type TrendyolQueueItem, type TrendyolSyncContext,
 } from "@/lib/trendyol/sync";
 import { marcajUrmator, pollPackagesToateVitrinele } from "@/lib/trendyol/orders";
@@ -344,6 +344,31 @@ export async function GET(req: NextRequest) {
   if (eSelleri) {
     await logError({ action: "trendyol-sync", message: `magazinele conectate nu s-au putut citi: ${eSelleri}`, severity: "critical" });
   }
+  /* ── 3b) Stergerile care si-au asteptat ziua de arhiva ──────────────────────
+   *
+   * ⚠ STERGEREA NU MAI PLEACA ODATA CU ARHIVAREA. Ei cer ca un produs aprobat sa fi stat
+   * arhivat PESTE O ZI; ceruta imediat, e refuzata pe buna dreptate — iar noi o citeam drept
+   * „gata" si uitam listarea, desi produsul ramanea la ei.
+   *
+   * ⚠ La zece minute, nu la fiecare trecere: nimic din ce asteapta de o zi nu se grabeste.
+   */
+  if (new Date().getMinutes() % 10 === 7) {
+    for (const businessId of alegeInRotatie(sellerIds, MAX_BIZ)) {
+      const ctx = await ctxFor(businessId);
+      if (!ctx) continue;
+      try {
+        await stergeCePoateFiSters(admin, ctx);
+      } catch (e) {
+        await logError({
+          action: "trendyol-sync",
+          message: `stergerile amanate n-au putut fi trimise: ${e instanceof Error ? e.message : String(e)}`,
+          businessId, severity: "warning",
+        });
+      }
+      await pause(PACE_MS);
+    }
+  }
+
   /* ── Retururile (claims) ────────────────────────────────────────────────────
    *
    * ⚠ LA ZECE MINUTE, nu la fiecare trecere. O cerere de retur nu se schimba din minut in

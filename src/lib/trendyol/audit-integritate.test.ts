@@ -238,35 +238,102 @@ test("⚠ listarea se uita NUMAI dupa ce marfa nu se mai vinde", () => {
    * ⚠ ORDINEA E TOATA REPARATIA: arhivare (scoate din vanzare imediat), stoc zero (a doua
    * plasa), stergere adevarata, si abia apoi se uita listarea.
    */
+  /*
+   * ⚠ ORDINEA S-A LUNGIT (26.08.2026). Nu mai e „arhivare, stergere, uitare" intr-o singura
+   * trecere: arhivarea si stergerea sunt LOTURI, iar ei cer o zi de arhiva intre ele. Deci:
+   *
+   *     scoateDeLaVanzare      stoc zero + arhivare + `removing`
+   *     pollOpenBatches        arhivarea confirmata -> `arhivat_la`
+   *     stergeCePoateFiSters   dupa 25 de ore -> DELETE
+   *     pollOpenBatches        stergerea confirmata -> abia acum se uita randul
+   *
+   * Ce ramane neschimbat, si e chiar miezul: uitarea vine ULTIMA, dupa ce marfa chiar nu se mai
+   * vinde. Proba cere acum ordinea peste tot lantul, nu doar in prima functie.
+   */
   assert.match(sync, /async function scoateDeLaVanzare\(/);
-  const i = sync.indexOf("async function scoateDeLaVanzare(");
-  const f = sync.slice(i, i + 3000);
+  const f = sync.slice(sync.indexOf("async function scoateDeLaVanzare("), sync.indexOf("export async function removeProductNow("));
   const iArh = f.indexOf("setArchiveState(");
-  const iSter = f.indexOf("deleteProducts(");
-  const iUita = f.lastIndexOf('from("trendyol_listings").delete()');
-  assert.ok(iArh > 0 && iSter > iArh, "arhivarea vine INAINTEA stergerii");
-  assert.ok(iUita > iSter, "uitarea listarii vine ultima");
+  const iSemn = f.indexOf('status: "removing"');
+  assert.ok(iArh > 0 && iSemn > iArh, "arhivarea, apoi piatra de mormant");
+
+  /* ⚠ Stergerea propriu-zisa e in ALTA functie, si dupa ceas. */
+  const g = sync.slice(sync.indexOf("export async function stergeCePoateFiSters("));
+  const iCeas = g.indexOf('.lt("arhivat_la", prag)');
+  const iSter = g.indexOf("deleteProducts(");
+  assert.ok(iCeas > 0 && iSter > iCeas, "intai ceasul de arhiva, apoi stergerea");
+
+  /* ⚠ Si uitarea randului, numai pe ramura de reusita a lotului. */
+  /* ⚠ Domeniul se margineste la RAMURA de stergere: `lastIndexOf` pe tot restul fisierului
+     nimerea alt `else`, dintr-o functie cu totul diferita. */
+  const iDel = sync.indexOf('b.kind === "delete"');
+  const h = sync.slice(iDel, sync.indexOf('b.kind === "inventory" && hardFail', iDel));
+  assert.match(h.slice(h.lastIndexOf("} else {")), /\.delete\(\)\.eq\("business_id", ctx\.businessId\)/);
 });
 
-test("⚠ cand marfa e inca vandabila, randul RAMANE ca piatra de mormant", () => {
-  /* Sters, n-am mai fi stiut nimic. Ramas, coada reia stergerea si panoul il poate arata. */
-  const i = sync.indexOf("async function scoateDeLaVanzare(");
-  const f = sync.slice(i, i + 3000);
+test("⚠ randul NU se mai sterge la retragere. Niciodata", () => {
   /*
-   * ⚠ PAZA CEREA PANA AZI DOUA CONDITII, si a doua o slabea. `zero.verdict === "gata"` inseamna
-   * doar ca lotul de stoc a fost PRIMIT de ei — iar in registrul nostru loturile de stoc pica
-   * la ei de trei ori din zece (632 esuate din 1954, masurat pe traficul real). Deci „SI
-   * zeroizarea n-a iesit gata" lasa sa treaca tocmai cazul in care nici arhivarea n-a mers.
+   * ═══ ⚠ „PRIMIT DE EI" NU E „FACUT", SI ASTA E VALABIL SI PENTRU ARHIVARE (26.08.2026) ═══
    *
-   * Arhivarea e singura care scoate marfa din vanzare fara sa depinda de un lot de urmarit.
-   * Atunci ea singura poate fi si conditia.
+   * Forma dinainte cerea arhivarea, cerea stergerea, si uita listarea pe loc. Amandoua sunt
+   * insa LOTURI ASINCRONE: raspunsul HTTP spune ca au primit cererea, nu ca au facut-o. Masurat
+   * pe registrul nostru: 632 din 1954 de loturi de stoc au esuat la ei, 78 din 150 la produs.
+   *
+   * Deci se putea intampla, si nu era o inlantuire nefireasca: arhivare esuata, stoc esuat,
+   * stergere esuata — si randul, sters deja. Produsul ramanea la vanzare la ei, iar la noi nu
+   * mai era nicio urma ca a existat.
    */
-  assert.match(f, /if \(!arhivat\) \{/);
-  assert.doesNotMatch(f, /!arhivat && zero\.verdict/, "a doua conditie nu se intoarce");
+  const f = sync.slice(sync.indexOf("async function scoateDeLaVanzare("), sync.indexOf("export async function stergeCePoateFiSters("));
   assert.match(f, /status: "removing"/);
-  /* ⚠ Si e TRECATOR de la oricare din cele doua: o pana de retea la arhivare merita reincercata
-     fara sa arda o incercare, la fel ca una la zeroizare. */
-  assert.match(f, /eTrecatoare\(arh\.status\) \|\| zero\.verdict === "trecatoare"/);
+  /* ⚠ Singurele stergeri locale ramase sunt cele in care produsul N-A AJUNS niciodata la ei:
+     `draft`, si cel fara barcoduri. */
+  assert.equal((f.match(/\.delete\(\)/g) ?? []).length, 2, "numai draft si fara-barcoduri");
+  assert.doesNotMatch(f, /deleteProducts\(/, "stergerea nu mai pleaca odata cu arhivarea");
+});
+
+test("⚠ lotul de arhivare se URMARESTE, si `recordBatch` se verifica", () => {
+  /* Ei ne dau un `batchRequestId` si noi nu-l putem scrie => rezultat NECUNOSCUT, nu reusit.
+     Elementul se reia; arhivarea e idempotenta, deci reincercarea nu strica. */
+  const f = sync.slice(sync.indexOf("async function scoateDeLaVanzare("), sync.indexOf("export async function stergeCePoateFiSters("));
+  assert.match(f, /recordBatch\(admin, ctx\.businessId, arh\.data\.batchRequestId, "archive", \[listing\.id\]\)/);
+  assert.match(f, /if \(!scris\) return \{ ok: false/);
+});
+
+test("⚠ stergerea asteapta ZIUA de arhiva ceruta de ei", () => {
+  /*
+   * Pentru un produs aprobat, `DELETE /products` e ingaduit abia dupa ce a stat arhivat peste o
+   * zi. Ceruta imediat dupa arhivare, e refuzata pe buna dreptate — iar noi o citeam „gata".
+   *
+   * ⚠ Douazeci si cinci de ore, nu douazeci si patru: ceasul lor si al nostru nu bat la fel.
+   */
+  assert.match(sync, /const ORE_ARHIVA_INAINTE_DE_STERGERE = 25;/);
+  const f = sync.slice(sync.indexOf("export async function stergeCePoateFiSters("));
+  assert.match(f, /\.not\("arhivat_la", "is", null\)\.lt\("arhivat_la", prag\)/);
+});
+
+test("⚠ ceasul porneste la CONFIRMAREA arhivarii, nu la trimiterea ei", () => {
+  /* Pornit la trimitere, ar fi pornit de la ceva care poate n-a avut loc. La esec `arhivat_la`
+     ramane gol, deci stergerea nu pleaca niciodata si randul sta vizibil cu motivul scris. */
+  const i = sync.indexOf('b.kind === "archive"');
+  const f = sync.slice(i, i + 1200);
+  assert.match(f, /arhivat_la: now/);
+  assert.match(f, /if \(hardFail\) \{/);
+  assert.match(f, /sters_eroare: `Arhivarea a esuat la ei/);
+});
+
+test("⚠ o stergere ESUATA nu mai uita listarea", () => {
+  /*
+   * Forma dinainte o uita si la esec, cu argumentul „produsul e oricum arhivat si pe stoc zero".
+   * Dar niciuna din cele doua nu fusese confirmata atunci. Argumentul se sprijinea pe doua
+   * presupuneri, iar pretul greselii era sa pierdem orice urma a unui produs inca vandabil.
+   */
+  const i = sync.indexOf('b.kind === "delete"');
+  const f = sync.slice(i, i + 1800);
+  assert.match(f, /\} else if \(hardFail\) \{/);
+  assert.match(f, /sters_eroare:/);
+  /* Stergerea locala e NUMAI pe ramura de reusita. */
+  const iElse = f.lastIndexOf("} else {");
+  assert.ok(iElse > f.indexOf("hardFail"), "stergerea locala vine dupa ramura de esec");
+  assert.match(f.slice(iElse), /\.delete\(\)\.eq\("business_id", ctx\.businessId\)/);
 });
 
 test("⚠ zeroizarea are TREI verdicte si scrie in jurnal, nu in consola", () => {
@@ -290,7 +357,10 @@ test("⚠ si Trendyol chiar are stergere, pe care n-o foloseam", () => {
    * nostru loturile pica la ei des (632 esuate din 1954 la stoc, 78 din 150 la produs). Sta pe
    * `removing` pana cand `pollOpenBatches` afla ce s-a intamplat cu adevarat.
    */
-  assert.match(sync, /recordBatch\(admin, ctx\.businessId, idLot, "delete", \[listing\.id\]\)/);
+  /* ⚠ Lotul poarta id-ul LISTARII, iar `recordBatch` se VERIFICA: primit de ei si nescris de
+     noi inseamna rezultat necunoscut, deci se reia. */
+  assert.match(sync, /recordBatch\(admin, ctx\.businessId, idLot, "delete", \[l\.id\]\)/);
+  assert.match(sync, /sters_eroare: scris \? null :/);
   assert.match(sync, /\} else if \(b\.kind === "delete"\) \{/, "si lotul se citeste la sondare");
 });
 

@@ -1064,6 +1064,15 @@ async function zeroizeazaStocul(
  * atat timp cat exista, coada reia stergerea, panoul il poate arata, iar noi stim ca la ei a
  * mai ramas ceva. Sters, n-am mai fi stiut nimic.
  */
+/**
+ * Cat trebuie sa stea un produs arhivat inainte sa poata fi sters.
+ *
+ * ⚠ E REGULA LOR, nu prudenta noastra: pentru un produs aprobat, stergerea e ingaduita abia
+ * dupa ce a stat arhivat peste o zi. Douazeci si cinci de ore, nu douazeci si patru: ceasul lor
+ * si al nostru nu bat la fel, iar o ora in plus nu costa nimic — marfa e deja scoasa din vanzare.
+ */
+const ORE_ARHIVA_INAINTE_DE_STERGERE = 25;
+
 async function scoateDeLaVanzare(
   admin: Db, ctx: TrendyolSyncContext, listing: ListingRow,
 ): Promise<SyncOutcome> {
@@ -1076,12 +1085,13 @@ async function scoateDeLaVanzare(
   const zero = await zeroizeazaStocul(admin, ctx, listing.id);
 
   if (zero.barcoduri.length === 0) {
+    /* Fara barcoduri, listarea n-a ajuns niciodata la ei sub o forma pe care s-o putem numi. */
     await admin.from("trendyol_listings").delete().eq("id", listing.id);
     return { ok: true, action: "removed" };
   }
 
   /* ⚠ ARHIVAREA INAINTE DE ORICE: e singura care scoate marfa din vanzare fara sa depinda de
-     un lot pe care trebuie sa-l mai si urmarim. */
+     cantitate. Dar e si ea un LOT, deci „primita" nu inseamna „facuta" — vezi mai jos. */
   const arh = await setArchiveState(ctx.auth, zero.barcoduri.map((barcode) => ({ barcode, archived: true })));
   const arhivat = !isTrendyolError(arh);
   if (!arhivat) {
@@ -1094,88 +1104,133 @@ async function scoateDeLaVanzare(
   }
 
   /*
-   * ⚠ DACA MARFA E INCA VANDABILA, NU SE STERGE NIMIC LA NOI. Randul ramane ca urma, iar
-   * verdictul trimite elementul inapoi in coada — trecator daca a fost o pana, altfel omul
-   * il vede in panou pe `removing`.
+   * ═══ ⚠ RANDUL NU SE MAI STERGE AICI. NICIODATA (26.08.2026) ═══
+   *
+   * Forma dinainte cerea arhivarea, cerea stergerea, si uita listarea pe loc. Amandoua sunt
+   * insa LOTURI ASINCRONE la ei: raspunsul HTTP spune ca au primit cererea, nu ca au facut-o.
+   * Masurat pe registrul nostru, pe trafic real, loturile pica la ei des — 632 din 1954 la
+   * stoc, 78 din 150 la produs.
+   *
+   * Deci se putea intampla asta, si nu era o inlantuire nefireasca:
+   *
+   *     arhivare  primita  -> mai tarziu ESUATA
+   *     stoc zero primit   -> mai tarziu ESUAT
+   *     stergere  primita  -> mai tarziu ESUATA
+   *     la noi:            randul, sters deja
+   *
+   * Adica produsul ramanea la vanzare la ei, si la noi nu mai era nicio urma ca a existat.
+   *
+   * ⚠ ACUM RANDUL STA PE `removing` PANA CAND LOTURILE CONFIRMA. `removing` nu e o stare
+   * inventata: e chiar piatra de mormant a casei pentru „marfa poate fi inca vandabila".
+   *
+   * ⚠ SI STERGEREA NU MAI PLEACA IN ACEEASI CLIPA CU ARHIVAREA. Ei cer ca un produs aprobat sa
+   * fi stat arhivat PESTE O ZI. Ceruta imediat, stergerea e refuzata pe buna dreptate — iar noi
+   * o luam drept „gata". Pleaca din cron, cand `arhivat_la` e destul de vechi. Vezi
+   * `stergeCePoateFiSters`.
    */
+  const acum = new Date().toISOString();
+  const { error: eSemn } = await admin.from("trendyol_listings")
+    .update({ status: "removing", error: arhivat ? null : arh.error, updated_at: acum } as never)
+    .eq("id", listing.id);
+  if (eSemn) {
+    /* ⚠ Nemarcat, randul ar fi ramas „approved" si nimeni n-ar mai fi stiut ca e de scos. */
+    return { ok: false, error: "Retragerea nu s-a putut marca la noi.", status: 0 };
+  }
+
   /*
-   * ⚠ PAZA STA NUMAI PE ARHIVARE (26.08.2026).
-   *
-   * Cerea pana azi „arhivarea a picat SI zeroizarea n-a iesit `gata`". Dar `gata` de la
-   * `zeroizeazaStocul` inseamna doar ca lotul a fost PRIMIT — iar in registrul nostru loturile
-   * de stoc pica la ei de trei ori din zece (632 esuate din 1954). Deci a doua conditie lasa sa
-   * treaca tocmai cazul in care nici arhivarea n-a mers, si nici stocul n-a ajuns pe zero.
-   *
-   * Nota de deasupra o spunea deja, cu alte cuvinte: arhivarea e SINGURA care scoate marfa din
-   * vanzare fara sa depinda de un lot pe care trebuie sa-l mai si urmarim. Atunci ea singura
-   * poate fi si conditia.
+   * ⚠ LOTUL DE ARHIVARE SE URMARESTE, si `recordBatch` se VERIFICA. Daca ei ne-au dat un
+   * `batchRequestId` si noi nu l-am putut scrie, rezultatul e NECUNOSCUT — nu reusit. Elementul
+   * se reia, iar arhivarea e idempotenta: arhivarea unui produs deja arhivat nu strica nimic.
    */
+  if (arhivat && arh.data?.batchRequestId) {
+    const scris = await recordBatch(admin, ctx.businessId, arh.data.batchRequestId, "archive", [listing.id]);
+    if (!scris) return { ok: false, error: "Lotul de arhivare n-a putut fi tinut minte.", status: 0 };
+  }
+
   if (!arhivat) {
-    await admin.from("trendyol_listings").update({ status: "removing" } as never).eq("id", listing.id);
     return {
       ok: false,
       error: `Produsul e inca de vanzare pe Trendyol: ${arh.error}`,
-      /* ⚠ Trecatoare de la ORICARE dintre cele doua: o pana de retea la arhivare merita
-         reincercata fara sa arda o incercare, la fel ca una la zeroizare. */
+      /* ⚠ Trecatoare de la ORICARE dintre cele doua. */
       status: (eTrecatoare(arh.status) || zero.verdict === "trecatoare") ? 0 : undefined,
     };
   }
 
-  /*
-   * ⚠ STERGEREA ADEVARATA, si numai dupa ce marfa nu se mai vinde. Un refuz aici NU mai e
-   * grav: produsul e arhivat sau pe stoc zero, deci nimeni nu-l mai cumpara. De-aia nu tine
-   * elementul in coada — se scrie si se merge mai departe.
-   */
-  const ster = await deleteProducts(ctx.auth, zero.barcoduri);
-  if (isTrendyolError(ster)) {
-    await logError({
-      action: "trendyol/stergere",
-      message: `stergerea la Trendyol a fost refuzata (produsul ramane scos din vanzare): ${ster.error}`,
-      details: { listingId: listing.id, barcoduri: zero.barcoduri.slice(0, 20), status: ster.status },
-      businessId: ctx.businessId, severity: "warning",
-    });
-    /* Refuzata pe loc, dar marfa e arhivata sau pe stoc zero: nu se mai vinde. Randul se uita,
-       ca pana acum — n-avem ce astepta, fiindca nu s-a deschis niciun lot. */
-    await admin.from("trendyol_listings").delete().eq("id", listing.id);
-    return { ok: true, action: "removed" };
-  }
-
-  const idLot = ster.data?.batchRequestId;
-  if (!idLot) {
-    /* Fara id de lot n-avem ce urmari; ca mai sus, marfa nu se mai vinde. */
-    await admin.from("trendyol_listings").delete().eq("id", listing.id);
-    return { ok: true, action: "removed" };
-  }
-
-  /*
-   * ═══ ⚠ „PRIMIT DE EI" NU E „FACUT" (26.08.2026) ═══
-   *
-   * Randul se stergea aici, pe increderea ca lotul a fost PRIMIT. Dar la Trendyol toate
-   * miscarile astea sunt loturi asincrone, iar rezultatul adevarat se afla abia din
-   * `getBatchResult`.
-   *
-   * ⚠ MASURAT PE REGISTRUL NOSTRU, pe traficul real al contului:
-   *
-   *     inventory   1322 reusite   632 ESUATE   (32%)
-   *     product       72 reusite    78 ESUATE   (52%)
-   *     update      2451 reusite   148 esuate
-   *
-   * Adica tocmai lotul pe care `zeroizeazaStocul` il declara „gata" de indata ce e primit
-   * pica la ei de trei ori din zece. Sters randul, la noi nu mai ramanea nicio urma ca
-   * produsul a existat vreodata acolo — iar la ei se vindea mai departe.
-   *
-   * ⚠ DECI RANDUL RAMANE `removing` PANA CAND LOTUL CONFIRMA. Nu e o stare de asteptare
-   * inventata: `removing` exista deja si e chiar piatra de mormant pe care o punem cand marfa
-   * e inca vandabila. `pollOpenBatches` o ridica atunci cand lotul de stergere se incheie.
-   *
-   * ⚠ Iar `related_ids` poarta ID-UL LISTARII, nu barcodurile: la confirmare trebuie sa stim
-   * ce rand sa uitam, iar barcodurile nu ne duc inapoi la el decat printr-o a doua citire.
-   */
-  await recordBatch(admin, ctx.businessId, idLot, "delete", [listing.id]);
-  await admin.from("trendyol_listings")
-    .update({ status: "removing", updated_at: new Date().toISOString() } as never)
-    .eq("id", listing.id);
+  /* Marfa e pe drumul spre „nu se mai vinde". Restul il duce cronul, dupa confirmari. */
   return { ok: true, action: "removed" };
+}
+
+/**
+ * Ce s-a arhivat acum mai bine de o zi se poate si sterge.
+ *
+ * ═══ ⚠ EI CER O ZI DE ARHIVA INAINTE DE STERGERE ═══
+ *
+ * Pentru un produs APROBAT, `DELETE /products` e ingaduit numai dupa ce a stat arhivat peste o
+ * zi. Ceruta imediat dupa arhivare — cum faceam — cererea e refuzata pe buna dreptate, iar noi
+ * o citeam drept „gata" si uitam listarea.
+ *
+ * ⚠ `arhivat_la` SE SCRIE LA CONFIRMAREA LOTULUI, nu la trimiterea lui. Altfel ceasul ar porni
+ * de la o arhivare care poate n-a avut loc.
+ */
+export async function stergeCePoateFiSters(
+  admin: Db, ctx: TrendyolSyncContext, maxProduse = 20,
+): Promise<{ cerute: number }> {
+  const prag = new Date(Date.now() - ORE_ARHIVA_INAINTE_DE_STERGERE * 3600_000).toISOString();
+  const randuri = randuriCitite<{ id: string }>("trendyol.listariDeSters", await admin
+    .from("trendyol_listings").select("id")
+    .eq("business_id", ctx.businessId).eq("status", "removing")
+    .not("arhivat_la", "is", null).lt("arhivat_la", prag)
+    /* ⚠ Cele la care n-am mai incercat de mult intai, ca sa nu se blocheze coada pe una care
+       refuza mereu. */
+    .order("sters_cerut_la", { ascending: true, nullsFirst: true })
+    .limit(maxProduse) as never);
+
+  let cerute = 0;
+  for (const l of randuri) {
+    const barcoduri = randuriCitite<{ barcode: string }>("trendyol.barcoduriDeSters", await admin
+      .from("trendyol_variants").select("barcode")
+      .eq("listing_id", l.id).not("barcode", "is", null) as never)
+      .map((v) => v.barcode).filter(Boolean);
+    if (barcoduri.length === 0) {
+      /* N-avem ce numi la ei; randul si-a facut treaba de piatra de mormant. */
+      await admin.from("trendyol_listings").delete().eq("id", l.id);
+      continue;
+    }
+
+    const acum = new Date().toISOString();
+    const ster = await deleteProducts(ctx.auth, barcoduri);
+    if (isTrendyolError(ster)) {
+      /*
+       * ⚠ RANDUL RAMANE. Un refuz aici nu inseamna ca produsul a disparut — inseamna ca inca e
+       * acolo, arhivat. Sters randul, n-am mai fi stiut nici macar atat.
+       */
+      await admin.from("trendyol_listings")
+        .update({ sters_cerut_la: acum, sters_eroare: ster.error, updated_at: acum } as never)
+        .eq("id", l.id);
+      continue;
+    }
+
+    const idLot = ster.data?.batchRequestId;
+    if (!idLot) {
+      /* Fara id de lot n-avem ce urmari. Marfa e arhivata, deci nu se vinde; randul se uita. */
+      await admin.from("trendyol_listings").delete().eq("id", l.id);
+      cerute++;
+      continue;
+    }
+
+    /* ⚠ `related_ids` poarta ID-UL LISTARII: la confirmare trebuie sa stim ce rand sa uitam. */
+    const scris = await recordBatch(admin, ctx.businessId, idLot, "delete", [l.id]);
+    await admin.from("trendyol_listings")
+      .update({
+        sters_cerut_la: acum,
+        /* ⚠ Lotul primit dar nescris = rezultat NECUNOSCUT. Se noteaza si se reia. */
+        sters_eroare: scris ? null : "Lotul de stergere n-a putut fi tinut minte; se reia.",
+        updated_at: acum,
+      } as never)
+      .eq("id", l.id);
+    cerute++;
+  }
+  return { cerute };
 }
 
 export async function removeProductNow(admin: Db, ctx: TrendyolSyncContext, productId: string): Promise<SyncOutcome> {
@@ -1189,6 +1244,17 @@ export async function removeByMainId(admin: Db, ctx: TrendyolSyncContext, mainId
   /* Aceeasi cale, si din acelasi motiv: drumul din coada (produs sters din Edinio) trecea
      direct la stergerea randului, deci lasa produsul viu si vandabil la ei. */
   return scoateDeLaVanzare(admin, ctx, listing);
+}
+
+/**
+ * ⚠ NUMAI CE ARATA A UUID. `related_ids` a purtat candva BARCODURI la loturile de stergere. Un
+ * rand vechi ar trimite siruri ca „8595602540280" intr-un `.in("id", ...)`, iar Postgres refuza
+ * tot lotul cu „invalid input syntax for type uuid" — o singura ramasita ar rupe sondarea
+ * pentru toti.
+ */
+function eUuid(x: unknown): x is string {
+  return typeof x === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
 }
 
 // ── Batch polling (cron) ────────────────────────────────────────────────────────
@@ -1482,49 +1548,66 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
       // Lotul de stoc a trecut: contorul de reluari se sterge, ca produsul sa
       // nu ramana cu o datorie veche care sa-l blocheze la urmatoarea problema.
       await reseteazaReluarileDeStoc(admin, ctx, Array.isArray(b.related_ids) ? (b.related_ids as string[]) : []);
+    } else if (b.kind === "archive") {
+      /*
+       * ═══ ⚠ CEASUL CELOR 24 DE ORE PORNESTE DE AICI, NU DE LA TRIMITERE (26.08.2026) ═══
+       *
+       * Ei cer ca un produs aprobat sa fi stat arhivat peste o zi inainte de stergere. Daca am
+       * fi pornit ceasul cand am TRIMIS arhivarea, l-am fi pornit de la ceva care poate n-a avut
+       * loc: arhivarea e un lot, iar loturile pica la ei des.
+       *
+       * ⚠ La esec, `arhivat_la` ramane gol — deci stergerea nu pleaca niciodata, si randul sta
+       * pe `removing` cu motivul scris. Vizibil si nereparat e mult mai bine decat sters si uitat.
+       */
+      const listariArhivate = (Array.isArray(b.related_ids) ? b.related_ids : []).filter(eUuid);
+      if (listariArhivate.length > 0) {
+        if (hardFail) {
+          await admin.from("trendyol_listings").update({
+            sters_eroare: `Arhivarea a esuat la ei: ${errors.slice(0, 2).join("; ")}`,
+            updated_at: now,
+          } as never).eq("business_id", ctx.businessId).in("id", listariArhivate);
+        } else {
+          /* ⚠ NUMAI PE RANDURI CARE CHIAR SUNT IN RETRAGERE. A doua centura: un lot etichetat
+             gresit „archive" n-ar putea porni ceasul de stergere pe un produs viu. */
+          await admin.from("trendyol_listings").update({
+            arhivat_la: now, sters_eroare: null, updated_at: now,
+          } as never)
+            .eq("business_id", ctx.businessId).eq("status", "removing").in("id", listariArhivate);
+        }
+      }
     } else if (b.kind === "delete") {
       /*
-       * ⚠ ABIA ACUM SE UITA LISTAREA. Pana la confirmarea lotului, randul a stat pe `removing`:
-       * marfa e arhivata si pe stoc zero, deci nu se vinde, dar noi inca nu stiam daca s-a si
-       * sters la ei.
+       * ⚠ LISTAREA SE UITA NUMAI LA O STERGERE CONFIRMATA (26.08.2026).
        *
-       * ⚠ SI LA ESEC SE UITA TOT, dinadins. Stergerea e ultimul pas si cel mai putin important:
-       * produsul e deja scos din vanzare de arhivare si de stocul zero. Tinut pe `removing` la
-       * nesfarsit, i-ar fi ramas comerciantului in panou un rand pe care nu-l poate limpezi cu
-       * nimic. Se scrie in jurnal si se merge mai departe.
-       */
-      /*
-       * ⚠ NUMAI CE ARATA A UUID. `related_ids` a purtat pana azi BARCODURI la loturile de
-       * stergere — le-am schimbat pe id-uri de listare chiar in trecerea asta. Un rand vechi,
-       * scris de codul dinainte, ar trimite siruri ca „8595602540280" intr-un `.in("id", ...)`,
-       * iar Postgres refuza tot lotul cu „invalid input syntax for type uuid" — adica o
-       * singura ramasita ar rupe sondarea pentru toti.
+       * Forma dinainte o uita SI la esec, cu argumentul „produsul e oricum arhivat si pe stoc
+       * zero". Dar nici arhivarea, nici zeroizarea nu fusesera confirmate atunci — erau tot
+       * loturi doar primite. Deci argumentul se sprijinea pe doua presupuneri, iar pretul
+       * greselii era sa pierdem orice urma a unui produs inca vandabil.
        *
-       * ⚠ In productie nu exista niciun asemenea rand (zero loturi de stergere in registru,
-       * verificat), deci asta e o centura, nu o reparatie. Dar calea asta nu s-a mai executat
-       * niciodata, si prima ei rulare n-are voie sa fie si prima ei incercare.
+       * ⚠ ACUM: la esec randul RAMANE pe `removing`, cu motivul scris, si se reincearca. Ei cer
+       * o zi de arhiva inainte de stergere, iar refuzul cel mai probabil e chiar „prea devreme"
+       * — un refuz care trece de la sine.
        */
-      const eUuid = (x: unknown): x is string =>
-        typeof x === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
-      const brute = Array.isArray(b.related_ids) ? b.related_ids : [];
-      const listariDeUitat = brute.filter(eUuid);
-      if (brute.length > 0 && listariDeUitat.length === 0) {
+      const listariDeUitat = (Array.isArray(b.related_ids) ? b.related_ids : []).filter(eUuid);
+      if (listariDeUitat.length === 0) {
         await logError({
           action: "trendyol/stergere",
-          message: "lotul de stergere poarta id-uri vechi (barcoduri), deci nu se stie ce listare sa se uite",
-          details: { batchRequestId: b.batch_request_id, exemple: brute.slice(0, 5) },
+          message: "lotul de stergere n-are id-uri de listare, deci nu se stie ce rand sa se uite",
+          details: { batchRequestId: b.batch_request_id },
           businessId: ctx.businessId, severity: "warning",
         });
-      }
-      if (hardFail) {
+      } else if (hardFail) {
         await logError({
           action: "trendyol/stergere",
-          message: `lotul de stergere a esuat la ei; produsul ramane arhivat si pe stoc zero: ${errors.slice(0, 2).join("; ")}`,
+          message: `lotul de stergere a esuat; produsul ramane arhivat si marcat pentru retragere: ${errors.slice(0, 2).join("; ")}`,
           details: { batchRequestId: b.batch_request_id, listari: listariDeUitat.slice(0, 20) },
           businessId: ctx.businessId, severity: "warning",
         });
-      }
-      if (listariDeUitat.length > 0) {
+        await admin.from("trendyol_listings").update({
+          sters_eroare: errors.slice(0, 2).join("; ") || "Stergerea a fost refuzata la ei.",
+          updated_at: now,
+        } as never).eq("business_id", ctx.businessId).in("id", listariDeUitat);
+      } else {
         await admin.from("trendyol_listings")
           .delete().eq("business_id", ctx.businessId).in("id", listariDeUitat);
       }
@@ -1585,10 +1668,27 @@ async function incearcaAdoptarea(
   if (info.archived === true) {
     const dez = await setArchiveState(ctx.auth, [{ barcode, archived: false }]);
     if (isTrendyolError(dez)) {
-      console.warn(`[trendyol] produs adoptat dar NEDEZARHIVAT (${barcode}): ${dez.error}`);
+      /* ⚠ In jurnal, nu in consola: un `console.warn` nu ajunge nicaieri unde se uita cineva. */
+      await logError({
+        action: "trendyol/adoptare",
+        message: `produs adoptat dar NEDEZARHIVAT, deci nu se vede inca la ei: ${dez.error}`,
+        details: { barcode, listingId: listing.id },
+        businessId: ctx.businessId, severity: "warning",
+      });
     } else {
       const batchRequestId = dez.data?.batchRequestId;
-      if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "archive", [listing.product_main_id]);
+      /*
+       * ⚠ FEL PROPRIU, NU „archive" (26.08.2026).
+       *
+       * Asta e o DEZarhivare — opusul. Inregistrata sub acelasi fel ca arhivarea de la
+       * retragere, sondarea ar fi citit-o drept „s-a arhivat" si ar fi pornit ceasul de 25 de
+       * ore dupa care produsul se STERGE. Adica exact produsul pe care comerciantul tocmai
+       * l-a publicat.
+       *
+       * Azi n-ar fi lovit, si numai din noroc: purta `product_main_id`, care nu se potriveste
+       * cu niciun `id` de listare. Norocul ala tine pana cand cineva „indreapta" id-ul.
+       */
+      if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "dezarhivare", [listing.id]);
     }
   }
 

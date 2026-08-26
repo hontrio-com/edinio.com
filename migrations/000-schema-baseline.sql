@@ -5431,7 +5431,10 @@ create table if not exists public.trendyol_listings (
   ty_content_id bigint,
   creat_de_edinio boolean default false not null,
   sgr_units integer,
-  country_of_origin text);
+  country_of_origin text,
+  arhivat_la timestamp with time zone,
+  sters_cerut_la timestamp with time zone,
+  sters_eroare text);
 
 create table if not exists public.trendyol_orders (
   id uuid default gen_random_uuid() not null,
@@ -6086,6 +6089,7 @@ CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING b
 CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING btree (claim_row_id);
 CREATE INDEX trendyol_claims_biz_idx ON public.trendyol_claims USING btree (business_id, claim_date DESC);
 CREATE INDEX trendyol_claims_de_hotarat_idx ON public.trendyol_claims USING btree (business_id, last_modified) WHERE (claim_status = ANY (ARRAY['Created'::text, 'WaitingInAction'::text, 'InAnalysis'::text]));
+CREATE INDEX trendyol_listings_de_sters_idx ON public.trendyol_listings USING btree (business_id, arhivat_la) WHERE (status = 'removing'::text);
 CREATE INDEX trendyol_sync_queue_ordine_idx ON public.trendyol_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX ups_etichete_business_idx ON public.ups_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX users_profile_role_idx ON public.users_profile USING btree (role);

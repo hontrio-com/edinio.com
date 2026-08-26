@@ -86,9 +86,32 @@ export async function GET(req: NextRequest) {
   const ctxCache = new Map<string, TrendyolSyncContext | null>();
   async function ctxFor(businessId: string): Promise<TrendyolSyncContext | null> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
-    const ctx = await loadTrendyolContext(admin, businessId);
-    ctxCache.set(businessId, ctx);
-    return ctx;
+    try {
+      const ctx = await loadTrendyolContext(admin, businessId);
+      ctxCache.set(businessId, ctx);
+      return ctx;
+    } catch (e) {
+      /*
+       * ═══ ⚠ UN MAGAZIN N-ARE VOIE SA OPREASCA TOT CRONUL (26.08.2026) ═══
+       *
+       * `loadTrendyolContext` a devenit strict — si asa trebuie: un `null` acolo insemna
+       * „magazinul nu e conectat", si o pana de o clipa oprea tacut tot Trendyol-ul lui.
+       *
+       * Dar aruncarea urca pana in bucla cronului, care n-o prinde. Deci un glitch de baza pe
+       * UN magazin oprea trecerea pentru TOATE: cozile lor nu se goleau, comenzile lor nu se
+       * citeau. Am schimbat o tacere pe un magazin cu o oprire pe toate.
+       *
+       * ⚠ NU SE PUNE IN CACHE. `null` acolo ar fi insemnat „am intrebat si nu e conectat", iar
+       * pasii de mai jos din ACEEASI trecere l-ar fi sarit pe toti. O pana e trecatoare;
+       * urmatorul pas are dreptul sa incerce din nou.
+       */
+      await logError({
+        action: "trendyol-sync",
+        message: `contextul magazinului nu s-a putut citi: ${e instanceof Error ? e.message : String(e)}`,
+        businessId, severity: "warning",
+      });
+      return null;
+    }
   }
 
   // ── 1) Drain the sync queue, grouped by business ────────────────────────────────

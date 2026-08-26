@@ -515,21 +515,52 @@ export async function ingestByOrderNumber(admin: Db, ctx: TrendyolSyncContext, o
 }
 
 /**
- * Fereastra de interogare a comenzilor, taiata la ce accepta Trendyol.
+ * Fereastra de interogare a comenzilor.
  *
- * Serviciul refuza un interval mai mare de DOUA SAPTAMANI. Un magazin care sta
- * o luna fara sincronizare ar fi cerut o fereastra mai lunga si ar fi primit
- * eroare la fiecare rulare de cron — adica exact magazinul care avea nevoie de
- * recuperare nu si-ar mai fi luat niciodata comenzile. Cerem ultimele doua
- * saptamani si lasam pasul urmator sa continue.
+ * ═══ ⚠ SUNT DOUA PLAFOANE DIFERITE, SI LE CONFUNDAM INTR-UNUL ═══
+ *
+ * Trendyol pune doua limite deosebite, iar noi le tratam ca pe una singura:
+ *
+ *   LATIMEA FERESTREI   cel mult 14 zile intr-o cerere
+ *   CAT DE MULT IN URMA capatul clasic da date doar pe ULTIMA LUNA
+ *                       („Erişilebilir veri kapsamı son 1 ay ile sınırlandırılacaktır")
+ *
+ * Codul dinainte lua „14 zile" si ca latime, SI ca orizont — deci pentru un magazin oprit o
+ * luna cerea `acum - 14 zile` si ii spunea marcajului ca a citit tot pana acum.
+ *
+ * ⚠ CE COSTA: ultima sincronizare pe 1 august, cronul revine pe 31. Se citea 17 -> 31 august,
+ * marcajul ajungea la 31, iar cele saisprezece zile dintre 1 si 17 nu se mai citeau NICIODATA.
+ * Nu incet, nu cu o eroare — definitiv, si tocmai pentru magazinul care avea cel mai mult
+ * nevoie de recuperare.
+ *
+ * ⚠ „Lasam pasul urmator sa continue" era o presupunere pe care n-o verifica nimeni: nimic nu
+ * continua, fiindca marcajul trecuse deja de gaura.
+ *
+ * ⚠ ACUM SE MERGE FEREASTRA CU FEREASTRA. Se porneste de unde s-a ramas, se cere cel mult
+ * paisprezece zile, iar marcajul se opreste la sfarsitul ferestrei CITITE. Trecerea urmatoare
+ * continua de-acolo, pana se ajunge din urma.
+ *
+ * ⚠ SI CAND CHIAR NU SE POATE, SE SPUNE. Peste o luna, ei pur si simplu nu mai au datele —
+ * `taiat` iese `true`, iar apelantul striga in jurnal. O pierdere pe care n-o putem evita e cu
+ * totul altceva decat una pe care o ascundem.
  */
 const DOUA_SAPTAMANI = 14 * 24 * 60 * 60 * 1000;
 
-export function fereastraComenzi(sinceMs: number | undefined, acum = Date.now()): { startDate: number; endDate: number } {
-  const minim = acum - DOUA_SAPTAMANI;
-  // O marja de un minut: ceasurile noastre si ale lor nu bat perfect.
-  const start = sinceMs != null && sinceMs > minim ? sinceMs : minim + 60_000;
-  return { startDate: Math.min(start, acum), endDate: acum };
+/** Cat de mult in urma mai au ei datele, pe capatul clasic. Fluxul are trei luni. */
+const ORIZONT_DATE = 30 * 24 * 60 * 60 * 1000;
+
+export function fereastraComenzi(
+  sinceMs: number | undefined, acum = Date.now(),
+): { startDate: number; endDate: number; taiat: boolean } {
+  /* O marja de un minut: ceasurile noastre si ale lor nu bat perfect. */
+  const celMaiDevreme = acum - ORIZONT_DATE + 60_000;
+  const cerut = sinceMs ?? acum - DOUA_SAPTAMANI;
+
+  /* ⚠ `taiat` inseamna „am pierdut ceva si n-avem cum sa-l luam", nu „am ales sa nu ne uitam". */
+  const taiat = cerut < celMaiDevreme;
+  const startDate = Math.min(Math.max(cerut, celMaiDevreme), acum);
+  const endDate = Math.min(startDate + DOUA_SAPTAMANI, acum);
+  return { startDate, endDate, taiat };
 }
 
 // Poll recent shipment packages for one business (cron safety net). `sinceMs` is a
@@ -558,6 +589,8 @@ export interface RezultatPeVitrina {
   ingested: number;
   ok: boolean;
   cursorMs?: number;
+  /** ⚠ Pana unde s-a citit CU ADEVARAT. Vezi `marcajUrmator`, capcana a patra. */
+  fereastraSfarsitMs?: number;
 }
 
 export async function pollPackagesToateVitrinele(
@@ -586,7 +619,10 @@ export async function pollPackagesToateVitrinele(
       : { ...ctx, auth: { ...ctx.auth, storefront: vitrina } };
     const r = await pollPackages(admin, ctxVitrina, marcaje[vitrina]);
     ingested += r.ingested;
-    peVitrina.push({ vitrina, ingested: r.ingested, ok: r.ok, cursorMs: r.cursorMs });
+    peVitrina.push({
+      vitrina, ingested: r.ingested, ok: r.ok,
+      cursorMs: r.cursorMs, fereastraSfarsitMs: r.fereastraSfarsitMs,
+    });
   }
   return { ingested, peVitrina };
 }
@@ -597,7 +633,7 @@ export async function pollPackages(
     aduPagina?: AducePagina;
     ingereaza?: (pkg: TrendyolShipmentPackage) => Promise<"created" | "updated" | "skipped" | "failed">;
   },
-): Promise<{ ingested: number; ok: boolean; cursorMs?: number }> {
+): Promise<{ ingested: number; ok: boolean; cursorMs?: number; fereastraSfarsitMs?: number }> {
   let ingested = 0;
   let ok = true;
   /*
@@ -611,7 +647,24 @@ export async function pollPackages(
    */
   let cursorMs: number | undefined;
   let cursorInghetat = false;
-  const { startDate, endDate } = fereastraComenzi(sinceMs);
+  const { startDate, endDate, taiat } = fereastraComenzi(sinceMs);
+  if (taiat) {
+    /*
+     * ⚠ NU E O EROARE A NOASTRA, si nici nu se poate repara: peste o luna ei nu mai au datele.
+     * Dar tacut, comerciantul ar fi crezut ca are toate comenzile. Se spune o data, la fiecare
+     * trecere care chiar taie — si asta se intampla numai la o intrerupere lunga.
+     */
+    await logError({
+      action: "trendyol/comenzi",
+      message: "sincronizarea a lipsit mai mult decat tin ei datele; comenzile mai vechi de o luna nu se mai pot aduce",
+      details: {
+        ultimaSincronizare: sinceMs ? new Date(sinceMs).toISOString() : null,
+        seCitesteDeLa: new Date(startDate).toISOString(),
+        vitrina: ctx.auth.storefront ?? null,
+      },
+      businessId: ctx.businessId, severity: "critical",
+    });
+  }
   /*
    * ⚠ `ok` INSEAMNA „AM CITIT TOT SI TOTUL A INTRAT", nu „n-a explodat nimic".
    *
@@ -740,7 +793,9 @@ export async function pollPackages(
       details: { cursorMs }, businessId: ctx.businessId, severity: "critical",
     });
   }
-  return { ingested, ok, cursorMs };
+  /* ⚠ `endDate` pleaca mai departe: marcajul n-are voie sa treaca de unde s-a citit. Vezi
+     `marcajUrmator`, capcana a patra. */
+  return { ingested, ok, cursorMs, fereastraSfarsitMs: endDate };
 }
 
 // Best-effort extraction of packages from a webhook payload (same shape as the

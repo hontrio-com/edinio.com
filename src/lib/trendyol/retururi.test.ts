@@ -39,18 +39,35 @@ test("⚠ marcajul avanseaza NUMAI la o trecere intreaga", () => {
    */
   /* ⚠ Forma s-a schimbat odata cu marcajele pe vitrina: nu mai e un singur `if (r.ok)` care
      scrie configurarea, ci cate o pozitie pe fiecare vitrina. Regula e insa aceeasi. */
-  assert.match(mod, /if \(r\.ok\) noi\[vitrina\] = /);
+  assert.match(mod, /if \(r\.ok\) \{/);
   assert.match(mod, /claims_synced_per_storefront: \{ \.\.\.marcaje, \.\.\.noi \}/);
   assert.match(mod, /if \(pagina \+ 1 >= PAGINI_PE_TRECERE\) ok = false;/);
   /* ⚠ Si se scrie clipa de DINAINTE de citire, minus suprapunerea. */
-  assert.match(mod, /new Date\(inceput - 5 \* 60_000\)\.toISOString\(\)/);
+  /* ⚠ Se scrie clipa de DINAINTE de citire, minus suprapunerea — dar nu mai departe decat s-a
+     citit: fereastra e taiata la doua saptamani, iar sarit la „acum", marcajul ar lasa in urma o
+     gaura care nu se mai citeste niciodata. */
+  assert.match(mod, /const panaLa = Math\.min\(inceput, r\.fereastraSfarsitMs\);/);
+  assert.match(mod, /new Date\(panaLa - 5 \* 60_000\)\.toISOString\(\)/);
 });
 
-test("⚠ fereastra lor e de cel mult doua saptamani", () => {
-  /* Ceruta mai larga, serviciul raspunde 400 si nu s-ar aduce nimic — iar cronul ar parea ca
-     merge. */
+test("⚠ DOUA plafoane, nu unul: latimea cererii si cat de mult in urma", () => {
+  /*
+   * ═══ ⚠ PROBA ASTA CEREA PANA AZI JUMATATE DIN ADEVAR (26.08.2026) ═══
+   *
+   * Cerea `Math.max(marcaj - 5min, acum - FEREASTRA_MAXIMA)` — adica lua „doua saptamani" si ca
+   * LATIME a cererii, si ca ORIZONT. Confundate, un magazin oprit o luna pornea de la
+   * `acum - 14 zile` si pierdea restul, iar marcajul sarea apoi la „acum".
+   *
+   * Latimea ramane doua saptamani, fiindca atat ingaduie ei intr-o cerere. Orizontul e alta
+   * socoteala, si se merge fereastra cu fereastra pana se ajunge din urma.
+   */
   assert.match(mod, /const FEREASTRA_MAXIMA_MS = 14 \* 24 \* 60 \* 60 \* 1000;/);
-  assert.match(mod, /Math\.max\(marcajMs - 5 \* 60_000, acum - FEREASTRA_MAXIMA_MS\)/);
+  assert.match(mod, /const ORIZONT_RETURURI_MS = 90 \* 24 \* 60 \* 60 \* 1000;/);
+  assert.match(mod, /const de_la = Math\.min\(Math\.max\(cerut, celMaiDevreme\), acum\);/);
+  assert.match(mod, /const pana_la = Math\.min\(de_la \+ FEREASTRA_MAXIMA_MS, acum\);/);
+  /* ⚠ Iar ce nu se poate lua se SPUNE, nu se ascunde. */
+  assert.match(mod, /if \(taiat\) \{/);
+  assert.match(mod, /severity: "critical"/);
 });
 
 test("⚠ hotararea se scrie DUPA raspunsul lor, nu inainte", () => {
@@ -210,7 +227,10 @@ test("⚠ fiecare vitrina isi tine POZITIA ei, ca la comenzi", () => {
    * NICIODATA — fara nicio eroare, fiindca trecerea „a reusit".
    */
   assert.match(mod, /claims_synced_per_storefront/);
-  assert.match(mod, /if \(r\.ok\) noi\[vitrina\] = /, "numai trecerea intreaga muta marcajul");
+  assert.match(mod, /if \(r\.ok\) \{/, "numai trecerea intreaga muta marcajul");
+  /* ⚠ Si NU mai departe decat s-a citit: fereastra e taiata la doua saptamani, iar sarit la
+     „acum", marcajul ar lasa in urma o gaura care nu se mai citeste niciodata. */
+  assert.match(mod, /const panaLa = Math\.min\(inceput, r\.fereastraSfarsitMs\);/);
   /* ⚠ Si marcajul vechi ramane punct de plecare pentru vitrina de origine: fara asta, prima
      trecere de dupa schimbare ar fi recitit doua saptamani pe fiecare vitrina. */
   assert.match(mod, /vitrina === origine && Number\.isFinite\(vechi\)/);

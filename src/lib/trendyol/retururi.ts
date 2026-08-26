@@ -44,6 +44,15 @@ const FEREASTRA_INITIALA_MS = 14 * 24 * 60 * 60 * 1000;
  */
 const FEREASTRA_MAXIMA_MS = 14 * 24 * 60 * 60 * 1000;
 
+/**
+ * Cat de mult in urma se mai pot cere cererile de retur.
+ *
+ * ⚠ ALT PLAFON DECAT LATIMEA FERESTREI. Ei tin cererile mai mult decat comenzile de pe capatul
+ * clasic, dar nu la nesfarsit. Trei luni e cifra pe care o dau pentru flux; se ia aceeasi, ca sa
+ * nu cerem ani intregi degeaba.
+ */
+const ORIZONT_RETURURI_MS = 90 * 24 * 60 * 60 * 1000;
+
 /** ⚠ Plafonul LOR pentru explicatia respingerii. Peste el, cererea e refuzata intreaga. */
 const MAX_EXPLICATIE = 500;
 
@@ -63,19 +72,55 @@ function laData(ms: unknown): string | null {
  */
 export async function aduRetururile(
   admin: Db, ctx: TrendyolSyncContext, marcajMs?: number,
-): Promise<{ aduse: number; ok: boolean }> {
+): Promise<{ aduse: number; ok: boolean; fereastraSfarsitMs: number }> {
   const acum = Date.now();
   /* ⚠ Suprapunere de cinci minute peste marcaj: ceasul lor si al nostru nu bat la fel, iar o
      cerere modificata chiar in secunda marcajului ar cadea intre doua ferestre. */
-  const de_la = Number.isFinite(marcajMs) && marcajMs
-    ? Math.max(marcajMs - 5 * 60_000, acum - FEREASTRA_MAXIMA_MS)
+  /*
+   * ⚠ DOUA PLAFOANE, NU UNUL. Latimea unei cereri e de cel mult doua saptamani; cat de mult in
+   * urma se poate cere e alta socoteala. Confundate, un magazin oprit o luna pornea de la
+   * `acum - 14 zile` si pierdea restul.
+   */
+  const cerut = Number.isFinite(marcajMs) && marcajMs
+    ? marcajMs - 5 * 60_000
     : acum - FEREASTRA_INITIALA_MS;
+  const celMaiDevreme = acum - ORIZONT_RETURURI_MS;
+  const taiat = cerut < celMaiDevreme;
+  const de_la = Math.min(Math.max(cerut, celMaiDevreme), acum);
+
+  /*
+   * ═══ ⚠ SI SFARSITUL SE TAIE, NU DOAR INCEPUTUL (26.08.2026) ═══
+   *
+   * Aceeasi gaura ca la comenzi, si tot atat de tacuta. Un magazin oprit o luna cerea ultimele
+   * doua saptamani — corect, altfel serviciul refuza — dar dupa o trecere reusita marcajul
+   * sarea la „acum". Cele saisprezece zile dintre ele nu se mai citeau NICIODATA.
+   *
+   * ⚠ Fereastra e acum cel mult doua saptamani de la inceputul EI, iar marcajul se opreste la
+   * sfarsitul ei adevarat. Trecerea urmatoare porneste de-acolo, fereastra cu fereastra, pana
+   * se ajunge din urma.
+   */
+  const pana_la = Math.min(de_la + FEREASTRA_MAXIMA_MS, acum);
+
+  if (taiat) {
+    /* ⚠ O pierdere pe care n-o putem evita se SPUNE. Ascunsa, comerciantul ar crede ca are toate
+       cererile de retur — si le-ar pierde pe cele mai vechi fara sa afle vreodata. */
+    await logError({
+      action: "trendyol/retururi",
+      message: "sincronizarea a lipsit mai mult decat tin ei cererile; retururile mai vechi nu se mai pot aduce",
+      details: {
+        ultimaSincronizare: marcajMs ? new Date(marcajMs).toISOString() : null,
+        seCitesteDeLa: new Date(de_la).toISOString(),
+        vitrina: ctx.auth.storefront ?? null,
+      },
+      businessId: ctx.businessId, severity: "critical",
+    });
+  }
 
   let aduse = 0;
   let ok = true;
 
   for (let pagina = 0; pagina < PAGINI_PE_TRECERE; pagina++) {
-    const res = await getClaims(ctx.auth, { startDate: de_la, endDate: acum, page: pagina, size: 50 });
+    const res = await getClaims(ctx.auth, { startDate: de_la, endDate: pana_la, page: pagina, size: 50 });
     if (isTrendyolError(res)) {
       await logError({
         action: "trendyol/retururi",
@@ -84,7 +129,7 @@ export async function aduRetururile(
         businessId: ctx.businessId, severity: "warning",
       });
       /* ⚠ Marcajul NU avanseaza: fereastra se reia. */
-      return { aduse, ok: false };
+      return { aduse, ok: false, fereastraSfarsitMs: pana_la };
     }
 
     const continut = res.data?.content ?? [];
@@ -97,13 +142,13 @@ export async function aduRetururile(
     }
 
     const totalPagini = Math.max(1, Number(res.data?.totalPages ?? 1));
-    if (continut.length === 0 || pagina + 1 >= totalPagini) return { aduse, ok };
+    if (continut.length === 0 || pagina + 1 >= totalPagini) return { aduse, ok, fereastraSfarsitMs: pana_la };
     /* ⚠ S-au terminat paginile ingaduite intr-o trecere, dar mai sunt: marcajul NU are voie sa
        sara la „acum", altfel cererile necitite raman in urma ferestrei pentru totdeauna. */
     if (pagina + 1 >= PAGINI_PE_TRECERE) ok = false;
   }
 
-  return { aduse, ok };
+  return { aduse, ok, fereastraSfarsitMs: pana_la };
 }
 
 /**
@@ -148,9 +193,18 @@ export async function treceRetururile(
 
     const r = await aduRetururile(admin, ctxVitrina, marcaj);
     aduse += r.aduse;
-    /* ⚠ Fiecare vitrina isi muta marcajul singura, si numai la o trecere intreaga. Un esec pe
-       una nu atinge pozitia celorlalte. */
-    if (r.ok) noi[vitrina] = new Date(inceput - 5 * 60_000).toISOString();
+    /*
+     * ⚠ Fiecare vitrina isi muta marcajul singura, si numai la o trecere intreaga. Un esec pe
+     * una nu atinge pozitia celorlalte.
+     *
+     * ⚠ SI NU MAI DEPARTE DECAT S-A CITIT. Fereastra e taiata la doua saptamani; sarit la
+     * „acum", marcajul ar fi lasat in urma o gaura care nu se mai citea niciodata. Se ia cel
+     * mai devreme dintre clipa de start si sfarsitul ferestrei.
+     */
+    if (r.ok) {
+      const panaLa = Math.min(inceput, r.fereastraSfarsitMs);
+      noi[vitrina] = new Date(panaLa - 5 * 60_000).toISOString();
+    }
   }
 
   if (Object.keys(noi).length > 0) {

@@ -167,12 +167,34 @@ test("pretul taiat devine listPrice, cel curent salePrice", () => {
 const ACUM = 1_800_000_000_000;
 const DOUA_SAPTAMANI = 14 * 24 * 60 * 60 * 1000;
 
-test("nu cerem niciodata mai mult de doua saptamani de comenzi", () => {
-  // Un magazin nesincronizat de o luna ar fi cerut o fereastra respinsa de
-  // Trendyol, deci tocmai el nu si-ar mai fi luat comenzile.
+test("⚠ o CERERE nu cere mai mult de doua saptamani, dar recuperarea merge mai in urma", () => {
+  /*
+   * ═══ ⚠ PROBA ASTA CEREA PANA AZI EXACT DEFECTUL (26.08.2026) ═══
+   *
+   * Cerea `endDate === ACUM` — adica taman saritura care pierdea datele. Sunt doua plafoane
+   * deosebite la ei, iar noi le tratam ca pe unul:
+   *
+   *     LATIMEA UNEI CERERI    cel mult 14 zile
+   *     CAT DE MULT IN URMA    capatul clasic da date pe ultima LUNA
+   *
+   * Cu ele confundate, un magazin oprit o luna cerea `acum - 14 zile`, citea cu bine, iar
+   * marcajul sarea la „acum" — si cele saisprezece zile dintre ele se pierdeau DEFINITIV.
+   *
+   * Acum se merge fereastra cu fereastra: latimea ramane paisprezece zile, dar inceputul
+   * porneste de unde s-a ramas, iar marcajul se opreste la sfarsitul ferestrei citite.
+   */
+  const f = fereastraComenzi(ACUM - 20 * 24 * 60 * 60 * 1000, ACUM);
+  assert.equal(f.endDate - f.startDate, DOUA_SAPTAMANI, "o cerere ramane de doua saptamani");
+  assert.ok(f.endDate < ACUM, "dar NU se inchide la „acum”, ca sa nu se sara peste gaura");
+  assert.equal(f.taiat, false, "si nimic nu s-a pierdut: douazeci de zile incap in orizontul lor");
+});
+
+test("⚠ peste orizontul lor, ce nu se poate lua se SPUNE", () => {
+  /* Capatul clasic da date doar pe ultima luna. O pierdere pe care n-o putem evita e cu totul
+     altceva decat una pe care o ascundem. */
   const f = fereastraComenzi(ACUM - 60 * 24 * 60 * 60 * 1000, ACUM);
-  assert.ok(ACUM - f.startDate < DOUA_SAPTAMANI);
-  assert.equal(f.endDate, ACUM);
+  assert.equal(f.taiat, true);
+  assert.ok(ACUM - f.startDate <= 30 * 24 * 60 * 60 * 1000);
 });
 
 test("un reper recent e pastrat asa cum e", () => {
@@ -181,9 +203,13 @@ test("un reper recent e pastrat asa cum e", () => {
 });
 
 test("fara reper, luam ultimele doua saptamani", () => {
+  /* ⚠ Fara marcaj se cer exact doua saptamani — nu tot orizontul de o luna. Prima sincronizare
+     a unui magazin nou n-are de ce sa care o luna de comenzi vechi, care oricum nu sunt ale
+     integrarii; recuperarea in urma e pentru cine A AVUT marcaj si l-a pierdut. */
   const f = fereastraComenzi(undefined, ACUM);
-  assert.ok(ACUM - f.startDate < DOUA_SAPTAMANI);
+  assert.ok(ACUM - f.startDate <= DOUA_SAPTAMANI);
   assert.ok(ACUM - f.startDate > DOUA_SAPTAMANI - 5 * 60 * 1000);
+  assert.equal(f.endDate, ACUM, "si se inchide la prezent: n-are ce recupera");
 });
 
 // ── Mesaje in romana ──────────────────────────────────────────────────────────

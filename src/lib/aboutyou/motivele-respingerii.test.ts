@@ -60,3 +60,29 @@ test("⚠ `rejected_page` chiar exista in tipul configului", () => {
   const tipuri = readFileSync("src/lib/aboutyou/types.ts", "utf8");
   assert.match(tipuri, /rejected_page\?: number;/);
 });
+
+test("⚠ cand sunt putine, se cer PE NUME, si atunci paginarea nici nu mai intra in joc", () => {
+  /*
+   * `/products/rejected` accepta `style_key`. Cu putine produse respinse - cazul obisnuit -
+   * intrebam exact pe cele care ne trebuie: raspuns sigur, fara paginare, deci fara nicio cale
+   * prin care un style sa nu-si primeasca motivul. Paginarea rotativa de mai sus ramane pentru
+   * cazul rar.
+   *
+   * ⚠ Pragul e o socoteala, nu un gust: ruta are 50 de cereri pe minut, iar pagina aduce 100.
+   */
+  assert.match(sync, /const PRAG_PE_NUME = 15;/);
+  assert.match(sync, /if \(deRespins\.size <= PRAG_PE_NUME\) \{/);
+  assert.match(sync, /getRejectedProducts\(ctx\.auth, \{ style_key: styleKey, per_page: 1 \}\)/);
+});
+
+test("⚠ un raspuns gol pe calea tintita NU sterge motivul dinainte", () => {
+  /*
+   * Statusul „respins" vine din `GET /products/`, iar ruta de respinse se poate aseza cu
+   * intarziere. Scrisa ca „fara motive", lipsa ar fi sters motivul de la trimiterea dinainte, si
+   * comerciantul ar fi ramas cu „respins" si nimic altceva - exact paguba pe care calea asta o
+   * repara.
+   */
+  const i = sync.indexOf("const PRAG_PE_NUME");
+  const bucata = sync.slice(i, i + 1400);
+  assert.match(bucata, /if \(!it \|\| !it\.style_key\) continue;/);
+});

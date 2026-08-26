@@ -47,12 +47,61 @@ const TIMEOUT_MS = 20_000;
  * contor local ar fi lasat fiecare instanta sa creada ca are tot bugetul — vezi nota de la
  * `spunePauza`: „un 429 il ia fiecare pe rand".
  */
+/*
+ * ═══ ⚠ PATRU GALETI ACOPEREAU RUTE CU PLAFOANE DIFERITE (27.08.2026) ═══
+ *
+ * `/orders` la 100 acoperea si `/orders/cancel` si `/orders/return`, iar `/products` la 100
+ * acoperea si `/products/rejected` — ruta pentru care CHIAR COMENTARIUL NOSTRU din `sync.ts`
+ * scria „limita rutei e 50 de cereri pe minut, de douazeci de ori mai stransa". Stiam si nu
+ * pusesem numarul unde conteaza.
+ *
+ * ⚠ ORDINEA CONTEAZA: se ia PRIMA potrivire, deci rutele stramte stau INAINTEA familiei lor.
+ *
+ * ⚠ SE STRANGE, NU SE LARGESTE. Un plafon mai mic decat cel adevarat costa doar viteza pe rute
+ * chemate rar; unul mai mare inseamna cereri respinse — si ele se numara in limita, deci
+ * greseala se hraneste singura.
+ */
 const LIMITE_AY: { potrivire: RegExp; limita: number; nume: string }[] = [
+  /* Rutele de actionare pe comanda sunt mult mai stramte decat citirea comenzilor. */
+  { potrivire: /^\/orders\/(cancel|return)/, limita: 50, nume: "orders-actiuni" },
   { potrivire: /^\/orders/, limita: 100, nume: "orders" },
   { potrivire: /^\/products\/(stock|price)/, limita: 200, nume: "stock-price" },
+  { potrivire: /^\/products\/rejected/, limita: 50, nume: "products-rejected" },
   { potrivire: /^\/products/, limita: 100, nume: "products" },
-  { potrivire: /^\/(categories|attributes|brands|colors|sizes|materials|countries)/, limita: 300, nume: "taxonomie" },
+  /* Nomenclatoarele nu se cheama des, deci o galeata stramta nu costa nimic. */
+  /*
+   * ⚠ Rutele de rezultate cadeau pe „altele" — plafonul de rezerva, tot 100. Aceeasi cifra, dar
+   * scrisa: sunt cele mai chemate rute din integrare (fiecare lot deschis, la fiecare minut), deci
+   * merita sa se vada in tabela, nu sa se afle citind implicitul.
+   */
+  { potrivire: /^\/results/, limita: 100, nume: "results" },
+  { potrivire: /^\/(brands|colors|sizes|materials)/, limita: 50, nume: "taxonomie-mica" },
+  { potrivire: /^\/(categories|attributes|countries)/, limita: 100, nume: "taxonomie" },
 ];
+
+/**
+ * Plafoane STRANSE dupa ce ne-au spus ei, prin `X-RateLimit-Limit`.
+ *
+ * ⚠ NUMAI IN JOS. Antetul lor e adevarul, dar citit gresit in sus ar deschide robinetul peste
+ * ce ingaduie ei — iar cererile respinse se numara si ele. Strans, cel mai rau caz e sa mergem
+ * mai incet decat am putea.
+ *
+ * ⚠ E pe proces, nu in baza: galeata insasi e impartita (`asteaptaJetonImpartit`), dar plafonul
+ * il afla fiecare instanta din primul raspuns pe care il primeste. Se aliniaza singure.
+ */
+const plafoaneAflate = new Map<string, number>();
+
+/** Ce plafon ne-au spus ei, daca ne-au spus. */
+function plafonDinAntet(h: Headers): number | null {
+  for (const nume of ["x-ratelimit-limit", "ratelimit-limit"]) {
+    const v = h.get(nume);
+    if (!v) continue;
+    /* `RateLimit-Limit` poate veni si ca „100, 100;w=60"; ne trebuie primul numar. */
+    const n = Number.parseInt(v.trim().split(/[,;\s]/)[0] ?? "", 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
 
 /** Familia de rute si plafonul ei. Ce nu se potriveste primeste cel mai strans plafon. */
 function galeata(auth: AboutYouAuth, path: string): { cheie: string; limita: number } {
@@ -83,7 +132,9 @@ async function call<T>(
    * in contul elementului. Trimisa oricum, ar fi fost inca o cerere respinsa numarata in limita.
    */
   const { cheie, limita } = galeata(auth, path);
-  if (!await asteaptaJetonImpartit(cheie, limita, 60_000, "aboutyou")) {
+  /* ⚠ Daca ei ne-au spus un plafon mai mic, al lor conteaza. Vezi `plafoaneAflate`. */
+  const plafon = Math.min(limita, plafoaneAflate.get(cheie) ?? limita);
+  if (!await asteaptaJetonImpartit(cheie, plafon, 60_000, "aboutyou")) {
     return { error: "Limita de cereri About You e atinsă; se reia la trecerea următoare.", status: 0 };
   }
 
@@ -107,6 +158,16 @@ async function call<T>(
      */
     if (res.status === 429) {
       await spunePauza(cheie, asteptareaCerutaDeEi(res.headers, 30_000), "aboutyou");
+    }
+
+    /*
+     * ⚠ SE INVATA DIN ANTETUL LOR, si numai in jos. Tabela de mai sus e cea mai buna presupunere
+     * a noastra; `X-RateLimit-Limit` e chiar raspunsul lor. Cand al lor e mai mic, il tinem minte
+     * pentru galeata asta si urmatoarele cereri il respecta.
+     */
+    const spusDeEi = plafonDinAntet(res.headers);
+    if (spusDeEi != null && spusDeEi < (plafoaneAflate.get(cheie) ?? limita)) {
+      plafoaneAflate.set(cheie, spusDeEi);
     }
 
     if (res.status === 204) return { data: undefined as T };

@@ -1624,6 +1624,42 @@ export async function reconcileStatuses(
   // Limita de rata aici e 50/min, de douazeci de ori mai stransa: o singura
   // trecere paginata, nu cate o cerere per produs respins.
   const deRespins = new Set(respinse);
+
+  /*
+   * ═══ ⚠ CAND SUNT PUTINE, SE CER PE NUME (27.08.2026) ═══
+   *
+   * `/products/rejected` accepta `style_key`. Cu putine produse respinse — cazul obisnuit —
+   * intrebam exact pe cele care ne trebuie: raspuns sigur, fara paginare, deci fara nicio cale
+   * prin care un style sa nu-si primeasca motivul.
+   *
+   * ⚠ PRAGUL E O SOCOTEALA, nu un gust: ruta are 50 de cereri pe minut. Peste cincisprezece
+   * nume, paginarea (100 pe pagina) costa mai putin decat cate o cerere de fiecare.
+   */
+  const PRAG_PE_NUME = 15;
+  if (deRespins.size <= PRAG_PE_NUME) {
+    for (const styleKey of [...deRespins]) {
+      if (expirat()) break;
+      const unul = await getRejectedProducts(ctx.auth, { style_key: styleKey, per_page: 1 });
+      if (isAboutYouError(unul)) return { ok: false, error: unul.error, status: unul.status };
+      const it = (unul.data?.items ?? [])[0];
+      /*
+       * ⚠ Lipsa NU se scrie ca „fara motive": statusul vine din `GET /products/`, iar ruta de
+       * respinse se poate aseza cu intarziere. Sters, motivul de la trimiterea dinainte ar
+       * disparea si comerciantul ar ramane cu „respins" si nimic altceva.
+       */
+      if (!it || !it.style_key) continue;
+      const rejection = (it.rejection_reasons ?? []) as AboutYouRejectionReason[];
+      await admin.from("aboutyou_listings")
+        .update({
+          rejection_reasons: (rejection as unknown) as never,
+          error: it.rejection_message ?? null,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
+      await pause(250);
+    }
+    return { ok: true };
+  }
   /*
    * ═══ ⚠ MOTIVELE PORNEAU MEREU DE LA PAGINA 1, SI SE OPREAU LA 20 (27.08.2026) ═══
    *

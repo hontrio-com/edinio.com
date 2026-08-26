@@ -44,9 +44,19 @@ test("⚠ fiecare cerere asteapta un jeton, din limitatorul IMPARTIT", () => {
      de doua ori azi. */
   assert.ok(client.includes('from "@/lib/marketplace/ritm-impartit"'), "limitatorul nu e importat");
   assert.ok(
-    client.includes('await asteaptaJetonImpartit(cheie, limita, 60_000, "aboutyou")'),
+    client.includes('await asteaptaJetonImpartit(cheie, plafon, 60_000, "aboutyou")'),
     "jetonul nu se cere",
   );
+
+  /*
+   * ═══ ⚠ SI PLAFONUL SE INVATA DIN ANTETUL LOR (27.08.2026) ═══
+   *
+   * Tabela noastra e cea mai buna presupunere; `X-RateLimit-Limit` e chiar raspunsul lor. Se
+   * strange NUMAI IN JOS: citit gresit in sus, ar deschide robinetul peste ce ingaduie ei, iar
+   * cererile respinse se numara si ele in limita — deci greseala s-ar hrani singura.
+   */
+  assert.ok(client.includes("const plafon = Math.min(limita, plafoaneAflate.get(cheie) ?? limita);"));
+  assert.ok(client.includes("if (spusDeEi != null && spusDeEi < (plafoaneAflate.get(cheie) ?? limita)) {"));
 
   /* ⚠ Si asteptarea e INAINTEA lui `fetch`: dupa, n-ar mai fi o franare. */
   const iJeton = client.indexOf("asteaptaJetonImpartit");
@@ -86,4 +96,25 @@ test("⚠ ce nu se potriveste primeste cel mai strans plafon", () => {
   /* O ruta noua, necunoscuta, n-are voie sa mosteneasca bugetul cel mai larg: necunoscutul se
      trateaza strans, ca peste tot. */
   assert.match(client, /limita: g\?\.limita \?\? 100/);
+});
+
+test("⚠ galetile despart rutele cu plafoane diferite, si cele stramte stau primele", () => {
+  /*
+   * ═══ ⚠ PATRU GALETI ACOPEREAU RUTE CU PLAFOANE DIFERITE (27.08.2026) ═══
+   *
+   * `/orders` la 100 acoperea si `/orders/cancel`; `/products` la 100 acoperea si
+   * `/products/rejected` — ruta pentru care CHIAR COMENTARIUL NOSTRU din `sync.ts` scria „limita
+   * rutei e 50 de cereri pe minut". Stiam si nu pusesem numarul unde conteaza.
+   */
+  const iActiuni = client.indexOf('nume: "orders-actiuni"');
+  const iOrders = client.indexOf('nume: "orders"');
+  const iRespinse = client.indexOf('nume: "products-rejected"');
+  const iProduse = client.indexOf('nume: "products"');
+  assert.ok(iActiuni > 0 && iRespinse > 0, "galetile stramte lipsesc");
+  /* ⚠ Se ia PRIMA potrivire, deci ordinea E regula: stramtul inaintea familiei lui. */
+  assert.ok(iActiuni < iOrders, "`/orders/cancel` trebuie sa fie inaintea lui `/orders`");
+  assert.ok(iRespinse < iProduse, "`/products/rejected` trebuie sa fie inaintea lui `/products`");
+
+  /* ⚠ Si rutele de rezultate au galeata lor: cadeau pe implicitul „altele", nescris nicaieri. */
+  assert.ok(client.includes('nume: "results"'));
 });

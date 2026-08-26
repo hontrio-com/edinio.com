@@ -128,6 +128,14 @@ test("⚠ repunerea in stoc e o SINGURA tranzactie, cu randul blocat", () => {
    * adunarea reusea si scrierea marcajului pica, iar omul incerca din nou.
    *
    * „Idempotent" scris in comentariu nu tine loc de blocare.
+   *
+   * ⚠ MASURAT IN PRODUCTIE, in tranzactie intoarsa inapoi (26.08.2026):
+   *
+   *     stoc inainte         50
+   *     dupa prima apasare   53   r = {"pus": 3, "stare": "pus"}
+   *     dupa a doua          53   r = {"pus": 0, "stare": "deja"}
+   *
+   * Se pune CANTITATEA LINIEI (3), nu una singura, si a doua apasare nu mai adauga.
    */
   const mig = readFileSync("migrations/2026-11-01-retur-repunere-atomica.sql", "utf8");
   assert.match(mig, /for update;/, "randul se ia blocat");

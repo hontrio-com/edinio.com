@@ -1493,7 +1493,29 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
        * nesfarsit, i-ar fi ramas comerciantului in panou un rand pe care nu-l poate limpezi cu
        * nimic. Se scrie in jurnal si se merge mai departe.
        */
-      const listariDeUitat = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+      /*
+       * ⚠ NUMAI CE ARATA A UUID. `related_ids` a purtat pana azi BARCODURI la loturile de
+       * stergere — le-am schimbat pe id-uri de listare chiar in trecerea asta. Un rand vechi,
+       * scris de codul dinainte, ar trimite siruri ca „8595602540280" intr-un `.in("id", ...)`,
+       * iar Postgres refuza tot lotul cu „invalid input syntax for type uuid" — adica o
+       * singura ramasita ar rupe sondarea pentru toti.
+       *
+       * ⚠ In productie nu exista niciun asemenea rand (zero loturi de stergere in registru,
+       * verificat), deci asta e o centura, nu o reparatie. Dar calea asta nu s-a mai executat
+       * niciodata, si prima ei rulare n-are voie sa fie si prima ei incercare.
+       */
+      const eUuid = (x: unknown): x is string =>
+        typeof x === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+      const brute = Array.isArray(b.related_ids) ? b.related_ids : [];
+      const listariDeUitat = brute.filter(eUuid);
+      if (brute.length > 0 && listariDeUitat.length === 0) {
+        await logError({
+          action: "trendyol/stergere",
+          message: "lotul de stergere poarta id-uri vechi (barcoduri), deci nu se stie ce listare sa se uite",
+          details: { batchRequestId: b.batch_request_id, exemple: brute.slice(0, 5) },
+          businessId: ctx.businessId, severity: "warning",
+        });
+      }
       if (hardFail) {
         await logError({
           action: "trendyol/stergere",

@@ -59,8 +59,20 @@ test("⚠ o recitire a comenzii NU sterge marcajul de repunere", () => {
 });
 
 test("⚠ repunerea e o SINGURA tranzactie, cu randul blocat", () => {
-  /* Citit-adunat-marcat, doua apasari repezi ar trece amandoua de citire cu marcajul gol si ar
-     aduna amandoua. Aceeasi forma ca la Trendyol, si din acelasi motiv. */
+  /*
+   * Citit-adunat-marcat, doua apasari repezi ar trece amandoua de citire cu marcajul gol si ar
+   * aduna amandoua. Aceeasi forma ca la Trendyol, si din acelasi motiv.
+   *
+   * ⚠ MASURAT IN PRODUCTIE, in tranzactie intoarsa inapoi (26.08.2026):
+   *
+   *     stoc inainte        120
+   *     dupa prima apasare  122   r = {"pus": 2, "stare": "pus"}
+   *     dupa a doua         122   r = {"pus": 0, "stare": "deja"}
+   *
+   * ⚠ Si doua cazuri de margine, in aceeasi trecere:
+   *     linie fara produs legat        -> {"stare": "fara-produs"}, nu o reusita tacuta
+   *     chemata cu ALT business_id     -> {"stare": "lipsa"}: nimeni nu repune stocul altuia
+   */
   assert.match(mig, /for update;/);
   const iSelect = mig.indexOf("for update;");
   const iMarcaj = mig.indexOf("if v_r.repus_in_stoc_la is not null then");

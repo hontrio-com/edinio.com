@@ -7,7 +7,7 @@ import {
   loadAboutYouContext, processQueueItem, pollOpenBatches, reconcileStatuses, pause,
   type AboutYouQueueItem, type AboutYouSyncContext,
 } from "@/lib/aboutyou/sync";
-import { pollOrders } from "@/lib/aboutyou/orders";
+import { pollOrders, reconciliazaComenzile } from "@/lib/aboutyou/orders";
 // Mutata in `lib/marketplace/rotatie` ca s-o poata folosi si cronul Trendyol,
 // care taia inca cu `.slice()`.
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
@@ -324,6 +324,39 @@ export async function GET(req: NextRequest) {
       await patchConfig(admin, businessId, { orders_synced_at: new Date(marcajNou).toISOString() });
     }
     await pause(PACE_MS);
+  }
+
+  /*
+   * ── Starile comenzilor pe care le stim ──────────────────────────────────────
+   *
+   * ═══ ⚠ FEREASTRA FILTREAZA DUPA DATA CREARII, DECI NU VEDE O SCHIMBARE TARZIE ═══
+   *
+   * `orders_from` merge pe `created_at` — scrie chiar in `candFacuta`. Deci o comanda facuta acum
+   * trei saptamani care se anuleaza AZI nu mai reintra in nicio fereastra: marcajul a trecut
+   * demult de data crearii ei.
+   *
+   * ⚠ Webhook-ul e calea rapida, dar nu e o garantie: daca ruta noastra e indisponibila cat timp
+   * ei reincearca, evenimentul se pierde definitiv, iar sondarea nu-l poate recupera.
+   *
+   * ⚠ La cinci minute, si NU MUTA NICIUN MARCAJ: e o reconciliere, nu o aducere.
+   */
+  if (new Date().getMinutes() % 5 === 2) {
+    for (const businessId of alegeInRotatie(sellerIds, POLL_ORDERS_BIZ)) {
+      if (Date.now() - inceput > BUGET_TOTAL_MS) break;
+      const ctx = await ctxFor(businessId);
+      if (!ctx) continue;
+      try {
+        const r = await reconciliazaComenzile(admin, ctx);
+        ordersIngested += r.verificate;
+      } catch (e) {
+        await logError({
+          action: "aboutyou-sync",
+          message: `reconcilierea comenzilor a picat: ${e instanceof Error ? e.message : String(e)}`,
+          businessId, severity: "warning",
+        });
+      }
+      await pause(PACE_MS);
+    }
   }
 
   console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested}`);

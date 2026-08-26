@@ -261,6 +261,7 @@ export type Database = {
           items: Json
           last_synced_at: string | null
           order_id: string | null
+          reintrebat_la: string | null
           shop_country: string | null
           status: string
           updated_at: string
@@ -275,6 +276,7 @@ export type Database = {
           items?: Json
           last_synced_at?: string | null
           order_id?: string | null
+          reintrebat_la?: string | null
           shop_country?: string | null
           status?: string
           updated_at?: string
@@ -289,6 +291,7 @@ export type Database = {
           items?: Json
           last_synced_at?: string | null
           order_id?: string | null
+          reintrebat_la?: string | null
           shop_country?: string | null
           status?: string
           updated_at?: string

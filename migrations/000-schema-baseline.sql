@@ -4472,7 +4472,8 @@ create table if not exists public.aboutyou_orders (
   last_synced_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  anulate_eliberate jsonb default '[]'::jsonb not null);
+  anulate_eliberate jsonb default '[]'::jsonb not null,
+  reintrebat_la timestamp with time zone);
 
 create table if not exists public.aboutyou_retururi (
   id uuid default gen_random_uuid() not null,
@@ -6062,6 +6063,7 @@ CREATE INDEX abandoned_carts_business_phone_idx ON public.abandoned_carts USING 
 CREATE UNIQUE INDEX abandoned_carts_business_session_uidx ON public.abandoned_carts USING btree (business_id, session_id);
 CREATE INDEX abandoned_carts_business_status_activity_idx ON public.abandoned_carts USING btree (business_id, status, last_activity_at DESC);
 CREATE INDEX aboutyou_batches_deschise_idx ON public.aboutyou_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
+CREATE INDEX aboutyou_orders_reintrebat_idx ON public.aboutyou_orders USING btree (business_id, reintrebat_la NULLS FIRST);
 CREATE INDEX aboutyou_retururi_de_rezolvat_idx ON public.aboutyou_retururi USING btree (business_id, created_at DESC) WHERE (repus_in_stoc_la IS NULL);
 CREATE INDEX aboutyou_sync_queue_ordine_idx ON public.aboutyou_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX announcements_feed_idx ON public.announcements USING btree (is_published, is_pinned DESC, published_at DESC);

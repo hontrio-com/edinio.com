@@ -16,7 +16,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { logError } from "@/lib/error-logger";
-import { randCitit } from "@/lib/supabase/rand-citit";
+import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import type { Database } from "@/types/database.types";
 import { recordBatch, type AboutYouSyncContext } from "./sync";
 import { getOrders, isAboutYouError } from "./client";
@@ -574,6 +574,94 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
  * About You reincearca din ora in ora, doua zile. O comanda care nu s-a putut
  * salva ramane oricum pe seama cronului, care intreaba direct `GET /orders/`.
  */
+/**
+ * Starile de LINIE din care o comanda nu mai are ce sa ne spuna.
+ *
+ * ⚠ SE NUMESC CELE INCHEIATE, nu cele vii — aceeasi hotarare ca la retururile Trendyol, si din
+ * acelasi motiv: o lista de „stari vii" lasa pe dinafara tot ce nu cunoastem, iar `status`-ul
+ * liniei poate primi valori noi fara sa ne intrebe.
+ *
+ * ⚠ `shipped` NU e incheiata: de-acolo se poate ajunge la `returned`.
+ */
+const LINII_INCHEIATE_AY = new Set(["cancelled", "returned"]);
+
+/** Cate comenzi se reintreaba intr-o trecere. */
+const COMENZI_DE_REINTREBAT = 20;
+
+/**
+ * Cat timp mai are rost sa reintrebi de o comanda neincheiata.
+ *
+ * ⚠ Fara margine, bazinul creste la nesfarsit cu comenzi ramase agatate intr-o stare pe care ei
+ * n-o mai schimba niciodata — iar cele vii ar astepta dupa ele.
+ */
+const ZILE_DE_REINTREBAT_AY = 60;
+
+/**
+ * Reintreaba comenzile care nu s-au incheiat, pe NUMAR.
+ *
+ * ═══ ⚠ FEREASTRA FILTREAZA DUPA DATA CREARII, DECI NU VEDE O SCHIMBARE TARZIE ═══
+ *
+ * Scrie chiar in `candFacuta`: „`orders_from` merge pe `created_at`". Deci o comanda facuta acum
+ * trei saptamani care se anuleaza AZI nu mai reintra in nicio fereastra — marcajul a trecut demult
+ * de data crearii ei.
+ *
+ * ⚠ Webhook-ul e calea rapida, dar nu e o garantie: daca ruta noastra e indisponibila cat timp ei
+ * reincearca, evenimentul se pierde definitiv, iar sondarea nu-l poate recupera.
+ *
+ * ⚠ NU MUTA NICIUN MARCAJ. E o reconciliere, nu o aducere: n-are fereastra, deci n-are ce pierde
+ * si n-are ce avansa. Cele doua cai sunt despartite anume.
+ */
+export async function reconciliazaComenzile(
+  admin: Db, ctx: AboutYouSyncContext,
+): Promise<{ verificate: number }> {
+  const deLa = new Date(Date.now() - ZILE_DE_REINTREBAT_AY * 24 * 3600_000).toISOString();
+  const randuri = randuriCitite<{ aboutyou_order_number: string; items: unknown }>(
+    "aboutyou.comenziNeincheiate", await admin
+      .from("aboutyou_orders").select("aboutyou_order_number, items")
+      .eq("business_id", ctx.businessId)
+      .gte("created_at", deLa)
+      /* ⚠ Cele mai demult atinse intai, ca sa nu ramana niciuna in urma. */
+      .order("reintrebat_la", { ascending: true, nullsFirst: true })
+      .limit(COMENZI_DE_REINTREBAT) as never);
+
+  /*
+   * ⚠ Taierea pe stari se face AICI, nu in interogare: starea adevarata sta pe LINII, in `items`,
+   * si nu se poate filtra pe ea din SQL fara sa desfacem jsonb-ul. Bazinul e deja marginit la
+   * `COMENZI_DE_REINTREBAT`, deci costul e o citire, nu o scanare.
+   */
+  const deIntrebat = randuri.filter((r) => {
+    const linii = Array.isArray(r.items) ? (r.items as { status?: string }[]) : [];
+    if (linii.length === 0) return true; // nu stim nimic despre ea: se intreaba
+    return linii.some((l) => !l.status || !LINII_INCHEIATE_AY.has(l.status));
+  });
+
+  let verificate = 0;
+  for (const r of deIntrebat) {
+    await ingestOrderByNumber(admin, ctx, r.aboutyou_order_number);
+    verificate++;
+  }
+
+  /*
+   * ⚠ ROATA SE INVARTE PE TOATE CELE CITITE, nu doar pe cele reintrebate. O comanda incheiata
+   * ramasa in bazin (mai noua de 60 de zile) ar fi mereu prima in rand si le-ar tine pe celelalte
+   * pe loc — chiar infometarea pe care rotatia o inlatura.
+   */
+  if (randuri.length > 0) {
+    const { error } = await admin.from("aboutyou_orders")
+      .update({ reintrebat_la: new Date().toISOString() } as never)
+      .eq("business_id", ctx.businessId)
+      .in("aboutyou_order_number", randuri.map((r) => r.aboutyou_order_number));
+    if (error) {
+      await logError({
+        action: "aboutyou/reconciliere", severity: "warning",
+        message: `roata reconcilierii comenzilor nu s-a putut invarti: ${error.message}`,
+        details: { cate: randuri.length }, businessId: ctx.businessId,
+      });
+    }
+  }
+  return { verificate };
+}
+
 export async function ingestOrderByNumber(admin: Db, ctx: AboutYouSyncContext, orderNumber: string): Promise<void> {
   const res = await getOrders(ctx.auth, { order_number: orderNumber, per_page: 5 });
   if (isAboutYouError(res)) return;

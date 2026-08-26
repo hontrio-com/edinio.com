@@ -447,3 +447,19 @@ test("⚠ dar NUMAI pe mesajul ala, nu pe orice esec", () => {
   const iStinge = f.indexOf("exista_la_ei: false");
   assert.ok(iCond > 0 && iStinge > iCond, "stingerea e SUB conditie, nu langa ea");
 });
+
+test("⚠ si se REPUNE la coada, altfel stinsul steagului n-ar folosi la nimic", () => {
+  /*
+   * Nimic nu reia o listare dupa un esec de actualizare — nici coada, nici reconcilierea.
+   * Steagul stins si atat, produsul ar fi ramas tot in `created`, doar cu o piedica in minus.
+   * O jumatate de reparatie care arata ca una intreaga.
+   *
+   * ⚠ `attempts: 0`: e o lucrare NOUA, nu continuarea celei care a esuat. Trimisa cu datoria
+   * veche, ar fi fost abandonata dupa una-doua treceri.
+   */
+  const i = sync.indexOf("exista_la_ei: false");
+  const f = sync.slice(i, i + 1200);
+  assert.match(f, /from\("trendyol_sync_queue"\)\.upsert/);
+  assert.match(f, /attempts: 0/);
+  assert.match(f, /abandonat_la: null/);
+});

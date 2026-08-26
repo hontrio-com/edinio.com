@@ -1596,9 +1596,33 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
             await admin.from("trendyol_variants")
               .update({ exista_la_ei: false } as never)
               .eq("listing_id", listing.id);
+            /*
+             * ⚠ SI SE REPUNE LA COADA, altfel stinsul steagului n-ar folosi la nimic.
+             *
+             * Nimic nu reia o listare dupa un esec de actualizare — nici coada, nici
+             * reconcilierea. Steagul stins si atat, produsul ar fi ramas tot in `created`, doar
+             * cu o piedica in minus. Reparatia trebuie sa ajunga pana la capat singura, altfel e
+             * o jumatate de reparatie care arata ca una intreaga.
+             *
+             * ⚠ `attempts: 0`: e o lucrare NOUA, nu continuarea celei care a esuat. Trimisa cu
+             * datoria veche, ar fi fost abandonata dupa una-doua treceri.
+             */
+            if (listing.product_id) {
+              await admin.from("trendyol_sync_queue").upsert({
+                business_id: ctx.businessId,
+                product_id: listing.product_id,
+                offer_id: listing.product_id,
+                op: "upsert",
+                attempts: 0,
+                last_error: null,
+                next_retry_at: null,
+                abandonat_la: null,
+              } as never, { onConflict: "business_id,offer_id,op" });
+            }
+
             await logError({
               action: "trendyol/actualizare",
-              message: "produsul nu exista la ei; se va reincerca prin CREARE, nu prin actualizare",
+              message: "produsul nu exista la ei; steagul s-a stins si s-a repus la coada pentru CREARE",
               details: { listingId: listing.id, motiv: motiv.slice(0, 200) },
               businessId: ctx.businessId, severity: "warning",
             });

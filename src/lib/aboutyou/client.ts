@@ -7,6 +7,7 @@
 // branch with `isAboutYouError`. `cache: "no-store"` mirrors the OLX client
 // (Vercel Data Cache returned 500s at runtime for small upstream calls).
 
+import { asteaptaJetonImpartit, asteptareaCerutaDeEi, spunePauza } from "@/lib/marketplace/ritm-impartit";
 import { aboutyouBaseUrl } from "./auth";
 import type {
   AboutYouAttributeGroup, AboutYouBatchAck, AboutYouBatchResult, AboutYouBrand,
@@ -33,6 +34,35 @@ export function isAboutYouError<T>(r: AboutYouResult<T>): r is { error: string; 
 // secunde e mult peste orice raspuns normal al API-ului.
 const TIMEOUT_MS = 20_000;
 
+/**
+ * Plafoanele lor, pe familie de rute.
+ *
+ * ═══ ⚠ NIMIC NU LE PAZEA (26.08.2026) ═══
+ *
+ * Sondarea comenzilor putea scoate pana la cinci statusuri × patruzeci de pagini = doua sute de
+ * cereri pe magazin intr-o singura rulare, peste plafonul de o suta pe minut al rutei de comenzi.
+ * Iar cererile RESPINSE se numara si ele in limita, deci depasirea se hraneste singura.
+ *
+ * ⚠ SE FOLOSESTE LIMITATORUL IMPARTIT AL CASEI, nu unul pe proces. Pe mai multe instante, un
+ * contor local ar fi lasat fiecare instanta sa creada ca are tot bugetul — vezi nota de la
+ * `spunePauza`: „un 429 il ia fiecare pe rand".
+ */
+const LIMITE_AY: { potrivire: RegExp; limita: number; nume: string }[] = [
+  { potrivire: /^\/orders/, limita: 100, nume: "orders" },
+  { potrivire: /^\/products\/(stock|price)/, limita: 200, nume: "stock-price" },
+  { potrivire: /^\/products/, limita: 100, nume: "products" },
+  { potrivire: /^\/(categories|attributes|brands|colors|sizes|materials|countries)/, limita: 300, nume: "taxonomie" },
+];
+
+/** Familia de rute si plafonul ei. Ce nu se potriveste primeste cel mai strans plafon. */
+function galeata(auth: AboutYouAuth, path: string): { cheie: string; limita: number } {
+  const g = LIMITE_AY.find((x) => x.potrivire.test(path));
+  /* ⚠ Cheia poarta si MEDIUL: sandbox si productie au bugete deosebite, iar amestecate una ar
+     manca-o pe cealalta. Si cheia contului, nu magazinul: plafonul e pe cheia API. */
+  const cont = `${auth.environment ?? "production"}:${(auth.apiKey ?? "").trim().slice(-8)}`;
+  return { cheie: `aboutyou:${cont}:${g?.nume ?? "altele"}`, limita: g?.limita ?? 100 };
+}
+
 async function call<T>(
   auth: AboutYouAuth,
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH",
@@ -46,6 +76,17 @@ async function call<T>(
   if (apiKey.startsWith("enc.v1.")) {
     return { error: "Cheia API About You a fost citită criptat (eroare internă). Reconectează contul.", status: 0 };
   }
+
+  /*
+   * ⚠ SE ASTEAPTA UN JETON INAINTE DE ORICE CERERE. Cand nu vine in bugetul limitatorului, NU se
+   * trimite: se intoarce ca o cauza trecatoare (status 0), pe care cronul o stie deja sa n-o puna
+   * in contul elementului. Trimisa oricum, ar fi fost inca o cerere respinsa numarata in limita.
+   */
+  const { cheie, limita } = galeata(auth, path);
+  if (!await asteaptaJetonImpartit(cheie, limita, 60_000, "aboutyou")) {
+    return { error: "Limita de cereri About You e atinsă; se reia la trecerea următoare.", status: 0 };
+  }
+
   try {
     const res = await fetch(`${aboutyouBaseUrl(auth.environment)}${path}`, {
       method,
@@ -58,6 +99,16 @@ async function call<T>(
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    /*
+     * ⚠ CE SPUN EI BATE SOCOTEALA NOASTRA. Un `429` inseamna sigur ca am trecut de limita,
+     * indiferent ce credea galeata; iar `Retry-After` spune cat, si o spune TUTUROR instantelor
+     * prin `spunePauza`. Fara asta, prima instanta se opreste si celelalte continua sa bata la
+     * aceeasi usa — iar cererile respinse se numara si ele in limita.
+     */
+    if (res.status === 429) {
+      await spunePauza(cheie, asteptareaCerutaDeEi(res.headers, 30_000), "aboutyou");
+    }
+
     if (res.status === 204) return { data: undefined as T };
     const text = await res.text();
     let json: unknown = {};

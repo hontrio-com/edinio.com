@@ -546,17 +546,69 @@ export async function GET(req: NextRequest) {
   }
 
   if (neverificate.length > 0 || wwwLipsa.length > 0) {
-    // Separat si la severitate mai mica: nu stim ca e ceva stricat, stim ca n-am
-    // putut sa ne uitam. Daca aceleasi domenii revin aici rulare de rulare, ce e
-    // stricat e citirea, nu domeniul.
-    await logError({
-      action: "domains-reconcile.neverificate",
-      message:
-        `${neverificate.length} domenii neverificate` +
-        (wwwLipsa.length ? `, ${wwwLipsa.length} fara geamanul www` : ""),
-      details: { neverificate, wwwLipsa },
-      severity: "warning",
+    /*
+     * ═══ ⚠ O ALARMA CARE SUNA MEREU E O ALARMA OPRITA (26.08.2026) ═══
+     *
+     * Nota de aici prezicea exact ce s-a intamplat: „daca aceleasi domenii revin rulare de
+     * rulare, ce e stricat e CITIREA, nu domeniul". Prezicea, si nu facea nimic.
+     *
+     * ⚠ MASURAT: `okai.ro` a scris randul asta de 150 de ori, din 10.08.2026, din ora in ora,
+     * cu acelasi text. Iar magazinul de sub el are ZERO produse si ZERO comenzi — deci nici
+     * macar nu era o vitrina cazuta, era un rand parasit care tipa de saisprezece zile.
+     *
+     * ⚠ SI ZGOMOTUL COSTA. Emailurile erau deja franate chiar mai jos, cu explicatia potrivita
+     * („dupa a treia zi emailul se muta intr-un dosar si nu se mai citeste, inclusiv in ziua in
+     * care cade ALT domeniu"). Jurnalul nu era, si tot el e locul in care se uita omul.
+     *
+     * ⚠ CAND SETUL SE SCHIMBA, se scrie pe loc. Cand nu se schimba, se tace — pana la douasprezece
+     * ore, cand se scrie o data SI SE SPUNE CE INSEAMNA: nu „un domeniu neverificat", ci „de
+     * atatea ori la rand acelasi, deci uita-te la sonda, nu la domeniu".
+     */
+    const amprenta = JSON.stringify({
+      n: neverificate.map((x) => `${x.domain}|${x.motiv}`).sort(),
+      w: [...wwwLipsa].sort(),
     });
+
+    const { data: precedente, error: eIstoric } = await admin
+      .from("error_logs")
+      .select("created_at, details")
+      .eq("action", "domains-reconcile.neverificate")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    /* ⚠ La indoiala se SCRIE. O citire picata a istoricului n-are voie sa faca zgomotul sa
+       para liniste — aceeasi asimetrie ca la emailuri, unde „la indoiala se trimite". */
+    let laRand = 0;
+    let deCand: string | null = null;
+    if (!eIstoric) {
+      for (const rand of (precedente ?? []) as { created_at: string; details: unknown }[]) {
+        const d = rand.details as { amprenta?: unknown } | null;
+        if (!d || typeof d !== "object" || d.amprenta !== amprenta) break;
+        laRand++;
+        deCand = rand.created_at;
+      }
+    }
+
+    const ORE_TACERE = 12;
+    const ultima = (precedente ?? [])[0] as { created_at: string } | undefined;
+    const deLaUltima = ultima ? Date.now() - Date.parse(ultima.created_at) : Infinity;
+    const seScrie = laRand === 0 || deLaUltima >= ORE_TACERE * 3600_000;
+
+    if (seScrie) {
+      const repetat = laRand > 0
+        ? ` — al ${laRand + 1}-lea rand cu ACELASI rezultat${deCand ? `, de la ${deCand.slice(0, 10)}` : ""}.`
+          + " Cand nu se schimba nimic, ce e de reparat e sonda sau randul din baza, nu domeniul."
+        : "";
+      await logError({
+        action: "domains-reconcile.neverificate",
+        message:
+          `${neverificate.length} domenii neverificate` +
+          (wwwLipsa.length ? `, ${wwwLipsa.length} fara geamanul www` : "") +
+          repetat,
+        details: { neverificate, wwwLipsa, amprenta, laRand },
+        severity: "warning",
+      });
+    }
   }
 
   if (stricate.length > 0 || neverificate.length > 0) {

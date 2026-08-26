@@ -45,8 +45,20 @@ test("⚠ oprirea vine CU inlocuitor: liniile intoarse se tin minte", () => {
    * ⚠ Statusul returului sta pe LINIE la About You (n-au un serviciu de retururi ca Trendyol),
    * deci se citeste chiar din ingest.
    */
-  assert.match(mod, /\.filter\(\(it\) => it\.status === "returned"\)/);
+  assert.match(mod, /\.filter\(\(\{ it \}\) => it\.status === "returned"\)/);
+  /*
+   * ⚠ PE AMANDOUA RAMURILE. Se chema numai cand comanda era deja la noi — dar o comanda poate
+   * sosi PRIMA DATA cu linii deja `returned`, iar atunci se pierdeau tacut.
+   */
   assert.match(mod, /await scrieRetururile\(admin, ctx, ayNumber, ex\.order_id, intoarse\)/);
+  assert.match(mod, /await scrieRetururile\(admin, ctx, ayNumber, orderId, intoarse\)/);
+  /*
+   * ⚠ SI FIECARE BUCATA ISI ARE RANDUL EI. La ei o linie de comanda INSEAMNA o bucata — n-au
+   * camp de cantitate — deci doua bucati din acelasi SKU sunt doua linii. Cheia pe `sku` le
+   * stringea intr-una, si a doua nu se mai putea repune in stoc niciodata.
+   */
+  assert.match(mod, /linie_cheie: it\.id != null \? String\(it\.id\)/);
+  assert.match(mod, /onConflict: "business_id,aboutyou_order_number,linie_cheie"/);
 });
 
 test("⚠ o recitire a comenzii NU sterge marcajul de repunere", () => {

@@ -258,6 +258,43 @@ export async function syncProductNow(
    */
   let listing = await getListing(admin, ctx.businessId, productId);
   const activ = (product as { is_active?: boolean }).is_active !== false;
+
+  /*
+   * ═══ ⚠ O LISTARE IN RETRAGERE NU SE RESINCRONIZEAZA (26.08.2026) ═══
+   *
+   * De cand stergerea asteapta ziua de arhiva ceruta de ei, randul sta pe `removing` vreo 25 de
+   * ore. In fereastra aia, ORICE atingere a produsului — o schimbare de pret, de stoc, o
+   * editare — il repunea la coada si il trimitea pe drumul obisnuit. Iar acolo
+   * `incearcaAdoptarea` gaseste produsul arhivat la ei si il DEZARHIVEAZA anume, fiindca
+   * „comerciantul care publica din Edinio vrea exact opusul".
+   *
+   * Deci marfa pe care omul tocmai a cerut s-o scoata se intorcea la vanzare, singura, si fara
+   * niciun semn. Iar stergerea de peste 25 de ore ar fi lovit un produs iar activ.
+   *
+   * ⚠ CU O IESIRE ANUME PENTRU CERERE EXPLICITA. Daca omul apasa el butonul de publicare
+   * (`manual`), asta INSEAMNA ca s-a razgandit — si atunci retragerea se anuleaza cinstit, cu
+   * toate urmele ei sterse, nu pe ocolite printr-o dezarhivare intamplatoare.
+   */
+  if (listing?.status === "removing") {
+    if (!manual) {
+      /* ⚠ `skipped`, nu esec: nu e nimic stricat — e o hotarare a comerciantului, luata acum
+         cateva ore. Iesirea curata inseamna si ca elementul de coada se sterge, deci nu se
+         reincearca la nesfarsit ceva ce n-are voie sa plece. */
+      return { ok: true, action: "skipped" };
+    }
+    const acum = new Date().toISOString();
+    await admin.from("trendyol_listings").update({
+      status: "created", arhivat_la: null, sters_cerut_la: null, sters_eroare: null,
+      updated_at: acum,
+    } as never).eq("id", listing.id);
+    await logError({
+      action: "trendyol/retragere",
+      message: "retragerea a fost anulata: comerciantul a cerut publicarea din nou",
+      details: { listingId: listing.id, productId },
+      businessId: ctx.businessId, severity: "warning",
+    });
+    listing = { ...listing, status: "created" };
+  }
   // Un produs nelistat si inactiv n-are ce cauta pe Trendyol: nu-l creem doar ca
   // sa-i punem imediat stocul pe zero.
   if (!listing && !activ) return { ok: true, action: "skipped" };
@@ -1651,10 +1688,50 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
       const listariArhivate = (Array.isArray(b.related_ids) ? b.related_ids : []).filter(eUuid);
       if (listariArhivate.length > 0) {
         if (hardFail) {
+          /*
+           * ═══ ⚠ RETRAGEREA MUREA AICI, IN TACERE (26.08.2026) ═══
+           *
+           * Singura urma era coloana `sters_eroare`, pe care n-o citeste nimeni. Iar
+           * `stergeCePoateFiSters` filtreaza pe `arhivat_la is not null` — care ramane gol la
+           * esec — deci randul nu era ales NICIODATA. Elementul de coada fusese deja consumat
+           * (`scoateDeLaVanzare` intoarce `ok: true`), deci nimic nu relua arhivarea.
+           *
+           * Rezultat: produsul ramanea la vanzare pe Trendyol, cu stocul vechi, la nesfarsit;
+           * la noi randul statea pe `removing` pe veci; in jurnal nu aparea nimic. Iar daca
+           * produsul fusese sters din Edinio, nu mai exista nici macar un buton de apasat.
+           *
+           * ⚠ SE SCRIE SI SE REPUNE LA COADA. Arhivarea e idempotenta la ei — arhivarea a ceva
+           * deja arhivat nu strica — deci reincercarea e sigura.
+           */
+          const motivArh = errors.slice(0, 2).join("; ") || "Trendyol nu a comunicat un motiv.";
           await admin.from("trendyol_listings").update({
-            sters_eroare: `Arhivarea a esuat la ei: ${errors.slice(0, 2).join("; ")}`,
+            sters_eroare: `Arhivarea a esuat la ei: ${motivArh}`,
             updated_at: now,
           } as never).eq("business_id", ctx.businessId).in("id", listariArhivate);
+
+          await logError({
+            action: "trendyol/stergere",
+            message: `arhivarea a esuat la ei; produsul RAMANE la vanzare pana se reia: ${motivArh}`,
+            details: { batchRequestId: b.batch_request_id, listari: listariArhivate.slice(0, 20) },
+            businessId: ctx.businessId, severity: "critical",
+          });
+
+          /* ⚠ Se repune la coada pe `delete`, adica pe drumul care reia intreaga retragere:
+             zeroizare, arhivare, si apoi stergerea amanata. */
+          const deReluat = randuriCitite<{ id: string; product_id: string | null }>(
+            "trendyol.listariDeReluat", await admin
+              .from("trendyol_listings").select("id, product_id")
+              .eq("business_id", ctx.businessId).in("id", listariArhivate) as never);
+          const randuriCoada = deReluat
+            .filter((l) => l.product_id)
+            .map((l) => ({
+              business_id: ctx.businessId, product_id: l.product_id, offer_id: l.product_id as string,
+              op: "delete", attempts: 0, last_error: null, next_retry_at: null, abandonat_la: null,
+            }));
+          if (randuriCoada.length > 0) {
+            await admin.from("trendyol_sync_queue")
+              .upsert(randuriCoada as never, { onConflict: "business_id,offer_id,op" });
+          }
         } else {
           /* ⚠ NUMAI PE RANDURI CARE CHIAR SUNT IN RETRAGERE. A doua centura: un lot etichetat
              gresit „archive" n-ar putea porni ceasul de stergere pe un produs viu. */

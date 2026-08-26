@@ -51,16 +51,21 @@ function edinioStatusFor(ayStatus: string | undefined): string {
  */
 async function scrieRetururile(
   admin: Db, ctx: AboutYouSyncContext, ayNumber: string, orderId: string | null,
-  intoarse: { sku: string; product_id: string | null; variant_title: string | null; nume_produs: string | null; quantity: number }[],
+  intoarse: {
+    linie_cheie: string; sku: string; product_id: string | null;
+    variant_title: string | null; nume_produs: string | null; quantity: number;
+  }[],
 ): Promise<void> {
   if (intoarse.length === 0) return;
   const { error } = await admin.from("aboutyou_retururi").upsert(
     intoarse.map((r) => ({
       business_id: ctx.businessId, aboutyou_order_number: ayNumber, order_id: orderId,
+      linie_cheie: r.linie_cheie,
       sku: r.sku, product_id: r.product_id, variant_title: r.variant_title,
       nume_produs: r.nume_produs, quantity: r.quantity,
     })) as never,
-    { onConflict: "business_id,aboutyou_order_number,sku", ignoreDuplicates: true },
+    /* ⚠ Pe BUCATA, nu pe SKU: doua bucati din acelasi SKU sunt doua randuri. */
+    { onConflict: "business_id,aboutyou_order_number,linie_cheie", ignoreDuplicates: true },
   );
   if (error) {
     await logError({
@@ -286,17 +291,37 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
    * deci se citeste chiar de aici. Fara asta, oprirea repunerii automate ar fi insemnat ca
    * marfa intoarsa nu mai ajunge NICIODATA in stoc — o paguba mai mare decat cea reparata.
    */
+  /*
+   * ═══ ⚠ LA EI, O LINIE DE COMANDA INSEAMNA O BUCATA (26.08.2026) ═══
+   *
+   * `AboutYouOrderItem` n-are camp de cantitate, si tot fisierul socoteste asa: `qty = 1` pe
+   * element, iar totalul se aduna ca suma preturilor, fara inmultire. Deci o comanda cu 2 x
+   * „ABC" vine ca DOUA elemente cu acelasi `sku`, cu `id`-uri diferite.
+   *
+   * ⚠ CHEIA ERA PE `sku`, si le stringea intr-un singur rand. Comerciantul apasa „Am primit
+   * marfa si e buna", intra o bucata in stoc, randul se marcheaza rezolvat — iar a doua bucata
+   * nu se mai putea repune NICIODATA: `ignoreDuplicates` o taia pe conflict cu randul deja
+   * rezolvat, deci nici macar nu aparea pe ecran. Stoc real 2, stoc in Edinio 1, tacut.
+   *
+   * ⚠ SI E CU ATAT MAI GRAV CU CAT chiar azi s-a oprit repunerea automata: ecranul asta e
+   * SINGURA cale prin care marfa intoarsa mai ajunge inapoi pe raft.
+   *
+   * ⚠ CHEIA E `id`-UL LINIEI, cu o rezerva pe indice cand nu ni-l dau — determinista, ca a doua
+   * citire a aceleiasi comenzi sa nimereasca acelasi rand, nu unul nou.
+   */
   const intoarse = items
-    .filter((it) => it.status === "returned")
-    .map((it) => {
+    .map((it, indice) => ({ it, indice }))
+    .filter(({ it }) => it.status === "returned")
+    .map(({ it, indice }) => {
       const meta = info.get(it.sku);
-      const q = (it as { quantity?: number }).quantity;
       return {
+        linie_cheie: it.id != null ? String(it.id) : `sku:${it.sku}:${indice}`,
         sku: it.sku,
         product_id: meta?.productId ?? null,
         variant_title: meta?.variantTitle ?? null,
         nume_produs: meta?.name ?? null,
-        quantity: typeof q === "number" && q > 0 ? q : 1,
+        /* ⚠ Mereu 1: la ei o linie E o bucata. Vezi nota de sus. */
+        quantity: 1,
       };
     });
 
@@ -451,6 +476,18 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     items: ayItems as never,
     last_synced_at: now,
   } as never, { onConflict: "business_id,aboutyou_order_number" });
+
+  /*
+   * ⚠ SI AICI, NU DOAR PE RAMURA „EXISTA DEJA" (26.08.2026).
+   *
+   * `scrieRetururile` se chema numai cand comanda era deja la noi. Dar o comanda poate sosi
+   * PRIMA DATA cu linii deja `returned` — ei tin comenzile pana la doua saptamani, iar noi
+   * citim ferestre. Ingerata asa, liniile ei intoarse se pierdeau tacut: nu se scriau nicaieri,
+   * deci comerciantul n-avea ce apasa, iar marfa nu se mai intorcea pe raft niciodata.
+   *
+   * ⚠ E cu atat mai grav cu cat chiar azi s-a oprit repunerea automata.
+   */
+  await scrieRetururile(admin, ctx, ayNumber, orderId, intoarse);
 
   // Unified inventory: reflect the marketplace sale in Edinio stock (only on a
   // genuinely new order, never when recovering/re-linking an existing one).

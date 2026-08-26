@@ -304,6 +304,7 @@ export type Database = {
           business_id: string
           created_at: string
           id: string
+          linie_cheie: string
           nume_produs: string | null
           order_id: string | null
           product_id: string | null
@@ -318,6 +319,7 @@ export type Database = {
           business_id: string
           created_at?: string
           id?: string
+          linie_cheie?: string
           nume_produs?: string | null
           order_id?: string | null
           product_id?: string | null
@@ -332,6 +334,7 @@ export type Database = {
           business_id?: string
           created_at?: string
           id?: string
+          linie_cheie?: string
           nume_produs?: string | null
           order_id?: string | null
           product_id?: string | null

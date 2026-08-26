@@ -313,11 +313,21 @@ test("⚠ stergerea asteapta ZIUA de arhiva ceruta de ei", () => {
 test("⚠ ceasul porneste la CONFIRMAREA arhivarii, nu la trimiterea ei", () => {
   /* Pornit la trimitere, ar fi pornit de la ceva care poate n-a avut loc. La esec `arhivat_la`
      ramane gol, deci stergerea nu pleaca niciodata si randul sta vizibil cu motivul scris. */
+  /* ⚠ Domeniul se margineste la RAMURA, nu la un numar de semne: ramura s-a lungit cand esecul
+     a inceput sa strige si sa repuna la coada, si proba a cazut degeaba. */
   const i = sync.indexOf('b.kind === "archive"');
-  const f = sync.slice(i, i + 1200);
+  const f = sync.slice(i, sync.indexOf('b.kind === "delete"', i));
   assert.match(f, /arhivat_la: now/);
   assert.match(f, /if \(hardFail\) \{/);
   assert.match(f, /sters_eroare: `Arhivarea a esuat la ei/);
+  /*
+   * ⚠ SI NU MOARE ACOLO. `sters_eroare` nu e citit de nimeni, iar `stergeCePoateFiSters`
+   * filtreaza pe `arhivat_la is not null` — care ramane gol la esec. Elementul de coada fusese
+   * deja consumat, deci nimic nu relua arhivarea: produsul ramanea la vanzare la ei, la
+   * nesfarsit, iar in jurnal nu aparea nimic.
+   */
+  assert.match(f, /severity: "critical"/, "se striga in jurnal");
+  assert.match(f, /op: "delete", attempts: 0/, "si se repune la coada");
 });
 
 test("⚠ o stergere ESUATA nu mai uita listarea", () => {
@@ -462,4 +472,63 @@ test("⚠ si se REPUNE la coada, altfel stinsul steagului n-ar folosi la nimic",
   assert.match(f, /from\("trendyol_sync_queue"\)\.upsert/);
   assert.match(f, /attempts: 0/);
   assert.match(f, /abandonat_la: null/);
+});
+
+test("⚠ o listare in RETRAGERE nu se resincronizeaza singura", () => {
+  /*
+   * ═══ ⚠ FEREASTRA DE 25 DE ORE ERA O CAPCANA (26.08.2026) ═══
+   *
+   * De cand stergerea asteapta ziua de arhiva ceruta de ei, randul sta pe `removing` vreo 25 de
+   * ore. In fereastra aia, ORICE atingere a produsului — o schimbare de pret, de stoc, o
+   * editare — il repunea la coada si il trimitea pe drumul obisnuit. Iar acolo
+   * `incearcaAdoptarea` gaseste produsul arhivat la ei si il DEZARHIVEAZA anume, fiindca
+   * „comerciantul care publica din Edinio vrea exact opusul".
+   *
+   * Marfa pe care omul tocmai ceruse s-o scoata se intorcea la vanzare, singura si fara niciun
+   * semn. Iar stergerea de peste 25 de ore ar fi lovit un produs iar activ.
+   *
+   * ⚠ Defectul a fost adus chiar de reparatia lantului de stergere, in aceeasi zi. O reparatie
+   * poate deschide o usa pe care n-o vedeai cat timp usa dinainte era inchisa.
+   */
+  const i = sync.indexOf('listing?.status === "removing"');
+  assert.ok(i > 0, "exista paza");
+  const f = sync.slice(i, i + 1400);
+  assert.match(f, /if \(!manual\) \{/);
+  assert.match(f, /action: "skipped"/);
+});
+
+test("⚠ dar o cerere EXPLICITA anuleaza retragerea cinstit", () => {
+  /*
+   * Daca omul apasa el butonul de publicare, asta INSEAMNA ca s-a razgandit. Atunci retragerea
+   * se anuleaza cu toate urmele ei sterse — nu pe ocolite, printr-o dezarhivare intamplatoare
+   * care lasa `arhivat_la` in urma si un ceas de stergere care inca merge.
+   */
+  const i = sync.indexOf('listing?.status === "removing"');
+  const f = sync.slice(i, i + 1400);
+  assert.match(f, /arhivat_la: null, sters_cerut_la: null, sters_eroare: null/);
+  assert.match(f, /retragerea a fost anulata/);
+});
+
+test("⚠ felurile de lot pe care le scriem CHIAR incap in check-ul bazei", () => {
+  /*
+   * ═══ ⚠ O VALOARE PE CARE `check`-UL O RESPINGE NU STRICA RANDUL, IL OPRESTE SA EXISTE ═══
+   *
+   * Am adaugat `delete` si `dezarhivare` in cod fara sa ma uit la constrangere. Ea accepta doar
+   * `product`, `inventory`, `archive`, `update`. Deci:
+   *
+   *   - lantul NOU de stergere nu se inregistra niciodata, iar listarile ramaneau pe `removing`
+   *     pe veci, reincercand la nesfarsit;
+   *   - dezarhivarea de la adoptare, care mergea pana ieri sub `archive`, s-a STRICAT.
+   *
+   * Proba compara cele doua liste, ca sa nu se mai poata desparti.
+   */
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const m = baseline.match(/trendyol_batches_kind_check CHECK \(\(kind = ANY \(ARRAY\[([^\]]+)\]\)\)\)/);
+  assert.ok(m, "constrangerea exista in baseline");
+  const permise = new Set([...m[1].matchAll(/'([a-z]+)'::text/g)].map((x) => x[1]));
+  const scrise = new Set([...sync.matchAll(/recordBatch\([^)]*?,\s*"([a-z]+)"\s*,/g)].map((x) => x[1]));
+  assert.ok(scrise.size >= 5, `s-au gasit felurile scrise (${[...scrise].join(", ")})`);
+  for (const k of scrise) {
+    assert.ok(permise.has(k), `felul "${k}" trebuie sa fie in trendyol_batches_kind_check`);
+  }
 });

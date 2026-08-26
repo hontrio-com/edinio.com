@@ -8,6 +8,7 @@ import {
   type AboutYouQueueItem, type AboutYouSyncContext,
 } from "@/lib/aboutyou/sync";
 import { pollOrders, reconciliazaComenzile } from "@/lib/aboutyou/orders";
+import { reiaEvenimenteleNeprelucrate } from "@/lib/aboutyou/inbox";
 // Mutata in `lib/marketplace/rotatie` ca s-o poata folosi si cronul Trendyol,
 // care taia inca cu `.slice()`.
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
   const now = new Date().toISOString();
   const inceput = Date.now();
   const fereastraPlina = () => Date.now() - inceput > BUGET_PASI_1_3_MS;
-  let processed = 0, failed = 0, polled = 0, reconciled = 0, ordersIngested = 0;
+  let processed = 0, failed = 0, polled = 0, reconciled = 0, ordersIngested = 0, reluate = 0;
   const ctxCache = new Map<string, AboutYouSyncContext | null>();
   async function ctxFor(businessId: string): Promise<AboutYouSyncContext | null> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
@@ -359,8 +360,34 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested}`);
-  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested });
+  /*
+   * ── Evenimentele de webhook care n-au apucat sa fie prelucrate ──────────────
+   *
+   * ⚠ Ruta le SCRIE inainte sa le prelucreze, apoi incearca pe loc — calea rapida. Cand
+   * prelucrarea pica (o pana de baza, o comanda pe care n-o gaseam inca), randul ramane
+   * neprelucrat. Fara pasul asta, ar ramane asa pentru totdeauna: About You a primit `200` si nu
+   * mai reincearca.
+   *
+   * ⚠ La fiecare trecere, nu pe tura: un eveniment neprelucrat inseamna o expediere sau o anulare
+   * care nu s-a intamplat, si aia nu asteapta cinci minute.
+   */
+  for (const businessId of alegeInRotatie(sellerIds, POLL_ORDERS_BIZ)) {
+    if (Date.now() - inceput > BUGET_TOTAL_MS) break;
+    const ctx = await ctxFor(businessId);
+    if (!ctx) continue;
+    try {
+      reluate += await reiaEvenimenteleNeprelucrate(admin, businessId, ctx.config);
+    } catch (e) {
+      await logError({
+        action: "aboutyou-sync",
+        message: `reluarea evenimentelor de webhook a picat: ${e instanceof Error ? e.message : String(e)}`,
+        businessId, severity: "warning",
+      });
+    }
+  }
+
+  console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested} reluate=${reluate}`);
+  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested, reluate });
 }
 
 /*

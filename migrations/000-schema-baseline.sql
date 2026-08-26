@@ -4524,6 +4524,17 @@ create table if not exists public.aboutyou_variants (
   updated_at timestamp with time zone default now() not null,
   variant_title text);
 
+create table if not exists public.aboutyou_webhook_inbox (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  event_id text not null,
+  event_name text,
+  payload jsonb not null,
+  primit_la timestamp with time zone default now() not null,
+  prelucrat_la timestamp with time zone,
+  incercari integer default 0 not null,
+  last_error text);
+
 create table if not exists public.admin_audit_log (
   id uuid default gen_random_uuid() not null,
   admin_id uuid,
@@ -5742,6 +5753,7 @@ alter table public.aboutyou_orders add constraint aboutyou_orders_pkey PRIMARY K
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_pkey PRIMARY KEY (id);
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_pkey PRIMARY KEY (id);
 alter table public.aboutyou_variants add constraint aboutyou_variants_pkey PRIMARY KEY (id);
+alter table public.aboutyou_webhook_inbox add constraint aboutyou_webhook_inbox_pkey PRIMARY KEY (id);
 alter table public.admin_audit_log add constraint admin_audit_log_pkey PRIMARY KEY (id);
 alter table public.announcements add constraint announcements_pkey PRIMARY KEY (id);
 alter table public.brevo_suppressions add constraint brevo_suppressions_pkey PRIMARY KEY (id);
@@ -5818,6 +5830,7 @@ alter table public.aboutyou_orders add constraint aboutyou_orders_business_id_ab
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_linie_key UNIQUE (business_id, aboutyou_order_number, linie_cheie);
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
 alter table public.aboutyou_variants add constraint aboutyou_variants_business_id_sku_key UNIQUE (business_id, sku);
+alter table public.aboutyou_webhook_inbox add constraint aboutyou_webhook_inbox_business_id_event_id_key UNIQUE (business_id, event_id);
 alter table public.brevo_suppressions add constraint brevo_suppressions_business_id_email_key UNIQUE (business_id, email);
 alter table public.businesses add constraint businesses_custom_domain_key UNIQUE (custom_domain);
 alter table public.businesses add constraint businesses_slug_key UNIQUE (slug);
@@ -6066,6 +6079,7 @@ CREATE INDEX aboutyou_batches_deschise_idx ON public.aboutyou_batches USING btre
 CREATE INDEX aboutyou_orders_reintrebat_idx ON public.aboutyou_orders USING btree (business_id, reintrebat_la NULLS FIRST);
 CREATE INDEX aboutyou_retururi_de_rezolvat_idx ON public.aboutyou_retururi USING btree (business_id, created_at DESC) WHERE (repus_in_stoc_la IS NULL);
 CREATE INDEX aboutyou_sync_queue_ordine_idx ON public.aboutyou_sync_queue USING btree (prioritate, created_at);
+CREATE INDEX aboutyou_webhook_inbox_neprelucrate_idx ON public.aboutyou_webhook_inbox USING btree (business_id, primit_la) WHERE (prelucrat_la IS NULL);
 CREATE INDEX announcements_feed_idx ON public.announcements USING btree (is_published, is_pinned DESC, published_at DESC);
 CREATE INDEX bds_biz_zi ON public.business_daily_stats USING btree (business_id, zi DESC);
 CREATE INDEX brevo_suppressions_business_email_idx ON public.brevo_suppressions USING btree (business_id, email);
@@ -6361,6 +6375,7 @@ alter table public.aboutyou_orders enable row level security;
 alter table public.aboutyou_retururi enable row level security;
 alter table public.aboutyou_sync_queue enable row level security;
 alter table public.aboutyou_variants enable row level security;
+alter table public.aboutyou_webhook_inbox enable row level security;
 alter table public.admin_audit_log enable row level security;
 alter table public.announcements enable row level security;
 alter table public.brevo_suppressions enable row level security;
@@ -6468,6 +6483,9 @@ create policy owner_select_aboutyou_sync_queue on public.aboutyou_sync_queue as 
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_variants on public.aboutyou_variants as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_aboutyou_webhook_inbox on public.aboutyou_webhook_inbox as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Admins manage announcements" on public.announcements as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
@@ -6856,6 +6874,27 @@ grant SELECT on table public.aboutyou_variants to service_role;
 grant TRIGGER on table public.aboutyou_variants to service_role;
 grant TRUNCATE on table public.aboutyou_variants to service_role;
 grant UPDATE on table public.aboutyou_variants to service_role;
+grant DELETE on table public.aboutyou_webhook_inbox to anon;
+grant INSERT on table public.aboutyou_webhook_inbox to anon;
+grant REFERENCES on table public.aboutyou_webhook_inbox to anon;
+grant SELECT on table public.aboutyou_webhook_inbox to anon;
+grant TRIGGER on table public.aboutyou_webhook_inbox to anon;
+grant TRUNCATE on table public.aboutyou_webhook_inbox to anon;
+grant UPDATE on table public.aboutyou_webhook_inbox to anon;
+grant DELETE on table public.aboutyou_webhook_inbox to authenticated;
+grant INSERT on table public.aboutyou_webhook_inbox to authenticated;
+grant REFERENCES on table public.aboutyou_webhook_inbox to authenticated;
+grant SELECT on table public.aboutyou_webhook_inbox to authenticated;
+grant TRIGGER on table public.aboutyou_webhook_inbox to authenticated;
+grant TRUNCATE on table public.aboutyou_webhook_inbox to authenticated;
+grant UPDATE on table public.aboutyou_webhook_inbox to authenticated;
+grant DELETE on table public.aboutyou_webhook_inbox to service_role;
+grant INSERT on table public.aboutyou_webhook_inbox to service_role;
+grant REFERENCES on table public.aboutyou_webhook_inbox to service_role;
+grant SELECT on table public.aboutyou_webhook_inbox to service_role;
+grant TRIGGER on table public.aboutyou_webhook_inbox to service_role;
+grant TRUNCATE on table public.aboutyou_webhook_inbox to service_role;
+grant UPDATE on table public.aboutyou_webhook_inbox to service_role;
 grant DELETE on table public.admin_audit_log to anon;
 grant INSERT on table public.admin_audit_log to anon;
 grant REFERENCES on table public.admin_audit_log to anon;

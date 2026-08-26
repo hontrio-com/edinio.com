@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
-import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
-import {
-  handleProductMasterStatus, handleStockUpdated, readSignatureHeader, verifyAboutYouSignature,
-} from "@/lib/aboutyou/webhooks";
-import { extractOrderNumber, ingestOrderByNumber } from "@/lib/aboutyou/orders";
+import { createHash, timingSafeEqual } from "crypto";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { readSignatureHeader, verifyAboutYouSignature } from "@/lib/aboutyou/webhooks";
+import { prelucreazaEveniment } from "@/lib/aboutyou/inbox";
 import { logError } from "@/lib/error-logger";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 
@@ -75,38 +72,69 @@ export async function POST(request: NextRequest) {
     return ok();
   }
 
-  let event: { event?: string; type?: string; data?: unknown; message?: unknown };
+  let event: { id?: unknown; event?: string; type?: string; data?: unknown; message?: unknown };
   try { event = JSON.parse(rawBody); } catch { return ok(); }
   const name = event.event ?? event.type;
-  const ctx = cfg.api_key
-    ? { auth: { apiKey: cfg.api_key, environment: cfg.environment }, config: cfg, businessId }
-    : null;
 
-  if (name === "stock.updated") {
-    await handleStockUpdated(admin, businessId, event);
-  } else if (name === "product_master.status_updated") {
-    // Singura cale prin care motivele de respingere ajung la noi fara sa mai
-    // intrebam: `GET /products/` nu le contine deloc.
-    await handleProductMasterStatus(admin, businessId, event);
-  } else if (name && name.startsWith("order") && ctx) {
-    const orderNumber = extractOrderNumber(event);
-    if (orderNumber) {
-      await ingestOrderByNumber(admin, ctx, orderNumber);
-    } else {
-      /*
-       * Evenimentele `order_items.*` NU poarta numarul comenzii: sarcina lor e un
-       * `GetShipmentSchema` — `{items, carrier_key, tracking_key,
-       * return_tracking_key}`. Codul cauta `order_number`, nu-l gasea si iesea
-       * tacut, deci expedierile si retururile pe articole nu ajungeau niciodata.
-       * Comanda o gasim dupa id-urile articolelor, pe care le avem deja salvate.
-       */
-      const numar = await orderNumberDinArticole(admin, businessId, event);
-      if (numar) await ingestOrderByNumber(admin, ctx, numar);
-    }
+  /*
+   * ═══ ⚠ SE SCRIE INTAI, SE PRELUCREAZA PE URMA (26.08.2026) ═══
+   *
+   * About You reincearca livrarea vreo doua zile daca nu primeste un raspuns bun. Ruta raspundea
+   * insa `200` pe TOATE caile, inclusiv cand ingestia pica — o pana de baza, o exceptie, o comanda
+   * pe care n-o gasim. Pentru ei, evenimentul era livrat: nu-l mai reincercau. Iar sondarea nu-l
+   * poate recupera, fiindca filtreaza dupa data CREARII comenzii.
+   *
+   * ⚠ CELE TREI `200` DE LA AUTENTIFICARE RAMAN, si sunt o hotarare buna: un eveniment fara secret
+   * sau cu semnatura gresita n-are cum sa devina bun daca il mai trimit o data. Acolo reincercarea
+   * e zgomot curat. Se schimba numai calea de DUPA autentificare.
+   *
+   * ⚠ SI CALEA RAPIDA RAMANE. Scris in inbox, evenimentul e in siguranta — dar prelucrarea nu
+   * asteapta cronul: se incearca pe loc, iar daca pica, randul ramane neprelucrat si cronul il
+   * reia. Fara asta, fiecare expediere ar intarzia pana la un minut degeaba.
+   */
+  const eventId = idEvenimentului(event, rawBody);
+  const { error: eInbox } = await admin.from("aboutyou_webhook_inbox").upsert(
+    {
+      business_id: businessId, event_id: eventId, event_name: name ?? null,
+      payload: event as never,
+    },
+    { onConflict: "business_id,event_id", ignoreDuplicates: true },
+  );
+  if (eInbox) {
+    /*
+     * ⚠ SINGURUL LOC UNDE RASPUNDEM CU ESEC, si singurul unde reincercarea lor chiar ajuta: n-am
+     * pastrat evenimentul, deci daca ne oprim aici e pierdut definitiv.
+     */
+    await logError({
+      action: "aboutyou/webhook", severity: "critical",
+      message: `evenimentul n-a putut fi scris in inbox: ${eInbox.message}`,
+      details: { businessId, eventId, name }, businessId,
+    });
+    return NextResponse.json({ error: "inbox indisponibil" }, { status: 503 });
   }
+
+  /* ⚠ De-aici incolo, un esec nu mai pierde nimic: randul ramane neprelucrat si cronul il reia. */
+  await prelucreazaEveniment(admin, businessId, cfg, event).catch(async (e) => {
+    await admin.from("aboutyou_webhook_inbox")
+      .update({ incercari: 1, last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500) } as never)
+      .eq("business_id", businessId).eq("event_id", eventId);
+  });
 
   return ok();
 }
+
+/**
+ * Cheia dupa care acelasi eveniment livrat de doua ori nu face doua randuri.
+ *
+ * ⚠ `id`-ul din plicul lor e cheia adevarata. Cand lipseste, se face o amprenta din corp — ca
+ * aceeasi livrare sa nimereasca acelasi rand, nu unul nou la fiecare reincercare.
+ */
+function idEvenimentului(event: { id?: unknown }, rawBody: string): string {
+  if (typeof event.id === "string" && event.id.trim()) return event.id.trim();
+  if (typeof event.id === "number") return String(event.id);
+  return `amprenta:${createHash("sha256").update(rawBody).digest("hex").slice(0, 32)}`;
+}
+
 
 // Comparatie in timp constant: o comparatie obisnuita se opreste la prima
 // diferenta, deci scurgerea de timp lasa tokenul sa fie ghicit caracter cu caracter.
@@ -132,55 +160,4 @@ function deSemnalat(cheie: string): boolean {
   if (ultim != null && acum - ultim < SASE_ORE) return false;
   semnalatLa.set(cheie, acum);
   return true;
-}
-
-async function orderNumberDinArticole(
-  admin: SupabaseClient<Database>, businessId: string, event: unknown,
-): Promise<string | null> {
-  const e = (event ?? {}) as Record<string, unknown>;
-  const msg = (e.message ?? e.data) as Record<string, unknown> | undefined;
-  const items = Array.isArray(msg?.items) ? (msg.items as unknown[]) : [];
-  const ids = items
-    .map((it) => (typeof it === "number" ? it : (it as { id?: number })?.id))
-    .filter((x): x is number => typeof x === "number");
-  if (ids.length === 0) return null;
-
-  /*
-   * Corelarea se cere BAZEI, nu se caută in memorie.
-   *
-   * Se citeau ultimele 200 de comenzi si se scana lista lor de articole. Peste 200
-   * de comenzi About You, anularile si returnarile pe ARTICOL nu mai gaseau comanda
-   * si se pierdeau definitiv — iar 200 se atinge intr-o luna buna.
-   *
-   * ⚠ CONTAINMENT-UL SE SCRIE CA SIR, nu ca obiect.
-   *
-   * `contains(col, valoare)` din postgrest-js are trei ramuri: sirul pleaca
-   * verbatim, ARRAY-ul devine `cs.{${value.join(",")}}`. Un array de obiecte
-   * ajunge deci `cs.{[object Object]}` — 400 la fiecare apel, adica exact zero
-   * corelari, mai rau decat cele 200 de comenzi de dinainte. Am probat calea
-   * corecta pe API-ul real: `items=cs.[{"order_item_id":123}]` raspunde 200.
-   * Index: `idx_aboutyou_orders_items_gin`.
-   *
-   * O singura interogare pentru toate articolele: `[{"order_item_id":N}]` nu
-   * contine virgula, deci separatorul lui `or` rămâne neambiguu.
-   */
-  const conditii = ids.slice(0, 100)
-    .map((id) => `items.cs.${JSON.stringify([{ order_item_id: id }])}`).join(",");
-  const { data, error } = await admin
-    .from("aboutyou_orders").select("aboutyou_order_number")
-    .eq("business_id", businessId)
-    .or(conditii)
-    .limit(1);
-  if (error) {
-    // O citire cazuta NU inseamna „nicio potrivire": inghitita, evenimentul se
-    // pierde definitiv, fiindca ruta raspunde oricum 200 si About You nu reia.
-    await logError({
-      action: "aboutyou/webhook",
-      message: `corelarea articolelor a eșuat: ${error.message}`,
-      details: { businessId, ids: ids.slice(0, 10) }, businessId, severity: "critical",
-    });
-    return null;
-  }
-  const gasit = (data ?? [])[0] as { aboutyou_order_number?: string } | undefined;
-  return gasit?.aboutyou_order_number ?? null;
 }

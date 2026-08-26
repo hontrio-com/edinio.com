@@ -424,6 +424,42 @@ export type Database = {
           },
         ]
       }
+      aboutyou_webhook_inbox: {
+        Row: {
+          business_id: string
+          event_id: string
+          event_name: string | null
+          id: string
+          incercari: number
+          last_error: string | null
+          payload: Json
+          prelucrat_la: string | null
+          primit_la: string
+        }
+        Insert: {
+          business_id: string
+          event_id: string
+          event_name?: string | null
+          id?: string
+          incercari?: number
+          last_error?: string | null
+          payload: Json
+          prelucrat_la?: string | null
+          primit_la?: string
+        }
+        Update: {
+          business_id?: string
+          event_id?: string
+          event_name?: string | null
+          id?: string
+          incercari?: number
+          last_error?: string | null
+          payload?: Json
+          prelucrat_la?: string | null
+          primit_la?: string
+        }
+        Relationships: []
+      }
       aboutyou_variants: {
         Row: {
           ay_status: string | null

@@ -22,7 +22,7 @@ import {
   type AboutYouListingEnrichment, type AboutYouStoredMaterial, type AboutYouVariantData,
   type MappableProduct,
 } from "./mapping";
-import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
+import { randuriCitite } from "@/lib/supabase/rand-citit";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";

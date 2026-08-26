@@ -195,9 +195,9 @@ export async function hotarasteReturTrendyol(
  * intr-un `FormData`. De-aia respingerea cu dovezi are actiunea ei, in loc sa umfle
  * `hotarasteReturTrendyol`.
  *
- * ⚠ DOVEZILE SUNT OPTIONALE, si asa scrie si in schema lor: `files (array of files, optional)`.
- * Nu se cer, deci nu se cer nici aici — dar pana azi comerciantul nu le putea trimite deloc,
- * iar o respingere fara dovada ajunge la arbitrajul lor cu mainile goale.
+ * ⚠ DOVADA E CERUTA, in afara de doua motive. Schema lor le da ca optionale, ghidul lor le cere
+ * („file yüklemek zorunludur"), si se crede ghidul — vezi nota lunga de la `MOTIVE_FARA_DOVADA`.
+ * Oprirea sta in `hotarasteRetur`, ca sa acopere si calea fara fisiere, nu doar ecranul asta.
  *
  * ⚠ SE MARGINESC AICI, nu la ei: cel mult cinci fisiere, cel mult 10 MB fiecare, si numai
  * PDF/JPEG/PNG. Altfel refuzul ar fi venit de la ei dupa ce omul a apasat, iar mesajul lor nu

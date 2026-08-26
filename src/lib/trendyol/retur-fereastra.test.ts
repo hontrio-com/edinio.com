@@ -30,7 +30,9 @@ const mod = viu("src/lib/trendyol/retururi.ts");
 
 test("⚠ cand fereastra nu incape, se INGUSTEAZA — nu se sta pe loc", () => {
   /* Se stie din `totalPages` cat de mult depaseste, deci se taie proportional, cu marja. */
-  assert.match(mod, /const depasire = totalPagini \/ PAGINI_PE_TRECERE;/);
+  /* ⚠ Se imparte la CATE pagini s-au citit chiar, nu la constanta: la fundul ferestrei se
+     citesc mai multe. Vezi `retur-stramtoare.test.ts`. */
+  assert.match(mod, /const depasire = totalPagini \/ paginiDeCitit;/);
   assert.match(mod, /Math\.ceil\(depasire \* 1\.5\)/);
   assert.match(mod, /latimeUrmatoare: stransa/);
 });

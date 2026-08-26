@@ -5,7 +5,8 @@ import { approveClaimItems, getClaims, isTrendyolError, rejectClaimItems } from 
 import type { TrendyolSyncContext } from "./sync";
 import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
 import {
-  coletDeTrimisInapoi, idCererii, idPachetului, liniileReturului, nuSeTrimiteInapoi,
+  coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului,
+  nuSeTrimiteInapoi,
 } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchTrendyolConfig } from "./config";
@@ -39,27 +40,56 @@ type Db = SupabaseClient<Database>;
 const FEREASTRA_INITIALA_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
- * ⚠ FEREASTRA LOR E DE CEL MULT DOUA SAPTAMANI, ca la comenzi. Ceruta mai larga, serviciul
- * raspunde 400 si nu s-ar aduce nimic — iar cronul ar parea ca merge.
+ * Cea mai lata fereastra ceruta intr-o trecere.
+ *
+ * ⚠ E PRECAUTIA NOASTRA, NU REGULA LOR (26.08.2026). Pana azi scria aici ca fereastra e de cel
+ * mult doua saptamani „ca la comenzi" si ca peste atat raspund 400. La COMENZI asta chiar e
+ * scris; la retururi NU e scris nicaieri — in OpenAPI `startDate` si `endDate` sunt
+ * `required: false`, si singurul „maximum" din toata pagina e cel de la `size`.
+ *
+ * ⚠ SE PASTREAZA CIFRA, dar se numeste ce este. O fereastra larga nu strica nimic daca ei o
+ * accepta, si ne apara daca n-o accepta — iar `latimeUrmatoare` o ingusteaza oricum de indata ce
+ * paginile nu incap. Ce nu e in regula e sa lasam scrisa ca a lor o margine care e a noastra:
+ * cine citeste comentariul mai tarziu ia o presupunere drept fapt.
  */
 const FEREASTRA_MAXIMA_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
  * Cat de mult in urma se mai pot cere cererile de retur.
  *
- * ⚠ ALT PLAFON DECAT LATIMEA FERESTREI. Ei tin cererile mai mult decat comenzile de pe capatul
- * clasic, dar nu la nesfarsit. Trei luni e cifra pe care o dau pentru flux; se ia aceeasi, ca sa
- * nu cerem ani intregi degeaba.
+ * ⚠ ALT PLAFON DECAT LATIMEA FERESTREI, si tot al nostru. Pentru retururi ei nu scriu niciun
+ * orizont — nici cat de mult in urma se poate cere, nici cat tin cererile. Trei luni e cifra pe
+ * care o dau la fluxul de comenzi, si se ia aceeasi ca sa nu pornim de la ani intregi cand un
+ * magazin a stat oprit. Daca s-ar dovedi prea scurta, se lungeste; deocamdata e o margine
+ * aleasa, nu una citita.
  */
 const ORIZONT_RETURURI_MS = 90 * 24 * 60 * 60 * 1000;
 
 /** ⚠ Plafonul LOR pentru explicatia respingerii. Peste el, cererea e refuzata intreaga. */
 const MAX_EXPLICATIE = 500;
 
-/** Cate pagini se citesc intr-o trecere. */
+/** Cate pagini se citesc intr-o trecere, cat timp fereastra se mai poate ingusta. */
 const PAGINI_PE_TRECERE = 3;
 
-/** Cate cereri pe pagina. Implicitul lor. */
+/**
+ * Cate pagini se citesc cand fereastra e DEJA la minim si tot nu incape.
+ *
+ * ⚠ EXISTA CA SA NU SE BLOCHEZE DE TOT. Vezi nota lunga de la `laStramtoare`: ingustarea are un
+ * fund, iar pe fundul ala „mai ingusteaza" nu mai inseamna nimic. Atunci se citeste MAI MULT, nu
+ * mai putin. `page` n-are plafon documentat, iar citirea cererilor are un buget larg (1000/minut).
+ */
+const PAGINI_LA_STRAMTOARE = 20;
+
+/**
+ * Cate cereri pe pagina.
+ *
+ * ⚠ 50 E IMPLICITUL LOR PE AMANDOUA RAMURILE, si de-aia ramane 50. Plafonul de 200 e scris
+ * NUMAI in referinta turceasca (`"default": 50, "maximum": 200`); in variantele Europa si Golf
+ * blocul e identic intre ele si n-are `maximum` deloc. Toate vitrinele noastre sunt europene,
+ * deci un 200 acolo ar fi o presupunere netestata pe un capat de la care depinde ca un
+ * comerciant afla ca are un retur de rezolvat. Adancimea se ia din `page`, care e documentat
+ * fara plafon, nu dintr-un `size` ghicit.
+ */
 const PE_PAGINA = 50;
 
 /**
@@ -149,7 +179,25 @@ export async function aduRetururile(
   let aduse = 0;
   let ok = true;
 
-  for (let pagina = 0; pagina < PAGINI_PE_TRECERE; pagina++) {
+  /*
+   * ═══ ⚠ INGUSTAREA ARE UN FUND, SI PE FUND SE STATEA PE LOC (26.08.2026) ═══
+   *
+   * Vezi nota de mai jos de la `pagina + 1 >= paginiDeCitit`: cand fereastra nu incape in
+   * paginile citite, se ingusteaza si se reia. Dar `stransa` nu coboara sub `FEREASTRA_MINIMA_MS`.
+   *
+   * ⚠ DECI LA FUND SE INTORCEA `latimeUrmatoare === latime`, la nesfarsit. Aceeasi fereastra de-o
+   * ora, aceleasi trei pagini, `ok = false` de fiecare data, marcajul nemiscat — reparatia de
+   * dimineata reintrodusa exact acolo unde nu mai avea unde sa ingusteze. Un magazin cu peste 150
+   * de cereri intr-o ora nu mai citea NICIODATA nimic, nici macar retururile de maine.
+   *
+   * ⚠ CAND NU MAI POTI INGUSTA, CITESTE MAI MULT. Douazeci de pagini pe o fereastra de-o ora
+   * inseamna o mie de cereri intr-o ora la un singur magazin. `page` n-are plafon documentat, iar
+   * citirea are 1000 de cereri pe minut — deci calea asta e ieftina si e deschisa.
+   */
+  const laStramtoare = latime <= FEREASTRA_MINIMA_MS;
+  const paginiDeCitit = laStramtoare ? PAGINI_LA_STRAMTOARE : PAGINI_PE_TRECERE;
+
+  for (let pagina = 0; pagina < paginiDeCitit; pagina++) {
     const res = await getClaims(ctx.auth, { startDate: de_la, endDate: pana_la, page: pagina, size: PE_PAGINA });
     if (isTrendyolError(res)) {
       await logError({
@@ -202,15 +250,38 @@ export async function aduRetururile(
      * proportional, cu o marja. Fereastra mai mica incape, marcajul avanseaza, si se merge mai
      * departe — bucata cu bucata, in loc sa se stea pe loc.
      */
-    if (pagina + 1 >= PAGINI_PE_TRECERE) {
-      const depasire = totalPagini / PAGINI_PE_TRECERE;
+    if (pagina + 1 >= paginiDeCitit) {
+      /*
+       * ⚠ LA FUND, „NU MUT MARCAJUL" AR INSEMNA SA NU MAI CITESC NIMIC, NICIODATA. Fereastra e
+       * deja de-o ora, s-au citit douazeci de pagini — adica peste o mie de cereri intr-o ora la
+       * un singur magazin — si tot mai sunt. Oprit aici, marcajul ramane infipt si TOATE
+       * retururile de maine incolo se pierd, nu doar coada orei asteia.
+       *
+       * ⚠ DECI SE TRECE MAI DEPARTE SI SE SPUNE PE FATA. Se pierde coada unei ore; alternativa
+       * era sa se piarda tot, de-acum inainte. Se scrie `critical` fiindca e chiar genul de
+       * pierdere pe care comerciantul trebuie s-o afle de la noi, nu de la clientul lui.
+       */
+      if (laStramtoare) {
+        await logError({
+          action: "trendyol/retururi",
+          message: `fereastra minima are ${totalPagini} pagini si s-au citit ${paginiDeCitit}: restul orei nu se mai poate citi, dar se merge mai departe`,
+          details: {
+            deLa: new Date(de_la).toISOString(), panaLa: new Date(pana_la).toISOString(),
+            totalPagini, citite: paginiDeCitit, vitrina: ctx.auth.storefront ?? null,
+          },
+          businessId: ctx.businessId, severity: "critical",
+        });
+        return { aduse, ok: true, fereastraSfarsitMs: pana_la, latimeUrmatoare: FEREASTRA_MINIMA_MS };
+      }
+
+      const depasire = totalPagini / paginiDeCitit;
       const stransa = Math.max(
         FEREASTRA_MINIMA_MS,
         Math.floor((pana_la - de_la) / Math.max(2, Math.ceil(depasire * 1.5))),
       );
       await logError({
         action: "trendyol/retururi",
-        message: `fereastra are ${totalPagini} pagini si citim ${PAGINI_PE_TRECERE}; se ingusteaza ca sa poata avansa`,
+        message: `fereastra are ${totalPagini} pagini si citim ${paginiDeCitit}; se ingusteaza ca sa poata avansa`,
         details: {
           latimeVeche: pana_la - de_la, latimeNoua: stransa,
           vitrina: ctx.auth.storefront ?? null,
@@ -397,9 +468,8 @@ export async function hotarasteRetur(
     /**
      * Dovezi pentru respingere: poze cu marfa primita, PDF-uri.
      *
-     * ⚠ OPTIONALE IN SCHEMA LOR — verificat in OpenAPI: `files (array of files, optional)`.
-     * Nu se cer, deci nu se cer nici aici. Dar pana azi comerciantul nu le putea trimite DELOC,
-     * iar o respingere fara dovada ajunge la arbitrajul lor cu mainile goale.
+     * ⚠ CERUTE, IN AFARA DE DOUA MOTIVE. Vezi nota lunga de la `MOTIVE_FARA_DOVADA`: schema lor
+     * le da ca optionale, ghidul lor le cere („file yüklemek zorunludur"), si se crede ghidul.
      */
     dovezi?: Blob[];
   },
@@ -462,6 +532,24 @@ export async function hotarasteRetur(
        refuzata intreaga si comerciantul nu afla de ce. */
     if (explicatie.length > MAX_EXPLICATIE) {
       return { error: `Explicația poate avea cel mult ${MAX_EXPLICATIE} de caractere.` };
+    }
+
+    /*
+     * ═══ ⚠ DOVADA E CERUTA DE GHIDUL LOR, ORICE AR ZICE SCHEMA (26.08.2026) ═══
+     *
+     * Vezi nota de la `MOTIVE_FARA_DOVADA`. Aici se opreste, nu in ecran: o actiune de server se
+     * poate chema cu orice argumente, printr-un POST direct.
+     *
+     * ⚠ SI SE OPRESTE INAINTE DE APEL, nu dupa. Respingerea e ireversibila si e plafonata la 5 pe
+     * minut; iar ghidul spune ca rezultatul ei se urmareste ABIA pe urma, pe `claimItemStatus` —
+     * deci un `200` de la ei n-ar dovedi ca respingerea a fost primita. O respingere plecata fara
+     * dovada s-ar putea stinge tacut zile mai tarziu, cu marfa deja la comerciant si banii deja
+     * intorsi clientului.
+     */
+    if (dovadaCeruta(p.motivId) && (p.dovezi?.length ?? 0) === 0) {
+      return {
+        error: "Pentru motivul ales, Trendyol cere o dovadă atașată. Adaugă o poză sau un PDF cu produsul primit.",
+      };
     }
     const res = await rejectClaimItems(ctxCerere.auth, p.claimId, {
       claimIssueReasonId: p.motivId,
@@ -539,6 +627,100 @@ export async function repuneInStoc(
     case "fara-produs": return { error: "Listarea nu mai are produs legat." };
     default: return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
   }
+}
+
+/**
+ * Starile in care o cerere de retur inca se poate schimba.
+ *
+ * ⚠ `Rejected` E AICI DINADINS, si nu e o scapare: dupa o respingere, ei pot crea un colet de
+ * retur catre client, iar `rejectedPackageInfo` apare abia atunci. Cat timp lipseste, cererea
+ * inca are ceva de spus.
+ */
+const STARI_INCA_VII = ["Created", "WaitingInAction", "InAnalysis", "Rejected"] as const;
+
+/** Cate cereri se reintreaba intr-o trecere. Ei ingaduie 1000 de citiri pe minut. */
+const CERERI_DE_REINTREBAT = 60;
+
+/**
+ * Reintreaba cererile pe care le stim si care inca se pot schimba.
+ *
+ * ═══ ⚠ FEREASTRA DE TIMP NU MAI VEDE O CERERE DUPA CE TRECE DE EA (26.08.2026) ═══
+ *
+ * Aducerea obisnuita cere `startDate`/`endDate` si muta marcajul inainte. Dar o cerere de retur
+ * traieste ZILE: `Created` -> `WaitingInAction` -> `InAnalysis` -> `Accepted`/`Rejected`, iar in
+ * Romania comerciantul are pana la doua zile lucratoare sa se hotarasca.
+ *
+ * Deci: retur creat la 10:00, vazut la 10:04 si la 10:14 datorita suprapunerii. Marcajul ajunge
+ * la 10:09. Cererea se muta pe `Accepted` la ora 14:00 — si noi n-o mai vedem niciodata, fiindca
+ * a iesit din fereastra.
+ *
+ * ⚠ CE COSTA: in panou ramane „Așteaptă răspunsul tău" pentru ceva deja hotarat. Si, mai rau, nu
+ * mai aflam niciodata `dontShipBack` si `rejectedPackageInfo` — exact datele dupa care ii spunem
+ * comerciantului daca trebuie sa trimita coletul inapoi la client. Netrimis, returul se intoarce
+ * impotriva lui.
+ *
+ * ⚠ DE-AIA SE INTREABA PE ID, nu pe timp. `claimIds` e chiar calea pe care ne-o dau ei pentru
+ * asta, iar cererile pe care le stim sunt putine si marginite: numai cele inca vii.
+ *
+ * ⚠ SI NU MUTA NICIUN MARCAJ. E o reconciliere, nu o aducere: n-are fereastra, deci n-are ce
+ * pierde si n-are ce avansa. Cele doua cai sunt despartite anume.
+ */
+export async function reconciliazaRetururile(
+  admin: Db, ctx: TrendyolSyncContext,
+): Promise<{ verificate: number }> {
+  const vii = randuriCitite<{ claim_id: string; storefront: string | null; dont_ship_back: boolean | null }>(
+    "trendyol.cereriIncaVii", await admin
+      .from("trendyol_claims").select("claim_id, storefront, dont_ship_back")
+      .eq("business_id", ctx.businessId)
+      .in("claim_status", STARI_INCA_VII as unknown as string[])
+      /* ⚠ Cele mai demult atinse intai, ca sa nu ramana niciuna in urma — aceeasi regula ca la
+         confirmarea tintita a listarilor, unde lipsa ei a produs infometare. */
+      .order("last_modified", { ascending: true, nullsFirst: true })
+      .limit(CERERI_DE_REINTREBAT) as never);
+
+  if (vii.length === 0) return { verificate: 0 };
+
+  /*
+   * ⚠ GRUPATE PE VITRINA: o cerere greceasca se intreaba pe vitrina greceasca. Amestecate, ele
+   * n-ar fi gasite — iar Golful are de-a dreptul alte cai.
+   */
+  const peVitrina = new Map<string, string[]>();
+  for (const c of vii) {
+    const v = c.storefront ?? ctx.auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
+    const lista = peVitrina.get(v) ?? [];
+    lista.push(c.claim_id);
+    peVitrina.set(v, lista);
+  }
+
+  let verificate = 0;
+  for (const [vitrina, idsVitrina] of peVitrina) {
+    const ctxVitrina = vitrina === ctx.auth.storefront
+      ? ctx
+      : { ...ctx, auth: { ...ctx.auth, storefront: vitrina as TrendyolStoreFront } };
+
+    /* ⚠ In bucati: `claimIds` pleaca in ADRESA, iar o lista lunga o face prea lunga. */
+    for (let i = 0; i < idsVitrina.length; i += 20) {
+      const bucata = idsVitrina.slice(i, i + 20);
+      const res = await getClaims(ctxVitrina.auth, { claimIds: bucata, size: bucata.length });
+      if (isTrendyolError(res)) {
+        await logError({
+          action: "trendyol/retururi",
+          message: `reintrebarea cererilor vii a picat: ${res.error}`,
+          details: { vitrina, cate: bucata.length, status: res.status },
+          businessId: ctx.businessId, severity: "warning",
+        });
+        continue;
+      }
+      for (const c of res.data?.content ?? []) {
+        const idCerere = idCererii(c);
+        if (!idCerere) continue;
+        /* ⚠ Acelasi drum ca la aducere: aceeasi scriere, aceleasi reguli, un singur loc. */
+        await scrieCererea(admin, ctxVitrina, c, idCerere);
+        verificate++;
+      }
+    }
+  }
+  return { verificate };
 }
 
 /** Cate cereri asteapta o hotarare. Pentru pastila din panou. */

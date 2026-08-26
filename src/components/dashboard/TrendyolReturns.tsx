@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Loader2, PackageCheck, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { dovadaCeruta, MOTIV_BLOCAT_24H } from "@/lib/trendyol/retur-forma";
 import {
   hotarasteReturTrendyol, motiveRespingereTrendyol, repuneInStocTrendyol, retururiTrendyol,
   respingeReturTrendyolCuDovezi, type RandRetur,
@@ -62,6 +63,10 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
    * respingerea altuia. Aceeasi greseala ca la bifate, facuta a doua oara in acelasi fisier.
    */
   const [dovezi, setDovezi] = useState<Record<string, File[]>>({});
+
+  /* ⚠ Motivul e tinut ca sir in `<select>`; `dovadaCeruta` vrea numar, si `Number("")` e 0 —
+     adica exact „niciun motiv ales", care nu cere nimic. */
+  const ceruta = (claimId: string) => dovadaCeruta(Number(motivAles[claimId]) || null);
   const [seIncarca, incepe] = useTransition();
 
   function incarca(doar = doarDeHotarat) {
@@ -304,9 +309,9 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     className="min-w-40 flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
                   />
                   {/*
-                    ⚠ DOVEZILE SUNT OPTIONALE, si asa scrie si in schema lor. Dar până azi nu
-                    puteau fi trimise DELOC — iar o respingere fără dovadă ajunge la arbitrajul
-                    lor cu mâinile goale.
+                    ⚠ DOVADA E CERUTĂ DE GHIDUL LOR, în afară de două motive — vezi nota lungă de
+                    la `MOTIVE_FARA_DOVADA`. Ecranul o spune înainte de apăsare, iar serverul o
+                    oprește oricum: butonul care se dezactivează e o curtoazie, nu o pază.
                   */}
                   <label className="flex w-full flex-col gap-0.5">
                     <input
@@ -315,10 +320,24 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                       className="text-[11px] file:mr-2 file:rounded file:border file:border-border file:bg-muted file:px-2 file:py-0.5 file:text-[11px]"
                     />
                     <span className="text-[11px] text-muted-foreground">
-                      Poze cu marfa primită sau documente, dacă ai. Cel mult 5 fișiere, PDF, JPEG
-                      sau PNG, până în 10 MB fiecare.
+                      {ceruta(r.claimId)
+                        ? "Trendyol cere o dovadă pentru motivul ales: poză cu marfa primită sau document. "
+                        : "Poze cu marfa primită sau documente, dacă ai. "}
+                      Cel mult 5 fișiere, PDF, JPEG sau PNG, până în 10 MB fiecare.
                       {(dovezi[r.claimId]?.length ?? 0) > 0 && ` Ai ales ${dovezi[r.claimId].length}.`}
                     </span>
+                    {/*
+                      ⚠ REGULA LOR, altfel refuzul vine de la ei cu un text care nu explică nimic:
+                      motivul 1651 nu poate fi ales în primele 24 de ore de când returul a intrat
+                      în „Așteaptă răspunsul tău". E chiar unul dintre cele două motive scutite de
+                      dovadă, deci e cel spre care omul e împins să meargă.
+                    */}
+                    {Number(motivAles[r.claimId]) === MOTIV_BLOCAT_24H && (
+                      <span className="text-[11px] text-amber-700">
+                        Motivul ăsta nu poate fi folosit în primele 24 de ore de când returul
+                        așteaptă răspunsul tău. Dacă respingerea e refuzată, mai încearcă mâine.
+                      </span>
+                    )}
                   </label>
                   <button
                     type="button"
@@ -326,6 +345,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     disabled={
                       seIncarca || !motivAles[r.claimId] || !(explicatie[r.claimId] ?? "").trim()
                       || (alese[r.claimId]?.size ?? 0) === 0
+                      || (ceruta(r.claimId) && (dovezi[r.claimId]?.length ?? 0) === 0)
                     }
                     className="rounded-lg border border-red-300 px-3 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
                   >

@@ -20,7 +20,7 @@ import {
 import { marcajUrmator, pollPackagesToateVitrinele } from "@/lib/trendyol/orders";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { patchTrendyolConfig } from "@/lib/trendyol/config";
-import { treceRetururile } from "@/lib/trendyol/retururi";
+import { reconciliazaRetururile, treceRetururile } from "@/lib/trendyol/retururi";
 import type { TrendyolConfig, TrendyolStoreFront } from "@/lib/trendyol/types";
 
 type Admin = SupabaseClient<Database>;
@@ -529,6 +529,36 @@ export async function GET(req: NextRequest) {
       await pause(PACE_MS);
     }
   }
+  /* ── Starile retururilor pe care le stim ────────────────────────────────────
+   *
+   * ═══ ⚠ FEREASTRA DE TIMP NU MAI VEDE O CERERE DUPA CE TRECE DE EA ═══
+   *
+   * Aducerea de mai sus cere `startDate`/`endDate` si muta marcajul inainte. Dar o cerere de
+   * retur traieste ZILE, iar in Romania comerciantul are pana la doua zile lucratoare sa se
+   * hotarasca. Marcajul trece de ea in cateva minute, si de-atunci n-o mai vedem niciodata —
+   * nici cand ei o mut pe `Accepted`, nici cand apare coletul de retur catre client.
+   *
+   * ⚠ De-aia cererile INCA VII se reintreaba pe `claimIds`, nu pe timp. La cinci minute: o
+   * hotarare de-a lor nu se schimba din minut in minut, iar citirea cererilor are un buget
+   * larg la ei (1000/minut).
+   */
+  if (new Date().getMinutes() % 5 === 3) {
+    for (const businessId of alegeInRotatie(sellerIds, MAX_BIZ)) {
+      const ctx = await ctxFor(businessId);
+      if (!ctx) continue;
+      try {
+        await reconciliazaRetururile(admin, ctx);
+      } catch (e) {
+        await logError({
+          action: "trendyol-sync",
+          message: `starile retururilor nu s-au putut reintreba: ${e instanceof Error ? e.message : String(e)}`,
+          businessId, severity: "warning",
+        });
+      }
+      await pause(PACE_MS);
+    }
+  }
+
 
   let ingested = 0;
   for (const businessId of alegeInRotatie(sellerIds, ORDERS_BIZ)) {

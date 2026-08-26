@@ -43,7 +43,9 @@ test("⚠ marcajul avanseaza NUMAI la o trecere intreaga", () => {
   assert.match(mod, /claims_synced_per_storefront: \{ \.\.\.marcaje, \.\.\.noi \}/);
   /* ⚠ Trunchierea opreste marcajul SI ingusteaza fereastra: fara a doua parte, trecerea
      urmatoare relua aceleasi pagini la nesfarsit. */
-  assert.match(mod, /if \(pagina \+ 1 >= PAGINI_PE_TRECERE\) \{/);
+  /* ⚠ Numarul de pagini nu mai e fix: la fundul ferestrei se citesc mai multe, fiindca acolo
+     „mai ingusteaza" nu mai inseamna nimic. Vezi `retur-stramtoare.test.ts`. */
+  assert.match(mod, /if \(pagina \+ 1 >= paginiDeCitit\) \{/);
   assert.match(mod, /return \{ aduse, ok: false, fereastraSfarsitMs: pana_la, latimeUrmatoare: stransa \};/);
   /* ⚠ Si se scrie clipa de DINAINTE de citire, minus suprapunerea. */
   /* ⚠ Se scrie clipa de DINAINTE de citire, minus suprapunerea — dar nu mai departe decat s-a

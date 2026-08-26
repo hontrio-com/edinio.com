@@ -647,19 +647,56 @@ export function uploadInvoiceFile(
  * grosier al pachetului (`Returned`) — nu ce articol s-a intors, nu cate bucati, nu de ce, si
  * nu daca cererea asteapta o hotarare de la comerciant.
  *
- * ⚠ FEREASTRA E OBLIGATORIE LA EI si e de cel mult doua saptamani, ca la comenzi. Ceruta mai
- * larga, serviciul raspunde 400 — deci cronul cere ferestre scurte si le mata inainte cu un
- * cursor, exact ca la comenzi.
+ * ═══ ⚠ FEREASTRA FILTREAZA DUPA DATA CREARII, NU DUPA ULTIMA MODIFICARE ═══
+ *
+ * Citat din ghidul lor, in ambele limbi si in patru pagini deosebite:
+ *   „| startDate | It works according to the creation date of the claim package. | integer |"
+ *   „| startDate | İade paketinin oluşturulma tarihine göre çalışır. | integer |"
+ *
+ * ⚠ CONSECINTA E TOT INTELESUL RECONCILIERII. Un retur creat la 10:00 care trece pe `Accepted`
+ * la 14:00 NU reintra in nicio fereastra de dupa 10:00 — data crearii ramane 10:00 oricate
+ * tranzitii urmeaza. `lastModifiedDate` se schimba, dar NIMIC nu filtreaza pe el: parametrii
+ * sunt `startDate`, `endDate`, `page`, `size`, `claimItemStatus`, `orderNumber`, `claimIds`, si
+ * atat. Nu exista `lastModifiedStartDate`, nu exista sortare. Nici capatul de audit nu ajuta —
+ * primeste doar id-uri de cale, deci nu se poate cladi din el un flux „ce s-a schimbat".
+ *
+ * ⚠ SI ORDINEA E FIX INVERSUL FILTRULUI: „will be provided to you in the order of
+ * lastModifiedDate". Se filtreaza pe data crearii, dar se ordoneaza pe ultima modificare — deci
+ * cat parcurgem paginile unei ferestre, un retur care isi schimba statusul isi schimba locul in
+ * sortare, si poate aluneca peste o pagina deja citita. De-aia ferestrele se tin scurte, si
+ * de-aia cererile inca vii se reintreaba PE ID, unde ordinea nu conteaza.
+ *
+ * ⚠ LATIMEA DE DOUA SAPTAMANI E PRECAUTIA NOASTRA, NU REGULA LOR (26.08.2026). Comentariul de
+ * aici a sustinut pana azi ca fereastra e obligatorie si ca peste doua saptamani raspund 400. NU
+ * E SCRIS NICAIERI pentru retururi: in OpenAPI `startDate`/`endDate` sunt `required: false`, si
+ * singurul „maximum" din toata pagina e cel de la `size`. Regula de doua saptamani e scrisa la
+ * COMENZI si a fost adusa aici prin analogie. Se pastreaza fiindca e sigura in ambele sensuri,
+ * dar se numeste ce este: o alegere de-a noastra.
  */
 export function getClaims(
   auth: TrendyolAuth,
-  params: { startDate: number; endDate: number; page?: number; size?: number; claimIds?: string[]; claimItemStatus?: string },
+  /*
+   * ⚠ `startDate`/`endDate` SUNT OPTIONALE cand se cere pe `claimIds`. Ei spun ca la trimiterea
+   * lui `claimIds` ceilalti parametri nu se mai proceseaza — iar noi avem nevoie chiar de calea
+   * asta pentru reconcilierea cererilor vii, care n-are fereastra de timp si nici n-ar trebui
+   * sa aiba.
+   */
+  params: {
+    startDate?: number; endDate?: number;
+    page?: number; size?: number; claimIds?: string[]; claimItemStatus?: string;
+  },
 ) {
   const q = new URLSearchParams();
-  q.set("startDate", String(params.startDate));
-  q.set("endDate", String(params.endDate));
+  if (params.startDate != null) q.set("startDate", String(params.startDate));
+  if (params.endDate != null) q.set("endDate", String(params.endDate));
   if (params.page != null) q.set("page", String(params.page));
-  /* Serviciul lor taie la 200; cerut mai mult, raspunde 400. */
+  /*
+   * ⚠ 200 E DOCUMENTAT DOAR PE TURCIA. In `/reference/getclaims.md`, `size` are
+   * `"default": 50, "maximum": 200`. In variantele internationale (`getclaimseurope`,
+   * `getclaimsgulf`) blocul e identic intre ele si NU CONTINE `maximum` — deci acolo plafonul
+   * e nedocumentat, nu infirmat. Se taie oricum la 200: pe Turcia e chiar regula lor, iar in
+   * rest e cea mai buna margine pe care o cunoastem.
+   */
   if (params.size != null) q.set("size", String(Math.max(1, Math.min(200, params.size))));
   if (params.claimIds?.length) q.set("claimIds", params.claimIds.join(","));
   if (params.claimItemStatus) q.set("claimItemStatus", params.claimItemStatus);

@@ -158,3 +158,44 @@ export function nuSeTrimiteInapoi(c: TrendyolClaim): boolean | null {
   if (!p) return null;
   return typeof p.dontShipBack === "boolean" ? p.dontShipBack : null;
 }
+
+/**
+ * Motivele de respingere care NU cer dovada atasata.
+ *
+ * ═══ ⚠ GHIDUL LOR CERE FISIER, SCHEMA LOR SPUNE CA E OPTIONAL ═══
+ *
+ * Cele doua se contrazic, si comentariul nostru de pana azi a crezut schema. Citat din ghidul
+ * turcesc (updatedAt 2026-01-22): „Bu iki iade sebebi dışında bütün sebepler için file yüklemek
+ * zorunludur." Iar in engleza: „It is mandatory to upload a file for all reasons except these two
+ * return reasons." In OpenAPI, in schimb, `required` e doar
+ * `[claimIssueReasonId, claimItemIdList, description]` — `files` lipseste de-acolo, in toate trei
+ * variantele (TR, Europa, Golf).
+ *
+ * ⚠ SE CREDE GHIDUL, fiindca partea care greseste in favoarea noastra costa un fisier in plus, iar
+ * cealalta costa o respingere pierduta. Si nu se stie macar daca refuzul vine sincron: ghidul spune
+ * ca rezultatul respingerii se urmareste ulterior, pe `claimItemStatus` — deci un `200` la apel
+ * n-ar dovedi ca respingerea a fost primita.
+ *
+ * ⚠ 2101 NU E AICI, DESI APARE IN LISTA LOR. Ghidul turcesc si una din cele doua variante engleze
+ * il enumera; a doua varianta engleza nu. Peste asta, fraza care insoteste lista de TREI motive
+ * zice tot „aceste doua motive" — deci lista a fost extinsa fara ca textul sa fie potrivit, si nu
+ * se stie care jumatate e cea buna. In plus, 2101 lipseste din toate raspunsurile-exemplu ale
+ * `getClaimIssueReasons`. Pe o cale ireversibila nu se pariaza pe jumatatea favorabila: cerandu-i
+ * dovada degeaba, comerciantul pierde un minut; nececand-o cand trebuia, pierde returul.
+ */
+export const MOTIVE_FARA_DOVADA = new Set([1651, 451]);
+
+/** Trebuie atasata o dovada pentru motivul asta de respingere? */
+export function dovadaCeruta(motivId: number | null | undefined): boolean {
+  return !!motivId && !MOTIVE_FARA_DOVADA.has(motivId);
+}
+
+/**
+ * Motivul care nu poate fi ales in primele 24 de ore.
+ *
+ * ⚠ REGULA LOR, scrisa in ghid: „For the claim issue reason 1651, this reason cannot be selected
+ * within the first 24 hours after the return on the Waiting Action status." E chiar unul dintre
+ * cele doua motive scutite de dovada — deci comerciantul ar alege exact motivul cel mai comod si
+ * ar primi un refuz al carui text nu explica nimic. Se spune in ecran, inainte de apasare.
+ */
+export const MOTIV_BLOCAT_24H = 1651;

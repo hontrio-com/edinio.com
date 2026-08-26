@@ -79,6 +79,16 @@ test("⚠ roata se invarte pe un camp AL NOSTRU, nu pe unul de-al lor", () => {
    * ⚠ DECI UN MAGAZIN CU PESTE 60 DE CERERI VII AR FI REINTREBAT ACELEASI 60, la fiecare cinci
    * minute, pentru totdeauna. Restul, niciodata. Exact infometarea pe care reconcilierea venea
    * s-o inlature.
+   *
+   * ⚠ MASURAT PE SCHEMA ADEVARATA, in tranzactie anulata: 150 de cereri vii, toate cu acelasi
+   * `last_modified` — cazul real, fiindca niciuna nu se schimbase.
+   *
+   *     ordonat pe `last_modified`  ->  tura 1 si tura 2 iau ACELEASI 60 din 60.
+   *                                     90 din 150 n-ar fi fost vazute NICIODATA.
+   *     ordonat pe `reintrebat_la`  ->  tura 1: 60, tura 2: 60, se repeta ZERO.
+   *
+   * Nu e o presupunere despre ce s-ar fi intamplat: sunt cele doua interogari, una langa alta,
+   * pe acelasi tabel si acelasi index.
    */
   assert.match(mod, /\.order\("reintrebat_la", \{ ascending: true, nullsFirst: true \}\)/);
   assert.doesNotMatch(mod, /\.order\("last_modified"/);

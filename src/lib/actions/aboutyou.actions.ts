@@ -22,6 +22,7 @@ import {
 } from "@/lib/aboutyou/client";
 import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
 import { cancelOrderNow, returnOrderNow } from "@/lib/aboutyou/orders";
+import { randCitit } from "@/lib/supabase/rand-citit";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
   cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
@@ -846,6 +847,46 @@ export async function validateAboutYouListing(
     },
     variants,
   }, cerintaMaterial);
+
+  /*
+   * ═══ ⚠ DOUA REGULI ALE LOR PE CARE NU LE PUTEM CITI (27.08.2026) ═══
+   *
+   * Auditul spune ca (1) un produs `pending_approval` nu poate fi modificat — trebuie intors in
+   * `draft`, actualizat, si retrimis — si ca (2) categoria nu se mai poate schimba dupa aprobare.
+   * Documentatia lor sta in spatele contului de partener, deci n-am putut citi niciuna.
+   *
+   * ⚠ SE SPUN, NU SE IMPUN. Un blocaj construit pe o regula neverificata opreste lucruri care
+   * poate merg — si asta e mai rau decat o cerere respinsa, fiindca respingerea se vede si se
+   * poate relua, iar blocajul nostru nu se poate ocoli deloc. Aceeasi hotarare ca la `valid_at`
+   * si la schema de semnatura.
+   *
+   * ⚠ SI DACA EI CHIAR REFUZA, comerciantul afla de ce: motivele respingerii ajung acum pe
+   * listare prin `/products/rejected`, cerute pe nume. Deci calea „incearca si afla" nu mai e
+   * oarba, cum era.
+   */
+  const rand = randCitit<{ status: string; category_id: number | null }>(
+    "aboutyou.listareaDeVerificat", await createAdminClient()
+      .from("aboutyou_listings").select("status, category_id")
+      .eq("business_id", businessId).eq("product_id", productId).maybeSingle());
+
+  if (rand?.status === "pending_approval") {
+    warnings.push(
+      /* ⚠ Butonul se numeste „Retrage" si CHIAR EXISTA pe `pending_approval` (vezi
+         `RETRAGABILE` din `AboutYouListings`). Verificat inainte de a scrie mesajul. */
+      "Produsul e în curs de aprobare la About You. Se poate ca ei să nu accepte modificări acum;"
+      + " dacă trimiterea e respinsă, apasă „Retrage” în lista de produse, modifică-l și trimite-l din nou.",
+    );
+  }
+
+  const dupaAprobare = new Set(["active", "published", "pending_active", "inactive"]);
+  const categoriaCeruta = input.category_id ?? config.category_map?.[produs.category ?? ""]?.category_id ?? null;
+  if (rand && dupaAprobare.has(rand.status) && rand.category_id != null
+    && categoriaCeruta != null && categoriaCeruta !== rand.category_id) {
+    warnings.push(
+      "Ai schimbat categoria unui produs deja aprobat. About You poate refuza schimbarea după aprobare;"
+      + " dacă o refuză, produsul trebuie listat din nou, ca produs nou.",
+    );
+  }
 
   return { issues, warnings };
 }

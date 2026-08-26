@@ -230,13 +230,29 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 2) Poll open batches ─────────────────────────────────────────────────────────
-  const { data: batchBiz } = await admin
-    .from("trendyol_batches").select("business_id")
-    .in("status", ["pending", "processing", "retry"])
-    // `order` + rotatie in loc de `slice`: fara ele, primele magazine ies mereu
-    // primele si cele de la coada nu ajung niciodata la rand.
-    .order("business_id", { ascending: true }).limit(1000);
-  const pollSet = alegeInRotatie([...new Set((batchBiz ?? []).map((r) => r.business_id))], MAX_BIZ);
+  /*
+   * ⚠ ACELASI PLAFON CA LA PASUL 3, gasit de proba scrisa pentru el (26.08.2026).
+   *
+   * Comentariul de aici se ingrijea deja de rotatie — dar rotatia nu repara o taietura care se
+   * face INAINTEA deduplicarii. Un magazin cu peste o mie de loturi deschise ar fi umplut
+   * singur fereastra, iar celelalte nu si-ar mai fi sondat loturile deloc.
+   *
+   * ⚠ SI DE AZI COSTA MAI MULT: stergerea unui produs asteapta confirmarea lotului inainte sa
+   * uite listarea. Un magazin cazut dupa taietura si-ar fi lasat listarile in `removing` pe veci.
+   */
+  const { data: batchBiz, error: eBatchBiz } = await admin.rpc("trendyol_magazine_cu_loturi_deschise");
+  if (eBatchBiz) {
+    /* ⚠ Picata, citirea arata identic cu „niciun lot deschis" — si tot pasul s-ar fi sarit tacut. */
+    await logError({
+      action: "trendyol-sync",
+      message: `magazinele cu loturi deschise nu s-au putut citi: ${eBatchBiz.message}`,
+      severity: "warning",
+    });
+  }
+  const pollSet = alegeInRotatie(
+    ((batchBiz ?? []) as { business_id: string }[]).map((r) => r.business_id),
+    MAX_BIZ,
+  );
   for (const businessId of pollSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;
@@ -261,11 +277,42 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 3) Reconcile approval for stores with listings awaiting approval ─────────────
-  const { data: pendingBiz } = await admin
-    .from("trendyol_listings").select("business_id")
-    .in("status", RECONCILE_STATUSES)
-    .order("business_id", { ascending: true }).limit(1000);
-  const reconcileSet = alegeInRotatie([...new Set((pendingBiz ?? []).map((r) => r.business_id))], RECONCILE_BIZ);
+  /*
+   * ═══ ⚠ DOUA MAGAZINE NU AJUNGEAU NICIODATA AICI (26.08.2026) ═══
+   *
+   * Forma dinainte citea `trendyol_listings` cu `.limit(1000)`, ordonat pe `business_id`, si
+   * deduplica ABIA DUPA. Trunchierea fiind inaintea deduplicarii, rotatia n-o repara. Masurat
+   * pe datele reale:
+   *
+   *     19c5146c    14 randuri   0..13     in pool
+   *     635bc524   986 randuri  14..999    in pool, umple restul
+   *     bdba3cc6    —                      NU AJUNGE NICIODATA
+   *     fa126de4    —                      NU AJUNGE NICIODATA
+   *
+   * Un singur vanzator cu aproape o mie de listari umplea singur fereastra. Celelalte magazine
+   * nu erau reconciliate mai rar — nu erau reconciliate DELOC. 76 de listari ale lui Okxi
+   * stateau in `created` de pana la 24 de ore fara ca cineva sa intrebe daca s-au aprobat.
+   *
+   * ⚠ E CHIAR DEFECTUL DESPRE CARE AVERTIZEAZA COMENTARIUL DIN PASUL 4 de mai jos, unde s-a
+   * reparat pentru comenzi. Aici a ramas.
+   *
+   * ⚠ ACUM SE NUMARA IN POSTGRES: un rand pe magazin, nu unul pe listare. Nu mai e nimic de
+   * trunchiat.
+   */
+  const { data: pendingBiz, error: ePending } = await admin.rpc("trendyol_magazine_de_reconciliat");
+  if (ePending) {
+    /* ⚠ O citire picata NU se citeste ca „niciun magazin de reconciliat": ar fi sarit tacut
+       peste tot pasul, si nimeni n-ar fi aflat de ce statusurile stau pe loc. */
+    await logError({
+      action: "trendyol-sync",
+      message: `magazinele de reconciliat nu s-au putut citi: ${ePending.message}`,
+      severity: "warning",
+    });
+  }
+  const reconcileSet = alegeInRotatie(
+    ((pendingBiz ?? []) as { business_id: string }[]).map((r) => r.business_id),
+    RECONCILE_BIZ,
+  );
   for (const businessId of reconcileSet) {
     const ctx = await ctxFor(businessId);
     if (!ctx) continue;

@@ -3855,6 +3855,34 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trendyol_magazine_cu_loturi_deschise()
+ RETURNS TABLE(business_id uuid, cate bigint)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select b.business_id, count(*) as cate
+    from public.trendyol_batches b
+   where b.status in ('pending', 'processing', 'retry')
+   group by b.business_id
+   order by b.business_id;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.trendyol_magazine_de_reconciliat()
+ RETURNS TABLE(business_id uuid, cate bigint)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select l.business_id, count(*) as cate
+    from public.trendyol_listings l
+   where l.status in ('pending', 'created', 'approved', 'active', 'rejected')
+   group by l.business_id
+   order by l.business_id;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.trendyol_repune_stoc_retur(p_business_id uuid, p_claim_item_id text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -8390,6 +8418,8 @@ grant execute on function public.touch_customers() to service_role;
 grant execute on function public.touch_stock_feed_sources() to anon;
 grant execute on function public.touch_stock_feed_sources() to authenticated;
 grant execute on function public.touch_stock_feed_sources() to service_role;
+grant execute on function public.trendyol_magazine_cu_loturi_deschise() to service_role;
+grant execute on function public.trendyol_magazine_de_reconciliat() to service_role;
 grant execute on function public.trendyol_repune_stoc_retur(p_business_id uuid, p_claim_item_id text) to service_role;
 grant execute on function public.trg_catalog_cuvinte_murdar() to anon;
 grant execute on function public.trg_catalog_cuvinte_murdar() to authenticated;
@@ -8498,6 +8528,8 @@ revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minu
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
+revoke execute on function public.trendyol_magazine_cu_loturi_deschise() from public;
+revoke execute on function public.trendyol_magazine_de_reconciliat() from public;
 revoke execute on function public.trendyol_repune_stoc_retur(p_business_id uuid, p_claim_item_id text) from public;
 revoke execute on function public.trg_generatia_cozii() from public;
 revoke execute on function public.update_support_ticket_updated_at() from public;

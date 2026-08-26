@@ -4845,6 +4845,8 @@ export type Database = {
       incheie_operatie_externa: { Args: { p_id: string; p_business_id: string | null; p_stare: string; p_referinta_externa?: string | null; p_detalii?: Json; p_eroare?: string | null }; Returns: Json }
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
+      trendyol_magazine_cu_loturi_deschise: { Args: Record<string, never>; Returns: { business_id: string; cate: number }[] }
+      trendyol_magazine_de_reconciliat: { Args: Record<string, never>; Returns: { business_id: string; cate: number }[] }
       trendyol_repune_stoc_retur: { Args: { p_business_id: string; p_claim_item_id: string }; Returns: Json }
       scrie_variante_daca_neschimbat: { Args: { p_business: string; p_product: string; p_asteptat: Json; p_nou: Json }; Returns: string }
       site_analytics_breakdown_zile: { Args: { bid: string; p_zile: number }; Returns: unknown }

@@ -1803,7 +1803,47 @@ async function confirmaTintit(
     const res = await getApprovedProducts(ctx.auth, { productMainId: l.product_main_id, size: 1 });
     /* ⚠ O eroare NU inseamna „nu e aprobat": se lasa pe seama scanarii, care vine oricum. */
     if (isTrendyolError(res)) continue;
-    const gasit = (res.data?.content ?? []).length > 0;
+    let gasit = (res.data?.content ?? []).length > 0;
+
+    /*
+     * ═══ ⚠ EI ISI SCHIMBA `productMainId`, SI ATUNCI NU-L MAI GASIM NICIODATA (26.08.2026) ═══
+     *
+     * Noi trimitem UUID-ul nostru ca `productMainId`. Cand ei leaga produsul de o fisa deja
+     * existenta din catalogul LOR, il inlocuiesc cu al lor — `TYCA6CAF3173D9F507C6F9800`.
+     *
+     * ⚠ SI AMANDOUA CAILE POTRIVEAU PE EL: si intrebarea tintita de aici, si scanarea paginata
+     * de mai jos. Deci un produs caruia i-au schimbat id-ul ramanea „in aprobare" la noi PENTRU
+     * TOTDEAUNA, desi la ei se vindea.
+     *
+     * ⚠ MASURAT pe un cont real: din 76 de listari blocate in `created`, 11 aveau id-ul
+     * schimbat de ei si erau aprobate; a 12-a chiar astepta aprobarea, si a ramas cum trebuie.
+     *
+     * ⚠ SI COSTA MAI MULT DECAT O ETICHETA GRESITA: plasa de deriva a stocului se uita numai la
+     * `approved`/`active`. Blocate in `created`, produsele alea se vindeau la ei fara nicio
+     * plasa — daca o trimitere de stoc pica tacut, nimic n-o prindea.
+     *
+     * ⚠ CODUL DE BARE E AL NOSTRU SI NU SE SCHIMBA. De-aia el e a doua intrebare.
+     *
+     * ⚠ NU SE SCRIE ID-UL LOR PESTE AL NOSTRU. `product_main_id` e cheie unica, tinta de
+     * `onConflict` la salvare, si pleaca in fiecare publicare — schimbat aici, ar fi rescris
+     * inapoi la prima salvare din editor si ar fi bulversat publicarea. Se raspunde doar la
+     * intrebarea „e aprobat?", care e tot ce ne trebuie.
+     */
+    if (!gasit) {
+      const bc = randCitit<{ barcode: string }>("trendyol.barcodePentruConfirmare", await admin
+        .from("trendyol_variants").select("barcode")
+        .eq("listing_id", l.id).eq("enabled", true)
+        .not("barcode", "is", null).limit(1).maybeSingle() as never);
+      if (bc?.barcode) {
+        const dupaBarcode = await getProductBaseInfo(ctx.auth, bc.barcode);
+        /* ⚠ Tot o eroare nu inseamna „nu e aprobat". Si nici `archived` nu inseamna aprobat. */
+        if (!isTrendyolError(dupaBarcode)
+          && dupaBarcode.data?.approved === true
+          && dupaBarcode.data?.archived !== true) {
+          gasit = true;
+        }
+      }
+    }
 
     /*
      * ═══ ⚠ MARCAJUL SE SCRIE SI CAND NU S-A GASIT (indreptat in aceeasi ora) ═══

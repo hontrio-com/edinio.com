@@ -93,3 +93,50 @@ test("⚠ si pasul de COMENZI ramane pe magazinele conectate, nu pe listari", ()
      asta. Proba le tine legate, ca sa nu se intoarca niciunul. */
   assert.match(cron, /magazineConectate\(admin, "trendyol_config"\)/);
 });
+
+test("⚠ cand EI schimba `productMainId`, se intreaba pe CODUL DE BARE", () => {
+  /*
+   * ═══ ⚠ AMANDOUA CAILE POTRIVEAU PE UN ID CARE NU E AL NOSTRU (26.08.2026) ═══
+   *
+   * Noi trimitem UUID-ul nostru ca `productMainId`. Cand ei leaga produsul de o fisa deja
+   * existenta din catalogul LOR, il inlocuiesc cu al lor: `TYCA6CAF3173D9F507C6F9800`.
+   *
+   * Si intrebarea tintita, si scanarea paginata potriveau pe el. Deci un produs caruia i-au
+   * schimbat id-ul ramanea „in aprobare" la noi PENTRU TOTDEAUNA, desi la ei se vindea.
+   *
+   * ⚠ MASURAT pe un cont real: din 76 de listari blocate in `created`, 11 aveau id-ul schimbat
+   * de ei si erau aprobate; a 12-a (`AVX-USVG59`) chiar astepta aprobarea — si a ramas cum
+   * trebuie, ceea ce e chiar martorul ca reparatia nu aproba la gramada.
+   *
+   * ⚠ SI COSTA MAI MULT DECAT O ETICHETA GRESITA: plasa de deriva a stocului se uita numai la
+   * `approved`/`active`. Blocate in `created`, produsele alea se vindeau fara nicio plasa.
+   */
+  const sync = viu("src/lib/trendyol/sync.ts");
+  const i = sync.indexOf("async function confirmaTintit(");
+  const f = sync.slice(i, sync.indexOf("export async function reconcileStatuses(", i));
+  assert.match(f, /if \(!gasit\) \{/, "a doua intrebare vine doar cand prima n-a gasit");
+  assert.match(f, /getProductBaseInfo\(ctx\.auth, bc\.barcode\)/);
+  /* ⚠ `archived` NU inseamna aprobat: un produs arhivat nu se mai vinde. */
+  assert.match(f, /dupaBarcode\.data\?\.approved === true/);
+  assert.match(f, /dupaBarcode\.data\?\.archived !== true/);
+});
+
+test("⚠ id-ul LOR nu se scrie peste al nostru", () => {
+  /*
+   * `product_main_id` e cheie unica, tinta de `onConflict` la salvarea listarii, si pleaca in
+   * fiecare publicare. Schimbat aici, ar fi fost rescris inapoi la prima salvare din editor si
+   * ar fi bulversat publicarea.
+   *
+   * Se raspunde doar la intrebarea „e aprobat?", care e tot ce trebuie ca sa iasa din `created`.
+   */
+  const sync = viu("src/lib/trendyol/sync.ts");
+  const i = sync.indexOf("async function confirmaTintit(");
+  const f = sync.slice(i, sync.indexOf("export async function reconcileStatuses(", i));
+  /* ⚠ Se uita la ce se SCRIE, nu la ce se citeste: `product_main_id` apare firesc in `select`
+     si in tipul randului. Proba dinainte cadea pe chiar citirea aia. */
+  const iUpd = f.indexOf('.update({');
+  const bloc = f.slice(iUpd, f.indexOf('.eq("id", l.id)', iUpd));
+  assert.ok(iUpd > 0, "exista scrierea");
+  assert.doesNotMatch(bloc, /product_main_id/, "cheia nu se rescrie");
+  assert.match(bloc, /status: "approved"/, "dar starea da");
+});

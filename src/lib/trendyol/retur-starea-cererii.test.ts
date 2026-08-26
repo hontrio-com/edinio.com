@@ -269,3 +269,54 @@ test("⚠ `Rejected` pierde in fata oricarei linii NEHOTARATE, si castiga in fat
   /* ⚠ Si mingea la comerciant bate tot. */
   assert.equal(stareaCererii(cerere("Rejected", "WaitingInAction")), "WaitingInAction");
 });
+
+test("⚠ INVARIANTUL: daca cererea iese din bazin, nicio linie nu mai e nehotarata", () => {
+  /*
+   * ═══ ⚠ PROPRIETATEA CARE FACE TOT RESTUL SIGUR ═══
+   *
+   * Reconcilierea scoate din bazin cererile cu `claim_status` in `["Accepted","Cancelled"]`, si
+   * pe cele `Rejected` carora le-a aparut coletul de retur-respins. Iesita din bazin, o cerere nu
+   * se mai reintreaba NICIODATA: aducerea pe fereastra filtreaza dupa data CREARII.
+   *
+   * ⚠ DECI TOT CE TREBUIE SA FIE ADEVARAT E ATAT: cand starea cererii e una din alea, nicio linie
+   * a ei sa nu mai poata ajunge `Accepted` mai tarziu. Altfel marfa ramane blocata pe raft.
+   *
+   * ⚠ SE PROBEAZA PE TOATE COMBINATIILE, nu pe cazuri alese de mine. Cele trei funduri de sac de
+   * azi au fost toate cazuri la care nu ma gandisem — iar o proba care numara cazurile la care
+   * m-am gandit nu prinde exact felul asta de defect.
+   */
+  const NEHOTARATE = ["Created", "WaitingInAction", "InAnalysis", "WaitingFraudCheck", "Unresolved"];
+  const HOTARATE = ["Accepted", "Cancelled", "Rejected"];
+  const TOATE = [...NEHOTARATE, ...HOTARATE, null];
+  const IESE_DIN_BAZIN = new Set(["Accepted", "Cancelled", "Rejected"]);
+
+  let verificate = 0;
+  /* Toate perechile si toate tripletele: noua stari cu putinta (cinci nehotarate, trei hotarate,
+     plus „necitibila"), deci 9² + 9³ = 810 cereri. */
+  const combinatii: (string | null)[][] = [];
+  for (const a of TOATE) {
+    for (const b of TOATE) {
+      combinatii.push([a, b]);
+      for (const c of TOATE) combinatii.push([a, b, c]);
+    }
+  }
+
+  for (const linii of combinatii) {
+    const st = stareaCererii(cerere(...(linii as string[])));
+    verificate++;
+    if (st == null || !IESE_DIN_BAZIN.has(st)) continue;
+
+    /* ⚠ Cererea poate iesi din bazin. Deci NICIUNA din liniile ei nu mai are voie sa fie
+       nehotarata sau necitibila — altfel ar ramane inghetata pe veci. */
+    for (const l of linii) {
+      assert.ok(
+        l !== null && !NEHOTARATE.includes(l),
+        `[${linii.map(String).join(", ")}] -> "${st}" iese din bazin, dar linia "${String(l)}" e inca nehotarata`,
+      );
+    }
+  }
+  /* ⚠ Pragul e aici ca sa prinda ziua in care cineva scurteaza listele si proba pare sa treaca
+     fiindca n-a mai verificat nimic. Prima oara l-am pus la 2000 dintr-o socoteala gresita, si
+     proba a picat cu invariantul intreg — un prag trebuie sa fie masurat, nu ghicit. */
+  assert.equal(verificate, 810, "s-au verificat mai putine combinatii decat trebuie");
+});

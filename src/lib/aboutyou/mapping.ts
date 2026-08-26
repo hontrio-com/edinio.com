@@ -11,6 +11,14 @@ import {
   comboCompareAtPrice, comboStock, comboUnitPrice, parseVariants,
   type VariantCombo,
 } from "@/lib/storefront/variants";
+/*
+ * ⚠ Se refoloseste rescrierea de adrese a lui Trendyol, nu se scrie a treia (eMAG o refoloseste
+ * si el). Motivul e acolo: 1466 de imagini pe 855 de produse mai stau pe domeniul de INCERCARI
+ * `pub-*.r2.dev`, pe care Cloudflare spune raspicat sa nu-l folosesti in productie. About You isi
+ * aduce singur imaginile de pe adresele pe care i le dam — exact ca Trendyol — deci produsele
+ * alea ii pica la fel. Cele doua domenii servesc acelasi obiect, aceeasi suma de control.
+ */
+import { adresaPublicaImagine } from "@/lib/trendyol/mapping";
 import type {
   AboutYouConfig, AboutYouFxConfig, AboutYouMaterialCluster, AboutYouMaterialType, AboutYouPrice,
   AboutYouProductItem,
@@ -66,6 +74,8 @@ export interface AboutYouVariantData {
    */
   ron_price?: number | null;
   ron_compare_at?: number | null;
+  /** Imaginea combinatiei din produs, pentru calea de culoare. Vezi `imaginiPeCulori`. */
+  combo_image?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -83,7 +93,7 @@ export function ronToEur(ron: number, fx?: AboutYouFxConfig): number | null {
 
 function productImages(product: MappableProduct): string[] {
   const raw = Array.isArray(product.images) ? product.images : [];
-  return raw.map((x) => String(x).trim()).filter((u) => /^https?:\/\//i.test(u)).slice(0, 10);
+  return raw.map((x) => String(x).trim()).filter((u) => /^https?:\/\//i.test(u));
 }
 
 // Greutatea nu se mai inlocuieste tacit: `validateListing` o cere explicit, iar
@@ -142,6 +152,13 @@ export interface VariantSlot {
    * produsul care tine inventar), nu dintr-un numar scris cu mana.
    */
   stocViu: boolean;
+  /**
+   * Imaginea COMBINATIEI, cand exista.
+   *
+   * La About You imaginile tin de calea de CULOARE, nu de produs: un produs cu trei culori are
+   * trei seturi de fotografii. Vezi `imaginiPeCulori`.
+   */
+  image: string | null;
 }
 
 /*
@@ -201,6 +218,7 @@ export function deriveVariantSlots(product: MappableProduct): VariantSlot[] {
         gtin: c.gtin?.trim() || null,
         quantity: stoc.quantity,
         stocViu: stoc.viu,
+        image: c.image?.trim() || null,
       };
     });
   }
@@ -211,6 +229,8 @@ export function deriveVariantSlots(product: MappableProduct): VariantSlot[] {
     // Produsul n-are combinatii, deci nu exista niciun titlu de potrivit.
     variantTitle: null,
     sku: (product.sku || product.id).trim(),
+    /* Fara combinatii nu exista imagine de combinatie: raman cele ale produsului. */
+    image: null,
     ron_price: product.price,
     ron_compare_at: product.compare_at_price,
     // Produsul fara variante isi tine codul de bare in `page_sections.google.gtin`
@@ -249,7 +269,7 @@ export function atasezaPreturileRon(
      * nici la stoc, nici la pret). Scoaterea SKU-ului de pe About You o face
      * `reconciliazaVariante` din sync.ts.
      */
-    if (!slot) return { ...v, enabled: false, ron_price: null, ron_compare_at: null };
+    if (!slot) return { ...v, enabled: false, ron_price: null, ron_compare_at: null, combo_image: null };
     return {
       ...v,
       ron_price: slot.ron_price,
@@ -266,6 +286,7 @@ export function atasezaPreturileRon(
        */
       quantity: slot.stocViu ? slot.quantity : (v.quantity ?? slot.quantity),
       ean: v.ean ?? slot.gtin ?? null,
+      combo_image: slot.image,
     };
   });
 }
@@ -530,7 +551,36 @@ export function validateListing(ctx: BuildContext, material?: CerintaMaterialLis
   } else if (cuCuloare === 0 && !listing.color_id) {
     issues.push("Lipsește culoarea.");
   }
-  if (productImages(product).length === 0) issues.push("Produsul nu are imagini valide (URL http/https).");
+  /*
+   * Imaginile se verifica PE CULOARE, nu pe produs.
+   *
+   * ⚠ Verificarea veche („produsul n-are imagini") ar fi refuzat tocmai produsul facut cum
+   * trebuie: cel cu trei culori si fotografiile puse pe fiecare combinatie, fara nicio imagine la
+   * nivelul produsului. Se cere ce cere si About You — cel putin o imagine PE ARTICOL.
+   */
+  const aleProdusului = productImages(product);
+  const galerii = imaginiPeCulori(aleProdusului, active, listing.color_id);
+  const faraImagini = [...galerii.entries()].filter(([, g]) => g.length === 0).map(([c]) => c);
+  if (galerii.size === 0 && aleProdusului.length === 0) {
+    issues.push("Produsul nu are imagini valide (URL http/https).");
+  }
+  for (const culoare of faraImagini) {
+    issues.push(`Culoarea ${culoare} nu are nicio imagine validă, nici pe combinațiile ei, nici pe produs.`);
+  }
+  /*
+   * ⚠ Si cand a mers, dar prost: la mai multe culori, una fara fotografii proprii imprumuta
+   * fotografiile produsului — adica, de obicei, poza altei culori. Se listeaza (mai bine decat
+   * deloc), dar comerciantul trebuie sa afle.
+   */
+  if (galerii.size > 1) {
+    const proprii = new Set(active.filter((v) => (v.combo_image ?? "").trim())
+      .map((v) => v.color_id ?? listing.color_id));
+    for (const culoare of galerii.keys()) {
+      if (!proprii.has(culoare)) {
+        warnings.push(`Culoarea ${culoare} nu are fotografii proprii: se trimit cele ale produsului, care arată de obicei altă culoare.`);
+      }
+    }
+  }
   if (productWeight(product) == null) issues.push("Produsul nu are greutate. Completeaz-o în fișa produsului.");
 
   if (material?.necunoscut) {
@@ -654,6 +704,67 @@ export function validateListing(ctx: BuildContext, material?: CerintaMaterialLis
   return { issues, warnings };
 }
 
+/**
+ * Imaginile fiecarei cai de CULOARE.
+ *
+ * ═══ ⚠ O SINGURA GALERIE PLECA LA TOATE CULORILE (27.08.2026) ═══
+ *
+ * `images` se socotea o data, din produs, si se punea IDENTIC pe fiecare articol. La About You
+ * imaginile tin insa de calea de culoare: cumparatorul care alege rosu vedea fotografiile
+ * produsului negru. Comentariul din `validateListing` scria deja asta — „documentatia lor spune ca
+ * imaginile tin de fiecare cale de culoare" — dar codul nu se schimbase.
+ *
+ * Regula, si de ce e in doi timpi:
+ *
+ *   O SINGURA CULOARE (sau niciuna proprie) → imaginile combinatiilor se ADAUGA la cele ale
+ *   produsului. Un produs care difera doar prin marime are o singura cale de culoare, deci toate
+ *   fotografiile sunt ale ei. Aici mai multe imagini inseamna doar o fisa mai buna.
+ *
+ *   MAI MULTE CULORI → fiecare culoare primeste NUMAI imaginile ei. Adaugate, fotografiile
+ *   produsului (care arata o singura culoare, de obicei cea principala) ar fi pus poze negre sub
+ *   articolul rosu — exact defectul reparat, doar mutat mai jos in galerie.
+ *
+ *   ⚠ O CULOARE FARA IMAGINI PROPRII cade tot pe cele ale produsului: About You cere cel putin o
+ *   imagine, si un articol nelistat e mai rau decat unul cu fotografia culorii principale.
+ *   `validateListing` o spune comerciantului, ca sa poata repara.
+ */
+export function imaginiPeCulori(
+  aleProdusului: string[],
+  variante: { color_id: number | null; combo_image?: string | null }[],
+  culoareaListarii: number | null,
+): Map<number, string[]> {
+  /* ⚠ Rescrise LA IESIRE, intr-un singur loc: adresele salvate raman neatinse. */
+  const aleLui = aleProdusului.map(adresaPublicaImagine);
+  const pePozitie = new Map<number, string[]>();
+  const culori = new Set<number>();
+  for (const v of variante) {
+    const culoare = v.color_id ?? culoareaListarii;
+    if (culoare == null) continue;
+    culori.add(culoare);
+    const img = adresaPublicaImagine((v.combo_image ?? "").trim());
+    if (!/^https?:\/\//i.test(img)) continue;
+    const lista = pePozitie.get(culoare) ?? [];
+    if (!lista.includes(img)) lista.push(img);
+    pePozitie.set(culoare, lista);
+  }
+
+  const singura = culori.size <= 1;
+  const iesire = new Map<number, string[]>();
+  for (const culoare of culori) {
+    const aleEi = pePozitie.get(culoare) ?? [];
+    /* ⚠ Cele ale produsului stau PRIMELE cand se amesteca: prima imagine e coperta articolului,
+       iar comerciantul si-a ales-o deja acolo. */
+    const toate = singura || aleEi.length === 0
+      ? [...aleLui, ...aleEi]
+      : aleEi;
+    iesire.set(culoare, [...new Set(toate)].slice(0, MAX_IMAGINI));
+  }
+  return iesire;
+}
+
+/* About You primeste cel mult atatea imagini pe articol. */
+const MAX_IMAGINI = 10;
+
 export function buildAboutYouItems(ctx: BuildContext): { items: AboutYouProductItem[] } | { error: string } {
   const { config, product, listing } = ctx;
 
@@ -663,7 +774,6 @@ export function buildAboutYouItems(ctx: BuildContext): { items: AboutYouProductI
   if (!category) return { error: "Categoria produsului nu este mapată la About You." };
 
   const images = productImages(product);
-  if (images.length === 0) return { error: "Produsul nu are imagini valide." };
 
   const weight = productWeight(product);
   if (weight == null) {
@@ -704,6 +814,13 @@ export function buildAboutYouItems(ctx: BuildContext): { items: AboutYouProductI
   const enabled = ctx.variants.filter((v) => v.enabled);
   if (enabled.length === 0) return { error: "Nicio variantă activă de listat." };
 
+  /*
+   * ⚠ Verificarea imaginilor s-a MUTAT dupa asta, si nu din comoditate: cand fiecare culoare are
+   * fotografiile ei, un produs poate sa n-aiba niciuna la nivelul lui si sa fie totusi complet.
+   * Oprit mai sus, ar fi refuzat tocmai produsele facute cum trebuie.
+   */
+  const peCuloare = imaginiPeCulori(images, enabled, listing.color_id);
+
   const items: AboutYouProductItem[] = [];
   const skuVazute = new Set<string>();
   for (const v of enabled) {
@@ -721,6 +838,10 @@ export function buildAboutYouItems(ctx: BuildContext): { items: AboutYouProductI
     if (!color) return { error: "Lipsește culoarea produsului." };
     const priced = buildVariantPrices(config, product, v);
     if ("error" in priced) return priced;
+    const imagini = peCuloare.get(color) ?? [];
+    if (imagini.length === 0) {
+      return { error: `Varianta ${v.sku} nu are nicio imagine validă, nici pe culoarea ei, nici pe produs.` };
+    }
 
     const item: AboutYouProductItem = {
       style_key: styleKey,
@@ -732,7 +853,7 @@ export function buildAboutYouItems(ctx: BuildContext): { items: AboutYouProductI
       country_of_origin: countryOfOrigin,
       attributes,
       prices: priced.prices,
-      images,
+      images: imagini,
       // `countries` spune UNDE se publica; `prices` spune CU CAT. Trimise din
       // aceeasi sursa, cele doua liste nu pot ajunge sa se contrazica.
       countries: [...tari],

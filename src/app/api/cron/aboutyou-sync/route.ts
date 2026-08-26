@@ -12,6 +12,7 @@ import { pollOrders } from "@/lib/aboutyou/orders";
 // care taia inca cu `.slice()`.
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { marcajUrmator } from "@/lib/marketplace/marcaj";
+import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 import type { Json } from "@/types/database.types";
 
@@ -44,6 +45,9 @@ const BUGET_TOTAL_MS = 52_000;
 // 300/min. The cron fires every minute; pace conservatively and cap per-run work.
 const QUEUE_BATCH = 30;
 const MAX_ATTEMPTS = 5;
+
+/** ⚠ Scris o data: fiecare scriere in coada trece prin CAS pe generatie. Vezi `coada-cas.ts`. */
+const COADA = "aboutyou_sync_queue" as const;
 const MAX_BIZ = 12;
 const RECONCILE_BIZ = 6;
 const POLL_ORDERS_BIZ = 10;
@@ -132,7 +136,12 @@ export async function GET(req: NextRequest) {
        */
       const deconectat = await esteDeconectat(admin, businessId);
       if (deconectat === true) {
-        await admin.from("aboutyou_sync_queue").delete().in("id", items.map((i) => i.id));
+        /*
+         * ⚠ CATE UNUL, CU PAZA PE GENERATIE. Un `delete ... in (ids)` ar sterge si randurile
+         * rescrise intre timp. Magazinul e deconectat, deci cererile n-au unde pleca — dar daca
+         * cineva tocmai l-a reconectat si a pus ceva la coada, aia trebuie sa ramana.
+         */
+        for (const it of items) await stergeDacaNeschimbat(admin, COADA, it);
       }
       continue;
     }
@@ -149,8 +158,13 @@ export async function GET(req: NextRequest) {
       if (fereastraPlina()) break;
       const res = await processQueueItem(admin, ctx, item);
       if (res.ok) {
-        await admin.from("aboutyou_sync_queue").delete().eq("id", item.id);
-        processed++;
+        /*
+         * ⚠ SE STERGE NUMAI DACA NIMENI N-A RESCRIS RANDUL. Vezi nota lunga de la
+         * `AboutYouQueueItem.generation`: intre revendicare si terminarea apelului extern trec
+         * secunde, iar o schimbare de stoc facuta chiar atunci era stearsa de terminarea celei
+         * vechi. `false` inseamna „a venit o cerere mai noua" — randul ramane si se ia imediat.
+         */
+        if (await stergeDacaNeschimbat(admin, COADA, item)) processed++;
       } else {
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
@@ -165,8 +179,7 @@ export async function GET(req: NextRequest) {
          * nu inrautatim limita lovind-o iar.
          */
         if (eTrecatoare(res.status)) {
-          await admin.from("aboutyou_sync_queue")
-            .update({ last_error: res.error.slice(0, 500) }).eq("id", item.id);
+          await scrieDacaNeschimbat(admin, COADA, item, { last_error: res.error.slice(0, 500) });
           opritDinLimita = true;
           break;
         }
@@ -195,9 +208,15 @@ export async function GET(req: NextRequest) {
             message: `Element renunțat din coadă (${item.op}): ${res.error}`,
             details: { businessId, offerId: item.offer_id, attempts }, businessId,
           });
-          await admin.from("aboutyou_sync_queue").delete().eq("id", item.id);
+          /*
+           * ⚠ SI ABANDONUL SE PAZESTE, ba chiar mai ales el. Sters peste o cerere NOUA, produsul
+           * n-ar mai pleca niciodata — iar omul tocmai a apasat ceva ce nu s-a incercat vreodata.
+           */
+          await stergeDacaNeschimbat(admin, COADA, item);
         } else {
-          await admin.from("aboutyou_sync_queue").update({ attempts, last_error: res.error.slice(0, 500) }).eq("id", item.id);
+          await scrieDacaNeschimbat(admin, COADA, item, {
+            attempts, last_error: res.error.slice(0, 500),
+          });
         }
       }
       await pause(PACE_MS);

@@ -22,6 +22,7 @@ import {
   type AboutYouListingEnrichment, type AboutYouStoredMaterial, type AboutYouVariantData,
   type MappableProduct,
 } from "./mapping";
+import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";
@@ -144,9 +145,25 @@ async function setListingStatus(
     .eq("id", listingId);
 }
 
+/**
+ * Tine minte un lot trimis la About You.
+ *
+ * ═══ ⚠ FEREASTRA „EI AU PRIMIT, NOI N-AM APUCAT SA SCRIEM" (26.08.2026) ═══
+ *
+ * Se cheama DUPA ce cererea externa a reusit si ei ne-au dat `batchRequestId`. Daca scrierea de
+ * aici pica, id-ul se pierdea in TACERE: nu mai stiam ce sa sondam, lotul nu se incheia niciodata,
+ * iar listarea ramanea `pending` pe veci — fara nicio eroare nicaieri.
+ *
+ * ⚠ SI NU SE POATE RETRIMITE ORBESTE. O cerere externa cu rezultat necunoscut, retrimisa, face
+ * dubluri. Deduplicarea lor pe payload identic ajuta, dar e o fereastra, nu o garantie.
+ *
+ * ⚠ DECI ID-UL SE SCRIE MACAR IN JURNAL, ca `critical`, cu tot ce trebuie ca sa fie recuperat de
+ * mana. Iar functia INTOARCE daca a reusit, ca apelantul sa nu mai spuna „trimis" despre ceva ce
+ * nu mai poate urmari.
+ */
 export async function recordBatch(
   admin: Db, businessId: string, batchRequestId: string, kind: string, relatedIds: string[],
-): Promise<void> {
+): Promise<boolean> {
   /*
    * Contoarele se pun pe ZERO la fiecare inregistrare.
    *
@@ -155,7 +172,7 @@ export async function recordBatch(
    * isi scurgea contoarele in urmatorul: lotul nou pornea cu esecuri mostenite si
    * putea fi abandonat din prima.
    */
-  await admin.from("aboutyou_batches").upsert(
+  const { error } = await admin.from("aboutyou_batches").upsert(
     {
       business_id: businessId, batch_request_id: batchRequestId, kind, status: "pending",
       related_ids: relatedIds as never, attempts: 0, poll_errors: 0,
@@ -163,6 +180,17 @@ export async function recordBatch(
     },
     { onConflict: "business_id,batch_request_id" },
   );
+  if (error) {
+    await logError({
+      action: "aboutyou/lot-nescris", severity: "critical",
+      message: `About You a primit lotul, dar nu l-am putut tine minte: ${error.message}`,
+      /* ⚠ Tot ce trebuie ca sa fie reluat de mana: id-ul lor, ce fel de lot, si pe ce se aplica. */
+      details: { batchRequestId, kind, relatedIds: relatedIds.slice(0, 20) },
+      businessId,
+    });
+    return false;
+  }
+  return true;
 }
 
 /*
@@ -460,18 +488,45 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   // respinge cererea INTREAGA, nu doar surplusul. Un produs cu peste 100 de
   // variante nu s-ar fi putut lista deloc.
   let batchRequestId: string | undefined;
+  const transe = Math.ceil(built.items.length / 100);
+  let nescrise = 0;
   for (let i = 0; i < built.items.length; i += 100) {
     const res = await upsertProducts(ctx.auth, built.items.slice(i, i + 100));
     if (isAboutYouError(res)) {
+      /*
+       * ⚠ UN ESEC LA MIJLOCUL SIRULUI LASA PRODUSUL PE JUMATATE LA EI. Transele dinainte au
+       * plecat si nu se pot lua inapoi; iesim aici, deci ele raman acolo fara ca nimic sa spuna
+       * ca produsul e incomplet. Se scrie, ca omul sa stie ce vede daca se uita in panoul lor.
+       */
+      if (i > 0) {
+        await logError({
+          action: "aboutyou/lot-partial", severity: "warning",
+          message: `transa ${Math.floor(i / 100) + 1} din ${transe} a picat; primele ${Math.floor(i / 100)} au ajuns deja la About You`,
+          details: { styleKey: listing.style_key, variante: built.items.length, eroare: res.error },
+          businessId: ctx.businessId,
+        });
+      }
       await setListingStatus(admin, listing.id, "error", { error: res.error });
       return { ok: false, error: res.error, status: res.status };
     }
     const id = res.data?.batchRequestId;
     if (id) {
       batchRequestId = batchRequestId ?? id;
-      await recordBatch(admin, ctx.businessId, id, "product", [listing.style_key]);
+      /* ⚠ Vezi `recordBatch`: un lot netinut minte nu mai poate fi sondat niciodata. */
+      if (!await recordBatch(admin, ctx.businessId, id, "product", [listing.style_key])) nescrise++;
     }
     if (i + 100 < built.items.length) await pause(300);
+  }
+
+  /*
+   * ⚠ DACA VREUN LOT N-A PUTUT FI TINUT MINTE, LISTAREA NU TRECE PE `pending`. `pending` inseamna
+   * „am trimis si astept raspunsul lor" — dar noi n-am mai avea ce astepta, si listarea ar sta
+   * asa la nesfarsit. `error` cu motivul scris ii da omului si un buton de reluare.
+   */
+  if (nescrise > 0) {
+    const motiv = `${nescrise} ${nescrise === 1 ? "lot a plecat" : "loturi au plecat"} la About You, dar nu le-am putut ține minte ca să le urmărim. Reîncearcă trimiterea.`;
+    await setListingStatus(admin, listing.id, "error", { error: motiv });
+    return { ok: false, error: motiv };
   }
   const now = new Date().toISOString();
   await setListingStatus(admin, listing.id, "pending", { error: null, last_synced_at: now });
@@ -896,8 +951,42 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
               : "Eroare la procesarea pe About You.");
           await setListingStatus(admin, listing.id, "error", { error: motiv });
         } else if (b.kind === "product" && listing.status === "pending") {
+          /*
+           * ═══ ⚠ UN PRODUS CU PESTE 100 DE VARIANTE PLEACA IN MAI MULTE LOTURI ═══
+           *
+           * `POST /products/` primeste cel mult 100 de articole, deci 250 de variante inseamna
+           * trei loturi, fiecare cu `batchRequestId`-ul lui. Loturile se aseaza la ei ASINCRON si
+           * in orice ordine.
+           *
+           * ⚠ AICI SE PUBLICA LA PRIMUL LOT INCHEIAT. Nu e o cursa care se poate intampla — e
+           * comportamentul obisnuit al oricarui produs cu peste 100 de variante: se cerea
+           * aprobarea produsului cand doua treimi din variante nu ajunsesera inca.
+           *
+           * ⚠ NU E NEVOIE DE NICIUN CONTOR NOU: loturile aceluiasi produs poarta acelasi
+           * `style_key` in `related_ids`. Deci se intreaba direct baza daca a mai ramas vreunul
+           * neincheiat — si daca da, publicarea asteapta lotul care se incheie ultimul.
+           */
+          const fratiNeterminati = randuriCitite<{ id: string }>(
+            "aboutyou.loturileFratelui", await admin
+              .from("aboutyou_batches").select("id")
+              .eq("business_id", ctx.businessId).eq("kind", "product")
+              .contains("related_ids", [listing.style_key])
+              .in("status", ["pending", "processing", "retry"])
+              .neq("id", b.id) as never);
+
           // Product accepted; it exists as a draft on About You until published.
           await setListingStatus(admin, listing.id, "draft", { error: null });
+
+          if (fratiNeterminati.length > 0) {
+            /* ⚠ Se spune, ca sa nu para ca s-a pierdut ceva: publicarea vine la ultimul lot. */
+            await logError({
+              action: "aboutyou-sync/loturi", severity: "info",
+              message: `lot incheiat, dar produsul mai are ${fratiNeterminati.length} loturi in lucru: publicarea asteapta`,
+              details: { styleKey: listing.style_key, batchId: b.batch_request_id },
+              businessId: ctx.businessId,
+            });
+            continue;
+          }
           /*
            * PUBLICAREA SE INLANTUIE SINGURA. Aici, si nicaieri altundeva.
            *
@@ -916,10 +1005,20 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * nu atinge ciornele vechi, lasate dinadins nepublicate.
            */
           if (listing.product_id) {
-            await admin.from("aboutyou_sync_queue").upsert(
+            /* ⚠ Si aici se verifica `error`: fara el, publicarea nu se punea la coada si produsul
+               ramanea ciorna la ei pentru totdeauna, fara nicio urma. */
+            const { error: ePub } = await admin.from("aboutyou_sync_queue").upsert(
               { business_id: ctx.businessId, product_id: listing.product_id, offer_id: listing.style_key, op: "publish", attempts: 0, last_error: null },
               { onConflict: "business_id,offer_id,op" },
             );
+            if (ePub) {
+              await logError({
+                action: "aboutyou-sync/loturi", severity: "error",
+                message: `publicarea nu s-a putut pune la coada: ${ePub.message}`,
+                details: { styleKey: listing.style_key, productId: listing.product_id },
+                businessId: ctx.businessId,
+              });
+            }
           }
         }
       }
@@ -1078,6 +1177,30 @@ export interface AboutYouQueueItem {
   offer_id: string;
   op: string;
   attempts: number;
+  /**
+   * Generatia randului la clipa revendicarii.
+   *
+   * ═══ ⚠ EXISTA IN BAZA DE MULT, DAR LUCRATORUL O ARUNCA (26.08.2026) ═══
+   *
+   * `aboutyou_sync_queue` are coloana `generation` si declansatorul `trg_generatie` care o
+   * creste la fiecare update — verificat in baseline. Iar lucratorul trece prin
+   * `revendica_din_coada`, care intoarce randul INTREG (`to_jsonb(q.*)`), deci valoarea venea
+   * deja in raspuns si se arunca.
+   *
+   * Fara ea:
+   *
+   *   10:00:00  stocul e 5   -> rand in coada, generatia 10
+   *   10:00:01  lucratorul revendica randul si pleaca la About You
+   *   10:00:02  omul schimba stocul la 3 -> acelasi rand, generatia 11
+   *   10:00:04  lucratorul termina cu 5 si face `delete where id = X`
+   *
+   * Generatia 11 dispare, desi n-a plecat niciodata. Comerciantul vede 3 in magazin si 5 la
+   * About You, fara nicio eroare nicaieri.
+   *
+   * ⚠ Optionala: un apelant care nu trece prin `revendica_din_coada` n-o are, si atunci se
+   * scrie fara paza — mai bine fara paza decat deloc. Vezi `src/lib/marketplace/coada-cas.ts`.
+   */
+  generation?: number | null;
 }
 
 export async function processQueueItem(admin: Db, ctx: AboutYouSyncContext, item: AboutYouQueueItem): Promise<SyncOutcome> {

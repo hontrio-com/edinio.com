@@ -31,8 +31,15 @@ import { logError } from "@/lib/error-logger";
 
 type Db = SupabaseClient<Database>;
 
-/** Numele cozilor care au `generation`. Lista alba, ca la `revendica_din_coada`. */
-export type NumeCoada = "trendyol_sync_queue" | "emag_sync_queue";
+/**
+ * Numele cozilor care au `generation`. Lista alba, ca la `revendica_din_coada`.
+ *
+ * ⚠ `aboutyou_sync_queue` a intrat pe 26.08.2026, si tot dupa o masuratoare: coloana si
+ * declansatorul `trg_generatie` existau in baza, lucratorul trecea prin `revendica_din_coada`
+ * (deci generatia venea deja in raspuns), si toate cinci scrierile lui erau `.eq("id", ...)`
+ * goale. Exact starea in care era Trendyol in dimineata aceleiasi zile.
+ */
+export type NumeCoada = "trendyol_sync_queue" | "emag_sync_queue" | "aboutyou_sync_queue";
 
 /** Ce trebuie sa poarte un element ca sa poata fi scris in siguranta. */
 export interface ElementRevendicat {

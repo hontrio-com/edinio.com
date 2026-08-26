@@ -811,9 +811,42 @@ export async function reconciliazaComenzile(
   });
 
   let verificate = 0;
+  let picate = 0;
   for (const r of deIntrebat) {
-    await ingestOrderByNumber(admin, ctx, r.aboutyou_order_number);
-    verificate++;
+    /*
+     * ═══ ⚠ O COMANDA PICATA NU ARE VOIE SA TINA ROATA PE LOC (27.08.2026) ═══
+     *
+     * `ingestOrderByNumber` a inceput sa ARUNCE azi — corect, ca sa nu mai marcheze evenimente de
+     * webhook drept prelucrate degeaba. Dar aici bucla n-avea nicio plasa: prima comanda picata
+     * oprea si restul lotului, SI sarea peste scrierea lui `reintrebat_la` de mai jos. Adica
+     * exact aceleasi douazeci de comenzi reveneau la fiecare trecere, la nesfarsit, si niciuna
+     * dintre celelalte nu mai era reintrebata vreodata.
+     *
+     * ⚠ SE PRINDE PE FIECARE, ca la `pollOrders`. Reconcilierea e o PLASA, nu calea principala:
+     * o comanda care nu se poate citi acum se reintreaba peste o tura, dupa ce roata s-a invartit.
+     */
+    try {
+      await ingestOrderByNumber(admin, ctx, r.aboutyou_order_number);
+      verificate++;
+    } catch (e) {
+      picate++;
+      await logError({
+        action: "aboutyou/reconciliere", severity: "warning",
+        message: `comanda ${r.aboutyou_order_number} nu s-a putut reciti: ${e instanceof Error ? e.message : String(e)}`,
+        details: { ayNumber: r.aboutyou_order_number }, businessId: ctx.businessId,
+      });
+    }
+  }
+  if (picate > 0 && verificate === 0 && deIntrebat.length > 0) {
+    /*
+     * ⚠ TOATE au picat: nu e o comanda proasta, e o cauza comuna (cheie invalidata, pana la ei).
+     * Se scrie o data, la nivelul potrivit, ca sa nu se piarda printre avertismentele de mai sus.
+     */
+    await logError({
+      action: "aboutyou/reconciliere", severity: "critical",
+      message: `niciuna din cele ${deIntrebat.length} comenzi reintrebate nu s-a putut reciti`,
+      details: { cate: deIntrebat.length }, businessId: ctx.businessId,
+    });
   }
 
   /*

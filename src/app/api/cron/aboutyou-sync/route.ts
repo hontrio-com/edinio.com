@@ -96,6 +96,32 @@ export async function GET(req: NextRequest) {
   }
 
   /*
+   * ═══ ⚠ UN MAGAZIN NU ARE VOIE SA DOBOARE PASUL PENTRU CEILALTI (27.08.2026) ═══
+   *
+   * De azi, citirile din baza ARUNCA in loc sa intoarca `null` — altfel o pana de-o clipa trecea
+   * drept „nu exista" si se luau hotarari pe ea. Dar pasii 2 si 3 chemau `pollOpenBatches` si
+   * `reconcileStatuses` fara nicio plasa: o aruncare la primul magazin ar fi iesit din bucla si ar
+   * fi oprit si pasul 4 — ingestul comenzilor, adica exact ce n-are voie sa cada.
+   *
+   * ⚠ Nu e o inghitire: se scrie, si magazinul se numara la `failed`. Ce nu se face acum se face
+   * la minutul urmator; ce nu are voie e ca un magazin sa-i traga pe ceilalti dupa el.
+   */
+  async function peMagazin(businessId: string, pas: string, treaba: () => Promise<void>): Promise<boolean> {
+    try {
+      await treaba();
+      return true;
+    } catch (e) {
+      failed++;
+      await logError({
+        action: "aboutyou-sync", severity: "warning",
+        message: `pasul „${pas}” a picat pentru un magazin: ${e instanceof Error ? e.message : String(e)}`,
+        details: { businessId, pas }, businessId,
+      });
+      return false;
+    }
+  }
+
+  /*
    * ═══ ⚠ UN HOP AL BAZEI SAREA TACUT PESTE UN MAGAZIN INTREG (27.08.2026) ═══
    *
    * Pasii 2, 3 si 4 faceau `if (!ctx) continue`, iar `loadAboutYouContext` intorcea `null` si
@@ -278,8 +304,7 @@ export async function GET(req: NextRequest) {
     if (fereastraPlina()) break;
     const ctx = await ctxSauScrie(businessId, "loturi");
     if (!ctx) continue;
-    await pollOpenBatches(admin, ctx);
-    polled++;
+    if (await peMagazin(businessId, "loturi", () => pollOpenBatches(admin, ctx))) polled++;
     await pause(PACE_MS);
   }
 
@@ -301,7 +326,10 @@ export async function GET(req: NextRequest) {
     // la nesfarsit, iar rularea se numara oricum drept reusita.
     // Termenul e cel al pasilor 1-3: ce nu incape se reia la minutul urmator,
     // ca pasul 4 (comenzile) sa apuce sa ruleze.
-    const rec = await reconcileStatuses(admin, ctx, 50, inceput + BUGET_PASI_1_3_MS);
+    let rec: Awaited<ReturnType<typeof reconcileStatuses>> = { ok: true };
+    await peMagazin(businessId, "reconciliere", async () => {
+      rec = await reconcileStatuses(admin, ctx, 50, inceput + BUGET_PASI_1_3_MS);
+    });
     if (!rec.ok) {
       await logError({
         action: "aboutyou-sync", severity: rec.status === 401 || rec.status === 403 ? "critical" : "warning",
@@ -344,8 +372,11 @@ export async function GET(req: NextRequest) {
     const since = Number.isFinite(marcajMs)
       ? new Date(marcajMs - ORDERS_OVERLAP_MS).toISOString()
       : marcaj;
-    const pr = await pollOrders(admin, ctx, since);
-    ordersIngested += pr.ingested;
+    /* ⚠ Si aici: `pollOrders` citeste din baza, deci poate arunca. Marcajul NU se misca atunci. */
+    let pr: Awaited<ReturnType<typeof pollOrders>> | null = null;
+    await peMagazin(businessId, "comenzi", async () => { pr = await pollOrders(admin, ctx, since); });
+    if (pr == null) { await pause(PACE_MS); continue; }
+    ordersIngested += (pr as { ingested: number }).ingested;
     /*
      * Aceeasi regula ca la Trendyol, si din aceleasi motive — vezi `marcajUrmator`:
      * citire completa -> „acum"; citire partiala DAR cu cursor -> exact pana la

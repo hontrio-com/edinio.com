@@ -23,7 +23,7 @@ import {
   type AboutYouListingEnrichment, type AboutYouStoredMaterial, type AboutYouVariantData,
   type MappableProduct,
 } from "./mapping";
-import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
+import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchAboutYouConfig } from "./config";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
@@ -1751,7 +1751,36 @@ export interface AboutYouQueueItem {
   generation?: number | null;
 }
 
+/**
+ * Un element de coada, dus la capat.
+ *
+ * ═══ ⚠ O CITIRE PICATA AR FI OMORAT TOATA RULAREA CRONULUI (27.08.2026) ═══
+ *
+ * De azi, citirile din baza ARUNCA `EroareCitireBaza` in loc sa intoarca `null` — altfel o pana
+ * de-o clipa trecea drept „listarea nu exista" si elementul se STERGEA din coada ca reusit.
+ *
+ * Dar bucla din cron n-avea nicio plasa in jurul lui `processQueueItem`: aruncarea ar fi iesit
+ * din bucla magazinelor si ar fi oprit pasii 2, 3 si 4 — sondarea loturilor, reconcilierea si
+ * ingestul comenzilor — pentru TOATA platforma. Adica reparatia unei tacerimi ar fi produs o
+ * cadere mult mai mare.
+ *
+ * ⚠ SE PRINDE AICI, la marginea lucratorului de coada, si devine `status: 0`. Regula e scrisa
+ * chiar in `rand-citit.ts`: „se prinde intr-un singur loc, la marginea lui `trimiteElement`, si
+ * devine verdictul `trecatoare` — cel care nu arde nicio incercare". Cronul stie deja ce sa faca
+ * cu `0`: nu pune nimic in contul elementului si opreste magazinul pe tura asta.
+ */
 export async function processQueueItem(admin: Db, ctx: AboutYouSyncContext, item: AboutYouQueueItem): Promise<SyncOutcome> {
+  try {
+    return await trimiteElement(admin, ctx, item);
+  } catch (e) {
+    if (e instanceof EroareCitireBaza) {
+      return { ok: false, error: e.message, status: 0 };
+    }
+    throw e;
+  }
+}
+
+async function trimiteElement(admin: Db, ctx: AboutYouSyncContext, item: AboutYouQueueItem): Promise<SyncOutcome> {
   switch (item.op) {
     case "delete":
       return removeByStyleKey(admin, ctx, item.offer_id);

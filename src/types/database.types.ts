@@ -103,54 +103,63 @@ export type Database = {
       }
       aboutyou_batches: {
         Row: {
+          alarma_scrisa_la: string | null
           attempts: number
           batch_request_id: string
           business_id: string
           created_at: string
           id: string
           kind: string
+          next_poll_at: string | null
           poll_errors: number
           polled_at: string | null
           related_ids: Json
           result_summary: Json | null
           status: string
           submitted_at: string
+          tranzient_de_la: string | null
         }
         Insert: {
+          alarma_scrisa_la?: string | null
           attempts?: number
           batch_request_id: string
           business_id: string
           created_at?: string
           id?: string
           kind: string
+          next_poll_at?: string | null
           poll_errors?: number
           polled_at?: string | null
           related_ids?: Json
           result_summary?: Json | null
           status?: string
           submitted_at?: string
+          tranzient_de_la?: string | null
         }
         Update: {
+          alarma_scrisa_la?: string | null
           attempts?: number
           batch_request_id?: string
           business_id?: string
           created_at?: string
           id?: string
           kind?: string
+          next_poll_at?: string | null
           poll_errors?: number
           polled_at?: string | null
           related_ids?: Json
           result_summary?: Json | null
           status?: string
           submitted_at?: string
+          tranzient_de_la?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "aboutyou_batches_business_id_fkey"
             columns: ["business_id"]
+            foreignKeyName: "aboutyou_batches_business_id_fkey"
             isOneToOne: false
-            referencedRelation: "businesses"
             referencedColumns: ["id"]
+            referencedRelation: "businesses"
           },
         ]
       }

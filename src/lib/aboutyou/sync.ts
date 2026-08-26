@@ -727,7 +727,22 @@ export async function removeByStyleKey(admin: Db, ctx: AboutYouSyncContext, styl
 interface BatchRow {
   id: string; batch_request_id: string; kind: string; related_ids: unknown;
   attempts: number; poll_errors: number;
+  tranzient_de_la: string | null; alarma_scrisa_la: string | null;
 }
+
+/**
+ * Cat se amana urmatoarea interogare, dupa un esec de TRANSPORT.
+ *
+ * ⚠ CRESTE, si de-aia exista: cauza obisnuita e o limita de rata sau o pana la ei, adica exact
+ * situatia in care a intreba din minut in minut inrautateste lucrurile. Un minut, doua, patru…
+ * pana la un sfert de ora.
+ */
+function amanare(esecuri: number): number {
+  return Math.min(15, 2 ** Math.max(0, esecuri - 1)) * 60_000;
+}
+
+/** Dupa atata vreme de esecuri de transport neintrerupte, se scrie o alarma. */
+const ORE_PANA_LA_ALARMA = 1;
 
 /** Trece pe „error" listarile unui lot care s-a inchis fara sa se fi asezat. */
 async function marcheazaListarileLotului(
@@ -744,14 +759,16 @@ async function marcheazaListarileLotului(
 }
 
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
-  const { data } = await admin
+  const batches = randuriCitite<BatchRow>("aboutyou.loturiDeschise", await admin
     .from("aboutyou_batches")
-    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors")
+    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, tranzient_de_la, alarma_scrisa_la")
     .eq("business_id", ctx.businessId)
     .in("status", ["pending", "processing", "retry"])
+    /* ⚠ Loturile amanate dupa un esec de transport se sar: vezi `amanare`. Fara asta, un lot in
+       amanare ar fi tot interogat si amanarea n-ar insemna nimic. */
+    .or(`next_poll_at.is.null,next_poll_at.lte.${new Date().toISOString()}`)
     .order("submitted_at", { ascending: true })
-    .limit(limit);
-  const batches = (data ?? []) as BatchRow[];
+    .limit(limit) as never);
 
   for (const b of batches) {
     const res =
@@ -779,10 +796,60 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
        * ajungea `draft`, „Publică toate" o sarea, si omul vedea „in curs" mereu.
        */
       const esecuri = b.poll_errors + 1;
-      const renuntam = esecuri >= 6;
+      const trecatoare = res.status === 0 || res.status === 429 || res.status >= 500;
+
+      /*
+       * ═══ ⚠ O PANA LA EI NU MAI INCHIDE LOTUL CA ESUAT (26.08.2026) ═══
+       *
+       * Contorul e per lot, si asta e corect. Dar CAUZA e comuna: cand About You da 5xx sau 429,
+       * TOATE loturile deschise ale TUTUROR magazinelor esueaza la aceeasi interogare, in aceeasi
+       * rulare. Cronul merge din minut in minut, pragul era sase — deci sase minute de
+       * indisponibilitate la ei inchideau ca `failed` tot ce era deschis in platforma. Iar
+       * selectia exclude `failed`: loturile alea nu mai erau interogate NICIODATA, desi la ei
+       * puteau fi de mult `completed`.
+       *
+       * ⚠ 429 / 5xx / retea NU SPUN NIMIC DESPRE LOT. Singurele care il pot inchide sunt un
+       * raspuns explicit de esec de la ei, sau un 4xx permanent — lot necunoscut, cheie
+       * invalidata. Aia raman cu prag, fiindca reincercarea lor chiar n-are ce sa mai aduca.
+       *
+       * ⚠ In locul pragului, o AMANARE care creste: lotul ramane deschis, dar nu se mai intreaba
+       * din minut in minut — altfel am lovi in continuu o limita de rata deja atinsa.
+       */
+      const renuntam = !trecatoare && esecuri >= 6;
+      const deLa = b.tranzient_de_la ?? now;
       await admin.from("aboutyou_batches")
-        .update({ poll_errors: esecuri, polled_at: now, status: renuntam ? "failed" : "retry" } as never)
+        .update({
+          poll_errors: esecuri, polled_at: now,
+          status: renuntam ? "failed" : "retry",
+          ...(trecatoare
+            ? {
+              next_poll_at: new Date(Date.now() + amanare(esecuri)).toISOString(),
+              tranzient_de_la: deLa,
+            }
+            : { next_poll_at: null }),
+        } as never)
         .eq("id", b.id);
+
+      /*
+       * ⚠ TACEREA NU E O OPTIUNE cand lotul ramane deschis la nesfarsit. Dupa un ceas de esecuri
+       * de transport neintrerupte se scrie o data — nu la fiecare trecere, altfel acelasi lot ar
+       * umple jurnalul si l-ar face necitibil taman cand e nevoie de el.
+       */
+      if (trecatoare) {
+        const deCat = Date.now() - Date.parse(deLa);
+        const scrisRecent = b.alarma_scrisa_la
+          && Date.now() - Date.parse(b.alarma_scrisa_la) < ORE_PANA_LA_ALARMA * 3600_000;
+        if (deCat >= ORE_PANA_LA_ALARMA * 3600_000 && !scrisRecent) {
+          await logError({
+            action: "aboutyou/loturi", severity: "warning",
+            message: `lotul nu se poate interoga de ${Math.round(deCat / 3600_000)} ${deCat >= 7200_000 ? "ore" : "ora"}: About You raspunde ${res.status}`,
+            details: { batchRequestId: b.batch_request_id, kind: b.kind, esecuri },
+            businessId: ctx.businessId,
+          });
+          await admin.from("aboutyou_batches")
+            .update({ alarma_scrisa_la: now } as never).eq("id", b.id);
+        }
+      }
       /*
        * ⚠ LISTAREA NU SE VOPSESTE IN ROSU PENTRU O CAUZA TRECATOARE.
        *
@@ -797,8 +864,8 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
        * statusul adevarat se citeste de la About You la trecerea urmatoare. Doar
        * cauzele PERMANENTE (cheie invalidata, lot necunoscut) se scriu pe listare.
        */
-      const trecator = res.status === 0 || res.status === 429 || res.status >= 500;
-      if (renuntam && !trecator) {
+      /* ⚠ `renuntam` e deja fals pentru cauzele trecatoare — vezi nota de mai sus. */
+      if (renuntam) {
         await marcheazaListarileLotului(admin, ctx, b, `Nu am putut citi rezultatul de la About You: ${res.error}`);
       }
       continue;
@@ -836,6 +903,9 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
          * legitim doua ore aduna sase hopuri raspandite si e ucis oricum.
          */
         poll_errors: 0,
+        /* ⚠ Si amanarea, si sirul de esecuri de transport: interogarea A RASPUNS. */
+        next_poll_at: null,
+        tranzient_de_la: null,
         ...(abandonat
           ? { status: "failed", result_summary: { status: result?.status ?? "necunoscut", abandonat: true } as never }
           : {}),

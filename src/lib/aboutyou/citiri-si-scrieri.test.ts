@@ -90,24 +90,71 @@ test("⚠ o bucata picata OPRESTE lotul, nu-l scurteaza in tacere", () => {
   assert.doesNotMatch(f, /continue;/, "`continue` lasa un subset tacut");
 });
 
-test("⚠ un lot trimis la ei nu se mai pierde in tacere", () => {
+test("⚠ nicio trimitere nu mai pleaca fara urma scrisa INAINTE", () => {
   /*
-   * `recordBatch` se cheama DUPA ce cererea externa a reusit. Daca scrierea pica, id-ul lor se
-   * pierdea: nu mai stiam ce sa sondam, lotul nu se incheia niciodata, iar listarea ramanea
-   * `pending` pe veci — fara nicio eroare nicaieri.
+   * ═══ ⚠ FEREASTRA CARE A RAMAS DUPA `recordBatch` (27.08.2026) ═══
    *
-   * ⚠ Si nu se poate retrimite orbeste: o cerere externa cu rezultat necunoscut, retrimisa, face
-   * dubluri. Deci id-ul se scrie macar in jurnal, ca `critical`, cu tot ce trebuie pentru o
-   * reluare de mana.
+   * `recordBatch` scria lotul DUPA ce About You il primea. Intre acceptul lor si scrierea
+   * noastra ramanea o fereastra in care operatia se intampla si noi n-o mai stiam — iar sapte
+   * din opt chematori nici nu-i citeau raspunsul, deci raportau REUSITA.
+   *
+   * Nu se putea repara citind raspunsul: o reluare oarba de-acolo poate expedia sau anula de
+   * DOUA ORI. Deci urma se scrie inainte, si `recordBatch` nu mai exista aici.
    */
   const sync = viu("src/lib/aboutyou/sync.ts");
-  assert.match(sync, /export async function recordBatch\([\s\S]{0,400}?Promise<boolean>/);
-  assert.match(sync, /action: "aboutyou\/lot-nescris", severity: "critical"/);
+  assert.doesNotMatch(sync, /recordBatch\(/, "calea veche s-a intors");
+  assert.match(sync, /export async function cuLotDurabil</);
 
-  /* ⚠ Si apelantul chiar se uita la raspuns: altfel ar spune „trimis" despre ceva ce nu mai poate
-     urmari, iar listarea ar ramane `pending` la nesfarsit. */
-  assert.match(sync, /if \(!await recordBatch\(/);
-  assert.match(sync, /if \(nescrise > 0\)/);
+  /* ⚠ Insertul intentiei e INAINTEA apelului: altfel n-ar apara nimic. */
+  const f = sync.slice(sync.indexOf("export async function cuLotDurabil"));
+  const corp = f.slice(0, f.indexOf("\n}\n"));
+  assert.ok(corp.indexOf('status: "intentie"') < corp.indexOf("const res = await trimite()"),
+    "intentia trebuie scrisa inaintea cererii");
+  /* ⚠ Si `trimis_la` tot inainte: pus dupa, o cadere intre apel si scriere ar arata ca n-a plecat. */
+  assert.ok(corp.indexOf("trimis_la:") < corp.indexOf("const res = await trimite()"));
+  /* ⚠ Intentia nescrisa OPRESTE cererea. */
+  assert.match(corp, /if \(eIntentie\) \{[\s\S]*?return null;/);
+
+  /* ⚠ Refuz vs necunoscut, pe CODUL HTTP. `408` si `429` nu sunt refuzuri. */
+  assert.match(sync, /export function eRefuzLimpede/);
+  assert.match(sync, /status === 408 \|\| status === 429/);
+  assert.ok(corp.includes(".delete().eq(\"business_id\", businessId).eq(\"intent_id\", intentId)"),
+    "refuzul limpede sterge urma");
+  assert.ok(corp.includes('status: "necunoscut"'), "necunoscutul o pastreaza");
+});
+
+test("⚠ toate cele opt trimiteri trec prin outbox, si niciuna pe langa", () => {
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  const orders = viu("src/lib/aboutyou/orders.ts");
+  const feluri = new Set([...`${sync}${orders}`.matchAll(/cuLotDurabil\(admin, ctx\.businessId, ("?\w+"?),/g)]
+    .map((m) => m[1].replace(/"/g, "")));
+  /* `kind` e o variabila la stoc/pret: acolo felul se alege la chemare. */
+  assert.deepEqual([...feluri].sort(),
+    ["cancel", "kind", "product", "removal", "return", "ship", "status", "stock_removal"]);
+
+  /* ⚠ Si fiecare chematoare se uita la `null`: altfel cererea ar parea facuta. */
+  const nuluri = [...`${sync}${orders}`.matchAll(/if \(res === null\)|if \(zero === null\)/g)];
+  assert.ok(nuluri.length >= 6, `doar ${nuluri.length} chematori verifica intentia nescrisa`);
+});
+
+test("⚠ intentia ramasa deschisa ajunge la un om, o singura data", () => {
+  /*
+   * „Am trimis si nu stiu ce a iesit" e singura stare care cere un OM: nu se poate relua orbeste.
+   * Se scrie `critical`, si se marcheaza randul, altfel cronul de minut ar scrie acelasi lucru de
+   * 1440 de ori pe zi si ar ingropa alarmele adevarate.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /export async function alarmaIntentiiDeschise/);
+  assert.match(sync, /action: "aboutyou\/intentie-deschisa", severity: "critical"/);
+  assert.match(sync, /\.is\("alarma_scrisa_la", null\)/);
+  assert.match(sync, /alarma_scrisa_la: new Date\(\)\.toISOString\(\)/);
+
+  /* Si e chemata din cron, altfel n-ar afla nimeni niciodata. */
+  const cron = viu("src/app/api/cron/aboutyou-sync/route.ts");
+  assert.match(cron, /await alarmaIntentiiDeschise\(admin, businessId\)/);
+
+  /* ⚠ Loturile deschise NU se sondeaza: n-au id-ul lor, deci n-au ce intreba. */
+  assert.match(sync, /\.in\("status", \["pending", "processing", "retry"\]\)/);
 });
 
 test("⚠ publicarea asteapta ULTIMUL lot al produsului, nu primul", () => {
@@ -129,6 +176,24 @@ test("⚠ publicarea asteapta ULTIMUL lot al produsului, nu primul", () => {
   const i = sync.indexOf("const fratiNeterminati");
   const j = sync.indexOf('op: "publish"');
   assert.ok(i > 0 && j > i, "verificarea fratilor trebuie sa fie inaintea publicarii");
+
+  /*
+   * ═══ ⚠ SI CEEA CE PROBA ASTA NU VEDEA (27.08.2026) ═══
+   *
+   * Verificarea exista si era inaintea publicarii — amandoua adevarate — dar SCRIEREA STATUSULUI
+   * era inaintea verificarii. Deci lotul 1 scotea listarea din `pending`, iar loturile 2 si 3 nu
+   * mai intrau deloc in ramura: un produs cu peste 100 de variante nu se publica NICIODATA.
+   *
+   * Proba trecea verde peste chiar defectul pe care il masura. Acum se cere si ordinea a treia:
+   * iesirea pe frati neterminati vine INAINTEA oricarei scrieri de status.
+   */
+  const iesirea = sync.indexOf("if (fratiNeterminati.length > 0) {");
+  const scrierea = sync.indexOf("const urmare = urmareaLotului(listing.stare_dinainte)");
+  assert.ok(iesirea > i, "iesirea pe frati vine dupa interogarea lor");
+  assert.ok(scrierea > iesirea,
+    "statusul se scrie DUPA iesirea pe frati neterminati, altfel loturile urmatoare nu mai intra in ramura");
+  /* Si ramura intreaga se intra doar cat listarea e `pending`, deci scrierea o inchide. */
+  assert.match(sync, /b\.kind === "product" && listing\.status === "pending"/);
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

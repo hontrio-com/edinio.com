@@ -4,7 +4,8 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
-  loadAboutYouContext, processQueueItem, pollOpenBatches, reconcileStatuses, pause,
+  alarmaIntentiiDeschise, loadAboutYouContext, processQueueItem, pollOpenBatches,
+  reconcileStatuses, pause,
   type AboutYouQueueItem, type AboutYouSyncContext,
 } from "@/lib/aboutyou/sync";
 import { pollOrders, reconciliazaComenzile } from "@/lib/aboutyou/orders";
@@ -407,6 +408,12 @@ export async function GET(req: NextRequest) {
     const ctx = await ctxSauScrie(businessId, "inbox");
     if (!ctx) continue;
     try {
+      /*
+       * ⚠ INTENTIILE RAMASE DESCHISE, inaintea evenimentelor: „am trimis la About You si nu stiu
+       * ce a iesit" e singura stare care cere un OM, si trebuie sa iasa la lumina repede. Vezi
+       * `cuLotDurabil`. Se scrie o singura data pe rand.
+       */
+      await alarmaIntentiiDeschise(admin, businessId);
       reluate += await reiaEvenimenteleNeprelucrate(admin, businessId, ctx.config);
     } catch (e) {
       await logError({

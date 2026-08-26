@@ -7,6 +7,7 @@
 // approval/rejection transitions About You makes on its own side.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
 import { logError } from "@/lib/error-logger";
 import type { Database } from "@/types/database.types";
 import type { AboutYouAuth, AboutYouResult } from "./client";
@@ -186,36 +187,138 @@ async function setListingStatus(
  * mana. Iar functia INTOARCE daca a reusit, ca apelantul sa nu mai spuna „trimis" despre ceva ce
  * nu mai poate urmari.
  */
-export async function recordBatch(
-  admin: Db, businessId: string, batchRequestId: string, kind: string, relatedIds: string[],
-): Promise<boolean> {
-  /*
-   * Contoarele se pun pe ZERO la fiecare inregistrare.
-   *
-   * About You deduplica payload-urile identice pe acelasi `batchRequestId`, deci
-   * randul poate fi REDESCHIS pentru un lot nou. Fara resetare, un ciclu incheiat
-   * isi scurgea contoarele in urmatorul: lotul nou pornea cu esecuri mostenite si
-   * putea fi abandonat din prima.
-   */
-  const { error } = await admin.from("aboutyou_batches").upsert(
-    {
-      business_id: businessId, batch_request_id: batchRequestId, kind, status: "pending",
-      related_ids: relatedIds as never, attempts: 0, poll_errors: 0,
-      polled_at: null, result_summary: null,
-    },
-    { onConflict: "business_id,batch_request_id" },
-  );
-  if (error) {
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTENTIA SE SCRIE INAINTEA CERERII
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠ FEREASTRA: About You accepta cererea, ne da `batchRequestId`, iar INSERT-ul nostru pica. De
+   acolo nu mai stim nimic despre soarta operatiei. `recordBatch` scria de mult un `critical` cu
+   tot ce trebuie pentru o reluare de mana — dar sapte din opt chematori nici nu-i citeau
+   raspunsul, deci operatia raporta REUSITA. O expediere, o anulare sau un retur „reusite" despre
+   care nu se mai afla niciodata daca s-au intamplat.
+
+   ⚠ SI NU E DE AJUNS SA CITIM RASPUNSUL. Ramane fereastra dintre clipa in care ei accepta si
+   clipa in care noi scriem. O reluare oarba de acolo poate anula sau expedia de DOUA ORI — deci
+   operatia nu se poate relua, dar nici nu se poate uita.
+
+   Trei feluri de a se opri, toate vizibile acum:
+
+     insertul pica  → cererea externa NU se face. Nimic nu s-a intamplat.
+     ei REFUZA      → randul se sterge. Nimic nu s-a intamplat.
+     updateul pica  → randul ramane pe `intentie` cu `trimis_la` pus: „am trimis si nu stiu ce a
+                      iesit". Starea care lipsea, si singura care cere un om.
+
+   ⚠ REFUZ vs NECUNOSCUT se hotaraste pe CODUL HTTP, niciodata pe textul mesajului — aceeasi
+   regula ca la eMAG si Trendyol. `408` si `429` NU sunt refuzuri: sunt „mai incearca".
+*/
+
+/** Un refuz limpede: cererea n-a ajuns sa faca nimic la ei. */
+export function eRefuzLimpede(status: number | undefined): boolean {
+  if (status == null) return false;                    // retea cazuta: nu se stie
+  if (status === 408 || status === 429) return false;  // „mai incearca", nu „nu"
+  return status >= 400 && status < 500;
+}
+
+/**
+ * Trimite ceva la About You cu urma scrisa INAINTE.
+ *
+ * Intoarce EXACT ce intoarce cererea, ca sa nu se schimbe nimic la chematori — sau `null` cand
+ * INTENTIA n-a putut fi scrisa, si atunci `trimite` nici nu se cheama. E singura purtare
+ * corecta: mai bine o operatie neincercata decat una neurmarita.
+ *
+ * ⚠ INLOCUIESTE `recordBatch` LA TOATE TRIMITERILE. Cine cheama nu mai are ce inregistra dupa:
+ * lotul e deja scris, cu id-ul lor pus la loc.
+ */
+export async function cuLotDurabil<T extends { batchRequestId?: string | null }>(
+  admin: Db, businessId: string, kind: string, relatedIds: string[],
+  trimite: () => Promise<AboutYouResult<T>>,
+): Promise<AboutYouResult<T> | null> {
+  const intentId = randomUUID();
+  const { error: eIntentie } = await admin.from("aboutyou_batches").insert({
+    business_id: businessId, batch_request_id: null, intent_id: intentId,
+    kind, status: "intentie", related_ids: relatedIds as never,
+    attempts: 0, poll_errors: 0,
+    /* ⚠ Pus INAINTE de apel, nu dupa: dupa, o cadere intre apel si scriere ar lasa randul
+       aratand ca n-a plecat nimic — exact minciuna de care fugim. */
+    trimis_la: new Date().toISOString(),
+  } as never);
+  if (eIntentie) {
     await logError({
-      action: "aboutyou/lot-nescris", severity: "critical",
-      message: `About You a primit lotul, dar nu l-am putut tine minte: ${error.message}`,
-      /* ⚠ Tot ce trebuie ca sa fie reluat de mana: id-ul lor, ce fel de lot, si pe ce se aplica. */
-      details: { batchRequestId, kind, relatedIds: relatedIds.slice(0, 20) },
-      businessId,
+      action: "aboutyou/intentie", severity: "critical",
+      message: `intentia nu s-a putut scrie, deci cererea catre About You NU s-a mai facut: ${eIntentie.message}`,
+      details: { kind, relatedIds: relatedIds.slice(0, 20) }, businessId,
     });
-    return false;
+    return null;
   }
-  return true;
+
+  const res = await trimite();
+
+  if (isAboutYouError(res)) {
+    if (eRefuzLimpede(res.status)) {
+      /* Refuz limpede: la ei nu s-a intamplat nimic, deci urma n-are ce pazi. */
+      await admin.from("aboutyou_batches")
+        .delete().eq("business_id", businessId).eq("intent_id", intentId);
+    } else {
+      /*
+       * ⚠ NECUNOSCUT: randul RAMANE. O pana de retea sau un `5xx` nu spun daca cererea a apucat
+       * sa fie primita. Sters, am fi declarat „nu s-a intamplat" fara sa stim.
+       */
+      await admin.from("aboutyou_batches")
+        .update({ status: "necunoscut", result_summary: { eroare: res.error, status: res.status } as never } as never)
+        .eq("business_id", businessId).eq("intent_id", intentId);
+    }
+    return res;
+  }
+
+  const id = res.data?.batchRequestId ?? null;
+  const { error: eInchidere } = await admin.from("aboutyou_batches")
+    .update({ batch_request_id: id, status: id ? "pending" : "necunoscut" } as never)
+    .eq("business_id", businessId).eq("intent_id", intentId);
+  if (eInchidere) {
+    /*
+     * ⚠ AICI ERA GAURA, si acum lasa urma. Randul ramane pe `intentie` cu `trimis_la` pus, iar
+     * `alarmaIntentiiDeschise` il scoate la lumina. Nu se reincearca nimic orbeste.
+     */
+    await logError({
+      action: "aboutyou/intentie", severity: "critical",
+      message: `About You a primit lotul (${id ?? "fara id"}), dar intentia n-a putut fi inchisa: ${eInchidere.message}`,
+      details: { kind, batchRequestId: id, relatedIds: relatedIds.slice(0, 20) }, businessId,
+    });
+  }
+  return res;
+}
+
+/**
+ * Intentiile ramase deschise: am trimis si nu stim ce a iesit.
+ *
+ * ⚠ Se scrie o SINGURA data pe rand (`alarma_scrisa_la`), altfel cronul de minut ar umple
+ * jurnalul cu acelasi rand de 1440 de ori pe zi si ar ingropa alarmele adevarate.
+ */
+const PRAG_INTENTIE_MS = 10 * 60 * 1000;
+export async function alarmaIntentiiDeschise(admin: Db, businessId: string): Promise<number> {
+  const limita = new Date(Date.now() - PRAG_INTENTIE_MS).toISOString();
+  const randuri = randuriCitite<{ id: string; kind: string; related_ids: unknown; trimis_la: string | null }>(
+    "aboutyou.intentiiDeschise", await admin
+      .from("aboutyou_batches").select("id, kind, related_ids, trimis_la")
+      .eq("business_id", businessId)
+      .in("status", ["intentie", "necunoscut"])
+      .lt("submitted_at", limita)
+      .is("alarma_scrisa_la", null)
+      .limit(50) as never);
+
+  for (const r of randuri) {
+    await logError({
+      action: "aboutyou/intentie-deschisa", severity: "critical",
+      message: r.trimis_la
+        ? `operatie „${r.kind}" trimisa la About You fara sa stim ce a iesit: verifica in Seller Center inainte de a o relua`
+        : `operatie „${r.kind}" ramasa deschisa fara sa fi plecat`,
+      details: { kind: r.kind, relatedIds: r.related_ids, trimisLa: r.trimis_la }, businessId,
+    });
+    await admin.from("aboutyou_batches")
+      .update({ alarma_scrisa_la: new Date().toISOString() } as never).eq("id", r.id);
+  }
+  return randuri.length;
 }
 
 /*
@@ -331,7 +434,16 @@ async function reconciliazaVariante(
   if (deScos.length > 0) {
     if (listing.last_synced_at != null) {
       const lot = deScos.slice(0, MAX_ITEMI_STOC_PRET);
-      const zero = await updateStock(ctx.auth, lot.map((r) => ({ sku: r.sku, quantity: 0 })));
+      /*
+       * ⚠ Prin `cuLotDurabil`: urma se scrie INAINTE de cerere. `null` inseamna ca intentia
+       * n-a putut fi scrisa, deci cererea nici nu s-a facut — randurile raman `enabled: false`
+       * si zeroul se reincearca la trecerea urmatoare.
+       */
+      const zero = await cuLotDurabil(admin, ctx.businessId, "stock_removal", lot.map((r) => r.id),
+        () => updateStock(ctx.auth, lot.map((r) => ({ sku: r.sku, quantity: 0 }))));
+      if (zero === null) {
+        return { ok: false, error: "Nu am putut ține evidența retragerii variantelor; se reia." };
+      }
       if (isAboutYouError(zero)) {
         return { ok: false, error: `Nu am putut retrage variantele scoase: ${zero.error}`, status: zero.status };
       }
@@ -353,8 +465,6 @@ async function reconciliazaVariante(
        */
       await admin.from("aboutyou_variants")
         .update({ ay_status: "removing" } as never).in("id", lot.map((r) => r.id));
-      const idLot = zero.data?.batchRequestId;
-      if (idLot) await recordBatch(admin, ctx.businessId, idLot, "stock_removal", lot.map((r) => r.id));
     } else {
       // Listarea n-a plecat niciodata spre About You: nu e nimic de retras acolo,
       // deci marcajul se poate pune direct.
@@ -516,7 +626,13 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   const transe = Math.ceil(built.items.length / 100);
   let nescrise = 0;
   for (let i = 0; i < built.items.length; i += 100) {
-    const res = await upsertProducts(ctx.auth, built.items.slice(i, i + 100));
+    const res = await cuLotDurabil(admin, ctx.businessId, "product", [listing.style_key],
+      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100)));
+    if (res === null) {
+      /* Intentia n-a putut fi scrisa: cererea nu s-a facut, deci transa asta lipseste. */
+      nescrise++;
+      break;
+    }
     if (isAboutYouError(res)) {
       /*
        * ⚠ UN ESEC LA MIJLOCUL SIRULUI LASA PRODUSUL PE JUMATATE LA EI. Transele dinainte au
@@ -535,11 +651,9 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
       return { ok: false, error: res.error, status: res.status };
     }
     const id = res.data?.batchRequestId;
-    if (id) {
-      batchRequestId = batchRequestId ?? id;
-      /* ⚠ Vezi `recordBatch`: un lot netinut minte nu mai poate fi sondat niciodata. */
-      if (!await recordBatch(admin, ctx.businessId, id, "product", [listing.style_key])) nescrise++;
-    }
+    if (id) batchRequestId = batchRequestId ?? id;
+    /* Un raspuns fara id nu se poate sonda niciodata: `cuLotDurabil` a lasat randul „necunoscut". */
+    else nescrise++;
     if (i + 100 < built.items.length) await pause(300);
   }
 
@@ -613,7 +727,9 @@ async function setRemoteStatus(
     return { ok: true, action: "skipped" };
   }
 
-  const res = await updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }]);
+  const res = await cuLotDurabil(admin, ctx.businessId, "status", [listing.style_key],
+    () => updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }]));
+  if (res === null) return { ok: false, error: "Nu am putut ține evidența cererii; încearcă din nou." };
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", { error: res.error });
     return { ok: false, error: res.error, status: res.status };
@@ -631,7 +747,6 @@ async function setRemoteStatus(
    * au reusit, adica lotului incheiat fara erori.
    */
   await setListingStatus(admin, listing.id, statusLocal);
-  if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "status", [listing.style_key]);
   return { ok: true, action: "published", batchRequestId };
 }
 
@@ -758,8 +873,12 @@ async function stergeListare(
    * Acum lotul se INREGISTREAZA cu tipul `removal`, statusul listarii nu se atinge,
    * iar `pollOpenBatches` sterge randul abia cand lotul se incheie cu bine.
    */
-  const res = await updateProductStatus(
-    ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }]);
+  const res = await cuLotDurabil(admin, ctx.businessId, "removal", [listing.style_key], () => updateProductStatus(
+    ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }]));
+  /* Intentia nescrisa: cererea nu s-a facut, deci randul local ramane intreg si se poate relua. */
+  if (res === null) {
+    return { ok: false, error: "Nu am putut ține evidența retragerii; încearcă din nou." };
+  }
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", {
       error: `Nu am putut retrage produsul de pe About You: ${res.error}`,
@@ -783,7 +902,6 @@ async function stergeListare(
    * adevarat — si omul poate apasa din nou. Nicio stare fara ieșire.
    */
   const idLot = res.data?.batchRequestId;
-  if (idLot) await recordBatch(admin, ctx.businessId, idLot, "removal", [listing.style_key]);
   return { ok: true, action: "removed", batchRequestId: idLot };
 }
 
@@ -1190,6 +1308,38 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
               .neq("id", b.id) as never);
 
           /*
+           * ═══ ⚠ UN PRODUS CU PESTE 100 DE VARIANTE NU SE PUBLICA NICIODATA (27.08.2026) ═══
+           *
+           * Statusul se scria INAINTEA verificarii fratilor. Deci, la trei loturi:
+           *
+           *   lotul 1 se incheie → listarea trece pe `draft` → vede frati → nu publica
+           *   lotul 2 se incheie → `listing.status` nu mai e `pending` → ramura nici nu se intra
+           *   lotul 3 se incheie → la fel
+           *
+           * Adica nimeni nu publica. Verificarea fratilor, pusa ca sa nu se publice PREA DEVREME,
+           * facea sa nu se publice DELOC — si numai la produsele mari, unde se observa cel mai greu.
+           * Proba care o pazea verifica doar ca verificarea exista si e inaintea publicarii; nu si
+           * ca scrierea statusului vine dupa ea. Verde, peste defect.
+           *
+           * ⚠ ACUM NU SE ATINGE NIMIC PANA LA ULTIMUL LOT. Cat mai are frati in lucru, listarea
+           * ramane `pending` — ceea ce e si adevarat: produsul chiar nu e intreg la ei. Ultimul lot
+           * care se aseaza gaseste zero frati, scrie starea si pune publicarea la coada.
+           *
+           * ⚠ SI UN FRATE PICAT OPRESTE PUBLICAREA, cum trebuie: ramura de esec scrie `error`, deci
+           * ultimul lot bun nu mai gaseste `pending` si nu publica un produs incomplet.
+           */
+          if (fratiNeterminati.length > 0) {
+            /* ⚠ Se spune, ca sa nu para ca s-a pierdut ceva: totul vine la ultimul lot. */
+            await logError({
+              action: "aboutyou-sync/loturi", severity: "info",
+              message: `lot incheiat, dar produsul mai are ${fratiNeterminati.length} loturi in lucru: statusul si publicarea asteapta`,
+              details: { styleKey: listing.style_key, batchId: b.batch_request_id },
+              businessId: ctx.businessId,
+            });
+            continue;
+          }
+
+          /*
            * ⚠ „Ciorna" DOAR LA PRIMA TRIMITERE. Vezi `urmareaLotului`: la o modificare a unui
            * produs deja aprobat se pune inapoi starea lui de la ei, iar cand n-o stim ramane pe
            * `pending` si o scrie reconcilierea.
@@ -1200,17 +1350,6 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
           } else {
             await admin.from("aboutyou_listings")
               .update({ error: null, stare_dinainte: null } as never).eq("id", listing.id);
-          }
-
-          if (fratiNeterminati.length > 0) {
-            /* ⚠ Se spune, ca sa nu para ca s-a pierdut ceva: publicarea vine la ultimul lot. */
-            await logError({
-              action: "aboutyou-sync/loturi", severity: "info",
-              message: `lot incheiat, dar produsul mai are ${fratiNeterminati.length} loturi in lucru: publicarea asteapta`,
-              details: { styleKey: listing.style_key, batchId: b.batch_request_id },
-              businessId: ctx.businessId,
-            });
-            continue;
           }
           /*
            * PUBLICAREA SE INLANTUIE SINGURA. Aici, si nicaieri altundeva.
@@ -1541,13 +1680,12 @@ async function trimiteInTranse<T>(
   if (items.length === 0) return { ok: true, action: "skipped" };
   let batchRequestId: string | undefined;
   for (let i = 0; i < items.length; i += MAX_ITEMI_STOC_PRET) {
-    const res = await trimite(items.slice(i, i + MAX_ITEMI_STOC_PRET));
+    const res = await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
+      () => trimite(items.slice(i, i + MAX_ITEMI_STOC_PRET)));
+    if (res === null) return { ok: false, error: "Nu am putut ține evidența cererii; încearcă din nou." };
     if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
     const id = res.data?.batchRequestId;
-    if (id) {
-      batchRequestId = batchRequestId ?? id;
-      await recordBatch(admin, ctx.businessId, id, kind, [styleKey]);
-    }
+    if (id) batchRequestId = batchRequestId ?? id;
     if (i + MAX_ITEMI_STOC_PRET < items.length) await pause(300);
   }
   return { ok: true, action: "submitted", batchRequestId };
@@ -1678,14 +1816,19 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
   const awbRetur = typeof (row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number === "string"
     ? String((row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number).trim()
     : "";
-  const res = await shipOrderItems(ctx.auth, [{
+  /*
+   * ⚠ EXPEDIEREA E CEA MAI SCUMPA DE PIERDUT: fara urma, comanda ramane `ship_pending` si
+   * comerciantul crede ca a plecat. De aceea trece prin `cuLotDurabil`, iar cand intentia nu se
+   * poate scrie, cererea NU se face deloc.
+   */
+  const res = await cuLotDurabil(admin, ctx.businessId, "ship", [orderId], () => shipOrderItems(ctx.auth, [{
     order_items: orderItemIds, carrier_key: carrierKey,
     shipment_tracking_key: tracking, return_tracking_key: awbRetur || tracking,
-  }]);
+  }]));
+  if (res === null) return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou." };
   if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
   const batchRequestId = res.data?.batchRequestId;
   const now = new Date().toISOString();
-  if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "ship", [orderId]);
   /*
    * Statusul devine „trimis catre About You", nu „expediat".
    *

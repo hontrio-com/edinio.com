@@ -105,10 +105,11 @@ export type Database = {
         Row: {
           alarma_scrisa_la: string | null
           attempts: number
-          batch_request_id: string
+          batch_request_id: string | null
           business_id: string
           created_at: string
           id: string
+          intent_id: string | null
           kind: string
           next_poll_at: string | null
           poll_errors: number
@@ -118,14 +119,16 @@ export type Database = {
           status: string
           submitted_at: string
           tranzient_de_la: string | null
+          trimis_la: string | null
         }
         Insert: {
           alarma_scrisa_la?: string | null
           attempts?: number
-          batch_request_id: string
+          batch_request_id?: string | null
           business_id: string
           created_at?: string
           id?: string
+          intent_id?: string | null
           kind: string
           next_poll_at?: string | null
           poll_errors?: number
@@ -135,14 +138,16 @@ export type Database = {
           status?: string
           submitted_at?: string
           tranzient_de_la?: string | null
+          trimis_la?: string | null
         }
         Update: {
           alarma_scrisa_la?: string | null
           attempts?: number
-          batch_request_id?: string
+          batch_request_id?: string | null
           business_id?: string
           created_at?: string
           id?: string
+          intent_id?: string | null
           kind?: string
           next_poll_at?: string | null
           poll_errors?: number
@@ -152,6 +157,7 @@ export type Database = {
           status?: string
           submitted_at?: string
           tranzient_de_la?: string | null
+          trimis_la?: string | null
         }
         Relationships: [
           {

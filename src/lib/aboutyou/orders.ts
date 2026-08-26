@@ -18,7 +18,7 @@ import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale
 import { logError } from "@/lib/error-logger";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import type { Database } from "@/types/database.types";
-import { recordBatch, type AboutYouSyncContext } from "./sync";
+import { cuLotDurabil, type AboutYouSyncContext } from "./sync";
 import { getOrders, isAboutYouError } from "./client";
 import { cancelOrderItems, returnOrderItems } from "./client";
 import type { AboutYouOrder, AboutYouOrderStatus } from "./types";
@@ -1084,7 +1084,14 @@ export async function cancelOrderNow(
   /* ⚠ Anularea merge NUMAI pe liniile `open`: una deja expediata nu se mai anuleaza. */
   const ids = await idsArticoleInStarea(admin, ctx, orderId, "open");
   if ("error" in ids) return { ok: false, error: ids.error };
-  const res = await cancelOrderItems(ctx.auth, ids.ids.map((id) => ({ id })));
+  /*
+   * ⚠ Prin `cuLotDurabil`: urma se scrie INAINTE de cerere. O anulare pentru care About You a
+   * raspuns iar noi n-am tinut minte nimic e cea mai urata forma — nu se poate relua orbeste
+   * (s-ar anula de doua ori) si nu se poate uita.
+   */
+  const res = await cuLotDurabil(admin, ctx.businessId, "cancel", [orderId],
+    () => cancelOrderItems(ctx.auth, ids.ids.map((id) => ({ id }))));
+  if (res === null) return { ok: false, error: "Nu am putut ține evidența anulării; încearcă din nou." };
   if (isAboutYouError(res)) return { ok: false, error: res.error };
   await marcheazaSideRow(admin, ctx, orderId, "cancel_pending");
   /*
@@ -1097,7 +1104,6 @@ export async function cancelOrderNow(
    * reparat la expediere, ramas aici.
    */
   const id = res.data?.batchRequestId;
-  if (id) await recordBatch(admin, ctx.businessId, id, "cancel", [orderId]);
   return { ok: true, batchRequestId: id };
 }
 
@@ -1109,12 +1115,13 @@ export async function returnOrderNow(
   /* ⚠ Returul merge NUMAI pe liniile `shipped`: una care n-a plecat inca n-are ce sa se intoarca. */
   const ids = await idsArticoleInStarea(admin, ctx, orderId, "shipped");
   if ("error" in ids) return { ok: false, error: ids.error };
-  const res = await returnOrderItems(ctx.auth, [{ order_items: ids.ids, return_tracking_key: cheie }]);
+  const res = await cuLotDurabil(admin, ctx.businessId, "return", [orderId],
+    () => returnOrderItems(ctx.auth, [{ order_items: ids.ids, return_tracking_key: cheie }]));
+  if (res === null) return { ok: false, error: "Nu am putut ține evidența returului; încearcă din nou." };
   if (isAboutYouError(res)) return { ok: false, error: res.error };
   await marcheazaSideRow(admin, ctx, orderId, "return_pending");
   // Ca la anulare: fara inregistrare, „in curs de retur" nu se inchide niciodata.
   const id = res.data?.batchRequestId;
-  if (id) await recordBatch(admin, ctx.businessId, id, "return", [orderId]);
   return { ok: true, batchRequestId: id };
 }
 

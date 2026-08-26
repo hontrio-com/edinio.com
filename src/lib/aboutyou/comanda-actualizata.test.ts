@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { hotarareaActualizarii } from "./orders";
+import { acelasiContinut, hotarareaActualizarii } from "./orders";
 
 /* ══════════════════════════════════════════════════════════════════════════
    COMANDA DIN EDINIO NU SE SCHIMBA DELOC LA O ANULARE PARTIALA (27.08.2026)
@@ -109,4 +109,55 @@ test("⚠ si comanda necitibila din baza nu se rescrie orbeste", () => {
   for (const camp of ["items: edinioItems", "subtotal,", "total,", "vat_amount: vatAmount"]) {
     assert.ok(bloc.slice(0, 600).includes(camp), camp);
   }
+});
+
+/* ──────────────────────────────────────────────────────────────────────────
+   SI ACUM CU CE INTOARCE CHIAR BAZA, NU CU CE IMI INCHIPUI EU
+   ────────────────────────────────────────────────────────────────────────── */
+
+test("⚠ cheile reasezate de `jsonb` nu trec drept o schimbare", () => {
+  /*
+   * ═══ PROBA MEA DE MAI SUS APARA CHIAR DEFECTUL (27.08.2026) ═══
+   *
+   * Amandoua partile veneau din acelasi obiect din JavaScript, deci nu treceau niciodata prin
+   * `jsonb`. Dar `orders.items` E `jsonb`, iar Postgres REASEAZA cheile: intai dupa lungime, apoi
+   * alfabetic. Sirul de mai jos e MASURAT pe baza de productie, nu scris din cap:
+   *
+   *   select jsonb_build_object('product_id','p0','name','Produs 0','sku','S0',
+   *                             'price',19.90,'quantity',1)::text
+   *
+   * Comparate ca siruri, cele doua difereau intotdeauna — deci hotararea iesea „scrie" la fiecare
+   * trecere, si tocmai scrierea pe care paza trebuia s-o opreasca se facea de fiecare data.
+   */
+  const dinBaza = JSON.parse(
+    '[{"sku": "S0", "name": "Produs 0", "price": 19.90, "quantity": 1, "product_id": "p0"},'
+    + ' {"sku": "S1", "name": "Produs 1", "price": 100, "status": "cancelled", "quantity": 2, "product_id": "p1"}]',
+  );
+  /* Exact cum le construieste `edinioItems`, in ordinea lui. */
+  const aleNoastre = [
+    { product_id: "p0", name: "Produs 0", sku: "S0", price: 19.9, quantity: 1 },
+    { product_id: "p1", name: "Produs 1", sku: "S1", price: 100, quantity: 2, status: "cancelled" },
+  ];
+  /* Vechea comparatie, pastrata ca martor: chiar ASA se strica. */
+  assert.notEqual(JSON.stringify(dinBaza), JSON.stringify(aleNoastre));
+  assert.ok(acelasiContinut(dinBaza, aleNoastre));
+  assert.equal(hotarareaActualizarii({
+    facturata: false, itemsVechi: dinBaza, totalVechi: 219.9, itemsNoi: aleNoastre, totalNou: 219.9,
+  }), "nimic");
+});
+
+test("⚠ dar o schimbare adevarata trece mai departe", () => {
+  /* Canonizarea n-are voie sa ascunda si diferentele reale. */
+  const dinBaza = JSON.parse('[{"sku": "S0", "name": "Produs 0", "price": 100, "quantity": 1, "product_id": "p0"}]');
+  const anulata = [{ product_id: "p0", name: "Produs 0", sku: "S0", price: 100, quantity: 1, status: "cancelled" }];
+  assert.ok(!acelasiContinut(dinBaza, anulata), "un `status` in plus e chiar stirea");
+  const altCap = [{ product_id: "p0", name: "Produs 0", sku: "S0", price: 100, quantity: 2 }];
+  assert.ok(!acelasiContinut(dinBaza, altCap), "alta cantitate");
+});
+
+test("⚠ `undefined` si lipsa cheii sunt acelasi lucru", () => {
+  /* In `jsonb` nu exista `undefined`; o cheie pusa cu `undefined` in JavaScript nu ajunge acolo. */
+  assert.ok(acelasiContinut({ a: 1 }, { a: 1, b: undefined }));
+  /* Dar `null` E o valoare, si se pastreaza. */
+  assert.ok(!acelasiContinut({ a: 1 }, { a: 1, b: null }));
 });

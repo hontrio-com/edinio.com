@@ -1,4 +1,5 @@
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { imaginiPeCulori } from "./mapping";
 
@@ -209,4 +210,24 @@ test("⚠ domeniul de INCERCARI se rescrie inainte de plecare", () => {
   /* Si ce e deja pe domeniul bun nu se atinge. */
   const h = imaginiPeCulori(["https://edinio-cdn.com/x.jpg"], [{ color_id: 1, combo_image: null }], null);
   assert.deepEqual(h.get(1), ["https://edinio-cdn.com/x.jpg"]);
+});
+
+test("⚠ amandoi chematorii lui `validateListing` trec intai prin `atasezaPreturileRon`", () => {
+  /*
+   * `combo_image` nu vine din `aboutyou_variants`: il pune `atasezaPreturileRon`, din produs. Un
+   * chemator care sare peste ar primi variante fara imagini de combinatie si ar da avertismentul
+   * „culoarea X nu are fotografii proprii" tocmai produsului care le are pe toate.
+   *
+   * Cuplajul e adevarat azi in amandoua locurile; proba il tine asa.
+   */
+  const viu = (p: string) => readFileSync(p, "utf8")
+    .replace(/^[ \t]*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const f of ["src/lib/aboutyou/sync.ts", "src/lib/actions/aboutyou.actions.ts"]) {
+    const src = viu(f);
+    const iAtas = src.indexOf("atasezaPreturileRon(");
+    const iVal = src.indexOf("validateListing(");
+    assert.notEqual(iVal, -1, f);
+    assert.notEqual(iAtas, -1, `${f}: nu mai cheama atasezaPreturileRon`);
+    assert.ok(iAtas < iVal, `${f}: verificarea se face inaintea atasarii`);
+  }
 });

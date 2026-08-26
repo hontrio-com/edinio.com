@@ -153,13 +153,48 @@ function parseAddress(order: AboutYouOrder): ParsedAddress {
  * De aceea sunt trei raspunsuri, nu doua.
  */
 export type HotarareaActualizarii = "scrie" | "doar-jurnal" | "nimic";
+
+/**
+ * Acelasi continut, oricum ar fi asezate cheile.
+ *
+ * ═══ ⚠ `JSON.stringify` NU POATE COMPARA CEVA CITIT DIN `jsonb` (27.08.2026) ═══
+ *
+ * `orders.items` e `jsonb`, iar Postgres REASEAZA cheile obiectelor: intai dupa lungime, apoi
+ * alfabetic. Probat pe baza: linia scrisa de noi ca
+ * `{product_id, name, sku, price, quantity}` se intoarce `{sku, name, price, quantity,
+ * product_id}`. Doua siruri diferite pentru acelasi lucru — deci comparatia iesea „s-a schimbat"
+ * la FIECARE trecere, si tocmai scrierea pe care paza trebuia s-o opreasca se facea de fiecare
+ * data.
+ *
+ * ⚠ SI PROBA MEA A TRECUT PE LANGA. Amandoua partile veneau din acelasi obiect din JavaScript,
+ * deci nu treceau niciodata prin `jsonb`. O proba verde care apara chiar defectul.
+ *
+ * ⚠ Si banii se rotunjesc la doi zecimali: `19.90` scris se intoarce `19.9`, iar o zecimala de
+ * plutire n-are voie sa treaca drept stire.
+ */
+function canonic(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonic);
+  if (typeof v === "number") return Math.round(v * 100) / 100;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return Object.keys(o).sort().reduce<Record<string, unknown>>((acc, k) => {
+      /* `undefined` nu ajunge niciodata in `jsonb`: lipsa si `undefined` sunt acelasi lucru. */
+      if (o[k] !== undefined) acc[k] = canonic(o[k]);
+      return acc;
+    }, {});
+  }
+  return v;
+}
+export function acelasiContinut(a: unknown, b: unknown): boolean {
+  return JSON.stringify(canonic(a ?? null)) === JSON.stringify(canonic(b ?? null));
+}
 export function hotarareaActualizarii(a: {
   facturata: boolean;
   itemsVechi: unknown; totalVechi: number | null;
   itemsNoi: unknown; totalNou: number;
 }): HotarareaActualizarii {
-  /* Comparat pe continut: amandoua liniile vin din acelasi mapaj, deci diferenta e reala. */
-  const schimbat = JSON.stringify(a.itemsVechi ?? null) !== JSON.stringify(a.itemsNoi)
+  /* ⚠ Pe continut CANONIC, nu pe siruri: vezi `acelasiContinut`. */
+  const schimbat = !acelasiContinut(a.itemsVechi, a.itemsNoi)
     /* Banii se compara cu o toleranta: sunt socotiti din intregi, dar tin virgula. */
     || Math.abs(num(a.totalVechi) - a.totalNou) > 0.001;
   if (!schimbat) return "nimic";

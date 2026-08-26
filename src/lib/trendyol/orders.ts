@@ -249,6 +249,38 @@ async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: Tren
     "trendyol.pachetulCunoscut", await admin
       .from("trendyol_orders").select("id, order_id, last_modified_date")
       .eq("business_id", ctx.businessId).eq("shipment_package_id", packageId).maybeSingle() as never);
+
+  /*
+   * ═══ ⚠ UN PACHET SPART NU E O COMANDA NOUA (26.08.2026) ═══
+   *
+   * Cand comerciantul anuleaza doar o parte dintr-un pachet, Trendyol il SPARGE si da restului
+   * un `shipmentPackageId` NOU. La noi, randul lateral se cauta dupa acel id — deci pachetul nou
+   * nu se gasea, se facea o comanda NOUA, si `consuma_stoc_comanda_marketplace` scadea A DOUA
+   * OARA aceleasi bucati.
+   *
+   * ⚠ IAR PACHETUL VECHI, ajuns pe `UnSupplied`, elibera la randul lui TOT `stoc_rezervat`-ul
+   * comenzii vechi — inclusiv al marfii care chiar pleaca la client pe pachetul nou. Stocul
+   * urca inapoi cu bucatile alea, se impinge pe toate canalele, si se vinde ce nu mai exista.
+   *
+   * ⚠ EI NE SPUN LEGATURA, si n-o citeam: `originPackageIds` da id-ul pachetului INITIAL, si se
+   * completeaza chiar dupa anulare sau spargere. Cu el, pachetul nou se leaga de ACEEASI comanda
+   * si nu mai consuma nimic a doua oara.
+   */
+  let dinPachetulVechi: { id: string; order_id: string | null } | null = null;
+  if (!existing) {
+    const brute = pkg.originPackageIds;
+    const parinti = (Array.isArray(brute) ? brute : brute != null ? [brute] : [])
+      .map((x) => String(x).trim())
+      .filter((x) => x && x !== packageId);
+    for (const parinte of parinti) {
+      const gasit = randCitit<{ id: string; order_id: string | null }>(
+        "trendyol.pachetulParinte", await admin
+          .from("trendyol_orders").select("id, order_id")
+          .eq("business_id", ctx.businessId).eq("shipment_package_id", parinte)
+          .not("order_id", "is", null).maybeSingle() as never);
+      if (gasit?.order_id) { dinPachetulVechi = gasit; break; }
+    }
+  }
   const modificatLa = Number.isFinite(Number(pkg.lastModifiedDate)) ? Number(pkg.lastModifiedDate) : null;
   if (existing) {
     const ex = existing as { id: string; order_id: string | null; last_modified_date: number | null };
@@ -413,6 +445,45 @@ async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: Tren
   const subtotal = round2(total - vatAmount);
   const cust = parseCustomer(pkg);
 
+  /*
+   * ═══ ⚠ PACHETUL SPART SE LEAGA DE COMANDA VECHE, NU FACE UNA NOUA ═══
+   *
+   * Vezi nota lunga de la `dinPachetulVechi`. Se scrie randul lateral pentru id-ul NOU, dar
+   * aratand spre ACEEASI comanda — deci nu se creeaza nimic si nu se consuma nimic a doua oara.
+   *
+   * ⚠ SI NU SE CONSUMA STOC. Bucatile ramase erau deja rezervate de comanda veche; consumate
+   * inca o data, stocul ar fi scazut de doua ori pentru aceeasi marfa.
+   */
+  if (dinPachetulVechi?.order_id) {
+    const acumIso = new Date().toISOString();
+    const { error: eLegat } = await admin.from("trendyol_orders").upsert({
+      business_id: ctx.businessId,
+      order_id: dinPachetulVechi.order_id,
+      shipment_package_id: packageId,
+      order_number: pkg.orderNumber ?? null,
+      status: pkg.shipmentPackageStatus ?? pkg.status ?? "Created",
+      currency: pkg.currencyCode ?? null,
+      cargo_tracking_number: tracking,
+      lines: (pkg.lines ?? []) as never,
+      last_modified_date: modificatLa,
+      last_synced_at: acumIso,
+      updated_at: acumIso,
+    } as never, { onConflict: "business_id,shipment_package_id" });
+    if (eLegat) throw new EroareCitireBaza("trendyol.legareaPachetuluiSpart", eLegat.message);
+
+    await logError({
+      action: "trendyol/comenzi",
+      message: "pachet spart de ei dupa o anulare partiala: s-a legat de comanda existenta, fara consum nou de stoc",
+      details: {
+        pachetNou: packageId,
+        pachetVechi: (Array.isArray(pkg.originPackageIds) ? pkg.originPackageIds : [pkg.originPackageIds]).map(String),
+        orderId: dinPachetulVechi.order_id,
+      },
+      businessId: ctx.businessId, severity: "warning",
+    });
+    return "updated";
+  }
+
   const { data: created, error } = await admin.from("orders").insert({
     business_id: ctx.businessId,
     order_number: `TY-${packageId}`,
@@ -438,6 +509,22 @@ async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: Tren
     tracking_number: tracking,
     order_source: {
       marketplace: "trendyol", order_number: pkg.orderNumber, shipment_package_id: packageId,
+      /*
+       * ═══ ⚠ MONEDA SE SCRIE AICI, NU DOAR IN RANDUL LATERAL (26.08.2026) ═══
+       *
+       * `orders.total` e citit peste tot in casa ca LEI. Sub Cross-Country insa, `packageTotalPrice`
+       * vine in moneda vitrinei: EUR pe Grecia, BGN pe Bulgaria, SAR in Golf. Il scriam ca atare,
+       * fara niciun semn.
+       *
+       * `trendyol_orders.currency` retinea moneda — dar acolo n-o citeste nimeni la facturare, la
+       * afisare sau la raportare. About You o pune anume in `order_source`, chiar cu explicatia
+       * asta („`orders.total` e citit peste tot ca lei"); noi n-o puneam.
+       *
+       * ⚠ CE AR FI COSTAT: o comanda greceasca de 89,90 EUR facturata ca 89,90 LEI — un document
+       * fiscal gresit, care nu se retrage, se STORNEAZA. Iar urcat la Trendyol, nici de-acolo nu
+       * se mai poate scoate: 409 la a doua trimitere si niciun capat de corectie.
+       */
+      ...(pkg.currencyCode ? { currency: String(pkg.currencyCode).toUpperCase() } : {}),
       /* ⚠ Se pastreaza, NU se aduna la total. Vezi nota de la `sgrPachet`: `packageTotalPrice`
          e ce a platit clientul, iar garantia adunata a doua oara ar umfla comanda si ar strica
          si rambursul, si contabilitatea. */

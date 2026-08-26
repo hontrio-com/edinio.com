@@ -209,18 +209,48 @@ async function urcaCitit(
 /**
  * Comenzile care au factura si n-au trimis-o inca.
  *
- * ⚠ NUMAI CELE CU PACHET SI CU O FACTURA EMISA. O comanda fara factura nu e o problema — poate
- * inca nu s-a emis; una fara pachet n-are unde sa fie trimisa.
+ * ═══ ⚠ O FEREASTRA FIXA SE INCHIDE SI NU SE MAI DESCHIDE (26.08.2026) ═══
+ *
+ * Forma dinainte lua `order(updated_at desc).limit(10)`, fara rotatie si fara sa se uite daca
+ * exista vreo factura. Doua lucruri rele impreuna:
+ *
+ *   - o comanda FARA factura intoarce `fara_factura` si NU se marcheaza nicaieri, deci ramane
+ *     in bazin pe veci si ocupa un loc;
+ *   - `trendyol_orders.updated_at` se misca doar cand pachetul e recitit de la ei — iar factura
+ *     se emite in `orders`, deci nu-l atinge.
+ *
+ * ⚠ CE INSEMNA: un magazin cu peste zece pachete active. Comanda de luni primeste factura marti;
+ * `updated_at`-ul ei ramane de luni, iar cele zece pachete de marti (toate fara factura, toate
+ * intorcand `fara_factura`) umplu fereastra. Factura de luni nu mai ajunge NICIODATA la Trendyol,
+ * si nu se scrie nicio eroare nicaieri — pasul raporteaza ca a mers.
+ *
+ * E chiar tiparul reparat la eMAG pe 25.08, reintrodus aici. De-aia se face acum ca acolo:
+ * numaratoare, fereastra rotativa dupa minut, si o ordonare stabila.
+ *
+ * ⚠ SI FILTRUL E IN POSTGRES, nu la noi: RPC-ul intoarce numai comenzile care CHIAR au factura
+ * emisa. Altfel rotatia ar fi tot risipa — noua din zece locuri pe comenzi care n-au ce trimite.
  */
 export async function comenziDeFacturat(
   admin: Db, businessId: string, limita = 10,
 ): Promise<string[]> {
-  const randuri = randCitit<{ order_id: string }[]>("trendyol.comenziDeFacturat", await admin
-    .from("trendyol_orders").select("order_id")
-    .eq("business_id", businessId)
-    .is("invoice_uploaded_at", null)
-    .not("order_id", "is", null)
-    .order("updated_at", { ascending: false })
-    .limit(limita) as never) as unknown as { order_id: string }[] | null;
-  return (randuri ?? []).map((r) => r.order_id).filter(Boolean);
+  const { count: bazin, error: eBazin } = await admin
+    .from("trendyol_orders").select("id", { count: "exact", head: true })
+    .eq("business_id", businessId).is("invoice_uploaded_at", null).not("order_id", "is", null);
+  /* ⚠ `bazin ?? 0` la o citire picata ar fi insemnat „nicio comanda de facturat", si pasul s-ar
+     fi intors cu zero fara sa scrie nimic. Aceeasi confuzie ca peste tot. */
+  if (eBazin) throw eBazin;
+
+  const total = bazin ?? 0;
+  if (total === 0) return [];
+
+  /* ⚠ Aceeasi tura ca la rotatia magazinelor: minutul curent. Cand un magazin nu e ales la o
+     trecere, fereastra lui a avansat oricum, deci la urmatoarea ii vine alta felie. */
+  const tura = Math.floor(Date.now() / 60_000);
+  const deLa = total > limita ? (tura * limita) % total : 0;
+
+  const { data, error } = await admin.rpc("trendyol_comenzi_de_facturat", {
+    p_business_id: businessId, p_limita: limita, p_de_la: deLa,
+  });
+  if (error) throw error;
+  return ((data ?? []) as { order_id: string }[]).map((r) => r.order_id).filter(Boolean);
 }

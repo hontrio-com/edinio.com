@@ -3855,6 +3855,33 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.trendyol_comenzi_de_facturat(p_business_id uuid, p_limita integer DEFAULT 10, p_de_la integer DEFAULT 0)
+ RETURNS TABLE(order_id uuid, shipment_package_id text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select t.order_id, t.shipment_package_id
+    from public.trendyol_orders t
+    join public.orders o on o.id = t.order_id and o.business_id = t.business_id
+   where t.business_id = p_business_id
+     and t.order_id is not null
+     and t.invoice_uploaded_at is null
+     -- Numai cele care CHIAR au factura emisa. Fara filtrul asta, comenzile fara factura
+     -- ocupau fereastra la nesfarsit si o factura emisa mai tarziu nu mai ajungea niciodata.
+     and (
+       (o.smartbill_invoice_number is not null and o.smartbill_invoice_url is not null)
+       or (o.oblio_invoice_number is not null and o.oblio_invoice_link is not null)
+       or (o.fgo_invoice_number is not null and o.fgo_invoice_link is not null)
+     )
+     -- Nu se factureaza in lei o comanda care n-a fost in lei.
+     and coalesce(o.order_source->>'currency', 'RON') = 'RON'
+   order by t.order_id
+   offset greatest(0, p_de_la)
+   limit greatest(1, least(coalesce(p_limita, 10), 100));
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.trendyol_magazine_cu_loturi_deschise()
  RETURNS TABLE(business_id uuid, cate bigint)
  LANGUAGE sql
@@ -8473,6 +8500,7 @@ grant execute on function public.touch_customers() to service_role;
 grant execute on function public.touch_stock_feed_sources() to anon;
 grant execute on function public.touch_stock_feed_sources() to authenticated;
 grant execute on function public.touch_stock_feed_sources() to service_role;
+grant execute on function public.trendyol_comenzi_de_facturat(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.trendyol_magazine_cu_loturi_deschise() to service_role;
 grant execute on function public.trendyol_magazine_de_reconciliat() to service_role;
 grant execute on function public.trendyol_repune_stoc_retur(p_business_id uuid, p_claim_item_id text) to service_role;
@@ -8583,6 +8611,7 @@ revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minu
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
+revoke execute on function public.trendyol_comenzi_de_facturat(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.trendyol_magazine_cu_loturi_deschise() from public;
 revoke execute on function public.trendyol_magazine_de_reconciliat() from public;
 revoke execute on function public.trendyol_repune_stoc_retur(p_business_id uuid, p_claim_item_id text) from public;

@@ -558,6 +558,17 @@ export interface TrendyolShipmentPackage {
   packageTotalPrice?: number;
   totalPrice?: number;
   /**
+   * Din ce pachet s-a nascut acesta, dupa o anulare partiala sau o spargere.
+   *
+   * ⚠ CITAT DIN DOCUMENTATIA LOR: „Bu alan iptal veya bölme işlemlerinden sonra doldurulur ve bu
+   * işlemlerden sonra ilk paketin packageid'sini verir." — se completeaza dupa anulare sau
+   * spargere si da id-ul pachetului INITIAL.
+   *
+   * ⚠ FARA EL, UN PACHET SPART DEVENEA O COMANDA NOUA la noi, si consuma stocul A DOUA OARA
+   * pentru aceleasi bucati.
+   */
+  originPackageIds?: (number | string)[] | number | string | null;
+  /**
    * Garantia SGR incasata pe tot pachetul.
    *
    * ⚠ ADAUGAT DE EI IN 2026, si noi il stiam doar pe partea de PRODUS (`sgrPrice`, cat

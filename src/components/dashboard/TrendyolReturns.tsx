@@ -52,9 +52,16 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
    * intelege, in loc sa nu poata gresi.
    */
   const [alese, setAlese] = useState<Record<string, Set<string>>>({});
-  const [motivAles, setMotivAles] = useState<string>("");
-  const [explicatie, setExplicatie] = useState("");
-  const [dovezi, setDovezi] = useState<File[]>([]);
+  /* ⚠ Si motivul, si explicatia: acelasi formular se randeaza pe fiecare card, iar o stare
+     comuna trimitea la o cerere ce se scrisese pentru alta. */
+  const [motivAles, setMotivAles] = useState<Record<string, string>>({});
+  const [explicatie, setExplicatie] = useState<Record<string, string>>({});
+  /*
+   * ⚠ PE CERERE, NU LA GRAMADA (26.08.2026). Campul de fisiere se randeaza in FIECARE card de
+   * retur, dar starea era una singura pentru tot ecranul: fisierele alese la un retur plecau la
+   * respingerea altuia. Aceeasi greseala ca la bifate, facuta a doua oara in acelasi fisier.
+   */
+  const [dovezi, setDovezi] = useState<Record<string, File[]>>({});
   const [seIncarca, incepe] = useTransition();
 
   function incarca(doar = doarDeHotarat) {
@@ -90,16 +97,16 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
     const fd = new FormData();
     fd.set("claimId", claimId);
     fd.set("claimItemIds", ids.join(","));
-    fd.set("motivId", motivAles);
-    fd.set("explicatie", explicatie);
-    for (const f of dovezi) fd.append("dovezi", f);
+    fd.set("motivId", motivAles[claimId] ?? "");
+    fd.set("explicatie", explicatie[claimId] ?? "");
+    for (const f of dovezi[claimId] ?? []) fd.append("dovezi", f);
     incepe(async () => {
       const r = await respingeReturTrendyolCuDovezi(businessId, fd);
       if ("error" in r) { toast.error(r.error); return; }
       toast.success("Returul a fost respins.");
       setAlese((p) => ({ ...p, [claimId]: new Set() }));
-      setExplicatie("");
-      setDovezi([]);
+      setExplicatie((p) => ({ ...p, [claimId]: "" }));
+      setDovezi((p) => ({ ...p, [claimId]: [] }));
       incarca();
     });
   }
@@ -110,13 +117,13 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
     incepe(async () => {
       const r = await hotarasteReturTrendyol(businessId, {
         claimId, claimItemIds: ids, accepta,
-        motivId: accepta ? undefined : Number(motivAles) || undefined,
-        explicatie: accepta ? undefined : explicatie,
+        motivId: accepta ? undefined : Number(motivAles[claimId]) || undefined,
+        explicatie: accepta ? undefined : explicatie[claimId],
       });
       if ("error" in r) { toast.error(r.error); return; }
       toast.success(accepta ? "Returul a fost acceptat." : "Returul a fost respins.");
       setAlese((p) => ({ ...p, [claimId]: new Set() }));
-      setExplicatie("");
+      setExplicatie((p) => ({ ...p, [claimId]: "" }));
       incarca();
     });
   }
@@ -283,16 +290,16 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
               {motive.length > 0 && (
                 <>
                   <select
-                    value={motivAles}
-                    onChange={(e) => setMotivAles(e.target.value)}
+                    value={motivAles[r.claimId] ?? ""}
+                    onChange={(e) => setMotivAles((p) => ({ ...p, [r.claimId]: e.target.value }))}
                     className="rounded border border-border bg-background px-2 py-1 text-xs"
                   >
                     <option value="">Alege motivul</option>
                     {motive.map((m) => <option key={m.id} value={m.id}>{m.nume}</option>)}
                   </select>
                   <input
-                    value={explicatie}
-                    onChange={(e) => setExplicatie(e.target.value)}
+                    value={explicatie[r.claimId] ?? ""}
+                    onChange={(e) => setExplicatie((p) => ({ ...p, [r.claimId]: e.target.value }))}
                     placeholder="Scrie de ce respingi"
                     className="min-w-40 flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
                   />
@@ -304,20 +311,20 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                   <label className="flex w-full flex-col gap-0.5">
                     <input
                       type="file" multiple accept="application/pdf,image/jpeg,image/png"
-                      onChange={(e) => setDovezi([...(e.target.files ?? [])])}
+                      onChange={(e) => setDovezi((p) => ({ ...p, [r.claimId]: [...(e.target.files ?? [])] }))}
                       className="text-[11px] file:mr-2 file:rounded file:border file:border-border file:bg-muted file:px-2 file:py-0.5 file:text-[11px]"
                     />
                     <span className="text-[11px] text-muted-foreground">
                       Poze cu marfa primită sau documente, dacă ai. Cel mult 5 fișiere, PDF, JPEG
                       sau PNG, până în 10 MB fiecare.
-                      {dovezi.length > 0 && ` Ai ales ${dovezi.length}.`}
+                      {(dovezi[r.claimId]?.length ?? 0) > 0 && ` Ai ales ${dovezi[r.claimId].length}.`}
                     </span>
                   </label>
                   <button
                     type="button"
                     onClick={() => respinge(r.claimId)}
                     disabled={
-                      seIncarca || !motivAles || !explicatie.trim()
+                      seIncarca || !motivAles[r.claimId] || !(explicatie[r.claimId] ?? "").trim()
                       || (alese[r.claimId]?.size ?? 0) === 0
                     }
                     className="rounded-lg border border-red-300 px-3 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"

@@ -1,6 +1,7 @@
 "use server";
 
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
+import { logError } from "@/lib/error-logger";
 
 /**
  * Central auto-invoicing dispatcher. On an order status/payment change it issues
@@ -94,6 +95,33 @@ export async function maybeAutoInvoice(
      * fiindca a lui e raspunderea fiscala.
      */
     const eTrendyol = src?.marketplace === "trendyol" || o.payment_method === "trendyol";
+
+    /*
+     * ═══ ⚠ NU SE FACTUREAZA IN LEI O COMANDA CARE N-A FOST IN LEI (26.08.2026) ═══
+     *
+     * `orders.total` e citit peste tot ca lei, iar furnizorii de facturare primesc `currency: "RON"`
+     * scris fix. Sub Cross-Country insa, o comanda greceasca vine in EUR — deci 89,90 EUR ar fi
+     * iesit ca o factura de 89,90 LEI.
+     *
+     * ⚠ SI GRESEALA E IREVERSIBILA DE DOUA ORI: un document fiscal gresit nu se retrage, se
+     * STORNEAZA; iar urcat la Trendyol, nici de-acolo nu se mai scoate — 409 la a doua trimitere
+     * si niciun capat de corectie.
+     *
+     * ⚠ SE OPRESTE, NU SE GHICESTE. A converti noi in lei ar cere un curs, o data de referinta si
+     * un tratament de TVA intracomunitar — trei hotarari fiscale pe care nu le luam in locul
+     * comerciantului. Se scrie in jurnal si se lasa pe seama lui.
+     */
+    const monedaComenzii = (src as { currency?: string } | null)?.currency;
+    if (monedaComenzii && monedaComenzii.toUpperCase() !== "RON") {
+      await logError({
+        action: "invoice-auto",
+        message: `comanda e in ${monedaComenzii.toUpperCase()}, iar facturarea automata emite in lei: nu s-a emis nimic`,
+        details: { orderId, moneda: monedaComenzii, marketplace: src?.marketplace ?? null },
+        businessId, severity: "warning",
+      });
+      return;
+    }
+
     if (eTrendyol) {
       const { data: st, error: eSt } = await supabase
         .from("store_settings").select("trendyol_config").eq("business_id", businessId).maybeSingle();

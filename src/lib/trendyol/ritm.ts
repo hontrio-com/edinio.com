@@ -31,8 +31,11 @@ import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
  * ori peste orice cifra publicata pentru grupul asta. Nu s-a vazut fiindca nu scriem niciodata
  * un minut la rand; s-ar fi vazut la primul import mare.
  *
- * ⚠ Deci fiecare grup are AMANDOUA: un plafon pe minut (cum numara ei) si unul pe secunda (ca
- * sa nu plece toata fereastra deodata). Se cer amandoua jetoanele, in ordinea asta.
+ * ⚠ Deci fiecare grup are AMANDOUA: un plafon pe fereastra lui (de obicei un minut, cum numara
+ * ei) si o rafala pe secunda (ca sa nu plece toata fereastra deodata). Se cer amandoua
+ * jetoanele, in ordinea asta.
+ *
+ * ⚠ SI NU TOATE FERESTRELE SUNT UN MINUT: adresele au una de o ORA, fiindca atat dau ei.
  *
  * ⚠ CIFRELE SUNT CELE MAI STRAMTE DINTRE CELE PUBLICATE, si dinadins: sursele publice nu se
  * potrivesc intre ele, iar limita adevarata e a vanzatorului si difera de la unul la altul.
@@ -56,7 +59,7 @@ import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
  */
 export type GrupTrendyol =
   | "product-read" | "product-write" | "inventory"
-  | "orders" | "claims-read" | "claims-write" | "altele";
+  | "orders" | "claims-read" | "claims-write" | "adrese" | "altele";
 
 export const LIMITE_TRENDYOL: Record<GrupTrendyol, { limita: number; fereastraMs: number; rafala: number }> = {
   "product-read": { limita: 60, fereastraMs: 60_000, rafala: 5 },
@@ -65,11 +68,26 @@ export const LIMITE_TRENDYOL: Record<GrupTrendyol, { limita: number; fereastraMs
   /* ⚠ Cel mai stramt masurat public: „get shipment packages" porneste pe la 30/minut la
      vanzatorii mici. Se tine sub el cu bunastiinta, si merge asa de o luna. */
   orders: { limita: 20, fereastraMs: 60_000, rafala: 3 },
-  /* Citirea retururilor: trei pagini la fiecare trecere, si nimic grabit. */
+  /* Citirea retururilor: ei dau 1000/minut, noi cerem trei pagini la fiecare trecere. */
   "claims-read": { limita: 20, fereastraMs: 60_000, rafala: 2 },
-  /* ⚠ Aprobarea si respingerea sunt apasari de om, cateva pe zi — si sunt cele mai stramte
-     dintre toate la ei. Nu au ce cauta in aceeasi galeata cu citirile. */
-  "claims-write": { limita: 10, fereastraMs: 60_000, rafala: 1 },
+  /*
+   * ⚠ CINCI, NU ZECE. Cifra publicata de ei pentru „İade Onaylama" si „Ret Talebi" e chiar
+   * 5 cereri/minut — cea mai stramta din tot setul lor, alaturi de adrese.
+   *
+   * ⚠ ERA SINGURUL GRUP IN CARE TRECEAM PESTE EI. Toate celelalte erau prudente; asta era
+   * dublu. Iar aprobarea si respingerea sunt apasari de om, cateva pe zi — patru pe minut nu
+   * incurca pe nimeni si lasa o marja.
+   */
+  "claims-write": { limita: 4, fereastraMs: 60_000, rafala: 1 },
+  /*
+   * ⚠ O CERERE PE ORA. Nu e prudenta noastra: `getSuppliersAddresses` are scris in pagina lor
+   * de limite „1 req/hour", si e cel mai stramt capat pe care il ating.
+   *
+   * ⚠ SI DE-AIA ARE GALEATA LUI. Sub `altele` (30/minut) o singura bucla care reciteste
+   * adresele la fiecare produs sau la fiecare comanda ar fi luat 429 aproape sigur — iar
+   * memoria locala de pe Vercel nu e o paza, fiindca fiecare instanta are alta.
+   */
+  adrese: { limita: 1, fereastraMs: 3600_000, rafala: 1 },
   altele: { limita: 30, fereastraMs: 60_000, rafala: 3 },
 };
 
@@ -102,6 +120,8 @@ export function grupulCaii(cale: string, metoda: string): GrupTrendyol {
   if (cale.includes("/order/") || cale.includes("/orders") || cale.includes("shipment-packages")) {
     return "orders";
   }
+  /* ⚠ ADRESELE INAINTEA REGULII GENERALE: au 1 cerere pe ora, cel mai stramt capat al lor. */
+  if (cale.includes("/addresses")) return "adrese";
   if (cale.includes("price-and-inventory")) return "inventory";
   if (cale.includes("/product")) {
     return metoda === "GET" ? "product-read" : "product-write";

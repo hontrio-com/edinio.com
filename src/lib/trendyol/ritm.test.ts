@@ -52,7 +52,13 @@ test("⚠ grupul se citeste din CALE, si `price-and-inventory` are grupul lui", 
   assert.equal(grupulCaii("/integration/product/sellers/1/products?approved=true", "GET"), "product-read");
   assert.equal(grupulCaii("/integration/order/sellers/1/orders", "GET"), "orders");
   assert.equal(grupulCaii("/integration/oms/core/sellers/1/shipment-packages/2", "PUT"), "orders");
-  assert.equal(grupulCaii("/integration/sellers/1/addresses", "GET"), "altele");
+  /* ⚠ ADRESELE AU PLECAT DIN `altele` (26.08.2026): au 1 cerere pe ORA la ei, cel mai stramt
+     capat pe care il atingem. Vezi proba de mai jos. */
+  assert.equal(grupulCaii("/integration/sellers/1/addresses", "GET"), "adrese");
+  /* ⚠ Marcile si categoriile stau sub `/product/`, deci cad in `product-read` — si asa si
+     trebuie: ei le numara tot in grupul de produs (50/minut la marci si categorii, mult peste
+     cele 60/minut pe care ni le dam noi). */
+  assert.equal(grupulCaii("/integration/product/sellers/1/brands", "GET"), "product-read");
 });
 
 test("⚠ TOATE grupurile se numara pe MINUT, cum numara si ei", () => {
@@ -68,6 +74,9 @@ test("⚠ TOATE grupurile se numara pe MINUT, cum numara si ei", () => {
    * plece toata fereastra deodata). Amandoua jetoanele se cer, in ordinea asta.
    */
   for (const g of Object.keys(LIMITE_TRENDYOL) as (keyof typeof LIMITE_TRENDYOL)[]) {
+    /* ⚠ Adresele fac exceptie, si nu din capriciu: ei dau chiar „1 req/hour" pe
+       `getSuppliersAddresses`. Vezi proba de mai jos. */
+    if (g === "adrese") continue;
     assert.equal(LIMITE_TRENDYOL[g].fereastraMs, 60_000, `${g} se numara pe minut`);
     assert.ok(LIMITE_TRENDYOL[g].rafala >= 1, `${g} are si o rafala`);
     /* ⚠ Rafala nu are voie sa fie mai larga decat minutul: ar fi facut plafonul de sus o
@@ -159,4 +168,35 @@ test("⚠ pauza nu se scurteaza, si are plafon", () => {
   /* ⚠ Si pauza NU consuma jeton: cat timp ei ne-au spus sa tacem, o cerere in plus se
      numara la ei ca cerere respinsa. */
   assert.match(mig, /if v_pauza is not null and v_pauza > now\(\) then/);
+});
+
+test("⚠ cifrele publicate de EI, acolo unde le-am gasit scrise", () => {
+  /*
+   * ═══ ⚠ ERA UN SINGUR GRUP IN CARE TRECEAM PESTE EI (26.08.2026) ═══
+   *
+   * Pagina lor de limite de serviciu („Servis Limitleri" / „Service Limitations") da:
+   *
+   *     İade Onaylama  / approveClaimLineItems   5 cereri/minut
+   *     Ret Talebi     / createClaimIssue        5 cereri/minut
+   *     İade ve Sevkiyat Adres Bilgileri         1 cerere pe ORA
+   *     getClaims                             1000 cereri/minut
+   *
+   * Noi aveam `claims-write: 10` — DUBLU fata de cei 5 publicati, si singurul grup peste
+   * limita lor. Toate celelalte erau prudente.
+   *
+   * ⚠ Patru, nu cinci: aprobarea si respingerea sunt apasari de om, cateva pe zi. O marja nu
+   * incurca pe nimeni, iar un 429 la respingerea unui retur inseamna un arbitraj pierdut.
+   */
+  assert.ok(LIMITE_TRENDYOL["claims-write"].limita <= 5, "sub cei 5 publicati de ei");
+
+  /*
+   * ⚠ ADRESELE AU O CERERE PE ORA, si de-aia au galeata lor. Sub `altele` (30/minut), o bucla
+   * care le reciteste la fiecare produs ar fi luat 429 aproape sigur — iar memoria locala de pe
+   * Vercel nu e o paza, fiindca fiecare instanta are alta.
+   */
+  assert.equal(LIMITE_TRENDYOL.adrese.limita, 1);
+  assert.equal(LIMITE_TRENDYOL.adrese.fereastraMs, 3600_000);
+  assert.equal(grupulCaii("/integration/sellers/1/addresses", "GET"), "adrese");
+  /* ⚠ Inaintea regulii generale: altfel `altele` le-ar fi inghitit, cum facea. */
+  assert.notEqual(grupulCaii("/integration/sellers/1/addresses", "GET"), "altele");
 });

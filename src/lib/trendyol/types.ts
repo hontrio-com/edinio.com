@@ -584,6 +584,14 @@ export interface TrendyolClaim {
   shipmentPackageId?: number;
   cargoTrackingNumber?: string | number;
   cargoProviderName?: string;
+  /**
+   * Coletul de retur-RESPINS: ce se intoarce la CLIENT dupa ce respingem returul.
+   *
+   * ⚠ LIPSESTE CU TOTUL cand nu s-a creat un asemenea colet, si asta NU e acelasi lucru cu
+   * „dontShipBack: false". Documentatia lor o spune pe fata: „If there is no return rejection
+   * package, this field will not appear." Absenta e a treia stare.
+   */
+  rejectedPackageInfo?: TrendyolColetRespins;
   status?: string;
   /**
    * ⚠ NU SUNT LINIILE. Fiecare element e un INVELIS: `orderLine` (ce produs) plus
@@ -592,6 +600,35 @@ export interface TrendyolClaim {
   items?: TrendyolClaimGrup[];
   /** Forma plata, pe care unele raspunsuri ale lor o mai dau. Se citeste tot. */
   claimItems?: TrendyolClaimItem[];
+}
+
+/**
+ * Coletul care se intoarce la CLIENT dupa o respingere.
+ *
+ * ═══ ⚠ „RESPINS" NU INSEAMNA „GATA" (26.08.2026) ═══
+ *
+ * Regula lor, verbatim: „If `dontShipBack: true`: You do not need to ship the package back to
+ * the customer. If `dontShipBack: false`: You must ship the package back to the customer only
+ * if your rejection request has been accepted by Trendyol."
+ *
+ * Deci comerciantul apasa „Respinge", primeste 200, si crede ca a terminat — cand de fapt mai
+ * are de expediat un colet inapoi. Nefacut, returul se intoarce impotriva lui.
+ *
+ * ⚠ RASPUNSUL LA RESPINGERE E DOAR `HTTP 200`, fara corp. Deci `dontShipBack` nu se poate citi
+ * de-acolo: se afla abia la urmatoarea citire a cererilor.
+ */
+export interface TrendyolColetRespins {
+  /** ⚠ Vine NUMERIC in exemplul lor, nu ca sir. */
+  cargoTrackingNumber?: string | number;
+  packageId?: number;
+  cargoProviderName?: string;
+  cargoTrackingLink?: string;
+  /** Id-urile bucatilor (claimItem.id) care merg inapoi. */
+  items?: string[];
+  shipmentAddress?: Record<string, unknown>;
+  dontShipBack?: boolean;
+  /** PIN-ul de ridicare, cand curierul e de tip BoxNow. */
+  sellerOtp?: string;
 }
 
 /** Invelisul din `items[]`: produsul o data, bucatile intoarse din el separat. */

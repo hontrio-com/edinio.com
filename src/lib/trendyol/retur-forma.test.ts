@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { idCererii, idPachetului, liniileReturului } from "./retur-forma";
+import { readFileSync } from "node:fs";
+import {
+  coletDeTrimisInapoi, idCererii, idPachetului, liniileReturului, nuSeTrimiteInapoi,
+} from "./retur-forma";
 import type { TrendyolClaim } from "./types";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -148,4 +151,62 @@ test("⚠ id-ul cererii se citeste si ca `id`, si ca `claimId`", () => {
   assert.equal(idCererii(CA_LA_EI), "1a2b3c");
   assert.equal(idCererii({ claimId: "doar-asta" } as TrendyolClaim), "doar-asta");
   assert.equal(idCererii({} as TrendyolClaim), null);
+});
+
+test("⚠ „respins” nu inseamna „gata”: coletul se poate intoarce la CLIENT", () => {
+  /*
+   * ═══ ⚠ TREI STARI, NU DOUA (26.08.2026) ═══
+   *
+   * Regula lor, verbatim: „If `dontShipBack: true`: You do not need to ship the package back to
+   * the customer. If `dontShipBack: false`: You must ship the package back to the customer only
+   * if your rejection request has been accepted by Trendyol."
+   *
+   * ⚠ SI INTREG `rejectedPackageInfo` LIPSESTE cand nu s-a creat un colet de retur-respins.
+   * Documentatia lor o spune pe fata: „If there is no return rejection package, this field will
+   * not appear." Deci ABSENTA nu e „false".
+   *
+   * Un `?.dontShipBack ?? false` ar fi turnat prima stare peste a treia — adica i-ar fi spus
+   * comerciantului „ai de trimis un colet" la fiecare retur respins, inclusiv unde nu exista
+   * niciunul. Iar o alarma care suna mereu inceteaza sa fie citita.
+   */
+  const faraColet = { id: "c-1" } as unknown as TrendyolClaim;
+  assert.equal(nuSeTrimiteInapoi(faraColet), null, "absenta NU e false");
+  assert.equal(coletDeTrimisInapoi(faraColet), null);
+
+  const nuTrimite = {
+    id: "c-2",
+    rejectedPackageInfo: { packageId: 92248304, dontShipBack: true },
+  } as unknown as TrendyolClaim;
+  assert.equal(nuSeTrimiteInapoi(nuTrimite), true);
+
+  /* Tiparul e copiat ca structura din exemplul lor: AWB-ul vine NUMERIC. */
+  const trimite = {
+    id: "c-3",
+    rejectedPackageInfo: {
+      cargoTrackingNumber: 2207284754,
+      packageId: 92248304,
+      cargoProviderName: "FANCOURIER",
+      cargoTrackingLink: "https://stage-tracking.trendyol.com/?trackingId=x",
+      items: ["26889877-203a-468a-abb8-6b8e05497c0b"],
+      dontShipBack: false,
+      sellerOtp: "234433",
+    },
+  } as unknown as TrendyolClaim;
+  assert.equal(nuSeTrimiteInapoi(trimite), false);
+  assert.equal(coletDeTrimisInapoi(trimite)?.cargoProviderName, "FANCOURIER");
+  assert.equal(coletDeTrimisInapoi(trimite)?.sellerOtp, "234433");
+
+  /* ⚠ Un colet exista, dar fara steag: tot necunoscut, nu „trimite". */
+  const faraSteag = { id: "c-4", rejectedPackageInfo: { packageId: 1 } } as unknown as TrendyolClaim;
+  assert.equal(nuSeTrimiteInapoi(faraSteag), null);
+});
+
+test("⚠ ecranul vorbeste numai cand chiar e ceva de facut", () => {
+  const ui = readFileSync("src/components/dashboard/TrendyolReturns.tsx", "utf8");
+  /* Numai `false` SI colet existent aduce avertismentul. */
+  assert.match(ui, /r\.nuTrimiteInapoi === false && r\.coletRespins/);
+  assert.match(ui, /Mai ai de trimis coletul înapoi clientului/);
+  /* Si `true` se spune, scurt, ca sa se vada ca s-a incheiat. */
+  assert.match(ui, /r\.nuTrimiteInapoi === true/);
+  assert.match(ui, /Nu trebuie să trimiți nimic înapoi clientului/);
 });

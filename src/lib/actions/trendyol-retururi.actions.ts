@@ -44,6 +44,17 @@ export interface RandRetur {
   orderNumber: string | null;
   status: string | null;
   claimDate: string | null;
+  /**
+   * Ce mai are de facut omul dupa ce a respins returul.
+   *
+   * ⚠ TREI STARI, NU DOUA: `null` = nu exista colet de retur-respins; `true` = nu trimiti nimic
+   * inapoi; `false` = TREBUIE sa trimiti coletul inapoi clientului daca ei accepta respingerea.
+   * Absenta nu e „false" — vezi `nuSeTrimiteInapoi`.
+   */
+  nuTrimiteInapoi: boolean | null;
+  coletRespins: {
+    awb: string | null; curier: string | null; link: string | null; pin: string | null;
+  } | null;
   linii: {
     claimItemId: string;
     barcode: string | null;
@@ -65,7 +76,7 @@ export async function retururiTrendyol(
 
   const admin = createAdminClient();
   let q = admin.from("trendyol_claims")
-    .select("claim_id, order_number, claim_status, claim_date, trendyol_claim_items(claim_item_id, barcode, product_name, quantity, reason, customer_note, decizie, repus_in_stoc_la)")
+    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, trendyol_claim_items(claim_item_id, barcode, product_name, quantity, reason, customer_note, decizie, repus_in_stoc_la)")
     .eq("business_id", businessId)
     .order("claim_date", { ascending: false })
     .limit(100);
@@ -79,6 +90,8 @@ export async function retururiTrendyol(
 
   type Rand = {
     claim_id: string; order_number: string | null; claim_status: string | null; claim_date: string | null;
+    dont_ship_back: boolean | null;
+    colet_respins: Record<string, unknown> | null;
     trendyol_claim_items: {
       claim_item_id: string; barcode: string | null; product_name: string | null; quantity: number;
       reason: string | null; customer_note: string | null; decizie: string | null; repus_in_stoc_la: string | null;
@@ -91,6 +104,16 @@ export async function retururiTrendyol(
       orderNumber: r.order_number,
       status: r.claim_status,
       claimDate: r.claim_date,
+      nuTrimiteInapoi: r.dont_ship_back,
+      coletRespins: r.colet_respins
+        ? {
+          /* ⚠ AWB-ul vine NUMERIC in exemplul lor, nu ca sir. */
+          awb: r.colet_respins.cargoTrackingNumber != null ? String(r.colet_respins.cargoTrackingNumber) : null,
+          curier: typeof r.colet_respins.cargoProviderName === "string" ? r.colet_respins.cargoProviderName : null,
+          link: typeof r.colet_respins.cargoTrackingLink === "string" ? r.colet_respins.cargoTrackingLink : null,
+          pin: typeof r.colet_respins.sellerOtp === "string" ? r.colet_respins.sellerOtp : null,
+        }
+        : null,
       linii: (r.trendyol_claim_items ?? []).map((l) => ({
         claimItemId: l.claim_item_id,
         barcode: l.barcode,

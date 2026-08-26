@@ -658,10 +658,22 @@ export function rejectClaimItems(
   return call<undefined>(auth, "POST", caleaRespingere(auth, claimId), corp);
 }
 
-/** Motivele pe care le accepta ei la respingere. Se citesc, nu se ghicesc. */
+/**
+ * Motivele pe care le accepta ei la respingere. Se citesc, nu se ghicesc.
+ *
+ * ⚠ SI ASTA ARE VARIANTA DE GOLF (26.08.2026). Nu era in niciun audit: capatul e
+ * `claim-issue-reasons-gulf`, si nu are `sellerId` in cale — ceea ce il face usor de ratat cand
+ * cauti dupa tiparul celorlalte.
+ *
+ * ⚠ CE AR FI INSEMNAT: un vanzator din Golf ar fi primit motivele EUROPENE, ar fi ales unul, si
+ * respingerea lui ar fi fost refuzata cu un id pe care regiunea lui nu-l cunoaste. Adica taman
+ * pasul de dinaintea celui pe care tocmai il reparasem.
+ */
 export function getClaimIssueReasons(auth: TrendyolAuth) {
-  return call<{ id: number; name: string; externalReasonId?: number }[]>(
-    auth, "GET", "/integration/order/claim-issue-reasons");
+  const cale = eVitrinaGolf(auth.storefront)
+    ? "/integration/order/claim-issue-reasons-gulf"
+    : "/integration/order/claim-issue-reasons";
+  return call<{ id: number; name: string; externalReasonId?: number }[]>(auth, "GET", cale);
 }
 
 export function createWebhook(

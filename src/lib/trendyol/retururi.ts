@@ -4,7 +4,9 @@ import { logError } from "@/lib/error-logger";
 import { approveClaimItems, getClaims, isTrendyolError, rejectClaimItems } from "./client";
 import type { TrendyolSyncContext } from "./sync";
 import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
-import { idCererii, idPachetului, liniileReturului } from "./retur-forma";
+import {
+  coletDeTrimisInapoi, idCererii, idPachetului, liniileReturului, nuSeTrimiteInapoi,
+} from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchTrendyolConfig } from "./config";
 
@@ -187,6 +189,16 @@ async function scrieCererea(
     /* ⚠ VITRINA DE PE CARE A VENIT. Hotararea trebuie sa plece tot pe ea: Golful are cai
        separate, iar o aprobare trimisa pe calea europeana nu gaseste cererea. */
     storefront: ctx.auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT,
+    /*
+     * ⚠ „RESPINS" NU INSEAMNA „GATA". Cand ei creeaza un colet de retur-respins si
+     * `dontShipBack` e `false`, comerciantul mai are de EXPEDIAT ceva inapoi la client. Fara
+     * randurile astea, panoul i-ar fi spus „respins" si atat.
+     *
+     * ⚠ `null` inseamna „nu exista colet", nu „false": intreg `rejectedPackageInfo` lipseste
+     * din raspuns cand nu s-a creat unul.
+     */
+    dont_ship_back: nuSeTrimiteInapoi(c),
+    colet_respins: (coletDeTrimisInapoi(c) ?? null) as never,
     /* ⚠ Raspunsul lor INTREG: forma cererilor nu e in schema pe care o avem. */
     raw: c as never,
     claim_date: laData(c.claimDate),

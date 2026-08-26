@@ -1,5 +1,5 @@
 import type {
-  TrendyolClaim, TrendyolClaimItem, TrendyolClaimOrderLine,
+  TrendyolClaim, TrendyolClaimItem, TrendyolClaimOrderLine, TrendyolColetRespins,
 } from "./types";
 
 /**
@@ -131,3 +131,30 @@ export function idPachetului(c: TrendyolClaim): number | null {
   return Number.isFinite(Number(brut)) ? Number(brut) : null;
 }
 
+
+
+/**
+ * Ce mai are de facut comerciantul dupa ce respinge returul.
+ *
+ * ═══ ⚠ TREI STARI, NU DOUA (26.08.2026) ═══
+ *
+ *   `null`   nu exista colet de retur-respins. Documentatia lor: „If there is no return
+ *            rejection package, this field will not appear." Absenta NU e „false".
+ *   `true`   nu trimiti nimic inapoi.
+ *   `false`  TREBUIE sa trimiti coletul inapoi clientului, daca ei accepta respingerea.
+ *
+ * ⚠ Un `?.dontShipBack ?? false` ar fi turnat prima stare peste a treia — adica i-ar fi spus
+ * comerciantului „ai de trimis un colet" pentru fiecare retur respins, inclusiv cele unde nu
+ * exista niciun colet. Iar cand alarma suna mereu, nu mai suna deloc.
+ */
+export function coletDeTrimisInapoi(c: TrendyolClaim): TrendyolColetRespins | null {
+  const p = c.rejectedPackageInfo;
+  return p && typeof p === "object" ? p : null;
+}
+
+/** `true`/`false`/`null` — vezi `coletDeTrimisInapoi` pentru ce inseamna fiecare. */
+export function nuSeTrimiteInapoi(c: TrendyolClaim): boolean | null {
+  const p = coletDeTrimisInapoi(c);
+  if (!p) return null;
+  return typeof p.dontShipBack === "boolean" ? p.dontShipBack : null;
+}

@@ -152,6 +152,45 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
               </span>
             </div>
 
+            {/*
+              ═══ ⚠ „RESPINS" NU INSEAMNA „GATA" (26.08.2026) ═══
+
+              Regula lor, verbatim: cu `dontShipBack: false`, comerciantul TREBUIE sa trimita
+              coletul inapoi clientului, daca ei accepta respingerea. El apasa „Respinge",
+              primeste 200, si crede ca a terminat — iar returul se intoarce impotriva lui.
+
+              ⚠ Se arata NUMAI cand exista chiar un colet de retur-respins. `null` inseamna ca
+              nu s-a creat niciunul, si nu are ce sa i se spuna: o alarma care suna si cand nu e
+              nimic de facut inceteaza sa fie citita.
+            */}
+            {r.nuTrimiteInapoi === false && r.coletRespins && (
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                <p className="font-medium">Mai ai de trimis coletul înapoi clientului.</p>
+                <p className="mt-0.5 leading-relaxed">
+                  Dacă Trendyol acceptă respingerea, produsul se întoarce la client pe cheltuiala
+                  ta. Coletul e deja pregătit de ei.
+                </p>
+                <p className="mt-1 font-mono">
+                  {r.coletRespins.curier ?? "Curier"}
+                  {r.coletRespins.awb ? ` · AWB ${r.coletRespins.awb}` : ""}
+                  {r.coletRespins.pin ? ` · PIN ${r.coletRespins.pin}` : ""}
+                </p>
+                {r.coletRespins.link && (
+                  <a
+                    href={r.coletRespins.link} target="_blank" rel="noopener noreferrer"
+                    className="mt-1 inline-block underline"
+                  >
+                    Urmărește coletul
+                  </a>
+                )}
+              </div>
+            )}
+            {r.nuTrimiteInapoi === true && (
+              <p className="mb-2 text-[11px] text-muted-foreground">
+                Respins. Nu trebuie să trimiți nimic înapoi clientului.
+              </p>
+            )}
+
             <ul className="space-y-1.5">
               {r.linii.map((l) => (
                 <li key={l.claimItemId} className="flex flex-wrap items-start gap-2 text-xs">

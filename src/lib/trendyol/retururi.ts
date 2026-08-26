@@ -6,7 +6,7 @@ import type { TrendyolSyncContext } from "./sync";
 import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
 import {
   coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului,
-  nuSeTrimiteInapoi, sePoateHotari, stareaCererii,
+  nuSeTrimiteInapoi, sePoateHotari, STARI_DE_HOTARAT, stareaCererii,
 } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { patchTrendyolConfig } from "./config";
@@ -648,9 +648,10 @@ export async function hotarasteRetur(
    * unei respingeri se urmareste ABIA pe urma, pe `claimItemStatus` — deci nici macar n-am fi
    * aflat pe loc ca n-a prins. Comerciantul ar fi crezut ca a respins; banii plecasera deja.
    *
-   * ⚠ SE OPRESC NUMAI CELE SIGUR GRESITE. Vezi `LINII_FARA_HOTARARE`: ghidul lor NU spune ca
-   * aprobarea se poate face doar din `WaitingInAction`, deci nici noi n-o spunem. `InAnalysis`,
-   * `Unresolved` si necunoscutul trec.
+   * ⚠ TRECE NUMAI `WaitingInAction`, si e regula LOR, scrisa. Vezi `sePoateHotari`: citat verbatim
+   * din paginile de aprobare si de respingere, „You can only create a rejection request for
+   * returned orders with «WaitingInAction» status." Se opreste si necunoscutul: pe un apel
+   * ireversibil, plafonat la 5 pe minut si cu rezultatul vizibil abia mai tarziu, nu se pariaza.
    */
   const stari = new Map(aleCererii.map((l) => [l.claim_item_id, l.claim_item_status]));
   const inchise = p.claimItemIds.filter((id) => !sePoateHotari(stari.get(id)));
@@ -1004,11 +1005,27 @@ export async function reconciliazaRetururile(
   return { verificate };
 }
 
-/** Cate cereri asteapta o hotarare. Pentru pastila din panou. */
+/**
+ * Cate cereri asteapta o hotarare. Pentru pastila din panou.
+ *
+ * ═══ ⚠ AVEA LISTA VECHE, SCRISA DE MANA (indreptat 26.08.2026) ═══
+ *
+ * Cerea `["Created", "WaitingInAction", "InAnalysis"]`, adica de doua ori gresit dupa ce restul
+ * casei s-a indreptat: `Created` inseamna ca marfa e inca la client, iar pe `InAnalysis` se uita
+ * EI. O pastila cu „3 retururi de rezolvat" cand unul singur chiar cere o apasare il pune pe om
+ * sa caute doua butoane care nu exista.
+ *
+ * ⚠ NU E CHEMATA DE NICAIERI ACUM, si tocmai de-aia trebuia reparata: un cod mort care ramane
+ * gresit se leaga intr-o zi la un ecran, iar cine il leaga presupune ca e bun. Numarul lui de
+ * atunci ar fi mintit din prima zi.
+ *
+ * ⚠ SI FOLOSESTE `STARI_DE_HOTARAT`, nu o lista scrisa a doua oara. Doua liste care spun acelasi
+ * lucru se despart la prima schimbare — s-au despartit deja o data, chiar aici.
+ */
 export async function cateRetururiAsteapta(admin: Db, businessId: string): Promise<number> {
   const randuri = randuriCitite<{ id: string }>("trendyol.retururiDeHotarat", await admin
     .from("trendyol_claims").select("id")
     .eq("business_id", businessId)
-    .in("claim_status", ["Created", "WaitingInAction", "InAnalysis"]) as never);
+    .in("claim_status", STARI_DE_HOTARAT) as never);
   return randuri.length;
 }

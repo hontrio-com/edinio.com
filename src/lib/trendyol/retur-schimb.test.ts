@@ -62,3 +62,29 @@ test("⚠ si mesajul spune pe fata ca nu stim", () => {
      nu. Cine il citeste peste o luna trebuie sa stie exact cat stiam. */
   assert.match(brut, /inca nu stim ce sa-i aratam comerciantului/);
 });
+
+test("⚠ faptele coletului de inlocuire ajung in ecran, fara instructiune", () => {
+  /*
+   * ⚠ Deosebirea fata de coletul RESPINS e toata aici. Acolo stim ce are omul de facut — ghidul
+   * lor o spune — deci caseta e chihlimbarie si incepe cu „Mai ai de trimis coletul înapoi".
+   * Aici NU stim: ghidul nu pomeneste schimburile deloc. Deci se arata ce vedem, cu ton neutru,
+   * si nu se cere nimic.
+   *
+   * ⚠ Un „trimite un produs de schimb" ghicit gresit l-ar pune sa dea marfa degeaba — chiar
+   * paguba de care ne aparam in cealalta directie la `coletDeTrimisInapoi`.
+   */
+  const act = readFileSync("src/lib/actions/trendyol-retururi.actions.ts", "utf8");
+  assert.match(act, /coletInlocuire: r\.colet_inlocuire/);
+  /* ⚠ AWB-ul vine NUMERIC in exemplul lor, nu ca sir. */
+  assert.match(act, /r\.colet_inlocuire\.cargoTrackingNumber != null \? String\(/);
+
+  const ui = readFileSync("src/components/dashboard/TrendyolReturns.tsx", "utf8");
+  assert.match(ui, /Trendyol a creat un colet de înlocuire pentru returul ăsta\./);
+  assert.match(ui, /r\.coletInlocuire\.awb/);
+
+  /* ⚠ Si NU i se cere nimic: nicio propozitie care sa-l trimita sa expedieze. */
+  const i = ui.indexOf("Trendyol a creat un colet de înlocuire");
+  const caseta = ui.slice(i - 400, i + 1200);
+  assert.doesNotMatch(caseta, /Mai ai de trimis|trebuie să trimiți|expediază/i,
+    "nu se inventeaza nicio sarcina pentru comerciant");
+});

@@ -229,6 +229,37 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                 Respins. Nu trebuie să trimiți nimic înapoi clientului.
               </p>
             )}
+            {/*
+              ⚠ FAPTELE, FĂRĂ INSTRUCȚIUNE. `replacementOutboundpackageinfo` apare în
+              răspunsul-exemplu al lui `getClaims` cu AWB, curier și link — dar ghidul lor nu
+              spune NICĂIERI ce are comerciantul de făcut la un retur de tip schimb. Deci i se
+              arată ce vedem, și nu i se cere nimic: un „trimite un produs de schimb" greșit l-ar
+              pune să dea marfă degeaba.
+
+              ⚠ Tonul e neutru anume, nu de alarmă. Caseta de deasupra e chihlimbarie fiindcă
+              acolo CHIAR are ceva de făcut; aici doar află.
+            */}
+            {r.coletInlocuire && (
+              <div className="mb-2 rounded-lg border border-border bg-muted/40 p-2.5 text-[11px]">
+                <p className="font-medium">Trendyol a creat un colet de înlocuire pentru returul ăsta.</p>
+                <p className="mt-0.5 leading-relaxed text-muted-foreground">
+                  E un retur de tip schimb. Îți arătăm coletul așa cum ni-l dau ei; dacă e ceva de
+                  făcut, o vezi în panoul Trendyol.
+                </p>
+                <p className="mt-1 font-mono">
+                  {r.coletInlocuire.curier ?? "Curier"}
+                  {r.coletInlocuire.awb ? ` · AWB ${r.coletInlocuire.awb}` : ""}
+                </p>
+                {r.coletInlocuire.link && (
+                  <a
+                    href={r.coletInlocuire.link} target="_blank" rel="noopener noreferrer"
+                    className="mt-1 inline-block underline"
+                  >
+                    Urmărește coletul
+                  </a>
+                )}
+              </div>
+            )}
 
             <ul className="space-y-1.5">
               {r.linii.map((l) => (

@@ -58,6 +58,13 @@ export interface RandRetur {
    * Absenta nu e „false" — vezi `nuSeTrimiteInapoi`.
    */
   nuTrimiteInapoi: boolean | null;
+  /**
+   * Coletul de INLOCUIRE, la un retur de tip schimb.
+   *
+   * ⚠ SE ARATA CA FAPT, NU CA SARCINA. Ghidul lor nu spune ce are comerciantul de facut aici —
+   * vezi nota din `retururiTrendyol`.
+   */
+  coletInlocuire: { awb: string | null; curier: string | null; link: string | null } | null;
   coletRespins: {
     awb: string | null; curier: string | null; link: string | null; pin: string | null;
   } | null;
@@ -88,7 +95,7 @@ export async function retururiTrendyol(
 
   const admin = createAdminClient();
   let q = admin.from("trendyol_claims")
-    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, trendyol_claim_items(claim_item_id, claim_item_status, barcode, product_name, quantity, reason, customer_note, decizie, repus_in_stoc_la)")
+    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, colet_inlocuire, trendyol_claim_items(claim_item_id, claim_item_status, barcode, product_name, quantity, reason, customer_note, decizie, repus_in_stoc_la)")
     .eq("business_id", businessId)
     .order("claim_date", { ascending: false })
     .limit(100);
@@ -128,6 +135,7 @@ export async function retururiTrendyol(
     claim_id: string; order_number: string | null; claim_status: string | null; claim_date: string | null;
     dont_ship_back: boolean | null;
     colet_respins: Record<string, unknown> | null;
+    colet_inlocuire: Record<string, unknown> | null;
     trendyol_claim_items: {
       claim_item_id: string; claim_item_status: string | null;
       barcode: string | null; product_name: string | null; quantity: number;
@@ -142,6 +150,23 @@ export async function retururiTrendyol(
       status: r.claim_status,
       claimDate: r.claim_date,
       nuTrimiteInapoi: r.dont_ship_back,
+      /*
+       * ⚠ FAPTELE, FARA INSTRUCTIUNE. `replacementOutboundpackageinfo` apare in raspunsul-exemplu
+       * al lui `getClaims` cu AWB, curier si link, dar ghidul lor nu spune NICAIERI ce are
+       * comerciantul de facut la un retur de tip schimb. Deci i se arata ce vedem — un colet
+       * exista, iata-l — si nu i se spune sa expedieze nimic. Un „trimite un produs de schimb"
+       * gresit l-ar pune sa dea marfa degeaba.
+       *
+       * ⚠ Aceleasi campuri ca la coletul respins, si tot cu aceeasi grija: AWB-ul vine NUMERIC in
+       * exemplul lor, nu ca sir.
+       */
+      coletInlocuire: r.colet_inlocuire
+        ? {
+          awb: r.colet_inlocuire.cargoTrackingNumber != null ? String(r.colet_inlocuire.cargoTrackingNumber) : null,
+          curier: typeof r.colet_inlocuire.cargoProviderName === "string" ? r.colet_inlocuire.cargoProviderName : null,
+          link: typeof r.colet_inlocuire.cargoTrackingLink === "string" ? r.colet_inlocuire.cargoTrackingLink : null,
+        }
+        : null,
       coletRespins: r.colet_respins
         ? {
           /* ⚠ AWB-ul vine NUMERIC in exemplul lor, nu ca sir. */

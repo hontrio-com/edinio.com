@@ -191,3 +191,32 @@ test("⚠ „nu stim” nu se mai spune ca „s-a hotarat deja”", () => {
      un mesaj care nu-i cere nimic si nu-i promite nimic. */
   assert.match(ui, /se reîncearcă la următoarea sincronizare/);
 });
+
+test("⚠ si pastila numara doar ce cere chiar o apasare", () => {
+  /*
+   * ═══ ⚠ AM SPUS DE DOUA ORI CA FUNCTIA ASTA NU EXISTA (26.08.2026) ═══
+   *
+   * `cateRetururiAsteapta` sta in `retururi.ts`, si cerea lista veche:
+   * `["Created", "WaitingInAction", "InAnalysis"]`. Am cautat-o de doua ori si am raportat de
+   * doua ori ca nu exista — fiindca in amandoua cautarile pusesem `grep -v retururi.ts` ca sa
+   * reduc zgomotul. Am exclus taman fisierul in care statea, si apoi am afirmat un negativ.
+   *
+   * ⚠ NU E CHEMATA DE NICAIERI ACUM, si tocmai de-aia trebuia reparata: un cod mort care ramane
+   * gresit se leaga intr-o zi la un ecran, iar cine il leaga presupune ca e bun. Pastila lui ar
+   * fi aratat „3 retururi de rezolvat" cand unul singur cere o apasare.
+   *
+   * ⚠ SI FOLOSESTE `STARI_DE_HOTARAT`, nu o lista scrisa a doua oara. Doua liste care spun
+   * acelasi lucru se despart la prima schimbare — s-au despartit deja o data, chiar aici.
+   */
+  const mod = viu("src/lib/trendyol/retururi.ts");
+  assert.match(mod, /\.in\("claim_status", STARI_DE_HOTARAT\)/);
+  assert.doesNotMatch(mod, /"Created", "WaitingInAction", "InAnalysis"/);
+});
+
+test("⚠ si niciun comentariu nu mai spune ca necunoscutul trece", () => {
+  /* Codul era corect, comentariul nu — iar peste cateva luni cineva citeste comentariul. */
+  const brut = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
+  assert.doesNotMatch(brut, /ghidul lor NU spune ca/);
+  assert.doesNotMatch(brut, /LINII_FARA_HOTARARE/);
+  assert.match(brut, /TRECE NUMAI `WaitingInAction`, si e regula LOR, scrisa/);
+});

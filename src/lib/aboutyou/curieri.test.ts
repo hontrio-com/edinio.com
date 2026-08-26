@@ -20,8 +20,17 @@ test("select-ul de AWB acopera fiecare curier din lista", () => {
     SELECT_AWB_ABOUTYOU.split(",").map((s) => s.trim()).filter(Boolean));
   const lipsa = CAMPURI_AWB_ABOUTYOU.filter((c) => !coloane.has(c));
   assert.deepEqual(lipsa, [], `coloane necerute in select: ${lipsa.join(", ")}`);
-  // Si invers: nimic in plus, ca sa nu rămână coloane ale unor curieri scosi.
-  const inPlus = [...coloane].filter((c) => c !== "id" && c !== "tracking_number" && !CAMPURI_AWB_ABOUTYOU.includes(c));
+  /*
+   * Si invers: nimic in plus, ca sa nu rămână coloane ale unor curieri scosi.
+   *
+   * ⚠ `sameday_return_awb_number` E O EXCEPTIE NUMITA, nu o scapare (26.08.2026). Nu e AWB-ul de
+   * tur al unui curier — e cel de RETUR, si e singurul din toata lista care are unul azi. Se cere
+   * in `select` fiindca `shipOrderNow` il trimite ca `return_tracking_key` cand exista: pana
+   * acum se punea acolo AWB-ul de tur, presupunand ca e valabil in ambele sensuri, iar existenta
+   * chiar a acestei coloane arata ca presupunerea nu tine la orice curier.
+   */
+  const EXCEPTII = new Set(["id", "tracking_number", "sameday_return_awb_number"]);
+  const inPlus = [...coloane].filter((c) => !EXCEPTII.has(c) && !CAMPURI_AWB_ABOUTYOU.includes(c));
   assert.deepEqual(inPlus, [], `coloane in select fara curier in lista: ${inPlus.join(", ")}`);
 });
 

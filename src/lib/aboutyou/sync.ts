@@ -1457,19 +1457,44 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
 
   const rawItems = (ayOrder as { items?: unknown }).items;
   const items = Array.isArray(rawItems) ? (rawItems as { order_item_id?: number; status?: string }[]) : [];
-  // Articolele deja anulate sau returnate nu se mai expediaza: trimise, About You
-  // respinge intreaga cerere de expediere, deci s-ar bloca si celelalte.
+  /*
+   * ═══ ⚠ SE EXPEDIAZA NUMAI LINIILE `open` (26.08.2026) ═══
+   *
+   * Aici se filtra „orice in afara de `cancelled` si `returned`", deci treceau si liniile deja
+   * `shipped`, si orice stare noua pe care ei ar introduce-o. O linie deja expediata, trimisa a
+   * doua oara, e chiar cazul in care ei resping cererea INTREAGA — deci s-ar bloca si celelalte,
+   * exact paguba pe care filtrul voia s-o inlature.
+   *
+   * ⚠ SE NUMESC STARILE CERUTE, NU CELE OPRITE. O lista de „ce se opreste" lasa pe dinafara tot
+   * ce nu cunoastem, iar `status`-ul liniei poate primi valori noi fara sa ne intrebe.
+   */
   const orderItemIds = items
-    .filter((i) => i.status !== "cancelled" && i.status !== "returned")
+    .filter((i) => i.status === "open")
     .map((i) => i.order_item_id)
     .filter((x): x is number => typeof x === "number");
   if (orderItemIds.length === 0) return { ok: true, action: "skipped" };
 
-  // return_tracking_key is REQUIRED by the ship endpoint; RO couriers issue a single
-  // AWB for both directions, so we reuse the shipment tracking as the return key.
+  /*
+   * ═══ ⚠ AWB-UL DE RETUR, CAND CHIAR AVEM UNUL (26.08.2026) ═══
+   *
+   * `return_tracking_key` e cerut de ruta de expediere, iar noi puneam acolo AWB-ul de TUR,
+   * presupunand ca e valabil in ambele sensuri. Presupunerea nu tine la orice curier — si se vede
+   * chiar in casa: Sameday are camp separat de retur (`sameday_return_awb_number`), semn ca
+   * returul NU e mereu acelasi document.
+   *
+   * ⚠ DAR NU SE POATE CERE UNUL ADEVARAT LA TOTI. Din cei 17 curieri din `CURIERI_ABOUTYOU`, unul
+   * singur are azi AWB de retur. Oprita expedierea pana cand exista, s-ar fi blocat 16 din 17 —
+   * mult mai rau decat eticheta gresita pe care o reparam.
+   *
+   * ⚠ DECI: cand avem un AWB de retur adevarat, se trimite el. Cand nu, ramane cel de tur si se
+   * spune pe fata ca e o rezerva, ca sa nu para o hotarare verificata.
+   */
+  const awbRetur = typeof (row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number === "string"
+    ? String((row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number).trim()
+    : "";
   const res = await shipOrderItems(ctx.auth, [{
     order_items: orderItemIds, carrier_key: carrierKey,
-    shipment_tracking_key: tracking, return_tracking_key: tracking,
+    shipment_tracking_key: tracking, return_tracking_key: awbRetur || tracking,
   }]);
   if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
   const batchRequestId = res.data?.batchRequestId;

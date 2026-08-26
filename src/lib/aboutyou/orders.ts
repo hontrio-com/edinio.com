@@ -16,6 +16,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { logError } from "@/lib/error-logger";
+import { randCitit } from "@/lib/supabase/rand-citit";
 import type { Database } from "@/types/database.types";
 import { recordBatch, type AboutYouSyncContext } from "./sync";
 import { getOrders, isAboutYouError } from "./client";
@@ -791,7 +792,8 @@ export async function pollOrders(
 export async function cancelOrderNow(
   admin: Db, ctx: AboutYouSyncContext, orderId: string,
 ): Promise<{ ok: true; batchRequestId?: string } | { ok: false; error: string }> {
-  const ids = await idsArticoleActive(admin, ctx, orderId);
+  /* ⚠ Anularea merge NUMAI pe liniile `open`: una deja expediata nu se mai anuleaza. */
+  const ids = await idsArticoleInStarea(admin, ctx, orderId, "open");
   if ("error" in ids) return { ok: false, error: ids.error };
   const res = await cancelOrderItems(ctx.auth, ids.ids.map((id) => ({ id })));
   if (isAboutYouError(res)) return { ok: false, error: res.error };
@@ -815,7 +817,8 @@ export async function returnOrderNow(
 ): Promise<{ ok: true; batchRequestId?: string } | { ok: false; error: string }> {
   const cheie = returnTrackingKey.trim();
   if (!cheie) return { ok: false, error: "Completează numărul AWB de retur." };
-  const ids = await idsArticoleActive(admin, ctx, orderId);
+  /* ⚠ Returul merge NUMAI pe liniile `shipped`: una care n-a plecat inca n-are ce sa se intoarca. */
+  const ids = await idsArticoleInStarea(admin, ctx, orderId, "shipped");
   if ("error" in ids) return { ok: false, error: ids.error };
   const res = await returnOrderItems(ctx.auth, [{ order_items: ids.ids, return_tracking_key: cheie }]);
   if (isAboutYouError(res)) return { ok: false, error: res.error };
@@ -826,21 +829,51 @@ export async function returnOrderNow(
   return { ok: true, batchRequestId: id };
 }
 
-async function idsArticoleActive(
-  admin: Db, ctx: AboutYouSyncContext, orderId: string,
+/**
+ * Liniile comenzii care sunt intr-o anume stare la ei.
+ *
+ * ═══ ⚠ FIECARE OPERATIE ARE STAREA EI, SI NU E „ORICE IN AFARA DE DOUA" (26.08.2026) ═══
+ *
+ * Documentatia lor cere:
+ *
+ *     expediere   numai liniile `open`
+ *     anulare     numai liniile `open`
+ *     retur       numai liniile `shipped`
+ *
+ * Aici se filtra `!== "cancelled" && !== "returned"`, adica se lasau sa treaca si `open`, si
+ * `shipped`, si orice stare noua pe care ei ar introduce-o. Deci o anulare putea include o linie
+ * deja EXPEDIATA, iar un retur putea include una care n-a plecat inca — cereri pe care ei le
+ * resping, sau, mai rau, le accepta partial si starile noastre se despart de ale lor.
+ *
+ * ⚠ SE NUMESC STARILE CERUTE, NU CELE OPRITE. O lista de „ce se opreste" lasa pe dinafara tot ce
+ * nu cunoastem, iar `AboutYouOrderItem.status` poate primi valori noi fara sa ne intrebe. E
+ * aceeasi hotarare pe care am luat-o azi la retururile Trendyol, din acelasi motiv.
+ */
+async function idsArticoleInStarea(
+  admin: Db, ctx: AboutYouSyncContext, orderId: string, ceruta: "open" | "shipped",
 ): Promise<{ ids: number[] } | { error: string }> {
-  const { data } = await admin
+  /*
+   * ⚠ `data: null` dintr-o pana se citea ca „nu e comanda About You". Aceeasi clasa reparata azi
+   * in `queue.ts`: o citire picata nu are voie sa devina o hotarare.
+   */
+  const rand = randCitit<{ items: unknown }>("aboutyou.liniileComenzii", await admin
     .from("aboutyou_orders").select("items")
-    .eq("business_id", ctx.businessId).eq("order_id", orderId).maybeSingle();
-  if (!data) return { error: "Comanda nu este o comandă About You." };
-  const items = Array.isArray((data as { items?: unknown }).items)
-    ? ((data as { items: { order_item_id?: number; status?: string }[] }).items)
+    .eq("business_id", ctx.businessId).eq("order_id", orderId).maybeSingle());
+  if (!rand) return { error: "Comanda nu este o comandă About You." };
+  const items = Array.isArray(rand.items)
+    ? (rand.items as { order_item_id?: number; status?: string }[])
     : [];
   const ids = items
-    .filter((i) => i.status !== "cancelled" && i.status !== "returned")
+    .filter((i) => i.status === ceruta)
     .map((i) => i.order_item_id)
     .filter((x): x is number => typeof x === "number");
-  if (ids.length === 0) return { error: "Comanda nu mai are articole active." };
+  if (ids.length === 0) {
+    return {
+      error: ceruta === "open"
+        ? "Comanda nu mai are articole deschise."
+        : "Comanda nu are articole expediate, deci nu se poate cere retur.",
+    };
+  }
   return { ids };
 }
 

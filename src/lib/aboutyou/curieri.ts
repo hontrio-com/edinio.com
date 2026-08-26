@@ -55,4 +55,8 @@ export const CAMPURI_AWB_ABOUTYOU = CURIERI_ABOUTYOU.map((c) => c.camp);
  * ieși cu „skipped": un succes raportat pentru o comanda ramasa neexpediata.
  */
 export const SELECT_AWB_ABOUTYOU =
-  "id, tracking_number, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_awb_number, colete_awb_number, woot_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, posta_awb_number, packeta_packet_id, innoship_awb_number, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number";
+  /* ⚠ `sameday_return_awb_number` e AWB-ul de RETUR, si e altceva decat cel de tur: e singurul
+     curier din lista care are unul azi. Vezi `return_tracking_key` din `shipOrderNow` — fara el
+     in selectie, campul iesea mereu `undefined` si rezerva se aplica pe tacute chiar si acolo
+     unde exista un document adevarat. */
+  "id, tracking_number, cargus_awb_number, sameday_awb_number, sameday_return_awb_number, fan_courier_awb_number, dpd_awb_number, colete_awb_number, woot_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, posta_awb_number, packeta_packet_id, innoship_awb_number, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number";

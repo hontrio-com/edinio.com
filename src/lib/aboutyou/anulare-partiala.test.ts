@@ -90,3 +90,52 @@ test("⚠ MASURAT pe baza adevarata, in tranzactie anulata", () => {
   /* ⚠ Si o comanda pe care n-o gasim nu se preface ca a eliberat ceva. */
   assert.match(mig, /'stare', 'lipsa'/);
 });
+
+test("⚠ fiecare operatie cere STAREA ei, nu „orice in afara de doua”", () => {
+  /*
+   * ═══ ⚠ DOCUMENTATIA LOR CERE TREI STARI DEOSEBITE ═══
+   *
+   *     expediere   numai liniile `open`
+   *     anulare     numai liniile `open`
+   *     retur       numai liniile `shipped`
+   *
+   * Se filtra `!== "cancelled" && !== "returned"`, deci treceau si `open`, si `shipped`, si orice
+   * stare noua pe care ei ar introduce-o. O anulare putea include o linie deja EXPEDIATA, iar un
+   * retur una care n-a plecat inca.
+   *
+   * ⚠ Si la expediere e mai rau decat o eticheta gresita: o linie deja `shipped`, trimisa a doua
+   * oara, e chiar cazul in care ei resping cererea INTREAGA — deci s-ar bloca si celelalte linii,
+   * exact paguba pe care filtrul voia s-o inlature.
+   */
+  assert.match(orders, /async function idsArticoleInStarea\([\s\S]{0,200}?ceruta: "open" \| "shipped"/);
+  assert.match(orders, /\.filter\(\(i\) => i\.status === ceruta\)/);
+  assert.doesNotMatch(orders, /i\.status !== "cancelled" && i\.status !== "returned"/);
+
+  /* ⚠ Anularea pe `open`, returul pe `shipped`. */
+  assert.match(orders, /idsArticoleInStarea\(admin, ctx, orderId, "open"\)/);
+  assert.match(orders, /idsArticoleInStarea\(admin, ctx, orderId, "shipped"\)/);
+
+  /* ⚠ Si expedierea, in `sync.ts`, tot pe `open`. */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /\.filter\(\(i\) => i\.status === "open"\)/);
+  assert.doesNotMatch(sync, /i\.status !== "cancelled" && i\.status !== "returned"/);
+});
+
+test("⚠ AWB-ul de retur se trimite cand chiar avem unul", () => {
+  /*
+   * `return_tracking_key` e cerut de ruta lor, iar noi puneam acolo AWB-ul de TUR, presupunand ca
+   * e valabil in ambele sensuri. Se vede chiar in casa ca nu tine: Sameday are camp separat de
+   * retur, semn ca returul nu e mereu acelasi document.
+   *
+   * ⚠ Dar din 17 curieri unul singur are azi AWB de retur. Oprita expedierea pana cand exista,
+   * s-ar fi blocat 16 din 17 — mult mai rau decat eticheta gresita.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /sameday_return_awb_number/);
+  assert.match(sync, /return_tracking_key: awbRetur \|\| tracking/);
+
+  /* ⚠ Si coloana e CERUTA in `select`: fara ea iesea mereu `undefined`, iar rezerva se aplica pe
+     tacute chiar si acolo unde exista un document adevarat. */
+  const cur = readFileSync("src/lib/aboutyou/curieri.ts", "utf8");
+  assert.match(cur, /sameday_return_awb_number/);
+});

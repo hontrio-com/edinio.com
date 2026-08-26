@@ -547,6 +547,38 @@ async function scrieCererea(
   }
 
   const claimRowId = (cerere as { id: string }).id;
+
+  /*
+   * ═══ ⚠ CAND LE VEDEM STAREA SI TOT N-O PUTEM CITI, VREM SA AFLAM ═══
+   *
+   * `numeStare` intoarce `null` si cand campul lipseste, si cand exista dar are o forma pe care
+   * n-o cunoastem. Cele doua nu sunt la fel: lipsa e a lor, forma necunoscuta e a noastra — un
+   * parser ramas in urma fata de ce trimit ei.
+   *
+   * ⚠ SI COSTA ACUM MAI MULT DECAT INAINTE. De cand repunerea in stoc e fail-closed, o stare pe
+   * care n-o citim tine marfa blocata pe raft; iar de cand cererea cu o linie necitibila ramane
+   * in bazin, o forma noua ar tine-o acolo pana la `ZILE_DE_REINTREBAT`. Prima aparitie trebuie
+   * sa ajunga sub ochii nostri, nu sa se scurga in tacere.
+   *
+   * ⚠ Se scrie o data pe CERERE, nu pe linie, si numai cand campul CHIAR e acolo.
+   */
+  const nedescifrate = liniileReturului(c).filter((l) => {
+    if (l.stare) return false;
+    const brut = (l.brut ?? {}) as { claimItemStatus?: unknown };
+    return brut.claimItemStatus != null && brut.claimItemStatus !== "";
+  });
+  if (nedescifrate.length > 0) {
+    await logError({
+      action: "trendyol/retururi",
+      message: `${nedescifrate.length} linii au un \`claimItemStatus\` pe care nu-l putem citi: forma lor s-a schimbat`,
+      details: {
+        claimId: idCerere,
+        exemple: nedescifrate.slice(0, 3).map((l) => (l.brut as { claimItemStatus?: unknown }).claimItemStatus),
+      },
+      businessId: ctx.businessId, severity: "warning",
+    });
+  }
+
   for (const l of liniileReturului(c)) {
     const { error: eLinie } = await admin.from("trendyol_claim_items").upsert({
       business_id: ctx.businessId,
@@ -689,7 +721,7 @@ export async function hotarasteRetur(
     const toate = (f: (s: string | null) => boolean) => stariInchise.every(f);
     return {
       error: toate((x) => x === null)
-        ? "Nu am putut confirma încă starea returului la Trendyol. Încearcă din nou după următoarea sincronizare."
+        ? "Nu am putut confirma starea liniilor la Trendyol. Se reîncearcă la fiecare sincronizare — încearcă din nou peste câteva minute."
         : toate((x) => x === "Created")
           ? "Clientul abia a cerut returul, iar coletul n-a ajuns încă la tine. Nu ai ce răspunde până atunci."
           : "Returul nu mai așteaptă un răspuns de la tine — între timp s-a schimbat. Reîncarcă pagina.",
@@ -816,7 +848,7 @@ export async function repuneInStoc(
      * umfla stocul tacut si il plateste un client care cumpara ce nu exista.
      */
     case "status-necunoscut": return {
-      error: "Nu am putut confirma încă starea returului la Trendyol. Încearcă din nou după următoarea sincronizare.",
+      error: "Nu am putut confirma starea liniei la Trendyol, deci nu punem marfa înapoi pe ghicite. Se reîncearcă la fiecare sincronizare; dacă rămâne așa, corectează stocul din fișa produsului.",
     };
     default: return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
   }

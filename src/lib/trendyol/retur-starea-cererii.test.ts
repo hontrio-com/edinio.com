@@ -150,3 +150,55 @@ test("⚠ si un status pe care NU-L STIM se arata, nu se ascunde", () => {
   assert.match(act, /claim_status\.is\.null,claim_status\.in\.\(\$\{STARI_DE_HOTARAT\.join\(","\)\}\)/);
   assert.doesNotMatch(act, /q\.in\("claim_status"/, "un `in` simplu ar pierde golul");
 });
+
+test("⚠ o cerere pe care n-o citim INTREAGA nu e incheiata", () => {
+  /*
+   * ═══ ⚠ FUNDUL DE SAC PE CARE MI L-AM FACUT SINGUR (26.08.2026) ═══
+   *
+   * `stareaCererii` filtra liniile fara stare si hotara din ce ramanea. Deci un retur PARTIAL cu
+   * linia A pe `Accepted` si linia B necitibila iesea `Accepted`. De-acolo:
+   *
+   *   1. `Accepted` e in `STARI_INCHEIATE`, deci reconcilierea scoate cererea din bazin.
+   *   2. Aducerea pe fereastra filtreaza dupa data CREARII, care a trecut demult.
+   *   3. Starea liniei B ramane NULL pe veci.
+   *   4. Iar de cand repunerea in stoc e fail-closed, comerciantul are marfa pe raft si nu o mai
+   *      poate repune NICIODATA.
+   *
+   * ⚠ Fail-closed-ul avea nevoie de o cale de iesire si n-o avea. Calea e asta: cat timp o linie
+   * ne scapa, cererea ramane in bazin si se reintreaba.
+   */
+  const INCHEIATE = ["Accepted", "Cancelled"];
+  const iese = (c: TrendyolClaim) => {
+    const st = stareaCererii(c);
+    return st != null && INCHEIATE.includes(st);
+  };
+
+  /* ⚠ Cu o linie necitibila, cererea NU se declara incheiata — oricat ar spune celelalte. */
+  assert.equal(stareaCererii(cerere("Accepted", null as never)), null);
+  assert.equal(iese(cerere("Accepted", null as never)), false);
+  assert.equal(iese(cerere("Cancelled", null as never)), false);
+
+  /* ⚠ Dar cand toate liniile SE CITESC si toate sunt incheiate, cererea iese — altfel bazinul ar
+     creste la nesfarsit cu retururi terminate, si i-ar inghesui pe cei vii. */
+  assert.equal(stareaCererii(cerere("Accepted", "Accepted")), "Accepted");
+  assert.equal(iese(cerere("Accepted", "Accepted")), true);
+  assert.equal(iese(cerere("Accepted", "Cancelled")), true);
+
+  /* ⚠ Si o stare inca vie bate necunoscutul: acolo chiar stim ceva de spus. */
+  assert.equal(stareaCererii(cerere("Accepted", "WaitingInAction")), "WaitingInAction");
+  assert.equal(stareaCererii(cerere("Rejected", null as never)), "Rejected");
+});
+
+test("⚠ si aflam cand forma starii lor se schimba", () => {
+  /*
+   * `numeStare` da `null` si cand campul LIPSESTE, si cand exista dar are o forma necunoscuta.
+   * Cele doua nu sunt la fel: lipsa e a lor, forma necunoscuta e a noastra.
+   *
+   * ⚠ Si costa mai mult ca inainte: o stare necitita tine marfa blocata pe raft (repunerea e
+   * fail-closed) si tine cererea in bazin pana la `ZILE_DE_REINTREBAT`.
+   */
+  const mod = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
+  assert.match(mod, /const nedescifrate = liniileReturului\(c\)\.filter/);
+  assert.match(mod, /brut\.claimItemStatus != null && brut\.claimItemStatus !== ""/);
+  assert.match(mod, /forma lor s-a schimbat/);
+});

@@ -307,7 +307,8 @@ const LINII_FARA_REPUNERE = new Set(["Created"]);
  * FACUT — deci o singura linie care asteapta trage toata cererea in „de hotarat".
  */
 export function stareaCererii(c: TrendyolClaim): string | null {
-  const stari = liniileReturului(c).map((l) => l.stare).filter((s): s is string => !!s);
+  const toate = liniileReturului(c).map((l) => l.stare);
+  const stari = toate.filter((s): s is string => !!s);
   if (stari.length === 0) {
     /* ⚠ Fara linii citibile NU se ghiceste. `null` inseamna „nu stim", iar reconcilierea il
        trateaza anume ca pe o cerere de reintrebat — vezi `STARI_INCHEIATE`. */
@@ -319,7 +320,28 @@ export function stareaCererii(c: TrendyolClaim): string | null {
   /* ⚠ Apoi orice linie neincheiata: cererea inca se poate schimba. */
   const vie = stari.find((s) => !LINII_INCHEIATE.has(s));
   if (vie) return vie;
-  /* Toate incheiate: se ia prima, si toate spun acelasi lucru. */
+
+  /*
+   * ═══ ⚠ O CERERE PE CARE N-O CITIM INTREAGA NU E INCHEIATA (26.08.2026) ═══
+   *
+   * Aici se intorcea `stari[0]` de indata ce liniile CITIBILE erau toate incheiate — iar cele
+   * necitibile fusesera filtrate cu doua randuri mai sus, deci nu se puneau in cumpana. Un retur
+   * partial cu linia A pe `Accepted` si linia B necitibila iesea `Accepted`.
+   *
+   * ⚠ SI DE-ACOLO NU MAI EXISTA INTOARCERE. `Accepted` e in `STARI_INCHEIATE`, deci reconcilierea
+   * scoate cererea din bazin si n-o mai reintreaba; iar aducerea pe fereastra filtreaza dupa data
+   * CREARII, care a trecut demult. Starea liniei B ramanea NULL pe veci — si de cand repunerea in
+   * stoc e fail-closed, comerciantul avea marfa pe raft si nu o mai putea repune NICIODATA.
+   *
+   * ⚠ E chiar pretul pe care fail-closed-ul trebuia sa-l plateasca cu o cale de iesire, si n-o
+   * avea. Calea de iesire e asta: cat timp o linie ne scapa, cererea ramane in bazin si se
+   * reintreaba — pana cand ei ne dau o stare citibila, sau pana la `ZILE_DE_REINTREBAT`.
+   *
+   * ⚠ Se intoarce `null`, nu starea cunoscuta: `null` inseamna „nu stim", si asta e adevarul.
+   */
+  if (stari.length < toate.length) return null;
+
+  /* Toate citibile si toate incheiate: se ia prima, si toate spun acelasi lucru. */
   return stari[0];
 }
 

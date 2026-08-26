@@ -330,7 +330,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     {!l.sePoateHotari && !l.decizie && (
                       <span className="block text-[11px] text-muted-foreground">
                         {l.stareNecunoscuta
-                          ? "nu i-am putut citi starea de la Trendyol; se reîncearcă la următoarea sincronizare"
+                          ? "nu i-am putut citi starea de la Trendyol; se reîncearcă la fiecare sincronizare"
                           : !l.marfaAAjuns
                             ? "clientul abia a cerut returul; nu ai ce răspunde până nu ajunge la tine"
                             : "nu mai așteaptă un răspuns de la tine"}
@@ -362,7 +362,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     */
                     <span className="text-[11px] text-muted-foreground">
                       {l.stareNecunoscuta
-                        ? "nu i-am putut confirma starea la Trendyol; încearcă după următoarea sincronizare"
+                        ? "nu i-am putut confirma starea la Trendyol; se reîncearcă la fiecare sincronizare"
                         : "clientul abia a cerut returul; coletul n-a ajuns încă la tine"}
                     </span>
                   ) : (

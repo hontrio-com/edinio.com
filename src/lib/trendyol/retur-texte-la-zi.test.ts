@@ -65,7 +65,7 @@ test("⚠ „nu mai asteapta” nu se spune despre un retur care n-a INCEPUT sa 
    */
   assert.match(mod, /toate\(\(x\) => x === null\)/);
   assert.match(mod, /toate\(\(x\) => x === "Created"\)/);
-  assert.match(mod, /Nu am putut confirma încă starea returului la Trendyol/);
+  assert.match(mod, /Nu am putut confirma starea liniilor la Trendyol/);
 });
 
 test("⚠ hotararea se anunta pe LINII, fiindca retururile lor sunt PARTIALE", () => {

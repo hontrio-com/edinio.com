@@ -131,7 +131,9 @@ test("⚠ repunerea in stoc cere ca marfa sa fi AJUNS", () => {
   /* ⚠ Si mesajul spune ca e o ASTEPTARE, nu un refuz. */
   const sursaModulului = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
   assert.match(sursaModulului, /case "status-necunoscut"/);
-  assert.match(sursaModulului, /Nu am putut confirma încă starea returului la Trendyol/);
+  assert.match(sursaModulului, /Nu am putut confirma starea liniei la Trendyol/);
+  /* ⚠ Si mesajul da o cale de iesire, fiindca fail-closed-ul fara una e un fund de sac. */
+  assert.match(sursaModulului, /corectează stocul din fișa produsului/);
 
   /* ⚠ Si mesajul spune DE CE si CAND se poate, nu doar ca nu merge. */
   const mod = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
@@ -225,7 +227,9 @@ test("⚠ „nu stim” nu se mai spune ca „s-a hotarat deja”", () => {
 
   /* ⚠ Si textul spune si CE URMEAZA, nu doar ce nu merge: se reia singur. Altfel omul ramane cu
      un mesaj care nu-i cere nimic si nu-i promite nimic. */
-  assert.match(ui, /se reîncearcă la următoarea sincronizare/);
+  /* ⚠ „la fiecare sincronizare", nu „la urmatoarea": prima varianta promitea o singura
+     incercare, iar cererea se reintreaba de fapt la fiecare rotatie a roatei. */
+  assert.match(ui, /se reîncearcă la fiecare sincronizare/);
 });
 
 test("⚠ si pastila numara doar ce cere chiar o apasare", () => {

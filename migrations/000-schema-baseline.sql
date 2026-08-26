@@ -3926,7 +3926,7 @@ begin
     from public.trendyol_claim_items
    where business_id = p_business_id
      and claim_item_id = p_claim_item_id
-   ;
+   for update;
 
   if not found then
     return jsonb_build_object('stare', 'lipsa', 'pus', 0);
@@ -3972,10 +3972,10 @@ begin
     perform public.elibereaza_stoc_complet(
       '[]'::jsonb,
       jsonb_build_array(jsonb_build_object(
-        'product_id', v_product_id, 'variant_title', v_variant_title, 'quantity', 1)));
+        'product_id', v_product_id, 'variant_title', v_variant_title, 'quantity', v_linie.quantity)));
   else
     perform public.elibereaza_stoc_complet(
-      jsonb_build_array(jsonb_build_object('product_id', v_product_id, 'quantity', 1)),
+      jsonb_build_array(jsonb_build_object('product_id', v_product_id, 'quantity', v_linie.quantity)),
       '[]'::jsonb);
   end if;
 

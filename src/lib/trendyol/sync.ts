@@ -881,7 +881,25 @@ export async function syncProductsBulk(
     const batchRequestId = res.data?.batchRequestId;
     if (batchRequestId) {
       out.batchRequestIds.push(batchRequestId);
-      await recordBatch(admin, ctx.businessId, batchRequestId, "product", lot.mainIds);
+      /*
+       * ⚠ LOTUL PRIMIT DE EI SI NESCRIS DE NOI = REZULTAT NECUNOSCUT (26.08.2026).
+       *
+       * Regula e simpla si se aplica peste tot: daca ne-au dat un `batchRequestId` si noi nu-l
+       * putem tine minte, nu mai avem cum sa aflam ce s-a intamplat cu produsele alea. Marcate
+       * `pending`, ar fi asteptat la nesfarsit o confirmare pe care n-o mai putem cere.
+       *
+       * De-aia listarile se intorc pe `error`, cu motivul scris: vizibile si reincercabile e
+       * mult mai bine decat blocate in „in aprobare" pe veci. Publicarea e idempotenta la ei —
+       * acelasi produs trimis de doua ori nu face doua produse, se potriveste pe barcode.
+       */
+      const scris = await recordBatch(admin, ctx.businessId, batchRequestId, "product", lot.mainIds);
+      if (!scris) {
+        for (const listingId of lot.listingIds) {
+          await setListingStatus(admin, listingId, "error", {
+            error: "Lotul a fost primit de Trendyol, dar nu s-a putut tine minte. Se reia.",
+          });
+        }
+      }
     }
     await pause(200);
   }
@@ -1044,7 +1062,20 @@ async function zeroizeazaStocul(
       };
     }
     const batchRequestId = res.data?.batchRequestId;
-    if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", []);
+    if (batchRequestId) {
+      /*
+       * ⚠ NESCRIS INSEAMNA NECUNOSCUT, si aici conteaza mai mult ca oriunde: zeroizarea e prima
+       * plasa a retragerii. Nestiind daca s-a facut, verdictul NU are voie sa fie „gata".
+       */
+      const scris = await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", []);
+      if (!scris) {
+        return {
+          verdict: "trecatoare",
+          barcoduri,
+          motiv: "Lotul de stoc a fost primit de Trendyol, dar nu s-a putut tine minte.",
+        };
+      }
+    }
   }
   return { verdict: "gata", barcoduri };
 }
@@ -1688,7 +1719,19 @@ async function incearcaAdoptarea(
        * Azi n-ar fi lovit, si numai din noroc: purta `product_main_id`, care nu se potriveste
        * cu niciun `id` de listare. Norocul ala tine pana cand cineva „indreapta" id-ul.
        */
-      if (batchRequestId) await recordBatch(admin, ctx.businessId, batchRequestId, "dezarhivare", [listing.id]);
+      if (batchRequestId) {
+        const scris = await recordBatch(admin, ctx.businessId, batchRequestId, "dezarhivare", [listing.id]);
+        if (!scris) {
+          /* ⚠ Adoptarea merge mai departe — produsul e al lui si trebuie legat — dar se scrie ca
+             dezarhivarea ramane necunoscuta, altfel el s-ar mira de ce nu se vede la ei. */
+          await logError({
+            action: "trendyol/adoptare",
+            message: "dezarhivarea a fost primita de Trendyol dar nu s-a putut tine minte; produsul poate ramane invizibil la ei",
+            details: { barcode, listingId: listing.id },
+            businessId: ctx.businessId, severity: "warning",
+          });
+        }
+      }
     }
   }
 
@@ -2271,7 +2314,20 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
         const aleLotului = [...new Set(
           chunk.map((it) => mainIdPeBarcode.get(it.barcode)).filter((x): x is string => !!x),
         )];
-        await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", aleLotului);
+        const scris = await recordBatch(admin, ctx.businessId, batchRequestId, "inventory", aleLotului);
+        if (!scris) {
+          /*
+           * ⚠ Aici nu se poate intoarce nimic — suntem in mijlocul unei plase care trece prin
+           * catalog. Dar tacerea ar fi cea mai rea alegere: repararea derivei ar parea facuta,
+           * iar produsele ar ramane departate fara sa mai afle nimeni.
+           */
+          await logError({
+            action: "trendyol/deriva",
+            message: "lotul de reparare a derivei a fost primit de Trendyol dar nu s-a putut tine minte",
+            details: { batchRequestId, produse: aleLotului.slice(0, 20) },
+            businessId: ctx.businessId, severity: "warning",
+          });
+        }
       }
     }
     await pause(300);

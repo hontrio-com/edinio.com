@@ -211,6 +211,15 @@ export interface TrendyolConfig {
    * Raspunderea fiscala e a comerciantului, deci si hotararea.
    */
   factureaza_clientul?: boolean;
+  /**
+   * Comenzile se citesc prin `orders/stream`, nu prin paginarea clasica.
+   *
+   * ⚠ STINS DIN START. Calea de azi merge si e verificata; fluxul rezolva un plafon
+   * (`maxQueryWindowResult = 10000`) la care magazinele noastre nu ajung. Comenzile sunt calea
+   * cea mai sensibila din toata integrarea — ele misca stocul — si nu se schimba sub un magazin
+   * care merge, pentru o problema pe care n-o are.
+   */
+  foloseste_stream?: boolean;
   claims_synced_at?: string;
   /**
    * ⚠ Pozitia pe FIECARE vitrina. Cu un marcaj comun, o vitrina cazuta ii tine pe loc pe

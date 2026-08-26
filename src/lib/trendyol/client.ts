@@ -468,6 +468,45 @@ export function getOrders(
   return call<{ content: TrendyolShipmentPackage[]; totalElements?: number; totalPages?: number; page?: number; size?: number }>(
     auth, "GET", `/integration/order/sellers/${auth.supplierId}/v2/orders${qs ? `?${qs}` : ""}`);
 }
+/**
+ * Comenzile schimbate, prin flux cu cursor.
+ *
+ * ═══ ⚠ ALTFEL DE PAGINARE DECAT `/v2/orders` ═══
+ *
+ * Nu mai dau `totalPages`, `totalElements` sau `page` — changelog-ul lor din 02.06.2026 o spune
+ * pe fata. Dau `hasMore` si un `nextCursor`, iar bucla se opreste cand `hasMore` e `false`.
+ *
+ * ⚠ CURSORUL E OPAC. Regula lor, verbatim: „nextCursor opaque bir değerdir → parse edilmemelidir,
+ * değiştirilmemelidir." Nu se citeste, nu se schimba, nu se construieste de mana.
+ *
+ * ⚠ TIMPUL LOR E IN MILISECUNDE SI IN GMT+3, si fereastra e de cel mult doua saptamani, din
+ * cel mult ultimele trei luni. Cerut altfel, raspund 400 — iar cronul ar parea ca merge.
+ *
+ * ⚠ `size` are plafonul 200 la ei. Cerut mai mare, refuza cererea.
+ */
+export function getOrdersStream(
+  auth: TrendyolAuth,
+  p: {
+    lastModifiedStartDate?: number; lastModifiedEndDate?: number;
+    size?: number; nextCursor?: string; packageItemStatuses?: string;
+  },
+) {
+  const q = new URLSearchParams();
+  if (p.lastModifiedStartDate != null) q.set("lastModifiedStartDate", String(p.lastModifiedStartDate));
+  if (p.lastModifiedEndDate != null) q.set("lastModifiedEndDate", String(p.lastModifiedEndDate));
+  if (p.size != null) q.set("size", String(Math.max(1, Math.min(200, p.size))));
+  /* ⚠ La prima cerere NU se trimite deloc, nu se trimite gol. */
+  if (p.nextCursor) q.set("nextCursor", p.nextCursor);
+  if (p.packageItemStatuses) q.set("packageItemStatuses", p.packageItemStatuses);
+  const qs = q.toString();
+  return call<{
+    content?: TrendyolShipmentPackage[];
+    hasMore?: boolean;
+    nextCursor?: string;
+    size?: number;
+  }>(auth, "GET", `/integration/order/sellers/${auth.supplierId}/orders/stream${qs ? `?${qs}` : ""}`);
+}
+
 // Move a package Picking -> Invoiced. Trendyol's contracted cargo handles the
 // actual shipment (tracking is assigned by Trendyol).
 export function updatePackage(

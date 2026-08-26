@@ -3921,13 +3921,12 @@ declare
   v_listing_id uuid;
   v_variant_title text;
   v_product_id uuid;
-  v_stare_cerere text;
 begin
   select * into v_linie
     from public.trendyol_claim_items
    where business_id = p_business_id
      and claim_item_id = p_claim_item_id
-   for update;
+   ;
 
   if not found then
     return jsonb_build_object('stare', 'lipsa', 'pus', 0);
@@ -3937,20 +3936,14 @@ begin
     return jsonb_build_object('stare', 'deja', 'pus', 0);
   end if;
 
-  -- Adevarul e al LINIEI: operatia e pe claim_item_id. Starea cererii e doar plasa pentru cazul
-  -- in care starea liniei lipseste.
-  if v_linie.claim_item_status = 'Created' then
-    return jsonb_build_object('stare', 'marfa-n-a-ajuns', 'pus', 0);
+  -- Fara starea LINIEI n-avem nicio dovada ca marfa a ajuns. Se opreste, si se spune de ce.
+  if v_linie.claim_item_status is null then
+    return jsonb_build_object('stare', 'status-necunoscut', 'pus', 0);
   end if;
 
-  if v_linie.claim_item_status is null then
-    select c.claim_status into v_stare_cerere
-      from public.trendyol_claims c
-     where c.id = v_linie.claim_row_id;
-
-    if v_stare_cerere = 'Created' then
-      return jsonb_build_object('stare', 'marfa-n-a-ajuns', 'pus', 0);
-    end if;
+  -- `Created` = clientul abia a apasat butonul de retur; coletul e inca la el.
+  if v_linie.claim_item_status = 'Created' then
+    return jsonb_build_object('stare', 'marfa-n-a-ajuns', 'pus', 0);
   end if;
 
   if coalesce(v_linie.barcode, '') = '' then
@@ -3979,10 +3972,10 @@ begin
     perform public.elibereaza_stoc_complet(
       '[]'::jsonb,
       jsonb_build_array(jsonb_build_object(
-        'product_id', v_product_id, 'variant_title', v_variant_title, 'quantity', v_linie.quantity)));
+        'product_id', v_product_id, 'variant_title', v_variant_title, 'quantity', 1)));
   else
     perform public.elibereaza_stoc_complet(
-      jsonb_build_array(jsonb_build_object('product_id', v_product_id, 'quantity', v_linie.quantity)),
+      jsonb_build_array(jsonb_build_object('product_id', v_product_id, 'quantity', 1)),
       '[]'::jsonb);
   end if;
 

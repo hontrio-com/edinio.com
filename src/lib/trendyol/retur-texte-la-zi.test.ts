@@ -55,8 +55,17 @@ test("⚠ „nu mai asteapta” nu se spune despre un retur care n-a INCEPUT sa 
    * „nu mai" asteapta. Mesajul pleaca si din server, si din ecran, deci se indreapta in amandoua.
    */
   assert.match(mod, /Clientul abia a cerut returul, iar coletul n-a ajuns încă la tine/);
-  assert.match(mod, /const abiaCerute = inchise\.filter\(\(id\) => !marfaAAjuns\(stari\.get\(id\)\)\)/);
   assert.match(ui, /clientul abia a cerut returul; nu ai ce răspunde până nu ajunge la tine/);
+
+  /*
+   * ⚠ SI CARE DIN TREI E, nu din doua. De cand `marfaAAjuns(null)` intoarce `false`, o linie fara
+   * stare cadea in ramura „clientul abia a cerut returul" — un neadevar spus cu incredere, si o
+   * regresie pe care mi-am facut-o singur. Fail-closed la o functie schimba intelesul FIECARUI
+   * apel al ei, nu doar pe cel pe care il repari.
+   */
+  assert.match(mod, /toate\(\(x\) => x === null\)/);
+  assert.match(mod, /toate\(\(x\) => x === "Created"\)/);
+  assert.match(mod, /Nu am putut confirma încă starea returului la Trendyol/);
 });
 
 test("⚠ hotararea se anunta pe LINII, fiindca retururile lor sunt PARTIALE", () => {

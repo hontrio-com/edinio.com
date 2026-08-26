@@ -88,16 +88,50 @@ test("⚠ repunerea in stoc cere ca marfa sa fi AJUNS", () => {
    *     Accepted        -> {stare: "pus", pus: 1}
    */
   assert.equal(marfaAAjuns("Created"), false);
-  for (const s of ["WaitingInAction", "InAnalysis", "Accepted", "Rejected", "Unresolved", null]) {
+  for (const s of ["WaitingInAction", "InAnalysis", "Accepted", "Rejected", "Unresolved", "WaitingFraudCheck"]) {
     assert.equal(marfaAAjuns(s), true, `${s}`);
   }
 
+  /*
+   * ═══ ⚠ SI NECUNOSCUTUL SE OPRESTE (indreptat 26.08.2026) ═══
+   *
+   * Aici scria ca `null` TRECE, cu explicatia ca „omul se uita la marfa in clipa in care apasa".
+   * Adevarata, dar cantarita gresit: cele doua greseli nu se platesc la fel. Un „nu" gresit e
+   * vizibil si se repara singur — omul vede motivul si incearca dupa urmatoarea sincronizare. Un
+   * „da" gresit umfla stocul TACUT, iar pretul il plateste un client care cumpara ce nu exista.
+   *
+   * ⚠ Si e aceeasi necunoscuta ca la `sePoateHotari`, unde alesesem deja sa OPRIM. Doua
+   * raspunsuri diferite la aceeasi intrebare, in acelasi fisier, e un defect in sine.
+   */
+  for (const s of [null, undefined, ""]) {
+    assert.equal(marfaAAjuns(s), false, `${s} trebuie oprit`);
+  }
+
   /* ⚠ Si paza sta in RPC, nu in ecran: butonul se poate ocoli cu un POST direct, functia nu. */
-  const mig = readFileSync("migrations/2026-11-13-repunerea-se-uita-la-linia-ei.sql", "utf8");
-  /* ⚠ Adevarul e AL LINIEI; starea cererii ramane doar plasa, cand starea liniei lipseste. */
+  const mig = readFileSync("migrations/2026-11-15-repunerea-fara-stare-nu-pleaca.sql", "utf8");
   assert.match(mig, /if v_linie\.claim_item_status = 'Created' then/);
-  assert.match(mig, /if v_linie\.claim_item_status is null then/);
   assert.match(mig, /'stare', 'marfa-n-a-ajuns'/);
+
+  /*
+   * ⚠ FARA STAREA LINIEI NU PLEACA NIMIC, si plasa pe cerere a iesit cu totul: operatia e pe
+   * `claim_item_id`, deci daca starea LINIEI nu se stie n-avem nicio dovada despre bucata aia,
+   * oricat ar spune starea adunata a cererii.
+   *
+   * ⚠ MASURAT pe RPC-ul adevarat, in tranzactie anulata, cu cererea pe `WaitingInAction`:
+   *     WaitingInAction   -> {stare: "pus", pus: 1}
+   *     Accepted          -> {stare: "pus", pus: 1}
+   *     WaitingFraudCheck -> {stare: "pus", pus: 1}
+   *     Created           -> {stare: "marfa-n-a-ajuns", pus: 0}
+   *     (fara stare)      -> {stare: "status-necunoscut", pus: 0}   <- desi cererea era buna
+   *     a doua apasare    -> {stare: "deja", pus: 0}
+   */
+  assert.match(mig, /'stare', 'status-necunoscut'/);
+  assert.doesNotMatch(mig, /v_stare_cerere/, "plasa pe cerere a iesit");
+
+  /* ⚠ Si mesajul spune ca e o ASTEPTARE, nu un refuz. */
+  const sursaModulului = readFileSync("src/lib/trendyol/retururi.ts", "utf8");
+  assert.match(sursaModulului, /case "status-necunoscut"/);
+  assert.match(sursaModulului, /Nu am putut confirma încă starea returului la Trendyol/);
 
   /* ⚠ Si mesajul spune DE CE si CAND se poate, nu doar ca nu merge. */
   const mod = readFileSync("src/lib/trendyol/retururi.ts", "utf8");

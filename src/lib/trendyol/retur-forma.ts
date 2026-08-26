@@ -269,6 +269,13 @@ export function sePoateHotari(stare: string | null | undefined): boolean {
   return stare === "WaitingInAction";
 }
 
+/**
+ * Starile din care marfa NU a ajuns inca la comerciant, deci nu se poate repune in stoc.
+ *
+ * ⚠ `Created`, din definitia lor: acolo clientul abia a apasat butonul de retur, iar coletul e
+ * inca la el. Repus atunci, stocul creste pentru marfa care nu e la raft — si se vinde ce nu e.
+ * Restul starilor vin toate DUPA ce returul a ajuns la furnizor.
+ */
 const LINII_FARA_REPUNERE = new Set(["Created"]);
 
 /**
@@ -321,9 +328,26 @@ export function asteaptaHotarare(stare: string | null | undefined): boolean {
   return !!stare && LINII_DE_HOTARAT.has(stare);
 }
 
-/** A ajuns marfa fizic la comerciant? Vezi `LINII_FARA_REPUNERE`. */
+/**
+ * A ajuns marfa fizic la comerciant?
+ *
+ * ═══ ⚠ NECUNOSCUTUL SE OPRESTE, CA PESTE TOT (indreptat 26.08.2026) ═══
+ *
+ * Aici scria `!stare || ...`, adica un status pe care nu l-am putut citi TRECEA. Explicatia era
+ * ca „omul se uita la marfa in clipa in care apasa" — adevarata, dar cantarita gresit.
+ *
+ * ⚠ CELE DOUA GRESELI NU SE PLATESC LA FEL. Un „nu" gresit e vizibil si se repara singur: omul
+ * vede motivul si incearca dupa urmatoarea sincronizare. Un „da" gresit umfla stocul TACUT, iar
+ * pretul lui il plateste un client care cumpara ce nu exista — si abia pe urma comerciantul,
+ * anuland comanda.
+ *
+ * ⚠ SI E ACEEASI NECUNOSCUTA CA LA `sePoateHotari`, unde alesesem deja sa OPRIM. Doua raspunsuri
+ * diferite la aceeasi intrebare, in acelasi fisier, e un defect in sine: cine citeste unul din
+ * ele nu mai stie care e regula casei.
+ */
 export function marfaAAjuns(stare: string | null | undefined): boolean {
-  return !stare || !LINII_FARA_REPUNERE.has(stare);
+  if (!stare) return false;
+  return !LINII_FARA_REPUNERE.has(stare);
 }
 
 /**

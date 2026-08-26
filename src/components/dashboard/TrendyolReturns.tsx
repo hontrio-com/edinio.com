@@ -352,13 +352,18 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                     </span>
                   ) : !l.marfaAAjuns ? (
                     /*
-                      ⚠ NU SE ARATA UN BUTON CARE VA FI REFUZAT. Pe „Created", din definiția lor,
-                      clientul abia a apăsat butonul de retur, iar coletul e încă la el. Serverul
-                      oprește oricum — acolo e paza adevărată — dar aici se spune DE CE, ca omul
-                      să nu apese și să afle pe urmă.
+                      ⚠ NU SE ARATA UN BUTON CARE VA FI REFUZAT. Serverul oprește oricum — acolo e
+                      paza adevărată — dar aici se spune DE CE, ca omul să nu apese și să afle pe
+                      urmă.
+
+                      ⚠ Și se spune CARE din două e. Pe „Created" clientul abia a apăsat butonul,
+                      iar coletul e la el. Cu starea necitibilă nu știm nimic — iar necunoscutul
+                      oprește, ca peste tot: un „da" greșit umflă stocul tăcut. Vezi `marfaAAjuns`.
                     */
                     <span className="text-[11px] text-muted-foreground">
-                      clientul abia a cerut returul; coletul n-a ajuns încă la tine
+                      {l.stareNecunoscuta
+                        ? "nu i-am putut confirma starea la Trendyol; încearcă după următoarea sincronizare"
+                        : "clientul abia a cerut returul; coletul n-a ajuns încă la tine"}
                     </span>
                   ) : (
                     <button

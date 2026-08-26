@@ -5,7 +5,7 @@ import { approveClaimItems, getClaims, isTrendyolError, rejectClaimItems } from 
 import type { TrendyolSyncContext } from "./sync";
 import { TRENDYOL_DEFAULT_STOREFRONT, type TrendyolClaim, type TrendyolStoreFront } from "./types";
 import {
-  coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului, marfaAAjuns,
+  coletDeTrimisInapoi, dovadaCeruta, idCererii, idPachetului, liniileReturului,
   nuSeTrimiteInapoi, sePoateHotari, STARI_DE_HOTARAT, stareaCererii,
 } from "./retur-forma";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
@@ -672,15 +672,27 @@ export async function hotarasteRetur(
       businessId: ctx.businessId, severity: "warning",
     });
     /*
-     * ⚠ MESAJUL TREBUIE SA SPUNA CARE DIN DOUA E. Pleaca pentru orice linie care nu e
-     * `WaitingInAction`, iar pe `Created` „nu MAI asteapta" e de-a dreptul pe dos: returul nici
-     * n-a INCEPUT sa astepte, fiindca marfa e inca la client.
+     * ⚠ MESAJUL TREBUIE SA SPUNA CARE DIN TREI E. Pleaca pentru orice linie care nu e
+     * `WaitingInAction`, iar cele trei cazuri cer trei raspunsuri:
+     *
+     *   `Created`  returul nici n-a INCEPUT sa astepte — marfa e la client. „Nu MAI asteapta" ar
+     *              fi de-a dreptul pe dos.
+     *   gol        nu stim nimic; e o asteptare, nu un refuz.
+     *   restul     s-a hotarat deja, si nu de aici.
+     *
+     * ⚠ AL DOILEA CAZ E O REGRESIE PE CARE MI-AM FACUT-O SINGUR acum cateva minute: de cand
+     * `marfaAAjuns(null)` intoarce `false`, o linie fara stare cadea in ramura „clientul abia a
+     * cerut returul" — un neadevar spus cu incredere. Fail-closed la o functie schimba intelesul
+     * fiecarui apel al ei, nu doar pe cel pe care il repari.
      */
-    const abiaCerute = inchise.filter((id) => !marfaAAjuns(stari.get(id)));
+    const stariInchise = inchise.map((id) => stari.get(id) ?? null);
+    const toate = (f: (s: string | null) => boolean) => stariInchise.every(f);
     return {
-      error: abiaCerute.length === inchise.length
-        ? "Clientul abia a cerut returul, iar coletul n-a ajuns încă la tine. Nu ai ce răspunde până atunci."
-        : "Returul nu mai așteaptă un răspuns de la tine — între timp s-a schimbat. Reîncarcă pagina.",
+      error: toate((x) => x === null)
+        ? "Nu am putut confirma încă starea returului la Trendyol. Încearcă din nou după următoarea sincronizare."
+        : toate((x) => x === "Created")
+          ? "Clientul abia a cerut returul, iar coletul n-a ajuns încă la tine. Nu ai ce răspunde până atunci."
+          : "Returul nu mai așteaptă un răspuns de la tine — între timp s-a schimbat. Reîncarcă pagina.",
     };
   }
 
@@ -797,6 +809,14 @@ export async function repuneInStoc(
      */
     case "marfa-n-a-ajuns": return {
       error: "Returul e abia inițiat de client, iar coletul n-a ajuns încă la tine. Poți pune marfa înapoi în stoc după ce o primești.",
+    };
+    /*
+     * ⚠ NECUNOSCUTUL SE OPRESTE, si mesajul spune ca e o asteptare, nu un refuz. Vezi
+     * `marfaAAjuns`: un „nu" gresit se repara singur la urmatoarea sincronizare, un „da" gresit
+     * umfla stocul tacut si il plateste un client care cumpara ce nu exista.
+     */
+    case "status-necunoscut": return {
+      error: "Nu am putut confirma încă starea returului la Trendyol. Încearcă din nou după următoarea sincronizare.",
     };
     default: return { error: "Stocul nu s-a putut actualiza. Încearcă din nou." };
   }

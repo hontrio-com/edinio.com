@@ -106,6 +106,27 @@ test("⚠ si nimeni nu mai scrie `c.status` in baza", () => {
   /* ⚠ Si panoul filtreaza pe lista adevarata, nu pe una scrisa de mana. */
   const act = readFileSync("src/lib/actions/trendyol-retururi.actions.ts", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "");
-  assert.match(act, /q\.in\("claim_status", STARI_DE_HOTARAT\)/);
   assert.doesNotMatch(act, /"Created", "WaitingInAction", "InAnalysis"/);
+});
+
+test("⚠ si un status pe care NU-L STIM se arata, nu se ascunde", () => {
+  /*
+   * ═══ ⚠ ACEEASI CAPCANA, IN ALTA HAINA ═══
+   *
+   * `in(...)` nu potriveste un NULL. `claim_status` se aduna acum din liniile lor — iar daca
+   * vreodata n-am putea citi starea unei linii (o forma noua a lui `claimItemStatus`, un raspuns
+   * pe care nu l-am mai vazut), cererea ar iesi cu `null` si ar DISPAREA din lista. Adica exact
+   * defectul de azi, reintors pe alt drum.
+   *
+   * ⚠ DIRECTIA SIGURA E INVERSA: mai bine aratat un retur la care omul n-are ce face, decat
+   * ascuns unul care cere o apasare si expira netratat.
+   *
+   * ⚠ MASURAT pe sase cazuri, in tranzactie anulata pe schema adevarata:
+   *     forma veche  ->  InAnalysis, WaitingInAction, Created      (GOLUL LIPSESTE)
+   *     forma noua   ->  WaitingInAction, Created, GOL             (si fara InAnalysis)
+   */
+  const act = readFileSync("src/lib/actions/trendyol-retururi.actions.ts", "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(act, /claim_status\.is\.null,claim_status\.in\.\(\$\{STARI_DE_HOTARAT\.join\(","\)\}\)/);
+  assert.doesNotMatch(act, /q\.in\("claim_status"/, "un `in` simplu ar pierde golul");
 });

@@ -100,7 +100,20 @@ export async function retururiTrendyol(
    * Apoi: `InAnalysis` nu e o stare in care comerciantul are ceva de facut — acolo se uita EI.
    * Aratata ca „așteaptă răspunsul tău", l-ar fi trimis sa caute un buton care nu exista.
    */
-  if (doarDeHotarat) q = q.in("claim_status", STARI_DE_HOTARAT);
+  /*
+   * ═══ ⚠ SI UN STATUS PE CARE NU-L STIM TREBUIE SA SE VADA ═══
+   *
+   * `in(...)` nu potriveste un NULL — chiar capcana de mai sus, in alta haina. `claim_status` se
+   * aduna acum din liniile lor, iar daca vreodata n-am putea citi starea unei linii (o forma
+   * noua a lui `claimItemStatus`, un raspuns pe care nu l-am mai vazut), cererea ar iesi cu
+   * `null` si ar DISPAREA din lista — adica exact defectul de azi, reintors.
+   *
+   * ⚠ DIRECTIA SIGURA E INVERSA: mai bine aratat un retur la care omul n-are ce face, decat
+   * ascuns unul care cere o apasare si expira netratat. Necunoscutul se arata.
+   */
+  if (doarDeHotarat) {
+    q = q.or(`claim_status.is.null,claim_status.in.(${STARI_DE_HOTARAT.join(",")})`);
+  }
 
   const { data, error } = await q;
   if (error) return { error: "Retururile nu s-au putut citi. Reîncarcă pagina." };

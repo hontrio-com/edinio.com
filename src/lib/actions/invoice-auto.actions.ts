@@ -32,9 +32,12 @@ export async function maybeAutoInvoice(
 
     const o = order as Record<string, unknown>;
     /*
-     * Marketplaces (About You, Trendyol, ...) collect payment and invoice the end
-     * customer themselves, so we never auto-invoice their orders (the merchant
-     * invoices the marketplace B2B instead).
+     * Unele marketplace-uri incaseaza si factureaza ELE clientul final, iar comerciantul le
+     * factureaza lor B2B. Acolo nu emitem nimic catre client.
+     *
+     * ⚠ NU E ADEVARAT LA TOATE, si presupunerea asta a tinut comenzile Trendyol nefacturate.
+     * Vezi nota de mai jos: eMAG si Trendyol cer AMANDOUA ca vanzatorul sa factureze clientul
+     * final. About You ramane sub regula de sus.
      *
      * ═══ ⚠ eMAG E EXCEPTIA, SI E O DEOSEBIRE FISCALA, NU TEHNICA ═══
      *
@@ -52,7 +55,55 @@ export async function maybeAutoInvoice(
      */
     const src = o.order_source as { marketplace?: string } | null;
     const eEmag = src?.marketplace === "emag" || o.payment_method === "emag";
-    if (!eEmag && (src?.marketplace || o.payment_method === "aboutyou" || o.payment_method === "trendyol")) return;
+
+    /*
+     * ═══ ⚠ SI TRENDYOL FACTUREAZA CLIENTUL FINAL (26.08.2026) ═══
+     *
+     * Nota de mai sus spunea „marketplace-urile incaseaza si factureaza ele clientul, deci nu
+     * le facturam comenzile". E adevarat la About You. La Trendyol e GRESIT, si s-a masurat
+     * direct pe API-ul lor, pe comenzile reale ale contului:
+     *
+     *   invoiceAddress = numele si adresa CLIENTULUI (nu ale Trendyol)
+     *   invoiceStatus  = "NotInvoiced"   pe toate cele opt comenzi
+     *   invoiceNumber  = ""              pe toate cele opt comenzi
+     *
+     * `invoiceStatus` si `invoiceNumber` sunt campuri pe care doar VANZATORUL le poate misca.
+     * Daca Trendyol ar factura clientul, n-ar exista un loc gol care asteapta numarul nostru.
+     *
+     * ⚠ CE A COSTAT: niciuna dintre comenzile Trendyol ale comerciantului n-a fost vreodata
+     * facturata. Nici la client, nici la ei. Iar lipsa nu se vedea nicaieri in Edinio, fiindca
+     * „nu facturam comenzile de marketplace" arata ca o hotarare, nu ca o scapare.
+     *
+     * ⚠ INCARCAREA NU SE FACE DE AICI (ar trage modulele Trendyol in fiecare schimbare de
+     * status). Se face din cronul `trendyol-sync`, care ia comenzile cu factura si fara
+     * `invoice_uploaded_at` — exact tiparul eMAG.
+     */
+    /*
+     * ⚠ SI TOTUSI NU PORNESTE SINGURA. Doua lucruri masurate azi schimba socoteala:
+     *
+     *   - `invoiceNumber` la ei are format fix (3 alfanumerice + 13 cifre, 16 semne). O serie
+     *     romaneasca obisnuita, „EDN1234", NU incape. Iar un numar potrivit de noi ar fi ALT
+     *     numar decat cel de pe documentul fiscal — asa ceva nu se face niciodata.
+     *   - nu au niciun capat de CORECTIE sau STERGERE a unei facturi trimise, iar duplicatele
+     *     dau 409. Deci fiecare trimitere e cu un singur foc si pe veci.
+     *
+     * Peste asta, comerciantul poate emite deja facturile astea de mana, in alta parte —
+     * pornite si de aici, ar iesi doua documente fiscale pentru aceeasi marfa.
+     *
+     * ⚠ DECI E UN COMUTATOR, STINS DIN START. Codul e gata; hotararea e a comerciantului,
+     * fiindca a lui e raspunderea fiscala.
+     */
+    const eTrendyol = src?.marketplace === "trendyol" || o.payment_method === "trendyol";
+    if (eTrendyol) {
+      const { data: st, error: eSt } = await supabase
+        .from("store_settings").select("trendyol_config").eq("business_id", businessId).maybeSingle();
+      /* ⚠ O citire picata NU porneste facturarea: aceeasi asimetrie ca la eMAG mai jos — o
+         trecere sarita se reia, o factura fiscala gresita se storneaza. */
+      if (eSt) return;
+      const cfg = (st?.trendyol_config ?? {}) as { factureaza_clientul?: boolean };
+      if (cfg.factureaza_clientul !== true) return;
+    }
+    if (!eEmag && !eTrendyol && (src?.marketplace || o.payment_method === "aboutyou")) return;
 
     /*
      * ═══ ⚠ O COMANDĂ eMAG INCOMPLETĂ NU SE FACTUREAZĂ ═══

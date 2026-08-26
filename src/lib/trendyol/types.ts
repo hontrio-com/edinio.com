@@ -198,6 +198,19 @@ export interface TrendyolConfig {
    */
   origine?: TrendyolStoreFront;
   /** Marcajul ferestrei de retururi. ⚠ Fereastra lor e de cel mult doua saptamani. */
+  /**
+   * Comerciantul factureaza CLIENTUL FINAL la Trendyol, si vrea ca Edinio s-o faca.
+   *
+   * ⚠ MASURAT PE API-UL LOR ca asa stau lucrurile: `invoiceAddress` poarta numele si adresa
+   * clientului, iar `invoiceStatus`/`invoiceNumber` sunt campuri pe care doar vanzatorul le
+   * misca — si erau „NotInvoiced"/gol pe toate comenzile contului.
+   *
+   * ⚠ DAR RAMANE STINS DIN START, si nu din nehotarare: `invoiceNumber` la ei are format fix
+   * (3 alfanumerice + 13 cifre) in care o serie romaneasca obisnuita nu incape, iar ei n-au
+   * niciun capat de corectie sau stergere — fiecare trimitere e cu un singur foc si pe veci.
+   * Raspunderea fiscala e a comerciantului, deci si hotararea.
+   */
+  factureaza_clientul?: boolean;
   claims_synced_at?: string;
   /**
    * ⚠ Pozitia pe FIECARE vitrina. Cu un marcaj comun, o vitrina cazuta ii tine pe loc pe

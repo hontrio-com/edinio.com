@@ -57,6 +57,15 @@ export interface AboutYouConfig {
   fulfillment_type?: AboutYouFulfillmentType;
   default_carrier_key?: string;
   carrier_map?: Record<string, string>; // Edinio courier code -> About You carrier_key
+  /**
+   * Curierii la care AWB-ul de TUR e valabil si pentru RETUR, declarat de comerciant.
+   *
+   * ⚠ NU E O PRESUPUNERE DE-A NOASTRA, si de-aia sta in config, nu in cod. `return_tracking_key`
+   * e un camp separat de `shipment_tracking_key` in schema lor, deci ei le tin drept doua
+   * documente. Daca sunt sau nu acelasi la un curier anume, stie contractul comerciantului cu
+   * curierul — nu stim noi. Nedeclarat, se opreste expedierea. Vezi `shipOrderNow`.
+   */
+  retur_bidirectional?: Record<string, boolean>;
   // Catalog defaults.
   default_country_of_origin?: string;   // ISO2, default "RO"
   brand_id?: number;                    // merchant's primary brand

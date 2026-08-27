@@ -56,27 +56,56 @@ test("⚠ fara AWB de retur adevarat, campul se OMITE", () => {
   assert.match(tipuri, /return_tracking_key\?: string \| null;/);
 });
 
-test("⚠ dar daca ei totusi il cer, expedierea nu se blocheaza", () => {
+test("⚠ numarul de tur nu mai pleaca drept retur, NICIODATA", () => {
   /*
-   * O reluare, o singura data, cu numarul de tur - si scrisa, ca sa nu para o hotarare buna.
-   * Numai pe REFUZ LIMPEDE (4xx), fiindca doar acolo stim ca nu s-a intamplat nimic: o retrimitere
-   * peste un raspuns necunoscut ar putea expedia de doua ori.
-   */
-  assert.match(sync, /if \(isAboutYouError\(res\) && !awbRetur && eRefuzLimpede\(res\.status\)\) \{/);
-  assert.match(sync, /NU e o eticheta de retur valabila/);
-  /* Si chiar o SINGURA data: reluarea trimite `tracking`, deci a doua oara conditia nu mai tine. */
-  assert.equal((sync.match(/await trimiteExpedierea\(/g) ?? []).length, 2);
-
-  /*
-   * ═══ ⚠ SI AMANDOUA INCERCARILE SE OPRESC PE „NEURMARIT" (27.08.2026) ═══
+   * ═══ ⚠ DIMINEATA MAI EXISTA O RELUARE (27.08.2026, seara) ═══
    *
-   * Expedierea are un singur foc. „Ei au primit-o si noi n-am putut lega id-ul" nu e „a picat":
-   * o retrimitere de-acolo ar raporta doua expedieri pe aceleasi linii. Deci se opreste, cu
-   * `409` — nu cu `0`, care inseamna trecator si l-ar face pe cron sa reia singur.
+   * Scosesem rezerva din prima cerere, dar lasasem o reluare: la un refuz limpede se retrimitea cu
+   * numarul de TUR, si chiar logul spunea „care NU e o eticheta de retur valabila". Adica: codul
+   * stia ca informatia e falsa si o trimitea oricum. Aia nu se apara cu nimic.
+   *
+   * ⚠ E cu atat mai rau daca `return_tracking_key` e CERUT de schema lor: atunci prima cerere ar
+   * fi refuzata mereu, deci reluarea ar fi calea OBISNUITA, nu exceptia - fiecare colet ar pleca
+   * cu o eticheta de retur care nu duce nicaieri.
    */
-  assert.equal((sync.match(/lot[12]\.fel === "neurmarit"/g) ?? []).length, 2);
-  assert.equal((sync.match(/lot[12]\.fel === "intentie-nescrisa"/g) ?? []).length, 2);
-  assert.match(sync, /status: 409,/);
+  assert.doesNotMatch(sync, /trimiteExpedierea\(tracking\)/, "reluarea cu numarul de tur s-a intors");
+  assert.doesNotMatch(sync, /NU e o eticheta de retur valabila/);
+  /* O singura trimitere: nu mai exista a doua incercare cu alt continut. */
+  assert.equal((sync.match(/await trimiteExpedierea\(/g) ?? []).length, 1);
+});
+
+test("⚠ ce nu stim se declara, nu se ghiceste", () => {
+  /*
+   * Ce STIM: ca ei tin `shipment_tracking_key` si `return_tracking_key` drept doua campuri
+   * deosebite - asta e in schema. Ce NU stim: daca la un curier anume acelasi numar e valabil in
+   * amandoua sensurile - asta e in contractul comerciantului cu curierul.
+   *
+   * Deci nu hotaram noi: declara el, pe curier, si nedeclarat inseamna OPRIT.
+   */
+  assert.match(sync, /const bidirectional = ctx\.config\.retur_bidirectional\?\.\[codCurier\] === true;/);
+  assert.match(sync, /const cheiaDeRetur = awbRetur \|\| \(bidirectional \? tracking : undefined\);/);
+  assert.match(sync, /if \(!cheiaDeRetur\) \{/);
+  /* ⚠ Si oprirea NU e trecatoare: cronul n-are ce relua singur, e treaba omului. */
+  const i = sync.indexOf("if (!cheiaDeRetur) {");
+  assert.match(sync.slice(i, i + 700), /status: 409,/);
+});
+
+test("⚠ si mesajul trimite la bifa care CHIAR exista", () => {
+  /* ⚠ De doua ori intr-o zi am trimis clientul la un buton inexistent. */
+  assert.match(sync, /bifează în Setări → About You/);
+  const ecran = readFileSync("src/components/dashboard/AboutYouCarrierMapping.tsx", "utf8");
+  assert.match(ecran, /Același AWB e valabil și pentru retur/);
+  assert.match(ecran, /saveAboutYouReturBidirectional\(businessId, courierCode, valoare\)/);
+  /* Si bifa ajunge chiar in configul pe care il citeste expedierea. */
+  const act = readFileSync("src/lib/actions/aboutyou.actions.ts", "utf8");
+  assert.match(act, /retur_bidirectional: harta/);
+});
+
+test("⚠ „nedeclarat” si „declarat ca nu” duc la aceeasi oprire", () => {
+  /* Se STERGE cheia in loc sa se scrie `false`: doua feluri de a spune acelasi lucru, o singura
+     forma in date. Altfel ar fi trebuit sa deosebim intre ele undeva, degeaba. */
+  const act = readFileSync("src/lib/actions/aboutyou.actions.ts", "utf8");
+  assert.match(act, /if \(valoare\) harta\[courierCode\] = true;[\s\S]{0,12}else delete harta\[courierCode\];/);
 });
 
 test("⚠ raspunsul brut se pastreaza la fiecare ingest, pe amandoua caile", () => {

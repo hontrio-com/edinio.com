@@ -160,6 +160,8 @@ export interface AboutYouStatus {
   defaultCountryOfOrigin: string;
   defaultCarrierKey?: string;
   carrierMap: Record<string, string>;
+  /** Curierii la care comerciantul a declarat ca AWB-ul de tur e valabil si la retur. */
+  returBidirectional: Record<string, boolean>;
   autoSync: boolean;
   lastSyncAt?: string;
   webhookActive: boolean;
@@ -206,6 +208,7 @@ export async function getAboutYouStatus(businessId: string): Promise<AboutYouSta
     defaultCountryOfOrigin: config.default_country_of_origin ?? DEFAULT_COUNTRY_OF_ORIGIN,
     defaultCarrierKey: config.default_carrier_key,
     carrierMap: config.carrier_map ?? {},
+    returBidirectional: config.retur_bidirectional ?? {},
     autoSync: config.auto_sync !== false,
     lastSyncAt: config.last_sync_at,
     webhookActive: !!config.webhook_subscription_id,
@@ -596,6 +599,30 @@ export async function getAboutYouCarriers(businessId: string): Promise<{ carrier
   const r = await getCarriersCached(g.auth);
   if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca curierii About You.", "carriers", r);
   return { carriers: r.data };
+}
+
+/**
+ * Comerciantul declara ca la un curier acelasi AWB e valabil si la retur.
+ *
+ * ⚠ E O DECLARATIE, NU O SETARE DE COMODITATE. `return_tracking_key` e un camp separat de
+ * `shipment_tracking_key` in schema lor, deci ei le tin drept doua documente. Daca la un curier
+ * anume sunt acelasi, stie contractul comerciantului cu curierul — nu stim noi, si nu ghicim.
+ * Nedeclarat, expedierea se opreste (vezi `shipOrderNow`).
+ */
+export async function saveAboutYouReturBidirectional(
+  businessId: string, courierCode: string, valoare: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(businessId);
+  const harta = { ...(config.retur_bidirectional ?? {}) };
+  /* Sters, nu pus pe `false`: „nedeclarat" si „declarat ca nu" duc la aceeasi oprire. */
+  if (valoare) harta[courierCode] = true;
+  else delete harta[courierCode];
+  const ok = await saveConfig(businessId, { ...config, retur_bidirectional: harta });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
 }
 
 export async function saveAboutYouCarrierMap(

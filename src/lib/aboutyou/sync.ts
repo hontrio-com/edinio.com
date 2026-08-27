@@ -96,13 +96,15 @@ interface ListingRow {
   last_synced_at: string | null;
   /** Ce stiam despre el INAINTE de trimiterea in curs. Vezi `urmareaLotului`. */
   stare_dinainte: string | null;
+  /** A cata oara s-a trimis produsul. Vezi migratia 2026-11-27. */
+  generatie: number;
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListing", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte, generatie")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
 }
 
@@ -110,7 +112,7 @@ async function getListingByStyleKey(admin: Db, businessId: string, styleKey: str
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListingByStyleKey", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte, generatie")
     .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle() as never);
 }
 
@@ -264,12 +266,15 @@ export function eRefuzLimpede(status: number | undefined): boolean {
 export async function cuLotDurabil<T extends { batchRequestId?: string | null }>(
   admin: Db, businessId: string, kind: string, relatedIds: string[],
   trimite: () => Promise<AboutYouResult<T>>,
+  /** Generatia trimiterii, la loturile de produs. Vezi migratia 2026-11-27. */
+  generatie?: number,
 ): Promise<LotDurabil<T>> {
   const intentId = randomUUID();
   const { error: eIntentie } = await admin.from("aboutyou_batches").insert({
     business_id: businessId, batch_request_id: null, intent_id: intentId,
     kind, status: "intentie", related_ids: relatedIds as never,
     attempts: 0, poll_errors: 0,
+    ...(generatie != null ? { generatie } : {}),
     /* ⚠ Pus INAINTE de apel, nu dupa: dupa, o cadere intre apel si scriere ar lasa randul
        aratand ca n-a plecat nimic — exact minciuna de care fugim. */
     trimis_la: new Date().toISOString(),
@@ -349,6 +354,35 @@ export function caUnRezultat<T extends { batchRequestId?: string | null }>(
 }
 
 /**
+ * Loturile de produs ramase deschise dintr-o generatie depasita.
+ *
+ * ⚠ Se cauta de la LISTARE spre loturi, nu invers: listarea stie care e generatia curenta, iar
+ * `related_ids` poarta `style_key`-ul ei.
+ */
+async function inchideLoturileDepasite(admin: Db, businessId: string): Promise<void> {
+  const listari = randuriCitite<{ style_key: string; generatie: number }>(
+    "aboutyou.listariCuGeneratie", await admin
+      .from("aboutyou_listings").select("style_key, generatie")
+      .eq("business_id", businessId).gt("generatie", 0).limit(500) as never);
+
+  for (const l of listari) {
+    const { error } = await admin.from("aboutyou_batches")
+      .update({ status: "depasit", polled_at: new Date().toISOString() } as never)
+      .eq("business_id", businessId).eq("kind", "product")
+      .contains("related_ids", [l.style_key])
+      .in("status", ["intentie", "necunoscut"])
+      .lt("generatie", l.generatie);
+    if (error) {
+      await logError({
+        action: "aboutyou/intentie", severity: "warning",
+        message: `loturile depasite ale produsului nu s-au putut inchide: ${error.message}`,
+        details: { styleKey: l.style_key, generatie: l.generatie }, businessId,
+      });
+    }
+  }
+}
+
+/**
  * Intentiile ramase deschise: am trimis si nu stim ce a iesit.
  *
  * ⚠ Se scrie o SINGURA data pe rand (`alarma_scrisa_la`), altfel cronul de minut ar umple
@@ -356,6 +390,18 @@ export function caUnRezultat<T extends { batchRequestId?: string | null }>(
  */
 const PRAG_INTENTIE_MS = 10 * 60 * 1000;
 export async function alarmaIntentiiDeschise(admin: Db, businessId: string): Promise<number> {
+  /*
+   * ═══ ⚠ INTAI SE INCHID CELE DEPASITE, APOI SE STRIGA DUPA CE RAMANE (27.08.2026, seara) ═══
+   *
+   * Un lot de produs ramas `intentie` sau `necunoscut` dintr-o generatie veche nu mai are ce
+   * pazi: ce a trimis el a fost inlocuit de ce am trimis dupa. Lasat asa, ar fi strigat la
+   * nesfarsit — iar o alarma care striga mereu nu mai e o alarma.
+   *
+   * ⚠ SE INCHID CA `depasit`, nu se sterg: randul e urma unei cereri care CHIAR a plecat spre
+   * About You, si aia nu se sterge fiindca ne-a devenit incomoda.
+   */
+  await inchideLoturileDepasite(admin, businessId);
+
   const limita = new Date(Date.now() - PRAG_INTENTIE_MS).toISOString();
   const randuri = randuriCitite<{ id: string; kind: string; related_ids: unknown; trimis_la: string | null }>(
     "aboutyou.intentiiDeschise", await admin
@@ -681,13 +727,32 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   // POST /products/ accepta cel mult 100 de articole (`maxItems`), iar depasirea
   // respinge cererea INTREAGA, nu doar surplusul. Un produs cu peste 100 de
   // variante nu s-ar fi putut lista deloc.
+  /*
+   * ═══ ⚠ FIECARE TRIMITERE E O GENERATIE ═══
+   *
+   * Se creste ATOMIC, printr-un RPC: doi lucratori care trimit acelasi produs in aceeasi clipa ar
+   * citi altfel amandoi aceeasi valoare si s-ar crede amandoi generatia curenta. Vezi migratia
+   * 2026-11-27.
+   *
+   * ⚠ Cand cresterea nu merge, NU se trimite nimic: un lot fara generatie n-ar putea fi nici
+   * numarat printre frati, nici depasit mai tarziu — adica exact fundul de sac pe care generatia
+   * il inlatura.
+   */
+  const { data: genNoua, error: eGen } = await admin.rpc("aboutyou_generatie_noua", {
+    p_listing_id: listing.id,
+  });
+  if (eGen || typeof genNoua !== "number") {
+    return { ok: false, error: `Nu am putut deschide o trimitere nouă: ${eGen?.message ?? "răspuns nevalid"}`, status: 0 };
+  }
+  const generatie = genNoua;
+
   let batchRequestId: string | undefined;
   const transe = Math.ceil(built.items.length / 100);
   let nescrise = 0;
   for (let i = 0; i < built.items.length; i += 100) {
     /* ⚠ Acelasi produs retrimis da acelasi produs: reluarea e inofensiva. */
     const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "product", [listing.style_key],
-      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100))), "trimiterea produsului");
+      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100)), generatie), "trimiterea produsului");
     if (isAboutYouError(res)) {
       /*
        * ⚠ UN ESEC LA MIJLOCUL SIRULUI LASA PRODUSUL PE JUMATATE LA EI. Transele dinainte au
@@ -975,6 +1040,8 @@ interface BatchRow {
   id: string; batch_request_id: string; kind: string; related_ids: unknown;
   attempts: number; poll_errors: number; submitted_at: string;
   tranzient_de_la: string | null; alarma_scrisa_la: string | null;
+  /** Generatia trimiterii in care a plecat. Vezi migratia 2026-11-27. */
+  generatie: number | null;
 }
 
 /**
@@ -1048,7 +1115,7 @@ async function marcheazaComenzileLotului(
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
   const batches = randuriCitite<BatchRow>("aboutyou.loturiDeschise", await admin
     .from("aboutyou_batches")
-    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la")
+    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la, generatie")
     .eq("business_id", ctx.businessId)
     .in("status", ["pending", "processing", "retry"])
     /* ⚠ Loturile amanate dupa un esec de transport se sar: vezi `amanare`. Fara asta, un lot in
@@ -1462,6 +1529,20 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             /* Si-a facut treaba: urmatoarea trimitere isi scrie propria stare de dinainte. */
             stare_dinainte: null,
           })) asezat = false;
+        } else if (b.kind === "product" && b.generatie != null && b.generatie < listing.generatie) {
+          /*
+           * ═══ ⚠ LOTUL E DINTR-O GENERATIE DEPASITA (27.08.2026, seara) ═══
+           *
+           * Comerciantul a mai trimis produsul de-atunci. Ce spune lotul asta e despre o versiune
+           * care nu mai exista: n-are voie nici sa scrie starea, nici sa publice. Se lasa in pace,
+           * si generatia curenta isi va spune singura cuvantul.
+           */
+          await logError({
+            action: "aboutyou-sync/loturi", severity: "info",
+            message: `lot din generatia ${b.generatie} asezat dupa ce produsul a fost retrimis (generatia ${listing.generatie}): se ignora`,
+            details: { styleKey: listing.style_key, batchRequestId: b.batch_request_id },
+            businessId: ctx.businessId,
+          });
         } else if (b.kind === "product" && listing.status === "pending") {
           /*
            * ═══ ⚠ UN PRODUS CU PESTE 100 DE VARIANTE PLEACA IN MAI MULTE LOTURI ═══
@@ -1495,6 +1576,17 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
                * marimile alea ar fi fost de vanzare fara sa existe.
                */
               .in("status", ["intentie", "necunoscut", "pending", "processing", "retry"])
+              /*
+               * ═══ ⚠ DAR NUMAI IN GENERATIA LOTULUI (27.08.2026, seara) ═══
+               *
+               * Fara asta, un `necunoscut` orfan — o transa care a plecat si a primit un `5xx` —
+               * ramanea in baza fara `batchRequestId`, deci nesondabil pentru totdeauna, si
+               * bloca publicarea produsului la NESFARSIT. Reluarea reusea, dar orfanul ramanea.
+               *
+               * Un lot dintr-o generatie mai veche nu mai are ce sa blocheze: ce a trimis el a
+               * fost oricum inlocuit de ce am trimis dupa.
+               */
+              .eq("generatie", b.generatie ?? -1)
               .neq("id", b.id) as never);
 
           /*
@@ -2156,19 +2248,25 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
    * singur are azi AWB de retur. Oprita expedierea pana cand exista, s-ar fi blocat 16 din 17 —
    * mult mai rau decat eticheta gresita pe care o reparam.
    *
-   * ═══ ⚠ SI TOTUSI NU SE MAI TRIMITE CEL DE TUR (27.08.2026) ═══
+   * ═══ ⚠ NUMARUL DE TUR NU MAI PLEACA DREPT RETUR, NICIODATA (27.08.2026, seara) ═══
    *
-   * Rezerva era `return_tracking_key: awbRetur || tracking`: fara AWB de retur, pleca numarul de
-   * TUR. Clientul primeste atunci o eticheta de retur care nu duce nicaieri — un document valid
-   * pentru alt drum. Nu e o lipsa, e o informatie FALSA, si e mai rea decat lipsa.
+   * Dimineata am scos rezerva din prima cerere, dar am lasat o reluare: la un refuz limpede se
+   * retrimitea cu numarul de TUR, si chiar logul spunea „care NU e o eticheta de retur valabila".
+   * Adica: codul stia ca informatia e falsa si o trimitea oricum. Aia nu se apara cu nimic.
    *
-   * ⚠ CAMPUL E OPTIONAL, si nu e o presupunere: `shipOrderItems` il are `?` in semnatura, iar
-   * `AboutYouOrderItem.return_tracking_key` e `?: string | null` in schema lor de citire. Doua
-   * semne independente. Deci cand nu avem unul adevarat, se OMITE.
+   * ⚠ SI E CU ATAT MAI RAU DACA `return_tracking_key` E CERUT de schema lor: atunci prima cerere
+   * ar fi refuzata MEREU, deci reluarea ar fi calea OBISNUITA, nu exceptia. Fiecare colet ar
+   * pleca cu o eticheta de retur care nu duce nicaieri.
    *
-   * ⚠ SI DACA TOTUSI IL CER: un refuz limpede (4xx, deci „nu s-a intamplat nimic" dupa chiar
-   * regula noastra din `eRefuzLimpede`) se reia O SINGURA DATA cu numarul de tur, si se scrie de
-   * ce. Asa nu se blocheaza nicio expediere, dar nici nu se minte din prima.
+   * ⚠ CE STIM SI CE NU. Ca ei tin `shipment_tracking_key` si `return_tracking_key` drept doua
+   * campuri deosebite — asta e in schema. Daca la un curier anume acelasi numar e valabil in
+   * amandoua sensurile — asta NU e in schema lor, e in contractul comerciantului cu curierul.
+   * Deci nu o hotaram noi: o declara el, pe curier, in setari (`retur_bidirectional`).
+   *
+   * Trei cai, si niciuna nu minte:
+   *   AWB de retur adevarat (azi: Sameday)        → pleaca el
+   *   comerciantul a declarat curierul bidirectional → pleaca cel de tur, si se scrie ca atare
+   *   nedeclarat                                   → SE OPRESTE, cu ce are de facut scris pe fata
    */
   const awbRetur = typeof (row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number === "string"
     ? String((row as { sameday_return_awb_number?: unknown }).sameday_return_awb_number).trim()
@@ -2178,6 +2276,24 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
    * comerciantul crede ca a plecat. De aceea trece prin `cuLotDurabil`, iar cand intentia nu se
    * poate scrie, cererea NU se face deloc.
    */
+  /*
+   * ⚠ Nedeclarat inseamna OPRIT, nu „probabil merge". Implicitul unei intrebari la care n-am
+   * primit raspuns e „nu stiu", iar pe „nu stiu" nu se trimite un document catre un client.
+   */
+  const codCurier = courier ?? "";
+  const bidirectional = ctx.config.retur_bidirectional?.[codCurier] === true;
+  const cheiaDeRetur = awbRetur || (bidirectional ? tracking : undefined);
+  if (!cheiaDeRetur) {
+    return {
+      ok: false,
+      error: `Nu există un AWB de retur pentru ${codCurier || "curierul comenzii"}.`
+        + " Generează un AWB de retur, sau bifează în Setări → About You că la acest curier"
+        + " același AWB e valabil și la retur.",
+      /* ⚠ NU `0`: nu e o cauza trecatoare, ci ceva ce numai omul poate rezolva. */
+      status: 409,
+    };
+  }
+
   const trimiteExpedierea = (cuRetur: string | undefined) =>
     cuLotDurabil(admin, ctx.businessId, "ship", [orderId], () => shipOrderItems(ctx.auth, [{
       order_items: orderItemIds, carrier_key: carrierKey,
@@ -2196,7 +2312,7 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
    * `alarmaIntentiiDeschise` il scoate la lumina cu tot ce trebuie ca sa fie verificat in Seller
    * Center inainte de o reluare de mana.
    */
-  const lot1 = await trimiteExpedierea(awbRetur || undefined);
+  const lot1 = await trimiteExpedierea(cheiaDeRetur);
   if (lot1.fel === "intentie-nescrisa") {
     return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou.", status: 0 };
   }
@@ -2209,28 +2325,7 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
       status: 409,
     };
   }
-  let res = lot1.res;
-  if (isAboutYouError(res) && !awbRetur && eRefuzLimpede(res.status)) {
-    /* Vezi nota de mai sus: o singura reluare, cu numarul de tur, si scrisa. */
-    await logError({
-      action: "aboutyou/expediere", severity: "warning",
-      message: "About You a refuzat expedierea fara AWB de retur: s-a retrimis cu numarul de tur, care NU e o eticheta de retur valabila",
-      details: { orderId, carrierKey, raspuns: res.error }, businessId: ctx.businessId,
-    });
-    const lot2 = await trimiteExpedierea(tracking);
-    if (lot2.fel === "intentie-nescrisa") {
-      return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou.", status: 0 };
-    }
-    if (lot2.fel === "neurmarit") {
-      return {
-        ok: false,
-        error: "Am trimis expedierea la About You, dar nu știm dacă a fost primită."
-          + " Verifică în Seller Center înainte de a încerca din nou.",
-        status: 409,
-      };
-    }
-    res = lot2.res;
-  }
+  const res = lot1.res;
   if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
   const batchRequestId = res.data?.batchRequestId;
   const now = new Date().toISOString();

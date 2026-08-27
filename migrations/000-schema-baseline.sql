@@ -376,6 +376,24 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_generatie_noua(p_listing_id uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_gen integer;
+begin
+  update public.aboutyou_listings
+     set generatie = generatie + 1, updated_at = now()
+   where id = p_listing_id
+  returning generatie into v_gen;
+  return v_gen;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -4458,7 +4476,8 @@ create table if not exists public.aboutyou_batches (
   tranzient_de_la timestamp with time zone,
   alarma_scrisa_la timestamp with time zone,
   intent_id uuid,
-  trimis_la timestamp with time zone);
+  trimis_la timestamp with time zone,
+  generatie integer);
 
 create table if not exists public.aboutyou_listings (
   id uuid default gen_random_uuid() not null,
@@ -4482,7 +4501,8 @@ create table if not exists public.aboutyou_listings (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   attributes jsonb default '[]'::jsonb not null,
-  stare_dinainte text);
+  stare_dinainte text,
+  generatie integer default 0 not null);
 
 create table if not exists public.aboutyou_orders (
   id uuid default gen_random_uuid() not null,
@@ -6102,6 +6122,7 @@ CREATE INDEX abandoned_carts_business_phone_idx ON public.abandoned_carts USING 
 CREATE UNIQUE INDEX abandoned_carts_business_session_uidx ON public.abandoned_carts USING btree (business_id, session_id);
 CREATE INDEX abandoned_carts_business_status_activity_idx ON public.abandoned_carts USING btree (business_id, status, last_activity_at DESC);
 CREATE INDEX aboutyou_batches_deschise_idx ON public.aboutyou_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
+CREATE INDEX aboutyou_batches_generatie_idx ON public.aboutyou_batches USING btree (business_id, kind, generatie) WHERE (generatie IS NOT NULL);
 CREATE UNIQUE INDEX aboutyou_batches_intent_uidx ON public.aboutyou_batches USING btree (business_id, intent_id) WHERE (intent_id IS NOT NULL);
 CREATE INDEX aboutyou_batches_intentii_idx ON public.aboutyou_batches USING btree (business_id, submitted_at) WHERE (status = 'intentie'::text);
 CREATE INDEX aboutyou_inbox_de_reluat_idx ON public.aboutyou_webhook_inbox USING btree (business_id, primit_la) WHERE (prelucrat_la IS NULL);
@@ -8525,6 +8546,7 @@ grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) t
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to anon;
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to authenticated;
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to service_role;
+grant execute on function public.aboutyou_generatie_noua(p_listing_id uuid) to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
@@ -8708,6 +8730,7 @@ revoke execute on function privat.cripteaza(p_val text) from public;
 revoke execute on function privat.cripteaza_rand(p_rand jsonb) from public;
 revoke execute on function privat.decripteaza(p_val text) from public;
 revoke execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) from public;
+revoke execute on function public.aboutyou_generatie_noua(p_listing_id uuid) from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;

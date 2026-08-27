@@ -3,7 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { getAboutYouCarriers, saveAboutYouCarrierMap } from "@/lib/actions/aboutyou.actions";
+import {
+  getAboutYouCarriers, saveAboutYouCarrierMap, saveAboutYouReturBidirectional,
+} from "@/lib/actions/aboutyou.actions";
 import { CURIERI_ABOUTYOU } from "@/lib/aboutyou/curieri";
 import type { AboutYouCarrier } from "@/lib/aboutyou/types";
 
@@ -19,9 +21,12 @@ import type { AboutYouCarrier } from "@/lib/aboutyou/types";
 const COURIERS = CURIERI_ABOUTYOU.map((c) => ({ code: c.cod, label: c.eticheta }));
 
 export function AboutYouCarrierMapping({
-  businessId, carrierMap,
+  businessId, carrierMap, returBidirectional,
 }: {
-  businessId: string; carrierMap: Record<string, string>;
+  businessId: string;
+  carrierMap: Record<string, string>;
+  /** Curierii la care comerciantul a declarat ca AWB-ul de tur e valabil si la retur. */
+  returBidirectional: Record<string, boolean>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -54,6 +59,17 @@ export function AboutYouCarrierMapping({
    */
   const romanesti = options.filter((o) => o.country_code === "RO");
   const optiuniSortate = [...romanesti, ...options.filter((o) => o.country_code !== "RO")];
+
+  const setRetur = (courierCode: string, valoare: boolean) => {
+    startTransition(async () => {
+      const res = await saveAboutYouReturBidirectional(businessId, courierCode, valoare);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(valoare
+        ? "Am notat: la acest curier AWB-ul e valabil și la retur."
+        : "Am notat: la acest curier e nevoie de un AWB de retur separat.");
+      router.refresh();
+    });
+  };
 
   const setMapping = (courierCode: string, carrierKey: string) => {
     startTransition(async () => {
@@ -92,8 +108,26 @@ export function AboutYouCarrierMapping({
       ) : (
         <div className="divide-y divide-border">
           {COURIERS.map((c) => (
-            <div key={c.code} className="py-3 flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-foreground">{c.label}</p>
+            <div key={c.code} className="py-3 flex items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{c.label}</p>
+                {/*
+                  * ⚠ Bifa e o DECLARATIE, nu o comoditate. About You cere un `return_tracking_key`
+                  * separat de cel de tur, deci le tine drept doua documente. Daca la curierul asta
+                  * sunt acelasi, stie contractul comerciantului cu el — nu stim noi, si nu ghicim.
+                  * Nebifat, expedierea se opreste cu un mesaj care trimite exact aici.
+                  */}
+                <label className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={returBidirectional[c.code] === true}
+                    onChange={(e) => setRetur(c.code, e.target.checked)}
+                    disabled={pending}
+                    className="h-3.5 w-3.5 rounded border-border"
+                  />
+                  Același AWB e valabil și pentru retur
+                </label>
+              </div>
               <select
                 value={carrierMap[c.code] ?? ""}
                 onChange={(e) => setMapping(c.code, e.target.value)}

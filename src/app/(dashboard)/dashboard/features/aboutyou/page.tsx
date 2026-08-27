@@ -92,7 +92,8 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
           {/* Inainte de mapari si de editor: ce lipseste, numarat pe datele reale. */}
           {preVerificare && <AboutYouPreVerificare date={preVerificare} />}
           <AboutYouCategoryMapping businessId={businessId} edinioCategories={categories} mapped={st.categoryMap} />
-          <AboutYouCarrierMapping businessId={businessId} carrierMap={st.carrierMap} />
+          <AboutYouCarrierMapping businessId={businessId} carrierMap={st.carrierMap}
+            returBidirectional={st.returBidirectional} />
           {paginaProduse && (
             <AboutYouListings
               businessId={businessId}

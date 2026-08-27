@@ -1319,11 +1319,26 @@ async function idsArticoleInStarea(
   return { ids };
 }
 
+/**
+ * Marcheaza randul lateral cu o stare de asteptare (`cancel_pending`, `return_pending`).
+ *
+ * ⚠ SCRIEREA PICATA SE SPUNE (27.08.2026, seara). Rezultatul nu se citea. Nu e pierdere de date
+ * — lotul e urmarit, iar `pollOpenBatches` scrie starea finala cand se aseaza — dar pana atunci
+ * comerciantul vede comanda ca si cum n-ar fi cerut nimic, si poate cere a doua oara. Costa o
+ * linie sa afle cineva.
+ */
 async function marcheazaSideRow(admin: Db, ctx: AboutYouSyncContext, orderId: string, status: string): Promise<void> {
   const now = new Date().toISOString();
-  await admin.from("aboutyou_orders")
+  const { error } = await admin.from("aboutyou_orders")
     .update({ status, last_synced_at: now, updated_at: now } as never)
     .eq("business_id", ctx.businessId).eq("order_id", orderId);
+  if (error) {
+    await logError({
+      action: "aboutyou/orders", severity: "warning",
+      message: `starea „${status}" nu s-a putut scrie pe comanda: ecranul o va arata gresit pana se aseaza lotul`,
+      details: { orderId, status, eroare: error.message }, businessId: ctx.businessId,
+    });
+  }
 }
 
 /*

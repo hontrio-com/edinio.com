@@ -29,16 +29,40 @@ test("⚠ produsul in aprobare primeste un avertisment, nu un blocaj", () => {
   assert.doesNotMatch(bucata, /issues\.push\(/);
 });
 
-test("⚠ si mesajul numeste butonul care CHIAR exista", () => {
+test("⚠ retragerea in ciorna se FACE, nu se cere omului", () => {
   /*
-   * ⚠ De doua ori intr-o zi am trimis clientul la un buton inexistent. Butonul se numeste
-   * „Retrage", si e aratat pe `pending_approval` - se cere aici, ca sa nu se schimbe unul fara
-   * celalalt.
+   * ═══ ⚠ ERA DOAR UN AVERTISMENT (27.08.2026, seara) ═══
+   *
+   * Documentatia lor spune ca un produs in aprobare nu se modifica: se retrage in `draft`, se
+   * schimba, si se retrimite. Noi doar avertizam si trimiteam oricum - „incearca si afla". Merge,
+   * dar prost: cererea e refuzata dupa minute, iar omul afla tarziu si nu stie ce sa faca.
+   *
+   * Pasul exista de mult (`tintaRetragere` intoarce `draft` chiar pentru `pending_approval`); ce
+   * lipsea era sa-l chemam noi.
    */
-  assert.match(actiuni, /apasă „Retrage” în lista de produse/);
-  const ecran = readFileSync("src/components/dashboard/AboutYouListings.tsx", "utf8");
-  assert.match(ecran, /const RETRAGABILE = new Set\(\[[\s\S]{0,200}?"pending_approval"/);
-  assert.match(ecran, /Retrage\s*<\/button>/);
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /if \(listing\.status === "pending_approval"\) \{/);
+  assert.match(sync, /await setRemoteStatus\(admin, ctx, productId, "draft"\)/);
+
+  /*
+   * ⚠ SI NU SE MERGE MAI DEPARTE IN ACEEASI TRECERE: `PUT /products/status` e tot asincron, deci
+   * pana se aseaza lotul lui produsul E INCA in aprobare la ei. `status: 0` inseamna trecator,
+   * deci elementul ramane in coada fara sa arda o incercare.
+   */
+  const i = sync.indexOf('if (listing.status === "pending_approval") {');
+  const bucata = sync.slice(i, i + 800);
+  assert.match(bucata, /status: 0,/);
+  /* Si vine INAINTEA deschiderii unei generatii noi: altfel am fi ars una degeaba. */
+  assert.ok(i < sync.indexOf('await admin.rpc("aboutyou_generatie_noua"'));
+});
+
+test("⚠ si textul din editor s-a schimbat odata cu codul", () => {
+  /*
+   * ⚠ Spunea „daca trimiterea e respinsa, apasa «Retrage»" - adevarat cat timp trimiteam oricum
+   * si asteptam refuzul. Lasat asa, ar fi trimis omul sa faca de mana un lucru deja facut.
+   */
+  assert.match(actiuni, /Îl retragem automat în ciornă la trimitere/);
+  assert.doesNotMatch(actiuni, /apasă „Retrage” în lista de produse/);
 });
 
 test("⚠ schimbarea categoriei dupa aprobare se semnaleaza, si numai atunci", () => {

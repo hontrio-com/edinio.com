@@ -730,6 +730,40 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   // respinge cererea INTREAGA, nu doar surplusul. Un produs cu peste 100 de
   // variante nu s-ar fi putut lista deloc.
   /*
+   * ═══ ⚠ UN PRODUS IN APROBARE SE RETRAGE INTAI IN CIORNA (27.08.2026, seara) ═══
+   *
+   * Documentatia lor spune ca un product master aflat in aprobare nu se modifica: se retrage in
+   * `draft`, se schimba, si se retrimite. Pana acum doar AVERTIZAM in editor si trimiteam oricum
+   * — „incearca si afla". Merge, dar prost: cererea e refuzata dupa minute, comerciantul afla
+   * tarziu, si nu-i e limpede ce sa faca.
+   *
+   * ⚠ SE FACE PASUL, NU SE CERE OMULUI. Retragerea in `draft` exista de mult (`tintaRetragere` o
+   * intoarce chiar pentru `pending_approval`); ce lipsea era s-o chemam noi, la locul potrivit.
+   *
+   * ⚠ SI NU SE MERGE MAI DEPARTE IN ACEEASI TRECERE. `PUT /products/status` e tot asincron: pana
+   * nu se aseaza lotul lui, produsul E INCA in aprobare la ei, deci trimiterea ar fi refuzata la
+   * fel. Se intoarce `status: 0` — cauza trecatoare — deci elementul ramane in coada fara sa arda
+   * o incercare, iar la trecerea urmatoare listarea e deja `draft` si trimiterea pleaca.
+   *
+   * ⚠ DE CE E SIGUR CHIAR DACA REGULA LOR AR FI ALTA: retragerea in ciorna e o operatie pe care o
+   * facem oricum la cerere, si de pe `pending_approval` documentatia o ingaduie explicit
+   * („Reverting to `draft` is only supported BEFORE the product reaches approval"). Cel mai rau
+   * caz e un drum in plus, nu o stare stricata.
+   */
+  if (listing.status === "pending_approval") {
+    const retras = await setRemoteStatus(admin, ctx, productId, "draft");
+    if (!retras.ok) {
+      return { ok: false, error: `Produsul e în aprobare și nu l-am putut retrage în ciornă: ${retras.error}`, status: retras.status };
+    }
+    return {
+      ok: false,
+      error: "Produsul era în aprobare la About You. L-am retras în ciornă; modificarea se trimite la trecerea următoare.",
+      /* Trecatoare: elementul ramane in coada, fara sa consume o incercare. */
+      status: 0,
+    };
+  }
+
+  /*
    * ═══ ⚠ FIECARE TRIMITERE E O GENERATIE ═══
    *
    * Se creste ATOMIC, printr-un RPC: doi lucratori care trimit acelasi produs in aceeasi clipa ar

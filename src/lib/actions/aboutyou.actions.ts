@@ -898,10 +898,15 @@ export async function validateAboutYouListing(
 
   if (rand?.status === "pending_approval") {
     warnings.push(
-      /* ⚠ Butonul se numeste „Retrage" si CHIAR EXISTA pe `pending_approval` (vezi
-         `RETRAGABILE` din `AboutYouListings`). Verificat inainte de a scrie mesajul. */
-      "Produsul e în curs de aprobare la About You. Se poate ca ei să nu accepte modificări acum;"
-      + " dacă trimiterea e respinsă, apasă „Retrage” în lista de produse, modifică-l și trimite-l din nou.",
+      /*
+       * ⚠ TEXTUL S-A SCHIMBAT ODATA CU CODUL (27.08.2026, seara). Spunea „daca trimiterea e
+       * respinsa, apasa «Retrage»" — adevarat cat timp trimiteam oricum si asteptam refuzul. Acum
+       * `syncProductNow` face singur retragerea in ciorna si trimite la trecerea urmatoare, deci
+       * vechiul text ar fi trimis omul sa faca de mana un lucru deja facut.
+       */
+      "Produsul e în curs de aprobare la About You, iar ei nu acceptă modificări în starea asta."
+      + " Îl retragem automat în ciornă la trimitere, iar modificarea pleacă imediat după."
+      + " Va trece din nou prin aprobarea lor.",
     );
   }
 
@@ -956,8 +961,14 @@ export async function saveAboutYouListing(
     country_of_origin: input.country_of_origin, hs_code: input.hs_code, updated_at: now,
   };
 
-  const { data: existent } = await admin.from("aboutyou_listings")
+  /*
+   * ⚠ Strict: o pana citita ca „nu exista" trimite pe calea de INSERT, iar acolo `UNIQUE
+   * (business_id, style_key)` respinge — deci se ajungea pe ramura de cursa pentru un motiv care
+   * n-avea nicio legatura cu o cursa, si mesajul ajuns la comerciant era despre altceva.
+   */
+  const { data: existent, error: eExistent } = await admin.from("aboutyou_listings")
     .select("id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
+  if (eExistent) return { error: "Nu am putut citi listarea. Încearcă din nou." };
 
   let listingId: string;
   if (existent) {
@@ -1023,8 +1034,20 @@ export async function saveAboutYouListing(
 
   const newSkus = rows.map((r) => r.sku);
   if (newSkus.length > 0) {
-    const { data: clash } = await admin.from("aboutyou_variants")
+    /*
+     * ═══ ⚠ O PAZA CARE CADEA DESCHIS (27.08.2026, seara) ═══
+     *
+     * `const { data: clash }` inghitea eroarea. O citire picata dadea `null`, `?? []` o facea
+     * lista goala, si de-acolo iesea „niciun conflict" — adica exact verdictul pe care paza
+     * trebuia sa-l dea numai dupa ce a VERIFICAT. Doua produse ajungeau cu acelasi SKU la About
+     * You, iar acolo al doilea il suprascrie pe primul, tacut.
+     *
+     * ⚠ Diferenta fata de citirile de AFISARE din editor: acolo o pana arata o lista goala si se
+     * vede; aici arata „e in regula" si se scrie.
+     */
+    const { data: clash, error: eClash } = await admin.from("aboutyou_variants")
       .select("sku, listing_id").eq("business_id", businessId).in("sku", newSkus);
+    if (eClash) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
     const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
     if (conflict) return { error: `SKU-ul „${(conflict as { sku: string }).sku}" este deja folosit de alt produs. Folosește SKU-uri unice.` };
   }

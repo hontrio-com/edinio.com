@@ -24,13 +24,14 @@ import {
   type MappableProduct,
 } from "./mapping";
 import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { patchAboutYouConfig } from "./config";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";
 import type { AboutYouConfig, AboutYouGetProductItem, AboutYouRejectionReason } from "./types";
 import {
-  FEREASTRA_VEGHE_MS, MAX_VEGHI_PE_TRECERE, PRAG_REASERTARI, pornesteVeghea,
+  MAX_VEGHI_PE_TRECERE, ORIZONT_VEGHE_MS, PRAG_REASERTARI, pornesteVeghea, reperulVeghii,
   urmatoareaVerificareMs, vegheaSAIncheiat, veghiScadente,
 } from "./veghe";
 
@@ -616,11 +617,35 @@ async function derivaFataDeEi(
     if (isAboutYouError(res)) return { fel: "necitibil", ...nimic };
     const items = res.data?.items ?? [];
     for (const it of items) aleLor.set(it.sku, it);
+
+    /*
+     * ═══ ⚠ CAT DE MARE E PRODUSUL SE AFLA DIN PRIMA CERERE (27.08.2026, tarziu) ═══
+     *
+     * Plafonul de douazeci de pagini e o margine de buget, nu o hotarare despre produs. Numai ca,
+     * la unul care il depaseste, il descopeream cheltuind toate cele douazeci de cereri — la
+     * FIECARE trecere a cronului, la nesfarsit, fiindca „necitibil" nu inchide nimic.
+     *
+     * ⚠ Raspunsul lor poarta `pagination.pages`. Citit din prima cerere, un produs prea mare se
+     * vede dintr-o singura cerere si se striga, in loc sa fie descoperit din douazeci.
+     *
+     * ⚠ SI NU SE FOLOSESTE CA CONDITIE DE OPRIRE. `pages` e nulabil in schema lor, iar
+     * `Number(undefined ?? 1)` da 1 — chiar defectul care oprea reconcilierea dupa prima suta de
+     * SKU-uri. Oprirea ramane pe LUNGIMEA lotului; `pages` serveste doar la a striga devreme.
+     */
+    const pagini = Number((res.data?.pagination as { pages?: unknown } | undefined)?.pages);
+    if (page === 1 && Number.isFinite(pagini) && pagini > MAX_PAGINI_DERIVA) {
+      await logError({
+        action: "aboutyou/deriva", severity: "warning",
+        message: `produsul are ${pagini} pagini de variante la About You, peste cat se poate verifica intr-o trecere (${MAX_PAGINI_DERIVA}): deriva lui nu se masoara`,
+        details: { styleKey: listing.style_key, pagini }, businessId: ctx.businessId,
+      });
+      return { fel: "necitibil", ...nimic };
+    }
     if (items.length < 100) { taiat = false; break; }
   }
   /*
-   * ⚠ „N-AM VAZUT TOT" NU E „E BINE", si nici „e stricat". Un produs cu peste doua mii de SKU-uri
-   * nu se poate masura in bugetul asta, deci nu se declara nimic despre el.
+   * ⚠ „N-AM VAZUT TOT" NU E „E BINE", si nici „e stricat". Un produs care nu incape in bugetul
+   * asta nu se poate masura, deci nu se declara nimic despre el.
    */
   if (taiat) return { fel: "necitibil", ...nimic };
 
@@ -761,12 +786,12 @@ async function inchideLoturileDepasite(admin: Db, ctx: AboutYouSyncContext): Pro
      *
      * Pana aici tocmai am dovedit ca ACUM starea de la ei e cea buna. Nu si ca lotul orb s-a
      * terminat: el se poate aseza peste zece minute, si nimic nu l-ar mai observa. Produsul intra
-     * sub veghe pentru doua zile — vezi `veghe.ts`.
+     * sub veghe — vezi `veghe.ts`.
      *
      * ⚠ VEGHEA NESCRISA TINE LOTUL DESCHIS. Inchis fara ea, exact aici s-ar pierde singurul fir
      * care ne mai aduce inapoi la produsul asta.
      */
-    if (!await pornesteVeghea(admin, businessId, styleKey, listing.product_id, "lot-orb")) {
+    if (!await pornesteVeghea(admin, businessId, styleKey, listing.product_id, "lot-orb", lot.id)) {
       await logError({
         action: "aboutyou/veghe", severity: "warning",
         message: "veghea produsului nu s-a putut porni: lotul orb ramane deschis si se reia",
@@ -811,6 +836,9 @@ export async function treciPrinVeghe(
     const deriva = await derivaFataDeEi(admin, ctx, listing);
     verificate++;
 
+    const reper = reperulVeghii(v);
+    const varsta = acum - reper;
+
     if (deriva.fel === "necitibil") {
       /*
        * ⚠ NU SE NUMARA NICI CA BINE, NICI CA RAU. O citire care n-a mers nu spune nimic despre
@@ -818,41 +846,66 @@ export async function treciPrinVeghe(
        */
       await admin.from("aboutyou_veghe").update({
         verificari: v.verificari + 1,
-        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(v.curate_la_rand)).toISOString(),
+        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(v.curate_la_rand, varsta)).toISOString(),
         updated_at: new Date(acum).toISOString(),
       } as never).eq("id", v.id);
       continue;
     }
 
-    if (deriva.straine.length > 0 && v.alarma_scrisa_la == null) {
+    /*
+     * ═══ ⚠ UN SKU STRAIN NU SE ATINGE, DAR NICI NU E „CURAT" (27.08.2026, tarziu) ═══
+     *
+     * Nu stim ce e — o listare facuta de om direct in Seller Center, un rand sters din greseala la
+     * noi. Sa-i punem stoc 0 ar insemna sa luam in locul omului o hotarare pe care nu ne-a
+     * cerut-o, deci nu se atinge; asta ramane bine.
+     *
+     * ⚠ DAR PANA AZI SE SCRIA ALARMA SI ATAT, iar restul citirii iesea „identic". Dupa
+     * patruzeci si opt de ore si trei citiri, veghea se STERGEA — declarand curat un produs despre
+     * care ea insasi scrisese ca are ceva nelamurit, si stingand singurul lucru care il mai tinea
+     * vizibil.
+     *
+     * ⚠ ACUM SE INSEMNEAZA PE RAND. Cat timp `necesita_om` e pus, veghea nu se poate inchide; iar
+     * cand SKU-ul strain dispare de la ei — comerciantul l-a scos, sau l-a legat — semnul cade
+     * singur, fara sa fie nevoie de vreo apasare.
+     */
+    const areStraine = deriva.straine.length > 0;
+    if (areStraine && v.alarma_scrisa_la == null) {
       await logError({
         action: "aboutyou/veghe", severity: "critical",
         message: `About You are ${deriva.straine.length} SKU-uri pe produsul asta pe care noi nu le cunoastem: verifica in Seller Center`,
         details: { styleKey: v.style_key, skuuri: deriva.straine.slice(0, 20) }, businessId,
       });
-      await admin.from("aboutyou_veghe")
-        .update({ alarma_scrisa_la: new Date(acum).toISOString() } as never).eq("id", v.id);
     }
+    const semneleStrainilor = {
+      necesita_om: areStraine,
+      straine: deriva.straine.slice(0, 50) as never,
+      ...(areStraine && v.alarma_scrisa_la == null
+        ? { alarma_scrisa_la: new Date(acum).toISOString() }
+        : {}),
+      /* ⚠ Cand nu mai sunt straini, si alarma se stinge: altfel un incident viitor n-ar mai striga. */
+      ...(!areStraine && v.necesita_om ? { alarma_scrisa_la: null } : {}),
+    };
 
     if (deriva.fel === "identic") {
       const curate = v.curate_la_rand + 1;
       /*
-       * ⚠ SE INCHIDE DOAR CAND FEREASTRA S-A SCURS SI ULTIMELE CITIRI AU FOST CURATE. O singura
-       * citire curata era chiar defectul pe care veghea il repara.
+       * ⚠ SE INCHIDE DOAR CAND ORIZONTUL S-A SCURS, ULTIMELE CITIRI AU FOST CURATE SI NU ASTEAPTA
+       * UN OM. O singura citire curata era chiar defectul pe care veghea il repara.
        */
-      if (vegheaSAIncheiat({ pana_la: v.pana_la, curate_la_rand: curate }, acum)) {
+      if (vegheaSAIncheiat({ pana_la: v.pana_la, curate_la_rand: curate, necesita_om: areStraine }, acum)) {
         await admin.from("aboutyou_veghe").delete().eq("id", v.id);
         continue;
       }
       await admin.from("aboutyou_veghe").update({
         verificari: v.verificari + 1, curate_la_rand: curate,
-        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(curate)).toISOString(),
+        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(curate, varsta)).toISOString(),
         updated_at: new Date(acum).toISOString(),
+        ...semneleStrainilor,
       } as never).eq("id", v.id);
       continue;
     }
 
-    /* ── Deriva ────────────────────────────────────────────────────────────── */
+    /* ── Deriva ──────────────────────────────────────────── */
     /*
      * ⚠ SI RETRIMITEREA ARE UN CAPAT. Dupa `PRAG_REASERTARI` fara convergenta, cauza nu mai e o
      * cursa — e ceva ce nu intelegem — iar retrimiterea la nesfarsit ar costa o cerere la fiecare
@@ -872,8 +925,11 @@ export async function treciPrinVeghe(
       await admin.from("aboutyou_veghe").update({
         verificari: v.verificari + 1, curate_la_rand: 0,
         ultima_deriva_la: new Date(acum).toISOString(),
+        /* ⚠ Deriva neinchisa dupa atatea incercari e chiar cazul in care e nevoie de un om. */
+        necesita_om: true,
+        straine: deriva.straine.slice(0, 50) as never,
         alarma_scrisa_la: v.alarma_scrisa_la ?? new Date(acum).toISOString(),
-        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(0)).toISOString(),
+        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(0, varsta)).toISOString(),
         updated_at: new Date(acum).toISOString(),
       } as never).eq("id", v.id);
       continue;
@@ -885,10 +941,15 @@ export async function treciPrinVeghe(
     await admin.from("aboutyou_veghe").update({
       verificari: v.verificari + 1, curate_la_rand: 0, reasertari: v.reasertari + 1,
       ultima_deriva_la: new Date(acum).toISOString(),
-      /* ⚠ Fereastra se muta inainte: cat timp produsul deriveaza, veghea n-are voie sa expire. */
-      pana_la: new Date(acum + FEREASTRA_VEGHE_MS).toISOString(),
+      /*
+       * ⚠ Orizontul se muta inainte SI ceasul reporneste: `ultima_deriva_la` e reperul dupa care
+       * se socoteste fereastra deasa, deci un produs care deriveaza a treia zi se intoarce la
+       * citiri dese, nu ramane la una pe zi taman cand are cea mai mare nevoie.
+       */
+      pana_la: new Date(acum + ORIZONT_VEGHE_MS).toISOString(),
       urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(0)).toISOString(),
       updated_at: new Date(acum).toISOString(),
+      ...semneleStrainilor,
     } as never).eq("id", v.id);
   }
   return verificate;
@@ -1007,6 +1068,147 @@ export async function continuaLucrarileInMasa(admin: Db, ctx: AboutYouSyncContex
     ...(gata ? { status: "gata", terminat_la: acum } : {}),
   } as never).eq("id", lucrare.id);
   return puse;
+}
+
+/**
+ * Semnele lasate de declansator, cand punerea la coada din aplicatie s-a pierdut.
+ *
+ * ═══ ⚠ MODIFICAREA S-A SALVAT, COADA A PICAT, SI N-A RAMAS NIMIC (27.08.2026, tarziu) ═══
+ *
+ * `enqueueAboutYouSync` e „pornit si uitat": n-are voie sa arunce in apelant, fiindca o pana la
+ * marketplace n-are voie sa impiedice salvarea unui produs. Dar cand CHIAR pica, tot ce ramanea
+ * era un rand in jurnal:
+ *
+ *     UPDATE products      -> COMMIT ✅
+ *     after() -> enqueue…  -> UPSERT in coada ❌
+ *     logError             -> ✅
+ *
+ * Produsul modificat la noi, nemodificat la ei, si nimic care sa mai revina vreodata la el: veghea
+ * urmareste produsele cu LOT extern orb, iar aici nu s-a nascut niciun lot. Cel mai scump caz e
+ * stocul — o comanda scade 5 la 4, punerea la coada pica, si About You vinde mai departe bucata
+ * care nu mai exista.
+ *
+ * ⚠ SEMNUL SE SCRIE IN ACEEASI TRANZACTIE CU MODIFICAREA, de un declansator pe `products`. Orice
+ * „cutie de iesire" scrisa din aplicatie ar pica exact in aceleasi clipe ca punerea la coada —
+ * n-ar fi o plasa, ar fi acelasi fir.
+ *
+ * ⚠ SI SE PREFACE IN COADA DOAR DACA S-A PIERDUT CU ADEVARAT. Doua dovezi, amandoua ieftine:
+ * exista deja un rand in coada pentru produs? sau a plecat ceva pentru listare DUPA clipa
+ * semnului? Oricare din ele inseamna ca drumul obisnuit a mers, si semnul se sterge fara sa coste
+ * nimic.
+ *
+ * ⚠ SI DECLANSATORUL NU STIE CE OPERATIE TREBUIE. O schimbare de stoc cere `stock` — o cerere —,
+ * nu `upsert`, care duce produsul intreg prin validari si loturi. De-aia el scrie doar un SEMN:
+ * pus orbeste in coada, fiecare comanda ar fi impins produsul intreg. Aici, cand chiar s-a
+ * pierdut, `upsert` e alegerea corecta oricum: nu mai stim CE s-a schimbat.
+ *
+ * ⚠ SI CAND SE REFACE, SE SCRIE. O plasa care lucreaza in tacere ascunde tocmai defectul din
+ * cauza caruia exista: daca punerea la coada pica des, trebuie sa se vada, nu sa fie carpita
+ * discret la fiecare trecere.
+ */
+const PRAG_INTENTIE_PIERDUTA_MS = 3 * 60 * 1000;
+const MAX_INTENTII_PE_TRECERE = 200;
+
+export async function rezolvaIntentiile(admin: Db, ctx: AboutYouSyncContext): Promise<number> {
+  const businessId = ctx.businessId;
+
+  /*
+   * ═══ ⚠ PLASA NU PORNESTE CE A OPRIT OMUL (27.08.2026, tarziu) ═══
+   *
+   * Declansatorul scrie semnul pentru orice produs listat, fiindca in Postgres nu are cum sa stie
+   * ce a bifat comerciantul. Dar `enqueueAboutYouSync` NU pune nimic la coada cand `auto_sync` e
+   * oprit — si aia nu e o scapare, e o hotarare a omului: „nu trimite modificarile mele".
+   *
+   * Fara verificarea asta, plasa ar fi citit lipsa randului din coada drept „s-a pierdut" si ar fi
+   * trimis exact ce el ceruse sa nu plece. O plasa repara ce s-a stricat; nu porneste ce n-a fost
+   * cerut.
+   *
+   * ⚠ SI SEMNELE SE STERG TOTUSI, altfel s-ar aduna la nesfarsit pe un magazin cu sincronizarea
+   * oprita si ar fi recitite la fiecare trecere.
+   */
+  if (ctx.config.auto_sync === false) {
+    await admin.from("aboutyou_intentii").delete().eq("business_id", businessId);
+    return 0;
+  }
+
+  const marci = randuriCitite<{ id: string; product_id: string; creat_la: string }>(
+    "aboutyou.intentiiDeRezolvat", await admin
+      .from("aboutyou_intentii").select("id, product_id, creat_la")
+      .eq("business_id", businessId)
+      /* ⚠ Nu imediat: drumul obisnuit ruleaza in `after()`, deci semnul e proaspat si inca n-a
+         apucat sa fie confirmat. Trei minute inseamna „a avut timp si n-a reusit". */
+      .lt("creat_la", new Date(Date.now() - PRAG_INTENTIE_PIERDUTA_MS).toISOString())
+      .order("creat_la", { ascending: true })
+      .limit(MAX_INTENTII_PE_TRECERE) as never);
+  if (marci.length === 0) return 0;
+
+  const ids = [...new Set(marci.map((m) => m.product_id))];
+
+  /* ⚠ Pe BUCATI: `.in()` pleaca in adresa cererii si peste vreo sase sute de id-uri e refuzat. */
+  const inCoada = new Set<string>();
+  for (const bucata of bucatiDeIduri(ids)) {
+    for (const r of randuriCitite<{ product_id: string | null }>("aboutyou.cozileIntentiilor",
+      await admin.from("aboutyou_sync_queue").select("product_id")
+        .eq("business_id", businessId).in("product_id", bucata) as never)) {
+      if (r.product_id) inCoada.add(r.product_id);
+    }
+  }
+
+  const impinsLa = new Map<string, string | null>();
+  for (const bucata of bucatiDeIduri(ids)) {
+    for (const r of randuriCitite<{ product_id: string | null; ultima_impingere_la: string | null }>(
+      "aboutyou.listarileIntentiilor", await admin
+        .from("aboutyou_listings").select("product_id, ultima_impingere_la")
+        .eq("business_id", businessId).in("product_id", bucata) as never)) {
+      if (r.product_id) impinsLa.set(r.product_id, r.ultima_impingere_la);
+    }
+  }
+
+  const deSters: string[] = [];
+  const pierdute: { id: string; product_id: string }[] = [];
+  for (const m of marci) {
+    /* Drumul obisnuit a mers: randul isi asteapta randul in coada. */
+    if (inCoada.has(m.product_id)) { deSters.push(m.id); continue; }
+    /* Produsul nu mai e listat la About You: semnul n-are ce sa mai pazeasca. */
+    if (!impinsLa.has(m.product_id)) { deSters.push(m.id); continue; }
+    const impins = impinsLa.get(m.product_id);
+    /* A plecat ceva DUPA clipa semnului: modificarea a ajuns, iar randul a fost deja consumat. */
+    if (impins && Date.parse(impins) >= Date.parse(m.creat_la)) { deSters.push(m.id); continue; }
+    pierdute.push({ id: m.id, product_id: m.product_id });
+  }
+
+  if (pierdute.length > 0) {
+    const { error } = await admin.from("aboutyou_sync_queue").upsert(
+      pierdute.map((p) => ({
+        business_id: businessId, product_id: p.product_id, offer_id: p.product_id,
+        op: "upsert", attempts: 0, last_error: null,
+      })) as never,
+      { onConflict: "business_id,offer_id,op" },
+    );
+    if (error) {
+      /* ⚠ Semnele NU se sterg: se reiau la trecerea urmatoare. O plasa care se rupe tacut n-ar fi
+         o plasa. */
+      await logError({
+        action: "aboutyou/intentie-pierduta", severity: "error",
+        message: `intentiile pierdute nu s-au putut repune la coada: ${error.message}`,
+        details: { cate: pierdute.length }, businessId,
+      });
+    } else {
+      await logError({
+        action: "aboutyou/intentie-pierduta", severity: "warning",
+        message: `${pierdute.length} ${pierdute.length === 1 ? "modificare a fost salvata" : "modificari au fost salvate"} fara sa ajunga in coada About You: repuse acum`,
+        details: { produse: pierdute.map((p) => p.product_id).slice(0, 20) }, businessId,
+      });
+      deSters.push(...pierdute.map((p) => p.id));
+    }
+  }
+
+  if (deSters.length > 0) {
+    for (const bucata of bucatiDeIduri(deSters)) {
+      await admin.from("aboutyou_intentii").delete().in("id", bucata);
+    }
+  }
+  return pierdute.length;
 }
 
 export async function alarmaIntentiiDeschise(admin: Db, ctx: AboutYouSyncContext): Promise<number> {
@@ -1509,6 +1711,13 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
    */
   await setListingStatus(admin, listing.id, "pending", {
     error: null, last_synced_at: now, stare_dinainte: stareaDeTinutMinte(listing),
+    /*
+     * ⚠ SI CLIPA IN CARE A PLECAT CEVA, oricat de mic. E alta intrebare decat cea la care
+     * raspunde `last_synced_at` („a plecat vreodata produsul intreg acolo") si se citeste in alta
+     * parte: `rezolvaIntentiile` o compara cu semnul lasat de declansator, ca sa afle daca
+     * punerea la coada s-a pierdut. Vezi migratia 2026-12-02.
+     */
+    ultima_impingere_la: now,
   });
   return { ok: true, action: "submitted", batchRequestId };
 }
@@ -2065,7 +2274,7 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
           if (b.kind === "product") {
             for (const sk of (Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [])) {
               const l = await getListingByStyleKey(admin, ctx.businessId, sk);
-              if (l) await pornesteVeghea(admin, ctx.businessId, sk, l.product_id, "lot-abandonat");
+              if (l) await pornesteVeghea(admin, ctx.businessId, sk, l.product_id, "lot-abandonat", b.id);
             }
           }
         }
@@ -2395,7 +2604,7 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * „am retrimis" nu inseamna „s-a asezat ce trebuie". Se verifica, de cateva ori, in
            * urmatoarele doua zile — vezi `veghe.ts`.
            */
-          if (!await pornesteVeghea(admin, ctx.businessId, listing.style_key, listing.product_id, "generatie-depasita")) {
+          if (!await pornesteVeghea(admin, ctx.businessId, listing.style_key, listing.product_id, "generatie-depasita", b.id)) {
             asezat = false;
           }
           await logError({
@@ -2505,36 +2714,41 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * produs deja aprobat se pune inapoi starea lui de la ei, iar cand n-o stim ramane pe
            * `pending` si o scrie reconcilierea.
            */
-          const urmare = urmareaLotului(listing.stare_dinainte);
-          if (urmare.status != null) {
-            if (!await setListingStatus(admin, listing.id, urmare.status, { error: null, stare_dinainte: null })) {
-              asezat = false;
-            }
-          } else {
-            const { error: eStare } = await admin.from("aboutyou_listings")
-              .update({ error: null, stare_dinainte: null } as never).eq("id", listing.id);
-            if (eStare) asezat = false;
-          }
+          /*
+           * ═══ ⚠ INTENTIA DE PUBLICARE SE SCRIE INAINTEA STARII (27.08.2026, tarziu) ═══
+           *
+           * Era invers: se scria `draft`, apoi se punea publicarea la coada, iar daca aia pica se
+           * scria in jurnal si atat. Numai ca ramura asta se intra NUMAI pe `status === "pending"`
+           * — iar starea tocmai fusese schimbata in `draft`. Deci:
+           *
+           *     lotul se incheie      -> `pending` devine `draft`  ✅
+           *     punerea publicarii    -> pica                      ❌
+           *     lotul se inchide `completed`
+           *
+           * Produsul e creat la ei, e ciorna, si NIMENI nu mai incearca vreodata publicarea. Nici
+           * macar o reluare a lotului n-ar repara-o, fiindca la a doua trecere starea nu mai e
+           * `pending` si ramura nici nu se intra.
+           *
+           * ⚠ ACUM INTENTIA E PRIMA. Cat timp ea nu s-a scris, starea ramane `pending` si lotul
+           * ramane deschis — deci reluarea CHIAR reintra aici. Aceeasi regula ca la `cuLotDurabil`:
+           * urma inaintea lucrului, fiindca ordinea e chiar apararea.
+           */
           /*
            * PUBLICAREA SE INLANTUIE SINGURA. Aici, si nicaieri altundeva.
            *
-           * API-ul lor are doi pasi — `POST /products/` creeaza produsul, iar
-           * `PUT /products/status` il duce spre aprobare („Newly created products
-           * start in the `draft` state") — si ii lasasem pe amandoi in interfata,
-           * ca doua butoane. Dar pasii sunt ASINCRONI: produsul apare la ei abia
-           * dupa ce lotul se aseaza, in zeci de secunde. Comerciantul a apasat
-           * „Publică" la patru secunde dupa trimitere si a primit „Product master
-           * not found" — i se cerea sa nimereasca un moment pe care nu-l poate
-           * vedea.
+           * API-ul lor are doi pasi — `POST /products/` creeaza produsul, iar `PUT
+           * /products/status` il duce spre aprobare („Newly created products start in the `draft`
+           * state") — si ii lasasem pe amandoi in interfata, ca doua butoane. Dar pasii sunt
+           * ASINCRONI: produsul apare la ei abia dupa ce lotul se aseaza, in zeci de secunde.
+           * Comerciantul a apasat „Publică" la patru secunde dupa trimitere si a primit „Product
+           * master not found" — i se cerea sa nimereasca un moment pe care nu-l poate vedea.
            *
-           * Momentul asta il stim NOI, exact: lotul tocmai s-a incheiat cu bine.
-           * Deci punem singuri publicarea la coada. Se declanseaza doar la
-           * trecerea `pending -> draft`, adica imediat dupa o trimitere reusita —
-           * nu atinge ciornele vechi, lasate dinadins nepublicate.
+           * Momentul asta il stim NOI, exact: lotul tocmai s-a incheiat cu bine. Deci punem singuri
+           * publicarea la coada. Se declanseaza doar la trecerea `pending -> draft`, adica imediat
+           * dupa o trimitere reusita — nu atinge ciornele vechi, lasate dinadins nepublicate.
            */
+          const urmare = urmareaLotului(listing.stare_dinainte);
           if (listing.product_id && urmare.publica) {
-            /* ⚠ Si aici se verifica `error`: fara el, publicarea nu se punea la coada si produsul
-               ramanea ciorna la ei pentru totdeauna, fara nicio urma. */
             const { error: ePub } = await admin.from("aboutyou_sync_queue").upsert(
               { business_id: ctx.businessId, product_id: listing.product_id, offer_id: listing.style_key, op: "publish", attempts: 0, last_error: null },
               { onConflict: "business_id,offer_id,op" },
@@ -2546,7 +2760,32 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
                 details: { styleKey: listing.style_key, productId: listing.product_id },
                 businessId: ctx.businessId,
               });
+              /*
+               * ⚠ SE OPRESTE AICI, cu starea neatinsa. Lotul ramane deschis si se reia; la
+               * trecerea urmatoare listarea e tot `pending`, deci ramura se reintra si publicarea
+               * mai are o sansa. Scrisa starea, sansa aia n-ar mai exista niciodata.
+               */
+              asezat = false;
+              continue;
             }
+          }
+          /*
+           * ⚠ „Ciorna" DOAR LA PRIMA TRIMITERE. Vezi `urmareaLotului`: la o modificare a unui
+           * produs deja aprobat se pune inapoi starea lui de la ei, iar cand n-o stim ramane pe
+           * `pending` si o scrie reconcilierea.
+           */
+          if (urmare.status != null) {
+            if (!await setListingStatus(admin, listing.id, urmare.status, {
+              error: null, stare_dinainte: null,
+              /* ⚠ Lotul s-a asezat: a plecat ceva pentru listarea asta. Vezi `rezolvaIntentiile`. */
+              ultima_impingere_la: new Date().toISOString(),
+            })) {
+              asezat = false;
+            }
+          } else {
+            const { error: eStare } = await admin.from("aboutyou_listings")
+              .update({ error: null, stare_dinainte: null } as never).eq("id", listing.id);
+            if (eStare) asezat = false;
           }
         }
       }
@@ -3061,6 +3300,19 @@ async function trimiteInTranse<T>(
     if (id) batchRequestId = batchRequestId ?? id;
     if (i + MAX_ITEMI_STOC_PRET < items.length) await pause(300);
   }
+  /*
+   * ⚠ A PLECAT CEVA PENTRU LISTAREA ASTA, si asta e tot ce trebuie sa se stie aici.
+   *
+   * `last_synced_at` NU se atinge, si nu din delicatete: el inseamna „a plecat vreodata produsul
+   * intreg acolo" si e citit ca atare in sase locuri — „prima trimitere", „exista pe About You",
+   * filtrul publicarii. O impingere de stoc care l-ar rescrie ar minti in toate sase.
+   *
+   * ⚠ Scrierea picata nu opreste nimic: cel mai rau, `rezolvaIntentiile` crede ca punerea la coada
+   * s-a pierdut si mai pune un `upsert` — o cerere in plus, nu o pierdere.
+   */
+  await admin.from("aboutyou_listings")
+    .update({ ultima_impingere_la: new Date().toISOString() } as never)
+    .eq("business_id", ctx.businessId).eq("style_key", styleKey);
   return { ok: true, action: "submitted", batchRequestId };
 }
 

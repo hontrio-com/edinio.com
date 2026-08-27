@@ -5,7 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
   alarmaIntentiiDeschise, continuaLucrarileInMasa, loadAboutYouContext, processQueueItem, pollOpenBatches,
-  reconcileStatuses, treciPrinVeghe, pause,
+  reconcileStatuses, rezolvaIntentiile, treciPrinVeghe, pause,
   type AboutYouQueueItem, type AboutYouSyncContext,
 } from "@/lib/aboutyou/sync";
 import { pollOrders, reconciliazaComenzile } from "@/lib/aboutyou/orders";
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   const inceput = Date.now();
   const fereastraPlina = () => Date.now() - inceput > BUGET_PASI_1_3_MS;
   let processed = 0, failed = 0, polled = 0, reconciled = 0, ordersIngested = 0, reluate = 0;
-  let raspandite = 0, vegheate = 0;
+  let raspandite = 0, vegheate = 0, recuperate = 0;
   const ctxCache = new Map<string, AboutYouSyncContext | null>();
   async function ctxFor(businessId: string): Promise<AboutYouSyncContext | null> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
@@ -458,6 +458,13 @@ export async function GET(req: NextRequest) {
        * observa asta, iar fara el veghea ar fi doar un tabel care se umple.
        */
       vegheate += await treciPrinVeghe(admin, ctx, inceput + BUGET_TOTAL_MS);
+      /*
+       * ⚠ SI MODIFICARILE CARE N-AU AJUNS NICIODATA IN COADA. Declansatorul de pe `products` lasa
+       * un semn IN ACEEASI TRANZACTIE cu salvarea; pasul asta il preface in coada, dar numai daca
+       * se dovedeste ca punerea din aplicatie chiar s-a pierdut. Fara el, semnele s-ar aduna si
+       * n-ar face nimic. Vezi `rezolvaIntentiile`.
+       */
+      recuperate += await rezolvaIntentiile(admin, ctx);
       reluate += await reiaEvenimenteleNeprelucrate(admin, businessId, ctx.config);
     } catch (e) {
       await logError({
@@ -468,8 +475,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested} reluate=${reluate} vegheate=${vegheate}`);
-  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested, reluate, raspandite, vegheate });
+  console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested} reluate=${reluate} vegheate=${vegheate} recuperate=${recuperate}`);
+  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested, reluate, raspandite, vegheate, recuperate });
 }
 
 /*

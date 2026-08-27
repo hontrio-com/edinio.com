@@ -217,6 +217,27 @@ export type Database = {
         }
         Relationships: []
       }
+      aboutyou_intentii: {
+        Row: {
+          business_id: string
+          creat_la: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          business_id: string
+          creat_la?: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          business_id?: string
+          creat_la?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: []
+      }
       aboutyou_listings: {
         Row: {
           attributes: Json
@@ -241,6 +262,7 @@ export type Database = {
           stare_dinainte: string | null
           status: string
           style_key: string
+          ultima_impingere_la: string | null
           updated_at: string
         }
         Insert: {
@@ -266,6 +288,7 @@ export type Database = {
           stare_dinainte?: string | null
           status?: string
           style_key: string
+          ultima_impingere_la: string | null
           updated_at?: string
         }
         Update: {
@@ -291,6 +314,7 @@ export type Database = {
           stare_dinainte?: string | null
           status?: string
           style_key?: string
+          ultima_impingere_la?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -615,11 +639,14 @@ export type Database = {
           creat_la: string
           curate_la_rand: number
           id: string
+          incident: string | null
           motiv: string
+          necesita_om: boolean
           pana_la: string
           pornita_la: string
           product_id: string | null
           reasertari: number
+          straine: Json
           style_key: string
           ultima_deriva_la: string | null
           updated_at: string
@@ -632,11 +659,14 @@ export type Database = {
           creat_la?: string
           curate_la_rand?: number
           id?: string
+          incident?: string | null
           motiv: string
+          necesita_om?: boolean
           pana_la: string
           pornita_la?: string
           product_id?: string | null
           reasertari?: number
+          straine?: Json
           style_key: string
           ultima_deriva_la?: string | null
           updated_at?: string
@@ -649,11 +679,14 @@ export type Database = {
           creat_la?: string
           curate_la_rand?: number
           id?: string
+          incident?: string | null
           motiv?: string
+          necesita_om?: boolean
           pana_la?: string
           pornita_la?: string
           product_id?: string | null
           reasertari?: number
+          straine?: Json
           style_key?: string
           ultima_deriva_la?: string | null
           updated_at?: string

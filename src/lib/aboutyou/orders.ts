@@ -294,6 +294,17 @@ async function elibereazaAnularile(
     });
     throw new Error(error?.message ?? "eliberarea anularilor n-a raspuns valid");
   }
+  if (r.stare === "acoperit-de-comanda") {
+    /*
+     * ⚠ Plasa din baza a oprit o dublare. Ajunge aici numai daca saritura de la apelant n-a
+     * prins cazul — deci merita scris: inseamna ca mai exista un drum la care nu m-am gandit.
+     */
+    await logError({
+      action: "aboutyou/orders", severity: "warning",
+      message: "liniile anulate erau deja acoperite de eliberarea intregii comenzi: nu s-a mai eliberat nimic",
+      details: { ayNumber, linii: linii.length }, businessId: ctx.businessId,
+    });
+  }
   if ((r.eliberate ?? 0) > 0) {
     await logError({
       action: "aboutyou/orders", severity: "info",
@@ -616,8 +627,20 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
       /*
        * ⚠ DUPA consum, nu inainte: consumul e cel care aseaza `stoc_marketplace_la`, iar
        * eliberarea unei linii anulate n-are sens inaintea lui. Vezi nota de la `anulate`.
+       *
+       * ═══ ⚠ SI NU LA O ANULARE TOTALA (27.08.2026) ═══
+       *
+       * Cand About You trece comanda intreaga pe `cancelled`, tranzitia de mai sus a eliberat deja
+       * REZERVAREA INTREAGA. Chemat si aici, stocul crestea de DOUA ori cu cantitatea anulata —
+       * masurat pe productie: 120 la inceput, 122 dupa tranzitie, 124 dupa liniile anulate.
+       *
+       * ⚠ PAZA ADEVARATA E IN BAZA (`stoc_eliberat_la`, vezi migratia 2026-11-25), fiindca acolo
+       * se intalnesc cele doua cai si tine oricare ar fi ordinea chemarilor. Saritura de aici e
+       * economie, nu siguranta — si asa scrie, ca sa nu se creada invers.
        */
-      await elibereazaAnularile(admin, ctx, ayNumber, anulate);
+      if (order.status !== "cancelled") {
+        await elibereazaAnularile(admin, ctx, ayNumber, anulate);
+      }
 
     /*
      * ⚠ SI PE CELELALTE CANALE. Stocul tocmai s-a schimbat, iar eMAG, Trendyol si restul inca il au

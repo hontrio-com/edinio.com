@@ -298,6 +298,7 @@ declare
   v_noi jsonb;
   v_produse jsonb;
   v_variante jsonb;
+  v_deja_eliberat_tot boolean;
 begin
   select * into v_rand
     from public.aboutyou_orders
@@ -317,6 +318,26 @@ begin
 
   if jsonb_array_length(v_noi) = 0 then
     return jsonb_build_object('stare', 'deja', 'eliberate', 0);
+  end if;
+
+  -- Rezervarea intreaga a fost deja intoarsa pe raft de calea de comanda
+  -- (elibereaza_stoc_comanda pune stoc_eliberat_la). Mai eliberam o data pe linie ar umfla
+  -- stocul cu exact cantitatea anulata.
+  v_deja_eliberat_tot := false;
+  if v_rand.order_id is not null then
+    select o.stoc_eliberat_la is not null into v_deja_eliberat_tot
+      from public.orders o where o.id = v_rand.order_id;
+  end if;
+
+  if coalesce(v_deja_eliberat_tot, false) then
+    update public.aboutyou_orders
+       set anulate_eliberate = v_deja || (
+             select coalesce(jsonb_agg(l->>'linie_cheie'), '[]'::jsonb)
+               from jsonb_array_elements(v_noi) as l),
+           updated_at = now()
+     where id = v_rand.id;
+    return jsonb_build_object('stare', 'acoperit-de-comanda', 'eliberate', 0,
+                              'marcate', jsonb_array_length(v_noi));
   end if;
 
   select coalesce(jsonb_agg(jsonb_build_object('product_id', pid, 'quantity', q)), '[]'::jsonb)

@@ -103,6 +103,14 @@ export interface AboutYouConfig {
   /** Unde a ajuns roata pe `/products/rejected`. Vezi nota din `reconcileStatuses`. */
   rejected_page?: number;
   /**
+   * Unde a ajuns roata pe listarile ramase orfane.
+   *
+   * ⚠ FARA EA, primele doua sute tin locul tuturor: o retragere care nu se poate duce la capat
+   * lasa randul pe loc, iar urmatoarele cinci mii n-ar mai fi vazute niciodata. Vezi
+   * `retrageListarileOrfane`.
+   */
+  orfane_dupa?: string | null;
+  /**
    * MOSTENIRE: raspandirea unei setari globale, ramasa neterminata.
    *
    * ⚠ NU SE MAI SCRIE. Lucrarile in masa stau acum intr-un RAND propriu (`aboutyou_bulk_jobs`),

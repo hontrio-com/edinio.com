@@ -222,22 +222,31 @@ export type Database = {
           business_id: string
           creat_la: string
           id: string
+          last_error: string | null
+          op: string
           product_id: string
           recuperari: number
+          status: string
         }
         Insert: {
           business_id: string
           creat_la?: string
           id?: string
+          last_error?: string | null
+          op?: string
           product_id: string
-          recuperari: number
+          recuperari?: number
+          status?: string
         }
         Update: {
           business_id?: string
           creat_la?: string
           id?: string
+          last_error?: string | null
+          op?: string
           product_id?: string
           recuperari?: number
+          status?: string
         }
         Relationships: []
       }
@@ -260,11 +269,14 @@ export type Database = {
           last_status_at: string | null
           last_synced_at: string | null
           material_composition: Json
+          pret_citit_la: string | null
           product_id: string | null
           rejection_reasons: Json
           size_option_name: string | null
           stare_dinainte: string | null
+          remote_poate_exista: boolean
           status: string
+          stoc_citit_la: string | null
           style_key: string
           updated_at: string
         }
@@ -286,11 +298,14 @@ export type Database = {
           last_status_at?: string | null
           last_synced_at?: string | null
           material_composition?: Json
+          pret_citit_la?: string | null
           product_id?: string | null
           rejection_reasons?: Json
           size_option_name?: string | null
           stare_dinainte?: string | null
+          remote_poate_exista?: boolean
           status?: string
+          stoc_citit_la: string | null
           style_key: string
           updated_at?: string
         }
@@ -312,11 +327,14 @@ export type Database = {
           last_status_at?: string | null
           last_synced_at?: string | null
           material_composition?: Json
+          pret_citit_la?: string | null
           product_id?: string | null
           rejection_reasons?: Json
           size_option_name?: string | null
           stare_dinainte?: string | null
+          remote_poate_exista?: boolean
           status?: string
+          stoc_citit_la?: string | null
           style_key?: string
           updated_at?: string
         }

@@ -400,6 +400,9 @@ CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_modificarea()
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
+declare
+  v_ops text[] := '{}';
+  v_op text;
 begin
   if not exists (
     select 1 from public.aboutyou_listings l
@@ -408,10 +411,34 @@ begin
     return new;
   end if;
 
-  insert into public.aboutyou_intentii (business_id, product_id)
-  values (new.business_id, new.id)
-  on conflict (business_id, product_id)
-  do update set creat_la = now();
+  if new.name is distinct from old.name
+     or new.description is distinct from old.description
+     or new.images is distinct from old.images
+     or new.category is distinct from old.category
+     or new.sku is distinct from old.sku
+     or new.weight_grams is distinct from old.weight_grams
+     or new.page_sections is distinct from old.page_sections
+     or new.is_active is distinct from old.is_active then
+    v_ops := array_append(v_ops, 'upsert');
+  end if;
+
+  if new.stock_quantity is distinct from old.stock_quantity
+     or new.track_inventory is distinct from old.track_inventory then
+    v_ops := array_append(v_ops, 'stock');
+  end if;
+
+  if new.price is distinct from old.price
+     or new.compare_at_price is distinct from old.compare_at_price then
+    v_ops := array_append(v_ops, 'price');
+  end if;
+
+  foreach v_op in array v_ops loop
+    insert into public.aboutyou_intentii (business_id, product_id, op)
+    values (new.business_id, new.id, v_op)
+    on conflict (business_id, product_id, op)
+    do update set creat_la = now(), recuperari = 0, status = 'deschis', last_error = null;
+  end loop;
+
   return new;
 end;
 $function$
@@ -4564,7 +4591,10 @@ create table if not exists public.aboutyou_intentii (
   business_id uuid not null,
   product_id uuid not null,
   creat_la timestamp with time zone default now() not null,
-  recuperari integer default 0 not null);
+  recuperari integer default 0 not null,
+  op text default 'upsert'::text not null,
+  status text default 'deschis'::text not null,
+  last_error text);
 
 create table if not exists public.aboutyou_listings (
   id uuid default gen_random_uuid() not null,
@@ -4590,7 +4620,10 @@ create table if not exists public.aboutyou_listings (
   attributes jsonb default '[]'::jsonb not null,
   stare_dinainte text,
   generatie integer default 0 not null,
-  catalog_citit_la timestamp with time zone);
+  catalog_citit_la timestamp with time zone,
+  remote_poate_exista boolean default false not null,
+  stoc_citit_la timestamp with time zone,
+  pret_citit_la timestamp with time zone);
 
 create table if not exists public.aboutyou_orders (
   id uuid default gen_random_uuid() not null,
@@ -5982,7 +6015,6 @@ alter table public.ups_etichete add constraint ups_etichete_pkey PRIMARY KEY (or
 alter table public.users_profile add constraint users_profile_pkey PRIMARY KEY (id);
 alter table privat.store_settings add constraint store_settings_business_id_key UNIQUE (business_id);
 alter table public.aboutyou_batches add constraint aboutyou_batches_business_id_batch_request_id_key UNIQUE (business_id, batch_request_id);
-alter table public.aboutyou_intentii add constraint aboutyou_intentii_business_id_product_id_key UNIQUE (business_id, product_id);
 alter table public.aboutyou_listings add constraint aboutyou_listings_business_id_style_key_key UNIQUE (business_id, style_key);
 alter table public.aboutyou_orders add constraint aboutyou_orders_business_id_aboutyou_order_number_key UNIQUE (business_id, aboutyou_order_number);
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_linie_key UNIQUE (business_id, aboutyou_order_number, linie_cheie);
@@ -6019,6 +6051,8 @@ alter table public.trendyol_variants add constraint trendyol_variants_business_i
 alter table public.aboutyou_batches add constraint aboutyou_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'stock'::text, 'stock_removal'::text, 'price'::text, 'status'::text, 'removal'::text, 'ship'::text, 'cancel'::text, 'return'::text])));
 alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'price'::text, 'publish'::text])));
 alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_status_check CHECK ((status = ANY (ARRAY['deschis'::text, 'gata'::text, 'oprit'::text])));
+alter table public.aboutyou_intentii add constraint aboutyou_intentii_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'stock'::text, 'price'::text])));
+alter table public.aboutyou_intentii add constraint aboutyou_intentii_status_check CHECK ((status = ANY (ARRAY['deschis'::text, 'abandonat'::text])));
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'publish'::text, 'stock'::text, 'price'::text, 'ship'::text])));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
@@ -6244,7 +6278,8 @@ CREATE INDEX aboutyou_batches_intentii_idx ON public.aboutyou_batches USING btre
 CREATE INDEX aboutyou_bulk_jobs_deschise_idx ON public.aboutyou_bulk_jobs USING btree (atins_la) WHERE (status = 'deschis'::text);
 CREATE UNIQUE INDEX aboutyou_bulk_jobs_unic_deschis_idx ON public.aboutyou_bulk_jobs USING btree (business_id, op) WHERE (status = 'deschis'::text);
 CREATE INDEX aboutyou_inbox_de_reluat_idx ON public.aboutyou_webhook_inbox USING btree (business_id, primit_la) WHERE (prelucrat_la IS NULL);
-CREATE INDEX aboutyou_intentii_scadente_idx ON public.aboutyou_intentii USING btree (business_id, creat_la);
+CREATE INDEX aboutyou_intentii_deschise_idx ON public.aboutyou_intentii USING btree (business_id, creat_la) WHERE (status = 'deschis'::text);
+CREATE UNIQUE INDEX aboutyou_intentii_unic_idx ON public.aboutyou_intentii USING btree (business_id, product_id, op);
 CREATE INDEX aboutyou_orders_order_id_idx ON public.aboutyou_orders USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX aboutyou_orders_reintrebat_idx ON public.aboutyou_orders USING btree (business_id, reintrebat_la NULLS FIRST);
 CREATE INDEX aboutyou_retururi_de_rezolvat_idx ON public.aboutyou_retururi USING btree (business_id, created_at DESC) WHERE (repus_in_stoc_la IS NULL);

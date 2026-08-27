@@ -63,7 +63,14 @@ test("⚠ un status nou de-al lor nu e citit drept „prima trimitere”", () =>
 });
 
 test("⚠ ce se tine minte inainte de a acoperi cu `pending`", () => {
-  /* Fara `last_synced_at`, produsul n-a plecat niciodata: prima trimitere. */
+  /*
+   * Fara `last_synced_at`, trimiterea urmatoare se poarta ca PRIMA: se scrie `draft` dupa ea.
+   *
+   * ⚠ SI ASTA RAMANE CORECT chiar daca o transa dinainte a ajuns totusi la ei — produsele nou
+   * create pornesc oricum in `draft`, deci ghicitul nimereste. Ce NU se poate deduce din campul
+   * asta e „la ei nu exista nimic": intrebarea aia are camp propriu, `remote_poate_exista`, scris
+   * INAINTEA cererii. Vezi `veghea-lotului-orb.test.ts`.
+   */
   assert.equal(stareaDeTinutMinte({ status: "local", last_synced_at: null }), "prima");
   assert.equal(stareaDeTinutMinte({ status: "draft", last_synced_at: null }), "prima");
   /* A plecat si stim starea lui la ei. */

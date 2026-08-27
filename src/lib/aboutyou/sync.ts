@@ -99,6 +99,14 @@ interface ListingRow {
   hs_code: string | null;
   /** Momentul in care produsul chiar a plecat spre About You. `null` = doar local. */
   last_synced_at: string | null;
+  /**
+   * S-a facut vreodata o cerere care putea CREA produsul la ei.
+   *
+   * ⚠ NU E ACELASI LUCRU CU `last_synced_at`, si confuzia costa: acela se scrie abia dupa ce
+   * TOATE transele au plecat, deci un esec la mijloc il lasa gol desi la ei sunt deja doua sute de
+   * variante. Vezi nota din `syncProductNow`.
+   */
+  remote_poate_exista: boolean;
   /** Ce stiam despre el INAINTE de trimiterea in curs. Vezi `urmareaLotului`. */
   stare_dinainte: string | null;
   /** A cata oara s-a trimis produsul. Vezi migratia 2026-11-27. */
@@ -109,7 +117,7 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListing", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte, generatie")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
 }
 
@@ -117,7 +125,7 @@ async function getListingByStyleKey(admin: Db, businessId: string, styleKey: str
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListingByStyleKey", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, stare_dinainte, generatie")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie")
     .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle() as never);
 }
 
@@ -1128,106 +1136,138 @@ export async function rezolvaIntentiile(admin: Db, ctx: AboutYouSyncContext): Pr
    * Declansatorul scrie semnul pentru orice produs listat, fiindca in Postgres nu are cum sa stie
    * ce a bifat comerciantul. Dar `enqueueAboutYouSync` NU pune nimic la coada cand `auto_sync` e
    * oprit — si aia nu e o scapare, e o hotarare a omului: „nu trimite modificarile mele".
-   *
-   * ⚠ SI SEMNELE SE STERG TOTUSI, altfel s-ar aduna la nesfarsit pe un magazin cu sincronizarea
-   * oprita si ar fi recitite la fiecare trecere.
    */
   if (ctx.config.auto_sync === false) {
     await admin.from("aboutyou_intentii").delete().eq("business_id", businessId);
     return 0;
   }
 
-  const marci = randuriCitite<{ id: string; product_id: string; creat_la: string; recuperari: number }>(
-    "aboutyou.intentiiDeRezolvat", await admin
-      .from("aboutyou_intentii").select("id, product_id, creat_la, recuperari")
-      .eq("business_id", businessId)
-      /* ⚠ Nu imediat: drumul obisnuit ruleaza in `after()`, deci semnul e proaspat si inca n-a
-         apucat sa fie confirmat. Trei minute inseamna „a avut timp si n-a reusit". */
-      .lt("creat_la", new Date(Date.now() - PRAG_INTENTIE_PIERDUTA_MS).toISOString())
-      .order("creat_la", { ascending: true })
-      .limit(MAX_INTENTII_PE_TRECERE) as never);
+  const marci = randuriCitite<{
+    id: string; product_id: string; op: string; creat_la: string; recuperari: number;
+  }>("aboutyou.intentiiDeRezolvat", await admin
+    .from("aboutyou_intentii").select("id, product_id, op, creat_la, recuperari")
+    .eq("business_id", businessId).eq("status", "deschis")
+    /* ⚠ Nu imediat: drumul obisnuit ruleaza in `after()`, deci semnul e proaspat si inca n-a
+       apucat sa fie confirmat. Trei minute inseamna „a avut timp si n-a reusit". */
+    .lt("creat_la", new Date(Date.now() - PRAG_INTENTIE_PIERDUTA_MS).toISOString())
+    .order("creat_la", { ascending: true })
+    .limit(MAX_INTENTII_PE_TRECERE) as never);
   if (marci.length === 0) return 0;
 
   const ids = [...new Set(marci.map((m) => m.product_id))];
 
   /*
-   * ═══ ⚠ DOVADA E PER OPERATIE, NU „A PLECAT CEVA" (27.08.2026, noaptea tarziu) ═══
+   * ═══ ⚠ DOVADA E PER OPERATIE, IN AMANDOUA SENSURILE (28.08.2026) ═══
    *
-   * Semnul cere o trimitere de CATALOG. Ieri se citea orice rand din coada si orice impingere, deci:
+   * Ieri numai un `upsert` putea satisface un semn. Corect pentru o schimbare de descriere — si
+   * gresit pentru una de stoc: impingerea dedicata pleaca si e chiar ce trebuie, dar nu scria
+   * nicio dovada, deci dupa trei minute plasa trimitea produsul INTREG. Fiecare comanda ar fi
+   * produs, pe langa stoc, si un lot complet de catalog.
    *
-   *     descrierea se schimba          -> semn
-   *     punerea la coada pica          -> ❌
-   *     un `stock` intra din alt motiv -> plasa: „exista in coada" -> sterge semnul
-   *
-   * Numai ca lotul de stoc nu poarta descrierea. La ei ramanea cea veche, si nimic nu mai revenea.
-   * Deci: se numara doar randurile `upsert`, si doar `catalog_citit_la` conteaza ca dovada.
+   * ⚠ ACUM FIECARE SEMN ISI ARE FELUL, si fiecare trimitere isi scrie clipa. Iar un `upsert` le
+   * satisface pe toate trei, fiindca duce cu el si stocul, si preturile — invers nu e adevarat.
    */
-  const inCoada = new Set<string>();
+  const inCoada = new Map<string, Set<string>>();
   for (const bucata of bucatiDeIduri(ids)) {
-    for (const r of randuriCitite<{ product_id: string | null }>("aboutyou.cozileIntentiilor",
-      await admin.from("aboutyou_sync_queue").select("product_id")
-        .eq("business_id", businessId).eq("op", "upsert").in("product_id", bucata) as never)) {
-      if (r.product_id) inCoada.add(r.product_id);
+    for (const r of randuriCitite<{ product_id: string | null; op: string }>("aboutyou.cozileIntentiilor",
+      await admin.from("aboutyou_sync_queue").select("product_id, op")
+        .eq("business_id", businessId).in("op", ["upsert", "stock", "price"])
+        .in("product_id", bucata) as never)) {
+      if (!r.product_id) continue;
+      const set = inCoada.get(r.product_id) ?? new Set<string>();
+      set.add(r.op);
+      inCoada.set(r.product_id, set);
     }
   }
 
-  const cititLa = new Map<string, string | null>();
+  interface Dovezi { catalog: string | null; stoc: string | null; pret: string | null }
+  const dovezi = new Map<string, Dovezi>();
   for (const bucata of bucatiDeIduri(ids)) {
-    for (const r of randuriCitite<{ product_id: string | null; catalog_citit_la: string | null }>(
-      "aboutyou.listarileIntentiilor", await admin
-        .from("aboutyou_listings").select("product_id, catalog_citit_la")
-        .eq("business_id", businessId).in("product_id", bucata) as never)) {
-      if (r.product_id) cititLa.set(r.product_id, r.catalog_citit_la);
+    for (const r of randuriCitite<{
+      product_id: string | null; catalog_citit_la: string | null;
+      stoc_citit_la: string | null; pret_citit_la: string | null;
+    }>("aboutyou.listarileIntentiilor", await admin
+      .from("aboutyou_listings").select("product_id, catalog_citit_la, stoc_citit_la, pret_citit_la")
+      .eq("business_id", businessId).in("product_id", bucata) as never)) {
+      if (r.product_id) {
+        dovezi.set(r.product_id, {
+          catalog: r.catalog_citit_la, stoc: r.stoc_citit_la, pret: r.pret_citit_la,
+        });
+      }
     }
   }
+
+  /** Clipele de citire care pot satisface semnul: cea a felului lui, si mereu cea de catalog. */
+  const potriviteFelului = (d: Dovezi, op: string): (string | null)[] =>
+    op === "stock" ? [d.stoc, d.catalog]
+      : op === "price" ? [d.pret, d.catalog]
+        : [d.catalog];
+  /** Randurile din coada care pot duce semnul la capat: al felului lui, si mereu `upsert`. */
+  const cozilePotrivite = (op: string): string[] => (op === "upsert" ? ["upsert"] : [op, "upsert"]);
 
   const deSters: string[] = [];
-  const pierdute: { id: string; product_id: string; recuperari: number }[] = [];
-  const abandonate: { id: string; product_id: string }[] = [];
+  const pierdute: { id: string; product_id: string; op: string; recuperari: number }[] = [];
+  const abandonate: { id: string; product_id: string; op: string }[] = [];
   for (const m of marci) {
+    const d = dovezi.get(m.product_id);
     /* Produsul nu mai e listat la About You: semnul n-are ce sa mai pazeasca. */
-    if (!cititLa.has(m.product_id)) { deSters.push(m.id); continue; }
-    const citit = cititLa.get(m.product_id);
+    if (!d) { deSters.push(m.id); continue; }
+    const cerut = Date.parse(m.creat_la);
     /*
-     * ⚠ A PLECAT CHIAR CATALOGUL, si citit DUPA modificare. Nu „dupa clipa trimiterii": intre
-     * citire si trimitere trec secunde in care produsul se poate schimba iar, si atunci sarcina
+     * ⚠ A PLECAT CHIAR FELUL CERUT, si citit DUPA modificare. Nu „dupa clipa trimiterii": intre
+     * citire si trimitere trec secunde in care valoarea se poate schimba iar, si atunci sarcina
      * utila n-ar cuprinde modificarea din semn.
      */
-    if (citit && Date.parse(citit) >= Date.parse(m.creat_la)) { deSters.push(m.id); continue; }
+    if (potriviteFelului(d, m.op).some((t) => t != null && Date.parse(t) >= cerut)) {
+      deSters.push(m.id); continue;
+    }
     /*
-     * ⚠ EXISTA DEJA UN `upsert` LA COADA: nu s-a pierdut nimic, doar n-a apucat sa ruleze. Semnul
-     * se LASA, nu se sterge — se sterge abia cand dovada chiar apare. Sters acum, un lucrator care
-     * a citit produsul INAINTEA modificarii ar duce la capat sarcina veche si nimeni n-ar mai sti
-     * ca cea noua n-a plecat.
+     * ⚠ EXISTA DEJA UN RAND POTRIVIT LA COADA: nu s-a pierdut nimic, doar n-a apucat sa ruleze.
+     * Semnul se LASA, nu se sterge — se sterge abia cand dovada chiar apare. Sters acum, un
+     * lucrator care a citit produsul INAINTEA modificarii ar duce la capat sarcina veche si nimeni
+     * n-ar mai sti ca cea noua n-a plecat.
      */
-    if (inCoada.has(m.product_id)) continue;
-    if (m.recuperari >= PRAG_RECUPERARI) { abandonate.push({ id: m.id, product_id: m.product_id }); continue; }
-    pierdute.push({ id: m.id, product_id: m.product_id, recuperari: m.recuperari });
+    const cozi = inCoada.get(m.product_id);
+    if (cozi && cozilePotrivite(m.op).some((op) => cozi.has(op))) continue;
+    if (m.recuperari >= PRAG_RECUPERARI) { abandonate.push({ id: m.id, product_id: m.product_id, op: m.op }); continue; }
+    pierdute.push({ id: m.id, product_id: m.product_id, op: m.op, recuperari: m.recuperari });
   }
 
   if (abandonate.length > 0) {
     await logError({
       action: "aboutyou/intentie-pierduta", severity: "critical",
-      message: `${abandonate.length} ${abandonate.length === 1 ? "produs a fost repus" : "produse au fost repuse"} la coada de ${PRAG_RECUPERARI} ori fara sa plece: verifica eroarea de pe listare`,
-      details: { produse: abandonate.map((a) => a.product_id).slice(0, 20) }, businessId,
+      message: `${abandonate.length} ${abandonate.length === 1 ? "modificare a fost repusa" : "modificari au fost repuse"} la coada de ${PRAG_RECUPERARI} ori fara sa plece: verifica eroarea de pe listare`,
+      details: { produse: abandonate.map((a) => `${a.product_id}:${a.op}`).slice(0, 20) }, businessId,
     });
-    deSters.push(...abandonate.map((a) => a.id));
+    /*
+     * ═══ ⚠ NU SE STERG, SE PUN IN SCRISORI MOARTE (28.08.2026) ═══
+     *
+     * Sters, randul lua cu el si ce modificare n-a plecat, si de cand, si de cate ori. Pastrat, se
+     * vede — iar cand comerciantul repara produsul, prima lui modificare noua il repune singura pe
+     * `deschis`, cu bugetul de recuperari intreg (vezi declansatorul). Nu e nevoie de niciun buton.
+     */
+    for (const a of abandonate) {
+      await admin.from("aboutyou_intentii").update({
+        status: "abandonat",
+        last_error: `repusa la coada de ${PRAG_RECUPERARI} ori fara sa plece`,
+      } as never).eq("id", a.id);
+    }
   }
 
   if (pierdute.length > 0) {
     /*
      * ⚠ SE SCRIU DOAR CHEILE. `attempts` si `last_error` lipsesc dinadins: cuprinse, fiecare
      * repunere ar reseta contorul unui element care esueaza mereu, iar plafonul de incercari n-ar
-     * mai putea sa-l opreasca niciodata. Pe un rand nou, valorile implicite fac oricum treaba.
+     * mai putea sa-l opreasca niciodata.
      */
     const { error } = await admin.from("aboutyou_sync_queue").upsert(
       pierdute.map((p) => ({
-        business_id: businessId, product_id: p.product_id, offer_id: p.product_id, op: "upsert",
+        business_id: businessId, product_id: p.product_id, offer_id: p.product_id, op: p.op,
       })) as never,
       { onConflict: "business_id,offer_id,op" },
     );
     if (error) {
-      /* ⚠ Semnele NU se sterg: se reiau la trecerea urmatoare. O plasa care se rupe tacut n-ar fi
+      /* ⚠ Semnele NU se ating: se reiau la trecerea urmatoare. O plasa care se rupe tacut n-ar fi
          o plasa. */
       await logError({
         action: "aboutyou/intentie-pierduta", severity: "error",
@@ -1238,12 +1278,12 @@ export async function rezolvaIntentiile(admin: Db, ctx: AboutYouSyncContext): Pr
       await logError({
         action: "aboutyou/intentie-pierduta", severity: "warning",
         message: `${pierdute.length} ${pierdute.length === 1 ? "modificare a fost salvata" : "modificari au fost salvate"} fara sa ajunga in coada About You: repuse acum`,
-        details: { produse: pierdute.map((p) => p.product_id).slice(0, 20) }, businessId,
+        details: { produse: pierdute.map((p) => `${p.product_id}:${p.op}`).slice(0, 20) }, businessId,
       });
       /*
        * ⚠ SEMNUL NU SE STERGE LA REPUNERE, ci se numara. Sters, n-am mai sti ca produsul asta a
-       * avut nevoie de plasa — si nici cate ori. Cade singur cand `catalog_citit_la` il depaseste,
-       * adica atunci cand modificarea CHIAR a plecat.
+       * avut nevoie de plasa — si nici cate ori. Cade singur cand dovada il depaseste, adica atunci
+       * cand modificarea CHIAR a plecat.
        */
       for (const p of pierdute) {
         await admin.from("aboutyou_intentii")
@@ -1261,54 +1301,71 @@ export async function rezolvaIntentiile(admin: Db, ctx: AboutYouSyncContext): Pr
 }
 
 /**
- * Listarile ramase orfane: produsul a fost sters la noi, iar la ei e inca acolo.
+ * Listarile ramase orfane: produsul a fost sters la noi, iar la ei poate fi inca acolo.
  *
- * ═══ ⚠ STERGEREA NU AVEA NICIO PLASA (27.08.2026, noaptea tarziu) ═══
+ * ═══ ⚠ STERGEREA NU AVEA NICIO PLASA ═══
  *
  * Declansatorul e pe `AFTER UPDATE`, deci o STERGERE nu lasa niciun semn — si nici n-ar avea unde:
- * `aboutyou_intentii.product_id` ar arata spre un rand care nu mai exista. Deci, daca punerea la
- * coada a retragerii pica:
+ * `aboutyou_intentii.product_id` ar arata spre un rand care nu mai exista. Dar semnul exista deja,
+ * si e chiar listarea: `product_id IS NULL` inseamna exact „produsul care o avea a fost sters",
+ * fiindca doar cheia straina scrie NULL acolo.
  *
- *     produs sters la noi                ✅
- *     `aboutyou_listings.product_id` NULL ✅ (cheia straina e `on delete set null`)
- *     retragerea in coada                 ❌
+ * ═══ ⚠ SI `last_synced_at` NU DECIDE CINE SE STERGE (28.08.2026) ═══
  *
- * Produsul ramane ACTIV pe About You si primeste comenzi pentru marfa care nu mai exista. Iar
- * panoul porneste de la `products`, deci comerciantul nu are nici buton, nici rand de apasat.
+ * Pana azi, listarile fara `last_synced_at` se stergeau pe loc, „fiindca n-au plecat niciodata".
+ * Fals, si dovada era chiar in `syncProductNow`: un produs cu 250 de variante pleaca in trei
+ * transe, iar daca a treia pica, primele doua sunt DEJA la ei si campul ramane gol. Sters randul,
+ * dispare si ultimul fir prin care le-am mai fi putut retrage.
  *
- * ⚠ SEMNUL EXISTA DEJA, SI E CHIAR LISTAREA: `product_id IS NULL` inseamna exact „produsul care o
- * avea a fost sters", fiindca doar cheia straina scrie NULL acolo. Nu e nevoie de niciun tabel nou.
- *
- * ⚠ SI ACOPERA TOATE CAILE: stergerea unui produs, cea in masa, si oricare alta care ar aparea
- * maine. De-aia se citeste starea, nu se instrumenteaza fiecare apelant.
+ * ⚠ HOTARASTE `remote_poate_exista`, scris INAINTEA primei cereri. La indoiala ramane `true`: o
+ * retragere fara obiect costa o cerere, una nefacuta lasa marfa la vanzare.
  */
 const MAX_ORFANE_PE_TRECERE = 200;
 
 export async function retrageListarileOrfane(admin: Db, ctx: AboutYouSyncContext): Promise<number> {
   const businessId = ctx.businessId;
-  const orfane = randuriCitite<{ id: string; style_key: string; last_synced_at: string | null }>(
-    "aboutyou.listariOrfane", await admin
-      .from("aboutyou_listings").select("id, style_key, last_synced_at")
-      .eq("business_id", businessId).is("product_id", null)
-      .limit(MAX_ORFANE_PE_TRECERE) as never);
+  /*
+   * ═══ ⚠ CU ROTATIE, ALTFEL PRIMELE DOUA SUTE TIN LOCUL TUTUROR (28.08.2026) ═══
+   *
+   * Plafonul fara cursor se sprijinea pe presupunerea ca fiecare trecere goleste ce a citit. Dar o
+   * retragere care nu se poate duce la capat — o cheie invalidata, un produs pe care ei il refuza —
+   * lasa randul pe loc, iar urmatoarele cinci mii n-ar mai fi vazute NICIODATA. Acelasi defect ca
+   * la reconciliere, unde „primele 5 pagini de la zero" nu vedeau nimic dupa produsul 500.
+   */
+  const dupa = ctx.config.orfane_dupa ?? null;
+  let q = admin.from("aboutyou_listings")
+    .select("id, style_key, remote_poate_exista")
+    .eq("business_id", businessId).is("product_id", null);
+  if (dupa) q = q.gt("id", dupa);
+  const orfane = randuriCitite<{ id: string; style_key: string; remote_poate_exista: boolean }>(
+    "aboutyou.listariOrfane",
+    await q.order("id", { ascending: true }).limit(MAX_ORFANE_PE_TRECERE) as never);
+
+  /* ⚠ Roata se intoarce la inceput cand s-a terminat lista; altfel cursorul ar creste la nesfarsit. */
+  const gata = orfane.length < MAX_ORFANE_PE_TRECERE;
+  const urmatorul = gata ? null : orfane[orfane.length - 1].id;
+  if (dupa !== urmatorul) {
+    await patchAboutYouConfig(admin, businessId, { orfane_dupa: urmatorul });
+  }
   if (orfane.length === 0) return 0;
 
   /*
-   * ⚠ CELE CARE N-AU PLECAT NICIODATA se sterg pe loc: la About You nu exista nimic de retras, iar
-   * lasate asa ar fi citite la fiecare trecere. Aceeasi proba ca peste tot: `last_synced_at`.
+   * ⚠ CELE DESPRE CARE STIM CA N-AU PLECAT se sterg pe loc: la About You nu exista nimic de retras,
+   * iar lasate asa ar fi citite la fiecare rotatie. „Stim" inseamna `remote_poate_exista` fals,
+   * scris inaintea oricarei cereri — nu lipsa unui camp scris DUPA ce toate transele au reusit.
    */
-  const doarLocale = orfane.filter((o) => o.last_synced_at == null);
+  const doarLocale = orfane.filter((o) => !o.remote_poate_exista);
   if (doarLocale.length > 0) {
     await admin.from("aboutyou_listings").delete().in("id", doarLocale.map((o) => o.id));
   }
 
-  const deRetras = orfane.filter((o) => o.last_synced_at != null);
+  const deRetras = orfane.filter((o) => o.remote_poate_exista);
   if (deRetras.length === 0) return 0;
 
   /*
-   * ⚠ Se pune la coada ce lipseste; randurile care exista deja raman neatinse — `onConflict` face
-   * din asta o operatie tacuta si ieftina, deci pasul nu deranjeaza nimic in cazul obisnuit, cand
-   * retragerea a intrat cum trebuie si asteapta sa fie dusa la capat.
+   * ⚠ Se pune la coada ce lipseste; randurile care exista deja raman neatinse — `ignoreDuplicates`
+   * face din asta o operatie tacuta si ieftina, deci pasul nu deranjeaza nimic in cazul obisnuit,
+   * cand retragerea a intrat cum trebuie si asteapta sa fie dusa la capat.
    */
   const { error } = await admin.from("aboutyou_sync_queue").upsert(
     deRetras.map((o) => ({
@@ -1789,6 +1846,35 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   }
   const generatie = genNoua;
 
+  /*
+   * ═══ ⚠ „POATE EXISTA LA EI" SE SCRIE INAINTEA CERERII (28.08.2026) ═══
+   *
+   * Pana azi, dovada ca produsul ajunsese acolo era `last_synced_at` — scris ABIA dupa ce toate
+   * transele au plecat. Numai ca un esec la mijloc lasa transele dinainte la ei si iese pe alta
+   * cale: chiar codul de mai jos scrie in jurnal „primele N au ajuns deja la About You", si tot el
+   * lasa campul gol. La fel orice cadere de proces intre trimitere si scriere.
+   *
+   * Iar plasa de orfane citea campul gol ca „n-a plecat niciodata" si STERGEA listarea — adica
+   * tocmai randul care ne mai ingaduia sa retragem cele doua sute de variante ramase la vanzare.
+   *
+   * ⚠ SE SCRIE INAINTE, SI DACA NU SE SCRIE NU SE TRIMITE. Acelasi tipar ca `cuLotDurabil`: nu
+   * exista clipa in care la ei sa fie ceva iar la noi sa scrie ca nu e.
+   *
+   * ⚠ SI NU SE STINGE NICIODATA DE-AICI. Se stinge doar odata cu listarea, la o retragere
+   * confirmata. Un fals pozitiv costa o cerere de retragere fara obiect; un fals negativ lasa
+   * marfa la vanzare.
+   */
+  if (!listing.remote_poate_exista) {
+    const { error: ePoate } = await admin.from("aboutyou_listings")
+      .update({ remote_poate_exista: true } as never).eq("id", listing.id);
+    if (ePoate) {
+      return {
+        ok: false, status: 0,
+        error: `Nu am putut ține minte că trimiterea pleacă spre About You: ${ePoate.message}`,
+      };
+    }
+  }
+
   let batchRequestId: string | undefined;
   const transe = Math.ceil(built.items.length / 100);
   let nescrise = 0;
@@ -1836,7 +1922,23 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
    * sterge si celalalt fapt de care e nevoie la incheierea lotului: „exista la ei dinainte?".
    * Vezi `urmareaLotului`.
    */
-  await setListingStatus(admin, listing.id, "pending", {
+  /*
+   * ═══ ⚠ RASPUNSUL SCRIERII ASTEIA SE CITESTE (28.08.2026) ═══
+   *
+   * `setListingStatus` intoarce `boolean` chiar fiindca raspunsul conteaza — si taman aici era
+   * aruncat, desi e cea mai importanta scriere de dupa trimitere. Loturile plecasera la ei, iar
+   * functia raspundea `ok: true`:
+   *
+   *   * `last_synced_at` ramanea gol, deci si `stare_dinainte`, deci si `catalog_citit_la`;
+   *   * listarea ramanea `local`/`draft` in loc de `pending`, iar asezarea lotului cauta chiar
+   *     `pending` ca sa inlantuie publicarea — deci produsul putea ramane ciorna pentru totdeauna;
+   *   * iar plasa de orfane citea „n-a plecat niciodata".
+   *
+   * ⚠ RETRIMITEREA E INOFENSIVA: acelasi produs trimis iar da acelasi produs, iar generatiile,
+   * loturile durabile si veghea exista tocmai pentru asta. Deci se raporteaza esec TRECATOR
+   * (`status: 0`), elementul ramane in coada fara sa arda o incercare, si se reia.
+   */
+  const salvat = await setListingStatus(admin, listing.id, "pending", {
     error: null, last_synced_at: now, stare_dinainte: stareaDeTinutMinte(listing),
     /*
      * ⚠ DOVADA CA A PLECAT CHIAR CATALOGUL, si de la clipa CITIRII. `last_synced_at` nu poate
@@ -1846,6 +1948,12 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
      */
     catalog_citit_la: cititLa,
   });
+  if (!salvat) {
+    return {
+      ok: false, status: 0,
+      error: "Produsul a plecat spre About You, dar starea locală nu s-a putut salva; se reia.",
+    };
+  }
   return { ok: true, action: "submitted", batchRequestId };
 }
 
@@ -3370,6 +3478,8 @@ export function momentulValorii(
 }
 
 export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
+  /* ⚠ Inaintea oricarei citiri: intre citire si trimitere valoarea se poate schimba iar. */
+  const cititLa = new Date().toISOString();
   const { data: product, error: eroareProdus } = await admin
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
   if (eroareProdus) return { ok: false, error: eroareProdus.message };
@@ -3389,7 +3499,7 @@ export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productI
   return trimiteInTranse(admin, ctx, listing.style_key, "stock", items,
     (lot, validAt) => updateStock(ctx.auth, lot.map((x) => ({ ...x, ...(validAt ? { valid_at: validAt } : {}) }))),
     /* ⚠ Si variantele: la un produs fara inventar urmarit, numarul vine din randul variantei. */
-    momentulValorii(produs.updated_at, variants, null));
+    momentulValorii(produs.updated_at, variants, null), cititLa);
 }
 
 /**
@@ -3399,7 +3509,9 @@ export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productI
 async function trimiteInTranse<T>(
   admin: Db, ctx: AboutYouSyncContext, styleKey: string, kind: "stock" | "price",
   items: T[], trimite: (lot: T[], validAt: string | undefined) => Promise<AboutYouResult<AboutYouBatchAck>>,
-  validAt?: string,
+  validAt: string | undefined,
+  /** Clipa in care s-a CITIT valoarea trimisa. Vezi `rezolvaIntentiile`. */
+  cititLa: string,
 ): Promise<SyncOutcome> {
   if (items.length === 0) return { ok: true, action: "skipped" };
   let batchRequestId: string | undefined;
@@ -3426,17 +3538,26 @@ async function trimiteInTranse<T>(
     if (i + MAX_ITEMI_STOC_PRET < items.length) await pause(300);
   }
   /*
-   * ⚠ AICI NU SE SCRIE NICIO DOVADA, SI ASTA E CHIAR IDEEA (27.08.2026, noaptea tarziu).
+   * ═══ ⚠ DOVADA E A OPERATIEI, SI E CLIPA CITIRII (28.08.2026) ═══
    *
-   * Ieri se scria un „a plecat ceva" comun. Dar semnul lasat de declansator cere o trimitere de
-   * CATALOG: o impingere de stoc sau de pret nu poarta descrierea, imaginile sau atributele.
-   * Confirmat de ea, semnul unei schimbari de descriere se stergea iar descrierea ramanea veche la
-   * ei, tacut. Dovada e `catalog_citit_la`, si o scrie doar `syncProductNow`.
+   * Ieri aici nu se scria nimic, ca sa nu se confirme din greseala un semn de CATALOG cu o
+   * impingere de stoc. Corect ca principiu, si prea aspru ca urmare: semnul lasat de o schimbare de
+   * STOC nu putea fi satisfacut decat de un upsert de produs intreg, deci fiecare comanda ar fi
+   * produs, pe langa impingerea de stoc, si o trimitere completa de catalog. La o mie de comenzi pe
+   * zi, mii de loturi degeaba.
+   *
+   * ⚠ Fiecare fel isi scrie propria clipa, si un `upsert` le satisface pe toate trei — fiindca duce
+   * cu el si stocul, si preturile. Invers nu e adevarat, si de-aia sunt campuri separate.
    */
+  await admin.from("aboutyou_listings")
+    .update({ [kind === "stock" ? "stoc_citit_la" : "pret_citit_la"]: cititLa } as never)
+    .eq("business_id", ctx.businessId).eq("style_key", styleKey);
   return { ok: true, action: "submitted", batchRequestId };
 }
 
 export async function pushPriceNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
+  /* ⚠ Inaintea oricarei citiri: intre citire si trimitere valoarea se poate schimba iar. */
+  const cititLa = new Date().toISOString();
   const { data: product, error: eroareProdus } = await admin
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
   // O citire cazuta nu inseamna „produs sters": elementul trebuie reincercat,
@@ -3463,7 +3584,7 @@ export async function pushPriceNow(admin: Db, ctx: AboutYouSyncContext, productI
   return trimiteInTranse(admin, ctx, listing.style_key, "price", items,
     (lot, validAt) => updatePrice(ctx.auth, lot.map((x) => ({ ...x, ...(validAt ? { valid_at: validAt } : {}) }))),
     /* ⚠ Toate trei: produsul, randurile de varianta (`manual_eur`) si cursul (`fx_from_ron`). */
-    momentulValorii(produs.updated_at, variants, ctx.config.fx?.updated_at));
+    momentulValorii(produs.updated_at, variants, ctx.config.fx?.updated_at), cititLa);
 }
 
 // ── Fulfillment: push AWB tracking to About You (Faza 4, dropshipping) ────────────

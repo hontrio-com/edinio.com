@@ -423,7 +423,7 @@ test("⚠ semnul se scrie de un DECLANSATOR, in aceeasi tranzactie cu modificare
    * semnul. Verificat pe baza de productie, nu dedus.
    */
   const i = baseline.indexOf("FUNCTION public.aboutyou_marcheaza_modificarea");
-  const corp = baseline.slice(i, i + 1400);
+  const corp = baseline.slice(i, i + 2400);
   assert.doesNotMatch(corp, /EXCEPTION/i,
     "declansatorul nu are voie sa-si inghita eroarea: atunci urma nu mai e tranzactionala");
 
@@ -436,8 +436,39 @@ test("⚠ semnul se scrie de un DECLANSATOR, in aceeasi tranzactie cu modificare
    *     10:02 modificarea B, punerea pica -> semnul RAMANE 10:00
    *     plasa: 10:01 >= 10:00 -> „s-a trimis"  ❌ B nu s-a trimis niciodata
    */
-  assert.match(corp, /do update set creat_la = now\(\)/i);
+  assert.match(corp, /do update set creat_la = now\(\), recuperari = 0, status = 'deschis'/i);
   assert.doesNotMatch(corp, /do nothing/i);
+
+  /*
+   * ⚠ SI O MODIFICARE NOUA PRIMESTE BUGET NOU DE RECUPERARI. Pastrat contorul, un produs care
+   * avusese nevoie de patru recuperari intra la a cincea direct in abandon — pentru o modificare
+   * care n-are nicio legatura cu incidentul de atunci. Aceeasi regula ca la `incident` in veghea
+   * loturilor oarbe, unde am aplicat-o corect si aici o uitasem.
+   */
+  assert.match(corp, /recuperari = 0/);
+});
+
+test("⚠ semnul poarta OPERATIA de care e nevoie, nu doar „s-a schimbat ceva”", () => {
+  /*
+   * ═══ ⚠ O COMANDA AR FI TRIMIS PRODUSUL INTREG (28.08.2026) ═══
+   *
+   *     o comanda scade stocul       -> semn (declansatorul asculta `stock_quantity`)
+   *     impingerea dedicata de stoc  -> pleaca, si e chiar ce trebuie ✅
+   *     dar nu scria nicio dovada
+   *     dupa trei minute: „n-a plecat prin catalog" -> upsert de produs INTREG
+   *
+   * La o mie de comenzi pe zi, mii de loturi de catalog degeaba — cu tot cu generatii, loturi si
+   * curse de urmarit. Acum semnul stie ce fel de trimitere cere.
+   *
+   * ⚠ `page_sections` MERGE LA CATALOG desi poarta si stocul si preturile variantelor: un `upsert`
+   * le duce pe toate, iar o schimbare de titlu de varianta trimisa doar ca stoc n-ar ajunge acolo.
+   */
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const i = baseline.indexOf("FUNCTION public.aboutyou_marcheaza_modificarea");
+  const corp = baseline.slice(i, i + 2400);
+  assert.match(corp, /new\.stock_quantity is distinct from old\.stock_quantity[\s\S]{0,200}?'stock'/i);
+  assert.match(corp, /new\.price is distinct from old\.price[\s\S]{0,200}?'price'/i);
+  assert.match(corp, /new\.page_sections is distinct from old\.page_sections[\s\S]{0,300}?'upsert'/i);
 });
 
 test("⚠ declansatorul asculta EXACT campurile care pleaca la About You", () => {
@@ -479,17 +510,23 @@ test("⚠ semnul devine coada DOAR daca punerea din aplicatie chiar s-a pierdut"
    *
    * Dar lotul de stoc nu poarta descrierea. La ei ramanea cea veche, tacut.
    */
-  assert.match(sync, /\.eq\("op", "upsert"\)\.in\("product_id", bucata\)/);
-  assert.match(sync, /if \(citit && Date\.parse\(citit\) >= Date\.parse\(m\.creat_la\)\) \{ deSters\.push\(m\.id\); continue; \}/);
+  assert.match(sync, /\.in\("op", \["upsert", "stock", "price"\]\)/);
+  /*
+   * ⚠ SI IN AMANDOUA SENSURILE: un semn de STOC se satisface cu o impingere de stoc SAU cu un
+   * upsert (care duce si stocul); un semn de CATALOG, doar cu un upsert. Invers ar fi fost fals.
+   */
+  assert.match(sync, /op === "stock" \? \[d\.stoc, d\.catalog\]/);
+  assert.match(sync, /op === "upsert" \? \["upsert"\] : \[op, "upsert"\]/);
+  assert.match(sync, /if \(potriviteFelului\(d, m\.op\)\.some\(\(t\) => t != null && Date\.parse\(t\) >= cerut\)\)/);
   /*
    * ⚠ SI UN RAND `upsert` DEJA LA COADA NU STERGE SEMNUL, doar il lasa in pace. Sters, un lucrator
    * care a citit produsul INAINTEA modificarii ar duce la capat sarcina veche, si nimeni n-ar mai
    * sti ca cea noua n-a plecat. Semnul cade abia cand apare dovada.
    */
-  assert.match(sync, /if \(inCoada\.has\(m\.product_id\)\) continue;/);
+  assert.match(sync, /if \(cozi && cozilePotrivite\(m\.op\)\.some\(\(op\) => cozi\.has\(op\)\)\) continue;/);
   /* ⚠ Si repunerea nu reseteaza `attempts`: altfel un element care esueaza mereu n-ar muri niciodata. */
-  const iUps = sync.indexOf("business_id: businessId, product_id: p.product_id, offer_id: p.product_id, op: \"upsert\"");
-  assert.ok(iUps > 0, "repunerea scrie doar cheile");
+  const iUps = sync.indexOf("business_id: businessId, product_id: p.product_id, offer_id: p.product_id, op: p.op,");
+  assert.ok(iUps > 0, "repunerea scrie doar cheile, si pe felul cerut de semn");
   assert.doesNotMatch(sync.slice(iUps, iUps + 160), /attempts/);
   /* ⚠ Si `.in()` pe bucati: peste vreo sase sute de id-uri, adresa cererii e refuzata. */
   assert.match(sync, /for \(const bucata of bucatiDeIduri\(ids\)\)/);
@@ -639,8 +676,15 @@ test("⚠ si o retragere pierduta se recupereaza din listarea ramasa orfana", ()
   assert.match(sync, /export async function retrageListarileOrfane\(/);
   assert.match(sync, /\.is\("product_id", null\)/);
   assert.match(sync, /op: "delete",/);
-  /* ⚠ Cele care n-au plecat niciodata se sterg pe loc: la ei nu exista nimic de retras. */
-  assert.match(sync, /const doarLocale = orfane\.filter\(\(o\) => o\.last_synced_at == null\);/);
+  /*
+   * ═══ ⚠ SI NU `last_synced_at` HOTARASTE CINE SE STERGE (28.08.2026) ═══
+   *
+   * Vezi proba de mai jos: un produs cu 250 de variante pleaca in trei transe, iar daca a treia
+   * pica, primele doua sunt DEJA la ei si campul ramane gol. Sters randul, dispare si ultimul fir
+   * prin care le-am mai fi putut retrage.
+   */
+  assert.match(sync, /const doarLocale = orfane\.filter\(\(o\) => !o\.remote_poate_exista\);/);
+  assert.doesNotMatch(sync, /orfane\.filter\(\(o\) => o\.last_synced_at == null\)/);
   /* Si cronul chiar trece pe-acolo. */
   assert.match(cron, /orfane \+= await retrageListarileOrfane\(admin, ctx\)/);
 });
@@ -654,4 +698,69 @@ test("⚠ si recuperarea are un capat", () => {
   assert.match(sync, /const PRAG_RECUPERARI = 5;/);
   assert.match(sync, /if \(m\.recuperari >= PRAG_RECUPERARI\)/);
   assert.match(sync, /verifica eroarea de pe listare/);
+});
+
+
+/* ── `last_synced_at` nu e o dovada ca la ei nu exista nimic ───────────────── */
+
+test("⚠ o transa picata la mijloc lasa produsul PARTIAL la ei, cu campul gol", () => {
+  /*
+   * ═══ ⚠ CHIAR CODUL O SPUNE, SI TOT EL LASA CAMPUL GOL ═══
+   *
+   *     un produs cu 250 de variante pleaca in TREI transe
+   *     transa 1 -> acceptata la ei ✅
+   *     transa 2 -> acceptata la ei ✅
+   *     transa 3 -> pica            ❌
+   *     `setListingStatus(error)` si `return` — `last_synced_at` NU se scrie
+   *
+   * Ramura de esec scrie in jurnal „primele N au ajuns deja la About You". Deci codul STIE ca
+   * la ei sunt doua sute de variante, si lasa in acelasi timp campul din care plasa de orfane
+   * deducea „n-a plecat niciodata".
+   */
+  const iBucla = sync.indexOf("for (let i = 0; i < built.items.length; i += 100)");
+  const bucla = sync.slice(iBucla, sync.indexOf("const now = new Date().toISOString();", iBucla));
+  assert.ok(iBucla > 0, "bucla de transe trebuie sa existe");
+  assert.match(bucla, /return \{ ok: false, error: res\.error, status: res\.status \};/);
+  assert.doesNotMatch(bucla, /last_synced_at/,
+    "ramura de esec nu scrie `last_synced_at` — deci el nu poate dovedi ca nimic n-a plecat");
+
+  /* ⚠ SEMNUL SE SCRIE INAINTEA PRIMEI TRANSE, si daca nu se scrie, nu se trimite. */
+  const iPoate = sync.indexOf("remote_poate_exista: true");
+  assert.ok(iPoate > 0 && iPoate < iBucla,
+    "`remote_poate_exista` se scrie INAINTEA buclei de transe, ca la `cuLotDurabil`");
+  assert.match(sync, /if \(ePoate\) \{[\s\S]{0,320}?ok: false, status: 0/);
+});
+
+test("⚠ si rezultatul ultimei scrieri dupa trimitere se citeste", () => {
+  /*
+   * `setListingStatus` intoarce `boolean` chiar fiindca raspunsul conteaza — si taman aici era
+   * aruncat, desi e cea mai importanta scriere de dupa trimitere. Loturile plecau la ei, functia
+   * raspundea `ok: true`, iar listarea ramanea fara `last_synced_at`, fara `catalog_citit_la` si
+   * fara `pending` — deci nici publicarea nu se mai inlantuia, fiindca asezarea lotului cauta
+   * chiar `pending`.
+   */
+  assert.match(sync, /const salvat = await setListingStatus\(admin, listing\.id, "pending"/);
+  assert.match(sync, /if \(!salvat\) \{[\s\S]{0,300}?ok: false, status: 0/);
+});
+
+test("⚠ orfanele se rotesc, ca primele doua sute sa nu tina locul tuturor", () => {
+  /*
+   * Plafonul fara cursor se sprijinea pe presupunerea ca fiecare trecere goleste ce a citit. Dar o
+   * retragere care nu se poate duce la capat lasa randul pe loc, iar urmatoarele cinci mii n-ar
+   * mai fi vazute NICIODATA — acelasi defect ca „primele 5 pagini de la zero" la reconciliere.
+   */
+  assert.match(sync, /if \(dupa\) q = q\.gt\("id", dupa\);/);
+  assert.match(sync, /\.order\("id", \{ ascending: true \}\)/);
+  /* ⚠ Si roata se intoarce la inceput cand lista s-a terminat. */
+  assert.match(sync, /const urmatorul = gata \? null : orfane\[orfane\.length - 1\]\.id;/);
+});
+
+test("⚠ semnul abandonat se pastreaza, nu se sterge", () => {
+  /*
+   * Sters, randul lua cu el si ce modificare n-a plecat, si de cand, si de cate ori. Pastrat, se
+   * vede — iar cand comerciantul repara produsul, prima lui modificare noua il repune singura pe
+   * `deschis`, cu bugetul de recuperari intreg. Nu e nevoie de niciun buton.
+   */
+  assert.match(sync, /status: "abandonat",/);
+  assert.match(sync, /\.eq\("status", "deschis"\)/);
 });

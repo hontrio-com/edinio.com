@@ -492,12 +492,26 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     const ex = existing;
     /* ⚠ Si raspunsul BRUT, ca sa se poata raspunde la intrebari pe care schema noastra nu le
        cunoaste inca. Vezi migratia 2026-11-24. */
-    await admin.from("aboutyou_orders")
+    const { error: eLateralAct } = await admin.from("aboutyou_orders")
       .update({
         items: ayItems as never, status: order.status ?? "open",
         raw: order as never, last_synced_at: now, updated_at: now,
       } as never)
       .eq("id", ex.id);
+    /*
+     * ═══ ⚠ RANDUL LATERAL PUTEA RAMANE VECHI, SI TOT SE MERGEA MAI DEPARTE (27.08.2026) ═══
+     *
+     * Rezultatul nu se citea. Din `items` de aici se socoteste TOT ce urmeaza: ce linii se pot
+     * expedia, ce se poate anula, ce se poate returna, si care comenzi se reintreaba. Ramas la
+     * starea de ieri, ecranul arata butoane pentru linii care nu mai sunt in starea aia, iar
+     * expedierea ar pleca pe id-uri vechi.
+     *
+     * ⚠ SE ARUNCA INAINTE de tranzitia terminala si de consumul de stoc: reluarea reface totul de
+     * la capat, si amandoua sunt idempotente. Asa nu ramane nimic pe jumatate.
+     */
+    if (eLateralAct) {
+      throw new Error(`Randul About You al comenzii ${ayNumber} nu s-a putut actualiza: ${eLateralAct.message}`);
+    }
     /*
      * Starile terminale trec prin motorul comun: o anulare sau un retur trebuie sa
      * ELIBEREZE stocul, nu doar sa schimbe eticheta. Vezi `tranzitie-marketplace`.

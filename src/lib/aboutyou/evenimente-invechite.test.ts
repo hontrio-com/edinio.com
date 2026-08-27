@@ -38,24 +38,42 @@ test("⚠ inlocuitoarele lor sunt in cele esentiale", () => {
   }
 });
 
-test("⚠ lista intreaga se cere in continuare, si nu pierde nimic pe drum", () => {
-  assert.equal(ABOUTYOU_WEBHOOK_EVENTS.length, EVENIMENTE_ESENTIALE.length + EVENIMENTE_INVECHITE.length);
-  assert.equal(new Set(ABOUTYOU_WEBHOOK_EVENTS).size, ABOUTYOU_WEBHOOK_EVENTS.length, "nume dublat");
+test("⚠ cererea de abonare NU le mai cuprinde", () => {
+  /*
+   * ═══ ⚠ DIMINEATA ERAU CERUTE „DIN PRISOS" (27.08.2026) ═══
+   *
+   * Rationamentul de atunci: „«sunt invechite» e o informatie, nu o certitudine, deci se cer mai
+   * departe, cu o reluare pe cele esentiale in caz de refuz". Intre timp specificatia lor curenta
+   * a fost citita inca o data, separat, si le marcheaza `deprecated`. Doua citiri care spun
+   * acelasi lucru — acelasi prag ca la `valid_at`.
+   *
+   * ⚠ Si nu se pierde nimic: orice eveniment de comanda duce la aceeasi recitire intreaga.
+   */
+  assert.deepEqual(ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE);
+  for (const e of EVENIMENTE_INVECHITE) {
+    assert.ok(!ABOUTYOU_WEBHOOK_EVENTS.includes(e), `${e} inca se cere`);
+  }
 });
 
-test("⚠ abonarea se reia cu cele esentiale, dupa ce sterge orfanul", () => {
+test("⚠ dar lista lor ramane scrisa, pentru diagnoza", () => {
   /*
-   * ⚠ „A picat" nu inseamna „nu s-a creat" — lectia eMAG, unde un raspuns de eroare lasa totusi
-   * oferta salvata. O reluare oarba ar face al doilea abonament, si fiecare eveniment ar veni de
-   * doua ori. Se cauta dupa URL, care poarta un token generat chiar atunci.
+   * Nu din nostalgie: un abonament vechi care inca le poarta e SANATOS, nu stricat, si diagnoza
+   * trebuie sa stie asta ca sa nu-l trimita pe comerciant sa repare ce nu e stricat.
+   */
+  assert.deepEqual([...EVENIMENTE_INVECHITE].sort(),
+    ["order.cancelled", "order.returned", "order.shipped"]);
+});
+
+test("⚠ si reluarea pe lista scurta s-a scos odata cu ele", () => {
+  /*
+   * Lista ceruta E deja cea scurta, deci o reluare ar fi retrimis exact aceleasi nume. Un cod care
+   * se preface ca mai are o sansa e mai rau decat unul care n-are: la urmatorul audit ar fi trecut
+   * drept plasa.
    */
   const act = viu("src/lib/actions/aboutyou.actions.ts");
-  assert.ok(act.includes("events: ABOUTYOU_WEBHOOK_EVENTS }"), "prima incercare nu mai cere tot");
-  assert.ok(act.includes("const orfan = (toate.data ?? []).find((w) => w.url === url);"), "orfanul nu se cauta");
-  assert.ok(act.includes("await deleteWebhookSubscription(g.auth, String(orfan.id));"), "orfanul nu se sterge");
-  assert.ok(act.includes("events: EVENIMENTE_ESENTIALE }"), "reluarea nu se face");
-  /* Si ordinea: stergerea orfanului STRICT inaintea reluarii. */
-  assert.ok(act.indexOf("String(orfan.id)") < act.indexOf("events: EVENIMENTE_ESENTIALE }"));
+  assert.ok(!act.includes("events: EVENIMENTE_ESENTIALE }"), "reluarea a ramas");
+  assert.ok(act.includes("events: ABOUTYOU_WEBHOOK_EVENTS }"));
+  assert.ok(!act.includes("const orfan ="), "cautarea orfanului n-are ce pazi fara reluare");
 });
 
 test("⚠ diagnoza nu mai raporteaza pe veci „trei evenimente lipsa”", () => {

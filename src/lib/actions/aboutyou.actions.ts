@@ -17,7 +17,7 @@ import { logError } from "@/lib/error-logger";
 import { aboutyouGloballyEnabled, aboutyouWebhookUrl, maskApiKey } from "@/lib/aboutyou/auth";
 import {
   createWebhookSubscription, deleteWebhookSubscription, getOrderDocument, getWebhookSubscription,
-  isAboutYouError, listWebhookSubscriptions, mesajEroare, testConnection,
+  isAboutYouError, mesajEroare, testConnection,
   type AboutYouAuth,
 } from "@/lib/aboutyou/client";
 import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
@@ -1561,32 +1561,18 @@ export async function subscribeAboutYouWebhook(businessId: string): Promise<{ su
   const token = randomBytes(24).toString("base64url");
   const url = `${aboutyouWebhookUrl()}?businessId=${encodeURIComponent(businessId)}&token=${token}`;
   /*
-   * ⚠ LISTA INTREAGA, APOI DOAR CELE ESENTIALE. Vezi `EVENIMENTE_INVECHITE`: un singur nume pe
-   * care ei nu-l mai recunosc face cererea sa pice toata, si comerciantul ramane fara NICIUN
-   * webhook. Reluarea nu pierde nimic — cele trei duceau la aceeasi recitire a comenzii.
+   * ⚠ SE CER DOAR CELE ESENTIALE. Vezi `EVENIMENTE_INVECHITE`: cele trei vechi sunt marcate
+   * `deprecated` in specificatia lor si nu aduceau nimic — orice eveniment de comanda duce la
+   * aceeasi recitire intreaga a comenzii. Cerute, erau doar inca un fel in care cererea intreaga
+   * putea fi refuzata, lasand comerciantul fara NICIUN webhook.
+   *
+   * ⚠ RELUAREA PE LISTA SCURTA S-A SCOS ODATA CU ELE: lista ceruta E deja cea scurta, deci o
+   * reluare ar fi retrimis exact aceleasi nume. Un cod care se preface ca mai are o sansa e mai
+   * rau decat unul care n-are.
    */
-  const corp = { url, description: "Edinio sync" };
-  let res = await createWebhookSubscription(g.auth, { ...corp, events: ABOUTYOU_WEBHOOK_EVENTS });
-  if (isAboutYouError(res)) {
-    /*
-     * ⚠ „A PICAT" NU INSEAMNA „NU S-A CREAT". Lectia eMAG, unde un raspuns de eroare lasa totusi
-     * oferta salvata: o reluare oarba ar face al doilea abonament, si fiecare eveniment ar veni de
-     * doua ori. Se cauta dupa URL — care poarta un token generat acum, deci e al nostru si numai
-     * al acestei incercari — si orfanul se sterge inainte de a relua.
-     */
-    const toate = await listWebhookSubscriptions(g.auth);
-    if (!isAboutYouError(toate)) {
-      const orfan = (toate.data ?? []).find((w) => w.url === url);
-      if (orfan?.id != null) await deleteWebhookSubscription(g.auth, String(orfan.id));
-    }
-    res = await createWebhookSubscription(g.auth, { ...corp, events: EVENIMENTE_ESENTIALE });
-    if (isAboutYouError(res)) return { error: res.error };
-    await logError({
-      action: "aboutyou/webhook", severity: "warning",
-      message: "abonamentul cu lista intreaga a fost refuzat; s-a facut numai cu evenimentele esentiale",
-      details: { businessId }, businessId,
-    });
-  }
+  const res = await createWebhookSubscription(g.auth, { url, description: "Edinio sync", events: ABOUTYOU_WEBHOOK_EVENTS });
+  if (isAboutYouError(res)) return { error: res.error };
+
   const next: AboutYouConfig = {
     ...g.config,
     webhook_token: token,

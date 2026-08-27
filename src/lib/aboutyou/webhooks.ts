@@ -40,10 +40,29 @@ export const EVENIMENTE_ESENTIALE = [
   "stock.updated", "product_master.status_updated",
 ];
 
-/** Cerute din prisos: daca ei le refuza, abonamentul se face fara ele. */
+/**
+ * Cele trei invechite. NU se mai cer.
+ *
+ * ═══ ⚠ ERAU CERUTE „DIN PRISOS", SI ACUM NU MAI SUNT (27.08.2026) ═══
+ *
+ * Pe 27.08 dimineata le-am lasat in cerere, cu o reluare pe cele esentiale in caz de refuz.
+ * Rationamentul era: „«sunt invechite» e o informatie, nu o certitudine, deci se cer mai departe".
+ * Intre timp specificatia lor curenta a fost citita inca o data, separat, si le marcheaza
+ * `deprecated`, cu `order.updated` / `order_items.*` drept inlocuitori. Doua citiri care spun
+ * acelasi lucru — acelasi prag ca la `valid_at`.
+ *
+ * ⚠ SI NU SE PIERDE NIMIC. Orice eveniment de comanda duce la aceeasi fapta: `ingestOrderByNumber`,
+ * adica o RECITIRE intreaga a comenzii. Trei nume in plus pentru aceeasi recitire nu aduceau
+ * nicio informatie noua — doar inca un fel in care cererea de abonare putea fi refuzata intreaga,
+ * lasand comerciantul fara NICIUN webhook.
+ *
+ * ⚠ LISTA RAMANE SCRISA, si nu din nostalgie: `getAboutYouWebhookDiagnoza` trebuie sa stie ca un
+ * abonament vechi care inca le poarta e sanatos, nu stricat.
+ */
 export const EVENIMENTE_INVECHITE = ["order.cancelled", "order.shipped", "order.returned"];
 
-export const ABOUTYOU_WEBHOOK_EVENTS = [...EVENIMENTE_ESENTIALE, ...EVENIMENTE_INVECHITE];
+/** Ce se cere efectiv la abonare. */
+export const ABOUTYOU_WEBHOOK_EVENTS = [...EVENIMENTE_ESENTIALE];
 
 const SIGNATURE_HEADERS = ["x-signature", "x-aboutyou-signature", "x-scayle-signature", "signature"];
 

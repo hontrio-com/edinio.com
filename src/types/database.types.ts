@@ -446,6 +446,7 @@ export type Database = {
           last_error: string | null
           payload: Json
           prelucrat_la: string | null
+          urmatoarea_incercare: string | null
           primit_la: string
         }
         Insert: {
@@ -457,6 +458,7 @@ export type Database = {
           last_error?: string | null
           payload: Json
           prelucrat_la?: string | null
+          urmatoarea_incercare?: string | null
           primit_la?: string
         }
         Update: {
@@ -468,6 +470,7 @@ export type Database = {
           last_error?: string | null
           payload?: Json
           prelucrat_la?: string | null
+          urmatoarea_incercare?: string | null
           primit_la?: string
         }
         Relationships: []

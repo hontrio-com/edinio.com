@@ -1007,6 +1007,43 @@ async function marcheazaListarileLotului(
 /** Cat de rar se intreaba un lot care e in lucru la ei de peste doua ore. */
 const AMANARE_LOT_LENT_MS = 30 * 60 * 1000;
 
+/** Felurile de lot care lucreaza pe COMENZI, nu pe listari. `related_ids` poarta id-uri de comanda. */
+const LOTURI_DE_COMANDA: Record<string, string> = {
+  ship: "ship_necunoscut", cancel: "cancel_necunoscut", return: "return_necunoscut",
+};
+
+/**
+ * Cand am incetat sa intrebam despre un lot de comanda.
+ *
+ * ═══ ⚠ COMANDA RAMANEA `ship_pending` PE VECI (27.08.2026) ═══
+ *
+ * La sapte zile lotul se inchidea, si se chema `marcheazaListarileLotului` — care cauta LISTARI
+ * dupa `style_key`. Dar la `ship`, `cancel` si `return`, `related_ids` poarta id-uri de COMANDA:
+ * cautarea nu gasea nimic, deci comanda ramanea „in curs" pentru totdeauna, fara nicio urma.
+ *
+ * ⚠ SI NU SE SCRIE `ship_failed`. Ecranul arata butonul „Reia expedierea" pe el, iar o reluare
+ * peste o expediere care poate a fost primita inseamna doua expedieri raportate pe aceleasi
+ * linii. Starea noua spune adevarul: nu stim, si trebuie sa se uite un om.
+ */
+async function marcheazaComenzileLotului(
+  admin: Db, ctx: AboutYouSyncContext, b: BatchRow,
+): Promise<void> {
+  const stare = LOTURI_DE_COMANDA[b.kind];
+  if (!stare) return;
+  const orderIds = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
+  for (const oid of orderIds) {
+    await admin.from("aboutyou_orders")
+      .update({ status: stare, updated_at: new Date().toISOString() } as never)
+      .eq("business_id", ctx.businessId).eq("order_id", oid);
+  }
+  await logError({
+    action: "aboutyou-sync/lot-necunoscut", severity: "critical",
+    message: `am incetat sa intrebam de lotul „${b.kind}" dupa sapte zile: verifica in Seller Center inainte de a-l relua`,
+    details: { batchRequestId: b.batch_request_id, kind: b.kind, orderIds: orderIds.slice(0, 20) },
+    businessId: ctx.businessId,
+  });
+}
+
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
   const batches = randuriCitite<BatchRow>("aboutyou.loturiDeschise", await admin
     .from("aboutyou_batches")
@@ -1195,8 +1232,14 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
       } as never).eq("id", b.id);
 
       if (amIncetatSaIntreb) {
-        await marcheazaListarileLotului(admin, ctx,
-          b, "About You nu a terminat procesarea in sapte zile si am incetat sa intrebam. Trimite produsul din nou.");
+        /* ⚠ Loturile de COMANDA au alt drum: `related_ids` poarta id-uri de comanda, nu chei de
+           produs, iar starea scrisa nu are voie sa invite la o reluare oarba. */
+        if (LOTURI_DE_COMANDA[b.kind]) {
+          await marcheazaComenzileLotului(admin, ctx, b);
+        } else {
+          await marcheazaListarileLotului(admin, ctx,
+            b, "About You nu a terminat procesarea in sapte zile si am incetat sa intrebam. Trimite produsul din nou.");
+        }
       } else if (incetinit && b.alarma_scrisa_la == null) {
         /* ⚠ O SINGURA DATA pe lot: cronul de minut ar scrie altfel acelasi rand la nesfarsit. */
         await logError({
@@ -1234,6 +1277,21 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
      * marketplace-ul nu stia nimic.
      */
     /*
+     * ⚠ SCRIERILE LOCALE PICATE TIN LOTUL DESCHIS.
+     *
+     * Rezultatul lui About You se citeste O SINGURA DATA: lotul inchis pe `completed` nu se mai
+     * intreaba niciodata. Deci o scriere locala picata inseamna ca adevarul lor e pierdut
+     * definitiv — comanda ramane `ship_pending` pe veci, listarea ramane `pending`, sau un produs
+     * respins arata ca merge. Lasat pe `retry`, lotul se reinterogheaza si asezarea se reface.
+     *
+     * ⚠ SE DECLARA AICI, INAINTEA TUTUROR ASEZARILOR, nu doar inaintea celor de catalog: prima
+     * varianta il punea mai jos, deci `stock_removal`, `ship`, `cancel` si `return` inchideau
+     * lotul oricum. Cea mai scumpa era expedierea: comanda ramanea `ship_pending`, comerciantul
+     * credea ca n-a plecat si apasa „Reia expedierea".
+     */
+    let asezat = true;
+
+    /*
      * Retragerea unei variante se confirma ABIA AICI.
      *
      * `reconciliazaVariante` a stins doar `enabled`; marcajul „retras" se pune cand
@@ -1245,8 +1303,13 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
       if (!hardFail) {
         const ids = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
         if (ids.length > 0) {
-          await admin.from("aboutyou_variants")
+          const { error: eScos } = await admin.from("aboutyou_variants")
             .update({ ay_status: "removed", updated_at: now } as never).in("id", ids);
+          /*
+           * ⚠ Nescris, marcajul „retras" lipseste, deci variantele reintra in `deScos` la
+           * fiecare trecere si zeroul se retrimite la nesfarsit. Lotul ramane deschis.
+           */
+          if (eScos) asezat = false;
         }
       }
     }
@@ -1264,22 +1327,34 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
       const reusit = b.kind === "cancel" ? "cancelled" : "returned";
       const esuat = b.kind === "cancel" ? "cancel_failed" : "return_failed";
       for (const oid of orderIds) {
-        await admin.from("aboutyou_orders")
+        const { error: eStare } = await admin.from("aboutyou_orders")
           .update({ status: hardFail ? esuat : reusit, last_synced_at: now, updated_at: now } as never)
           .eq("business_id", ctx.businessId).eq("order_id", oid);
+        /*
+         * ⚠ Nescrisa, comanda ramane pe `cancel_pending` / `return_pending` PENTRU TOTDEAUNA:
+         * rezultatul lor se citeste o singura data, iar lotul inchis nu se mai intreaba. Iar
+         * comerciantul vede „in curs" pe ceva ce s-a terminat de mult.
+         */
+        if (eStare) asezat = false;
       }
     }
 
     if (b.kind === "ship") {
       const orderIds = Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [];
       for (const oid of orderIds) {
-        await admin.from("aboutyou_orders")
+        const { error: eExp } = await admin.from("aboutyou_orders")
           .update({
             status: hardFail ? "ship_failed" : "shipped",
             last_synced_at: now,
             updated_at: now,
           } as never)
           .eq("business_id", ctx.businessId).eq("order_id", oid);
+        /*
+         * ⚠ Cea mai scumpa dintre toate: nescrisa, comanda ramane `ship_pending`, comerciantul
+         * crede ca expedierea n-a plecat si apasa „Reia expedierea" — doua expedieri raportate pe
+         * aceleasi linii, pentru o scriere de-o clipa care n-a mers.
+         */
+        if (eExp) asezat = false;
       }
     }
 
@@ -1340,15 +1415,6 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
 
     // Only catalog batches (product create/update, status) reflect onto the
     // listing status; stock/price batches are transient and just settle.
-    /*
-     * ⚠ SCRIERILE LOCALE PICATE TIN LOTUL DESCHIS.
-     *
-     * Rezultatul lui About You se citeste O SINGURA DATA: lotul inchis pe `completed` nu se mai
-     * intreaba niciodata. Deci o scriere locala picata inseamna ca adevarul lor e pierdut
-     * definitiv — listarea ramane pe `pending` pe veci, sau un produs respins arata ca merge.
-     * Lasat pe `retry`, lotul se reinterogheaza si asezarea se reface.
-     */
-    let asezat = true;
     if (b.kind === "product" || b.kind === "status" || b.kind === "removal") {
       for (const sk of styleKeys) {
         const listing = await getListingByStyleKey(admin, ctx.businessId, sk);
@@ -1416,7 +1482,18 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
               .from("aboutyou_batches").select("id")
               .eq("business_id", ctx.businessId).eq("kind", "product")
               .contains("related_ids", [listing.style_key])
-              .in("status", ["pending", "processing", "retry"])
+              /*
+               * ═══ ⚠ SI FRATII NEURMARITI BLOCHEAZA (27.08.2026) ═══
+               *
+               * Lista era doar `pending/processing/retry`. Dar de cand urma se scrie INAINTE de
+               * cerere, un frate poate sta pe `intentie` (trimis, id nelegat) sau pe `necunoscut`
+               * (raspuns pe care nu-l putem citi). Amandoua inseamna „poate n-a ajuns tot
+               * produsul acolo" — exact ce verificarea asta trebuie sa impiedice.
+               *
+               * ⚠ Fara ele, un produs cu 250 de variante putea fi publicat cu o transa lipsa, si
+               * marimile alea ar fi fost de vanzare fara sa existe.
+               */
+              .in("status", ["intentie", "necunoscut", "pending", "processing", "retry"])
               .neq("id", b.id) as never);
 
           /*

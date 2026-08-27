@@ -30,7 +30,21 @@ const ETICHETE: Record<string, { text: string; cls: string }> = {
   returned: { text: "Returnată", cls: "bg-muted text-muted-foreground" },
   return_failed: { text: "Retur respins", cls: "bg-red-100 text-red-700" },
   mixed: { text: "Mixtă", cls: "bg-muted text-muted-foreground" },
+  /*
+   * ⚠ „NU STIM" NU E „A ESUAT", si de-aia are eticheta lui.
+   *
+   * Ajunge aici cand am trimis cererea la About You si, dupa sapte zile, tot nu stim ce a iesit.
+   * Scrisa `ship_failed`, ar fi primit butonul „Reia expedierea" — iar o reluare peste ceva ce
+   * poate a fost primit inseamna doua expedieri raportate pe aceleasi linii. Deci: se arata, se
+   * explica, si NU se ofera butonul.
+   */
+  ship_necunoscut: { text: "Expediere neconfirmată", cls: "bg-amber-100 text-amber-700" },
+  cancel_necunoscut: { text: "Anulare neconfirmată", cls: "bg-amber-100 text-amber-700" },
+  return_necunoscut: { text: "Retur neconfirmat", cls: "bg-amber-100 text-amber-700" },
 };
+
+/** Starile in care nu stim ce s-a intamplat la ei: se cere un om, nu un buton. */
+const NECONFIRMATE = new Set(["ship_necunoscut", "cancel_necunoscut", "return_necunoscut"]);
 
 const DE_RELUAT = new Set(["ship_failed"]);
 
@@ -138,7 +152,10 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${et.cls}`}>{et.text}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${et.cls}`}
+                    title={NECONFIRMATE.has(c.status)
+                      ? "Am trimis cererea la About You, dar nu am aflat ce a ieșit. Verifică în Seller Center înainte de a încerca din nou."
+                      : undefined}>{et.text}</span>
                   {c.orderId && (
                     <>
                       <button onClick={() => descarca(c.orderId!, "invoices")} disabled={pending}

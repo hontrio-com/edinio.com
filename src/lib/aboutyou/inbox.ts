@@ -78,6 +78,18 @@ export async function prelucreazaEveniment(
 
 const MAX_INCERCARI_INBOX = 10;
 
+/**
+ * Cat se asteapta pana la incercarea urmatoare.
+ *
+ * ⚠ Plafonul de un ceas nu e din gust: peste el, un eveniment de expediere ramas in urma ar
+ * intarzia un colet cu mai mult decat merita orice pana. Zece incercari asa inseamna aproape sase
+ * ore, in loc de zece minute.
+ */
+export function amanareInbox(incercari: number): number {
+  const UN_MINUT = 60_000;
+  return Math.min(60 * UN_MINUT, UN_MINUT * 2 ** Math.max(0, incercari - 1));
+}
+
 /** Cate evenimente se reiau intr-o trecere, pe magazin. */
 const PE_TRECERE = 20;
 
@@ -100,6 +112,17 @@ export async function reiaEvenimenteleNeprelucrate(
     .eq("business_id", businessId)
     .is("prelucrat_la", null)
     .lt("incercari", MAX_INCERCARI_INBOX)
+    /*
+     * ═══ ⚠ ZECE INCERCARI LA UN MINUT INSEAMNAU ZECE MINUTE (27.08.2026) ═══
+     *
+     * Cronul trece din minut in minut, deci pragul de zece incercari era zece MINUTE. O pana de
+     * un sfert de ora ardea toate incercarile FIECARUI eveniment din inbox si le trimitea pe
+     * toate in scrisori moarte — chiar cazul pentru care inbox-ul fusese facut. Iar cauza e
+     * comuna: cand ceva pica, pica toate deodata, in aceeasi rulare.
+     *
+     * Cu amanarea crescatoare, zece incercari inseamna aproape sase ore de rabdare.
+     */
+    .or(`urmatoarea_incercare.is.null,urmatoarea_incercare.lte.${new Date().toISOString()}`)
     /* ⚠ Cele mai vechi intai: un eveniment de expediere care asteapta e un colet care nu pleaca. */
     .order("primit_la", { ascending: true })
     .limit(PE_TRECERE) as never);
@@ -118,6 +141,8 @@ export async function reiaEvenimenteleNeprelucrate(
         .update({
           incercari,
           last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
+          /* 1, 2, 4, 8… minute, cu plafon un ceas. Vezi nota de la selectie. */
+          urmatoarea_incercare: new Date(Date.now() + amanareInbox(incercari)).toISOString(),
         } as never)
         .eq("id", r.id);
 

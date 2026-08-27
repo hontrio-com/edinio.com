@@ -53,7 +53,42 @@ test("⚠ cele trei `200` de la autentificare RAMAN", () => {
 
 test("⚠ calea rapida ramane: nu se asteapta cronul", () => {
   /* Fara asta, fiecare expediere ar intarzia pana la un minut degeaba. */
-  assert.match(ruta, /await prelucreazaEveniment\(admin, businessId, cfg, event\)\.catch\(/);
+  assert.match(ruta, /await prelucreazaEveniment\(admin, businessId, cfg, event\);/);
+
+  /*
+   * ═══ ⚠ SI REUSITA SE MARCHEAZA (27.08.2026) ═══
+   *
+   * Calea rapida prelucra evenimentul si il lasa neatins in inbox: randul ramanea cu
+   * `prelucrat_la` null, deci cronul il lua de la capat la minutul urmator. Fiecare eveniment,
+   * prelucrat de doua ori. Ingestul e idempotent, deci nu se pierdea nimic — se cheltuiau insa o
+   * recitire a comenzii de la ei si un loc din cele douazeci pe trecere, degeaba.
+   *
+   * ⚠ DUPA prelucrare, nu inainte: invers, un esec ar fi inchis randul definitiv, adica exact
+   * pierderea pe care inbox-ul o inlatura.
+   */
+  const i = ruta.indexOf("await prelucreazaEveniment(admin, businessId, cfg, event);");
+  const j = ruta.indexOf("prelucrat_la: new Date().toISOString()");
+  assert.ok(i > 0 && j > i, "marcajul trebuie sa vina DUPA prelucrare");
+  /* ⚠ Iar esecul porneste amanarea, altfel cronul ar relua imediat exact ce tocmai a picat. */
+  assert.match(ruta, /urmatoarea_incercare: new Date\(Date\.now\(\) \+ amanareInbox\(1\)\)/);
+});
+
+test("⚠ o pana lunga nu mai arde toate incercarile in cateva minute", () => {
+  /*
+   * Cronul trece din minut in minut, deci pragul de zece incercari era zece MINUTE. O pana de un
+   * sfert de ora ardea toate incercarile FIECARUI eveniment din inbox si le trimitea pe toate in
+   * scrisori moarte — chiar cazul pentru care inbox-ul fusese facut. Iar cauza e comuna: cand ceva
+   * pica, pica toate deodata, in aceeasi rulare.
+   */
+  assert.match(inbox, /export function amanareInbox\(incercari: number\): number/);
+  assert.match(inbox, /Math\.min\(60 \* UN_MINUT, UN_MINUT \* 2 \*\* Math\.max\(0, incercari - 1\)\)/);
+  /* ⚠ Si selectia chiar sare peste cele amanate: fara asta, amanarea n-ar insemna nimic. */
+  assert.match(inbox, /urmatoarea_incercare\.is\.null,urmatoarea_incercare\.lte\./);
+
+  /* Zece incercari inseamna aproape sase ore, nu zece minute. */
+  let total = 0;
+  for (let k = 1; k <= 10; k++) total += Math.min(60, 2 ** (k - 1));
+  assert.ok(total > 300, `zece incercari acopera doar ${total} de minute`);
 });
 
 test("⚠ acelasi eveniment livrat de doua ori nu face doua randuri", () => {
@@ -89,5 +124,5 @@ test("⚠ prelucrarea sta in biblioteca, nu in ruta", () => {
   /* Importata dintr-o ruta, ar fi tras dupa ea modulul rutei — inclusiv efectele lui de nivel de
      modul. Biblioteca e locul ei. */
   assert.match(inbox, /export async function prelucreazaEveniment\(/);
-  assert.match(ruta, /import \{ prelucreazaEveniment \} from "@\/lib\/aboutyou\/inbox"/);
+  assert.match(ruta, /import \{ amanareInbox, prelucreazaEveniment \} from "@\/lib\/aboutyou\/inbox"/);
 });

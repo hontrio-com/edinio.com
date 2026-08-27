@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash, timingSafeEqual } from "crypto";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { readSignatureHeader, verifyAboutYouSignature } from "@/lib/aboutyou/webhooks";
-import { prelucreazaEveniment } from "@/lib/aboutyou/inbox";
+import { amanareInbox, prelucreazaEveniment } from "@/lib/aboutyou/inbox";
 import { logError } from "@/lib/error-logger";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 
@@ -145,11 +145,32 @@ export async function POST(request: NextRequest) {
   }
 
   /* ⚠ De-aici incolo, un esec nu mai pierde nimic: randul ramane neprelucrat si cronul il reia. */
-  await prelucreazaEveniment(admin, businessId, cfg, event).catch(async (e) => {
+  try {
+    await prelucreazaEveniment(admin, businessId, cfg, event);
+    /*
+     * ═══ ⚠ REUSITA NU SE MARCA, DECI CRONUL REFACEA TOT (27.08.2026) ═══
+     *
+     * Calea rapida prelucra evenimentul si il lasa neatins in inbox. Randul ramanea `prelucrat_la`
+     * null, deci cronul il lua de la capat la minutul urmator — fiecare eveniment prelucrat de
+     * DOUA ori. Ingestul e idempotent, deci nu se pierdea nimic; se cheltuiau insa o recitire a
+     * comenzii de la ei si un loc din cele douazeci pe trecere, degeaba.
+     *
+     * ⚠ SE MARCHEAZA DUPA ce prelucrarea a mers, nu inainte: invers, un esec ar fi inchis randul
+     * definitiv, adica exact pierderea pe care inbox-ul o inlatura.
+     */
     await admin.from("aboutyou_webhook_inbox")
-      .update({ incercari: 1, last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500) } as never)
+      .update({ prelucrat_la: new Date().toISOString(), last_error: null } as never)
       .eq("business_id", businessId).eq("event_id", eventId);
-  });
+  } catch (e) {
+    await admin.from("aboutyou_webhook_inbox")
+      .update({
+        incercari: 1,
+        last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
+        /* ⚠ Si amanarea porneste de aici: fara ea, cronul ar relua imediat exact ce tocmai a picat. */
+        urmatoarea_incercare: new Date(Date.now() + amanareInbox(1)).toISOString(),
+      } as never)
+      .eq("business_id", businessId).eq("event_id", eventId);
+  }
 
   return ok();
 }

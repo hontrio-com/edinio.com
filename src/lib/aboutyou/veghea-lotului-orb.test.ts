@@ -549,7 +549,13 @@ test("⚠ dovada se ia la CITIRE, nu la trimitere", () => {
   const iProdus = sync.indexOf('.from("products").select(PRODUCT_FIELDS)', iCitit);
   assert.ok(iCitit > 0 && iProdus > iCitit,
     "clipa se ia INAINTEA citirii produsului, altfel n-ar acoperi ce s-a citit");
-  assert.match(sync, /catalog_citit_la: cititLa,/);
+  /*
+   * ⚠ SI NU LA TRIMITERE. Lotul de produs e tot asincron si poate fi respins mai tarziu; dovada
+   * scrisa la plecare ar fi stins intre timp si semnele de stoc si de pret, care se satisfac prin
+   * el. Clipa calatoreste CU LOTUL si trece pe listare abia la asezare.
+   */
+  assert.match(sync, /generatie, cititLa\), "trimiterea produsului"/);
+  assert.match(sync, /catalog_confirmat_la: b\.citit_la/);
 });
 
 test("⚠ o impingere de stoc sau de pret nu scrie NICIO dovada", () => {
@@ -560,8 +566,8 @@ test("⚠ o impingere de stoc sau de pret nu scrie NICIO dovada", () => {
    */
   const i = sync.indexOf("async function trimiteInTranse");
   const bucata = sync.slice(i, i + 2600);
-  assert.doesNotMatch(bucata, /catalog_citit_la/,
-    "impingerea de stoc/pret nu are voie sa scrie dovada de catalog");
+  assert.doesNotMatch(bucata, /confirmat_la/,
+    "impingerea de stoc/pret nu confirma nimic la trimitere: confirmarea o pune asezarea lotului");
   assert.doesNotMatch(bucata, /last_synced_at/,
     "si nici `last_synced_at`, care inseamna „a plecat produsul intreg acolo”");
 });
@@ -763,4 +769,150 @@ test("⚠ semnul abandonat se pastreaza, nu se sterge", () => {
    */
   assert.match(sync, /status: "abandonat",/);
   assert.match(sync, /\.eq\("status", "deschis"\)/);
+});
+
+
+/* ── „Exista ceva la ei?" are UN SINGUR raspuns in toata integrarea ───────── */
+
+test("⚠ nicio hotarare despre ce exista la ei nu se mai ia din `last_synced_at`", () => {
+  /*
+   * ═══ ⚠ CAMPUL INSEAMNA ALTCEVA, SI PATRU LOCURI IL CITEAU GRESIT (28.08.2026, seara) ═══
+   *
+   * `last_synced_at` inseamna „s-a terminat vreodata o trimitere COMPLETA". Un produs cu 250 de
+   * variante ale carui prime doua transe au ajuns si a treia a picat il are GOL — si doua sute de
+   * variante vandabile la ei. Citit ca „nu exista nimic acolo", iesea prost in patru feluri:
+   *
+   *   `stergeListare`        -> stergea randul, cu tot cu `style_key` si maparea SKU
+   *   `setRemoteStatus`      -> scria `inactive` doar local
+   *   produs dezactivat      -> „sarit", produsul ramanea vandabil
+   *   variante scoase        -> marcate „retrase" local, dar cu stoc la ei
+   *
+   * Intrebarea „poate exista ceva acolo?" are camp propriu, scris INAINTEA cererii.
+   */
+  const decizii = [
+    /const eDoarLocala = !listing\.remote_poate_exista;/,
+    /if \(!listing\.remote_poate_exista\) \{/,
+    /if \(listing\.remote_poate_exista\) \{/,
+  ];
+  for (const d of decizii) assert.match(sync, d);
+
+  /*
+   * ⚠ SI NICIUNA DIN CELE PATRU nu mai citeste `last_synced_at`. Ce ramane e legitim: „prima
+   * trimitere?" (`stareaDeTinutMinte`) si cazul ambiguu de la variante, unde tocmai lipsa lui
+   * deosebeste „a plecat tot" de „a plecat o parte".
+   */
+  const ramase = [...sync.matchAll(/last_synced_at (?:==|!=) null/g)].length;
+  assert.equal(ramase, 2,
+    "au ramas doar `stareaDeTinutMinte` si deosebirea cazului ambiguu de la variante");
+});
+
+test("⚠ varianta scoasa in cazul ambiguu se LAMURESTE, nu se ghiceste", () => {
+  /*
+   * `remote_poate_exista` adevarat cu `last_synced_at` gol inseamna „cateva transe au ajuns, nu
+   * stim care". Marcata „retrasa" local, varianta ar ramane vandabila; un zero trimis orbeste
+   * primeste „not found", lotul iese `hardFail` si zeroul se reincearca la nesfarsit.
+   *
+   * ⚠ O citire spune exact ce SKU-uri sunt acolo. Costa o cerere, si numai in cazul ambiguu.
+   */
+  assert.match(sync, /if \(listing\.remote_poate_exista && listing\.last_synced_at == null\) \{/);
+  assert.match(sync, /aleLorAmbiguu = new Set\(\(res\.data\?\.items \?\? \[\]\)\.map\(\(it\) => it\.sku\)\);/);
+  /* ⚠ Necitibil: nu se hotaraste nimic, randurile raman in `deScos` si se reia. */
+  assert.match(sync, /Nu am putut citi variantele de la About You/);
+  assert.match(sync, /const deZerouit = deScos\.filter\(chiarAcolo\);/);
+});
+
+/* ── „Am trimis" nu e „s-a aplicat" ───────────────────────────────────────── */
+
+test("⚠ dovada se scrie la ASEZARE, si lotul o poarta cu el", () => {
+  /*
+   * ═══ ⚠ `PUT` INTOARCE UN `batchRequestId`, NU UN VERDICT (28.08.2026, seara) ═══
+   *
+   *     stocul scade 10 -> 2, impingerea pleaca si e acceptata ✅
+   *     dovada scrisa, semnul dispare                          ✅
+   *     `/results/stocks`: `success: false`                    ❌
+   *
+   * La noi 2, la ei 10, si nimic care sa mai revina — chiar peste stoc, unde greseala se plateste
+   * in marfa vanduta si neexistenta. Documentatia lor spune limpede ca un lot `completed` poate
+   * contine articole cu `success: false`.
+   */
+  assert.match(sync, /citit_la: cititLa/);
+  assert.match(sync, /const camp = b\.kind === "stock" \? "stoc_confirmat_la" : "pret_confirmat_la";/);
+  /* ⚠ Si numai la lot fara articole respinse. */
+  assert.match(sync, /if \(!hardFail && b\.citit_la\) \{/);
+  /* ⚠ Si nu se da inapoi: doua loturi asezate in ordine inversa n-au voie sa mute dovada in trecut. */
+  assert.match(sync, /if \(Date\.parse\(b\.citit_la\) <= vechea\) continue;/);
+});
+
+test("⚠ si ce e IN ZBOR nu se numara pierdut", () => {
+  /*
+   * De cand dovada se scrie la asezare, intre trimitere si rezultat trec minute in care nu exista
+   * nici rand in coada (a fost consumat), nici confirmare. Citit ca „s-a pierdut", fiecare
+   * trimitere ar fi fost repusa la coada trei minute mai tarziu — o roata perfecta.
+   */
+  assert.match(sync, /\.in\("status", \["intentie", "necunoscut", "pending", "processing", "retry"\]\)/);
+  assert.match(sync, /if \(zbor\.some\(\(b\) => feluri\.includes\(b\.kind\) && b\.citit_la != null && Date\.parse\(b\.citit_la\) >= cerut\)\)/);
+});
+
+/* ── Starea are si ea generatie ───────────────────────────────────────────── */
+
+test("⚠ un lot de stare dintr-o generatie depasita nu castiga", () => {
+  /*
+   *     10:00 omul cere „Publica"   -> lotul pleaca, raspunsul se pierde
+   *     10:02 omul cere „Retrage"   -> lotul pleaca si se incheie -> la ei `inactive` ✅
+   *     10:05 lotul vechi se aseaza -> la ei `published` ❌
+   *
+   * Continutul avea generatii de mult; starea n-avea nimic, iar reconcilierea ar fi citit
+   * `published` si l-ar fi scris la noi ca si cum ar fi fost ce s-a cerut.
+   */
+  assert.match(sync, /const genStatus = listing\.status_generatie \+ 1;/);
+  /* ⚠ Scrisa INAINTEA cererii, si daca nu se scrie, cererea nu pleaca. */
+  const iGen = sync.indexOf("const genStatus = listing.status_generatie + 1;");
+  const iCerere = sync.indexOf('cuLotDurabil(admin, ctx.businessId, "status"', iGen);
+  assert.ok(iGen > 0 && iCerere > iGen);
+  assert.match(sync, /if \(eGenStatus\) \{[\s\S]{0,200}?ok: false, status: 0/);
+  /* ⚠ Si nu ajunge sa nu-i credem starea: se retrimite ce a cerut omul ULTIMA oara. */
+  assert.match(sync, /if \(b\.generatie != null && b\.generatie < l\.status_generatie\) \{/);
+  assert.match(sync, /op: l\.status_dorit === "published" \? "publish" : "upsert",/);
+});
+
+test("⚠ si `setRemoteStatus` isi citeste scrierea, ca `syncProductNow`", () => {
+  /* Cererea plecase la ei, iar noi raportam `ok: true` cu starea locala nescrisa: ecranul arata
+     succes pentru ceva ce la noi nu s-a intamplat, iar a doua apasare ar fi trimis inca un lot. */
+  assert.match(sync, /if \(!await setListingStatus\(admin, listing\.id, statusLocal\)\) \{[\s\S]{0,300}?ok: false, status: 0/);
+});
+
+/* ── Editarile din fisa About You lasa si ele urma ────────────────────────── */
+
+test("⚠ EAN-ul, marimea si pretul manual lasa si ele semn", () => {
+  /*
+   * ═══ ⚠ CUTIA DE IESIRE ERA DOAR PE `products` (28.08.2026, seara) ═══
+   *
+   * EAN-ul, marimea, culoarea, pretul manual in euro, bifa variantei, categoria si materialele stau
+   * in `aboutyou_listings` si `aboutyou_variants`. O editare din fisa About You nu lasa NICIUN
+   * semn — iar „Salveaza si trimite" sunt doua cereri separate ale browserului: daca a doua nu mai
+   * pleaca (fila inchisa, retea cazuta), omul a apasat „Trimite" si s-a salvat doar configurarea.
+   *
+   * ⚠ SE ASCULTA STAREA, NU SE INSTRUMENTEAZA APELANTUL. Un declansator acopera si editorul, si
+   * orice alta cale care ar aparea maine — inclusiv un script.
+   *
+   * ⚠ SI DOAR COLOANELE OMULUI: `status`, `error`, `catalog_confirmat_la`, `ay_status` le scriem
+   * NOI la fiecare trecere a cronului; ascultate, semnul s-ar rescrie la nesfarsit.
+   */
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.match(baseline, /CREATE TRIGGER aboutyou_marcheaza_listarea/);
+  assert.match(baseline, /CREATE TRIGGER aboutyou_marcheaza_varianta/);
+  const linii = baseline.split(/\r?\n/);
+  const lListare = linii.find((l) => l.includes("CREATE TRIGGER aboutyou_marcheaza_listarea"))!;
+  const lVarianta = linii.find((l) => l.includes("CREATE TRIGGER aboutyou_marcheaza_varianta"))!;
+  for (const c of ["brand_id", "category_id", "color_id", "attributes", "material_composition"]) {
+    assert.ok(lListare.includes(c), `declansatorul listarii trebuie sa asculte ${c}`);
+  }
+  for (const c of ["ean", "size_id", "retail_price_eur", "sale_price_eur", "enabled"]) {
+    assert.ok(lVarianta.includes(c), `declansatorul variantei trebuie sa asculte ${c}`);
+  }
+  /* ⚠ Si NU coloanele scrise de noi. */
+  for (const c of ["status", "error", "confirmat_la", "ay_status", "last_synced_at"]) {
+    assert.ok(!lListare.includes(c) && !lVarianta.includes(c),
+      `${c} il scriem noi: ascultat, semnul s-ar rescrie la fiecare trecere a cronului`);
+  }
 });

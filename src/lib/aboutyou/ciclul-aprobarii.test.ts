@@ -55,7 +55,7 @@ test("⚠ retragerea in ciorna se FACE, nu se cere omului", () => {
   assert.match(sync, /if \(listing\.status === "draft_pending"\) \{/);
   /* Iar `draft` il pune ABIA asezarea lotului de status. */
   assert.match(sync, /if \(b\.kind === "status" && !hardFail\) \{/);
-  assert.match(sync, /l\?\.status === "draft_pending"/);
+  assert.match(sync, /if \(l\.status === "draft_pending"\) \{/);
   /* Si starea are eticheta ei in ecran, ca omul sa nu vada un cuvant nemaivazut. */
   const ecran = readFileSync("src/components/dashboard/AboutYouListings.tsx", "utf8");
   assert.match(ecran, /draft_pending: \{ text: "Se retrage în ciornă"/);

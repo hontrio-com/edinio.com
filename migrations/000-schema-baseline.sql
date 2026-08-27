@@ -394,6 +394,25 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_listarea()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if new.product_id is null then
+    return new;
+  end if;
+  insert into public.aboutyou_intentii (business_id, product_id, op)
+  values (new.business_id, new.product_id, 'upsert')
+  on conflict (business_id, product_id, op)
+  do update set creat_la = now(), recuperari = 0, status = 'deschis', last_error = null;
+  return new;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_modificarea()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -4570,7 +4589,8 @@ create table if not exists public.aboutyou_batches (
   alarma_scrisa_la timestamp with time zone,
   intent_id uuid,
   trimis_la timestamp with time zone,
-  generatie integer);
+  generatie integer,
+  citit_la timestamp with time zone);
 
 create table if not exists public.aboutyou_bulk_jobs (
   id uuid default gen_random_uuid() not null,
@@ -4620,10 +4640,12 @@ create table if not exists public.aboutyou_listings (
   attributes jsonb default '[]'::jsonb not null,
   stare_dinainte text,
   generatie integer default 0 not null,
-  catalog_citit_la timestamp with time zone,
   remote_poate_exista boolean default false not null,
-  stoc_citit_la timestamp with time zone,
-  pret_citit_la timestamp with time zone);
+  catalog_confirmat_la timestamp with time zone,
+  stoc_confirmat_la timestamp with time zone,
+  pret_confirmat_la timestamp with time zone,
+  status_dorit text,
+  status_generatie integer default 0 not null);
 
 create table if not exists public.aboutyou_orders (
   id uuid default gen_random_uuid() not null,
@@ -6565,7 +6587,9 @@ create or replace view public.store_settings with (security_invoker = true) as
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
 CREATE TRIGGER set_store_settings_updated_at BEFORE UPDATE ON privat.store_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER aboutyou_marcheaza_listarea AFTER UPDATE OF brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code ON public.aboutyou_listings FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_listarea();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.aboutyou_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
+CREATE TRIGGER aboutyou_marcheaza_varianta AFTER UPDATE OF sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled ON public.aboutyou_variants FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_listarea();
 CREATE TRIGGER businesses_blocheaza_domeniu_platforma BEFORE INSERT OR UPDATE OF custom_domain ON public.businesses FOR EACH ROW EXECUTE FUNCTION blocheaza_domeniu_platforma();
 CREATE TRIGGER set_businesses_updated_at BEFORE UPDATE ON public.businesses FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER catalog_produs_cuvinte AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_cuvinte_murdar();
@@ -8801,6 +8825,9 @@ grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid,
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to authenticated;
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to service_role;
 grant execute on function public.aboutyou_generatie_noua(p_listing_id uuid) to service_role;
+grant execute on function public.aboutyou_marcheaza_listarea() to anon;
+grant execute on function public.aboutyou_marcheaza_listarea() to authenticated;
+grant execute on function public.aboutyou_marcheaza_listarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_modificarea() to anon;
 grant execute on function public.aboutyou_marcheaza_modificarea() to authenticated;
 grant execute on function public.aboutyou_marcheaza_modificarea() to service_role;
@@ -8989,6 +9016,7 @@ revoke execute on function privat.cripteaza_rand(p_rand jsonb) from public;
 revoke execute on function privat.decripteaza(p_val text) from public;
 revoke execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) from public;
 revoke execute on function public.aboutyou_generatie_noua(p_listing_id uuid) from public;
+revoke execute on function public.aboutyou_marcheaza_listarea() from public;
 revoke execute on function public.aboutyou_marcheaza_modificarea() from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
 revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) from public;

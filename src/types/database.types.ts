@@ -107,6 +107,7 @@ export type Database = {
           attempts: number
           batch_request_id: string | null
           business_id: string
+          citit_la: string | null
           created_at: string
           generatie: number | null
           id: string
@@ -127,6 +128,7 @@ export type Database = {
           attempts?: number
           batch_request_id?: string | null
           business_id: string
+          citit_la: string | null
           created_at?: string
           generatie?: number | null
           id?: string
@@ -147,6 +149,7 @@ export type Database = {
           attempts?: number
           batch_request_id?: string | null
           business_id?: string
+          citit_la?: string | null
           created_at?: string
           generatie?: number | null
           id?: string
@@ -256,7 +259,7 @@ export type Database = {
           ay_master_id: string | null
           brand_id: number | null
           business_id: string
-          catalog_citit_la: string | null
+          catalog_confirmat_la: string | null
           category_id: number | null
           color_id: number | null
           country_of_origin: string | null
@@ -269,14 +272,16 @@ export type Database = {
           last_status_at: string | null
           last_synced_at: string | null
           material_composition: Json
-          pret_citit_la: string | null
+          pret_confirmat_la: string | null
           product_id: string | null
           rejection_reasons: Json
           size_option_name: string | null
           stare_dinainte: string | null
           remote_poate_exista: boolean
           status: string
-          stoc_citit_la: string | null
+          status_dorit: string | null
+          status_generatie: number
+          stoc_confirmat_la: string | null
           style_key: string
           updated_at: string
         }
@@ -285,7 +290,7 @@ export type Database = {
           ay_master_id?: string | null
           brand_id?: number | null
           business_id: string
-          catalog_citit_la: string | null
+          catalog_confirmat_la: string | null
           category_id?: number | null
           color_id?: number | null
           country_of_origin?: string | null
@@ -298,14 +303,16 @@ export type Database = {
           last_status_at?: string | null
           last_synced_at?: string | null
           material_composition?: Json
-          pret_citit_la?: string | null
+          pret_confirmat_la?: string | null
           product_id?: string | null
           rejection_reasons?: Json
           size_option_name?: string | null
           stare_dinainte?: string | null
           remote_poate_exista?: boolean
           status?: string
-          stoc_citit_la: string | null
+          status_dorit?: string | null
+          status_generatie?: number
+          stoc_confirmat_la: string | null
           style_key: string
           updated_at?: string
         }
@@ -314,7 +321,7 @@ export type Database = {
           ay_master_id?: string | null
           brand_id?: number | null
           business_id?: string
-          catalog_citit_la?: string | null
+          catalog_confirmat_la?: string | null
           category_id?: number | null
           color_id?: number | null
           country_of_origin?: string | null
@@ -327,14 +334,16 @@ export type Database = {
           last_status_at?: string | null
           last_synced_at?: string | null
           material_composition?: Json
-          pret_citit_la?: string | null
+          pret_confirmat_la?: string | null
           product_id?: string | null
           rejection_reasons?: Json
           size_option_name?: string | null
           stare_dinainte?: string | null
           remote_poate_exista?: boolean
           status?: string
-          stoc_citit_la?: string | null
+          status_dorit?: string | null
+          status_generatie?: number
+          stoc_confirmat_la?: string | null
           style_key?: string
           updated_at?: string
         }

@@ -107,6 +107,9 @@ interface ListingRow {
    * variante. Vezi nota din `syncProductNow`.
    */
   remote_poate_exista: boolean;
+  /** Ultima stare ceruta de comerciant, si generatia cererii. Vezi `setRemoteStatus`. */
+  status_dorit: string | null;
+  status_generatie: number;
   /** Ce stiam despre el INAINTE de trimiterea in curs. Vezi `urmareaLotului`. */
   stare_dinainte: string | null;
   /** A cata oara s-a trimis produsul. Vezi migratia 2026-11-27. */
@@ -117,7 +120,7 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListing", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie, status_dorit, status_generatie")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
 }
 
@@ -125,7 +128,7 @@ async function getListingByStyleKey(admin: Db, businessId: string, styleKey: str
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListingByStyleKey", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie, status_dorit, status_generatie")
     .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle() as never);
 }
 
@@ -283,6 +286,15 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
   trimite: () => Promise<AboutYouResult<T>>,
   /** Generatia trimiterii, la loturile de produs. Vezi migratia 2026-11-27. */
   generatie?: number,
+  /**
+   * Clipa in care s-a CITIT valoarea pe care o duce lotul.
+   *
+   * ⚠ „AM TRIMIS" NU E „S-A APLICAT". Dovada ca o modificare a ajuns acolo se scria la trimitere,
+   * dar `PUT` intoarce doar un `batchRequestId` — verdictul vine din `/results/*`, si un lot
+   * `completed` poate contine articole cu `success: false`. Purtata de lot, clipa asta trece pe
+   * listare abia la asezare reusita. Vezi `rezolvaIntentiile`.
+   */
+  cititLa?: string,
 ): Promise<LotDurabil<T>> {
   const intentId = randomUUID();
   const { error: eIntentie } = await admin.from("aboutyou_batches").insert({
@@ -290,6 +302,7 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
     kind, status: "intentie", related_ids: relatedIds as never,
     attempts: 0, poll_errors: 0,
     ...(generatie != null ? { generatie } : {}),
+    ...(cititLa != null ? { citit_la: cititLa } : {}),
     /* ⚠ Pus INAINTE de apel, nu dupa: dupa, o cadere intre apel si scriere ar lasa randul
        aratand ca n-a plecat nimic — exact minciuna de care fugim. */
     trimis_la: new Date().toISOString(),
@@ -1180,19 +1193,50 @@ export async function rezolvaIntentiile(admin: Db, ctx: AboutYouSyncContext): Pr
     }
   }
 
-  interface Dovezi { catalog: string | null; stoc: string | null; pret: string | null }
+  interface Dovezi { catalog: string | null; stoc: string | null; pret: string | null; styleKey: string }
   const dovezi = new Map<string, Dovezi>();
   for (const bucata of bucatiDeIduri(ids)) {
     for (const r of randuriCitite<{
-      product_id: string | null; catalog_citit_la: string | null;
-      stoc_citit_la: string | null; pret_citit_la: string | null;
+      product_id: string | null; style_key: string; catalog_confirmat_la: string | null;
+      stoc_confirmat_la: string | null; pret_confirmat_la: string | null;
     }>("aboutyou.listarileIntentiilor", await admin
-      .from("aboutyou_listings").select("product_id, catalog_citit_la, stoc_citit_la, pret_citit_la")
+      .from("aboutyou_listings")
+      .select("product_id, style_key, catalog_confirmat_la, stoc_confirmat_la, pret_confirmat_la")
       .eq("business_id", businessId).in("product_id", bucata) as never)) {
       if (r.product_id) {
         dovezi.set(r.product_id, {
-          catalog: r.catalog_citit_la, stoc: r.stoc_citit_la, pret: r.pret_citit_la,
+          catalog: r.catalog_confirmat_la, stoc: r.stoc_confirmat_la, pret: r.pret_confirmat_la,
+          styleKey: r.style_key,
         });
+      }
+    }
+  }
+
+  /*
+   * ═══ ⚠ SI CE E IN ZBOR NU S-A PIERDUT (28.08.2026, seara) ═══
+   *
+   * De cand dovada se scrie la ASEZARE, intre trimitere si rezultat trec minute in care nu exista
+   * nici rand in coada (a fost consumat), nici confirmare. Citit ca „s-a pierdut", fiecare
+   * trimitere ar fi fost repusa la coada trei minute mai tarziu — o roata perfecta.
+   *
+   * ⚠ Loturile DESCHISE sunt tocmai urma acelei trimiteri, si poarta clipa citirii. Un lot deschis
+   * cu `citit_la` mai nou decat semnul inseamna „pleaca deja ce trebuie": se asteapta, nu se
+   * retrimite.
+   */
+  const inZbor = new Map<string, { kind: string; citit_la: string | null }[]>();
+  const cheiStil = [...new Set([...dovezi.values()].map((d) => d.styleKey))];
+  for (const bucata of bucatiDeIduri(cheiStil)) {
+    for (const sk of bucata) {
+      for (const b of randuriCitite<{ kind: string; citit_la: string | null }>(
+        "aboutyou.loturiInZbor", await admin
+          .from("aboutyou_batches").select("kind, citit_la")
+          .eq("business_id", businessId)
+          .in("kind", ["product", "stock", "price"])
+          .in("status", ["intentie", "necunoscut", "pending", "processing", "retry"])
+          .contains("related_ids", JSON.stringify([sk])) as never)) {
+        const l = inZbor.get(sk) ?? [];
+        l.push(b);
+        inZbor.set(sk, l);
       }
     }
   }
@@ -1229,6 +1273,12 @@ export async function rezolvaIntentiile(admin: Db, ctx: AboutYouSyncContext): Pr
      */
     const cozi = inCoada.get(m.product_id);
     if (cozi && cozilePotrivite(m.op).some((op) => cozi.has(op))) continue;
+    /* ⚠ Si un lot DESCHIS, cu citirea mai noua decat semnul, duce deja ce trebuie: se asteapta. */
+    const zbor = inZbor.get(d.styleKey) ?? [];
+    const feluri = m.op === "upsert" ? ["product"] : [m.op, "product"];
+    if (zbor.some((b) => feluri.includes(b.kind) && b.citit_la != null && Date.parse(b.citit_la) >= cerut)) {
+      continue;
+    }
     if (m.recuperari >= PRAG_RECUPERARI) { abandonate.push({ id: m.id, product_id: m.product_id, op: m.op }); continue; }
     pierdute.push({ id: m.id, product_id: m.product_id, op: m.op, recuperari: m.recuperari });
   }
@@ -1550,8 +1600,41 @@ async function reconciliazaVariante(
   const deScos = randuri.filter((r) => (!dupaSku.has(r.sku) || !r.enabled) && r.ay_status !== "removed");
 
   if (deScos.length > 0) {
-    if (listing.last_synced_at != null) {
-      const lot = deScos.slice(0, MAX_ITEMI_STOC_PRET);
+    /*
+     * ═══ ⚠ CAZUL AMBIGUU SE LAMURESTE, NU SE GHICESTE (28.08.2026, seara) ═══
+     *
+     * `last_synced_at != null` insemna „produsul a plecat intreg", si de-aia zeroul se trimitea
+     * doar atunci. Dar exista o stare intre: `remote_poate_exista` adevarat cu `last_synced_at`
+     * gol — cateva transe au ajuns, restul nu. Varianta scoasa POATE fi acolo, si atunci marcata
+     * „retrasa" doar local ar ramane vandabila; sau poate nu, si atunci un zero trimis orbeste
+     * primeste „not found", lotul iese `hardFail` si zeroul se reincearca la nesfarsit.
+     *
+     * ⚠ SE INTREABA. O citire spune exact ce SKU-uri sunt acolo, iar hotararea se ia pe ele. Costa
+     * o cerere, si numai in cazul ambiguu — care e rar prin definitie.
+     */
+    let aleLorAmbiguu: Set<string> | null = null;
+    if (listing.remote_poate_exista && listing.last_synced_at == null) {
+      const res = await getProducts(ctx.auth, { style_key: listing.style_key, per_page: 100 });
+      /* ⚠ Necitibil: nu se hotaraste nimic. Randurile raman in `deScos` si se reia. */
+      if (isAboutYouError(res)) {
+        return { ok: false, status: 0, error: `Nu am putut citi variantele de la About You: ${res.error}` };
+      }
+      aleLorAmbiguu = new Set((res.data?.items ?? []).map((it) => it.sku));
+    }
+    const chiarAcolo = (r: RandVarianta) =>
+      aleLorAmbiguu ? aleLorAmbiguu.has(r.sku) : listing.remote_poate_exista;
+    const deZerouit = deScos.filter(chiarAcolo);
+    const doarLocal = deScos.filter((r) => !chiarAcolo(r));
+
+    if (doarLocal.length > 0) {
+      const { error: eRemoved } = await admin.from("aboutyou_variants")
+        .update({ ay_status: "removed" } as never).in("id", doarLocal.map((r) => r.id));
+      if (eRemoved) {
+        return { ok: false, status: 0, error: `Marcajul de retragere nu s-a putut scrie: ${eRemoved.message}` };
+      }
+    }
+    if (deZerouit.length > 0) {
+      const lot = deZerouit.slice(0, MAX_ITEMI_STOC_PRET);
       /*
        * ⚠ Prin `cuLotDurabil`: urma se scrie INAINTE de cerere. `null` inseamna ca intentia
        * n-a putut fi scrisa, deci cererea nici nu s-a facut — randurile raman `enabled: false`
@@ -1589,14 +1672,6 @@ async function reconciliazaVariante(
        */
       if (eRemoving) {
         return { ok: false, status: 0, error: `Marcajul de retragere nu s-a putut scrie: ${eRemoving.message}` };
-      }
-    } else {
-      // Listarea n-a plecat niciodata spre About You: nu e nimic de retras acolo,
-      // deci marcajul se poate pune direct.
-      const { error: eRemoved } = await admin.from("aboutyou_variants")
-        .update({ ay_status: "removed" } as never).in("id", deScos.map((r) => r.id));
-      if (eRemoved) {
-        return { ok: false, status: 0, error: `Marcajul de retragere nu s-a putut scrie: ${eRemoved.message}` };
       }
     }
   }
@@ -1668,7 +1743,15 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
    * dupa ce cauza dispare.
    */
   if ((product as { is_active?: boolean }).is_active === false) {
-    if (listing.last_synced_at != null) {
+    /*
+     * ⚠ „EXISTA ACOLO?" SE CITESTE DIN `remote_poate_exista` (28.08.2026, seara).
+     *
+     * Aici scria `last_synced_at != null`, adica „s-a terminat vreodata o trimitere completa". Dar
+     * un produs cu 250 de variante ale carui prime doua transe au ajuns si a treia a picat are
+     * campul GOL si doua sute de variante vandabile la ei. Comerciantul il dezactiveaza in Edinio,
+     * iar noi ieseam „sarit": la About You ramanea la vanzare.
+     */
+    if (listing.remote_poate_exista) {
       /*
        * Tinta se alege dupa unde a ajuns produsul, nu `inactive` orbeste.
        * Documentatia: „Only previously published products can be set to
@@ -1881,7 +1964,7 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   for (let i = 0; i < built.items.length; i += 100) {
     /* ⚠ Acelasi produs retrimis da acelasi produs: reluarea e inofensiva. */
     const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "product", [listing.style_key],
-      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100)), generatie), "trimiterea produsului");
+      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100)), generatie, cititLa), "trimiterea produsului");
     if (isAboutYouError(res)) {
       /*
        * ⚠ UN ESEC LA MIJLOCUL SIRULUI LASA PRODUSUL PE JUMATATE LA EI. Transele dinainte au
@@ -1941,12 +2024,10 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   const salvat = await setListingStatus(admin, listing.id, "pending", {
     error: null, last_synced_at: now, stare_dinainte: stareaDeTinutMinte(listing),
     /*
-     * ⚠ DOVADA CA A PLECAT CHIAR CATALOGUL, si de la clipa CITIRII. `last_synced_at` nu poate
-     * tine locul: el se scrie la trimitere si inseamna „a plecat vreodata produsul intreg acolo".
-     * Iar o impingere de stoc sau de pret nu are voie sa scrie aici NIMIC — nu poarta descrierea,
-     * imaginile sau atributele, deci n-ar dovedi nimic despre modificarea din semn.
+     * ⚠ DOVADA NU SE SCRIE AICI. Lotul de produs e tot asincron, si poate fi respins mai tarziu
+     * („Size is invalid"). Confirmarea o pune asezarea lui, din clipa `citit_la` pe care lotul o
+     * duce cu el. Vezi `pollOpenBatches`.
      */
-    catalog_citit_la: cititLa,
   });
   if (!salvat) {
     return {
@@ -2002,7 +2083,12 @@ async function setRemoteStatus(
     };
   }
 
-  if (listing.last_synced_at == null) {
+  /*
+   * ⚠ SI AICI, `remote_poate_exista`, nu `last_synced_at`. O listare care a apucat sa trimita
+   * transe si apoi a picat are campul gol — dar la ei exista ceva, si o dezactivare care se
+   * multumeste sa scrie local ar lasa marfa la vanzare.
+   */
+  if (!listing.remote_poate_exista) {
     if (status === "published") {
       return { ok: false, error: "Trimite întâi produsul pe About You, apoi publică-l." };
     }
@@ -2012,8 +2098,30 @@ async function setRemoteStatus(
     return { ok: true, action: "skipped" };
   }
 
+  /*
+   * ═══ ⚠ SI STAREA ARE GENERATIE, CA SI CONTINUTUL (28.08.2026, seara) ═══
+   *
+   * `PUT /products/status` e tot asincron, si nimic nu garanteaza ordinea intre doua loturi:
+   *
+   *     10:00 omul cere „Publica"   -> lotul pleaca, raspunsul se pierde
+   *     10:02 omul cere „Retrage"   -> lotul pleaca si se incheie -> la ei `inactive` ✅
+   *     10:05 lotul vechi se aseaza -> la ei `published` ❌
+   *
+   * Continutul avea generatii tocmai pentru asta; starea n-avea nimic, iar reconcilierea ar fi
+   * citit `published` si l-ar fi scris la noi ca si cum ar fi fost ce s-a cerut.
+   *
+   * ⚠ SE SCRIE INAINTEA CERERII, impreuna cu `status_dorit`: cand un lot depasit se aseaza, nu
+   * ajunge sa nu-i credem starea — trebuie sa stim CE sa retrimitem. Nescrisa, cererea nu pleaca.
+   */
+  const genStatus = listing.status_generatie + 1;
+  const { error: eGenStatus } = await admin.from("aboutyou_listings")
+    .update({ status_generatie: genStatus, status_dorit: status } as never).eq("id", listing.id);
+  if (eGenStatus) {
+    return { ok: false, status: 0, error: `Nu am putut ține minte starea cerută: ${eGenStatus.message}` };
+  }
+
   const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "status", [listing.style_key],
-    () => updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }])),
+    () => updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }]), genStatus),
     "schimbarea stării");
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", { error: res.error });
@@ -2032,7 +2140,18 @@ async function setRemoteStatus(
    * nu spune nimic despre esecul dinainte — golirea aparține doar cailor care chiar
    * au reusit, adica lotului incheiat fara erori.
    */
-  await setListingStatus(admin, listing.id, statusLocal);
+  /*
+   * ⚠ SI RASPUNSUL SCRIERII SE CITESTE, ca in `syncProductNow`. Cererea plecase la ei, iar noi
+   * raportam `ok: true` cu starea locala nescrisa: ecranul arata succes pentru ceva ce la noi nu
+   * s-a intamplat. Lotul e urmarit, deci reconcilierea repara pana la urma — dar omul a primit
+   * intre timp un raspuns fals, si a doua apasare ar fi trimis inca un lot.
+   */
+  if (!await setListingStatus(admin, listing.id, statusLocal)) {
+    return {
+      ok: false, status: 0,
+      error: "Cererea a plecat spre About You, dar starea locală nu s-a putut salva; se reia.",
+    };
+  }
   return { ok: true, action: "published", batchRequestId };
 }
 
@@ -2138,7 +2257,13 @@ async function stergeListare(
    * lasand produsul ACTIV pe About You si fara nicio urma la noi. `last_synced_at`
    * se scrie o singura data, cand produsul chiar a plecat, si nu se mai retrage.
    */
-  const eDoarLocala = listing.last_synced_at == null;
+  /*
+   * ⚠ SI AICI ERA CEA MAI SCUMPA (28.08.2026, seara). `last_synced_at` gol se citea ca „nu exista
+   * nimic acolo", iar randul se STERGEA — cu tot cu `style_key` si cu maparea SKU, prin cascada.
+   * La un produs ale carui prime transe ajunsesera, tocmai am fi aruncat singurul fir prin care
+   * mai puteam cere retragerea celor doua sute de variante ramase vandabile.
+   */
+  const eDoarLocala = !listing.remote_poate_exista;
   if (eDoarLocala) {
     await admin.from("aboutyou_listings").delete().eq("id", listing.id);
     return { ok: true, action: "removed" };
@@ -2208,6 +2333,8 @@ interface BatchRow {
   tranzient_de_la: string | null; alarma_scrisa_la: string | null;
   /** Generatia trimiterii in care a plecat. Vezi migratia 2026-11-27. */
   generatie: number | null;
+  /** Clipa in care s-a citit valoarea pe care o duce. Vezi `cuLotDurabil`. */
+  citit_la: string | null;
 }
 
 /**
@@ -2284,7 +2411,7 @@ async function marcheazaComenzileLotului(
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
   const batches = randuriCitite<BatchRow>("aboutyou.loturiDeschise", await admin
     .from("aboutyou_batches")
-    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la, generatie")
+    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la, generatie, citit_la")
     .eq("business_id", ctx.businessId)
     /*
      * ═══ ⚠ SI `stalled`, RAR (27.08.2026, tarziu) ═══
@@ -2632,6 +2759,31 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
     }
 
     if (b.kind === "stock" || b.kind === "price") {
+      /*
+       * ═══ ⚠ ABIA ACUM SE CONFIRMA CE A PLECAT (28.08.2026, seara) ═══
+       *
+       * Clipa de citire calatoreste cu lotul, si trece pe listare doar cand lotul s-a asezat FARA
+       * niciun articol respins. Scrisa la trimitere, un lot acceptat si respins mai tarziu stingea
+       * semnul unei modificari care nu ajunsese nicaieri — la noi 2, la ei 10.
+       *
+       * ⚠ SI NU SE DA INAPOI: se scrie doar daca e mai noua decat ce era. Doua loturi asezate in
+       * ordine inversa n-au voie sa mute confirmarea in trecut.
+       */
+      if (!hardFail && b.citit_la) {
+        const camp = b.kind === "stock" ? "stoc_confirmat_la" : "pret_confirmat_la";
+        for (const sk of styleKeys) {
+          const l = randCitit<Record<string, string | null>>("aboutyou.confirmareaLotului", await admin
+            .from("aboutyou_listings").select(`id, ${camp}`)
+            .eq("business_id", ctx.businessId).eq("style_key", sk).maybeSingle() as never);
+          if (!l) continue;
+          const vechea = l[camp] ? Date.parse(l[camp] as string) : 0;
+          if (Date.parse(b.citit_la) <= vechea) continue;
+          const { error: eConf } = await admin.from("aboutyou_listings")
+            .update({ [camp]: b.citit_la } as never).eq("id", l.id as unknown as string);
+          /* ⚠ Nescrisa, semnul ramane deschis si plasa retrimite — o cerere in plus, nu o pierdere. */
+          if (eConf) asezat = false;
+        }
+      }
       for (const sk of styleKeys) {
         const randListare = await getListingByStyleKey(admin, ctx.businessId, sk);
         if (!randListare) continue;
@@ -2721,6 +2873,25 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
      * intreaba baza daca a plecat vreun lot dedicat DUPA asta — semnul exact al cursei.
      */
     if (b.kind === "product" && !hardFail) {
+      /*
+       * ⚠ SI CATALOGUL SE CONFIRMA ABIA AICI, din acelasi motiv: un lot de produs poate fi respins
+       * mai tarziu („Size is invalid"), iar dovada scrisa la trimitere ar fi stins intre timp si
+       * semnele de stoc si de pret, care se pot satisface prin el.
+       */
+      if (b.citit_la) {
+        for (const sk of styleKeys) {
+          const l = randCitit<{ id: string; catalog_confirmat_la: string | null }>(
+            "aboutyou.confirmareaCatalogului", await admin
+              .from("aboutyou_listings").select("id, catalog_confirmat_la")
+              .eq("business_id", ctx.businessId).eq("style_key", sk).maybeSingle() as never);
+          if (!l) continue;
+          const vechea = l.catalog_confirmat_la ? Date.parse(l.catalog_confirmat_la) : 0;
+          if (Date.parse(b.citit_la) <= vechea) continue;
+          const { error: eConf } = await admin.from("aboutyou_listings")
+            .update({ catalog_confirmat_la: b.citit_la } as never).eq("id", l.id);
+          if (eConf) asezat = false;
+        }
+      }
       for (const sk of styleKeys) {
         const dedicateMaiNoi = randuriCitite<{ id: string }>(
           "aboutyou.lotDedicatDupaProdus", await admin
@@ -2763,7 +2934,37 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
     if (b.kind === "status" && !hardFail) {
       for (const sk of styleKeys) {
         const l = await getListingByStyleKey(admin, ctx.businessId, sk);
-        if (l?.status === "draft_pending") {
+        if (!l) continue;
+        /*
+         * ═══ ⚠ UN LOT DE STARE DINTR-O GENERATIE DEPASITA NU CASTIGA (28.08.2026, seara) ═══
+         *
+         *     10:00 „Publica" -> lotul pleaca, raspunsul se pierde
+         *     10:02 „Retrage" -> lotul pleaca si se incheie -> la ei `inactive` ✅
+         *     10:05 lotul vechi se aseaza                       -> la ei `published` ❌
+         *
+         * ⚠ SI NU AJUNGE SA NU-I CREDEM STAREA: la ei tocmai s-a asezat ce a cerut lotul vechi.
+         * Se retrimite ce a cerut omul ULTIMA oara (`status_dorit`) — iar daca punerea la coada nu
+         * merge, lotul ramane deschis si se reia, fiindca altfel n-ar mai reveni nimeni acolo.
+         */
+        if (b.generatie != null && b.generatie < l.status_generatie) {
+          if (l.product_id && l.status_dorit) {
+            const { error: eRe } = await admin.from("aboutyou_sync_queue").upsert(
+              {
+                business_id: ctx.businessId, product_id: l.product_id, offer_id: l.style_key,
+                op: l.status_dorit === "published" ? "publish" : "upsert",
+              } as never,
+              { onConflict: "business_id,offer_id,op" },
+            );
+            if (eRe) asezat = false;
+          }
+          await logError({
+            action: "aboutyou-sync/loturi", severity: "warning",
+            message: `lot de stare din generatia ${b.generatie} asezat dupa unul mai nou (${l.status_generatie}): se retrimite starea ceruta`,
+            details: { styleKey: sk, statusDorit: l.status_dorit }, businessId: ctx.businessId,
+          });
+          continue;
+        }
+        if (l.status === "draft_pending") {
           if (!await setListingStatus(admin, l.id, "draft", { error: null })) asezat = false;
         }
       }
@@ -3518,7 +3719,7 @@ async function trimiteInTranse<T>(
   for (let i = 0; i < items.length; i += MAX_ITEMI_STOC_PRET) {
     const transa = items.slice(i, i + MAX_ITEMI_STOC_PRET);
     const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
-      () => trimite(transa, validAt)), `împingerea de ${kind}`);
+      () => trimite(transa, validAt), undefined, cititLa), `împingerea de ${kind}`);
     /*
      * ═══ ⚠ RELUAREA FARA `valid_at` S-A SCOS (27.08.2026, seara) ═══
      *
@@ -3538,20 +3739,19 @@ async function trimiteInTranse<T>(
     if (i + MAX_ITEMI_STOC_PRET < items.length) await pause(300);
   }
   /*
-   * ═══ ⚠ DOVADA E A OPERATIEI, SI E CLIPA CITIRII (28.08.2026) ═══
+   * ═══ ⚠ AICI NU SE CONFIRMA NIMIC (28.08.2026, seara) ═══
    *
-   * Ieri aici nu se scria nimic, ca sa nu se confirme din greseala un semn de CATALOG cu o
-   * impingere de stoc. Corect ca principiu, si prea aspru ca urmare: semnul lasat de o schimbare de
-   * STOC nu putea fi satisfacut decat de un upsert de produs intreg, deci fiecare comanda ar fi
-   * produs, pe langa impingerea de stoc, si o trimitere completa de catalog. La o mie de comenzi pe
-   * zi, mii de loturi degeaba.
+   * Pana azi se scria dovada chiar aici, la trimitere. Dar `PUT /products/stocks` intoarce doar un
+   * `batchRequestId`: verdictul vine din `/results/stocks`, iar documentatia lor spune limpede ca
+   * un lot `completed` poate contine articole cu `success: false`.
    *
-   * ⚠ Fiecare fel isi scrie propria clipa, si un `upsert` le satisface pe toate trei — fiindca duce
-   * cu el si stocul, si preturile. Invers nu e adevarat, si de-aia sunt campuri separate.
+   *     stocul scade 10 -> 2, impingerea pleaca si e acceptata ✅
+   *     dovada scrisa, semnul dispare                          ✅
+   *     rezultatul: `success: false`                           ❌
+   *
+   * La noi 2, la ei 10, si nimic care sa mai revina. Clipa de citire calatoreste acum CU LOTUL
+   * (`citit_la`) si trece pe listare abia la asezare — vezi `pollOpenBatches`.
    */
-  await admin.from("aboutyou_listings")
-    .update({ [kind === "stock" ? "stoc_citit_la" : "pret_citit_la"]: cititLa } as never)
-    .eq("business_id", ctx.businessId).eq("style_key", styleKey);
   return { ok: true, action: "submitted", batchRequestId };
 }
 

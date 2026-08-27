@@ -51,7 +51,7 @@ test("⚠ cand generatia nu se poate deschide, NU se trimite nimic", () => {
 test("⚠ fratii se numara DOAR in generatia lotului", () => {
   assert.match(sync, /\.eq\("generatie", b\.generatie \?\? -1\)/);
   /* Si lotul poarta generatia cu el, de la trimitere. */
-  assert.match(sync, /upsertProducts\(ctx\.auth, built\.items\.slice\(i, i \+ 100\)\), generatie\)/);
+  assert.match(sync, /upsertProducts\(ctx\.auth, built\.items\.slice\(i, i \+ 100\)\), generatie, cititLa\)/);
 });
 
 test("⚠ un lot dintr-o generatie depasita nu mai scrie nimic", () => {

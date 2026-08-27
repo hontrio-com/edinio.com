@@ -22,7 +22,7 @@ import {
 } from "@/lib/aboutyou/client";
 import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
 import { cancelOrderNow, returnOrderNow } from "@/lib/aboutyou/orders";
-import { randCitit } from "@/lib/supabase/rand-citit";
+import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
   cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
@@ -285,6 +285,30 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
   await saveConfig(businessId, {});
   const admin = createAdminClient();
   await admin.from("aboutyou_sync_queue").delete().eq("business_id", businessId);
+  /*
+   * ═══ ⚠ MAPAREA SKU SE PASTREAZA SI LA DECONECTARE (28.08.2026, noaptea) ═══
+   *
+   * Aici randurile se sterg DIRECT, nu prin cascada — deci a patra cale prin care se pierdea
+   * legatura `sku -> produs`. Deconectarea opreste sondarea, dar nu si comenzile deja plecate: o
+   * reconectare peste doua zile ar ingera comenzi pe SKU-uri pe care nu le mai recunoastem, si
+   * atunci stocul nu se scade. Costa un rand pe SKU; tacerea costa marfa.
+   */
+  {
+    const deSalvat = randuriCitite<{ sku: string; product_id: string | null; variant_title: string | null }>(
+      "aboutyou.mapareaLaDeconectare", await admin
+        .from("aboutyou_variants").select("sku, product_id, variant_title")
+        .eq("business_id", businessId) as never);
+    if (deSalvat.length > 0) {
+      const acum = new Date().toISOString();
+      await admin.from("aboutyou_sku_istoric").upsert(
+        deSalvat.map((r) => ({
+          business_id: businessId, sku: r.sku, product_id: r.product_id,
+          variant_title: r.variant_title, scos_la: acum,
+        })) as never,
+        { onConflict: "business_id,sku" },
+      );
+    }
+  }
   await admin.from("aboutyou_variants").delete().eq("business_id", businessId);
   await admin.from("aboutyou_batches").delete().eq("business_id", businessId);
   await admin.from("aboutyou_listings").delete().eq("business_id", businessId);
@@ -993,9 +1017,40 @@ export async function validateAboutYouListing(
 
 export async function saveAboutYouListing(
   businessId: string, productId: string, input: AboutYouListingInput,
+  /**
+   * Omul a apasat „Salvează și trimite", nu doar „Salvează".
+   *
+   * ═══ ⚠ ERAU DOUA CERERI ALE BROWSERULUI, SI A DOUA PUTEA SA NU MAI PLECE (28.08.2026, noaptea) ═══
+   *
+   * Editorul chema `saveAboutYouListing`, apoi `syncAboutYouProduct`. Intre ele, fila inchisa sau
+   * reteaua cazuta insemnau: configurarea salvata, trimiterea niciodata ceruta. Iar cutia de
+   * iesire nu ajuta: declansatorul de pe `products` nu vede editari in `aboutyou_listings` /
+   * `aboutyou_variants`, iar cel de pe variante nu poate porni o trimitere pentru o listare care
+   * n-a plecat inca la ei — plasa repara ce s-a stricat, nu porneste ce n-a fost cerut.
+   *
+   * ⚠ INTENTIA SE SCRIE INAINTEA SALVARII, si daca nu se scrie, NU se salveaza. Ordinea e chiar
+   * apararea: intoarsa, am fi avut iar „salvat, dar poate nu pleaca niciodata". Un semn scris
+   * degeaba (salvarea pica dupa el) costa o retrimitere a starii de acum — nimic.
+   */
+  siTrimite = false,
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
+
+  if (siTrimite) {
+    const { error: eIntentie } = await createAdminClient().from("aboutyou_intentii").upsert(
+      { business_id: businessId, product_id: productId, op: "upsert" } as never,
+      { onConflict: "business_id,product_id,op" },
+    );
+    if (eIntentie) {
+      logError({
+        action: "aboutyou.saveListing", severity: "critical",
+        message: `intentia de trimitere nu s-a putut scrie, deci nu s-a salvat nimic: ${eIntentie.message}`,
+        details: { businessId, productId }, businessId,
+      });
+      return { error: "Nu am putut porni trimiterea. Încearcă din nou." };
+    }
+  }
   const { data: product } = await g.supabase
     .from("products").select("id").eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };

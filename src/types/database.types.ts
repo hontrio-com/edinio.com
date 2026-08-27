@@ -478,6 +478,33 @@ export type Database = {
         }
         Relationships: []
       }
+      aboutyou_sku_istoric: {
+        Row: {
+          business_id: string
+          id: string
+          product_id: string | null
+          scos_la: string
+          sku: string
+          variant_title: string | null
+        }
+        Insert: {
+          business_id: string
+          id?: string
+          product_id?: string | null
+          scos_la?: string
+          sku: string
+          variant_title?: string | null
+        }
+        Update: {
+          business_id?: string
+          id?: string
+          product_id?: string | null
+          scos_la?: string
+          sku?: string
+          variant_title?: string | null
+        }
+        Relationships: []
+      }
       aboutyou_sync_queue: {
         Row: {
           abandonat_la: string | null

@@ -401,7 +401,7 @@ CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_listarea()
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 begin
-  if new.product_id is null then
+  if new.product_id is null or new.remote_poate_exista is not true then
     return new;
   end if;
   insert into public.aboutyou_intentii (business_id, product_id, op)
@@ -458,6 +458,31 @@ begin
     do update set creat_la = now(), recuperari = 0, status = 'deschis', last_error = null;
   end loop;
 
+  return new;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_varianta()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if new.product_id is null then
+    return new;
+  end if;
+  if not exists (
+    select 1 from public.aboutyou_listings l
+     where l.id = new.listing_id and l.remote_poate_exista
+  ) then
+    return new;
+  end if;
+  insert into public.aboutyou_intentii (business_id, product_id, op)
+  values (new.business_id, new.product_id, 'upsert')
+  on conflict (business_id, product_id, op)
+  do update set creat_la = now(), recuperari = 0, status = 'deschis', last_error = null;
   return new;
 end;
 $function$
@@ -4678,6 +4703,14 @@ create table if not exists public.aboutyou_retururi (
   updated_at timestamp with time zone default now() not null,
   linie_cheie text not null);
 
+create table if not exists public.aboutyou_sku_istoric (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  sku text not null,
+  product_id uuid,
+  variant_title text,
+  scos_la timestamp with time zone default now() not null);
+
 create table if not exists public.aboutyou_sync_queue (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -5962,6 +5995,7 @@ alter table public.aboutyou_intentii add constraint aboutyou_intentii_pkey PRIMA
 alter table public.aboutyou_listings add constraint aboutyou_listings_pkey PRIMARY KEY (id);
 alter table public.aboutyou_orders add constraint aboutyou_orders_pkey PRIMARY KEY (id);
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_pkey PRIMARY KEY (id);
+alter table public.aboutyou_sku_istoric add constraint aboutyou_sku_istoric_pkey PRIMARY KEY (id);
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_pkey PRIMARY KEY (id);
 alter table public.aboutyou_variants add constraint aboutyou_variants_pkey PRIMARY KEY (id);
 alter table public.aboutyou_veghe add constraint aboutyou_veghe_pkey PRIMARY KEY (id);
@@ -6040,6 +6074,7 @@ alter table public.aboutyou_batches add constraint aboutyou_batches_business_id_
 alter table public.aboutyou_listings add constraint aboutyou_listings_business_id_style_key_key UNIQUE (business_id, style_key);
 alter table public.aboutyou_orders add constraint aboutyou_orders_business_id_aboutyou_order_number_key UNIQUE (business_id, aboutyou_order_number);
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_linie_key UNIQUE (business_id, aboutyou_order_number, linie_cheie);
+alter table public.aboutyou_sku_istoric add constraint aboutyou_sku_istoric_business_id_sku_key UNIQUE (business_id, sku);
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
 alter table public.aboutyou_variants add constraint aboutyou_variants_business_id_sku_key UNIQUE (business_id, sku);
 alter table public.aboutyou_veghe add constraint aboutyou_veghe_business_id_style_key_key UNIQUE (business_id, style_key);
@@ -6075,7 +6110,7 @@ alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_op_check
 alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_status_check CHECK ((status = ANY (ARRAY['deschis'::text, 'gata'::text, 'oprit'::text])));
 alter table public.aboutyou_intentii add constraint aboutyou_intentii_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'stock'::text, 'price'::text])));
 alter table public.aboutyou_intentii add constraint aboutyou_intentii_status_check CHECK ((status = ANY (ARRAY['deschis'::text, 'abandonat'::text])));
-alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'publish'::text, 'stock'::text, 'price'::text, 'ship'::text])));
+alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'publish'::text, 'stock'::text, 'price'::text, 'ship'::text, 'status'::text])));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
@@ -6307,6 +6342,7 @@ CREATE INDEX aboutyou_orders_reintrebat_idx ON public.aboutyou_orders USING btre
 CREATE INDEX aboutyou_retururi_de_rezolvat_idx ON public.aboutyou_retururi USING btree (business_id, created_at DESC) WHERE (repus_in_stoc_la IS NULL);
 CREATE INDEX aboutyou_retururi_order_id_idx ON public.aboutyou_retururi USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX aboutyou_retururi_product_id_idx ON public.aboutyou_retururi USING btree (product_id) WHERE (product_id IS NOT NULL);
+CREATE INDEX aboutyou_sku_istoric_cautare_idx ON public.aboutyou_sku_istoric USING btree (business_id, sku);
 CREATE INDEX aboutyou_sync_queue_ordine_idx ON public.aboutyou_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX aboutyou_veghe_magazin_idx ON public.aboutyou_veghe USING btree (business_id);
 CREATE INDEX aboutyou_veghe_scadente_idx ON public.aboutyou_veghe USING btree (urmatoarea_verificare);
@@ -6589,7 +6625,7 @@ create or replace view public.store_settings with (security_invoker = true) as
 CREATE TRIGGER set_store_settings_updated_at BEFORE UPDATE ON privat.store_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER aboutyou_marcheaza_listarea AFTER UPDATE OF brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code ON public.aboutyou_listings FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_listarea();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.aboutyou_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
-CREATE TRIGGER aboutyou_marcheaza_varianta AFTER UPDATE OF sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled ON public.aboutyou_variants FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_listarea();
+CREATE TRIGGER aboutyou_marcheaza_varianta AFTER INSERT OR UPDATE OF sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled ON public.aboutyou_variants FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_varianta();
 CREATE TRIGGER businesses_blocheaza_domeniu_platforma BEFORE INSERT OR UPDATE OF custom_domain ON public.businesses FOR EACH ROW EXECUTE FUNCTION blocheaza_domeniu_platforma();
 CREATE TRIGGER set_businesses_updated_at BEFORE UPDATE ON public.businesses FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER catalog_produs_cuvinte AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_cuvinte_murdar();
@@ -6628,6 +6664,7 @@ alter table public.aboutyou_intentii enable row level security;
 alter table public.aboutyou_listings enable row level security;
 alter table public.aboutyou_orders enable row level security;
 alter table public.aboutyou_retururi enable row level security;
+alter table public.aboutyou_sku_istoric enable row level security;
 alter table public.aboutyou_sync_queue enable row level security;
 alter table public.aboutyou_variants enable row level security;
 alter table public.aboutyou_veghe enable row level security;
@@ -6739,6 +6776,9 @@ create policy owner_select_aboutyou_orders on public.aboutyou_orders as PERMISSI
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_retururi on public.aboutyou_retururi as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_aboutyou_sku_istoric on public.aboutyou_sku_istoric as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_sync_queue on public.aboutyou_sync_queue as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
@@ -7139,6 +7179,27 @@ grant SELECT on table public.aboutyou_retururi to service_role;
 grant TRIGGER on table public.aboutyou_retururi to service_role;
 grant TRUNCATE on table public.aboutyou_retururi to service_role;
 grant UPDATE on table public.aboutyou_retururi to service_role;
+grant DELETE on table public.aboutyou_sku_istoric to anon;
+grant INSERT on table public.aboutyou_sku_istoric to anon;
+grant REFERENCES on table public.aboutyou_sku_istoric to anon;
+grant SELECT on table public.aboutyou_sku_istoric to anon;
+grant TRIGGER on table public.aboutyou_sku_istoric to anon;
+grant TRUNCATE on table public.aboutyou_sku_istoric to anon;
+grant UPDATE on table public.aboutyou_sku_istoric to anon;
+grant DELETE on table public.aboutyou_sku_istoric to authenticated;
+grant INSERT on table public.aboutyou_sku_istoric to authenticated;
+grant REFERENCES on table public.aboutyou_sku_istoric to authenticated;
+grant SELECT on table public.aboutyou_sku_istoric to authenticated;
+grant TRIGGER on table public.aboutyou_sku_istoric to authenticated;
+grant TRUNCATE on table public.aboutyou_sku_istoric to authenticated;
+grant UPDATE on table public.aboutyou_sku_istoric to authenticated;
+grant DELETE on table public.aboutyou_sku_istoric to service_role;
+grant INSERT on table public.aboutyou_sku_istoric to service_role;
+grant REFERENCES on table public.aboutyou_sku_istoric to service_role;
+grant SELECT on table public.aboutyou_sku_istoric to service_role;
+grant TRIGGER on table public.aboutyou_sku_istoric to service_role;
+grant TRUNCATE on table public.aboutyou_sku_istoric to service_role;
+grant UPDATE on table public.aboutyou_sku_istoric to service_role;
 grant DELETE on table public.aboutyou_sync_queue to anon;
 grant INSERT on table public.aboutyou_sync_queue to anon;
 grant REFERENCES on table public.aboutyou_sync_queue to anon;
@@ -8831,6 +8892,9 @@ grant execute on function public.aboutyou_marcheaza_listarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_modificarea() to anon;
 grant execute on function public.aboutyou_marcheaza_modificarea() to authenticated;
 grant execute on function public.aboutyou_marcheaza_modificarea() to service_role;
+grant execute on function public.aboutyou_marcheaza_varianta() to anon;
+grant execute on function public.aboutyou_marcheaza_varianta() to authenticated;
+grant execute on function public.aboutyou_marcheaza_varianta() to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
 grant execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
@@ -9018,6 +9082,7 @@ revoke execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid
 revoke execute on function public.aboutyou_generatie_noua(p_listing_id uuid) from public;
 revoke execute on function public.aboutyou_marcheaza_listarea() from public;
 revoke execute on function public.aboutyou_marcheaza_modificarea() from public;
+revoke execute on function public.aboutyou_marcheaza_varianta() from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
 revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;

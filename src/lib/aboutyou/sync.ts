@@ -2155,6 +2155,26 @@ async function setRemoteStatus(
   return { ok: true, action: "published", batchRequestId };
 }
 
+/**
+ * Retrimite starea pe care comerciantul a cerut-o ULTIMA oara.
+ *
+ * ⚠ Cand un lot de stare dintr-o generatie depasita se aseaza, la ei ramane ce a cerut el — deci nu
+ * ajunge sa nu-i credem starea, trebuie sa cerem din nou ce voia omul. `status_dorit` o tine minte,
+ * scris INAINTEA fiecarei cereri.
+ */
+async function retrimiteStareaDorita(
+  admin: Db, ctx: AboutYouSyncContext, productId: string,
+): Promise<SyncOutcome> {
+  const listing = await getListing(admin, ctx.businessId, productId);
+  if (!listing) return { ok: true, action: "skipped" };
+  const dorit = listing.status_dorit;
+  /* Nimeni n-a cerut nimic: n-avem ce retrimite. */
+  if (dorit !== "published" && dorit !== "inactive" && dorit !== "draft") {
+    return { ok: true, action: "skipped" };
+  }
+  return setRemoteStatus(admin, ctx, productId, dorit);
+}
+
 export function publishProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
   return setRemoteStatus(admin, ctx, productId, "published");
 }
@@ -2245,6 +2265,55 @@ export async function unpublishProductNow(admin: Db, ctx: AboutYouSyncContext, p
  * confirma dezactivarea, pastram randul si intoarcem eroare: elementul se
  * reincearca la urmatoarea trecere a cronului.
  */
+/**
+ * Muta maparea SKU in istoric, inainte ca stergerea listarii s-o ia cu ea.
+ *
+ * ═══ ⚠ COMENTARIUL SPUNEA CA NU SE STERGE, SI SE STERGEA (28.08.2026, noaptea) ═══
+ *
+ * `reconciliazaVariante` are scris, negru pe alb, ca randul de varianta NU se sterge NICIODATA —
+ * fiindca e singura urma a maparii `sku -> product_id + variant_title`, iar `orders.ts` o foloseste
+ * ca sa lege o comanda de produs si sa scada stocul combinatiei.
+ *
+ * Si totusi `stergeListare` face `DELETE FROM aboutyou_listings`, iar `aboutyou_variants.listing_id`
+ * e `ON DELETE CASCADE`. Deci exact ce spunea comentariul ca nu se intampla, se intampla — pentru
+ * toate variantele deodata:
+ *
+ *     10:00 clientul comanda SKU X
+ *     webhook intarziat / inbox indisponibil
+ *     10:02 comerciantul apasa „Elimina" -> listarea si toate variantele dispar
+ *     10:05 comanda ajunge -> SKU X necunoscut -> `product_id` null, stocul NU se scade
+ *
+ * ⚠ MAPAREA E ISTORIE, NU STARE. Nu tine de faptul ca produsul mai e sau nu listat, ci de faptul ca
+ * s-a vandut candva cu SKU-ul ala. De-aia nu moare odata cu listarea.
+ *
+ * ⚠ INTOARCE `false` DACA N-A PUTUT: apelantul nu are voie sa stearga listarea atunci. O comanda
+ * pierduta e mai scumpa decat o retragere amanata cu un minut.
+ */
+async function pastreazaMaparea(admin: Db, businessId: string, listingId: string): Promise<boolean> {
+  const randuri = randuriCitite<{ sku: string; product_id: string | null; variant_title: string | null }>(
+    "aboutyou.mapareaDePastrat", await admin
+      .from("aboutyou_variants").select("sku, product_id, variant_title")
+      .eq("listing_id", listingId) as never);
+  if (randuri.length === 0) return true;
+  const acum = new Date().toISOString();
+  const { error } = await admin.from("aboutyou_sku_istoric").upsert(
+    randuri.map((r) => ({
+      business_id: businessId, sku: r.sku, product_id: r.product_id,
+      variant_title: r.variant_title, scos_la: acum,
+    })) as never,
+    { onConflict: "business_id,sku" },
+  );
+  if (error) {
+    await logError({
+      action: "aboutyou/mapare", severity: "error",
+      message: `maparea SKU nu s-a putut pastra inainte de stergerea listarii: ${error.message}`,
+      details: { listingId, cate: randuri.length }, businessId,
+    });
+    return false;
+  }
+  return true;
+}
+
 async function stergeListare(
   admin: Db, ctx: AboutYouSyncContext, listing: ListingRow,
 ): Promise<SyncOutcome> {
@@ -2265,6 +2334,10 @@ async function stergeListare(
    */
   const eDoarLocala = !listing.remote_poate_exista;
   if (eDoarLocala) {
+    /* ⚠ Si aici: o listare care n-a plecat n-a putut primi comenzi, dar maparea nu costa nimic. */
+    if (!await pastreazaMaparea(admin, ctx.businessId, listing.id)) {
+      return { ok: false, status: 0, error: "Nu am putut păstra maparea SKU; se reia." };
+    }
     await admin.from("aboutyou_listings").delete().eq("id", listing.id);
     return { ok: true, action: "removed" };
   }
@@ -2406,6 +2479,48 @@ async function marcheazaComenzileLotului(
     details: { batchRequestId: b.batch_request_id, kind: b.kind, orderIds: orderIds.slice(0, 20) },
     businessId: ctx.businessId,
   });
+}
+
+/**
+ * Toate transele aceleiasi operatii logice s-au incheiat cu bine?
+ *
+ * ═══ ⚠ CONFIRMAM DUPA PRIMA TRANSA, NU DUPA TOATE (28.08.2026, noaptea) ═══
+ *
+ * `POST /products/` primeste cel mult 100 de articole, iar impingerile de stoc si pret cel mult o
+ * mie. Deci o singura operatie ceruta de comerciant pleaca in mai multe loturi:
+ *
+ *     250 de variante            -> 3 loturi de produs
+ *     400 de variante × 3 tari   -> 1200 de articole de pret -> 2 loturi
+ *
+ * Toate poarta ACEEASI clipa de citire. Dar confirmarea se scria la asezarea FIECAREIA:
+ *
+ *     lotul 1 se aseaza, toate articolele bune -> `confirmat_la` scris
+ *     semnul dispare                            ✅
+ *     lotul 2 e respins                         ❌
+ *
+ * Doua sute de preturi n-au ajuns, iar cutia de iesire care trebuia sa garanteze tocmai asta se
+ * stinsese deja. Si mai rau la catalog: `catalog_confirmat_la` poate satisface si semnele de stoc
+ * si de pret — dar lotul 1 duce doar primele o suta de SKU-uri, iar stocul schimbat putea fi al
+ * variantei 175.
+ *
+ * ⚠ CLIPA DE CITIRE E CHIAR NUMELE OPERATIEI LOGICE. Transele aceleiasi trimiteri o au identica —
+ * se ia o singura data, inaintea oricarei citiri — deci fratii se gasesc dupa ea, fara niciun
+ * camp nou. Loturile de stoc si de pret n-au generatie; asta au.
+ *
+ * ⚠ SE CERE `completed` LA TOTI. Un frate `failed`, `stalled` sau inca in lucru inseamna ca
+ * operatia nu s-a incheiat — iar „nu stim inca" nu e „a mers".
+ */
+async function operatiaSAIncheiat(
+  admin: Db, businessId: string, kind: string, styleKey: string, cititLa: string, idAcesta: string,
+): Promise<boolean> {
+  const frati = randuriCitite<{ id: string; status: string }>(
+    "aboutyou.fratiiOperatiei", await admin
+      .from("aboutyou_batches").select("id, status")
+      .eq("business_id", businessId).eq("kind", kind)
+      .eq("citit_la", cititLa)
+      .contains("related_ids", JSON.stringify([styleKey]))
+      .neq("id", idAcesta) as never);
+  return frati.every((f) => f.status === "completed");
 }
 
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
@@ -2772,6 +2887,8 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
       if (!hardFail && b.citit_la) {
         const camp = b.kind === "stock" ? "stoc_confirmat_la" : "pret_confirmat_la";
         for (const sk of styleKeys) {
+          /* ⚠ Numai cand TOATE transele aceleiasi citiri s-au incheiat bine. Vezi `operatiaSAIncheiat`. */
+          if (!await operatiaSAIncheiat(admin, ctx.businessId, b.kind, sk, b.citit_la, b.id)) continue;
           const l = randCitit<Record<string, string | null>>("aboutyou.confirmareaLotului", await admin
             .from("aboutyou_listings").select(`id, ${camp}`)
             .eq("business_id", ctx.businessId).eq("style_key", sk).maybeSingle() as never);
@@ -2880,6 +2997,12 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
        */
       if (b.citit_la) {
         for (const sk of styleKeys) {
+          /*
+           * ⚠ Un produs cu 250 de variante pleaca in trei loturi, toate cu aceeasi clipa de
+           * citire. Confirmat dupa primul, semnul ar disparea inainte ca celelalte doua sute de
+           * variante sa fi ajuns — si tocmai el garanta ca ajung.
+           */
+          if (!await operatiaSAIncheiat(admin, ctx.businessId, "product", sk, b.citit_la, b.id)) continue;
           const l = randCitit<{ id: string; catalog_confirmat_la: string | null }>(
             "aboutyou.confirmareaCatalogului", await admin
               .from("aboutyou_listings").select("id, catalog_confirmat_la")
@@ -2951,7 +3074,14 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             const { error: eRe } = await admin.from("aboutyou_sync_queue").upsert(
               {
                 business_id: ctx.businessId, product_id: l.product_id, offer_id: l.style_key,
-                op: l.status_dorit === "published" ? "publish" : "upsert",
+                /*
+                 * ⚠ `status`, NU `upsert`. Aici scria `publish` pentru „published" si `upsert`
+                 * pentru orice altceva — iar `upsert` inseamna `syncProductNow`, adica trimiterea
+                 * CONTINUTULUI. Pentru `inactive` sau `draft` nu e nici pe departe un
+                 * `PUT /products/status`: la ei ramanea `published`, desi noi stiam ca omul ceruse
+                 * altceva. Iar proba cerea exact forma gresita.
+                 */
+                op: "status",
               } as never,
               { onConflict: "business_id,offer_id,op" },
             );
@@ -2988,6 +3118,16 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
                 || "About You nu a acceptat retragerea produsului. Încearcă din nou.",
             })) asezat = false;
           } else {
+            /*
+             * ⚠ MAPAREA SKU SE PASTREAZA INAINTE. `aboutyou_variants.listing_id` e `ON DELETE
+             * CASCADE`, deci stergerea de mai jos ar lua cu ea singura urma a legaturii
+             * `sku -> produs`, iar o comanda sosita mai tarziu pe acel SKU ar intra fara sa scada
+             * stoc. Nepastrata, lotul ramane deschis si se reia.
+             */
+            if (!await pastreazaMaparea(admin, ctx.businessId, listing.id)) {
+              asezat = false;
+              continue;
+            }
             const { error: eSters } = await admin.from("aboutyou_listings").delete().eq("id", listing.id);
             /* ⚠ Randul nesters inseamna ca produsul apare mai departe in panou desi e retras. */
             if (eSters) asezat = false;
@@ -3601,6 +3741,13 @@ async function trimiteElement(admin: Db, ctx: AboutYouSyncContext, item: AboutYo
       return item.product_id ? pushStockNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
     case "price":
       return item.product_id ? pushPriceNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
+    case "status":
+      /*
+       * ⚠ Starea CERUTA, citita de pe listare. Se pune la coada cand un lot de stare dintr-o
+       * generatie depasita se aseaza si trebuie retrimis ce a cerut omul ultima oara — vezi
+       * `pollOpenBatches`. Trece prin aceeasi masina de stari, deci primeste generatie noua.
+       */
+      return item.product_id ? retrimiteStareaDorita(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
     case "ship":
       return shipOrderNow(admin, ctx, item.offer_id);
     default:

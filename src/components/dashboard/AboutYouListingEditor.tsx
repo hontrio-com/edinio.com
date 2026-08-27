@@ -309,7 +309,13 @@ export function AboutYouListingEditor({
         }
         setIssues([]);
 
-        const res = await saveAboutYouListing(businessId, productId, input);
+        /*
+         * ⚠ O SINGURA CERERE PENTRU O SINGURA APASARE. Erau doua actiuni de server legate de
+         * browser: daca a doua nu mai pleca (fila inchisa, retea cazuta), omul apasase „Trimite" si
+         * se salva doar configurarea. Acum intentia de trimitere se scrie in aceeasi actiune, si
+         * inaintea salvarii — iar `syncAboutYouProduct` de mai jos e doar calea rapida.
+         */
+        const res = await saveAboutYouListing(businessId, productId, input, then === "sync");
         if ("error" in res) { toast.error(res.error); return; }
         if (then === "sync") {
           const s = await syncAboutYouProduct(businessId, productId);

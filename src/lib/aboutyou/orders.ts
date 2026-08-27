@@ -356,7 +356,46 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
        */
       throw new EroareTrecatoare(`maparea SKU nu s-a putut citi: ${eVar.message}`);
     }
-    const randuri = vs ?? [];
+    let randuri = (vs ?? []) as { sku: string; product_id: string | null; variant_title: string | null }[];
+    /*
+     * ═══ ⚠ SI MAPAREA ISTORICA, PENTRU COMENZILE INTARZIATE (28.08.2026, noaptea) ═══
+     *
+     * Cand comerciantul elimina listarea, randurile de varianta plecau cu ea (cascada). O comanda
+     * sosita dupa aceea — un webhook intarziat, o reluare din inbox — nu mai gasea SKU-ul, intra cu
+     * `product_id` null si NU scadea stocul. Tacut.
+     *
+     * ⚠ Se intreaba doar pentru SKU-urile ramase fara mapare: la comanda obisnuita, interogarea
+     * asta nici nu se face.
+     */
+    const gasite = new Set(randuri.map((v) => v.sku));
+    const lipsa = skus.filter((sk) => !gasite.has(sk));
+    if (lipsa.length > 0) {
+      const { data: ist, error: eIst } = await admin
+        .from("aboutyou_sku_istoric").select("sku, product_id, variant_title")
+        .eq("business_id", ctx.businessId).in("sku", lipsa);
+      /* ⚠ Aceeasi regula ca mai sus: „n-am putut citi" nu e „nu exista". */
+      if (eIst) throw new EroareTrecatoare(`maparea SKU istorica nu s-a putut citi: ${eIst.message}`);
+      randuri = [...randuri, ...((ist ?? []) as typeof randuri)];
+    }
+    /*
+     * ═══ ⚠ UN SKU FARA NICIO MAPARE NU MAI TACE (28.08.2026, noaptea) ═══
+     *
+     * Pana aici, un SKU necunoscut intra cu `product_id: null`, nu scadea niciun stoc, si nu scria
+     * NIMIC nicaieri — singurul jurnal din zona e pentru eroarea de CITIRE. Iar consecinta e mai
+     * grea decat pare: `consuma_stoc_comanda_marketplace` chemat cu liste goale trece de toate
+     * ramurile de esec, intoarce `gasit: true` si aseaza `stoc_marketplace_la`. Comanda ramane
+     * marcata „stoc consumat", deci idempotenta inchide si sansa unei reparatii ulterioare.
+     *
+     * ⚠ Se scrie o data pe comanda, cu SKU-urile cu tot, ca omul sa aiba ce cauta.
+     */
+    const faraMapare = skus.filter((sk) => !randuri.some((v) => v.sku === sk));
+    if (faraMapare.length > 0) {
+      await logError({
+        action: "aboutyou/orders", severity: "critical",
+        message: `${faraMapare.length} ${faraMapare.length === 1 ? "SKU din comanda nu are" : "SKU-uri din comanda nu au"} nicio mapare la un produs: stocul NU se scade pentru ele`,
+        details: { ayNumber, skuuri: faraMapare.slice(0, 20) }, businessId: ctx.businessId,
+      });
+    }
     const prodIds = [...new Set(randuri.map((v) => v.product_id).filter(Boolean) as string[])];
     const prodName = new Map<string, string>();
     if (prodIds.length > 0) {

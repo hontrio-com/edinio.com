@@ -872,7 +872,24 @@ test("⚠ un lot de stare dintr-o generatie depasita nu castiga", () => {
   assert.match(sync, /if \(eGenStatus\) \{[\s\S]{0,200}?ok: false, status: 0/);
   /* ⚠ Si nu ajunge sa nu-i credem starea: se retrimite ce a cerut omul ULTIMA oara. */
   assert.match(sync, /if \(b\.generatie != null && b\.generatie < l\.status_generatie\) \{/);
-  assert.match(sync, /op: l\.status_dorit === "published" \? "publish" : "upsert",/);
+  /*
+   * ═══ ⚠ SI PROBA ASTA CEREA FORMA GRESITA (28.08.2026, noaptea) ═══
+   *
+   * Cerea `op: l.status_dorit === "published" ? "publish" : "upsert"`. Dar `upsert` inseamna
+   * `syncProductNow`, adica trimiterea CONTINUTULUI — nu e nici pe departe un `PUT /products/status`
+   * cu `inactive`. Deci pentru „Retrage" retrimiteam produsul, iar la ei ramanea `published`.
+   *
+   * ⚠ E A TREIA OARA IN DOUA ZILE cand o proba verde apara alegerea care strica invariantul. De-aia
+   * proba noua nu se uita la forma, ci la CE FACE lucratorul cu operatia.
+   */
+  assert.match(sync, /op: "status",/);
+  assert.doesNotMatch(sync, /status_dorit === "published" \? "publish" : "upsert"/);
+  /* ⚠ Si lucratorul chiar duce `status` prin masina de stari, cu starea ceruta de om. */
+  assert.match(sync, /case "status":/);
+  assert.match(sync, /return setRemoteStatus\(admin, ctx, productId, dorit\);/);
+  /* ⚠ Si constrangerea din baza il primeste: o valoare respinsa de `check` opreste randul sa existe. */
+  const baseline0 = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.match(baseline0, /aboutyou_sync_queue_op_check[\s\S]{0,200}?'status'/);
 });
 
 test("⚠ si `setRemoteStatus` isi citeste scrierea, ca `syncProductNow`", () => {
@@ -915,4 +932,104 @@ test("⚠ EAN-ul, marimea si pretul manual lasa si ele semn", () => {
     assert.ok(!lListare.includes(c) && !lVarianta.includes(c),
       `${c} il scriem noi: ascultat, semnul s-ar rescrie la fiecare trecere a cronului`);
   }
+});
+
+
+/* ── O operatie logica se confirma intreaga, nu pe transe ─────────────────── */
+
+test("⚠ confirmarea asteapta TOATE transele aceleiasi citiri", () => {
+  /*
+   * ═══ ⚠ CONFIRMAM DUPA PRIMA TRANSA (28.08.2026, noaptea) ═══
+   *
+   * `POST /products/` primeste cel mult 100 de articole, impingerile de stoc si pret cel mult o
+   * mie. Deci o singura operatie ceruta de comerciant pleaca in mai multe loturi:
+   *
+   *     250 de variante           -> 3 loturi de produs
+   *     400 de variante × 3 tari  -> 1200 de articole de pret -> 2 loturi
+   *
+   * Toate poarta aceeasi clipa de citire, iar confirmarea se scria la asezarea FIECAREIA: primul
+   * lot bun stingea semnul, al doilea putea fi respins, si doua sute de preturi nu ajungeau
+   * niciodata — exact ce trebuia cutia de iesire sa garanteze.
+   *
+   * ⚠ SI MAI RAU LA CATALOG: `catalog_confirmat_la` poate satisface si semnele de stoc si de pret,
+   * dar lotul 1 duce doar primele o suta de SKU-uri — iar stocul schimbat putea fi al variantei 175.
+   */
+  assert.match(sync, /async function operatiaSAIncheiat\(/);
+  /*
+   * ⚠ CLIPA DE CITIRE E NUMELE OPERATIEI LOGICE. Loturile de stoc si de pret n-au generatie
+   * (`cuLotDurabil` e chemat cu `undefined`), deci un filtru pe generatie n-ar fi mers la ele.
+   */
+  assert.match(sync, /\.eq\("citit_la", cititLa\)/);
+  assert.match(sync, /return frati\.every\(\(f\) => f\.status === "completed"\);/);
+  /* ⚠ Si `related_ids` e jsonb: sirul JSON, nu vectorul — altfel 22P02 si aruncare. */
+  assert.match(sync, /\.contains\("related_ids", JSON\.stringify\(\[styleKey\]\)\)/);
+
+  /* Amandoua confirmarile trec prin ea. */
+  assert.match(sync, /if \(!await operatiaSAIncheiat\(admin, ctx\.businessId, b\.kind, sk, b\.citit_la, b\.id\)\) continue;/);
+  assert.match(sync, /if \(!await operatiaSAIncheiat\(admin, ctx\.businessId, "product", sk, b\.citit_la, b\.id\)\) continue;/);
+});
+
+/* ── Maparea SKU supravietuieste eliminarii listarii ──────────────────────── */
+
+test("⚠ maparea SKU nu moare odata cu listarea", () => {
+  /*
+   * ═══ ⚠ COMENTARIUL SPUNEA CA NU SE STERGE, SI SE STERGEA ═══
+   *
+   * `reconciliazaVariante` are scris ca randul de varianta NU se sterge NICIODATA, fiindca e
+   * singura urma a maparii `sku -> product_id + variant_title`. Si totusi `stergeListare` face
+   * `DELETE FROM aboutyou_listings`, iar `listing_id` e `ON DELETE CASCADE`.
+   *
+   *     10:00 clientul comanda SKU X
+   *     webhook intarziat / inbox indisponibil
+   *     10:02 „Elimina" -> listarea si toate variantele dispar
+   *     10:05 comanda ajunge -> `product_id` null, stocul NU se scade
+   *
+   * ⚠ SI CONSECINTA E MAI GREA DECAT PARE: `consuma_stoc_comanda_marketplace` chemat cu liste
+   * goale trece de toate ramurile de esec, intoarce `gasit: true` si aseaza `stoc_marketplace_la`.
+   * Comanda ramane marcata „stoc consumat", deci idempotenta inchide si sansa reparatiei.
+   */
+  assert.match(sync, /async function pastreazaMaparea\(/);
+  /* ⚠ Si nepastrata, listarea NU se sterge: o comanda pierduta e mai scumpa ca o retragere amanata. */
+  assert.match(sync, /if \(!await pastreazaMaparea\(admin, ctx\.businessId, listing\.id\)\) \{[\s\S]{0,200}?asezat = false;/);
+  assert.match(sync, /if \(!await pastreazaMaparea\(admin, ctx\.businessId, listing\.id\)\) \{[\s\S]{0,200}?ok: false, status: 0/);
+
+  /* ⚠ Si comenzile cad pe istoric cand maparea curenta lipseste. */
+  const ord = viu("src/lib/aboutyou/orders.ts");
+  assert.match(ord, /\.from\("aboutyou_sku_istoric"\)\.select\("sku, product_id, variant_title"\)/);
+  /* ⚠ Aceeasi regula ca la maparea curenta: „n-am putut citi" nu e „nu exista". */
+  assert.match(ord, /maparea SKU istorica nu s-a putut citi/);
+  /* ⚠ Si un SKU ramas fara nicio mapare nu mai tace. */
+  assert.match(ord, /stocul NU se scade pentru ele/);
+
+  /* ⚠ Si a patra cale: deconectarea sterge randurile DIRECT, nu prin cascada. */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  const iSalv = act.indexOf("aboutyou.mapareaLaDeconectare");
+  const iSterg = act.indexOf('.from("aboutyou_variants").delete().eq("business_id", businessId)');
+  assert.ok(iSalv > 0 && iSterg > iSalv,
+    "maparea se salveaza INAINTEA stergerii de la deconectare");
+});
+
+/* ── O apasare, o cerere ──────────────────────────────────────────────────── */
+
+test("⚠ „Salveaza si trimite” nu mai depinde de a doua cerere a browserului", () => {
+  /*
+   * Editorul chema `saveAboutYouListing`, apoi `syncAboutYouProduct`. Intre ele, fila inchisa sau
+   * reteaua cazuta insemnau: configurarea salvata, trimiterea niciodata ceruta. Iar cutia de iesire
+   * nu ajuta — declansatorul de pe `products` nu vede editari in `aboutyou_listings` /
+   * `aboutyou_variants`, iar cel de pe variante are garda `remote_poate_exista`, deci nu porneste o
+   * trimitere pentru o listare care n-a plecat inca.
+   *
+   * ⚠ INTENTIA SE SCRIE INAINTEA SALVARII, si daca nu se scrie, NU se salveaza. Ordinea e chiar
+   * apararea: intoarsa, am fi avut iar „salvat, dar poate nu pleaca niciodata".
+   */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  assert.match(act, /siTrimite = false,/);
+  const iIntentie = act.indexOf('.from("aboutyou_intentii").upsert(');
+  const iSalvare = act.indexOf('.from("aboutyou_listings")', iIntentie);
+  assert.ok(iIntentie > 0 && iSalvare > iIntentie,
+    "intentia se scrie INAINTEA salvarii listarii");
+  assert.match(act, /Nu am putut porni trimiterea/);
+
+  const ecran = viu("src/components/dashboard/AboutYouListingEditor.tsx");
+  assert.match(ecran, /saveAboutYouListing\(businessId, productId, input, then === "sync"\)/);
 });

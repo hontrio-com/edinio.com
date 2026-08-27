@@ -4,6 +4,8 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { readSignatureHeader, verifyAboutYouSignature } from "@/lib/aboutyou/webhooks";
 import { amanareInbox, prelucreazaEveniment } from "@/lib/aboutyou/inbox";
 import { EroareTrecatoare } from "@/lib/aboutyou/erori";
+import { cercetareSemnatura } from "@/lib/aboutyou/semnatura-descoperire";
+import { patchAboutYouConfig } from "@/lib/aboutyou/config";
 import { EroareCitireBaza } from "@/lib/supabase/rand-citit";
 import { logError } from "@/lib/error-logger";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
@@ -103,6 +105,42 @@ export async function POST(request: NextRequest) {
   if (!tokenOk && !semnaturaOk) {
     console.error("[aboutyou/webhook] eveniment neautentificat", { businessId, areToken: !!token });
     return ok();
+  }
+
+  /*
+   * ═══ ⚠ CE FEL DE SEMNĂTURĂ PUNE, DE FAPT (27.08.2026) ═══
+   *
+   * `verifyAboutYouSignature` e o DEDUCȚIE: HMAC-SHA256 peste corpul brut, în hex, pe patru antete
+   * ghicite. Documentația spune că la abonare primești un `client_secret`, dar nu descrie antetul,
+   * algoritmul, codificarea sau ce anume se semnează. De-aia există a doua încuietoare, tokenul.
+   *
+   * ⚠ RĂSPUNSUL VINE ÎN FIECARE CERERE, iar noi îl aruncam. Antetele unei livrări adevărate conțin
+   * exact ce ne lipsește; ne uitam doar la cele patru ghicite și, când niciunul nu se potrivea,
+   * mergeam mai departe pe token fără să vedem ce era acolo.
+   *
+   * ⚠ SE UITĂ NUMAI CÂND TOKENUL A TRECUT ȘI SEMNĂTURA NU. Atunci știm sigur două lucruri: că
+   * cererea e autentică (doar About You are tokenul) și că presupunerea noastră e greșită. Fix
+   * situația în care merită să ne uităm.
+   *
+   * ⚠ NU HOTĂRĂȘTE NIMIC ȘI NU SCRIE NICIUN SECRET. Vezi `cercetareSemnatura`: se scriu numele
+   * antetelor, forma valorilor (hexa/base64 și lungimea) și care combinație s-a potrivit. O
+   * singură dată pe magazin — un webhook des ar umple jurnalul cu același lucru.
+   */
+  if (tokenOk && !semnaturaOk && !cfg.semnatura_cercetata) {
+    const c = cercetareSemnatura(cfg.webhook_secret, request.headers, rawBody);
+    await logError({
+      action: "aboutyou/semnatura", severity: c.potrivire ? "info" : "warning",
+      message: c.potrivire
+        ? `schema de semnătură AFLATĂ: ${c.potrivire} pe antetul „${c.potrivirePeAntet}"`
+        : "nicio combinație cunoscută nu se potrivește; antetele primite sunt în detalii",
+      details: {
+        potrivire: c.potrivire, antet: c.potrivirePeAntet,
+        antete: c.antete, toateAnteteleNume: c.toateAnteteleNume,
+      },
+      businessId,
+    });
+    /* Se însemnează, ca să nu se repete. Eșecul scrierii nu oprește nimic: e o măsurătoare. */
+    await patchAboutYouConfig(admin, businessId, { semnatura_cercetata: true }).catch(() => {});
   }
 
   let event: { id?: unknown; event?: string; type?: string; data?: unknown; message?: unknown };

@@ -53,6 +53,13 @@ export interface AboutYouConfig {
    * doua incuietoare, care nu depinde de nimic ghicit.
    */
   webhook_token?: string;
+  /**
+   * S-a uitat deja o dată la antetele unei livrări adevărate, ca să afle schema de semnătură.
+   *
+   * ⚠ O singură dată pe magazin: un webhook care vine des ar umple jurnalul cu același lucru, iar
+   * o intrare care se repetă încetează să fie citită. Vezi `semnatura-descoperire.ts`.
+   */
+  semnatura_cercetata?: boolean;
   // Fulfillment.
   fulfillment_type?: AboutYouFulfillmentType;
   default_carrier_key?: string;

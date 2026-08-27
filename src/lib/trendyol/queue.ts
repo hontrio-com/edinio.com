@@ -336,17 +336,27 @@ export async function enqueueTrendyolStergereMany(businessId: string, productIds
      * lasata la vanzare produce comenzi pe care nimeni nu le poate onora. Aceeasi hotarare ca la
      * `enqueueTrendyolRetragereInainteDeStergere`, daca exista.
      */
-    const listedIds = new Set<string>();
-    for (const bucata of bucatiDeIduri(ids)) {
-      const { data: listed, error } = await admin
-        .from("trendyol_listings").select("product_id").eq("business_id", businessId).in("product_id", bucata);
-      if (error) throw error;
-      for (const r of listed ?? []) {
-        const pid = (r as { product_id: string | null }).product_id;
-        if (pid) listedIds.add(pid);
-      }
-    }
-    const rows = ids.filter((id) => listedIds.has(id))
+    /*
+     * ═══ ⚠ FILTRUL DUPA `product_id` NU POATE FUNCTIONA AICI (27.08.2026, noaptea tarziu) ═══
+     *
+     * Randurile se scriu DUPA `DELETE FROM products`, iar `trendyol_listings.product_id` e
+     * `ON DELETE SET NULL` — deci in clipa apelului e deja NULL pentru toate produsele sterse.
+     * Filtrul intorcea multimea goala, `rows` iesea `[]`, si NU pleca nicio retragere: produsul
+     * disparea din magazin si ramanea la vanzare pe Trendyol.
+     *
+     * ⚠ GASIT LA ABOUT YOU, unde e acelasi defect si l-am masurat pe baza adevarata. Aici era
+     * copiat, si nu l-a semnalat nimeni — n-a fost in niciun audit.
+     *
+     * ⚠ SE SCOATE FILTRUL, nu se muta pe alta coloana. La About You exista `style_key`, egal cu
+     * `product_id`-ul nostru, deci filtrul se poate pastra; `trendyol_listings` n-are un asemenea
+     * geaman, iar calea de stergere a UNUI produs nici nu filtreaza — `enqueueTrendyolSync` cere
+     * listarea doar pentru `upsert`. Deci asta o aduce in acord cu ea, nu inventeaza altceva.
+     *
+     * ⚠ CE COSTA: un produs care n-a fost niciodata listat lasa un rand in coada, pe care
+     * lucratorul il rezolva ca „sarit". La o curatenie in masa, cateva randuri degeaba — mult mai
+     * ieftin decat marfa lasata la vanzare.
+     */
+    const rows = ids
       .map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete", ...CERERE_NOUA }));
     if (rows.length === 0) return;
     const { error } = await admin.from("trendyol_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });

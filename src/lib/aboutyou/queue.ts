@@ -261,8 +261,39 @@ export async function enqueueAboutYouStergereMany(businessId: string, productIds
     const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
     /* ⚠ Ca la Trendyol: retragerea nu se supune lui `auto_sync`. Marfa nu mai exista. */
     if (!config.connected || !config.api_key) return;
-    const listedIds = await idsListate(admin, businessId, ids);
-    const rows = ids.filter((id) => listedIds.has(id))
+    /*
+     * ═══ ⚠ SE CAUTA DUPA `style_key`, FIINDCA `product_id` E DEJA NULL (27.08.2026, noaptea tarziu) ═══
+     *
+     * Randul asta se scrie DUPA `DELETE FROM products`, iar cheia straina e `ON DELETE SET NULL`.
+     * Deci in clipa apelului `aboutyou_listings.product_id` e NULL pentru toate produsele sterse —
+     * chiar asta scrie si nota de deasupra functiei. Numai ca dedesubt se chema `idsListate`, care
+     * cauta TOCMAI dupa `product_id`:
+     *
+     *     listari gasite -> 0
+     *     rows           -> []
+     *     return
+     *
+     * Adica la stergerea in masa NU pleca nicio retragere: produsul disparea din magazin si ramanea
+     * ACTIV pe About You, primind comenzi pentru marfa care nu mai exista. Nota si codul de sub ea
+     * se contraziceau pe doua randuri alaturate.
+     *
+     * ⚠ MASURAT pe baza adevarata: dupa stergere, cautarea dupa `product_id` da 0 randuri, iar cea
+     * dupa `style_key` da 1. Calea de stergere a UNUI produs facea deja corect — `enqueueAboutYouSync`
+     * cu `op === "delete"` cauta dupa `style_key`; doar cea in masa se scrisese altfel.
+     */
+    const listate = new Set<string>();
+    for (const bucata of bucatiDeIduri(ids)) {
+      const { data, error } = await admin
+        .from("aboutyou_listings").select("style_key")
+        .eq("business_id", businessId).in("style_key", bucata);
+      /* ⚠ Ca la `idsListate`: o bucata picata ar da un SUBSET tacut, deci se opreste tot lotul. */
+      if (error) throw new Error(`listarile nu s-au putut citi la stergere: ${error.message}`);
+      for (const r of data ?? []) {
+        const sk = (r as { style_key: string | null }).style_key;
+        if (sk) listate.add(sk);
+      }
+    }
+    const rows = ids.filter((id) => listate.has(id))
       .map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete" as const }));
     if (rows.length === 0) return;
     const { error: eCoada } = await admin.from("aboutyou_sync_queue")

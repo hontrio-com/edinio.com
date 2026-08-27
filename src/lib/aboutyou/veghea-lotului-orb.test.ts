@@ -403,8 +403,41 @@ test("⚠ semnul se scrie de un DECLANSATOR, in aceeasi tranzactie cu modificare
    */
   const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
   assert.match(baseline, /CREATE TRIGGER aboutyou_marcheaza_modificarea/);
-  /* ⚠ Si nu poate dobori o salvare de produs: o plasa care rupe lucrul pazit e mai rea ca lipsa ei. */
-  assert.match(baseline, /aboutyou_marcheaza_modificarea[\s\S]{0,1200}?EXCEPTION[\s\S]{0,120}?RETURN new/i);
+
+  /*
+   * ═══ ⚠ SI NU-SI MAI INGHITE PROPRIA EROARE (27.08.2026, noaptea tarziu) ═══
+   *
+   * Corpul avea `exception when others then return new`, cu explicatia „o plasa n-are voie sa rupa
+   * chiar lucrul pe care il pazeste". Suna bine si e fals in fond: taman asta facea ca urma sa NU
+   * mai fie tranzactionala — modificarea se salva, semnul nu, si ajungeam exact in situatia pe care
+   * declansatorul trebuia s-o faca imposibila, doar ca acum cu o plasa care PARE ca exista.
+   *
+   * ⚠ SI PROBA ASTA CEREA SA EXISTE. Inca un test verde care apara o alegere ce slabeste
+   * invariantul; e al doilea in aceeasi zi. Acum cere opusul.
+   *
+   * ⚠ CE POATE PICA, DE FAPT: cheia unica (rezolvata de `on conflict`), sau infrastructura — si
+   * atunci pica si `UPDATE`-ul comerciantului oricum.
+   *
+   * ⚠ PROBAT INAINTE DE A SCOATE PAZA, fiindca fara ea o greseala aici opreste salvarea produselor
+   * pentru toti: un `UPDATE products` rulat cu rolul `authenticated` si RLS pornit CHIAR scrie
+   * semnul. Verificat pe baza de productie, nu dedus.
+   */
+  const i = baseline.indexOf("FUNCTION public.aboutyou_marcheaza_modificarea");
+  const corp = baseline.slice(i, i + 1400);
+  assert.doesNotMatch(corp, /EXCEPTION/i,
+    "declansatorul nu are voie sa-si inghita eroarea: atunci urma nu mai e tranzactionala");
+
+  /*
+   * ⚠ SI SEMNUL POARTA CEA MAI NOUA MODIFICARE, nu prima. `do nothing` pastra prima, iar
+   * comentariul o numea „cea mai stricta". E invers:
+   *
+   *     10:00 modificarea A -> semn 10:00
+   *     10:01 A pleaca                    -> dovada 10:01
+   *     10:02 modificarea B, punerea pica -> semnul RAMANE 10:00
+   *     plasa: 10:01 >= 10:00 -> „s-a trimis"  ❌ B nu s-a trimis niciodata
+   */
+  assert.match(corp, /do update set creat_la = now\(\)/i);
+  assert.doesNotMatch(corp, /do nothing/i);
 });
 
 test("⚠ declansatorul asculta EXACT campurile care pleaca la About You", () => {
@@ -435,8 +468,29 @@ test("⚠ semnul devine coada DOAR daca punerea din aplicatie chiar s-a pierdut"
    * deja un rand in coada pentru produs, sau a plecat ceva pentru listare DUPA clipa semnului.
    * Fara ele, plasa ar repune la coada tot catalogul dupa fiecare salvare.
    */
-  assert.match(sync, /if \(inCoada\.has\(m\.product_id\)\) \{ deSters\.push\(m\.id\); continue; \}/);
-  assert.match(sync, /if \(impins && Date\.parse\(impins\) >= Date\.parse\(m\.creat_la\)\) \{ deSters\.push\(m\.id\); continue; \}/);
+  /*
+   * ═══ ⚠ DOVADA E PER OPERATIE, NU „A PLECAT CEVA" (27.08.2026, noaptea tarziu) ═══
+   *
+   * Semnul cere o trimitere de CATALOG. Ieri se citea ORICE rand din coada si ORICE impingere:
+   *
+   *     descrierea se schimba          -> semn
+   *     punerea la coada pica          -> ❌
+   *     un `stock` intra din alt motiv -> plasa: „exista in coada" -> sterge semnul
+   *
+   * Dar lotul de stoc nu poarta descrierea. La ei ramanea cea veche, tacut.
+   */
+  assert.match(sync, /\.eq\("op", "upsert"\)\.in\("product_id", bucata\)/);
+  assert.match(sync, /if \(citit && Date\.parse\(citit\) >= Date\.parse\(m\.creat_la\)\) \{ deSters\.push\(m\.id\); continue; \}/);
+  /*
+   * ⚠ SI UN RAND `upsert` DEJA LA COADA NU STERGE SEMNUL, doar il lasa in pace. Sters, un lucrator
+   * care a citit produsul INAINTEA modificarii ar duce la capat sarcina veche, si nimeni n-ar mai
+   * sti ca cea noua n-a plecat. Semnul cade abia cand apare dovada.
+   */
+  assert.match(sync, /if \(inCoada\.has\(m\.product_id\)\) continue;/);
+  /* ⚠ Si repunerea nu reseteaza `attempts`: altfel un element care esueaza mereu n-ar muri niciodata. */
+  const iUps = sync.indexOf("business_id: businessId, product_id: p.product_id, offer_id: p.product_id, op: \"upsert\"");
+  assert.ok(iUps > 0, "repunerea scrie doar cheile");
+  assert.doesNotMatch(sync.slice(iUps, iUps + 160), /attempts/);
   /* ⚠ Si `.in()` pe bucati: peste vreo sase sute de id-uri, adresa cererii e refuzata. */
   assert.match(sync, /for \(const bucata of bucatiDeIduri\(ids\)\)/);
   /* ⚠ Si cand se repune, se SCRIE: o plasa care lucreaza tacut ascunde defectul din cauza caruia exista. */
@@ -445,18 +499,34 @@ test("⚠ semnul devine coada DOAR daca punerea din aplicatie chiar s-a pierdut"
   assert.match(cron, /recuperate \+= await rezolvaIntentiile\(admin, ctx\)/);
 });
 
-test("⚠ `last_synced_at` NU se imprumuta pentru asta", () => {
+test("⚠ dovada se ia la CITIRE, nu la trimitere", () => {
   /*
-   * ⚠ El inseamna „a plecat vreodata produsul intreg acolo" si e citit ca atare in sase locuri:
-   * „prima trimitere", „exista pe About You", filtrul publicarii. O impingere de stoc care l-ar
-   * rescrie ar minti in toate sase. De-aia intrebarea „a plecat CEVA?" are camp propriu.
+   * ═══ ⚠ INTRE CITIRE SI TRIMITERE PRODUSUL SE POATE SCHIMBA ═══
+   *
+   * Lucratorul scoate randul din coada, CITESTE produsul, apoi trimite — secunde intregi. O dovada
+   * pusa la trimitere ar acoperi si o modificare pe care sarcina utila n-o continea, iar semnul ei
+   * s-ar sterge fara ca ea sa fi plecat vreodata.
    */
-  assert.match(sync, /ultima_impingere_la: now,/);
-  assert.match(sync, /\.update\(\{ ultima_impingere_la: new Date\(\)\.toISOString\(\) \} as never\)/);
+  assert.match(sync, /const cititLa = new Date\(\)\.toISOString\(\);/);
+  const iCitit = sync.indexOf("const cititLa = new Date().toISOString();");
+  const iProdus = sync.indexOf('.from("products").select(PRODUCT_FIELDS)', iCitit);
+  assert.ok(iCitit > 0 && iProdus > iCitit,
+    "clipa se ia INAINTEA citirii produsului, altfel n-ar acoperi ce s-a citit");
+  assert.match(sync, /catalog_citit_la: cititLa,/);
+});
+
+test("⚠ o impingere de stoc sau de pret nu scrie NICIO dovada", () => {
+  /*
+   * ⚠ Nu poarta descrierea, imaginile sau atributele — deci n-are cum sa dovedeasca nimic despre
+   * modificarea din semn. Ieri scria un „a plecat ceva" comun, si taman aia stergea semnul unei
+   * schimbari de descriere care nu plecase.
+   */
   const i = sync.indexOf("async function trimiteInTranse");
   const bucata = sync.slice(i, i + 2600);
+  assert.doesNotMatch(bucata, /catalog_citit_la/,
+    "impingerea de stoc/pret nu are voie sa scrie dovada de catalog");
   assert.doesNotMatch(bucata, /last_synced_at/,
-    "impingerea de stoc sau de pret nu are voie sa atinga `last_synced_at`");
+    "si nici `last_synced_at`, care inseamna „a plecat produsul intreg acolo”");
 });
 
 /* ── Publicarea pierduta dupa ce produsul a fost creat cu succes ──────────── */
@@ -512,4 +582,76 @@ test("⚠ un produs prea mare se vede din PRIMA cerere, nu din douazeci", () => 
    * lungimea lotului.
    */
   assert.match(sync, /if \(items\.length < 100\) \{ taiat = false; break; \}/);
+});
+
+
+/* ── Stergerea: ce se cauta dupa ce produsul nu mai exista ────────────────── */
+
+test("⚠ stergerea in masa nu mai cauta dupa un `product_id` deja NULL", () => {
+  /*
+   * ═══ ⚠ BULK DELETE NU TRIMITEA NIMIC (27.08.2026, noaptea tarziu) ═══
+   *
+   * Randul se scrie DUPA `DELETE FROM products`, iar cheia straina e `ON DELETE SET NULL`. Deci in
+   * clipa apelului `aboutyou_listings.product_id` e NULL — chiar asta scria si nota de deasupra
+   * functiei. Numai ca dedesubt se chema `idsListate`, care cauta TOCMAI dupa `product_id`:
+   *
+   *     listari gasite -> 0
+   *     rows           -> []
+   *     return
+   *
+   * Produsul disparea din magazin si ramanea ACTIV pe About You, primind comenzi pentru marfa care
+   * nu mai exista. Nota si codul de sub ea se contraziceau pe doua randuri alaturate.
+   *
+   * ⚠ MASURAT pe baza adevarata: dupa stergere, cautarea dupa `product_id` da 0 randuri, cea dupa
+   * `style_key` da 1.
+   */
+  const coada = viu("src/lib/aboutyou/queue.ts");
+  const i = coada.indexOf("export async function enqueueAboutYouStergereMany");
+  const bucata = coada.slice(i, i + 2000);
+  assert.match(bucata, /\.select\("style_key"\)[\s\S]{0,120}?\.in\("style_key", bucata\)/);
+  assert.doesNotMatch(bucata, /idsListate/,
+    "`idsListate` cauta dupa `product_id`, care la stergere e deja NULL");
+});
+
+test("⚠ si Trendyol avea acelasi defect, negasit de niciun audit", () => {
+  /*
+   * `trendyol_listings.product_id` e tot `ON DELETE SET NULL`, iar filtrul rula tot dupa stergere.
+   * Aici nu exista un geaman al lui `style_key`, iar calea de stergere a UNUI produs nici nu
+   * filtreaza — deci filtrul se scoate, ceea ce o aduce in acord cu ea insasi.
+   */
+  const coadaTy = viu("src/lib/trendyol/queue.ts");
+  const i = coadaTy.indexOf("export async function enqueueTrendyolStergereMany");
+  const bucata = coadaTy.slice(i, i + 1600);
+  assert.doesNotMatch(bucata, /\.in\("product_id", bucata\)/);
+  assert.match(bucata, /const rows = ids\s*\n?\s*\.map\(/);
+});
+
+test("⚠ si o retragere pierduta se recupereaza din listarea ramasa orfana", () => {
+  /*
+   * ⚠ Declansatorul e pe `AFTER UPDATE`, deci o STERGERE nu lasa niciun semn — si nici n-ar avea
+   * unde: `aboutyou_intentii.product_id` ar arata spre un rand care nu mai exista. Dar semnul
+   * exista deja, si e chiar listarea: `product_id IS NULL` inseamna exact „produsul care o avea a
+   * fost sters", fiindca doar cheia straina scrie NULL acolo.
+   *
+   * ⚠ SI ACOPERA TOATE CAILE — una, in masa, si oricare alta care ar aparea maine. De-aia se
+   * citeste STAREA, nu se instrumenteaza fiecare apelant.
+   */
+  assert.match(sync, /export async function retrageListarileOrfane\(/);
+  assert.match(sync, /\.is\("product_id", null\)/);
+  assert.match(sync, /op: "delete",/);
+  /* ⚠ Cele care n-au plecat niciodata se sterg pe loc: la ei nu exista nimic de retras. */
+  assert.match(sync, /const doarLocale = orfane\.filter\(\(o\) => o\.last_synced_at == null\);/);
+  /* Si cronul chiar trece pe-acolo. */
+  assert.match(cron, /orfane \+= await retrageListarileOrfane\(admin, ctx\)/);
+});
+
+test("⚠ si recuperarea are un capat", () => {
+  /*
+   * Un produs care nu poate fi trimis NICIODATA — o mapare lipsa, o validare pe care n-o trece —
+   * n-ar ajunge niciodata sa aiba `catalog_citit_la` mai nou decat semnul. Fara contor, plasa l-ar
+   * repune la coada la fiecare trecere, pe veci.
+   */
+  assert.match(sync, /const PRAG_RECUPERARI = 5;/);
+  assert.match(sync, /if \(m\.recuperari >= PRAG_RECUPERARI\)/);
+  assert.match(sync, /verifica eroarea de pe listare/);
 });

@@ -410,9 +410,8 @@ begin
 
   insert into public.aboutyou_intentii (business_id, product_id)
   values (new.business_id, new.id)
-  on conflict (business_id, product_id) do nothing;
-  return new;
-exception when others then
+  on conflict (business_id, product_id)
+  do update set creat_la = now();
   return new;
 end;
 $function$
@@ -4564,7 +4563,8 @@ create table if not exists public.aboutyou_intentii (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
   product_id uuid not null,
-  creat_la timestamp with time zone default now() not null);
+  creat_la timestamp with time zone default now() not null,
+  recuperari integer default 0 not null);
 
 create table if not exists public.aboutyou_listings (
   id uuid default gen_random_uuid() not null,
@@ -4590,7 +4590,7 @@ create table if not exists public.aboutyou_listings (
   attributes jsonb default '[]'::jsonb not null,
   stare_dinainte text,
   generatie integer default 0 not null,
-  ultima_impingere_la timestamp with time zone);
+  catalog_citit_la timestamp with time zone);
 
 create table if not exists public.aboutyou_orders (
   id uuid default gen_random_uuid() not null,

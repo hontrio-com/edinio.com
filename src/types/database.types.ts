@@ -223,18 +223,21 @@ export type Database = {
           creat_la: string
           id: string
           product_id: string
+          recuperari: number
         }
         Insert: {
           business_id: string
           creat_la?: string
           id?: string
           product_id: string
+          recuperari: number
         }
         Update: {
           business_id?: string
           creat_la?: string
           id?: string
           product_id?: string
+          recuperari?: number
         }
         Relationships: []
       }
@@ -244,6 +247,7 @@ export type Database = {
           ay_master_id: string | null
           brand_id: number | null
           business_id: string
+          catalog_citit_la: string | null
           category_id: number | null
           color_id: number | null
           country_of_origin: string | null
@@ -262,7 +266,6 @@ export type Database = {
           stare_dinainte: string | null
           status: string
           style_key: string
-          ultima_impingere_la: string | null
           updated_at: string
         }
         Insert: {
@@ -270,6 +273,7 @@ export type Database = {
           ay_master_id?: string | null
           brand_id?: number | null
           business_id: string
+          catalog_citit_la: string | null
           category_id?: number | null
           color_id?: number | null
           country_of_origin?: string | null
@@ -288,7 +292,6 @@ export type Database = {
           stare_dinainte?: string | null
           status?: string
           style_key: string
-          ultima_impingere_la: string | null
           updated_at?: string
         }
         Update: {
@@ -296,6 +299,7 @@ export type Database = {
           ay_master_id?: string | null
           brand_id?: number | null
           business_id?: string
+          catalog_citit_la?: string | null
           category_id?: number | null
           color_id?: number | null
           country_of_origin?: string | null
@@ -314,7 +318,6 @@ export type Database = {
           stare_dinainte?: string | null
           status?: string
           style_key?: string
-          ultima_impingere_la?: string | null
           updated_at?: string
         }
         Relationships: [

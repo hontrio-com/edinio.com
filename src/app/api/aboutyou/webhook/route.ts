@@ -126,15 +126,26 @@ export async function POST(request: NextRequest) {
    * antetelor, forma valorilor (hexa/base64 și lungimea) și care combinație s-a potrivit. O
    * singură dată pe magazin — un webhook des ar umple jurnalul cu același lucru.
    */
-  if (tokenOk && !semnaturaOk && !cfg.semnatura_cercetata) {
+  /*
+   * ═══ ⚠ SE UITA SI CAND SEMNATURA TRECE (27.08.2026) ═══
+   *
+   * Prima varianta se uita numai la esec. Dar prima livrare adevarata a TRECUT de verificare —
+   * deci deductia era corecta — si tocmai de-aia n-am aflat nimic: nu stiam PE CARE dintre cele
+   * patru antete, nici in ce codificare. Iar fara asta nu se poate strange `verifyAboutYouSignature`
+   * la schema adevarata; ar ramane sa incerce toate patru la nesfarsit.
+   *
+   * ⚠ O reusita necercetata e tot o necunoscuta. Se scrie o data, la fel, si tot fara secret.
+   */
+  if (tokenOk && !cfg.semnatura_cercetata) {
     const c = cercetareSemnatura(cfg.webhook_secret, request.headers, rawBody);
     await logError({
       action: "aboutyou/semnatura", severity: c.potrivire ? "info" : "warning",
       message: c.potrivire
-        ? `schema de semnătură AFLATĂ: ${c.potrivire} pe antetul „${c.potrivirePeAntet}"`
+        ? `schema de semnătură AFLATĂ: ${c.potrivire} pe antetul „${c.potrivirePeAntet}”`
+          + (semnaturaOk ? " (verificarea de azi o accepta deja)" : " (verificarea de azi NU o accepta)")
         : "nicio combinație cunoscută nu se potrivește; antetele primite sunt în detalii",
       details: {
-        potrivire: c.potrivire, antet: c.potrivirePeAntet,
+        potrivire: c.potrivire, antet: c.potrivirePeAntet, treceaDeja: semnaturaOk,
         antete: c.antete, toateAnteteleNume: c.toateAnteteleNume,
       },
       businessId,

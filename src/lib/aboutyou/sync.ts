@@ -138,9 +138,10 @@ async function getVariantData(admin: Db, listingId: string): Promise<AboutYouVar
     sku: string; ean: string | null; size_id: number | null; second_size_id: number | null;
     color_id: number | null; quantity: number | null; retail_price_eur: number | null;
     sale_price_eur: number | null; enabled: boolean; ay_status: string | null;
+    updated_at: string | null;
   }>("aboutyou.getVariantData", await admin
     .from("aboutyou_variants")
-    .select("sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled, ay_status")
+    .select("sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled, ay_status, updated_at")
     .eq("listing_id", listingId) as never);
   return data.map((v) => ({
     sku: v.sku,
@@ -162,6 +163,7 @@ async function getVariantData(admin: Db, listingId: string): Promise<AboutYouVar
      * coloana pastreaza ce a vrut omul.
      */
     enabled: v.enabled && v.ay_status !== "removing" && v.ay_status !== "removed",
+    updated_at: v.updated_at,
   }));
 }
 
@@ -1289,10 +1291,20 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
           : null,
         ...(amIncetatSaIntreb
           ? {
-            status: "failed",
+            /*
+             * ⚠ `stalled`, NU `failed` (27.08.2026, seara).
+             *
+             * About You raspundea in continuare `pending` sau `processing` — stari pe care
+             * schema lor le tine DEOSEBITE de `failed`. Scriind `failed`, spuneam ceva ce ei nu
+             * spusesera niciodata, iar cuvantul ajunge pana la comerciant, care retrimite.
+             *
+             * ⚠ Nu e nici in lista sondabila (`pending/processing/retry`), deci lotul nu mai
+             * ocupa un loc; dar numele nu mai minte. Doar un `failed` venit CHIAR DE LA EI mai
+             * scrie `failed`.
+             */
+            status: "stalled",
             result_summary: {
               status: result?.status ?? "necunoscut",
-              /* ⚠ „Am incetat sa intrebam", nu „ei au esuat". Cuvantul conteaza pentru cine citeste. */
               amIncetatSaIntrebam: true, zile: 7,
             } as never,
           }
@@ -2044,6 +2056,42 @@ async function trimiteElement(admin: Db, ctx: AboutYouSyncContext, item: AboutYo
  */
 const MAX_ITEMI_STOC_PRET = 1000;
 
+/**
+ * Cand a devenit adevarata valoarea pe care o trimitem.
+ *
+ * ═══ ⚠ `products.updated_at` SINGUR ERA GRESIT LA DOUA CAI DIN TREI (27.08.2026, seara) ═══
+ *
+ * Pretul trimis nu vine mereu din `products`:
+ *
+ *   `manual_eur`   → `aboutyou_variants.retail_price_eur` / `sale_price_eur`. Comerciantul
+ *                    schimba 20 EUR in 18 EUR, se scrie randul variantei, iar `products.updated_at`
+ *                    NU se misca. Plecam cu 18 si o marca de timp veche — deci About You putea
+ *                    socoti actualizarea mai batrana decat una deja aplicata, si sa pastreze 20.
+ *   `fx_from_ron`  → pretul in RON PRIN CURS. Se schimba doar cursul (5.00 → 4.80) si pretul in
+ *                    euro se schimba, dar produsul n-a fost atins deloc.
+ *
+ * Adica exact problema pe care `valid_at` trebuie s-o previna, lasata deschisa pe caile pe care
+ * merchantii chiar le folosesc.
+ *
+ * ⚠ SE IA MAXIMUL, si e monoton: orice schimbare adevarata il duce inainte, iar o trimitere de
+ * mai tarziu are un maxim cel putin la fel de mare. Deci ordinea dintre doua trimiteri ale
+ * aceluiasi produs se pastreaza — chiar asta i se cere.
+ *
+ * ⚠ CAND NU STIM NIMIC, se intoarce `undefined` si campul se OMITE. O marca de timp inventata ar
+ * fi mai rea decat lipsa ei: ar putea face o valoare veche sa bata una noua.
+ */
+export function momentulValorii(
+  produsUpdatedAt: string | null | undefined,
+  variante: { updated_at?: string | null }[],
+  fxUpdatedAt: string | null | undefined,
+): string | undefined {
+  const candidati = [produsUpdatedAt, fxUpdatedAt, ...variante.map((v) => v.updated_at)]
+    .filter((x): x is string => typeof x === "string" && x !== "")
+    .filter((x) => !Number.isNaN(Date.parse(x)));
+  if (candidati.length === 0) return undefined;
+  return candidati.reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a));
+}
+
 export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
   const { data: product, error: eroareProdus } = await admin
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
@@ -2063,7 +2111,8 @@ export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productI
 
   return trimiteInTranse(admin, ctx, listing.style_key, "stock", items,
     (lot, validAt) => updateStock(ctx.auth, lot.map((x) => ({ ...x, ...(validAt ? { valid_at: validAt } : {}) }))),
-    produs.updated_at ?? undefined);
+    /* ⚠ Si variantele: la un produs fara inventar urmarit, numarul vine din randul variantei. */
+    momentulValorii(produs.updated_at, variants, null));
 }
 
 /**
@@ -2079,18 +2128,21 @@ async function trimiteInTranse<T>(
   let batchRequestId: string | undefined;
   for (let i = 0; i < items.length; i += MAX_ITEMI_STOC_PRET) {
     const transa = items.slice(i, i + MAX_ITEMI_STOC_PRET);
-    let res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
+    const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
       () => trimite(transa, validAt)), `împingerea de ${kind}`);
-    if (validAt && isAboutYouError(res) && eRefuzLimpede(res.status)) {
-      /* Vezi nota de la `MAX_ITEMI_STOC_PRET`: o singura reluare fara `valid_at`, si scrisa. */
-      await logError({
-        action: "aboutyou/valid-at", severity: "warning",
-        message: `About You a refuzat transa cu \`valid_at\`: s-a retrimis fara el, deci fara paza impotriva reordonarii`,
-        details: { styleKey, kind, validAt, raspuns: res.error }, businessId: ctx.businessId,
-      });
-      res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
-        () => trimite(transa, undefined)), `împingerea de ${kind}`);
-    }
+    /*
+     * ═══ ⚠ RELUAREA FARA `valid_at` S-A SCOS (27.08.2026, seara) ═══
+     *
+     * Era: orice refuz limpede → se retrimite fara `valid_at`. Dar „limpede" inseamna ORICE 4xx,
+     * inclusiv `400 Invalid price` — care n-are nicio legatura cu campul. Adica prima greseala de
+     * pret dintr-un lot stingea tacut chiar paza impotriva reordonarii, si o stingea pentru
+     * totdeauna, fiindca urmatoarele trimiteri treceau pe aceeasi cale.
+     *
+     * ⚠ SI NU SE POATE INLOCUI CU O CITIRE A MESAJULUI LOR: regula casei e ca refuzul se
+     * clasifica pe codul HTTP, niciodata pe text. Deci ori tinem campul dupa contract, ori nu-l
+     * trimitem deloc. Il tinem: doua citiri independente ale specificatiei spun acelasi lucru, iar
+     * un refuz adevarat se vede acum ca refuz, cu mesajul lor cu tot.
+     */
     if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
     const id = res.data?.batchRequestId;
     if (id) batchRequestId = batchRequestId ?? id;
@@ -2125,7 +2177,8 @@ export async function pushPriceNow(admin: Db, ctx: AboutYouSyncContext, productI
   // se atinge repede.
   return trimiteInTranse(admin, ctx, listing.style_key, "price", items,
     (lot, validAt) => updatePrice(ctx.auth, lot.map((x) => ({ ...x, ...(validAt ? { valid_at: validAt } : {}) }))),
-    produs.updated_at ?? undefined);
+    /* ⚠ Toate trei: produsul, randurile de varianta (`manual_eur`) si cursul (`fx_from_ron`). */
+    momentulValorii(produs.updated_at, variants, ctx.config.fx?.updated_at));
 }
 
 // ── Fulfillment: push AWB tracking to About You (Faza 4, dropshipping) ────────────

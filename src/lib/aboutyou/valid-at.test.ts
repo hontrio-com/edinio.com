@@ -28,8 +28,16 @@ test("⚠ marca de timp e a SCHIMBARII, nu a trimiterii", () => {
    * la o secunda distanta sa para amandoua „de acum", si n-ar deosebi nimic. Se trimite
    * `products.updated_at`.
    */
-  assert.match(sync, /produs\.updated_at \?\? undefined/);
-  assert.equal((sync.match(/produs\.updated_at \?\? undefined/g) ?? []).length, 2, "si la stoc, si la pret");
+  /*
+   * ═══ ⚠ SI NU DOAR `products.updated_at` (27.08.2026, seara) ═══
+   *
+   * Pretul nu vine mereu din `products`: la `manual_eur` vine din randul variantei, la
+   * `fx_from_ron` depinde de curs. Marca de timp e maximul a tot ce influenteaza chiar valoarea.
+   * Vezi `momentul-valorii.test.ts`.
+   */
+  assert.match(sync, /momentulValorii\(produs\.updated_at, variants,/);
+  assert.equal((sync.match(/momentulValorii\(produs\.updated_at, variants,/g) ?? []).length, 2,
+    "si la stoc, si la pret");
   /* Si campul chiar se cere din baza: fara el ar fi mereu `undefined` si nimic n-ar pleca. */
   assert.match(sync, /stock_quantity, updated_at"/);
 });
@@ -41,25 +49,23 @@ test("⚠ campul pleaca in fiecare articol, nu pe lot", () => {
   assert.match(client, /valid_at\?: string \| null \}\[\]/);
 });
 
-test("⚠ si tot nu se merge orbeste: un refuz limpede se reia FARA el", () => {
+test("⚠ reluarea fara `valid_at` s-a scos, si de ce", () => {
   /*
-   * Chiar daca amandoua citirile ar fi gresite, cel mai rau caz e o cerere in plus - nu impingerea
-   * de stoc oprita pentru toate magazinele, care era teama din nota veche.
+   * ═══ ⚠ „REFUZ LIMPEDE" INSEAMNA ORICE 4xx (27.08.2026, seara) ═══
    *
-   * ⚠ Numai pe REFUZ LIMPEDE (4xx): acolo stim ca nu s-a intamplat nimic. Peste un raspuns
-   * necunoscut, o retrimitere ar putea aplica de doua ori.
+   * Dimineata: la un refuz limpede se retrimitea fara `valid_at`. Dar acolo intra si
+   * `400 Invalid price` - care n-are nicio legatura cu campul. Adica prima greseala de pret dintr-un
+   * lot stingea TACUT chiar paza impotriva reordonarii, si o stingea pentru totdeauna, fiindca
+   * urmatoarele trimiteri treceau pe aceeasi cale.
+   *
+   * ⚠ Si nu se poate inlocui cu o citire a mesajului lor: regula casei e ca esecul se clasifica
+   * pe cod sau pe tip, niciodata pe text. Deci ori tinem campul dupa contract, ori nu-l trimitem
+   * deloc. Il tinem.
    */
-  assert.match(sync, /if \(validAt && isAboutYouError\(res\) && eRefuzLimpede\(res\.status\)\) \{/);
-  assert.match(sync, /trimite\(transa, undefined\)/);
-  /* Si se SCRIE, ca sa nu para o hotarare buna: fara `valid_at` nu mai exista paza. */
-  assert.match(sync, /fara paza impotriva reordonarii/);
-});
-
-test("⚠ reluarea se face o SINGURA data", () => {
-  /* A doua oara `validAt` e `undefined`, deci conditia nu mai tine. Nu e o bucla. */
-  const i = sync.indexOf("if (validAt && isAboutYouError(res) && eRefuzLimpede(res.status))");
-  const bucata = sync.slice(i, i + 900);
-  assert.equal((bucata.match(/eRefuzLimpede/g) ?? []).length, 1);
+  assert.doesNotMatch(sync, /trimite\(transa, undefined\)/);
+  assert.doesNotMatch(sync, /if \(validAt && isAboutYouError\(res\)/);
+  /* Un refuz adevarat se vede acum ca refuz, cu mesajul lor cu tot. */
+  assert.match(sync, /if \(isAboutYouError\(res\)\) return \{ ok: false, error: res\.error, status: res\.status \};/);
 });
 
 test("⚠ paza veche nu s-a scos: reordonarea se vede si din datele noastre", () => {

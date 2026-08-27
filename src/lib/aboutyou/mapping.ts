@@ -83,6 +83,13 @@ export interface AboutYouVariantData {
   ron_compare_at?: number | null;
   /** Imaginea combinatiei din produs, pentru calea de culoare. Vezi `imaginiPeCulori`. */
   combo_image?: string | null;
+  /**
+   * Cand s-a scris ultima oara randul variantei.
+   *
+   * ⚠ La `manual_eur`, PRETUL trimis e `retail_price_eur` de aici — iar el se schimba fara ca
+   * `products.updated_at` sa se miste. Vezi `momentulValorii`.
+   */
+  updated_at?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

@@ -1038,10 +1038,34 @@ export async function saveAboutYouListing(
    * ii lua si semnul `ay_status = "removed"`, deci `reconciliazaVariante` relua
    * retragerea la fiecare rulare.
    */
+  /*
+   * ═══ ⚠ STERGEREA SI INSERAREA ERAU DOUA TRANZACTII (27.08.2026, seara) ═══
+   *
+   * `delete` reusea, apoi `insert` putea pica dintr-un hop de-o clipa — iar randurile vechi erau
+   * deja duse. Se pierdeau codurile EAN, maparea de marime, cea de culoare, preturile EUR scrise
+   * de mana, comutatoarele `enabled` si titlurile de varianta. Nimic nu le mai refacea: sunt date
+   * introduse de OM, nu date pe care sa le recitim de undeva. Si e chiar calea cea mai folosita:
+   * fiecare apasare pe „Salveaza".
+   *
+   * ⚠ Acum intr-un singur RPC, deci intr-o singura tranzactie: ori se schimba tot, ori nimic.
+   * Probat pe productie — o salvare care pica lasa cele doua randuri vechi neatinse, iar una care
+   * merge inlocuieste doar SKU-ul cerut.
+   */
   if (newSkus.length > 0) {
-    await admin.from("aboutyou_variants").delete().eq("listing_id", listingId).in("sku", newSkus);
-    const { error: vErr } = await admin.from("aboutyou_variants").insert(rows as never);
-    if (vErr) return { error: "Eroare la salvarea variantelor. Verifică să nu ai SKU-uri duplicate." };
+    const { data: rez, error: vErr } = await admin.rpc("aboutyou_salveaza_variante", {
+      p_business_id: businessId, p_listing_id: listingId, p_randuri: rows as never,
+    });
+    const r = rez as { stare?: string; scrise?: number } | null;
+    if (vErr || !r?.stare) {
+      logError({
+        action: "aboutyou.saveListing", severity: "error",
+        message: `variantele nu s-au putut salva: ${vErr?.message ?? "raspuns nevalid"}`,
+        details: { businessId, productId, cate: rows.length }, businessId,
+      });
+      return { error: "Eroare la salvarea variantelor. Verifică să nu ai SKU-uri duplicate." };
+    }
+    /* ⚠ „Listarea nu exista" nu e acelasi lucru cu „a mers": ar iesi tacut, fara nicio varianta. */
+    if (r.stare === "lipsa") return { error: "Listarea About You nu mai există. Reîncarcă pagina." };
   }
   revalidatePath(FEATURE_PATH);
   return { success: true };

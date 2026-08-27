@@ -19,6 +19,7 @@ import { logError } from "@/lib/error-logger";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import type { Database } from "@/types/database.types";
 import { cuLotDurabil, type AboutYouSyncContext } from "./sync";
+import { EroareTrecatoare } from "./erori";
 import { getOrders, isAboutYouError } from "./client";
 import { cancelOrderItems, returnOrderItems } from "./client";
 import type { AboutYouOrder, AboutYouOrderStatus } from "./types";
@@ -947,11 +948,25 @@ export async function reconciliazaComenzile(
 export async function ingestOrderByNumber(admin: Db, ctx: AboutYouSyncContext, orderNumber: string): Promise<void> {
   const res = await getOrders(ctx.auth, { order_number: orderNumber, per_page: 5 });
   if (isAboutYouError(res)) {
-    throw new Error(`Comanda ${orderNumber} nu s-a putut citi de la About You: ${res.error}`);
+    /*
+     * ⚠ SE SPUNE CE FEL DE ESEC E, prin TIP, nu prin text. O pana la ei sau o limita de rata nu
+     * spune nimic despre eveniment; numarata drept incercare, ar trimite in scrisori moarte tocmai
+     * evenimentele care n-au nicio vina. Vezi `EroareTrecatoare` din `inbox.ts`.
+     *
+     * ⚠ Clasificarea e pe COD, ca peste tot: `0` (retea), `429` (limita), `5xx` (pana la ei).
+     */
+    const mesaj = `Comanda ${orderNumber} nu s-a putut citi de la About You: ${res.error}`;
+    throw (res.status === 0 || res.status === 429 || res.status >= 500)
+      ? new EroareTrecatoare(mesaj)
+      : new Error(mesaj);
   }
   const order = (res.data?.items ?? []).find((o) => o.order_number === orderNumber) ?? res.data?.items?.[0];
   if (!order) {
-    throw new Error(`About You nu a intors comanda ${orderNumber}.`);
+    /*
+     * ⚠ Si „n-au intors-o" e TRECATOR: comanda se poate sa nu se fi asezat inca la ei. Numarata,
+     * un eveniment sosit cu cateva secunde inaintea comenzii ar fi ars incercari degeaba.
+     */
+    throw new EroareTrecatoare(`About You nu a intors comanda ${orderNumber}.`);
   }
   /* Fara `catch`: cine cheama trebuie sa afle. Vezi nota de mai sus. */
   await ingestOrder(admin, ctx, order);

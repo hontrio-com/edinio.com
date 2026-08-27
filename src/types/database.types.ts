@@ -4990,6 +4990,7 @@ export type Database = {
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
       aboutyou_elibereaza_anulari: { Args: { p_business_id: string; p_order_number: string; p_linii: Json }; Returns: Json }
       aboutyou_generatie_noua: { Args: { p_listing_id: string }; Returns: number }
+      aboutyou_salveaza_variante: { Args: { p_business_id: string; p_listing_id: string; p_randuri: Json }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
       trendyol_comenzi_de_facturat: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { order_id: string; shipment_package_id: string }[] }
       trendyol_magazine_cu_loturi_deschise: { Args: Record<string, never>; Returns: { business_id: string; cate: number }[] }

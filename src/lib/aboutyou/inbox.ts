@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
-import { randuriCitite } from "@/lib/supabase/rand-citit";
+import { EroareCitireBaza, randuriCitite } from "@/lib/supabase/rand-citit";
+import { EroareTrecatoare } from "./erori";
 import { extractOrderNumber, ingestOrderByNumber } from "./orders";
 import { handleProductMasterStatus, handleStockUpdated } from "./webhooks";
 import type { AboutYouConfig } from "./types";
@@ -76,6 +77,30 @@ export async function prelucreazaEveniment(
   }
 }
 
+/**
+ * O cauza care nu spune nimic despre eveniment: o pana la ei, o limita de rata, baza cazuta.
+ *
+ * ═══ ⚠ ZECE INCERCARI ARUNCAU SI CE N-AVEA NICIO VINA (27.08.2026, seara) ═══
+ *
+ * Amanarea crescatoare a facut cele zece incercari sa insemne sase ore in loc de zece minute —
+ * mai bine, dar tot o taietura in timp. O pana mai lunga de-atat, sau o cheie invalidata pana
+ * luni dimineata, trimitea in scrisori moarte fiecare eveniment din inbox. Iar About You
+ * reincearca livrarea vreo doua zile: noi renuntam inaintea lor.
+ *
+ * ⚠ SE DEOSEBESTE PE TIP, NU PE TEXTUL EROARII. Regula casei e ca refuzul se clasifica pe cod,
+ * niciodata pe mesaj — vezi `eRefuzLimpede`. Deci cauzele trecatoare ARUNCA un tip anume, iar
+ * cine il prinde stie ce e fara sa ghiceasca.
+ *
+ * ⚠ CE RAMANE MARGINIT: ce e chiar stricat. Un eveniment pe care nu-l putem lega de nicio
+ * comanda, sau o sarcina utila pe care n-o intelegem, se opreste dupa zece incercari si se
+ * striga — acolo reincercarea chiar n-are ce sa aduca.
+ */
+
+/** O cauza trecatoare nu pune nimic in contul evenimentului. */
+function eTrecatoare(e: unknown): boolean {
+  return e instanceof EroareTrecatoare || e instanceof EroareCitireBaza;
+}
+
 const MAX_INCERCARI_INBOX = 10;
 
 /**
@@ -136,13 +161,19 @@ export async function reiaEvenimenteleNeprelucrate(
         .eq("id", r.id);
       reusite++;
     } catch (e) {
-      const incercari = r.incercari + 1;
+      /*
+       * ⚠ CAUZELE TRECATOARE NU ARD O INCERCARE. Vezi `EroareTrecatoare`: o pana la ei sau la baza
+       * nu spune nimic despre eveniment, iar numarata, ar trimite in scrisori moarte tocmai
+       * evenimentele care n-au nicio vina. Se amana, dar contorul sta pe loc.
+       */
+      const trecator = eTrecatoare(e);
+      const incercari = trecator ? r.incercari : r.incercari + 1;
       await admin.from("aboutyou_webhook_inbox")
         .update({
           incercari,
           last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
           /* 1, 2, 4, 8… minute, cu plafon un ceas. Vezi nota de la selectie. */
-          urmatoarea_incercare: new Date(Date.now() + amanareInbox(incercari)).toISOString(),
+          urmatoarea_incercare: new Date(Date.now() + amanareInbox(incercari + 1)).toISOString(),
         } as never)
         .eq("id", r.id);
 
@@ -150,7 +181,7 @@ export async function reiaEvenimenteleNeprelucrate(
        * ⚠ RENUNTAREA SE SCRIE, si o singura data — la trecerea pragului, nu la fiecare incercare
        * de dupa. Un eveniment abandonat in tacere e chiar pierderea pe care inbox-ul o inlatura.
        */
-      if (incercari >= MAX_INCERCARI_INBOX) {
+      if (!trecator && incercari >= MAX_INCERCARI_INBOX) {
         await logError({
           action: "aboutyou/inbox", severity: "critical",
           message: `eveniment de webhook abandonat dupa ${MAX_INCERCARI_INBOX} incercari: ${r.event_name ?? "necunoscut"}`,

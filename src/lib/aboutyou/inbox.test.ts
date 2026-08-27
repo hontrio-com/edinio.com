@@ -116,8 +116,42 @@ test("⚠ si reluarea are un plafon, cu renuntarea scrisa o singura data", () =>
    */
   assert.match(inbox, /const MAX_INCERCARI_INBOX = 10;/);
   assert.match(inbox, /\.lt\("incercari", MAX_INCERCARI_INBOX\)/);
-  assert.match(inbox, /if \(incercari >= MAX_INCERCARI_INBOX\)/);
   assert.match(inbox, /severity: "critical"/);
+
+  /*
+   * ═══ ⚠ DAR PLAFONUL NU MAI NUMARA SI PANELE (27.08.2026, seara) ═══
+   *
+   * Amanarea crescatoare facuse cele zece incercari sa insemne sase ore in loc de zece minute —
+   * mai bine, dar tot o taietura in TIMP. O pana mai lunga de-atat, sau o cheie invalidata pana
+   * luni dimineata, trimitea in scrisori moarte fiecare eveniment din inbox. Iar About You
+   * reincearca livrarea vreo doua zile: noi renuntam inaintea lor.
+   *
+   * ⚠ SE DEOSEBESTE PE TIP, nu pe textul erorii — aceeasi regula ca la clasificarea refuzurilor.
+   * O pana la ei sau la baza nu pune nimic in contul evenimentului; ce e chiar stricat, da.
+   */
+  assert.match(inbox, /function eTrecatoare\(e: unknown\): boolean \{/);
+  assert.match(inbox, /e instanceof EroareTrecatoare \|\| e instanceof EroareCitireBaza/);
+  assert.match(inbox, /const incercari = trecator \? r\.incercari : r\.incercari \+ 1;/);
+  assert.match(inbox, /if \(!trecator && incercari >= MAX_INCERCARI_INBOX\)/);
+});
+
+test("⚠ si cine arunca spune ce fel de esec e", () => {
+  /*
+   * Clasificarea n-are ce citi daca cel care arunca nu spune. `ingestOrderByNumber` deosebeste pe
+   * COD: `0` (retea), `429` (limita), `5xx` (pana la ei) — si „n-au intors comanda", fiindca ea se
+   * poate sa nu se fi asezat inca la ei.
+   */
+  const orders = readFileSync("src/lib/aboutyou/orders.ts", "utf8");
+  assert.match(orders, /res\.status === 0 \|\| res\.status === 429 \|\| res\.status >= 500/);
+  assert.match(orders, /new EroareTrecatoare\(`About You nu a intors comanda/);
+
+  /*
+   * ⚠ Clasa sta intr-un fisier NEUTRU. Pusa in `orders` sau in `inbox`, cele doua se importau
+   * reciproc — un cerc care merge in ESM, dar care se rupe urat la prima reordonare de importuri.
+   */
+  const erori = readFileSync("src/lib/aboutyou/erori.ts", "utf8");
+  assert.match(erori, /export class EroareTrecatoare extends Error/);
+  assert.doesNotMatch(erori, /^import /m, "fisierul de erori nu are voie sa depinda de nimic");
 });
 
 test("⚠ prelucrarea sta in biblioteca, nu in ruta", () => {

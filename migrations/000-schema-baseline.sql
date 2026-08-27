@@ -440,6 +440,49 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_skuri text[];
+  v_sterse integer;
+  v_scrise integer;
+begin
+  if p_randuri is null or jsonb_array_length(p_randuri) = 0 then
+    return jsonb_build_object('stare', 'nimic', 'scrise', 0);
+  end if;
+
+  perform 1 from public.aboutyou_listings
+   where id = p_listing_id and business_id = p_business_id for update;
+  if not found then
+    return jsonb_build_object('stare', 'lipsa', 'scrise', 0);
+  end if;
+
+  select array_agg(r->>'sku') into v_skuri from jsonb_array_elements(p_randuri) as r;
+
+  delete from public.aboutyou_variants
+   where listing_id = p_listing_id and sku = any(v_skuri);
+  get diagnostics v_sterse = row_count;
+
+  insert into public.aboutyou_variants (
+    listing_id, business_id, product_id, sku, ean, size_id, second_size_id,
+    color_id, quantity, retail_price_eur, sale_price_eur, enabled, variant_title)
+  select
+    p_listing_id, p_business_id, (r->>'product_id')::uuid, r->>'sku', r->>'ean',
+    (r->>'size_id')::int, (r->>'second_size_id')::int, (r->>'color_id')::int,
+    (r->>'quantity')::int, (r->>'retail_price_eur')::numeric, (r->>'sale_price_eur')::numeric,
+    coalesce((r->>'enabled')::boolean, true), r->>'variant_title'
+  from jsonb_array_elements(p_randuri) as r;
+  get diagnostics v_scrise = row_count;
+
+  return jsonb_build_object('stare', 'scris', 'sterse', v_sterse, 'scrise', v_scrise);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb)
  RETURNS void
  LANGUAGE plpgsql
@@ -8548,6 +8591,7 @@ grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid,
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to service_role;
 grant execute on function public.aboutyou_generatie_noua(p_listing_id uuid) to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
+grant execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
 grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
@@ -8732,6 +8776,7 @@ revoke execute on function privat.decripteaza(p_val text) from public;
 revoke execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) from public;
 revoke execute on function public.aboutyou_generatie_noua(p_listing_id uuid) from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
+revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;
 revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;

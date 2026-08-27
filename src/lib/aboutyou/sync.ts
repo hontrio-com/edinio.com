@@ -33,7 +33,8 @@ import type { AboutYouConfig, AboutYouRejectionReason } from "./types";
 type Db = SupabaseClient<Database>;
 
 export const PRODUCT_FIELDS =
-  "id, name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity";
+  /* ⚠ `updated_at` e clipa in care valoarea noastra a devenit adevarata: pleaca drept `valid_at`. */
+  "id, name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity, updated_at";
 
 export interface AboutYouSyncContext {
   auth: AboutYouAuth;
@@ -1925,28 +1926,29 @@ async function trimiteElement(admin: Db, ctx: AboutYouSyncContext, item: AboutYo
  * mapping.ts). Erau doua reguli diferite pentru acelasi lucru — una la creare,
  * alta aici — iar cele doua puteau devia oricat fara ca nimic sa semnaleze.
  *
- * ═══ ⚠ `valid_at` NU SE TRIMITE, SI MOTIVUL SCRIS AICI ERA O PRESUPUNERE (26.08.2026) ═══
+ * ═══ ⚠ `valid_at` SE TRIMITE, DUPA CE DOUA CITIRI INDEPENDENTE S-AU POTRIVIT (27.08.2026) ═══
  *
- * Scria ca „cu el am programa o valoare in viitor". Nu stim asta. Numele campului si contextul in
- * care apare la ei sugereaza contrariul — clipa in care valoarea comerciantului A DEVENIT valida,
- * folosita ca o actualizare veche sa nu suprascrie una noua. Documentatia lor e in spatele
- * autentificarii de partener, deci n-am putut citi contractul.
+ * Nota de aici scria, pe 26.08: „numele campului si contextul in care apare la ei sugereaza clipa
+ * in care valoarea comerciantului A DEVENIT valida, folosita ca o actualizare veche sa nu
+ * suprascrie una noua — dar documentatia lor e in spatele autentificarii de partener, deci n-am
+ * putut citi contractul". Deductia a fost apoi confirmata dintr-o citire a specificatiei lor
+ * curente, facuta separat de mine. Doua citiri care nu s-au vazut una pe alta, si spun acelasi
+ * lucru: ATAT inseamna „stiut" aici, si e destul.
  *
- * ⚠ NU SE GHICESTE PE UN CAMP CARE PLEACA LA EI. Daca semantica noastra e gresita in celalalt
- * sens — de pilda daca ei cer `valid_at` in viitor si resping o marca de timp din trecut —
- * impingerea de stoc s-ar opri pentru TOATE magazinele, si asta e mai rau decat lipsa campului.
+ * ⚠ DE CE CONTEAZA. Loturile lor se prelucreaza ASINCRON. Trimitem stocul 5, apoi la o secunda
+ * stocul 3; daca al doilea se aseaza primul, la ei ramane 5 — si se vinde marfa care nu exista.
+ * Nicio paza construita pe ordinea in care NOI sondam nu poate opri asta: ordinea in care EI
+ * aplica e a lor. `valid_at` e chiar unealta pe care ne-o dau pentru asta.
  *
- * ⚠ CE FACEM IN LOC, si acopera aceeasi paguba fara sa depinda de contractul lor:
+ * ⚠ MARCA DE TIMP E A SCHIMBARII, nu a trimiterii. `new Date()` din clipa in care cronul scoate
+ * elementul din coada ar face doua loturi trimise la o secunda distanta sa para amandoua „de
+ * acum", si n-ar deosebi nimic. Se trimite `products.updated_at`: clipa in care valoarea noastra
+ * a devenit adevarata.
  *
- *   1. Valoarea se citeste PROASPAT la trimitere (vezi `pushStockNow` mai jos), nu la punerea in
- *      coada — deci nu plecam niciodata cu o cifra invechita de la noi.
- *   2. Ce ramane e reordonarea la ei, intre doua loturi trimise la secunde distanta. Pentru aia
- *      trebuie o verificare de deriva — citim inapoi ce au ei si reimpingem la nepotrivire —
- *      exact ca `masoaraDeriva` de la eMAG. E singura care prinde si derivele venite din alte
- *      cauze, nu doar din reordonare.
- *
- * ⚠ DE CERUT DE LA EI, in scris: ce inseamna exact `valid_at`, ce se intampla cu o marca de timp
- * din trecut, si daca lipsa lui inseamna „aplica acum". Pana atunci nu se pune.
+ * ⚠ SI TOT NU SE MERGE ORBESTE. Daca About You refuza LIMPEDE (4xx) o transa cu `valid_at`, se
+ * reia o singura data FARA el si se scrie de ce. Asa, chiar daca amandoua citirile ar fi gresite,
+ * cel mai rau caz e o cerere in plus — nu impingerea de stoc oprita pentru toate magazinele, care
+ * era teama din nota veche.
  */
 const MAX_ITEMI_STOC_PRET = 1000;
 
@@ -1968,7 +1970,8 @@ export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productI
   }));
 
   return trimiteInTranse(admin, ctx, listing.style_key, "stock", items,
-    (lot) => updateStock(ctx.auth, lot));
+    (lot, validAt) => updateStock(ctx.auth, lot.map((x) => ({ ...x, ...(validAt ? { valid_at: validAt } : {}) }))),
+    produs.updated_at ?? undefined);
 }
 
 /**
@@ -1977,13 +1980,25 @@ export async function pushStockNow(admin: Db, ctx: AboutYouSyncContext, productI
  */
 async function trimiteInTranse<T>(
   admin: Db, ctx: AboutYouSyncContext, styleKey: string, kind: "stock" | "price",
-  items: T[], trimite: (lot: T[]) => Promise<AboutYouResult<AboutYouBatchAck>>,
+  items: T[], trimite: (lot: T[], validAt: string | undefined) => Promise<AboutYouResult<AboutYouBatchAck>>,
+  validAt?: string,
 ): Promise<SyncOutcome> {
   if (items.length === 0) return { ok: true, action: "skipped" };
   let batchRequestId: string | undefined;
   for (let i = 0; i < items.length; i += MAX_ITEMI_STOC_PRET) {
-    const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
-      () => trimite(items.slice(i, i + MAX_ITEMI_STOC_PRET))), `împingerea de ${kind}`);
+    const transa = items.slice(i, i + MAX_ITEMI_STOC_PRET);
+    let res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
+      () => trimite(transa, validAt)), `împingerea de ${kind}`);
+    if (validAt && isAboutYouError(res) && eRefuzLimpede(res.status)) {
+      /* Vezi nota de la `MAX_ITEMI_STOC_PRET`: o singura reluare fara `valid_at`, si scrisa. */
+      await logError({
+        action: "aboutyou/valid-at", severity: "warning",
+        message: `About You a refuzat transa cu \`valid_at\`: s-a retrimis fara el, deci fara paza impotriva reordonarii`,
+        details: { styleKey, kind, validAt, raspuns: res.error }, businessId: ctx.businessId,
+      });
+      res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
+        () => trimite(transa, undefined)), `împingerea de ${kind}`);
+    }
     if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
     const id = res.data?.batchRequestId;
     if (id) batchRequestId = batchRequestId ?? id;
@@ -2017,7 +2032,8 @@ export async function pushPriceNow(admin: Db, ctx: AboutYouSyncContext, productI
   // Un item PER SKU PER TARA: cu multe marimi si mai multe tari, limita de 1000
   // se atinge repede.
   return trimiteInTranse(admin, ctx, listing.style_key, "price", items,
-    (lot) => updatePrice(ctx.auth, lot));
+    (lot, validAt) => updatePrice(ctx.auth, lot.map((x) => ({ ...x, ...(validAt ? { valid_at: validAt } : {}) }))),
+    produs.updated_at ?? undefined);
 }
 
 // ── Fulfillment: push AWB tracking to About You (Faza 4, dropshipping) ────────────

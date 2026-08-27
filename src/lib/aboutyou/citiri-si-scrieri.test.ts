@@ -154,7 +154,13 @@ test("⚠ toate cele opt trimiteri trec prin outbox, si niciuna pe langa", () =>
    * exact același lucru.
    */
   const reluabile = [...sync.matchAll(/caUnRezultat\(await cuLotDurabil\(/g)];
-  assert.equal(reluabile.length, 5, `asteptam cinci operatii reluabile, am gasit ${reluabile.length}`);
+  /*
+   * Sase locuri, cinci operatii: stoc/pret trimit prin acelasi ajutor, iar acolo exista si
+   * reluarea FARA `valid_at` la un refuz limpede — tot o trimitere reluabila. Vezi nota de la
+   * `MAX_ITEMI_STOC_PRET`.
+   */
+  assert.equal(reluabile.length, 6, `asteptam sase trimiteri reluabile, am gasit ${reluabile.length}`);
+  assert.match(sync, /\(\) => trimite\(transa, undefined\)/, "reluarea fara `valid_at` lipseste");
 
   /*
    * ⚠ CELE CU UN SINGUR FOC — expediere, anulare, retur — NU trec pe-acolo: acolo o retrimitere

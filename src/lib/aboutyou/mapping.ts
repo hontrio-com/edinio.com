@@ -33,6 +33,13 @@ export interface MappableProduct {
   price: number;                     // RON
   compare_at_price: number | null;   // RON
   images: unknown;                   // Json: array of URL strings
+  /**
+   * Clipa in care valoarea noastra a devenit adevarata.
+   *
+   * ⚠ Pleaca la About You drept `valid_at`, ca o actualizare veche sa nu suprascrie una noua
+   * cand loturile lor se aseaza in alta ordine. Vezi nota de la `MAX_ITEMI_STOC_PRET` din `sync`.
+   */
+  updated_at?: string | null;
   category: string | null;
   sku: string | null;
   weight_grams: number | null;

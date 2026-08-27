@@ -311,3 +311,47 @@ export function enqueueTrendyolSyncMany(businessId: string, productIds: (string 
 export function enqueueTrendyolInventoryMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
   return enqueueMany(businessId, productIds, "inventory");
 }
+
+/**
+ * Retragerea IN MASA a produselor sterse. Vezi nota geamana din `google-merchant/queue.ts`:
+ * erau 340 de chemari pe integrare, fiecare cu citirea ei de config, si toate dupa raspuns — deci
+ * ce nu apuca sa se termine se TAIA, iar produsul ramanea la vanzare acolo.
+ *
+ * ⚠ `product_id` E NULL: randul se scrie DUPA stergere, deci o legatura spre produs ar arata catre
+ * un rand care nu mai exista.
+ */
+export async function enqueueTrendyolStergereMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
+  try {
+    const ids = [...new Set(productIds.filter((x): x is string => !!x))];
+    if (ids.length === 0) return;
+    const admin = createAdminClient();
+    const { data: ss, error: eSetari } = await admin
+      .from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
+    if (eSetari) throw eSetari;
+    const config = (ss?.trendyol_config as TrendyolConfig) ?? {};
+    if (!config.connected || !config.api_key) return;
+    /*
+     * ⚠ NU se cere `auto_sync` aici, si e o deosebire de fond. „Sincronizare automata" e despre
+     * a IMPINGE modificari; retragerea unui produs sters e altceva — marfa nu mai exista, iar
+     * lasata la vanzare produce comenzi pe care nimeni nu le poate onora. Aceeasi hotarare ca la
+     * `enqueueTrendyolRetragereInainteDeStergere`, daca exista.
+     */
+    const listedIds = new Set<string>();
+    for (const bucata of bucatiDeIduri(ids)) {
+      const { data: listed, error } = await admin
+        .from("trendyol_listings").select("product_id").eq("business_id", businessId).in("product_id", bucata);
+      if (error) throw error;
+      for (const r of listed ?? []) {
+        const pid = (r as { product_id: string | null }).product_id;
+        if (pid) listedIds.add(pid);
+      }
+    }
+    const rows = ids.filter((id) => listedIds.has(id))
+      .map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete", ...CERERE_NOUA }));
+    if (rows.length === 0) return;
+    const { error } = await admin.from("trendyol_sync_queue").upsert(rows, { onConflict: "business_id,offer_id,op" });
+    if (error) throw error;
+  } catch (e) {
+    inghiteDarScrie("stergere-multe", businessId, e, { cate: productIds.length });
+  }
+}

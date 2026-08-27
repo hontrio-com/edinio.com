@@ -69,3 +69,40 @@ export async function enqueueGmcSyncMany(businessId: string, productIds: (string
     scrieEsecul("coada", businessId, e);
   }
 }
+
+/**
+ * Retragerea IN MASA a produselor sterse.
+ *
+ * ═══ ⚠ ERAU 340 DE CHEMARI, FIECARE CU CITIREA EI DE CONFIG (27.08.2026) ═══
+ *
+ * Stergerea in masa punea la coada cate un element PE PRODUS, pe fiecare integrare:
+ * `for (const id of ids) dupaRaspuns(() => enqueue…(businessId, null, id, "delete"))`. La 340 de
+ * produse × 4 integrari inseamna 1360 de chemari, fiecare citind din nou setarile magazinului.
+ *
+ * ⚠ SI SE INTAMPLA DUPA RASPUNS, cu `after`, care tine instanta pana se termina. Peste durata
+ * maxima a functiei, ce n-a apucat se TAIE — iar ce se taie sunt tocmai retragerile: produsul e
+ * sters la noi si ramane la vanzare pe marketplace, tacut.
+ *
+ * O citire de config, un lot de scriere. Aceeasi treaba, de 340 de ori mai putine drumuri.
+ *
+ * ⚠ `product_id` E NULL, si nu din neglijenta: randul se scrie DUPA ce produsul a fost sters, deci
+ * o legatura spre el ar arata catre un rand care nu mai exista. `offer_id` poarta id-ul, si el e
+ * tot ce trebuie ca sa se stie ce se retrage.
+ */
+export async function enqueueGmcStergereMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
+  try {
+    const ids = [...new Set(productIds.filter((x): x is string => !!x))];
+    if (ids.length === 0) return;
+    const admin = createAdminClient();
+    const { data: ss } = await admin
+      .from("store_settings").select("google_merchant_config").eq("business_id", businessId).single();
+    const config = (ss?.google_merchant_config as GoogleMerchantConfig) ?? {};
+    if (!config.connected || !config.account_id || config.auto_sync === false) return;
+    await admin.from("gmc_sync_queue").upsert(
+      ids.map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete" })),
+      { onConflict: "business_id,offer_id,op" },
+    );
+  } catch (e) {
+    scrieEsecul("coada", businessId, e);
+  }
+}

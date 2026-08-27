@@ -14,10 +14,10 @@ import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
 import { readBundleConfig } from "@/lib/bundles";
 import { construiesteTrepte, mesajProblemaTrepte, problemaMonotonie } from "@/lib/storefront/quantity-tiers";
-import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
-import { enqueueOlxSync, enqueueOlxSyncMany } from "@/lib/olx/queue";
-import { enqueueAboutYouSync, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
-import { enqueueTrendyolSync, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
+import { enqueueGmcSync, enqueueGmcStergereMany, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
+import { enqueueOlxSync, enqueueOlxStergereMany, enqueueOlxSyncMany } from "@/lib/olx/queue";
+import { enqueueAboutYouSync, enqueueAboutYouStergereMany, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
+import { enqueueTrendyolSync, enqueueTrendyolStergereMany, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
 import {
   enqueueEmagPretMany, enqueueEmagRetragereInainteDeStergere,
   enqueueEmagSync, enqueueEmagSyncMany,
@@ -681,10 +681,20 @@ export async function bulkProductAction(
       for (const r of rows ?? []) {
         if (Array.isArray(r.images)) void deleteOrphanImages(supabase, businessId, r.images as string[]);
       }
-      for (const id of ids) dupaRaspuns(() => enqueueGmcSync(businessId, null, id, "delete"), "enqueueGmcSync", businessId);
-      for (const id of ids) dupaRaspuns(() => enqueueOlxSync(businessId, null, id, "delete"), "enqueueOlxSync", businessId);
-      for (const id of ids) dupaRaspuns(() => enqueueAboutYouSync(businessId, null, id, "delete"), "enqueueAboutYouSync", businessId);
-      for (const id of ids) dupaRaspuns(() => enqueueTrendyolSync(businessId, null, id, "delete"), "enqueueTrendyolSync", businessId);
+      /*
+       * ═══ ⚠ ERAU 1360 DE CHEMARI, FIECARE CU CITIREA EI DE CONFIG (27.08.2026) ═══
+       *
+       * Cate una PE PRODUS, pe fiecare din cele patru integrari: la 340 de produse inseamna 1360
+       * de drumuri la baza, toate DUPA raspuns. `after` tine instanta pana se termina, dar peste
+       * durata maxima a functiei ce n-a apucat se TAIE — iar ce se taie sunt tocmai retragerile.
+       * Produsul e sters la noi si ramane la vanzare pe marketplace, tacut.
+       *
+       * O citire de config si un lot de scriere, pe integrare. Aceeasi treaba, patru drumuri.
+       */
+      dupaRaspuns(() => enqueueGmcStergereMany(businessId, ids), "enqueueGmcStergereMany", businessId);
+      dupaRaspuns(() => enqueueOlxStergereMany(businessId, ids), "enqueueOlxStergereMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouStergereMany(businessId, ids), "enqueueAboutYouStergereMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolStergereMany(businessId, ids), "enqueueTrendyolStergereMany", businessId);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });

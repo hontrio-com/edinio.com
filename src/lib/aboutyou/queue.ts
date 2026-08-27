@@ -242,3 +242,33 @@ export async function enqueueAboutYouShip(businessId: string, orderId: string): 
     scrieEsecul("coada", businessId, e);
   }
 }
+
+/**
+ * Retragerea IN MASA a produselor sterse. Vezi nota geamana din `google-merchant/queue.ts`:
+ * erau 340 de chemari pe integrare, fiecare cu citirea ei de config, si toate dupa raspuns — deci
+ * ce nu apuca sa se termine se TAIA, iar produsul ramanea la vanzare acolo.
+ *
+ * ⚠ `product_id` E NULL: randul se scrie DUPA stergere, deci o legatura spre produs ar arata catre
+ * un rand care nu mai exista.
+ */
+export async function enqueueAboutYouStergereMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
+  try {
+    const ids = [...new Set(productIds.filter((x): x is string => !!x))];
+    if (ids.length === 0) return;
+    const admin = createAdminClient();
+    const ss = randCitit<{ aboutyou_config: unknown }>("aboutyou.configPentruStergere", await admin
+      .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single());
+    const config = (ss?.aboutyou_config as AboutYouConfig) ?? {};
+    /* ⚠ Ca la Trendyol: retragerea nu se supune lui `auto_sync`. Marfa nu mai exista. */
+    if (!config.connected || !config.api_key) return;
+    const listedIds = await idsListate(admin, businessId, ids);
+    const rows = ids.filter((id) => listedIds.has(id))
+      .map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete" as const }));
+    if (rows.length === 0) return;
+    const { error: eCoada } = await admin.from("aboutyou_sync_queue")
+      .upsert(rows, { onConflict: "business_id,offer_id,op" });
+    if (eCoada) throw new Error(`retragerea a ${rows.length} produse n-a intrat in coada: ${eCoada.message}`);
+  } catch (e) {
+    scrieEsecul("coada", businessId, e);
+  }
+}

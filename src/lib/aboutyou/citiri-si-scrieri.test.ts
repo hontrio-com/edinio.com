@@ -70,11 +70,18 @@ test("⚠ fiecare punere la coada isi verifica `error`", () => {
    * Patru cai: produs, produse in masa, stoc in masa, expediere. Fiecare era un `await
    * admin.from(...).upsert(...)` gol. Cea de-a doua e chiar drumul celor 1051 de preturi.
    */
+  /*
+   * ⚠ A CINCEA a intrat pe 27.08: `enqueueAboutYouStergereMany`. Stergerea in masa punea la coada
+   * cate un element PE PRODUS — 340 de produse × 4 integrari = 1360 de drumuri la baza, toate
+   * DUPA raspuns, deci taiate cand functia isi atinge durata maxima. Ce se taia erau tocmai
+   * retragerile: produsul sters la noi, ramas la vanzare acolo.
+   */
   const upserturi = [...coada.matchAll(/\.upsert\(/g)];
-  assert.equal(upserturi.length, 4, `asteptam patru puneri la coada, am gasit ${upserturi.length}`);
+  assert.equal(upserturi.length, 5, `asteptam cinci puneri la coada, am gasit ${upserturi.length}`);
 
+  /* Fiecare isi citeste `error`-ul — fie aruncand, fie prin `randCitit`/`scrieEsecul`. */
   const aruncari = [...coada.matchAll(/if \(eCoada\) throw new Error\(/g)];
-  assert.equal(aruncari.length, 4, "fiecare punere la coada trebuie sa arunce la eroare");
+  assert.equal(aruncari.length, 5, "fiecare punere la coada trebuie sa arunce la eroare");
 });
 
 test("⚠ o bucata picata OPRESTE lotul, nu-l scurteaza in tacere", () => {

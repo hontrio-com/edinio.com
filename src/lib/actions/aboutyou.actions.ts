@@ -387,6 +387,41 @@ export async function saveAboutYouSettings(
   };
   const ok = await saveConfig(businessId, next);
   if (!ok) return { error: "Eroare la salvare." };
+
+  /*
+   * ═══ ⚠ O SETARE GLOBALA SCHIMBATA NU AJUNGEA NICIODATA LA PRODUSELE DEJA LISTATE (27.08.2026) ═══
+   *
+   * Comerciantul are cursul 1 EUR = 5 RON, deci un produs de 100 RON e 20 EUR la About You. Schimba
+   * cursul pe 4.5. Se salva `fx.updated_at` — corect — dar NU se punea nimic la coada. La About You
+   * ramaneau 20 EUR pana cand produsul se schimba din alt motiv, poate niciodata.
+   *
+   * ⚠ `valid_at` nu ajuta cu nimic aici: el apara ordinea intre doua trimiteri, nu inlocuieste o
+   * trimitere care nu se face deloc.
+   *
+   * ⚠ CE SE PUNE LA COADA depinde de CE s-a schimbat, si nu e o subtilitate: `upsert` inseamna
+   * produsul intreg, deci trece prin verificari, taxonomie si loturi de 100 — scump si lent. Cand
+   * s-a schimbat doar un pret, `price` face exact ce trebuie si nimic in plus.
+   */
+  const doarPret = fxChanged
+    || (input.price_mode != null && input.price_mode !== (config.price_mode ?? "fx_from_ron"));
+  const dinNou = input.ship_countries != null
+    || input.brand_id !== undefined
+    || (input.default_country_of_origin != null
+      && input.default_country_of_origin.trim() !== (config.default_country_of_origin ?? ""))
+    || (input.target_audience != null && input.target_audience !== config.target_audience);
+
+  if (dinNou || doarPret) {
+    /* ⚠ Trimiterea intreaga o cuprinde si pe cea de pret: nu se pun amandoua pe acelasi produs. */
+    const r = await enqueueForListings(g.supabase, businessId, dinNou ? "upsert" : "price");
+    if (r.incomplet) {
+      logError({
+        action: "aboutyou.saveSettings", severity: "warning",
+        message: `setarile s-au salvat, dar doar ${r.n} produse au intrat in coada: restul raman cu valorile vechi la About You`,
+        details: { businessId, op: dinNou ? "upsert" : "price" }, businessId,
+      });
+    }
+  }
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -914,9 +949,14 @@ export async function validateAboutYouListing(
   const categoriaCeruta = input.category_id ?? config.category_map?.[produs.category ?? ""]?.category_id ?? null;
   if (rand && dupaAprobare.has(rand.status) && rand.category_id != null
     && categoriaCeruta != null && categoriaCeruta !== rand.category_id) {
+    /*
+     * ⚠ TEXTUL S-A SCHIMBAT ODATA CU CODUL. Spunea „About You POATE refuza" — adevarat cat timp
+     * salvam si asteptam refuzul lor. Acum salvarea se opreste la noi, deci avertismentul e o
+     * prevenire, nu o prezicere: omul afla inainte sa apese, nu dupa.
+     */
     warnings.push(
-      "Ai schimbat categoria unui produs deja aprobat. About You poate refuza schimbarea după aprobare;"
-      + " dacă o refuză, produsul trebuie listat din nou, ca produs nou.",
+      "Ai schimbat categoria unui produs deja aprobat. About You nu mai acceptă asta după aprobare,"
+      + " iar salvarea va fi oprită: ca să-l muți în altă categorie, elimină listarea și creează una nouă.",
     );
   }
 
@@ -967,8 +1007,60 @@ export async function saveAboutYouListing(
    * n-avea nicio legatura cu o cursa, si mesajul ajuns la comerciant era despre altceva.
    */
   const { data: existent, error: eExistent } = await admin.from("aboutyou_listings")
-    .select("id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
+    .select("id, status, category_id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
   if (eExistent) return { error: "Nu am putut citi listarea. Încearcă din nou." };
+
+  /*
+   * ═══ ⚠ CATEGORIA SI MARIMEA NU SE MAI SCHIMBA DUPA APROBARE (27.08.2026, tarziu) ═══
+   *
+   * Erau doar AVERTIZATE in editor, si se salvau. Comerciantul afla ca nu merge abia din lotul
+   * respins, minute mai tarziu, iar intre timp datele locale spuneau altceva decat cele de la ei.
+   *
+   * ⚠ SE OPRESTE AICI, NU LA TRIMITERE, si asta e miezul: oprita la trimitere, schimbarea era deja
+   * SALVATA la noi. De-acolo, orice comparatie intre ce credem si ce e la ei ar fi mintit, iar
+   * urmatoarea trimitere ar fi incercat iar acelasi lucru imposibil.
+   *
+   * ⚠ SI ARE O IESIRE SCRISA. O regula care doar refuza, fara sa spuna ce se poate face, e o usa
+   * incuiata fara clanta: listare noua pentru categorie, varianta noua pentru marime.
+   */
+  const APROBATE = new Set(["active", "published", "pending_active", "inactive"]);
+  const randVechi = existent as { id: string; status?: string; category_id?: number | null } | null;
+  if (randVechi && APROBATE.has(randVechi.status ?? "")) {
+    const categoriaNoua = input.category_id ?? null;
+    if (categoriaNoua != null && randVechi.category_id != null && categoriaNoua !== randVechi.category_id) {
+      return {
+        error: "About You nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat."
+          + " Ca să-l muți în altă categorie, elimină listarea și creează una nouă.",
+      };
+    }
+
+    /*
+     * ⚠ Marimea se compara PE SKU, nu pe pozitie: variantele se pot reordona intre doua deschideri
+     * ale editorului, iar comparate pe indice ar fi parut schimbate toate.
+     */
+    const { data: vechi, error: eVechi } = await admin.from("aboutyou_variants")
+      .select("sku, size_id, second_size_id").eq("listing_id", randVechi.id);
+    if (eVechi) return { error: "Nu am putut citi variantele. Încearcă din nou." };
+    const dupaSku = new Map((vechi ?? []).map((v) => [
+      (v as { sku: string }).sku,
+      v as { size_id: number | null; second_size_id: number | null },
+    ]));
+    for (const v of input.variants) {
+      const sku = v.sku?.trim();
+      if (!sku) continue;
+      const vechea = dupaSku.get(sku);
+      /* Varianta noua n-are ce sa incalce: regula e despre SCHIMBAREA uneia deja aprobate. */
+      if (!vechea) continue;
+      const schimbata = (v.size_id ?? null) !== (vechea.size_id ?? null)
+        || (v.second_size_id ?? null) !== (vechea.second_size_id ?? null);
+      if (schimbata && vechea.size_id != null) {
+        return {
+          error: `About You nu mai acceptă schimbarea mărimii la varianta „${sku}" după ce a fost aprobată.`
+            + " Dezactivează varianta și adaugă una nouă, cu SKU nou, pentru mărimea corectă.",
+        };
+      }
+    }
+  }
 
   let listingId: string;
   if (existent) {
@@ -1674,7 +1766,10 @@ export async function unsubscribeAboutYouWebhook(businessId: string): Promise<{ 
 
 // ── Bulk operations (Faza 5) ────────────────────────────────────────────────────
 async function enqueueForListings(
-  supabase: ServerClient, businessId: string, op: "upsert" | "publish", statusFilter?: string,
+  supabase: ServerClient, businessId: string,
+  /* ⚠ `price` a intrat cand setarile globale au inceput sa repuna produsele la coada: o schimbare
+     de curs cere doar preturi, nu produsul intreg. Vezi `saveAboutYouSettings`. */
+  op: "upsert" | "publish" | "price", statusFilter?: string,
   doarTrimise?: boolean,
 ): Promise<{ n: number; incomplet: boolean }> {
   /*

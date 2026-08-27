@@ -3,6 +3,8 @@ import { createHash, timingSafeEqual } from "crypto";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { readSignatureHeader, verifyAboutYouSignature } from "@/lib/aboutyou/webhooks";
 import { amanareInbox, prelucreazaEveniment } from "@/lib/aboutyou/inbox";
+import { EroareTrecatoare } from "@/lib/aboutyou/erori";
+import { EroareCitireBaza } from "@/lib/supabase/rand-citit";
 import { logError } from "@/lib/error-logger";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 
@@ -162,9 +164,17 @@ export async function POST(request: NextRequest) {
       .update({ prelucrat_la: new Date().toISOString(), last_error: null } as never)
       .eq("business_id", businessId).eq("event_id", eventId);
   } catch (e) {
+    /*
+     * ═══ ⚠ SI CALEA RAPIDA DEOSEBESTE CAUZELE (27.08.2026, tarziu) ═══
+     *
+     * Scria `incercari: 1` pentru ORICE exceptie, inclusiv o pana a bazei — deci prima incercare
+     * era arsa chiar de indisponibilitatea care n-are nicio legatura cu evenimentul. Acum
+     * trecatoarele lasa contorul pe zero, ca in cron.
+     */
+    const trecator = e instanceof EroareTrecatoare || e instanceof EroareCitireBaza;
     await admin.from("aboutyou_webhook_inbox")
       .update({
-        incercari: 1,
+        incercari: trecator ? 0 : 1,
         last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
         /* ⚠ Si amanarea porneste de aici: fara ea, cronul ar relua imediat exact ce tocmai a picat. */
         urmatoarea_incercare: new Date(Date.now() + amanareInbox(1)).toISOString(),

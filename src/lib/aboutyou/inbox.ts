@@ -246,7 +246,7 @@ async function orderNumberDinArticole(
       message: `corelarea articolelor a eșuat: ${error.message}`,
       details: { businessId, ids: ids.slice(0, 10) }, businessId, severity: "critical",
     });
-    throw new Error(`corelarea articolelor a esuat: ${error.message}`);
+    throw new EroareTrecatoare(`corelarea articolelor a esuat: ${error.message}`);
   }
   const gasit = (data ?? [])[0] as { aboutyou_order_number?: string } | undefined;
   return gasit?.aboutyou_order_number ?? null;

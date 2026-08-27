@@ -42,7 +42,23 @@ test("⚠ retragerea in ciorna se FACE, nu se cere omului", () => {
    */
   const sync = viu("src/lib/aboutyou/sync.ts");
   assert.match(sync, /if \(listing\.status === "pending_approval"\) \{/);
-  assert.match(sync, /await setRemoteStatus\(admin, ctx, productId, "draft"\)/);
+
+  /*
+   * ═══ ⚠ SI SE ASTEAPTA CONFIRMAREA LOR (27.08.2026, tarziu) ═══
+   *
+   * Prima varianta scria `draft` local imediat si se bizuia pe cron: „la trecerea urmatoare
+   * listarea e deja ciorna". Dar `PUT /products/status` e tot ASINCRON — pana se aseaza lotul lui,
+   * produsul e INCA `pending_approval` la ei. Un minut mai tarziu trimiteam modificarea peste un
+   * produs aflat inca in aprobare, adica exact ce documentatia lor interzice.
+   */
+  assert.match(sync, /await setRemoteStatus\(admin, ctx, productId, "draft", "draft_pending"\)/);
+  assert.match(sync, /if \(listing\.status === "draft_pending"\) \{/);
+  /* Iar `draft` il pune ABIA asezarea lotului de status. */
+  assert.match(sync, /if \(b\.kind === "status" && !hardFail\) \{/);
+  assert.match(sync, /l\?\.status === "draft_pending"/);
+  /* Si starea are eticheta ei in ecran, ca omul sa nu vada un cuvant nemaivazut. */
+  const ecran = readFileSync("src/components/dashboard/AboutYouListings.tsx", "utf8");
+  assert.match(ecran, /draft_pending: \{ text: "Se retrage în ciornă"/);
 
   /*
    * ⚠ SI NU SE MERGE MAI DEPARTE IN ACEEASI TRECERE: `PUT /products/status` e tot asincron, deci

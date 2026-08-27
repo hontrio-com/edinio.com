@@ -84,6 +84,12 @@ test("⚠ orfanii vechi se INCHID, ca alarma sa nu strige la nesfarsit", () => {
 
 test("⚠ `depasit` nu e o stare sondabila", () => {
   /* Sondarea ia doar `pending/processing/retry`: un lot depasit n-are ce sa mai intrebe. */
-  assert.match(sync, /\.in\("status", \["pending", "processing", "retry"\]\)/);
+  /*
+   * Sondarea nu-l cuprinde: un lot depasit n-are ce sa mai intrebe, si nici n-are id.
+   *
+   * ⚠ `stalled` E in selectie, cu o amanare de sase ore — vezi nota de acolo: un nume onest peste
+   * o purtare la fel de terminala ca `failed` tot fund de sac ramane.
+   */
+  assert.match(sync, /\.in\("status", \["pending", "processing", "retry", "stalled"\]\)/);
   assert.doesNotMatch(sync, /\.in\("status", \[[^\]]*"depasit"[^\]]*\]\)\s*\n?\s*\.or\(/);
 });

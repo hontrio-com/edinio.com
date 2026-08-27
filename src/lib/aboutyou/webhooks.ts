@@ -15,6 +15,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { randCitit } from "@/lib/supabase/rand-citit";
+import { EroareTrecatoare } from "./erori";
 
 /*
  * ═══ ⚠ TREI EVENIMENTE INVECHITE PUTEAU DARAMA TOT ABONAMENTUL (27.08.2026) ═══
@@ -124,7 +125,8 @@ export async function handleStockUpdated(
      *
      * ⚠ „Zero randuri atinse" NU e o eroare: e un SKU pe care nu-l avem, si acolo n-avem ce face.
      */
-    if (error) throw new Error(`stocul SKU-ului ${sku} nu s-a putut scrie: ${error.message}`);
+    /* ⚠ Trecatoare: o pana a bazei nu spune nimic despre eveniment. Vezi `EroareTrecatoare`. */
+    if (error) throw new EroareTrecatoare(`stocul SKU-ului ${sku} nu s-a putut scrie: ${error.message}`);
   }
 }
 
@@ -194,5 +196,5 @@ export async function handleProductMasterStatus(
    * intrebam — `GET /products/` nu le are deloc in schema. Pierdut tacut, comerciantul vede
    * „respins" fara sa afle de ce, si nu mai are cum sa afle.
    */
-  if (eScriere) throw new Error(`statusul produsului ${styleKey} nu s-a putut scrie: ${eScriere.message}`);
+  if (eScriere) throw new EroareTrecatoare(`statusul produsului ${styleKey} nu s-a putut scrie: ${eScriere.message}`);
 }

@@ -355,6 +355,72 @@ export function caUnRezultat<T extends { batchRequestId?: string | null }>(
   return lot.res;
 }
 
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * NU CONTROLAM ORDINEA LA EI — DECI SPUNEM ADEVARUL LA URMA
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠ CE NU REZOLVA GENERATIA (27.08.2026, tarziu)
+ *
+ * Generatia apara starea NOASTRA: un lot vechi care se aseaza nu mai scrie nimic la noi. Dar nu
+ * poate anula ce a facut el LA EI:
+ *
+ *     GEN 10 → produsul ROSU → cererea ajunge la ei → conexiunea cade inainte de raspuns
+ *     comerciantul schimba pe ALBASTRU
+ *     GEN 11 → ALBASTRU → `completed` ✅
+ *     mai tarziu, GEN 10 se prelucreaza la ei → ramane ROSU ❌
+ *
+ * Iar `inchideLoturileDepasite` scria ca „ce a trimis el a fost oricum inlocuit de ce am trimis
+ * dupa". Nu e garantat: loturile lor se prelucreaza asincron, si nicaieri in contract nu scrie ca
+ * doua loturi diferite se aseaza in ordinea trimiterii.
+ *
+ * ⚠ CE SE POATE FACE, SI SE FACE: nu presupunem ca noul a castigat — ne asiguram ca ULTIMUL lucru
+ * pe care il primesc e cel adevarat. Dupa orice lot dintr-o generatie depasita, se pune la coada o
+ * retrimitere a starii de ACUM. Nu conteaza in ce ordine au aplicat ce le-am dat: ce vine la urma
+ * e adevarul, si el ramane.
+ *
+ * ⚠ DOUA CAI, fiindca doua feluri de lot vechi:
+ *
+ *   il VEDEM asezandu-se (are `batchRequestId`) → retrimitere ACUM;
+ *   nu-l vom vedea niciodata (`necunoscut` fara id) → retrimitere AMANATA, cat sa fi apucat sa
+ *     se aseze la ei. Amanarea foloseste `next_retry_at`, pe care `revendica_din_coada` il
+ *     respecta deja.
+ */
+const ASTEPTAREA_LOTULUI_ORB_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Pune la coada o retrimitere a starii de ACUM a produsului.
+ *
+ * ⚠ `ignoreDuplicates` la varianta amanata: daca exista deja o retrimitere la coada, ea face
+ * oricum treaba — si ar fi gresit sa-i impingem `next_retry_at` inainte, adica sa INTARZIEM o
+ * lucrare care era gata de plecare.
+ */
+async function reasertaStareaCurenta(
+  admin: Db, businessId: string, productId: string | null, styleKey: string,
+  intarziereMs = 0,
+): Promise<void> {
+  if (!productId) return;
+  const rand = {
+    business_id: businessId, product_id: productId, offer_id: styleKey, op: "upsert",
+    attempts: 0, last_error: null,
+    ...(intarziereMs > 0
+      ? { next_retry_at: new Date(Date.now() + intarziereMs).toISOString() }
+      : { next_retry_at: null }),
+  };
+  const { error } = intarziereMs > 0
+    ? await admin.from("aboutyou_sync_queue")
+      .upsert(rand as never, { onConflict: "business_id,offer_id,op", ignoreDuplicates: true })
+    : await admin.from("aboutyou_sync_queue")
+      .upsert(rand as never, { onConflict: "business_id,offer_id,op" });
+  if (error) {
+    await logError({
+      action: "aboutyou/reasertare", severity: "critical",
+      message: `retrimiterea starii curente nu s-a putut pune la coada: ${error.message}`,
+      details: { styleKey, productId, intarziereMs }, businessId,
+    });
+  }
+}
+
 /**
  * Loturile de produs ramase deschise dintr-o generatie depasita.
  *
@@ -362,18 +428,39 @@ export function caUnRezultat<T extends { batchRequestId?: string | null }>(
  * `related_ids` poarta `style_key`-ul ei.
  */
 async function inchideLoturileDepasite(admin: Db, businessId: string): Promise<void> {
-  const listari = randuriCitite<{ style_key: string; generatie: number }>(
+  const listari = randuriCitite<{ style_key: string; generatie: number; product_id: string | null }>(
     "aboutyou.listariCuGeneratie", await admin
-      .from("aboutyou_listings").select("style_key, generatie")
+      .from("aboutyou_listings").select("style_key, generatie, product_id")
       .eq("business_id", businessId).gt("generatie", 0).limit(500) as never);
 
   for (const l of listari) {
+    /*
+     * ⚠ SE CITESTE CATE SUNT, INAINTE DE A LE INCHIDE. Numarul e singurul semn ca a existat un lot
+     * orb pe produsul asta — dupa `update` n-am mai avea de unde sti, iar retrimiterea amanata
+     * de mai jos are rost NUMAI daca a existat unul.
+     */
+    const orbi = randuriCitite<{ id: string }>("aboutyou.loturiOrbe", await admin
+      .from("aboutyou_batches").select("id")
+      .eq("business_id", businessId).eq("kind", "product")
+      .contains("related_ids", [l.style_key])
+      .in("status", ["intentie", "necunoscut"])
+      .lt("generatie", l.generatie).limit(1) as never);
+
     const { error } = await admin.from("aboutyou_batches")
       .update({ status: "depasit", polled_at: new Date().toISOString() } as never)
       .eq("business_id", businessId).eq("kind", "product")
       .contains("related_ids", [l.style_key])
       .in("status", ["intentie", "necunoscut"])
       .lt("generatie", l.generatie);
+
+    /*
+     * ⚠ AICI SE FACE ADEVARATA COMENTARIUL. Un lot orb nu se va vedea niciodata asezandu-se — deci
+     * nu presupunem ca noul l-a batut, ci punem la coada o retrimitere a starii de ACUM, amanata
+     * cat sa fi apucat sa ajunga la ei. Ce vine la urma ramane. Vezi `reasertaStareaCurenta`.
+     */
+    if (!error && orbi.length > 0) {
+      await reasertaStareaCurenta(admin, businessId, l.product_id, l.style_key, ASTEPTAREA_LOTULUI_ORB_MS);
+    }
     if (error) {
       await logError({
         action: "aboutyou/intentie", severity: "warning",
@@ -750,15 +837,40 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
    * („Reverting to `draft` is only supported BEFORE the product reaches approval"). Cel mai rau
    * caz e un drum in plus, nu o stare stricata.
    */
+  /*
+   * ═══ ⚠ SI SE ASTEAPTA CONFIRMAREA LOR, NU DOAR TRECEREA URMATOARE (27.08.2026, tarziu) ═══
+   *
+   * Prima varianta scria `draft` local imediat si se bizuia pe cron: „la trecerea urmatoare
+   * listarea e deja ciorna". Dar `PUT /products/status` e tot ASINCRON — pana se aseaza lotul lui,
+   * produsul e INCA `pending_approval` la ei. Un minut mai tarziu trimiteam modificarea peste un
+   * produs aflat inca in aprobare, adica tocmai ce documentatia lor interzice, si aflam abia din
+   * refuzul lor.
+   *
+   * ⚠ STAREA DE ASTEPTARE ARE NUME: `draft_pending`. Se scrie ea, nu `draft`, iar `draft` il pune
+   * abia asezarea lotului de status. Pana atunci, orice trimitere se opreste aici, trecator.
+   */
   if (listing.status === "pending_approval") {
-    const retras = await setRemoteStatus(admin, ctx, productId, "draft");
+    const retras = await setRemoteStatus(admin, ctx, productId, "draft", "draft_pending");
     if (!retras.ok) {
       return { ok: false, error: `Produsul e în aprobare și nu l-am putut retrage în ciornă: ${retras.error}`, status: retras.status };
     }
     return {
       ok: false,
-      error: "Produsul era în aprobare la About You. L-am retras în ciornă; modificarea se trimite la trecerea următoare.",
+      error: "Produsul era în aprobare la About You. Am cerut retragerea în ciornă; modificarea pleacă după ce ei o confirmă.",
       /* Trecatoare: elementul ramane in coada, fara sa consume o incercare. */
+      status: 0,
+    };
+  }
+
+  /*
+   * ⚠ RETRAGEREA E CERUTA SI INCA NECONFIRMATA. Nu se trimite nimic: la ei produsul poate fi inca
+   * in aprobare. Se asteapta, tot trecator. Daca lotul de status pica, `pollOpenBatches` scrie
+   * `error` pe listare, iar de-acolo elementul isi consuma incercarile normal si se vede.
+   */
+  if (listing.status === "draft_pending") {
+    return {
+      ok: false,
+      error: "Așteptăm ca About You să confirme retragerea în ciornă.",
       status: 0,
     };
   }
@@ -838,6 +950,13 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
 // ── Publish / unpublish ─────────────────────────────────────────────────────────
 async function setRemoteStatus(
   admin: Db, ctx: AboutYouSyncContext, productId: string, status: "published" | "inactive" | "draft",
+  /**
+   * Ce stare LOCALA se scrie in loc de cea obisnuita.
+   *
+   * ⚠ Serveste retragerii dinaintea unei modificari: `PUT /products/status` e ASINCRON, deci
+   * `draft` scris pe loc ar fi o minciuna pana se aseaza lotul. Vezi `syncProductNow`.
+   */
+  stareLocala?: string,
 ): Promise<SyncOutcome> {
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: false, error: "Listarea About You nu există." };
@@ -891,7 +1010,8 @@ async function setRemoteStatus(
     return { ok: false, error: res.error, status: res.status };
   }
   const batchRequestId = res.data?.batchRequestId;
-  const statusLocal = status === "published" ? "pending" : status === "inactive" ? "inactive" : "draft";
+  const statusLocal = stareLocala
+    ?? (status === "published" ? "pending" : status === "inactive" ? "inactive" : "draft");
   /*
    * ⚠ `error` NU se goleste aici. Probat pe fir, 17.08.
    *
@@ -1111,6 +1231,9 @@ async function marcheazaListarileLotului(
 /** Cat de rar se intreaba un lot care e in lucru la ei de peste doua ore. */
 const AMANARE_LOT_LENT_MS = 30 * 60 * 1000;
 
+/** Si cat de rar unul ramas nelamurit dupa sapte zile. Nu se abandoneaza, doar se rareste. */
+const AMANARE_LOT_STALLED_MS = 6 * 60 * 60 * 1000;
+
 /** Felurile de lot care lucreaza pe COMENZI, nu pe listari. `related_ids` poarta id-uri de comanda. */
 const LOTURI_DE_COMANDA: Record<string, string> = {
   ship: "ship_necunoscut", cancel: "cancel_necunoscut", return: "return_necunoscut",
@@ -1153,7 +1276,18 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
     .from("aboutyou_batches")
     .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la, generatie")
     .eq("business_id", ctx.businessId)
-    .in("status", ["pending", "processing", "retry"])
+    /*
+     * ═══ ⚠ SI `stalled`, RAR (27.08.2026, tarziu) ═══
+     *
+     * Dupa sapte zile lotul trecea pe `stalled` — nume corect — dar iesea din selectie, deci nu
+     * mai era intrebat NICIODATA. Adica un nume onest peste o purtare la fel de terminala ca
+     * `failed`: singura cale de iesire ramanea sa retrimita omul, iar asta e chiar ce nu vrem cat
+     * timp lotul vechi poate inca sa se aseze la ei.
+     *
+     * ⚠ Ramane in selectie, dar cu `next_poll_at` la sase ore: nu ocupa un loc printre cele vii,
+     * si totusi, daca ei raspund vreodata, aflam.
+     */
+    .in("status", ["pending", "processing", "retry", "stalled"])
     /* ⚠ Loturile amanate dupa un esec de transport se sar: vezi `amanare`. Fara asta, un lot in
        amanare ar fi tot interogat si amanarea n-ar insemna nimic. */
     .or(`next_poll_at.is.null,next_poll_at.lte.${new Date().toISOString()}`)
@@ -1320,9 +1454,12 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
         poll_errors: 0,
         /* ⚠ Sirul de esecuri de transport se rupe; amanarea, insa, o pune incetinirea de mai jos. */
         tranzient_de_la: null,
-        next_poll_at: incetinit
-          ? new Date(Date.now() + AMANARE_LOT_LENT_MS).toISOString()
-          : null,
+        /* ⚠ Cel `stalled` isi pune singur amanarea, mai lunga; nu se scrie peste ea. */
+        ...(amIncetatSaIntreb ? {} : {
+          next_poll_at: incetinit
+            ? new Date(Date.now() + AMANARE_LOT_LENT_MS).toISOString()
+            : null,
+        }),
         ...(amIncetatSaIntreb
           ? {
             /*
@@ -1337,6 +1474,8 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
              * scrie `failed`.
              */
             status: "stalled",
+            /* ⚠ Rar, dar nu niciodata: vezi selectia din `pollOpenBatches`. */
+            next_poll_at: new Date(Date.now() + AMANARE_LOT_STALLED_MS).toISOString(),
             result_summary: {
               status: result?.status ?? "necunoscut",
               amIncetatSaIntrebam: true, zile: 7,
@@ -1529,6 +1668,20 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
 
     // Only catalog batches (product create/update, status) reflect onto the
     // listing status; stock/price batches are transient and just settle.
+    /*
+     * ⚠ CONFIRMAREA RETRAGERII. `draft_pending` inseamna „am cerut ciorna si asteptam"; abia
+     * asezarea lotului de status o face adevarata. Fara pasul asta, produsul ar astepta la
+     * nesfarsit o confirmare pe care nimeni n-o scrie.
+     */
+    if (b.kind === "status" && !hardFail) {
+      for (const sk of styleKeys) {
+        const l = await getListingByStyleKey(admin, ctx.businessId, sk);
+        if (l?.status === "draft_pending") {
+          if (!await setListingStatus(admin, l.id, "draft", { error: null })) asezat = false;
+        }
+      }
+    }
+
     if (b.kind === "product" || b.kind === "status" || b.kind === "removal") {
       for (const sk of styleKeys) {
         const listing = await getListingByStyleKey(admin, ctx.businessId, sk);
@@ -1583,9 +1736,16 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * care nu mai exista: n-are voie nici sa scrie starea, nici sa publice. Se lasa in pace,
            * si generatia curenta isi va spune singura cuvantul.
            */
+          /*
+           * ⚠ NU SE „IGNORA" PUR SI SIMPLU. Lotul asta tocmai a aplicat LA EI o versiune veche a
+           * produsului — poate peste cea noua, fiindca loturile lor se aseaza asincron si nimic
+           * nu garanteaza ordinea. Se pune la coada o retrimitere a starii de ACUM: ce vine la
+           * urma ramane.
+           */
+          await reasertaStareaCurenta(admin, ctx.businessId, listing.product_id, listing.style_key);
           await logError({
-            action: "aboutyou-sync/loturi", severity: "info",
-            message: `lot din generatia ${b.generatie} asezat dupa ce produsul a fost retrimis (generatia ${listing.generatie}): se ignora`,
+            action: "aboutyou-sync/loturi", severity: "warning",
+            message: `lot din generatia ${b.generatie} asezat dupa ce produsul a fost retrimis (generatia ${listing.generatie}): se retrimite starea de acum`,
             details: { styleKey: listing.style_key, batchRequestId: b.batch_request_id },
             businessId: ctx.businessId,
           });

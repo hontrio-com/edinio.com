@@ -193,8 +193,17 @@ test("⚠ intentia ramasa deschisa ajunge la un om, o singura data", () => {
   const cron = viu("src/app/api/cron/aboutyou-sync/route.ts");
   assert.match(cron, /await alarmaIntentiiDeschise\(admin, businessId\)/);
 
-  /* ⚠ Loturile deschise NU se sondeaza: n-au id-ul lor, deci n-au ce intreba. */
-  assert.match(sync, /\.in\("status", \["pending", "processing", "retry"\]\)/);
+  /*
+   * ⚠ Loturile deschise (`intentie`, `necunoscut`) NU se sondeaza: n-au id-ul lor, deci n-au ce
+   * intreba. `stalled` E in selectie, dar cu o amanare de sase ore — vezi nota de acolo: un nume
+   * onest peste o purtare terminala tot fund de sac ramane.
+   */
+  assert.match(sync, /\.in\("status", \["pending", "processing", "retry", "stalled"\]\)/);
+  /* Si intentiile deschise chiar NU sunt in selectia de sondare: n-au id-ul lor. */
+  const iSelectie = sync.indexOf('.in("status", ["pending", "processing", "retry", "stalled"])');
+  assert.ok(iSelectie > 0);
+  assert.ok(!sync.slice(iSelectie - 400, iSelectie).includes('"intentie"'),
+    "selectia de sondare nu are voie sa cuprinda intentiile deschise");
 });
 
 test("⚠ publicarea asteapta ULTIMUL lot al produsului, nu primul", () => {
@@ -209,7 +218,13 @@ test("⚠ publicarea asteapta ULTIMUL lot al produsului, nu primul", () => {
   const sync = viu("src/lib/aboutyou/sync.ts");
   assert.match(sync, /const fratiNeterminati = randuriCitite</);
   assert.match(sync, /\.contains\("related_ids", \[listing\.style_key\]\)/);
-  assert.match(sync, /\.in\("status", \["pending", "processing", "retry"\]\)/);
+  /*
+   * ⚠ Lista fraților CUPRINDE și `intentie` / `necunoscut` — vezi nota din cod: de când urma se
+   * scrie înainte de cerere, un frate poate sta acolo, iar amândouă înseamnă „poate n-a ajuns tot
+   * produsul la ei". Nu se confundă cu selecția de SONDARE, care e altă listă și n-are ce întreba
+   * pe un lot fără id.
+   */
+  assert.match(sync, /\.in\("status", \["intentie", "necunoscut", "pending", "processing", "retry"\]\)/);
   assert.match(sync, /\.neq\("id", b\.id\)/, "lotul curent nu se numara pe sine");
 
   /* ⚠ Si verificarea e INAINTEA punerii publicarii la coada. */

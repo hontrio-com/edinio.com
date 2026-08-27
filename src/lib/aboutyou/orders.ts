@@ -88,7 +88,7 @@ async function scrieRetururile(
       details: { ayNumber, cate: intoarse.length, orderId },
       businessId: ctx.businessId, severity: "critical",
     });
-    throw new Error(`Liniile intoarse ale comenzii ${ayNumber} nu s-au putut scrie: ${error.message}`);
+    throw new EroareTrecatoare(`Liniile intoarse ale comenzii ${ayNumber} nu s-au putut scrie: ${error.message}`);
   }
 }
 
@@ -511,7 +511,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      * la capat, si amandoua sunt idempotente. Asa nu ramane nimic pe jumatate.
      */
     if (eLateralAct) {
-      throw new Error(`Randul About You al comenzii ${ayNumber} nu s-a putut actualiza: ${eLateralAct.message}`);
+      throw new EroareTrecatoare(`Randul About You al comenzii ${ayNumber} nu s-a putut actualiza: ${eLateralAct.message}`);
     }
     /*
      * Starile terminale trec prin motorul comun: o anulare sau un retur trebuie sa
@@ -757,7 +757,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
     last_synced_at: now,
   } as never, { onConflict: "business_id,aboutyou_order_number" });
   if (eLateral) {
-    throw new Error(`Randul About You al comenzii ${ayNumber} nu s-a putut scrie: ${eLateral.message}`);
+    throw new EroareTrecatoare(`Randul About You al comenzii ${ayNumber} nu s-a putut scrie: ${eLateral.message}`);
   }
 
   /*

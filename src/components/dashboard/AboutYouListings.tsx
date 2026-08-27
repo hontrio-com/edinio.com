@@ -19,6 +19,12 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   active: { text: "Activ pe About You", cls: "bg-green-100 text-green-700" },
   pending: { text: "În așteptare", cls: "bg-amber-100 text-amber-700" },
   pending_approval: { text: "În aprobare", cls: "bg-amber-100 text-amber-700" },
+  /*
+   * ⚠ „Am cerut ciorna si asteptam confirmarea lor". About You nu accepta modificari cat produsul
+   * e in aprobare, deci il retragem intai — dar `PUT /products/status` e asincron, si pana se
+   * aseaza lotul produsul e INCA in aprobare la ei. Starea asta e chiar fereastra aia.
+   */
+  draft_pending: { text: "Se retrage în ciornă", cls: "bg-blue-100 text-blue-700" },
   pending_active: { text: "Se activează", cls: "bg-amber-100 text-amber-700" },
   /*
    * DOUA stari care aratau identic si inseamna lucruri opuse.

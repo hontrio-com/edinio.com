@@ -89,10 +89,13 @@ export async function POST(request: NextRequest) {
   /*
    * DOUA INCUIETORI, pentru ca prima nu e sigura.
    *
-   * Schema de semnatura a lui About You nu e publicata nicaieri: antetul si
-   * algoritmul din `verifyAboutYouSignature` sunt DEDUSE. Daca sunt gresite,
-   * verificarea pica mereu si ruta nu ar avea nicio aparare reala — sau, mai rau,
-   * cineva ar putea fi tentat sa o scoata ca „sa mearga".
+   * ⚠ SCHEMA E ACUM CONFIRMATA — masurata pe doua livrari adevarate, vezi `webhooks.ts`:
+   * HMAC-SHA256 peste corpul brut, hexa, pe `x-signature`. Nota de aici spunea pana azi ca e
+   * „dedusa" si ca „daca e gresita, verificarea pica mereu"; nu mai e adevarat.
+   *
+   * ⚠ TOKENUL RAMANE TOTUSI, si nu din obisnuinta: secretul se poate pierde la o resalvare de
+   * config, iar atunci el e singurul lucru care mai tine webhookul in viata. Doua incuietori
+   * inseamna ca niciuna nu e singurul punct de cadere.
    *
    * De aceea adaugam un secret propriu in chiar URL-ul cu care ne abonam
    * (`?token=`). El nu depinde de nimic ce trebuie ghicit: doar About You il

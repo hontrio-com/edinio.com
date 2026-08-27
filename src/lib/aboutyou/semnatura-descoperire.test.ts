@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { cercetareSemnatura, formaValorii } from "./semnatura-descoperire";
+import { verifyAboutYouSignature } from "./webhooks";
 
 /* ══════════════════════════════════════════════════════════════════════════
    CE FEL DE SEMNATURA PUNE ABOUT YOU (27.08.2026)
@@ -100,4 +102,73 @@ test("⚠ nu hotaraste nimic: e o masuratoare, nu o poarta", () => {
    */
   const c = cercetareSemnatura(SECRET, cu({ "x-signature": "0".repeat(64) }), CORP);
   assert.deepEqual(Object.keys(c).sort(), ["antete", "potrivire", "potrivirePeAntet", "toateAnteteleNume"]);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SI ACUM SCHEMA ADEVARATA, MASURATA (27.08.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Doua livrari adevarate pe contul de sandbox - o schimbare de stoc dus-intors - au raspuns la
+   intrebarea care statea deschisa de la prima zi a integrarii. Din jurnal, verbatim:
+
+       schema de semnatura AFLATA: hmac-sha256(corp)/hex pe antetul „x-signature"
+       (verificarea de azi o accepta deja)
+
+   ⚠ DEDUCTIA DIN PRIMA ZI ERA CORECTA. Comentariul care spunea „SEMNATURA NU E CONFIRMATA… daca
+   schema difera, TOATE evenimentele cad tacut" a stat luni si a intrat in fiecare audit ca risc
+   deschis - pentru un lucru care mergea.
+
+   ⚠ SI IN TOATA LISTA ANTETELOR primite nu exista alt candidat de semnatura si niciun antet de
+   marca de timp: 48 de antete, dintre care unul singur e `x-signature`. Deci nu e o schema cu
+   `timestamp.corp`. Verificat pe lista intreaga, nu pe cele patru la care ne uitam.
+*/
+
+test("⚠ schema masurata e chiar cea pe care o acceptam", () => {
+  /*
+   * Proba reface exact ce s-a masurat: acelasi algoritm, aceeasi codificare, acelasi antet. Daca
+   * cineva strange candidatii si scoate tocmai varianta asta, aici se vede.
+   */
+  const corp = '{"id":"evt","event":"stock.updated"}';
+  const hex = createHmac("sha256", SECRET).update(corp).digest("hex");
+  assert.equal(hex.length, 64, "64 de caractere hexa, ca in masuratoare");
+
+  const c = cercetareSemnatura(SECRET, cu({ "x-signature": hex }), corp);
+  assert.equal(c.potrivire, "hmac-sha256(corp)/hex");
+  assert.equal(c.potrivirePeAntet, "x-signature");
+  assert.deepEqual(c.antete, [{ nume: "x-signature", forma: "hexa:64" }]);
+});
+
+test("⚠ si verificarea din productie o accepta", () => {
+  /*
+   * ⚠ Legatura care conteaza: unealta MASOARA, `verifyAboutYouSignature` HOTARASTE. Daca cele doua
+   * se despart, masuratoarea devine o curiozitate. Aici se cere sa spuna acelasi lucru.
+   */
+  const corp = '{"id":"evt","event":"stock.updated"}';
+  const hex = createHmac("sha256", SECRET).update(corp).digest("hex");
+  assert.equal(verifyAboutYouSignature(SECRET, hex, corp), true);
+  /* Si un secret gresit nu trece, altfel proba de mai sus n-ar dovedi nimic. */
+  assert.equal(verifyAboutYouSignature("alt-secret", hex, corp), false);
+});
+
+test("⚠ nota veche care spunea ca schema NU e confirmata a fost stearsa", () => {
+  /*
+   * ⚠ O afirmatie falsa lasata in cod devine fapt pentru cine o citeste mai tarziu - azi am gasit
+   * doua asa, si amandoua modelasera hotarari saptamani la rand („GET /products/ da doar trei
+   * campuri", si asta). Se sterge odata cu masuratoarea.
+   */
+  const brut = readFileSync("src/lib/aboutyou/webhooks.ts", "utf8");
+  assert.match(brut, /SCHEMA DE SEMNATURA E CONFIRMATA/);
+  assert.match(brut, /hmac-sha256\(corp\)\/hex pe antetul/);
+
+  /*
+   * ⚠ Fraza veche mai apare o data, si e in regula: in CITATUL cu care se explica ce scria
+   * inainte. Asta nu e o afirmatie activa, e istoria corecturii — iar pastrata, urmatorul care
+   * citeste fisierul intelege de ce nota s-a schimbat. Se cere doar sa NU mai fie o afirmatie de
+   * sine statatoare.
+   */
+  for (const linie of brut.split(/\r?\n/)) {
+    if (!linie.includes("SEMNATURA NU E CONFIRMATA")) continue;
+    assert.ok(linie.includes("Aici scria"),
+      `„SEMNATURA NU E CONFIRMATA" a reaparut ca afirmatie, nu ca citat: ${linie.trim()}`);
+  }
 });

@@ -2,14 +2,37 @@
 // event handlers. About You returns a `client_secret` when a subscription is
 // created; events are signed with it.
 //
-// SEMNATURA NU E CONFIRMATA. Documentatia About You nu publica nici antetul, nici
-// algoritmul; presupunerea de mai jos (HMAC-SHA256 peste corpul brut, in hex) e
-// dedusa, nu citita. Pana la confirmare, un eveniment care nu trece verificarea
-// este logat si IGNORAT — nu actionam niciodata pe date neverificate.
-//
-// CONSECINTA, de stiut inainte de a te baza pe webhookuri: daca schema difera,
-// TOATE evenimentele cad tacut. Plasa de siguranta e cronul, care intreaba direct
-// `GET /orders/` si aduce comenzile oricum, cu o intarziere de pana la un minut.
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⚠ SCHEMA DE SEMNATURA E CONFIRMATA. MASURATA, NU CITITA (27.08.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Aici scria, de la prima zi a integrarii: „SEMNATURA NU E CONFIRMATA… presupunerea de mai jos e
+ * dedusa, nu citita", si mai departe „daca schema difera, TOATE evenimentele cad tacut".
+ * Afirmatia a stat luni intregi si a intrat in fiecare audit ca risc deschis.
+ *
+ * S-a lamurit cu doua livrari adevarate pe contul de sandbox — o schimbare de stoc dus-intors —
+ * si cu o unealta care se uita la ce vine (`semnatura-descoperire.ts`). Rezultatul, verbatim din
+ * jurnal:
+ *
+ *     schema de semnatura AFLATA: hmac-sha256(corp)/hex pe antetul „x-signature"
+ *
+ * Adica exact ce deduseseram: HMAC-SHA256 peste CORPUL BRUT, in hexazecimal, 64 de caractere,
+ * fara prefix, pe antetul `x-signature`.
+ *
+ * ⚠ SI IN TOATA LISTA ANTETELOR PRIMITE nu exista alt candidat de semnatura si niciun antet de
+ * marca de timp — deci nu e o schema cu `timestamp.corp`, cum au altii. Verificat pe lista
+ * intreaga, nu pe cele patru la care ne uitam.
+ *
+ * ⚠ CE RAMANE ADEVARAT: tokenul din URL. Nu mai e o carja pentru o semnatura neconfirmata, ci a
+ * doua incuietoare — iar cand secretul se pierde la o resalvare de config, el e singurul lucru
+ * care mai tine webhookul in viata. Se pastreaza.
+ *
+ * ⚠ SI DE CE SE ACCEPTA IN CONTINUARE SI BASE64, si celelalte trei antete: nu slabeste nimic.
+ * Toate cer acelasi secret, deci cine nu-l are nu trece pe niciuna. Masurat inseamna „stim ce
+ * trimit AZI, pe contul asta"; ingustat la un singur nume, o schimbare la ei ar taia toate
+ * evenimentele in tacere — chiar paguba pe care nota veche o descria.
+ */
 
 import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";

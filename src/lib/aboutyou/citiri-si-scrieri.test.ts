@@ -162,11 +162,17 @@ test("⚠ toate cele opt trimiteri trec prin outbox, si niciuna pe langa", () =>
    */
   const reluabile = [...sync.matchAll(/caUnRezultat\(await cuLotDurabil\(/g)];
   /*
-   * Cinci operatii reluabile: produs, stare, retragere, retragere de variante, si stoc/pret prin
-   * acelasi ajutor. Reluarea FARA `valid_at` s-a scos — vezi `valid-at.test.ts`: „refuz limpede"
+   * Sase operatii reluabile: produs, stare, retragere, retragere de variante, stingerea unui produs
+   * eliminat, si stoc/pret prin acelasi ajutor. Reluarea FARA `valid_at` s-a scos — vezi `valid-at.test.ts`: „refuz limpede"
    * inseamna orice 4xx, deci prima greseala de pret ar fi stins tacut paza impotriva reordonarii.
    */
-  assert.equal(reluabile.length, 5, `asteptam cinci trimiteri reluabile, am gasit ${reluabile.length}`);
+  /*
+   * ⚠ A SASEA (28.08.2026, tarziu): stingerea unui produs ELIMINAT pe care un lot de stare mai vechi
+   * l-a reactivat. E reluabila din acelasi motiv ca celelalte — `inactive` cerut de doua ori da tot
+   * `inactive` — si trece prin piatra de mormant, singura care mai stie cheia dupa ce listarea a
+   * disparut. Vezi `pollOpenBatches`, ramura `b.kind === "status"` fara listare.
+   */
+  assert.equal(reluabile.length, 6, `asteptam sase trimiteri reluabile, am gasit ${reluabile.length}`);
   assert.doesNotMatch(sync, /\(\) => trimite\(transa, undefined\)/, "reluarea fara `valid_at` s-a intors");
 
   /*

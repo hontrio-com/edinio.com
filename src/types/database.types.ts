@@ -120,6 +120,7 @@ export type Database = {
           result_summary: Json | null
           status: string
           submitted_at: string
+          transe: number | null
           tranzient_de_la: string | null
           trimis_la: string | null
         }
@@ -141,6 +142,7 @@ export type Database = {
           result_summary?: Json | null
           status?: string
           submitted_at?: string
+          transe?: number | null
           tranzient_de_la?: string | null
           trimis_la?: string | null
         }
@@ -162,6 +164,7 @@ export type Database = {
           result_summary?: Json | null
           status?: string
           submitted_at?: string
+          transe?: number | null
           tranzient_de_la?: string | null
           trimis_la?: string | null
         }
@@ -250,6 +253,36 @@ export type Database = {
           product_id?: string
           recuperari?: number
           status?: string
+        }
+        Relationships: []
+      }
+      aboutyou_listari_scoase: {
+        Row: {
+          business_id: string
+          id: string
+          product_id: string | null
+          reasertari: number
+          scos_la: string
+          status_generatie: number
+          style_key: string
+        }
+        Insert: {
+          business_id: string
+          id?: string
+          product_id?: string | null
+          reasertari?: number
+          scos_la?: string
+          status_generatie?: number
+          style_key: string
+        }
+        Update: {
+          business_id?: string
+          id?: string
+          product_id?: string | null
+          reasertari?: number
+          scos_la?: string
+          status_generatie?: number
+          style_key?: string
         }
         Relationships: []
       }
@@ -5179,6 +5212,7 @@ export type Database = {
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
       aboutyou_elibereaza_anulari: { Args: { p_business_id: string; p_order_number: string; p_linii: Json }; Returns: Json }
       aboutyou_generatie_noua: { Args: { p_listing_id: string }; Returns: number }
+      aboutyou_status_generatie_noua: { Args: { p_listing_id: string; p_status: string }; Returns: number }
       aboutyou_salveaza_variante: { Args: { p_business_id: string; p_listing_id: string; p_randuri: Json }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
       trendyol_comenzi_de_facturat: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { order_id: string; shipment_package_id: string }[] }

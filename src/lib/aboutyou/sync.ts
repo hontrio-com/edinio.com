@@ -295,6 +295,18 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
    * listare abia la asezare reusita. Vezi `rezolvaIntentiile`.
    */
   cititLa?: string,
+  /**
+   * Cate loturi are, in total, operatia logica din care face parte acesta.
+   *
+   * ⚠ O LISTA GOALA DE FRATI NU INSEAMNA CA N-AU EXISTAT NICIODATA. `operatiaSAIncheiat` numara
+   * randurile care apuca sa existe, iar `[].every(...)` e `true`: daca procesul moare dupa transa 1,
+   * transele 2 si 3 n-au niciun rand, iar mai tarziu transa 1 asezata trece drept „operatie
+   * incheiata" — cu o suta de variante din doua sute cincizeci la ei.
+   *
+   * Numarul se stie INAINTE de prima cerere, e o impartire. Scris pe fiecare rand, confirmarea
+   * poate cere doua lucruri: sa fie TOTI, si toti incheiati.
+   */
+  transe?: number,
 ): Promise<LotDurabil<T>> {
   const intentId = randomUUID();
   const { error: eIntentie } = await admin.from("aboutyou_batches").insert({
@@ -303,6 +315,7 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
     attempts: 0, poll_errors: 0,
     ...(generatie != null ? { generatie } : {}),
     ...(cititLa != null ? { citit_la: cititLa } : {}),
+    ...(transe != null ? { transe } : {}),
     /* ⚠ Pus INAINTE de apel, nu dupa: dupa, o cadere intre apel si scriere ar lasa randul
        aratand ca n-a plecat nimic — exact minciuna de care fugim. */
     trimis_la: new Date().toISOString(),
@@ -1964,7 +1977,7 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   for (let i = 0; i < built.items.length; i += 100) {
     /* ⚠ Acelasi produs retrimis da acelasi produs: reluarea e inofensiva. */
     const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "product", [listing.style_key],
-      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100)), generatie, cititLa), "trimiterea produsului");
+      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100)), generatie, cititLa, transe), "trimiterea produsului");
     if (isAboutYouError(res)) {
       /*
        * ⚠ UN ESEC LA MIJLOCUL SIRULUI LASA PRODUSUL PE JUMATATE LA EI. Transele dinainte au
@@ -2113,12 +2126,26 @@ async function setRemoteStatus(
    * ⚠ SE SCRIE INAINTEA CERERII, impreuna cu `status_dorit`: cand un lot depasit se aseaza, nu
    * ajunge sa nu-i credem starea — trebuie sa stim CE sa retrimitem. Nescrisa, cererea nu pleaca.
    */
-  const genStatus = listing.status_generatie + 1;
-  const { error: eGenStatus } = await admin.from("aboutyou_listings")
-    .update({ status_generatie: genStatus, status_dorit: status } as never).eq("id", listing.id);
-  if (eGenStatus) {
-    return { ok: false, status: 0, error: `Nu am putut ține minte starea cerută: ${eGenStatus.message}` };
+  /*
+   * ⚠ ATOMIC, PRINTR-UN RPC, ca la generatia continutului. Citit-apoi-scris din aplicatie, doua
+   * cereri simultane citesc amandoua 5 si scriu amandoua 6:
+   *
+   *     A vrea `published` -> generatia 6
+   *     B vrea `inactive`  -> generatia 6
+   *
+   * Doua loturi externe cu aceeasi generatie: niciunul nu e „depasit" fata de celalalt, deci paza
+   * nu vede nimic, iar la ei castiga cine termina ultimul — nu cine a cerut ultimul.
+   */
+  const { data: genNou, error: eGenStatus } = await admin.rpc("aboutyou_status_generatie_noua", {
+    p_listing_id: listing.id, p_status: status,
+  });
+  if (eGenStatus || typeof genNou !== "number") {
+    return {
+      ok: false, status: 0,
+      error: `Nu am putut ține minte starea cerută: ${eGenStatus?.message ?? "răspuns nevalid"}`,
+    };
   }
+  const genStatus = genNou;
 
   const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "status", [listing.style_key],
     () => updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }]), genStatus),
@@ -2289,6 +2316,45 @@ export async function unpublishProductNow(admin: Db, ctx: AboutYouSyncContext, p
  * ⚠ INTOARCE `false` DACA N-A PUTUT: apelantul nu are voie sa stearga listarea atunci. O comanda
  * pierduta e mai scumpa decat o retragere amanata cu un minut.
  */
+/**
+ * Piatra de mormant a unei listari eliminate.
+ *
+ * ═══ ⚠ UN `publish` VECHI POATE REACTIVA UN PRODUS ELIMINAT (28.08.2026, tarziu) ═══
+ *
+ *     10:00 „Publica"  -> lotul pleaca, e inca in lucru la ei
+ *     10:01 „Elimina"  -> `inactive` se incheie primul, randul local se sterge
+ *     10:05 `published` cel vechi se aseaza -> la ei produsul E DIN NOU ACTIV ❌
+ *
+ * Iar la noi nu mai exista nici listare, nici `status_dorit`, nici generatie: nimic care sa mai
+ * ceara `inactive`. Produsul ramane vandabil, si nimeni nu mai afla.
+ *
+ * ⚠ PIATRA TINE MINTE EXACT CE TREBUIE: cheia de stil si generatia la care s-a cerut scoaterea. Un
+ * lot de stare sub ea, asezat oricat de tarziu, se recunoaste ca depasit — chiar fara listare.
+ *
+ * ⚠ INTOARCE `false` DACA N-A PUTUT: apelantul nu sterge listarea atunci. Cat timp listarea exista,
+ * paza obisnuita pe generatie inca lucreaza; stearsa fara piatra, n-ar mai lucra nimic.
+ */
+async function pastreazaPiatra(
+  admin: Db, businessId: string, listing: { style_key: string; product_id: string | null; status_generatie: number },
+): Promise<boolean> {
+  const { error } = await admin.from("aboutyou_listari_scoase").upsert(
+    {
+      business_id: businessId, style_key: listing.style_key, product_id: listing.product_id,
+      status_generatie: listing.status_generatie, scos_la: new Date().toISOString(),
+    } as never,
+    { onConflict: "business_id,style_key" },
+  );
+  if (error) {
+    await logError({
+      action: "aboutyou/piatra", severity: "error",
+      message: `piatra de mormant a listarii nu s-a putut scrie: ${error.message}`,
+      details: { styleKey: listing.style_key }, businessId,
+    });
+    return false;
+  }
+  return true;
+}
+
 async function pastreazaMaparea(admin: Db, businessId: string, listingId: string): Promise<boolean> {
   const randuri = randuriCitite<{ sku: string; product_id: string | null; variant_title: string | null }>(
     "aboutyou.mapareaDePastrat", await admin
@@ -2338,6 +2404,9 @@ async function stergeListare(
     if (!await pastreazaMaparea(admin, ctx.businessId, listing.id)) {
       return { ok: false, status: 0, error: "Nu am putut păstra maparea SKU; se reia." };
     }
+    if (!await pastreazaPiatra(admin, ctx.businessId, listing)) {
+      return { ok: false, status: 0, error: "Nu am putut păstra urma listării scoase; se reia." };
+    }
     await admin.from("aboutyou_listings").delete().eq("id", listing.id);
     return { ok: true, action: "removed" };
   }
@@ -2357,9 +2426,30 @@ async function stergeListare(
    * Acum lotul se INREGISTREAZA cu tipul `removal`, statusul listarii nu se atinge,
    * iar `pollOpenBatches` sterge randul abia cand lotul se incheie cu bine.
    */
+  /*
+   * ═══ ⚠ SI ELIMINAREA TRECE PRIN GENERATIA STARII (28.08.2026, tarziu) ═══
+   *
+   * Pana azi, `removal` era un lot cu totul separat, care nu atingea nici `status_generatie`, nici
+   * `status_dorit`. Deci un `publish` cerut cu un minut inainte, inca in lucru la ei, NU se facea
+   * depasit de eliminare — iar asezat mai tarziu, reactiva produsul.
+   *
+   * Cerand generatie noua aici, lotul de `publish` de dinainte devine depasit prin chiar acest
+   * pas, si asezarea lui se recunoaste ca atare. Nescrisa, cererea nu pleaca.
+   */
+  const { data: genScoatere, error: eGenScoatere } = await admin.rpc("aboutyou_status_generatie_noua", {
+    p_listing_id: listing.id, p_status: tintaRetragere(listing.status),
+  });
+  if (eGenScoatere || typeof genScoatere !== "number") {
+    return {
+      ok: false, status: 0,
+      error: `Nu am putut ține minte scoaterea: ${eGenScoatere?.message ?? "răspuns nevalid"}`,
+    };
+  }
+
   const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "removal", [listing.style_key],
     () => updateProductStatus(
-      ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }])),
+      ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }]),
+    genScoatere, undefined, 1),
     "retragerea produsului");
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", {
@@ -2408,6 +2498,8 @@ interface BatchRow {
   generatie: number | null;
   /** Clipa in care s-a citit valoarea pe care o duce. Vezi `cuLotDurabil`. */
   citit_la: string | null;
+  /** Cate loturi are operatia logica din care face parte. Vezi `operatiaSAIncheiat`. */
+  transe: number | null;
 }
 
 /**
@@ -2511,7 +2603,8 @@ async function marcheazaComenzileLotului(
  * operatia nu s-a incheiat — iar „nu stim inca" nu e „a mers".
  */
 async function operatiaSAIncheiat(
-  admin: Db, businessId: string, kind: string, styleKey: string, cititLa: string, idAcesta: string,
+  admin: Db, businessId: string, kind: string, styleKey: string, cititLa: string,
+  idAcesta: string, transe: number | null,
 ): Promise<boolean> {
   const frati = randuriCitite<{ id: string; status: string }>(
     "aboutyou.fratiiOperatiei", await admin
@@ -2520,13 +2613,28 @@ async function operatiaSAIncheiat(
       .eq("citit_la", cititLa)
       .contains("related_ids", JSON.stringify([styleKey]))
       .neq("id", idAcesta) as never);
+
+  /*
+   * ═══ ⚠ SI SA FIE TOTI, NU DOAR CEI CARE EXISTA (28.08.2026, tarziu) ═══
+   *
+   * Verificarea de ieri numara randurile gasite si se multumea cu ele. Dar `[].every(...)` e
+   * `true`: daca procesul moare dupa transa 1, transele 2 si 3 n-au niciun rand, iar transa 1
+   * asezata mai tarziu trece drept „operatie incheiata" — cu o suta de variante din doua sute
+   * cincizeci la ei, si cu semnul din cutia de iesire stins.
+   *
+   * ⚠ `transe` VINE DE PE RANDUL LOTULUI, scris inaintea primei cereri. Lipsa lui — un lot dinainte
+   * de migratie — se trateaza ca „nu pot dovedi": nu se confirma. Confirmarea amanata costa o
+   * retrimitere; una data degeaba costa marfa.
+   */
+  if (transe == null) return false;
+  if (frati.length + 1 !== transe) return false;
   return frati.every((f) => f.status === "completed");
 }
 
 export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit = 20): Promise<void> {
   const batches = randuriCitite<BatchRow>("aboutyou.loturiDeschise", await admin
     .from("aboutyou_batches")
-    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la, generatie, citit_la")
+    .select("id, batch_request_id, kind, related_ids, attempts, poll_errors, submitted_at, tranzient_de_la, alarma_scrisa_la, generatie, citit_la, transe")
     .eq("business_id", ctx.businessId)
     /*
      * ═══ ⚠ SI `stalled`, RAR (27.08.2026, tarziu) ═══
@@ -2888,7 +2996,7 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
         const camp = b.kind === "stock" ? "stoc_confirmat_la" : "pret_confirmat_la";
         for (const sk of styleKeys) {
           /* ⚠ Numai cand TOATE transele aceleiasi citiri s-au incheiat bine. Vezi `operatiaSAIncheiat`. */
-          if (!await operatiaSAIncheiat(admin, ctx.businessId, b.kind, sk, b.citit_la, b.id)) continue;
+          if (!await operatiaSAIncheiat(admin, ctx.businessId, b.kind, sk, b.citit_la, b.id, b.transe)) continue;
           const l = randCitit<Record<string, string | null>>("aboutyou.confirmareaLotului", await admin
             .from("aboutyou_listings").select(`id, ${camp}`)
             .eq("business_id", ctx.businessId).eq("style_key", sk).maybeSingle() as never);
@@ -3002,7 +3110,7 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * citire. Confirmat dupa primul, semnul ar disparea inainte ca celelalte doua sute de
            * variante sa fi ajuns — si tocmai el garanta ca ajung.
            */
-          if (!await operatiaSAIncheiat(admin, ctx.businessId, "product", sk, b.citit_la, b.id)) continue;
+          if (!await operatiaSAIncheiat(admin, ctx.businessId, "product", sk, b.citit_la, b.id, b.transe)) continue;
           const l = randCitit<{ id: string; catalog_confirmat_la: string | null }>(
             "aboutyou.confirmareaCatalogului", await admin
               .from("aboutyou_listings").select("id, catalog_confirmat_la")
@@ -3057,7 +3165,56 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
     if (b.kind === "status" && !hardFail) {
       for (const sk of styleKeys) {
         const l = await getListingByStyleKey(admin, ctx.businessId, sk);
-        if (!l) continue;
+        /*
+         * ═══ ⚠ LISTAREA A FOST ELIMINATA INTRE TIMP (28.08.2026, tarziu) ═══
+         *
+         *     10:00 „Publica"  -> lotul pleaca, e inca in lucru la ei
+         *     10:01 „Elimina"  -> `inactive` se incheie primul, randul local se sterge
+         *     10:05 `published` cel vechi se aseaza -> la ei produsul E DIN NOU ACTIV ❌
+         *
+         * Pana azi se iesea tacut („listarea nu mai exista, n-am ce scrie") si produsul ramanea
+         * vandabil, fara nimic la noi care sa mai ceara `inactive`.
+         *
+         * ⚠ PIATRA DE MORMANT STIE CE TREBUIE: cheia si generatia de la clipa scoaterii. Un lot sub
+         * ea inseamna „ce s-a asezat acum e mai vechi decat scoaterea" — deci se cere din nou
+         * `inactive`, pe cheie, fara sa fie nevoie de vreo listare.
+         */
+        if (!l) {
+          const piatra = randCitit<{ id: string; status_generatie: number; reasertari: number }>(
+            "aboutyou.piatraListarii", await admin
+              .from("aboutyou_listari_scoase").select("id, status_generatie, reasertari")
+              .eq("business_id", ctx.businessId).eq("style_key", sk).maybeSingle() as never);
+          if (!piatra) continue;
+          if (b.generatie != null && b.generatie >= piatra.status_generatie) continue;
+          /*
+           * ⚠ SI ARE UN CAPAT. Daca `inactive` nu se prinde dupa cateva incercari, cauza nu mai e o
+           * cursa — si o roata care se invarte la nesfarsit ar costa o cerere la fiecare lot asezat.
+           */
+          if (piatra.reasertari >= 5) {
+            await logError({
+              action: "aboutyou-sync/loturi", severity: "critical",
+              message: `un produs eliminat a fost reactivat de un lot vechi si nu se lasa stins dupa ${piatra.reasertari} incercari: verifica in Seller Center`,
+              details: { styleKey: sk }, businessId: ctx.businessId,
+            });
+            continue;
+          }
+          const stins = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "removal", [sk],
+            () => updateProductStatus(ctx.auth, [{ style_key: sk, status: "inactive" }]),
+            piatra.status_generatie + 1, undefined, 1),
+            "stingerea unui produs eliminat");
+          if (isAboutYouError(stins)) { asezat = false; continue; }
+          await admin.from("aboutyou_listari_scoase").update({
+            status_generatie: piatra.status_generatie + 1,
+            reasertari: piatra.reasertari + 1,
+          } as never).eq("id", piatra.id);
+          await logError({
+            action: "aboutyou-sync/loturi", severity: "warning",
+            message: "un lot de stare mai vechi decat eliminarea s-a asezat: se cere din nou dezactivarea",
+            details: { styleKey: sk, generatieLot: b.generatie, generatieScoatere: piatra.status_generatie },
+            businessId: ctx.businessId,
+          });
+          continue;
+        }
         /*
          * ═══ ⚠ UN LOT DE STARE DINTR-O GENERATIE DEPASITA NU CASTIGA (28.08.2026, seara) ═══
          *
@@ -3125,6 +3282,15 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
              * stoc. Nepastrata, lotul ramane deschis si se reia.
              */
             if (!await pastreazaMaparea(admin, ctx.businessId, listing.id)) {
+              asezat = false;
+              continue;
+            }
+            /*
+             * ⚠ SI PIATRA DE MORMANT, cu generatia starii de la clipa scoaterii. Fara ea, un
+             * `publish` mai vechi asezat dupa eliminare ar reactiva produsul la ei, iar la noi
+             * n-ar mai exista nimic care sa ceara `inactive`.
+             */
+            if (!await pastreazaPiatra(admin, ctx.businessId, listing)) {
               asezat = false;
               continue;
             }
@@ -3862,11 +4028,13 @@ async function trimiteInTranse<T>(
   cititLa: string,
 ): Promise<SyncOutcome> {
   if (items.length === 0) return { ok: true, action: "skipped" };
+  /* ⚠ Se stie inaintea primei cereri. Vezi `transe` din `cuLotDurabil`. */
+  const cateTranse = Math.ceil(items.length / MAX_ITEMI_STOC_PRET);
   let batchRequestId: string | undefined;
   for (let i = 0; i < items.length; i += MAX_ITEMI_STOC_PRET) {
     const transa = items.slice(i, i + MAX_ITEMI_STOC_PRET);
     const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
-      () => trimite(transa, validAt), undefined, cititLa), `împingerea de ${kind}`);
+      () => trimite(transa, validAt), undefined, cititLa, cateTranse), `împingerea de ${kind}`);
     /*
      * ═══ ⚠ RELUAREA FARA `valid_at` S-A SCOS (27.08.2026, seara) ═══
      *

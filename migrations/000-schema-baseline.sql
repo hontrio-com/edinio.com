@@ -577,6 +577,25 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_gen integer;
+begin
+  update public.aboutyou_listings
+     set status_generatie = status_generatie + 1,
+         status_dorit = p_status
+   where id = p_listing_id
+  returning status_generatie into v_gen;
+  return v_gen;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb)
  RETURNS void
  LANGUAGE plpgsql
@@ -4615,7 +4634,8 @@ create table if not exists public.aboutyou_batches (
   intent_id uuid,
   trimis_la timestamp with time zone,
   generatie integer,
-  citit_la timestamp with time zone);
+  citit_la timestamp with time zone,
+  transe integer);
 
 create table if not exists public.aboutyou_bulk_jobs (
   id uuid default gen_random_uuid() not null,
@@ -4640,6 +4660,15 @@ create table if not exists public.aboutyou_intentii (
   op text default 'upsert'::text not null,
   status text default 'deschis'::text not null,
   last_error text);
+
+create table if not exists public.aboutyou_listari_scoase (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  style_key text not null,
+  product_id uuid,
+  status_generatie integer default 0 not null,
+  scos_la timestamp with time zone default now() not null,
+  reasertari integer default 0 not null);
 
 create table if not exists public.aboutyou_listings (
   id uuid default gen_random_uuid() not null,
@@ -5992,6 +6021,7 @@ alter table public.abandoned_carts add constraint abandoned_carts_pkey PRIMARY K
 alter table public.aboutyou_batches add constraint aboutyou_batches_pkey PRIMARY KEY (id);
 alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_pkey PRIMARY KEY (id);
 alter table public.aboutyou_intentii add constraint aboutyou_intentii_pkey PRIMARY KEY (id);
+alter table public.aboutyou_listari_scoase add constraint aboutyou_listari_scoase_pkey PRIMARY KEY (id);
 alter table public.aboutyou_listings add constraint aboutyou_listings_pkey PRIMARY KEY (id);
 alter table public.aboutyou_orders add constraint aboutyou_orders_pkey PRIMARY KEY (id);
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_pkey PRIMARY KEY (id);
@@ -6071,6 +6101,7 @@ alter table public.ups_etichete add constraint ups_etichete_pkey PRIMARY KEY (or
 alter table public.users_profile add constraint users_profile_pkey PRIMARY KEY (id);
 alter table privat.store_settings add constraint store_settings_business_id_key UNIQUE (business_id);
 alter table public.aboutyou_batches add constraint aboutyou_batches_business_id_batch_request_id_key UNIQUE (business_id, batch_request_id);
+alter table public.aboutyou_listari_scoase add constraint aboutyou_listari_scoase_business_id_style_key_key UNIQUE (business_id, style_key);
 alter table public.aboutyou_listings add constraint aboutyou_listings_business_id_style_key_key UNIQUE (business_id, style_key);
 alter table public.aboutyou_orders add constraint aboutyou_orders_business_id_aboutyou_order_number_key UNIQUE (business_id, aboutyou_order_number);
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_linie_key UNIQUE (business_id, aboutyou_order_number, linie_cheie);
@@ -6337,6 +6368,7 @@ CREATE UNIQUE INDEX aboutyou_bulk_jobs_unic_deschis_idx ON public.aboutyou_bulk_
 CREATE INDEX aboutyou_inbox_de_reluat_idx ON public.aboutyou_webhook_inbox USING btree (business_id, primit_la) WHERE (prelucrat_la IS NULL);
 CREATE INDEX aboutyou_intentii_deschise_idx ON public.aboutyou_intentii USING btree (business_id, creat_la) WHERE (status = 'deschis'::text);
 CREATE UNIQUE INDEX aboutyou_intentii_unic_idx ON public.aboutyou_intentii USING btree (business_id, product_id, op);
+CREATE INDEX aboutyou_listari_scoase_cautare_idx ON public.aboutyou_listari_scoase USING btree (business_id, style_key);
 CREATE INDEX aboutyou_orders_order_id_idx ON public.aboutyou_orders USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX aboutyou_orders_reintrebat_idx ON public.aboutyou_orders USING btree (business_id, reintrebat_la NULLS FIRST);
 CREATE INDEX aboutyou_retururi_de_rezolvat_idx ON public.aboutyou_retururi USING btree (business_id, created_at DESC) WHERE (repus_in_stoc_la IS NULL);
@@ -6661,6 +6693,7 @@ alter table public.abandoned_carts enable row level security;
 alter table public.aboutyou_batches enable row level security;
 alter table public.aboutyou_bulk_jobs enable row level security;
 alter table public.aboutyou_intentii enable row level security;
+alter table public.aboutyou_listari_scoase enable row level security;
 alter table public.aboutyou_listings enable row level security;
 alter table public.aboutyou_orders enable row level security;
 alter table public.aboutyou_retururi enable row level security;
@@ -6767,6 +6800,9 @@ create policy owner_select_aboutyou_bulk_jobs on public.aboutyou_bulk_jobs as PE
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_intentii on public.aboutyou_intentii as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_aboutyou_listari_scoase on public.aboutyou_listari_scoase as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_listings on public.aboutyou_listings as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
@@ -7116,6 +7152,27 @@ grant SELECT on table public.aboutyou_intentii to service_role;
 grant TRIGGER on table public.aboutyou_intentii to service_role;
 grant TRUNCATE on table public.aboutyou_intentii to service_role;
 grant UPDATE on table public.aboutyou_intentii to service_role;
+grant DELETE on table public.aboutyou_listari_scoase to anon;
+grant INSERT on table public.aboutyou_listari_scoase to anon;
+grant REFERENCES on table public.aboutyou_listari_scoase to anon;
+grant SELECT on table public.aboutyou_listari_scoase to anon;
+grant TRIGGER on table public.aboutyou_listari_scoase to anon;
+grant TRUNCATE on table public.aboutyou_listari_scoase to anon;
+grant UPDATE on table public.aboutyou_listari_scoase to anon;
+grant DELETE on table public.aboutyou_listari_scoase to authenticated;
+grant INSERT on table public.aboutyou_listari_scoase to authenticated;
+grant REFERENCES on table public.aboutyou_listari_scoase to authenticated;
+grant SELECT on table public.aboutyou_listari_scoase to authenticated;
+grant TRIGGER on table public.aboutyou_listari_scoase to authenticated;
+grant TRUNCATE on table public.aboutyou_listari_scoase to authenticated;
+grant UPDATE on table public.aboutyou_listari_scoase to authenticated;
+grant DELETE on table public.aboutyou_listari_scoase to service_role;
+grant INSERT on table public.aboutyou_listari_scoase to service_role;
+grant REFERENCES on table public.aboutyou_listari_scoase to service_role;
+grant SELECT on table public.aboutyou_listari_scoase to service_role;
+grant TRIGGER on table public.aboutyou_listari_scoase to service_role;
+grant TRUNCATE on table public.aboutyou_listari_scoase to service_role;
+grant UPDATE on table public.aboutyou_listari_scoase to service_role;
 grant DELETE on table public.aboutyou_listings to anon;
 grant INSERT on table public.aboutyou_listings to anon;
 grant REFERENCES on table public.aboutyou_listings to anon;
@@ -8897,6 +8954,9 @@ grant execute on function public.aboutyou_marcheaza_varianta() to authenticated;
 grant execute on function public.aboutyou_marcheaza_varianta() to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
 grant execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) to service_role;
+grant execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) to anon;
+grant execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) to authenticated;
+grant execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
 grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
@@ -9085,6 +9145,7 @@ revoke execute on function public.aboutyou_marcheaza_modificarea() from public;
 revoke execute on function public.aboutyou_marcheaza_varianta() from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
 revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) from public;
+revoke execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;
 revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;

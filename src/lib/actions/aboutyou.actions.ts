@@ -282,33 +282,69 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
     );
   }
 
-  await saveConfig(businessId, {});
-  const admin = createAdminClient();
-  await admin.from("aboutyou_sync_queue").delete().eq("business_id", businessId);
   /*
-   * ═══ ⚠ MAPAREA SKU SE PASTREAZA SI LA DECONECTARE (28.08.2026, noaptea) ═══
+   * ═══ ⚠ ORDINEA E FAIL-CLOSED, CA PESTE TOT (28.08.2026, tarziu) ═══
    *
-   * Aici randurile se sterg DIRECT, nu prin cascada — deci a patra cale prin care se pierdea
-   * legatura `sku -> produs`. Deconectarea opreste sondarea, dar nu si comenzile deja plecate: o
-   * reconectare peste doua zile ar ingera comenzi pe SKU-uri pe care nu le mai recunoastem, si
-   * atunci stocul nu se scade. Costa un rand pe SKU; tacerea costa marfa.
+   * Pana azi, fiecare pas se facea si se mergea mai departe, orice s-ar fi intamplat. Cel mai urat
+   * drum: dezabonarea la ei reuseste, scrierea configului PICA, iar stergerile locale se fac —
+   * adica un cont care pare inca legat (cheia e acolo) dar fara nicio stare locala: fara listari,
+   * fara variante, fara loturi. Nimic nu mai poate nici trimite, nici retrage.
+   *
+   * ⚠ SE SCRIE INTAI CA E DECONECTAT. Cat timp asta nu s-a scris, nu se sterge nimic: cel mai rau
+   * caz devine „a ramas conectat, mai incearca" — o stare intreaga, nu una pe jumatate.
    */
-  {
-    const deSalvat = randuriCitite<{ sku: string; product_id: string | null; variant_title: string | null }>(
-      "aboutyou.mapareaLaDeconectare", await admin
-        .from("aboutyou_variants").select("sku, product_id, variant_title")
-        .eq("business_id", businessId) as never);
-    if (deSalvat.length > 0) {
-      const acum = new Date().toISOString();
-      await admin.from("aboutyou_sku_istoric").upsert(
-        deSalvat.map((r) => ({
-          business_id: businessId, sku: r.sku, product_id: r.product_id,
-          variant_title: r.variant_title, scos_la: acum,
-        })) as never,
-        { onConflict: "business_id,sku" },
-      );
+  const admin = createAdminClient();
+
+  /*
+   * ⚠ SI MAPAREA SKU SE SALVEAZA INAINTEA ORICAREI STERGERI, cu raspunsul citit. Aici randurile de
+   * varianta se sterg DIRECT, nu prin cascada — a patra cale prin care se pierdea legatura
+   * `sku -> produs`. Deconectarea opreste sondarea, dar nu si comenzile deja plecate: o reconectare
+   * peste doua zile ar ingera comenzi pe SKU-uri pe care nu le mai recunoastem, iar stocul nu s-ar
+   * scadea. Aceeasi regula ca la eliminarea unei listari: nesalvata, nu se sterge nimic.
+   */
+  const deSalvat = randuriCitite<{ sku: string; product_id: string | null; variant_title: string | null }>(
+    "aboutyou.mapareaLaDeconectare", await admin
+      .from("aboutyou_variants").select("sku, product_id, variant_title")
+      .eq("business_id", businessId) as never);
+  if (deSalvat.length > 0) {
+    const acum = new Date().toISOString();
+    const { error: eIstoric } = await admin.from("aboutyou_sku_istoric").upsert(
+      deSalvat.map((r) => ({
+        business_id: businessId, sku: r.sku, product_id: r.product_id,
+        variant_title: r.variant_title, scos_la: acum,
+      })) as never,
+      { onConflict: "business_id,sku" },
+    );
+    if (eIstoric) {
+      logError({
+        action: "aboutyou.disconnect", severity: "critical",
+        message: `maparea SKU nu s-a putut pastra, deci nu s-a sters nimic: ${eIstoric.message}`,
+        details: { businessId, cate: deSalvat.length }, businessId,
+      });
+      return { error: "Nu am putut păstra legătura dintre SKU-uri și produse. Încearcă din nou." };
     }
   }
+
+  /*
+   * ⚠ `saveConfig` INTOARCE UN BOOLEAN, nu arunca. Un `try/catch` in jurul ei ar fi fost o paza
+   * care nu se poate aprinde niciodata — chiar tiparul pe care il vanez de zile intregi. Se
+   * citeste valoarea.
+   */
+  if (!await saveConfig(businessId, {})) {
+    logError({
+      action: "aboutyou.disconnect", severity: "critical",
+      message: "deconectarea nu s-a putut scrie, deci nu s-a sters nimic",
+      details: { businessId }, businessId,
+    });
+    return { error: "Nu am putut salva deconectarea. Încearcă din nou." };
+  }
+
+  /*
+   * ⚠ DE-ABIA ACUM CURATENIA, si in ordinea in care o intrerupere lasa cea mai putina paguba:
+   * coada intai (nu mai are unde pleca), loturile pe urma, listarile la sfarsit. Ce ramane dupa o
+   * intrerupere e citit oricum ca „deconectat", fiindca configul s-a scris deja.
+   */
+  await admin.from("aboutyou_sync_queue").delete().eq("business_id", businessId);
   await admin.from("aboutyou_variants").delete().eq("business_id", businessId);
   await admin.from("aboutyou_batches").delete().eq("business_id", businessId);
   await admin.from("aboutyou_listings").delete().eq("business_id", businessId);
@@ -1225,6 +1261,39 @@ export async function saveAboutYouListing(
     if (eClash) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
     const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
     if (conflict) return { error: `SKU-ul „${(conflict as { sku: string }).sku}" este deja folosit de alt produs. Folosește SKU-uri unice.` };
+
+    /*
+     * ═══ ⚠ SI UN SKU CARE A APARTINUT CANDVA ALTUI PRODUS (28.08.2026, tarziu) ═══
+     *
+     * Verificarea de mai sus se uita doar la maparile de ACUM. Dar `aboutyou_sku_istoric` tine
+     * minte SKU-urile listarilor eliminate, tocmai ca o comanda intarziata sa se poata lega. Iar
+     * daca acelasi SKU e dat intre timp altui produs:
+     *
+     *     SKU ABC -> produsul A, listarea A eliminata -> istoric: ABC -> A
+     *     ABC dat produsului B
+     *     comanda foarte intarziata pentru A ajunge -> `aboutyou_variants` gaseste B
+     *     se scade stocul lui B, pentru marfa lui A
+     *
+     * Iar `orders.ts` cauta INTAI maparea curenta, deci B castiga — nu din greseala de cod, ci
+     * fiindca SKU-ul a incetat sa fie un identificator.
+     *
+     * ⚠ NU SE STERGE ISTORICUL CA SA FACEM LOC. Un SKU care a existat pentru alt produs pur si
+     * simplu nu se mai refoloseste: e cea mai simpla regula care tine identitatea intreaga, si
+     * mesajul spune limpede de ce.
+     */
+    const { data: vechi, error: eVechi } = await admin.from("aboutyou_sku_istoric")
+      .select("sku, product_id").eq("business_id", businessId).in("sku", newSkus);
+    if (eVechi) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
+    const refolosit = (vechi ?? []).find((c) => {
+      const r = c as { product_id: string | null };
+      return r.product_id != null && r.product_id !== productId;
+    });
+    if (refolosit) {
+      return {
+        error: `SKU-ul „${(refolosit as { sku: string }).sku}" a fost folosit de alt produs listat cândva pe About You. `
+          + "Folosește un SKU nou: comenzile vechi se leagă de produse după SKU, iar refolosirea lui ar scădea stocul greșit.",
+      };
+    }
   }
   /*
    * Se inlocuiesc DOAR randurile care vin din editor, nu toate.

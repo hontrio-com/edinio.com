@@ -554,7 +554,7 @@ test("⚠ dovada se ia la CITIRE, nu la trimitere", () => {
    * scrisa la plecare ar fi stins intre timp si semnele de stoc si de pret, care se satisfac prin
    * el. Clipa calatoreste CU LOTUL si trece pe listare abia la asezare.
    */
-  assert.match(sync, /generatie, cititLa\), "trimiterea produsului"/);
+  assert.match(sync, /generatie, cititLa, transe\), "trimiterea produsului"/);
   assert.match(sync, /catalog_confirmat_la: b\.citit_la/);
 });
 
@@ -864,12 +864,19 @@ test("⚠ un lot de stare dintr-o generatie depasita nu castiga", () => {
    * Continutul avea generatii de mult; starea n-avea nimic, iar reconcilierea ar fi citit
    * `published` si l-ar fi scris la noi ca si cum ar fi fost ce s-a cerut.
    */
-  assert.match(sync, /const genStatus = listing\.status_generatie \+ 1;/);
+    /*
+   * ⚠ ATOMIC, PRINTR-UN RPC (28.08.2026, tarziu). Citit-apoi-scris din aplicatie, doua cereri
+   * simultane citesc amandoua 5 si scriu amandoua 6 — iar atunci niciuna nu e „depasita" fata de
+   * cealalta, si la ei castiga cine termina ultimul, nu cine a cerut ultimul.
+   */
+  assert.match(sync, /await admin\.rpc\("aboutyou_status_generatie_noua", \{/);
+  assert.doesNotMatch(sync, /const genStatus = listing\.status_generatie \+ 1;/);
   /* ⚠ Scrisa INAINTEA cererii, si daca nu se scrie, cererea nu pleaca. */
-  const iGen = sync.indexOf("const genStatus = listing.status_generatie + 1;");
+  const iGen = sync.indexOf('await admin.rpc("aboutyou_status_generatie_noua"');
   const iCerere = sync.indexOf('cuLotDurabil(admin, ctx.businessId, "status"', iGen);
-  assert.ok(iGen > 0 && iCerere > iGen);
-  assert.match(sync, /if \(eGenStatus\) \{[\s\S]{0,200}?ok: false, status: 0/);
+  assert.ok(iGen > 0 && iCerere > iGen,
+    "generatia se cere INAINTEA cererii externe, altfel paza n-ar avea ce compara");
+  assert.match(sync, /if \(eGenStatus \|\| typeof genNou !== "number"\) \{[\s\S]{0,260}?ok: false, status: 0/);
   /* ⚠ Si nu ajunge sa nu-i credem starea: se retrimite ce a cerut omul ULTIMA oara. */
   assert.match(sync, /if \(b\.generatie != null && b\.generatie < l\.status_generatie\) \{/);
   /*
@@ -965,8 +972,8 @@ test("⚠ confirmarea asteapta TOATE transele aceleiasi citiri", () => {
   assert.match(sync, /\.contains\("related_ids", JSON\.stringify\(\[styleKey\]\)\)/);
 
   /* Amandoua confirmarile trec prin ea. */
-  assert.match(sync, /if \(!await operatiaSAIncheiat\(admin, ctx\.businessId, b\.kind, sk, b\.citit_la, b\.id\)\) continue;/);
-  assert.match(sync, /if \(!await operatiaSAIncheiat\(admin, ctx\.businessId, "product", sk, b\.citit_la, b\.id\)\) continue;/);
+  assert.match(sync, /if \(!await operatiaSAIncheiat\(admin, ctx\.businessId, b\.kind, sk, b\.citit_la, b\.id, b\.transe\)\) continue;/);
+  assert.match(sync, /if \(!await operatiaSAIncheiat\(admin, ctx\.businessId, "product", sk, b\.citit_la, b\.id, b\.transe\)\) continue;/);
 });
 
 /* ── Maparea SKU supravietuieste eliminarii listarii ──────────────────────── */
@@ -1032,4 +1039,113 @@ test("⚠ „Salveaza si trimite” nu mai depinde de a doua cerere a browserulu
 
   const ecran = viu("src/components/dashboard/AboutYouListingEditor.tsx");
   assert.match(ecran, /saveAboutYouListing\(businessId, productId, input, then === "sync"\)/);
+});
+
+
+/* ── O lista goala de frati nu inseamna ca n-au existat ───────────────────── */
+
+test("⚠ o cadere dupa prima transa NU confirma operatia", () => {
+  /*
+   * ═══ ⚠ `[].every(...)` E `true` (28.08.2026, tarziu) ═══
+   *
+   * Verificarea de ieri numara fratii care EXISTA. Dar daca procesul moare dupa transa 1, transele
+   * 2 si 3 n-au niciun rand — si atunci lista de frati e goala, iar `every` spune „toti buni":
+   *
+   *     250 de variante -> trei transe
+   *     transa 1 trimisa ✅, procesul moare
+   *     mai tarziu transa 1 se aseaza -> frati: [] -> „operatie incheiata" ❌
+   *
+   * Se scrie `catalog_confirmat_la`, semnul din cutia de iesire se stinge, si se poate merge chiar
+   * spre publicare — cu o suta de variante din doua sute cincizeci la ei.
+   *
+   * ⚠ SI E CHIAR CAZUL OBISNUIT LA PRET: articolele se numara pe SKU × tara, deci 400 de variante
+   * pe trei tari fac 1200 — peste plafonul de o mie, adica doua transe.
+   */
+  assert.match(sync, /if \(transe == null\) return false;/);
+  assert.match(sync, /if \(frati\.length \+ 1 !== transe\) return false;/);
+  /* ⚠ Numarul se stie inaintea primei cereri si calatoreste pe randul care supravietuieste. */
+  assert.match(sync, /const transe = Math\.ceil\(built\.items\.length \/ 100\);/);
+  assert.match(sync, /const cateTranse = Math\.ceil\(items\.length \/ MAX_ITEMI_STOC_PRET\);/);
+  assert.match(sync, /\.\.\.\(transe != null \? \{ transe \} : \{\}\),/);
+
+  /*
+   * ⚠ SI UN LOT VECHI, DINAINTE DE COLOANA, NU CONFIRMA. `transe` lipsa inseamna „nu pot dovedi",
+   * nu „e in regula": confirmarea amanata costa o retrimitere, una data degeaba costa marfa.
+   */
+  const i = sync.indexOf("async function operatiaSAIncheiat(");
+  const corp = sync.slice(i, i + 1400);
+  assert.match(corp, /if \(transe == null\) return false;/);
+
+  /*
+   * ⚠ SI SE PASTREAZA `.neq("id", idAcesta)`. Scos, randul propriu ar intra in numaratoare cu
+   * statusul lui DE ACUM — care se scrie abia la sfarsitul iteratiei, deci inca nu e `completed`,
+   * si nimic nu s-ar mai confirma vreodata.
+   */
+  assert.match(corp, /\.neq\("id", idAcesta\)/);
+});
+
+/* ── Un produs eliminat nu se mai poate reactiva ──────────────────────────── */
+
+test("⚠ un `publish` mai vechi nu mai poate invia un produs eliminat", () => {
+  /*
+   *     10:00 „Publica"  -> lotul pleaca, e inca in lucru la ei
+   *     10:01 „Elimina"  -> `inactive` se incheie primul, randul local se sterge
+   *     10:05 `published` cel vechi se aseaza -> la ei produsul E DIN NOU ACTIV
+   *
+   * Pana azi, `removal` era un lot cu totul separat, care nu atingea generatia starii — deci
+   * `publish`-ul de dinainte nu devenea depasit — iar dupa stergerea randului nu mai exista nimic
+   * care sa ceara `inactive`. Produsul ramanea vandabil si nimeni nu afla.
+   */
+  assert.match(sync, /p_listing_id: listing\.id, p_status: tintaRetragere\(listing\.status\),/);
+  assert.match(sync, /async function pastreazaPiatra\(/);
+  /* ⚠ Nescrisa piatra, listarea NU se sterge: altfel n-ar mai ramane nimic care sa stie cheia. */
+  assert.match(sync, /if \(!await pastreazaPiatra\(admin, ctx\.businessId, listing\)\) \{[\s\S]{0,200}?asezat = false;/);
+  /* ⚠ Si asezarea unui lot sub generatia scoaterii cere din nou `inactive`, pe cheie. */
+  assert.match(sync, /if \(b\.generatie != null && b\.generatie >= piatra\.status_generatie\) continue;/);
+  assert.match(sync, /updateProductStatus\(ctx\.auth, \[\{ style_key: sk, status: "inactive" \}\]\)/);
+  /* ⚠ Si are un capat: o roata care se invarte la nesfarsit n-ar fi o plasa. */
+  assert.match(sync, /if \(piatra\.reasertari >= 5\) \{/);
+});
+
+/* ── Deconectarea e fail-closed ───────────────────────────────────────────── */
+
+test("⚠ deconectarea nu sterge nimic pana nu s-a scris ca e deconectat", () => {
+  /*
+   * Cel mai urat drum de pana azi: dezabonarea la ei reuseste, scrierea configului PICA, iar
+   * stergerile locale se fac — adica un cont care pare inca legat (cheia e acolo) dar fara nicio
+   * stare locala. Nimic nu mai poate nici trimite, nici retrage.
+   *
+   * ⚠ `saveConfig` INTOARCE UN BOOLEAN, nu arunca. Un `try/catch` in jurul ei ar fi fost o paza
+   * care nu se poate aprinde niciodata — chiar tiparul vanat toata saptamana.
+   */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  assert.match(act, /if \(!await saveConfig\(businessId, \{\}\)\) \{/);
+  const iConfig = act.indexOf("if (!await saveConfig(businessId, {}))");
+  const iStergere = act.indexOf('.from("aboutyou_sync_queue").delete().eq("business_id", businessId)', iConfig);
+  assert.ok(iConfig > 0 && iStergere > iConfig,
+    "stergerile locale vin DUPA ce s-a scris ca magazinul e deconectat");
+  /* ⚠ Si maparea SKU se salveaza inaintea tuturor, cu raspunsul citit. */
+  const iMapare = act.indexOf("aboutyou.mapareaLaDeconectare");
+  assert.ok(iMapare > 0 && iMapare < iConfig);
+  assert.match(act, /maparea SKU nu s-a putut pastra, deci nu s-a sters nimic/);
+});
+
+/* ── Un SKU nu se refoloseste intre produse ───────────────────────────────── */
+
+test("⚠ un SKU care a apartinut altui produs nu se mai poate refolosi", () => {
+  /*
+   *     SKU ABC -> produsul A, listarea A eliminata -> istoric: ABC -> A
+   *     ABC dat produsului B
+   *     comanda foarte intarziata pentru A ajunge -> `aboutyou_variants` gaseste B
+   *     se scade stocul lui B, pentru marfa lui A
+   *
+   * Iar `orders.ts` cauta INTAI maparea curenta, deci B castiga — nu dintr-o greseala de cod, ci
+   * fiindca SKU-ul a incetat sa fie un identificator. Istoricul exista tocmai ca sa lege comenzile
+   * intarziate; refolosirea il face sa minta.
+   */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  assert.match(act, /\.from\("aboutyou_sku_istoric"\)\s*\n?\s*\.select\("sku, product_id"\)/);
+  assert.match(act, /a fost folosit de alt produs listat c\u00e2ndva pe About You/);
+  /* ⚠ Si nu se sterge istoricul ca sa facem loc: mesajul spune de ce. */
+  assert.match(act, /comenzile vechi se leag\u0103 de produse dup\u0103 SKU/);
 });

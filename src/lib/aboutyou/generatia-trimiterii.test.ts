@@ -75,9 +75,15 @@ test("⚠ orfanii vechi se INCHID, ca alarma sa nu strige la nesfarsit", () => {
    */
   assert.match(sync, /async function inchideLoturileDepasite/);
   assert.match(sync, /\.update\(\{ status: "depasit", polled_at: new Date\(\)\.toISOString\(\) \} as never\)/);
-  assert.match(sync, /\.in\("status", \["intentie", "necunoscut"\]\)\s*\n?\s*\.lt\("generatie", l\.generatie\)/);
+  /*
+   * ⚠ SE PORNESTE DE LA LOTURI, nu de la listari. Prima varianta citea `aboutyou_listings …
+   * limit(500)`: la zece mii de produse vedea o douăzecime, mereu aceleași primele, deci un lot orb
+   * al produsului opt mii n-ar fi fost atins niciodată. Vezi `dupa-aprobare-si-reasertare.test.ts`.
+   */
+  assert.match(sync, /\.in\("status", \["intentie", "necunoscut"\]\)/);
+  assert.match(sync, /if \(lot\.generatie != null && lot\.generatie >= listing\.generatie\) continue;/);
   /* Si se cheama INAINTEA alarmei, altfel ar striga tocmai despre cele care tocmai s-au inchis. */
-  const iInchide = sync.indexOf("await inchideLoturileDepasite(admin, businessId);");
+  const iInchide = sync.indexOf("await inchideLoturileDepasite(admin, ctx);");
   const iAlarma = sync.indexOf('"aboutyou.intentiiDeschise"');
   assert.ok(iInchide > 0 && iAlarma > iInchide);
 });

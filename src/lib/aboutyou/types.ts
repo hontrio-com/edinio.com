@@ -95,6 +95,18 @@ export interface AboutYouConfig {
   reconcile_page?: number;
   /** Unde a ajuns roata pe `/products/rejected`. Vezi nota din `reconcileStatuses`. */
   rejected_page?: number;
+  /**
+   * Raspandirea unei setari globale, ramasa neterminata.
+   *
+   * ⚠ CAND SE SCHIMBA CURSUL sau tarile, toate produsele listate trebuie repuse la coada. O
+   * actiune de server nu poate rula oricat, deci se opreste la un plafon — iar pana acum acolo se
+   * si TERMINA: la douazeci si cinci de mii de produse, ultimele cinci mii ramaneau cu preturile
+   * vechi la About You, poate pentru totdeauna, in timp ce ecranul spunea „Salvat".
+   *
+   * Aici se tine minte unde s-a ajuns; cronul continua de la `dupa` pana se termina, si abia
+   * atunci sterge campul. „Toate produsele" inseamna toate, chiar daca ia mai multe treceri.
+   */
+  fanout?: { op: "upsert" | "price"; dupa: string | null } | null;
   orders_synced_at?: string;
   needs_reconnect?: boolean;
 }
@@ -185,10 +197,53 @@ export interface AboutYouRejectionReason { key?: string; type?: string; name?: s
 // GET /products/ (GetProductItemSchema). Deliberately does NOT carry rejection
 // data — that lives only on GET /products/rejected and on the
 // `product_master.status_updated` webhook.
+/**
+ * Un articol din `GET /products/`.
+ *
+ * ═══ ⚠ CREDEAM CA DA TREI CAMPURI. DA DOUAZECI SI TREI (27.08.2026) ═══
+ *
+ * Tipul asta avea doar `style_key`, `sku` si `status`, iar codul a construit pe el o convingere
+ * scrisa in doua locuri: „nu exista niciun capat de citire a stocului sau pretului… deci nici
+ * deriva fata de ei nu se poate masura". Afirmatia a modelat hotarari saptamani la rand — de la
+ * `valid_at` pana la reasertarea oarba de sase ore.
+ *
+ * ⚠ E FALSA. Masurat pe contul de sandbox, o singura cerere `GET /products/?page=1&per_page=2`,
+ * raspuns `200`, cheile unui articol:
+ *
+ *   attributes, brand, category, color, colorway_key, countries, country_of_origin,
+ *   description, descriptions, ean, images, material_composition_non_textile,
+ *   material_composition_textile, name, prices, quantity, quantity_fbm, second_size,
+ *   size, sku, status, style_key, weight
+ *
+ * ⚠ CE SCHIMBA: se poate compara ce credem noi cu ce au ei, pe stoc, pret si continut. Deci
+ * reasertarea nu mai trebuie sa GHICEASCA („probabil in sase ore s-a asezat"), ci poate VERIFICA.
+ *
+ * ⚠ SI DE CE N-AM AFLAT MAI DEVREME: n-am cerut niciodata. Convingerea a intrat odata cu tipul,
+ * la prima scriere, si de-atunci fiecare comentariu nou s-a sprijinit pe cel dinainte. O cerere
+ * de citire ar fi lamurit-o oricand.
+ */
 export interface AboutYouGetProductItem {
   style_key: string | null;
   sku: string;
   status: AboutYouReadStatus | string;
+  /** Stocul din depozitul comerciantului. `quantity_fbm` e cel din depozitele lor. */
+  quantity?: number | null;
+  quantity_fbm?: number | null;
+  /** Preturile pe tara, in forma in care le-am trimis. */
+  prices?: { country_code?: string; retail_price?: number | null; sale_price?: number | null }[] | null;
+  ean?: string | null;
+  name?: string | null;
+  color?: number | null;
+  size?: number | null;
+  second_size?: number | null;
+  brand?: number | null;
+  category?: number | null;
+  countries?: string[] | null;
+  country_of_origin?: string | null;
+  images?: string[] | null;
+  attributes?: number[] | null;
+  weight?: number | null;
+  colorway_key?: string | null;
 }
 // GET /products/rejected (RejectedProductSchema).
 export interface AboutYouRejectedProduct {

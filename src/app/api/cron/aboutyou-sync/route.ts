@@ -4,7 +4,7 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
-  alarmaIntentiiDeschise, loadAboutYouContext, processQueueItem, pollOpenBatches,
+  alarmaIntentiiDeschise, continuaRaspandirea, loadAboutYouContext, processQueueItem, pollOpenBatches,
   reconcileStatuses, pause,
   type AboutYouQueueItem, type AboutYouSyncContext,
 } from "@/lib/aboutyou/sync";
@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
   const inceput = Date.now();
   const fereastraPlina = () => Date.now() - inceput > BUGET_PASI_1_3_MS;
   let processed = 0, failed = 0, polled = 0, reconciled = 0, ordersIngested = 0, reluate = 0;
+  let raspandite = 0;
   const ctxCache = new Map<string, AboutYouSyncContext | null>();
   async function ctxFor(businessId: string): Promise<AboutYouSyncContext | null> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
@@ -444,7 +445,13 @@ export async function GET(req: NextRequest) {
        * ce a iesit" e singura stare care cere un OM, si trebuie sa iasa la lumina repede. Vezi
        * `cuLotDurabil`. Se scrie o singura data pe rand.
        */
-      await alarmaIntentiiDeschise(admin, businessId);
+      await alarmaIntentiiDeschise(admin, ctx);
+      /*
+       * ⚠ SI RASPANDIREA RAMASA NETERMINATA. Cand comerciantul schimba cursul pe un catalog
+       * mare, actiunea de server pune la coada cat apuca si tine minte unde a ajuns; restul se
+       * face aici, trecere de trecere. Fara pasul asta, cursorul ar fi doar o nota in config.
+       */
+      raspandite += await continuaRaspandirea(admin, ctx);
       reluate += await reiaEvenimenteleNeprelucrate(admin, businessId, ctx.config);
     } catch (e) {
       await logError({
@@ -456,7 +463,7 @@ export async function GET(req: NextRequest) {
   }
 
   console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested} reluate=${reluate}`);
-  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested, reluate });
+  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested, reluate, raspandite });
 }
 
 /*

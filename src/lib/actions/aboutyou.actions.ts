@@ -23,6 +23,7 @@ import {
 import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
 import { cancelOrderNow, returnOrderNow } from "@/lib/aboutyou/orders";
 import { randCitit } from "@/lib/supabase/rand-citit";
+import { patchAboutYouConfig } from "@/lib/aboutyou/config";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
   cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
@@ -412,12 +413,28 @@ export async function saveAboutYouSettings(
 
   if (dinNou || doarPret) {
     /* ⚠ Trimiterea intreaga o cuprinde si pe cea de pret: nu se pun amandoua pe acelasi produs. */
-    const r = await enqueueForListings(g.supabase, businessId, dinNou ? "upsert" : "price");
+    const op = dinNou ? "upsert" as const : "price" as const;
+    const r = await enqueueForListings(g.supabase, businessId, op);
+    /*
+     * ═══ ⚠ „INCOMPLET" ERA UN CAPAT DE DRUM (27.08.2026) ═══
+     *
+     * Se scria in jurnal si se raspundea `success`. La douazeci si cinci de mii de produse,
+     * primele douazeci de mii intrau in coada si ultimele cinci mii NU — iar ecranul spunea
+     * „Salvat". Preturile alea puteau ramane vechi la About You pentru totdeauna.
+     *
+     * Nu e o limitare de comoditate: e deriva de date, tacuta.
+     *
+     * ⚠ ACUM SE TINE MINTE UNDE S-A AJUNS, iar cronul continua. Campul se sterge abia cand s-a
+     * terminat, deci „toate produsele" inseamna toate — chiar daca ia mai multe treceri.
+     */
+    await patchAboutYouConfig(createAdminClient(), businessId, {
+      fanout: r.incomplet ? { op, dupa: r.ultimulId } : null,
+    });
     if (r.incomplet) {
       logError({
-        action: "aboutyou.saveSettings", severity: "warning",
-        message: `setarile s-au salvat, dar doar ${r.n} produse au intrat in coada: restul raman cu valorile vechi la About You`,
-        details: { businessId, op: dinNou ? "upsert" : "price" }, businessId,
+        action: "aboutyou.saveSettings", severity: "info",
+        message: `setarile s-au salvat; ${r.n} produse au intrat in coada, restul continua la trecerile urmatoare ale cronului`,
+        details: { businessId, op, dupa: r.ultimulId }, businessId,
       });
     }
   }
@@ -1771,7 +1788,9 @@ async function enqueueForListings(
      de curs cere doar preturi, nu produsul intreg. Vezi `saveAboutYouSettings`. */
   op: "upsert" | "publish" | "price", statusFilter?: string,
   doarTrimise?: boolean,
-): Promise<{ n: number; incomplet: boolean }> {
+  /** De unde se reia, cand o trecere anterioara s-a oprit la plafon. Vezi `AboutYouConfig.fanout`. */
+  dupa?: string | null,
+): Promise<{ n: number; incomplet: boolean; ultimulId: string | null }> {
   /*
    * Se citeste PE FERESTRE, nu cu `.limit(2000)`.
    *
@@ -1794,6 +1813,12 @@ async function enqueueForListings(
   for (let de = 0; de < PLAFON; de += PAS) {
     let q = supabase.from("aboutyou_listings").select("product_id")
       .eq("business_id", businessId).not("product_id", "is", null);
+    /*
+     * ⚠ RELUAREA E EXACTA, nu aproximativa: ordinea e `product_id` crescator, deci „mai mare decat
+     * ultimul dus la capat" nu poate nici sari, nici repeta. Un `offset` ar fi alunecat la fiecare
+     * listare noua sau stearsa intre treceri.
+     */
+    if (dupa) q = q.gt("product_id", dupa);
     if (statusFilter) q = q.eq("status", statusFilter);
     // Publicarea are nevoie de un product master pe About You, iar acela exista
     // doar dupa ce produsul a plecat efectiv. Aceeasi proba o foloseste si
@@ -1811,18 +1836,25 @@ async function enqueueForListings(
     if (de + PAS >= PLAFON) incomplet = true; // plafon atins cu o pagina PLINA
   }
   const ids = [...new Set(brute)];
-  if (ids.length === 0) return { n: 0, incomplet };
+  /*
+   * ⚠ ULTIMUL DUS LA CAPAT, nu ultimul CITIT: daca scrierea se opreste la mijloc, reluarea
+   * trebuie sa porneasca de la ce a intrat cu adevarat in coada. Se tine minte pe masura ce se
+   * scrie, nu la sfarsit.
+   */
+  if (ids.length === 0) return { n: 0, incomplet, ultimulId: dupa ?? null };
   const admin = createAdminClient();
   const rows = ids.map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
   for (let i = 0; i < rows.length; i += 1000) {
+    const bucata = rows.slice(i, i + 1000);
     const { error } = await admin.from("aboutyou_sync_queue")
-      .upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+      .upsert(bucata as never, { onConflict: "business_id,offer_id,op" });
     if (error) {
       logError({ action: "aboutyou.enqueueForListings", message: error.message, details: { businessId, op }, businessId });
-      return { n: i, incomplet: true };
+      /* Ce s-a scris pana aici e bun; reluarea porneste de dupa ultimul lot dus la capat. */
+      return { n: i, incomplet: true, ultimulId: i > 0 ? ids[i - 1] : (dupa ?? null) };
     }
   }
-  return { n: rows.length, incomplet };
+  return { n: rows.length, incomplet, ultimulId: ids[ids.length - 1] };
 }
 
 // Re-send every enriched listing to About You (create/update).

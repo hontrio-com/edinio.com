@@ -198,7 +198,7 @@ test("⚠ intentia ramasa deschisa ajunge la un om, o singura data", () => {
 
   /* Si e chemata din cron, altfel n-ar afla nimeni niciodata. */
   const cron = viu("src/app/api/cron/aboutyou-sync/route.ts");
-  assert.match(cron, /await alarmaIntentiiDeschise\(admin, businessId\)/);
+  assert.match(cron, /await alarmaIntentiiDeschise\(admin, ctx\)/);
 
   /*
    * ⚠ Loturile deschise (`intentie`, `necunoscut`) NU se sondeaza: n-au id-ul lor, deci n-au ce

@@ -382,11 +382,14 @@ export function caUnRezultat<T extends { batchRequestId?: string | null }>(
  * ⚠ DOUA CAI, fiindca doua feluri de lot vechi:
  *
  *   il VEDEM asezandu-se (are `batchRequestId`) → retrimitere ACUM;
- *   nu-l vom vedea niciodata (`necunoscut` fara id) → retrimitere AMANATA, cat sa fi apucat sa
- *     se aseze la ei. Amanarea foloseste `next_retry_at`, pe care `revendica_din_coada` il
- *     respecta deja.
+ *   nu-l vom vedea niciodata (`necunoscut` fara id) → se CITESTE ce au ei si se retrimite doar
+ *     daca chiar difera. Vezi `derivaFataDeEi`.
+ *
+ * ⚠ A DOUA CALE ERA, PANA IN SEARA ASTA, O AMANARE DE SASE ORE. Presupunea ca in sase ore lotul
+ * orb s-a asezat — dar sase ore nu e garantia nimanui: daca ajungea la a opta, ramanea el, si nu
+ * mai exista nimic care sa declanseze alta retrimitere. S-a scos dupa ce am masurat ca
+ * `GET /products/` intoarce chiar stocul, preturile si culoarea, deci se poate VERIFICA.
  */
-const ASTEPTAREA_LOTULUI_ORB_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Pune la coada o retrimitere a starii de ACUM a produsului.
@@ -398,8 +401,17 @@ const ASTEPTAREA_LOTULUI_ORB_MS = 6 * 60 * 60 * 1000;
 async function reasertaStareaCurenta(
   admin: Db, businessId: string, productId: string | null, styleKey: string,
   intarziereMs = 0,
-): Promise<void> {
-  if (!productId) return;
+): Promise<boolean> {
+  /*
+   * ═══ ⚠ SPUNE DACA A REUSIT (27.08.2026) ═══
+   *
+   * Inainte scria un `critical` si iesea `void`. Deci, exact in clipa in care STIM ca la ei poate
+   * fi o stare veche, o clipa proasta a bazei facea sa nu mai ramana NIMIC care sa oblige
+   * retrimiterea: lotul se inchidea, iar produsul ramanea stricat acolo, tacut.
+   *
+   * Acum raspunsul se citeste, iar lotul nu se inchide daca reasertarea n-a intrat in coada.
+   */
+  if (!productId) return false;
   const rand = {
     business_id: businessId, product_id: productId, offer_id: styleKey, op: "upsert",
     attempts: 0, last_error: null,
@@ -418,58 +430,163 @@ async function reasertaStareaCurenta(
       message: `retrimiterea starii curente nu s-a putut pune la coada: ${error.message}`,
       details: { styleKey, productId, intarziereMs }, businessId,
     });
+    return false;
   }
+  return true;
+}
+
+/**
+ * Ce am trimis noi, in forma in care ei ne-o dau inapoi.
+ *
+ * ⚠ SE COMPARA DOAR CE E DETERMINIST. Numele si descrierile nu se trimit deloc (vezi
+ * `buildAboutYouItems`), imaginile se pot rescrie sau reordona la ei, iar ordinea atributelor nu e
+ * garantata. Ce ramane — stoc, preturi, cod de bare, culoare, marime, marca, categorie, tari — sunt
+ * numere si siruri pe care le-am pus noi si care se intorc neschimbate.
+ *
+ * ⚠ CE NU PRINDE, si o spun aici ca sa nu se creada altceva: o deosebire numai in descriere sau in
+ * imagini nu se vede. Pentru ea ramane retrimiterea, care oricum se declanseaza la orice alta
+ * deosebire.
+ */
+function amprentaArticolului(x: {
+  quantity?: number | null;
+  prices?: { country_code?: string; retail_price?: number | null; sale_price?: number | null }[] | null;
+  ean?: string | null; color?: number | null; size?: number | null; second_size?: number | null;
+  brand?: number | null; category?: number | null; country_of_origin?: string | null;
+  countries?: string[] | null;
+}): string {
+  const bani = (v: number | null | undefined) => (v == null ? null : Math.round(v * 100) / 100);
+  const preturi = (x.prices ?? [])
+    .map((p) => `${(p.country_code ?? "").toUpperCase()}:${bani(p.retail_price)}:${bani(p.sale_price)}`)
+    .sort();
+  return JSON.stringify({
+    q: x.quantity ?? null,
+    p: preturi,
+    ean: x.ean || null,
+    c: x.color ?? null, s: x.size ?? null, s2: x.second_size ?? null,
+    b: x.brand ?? null, cat: x.category ?? null,
+    o: (x.country_of_origin ?? "").toUpperCase() || null,
+    t: [...(x.countries ?? [])].map((c) => c.toUpperCase()).sort(),
+  });
+}
+
+/**
+ * Ce e la ei, fata de ce ar trebui sa fie.
+ *
+ * ═══ ⚠ INAINTE GHICEAM, ACUM VERIFICAM (27.08.2026) ═══
+ *
+ * Un lot ORB — trimis, cu raspunsul pierdut — poate sa se aseze la ei ORICAND, si peste o versiune
+ * mai noua. Pana acum raspunsul era o retrimitere amanata sase ore, cu speranta ca intre timp s-a
+ * asezat. Sase ore nu e o garantie a nimanui: daca lotul vechi ajunge la a opta ora, ramane el.
+ *
+ * ⚠ Se poate insa CITI ce au ei: `GET /products/` intoarce douazeci si trei de campuri, printre
+ * care stocul, preturile, culoarea si marimea. Masurat pe sandbox — vezi `AboutYouGetProductItem`.
+ * Deci nu se mai asteapta: se compara, si se retrimite doar daca chiar difera.
+ */
+type Deriva = "identic" | "diferit" | "necitibil";
+
+async function derivaFataDeEi(
+  admin: Db, ctx: AboutYouSyncContext, listing: ListingRow,
+): Promise<Deriva> {
+  if (!listing.product_id) return "necitibil";
+
+  const product = randCitit<Record<string, unknown>>("aboutyou.produsPentruDeriva", await admin
+    .from("products").select(PRODUCT_FIELDS)
+    .eq("id", listing.product_id).eq("business_id", ctx.businessId).maybeSingle());
+  if (!product) return "necitibil";
+
+  const variants = atasezaPreturileRon(product as unknown as MappableProduct,
+    await getVariantData(admin, listing.id));
+  const built = buildAboutYouItems({
+    config: ctx.config, product: product as unknown as MappableProduct,
+    listing: toEnrichment(listing), variants,
+  });
+  if ("error" in built) return "necitibil";
+
+  const res = await getProducts(ctx.auth, { style_key: listing.style_key, per_page: 100 });
+  if (isAboutYouError(res)) return "necitibil";
+  const aleLor = new Map((res.data?.items ?? []).map((it) => [it.sku, it]));
+
+  /*
+   * ⚠ UN SKU LIPSA LA EI E O DEOSEBIRE, nu o necunoscuta: inseamna ca o varianta pe care o credem
+   * trimisa nu e acolo. Exact ce trebuie sa declanseze o retrimitere.
+   */
+  for (const alNostru of built.items) {
+    const lor = aleLor.get(alNostru.sku);
+    if (!lor) return "diferit";
+    if (amprentaArticolului(alNostru as never) !== amprentaArticolului(lor)) return "diferit";
+  }
+  return "identic";
 }
 
 /**
  * Loturile de produs ramase deschise dintr-o generatie depasita.
  *
- * ⚠ Se cauta de la LISTARE spre loturi, nu invers: listarea stie care e generatia curenta, iar
- * `related_ids` poarta `style_key`-ul ei.
+ * ═══ ⚠ PORNEA DE LA LISTARI, SI VEDEA CEL MULT 500 (27.08.2026) ═══
+ *
+ * Prima varianta citea `aboutyou_listings … limit(500)` si cauta pentru fiecare daca are loturi
+ * ramase. La zece mii de produse listate — perfect obisnuit — vedea o douazecime, mereu aceleasi
+ * primele: fara cursor si fara rotatie, un lot orb al produsului numarul opt mii n-ar fi primit
+ * niciodata nici macar reasertarea.
+ *
+ * ⚠ SE PORNESTE INVERS: de la LOTURILE problematice. Ele sunt putine si trecatoare, iar indexul
+ * partial `aboutyou_batches_intentii_idx` le gaseste direct. Se prelucreaza exact ce e stricat, nu
+ * se scaneaza cinci sute de listari sanatoase sperand sa se dea peste unul.
  */
-async function inchideLoturileDepasite(admin: Db, businessId: string): Promise<void> {
-  const listari = randuriCitite<{ style_key: string; generatie: number; product_id: string | null }>(
-    "aboutyou.listariCuGeneratie", await admin
-      .from("aboutyou_listings").select("style_key, generatie, product_id")
-      .eq("business_id", businessId).gt("generatie", 0).limit(500) as never);
-
-  for (const l of listari) {
-    /*
-     * ⚠ SE CITESTE CATE SUNT, INAINTE DE A LE INCHIDE. Numarul e singurul semn ca a existat un lot
-     * orb pe produsul asta — dupa `update` n-am mai avea de unde sti, iar retrimiterea amanata
-     * de mai jos are rost NUMAI daca a existat unul.
-     */
-    const orbi = randuriCitite<{ id: string }>("aboutyou.loturiOrbe", await admin
-      .from("aboutyou_batches").select("id")
+async function inchideLoturileDepasite(admin: Db, ctx: AboutYouSyncContext): Promise<void> {
+  const businessId = ctx.businessId;
+  const orbe = randuriCitite<{ id: string; related_ids: unknown; generatie: number | null }>(
+    "aboutyou.loturiOrbe", await admin
+      .from("aboutyou_batches").select("id, related_ids, generatie")
       .eq("business_id", businessId).eq("kind", "product")
-      .contains("related_ids", [l.style_key])
       .in("status", ["intentie", "necunoscut"])
-      .lt("generatie", l.generatie).limit(1) as never);
+      .not("generatie", "is", null)
+      .order("submitted_at", { ascending: true })
+      .limit(MAX_LOTURI_ORBE) as never);
 
-    const { error } = await admin.from("aboutyou_batches")
-      .update({ status: "depasit", polled_at: new Date().toISOString() } as never)
-      .eq("business_id", businessId).eq("kind", "product")
-      .contains("related_ids", [l.style_key])
-      .in("status", ["intentie", "necunoscut"])
-      .lt("generatie", l.generatie);
+  for (const lot of orbe) {
+    const chei = Array.isArray(lot.related_ids) ? (lot.related_ids as string[]) : [];
+    const styleKey = chei[0];
+    if (!styleKey) continue;
+
+    const listing = await getListingByStyleKey(admin, businessId, styleKey);
+    /* Listarea a disparut intre timp: lotul n-are ce sa mai pazeasca. */
+    if (!listing) {
+      await admin.from("aboutyou_batches")
+        .update({ status: "depasit", polled_at: new Date().toISOString() } as never).eq("id", lot.id);
+      continue;
+    }
+    /* Inca e generatia curenta: lotul e in lucru, nu depasit. Se lasa in pace. */
+    if (lot.generatie != null && lot.generatie >= listing.generatie) continue;
 
     /*
-     * ⚠ AICI SE FACE ADEVARATA COMENTARIUL. Un lot orb nu se va vedea niciodata asezandu-se — deci
-     * nu presupunem ca noul l-a batut, ci punem la coada o retrimitere a starii de ACUM, amanata
-     * cat sa fi apucat sa ajunga la ei. Ce vine la urma ramane. Vezi `reasertaStareaCurenta`.
+     * ⚠ SE VERIFICA, NU SE PRESUPUNE. Vezi `derivaFataDeEi`: daca la ei e deja ce trebuie, nu se
+     * mai trimite nimic — iar daca difera, se retrimite ACUM, nu peste sase ore.
      */
-    if (!error && orbi.length > 0) {
-      await reasertaStareaCurenta(admin, businessId, l.product_id, l.style_key, ASTEPTAREA_LOTULUI_ORB_MS);
+    const deriva = await derivaFataDeEi(admin, ctx, listing);
+    if (deriva === "necitibil") {
+      /*
+       * ⚠ NU SE INCHIDE LOTUL. „N-am putut verifica" nu e „e in regula": inchis acum, n-ar mai
+       * exista nimic care sa ne aduca inapoi la produsul asta. Se reia la trecerea urmatoare.
+       */
+      continue;
     }
-    if (error) {
-      await logError({
-        action: "aboutyou/intentie", severity: "warning",
-        message: `loturile depasite ale produsului nu s-au putut inchide: ${error.message}`,
-        details: { styleKey: l.style_key, generatie: l.generatie }, businessId,
-      });
+    if (deriva === "diferit") {
+      /*
+       * ⚠ SI REASERTAREA TREBUIE SA REUSEASCA INAINTE DE A INCHIDE LOTUL. Daca punerea la coada
+       * pica — o clipa proasta a bazei — si noi inchidem oricum, nu mai ramane NIMIC care sa
+       * oblige retrimiterea. Tocmai in clipa in care STIM ca la ei e o stare veche.
+       */
+      if (!await reasertaStareaCurenta(admin, businessId, listing.product_id, styleKey)) continue;
     }
+
+    await admin.from("aboutyou_batches")
+      .update({ status: "depasit", polled_at: new Date().toISOString() } as never).eq("id", lot.id);
   }
 }
+
+/** Cate loturi orbe se lamuresc intr-o trecere. Fiecare costa o cerere de citire la ei. */
+const MAX_LOTURI_ORBE = 20;
+
 
 /**
  * Intentiile ramase deschise: am trimis si nu stim ce a iesit.
@@ -478,18 +595,80 @@ async function inchideLoturileDepasite(admin: Db, businessId: string): Promise<v
  * jurnalul cu acelasi rand de 1440 de ori pe zi si ar ingropa alarmele adevarate.
  */
 const PRAG_INTENTIE_MS = 10 * 60 * 1000;
-export async function alarmaIntentiiDeschise(admin: Db, businessId: string): Promise<number> {
+/**
+ * Continua raspandirea unei setari globale ramase neterminata.
+ *
+ * ═══ ⚠ „TOATE PRODUSELE" TREBUIE SA INSEMNE TOATE (27.08.2026) ═══
+ *
+ * Cand comerciantul schimba cursul sau tarile, toate produsele listate trebuie repuse la coada. O
+ * actiune de server nu poate rula oricat, deci se opreste la un plafon — iar pana acum acolo se si
+ * TERMINA: la douazeci si cinci de mii de produse, ultimele cinci mii ramaneau cu preturile vechi
+ * la About You, poate pentru totdeauna, in timp ce ecranul spunea „Salvat".
+ *
+ * ⚠ RELUAREA E EXACTA, nu aproximativa: ordinea e `product_id` crescator, deci „mai mare decat
+ * ultimul dus la capat" nu poate nici sari, nici repeta un produs. Un `offset` ar fi alunecat la
+ * fiecare listare noua sau stearsa intre treceri.
+ *
+ * ⚠ CAMPUL SE STERGE ABIA CAND S-A TERMINAT. Sters mai devreme, restul catalogului ar ramane
+ * netrimis, si nimic n-ar mai aduce pe nimeni inapoi la el.
+ */
+export async function continuaRaspandirea(admin: Db, ctx: AboutYouSyncContext): Promise<number> {
+  const f = ctx.config.fanout;
+  if (!f?.op) return 0;
+
+  const PAS = 1000;
+  const PE_TRECERE = 5000;
+  let dupa = f.dupa ?? null;
+  let puse = 0;
+  let gata = false;
+
+  for (let luate = 0; luate < PE_TRECERE; luate += PAS) {
+    let q = admin.from("aboutyou_listings").select("product_id")
+      .eq("business_id", ctx.businessId).not("product_id", "is", null);
+    if (dupa) q = q.gt("product_id", dupa);
+    const randuri = randuriCitite<{ product_id: string | null }>("aboutyou.raspandire",
+      await q.order("product_id", { ascending: true }).limit(PAS) as never);
+
+    const ids = randuri.map((r) => r.product_id).filter((x): x is string => !!x);
+    if (ids.length === 0) { gata = true; break; }
+
+    const { error } = await admin.from("aboutyou_sync_queue").upsert(
+      ids.map((id) => ({ business_id: ctx.businessId, product_id: id, offer_id: id, op: f.op })) as never,
+      { onConflict: "business_id,offer_id,op" },
+    );
+    /* ⚠ Scrierea picata OPRESTE, fara sa mute cursorul: se reia de la acelasi loc. */
+    if (error) {
+      await logError({
+        action: "aboutyou/raspandire", severity: "warning",
+        message: `raspandirea setarii nu s-a putut continua: ${error.message}`,
+        details: { op: f.op, dupa }, businessId: ctx.businessId,
+      });
+      break;
+    }
+    dupa = ids[ids.length - 1];
+    puse += ids.length;
+    if (ids.length < PAS) { gata = true; break; }
+  }
+
+  await patchAboutYouConfig(admin, ctx.businessId, {
+    fanout: gata ? null : { op: f.op, dupa },
+  });
+  return puse;
+}
+
+export async function alarmaIntentiiDeschise(admin: Db, ctx: AboutYouSyncContext): Promise<number> {
+  const businessId = ctx.businessId;
   /*
    * ═══ ⚠ INTAI SE INCHID CELE DEPASITE, APOI SE STRIGA DUPA CE RAMANE (27.08.2026, seara) ═══
    *
-   * Un lot de produs ramas `intentie` sau `necunoscut` dintr-o generatie veche nu mai are ce
-   * pazi: ce a trimis el a fost inlocuit de ce am trimis dupa. Lasat asa, ar fi strigat la
-   * nesfarsit — iar o alarma care striga mereu nu mai e o alarma.
+   * Un lot de produs ramas `intentie` sau `necunoscut` dintr-o generatie veche se lamureste acum
+   * CITIND ce au ei, nu presupunand ca l-a inlocuit ce am trimis dupa — vezi `derivaFataDeEi`.
+   * Lasat asa, ar fi strigat la nesfarsit, iar o alarma care striga mereu nu mai e o alarma.
    *
    * ⚠ SE INCHID CA `depasit`, nu se sterg: randul e urma unei cereri care CHIAR a plecat spre
    * About You, si aia nu se sterge fiindca ne-a devenit incomoda.
    */
-  await inchideLoturileDepasite(admin, businessId);
+  await inchideLoturileDepasite(admin, ctx);
 
   const limita = new Date(Date.now() - PRAG_INTENTIE_MS).toISOString();
   const randuri = randuriCitite<{ id: string; kind: string; related_ids: unknown; trimis_la: string | null }>(
@@ -603,8 +782,25 @@ async function reconciliazaVariante(
   for (const r of randuri) {
     const slot = dupaSku.get(r.sku);
     if (slot && slot.variantTitle !== r.variant_title) {
-      await admin.from("aboutyou_variants")
+      const { error: eTitlu } = await admin.from("aboutyou_variants")
         .update({ variant_title: slot.variantTitle } as never).eq("id", r.id);
+      /*
+       * ═══ ⚠ SCRIEREA ASTA PICATA COSTA STOC (27.08.2026) ═══
+       *
+       * Rezultatul nu se citea. Dar `variant_title` e cheia dupa care se scade stocul combinatiei
+       * la o comanda: `consuma_stoc_comanda_marketplace` cauta combinatia cu
+       * `t.c->>'title' = r.titlu`, iar cand n-o gaseste face `continue` — deci comanda intra,
+       * marfa pleaca, si stocul variantei NU scade. Tacut.
+       *
+       * Ramas vechi („Negru / M" cand produsul are acum „Black / M"), randul asta se strica
+       * exact asa. Fail-closed: elementul se reia, cu `status: 0`, deci fara sa arda o incercare.
+       */
+      if (eTitlu) {
+        return {
+          ok: false, status: 0,
+          error: `Titlul variantei ${r.sku} nu s-a putut actualiza: ${eTitlu.message}`,
+        };
+      }
     }
   }
 
@@ -657,13 +853,23 @@ async function reconciliazaVariante(
        * atunci randul reintra in `deScos` si zeroul se reincearca; payload-ul
        * identic primeste acelasi `batchRequestId`, deci reluarea e ieftina.
        */
-      await admin.from("aboutyou_variants")
+      const { error: eRemoving } = await admin.from("aboutyou_variants")
         .update({ ay_status: "removing" } as never).in("id", lot.map((r) => r.id));
+      /*
+       * ⚠ Nescris, marcajul lipseste si randurile reintra in `deScos` la fiecare trecere: acelasi
+       * zero se retrimite la nesfarsit, iar lotul de retragere se face iar si iar.
+       */
+      if (eRemoving) {
+        return { ok: false, status: 0, error: `Marcajul de retragere nu s-a putut scrie: ${eRemoving.message}` };
+      }
     } else {
       // Listarea n-a plecat niciodata spre About You: nu e nimic de retras acolo,
       // deci marcajul se poate pune direct.
-      await admin.from("aboutyou_variants")
+      const { error: eRemoved } = await admin.from("aboutyou_variants")
         .update({ ay_status: "removed" } as never).in("id", deScos.map((r) => r.id));
+      if (eRemoved) {
+        return { ok: false, status: 0, error: `Marcajul de retragere nu s-a putut scrie: ${eRemoved.message}` };
+      }
     }
   }
 
@@ -677,8 +883,15 @@ async function reconciliazaVariante(
   const reactivate = randuri.filter((r) => dupaSku.has(r.sku) && r.enabled
     && (r.ay_status === "removing" || r.ay_status === "removed"));
   if (reactivate.length > 0) {
-    await admin.from("aboutyou_variants")
+    const { error: eReactivare } = await admin.from("aboutyou_variants")
       .update({ ay_status: null } as never).in("id", reactivate.map((r) => r.id));
+    /*
+     * ⚠ Nescris, varianta ramane „retrasa" desi a revenit pe produs: nu mai intra in niciun
+     * payload, deci la About You ramane pe zero si nu se mai vinde niciodata.
+     */
+    if (eReactivare) {
+      return { ok: false, status: 0, error: `Reactivarea variantelor nu s-a putut scrie: ${eReactivare.message}` };
+    }
   }
   return { ok: true };
 }

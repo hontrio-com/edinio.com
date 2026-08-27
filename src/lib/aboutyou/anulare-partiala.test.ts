@@ -64,7 +64,13 @@ test("⚠ o eliberare picata OPRESTE fereastra", () => {
    */
   const i = orders.indexOf("async function elibereazaAnularile");
   const f = orders.slice(i, orders.indexOf("\n}", i));
-  assert.match(f, /throw new Error\(/);
+  /*
+   * ⚠ `EroareTrecatoare`, nu `Error` (27.08.2026). Un RPC picat inseamna baza cazuta, nu o
+   * comanda proasta. Aruncat generic, evenimentul de webhook isi ardea o incercare din zece pentru
+   * indisponibilitatea NOASTRA, si dupa zece ajungea in scrisori moarte. Protocolul e acelasi — se
+   * arunca, `pollOrders` prinde si pune `ok = false` — doar felul erorii s-a facut limpede.
+   */
+  assert.match(f, /throw new EroareTrecatoare\(/);
   assert.match(f, /severity: "critical"/);
 
   /* ⚠ Si se cheama DUPA consum: consumul e cel care aseaza `stoc_marketplace_la`. */

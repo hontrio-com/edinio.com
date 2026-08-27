@@ -257,7 +257,11 @@ async function consumaStoculComenzii(
       action: "aboutyou/orders", message: error?.message ?? "consumul de stoc n-a raspuns valid",
       details: { orderId, raspuns: r }, businessId: ctx.businessId, severity: "critical",
     });
-    throw new Error(error?.message ?? "consumul de stoc n-a raspuns valid");
+    /*
+     * ⚠ TRECATOARE. Un RPC picat inseamna baza cazuta, nu o comanda proasta. Aruncat generic,
+     * evenimentul de webhook isi ardea o incercare din zece pentru indisponibilitatea NOASTRA.
+     */
+    throw new EroareTrecatoare(error?.message ?? "consumul de stoc n-a raspuns valid");
   }
   if (!r.deja && Array.isArray(r.lipsa) && r.lipsa.length > 0) {
     await logError({
@@ -293,7 +297,7 @@ async function elibereazaAnularile(
       message: `eliberarea stocului pentru liniile anulate a picat: ${error?.message ?? "raspuns nevalid"}`,
       details: { ayNumber, linii: linii.length }, businessId: ctx.businessId,
     });
-    throw new Error(error?.message ?? "eliberarea anularilor n-a raspuns valid");
+    throw new EroareTrecatoare(error?.message ?? "eliberarea anularilor n-a raspuns valid");
   }
   if (r.stare === "acoperit-de-comanda") {
     /*
@@ -350,7 +354,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
        * mapare" si „n-am putut citi maparea" sunt lucruri diferite; fluxul nu-l
        * respecta.
        */
-      throw new Error(`maparea SKU nu s-a putut citi: ${eVar.message}`);
+      throw new EroareTrecatoare(`maparea SKU nu s-a putut citi: ${eVar.message}`);
     }
     const randuri = vs ?? [];
     const prodIds = [...new Set(randuri.map((v) => v.product_id).filter(Boolean) as string[])];
@@ -671,7 +675,11 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
      * `stoc_marketplace_la` NULL n-ar mai fi dusa la capat niciodata.
      */
     if (reiaTranzitia) {
-      throw new Error(`Tranzitia comenzii About You ${ayNumber} nu s-a aplicat; fereastra ramane pe loc.`);
+      /*
+       * ⚠ TRECATOARE: `reincearca` inseamna chiar ca tranzitia trebuie reluata, deci nu e o
+       * insusire a evenimentului. `definitiv` nu ajunge aici — vezi mai sus, unde e citit separat.
+       */
+      throw new EroareTrecatoare(`Tranzitia comenzii About You ${ayNumber} nu s-a aplicat; fereastra ramane pe loc.`);
     }
     return "updated";
   }
@@ -722,7 +730,7 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
       .from("orders").select("id")
       .eq("business_id", ctx.businessId).eq("order_number", `AY-${ayNumber}`).maybeSingle());
     if (!found) {
-      throw new Error(`Comanda About You ${ayNumber} nu a putut fi salvată: ${error?.message ?? "motiv necunoscut"}`);
+      throw new EroareTrecatoare(`Comanda About You ${ayNumber} nu a putut fi salvată: ${error?.message ?? "motiv necunoscut"}`);
     }
     orderId = found.id;
     isNew = false;

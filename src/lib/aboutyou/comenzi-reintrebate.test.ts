@@ -62,11 +62,25 @@ test("⚠ roata se invarte pe TOATE cele citite, nu doar pe cele reintrebate", (
   assert.match(orders, /\.in\("aboutyou_order_number", randuri\.map\(\(r\) => r\.aboutyou_order_number\)\)/);
 });
 
-test("⚠ si bazinul e marginit in timp", () => {
-  /* Fara margine, creste la nesfarsit cu comenzi agatate intr-o stare pe care ei n-o mai schimba
-     niciodata — iar cele vii ar astepta dupa ele. */
-  assert.match(orders, /const ZILE_DE_REINTREBAT_AY = 60;/);
-  assert.match(orders, /\.gte\("created_at", deLa\)/);
+test("⚠ nicio comanda neincheiata nu mai iese din reconciliere", () => {
+  /*
+   * ═══ ⚠ ERA O TAIETURA LA 60 DE ZILE (27.08.2026) ═══
+   *
+   * `gte("created_at", acum - 60 de zile)` scotea din reconciliere orice comanda mai veche. Teama
+   * scrisa atunci — „bazinul creste la nesfarsit, iar cele vii ar astepta dupa ele" — nu se
+   * verifica: ordonarea e dupa `reintrebat_la` crescator, cu `nullsFirst`, deci o comanda NOUA
+   * intra mereu prima. Nimeni nu asteapta dupa nimeni.
+   *
+   * Iar o comanda deschisa de 90 de zile e suspecta tocmai de-aia — poate fi marfa rezervata
+   * degeaba, sau o expediere neconfirmata — deci ultimul lucru de facut e s-o uitam.
+   */
+  assert.match(orders, /const ZILE_BANDA_INTAI_AY = 60;/);
+  /* Doua benzi: recentele au prioritate, cele vechi umplu ce ramane. */
+  assert.match(orders, /q = recente \? q\.gte\("created_at", deLa\) : q\.lt\("created_at", deLa\);/);
+  assert.match(orders, /const recente = await citeste\(true, COMENZI_DE_REINTREBAT\);/);
+  assert.match(orders, /\.\.\.await citeste\(false, COMENZI_DE_REINTREBAT - recente\.length\)/);
+  /* ⚠ Si banda a doua se cere DOAR daca a ramas loc: altfel ar lua din locurile celor vii. */
+  assert.match(orders, /recente\.length >= COMENZI_DE_REINTREBAT[\s\S]{0,20}\? recente/);
 });
 
 test("⚠ cronul chiar o cheama, pe o tura proprie", () => {

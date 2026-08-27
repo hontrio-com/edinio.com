@@ -88,7 +88,19 @@ test("⚠ galeata e pe CHEIE si pe MEDIU, nu pe magazin", () => {
    * Plafonul lor e pe cheia API. Iar sandbox si productia au bugete deosebite — amestecate, una
    * ar manca-o pe cealalta.
    */
-  assert.match(client, /const cont = `\$\{auth\.environment \?\? "production"\}:\$\{\(auth\.apiKey \?\? ""\)\.trim\(\)\.slice\(-8\)\}`/);
+  assert.match(client, /const cont = `\$\{auth\.environment \?\? "production"\}:\$\{amprentaCheii\(auth\.apiKey\)\}`/);
+
+  /*
+   * ═══ ⚠ SI NU O BUCATA DIN SECRET (27.08.2026) ═══
+   *
+   * Erau ultimele opt caractere ale cheii API, puse intr-o cheie de galeata care ajunge in baza si
+   * in loguri. N-ar fi de ajuns ca sa reconstruiesti cheia, dar o bucata dintr-un secret intr-un
+   * loc operational n-are ce cauta. O amprenta face aceeasi treaba — aceeasi cheie da acelasi sir
+   * — fara sa poarte nimic din el.
+   */
+  assert.match(client, /function amprentaCheii\(apiKey: string \| undefined\): string/);
+  assert.match(client, /createHash\("sha256"\)\.update\(\(apiKey \?\? ""\)\.trim\(\)\)\.digest\("hex"\)\.slice\(0, 16\)/);
+  assert.doesNotMatch(client, /apiKey \?\? ""\)\.trim\(\)\.slice\(-8\)/, "bucata din secret s-a intors");
   assert.match(client, /cheie: `aboutyou:\$\{cont\}:\$\{g\?\.nume \?\? "altele"\}`/);
 });
 

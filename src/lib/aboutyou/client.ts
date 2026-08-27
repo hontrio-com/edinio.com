@@ -8,6 +8,7 @@
 // (Vercel Data Cache returned 500s at runtime for small upstream calls).
 
 import { asteaptaJetonImpartit, asteptareaCerutaDeEi, spunePauza } from "@/lib/marketplace/ritm-impartit";
+import { createHash } from "node:crypto";
 import { aboutyouBaseUrl } from "./auth";
 import type {
   AboutYouAttributeGroup, AboutYouBatchAck, AboutYouBatchResult, AboutYouBrand,
@@ -103,12 +104,29 @@ function plafonDinAntet(h: Headers): number | null {
   return null;
 }
 
+/**
+ * Amprenta cheii API, pentru chei de galeata. Nu poarta nimic din secret.
+ *
+ * ⚠ Se taie la 16 caractere hexa: destul ca doua conturi sa nu se ciocneasca, si nici pe departe
+ * de ajuns ca sa se intoarca la cheie.
+ */
+function amprentaCheii(apiKey: string | undefined): string {
+  return createHash("sha256").update((apiKey ?? "").trim()).digest("hex").slice(0, 16);
+}
+
 /** Familia de rute si plafonul ei. Ce nu se potriveste primeste cel mai strans plafon. */
 function galeata(auth: AboutYouAuth, path: string): { cheie: string; limita: number } {
   const g = LIMITE_AY.find((x) => x.potrivire.test(path));
-  /* ⚠ Cheia poarta si MEDIUL: sandbox si productie au bugete deosebite, iar amestecate una ar
-     manca-o pe cealalta. Si cheia contului, nu magazinul: plafonul e pe cheia API. */
-  const cont = `${auth.environment ?? "production"}:${(auth.apiKey ?? "").trim().slice(-8)}`;
+  /*
+   * ⚠ Cheia poarta si MEDIUL: sandbox si productie au bugete deosebite, iar amestecate una ar
+   * manca-o pe cealalta. Si cheia contului, nu magazinul: plafonul e pe cheia API.
+   *
+   * ⚠ SE IA AMPRENTA, NU O BUCATA DIN SECRET (27.08.2026). Erau ultimele opt caractere ale
+   * cheii API, puse intr-o cheie de galeata care ajunge in baza si in loguri. N-ar fi de ajuns ca
+   * sa reconstruiesti cheia, dar o bucata dintr-un secret intr-un loc operational nu are ce cauta:
+   * o amprenta face aceeasi treaba — aceeasi cheie da acelasi sir — fara sa poarte nimic din el.
+   */
+  const cont = `${auth.environment ?? "production"}:${amprentaCheii(auth.apiKey)}`;
   return { cheie: `aboutyou:${cont}:${g?.nume ?? "altele"}`, limita: g?.limita ?? 100 };
 }
 

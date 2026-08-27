@@ -787,12 +787,22 @@ const LINII_INCHEIATE_AY = new Set(["cancelled", "returned"]);
 const COMENZI_DE_REINTREBAT = 20;
 
 /**
- * Cat timp mai are rost sa reintrebi de o comanda neincheiata.
+ * De la ce vechime o comanda neincheiata trece pe banda a doua.
  *
- * ⚠ Fara margine, bazinul creste la nesfarsit cu comenzi ramase agatate intr-o stare pe care ei
- * n-o mai schimba niciodata — iar cele vii ar astepta dupa ele.
+ * ═══ ⚠ ERA O TAIETURA, SI COMENZILE VECHI DISPAREAU DE TOT (27.08.2026) ═══
+ *
+ * `gte("created_at", acum - 60 de zile)` scotea din reconciliere orice comanda mai veche. Teama
+ * scrisa atunci — „bazinul creste la nesfarsit, iar cele vii ar astepta dupa ele" — nu se
+ * verifica: ordonarea e dupa `reintrebat_la` crescator, cu `nullsFirst`, deci o comanda NOUA
+ * intra mereu prima. Nimeni nu asteapta dupa nimeni.
+ *
+ * ⚠ IAR O COMANDA DESCHISA DE 90 DE ZILE E SUSPECTA TOCMAI DE-AIA, deci ultimul lucru de facut e
+ * s-o uitam. Poate fi marfa rezervata degeaba, sau o expediere care n-a fost niciodata confirmata.
+ *
+ * ⚠ CE RAMANE: doua benzi. Cele din ultimele 60 de zile se intreaba la fiecare trecere; cele mai
+ * vechi umplu locurile ramase, deci se intreaba mai rar, dar NU dispar niciodata.
  */
-const ZILE_DE_REINTREBAT_AY = 60;
+const ZILE_BANDA_INTAI_AY = 60;
 
 /**
  * Reintreaba comenzile care nu s-au incheiat, pe NUMAR.
@@ -812,15 +822,27 @@ const ZILE_DE_REINTREBAT_AY = 60;
 export async function reconciliazaComenzile(
   admin: Db, ctx: AboutYouSyncContext,
 ): Promise<{ verificate: number }> {
-  const deLa = new Date(Date.now() - ZILE_DE_REINTREBAT_AY * 24 * 3600_000).toISOString();
-  const randuri = randuriCitite<{ aboutyou_order_number: string; items: unknown }>(
-    "aboutyou.comenziNeincheiate", await admin
-      .from("aboutyou_orders").select("aboutyou_order_number, items")
-      .eq("business_id", ctx.businessId)
-      .gte("created_at", deLa)
+  const deLa = new Date(Date.now() - ZILE_BANDA_INTAI_AY * 24 * 3600_000).toISOString();
+  const citeste = async (recente: boolean, cate: number) => {
+    let q = admin.from("aboutyou_orders").select("aboutyou_order_number, items")
+      .eq("business_id", ctx.businessId);
+    q = recente ? q.gte("created_at", deLa) : q.lt("created_at", deLa);
+    return randuriCitite<{ aboutyou_order_number: string; items: unknown }>(
+      recente ? "aboutyou.comenziNeincheiate" : "aboutyou.comenziVechiNeincheiate",
       /* ⚠ Cele mai demult atinse intai, ca sa nu ramana niciuna in urma. */
-      .order("reintrebat_la", { ascending: true, nullsFirst: true })
-      .limit(COMENZI_DE_REINTREBAT) as never);
+      await q.order("reintrebat_la", { ascending: true, nullsFirst: true })
+        .limit(cate) as never);
+  };
+
+  /*
+   * ⚠ DOUA BENZI, si ordinea lor e chiar regula. Vezi nota de la `ZILE_BANDA_INTAI_AY`: comenzile
+   * din ultimele saizeci de zile au prioritate, iar cele mai vechi umplu ce ramane. Asa nu se mai
+   * pierde niciuna, dar nici nu tin locul celor vii.
+   */
+  const recente = await citeste(true, COMENZI_DE_REINTREBAT);
+  const randuri = recente.length >= COMENZI_DE_REINTREBAT
+    ? recente
+    : [...recente, ...await citeste(false, COMENZI_DE_REINTREBAT - recente.length)];
 
   /*
    * ⚠ Taierea pe stari se face AICI, nu in interogare: starea adevarata sta pe LINII, in `items`,

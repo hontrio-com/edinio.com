@@ -4522,6 +4522,20 @@ create table if not exists public.aboutyou_batches (
   trimis_la timestamp with time zone,
   generatie integer);
 
+create table if not exists public.aboutyou_bulk_jobs (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  op text not null,
+  dupa uuid,
+  status_filtru text,
+  doar_trimise boolean default false not null,
+  puse integer default 0 not null,
+  status text default 'deschis'::text not null,
+  last_error text,
+  creat_la timestamp with time zone default now() not null,
+  atins_la timestamp with time zone default now() not null,
+  terminat_la timestamp with time zone);
+
 create table if not exists public.aboutyou_listings (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -4611,6 +4625,23 @@ create table if not exists public.aboutyou_variants (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   variant_title text);
+
+create table if not exists public.aboutyou_veghe (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  style_key text not null,
+  product_id uuid,
+  motiv text not null,
+  pornita_la timestamp with time zone default now() not null,
+  pana_la timestamp with time zone not null,
+  urmatoarea_verificare timestamp with time zone default now() not null,
+  verificari integer default 0 not null,
+  curate_la_rand integer default 0 not null,
+  reasertari integer default 0 not null,
+  ultima_deriva_la timestamp with time zone,
+  alarma_scrisa_la timestamp with time zone,
+  creat_la timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
 
 create table if not exists public.aboutyou_webhook_inbox (
   id uuid default gen_random_uuid() not null,
@@ -5837,11 +5868,13 @@ alter table privat.ritm_extern add constraint ritm_extern_pkey PRIMARY KEY (chei
 alter table privat.store_settings add constraint store_settings_pkey PRIMARY KEY (id);
 alter table public.abandoned_carts add constraint abandoned_carts_pkey PRIMARY KEY (id);
 alter table public.aboutyou_batches add constraint aboutyou_batches_pkey PRIMARY KEY (id);
+alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_pkey PRIMARY KEY (id);
 alter table public.aboutyou_listings add constraint aboutyou_listings_pkey PRIMARY KEY (id);
 alter table public.aboutyou_orders add constraint aboutyou_orders_pkey PRIMARY KEY (id);
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_pkey PRIMARY KEY (id);
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_pkey PRIMARY KEY (id);
 alter table public.aboutyou_variants add constraint aboutyou_variants_pkey PRIMARY KEY (id);
+alter table public.aboutyou_veghe add constraint aboutyou_veghe_pkey PRIMARY KEY (id);
 alter table public.aboutyou_webhook_inbox add constraint aboutyou_webhook_inbox_pkey PRIMARY KEY (id);
 alter table public.admin_audit_log add constraint admin_audit_log_pkey PRIMARY KEY (id);
 alter table public.announcements add constraint announcements_pkey PRIMARY KEY (id);
@@ -5919,6 +5952,7 @@ alter table public.aboutyou_orders add constraint aboutyou_orders_business_id_ab
 alter table public.aboutyou_retururi add constraint aboutyou_retururi_linie_key UNIQUE (business_id, aboutyou_order_number, linie_cheie);
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
 alter table public.aboutyou_variants add constraint aboutyou_variants_business_id_sku_key UNIQUE (business_id, sku);
+alter table public.aboutyou_veghe add constraint aboutyou_veghe_business_id_style_key_key UNIQUE (business_id, style_key);
 alter table public.aboutyou_webhook_inbox add constraint aboutyou_webhook_inbox_business_id_event_id_key UNIQUE (business_id, event_id);
 alter table public.brevo_suppressions add constraint brevo_suppressions_business_id_email_key UNIQUE (business_id, email);
 alter table public.businesses add constraint businesses_custom_domain_key UNIQUE (custom_domain);
@@ -5947,6 +5981,8 @@ alter table public.trendyol_orders add constraint trendyol_orders_business_id_sh
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
 alter table public.trendyol_variants add constraint trendyol_variants_business_id_barcode_key UNIQUE (business_id, barcode);
 alter table public.aboutyou_batches add constraint aboutyou_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'stock'::text, 'stock_removal'::text, 'price'::text, 'status'::text, 'removal'::text, 'ship'::text, 'cancel'::text, 'return'::text])));
+alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'price'::text, 'publish'::text])));
+alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_status_check CHECK ((status = ANY (ARRAY['deschis'::text, 'gata'::text, 'oprit'::text])));
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'publish'::text, 'stock'::text, 'price'::text, 'ship'::text])));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
@@ -6169,6 +6205,8 @@ CREATE INDEX aboutyou_batches_deschise_idx ON public.aboutyou_batches USING btre
 CREATE INDEX aboutyou_batches_generatie_idx ON public.aboutyou_batches USING btree (business_id, kind, generatie) WHERE (generatie IS NOT NULL);
 CREATE UNIQUE INDEX aboutyou_batches_intent_uidx ON public.aboutyou_batches USING btree (business_id, intent_id) WHERE (intent_id IS NOT NULL);
 CREATE INDEX aboutyou_batches_intentii_idx ON public.aboutyou_batches USING btree (business_id, submitted_at) WHERE (status = 'intentie'::text);
+CREATE INDEX aboutyou_bulk_jobs_deschise_idx ON public.aboutyou_bulk_jobs USING btree (atins_la) WHERE (status = 'deschis'::text);
+CREATE UNIQUE INDEX aboutyou_bulk_jobs_unic_deschis_idx ON public.aboutyou_bulk_jobs USING btree (business_id, op) WHERE (status = 'deschis'::text);
 CREATE INDEX aboutyou_inbox_de_reluat_idx ON public.aboutyou_webhook_inbox USING btree (business_id, primit_la) WHERE (prelucrat_la IS NULL);
 CREATE INDEX aboutyou_orders_order_id_idx ON public.aboutyou_orders USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX aboutyou_orders_reintrebat_idx ON public.aboutyou_orders USING btree (business_id, reintrebat_la NULLS FIRST);
@@ -6176,6 +6214,8 @@ CREATE INDEX aboutyou_retururi_de_rezolvat_idx ON public.aboutyou_retururi USING
 CREATE INDEX aboutyou_retururi_order_id_idx ON public.aboutyou_retururi USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX aboutyou_retururi_product_id_idx ON public.aboutyou_retururi USING btree (product_id) WHERE (product_id IS NOT NULL);
 CREATE INDEX aboutyou_sync_queue_ordine_idx ON public.aboutyou_sync_queue USING btree (prioritate, created_at);
+CREATE INDEX aboutyou_veghe_magazin_idx ON public.aboutyou_veghe USING btree (business_id);
+CREATE INDEX aboutyou_veghe_scadente_idx ON public.aboutyou_veghe USING btree (urmatoarea_verificare);
 CREATE INDEX aboutyou_webhook_inbox_neprelucrate_idx ON public.aboutyou_webhook_inbox USING btree (business_id, primit_la) WHERE (prelucrat_la IS NULL);
 CREATE INDEX announcements_feed_idx ON public.announcements USING btree (is_published, is_pinned DESC, published_at DESC);
 CREATE INDEX bds_biz_zi ON public.business_daily_stats USING btree (business_id, zi DESC);
@@ -6486,11 +6526,13 @@ CREATE TRIGGER users_profile_blocheaza_escaladare BEFORE UPDATE ON public.users_
 alter table privat.store_settings enable row level security;
 alter table public.abandoned_carts enable row level security;
 alter table public.aboutyou_batches enable row level security;
+alter table public.aboutyou_bulk_jobs enable row level security;
 alter table public.aboutyou_listings enable row level security;
 alter table public.aboutyou_orders enable row level security;
 alter table public.aboutyou_retururi enable row level security;
 alter table public.aboutyou_sync_queue enable row level security;
 alter table public.aboutyou_variants enable row level security;
+alter table public.aboutyou_veghe enable row level security;
 alter table public.aboutyou_webhook_inbox enable row level security;
 alter table public.admin_audit_log enable row level security;
 alter table public.announcements enable row level security;
@@ -6586,6 +6628,9 @@ create policy owner_update_abandoned_carts on public.abandoned_carts as PERMISSI
 create policy owner_select_aboutyou_batches on public.aboutyou_batches as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_aboutyou_bulk_jobs on public.aboutyou_bulk_jobs as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_listings on public.aboutyou_listings as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
@@ -6599,6 +6644,9 @@ create policy owner_select_aboutyou_sync_queue on public.aboutyou_sync_queue as 
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_variants on public.aboutyou_variants as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_aboutyou_veghe on public.aboutyou_veghe as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_aboutyou_webhook_inbox on public.aboutyou_webhook_inbox as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
@@ -6885,6 +6933,27 @@ grant SELECT on table public.aboutyou_batches to service_role;
 grant TRIGGER on table public.aboutyou_batches to service_role;
 grant TRUNCATE on table public.aboutyou_batches to service_role;
 grant UPDATE on table public.aboutyou_batches to service_role;
+grant DELETE on table public.aboutyou_bulk_jobs to anon;
+grant INSERT on table public.aboutyou_bulk_jobs to anon;
+grant REFERENCES on table public.aboutyou_bulk_jobs to anon;
+grant SELECT on table public.aboutyou_bulk_jobs to anon;
+grant TRIGGER on table public.aboutyou_bulk_jobs to anon;
+grant TRUNCATE on table public.aboutyou_bulk_jobs to anon;
+grant UPDATE on table public.aboutyou_bulk_jobs to anon;
+grant DELETE on table public.aboutyou_bulk_jobs to authenticated;
+grant INSERT on table public.aboutyou_bulk_jobs to authenticated;
+grant REFERENCES on table public.aboutyou_bulk_jobs to authenticated;
+grant SELECT on table public.aboutyou_bulk_jobs to authenticated;
+grant TRIGGER on table public.aboutyou_bulk_jobs to authenticated;
+grant TRUNCATE on table public.aboutyou_bulk_jobs to authenticated;
+grant UPDATE on table public.aboutyou_bulk_jobs to authenticated;
+grant DELETE on table public.aboutyou_bulk_jobs to service_role;
+grant INSERT on table public.aboutyou_bulk_jobs to service_role;
+grant REFERENCES on table public.aboutyou_bulk_jobs to service_role;
+grant SELECT on table public.aboutyou_bulk_jobs to service_role;
+grant TRIGGER on table public.aboutyou_bulk_jobs to service_role;
+grant TRUNCATE on table public.aboutyou_bulk_jobs to service_role;
+grant UPDATE on table public.aboutyou_bulk_jobs to service_role;
 grant DELETE on table public.aboutyou_listings to anon;
 grant INSERT on table public.aboutyou_listings to anon;
 grant REFERENCES on table public.aboutyou_listings to anon;
@@ -6990,6 +7059,27 @@ grant SELECT on table public.aboutyou_variants to service_role;
 grant TRIGGER on table public.aboutyou_variants to service_role;
 grant TRUNCATE on table public.aboutyou_variants to service_role;
 grant UPDATE on table public.aboutyou_variants to service_role;
+grant DELETE on table public.aboutyou_veghe to anon;
+grant INSERT on table public.aboutyou_veghe to anon;
+grant REFERENCES on table public.aboutyou_veghe to anon;
+grant SELECT on table public.aboutyou_veghe to anon;
+grant TRIGGER on table public.aboutyou_veghe to anon;
+grant TRUNCATE on table public.aboutyou_veghe to anon;
+grant UPDATE on table public.aboutyou_veghe to anon;
+grant DELETE on table public.aboutyou_veghe to authenticated;
+grant INSERT on table public.aboutyou_veghe to authenticated;
+grant REFERENCES on table public.aboutyou_veghe to authenticated;
+grant SELECT on table public.aboutyou_veghe to authenticated;
+grant TRIGGER on table public.aboutyou_veghe to authenticated;
+grant TRUNCATE on table public.aboutyou_veghe to authenticated;
+grant UPDATE on table public.aboutyou_veghe to authenticated;
+grant DELETE on table public.aboutyou_veghe to service_role;
+grant INSERT on table public.aboutyou_veghe to service_role;
+grant REFERENCES on table public.aboutyou_veghe to service_role;
+grant SELECT on table public.aboutyou_veghe to service_role;
+grant TRIGGER on table public.aboutyou_veghe to service_role;
+grant TRUNCATE on table public.aboutyou_veghe to service_role;
+grant UPDATE on table public.aboutyou_veghe to service_role;
 grant DELETE on table public.aboutyou_webhook_inbox to anon;
 grant INSERT on table public.aboutyou_webhook_inbox to anon;
 grant REFERENCES on table public.aboutyou_webhook_inbox to anon;

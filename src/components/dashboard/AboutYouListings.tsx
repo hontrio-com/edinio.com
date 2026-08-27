@@ -123,17 +123,23 @@ export function AboutYouListings({
   };
 
   /*
-   * „Trimite toate" trebuie sa spuna cand NU a trimis toate.
+   * „Trimite toate" trebuie sa spuna CE URMEAZA, nu doar ce s-a facut.
    *
-   * Citirea listarilor se face pe ferestre, iar o pagina cazuta sau atingerea
-   * plafonului dau o lista trunchiata. Raportata drept succes, comerciantul rămânea
-   * convins ca tot catalogul a plecat.
+   * Citirea listarilor se face pe ferestre, iar o trecere se opreste la un plafon. Pana azi
+   * mesajul spunea „Repetă operația" — si asta era adevarat cat timp plafonul era TERMINAL: ce
+   * nu incapea nu mai pleca niciodata.
+   *
+   * ⚠ ACUM NU MAI E ADEVARAT. Lucrarea se tine minte intr-un rand (`aboutyou_bulk_jobs`) si cronul
+   * o duce la capat singur. Cerut sa repete, omul ar apasa degeaba — iar a doua apasare nici macar
+   * nu porneste o lucrare noua, ci o continua pe cea care merge deja.
+   *
+   * ⚠ Un text care ramane in urma codului MINTE, si minte cu incredere. E a patra oara luna asta.
    */
   const syncAll = () => startTransition(async () => {
     const res = await syncAllAboutYou(businessId);
     if ("error" in res) { toast.error(res.error); return; }
     if (res.incomplet) {
-      toast.warning(`${res.queued} produse trimise în coadă, dar lista nu s-a putut citi în întregime. Repetă operația.`);
+      toast.success(`${res.queued} produse trimise în coadă. Restul catalogului continuă automat, în fundal.`);
     } else {
       toast.success(res.queued > 0 ? `${res.queued} produse trimise în coadă.` : "Nu există listări de trimis.");
     }
@@ -145,7 +151,7 @@ export function AboutYouListings({
     const res = await publishAllAboutYou(businessId);
     if ("error" in res) { toast.error(res.error); return; }
     if (res.incomplet) {
-      toast.warning(`${res.queued} produse programate, dar lista nu s-a putut citi în întregime. Repetă operația.`);
+      toast.success(`${res.queued} produse programate pentru publicare. Restul continuă automat, în fundal.`);
     } else {
       toast.success(res.queued > 0 ? `${res.queued} produse programate pentru publicare.` : "Nu există ciorne de publicat.");
     }

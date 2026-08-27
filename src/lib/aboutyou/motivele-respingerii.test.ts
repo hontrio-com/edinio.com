@@ -41,7 +41,36 @@ test("⚠ cursorul NU se muta cand am gasit tot", () => {
    * Mutat si atunci, urmatoarea trecere ar sari peste paginile de la inceput fara motiv - iar
    * cele mai multe treceri se termina exact asa, cu tot ce cautam gasit in primele pagini.
    */
-  assert.match(sync, /if \(!gasiteToate && urmatoareaR !== dePeLaR\) \{/);
+  assert.match(sync, /if \(!gasiteToate && urmatoareaR !== dePeLaR && toateScriseR\) \{/);
+});
+
+test("⚠ si nici peste o scriere locala care n-a intrat", () => {
+  /*
+   * ═══ ⚠ CURSORUL SE MUTA INAINTEA SCRIERILOR, IAR ELE NU-SI CITEAU RASPUNSUL (27.08.2026, noaptea) ═══
+   *
+   *     pagina 37 citita de la ei     ✅
+   *     `reconcile_page = 38`         ✅
+   *     scrierile paginii 37 pica     ❌
+   *
+   * Pagina 37 nu se mai reia pana la o rotatie completa a catalogului — ore sau zile — iar
+   * statusurile ei raman la noi cele vechi: un produs respins arata mai departe „activ", si
+   * comerciantul nu afla de ce nu se vinde.
+   *
+   * ⚠ ORDINEA CORECTA: se citeste, se scrie TOT, se verifica ca a intrat, si abia atunci se muta
+   * cursorul. Nemutat, cel mai rau lucru care se intampla e ca aceleasi pagini se recitesc.
+   */
+  const iScrieri = sync.indexOf("const status = statusDominant(stari);");
+  const iCursor = sync.indexOf("reconcile_page: urmatoarea");
+  assert.ok(iScrieri > 0 && iCursor > iScrieri,
+    "cursorul de reconciliere trebuie scris DUPA scrierile locale, nu inaintea lor");
+  assert.match(sync, /if \(eScris\) toateScrise = false;/);
+  assert.match(sync, /if \(toateScrise\) \{[\s\S]{0,400}?reconcile_page: urmatoarea/);
+
+  /*
+   * ⚠ SI LA MOTIVE, SCOATEREA DIN MULTIME SE FACE DOAR DACA S-A SCRIS. Scoasa oricum, socoteala
+   * „le-am gasit pe toate" devine falsa dintr-o scriere picata, iar cursorul trece mai departe.
+   */
+  assert.match(sync, /if \(eMotiv\) \{ toateScriseR = false; continue; \}/);
 });
 
 test("⚠ catalogul terminat intoarce roata la inceput", () => {

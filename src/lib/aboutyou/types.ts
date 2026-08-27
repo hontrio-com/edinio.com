@@ -103,15 +103,17 @@ export interface AboutYouConfig {
   /** Unde a ajuns roata pe `/products/rejected`. Vezi nota din `reconcileStatuses`. */
   rejected_page?: number;
   /**
-   * Raspandirea unei setari globale, ramasa neterminata.
+   * MOSTENIRE: raspandirea unei setari globale, ramasa neterminata.
    *
-   * ⚠ CAND SE SCHIMBA CURSUL sau tarile, toate produsele listate trebuie repuse la coada. O
-   * actiune de server nu poate rula oricat, deci se opreste la un plafon — iar pana acum acolo se
-   * si TERMINA: la douazeci si cinci de mii de produse, ultimele cinci mii ramaneau cu preturile
-   * vechi la About You, poate pentru totdeauna, in timp ce ecranul spunea „Salvat".
+   * ⚠ NU SE MAI SCRIE. Lucrarile in masa stau acum intr-un RAND propriu (`aboutyou_bulk_jobs`),
+   * fiindca un singur camp in config se calca in picioare: „Publica toate" scria `fanout =
+   * publish`, iar o salvare de setari un minut mai tarziu il inlocuia cu `price` — prima lucrare
+   * disparea in tacere.
    *
-   * Aici se tine minte unde s-a ajuns; cronul continua de la `dupa` pana se termina, si abia
-   * atunci sterge campul. „Toate produsele" inseamna toate, chiar daca ia mai multe treceri.
+   * ⚠ SE MAI CITESTE, SI DE-AIA RAMANE. Intre comit si desfasurare pot exista magazine cu campul
+   * inca plin, iar el inseamna „mai am catalog de pus la coada": ignorat, exact produsele alea ar
+   * ramane neatinse de nimic. `continuaLucrarileInMasa` il preia intr-o lucrare si abia atunci il
+   * sterge. Se scoate cand nu mai exista niciun magazin cu el.
    */
   fanout?: { op: "upsert" | "price"; dupa: string | null } | null;
   orders_synced_at?: string;
@@ -247,10 +249,31 @@ export interface AboutYouGetProductItem {
   category?: number | null;
   countries?: string[] | null;
   country_of_origin?: string | null;
+  /**
+   * ⚠ URL-URILE NU SUNT ALE NOASTRE, si asta nu e o subtilitate: About You REGAZDUIESTE fiecare
+   * imagine si o si transcodeaza. Masurat pe acelasi produs, aceeasi zi:
+   *
+   *   trimis:  https://edinio-cdn.com/products/<uuid>/<uuid>.webp        (6 bucati)
+   *   primit:  https://ayou-live-sellerscenter-s3.s3.amazonaws.com/…jpg  (6 bucati)
+   *
+   * Deci o comparatie pe URL ar gasi „deriva" la fiecare citire, pentru totdeauna — o retrimitere
+   * la nesfarsit pe un produs perfect sanatos. Se compara NUMARUL. Vezi `amprentaArticolului`.
+   */
   images?: string[] | null;
+  /** ⚠ Aceleasi numere pe care le trimitem, dar REORDONATE. Se compara sortat. */
   attributes?: number[] | null;
   weight?: number | null;
   colorway_key?: string | null;
+  /*
+   * ⚠ Cele patru de mai jos lipseau din tip desi VIN in raspuns — vezi lista masurata din nota de
+   * mai sus. `name`, `description` si `descriptions` se intorc goale fiindca noi nu le trimitem
+   * (`buildAboutYouItems` nu le pune); compozitia, in schimb, se intoarce identica cu ce am
+   * trimis, pana la ordinea grupurilor, deci se poate compara.
+   */
+  description?: string | null;
+  descriptions?: Record<string, string> | null;
+  material_composition_textile?: AboutYouMaterialCluster[] | null;
+  material_composition_non_textile?: AboutYouMaterialCluster[] | null;
 }
 // GET /products/rejected (RejectedProductSchema).
 export interface AboutYouRejectedProduct {

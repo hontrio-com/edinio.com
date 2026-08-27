@@ -224,7 +224,23 @@ test("⚠ publicarea asteapta ULTIMUL lot al produsului, nu primul", () => {
    */
   const sync = viu("src/lib/aboutyou/sync.ts");
   assert.match(sync, /const fratiNeterminati = randuriCitite</);
-  assert.match(sync, /\.contains\("related_ids", \[listing\.style_key\]\)/);
+  /*
+   * ═══ ⚠ SI PROBA ASTA CERUSE CHIAR FORMA CARE ARUNCA (27.08.2026, noaptea) ═══
+   *
+   * `related_ids` e `jsonb`. postgrest-js scrie un VECTOR ca `cs.{uuid}` — sintaxa de array
+   * Postgres — iar pe jsonb aia e `22P02: invalid input syntax for type json`, deci 400. Masurat
+   * prin clientul real: vectorul arunca, sirul JSON intoarce randurile.
+   *
+   * ⚠ IAR `randuriCitite` PREFACE 400-ul IN ARUNCARE, deci asezarea lotului murea INAINTE de a
+   * scrie starea listarii: produsul ramanea `pending` si nu se publica NICIODATA. Verificarea de
+   * mai sus, pusa ca sa nu se publice PREA DEVREME, facea sa nu se publice DELOC — a doua oara
+   * acelasi tipar, in aceeasi ramura. Iar proba il pazea, cerand exact forma stricata: verde,
+   * peste defect.
+   *
+   * ⚠ Forma se pazeste acum din `containment-jsonb.test.ts`, care citeste TIPUL coloanei din
+   * baseline in loc sa se increada in cine a scris apelul.
+   */
+  assert.match(sync, /\.contains\("related_ids", JSON\.stringify\(\[listing\.style_key\]\)\)/);
   /*
    * ⚠ Lista fraților CUPRINDE și `intentie` / `necunoscut` — vezi nota din cod: de când urma se
    * scrie înainte de cerere, un frate poate sta acolo, iar amândouă înseamnă „poate n-a ajuns tot

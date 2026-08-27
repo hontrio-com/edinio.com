@@ -28,7 +28,11 @@ import { patchAboutYouConfig } from "./config";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";
-import type { AboutYouConfig, AboutYouRejectionReason } from "./types";
+import type { AboutYouConfig, AboutYouGetProductItem, AboutYouRejectionReason } from "./types";
+import {
+  FEREASTRA_VEGHE_MS, MAX_VEGHI_PE_TRECERE, PRAG_REASERTARI, pornesteVeghea,
+  urmatoareaVerificareMs, vegheaSAIncheiat, veghiScadente,
+} from "./veghe";
 
 type Db = SupabaseClient<Database>;
 
@@ -436,23 +440,69 @@ async function reasertaStareaCurenta(
 }
 
 /**
+ * Compozitia de materiale, in forma in care se poate compara.
+ *
+ * ⚠ MASURAT, nu presupus: pe acelasi produs, `material_composition_non_textile` se intoarce de la
+ * ei identic cu ce am trimis — aceleasi grupuri, aceleasi materiale, chiar in aceeasi ordine. Se
+ * sorteaza totusi, fiindca „a fost la fel azi" nu e o promisiune de-a lor.
+ */
+function canonicMateriale(
+  m: { cluster_id?: number; components?: { material_id?: number; fraction?: number }[] }[] | null | undefined,
+): string[] {
+  return (m ?? [])
+    .map((c) => `${c.cluster_id ?? ""}=${(c.components ?? [])
+      .map((x) => `${x.material_id ?? ""}:${x.fraction ?? ""}`).sort().join(",")}`)
+    .sort();
+}
+
+/**
  * Ce am trimis noi, in forma in care ei ne-o dau inapoi.
  *
- * ⚠ SE COMPARA DOAR CE E DETERMINIST. Numele si descrierile nu se trimit deloc (vezi
- * `buildAboutYouItems`), imaginile se pot rescrie sau reordona la ei, iar ordinea atributelor nu e
- * garantata. Ce ramane — stoc, preturi, cod de bare, culoare, marime, marca, categorie, tari — sunt
- * numere si siruri pe care le-am pus noi si care se intorc neschimbate.
+ * ═══ ⚠ CE INTRA SI CE NU, DUPA O MASURATOARE (27.08.2026, noaptea) ═══
  *
- * ⚠ CE NU PRINDE, si o spun aici ca sa nu se creada altceva: o deosebire numai in descriere sau in
- * imagini nu se vede. Pentru ea ramane retrimiterea, care oricum se declanseaza la orice alta
- * deosebire.
+ * Amprenta de dimineata lua stocul, preturile, codul de bare, culoarea, marimea, marca, categoria
+ * si tarile — si spunea, pe fata, ca imaginile si atributele „se pot rescrie sau reordona la ei",
+ * deci se lasa afara. Prima jumatate a propozitiei era adevarata, a doua nu: nu le lasasem afara
+ * fiindca masurasem ceva, ci fiindca nu masurasem nimic.
+ *
+ * S-a cerut acelasi produs de la ei si s-a pus langa ce trimitem. Rezultatul:
+ *
+ *   `attributes`  — ACELEASI numere, alta ordine. Trimis [186833,158862,158453,158747,180687,
+ *                   280509], primit [186833,180687,158453,280509,158747,158862]. Sortate, se
+ *                   compara exact. ⚠ INTRA IN AMPRENTA.
+ *   materiale     — identice pana la ordinea grupurilor. ⚠ INTRA.
+ *   `weight`      — 300 trimis, 300 primit. ⚠ INTRA.
+ *   `images`      — REGAZDUITE SI TRANSCODATE: plecam cu sase `edinio-cdn.com/….webp`, primim
+ *                   sase `ayou-live-sellerscenter-s3.s3.amazonaws.com/media/products/….jpg`.
+ *                   ⚠ NU INTRA DELOC. Vezi mai jos.
+ *
+ * ⚠ DE CE NU URL-URILE, desi ele ar prinde cel mai bine un lot vechi care schimba doar pozele:
+ * fiindca nu se pot compara. Confruntate literal, fiecare citire ar gasi „deriva" pe fiecare
+ * produs sanatos, si am retrimite catalogul intreg la nesfarsit — o paguba mai mare decat cea de
+ * care ne aparam.
+ *
+ * ⚠ SI DE CE NICI MACAR NUMARUL, desi sase erau si sase s-au intors: fiindca produsul masurat are
+ * O SINGURA varianta si O SINGURA culoare. Noi trimitem lista de imagini PE CULOARE, iar ce
+ * intorc ei pe un produs cu trei culori — lista culorii, sau a produsului intreg — nu stiu. Daca
+ * e a produsului intreg, numarul lor ar fi mereu mai mare, si fiecare produs multicolor ar arata
+ * deriva pentru totdeauna. O masuratoare pe un singur caz nu e o regula despre celelalte.
+ *
+ * ⚠ CE SE POATE SPUNE TOTUSI, si se spune in `derivaFataDeEi`: daca ei au MAI PUTINE imagini
+ * decat trimitem, ceva lipseste — si asta e adevarat sub amandoua ipotezele. Comparatia aia sta
+ * separat, nu in amprenta, tocmai fiindca merge intr-o singura directie.
+ *
+ * ⚠ SI TOT CE INTRA POATE GRESI. Daca vreodata ei normalizeaza un camp altfel decat credem,
+ * amprenta ar arata deriva mereu — de-aia veghea numara retrimiterile si, dupa `PRAG_REASERTARI`,
+ * striga in loc sa se invarta. O comparatie mai bogata cere o iesire din bucla, nu incredere.
  */
-function amprentaArticolului(x: {
+export function amprentaArticolului(x: {
   quantity?: number | null;
   prices?: { country_code?: string; retail_price?: number | null; sale_price?: number | null }[] | null;
   ean?: string | null; color?: number | null; size?: number | null; second_size?: number | null;
   brand?: number | null; category?: number | null; country_of_origin?: string | null;
-  countries?: string[] | null;
+  countries?: string[] | null; attributes?: number[] | null; weight?: number | null;
+  material_composition_textile?: { cluster_id?: number; components?: { material_id?: number; fraction?: number }[] }[] | null;
+  material_composition_non_textile?: { cluster_id?: number; components?: { material_id?: number; fraction?: number }[] }[] | null;
 }): string {
   const bani = (v: number | null | undefined) => (v == null ? null : Math.round(v * 100) / 100);
   const preturi = (x.prices ?? [])
@@ -466,6 +516,10 @@ function amprentaArticolului(x: {
     b: x.brand ?? null, cat: x.category ?? null,
     o: (x.country_of_origin ?? "").toUpperCase() || null,
     t: [...(x.countries ?? [])].map((c) => c.toUpperCase()).sort(),
+    a: [...(x.attributes ?? [])].sort((u, v) => u - v),
+    g: x.weight ?? null,
+    mt: canonicMateriale(x.material_composition_textile),
+    mn: canonicMateriale(x.material_composition_non_textile),
   });
 }
 
@@ -484,15 +538,63 @@ function amprentaArticolului(x: {
  */
 type Deriva = "identic" | "diferit" | "necitibil";
 
+export interface ConstatareDeriva {
+  fel: Deriva;
+  /**
+   * SKU-uri pe care EI le au cu stoc, iar noi le credem retrase.
+   *
+   * ⚠ ASTA E O VARIANTA CARE SE VINDE FARA SA STIM. Vezi nota lunga din `derivaFataDeEi`.
+   */
+  scurgeri: string[];
+  /** SKU-uri de la ei pe care nu le cunoastem deloc. Nu se atinge nimic; se striga. */
+  straine: string[];
+}
+
+/**
+ * Cate pagini de o suta se citesc pentru un singur produs.
+ *
+ * ⚠ EXISTA FIINDCA `per_page` E PLAFONAT LA 100 LA EI, iar un produs poate avea mai multe: chiar
+ * de-aia `POST /products/` se rupe in loturi de 100. Cu o singura pagina, varianta 101 parea
+ * „lipsa" la fiecare citire — deci retrimitere la nesfarsit — si nici SKU-urile in plus de pe
+ * paginile urmatoare nu s-ar fi vazut vreodata.
+ */
+const MAX_PAGINI_DERIVA = 20;
+
+/**
+ * ⚠ SI INVERS: CE AU EI SI NOI NU (27.08.2026, noaptea)
+ *
+ * Comparatia de dimineata mergea intr-o singura directie — fiecare SKU pe care il vrem trebuie sa
+ * fie la ei, cu aceleasi valori. Ce e la ei IN PLUS nu se uita nimeni. Si iesea asa:
+ *
+ *     SKU A si SKU B publicate
+ *     SKU B se retrage    -> stoc 0 la ei, `ay_status = removed` la noi
+ *     un lot vechi intarziat reaplica SKU B -> la ei are iar stoc
+ *     starea dorita de acum contine doar SKU A
+ *
+ * Verificam A, il gasim bun, spunem „identic". B nu e in lista noastra, deci nu-l cautam; si
+ * fiindca local e deja `removed`, `reconciliazaVariante` nu-l mai pune niciodata in `deScos`.
+ * Rezultatul: o marime retrasa care se vinde mai departe la About You, si nimic la noi care sa
+ * arate asta vreodata.
+ *
+ * ⚠ CE FACE ACUM: un SKU al lor cu stoc pe care il credem retras isi pierde piatra de mormant
+ * (`ay_status` inapoi pe gol), iar produsul se retrimite — si atunci `deScos` il prinde si
+ * zeroul pleaca din nou. Piatra de mormant nu se sterge din obisnuinta: se sterge fiindca AM
+ * MASURAT ca minte.
+ *
+ * ⚠ SI UN SKU CU TOTUL STRAIN NU SE ATINGE. Nu stim ce e — o listare facuta de om direct in
+ * Seller Center, un rand sters din greseala la noi. Sa-i punem stoc 0 ar insemna sa luam in locul
+ * omului o hotarare pe care nu ne-a cerut-o. Se striga, si atat.
+ */
 async function derivaFataDeEi(
   admin: Db, ctx: AboutYouSyncContext, listing: ListingRow,
-): Promise<Deriva> {
-  if (!listing.product_id) return "necitibil";
+): Promise<ConstatareDeriva> {
+  const nimic = { scurgeri: [] as string[], straine: [] as string[] };
+  if (!listing.product_id) return { fel: "necitibil", ...nimic };
 
   const product = randCitit<Record<string, unknown>>("aboutyou.produsPentruDeriva", await admin
     .from("products").select(PRODUCT_FIELDS)
     .eq("id", listing.product_id).eq("business_id", ctx.businessId).maybeSingle());
-  if (!product) return "necitibil";
+  if (!product) return { fel: "necitibil", ...nimic };
 
   const variants = atasezaPreturileRon(product as unknown as MappableProduct,
     await getVariantData(admin, listing.id));
@@ -500,22 +602,90 @@ async function derivaFataDeEi(
     config: ctx.config, product: product as unknown as MappableProduct,
     listing: toEnrichment(listing), variants,
   });
-  if ("error" in built) return "necitibil";
+  if ("error" in built) return { fel: "necitibil", ...nimic };
 
-  const res = await getProducts(ctx.auth, { style_key: listing.style_key, per_page: 100 });
-  if (isAboutYouError(res)) return "necitibil";
-  const aleLor = new Map((res.data?.items ?? []).map((it) => [it.sku, it]));
+  /*
+   * ⚠ SE CITESTE PANA LA CAPAT. `per_page` nu trece de 100 la ei; oprirea se ia din LUNGIMEA
+   * lotului, nu din `pagination.pages` — acelasi motiv ca in `reconcileStatuses`, unde `pages`
+   * nulabil facea `Number(undefined ?? 1) === 1`.
+   */
+  const aleLor = new Map<string, AboutYouGetProductItem>();
+  let taiat = true;
+  for (let page = 1; page <= MAX_PAGINI_DERIVA; page++) {
+    const res = await getProducts(ctx.auth, { style_key: listing.style_key, page, per_page: 100 });
+    if (isAboutYouError(res)) return { fel: "necitibil", ...nimic };
+    const items = res.data?.items ?? [];
+    for (const it of items) aleLor.set(it.sku, it);
+    if (items.length < 100) { taiat = false; break; }
+  }
+  /*
+   * ⚠ „N-AM VAZUT TOT" NU E „E BINE", si nici „e stricat". Un produs cu peste doua mii de SKU-uri
+   * nu se poate masura in bugetul asta, deci nu se declara nimic despre el.
+   */
+  if (taiat) return { fel: "necitibil", ...nimic };
 
   /*
    * ⚠ UN SKU LIPSA LA EI E O DEOSEBIRE, nu o necunoscuta: inseamna ca o varianta pe care o credem
    * trimisa nu e acolo. Exact ce trebuie sa declanseze o retrimitere.
    */
+  let diferit = false;
+  const aleNoastre = new Set<string>();
   for (const alNostru of built.items) {
+    aleNoastre.add(alNostru.sku);
     const lor = aleLor.get(alNostru.sku);
-    if (!lor) return "diferit";
-    if (amprentaArticolului(alNostru as never) !== amprentaArticolului(lor)) return "diferit";
+    if (!lor || amprentaArticolului(alNostru as never) !== amprentaArticolului(lor)) { diferit = true; continue; }
+    /*
+     * ⚠ IMAGINILE, INTR-O SINGURA DIRECTIE. Nu se pot compara ca liste — ei le regazduiesc si le
+     * transcodeaza, vezi `amprentaArticolului` — si nici ca numere, fiindca nu stiu ce intorc pe
+     * un produs cu mai multe culori, iar noi trimitem lista PE CULOARE.
+     *
+     * ⚠ DAR „MAI PUTINE DECAT AM TRIMIS" e adevarat sub amandoua ipotezele: si daca lista lor e a
+     * culorii, si daca e a produsului intreg, ea n-are cum sa fie mai scurta decat ce am trimis
+     * pentru culoarea aia. Deci asta prinde chiar cazul de care ne temem — un lot vechi asezat cu
+     * trei poze peste unul cu sase — fara sa poata da vreodata o deriva falsa.
+     *
+     * ⚠ CE NU PRINDE, si o spun ca sa nu se creada altceva: un lot vechi cu MAI MULTE imagini, sau
+     * cu alte imagini dar tot atatea. Pentru aia ar trebui sa stim ce forma are lista lor, si nu
+     * stim inca.
+     */
+    if ((lor.images ?? []).length < (alNostru.images ?? []).length) diferit = true;
   }
-  return "identic";
+
+  /* Randurile locale INTREGI, inclusiv cele retrase: pietrele de mormant sunt chiar ce se verifica. */
+  const localeToate = randuriCitite<{ id: string; sku: string; ay_status: string | null }>(
+    "aboutyou.varianteToatePentruDeriva", await admin
+      .from("aboutyou_variants").select("id, sku, ay_status")
+      .eq("listing_id", listing.id) as never);
+  const dupaSkuLocal = new Map(localeToate.map((r) => [r.sku, r]));
+
+  const scurgeri: string[] = [];
+  const straine: string[] = [];
+  const dePiatraRidicata: string[] = [];
+  for (const [sku, alLor] of aleLor) {
+    if (aleNoastre.has(sku)) continue;
+    const local = dupaSkuLocal.get(sku);
+    if (!local) { straine.push(sku); continue; }
+    /* Retras la noi, dar cu stoc la ei: se vinde marfa pe care am scos-o de la vanzare. */
+    if ((alLor.quantity ?? 0) > 0) {
+      scurgeri.push(sku);
+      if (local.ay_status === "removed") dePiatraRidicata.push(local.id);
+    }
+  }
+
+  if (dePiatraRidicata.length > 0) {
+    const { error } = await admin.from("aboutyou_variants")
+      .update({ ay_status: null, updated_at: new Date().toISOString() } as never)
+      .in("id", dePiatraRidicata);
+    /*
+     * ⚠ NESCRIS, RETRIMITEREA N-AR FOLOSI LA NIMIC: `deScos` sare peste `removed`, deci zeroul
+     * n-ar pleca niciodata si am face o trimitere degeaba, crezand ca am reparat. Se raporteaza
+     * „n-am putut verifica", care nu inchide nimic si se reia.
+     */
+    if (error) return { fel: "necitibil", ...nimic };
+  }
+
+  if (scurgeri.length > 0) diferit = true;
+  return { fel: diferit ? "diferit" : "identic", scurgeri, straine };
 }
 
 /**
@@ -563,14 +733,14 @@ async function inchideLoturileDepasite(admin: Db, ctx: AboutYouSyncContext): Pro
      * mai trimite nimic — iar daca difera, se retrimite ACUM, nu peste sase ore.
      */
     const deriva = await derivaFataDeEi(admin, ctx, listing);
-    if (deriva === "necitibil") {
+    if (deriva.fel === "necitibil") {
       /*
        * ⚠ NU SE INCHIDE LOTUL. „N-am putut verifica" nu e „e in regula": inchis acum, n-ar mai
        * exista nimic care sa ne aduca inapoi la produsul asta. Se reia la trecerea urmatoare.
        */
       continue;
     }
-    if (deriva === "diferit") {
+    if (deriva.fel === "diferit") {
       /*
        * ⚠ SI REASERTAREA TREBUIE SA REUSEASCA INAINTE DE A INCHIDE LOTUL. Daca punerea la coada
        * pica — o clipa proasta a bazei — si noi inchidem oricum, nu mai ramane NIMIC care sa
@@ -578,10 +748,150 @@ async function inchideLoturileDepasite(admin: Db, ctx: AboutYouSyncContext): Pro
        */
       if (!await reasertaStareaCurenta(admin, businessId, listing.product_id, styleKey)) continue;
     }
+    if (deriva.straine.length > 0) {
+      await logError({
+        action: "aboutyou/deriva", severity: "critical",
+        message: `About You are ${deriva.straine.length} SKU-uri pe produsul asta pe care noi nu le cunoastem: verifica in Seller Center`,
+        details: { styleKey, skuuri: deriva.straine.slice(0, 20) }, businessId,
+      });
+    }
+
+    /*
+     * ═══ ⚠ SI DUPA CE S-A VERIFICAT O DATA, SE MAI VERIFICA (27.08.2026, noaptea) ═══
+     *
+     * Pana aici tocmai am dovedit ca ACUM starea de la ei e cea buna. Nu si ca lotul orb s-a
+     * terminat: el se poate aseza peste zece minute, si nimic nu l-ar mai observa. Produsul intra
+     * sub veghe pentru doua zile — vezi `veghe.ts`.
+     *
+     * ⚠ VEGHEA NESCRISA TINE LOTUL DESCHIS. Inchis fara ea, exact aici s-ar pierde singurul fir
+     * care ne mai aduce inapoi la produsul asta.
+     */
+    if (!await pornesteVeghea(admin, businessId, styleKey, listing.product_id, "lot-orb")) {
+      await logError({
+        action: "aboutyou/veghe", severity: "warning",
+        message: "veghea produsului nu s-a putut porni: lotul orb ramane deschis si se reia",
+        details: { styleKey, lotId: lot.id }, businessId,
+      });
+      continue;
+    }
 
     await admin.from("aboutyou_batches")
       .update({ status: "depasit", polled_at: new Date().toISOString() } as never).eq("id", lot.id);
   }
+}
+
+/**
+ * O trecere prin veghile scadente ale magazinului.
+ *
+ * ⚠ COSTA O CITIRE LA EI DE FIECARE VEGHE, deci sunt putine pe trecere si tot mai rare pe masura
+ * ce produsul se dovedeste asezat. Vezi `urmatoareaVerificareMs`.
+ */
+export async function treciPrinVeghe(
+  admin: Db, ctx: AboutYouSyncContext, pana?: number,
+): Promise<number> {
+  const businessId = ctx.businessId;
+  const randuri = await veghiScadente(admin, businessId, MAX_VEGHI_PE_TRECERE);
+  let verificate = 0;
+
+  for (const v of randuri) {
+    /*
+     * ⚠ TERMEN, CA PESTE TOT IN CRONUL ASTA. Zece veghi pe magazin, zece magazine in rotatie:
+     * o suta de citiri la ei, taman in coada rularii. Ce nu incape se reia la minutul urmator —
+     * randul ramane scadent, deci nu se pierde nimic, doar se amana.
+     */
+    if (pana != null && Date.now() > pana) break;
+    const acum = Date.now();
+    const listing = await getListingByStyleKey(admin, businessId, v.style_key);
+    /* Listarea a disparut: n-are ce sa mai vegheze. */
+    if (!listing) {
+      await admin.from("aboutyou_veghe").delete().eq("id", v.id);
+      continue;
+    }
+
+    const deriva = await derivaFataDeEi(admin, ctx, listing);
+    verificate++;
+
+    if (deriva.fel === "necitibil") {
+      /*
+       * ⚠ NU SE NUMARA NICI CA BINE, NICI CA RAU. O citire care n-a mers nu spune nimic despre
+       * produs; numarata drept „curata", ar inchide veghea taman cand n-avem nicio dovada.
+       */
+      await admin.from("aboutyou_veghe").update({
+        verificari: v.verificari + 1,
+        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(v.curate_la_rand)).toISOString(),
+        updated_at: new Date(acum).toISOString(),
+      } as never).eq("id", v.id);
+      continue;
+    }
+
+    if (deriva.straine.length > 0 && v.alarma_scrisa_la == null) {
+      await logError({
+        action: "aboutyou/veghe", severity: "critical",
+        message: `About You are ${deriva.straine.length} SKU-uri pe produsul asta pe care noi nu le cunoastem: verifica in Seller Center`,
+        details: { styleKey: v.style_key, skuuri: deriva.straine.slice(0, 20) }, businessId,
+      });
+      await admin.from("aboutyou_veghe")
+        .update({ alarma_scrisa_la: new Date(acum).toISOString() } as never).eq("id", v.id);
+    }
+
+    if (deriva.fel === "identic") {
+      const curate = v.curate_la_rand + 1;
+      /*
+       * ⚠ SE INCHIDE DOAR CAND FEREASTRA S-A SCURS SI ULTIMELE CITIRI AU FOST CURATE. O singura
+       * citire curata era chiar defectul pe care veghea il repara.
+       */
+      if (vegheaSAIncheiat({ pana_la: v.pana_la, curate_la_rand: curate }, acum)) {
+        await admin.from("aboutyou_veghe").delete().eq("id", v.id);
+        continue;
+      }
+      await admin.from("aboutyou_veghe").update({
+        verificari: v.verificari + 1, curate_la_rand: curate,
+        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(curate)).toISOString(),
+        updated_at: new Date(acum).toISOString(),
+      } as never).eq("id", v.id);
+      continue;
+    }
+
+    /* ── Deriva ────────────────────────────────────────────────────────────── */
+    /*
+     * ⚠ SI RETRIMITEREA ARE UN CAPAT. Dupa `PRAG_REASERTARI` fara convergenta, cauza nu mai e o
+     * cursa — e ceva ce nu intelegem — iar retrimiterea la nesfarsit ar costa o cerere la fiecare
+     * trecere si ar acoperi tocmai cauza. Se striga o data si veghea continua sa MASOARE, fara sa
+     * mai trimita.
+     */
+    const peste = v.reasertari >= PRAG_REASERTARI;
+    if (peste) {
+      if (v.alarma_scrisa_la == null) {
+        await logError({
+          action: "aboutyou/veghe", severity: "critical",
+          message: `produsul deriveaza fata de About You si dupa ${v.reasertari} retrimiteri: se opreste retrimiterea si se cere un om`,
+          details: { styleKey: v.style_key, motiv: v.motiv, scurgeri: deriva.scurgeri.slice(0, 20) },
+          businessId,
+        });
+      }
+      await admin.from("aboutyou_veghe").update({
+        verificari: v.verificari + 1, curate_la_rand: 0,
+        ultima_deriva_la: new Date(acum).toISOString(),
+        alarma_scrisa_la: v.alarma_scrisa_la ?? new Date(acum).toISOString(),
+        urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(0)).toISOString(),
+        updated_at: new Date(acum).toISOString(),
+      } as never).eq("id", v.id);
+      continue;
+    }
+
+    /* ⚠ Nepusa la coada, retrimiterea nu exista: se lasa veghea neatinsa si se reia. */
+    if (!await reasertaStareaCurenta(admin, businessId, listing.product_id, v.style_key)) continue;
+
+    await admin.from("aboutyou_veghe").update({
+      verificari: v.verificari + 1, curate_la_rand: 0, reasertari: v.reasertari + 1,
+      ultima_deriva_la: new Date(acum).toISOString(),
+      /* ⚠ Fereastra se muta inainte: cat timp produsul deriveaza, veghea n-are voie sa expire. */
+      pana_la: new Date(acum + FEREASTRA_VEGHE_MS).toISOString(),
+      urmatoarea_verificare: new Date(acum + urmatoareaVerificareMs(0)).toISOString(),
+      updated_at: new Date(acum).toISOString(),
+    } as never).eq("id", v.id);
+  }
+  return verificate;
 }
 
 /** Cate loturi orbe se lamuresc intr-o trecere. Fiecare costa o cerere de citire la ei. */
@@ -596,52 +906,93 @@ const MAX_LOTURI_ORBE = 20;
  */
 const PRAG_INTENTIE_MS = 10 * 60 * 1000;
 /**
- * Continua raspandirea unei setari globale ramase neterminata.
+ * Continua o lucrare in masa ramasa neterminata: „Sincronizeaza tot", „Publica toate", sau
+ * raspandirea unei setari globale.
  *
  * ═══ ⚠ „TOATE PRODUSELE" TREBUIE SA INSEMNE TOATE (27.08.2026) ═══
  *
- * Cand comerciantul schimba cursul sau tarile, toate produsele listate trebuie repuse la coada. O
- * actiune de server nu poate rula oricat, deci se opreste la un plafon — iar pana acum acolo se si
- * TERMINA: la douazeci si cinci de mii de produse, ultimele cinci mii ramaneau cu preturile vechi
- * la About You, poate pentru totdeauna, in timp ce ecranul spunea „Salvat".
+ * O actiune de server nu poate rula oricat, deci se opreste la un plafon — iar pana azi acolo se
+ * si TERMINA: la douazeci si cinci de mii de produse, ultimele cinci mii nu intrau in coada, in
+ * timp ce ecranul spunea „Salvat". Pentru schimbarile de setari s-a pus un cursor in config; „
+ * Sincronizeaza tot" si „Publica toate" ramasesera insa cu plafonul TERMINAL — si acolo o noua
+ * apasare pornea iar de la inceput, deci ultimele produse n-ar fi plecat niciodata.
+ *
+ * ═══ ⚠ SI UN SINGUR CAMP IN CONFIG SE CALCA IN PICIOARE (27.08.2026, noaptea) ═══
+ *
+ * „Publica toate" scria `fanout = {publish, …}`; o salvare de setari facuta un minut mai tarziu il
+ * inlocuia cu `{price, …}`. Publicarea disparea in tacere. Un RAND per lucrare
+ * (`aboutyou_bulk_jobs`) nu are cum sa faca asta, si mai spune si cat s-a facut.
  *
  * ⚠ RELUAREA E EXACTA, nu aproximativa: ordinea e `product_id` crescator, deci „mai mare decat
  * ultimul dus la capat" nu poate nici sari, nici repeta un produs. Un `offset` ar fi alunecat la
  * fiecare listare noua sau stearsa intre treceri.
  *
- * ⚠ CAMPUL SE STERGE ABIA CAND S-A TERMINAT. Sters mai devreme, restul catalogului ar ramane
+ * ⚠ LUCRAREA SE INCHIDE ABIA CAND S-A TERMINAT. Inchisa mai devreme, restul catalogului ar ramane
  * netrimis, si nimic n-ar mai aduce pe nimeni inapoi la el.
  */
-export async function continuaRaspandirea(admin: Db, ctx: AboutYouSyncContext): Promise<number> {
+export async function continuaLucrarileInMasa(admin: Db, ctx: AboutYouSyncContext): Promise<number> {
+  const businessId = ctx.businessId;
+
+  /*
+   * ═══ ⚠ MOSTENIREA: UN `fanout` VECHI DIN CONFIG ═══
+   *
+   * Pana azi, raspandirea unei setari globale se tinea minte intr-un camp din config. Codul nou
+   * scrie randuri in `aboutyou_bulk_jobs`, dar intre desfasurare si desfasurare pot exista
+   * magazine cu campul inca plin — iar el inseamna „mai am catalog de pus la coada". Sters fara
+   * sa fie preluat, exact produsele alea n-ar mai fi atinse de nimic.
+   */
   const f = ctx.config.fanout;
-  if (!f?.op) return 0;
+  if (f?.op) {
+    const { error } = await admin.from("aboutyou_bulk_jobs").insert({
+      business_id: businessId, op: f.op, dupa: f.dupa ?? null,
+    } as never);
+    /* `23505` = exista deja o lucrare deschisa cu aceeasi operatie; ea face treaba. */
+    if (!error || (error as { code?: string }).code === "23505") {
+      await patchAboutYouConfig(admin, businessId, { fanout: null });
+    }
+  }
+
+  const lucrare = randCitit<{
+    id: string; op: string; dupa: string | null; status_filtru: string | null;
+    doar_trimise: boolean; puse: number;
+  }>("aboutyou.lucrareInMasa", await admin
+    .from("aboutyou_bulk_jobs")
+    .select("id, op, dupa, status_filtru, doar_trimise, puse")
+    .eq("business_id", businessId).eq("status", "deschis")
+    .order("atins_la", { ascending: true }).limit(1).maybeSingle() as never);
+  if (!lucrare) return 0;
 
   const PAS = 1000;
   const PE_TRECERE = 5000;
-  let dupa = f.dupa ?? null;
+  let dupa = lucrare.dupa;
   let puse = 0;
   let gata = false;
+  let eroare: string | null = null;
 
   for (let luate = 0; luate < PE_TRECERE; luate += PAS) {
     let q = admin.from("aboutyou_listings").select("product_id")
-      .eq("business_id", ctx.businessId).not("product_id", "is", null);
+      .eq("business_id", businessId).not("product_id", "is", null);
     if (dupa) q = q.gt("product_id", dupa);
-    const randuri = randuriCitite<{ product_id: string | null }>("aboutyou.raspandire",
+    if (lucrare.status_filtru) q = q.eq("status", lucrare.status_filtru);
+    /* Publicarea cere un product master la ei, iar acela exista abia dupa o trimitere reusita. */
+    if (lucrare.doar_trimise) q = q.not("last_synced_at", "is", null);
+    const randuri = randuriCitite<{ product_id: string | null }>("aboutyou.lucrarePagina",
       await q.order("product_id", { ascending: true }).limit(PAS) as never);
 
     const ids = randuri.map((r) => r.product_id).filter((x): x is string => !!x);
     if (ids.length === 0) { gata = true; break; }
 
     const { error } = await admin.from("aboutyou_sync_queue").upsert(
-      ids.map((id) => ({ business_id: ctx.businessId, product_id: id, offer_id: id, op: f.op })) as never,
+      ids.map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op: lucrare.op })) as never,
       { onConflict: "business_id,offer_id,op" },
     );
     /* ⚠ Scrierea picata OPRESTE, fara sa mute cursorul: se reia de la acelasi loc. */
     if (error) {
+      eroare = error.message;
       await logError({
-        action: "aboutyou/raspandire", severity: "warning",
-        message: `raspandirea setarii nu s-a putut continua: ${error.message}`,
-        details: { op: f.op, dupa }, businessId: ctx.businessId,
+        action: "aboutyou/lucrare", severity: "warning",
+        message: `lucrarea in masa nu s-a putut continua: ${error.message}`,
+        details: { op: lucrare.op, dupa }, businessId,
       });
       break;
     }
@@ -650,9 +1001,11 @@ export async function continuaRaspandirea(admin: Db, ctx: AboutYouSyncContext): 
     if (ids.length < PAS) { gata = true; break; }
   }
 
-  await patchAboutYouConfig(admin, ctx.businessId, {
-    fanout: gata ? null : { op: f.op, dupa },
-  });
+  const acum = new Date().toISOString();
+  await admin.from("aboutyou_bulk_jobs").update({
+    dupa, puse: lucrare.puse + puse, atins_la: acum, last_error: eroare,
+    ...(gata ? { status: "gata", terminat_la: acum } : {}),
+  } as never).eq("id", lucrare.id);
   return puse;
 }
 
@@ -1705,6 +2058,16 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
         } else {
           await marcheazaListarileLotului(admin, ctx,
             b, "About You nu a terminat procesarea in sapte zile si am incetat sa intrebam. Trimite produsul din nou.");
+          /*
+           * ⚠ SI TOCMAI ASTA E CEL MAI ORB LOT DINTRE TOATE: noi am incetat sa intrebam, dar el
+           * poate sa se aseze la ei si maine. Intra sub veghe, ca sa se vada daca o face.
+           */
+          if (b.kind === "product") {
+            for (const sk of (Array.isArray(b.related_ids) ? (b.related_ids as string[]) : [])) {
+              const l = await getListingByStyleKey(admin, ctx.businessId, sk);
+              if (l) await pornesteVeghea(admin, ctx.businessId, sk, l.product_id, "lot-abandonat");
+            }
+          }
         }
       } else if (incetinit && b.alarma_scrisa_la == null) {
         /* ⚠ O SINGURA DATA pe lot: cronul de minut ar scrie altfel acelasi rand la nesfarsit. */
@@ -1839,10 +2202,18 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
          * cere autentificare de partener, iar o marca de timp gresita ar putea opri impingerea de
          * stoc pentru toate magazinele. Vezi nota de la `MAX_ITEMI_STOC_PRET`.
          *
-         * ⚠ SI NU EXISTA NICIUN CAPAT DE CITIRE a stocului sau pretului: `GET /products/` da doar
-         * `style_key`, `sku` si `status`. Deci nici deriva fata de ei nu se poate masura.
+         * ⚠ AICI SCRIA, PANA AZI: „nu exista niciun capat de citire a stocului sau pretului:
+         * `GET /products/` da doar `style_key`, `sku` si `status`. Deci nici deriva fata de ei nu
+         * se poate masura." E FALS, si masurat: ruta da douazeci si trei de campuri, printre care
+         * chiar stocul si preturile — vezi `AboutYouGetProductItem`. Fraza a stat luni, in doua
+         * locuri, si a modelat hotarari. Se sterge odata cu masuratoarea.
          *
-         * ⚠ DAR REORDONAREA SE VEDE DIN DATELE NOASTRE. Daca un lot mai NOU pentru acelasi produs
+         * ⚠ SE PASTREAZA TOTUSI PAZA DE MAI JOS, si nu din inertie: citirea costa o cerere si
+         * spune ce e la ei ACUM, pe cand semnul de dedesubt se ia din datele NOASTRE, gratis, si
+         * spune ca s-ar fi putut strica. Cele doua nu se inlocuiesc — veghea le si foloseste pe
+         * amandoua.
+         *
+         * ⚠ REORDONAREA SE VEDE DIN DATELE NOASTRE. Daca un lot mai NOU pentru acelasi produs
          * s-a incheiat deja, inseamna ca asta se aseaza dupa el — deci poate sa-l fi suprascris cu
          * o valoare mai veche. Atunci se pune la coada o impingere proaspata, care citeste stocul
          * de acum. Nu stim daca s-a stricat ceva; stim ca S-AR FI PUTUT, si costa o cerere.
@@ -1852,7 +2223,7 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             "aboutyou.lotMaiNouIncheiat", await admin
               .from("aboutyou_batches").select("id")
               .eq("business_id", ctx.businessId).eq("kind", b.kind)
-              .contains("related_ids", [sk])
+              .contains("related_ids", JSON.stringify([sk]))
               .eq("status", "completed")
               .gt("submitted_at", b.submitted_at)
               .neq("id", b.id).limit(1) as never);
@@ -1875,6 +2246,65 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
               businessId: ctx.businessId,
             });
           }
+        }
+      }
+    }
+
+    /*
+     * ═══ ⚠ UN UPSERT DE PRODUS DUCE CU EL SI STOCUL SI PRETURILE (27.08.2026, noaptea) ═══
+     *
+     * `POST /products/` nu trimite doar continut: `quantity` si `prices` sunt in aceeasi sarcina
+     * utila. Deci un lot de produs care se aseaza TARZIU scrie la ei valorile de la clipa cand a
+     * fost construit — si le scrie peste unele mai noi:
+     *
+     *     10:00  se schimba descrierea -> lot PRODUS, cu stoc 10 si pret 100
+     *     10:01  stocul devine 5       -> lot STOC dedicat, cu `valid_at`
+     *     10:01  pretul devine 90      -> lot PRET dedicat, cu `valid_at`
+     *     10:02  loturile dedicate se aseaza  -> la ei 5 / 90 ✅
+     *     10:03  lotul de PRODUS se aseaza    -> la ei iar 10 / 100 ❌
+     *
+     * ⚠ `valid_at` NU APARA AICI. El ordoneaza doua scrieri pe rutele DEDICATE de stoc si pret;
+     * valorile care calatoresc INAUNTRUL unui upsert de produs nu trec pe rutele alea si nu poarta
+     * nicio marca de timp. Paza pe care o aveam pentru stoc si pret n-are cum sa vada lotul asta.
+     *
+     * ⚠ LEACUL: dupa ce lotul de produs s-a asezat, stocul si pretul de ACUM se retrimit pe rutele
+     * dedicate — care poarta `valid_at` si deci raman ultima autoritate. Se pune la coada, adica e
+     * durabil: o rulare intrerupta nu-l pierde.
+     *
+     * ⚠ SI NU LA FIECARE LOT DE PRODUS. Retrimis mereu, un „Sincronizeaza tot" pe douazeci si
+     * cinci de mii de produse ar face cincizeci de mii de cereri in plus, degeaba: fara o
+     * schimbare de stoc sau pret intre timp, lotul de produs duce chiar valorile de acum. Se
+     * intreaba baza daca a plecat vreun lot dedicat DUPA asta — semnul exact al cursei.
+     */
+    if (b.kind === "product" && !hardFail) {
+      for (const sk of styleKeys) {
+        const dedicateMaiNoi = randuriCitite<{ id: string }>(
+          "aboutyou.lotDedicatDupaProdus", await admin
+            .from("aboutyou_batches").select("id")
+            .eq("business_id", ctx.businessId)
+            .in("kind", ["stock", "price"])
+            .contains("related_ids", JSON.stringify([sk]))
+            .gt("submitted_at", b.submitted_at)
+            .limit(1) as never);
+        if (dedicateMaiNoi.length === 0) continue;
+
+        const l = await getListingByStyleKey(admin, ctx.businessId, sk);
+        if (!l?.product_id) continue;
+        const { error: eReasert } = await admin.from("aboutyou_sync_queue").upsert([
+          { business_id: ctx.businessId, product_id: l.product_id, offer_id: sk, op: "stock", attempts: 0, last_error: null },
+          { business_id: ctx.businessId, product_id: l.product_id, offer_id: sk, op: "price", attempts: 0, last_error: null },
+        ] as never, { onConflict: "business_id,offer_id,op" });
+        /*
+         * ⚠ NEPUSE LA COADA, RAMANE LA EI VALOAREA VECHE. Lotul se lasa deschis: se reinterogheaza
+         * si asezarea se reface. E chiar cazul in care tacerea costa marfa vanduta gresit.
+         */
+        if (eReasert) {
+          asezat = false;
+          await logError({
+            action: "aboutyou-sync/loturi", severity: "error",
+            message: `reimprospatarea stocului si pretului dupa lotul de produs n-a putut fi pusa la coada: ${eReasert.message}`,
+            details: { styleKey: sk, batchRequestId: b.batch_request_id }, businessId: ctx.businessId,
+          });
         }
       }
     }
@@ -1955,7 +2385,19 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * nu garanteaza ordinea. Se pune la coada o retrimitere a starii de ACUM: ce vine la
            * urma ramane.
            */
-          await reasertaStareaCurenta(admin, ctx.businessId, listing.product_id, listing.style_key);
+          if (!await reasertaStareaCurenta(admin, ctx.businessId, listing.product_id, listing.style_key)) {
+            /* ⚠ Nepusa la coada, retrimiterea nu exista. Lotul ramane deschis si se reia. */
+            asezat = false;
+          }
+          /*
+           * ⚠ SI PRODUSUL INTRA SUB VEGHE. Retrimiterea de mai sus pleaca acum; lotul vechi s-a
+           * asezat deja. Dar nimic nu garanteaza ca ordinea la ei e cea in care trimitem noi, deci
+           * „am retrimis" nu inseamna „s-a asezat ce trebuie". Se verifica, de cateva ori, in
+           * urmatoarele doua zile — vezi `veghe.ts`.
+           */
+          if (!await pornesteVeghea(admin, ctx.businessId, listing.style_key, listing.product_id, "generatie-depasita")) {
+            asezat = false;
+          }
           await logError({
             action: "aboutyou-sync/loturi", severity: "warning",
             message: `lot din generatia ${b.generatie} asezat dupa ce produsul a fost retrimis (generatia ${listing.generatie}): se retrimite starea de acum`,
@@ -1982,7 +2424,25 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             "aboutyou.loturileFratelui", await admin
               .from("aboutyou_batches").select("id")
               .eq("business_id", ctx.businessId).eq("kind", "product")
-              .contains("related_ids", [listing.style_key])
+                            /*
+               * ⚠ `related_ids` E JSONB: `.contains()` PRIMESTE UN SIR JSON, NU UN VECTOR.
+               *
+               * Cu vectorul brut, postgrest-js scrie `cs.{uuid}` — sintaxa de ARRAY Postgres —, iar
+               * pe o coloana jsonb asta e `22P02: invalid input syntax for type json`. Adica 400 la
+               * fiecare apel. Masurat prin clientul real: vectorul arunca, `JSON.stringify([id])`
+               * intoarce randurile.
+               *
+               * ⚠ SI NU DADEA O LISTA GOALA, CI ARUNCA — `randuriCitite` transforma eroarea in
+               * `EroareCitireBaza`, deci asezarea lotului murea INAINTE sa scrie starea listarii.
+               * Produsul ramanea `pending` si nu se publica NICIODATA. Verificarea pusa ca sa nu se
+               * publice PREA DEVREME facea sa nu se publice DELOC — a doua oara acelasi tipar, in
+               * aceeasi functie.
+               *
+               * ⚠ Trendyol o avea scrisa corect, cu nota „probat prin clientul real". Aici s-a
+               * scris din memorie. De-aia proba din `containment-jsonb.test.ts` citeste acum TIPUL
+               * coloanei din baseline, in loc sa se increada in cine scrie apelul.
+               */
+              .contains("related_ids", JSON.stringify([listing.style_key]))
               /*
                * ═══ ⚠ SI FRATII NEURMARITI BLOCHEAZA (27.08.2026) ═══
                *
@@ -2207,27 +2667,30 @@ export async function reconcileStatuses(
   }
 
   /*
-   * ⚠ CURSORUL SE SCRIE SI CAND S-A OPRIT DIN BUGET, nu doar la capat. Tocmai oprirea din buget e
-   * cazul obisnuit la un catalog mare — si singurul in care „de la 1" insemna sa nu se ajunga
-   * niciodata mai departe.
+   * ═══ ⚠ CURSORUL SE MUTA DUPA SCRIERI, NU INAINTEA LOR (27.08.2026, noaptea) ═══
+   *
+   * Pana aici doar am CITIT de la ei. Cursorul se scria insa chiar acum, inaintea scrierilor
+   * locale — si scrierile alea nici nu-si citeau raspunsul. Deci:
+   *
+   *     pagina 37 citita de la ei     ✅
+   *     `reconcile_page = 38`         ✅
+   *     scrierile paginii 37 pica     ❌
+   *
+   * Pagina 37 nu se mai reia pana la o rotatie completa a catalogului — ore sau zile —, iar
+   * statusurile ei raman la noi cele vechi. Un produs respins arata mai departe „activ".
+   *
+   * ⚠ ORDINEA CORECTA E: se citeste, se scrie TOT, se verifica ca a intrat, si abia atunci se
+   * muta cursorul. Nemutat, cel mai rau lucru care se intampla e ca aceleasi pagini se citesc din
+   * nou — ieftin si idempotent.
    */
-  await patchAboutYouConfig(admin, ctx.businessId, { reconcile_page: urmatoarea });
-
-  if (trunchiat) {
-    await logError({
-      action: "aboutyou/reconcile", severity: "info",
-      message: `Reconcilierea s-a oprit la pagina ${urmatoarea - 1}; se reia de-acolo la trecerea urmatoare.`,
-      details: { businessId: ctx.businessId, dePeLa, urmatoarea }, businessId: ctx.businessId,
-    });
-  }
-
+  let toateScrise = true;
   {
     const now = new Date().toISOString();
     for (const [styleKey, stari] of peStyle) {
       const status = statusDominant(stari);
       const eRespins = status === "rejected";
       if (eRespins) respinse.push(styleKey);
-      await admin.from("aboutyou_listings")
+      const { error: eScris } = await admin.from("aboutyou_listings")
         .update({
           status,
           last_status_at: now,
@@ -2247,7 +2710,31 @@ export async function reconcileStatuses(
           ...(eRespins ? {} : { rejection_reasons: [] as never }),
         } as never)
         .eq("business_id", ctx.businessId).eq("style_key", styleKey);
+      /* ⚠ O scriere picata inseamna ca pagina ei nu s-a asezat: cursorul nu are voie sa treaca. */
+      if (eScris) toateScrise = false;
     }
+  }
+
+  if (toateScrise) {
+    /*
+     * ⚠ CURSORUL SE SCRIE SI CAND S-A OPRIT DIN BUGET, nu doar la capat. Tocmai oprirea din buget
+     * e cazul obisnuit la un catalog mare — si singurul in care „de la 1" insemna sa nu se ajunga
+     * niciodata mai departe.
+     */
+    await patchAboutYouConfig(admin, ctx.businessId, { reconcile_page: urmatoarea });
+    if (trunchiat) {
+      await logError({
+        action: "aboutyou/reconcile", severity: "info",
+        message: `Reconcilierea s-a oprit la pagina ${urmatoarea - 1}; se reia de-acolo la trecerea urmatoare.`,
+        details: { businessId: ctx.businessId, dePeLa, urmatoarea }, businessId: ctx.businessId,
+      });
+    }
+  } else {
+    await logError({
+      action: "aboutyou/reconcile", severity: "warning",
+      message: `statusurile citite n-au putut fi scrise toate local: cursorul ramane la ${dePeLa} si paginile se recitesc`,
+      details: { businessId: ctx.businessId, dePeLa, urmatoarea }, businessId: ctx.businessId,
+    });
   }
 
   if (respinse.length === 0) return { ok: true };
@@ -2281,13 +2768,25 @@ export async function reconcileStatuses(
        */
       if (!it || !it.style_key) continue;
       const rejection = (it.rejection_reasons ?? []) as AboutYouRejectionReason[];
-      await admin.from("aboutyou_listings")
+      const { error: eMotiv } = await admin.from("aboutyou_listings")
         .update({
           rejection_reasons: (rejection as unknown) as never,
           error: it.rejection_message ?? null,
           updated_at: new Date().toISOString(),
         } as never)
         .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
+      /*
+       * ⚠ Aici nu exista cursor de miscat, deci reluarea vine de la sine: statusul ramane
+       * `rejected`, iar trecerea urmatoare cere motivul din nou. Se scrie totusi, ca sa nu para
+       * din jurnal ca motivul a ajuns la comerciant cand el n-a ajuns.
+       */
+      if (eMotiv) {
+        await logError({
+          action: "aboutyou/reconcile", severity: "warning",
+          message: `motivul respingerii n-a putut fi scris: ${eMotiv.message}`,
+          details: { businessId: ctx.businessId, styleKey: it.style_key }, businessId: ctx.businessId,
+        });
+      }
       await pause(250);
     }
     return { ok: true };
@@ -2312,6 +2811,8 @@ export async function reconcileStatuses(
   const dePeLaR = Math.max(1, Number(ctx.config.rejected_page ?? 1) || 1);
   let urmatoareaR = dePeLaR;
   let gasiteToate = false;
+  /* ⚠ Aceeasi regula ca la cursorul de mai sus: nu se muta peste o scriere care n-a intrat. */
+  let toateScriseR = true;
   for (let page = dePeLaR; page < dePeLaR + Math.min(maxPages, 20); page++) {
     urmatoareaR = page + 1;
     if (expirat()) break;
@@ -2324,14 +2825,19 @@ export async function reconcileStatuses(
     for (const it of items) {
       if (!it.style_key || !deRespins.has(it.style_key)) continue;
       const rejection = (it.rejection_reasons ?? []) as AboutYouRejectionReason[];
-      await admin.from("aboutyou_listings")
+      const { error: eMotiv } = await admin.from("aboutyou_listings")
         .update({
           rejection_reasons: (rejection as unknown) as never,
           error: it.rejection_message ?? null,
           updated_at: now,
         } as never)
         .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
-      /* ⚠ Scos din multime: cand se goleste, n-avem ce mai cauta. */
+      /*
+       * ⚠ SCOS DIN MULTIME NUMAI DACA S-A SCRIS. Scos oricum, socoteala „le-am gasit pe toate"
+       * devine falsa dintr-o scriere picata — iar cursorul de mai jos trece mai departe si
+       * comerciantul ramane cu „respins" fara sa afle vreodata de ce.
+       */
+      if (eMotiv) { toateScriseR = false; continue; }
       deRespins.delete(it.style_key);
     }
     if (deRespins.size === 0) { gasiteToate = true; break; }
@@ -2343,7 +2849,7 @@ export async function reconcileStatuses(
    * ⚠ CURSORUL NU SE MUTA CAND AM GASIT TOT. Mutat si atunci, urmatoarea trecere ar sari peste
    * paginile de la inceput fara motiv — iar cele mai multe treceri se termina asa.
    */
-  if (!gasiteToate && urmatoareaR !== dePeLaR) {
+  if (!gasiteToate && urmatoareaR !== dePeLaR && toateScriseR) {
     await patchAboutYouConfig(admin, ctx.businessId, { rejected_page: urmatoareaR });
   }
   return { ok: true };

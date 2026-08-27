@@ -23,7 +23,6 @@ import {
 import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
 import { cancelOrderNow, returnOrderNow } from "@/lib/aboutyou/orders";
 import { randCitit } from "@/lib/supabase/rand-citit";
-import { patchAboutYouConfig } from "@/lib/aboutyou/config";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
   cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
@@ -414,7 +413,6 @@ export async function saveAboutYouSettings(
   if (dinNou || doarPret) {
     /* ⚠ Trimiterea intreaga o cuprinde si pe cea de pret: nu se pun amandoua pe acelasi produs. */
     const op = dinNou ? "upsert" as const : "price" as const;
-    const r = await enqueueForListings(g.supabase, businessId, op);
     /*
      * ═══ ⚠ „INCOMPLET" ERA UN CAPAT DE DRUM (27.08.2026) ═══
      *
@@ -422,20 +420,33 @@ export async function saveAboutYouSettings(
      * primele douazeci de mii intrau in coada si ultimele cinci mii NU — iar ecranul spunea
      * „Salvat". Preturile alea puteau ramane vechi la About You pentru totdeauna.
      *
-     * Nu e o limitare de comoditate: e deriva de date, tacuta.
+     * ═══ ⚠ SI CURSORUL SE SCRIA DUPA LUCRU, FARA SA I SE CITEASCA RASPUNSUL (27.08.2026, noaptea) ═══
      *
-     * ⚠ ACUM SE TINE MINTE UNDE S-A AJUNS, iar cronul continua. Campul se sterge abia cand s-a
-     * terminat, deci „toate produsele" inseamna toate — chiar daca ia mai multe treceri.
+     * Deci scrierea lui picata lasa iar ultimele cinci mii fara nimic care sa le atinga, si tot
+     * cu „Salvat" pe ecran. Acum lucrarea se deschide INAINTE de prima transa: daca actiunea
+     * moare la jumatate, randul exista deja si cronul o duce la capat.
      */
-    await patchAboutYouConfig(createAdminClient(), businessId, {
-      fanout: r.incomplet ? { op, dupa: r.ultimulId } : null,
-    });
-    if (r.incomplet) {
+    const lucrare = await deschideLucrarea(businessId, op);
+    if (!lucrare) {
+      /*
+       * ⚠ SETARILE S-AU SALVAT DEJA, deci nu se raspunde cu eroare — dar nici nu se tace: fara
+       * lucrare, produsele nu se repun la coada, iar la About You raman valorile vechi.
+       */
       logError({
-        action: "aboutyou.saveSettings", severity: "info",
-        message: `setarile s-au salvat; ${r.n} produse au intrat in coada, restul continua la trecerile urmatoare ale cronului`,
-        details: { businessId, op, dupa: r.ultimulId }, businessId,
+        action: "aboutyou.saveSettings", severity: "critical",
+        message: "setarile s-au salvat, dar raspandirea catre produse n-a putut fi pornita: apasa „Sincronizează tot”",
+        details: { businessId, op }, businessId,
       });
+    } else {
+      const r = await enqueueForListings(g.supabase, businessId, op, undefined, undefined, lucrare.dupa);
+      await mutaLucrarea(lucrare, r);
+      if (r.incomplet) {
+        logError({
+          action: "aboutyou.saveSettings", severity: "info",
+          message: `setarile s-au salvat; ${r.n} produse au intrat in coada, restul continua la trecerile urmatoare ale cronului`,
+          details: { businessId, op, dupa: r.ultimulId }, businessId,
+        });
+      }
     }
   }
 
@@ -1782,13 +1793,80 @@ export async function unsubscribeAboutYouWebhook(businessId: string): Promise<{ 
 }
 
 // ── Bulk operations (Faza 5) ────────────────────────────────────────────────────
+
+/**
+ * Deschide o lucrare in masa INAINTE de a pune ceva la coada.
+ *
+ * ═══ ⚠ URMA SE SCRIE INAINTEA LUCRULUI (27.08.2026, noaptea) ═══
+ *
+ * Pana azi se punea intai la coada cat apuca actiunea, si ABIA APOI se scria cursorul. Raspunsul
+ * scrierii nici nu se citea. Deci:
+ *
+ *     25.000 de listari
+ *     primele 20.000 intra in coada     ✅
+ *     scrierea cursorului pica          ❌
+ *     omul vede „Salvat"                ✅
+ *
+ * Ultimele 5.000 nu mai au NIMIC care sa le atinga vreodata. Aceeasi lectie ca la `cuLotDurabil`,
+ * unde intentia se scrie inaintea cererii: ordinea nu e un amanunt, e chiar apararea.
+ *
+ * ⚠ INTOARCE `null` DACA LUCRAREA NU S-A PUTUT DESCHIDE, iar apelantul raspunde cu eroare. O
+ * lucrare care nu exista nu se poate relua, deci n-avem voie sa spunem „am pornit".
+ *
+ * ⚠ O A DOUA APASARE PE ACELASI BUTON nu porneste inca o lucrare: indexul unic partial o refuza,
+ * si atunci se continua cea deschisa — ceea ce si vrea omul care apasa a doua oara.
+ */
+interface Lucrare { id: string; dupa: string | null; puse: number }
+
+async function deschideLucrarea(
+  businessId: string, op: "upsert" | "publish" | "price",
+  statusFilter?: string, doarTrimise?: boolean,
+): Promise<Lucrare | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("aboutyou_bulk_jobs")
+    .insert({
+      business_id: businessId, op,
+      status_filtru: statusFilter ?? null, doar_trimise: !!doarTrimise,
+    } as never)
+    .select("id, dupa, puse").maybeSingle();
+  if (!error && data) return data as Lucrare;
+
+  if ((error as { code?: string } | null)?.code === "23505") {
+    const { data: veche } = await admin.from("aboutyou_bulk_jobs")
+      .select("id, dupa, puse").eq("business_id", businessId).eq("op", op).eq("status", "deschis")
+      .maybeSingle();
+    if (veche) return veche as Lucrare;
+  }
+  logError({
+    action: "aboutyou.deschideLucrarea", severity: "critical",
+    message: `lucrarea in masa nu s-a putut deschide: ${error?.message ?? "necunoscut"}`,
+    details: { businessId, op }, businessId,
+  });
+  return null;
+}
+
+/**
+ * Muta cursorul lucrarii, sau o inchide daca s-a terminat.
+ *
+ * ⚠ SCRIEREA ASTA PICATA NU MAI PIERDE NIMIC, si asta e tot rostul randului: lucrarea ramane
+ * deschisa cu cursorul dinainte, iar cronul reia de-acolo. Cel mai rau lucru care se intampla e
+ * ca o parte din catalog intra a doua oara in coada — o pierdere de-o cerere, nu de catalog.
+ */
+async function mutaLucrarea(l: Lucrare, r: { n: number; incomplet: boolean; ultimulId: string | null }) {
+  const acum = new Date().toISOString();
+  await createAdminClient().from("aboutyou_bulk_jobs").update({
+    dupa: r.ultimulId, puse: l.puse + r.n, atins_la: acum,
+    ...(r.incomplet ? {} : { status: "gata", terminat_la: acum }),
+  } as never).eq("id", l.id);
+}
+
 async function enqueueForListings(
   supabase: ServerClient, businessId: string,
   /* ⚠ `price` a intrat cand setarile globale au inceput sa repuna produsele la coada: o schimbare
      de curs cere doar preturi, nu produsul intreg. Vezi `saveAboutYouSettings`. */
   op: "upsert" | "publish" | "price", statusFilter?: string,
   doarTrimise?: boolean,
-  /** De unde se reia, cand o trecere anterioara s-a oprit la plafon. Vezi `AboutYouConfig.fanout`. */
+  /** De unde se reia, cand o trecere anterioara s-a oprit la plafon. */
   dupa?: string | null,
 ): Promise<{ n: number; incomplet: boolean; ultimulId: string | null }> {
   /*
@@ -1857,11 +1935,28 @@ async function enqueueForListings(
   return { n: rows.length, incomplet, ultimulId: ids[ids.length - 1] };
 }
 
+/*
+ * ═══ ⚠ „SINCRONIZEAZA TOT" SI „PUBLICA TOATE" AVEAU UN PLAFON TERMINAL (27.08.2026, noaptea) ═══
+ *
+ * Amandoua se sprijineau pe `enqueueForListings`, care se opreste la 20.000 de produse si intoarce
+ * `incomplet`. Ecranul spunea „am pus N la coada", si atat: la 30.000 de produse, ultimele 10.000
+ * nu intrau NICIODATA. Iar o noua apasare pornea de la inceput, deci exact ele n-ar fi plecat
+ * vreodata — infometare, nu intarziere.
+ *
+ * ⚠ ACUM PLAFONUL E DOAR AL UNEI TRECERI. Lucrarea se deschide INAINTE de prima transa si tine
+ * minte unde a ajuns; cronul o continua pana la capat, cu acelasi cursor exact. „Toate" inseamna
+ * toate, chiar daca ia mai multe minute.
+ */
+
 // Re-send every enriched listing to About You (create/update).
 export async function syncAllAboutYou(businessId: string): Promise<{ queued: number; incomplet: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const r = await enqueueForListings(g.supabase, businessId, "upsert");
+  const lucrare = await deschideLucrarea(businessId, "upsert");
+  /* ⚠ Fara lucrare, nimic n-ar relua ce nu incape acum: mai bine o eroare limpede decat „Salvat". */
+  if (!lucrare) return { error: "Nu am putut porni sincronizarea. Încearcă din nou." };
+  const r = await enqueueForListings(g.supabase, businessId, "upsert", undefined, undefined, lucrare.dupa);
+  await mutaLucrarea(lucrare, r);
   revalidatePath(FEATURE_PATH);
   return { queued: r.n, incomplet: r.incomplet };
 }
@@ -1870,7 +1965,10 @@ export async function syncAllAboutYou(businessId: string): Promise<{ queued: num
 export async function publishAllAboutYou(businessId: string): Promise<{ queued: number; incomplet: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const r = await enqueueForListings(g.supabase, businessId, "publish", "draft", true);
+  const lucrare = await deschideLucrarea(businessId, "publish", "draft", true);
+  if (!lucrare) return { error: "Nu am putut porni publicarea. Încearcă din nou." };
+  const r = await enqueueForListings(g.supabase, businessId, "publish", "draft", true, lucrare.dupa);
+  await mutaLucrarea(lucrare, r);
   revalidatePath(FEATURE_PATH);
   return { queued: r.n, incomplet: r.incomplet };
 }

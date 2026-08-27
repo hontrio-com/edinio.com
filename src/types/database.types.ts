@@ -172,6 +172,51 @@ export type Database = {
           },
         ]
       }
+      aboutyou_bulk_jobs: {
+        Row: {
+          atins_la: string
+          business_id: string
+          creat_la: string
+          doar_trimise: boolean
+          dupa: string | null
+          id: string
+          last_error: string | null
+          op: string
+          puse: number
+          status: string
+          status_filtru: string | null
+          terminat_la: string | null
+        }
+        Insert: {
+          atins_la?: string
+          business_id: string
+          creat_la?: string
+          doar_trimise?: boolean
+          dupa?: string | null
+          id?: string
+          last_error?: string | null
+          op: string
+          puse?: number
+          status?: string
+          status_filtru?: string | null
+          terminat_la?: string | null
+        }
+        Update: {
+          atins_la?: string
+          business_id?: string
+          creat_la?: string
+          doar_trimise?: boolean
+          dupa?: string | null
+          id?: string
+          last_error?: string | null
+          op?: string
+          puse?: number
+          status?: string
+          status_filtru?: string | null
+          terminat_la?: string | null
+        }
+        Relationships: []
+      }
       aboutyou_listings: {
         Row: {
           attributes: Json
@@ -562,6 +607,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      aboutyou_veghe: {
+        Row: {
+          alarma_scrisa_la: string | null
+          business_id: string
+          creat_la: string
+          curate_la_rand: number
+          id: string
+          motiv: string
+          pana_la: string
+          pornita_la: string
+          product_id: string | null
+          reasertari: number
+          style_key: string
+          ultima_deriva_la: string | null
+          updated_at: string
+          urmatoarea_verificare: string
+          verificari: number
+        }
+        Insert: {
+          alarma_scrisa_la?: string | null
+          business_id: string
+          creat_la?: string
+          curate_la_rand?: number
+          id?: string
+          motiv: string
+          pana_la: string
+          pornita_la?: string
+          product_id?: string | null
+          reasertari?: number
+          style_key: string
+          ultima_deriva_la?: string | null
+          updated_at?: string
+          urmatoarea_verificare?: string
+          verificari?: number
+        }
+        Update: {
+          alarma_scrisa_la?: string | null
+          business_id?: string
+          creat_la?: string
+          curate_la_rand?: number
+          id?: string
+          motiv?: string
+          pana_la?: string
+          pornita_la?: string
+          product_id?: string | null
+          reasertari?: number
+          style_key?: string
+          ultima_deriva_la?: string | null
+          updated_at?: string
+          urmatoarea_verificare?: string
+          verificari?: number
+        }
+        Relationships: []
       }
       admin_audit_log: {
         Row: {

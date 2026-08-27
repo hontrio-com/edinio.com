@@ -131,8 +131,8 @@ test("⚠ si reluarea are un plafon, cu renuntarea scrisa o singura data", () =>
    */
   assert.match(inbox, /function eTrecatoare\(e: unknown\): boolean \{/);
   assert.match(inbox, /e instanceof EroareTrecatoare \|\| e instanceof EroareCitireBaza/);
-  assert.match(inbox, /const incercari = trecator \? r\.incercari : r\.incercari \+ 1;/);
-  assert.match(inbox, /if \(!trecator && incercari >= MAX_INCERCARI_INBOX\)/);
+  assert.match(inbox, /const incercari = numara \? r\.incercari \+ 1 : r\.incercari;/);
+  assert.match(inbox, /if \(numara && incercari >= MAX_INCERCARI_INBOX\)/);
 });
 
 test("⚠ si cine arunca spune ce fel de esec e", () => {

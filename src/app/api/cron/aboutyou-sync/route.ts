@@ -4,8 +4,8 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
-  alarmaIntentiiDeschise, continuaRaspandirea, loadAboutYouContext, processQueueItem, pollOpenBatches,
-  reconcileStatuses, pause,
+  alarmaIntentiiDeschise, continuaLucrarileInMasa, loadAboutYouContext, processQueueItem, pollOpenBatches,
+  reconcileStatuses, treciPrinVeghe, pause,
   type AboutYouQueueItem, type AboutYouSyncContext,
 } from "@/lib/aboutyou/sync";
 import { pollOrders, reconciliazaComenzile } from "@/lib/aboutyou/orders";
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   const inceput = Date.now();
   const fereastraPlina = () => Date.now() - inceput > BUGET_PASI_1_3_MS;
   let processed = 0, failed = 0, polled = 0, reconciled = 0, ordersIngested = 0, reluate = 0;
-  let raspandite = 0;
+  let raspandite = 0, vegheate = 0;
   const ctxCache = new Map<string, AboutYouSyncContext | null>();
   async function ctxFor(businessId: string): Promise<AboutYouSyncContext | null> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
@@ -451,7 +451,13 @@ export async function GET(req: NextRequest) {
        * mare, actiunea de server pune la coada cat apuca si tine minte unde a ajuns; restul se
        * face aici, trecere de trecere. Fara pasul asta, cursorul ar fi doar o nota in config.
        */
-      raspandite += await continuaRaspandirea(admin, ctx);
+      raspandite += await continuaLucrarileInMasa(admin, ctx);
+      /*
+       * ⚠ SI VEGHEA PRODUSELOR CU LOT ORB. Un lot vechi se poate aseza la ei si dupa ce noi am
+       * citit o data ca totul e in regula — vezi `veghe.ts`. Pasul asta e singurul care mai poate
+       * observa asta, iar fara el veghea ar fi doar un tabel care se umple.
+       */
+      vegheate += await treciPrinVeghe(admin, ctx, inceput + BUGET_TOTAL_MS);
       reluate += await reiaEvenimenteleNeprelucrate(admin, businessId, ctx.config);
     } catch (e) {
       await logError({
@@ -462,8 +468,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested} reluate=${reluate}`);
-  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested, reluate, raspandite });
+  console.log(`[aboutyou-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} orders=${ordersIngested} reluate=${reluate} vegheate=${vegheate}`);
+  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ordersIngested, reluate, raspandite, vegheate });
 }
 
 /*

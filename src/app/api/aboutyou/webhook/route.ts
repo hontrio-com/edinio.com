@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { readSignatureHeader, verifyAboutYouSignature } from "@/lib/aboutyou/webhooks";
 import { amanareInbox, prelucreazaEveniment } from "@/lib/aboutyou/inbox";
-import { EroareTrecatoare } from "@/lib/aboutyou/erori";
+import { EroareNecorelata, EroareTrecatoare } from "@/lib/aboutyou/erori";
 import { cercetareSemnatura } from "@/lib/aboutyou/semnatura-descoperire";
 import { patchAboutYouConfig } from "@/lib/aboutyou/config";
 import { EroareCitireBaza } from "@/lib/supabase/rand-citit";
@@ -223,7 +223,14 @@ export async function POST(request: NextRequest) {
      * era arsa chiar de indisponibilitatea care n-are nicio legatura cu evenimentul. Acum
      * trecatoarele lasa contorul pe zero, ca in cron.
      */
-    const trecator = e instanceof EroareTrecatoare || e instanceof EroareCitireBaza;
+    /*
+     * ⚠ SI „INCA NU SE POATE CORELA" LASA CONTORUL PE ZERO AICI. Randul tocmai s-a scris, deci e
+     * cel mai tanar cu putinta — iar `order_items.*` sosit inaintea comenzii e chiar cazul
+     * obisnuit pe calea rapida, nu o exceptie. Vezi `numaraIncercarea` din `inbox.ts`, care ia
+     * aceeasi hotarare pe varsta randului.
+     */
+    const trecator = e instanceof EroareTrecatoare || e instanceof EroareCitireBaza
+      || e instanceof EroareNecorelata;
     await admin.from("aboutyou_webhook_inbox")
       .update({
         incercari: trecator ? 0 : 1,

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { EroareCitireBaza, randuriCitite } from "@/lib/supabase/rand-citit";
-import { EroareTrecatoare } from "./erori";
+import { EroareNecorelata, EroareTrecatoare, RABDARE_CORELARE_MS } from "./erori";
 import { extractOrderNumber, ingestOrderByNumber } from "./orders";
 import { handleProductMasterStatus, handleStockUpdated } from "./webhooks";
 import type { AboutYouConfig } from "./types";
@@ -51,7 +51,13 @@ export async function prelucreazaEveniment(
      * i s-a invalidat cheia trecea prin toate ramurile fara sa faca nimic, iar randul din inbox
      * primea `prelucrat_la`. Se arunca, deci evenimentul asteapta reconectarea.
      */
-    if (!ctx) throw new Error("magazinul nu are cheie About You: evenimentul de comanda ramane neprelucrat");
+    /*
+     * ⚠ FARA CHEIE NU E VINA EVENIMENTULUI. Se arunca `EroareNecorelata`, nu un `Error` oarecare:
+     * lipsa cheii e o stare a MAGAZINULUI, comuna tuturor evenimentelor lui, si se repara cand
+     * omul reconecteaza contul. Numarata ca incercare, o cheie invalidata peste noapte ar fi
+     * abandonat pana dimineata fiecare eveniment din inbox — expedieri, anulari, tot.
+     */
+    if (!ctx) throw new EroareNecorelata("magazinul nu are cheie About You: evenimentul de comanda ramane neprelucrat");
     const orderNumber = extractOrderNumber(event as never);
     if (orderNumber) {
       await ingestOrderByNumber(admin, ctx, orderNumber);
@@ -70,7 +76,7 @@ export async function prelucreazaEveniment(
        * inchidea. Se arunca: sondarea aduce comanda intre timp, si reluarea o gaseste.
        */
       if (!numar) {
-        throw new Error("evenimentul pe articole nu s-a putut lega de nicio comanda cunoscuta");
+        throw new EroareNecorelata("evenimentul pe articole nu s-a putut lega de nicio comanda cunoscuta");
       }
       await ingestOrderByNumber(admin, ctx, numar);
     }
@@ -91,14 +97,38 @@ export async function prelucreazaEveniment(
  * niciodata pe mesaj — vezi `eRefuzLimpede`. Deci cauzele trecatoare ARUNCA un tip anume, iar
  * cine il prinde stie ce e fara sa ghiceasca.
  *
- * ⚠ CE RAMANE MARGINIT: ce e chiar stricat. Un eveniment pe care nu-l putem lega de nicio
- * comanda, sau o sarcina utila pe care n-o intelegem, se opreste dupa zece incercari si se
- * striga — acolo reincercarea chiar n-are ce sa aduca.
+ * ⚠ CE RAMANE MARGINIT: ce e chiar stricat. O sarcina utila pe care n-o intelegem se opreste dupa
+ * zece incercari si se striga — acolo reincercarea chiar n-are ce sa aduca.
+ *
+ * ═══ ⚠ SI INCA UN FEL, INTRE ELE DOUA (27.08.2026, noaptea) ═══
+ *
+ * „Nu s-a putut corela cu nicio comanda" si „magazinul n-are cheie API" plecau ca `Error` simplu,
+ * deci ardeau incercari ca si cum ar fi fost stricate. Amandoua se repara singure: comanda soseste
+ * prin sondare in minutele urmatoare (evenimentele lor NU vin in ordine), iar cheia se reconecteaza.
+ * Cu amanarea crescatoare, zece incercari inseamna vreo sase ore — deci renuntam la ele inaintea
+ * lui About You, care reincearca doua zile.
+ *
+ * ⚠ DAR NU SUNT NICI TRECATOARE: o comanda care la ei nu mai exista nu se coreleaza NICIODATA, iar
+ * „nu numara" fara capat i-ar tine loc la nesfarsit. De-aia hotararea se ia pe VARSTA randului:
+ * `EroareNecorelata` nu numara sub `RABDARE_CORELARE_MS`, si numara peste. Vezi `numaraIncercarea`.
  */
 
 /** O cauza trecatoare nu pune nimic in contul evenimentului. */
 function eTrecatoare(e: unknown): boolean {
   return e instanceof EroareTrecatoare || e instanceof EroareCitireBaza;
+}
+
+/**
+ * O incercare se numara sau nu.
+ *
+ * ⚠ TREI RASPUNSURI, NU DOUA. Pe langa „trecatoare" (nu numara niciodata) si „stricat" (numara),
+ * exista „inca nu se poate corela" — care nu numara CAT TIMP randul e tanar. Vezi
+ * `EroareNecorelata`: sub `RABDARE_CORELARE_MS` evenimentul mai are de ce sa astepte, peste, nu.
+ */
+export function numaraIncercarea(e: unknown, varstaMs: number): boolean {
+  if (eTrecatoare(e)) return false;
+  if (e instanceof EroareNecorelata) return varstaMs >= RABDARE_CORELARE_MS;
+  return true;
 }
 
 const MAX_INCERCARI_INBOX = 10;
@@ -126,6 +156,7 @@ interface RandInbox {
   event_name: string | null;
   payload: unknown;
   incercari: number;
+  primit_la: string;
 }
 
 export async function reiaEvenimenteleNeprelucrate(
@@ -133,7 +164,7 @@ export async function reiaEvenimenteleNeprelucrate(
 ): Promise<number> {
   const randuri = randuriCitite<RandInbox>("aboutyou.inboxNeprelucrat", await admin
     .from("aboutyou_webhook_inbox")
-    .select("id, event_id, event_name, payload, incercari")
+    .select("id, event_id, event_name, payload, incercari, primit_la")
     .eq("business_id", businessId)
     .is("prelucrat_la", null)
     .lt("incercari", MAX_INCERCARI_INBOX)
@@ -166,8 +197,13 @@ export async function reiaEvenimenteleNeprelucrate(
        * nu spune nimic despre eveniment, iar numarata, ar trimite in scrisori moarte tocmai
        * evenimentele care n-au nicio vina. Se amana, dar contorul sta pe loc.
        */
-      const trecator = eTrecatoare(e);
-      const incercari = trecator ? r.incercari : r.incercari + 1;
+      /*
+       * ⚠ VARSTA RANDULUI HOTARASTE la cauzele „inca nu se poate corela": un `order_items.*` sosit
+       * inaintea comenzii merita rabdare, dar nu la nesfarsit. Vezi `numaraIncercarea`.
+       */
+      const varstaMs = Date.now() - Date.parse(r.primit_la);
+      const numara = numaraIncercarea(e, Number.isFinite(varstaMs) ? varstaMs : 0);
+      const incercari = numara ? r.incercari + 1 : r.incercari;
       await admin.from("aboutyou_webhook_inbox")
         .update({
           incercari,
@@ -181,7 +217,7 @@ export async function reiaEvenimenteleNeprelucrate(
        * ⚠ RENUNTAREA SE SCRIE, si o singura data — la trecerea pragului, nu la fiecare incercare
        * de dupa. Un eveniment abandonat in tacere e chiar pierderea pe care inbox-ul o inlatura.
        */
-      if (!trecator && incercari >= MAX_INCERCARI_INBOX) {
+      if (numara && incercari >= MAX_INCERCARI_INBOX) {
         await logError({
           action: "aboutyou/inbox", severity: "critical",
           message: `eveniment de webhook abandonat dupa ${MAX_INCERCARI_INBOX} incercari: ${r.event_name ?? "necunoscut"}`,

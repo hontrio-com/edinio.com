@@ -173,9 +173,15 @@ test("⚠ un lot primit de ei dar nescris la noi NU e o lucrare terminata", () =
    */
   assert.match(sync, /async function recordBatch\([\s\S]{0,400}?\): Promise<boolean>/);
   assert.match(sync, /lotul a fost primit de Trendyol dar nu s-a scris in registru/);
+  /*
+   * ⚠ TREI DRUMURI de la 27.08.2026, nu doua: produs, stoc, si TERMENUL DE EXPEDIERE
+   * (`pushLivrareNow`). Fiecare trimite un lot si il inregistreaza, deci fiecare trebuie sa
+   * trateze la fel „primit de ei, nescris la noi": `status: 0`, adica trecator, deci se reia fara
+   * sa arda o incercare.
+   */
   assert.equal(
     (sync.match(/if \(!scris\) return \{ ok: false, error: "lotul nu s-a putut scrie in registru", status: 0 \};/g) ?? []).length,
-    2, "amandoua drumurile cozii",
+    3, "toate cele trei drumuri ale cozii",
   );
 });
 
@@ -398,7 +404,9 @@ test("⚠ si cronul, si panoul trec pe acolo", () => {
   assert.match(sync, /await patchTrendyolConfig\(admin, ctx\.businessId, \{ reconcile_page: pagina \}\);/);
   const act = viu("src/lib/actions/trendyol.actions.ts");
   assert.match(act, /const petic: Partial<TrendyolConfig> = \{/);
-  assert.match(act, /await patchTrendyolConfig\(createAdminClient\(\), businessId, petic\)/);
+  /* ⚠ Clientul de administrare se tine acum intr-o variabila: se foloseste si la repunerea
+     produselor la coada, cand se schimba termenul de expediere. */
+  assert.match(act, /await patchTrendyolConfig\(admin, businessId, petic\)/);
   /* ⚠ Si harta de categorii, care se scria tot cu obiectul intreg. */
   assert.equal(
     (act.match(/patchTrendyolConfig\(createAdminClient\(\), businessId, \{ category_map: map \}\)/g) ?? []).length,

@@ -68,6 +68,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [shipmentAddressId, setShipmentAddressId] = useState(status?.shipmentAddressId != null ? String(status.shipmentAddressId) : "");
   const [returningAddressId, setReturningAddressId] = useState(status?.returningAddressId != null ? String(status.returningAddressId) : "");
   const [carrierCode, setCarrierCode] = useState(status?.defaultCarrierCode ?? "");
+  /* „" = nu trimitem campul, deci Trendyol pastreaza termenul contului. Vezi eticheta. */
+  const [termenExpediere, setTermenExpediere] = useState(
+    status?.deliveryDuration != null ? String(status.deliveryDuration) : "");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
   const [autoPublish, setAutoPublish] = useState(status?.autoPublish ?? false);
   const [taraOrigine, setTaraOrigine] = useState(status?.defaultCountryOfOrigin ?? "");
@@ -141,6 +144,8 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     startTransition(async () => {
       const res = await saveTrendyolSettings(businessId, {
         shipment_address_id: ship, returning_address_id: ret,
+        /* „" inseamna „las cum e in contul Trendyol", nu zero. Vezi eticheta campului. */
+        delivery_duration: termenExpediere === "" ? null : Number(termenExpediere),
         default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
         auto_sync: autoSync,
         /*
@@ -331,7 +336,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
           {/* Settings */}
           <div className="rounded-xl border border-border bg-surface p-5">
             <h2 className="text-base font-semibold text-foreground mb-4">Setări</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Adresă expediere</label>
                 {addresses.length > 0 ? (
@@ -346,6 +351,29 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   <input type="number" min="0" inputMode="numeric" value={shipmentAddressId} onChange={(e) => setShipmentAddressId(e.target.value)}
                     placeholder="ID adresă" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
                 )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">În câte zile expediezi</label>
+                <select value={termenExpediere} onChange={(e) => setTermenExpediere(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                  {/*
+                    * ⚠ DOUA OPTIUNI, NU O LISTA DE ZILE, si nu din lene.
+                    *
+                    * La eMAG comerciantul alege dintr-o lista pe care ei ne-o dau
+                    * (`/handling_time/read`). Trendyol n-are asa ceva: documentatia lor da inteles
+                    * doar lui `0` („azi in curier") si `1` („cel tarziu maine"), iar OpenAPI-ul
+                    * spune atat, `integer`, fara minim, maxim sau lista. Fraza lor e „poti
+                    * introduce durate in intervalele indicate de echipele de operatiuni" — un
+                    * interval care nu e publicat nicaieri.
+                    *
+                    * Un camp liber ar fi lasat omul sa scrie 3, iar noi n-avem cum sa stim daca
+                    * il primesc. Cand se probeaza pe un cont adevarat si se afla plaja, aici se
+                    * adauga optiuni; pana atunci nu promitem ce nu stim.
+                    */}
+                  <option value="">Cum e setat în contul Trendyol</option>
+                  <option value="0">În aceeași zi</option>
+                  <option value="1">Cel târziu a doua zi</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Adresă retur</label>

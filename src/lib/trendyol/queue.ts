@@ -212,7 +212,7 @@ export async function enqueueTrendyolSync(
  * cu corp, deci nu atinge limita de adresa; taiata si ea, ar fi insemnat mai
  * multe cereri fara niciun castig.
  */
-async function enqueueMany(businessId: string, productIds: (string | null | undefined)[], op: "upsert" | "inventory"): Promise<void> {
+async function enqueueMany(businessId: string, productIds: (string | null | undefined)[], op: "upsert" | "inventory" | "livrare"): Promise<void> {
   try {
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
     if (ids.length === 0) return;
@@ -354,4 +354,24 @@ export async function enqueueTrendyolStergereMany(businessId: string, productIds
   } catch (e) {
     inghiteDarScrie("stergere-multe", businessId, e, { cate: productIds.length });
   }
+}
+
+/**
+ * Termenul de expediere s-a schimbat: se duce la produsele DEJA listate.
+ *
+ * ═══ ⚠ FARA ASTA, SETAREA N-AR FACE NIMIC (27.08.2026) ═══
+ *
+ * `deliveryOption` pleaca in incarcatura de produs — dar aia se trimite doar cand produsul se
+ * modifica din alt motiv. Comerciantul schimba termenul in setari, salveaza, si la Trendyol ramane
+ * cel vechi pana cand atinge produsul din alta parte. Poate niciodata.
+ *
+ * ⚠ E CHIAR DEFECTUL REPARAT AZI LA ABOUT YOU, unde o schimbare de curs nu ajungea la preturi. Se
+ * repeta fiindca e usor de scapat: setarea SE SALVEAZA, deci pare ca a mers.
+ *
+ * ⚠ `livrare`, NU `upsert`: `upsert` trimite continutul intreg si trece produsul din nou prin
+ * revizuia lor. Termenul are ruta lui, `delivery-info-bulk-update`, care nu atinge continutul.
+ * Aceeasi regula ca la eMAG: ruta cea mai usoara pentru intentia avuta.
+ */
+export function enqueueTrendyolLivrareMany(businessId: string, productIds: (string | null | undefined)[]): Promise<void> {
+  return enqueueMany(businessId, productIds, "livrare");
 }

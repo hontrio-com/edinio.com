@@ -426,6 +426,33 @@ export function updateApprovedVariants(
     auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/variant-bulk-update`, { items });
 }
 
+/**
+ * Schimba termenul de expediere la produse DEJA APROBATE.
+ *
+ * ═══ ⚠ DE CE O RUTA APARTE ═══
+ *
+ * `deliveryOption` pleaca in incarcatura de creare/actualizare de produs — dar aia atinge
+ * CONTINUTUL, deci pe un produs aprobat il trimite din nou prin revizuia lor. Iar
+ * `price-and-inventory` are strict `barcode/quantity/salePrice/listPrice`: n-are unde sa incapa.
+ * Fara ruta asta, o schimbare de termen pur si simplu n-ar avea pe unde sa ajunga la produsele
+ * publicate.
+ *
+ * ⚠ CHEIA E LA PLURAL AICI, `deliveryOptions`, si la SINGULAR in incarcatura de produs. Nu e o
+ * scapare de-a mea: asa scrie in amandoua paginile lor, si asa arata si raspunsul de citire
+ * (`filterApprovedProducts` intoarce `variants[].deliveryOptions`). Verificat in doua locuri
+ * inainte de a fi scris asa.
+ *
+ * ⚠ Cheia de identificare e BARCODUL, si numai el e obligatoriu: termenul se declara pe varianta,
+ * nu pe magazin. Cel mult 1000 de articole pe cerere.
+ */
+export function updateDeliveryInfo(
+  auth: TrendyolAuth,
+  items: { barcode: string; deliveryOptions: { deliveryDuration: number } }[],
+) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/delivery-info-bulk-update`, { items });
+}
+
 export function getBatchResult(auth: TrendyolAuth, batchRequestId: string) {
   return call<TrendyolBatchResult<{ product?: { barcode?: string }; barcode?: string }>>(
     auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/batch-requests/${encodeURIComponent(batchRequestId)}`);

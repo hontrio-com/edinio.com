@@ -264,6 +264,16 @@ export interface TrendyolConfig {
    * drept lipsa oricum, fiindca toti intreaba pe adevarat/fals, nu `!== undefined`.
    */
   shipment_address_id?: number | null;
+  /**
+   * In cate zile expediaza comerciantul, declarat pentru Trendyol.
+   *
+   * ⚠ `null` sau lipsa NU inseamna „zero zile". Inseamna „nu trimite campul", si atunci Trendyol
+   * foloseste termenul implicit al contului, setat in panoul lor. Vezi `deliveryOption` din
+   * `TrendyolProductItem`.
+   *
+   * ⚠ SINGURELE VALORI CU INTELES DOCUMENTAT SUNT 0 SI 1. Ecranul nu ofera altele.
+   */
+  delivery_duration?: number | null;
   returning_address_id?: number | null;
   /**
    * Curierul implicit, ca `providerCode` (sir). Se foloseste la trimiterea
@@ -434,7 +444,31 @@ export interface TrendyolProductItem {
   images: TrendyolImage[];          // max 8, HTTPS only
   attributes: TrendyolProductAttribute[];
   dimensionalWeight?: number;
-  deliveryDuration?: number;
+  /**
+   * In cate zile pleaca marfa de la vanzator.
+   *
+   * ═══ ⚠ ERA DECLARAT PLAT, SI TRENDYOL IL VREA INVELIT (27.08.2026) ═══
+   *
+   * Statea aici ca `deliveryDuration?: number`, de la primul comit al integrarii, si nu-l scria
+   * nimeni niciodata. Daca cineva l-ar fi completat, ar fi plecat la RADACINA obiectului — iar in
+   * schema lor `deliveryDuration` nu exista la nivelul intai. L-ar fi ignorat in tacere: cerere
+   * acceptata, produs publicat, termen neschimbat. Chiar tiparul „op: upsert" de la 1051 de
+   * preturi, doar cu alt camp.
+   *
+   * Forma adevarata, din tabelul „Product Create v2" si din OpenAPI-ul lor (`createproducts`):
+   * un obiect `deliveryOption`, la SINGULAR, cu `deliveryDuration` inauntru.
+   *
+   * ⚠ CE STIM DESPRE VALORI, SI CAT DE PUTIN E. Documentatia da inteles doar lui `0` („azi in
+   * curier") si `1` („cel tarziu maine"). OpenAPI-ul spune atat: `integer`. Nu exista nici
+   * `minimum`, nici `maximum`, nici `enum`, si nicaieri lista valorilor admise — doar fraza „poti
+   * introduce durate in intervalele indicate de echipele noastre de operatiuni". Deci NU stim daca
+   * 3 e primit, si nu promitem asta nimanui pana nu se probeaza pe un cont adevarat.
+   *
+   * ⚠ NETRIMIS, se aplica termenul implicit al CONTULUI, setat in panoul lor. De-aia se omite
+   * cand comerciantul n-a ales nimic: altfel i-am rescrie la fiecare publicare o hotarare pe care
+   * a luat-o in alta parte. Aceeasi regula ca la `handling_time` de la eMAG.
+   */
+  deliveryOption?: { deliveryDuration?: number; fastDeliveryType?: string };
   shipmentAddressId?: number;
   returningAddressId?: number;
   /**

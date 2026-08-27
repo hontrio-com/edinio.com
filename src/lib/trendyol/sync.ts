@@ -8,7 +8,8 @@ import type { Database } from "@/types/database.types";
 import type { TrendyolAuth } from "./client";
 import {
   createProducts, deleteProducts, getApprovedProducts, getBatchResult, getProductBaseInfo, getUnapprovedProducts,
-  isTrendyolError, setArchiveState, updateApprovedContent, updateApprovedVariants, updatePriceInventory,
+  isTrendyolError, setArchiveState, updateApprovedContent, updateApprovedVariants,
+  updateDeliveryInfo, updatePriceInventory,
   updateUnapprovedProducts, type TrendyolItemActualizare, type TrendyolMotivRespingere,
 } from "./client";
 import {
@@ -1021,6 +1022,52 @@ export async function pushInventoryNow(
     /* ⚠ Trendyol a primit lotul, dar nu i-am putut scrie numarul. `status: 0` il face
        „trecator": elementul se reia FARA sa arda o incercare, si se retrimite. Vezi
        `recordBatch` pentru de ce retrimiterea e sigura. */
+    if (!scris) return { ok: false, error: "lotul nu s-a putut scrie in registru", status: 0 };
+  }
+  return { ok: true, action: "submitted", batchRequestId };
+}
+
+/**
+ * Duce termenul de expediere la produsele DEJA listate.
+ *
+ * ═══ ⚠ DE CE NU PRIN `upsert` ═══
+ *
+ * `deliveryOption` incape si in incarcatura de produs, dar aia trimite CONTINUTUL intreg si trece
+ * produsul din nou prin revizuia lor. Termenul are ruta lui — `delivery-info-bulk-update` — care
+ * nu atinge continutul. Aceeasi regula pe care o tinem la eMAG: ruta cea mai usoara pentru
+ * intentia avuta. Acolo, confuzia intre ele a raportat succes pe 1051 de produse fara sa schimbe
+ * niciun pret.
+ *
+ * ⚠ CAND COMERCIANTUL N-A ALES NIMIC, nu se trimite nimic — si nu e o scapare. `null` inseamna
+ * „las cum e in contul lor", iar o cerere cu o valoare de rezerva i-ar rescrie hotararea. Nu
+ * exista „sterge termenul" prin ruta asta, deci intoarcerea la implicit se face din panoul lor.
+ *
+ * ⚠ SE TRIMITE PE BARCOD, ca si stocul: la ei termenul sta pe varianta, nu pe produs.
+ */
+export async function pushLivrareNow(
+  admin: Db, ctx: TrendyolSyncContext, productId: string,
+): Promise<SyncOutcome> {
+  const zile = ctx.config.delivery_duration;
+  if (zile == null) return { ok: true, action: "skipped" };
+
+  /* Barcodurile ies din aceeasi socoteala ca la stoc, deci nu se pot desparti de ea. */
+  const built = await computeInventoryItems(admin, ctx, productId);
+  if (built === null) return { ok: true, action: "skipped" };
+  if ("error" in built) return { ok: false, error: built.error };
+
+  const items = built.items.map((i) => ({ barcode: i.barcode, deliveryOptions: { deliveryDuration: zile } }));
+  if (items.length === 0) return { ok: true, action: "skipped" };
+
+  const res = await updateDeliveryInfo(ctx.auth, items);
+  if (isTrendyolError(res)) {
+    return esteEroareDeChei(res.status)
+      ? { ok: false, error: res.error, authFailed: true, status: res.status }
+      : { ok: false, error: res.error, status: res.status };
+  }
+  const batchRequestId = res.data?.batchRequestId;
+  if (batchRequestId) {
+    const scris = await recordBatch(admin, ctx.businessId, batchRequestId, "livrare", [built.listing.product_main_id]);
+    /* ⚠ Ca la stoc: lotul primit si nescris se reia FARA sa arda o incercare. */
     if (!scris) return { ok: false, error: "lotul nu s-a putut scrie in registru", status: 0 };
   }
   return { ok: true, action: "submitted", batchRequestId };
@@ -2512,6 +2559,8 @@ export async function processQueueItem(admin: Db, ctx: TrendyolSyncContext, item
         return await removeByMainId(admin, ctx, item.offer_id);
       case "inventory":
         return item.product_id ? await pushInventoryNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
+      case "livrare":
+        return item.product_id ? await pushLivrareNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
       default:
         return item.product_id ? await syncProductNow(admin, ctx, item.product_id) : { ok: true, action: "skipped" };
     }

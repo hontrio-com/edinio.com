@@ -10,6 +10,9 @@
 // client — only a masked preview and booleans.
 
 import { randomBytes } from "crypto";
+import { randuriCitite } from "@/lib/supabase/rand-citit";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { enqueueTrendyolLivrareMany } from "@/lib/trendyol/queue";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -142,6 +145,8 @@ export interface TrendyolStatus {
   apiKeyMasked: string | null;
   sellerName?: string;
   shipmentAddressId?: number;
+  /** In cate zile expediaza. `null` = „las cum e in contul Trendyol". */
+  deliveryDuration?: number | null;
   returningAddressId?: number;
   defaultCarrierCode?: string;
   currency: string;
@@ -207,6 +212,7 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     /* ⚠ `?? undefined`: configul poate purta acum `null` pentru un camp GOLIT de om, iar
        ecranul face aceeasi treaba cu amandoua. Vezi nota din `types.ts`. */
     shipmentAddressId: config.shipment_address_id ?? undefined,
+    deliveryDuration: config.delivery_duration ?? null,
     returningAddressId: config.returning_address_id ?? undefined,
     defaultCarrierCode: config.default_carrier_code ?? undefined,
     // Moneda o dicteaza vitrina, nu noi: preturile trimise sunt citite in ea.
@@ -357,6 +363,8 @@ export async function disconnectTrendyol(businessId: string): Promise<{ success:
 // ── Settings ────────────────────────────────────────────────────────────────────
 export interface TrendyolSettingsInput {
   shipment_address_id?: number | null;
+  /** In cate zile expediaza. `null` = „las cum e in contul Trendyol". Vezi `TrendyolConfig`. */
+  delivery_duration?: number | null;
   returning_address_id?: number | null;
   default_carrier_code?: string | null;
   brand_id?: number | null;
@@ -423,6 +431,12 @@ export async function saveTrendyolSettings(
   const petic: Partial<TrendyolConfig> = {
     ...(input.shipment_address_id !== undefined
       ? { shipment_address_id: input.shipment_address_id ?? null } : {}),
+    /*
+     * ⚠ `null` inseamna „nu trimite campul", deci Trendyol pastreaza termenul implicit al
+     * contului. Nu inseamna „zero zile" — vezi nota de la `TrendyolConfig.delivery_duration`.
+     */
+    ...(input.delivery_duration !== undefined
+      ? { delivery_duration: input.delivery_duration ?? null } : {}),
     ...(input.returning_address_id !== undefined
       ? { returning_address_id: input.returning_address_id ?? null } : {}),
     ...(input.default_carrier_code !== undefined
@@ -443,8 +457,36 @@ export async function saveTrendyolSettings(
     currency: infoVitrina(config.storefront).moneda,
   };
 
-  const ok = await patchTrendyolConfig(createAdminClient(), businessId, petic);
+  const admin = createAdminClient();
+  const ok = await patchTrendyolConfig(admin, businessId, petic);
   if (!ok) return { error: "Eroare la salvare." };
+
+  /*
+   * ═══ ⚠ SETAREA SALVATA NU AJUNGE SINGURA LA PRODUSE (27.08.2026) ═══
+   *
+   * Termenul de expediere pleaca in incarcatura de produs — deci, fara pasul asta, la Trendyol ar
+   * ramane cel vechi pana cand produsul se modifica din alt motiv. Poate niciodata. Iar setarea
+   * SE SALVEAZA, deci ecranul arata ca a mers: chiar felul de defect care nu se plange.
+   *
+   * ⚠ E ACELASI LUCRU REPARAT AZI LA ABOUT YOU, unde o schimbare de curs nu ajungea la preturi.
+   * A doua oara intr-o zi, in doua integrari — semn ca e usor de scapat, nu ca am fost neatent
+   * intr-un singur loc.
+   *
+   * ⚠ SE PUNE `livrare`, NU `upsert`: `upsert` trimite continutul intreg si trece produsul din
+   * nou prin revizuia lor, pentru un singur numar. Vezi `pushLivrareNow`.
+   */
+  const termenSchimbat = input.delivery_duration !== undefined
+    && (input.delivery_duration ?? null) !== (config.delivery_duration ?? null);
+  if (termenSchimbat && (input.delivery_duration ?? null) != null) {
+    const ids = randuriCitite<{ product_id: string | null }>("trendyol.listariPentruLivrare", await admin
+      .from("trendyol_listings").select("product_id").eq("business_id", businessId)
+      .not("product_id", "is", null).limit(5000) as never);
+    dupaRaspuns(
+      () => enqueueTrendyolLivrareMany(businessId, ids.map((r: { product_id: string | null }) => r.product_id)),
+      "enqueueTrendyolLivrareMany", businessId,
+    );
+  }
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }

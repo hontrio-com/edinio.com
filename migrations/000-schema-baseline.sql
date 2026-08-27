@@ -5974,9 +5974,9 @@ alter table public.support_messages add constraint support_messages_sender_type_
 alter table public.support_tickets add constraint support_tickets_category_check CHECK ((category = ANY (ARRAY['technical'::text, 'billing'::text, 'feature'::text, 'other'::text])));
 alter table public.support_tickets add constraint support_tickets_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text])));
 alter table public.support_tickets add constraint support_tickets_status_check CHECK ((status = ANY (ARRAY['open'::text, 'in_progress'::text, 'resolved'::text, 'closed'::text])));
-alter table public.trendyol_batches add constraint trendyol_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'inventory'::text, 'archive'::text, 'update'::text, 'delete'::text, 'dezarhivare'::text])));
+alter table public.trendyol_batches add constraint trendyol_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'inventory'::text, 'archive'::text, 'update'::text, 'delete'::text, 'dezarhivare'::text, 'livrare'::text])));
 alter table public.trendyol_listings add constraint trendyol_listings_origin_chk CHECK (((country_of_origin IS NULL) OR (country_of_origin ~ '^[A-Z]{2}$'::text)));
-alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'inventory'::text])));
+alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'inventory'::text, 'livrare'::text])));
 alter table public.users_profile add constraint users_profile_plan_check CHECK ((plan = ANY (ARRAY['free'::text, 'basic'::text, 'premium'::text, 'ultra'::text])));
 alter table public.users_profile add constraint users_profile_plan_interval_check CHECK (((plan_interval IS NULL) OR (plan_interval = ANY (ARRAY['monthly'::text, 'annual'::text]))));
 alter table public.users_profile add constraint users_profile_role_check CHECK ((role = ANY (ARRAY['user'::text, 'admin'::text, 'moderator'::text])));

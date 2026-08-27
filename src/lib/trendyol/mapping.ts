@@ -656,10 +656,38 @@ export function buildTrendyolItems(ctx: BuildContext): { items: TrendyolProductI
     // altele decat implicitele contului sau.
     if (config.shipment_address_id) item.shipmentAddressId = config.shipment_address_id;
     if (config.returning_address_id) item.returningAddressId = config.returning_address_id;
+
+    /*
+     * Termenul de expediere, cand comerciantul l-a ales.
+     *
+     * ⚠ SE OMITE CAND E `null`, si nu din comoditate: netrimis, Trendyol pastreaza termenul
+     * implicit al CONTULUI, pe care omul l-a pus in panoul lor. Trimis cu o valoare de rezerva,
+     * fiecare republicare i-ar rescrie hotararea aia — fara nicio eroare, fiindca si `1` e o
+     * valoare perfect valida. Chiar greseala `handling_time ?? 1` de la eMAG, in alta haina.
+     *
+     * ⚠ SI SE VERIFICA VALOAREA AICI. Incarcatura pleaca printr-un tip larg, deci o cifra ajunsa
+     * in config din alta parte — o consola, o versiune mai veche — n-ar fi oprita de compilator.
+     */
+    const zile = config.delivery_duration;
+    if (zile != null && Number.isInteger(zile) && zile >= 0 && zile <= ZILE_EXPEDIERE_MAXIM) {
+      item.deliveryOption = { deliveryDuration: zile };
+    }
     items.push(item);
   }
   return { items };
 }
+
+/**
+ * Cel mai mare termen de expediere pe care il trimitem la Trendyol.
+ *
+ * ⚠ NU E PLAFONUL LOR — ei nu publica niciunul. E al NOSTRU, si il pun aici tocmai fiindca al lor
+ * nu se stie: documentatia da inteles doar lui `0` si `1`, iar OpenAPI-ul spune doar `integer`.
+ * O valoare mare trimisa pe nevazute ar fi cel mai prost fel de a afla ca nu se poate.
+ *
+ * ⚠ Comentariul asta e o PRECAUTIE DE-A NOASTRA, nu o regula a lor. Scris invers, ar deveni fapt
+ * pentru cine il citeste peste sase luni.
+ */
+const ZILE_EXPEDIERE_MAXIM = 1;
 
 /** Moneda in care Trendyol citeste preturile trimise, dupa vitrina aleasa. */
 export function monedaVitrina(config: TrendyolConfig): string {

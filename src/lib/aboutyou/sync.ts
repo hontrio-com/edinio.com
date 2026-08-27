@@ -222,6 +222,31 @@ async function setListingStatus(
    regula ca la eMAG si Trendyol. `408` si `429` NU sunt refuzuri: sunt „mai incearca".
 */
 
+/**
+ * Ce s-a ales din trimitere. Trei stari, si nu se confunda intre ele.
+ *
+ * ═══ ⚠ „ACCEPTAT LA EI, NECUNOSCUT LA NOI" LIPSEA (27.08.2026) ═══
+ *
+ * Prima varianta a lui `cuLotDurabil` scria intentia inainte de cerere — bine — dar cand About
+ * You raspundea cu `batchRequestId` iar UPDATE-ul care leaga id-ul de intentie pica, se scria un
+ * `critical` si se intorcea chematorului raspunsul extern CURAT. Adica exact minciuna pe care
+ * intentia trebuia s-o inlature, doar mutata cu un pas mai incolo: operatia parea urmarita.
+ *
+ * Acum starea are nume, si chematorul e OBLIGAT de tipuri s-o vada.
+ */
+export type LotDurabil<T> =
+  /** Intentia n-a putut fi scrisa, deci cererea NICI nu s-a facut. Nimic nu s-a intamplat. */
+  | { fel: "intentie-nescrisa" }
+  /** Cererea s-a facut si urma exista: purtarea obisnuita. */
+  | { fel: "urmarit"; res: AboutYouResult<T> }
+  /**
+   * Ei au primit-o, noi n-am putut lega id-ul. Nu se stie ce a iesit si NU se poate relua orbeste.
+   *
+   * ⚠ Randul ramane pe `intentie` cu `trimis_la` pus, iar `alarmaIntentiiDeschise` il scoate la
+   * lumina. Chematorul nu are voie sa spuna „gata".
+   */
+  | { fel: "neurmarit"; res: AboutYouResult<T> };
+
 /** Un refuz limpede: cererea n-a ajuns sa faca nimic la ei. */
 export function eRefuzLimpede(status: number | undefined): boolean {
   if (status == null) return false;                    // retea cazuta: nu se stie
@@ -232,17 +257,13 @@ export function eRefuzLimpede(status: number | undefined): boolean {
 /**
  * Trimite ceva la About You cu urma scrisa INAINTE.
  *
- * Intoarce EXACT ce intoarce cererea, ca sa nu se schimbe nimic la chematori — sau `null` cand
- * INTENTIA n-a putut fi scrisa, si atunci `trimite` nici nu se cheama. E singura purtare
- * corecta: mai bine o operatie neincercata decat una neurmarita.
- *
- * ⚠ INLOCUIESTE `recordBatch` LA TOATE TRIMITERILE. Cine cheama nu mai are ce inregistra dupa:
- * lotul e deja scris, cu id-ul lor pus la loc.
+ * ⚠ Cand INTENTIA nu se poate scrie, `trimite` nici nu se cheama. E singura purtare corecta: mai
+ * bine o operatie neincercata decat una neurmarita.
  */
 export async function cuLotDurabil<T extends { batchRequestId?: string | null }>(
   admin: Db, businessId: string, kind: string, relatedIds: string[],
   trimite: () => Promise<AboutYouResult<T>>,
-): Promise<AboutYouResult<T> | null> {
+): Promise<LotDurabil<T>> {
   const intentId = randomUUID();
   const { error: eIntentie } = await admin.from("aboutyou_batches").insert({
     business_id: businessId, batch_request_id: null, intent_id: intentId,
@@ -258,7 +279,7 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
       message: `intentia nu s-a putut scrie, deci cererea catre About You NU s-a mai facut: ${eIntentie.message}`,
       details: { kind, relatedIds: relatedIds.slice(0, 20) }, businessId,
     });
-    return null;
+    return { fel: "intentie-nescrisa" };
   }
 
   const res = await trimite();
@@ -268,16 +289,20 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
       /* Refuz limpede: la ei nu s-a intamplat nimic, deci urma n-are ce pazi. */
       await admin.from("aboutyou_batches")
         .delete().eq("business_id", businessId).eq("intent_id", intentId);
-    } else {
-      /*
-       * ⚠ NECUNOSCUT: randul RAMANE. O pana de retea sau un `5xx` nu spun daca cererea a apucat
-       * sa fie primita. Sters, am fi declarat „nu s-a intamplat" fara sa stim.
-       */
-      await admin.from("aboutyou_batches")
-        .update({ status: "necunoscut", result_summary: { eroare: res.error, status: res.status } as never } as never)
-        .eq("business_id", businessId).eq("intent_id", intentId);
+      return { fel: "urmarit", res };
     }
-    return res;
+    /*
+     * ⚠ NECUNOSCUT: randul RAMANE. O pana de retea sau un `5xx` nu spun daca cererea a apucat sa
+     * fie primita. Sters, am fi declarat „nu s-a intamplat" fara sa stim.
+     *
+     * ⚠ SI CHEMATORUL AFLA. Pentru o operatie cu un singur foc — expediere, anulare, retur —
+     * deosebirea dintre „refuzata" si „poate s-a facut" e chiar deosebirea dintre a relua si a nu
+     * relua.
+     */
+    await admin.from("aboutyou_batches")
+      .update({ status: "necunoscut", result_summary: { eroare: res.error, status: res.status } as never } as never)
+      .eq("business_id", businessId).eq("intent_id", intentId);
+    return { fel: "neurmarit", res };
   }
 
   const id = res.data?.batchRequestId ?? null;
@@ -285,17 +310,41 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
     .update({ batch_request_id: id, status: id ? "pending" : "necunoscut" } as never)
     .eq("business_id", businessId).eq("intent_id", intentId);
   if (eInchidere) {
-    /*
-     * ⚠ AICI ERA GAURA, si acum lasa urma. Randul ramane pe `intentie` cu `trimis_la` pus, iar
-     * `alarmaIntentiiDeschise` il scoate la lumina. Nu se reincearca nimic orbeste.
-     */
     await logError({
       action: "aboutyou/intentie", severity: "critical",
       message: `About You a primit lotul (${id ?? "fara id"}), dar intentia n-a putut fi inchisa: ${eInchidere.message}`,
       details: { kind, batchRequestId: id, relatedIds: relatedIds.slice(0, 20) }, businessId,
     });
+    return { fel: "neurmarit", res };
   }
-  return res;
+  /*
+   * ⚠ SI UN RASPUNS FARA `batchRequestId` E TOT NEURMARIT: fara id n-avem ce sonda niciodata, deci
+   * soarta operatiei ramane necunoscuta la fel ca la o scriere picata.
+   */
+  if (id == null) return { fel: "neurmarit", res };
+  return { fel: "urmarit", res };
+}
+
+/**
+ * Pentru operatiile in care RETRIMITEREA E INOFENSIVA: pret, stoc, status, produs.
+ *
+ * ⚠ La ele valoarea bate istoricul — a doua trimitere a aceluiasi pret da acelasi pret — deci
+ * „nu stiu ce a iesit" se poate trata ca „n-a mers, mai incearca". `status: 0` inseamna cauza
+ * trecatoare: elementul ramane in coada fara sa arda o incercare.
+ *
+ * ⚠ NU SE FOLOSESTE la expediere, anulare si retur. Acolo o retrimitere poate expedia sau anula
+ * de doua ori, si tocmai de-aia starea are nume.
+ */
+export function caUnRezultat<T extends { batchRequestId?: string | null }>(
+  lot: LotDurabil<T>, ceFaceam: string,
+): AboutYouResult<T> {
+  if (lot.fel === "intentie-nescrisa") {
+    return { error: `Nu am putut ține evidența cererii (${ceFaceam}); se reia.`, status: 0 };
+  }
+  if (lot.fel === "neurmarit" && !isAboutYouError(lot.res)) {
+    return { error: `About You a primit cererea (${ceFaceam}), dar nu o putem urmări; se reia.`, status: 0 };
+  }
+  return lot.res;
 }
 
 /**
@@ -448,11 +497,11 @@ async function reconciliazaVariante(
        * n-a putut fi scrisa, deci cererea nici nu s-a facut — randurile raman `enabled: false`
        * si zeroul se reincearca la trecerea urmatoare.
        */
-      const zero = await cuLotDurabil(admin, ctx.businessId, "stock_removal", lot.map((r) => r.id),
-        () => updateStock(ctx.auth, lot.map((r) => ({ sku: r.sku, quantity: 0 }))));
-      if (zero === null) {
-        return { ok: false, error: "Nu am putut ține evidența retragerii variantelor; se reia." };
-      }
+      /* ⚠ Un zero retrimis da tot zero, deci „nu stiu ce a iesit" se poate trata ca „mai incearca". */
+      const zero = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "stock_removal",
+        lot.map((r) => r.id),
+        () => updateStock(ctx.auth, lot.map((r) => ({ sku: r.sku, quantity: 0 })))),
+        "retragerea variantelor");
       if (isAboutYouError(zero)) {
         return { ok: false, error: `Nu am putut retrage variantele scoase: ${zero.error}`, status: zero.status };
       }
@@ -635,13 +684,9 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
   const transe = Math.ceil(built.items.length / 100);
   let nescrise = 0;
   for (let i = 0; i < built.items.length; i += 100) {
-    const res = await cuLotDurabil(admin, ctx.businessId, "product", [listing.style_key],
-      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100)));
-    if (res === null) {
-      /* Intentia n-a putut fi scrisa: cererea nu s-a facut, deci transa asta lipseste. */
-      nescrise++;
-      break;
-    }
+    /* ⚠ Acelasi produs retrimis da acelasi produs: reluarea e inofensiva. */
+    const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "product", [listing.style_key],
+      () => upsertProducts(ctx.auth, built.items.slice(i, i + 100))), "trimiterea produsului");
     if (isAboutYouError(res)) {
       /*
        * ⚠ UN ESEC LA MIJLOCUL SIRULUI LASA PRODUSUL PE JUMATATE LA EI. Transele dinainte au
@@ -736,9 +781,9 @@ async function setRemoteStatus(
     return { ok: true, action: "skipped" };
   }
 
-  const res = await cuLotDurabil(admin, ctx.businessId, "status", [listing.style_key],
-    () => updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }]));
-  if (res === null) return { ok: false, error: "Nu am putut ține evidența cererii; încearcă din nou." };
+  const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "status", [listing.style_key],
+    () => updateProductStatus(ctx.auth, [{ style_key: listing.style_key, status }])),
+    "schimbarea stării");
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", { error: res.error });
     return { ok: false, error: res.error, status: res.status };
@@ -882,12 +927,10 @@ async function stergeListare(
    * Acum lotul se INREGISTREAZA cu tipul `removal`, statusul listarii nu se atinge,
    * iar `pollOpenBatches` sterge randul abia cand lotul se incheie cu bine.
    */
-  const res = await cuLotDurabil(admin, ctx.businessId, "removal", [listing.style_key], () => updateProductStatus(
-    ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }]));
-  /* Intentia nescrisa: cererea nu s-a facut, deci randul local ramane intreg si se poate relua. */
-  if (res === null) {
-    return { ok: false, error: "Nu am putut ține evidența retragerii; încearcă din nou." };
-  }
+  const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "removal", [listing.style_key],
+    () => updateProductStatus(
+      ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }])),
+    "retragerea produsului");
   if (isAboutYouError(res)) {
     await setListingStatus(admin, listing.id, "error", {
       error: `Nu am putut retrage produsul de pe About You: ${res.error}`,
@@ -1862,9 +1905,8 @@ async function trimiteInTranse<T>(
   if (items.length === 0) return { ok: true, action: "skipped" };
   let batchRequestId: string | undefined;
   for (let i = 0; i < items.length; i += MAX_ITEMI_STOC_PRET) {
-    const res = await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
-      () => trimite(items.slice(i, i + MAX_ITEMI_STOC_PRET)));
-    if (res === null) return { ok: false, error: "Nu am putut ține evidența cererii; încearcă din nou." };
+    const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, kind, [styleKey],
+      () => trimite(items.slice(i, i + MAX_ITEMI_STOC_PRET))), `împingerea de ${kind}`);
     if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
     const id = res.data?.batchRequestId;
     if (id) batchRequestId = batchRequestId ?? id;
@@ -2050,8 +2092,31 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
       ...(cuRetur ? { return_tracking_key: cuRetur } : {}),
     }]));
 
-  let res = await trimiteExpedierea(awbRetur || undefined);
-  if (res === null) return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou." };
+  /*
+   * ═══ ⚠ EXPEDIEREA NU SE RELUA ORBESTE, SI DE-AIA STAREA ARE NUME ═══
+   *
+   * `caUnRezultat` preface „nu stiu ce a iesit" in „mai incearca" — bun la pret si la stoc, unde
+   * valoarea bate istoricul. Aici ar insemna un al doilea `POST /orders/ship` peste unul care
+   * poate a fost primit: doua expedieri raportate pe aceleasi linii.
+   *
+   * ⚠ Deci se OPRESTE, si se cere un om. Randul de intentie ramane deschis si
+   * `alarmaIntentiiDeschise` il scoate la lumina cu tot ce trebuie ca sa fie verificat in Seller
+   * Center inainte de o reluare de mana.
+   */
+  const lot1 = await trimiteExpedierea(awbRetur || undefined);
+  if (lot1.fel === "intentie-nescrisa") {
+    return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou.", status: 0 };
+  }
+  if (lot1.fel === "neurmarit") {
+    return {
+      ok: false,
+      error: "Am trimis expedierea la About You, dar nu știm dacă a fost primită."
+        + " Verifică în Seller Center înainte de a încerca din nou.",
+      /* ⚠ NU `0`: `0` inseamna trecator, iar cronul ar relua singur. Aici tocmai asta n-are voie. */
+      status: 409,
+    };
+  }
+  let res = lot1.res;
   if (isAboutYouError(res) && !awbRetur && eRefuzLimpede(res.status)) {
     /* Vezi nota de mai sus: o singura reluare, cu numarul de tur, si scrisa. */
     await logError({
@@ -2059,8 +2124,19 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
       message: "About You a refuzat expedierea fara AWB de retur: s-a retrimis cu numarul de tur, care NU e o eticheta de retur valabila",
       details: { orderId, carrierKey, raspuns: res.error }, businessId: ctx.businessId,
     });
-    res = await trimiteExpedierea(tracking);
-    if (res === null) return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou." };
+    const lot2 = await trimiteExpedierea(tracking);
+    if (lot2.fel === "intentie-nescrisa") {
+      return { ok: false, error: "Nu am putut ține evidența expedierii; încearcă din nou.", status: 0 };
+    }
+    if (lot2.fel === "neurmarit") {
+      return {
+        ok: false,
+        error: "Am trimis expedierea la About You, dar nu știm dacă a fost primită."
+          + " Verifică în Seller Center înainte de a încerca din nou.",
+        status: 409,
+      };
+    }
+    res = lot2.res;
   }
   if (isAboutYouError(res)) return { ok: false, error: res.error, status: res.status };
   const batchRequestId = res.data?.batchRequestId;

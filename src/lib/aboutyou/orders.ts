@@ -1152,9 +1152,25 @@ export async function cancelOrderNow(
    * raspuns iar noi n-am tinut minte nimic e cea mai urata forma — nu se poate relua orbeste
    * (s-ar anula de doua ori) si nu se poate uita.
    */
-  const res = await cuLotDurabil(admin, ctx.businessId, "cancel", [orderId],
+  /*
+   * ⚠ UN SINGUR FOC: NU SE RELUA ORBESTE. „Ei au primit-o si noi n-am putut lega id-ul" nu e
+   * acelasi lucru cu „a picat" — o retrimitere de-acolo ar face fapta de doua ori. Se opreste si
+   * se cere un om; randul de intentie ramane deschis, iar `alarmaIntentiiDeschise` il scoate la
+   * lumina cu tot ce trebuie pentru o verificare in Seller Center.
+   */
+  const lot = await cuLotDurabil(admin, ctx.businessId, "cancel", [orderId],
     () => cancelOrderItems(ctx.auth, ids.ids.map((id) => ({ id }))));
-  if (res === null) return { ok: false, error: "Nu am putut ține evidența anulării; încearcă din nou." };
+  if (lot.fel === "intentie-nescrisa") {
+    return { ok: false, error: "Nu am putut ține evidența anulării; încearcă din nou." };
+  }
+  if (lot.fel === "neurmarit") {
+    return {
+      ok: false,
+      error: "Am trimis cererea la About You, dar nu știm dacă a fost primită."
+        + " Verifică în Seller Center înainte de a încerca din nou.",
+    };
+  }
+  const res = lot.res;
   if (isAboutYouError(res)) return { ok: false, error: res.error };
   await marcheazaSideRow(admin, ctx, orderId, "cancel_pending");
   /*
@@ -1178,9 +1194,25 @@ export async function returnOrderNow(
   /* ⚠ Returul merge NUMAI pe liniile `shipped`: una care n-a plecat inca n-are ce sa se intoarca. */
   const ids = await idsArticoleInStarea(admin, ctx, orderId, "shipped");
   if ("error" in ids) return { ok: false, error: ids.error };
-  const res = await cuLotDurabil(admin, ctx.businessId, "return", [orderId],
+  /*
+   * ⚠ UN SINGUR FOC: NU SE RELUA ORBESTE. „Ei au primit-o si noi n-am putut lega id-ul" nu e
+   * acelasi lucru cu „a picat" — o retrimitere de-acolo ar face fapta de doua ori. Se opreste si
+   * se cere un om; randul de intentie ramane deschis, iar `alarmaIntentiiDeschise` il scoate la
+   * lumina cu tot ce trebuie pentru o verificare in Seller Center.
+   */
+  const lot = await cuLotDurabil(admin, ctx.businessId, "return", [orderId],
     () => returnOrderItems(ctx.auth, [{ order_items: ids.ids, return_tracking_key: cheie }]));
-  if (res === null) return { ok: false, error: "Nu am putut ține evidența returului; încearcă din nou." };
+  if (lot.fel === "intentie-nescrisa") {
+    return { ok: false, error: "Nu am putut ține evidența returului; încearcă din nou." };
+  }
+  if (lot.fel === "neurmarit") {
+    return {
+      ok: false,
+      error: "Am trimis cererea la About You, dar nu știm dacă a fost primită."
+        + " Verifică în Seller Center înainte de a încerca din nou.",
+    };
+  }
+  const res = lot.res;
   if (isAboutYouError(res)) return { ok: false, error: res.error };
   await marcheazaSideRow(admin, ctx, orderId, "return_pending");
   // Ca la anulare: fara inregistrare, „in curs de retur" nu se inchide niciodata.

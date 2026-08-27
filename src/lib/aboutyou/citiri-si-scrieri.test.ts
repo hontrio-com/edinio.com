@@ -112,8 +112,24 @@ test("⚠ nicio trimitere nu mai pleaca fara urma scrisa INAINTE", () => {
     "intentia trebuie scrisa inaintea cererii");
   /* ⚠ Si `trimis_la` tot inainte: pus dupa, o cadere intre apel si scriere ar arata ca n-a plecat. */
   assert.ok(corp.indexOf("trimis_la:") < corp.indexOf("const res = await trimite()"));
+
+  /*
+   * ═══ ⚠ „ACCEPTAT LA EI, NECUNOSCUT LA NOI" ARE ACUM NUME (27.08.2026) ═══
+   *
+   * Prima variantă scria un `critical` când UPDATE-ul care leagă id-ul pica, și întorcea totuși
+   * răspunsul extern CURAT — deci operația părea urmărită. Aceeași minciună pe care intenția
+   * trebuia s-o înlăture, doar mutată cu un pas mai încolo.
+   *
+   * Trei stări, iar tipurile obligă fiecare chemător să le vadă.
+   */
+  assert.match(sync, /export type LotDurabil<T> =/);
+  for (const stare of ['"intentie-nescrisa"', '"urmarit"', '"neurmarit"']) {
+    assert.ok(sync.includes(`fel: ${stare}`), `starea ${stare} lipseste`);
+  }
+  /* ⚠ Si un raspuns FARA `batchRequestId` e tot neurmarit: fara id n-avem ce sonda niciodata. */
+  assert.ok(corp.includes('if (id == null) return { fel: "neurmarit", res };'));
   /* ⚠ Intentia nescrisa OPRESTE cererea. */
-  assert.match(corp, /if \(eIntentie\) \{[\s\S]*?return null;/);
+  assert.match(corp, /if \(eIntentie\) \{[\s\S]*?return \{ fel: "intentie-nescrisa" \};/);
 
   /* ⚠ Refuz vs necunoscut, pe CODUL HTTP. `408` si `429` nu sunt refuzuri. */
   assert.match(sync, /export function eRefuzLimpede/);
@@ -132,9 +148,27 @@ test("⚠ toate cele opt trimiteri trec prin outbox, si niciuna pe langa", () =>
   assert.deepEqual([...feluri].sort(),
     ["cancel", "kind", "product", "removal", "return", "ship", "status", "stock_removal"]);
 
-  /* ⚠ Si fiecare chematoare se uita la `null`: altfel cererea ar parea facuta. */
-  const nuluri = [...`${sync}${orders}`.matchAll(/if \(res === null\)|if \(zero === null\)/g)];
-  assert.ok(nuluri.length >= 6, `doar ${nuluri.length} chematori verifica intentia nescrisa`);
+  /*
+   * ⚠ CELE RELUABILE trec prin `caUnRezultat`, care preface „nu știu ce a ieșit" în „mai
+   * încearcă": la preț, stoc, stare și produs valoarea bate istoricul, deci o a doua trimitere dă
+   * exact același lucru.
+   */
+  const reluabile = [...sync.matchAll(/caUnRezultat\(await cuLotDurabil\(/g)];
+  assert.equal(reluabile.length, 5, `asteptam cinci operatii reluabile, am gasit ${reluabile.length}`);
+
+  /*
+   * ⚠ CELE CU UN SINGUR FOC — expediere, anulare, retur — NU trec pe-acolo: acolo o retrimitere
+   * poate expedia sau anula de două ori. Ele citesc `fel` pe față și se OPRESC.
+   */
+  const unSingurFoc = [...`${sync}${orders}`.matchAll(/\.fel === "neurmarit"/g)];
+  assert.ok(unSingurFoc.length >= 4, `doar ${unSingurFoc.length} locuri opresc pe „neurmarit"`);
+  assert.match(sync, /nu știm dacă a fost primită/);
+  assert.match(orders, /nu știm dacă a fost primită/);
+  /* ⚠ Si NU cu `status: 0`: `0` inseamna trecator, iar cronul ar relua singur exact ce n-are voie. */
+  assert.match(sync, /status: 409,/);
+
+  /* ⚠ Si niciunul nu mai verifica `null`: forma aia a disparut cu tot cu ambiguitatea ei. */
+  assert.doesNotMatch(`${sync}${orders}`, /if \(res === null\)/);
 });
 
 test("⚠ intentia ramasa deschisa ajunge la un om, o singura data", () => {

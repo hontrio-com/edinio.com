@@ -65,7 +65,18 @@ test("⚠ dar daca ei totusi il cer, expedierea nu se blocheaza", () => {
   assert.match(sync, /if \(isAboutYouError\(res\) && !awbRetur && eRefuzLimpede\(res\.status\)\) \{/);
   assert.match(sync, /NU e o eticheta de retur valabila/);
   /* Si chiar o SINGURA data: reluarea trimite `tracking`, deci a doua oara conditia nu mai tine. */
-  assert.equal((sync.match(/res = await trimiteExpedierea\(/g) ?? []).length, 2);
+  assert.equal((sync.match(/await trimiteExpedierea\(/g) ?? []).length, 2);
+
+  /*
+   * ═══ ⚠ SI AMANDOUA INCERCARILE SE OPRESC PE „NEURMARIT" (27.08.2026) ═══
+   *
+   * Expedierea are un singur foc. „Ei au primit-o si noi n-am putut lega id-ul" nu e „a picat":
+   * o retrimitere de-acolo ar raporta doua expedieri pe aceleasi linii. Deci se opreste, cu
+   * `409` — nu cu `0`, care inseamna trecator si l-ar face pe cron sa reia singur.
+   */
+  assert.equal((sync.match(/lot[12]\.fel === "neurmarit"/g) ?? []).length, 2);
+  assert.equal((sync.match(/lot[12]\.fel === "intentie-nescrisa"/g) ?? []).length, 2);
+  assert.match(sync, /status: 409,/);
 });
 
 test("⚠ raspunsul brut se pastreaza la fiecare ingest, pe amandoua caile", () => {

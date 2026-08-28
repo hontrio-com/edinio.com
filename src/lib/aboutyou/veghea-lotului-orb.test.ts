@@ -730,9 +730,17 @@ test("⚠ o transa picata la mijloc lasa produsul PARTIAL la ei, cu campul gol",
   assert.doesNotMatch(bucla, /last_synced_at/,
     "ramura de esec nu scrie `last_synced_at` — deci el nu poate dovedi ca nimic n-a plecat");
 
-  /* ⚠ SEMNUL SE SCRIE INAINTEA PRIMEI TRANSE, si daca nu se scrie, nu se trimite. */
-  const iPoate = sync.indexOf("remote_poate_exista: true");
-  assert.ok(iPoate > 0 && iPoate < iBucla,
+  /*
+   * ⚠ SEMNUL SE SCRIE INAINTEA PRIMEI TRANSE, si daca nu se scrie, nu se trimite.
+   *
+   * ⚠ Proba cerea literalul `remote_poate_exista: true`, dintr-un obiect scris pe loc. De cand in
+   * aceeasi scriere se ingheata si CATEGORIA trimisa, campurile se aduna intr-un obiect si forma
+   * s-a schimbat — dar regula nu: scrierea ramane inaintea buclei, si tot ea opreste trimiterea
+   * daca pica. Se cere fapta, nu ortografia ei.
+   */
+  const iPoate = sync.indexOf("deInghetat.remote_poate_exista = true");
+  const iScriere = sync.indexOf('.update(deInghetat as never)');
+  assert.ok(iPoate > 0 && iScriere > iPoate && iScriere < iBucla,
     "`remote_poate_exista` se scrie INAINTEA buclei de transe, ca la `cuLotDurabil`");
   assert.match(sync, /if \(ePoate\) \{[\s\S]{0,320}?ok: false, status: 0/);
 });

@@ -361,3 +361,31 @@ test("⚠ si regula se citeste sub aceeasi incuietoare cu scrierea", () => {
   assert.ok(iIncuietoare < iRegula, "randul se incuie inainte ca regula sa-i citeasca statusul");
   assert.ok(iRegula < iScriere, "regula se judeca inaintea oricarei scrieri");
 });
+
+test("⚠ categoria trimisa se ingheata pe rand, altfel regula n-are ce compara", () => {
+  /*
+   * ═══ ⚠ O GAURA PE SUB REGULA (28.08.2026, noaptea) ═══
+   *
+   * Categoria care pleaca la ei nu e mereu cea de pe listare: `effectiveCategoryId` cade pe harta
+   * din setari cand randul n-are una scrisa. Iar atunci regula de mai sus tace — ea cere
+   * `category_id` nenul — si nici n-ar avea ce compara:
+   *
+   *     listarea are `category_id` null; harta zice 1234; produsul e APROBAT cu 1234
+   *     comerciantul reface maparea: acum harta zice 5678
+   *     urmatoarea trimitere pleaca cu 5678, pe un produs aprobat pe 1234
+   *
+   * ⚠ Deci se scrie CE CHIAR PLEACA, inaintea cererii. De-atunci `effectiveCategoryId` intoarce
+   * valoarea de pe rand, harta nu mai poate schimba nimic pe la spate, iar regula are un martor.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  /* ⚠ Inaintea cererii, ca `remote_poate_exista` — dupa, ar exista o clipa in care la ei e o
+     categorie despre care la noi nu scrie nimic. */
+  const iInghetare = sync.indexOf("if (listing.category_id == null && categoria != null)");
+  const iCerere = sync.indexOf("const transe = Math.ceil(built.items.length / 100);");
+  assert.ok(iInghetare > 0, "categoria trimisa nu se scrie pe rand");
+  assert.ok(iCerere > iInghetare, "inghetarea vine INAINTEA transelor care pleaca la ei");
+  /* ⚠ Si nu se suprascrie una aleasa de om: acolo alegerea lui e mai tare. */
+  assert.match(sync, /listing\.category_id == null && categoria != null/);
+  /* ⚠ Si daca nu se scrie, NU se trimite: aceeasi masura ca `remote_poate_exista`. */
+  assert.match(sync, /if \(ePoate\) \{[\s\S]{0,200}?ok: false, status: 0/);
+});

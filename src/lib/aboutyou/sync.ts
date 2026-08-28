@@ -2003,9 +2003,30 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
    * confirmata. Un fals pozitiv costa o cerere de retragere fara obiect; un fals negativ lasa
    * marfa la vanzare.
    */
-  if (!listing.remote_poate_exista) {
+  /*
+   * ═══ ⚠ SI CATEGORIA TRIMISA SE INGHEATA PE RAND (28.08.2026, noaptea) ═══
+   *
+   * Categoria care pleaca la ei nu e mereu cea de pe listare: `effectiveCategoryId` cade pe harta
+   * din setari cand randul n-are una scrisa. Iar atunci regula „categoria nu se mai schimba dupa
+   * aprobare" nu are ce compara — ea cere `category_id` nenul — si nici n-ar folosi la ceva:
+   *
+   *     listarea are `category_id` null; harta zice 1234; produsul pleaca si e APROBAT cu 1234
+   *     comerciantul reface maparea din ecranul de categorii: acum harta zice 5678
+   *     urmatoarea trimitere pleaca cu 5678, pe un produs aprobat pe 1234 ❌
+   *     iar regula tace, fiindca pe rand nu scrie nicio categorie
+   *
+   * ⚠ SE SCRIE CE CHIAR PLEACA, si tot inaintea cererii. De-atunci `effectiveCategoryId` intoarce
+   * valoarea de pe rand, deci harta nu mai poate schimba nimic pe la spate, iar regula are un
+   * martor. Aceeasi masura ca `remote_poate_exista`, si de-aia sta in aceeasi scriere.
+   *
+   * ⚠ NU SE SUPRASCRIE una scrisa deja: acolo comerciantul a ales, si alegerea lui e mai tare.
+   */
+  const deInghetat: Record<string, unknown> = {};
+  if (!listing.remote_poate_exista) deInghetat.remote_poate_exista = true;
+  if (listing.category_id == null && categoria != null) deInghetat.category_id = categoria;
+  if (Object.keys(deInghetat).length > 0) {
     const { error: ePoate } = await admin.from("aboutyou_listings")
-      .update({ remote_poate_exista: true } as never).eq("id", listing.id);
+      .update(deInghetat as never).eq("id", listing.id);
     if (ePoate) {
       return {
         ok: false, status: 0,

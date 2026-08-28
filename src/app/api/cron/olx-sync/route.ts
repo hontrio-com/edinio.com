@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { patchOlxConfig } from "@/lib/olx/config";
 import { logError } from "@/lib/error-logger";
 import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
-  loadOlxContext, processQueueItem, refreshAdvertStatus, pause,
+  loadOlxContext, processQueueItem, refreshAdvertStatus, pause, type RezultatContext,
   PRODUCT_FIELDS, type OlxQueueItem, type OlxSyncContext,
 } from "@/lib/olx/sync";
 import { advertCommand } from "@/lib/olx/client";
@@ -21,6 +22,18 @@ const QUEUE_BATCH = 30;
 const STATUS_BATCH = 25;
 const EXTEND_BATCH = 15;
 const MAX_ATTEMPTS = 5;
+
+/**
+ * Cat se asteapta pana la incercarea urmatoare.
+ *
+ * ⚠ Crescator si PLAFONAT: fara plafon, a cincea asteptare ar fi de ore, iar o modificare de pret
+ * ar sta degeaba dupa ce OLX si-a revenit demult. Cu plafon la un sfert de ora, cele cinci
+ * incercari se intind peste vreo jumatate de ora — destul cat sa treaca o pana obisnuita.
+ */
+function asteptareaUrmatoare(attempts: number): string {
+  const minute = Math.min(15, 2 ** Math.max(0, attempts - 1));
+  return new Date(Date.now() + minute * 60_000).toISOString();
+}
 const PACE_MS = 300;
 
 function verifyCron(req: NextRequest): boolean {
@@ -43,13 +56,13 @@ export async function GET(req: NextRequest) {
 
   const now = new Date().toISOString();
   let processed = 0, failed = 0, statusChecked = 0, extended = 0;
-  const ctxCache = new Map<string, OlxSyncContext | null>();
+  const ctxCache = new Map<string, RezultatContext>();
 
-  async function ctxFor(businessId: string): Promise<OlxSyncContext | null> {
+  async function ctxFor(businessId: string): Promise<RezultatContext> {
     if (ctxCache.has(businessId)) return ctxCache.get(businessId)!;
-    const ctx = await loadOlxContext(admin, businessId);
-    ctxCache.set(businessId, ctx);
-    return ctx;
+    const r = await loadOlxContext(admin, businessId);
+    ctxCache.set(businessId, r);
+    return r;
   }
 
   // ── 1) Drain the sync queue, grouped by business ────────────────────────────────
@@ -80,12 +93,40 @@ export async function GET(req: NextRequest) {
   }
 
   for (const [businessId, items] of byBiz) {
-    const ctx = await ctxFor(businessId);
-    if (!ctx) {
-      // Not connected / token dead — drop queued work so it doesn't pile up.
-      for (const it of items) await stergeDacaNeschimbat(admin, COADA, it);
+    const r = await ctxFor(businessId);
+    if (r.stare !== "gata") {
+      /*
+       * ═══ ⚠ NUMAI „DECONECTAT" INDREPTATESTE STERGEREA (29.08.2026, noaptea) ═══
+       *
+       * Pana azi se stergea la orice `null` — inclusiv la o pana de retea de cinci secunde in
+       * reimprospatarea tokenului. Adica pretul si stocul cerute de comerciant se aruncau definitiv,
+       * pentru o clipa proasta, fara ca nimeni sa afle.
+       *
+       * ⚠ Deconectat: lucrarile chiar n-au unde pleca — se sterg, ca sa nu se adune la nesfarsit.
+       * ⚠ Cere reconectare / trecatoare: se ASTEAPTA. Elementul ramane in coada, cu asteptare
+       * crescatoare; daca omul reconecteaza maine, pleaca de la sine.
+       */
+      if (r.stare === "deconectat") {
+        for (const it of items) await stergeDacaNeschimbat(admin, COADA, it);
+        continue;
+      }
+      for (const it of items) {
+        const attempts = (it.attempts ?? 0) + 1;
+        await scrieDacaNeschimbat(admin, COADA, it, {
+          attempts,
+          last_error: r.motiv.slice(0, 500),
+          next_retry_at: asteptareaUrmatoare(attempts),
+          ...(attempts >= MAX_ATTEMPTS ? { abandonat_la: now } : {}),
+        });
+      }
+      await logError({
+        action: "olx-sync", severity: r.stare === "cere-reconectare" ? "warning" : "info",
+        message: `lucrarile OLX asteapta (${r.stare}): ${r.motiv}`,
+        details: { cate: items.length }, businessId,
+      });
       continue;
     }
+    const ctx = r.ctx;
 
     // Preload products needed for upserts (single query).
     const upsertIds = items.filter((i) => i.op === "upsert" && i.product_id).map((i) => i.product_id!) as string[];
@@ -107,15 +148,35 @@ export async function GET(req: NextRequest) {
       } else {
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
+        /*
+         * ═══ ⚠ MUNCA TRECATOARE NU SE MAI ARUNCA (29.08.2026, noaptea) ═══
+         *
+         * La a cincea incercare se STERGEA elementul. Dar `permanent` e deja tratat mai sus, deci
+         * aici sunt doar cauze trecatoare: `429`, `500`, retea. O pana OLX de o jumatate de ora
+         * consuma cele cinci incercari intr-un minut si arunca definitiv modificarea — iar pretul
+         * ramane vechi la ei pana cand omul mai atinge produsul, poate niciodata.
+         *
+         * ⚠ Acum: asteptare crescatoare intre incercari, si la capat SCRISORI MOARTE, nu stergere.
+         * `abandonat_la` scoate elementul din revendicare, dar il lasa vizibil — cu de cate ori s-a
+         * incercat si cu ultima eroare. Sters, n-ar mai fi ramas nici macar intrebarea.
+         */
+        await scrieDacaNeschimbat(admin, COADA, item, {
+          attempts,
+          last_error: res.error.slice(0, 500),
+          next_retry_at: asteptareaUrmatoare(attempts),
+          ...(attempts >= MAX_ATTEMPTS ? { abandonat_la: now } : {}),
+        });
         if (attempts >= MAX_ATTEMPTS) {
-          await stergeDacaNeschimbat(admin, COADA, item);
-        } else {
-          await scrieDacaNeschimbat(admin, COADA, item, { attempts, last_error: res.error.slice(0, 500) });
+          await logError({
+            action: "olx-sync", severity: "critical",
+            message: `o lucrare OLX a fost abandonata dupa ${attempts} incercari: ${res.error.slice(0, 200)}`,
+            details: { offerId: item.offer_id, op: item.op }, businessId,
+          });
         }
       }
       await pause(PACE_MS);
     }
-    await patchConfig(admin, businessId, { last_sync_at: now });
+    await patchOlxConfig(admin, businessId, { last_sync_at: now });
   }
 
   // ── 2) Poll statuses — prioritize freshly-posted (`new`) adverts ────────────────
@@ -133,7 +194,8 @@ export async function GET(req: NextRequest) {
 
   for (const row of toPoll ?? []) {
     if (!row.olx_advert_id) continue;
-    const ctx = await ctxFor(row.business_id);
+    const rCtx = await ctxFor(row.business_id);
+    const ctx = rCtx.stare === "gata" ? rCtx.ctx : null;
     if (!ctx) continue;
     await refreshAdvertStatus(admin, ctx, row.id, row.olx_advert_id);
     statusChecked++;
@@ -155,8 +217,9 @@ export async function GET(req: NextRequest) {
 
   for (const row of expiring ?? []) {
     if (!row.olx_advert_id) continue;
-    const ctx = await ctxFor(row.business_id);
-    if (!ctx || ctx.config.auto_extend !== true) continue;
+    const rExt = await ctxFor(row.business_id);
+    if (rExt.stare !== "gata" || rExt.ctx.config.auto_extend !== true) continue;
+    const ctx = rExt.ctx;
     const res = await advertCommand(ctx.token, row.olx_advert_id, "extend");
     if (!("error" in res)) {
       extended++;
@@ -169,10 +232,3 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, processed, failed, statusChecked, extended });
 }
 
-async function patchConfig(admin: Admin, businessId: string, patch: Partial<OlxConfig>) {
-  const { data: ss } = await admin.from("store_settings").select("olx_config").eq("business_id", businessId).single();
-  const config = (ss?.olx_config as OlxConfig) ?? {};
-  await admin.from("store_settings")
-    .update({ olx_config: { ...config, ...patch } as never })
-    .eq("business_id", businessId);
-}

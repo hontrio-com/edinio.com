@@ -17,6 +17,23 @@ import type { OlxConfig } from "./types";
  * (21.08), cererea de punere la coada a cazut, si nimeni n-a aflat. Preturile
  * s-au schimbat in magazin, la marketplace au ramas cele vechi, iar in panou nu
  * scria nimic. A fost gasit abia cand a intrebat el, dupa o zi.
+ *
+ * ═══ ⚠ SI `catch` NU PRINDEA NIMIC (29.08.2026, noaptea) ═══
+ *
+ * Nota de mai sus era scrisa de mult si suna ca o problema rezolvata. Nu era: `supabase-js` NU
+ * arunca la o eroare PostgREST, o INTOARCE in `{ error }`. Iar niciuna din cele trei functii nu-l
+ * citea. Deci `try/catch`-ul de aici pazea doar caderile de retea ale clientului — tocmai cazul
+ * rar —, iar un refuz al bazei se scurgea in tacere, exact ca inainte de nota.
+ *
+ * Cel mai scump drum:
+ *
+ *     produs sters din Edinio -> trebuie un DELETE la OLX
+ *     punerea la coada pica (RLS, coloana, orice) -> `{ error }` intors, nimeni nu-l citeste
+ *     produsul dispare din magazin
+ *     -> anuntul ramane ACTIV la OLX, si nimic nu mai stie de el ❌
+ *
+ * ⚠ Si citirea configului la fel: inghitita, `config` iesea `{}`, `connected` iesea fals, si
+ * functia se intorcea linistita — adica „magazinul n-are OLX" spus pe baza unei pene.
  */
 function scrieEsecul(unde: string, businessId: string, e: unknown): void {
   void logError({
@@ -36,15 +53,19 @@ export async function enqueueOlxSync(
 ): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data: ss } = await admin
+    const { data: ss, error: eConfig } = await admin
       .from("store_settings").select("olx_config").eq("business_id", businessId).single();
+    /* ⚠ O pana nu inseamna „magazinul n-are OLX": aruncam, ca `scrieEsecul` s-o vada. */
+    if (eConfig) throw new Error(`configul OLX nu s-a putut citi: ${eConfig.message}`);
     const config = (ss?.olx_config as OlxConfig) ?? {};
     if (!config.connected || !config.refresh_token) return;
     if (config.auto_sync === false) return;
-    await admin.from("olx_sync_queue").upsert(
+    const { error: eCoada } = await admin.from("olx_sync_queue").upsert(
       { business_id: businessId, product_id: productId, offer_id: offerId, op },
       { onConflict: "business_id,offer_id,op" },
     );
+    /* ⚠ `supabase-js` NU arunca la o eroare PostgREST: o intoarce. Vezi nota de sus. */
+    if (eCoada) throw new Error(`punerea in coada OLX a picat: ${eCoada.message}`);
   } catch (e) {
     scrieEsecul("coada", businessId, e);
   }
@@ -57,14 +78,17 @@ export async function enqueueOlxSyncMany(businessId: string, productIds: (string
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
     if (ids.length === 0) return;
     const admin = createAdminClient();
-    const { data: ss } = await admin
+    const { data: ss, error: eConfig } = await admin
       .from("store_settings").select("olx_config").eq("business_id", businessId).single();
+    if (eConfig) throw new Error(`configul OLX nu s-a putut citi: ${eConfig.message}`);
     const config = (ss?.olx_config as OlxConfig) ?? {};
     if (!config.connected || !config.refresh_token || config.auto_sync === false) return;
-    await admin.from("olx_sync_queue").upsert(
+    const { error: eCoada } = await admin.from("olx_sync_queue").upsert(
       ids.map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op: "upsert" })),
       { onConflict: "business_id,offer_id,op" },
     );
+    /* ⚠ `supabase-js` NU arunca la o eroare PostgREST: o intoarce. Vezi nota de sus. */
+    if (eCoada) throw new Error(`punerea in coada OLX a picat: ${eCoada.message}`);
   } catch (e) {
     scrieEsecul("coada", businessId, e);
   }
@@ -94,14 +118,17 @@ export async function enqueueOlxStergereMany(businessId: string, productIds: (st
     const ids = [...new Set(productIds.filter((x): x is string => !!x))];
     if (ids.length === 0) return;
     const admin = createAdminClient();
-    const { data: ss } = await admin
+    const { data: ss, error: eConfig } = await admin
       .from("store_settings").select("olx_config").eq("business_id", businessId).single();
+    if (eConfig) throw new Error(`configul OLX nu s-a putut citi: ${eConfig.message}`);
     const config = (ss?.olx_config as OlxConfig) ?? {};
     if (!config.connected || !config.refresh_token || config.auto_sync === false) return;
-    await admin.from("olx_sync_queue").upsert(
+    const { error: eCoada } = await admin.from("olx_sync_queue").upsert(
       ids.map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete" })),
       { onConflict: "business_id,offer_id,op" },
     );
+    /* ⚠ `supabase-js` NU arunca la o eroare PostgREST: o intoarce. Vezi nota de sus. */
+    if (eCoada) throw new Error(`punerea in coada OLX a picat: ${eCoada.message}`);
   } catch (e) {
     scrieEsecul("coada", businessId, e);
   }

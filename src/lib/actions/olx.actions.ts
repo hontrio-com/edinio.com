@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { patchOlxConfig } from "@/lib/olx/config";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { logError } from "@/lib/error-logger";
 import {
@@ -185,10 +186,34 @@ export async function disconnectOlx(businessId: string): Promise<{ success: true
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  await saveConfig(supabase, businessId, {});
+  /*
+   * ═══ ⚠ DECONECTAREA MERGEA OARBA PE TREI SCRIERI (29.08.2026, noaptea) ═══
+   *
+   * Cea mai proasta iesire: configul NEsters, dar anunturile si coada sterse — un cont care pare
+   * inca legat, fara nicio stare locala, deci nici nu mai poate trimite, nici nu mai poate retrage.
+   *
+   * ⚠ INTAI SE SCRIE CA E DECONECTAT, si daca asta nu intra nu se sterge nimic: cel mai rau caz
+   * devine „a ramas conectat, mai incearca" — o stare intreaga, nu una pe jumatate. Aceeasi ordine
+   * ca la About You.
+   */
+  if (!await saveConfig(supabase, businessId, {})) {
+    return { error: "Nu am putut salva deconectarea. Încearcă din nou." };
+  }
   const admin = createAdminClient();
-  await admin.from("olx_adverts").delete().eq("business_id", businessId);
-  await admin.from("olx_sync_queue").delete().eq("business_id", businessId);
+  const resturi: string[] = [];
+  for (const tabel of ["olx_sync_queue", "olx_adverts"] as const) {
+    const { error } = await admin.from(tabel).delete().eq("business_id", businessId);
+    if (error) resturi.push(`${tabel}: ${error.message}`);
+  }
+  if (resturi.length > 0) {
+    /* ⚠ Nu opreste deconectarea — configul e deja sters, deci magazinul E deconectat — dar se
+       scrie, ca resturile sa poata fi gasite. */
+    logError({
+      action: "olx.disconnect", severity: "warning",
+      message: `magazinul e deconectat, dar au ramas randuri nesterse: ${resturi.join(" | ")}`,
+      details: { businessId }, businessId,
+    });
+  }
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -226,8 +251,16 @@ export async function saveOlxSettings(businessId: string, input: OlxSettingsInpu
     auto_sync: input.auto_sync ?? config.auto_sync,
     auto_extend: input.auto_extend ?? config.auto_extend,
   };
-  const ok = await saveConfig(supabase, businessId, next);
-  if (!ok) return { error: "Eroare la salvare." };
+  /*
+   * ⚠ PETIC, NU CONFIG INTREG (29.08.2026, noaptea). Scris intreg, salvarea asta rescria si
+   * tokenul citit cu o clipa inainte — iar daca intre timp se reimprospatase, refresh tokenul NOU
+   * era inlocuit cu cel vechi si conexiunea murea la urmatoarea reimprospatare.
+   */
+  try {
+    await patchOlxConfig(createAdminClient(), businessId, next);
+  } catch {
+    return { error: "Eroare la salvare." };
+  }
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -285,8 +318,12 @@ export async function saveOlxCategoryMapEntry(
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];
   else map[edinioCategory] = entry;
-  const ok = await saveConfig(supabase, businessId, { ...config, category_map: map });
-  if (!ok) return { error: "Eroare la salvare." };
+  /* ⚠ Ca mai sus: se scrie doar harta, nu configul intreg peste care sta si tokenul. */
+  try {
+    await patchOlxConfig(createAdminClient(), businessId, { category_map: map });
+  } catch {
+    return { error: "Eroare la salvare." };
+  }
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -310,8 +347,21 @@ export async function publishOlxProduct(businessId: string, productId: string): 
   }
 
   const admin = createAdminClient();
-  const ctx = await loadOlxContext(admin, businessId);
-  if (!ctx) return { error: "Conexiunea OLX nu este disponibila. Reconecteaza contul." };
+  const r = await loadOlxContext(admin, businessId);
+  if (r.stare !== "gata") {
+    /*
+     * ⚠ Cele trei feluri de „nu acum" nu se spun la fel: unul cere o apasare pe „Conectează",
+     * altul cere doar rabdare. Spuse la fel, omul reconecteaza degeaba un cont sanatos.
+     */
+    return {
+      error: r.stare === "deconectat"
+        ? "Contul OLX nu este conectat. Conectează-l din Integrări > OLX."
+        : r.stare === "cere-reconectare"
+          ? "Sesiunea OLX a expirat. Reconectează contul OLX."
+          : "OLX nu răspunde acum. Încearcă din nou peste câteva minute.",
+    };
+  }
+  const ctx = r.ctx;
 
   /*
    * ⚠ APASAREA ASTA E CHIAR IESIREA DIN „STERS DE OM". Stergerea unui anunt lasa o urma tocmai ca
@@ -388,8 +438,21 @@ export async function deactivateOlxProduct(businessId: string, productId: string
   const g = await guard(businessId);
   if ("error" in g) return g;
   const admin = createAdminClient();
-  const ctx = await loadOlxContext(admin, businessId);
-  if (!ctx) return { error: "Conexiunea OLX nu este disponibila." };
+  const r = await loadOlxContext(admin, businessId);
+  if (r.stare !== "gata") {
+    /*
+     * ⚠ Cele trei feluri de „nu acum" nu se spun la fel: unul cere o apasare pe „Conectează",
+     * altul cere doar rabdare. Spuse la fel, omul reconecteaza degeaba un cont sanatos.
+     */
+    return {
+      error: r.stare === "deconectat"
+        ? "Contul OLX nu este conectat. Conectează-l din Integrări > OLX."
+        : r.stare === "cere-reconectare"
+          ? "Sesiunea OLX a expirat. Reconectează contul OLX."
+          : "OLX nu răspunde acum. Încearcă din nou peste câteva minute.",
+    };
+  }
+  const ctx = r.ctx;
   const res = await deactivateProductNow(admin, ctx, businessId, productId);
   if (!res.ok) return { error: res.error };
   revalidatePath(FEATURE_PATH);
@@ -400,8 +463,21 @@ export async function activateOlxProduct(businessId: string, productId: string):
   const g = await guard(businessId);
   if ("error" in g) return g;
   const admin = createAdminClient();
-  const ctx = await loadOlxContext(admin, businessId);
-  if (!ctx) return { error: "Conexiunea OLX nu este disponibila." };
+  const r = await loadOlxContext(admin, businessId);
+  if (r.stare !== "gata") {
+    /*
+     * ⚠ Cele trei feluri de „nu acum" nu se spun la fel: unul cere o apasare pe „Conectează",
+     * altul cere doar rabdare. Spuse la fel, omul reconecteaza degeaba un cont sanatos.
+     */
+    return {
+      error: r.stare === "deconectat"
+        ? "Contul OLX nu este conectat. Conectează-l din Integrări > OLX."
+        : r.stare === "cere-reconectare"
+          ? "Sesiunea OLX a expirat. Reconectează contul OLX."
+          : "OLX nu răspunde acum. Încearcă din nou peste câteva minute.",
+    };
+  }
+  const ctx = r.ctx;
   const res = await activateProductNow(admin, ctx, businessId, productId);
   if (!res.ok) return { error: res.error };
   revalidatePath(FEATURE_PATH);
@@ -412,8 +488,21 @@ export async function deleteOlxAdvert(businessId: string, offerId: string): Prom
   const g = await guard(businessId);
   if ("error" in g) return g;
   const admin = createAdminClient();
-  const ctx = await loadOlxContext(admin, businessId);
-  if (!ctx) return { error: "Conexiunea OLX nu este disponibila." };
+  const r = await loadOlxContext(admin, businessId);
+  if (r.stare !== "gata") {
+    /*
+     * ⚠ Cele trei feluri de „nu acum" nu se spun la fel: unul cere o apasare pe „Conectează",
+     * altul cere doar rabdare. Spuse la fel, omul reconecteaza degeaba un cont sanatos.
+     */
+    return {
+      error: r.stare === "deconectat"
+        ? "Contul OLX nu este conectat. Conectează-l din Integrări > OLX."
+        : r.stare === "cere-reconectare"
+          ? "Sesiunea OLX a expirat. Reconectează contul OLX."
+          : "OLX nu răspunde acum. Încearcă din nou peste câteva minute.",
+    };
+  }
+  const ctx = r.ctx;
   const res = await deleteAdvertNow(admin, ctx, businessId, offerId);
   if (!res.ok) return { error: res.error };
   revalidatePath(FEATURE_PATH);

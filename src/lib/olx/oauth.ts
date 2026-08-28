@@ -12,6 +12,7 @@ import crypto from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { OlxConfig } from "./types";
+import { patchOlxConfig } from "./config";
 
 type Db = SupabaseClient<Database>;
 
@@ -122,15 +123,13 @@ export async function ensureMerchantToken(
   const res = await refreshTokens(config.refresh_token);
   if ("error" in res) {
     if (res.invalidGrant) {
-      const patched: OlxConfig = { ...config, needs_reconnect: true };
-      await persistConfig(db, businessId, patched);
+      await persistConfig(db, businessId, { needs_reconnect: true });
       return { error: "Sesiunea OLX a expirat. Reconecteaza contul OLX.", needsReconnect: true };
     }
     return { error: res.error, needsReconnect: false };
   }
 
-  const patched: OlxConfig = {
-    ...config,
+  const petic: Partial<OlxConfig> = {
     access_token: res.accessToken,
     access_token_expires_at: res.expiresAt,
     // Rotation: keep the new refresh token when one is issued.
@@ -138,18 +137,53 @@ export async function ensureMerchantToken(
     token_updated_at: new Date().toISOString(),
     needs_reconnect: false,
   };
-  await persistConfig(db, businessId, patched);
-  return { token: res.accessToken, config: patched };
+  const scris = await persistConfig(db, businessId, petic);
+
+  /*
+   * ═══ ⚠ UN REFRESH TOKEN ROTIT SI NESCRIS INSEAMNA CONEXIUNE MOARTA (29.08.2026, noaptea) ═══
+   *
+   * OLX roteste refresh tokenul: cand da unul nou, cel vechi nu mai e bun. Pana azi scrierea mergea
+   * oarba si se raporta oricum sanatate:
+   *
+   *     avem R1 -> OLX ne da A2 + R2
+   *     scrierea lui R2 pica -> in baza ramane R1
+   *     mergem mai departe cu A2, deci totul pare bine
+   *     A2 expira -> incercam iar cu R1, care nu mai e bun -> „reconecteaza contul" ❌
+   *
+   * ⚠ DEOSEBIREA E CHIAR ROTATIA. Daca ei NU ne-au dat alt refresh token, cel din baza e inca bun:
+   * o scriere picata costa doar o reimprospatare in plus, deci se merge mai departe. Daca ne-au dat
+   * unul nou si nu l-am scris, singurul martor al conexiunii e in memoria procesului asta — si
+   * moare cu el. Atunci NU se raporteaza sanatate.
+   */
+  const rotit = !!res.refreshToken && res.refreshToken !== config.refresh_token;
+  if (!scris && rotit) {
+    return {
+      error: "Nu am putut salva sesiunea OLX reînnoită; se reia.",
+      needsReconnect: false,
+    };
+  }
+  return { token: res.accessToken, config: { ...config, ...petic } };
 }
 
-async function persistConfig(db: Db, businessId: string, config: OlxConfig): Promise<void> {
+/**
+ * Scrie un petic peste configul OLX, si SPUNE daca a intrat.
+ *
+ * ═══ ⚠ ERA O PAZA CARE NU SE PUTEA APRINDE (29.08.2026, noaptea) ═══
+ *
+ * Avea `try/catch` in jurul unei cereri care NU arunca: `supabase-js` intoarce `{ error }` la o
+ * eroare PostgREST. Deci `catch`-ul prindea doar caderile de retea ale clientului, iar un refuz al
+ * bazei se scurgea tacut — si comentariul „best-effort — next call refreshes again" nu era
+ * adevarat pentru cazul care conteaza.
+ *
+ * ⚠ SI SCRIE UN PETIC, NU CONFIGUL INTREG. Scris intreg, doua salvari care se suprapun se calca —
+ * iar cea mai scumpa de pierdut e chiar cea de aici, fiindca refresh tokenul SE ROTESTE.
+ */
+async function persistConfig(db: Db, businessId: string, patch: Partial<OlxConfig>): Promise<boolean> {
   try {
-    await db
-      .from("store_settings")
-      .update({ olx_config: config as never, updated_at: new Date().toISOString() })
-      .eq("business_id", businessId);
+    await patchOlxConfig(db, businessId, patch);
+    return true;
   } catch {
-    // best-effort — next call refreshes again
+    return false;
   }
 }
 

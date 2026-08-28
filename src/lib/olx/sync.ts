@@ -53,17 +53,52 @@ export function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export async function loadOlxContext(admin: Db, businessId: string): Promise<OlxSyncContext | null> {
-  const { data: ss } = await admin
+/**
+ * De ce nu se poate lucra acum cu OLX.
+ *
+ * ═══ ⚠ `null` INSEMNA CINCI LUCRURI DEOSEBITE (29.08.2026, noaptea) ═══
+ *
+ * `loadOlxContext` intorcea `null` si pentru „magazinul nu e conectat", si pentru „OLX n-a
+ * raspuns la reimprospatarea tokenului", si pentru „baza a picat". Iar cronul citea `null` ca
+ * „deconectat" si STERGEA lucrarile revendicate:
+ *
+ *     OLX are o pana de retea de cinci secunde
+ *     reimprospatarea tokenului pica -> `null`
+ *     cronul sterge definitiv elementele din coada ❌
+ *     -> pretul si stocul raman vechi la OLX, pana cand omul mai atinge produsul
+ *
+ * ⚠ Deosebirea nu e un rafinament, e chiar hotararea: numai „deconectat" indreptateste stergerea.
+ */
+export type RezultatContext =
+  | { stare: "gata"; ctx: OlxSyncContext }
+  /** Magazinul chiar n-are OLX legat: lucrarile ramase n-au unde pleca. */
+  | { stare: "deconectat" }
+  /** Sesiunea a murit si cere mana omului. Lucrarile ASTEAPTA, nu se arunca. */
+  | { stare: "cere-reconectare"; motiv: string }
+  /** O pana de-o clipa: retea, OLX, baza. Se reia. */
+  | { stare: "trecatoare"; motiv: string };
+
+export async function loadOlxContext(admin: Db, businessId: string): Promise<RezultatContext> {
+  const { data: ss, error: eConfig } = await admin
     .from("store_settings").select("olx_config").eq("business_id", businessId).single();
+  /* ⚠ O citire picata NU inseamna „nu e conectat": ar duce la stergerea cozii pentru o pana. */
+  if (eConfig) return { stare: "trecatoare", motiv: `configul nu s-a putut citi: ${eConfig.message}` };
   const config = (ss?.olx_config as OlxConfig) ?? {};
-  if (!config.connected || !config.refresh_token) return null;
+  if (!config.connected || !config.refresh_token) return { stare: "deconectat" };
+
   const tok = await ensureMerchantToken(admin, businessId, config);
-  if ("error" in tok) return null;
-  const { data: biz } = await admin
+  if ("error" in tok) {
+    /* ⚠ `needsReconnect` e chiar deosebirea pe care ei ne-o spun: `invalid_grant` fata de restul. */
+    return tok.needsReconnect
+      ? { stare: "cere-reconectare", motiv: tok.error }
+      : { stare: "trecatoare", motiv: tok.error };
+  }
+
+  const { data: biz, error: eBiz } = await admin
     .from("businesses").select("slug, custom_domain, store_name, business_name").eq("id", businessId).single();
-  if (!biz) return null;
-  return { token: tok.token, config: tok.config, business: biz as MappableBusiness };
+  if (eBiz) return { stare: "trecatoare", motiv: `magazinul nu s-a putut citi: ${eBiz.message}` };
+  if (!biz) return { stare: "deconectat" };
+  return { stare: "gata", ctx: { token: tok.token, config: tok.config, business: biz as MappableBusiness } };
 }
 
 // Retryable = network, rate-limit, auth hiccup, 5xx. Permanent = validation.

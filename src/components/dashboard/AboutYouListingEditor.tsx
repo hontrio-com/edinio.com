@@ -265,6 +265,14 @@ export function AboutYouListingEditor({
     }));
     return {
       brand_id: brandId,
+      /*
+       * ⚠ DE LA CE LISTARE A PORNIT OMUL. Serverul o reciteste la salvare, dar atunci ar vedea
+       * lumea de ACUM — iar intre deschiderea editorului si „Salvează" trec minute in care
+       * listarea poate fi eliminata. Fara asta, salvarea ar crea alta in locul ei.
+       *
+       * ⚠ `null` cand editorul s-a deschis fara listare: chiar atunci crearea e ce trebuie.
+       */
+      incarnare: data?.listing?.id ?? null,
       category_id: categoryId,
       color_id: colorId,
       attributes: Object.values(attrSel).flat().filter((x): x is number => !!x),

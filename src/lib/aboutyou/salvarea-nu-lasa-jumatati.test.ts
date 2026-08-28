@@ -98,10 +98,29 @@ test("salvarea spune de la ce incarnare a pornit", () => {
    */
   assert.match(corp, /p_listare_asteptata:\s*incarnarea/,
     "RPC-ul primeste randul de la care a pornit salvarea");
-  assert.match(corp, /const incarnarea = \(existent as \{ id: string \} \| null\)\?\.id \?\? null;/);
+  /*
+   * ⚠ SI VINE DIN BROWSER, NU DINTR-O RECITIRE. Recitita pe server, paza acoperea doar fereastra
+   * dintre cererile acestei actiuni — cateva sute de milisecunde. Fereastra adevarata e cat sta
+   * editorul deschis: minute. Numai browserul stie de la ce a pornit OMUL.
+   */
+  assert.match(corp, /input\.incarnare !== undefined/,
+    "incarnarea trimisa de browser bate recitirea de pe server");
+  /* ⚠ `undefined` (fila veche) cade pe citirea serverului; `null` inseamna anume „fara listare". */
+  assert.match(corp, /\?\s*input\.incarnare[\s\S]{0,120}?existent as \{ id: string \} \| null/);
+  /* ⚠ Si editorul chiar il trimite — altfel jumatatea de sus e o teorie. */
+  const editor = readFileSync("src/components/dashboard/AboutYouListingEditor.tsx", "utf8");
+  assert.match(editor, /incarnare: data\?\.listing\?\.id \?\? null,/);
   /* ⚠ Si `depasit` are mesajul lui, cu iesire scrisa — nu cade in eroarea generica. */
   assert.match(corp, /if \(r\.stare === "depasit"\)/);
-  assert.match(corp, /salvează-l ca listare nouă/);
+  /*
+   * ⚠ Mesajul spunea „salvează-l ca listare nouă", dar butonul se numeste doar „Salvează" — o
+   * iesire catre un buton care nu exista. Si tacea despre pret: variantele pleaca odata cu
+   * listarea (`ON DELETE CASCADE`), deci ce a completat omul chiar nu se mai poate pastra.
+   */
+  assert.match(corp, /ce ai completat acum nu se poate păstra/);
+  assert.doesNotMatch(corp, /salvează-l ca listare nouă/);
+  /* ⚠ Si semnul de trimitere se retrage: ramas, ar cere o trimitere pentru o listare inexistenta. */
+  assert.match(corp, /if \(siTrimite\) \{[\s\S]{0,220}?from\("aboutyou_intentii"\)\.delete\(\)/);
 });
 
 test("coliziunea de SKU se judeca pe cheia de stil, nu pe id-ul randului", () => {
@@ -155,4 +174,16 @@ test("raspunsul salvarii se citeste, nu se presupune", () => {
     "si raspunsul variantelor se citeste, nu doar cel al listarii");
   assert.match(corp, /if\s*\(r\.stare !== "scris"\)/,
     "orice alt raspuns decat „scris” opreste salvarea");
+});
+
+test("„nu găsesc funcția” nu se imbraca in „ai SKU-uri duplicate”", () => {
+  /*
+   * ⚠ `PGRST202` apare cat timp memoria de scheme a lui PostgREST e mai veche decat baza — cateva
+   * secunde dupa o desfasurare. Imbracat in mesajul despre SKU-uri, il trimiteam pe comerciant sa
+   * caute in datele lui un defect care e al nostru, si pe care nu-l poate repara nicicum.
+   */
+  assert.match(corp, /eSalvare\?\.code === "PGRST202"/);
+  assert.match(corp, /nu ai nimic de reparat/);
+  /* ⚠ Si codul intra in jurnal, ca data viitoare sa nu mai fie nevoie de ghicit. */
+  assert.match(corp, /cod: eSalvare\?\.code/);
 });

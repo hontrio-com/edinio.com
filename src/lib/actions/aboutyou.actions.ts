@@ -865,6 +865,14 @@ export interface AboutYouEditorData {
   defaultBrandId: number | null;
   defaultBrandName: string | null;
   listing: {
+    /**
+     * Incarnarea pe care o are omul in fata.
+     *
+     * ⚠ Se trimite inapoi la salvare (`AboutYouListingInput.incarnare`) fiindca numai browserul
+     * stie de la ce a pornit el. Serverul, recitind la salvare, vede lumea de ACUM — iar intre
+     * deschiderea editorului si „Salvează" trec minute.
+     */
+    id: string;
     brand_id: number | null; category_id: number | null; color_id: number | null;
     attributes: number[]; material: AboutYouStoredMaterial | null;
     country_of_origin: string | null; hs_code: string | null; status: string;
@@ -960,6 +968,13 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
     defaultBrandId: config.brand_id ?? null,
     defaultBrandName: config.brand_name ?? null,
     listing: l ? {
+      /*
+       * ⚠ ID-UL SE DUCE PANA IN BROWSER (28.08.2026, noaptea tarziu). Salvarea il trimite inapoi
+       * si RPC-ul cere sa fie inca acelasi rand — vezi `p_listare_asteptata`. Recitit pe server
+       * la salvare, ar acoperi doar cateva sute de milisecunde; fereastra adevarata e cat sta
+       * editorul deschis, adica minute.
+       */
+      id: l.id as string,
       brand_id: (l.brand_id as number | null) ?? null,
       category_id: (l.category_id as number | null) ?? null,
       color_id: (l.color_id as number | null) ?? null,
@@ -975,6 +990,15 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
 }
 
 export interface AboutYouListingInput {
+  /**
+   * Listarea pe care o avea in fata OMUL cand a inceput sa editeze.
+   *
+   * ⚠ `null` inseamna „editorul s-a deschis fara listare" — si numai atunci se poate crea una.
+   * ⚠ `undefined` inseamna „fila e dintr-un pachet mai vechi, care inca nu-l trimite": atunci se
+   * cade pe ce citeste serverul, adica purtarea de dinainte. Deosebirea conteaza, deci nu se
+   * inlocuieste cu un singur `null`.
+   */
+  incarnare?: string | null;
   brand_id: number | null;
   category_id: number | null;
   color_id: number | null;
@@ -1206,7 +1230,26 @@ export async function saveAboutYouListing(
   const { data: existent, error: eExistent } = await admin.from("aboutyou_listings")
     .select("id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
   if (eExistent) return { error: "Nu am putut citi listarea. Încearcă din nou." };
-  const incarnarea = (existent as { id: string } | null)?.id ?? null;
+  /*
+   * ⚠ INCARNAREA VINE DIN BROWSER CAND O TRIMITE (28.08.2026, noaptea tarziu).
+   *
+   * Recitita aici, paza acoperea doar fereastra dintre cererile ACESTEI actiuni — cateva sute de
+   * milisecunde. Dar fereastra adevarata e alta, si e cu trei ordine de marime mai lata:
+   *
+   *     omul deschide editorul pe listarea L1
+   *     ⟵ AICI trec minute: completeaza marimi, EAN-uri, compozitie
+   *     intre timp scoaterea se incheie -> L1 STEARSA
+   *     apasa „Salvează" -> serverul citeste ACUM si nu mai gaseste nimic
+   *     -> `incarnarea` ar fi `null` -> se CREEAZA L2, si la „și trimite" pleaca iar la ei ❌
+   *
+   * Numai browserul stie de la ce a pornit OMUL. Serverul stie doar ce e acum.
+   *
+   * ⚠ `undefined` (fila dintr-un pachet mai vechi) cade pe citirea serverului: mai putin, dar nu
+   * mai rau decat inainte. `null` trimis anume inseamna „am deschis fara listare".
+   */
+  const incarnarea = input.incarnare !== undefined
+    ? input.incarnare
+    : (existent as { id: string } | null)?.id ?? null;
 
   /*
    * ═══ ⚠ REGULA IMUTABILITATII S-A MUTAT IN SQL (28.08.2026, noaptea) ═══
@@ -1377,13 +1420,25 @@ export async function saveAboutYouListing(
     p_campuri: campuri as never, p_randuri: variante as never,
     p_listare_asteptata: incarnarea,
   });
-  const r = rez as { stare?: string; sku?: string; variante?: { stare?: string } } | null;
+  const r = rez as { stare?: string; skuri?: unknown[]; variante?: { stare?: string } } | null;
   if (eSalvare || !r?.stare) {
     logError({
       action: "aboutyou.saveListing", severity: "error",
       message: `salvarea listarii nu s-a putut face: ${eSalvare?.message ?? "raspuns nevalid"}`,
-      details: { businessId, productId, cate: variante.length }, businessId,
+      details: { businessId, productId, cate: variante.length, cod: eSalvare?.code }, businessId,
     });
+    /*
+     * ⚠ „NU GASESC FUNCTIA" NU E O GRESEALA A OMULUI. `PGRST202` apare cat timp memoria de scheme
+     * a lui PostgREST e mai veche decat baza — cateva secunde dupa o desfasurare. Imbracat in
+     * „verifică să nu ai SKU-uri duplicate", il trimiteam sa caute in datele lui un defect care e
+     * al nostru, si pe care nu-l poate repara nicicum.
+     */
+    if (eSalvare?.code === "PGRST202") {
+      return {
+        error: "Salvarea nu e disponibilă chiar acum, fiindcă aplicația tocmai se actualizează."
+          + " Încearcă din nou peste un minut; nu ai nimic de reparat.",
+      };
+    }
     return { error: "Eroare la salvarea listării. Verifică să nu ai SKU-uri duplicate." };
   }
   /* ⚠ „Listarea nu exista" nu e acelasi lucru cu „a mers": ar iesi tacut, fara sa fi scris nimic. */
@@ -1396,9 +1451,26 @@ export async function saveAboutYouListing(
    * fara clanta.
    */
   if (r.stare === "depasit") {
+    /*
+     * ⚠ SI SEMNUL DE TRIMITERE SE RETRAGE. Scris inaintea salvarii (vezi mai sus), ramas asa ar
+     * cere o trimitere pentru o listare care nu mai exista. Plasa l-ar sterge oricum la trecerea
+     * urmatoare — dar „oricum, mai tarziu, de altcineva" nu e acelasi lucru cu „acum, de cine a
+     * facut greseala".
+     */
+    if (siTrimite) {
+      await admin.from("aboutyou_intentii").delete()
+        .eq("business_id", businessId).eq("product_id", productId).eq("op", "upsert");
+    }
+    /*
+     * ⚠ MESAJUL SPUNE SI CE SE PIERDE. „Reîncarcă pagina" suna gratis, dar variantele au plecat
+     * odata cu listarea (`ON DELETE CASCADE`), deci marimile, EAN-urile si compozitia completate
+     * acum chiar nu se mai pot pastra. Un indemn care ascunde costul se plateste o data in date si
+     * inca o data in incredere.
+     */
     return {
-      error: "Listarea a fost eliminată sau refăcută între timp, așa că nu am salvat nimic."
-        + " Reîncarcă pagina: dacă vrei produsul din nou pe About You, salvează-l ca listare nouă.",
+      error: "Listarea a fost eliminată între timp, așa că nu am salvat nimic."
+        + " Reîncarcă pagina și configureaz-o din nou: ce ai completat acum nu se poate păstra,"
+        + " fiindcă listarea la care se referea nu mai există.",
     };
   }
   /*
@@ -1413,8 +1485,18 @@ export async function saveAboutYouListing(
     };
   }
   if (r.stare === "marime-blocata") {
+    /*
+     * ⚠ SE NUMESC TOATE, NU PRIMA CARE IESE. Cu trei marimi schimbate si un singur nume in mesaj,
+     * omul repara una, apasa iar, si afla de urmatoarea — o scara urcata in alta ordine decat cea
+     * de pe ecran. Si numele veneau dintr-un `limit 1` fara `order by`, deci nici macar aceeasi
+     * de doua ori.
+     */
+    const skuri = Array.isArray(r.skuri) ? r.skuri.map(String) : [];
+    const numite = skuri.slice(0, 3).map((x) => `„${x}"`).join(", ");
+    const restul = skuri.length > 3 ? ` și încă ${skuri.length - 3}` : "";
     return {
-      error: `About You nu mai acceptă schimbarea mărimii la varianta „${r.sku ?? ""}" după ce a fost aprobată.`
+      error: `About You nu mai acceptă schimbarea mărimii după aprobare, iar tu ai schimbat-o la`
+        + ` ${skuri.length === 1 ? "varianta" : "variantele"} ${numite}${restul}.`
         + " Dezactivează varianta și adaugă una nouă, cu SKU nou, pentru mărimea corectă.",
     };
   }

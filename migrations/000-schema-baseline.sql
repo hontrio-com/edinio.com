@@ -699,7 +699,7 @@ declare
   v_nou boolean := false;
   v_chei text;
   v_straina text;
-  v_sku text;
+  v_skuri text[];
   v_variante jsonb;
   c_aprobate constant text[] := array['active', 'published', 'pending_active', 'inactive'];
 begin
@@ -747,16 +747,15 @@ begin
       return jsonb_build_object('stare', 'categorie-blocata');
     end if;
 
-    select r->>'sku' into v_sku
+    select array_agg(distinct v.sku order by v.sku) into v_skuri
       from jsonb_array_elements(p_randuri) as r
       join public.aboutyou_variants v
         on v.listing_id = v_id and v.sku = r->>'sku'
      where v.size_id is not null
        and (v.size_id is distinct from (r->>'size_id')::integer
-         or v.second_size_id is distinct from (r->>'second_size_id')::integer)
-     limit 1;
-    if v_sku is not null then
-      return jsonb_build_object('stare', 'marime-blocata', 'sku', v_sku);
+         or v.second_size_id is distinct from (r->>'second_size_id')::integer);
+    if v_skuri is not null and array_length(v_skuri, 1) > 0 then
+      return jsonb_build_object('stare', 'marime-blocata', 'skuri', to_jsonb(v_skuri));
     end if;
   end if;
 

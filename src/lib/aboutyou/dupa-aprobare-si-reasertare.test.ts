@@ -324,13 +324,31 @@ test("⚠ marimea la fel, si comparata PE SKU, nu pe pozitie", () => {
   const corp = corpulSalvarii();
   assert.match(corp, /v\.sku = r->>'sku'/, "potrivirea se face pe SKU, nu pe pozitie");
   assert.match(corp, /marime-blocata/);
+  /*
+   * ⚠ SE NUMESC TOATE, IN ORDINE. `limit 1` fara `order by` numea oricare — iar cu trei marimi
+   * schimbate, omul repara una, apasa iar, si afla de urmatoarea: o scara urcata in alta ordine
+   * decat cea de pe ecran. Si nici macar aceeasi de doua ori.
+   */
+  assert.match(corp, /array_agg\(distinct v\.sku order by v\.sku\)/,
+    "SKU-urile blocate se aduna toate, si in ordine");
+  assert.doesNotMatch(corp, /marime-blocata[\s\S]{0,80}?limit 1/,
+    "s-a intors alegerea nedeterminista a unui singur SKU");
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  assert.match(act, /skuri\.slice\(0, 3\)/, "mesajul numeste primele trei");
+  assert.match(act, /și încă \$\{skuri\.length - 3\}/, "si spune cate au mai ramas");
   /* ⚠ O varianta NOUA n-are ce sa incalce: `join` o lasa pe dinafara, ca `if (!vechea) continue`. */
   assert.match(corp, /join public\.aboutyou_variants/);
   /* ⚠ Si una a carei marime veche e nescrisa n-a fost niciodata aprobata cu o marime. */
   assert.match(corp, /v\.size_id is not null/);
   /* ⚠ `is distinct from`, nu `<>`: cu `<>`, o marime devenita null ar fi trecut neobservata. */
   assert.match(corp, /is distinct from/);
-  assert.match(actiuni, /nu mai acceptă schimbarea mărimii la varianta/);
+  /*
+   * ⚠ Textul s-a schimbat odata cu codul: de cand se numesc TOATE variantele blocate, mesajul nu
+   * mai poate spune „la varianta X". Se cere fapta — ca refuzul vorbeste despre marime dupa
+   * aprobare — si iesirea lui scrisa, nu ortografia de ieri.
+   */
+  assert.match(actiuni, /nu mai acceptă schimbarea mărimii după aprobare/);
+  assert.match(actiuni, /cu SKU nou, pentru mărimea corectă/);
   assert.doesNotMatch(actiuni, /const vechea = dupaSku\.get\(sku\);/);
 });
 
@@ -388,4 +406,30 @@ test("⚠ categoria trimisa se ingheata pe rand, altfel regula n-are ce compara"
   assert.match(sync, /listing\.category_id == null && categoria != null/);
   /* ⚠ Si daca nu se scrie, NU se trimite: aceeasi masura ca `remote_poate_exista`. */
   assert.match(sync, /if \(ePoate\) \{[\s\S]{0,200}?ok: false, status: 0/);
+});
+
+test("⚠ lista starilor aprobate e aceeasi in SQL si in avertismentul din editor", () => {
+  /*
+   * ═══ ⚠ COPIA A SUPRAVIETUIT SUB ALT NUME (28.08.2026, noaptea tarziu) ═══
+   *
+   * Cand regula s-a mutat in SQL, am scris ca „nu s-a lasat si aici o copie". Nu era adevarat:
+   * `dupaAprobare` — aceeasi lista, alt nume — statea cinci randuri mai sus, in avertismentul
+   * aratat in editor. Iar proba care pazea cerea `const APROBATE = new Set(` — deci s-a uitat la
+   * NUME, nu la continut, si a trecut verde peste chiar lucrul pe care il apara.
+   *
+   * ⚠ SI COPIA E INDREPTATITA: avertismentul prezice, nu scrie, deci nu poate chema functia — ar
+   * insemna o scriere. Ce nu e indreptatit e sa se poata DEPARTA in tacere. Deci nu se sterge,
+   * se confrunta.
+   */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  const inTs = act.match(/const dupaAprobare = new Set\(\[([^\]]+)\]\)/);
+  assert.ok(inTs, "avertismentul din editor nu mai are lista starilor aprobate");
+  const stariTs = [...inTs[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
+
+  const inSql = corpulSalvarii().match(/c_aprobate constant text\[\] := array\[([^\]]+)\]/);
+  assert.ok(inSql, "regula din SQL nu mai are lista starilor aprobate");
+  const stariSql = [...inSql[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+
+  assert.deepEqual(stariTs, stariSql,
+    "avertismentul si oprirea vorbesc despre stari diferite: unul ar minti");
 });

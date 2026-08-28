@@ -112,8 +112,13 @@ export function toOlxAdvertBody(
   config: OlxConfig,
   entry: OlxCategoryMapEntry,
 ): Record<string, unknown> {
+  /*
+   * ⚠ `photos_limit = 0` CHIAR INSEAMNA ZERO (30.08.2026). `Math.max(1, …)` trimitea o poza si
+   * atunci — iar OLX are categorii cu limita zero si raspunde „Image limit exceeded". Adica
+   * publicarea pica intreaga, pentru o poza pe care noi am hotarat s-o trimitem oricum.
+   */
   const images = (Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [])
-    .slice(0, Math.max(1, entry.photos_limit ?? 8));
+    .slice(0, Math.max(0, entry.photos_limit ?? 8));
 
   const attributes = Object.entries(entry.attributes ?? {})
     .filter(([code, v]) => !!code && (Array.isArray(v) ? v.length > 0 : String(v).trim() !== ""))

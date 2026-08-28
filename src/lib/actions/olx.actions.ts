@@ -425,8 +425,29 @@ export async function publishProductsToOlx(
 
   if (rows.length > 0) {
     const admin = createAdminClient();
+    /*
+     * ═══ ⚠ SELECTIA ANUME E CHIAR IESIREA DIN „STERS DE OM" (30.08.2026) ═══
+     *
+     * `publishOlxProduct` sterge urma, fiindca acolo omul apasa pe un produs anume. Aici alege el
+     * produsele si apasa „Publică pe OLX" — deci cere acelasi lucru, doar pentru mai multe deodata.
+     * Fara pasul asta, elementele intrau in coada, sincronizarea le sarea din cauza urmei, iar
+     * ecranul ii spunea totusi „N trimise". Un numar adevarat despre o lucrare care nu se face.
+     */
+    for (const bucata of bucatiDeIduri(rows.map((r) => r.offer_id))) {
+      const { error: eUrma } = await admin.from("olx_adverts")
+        .update({ sters_de_om_la: null } as never)
+        .eq("business_id", businessId).in("offer_id", bucata)
+        .not("sters_de_om_la", "is", null);
+      if (eUrma) return { error: "Nu am putut porni publicarea. Incearca din nou." };
+    }
+    /*
+     * ⚠ SI SCRIEREA IN COADA ISI CITESTE RASPUNSUL. Oarba, functia raporta „N trimise la OLX" cand
+     * baza acceptase zero — chiar tiparul din antetul lui `queue.ts`, pe alta cale.
+     */
     for (let i = 0; i < rows.length; i += 1000) {
-      await admin.from("olx_sync_queue").upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+      const { error: eCoada } = await admin.from("olx_sync_queue")
+        .upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+      if (eCoada) return { error: `Nu am putut pune produsele in coada OLX: ${eCoada.message}` };
     }
   }
   revalidatePath(FEATURE_PATH);
@@ -510,7 +531,7 @@ export async function deleteOlxAdvert(businessId: string, offerId: string): Prom
 }
 
 // Bulk: enqueue every sellable product that has a mapped category.
-export async function publishAllOlx(businessId: string): Promise<{ queued: number } | { error: string }> {
+export async function publishAllOlx(businessId: string): Promise<{ queued: number; sarite: number } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
@@ -524,17 +545,42 @@ export async function publishAllOlx(businessId: string): Promise<{ queued: numbe
   const products = await fetchAllRowsStrict("olx.publishAll.products", (from, to) =>
     supabase.from("products").select("id, category").eq("business_id", businessId).eq("is_active", true).order("id").range(from, to)
   );
+  const admin = createAdminClient();
+
+  /*
+   * ═══ ⚠ „PUBLICĂ TOATE" NU INVIE CE A STERS OMUL (30.08.2026) ═══
+   *
+   * Deosebirea fata de o selectie anume: aici omul n-a numit produsul. „Toate" inseamna „tot ce e
+   * de publicat", nu „desfa si hotararile mele de dinainte". Sters, un anunt ramane sters pana cand
+   * comerciantul cere el republicarea — pe produsul acela.
+   *
+   * ⚠ DAR SE SI SPUNE CATE S-AU SARIT. Puse in coada si sarite mai tarziu de sincronizare, ele ar fi
+   * intrat in numarul raportat — „N trimise" pentru o lucrare care nu se face. Numarul trebuie sa
+   * fie adevarat, chiar daca e mai mic.
+   */
+  const sterseDeOm = new Set<string>();
+  for (const bucata of bucatiDeIduri(products.map((p) => p.id as string))) {
+    const { data, error } = await admin.from("olx_adverts")
+      .select("offer_id").eq("business_id", businessId)
+      .in("offer_id", bucata).not("sters_de_om_la", "is", null);
+    if (error) return { error: `Nu am putut citi anunturile sterse: ${error.message}` };
+    for (const r of (data ?? []) as { offer_id: string }[]) sterseDeOm.add(r.offer_id);
+  }
+
   const rows = products
     .filter((p) => p.category && mappedCategories.has(p.category as string))
+    .filter((p) => !sterseDeOm.has(p.id as string))
     .map((p) => ({ business_id: businessId, product_id: p.id, offer_id: p.id, op: "upsert" as const }));
-  if (rows.length === 0) return { queued: 0 };
+  if (rows.length === 0) return { queued: 0, sarite: sterseDeOm.size };
 
-  const admin = createAdminClient();
+  /* ⚠ Si aici scrierea isi citeste raspunsul: altfel „N trimise" e o cifra despre nimic. */
   for (let i = 0; i < rows.length; i += 1000) {
-    await admin.from("olx_sync_queue").upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+    const { error: eCoada } = await admin.from("olx_sync_queue")
+      .upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+    if (eCoada) return { error: `Nu am putut pune produsele in coada OLX: ${eCoada.message}` };
   }
   revalidatePath(FEATURE_PATH);
-  return { queued: rows.length };
+  return { queued: rows.length, sarite: sterseDeOm.size };
 }
 
 export async function retryOlxProduct(businessId: string, productId: string): Promise<{ success: true } | { error: string }> {

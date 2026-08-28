@@ -2807,6 +2807,7 @@ export type Database = {
           product_id: string | null
           sters_de_om_la: string | null
           status: string
+          ultima_prelungire_la: string | null
           updated_at: string
           valid_to: string | null
         }
@@ -2825,6 +2826,7 @@ export type Database = {
           product_id?: string | null
           sters_de_om_la?: string | null
           status?: string
+          ultima_prelungire_la?: string | null
           updated_at?: string
           valid_to?: string | null
         }
@@ -2843,6 +2845,7 @@ export type Database = {
           product_id?: string | null
           sters_de_om_la?: string | null
           status?: string
+          ultima_prelungire_la?: string | null
           updated_at?: string
           valid_to?: string | null
         }

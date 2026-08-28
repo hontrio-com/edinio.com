@@ -61,6 +61,20 @@ export async function GET(req: NextRequest) {
   if (!isOlxError(me)) {
     config.olx_user_id = me.data.id;
     config.olx_user_name = me.data.name;
+    /*
+     * ═══ ⚠ CONTUL DE FIRMA SE AFLA DE LA EI, NU SE ASTEAPTA DE LA OM (30.08.2026) ═══
+     *
+     * `/users/me` ne spune `is_business` chiar la conectare. Nefolosit, un cont OLX Business ramanea
+     * la noi `advertiser_type: "private"` — iar anunturile plecau declarate gresit, pana cand omul
+     * gasea singur comutatorul. El n-avea de unde sa stie ca trebuie.
+     *
+     * ⚠ SE COMPLETEAZA DOAR CE E GOL. O reconectare (token expirat, cont schimbat) nu are voie sa
+     * calce ce a ales omul intre timp: `??=` scrie numai peste nescris.
+     */
+    if (me.data.is_business === true) config.advertiser_type ??= "business";
+    else if (me.data.is_business === false) config.advertiser_type ??= "private";
+    if (me.data.name) config.contact_name ??= me.data.name.slice(0, 100);
+    if (me.data.phone) config.contact_phone ??= String(me.data.phone).replace(/\s+/g, "");
   }
 
   /*

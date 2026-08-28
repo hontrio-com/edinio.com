@@ -206,14 +206,33 @@ export async function GET(req: NextRequest) {
   // OLX allows a manual `extend` at most once / 14 days; we extend when valid_to
   // is within 24h. `auto_extend_enabled` on the advert also covers this, but the
   // explicit command is our safety net for stores that opted in.
+  /*
+   * ═══ ⚠ PLASA BATEA IN OLX DIN MINUT IN MINUT (30.08.2026) ═══
+   *
+   * Fereastra e „expira in mai putin de 24 de ore", iar cronul porneste in fiecare minut. Un refuz
+   * al lor nu era nici citit, nici tinut minte — deci randul ramanea in aceeasi fereastra si se
+   * reincerca IAR, pana la o mie patru sute de ori intr-o zi. Iar OLX spune limpede ca un anunt nu
+   * poate fi improspatat mai des decat ingaduie tara (exemplul lor oficial: paisprezece zile).
+   *
+   * ⚠ CLIPA SE SCRIE SI LA REUSITA, SI LA REFUZ. La reusita, `valid_to` se muta abia dupa
+   * urmatoarea citire de stare — deci pana atunci randul ar fi ramas tot in fereastra.
+   */
   const soon = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
-  const { data: expiring } = await admin
+  const deIncercat = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+  const { data: expiring, error: eExpira } = await admin
     .from("olx_adverts")
     .select("id, business_id, olx_advert_id, valid_to")
     .eq("status", "active")
     .not("valid_to", "is", null)
     .lt("valid_to", soon)
+    .or(`ultima_prelungire_la.is.null,ultima_prelungire_la.lt.${deIncercat}`)
     .limit(EXTEND_BATCH);
+  if (eExpira) {
+    await logError({
+      action: "olx-sync", severity: "warning",
+      message: `anunturile care expira nu s-au putut citi: ${eExpira.message}`,
+    });
+  }
 
   for (const row of expiring ?? []) {
     if (!row.olx_advert_id) continue;
@@ -221,10 +240,23 @@ export async function GET(req: NextRequest) {
     if (rExt.stare !== "gata" || rExt.ctx.config.auto_extend !== true) continue;
     const ctx = rExt.ctx;
     const res = await advertCommand(ctx.token, row.olx_advert_id, "extend");
-    if (!("error" in res)) {
-      extended++;
-      await admin.from("olx_adverts").update({ last_status_at: null, updated_at: now }).eq("id", row.id);
+    /* ⚠ Se scrie INAINTE de a socoti reusita: si un refuz trebuie sa tina randul deoparte o zi. */
+    const { error: eMarcaj } = await admin.from("olx_adverts")
+      .update({
+        ultima_prelungire_la: now,
+        ...(!("error" in res) ? { last_status_at: null } : {}),
+        updated_at: now,
+      } as never)
+      .eq("id", row.id);
+    if (eMarcaj) {
+      /* ⚠ Nescris, randul ramane in fereastra si il batem iar peste un minut. Se vede. */
+      await logError({
+        action: "olx-sync", severity: "warning",
+        message: `prelungirea s-a incercat, dar marcajul nu s-a scris: ${eMarcaj.message}`,
+        details: { advertId: row.olx_advert_id }, businessId: row.business_id,
+      });
     }
+    if (!("error" in res)) extended++;
     await pause(PACE_MS);
   }
 

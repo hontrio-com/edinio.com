@@ -441,8 +441,31 @@ async function upsertRemote(
       return { ok: true, action: "updated", status: proaspat.status, url: proaspat.url ?? null };
     }
   }
-  // Un esec al interogarii NU opreste crearea: ar bloca publicarea la fiecare
-  // hopa de retea. Se pierde doar adoptarea, adica se revine la purtarea de azi.
+  /*
+   * ═══ ⚠ PAZA ANTI-DUPLICAT CADEA DESCHIS (30.08.2026) ═══
+   *
+   * Comentariul de aici spunea ca un esec al interogarii nu trebuie sa opreasca publicarea, „ca sa
+   * nu blocheze la fiecare hopa de retea". Suna cuminte, si e chiar pe dos: interogarea asta e
+   * SINGURA paza impotriva duplicatelor, iar ea se strica exact atunci cand duplicatul e cel mai
+   * probabil — cand OLX are probleme.
+   *
+   *     POST-ul de acum un minut a REUSIT la OLX, dar scrierea locala a picat
+   *     se reia: `GET /adverts?external_id=…` da timeout
+   *     „nu blocam publicarea" -> POST din nou
+   *     -> DOUA anunturi pentru acelasi produs, si numai unul legat la noi ❌
+   *
+   * ⚠ CREAREA E SINGURUL EFECT DIN TOT MARKETPLACE-UL CARE NU SE POATE DESFACE de la noi: al doilea
+   * anunt are alt id, nu e in `olx_adverts`, si nimeni nu-l mai gaseste vreodata. Fata de asta, o
+   * publicare intarziata cu un minut nu e nici macar o paguba.
+   *
+   * ⚠ Deci: daca nu putem VERIFICA, nu CREAM. Se reia, si atunci se verifica din nou.
+   */
+  if (isOlxError(existente)) {
+    return {
+      ok: false, permanent: false,
+      error: `Nu am putut verifica daca anuntul exista deja la OLX (${existente.status}): ${existente.error}`,
+    };
+  }
 
   const res: OlxResult<OlxAdvert> = await createAdvert(ctx.token, body);
   if (isOlxError(res)) {

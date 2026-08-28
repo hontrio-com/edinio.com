@@ -146,7 +146,19 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
             onClick={() => startSync(async () => {
               const res = await publishAllOlx(businessId);
               if ("error" in res) { toast.error(res.error); return; }
-              toast.success(res.queued > 0 ? `${res.queued} produse adăugate la publicare.` : "Niciun produs mapat de publicat.");
+              /*
+               * ⚠ CE S-A SARIT SE SPUNE, nu se tace. „Publică tot" nu invie anunturile pe care
+               * omul le-a sters dinadins — dar daca numarul ar tace despre ele, el ar crede ca
+               * pleaca si alea si s-ar mira mai tarziu ca nu apar.
+               */
+              const coada = res.queued > 0
+                ? `${res.queued} produse adăugate la publicare.`
+                : "Niciun produs mapat de publicat.";
+              const sarite = res.sarite > 0
+                ? ` ${res.sarite} ${res.sarite === 1 ? "anunț a fost șters" : "anunțuri au fost șterse"} de tine și nu se republică`
+                  + " automat: publică-le individual dacă le vrei înapoi."
+                : "";
+              toast.success(coada + sarite);
               router.refresh();
             })}
             disabled={syncing || !status.ready}>

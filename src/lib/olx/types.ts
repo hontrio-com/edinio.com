@@ -56,7 +56,21 @@ export type OlxAdvertStatus =
   | "error";             // local-only: sync failed (validation etc.)
 
 // ── API entities (subset we consume) ─────────────────────────────────────────────
-export interface OlxUser { id: number; name: string; avatar?: string | null }
+export interface OlxUser {
+  id: number;
+  name: string;
+  avatar?: string | null;
+  /**
+   * Contul e de firma, nu de persoana.
+   *
+   * ⚠ `/users/me` ni-l spune de la prima conectare, dar tipul nostru nici nu-l cuprindea — deci un
+   * cont OLX Business ramanea la noi `advertiser_type: "private"` pana il schimba omul de mana,
+   * si nici nu avea de unde sa stie ca trebuie.
+   */
+  is_business?: boolean;
+  phone?: string | null;
+  email?: string | null;
+}
 
 export interface OlxCategory {
   id: number;

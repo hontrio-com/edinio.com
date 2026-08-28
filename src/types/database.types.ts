@@ -5234,6 +5234,12 @@ export type Database = {
       editeaza_comanda_atomic: { Args: { p_order_id: string; p_business_id: string; p_patch: Json; p_produse: Json; p_variante: Json; p_status_asteptat?: string | null; p_produse_minus?: Json; p_variante_minus?: Json; p_produse_necesar?: Json; p_variante_necesar?: Json }; Returns: Json }
       scade_din_rezervat: { Args: { p_rez: Json; p_produse_minus: Json; p_variante_minus: Json; p_produse_necesar?: Json; p_variante_necesar?: Json }; Returns: Json }
       elibereaza_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: undefined }
+      /* ⚠ Scrie peticul de token DOAR daca nimeni n-a rotit de cand a citit apelantul.
+         `false` = altcineva a rotit; se reciteste, nu se scrie peste. */
+      olx_roteste_tokenul: {
+        Args: { p_business_id: string; p_vazut: string | null; p_patch: Json }
+        Returns: boolean
+      }
       jsonb_merge_config: { Args: { p_business_id: string; p_column: string; p_patch: Json }; Returns: undefined }
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
       orders_venit_zilnic: { Args: { bid: string; p_zile: number; p_deplasare?: number }; Returns: unknown }

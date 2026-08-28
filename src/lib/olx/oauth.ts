@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { OlxConfig } from "./types";
 import { patchOlxConfig } from "./config";
+import type { Json } from "@/types/database.types";
 
 type Db = SupabaseClient<Database>;
 
@@ -137,7 +138,42 @@ export async function ensureMerchantToken(
     token_updated_at: new Date().toISOString(),
     needs_reconnect: false,
   };
-  const scris = await persistConfig(db, businessId, petic);
+
+  /*
+   * ═══ ⚠ ROTATIA ARE UN SINGUR CASTIGATOR (30.08.2026) ═══
+   *
+   * Functia asta se cheama din cron, din actiuni si din callback. Doua fire care gasesc acelasi
+   * access token expirat pornesc AMANDOUA reimprospatarea, cu acelasi refresh token:
+   *
+   *     A si B citesc configul: acces expirat, refresh R1
+   *     A: OLX -> A2 + R2, scrie R2
+   *     B: OLX cu R1 -> refuz, fiindca R1 s-a consumat
+   *     B scrie peste configul SANATOS al lui A ❌
+   *
+   * ⚠ COMPARAREA NU SE POATE FACE PE TOKEN: `refresh_token` e criptat in baza, deci ce sta acolo nu
+   * se poate confrunta cu ce tine firul in mana. Dar rotatia lasa un martor necriptat —
+   * `token_updated_at` — si „nimeni n-a rotit de cand am citit eu" se spune atunci simplu.
+   *
+   * ⚠ CINE PIERDE CURSA NU SE PLANGE, RECITESTE. Celalalt fir a scris deja un token bun; a-l
+   * declara „sesiune moarta" ar trimite comerciantul sa reconecteze un cont viu.
+   */
+  const vazut = config.token_updated_at ?? null;
+  const { data: aScris, error: eRotatie } = await db.rpc("olx_roteste_tokenul", {
+    p_business_id: businessId,
+    p_vazut: vazut,
+    p_patch: petic as unknown as Json,
+  });
+
+  if (!eRotatie && aScris === false) {
+    /* Altcineva a rotit intre timp: se ia ce a scris el, nu se scrie peste. */
+    const proaspat = await citesteConfig(db, businessId);
+    if (proaspat?.access_token && proaspat.refresh_token) {
+      return { token: proaspat.access_token, config: proaspat };
+    }
+    return { error: "Sesiunea OLX se reinnoieste in alta parte; se reia.", needsReconnect: false };
+  }
+
+  const scris = eRotatie ? await persistConfig(db, businessId, petic) : true;
 
   /*
    * ═══ ⚠ UN REFRESH TOKEN ROTIT SI NESCRIS INSEAMNA CONEXIUNE MOARTA (29.08.2026, noaptea) ═══
@@ -178,6 +214,19 @@ export async function ensureMerchantToken(
  * ⚠ SI SCRIE UN PETIC, NU CONFIGUL INTREG. Scris intreg, doua salvari care se suprapun se calca —
  * iar cea mai scumpa de pierdut e chiar cea de aici, fiindca refresh tokenul SE ROTESTE.
  */
+/**
+ * Citeste configul proaspat, prin vederea care decripteaza.
+ *
+ * ⚠ Se cheama cand am PIERDUT cursa rotatiei: celalalt fir a scris deja un token bun, si pe acela
+ * il vrem — nu unul pe care tocmai l-am invalidat noi ceruind altul.
+ */
+async function citesteConfig(db: Db, businessId: string): Promise<OlxConfig | null> {
+  const { data, error } = await db
+    .from("store_settings").select("olx_config").eq("business_id", businessId).maybeSingle();
+  if (error) return null;
+  return ((data?.olx_config as OlxConfig) ?? null);
+}
+
 async function persistConfig(db: Db, businessId: string, patch: Partial<OlxConfig>): Promise<boolean> {
   try {
     await patchOlxConfig(db, businessId, patch);

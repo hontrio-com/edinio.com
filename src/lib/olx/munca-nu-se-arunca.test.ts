@@ -125,3 +125,41 @@ test("⚠ si coada chiar ocoleste ce e abandonat sau in asteptare", () => {
   assert.match(corp, /and c\.abandonat_la is null/);
   assert.match(corp, /and \(c\.next_retry_at is null or c\.next_retry_at <= now\(\)\)/);
 });
+
+/* ── Rotatia tokenului ────────────────────────────────────────────────────── */
+
+test("⚠ rotatia tokenului are un singur castigator", () => {
+  /*
+   * ═══ ⚠ DOUA FIRE PORNEAU AMANDOUA REIMPROSPATAREA (30.08.2026) ═══
+   *
+   * `ensureMerchantToken` se cheama din cron, din actiuni si din callback. Doua fire care gasesc
+   * acelasi access token expirat pleaca amandoua cu acelasi refresh token:
+   *
+   *     A: OLX -> A2 + R2, scrie R2
+   *     B: OLX cu R1 -> refuz, fiindca R1 s-a consumat
+   *     B scrie peste configul SANATOS al lui A ❌
+   *
+   * ⚠ COMPARAREA NU SE POATE FACE PE TOKEN: `refresh_token` e criptat in baza. Dar rotatia lasa un
+   * martor necriptat, `token_updated_at`, si „nimeni n-a rotit de cand am citit eu" se spune atunci
+   * simplu. Masurat pe baza adevarata: al doilea fir primeste `false`, iar peticul lui NU intra.
+   */
+  const oauth = readFileSync("src/lib/olx/oauth.ts", "utf8");
+  assert.match(oauth, /await db\.rpc\("olx_roteste_tokenul", \{/);
+  assert.match(oauth, /p_vazut: vazut,/);
+  /* ⚠ Cine pierde cursa RECITESTE, nu se plange: celalalt fir a scris deja un token bun. */
+  assert.match(oauth, /if \(!eRotatie && aScris === false\) \{[\s\S]{0,400}?citesteConfig\(db, businessId\)/);
+  assert.doesNotMatch(oauth, /aScris === false[\s\S]{0,200}?needsReconnect: true/,
+    "un fir care a pierdut cursa nu declara sesiunea moarta");
+
+  /* ⚠ Si conditia chiar e in baza, sub incuietoare — altfel doua fire ar trece amandoua de ea. */
+  const temelie = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const i = temelie.indexOf("FUNCTION public.olx_roteste_tokenul");
+  assert.notEqual(i, -1, "functia lipseste din temelie");
+  const d = temelie.indexOf("AS $function$", i);
+  const corp = temelie.slice(d, temelie.indexOf("$function$", d + 13));
+  assert.match(corp, /for update/i, "randul se incuie INAINTE de comparare");
+  assert.match(corp, /v_acum is distinct from p_vazut/,
+    "`is distinct from` acopera si cazul „niciunul nu exista inca”");
+  /* ⚠ Si nu se rescrie logica de secrete: se sprijina pe `jsonb_merge_config`. */
+  assert.match(corp, /perform public\.jsonb_merge_config\(p_business_id, 'olx_config', p_patch\)/);
+});

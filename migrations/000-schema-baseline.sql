@@ -3194,6 +3194,34 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_acum timestamptz;
+begin
+  select (olx_config->>'token_updated_at')::timestamptz into v_acum
+    from privat.store_settings
+   where business_id = p_business_id
+     for update;
+
+  if not found then
+    return false;
+  end if;
+
+  if v_acum is distinct from p_vazut then
+    return false;
+  end if;
+
+  perform public.jsonb_merge_config(p_business_id, 'olx_config', p_patch);
+  return true;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.order_customer_key(customer_phone text, customer_email text, order_id uuid)
  RETURNS text
  LANGUAGE sql
@@ -9357,6 +9385,7 @@ grant execute on function public.normalize_phone(raw text) to authenticated;
 grant execute on function public.normalize_phone(raw text) to service_role;
 grant execute on function public.numar_produse_si_comenzi() to service_role;
 grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
+grant execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) to service_role;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to anon;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to authenticated;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to service_role;
@@ -9510,6 +9539,7 @@ revoke execute on function public.mark_payout_complete(p_user_id uuid, p_amount 
 revoke execute on function public.next_order_number(p_business_id uuid) from public;
 revoke execute on function public.numar_produse_si_comenzi() from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
+revoke execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;

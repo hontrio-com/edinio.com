@@ -275,12 +275,6 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
    * sa se deconecteze.
    */
   const prev = await loadConfig(businessId);
-  if (prev.api_key && prev.webhook_subscription_id) {
-    await deleteWebhookSubscription(
-      { apiKey: prev.api_key, environment: prev.environment },
-      prev.webhook_subscription_id,
-    );
-  }
 
   /*
    * ═══ ⚠ ORDINEA E FAIL-CLOSED, CA PESTE TOT (28.08.2026, tarziu) ═══
@@ -348,6 +342,29 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
   await admin.from("aboutyou_variants").delete().eq("business_id", businessId);
   await admin.from("aboutyou_batches").delete().eq("business_id", businessId);
   await admin.from("aboutyou_listings").delete().eq("business_id", businessId);
+
+  /*
+   * ═══ ⚠ DEZABONAREA LA EI VINE LA URMA (28.08.2026, noaptea) ═══
+   *
+   * Era prima, cu explicatia ca dupa aruncarea configului nu mai avem cu ce dezabona. Adevarat, si
+   * de-aia acreditarile se citesc INAINTE, in `prev` — dar ordinea de dinainte facea posibila
+   * starea cea mai proasta dintre toate:
+   *
+   *     abonamentul sters la ei ✅
+   *     scrierea configului pica ❌
+   *     -> la noi „conectat", la ei fara abonament: nu mai vine niciun eveniment, si nimeni nu stie
+   *
+   * ⚠ INVERS E STRICT MAI BINE. Daca dezabonarea pica dupa ce am scris deconectarea, ei mai trimit
+   * o vreme evenimente catre o ruta care le ignora — zgomot, nu pierdere. Iar cronul nu mai atinge
+   * magazinul, fiindca `connected` e fals.
+   */
+  if (prev.api_key && prev.webhook_subscription_id) {
+    await deleteWebhookSubscription(
+      { apiKey: prev.api_key, environment: prev.environment },
+      prev.webhook_subscription_id,
+    );
+  }
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -1188,9 +1205,24 @@ export async function saveAboutYouListing(
     if (error) return { error: "Eroare la salvarea listării." };
     listingId = (existent as { id: string }).id;
   } else {
+    /*
+     * ═══ ⚠ GENERATIA STARII NU SE INTOARCE LA ZERO (28.08.2026, noaptea) ═══
+     *
+     * Un produs eliminat lasa o piatra de mormant cu generatia la care s-a cerut scoaterea. Daca
+     * mai tarziu e listat din nou, randul nou porneste de la 0 — iar un lot de stare foarte
+     * intarziat din viata dinainte (generatia 5) nu mai e recunoscut ca depasit fata de o listare
+     * la generatia 1. Cel vechi ar castiga, si produsul ar reveni in starea de-atunci.
+     *
+     * ⚠ GENERATIA APARTINE CHEII DE STIL, nu randului. `style_key` e acelasi la ei si dupa
+     * relistare, deci si ceasul trebuie sa fie acelasi: se porneste de dupa piatra.
+     */
+    const piatra = randCitit<{ status_generatie: number }>("aboutyou.piatraLaRelistare", await admin
+      .from("aboutyou_listari_scoase").select("status_generatie")
+      .eq("business_id", businessId).eq("style_key", productId).maybeSingle());
     const { data: nou, error } = await admin.from("aboutyou_listings").insert({
       business_id: businessId, product_id: productId, style_key: productId,
       status: "local", ...campuri,
+      ...(piatra ? { status_generatie: piatra.status_generatie + 1 } : {}),
     } as never).select("id").single();
     if (nou) {
       listingId = (nou as { id: string }).id;

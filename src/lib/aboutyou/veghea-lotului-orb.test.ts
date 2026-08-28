@@ -1149,3 +1149,110 @@ test("⚠ un SKU care a apartinut altui produs nu se mai poate refolosi", () => 
   /* ⚠ Si nu se sterge istoricul ca sa facem loc: mesajul spune de ce. */
   assert.match(act, /comenzile vechi se leag\u0103 de produse dup\u0103 SKU/);
 });
+
+
+/* ── Publicarea foloseste ACELASI invariant ca restul ─────────────────────── */
+
+test("⚠ publicarea cere operatia intreaga, nu doar „niciun frate deschis”", () => {
+  /*
+   * ═══ ⚠ DOUA DEFINITII PENTRU „TOATE LOTURILE S-AU TERMINAT” (28.08.2026, noaptea) ═══
+   *
+   * `fratiNeterminati` intreaba „mai e vreun frate in lucru?". Lista goala inseamna insa doua
+   * lucruri cu totul diferite: „toti s-au incheiat" si „ceilalti n-au apucat sa existe". Iar cea
+   * slaba pazea tocmai pasul cel mai greu de intors — publicarea.
+   *
+   * ⚠ SI NU PE DRUMUL DIN AUDIT. Un proces mort la transa 1 nu poate ajunge acolo: `pending` se
+   * scrie DUPA bucla de transe. Drumul adevarat e o listare deja `pending` din alta scriere — o
+   * apasare pe „Publica", sau o asezare in care `urmareaLotului` a intors `status: null`. Verificat
+   * de un agent care a urmarit lantul de `if/else if` pana la capat; scenariul din audit era gresit,
+   * defectul nu.
+   *
+   * ⚠ SI `stalled` NU ERA SOCOTIT NETERMINAT de `fratiNeterminati` (lipseste din lista lui de
+   * cinci statusuri), desi loturile `stalled` inca se sondeaza. `operatiaSAIncheiat` cere
+   * `completed` la toti, deci il acopera si pe el.
+   */
+  assert.match(sync, /if \(b\.citit_la && !await operatiaSAIncheiat\(admin, ctx\.businessId, "product", listing\.style_key, b\.citit_la, b\.id, b\.transe\)\)/);
+  /*
+   * ⚠ SI `citit_la` LIPSA NU ARUNCA. Un lot dinainte de coloana ar fi produs `citit_la = ""` —
+   * nu e o marca de timp, deci interogarea ar fi picat, iar `randuriCitite` ar fi doborat asezarea
+   * intregului magazin. O paza care omoara pasul pe care il pazeste nu e o paza.
+   */
+  assert.doesNotMatch(sync, /b\.citit_la \?\? ""/);
+});
+
+/* ── Scoaterea poate fi ea insasi depasita ────────────────────────────────── */
+
+test("⚠ o scoatere depasita de o cerere mai noua nu mai sterge listarea", () => {
+  /*
+   *     generatia 5
+   *     „Elimina"  -> generatia 6, lotul pleaca
+   *     „Publica"  -> generatia 7, lotul pleaca
+   *     scoaterea se incheie prima -> stergea listarea
+   *
+   * ⚠ AUDITUL A DIAGNOSTICAT GRESIT MECANISMUL, si un agent pus sa-l refuze a aratat de ce:
+   * cerea ca piatra sa poarte generatia LOTULUI (6) in loc de cea a listarii (7). Dar paza e
+   * `b.generatie >= piatra.status_generatie`, deci publicarea (7) trece si peste 6, si peste 7 —
+   * remediul propus n-ar fi schimbat nimic.
+   *
+   * ⚠ DEFECTUL E ALTUL, SI E REAL: nu ca publicarea castiga — ea CHIAR e cererea mai noua —, ci
+   * ca stergem listarea cat timp exista o cerere mai noua decat scoaterea. Se compara cu ce e ACUM.
+   */
+  assert.match(sync, /const eDepasita = acum != null && b\.generatie != null[\s\S]{0,40}?b\.generatie < acum\.status_generatie;/);
+  assert.match(sync, /if \(eDepasita\) \{/);
+  /* ⚠ Si se retrimite starea ceruta ultima oara, prin operatia adevarata de stare. */
+  assert.match(sync, /offer_id: acum\.style_key, op: "status",/);
+});
+
+/* ── Generatia starii supravietuieste relistarii ──────────────────────────── */
+
+test("⚠ generatia nu se intoarce la zero cand produsul e listat din nou", () => {
+  /*
+   * Piatra tine generatia la care s-a cerut scoaterea. Un rand nou pornit de la 0 ar face ca un lot
+   * de stare foarte intarziat din viata dinainte (generatia 5) sa nu mai fie recunoscut ca depasit
+   * fata de o listare la generatia 1 — si cel vechi ar castiga.
+   *
+   * ⚠ GENERATIA APARTINE CHEII DE STIL, nu randului: `style_key` e acelasi la ei si dupa
+   * relistare, deci si ceasul trebuie sa fie acelasi.
+   */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  assert.match(act, /\.from\("aboutyou_listari_scoase"\)\.select\("status_generatie"\)/);
+  assert.match(act, /\.\.\.\(piatra \? \{ status_generatie: piatra\.status_generatie \+ 1 \} : \{\}\),/);
+});
+
+/* ── Deduplicarea lor nu mai pare o pierdere ──────────────────────────────── */
+
+test("⚠ acelasi lot intors de doua ori e URMARIT, nu pierdut", () => {
+  /*
+   * About You intoarce acelasi `batchRequestId` pentru un payload identic — chiar asa scrie si nota
+   * din `reconciliazaVariante`. Iar `UNIQUE (business_id, batch_request_id)` face ca a doua scriere
+   * sa pice cu `23505`, si orice eroare acolo insemna „trimis dar NEURMARIT": o alarma falsa care ii
+   * cere omului sa retrimita ceva ce e deja in lucru.
+   */
+  assert.match(sync, /const eDuplicat = \(eInchidere as \{ code\?: string \}\)\.code === "23505";/);
+  assert.match(sync, /return \{ fel: "urmarit", res \};/);
+  /* ⚠ Si numai daca e chiar operatia noastra: acelasi fel si aceleasi chei. */
+  assert.match(sync, /geaman\.kind === kind[\s\S]{0,40}?JSON\.stringify\(geaman\.related_ids\) === JSON\.stringify\(relatedIds\)/);
+  /* ⚠ Altfel invariantul e rupt si se striga: acolo tacerea ar fi periculoasa. */
+  assert.match(sync, /e deja folosit de alta operatie/);
+});
+
+/* ── Dezabonarea vine dupa ce s-a scris deconectarea ──────────────────────── */
+
+test("⚠ nu ramanem conectati la noi si dezabonati la ei", () => {
+  /*
+   * Dezabonarea era prima, iar intre ea si scrierea configului sunt trei cai de abandon. Oricare
+   * lasa starea cea mai proasta: la noi „conectat", la ei fara abonament — nu mai vine niciun
+   * eveniment, si nimeni nu stie.
+   *
+   * ⚠ INVERS E STRICT MAI BINE: daca dezabonarea pica dupa ce am scris deconectarea, ei mai
+   * trimit o vreme evenimente catre o ruta care le ignora — zgomot, nu pierdere.
+   */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  const iConfig = act.indexOf("if (!await saveConfig(businessId, {}))");
+  const iWebhook = act.indexOf("await deleteWebhookSubscription(", iConfig);
+  assert.ok(iConfig > 0 && iWebhook > iConfig,
+    "dezabonarea la ei vine DUPA ce s-a scris ca magazinul e deconectat");
+  /* ⚠ Si acreditarile se citesc inainte, in `prev`: dupa `saveConfig({})` nu mai exista in baza. */
+  const iPrev = act.indexOf("const prev = await loadConfig(businessId);", act.indexOf("disconnectAboutYou"));
+  assert.ok(iPrev > 0 && iPrev < iConfig);
+});

@@ -357,6 +357,53 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
     .update({ batch_request_id: id, status: id ? "pending" : "necunoscut" } as never)
     .eq("business_id", businessId).eq("intent_id", intentId);
   if (eInchidere) {
+    /*
+     * ═══ ⚠ DEDUPLICAREA LOR SE IZBEA DE CHEIA NOASTRA UNICA (28.08.2026, noaptea) ═══
+     *
+     * About You intoarce ACELASI `batchRequestId` pentru un payload identic trimis din nou — chiar
+     * asa scrie si nota din `reconciliazaVariante`: „payload-ul identic primeste acelasi
+     * `batchRequestId`, deci reluarea e ieftina". Iar noi avem `UNIQUE (business_id,
+     * batch_request_id)`, deci a doua scriere pica pe `23505`.
+     *
+     *     lotul A, payload X -> id XYZ, urmarit
+     *     reluare din coada / apasare dubla -> acelasi payload
+     *     ei: acelasi XYZ
+     *     noi: 23505 -> „trimis dar NEURMARIT"
+     *
+     * Numai ca operatia CHIAR e urmarita — prin randul A, care sondeaza exact acel id. Iar
+     * `neurmarit` duce, pentru produs, la `error` pe listare cu „loturi au plecat, dar nu le-am
+     * putut tine minte": o alarma falsa care ii cere omului sa retrimita ceva ce e deja in lucru.
+     *
+     * ⚠ SE CONFRUNTA CU RANDUL CARE EXISTA. Daca poarta acelasi `kind` si aceleasi `related_ids`,
+     * e chiar operatia noastra: intentia duplicata se sterge, si raspundem URMARIT. Daca id-ul
+     * apartine altcuiva, invariantul e rupt si se striga — acolo tacerea ar fi periculoasa.
+     */
+    const eDuplicat = (eInchidere as { code?: string }).code === "23505";
+    if (eDuplicat && id) {
+      const geaman = randCitit<{ id: string; kind: string; related_ids: unknown }>(
+        "aboutyou.lotulGeaman", await admin
+          .from("aboutyou_batches").select("id, kind, related_ids")
+          .eq("business_id", businessId).eq("batch_request_id", id).maybeSingle());
+      const aceleasi = geaman != null && geaman.kind === kind
+        && JSON.stringify(geaman.related_ids) === JSON.stringify(relatedIds);
+      if (aceleasi) {
+        /* Randul dinainte sondeaza deja acelasi lot: al doilea n-are ce pazi. */
+        await admin.from("aboutyou_batches")
+          .delete().eq("business_id", businessId).eq("intent_id", intentId);
+        await logError({
+          action: "aboutyou/intentie", severity: "info",
+          message: `About You a deduplicat cererea si a intors acelasi lot (${id}): se urmareste prin randul dinainte`,
+          details: { kind, batchRequestId: id }, businessId,
+        });
+        return { fel: "urmarit", res };
+      }
+      await logError({
+        action: "aboutyou/intentie", severity: "critical",
+        message: `lotul ${id} e deja folosit de alta operatie (${geaman?.kind ?? "necunoscuta"}): nu putem urmari cererea de acum`,
+        details: { kind, batchRequestId: id, relatedIds: relatedIds.slice(0, 20) }, businessId,
+      });
+      return { fel: "neurmarit", res };
+    }
     await logError({
       action: "aboutyou/intentie", severity: "critical",
       message: `About You a primit lotul (${id ?? "fara id"}), dar intentia n-a putut fi inchisa: ${eInchidere.message}`,
@@ -2341,6 +2388,14 @@ async function pastreazaPiatra(
     {
       business_id: businessId, style_key: listing.style_key, product_id: listing.product_id,
       status_generatie: listing.status_generatie, scos_la: new Date().toISOString(),
+      /*
+       * ⚠ CONTOR NOU LA INCIDENT NOU. Piatra e unica pe cheie, deci o a doua scoatere cadea peste
+       * cea veche si ii MOSTENEA numaratoarea: un produs care ajunsese la cinci reasertari in
+       * viata dinainte n-ar mai fi primit NICIUNA in cea noua, si prima stare invechita l-ar fi
+       * lasat publicat. E a treia oara cand acelasi tipar apare la un contor pastrat peste un
+       * incident nou — la veghe si la cutia de iesire l-am prins deja.
+       */
+      reasertari: 0,
     } as never,
     { onConflict: "business_id,style_key" },
   );
@@ -3286,6 +3341,44 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
               continue;
             }
             /*
+             * ═══ ⚠ SI SCOATEREA POATE FI EA INSASI DEPASITA (28.08.2026, noaptea) ═══
+             *
+             *     generatia 5
+             *     „Elimina"  -> generatia 6, `status_dorit = inactive`, lotul pleaca
+             *     „Publica"  -> generatia 7, `status_dorit = published`, lotul pleaca
+             *     scoaterea se incheie prima -> stergem listarea ❌
+             *
+             * Iar piatra ar lua generatia CURENTA a listarii (7, nu 6), deci lotul de publicare 7
+             * asezat dupa n-ar mai fi recunoscut ca depasit: la ei produsul ramane publicat, la noi
+             * listarea e stearsa, si nimic nu mai leaga cele doua.
+             *
+             * ⚠ SE COMPARA CU CE E ACUM. Daca intre timp s-a cerut altceva, scoaterea nu mai are
+             * dreptul sa stearga nimic: se lasa listarea in pace si se retrimite starea ceruta
+             * ultima oara. Lotul se aseaza oricum ca `completed` — la ei chiar s-a intamplat ce a
+             * cerut el —, dar hotararea locala e a celei mai noi cereri.
+             */
+            const acum = await getListingByStyleKey(admin, ctx.businessId, sk);
+            const eDepasita = acum != null && b.generatie != null
+              && b.generatie < acum.status_generatie;
+            if (eDepasita) {
+              if (acum.product_id && acum.status_dorit) {
+                const { error: eRe } = await admin.from("aboutyou_sync_queue").upsert(
+                  {
+                    business_id: ctx.businessId, product_id: acum.product_id,
+                    offer_id: acum.style_key, op: "status",
+                  } as never,
+                  { onConflict: "business_id,offer_id,op" },
+                );
+                if (eRe) asezat = false;
+              }
+              await logError({
+                action: "aboutyou-sync/loturi", severity: "warning",
+                message: `scoaterea din generatia ${b.generatie} s-a incheiat dupa o cerere mai noua (${acum.status_generatie}): listarea nu se sterge, se retrimite starea ceruta`,
+                details: { styleKey: sk, statusDorit: acum.status_dorit }, businessId: ctx.businessId,
+              });
+              continue;
+            }
+            /*
              * ⚠ SI PIATRA DE MORMANT, cu generatia starii de la clipa scoaterii. Fara ea, un
              * `publish` mai vechi asezat dupa eliminare ar reactiva produsul la ei, iar la noi
              * n-ar mai exista nimic care sa ceara `inactive`.
@@ -3440,6 +3533,36 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
            * ⚠ SI UN FRATE PICAT OPRESTE PUBLICAREA, cum trebuie: ramura de esec scrie `error`, deci
            * ultimul lot bun nu mai gaseste `pending` si nu publica un produs incomplet.
            */
+          /*
+           * ═══ ⚠ SI SA FIE TOATE TRANSELE, NU DOAR SA NU FIE NICIUNA DESCHISA (28.08.2026, noaptea) ═══
+           *
+           * `fratiNeterminati` intreaba „mai e vreun frate in lucru?". Lista goala inseamna insa
+           * doua lucruri cu totul diferite: „toti s-au incheiat" si „ceilalti n-au apucat sa
+           * existe". Daca procesul moare dupa transa 1 din 3:
+           *
+           *     transele 2 si 3 n-au niciun rand
+           *     `fratiNeterminati` -> []  -> „se poate publica"
+           *
+           * Si se cerea aprobarea unui produs cu o suta din doua sute cincizeci de variante.
+           *
+           * ⚠ „TOATE LOTURILE S-AU TERMINAT" TREBUIE SA AIBA O SINGURA DEFINITIE. Exista deja, si
+           * cere si numarul: `operatiaSAIncheiat`. Aici erau doua, si cea slaba pazea tocmai pasul
+           * cel mai greu de intors — publicarea.
+           */
+          /*
+           * ⚠ `citit_la` LIPSA inseamna un lot dinainte de coloana: acolo se cade inapoi pe
+           * verificarea veche, fiindca `citit_la = ""` n-ar fi o marca de timp si interogarea ar
+           * ARUNCA — adica ar doborî asezarea intregului magazin, nu ar pazi nimic.
+           */
+          if (b.citit_la && !await operatiaSAIncheiat(admin, ctx.businessId, "product", listing.style_key, b.citit_la, b.id, b.transe)) {
+            await logError({
+              action: "aboutyou-sync/loturi", severity: "info",
+              message: "lot incheiat, dar operatia de produs nu e intreaga: statusul si publicarea asteapta",
+              details: { styleKey: listing.style_key, batchId: b.batch_request_id, transe: b.transe },
+              businessId: ctx.businessId,
+            });
+            continue;
+          }
           if (fratiNeterminati.length > 0) {
             /* ⚠ Se spune, ca sa nu para ca s-a pierdut ceva: totul vine la ultimul lot. */
             await logError({

@@ -140,8 +140,16 @@ test("⚠ respingerea pleaca in forma CERUTA de ei: multipart, lista prin virgul
 test("⚠ respingerea cere motiv SI explicatie", () => {
   /* Cerute de ei, si pe buna dreptate: un retur respins fara explicatie ajunge la arbitrajul
      lor, iar acolo tacerea vanzatorului nu ajuta pe nimeni. */
-  assert.match(mod, /if \(!p\.motivId\) return \{ error: "Alege motivul respingerii\." \};/);
-  assert.match(mod, /if \(!explicatie\) return \{ error: "Scrie de ce respingi returul\." \};/);
+  /*
+   * ⚠ Ancora cerea `return` gol pe fiecare. De cand hotararea se REZERVA inaintea apelului
+   * ireversibil, orice iesire de dupa rezervare trebuie sa o dea inapoi mai intai — deci forma s-a
+   * schimbat, dar regula nu: fara motiv si fara explicatie nu pleaca nimic.
+   */
+  assert.match(mod, /if \(!p\.motivId\) \{[\s\S]{0,120}?error: "Alege motivul respingerii\." \};/);
+  assert.match(mod, /if \(!explicatie\) \{[\s\S]{0,120}?error: "Scrie de ce respingi returul\." \};/);
+  /* ⚠ Si amandoua dau rezervarea inapoi: altfel linia ar ramane blocata pentru o greseala de formular. */
+  assert.match(mod, /if \(!p\.motivId\) \{ await daInapoiRezervarea\(\);/);
+  assert.match(mod, /if \(!explicatie\) \{ await daInapoiRezervarea\(\);/);
   /* ⚠ Iar motivele se CITESC de la ei: un id inventat ar fi fost refuzat abia la respingere. */
   assert.match(client, /export function getClaimIssueReasons\(/);
 });

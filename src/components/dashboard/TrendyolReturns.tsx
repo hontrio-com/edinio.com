@@ -327,7 +327,18 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                       în lista „așteaptă răspunsul tău" — iar „nu mai așteaptă" ar fi contrazis
                       chiar lista în care se află.
                     */}
-                    {!l.sePoateHotari && !l.decizie && (
+                    {/*
+                      ⚠ „Se trimite" e o stare de sine statatoare, nu o lipsa. Fara ea, o linie cu
+                      hotararea in zbor arata exact ca una pe care n-o poti bifa „fiindca nu mai
+                      asteapta raspunsul tau" — un neadevar, si tocmai in clipa in care omul se
+                      intreaba daca apasarea lui a contat.
+                    */}
+                    {l.seTrimite && (
+                      <span className="block text-[11px] text-muted-foreground">
+                        se trimite hotărârea la Trendyol; se confirmă la următoarea sincronizare
+                      </span>
+                    )}
+                    {!l.sePoateHotari && !l.decizie && !l.seTrimite && (
                       <span className="block text-[11px] text-muted-foreground">
                         {l.stareNecunoscuta
                           ? "nu i-am putut citi starea de la Trendyol; se reîncearcă la fiecare sincronizare"

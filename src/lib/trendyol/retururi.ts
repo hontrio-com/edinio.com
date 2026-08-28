@@ -658,9 +658,13 @@ export async function hotarasteRetur(
     ? { ...ctx, auth: { ...ctx.auth, storefront: cerere.storefront as TrendyolStoreFront } }
     : ctx;
 
-  const aleCererii = randuriCitite<{ claim_item_id: string; claim_item_status: string | null }>(
+  const aleCererii = randuriCitite<{
+    claim_item_id: string; claim_item_status: string | null;
+    decizie: string | null; hotarare_ceruta_la: string | null;
+  }>(
     "trendyol.liniileCererii", await admin
-      .from("trendyol_claim_items").select("claim_item_id, claim_item_status")
+      .from("trendyol_claim_items")
+      .select("claim_item_id, claim_item_status, decizie, hotarare_ceruta_la")
       .eq("business_id", ctx.businessId).eq("claim_row_id", cerere.id) as never);
   const ingaduite = new Set(aleCererii.map((l) => l.claim_item_id));
   const straine = p.claimItemIds.filter((id) => !ingaduite.has(id));
@@ -728,18 +732,95 @@ export async function hotarasteRetur(
     };
   }
 
+  /*
+   * ═══ ⚠ SI HOTARAREA NOASTRA SE CITESTE, NU DOAR STAREA LOR (29.08.2026, dupa-amiaza) ═══
+   *
+   * Paza de mai sus se uita la `claim_item_status`, adica la COPIA NOASTRA a starii lor — iar copia
+   * se improspateaza din cron, la cinci sau zece minute. Chiar nota de la `reconciliazaRetururile`
+   * o spune: „`hotarasteRetur` scrie `decizie` de indata ce ei raspund, dar `claim_item_status`
+   * vine abia la reconciliere". In fereastra aia, starea e INCA `WaitingInAction`:
+   *
+   *     10:00 omul apasa „Acceptă" -> pleaca la ei, banii se intorc clientului
+   *     10:00 apasa din nou (sau alta fila, sau „Respinge")
+   *     paza vede tot `WaitingInAction` -> pleaca A DOUA hotarare, ireversibila ❌
+   *
+   * ⚠ Si ecranul nu acopera: butonul se dezactiveaza tot pe `claim_item_status`, nu pe `decizie`.
+   */
+  const hotarate = p.claimItemIds.filter((id) => {
+    const l = aleCererii.find((x) => x.claim_item_id === id);
+    return l?.decizie != null;
+  });
+  if (hotarate.length > 0) {
+    return {
+      error: "Ai hotărât deja pentru acest retur, iar hotărârea a plecat la Trendyol."
+        + " Reîncarcă pagina ca să vezi starea de acum.",
+    };
+  }
+
+  /*
+   * ═══ ⚠ SI SE REZERVA INAINTE SA PLECE ═══
+   *
+   * Citirea de mai sus inchide a doua apasare de peste cateva secunde, dar nu si pe cele doua
+   * plecate in aceeasi clipa: `decizie` se scrie abia DUPA raspunsul lor — dinadins, fiindca „o
+   * hotarare marcata la noi si netrimisa la ei ar fi cea mai rea forma" — deci intre ele exista o
+   * clipa in care nimic nu spune ca s-a hotarat.
+   *
+   * ⚠ REZERVAREA E UN UPDATE CONDITIONAT, deci doua apasari nu pot rezerva amandoua aceeasi linie:
+   * a doua nu primeste randul inapoi si se opreste inainte de orice apel.
+   */
+  const acum = new Date().toISOString();
+  const { data: rezervate, error: eRezervare } = await admin.from("trendyol_claim_items")
+    .update({ hotarare_ceruta_la: acum } as never)
+    .eq("business_id", ctx.businessId).eq("claim_row_id", cerere.id)
+    .in("claim_item_id", p.claimItemIds)
+    .is("decizie", null).is("hotarare_ceruta_la", null)
+    .select("claim_item_id");
+  if (eRezervare) {
+    return { error: "Nu am putut porni trimiterea hotărârii. Încearcă din nou." };
+  }
+  /**
+   * Da inapoi rezervarea facuta ACUM.
+   *
+   * ⚠ Se cheama pe fiecare iesire de dupa rezervare in care stim ca la ei NU s-a intamplat nimic:
+   * o validare a noastra, sau un refuz dovedit al lor. Cand nu stim ce-a iesit — reteaua cazuta
+   * dupa ce cererea a plecat — rezervarea RAMANE, si asta e voit: o linie rezervata fara hotarare
+   * inseamna „a plecat si nu stim", adica se intreaba un om, nu se reincearca singur.
+   *
+   * ⚠ Numai ce am rezervat noi: filtrul pe `acum` deosebeste rezervarea asta de oricare alta.
+   */
+  const daInapoiRezervarea = async () => {
+    await admin.from("trendyol_claim_items")
+      .update({ hotarare_ceruta_la: null } as never)
+      .eq("business_id", ctx.businessId).eq("claim_row_id", cerere.id)
+      .eq("hotarare_ceruta_la", acum);
+  };
+
+  const nerezervate = p.claimItemIds.length - (rezervate?.length ?? 0);
+  if (nerezervate > 0) {
+    /*
+     * ⚠ NU SE TRIMITE NIMIC, nici macar pentru liniile rezervate cu succes: cererea catre ei
+     * cuprinde toata lista, si o cerere pe jumatate ar fi mai greu de inteles decat un refuz.
+     */
+    await daInapoiRezervarea();
+    return {
+      error: "O hotărâre pentru acest retur tocmai a plecat din altă parte."
+        + " Reîncarcă pagina ca să vezi ce s-a trimis.",
+    };
+  }
+
   if (p.accepta) {
     const res = await approveClaimItems(ctxCerere.auth, p.claimId, p.claimItemIds);
-    if (isTrendyolError(res)) return { error: res.error };
+    if (isTrendyolError(res)) { await daInapoiRezervarea(); return { error: res.error }; }
   } else {
     /* ⚠ Motivul e cerut de EI, si asa si trebuie: un retur respins fara explicatie ajunge la
        arbitrajul lor, iar acolo tacerea vanzatorului nu ajuta pe nimeni. */
-    if (!p.motivId) return { error: "Alege motivul respingerii." };
+    if (!p.motivId) { await daInapoiRezervarea(); return { error: "Alege motivul respingerii." }; }
     const explicatie = (p.explicatie ?? "").trim();
-    if (!explicatie) return { error: "Scrie de ce respingi returul." };
+    if (!explicatie) { await daInapoiRezervarea(); return { error: "Scrie de ce respingi returul." }; }
     /* ⚠ 500 de caractere e plafonul LOR. Taiata aici, explicatia pleaca; netaiata, cererea e
        refuzata intreaga si comerciantul nu afla de ce. */
     if (explicatie.length > MAX_EXPLICATIE) {
+      await daInapoiRezervarea();
       return { error: `Explicația poate avea cel mult ${MAX_EXPLICATIE} de caractere.` };
     }
 
@@ -756,6 +837,7 @@ export async function hotarasteRetur(
      * intorsi clientului.
      */
     if (dovadaCeruta(p.motivId) && (p.dovezi?.length ?? 0) === 0) {
+      await daInapoiRezervarea();
       return {
         error: "Pentru motivul ales, Trendyol cere o dovadă atașată. Adaugă o poză sau un PDF cu produsul primit.",
       };
@@ -766,7 +848,7 @@ export async function hotarasteRetur(
       description: explicatie,
       files: p.dovezi,
     });
-    if (isTrendyolError(res)) return { error: res.error };
+    if (isTrendyolError(res)) { await daInapoiRezervarea(); return { error: res.error }; }
   }
 
   /* ⚠ Se scrie DUPA raspunsul lor, nu inainte: o hotarare marcata la noi si netrimisa la ei ar

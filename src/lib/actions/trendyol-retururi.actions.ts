@@ -79,6 +79,13 @@ export interface RandRetur {
     motiv: string | null;
     notaClient: string | null;
     decizie: string | null;
+    /**
+     * Hotararea a plecat la Trendyol si inca nu stim ce-a iesit.
+     *
+     * ⚠ Rezervata inaintea apelului ireversibil, stearsa daca ei refuza. Deci „rezervata fara
+     * hotarare" inseamna chiar „a plecat si asteptam", nu „n-a inceput".
+     */
+    seTrimite: boolean;
     /** Se mai poate cere o hotarare pe linia asta? Vezi `sePoateHotari`. */
     sePoateHotari: boolean;
     /** Se poate repune marfa in stoc? Numai pe `Accepted` — vezi `sePoateRepune`. */
@@ -102,7 +109,7 @@ export async function retururiTrendyol(
 
   const admin = createAdminClient();
   let q = admin.from("trendyol_claims")
-    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, colet_inlocuire, trendyol_claim_items(claim_item_id, claim_item_status, barcode, product_name, quantity, reason, customer_note, decizie, repus_in_stoc_la)")
+    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, colet_inlocuire, trendyol_claim_items(claim_item_id, claim_item_status, barcode, product_name, quantity, reason, customer_note, decizie, hotarare_ceruta_la, repus_in_stoc_la)")
     .eq("business_id", businessId)
     .order("claim_date", { ascending: false })
     .limit(100);
@@ -147,6 +154,7 @@ export async function retururiTrendyol(
       claim_item_id: string; claim_item_status: string | null;
       barcode: string | null; product_name: string | null; quantity: number;
       reason: string | null; customer_note: string | null; decizie: string | null; repus_in_stoc_la: string | null;
+      hotarare_ceruta_la: string | null;
     }[] | null;
   };
 
@@ -191,6 +199,7 @@ export async function retururiTrendyol(
         motiv: l.reason,
         notaClient: l.customer_note,
         decizie: l.decizie,
+        seTrimite: l.decizie == null && l.hotarare_ceruta_la != null,
         repusInStoc: !!l.repus_in_stoc_la,
         /*
          * ⚠ ECRANUL NU ARE VOIE SA OFERE UN BUTON CARE VA FI REFUZAT (26.08.2026).
@@ -199,7 +208,16 @@ export async function retururiTrendyol(
          * un POST direct. Dar aratat activ, butonul promite ceva ce nu se poate face, iar omul
          * afla abia dupa apasare. Vezi `sePoateHotari` si `sePoateRepune`.
          */
-        sePoateHotari: sePoateHotari(l.claim_item_status),
+        /*
+         * ⚠ SI O LINIE DEJA HOTARATA — SAU CU HOTARAREA IN ZBOR — NU MAI POATE FI BIFATA.
+         *
+         * `sePoateHotari` se uita la `claim_item_status`, adica la copia noastra a starii lor, iar
+         * copia se improspateaza din cron la cinci-zece minute. In fereastra aia arata tot
+         * `WaitingInAction`, deci bifa ramanea vie dupa o hotarare deja plecata — si a doua apasare
+         * trimitea inca un apel ireversibil.
+         */
+        sePoateHotari: sePoateHotari(l.claim_item_status)
+          && l.decizie == null && l.hotarare_ceruta_la == null,
         sePoateRepune: sePoateRepune(l.claim_item_status),
         deCeNuSeRepune: deCeNuSeRepune(l.claim_item_status),
         /* ⚠ I-am trimis acceptarea, dar ei nu ne-au confirmat-o inca. Nu schimba ce se poate

@@ -4614,6 +4614,7 @@ export type Database = {
           customer_note: string | null
           decis_la: string | null
           decizie: string | null
+          hotarare_ceruta_la: string | null
           id: string
           order_line_id: string | null
           product_name: string | null
@@ -4633,6 +4634,7 @@ export type Database = {
           customer_note?: string | null
           decis_la?: string | null
           decizie?: string | null
+          hotarare_ceruta_la?: string | null
           id?: string
           order_line_id?: string | null
           product_name?: string | null
@@ -4652,6 +4654,7 @@ export type Database = {
           customer_note?: string | null
           decis_la?: string | null
           decizie?: string | null
+          hotarare_ceruta_la?: string | null
           id?: string
           order_line_id?: string | null
           product_name?: string | null

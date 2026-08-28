@@ -68,7 +68,13 @@ test("⚠ si oprirea e pe SERVER, inaintea apelului ireversibil", () => {
    * urmareste ABIA pe urma, pe `claimItemStatus` — deci nici n-am fi aflat pe loc ca n-a prins.
    */
   const mod = viu("src/lib/trendyol/retururi.ts");
-  assert.match(mod, /select\("claim_item_id, claim_item_status"\)/);
+  /*
+   * ⚠ Citirea aduce acum si HOTARAREA noastra, si rezervarea. Paza pe `claim_item_status` singura
+   * lasa sa treaca a doua apasare: starea lor e copia noastra, improspatata din cron la cinci-zece
+   * minute, deci in fereastra aia arata tot `WaitingInAction`. Regula pazita aici — verificarea
+   * inaintea apelului ireversibil — a ramas; ce s-a adaugat sunt inca doua lucruri de verificat.
+   */
+  assert.match(mod, /select\("claim_item_id, claim_item_status, decizie, hotarare_ceruta_la"\)/);
   assert.match(mod, /!sePoateHotari\(stari\.get\(id\)\)/);
 
   const i = mod.indexOf("sePoateHotari(stari.get(id))");

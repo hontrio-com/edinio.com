@@ -6075,7 +6075,8 @@ create table if not exists public.trendyol_claim_items (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   claim_item_status text,
-  order_line_id text);
+  order_line_id text,
+  hotarare_ceruta_la timestamp with time zone);
 
 create table if not exists public.trendyol_claims (
   id uuid default gen_random_uuid() not null,

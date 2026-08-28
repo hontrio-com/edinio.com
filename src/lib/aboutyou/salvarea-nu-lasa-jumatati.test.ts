@@ -68,14 +68,40 @@ test("toate verificarile de SKU se fac inainte de orice scriere", () => {
   }
 });
 
-test("si oprirea pe categorie sau marime dupa aprobare, la fel", () => {
+test("oprirea pe categorie sau marime a intrat CHIAR in tranzactia scrierii", () => {
   /*
-   * ⚠ Regula de la 27.08: categoria si marimea nu se mai schimba dupa aprobare. Ea se oprea deja
-   * inaintea scrierii, si asa trebuie sa ramana — altfel campul respins ar fi salvat oricum.
+   * ⚠ Proba asta cerea, pana azi, ca cele doua mesaje sa apara INAINTEA apelului de salvare — adica
+   * verificarea sa fie facuta in TypeScript, mai devreme. **Avea dreptate sub premisa de-atunci**:
+   * o verificare de dupa scriere ar fi respins o salvare deja facuta.
+   *
+   * Premisa a cazut cand s-a vazut ca „mai devreme" inseamna si „pe date care se pot invechi":
+   * intre citirea statusului si scriere, cronul apuca sa scrie aprobarea. Acum verificarea e in
+   * acelasi RPC cu scrierea, sub aceeasi incuietoare — deci mesajele vin DUPA apel, fiindca sunt
+   * traducerea raspunsului lui, si asta e forma corecta.
    */
   const scriere = unde(SCRIEREA, "salvarea listarii");
-  assert.ok(unde(/About You nu mai acceptă schimbarea categoriei/, "oprirea pe categorie") < scriere);
-  assert.ok(unde(/About You nu mai acceptă schimbarea mărimii/, "oprirea pe marime") < scriere);
+  assert.ok(unde(/r\.stare === "categorie-blocata"/, "traducerea opririi pe categorie") > scriere);
+  assert.ok(unde(/r\.stare === "marime-blocata"/, "traducerea opririi pe marime") > scriere);
+  /* ⚠ Dar mesajele si iesirile lor scrise n-au voie sa se piarda la mutare. */
+  assert.match(corp, /About You nu mai acceptă schimbarea categoriei/);
+  assert.match(corp, /elimină listarea și creează una nouă/);
+  assert.match(corp, /About You nu mai acceptă schimbarea mărimii/);
+  assert.match(corp, /Dezactivează varianta și adaugă una nouă, cu SKU nou/);
+});
+
+test("salvarea spune de la ce incarnare a pornit", () => {
+  /*
+   * ⚠ Fara asta, o salvare pornita cu listarea L1 in fata, care ajunge la RPC dupa ce L1 a fost
+   * eliminata, intra pe ramura de CREARE si invie produsul ca L2 — iar la „Salvează și trimite" el
+   * pleaca din nou la ei. Masurat: cu incarnarea trimisa, raspunsul e `depasit` si nu se creeaza
+   * nimic in locul ei.
+   */
+  assert.match(corp, /p_listare_asteptata:\s*incarnarea/,
+    "RPC-ul primeste randul de la care a pornit salvarea");
+  assert.match(corp, /const incarnarea = \(existent as \{ id: string \} \| null\)\?\.id \?\? null;/);
+  /* ⚠ Si `depasit` are mesajul lui, cu iesire scrisa — nu cade in eroarea generica. */
+  assert.match(corp, /if \(r\.stare === "depasit"\)/);
+  assert.match(corp, /salvează-l ca listare nouă/);
 });
 
 test("coliziunea de SKU se judeca pe cheia de stil, nu pe id-ul randului", () => {

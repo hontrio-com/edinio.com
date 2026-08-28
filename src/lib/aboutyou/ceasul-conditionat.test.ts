@@ -191,6 +191,36 @@ test("scrierea pietrei dupa reasertare isi citeste raspunsul", () => {
     "o piatra nescrisa lasa lotul deschis, ca sa se reia");
 });
 
+test("si salvarea cere randul de la care a pornit, altfel nu creeaza nimic", () => {
+  /*
+   * ═══ ⚠ ACEEASI REGULA, PE A TREIA CALE (28.08.2026, noaptea) ═══
+   *
+   * Schimbarile de stare erau legate de rand de ieri. Salvarea nu era, si prin ea produsul putea
+   * invia:
+   *
+   *     salvarea citeste listarea L1 si merge mai departe
+   *     intre timp: scoaterea se incheie -> `inactive` la ei -> piatra -> L1 STEARSA
+   *     RPC-ul nu mai gaseste nimic dupa (business_id, style_key) -> CREEAZA L2
+   *     iar la „Salvează și trimite", produsul pleaca din nou la ei ❌
+   *
+   * ⚠ O ACTIUNE PORNITA CA „ACTUALIZEAZA" N-ARE VOIE SA SE FACA „CREEAZA" PE DRUM. Masurat:
+   * `depasit`, si zero randuri create in locul celei eliminate.
+   */
+  const corp = corpFunctiei("aboutyou_salveaza_listarea");
+  /* ⚠ Randul gasit trebuie sa fie CHIAR cel de la care s-a pornit, nu doar unul cu aceeasi cheie. */
+  assert.match(corp, /p_listare_asteptata is not null and v_id <> p_listare_asteptata[\s\S]{0,120}?depasit/i,
+    "un rand cu aceeasi cheie, dar alta incarnare, nu se ia drept acelasi");
+  /*
+   * ⚠ Si ramura de CREARE ii e inchisa. Fara asta, defectul ramane intreg: tocmai lipsa randului
+   * e cazul in care salvarea invia produsul.
+   */
+  const iNegasit = corp.indexOf("else");
+  assert.ok(iNegasit > 0, "n-am gasit ramura de creare");
+  const ramura = corp.slice(iNegasit, corp.indexOf("aboutyou_ceas_urmator"));
+  assert.match(ramura, /p_listare_asteptata is not null[\s\S]{0,120}?depasit/i,
+    "o salvare pornita de la o listare care nu mai exista NU creeaza alta in locul ei");
+});
+
 test("scoaterea si publicarea cer numarul legat de randul citit", () => {
   const cereri = sync.split('admin.rpc("aboutyou_ceas_pentru_listare"');
   assert.ok(cereri.length - 1 >= 3,

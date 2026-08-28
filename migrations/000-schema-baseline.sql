@@ -685,7 +685,7 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb)
+CREATE OR REPLACE FUNCTION public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb, p_listare_asteptata uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -693,17 +693,30 @@ CREATE OR REPLACE FUNCTION public.aboutyou_salveaza_listarea(p_business_id uuid,
 AS $function$
 declare
   v_id uuid;
+  v_status text;
+  v_categorie integer;
   v_gen integer;
   v_nou boolean := false;
   v_chei text;
   v_straina text;
+  v_sku text;
   v_variante jsonb;
+  c_aprobate constant text[] := array['active', 'published', 'pending_active', 'inactive'];
 begin
-  select id into v_id from public.aboutyou_listings
+  select id, status, category_id into v_id, v_status, v_categorie
+    from public.aboutyou_listings
    where business_id = p_business_id and style_key = p_style_key
      for update;
 
-  if not found then
+  if found then
+    if p_listare_asteptata is not null and v_id <> p_listare_asteptata then
+      return jsonb_build_object('stare', 'depasit');
+    end if;
+  else
+    if p_listare_asteptata is not null then
+      return jsonb_build_object('stare', 'depasit');
+    end if;
+
     v_gen := public.aboutyou_ceas_urmator(p_business_id, p_style_key, null);
 
     insert into public.aboutyou_listings
@@ -713,7 +726,8 @@ begin
     returning id into v_id;
 
     if v_id is null then
-      select id into v_id from public.aboutyou_listings
+      select id, status, category_id into v_id, v_status, v_categorie
+        from public.aboutyou_listings
        where business_id = p_business_id and style_key = p_style_key
          for update;
       if not found then
@@ -721,6 +735,28 @@ begin
       end if;
     else
       v_nou := true;
+      v_status := 'local';
+      v_categorie := null;
+    end if;
+  end if;
+
+  if v_status = any(c_aprobate) then
+    if v_categorie is not null
+       and (p_campuri->>'category_id') is not null
+       and (p_campuri->>'category_id')::integer <> v_categorie then
+      return jsonb_build_object('stare', 'categorie-blocata');
+    end if;
+
+    select r->>'sku' into v_sku
+      from jsonb_array_elements(p_randuri) as r
+      join public.aboutyou_variants v
+        on v.listing_id = v_id and v.sku = r->>'sku'
+     where v.size_id is not null
+       and (v.size_id is distinct from (r->>'size_id')::integer
+         or v.second_size_id is distinct from (r->>'second_size_id')::integer)
+     limit 1;
+    if v_sku is not null then
+      return jsonb_build_object('stare', 'marime-blocata', 'sku', v_sku);
     end if;
   end if;
 
@@ -9185,7 +9221,7 @@ grant execute on function public.aboutyou_marcheaza_listarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_modificarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_varianta() to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
-grant execute on function public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb) to service_role;
+grant execute on function public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb, p_listare_asteptata uuid) to service_role;
 grant execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
@@ -9368,7 +9404,7 @@ revoke execute on function public.aboutyou_marcheaza_listarea() from public;
 revoke execute on function public.aboutyou_marcheaza_modificarea() from public;
 revoke execute on function public.aboutyou_marcheaza_varianta() from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
-revoke execute on function public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb) from public;
+revoke execute on function public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb, p_listare_asteptata uuid) from public;
 revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;

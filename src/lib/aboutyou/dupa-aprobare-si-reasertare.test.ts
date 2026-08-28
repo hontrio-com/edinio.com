@@ -273,22 +273,91 @@ test("⚠ si un `fanout` vechi din config nu se pierde la desfasurare", () => {
   assert.match(sync, /if \(!error \|\| \(error as \{ code\?: string \}\)\.code === "23505"\) \{[\s\S]{0,160}?fanout: null/);
 });
 
+/*
+ * ⚠ REGULA A RAMAS, LOCUL EI S-A SCHIMBAT (28.08.2026, noaptea).
+ *
+ * Probele de mai jos cereau, pana azi, forma din TypeScript: `const APROBATE = new Set([...])`,
+ * `dupaSku.get(sku)`, `if (!vechea) continue;`. **Aveau dreptate cand s-au scris** — atunci acolo
+ * era singura verificare. Au incetat sa aiba cand s-a vazut ca verificarea si scrierea stateau in
+ * locuri deosebite, cu cateva cereri intre ele:
+ *
+ *     salvarea citeste: status `pending_approval` -> regula ingaduie schimbarea
+ *     About You aproba produsul; reconcilierea scrie `active`
+ *     salvarea scrie categoria noua -> exact ce regula voia sa impiedice
+ *
+ * Masurat pe baza adevarata: fara incuietoare, scrierea cronului a intrat in fereastra la 589ms;
+ * cu ea, a asteptat toate cele trei secunde si hotararea s-a luat pe statusul adevarat.
+ *
+ * Deci probele se uita acum la SQL — la temelia regenerata din productie, nu la migratie — si
+ * cer, pe langa regula, chiar incuietoarea si ordinea care o fac adevarata.
+ */
+const temelie = viu("migrations/000-schema-baseline.sql");
+
+/** Corpul lui `aboutyou_salveaza_listarea`, dintre cele doua `$function$` care il incadreaza. */
+function corpulSalvarii(): string {
+  const i = temelie.indexOf("FUNCTION public.aboutyou_salveaza_listarea(");
+  assert.notEqual(i, -1, "functia de salvare lipseste din temelia schemei");
+  const inceput = temelie.indexOf("AS $function$", i);
+  const sfarsit = temelie.indexOf("$function$", inceput + "AS $function$".length);
+  assert.ok(inceput !== -1 && sfarsit !== -1);
+  return temelie.slice(inceput, sfarsit);
+}
+
 test("⚠ categoria nu se mai poate schimba dupa aprobare, si nu doar se avertizeaza", () => {
   /*
    * ⚠ Se opreste la SALVARE, nu la trimitere: oprita la trimitere, schimbarea era deja salvata la
    * noi, iar de-acolo orice comparatie intre ce credem si ce e la ei ar fi mintit.
    */
-  assert.match(actiuni, /const APROBATE = new Set\(\["active", "published", "pending_active", "inactive"\]\);/);
+  const corp = corpulSalvarii();
+  assert.match(corp, /c_aprobate constant text\[\] := array\['active', 'published', 'pending_active', 'inactive'\]/);
+  assert.match(corp, /categorie-blocata/);
+  /* ⚠ Si mesajul, cu IESIREA lui scrisa, a ramas acolo unde il vede omul. */
   assert.match(actiuni, /nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat/);
-  /* ⚠ Si are o IESIRE scrisa: o regula care doar refuza e o usa incuiata fara clanta. */
   assert.match(actiuni, /elimină listarea și creează una nouă/);
+  /* ⚠ Si nu s-a lasat o copie in TypeScript: doua liste s-ar departa tacut, iar cea veche ar parea paza. */
+  assert.doesNotMatch(actiuni, /const APROBATE = new Set\(/);
 });
 
 test("⚠ marimea la fel, si comparata PE SKU, nu pe pozitie", () => {
   /* Variantele se pot reordona intre doua deschideri ale editorului; comparate pe indice, ar fi
      parut schimbate toate. */
-  assert.match(actiuni, /const vechea = dupaSku\.get\(sku\);/);
+  const corp = corpulSalvarii();
+  assert.match(corp, /v\.sku = r->>'sku'/, "potrivirea se face pe SKU, nu pe pozitie");
+  assert.match(corp, /marime-blocata/);
+  /* ⚠ O varianta NOUA n-are ce sa incalce: `join` o lasa pe dinafara, ca `if (!vechea) continue`. */
+  assert.match(corp, /join public\.aboutyou_variants/);
+  /* ⚠ Si una a carei marime veche e nescrisa n-a fost niciodata aprobata cu o marime. */
+  assert.match(corp, /v\.size_id is not null/);
+  /* ⚠ `is distinct from`, nu `<>`: cu `<>`, o marime devenita null ar fi trecut neobservata. */
+  assert.match(corp, /is distinct from/);
   assert.match(actiuni, /nu mai acceptă schimbarea mărimii la varianta/);
-  /* ⚠ O varianta NOUA n-are ce sa incalce: regula e despre schimbarea uneia deja aprobate. */
-  assert.match(actiuni, /if \(!vechea\) continue;/);
+  assert.doesNotMatch(actiuni, /const vechea = dupaSku\.get\(sku\);/);
+});
+
+test("⚠ si regula se citeste sub aceeasi incuietoare cu scrierea", () => {
+  /*
+   * ⚠ AICI E TOT MIEZUL, si nu se vede din regula insasi: verificarea trebuie sa fie DUPA
+   * `for update` pe randul de listare si INAINTEA oricarei scrieri. Mutata dupa scriere, ar
+   * respinge o salvare deja facuta; facuta fara incuietoare, ar hotari pe un status invechit.
+   */
+  const corp = corpulSalvarii();
+  /*
+   * ⚠ SE DECUPEAZA CHIAR CITIREA CARE HOTARASTE, nu se cauta „for update" oriunde. In functie sunt
+   * DOUA incuietori — a doua, in ramura de creare, e tot inaintea regulii; cautat asa, testul ar fi
+   * trecut verde cu prima scoasa. Confruntat cu mutatia: cu ancora larga trecea, cu asta cade.
+   */
+  const citirea = corp.slice(0, corp.indexOf("if found then"));
+  assert.match(citirea, /select id, status, category_id into[\s\S]{0,200}?for update/i,
+    "citirea care hotaraste isi incuie randul, altfel statusul se poate invechi sub ea");
+  const iIncuietoare = citirea.indexOf("for update");
+  /*
+   * ⚠ SE CAUTA FOLOSIREA, NU DECLARATIA. `c_aprobate` apare intai in blocul `declare`, care e
+   * INAINTEA oricarei incuietori — cautat asa, testul cadea desi codul era bun, si tot asa ar fi
+   * trecut verde daca regula ar fi fost mutata gresit. A doua oara in doua zile.
+   */
+  const iRegula = corp.indexOf("v_status = any(c_aprobate)");
+  const iScriere = corp.indexOf("update public.aboutyou_listings set (%s)");
+  assert.ok(iIncuietoare > 0 && iRegula > 0 && iScriere > 0);
+  assert.ok(iIncuietoare < iRegula, "randul se incuie inainte ca regula sa-i citeasca statusul");
+  assert.ok(iRegula < iScriere, "regula se judeca inaintea oricarei scrieri");
 });

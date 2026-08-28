@@ -1189,66 +1189,48 @@ export async function saveAboutYouListing(
   };
 
   /*
-   * ⚠ Strict: o pana citita ca „nu exista" trimite pe calea de INSERT, iar acolo `UNIQUE
-   * (business_id, style_key)` respinge — deci se ajungea pe ramura de cursa pentru un motiv care
-   * n-avea nicio legatura cu o cursa, si mesajul ajuns la comerciant era despre altceva.
+   * ═══ ⚠ DE LA CE INCARNARE PORNESTE SALVAREA (28.08.2026, noaptea) ═══
+   *
+   * Citirea asta nu mai e „ce scriu peste", ci „din ce lume am pornit". Randul se trimite mai jos
+   * la RPC ca `p_listare_asteptata`, iar acolo se cere sa fie inca ACELASI. Fara el:
+   *
+   *     citim listarea L1 si mergem mai departe (variante, coliziuni de SKU, istoric)
+   *     intre timp: scoaterea se incheie -> `inactive` la ei -> piatra -> L1 STEARSA
+   *     RPC-ul nu mai gaseste nimic dupa (business_id, style_key) -> CREEAZA L2
+   *     iar la „Salvează și trimite", produsul pleaca din nou la ei ❌
+   *
+   * ⚠ O ACTIUNE PORNITA CA „ACTUALIZEAZA" N-ARE VOIE SA SE FACA „CREEAZA" PE DRUM.
+   *
+   * ⚠ Strict: o pana citita ca „nu exista" ar porni o creare, adica exact ce inchidem. Se opreste.
    */
   const { data: existent, error: eExistent } = await admin.from("aboutyou_listings")
-    .select("id, status, category_id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
+    .select("id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
   if (eExistent) return { error: "Nu am putut citi listarea. Încearcă din nou." };
+  const incarnarea = (existent as { id: string } | null)?.id ?? null;
 
   /*
-   * ═══ ⚠ CATEGORIA SI MARIMEA NU SE MAI SCHIMBA DUPA APROBARE (27.08.2026, tarziu) ═══
+   * ═══ ⚠ REGULA IMUTABILITATII S-A MUTAT IN SQL (28.08.2026, noaptea) ═══
    *
-   * Erau doar AVERTIZATE in editor, si se salvau. Comerciantul afla ca nu merge abia din lotul
-   * respins, minute mai tarziu, iar intre timp datele locale spuneau altceva decat cele de la ei.
+   * „Categoria si marimea nu se mai schimba dupa aprobare" se citea AICI, cu cateva cereri
+   * inaintea scrierii. In fereastra aia, cronul apuca sa mute statusul:
    *
-   * ⚠ SE OPRESTE AICI, NU LA TRIMITERE, si asta e miezul: oprita la trimitere, schimbarea era deja
-   * SALVATA la noi. De-acolo, orice comparatie intre ce credem si ce e la ei ar fi mintit, iar
-   * urmatoarea trimitere ar fi incercat iar acelasi lucru imposibil.
+   *     salvarea citeste: status `pending_approval` -> regula ingaduie schimbarea
+   *     About You aproba produsul; reconcilierea scrie `active`
+   *     salvarea scrie categoria noua
+   *     -> la ei categoria aprobata veche, la noi cea noua ❌
    *
-   * ⚠ SI ARE O IESIRE SCRISA. O regula care doar refuza, fara sa spuna ce se poate face, e o usa
-   * incuiata fara clanta: listare noua pentru categorie, varianta noua pentru marime.
+   * Adica exact starea pe care regula exista ca s-o impiedice.
+   *
+   * ⚠ LEACUL NU E O VERIFICARE MAI BUNA, CI ACELASI LOC: acum se face in
+   * `aboutyou_salveaza_listarea`, sub `for update` pe randul de listare si inaintea oricarei
+   * scrieri. Masurat pe baza adevarata: cu incuietoare, scrierea cronului a asteptat toata
+   * fereastra de trei secunde si hotararea s-a luat pe statusul adevarat; fara ea, cronul a intrat
+   * la 589ms si hotararea s-a luat pe unul invechit.
+   *
+   * ⚠ SI NU S-A LASAT SI AICI O COPIE. Doua liste ale starilor „aprobate", una in TypeScript si
+   * una in SQL, s-ar fi departat tacut la prima schimbare — iar cea din TypeScript ar fi parut
+   * paza, fara sa mai fie.
    */
-  const APROBATE = new Set(["active", "published", "pending_active", "inactive"]);
-  const randVechi = existent as { id: string; status?: string; category_id?: number | null } | null;
-  if (randVechi && APROBATE.has(randVechi.status ?? "")) {
-    const categoriaNoua = input.category_id ?? null;
-    if (categoriaNoua != null && randVechi.category_id != null && categoriaNoua !== randVechi.category_id) {
-      return {
-        error: "About You nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat."
-          + " Ca să-l muți în altă categorie, elimină listarea și creează una nouă.",
-      };
-    }
-
-    /*
-     * ⚠ Marimea se compara PE SKU, nu pe pozitie: variantele se pot reordona intre doua deschideri
-     * ale editorului, iar comparate pe indice ar fi parut schimbate toate.
-     */
-    const { data: vechi, error: eVechi } = await admin.from("aboutyou_variants")
-      .select("sku, size_id, second_size_id").eq("listing_id", randVechi.id);
-    if (eVechi) return { error: "Nu am putut citi variantele. Încearcă din nou." };
-    const dupaSku = new Map((vechi ?? []).map((v) => [
-      (v as { sku: string }).sku,
-      v as { size_id: number | null; second_size_id: number | null },
-    ]));
-    for (const v of input.variants) {
-      const sku = v.sku?.trim();
-      if (!sku) continue;
-      const vechea = dupaSku.get(sku);
-      /* Varianta noua n-are ce sa incalce: regula e despre SCHIMBAREA uneia deja aprobate. */
-      if (!vechea) continue;
-      const schimbata = (v.size_id ?? null) !== (vechea.size_id ?? null)
-        || (v.second_size_id ?? null) !== (vechea.second_size_id ?? null);
-      if (schimbata && vechea.size_id != null) {
-        return {
-          error: `About You nu mai acceptă schimbarea mărimii la varianta „${sku}" după ce a fost aprobată.`
-            + " Dezactivează varianta și adaugă una nouă, cu SKU nou, pentru mărimea corectă.",
-        };
-      }
-    }
-  }
-
   /*
    * ═══ ⚠ TOATE VERIFICARILE INAINTE DE ORICE SCRIERE (28.08.2026, seara) ═══
    *
@@ -1393,8 +1375,9 @@ export async function saveAboutYouListing(
   const { data: rez, error: eSalvare } = await admin.rpc("aboutyou_salveaza_listarea", {
     p_business_id: businessId, p_style_key: productId, p_product_id: productId,
     p_campuri: campuri as never, p_randuri: variante as never,
+    p_listare_asteptata: incarnarea,
   });
-  const r = rez as { stare?: string; variante?: { stare?: string } } | null;
+  const r = rez as { stare?: string; sku?: string; variante?: { stare?: string } } | null;
   if (eSalvare || !r?.stare) {
     logError({
       action: "aboutyou.saveListing", severity: "error",
@@ -1406,6 +1389,34 @@ export async function saveAboutYouListing(
   /* ⚠ „Listarea nu exista" nu e acelasi lucru cu „a mers": ar iesi tacut, fara sa fi scris nimic. */
   if (r.stare === "lipsa" || r.variante?.stare === "lipsa") {
     return { error: "Listarea About You nu mai există. Reîncarcă pagina." };
+  }
+  /*
+   * ⚠ SALVAREA A PORNIT DINTR-O LISTARE CARE NU MAI E. Nu s-a scris nimic, dinadins — si mesajul
+   * spune CE SA FACA, nu doar ca n-a mers: o regula care refuza fara iesire e o usa incuiata
+   * fara clanta.
+   */
+  if (r.stare === "depasit") {
+    return {
+      error: "Listarea a fost eliminată sau refăcută între timp, așa că nu am salvat nimic."
+        + " Reîncarcă pagina: dacă vrei produsul din nou pe About You, salvează-l ca listare nouă.",
+    };
+  }
+  /*
+   * ⚠ Aceleasi doua reguli ca inainte, si aceleasi doua mesaje — numai locul verificarii s-a
+   * schimbat. Fiecare isi poarta iesirea scrisa: listare noua pentru categorie, varianta noua
+   * pentru marime.
+   */
+  if (r.stare === "categorie-blocata") {
+    return {
+      error: "About You nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat."
+        + " Ca să-l muți în altă categorie, elimină listarea și creează una nouă.",
+    };
+  }
+  if (r.stare === "marime-blocata") {
+    return {
+      error: `About You nu mai acceptă schimbarea mărimii la varianta „${r.sku ?? ""}" după ce a fost aprobată.`
+        + " Dezactivează varianta și adaugă una nouă, cu SKU nou, pentru mărimea corectă.",
+    };
   }
   if (r.stare !== "scris") {
     logError({

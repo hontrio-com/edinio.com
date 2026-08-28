@@ -5256,6 +5256,9 @@ export type Database = {
         Args: {
           p_business_id: string; p_style_key: string; p_product_id: string
           p_campuri: Json; p_randuri: Json
+          /* ⚠ Incarnarea de la care a pornit salvarea. `null` = „am inceput fara listare", si numai
+             atunci se poate crea una. Vezi migratia 2026-12-12. */
+          p_listare_asteptata?: string | null
         }
         Returns: Json
       }

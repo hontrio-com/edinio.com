@@ -235,7 +235,6 @@ export interface OlxSettingsInput {
 export async function saveOlxSettings(businessId: string, input: OlxSettingsInput): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const { supabase } = g;
   const config = await loadConfig(businessId);
 
   const next: OlxConfig = {
@@ -313,7 +312,6 @@ export async function saveOlxCategoryMapEntry(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const { supabase } = g;
   const config = await loadConfig(businessId);
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];

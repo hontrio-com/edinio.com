@@ -5,6 +5,7 @@
 //  - capital letters must stay under 50% of the text
 // Violations get the advert rejected at POST time, so we sanitize proactively.
 
+import { gpsrEfectiv, type GpsrConfig } from "@/lib/gpsr";
 import { OLX_CURRENCY, type OlxCategoryMapEntry, type OlxConfig } from "./types";
 
 export interface MappableBusiness {
@@ -26,6 +27,13 @@ export interface MappableProduct {
   is_active: boolean;
   track_inventory: boolean;
   stock_quantity: number | null;
+  /**
+   * Ce tine de produs si n-are coloana proprie: `google`, `dimensions`, `variants` — si `gpsr`.
+   *
+   * ⚠ Optional dinadims: sunt apelanti care construiesc `MappableProduct` din citiri mai vechi,
+   * fara campul asta. `gpsrDinProdus` citeste `unknown` fara sa presupuna nimic despre forma.
+   */
+  page_sections?: unknown;
 }
 
 export function isProductSellable(p: Pick<MappableProduct, "is_active" | "track_inventory" | "stock_quantity">): boolean {
@@ -111,6 +119,14 @@ export function toOlxAdvertBody(
   product: MappableProduct,
   config: OlxConfig,
   entry: OlxCategoryMapEntry,
+  /**
+   * Producatorul si persoana responsabila din UE, din setarile magazinului.
+   *
+   * ⚠ Se dau de sus, nu se citesc aici: `mapping.ts` n-are client de baza, iar o citire ascunsa
+   * intr-un constructor de sarcina utila ar fi o cerere la baza pentru fiecare produs dintr-o
+   * publicare in masa.
+   */
+  gpsrConfig?: GpsrConfig | null,
 ): Record<string, unknown> {
   /*
    * ⚠ `photos_limit = 0` CHIAR INSEAMNA ZERO (30.08.2026). `Math.max(1, …)` trimitea o poza si
@@ -131,11 +147,25 @@ export function toOlxAdvertBody(
   const phone = (config.contact_phone ?? "").replace(/\s+/g, "");
   if (phone) contact.phone = phone;
 
+  const gpsr = gpsrEfectiv(product.page_sections, gpsrConfig);
+
   const body: Record<string, unknown> = {
     title: buildOlxTitle(product, business),
     description: buildOlxDescription(product, business),
     category_id: entry.category_id,
     advertiser_type: config.advertiser_type ?? "private",
+    /*
+     * ⚠ GPSR: cine raspunde pentru siguranta produsului (30.08.2026).
+     *
+     * OLX il cere prin `product_safety_regulation` la creare si la actualizare, si il refuza in
+     * categoriile unde regulamentul european il face obligatoriu. Pana azi nu trimiteam nimic, deci
+     * acolo publicarea pica fara ca noi sa fi avut vreodata datele.
+     *
+     * ⚠ NU SE TRIMITE UN OBIECT GOL: `gpsrEfectiv` intoarce `null` cand n-avem nimic, iar cheia
+     * lipseste cu totul. `{}` ar insemna „am declarat ceva" — neadevarat, si mai rau decat lipsa,
+     * fiindca refuzul lor n-ar mai spune ce lipseste.
+     */
+    ...(gpsr ? { product_safety_regulation: gpsr } : {}),
     // external_id lets us dedup; external_url is NOT sent — many partner accounts
     // are not allowed to set it and OLX rejects the advert ("partner is not
     // allowed to set external_url"). The shop link lives in the description flow.

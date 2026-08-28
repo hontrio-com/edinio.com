@@ -14,6 +14,7 @@ import {
   type OlxStatus, type OlxAdvertRow,
 } from "@/lib/actions/olx.actions";
 import type { OlxCity, OlxDistrict } from "@/lib/olx/types";
+import { GpsrSettings } from "./GpsrSettings";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -195,6 +196,12 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
       )}
 
       {showSettings && <OlxSettings businessId={businessId} status={status} onSaved={() => router.refresh()} />}
+      {/*
+        ⚠ Sub setările OLX, dar NU o setare de OLX: aceleași date le cer și eMAG, și About You.
+        Se arată aici fiindcă aici e comerciantul când conectează primul marketplace — iar textul
+        panoului spune limpede că valorile se folosesc pe toate canalele.
+      */}
+      {showSettings && <GpsrSettings businessId={businessId} />}
 
       {/* Category mapping */}
       <OlxCategoryMapper businessId={businessId} categories={categories} initialMap={status.categoryMap} />

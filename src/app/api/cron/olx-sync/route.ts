@@ -3,17 +3,14 @@ import { patchOlxConfig } from "@/lib/olx/config";
 import { logError } from "@/lib/error-logger";
 import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import { verificaCron } from "@/lib/cron-auth";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
   loadOlxContext, processQueueItem, refreshAdvertStatus, pause, type RezultatContext,
-  PRODUCT_FIELDS, type OlxQueueItem, type OlxSyncContext,
+  PRODUCT_FIELDS, type OlxQueueItem,
 } from "@/lib/olx/sync";
 import { advertCommand } from "@/lib/olx/client";
 import type { MappableProduct } from "@/lib/olx/mapping";
-import type { OlxConfig } from "@/lib/olx/types";
-
-type Admin = SupabaseClient<Database>;
 
 // OLX rate limits are not clearly documented — pace conservatively and keep the
 // per-run volume small (the cron fires every minute). Each write op also costs

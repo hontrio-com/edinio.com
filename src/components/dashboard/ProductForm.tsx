@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus, X, Pencil, Loader2, Upload, Star, ArrowLeft, Trash2,
-  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info, ExternalLink,
+  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info, ExternalLink, ShieldCheck,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -125,6 +125,22 @@ interface FormState {
   variants: VariantsState;
   customization: CustomizationState;
   google: GoogleShoppingState;
+  gpsr: GpsrState;
+}
+
+/**
+ * Suprascrierea GPSR de pe produs.
+ *
+ * ⚠ Gol inseamna „ia din setarile magazinului". Suprascrierea e la nivel de PERSOANA intreaga:
+ * imbinate camp cu camp, s-ar naste o adresa jumatate a unui producator si jumatate a altuia — o
+ * informatie legala falsa, si mai rea decat una lipsa.
+ */
+interface GpsrPersoanaState { name: string; address: string; email: string; phone: string }
+interface GpsrState {
+  placed_before_2024: boolean;
+  manufacturer: GpsrPersoanaState;
+  contact_person: GpsrPersoanaState;
+  warning_and_safety: string;
 }
 
 interface GoogleShoppingState {
@@ -229,6 +245,17 @@ const EMPTY_FORM: FormState = {
   variants: { enabled: false, options: [], combinations: [] },
   customization: { enabled: false, fields: [] },
   google: { gtin: "", brand: "", mpn: "", google_product_category: "", condition: "", gender: "", age_group: "", color: "", size: "", material: "", custom_label_0: "", custom_label_1: "", custom_label_2: "", custom_label_3: "", custom_label_4: "" },
+  /*
+   * ⚠ SUPRASCRIEREA GPSR, la nivel de PERSOANA intreaga. Gol inseamna „ia din setarile
+   * magazinului". Imbinate camp cu camp, s-ar naste o adresa jumatate a unui producator si
+   * jumatate a altuia — o informatie legala falsa, si mai rea decat una lipsa.
+   */
+  gpsr: {
+    placed_before_2024: false,
+    manufacturer: { name: "", address: "", email: "", phone: "" },
+    contact_person: { name: "", address: "", email: "", phone: "" },
+    warning_and_safety: "",
+  },
 };
 
 type PageSections = {
@@ -305,6 +332,21 @@ function productToForm(p: Product): FormState {
     customization: ps.customization
       ? { enabled: ps.customization.enabled, fields: ps.customization.fields }
       : { enabled: false, fields: [] },
+    /* ⚠ Citit fara sa presupunem forma: `page_sections` e jsonb, si produsele vechi n-au cheia. */
+    gpsr: (() => {
+      const g = (ps as { gpsr?: Record<string, unknown> } | null)?.gpsr ?? {};
+      const p = (x: unknown) => {
+        const o = (x ?? {}) as Record<string, unknown>;
+        const c = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+        return { name: c("name"), address: c("address"), email: c("email"), phone: c("phone") };
+      };
+      return {
+        placed_before_2024: g.placed_before_2024 === true,
+        manufacturer: p(g.manufacturer),
+        contact_person: p(g.contact_person),
+        warning_and_safety: typeof g.warning_and_safety === "string" ? g.warning_and_safety : "",
+      };
+    })(),
     google: {
       gtin: ps.google?.gtin ?? "",
       brand: ps.google?.brand ?? "",
@@ -577,6 +619,15 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   // Toggle vizual pentru sectiunea Google Shopping: inchis implicit, dar deschis
   // din start daca produsul editat are deja atribute completate.
   const [showGoogle, setShowGoogle] = useState(() => hasGoogleData(form.google));
+  /*
+   * ⚠ Deschisa din start daca produsul are deja o suprascriere: inchisa, ar fi ascuns date pe care
+   * omul le-a scris — si le-ar fi crezut pierdute. Acelasi tipar ca la Google Shopping.
+   */
+  const [showGpsr, setShowGpsr] = useState(
+    form.gpsr.placed_before_2024
+    || [form.gpsr.manufacturer, form.gpsr.contact_person].some((p) => Object.values(p).some((x) => x !== ""))
+    || form.gpsr.warning_and_safety !== "",
+  );
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const toggleHelp = (k: string) => setHelpOpen((p) => (p === k ? null : k));
   const [isPending, startTransition] = useTransition();
@@ -814,6 +865,25 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
           enabled: form.customization.enabled,
           fields: form.customization.fields,
         },
+        /*
+         * ⚠ Se scrie doar ce a completat OMUL. Un obiect plin de siruri goale ar arata, la citire,
+         * ca o suprascriere — iar produsul ar pleca fara producator, in loc sa-l ia din setari.
+         */
+        gpsr: (() => {
+          const p = (o: { name: string; address: string; email: string; phone: string }) => {
+            const v = { name: o.name.trim(), address: o.address.trim(), email: o.email.trim(), phone: o.phone.trim() };
+            return Object.values(v).some((x) => x !== "") ? v : undefined;
+          };
+          const out: Record<string, unknown> = {};
+          if (form.gpsr.placed_before_2024) out.placed_before_2024 = true;
+          const man = p(form.gpsr.manufacturer);
+          if (man) out.manufacturer = man;
+          const con = p(form.gpsr.contact_person);
+          if (con) out.contact_person = con;
+          const av = form.gpsr.warning_and_safety.trim();
+          if (av) out.warning_and_safety = av;
+          return out;
+        })(),
         google: {
           gtin: form.google.gtin.trim(),
           brand: form.google.brand.trim(),
@@ -1742,6 +1812,99 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 </div>
               </div>
             </div>
+
+            {/*
+              ── Siguranța produsului (GPSR) ─────────────────────────────────
+              ⚠ SE ARATĂ DOAR CÂND E CONECTAT UN MARKETPLACE CARE O CERE, după același tipar ca
+              secțiunea Google Shopping de mai jos. Cerința LEGALĂ îl privește pe oricine vinde în
+              UE, deci datele există pentru toată lumea — dar cerința TEHNICĂ, un API care refuză,
+              e numai a marketplace-urilor. Un comerciant fără nicio integrare n-are ce face cu
+              câmpurile astea acum, și n-are rost să i le punem în drum.
+
+              ⚠ ȘI E DOAR O SUPRASCRIERE: gol înseamnă „ia din Setări", unde se completează o
+              dată pentru tot catalogul. Cerute aici pe fiecare produs, ar fi fost rescrise de trei
+              mii de ori și greșite de la al doilea.
+            */}
+            {(olxConnected || emagConnected) && (
+            <div className={sectionCls}>
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Siguranța produsului (GPSR)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Doar dacă acest produs are alt producător decât cel din Setări. Gol = se folosesc datele din Setări.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={showGpsr} onCheckedChange={setShowGpsr} className="shrink-0" />
+              </div>
+              {showGpsr && (
+              <div className="px-5 py-5 space-y-4">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={form.gpsr.placed_before_2024}
+                    onChange={(e) => setForm((f) => ({ ...f, gpsr: { ...f.gpsr, placed_before_2024: e.target.checked } }))} />
+                  <span>
+                    <span className="text-foreground">Pus pe piață înainte de 13 decembrie 2024</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Pentru produsele astea, regulamentul nu cere datele de mai jos.
+                    </span>
+                  </span>
+                </label>
+
+                {!form.gpsr.placed_before_2024 && (
+                  <>
+                    {([
+                      ["manufacturer", "Producător", "Cine a fabricat acest produs, dacă e altul decât cel din Setări."],
+                      ["contact_person", "Persoană responsabilă în UE", "Cine răspunde pentru el în Uniune."],
+                    ] as const).map(([cheie, titlu, ajutor]) => (
+                      <div key={cheie} className="space-y-2 rounded-xl border border-border p-3">
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">{titlu}</p>
+                          <p className="text-[11px] text-muted-foreground">{ajutor}</p>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {([
+                            ["name", "Denumire"], ["address", "Adresă completă"],
+                            ["email", "E-mail"], ["phone", "Telefon"],
+                          ] as const).map(([camp, eticheta]) => (
+                            <input
+                              key={camp}
+                              type="text"
+                              value={form.gpsr[cheie][camp]}
+                              placeholder={eticheta}
+                              aria-label={`${titlu} — ${eticheta}`}
+                              className="w-full rounded-lg border border-border bg-background p-2 text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({
+                                ...f,
+                                gpsr: { ...f.gpsr, [cheie]: { ...f.gpsr[cheie], [camp]: e.target.value } },
+                              }))} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground" htmlFor="gpsr-avertisment-produs">
+                        Avertismente și instrucțiuni de siguranță
+                      </label>
+                      <textarea
+                        id="gpsr-avertisment-produs"
+                        rows={3}
+                        value={form.gpsr.warning_and_safety}
+                        onChange={(e) => setForm((f) => ({ ...f, gpsr: { ...f.gpsr, warning_and_safety: e.target.value } }))}
+                        placeholder="Ce scrie pe ambalajul acestui produs, dacă diferă de textul din Setări."
+                        className="w-full rounded-lg border border-border bg-background p-2 text-sm" />
+                    </div>
+                  </>
+                )}
+              </div>
+              )}
+            </div>
+            )}
 
             {/* ── Google Shopping / Merchant Center (doar cand GMC e conectat) ── */}
             {gmcConnected && (

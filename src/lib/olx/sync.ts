@@ -16,18 +16,32 @@ import {
   type OlxResult,
 } from "./client";
 import { isProductSellable, toOlxAdvertBody, type MappableBusiness, type MappableProduct } from "./mapping";
+import type { GpsrConfig } from "@/lib/gpsr";
 import type { OlxAdvert, OlxConfig } from "./types";
 import { logError } from "@/lib/error-logger";
 
 type Db = SupabaseClient<Database>;
 
+/*
+ * ⚠ `page_sections` E IN LISTA PENTRU GPSR (30.08.2026). Acolo sta suprascrierea de pe produs —
+ * producatorul altui brand, la un revanzator. Fara coloana in citire, `gpsrEfectiv` ar fi primit
+ * mereu `undefined` si ar fi cazut tacut pe setarile magazinului: o declaratie legala GRESITA,
+ * spusa cu incredere.
+ */
 export const PRODUCT_FIELDS =
-  "id, name, slug, description, price, compare_at_price, images, category, is_active, track_inventory, stock_quantity";
+  "id, name, slug, description, price, compare_at_price, images, category, is_active, track_inventory, stock_quantity, page_sections";
 
 export interface OlxSyncContext {
   token: string;
   config: OlxConfig;
   business: MappableBusiness;
+  /**
+   * Producatorul si persoana responsabila din UE, din setarile magazinului.
+   *
+   * ⚠ Se citeste O DATA, la incarcarea contextului, si se duce mai departe: citita in
+   * `toOlxAdvertBody`, ar fi fost o cerere la baza pentru fiecare produs dintr-o publicare in masa.
+   */
+  gpsr: GpsrConfig | null;
 }
 
 export interface OlxAdvertRow {
@@ -90,7 +104,7 @@ export type RezultatContext =
 
 export async function loadOlxContext(admin: Db, businessId: string): Promise<RezultatContext> {
   const { data: ss, error: eConfig } = await admin
-    .from("store_settings").select("olx_config").eq("business_id", businessId).single();
+    .from("store_settings").select("olx_config, gpsr_config").eq("business_id", businessId).single();
   /* ⚠ O citire picata NU inseamna „nu e conectat": ar duce la stergerea cozii pentru o pana. */
   if (eConfig) return { stare: "trecatoare", motiv: `configul nu s-a putut citi: ${eConfig.message}` };
   const config = (ss?.olx_config as OlxConfig) ?? {};
@@ -108,7 +122,15 @@ export async function loadOlxContext(admin: Db, businessId: string): Promise<Rez
     .from("businesses").select("slug, custom_domain, store_name, business_name").eq("id", businessId).single();
   if (eBiz) return { stare: "trecatoare", motiv: `magazinul nu s-a putut citi: ${eBiz.message}` };
   if (!biz) return { stare: "deconectat" };
-  return { stare: "gata", ctx: { token: tok.token, config: tok.config, business: biz as MappableBusiness } };
+  return {
+    stare: "gata",
+    ctx: {
+      token: tok.token,
+      config: tok.config,
+      business: biz as MappableBusiness,
+      gpsr: (ss?.gpsr_config as GpsrConfig) ?? null,
+    },
+  };
 }
 
 // Retryable = network, rate-limit, auth hiccup, 5xx. Permanent = validation.
@@ -314,7 +336,7 @@ async function upsertRemote(
       : { ok: true, action: "skipped" };
   }
 
-  const body = toOlxAdvertBody(ctx.business, product, ctx.config, entry);
+  const body = toOlxAdvertBody(ctx.business, product, ctx.config, entry, ctx.gpsr);
   const now = new Date().toISOString();
 
   if (row?.olx_advert_id) {

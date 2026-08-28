@@ -4255,6 +4255,7 @@ export type Database = {
           gls_config: Json | null
           innoship_config: Json | null
           packeta_config: Json | null
+          gpsr_config: Json
           google_analytics_config: Json
           google_merchant_config: Json
           id: string
@@ -4329,6 +4330,7 @@ export type Database = {
           gls_config?: Json | null
           innoship_config?: Json | null
           packeta_config?: Json | null
+          gpsr_config?: Json
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string
@@ -4403,6 +4405,7 @@ export type Database = {
           gls_config?: Json | null
           innoship_config?: Json | null
           packeta_config?: Json | null
+          gpsr_config?: Json
           google_analytics_config?: Json
           google_merchant_config?: Json
           id?: string

@@ -176,11 +176,24 @@ async function getVariantData(admin: Db, listingId: string): Promise<TrendyolVar
   }));
 }
 
-async function setListingStatus(admin: Db, listingId: string, status: string, extra: Record<string, unknown> = {}): Promise<void> {
+/**
+ * Scrie starea unei listari, si SPUNE daca a mers.
+ *
+ * ⚠ Intorcea `void`, iar `pollOpenBatches` inchidea lotul necondiționat dupa ce il asezase. Deci o
+ * scriere picata la mijloc lasa verdictul lor nescris SI lotul inchis: un produs RESPINS de
+ * Trendyol ramanea la noi pe `pending` pentru totdeauna, fara text de eroare, iar comerciantul nu
+ * afla niciodata de ce nu apare. Loturile inchise nu se mai intreaba — selectia cere
+ * `pending/processing/retry`.
+ *
+ * ⚠ Aceeasi capcana e reparata de mult la About You, in acelasi rol: acolo functia intoarce
+ * `boolean` si asezarea tine un steag. Aici lipseau si valoarea, si steagul.
+ */
+async function setListingStatus(admin: Db, listingId: string, status: string, extra: Record<string, unknown> = {}): Promise<boolean> {
   const now = new Date().toISOString();
-  await admin.from("trendyol_listings")
+  const { error } = await admin.from("trendyol_listings")
     .update({ status, last_status_at: now, updated_at: now, ...extra } as never)
     .eq("id", listingId);
+  return !error;
 }
 
 /**
@@ -1515,6 +1528,28 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
     }
     const result = res.data;
     const stare = stareLot(result);
+    /*
+     * ═══ ⚠ UN LOT NU SE INCHIDE DACA ASEZAREA LUI N-A APUCAT SA SE SCRIE (29.08.2026, seara) ═══
+     *
+     * Toate scrierile de mai jos mergeau oarbe, iar lotul se inchidea necondiționat. Deci o pana de
+     * o clipa la mijloc lasa verdictul lor nescris SI lotul inchis — iar loturile inchise nu se mai
+     * intreaba niciodata (selectia cere `pending/processing/retry`).
+     *
+     * Cel mai scump: un produs RESPINS de Trendyol ramanea la noi pe `pending` pentru totdeauna,
+     * fara text de eroare. Comerciantul il vedea „in asteptare" si nu afla niciodata de ce nu apare
+     * la ei. Nici plasele nu-l ridicau: `confirmaTintit` cauta produse GASITE la ei, iar unul
+     * respins nu se gaseste.
+     *
+     * ⚠ NEINCHIS, LOTUL SE REIA — si asta e ieftin: asezarea e idempotenta (aceleasi stari,
+     * aceleasi repuneri la coada). Aceeasi alegere ca la About You, in acelasi rol.
+     */
+    let asezat = true;
+    /** Inveleste o scriere: daca pica, lotul nu se inchide si se reia. */
+    const scris = async (q: PromiseLike<{ error: unknown }>): Promise<boolean> => {
+      const { error } = await q;
+      if (error) asezat = false;
+      return !error;
+    };
     if (stare !== "gata") {
       const attempts = b.attempts + 1;
       /*
@@ -1601,23 +1636,23 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
            */
           const adoptat = await incearcaAdoptarea(admin, ctx, listing, motiveleLui);
           if (!adoptat) {
-            await setListingStatus(admin, listing.id, "error", {
+            if (!await setListingStatus(admin, listing.id, "error", {
               error: motiveleLui.slice(0, 5).join("; ").slice(0, 500) || "Eroare la procesarea pe Trendyol.",
-            });
+            })) asezat = false;
           }
         } else if (listing.status === "pending") {
           // Accepted; exists on Trendyol pending approval. `creat_de_edinio`
           // retine ca produsul de acolo e al NOSTRU: un refuz ulterior de tipul
           // „codul exista deja" e atunci propriul nostru produs, nu unul strain.
-          await setListingStatus(admin, listing.id, "created", { error: null, creat_de_edinio: true });
+          if (!await setListingStatus(admin, listing.id, "created", { error: null, creat_de_edinio: true })) asezat = false;
         }
         /*
          * Barcodurile acceptate se marcheaza, ca o varianta adaugata mai tarziu
          * sa poata fi deosebita de cele deja existente si sa plece pe creare.
          */
         if (!motiveleLui) {
-          await admin.from("trendyol_variants").update({ exista_la_ei: true } as never)
-            .eq("listing_id", listing.id);
+          await scris(admin.from("trendyol_variants").update({ exista_la_ei: true } as never)
+            .eq("listing_id", listing.id));
         }
       }
     } else if (b.kind === "update") {
@@ -1649,10 +1684,10 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
           const motiv = errors.length
             ? errors.slice(0, 3).join("; ")
             : "Trendyol nu a comunicat un motiv.";
-          await admin.from("trendyol_listings").update({
+          await scris(admin.from("trendyol_listings").update({
             issues: [{ tip: "actualizare", mesaj: motiv.slice(0, 500) }] as never,
             updated_at: new Date().toISOString(),
-          } as never).eq("id", listing.id);
+          } as never).eq("id", listing.id));
 
           /*
            * ═══ ⚠ „NU EXISTA LA EI" TREBUIE SA STINGA STEAGUL CARE SPUNE CA EXISTA (26.08.2026) ═══
@@ -1677,9 +1712,9 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
            * deja". Ar fi fost celalalt fel de bucla.
            */
           if (/nu a fost g[ăa]sit|not found/i.test(motiv)) {
-            await admin.from("trendyol_variants")
+            await scris(admin.from("trendyol_variants")
               .update({ exista_la_ei: false } as never)
-              .eq("listing_id", listing.id);
+              .eq("listing_id", listing.id));
             /*
              * ⚠ SI SE REPUNE LA COADA, altfel stinsul steagului n-ar folosi la nimic.
              *
@@ -1692,7 +1727,7 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
              * datoria veche, ar fi fost abandonata dupa una-doua treceri.
              */
             if (listing.product_id) {
-              await admin.from("trendyol_sync_queue").upsert({
+              await scris(admin.from("trendyol_sync_queue").upsert({
                 business_id: ctx.businessId,
                 product_id: listing.product_id,
                 offer_id: listing.product_id,
@@ -1701,7 +1736,7 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
                 last_error: null,
                 next_retry_at: null,
                 abandonat_la: null,
-              } as never, { onConflict: "business_id,offer_id,op" });
+              } as never, { onConflict: "business_id,offer_id,op" }));
             }
 
             await logError({
@@ -1713,8 +1748,8 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
           }
         } else {
           // Reusita sterge urma esecului anterior si confirma barcodurile.
-          await admin.from("trendyol_listings").update({ issues: [] as never } as never).eq("id", listing.id);
-          await admin.from("trendyol_variants").update({ exista_la_ei: true } as never).eq("listing_id", listing.id);
+          await scris(admin.from("trendyol_listings").update({ issues: [] as never } as never).eq("id", listing.id));
+          await scris(admin.from("trendyol_variants").update({ exista_la_ei: true } as never).eq("listing_id", listing.id));
         }
       }
     } else if (b.kind === "inventory" && !hardFail) {
@@ -1751,10 +1786,10 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
            * deja arhivat nu strica — deci reincercarea e sigura.
            */
           const motivArh = errors.slice(0, 2).join("; ") || "Trendyol nu a comunicat un motiv.";
-          await admin.from("trendyol_listings").update({
+          await scris(admin.from("trendyol_listings").update({
             sters_eroare: `Arhivarea a esuat la ei: ${motivArh}`,
             updated_at: now,
-          } as never).eq("business_id", ctx.businessId).in("id", listariArhivate);
+          } as never).eq("business_id", ctx.businessId).in("id", listariArhivate));
 
           await logError({
             action: "trendyol/stergere",
@@ -1776,16 +1811,16 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
               op: "delete", attempts: 0, last_error: null, next_retry_at: null, abandonat_la: null,
             }));
           if (randuriCoada.length > 0) {
-            await admin.from("trendyol_sync_queue")
-              .upsert(randuriCoada as never, { onConflict: "business_id,offer_id,op" });
+            await scris(admin.from("trendyol_sync_queue")
+              .upsert(randuriCoada as never, { onConflict: "business_id,offer_id,op" }));
           }
         } else {
           /* ⚠ NUMAI PE RANDURI CARE CHIAR SUNT IN RETRAGERE. A doua centura: un lot etichetat
              gresit „archive" n-ar putea porni ceasul de stergere pe un produs viu. */
-          await admin.from("trendyol_listings").update({
+          await scris(admin.from("trendyol_listings").update({
             arhivat_la: now, sters_eroare: null, updated_at: now,
           } as never)
-            .eq("business_id", ctx.businessId).eq("status", "removing").in("id", listariArhivate);
+            .eq("business_id", ctx.businessId).eq("status", "removing").in("id", listariArhivate));
         }
       }
     } else if (b.kind === "delete") {
@@ -1816,13 +1851,13 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
           details: { batchRequestId: b.batch_request_id, listari: listariDeUitat.slice(0, 20) },
           businessId: ctx.businessId, severity: "warning",
         });
-        await admin.from("trendyol_listings").update({
+        await scris(admin.from("trendyol_listings").update({
           sters_eroare: errors.slice(0, 2).join("; ") || "Stergerea a fost refuzata la ei.",
           updated_at: now,
-        } as never).eq("business_id", ctx.businessId).in("id", listariDeUitat);
+        } as never).eq("business_id", ctx.businessId).in("id", listariDeUitat));
       } else {
-        await admin.from("trendyol_listings")
-          .delete().eq("business_id", ctx.businessId).in("id", listariDeUitat);
+        await scris(admin.from("trendyol_listings")
+          .delete().eq("business_id", ctx.businessId).in("id", listariDeUitat));
       }
     } else if (b.kind === "inventory" && hardFail) {
       /*
@@ -1835,9 +1870,31 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
        */
       await jurnalLotEsuat(admin, ctx, b, errors);
     }
-    await admin.from("trendyol_batches")
-      .update({ status: hardFail ? "failed" : "completed", polled_at: now, result_summary: { status: result?.status ?? null, errors: errors.slice(0, 10) } as never })
+    /*
+     * ⚠ `retry`, NU `completed`, cand asezarea n-a apucat sa se scrie. Verdictul lor e deja la noi
+     * in `result`; ce lipseste e urma lui in baza. Lotul se reia la trecerea urmatoare si o scrie.
+     */
+    const { error: eInchidere } = await admin.from("trendyol_batches")
+      .update({
+        status: !asezat ? "retry" : hardFail ? "failed" : "completed",
+        polled_at: now,
+        result_summary: { status: result?.status ?? null, errors: errors.slice(0, 10) } as never,
+      } as never)
       .eq("id", b.id);
+    if (!asezat) {
+      await logError({
+        action: "trendyol-sync/loturi", severity: "error",
+        message: "verdictul lotului n-a putut fi scris in intregime; lotul ramane deschis si se reia",
+        details: { batchRequestId: b.batch_request_id, kind: b.kind }, businessId: ctx.businessId,
+      });
+    }
+    if (eInchidere) {
+      await logError({
+        action: "trendyol-sync/loturi", severity: "warning",
+        message: `lotul s-a asezat, dar starea lui nu s-a putut scrie: ${eInchidere.message}`,
+        details: { batchRequestId: b.batch_request_id, kind: b.kind }, businessId: ctx.businessId,
+      });
+    }
   }
 }
 

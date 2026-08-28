@@ -117,3 +117,60 @@ test("⚠ raspunsul brut se pastreaza la fiecare ingest, pe amandoua caile", () 
   const orders = viu("src/lib/aboutyou/orders.ts");
   assert.equal((orders.match(/raw: order as never/g) ?? []).length, 2, "si la creare, si la actualizare");
 });
+
+/* ── A doua expediere pe aceleasi linii ──────────────────────────────────── */
+
+test("⚠ o expediere deja in zbor opreste a doua, si nu dupa starile liniilor", () => {
+  /*
+   * ═══ ⚠ PAZA SE UITA LA CEVA CARE SE SCRIE PREA TARZIU (28.08.2026, noaptea) ═══
+   *
+   * Singura paza era `status === "open"` pe liniile comenzii. Dar starile liniilor se scriu abia
+   * cand se aseaza lotul — pana atunci raman `open`, desi cererea a plecat. Iar `ship_pending` se
+   * scrie doar pe COMANDA, si abia DUPA trimitere.
+   *
+   *     10:00 pleaca `POST /orders/ship` pentru liniile 1 si 2
+   *     10:01 se reemite AWB-ul la alt curier -> expedierea se pune iar la coada
+   *     10:01 paza vede tot `open` -> pleaca A DOUA cerere pe aceleasi linii ❌
+   *
+   * Si nu e o cale rara: o repune la coada fiecare emitere sau adoptare de AWB (DHL, FedEx,
+   * Innoship, Ecolet), plus butonul „Încearcă din nou". Iar cand al doilea AWB difera de primul,
+   * deduplicarea lor pe sarcina identica nu mai prinde nimic.
+   *
+   * ⚠ URMA CITITA E CEA SCRISA INAINTEA CERERII: `cuLotDurabil` pune randul de lot cu
+   * `kind: "ship"` INAINTE sa plece ceva. De-aia ea poate pazi, iar starile liniilor nu.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  const i = sync.indexOf("export async function shipOrderNow");
+  assert.notEqual(i, -1);
+  const corp = sync.slice(i, sync.indexOf("\nexport ", i + 10));
+
+  const iPaza = corp.indexOf('.eq("kind", "ship")');
+  const iCerere = corp.indexOf("await trimiteExpedierea(");
+  assert.ok(iPaza > 0, "lipseste cautarea expedierilor in zbor");
+  assert.ok(iCerere > iPaza, "paza vine INAINTEA cererii, altfel nu pazeste nimic");
+
+  /* ⚠ Toate starile deschise, nu doar `pending`: `intentie` e chiar cea scrisa inaintea cererii. */
+  for (const stare of ["intentie", "necunoscut", "pending", "processing", "retry"]) {
+    assert.match(corp, new RegExp(`"${stare}"`), `starea deschisa ${stare} lipseste din paza`);
+  }
+
+  /*
+   * ⚠ `.contains` PE `jsonb` CERE UN SIR JSON, nu o lista JS: cu lista iese `cs.{…}`, PostgREST
+   * raspunde `22P02` si citirea ARUNCA — adica paza ar doborî expedierea in loc s-o pazeasca.
+   */
+  assert.match(corp, /\.contains\("related_ids", JSON\.stringify\(\[orderId\]\)\)/);
+
+  /* ⚠ Si iesirea e `skipped`, nu eroare: chiar pleaca ce trebuie, deci n-are ce fi reluat. */
+  assert.match(corp, /expedieriInZbor\.length > 0[\s\S]{0,200}?action: "skipped"/);
+});
+
+test("⚠ si scrierea starii comenzii dupa expediere isi citeste raspunsul", () => {
+  /*
+   * Nescrisa, comanda ramane pe starea dinainte si comerciantul vede butonul de expediere pe o
+   * comanda deja expediata. Nu opreste nimic — cererea a plecat, iar lotul deschis o pazeste
+   * de-acum — dar tacerea era chiar ce ascundea calea catre a doua expediere.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /const \{ error: eStare \} = await admin\.from\("aboutyou_orders"\)[\s\S]{0,200}?ship_pending/);
+  assert.match(sync, /if \(eStare\) \{[\s\S]{0,300}?expedierea a plecat, dar starea comenzii/);
+});

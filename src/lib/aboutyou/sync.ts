@@ -3705,6 +3705,12 @@ export async function reconcileStatuses(
    * pierde, doar se amana.
    */
   const expirat = () => pana != null && Date.now() > pana;
+  /*
+   * ⚠ CLIPA DE LA CARE INCEPEM SA CITIM, luata INAINTE de prima cerere catre ei. Scrierile de la
+   * sfarsit o folosesc ca sa nu atinga un rand nascut intre timp — vezi nota lor. Luata mai
+   * tarziu, ar cuprinde chiar fereastra pe care vrem s-o inlaturam.
+   */
+  const inceputulCitirii = new Date().toISOString();
   const respinse: string[] = [];
   // Un rand PER SKU, un status PER STYLE: se aduna intai, se scrie o data.
   const peStyle = new Map<string, Set<string>>();
@@ -3776,6 +3782,23 @@ export async function reconcileStatuses(
    * muta cursorul. Nemutat, cel mai rau lucru care se intampla e ca aceleasi pagini se citesc din
    * nou — ieftin si idempotent.
    */
+  /*
+   * ═══ ⚠ SI NU SE SCRIE PESTE O INCARNARE PE CARE N-AM CITIT-O (28.08.2026, noaptea) ═══
+   *
+   * Cele trei scrieri de mai jos merg pe `(business_id, style_key)`, iar `style_key` SUPRAVIETUIESTE
+   * relistarii: sters si refacut, produsul are aceeasi cheie si alt rand. Intre citirea de la ei —
+   * pana la cincizeci de pagini, cu pauze — si scrierea de aici incape tot ciclul:
+   *
+   *     citim la ei: styleKey ABC e `rejected`, cu motivele lui
+   *     omul elimina listarea -> randul local se sterge
+   *     omul o reface        -> rand NOU, `local`, care n-a plecat niciodata la ei
+   *     scriem: randul nou primeste `rejected` si motivele produsului DINAINTE ❌
+   *
+   * Aceeasi regula ca la stare si la salvare (vezi `aboutyou_ceas_pentru_listare` si
+   * `p_listare_asteptata`), doar ca aici nu exista o incarnare anume de cerut: citirea e despre o
+   * CHEIE, nu despre un rand. Deci se cere altceva, la fel de exact — randul sa fi existat inainte
+   * sa incepem sa citim. Unul nascut dupa aceea nu poate fi cel despre care am citit.
+   */
   let toateScrise = true;
   {
     const now = new Date().toISOString();
@@ -3802,7 +3825,9 @@ export async function reconcileStatuses(
            */
           ...(eRespins ? {} : { rejection_reasons: [] as never }),
         } as never)
-        .eq("business_id", ctx.businessId).eq("style_key", styleKey);
+        .eq("business_id", ctx.businessId).eq("style_key", styleKey)
+        /* ⚠ Vezi nota de mai sus: un rand nascut dupa ce am inceput sa citim nu e cel citit. */
+        .lt("created_at", inceputulCitirii);
       /* ⚠ O scriere picata inseamna ca pagina ei nu s-a asezat: cursorul nu are voie sa treaca. */
       if (eScris) toateScrise = false;
     }
@@ -3867,7 +3892,9 @@ export async function reconcileStatuses(
           error: it.rejection_message ?? null,
           updated_at: new Date().toISOString(),
         } as never)
-        .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
+        .eq("business_id", ctx.businessId).eq("style_key", it.style_key)
+        /* ⚠ Ca mai sus: motivele produsului dinainte n-au ce cauta pe listarea refacuta. */
+        .lt("created_at", inceputulCitirii);
       /*
        * ⚠ Aici nu exista cursor de miscat, deci reluarea vine de la sine: statusul ramane
        * `rejected`, iar trecerea urmatoare cere motivul din nou. Se scrie totusi, ca sa nu para
@@ -3924,7 +3951,9 @@ export async function reconcileStatuses(
           error: it.rejection_message ?? null,
           updated_at: now,
         } as never)
-        .eq("business_id", ctx.businessId).eq("style_key", it.style_key);
+        .eq("business_id", ctx.businessId).eq("style_key", it.style_key)
+        /* ⚠ Ca mai sus: motivele produsului dinainte n-au ce cauta pe listarea refacuta. */
+        .lt("created_at", inceputulCitirii);
       /*
        * ⚠ SCOS DIN MULTIME NUMAI DACA S-A SCRIS. Scos oricum, socoteala „le-am gasit pe toate"
        * devine falsa dintr-o scriere picata — iar cursorul de mai jos trece mai departe si
@@ -4325,6 +4354,42 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
   if (orderItemIds.length === 0) return { ok: true, action: "skipped" };
 
   /*
+   * ═══ ⚠ O EXPEDIERE DEJA IN ZBOR OPRESTE A DOUA (28.08.2026, noaptea) ═══
+   *
+   * Singura paza de pana acum era `status === "open"` pe liniile comenzii. Dar starile liniilor se
+   * scriu abia cand se aseaza lotul — pana atunci raman `open`, desi cererea a plecat. Iar
+   * `ship_pending` se scrie doar pe COMANDA, si dupa trimitere.
+   *
+   *     10:00 se trimite `POST /orders/ship` pentru liniile 1 si 2
+   *     10:00 liniile raman `open` la noi; lotul e in lucru la ei
+   *     10:01 se reemite AWB-ul la alt curier -> expedierea se pune iar la coada
+   *     10:01 paza vede tot `open` -> pleaca A DOUA cerere pe aceleasi linii ❌
+   *
+   * Si nu e o cale rara: o repune la coada fiecare emitere sau adoptare de AWB (DHL, FedEx,
+   * Innoship, Ecolet), plus butonul „Încearcă din nou". Iar cand al doilea AWB difera de primul,
+   * deduplicarea lor pe sarcina identica nu mai prinde nimic.
+   *
+   * ⚠ URMA CARE SE CITESTE E CHIAR CEA SCRISA INAINTEA CERERII: `cuLotDurabil` pune randul de lot
+   * cu `kind: "ship"` INAINTE sa plece ceva. Deci un lot `ship` inca deschis pentru comanda asta
+   * inseamna „pleaca deja ce trebuie", indiferent ce spun liniile.
+   *
+   * ⚠ `.contains` PE O COLOANA `jsonb` CERE UN SIR JSON, nu o lista JS: cu lista iese `cs.{…}`,
+   * PostgREST raspunde `22P02`, iar `randuriCitite` ARUNCA. Vezi 2026-12-05.
+   */
+  const expedieriInZbor = randuriCitite<{ id: string; status: string }>(
+    "aboutyou.expedieriInZbor", await admin
+      .from("aboutyou_batches").select("id, status")
+      .eq("business_id", ctx.businessId).eq("kind", "ship")
+      .in("status", ["intentie", "necunoscut", "pending", "processing", "retry"])
+      .contains("related_ids", JSON.stringify([orderId])) as never);
+  if (expedieriInZbor.length > 0) {
+    return {
+      ok: true, action: "skipped",
+      /* ⚠ `skipped`, nu eroare: chiar pleaca ce trebuie. Reluata, ar fi a doua expediere. */
+    };
+  }
+
+  /*
    * ═══ ⚠ AWB-UL DE RETUR, CAND CHIAR AVEM UNUL (26.08.2026) ═══
    *
    * `return_tracking_key` e cerut de ruta de expediere, iar noi puneam acolo AWB-ul de TUR,
@@ -4426,8 +4491,21 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
    * si nimeni nu o mai relua. Statusul final il pune `pollOpenBatches`, dupa ce
    * vede rezultatul lotului.
    */
-  await admin.from("aboutyou_orders")
+  /*
+   * ⚠ SI SCRIEREA ASTA ISI CITESTE RASPUNSUL. Nescrisa, comanda ramane pe starea dinainte, iar
+   * comerciantul vede un buton de expediere pe o comanda deja expediata. Nu opreste nimic —
+   * cererea a PLECAT, iar lotul deschis o pazeste de-acum — dar tacerea era chiar ce ascundea
+   * calea catre a doua expediere.
+   */
+  const { error: eStare } = await admin.from("aboutyou_orders")
     .update({ status: "ship_pending", last_synced_at: now, updated_at: now } as never)
     .eq("id", (ayOrder as { id: string }).id);
+  if (eStare) {
+    await logError({
+      action: "aboutyou/expediere", severity: "error",
+      message: `expedierea a plecat, dar starea comenzii n-a putut fi scrisa: ${eStare.message}`,
+      details: { orderId, batchRequestId }, businessId: ctx.businessId,
+    });
+  }
   return { ok: true, action: "submitted", batchRequestId };
 }

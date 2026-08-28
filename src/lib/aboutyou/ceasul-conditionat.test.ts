@@ -230,3 +230,38 @@ test("scoaterea si publicarea cer numarul legat de randul citit", () => {
       "randul trimis e chiar cel citit mai sus, nu unul recitit intre timp");
   }
 });
+
+test("reconcilierea nu scrie peste o incarnare pe care n-a citit-o", () => {
+  /*
+   * ═══ ⚠ ACEEASI REGULA, PE A PATRA CALE (28.08.2026, noaptea) ═══
+   *
+   * Cele trei scrieri ale reconcilierii merg pe `(business_id, style_key)`, iar cheia
+   * SUPRAVIETUIESTE relistarii. Intre citirea de la ei — pana la cincizeci de pagini, cu pauze —
+   * si scriere incape tot ciclul:
+   *
+   *     citim la ei: styleKey ABC e `rejected`, cu motivele lui
+   *     omul elimina listarea -> randul local se sterge
+   *     omul o reface        -> rand NOU, `local`, care n-a plecat niciodata la ei
+   *     scriem: randul nou primeste `rejected` si motivele produsului DINAINTE ❌
+   *
+   * ⚠ AICI NU EXISTA O INCARNARE ANUME DE CERUT: citirea e despre o CHEIE, nu despre un rand. Deci
+   * se cere altceva, la fel de exact — randul sa fi existat inainte sa incepem sa citim.
+   */
+  const sync = readFileSync("src/lib/aboutyou/sync.ts", "utf8");
+  const i = sync.indexOf("export async function reconcileStatuses");
+  assert.notEqual(i, -1);
+  const corp = sync.slice(i, sync.indexOf("\nexport ", i + 10));
+
+  /* ⚠ Clipa se ia INAINTE de prima cerere catre ei; luata mai tarziu, ar cuprinde chiar fereastra. */
+  const iClipa = corp.indexOf("const inceputulCitirii");
+  const iCitire = corp.indexOf("await ");
+  assert.ok(iClipa > 0 && iCitire > iClipa,
+    "clipa de citire se ia inaintea primei cereri, altfel nu acopera fereastra");
+
+  /* ⚠ Si TOATE cele trei scrieri o folosesc: una singura lasata pe dinafara e destula. */
+  const scrieriPeCheie = (corp.match(/\.eq\("style_key", (?:styleKey|it\.style_key)\)/g) ?? []).length;
+  const pazite = (corp.match(/\.lt\("created_at", inceputulCitirii\)/g) ?? []).length;
+  assert.equal(scrieriPeCheie, 3, "s-au schimbat scrierile pe cheie: verifica paza fiecareia");
+  assert.equal(pazite, scrieriPeCheie,
+    "fiecare scriere pe cheie isi cere randul mai vechi decat citirea");
+});

@@ -440,7 +440,7 @@ begin
     return 'fara-ceas';
   end if;
 
-  if p_generatie is null or p_generatie < v_ceas then
+  if p_generatie is null or p_generatie <> v_ceas then
     return 'depasit';
   end if;
 
@@ -655,25 +655,6 @@ begin
   get diagnostics v_scrise = row_count;
 
   return jsonb_build_object('stare', 'scris', 'sterse', v_sterse, 'scrise', v_scrise);
-end;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text)
- RETURNS integer
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-declare
-  v_gen integer;
-begin
-  update public.aboutyou_listings
-     set status_generatie = status_generatie + 1,
-         status_dorit = p_status
-   where id = p_listing_id
-  returning status_generatie into v_gen;
-  return v_gen;
 end;
 $function$
 ;
@@ -9054,30 +9035,15 @@ grant execute on function privat.decripteaza(p_val text) to service_role;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to anon;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to authenticated;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to service_role;
-grant execute on function public.aboutyou_ceas_urmator(p_business_id uuid, p_style_key text, p_dorit text) to anon;
-grant execute on function public.aboutyou_ceas_urmator(p_business_id uuid, p_style_key text, p_dorit text) to authenticated;
 grant execute on function public.aboutyou_ceas_urmator(p_business_id uuid, p_style_key text, p_dorit text) to service_role;
-grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to anon;
-grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to authenticated;
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to service_role;
 grant execute on function public.aboutyou_generatie_noua(p_listing_id uuid) to service_role;
-grant execute on function public.aboutyou_incheie_scoaterea(p_business_id uuid, p_style_key text, p_generatie integer) to anon;
-grant execute on function public.aboutyou_incheie_scoaterea(p_business_id uuid, p_style_key text, p_generatie integer) to authenticated;
 grant execute on function public.aboutyou_incheie_scoaterea(p_business_id uuid, p_style_key text, p_generatie integer) to service_role;
-grant execute on function public.aboutyou_marcheaza_listarea() to anon;
-grant execute on function public.aboutyou_marcheaza_listarea() to authenticated;
 grant execute on function public.aboutyou_marcheaza_listarea() to service_role;
-grant execute on function public.aboutyou_marcheaza_modificarea() to anon;
-grant execute on function public.aboutyou_marcheaza_modificarea() to authenticated;
 grant execute on function public.aboutyou_marcheaza_modificarea() to service_role;
-grant execute on function public.aboutyou_marcheaza_varianta() to anon;
-grant execute on function public.aboutyou_marcheaza_varianta() to authenticated;
 grant execute on function public.aboutyou_marcheaza_varianta() to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
 grant execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) to service_role;
-grant execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) to anon;
-grant execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) to authenticated;
-grant execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
 grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
@@ -9224,21 +9190,11 @@ grant execute on function public.trendyol_comenzi_de_facturat(p_business_id uuid
 grant execute on function public.trendyol_magazine_cu_loturi_deschise() to service_role;
 grant execute on function public.trendyol_magazine_de_reconciliat() to service_role;
 grant execute on function public.trendyol_repune_stoc_retur(p_business_id uuid, p_claim_item_id text) to service_role;
-grant execute on function public.trg_catalog_cuvinte_murdar() to anon;
-grant execute on function public.trg_catalog_cuvinte_murdar() to authenticated;
 grant execute on function public.trg_catalog_cuvinte_murdar() to service_role;
-grant execute on function public.trg_catalog_proiectie() to anon;
-grant execute on function public.trg_catalog_proiectie() to authenticated;
 grant execute on function public.trg_catalog_proiectie() to service_role;
-grant execute on function public.trg_catalog_rezumat_murdar() to anon;
-grant execute on function public.trg_catalog_rezumat_murdar() to authenticated;
 grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
-grant execute on function public.trg_categorii_rezumat_murdar() to anon;
-grant execute on function public.trg_categorii_rezumat_murdar() to authenticated;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
-grant execute on function public.trg_repretuieste_pachetele() to anon;
-grant execute on function public.trg_repretuieste_pachetele() to authenticated;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
 grant execute on function public.update_domain_orders_updated_at() to anon;
 grant execute on function public.update_domain_orders_updated_at() to authenticated;
@@ -9268,7 +9224,6 @@ revoke execute on function public.aboutyou_marcheaza_modificarea() from public;
 revoke execute on function public.aboutyou_marcheaza_varianta() from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
 revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) from public;
-revoke execute on function public.aboutyou_status_generatie_noua(p_listing_id uuid, p_status text) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;
 revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
@@ -9344,7 +9299,12 @@ revoke execute on function public.trendyol_comenzi_de_facturat(p_business_id uui
 revoke execute on function public.trendyol_magazine_cu_loturi_deschise() from public;
 revoke execute on function public.trendyol_magazine_de_reconciliat() from public;
 revoke execute on function public.trendyol_repune_stoc_retur(p_business_id uuid, p_claim_item_id text) from public;
+revoke execute on function public.trg_catalog_cuvinte_murdar() from public;
+revoke execute on function public.trg_catalog_proiectie() from public;
+revoke execute on function public.trg_catalog_rezumat_murdar() from public;
+revoke execute on function public.trg_categorii_rezumat_murdar() from public;
 revoke execute on function public.trg_generatia_cozii() from public;
+revoke execute on function public.trg_repretuieste_pachetele() from public;
 revoke execute on function public.update_support_ticket_updated_at() from public;
 revoke execute on function public.vezi_ritm_extern(p_cheie text, p_fereastra_ms integer) from public;
 

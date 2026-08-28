@@ -3586,13 +3586,26 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
         details: { batchRequestId: b.batch_request_id, kind: b.kind }, businessId: ctx.businessId,
       });
     }
-    await admin.from("aboutyou_batches")
+    /*
+     * ⚠ SI SCRIEREA ASTA ISI CITESTE RASPUNSUL (28.08.2026, dimineata). Nescrisa, lotul ramane
+     * deschis si se reia — ceea ce e voit —, dar asezarea lui s-a facut DEJA o data. Pentru
+     * scoatere asta insemna, pana la ceasul de azi, ca acelasi lot putea sterge si listarea
+     * refacuta intre timp. Ceasul inchide gaura; jurnalul o face si vizibila.
+     */
+    const { error: eInchis } = await admin.from("aboutyou_batches")
       .update({
         status: !asezat ? "retry" : hardFail ? "failed" : "completed",
         polled_at: now,
         result_summary: { status: result.status, errors: errors.slice(0, 10) } as never,
       })
       .eq("id", b.id);
+    if (eInchis) {
+      await logError({
+        action: "aboutyou-sync/loturi", severity: "warning",
+        message: `lotul s-a asezat, dar starea lui nu s-a putut scrie: ${eInchis.message}`,
+        details: { batchRequestId: b.batch_request_id, kind: b.kind }, businessId: ctx.businessId,
+      });
+    }
   }
 }
 

@@ -385,7 +385,8 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
       { apiKey: prev.api_key, environment: prev.environment },
       prev.webhook_subscription_id,
     );
-    if (isAboutYouError(dez)) {
+    /* ⚠ Ca mai sus: `404` inseamna ca nu mai exista, deci nu e un abonament orfan. */
+    if (isAboutYouError(dez) && dez.status !== 404) {
       logError({
         action: "aboutyou.disconnect", severity: "error",
         message: `abonamentul de webhook n-a putut fi sters la About You si ramane orfan: ${dez.error}`,
@@ -1247,9 +1248,34 @@ export async function saveAboutYouListing(
      * si se aduna unu — o alocare citit-calculeaza-scrie, care putea da acelasi numar unei
      * reasertari pornite in acelasi timp. Vezi migratia 2026-12-08.
      */
+    /*
+     * ⚠ SI CEASUL SE AVANSEAZA INAINTE CA LISTAREA NOUA SA EXISTE (28.08.2026, dimineata).
+     *
+     * Fara pasul asta e destul o cadere obisnuita, fara nicio cursa exotica:
+     *
+     *     ceasul 5, scoaterea 5 se incheie -> listarea stearsa ✅
+     *     scrierea `status: completed` pe lot PICA -> lotul ramane deschis
+     *     omul relisteaza -> listare noua, ceasul TOT 5
+     *     cronul reia acelasi lot: 5 = 5 -> nu e depasit -> STERGE listarea noua ❌
+     *
+     * Ceasul e singurul lucru care deosebeste viata veche de cea noua, deci trebuie sa se miste
+     * chiar la nasterea celei noi. Nemiscat, cererea nu pleaca: mai bine o salvare reincercata
+     * decat o listare care poate fi stearsa de un lot din viata dinainte.
+     */
+    const { data: genRelistare, error: eCeas } = await admin.rpc("aboutyou_ceas_urmator", {
+      p_business_id: businessId, p_style_key: productId, p_dorit: null,
+    });
+    if (eCeas || typeof genRelistare !== "number") {
+      logError({
+        action: "aboutyou.saveListing", severity: "critical",
+        message: `ceasul starii nu s-a putut avansa la relistare: ${eCeas?.message ?? "raspuns nevalid"}`,
+        details: { businessId, productId }, businessId,
+      });
+      return { error: "Nu am putut pregăti listarea. Încearcă din nou." };
+    }
     const { data: nou, error } = await admin.from("aboutyou_listings").insert({
       business_id: businessId, product_id: productId, style_key: productId,
-      status: "local", ...campuri,
+      status: "local", status_generatie: genRelistare, ...campuri,
     } as never).select("id").single();
     if (nou) {
       listingId = (nou as { id: string }).id;
@@ -1973,7 +1999,13 @@ export async function unsubscribeAboutYouWebhook(businessId: string): Promise<{ 
      * Aici, spre deosebire de deconectare, omul n-a cerut sa plece: poate reincerca.
      */
     const dezabonat = await deleteWebhookSubscription(g.auth, g.config.webhook_subscription_id);
-    if (isAboutYouError(dezabonat)) {
+    /*
+     * ⚠ `404` INSEAMNA „NU MAI EXISTA", adica exact ce ceream. Tratat ca eroare, se ajungea intr-un
+     * fund de sac: o incercare in care stergerea la ei reuseste dar scrierea la noi pica lasa
+     * id-ul in config, iar de-atunci fiecare reincercare primeste `404` si REFUZA sa curete —
+     * pentru totdeauna. O stergere e idempotenta prin fire: „nu e acolo" e o reusita.
+     */
+    if (isAboutYouError(dezabonat) && dezabonat.status !== 404) {
       return { error: `Abonamentul nu s-a putut șterge la About You: ${dezabonat.error}` };
     }
   }

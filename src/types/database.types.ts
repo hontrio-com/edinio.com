@@ -5238,7 +5238,6 @@ export type Database = {
       aboutyou_generatie_noua: { Args: { p_listing_id: string }; Returns: number }
       aboutyou_ceas_urmator: { Args: { p_business_id: string; p_style_key: string; p_dorit: string | null }; Returns: number }
       aboutyou_incheie_scoaterea: { Args: { p_business_id: string; p_style_key: string; p_generatie: number | null }; Returns: string }
-      aboutyou_status_generatie_noua: { Args: { p_listing_id: string; p_status: string }; Returns: number }
       aboutyou_salveaza_variante: { Args: { p_business_id: string; p_listing_id: string; p_randuri: Json }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
       trendyol_comenzi_de_facturat: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { order_id: string; shipment_package_id: string }[] }

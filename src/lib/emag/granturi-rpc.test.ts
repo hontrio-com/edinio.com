@@ -51,6 +51,19 @@ const PUBLICE_DINADINS: Record<string, string> = {
    * si le imbina; secretele vin din ce a trimis apelantul, nu din datele altcuiva.
    */
   pazeste_secretele: "chemata din declansatorul vederii, care ruleaza sub rolul apelantului",
+  /*
+   * ⚠ GASITA DE PROBA DE MAI JOS, la prima ei rulare, si NU e o exceptie de comoditate.
+   *
+   * `privat.cripteaza_rand(p_rand jsonb)` e chemata din `privat.store_settings_ins` si
+   * `privat.store_settings_upd` — declansatoarele `INSTEAD OF` ale vederii `public.store_settings`.
+   * Verificat in productie: NICIUNUL dintre cele trei apelante nu e `SECURITY DEFINER`, deci
+   * ruleaza sub rolul celui care scrie. Fara EXECUTE pentru `authenticated`, orice salvare de
+   * setari ar pica.
+   *
+   * ⚠ Si nu expune nimic: CRIPTEAZA ce i se da, nu descifreaza. Primeste randul apelantului si il
+   * intoarce cu campurile secrete inchise; nu citeste datele nimanui altcuiva.
+   */
+  cripteaza_rand: "chemata din declansatoarele vederii `store_settings`, care ruleaza sub rolul apelantului",
 };
 
 const NL = String.fromCharCode(10);
@@ -233,4 +246,53 @@ test("baseline-ul chiar contine revocari, nu doar granturi", () => {
   const cate = baseline.split(String.fromCharCode(10))
     .filter((l) => l.startsWith("revoke execute on function ")).length;
   assert.ok(cate > 40, `numai ${cate} revocari in baseline: generatorul le-a pierdut`);
+});
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   `revoke … from public` NU IA SI GRANTURILE DATE PE NUME (28.08.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Proba de mai sus cerea revocarea de la PUBLIC, si atat. A trecut verde luni intregi peste o
+   gaura pe care tocmai ea trebuia s-o vada: Supabase da EXECUTE lui `anon` si `authenticated` PE
+   NUME, prin privilegii implicite, iar `revoke … from public` nu atinge un grant nominal.
+
+   Citit in productie, nu in fisier: SAISPREZECE functii `security definer` aveau `anon=X`, printre
+   ele `aboutyou_incheie_scoaterea`, care face `delete from public.aboutyou_listings` ocolind RLS.
+
+   ⚠ SI DE CE NU O MATURARE. Patru dintre cele saisprezece TREBUIE sa ramana deschise: cele trei
+   `catalog_*` sunt chemate chiar de vitrina publica, cu cheia anonima, iar `is_admin` e folosita de
+   noua politici RLS — care ruleaza sub rolul apelantului. Inchise, ar fi cazut si magazinul, si
+   fiecare politica. De-aia lista de mai jos e o lista ALEASA, nu o exceptie de comoditate.
+*/
+test("nicio functie `security definer` nu ramane deschisa lui anon sau authenticated", () => {
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const secdef = new Set(functiiSecurityDefiner(baseline).map((n) => n.split(".")[1]));
+  assert.ok(secdef.size > 30, `prea putine functii gasite (${secdef.size}): proba nu citeste`);
+
+  const deschise: string[] = [];
+  for (const linie of baseline.split(NL)) {
+    const m = /^grant execute on function (\w+)\.(\w+)\(.* to (anon|authenticated);$/.exec(linie);
+    if (!m) continue;
+    if (!secdef.has(m[2])) continue;              /* fara `security definer` nu ocoleste RLS */
+    if (m[2] in PUBLICE_DINADINS) continue;
+    deschise.push(`${m[2]} -> ${m[3]}`);
+  }
+
+  assert.deepEqual(deschise, [],
+    "functii SECURITY DEFINER pe care `anon` sau `authenticated` le pot chema. `revoke … from "
+    + "public` NU le inchide: granturile catre rolurile astea sunt date pe nume si cer "
+    + "`revoke … from anon, authenticated`.");
+});
+
+test("si lista celor lasate dinadins deschise e chiar cea masurata", () => {
+  /*
+   * ⚠ O lista de exceptii care creste in tacere devine, in cateva luni, o poarta. Aici se cere ca
+   * fiecare nume din ea sa fie inca `security definer` in baseline — altfel e o intrare moarta,
+   * ramasa de la o functie stearsa, care nu mai apara nimic si doar slabeste proba de mai sus.
+   */
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const secdef = new Set(functiiSecurityDefiner(baseline).map((n) => n.split(".")[1]));
+  const moarte = Object.keys(PUBLICE_DINADINS).filter((n) => !secdef.has(n));
+  assert.deepEqual(moarte, [], "intrari ramase in lista celor publice dinadins, fara functie in spate");
 });

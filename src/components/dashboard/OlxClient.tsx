@@ -461,6 +461,8 @@ export function AdvertStatusBadge({ status }: { status: string }) {
     unpaid: { label: "Neplătit", cls: "bg-warning/10 text-warning", icon: Clock },
     limited: { label: "Limită atinsă", cls: "bg-warning/10 text-warning", icon: ShoppingBag },
     removed_by_user: { label: "Dezactivat", cls: "bg-muted text-muted-foreground", icon: Ban },
+    /* ⚠ Sters de om: randul ramane, ca sincronizarea sa nu recreeze anuntul. „Postează pe OLX" e iesirea. */
+    sters_de_om: { label: "Șters de tine", cls: "bg-muted text-muted-foreground", icon: Ban },
     outdated: { label: "Expirat", cls: "bg-muted text-muted-foreground", icon: Clock },
     moderated: { label: "Respins", cls: "bg-destructive/10 text-destructive", icon: CircleX },
     blocked: { label: "Blocat", cls: "bg-destructive/10 text-destructive", icon: CircleX },

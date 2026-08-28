@@ -2801,6 +2801,7 @@ export type Database = {
           olx_advert_id: number | null
           olx_url: string | null
           product_id: string | null
+          sters_de_om_la: string | null
           status: string
           updated_at: string
           valid_to: string | null
@@ -2817,6 +2818,7 @@ export type Database = {
           olx_advert_id?: number | null
           olx_url?: string | null
           product_id?: string | null
+          sters_de_om_la?: string | null
           status?: string
           updated_at?: string
           valid_to?: string | null
@@ -2833,6 +2835,7 @@ export type Database = {
           olx_advert_id?: number | null
           olx_url?: string | null
           product_id?: string | null
+          sters_de_om_la?: string | null
           status?: string
           updated_at?: string
           valid_to?: string | null

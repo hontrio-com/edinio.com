@@ -35,6 +35,14 @@ export interface OlxAdvertRow {
   olx_advert_id: number | null;
   status: string;
   offer_id: string;
+  /**
+   * Clipa in care OMUL a cerut stergerea anuntului.
+   *
+   * ⚠ Cat timp e scrisa, sincronizarea nu recreeaza anuntul — altfel prima comanda venita de pe
+   * alt marketplace l-ar readuce la OLX, impotriva a ceea ce ii promite butonul. Se sterge din
+   * „Postează pe OLX", adica tot de catre om.
+   */
+  sters_de_om_la: string | null;
 }
 
 export type SyncOutcome =
@@ -94,7 +102,7 @@ class CitireOlxEsuata extends Error {}
 
 async function getRow(admin: Db, businessId: string, offerId: string): Promise<OlxAdvertRow | null> {
   const { data, error } = await admin
-    .from("olx_adverts").select("id, olx_advert_id, status, offer_id")
+    .from("olx_adverts").select("id, olx_advert_id, status, offer_id, sters_de_om_la")
     .eq("business_id", businessId).eq("offer_id", offerId).maybeSingle();
   if (error) throw new CitireOlxEsuata(`randul OLX nu s-a putut citi: ${error.message}`);
   return (data as OlxAdvertRow) ?? null;
@@ -127,7 +135,33 @@ async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, 
       // permanent (ex. invalid status persistent) — keep going and drop the row
     }
   }
-  await admin.from("olx_adverts").delete().eq("id", row.id);
+  /*
+   * ═══ ⚠ RANDUL RAMANE, CU CLIPA HOTARARII (29.08.2026, seara) ═══
+   *
+   * Sters, randul lua cu el singura urma ca omul a cerut stergerea. Iar coada OLX n-are garda
+   * „numai produsele deja listate" (About You si Trendyol o au), si se umple dupa FIECARE editare
+   * de pret sau stoc — inclusiv dupa fiecare comanda venita de pe alt marketplace. Deci:
+   *
+   *     omul apasa „Șterge anunțul" -> anuntul dispare la OLX, randul local se sterge
+   *     o comanda de pe Trendyol scade stocul -> produsul intra in coada OLX cu `upsert`
+   *     `getRow` nu gaseste nimic -> ramura de CREARE -> anuntul REAPARE la OLX ❌
+   *
+   * ⚠ Iar butonul ii promite textual „Acțiunea nu poate fi anulată". Deci nu doar ca se desfacea,
+   * se desfacea impotriva a ceea ce ii spuneam.
+   *
+   * ⚠ IESIREA E SCRISA SI EXISTA DEJA: „Postează pe OLX" sterge urma. Hotararea se poate schimba
+   * oricand — dar de catre OM.
+   */
+  const { error: eUrma } = await admin.from("olx_adverts")
+    .update({
+      olx_advert_id: null, status: "sters_de_om", url: null, error: null,
+      sters_de_om_la: new Date().toISOString(), updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", row.id);
+  if (eUrma) {
+    /* ⚠ Fara urma scrisa, trecerea urmatoare recreeaza anuntul. Se reia, nu se raporteaza reusit. */
+    return { ok: false, permanent: false, error: `Anuntul s-a sters la OLX, dar nu am putut tine minte asta: ${eUrma.message}` };
+  }
   return { ok: true, action: "deleted" };
 }
 
@@ -179,6 +213,13 @@ async function upsertRemote(
   // Product gone (or no longer loadable) -> remove the advert entirely.
   if (!product) return removeRemote(admin, ctx, businessId, row);
 
+  /*
+   * ⚠ CE A STERS OMUL NU SE RECREEAZA SINGUR. Vezi nota din `removeRemote`: coada se umple dupa
+   * fiecare editare de pret sau stoc, deci fara paza asta prima comanda de pe alt marketplace ar
+   * fi readus anuntul la OLX. Urma se sterge din „Postează pe OLX", adica de catre om.
+   */
+  if (row?.sters_de_om_la) return { ok: true, action: "skipped" };
+
   // Inactive or out of stock -> deactivate but keep the advert for later.
   if (!isProductSellable(product)) {
     if (row?.olx_advert_id && ["active", "new", "unconfirmed"].includes(row.status)) {
@@ -215,8 +256,17 @@ async function upsertRemote(
       { business_id: businessId, offer_id: offerId, product_id: product.id, ...advertPatch(advert, now) } as never,
       { onConflict: "business_id,offer_id" },
     );
-    // It was deactivated/expired and is sellable again -> reactivate.
-    if (["removed_by_user", "outdated"].includes(advert.status || row.status)) {
+    /*
+     * ⚠ SE REACTIVEAZA NUMAI CE A EXPIRAT SINGUR (29.08.2026, seara).
+     *
+     * `removed_by_user` inseamna chiar „omul a apasat «Dezactivează»" — iar ecranul are un buton
+     * „Activează" separat, tocmai pentru intoarcere. Reactivat automat la prima editare de pret,
+     * butonul acela n-avea niciun rost, si hotararea omului tinea pana la urmatoarea comanda.
+     *
+     * ⚠ `outdated` E ALTCEVA: acolo OLX a expirat anuntul singur, si reactivarea automata e chiar
+     * ce trebuie. Deosebirea nu e cum arata starea, ci CINE a hotarat-o.
+     */
+    if ((advert.status || row.status) === "outdated") {
       const freshRow = await getRow(admin, businessId, offerId);
       if (freshRow) await activateRemote(admin, ctx, freshRow);
     }

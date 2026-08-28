@@ -313,6 +313,20 @@ export async function publishOlxProduct(businessId: string, productId: string): 
   const ctx = await loadOlxContext(admin, businessId);
   if (!ctx) return { error: "Conexiunea OLX nu este disponibila. Reconecteaza contul." };
 
+  /*
+   * ⚠ APASAREA ASTA E CHIAR IESIREA DIN „STERS DE OM". Stergerea unui anunt lasa o urma tocmai ca
+   * sincronizarea sa nu-l recreeze singura la prima editare de pret; dar cand omul cere el
+   * publicarea, urma nu mai are ce pazi — ar bloca chiar butonul facut ca sa se razgandeasca.
+   *
+   * ⚠ SE STERGE INAINTE de trimitere: lasata, `syncProductNow` ar iesi `skipped` si comerciantul
+   * ar apasa degeaba, fara sa afle de ce.
+   */
+  const { error: eUrma } = await admin.from("olx_adverts")
+    .update({ sters_de_om_la: null } as never)
+    .eq("business_id", businessId).eq("offer_id", productId)
+    .not("sters_de_om_la", "is", null);
+  if (eUrma) return { error: "Nu am putut porni publicarea. Incearca din nou." };
+
   const res = await syncProductNow(admin, ctx, businessId, productId);
   if (!res.ok) {
     logError({ action: "olx.publishProduct", message: res.error, details: { businessId, productId }, businessId, userId: g.userId });

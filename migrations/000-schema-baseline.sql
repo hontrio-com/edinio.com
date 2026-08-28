@@ -5632,7 +5632,8 @@ create table if not exists public.olx_adverts (
   last_synced_at timestamp with time zone,
   last_status_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  sters_de_om_la timestamp with time zone);
 
 create table if not exists public.olx_sync_queue (
   id uuid default gen_random_uuid() not null,

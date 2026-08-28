@@ -112,6 +112,14 @@ interface ListingRow {
   status_generatie: number;
   /** Ce stiam despre el INAINTE de trimiterea in curs. Vezi `urmareaLotului`. */
   stare_dinainte: string | null;
+  /**
+   * A trecut vreodata printr-o stare care dovedeste aprobarea la About You.
+   *
+   * ⚠ Se aprinde din declansator (si din reconciliere, pentru `inactive`) si nu se stinge
+   * niciodata. E singurul lucru din care se poate sti „a fost aprobat?" — `status` se rescrie de
+   * zeci de ori pe zi, inclusiv pe `error`.
+   */
+  aprobat_odata: boolean;
   /** A cata oara s-a trimis produsul. Vezi migratia 2026-11-27. */
   generatie: number;
 }
@@ -120,7 +128,7 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListing", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie, status_dorit, status_generatie")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, aprobat_odata, generatie, status_dorit, status_generatie")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
 }
 
@@ -128,7 +136,7 @@ async function getListingByStyleKey(admin: Db, businessId: string, styleKey: str
   /* ⚠ Arunca la pana: „listarea nu exista" duce pe calea care o STERGE si o recreeaza. */
   return randCitit<ListingRow>("aboutyou.getListingByStyleKey", await admin
     .from("aboutyou_listings")
-    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, generatie, status_dorit, status_generatie")
+    .select("id, product_id, style_key, status, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, last_synced_at, remote_poate_exista, stare_dinainte, aprobat_odata, generatie, status_dorit, status_generatie")
     .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle() as never);
 }
 
@@ -1816,7 +1824,7 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
        * produsul devine ACTIV — cu stocul intreg — desi comerciantul tocmai il
        * scosese de la vanzare.
        */
-      return setRemoteStatus(admin, ctx, productId, tintaRetragere(listing.status));
+      return setRemoteStatus(admin, ctx, productId, tintaRetragere(listing));
     }
     return { ok: true, action: "skipped" };
   }
@@ -2315,8 +2323,6 @@ export function publishProductNow(admin: Db, ctx: AboutYouSyncContext, productId
  * `error`, si urmatoarea incercare calcula tot `draft`: bucla infinita, cu produsul
  * ramas vandabil.
  */
-const INAINTE_DE_APROBARE = new Set(["draft", "pending_approval", "rejected"]);
-
 /*
  * ═══ ⚠ O MODIFICARE LA UN PRODUS APROBAT IL DADEA INAPOI LA „CIORNA" (27.08.2026) ═══
  *
@@ -2361,15 +2367,32 @@ export function urmareaLotului(stareDinainte: string | null): { status: string |
   return { status: null, publica: false };
 }
 
-/** Ce status se cere la About You cand retragem, dupa unde a ajuns produsul. */
-function tintaRetragere(status: string): "draft" | "inactive" {
-  return INAINTE_DE_APROBARE.has(status) ? "draft" : "inactive";
+/**
+ * Ce status se cere la About You cand retragem, dupa unde a ajuns produsul.
+ *
+ * ═══ ⚠ SE CITESTE SEMNUL, NU SE GHICESTE DIN STARE (29.08.2026, dupa-amiaza) ═══
+ *
+ * Pana azi intreba `INAINTE_DE_APROBARE.has(status)`, cu `draft`, `pending_approval` si
+ * `rejected` in lista. Adica exact deducerea pe care `aprobat_odata` exista ca s-o inlature — si
+ * cadea la fel, pe `error`:
+ *
+ *     produsul n-a fost aprobat niciodata; o trimitere pica -> `status = 'error'`
+ *     `error` nu e in lista -> tinta iese `inactive`
+ *     cererea e acceptata -> scriem local `inactive` -> declansatorul aprindea semnul ❌
+ *     ei resping („produsul nu era aprobat") -> revenim la `error`, dar semnul ramane
+ *
+ * ⚠ SI CAND NU STIM, SE CERE `draft`. Cele doua greseli nu costa la fel: `inactive` cerut pentru
+ * un produs neaprobat il face sa PARA aprobat la noi; `draft` cerut pentru unul aprobat e doar
+ * refuzat de ei, zgomotos si reparabil. Implicitul cade spre cea ieftina.
+ */
+function tintaRetragere(listing: Pick<ListingRow, "aprobat_odata">): "draft" | "inactive" {
+  return listing.aprobat_odata ? "inactive" : "draft";
 }
 
 export async function unpublishProductNow(admin: Db, ctx: AboutYouSyncContext, productId: string): Promise<SyncOutcome> {
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: false, error: "Listarea About You nu există." };
-  return setRemoteStatus(admin, ctx, productId, tintaRetragere(listing.status));
+  return setRemoteStatus(admin, ctx, productId, tintaRetragere(listing));
 }
 
 /*
@@ -2453,7 +2476,7 @@ async function stergeListare(
   /* ⚠ Si aici legat de RAND, din acelasi motiv: intre citire si cerere, listarea poate disparea. */
   const { data: genScoatere, error: eGenScoatere } = await admin.rpc("aboutyou_ceas_pentru_listare", {
     p_business_id: ctx.businessId, p_style_key: listing.style_key,
-    p_listare_id: listing.id, p_dorit: tintaRetragere(listing.status),
+    p_listare_id: listing.id, p_dorit: tintaRetragere(listing),
   });
   if (eGenScoatere) {
     return { ok: false, status: 0, error: `Nu am putut ține minte scoaterea: ${eGenScoatere.message}` };
@@ -2467,7 +2490,7 @@ async function stergeListare(
 
   const res = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "removal", [listing.style_key],
     () => updateProductStatus(
-      ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing.status) }]),
+      ctx.auth, [{ style_key: listing.style_key, status: tintaRetragere(listing) }]),
     genScoatere, undefined, 1),
     "retragerea produsului");
   if (isAboutYouError(res)) {
@@ -3843,11 +3866,25 @@ export async function reconcileStatuses(
       const status = statusDominant(stari);
       const eRespins = status === "rejected";
       if (eRespins) respinse.push(styleKey);
+      /*
+       * ═══ ⚠ ADEVARUL LOR DESPRE `inactive` IL SCRIE CINE IL CITESTE (29.08.2026) ═══
+       *
+       * `inactive` a iesit din lista declansatorului fiindca o scriem si NOI, optimist, inainte de
+       * verdictul lor — deci acolo nu se poate sti cine a scris-o. Aici insa starea vine chiar de
+       * la ei, prin `GET /products/`: un `inactive` citit de-aici chiar dovedeste ca produsul a
+       * trecut de aprobare, altfel n-ar fi avut de unde sa fie dezactivat.
+       *
+       * ⚠ Se scrie numai `true`, niciodata `false`: semnul nu se stinge, iar declansatorul nu-l
+       * calca (el doar aprinde).
+       */
+      const dovedesteAprobarea = ["active", "published", "pending_active", "inactive", "problem"]
+        .includes(status);
       const { error: eScris } = await admin.from("aboutyou_listings")
         .update({
           status,
           last_status_at: now,
           updated_at: now,
+          ...(dovedesteAprobarea ? { aprobat_odata: true } : {}),
           /*
            * Motivele respingerii se golesc cand About You o retrage, dar `error`
            * NU se atinge aici.

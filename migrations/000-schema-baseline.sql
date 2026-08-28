@@ -552,7 +552,11 @@ CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_aprobarea()
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 begin
-  if new.status in ('active', 'published', 'pending_active', 'inactive', 'problem') then
+  if tg_op = 'UPDATE' then
+    new.aprobat_odata := coalesce(old.aprobat_odata, false) or coalesce(new.aprobat_odata, false);
+  end if;
+
+  if new.status in ('active', 'published', 'pending_active', 'problem') then
     new.aprobat_odata := true;
   end if;
   return new;
@@ -6923,7 +6927,7 @@ create or replace view public.store_settings with (security_invoker = true) as
 -- ── DECLANSATOARE ─────────────────────────────────────────
 CREATE TRIGGER set_store_settings_updated_at BEFORE UPDATE ON privat.store_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER aboutyou_marcheaza_listarea AFTER UPDATE OF brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code ON public.aboutyou_listings FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_listarea();
-CREATE TRIGGER trg_aboutyou_marcheaza_aprobarea BEFORE INSERT OR UPDATE OF status ON public.aboutyou_listings FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_aprobarea();
+CREATE TRIGGER trg_aboutyou_marcheaza_aprobarea BEFORE INSERT OR UPDATE ON public.aboutyou_listings FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_aprobarea();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.aboutyou_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER aboutyou_marcheaza_varianta AFTER INSERT OR UPDATE OF sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled ON public.aboutyou_variants FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_varianta();
 CREATE TRIGGER businesses_blocheaza_domeniu_platforma BEFORE INSERT OR UPDATE OF custom_domain ON public.businesses FOR EACH ROW EXECUTE FUNCTION blocheaza_domeniu_platforma();

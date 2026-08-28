@@ -1123,7 +1123,16 @@ test("⚠ un `publish` mai vechi nu mai poate invia un produs eliminat", () => {
    * `publish`-ul de dinainte nu devenea depasit — iar dupa stergerea randului nu mai exista nimic
    * care sa ceara `inactive`. Produsul ramanea vandabil si nimeni nu afla.
    */
-  assert.match(sync, /p_dorit: tintaRetragere\(listing\.status\),/);
+  /*
+   * ⚠ Ancora cerea `tintaRetragere(listing.status)`. **Avea dreptate cat timp tinta se deducea din
+   * stare** — atunci chiar asa se scria. A incetat sa aiba cand s-a vazut ca deducerea cade pe
+   * `error`: un produs neaprobat primea tinta `inactive`, iar scrierea locala a lui `inactive`
+   * aprindea semnul de aprobare pe un produs care nu fusese niciodata aprobat.
+   *
+   * Regula pazita aici — scoaterea isi cere numarul legat de RAND, inaintea cererii — n-a
+   * schimbat-o nimic; doar argumentul lui `tintaRetragere` s-a facut listarea intreaga.
+   */
+  assert.match(sync, /p_dorit: tintaRetragere\(listing\),/);
   /*
    * ⚠ SI PIATRA SE SCRIE INAUNTRUL TRANZACTIEI, nu dintr-un ajutor separat: vezi
    * `aboutyou_incheie_scoaterea`. Scrisa din afara, ar fi fost inca o scriere care poate lipsi

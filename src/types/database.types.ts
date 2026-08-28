@@ -312,6 +312,7 @@ export type Database = {
       }
       aboutyou_listings: {
         Row: {
+          aprobat_odata: boolean
           attributes: Json
           ay_master_id: string | null
           brand_id: number | null
@@ -343,6 +344,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          aprobat_odata?: boolean
           attributes?: Json
           ay_master_id?: string | null
           brand_id?: number | null
@@ -374,6 +376,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          aprobat_odata?: boolean
           attributes?: Json
           ay_master_id?: string | null
           brand_id?: number | null

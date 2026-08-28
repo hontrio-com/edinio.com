@@ -458,7 +458,14 @@ test("⚠ semnul aprobarii se aprinde din declansator, si nu se stinge niciodata
    */
   const temelie2 = viu("migrations/000-schema-baseline.sql");
   assert.match(temelie2, /FUNCTION public\.aboutyou_marcheaza_aprobarea/);
-  assert.match(temelie2, /trg_aboutyou_marcheaza_aprobarea[\s\S]{0,200}?BEFORE INSERT OR UPDATE OF status/i);
+  /*
+   * ⚠ PE UPDATE INTREG, NU DOAR `OF status` (29.08.2026, dupa-amiaza). Cat timp asculta doar
+   * coloana `status`, o scriere care atingea NUMAI `aprobat_odata` nu-l pornea — deci tocmai calea
+   * de stins ramanea deschisa. Masurat: pana la schimbarea asta, un `update` direct chiar il
+   * stingea.
+   */
+  assert.match(temelie2, /trg_aboutyou_marcheaza_aprobarea[\s\S]{0,200}?BEFORE INSERT OR UPDATE ON/i);
+  assert.doesNotMatch(temelie2, /trg_aboutyou_marcheaza_aprobarea[\s\S]{0,200}?UPDATE OF status/i);
   /* ⚠ Numai in sus: nu se uita la `old`, deci nu poate stinge nimic. */
   /*
    * ⚠ Prima socoteala taia corpul INAINTE sa inceapa: `indexOf("$function$", inceput) + 10` cade
@@ -469,6 +476,101 @@ test("⚠ semnul aprobarii se aprinde din declansator, si nu se stinge niciodata
   const corpTrg = temelie2.slice(iDesc, temelie2.indexOf("$function$", iDesc));
   assert.match(corpTrg, /new\.aprobat_odata := true/);
   assert.doesNotMatch(corpTrg, /aprobat_odata := false/, "semnul nu are voie sa se stinga");
+
+  /*
+   * ⚠ SI `inactive` NU E IN LISTA, dinadims. E singura stare dintre cele care dovedeau aprobarea
+   * pe care o scriem SI NOI, optimist, inainte de verdictul lor (`setRemoteStatus`:
+   * `published -> pending`, `draft -> draft`, dar `inactive -> inactive`). Deci singura despre
+   * care declansatorul n-are cum sa stie cine a scris-o:
+   *
+   *     produs NEAPROBAT pe `error` -> se cere retragerea -> `inactive` la ei
+   *     cererea e acceptata -> scriem local `inactive` -> semnul se aprindea ❌
+   *     ei resping -> revenim la `error`, dar semnul e ireversibil dinadins
+   *     -> categoria si marimile blocate pe veci, pe un produs care n-a fost aprobat niciodata
+   */
+  assert.doesNotMatch(corpTrg, /'inactive'/,
+    "`inactive` se scrie si optimist, deci nu poate dovedi singura aprobarea");
+  for (const st of ["active", "published", "pending_active", "problem"]) {
+    assert.match(corpTrg, new RegExp(`'${st}'`), `starea ${st} lipseste din dovada`);
+  }
+
+  /*
+   * ⚠ SI SEMNUL E MONOTON PRIN REGULA, nu doar prin obicei. „Nu se stinge niciodata" era pana azi
+   * o OBSERVATIE — adevarata doar fiindca niciun cod nu scria `false`. Masurat: o scriere directa
+   * chiar il stingea.
+   */
+  assert.match(corpTrg, /new\.aprobat_odata := coalesce\(old\.aprobat_odata, false\) or/,
+    "valoarea veche trebuie sa supravietuiasca oricarei scrieri");
   /* ⚠ Si coloana e `not null`, ca sa nu existe „nu stiu" acolo unde regula cere un raspuns. */
   assert.match(temelie2, /aprobat_odata boolean DEFAULT false NOT NULL/i);
+});
+
+/* ── Tinta retragerii ────────────────────────────────────────────────────── */
+
+test("⚠ tinta retragerii se citeste din semn, nu se ghiceste din stare", () => {
+  /*
+   * ═══ ⚠ ACEEASI DEDUCERE, INTR-UN AL DOILEA LOC (29.08.2026, dupa-amiaza) ═══
+   *
+   * `aprobat_odata` s-a nascut fiindca „a fost aprobat?" nu se poate citi din starea de acum. Dar
+   * `tintaRetragere` continua sa faca exact asta, cu `INAINTE_DE_APROBARE = {draft,
+   * pending_approval, rejected}` — si cadea la fel, pe `error`:
+   *
+   *     produs NEAPROBAT, o trimitere pica -> `status = 'error'`
+   *     `error` nu e in lista -> tinta iese `inactive`
+   *     cererea e acceptata -> scriem local `inactive` -> semnul se aprindea
+   *
+   * Deci cele doua defecte erau unul singur, vazut din doua parti.
+   *
+   * ⚠ SI CAND NU STIM, SE CERE `draft`. Cele doua greseli nu costa la fel: `inactive` cerut pentru
+   * un produs neaprobat il face sa PARA aprobat la noi; `draft` cerut pentru unul aprobat e doar
+   * refuzat de ei, zgomotos si reparabil.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /function tintaRetragere\(listing: Pick<ListingRow, "aprobat_odata">\)/,
+    "tinta primeste listarea, nu un sir de stare");
+  assert.match(sync, /return listing\.aprobat_odata \? "inactive" : "draft";/);
+  assert.doesNotMatch(sync, /INAINTE_DE_APROBARE/,
+    "s-a intors lista de stari din care se deducea aprobarea");
+
+  /* ⚠ Si TOATE apelurile trimit listarea: unul singur ramas pe `status` ar readuce defectul. */
+  const apeluri = [...sync.matchAll(/tintaRetragere\(([^)]*)\)/g)].map((m) => m[1]);
+  const chemari = apeluri.filter((a) => a !== 'listing: Pick<ListingRow, "aprobat_odata">');
+  assert.ok(chemari.length >= 3, `asteptam cel putin trei apeluri, sunt ${chemari.length}`);
+  for (const a of chemari) {
+    assert.equal(a, "listing", `un apel inca trimite \`${a}\``);
+  }
+});
+
+test("⚠ semnul intra in randul citit, altfel codul n-are ce citi", () => {
+  /*
+   * ⚠ Proba care scaneaza sursa confirma ca SCRIE `listing.aprobat_odata`, nu ca are ce citi. De
+   * aia se cere si coloana in cele doua selecturi, si campul in tipul randului — chiar lantul care
+   * lipsea: interfata si tipurile ramasesera in urma migratiei.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /^\s*aprobat_odata: boolean;$/m, "`ListingRow` trebuie sa poarte semnul");
+  const selecturi = [...sync.matchAll(/\.select\("id, product_id, style_key, status,[^"]*"\)/g)];
+  assert.equal(selecturi.length, 2, "cele doua citiri de listare");
+  for (const sel of selecturi) {
+    assert.match(sel[0], /aprobat_odata/, "un select nu aduce semnul, deci codul l-ar citi `undefined`");
+  }
+  /* ⚠ Si tipurile bazei il stiu: fara asta, clientul tipizat respinge chiar coloana. */
+  const tipuri = viu("src/types/database.types.ts");
+  assert.match(tipuri, /aprobat_odata: boolean/);
+  assert.match(tipuri, /aprobat_odata\?: boolean/);
+});
+
+test("⚠ reconcilierea aprinde semnul pentru adevarul LOR despre `inactive`", () => {
+  /*
+   * `inactive` a iesit din declansator fiindca o scriem si noi, optimist. Dar la reconciliere
+   * starea vine chiar de la ei — un produs dezactivat la ei a trecut de aprobare, altfel n-ar fi
+   * avut de unde sa fie dezactivat. Deci semnul se aprinde de acolo, pe nume.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /const dovedesteAprobarea = \[[^\]]*"inactive"[^\]]*\]\s*\n?\s*\.includes\(status\)/,
+    "reconcilierea trebuie sa socoteasca `inactive` drept dovada");
+  assert.match(sync, /\.\.\.\(dovedesteAprobarea \? \{ aprobat_odata: true \} : \{\}\)/,
+    "si sa scrie semnul odata cu starea, in aceeasi scriere");
+  /* ⚠ Numai `true`, niciodata `false`: semnul nu se stinge de aici. */
+  assert.doesNotMatch(sync, /aprobat_odata: false/);
 });

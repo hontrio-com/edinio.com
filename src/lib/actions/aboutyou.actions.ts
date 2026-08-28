@@ -1106,9 +1106,9 @@ export async function validateAboutYouListing(
    * listare prin `/products/rejected`, cerute pe nume. Deci calea „incearca si afla" nu mai e
    * oarba, cum era.
    */
-  const rand = randCitit<{ status: string; category_id: number | null }>(
+  const rand = randCitit<{ status: string; category_id: number | null; aprobat_odata: boolean }>(
     "aboutyou.listareaDeVerificat", await createAdminClient()
-      .from("aboutyou_listings").select("status, category_id")
+      .from("aboutyou_listings").select("status, category_id, aprobat_odata")
       .eq("business_id", businessId).eq("product_id", productId).maybeSingle());
 
   if (rand?.status === "pending_approval") {
@@ -1125,9 +1125,21 @@ export async function validateAboutYouListing(
     );
   }
 
-  const dupaAprobare = new Set(["active", "published", "pending_active", "inactive"]);
+  /*
+   * ═══ ⚠ AVERTISMENTUL PREZICE PE ACEEASI TEMELIE CA OPRIREA (29.08.2026, dimineata) ═══
+   *
+   * Aici era o LISTA DE STARI, copia celei din SQL — si de-aia se putea departa de ea in tacere.
+   * S-a si departat: de cand oprirea citeste `aprobat_odata`, o listare aprobata cazuta pe `error`
+   * e oprita, dar lista de stari n-ar fi avertizat. Un avertisment care tace inaintea unui refuz
+   * e mai rau decat niciun avertisment: omul afla abia dupa ce apasa.
+   *
+   * ⚠ ACUM SE CITESTE ACELASI SEMN, si aceleasi doua stari de asteptare. Nu mai e o copie a unei
+   * liste, e aceeasi intrebare pusa in doua locuri.
+   */
+  const inAsteptare = new Set(["pending_approval", "draft_pending"]);
+  const imuabile = !!rand && (rand.aprobat_odata === true || inAsteptare.has(rand.status));
   const categoriaCeruta = input.category_id ?? config.category_map?.[produs.category ?? ""]?.category_id ?? null;
-  if (rand && dupaAprobare.has(rand.status) && rand.category_id != null
+  if (rand && imuabile && rand.category_id != null
     && categoriaCeruta != null && categoriaCeruta !== rand.category_id) {
     /*
      * ⚠ TEXTUL S-A SCHIMBAT ODATA CU CODUL. Spunea „About You POATE refuza" — adevarat cat timp
@@ -1135,8 +1147,11 @@ export async function validateAboutYouListing(
      * prevenire, nu o prezicere: omul afla inainte sa apese, nu dupa.
      */
     warnings.push(
-      "Ai schimbat categoria unui produs deja aprobat. About You nu mai acceptă asta după aprobare,"
-      + " iar salvarea va fi oprită: ca să-l muți în altă categorie, elimină listarea și creează una nouă.",
+      rand.aprobat_odata === true
+        ? "Ai schimbat categoria unui produs deja aprobat. About You nu mai acceptă asta după aprobare,"
+          + " iar salvarea va fi oprită: ca să-l muți în altă categorie, elimină listarea și creează una nouă."
+        : "Ai schimbat categoria unui produs care așteaptă verdictul About You. Salvarea va fi oprită"
+          + " până primim răspunsul lor: dacă îl aprobă între timp, ar rămâne la ei cu categoria veche.",
     );
   }
 
@@ -1420,7 +1435,9 @@ export async function saveAboutYouListing(
     p_campuri: campuri as never, p_randuri: variante as never,
     p_listare_asteptata: incarnarea,
   });
-  const r = rez as { stare?: string; skuri?: unknown[]; variante?: { stare?: string } } | null;
+  const r = rez as {
+    stare?: string; skuri?: unknown[]; asteptam?: boolean; variante?: { stare?: string };
+  } | null;
   if (eSalvare || !r?.stare) {
     logError({
       action: "aboutyou.saveListing", severity: "error",
@@ -1467,10 +1484,16 @@ export async function saveAboutYouListing(
      * acum chiar nu se mai pot pastra. Un indemn care ascunde costul se plateste o data in date si
      * inca o data in incredere.
      */
+    /*
+     * ⚠ `depasit` are acum DOUA intelesuri, si mesajul le acopera pe amandoua: sau listarea de la
+     * care ai pornit a fost eliminata, sau intre timp a aparut alta (o a doua fila, o alta
+     * salvare). In amandoua cazurile lumea din care ai pornit nu mai e, iar ce ai in fata nu se
+     * mai poate lipi de ce e in baza.
+     */
     return {
-      error: "Listarea a fost eliminată între timp, așa că nu am salvat nimic."
-        + " Reîncarcă pagina și configureaz-o din nou: ce ai completat acum nu se poate păstra,"
-        + " fiindcă listarea la care se referea nu mai există.",
+      error: "Listarea s-a schimbat între timp — a fost eliminată sau creată din altă parte —"
+        + " așa că nu am salvat nimic. Reîncarcă pagina și configureaz-o din nou:"
+        + " ce ai completat acum nu se poate păstra, fiindcă nu mai are de ce se lega.",
     };
   }
   /*
@@ -1479,6 +1502,19 @@ export async function saveAboutYouListing(
    * pentru marime.
    */
   if (r.stare === "categorie-blocata") {
+    /*
+     * ⚠ DOUA REFUZURI DEOSEBITE, CU DOUA IESIRI DEOSEBITE. Unul e definitiv (produsul e aprobat),
+     * celalalt e trecator (asteptam verdictul lor). Spuse la fel, omul care doar trebuie sa
+     * astepte ar fi crezut ca a pierdut categoria pentru totdeauna si ar fi eliminat listarea
+     * degeaba.
+     */
+    if (r.asteptam) {
+      return {
+        error: "Produsul așteaptă verdictul About You, așa că nu putem schimba categoria acum:"
+          + " dacă ei îl aprobă între timp, ar rămâne la ei cu cea veche."
+          + " Așteaptă răspunsul lor și încearcă din nou.",
+      };
+    }
     return {
       error: "About You nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat."
         + " Ca să-l muți în altă categorie, elimină listarea și creează una nouă.",
@@ -1494,9 +1530,17 @@ export async function saveAboutYouListing(
     const skuri = Array.isArray(r.skuri) ? r.skuri.map(String) : [];
     const numite = skuri.slice(0, 3).map((x) => `„${x}"`).join(", ");
     const restul = skuri.length > 3 ? ` și încă ${skuri.length - 3}` : "";
+    const care = `${skuri.length === 1 ? "varianta" : "variantele"} ${numite}${restul}`;
+    /* ⚠ Ca la categorie: refuzul trecator si cel definitiv nu se spun la fel. */
+    if (r.asteptam) {
+      return {
+        error: `Produsul așteaptă verdictul About You, așa că nu putem schimba mărimea la ${care}:`
+          + " dacă ei îl aprobă între timp, ar rămâne la ei cu cea veche."
+          + " Așteaptă răspunsul lor și încearcă din nou.",
+      };
+    }
     return {
-      error: `About You nu mai acceptă schimbarea mărimii după aprobare, iar tu ai schimbat-o la`
-        + ` ${skuri.length === 1 ? "varianta" : "variantele"} ${numite}${restul}.`
+      error: `About You nu mai acceptă schimbarea mărimii după aprobare, iar tu ai schimbat-o la ${care}.`
         + " Dezactivează varianta și adaugă una nouă, cu SKU nou, pentru mărimea corectă.",
     };
   }

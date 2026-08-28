@@ -86,7 +86,20 @@ test("⚠ schimbarea categoriei dupa aprobare se semnaleaza, si numai atunci", (
    * Numai cand produsul e chiar dincolo de aprobare SI categoria ceruta difera de cea trimisa.
    * Pornit pe orice listare, avertismentul ar fi devenit zgomot si nimeni nu l-ar mai fi citit.
    */
-  assert.match(actiuni, /const dupaAprobare = new Set\(\["active", "published", "pending_active", "inactive"\]\);/);
+  /*
+   * ⚠ REGULA NU MAI E O LISTA DE STARI (29.08.2026, dimineata). Proba cerea chiar lista —
+   * `["active","published","pending_active","inactive"]` — si **avea dreptate cat timp regula se
+   * citea din starea de acum**. A incetat sa aiba cand s-a vazut ca starea se rescrie: un produs
+   * aprobat caruia ii pica o actualizare ajunge pe `error`, iar `error` nu era in lista, deci
+   * regula tacea si categoria redevenea editabila.
+   *
+   * Acum se citeste `aprobat_odata` — o intamplare din trecut, scrisa o data si niciodata stinsa —
+   * plus cele doua stari in care inca asteptam verdictul lor.
+   */
+  assert.match(actiuni, /rand\.aprobat_odata === true \|\| inAsteptare\.has\(rand\.status\)/);
+  assert.match(actiuni, /new Set\(\["pending_approval", "draft_pending"\]\)/);
+  assert.doesNotMatch(actiuni, /const dupaAprobare = new Set\(/,
+    "s-a intors deducerea din starea de acum");
   assert.match(actiuni, /categoriaCeruta != null && categoriaCeruta !== rand\.category_id/);
   /* ⚠ Si categoria ceruta cade pe harta magazinului cand editorul n-o suprascrie - altfel fiecare
      produs fara categorie aleasa de mana ar fi parut ca si-o schimba. */
@@ -94,5 +107,5 @@ test("⚠ schimbarea categoriei dupa aprobare se semnaleaza, si numai atunci", (
 });
 
 test("⚠ listarea se citeste strict: o pana nu inseamna „nu e in aprobare”", () => {
-  assert.match(actiuni, /randCitit<\{ status: string; category_id: number \| null \}>\(/);
+  assert.match(actiuni, /randCitit<\{ status: string; category_id: number \| null; aprobat_odata: boolean \}>\(/);
 });

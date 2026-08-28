@@ -545,6 +545,21 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_aprobarea()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if new.status in ('active', 'published', 'pending_active', 'inactive', 'problem') then
+    new.aprobat_odata := true;
+  end if;
+  return new;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aboutyou_marcheaza_listarea()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -695,21 +710,23 @@ declare
   v_id uuid;
   v_status text;
   v_categorie integer;
+  v_aprobat boolean;
   v_gen integer;
   v_nou boolean := false;
   v_chei text;
   v_straina text;
   v_skuri text[];
   v_variante jsonb;
-  c_aprobate constant text[] := array['active', 'published', 'pending_active', 'inactive'];
+  c_in_asteptare constant text[] := array['pending_approval', 'draft_pending'];
 begin
-  select id, status, category_id into v_id, v_status, v_categorie
+  select id, status, category_id, aprobat_odata
+    into v_id, v_status, v_categorie, v_aprobat
     from public.aboutyou_listings
    where business_id = p_business_id and style_key = p_style_key
      for update;
 
   if found then
-    if p_listare_asteptata is not null and v_id <> p_listare_asteptata then
+    if p_listare_asteptata is null or v_id <> p_listare_asteptata then
       return jsonb_build_object('stare', 'depasit');
     end if;
   else
@@ -726,25 +743,19 @@ begin
     returning id into v_id;
 
     if v_id is null then
-      select id, status, category_id into v_id, v_status, v_categorie
-        from public.aboutyou_listings
-       where business_id = p_business_id and style_key = p_style_key
-         for update;
-      if not found then
-        return jsonb_build_object('stare', 'lipsa');
-      end if;
-    else
-      v_nou := true;
-      v_status := 'local';
-      v_categorie := null;
+      return jsonb_build_object('stare', 'depasit');
     end if;
+    v_nou := true;
+    v_status := 'local';
+    v_categorie := null;
+    v_aprobat := false;
   end if;
 
-  if v_status = any(c_aprobate) then
+  if v_aprobat or v_status = any(c_in_asteptare) then
     if v_categorie is not null
        and (p_campuri->>'category_id') is not null
        and (p_campuri->>'category_id')::integer <> v_categorie then
-      return jsonb_build_object('stare', 'categorie-blocata');
+      return jsonb_build_object('stare', 'categorie-blocata', 'asteptam', v_aprobat is not true);
     end if;
 
     select array_agg(distinct v.sku order by v.sku) into v_skuri
@@ -755,7 +766,8 @@ begin
        and (v.size_id is distinct from (r->>'size_id')::integer
          or v.second_size_id is distinct from (r->>'second_size_id')::integer);
     if v_skuri is not null and array_length(v_skuri, 1) > 0 then
-      return jsonb_build_object('stare', 'marime-blocata', 'skuri', to_jsonb(v_skuri));
+      return jsonb_build_object(
+        'stare', 'marime-blocata', 'skuri', to_jsonb(v_skuri), 'asteptam', v_aprobat is not true);
     end if;
   end if;
 
@@ -1693,6 +1705,14 @@ AS $function$
         and not exists (select 1 from ascunse b where b.id = v.id)
    );
 $function$
+;
+
+CREATE OR REPLACE FUNCTION public.ceasul_bazei()
+ RETURNS timestamp with time zone
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$ select now() $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.claim_discount_use(p_discount_id uuid)
@@ -4944,7 +4964,8 @@ create table if not exists public.aboutyou_listings (
   stoc_confirmat_la timestamp with time zone,
   pret_confirmat_la timestamp with time zone,
   status_dorit text,
-  status_generatie integer default 0 not null);
+  status_generatie integer default 0 not null,
+  aprobat_odata boolean default false not null);
 
 create table if not exists public.aboutyou_orders (
   id uuid default gen_random_uuid() not null,
@@ -6902,6 +6923,7 @@ create or replace view public.store_settings with (security_invoker = true) as
 -- ── DECLANSATOARE ─────────────────────────────────────────
 CREATE TRIGGER set_store_settings_updated_at BEFORE UPDATE ON privat.store_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER aboutyou_marcheaza_listarea AFTER UPDATE OF brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code ON public.aboutyou_listings FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_listarea();
+CREATE TRIGGER trg_aboutyou_marcheaza_aprobarea BEFORE INSERT OR UPDATE OF status ON public.aboutyou_listings FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_aprobarea();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.aboutyou_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER aboutyou_marcheaza_varianta AFTER INSERT OR UPDATE OF sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled ON public.aboutyou_variants FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_varianta();
 CREATE TRIGGER businesses_blocheaza_domeniu_platforma BEFORE INSERT OR UPDATE OF custom_domain ON public.businesses FOR EACH ROW EXECUTE FUNCTION blocheaza_domeniu_platforma();
@@ -9216,6 +9238,7 @@ grant execute on function public.aboutyou_ceas_urmator(p_business_id uuid, p_sty
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to service_role;
 grant execute on function public.aboutyou_generatie_noua(p_listing_id uuid) to service_role;
 grant execute on function public.aboutyou_incheie_scoaterea(p_business_id uuid, p_style_key text, p_generatie integer) to service_role;
+grant execute on function public.aboutyou_marcheaza_aprobarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_listarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_modificarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_varianta() to service_role;
@@ -9248,6 +9271,7 @@ grant execute on function public.catalog_reface_cuvinte(p_business uuid) to serv
 grant execute on function public.catalog_scrie_rezumat(p_randuri jsonb) to service_role;
 grant execute on function public.catalog_verifica(p_esantion integer) to service_role;
 grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
+grant execute on function public.ceasul_bazei() to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) to service_role;
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
@@ -9399,6 +9423,7 @@ revoke execute on function public.aboutyou_ceas_urmator(p_business_id uuid, p_st
 revoke execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) from public;
 revoke execute on function public.aboutyou_generatie_noua(p_listing_id uuid) from public;
 revoke execute on function public.aboutyou_incheie_scoaterea(p_business_id uuid, p_style_key text, p_generatie integer) from public;
+revoke execute on function public.aboutyou_marcheaza_aprobarea() from public;
 revoke execute on function public.aboutyou_marcheaza_listarea() from public;
 revoke execute on function public.aboutyou_marcheaza_modificarea() from public;
 revoke execute on function public.aboutyou_marcheaza_varianta() from public;
@@ -9420,6 +9445,7 @@ revoke execute on function public.catalog_reface_cuvinte(p_business uuid) from p
 revoke execute on function public.catalog_scrie_rezumat(p_randuri jsonb) from public;
 revoke execute on function public.catalog_verifica(p_esantion integer) from public;
 revoke execute on function public.categorii_ascunse(p_business uuid) from public;
+revoke execute on function public.ceasul_bazei() from public;
 revoke execute on function public.claim_discount_use(p_discount_id uuid) from public;
 revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) from public;
 revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;

@@ -309,7 +309,14 @@ test("⚠ categoria nu se mai poate schimba dupa aprobare, si nu doar se avertiz
    * noi, iar de-acolo orice comparatie intre ce credem si ce e la ei ar fi mintit.
    */
   const corp = corpulSalvarii();
-  assert.match(corp, /c_aprobate constant text\[\] := array\['active', 'published', 'pending_active', 'inactive'\]/);
+  /*
+   * ⚠ NU MAI E O LISTA DE STARI, e un SEMN. Vezi nota din `ciclul-aprobarii.test.ts`: statusul se
+   * rescrie — inclusiv pe `error`, dintr-unsprezece locuri — iar „a fost aprobat" e o intamplare
+   * din trecut, care nu se poate deduce dintr-o valoare de acum.
+   */
+  assert.match(corp, /v_aprobat or v_status = any\(c_in_asteptare\)/);
+  assert.match(corp, /c_in_asteptare constant text\[\] := array\['pending_approval', 'draft_pending'\]/);
+  assert.doesNotMatch(corp, /c_aprobate/, "s-a intors deducerea din starea de acum");
   assert.match(corp, /categorie-blocata/);
   /* ⚠ Si mesajul, cu IESIREA lui scrisa, a ramas acolo unde il vede omul. */
   assert.match(actiuni, /nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat/);
@@ -365,7 +372,7 @@ test("⚠ si regula se citeste sub aceeasi incuietoare cu scrierea", () => {
    * trecut verde cu prima scoasa. Confruntat cu mutatia: cu ancora larga trecea, cu asta cade.
    */
   const citirea = corp.slice(0, corp.indexOf("if found then"));
-  assert.match(citirea, /select id, status, category_id into[\s\S]{0,200}?for update/i,
+  assert.match(citirea, /select id, status, category_id, aprobat_odata[\s\S]{0,220}?for update/i,
     "citirea care hotaraste isi incuie randul, altfel statusul se poate invechi sub ea");
   const iIncuietoare = citirea.indexOf("for update");
   /*
@@ -373,7 +380,7 @@ test("⚠ si regula se citeste sub aceeasi incuietoare cu scrierea", () => {
    * INAINTEA oricarei incuietori — cautat asa, testul cadea desi codul era bun, si tot asa ar fi
    * trecut verde daca regula ar fi fost mutata gresit. A doua oara in doua zile.
    */
-  const iRegula = corp.indexOf("v_status = any(c_aprobate)");
+  const iRegula = corp.indexOf("if v_aprobat or v_status = any(c_in_asteptare)");
   const iScriere = corp.indexOf("update public.aboutyou_listings set (%s)");
   assert.ok(iIncuietoare > 0 && iRegula > 0 && iScriere > 0);
   assert.ok(iIncuietoare < iRegula, "randul se incuie inainte ca regula sa-i citeasca statusul");
@@ -408,28 +415,60 @@ test("⚠ categoria trimisa se ingheata pe rand, altfel regula n-are ce compara"
   assert.match(sync, /if \(ePoate\) \{[\s\S]{0,200}?ok: false, status: 0/);
 });
 
-test("⚠ lista starilor aprobate e aceeasi in SQL si in avertismentul din editor", () => {
+test("⚠ avertismentul si oprirea pun ACEEASI intrebare, nu doua liste care se pot departa", () => {
   /*
-   * ═══ ⚠ COPIA A SUPRAVIETUIT SUB ALT NUME (28.08.2026, noaptea tarziu) ═══
+   * ═══ ⚠ COPIA A SUPRAVIETUIT SUB ALT NUME, SI APOI S-A DEPARTAT ═══
    *
-   * Cand regula s-a mutat in SQL, am scris ca „nu s-a lasat si aici o copie". Nu era adevarat:
-   * `dupaAprobare` — aceeasi lista, alt nume — statea cinci randuri mai sus, in avertismentul
-   * aratat in editor. Iar proba care pazea cerea `const APROBATE = new Set(` — deci s-a uitat la
-   * NUME, nu la continut, si a trecut verde peste chiar lucrul pe care il apara.
+   * Cand regula s-a mutat in SQL am scris ca „nu s-a lasat si aici o copie". Nu era adevarat:
+   * `dupaAprobare` — aceeasi lista, alt nume — statea in avertismentul din editor. Proba care
+   * pazea cerea NUMELE `APROBATE`, deci a trecut verde peste chiar lucrul pe care il apara.
    *
-   * ⚠ SI COPIA E INDREPTATITA: avertismentul prezice, nu scrie, deci nu poate chema functia — ar
-   * insemna o scriere. Ce nu e indreptatit e sa se poata DEPARTA in tacere. Deci nu se sterge,
-   * se confrunta.
+   * ⚠ SI COPIA CHIAR S-A DEPARTAT, o zi mai tarziu: oprirea a trecut pe `aprobat_odata`, lista de
+   * stari a ramas pe loc. Un produs aprobat cazut pe `error` ar fi fost OPRIT fara sa fi fost
+   * AVERTIZAT — iar un avertisment care tace inaintea unui refuz e mai rau decat niciunul.
+   *
+   * ⚠ ACUM NU MAI SUNT DOUA LISTE, e aceeasi intrebare pusa in doua locuri: semnul persistent,
+   * plus cele doua stari de asteptare. Proba le confrunta pe amandoua.
    */
   const act = viu("src/lib/actions/aboutyou.actions.ts");
-  const inTs = act.match(/const dupaAprobare = new Set\(\[([^\]]+)\]\)/);
-  assert.ok(inTs, "avertismentul din editor nu mai are lista starilor aprobate");
+  const corp = corpulSalvarii();
+
+  /* ⚠ Amandoua citesc SEMNUL, nu starea de acum. */
+  assert.match(act, /rand\.aprobat_odata === true/);
+  assert.match(corp, /v_aprobat or /);
+
+  /* ⚠ Si aceleasi doua stari de asteptare, comparate element cu element, nu ca text. */
+  const inTs = act.match(/const inAsteptare = new Set\(\[([^\]]+)\]\)/);
+  assert.ok(inTs, "avertismentul nu mai are starile de asteptare");
   const stariTs = [...inTs[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
 
-  const inSql = corpulSalvarii().match(/c_aprobate constant text\[\] := array\[([^\]]+)\]/);
-  assert.ok(inSql, "regula din SQL nu mai are lista starilor aprobate");
+  const inSql = corp.match(/c_in_asteptare constant text\[\] := array\[([^\]]+)\]/);
+  assert.ok(inSql, "oprirea nu mai are starile de asteptare");
   const stariSql = [...inSql[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
 
   assert.deepEqual(stariTs, stariSql,
     "avertismentul si oprirea vorbesc despre stari diferite: unul ar minti");
+});
+
+test("⚠ semnul aprobarii se aprinde din declansator, si nu se stinge niciodata", () => {
+  /*
+   * ⚠ SCRIS IN COD, s-ar fi pus in unsprezece locuri — si uitat intr-unul din ele. Statusul se
+   * scrie din `syncProductNow`, din `setRemoteStatus`, din reconciliere, din asezarea loturilor.
+   * Un declansator il prinde pe toate, si pe cele de maine.
+   */
+  const temelie2 = viu("migrations/000-schema-baseline.sql");
+  assert.match(temelie2, /FUNCTION public\.aboutyou_marcheaza_aprobarea/);
+  assert.match(temelie2, /trg_aboutyou_marcheaza_aprobarea[\s\S]{0,200}?BEFORE INSERT OR UPDATE OF status/i);
+  /* ⚠ Numai in sus: nu se uita la `old`, deci nu poate stinge nimic. */
+  /*
+   * ⚠ Prima socoteala taia corpul INAINTE sa inceapa: `indexOf("$function$", inceput) + 10` cade
+   * chiar pe deschizatorul lui. Se ia bucata dintre cele doua marcaje, ca peste tot.
+   */
+  const iTrg = temelie2.indexOf("FUNCTION public.aboutyou_marcheaza_aprobarea");
+  const iDesc = temelie2.indexOf("AS $function$", iTrg) + "AS $function$".length;
+  const corpTrg = temelie2.slice(iDesc, temelie2.indexOf("$function$", iDesc));
+  assert.match(corpTrg, /new\.aprobat_odata := true/);
+  assert.doesNotMatch(corpTrg, /aprobat_odata := false/, "semnul nu are voie sa se stinga");
+  /* ⚠ Si coloana e `not null`, ca sa nu existe „nu stiu" acolo unde regula cere un raspuns. */
+  assert.match(temelie2, /aprobat_odata boolean DEFAULT false NOT NULL/i);
 });

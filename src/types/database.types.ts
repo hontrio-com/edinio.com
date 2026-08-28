@@ -5187,6 +5187,9 @@ export type Database = {
       agregeaza_analitice: { Args: { p_zile?: number }; Returns: number }
       aplica_tranzitia_comenzii: { Args: { p_order_id: string; p_status: string; p_payment_status?: string | null; p_business_id?: string; p_elibereaza_stoc?: boolean | null }; Returns: Json }
       catalog_aplica_proiectii: { Args: { p_randuri: Json }; Returns: number }
+      /* ⚠ `now()` al bazei. Cine compara cu o coloana scrisa de Postgres (`created_at`) ia
+         clipa de aici, nu din Node: altfel paza se bizuie pe potrivirea a doua ceasuri. */
+      ceasul_bazei: { Args: Record<string, never>; Returns: string }
       catalog_cauta: { Args: { p_business: string; p_cuvinte: string[]; p_filtre: Json; p_plafon?: number }; Returns: Json }
       catalog_pagina: { Args: { p_business: string; p_filtre: Json; p_limit: number; p_offset: number }; Returns: Json }
       catalog_randuri: { Args: { p_business: string; p_spec: Json }; Returns: Json }

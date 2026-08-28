@@ -208,8 +208,13 @@ test("si salvarea cere randul de la care a pornit, altfel nu creeaza nimic", () 
    */
   const corp = corpFunctiei("aboutyou_salveaza_listarea");
   /* ⚠ Randul gasit trebuie sa fie CHIAR cel de la care s-a pornit, nu doar unul cu aceeasi cheie. */
-  assert.match(corp, /p_listare_asteptata is not null and v_id <> p_listare_asteptata[\s\S]{0,120}?depasit/i,
-    "un rand cu aceeasi cheie, dar alta incarnare, nu se ia drept acelasi");
+  /*
+   * ⚠ SI `null` INSEAMNA STRICT „N-A EXISTAT NICIUNA" (29.08.2026). Pana ieri, o salvare pornita
+   * fara listare scria peste una aparuta intre timp — o fila deschisa zece minute putea calca
+   * listarea facuta in alta fila. „Nu stiam de ea" nu e o incuviintare.
+   */
+  assert.match(corp, /p_listare_asteptata is null or v_id <> p_listare_asteptata[\s\S]{0,120}?depasit/i,
+    "un rand cu alta incarnare — sau unul aparut cand nu era niciunul — nu se ia drept acelasi");
   /*
    * ⚠ Si ramura de CREARE ii e inchisa. Fara asta, defectul ramane intreg: tocmai lipsa randului
    * e cazul in care salvarea invia produsul.
@@ -252,11 +257,19 @@ test("reconcilierea nu scrie peste o incarnare pe care n-a citit-o", () => {
   assert.notEqual(i, -1);
   const corp = sync.slice(i, sync.indexOf("\nexport ", i + 10));
 
-  /* ⚠ Clipa se ia INAINTE de prima cerere catre ei; luata mai tarziu, ar cuprinde chiar fereastra. */
+  /*
+   * ⚠ Clipa se ia INAINTE de prima cerere CATRE EI; luata mai tarziu, ar cuprinde chiar fereastra.
+   *
+   * ⚠ Ancora era `indexOf("await ")` — „prima asteptare din functie". A incetat sa fie potrivita
+   * cand clipa insasi a inceput sa vina din baza, printr-un `await`: proba se compara cu propria
+   * ei citire si cadea pe cod bun. Se cere ce trebuie cerut: cererea catre About You.
+   */
   const iClipa = corp.indexOf("const inceputulCitirii");
-  const iCitire = corp.indexOf("await ");
-  assert.ok(iClipa > 0 && iCitire > iClipa,
-    "clipa de citire se ia inaintea primei cereri, altfel nu acopera fereastra");
+  const iCatreEi = corp.indexOf("await getProducts(ctx.auth");
+  assert.ok(iClipa > 0 && iCatreEi > iClipa,
+    "clipa de citire se ia inaintea primei cereri catre ei, altfel nu acopera fereastra");
+  /* ⚠ Si vine de la BAZA, nu din Node: se compara cu `created_at`, scris tot de Postgres. */
+  assert.match(corp, /admin\.rpc\("ceasul_bazei"\)/);
 
   /* ⚠ Si TOATE cele trei scrieri o folosesc: una singura lasata pe dinafara e destula. */
   const scrieriPeCheie = (corp.match(/\.eq\("style_key", (?:styleKey|it\.style_key)\)/g) ?? []).length;

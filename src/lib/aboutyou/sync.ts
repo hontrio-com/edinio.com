@@ -3730,8 +3730,24 @@ export async function reconcileStatuses(
    * ⚠ CLIPA DE LA CARE INCEPEM SA CITIM, luata INAINTE de prima cerere catre ei. Scrierile de la
    * sfarsit o folosesc ca sa nu atinga un rand nascut intre timp — vezi nota lor. Luata mai
    * tarziu, ar cuprinde chiar fereastra pe care vrem s-o inlaturam.
+   *
+   * ⚠ SI SE IA DE LA BAZA, NU DE LA NODE (29.08.2026). Se compara cu `created_at`, scris de
+   * Postgres: doua ceasuri deosebite. Amandoua sunt sincronizate cu NTP si abaterea obisnuita e
+   * mult sub fereastra pe care o aparam — dar o paza care se bizuie pe potrivirea a doua ceasuri
+   * are o presupunere ascunsa in ea, iar aici scoaterea ei costa o singura cerere.
+   *
+   * ⚠ Daca nu se poate citi, se cade pe ceasul din Node: mai putin decat vrem, dar exact cat era
+   * ieri — deci niciodata mai rau. O reconciliere oprita ar fi fost mai rau.
    */
-  const inceputulCitirii = new Date().toISOString();
+  const { data: acumDinBaza, error: eCeasBaza } = await admin.rpc("ceasul_bazei");
+  if (eCeasBaza) {
+    await logError({
+      action: "aboutyou-sync/reconciliere", severity: "warning",
+      message: `ceasul bazei nu s-a putut citi, se cade pe cel din Node: ${eCeasBaza.message}`,
+      businessId: ctx.businessId,
+    });
+  }
+  const inceputulCitirii = typeof acumDinBaza === "string" ? acumDinBaza : new Date().toISOString();
   const respinse: string[] = [];
   // Un rand PER SKU, un status PER STYLE: se aduna intai, se scrie o data.
   const peStyle = new Map<string, Set<string>>();

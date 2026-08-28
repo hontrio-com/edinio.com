@@ -101,6 +101,15 @@ export function GoogleAnalyticsClient({ businessId, status, available = true, in
     else if (p === "choose") toast.message("Alege proprietatea Google Analytics.");
     else if (p === "norefresh") toast.error("Reconectează-te și acceptă accesul offline.");
     else if (p === "error") toast.error("Conectarea Google a eșuat. Încearcă din nou.");
+    /*
+     * ⚠ „S-a autorizat la Google, dar n-am putut salva" NU e acelasi lucru cu „autorizarea a
+     * esuat". Codul de autorizare e de unica folosinta si a fost deja consumat, deci omul trebuie
+     * sa reia TOT dansul — iar mesajul trebuie sa-i spuna asta, nu sa-l lase sa creada ca a gresit
+     * el ceva.
+     */
+    else if (p === "save_failed") {
+      toast.error("Autorizarea la Google a mers, dar nu am putut salva conexiunea. Apasă din nou pe conectare.");
+    }
     window.history.replaceState({}, "", "/dashboard/features/google-analytics");
   }, []);
 

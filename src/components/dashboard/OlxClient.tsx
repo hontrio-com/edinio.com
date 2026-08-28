@@ -37,6 +37,15 @@ export function OlxClient({ businessId, status, adverts, categories }: {
     if (p === "connected") toast.success("Cont OLX conectat.");
     else if (p === "norefresh") toast.error("Reconectează-te și acceptă accesul.");
     else if (p === "error") toast.error("Conectarea OLX a eșuat. Încearcă din nou.");
+    /*
+     * ⚠ „S-a autorizat la OLX, dar n-am putut salva" NU e acelasi lucru cu „autorizarea a
+     * esuat". Codul de autorizare e de unica folosinta si a fost deja consumat, deci omul trebuie
+     * sa reia TOT dansul — iar mesajul trebuie sa-i spuna asta, nu sa-l lase sa creada ca a gresit
+     * el ceva.
+     */
+    else if (p === "save_failed") {
+      toast.error("Autorizarea la OLX a mers, dar nu am putut salva conexiunea. Apasă din nou pe conectare.");
+    }
     window.history.replaceState({}, "", "/dashboard/features/olx");
   }, []);
 

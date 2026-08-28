@@ -63,12 +63,34 @@ export async function GET(req: NextRequest) {
     config.olx_user_name = me.data.name;
   }
 
-  if (ss?.id) {
-    await supabase.from("store_settings")
+  /*
+   * ═══ ⚠ CODUL DE AUTORIZARE E DE UNICA FOLOSINTA (29.08.2026, seara) ═══
+   *
+   * Scrierea asta mergea oarba, iar omul era trimis inapoi cu „conectat". Numai ca `exchangeCode`
+   * a consumat DEJA codul de la OLX: nu se mai poate schimba a doua oara. Deci o pana de o
+   * clipa la baza lasa starea cea mai proasta cu putinta:
+   *
+   *     tokenul e emis la ei, dar la noi nu scrie nimic
+   *     ecranul spune „conectat", fiindca redirectarea nu s-a uitat la nimic
+   *     comerciantul crede ca a terminat, si nimic nu merge
+   *     iar reluarea cere alt cod, deci trebuie sa reia TOT dansul de autorizare
+   *
+   * ⚠ SI NU EXISTA NICIO PLASA. Nu se scrie nicaieri ce s-a pierdut, deci nici macar nu se poate
+   * afla din jurnal ca tokenul acela exista la ei si nu la noi.
+   *
+   * ⚠ Deci se citeste raspunsul, si daca n-a intrat, omul afla ACUM — cat mai are rabdare sa apese
+   * inca o data — nu peste doua zile, cand se intreaba de ce nu se sincronizeaza nimic.
+   */
+  const { error: eScris } = ss?.id
+    ? await supabase.from("store_settings")
       .update({ olx_config: config as never, updated_at: new Date().toISOString() })
-      .eq("business_id", businessId);
-  } else {
-    await supabase.from("store_settings").insert({ business_id: businessId, olx_config: config as never });
+      .eq("business_id", businessId)
+    : await supabase.from("store_settings")
+      .insert({ business_id: businessId, olx_config: config as never });
+
+  if (eScris) {
+    console.error("[olx/oauth] conexiunea nu s-a putut salva:", eScris);
+    return back(req, "olx=save_failed");
   }
 
   return back(req, "olx=connected");

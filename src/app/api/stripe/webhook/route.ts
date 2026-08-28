@@ -521,8 +521,18 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
       return NextResponse.json({ error: "DB update failed" }, { status: 500 });
     }
 
-    // Clear any active grace period / suspension
-    await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
+    /*
+     * ⚠ SI AICI: profilul isi citea raspunsul, ridicarea suspendarii nu. Un om care tocmai a
+     * platit si ramane suspendat e chiar cazul in care tacerea costa cel mai mult — el vede ca a
+     * platit, si magazinul lui e tot inchis.
+     */
+    const { error: eSuspendareInitiala } = await admin
+      .from("businesses").update({ suspended_until: null }).eq("user_id", userId);
+
+    if (eSuspendareInitiala) {
+      console.error("[webhook] checkout.session.completed — suspendarea nu s-a putut ridica:", eSuspendareInitiala);
+      return NextResponse.json({ error: "Suspension clear failed" }, { status: 500 });
+    }
 
     // Anuleaza orice ALT abonament al clientului (planul vechi la upgrade/reactivare).
     // Il anulam ABIA acum, dupa ce noua plata a reusit — daca l-am fi anulat inainte
@@ -651,18 +661,51 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
     const periodEnd = invoicePeriodEnd(invoice);
     const expiresAt = periodEnd ? new Date(periodEnd * 1000) : computeExpiry(interval);
 
+    /*
+     * ═══ ⚠ RAMURA DE REINNOIRE ERA SINGURA SURDA (28.08.2026, noaptea tarziu) ═══
+     *
+     * Aceleasi doua scrieri, pe `checkout.session.completed` si pe `subscription.deleted`, isi
+     * citesc raspunsul si intorc 500 ca Stripe sa reia. Aici nu — iar ruta iese cu
+     * `{ received: true }` orice s-ar intampla, deci Stripe nu mai relivreaza NICIODATA.
+     *
+     * Ce se pierdea, la fiecare reinnoire:
+     *   `plan_expires_at` nu se prelungea, deci un client platitor pica din plan
+     *   o schimbare de plan facuta la reinnoire nu se scria
+     *   `payment_failed_at` ramanea aprins dupa o recuperare din dunning, iar bannerul
+     *     „plată restantă" statea pe un cont platit si la zi
+     *
+     * ⚠ SI NIMIC NU REPARA PE URMA. `reconcile-subscriptions` filtreaza
+     * `.is("payment_failed_at", null)` si DOAR suspenda: nu prelungeste, nu curata semnul, nu
+     * ridica suspendarea. Mai rau, cu semnul ramas aprins userul iese definitiv si din
+     * interogarea lui — deci tocmai contul stricat devine invizibil pentru plasa.
+     *
+     * ⚠ SI RELUAREA E SIGURA. Factura fiscala se emite mai jos, DEFERAT prin `after()`, deci un
+     * `500` de aici se intoarce inainte ca ea sa fie programata. Iar `emitSubscriptionInvoice` e
+     * oricum idempotenta (sare daca exista serie, plus `unique(stripe_invoice_id)`).
+     */
     // 1. Update plan + expiry + interval. Curata `payment_failed_at`: orice plata
     // reusita (initiala, reinnoire normala sau recuperare in dunning) inseamna ca
     // abonamentul e la zi → bannerul/badge-ul de plata restanta dispare.
-    await admin.from("users_profile").update({
+    const { error: eProfil } = await admin.from("users_profile").update({
       plan: plan as never,
       plan_expires_at: expiresAt.toISOString(),
       plan_interval: normalizeInterval(interval),
       payment_failed_at: null,
     }).eq("id", userId);
 
+    if (eProfil) {
+      console.error("[webhook] invoice.payment_succeeded — planul nu s-a putut scrie:", eProfil);
+      return NextResponse.json({ error: "DB update failed" }, { status: 500 });
+    }
+
     // 2. Clear suspension
-    await admin.from("businesses").update({ suspended_until: null }).eq("user_id", userId);
+    const { error: eSuspendare } = await admin
+      .from("businesses").update({ suspended_until: null }).eq("user_id", userId);
+
+    if (eSuspendare) {
+      console.error("[webhook] invoice.payment_succeeded — suspendarea nu s-a putut ridica:", eSuspendare);
+      return NextResponse.json({ error: "Suspension clear failed" }, { status: 500 });
+    }
 
     // 3. Revalidate dashboard
     revalidatePath("/dashboard", "layout");

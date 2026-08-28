@@ -2184,13 +2184,34 @@ async function setRemoteStatus(
    * Doua loturi externe cu aceeasi generatie: niciunul nu e „depasit" fata de celalalt, deci paza
    * nu vede nimic, iar la ei castiga cine termina ultimul — nu cine a cerut ultimul.
    */
-  const { data: genNou, error: eGenStatus } = await admin.rpc("aboutyou_ceas_urmator", {
-    p_business_id: ctx.businessId, p_style_key: listing.style_key, p_dorit: status,
+  /*
+   * ═══ ⚠ NUMARUL SE CERE LEGAT DE RANDUL DE LA CARE A PORNIT (28.08.2026, dupa-amiaza) ═══
+   *
+   * Intre citirea listarii de mai sus si clipa asta, ea poate sa DISPARA:
+   *
+   *     citim listarea L… si ne oprim o clipa
+   *     intre timp: scoatere -> ceasul 6 -> `inactive` la ei -> piatra 6 -> L STEARSA
+   *     ne reluam drumul, cerem ceasul 6 -> 7, si trimitem `published`
+   *     la ei: PUBLICAT. La noi: listarea nu exista.
+   *     iar la asezare, piatra spune 6 si lotul spune 7 -> nu se mai reaserteaza nimic
+   *
+   * ⚠ `style_key` NU E DESTUL: el supravietuieste relistarii. Randul e incarnarea — sters si
+   * refacut, are alt `id`, iar o cerere pornita pentru cel vechi n-are ce cauta la cel nou.
+   *
+   * ⚠ `null` inseamna „lumea s-a schimbat": nu se mai trimite NIMIC la ei. Trecator, deci
+   * elementul se reia si citeste starea de-atunci.
+   */
+  const { data: genNou, error: eGenStatus } = await admin.rpc("aboutyou_ceas_pentru_listare", {
+    p_business_id: ctx.businessId, p_style_key: listing.style_key,
+    p_listare_id: listing.id, p_dorit: status,
   });
-  if (eGenStatus || typeof genNou !== "number") {
+  if (eGenStatus) {
+    return { ok: false, status: 0, error: `Nu am putut ține minte starea cerută: ${eGenStatus.message}` };
+  }
+  if (typeof genNou !== "number") {
     return {
       ok: false, status: 0,
-      error: `Nu am putut ține minte starea cerută: ${eGenStatus?.message ?? "răspuns nevalid"}`,
+      error: "Listarea s-a schimbat între timp (a fost scoasă sau refăcută); nu am trimis nimic.",
     };
   }
   const genStatus = genNou;
@@ -2367,8 +2388,9 @@ async function stergeListare(
      * mijloc), iar ceasul ramane singurul loc unde se hotaraste — chiar si aici, unde nu poate
      * exista o cursa cu un lot extern.
      */
-    const { data: genLocal, error: eCeasLocal } = await admin.rpc("aboutyou_ceas_urmator", {
-      p_business_id: ctx.businessId, p_style_key: listing.style_key, p_dorit: "inactive",
+    const { data: genLocal, error: eCeasLocal } = await admin.rpc("aboutyou_ceas_pentru_listare", {
+      p_business_id: ctx.businessId, p_style_key: listing.style_key,
+      p_listare_id: listing.id, p_dorit: "inactive",
     });
     if (eCeasLocal || typeof genLocal !== "number") {
       return { ok: false, status: 0, error: "Nu am putut ține minte scoaterea; se reia." };
@@ -2407,14 +2429,18 @@ async function stergeListare(
    * Cerand generatie noua aici, lotul de `publish` de dinainte devine depasit prin chiar acest
    * pas, si asezarea lui se recunoaste ca atare. Nescrisa, cererea nu pleaca.
    */
-  const { data: genScoatere, error: eGenScoatere } = await admin.rpc("aboutyou_ceas_urmator", {
+  /* ⚠ Si aici legat de RAND, din acelasi motiv: intre citire si cerere, listarea poate disparea. */
+  const { data: genScoatere, error: eGenScoatere } = await admin.rpc("aboutyou_ceas_pentru_listare", {
     p_business_id: ctx.businessId, p_style_key: listing.style_key,
-    p_dorit: tintaRetragere(listing.status),
+    p_listare_id: listing.id, p_dorit: tintaRetragere(listing.status),
   });
-  if (eGenScoatere || typeof genScoatere !== "number") {
+  if (eGenScoatere) {
+    return { ok: false, status: 0, error: `Nu am putut ține minte scoaterea: ${eGenScoatere.message}` };
+  }
+  if (typeof genScoatere !== "number") {
     return {
       ok: false, status: 0,
-      error: `Nu am putut ține minte scoaterea: ${eGenScoatere?.message ?? "răspuns nevalid"}`,
+      error: "Listarea s-a schimbat între timp; nu am cerut nicio retragere.",
     };
   }
 
@@ -3171,25 +3197,56 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             continue;
           }
           /*
-           * ⚠ NUMARUL SE CERE DE LA CEAS, nu se socoteste din piatra. Calculat aici ca
-           * `piatra.status_generatie + 1`, o relistare care se intampla in acelasi timp ar fi putut
-           * primi ACELASI numar — si atunci reasertarea ar fi parut „curenta" fata de listarea
-           * noua si ar fi sters-o. Ceasul e unul singur pe cheia de stil si nu da acelasi numar de
-           * doua ori.
+           * ═══ ⚠ O REASERTARE VECHE N-ARE VOIE SA SARA PESTE O RELISTARE (28.08.2026, dupa-amiaza) ═══
+           *
+           *     piatra 5, listarea nu mai exista
+           *     omul relisteaza -> ceasul 5 -> 6, dar randul nou nu s-a scris inca
+           *     reasertarea cere si ea -> ceasul 6 -> 7
+           *     relistarea se incheie: listare noua, generatia 6
+           *     reasertarea (7) se incheie -> 7 = 7 -> trece -> STERGE listarea noua ❌
+           *
+           * Reasertarea s-a nascut din viata VECHE: n-are voie sa devina „mai noua" doar fiindca a
+           * cerut numarul cu cateva milisecunde mai tarziu. Deci cere cu ASTEPTARE — ceasul trebuie
+           * sa fie inca acolo unde l-a lasat piatra.
+           *
+           * ⚠ `null` inseamna ca intre timp s-a intamplat altceva, aproape sigur o relistare.
+           * Atunci n-are ce sa mai stinga: produsul are o viata noua, si ea conteaza.
            */
-          const { data: genStingere, error: eGenStingere } = await admin.rpc("aboutyou_ceas_urmator", {
-            p_business_id: ctx.businessId, p_style_key: sk, p_dorit: "inactive",
+          const { data: genStingere, error: eGenStingere } = await admin.rpc("aboutyou_ceas_pentru_reasertare", {
+            p_business_id: ctx.businessId, p_style_key: sk,
+            p_generatie_asteptata: piatra.status_generatie,
           });
-          if (eGenStingere || typeof genStingere !== "number") { asezat = false; continue; }
+          if (eGenStingere) { asezat = false; continue; }
+          if (typeof genStingere !== "number") {
+            await logError({
+              action: "aboutyou-sync/loturi", severity: "info",
+              message: "reasertarea nu mai are obiect: ceasul s-a miscat de la scoatere incoace (relistare)",
+              details: { styleKey: sk, asteptat: piatra.status_generatie }, businessId: ctx.businessId,
+            });
+            continue;
+          }
           const stins = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "removal", [sk],
             () => updateProductStatus(ctx.auth, [{ style_key: sk, status: "inactive" }]),
             genStingere, undefined, 1),
             "stingerea unui produs eliminat");
           if (isAboutYouError(stins)) { asezat = false; continue; }
-          await admin.from("aboutyou_listari_scoase").update({
+          /*
+           * ⚠ SI SCRIEREA ASTA ISI CITESTE RASPUNSUL. Nescrisa, piatra ramane la generatia veche
+           * desi lotul a plecat cu una noua — iar urmatoarea reasertare ar cere cu o asteptare
+           * gresita si n-ar mai porni niciodata. Lotul ramane deschis si se reia.
+           */
+          const { error: ePiatra } = await admin.from("aboutyou_listari_scoase").update({
             status_generatie: genStingere,
             reasertari: piatra.reasertari + 1,
           } as never).eq("id", piatra.id);
+          if (ePiatra) {
+            asezat = false;
+            await logError({
+              action: "aboutyou-sync/loturi", severity: "error",
+              message: `stingerea a plecat, dar piatra n-a putut fi actualizata: ${ePiatra.message}`,
+              details: { styleKey: sk, generatie: genStingere }, businessId: ctx.businessId,
+            });
+          }
           await logError({
             action: "aboutyou-sync/loturi", severity: "warning",
             message: "un lot de stare mai vechi decat eliminarea s-a asezat: se cere din nou dezactivarea",

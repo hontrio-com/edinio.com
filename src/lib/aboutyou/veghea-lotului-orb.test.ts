@@ -874,15 +874,21 @@ test("⚠ un lot de stare dintr-o generatie depasita nu castiga", () => {
    * listare, se pierdea la relistare si se dubla cu cel din piatra de mormant — deci doua operatii
    * concurente puteau primi acelasi numar, iar paza pe generatie nu mai deosebea nimic.
    */
-  assert.match(sync, /await admin\.rpc\("aboutyou_ceas_urmator", \{/);
+  /*
+   * ⚠ SI ALOCAREA CERE O ASTEPTARE (28.08.2026, dupa-amiaza). Ceasul dadea numere unice, si atat:
+   * cine cere ultimul primeste cel mai mare numar. Dar „ultimul care a cerut" nu e „ultimul care a
+   * vrut ceva" — intre citirea listarii si cererea numarului, randul poate sa DISPARA, iar
+   * `published` pleca oricum si invia produsul la ei. Vezi `ceasul-conditionat.test.ts`.
+   */
+  assert.match(sync, /await admin\.rpc\("aboutyou_ceas_pentru_listare", \{/);
   assert.doesNotMatch(sync, /aboutyou_status_generatie_noua/);
   assert.doesNotMatch(sync, /const genStatus = listing\.status_generatie \+ 1;/);
   /* ⚠ Scrisa INAINTEA cererii, si daca nu se scrie, cererea nu pleaca. */
-  const iGen = sync.indexOf('await admin.rpc("aboutyou_ceas_urmator"');
+  const iGen = sync.indexOf('await admin.rpc("aboutyou_ceas_pentru_listare"');
   const iCerere = sync.indexOf('cuLotDurabil(admin, ctx.businessId, "status"', iGen);
   assert.ok(iGen > 0 && iCerere > iGen,
     "generatia se cere INAINTEA cererii externe, altfel paza n-ar avea ce compara");
-  assert.match(sync, /if \(eGenStatus \|\| typeof genNou !== "number"\) \{[\s\S]{0,260}?ok: false, status: 0/);
+  assert.match(sync, /if \(typeof genNou !== "number"\) \{[\s\S]{0,300}?ok: false, status: 0/);
   /* ⚠ Si nu ajunge sa nu-i credem starea: se retrimite ce a cerut omul ULTIMA oara. */
   assert.match(sync, /if \(b\.generatie != null && b\.generatie < l\.status_generatie\) \{/);
   /*
@@ -1340,9 +1346,20 @@ test("\u26a0 ceasul starii e o alocare atomica, nu citit-calculeaza-scrie", () =
   assert.match(baseline, /do update set generatie = public\.aboutyou_ceas_stare\.generatie \+ 1/);
   assert.match(baseline, /returning generatie into v_gen/);
 
-  /* Si toate cele patru cai cer de la el, nu-si socotesc singure numarul. */
-  assert.equal([...sync.matchAll(/aboutyou_ceas_urmator/g)].length, 4,
-    "publicarea/dezactivarea, scoaterea, scoaterea doar-locala si reasertarea din piatra cer toate de la ceas");
+  /*
+   * Si toate cele patru cai cer de la el, nu-si socotesc singure numarul.
+   *
+   * ⚠ DAR NU MAI CER NECONDITIONAT (28.08.2026, dupa-amiaza). Un numar unic nu e destul: „ultimul
+   * care a cerut" nu e „ultimul care a vrut ceva". Cele trei cai de stare cer legat de RANDUL de
+   * la care au pornit, iar reasertarea cere legat de generatia PIETREI. `aboutyou_ceas_urmator`
+   * ramane indreptatit doar la relistare, in actiuni, unde nu exista asteptare de verificat.
+   */
+  assert.equal([...sync.matchAll(/aboutyou_ceas_pentru_listare/g)].length, 3,
+    "publicarea/dezactivarea, scoaterea si scoaterea doar-locala cer legat de randul citit");
+  assert.equal([...sync.matchAll(/aboutyou_ceas_pentru_reasertare/g)].length, 1,
+    "reasertarea cere legat de generatia pietrei de mormant");
+  assert.equal([...sync.matchAll(/aboutyou_ceas_urmator/g)].length, 0,
+    "in sync.ts nicio cerere nu mai porneste de nicaieri");
   const act = viu("src/lib/actions/aboutyou.actions.ts");
   /* ⚠ Si relistarea nu mai socoteste nimic: ceasul supravietuieste stergerii listarii. */
   assert.doesNotMatch(act, /piatra\.status_generatie \+ 1/);

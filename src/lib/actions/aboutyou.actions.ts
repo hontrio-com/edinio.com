@@ -261,7 +261,11 @@ export async function connectAboutYou(
   return { success: true };
 }
 
-export async function disconnectAboutYou(businessId: string): Promise<{ success: true } | { error: string }> {
+/*
+ * ⚠ `avertisment` NU E O EROARE: deconectarea a reusit. E singurul lucru ramas nefacut, si e unul
+ * pe care numai comerciantul il poate duce la capat — vezi mai jos, la dezabonare.
+ */
+export async function disconnectAboutYou(businessId: string): Promise<{ success: true; avertisment?: string } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
 
@@ -372,6 +376,7 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
    * o vreme evenimente catre o ruta care le ignora — zgomot, nu pierdere. Iar cronul nu mai atinge
    * magazinul, fiindca `connected` e fals.
    */
+  let avertisment: string | undefined;
   if (prev.api_key && prev.webhook_subscription_id) {
     /*
      * ⚠ SI RASPUNSUL DEZABONARII SE CITESTE. `deleteWebhookSubscription` nu arunca — intoarce
@@ -393,11 +398,26 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
         details: { businessId, subscriptionId: prev.webhook_subscription_id, status: dez.status },
         businessId,
       });
+      /*
+       * ═══ ⚠ SI OMUL AFLA, FIINDCA NUMAI EL MAI POATE FACE CEVA (28.08.2026, seara) ═══
+       *
+       * Pana acum ramanea doar in jurnal, iar comerciantul vedea „Cont deconectat." si atat.
+       *
+       * ⚠ SI NU SE POATE REINCERCA MAI TARZIU. O coada de dezabonari ar trebui sa tina cheia
+       * About You ca sa aiba cu ce cere stergerea — adica sa RESCRIEM secretul pe care omul
+       * tocmai ne-a cerut sa-l aruncam. Un abonament orfan inseamna evenimente catre o ruta care
+       * le ignora, adica zgomot; o cheie pastrata dupa deconectare e cu totul altceva.
+       *
+       * Deci: nu se pastreaza nimic, dar se spune limpede ce a ramas si unde se sterge.
+       */
+      avertisment = `Contul e deconectat, dar abonamentul de notificări nu s-a putut șterge la About You`
+        + ` (id ${prev.webhook_subscription_id}). Șterge-l din Seller Center, altfel ei continuă să trimită`
+        + " notificări către o adresă care le ignoră.";
     }
   }
 
   revalidatePath(FEATURE_PATH);
-  return { success: true };
+  return avertisment ? { success: true, avertisment } : { success: true };
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────────
@@ -1229,6 +1249,125 @@ export async function saveAboutYouListing(
     }
   }
 
+  /*
+   * ═══ ⚠ TOATE VERIFICARILE INAINTE DE ORICE SCRIERE (28.08.2026, seara) ═══
+   *
+   * Pana acum randul de listare se scria INTAI, si abia dupa aceea se verificau SKU-urile. Deci o
+   * salvare respinsa lasa in urma jumatate din ea:
+   *
+   *     omul schimba si categoria (in `campuri`), si un SKU care se ciocneste
+   *     randul de listare se scrie cu categoria noua ✅
+   *     verificarea SKU-ului respinge -> „nu s-a salvat" ❌
+   *     dar categoria E SALVATA, iar variantele au ramas cele vechi
+   *
+   * Comerciantul citeste „nu s-a salvat", inchide editorul, si de-atunci datele locale spun
+   * altceva decat cele de la ei — chiar starea de care fugim.
+   *
+   * ⚠ Verificarile nu au nevoie de randul scris: singurul lucru pentru care il foloseau era
+   * excluderea listarii curente din cautarea de coliziuni, iar aia se face pe CHEIA DE STIL, care
+   * exista dinainte. Ce ramane nescris impreuna e doar perechea listare + variante, si acolo o
+   * cadere lasa campuri valide, nu o salvare respinsa si totusi facuta pe jumatate.
+   */
+  const variante = input.variants.filter((v) => v.sku?.trim()).map((v) => ({
+    business_id: businessId, product_id: productId,
+    sku: v.sku.trim(), ean: v.ean, size_id: v.size_id, second_size_id: v.second_size_id,
+    color_id: v.color_id, quantity: v.quantity, retail_price_eur: v.retail_price_eur,
+    sale_price_eur: v.sale_price_eur, enabled: v.enabled,
+    variant_title: v.variant_title?.trim() || null,
+  }));
+
+  /*
+   * DUPLICATELE DIN INTERIORUL ACELUIASI PRODUS, prinse primele.
+   *
+   * Verificarea de mai jos filtreaza explicit listarea curenta, deci vedea doar
+   * coliziunile cu ALTE produse. Doua combinatii cu acelasi SKU in acelasi produs
+   * treceau de ea, iar insertul cadea pe `UNIQUE (business_id, sku)` DUPA ce
+   * stergerea se comisese, fara rollback: listarea rămânea fara nicio varianta,
+   * cu marimile, culorile si preturile completate manual pierdute definitiv. Iar
+   * campul de SKU al combinatiei e text liber, deci cazul e usor de atins.
+   */
+  const vazute = new Set<string>();
+  const dublate = new Set<string>();
+  for (const r of variante) {
+    if (vazute.has(r.sku)) dublate.add(r.sku); else vazute.add(r.sku);
+  }
+  if (dublate.size > 0) {
+    const lista = [...dublate].slice(0, 3).join(", ");
+    return { error: `SKU-ul ${lista} apare la mai multe variante ale acestui produs. Fiecare variantă are nevoie de un SKU unic.` };
+  }
+
+  const newSkus = variante.map((r) => r.sku);
+  if (newSkus.length > 0) {
+    /*
+     * ═══ ⚠ O PAZA CARE CADEA DESCHIS (27.08.2026, seara) ═══
+     *
+     * `const { data: clash }` inghitea eroarea. O citire picata dadea `null`, `?? []` o facea
+     * lista goala, si de-acolo iesea „niciun conflict" — adica exact verdictul pe care paza
+     * trebuia sa-l dea numai dupa ce a VERIFICAT. Doua produse ajungeau cu acelasi SKU la About
+     * You, iar acolo al doilea il suprascrie pe primul, tacut.
+     *
+     * ⚠ Diferenta fata de citirile de AFISARE din editor: acolo o pana arata o lista goala si se
+     * vede; aici arata „e in regula" si se scrie.
+     */
+    const { data: clash, error: eClash } = await admin.from("aboutyou_variants")
+      .select("sku, listing_id").eq("business_id", businessId).in("sku", newSkus);
+    if (eClash) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
+    const gasite = (clash ?? []) as { sku: string; listing_id: string }[];
+    if (gasite.length > 0) {
+      /*
+       * ⚠ SE COMPARA CHEIA DE STIL, NU ID-UL RANDULUI. Randul se poate sa nu existe inca (salvare
+       * noua), sau sa fie altul decat cel citit mai sus — o a doua salvare a aceluiasi produs il
+       * poate crea intre timp. In amandoua cazurile propriile SKU-uri ar fi parut „ale altui
+       * produs", iar salvarea ar fi fost respinsa pe nedrept.
+       *
+       * ⚠ Si o listare pe care n-o gasim se socoteste CONFLICT, nu „liber": aici o necunoscuta
+       * inseamna doua produse cu acelasi SKU la ei, iar al doilea il suprascrie tacut pe primul.
+       */
+      const aleCui = [...new Set(gasite.map((c) => c.listing_id))];
+      const { data: listari, error: eListari } = await admin.from("aboutyou_listings")
+        .select("id, style_key").eq("business_id", businessId).in("id", aleCui);
+      if (eListari) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
+      const cheiaListarii = new Map(
+        ((listari ?? []) as { id: string; style_key: string }[]).map((l) => [l.id, l.style_key]),
+      );
+      const conflict = gasite.find((c) => cheiaListarii.get(c.listing_id) !== productId);
+      if (conflict) return { error: `SKU-ul „${conflict.sku}" este deja folosit de alt produs. Folosește SKU-uri unice.` };
+    }
+
+    /*
+     * ═══ ⚠ SI UN SKU CARE A APARTINUT CANDVA ALTUI PRODUS (28.08.2026, tarziu) ═══
+     *
+     * Verificarea de mai sus se uita doar la maparile de ACUM. Dar `aboutyou_sku_istoric` tine
+     * minte SKU-urile listarilor eliminate, tocmai ca o comanda intarziata sa se poata lega. Iar
+     * daca acelasi SKU e dat intre timp altui produs:
+     *
+     *     SKU ABC -> produsul A, listarea A eliminata -> istoric: ABC -> A
+     *     ABC dat produsului B
+     *     comanda foarte intarziata pentru A ajunge -> `aboutyou_variants` gaseste B
+     *     se scade stocul lui B, pentru marfa lui A
+     *
+     * Iar `orders.ts` cauta INTAI maparea curenta, deci B castiga — nu din greseala de cod, ci
+     * fiindca SKU-ul a incetat sa fie un identificator.
+     *
+     * ⚠ NU SE STERGE ISTORICUL CA SA FACEM LOC. Un SKU care a existat pentru alt produs pur si
+     * simplu nu se mai refoloseste: e cea mai simpla regula care tine identitatea intreaga, si
+     * mesajul spune limpede de ce.
+     */
+    const { data: vechiSku, error: eVechiSku } = await admin.from("aboutyou_sku_istoric")
+      .select("sku, product_id").eq("business_id", businessId).in("sku", newSkus);
+    if (eVechiSku) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
+    const refolosit = (vechiSku ?? []).find((c) => {
+      const r = c as { product_id: string | null };
+      return r.product_id != null && r.product_id !== productId;
+    });
+    if (refolosit) {
+      return {
+        error: `SKU-ul „${(refolosit as { sku: string }).sku}" a fost folosit de alt produs listat cândva pe About You. `
+          + "Folosește un SKU nou: comenzile vechi se leagă de produse după SKU, iar refolosirea lui ar scădea stocul greșit.",
+      };
+    }
+  }
+
   let listingId: string;
   if (existent) {
     const { error } = await admin.from("aboutyou_listings")
@@ -1298,88 +1437,8 @@ export async function saveAboutYouListing(
     }
   }
 
-  // Build the new variant set and guard against SKU clashes BEFORE deleting
-  // anything, so a duplicate SKU never wipes a listing's variants.
-  const rows = input.variants.filter((v) => v.sku?.trim()).map((v) => ({
-    listing_id: listingId, business_id: businessId, product_id: productId,
-    sku: v.sku.trim(), ean: v.ean, size_id: v.size_id, second_size_id: v.second_size_id,
-    color_id: v.color_id, quantity: v.quantity, retail_price_eur: v.retail_price_eur,
-    sale_price_eur: v.sale_price_eur, enabled: v.enabled,
-    variant_title: v.variant_title?.trim() || null,
-  }));
+  const rows = variante.map((v) => ({ listing_id: listingId, ...v }));
 
-  /*
-   * DUPLICATELE DIN INTERIORUL ACELUIASI PRODUS, prinse primele.
-   *
-   * Verificarea de mai jos filtreaza explicit listarea curenta, deci vedea doar
-   * coliziunile cu ALTE produse. Doua combinatii cu acelasi SKU in acelasi produs
-   * treceau de ea, iar insertul cadea pe `UNIQUE (business_id, sku)` DUPA ce
-   * stergerea se comisese, fara rollback: listarea rămânea fara nicio varianta,
-   * cu marimile, culorile si preturile completate manual pierdute definitiv. Iar
-   * campul de SKU al combinatiei e text liber, deci cazul e usor de atins.
-   */
-  const vazute = new Set<string>();
-  const dublate = new Set<string>();
-  for (const r of rows) {
-    if (vazute.has(r.sku)) dublate.add(r.sku); else vazute.add(r.sku);
-  }
-  if (dublate.size > 0) {
-    const lista = [...dublate].slice(0, 3).join(", ");
-    return { error: `SKU-ul ${lista} apare la mai multe variante ale acestui produs. Fiecare variantă are nevoie de un SKU unic.` };
-  }
-
-  const newSkus = rows.map((r) => r.sku);
-  if (newSkus.length > 0) {
-    /*
-     * ═══ ⚠ O PAZA CARE CADEA DESCHIS (27.08.2026, seara) ═══
-     *
-     * `const { data: clash }` inghitea eroarea. O citire picata dadea `null`, `?? []` o facea
-     * lista goala, si de-acolo iesea „niciun conflict" — adica exact verdictul pe care paza
-     * trebuia sa-l dea numai dupa ce a VERIFICAT. Doua produse ajungeau cu acelasi SKU la About
-     * You, iar acolo al doilea il suprascrie pe primul, tacut.
-     *
-     * ⚠ Diferenta fata de citirile de AFISARE din editor: acolo o pana arata o lista goala si se
-     * vede; aici arata „e in regula" si se scrie.
-     */
-    const { data: clash, error: eClash } = await admin.from("aboutyou_variants")
-      .select("sku, listing_id").eq("business_id", businessId).in("sku", newSkus);
-    if (eClash) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
-    const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
-    if (conflict) return { error: `SKU-ul „${(conflict as { sku: string }).sku}" este deja folosit de alt produs. Folosește SKU-uri unice.` };
-
-    /*
-     * ═══ ⚠ SI UN SKU CARE A APARTINUT CANDVA ALTUI PRODUS (28.08.2026, tarziu) ═══
-     *
-     * Verificarea de mai sus se uita doar la maparile de ACUM. Dar `aboutyou_sku_istoric` tine
-     * minte SKU-urile listarilor eliminate, tocmai ca o comanda intarziata sa se poata lega. Iar
-     * daca acelasi SKU e dat intre timp altui produs:
-     *
-     *     SKU ABC -> produsul A, listarea A eliminata -> istoric: ABC -> A
-     *     ABC dat produsului B
-     *     comanda foarte intarziata pentru A ajunge -> `aboutyou_variants` gaseste B
-     *     se scade stocul lui B, pentru marfa lui A
-     *
-     * Iar `orders.ts` cauta INTAI maparea curenta, deci B castiga — nu din greseala de cod, ci
-     * fiindca SKU-ul a incetat sa fie un identificator.
-     *
-     * ⚠ NU SE STERGE ISTORICUL CA SA FACEM LOC. Un SKU care a existat pentru alt produs pur si
-     * simplu nu se mai refoloseste: e cea mai simpla regula care tine identitatea intreaga, si
-     * mesajul spune limpede de ce.
-     */
-    const { data: vechi, error: eVechi } = await admin.from("aboutyou_sku_istoric")
-      .select("sku, product_id").eq("business_id", businessId).in("sku", newSkus);
-    if (eVechi) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
-    const refolosit = (vechi ?? []).find((c) => {
-      const r = c as { product_id: string | null };
-      return r.product_id != null && r.product_id !== productId;
-    });
-    if (refolosit) {
-      return {
-        error: `SKU-ul „${(refolosit as { sku: string }).sku}" a fost folosit de alt produs listat cândva pe About You. `
-          + "Folosește un SKU nou: comenzile vechi se leagă de produse după SKU, iar refolosirea lui ar scădea stocul greșit.",
-      };
-    }
-  }
   /*
    * Se inlocuiesc DOAR randurile care vin din editor, nu toate.
    *

@@ -5236,6 +5236,18 @@ export type Database = {
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
       aboutyou_elibereaza_anulari: { Args: { p_business_id: string; p_order_number: string; p_linii: Json }; Returns: Json }
       aboutyou_generatie_noua: { Args: { p_listing_id: string }; Returns: number }
+      /* ⚠ `Returns: number | null` — NULL cand randul de listare nu mai exista (a fost scos
+         sau refacut intre timp): atunci NU se mai trimite nimic la ei. */
+      aboutyou_ceas_pentru_listare: {
+        Args: { p_business_id: string; p_style_key: string; p_listare_id: string; p_dorit: string | null }
+        Returns: number | null
+      }
+      /* ⚠ `Returns: number | null` — NULL cand ceasul s-a miscat de la scoatere incoace
+         (aproape sigur o relistare): reasertarea nu mai are ce sa stinga. */
+      aboutyou_ceas_pentru_reasertare: {
+        Args: { p_business_id: string; p_style_key: string; p_generatie_asteptata: number | null }
+        Returns: number | null
+      }
       aboutyou_ceas_urmator: { Args: { p_business_id: string; p_style_key: string; p_dorit: string | null }; Returns: number }
       aboutyou_incheie_scoaterea: { Args: { p_business_id: string; p_style_key: string; p_generatie: number | null }; Returns: string }
       aboutyou_salveaza_variante: { Args: { p_business_id: string; p_listing_id: string; p_randuri: Json }; Returns: Json }

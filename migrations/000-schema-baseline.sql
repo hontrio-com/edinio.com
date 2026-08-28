@@ -286,6 +286,75 @@ AS $function$
     end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_ceas_pentru_listare(p_business_id uuid, p_style_key text, p_listare_id uuid, p_dorit text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_gen integer;
+begin
+  perform 1 from public.aboutyou_ceas_stare
+   where business_id = p_business_id and style_key = p_style_key
+     for update;
+
+  if not exists (
+    select 1 from public.aboutyou_listings
+     where id = p_listare_id and business_id = p_business_id and style_key = p_style_key
+  ) then
+    return null;
+  end if;
+
+  insert into public.aboutyou_ceas_stare (business_id, style_key, generatie, dorit)
+  values (p_business_id, p_style_key, 1, p_dorit)
+  on conflict (business_id, style_key)
+  do update set generatie = public.aboutyou_ceas_stare.generatie + 1,
+                dorit = p_dorit,
+                actualizat_la = now()
+  returning generatie into v_gen;
+
+  update public.aboutyou_listings
+     set status_generatie = v_gen, status_dorit = p_dorit
+   where id = p_listare_id;
+
+  return v_gen;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.aboutyou_ceas_pentru_reasertare(p_business_id uuid, p_style_key text, p_generatie_asteptata integer)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_ceas integer;
+  v_gen integer;
+begin
+  select generatie into v_ceas
+    from public.aboutyou_ceas_stare
+   where business_id = p_business_id and style_key = p_style_key
+     for update;
+  if not found then
+    return null;
+  end if;
+
+  if p_generatie_asteptata is null or v_ceas <> p_generatie_asteptata then
+    return null;
+  end if;
+
+  update public.aboutyou_ceas_stare
+     set generatie = generatie + 1, dorit = 'inactive', actualizat_la = now()
+   where business_id = p_business_id and style_key = p_style_key
+  returning generatie into v_gen;
+
+  return v_gen;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aboutyou_ceas_urmator(p_business_id uuid, p_style_key text, p_dorit text)
  RETURNS integer
  LANGUAGE plpgsql
@@ -9035,6 +9104,8 @@ grant execute on function privat.decripteaza(p_val text) to service_role;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to anon;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to authenticated;
 grant execute on function privat.decripteaza_config(p_cfg jsonb, p_cai text[]) to service_role;
+grant execute on function public.aboutyou_ceas_pentru_listare(p_business_id uuid, p_style_key text, p_listare_id uuid, p_dorit text) to service_role;
+grant execute on function public.aboutyou_ceas_pentru_reasertare(p_business_id uuid, p_style_key text, p_generatie_asteptata integer) to service_role;
 grant execute on function public.aboutyou_ceas_urmator(p_business_id uuid, p_style_key text, p_dorit text) to service_role;
 grant execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) to service_role;
 grant execute on function public.aboutyou_generatie_noua(p_listing_id uuid) to service_role;
@@ -9215,6 +9286,8 @@ revoke execute on function privat.cheie_integrari() from public;
 revoke execute on function privat.cripteaza(p_val text) from public;
 revoke execute on function privat.cripteaza_rand(p_rand jsonb) from public;
 revoke execute on function privat.decripteaza(p_val text) from public;
+revoke execute on function public.aboutyou_ceas_pentru_listare(p_business_id uuid, p_style_key text, p_listare_id uuid, p_dorit text) from public;
+revoke execute on function public.aboutyou_ceas_pentru_reasertare(p_business_id uuid, p_style_key text, p_generatie_asteptata integer) from public;
 revoke execute on function public.aboutyou_ceas_urmator(p_business_id uuid, p_style_key text, p_dorit text) from public;
 revoke execute on function public.aboutyou_elibereaza_anulari(p_business_id uuid, p_order_number text, p_linii jsonb) from public;
 revoke execute on function public.aboutyou_generatie_noua(p_listing_id uuid) from public;

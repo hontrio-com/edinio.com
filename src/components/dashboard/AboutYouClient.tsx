@@ -111,6 +111,12 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
       const res = await disconnectAboutYou(businessId);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont deconectat.");
+      /*
+       * ⚠ Deconectarea a reusit; asta e ce a ramas nefacut si numai comerciantul poate duce la
+       * capat. Arătat separat, ca sa nu para ca deconectarea a picat — si cu rabdare la citit,
+       * fiindca are un id in el.
+       */
+      if (res.avertisment) toast.warning(res.avertisment, { duration: 15000 });
       router.refresh();
     });
   };

@@ -226,6 +226,7 @@ export type Database = {
       aboutyou_ceas_stare: {
         Row: {
           actualizat_la: string
+          aprobat_odata: boolean
           business_id: string
           dorit: string | null
           generatie: number
@@ -233,6 +234,7 @@ export type Database = {
         }
         Insert: {
           actualizat_la?: string
+          aprobat_odata: boolean
           business_id: string
           dorit?: string | null
           generatie?: number
@@ -240,6 +242,7 @@ export type Database = {
         }
         Update: {
           actualizat_la?: string
+          aprobat_odata?: boolean
           business_id?: string
           dorit?: string | null
           generatie?: number

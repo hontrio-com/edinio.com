@@ -1149,7 +1149,8 @@ export async function validateAboutYouListing(
     warnings.push(
       rand.aprobat_odata === true
         ? "Ai schimbat categoria unui produs deja aprobat. About You nu mai acceptă asta după aprobare,"
-          + " iar salvarea va fi oprită: ca să-l muți în altă categorie, elimină listarea și creează una nouă."
+          + " iar salvarea va fi oprită: ca să-l muți în altă categorie, fă un produs nou în magazin"
+          + " și listează-l pe acela."
         : "Ai schimbat categoria unui produs care așteaptă verdictul About You. Salvarea va fi oprită"
           + " până primim răspunsul lor: dacă îl aprobă între timp, ar rămâne la ei cu categoria veche.",
     );
@@ -1515,9 +1516,22 @@ export async function saveAboutYouListing(
           + " Așteaptă răspunsul lor și încearcă din nou.",
       };
     }
+    /*
+     * ═══ ⚠ SFATUL DE DINAINTE NU FUNCTIONA (29.08.2026, noaptea) ═══
+     *
+     * Spunea „elimină listarea și creează una nouă". Dar `style_key` E CHIAR `productId`, deci
+     * listarea refacuta poarta aceeasi cheie — iar pentru About You e ACELASI product master, inca
+     * aprobat. Omul ar fi eliminat produsul de la ei, l-ar fi relistat, si s-ar fi lovit de acelasi
+     * refuz — dupa ce si-a stricat listarea degeaba.
+     *
+     * ⚠ Un master NOU cere o CHEIE noua, iar cheia vine din produsul din magazin. Deci singura
+     * iesire adevarata e un produs nou. Asta e si mai scump de spus, si mai ieftin de urmat decat
+     * un drum care nu duce nicaieri.
+     */
     return {
       error: "About You nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat."
-        + " Ca să-l muți în altă categorie, elimină listarea și creează una nouă.",
+        + " Nici eliminarea și relistarea nu ajută: la ei rămâne același produs, deja aprobat."
+        + " Ca să-l muți în altă categorie, fă un produs nou în magazin și listează-l pe acela.",
     };
   }
   if (r.stare === "marime-blocata") {

@@ -320,7 +320,19 @@ test("⚠ categoria nu se mai poate schimba dupa aprobare, si nu doar se avertiz
   assert.match(corp, /categorie-blocata/);
   /* ⚠ Si mesajul, cu IESIREA lui scrisa, a ramas acolo unde il vede omul. */
   assert.match(actiuni, /nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat/);
-  assert.match(actiuni, /elimină listarea și creează una nouă/);
+  /*
+   * ⚠ SFATUL VECHI NU FUNCTIONA, si proba il cerea. „Elimină listarea și creează una nouă" —
+   * dar `style_key` E CHIAR `productId`, deci listarea refacuta poarta aceeasi cheie, iar pentru
+   * About You e ACELASI product master, inca aprobat. Omul si-ar fi stricat listarea degeaba si
+   * s-ar fi lovit de acelasi refuz.
+   *
+   * ⚠ Un master NOU cere o CHEIE noua, iar cheia vine din produsul din magazin. Deci iesirea
+   * adevarata e un produs nou — si asta scrie acum.
+   */
+  assert.match(actiuni, /fă un produs nou în magazin/);
+  assert.match(actiuni, /Nici eliminarea și relistarea nu ajută/);
+  assert.doesNotMatch(actiuni, /elimină listarea și creează una nouă/,
+    "s-a intors sfatul care trimite omul pe un drum ce nu duce nicaieri");
   /* ⚠ Si nu s-a lasat o copie in TypeScript: doua liste s-ar departa tacut, iar cea veche ar parea paza. */
   assert.doesNotMatch(actiuni, /const APROBATE = new Set\(/);
 });
@@ -573,4 +585,41 @@ test("⚠ reconcilierea aprinde semnul pentru adevarul LOR despre `inactive`", (
     "si sa scrie semnul odata cu starea, in aceeasi scriere");
   /* ⚠ Numai `true`, niciodata `false`: semnul nu se stinge de aici. */
   assert.doesNotMatch(sync, /aprobat_odata: false/);
+});
+
+test("⚠ aprobarea tine de CHEIA DE STIL, deci supravietuieste eliminarii si relistarii", () => {
+  /*
+   * ═══ ⚠ SEMNUL MUREA ODATA CU RANDUL, DAR APROBAREA LOR NU MOARE (29.08.2026, noaptea) ═══
+   *
+   *     L1, `style_key = PROD123`, aprobat la ei, semnul aprins
+   *     omul elimina listarea -> randul local se sterge, semnul se duce cu el
+   *     omul relisteaza acelasi produs -> L2, `style_key` TOT `PROD123`
+   *     L2 se naste „neaprobat" -> categoria si marimile redevin schimbabile ❌
+   *
+   * Dar pentru About You `PROD123` e ACELASI product master, si el ramane aprobat: un produs
+   * `inactive` se poate reactiva, iar republicarea sare peste aprobare.
+   *
+   * ⚠ ACEEASI LECTIE CA LA GENERATIE: starea tine de `style_key`, care supravietuieste
+   * relistarii, nu de randul care moare. Masurat, in amandoua directiile: aprobat -> eliminat ->
+   * relistat ramane blocat; neaprobat ramane liber.
+   */
+  const temelie3 = viu("migrations/000-schema-baseline.sql");
+  /* ⚠ Semnul sta pe ceas, care traieste peste eliminare. */
+  assert.match(temelie3, /CREATE TABLE IF NOT EXISTS public\.aboutyou_ceas_stare[\s\S]{0,600}?aprobat_odata boolean/i);
+
+  const corpTrg = (() => {
+    const i = temelie3.indexOf("FUNCTION public.aboutyou_marcheaza_aprobarea");
+    const d = temelie3.indexOf("AS $function$", i) + "AS $function$".length;
+    return temelie3.slice(d, temelie3.indexOf("$function$", d));
+  })();
+  /* ⚠ La nastere se ia de pe ceas: altfel L2 s-ar naste neaprobat. */
+  assert.match(corpTrg, /tg_op = 'INSERT'[\s\S]{0,300}?from public\.aboutyou_ceas_stare/);
+  /* ⚠ Si se scrie inapoi in ceas, ca sa supravietuiasca randului. */
+  assert.match(corpTrg, /insert into public\.aboutyou_ceas_stare[\s\S]{0,200}?do update set aprobat_odata = true/);
+  /* ⚠ Si NU atinge `generatie`: ea are stapanul ei. */
+  assert.doesNotMatch(corpTrg, /do update set[^;]*generatie/);
+
+  /* ⚠ Iar salvarea intreaba CEASUL, nu doar randul: randul e oglinda, ceasul e izvorul. */
+  const corp = corpulSalvarii();
+  assert.match(corp, /v_aprobat := coalesce\(v_aprobat, false\) or coalesce\(\([\s\S]{0,220}?from public\.aboutyou_ceas_stare/);
 });

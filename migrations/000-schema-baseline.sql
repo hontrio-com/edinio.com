@@ -556,9 +556,23 @@ begin
     new.aprobat_odata := coalesce(old.aprobat_odata, false) or coalesce(new.aprobat_odata, false);
   end if;
 
+  if tg_op = 'INSERT' then
+    new.aprobat_odata := coalesce(new.aprobat_odata, false) or coalesce((
+      select c.aprobat_odata from public.aboutyou_ceas_stare c
+       where c.business_id = new.business_id and c.style_key = new.style_key
+    ), false);
+  end if;
+
   if new.status in ('active', 'published', 'pending_active', 'problem') then
     new.aprobat_odata := true;
   end if;
+
+  if new.aprobat_odata then
+    insert into public.aboutyou_ceas_stare (business_id, style_key, generatie, aprobat_odata)
+    values (new.business_id, new.style_key, 0, true)
+    on conflict (business_id, style_key) do update set aprobat_odata = true;
+  end if;
+
   return new;
 end;
 $function$
@@ -744,7 +758,7 @@ begin
       (business_id, product_id, style_key, status, status_generatie)
     values (p_business_id, p_product_id, p_style_key, 'local', v_gen)
     on conflict (business_id, style_key) do nothing
-    returning id into v_id;
+    returning id, aprobat_odata into v_id, v_aprobat;
 
     if v_id is null then
       return jsonb_build_object('stare', 'depasit');
@@ -752,8 +766,12 @@ begin
     v_nou := true;
     v_status := 'local';
     v_categorie := null;
-    v_aprobat := false;
   end if;
+
+  v_aprobat := coalesce(v_aprobat, false) or coalesce((
+    select c.aprobat_odata from public.aboutyou_ceas_stare c
+     where c.business_id = p_business_id and c.style_key = p_style_key
+  ), false);
 
   if v_aprobat or v_status = any(c_in_asteptare) then
     if v_categorie is not null
@@ -4918,7 +4936,8 @@ create table if not exists public.aboutyou_ceas_stare (
   style_key text not null,
   generatie integer default 0 not null,
   dorit text,
-  actualizat_la timestamp with time zone default now() not null);
+  actualizat_la timestamp with time zone default now() not null,
+  aprobat_odata boolean default false not null);
 
 create table if not exists public.aboutyou_intentii (
   id uuid default gen_random_uuid() not null,

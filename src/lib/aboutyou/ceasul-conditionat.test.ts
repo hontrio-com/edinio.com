@@ -146,13 +146,18 @@ test("nicio schimbare de stare nu mai cere numarul neconditionat", () => {
    * pazeste doar ca o rescriere de maine sa nu strecoare inapoi alocarea neconditionata pe o
    * cale de stare — chiar forma care stergea listarea relistata.
    *
-   * `aboutyou_ceas_urmator` ramane indreptatit intr-un singur loc: RELISTAREA din actiuni, unde
-   * nu exista nicio asteptare de verificat, fiindca ea insasi e cea mai noua intentie.
+   * `aboutyou_ceas_urmator` ramane indreptatit intr-un singur loc: RELISTAREA, unde nu exista
+   * nicio asteptare de verificat, fiindca ea insasi e cea mai noua intentie. Iar de cand salvarea
+   * se face dintr-un singur RPC, relistarea se petrece IN SQL — deci din aplicatie nu-l mai
+   * cheama nimeni, si asta se pazeste.
    */
   assert.ok(!sync.includes("aboutyou_ceas_urmator"),
     "in sync.ts orice cerere de numar porneste de la ceva anume: un rand sau o piatra");
-  const inActiuni = actiuni.split("aboutyou_ceas_urmator").length - 1;
-  assert.equal(inActiuni, 1, "singurul loc indreptatit e relistarea");
+  assert.ok(!actiuni.includes("aboutyou_ceas_urmator"),
+    "in actiuni nu se mai cere niciun numar de-a dreptul");
+  /* ⚠ Dar tot se cheama, din salvare — altfel randul nou ar porni de la un ceas nemiscat. */
+  assert.match(corpFunctiei("aboutyou_salveaza_listarea"), /aboutyou_ceas_urmator\(/,
+    "nasterea unei listari avanseaza ceasul inainte ca randul sa existe");
 });
 
 test("fiecare cerere de numar isi citeste raspunsul inainte sa trimita ceva", () => {

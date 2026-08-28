@@ -1368,115 +1368,52 @@ export async function saveAboutYouListing(
     }
   }
 
-  let listingId: string;
-  if (existent) {
-    const { error } = await admin.from("aboutyou_listings")
-      .update(campuri as never).eq("id", (existent as { id: string }).id);
-    if (error) return { error: "Eroare la salvarea listării." };
-    listingId = (existent as { id: string }).id;
-  } else {
-    /*
-     * ═══ ⚠ GENERATIA STARII NU SE INTOARCE LA ZERO ═══
-     *
-     * Un produs eliminat lasa in urma un ceas cu numarul la care s-a ajuns. Daca mai tarziu e
-     * listat din nou, randul nou NU trebuie sa porneasca de la 0 — un lot de stare foarte
-     * intarziat din viata dinainte ar castiga fata de o listare la generatia 1.
-     *
-     * ⚠ CEASUL SUPRAVIETUIESTE STERGERII, deci aici nu mai e nimic de socotit: el traieste pe
-     * `(business_id, style_key)`, iar `style_key` e acelasi si dupa relistare. Ieri se citea piatra
-     * si se aduna unu — o alocare citit-calculeaza-scrie, care putea da acelasi numar unei
-     * reasertari pornite in acelasi timp. Vezi migratia 2026-12-08.
-     */
-    /*
-     * ⚠ SI CEASUL SE AVANSEAZA INAINTE CA LISTAREA NOUA SA EXISTE (28.08.2026, dimineata).
-     *
-     * Fara pasul asta e destul o cadere obisnuita, fara nicio cursa exotica:
-     *
-     *     ceasul 5, scoaterea 5 se incheie -> listarea stearsa ✅
-     *     scrierea `status: completed` pe lot PICA -> lotul ramane deschis
-     *     omul relisteaza -> listare noua, ceasul TOT 5
-     *     cronul reia acelasi lot: 5 = 5 -> nu e depasit -> STERGE listarea noua ❌
-     *
-     * Ceasul e singurul lucru care deosebeste viata veche de cea noua, deci trebuie sa se miste
-     * chiar la nasterea celei noi. Nemiscat, cererea nu pleaca: mai bine o salvare reincercata
-     * decat o listare care poate fi stearsa de un lot din viata dinainte.
-     */
-    const { data: genRelistare, error: eCeas } = await admin.rpc("aboutyou_ceas_urmator", {
-      p_business_id: businessId, p_style_key: productId, p_dorit: null,
+  /*
+   * ═══ ⚠ LISTAREA SI VARIANTELE SE SCRIU IMPREUNA SAU DELOC (28.08.2026, seara) ═══
+   *
+   * Pana acum erau doua cereri, si intre ele incapea orice — un hop de-o clipa, o pana:
+   *
+   *     randul de listare se scrie cu categoria, brandul si compozitia noi ✅
+   *     salvarea variantelor PICA ❌
+   *     comerciantul citeste „Eroare la salvarea variantelor"
+   *     dar jumatate din ce a scris E SALVATA, iar variantele au ramas cele vechi
+   *
+   * Si e chiar calea cea mai folosita din toata integrarea: fiecare apasare pe „Salvează".
+   *
+   * ⚠ VERIFICARILE DE MAI SUS inchid jumatatea cealalta — o salvare RESPINSA nu atinge nimic.
+   * Asta o inchide pe cea de dupa: o salvare ACCEPTATA care se rupe la mijloc.
+   *
+   * ⚠ SI TOT ACOLO S-A MUTAT SI NASTEREA: randul nou, statusul „local" scris o singura data, si
+   * avansarea ceasului dinaintea lui. Cursa cu o a doua salvare a aceluiasi produs se rezolva sub
+   * incuietoarea randului, nu printr-o recitire dupa un insert respins.
+   *
+   * Probat pe productie: campurile listarii scrise, apoi variantele picand pe un tip gresit —
+   * brandul si `hs_code` au ramas cele dinainte, si cantitatea la fel.
+   */
+  const { data: rez, error: eSalvare } = await admin.rpc("aboutyou_salveaza_listarea", {
+    p_business_id: businessId, p_style_key: productId, p_product_id: productId,
+    p_campuri: campuri as never, p_randuri: variante as never,
+  });
+  const r = rez as { stare?: string; variante?: { stare?: string } } | null;
+  if (eSalvare || !r?.stare) {
+    logError({
+      action: "aboutyou.saveListing", severity: "error",
+      message: `salvarea listarii nu s-a putut face: ${eSalvare?.message ?? "raspuns nevalid"}`,
+      details: { businessId, productId, cate: variante.length }, businessId,
     });
-    if (eCeas || typeof genRelistare !== "number") {
-      logError({
-        action: "aboutyou.saveListing", severity: "critical",
-        message: `ceasul starii nu s-a putut avansa la relistare: ${eCeas?.message ?? "raspuns nevalid"}`,
-        details: { businessId, productId }, businessId,
-      });
-      return { error: "Nu am putut pregăti listarea. Încearcă din nou." };
-    }
-    const { data: nou, error } = await admin.from("aboutyou_listings").insert({
-      business_id: businessId, product_id: productId, style_key: productId,
-      status: "local", status_generatie: genRelistare, ...campuri,
-    } as never).select("id").single();
-    if (nou) {
-      listingId = (nou as { id: string }).id;
-    } else {
-      /*
-       * Cursa: intre citire si insert, alta salvare a creat randul, iar
-       * `UNIQUE (business_id, style_key)` respinge insertul. Recitim si scriem
-       * ca la o listare existenta — fara sa atingem statusul.
-       */
-      const { data: iar } = await admin.from("aboutyou_listings")
-        .select("id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
-      if (!iar) {
-        logError({ action: "aboutyou.saveListing", message: error?.message ?? "insert fara rand", details: { businessId, productId }, businessId });
-        return { error: "Eroare la salvarea listării." };
-      }
-      const { error: eroareUpdate } = await admin.from("aboutyou_listings")
-        .update(campuri as never).eq("id", (iar as { id: string }).id);
-      if (eroareUpdate) return { error: "Eroare la salvarea listării." };
-      listingId = (iar as { id: string }).id;
-    }
+    return { error: "Eroare la salvarea listării. Verifică să nu ai SKU-uri duplicate." };
   }
-
-  const rows = variante.map((v) => ({ listing_id: listingId, ...v }));
-
-  /*
-   * Se inlocuiesc DOAR randurile care vin din editor, nu toate.
-   *
-   * Un `delete` pe toata listarea stergea si randurile RETRASE — cele ale
-   * variantelor care nu mai exista pe produs. Iar randul retras e singura urma a
-   * maparii `sku -> product_id + variant_title`: fara el, o comanda About You
-   * sosita pe acel SKU intra fara sa scada stoc, tacut. Pe langa asta, stergerea
-   * ii lua si semnul `ay_status = "removed"`, deci `reconciliazaVariante` relua
-   * retragerea la fiecare rulare.
-   */
-  /*
-   * ═══ ⚠ STERGEREA SI INSERAREA ERAU DOUA TRANZACTII (27.08.2026, seara) ═══
-   *
-   * `delete` reusea, apoi `insert` putea pica dintr-un hop de-o clipa — iar randurile vechi erau
-   * deja duse. Se pierdeau codurile EAN, maparea de marime, cea de culoare, preturile EUR scrise
-   * de mana, comutatoarele `enabled` si titlurile de varianta. Nimic nu le mai refacea: sunt date
-   * introduse de OM, nu date pe care sa le recitim de undeva. Si e chiar calea cea mai folosita:
-   * fiecare apasare pe „Salveaza".
-   *
-   * ⚠ Acum intr-un singur RPC, deci intr-o singura tranzactie: ori se schimba tot, ori nimic.
-   * Probat pe productie — o salvare care pica lasa cele doua randuri vechi neatinse, iar una care
-   * merge inlocuieste doar SKU-ul cerut.
-   */
-  if (newSkus.length > 0) {
-    const { data: rez, error: vErr } = await admin.rpc("aboutyou_salveaza_variante", {
-      p_business_id: businessId, p_listing_id: listingId, p_randuri: rows as never,
+  /* ⚠ „Listarea nu exista" nu e acelasi lucru cu „a mers": ar iesi tacut, fara sa fi scris nimic. */
+  if (r.stare === "lipsa" || r.variante?.stare === "lipsa") {
+    return { error: "Listarea About You nu mai există. Reîncarcă pagina." };
+  }
+  if (r.stare !== "scris") {
+    logError({
+      action: "aboutyou.saveListing", severity: "error",
+      message: `salvarea listarii a raspuns „${r.stare}"`,
+      details: { businessId, productId }, businessId,
     });
-    const r = rez as { stare?: string; scrise?: number } | null;
-    if (vErr || !r?.stare) {
-      logError({
-        action: "aboutyou.saveListing", severity: "error",
-        message: `variantele nu s-au putut salva: ${vErr?.message ?? "raspuns nevalid"}`,
-        details: { businessId, productId, cate: rows.length }, businessId,
-      });
-      return { error: "Eroare la salvarea variantelor. Verifică să nu ai SKU-uri duplicate." };
-    }
-    /* ⚠ „Listarea nu exista" nu e acelasi lucru cu „a mers": ar iesi tacut, fara nicio varianta. */
-    if (r.stare === "lipsa") return { error: "Listarea About You nu mai există. Reîncarcă pagina." };
+    return { error: "Eroare la salvarea listării." };
   }
   revalidatePath(FEATURE_PATH);
   return { success: true };

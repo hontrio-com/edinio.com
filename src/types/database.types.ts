@@ -5250,6 +5250,15 @@ export type Database = {
       }
       aboutyou_ceas_urmator: { Args: { p_business_id: string; p_style_key: string; p_dorit: string | null }; Returns: number }
       aboutyou_incheie_scoaterea: { Args: { p_business_id: string; p_style_key: string; p_generatie: number | null }; Returns: string }
+      /* ⚠ Randul de listare SI variantele, intr-o singura tranzactie: ori se schimba tot, ori
+         nimic. `p_campuri` se aplica peste coloanele tabelei fara ca ele sa fie numite in SQL. */
+      aboutyou_salveaza_listarea: {
+        Args: {
+          p_business_id: string; p_style_key: string; p_product_id: string
+          p_campuri: Json; p_randuri: Json
+        }
+        Returns: Json
+      }
       aboutyou_salveaza_variante: { Args: { p_business_id: string; p_listing_id: string; p_randuri: Json }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
       trendyol_comenzi_de_facturat: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { order_id: string; shipment_package_id: string }[] }

@@ -685,6 +685,77 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_id uuid;
+  v_gen integer;
+  v_nou boolean := false;
+  v_chei text;
+  v_straina text;
+  v_variante jsonb;
+begin
+  select id into v_id from public.aboutyou_listings
+   where business_id = p_business_id and style_key = p_style_key
+     for update;
+
+  if not found then
+    v_gen := public.aboutyou_ceas_urmator(p_business_id, p_style_key, null);
+
+    insert into public.aboutyou_listings
+      (business_id, product_id, style_key, status, status_generatie)
+    values (p_business_id, p_product_id, p_style_key, 'local', v_gen)
+    on conflict (business_id, style_key) do nothing
+    returning id into v_id;
+
+    if v_id is null then
+      select id into v_id from public.aboutyou_listings
+       where business_id = p_business_id and style_key = p_style_key
+         for update;
+      if not found then
+        return jsonb_build_object('stare', 'lipsa');
+      end if;
+    else
+      v_nou := true;
+    end if;
+  end if;
+
+  select string_agg(quote_ident(k), ', ') into v_chei
+    from jsonb_object_keys(p_campuri) as k;
+  if v_chei is null then
+    return jsonb_build_object('stare', 'fara-campuri');
+  end if;
+
+  select k into v_straina
+    from jsonb_object_keys(p_campuri) as k
+   where not exists (
+     select 1 from information_schema.columns c
+      where c.table_schema = 'public' and c.table_name = 'aboutyou_listings'
+        and c.column_name = k
+   )
+   limit 1;
+  if v_straina is not null then
+    raise exception 'camp necunoscut pe aboutyou_listings: %', v_straina;
+  end if;
+
+  execute format(
+    'update public.aboutyou_listings set (%s) = '
+    || '(select %s from jsonb_populate_record(null::public.aboutyou_listings, $1)) where id = $2',
+    v_chei, v_chei)
+  using p_campuri, v_id;
+
+  v_variante := public.aboutyou_salveaza_variante(p_business_id, v_id, p_randuri);
+
+  return jsonb_build_object(
+    'stare', 'scris', 'listing_id', v_id, 'nou', v_nou, 'variante', v_variante);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -9114,6 +9185,7 @@ grant execute on function public.aboutyou_marcheaza_listarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_modificarea() to service_role;
 grant execute on function public.aboutyou_marcheaza_varianta() to service_role;
 grant execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) to service_role;
+grant execute on function public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb) to service_role;
 grant execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) to service_role;
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
@@ -9296,6 +9368,7 @@ revoke execute on function public.aboutyou_marcheaza_listarea() from public;
 revoke execute on function public.aboutyou_marcheaza_modificarea() from public;
 revoke execute on function public.aboutyou_marcheaza_varianta() from public;
 revoke execute on function public.aboutyou_repune_stoc_retur(p_business_id uuid, p_retur_id uuid) from public;
+revoke execute on function public.aboutyou_salveaza_listarea(p_business_id uuid, p_style_key text, p_product_id uuid, p_campuri jsonb, p_randuri jsonb) from public;
 revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid, p_listing_id uuid, p_randuri jsonb) from public;
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;

@@ -17,13 +17,15 @@ import { readFileSync } from "node:fs";
    Comerciantul citeste „nu s-a salvat", inchide editorul, si de-atunci datele locale spun
    altceva decat cele de la ei — chiar starea de care fugim de zile intregi.
 
-   ⚠ LEACUL NU E O TRANZACTIE MAI MARE, ci o ordine. Verificarile n-aveau nevoie de randul
-   scris: singurul lucru pentru care il foloseau era excluderea listarii curente din
-   cautarea de coliziuni, iar aia se face pe CHEIA DE STIL, care exista dinainte. Mutate
-   inaintea oricarei scrieri, o salvare respinsa nu mai atinge nimic.
+   ⚠ JUMATATEA DE DINAINTE se inchide printr-o ORDINE, nu printr-o tranzactie mai mare.
+   Verificarile n-aveau nevoie de randul scris: singurul lucru pentru care il foloseau era
+   excluderea listarii curente din cautarea de coliziuni, iar aia se face pe CHEIA DE STIL,
+   care exista dinainte. Mutate inaintea oricarei scrieri, o salvare RESPINSA nu atinge nimic.
 
-   Ce ramane nescris impreuna e doar perechea listare + variante — si acolo o cadere lasa
-   campuri valide, nu o salvare respinsa si totusi facuta pe jumatate.
+   ⚠ JUMATATEA DE DUPA — o salvare ACCEPTATA care se rupe la mijloc — cere insa chiar o
+   tranzactie: randul de listare si variantele pleaca acum intr-un singur RPC. Masurat pe
+   productie: cu campurile listarii deja scrise si variantele picand pe un tip gresit,
+   brandul si `hs_code` au ramas cele dinainte, si cantitatea la fel.
 */
 
 const sursa = readFileSync("src/lib/actions/aboutyou.actions.ts", "utf8");
@@ -46,11 +48,14 @@ function unde(model: RegExp, ce: string): number {
   return m;
 }
 
+/*
+ * Singura scriere din toata salvarea: un RPC care face randul de listare si variantele in aceeasi
+ * tranzactie. Tot ce e verificare trebuie sa fie inaintea lui.
+ */
+const SCRIEREA = /admin\.rpc\("aboutyou_salveaza_listarea"/;
+
 test("toate verificarile de SKU se fac inainte de orice scriere", () => {
-  const scriere = Math.min(
-    unde(/\.from\("aboutyou_listings"\)\s*\n?\s*\.update\(/, "actualizarea listarii"),
-    unde(/\.from\("aboutyou_listings"\)\.insert\(/, "inserarea listarii"),
-  );
+  const scriere = unde(SCRIEREA, "salvarea listarii");
 
   const verificari: [RegExp, string][] = [
     [/const dublate = new Set<string>\(\)/, "cautarea duplicatelor din acelasi produs"],
@@ -68,7 +73,7 @@ test("si oprirea pe categorie sau marime dupa aprobare, la fel", () => {
    * ⚠ Regula de la 27.08: categoria si marimea nu se mai schimba dupa aprobare. Ea se oprea deja
    * inaintea scrierii, si asa trebuie sa ramana — altfel campul respins ar fi salvat oricum.
    */
-  const scriere = unde(/\.from\("aboutyou_listings"\)\s*\n?\s*\.update\(/, "actualizarea listarii");
+  const scriere = unde(SCRIEREA, "salvarea listarii");
   assert.ok(unde(/About You nu mai acceptă schimbarea categoriei/, "oprirea pe categorie") < scriere);
   assert.ok(unde(/About You nu mai acceptă schimbarea mărimii/, "oprirea pe marime") < scriere);
 });
@@ -98,12 +103,30 @@ test("o listare pe care n-o gasim se socoteste conflict, nu „liber”", () => 
     "o citire picata opreste salvarea, nu o lasa sa treaca");
 });
 
-test("randurile de varianta se leaga de listare abia dupa ce randul exista", () => {
-  const rows = unde(/const rows = variante\.map/, "construirea randurilor de varianta");
-  const scriere = Math.min(
-    unde(/\.from\("aboutyou_listings"\)\s*\n?\s*\.update\(/, "actualizarea listarii"),
-    unde(/\.from\("aboutyou_listings"\)\.insert\(/, "inserarea listarii"),
-  );
-  assert.ok(rows > scriere, "`listing_id` nu exista inainte ca randul sa fie scris");
-  assert.ok(rows < unde(/aboutyou_salveaza_variante/, "salvarea variantelor"));
+test("listarea si variantele pleaca intr-o singura cerere", () => {
+  /*
+   * ⚠ DOUA CERERI INSEAMNA DOUA TRANZACTII, si intre ele incape orice: randul de listare scris cu
+   * campurile noi, salvarea variantelor picata, iar comerciantul citind „nu s-a salvat" peste o
+   * jumatate care s-a salvat. Probat pe productie: cu variantele picand pe un tip gresit, brandul
+   * si `hs_code` au ramas cele dinainte.
+   */
+  assert.equal(corp.split('admin.rpc("aboutyou_salveaza_listarea"').length - 1, 1,
+    "o singura scriere, nu doua");
+  assert.doesNotMatch(corp, /\.from\("aboutyou_listings"\)\s*\n?\s*\.update\(/,
+    "randul de listare nu se mai scrie separat");
+  assert.doesNotMatch(corp, /\.from\("aboutyou_listings"\)\.insert\(/,
+    "randul nou nu se mai insereaza separat");
+  assert.doesNotMatch(corp, /admin\.rpc\("aboutyou_salveaza_variante"/,
+    "variantele merg in aceeasi tranzactie cu listarea");
+  /* ⚠ Si campurile pleaca asa cum sunt: numite din nou in SQL, cele doua liste ar incepe sa se departeze. */
+  assert.match(corp, /p_campuri:\s*campuri as never/);
+  assert.match(corp, /p_randuri:\s*variante as never/);
+});
+
+test("raspunsul salvarii se citeste, nu se presupune", () => {
+  /* ⚠ „Listarea nu exista" nu e acelasi lucru cu „a mers": ar iesi tacut, fara sa fi scris nimic. */
+  assert.match(corp, /r\.stare === "lipsa" \|\| r\.variante\?\.stare === "lipsa"/,
+    "si raspunsul variantelor se citeste, nu doar cel al listarii");
+  assert.match(corp, /if\s*\(r\.stare !== "scris"\)/,
+    "orice alt raspuns decat „scris” opreste salvarea");
 });

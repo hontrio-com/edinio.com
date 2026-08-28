@@ -106,9 +106,33 @@ export function deleteAdvert(token: string, advertId: number) {
 }
 
 // `is_success` is required by the API for the `deactivate` command.
-export function advertCommand(token: string, advertId: number, command: "activate" | "deactivate" | "finish" | "extend") {
+/**
+ * O comanda pe un anunt.
+ *
+ * ═══ ⚠ `is_success` SPUNEA CA S-A VANDUT, LA ORICE DEZACTIVARE (30.08.2026) ═══
+ *
+ * La OLX, `is_success` inseamna „tranzactia s-a incheiat cu bine" — adica produsul S-A VANDUT.
+ * Noi il trimiteam `true` la FIECARE dezactivare, indiferent de motiv:
+ *
+ *     omul apasa „Dezactivează"      -> le spuneam ca s-a vandut
+ *     produsul devine inactiv        -> le spuneam ca s-a vandut
+ *     stocul ajunge la zero          -> le spuneam ca s-a vandut
+ *     retragere inaintea unei stergeri -> le spuneam ca s-a vandut
+ *
+ * Niciunul nu e o vanzare. E o informatie FALSA data unui furnizor despre propriul lui produs, si
+ * nu stim ce face el cu ea — statistici, clasare, poate reputatia contului.
+ *
+ * ⚠ IMPLICITUL E `false`, iar adevarul se cere pe nume. Cand vom sti chiar ca s-a vandut, se
+ * trimite `true` de la locul care stie asta — nu se ghiceste aici.
+ */
+export function advertCommand(
+  token: string,
+  advertId: number,
+  command: "activate" | "deactivate" | "finish" | "extend",
+  optiuni?: { sAVandut?: boolean },
+) {
   const body: Record<string, unknown> = { command };
-  if (command === "deactivate") body.is_success = true;
+  if (command === "deactivate") body.is_success = optiuni?.sAVandut === true;
   return call<undefined>(token, "POST", `/adverts/${advertId}/commands`, body);
 }
 

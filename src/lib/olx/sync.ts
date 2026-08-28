@@ -36,6 +36,16 @@ export interface OlxAdvertRow {
   status: string;
   offer_id: string;
   /**
+   * Cine a cerut dezactivarea, cand starea e `removed_by_user`.
+   *
+   * ⚠ Aceeasi stare se scrie si la apasarea omului, si cand stingem noi anuntul fiindca stocul s-a
+   * terminat. Fara deosebirea asta, regula „ce a hotarat omul nu se desface singur" ingheata si
+   * dezactivarile automate — iar marfa se intoarce pe raft cu anuntul stins.
+   *
+   * ⚠ `null` la randurile de dinaintea migratiei, si se citeste prudent: ca o hotarare a omului.
+   */
+  dezactivat_de: "om" | "stoc" | "produs-inactiv" | "inainte-de-stergere" | null;
+  /**
    * Clipa in care OMUL a cerut stergerea anuntului.
    *
    * ⚠ Cat timp e scrisa, sincronizarea nu recreeaza anuntul — altfel prima comanda venita de pe
@@ -137,7 +147,7 @@ class CitireOlxEsuata extends Error {}
 
 async function getRow(admin: Db, businessId: string, offerId: string): Promise<OlxAdvertRow | null> {
   const { data, error } = await admin
-    .from("olx_adverts").select("id, olx_advert_id, status, offer_id, sters_de_om_la")
+    .from("olx_adverts").select("id, olx_advert_id, status, offer_id, sters_de_om_la, dezactivat_de")
     .eq("business_id", businessId).eq("offer_id", offerId).maybeSingle();
   if (error) throw new CitireOlxEsuata(`randul OLX nu s-a putut citi: ${error.message}`);
   return (data as OlxAdvertRow) ?? null;
@@ -159,15 +169,37 @@ async function saveError(admin: Db, businessId: string, offerId: string, product
 async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, row: OlxAdvertRow | null): Promise<SyncOutcome> {
   if (!row) return { ok: true, action: "skipped" };
   if (row.olx_advert_id) {
-    // DELETE rejects `active` adverts — deactivate first (best-effort).
+    /*
+     * ═══ ⚠ PIATRA SE PUNEA SI CAND ANUNTUL RAMANEA VIU (30.08.2026) ═══
+     *
+     * OLX refuza sa stearga un anunt ACTIV: intoarce `400 Invalid status`. Iar `classify` socoteste
+     * orice `400` drept permanent, deci codul trecea mai departe si scria local „șters de tine":
+     *
+     *     dezactivarea de mai jos pica (rezultatul ei nici nu se citea)
+     *     DELETE -> 400 „advert is active"
+     *     `permanent` -> se merge mai departe -> local: sters ✅
+     *     la OLX: anunt ACTIV, care se vinde in continuare ❌
+     *
+     * Si de-acum e cu atat mai rau: piatra il si opreste sa fie recreat, deci nimic nu-l mai atinge.
+     *
+     * ⚠ NUMAI DOUA RASPUNSURI INDREPTATESC PIATRA: stergerea reusita, si `404` (nu mai era acolo).
+     * Orice altceva inseamna „poate e inca viu", si atunci se reia — un anunt care se sterge la a
+     * doua trecere costa un minut; unul crezut sters, dar viu, se vinde mai departe.
+     */
     if (["active", "new", "unconfirmed", "limited"].includes(row.status)) {
-      await advertCommand(ctx.token, row.olx_advert_id, "deactivate");
+      /* ⚠ Si rezultatul dezactivarii se citeste: e chiar cauza celui mai probabil `400` de mai jos. */
+      const dez = await advertCommand(ctx.token, row.olx_advert_id, "deactivate", { sAVandut: false });
+      if (isOlxError(dez) && dez.status !== 400) {
+        /* `400` aici inseamna de obicei „deja inactiv" — se merge mai departe la stergere. */
+        return { ok: false, permanent: false, error: `Nu am putut dezactiva anuntul inainte de stergere: ${dez.error}` };
+      }
     }
     const res = await deleteAdvert(ctx.token, row.olx_advert_id);
     if (isOlxError(res) && res.status !== 404) {
-      const { permanent } = classify(res);
-      if (!permanent) return { ok: false, permanent: false, error: res.error };
-      // permanent (ex. invalid status persistent) — keep going and drop the row
+      return {
+        ok: false, permanent: false,
+        error: `OLX nu a sters anuntul (${res.status}): ${res.error}`,
+      };
     }
   }
   /*
@@ -200,13 +232,19 @@ async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, 
   return { ok: true, action: "deleted" };
 }
 
-async function deactivateRemote(admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow): Promise<SyncOutcome> {
+/** Cine a cerut dezactivarea. Vezi migratia 2026-12-19: `removed_by_user` singur nu spune. */
+export type SursaDezactivarii = "om" | "stoc" | "produs-inactiv" | "inainte-de-stergere";
+
+async function deactivateRemote(
+  admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow, sursa: SursaDezactivarii,
+): Promise<SyncOutcome> {
   if (!row.olx_advert_id) return { ok: true, action: "skipped" };
-  const res = await advertCommand(ctx.token, row.olx_advert_id, "deactivate");
+  /* ⚠ `sAVandut: false`: niciunul din motivele noastre nu e o vanzare. Vezi `advertCommand`. */
+  const res = await advertCommand(ctx.token, row.olx_advert_id, "deactivate", { sAVandut: false });
   const now = new Date().toISOString();
   if (!isOlxError(res)) {
     await admin.from("olx_adverts")
-      .update({ status: "removed_by_user", error: null, last_status_at: now, updated_at: now })
+      .update({ status: "removed_by_user", dezactivat_de: sursa, error: null, last_status_at: now, updated_at: now })
       .eq("id", row.id);
     return { ok: true, action: "deactivated", status: "removed_by_user" };
   }
@@ -258,7 +296,12 @@ async function upsertRemote(
   // Inactive or out of stock -> deactivate but keep the advert for later.
   if (!isProductSellable(product)) {
     if (row?.olx_advert_id && ["active", "new", "unconfirmed"].includes(row.status)) {
-      return deactivateRemote(admin, ctx, row);
+      /*
+       * ⚠ SE SCRIE DE CE, nu doar CA. Aceeasi stare `removed_by_user` se scria si aici, si la
+       * apasarea omului — iar regula „ce a hotarat omul nu se desface singur" inghetase si
+       * dezactivarile automate: stocul se intorcea, anuntul ramanea stins.
+       */
+      return deactivateRemote(admin, ctx, row, product.is_active ? "stoc" : "produs-inactiv");
     }
     return { ok: true, action: "skipped" };
   }
@@ -301,7 +344,19 @@ async function upsertRemote(
      * ⚠ `outdated` E ALTCEVA: acolo OLX a expirat anuntul singur, si reactivarea automata e chiar
      * ce trebuie. Deosebirea nu e cum arata starea, ci CINE a hotarat-o.
      */
-    if ((advert.status || row.status) === "outdated") {
+    /*
+     * ⚠ SI CE AM STINS NOI SE APRINDE TOT DE NOI. `outdated` inseamna ca OLX l-a expirat singur.
+     * `removed_by_user` cu `dezactivat_de` deosebit de `om` inseamna ca l-am stins NOI, fiindca
+     * stocul se terminase sau produsul era inactiv — iar acum produsul e iar vandabil, deci motivul
+     * a disparut. Numai apasarea OMULUI ramane in picioare pana se razgandeste el.
+     *
+     * ⚠ `null` (randuri de dinaintea migratiei) se citeste ca „om": greseala ieftina e un anunt
+     * care asteapta o apasare, nu unul care porneste singur cand n-ar trebui.
+     */
+    const stareaAcum = advert.status || row.status;
+    const stinsDeNoi = stareaAcum === "removed_by_user"
+      && row.dezactivat_de != null && row.dezactivat_de !== "om";
+    if (stareaAcum === "outdated" || stinsDeNoi) {
       const freshRow = await getRow(admin, businessId, offerId);
       if (freshRow) await activateRemote(admin, ctx, freshRow);
     }
@@ -465,7 +520,7 @@ async function processQueueItemIntern(
       return removeRemote(admin, ctx, item.business_id, await getRow(admin, item.business_id, item.offer_id));
     case "deactivate": {
       const row = await getRow(admin, item.business_id, item.offer_id);
-      return row ? deactivateRemote(admin, ctx, row) : { ok: true, action: "skipped" };
+      return row ? deactivateRemote(admin, ctx, row, "om") : { ok: true, action: "skipped" };
     }
     case "activate": {
       const row = await getRow(admin, item.business_id, item.offer_id);
@@ -494,7 +549,7 @@ export async function syncProductNow(admin: Db, ctx: OlxSyncContext, businessId:
 export async function deactivateProductNow(admin: Db, ctx: OlxSyncContext, businessId: string, productId: string): Promise<SyncOutcome> {
   return faraCitiriPicate(async () => {
     const row = await getRow(admin, businessId, productId);
-    return row ? deactivateRemote(admin, ctx, row) : { ok: true, action: "skipped" };
+    return row ? deactivateRemote(admin, ctx, row, "om") : { ok: true, action: "skipped" };
   });
 }
 

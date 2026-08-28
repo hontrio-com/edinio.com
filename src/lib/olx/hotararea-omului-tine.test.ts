@@ -61,7 +61,7 @@ test("⚠ urma chiar se citeste din baza, nu doar se scrie", () => {
    * ⚠ Proba care scaneaza sursa arata ca SCRIE `row.sters_de_om_la`, nu ca are ce citi. Acelasi
    * lant care lipsea la `aprobat_odata`: coloana, selectul, tipul randului.
    */
-  assert.match(sync, /\.select\("id, olx_advert_id, status, offer_id, sters_de_om_la"\)/);
+  assert.match(sync, /\.select\("id, olx_advert_id, status, offer_id, sters_de_om_la, dezactivat_de"\)/);
   assert.match(sync, /^\s*sters_de_om_la: string \| null;$/m);
   const temelie = readFileSync("migrations/000-schema-baseline.sql", "utf8");
   assert.match(temelie, /sters_de_om_la timestamp with time zone/i);
@@ -84,13 +84,82 @@ test("⚠ „Postează pe OLX” e iesirea, si sterge urma INAINTE de trimitere"
   assert.match(corp, /if \(eUrma\) return \{ error:/);
 });
 
-test("⚠ se reactiveaza numai ce a expirat singur, nu ce a oprit omul", () => {
-  assert.match(sync, /if \(\(advert\.status \|\| row\.status\) === "outdated"\) \{/);
+test("⚠ se reactiveaza ce am stins NOI, nu ce a oprit omul", () => {
+  /*
+   * ═══ ⚠ REGULA DE IERI INGHETASE SI DEZACTIVARILE AUTOMATE (30.08.2026) ═══
+   *
+   * Proba cerea, pana azi, ca `removed_by_user` sa NU se reactiveze niciodata automat. **Avea
+   * dreptate sub premisa de-atunci**: starea aia insemna, dupa nume, „omul a hotarat".
+   *
+   * Premisa a cazut cand s-a vazut ca ACEEASI stare o scriem si noi, singuri, cand stocul ajunge la
+   * zero. Deci regula ingheta si ce stinsesem noi:
+   *
+   *     stoc 5 -> 0 -> stingem anuntul, si scriem `removed_by_user`
+   *     stoc 0 -> 10 -> produsul e iar vandabil
+   *     dar starea spune „omul a hotarat" -> anuntul RAMANE stins ❌
+   *
+   * Acum deosebirea se citeste din `dezactivat_de`, nu din numele starii.
+   */
+  assert.match(sync, /const stinsDeNoi = stareaAcum === "removed_by_user"\s*\n?\s*&& row\.dezactivat_de != null && row\.dezactivat_de !== "om";/);
+  assert.match(sync, /if \(stareaAcum === "outdated" \|\| stinsDeNoi\) \{/);
   assert.doesNotMatch(sync, /\["removed_by_user", "outdated"\]\.includes\(advert\.status \|\| row\.status\)/,
-    "reactivarea automata a lui `removed_by_user` desface apasarea pe „Dezactivează”");
+    "reactivarea neconditionata desface apasarea pe „Dezactivează”");
+  /* ⚠ Si `null` se citeste prudent, ca „om": un anunt care asteapta o apasare e mai ieftin decat
+     unul care porneste singur cand n-ar trebui. */
+  assert.match(sync, /row\.dezactivat_de != null/);
   /* ⚠ Si butonul manual a ramas acolo unde era: fara el, refuzul de mai sus ar fi o fundatura. */
   const ecran = readFileSync("src/components/dashboard/OlxClient.tsx", "utf8");
   assert.match(ecran, /canActivate = \["removed_by_user", "outdated"\]\.includes\(a\.status\)/);
   /* ⚠ Si starea noua are un nume in ecran, altfel apare ca necunoscuta. */
   assert.match(ecran, /sters_de_om: \{ label: "Șters de tine"/);
+});
+
+/* ── Cine a hotarat dezactivarea ─────────────────────────────────────────── */
+
+test("⚠ dezactivarea isi scrie motivul, si nu se mai presupune o vanzare", () => {
+  /*
+   * ⚠ La OLX, `is_success` inseamna „tranzactia s-a incheiat cu bine" — adica S-A VANDUT. Il
+   * trimiteam `true` la fiecare dezactivare: la apasarea omului, la stoc zero, la produs inactiv,
+   * si chiar inaintea unei stergeri. Niciunul nu e o vanzare. E o informatie falsa data unui
+   * furnizor despre propriul lui produs.
+   */
+  const client = readFileSync("src/lib/olx/client.ts", "utf8");
+  assert.match(client, /body\.is_success = optiuni\?\.sAVandut === true;/);
+  assert.doesNotMatch(client, /body\.is_success = true;/, "s-a intors presupunerea");
+
+  /* ⚠ Si toate cele patru cai ale noastre spun limpede ca NU e o vanzare. */
+  const chemari = [...sync.matchAll(/advertCommand\([^)]*"deactivate"[^)]*\)/g)];
+  assert.ok(chemari.length >= 2, "amandoua caile de dezactivare");
+  for (const m of chemari) {
+    assert.match(m[0], /sAVandut: false/, `o dezactivare nu spune ca nu e vanzare: ${m[0]}`);
+  }
+
+  /* ⚠ Iar motivul se scrie pe rand, ca reactivarea sa poata deosebi. */
+  assert.match(sync, /export type SursaDezactivarii = "om" \| "stoc" \| "produs-inactiv" \| "inainte-de-stergere";/);
+  assert.match(sync, /dezactivat_de: sursa/);
+  assert.match(sync, /deactivateRemote\(admin, ctx, row, product\.is_active \? "stoc" : "produs-inactiv"\)/);
+  assert.equal((sync.match(/deactivateRemote\(admin, ctx, row, "om"\)/g) ?? []).length, 2,
+    "amandoua apasarile din ecran spun „om”");
+});
+
+test("⚠ piatra se pune numai daca OLX chiar a sters anuntul", () => {
+  /*
+   * ═══ ⚠ SE PUNEA SI CAND ANUNTUL RAMANEA VIU ═══
+   *
+   * OLX refuza sa stearga un anunt ACTIV: `400 Invalid status`. Iar `classify` socoteste orice
+   * `400` drept permanent, deci codul mergea mai departe si scria local „șters de tine" — in timp
+   * ce la ei anuntul se vindea in continuare. Si de-acum e mai rau: piatra il opreste sa fie
+   * recreat, deci nimic nu-l mai atinge.
+   *
+   * ⚠ NUMAI DOUA RASPUNSURI INDREPTATESC PIATRA: stergerea reusita, si `404`.
+   */
+  const i = sync.indexOf("async function removeRemote");
+  const corp = sync.slice(i, sync.indexOf("\nasync function", i + 10));
+  assert.match(corp, /if \(isOlxError\(res\) && res\.status !== 404\) \{[\s\S]{0,260}?permanent: false/,
+    "orice alt raspuns decat 204/404 inseamna „poate e inca viu”, deci se reia");
+  assert.doesNotMatch(corp, /const \{ permanent \} = classify\(res\);/,
+    "s-a intors socoteala care lua `400` drept „gata, putem uita de el”");
+  /* ⚠ Si rezultatul dezactivarii de dinainte se citeste: e chiar cauza celui mai probabil `400`. */
+  assert.match(corp, /const dez = await advertCommand\([\s\S]{0,140}?"deactivate"/);
+  assert.match(corp, /if \(isOlxError\(dez\) && dez\.status !== 400\)/);
 });

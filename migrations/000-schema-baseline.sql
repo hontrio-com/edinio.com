@@ -5652,7 +5652,8 @@ create table if not exists public.olx_adverts (
   last_status_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  sters_de_om_la timestamp with time zone);
+  sters_de_om_la timestamp with time zone,
+  dezactivat_de text);
 
 create table if not exists public.olx_sync_queue (
   id uuid default gen_random_uuid() not null,
@@ -6441,6 +6442,7 @@ alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.intentii_publicare add constraint intentii_publicare_marketplace_check CHECK ((marketplace = ANY (ARRAY['trendyol'::text, 'emag'::text, 'aboutyou'::text])));
 alter table public.intentii_publicare add constraint intentii_publicare_sursa_check CHECK ((sursa = ANY (ARRAY['auto_publish'::text, 'import'::text, 'manual'::text])));
+alter table public.olx_adverts add constraint olx_adverts_dezactivat_de_check CHECK (((dezactivat_de IS NULL) OR (dezactivat_de = ANY (ARRAY['om'::text, 'stoc'::text, 'produs-inactiv'::text, 'inainte-de-stergere'::text]))));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
 alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'emag'::text, 'proba'::text])));

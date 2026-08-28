@@ -338,10 +338,24 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
    * coada intai (nu mai are unde pleca), loturile pe urma, listarile la sfarsit. Ce ramane dupa o
    * intrerupere e citit oricum ca „deconectat", fiindca configul s-a scris deja.
    */
-  await admin.from("aboutyou_sync_queue").delete().eq("business_id", businessId);
-  await admin.from("aboutyou_variants").delete().eq("business_id", businessId);
-  await admin.from("aboutyou_batches").delete().eq("business_id", businessId);
-  await admin.from("aboutyou_listings").delete().eq("business_id", businessId);
+  /*
+   * ⚠ SI FIECARE STERGERE ISI CITESTE RASPUNSUL. Comentariul de deasupra spunea „fail-closed", dar
+   * cele patru stergeri mergeau oarbe: o pana la mijloc lasa jumatate din stare in urma, iar
+   * functia raspundea `success`. Nu opresc deconectarea — configul e deja scris, deci magazinul E
+   * deconectat — dar se scriu, ca resturile sa poata fi gasite.
+   */
+  const resturi: string[] = [];
+  for (const tabel of ["aboutyou_sync_queue", "aboutyou_variants", "aboutyou_batches", "aboutyou_listings"] as const) {
+    const { error } = await admin.from(tabel).delete().eq("business_id", businessId);
+    if (error) resturi.push(`${tabel}: ${error.message}`);
+  }
+  if (resturi.length > 0) {
+    logError({
+      action: "aboutyou.disconnect", severity: "warning",
+      message: `magazinul e deconectat, dar au ramas randuri nesterse: ${resturi.join(" | ")}`,
+      details: { businessId }, businessId,
+    });
+  }
 
   /*
    * ═══ ⚠ DEZABONAREA LA EI VINE LA URMA (28.08.2026, noaptea) ═══
@@ -359,10 +373,26 @@ export async function disconnectAboutYou(businessId: string): Promise<{ success:
    * magazinul, fiindca `connected` e fals.
    */
   if (prev.api_key && prev.webhook_subscription_id) {
-    await deleteWebhookSubscription(
+    /*
+     * ⚠ SI RASPUNSUL DEZABONARII SE CITESTE. `deleteWebhookSubscription` nu arunca — intoarce
+     * `{ error, status }` —, deci un esec se scurgea tacut si ramanea un abonament ORFAN la ei, pe
+     * care nimeni nu-l mai poate sterge: cheia si id-ul tocmai au fost aruncate din config.
+     *
+     * ⚠ NU OPRESTE DECONECTAREA: omul a cerut-o, iar magazinul e deja deconectat la noi. Dar se
+     * scrie ID-UL, ca sa poata fi sters de mana din Seller Center — singura cale ramasa.
+     */
+    const dez = await deleteWebhookSubscription(
       { apiKey: prev.api_key, environment: prev.environment },
       prev.webhook_subscription_id,
     );
+    if (isAboutYouError(dez)) {
+      logError({
+        action: "aboutyou.disconnect", severity: "error",
+        message: `abonamentul de webhook n-a putut fi sters la About You si ramane orfan: ${dez.error}`,
+        details: { businessId, subscriptionId: prev.webhook_subscription_id, status: dez.status },
+        businessId,
+      });
+    }
   }
 
   revalidatePath(FEATURE_PATH);
@@ -1206,23 +1236,20 @@ export async function saveAboutYouListing(
     listingId = (existent as { id: string }).id;
   } else {
     /*
-     * ═══ ⚠ GENERATIA STARII NU SE INTOARCE LA ZERO (28.08.2026, noaptea) ═══
+     * ═══ ⚠ GENERATIA STARII NU SE INTOARCE LA ZERO ═══
      *
-     * Un produs eliminat lasa o piatra de mormant cu generatia la care s-a cerut scoaterea. Daca
-     * mai tarziu e listat din nou, randul nou porneste de la 0 — iar un lot de stare foarte
-     * intarziat din viata dinainte (generatia 5) nu mai e recunoscut ca depasit fata de o listare
-     * la generatia 1. Cel vechi ar castiga, si produsul ar reveni in starea de-atunci.
+     * Un produs eliminat lasa in urma un ceas cu numarul la care s-a ajuns. Daca mai tarziu e
+     * listat din nou, randul nou NU trebuie sa porneasca de la 0 — un lot de stare foarte
+     * intarziat din viata dinainte ar castiga fata de o listare la generatia 1.
      *
-     * ⚠ GENERATIA APARTINE CHEII DE STIL, nu randului. `style_key` e acelasi la ei si dupa
-     * relistare, deci si ceasul trebuie sa fie acelasi: se porneste de dupa piatra.
+     * ⚠ CEASUL SUPRAVIETUIESTE STERGERII, deci aici nu mai e nimic de socotit: el traieste pe
+     * `(business_id, style_key)`, iar `style_key` e acelasi si dupa relistare. Ieri se citea piatra
+     * si se aduna unu — o alocare citit-calculeaza-scrie, care putea da acelasi numar unei
+     * reasertari pornite in acelasi timp. Vezi migratia 2026-12-08.
      */
-    const piatra = randCitit<{ status_generatie: number }>("aboutyou.piatraLaRelistare", await admin
-      .from("aboutyou_listari_scoase").select("status_generatie")
-      .eq("business_id", businessId).eq("style_key", productId).maybeSingle());
     const { data: nou, error } = await admin.from("aboutyou_listings").insert({
       business_id: businessId, product_id: productId, style_key: productId,
       status: "local", ...campuri,
-      ...(piatra ? { status_generatie: piatra.status_generatie + 1 } : {}),
     } as never).select("id").single();
     if (nou) {
       listingId = (nou as { id: string }).id;
@@ -1940,10 +1967,21 @@ export async function unsubscribeAboutYouWebhook(businessId: string): Promise<{ 
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
   if (g.config.webhook_subscription_id) {
-    await deleteWebhookSubscription(g.auth, g.config.webhook_subscription_id);
+    /*
+     * ⚠ RASPUNSUL SE CITESTE. Ignorat, un esec lasa un abonament ORFAN la ei — iar randul de mai
+     * jos arunca tocmai `webhook_subscription_id` din config, deci nimeni nu l-ar mai putea sterge.
+     * Aici, spre deosebire de deconectare, omul n-a cerut sa plece: poate reincerca.
+     */
+    const dezabonat = await deleteWebhookSubscription(g.auth, g.config.webhook_subscription_id);
+    if (isAboutYouError(dezabonat)) {
+      return { error: `Abonamentul nu s-a putut șterge la About You: ${dezabonat.error}` };
+    }
   }
   const next: AboutYouConfig = { ...g.config, webhook_subscription_id: undefined, webhook_secret: undefined, webhook_token: undefined };
-  await saveConfig(businessId, next);
+  /* ⚠ Si scrierea: nescrisa, ecranul ar spune „dezabonat" iar configul ar pastra un id mort. */
+  if (!await saveConfig(businessId, next)) {
+    return { error: "Abonamentul s-a șters la About You, dar nu am putut salva. Reîncarcă pagina." };
+  }
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }

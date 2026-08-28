@@ -223,6 +223,30 @@ export type Database = {
         }
         Relationships: []
       }
+      aboutyou_ceas_stare: {
+        Row: {
+          actualizat_la: string
+          business_id: string
+          dorit: string | null
+          generatie: number
+          style_key: string
+        }
+        Insert: {
+          actualizat_la?: string
+          business_id: string
+          dorit?: string | null
+          generatie?: number
+          style_key: string
+        }
+        Update: {
+          actualizat_la?: string
+          business_id?: string
+          dorit?: string | null
+          generatie?: number
+          style_key?: string
+        }
+        Relationships: []
+      }
       aboutyou_intentii: {
         Row: {
           business_id: string
@@ -5212,6 +5236,8 @@ export type Database = {
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
       aboutyou_elibereaza_anulari: { Args: { p_business_id: string; p_order_number: string; p_linii: Json }; Returns: Json }
       aboutyou_generatie_noua: { Args: { p_listing_id: string }; Returns: number }
+      aboutyou_ceas_urmator: { Args: { p_business_id: string; p_style_key: string; p_dorit: string | null }; Returns: number }
+      aboutyou_incheie_scoaterea: { Args: { p_business_id: string; p_style_key: string; p_generatie: number | null }; Returns: string }
       aboutyou_status_generatie_noua: { Args: { p_listing_id: string; p_status: string }; Returns: number }
       aboutyou_salveaza_variante: { Args: { p_business_id: string; p_listing_id: string; p_randuri: Json }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }

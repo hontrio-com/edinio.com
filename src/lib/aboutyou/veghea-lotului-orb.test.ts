@@ -869,10 +869,16 @@ test("⚠ un lot de stare dintr-o generatie depasita nu castiga", () => {
    * simultane citesc amandoua 5 si scriu amandoua 6 — iar atunci niciuna nu e „depasita" fata de
    * cealalta, si la ei castiga cine termina ultimul, nu cine a cerut ultimul.
    */
-  assert.match(sync, /await admin\.rpc\("aboutyou_status_generatie_noua", \{/);
+  /*
+   * ⚠ CEASUL E UNUL SINGUR, PE CHEIA DE STIL (28.08.2026, noaptea tarziu). Tinut pe randul de
+   * listare, se pierdea la relistare si se dubla cu cel din piatra de mormant — deci doua operatii
+   * concurente puteau primi acelasi numar, iar paza pe generatie nu mai deosebea nimic.
+   */
+  assert.match(sync, /await admin\.rpc\("aboutyou_ceas_urmator", \{/);
+  assert.doesNotMatch(sync, /aboutyou_status_generatie_noua/);
   assert.doesNotMatch(sync, /const genStatus = listing\.status_generatie \+ 1;/);
   /* ⚠ Scrisa INAINTEA cererii, si daca nu se scrie, cererea nu pleaca. */
-  const iGen = sync.indexOf('await admin.rpc("aboutyou_status_generatie_noua"');
+  const iGen = sync.indexOf('await admin.rpc("aboutyou_ceas_urmator"');
   const iCerere = sync.indexOf('cuLotDurabil(admin, ctx.businessId, "status"', iGen);
   assert.ok(iGen > 0 && iCerere > iGen,
     "generatia se cere INAINTEA cererii externe, altfel paza n-ar avea ce compara");
@@ -995,10 +1001,17 @@ test("⚠ maparea SKU nu moare odata cu listarea", () => {
    * goale trece de toate ramurile de esec, intoarce `gasit: true` si aseaza `stoc_marketplace_la`.
    * Comanda ramane marcata „stoc consumat", deci idempotenta inchide si sansa reparatiei.
    */
-  assert.match(sync, /async function pastreazaMaparea\(/);
-  /* ⚠ Si nepastrata, listarea NU se sterge: o comanda pierduta e mai scumpa ca o retragere amanata. */
-  assert.match(sync, /if \(!await pastreazaMaparea\(admin, ctx\.businessId, listing\.id\)\) \{[\s\S]{0,200}?asezat = false;/);
-  assert.match(sync, /if \(!await pastreazaMaparea\(admin, ctx\.businessId, listing\.id\)\) \{[\s\S]{0,200}?ok: false, status: 0/);
+  /*
+   * ⚠ MAPAREA SE MUTA IN ACEEASI TRANZACTIE CU STERGEREA (28.08.2026, noaptea tarziu). Ieri erau
+   * trei scrieri din aplicatie — maparea, piatra, `DELETE` —, deci trei clipe in care o pana lasa
+   * jumatate de treaba. Acum e o singura instructiune, sub incuietoarea randului de ceas.
+   */
+  const bl = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.match(bl, /insert into public\.aboutyou_sku_istoric[\s\S]{0,400}?from public\.aboutyou_variants v/);
+  assert.match(bl, /delete from public\.aboutyou_listings where id = v_listing;/);
+  /* ⚠ Si ajutoarele de ieri au disparut: lasate, ar fi parut ca mai pazesc ceva. */
+  assert.doesNotMatch(sync, /async function pastreazaMaparea\(/);
+  assert.doesNotMatch(sync, /async function pastreazaPiatra\(/);
 
   /* ⚠ Si comenzile cad pe istoric cand maparea curenta lipseste. */
   const ord = viu("src/lib/aboutyou/orders.ts");
@@ -1011,9 +1024,9 @@ test("⚠ maparea SKU nu moare odata cu listarea", () => {
   /* ⚠ Si a patra cale: deconectarea sterge randurile DIRECT, nu prin cascada. */
   const act = viu("src/lib/actions/aboutyou.actions.ts");
   const iSalv = act.indexOf("aboutyou.mapareaLaDeconectare");
-  const iSterg = act.indexOf('.from("aboutyou_variants").delete().eq("business_id", businessId)');
+  const iSterg = act.indexOf('for (const tabel of ["aboutyou_sync_queue"', iSalv);
   assert.ok(iSalv > 0 && iSterg > iSalv,
-    "maparea se salveaza INAINTEA stergerii de la deconectare");
+    "maparea se salveaza INAINTEA stergerilor de la deconectare");
 });
 
 /* ── O apasare, o cerere ──────────────────────────────────────────────────── */
@@ -1096,10 +1109,15 @@ test("⚠ un `publish` mai vechi nu mai poate invia un produs eliminat", () => {
    * `publish`-ul de dinainte nu devenea depasit — iar dupa stergerea randului nu mai exista nimic
    * care sa ceara `inactive`. Produsul ramanea vandabil si nimeni nu afla.
    */
-  assert.match(sync, /p_listing_id: listing\.id, p_status: tintaRetragere\(listing\.status\),/);
-  assert.match(sync, /async function pastreazaPiatra\(/);
-  /* ⚠ Nescrisa piatra, listarea NU se sterge: altfel n-ar mai ramane nimic care sa stie cheia. */
-  assert.match(sync, /if \(!await pastreazaPiatra\(admin, ctx\.businessId, listing\)\) \{[\s\S]{0,200}?asezat = false;/);
+  assert.match(sync, /p_dorit: tintaRetragere\(listing\.status\),/);
+  /*
+   * ⚠ SI PIATRA SE SCRIE INAUNTRUL TRANZACTIEI, nu dintr-un ajutor separat: vezi
+   * `aboutyou_incheie_scoaterea`. Scrisa din afara, ar fi fost inca o scriere care poate lipsi
+   * exact intre verificare si cascada.
+   */
+  const baseline1 = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.match(baseline1, /FUNCTION public\.aboutyou_incheie_scoaterea/);
+  assert.match(baseline1, /insert into public\.aboutyou_listari_scoase/);
   /* ⚠ Si asezarea unui lot sub generatia scoaterii cere din nou `inactive`, pe cheie. */
   assert.match(sync, /if \(b\.generatie != null && b\.generatie >= piatra\.status_generatie\) continue;/);
   assert.match(sync, /updateProductStatus\(ctx\.auth, \[\{ style_key: sk, status: "inactive" \}\]\)/);
@@ -1121,9 +1139,14 @@ test("⚠ deconectarea nu sterge nimic pana nu s-a scris ca e deconectat", () =>
   const act = viu("src/lib/actions/aboutyou.actions.ts");
   assert.match(act, /if \(!await saveConfig\(businessId, \{\}\)\) \{/);
   const iConfig = act.indexOf("if (!await saveConfig(businessId, {}))");
-  const iStergere = act.indexOf('.from("aboutyou_sync_queue").delete().eq("business_id", businessId)', iConfig);
+  const iStergere = act.indexOf('for (const tabel of ["aboutyou_sync_queue"', iConfig);
   assert.ok(iConfig > 0 && iStergere > iConfig,
     "stergerile locale vin DUPA ce s-a scris ca magazinul e deconectat");
+  /* ⚠ Si fiecare isi citeste raspunsul: mergeau oarbe, iar functia raspundea `success`. */
+  assert.match(act, /if \(error\) resturi\.push/);
+  assert.match(act, /au ramas randuri nesterse/);
+  /* ⚠ Si dezabonarea la ei: un esec lasa un abonament ORFAN pe care nimeni nu-l mai poate sterge. */
+  assert.match(act, /ramane orfan/);
   /* ⚠ Si maparea SKU se salveaza inaintea tuturor, cu raspunsul citit. */
   const iMapare = act.indexOf("aboutyou.mapareaLaDeconectare");
   assert.ok(iMapare > 0 && iMapare < iConfig);
@@ -1197,8 +1220,25 @@ test("⚠ o scoatere depasita de o cerere mai noua nu mai sterge listarea", () =
    * ⚠ DEFECTUL E ALTUL, SI E REAL: nu ca publicarea castiga — ea CHIAR e cererea mai noua —, ci
    * ca stergem listarea cat timp exista o cerere mai noua decat scoaterea. Se compara cu ce e ACUM.
    */
-  assert.match(sync, /const eDepasita = acum != null && b\.generatie != null[\s\S]{0,40}?b\.generatie < acum\.status_generatie;/);
-  assert.match(sync, /if \(eDepasita\) \{/);
+  /*
+   * ═══ ⚠ VERIFICAREA SI STERGEREA SUNT ACELASI LUCRU (28.08.2026, noaptea tarziu) ═══
+   *
+   * Ieri se citea listarea, se compara generatia, si abia apoi se stergea. Intre cele doua incape o
+   * cerere noua:
+   *
+   *     ceasul 6, lotul de scoatere 6
+   *     citim: 6 < 6 e fals -> avem voie sa stergem
+   *     ⟵ AICI omul apasa „Publica" -> ceasul 7, lotul pleaca
+   *     scriem piatra si STERGEM listarea -> la ei publicat, la noi nimic
+   *
+   * Acum totul se face sub incuietoarea randului de ceas, intr-o singura tranzactie.
+   */
+  assert.match(sync, /await admin\.rpc\("aboutyou_incheie_scoaterea", \{/);
+  assert.match(sync, /if \(verdict === "depasit" \|\| verdict === "fara-ceas"\) \{/);
+  const baseline2 = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.match(baseline2, /aboutyou_incheie_scoaterea[\s\S]{0,900}?for update/i);
+  /* ⚠ Si „fara ceas" nu se citeste ca „liber": nu se sterge nimic ce nu se poate dovedi. */
+  assert.match(baseline2, /return 'fara-ceas';/);
   /* ⚠ Si se retrimite starea ceruta ultima oara, prin operatia adevarata de stare. */
   assert.match(sync, /offer_id: acum\.style_key, op: "status",/);
 });
@@ -1214,9 +1254,16 @@ test("⚠ generatia nu se intoarce la zero cand produsul e listat din nou", () =
    * ⚠ GENERATIA APARTINE CHEII DE STIL, nu randului: `style_key` e acelasi la ei si dupa
    * relistare, deci si ceasul trebuie sa fie acelasi.
    */
+  /*
+   * ⚠ SI NU MAI E NIMIC DE SOCOTIT LA RELISTARE. Ceasul traieste pe `(business_id, style_key)`,
+   * iar `style_key` e acelasi si dupa relistare — deci supravietuieste stergerii listarii de la
+   * sine. Ieri se citea piatra si se aduna unu: o alocare citit-calculeaza-scrie, care putea da
+   * acelasi numar unei reasertari pornite in acelasi timp.
+   */
   const act = viu("src/lib/actions/aboutyou.actions.ts");
-  assert.match(act, /\.from\("aboutyou_listari_scoase"\)\.select\("status_generatie"\)/);
-  assert.match(act, /\.\.\.\(piatra \? \{ status_generatie: piatra\.status_generatie \+ 1 \} : \{\}\),/);
+  assert.doesNotMatch(act, /piatra\.status_generatie \+ 1/);
+  const bl2 = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.match(bl2, /aboutyou_ceas_stare[\s\S]{0,400}?PRIMARY KEY \(business_id, style_key\)/i);
 });
 
 /* ── Deduplicarea lor nu mai pare o pierdere ──────────────────────────────── */
@@ -1228,12 +1275,22 @@ test("⚠ acelasi lot intors de doua ori e URMARIT, nu pierdut", () => {
    * sa pice cu `23505`, si orice eroare acolo insemna „trimis dar NEURMARIT": o alarma falsa care ii
    * cere omului sa retrimita ceva ce e deja in lucru.
    */
-  assert.match(sync, /const eDuplicat = \(eInchidere as \{ code\?: string \}\)\.code === "23505";/);
-  assert.match(sync, /return \{ fel: "urmarit", res \};/);
-  /* ⚠ Si numai daca e chiar operatia noastra: acelasi fel si aceleasi chei. */
-  assert.match(sync, /geaman\.kind === kind[\s\S]{0,40}?JSON\.stringify\(geaman\.related_ids\) === JSON\.stringify\(relatedIds\)/);
-  /* ⚠ Altfel invariantul e rupt si se striga: acolo tacerea ar fi periculoasa. */
-  assert.match(sync, /e deja folosit de alta operatie/);
+  /*
+   * ═══ ⚠ SI LEACUL DE IERI ERA GRESIT IN FOND (28.08.2026, noaptea tarziu) ═══
+   *
+   * Stergeam randul NOU si spuneam „urmarit", daca felul si cheile se potriveau. Dar
+   * `batchRequestId` identifica lotul LOR, nu operatia NOASTRA: GEN 6 are alta generatie, alta
+   * clipa de citire, alt numar de transe. Sters, operatia GEN 6 nu mai exista nicaieri — n-are cine
+   * sa-i confirme citirea, iar daca lotul era deja `completed` nici nu se mai sondeaza.
+   *
+   * ⚠ ACUM CONSTRANGEREA UNICA NU MAI EXISTA: un lot al lor poate purta mai multe operatii de-ale
+   * noastre, fiecare asezandu-se singura. Ramura de dedup a disparut cu totul.
+   */
+  assert.doesNotMatch(sync, /const eDuplicat/);
+  assert.doesNotMatch(sync, /lotulGeaman/);
+  const baseline3 = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.doesNotMatch(baseline3, /aboutyou_batches_business_id_batch_request_id_key/);
+  assert.match(baseline3, /aboutyou_batches_request_idx/);
 });
 
 /* ── Dezabonarea vine dupa ce s-a scris deconectarea ──────────────────────── */
@@ -1255,4 +1312,38 @@ test("⚠ nu ramanem conectati la noi si dezabonati la ei", () => {
   /* ⚠ Si acreditarile se citesc inainte, in `prev`: dupa `saveConfig({})` nu mai exista in baza. */
   const iPrev = act.indexOf("const prev = await loadConfig(businessId);", act.indexOf("disconnectAboutYou"));
   assert.ok(iPrev > 0 && iPrev < iConfig);
+});
+
+
+/* ── Ceasul e unul singur, si nu da doua numere la fel ────────────────────── */
+
+test("\u26a0 ceasul starii e o alocare atomica, nu citit-calculeaza-scrie", () => {
+  /*
+   * \u2550\u2550\u2550 \u26a0 GENERATIA STATEA IN DOUA LOCURI (28.08.2026, noaptea tarziu) \u2550\u2550\u2550
+   *
+   * Pe listare si pe piatra de mormant, iar alocarea la relistare era citit-calculeaza-scrie:
+   *
+   *     piatra = 5
+   *     un lot vechi reactiveaza produsul -> reasertarea vrea 6
+   *     in acelasi timp omul relisteaza   -> citeste piatra 5, creeaza listarea cu 6
+   *     cele doua operatii au ACEEASI generatie
+   *     cand reasertarea se incheie: 6 < 6 e fals -> e socotita curenta -> sterge listarea NOUA
+   *
+   * \u26a0 Ceasul apartine CHEII DE STIL, nu randului — chiar asa scria comentariul de ieri, dar
+   * implementarea tinea doua ceasuri. Masurat pe baza adevarata: opt cereri simultane dau opt
+   * numere distincte, iar o reasertare si o relistare concurente nu mai pot primi acelasi numar.
+   */
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  assert.match(baseline, /CREATE TABLE IF NOT EXISTS public\.aboutyou_ceas_stare/i);
+  assert.match(baseline, /FUNCTION public\.aboutyou_ceas_urmator/);
+  /* ⚠ Incrementul se face IN INSTRUCTIUNE, sub incuietoarea randului, si intoarce valoarea noua. */
+  assert.match(baseline, /do update set generatie = public\.aboutyou_ceas_stare\.generatie \+ 1/);
+  assert.match(baseline, /returning generatie into v_gen/);
+
+  /* Si toate cele patru cai cer de la el, nu-si socotesc singure numarul. */
+  assert.equal([...sync.matchAll(/aboutyou_ceas_urmator/g)].length, 4,
+    "publicarea/dezactivarea, scoaterea, scoaterea doar-locala si reasertarea din piatra cer toate de la ceas");
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  /* ⚠ Si relistarea nu mai socoteste nimic: ceasul supravietuieste stergerii listarii. */
+  assert.doesNotMatch(act, /piatra\.status_generatie \+ 1/);
 });

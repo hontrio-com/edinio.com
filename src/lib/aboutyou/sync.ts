@@ -378,32 +378,28 @@ export async function cuLotDurabil<T extends { batchRequestId?: string | null }>
      * e chiar operatia noastra: intentia duplicata se sterge, si raspundem URMARIT. Daca id-ul
      * apartine altcuiva, invariantul e rupt si se striga — acolo tacerea ar fi periculoasa.
      */
-    const eDuplicat = (eInchidere as { code?: string }).code === "23505";
-    if (eDuplicat && id) {
-      const geaman = randCitit<{ id: string; kind: string; related_ids: unknown }>(
-        "aboutyou.lotulGeaman", await admin
-          .from("aboutyou_batches").select("id, kind, related_ids")
-          .eq("business_id", businessId).eq("batch_request_id", id).maybeSingle());
-      const aceleasi = geaman != null && geaman.kind === kind
-        && JSON.stringify(geaman.related_ids) === JSON.stringify(relatedIds);
-      if (aceleasi) {
-        /* Randul dinainte sondeaza deja acelasi lot: al doilea n-are ce pazi. */
-        await admin.from("aboutyou_batches")
-          .delete().eq("business_id", businessId).eq("intent_id", intentId);
-        await logError({
-          action: "aboutyou/intentie", severity: "info",
-          message: `About You a deduplicat cererea si a intors acelasi lot (${id}): se urmareste prin randul dinainte`,
-          details: { kind, batchRequestId: id }, businessId,
-        });
-        return { fel: "urmarit", res };
-      }
-      await logError({
-        action: "aboutyou/intentie", severity: "critical",
-        message: `lotul ${id} e deja folosit de alta operatie (${geaman?.kind ?? "necunoscuta"}): nu putem urmari cererea de acum`,
-        details: { kind, batchRequestId: id, relatedIds: relatedIds.slice(0, 20) }, businessId,
-      });
-      return { fel: "neurmarit", res };
-    }
+    /*
+     * ═══ ⚠ UN LOT AL LOR NU E O OPERATIE DE-A NOASTRA (28.08.2026, noaptea tarziu) ═══
+     *
+     * Aici era, pana azi, o ramura care la `23505` cauta randul cu acelasi `batchRequestId` si, daca
+     * felul si cheile se potriveau, STERGEA randul nou si raspundea „urmarit". Suna rezonabil si e
+     * gresit in fond: `batchRequestId` identifica lotul LOR, nu operatia NOASTRA.
+     *
+     *     GEN 5, payload X -> lotul XYZ, `citit_la` T1
+     *     GEN 6, acelasi payload -> ei dedupliceaza, tot XYZ
+     *     noi stergeam randul GEN 6 si spuneam ca e urmarit
+     *
+     * Operatia GEN 6 nu mai exista nicaieri: n-are cine sa-i confirme `citit_la` T2, iar daca XYZ
+     * era deja `completed` nici nu se mai sondeaza. Publicarea nu porneste, confirmarile nu
+     * avanseaza, cutia de iesire retrimite pana la prag si apoi striga degeaba. Iar chiar
+     * `operatiaSAIncheiat` foloseste `citit_la` drept identitate a operatiei — deduplicarea o ignora
+     * tocmai pe ea.
+     *
+     * ⚠ ACUM CONSTRANGEREA UNICA NU MAI EXISTA (vezi migratia 2026-12-08): un lot al lor poate sta
+     * la temelia mai multor operatii de-ale noastre, fiecare cu generatia, clipa de citire si
+     * numarul de transe proprii, fiecare asezandu-se singura. Ruta de rezultate se poate citi de
+     * oricate ori. Deci aici nu mai e nimic de dres: o eroare ramasa e o eroare adevarata.
+     */
     await logError({
       action: "aboutyou/intentie", severity: "critical",
       message: `About You a primit lotul (${id ?? "fara id"}), dar intentia n-a putut fi inchisa: ${eInchidere.message}`,
@@ -2170,12 +2166,17 @@ async function setRemoteStatus(
    * Continutul avea generatii tocmai pentru asta; starea n-avea nimic, iar reconcilierea ar fi
    * citit `published` si l-ar fi scris la noi ca si cum ar fi fost ce s-a cerut.
    *
-   * ⚠ SE SCRIE INAINTEA CERERII, impreuna cu `status_dorit`: cand un lot depasit se aseaza, nu
-   * ajunge sa nu-i credem starea — trebuie sa stim CE sa retrimitem. Nescrisa, cererea nu pleaca.
+   * ⚠ SE SCRIE INAINTEA CERERII, impreuna cu `dorit`: cand un lot depasit se aseaza, nu ajunge sa
+   * nu-i credem starea — trebuie sa stim CE sa retrimitem. Nescrisa, cererea nu pleaca.
+   *
+   * ⚠ SI CEASUL E UNUL SINGUR, PE CHEIA DE STIL, nu pe randul de listare. Tinut pe rand, se
+   * pierdea la relistare si se dubla cu cel din piatra de mormant: doua operatii concurente puteau
+   * primi acelasi numar, si atunci paza pe generatie nu mai deosebea nimic. Vezi migratia
+   * 2026-12-08.
    */
   /*
-   * ⚠ ATOMIC, PRINTR-UN RPC, ca la generatia continutului. Citit-apoi-scris din aplicatie, doua
-   * cereri simultane citesc amandoua 5 si scriu amandoua 6:
+   * ⚠ ATOMIC, DINTR-UN CEAS UNIC PE CHEIA DE STIL. Citit-apoi-scris din aplicatie, doua cereri
+   * simultane citesc amandoua 5 si scriu amandoua 6:
    *
    *     A vrea `published` -> generatia 6
    *     B vrea `inactive`  -> generatia 6
@@ -2183,8 +2184,8 @@ async function setRemoteStatus(
    * Doua loturi externe cu aceeasi generatie: niciunul nu e „depasit" fata de celalalt, deci paza
    * nu vede nimic, iar la ei castiga cine termina ultimul — nu cine a cerut ultimul.
    */
-  const { data: genNou, error: eGenStatus } = await admin.rpc("aboutyou_status_generatie_noua", {
-    p_listing_id: listing.id, p_status: status,
+  const { data: genNou, error: eGenStatus } = await admin.rpc("aboutyou_ceas_urmator", {
+    p_business_id: ctx.businessId, p_style_key: listing.style_key, p_dorit: status,
   });
   if (eGenStatus || typeof genNou !== "number") {
     return {
@@ -2339,101 +2340,6 @@ export async function unpublishProductNow(admin: Db, ctx: AboutYouSyncContext, p
  * confirma dezactivarea, pastram randul si intoarcem eroare: elementul se
  * reincearca la urmatoarea trecere a cronului.
  */
-/**
- * Muta maparea SKU in istoric, inainte ca stergerea listarii s-o ia cu ea.
- *
- * ═══ ⚠ COMENTARIUL SPUNEA CA NU SE STERGE, SI SE STERGEA (28.08.2026, noaptea) ═══
- *
- * `reconciliazaVariante` are scris, negru pe alb, ca randul de varianta NU se sterge NICIODATA —
- * fiindca e singura urma a maparii `sku -> product_id + variant_title`, iar `orders.ts` o foloseste
- * ca sa lege o comanda de produs si sa scada stocul combinatiei.
- *
- * Si totusi `stergeListare` face `DELETE FROM aboutyou_listings`, iar `aboutyou_variants.listing_id`
- * e `ON DELETE CASCADE`. Deci exact ce spunea comentariul ca nu se intampla, se intampla — pentru
- * toate variantele deodata:
- *
- *     10:00 clientul comanda SKU X
- *     webhook intarziat / inbox indisponibil
- *     10:02 comerciantul apasa „Elimina" -> listarea si toate variantele dispar
- *     10:05 comanda ajunge -> SKU X necunoscut -> `product_id` null, stocul NU se scade
- *
- * ⚠ MAPAREA E ISTORIE, NU STARE. Nu tine de faptul ca produsul mai e sau nu listat, ci de faptul ca
- * s-a vandut candva cu SKU-ul ala. De-aia nu moare odata cu listarea.
- *
- * ⚠ INTOARCE `false` DACA N-A PUTUT: apelantul nu are voie sa stearga listarea atunci. O comanda
- * pierduta e mai scumpa decat o retragere amanata cu un minut.
- */
-/**
- * Piatra de mormant a unei listari eliminate.
- *
- * ═══ ⚠ UN `publish` VECHI POATE REACTIVA UN PRODUS ELIMINAT (28.08.2026, tarziu) ═══
- *
- *     10:00 „Publica"  -> lotul pleaca, e inca in lucru la ei
- *     10:01 „Elimina"  -> `inactive` se incheie primul, randul local se sterge
- *     10:05 `published` cel vechi se aseaza -> la ei produsul E DIN NOU ACTIV ❌
- *
- * Iar la noi nu mai exista nici listare, nici `status_dorit`, nici generatie: nimic care sa mai
- * ceara `inactive`. Produsul ramane vandabil, si nimeni nu mai afla.
- *
- * ⚠ PIATRA TINE MINTE EXACT CE TREBUIE: cheia de stil si generatia la care s-a cerut scoaterea. Un
- * lot de stare sub ea, asezat oricat de tarziu, se recunoaste ca depasit — chiar fara listare.
- *
- * ⚠ INTOARCE `false` DACA N-A PUTUT: apelantul nu sterge listarea atunci. Cat timp listarea exista,
- * paza obisnuita pe generatie inca lucreaza; stearsa fara piatra, n-ar mai lucra nimic.
- */
-async function pastreazaPiatra(
-  admin: Db, businessId: string, listing: { style_key: string; product_id: string | null; status_generatie: number },
-): Promise<boolean> {
-  const { error } = await admin.from("aboutyou_listari_scoase").upsert(
-    {
-      business_id: businessId, style_key: listing.style_key, product_id: listing.product_id,
-      status_generatie: listing.status_generatie, scos_la: new Date().toISOString(),
-      /*
-       * ⚠ CONTOR NOU LA INCIDENT NOU. Piatra e unica pe cheie, deci o a doua scoatere cadea peste
-       * cea veche si ii MOSTENEA numaratoarea: un produs care ajunsese la cinci reasertari in
-       * viata dinainte n-ar mai fi primit NICIUNA in cea noua, si prima stare invechita l-ar fi
-       * lasat publicat. E a treia oara cand acelasi tipar apare la un contor pastrat peste un
-       * incident nou — la veghe si la cutia de iesire l-am prins deja.
-       */
-      reasertari: 0,
-    } as never,
-    { onConflict: "business_id,style_key" },
-  );
-  if (error) {
-    await logError({
-      action: "aboutyou/piatra", severity: "error",
-      message: `piatra de mormant a listarii nu s-a putut scrie: ${error.message}`,
-      details: { styleKey: listing.style_key }, businessId,
-    });
-    return false;
-  }
-  return true;
-}
-
-async function pastreazaMaparea(admin: Db, businessId: string, listingId: string): Promise<boolean> {
-  const randuri = randuriCitite<{ sku: string; product_id: string | null; variant_title: string | null }>(
-    "aboutyou.mapareaDePastrat", await admin
-      .from("aboutyou_variants").select("sku, product_id, variant_title")
-      .eq("listing_id", listingId) as never);
-  if (randuri.length === 0) return true;
-  const acum = new Date().toISOString();
-  const { error } = await admin.from("aboutyou_sku_istoric").upsert(
-    randuri.map((r) => ({
-      business_id: businessId, sku: r.sku, product_id: r.product_id,
-      variant_title: r.variant_title, scos_la: acum,
-    })) as never,
-    { onConflict: "business_id,sku" },
-  );
-  if (error) {
-    await logError({
-      action: "aboutyou/mapare", severity: "error",
-      message: `maparea SKU nu s-a putut pastra inainte de stergerea listarii: ${error.message}`,
-      details: { listingId, cate: randuri.length }, businessId,
-    });
-    return false;
-  }
-  return true;
-}
 
 async function stergeListare(
   admin: Db, ctx: AboutYouSyncContext, listing: ListingRow,
@@ -2455,14 +2361,24 @@ async function stergeListare(
    */
   const eDoarLocala = !listing.remote_poate_exista;
   if (eDoarLocala) {
-    /* ⚠ Si aici: o listare care n-a plecat n-a putut primi comenzi, dar maparea nu costa nimic. */
-    if (!await pastreazaMaparea(admin, ctx.businessId, listing.id)) {
-      return { ok: false, status: 0, error: "Nu am putut păstra maparea SKU; se reia." };
+    /*
+     * ⚠ SI AICI TOT PRIN RPC, desi listarea n-a plecat niciodata la ei. Doua motive: maparea SKU si
+     * piatra se scriu in aceeasi tranzactie cu stergerea (nu ca doua scrieri care pot lipsi la
+     * mijloc), iar ceasul ramane singurul loc unde se hotaraste — chiar si aici, unde nu poate
+     * exista o cursa cu un lot extern.
+     */
+    const { data: genLocal, error: eCeasLocal } = await admin.rpc("aboutyou_ceas_urmator", {
+      p_business_id: ctx.businessId, p_style_key: listing.style_key, p_dorit: "inactive",
+    });
+    if (eCeasLocal || typeof genLocal !== "number") {
+      return { ok: false, status: 0, error: "Nu am putut ține minte scoaterea; se reia." };
     }
-    if (!await pastreazaPiatra(admin, ctx.businessId, listing)) {
-      return { ok: false, status: 0, error: "Nu am putut păstra urma listării scoase; se reia." };
+    const { data: verdictLocal, error: eLocal } = await admin.rpc("aboutyou_incheie_scoaterea", {
+      p_business_id: ctx.businessId, p_style_key: listing.style_key, p_generatie: genLocal,
+    });
+    if (eLocal || (verdictLocal !== "sters" && verdictLocal !== "lipsa")) {
+      return { ok: false, status: 0, error: "Nu am putut încheia scoaterea listării; se reia." };
     }
-    await admin.from("aboutyou_listings").delete().eq("id", listing.id);
     return { ok: true, action: "removed" };
   }
 
@@ -2491,8 +2407,9 @@ async function stergeListare(
    * Cerand generatie noua aici, lotul de `publish` de dinainte devine depasit prin chiar acest
    * pas, si asezarea lui se recunoaste ca atare. Nescrisa, cererea nu pleaca.
    */
-  const { data: genScoatere, error: eGenScoatere } = await admin.rpc("aboutyou_status_generatie_noua", {
-    p_listing_id: listing.id, p_status: tintaRetragere(listing.status),
+  const { data: genScoatere, error: eGenScoatere } = await admin.rpc("aboutyou_ceas_urmator", {
+    p_business_id: ctx.businessId, p_style_key: listing.style_key,
+    p_dorit: tintaRetragere(listing.status),
   });
   if (eGenScoatere || typeof genScoatere !== "number") {
     return {
@@ -3253,13 +3170,24 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             });
             continue;
           }
+          /*
+           * ⚠ NUMARUL SE CERE DE LA CEAS, nu se socoteste din piatra. Calculat aici ca
+           * `piatra.status_generatie + 1`, o relistare care se intampla in acelasi timp ar fi putut
+           * primi ACELASI numar — si atunci reasertarea ar fi parut „curenta" fata de listarea
+           * noua si ar fi sters-o. Ceasul e unul singur pe cheia de stil si nu da acelasi numar de
+           * doua ori.
+           */
+          const { data: genStingere, error: eGenStingere } = await admin.rpc("aboutyou_ceas_urmator", {
+            p_business_id: ctx.businessId, p_style_key: sk, p_dorit: "inactive",
+          });
+          if (eGenStingere || typeof genStingere !== "number") { asezat = false; continue; }
           const stins = caUnRezultat(await cuLotDurabil(admin, ctx.businessId, "removal", [sk],
             () => updateProductStatus(ctx.auth, [{ style_key: sk, status: "inactive" }]),
-            piatra.status_generatie + 1, undefined, 1),
+            genStingere, undefined, 1),
             "stingerea unui produs eliminat");
           if (isAboutYouError(stins)) { asezat = false; continue; }
           await admin.from("aboutyou_listari_scoase").update({
-            status_generatie: piatra.status_generatie + 1,
+            status_generatie: genStingere,
             reasertari: piatra.reasertari + 1,
           } as never).eq("id", piatra.id);
           await logError({
@@ -3331,37 +3259,38 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
             })) asezat = false;
           } else {
             /*
-             * ⚠ MAPAREA SKU SE PASTREAZA INAINTE. `aboutyou_variants.listing_id` e `ON DELETE
-             * CASCADE`, deci stergerea de mai jos ar lua cu ea singura urma a legaturii
-             * `sku -> produs`, iar o comanda sosita mai tarziu pe acel SKU ar intra fara sa scada
-             * stoc. Nepastrata, lotul ramane deschis si se reia.
+             * ⚠ MAPAREA SKU NU SE MAI SALVEAZA DE-AICI: o face RPC-ul de mai jos, in aceeasi
+             * tranzactie cu stergerea. Scrisa separat, ar fi fost inca o scriere care poate lipsi
+             * exact intre pastrare si cascada.
              */
-            if (!await pastreazaMaparea(admin, ctx.businessId, listing.id)) {
-              asezat = false;
-              continue;
-            }
             /*
-             * ═══ ⚠ SI SCOATEREA POATE FI EA INSASI DEPASITA (28.08.2026, noaptea) ═══
+             * ═══ ⚠ VERIFICAREA SI STERGEREA SUNT ACELASI LUCRU (28.08.2026, noaptea tarziu) ═══
              *
-             *     generatia 5
-             *     „Elimina"  -> generatia 6, `status_dorit = inactive`, lotul pleaca
-             *     „Publica"  -> generatia 7, `status_dorit = published`, lotul pleaca
-             *     scoaterea se incheie prima -> stergem listarea ❌
+             * Ieri se citea listarea, se compara generatia, si abia apoi se stergea. Intre cele doua
+             * incape o cerere noua:
              *
-             * Iar piatra ar lua generatia CURENTA a listarii (7, nu 6), deci lotul de publicare 7
-             * asezat dupa n-ar mai fi recunoscut ca depasit: la ei produsul ramane publicat, la noi
-             * listarea e stearsa, si nimic nu mai leaga cele doua.
+             *     ceasul 6, lotul de scoatere 6
+             *     citim: 6 < 6 e fals -> avem voie sa stergem
+             *     ⟵ AICI omul apasa „Publica" -> ceasul 7, lotul pleaca
+             *     scriem piatra si STERGEM listarea
+             *     la ei: publicat. La noi: nimic.
              *
-             * ⚠ SE COMPARA CU CE E ACUM. Daca intre timp s-a cerut altceva, scoaterea nu mai are
-             * dreptul sa stearga nimic: se lasa listarea in pace si se retrimite starea ceruta
-             * ultima oara. Lotul se aseaza oricum ca `completed` — la ei chiar s-a intamplat ce a
-             * cerut el —, dar hotararea locala e a celei mai noi cereri.
+             * ⚠ SE FACE INTR-O SINGURA TRANZACTIE, cu randul de ceas incuiat: se compara sub
+             * incuietoare, se muta maparea SKU, se scrie piatra si se sterge listarea — sau nu se
+             * face nimic. Nu mai exista fereastra.
              */
-            const acum = await getListingByStyleKey(admin, ctx.businessId, sk);
-            const eDepasita = acum != null && b.generatie != null
-              && b.generatie < acum.status_generatie;
-            if (eDepasita) {
-              if (acum.product_id && acum.status_dorit) {
+            const { data: verdict, error: eScoatere } = await admin.rpc("aboutyou_incheie_scoaterea", {
+              p_business_id: ctx.businessId, p_style_key: sk, p_generatie: b.generatie,
+            });
+            if (eScoatere) { asezat = false; continue; }
+            if (verdict === "depasit" || verdict === "fara-ceas") {
+              /*
+               * ⚠ S-a cerut altceva intre timp (sau n-avem cu ce dovedi): listarea ramane, si se
+               * retrimite starea ceruta ultima oara. Lotul se aseaza oricum — la ei chiar s-a
+               * intamplat ce a cerut el —, dar hotararea locala e a celei mai noi cereri.
+               */
+              const acum = await getListingByStyleKey(admin, ctx.businessId, sk);
+              if (acum?.product_id && acum.status_dorit) {
                 const { error: eRe } = await admin.from("aboutyou_sync_queue").upsert(
                   {
                     business_id: ctx.businessId, product_id: acum.product_id,
@@ -3373,23 +3302,15 @@ export async function pollOpenBatches(admin: Db, ctx: AboutYouSyncContext, limit
               }
               await logError({
                 action: "aboutyou-sync/loturi", severity: "warning",
-                message: `scoaterea din generatia ${b.generatie} s-a incheiat dupa o cerere mai noua (${acum.status_generatie}): listarea nu se sterge, se retrimite starea ceruta`,
-                details: { styleKey: sk, statusDorit: acum.status_dorit }, businessId: ctx.businessId,
+                message: `scoaterea din generatia ${b.generatie} nu mai e cea mai noua (${verdict}): listarea nu se sterge, se retrimite starea ceruta`,
+                details: { styleKey: sk, statusDorit: acum?.status_dorit }, businessId: ctx.businessId,
               });
               continue;
             }
             /*
-             * ⚠ SI PIATRA DE MORMANT, cu generatia starii de la clipa scoaterii. Fara ea, un
-             * `publish` mai vechi asezat dupa eliminare ar reactiva produsul la ei, iar la noi
-             * n-ar mai exista nimic care sa ceara `inactive`.
+             * ⚠ `lipsa` inseamna ca alta trecere a apucat s-o stearga: nu e o eroare, e chiar
+             * rezultatul dorit. Orice altceva decat `sters` sau `lipsa` a fost tratat mai sus.
              */
-            if (!await pastreazaPiatra(admin, ctx.businessId, listing)) {
-              asezat = false;
-              continue;
-            }
-            const { error: eSters } = await admin.from("aboutyou_listings").delete().eq("id", listing.id);
-            /* ⚠ Randul nesters inseamna ca produsul apare mai departe in panou desi e retras. */
-            if (eSters) asezat = false;
           }
           continue;
         }

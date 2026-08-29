@@ -20,6 +20,8 @@ const oauth = readFileSync("src/lib/olx/oauth.ts", "utf8");
 const config = readFileSync("src/lib/olx/config.ts", "utf8");
 const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8");
 const actiuni = readFileSync("src/lib/actions/olx.actions.ts", "utf8");
+const mesaje = readFileSync("src/lib/actions/olx-mesaje.actions.ts", "utf8");
+const cont = readFileSync("src/lib/actions/olx-cont.actions.ts", "utf8");
 
 function faraComentarii(t: string): string {
   return t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
@@ -441,4 +443,45 @@ test("⚠ plafonul sondarii se vede, nu se ghiceste", () => {
   const i = cron.indexOf("const { count: restante }");
   assert.ok(i > 0, "numaratoarea restantelor a disparut");
   assert.match(cron.slice(i, i + 300), /\{ count: "exact", head: true \}/);
+});
+
+/* ── Ecranele noi: doua reguli cu efect adevarat ─────────────────────────── */
+
+test("⚠ marcarea „citit” nu se mai arunca", () => {
+  /*
+   * ═══ O BULINA CARE MINTE E MAI REA DECAT UNA CARE INTARZIE (01.09.2026) ═══
+   *
+   * `markThreadRead` se chema cu `void` — fire-and-forget. Daca pica, bulina se stingea in ecran
+   * pentru un fir care ramanea NECITIT la ei, iar comerciantul nu se mai intorcea la el niciodata.
+   *
+   * ⚠ Starea din ecran e oglinda starii LOR, iar oglinda are voie sa arate doar ce s-a confirmat.
+   */
+  const i = mesaje.indexOf("export async function deschideOlxConversatia");
+  assert.ok(i > 0, "actiunea de deschidere a conversatiei a disparut");
+  const corp = faraComentarii(mesaje.slice(i));
+  assert.match(corp, /marcatCitit/, "rezultatul marcarii trebuie dus mai departe");
+  assert.doesNotMatch(corp, /void markThreadRead|void marcheaz/,
+    "o marcare aruncata stinge bulina peste un fir ramas necitit la ei");
+});
+
+test("⚠ atasamentele se arata doar de la adrese `http`", () => {
+  /*
+   * ⚠ Adresele vin de la ei si ajung intr-un `href`. Un `javascript:` scapat acolo ar rula in
+   * pagina comerciantului, cu sesiunea lui — iar noi n-am scris niciodata adresa aceea.
+   */
+  assert.match(mesaje, /\^https\?:/, "adresele atasamentelor trebuie filtrate");
+});
+
+test("⚠ profilul de firma se pazeste si la SCRIERE, nu doar la citire", () => {
+  /*
+   * ⚠ O actiune de server e o ADRESA, nu un formular ascuns. Pazita doar la citire, oricine ar
+   * putea scrie profilul unui cont particular — si am fi trimis la ei o cerere pe care contul aceia
+   * n-are dreptul s-o faca.
+   */
+  const scrieri = [...cont.matchAll(/advertiser_type !== "business"/g)];
+  assert.ok(scrieri.length >= 2, `asteptam paza si la citire si la scriere, sunt ${scrieri.length}`);
+  const i = cont.indexOf("export async function salveazaOlxProfilFirma");
+  assert.ok(i > 0);
+  const corp = cont.slice(i, i + 900);
+  assert.match(corp, /advertiser_type !== "business"/, "scrierea nu-si verifica poarta");
 });

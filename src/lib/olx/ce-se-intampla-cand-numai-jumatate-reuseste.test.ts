@@ -394,6 +394,9 @@ test("⚠ RELUARE: OLX zice `400` fiindca a intrat deja — motivul se scrie, nu
    * ⚠ Acum se INTREABA cum e la ei, si se scrie adevarul.
    */
   const stub = stubFetchPeRand([
+    /* ⚠ Prima cerere e LISTA: apasarea omului e asupra produsului, deci se cauta intai toate
+       anunturile lui. Abia dupa aceea vine comanda pe cel canonic. */
+    { status: 200, corp: { data: [{ id: 777, status: "active", external_id: PID }] } },
     { status: 400, corp: { error: { detail: "Ad has to be active" } } },
     { status: 200, corp: { data: { id: 777, status: "removed_by_user" } } },
   ]);
@@ -417,6 +420,9 @@ test("⚠ RELUARE: un anunt `limited` nu intra in bucla, si nu primeste motiv fa
    * ⚠ Dar nici motiv de dezactivare nu primeste: n-a fost o dezactivare.
    */
   const stub = stubFetchPeRand([
+    /* ⚠ Prima cerere e LISTA: apasarea omului e asupra produsului, deci se cauta intai toate
+       anunturile lui. Abia dupa aceea vine comanda pe cel canonic. */
+    { status: 200, corp: { data: [{ id: 777, status: "active", external_id: PID }] } },
     { status: 400, corp: { error: { detail: "Ad has to be active" } } },
     { status: 200, corp: { data: { id: 777, status: "limited" } } },
   ]);
@@ -432,6 +438,9 @@ test("⚠ RELUARE: un anunt `limited` nu intra in bucla, si nu primeste motiv fa
 test("⚠ RELUARE: `400` peste un anunt care e VIU nu se socoteste dezactivare", async () => {
   /* Refuzul lor venea din altceva, si anuntul e in continuare la vanzare. Nu se pretinde nimic. */
   const stub = stubFetchPeRand([
+    /* ⚠ Prima cerere e LISTA: apasarea omului e asupra produsului, deci se cauta intai toate
+       anunturile lui. Abia dupa aceea vine comanda pe cel canonic. */
+    { status: 200, corp: { data: [{ id: 777, status: "active", external_id: PID }] } },
     { status: 400, corp: { error: { detail: "altceva" } } },
     { status: 200, corp: { data: { id: 777, status: "active" } } },
   ]);
@@ -466,6 +475,9 @@ test("⚠ RELUARE: activarea deja intrata stinge motivul dezactivarii", async ()
 
 test("⚠ RELUARE: daca nu putem citi starea lor, nu pretindem nimic", async () => {
   const stub = stubFetchPeRand([
+    /* ⚠ Prima cerere e LISTA: apasarea omului e asupra produsului, deci se cauta intai toate
+       anunturile lui. Abia dupa aceea vine comanda pe cel canonic. */
+    { status: 200, corp: { data: [{ id: 777, status: "active", external_id: PID }] } },
     { status: 400, corp: { error: { detail: "Ad has to be active" } } },
     { status: 500, corp: { error: { detail: "picat" } } },
   ]);
@@ -480,7 +492,12 @@ test("⚠ RELUARE: daca nu putem citi starea lor, nu pretindem nimic", async () 
 
 test("⚠ RELUARE: un `404` la dezactivare inseamna tot ca omul l-a sters", async () => {
   /* A treia usa cu acelasi inteles. Sondarea si actualizarea o stiau; dezactivarea se reincerca. */
-  const stub = stubFetchPeRand([{ status: 404, corp: { error: { detail: "not found" } } }]);
+  const stub = stubFetchPeRand([
+    /* ⚠ Prima cerere e LISTA: apasarea omului e asupra produsului, deci se cauta intai toate
+       anunturile lui. Abia dupa aceea vine comanda pe cel canonic. */
+    { status: 200, corp: { data: [{ id: 777, status: "active", external_id: PID }] } },
+    { status: 404, corp: { error: { detail: "not found" } } },
+  ]);
   try {
     const { db, scrieri } = dbCuRand();
     const r = await processQueueItem(db, CTX, { ...LUCRARE, op: "deactivate" }, null);
@@ -618,7 +635,8 @@ test("⚠ maparea de AZI nu dovedeste nimic despre IERI", () => {
   const sync = readFileSync("src/lib/olx/sync.ts", "utf8");
   const i = sync.indexOf("if (!isProductSellable(product))");
   const ramura = sync.slice(i, sync.indexOf("const entry = product.category", i));
-  assert.match(ramura, /if \(!row\?\.olx_advert_id\) \{/);
+  assert.match(ramura, /stingeTotulPentruProdus\(/,
+    "amandoua caile trec prin acelasi rezolvitor");
   assert.doesNotMatch(ramura, /category_map\?\.\[product\.category\]/,
     "recuperarea nu are voie sa se sprijine pe maparea de azi");
 });
@@ -685,6 +703,9 @@ test("⚠ un anunt `outdated` NU primeste motiv de dezactivare", async () => {
    * `outdated` e starea pe care sincronizarea o reactiveaza automat.
    */
   const stub = stubFetchPeRand([
+    /* ⚠ Prima cerere e LISTA: apasarea omului e asupra produsului, deci se cauta intai toate
+       anunturile lui. Abia dupa aceea vine comanda pe cel canonic. */
+    { status: 200, corp: { data: [{ id: 777, status: "active", external_id: PID }] } },
     { status: 400, corp: { error: { detail: "Ad has to be active" } } },
     { status: 200, corp: { data: { id: 777, status: "outdated" } } },
   ]);
@@ -831,5 +852,131 @@ test("⚠ un anunt STRAIN nu se atinge nici pe drumul de stoc", async () => {
     const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_FARA_STOC);
     assert.deepEqual(r, { ok: true, action: "skipped" });
     assert.equal(stub.cereri.length, 1, "nicio comanda peste un anunt care nu e al produsului");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ stoc zero cu rand CANONIC legat: si duplicatul se stinge", async () => {
+  /*
+   * ═══ ULTIMUL CAZ DE DUPLICAT (01.09.2026) ═══
+   *
+   * Proba de dinainte pornea cu `getRow` gol, deci masura ramura orfanului. Aici randul CHIAR
+   * exista — starea cea mai probabila a unui duplicat istoric — si pana azi calea aceea iesea din
+   * prima, fara sa mai caute:
+   *
+   *     OLX:    111 ACTIVE (external_id = P)  si  222 ACTIVE (external_id = P)
+   *     Edinio: `olx_adverts` -> 111
+   *     stoc 10 -> 0  ->  se stingea 111 si se intorcea
+   *     -> 222 ramanea la vanzare, si marfa se vindea cand nu mai era
+   */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [
+      { id: 111, status: "active", external_id: PID },
+      { id: 222, status: "active", external_id: PID },
+    ] } },
+    { status: 200, corp: {} },   // deactivate 222 (in plus)
+    { status: 200, corp: {} },   // deactivate 111 (canonic)
+  ]);
+  try {
+    const RAND = { id: "r1", olx_advert_id: 111, status: "active", offer_id: PID, sters_de_om_la: null, dezactivat_de: null };
+    const { db, scrieri } = dbPeRand({ olx_adverts: [{ data: RAND, error: null }] });
+    const ctx = { ...CTX, config: CONFIG_CONECTAT } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_FARA_STOC);
+    assert.equal(r.ok, true, `asteptam reusita, am primit: ${JSON.stringify(r)}`);
+    const atinse = stub.cereri.join(" ");
+    assert.match(atinse, /adverts\/222\/commands/, "duplicatul trebuie stins, desi randul arata spre 111");
+    assert.match(atinse, /adverts\/111\/commands/, "si cel canonic");
+    const motiv = scrieri.find((x) => (x.corp as { dezactivat_de?: string }).dezactivat_de === "stoc");
+    assert.ok(motiv, "motivul se scrie pe randul canonic");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ apasarea „Dezactivează” stinge si duplicatul", async () => {
+  /*
+   * ⚠ Omul vede un PRODUS si un buton, nu un `olx_advert_id`. Daca produsul are un duplicat
+   * istoric, „am dezactivat" trebuie sa insemne ca nu mai e vandabil nicaieri — altfel ii spunem
+   * ceva ce nu e adevarat.
+   */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [
+      { id: 111, status: "active", external_id: PID },
+      { id: 222, status: "active", external_id: PID },
+    ] } },
+    { status: 200, corp: {} },
+    { status: 200, corp: {} },
+  ]);
+  try {
+    const RAND = { id: "r1", olx_advert_id: 111, status: "active", offer_id: PID, sters_de_om_la: null, dezactivat_de: null };
+    const { db, scrieri } = dbPeRand({ olx_adverts: [{ data: RAND, error: null }] });
+    const r = await processQueueItem(db, CTX, { ...LUCRARE, op: "deactivate" }, null);
+    assert.equal(r.ok, true, `asteptam reusita, am primit: ${JSON.stringify(r)}`);
+    const atinse = stub.cereri.join(" ");
+    assert.match(atinse, /adverts\/222\/commands/);
+    assert.match(atinse, /adverts\/111\/commands/);
+    assert.ok(scrieri.some((x) => (x.corp as { dezactivat_de?: string }).dezactivat_de === "om"),
+      "apasarea omului ramane insemnata ca a lui");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ `stingeLaEi` nu socoteste orice `400` drept reusita", async () => {
+  /*
+   * ═══ UN `400` NU E O DOVADA DE STARE (01.09.2026) ═══
+   *
+   * `400` e familia intreaga de refuzuri de validare la ei. Din codul HTTP nu se poate deduce ca
+   * starea dorita a fost atinsa — iar aici concluzia „e stins" opreste o lucrare care apara marfa
+   * de la a se vinde cand nu exista.
+   */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [
+      { id: 111, status: "active", external_id: PID },
+      { id: 222, status: "active", external_id: PID },
+    ] } },
+    { status: 400, corp: { error: { detail: "altceva" } } },   // deactivate 222 refuzat
+    { status: 200, corp: { data: { id: 222, status: "active" } } },  // …si e in continuare VIU
+  ]);
+  try {
+    const { db } = dbPeRand({ olx_adverts: [{ data: null, error: null }] });
+    const ctx = { ...CTX, config: CONFIG_CONECTAT } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_FARA_STOC);
+    assert.equal(r.ok, false, "un anunt ramas VIU nu e o stingere reusita");
+    assert.equal(r.ok === false && r.permanent, false, "se reia");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ dar un `400` peste un anunt chiar stins ESTE reusita", async () => {
+  /* Contraproba: fara ea, proba de sus ar trece si cu o functie care refuza mereu. */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [
+      { id: 111, status: "active", external_id: PID },
+      { id: 222, status: "active", external_id: PID },
+    ] } },
+    { status: 400, corp: { error: { detail: "Ad has to be active" } } },
+    { status: 200, corp: { data: { id: 222, status: "removed_by_user" } } },
+    { status: 200, corp: {} },   // deactivate 111
+  ]);
+  try {
+    const { db } = dbPeRand({ olx_adverts: [{ data: null, error: null }] });
+    const ctx = { ...CTX, config: CONFIG_CONECTAT } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_FARA_STOC);
+    assert.notEqual(r.ok, false, `asteptam sa treaca de anuntul in plus: ${JSON.stringify(r)}`);
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ cautarea dupa `external_id` trece prin TOATE paginile", async () => {
+  /*
+   * ⚠ O curatenie exhaustiva n-are voie sa se sprijine pe un numar maxim pe care API-ul lor nu l-a
+   * promis: `external_id` e un filtru de lista, nu o cheie unica.
+   */
+  const paginaPlina = Array.from({ length: 50 }, (_, i) => ({ id: 1000 + i, status: "removed_by_user", external_id: PID }));
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: paginaPlina } },
+    { status: 200, corp: { data: [{ id: 2222, status: "active", external_id: PID }] } },
+    { status: 200, corp: {} },
+    { status: 200, corp: {} },
+  ]);
+  try {
+    const { db } = dbPeRand({ products: [{ data: null, error: null }], olx_adverts: [{ data: null, error: null }] });
+    await processQueueItem(db, CTX, LUCRARE, null);
+    assert.match(stub.cereri[0], /offset=0/);
+    assert.match(stub.cereri[1] ?? "", /offset=50/, "o pagina plina inseamna ca mai pot fi si altele");
   } finally { stub.inapoi(); }
 });

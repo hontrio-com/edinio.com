@@ -118,6 +118,12 @@ test("⚠ se reactiveaza ce am stins NOI, nu ce a oprit omul", () => {
 
 test("⚠ dezactivarea isi scrie motivul, si nu se mai presupune o vanzare", () => {
   /*
+   * ⚠ Ancora cerea chemarea directa `deactivateRemote(admin, ctx, row, …)`. **Avea dreptate sub
+   * premisa de-atunci**: ramura nevandabil chema direct. De cand trece prin `stingeTotulPentruProdus`
+   * — ca sa nu ramana viu niciun duplicat — chemarea directa e mai jos, in rezolvitor. Regula n-a
+   * schimbat-o nimic: motivul se ia din CE anume face produsul nevandabil.
+   */
+  /*
    * ⚠ La OLX, `is_success` inseamna „tranzactia s-a incheiat cu bine" — adica S-A VANDUT. Il
    * trimiteam `true` la fiecare dezactivare: la apasarea omului, la stoc zero, la produs inactiv,
    * si chiar inaintea unei stergeri. Niciunul nu e o vanzare. E o informatie falsa data unui
@@ -137,9 +143,20 @@ test("⚠ dezactivarea isi scrie motivul, si nu se mai presupune o vanzare", () 
   /* ⚠ Iar motivul se scrie pe rand, ca reactivarea sa poata deosebi. */
   assert.match(sync, /export type SursaDezactivarii = "om" \| "stoc" \| "produs-inactiv" \| "inainte-de-stergere";/);
   assert.match(sync, /dezactivat_de: sursa/);
-  assert.match(sync, /deactivateRemote\(admin, ctx, row, product\.is_active \? "stoc" : "produs-inactiv"\)/);
-  assert.equal((sync.match(/deactivateRemote\(admin, ctx, row, "om"\)/g) ?? []).length, 2,
-    "amandoua apasarile din ecran spun „om”");
+  assert.match(sync, /product\.is_active \? "stoc" : "produs-inactiv"/);
+  /*
+   * ⚠ SE CERE REGULA, NU CHEMAREA. Ancora cerea doua chemari directe
+   * `deactivateRemote(admin, ctx, row, "om")` — si avea dreptate cat timp amandoua apasarile
+   * chemau direct. De cand trec prin `stingeTotulPentruProdus`, ca sa nu ramana viu niciun
+   * duplicat, chemarea e una singura, in rezolvitor. Regula: amandoua caile OMULUI duc sursa „om".
+   */
+  for (const cale of ["export async function deactivateProductNow", 'case "deactivate": {']) {
+    const i = sync.indexOf(cale);
+    assert.ok(i > 0, `calea \`${cale}\` a disparut`);
+    const corp = sync.slice(i, i + 700);
+    assert.match(corp, /stingeTotulPentruProdus\([\s\S]{0,220}?"om"/,
+      `apasarea omului nu mai duce sursa „om": ${cale}`);
+  }
 });
 
 test("⚠ piatra se pune numai daca OLX chiar a sters anuntul", () => {

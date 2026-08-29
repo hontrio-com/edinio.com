@@ -7,7 +7,7 @@ import { Archive,
   Loader2, RefreshCw, Check, X, CircleCheck, Clock, CircleX, Settings as SettingsIcon,
   Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag, ShoppingCart,
 } from "lucide-react";
-import { reincearcaOlxOprite,
+import { suggestOlxCityFromShop, reincearcaOlxOprite,
   startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx,
   publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert, finishOlxAdvert,
   buyOlxAdvertPacket, searchCities, getCityDistricts,
@@ -321,6 +321,18 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
   const [advertiserType, setAdvertiserType] = useState(status.advertiserType);
   const [cityId, setCityId] = useState<number | undefined>(status.cityId);
   const [cityName, setCityName] = useState(status.cityName ?? "");
+  const [sugestie, setSugestie] = useState<{ oras: string; potriviri: OlxCity[] } | null>(null);
+
+  /* Sugestia se cere o singură dată, la deschiderea setărilor, și numai dacă n-are deja localitate. */
+  useEffect(() => {
+    if (status.cityId) return;
+    let anulat = false;
+    void suggestOlxCityFromShop(businessId).then((r) => {
+      if (anulat || "error" in r || r.oras === null) return;
+      setSugestie({ oras: r.oras, potriviri: r.potriviri });
+    });
+    return () => { anulat = true; };
+  }, [businessId, status.cityId]);
   const [districtId, setDistrictId] = useState<number | undefined>(status.districtId);
   const [districts, setDistricts] = useState<OlxDistrict[]>([]);
   const [contactName, setContactName] = useState(status.contactName ?? "");
@@ -392,6 +404,26 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
             />
             {searching && <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
           </div>
+          {/*
+            ⚠ SUGESTIA E FOLOSITĂ, NU DOAR SCRISĂ (01.09.2026). Magazinul are `store_city` de la
+            înregistrare, iar ecranul îi cerea omului să caute din nou — a doua oară aceeași
+            întrebare, tocmai la pasul unde oricine se plictisește și alege primul lucru din listă.
+
+            ⚠ Rămâne o SUGESTIE. Adresa magazinului poate fi un depozit, iar anunțurile pot trebui
+            puse în alt oraș. Se arată și se confirmă; nu se scrie singură.
+          */}
+          {!cityId && sugestie && sugestie.potriviri.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/40 px-2.5 py-2">
+              <span className="text-[11px] text-muted-foreground">
+                Magazinul tău e în {sugestie.oras}:
+              </span>
+              {sugestie.potriviri.slice(0, 3).map((c) => (
+                <Button key={c.id} size="sm" variant="outline" onClick={() => pickCity(c)}>
+                  {c.name}
+                </Button>
+              ))}
+            </div>
+          )}
           {cityResults.length > 0 && (
             <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-border bg-popover shadow-lg">
               {cityResults.map((city) => (

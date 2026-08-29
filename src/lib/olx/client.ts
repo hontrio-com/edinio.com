@@ -348,10 +348,22 @@ export function getBilling(token: string, params: { page?: number; limit?: numbe
 
 // ── Messenger, restul ───────────────────────────────────────────────────────────
 /** Conversatiile, cu paginare — ecranul avea pana azi doar primele cincizeci. */
-export function getThreadsPaged(token: string, params: { offset?: number; limit?: number } = {}) {
+/**
+ * Conversatiile, cu paginare si filtre.
+ *
+ * ⚠ `advert_id` si `interlocutor_id` sunt filtre ALE LOR, deci ingusteaza inainte de a trimite
+ * randurile. Cautarea din ecran lucreaza pe ce e deja incarcat — utila, dar alta treaba: una taie
+ * dintr-o pagina, cealalta cere alta multime.
+ */
+export function getThreadsPaged(
+  token: string,
+  params: { offset?: number; limit?: number; advert_id?: number; interlocutor_id?: number } = {},
+) {
   const q = new URLSearchParams();
   if (params.offset != null) q.set("offset", String(params.offset));
   if (params.limit != null) q.set("limit", String(params.limit));
+  if (params.advert_id != null) q.set("advert_id", String(params.advert_id));
+  if (params.interlocutor_id != null) q.set("interlocutor_id", String(params.interlocutor_id));
   const qs = q.toString();
   return call<OlxThread[]>(token, "GET", `/threads${qs ? `?${qs}` : ""}`);
 }

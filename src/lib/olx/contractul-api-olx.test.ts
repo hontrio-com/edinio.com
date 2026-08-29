@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   addBusinessBanner, addBusinessLogo, addAdvertLogo, getBilling, getBusinessProfile,
-  postThreadMessage, setThreadFavourite, suggestLocationByCoords, updateBusinessProfile,
+  getThreadsPaged, postThreadMessage, setThreadFavourite, suggestLocationByCoords,
+  updateBusinessProfile,
 } from "./client";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -169,4 +170,24 @@ test("⚠ toate cererile poarta jetonul si versiunea ceruta de ei", async () => 
     assert.equal(antete.Authorization, `Bearer ${T}`);
     assert.equal(antete.Version, "2.0");
   } finally { globalThis.fetch = vechi; }
+});
+
+test("⚠ conversatiile se pot ingusta si la EI, nu doar in ecran", async () => {
+  /*
+   * ⚠ `advert_id` si `interlocutor_id` sunt filtre ALE LOR: ingusteaza INAINTE de a trimite
+   * randurile. Cautarea din ecran lucreaza pe ce e deja incarcat — utila, dar alta treaba: una
+   * taie dintr-o pagina, cealalta cere alta multime.
+   */
+  const p = prinde();
+  try {
+    await getThreadsPaged(T, { offset: 0, limit: 20, advert_id: 77 });
+    assert.match(p.cereri[0].url, /advert_id=77/);
+    p.cereri.length = 0;
+    await getThreadsPaged(T, { interlocutor_id: 42 });
+    assert.match(p.cereri[0].url, /interlocutor_id=42/);
+    /* ⚠ Si un filtru nedat nu pleaca gol: `advert_id=` ar insemna „anuntul fara id". */
+    p.cereri.length = 0;
+    await getThreadsPaged(T, { limit: 10 });
+    assert.doesNotMatch(p.cereri[0].url, /advert_id|interlocutor_id/);
+  } finally { p.inapoi(); }
 });

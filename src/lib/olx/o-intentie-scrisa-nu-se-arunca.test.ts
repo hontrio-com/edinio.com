@@ -401,3 +401,23 @@ export `, i + 10)));
   assert.match(corpNum, /\.in\("status", \["active", "new", "unconfirmed", "limited"\]\)/);
   assert.match(corpNum, /\.not\("olx_advert_id", "is", null\)/);
 });
+
+test("⚠ plafonul sondarii se vede, nu se ghiceste", () => {
+  /*
+   * ═══ O PROMISIUNE CARE SE STRICA IN TACERE (01.09.2026) ═══
+   *
+   * Nota din cron promite „restul se reimprospateaza la fiecare doua ore". Tine doar cat timp
+   * restantele incap in `STATUS_BATCH` pe minut — adica pana la vreo trei mii de anunturi. Peste,
+   * comentariul devine neadevarat FARA ca ceva sa se strice vizibil: sondarea merge mai departe,
+   * doar ca tot mai incet, iar starile invechite se acumuleaza.
+   *
+   * ⚠ Nu inseamna ca s-a stricat ceva; inseamna ca a venit clipa sa se schimbe modelul. Si nu
+   * aflam despre ea dintr-o reclamatie.
+   */
+  assert.match(cron, /const CAPACITATE_PE_CICLU = STATUS_BATCH \* 120;/);
+  assert.match(cron, /if \(\(restante \?\? 0\) > CAPACITATE_PE_CICLU\) \{/);
+  /* ⚠ Numaratoarea nu aduce randuri: costa o cerere, nu o pagina. */
+  const i = cron.indexOf("const { count: restante }");
+  assert.ok(i > 0, "numaratoarea restantelor a disparut");
+  assert.match(cron.slice(i, i + 300), /\{ count: "exact", head: true \}/);
+});

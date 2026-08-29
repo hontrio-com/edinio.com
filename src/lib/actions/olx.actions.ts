@@ -310,6 +310,38 @@ export async function saveOlxSettings(businessId: string, input: OlxSettingsInpu
   return { success: true };
 }
 
+/**
+ * Localitatea pe care o are magazinul in Edinio, cautata in nomenclatorul OLX.
+ *
+ * ═══ OMUL A SCRIS-O DEJA O DATA (01.09.2026) ═══
+ *
+ * Ecranul de setari OLX ii cerea sa caute din nou localitatea, desi magazinul are `store_city` de
+ * la inregistrare. E o intrebare pusa a doua oara — si tocmai la pasul in care oricine se
+ * plictiseste si alege primul lucru din lista.
+ *
+ * ⚠ E O SUGESTIE, NU O HOTARARE. Adresa magazinului poate fi un depozit, iar anunturile pot trebui
+ * puse in alt oras. Se arata si se confirma; nu se scrie singura.
+ *
+ * ⚠ Auditul cerea cautarea dupa COORDONATE. Edinio nu are latitudine si longitudine nicaieri —
+ * doar orasul, scris de om. Cautarea dupa nume foloseste chiar ce avem, si e mai directa: un nume
+ * scris de el se potriveste cu nomenclatorul lor mai bine decat un punct pe harta.
+ */
+export async function suggestOlxCityFromShop(
+  businessId: string,
+): Promise<{ oras: string; potriviri: OlxCity[] } | { error: string } | { oras: null }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const { data, error } = await g.supabase
+    .from("businesses").select("store_city, city").eq("id", businessId).single();
+  if (error) return { error: "Nu am putut citi localitatea magazinului." };
+  const oras = (data?.store_city ?? data?.city ?? "").trim();
+  if (!oras) return { oras: null };
+  /* ⚠ `null` inseamna „n-am putut cauta", nu „nu exista": nu se pretinde ca orasul lipseste. */
+  const potriviri = await searchOlxCities(oras);
+  if (potriviri === null) return { error: "Nu am putut căuta localitatea la OLX. Încearcă din nou." };
+  return { oras, potriviri: potriviri.slice(0, 5) };
+}
+
 // ── Location pickers ──────────────────────────────────────────────────────────────
 export async function searchCities(businessId: string, q: string): Promise<{ cities: OlxCity[] } | { error: string }> {
   const g = await guard(businessId);
@@ -492,6 +524,70 @@ async function produseleCuAnunturi(
     for (const r of (data ?? []) as { offer_id: string }[]) cuAnunt.push(r.offer_id);
   }
   return { ids: cuAnunt };
+}
+
+/**
+ * Cat de bine merge integrarea, in numere care se pot citi dintr-o privire.
+ *
+ * ═══ TACEREA ARATA EXACT CA FUNCTIONAREA (01.09.2026) ═══
+ *
+ * Toate reparatiile din ultimele runde au acelasi capat: cand ceva nu merge, se scrie undeva — in
+ * `last_error`, in `abandonat_la`, intr-un conflict, in jurnal. Dar nimic nu ADUNA. Comerciantul,
+ * si noi, ne uitam la un ecran care arata la fel si cand totul merge, si cand coada n-a mai fost
+ * atinsa de trei ore.
+ *
+ * ⚠ CEA MAI IMPORTANTA CIFRA E VECHIMEA CELEI MAI VECHI LUCRARI. Numarul din coada nu spune nimic
+ * singur — treizeci de lucrari puse acum o clipa sunt sanatate curata, iar UNA singura de acum
+ * doua ore inseamna ca ceva s-a oprit.
+ */
+export interface OlxSanatate {
+  inCoada: number;
+  celMaiVechiMinute: number | null;
+  oprite: number;
+  conflicte: number;
+  respinse: number;
+  ultimaSincronizare: string | null;
+  cereReconectare: boolean;
+}
+
+export async function getOlxSanatate(businessId: string): Promise<OlxSanatate | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+
+  const [coada, oprite, conflicte, respinse, ceaMaiVeche] = await Promise.all([
+    admin.from("olx_sync_queue").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).is("abandonat_la", null),
+    admin.from("olx_sync_queue").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).not("abandonat_la", "is", null),
+    admin.from("olx_adverts").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).not("conflict_la", "is", null),
+    admin.from("olx_adverts").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).not("moderation_text", "is", null),
+    admin.from("olx_sync_queue").select("created_at")
+      .eq("business_id", businessId).is("abandonat_la", null)
+      .order("created_at", { ascending: true }).limit(1).maybeSingle(),
+  ]);
+
+  /*
+   * ⚠ O CITIRE PICATA NU E UN ZERO. Un panou de sanatate care arata „0 probleme" fiindca n-a putut
+   * intreba e mai rau decat unul care lipseste: linisteste exact cand n-ar trebui.
+   */
+  for (const r of [coada, oprite, conflicte, respinse, ceaMaiVeche]) {
+    if (r.error) return { error: "Nu am putut citi starea integrării OLX." };
+  }
+
+  const config = await loadConfig(businessId);
+  const nascut = ceaMaiVeche.data?.created_at ? Date.parse(ceaMaiVeche.data.created_at) : NaN;
+  return {
+    inCoada: coada.count ?? 0,
+    celMaiVechiMinute: Number.isFinite(nascut) ? Math.floor((Date.now() - nascut) / 60_000) : null,
+    oprite: oprite.count ?? 0,
+    conflicte: conflicte.count ?? 0,
+    respinse: respinse.count ?? 0,
+    ultimaSincronizare: config.last_sync_at ?? null,
+    cereReconectare: config.needs_reconnect === true,
+  };
 }
 
 /** Un produs cu doua anunturi vii la OLX, si ce are omul de ales. */
@@ -1048,6 +1144,47 @@ export async function buyOlxAdvertPacket(
   const act = await withToken(businessId, (token) => advertCommand(token, advertId, "activate"));
   if ("error" in act) return { error: act.error };
   if (isOlxError(act) && act.status !== 400) return { error: mapPaymentError(act.error) };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/**
+ * Inchide un anunt ramas blocat de cota gratuita.
+ *
+ * ═══ „LIMITED" ERA UN FUND DE SAC (01.09.2026) ═══
+ *
+ * Un anunt `limited` exista la ei dar nu se vede: cota gratuita a categoriei s-a epuizat. Ecranul
+ * ii spunea omului sa cumpere un pachet — si atat. Daca nu voia sa cumpere, anuntul ramanea acolo,
+ * numarat in „limitate", pentru totdeauna.
+ *
+ * OLX are comanda `finish` tocmai pentru asta: muta un anunt inactiv in „incheiate". Nu e o
+ * stergere — istoricul ramane la ei, si omul il poate reactiva mai tarziu cumparand un pachet.
+ *
+ * ⚠ Se scrie si local, altfel sondarea l-ar aduce inapoi in numarul de „limitate" la trecerea
+ * urmatoare, si omul ar crede ca apasarea lui n-a facut nimic.
+ */
+export async function finishOlxAdvert(
+  businessId: string, advertId: number,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const res = await withToken(businessId, (token) => advertCommand(token, advertId, "finish"));
+  if ("error" in res) return res;
+  /* ⚠ `400` inseamna de obicei „e deja intr-o stare in care comanda n-are rost": nu e un esec. */
+  if (isOlxError(res) && res.status !== 400) return { error: res.error };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("olx_adverts")
+    .update({ status: "finished", last_status_at: null, updated_at: new Date().toISOString() } as never)
+    .eq("business_id", businessId).eq("olx_advert_id", advertId);
+  if (error) {
+    /* ⚠ Comanda a intrat la ei; daca marcajul local n-a intrat, sondarea il indreapta. Se spune. */
+    logError({
+      action: "olx.finish", severity: "warning",
+      message: `anuntul s-a incheiat la OLX, dar starea locala nu s-a scris: ${error.message}`,
+      details: { advertId }, businessId,
+    });
+  }
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }

@@ -3,13 +3,13 @@
 import { useEffect, useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
+import { Archive,
   Loader2, RefreshCw, Check, X, CircleCheck, Clock, CircleX, Settings as SettingsIcon,
   Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag, ShoppingCart,
 } from "lucide-react";
 import { reincearcaOlxOprite,
   startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx,
-  publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert,
+  publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert, finishOlxAdvert,
   buyOlxAdvertPacket, searchCities, getCityDistricts,
   type OlxStatus, type OlxAdvertRow,
 } from "@/lib/actions/olx.actions";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
 import OlxConflicte from "./OlxConflicte";
+import OlxSanatatePanel from "./OlxSanatate";
 import { selectCls } from "@/lib/ui";
 import { OlxCategoryMapper } from "./OlxCategoryMapper";
 import { OlxAccountPanel } from "./OlxAccountPanel";
@@ -174,6 +175,12 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
         <Callout variant="warning" icon={AlertTriangle}>{status.readinessError} Completează în „Setări”.</Callout>
       )}
 
+      {/*
+        ⚠ Sănătatea stă SUS, deasupra numerelor de anunțuri. Alea spun cum arată catalogul; asta
+        spune dacă mașinăria care îl duce acolo mai merge — și numai a doua e o veste.
+      */}
+      <OlxSanatatePanel businessId={businessId} />
+
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Kpi label="Anunțuri" value={c.published} icon={Tag} />
@@ -184,7 +191,12 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
       {c.limited > 0 && (
         <Callout variant="warning" icon={ShoppingBag}>
           {c.limited} {c.limited === 1 ? "anunț a atins" : "anunțuri au atins"} limita de anunțuri gratuite în categoria lor.
-          Cumpără un pachet din secțiunea „Cont OLX” de mai jos ca să le activezi.
+          Cumpără un pachet din secțiunea „Cont OLX” de mai jos ca să le activezi — sau închide-le
+          din lista de mai jos, dacă nu vrei să plătești acum. {/*
+            ⚠ „Limited" era un fund de sac: îi spuneam doar să cumpere. Dacă nu voia, anunțul rămânea
+            acolo, numărat, pentru totdeauna. `finish` îl mută în „încheiate" la ei — nu e o ștergere,
+            istoricul rămâne, și îl poate reactiva mai târziu cumpărând un pachet.
+          */}
         </Callout>
       )}
       {c.queued > 0 && (
@@ -513,6 +525,17 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
                           if (!window.confirm(`Cumperi un pachet pentru anunțul „${a.name}” (se plătește din creditul contului tău OLX) și îl activezi?`)) return;
                           act(a.offer_id, () => buyOlxAdvertPacket(businessId, a.olx_advert_id!), "Pachet cumpărat, anunț activat.");
                         }}><ShoppingCart className="h-3.5 w-3.5" /></IconBtn>
+                      )}
+                      {/*
+                        ⚠ CEALALTĂ IEȘIRE DIN „LIMITED". Până azi îi spuneam doar să cumpere; dacă
+                        nu voia, anunțul rămânea acolo, numărat, pentru totdeauna. `finish` îl mută
+                        în „încheiate" la ei — nu e ștergere, istoricul rămâne, și poate reveni.
+                      */}
+                      {isLimited && a.olx_advert_id && (
+                        <IconBtn title="Închide anunțul (fără să cumperi)" onClick={() => {
+                          if (!window.confirm(`Închizi anunțul „${a.name}” pe OLX? Nu se șterge — îl poți reactiva mai târziu cumpărând un pachet.`)) return;
+                          act(a.offer_id, () => finishOlxAdvert(businessId, a.olx_advert_id!), "Anunț închis pe OLX.");
+                        }}><Archive className="h-3.5 w-3.5" /></IconBtn>
                       )}
                       <IconBtn title="Șterge anunțul" danger onClick={() => {
                         if (!window.confirm(`Sigur ștergi anunțul „${a.name}” de pe OLX? Acțiunea nu poate fi anulată.`)) return;

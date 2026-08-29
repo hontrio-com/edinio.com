@@ -351,6 +351,41 @@ export async function GET(req: NextRequest) {
     .order("last_status_at", { ascending: true, nullsFirst: true })
     .limit(STATUS_BATCH);
 
+  /*
+   * ═══ PLAFONUL SE VEDE, NU SE GHICESTE (01.09.2026) ═══
+   *
+   * Nota de deasupra promite „restul se reimprospateaza la fiecare doua ore". Promisiunea aia tine
+   * doar cat timp restantele incap in `STATUS_BATCH` pe minut — adica pana la vreo trei mii de
+   * anunturi. Peste, comentariul devine neadevarat FARA ca ceva sa se strice vizibil: sondarea
+   * merge mai departe, doar ca tot mai incet, iar starile invechite se acumuleaza in tacere.
+   *
+   * ⚠ De-aia se numara restantele si se strigat cand depasesc ce putem duce. Nu inseamna ca s-a
+   * stricat ceva azi; inseamna ca a venit clipa sa se schimbe modelul — lucrator separat, sau
+   * marcaj de programare pe rand — si ca nu aflam despre ea dintr-o reclamatie.
+   *
+   * ⚠ Numaratoarea e `head: true`, deci nu aduce randuri: costa o cerere, nu o pagina.
+   */
+  const { count: restante } = await admin
+    .from("olx_adverts")
+    .select("id", { count: "exact", head: true })
+    .not("olx_advert_id", "is", null)
+    .or(`and(status.in.(new,unconfirmed),last_status_at.lt.${newBefore}),last_status_at.is.null,last_status_at.lt.${staleBefore}`);
+  if ((restante ?? 0) > STATUS_BATCH) {
+    console.log(`[olx-sync] sondare: ${restante} anunturi asteapta, ducem ${STATUS_BATCH} pe minut`);
+  }
+  /*
+   * ⚠ Si cand restantele depasesc ce putem duce intr-un ciclu de doua ore, nu mai e o intarziere,
+   * e o promisiune calcata: se scrie in jurnal, unde se vede.
+   */
+  const CAPACITATE_PE_CICLU = STATUS_BATCH * 120;
+  if ((restante ?? 0) > CAPACITATE_PE_CICLU) {
+    await logError({
+      action: "olx-sync", severity: "warning",
+      message: `sondarea de stare nu mai poate tine ritmul: ${restante} anunturi restante, capacitate ${CAPACITATE_PE_CICLU} pe ciclu`,
+      details: { restante, STATUS_BATCH },
+    });
+  }
+
   for (const row of toPoll ?? []) {
     if (!row.olx_advert_id) continue;
     const rCtx = await ctxFor(row.business_id);

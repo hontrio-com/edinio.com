@@ -859,3 +859,175 @@ export async function refreshAdvertStatus(
     });
   }
 }
+
+/** Cate anunturi se cer intr-o trecere de reconciliere. */
+export const RECONCILE_PAGINA = 50;
+
+/** Ce se face cu un anunt gasit in contul lor. */
+export type HotarareReconciliere =
+  /** E legat deja la un rand de-al nostru: sondarea de stare se ocupa de el. */
+  | { fel: "stim" }
+  /** `external_id` nu e un produs al magazinului: e anuntul LUI, sau un produs sters. */
+  | { fel: "nu-e-al-nostru" }
+  /** Omul l-a sters de la noi, dar la ei traieste: hotararea lui ramane in picioare. */
+  | { fel: "sters-de-om" }
+  /** Produsul are deja alt anunt legat: doua anunturi, si nu alege un cron care. */
+  | { fel: "duplicat"; legat: number }
+  /** E al nostru si nelegat: se leaga inapoi. */
+  | { fel: "leaga" };
+
+/**
+ * Ce se face cu un anunt gasit in contul lor. Pura dinadins: se poate proba fara retea.
+ *
+ * ⚠ ORDINEA E CHIAR REGULA, si fiecare pas de mai devreme e o poarta inchisa pentru cel de dupa:
+ *
+ *   1. il stim deja            -> nimic
+ *   2. nu e produsul nostru    -> NU se atinge. Contul lui de OLX e al lui.
+ *   3. omul l-a sters la noi   -> nu se readuce, oricat ar parea de „lipsa"
+ *   4. produsul are alt anunt  -> se scrie, nu se alege
+ *   5. altfel                  -> se leaga
+ *
+ * ⚠ Nicaieri „se sterge". Stergerea unui anunt e singurul efect din tot marketplace-ul care nu se
+ * poate desface de la noi, si o reconciliere care sterge pe o presupunere e cel mai scump fel de a
+ * gresi.
+ */
+export function hotarareaReconcilierii(a: {
+  advertId: number;
+  /** `external_id` e chiar id-ul unui produs al magazinului. */
+  eAlNostru: boolean;
+  /** Id-ul asta e deja scris pe un rand de-al nostru. */
+  cunoscut: boolean;
+  randul?: { olx_advert_id: number | null; sters_de_om_la: string | null };
+}): HotarareReconciliere {
+  if (a.cunoscut) return { fel: "stim" };
+  if (!a.eAlNostru) return { fel: "nu-e-al-nostru" };
+  if (a.randul?.sters_de_om_la) return { fel: "sters-de-om" };
+  const legat = a.randul?.olx_advert_id;
+  if (legat != null && legat !== a.advertId) return { fel: "duplicat", legat };
+  return { fel: "leaga" };
+}
+
+/**
+ * Trece prin anunturile din contul lor si leaga inapoi ce e al nostru si a ramas nelegat.
+ *
+ * ═══ CE E VIU LA EI SI NECUNOSCUT LA NOI NU SE VEDE DE NICAIERI (31.08.2026) ═══
+ *
+ * Sondarea de stare (pasul 2 din cron) intreaba despre randurile pe care le AVEM. Deci un anunt viu
+ * la OLX fara rand la noi e invizibil pentru totdeauna:
+ *
+ *     crearea reuseste la ei, dar scrierea legaturii pica
+ *     lucrarea se reia... si moare dupa cinci incercari
+ *     -> anuntul ramane ACTIV la OLX, si nimeni nu-l mai atinge
+ *     -> stocul ajunge la zero si el vinde mai departe, fiindca noi nu stim de el
+ *
+ * ⚠ SE ADOPTA DOAR CE E LIMPEDE AL NOSTRU. `external_id` trebuie sa fie chiar id-ul unui produs
+ * de-al magazinului. Contul lui de OLX e al lui: poate avea acolo zeci de anunturi puse de mana,
+ * care n-au nicio treaba cu Edinio, iar noi n-avem voie nici sa le atingem, nici sa le socotim ale
+ * noastre.
+ *
+ * ⚠ SI NU SE STERGE NIMIC. Ce nu se potriveste se SCRIE in jurnal, ca sa se uite un om. Stergerea
+ * unui anunt e singurul efect din tot marketplace-ul care nu se poate desface de la noi — vezi nota
+ * de la paza anti-duplicat — iar o reconciliere care sterge singura, pe o presupunere, e cel mai
+ * scump fel de a gresi.
+ */
+export async function reconciliazaAnunturile(
+  admin: Db, ctx: OlxSyncContext, businessId: string, deLa: number,
+): Promise<{ ok: true; urmatorul: number; adoptate: number } | { ok: false; error: string }> {
+  const lor = await listAdverts(ctx.token, { offset: deLa, limit: RECONCILE_PAGINA });
+  if (isOlxError(lor)) return { ok: false, error: `lista de anunturi nu s-a putut citi: ${lor.error}` };
+  const anunturi = (lor.data ?? []).filter((a) => a?.id);
+
+  /*
+   * ⚠ Pagina goala inseamna „am ajuns la capat", deci roata se intoarce la zero. Fara asta,
+   * cursorul ar creste la nesfarsit si reconcilierea ar citi vesnic pagini goale.
+   */
+  if (anunturi.length === 0) return { ok: true, urmatorul: 0, adoptate: 0 };
+  const urmatorul = anunturi.length < RECONCILE_PAGINA ? 0 : deLa + anunturi.length;
+
+  /* Numai anunturile care poarta un `external_id` — restul sunt ale lui, puse de mana. */
+  const alenoastre = anunturi.filter((a) => typeof a.external_id === "string" && a.external_id.length > 0);
+  if (alenoastre.length === 0) return { ok: true, urmatorul, adoptate: 0 };
+
+  const idsProduse = [...new Set(alenoastre.map((a) => a.external_id as string))];
+  const { data: randuri, error: eRanduri } = await admin
+    .from("olx_adverts")
+    .select("id, offer_id, olx_advert_id, sters_de_om_la")
+    .eq("business_id", businessId)
+    .in("offer_id", idsProduse);
+  /* ⚠ Fara randurile noastre, „necunoscut la noi" ar fi un neadevar despre TOATE. */
+  if (eRanduri) return { ok: false, error: `randurile locale nu s-au putut citi: ${eRanduri.message}` };
+
+  const { data: produse, error: eProduse } = await admin
+    .from("products").select("id").eq("business_id", businessId).in("id", idsProduse);
+  if (eProduse) return { ok: false, error: `produsele nu s-au putut citi: ${eProduse.message}` };
+  const aleMele = new Set((produse ?? []).map((p) => p.id));
+
+  const dupaOferta = new Map((randuri ?? []).map((r) => [r.offer_id, r]));
+  const idLegate = new Set((randuri ?? []).map((r) => r.olx_advert_id).filter((x): x is number => x != null));
+
+  const now = new Date().toISOString();
+  let adoptate = 0;
+  for (const a of alenoastre) {
+    const produs = a.external_id as string;
+    const randul = dupaOferta.get(produs);
+    const hot = hotarareaReconcilierii({
+      advertId: a.id,
+      eAlNostru: aleMele.has(produs),
+      cunoscut: idLegate.has(a.id),
+      randul,
+    });
+    if (hot.fel === "stim") continue;
+    if (hot.fel === "nu-e-al-nostru") {
+      /*
+       * ⚠ Anunt viu la ei, pentru un produs care nu e al magazinului. NU se sterge: poate fi un
+       * produs sters, un import care a schimbat id-uri, sau chiar un `external_id` pus de mana.
+       */
+      await logError({
+        action: "olx.reconciliere", severity: "warning",
+        message: `anuntul OLX ${a.id} arata catre un produs care nu e in magazin`,
+        details: { businessId, advertId: a.id, externalId: produs, status: a.status }, businessId,
+      });
+      continue;
+    }
+    if (hot.fel === "sters-de-om") {
+      /* ⚠ Ca sa fie viu la ei desi omul l-a sters de la noi inseamna ca stergerea n-a mers pana la
+         capat — dar hotararea lui ramane in picioare, deci nu-l adoptam inapoi. */
+      await logError({
+        action: "olx.reconciliere", severity: "warning",
+        message: `anuntul OLX ${a.id} e viu la ei, desi omul l-a sters de la noi`,
+        details: { businessId, advertId: a.id, offerId: produs }, businessId,
+      });
+      continue;
+    }
+    if (hot.fel === "duplicat") {
+      /* ⚠ DOUA anunturi pentru acelasi produs. Se scrie, nu se alege: care dintre ele e „cel bun"
+         nu poate hotari un cron — unul are istoric, mesaje, poate si o vanzare in curs. */
+      await logError({
+        action: "olx.reconciliere", severity: "critical",
+        message: `produsul are DOUA anunturi la OLX: ${hot.legat} (legat) si ${a.id} (nelegat)`,
+        details: { businessId, offerId: produs, legat: hot.legat, nelegat: a.id }, businessId,
+      });
+      continue;
+    }
+    /* Randul exista dar e nelegat, sau nu exista deloc: in amandoua cazurile, se leaga. */
+    const { error: eLegat } = await admin.from("olx_adverts").upsert(
+      { business_id: businessId, offer_id: produs, product_id: produs, ...advertPatch(a, now) } as never,
+      { onConflict: "business_id,offer_id" },
+    );
+    if (eLegat) {
+      await logError({
+        action: "olx.reconciliere", severity: "error",
+        message: `anuntul OLX ${a.id} n-a putut fi legat inapoi: ${eLegat.message}`,
+        details: { businessId, advertId: a.id, offerId: produs }, businessId,
+      });
+      continue;
+    }
+    adoptate++;
+    await logError({
+      action: "olx.reconciliere", severity: "warning",
+      message: `anuntul OLX ${a.id} era viu la ei si necunoscut la noi; a fost legat inapoi la produs`,
+      details: { businessId, advertId: a.id, offerId: produs, status: a.status }, businessId,
+    });
+  }
+  return { ok: true, urmatorul, adoptate };
+}

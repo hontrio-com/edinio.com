@@ -5,10 +5,11 @@ import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coa
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import {
+import { reconciliazaAnunturile,
   loadOlxContext, processQueueItem, refreshAdvertStatus, pause, type RezultatContext,
   PRODUCT_FIELDS, type OlxQueueItem,
 } from "@/lib/olx/sync";
+import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { advertCommand } from "@/lib/olx/client";
 import type { MappableProduct } from "@/lib/olx/mapping";
 
@@ -17,6 +18,8 @@ import type { MappableProduct } from "@/lib/olx/mapping";
 // moderation/throttle budget on OLX's side.
 const QUEUE_BATCH = 30;
 const STATUS_BATCH = 25;
+/** Cate magazine se reconciliaza intr-un sfert de ora. */
+const RECONCILE_MAGAZINE = 2;
 const EXTEND_BATCH = 15;
 const MAX_ATTEMPTS = 5;
 
@@ -348,7 +351,55 @@ export async function GET(req: NextRequest) {
     await pause(PACE_MS);
   }
 
-  console.log(`[olx-sync] processed=${processed} failed=${failed} amanate=${amanate} status=${statusChecked} extended=${extended}`);
-  return NextResponse.json({ ok: true, processed, failed, amanate, statusChecked, extended });
+  // ── 4) Reconciliere: ce e viu la ei si necunoscut la noi ────────────────────────
+  /*
+   * ═══ SONDAREA INTREABA DOAR DESPRE CE AVEM (31.08.2026) ═══
+   *
+   * Pasul 2 porneste de la `olx_adverts`, deci un anunt viu la OLX fara rand la noi e invizibil
+   * pentru totdeauna:
+   *
+   *     crearea reuseste la ei, dar scrierea legaturii pica
+   *     lucrarea se reia... si moare dupa cinci incercari
+   *     -> anuntul ramane ACTIV la OLX, si nimeni nu-l mai atinge
+   *     -> stocul ajunge la zero, si el vinde mai departe fiindca noi nu stim de el
+   *
+   * ⚠ DIN SFERT IN SFERT DE ORA, si `pas = 15`, nu 1. Cu `pas = 1`, rotatia se invarte in fiecare
+   * MINUT peste o poarta care se deschide o data la cincisprezece: aceleasi doua magazine ar fi
+   * ales de fiecare data cand poarta chiar e deschisa, iar restul n-ar fi reconciliate niciodata.
+   *
+   * ⚠ Cursorul sta in configul magazinului, si se muta si cand pagina n-a adus nimic: o fereastra
+   * fixa de la zero n-ar vedea niciodata nimic dincolo de primele cincizeci de anunturi.
+   */
+  let reconciliate = 0;
+  if (new Date().getMinutes() % 15 === 0) {
+    const { ids: conectate, error: eConectate } = await magazineConectate(admin, "olx_config");
+    if (eConectate) {
+      await logError({
+        action: "olx-sync", severity: "warning",
+        message: `magazinele conectate nu s-au putut citi pentru reconciliere: ${eConectate}`,
+      });
+    }
+    for (const bid of alegeInRotatie(conectate, RECONCILE_MAGAZINE, 15)) {
+      const rRec = await ctxFor(bid);
+      if (rRec.stare !== "gata") continue;
+      const deLa = Math.max(0, rRec.ctx.config.reconcile_offset ?? 0);
+      const r = await reconciliazaAnunturile(admin, rRec.ctx, bid, deLa);
+      if (!r.ok) {
+        /* ⚠ Cursorul NU se muta peste o pagina pe care n-am putut-o citi: ar sari peste ea. */
+        await logError({
+          action: "olx-sync", severity: "warning",
+          message: `reconcilierea nu s-a putut face: ${r.error}`,
+          details: { deLa }, businessId: bid,
+        });
+        continue;
+      }
+      reconciliate += r.adoptate;
+      await patchOlxConfig(admin, bid, { reconcile_offset: r.urmatorul });
+      await pause(PACE_MS);
+    }
+  }
+
+  console.log(`[olx-sync] processed=${processed} failed=${failed} amanate=${amanate} status=${statusChecked} extended=${extended} reconciliate=${reconciliate}`);
+  return NextResponse.json({ ok: true, processed, failed, amanate, statusChecked, extended, reconciliate });
 }
 

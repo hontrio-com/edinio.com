@@ -35,6 +35,13 @@ export interface OlxConfig {
   auto_sync?: boolean;              // push product changes automatically
   auto_extend?: boolean;            // auto_extend_enabled on adverts
   category_map?: Record<string, OlxCategoryMapEntry>; // Edinio category name -> OLX
+  /**
+   * Unde a ajuns ultima trecere de reconciliere prin lista lor de anunturi.
+   *
+   * ⚠ CURSOR, NU FEREASTRA FIXA. La Trendyol, o scanare de cinci pagini pornita mereu de la zero
+   * n-a vazut NICIODATA nimic dupa produsul 500 dintr-un catalog de 1033.
+   */
+  reconcile_offset?: number;
   last_sync_at?: string;
 }
 

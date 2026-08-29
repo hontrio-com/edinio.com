@@ -51,7 +51,7 @@ const MAX_PAGINI = 20;
  */
 export async function magazineConectate(
   admin: SupabaseClient,
-  coloana: "trendyol_config" | "aboutyou_config" | "emag_config",
+  coloana: "trendyol_config" | "aboutyou_config" | "emag_config" | "olx_config",
 ): Promise<{ ids: string[]; error: string | null }> {
   const ids: string[] = [];
   for (let pagina = 0; pagina < MAX_PAGINI; pagina++) {

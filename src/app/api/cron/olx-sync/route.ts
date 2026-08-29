@@ -56,6 +56,27 @@ const RECONCILE_BUGET_MS = 20_000;
  * fi cinci sute de cereri degeaba pana isi bea cafeaua.
  */
 const ASTEPTARE_RECONECTARE_MS = 5 * 60_000;
+/**
+ * ═══ CRONUL N-AVEA NICIO MARGINE DE TIMP (02.09.2026) ═══
+ *
+ * `maxDuration` lipsea, deci ruta cadea pe limita implicita a platformei. Douasprezece cronuri din
+ * depozit o fixeaza; asta nu — aceeasi lipsa gasita si reparata la About You, netrecuta mai departe.
+ *
+ * ⚠ SI `maxDuration` SINGUR NU AJUNGE. Pasii se executa in ordine, deci cei taiati la expirare sunt
+ * mereu ULTIMII. La OLX asta inseamna, de azi, tocmai lamurirea platilor — pasul care deblocheaza
+ * bani si care, de cand cheia poarta intentia, e singura cale prin care o cumparare atarnata se
+ * inchide singura. Un magazin cu coada plina l-ar fi infometat la nesfarsit.
+ *
+ * ⚠ Cronul porneste din minut in minut: ce nu incape acum se reia oricum peste un minut. Deci
+ * bugetul nu pierde lucru, doar il asaza.
+ */
+export const maxDuration = 60;
+
+/** Pana aici au voie pasii 1-4. Ce ramane e al lamuririi platilor. */
+const BUGET_PASI_1_4_MS = 45_000;
+/** Marginea intregii rulari, sub `maxDuration`, cu loc de incheiere. */
+const BUGET_TOTAL_MS = 55_000;
+
 const EXTEND_BATCH = 15;
 /**
  * Cate randuri se CITESC ca sa se aleaga cele `EXTEND_BATCH` de prelungit.
@@ -137,6 +158,10 @@ export async function GET(req: NextRequest) {
   );
 
   const now = new Date().toISOString();
+  const inceput = Date.now();
+  /** Pasii 1-4 s-au intins destul; ce urmeaza se lasa pentru lamurirea platilor. */
+  const fereastraPlina = () => Date.now() - inceput > BUGET_PASI_1_4_MS;
+  const timpulAExpirat = () => Date.now() - inceput > BUGET_TOTAL_MS;
   let processed = 0, failed = 0, amanate = 0, statusChecked = 0, extended = 0;
   const ctxCache = new Map<string, RezultatContext>();
 
@@ -440,6 +465,7 @@ export async function GET(req: NextRequest) {
     });
   }
   for (const row of deStatistici ?? []) {
+    if (fereastraPlina()) break;
     if (!row.olx_advert_id) continue;
     const rSt = await ctxFor(row.business_id);
     if (rSt.stare !== "gata") continue;
@@ -516,6 +542,7 @@ export async function GET(req: NextRequest) {
   }
 
   for (const row of deReinnoit) {
+    if (fereastraPlina()) break;
     const rExt = await ctxFor(row.business_id);
     if (rExt.stare !== "gata") continue;
     const ctx = rExt.ctx;
@@ -572,6 +599,7 @@ export async function GET(req: NextRequest) {
     const pana = Date.now() + RECONCILE_BUGET_MS;
     let vizitate = 0;
     for (const bid of alese) {
+      if (fereastraPlina()) break;
       if (Date.now() >= pana) break;
       const rRec = await ctxFor(bid);
       if (rRec.stare !== "gata") continue;
@@ -648,6 +676,7 @@ export async function GET(req: NextRequest) {
       });
     }
     for (const bid of conectate.ids) {
+      if (timpulAExpirat()) break;
       const { plati, error: ePlati } = await platiNelamurite(admin, bid);
       if (ePlati) {
         await logError({
@@ -657,6 +686,9 @@ export async function GET(req: NextRequest) {
         continue;
       }
       for (const p of plati) {
+        /* ⚠ Si pasul asta se opreste la timp: mai bine cateva randuri lamurite decat o rulare
+           taiata la mijloc, dupa care nimic nu se mai scrie. Se reia peste un minut. */
+        if (timpulAExpirat()) break;
         platiVazute++;
         const r = await lamurestePlata(admin, bid, p.id);
         if (!("error" in r) && r.stare === "intrat") platiInchise++;

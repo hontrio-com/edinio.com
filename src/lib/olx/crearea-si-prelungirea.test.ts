@@ -66,6 +66,42 @@ test("⚠ prelungirea isi tine minte incercarea, la reusita SI la refuz", () => 
   assert.match(corp, /if \(eMarcaj\) \{[\s\S]{0,300}?prelungirea s-a incercat, dar marcajul nu s-a scris/);
 });
 
+test("⚠ cronul are o margine de timp, si ultimul pas nu e infometat", () => {
+  /*
+   * ═══ `maxDuration` LIPSEA CU TOTUL (02.09.2026) ═══
+   *
+   * Ruta cadea pe limita implicita a platformei. Douasprezece cronuri din depozit o fixeaza; asta
+   * nu — aceeasi lipsa gasita si reparata la About You, netrecuta mai departe.
+   *
+   * ⚠ SI SINGUR N-AR AJUNGE. Pasii se executa in ordine, deci cei taiati la expirare sunt mereu
+   * ULTIMII. La OLX asta inseamna tocmai lamurirea platilor — pasul care deblocheaza bani si care,
+   * de cand cheia poarta intentia, e singura cale prin care o cumparare atarnata se inchide
+   * singura. Un magazin cu coada plina l-ar fi infometat la nesfarsit.
+   */
+  assert.match(cron, /export const maxDuration = 60;/, "ruta n-are margine de timp");
+  assert.match(cron, /const fereastraPlina = \(\) =>/, "pasii de mijloc n-au buget");
+  /* ⚠ Si bugetul se si FOLOSESTE: o constanta nechemata nu apara nimic. */
+  assert.ok(cron.split("if (fereastraPlina()) break;").length - 1 >= 3,
+    "bugetul trebuie verificat in buclele care se pot amana");
+  /* ⚠ Iar pasul platilor e cel care primeste restul, nu cel taiat primul. */
+  /*
+   * ⚠ SE CERE IN BUCLA DINAUNTRU, nu oriunde dupa antet. Prima forma cauta un singur
+   * `timpulAExpirat()` undeva dupa pasul 5 — si a trecut VERDE cand l-am scos din bucla PLATILOR,
+   * fiindca ramanea cel din bucla magazinelor. Confruntarea cu defectul a aratat-o; citita, parea
+   * sa apere si randurile, si magazinele.
+   */
+  const iPlati = cron.indexOf("// ── 5) Platile care au ramas nelamurite");
+  assert.ok(iPlati > 0, "pasul de lamurire a platilor a disparut");
+  const bucla = cron.slice(cron.indexOf("for (const p of plati) {", iPlati),
+                           cron.indexOf("console.log(`[olx-sync]", iPlati));
+  assert.match(bucla, /if \(timpulAExpirat\(\)\) break;/,
+    "bucla platilor n-are marginea ei: o rulare taiata la mijloc nu mai scrie nimic");
+  const buclaMagazine = cron.slice(cron.indexOf("for (const bid of conectate.ids) {", iPlati),
+                                   cron.indexOf("for (const p of plati) {", iPlati));
+  assert.match(buclaMagazine, /if \(timpulAExpirat\(\)\) break;/,
+    "bucla magazinelor n-are marginea ei");
+});
+
 test("⚠ prelungirea alege dintre magazinele care AU cerut-o, nu din primele cincisprezece randuri", () => {
   /*
    * ═══ ROATA CARE NU SE INVARTEA (02.09.2026) ═══

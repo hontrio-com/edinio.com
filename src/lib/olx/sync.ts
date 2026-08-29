@@ -67,6 +67,14 @@ export interface OlxAdvertRow {
    * „Postează pe OLX", adica tot de catre om.
    */
   sters_de_om_la: string | null;
+  /**
+   * Clipa in care s-au gasit DOUA anunturi vii pentru acelasi produs vandabil.
+   *
+   * ⚠ Cat timp e scrisa, sincronizarea nu atinge niciunul: care dintre ele e „cel bun" nu poate
+   * hotari un cron. Unul poate purta istoricul, mesajele si o promovare platita.
+   */
+  conflict_la: string | null;
+  conflict_iduri: number[] | null;
 }
 
 export type SyncOutcome =
@@ -199,7 +207,7 @@ class CitireOlxEsuata extends Error {}
 
 async function getRow(admin: Db, businessId: string, offerId: string): Promise<OlxAdvertRow | null> {
   const { data, error } = await admin
-    .from("olx_adverts").select("id, olx_advert_id, status, offer_id, sters_de_om_la, dezactivat_de")
+    .from("olx_adverts").select("id, olx_advert_id, status, offer_id, sters_de_om_la, dezactivat_de, conflict_la, conflict_iduri")
     .eq("business_id", businessId).eq("offer_id", offerId).maybeSingle();
   if (error) throw new CitireOlxEsuata(`randul OLX nu s-a putut citi: ${error.message}`);
   return (data as OlxAdvertRow) ?? null;
@@ -773,6 +781,14 @@ async function upsertRemote(
    */
   if (row?.sters_de_om_la) return { ok: true, action: "skipped" };
 
+  /*
+   * ⚠ CAT TIMP E CONFLICT, NU SE ATINGE NIMIC. Altfel am rescrie cu datele produsului anuntul pe
+   * care omul poate tocmai il pastreaza — sau, mai rau, l-am dubla inca o data. Iesirea e din ecran.
+   */
+  if (row?.conflict_la) {
+    return { ok: false, permanent: true, error: "Există mai multe anunțuri OLX pentru acest produs. Alege pe care îl păstrezi." };
+  }
+
   // Inactive or out of stock -> deactivate but keep the advert for later.
   if (!isProductSellable(product)) {
     /*
@@ -951,6 +967,43 @@ async function upsertRemote(
       if (typeof ext !== "string" || ext !== product.id) return false;
       return !MOARTE.includes(String(a.status ?? "").toLowerCase());
     });
+    /*
+     * ═══ DOUA ANUNTURI VII: SE INTREABA OMUL, NU SE ALEGE (01.09.2026) ═══
+     *
+     * `candidati[0]` insemna „cel intors primul de ei". Dar cand produsul e VANDABIL, intrebarea
+     * „care dintre ele e cel bun?" n-are raspuns tehnic:
+     *
+     *     anunt 111 — activ, 1.240 de vizualizari, doua conversatii, promovare platita
+     *     anunt 222 — activ, 17 vizualizari, nimic
+     *
+     * Un cron n-are cum sa stie asta. Se scrie conflictul, se opreste publicarea pe produsul acela,
+     * si omul alege din ecran — o data, si pentru totdeauna.
+     *
+     * ⚠ Deosebirea fata de nevandabil si de stergere, unde le atingem pe toate fara sa intrebam:
+     * acolo raspunsul e acelasi pentru oricare — niciunul nu ramane la vanzare. Aici unul TREBUIE
+     * sa ramana, si tocmai alegerea lui e ce nu putem face noi.
+     */
+    if (candidati.length > 1) {
+      const iduri = candidati.map((a) => a.id);
+      await logError({
+        action: "olx.conflict", severity: "critical",
+        message: `produsul are ${candidati.length} anunturi vii cu acelasi external_id; publicarea se opreste pana alege omul`,
+        details: { businessId, offerId, iduri }, businessId,
+      });
+      const { error: eConflict } = await admin.from("olx_adverts").upsert(
+        {
+          business_id: businessId, offer_id: offerId, product_id: product.id,
+          status: "conflict", conflict_la: now, conflict_iduri: iduri,
+          error: `Există ${candidati.length} anunțuri OLX pentru acest produs. Alege pe care îl păstrezi.`,
+          updated_at: now,
+        } as never,
+        { onConflict: "business_id,offer_id" },
+      );
+      if (eConflict) {
+        return { ok: false, permanent: false, error: `conflictul nu s-a putut scrie: ${eConflict.message}` };
+      }
+      return { ok: false, permanent: true, error: `Există ${candidati.length} anunțuri OLX pentru acest produs. Alege pe care îl păstrezi.` };
+    }
     const gasit = candidati[0];
     if (gasit?.id) {
       const { error: eAdoptare } = await admin.from("olx_adverts").upsert(
@@ -1555,4 +1608,65 @@ export async function reconciliazaAnunturile(
     });
   }
   return { ok: true, urmatorul, adoptate };
+}
+
+/**
+ * Omul a ales care anunt se pastreaza. Restul se retrag, si conflictul se stinge.
+ *
+ * ═══ ALEGEREA E A LUI, EXECUTIA E A NOASTRA ═══
+ *
+ * Cand un produs vandabil are doua anunturi vii, publicarea se opreste si se scrie conflictul
+ * (vezi `upsertRemote`). Aici se duce la capat ce a hotarat el: cel ales se leaga, ceilalti se
+ * retrag de-a dreptul.
+ *
+ * ⚠ SE VERIFICA CA ALEGEREA LUI E INCA ADEVARATA. Intre clipa in care a vazut ecranul si apasare
+ * pot trece minute: un anunt poate fi sters intre timp de la ei, sau starea se poate schimba. Se
+ * cere lista din nou, si daca cel ales nu mai e printre ele, nu se face nimic.
+ *
+ * ⚠ Retragerile se fac INAINTEA legarii: daca una pica, conflictul ramane scris si omul mai poate
+ * incerca. Legat intai, am fi ramas cu un produs „rezolvat" si un anunt inca viu.
+ */
+export async function rezolvaConflictul(
+  admin: Db, ctx: OlxSyncContext, businessId: string, offerId: string, pastreazaId: number,
+): Promise<SyncOutcome> {
+  return faraCitiriPicate(async () => {
+    const row = await getRow(admin, businessId, offerId);
+    if (!row?.conflict_la) return { ok: true, action: "skipped" };
+
+    const lor = await anunturileLorPentru(ctx, offerId, false);
+    if (!lor.ok) return lor.esec;
+    const ales = lor.anunturi.find((a) => a.id === pastreazaId);
+    if (!ales) {
+      return {
+        ok: false, permanent: true,
+        error: "Anunțul ales nu mai există la OLX. Reîncarcă pagina ca să vezi situația actuală.",
+      };
+    }
+
+    for (const a of lor.anunturi) {
+      if (a.id === pastreazaId) continue;
+      const r = await retrageLaEi(ctx, a.id, String(a.status ?? ""));
+      if (!r.ok) return r.esec;
+    }
+
+    const acum = new Date().toISOString();
+    const { error: eLegat } = await admin.from("olx_adverts").upsert(
+      {
+        business_id: businessId, offer_id: offerId, product_id: row.offer_id,
+        conflict_la: null, conflict_iduri: null,
+        ...advertPatch(ales, acum),
+      } as never,
+      { onConflict: "business_id,offer_id" },
+    );
+    if (eLegat) {
+      return { ok: false, permanent: false, error: `alegerea nu s-a putut scrie: ${eLegat.message}` };
+    }
+    await logError({
+      action: "olx.conflict", severity: "warning",
+      message: `conflictul de anunturi s-a rezolvat: se pastreaza ${pastreazaId}, s-au retras ${lor.anunturi.length - 1}`,
+      details: { offerId, pastreazaId, retrase: lor.anunturi.filter((a) => a.id !== pastreazaId).map((a) => a.id) },
+      businessId,
+    });
+    return { ok: true, action: "updated", status: ales.status, url: ales.url ?? null };
+  });
 }

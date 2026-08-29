@@ -980,3 +980,69 @@ test("⚠ cautarea dupa `external_id` trece prin TOATE paginile", async () => {
     assert.match(stub.cereri[1] ?? "", /offset=50/, "o pagina plina inseamna ca mai pot fi si altele");
   } finally { stub.inapoi(); }
 });
+
+/* ── Doua anunturi pe un produs VANDABIL: alege omul ─────────────────────── */
+
+const PRODUS_VANDABIL = { ...PRODUS_FARA_STOC, stock_quantity: 5 };
+
+test("⚠ produs vandabil cu doua anunturi vii: NU se alege singur", async () => {
+  /*
+   * ═══ `candidati[0]` INSEMNA „CEL INTORS PRIMUL DE EI" ═══
+   *
+   * Cand produsul e VANDABIL, intrebarea „care dintre ele e cel bun?" n-are raspuns tehnic:
+   *
+   *     anunt 111 — activ, 1.240 de vizualizari, doua conversatii, promovare platita
+   *     anunt 222 — activ, 17 vizualizari, nimic
+   *
+   * ⚠ Deosebirea fata de nevandabil si de stergere, unde le atingem pe toate fara sa intrebam:
+   * acolo raspunsul e acelasi pentru oricare — niciunul nu ramane la vanzare. Aici unul TREBUIE
+   * sa ramana, si tocmai alegerea lui e ce nu putem face noi.
+   */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [
+      { id: 111, status: "active", external_id: PID },
+      { id: 222, status: "active", external_id: PID },
+    ] } },
+  ]);
+  try {
+    const { db, scrieri } = dbPeRand({ olx_adverts: [{ data: null, error: null }] });
+    const ctx = { ...CTX, config: CONFIG_CONECTAT } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_VANDABIL);
+    assert.equal(r.ok, false, "publicarea se opreste pana alege omul");
+    assert.match(r.ok === false ? r.error : "", /Alege pe care/);
+    const conflict = scrieri.find((x) => (x.corp as { status?: string }).status === "conflict");
+    assert.ok(conflict, "conflictul trebuie SCRIS, altfel nimeni nu afla de el");
+    assert.deepEqual((conflict!.corp as { conflict_iduri: number[] }).conflict_iduri, [111, 222]);
+    /* ⚠ Si NU s-a creat nimic la ei: doua anunturi nu se repara cu al treilea. */
+    assert.equal(stub.cereri.filter((u) => !u.includes("external_id")).length, 0);
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ cat timp e conflict, sincronizarea nu atinge nimic", async () => {
+  /*
+   * ⚠ Altfel am rescrie cu datele produsului chiar anuntul pe care omul poate tocmai il pastreaza
+   * — sau, mai rau, l-am dubla inca o data.
+   */
+  const stub = stubFetchPeRand([{ status: 200, corp: { data: [] } }]);
+  try {
+    const RAND = {
+      id: "r1", olx_advert_id: null, status: "conflict", offer_id: PID,
+      sters_de_om_la: null, dezactivat_de: null, conflict_la: "2026-09-01T10:00:00Z", conflict_iduri: [111, 222],
+    };
+    const { db } = dbPeRand({ olx_adverts: [{ data: RAND, error: null }] });
+    const ctx = { ...CTX, config: CONFIG_CONECTAT } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_VANDABIL);
+    assert.equal(r.ok, false);
+    assert.equal(r.ok === false && r.permanent, true, "nu se reincearca la nesfarsit: asteapta omul");
+    assert.equal(stub.cereri.length, 0, "nicio cerere catre ei cat timp e conflict");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ un singur anunt gasit se adopta ca inainte", () => {
+  /* Contraproba: fara ea, probele de sus ar trece si cu o functie care refuza intotdeauna. */
+  const sync = readFileSync("src/lib/olx/sync.ts", "utf8");
+  assert.match(sync, /if \(candidati\.length > 1\) \{/,
+    "conflictul se declara numai la DOUA, nu la oricate");
+  assert.match(sync, /const gasit = candidati\[0\];/,
+    "cu un singur candidat, adoptarea ramane cum era");
+});

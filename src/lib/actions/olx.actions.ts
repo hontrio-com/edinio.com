@@ -20,7 +20,7 @@ import {
   getOlxCategoriesCached, getOlxCategoryAttributesCached, getOlxCityDistrictsCached,
   searchOlxCities, suggestOlxCategoriesCached,
 } from "@/lib/olx/categories";
-import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNow, deleteAdvertNow } from "@/lib/olx/sync";
+import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNow, deleteAdvertNow, rezolvaConflictul } from "@/lib/olx/sync";
 import { olxReadinessError, categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
 import { cuRegistru, cheieOperatie, type Verdict } from "@/lib/operatii/registru";
 import type {
@@ -136,6 +136,8 @@ export interface OlxStatus {
     queued: number;
     /** Scrisori moarte: `abandonat_la` scris, deci nimic nu le mai atinge fara o apasare. */
     oprite: number;
+    /** Produse cu doua anunturi vii la ei: publicarea sta pana alege omul. */
+    conflicte: number;
   };
 }
 
@@ -147,7 +149,7 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
 
   // Count-only queries (exact at any volume; avoids the 1000-row PostgREST cap).
   const rejectedStatuses = ["moderated", "blocked", "disabled", "removed_by_moderator", "error"];
-  const [{ count: total }, { count: published }, { count: active }, { count: pending }, { count: limited }, { count: rejected }, { count: queued }, { count: oprite }] = await Promise.all([
+  const [{ count: total }, { count: published }, { count: active }, { count: pending }, { count: limited }, { count: rejected }, { count: queued }, { count: oprite }, { count: conflicte }] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
     supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active"),
@@ -164,6 +166,7 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
      */
     supabase.from("olx_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId).is("abandonat_la", null),
     supabase.from("olx_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId).not("abandonat_la", "is", null),
+    supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId).not("conflict_la", "is", null),
   ]);
 
   return {
@@ -189,6 +192,7 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
       total: total ?? 0, published: published ?? 0, active: active ?? 0,
       pending: pending ?? 0, limited: limited ?? 0, rejected: rejected ?? 0, queued: queued ?? 0,
       oprite: oprite ?? 0,
+      conflicte: conflicte ?? 0,
     },
   };
 }
@@ -400,6 +404,64 @@ export async function reincearcaOlxOprite(
   if (!r.ok) return { error: "Nu am putut relua lucrările oprite. Încearcă din nou." };
   revalidatePath(FEATURE_PATH);
   return { success: true, reluate: r.reluate };
+}
+
+/** Un produs cu doua anunturi vii la OLX, si ce are omul de ales. */
+export interface OlxConflict {
+  offerId: string;
+  productName: string | null;
+  iduri: number[];
+  vazutLa: string;
+}
+
+/**
+ * Conflictele nerezolvate ale magazinului.
+ *
+ * ⚠ Se citesc separat de numaratori fiindca omul are de FACUT ceva cu ele, nu doar de vazut un
+ * numar. Un conflict tacut inseamna un produs care nu se mai publica si nimeni nu stie de ce.
+ */
+export async function getOlxConflicts(businessId: string): Promise<{ conflicte: OlxConflict[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("olx_adverts")
+    .select("offer_id, conflict_la, conflict_iduri")
+    .eq("business_id", businessId).not("conflict_la", "is", null)
+    .order("conflict_la", { ascending: true }).limit(50);
+  if (error) return { error: "Nu am putut citi conflictele." };
+  const randuri = (data ?? []) as { offer_id: string; conflict_la: string; conflict_iduri: number[] | null }[];
+  if (randuri.length === 0) return { conflicte: [] };
+
+  /* Numele produsului, ca omul sa stie despre ce e vorba fara sa caute UUID-uri. */
+  const { data: prods } = await admin
+    .from("products").select("id, name").eq("business_id", businessId)
+    .in("id", randuri.map((r) => r.offer_id));
+  const nume = new Map(((prods ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]));
+
+  return {
+    conflicte: randuri.map((r) => ({
+      offerId: r.offer_id,
+      productName: nume.get(r.offer_id) ?? null,
+      iduri: Array.isArray(r.conflict_iduri) ? r.conflict_iduri : [],
+      vazutLa: r.conflict_la,
+    })),
+  };
+}
+
+/** Omul a ales care anunt ramane. */
+export async function rezolvaConflictOlx(
+  businessId: string, offerId: string, pastreazaId: number,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const rCtx = await loadOlxContext(admin, businessId);
+  if (rCtx.stare !== "gata") return { error: "Conexiunea OLX nu este disponibilă acum. Încearcă din nou." };
+  const r = await rezolvaConflictul(admin, rCtx.ctx, businessId, offerId, pastreazaId);
+  if (!r.ok) return { error: r.error };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
 }
 
 // ── Publishing ────────────────────────────────────────────────────────────────────

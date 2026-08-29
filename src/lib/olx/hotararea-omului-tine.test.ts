@@ -61,10 +61,31 @@ test("⚠ urma chiar se citeste din baza, nu doar se scrie", () => {
    * ⚠ Proba care scaneaza sursa arata ca SCRIE `row.sters_de_om_la`, nu ca are ce citi. Acelasi
    * lant care lipsea la `aprobat_odata`: coloana, selectul, tipul randului.
    */
-  assert.match(sync, /\.select\("id, olx_advert_id, status, offer_id, sters_de_om_la, dezactivat_de"\)/);
-  assert.match(sync, /^\s*sters_de_om_la: string \| null;$/m);
+  /*
+   * ⚠ SE CERE LANTUL, NU LISTA EXACTA. Prima varianta fixa sirul intreg din `select`, si a picat
+   * cand i s-au adaugat coloanele de conflict — adica tocmai cand randul afla MAI MULTE. Un sir
+   * fix pedepseste adaugarea, nu lipsa.
+   */
   const temelie = readFileSync("migrations/000-schema-baseline.sql", "utf8");
-  assert.match(temelie, /sters_de_om_la timestamp with time zone/i);
+  /* ⚠ Din corpul lui `getRow`, nu primul `select` din fisier: `olx_adverts` se citeste din
+     multe locuri, si `indexOf` ar nimeri altul. */
+  const iGetRow = sync.indexOf("async function getRow(");
+  assert.ok(iGetRow > 0, "`getRow` a disparut");
+  const selectul = sync.slice(iGetRow, sync.indexOf("maybeSingle()", iGetRow));
+  for (const [coloana, tip] of [
+    ["sters_de_om_la", "timestamp with time zone"],
+    ["dezactivat_de", "text"],
+    ["conflict_la", "timestamp with time zone"],
+    ["conflict_iduri", "jsonb"],
+  ] as const) {
+    assert.ok(selectul.includes(coloana), `\`${coloana}\` nu se citeste din baza`);
+    /* ⚠ Potrivire de SIR, nu regex compus: `\s` intr-un sablon devine un simplu „s". */
+    assert.ok(
+      sync.includes(`  ${coloana}: `) || sync.includes(`  ${coloana}?: `),
+      `\`${coloana}\` nu e in tipul randului`,
+    );
+    assert.ok(temelie.toLowerCase().includes(`${coloana} ${tip}`), `\`${coloana}\` nu exista in schema`);
+  }
 });
 
 test("⚠ „Postează pe OLX” e iesirea, si sterge urma INAINTE de trimitere", () => {

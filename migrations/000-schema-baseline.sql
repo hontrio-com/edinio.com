@@ -5735,7 +5735,9 @@ create table if not exists public.olx_adverts (
   updated_at timestamp with time zone default now() not null,
   sters_de_om_la timestamp with time zone,
   dezactivat_de text,
-  ultima_prelungire_la timestamp with time zone);
+  ultima_prelungire_la timestamp with time zone,
+  conflict_la timestamp with time zone,
+  conflict_iduri jsonb);
 
 create table if not exists public.olx_sync_queue (
   id uuid default gen_random_uuid() not null,
@@ -6894,6 +6896,7 @@ CREATE INDEX notice_sms_log_order_id_idx ON public.notice_sms_log USING btree (o
 CREATE INDEX notice_sms_log_provider_id_idx ON public.notice_sms_log USING btree (provider_id) WHERE (provider_id IS NOT NULL);
 CREATE INDEX offers_business_active_idx ON public.offers USING btree (business_id, is_active);
 CREATE INDEX offers_business_type_idx ON public.offers USING btree (business_id, type);
+CREATE INDEX olx_adverts_conflict_idx ON public.olx_adverts USING btree (business_id) WHERE (conflict_la IS NOT NULL);
 CREATE INDEX olx_adverts_product_id_idx ON public.olx_adverts USING btree (product_id) WHERE (product_id IS NOT NULL);
 CREATE INDEX olx_sync_queue_ordine_idx ON public.olx_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX olx_sync_queue_product_id_idx ON public.olx_sync_queue USING btree (product_id) WHERE (product_id IS NOT NULL);

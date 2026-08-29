@@ -2793,6 +2793,8 @@ export type Database = {
       }
       olx_adverts: {
         Row: {
+          conflict_iduri: Json | null
+          conflict_la: string | null
           business_id: string
           created_at: string
           dezactivat_de: string | null
@@ -2812,6 +2814,8 @@ export type Database = {
           valid_to: string | null
         }
         Insert: {
+          conflict_iduri?: Json | null
+          conflict_la?: string | null
           business_id: string
           created_at?: string
           dezactivat_de?: string | null
@@ -2831,6 +2835,8 @@ export type Database = {
           valid_to?: string | null
         }
         Update: {
+          conflict_iduri?: Json | null
+          conflict_la?: string | null
           business_id?: string
           created_at?: string
           dezactivat_de?: string | null

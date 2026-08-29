@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
+import OlxConflicte from "./OlxConflicte";
 import { selectCls } from "@/lib/ui";
 import { OlxCategoryMapper } from "./OlxCategoryMapper";
 import { OlxAccountPanel } from "./OlxAccountPanel";
@@ -108,6 +109,7 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
   const [syncing, startSync] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
   const [showSettings, setShowSettings] = useState(!status.ready);
+  const [showConflicte, setShowConflicte] = useState(false);
 
   const c = status.counts;
 
@@ -204,6 +206,30 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
         ⚠ Cauza cea mai obișnuită e sesiunea expirată, iar aceea se repară singură la reconectare.
         Butonul e pentru celelalte: o pană lungă la ei, o limitare de o zi.
       */}
+      {/*
+        ⚠ DOUĂ ANUNȚURI PENTRU ACELAȘI PRODUS: ALEGE OMUL (01.09.2026).
+
+        `external_id` n-are constrângere de unicitate la OLX, iar Edinio chiar a avut o fereastră
+        în care un `POST` reușit urmat de o interogare anti-duplicat picată ducea la un al doilea.
+        Când produsul e vandabil, „care dintre ele e cel bun?" n-are răspuns tehnic: unul poate
+        purta istoricul, mesajele și o promovare plătită. Publicarea stă până alege el.
+      */}
+      {c.conflicte > 0 && (
+        <Callout variant="danger" icon={AlertTriangle}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              {c.conflicte === 1
+                ? "Un produs are două anunțuri pe OLX."
+                : `${c.conflicte} produse au câte două anunțuri pe OLX.`}{" "}
+              Publicarea lor e oprită până alegi pe care îl păstrezi — celălalt se retrage.
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setShowConflicte((v) => !v)}>
+              {showConflicte ? "Ascunde" : "Alege"}
+            </Button>
+          </div>
+          {showConflicte && <OlxConflicte businessId={businessId} onRezolvat={() => router.refresh()} />}
+        </Callout>
+      )}
       {c.oprite > 0 && (
         <Callout variant="warning" icon={AlertTriangle}>
           <div className="flex flex-wrap items-center justify-between gap-3">

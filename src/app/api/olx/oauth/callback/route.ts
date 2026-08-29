@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { patchOlxConfig } from "@/lib/olx/config";
+import { invieScrisorileMoarteOlx } from "@/lib/olx/queue";
 import { verifyState, exchangeCode } from "@/lib/olx/oauth";
 import { getMe, isOlxError } from "@/lib/olx/client";
 import type { OlxConfig } from "@/lib/olx/types";
@@ -127,6 +128,23 @@ export async function GET(req: NextRequest) {
   if (eScris) {
     console.error("[olx/oauth] conexiunea nu s-a putut salva:", eScris);
     return back(req, "olx=save_failed");
+  }
+
+  /*
+   * ═══ RECONECTAREA REPORNESTE CE A OMORAT EXPIRAREA (31.08.2026) ═══
+   *
+   * Cauza cea mai obisnuita a unei cozi moarte nu e un produs stricat, ci sesiunea: tokenul expira
+   * dimineata, fiecare lucrare esueaza de cinci ori in cincisprezece minute, si tot ce avea
+   * magazinul de trimis devine scrisoare moarta. Pana azi, omul reconecta seara si NIMIC nu
+   * repornea — preturile ramaneau vechi la OLX pana cand atingea fiecare produs pe rand.
+   *
+   * ⚠ NU OPRESTE CONECTAREA. Conexiunea e scrisa si buna; invierea e un castig in plus, iar o
+   * pana la ea nu are voie sa-l trimita inapoi cu „n-a mers" peste un cod deja consumat. Ce nu
+   * s-a inviat ramane vizibil in ecran, cu butonul „Reîncearcă".
+   */
+  const inviate = await invieScrisorileMoarteOlx(admin, businessId);
+  if (!inviate.ok) {
+    console.error("[olx/oauth] lucrarile oprite n-au putut fi reluate:", inviate.error);
   }
 
   return back(req, "olx=connected");

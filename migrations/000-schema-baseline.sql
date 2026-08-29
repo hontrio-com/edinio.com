@@ -3220,6 +3220,60 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'privat', 'pg_temp'
+AS $function$
+declare
+  v_id     uuid;
+  v_config jsonb;
+  v_harta  jsonb;
+begin
+  if p_business_id is null then
+    raise exception 'business_id lipsa';
+  end if;
+  if coalesce(btrim(p_categorie), '') = '' then
+    raise exception 'numele categoriei lipseste';
+  end if;
+  if p_intrare is not null and jsonb_typeof(p_intrare) <> 'object' then
+    raise exception 'intrarea trebuie sa fie un obiect jsonb';
+  end if;
+
+  select id, coalesce(olx_config, '{}'::jsonb)
+    into v_id, v_config
+    from privat.store_settings
+   where business_id = p_business_id
+     for update;
+
+  if v_id is null then
+    return;
+  end if;
+
+  if jsonb_typeof(v_config) <> 'object' then
+    v_config := '{}'::jsonb;
+  end if;
+
+  v_harta := coalesce(v_config -> 'category_map', '{}'::jsonb);
+  if jsonb_typeof(v_harta) <> 'object' then
+    v_harta := '{}'::jsonb;
+  end if;
+
+  if p_intrare is null then
+    v_harta := v_harta - p_categorie;
+  else
+    v_harta := v_harta || jsonb_build_object(p_categorie, p_intrare);
+  end if;
+
+  update privat.store_settings
+     set olx_config = jsonb_set(v_config, '{category_map}', v_harta, true),
+         updated_at = now()
+   where id = v_id;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.order_customer_key(customer_phone text, customer_email text, order_id uuid)
  RETURNS text
  LANGUAGE sql
@@ -9386,6 +9440,7 @@ grant execute on function public.normalize_phone(raw text) to service_role;
 grant execute on function public.numar_produse_si_comenzi() to service_role;
 grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
 grant execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) to service_role;
+grant execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) to service_role;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to anon;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to authenticated;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to service_role;
@@ -9540,6 +9595,7 @@ revoke execute on function public.next_order_number(p_business_id uuid) from pub
 revoke execute on function public.numar_produse_si_comenzi() from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
 revoke execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) from public;
+revoke execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;

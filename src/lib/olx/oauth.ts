@@ -288,8 +288,28 @@ export async function getAppToken(): Promise<string | null> {
 }
 
 // ── Signed OAuth `state` — ties the callback to a business + prevents CSRF ──────
+/**
+ * ⚠ FARA CADERE PE UN SIR SCRIS IN COD.
+ *
+ * Ultima varianta era `"edinio-olx-state"`, adica o cheie pe care o stie oricine deschide
+ * depozitul. Cu ea, `state` se poate FABRICA pentru orice `businessId` — iar `state` e singurul
+ * lucru care leaga intoarcerea de la OLX de un dans pornit chiar de comerciant:
+ *
+ *     atacatorul isi autorizeaza propriul cont OLX si tine `code`-ul
+ *     fabrica un `state` pentru magazinul victimei si o pacaleste sa deschida adresa
+ *     -> contul LUI de OLX ajunge legat la magazinul EI, si produsele ei se publica la el
+ *
+ * (Paza de proprietate din callback nu prinde asta: businessul CHIAR e al ei, si ea chiar e
+ * autentificata. Semnatura e ce lipseste.)
+ *
+ * ⚠ In practica firul nu era de apucat — `olxConfigured()` cere `OLX_CLIENT_SECRET`, deci fara el
+ * nu se porneste niciun dans. Dar o cadere care arata ca o plasa si nu e una devine adevar pentru
+ * cine o citeste mai tarziu. Fara cheie, nu se semneaza nimic.
+ */
 function stateSecret(): string {
-  return process.env.OLX_CLIENT_SECRET || process.env.CRON_SECRET || "edinio-olx-state";
+  const s = process.env.OLX_CLIENT_SECRET || process.env.CRON_SECRET;
+  if (!s) throw new Error("OLX_CLIENT_SECRET lipseste: `state` nu poate fi semnat.");
+  return s;
 }
 
 export function signState(businessId: string): string {
@@ -303,8 +323,22 @@ export function verifyState(state: string): string | null {
     const [businessId, ts, sig] = Buffer.from(state, "base64url").toString("utf8").split(".");
     if (!businessId || !ts || !sig) return null;
     const expected = crypto.createHmac("sha256", stateSecret()).update(`${businessId}.${ts}`).digest("hex").slice(0, 32);
-    if (sig !== expected) return null;
-    if (Date.now() - Number(ts) > 15 * 60_000) return null; // 15 min validity
+    /*
+     * ⚠ Comparare in timp constant. `!==` pe siruri iese la primul caracter deosebit, deci timpul
+     * de raspuns spune cate caractere s-au potrivit — si semnatura se poate ghici caracter cu
+     * caracter, fara sa stii cheia. `timingSafeEqual` cere lungimi egale, de-aia paza dinainte.
+     */
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    /*
+     * ⚠ `Number("maine")` da `NaN`, iar `NaN > 15 * 60_000` e FALS — deci o clipa fara inteles
+     * trecea de paza de vechime ca si cum ar fi fost proaspata. Semnatura acopera si `ts`, deci
+     * n-o putea fabrica un strain; dar o data necitibila n-are voie sa insemne „acum".
+     */
+    const nascut = Number(ts);
+    if (!Number.isFinite(nascut)) return null;
+    if (Date.now() - nascut > 15 * 60_000) return null; // 15 min validity
     return businessId;
   } catch {
     return null;

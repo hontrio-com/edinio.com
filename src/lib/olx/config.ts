@@ -47,3 +47,38 @@ export async function patchOlxConfig(admin: Db, businessId: string, patch: Parti
     .eq("business_id", businessId);
   if (eScriere) throw new Error(`configul OLX nu s-a putut scrie: ${eScriere.message}`);
 }
+
+/**
+ * Scrie (sau scoate) o singura intrare din harta de categorii.
+ *
+ * ═══ HARTA SE SCRIE PE CHEIE, NU INTREAGA (31.08.2026) ═══
+ *
+ * Pana azi actiunea citea configul, copia `category_map`, schimba o cheie si trimitea HARTA
+ * INTREAGA prin `patchOlxConfig`. Dar `jsonb_merge_config` imbina SUPERFICIAL, deci un petic care
+ * poarta `category_map` inlocuieste harta cu totul:
+ *
+ *     fila A si fila B au amandoua harta {Bijuterii}
+ *     A mapeaza „Ceasuri" -> scrie {Bijuterii, Ceasuri}
+ *     B mapeaza „Genti"   -> scrie {Bijuterii, Genti}
+ *     -> „Ceasuri" a disparut, si nimeni n-a vazut nicio eroare
+ *
+ * Iar pierderea nu se vede: produsele din categoria disparuta nu mai pleaca la OLX, si motivul
+ * scris pe ele e chiar „Categoria produsului nu este mapata" — adica ce omul crede ca a facut.
+ *
+ * E aceeasi greseala ca la token, cu alt obiect: nu se trimite ce ai citit, se cere bazei sa
+ * schimbe exact bucata pe care o vrei. Vezi migratia
+ * `2026-12-23-olx-harta-categoriilor-se-scrie-pe-cheie`.
+ *
+ * ⚠ AICI NU EXISTA CALE DE REZERVA, spre deosebire de `patchOlxConfig`. Orice rezerva ar fi tot un
+ * citeste-modifica-scrie, adica exact defectul reparat. O salvare care n-a mers se spune.
+ */
+export async function setOlxCategoryMapEntry(
+  admin: Db, businessId: string, categorie: string, intrare: unknown | null,
+): Promise<void> {
+  const { error } = await admin.rpc("olx_seteaza_categoria", {
+    p_business_id: businessId,
+    p_categorie: categorie,
+    p_intrare: (intrare ?? null) as Json,
+  });
+  if (error) throw new Error(`maparea de categorie nu s-a putut scrie: ${error.message}`);
+}

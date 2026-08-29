@@ -9,6 +9,7 @@ import {
   getOlxCategoryChildren, suggestOlxCategory, getOlxCategoryAttributes, saveOlxCategoryMapEntry,
 } from "@/lib/actions/olx.actions";
 import type { OlxAttributeDef, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion } from "@/lib/olx/types";
+import { categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -130,14 +131,16 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
 
   function save() {
     if (!leaf) return;
-    // Validate required attributes are filled.
-    const missing = (attributes ?? []).filter((a) => a.validation?.required && a.validation?.type === "attribute")
-      .filter((a) => {
-        const v = attrValues[a.code];
-        return Array.isArray(v) ? v.length === 0 : !String(v ?? "").trim();
-      });
+    /*
+      ⚠ ACEEAȘI regulă ca pe server, nu o copie a ei. Scrisă de două ori, s-ar fi despărțit la
+      prima schimbare — iar ecranul ar fi lăsat să treacă exact ce serverul refuză, sau invers.
+      Aici e doar ca omul să afle ÎNAINTE de o cerere dus-întors.
+    */
+    const nepotrivita = categoriaNuPrimesteProduse(attributes ?? []);
+    if (nepotrivita) { toast.error(nepotrivita); return; }
+    const missing = atributeObligatoriiLipsa(attributes ?? [], attrValues);
     if (missing.length > 0) {
-      toast.error(`Completează atributele obligatorii: ${missing.map((m) => m.label).join(", ")}`);
+      toast.error(`Completează atributele obligatorii: ${missing.join(", ")}`);
       return;
     }
     // Keep only attribute-type values (price/salary are derived from the product).

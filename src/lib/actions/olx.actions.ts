@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { patchOlxConfig } from "@/lib/olx/config";
+import { patchOlxConfig, setOlxCategoryMapEntry } from "@/lib/olx/config";
+import { invieScrisorileMoarteOlx } from "@/lib/olx/queue";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { logError } from "@/lib/error-logger";
 import {
@@ -20,7 +21,7 @@ import {
   searchOlxCities, suggestOlxCategoriesCached,
 } from "@/lib/olx/categories";
 import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNow, deleteAdvertNow } from "@/lib/olx/sync";
-import { olxReadinessError } from "@/lib/olx/mapping";
+import { olxReadinessError, categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
   OlxCity, OlxConfig, OlxDistrict, OlxMessage, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread,
@@ -127,7 +128,14 @@ export interface OlxStatus {
   categoryMap: Record<string, OlxCategoryMapEntry>;
   ready: boolean;
   readinessError: string | null;
-  counts: { total: number; published: number; active: number; pending: number; limited: number; rejected: number; queued: number };
+  counts: {
+    total: number; published: number; active: number; pending: number;
+    limited: number; rejected: number;
+    /** Lucrari VII: se pot revendica, deci chiar se misca. */
+    queued: number;
+    /** Scrisori moarte: `abandonat_la` scris, deci nimic nu le mai atinge fara o apasare. */
+    oprite: number;
+  };
 }
 
 export async function getOlxStatus(businessId: string): Promise<OlxStatus | { error: string }> {
@@ -138,14 +146,23 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
 
   // Count-only queries (exact at any volume; avoids the 1000-row PostgREST cap).
   const rejectedStatuses = ["moderated", "blocked", "disabled", "removed_by_moderator", "error"];
-  const [{ count: total }, { count: published }, { count: active }, { count: pending }, { count: limited }, { count: rejected }, { count: queued }] = await Promise.all([
+  const [{ count: total }, { count: published }, { count: active }, { count: pending }, { count: limited }, { count: rejected }, { count: queued }, { count: oprite }] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
     supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active"),
     supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId).in("status", ["new", "unconfirmed", "unpaid"]),
     supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "limited"),
     supabase.from("olx_adverts").select("id", { count: "exact", head: true }).eq("business_id", businessId).in("status", rejectedStatuses),
-    supabase.from("olx_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+    /*
+     * ⚠ „IN COADA" SI „OPRITA" NU SUNT ACELASI LUCRU (31.08.2026).
+     *
+     * Numarul lua toate randurile, iar ecranul arata pentru el o rotita si textul „Se publică N
+     * produse pe OLX…", cu reimprospatare din cinci in cinci secunde. Peste scrisori moarte, alea
+     * se invart la nesfarsit deasupra unei cozi in care nu se mai misca NIMIC — adica ecranul
+     * minte, cu cea mai linistitoare fata cu putinta.
+     */
+    supabase.from("olx_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId).is("abandonat_la", null),
+    supabase.from("olx_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId).not("abandonat_la", "is", null),
   ]);
 
   return {
@@ -170,6 +187,7 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
     counts: {
       total: total ?? 0, published: published ?? 0, active: active ?? 0,
       pending: pending ?? 0, limited: limited ?? 0, rejected: rejected ?? 0, queued: queued ?? 0,
+      oprite: oprite ?? 0,
     },
   };
 }
@@ -320,18 +338,53 @@ export async function saveOlxCategoryMapEntry(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(businessId);
-  const map = { ...(config.category_map ?? {}) };
-  if (entry === null) delete map[edinioCategory];
-  else map[edinioCategory] = entry;
-  /* ⚠ Ca mai sus: se scrie doar harta, nu configul intreg peste care sta si tokenul. */
+  /*
+   * ⚠ SE VERIFICA AICI, NU NUMAI IN ECRAN. Actiunea de server e o adresa: cine n-o cheama din
+   * ecran nu trece prin nicio verificare, iar pretul unei mapari stricate se plateste mai tarziu
+   * si in alta parte — la publicare, cu un mesaj despre un cod de atribut care nu spune ce sa faci.
+   */
+  if (entry !== null) {
+    const attributes = await getOlxCategoryAttributesCached(entry.category_id);
+    /*
+     * ⚠ Daca nu putem VERIFICA, nu SALVAM. O mapare nevalidata nu strica nimic acum, dar face
+     * produsele sa taca mai tarziu — iar omul reincearca peste un minut, fara sa piarda nimic.
+     */
+    if (attributes === null) return { error: "Nu am putut verifica categoria la OLX. Încearcă din nou." };
+    const nepotrivita = categoriaNuPrimesteProduse(attributes);
+    if (nepotrivita) return { error: nepotrivita };
+    const lipsa = atributeObligatoriiLipsa(attributes, entry.attributes);
+    if (lipsa.length > 0) return { error: `Completează atributele obligatorii: ${lipsa.join(", ")}` };
+  }
+  /*
+   * ⚠ NU SE MAI CITESTE HARTA CA S-O SCRIEM INAPOI. Citeste-modifica-scrie pe un obiect impartit
+   * pierde maparea celeilalte file, tacut — vezi nota de la `setOlxCategoryMapEntry`. Baza schimba
+   * acum exact cheia asta, sub lacatul randului.
+   */
   try {
-    await patchOlxConfig(createAdminClient(), businessId, { category_map: map });
+    await setOlxCategoryMapEntry(createAdminClient(), businessId, edinioCategory, entry);
   } catch {
     return { error: "Eroare la salvare." };
   }
   revalidatePath(FEATURE_PATH);
   return { success: true };
+}
+
+/**
+ * „Reincearca lucrarile oprite" — apasarea omului peste scrisorile moarte.
+ *
+ * O sesiune expirata omoara toata coada in cincisprezece minute (vezi `invieScrisorileMoarteOlx`).
+ * Reconectarea le invie singura, dar o coada poate muri si din alte cauze trecatoare — o pana lunga
+ * la ei, o limitare de o zi — si atunci omul are nevoie de o usa.
+ */
+export async function reincearcaOlxOprite(
+  businessId: string,
+): Promise<{ success: true; reluate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const r = await invieScrisorileMoarteOlx(createAdminClient(), businessId);
+  if (!r.ok) return { error: "Nu am putut relua lucrările oprite. Încearcă din nou." };
+  revalidatePath(FEATURE_PATH);
+  return { success: true, reluate: r.reluate };
 }
 
 // ── Publishing ────────────────────────────────────────────────────────────────────

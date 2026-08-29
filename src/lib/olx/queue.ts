@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
 import type { OlxConfig } from "./types";
 
 // Enqueue an OLX sync for a product when the store has OLX connected with
@@ -246,4 +248,47 @@ export async function enqueueOlxRetragereInainteDeStergere(
     scrieEsecul("retragereInainteDeStergere", businessId, e);
     return { fel: "nesigur", motiv: e instanceof Error ? e.message : "Eroare necunoscuta." };
   }
+}
+
+/**
+ * Aduce inapoi la lucru tot ce a fost abandonat pentru un magazin.
+ *
+ * ═══ O SESIUNE EXPIRATA OMOARA TOATA COADA, SI RECONECTAREA N-O INVIA (31.08.2026) ═══
+ *
+ * `abandonat_la` scoate randul din revendicare pentru totdeauna. Iar cauza cea mai obisnuita nu e
+ * un produs stricat, ci sesiunea:
+ *
+ *     tokenul expira intr-o dimineata
+ *     fiecare lucrare din coada esueaza de cinci ori, in cincisprezece minute
+ *     tot ce avea magazinul de trimis devine scrisoare moarta
+ *     seara omul reconecteaza contul — si NIMIC nu reporneste
+ *     -> preturile si stocurile raman vechi la OLX pana cand atinge fiecare produs pe rand
+ *
+ * ⚠ SE INVIE TOT, fara sa alegem dupa motiv. Motivul sta doar in textul lui `last_error`, iar
+ * deosebirile luate din text sunt chiar greseala pe care o ocolim peste tot: un „429" si un
+ * „categorie nemapata" arata la fel unei potriviri de sir. Ce nu mai merge va muri iar, la fel de
+ * repede, si cu acelasi motiv scris.
+ *
+ * ⚠ `created_at` REPORNESTE: ceasul de varsta al cronului (`VIATA_MAXIMA_MS`) masoara asteptarea
+ * INTENTIEI. Fara asta, o coada moarta de o saptamana s-ar reabandona la prima trecere.
+ *
+ * ⚠ `revendicat_pana` se sterge: un rand abandonat nu poate fi tinut de nimeni, fiindca
+ * `revendica_din_coada` il ocoleste — deci marcajul ramas de la ultima incercare doar l-ar
+ * intarzia degeaba.
+ */
+export async function invieScrisorileMoarteOlx(
+  admin: SupabaseClient<Database>, businessId: string,
+): Promise<{ ok: true; reluate: number } | { ok: false; error: string }> {
+  const { data, error } = await admin
+    .from("olx_sync_queue")
+    .update({
+      attempts: 0, last_error: null, next_retry_at: null, abandonat_la: null,
+      revendicat_pana: null, created_at: new Date().toISOString(),
+    } as never)
+    .eq("business_id", businessId)
+    /* ⚠ `not(..., "is", null)` — pe o coloana nulabila, orice filtru de lista sare peste NULL. */
+    .not("abandonat_la", "is", null)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, reluate: data?.length ?? 0 };
 }

@@ -7,7 +7,7 @@ import {
   Loader2, RefreshCw, Check, X, CircleCheck, Clock, CircleX, Settings as SettingsIcon,
   Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag, ShoppingCart,
 } from "lucide-react";
-import {
+import { reincearcaOlxOprite,
   startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx,
   publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert,
   buyOlxAdvertPacket, searchCities, getCityDistricts,
@@ -193,6 +193,36 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
             <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină — statusul se actualizează singur.</p>
           </div>
         </div>
+      )}
+      {/*
+        ⚠ „ÎN COADĂ" ȘI „OPRITĂ" NU SUNT ACELAȘI LUCRU (31.08.2026).
+
+        Numărul de mai sus le lua pe toate, iar peste lucrări oprite rotița se învârtea la
+        nesfârșit deasupra unei cozi în care nu se mai mișca nimic. Ecranul mințea, cu cea mai
+        liniștitoare față cu putință — iar omul aștepta zile în șir ceva ce nu avea să se întâmple.
+
+        ⚠ Cauza cea mai obișnuită e sesiunea expirată, iar aceea se repară singură la reconectare.
+        Butonul e pentru celelalte: o pană lungă la ei, o limitare de o zi.
+      */}
+      {c.oprite > 0 && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              {c.oprite} {c.oprite === 1 ? "lucrare s-a oprit" : "lucrări s-au oprit"} după mai multe încercări eșuate.
+              Modificările de preț și stoc din ele nu au ajuns la OLX.
+            </span>
+            <Button variant="outline" size="sm" disabled={syncing} onClick={() => startSync(async () => {
+              const res = await reincearcaOlxOprite(businessId);
+              if ("error" in res) { toast.error(res.error); return; }
+              toast.success(res.reluate > 0
+                ? `${res.reluate} ${res.reluate === 1 ? "lucrare reluată" : "lucrări reluate"}. Se procesează în câteva minute.`
+                : "Nu mai era nimic oprit.");
+              router.refresh();
+            })}>
+              {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Reîncearcă
+            </Button>
+          </div>
+        </Callout>
       )}
 
       {showSettings && <OlxSettings businessId={businessId} status={status} onSaved={() => router.refresh()} />}

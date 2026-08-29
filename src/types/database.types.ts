@@ -5243,6 +5243,10 @@ export type Database = {
         Args: { p_business_id: string; p_vazut: string | null; p_patch: Json }
         Returns: boolean
       }
+      olx_seteaza_categoria: {
+        Args: { p_business_id: string; p_categorie: string; p_intrare: Json }
+        Returns: undefined
+      }
       jsonb_merge_config: { Args: { p_business_id: string; p_column: string; p_patch: Json }; Returns: undefined }
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
       orders_venit_zilnic: { Args: { bid: string; p_zile: number; p_deplasare?: number }; Returns: unknown }

@@ -6,7 +6,7 @@
 // Violations get the advert rejected at POST time, so we sanitize proactively.
 
 import { gpsrEfectiv, gpsrPentruOlx, type GpsrConfig } from "@/lib/gpsr";
-import { OLX_CURRENCY, type OlxCategoryMapEntry, type OlxConfig } from "./types";
+import { OLX_CURRENCY, type OlxAttributeDef, type OlxCategoryMapEntry, type OlxConfig } from "./types";
 
 export interface MappableBusiness {
   slug: string;
@@ -191,4 +191,50 @@ export function olxReadinessError(config: OlxConfig): string | null {
   if (!config.contact_name) return "Completeaza numele de contact in setarile OLX.";
   if (!config.contact_phone) return "Completeaza telefonul de contact in setarile OLX.";
   return null;
+}
+
+/**
+ * De ce nu se poate mapa o categorie OLX pentru produse. `null` = se poate.
+ *
+ * ═══ ECRANUL VERIFICA, SERVERUL CREDEA PE CUVANT (31.08.2026) ═══
+ *
+ * `saveOlxCategoryMapEntry` e o actiune de server, adica o adresa. Verificarile stateau numai in
+ * `OlxCategoryMapper.save()`, deci orice cerere care nu trecea prin ecran salva ce voia — iar
+ * pretul se plateste MAI TARZIU si in alta parte:
+ *
+ *     se salveaza o mapare fara atributele obligatorii
+ *     omul publica, si OLX refuza cu un mesaj despre un cod de atribut
+ *     mesajul se scrie pe produs, dar el nu spune ce sa faca
+ *     -> produsul tace, si vina pare a produsului, nu a maparii
+ *
+ * ⚠ SI CATEGORIILE CARE NU-S PENTRU PRODUSE. Arborele OLX tine si Locuri de munca: acolo pretul nu
+ * e pret, e SALARIU (`validation.type === "salary"`), iar corpul nostru trimite un pret de produs.
+ * Un anunt de vanzare pus intr-o categorie de joburi e, in cel mai bun caz, refuzat.
+ *
+ * ⚠ Se citeste TIPUL declarat de ei, nu numele categoriei. Numele se schimba, se traduc, si sunt
+ * scrise de ei — tipul e ce foloseste chiar validarea lor.
+ */
+export function categoriaNuPrimesteProduse(attributes: OlxAttributeDef[]): string | null {
+  if (attributes.some((a) => a.validation?.type === "salary")) {
+    return "Categoria aleasă e din Locuri de muncă (are salariu, nu preț) și nu poate primi produse.";
+  }
+  return null;
+}
+
+/**
+ * Atributele obligatorii ale categoriei care lipsesc din mapare. Lista goala = e in regula.
+ *
+ * ⚠ Se cer doar cele de tip `attribute`: `price` si `salary` se scot din produs, nu din mapare.
+ * Aceeasi regula ca in ecran — scrisa o data, aici, si folosita in amandoua locurile.
+ */
+export function atributeObligatoriiLipsa(
+  attributes: OlxAttributeDef[], puse: Record<string, string | string[]> | undefined,
+): string[] {
+  return attributes
+    .filter((a) => a.validation?.required && a.validation?.type === "attribute")
+    .filter((a) => {
+      const v = puse?.[a.code];
+      return Array.isArray(v) ? v.length === 0 : !String(v ?? "").trim();
+    })
+    .map((a) => a.label);
 }

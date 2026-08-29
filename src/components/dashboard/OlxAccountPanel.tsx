@@ -158,6 +158,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
                 groups={packets?.groups ?? []}
                 hasMappedCategories={packets?.hasMappedCategories ?? false}
                 eroare={erori.pachete}
+                onCumparat={loadAll}
                 nereusite={packets?.nereusite ?? []}
                 metodaGhicita={packets?.metodaGhicita ?? false}
                 moneda={account?.balance?.currency ?? null}
@@ -166,7 +167,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
               />
 
               {/* Promote advert */}
-              <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} eroare={erori.promovari} />
+              <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} eroare={erori.promovari} onCumparat={loadAll} />
 
               {/* Facturare, profil de firma si promovarile pe care anuntul le are deja */}
               <OlxCont businessId={businessId} adverts={activeAdverts} />
@@ -178,7 +179,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   );
 }
 
-function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod, eroare, nereusite, metodaGhicita, moneda }: {
+function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod, eroare, nereusite, metodaGhicita, moneda, onCumparat }: {
   businessId: string; groups: OlxPacketGroup[]; hasMappedCategories: boolean; methods: OlxPaymentMethod[];
   defaultMethod: OlxPaymentMethod;
   /** Lista n-a putut fi citita. Se spune, in loc sa se arate un gol linistitor. */
@@ -189,6 +190,19 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
   metodaGhicita?: boolean;
   /** Moneda soldului, ca pretul din confirmare sa fie in ce plateste el. */
   moneda?: string | null;
+  /**
+   * ⚠ SOLDUL SI PACHETELE SE RECITESC DUPA FIECARE CUMPARARE.
+   *
+   * Panoul le incarca o SINGURA data, la deschidere (`if (next && account === null …)`), iar
+   * `router.refresh()` reimprospateaza numai componentele de SERVER — starea asta e in `useState`
+   * intr-o componenta de client. Deci dupa o cumparare reusita soldul si „Pachete active" ramaneau
+   * exact cele de acum cinci minute.
+   *
+   * ⚠ Si tocmai acolo se uita omul ca sa hotarasca daca mai cumpara unul — scrie chiar in fisier,
+   * la lista de pachete. Un numar care nu se misca e chiar semnalul care il face sa apese a doua
+   * oara, iar intentia tocmai a fost aruncata.
+   */
+  onCumparat?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
@@ -257,7 +271,7 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
                 if (!chosen || !group) return;
                 const pret = typeof chosen.price === "number" ? money(chosen.price, moneda) : null;
                 if (!confirmaPlata(
-                  `Cumperi un pachet de ${chosen.size} anunțuri în „${group.label}"?`,
+                  `Cumperi un pachet${chosen.is_premium ? " premium" : ""} de ${chosen.size} anunțuri în „${group.label}"?`,
                   pret,
                 )) return;
                 startSave(async () => {
@@ -268,9 +282,17 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
                   panoul e un acordeon, deci ar fi murit des, exact în clipele proaste.
                 */
                 const tip = (chosen.type as "base" | "mega") ?? "base";
-                const ce = cePachetCategorie(group.categoryId, chosen.size, tip);
+                /*
+                  ⚠ `premium` MERGE PESTE TOT, sau nicaieri. Ecranul arata de mult variantele premium,
+                  dar cererea nu purta deloc câmpul: omul alegea premium și pleca `POST`-ul variantei
+                  obișnuite. Și, pe deasupra, cele două cădeau pe aceeași cheie și pe aceeași țintă,
+                  deci se blocau una pe alta degeaba.
+                */
+                const premium = Boolean(chosen.is_premium);
+                const ce = cePachetCategorie(group.categoryId, chosen.size, tip, premium);
                 const res = await buyOlxCategoryPacket(
-                  businessId, group.categoryId, chosen.size, method, intentiaPentru(businessId, ce), tip);
+                  businessId, group.categoryId, chosen.size, method,
+                  intentiaPentru(businessId, ce), tip, premium);
                 if ("error" in res) { toast.error(res.error); return; }
                 /*
                   ⚠ SE ARUNCA INTENȚIA ȘI CÂND RĂSPUNSUL E „era deja făcută". Altfel intenția veche
@@ -281,6 +303,7 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
                 incheieIntentia(businessId, ce);
                 if (res.nou) toast.success("Pachet cumpărat.");
                 else toast.info("Cumpărarea asta era deja făcută; nu s-a plătit a doua oară. Apasă din nou dacă vrei încă un pachet.");
+                await onCumparat?.();
                 router.refresh();
                 });
               }}>
@@ -296,10 +319,12 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
   );
 }
 
-function PromoteAdvert({ businessId, adverts, features, methods, eroare }: {
+function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumparat }: {
   businessId: string; adverts: OlxAdvertRow[]; features: OlxPaidFeature[]; methods: OlxPaymentMethod[];
   /** Lista n-a putut fi citita: se spune, nu se ascunde sectiunea. */
   eroare?: string;
+  /** Soldul si promovarile se recitesc dupa cumparare. Vezi nota de la `BuyPacket`. */
+  onCumparat?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
@@ -356,6 +381,7 @@ function PromoteAdvert({ businessId, adverts, features, methods, eroare }: {
               incheieIntentia(businessId, ce);
               if (res.nou) toast.success("Promovare activată.");
               else toast.info("Promovarea asta era deja cumpărată; nu s-a plătit a doua oară.");
+              await onCumparat?.();
               router.refresh();
               });
             }}>

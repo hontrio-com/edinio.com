@@ -152,7 +152,7 @@ export async function lamurestePlata(
   admin: Db, businessId: string, operatieId: string,
 ): Promise<LamurireOlx | { error: string }> {
   const { data, error } = await admin
-    .from("operatii_externe").select("id, cheie, stare, creat_la")
+    .from("operatii_externe").select("id, cheie, stare, creat_la, tinta_idempotenta")
     .eq("id", operatieId).eq("business_id", businessId)
     .eq("furnizor", "olx").eq("fel", "plata").maybeSingle();
   if (error) return { error: "Nu am putut citi operația." };
@@ -236,11 +236,34 @@ export async function lamurestePlata(
    * Deci: cand mai exista un rand deschis pentru acelasi anunt si acelasi cod, nu se inchide
    * niciunul automat. Un singur martor nu poate fi revendicat de doua randuri.
    */
-  const { data: frati, error: eFrati } = await admin
-    .from("operatii_externe").select("id")
-    .eq("business_id", businessId).eq("furnizor", "olx").eq("fel", "plata")
-    .in("stare", ["in_curs", "necunoscut"])
-    .like("cheie", `plata:olx:promovare:${advertId}:${cod}:%`);
+  /*
+   * ⚠ SE CAUTA PE TINTA, NU CU `LIKE` PESTE CHEIE (03.09.2026).
+   *
+   * Tiparul era `plata:olx:promovare:123:top_ad:%` — iar in `LIKE`, `_` e JOCHER de un caracter.
+   * Deci `top_ad` prindea si `top-ad`, si `topXad`. Gresala e prudenta (prinde prea mult, nu prea
+   * putin), deci n-ar fi platit singura de doua ori — dar ar fi numarat drept „mai multe cumparari
+   * deschise" o plata care se putea dovedi, ar fi lasat-o `necunoscut`, si l-ar fi impins pe om
+   * catre singurul buton ramas: cel de deblocare, adica exact cel care duce la a doua plata.
+   *
+   * `tinta_idempotenta` e chiar coloana facuta pentru asta: potrivire exacta, acelasi cantar dupa
+   * care baza refuza a doua rezervare, si o citire pozitionala a cheii mai putin.
+   */
+  const tinta = (data as { tinta_idempotenta?: string | null }).tinta_idempotenta;
+  const { data: frati, error: eFrati } = tinta
+    ? await admin
+        .from("operatii_externe").select("id")
+        .eq("business_id", businessId).eq("furnizor", "olx").eq("fel", "plata")
+        .in("stare", ["in_curs", "necunoscut"])
+        .eq("tinta_idempotenta", tinta)
+    /* ⚠ Randurile de dinainte de incuietoarea semantica n-au tinta. Acolo nu se poate deosebi, deci
+       nu se inchide nimic automat: un singur martor n-are voie sa fie revendicat de doua randuri. */
+    : { data: null as { id: string }[] | null, error: null };
+  if (!tinta) {
+    return {
+      stare: "inca-nu-stim",
+      mesaj: "Promovarea se vede la OLX, dar cumpărarea asta e dinainte de blocarea pe țintă și nu pot spune sigur că e a ei. Verifică soldul pe olx.ro.",
+    };
+  }
   if (eFrati) return { error: "Nu am putut verifica dacă mai sunt cumpărări deschise pe același anunț." };
   if ((frati ?? []).length > 1) {
     return {

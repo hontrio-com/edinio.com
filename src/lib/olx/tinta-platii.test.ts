@@ -32,6 +32,8 @@ import { mesajBlocat } from "@/lib/operatii/registru";
 const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
 const registru = readFileSync("src/lib/operatii/registru.ts", "utf8");
 const actiuni = readFileSync("src/lib/actions/olx.actions.ts", "utf8");
+const panouCont = readFileSync("src/components/dashboard/OlxAccountPanel.tsx", "utf8");
+const plati = readFileSync("src/lib/olx/plati.ts", "utf8");
 
 function faraComentarii(t: string): string {
   return t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
@@ -203,4 +205,82 @@ test("⚠ toate cele trei cumparari trimit tinta, si e ALTA decat cheia", () => 
     assert.doesNotMatch(mTinta![1], /intentId/,
       `${fn}: tinta cu intentie in ea nu incuie nimic`);
   }
+});
+
+test("⚠ o cumparare reusita lasa ecranul in lumea de DUPA ea", () => {
+  /*
+   * ═══ TREI FELURI DE A-L FACE PE OM SA APESE A DOUA OARA (03.09.2026) ═══
+   *
+   * Cele doua incuietori opresc a doua CERERE. Nu opresc a doua HOTARARE — iar hotararea o ia omul
+   * uitandu-se la ecran. Daca ecranul arata lumea de dinaintea apasarii, el crede ca n-a mers.
+   *
+   * ⚠ Si e mai rau decat pare: intentia tocmai a fost aruncata (`incheieIntentia`), iar randul
+   * dinainte e `reusit` — deci a doua apasare trece prin AMANDOUA incuietorile si chiar plateste.
+   */
+
+  /* 1. Pachetul de anunt scria la ei si nu scria la noi: ecusonul „Limita atinsă" si BUTONUL de
+        cumparare ramaneau, fiindca `olx_adverts.status` ramanea `limited`. */
+  const i = actiuni.indexOf("export async function buyOlxAdvertPacket(");
+  /*
+   * ⚠ FARA COMENTARII. Nota de deasupra codului pomeneste chiar `last_status_at: null` ca sa
+   * explice de ce e acolo — deci o cautare in sursa BRUTA se potriveste cu propria mea proza si
+   * trece verde peste un cod din care campul a fost scos. A treia oara in rundele astea.
+   */
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf("\nexport ", i + 10)));
+  /* ⚠ Si se cere SCRIEREA INTREAGA, nu doua bucati care s-ar putea potrivi in locuri diferite. */
+  assert.match(corp, /from\("olx_adverts"\)[\s\S]{0,120}?\.update\(\{ status: "active", last_status_at: null,/,
+    "dupa activare trebuie scrisa starea locala, cu `last_status_at: null` ca adevarul sa vina de la EI");
+
+  /* 2. Panoul de cont incarca o singura data, la deschidere; `router.refresh()` nu atinge starea
+        unei componente de client. Soldul si „Pachete active" ramaneau inghetate. */
+  for (const m of panouCont.matchAll(/await buyOlx[A-Za-z]+\(/g)) {
+    const dupa = panouCont.slice(m.index ?? 0, (m.index ?? 0) + 1400);
+    assert.match(dupa, /await onCumparat\?\.\(\)/,
+      "dupa o cumparare, soldul si pachetele trebuie recitite, nu doar `router.refresh()`");
+  }
+  /*
+   * ⚠ SE CER AMANDOUA SECTIUNILE. O potrivire oriunde in fisier ramane verde cand se scoate de la
+   * una din ele — si atunci exact jumatate din cumparari lasa ecranul inghetat.
+   */
+  for (const comp of ["BuyPacket", "PromoteAdvert"]) {
+    const j = panouCont.indexOf(`<${comp}`);
+    assert.ok(j > 0, `${comp} nu se mai monteaza`);
+    const montaj = panouCont.slice(j, panouCont.indexOf("/>", j));
+    assert.match(montaj, /onCumparat=\{loadAll\}/, `${comp} nu reciteste soldul dupa cumparare`);
+  }
+});
+
+test("⚠ variantele premium nu se confunda cu cele obisnuite", () => {
+  /*
+   * ⚠ Ecranul aratase dintotdeauna „(premium)", dar cererea nu purta campul: omul alegea premium si
+   * pleca `POST`-ul variantei OBISNUITE. Si, pe deasupra, amandoua cadeau pe aceeasi cheie si pe
+   * aceeasi tinta — deci se blocau una pe alta degeaba.
+   */
+  const intentie = readFileSync("src/lib/olx/intentie-de-cumparare.ts", "utf8");
+  assert.match(intentie, /cePachetCategorie = \(categoryId: number, size: number, type: string, premium: boolean\)/,
+    "numele pachetului trebuie sa cuprinda `premium`, altfel doua variante impart o tinta");
+  assert.match(intentie, /\$\{premium \? ":premium" : ""\}/, "premium nu ajunge in nume");
+
+  const client = readFileSync("src/lib/olx/client.ts", "utf8");
+  assert.match(client, /type\?: "base" \| "mega"; is_premium\?: boolean;/,
+    "corpul cererii de pachet-categorie nu poarta `is_premium`");
+  assert.match(actiuni, /type, is_premium: isPremium \}\);/, "actiunea nu trimite `is_premium`");
+  assert.match(actiuni, /Boolean\(p\.is_premium\) === premium/,
+    "validarea variantei nu se uita la premium, deci valideaza alta varianta");
+});
+
+test("⚠ fratii unei plati se cauta pe TINTA, nu cu `LIKE` peste cheie", () => {
+  /*
+   * ⚠ `_` E JOCHER IN `LIKE`. Tiparul `plata:olx:promovare:123:top_ad:%` prindea si `top-ad`, si
+   * `topXad`. Gresala e prudenta — prinde prea mult — deci n-ar fi platit singura de doua ori; dar
+   * ar fi numarat drept „mai multe cumparari deschise" o plata care se putea dovedi, ar fi lasat-o
+   * `necunoscut`, si l-ar fi impins pe om catre singurul buton ramas: cel care duce la a doua plata.
+   */
+  assert.doesNotMatch(plati, /\.like\("cheie"/,
+    "`LIKE` peste cheie trateaza `_` din codurile lor ca jocher");
+  assert.match(plati, /\.eq\("tinta_idempotenta", tinta\)/,
+    "fratii se cauta exact, pe coloana facuta pentru asta");
+  /* ⚠ Si randurile de dinainte de incuietoare n-au tinta: acolo nu se inchide nimic automat. */
+  assert.match(plati, /dinainte de blocarea pe țintă/,
+    "un rand fara tinta nu poate revendica singur un martor");
 });

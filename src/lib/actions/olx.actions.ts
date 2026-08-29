@@ -1554,7 +1554,8 @@ function raportCumparare(r: RezultatOperatie<true>): RezultatCumparare {
  * ⚠ Si tot fail-closed: daca nu putem citi ce ofera, nu cumparam. Aceeasi regula ca la promovari.
  */
 async function pachetulExista(
-  token: string, categoryId: number, size: number, type: string, metoda: OlxPaymentMethod,
+  token: string, categoryId: number, size: number, type: string, premium: boolean,
+  metoda: OlxPaymentMethod,
 ): Promise<{ ok: true; pret: number | null } | { error: string }> {
   const r = await getAvailablePackets(token, {
     category_id: categoryId, payment_method: metoda, type: "all", with_features: true,
@@ -1563,7 +1564,10 @@ async function pachetulExista(
   if (!stim.stiu) {
     return { error: "Nu am putut citi pachetele oferite de OLX pentru categoria asta. Încearcă din nou peste câteva momente." };
   }
-  const gasit = stim.date.find((p) => Number(p.size) === size && String(p.type ?? "base") === type);
+  /* ⚠ Si `is_premium`: fara el, o varianta premium se valida pe cea obisnuita. */
+  const gasit = stim.date.find((p) => Number(p.size) === size
+    && String(p.type ?? "base") === type
+    && Boolean(p.is_premium) === premium);
   if (!gasit) {
     return { error: "Pachetul ales nu mai e disponibil la OLX. Reîncarcă panoul și alege din nou." };
   }
@@ -1572,7 +1576,7 @@ async function pachetulExista(
 
 export async function buyOlxCategoryPacket(
   businessId: string, categoryId: number, size: number, paymentMethod: OlxPaymentMethod,
-  intentId: string, type: "base" | "mega" = "base",
+  intentId: string, type: "base" | "mega" = "base", isPremium = false,
 ): Promise<RezultatCumparare> {
   const g = await guard(businessId);
   if ("error" in g) return g;
@@ -1584,23 +1588,23 @@ export async function buyOlxCategoryPacket(
   const jeton = await jetonulPentruPlata(businessId);
   if ("error" in jeton) return jeton;
 
-  const oferit = await pachetulExista(jeton.token, categoryId, size, type, m.metoda);
+  const oferit = await pachetulExista(jeton.token, categoryId, size, type, isPremium, m.metoda);
   if ("error" in oferit) return oferit;
 
   const r = await cuRegistru(
     createAdminClient(),
     {
       businessId, orderId: null, fel: "plata", furnizor: "olx",
-      cheie: cheiaPlatii(cePachetCategorie(categoryId, size, type), intentId),
+      cheie: cheiaPlatii(cePachetCategorie(categoryId, size, type, isPremium), intentId),
       /* ⚠ A doua incuietoare: acelasi lucru, sub alta intentie, nu pleaca a doua oara. */
-      tinta: cePachetCategorie(categoryId, size, type),
+      tinta: cePachetCategorie(categoryId, size, type, isPremium),
     },
     /* ⚠ Inauntru sta EXACT apelul ireversibil: jetonul e deja luat, metoda e deja aflata. */
     async () => {
       const res = await purchaseCategoryPacket(
-        jeton.token, { category_id: categoryId, size, payment_method: m.metoda, type });
+        jeton.token, { category_id: categoryId, size, payment_method: m.metoda, type, is_premium: isPremium });
       if (isOlxError(res)) aruncaPlata(res);
-      return { referinta: `${categoryId}:${size}:${type}`, valoare: true as const };
+      return { referinta: `${categoryId}:${size}:${type}${isPremium ? ":premium" : ""}`, valoare: true as const };
     },
     verdictOlxPlata,
   );
@@ -1670,6 +1674,32 @@ export async function buyOlxAdvertPacket(
     if (!["active", "new", "unconfirmed"].includes(stare)) {
       return { error: `Pachetul e cumpărat, dar anunțul e în continuare „${stare}". Încearcă activarea din listă.` };
     }
+  }
+
+  /*
+   * ⚠ SE SCRIE SI LOCAL, altfel ecranul ramane pe „Limita atinsă" (03.09.2026).
+   *
+   * Cumpararea reusise, activarea reusise — si randul din `olx_adverts` ramanea `limited`, fiindca
+   * nimic nu-l atingea. Deci `router.refresh()` recitea aceeasi stare, ecusonul si BUTONUL DE
+   * CUMPARARE ramaneau acolo, iar intentia tocmai fusese aruncata. A doua apasare trecea prin
+   * amandoua incuietorile — alta intentie, iar randul dinainte e `reusit` — si platea inca un
+   * pachet. Sondarea l-ar fi indreptat abia peste doua ore.
+   *
+   * ⚠ Exact ce spune nota lui `finishOlxAdvert`, la doua sute de linii mai jos in acelasi fisier:
+   * „omul ar crede ca apasarea lui n-a facut nimic". Acolo se scria; aici, nu.
+   *
+   * ⚠ `last_status_at: null` il pune in prima tura de sondare, ca starea adevarata sa vina de la
+   * EI, nu sa ramana presupunerea noastra.
+   */
+  const { error: eLocal } = await createAdminClient().from("olx_adverts")
+    .update({ status: "active", last_status_at: null, updated_at: new Date().toISOString() } as never)
+    .eq("business_id", businessId).eq("olx_advert_id", advertId);
+  if (eLocal) {
+    await logError({
+      action: "olx.buyOlxAdvertPacket", severity: "warning", businessId,
+      message: `pachetul s-a cumparat si anuntul s-a activat, dar starea locala n-a putut fi scrisa: ${eLocal.message}`,
+      details: { advertId },
+    });
   }
   revalidatePath(FEATURE_PATH);
   return { success: true, nou: r.fel === "facut" };

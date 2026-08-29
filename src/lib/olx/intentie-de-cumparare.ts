@@ -120,8 +120,13 @@ export function incheieIntentia(businessId: string, ceSeCumpara: string): void {
 
 export const cePromovare = (advertId: number, code: string) => `promovare:${advertId}:${code}`;
 
-export const cePachetCategorie = (categoryId: number, size: number, type: string) =>
-  `pachet-categorie:${categoryId}:${size}:${type}`;
+/**
+ * ⚠ `premium` INTRA IN NUME (03.09.2026). Doua variante de aceeasi marime si acelasi tip, una
+ * premium, cadeau pe ACELASI nume — deci pe aceeasi cheie si pe aceeasi tinta. Doua cumparari cu
+ * adevarat diferite se blocau una pe alta degeaba, iar reluarea uneia se lipea de cealalta.
+ */
+export const cePachetCategorie = (categoryId: number, size: number, type: string, premium: boolean) =>
+  `pachet-categorie:${categoryId}:${size}:${type}${premium ? ":premium" : ""}`;
 
 export const cePachetAnunt = (advertId: number, premium: boolean) =>
   `pachet-anunt:${advertId}:${premium ? "premium" : "normal"}`;

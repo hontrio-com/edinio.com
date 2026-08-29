@@ -230,10 +230,26 @@ export function getBoughtPackets(
   return call<OlxBoughtPacket[]>(token, "GET", `/users/me/packets${qs ? `?${qs}` : ""}`);
 }
 
-// Packet for a whole category. `size` must match an available packet variant.
+/**
+ * Pachet pentru o intreaga categorie. `size` trebuie sa fie al unei variante oferite.
+ *
+ * ⚠ `is_premium` SE TRIMITE, DAR E O PRESUPUNERE, si se scrie ca atare (03.09.2026).
+ *
+ * Ecranul aratase dintotdeauna variantele premium — `OlxPacket.is_premium` vine chiar din lista
+ * lor — dar corpul nu purta campul deloc. Deci omul alegea „premium", si pleca `POST`-ul variantei
+ * OBISNUITE: platea una si primea alta, tacut.
+ *
+ * ⚠ Numele campului e luat din ruta LOR de pachet pe anunt, unde e documentat. Pentru ruta de
+ * CATEGORIE n-am putut-o verifica: n-avem cont de probe. Daca ei il ignora, purtarea ramane cea de
+ * azi; daca il refuza, refuzul lor iese in ecran. Ce nu se putea intampla e sa ramana asa cum era,
+ * cu o alegere in ecran care nu ajungea nicaieri.
+ */
 export function purchaseCategoryPacket(
   token: string,
-  body: { category_id: number; size: number; payment_method: OlxPaymentMethod; type?: "base" | "mega" },
+  body: {
+    category_id: number; size: number; payment_method: OlxPaymentMethod;
+    type?: "base" | "mega"; is_premium?: boolean;
+  },
 ) {
   return call<undefined>(token, "POST", "/users/me/packets", body);
 }

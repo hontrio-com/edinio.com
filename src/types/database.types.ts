@@ -2795,6 +2795,13 @@ export type Database = {
         Row: {
           conflict_iduri: Json | null
           conflict_la: string | null
+          moderation_cod: string | null
+          moderation_la: string | null
+          moderation_text: string | null
+          stat_la: string | null
+          stat_telefon: number | null
+          stat_urmaritori: number | null
+          stat_vizualizari: number | null
           business_id: string
           created_at: string
           dezactivat_de: string | null
@@ -2816,6 +2823,13 @@ export type Database = {
         Insert: {
           conflict_iduri?: Json | null
           conflict_la?: string | null
+          moderation_cod?: string | null
+          moderation_la?: string | null
+          moderation_text?: string | null
+          stat_la?: string | null
+          stat_telefon?: number | null
+          stat_urmaritori?: number | null
+          stat_vizualizari?: number | null
           business_id: string
           created_at?: string
           dezactivat_de?: string | null
@@ -2837,6 +2851,13 @@ export type Database = {
         Update: {
           conflict_iduri?: Json | null
           conflict_la?: string | null
+          moderation_cod?: string | null
+          moderation_la?: string | null
+          moderation_text?: string | null
+          stat_la?: string | null
+          stat_telefon?: number | null
+          stat_urmaritori?: number | null
+          stat_vizualizari?: number | null
           business_id?: string
           created_at?: string
           dezactivat_de?: string | null
@@ -2871,6 +2892,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      olx_statistici_zilnice: {
+        Row: {
+          actualizat_la: string
+          business_id: string
+          olx_advert_id: number
+          telefon: number | null
+          urmaritori: number | null
+          vizualizari: number | null
+          zi: string
+        }
+        Insert: {
+          actualizat_la?: string
+          business_id: string
+          olx_advert_id: number
+          telefon?: number | null
+          urmaritori?: number | null
+          vizualizari?: number | null
+          zi: string
+        }
+        Update: {
+          actualizat_la?: string
+          business_id?: string
+          olx_advert_id?: number
+          telefon?: number | null
+          urmaritori?: number | null
+          vizualizari?: number | null
+          zi?: string
+        }
+        Relationships: []
       }
       olx_sync_queue: {
         Row: {

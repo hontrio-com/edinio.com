@@ -5737,7 +5737,23 @@ create table if not exists public.olx_adverts (
   dezactivat_de text,
   ultima_prelungire_la timestamp with time zone,
   conflict_la timestamp with time zone,
-  conflict_iduri jsonb);
+  conflict_iduri jsonb,
+  moderation_cod text,
+  moderation_text text,
+  moderation_la timestamp with time zone,
+  stat_vizualizari integer,
+  stat_telefon integer,
+  stat_urmaritori integer,
+  stat_la timestamp with time zone);
+
+create table if not exists public.olx_statistici_zilnice (
+  business_id uuid not null,
+  olx_advert_id bigint not null,
+  zi date not null,
+  vizualizari integer,
+  telefon integer,
+  urmaritori integer,
+  actualizat_la timestamp with time zone default now() not null);
 
 create table if not exists public.olx_sync_queue (
   id uuid default gen_random_uuid() not null,
@@ -6448,6 +6464,7 @@ alter table public.notice_sms_log add constraint notice_sms_log_pkey PRIMARY KEY
 alter table public.notifications add constraint notifications_pkey PRIMARY KEY (id);
 alter table public.offers add constraint offers_pkey PRIMARY KEY (id);
 alter table public.olx_adverts add constraint olx_adverts_pkey PRIMARY KEY (id);
+alter table public.olx_statistici_zilnice add constraint olx_statistici_zilnice_pkey PRIMARY KEY (business_id, olx_advert_id, zi);
 alter table public.olx_sync_queue add constraint olx_sync_queue_pkey PRIMARY KEY (id);
 alter table public.operatii_externe add constraint operatii_externe_pkey PRIMARY KEY (id);
 alter table public.orders add constraint orders_pkey PRIMARY KEY (id);
@@ -6626,6 +6643,7 @@ alter table public.notifications add constraint notifications_user_id_fkey FOREI
 alter table public.offers add constraint offers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.olx_adverts add constraint olx_adverts_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.olx_adverts add constraint olx_adverts_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+alter table public.olx_statistici_zilnice add constraint olx_statistici_zilnice_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.olx_sync_queue add constraint olx_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.olx_sync_queue add constraint olx_sync_queue_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.operatii_externe add constraint operatii_externe_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -6898,6 +6916,8 @@ CREATE INDEX offers_business_active_idx ON public.offers USING btree (business_i
 CREATE INDEX offers_business_type_idx ON public.offers USING btree (business_id, type);
 CREATE INDEX olx_adverts_conflict_idx ON public.olx_adverts USING btree (business_id) WHERE (conflict_la IS NOT NULL);
 CREATE INDEX olx_adverts_product_id_idx ON public.olx_adverts USING btree (product_id) WHERE (product_id IS NOT NULL);
+CREATE INDEX olx_adverts_stat_la_idx ON public.olx_adverts USING btree (business_id, stat_la NULLS FIRST) WHERE (olx_advert_id IS NOT NULL);
+CREATE INDEX olx_statistici_zilnice_zi_idx ON public.olx_statistici_zilnice USING btree (business_id, zi DESC);
 CREATE INDEX olx_sync_queue_ordine_idx ON public.olx_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX olx_sync_queue_product_id_idx ON public.olx_sync_queue USING btree (product_id) WHERE (product_id IS NOT NULL);
 CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btree (creat_la) WHERE (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text]));
@@ -7125,6 +7145,7 @@ alter table public.notice_sms_log enable row level security;
 alter table public.notifications enable row level security;
 alter table public.offers enable row level security;
 alter table public.olx_adverts enable row level security;
+alter table public.olx_statistici_zilnice enable row level security;
 alter table public.olx_sync_queue enable row level security;
 alter table public.operatii_externe enable row level security;
 alter table public.orders enable row level security;
@@ -7326,6 +7347,9 @@ create policy owner_update_offers on public.offers as PERMISSIVE for UPDATE to p
 create policy owner_select_olx_adverts on public.olx_adverts as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
+create policy owner_select_olx_statistici on public.olx_statistici_zilnice as PERMISSIVE for SELECT to authenticated using ((EXISTS ( SELECT 1
+   FROM businesses b
+  WHERE ((b.id = olx_statistici_zilnice.business_id) AND (b.user_id = auth.uid())))));
 create policy owner_select_olx_sync_queue on public.olx_sync_queue as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
@@ -8551,6 +8575,27 @@ grant SELECT on table public.olx_adverts to service_role;
 grant TRIGGER on table public.olx_adverts to service_role;
 grant TRUNCATE on table public.olx_adverts to service_role;
 grant UPDATE on table public.olx_adverts to service_role;
+grant DELETE on table public.olx_statistici_zilnice to anon;
+grant INSERT on table public.olx_statistici_zilnice to anon;
+grant REFERENCES on table public.olx_statistici_zilnice to anon;
+grant SELECT on table public.olx_statistici_zilnice to anon;
+grant TRIGGER on table public.olx_statistici_zilnice to anon;
+grant TRUNCATE on table public.olx_statistici_zilnice to anon;
+grant UPDATE on table public.olx_statistici_zilnice to anon;
+grant DELETE on table public.olx_statistici_zilnice to authenticated;
+grant INSERT on table public.olx_statistici_zilnice to authenticated;
+grant REFERENCES on table public.olx_statistici_zilnice to authenticated;
+grant SELECT on table public.olx_statistici_zilnice to authenticated;
+grant TRIGGER on table public.olx_statistici_zilnice to authenticated;
+grant TRUNCATE on table public.olx_statistici_zilnice to authenticated;
+grant UPDATE on table public.olx_statistici_zilnice to authenticated;
+grant DELETE on table public.olx_statistici_zilnice to service_role;
+grant INSERT on table public.olx_statistici_zilnice to service_role;
+grant REFERENCES on table public.olx_statistici_zilnice to service_role;
+grant SELECT on table public.olx_statistici_zilnice to service_role;
+grant TRIGGER on table public.olx_statistici_zilnice to service_role;
+grant TRUNCATE on table public.olx_statistici_zilnice to service_role;
+grant UPDATE on table public.olx_statistici_zilnice to service_role;
 grant DELETE on table public.olx_sync_queue to anon;
 grant INSERT on table public.olx_sync_queue to anon;
 grant REFERENCES on table public.olx_sync_queue to anon;

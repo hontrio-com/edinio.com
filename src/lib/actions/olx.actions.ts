@@ -745,6 +745,12 @@ export interface OlxAdvertRow {
   valid_to: string | null;
   error: string | null;
   last_synced_at: string | null;
+  /** De ce l-au respins, spus de ei. `null` cand n-au avut ce spune sau n-am intrebat inca. */
+  moderation_text: string | null;
+  /** Cati s-au uitat. `null` inseamna „nu stim", nu „nimeni" — de-aia nu se pune zero. */
+  stat_vizualizari: number | null;
+  stat_telefon: number | null;
+  stat_urmaritori: number | null;
 }
 
 export async function getOlxAdverts(businessId: string): Promise<OlxAdvertRow[]> {
@@ -753,7 +759,7 @@ export async function getOlxAdverts(businessId: string): Promise<OlxAdvertRow[]>
   const { supabase } = g;
   const { data } = await supabase
     .from("olx_adverts")
-    .select("product_id, offer_id, status, olx_advert_id, olx_url, valid_to, error, last_synced_at, products(name)")
+    .select("product_id, offer_id, status, olx_advert_id, olx_url, valid_to, error, last_synced_at, moderation_text, stat_vizualizari, stat_telefon, stat_urmaritori, products(name)")
     .eq("business_id", businessId)
     .order("updated_at", { ascending: false })
     .limit(200);
@@ -771,6 +777,10 @@ export async function getOlxAdverts(businessId: string): Promise<OlxAdvertRow[]>
       valid_to: r.valid_to,
       error: r.error,
       last_synced_at: r.last_synced_at,
+      moderation_text: r.moderation_text,
+      stat_vizualizari: r.stat_vizualizari,
+      stat_telefon: r.stat_telefon,
+      stat_urmaritori: r.stat_urmaritori,
     };
   });
 }

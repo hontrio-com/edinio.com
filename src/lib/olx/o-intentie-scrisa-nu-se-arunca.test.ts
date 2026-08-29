@@ -320,3 +320,54 @@ export `, i + 10)));
   assert.match(corp.slice(iActivare - 200, iActivare + 200), /act\.status !== 400/,
     "un anunt deja activ nu e un esec al activarii");
 });
+
+/* ── Ce ne spun ei si nu ceream ──────────────────────────────────────────── */
+
+test("⚠ motivul respingerii se cere NUMAI cand starea o spune", () => {
+  /*
+   * ═══ „DE CE NU APARE PRODUSUL MEU PE OLX?" (01.09.2026) ═══
+   *
+   * Comerciantul vedea „Moderat" sau „Eroare", si atat. OLX are o ruta care spune EXACT ce n-a
+   * mers, si n-o intrebam — deci singurul drum al omului era suportul, care nu stia nici el.
+   *
+   * ⚠ Dar se cere numai pe starile care chiar inseamna respingere: pe un anunt sanatos ruta
+   * raspunde gol, iar o cerere in plus la fiecare sondare ar dubla traficul degeaba.
+   */
+  assert.match(sync, /const RESPINSE = \["moderated", "blocked", "disabled", "removed_by_moderator"\];/);
+  assert.match(sync, /if \(RESPINSE\.includes\(stareaLor\) && inainte\?\.status !== stareaLor\) \{/);
+  /* ⚠ Si nu se reintreaba la fiecare trecere: `inainte` deosebeste vestea NOUA de una stiuta. */
+  const i = sync.indexOf("export async function ceruMotivulRespingerii");
+  const corp = faraComentarii(sync.slice(i, sync.indexOf(`
+/**`, i + 10)));
+  assert.match(corp, /moderation_la: now/, "clipa se scrie si cand n-au avut ce spune");
+  assert.match(corp, /if \(isOlxError\(res\)\) \{[\s\S]{0,300}?moderation_la: now/,
+    "fara marcaj, un raspuns picat ne-ar face sa reintrebam la nesfarsit");
+});
+
+test("⚠ statisticile nu inventeaza zero", () => {
+  /*
+   * ⚠ `null` inseamna „nu stim", iar zero inseamna „nimeni nu s-a uitat". Sunt lucruri deosebite,
+   * si al doilea e o veste proasta pe care n-avem dreptul s-o dam cand n-o stim.
+   */
+  const i = sync.indexOf("export async function ceruStatisticile");
+  const corp = faraComentarii(sync.slice(i));
+  assert.match(corp, /typeof st\.advert_views === "number" \? st\.advert_views : null/);
+  assert.match(corp, /typeof st\.phone_views === "number" \? st\.phone_views : null/);
+  assert.match(corp, /typeof st\.users_observing === "number" \? st\.users_observing : null/);
+  /* ⚠ Si o linie pe ZI, nu pe cerere: altfel un cron care trece de trei ori pe zi face din
+     „vizualizari" un grafic cu trei puncte pe zi si nicio poveste. */
+  assert.match(corp, /onConflict: "business_id,olx_advert_id,zi"/);
+  assert.match(corp, /zi: now\.slice\(0, 10\)/);
+});
+
+test("⚠ statisticile nu se cer pentru anunturi stinse", () => {
+  /*
+   * ⚠ E o citire PER ANUNT, deci la scara se plateste. Un anunt stins n-are ce statistici sa
+   * adune, iar starea unui anunt — care spune daca marfa se vinde — are dreptul la mai mult din
+   * bugetul de cereri decat cate vizualizari a avut.
+   */
+  assert.match(cron, /\.in\("status", \["active", "new"\]\)/);
+  assert.match(cron, /const STAT_BATCH = 15;/);
+  /* ⚠ Rotatia e a bazei, nu a noastra: cele despre care nu stim nimic vin primele. */
+  assert.match(cron, /\.order\("stat_la", \{ ascending: true, nullsFirst: true \}\)/);
+});

@@ -200,3 +200,55 @@ export interface OlxMessage {
   is_read?: boolean;
   attachments?: { name?: string; url?: string }[] | null;
 }
+
+/* ── Statistici, motive de moderare, profil de firma, facturare ───────────── */
+
+/**
+ * Ce a facut lumea cu anuntul.
+ *
+ * ⚠ Campurile sunt optionale dinadins: nu toate categoriile si nu toate conturile intorc tot, iar
+ * un zero inventat pentru o valoare care lipseste ar arata in ecran ca „nimeni nu s-a uitat" —
+ * ceea ce e cu totul altceva decat „nu stim".
+ */
+export interface OlxAdvertStats {
+  advert_views?: number;
+  phone_views?: number;
+  users_observing?: number;
+  message_count?: number;
+}
+
+/** De ce a fost respins anuntul. Se cere numai cand starea chiar spune ca a fost. */
+export interface OlxModerationReason {
+  code?: string;
+  reason?: string;
+  message?: string;
+  fields?: { field?: string; message?: string }[];
+}
+
+/** Profilul de firma al contului OLX. */
+export interface OlxBusinessProfile {
+  id?: number;
+  name?: string;
+  description?: string;
+  subdomain?: string;
+  website?: string;
+  phone?: string;
+  address?: string;
+  logo?: { url?: string } | null;
+  banner?: { url?: string } | null;
+}
+
+/** O linie din istoricul de facturare al contului. */
+export interface OlxBillingEntry {
+  id?: number;
+  created_at?: string;
+  type?: string;
+  description?: string;
+  amount?: { value?: number; currency?: string } | number;
+  balance_after?: number;
+}
+
+/** Un mesaj cu tot ce poarta el, inclusiv atasamente. */
+export interface OlxMessageFull extends OlxMessage {
+  attachments?: { url?: string; name?: string; mime_type?: string }[];
+}

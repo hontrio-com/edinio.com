@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { reconciliazaAnunturile,
   loadOlxContext, processQueueItem, refreshAdvertStatus, pause, type RezultatContext,
-  PRODUCT_FIELDS, type OlxQueueItem,
+  PRODUCT_FIELDS, ceruStatisticile, type OlxQueueItem,
 } from "@/lib/olx/sync";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { advertCommand } from "@/lib/olx/client";
@@ -20,6 +20,15 @@ const QUEUE_BATCH = 30;
 const STATUS_BATCH = 25;
 /** Cate magazine se reconciliaza intr-un sfert de ora. */
 const RECONCILE_MAGAZINE = 5;
+
+/**
+ * Cate anunturi isi cer statisticile intr-o trecere.
+ *
+ * ⚠ Mai putin decat sondarea de stare, dinadins: statisticile sunt utile, dar nu apara pe nimeni
+ * de nimic. Starea unui anunt spune daca marfa se vinde; cate vizualizari a avut spune doar cat
+ * de bine. Prima are dreptul la mai mult din bugetul de cereri.
+ */
+const STAT_BATCH = 15;
 
 /**
  * Cate pagini de anunturi se trec pentru un magazin, intr-o singura vizita.
@@ -353,6 +362,38 @@ export async function GET(req: NextRequest) {
     await pause(PACE_MS);
   }
 
+  // ── 2b) Statistici: cate vizualizari a avut anuntul ─────────────────────────────
+  /*
+   * ⚠ E O CITIRE PER ANUNT, deci la scara se plateste. Se cer numai pentru anunturi ACTIVE — unul
+   * stins n-are ce statistici sa adune — si numai pentru cele cu marcajul cel mai vechi, o data la
+   * sase ore. Rotatia e a bazei (`stat_la nulls first`), nu a noastra: randurile despre care nu
+   * stim nimic vin primele, si niciunul nu ramane pe dinafara.
+   */
+  let statistici = 0;
+  const statVechi = new Date(Date.now() - 6 * 60 * 60_000).toISOString();
+  const { data: deStatistici, error: eStat } = await admin
+    .from("olx_adverts")
+    .select("id, business_id, olx_advert_id")
+    .not("olx_advert_id", "is", null)
+    .in("status", ["active", "new"])
+    .or(`stat_la.is.null,stat_la.lt.${statVechi}`)
+    .order("stat_la", { ascending: true, nullsFirst: true })
+    .limit(STAT_BATCH);
+  if (eStat) {
+    await logError({
+      action: "olx-sync", severity: "warning",
+      message: `anunturile pentru statistici nu s-au putut citi: ${eStat.message}`,
+    });
+  }
+  for (const row of deStatistici ?? []) {
+    if (!row.olx_advert_id) continue;
+    const rSt = await ctxFor(row.business_id);
+    if (rSt.stare !== "gata") continue;
+    await ceruStatisticile(admin, rSt.ctx, row.business_id, row.id, row.olx_advert_id);
+    statistici++;
+    await pause(PACE_MS);
+  }
+
   // ── 3) Auto-extend adverts nearing expiry (opt-in per store) ────────────────────
   // OLX allows a manual `extend` at most once / 14 days; we extend when valid_to
   // is within 24h. `auto_extend_enabled` on the advert also covers this, but the
@@ -499,7 +540,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[olx-sync] processed=${processed} failed=${failed} amanate=${amanate} status=${statusChecked} extended=${extended} reconciliate=${reconciliate}`);
-  return NextResponse.json({ ok: true, processed, failed, amanate, statusChecked, extended, reconciliate });
+  console.log(`[olx-sync] processed=${processed} failed=${failed} amanate=${amanate} status=${statusChecked} extended=${extended} reconciliate=${reconciliate} statistici=${statistici}`);
+  return NextResponse.json({ ok: true, processed, failed, amanate, statusChecked, extended, reconciliate, statistici });
 }
 

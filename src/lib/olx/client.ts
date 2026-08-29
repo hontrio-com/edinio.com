@@ -4,8 +4,9 @@
 // nomenclature endpoints return bare arrays — unwrap both.
 
 import type {
-  OlxAccountBalance, OlxAdvert, OlxAttributeDef, OlxBoughtPacket, OlxCategory,
-  OlxCategorySuggestion, OlxCity, OlxDistrict, OlxMessage, OlxPacket,
+  OlxAccountBalance, OlxAdvert, OlxAdvertStats, OlxAttributeDef, OlxBillingEntry,
+  OlxBoughtPacket, OlxBusinessProfile, OlxCategory, OlxCategorySuggestion, OlxCity,
+  OlxDistrict, OlxMessage, OlxMessageFull, OlxModerationReason, OlxPacket,
   OlxPaidFeature, OlxPaymentMethod, OlxThread, OlxUser,
 } from "./types";
 
@@ -281,4 +282,78 @@ export function postThreadMessage(token: string, threadId: number, text: string)
 
 export function markThreadRead(token: string, threadId: number) {
   return call<undefined>(token, "POST", `/threads/${threadId}/commands`, { command: "mark-as-read" });
+}
+
+// ── Statistici ──────────────────────────────────────────────────────────────────
+/**
+ * Ce a facut lumea cu anuntul: vizualizari, afisari de telefon, urmaritori.
+ *
+ * ⚠ E o citire per ANUNT, deci la scara se plateste. Cronul o face pentru un numar marginit de
+ * anunturi pe trecere, si numai pentru cele active — un anunt stins n-are ce statistici sa adune.
+ */
+export function getAdvertStatistics(token: string, advertId: number) {
+  return call<OlxAdvertStats>(token, "GET", `/adverts/${advertId}/statistics`);
+}
+
+// ── De ce a fost respins ────────────────────────────────────────────────────────
+/**
+ * Motivul moderarii, cerut de la ei.
+ *
+ * ⚠ Se cere NUMAI cand starea spune ca a fost respins. Pe un anunt sanatos ruta raspunde `404` sau
+ * gol, iar o cerere in plus pentru fiecare anunt la fiecare sondare ar dubla traficul degeaba.
+ */
+export function getModerationReason(token: string, advertId: number) {
+  return call<OlxModerationReason>(token, "GET", `/adverts/${advertId}/moderation-reason`);
+}
+
+// ── Profilul de firma ───────────────────────────────────────────────────────────
+export function getBusinessProfile(token: string) {
+  return call<OlxBusinessProfile>(token, "GET", "/users-business/me");
+}
+
+export function updateBusinessProfile(token: string, body: Partial<OlxBusinessProfile>) {
+  return call<OlxBusinessProfile>(token, "PUT", "/users-business/me", body);
+}
+
+// ── Facturare ───────────────────────────────────────────────────────────────────
+export function getBilling(token: string, params: { offset?: number; limit?: number } = {}) {
+  const q = new URLSearchParams();
+  if (params.offset != null) q.set("offset", String(params.offset));
+  if (params.limit != null) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return call<OlxBillingEntry[]>(token, "GET", `/users/me/billing${qs ? `?${qs}` : ""}`);
+}
+
+// ── Messenger, restul ───────────────────────────────────────────────────────────
+/** Conversatiile, cu paginare — ecranul avea pana azi doar primele cincizeci. */
+export function getThreadsPaged(token: string, params: { offset?: number; limit?: number } = {}) {
+  const q = new URLSearchParams();
+  if (params.offset != null) q.set("offset", String(params.offset));
+  if (params.limit != null) q.set("limit", String(params.limit));
+  const qs = q.toString();
+  return call<OlxThread[]>(token, "GET", `/threads${qs ? `?${qs}` : ""}`);
+}
+
+export function getThread(token: string, threadId: number) {
+  return call<OlxThread>(token, "GET", `/threads/${threadId}`);
+}
+
+/** Un mesaj anume, cu atasamentele lui. */
+export function getMessage(token: string, threadId: number, messageId: number) {
+  return call<OlxMessageFull>(token, "GET", `/threads/${threadId}/messages/${messageId}`);
+}
+
+export function setThreadFavourite(token: string, threadId: number, favourite: boolean) {
+  return call<undefined>(token, "POST", `/threads/${threadId}/commands/set-favourite`, { is_favourite: favourite });
+}
+
+// ── Localitate dupa coordonate ──────────────────────────────────────────────────
+/**
+ * Ce oras/cartier are OLX la coordonatele date.
+ *
+ * ⚠ Se foloseste ca SUGESTIE, niciodata ca hotarare: adresa magazinului poate fi un depozit, iar
+ * anuntul poate trebui pus in alt loc. Omul confirma.
+ */
+export function suggestCityByCoords(token: string, lat: number, lon: number) {
+  return call<OlxCity[]>(token, "GET", `/cities?latitude=${lat}&longitude=${lon}`);
 }

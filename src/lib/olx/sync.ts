@@ -12,7 +12,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { ensureMerchantToken } from "./oauth";
 import {
-  advertCommand, createAdvert, deleteAdvert, getAdvert, isOlxError, listAdverts, updateAdvert,
+  advertCommand, createAdvert, deleteAdvert, getAdvert, getAdvertStatistics, getModerationReason,
+  isOlxError, listAdverts, updateAdvert,
   type OlxResult,
 } from "./client";
 import { isProductSellable, toOlxAdvertBody, type MappableBusiness, type MappableProduct } from "./mapping";
@@ -1395,6 +1396,15 @@ export async function refreshAdvertStatus(
   const stareaLor = advert.status || "new";
 
   /*
+   * ⚠ CAND STAREA SPUNE „RESPINS", SE INTREABA DE CE. Aici, in sondare, fiindca aici aflam prima
+   * data ca s-a intamplat — si fiindca `inainte` ne spune daca e o veste NOUA sau una pe care am
+   * intrebat-o deja.
+   */
+  if (RESPINSE.includes(stareaLor) && inainte?.status !== stareaLor) {
+    await ceruMotivulRespingerii(admin, ctx, rowId, olxAdvertId);
+  }
+
+  /*
    * ═══ ⚠ O DEZACTIVARE FACUTA DIRECT PE OLX E TOT A OMULUI (30.08.2026, tarziu) ═══
    *
    * Daca noi am stins anuntul, `deactivateRemote` a scris deja si `dezactivat_de`. Deci un
@@ -1669,4 +1679,102 @@ export async function rezolvaConflictul(
     });
     return { ok: true, action: "updated", status: ales.status, url: ales.url ?? null };
   });
+}
+
+/* ── De ce a fost respins, si cati s-au uitat ─────────────────────────────── */
+
+/** Starile in care OLX chiar are ce sa ne spuna despre o respingere. */
+const RESPINSE = ["moderated", "blocked", "disabled", "removed_by_moderator"];
+
+/**
+ * Cere motivul respingerii si il scrie pe rand.
+ *
+ * ═══ „DE CE NU APARE PRODUSUL MEU PE OLX?" (01.09.2026) ═══
+ *
+ * Pana azi comerciantul vedea „Moderat" sau „Eroare", si atat. OLX are o ruta separata care spune
+ * EXACT ce n-a mers — categoria nu se potriveste, lipseste un atribut, continutul nu e permis —
+ * si n-o intrebam. Singurul drum al omului era suportul, care nu stia nici el.
+ *
+ * ⚠ SE CERE NUMAI CAND STAREA O SPUNE. Pe un anunt sanatos ruta raspunde gol sau `404`, iar o
+ * cerere in plus pentru fiecare anunt la fiecare sondare ar dubla traficul degeaba.
+ *
+ * ⚠ SI SE SCRIE CE AU SPUS EI, cuvant cu cuvant. Reformulat, motivul ar deveni presupunerea
+ * noastra despre ce au vrut sa zica — iar omul ar corecta altceva decat trebuie.
+ *
+ * ⚠ Clipa se scrie si cand n-au avut ce spune: fara ea n-am deosebi „am intrebat si nimic" de
+ * „n-am intrebat inca", si am reintreba la fiecare trecere.
+ */
+export async function ceruMotivulRespingerii(
+  admin: Db, ctx: OlxSyncContext, rowId: string, olxAdvertId: number,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const res = await getModerationReason(ctx.token, olxAdvertId);
+  if (isOlxError(res)) {
+    /* Nu stim de ce; se marcheaza doar ca am intrebat, ca sa nu batem in ei la fiecare sondare. */
+    await admin.from("olx_adverts").update({ moderation_la: now } as never).eq("id", rowId);
+    return;
+  }
+  const m = res.data ?? {};
+  const bucati = [
+    m.reason ?? m.message ?? "",
+    ...(m.fields ?? []).map((f) => [f.field, f.message].filter(Boolean).join(": ")),
+  ].filter(Boolean);
+  const { error } = await admin.from("olx_adverts").update({
+    moderation_cod: m.code ?? null,
+    moderation_text: bucati.length > 0 ? bucati.join(" · ").slice(0, 1000) : null,
+    moderation_la: now,
+    updated_at: now,
+  } as never).eq("id", rowId);
+  if (error) {
+    await logError({
+      action: "olx.moderare", severity: "warning",
+      message: `motivul respingerii nu s-a putut scrie: ${error.message}`,
+      details: { rowId, olxAdvertId },
+    });
+  }
+}
+
+/**
+ * Cere statisticile unui anunt si le scrie: ultima valoare pe rand, si o linie pe zi in istoric.
+ *
+ * ⚠ O LINIE PE ZI, NU PE CERERE. Cheia primara pe (magazin, anunt, zi) face din a doua trecere o
+ * actualizare. Fara ea, un cron care trece de trei ori pe zi ar face din „vizualizari" un grafic
+ * cu trei puncte pe zi si nicio poveste.
+ *
+ * ⚠ NU SE INVENTEAZA ZERO. Un camp care lipseste din raspunsul lor ramane `null`: zero inseamna
+ * „nimeni nu s-a uitat", ceea ce e cu totul altceva decat „nu stim".
+ */
+export async function ceruStatisticile(
+  admin: Db, ctx: OlxSyncContext, businessId: string, rowId: string, olxAdvertId: number,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const res = await getAdvertStatistics(ctx.token, olxAdvertId);
+  if (isOlxError(res)) {
+    await admin.from("olx_adverts").update({ stat_la: now } as never).eq("id", rowId);
+    return;
+  }
+  const st = res.data ?? {};
+  const vizualizari = typeof st.advert_views === "number" ? st.advert_views : null;
+  const telefon = typeof st.phone_views === "number" ? st.phone_views : null;
+  const urmaritori = typeof st.users_observing === "number" ? st.users_observing : null;
+
+  await admin.from("olx_adverts").update({
+    stat_vizualizari: vizualizari, stat_telefon: telefon, stat_urmaritori: urmaritori,
+    stat_la: now, updated_at: now,
+  } as never).eq("id", rowId);
+
+  const { error } = await admin.from("olx_statistici_zilnice").upsert(
+    {
+      business_id: businessId, olx_advert_id: olxAdvertId, zi: now.slice(0, 10),
+      vizualizari, telefon, urmaritori, actualizat_la: now,
+    } as never,
+    { onConflict: "business_id,olx_advert_id,zi" },
+  );
+  if (error) {
+    await logError({
+      action: "olx.statistici", severity: "warning",
+      message: `statisticile zilnice nu s-au putut scrie: ${error.message}`,
+      details: { rowId, olxAdvertId }, businessId,
+    });
+  }
 }

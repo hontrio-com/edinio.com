@@ -467,10 +467,31 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
                     <p className="truncate text-sm font-medium text-foreground">{a.name}</p>
                     {a.olx_url && <a href={a.olx_url} target="_blank" rel="noreferrer" className="shrink-0 text-muted-foreground hover:text-primary"><ExternalLink className="h-3.5 w-3.5" /></a>}
                   </div>
-                  {a.error ? (
+                  {/*
+                    ⚠ MOTIVUL LOR, CUVANT CU CUVANT (01.09.2026). Până azi omul vedea „Moderat" și
+                    atât, iar singurul lui drum era suportul — care nu știa nici el, fiindcă nici
+                    Edinio nu întrebase. Textul se arată ca atare: reformulat, ar deveni
+                    presupunerea noastră despre ce au vrut ei să zică, și omul ar corecta altceva.
+                  */}
+                  {a.moderation_text ? (
+                    <p className="text-xs text-destructive">
+                      <span className="font-medium">OLX a respins anunțul:</span> {a.moderation_text}
+                    </p>
+                  ) : a.error ? (
                     <p className="truncate text-xs text-destructive">{a.error}</p>
                   ) : (
                     <p className="text-xs text-muted-foreground">{a.last_synced_at ? "Sincronizat" : "În coadă"}</p>
+                  )}
+                  {/*
+                    ⚠ `null` înseamnă „nu știm", nu „nimeni": de-aia nu se scrie zero, și de-aia
+                    rândul lipsește cu totul până vine primul răspuns de la ei.
+                  */}
+                  {(a.stat_vizualizari != null || a.stat_telefon != null || a.stat_urmaritori != null) && (
+                    <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground tabular-nums">
+                      {a.stat_vizualizari != null && <span>{a.stat_vizualizari.toLocaleString("ro-RO")} vizualizări</span>}
+                      {a.stat_telefon != null && <span>{a.stat_telefon.toLocaleString("ro-RO")} telefon afișat</span>}
+                      {a.stat_urmaritori != null && <span>{a.stat_urmaritori.toLocaleString("ro-RO")} urmăritori</span>}
+                    </p>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">

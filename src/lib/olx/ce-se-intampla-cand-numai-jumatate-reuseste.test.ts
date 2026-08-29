@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { processQueueItem, type OlxSyncContext, type OlxQueueItem } from "./sync";
 import { ensureMerchantToken } from "./oauth";
+import { enqueueOlxRetragereInainteDeStergere } from "./queue";
 import type { OlxConfig } from "./types";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -485,5 +486,218 @@ test("⚠ RELUARE: un `404` la dezactivare inseamna tot ca omul l-a sters", asyn
     assert.equal(r.ok, true);
     assert.equal(scrieri[0].status, "sters_de_om");
     assert.ok(scrieri[0].sters_de_om_la, "piatra poarta clipa hotararii");
+  } finally { stub.inapoi(); }
+});
+
+/* ── Anuntul pe care nu-l stim: cele trei drumuri catre el ───────────────── */
+
+const CONFIG_CONECTAT = { connected: true, refresh_token: "R1", category_map: { Pantofi: { category_id: 9 } } };
+
+test("⚠ intentia de retragere se scrie chiar cand NU exista niciun rand local", async () => {
+  /*
+   * ═══ LUCRATORUL STIE SA CAUTE ORFANUL, DAR NU E CHEMAT NICIODATA (01.09.2026) ═══
+   *
+   * Pana azi, `enqueueOlxRetragereInainteDeStergere` citea `olx_adverts` si punea lucrarea DOAR
+   * pentru produsele care aveau rand. Suna cuminte — de ce sa ceri retragerea unui produs care
+   * n-a fost niciodata publicat? — si e chiar gaura pe care lucratorul o repara:
+   *
+   *     `POST /adverts` reuseste ✅, scrierea in `olx_adverts` pica ❌
+   *     omul sterge produsul
+   *     -> filtrul nu gaseste niciun rand, deci NU pune nicio lucrare
+   *     -> cautarea dupa `external_id` nu se intampla niciodata
+   *
+   * ⚠ Si proba trebuie sa arate ca NU se mai citeste `olx_adverts` deloc: o citire pastrata
+   * „doar ca sa stim" ar putea oricand redeveni filtru.
+   */
+  const { db, cereri } = faceDb((c) => (c.tabela === "store_settings"
+    ? { data: { olx_config: CONFIG_CONECTAT }, error: null }
+    : { data: null, error: null }));
+
+  const r = await enqueueOlxRetragereInainteDeStergere(BID, [PID, "alt-produs"], db);
+  assert.deepEqual(r, { fel: "gata" });
+
+  const scrisa = cereri.find((c) => c.tabela === "olx_sync_queue" && c.fel === "upsert");
+  assert.ok(scrisa, "fara lucrare in coada, anuntul orfan nu mai are cine sa-l caute");
+  const randuri = scrisa!.corp as { offer_id: string; op: string }[];
+  assert.deepEqual(randuri.map((x) => x.offer_id).sort(), [PID, "alt-produs"].sort(),
+    "se pune pentru TOATE produsele, nu doar pentru cele cu rand local");
+  assert.ok(randuri.every((x) => x.op === "delete"));
+  assert.ok(!cereri.some((c) => c.tabela === "olx_adverts"),
+    "nu se mai citeste `olx_adverts`: era chiar filtrul care inghitea orfanul");
+});
+
+test("⚠ magazinul neconectat nu primeste lucrari de retragere", async () => {
+  /* Contraproba: fara ea, proba de sus ar trece si cu o functie care pune lucrari oricui. */
+  const { db, cereri } = faceDb((c) => (c.tabela === "store_settings"
+    ? { data: { olx_config: {} }, error: null } : { data: null, error: null }));
+  const r = await enqueueOlxRetragereInainteDeStergere(BID, [PID], db);
+  assert.deepEqual(r, { fel: "gata" });
+  assert.ok(!cereri.some((c) => c.tabela === "olx_sync_queue"));
+});
+
+test("⚠ configul necitit inseamna „nesigur”, deci produsul nu se sterge", async () => {
+  const { db } = faceDb(() => ({ data: null, error: { message: "timeout" } }));
+  const r = await enqueueOlxRetragereInainteDeStergere(BID, [PID], db);
+  assert.equal(r.fel, "nesigur");
+});
+
+/** O baza care raspunde ALTFEL la a doua citire din aceeasi tabela. */
+function dbPeRand(raspunsuri: Record<string, Raspuns[]>) {
+  const numarate: Record<string, number> = {};
+  const scrieri: { tabela: string; corp: unknown }[] = [];
+  const { db, cereri } = faceDb((c) => {
+    if (c.fel === "upsert" || c.fel === "update") scrieri.push({ tabela: c.tabela, corp: c.corp });
+    const lista = raspunsuri[`${c.fel} ${c.tabela}`] ?? raspunsuri[c.tabela];
+    if (!lista) return { data: null, error: null };
+    const i = (numarate[c.tabela] = (numarate[c.tabela] ?? 0) + 1) - 1;
+    return lista[Math.min(i, lista.length - 1)];
+  });
+  return { db, cereri, scrieri };
+}
+
+const PRODUS_FARA_STOC = {
+  id: PID, name: "Pantof", slug: "pantof", description: "", price: 100, compare_at_price: null,
+  images: [], category: "Pantofi", is_active: true, track_inventory: true, stock_quantity: 0,
+  page_sections: null,
+};
+
+test("⚠ stoc zero fara rand local: anuntul viu de la ei se leaga si se stinge", async () => {
+  /*
+   * ═══ MAI INSELATOR DECAT ORFANUL DE LA STERGERE ═══
+   *
+   * Produsul EXISTA in Edinio, deci comerciantul crede pe buna dreptate ca sincronizarea de stoc
+   * il apara:
+   *
+   *     `POST /adverts` reuseste ✅, scrierea in `olx_adverts` pica ❌
+   *     stocul ajunge la zero inainte ca reconcilierea sa lege randul inapoi
+   *     -> fara rand, ieseam cu „nimic de facut"
+   *     -> Edinio arata zero bucati, iar la OLX anuntul e ACTIV si se vinde
+   */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [{ id: 555, status: "active", external_id: PID }] } },
+    { status: 200, corp: { data: { id: 555, status: "removed_by_user" } } },
+  ]);
+  try {
+    const { db, scrieri } = dbPeRand({
+      olx_adverts: [
+        { data: null, error: null },                                        // getRow: nu stim nimic
+        { data: null, error: null },                                        // upsert-ul de legare
+        { data: { id: "r1", olx_advert_id: 555, status: "active", offer_id: PID, sters_de_om_la: null, dezactivat_de: null }, error: null },
+      ],
+    });
+    const ctx = { ...CTX, config: CONFIG_CONECTAT } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_FARA_STOC);
+    assert.equal(r.ok, true, `asteptam reusita, am primit: ${JSON.stringify(r)}`);
+    const legare = scrieri.find((x) => x.tabela === "olx_adverts" && (x.corp as { olx_advert_id?: number }).olx_advert_id === 555);
+    assert.ok(legare, "anuntul necunoscut trebuie legat inainte de a fi stins");
+    const stingere = scrieri.find((x) => (x.corp as { dezactivat_de?: string }).dezactivat_de === "stoc");
+    assert.ok(stingere, "si motivul dezactivarii se scrie");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ fara categorie mapata nu se intreaba OLX degeaba", async () => {
+  /*
+   * ⚠ Paza de cost, si e in memorie: fara categorie mapata `upsertRemote` n-ar fi ajuns niciodata
+   * la creare, deci nu exista ce cauta. Fara ea, FIECARE editare de stoc a unui produs nepublicat
+   * ar fi costat o cerere catre ei.
+   */
+  const stub = stubFetchPeRand([{ status: 200, corp: { data: [] } }]);
+  try {
+    const { db } = dbPeRand({ olx_adverts: [{ data: null, error: null }] });
+    const ctx = { ...CTX, config: { connected: true, category_map: {} } } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_FARA_STOC);
+    assert.deepEqual(r, { ok: true, action: "skipped" });
+    assert.equal(stub.cereri.length, 0, "nicio cerere catre OLX pentru o categorie nemapata");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ DOUA anunturi cu acelasi `external_id`: se retrag amandoua", async () => {
+  /*
+   * `external_id` n-are constrangere de unicitate la ei, iar noi chiar am avut o fereastra in care
+   * un `POST` reusit urmat de o interogare anti-duplicat picata ducea la un al doilea `POST`.
+   *
+   * ⚠ Retras doar primul, al doilea ramane la vanzare pentru un produs sters — si nimic nu-l mai
+   * gaseste, fiindca reconcilierea nu atinge un anunt fara produs.
+   */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [
+      { id: 111, status: "active", external_id: PID },
+      { id: 222, status: "active", external_id: PID },
+    ] } },
+    { status: 200, corp: {} },   // deactivate 222
+    { status: 200, corp: {} },   // delete 222
+    { status: 200, corp: {} },   // deactivate 111
+    { status: 200, corp: {} },   // delete 111
+  ]);
+  try {
+    const { db } = dbPeRand({
+      products: [{ data: null, error: null }],
+      olx_adverts: [
+        { data: null, error: null },
+        { data: null, error: null },
+        { data: { id: "r1", olx_advert_id: 111, status: "active", offer_id: PID, sters_de_om_la: null, dezactivat_de: null }, error: null },
+      ],
+    });
+    await processQueueItem(db, CTX, LUCRARE, null);
+    const atinse = stub.cereri.join(" ");
+    assert.match(atinse, /adverts\/222/, "anuntul in plus trebuie retras, nu lasat la vanzare");
+    assert.match(atinse, /adverts\/111/, "si cel dintai");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ daca anuntul in plus nu se poate retrage, lucrarea NU se incheie", async () => {
+  /* Altfel primul s-ar sterge, coada s-ar goli, si al doilea ar ramane viu pe veci. */
+  const stub = stubFetchPeRand([
+    { status: 200, corp: { data: [
+      { id: 111, status: "active", external_id: PID },
+      { id: 222, status: "active", external_id: PID },
+    ] } },
+    { status: 500, corp: { error: { detail: "picat" } } },
+  ]);
+  try {
+    const { db } = dbPeRand({ products: [{ data: null, error: null }], olx_adverts: [{ data: null, error: null }] });
+    const r = await processQueueItem(db, CTX, LUCRARE, null);
+    assert.equal(r.ok, false);
+    assert.equal(r.ok === false && r.permanent, false, "se reia");
+    assert.match(r.ok === false ? r.error : "", /in plus/);
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ un anunt `outdated` NU primeste motiv de dezactivare", async () => {
+  /*
+   * ═══ `dezactivat_de` RASPUNDE LA „CINE A FACUT `removed_by_user`?" ═══
+   *
+   * Nu la „ce incercam noi cand am primit refuzul". Un anunt `outdated` a expirat SINGUR la ei;
+   * un motiv scris acolo ar fi o minciuna care se citeste mai tarziu ca adevar — si tocmai
+   * `outdated` e starea pe care sincronizarea o reactiveaza automat.
+   */
+  const stub = stubFetchPeRand([
+    { status: 400, corp: { error: { detail: "Ad has to be active" } } },
+    { status: 200, corp: { data: { id: 777, status: "outdated" } } },
+  ]);
+  try {
+    const { db, scrieri } = dbCuRand();
+    const r = await processQueueItem(db, CTX, { ...LUCRARE, op: "deactivate" }, null);
+    assert.equal(r.ok, true, "anuntul oricum nu e la vanzare, deci nu e un esec");
+    assert.equal(scrieri[0].status, "outdated", "starea vine de la EI");
+    assert.equal("dezactivat_de" in scrieri[0], false,
+      "`outdated` nu e o dezactivare facuta de noi");
+  } finally { stub.inapoi(); }
+});
+
+test("⚠ la nevandabil, o cautare picata NU inseamna „nimic de facut”", async () => {
+  /*
+   * ⚠ Aceeasi regula ca peste tot: `skipped` inseamna „am putut intreba, si chiar nu e nimic".
+   * Inghitita, eroarea ar fi golit coada exact cand anuntul putea fi viu — si nimic n-ar mai fi
+   * reincercat.
+   */
+  const stub = stubFetchPeRand([{ status: 500, corp: { error: { detail: "picat" } } }]);
+  try {
+    const { db } = dbPeRand({ olx_adverts: [{ data: null, error: null }] });
+    const ctx = { ...CTX, config: CONFIG_CONECTAT } as unknown as OlxSyncContext;
+    const r = await processQueueItem(db, ctx, { ...LUCRARE, op: "upsert" }, PRODUS_FARA_STOC);
+    assert.equal(r.ok, false);
+    assert.equal(r.ok === false && r.permanent, false, "se reia");
+    assert.match(r.ok === false ? r.error : "", /nu am putut verifica/i);
   } finally { stub.inapoi(); }
 });

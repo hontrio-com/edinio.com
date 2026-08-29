@@ -241,6 +241,43 @@ async function saveError(
 
 // ── Delete / deactivate / activate ──────────────────────────────────────────────
 
+/**
+ * Stinge si sterge un anunt LA EI, fara sa atinga nimic local.
+ *
+ * ⚠ Se foloseste pentru anunturile in plus gasite dupa `external_id`, care n-au rand local si nici
+ * n-au de ce sa capete unul: nu sunt „al produsului", sunt duplicate de sters.
+ *
+ * ⚠ Aceleasi doua ingaduinte ca la retragerea obisnuita: `400` la dezactivare inseamna „deja
+ * inactiv", `404` la stergere inseamna „nu mai e". Amandoua fac reluarea sigura.
+ */
+async function retrageLaEi(
+  ctx: OlxSyncContext, advertId: number, status: string,
+): Promise<{ ok: true } | { ok: false; esec: SyncOutcome }> {
+  if (["active", "new", "unconfirmed", "limited"].includes(status)) {
+    const dez = await advertCommand(ctx.token, advertId, "deactivate", { sAVandut: false });
+    if (isOlxError(dez) && dez.status !== 400) {
+      return {
+        ok: false,
+        esec: {
+          ok: false, permanent: false, asteptare: asteptareaLor(dez),
+          error: `Nu am putut dezactiva anuntul in plus ${advertId}: ${dez.error}`,
+        },
+      };
+    }
+  }
+  const res = await deleteAdvert(ctx.token, advertId);
+  if (isOlxError(res) && res.status !== 404) {
+    return {
+      ok: false,
+      esec: {
+        ok: false, permanent: false, asteptare: asteptareaLor(res),
+        error: `OLX nu a sters anuntul in plus ${advertId} (${res.status}): ${res.error}`,
+      },
+    };
+  }
+  return { ok: true };
+}
+
 async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, row: OlxAdvertRow | null): Promise<SyncOutcome> {
   if (!row) return { ok: true, action: "skipped" };
   if (row.olx_advert_id) {
@@ -447,7 +484,13 @@ async function deactivateRemote(
        * ⚠ Si motivul OMULUI nu se calca: daca randul spunea deja „om", anuntul fusese stins de el,
        * iar comanda noastra doar a picat peste o hotarare care exista.
        */
-      const eStins = STINS_LA_EI.includes(lor.stare);
+      /*
+       * ⚠ NUMAI `removed_by_user` (01.09.2026). `dezactivat_de` raspunde la intrebarea „cine a
+       * facut `removed_by_user`?" — nu la „ce incercam noi cand am primit refuzul". Un anunt
+       * `outdated` (expirat singur la ei) sau oprit de moderator n-a fost stins de stocul nostru,
+       * si un motiv scris acolo ar fi o minciuna care se citeste mai tarziu ca adevar.
+       */
+      const eStins = lor.stare === "removed_by_user";
       const patch: Record<string, unknown> = {
         status: lor.stare, error: null, last_status_at: now, updated_at: now,
         ...(eStins && row.dezactivat_de !== "om" ? { dezactivat_de: sursa } : {}),
@@ -565,6 +608,57 @@ async function upsertRemote(
        * dezactivarile automate: stocul se intorcea, anuntul ramanea stins.
        */
       return deactivateRemote(admin, ctx, row, product.is_active ? "stoc" : "produs-inactiv");
+    }
+    /*
+     * ═══ SI AICI POATE FI UN ANUNT PE CARE NU-L STIM (01.09.2026) ═══
+     *
+     * Aceeasi fereastra ca la stergere, pe alt drum si mai inselator: produsul EXISTA in Edinio,
+     * deci comerciantul crede pe buna dreptate ca sincronizarea de stoc il apara.
+     *
+     *     `POST /adverts` reuseste ✅, scrierea in `olx_adverts` pica ❌
+     *     stocul ajunge la zero inainte ca reconcilierea sa apuce sa lege randul inapoi
+     *     -> fara rand, iesim cu „nimic de facut"
+     *     -> Edinio arata zero bucati, iar la OLX anuntul e ACTIV si se vinde
+     *
+     * ⚠ Se intreaba doar cand ar fi putut exista un anunt: fara categorie MAPATA, `upsertRemote`
+     * nici n-ar fi ajuns vreodata la creare, deci nu e nimic de cautat. Paza aia taie cererea
+     * pentru marea majoritate a produselor, si e in memorie, nu la baza.
+     */
+    if (!row?.olx_advert_id && product.category && ctx.config.category_map?.[product.category]) {
+      const gasite = await listAdverts(ctx.token, { external_id: product.id, limit: 20 });
+      /* ⚠ Daca nu putem INTREBA, nu spunem „nimic de facut": se reia. */
+      if (isOlxError(gasite)) {
+        return {
+          ok: false, permanent: false, asteptare: asteptareaLor(gasite),
+          error: `nu am putut verifica daca produsul nevandabil are un anunt la OLX: ${gasite.error}`,
+        };
+      }
+      const viu = (gasite.data ?? []).find((a) => {
+        if (!a?.id) return false;
+        const ext = (a as unknown as { external_id?: unknown }).external_id;
+        if (typeof ext !== "string" || ext !== product.id) return false;
+        return ["active", "new", "unconfirmed"].includes(String(a.status ?? "").toLowerCase());
+      });
+      if (viu?.id) {
+        await logError({
+          action: "olx.stoc", severity: "warning",
+          message: `produsul nevandabil avea un anunt VIU la OLX (${viu.id}), necunoscut la noi; se leaga si se stinge`,
+          details: { offerId, advertId: viu.id, status: viu.status }, businessId,
+        });
+        const acum = new Date().toISOString();
+        const { error: eLegat } = await admin.from("olx_adverts").upsert(
+          { business_id: businessId, offer_id: offerId, product_id: product.id, ...advertPatch(viu, acum) } as never,
+          { onConflict: "business_id,offer_id" },
+        );
+        if (eLegat) {
+          return {
+            ok: false, permanent: false,
+            error: `anuntul ${viu.id} nu s-a putut lega inainte de dezactivare: ${eLegat.message}`,
+          };
+        }
+        const proaspat = await getRow(admin, businessId, offerId);
+        if (proaspat) return deactivateRemote(admin, ctx, proaspat, product.is_active ? "stoc" : "produs-inactiv");
+      }
     }
     return { ok: true, action: "skipped" };
   }
@@ -973,7 +1067,7 @@ async function stergeDacaProdusulChiarNuMaiE(
     };
   }
   const MOARTE = ["removed_by_moderator", "moderated", "blocked", "deleted", "removed"];
-  const orfan = (viiLaEi.data ?? []).find((a) => {
+  const orfani = (viiLaEi.data ?? []).filter((a) => {
     if (!a?.id) return false;
     /* ⚠ Doi martori, ca la adoptare: daca ei ignora filtrul, raspunsul e primele anunturi ale
        contului — si am sterge un anunt STRAIN, care n-are nicio treaba cu produsul sters. */
@@ -981,7 +1075,32 @@ async function stergeDacaProdusulChiarNuMaiE(
     if (typeof ext !== "string" || ext !== item.offer_id) return false;
     return !MOARTE.includes(String(a.status ?? "").toLowerCase());
   });
-  if (!orfan?.id) return { ok: true, action: "skipped" };
+  if (orfani.length === 0) return { ok: true, action: "skipped" };
+  const orfan = orfani[0];
+
+  /*
+   * ═══ TOATE, NU PRIMUL (01.09.2026) ═══
+   *
+   * `external_id` nu are constrangere de unicitate la ei, iar noi chiar am avut o fereastra in care
+   * un `POST` reusit urmat de o interogare anti-duplicat picata ducea la un al doilea `POST`. Deci
+   * pentru comercianti vechi pot exista DOUA anunturi cu acelasi `external_id`.
+   *
+   * ⚠ Retras doar primul, al doilea ramane la vanzare pentru un produs sters — si nimic nu-l mai
+   * gaseste, fiindca reconcilierea nu atinge un anunt fara produs. Ce e in plus se retrage ACUM,
+   * inainte de randul obisnuit, iar un esec al lor face toata lucrarea sa se reia.
+   */
+  if (orfani.length > 1) {
+    await logError({
+      action: "olx.stergere", severity: "critical",
+      message: `produsul sters avea ${orfani.length} anunturi cu acelasi external_id; se retrag toate`,
+      details: { offerId: item.offer_id, iduri: orfani.map((a) => a.id) },
+      businessId: item.business_id,
+    });
+    for (const inPlus of orfani.slice(1)) {
+      const r = await retrageLaEi(ctx, inPlus.id, String(inPlus.status ?? ""));
+      if (!r.ok) return r.esec;
+    }
+  }
 
   await logError({
     action: "olx.stergere", severity: "warning",

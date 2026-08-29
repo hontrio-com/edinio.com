@@ -202,11 +202,18 @@ export type RezultatRetragereOlx = { fel: "gata" } | { fel: "nesigur"; motiv: st
 export async function enqueueOlxRetragereInainteDeStergere(
   businessId: string,
   offerIds: string[],
+  /**
+   * ⚠ Clientul se poate da din afara, ca la surorile ei (`patchOlxConfig`, `invieScrisorileMoarteOlx`).
+   * Nu e o poarta pentru chemator — toti cei doi il lasa gol — ci singurul fel in care functia asta
+   * poate fi PROBATA fara retea. Iar ea e paza cea mai scumpa din toata integrarea: ce nu se scrie
+   * aici inseamna un anunt ramas la vanzare pentru marfa care nu mai exista.
+   */
+  clientul?: SupabaseClient<Database>,
 ): Promise<RezultatRetragereOlx> {
   const ids = [...new Set((offerIds ?? []).filter(Boolean))];
   if (ids.length === 0) return { fel: "gata" };
   try {
-    const admin = createAdminClient();
+    const admin = clientul ?? createAdminClient();
     const { data: ss, error: eConfig } = await admin
       .from("store_settings").select("olx_config").eq("business_id", businessId).single();
     if (eConfig) {
@@ -220,18 +227,28 @@ export async function enqueueOlxRetragereInainteDeStergere(
      * ⚠ SI NUMAI PENTRU CE CHIAR ARE UN ANUNT. Un produs nelistat n-are ce retrage, iar un rand de
      * coada pentru el ar fi o lucrare care nu se poate incheia niciodata.
      */
-    const cuAnunt: string[] = [];
+    /*
+     * ═══ NU SE MAI FILTREAZA DUPA RANDURILE LOCALE (01.09.2026) ═══
+     *
+     * Pana azi se citea `olx_adverts` si se punea lucrarea DOAR pentru produsele care aveau rand.
+     * Suna cuminte — de ce sa cerem o retragere pentru un produs care n-a fost niciodata publicat?
+     * — si e chiar gaura pe care lucratorul o repara de ieri:
+     *
+     *     `POST /adverts` reuseste ✅, scrierea in `olx_adverts` pica ❌
+     *     omul sterge produsul
+     *     -> filtrul nu gaseste niciun rand, deci NU pune nicio lucrare
+     *     -> lucratorul, care stie sa caute orfanul dupa `external_id`, nu e chemat niciodata
+     *     -> anuntul ramane la vanzare, si nimeni nu mai are de unde sti ca exista
+     *
+     * ⚠ Plasa de DUPA stergere (`enqueueOlxStergereMany`) nu tine locul: nu e durabila — se cheama
+     * dupa raspuns si se taie la stergerile mari — si iese devreme cand `auto_sync` e stins.
+     *
+     * ⚠ CE COSTA: pentru fiecare produs sters de pe un magazin conectat, lucratorul face o cerere
+     * `GET /adverts?external_id=` daca nu gaseste rand local. Cererea e ieftina si e ritmata de
+     * cron. Fata de un anunt ramas viu pentru marfa care nu mai exista — pe care nimic nu-l mai
+     * poate gasi — e un pret mic, si se plateste o singura data per produs.
+     */
     for (const bucata of bucatiDeIduri(ids)) {
-      const { data, error } = await admin.from("olx_adverts")
-        .select("offer_id").eq("business_id", businessId).in("offer_id", bucata);
-      if (error) {
-        return { fel: "nesigur", motiv: "Anunturile OLX ale produsului nu s-au putut citi." };
-      }
-      for (const r of (data ?? []) as { offer_id: string }[]) cuAnunt.push(r.offer_id);
-    }
-    if (cuAnunt.length === 0) return { fel: "gata" };
-
-    for (const bucata of bucatiDeIduri(cuAnunt)) {
       const { error } = await admin.from("olx_sync_queue").upsert(
         bucata.map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete", ...REINVIE, ...CEAS_NOU() })),
         { onConflict: "business_id,offer_id,op" },

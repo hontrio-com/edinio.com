@@ -180,6 +180,108 @@ const grup = (combinations: unknown[], optiune?: string) =>
   buildProductJsonLd(cuCulori(combinations, optiune), "https://exemplu.ro/p", "Exemplu", SHIPPING) as
     Record<string, unknown>;
 
+/* ─── Campurile COMUNE ajung pe fiecare varianta ─────────────────────────────
+ *
+ * Reclamat de al doilea comerciant, prin Search Console: „description lipsa" pe
+ * FIECARE varianta a fiecarui produs cu variante. Descrierea era calculata si
+ * pusa numai pe `ProductGroup`.
+ *
+ * ⚠ DE CE N-A VAZUT-O NICIO PROBA DE PANA ACUM: toate fixturile de mai sus au
+ * `description: null`. Cazul reclamat — produs CU descriere si CU variante — nu
+ * era atins de niciuna. O proba care nu hraneste functia cu datele adevarate nu
+ * apara nimic.
+ */
+
+/** Ca fixtura de mai sus, dar cu descriere si galerie — adica situatia reala. */
+const cuDescriere = (combinations: unknown[]) => ({
+  id: "prod-1",
+  name: "Husa de Pat CAIAN Elastic Jersey",
+  /*
+    ⚠ DOUA BLOCURI, DINADINS. Cu un singur paragraf, o taiere gresita (eticheta scoasa ca sir gol
+    in loc de spatiu) da acelasi rezultat si la grup, si la variante — deci proba ramane verde
+    peste chiar defectul reclamat. Descrierile adevarate au blocuri: 1654 din 3061 de produse cu
+    variante aveau „…cazare.</p><h3>Beneficii:</h3>" lipit.
+  */
+  description: "<p>Husa de pat <b>100% bumbac</b>, elastica.</p><h3>Beneficii:</h3><p>Moale<br>Elastica</p>",
+  price: 100,
+  images: ["/galerie-1.webp", "/galerie-2.webp"],
+  sku: "HUSA-180",
+  page_sections: {
+    variants: {
+      enabled: true,
+      options: [{ id: "o1", name: "Culoare", values: ["Gri", "Bej", "Bordo"] }],
+      combinations,
+    },
+  },
+});
+
+const grupCuDescriere = (combinations: unknown[]) =>
+  buildProductJsonLd(cuDescriere(combinations), "https://exemplu.ro/p", "Exemplu", SHIPPING) as
+    Record<string, unknown>;
+
+test("⚠ FIECARE varianta isi poarta descrierea, nu doar grupul", () => {
+  /*
+   * ⚠ Documentatia spune ca variantele mostenesc de la `ProductGroup`. Raportul lor spune
+   * altceva. Nu ne mai bazam pe mostenire: ce e comun se scrie pe fiecare varianta.
+   */
+  const g = grupCuDescriere(CULORI.map((c) => ({ ...c, enabled: true })));
+  const asteptat = "Husa de pat 100% bumbac, elastica. Beneficii: Moale Elastica";
+
+  assert.equal(g.description, asteptat, "grupul isi pastreaza descrierea");
+  const v = g.hasVariant as Record<string, unknown>[];
+  assert.equal(v.length, 3);
+  for (const [i, varianta] of v.entries()) {
+    assert.equal(varianta.description, asteptat, `varianta ${i} n-are descriere`);
+  }
+});
+
+test("⚠ marca e comuna, deci intra si ea pe fiecare varianta", () => {
+  const g = grupCuDescriere(CULORI.map((c) => ({ ...c, enabled: true })));
+  for (const varianta of g.hasVariant as Record<string, unknown>[]) {
+    assert.deepEqual(varianta.brand, { "@type": "Brand", name: "Exemplu" },
+      "marca lipseste de pe varianta");
+  }
+});
+
+test("⚠ o varianta fara poza proprie primeste galeria, nu ramane fara imagine", () => {
+  /*
+   * ⚠ Comentariul de dinainte spunea „altfel mosteneste galeria" — dar nu mostenea nimic, pur si
+   * simplu lipsea cheia. Era o afirmatie despre validatorul LOR, scrisa de noi, si de acelasi fel
+   * cu cea pe care raportul tocmai a dezmintit-o la `description`. In productie sunt 8667 de
+   * variante fara poza proprie.
+   */
+  const g = grupCuDescriere([
+    { title: "Gri", gtin: "0682643488768", enabled: true, image: "/gri.webp" },
+    { title: "Bej", gtin: "0682643488799", enabled: true },
+  ]);
+  const v = g.hasVariant as Record<string, unknown>[];
+  assert.deepEqual(v[0].image, ["/gri.webp"], "poza proprie bate galeria");
+  assert.deepEqual(v[1].image, ["/galerie-1.webp", "/galerie-2.webp"],
+    "fara poza proprie, varianta trebuie sa primeasca galeria produsului");
+});
+
+test("⚠ descrierea variantei e curatata de HTML, ca si cea a grupului", () => {
+  /* Marcajul brut intr-un camp de date structurate e chiar felul de lucru pe care validatorul il
+     numeste „invalid", si l-am fi copiat pe fiecare din cele 45092 de variante. */
+  const g = grupCuDescriere(CULORI.map((c) => ({ ...c, enabled: true })));
+  for (const varianta of g.hasVariant as Record<string, unknown>[]) {
+    assert.doesNotMatch(String(varianta.description), /<[^>]+>/, "HTML ramas in descrierea variantei");
+  }
+});
+
+test("⚠ un produs FARA descriere nu capata una inventata pe variante", () => {
+  /*
+   * ⚠ Cand descrierea lipseste, `desc` cade pe NUMELE produsului — asa a fost dintotdeauna la
+   * grup. Ce nu are voie sa se intample e ca variantele sa primeasca altceva decat grupul: doua
+   * texte diferite pentru acelasi lucru sunt mai rele decat un text sarac.
+   */
+  const g = grup(CULORI.map((c) => ({ ...c, enabled: true })));
+  for (const varianta of g.hasVariant as Record<string, unknown>[]) {
+    assert.equal(varianta.description, g.description,
+      "varianta si grupul trebuie sa spuna acelasi lucru");
+  }
+});
+
 test("variantele cu cod propriu produc `ProductGroup`, nu `Product`", () => {
   const g = grup(CULORI.map((c) => ({ ...c, enabled: true })));
   assert.equal(g["@type"], "ProductGroup");

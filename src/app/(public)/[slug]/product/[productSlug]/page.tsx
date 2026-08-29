@@ -1,4 +1,5 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
+import { textCurat } from "@/lib/storefront/date-structurate";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
@@ -72,8 +73,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const seo = ps?.seo;
   const title = seo?.title || product.name;
   const description = seo?.description
-    || (ps?.short_description ? ps.short_description.replace(/<[^>]+>/g, "").slice(0, 155) : "")
-    || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
+    /* ⚠ `textCurat`, nu o taiere proprie: eticheta devine SPATIU, altfel „…cazare.Beneficii:". */
+    || textCurat(ps?.short_description, 155)
+    || (product.description ? textCurat(product.description, 155) : product.name);
   const images = product.images as string[] | null;
   const canonicalSlug = product.slug ?? productSlug;
   const { customDomain, storeMode } = await getBusinessMetaCached(slug);

@@ -251,6 +251,48 @@ describe("graful", () => {
 });
 
 describe("curatatoare", () => {
+  test("⚠ eticheta devine SPATIU: `</p><h3>` nu lipeste doua cuvinte", () => {
+    /*
+     * ⚠ Reclamat prin Search Console, pe descrieri adevarate: „…de cazare.</p><h3>Beneficii:</h3>"
+     * iesea „…de cazare.Beneficii:". Masurat: 1654 din 3061 de produse cu variante aveau blocuri
+     * lipite asa, si 1645 aveau `<br>` intre punctele unei liste.
+     */
+    assert.equal(textCurat("<p>unu</p><p>doi</p>"), "unu doi");
+    assert.equal(textCurat("<p>de cazare.</p><h3>Beneficii:</h3>"), "de cazare. Beneficii:");
+    assert.equal(textCurat("a<br>b<br/>c"), "a b c");
+    /* ⚠ Dar spatiul ramas inaintea punctuatiei se scoate: „certificari ." arata a greseala. */
+    assert.equal(textCurat("<p>certificari</p>."), "certificari.");
+  });
+
+  test("⚠ taierea nu trece prin mijlocul unui cuvant", () => {
+    /*
+     * ⚠ „Întreținere ușo" e felul de sfârșit care arată a greșeală, nu a text tăiat — și ajunge exact
+     * in rezultatele de cautare. De cand descrierea se scrie pe FIECARE varianta, se vede de sapte
+     * ori pe aceeasi pagina in loc de o data.
+     */
+    const text = ("cuvant ").repeat(100);
+    const t = textCurat(text, 50);
+    assert.ok(t.length <= 50);
+    assert.doesNotMatch(t, /cuv$|cuva$|cuvan$/, "s-a taiat prin mijlocul unui cuvant");
+    assert.equal(t, "cuvant cuvant cuvant cuvant cuvant cuvant cuvant");
+
+    /* ⚠ Fara niciun spatiu in ultima cincime se taie brut: un cuvant de patru sute de caractere
+       nu e text, si scurtat la jumatate n-ar mai spune nimic. */
+    assert.equal(textCurat("x".repeat(900), 500).length, 500);
+  });
+
+  test("⚠ semnul ramas singur la capat se scoate", () => {
+    /* Descrierile scrise cu liste se taie adesea fix dupa un semn, iar un „✔" orfan la sfarsit
+       arata a pagina stricata, nu a text scurtat. */
+    assert.equal(textCurat("<p>unu ✔ doi ✔ trei patru</p>", 13), "unu ✔ doi");
+    assert.equal(textCurat("<p>alfa - beta</p>", 7), "alfa");
+    /*
+     * ⚠ Si pragul de patru cincimi e o alegere, nu un adevar: cand ultimul spatiu cade mai
+     * devreme de-atat, se taie brut, fiindca altfel un singur cuvant lung ar inghiti tot textul.
+     */
+    assert.equal(textCurat("<p>unu ✔ doi ✔ trei patru</p>", 14), "unu ✔ doi ✔ tr");
+  });
+
   test("textCurat scoate etichetele si taie", () => {
     assert.equal(textCurat("<p>Un <b>text</b></p>"), "Un text");
     assert.equal(textCurat("x".repeat(900)).length, 500);

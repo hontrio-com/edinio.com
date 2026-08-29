@@ -1,4 +1,5 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
+import { textCurat } from "@/lib/storefront/date-structurate";
 import { graf, magazinJsonLd } from "@/lib/storefront/date-structurate";
 import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
 import { disponibilitatePachet } from "@/lib/bundles";
@@ -138,8 +139,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
       const opsTitle = seo.title || ps?.seo?.title || product.name;
       const opsDescription = seo.description
         || ps?.seo?.description
-        || (ps?.short_description ? ps.short_description.replace(/<[^>]+>/g, "").slice(0, 155) : "")
-        || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
+        /* ⚠ `textCurat`, nu o taiere proprie: eticheta devine SPATIU, altfel „…cazare.Beneficii:". */
+    || textCurat(ps?.short_description, 155)
+        || (product.description ? textCurat(product.description, 155) : product.name);
       const pImgs = product.images as string[] | null;
       const opsImage = seo.ogImage || pImgs?.[0] || business.cover_url;
       const opsImages = opsImage ? [opsImage] : [];
@@ -809,7 +811,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
         initialPriceMin={filtreAcasa.pretMin}
         initialPriceMax={filtreAcasa.pretMax}
         initialInStock={filtreAcasa.stoc}
-        editorDesign={esteEditorDesign}
+        editorDesign={esteEditorDesign}
+
         design={resolved.design}
         designStyle={resolved.style}
       />

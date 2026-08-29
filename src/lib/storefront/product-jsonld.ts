@@ -1,4 +1,5 @@
 import { isValidGtin, normalizeGtin } from "@/lib/gtin";
+import { textCurat } from "./date-structurate";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import {
   combinatiiActiveUnice, comboEpuizat, comboUnitPrice, esteMarime, parseVariants,
@@ -105,7 +106,20 @@ export function buildProductJsonLd(
   indisponibil = false,
 ) {
   const images = product.images as string[] | null;
-  const desc = product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 500) : product.name;
+  /*
+   * ⚠ ETICHETA DEVINE SPATIU, NU SIR GOL (30.08.2026)
+   *
+   * Se taia cu `replace(/<[^>]+>/g, "")` — deci `…de cazare.</p><h3>Beneficii:</h3>` iesea
+   * „…de cazare.Beneficii:", si `<br>` dintre puncte lipea „premium✔ Material". Masurat: 1654 din
+   * cele 3061 de produse cu variante au blocuri lipite asa, si 1645 au `<br>`.
+   *
+   * ⚠ SAPTE ALTE LOCURI DIN DEPOZIT O FACEAU DEJA CUM TREBUIE — Trendyol, OLX, eMAG, Facebook,
+   * Google Merchant, importul, si chiar `textCurat` de alaturi, al carui comentariu descrie fix
+   * defectul asta. Fisierul de fata era exceptia. Nota buna nu trecuse peste drum.
+   *
+   * `textCurat` scoate si spatiul ramas inaintea punctuatiei, si taie la hotar de cuvant.
+   */
+  const desc = product.description ? textCurat(product.description, 500) : product.name;
   // Aceeasi regula de stoc ca pagina de produs: marcajul „Stoc epuizat" /
   // „Precomanda" din editor bate inventarul. Fara el, o pagina cu butonul stins
   // declara „InStock" in datele structurate si Google trimite clienti pe ea.
@@ -314,12 +328,38 @@ export function buildProductJsonLd(
         /* Numele combinatiei, nu al produsului: „Husa … — Gri" se citeste ca
            articol, iar sapte randuri cu acelasi nume nu s-ar deosebi. */
         name: `${product.name} — ${combo.title}`,
+        /*
+         * ═══ CAMPURILE COMUNE SE SCRIU PE FIECARE VARIANTA, NU SE MOSTENESC ═══ (30.08.2026)
+         *
+         * `description` era calculata sus si pusa numai pe `ProductGroup`. Search Console i-a
+         * raportat unui comerciant „description lipsa" pe FIECARE varianta a fiecarui produs.
+         *
+         * ⚠ Documentatia spune ca variantele mostenesc de la grup. Raportul lor spune altceva. Nu
+         * putem sti care validator are dreptate — dar putem sa nu ne mai bazam pe mostenire: ce e
+         * comun se scrie pe fiecare varianta, si atunci intrebarea nici nu se mai pune. Aceeasi
+         * regula ca peste tot: precautia noastra nu e regula lor, si nici invers.
+         *
+         * ⚠ Masurat inainte de a dubla textul: 3061 de produse, 45092 de variante, 3 magazine.
+         * Adaosul mediu pe pagina e de ~5,9 KB, iar cel mai mare produs (100 de variante) adauga
+         * 50 KB. E o plata reala, facuta cu ochii deschisi: fara ea, 45092 de articole raman
+         * marcate ca incomplete in Merchant listings.
+         */
+        description: desc,
         ...(skuVarianta ? { sku: skuVarianta } : {}),
         ...(codVarianta ? { gtin: codVarianta } : {}),
         ...(mpn ? { mpn } : {}),
+        /* ⚠ Si marca: e comuna, deci intra sub aceeasi regula ca descrierea. */
+        brand: { "@type": "Brand", name: brandProdus },
         ...valori,
-        /* Poza variantei, cand are una a ei; altfel mosteneste galeria. */
-        ...(combo.image ? { image: [combo.image] } : {}),
+        /*
+         * Poza variantei, cand are una a ei; altfel GALERIA PRODUSULUI, scrisa aici.
+         *
+         * ⚠ Comentariul de dinainte spunea „altfel mosteneste galeria" — dar nu mostenea nimic,
+         * pur si simplu lipsea cheia. Era o afirmatie despre ce face validatorul LOR, scrisa de
+         * noi, si de acelasi fel cu cea pe care raportul tocmai a dezmintit-o la `description`.
+         * 8667 de variante din productie n-au poza proprie.
+         */
+        ...(combo.image ? { image: [combo.image] } : images?.length ? { image: images } : {}),
         offers: {
           "@type": "Offer",
           priceCurrency: "RON",

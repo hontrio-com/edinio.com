@@ -57,7 +57,7 @@ type Nod = Record<string, unknown>;
  */
 export function textCurat(brut: string | null | undefined, max = MAX_DESCRIERE): string {
   if (!brut) return "";
-  return brut
+  const curat = brut
     // Eticheta devine SPATIU, nu sir gol: `<p>unu</p><p>doi</p>` scos fara spatiu
     // ar da „unudoi". Doua cuvinte lipite arata a greseala de scriere in fiecare
     // descriere care are un paragraf.
@@ -68,8 +68,31 @@ export function textCurat(brut: string | null | undefined, max = MAX_DESCRIERE):
     // in rezultatele de cautare.
     .replace(/\s+([.,;:!?)\]])/g, "$1")
     .replace(/([([])\s+/g, "$1")
-    .trim()
-    .slice(0, max);
+    .trim();
+  return taiaLaCuvant(curat, max);
+}
+
+/**
+ * Taie la `max`, dar nu prin mijlocul unui cuvant.
+ *
+ * ⚠ „Întreținere ușo" e felul de sfarsit care arata a greseala, nu a text taiat — si ajunge exact
+ * in rezultatele de cautare. De cand descrierea se scrie pe FIECARE varianta a unui produs, se
+ * vede de sapte ori pe aceeasi pagina in loc de o data.
+ *
+ * ⚠ Cand nu exista niciun spatiu in ultima cincime, se taie brut: un cuvant de patru sute de
+ * caractere nu e text, si scurtat la jumatate n-ar mai spune nimic.
+ */
+function taiaLaCuvant(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const bucata = text.slice(0, max);
+  const ultimulSpatiu = bucata.lastIndexOf(" ");
+  const taiat = ultimulSpatiu > max * 0.8 ? bucata.slice(0, ultimulSpatiu) : bucata;
+  /*
+   * ⚠ SI SEMNUL RAMAS SINGUR LA CAPAT SE SCOATE. Descrierile scrise cu liste („✔ bumbac,
+   * ✔ elastic") se taie adesea fix dupa un semn, si atunci textul se incheie cu un „✔" orfan —
+   * care in rezultatele de cautare arata a pagina stricata, nu a text scurtat.
+   */
+  return taiat.replace(/[\s•✔✓✗*+\-–—,;:|]+$/u, "").trimEnd();
 }
 
 /** Un URL absolut http(s), sau nimic. Filtru pentru orice camp scris de om. */

@@ -265,6 +265,33 @@ notify pgrst, 'reload schema';
 --   v_b := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':D', v_t);
 --   assert (v_b->>'rezervat')::boolean, '4: dupa `esuat`, B trebuie sa poata rezerva';
 --
+--   -- 4b) calea `deja`, de care depind TOTI furnizorii, e neatinsa
+--   v_a := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':H', v_t || ':deja');
+--   perform public.incheie_operatie_externa((v_a->>'id')::uuid, v_biz, 'reusit', 'REF-123', '{"x":1}'::jsonb, null);
+--   v_b := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':H', v_t || ':deja');
+--   assert v_b->>'motiv' = 'reusit' and v_b->>'referinta_externa' = 'REF-123'
+--      and v_b->'detalii'->>'x' = '1' and (v_b->>'incercari')::int = 2, '4b: `deja` duce totul inapoi';
+--
+--   -- 4c) ANULAREA elibereaza tinta (lucreaza pe `reusit`/`necunoscut`)
+--   v_a := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':I', v_t || ':anul');
+--   perform public.incheie_operatie_externa((v_a->>'id')::uuid, v_biz, 'necunoscut', null, null, 'proba');
+--   v_b := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':J', v_t || ':anul');
+--   assert not (v_b->>'rezervat')::boolean, '4c: inainte de anulare, tinta blocheaza';
+--   perform public.marcheaza_operatie_anulata(v_biz, v_t || ':I');
+--   v_b := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':J', v_t || ':anul');
+--   assert (v_b->>'rezervat')::boolean, '4c: dupa anulare, tinta se elibereaza';
+--
+--   -- 4d) iesirea comerciantului: `esuat` pe un rand `in_curs` elibereaza tinta
+--   -- ⚠ Conteaza ca merge si pe `in_curs`: `marcheaza_operatie_anulata` NU atinge starea
+--   --   aceea, deci daca deblocarea n-ar face-o, un proces mort intre rezervare si incheiere
+--   --   ar incuia tinta pentru totdeauna.
+--   v_a := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':K', v_t || ':deblo');
+--   v_b := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':L', v_t || ':deblo');
+--   assert not (v_b->>'rezervat')::boolean, '4d: pregatire';
+--   perform public.incheie_operatie_externa((v_a->>'id')::uuid, v_biz, 'esuat', null, null, 'deblocat');
+--   v_b := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':L', v_t || ':deblo');
+--   assert (v_b->>'rezervat')::boolean, '4d: dupa deblocare, tinta se elibereaza';
+--
 --   -- 5) fara tinta, purtarea ramane cea de pana acum
 --   v_a := public.rezerva_operatie_externa(v_biz, null, 'awb', 'proba', v_t || ':X', null);
 --   v_b := public.rezerva_operatie_externa(v_biz, null, 'awb', 'proba', v_t || ':Y', null);

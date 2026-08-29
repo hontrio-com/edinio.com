@@ -12,12 +12,39 @@ import type {
 const BASE = "https://www.olx.ro/api/partner";
 
 export interface OlxValidationIssue { field?: string; title?: string; detail?: string }
-export type OlxResult<T> =
-  | { data: T }
-  | { error: string; status: number; validation?: OlxValidationIssue[] };
+export interface OlxEroare {
+  error: string;
+  status: number;
+  validation?: OlxValidationIssue[];
+  /** Cat ne-au cerut EI sa asteptam, in milisecunde. Vezi `asteptareaCeruta`. */
+  retryAfterMs?: number;
+}
+export type OlxResult<T> = { data: T } | OlxEroare;
 
-export function isOlxError<T>(r: OlxResult<T>): r is { error: string; status: number; validation?: OlxValidationIssue[] } {
+export function isOlxError<T>(r: OlxResult<T>): r is OlxEroare {
   return "error" in r;
+}
+
+/**
+ * `Retry-After`, in milisecunde.
+ *
+ * ═══ ASTEPTAREA O CER EI, NU O INVENTAM NOI (31.08.2026) ═══
+ *
+ * Antetul vine in doua forme in RFC 9110: un numar de secunde, sau o data HTTP. Amandoua se
+ * citesc; orice altceva se socoteste lipsa, si atunci ramane politica noastra.
+ *
+ * SE PUNE UN CAPAT SUS. Un antet gresit — sau ostil — ar putea spune „intoarce-te peste o
+ * saptamana", iar noi am parca lucrarea pana atunci fara ca nimeni sa afle. Un sfert de ora e
+ * peste orice fereastra de limitare reala a lor, si mult sub pragul la care omul se intreaba de
+ * ce nu s-a dus pretul.
+ */
+export function asteptareaCeruta(h: Headers): number | undefined {
+  const brut = h.get("retry-after");
+  if (!brut) return undefined;
+  const secunde = Number(brut.trim());
+  const ms = Number.isFinite(secunde) ? secunde * 1000 : Date.parse(brut) - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return undefined;
+  return Math.min(ms, 15 * 60_000);
 }
 
 async function call<T>(
@@ -62,7 +89,7 @@ async function call<T>(
       const msg = validation?.length
         ? `${detail}: ${validation.map((v) => v.detail ?? v.title ?? v.field).filter(Boolean).join("; ")}`
         : detail;
-      return { error: msg, status: res.status, validation };
+      return { error: msg, status: res.status, validation, retryAfterMs: asteptareaCeruta(res.headers) };
     }
     const unwrapped = (json !== null && typeof json === "object" && "data" in (json as Record<string, unknown>))
       ? (json as { data: T }).data

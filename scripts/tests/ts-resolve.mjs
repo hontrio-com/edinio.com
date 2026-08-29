@@ -9,16 +9,34 @@
  * din `src/` exact ca aplicatia.
  */
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { existsSync } from "node:fs";
+import { statSync } from "node:fs";
 import path from "node:path";
 
 const SRC = path.resolve(fileURLToPath(new URL("../../src/", import.meta.url)));
+
+/*
+ * FISIER, nu „exista".
+ *
+ * Prima candidata din lista de mai jos e chiar `base`, iar `existsSync` spune „da" si pentru un
+ * DIRECTOR. Deci `@/lib/gpsr` se oprea la director si Node arunca `ERR_UNSUPPORTED_DIR_IMPORT`,
+ * fara sa mai ajunga vreodata la `index.ts` de la coada listei.
+ *
+ * Ce costa: orice fisier care importa un modul-director devenea NETESTABIL — aceeasi paguba
+ * scrisa de doua ori mai jos, despre `./offer.types` si despre `next/*`.
+ */
+function esteFisier(cale) {
+  try {
+    return statSync(cale).isFile();
+  } catch {
+    return false;
+  }
+}
 
 export async function resolve(specifier, context, next) {
   if (specifier.startsWith("@/")) {
     const base = path.join(SRC, specifier.slice(2));
     for (const candidate of [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")]) {
-      if (existsSync(candidate)) return next(pathToFileURL(candidate).href, context);
+      if (esteFisier(candidate)) return next(pathToFileURL(candidate).href, context);
     }
   }
   // Doar extensiile ADEVARATE se lasa in pace. Cu „orice se termina in punct plus

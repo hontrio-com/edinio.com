@@ -21,6 +21,29 @@ const EXTEND_BATCH = 15;
 const MAX_ATTEMPTS = 5;
 
 /**
+ * O lucrare care asteapta de prea mult timp nu mai asteapta.
+ *
+ * ═══ CAPATUL DE SUS AL RABDARII (31.08.2026) ═══
+ *
+ * De cand un `429` nu mai arde o incercare, `attempts` singur nu mai marginește nimic: un magazin
+ * limitat la nesfarsit ar avea lucrari amanate din minut in minut, la infinit, fara ca nimeni sa
+ * afle ca pretul lui nu s-a dus niciodata.
+ *
+ * Varsta o marginește. Dupa o zi lucrarea devine scrisoare moarta ca oricare alta: se vede in
+ * ecran, cu motivul ei, si intra in „Reincearca tot".
+ *
+ * `created_at` se rescrie la fiecare intentie noua a omului (vezi `REINVIE` din `queue.ts`), deci
+ * ceasul masoara varsta INTENTIEI, nu a randului.
+ */
+const VIATA_MAXIMA_MS = 24 * 60 * 60_000;
+
+function preaBatran(item: { created_at?: string | null }): boolean {
+  const nascut = item.created_at ? Date.parse(item.created_at) : NaN;
+  /* O data necitibila nu are voie sa insemne „batran": ar arunca lucrarea din prima. */
+  return Number.isFinite(nascut) && Date.now() - nascut > VIATA_MAXIMA_MS;
+}
+
+/**
  * Cat se asteapta pana la incercarea urmatoare.
  *
  * ⚠ Crescator si PLAFONAT: fara plafon, a cincea asteptare ar fi de ore, iar o modificare de pret
@@ -52,7 +75,7 @@ export async function GET(req: NextRequest) {
   );
 
   const now = new Date().toISOString();
-  let processed = 0, failed = 0, statusChecked = 0, extended = 0;
+  let processed = 0, failed = 0, amanate = 0, statusChecked = 0, extended = 0;
   const ctxCache = new Map<string, RezultatContext>();
 
   async function ctxFor(businessId: string): Promise<RezultatContext> {
@@ -179,6 +202,25 @@ export async function GET(req: NextRequest) {
       } else if (res.permanent) {
         await stergeDacaNeschimbat(admin, COADA, item);
         failed++;
+      } else if (res.asteptare != null && !preaBatran(item)) {
+        amanate++;
+        /*
+         * ═══ CE NE-AU CERUT EI NU SE SOCOTESTE ESEC (31.08.2026) ═══
+         *
+         * `429` ardea o incercare, la fel ca o pana. Dar cele cinci incercari se consuma in
+         * cincisprezece minute, deci o limitare OLX de o jumatate de ora facea SCRISORI MOARTE din
+         * toata munca unui magazin — schimbari de pret care nu mai plecau niciodata.
+         *
+         * `attempts` ramane NEATINS: numara cat de rau e peticul, nu cat de ocupati sunt ei.
+         *
+         * Capatul e `preaBatran`, nu contorul: fara el, un magazin limitat pe veci ar avea lucrari
+         * amanate la nesfarsit, si nimeni n-ar afla. Cu el, dupa o zi lucrarea devine scrisoare
+         * moarta ca oricare alta — vizibila, cu motivul ei, si gata de „Reincearca".
+         */
+        await scrieDacaNeschimbat(admin, COADA, item, {
+          last_error: res.error.slice(0, 500),
+          next_retry_at: new Date(Date.now() + res.asteptare).toISOString(),
+        });
       } else {
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
@@ -198,9 +240,9 @@ export async function GET(req: NextRequest) {
           attempts,
           last_error: res.error.slice(0, 500),
           next_retry_at: asteptareaUrmatoare(attempts),
-          ...(attempts >= MAX_ATTEMPTS ? { abandonat_la: now } : {}),
+          ...(attempts >= MAX_ATTEMPTS || preaBatran(item) ? { abandonat_la: now } : {}),
         });
-        if (attempts >= MAX_ATTEMPTS) {
+        if (attempts >= MAX_ATTEMPTS || preaBatran(item)) {
           await logError({
             action: "olx-sync", severity: "critical",
             message: `o lucrare OLX a fost abandonata dupa ${attempts} incercari: ${res.error.slice(0, 200)}`,
@@ -306,7 +348,7 @@ export async function GET(req: NextRequest) {
     await pause(PACE_MS);
   }
 
-  console.log(`[olx-sync] processed=${processed} failed=${failed} status=${statusChecked} extended=${extended}`);
-  return NextResponse.json({ ok: true, processed, failed, statusChecked, extended });
+  console.log(`[olx-sync] processed=${processed} failed=${failed} amanate=${amanate} status=${statusChecked} extended=${extended}`);
+  return NextResponse.json({ ok: true, processed, failed, amanate, statusChecked, extended });
 }
 

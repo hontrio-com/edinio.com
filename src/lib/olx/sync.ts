@@ -71,7 +71,7 @@ export interface OlxAdvertRow {
 
 export type SyncOutcome =
   | { ok: true; action: "created" | "updated" | "deactivated" | "activated" | "deleted" | "skipped"; status?: string; url?: string | null }
-  | { ok: false; permanent: boolean; error: string };
+  | { ok: false; permanent: boolean; error: string; asteptare?: number };
 
 export function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -134,9 +134,39 @@ export async function loadOlxContext(admin: Db, businessId: string): Promise<Rez
 }
 
 // Retryable = network, rate-limit, auth hiccup, 5xx. Permanent = validation.
-function classify(res: { error: string; status: number; validation?: unknown[] }): { permanent: boolean } {
+/**
+ * Politica de reluare, intr-un singur loc.
+ *
+ * ═══ O ASTEPTARE NU E UN ESEC (31.08.2026) ═══
+ *
+ * `429` ardea o incercare, ca orice alta pana. Dar cele cinci incercari se consuma in
+ * 1+2+4+8 minute, deci o limitare OLX de un sfert de ora facea SCRISORI MOARTE din toata munca
+ * unui magazin — schimbari de pret si de stoc care nu mai plecau niciodata:
+ *
+ *     omul schimba pretul la treizeci de produse
+ *     OLX ne limiteaza (au dreptul, si o spun limpede prin `Retry-After`)
+ *     cinci refuzuri in cincisprezece minute -> `abandonat_la`
+ *     -> limitarea trece, dar nimic nu se mai reia
+ *
+ * DEOSEBIREA E INTRE „N-A MERS" SI „NU ACUM". Un refuz spune ceva despre lucrare; o limitare
+ * spune ceva despre CLIPA. Numai primul are voie sa consume din rabdarea noastra.
+ *
+ * Dar nici asteptarea nu e fara capat: cronul pune si o limita de varsta, ca o lucrare sa nu stea
+ * amanata la nesfarsit fara ca nimeni sa afle. Vezi `VIATA_MAXIMA_MS` in cron.
+ */
+const ASTEPTARE_IMPLICITA_MS = 60_000;
+
+/** Cat ne-au cerut EI sa asteptam, daca ne-au cerut. */
+export function asteptareaLor(res: { status: number; retryAfterMs?: number }): number | undefined {
+  if (res.retryAfterMs != null) return res.retryAfterMs;
+  return res.status === 429 ? ASTEPTARE_IMPLICITA_MS : undefined;
+}
+
+export function classify(res: { error: string; status: number; retryAfterMs?: number }): { permanent: boolean; asteptare?: number } {
+  /* Un `400` ramane refuz chiar daca poarta `Retry-After`: peticul e gresit, si intors peste un
+     minut va fi tot gresit. Asteptarea nu repara o cerere pe care ei au inteles-o si au respins-o. */
   if (res.status === 400) return { permanent: true };
-  return { permanent: false };
+  return { permanent: false, asteptare: asteptareaLor(res) };
 }
 
 function advertPatch(advert: OlxAdvert, now: string) {
@@ -175,15 +205,38 @@ async function getRow(admin: Db, businessId: string, offerId: string): Promise<O
   return (data as OlxAdvertRow) ?? null;
 }
 
-async function saveError(admin: Db, businessId: string, offerId: string, productId: string | null, message: string): Promise<void> {
+/**
+ * Scrie pe rand motivul pentru care lucrarea n-a mers, ca omul sa-l vada in ecran.
+ *
+ * ═══ UN REFUZ AL CARUI MOTIV NU S-A SCRIS E UN PRODUS CARE TACE (31.08.2026) ═══
+ *
+ * Scrierea mergea oarba. Iar cine cheama iesea cu `permanent: true`, deci cronul stergea elementul
+ * din coada — si nimic nu mai reincerca:
+ *
+ *     OLX refuza anuntul (categorie nemapata, atribut lipsa)
+ *     scrierea motivului pica -> nimeni n-o afla
+ *     elementul se sterge din coada
+ *     -> produsul pur si simplu NU apare pe OLX, si ecranul nu spune de ce
+ *
+ * Cine cheama intoarce acum `permanent: false` daca scrierea a picat. Costa cel mult cinci cereri
+ * in plus catre OLX pentru un produs oricum stricat — iar in schimb motivul nu se mai pierde: ori
+ * se scrie la a doua incercare, ori ramane in `last_error` pe scrisoarea moarta.
+ *
+ * Si reluarea e sigura pe toate cele patru cai: la actualizare e idempotenta, iar la creare paza
+ * anti-duplicat (`GET /adverts?external_id=`) intreaba OLX inainte de fiecare `POST`.
+ */
+async function saveError(
+  admin: Db, businessId: string, offerId: string, productId: string | null, message: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const now = new Date().toISOString();
-  await admin.from("olx_adverts").upsert(
+  const { error } = await admin.from("olx_adverts").upsert(
     {
       business_id: businessId, offer_id: offerId, product_id: productId,
       status: "error", error: message.slice(0, 500), updated_at: now,
     } as never,
     { onConflict: "business_id,offer_id" },
   );
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
 
 // ── Delete / deactivate / activate ──────────────────────────────────────────────
@@ -213,13 +266,14 @@ async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, 
       const dez = await advertCommand(ctx.token, row.olx_advert_id, "deactivate", { sAVandut: false });
       if (isOlxError(dez) && dez.status !== 400) {
         /* `400` aici inseamna de obicei „deja inactiv" — se merge mai departe la stergere. */
-        return { ok: false, permanent: false, error: `Nu am putut dezactiva anuntul inainte de stergere: ${dez.error}` };
+        /* Verdictul ramane al ramurii; se adauga doar asteptarea, ca un `429` sa nu arda o incercare. */
+        return { ok: false, permanent: false, asteptare: asteptareaLor(dez), error: `Nu am putut dezactiva anuntul inainte de stergere: ${dez.error}` };
       }
     }
     const res = await deleteAdvert(ctx.token, row.olx_advert_id);
     if (isOlxError(res) && res.status !== 404) {
       return {
-        ok: false, permanent: false,
+        ok: false, permanent: false, asteptare: asteptareaLor(res),
         error: `OLX nu a sters anuntul (${res.status}): ${res.error}`,
       };
     }
@@ -310,7 +364,7 @@ async function deactivateRemote(
     if (!scris.ok) return scris;
     return { ok: true, action: "skipped" };
   }
-  return { ok: false, permanent: false, error: res.error };
+  return { ok: false, permanent: false, asteptare: asteptareaLor(res), error: res.error };
 }
 
 async function activateRemote(admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow): Promise<SyncOutcome> {
@@ -348,8 +402,7 @@ async function activateRemote(admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow)
     }
     return { ok: false, permanent: true, error: "Cota de anunturi gratuite este epuizata. Cumpara un pachet OLX si activeaza anuntul." };
   }
-  const { permanent } = classify(res);
-  return { ok: false, permanent, error: res.error };
+  return { ok: false, ...classify(res), error: res.error };
 }
 
 // ── Upsert (create/update + stock reconciliation) ───────────────────────────────
@@ -385,10 +438,11 @@ async function upsertRemote(
 
   const entry = product.category ? ctx.config.category_map?.[product.category] : undefined;
   if (!entry) {
-    if (row) await saveError(admin, businessId, offerId, product.id, "Categoria produsului nu este mapata la o categorie OLX.");
-    return row
-      ? { ok: false, permanent: true, error: "Categoria produsului nu este mapata la o categorie OLX." }
-      : { ok: true, action: "skipped" };
+    if (!row) return { ok: true, action: "skipped" };
+    const motiv = "Categoria produsului nu este mapata la o categorie OLX.";
+    const scris = await saveError(admin, businessId, offerId, product.id, motiv);
+    if (!scris.ok) return { ok: false, permanent: false, error: `${motiv} (motivul nu s-a putut scrie: ${scris.error})` };
+    return { ok: false, permanent: true, error: motiv };
   }
 
   const body = toOlxAdvertBody(ctx.business, product, ctx.config, entry, ctx.gpsr);
@@ -398,19 +452,59 @@ async function upsertRemote(
     const res: OlxResult<OlxAdvert> = await updateAdvert(ctx.token, row.olx_advert_id, body);
     if (isOlxError(res)) {
       if (res.status === 404) {
-        // Advert vanished on OLX (removed manually) — recreate on next attempt.
-        await admin.from("olx_adverts").update({ olx_advert_id: null, updated_at: now }).eq("id", row.id);
-        return { ok: false, permanent: false, error: "Anuntul nu mai exista pe OLX - va fi recreat." };
+        /*
+         * ═══ ACEEASI HOTARARE, DOUA RASPUNSURI DEOSEBITE (31.08.2026) ═══
+         *
+         * Sondarea invatase deja ca un `404` inseamna „omul l-a sters de mana pe OLX" si punea o
+         * piatra. Aici scria pe dos: stergea legatura si il RECREA la trecerea urmatoare.
+         *
+         * Iar ramura asta o ia inaintea celeilalte, mereu: sondarea vine din doua in doua ore, pe
+         * cand coada se umple la FIECARE editare de pret sau de stoc. Deci reparatia de ieri era
+         * ocolita in practica de aproape fiecare data:
+         *
+         *     omul sterge anuntul in contul lui de OLX
+         *     mai schimba o data pretul in Edinio (sau intra o comanda)
+         *     `PUT /adverts/{id}` -> 404 -> „va fi recreat"
+         *     -> anuntul REAPARE, impotriva a ceea ce a facut el
+         *
+         * OLX nu sterge anunturi singur: ce expira primeste starea `outdated`, nu un `404`. Deci un
+         * `404` aici nu poate insemna decat hotararea lui. Iesirea e tot „Postează pe OLX".
+         */
+        const { error: ePiatra } = await admin.from("olx_adverts").update({
+          olx_advert_id: null, status: "sters_de_om", olx_url: null, error: null,
+          sters_de_om_la: now, last_status_at: now, updated_at: now,
+        } as never).eq("id", row.id);
+        if (ePiatra) {
+          return {
+            ok: false, permanent: false,
+            error: `Anuntul nu mai exista pe OLX, dar piatra nu s-a putut scrie: ${ePiatra.message}`,
+          };
+        }
+        return { ok: true, action: "skipped" };
       }
-      const { permanent } = classify(res);
-      if (permanent) await saveError(admin, businessId, offerId, product.id, res.error);
-      return { ok: false, permanent, error: res.error };
+      const v = classify(res);
+      if (v.permanent) {
+        const scris = await saveError(admin, businessId, offerId, product.id, res.error);
+        if (!scris.ok) return { ok: false, permanent: false, error: `${res.error} (motivul nu s-a putut scrie: ${scris.error})` };
+      }
+      return { ok: false, ...v, error: res.error };
     }
     const advert = res.data ?? ({ id: row.olx_advert_id, status: row.status } as OlxAdvert);
-    await admin.from("olx_adverts").upsert(
+    /*
+     * S-A DUS LA EI, DECI TREBUIE SA SE SCRIE SI LA NOI. Scrierea asta mergea oarba, iar mai jos se
+     * intorcea `ok` — deci cronul golea coada, si pretul nou, starea si `last_synced_at` ramaneau in
+     * urma pentru totdeauna. Reluarea e ieftina: `PUT` pe acelasi anunt e idempotent.
+     */
+    const { error: eProaspat } = await admin.from("olx_adverts").upsert(
       { business_id: businessId, offer_id: offerId, product_id: product.id, ...advertPatch(advert, now) } as never,
       { onConflict: "business_id,offer_id" },
     );
+    if (eProaspat) {
+      return {
+        ok: false, permanent: false,
+        error: `Anuntul s-a actualizat la OLX, dar starea locala nu s-a scris: ${eProaspat.message}`,
+      };
+    }
     /*
      * ⚠ SE REACTIVEAZA NUMAI CE A EXPIRAT SINGUR (29.08.2026, seara).
      *
@@ -507,8 +601,7 @@ async function upsertRemote(
        */
       const dupaAdoptare: OlxResult<OlxAdvert> = await updateAdvert(ctx.token, gasit.id, body);
       if (isOlxError(dupaAdoptare)) {
-        const { permanent } = classify(dupaAdoptare);
-        return { ok: false, permanent, error: dupaAdoptare.error };
+        return { ok: false, ...classify(dupaAdoptare), error: dupaAdoptare.error };
       }
       const proaspat = dupaAdoptare.data ?? gasit;
       /*
@@ -550,21 +643,26 @@ async function upsertRemote(
    */
   if (isOlxError(existente)) {
     return {
-      ok: false, permanent: false,
+      ok: false, permanent: false, asteptare: asteptareaLor(existente),
       error: `Nu am putut verifica daca anuntul exista deja la OLX (${existente.status}): ${existente.error}`,
     };
   }
 
   const res: OlxResult<OlxAdvert> = await createAdvert(ctx.token, body);
   if (isOlxError(res)) {
-    const { permanent } = classify(res);
-    if (permanent) await saveError(admin, businessId, offerId, product.id, res.error);
-    return { ok: false, permanent, error: res.error };
+    const v = classify(res);
+    if (v.permanent) {
+      const scris = await saveError(admin, businessId, offerId, product.id, res.error);
+      if (!scris.ok) return { ok: false, permanent: false, error: `${res.error} (motivul nu s-a putut scrie: ${scris.error})` };
+    }
+    return { ok: false, ...v, error: res.error };
   }
   const advert = res.data;
   if (!advert?.id) {
-    await saveError(admin, businessId, offerId, product.id, "Raspuns OLX fara ID de anunt.");
-    return { ok: false, permanent: true, error: "Raspuns OLX fara ID de anunt." };
+    const motiv = "Raspuns OLX fara ID de anunt.";
+    const scris = await saveError(admin, businessId, offerId, product.id, motiv);
+    if (!scris.ok) return { ok: false, permanent: false, error: `${motiv} (motivul nu s-a putut scrie: ${scris.error})` };
+    return { ok: false, permanent: true, error: motiv };
   }
   const { error: eLegatura } = await admin.from("olx_adverts").upsert(
     { business_id: businessId, offer_id: offerId, product_id: product.id, ...advertPatch(advert, now) } as never,
@@ -597,6 +695,8 @@ export interface OlxQueueItem {
   offer_id: string;
   op: string;
   attempts: number;
+  /** Capatul de sus al asteptarilor. `revendica_din_coada` intoarce randul intreg. */
+  created_at: string;
 }
 
 /**

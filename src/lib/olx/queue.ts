@@ -70,6 +70,15 @@ function scrieEsecul(unde: string, businessId: string, e: unknown): void {
  */
 const REINVIE = { attempts: 0, last_error: null, next_retry_at: null, abandonat_la: null } as const;
 
+/**
+ * Ceasul varstei porneste odata cu intentia, nu cu randul.
+ *
+ * Cronul abandoneaza o lucrare mai batrana de o zi (`VIATA_MAXIMA_MS`). Fara randul asta, un rand
+ * vechi de o saptamana, reinviat de o apasare de azi, ar fi fost aruncat la prima trecere — adica
+ * tocmai intentia proaspata ar fi murit cel mai repede.
+ */
+const CEAS_NOU = () => ({ created_at: new Date().toISOString() });
+
 export async function enqueueOlxSync(
   businessId: string,
   productId: string | null,
@@ -86,7 +95,7 @@ export async function enqueueOlxSync(
     if (!config.connected || !config.refresh_token) return;
     if (config.auto_sync === false) return;
     const { error: eCoada } = await admin.from("olx_sync_queue").upsert(
-      { business_id: businessId, product_id: productId, offer_id: offerId, op, ...REINVIE },
+      { business_id: businessId, product_id: productId, offer_id: offerId, op, ...REINVIE, ...CEAS_NOU() },
       { onConflict: "business_id,offer_id,op" },
     );
     /* ⚠ `supabase-js` NU arunca la o eroare PostgREST: o intoarce. Vezi nota de sus. */
@@ -109,7 +118,7 @@ export async function enqueueOlxSyncMany(businessId: string, productIds: (string
     const config = (ss?.olx_config as OlxConfig) ?? {};
     if (!config.connected || !config.refresh_token || config.auto_sync === false) return;
     const { error: eCoada } = await admin.from("olx_sync_queue").upsert(
-      ids.map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op: "upsert", ...REINVIE })),
+      ids.map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op: "upsert", ...REINVIE, ...CEAS_NOU() })),
       { onConflict: "business_id,offer_id,op" },
     );
     /* ⚠ `supabase-js` NU arunca la o eroare PostgREST: o intoarce. Vezi nota de sus. */
@@ -149,7 +158,7 @@ export async function enqueueOlxStergereMany(businessId: string, productIds: (st
     const config = (ss?.olx_config as OlxConfig) ?? {};
     if (!config.connected || !config.refresh_token || config.auto_sync === false) return;
     const { error: eCoada } = await admin.from("olx_sync_queue").upsert(
-      ids.map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete", ...REINVIE })),
+      ids.map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete", ...REINVIE, ...CEAS_NOU() })),
       { onConflict: "business_id,offer_id,op" },
     );
     /* ⚠ `supabase-js` NU arunca la o eroare PostgREST: o intoarce. Vezi nota de sus. */
@@ -222,7 +231,7 @@ export async function enqueueOlxRetragereInainteDeStergere(
 
     for (const bucata of bucatiDeIduri(cuAnunt)) {
       const { error } = await admin.from("olx_sync_queue").upsert(
-        bucata.map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete", ...REINVIE })),
+        bucata.map((id) => ({ business_id: businessId, product_id: null, offer_id: id, op: "delete", ...REINVIE, ...CEAS_NOU() })),
         { onConflict: "business_id,offer_id,op" },
       );
       if (error) return { fel: "nesigur", motiv: `Retragerea nu s-a putut pune in coada: ${error.message}` };

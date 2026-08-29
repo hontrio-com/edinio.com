@@ -23,6 +23,7 @@ import {
 import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNow, deleteAdvertNow, rezolvaConflictul } from "@/lib/olx/sync";
 import { olxReadinessError, categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
 import { cuRegistru, cheieOperatie, type Verdict } from "@/lib/operatii/registru";
+import { legatoriDeAtribute, nereguliAtribute } from "@/lib/olx/atribute";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
   OlxCity, OlxConfig, OlxDistrict, OlxMessage, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread,
@@ -371,7 +372,28 @@ export async function saveOlxCategoryMapEntry(
     if (attributes === null) return { error: "Nu am putut verifica categoria la OLX. Încearcă din nou." };
     const nepotrivita = categoriaNuPrimesteProduse(attributes);
     if (nepotrivita) return { error: nepotrivita };
-    const lipsa = atributeObligatoriiLipsa(attributes, entry.attributes);
+    /*
+     * ⚠ SI REGULILE LOR, NU DOAR „OBLIGATORIU" (01.09.2026). Schema atributului poarta `values[]`,
+     * `numeric`, `min`, `max`, `allow_multiple_values` — si le foloseam numai pe `required`. Deci o
+     * valoare care nu e in lista lor pleca la ei si se intorcea ca refuz, la publicare, pe produsul
+     * comerciantului. Verificata aici, il scuteste de o cursa pe care n-are cum s-o inteleaga.
+     *
+     * ⚠ Se verifica doar CONSTANTELE: o legatura catre un camp al produsului n-are inca valoare in
+     * clipa salvarii, iar valoarea aceea se verifica la publicare, cand exista produsul.
+     */
+    const constante: Record<string, string | string[]> = {};
+    for (const [cod, m] of Object.entries(entry.attributes ?? {})) {
+      if (typeof m === "string") { if (m.trim()) constante[cod] = m; continue; }
+      if (Array.isArray(m) && m.length > 0 && typeof m[0] === "string") constante[cod] = m as string[];
+    }
+    const nereguli = nereguliAtribute(attributes, constante);
+    if (nereguli.length > 0) return { error: nereguli.join(" ") };
+    /*
+     * ⚠ La SALVAREA maparii nu exista un produs anume, deci se verifica LEGATURILE: un atribut
+     * obligatoriu e „completat" daca are o sursa, oricare. Daca sursa aceea nu da nimic pentru un
+     * produs, aflam la publicare — si atunci mesajul e despre produsul acela, nu despre mapare.
+     */
+    const lipsa = atributeObligatoriiLipsa(attributes, legatoriDeAtribute(entry.attributes));
     if (lipsa.length > 0) return { error: `Completează atributele obligatorii: ${lipsa.join(", ")}` };
   }
   /*

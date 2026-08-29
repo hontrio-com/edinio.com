@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/olx.actions";
 import type { OlxAttributeDef, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion } from "@/lib/olx/types";
 import { categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
+import { legatoriDeAtribute, type OlxMaparecAtribut, type OlxLegaturaAtribut } from "@/lib/olx/atribute";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,7 +107,7 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
     initial ? { id: initial.category_id, label: initial.label, photos_limit: initial.photos_limit } : null,
   );
   const [attributes, setAttributes] = useState<OlxAttributeDef[] | null>(null);
-  const [attrValues, setAttrValues] = useState<Record<string, string | string[]>>(initial?.attributes ?? {});
+  const [attrValues, setAttrValues] = useState<Record<string, OlxMaparecAtribut>>(initial?.attributes ?? {});
   const [saving, startSave] = useTransition();
   // Derived: while a leaf is chosen but its attribute defs haven't loaded yet.
   const loadingAttrs = leaf !== null && attributes === null;
@@ -138,17 +139,20 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
     */
     const nepotrivita = categoriaNuPrimesteProduse(attributes ?? []);
     if (nepotrivita) { toast.error(nepotrivita); return; }
-    const missing = atributeObligatoriiLipsa(attributes ?? [], attrValues);
+    const missing = atributeObligatoriiLipsa(attributes ?? [], legatoriDeAtribute(attrValues));
     if (missing.length > 0) {
       toast.error(`Completează atributele obligatorii: ${missing.join(", ")}`);
       return;
     }
     // Keep only attribute-type values (price/salary are derived from the product).
-    const clean: Record<string, string | string[]> = {};
+    const clean: Record<string, OlxMaparecAtribut> = {};
     for (const a of attributes ?? []) {
       if (a.validation?.type && a.validation.type !== "attribute") continue;
       const v = attrValues[a.code];
-      if (Array.isArray(v) ? v.length > 0 : String(v ?? "").trim()) clean[a.code] = v;
+      if (v === undefined) continue;
+      if (typeof v === "string") { if (v.trim()) clean[a.code] = v; continue; }
+      if (Array.isArray(v) && v.length > 0) { clean[a.code] = v; continue; }
+      if (!Array.isArray(v) && typeof v === "object") clean[a.code] = v;
     }
     const entry: OlxCategoryMapEntry = { category_id: leaf.id, label: leaf.label, photos_limit: leaf.photos_limit, attributes: clean };
     startSave(async () => {
@@ -345,58 +349,136 @@ function CategoryPicker({ businessId, defaultQuery, onPick }: {
   );
 }
 
+/*
+  ⚠ DE UNDE VINE VALOAREA, NU DOAR CARE E (01.09.2026)
+
+  Până azi fiecare atribut OLX primea o valoare fixă pe categorie — deci toți pantofii magazinului
+  plecau cu același brand. Pentru un catalog adevărat nu ajunge: brandul e al produsului, mărimea
+  e a variantei, iar „Stare: nou" chiar e o constantă.
+
+  ⚠ Mapările vechi rămân valabile și se văd aici ca „Valoare fixă": un șir înseamnă, ca până acum,
+  o constantă. Nicio migrație, nicio zi în care maparea cuiva nu mai înseamnă nimic.
+*/
+
+type Sursa = "constanta" | "camp" | "specificatie" | "varianta";
+
+const CAMPURI: { valoare: "brand" | "sku" | "gtin" | "nume"; eticheta: string }[] = [
+  { valoare: "brand", eticheta: "Brand" },
+  { valoare: "nume", eticheta: "Nume produs" },
+  { valoare: "sku", eticheta: "SKU" },
+  { valoare: "gtin", eticheta: "Cod de bare (GTIN)" },
+];
+
+function sursaLui(v: OlxMaparecAtribut | undefined): Sursa {
+  if (v === undefined) return "constanta";
+  if (typeof v === "string" || (Array.isArray(v) && (v.length === 0 || typeof v[0] === "string"))) return "constanta";
+  const l = (Array.isArray(v) ? v[0] : v) as OlxLegaturaAtribut;
+  return l.sursa;
+}
+
 function AttributeFields({ attributes, values, onChange }: {
   attributes: OlxAttributeDef[];
-  values: Record<string, string | string[]>;
-  onChange: (v: Record<string, string | string[]>) => void;
+  values: Record<string, OlxMaparecAtribut>;
+  onChange: (v: Record<string, OlxMaparecAtribut>) => void;
 }) {
-  // Only user-provided attributes; price/salary come from the product itself.
   const editable = attributes.filter((a) => !a.validation?.type || a.validation.type === "attribute");
   if (editable.length === 0) {
     return <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">Această categorie nu cere atribute suplimentare.</p>;
   }
 
-  function set(code: string, v: string | string[]) { onChange({ ...values, [code]: v }); }
+  function pune(code: string, v: OlxMaparecAtribut | undefined) {
+    const next = { ...values };
+    if (v === undefined) delete next[code];
+    else next[code] = v;
+    onChange(next);
+  }
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-medium text-foreground">Atribute categorie</p>
       {editable.map((a) => {
-        const required = a.validation?.required === true;
-        const multiple = a.validation?.allow_multiple_values === true;
-        const hasValues = Array.isArray(a.values) && a.values.length > 0;
-        const current = values[a.code];
+        const v = values[a.code];
+        const sursa = sursaLui(v);
+        const legatura = (typeof v === "object" && !Array.isArray(v) ? v : Array.isArray(v) && typeof v[0] === "object" ? v[0] : null) as OlxLegaturaAtribut | null;
         return (
-          <div key={a.code}>
-            <label className="mb-1 block text-xs font-medium text-foreground">
-              {a.label}{a.unit ? ` (${a.unit})` : ""}{required && <span className="text-destructive"> *</span>}
+          <div key={a.code} className="rounded-xl border border-border p-3">
+            <label className="text-xs font-medium text-foreground">
+              {a.label}
+              {a.validation?.required && <span className="ml-1 text-destructive">*</span>}
+              {a.unit && <span className="ml-1 text-muted-foreground">({a.unit})</span>}
             </label>
-            {hasValues && !multiple ? (
-              <select aria-label={a.label} value={(current as string) ?? ""} onChange={(e) => set(a.code, e.target.value)} className={selectCls}>
-                <option value="">— alege —</option>
-                {a.values!.map((v) => <option key={v.code} value={v.code}>{v.label}</option>)}
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select
+                className={selectCls}
+                value={sursa}
+                onChange={(e) => {
+                  const s = e.target.value as Sursa;
+                  if (s === "constanta") pune(a.code, "");
+                  else if (s === "camp") pune(a.code, { sursa: "camp", camp: "brand" });
+                  else if (s === "specificatie") pune(a.code, { sursa: "specificatie", eticheta: "" });
+                  else pune(a.code, { sursa: "varianta", optiune: "" });
+                }}
+              >
+                <option value="constanta">Valoare fixă</option>
+                <option value="camp">Câmp din produs</option>
+                <option value="specificatie">Specificație produs</option>
+                <option value="varianta">Opțiune de variantă</option>
               </select>
-            ) : hasValues && multiple ? (
-              <div className="flex flex-wrap gap-1.5">
-                {a.values!.map((v) => {
-                  const arr = Array.isArray(current) ? current : [];
-                  const on = arr.includes(v.code);
-                  return (
-                    <button key={v.code} type="button"
-                      onClick={() => set(a.code, on ? arr.filter((x) => x !== v.code) : [...arr, v.code])}
-                      className={cn("rounded-full border px-2.5 py-1 text-xs transition-colors", on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50")}>
-                      {v.label}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <Input
-                value={(current as string) ?? ""}
-                onChange={(e) => set(a.code, e.target.value)}
-                inputMode={a.validation?.numeric ? "numeric" : undefined}
-                placeholder={a.validation?.numeric ? "număr" : ""}
-              />
+
+              {sursa === "constanta" && (
+                Array.isArray(a.values) && a.values.length > 0 ? (
+                  <select
+                    className={selectCls}
+                    value={typeof v === "string" ? v : ""}
+                    onChange={(e) => pune(a.code, e.target.value)}
+                  >
+                    <option value="">— alege —</option>
+                    {a.values.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
+                  </select>
+                ) : (
+                  <Input
+                    className="max-w-xs"
+                    value={typeof v === "string" ? v : ""}
+                    placeholder={a.validation?.numeric ? "număr" : "valoare"}
+                    onChange={(e) => pune(a.code, e.target.value)}
+                  />
+                )
+              )}
+
+              {sursa === "camp" && (
+                <select
+                  className={selectCls}
+                  value={legatura?.sursa === "camp" ? legatura.camp : "brand"}
+                  onChange={(e) => pune(a.code, { sursa: "camp", camp: e.target.value as "brand" })}
+                >
+                  {CAMPURI.map((c) => <option key={c.valoare} value={c.valoare}>{c.eticheta}</option>)}
+                </select>
+              )}
+
+              {sursa === "specificatie" && (
+                <Input
+                  className="max-w-xs"
+                  value={legatura?.sursa === "specificatie" ? legatura.eticheta : ""}
+                  placeholder="Eticheta specificației, ex. Culoare"
+                  onChange={(e) => pune(a.code, { sursa: "specificatie", eticheta: e.target.value })}
+                />
+              )}
+
+              {sursa === "varianta" && (
+                <Input
+                  className="max-w-xs"
+                  value={legatura?.sursa === "varianta" ? legatura.optiune : ""}
+                  placeholder="Numele opțiunii, ex. Mărime"
+                  onChange={(e) => pune(a.code, { sursa: "varianta", optiune: e.target.value })}
+                />
+              )}
+            </div>
+
+            {sursa !== "constanta" && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Dacă produsul nu are valoarea asta, atributul nu se trimite. Pentru categoriile unde
+                OLX îl cere, adaugă și o valoare fixă de rezervă din ecranul produsului.
+              </p>
             )}
           </div>
         );
@@ -404,3 +486,4 @@ function AttributeFields({ attributes, values, onChange }: {
     </div>
   );
 }
+

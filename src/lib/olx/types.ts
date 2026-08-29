@@ -3,7 +3,13 @@
 
 // Attribute values chosen by the merchant for a mapped category
 // (code -> value or list of values, matching OLX attribute definitions).
-export type OlxAttributeValues = Record<string, string | string[]>;
+/**
+ * Ce s-a legat la fiecare atribut OLX.
+ *
+ * ⚠ Forma VECHE — un sir sau o lista de siruri — ramane inteleasa ca „valoare fixa", deci mapările
+ * existente ale comerciantilor nu se strica si nu cer nicio migratie de date. Vezi `atribute.ts`.
+ */
+export type OlxAttributeValues = Record<string, import("./atribute").OlxMaparecAtribut>;
 
 // One mapped Edinio category -> OLX leaf category + its required attributes.
 export interface OlxCategoryMapEntry {

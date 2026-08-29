@@ -7,6 +7,7 @@
 
 import { gpsrEfectiv, gpsrPentruOlx, type GpsrConfig } from "@/lib/gpsr";
 import { OLX_CURRENCY, type OlxAttributeDef, type OlxCategoryMapEntry, type OlxConfig } from "./types";
+import { rezolvaAtributele } from "./atribute";
 
 export interface MappableBusiness {
   slug: string;
@@ -136,7 +137,13 @@ export function toOlxAdvertBody(
   const images = (Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [])
     .slice(0, Math.max(0, entry.photos_limit ?? 8));
 
-  const attributes = Object.entries(entry.attributes ?? {})
+  /*
+   * ⚠ VALOAREA SE REZOLVA PER PRODUS (01.09.2026). Pana azi era o constanta pe categorie, deci toti
+   * pantofii magazinului plecau cu acelasi brand. `rezolvaAtributele` ia fiecare atribut prin lantul
+   * lui de surse — camp al produsului, specificatie, optiune de varianta, constanta — si intoarce
+   * prima care da ceva. Mapările vechi (un sir) inseamna in continuare o constanta.
+   */
+  const attributes = Object.entries(rezolvaAtributele(entry.attributes, product))
     .filter(([code, v]) => !!code && (Array.isArray(v) ? v.length > 0 : String(v).trim() !== ""))
     .map(([code, v]) => (Array.isArray(v) ? { code, values: v } : { code, value: String(v) }));
 

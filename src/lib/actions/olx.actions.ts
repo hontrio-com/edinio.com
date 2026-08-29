@@ -28,6 +28,10 @@ import { cuRegistru, cheieOperatie, deblocheazaOperatie, eAtarnata, PRAG_ATARNAT
   type RezultatOperatie, type Verdict } from "@/lib/operatii/registru";
 import { FORMA_INTENTIEI, cePachetAnunt, cePachetCategorie, cePromovare } from "@/lib/olx/intentie-de-cumparare";
 import { verdictulPlatii } from "@/lib/olx/verdictul-platii";
+import {
+  citesteLista, lamurestePlata, platiNelamurite, promovareaEActiva,
+  type LamurireOlx, type OlxPlataNelamurita,
+} from "@/lib/olx/plati";
 import { legatoriDeAtribute, nereguliAtribute } from "@/lib/olx/atribute";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
@@ -727,21 +731,7 @@ export async function getOlxSanatate(businessId: string): Promise<OlxSanatate | 
 
 /* ── Platile ramase nelamurite ────────────────────────────────────────────── */
 
-/** O plata catre OLX al carei rezultat n-a fost confirmat. */
-export interface OlxPlataNelamurita {
-  id: string;
-  cheie: string;
-  creatLa: string;
-  ultimaEroare: string | null;
-  /** Ce anume s-a incercat, citit din cheie: `promovare:123:top_ad:<intentie>`. */
-  descriere: string;
-  /** `necunoscut` = apelul s-a incheiat si raspunsul a fost neinteligibil. */
-  stare: "in_curs" | "necunoscut";
-}
-
 /**
- * Platile care au ramas `in_curs` sau `necunoscut`.
- *
  * ═══ O INDOIALA CARE NU SE LAMURESTE E UN FUND DE SAC (01.09.2026) ═══
  *
  * Registrul tine slotul dinadins cand nu stie ce s-a intamplat — asa nu se plateste de doua ori.
@@ -751,14 +741,13 @@ export interface OlxPlataNelamurita {
  *
  * ⚠ SI PANA ACUM DEFECTUL ERA MASCAT. Cheia purta ziua, deci blocajul se desfacea singur peste
  * noapte. De cand cheia poarta intentia — si bine face — blocajul e permanent, iar iesirea asta a
- * trecut din „bine de avut" in „obligatoriu". Fara ea, reparatia ar fi inlocuit o plata dubla cu
- * un fund de sac.
+ * trecut din „bine de avut" in „obligatoriu".
  *
- * ⚠ PRAGUL E AL REGISTRULUI, nu unul nou. `eAtarnata` exista tocmai ca sa nu se arate ca „ramasa
- * neterminata" chiar operatia care TOCMAI a plecat si inca asteapta raspunsul — si sa nu i se
- * puna alaturi un buton care, apasat atunci, ar debloca o operatie care CHIAR se executa. Aceeasi
- * constanta trebuie sa hotarasca si ce se numara, si ce se arata, si ce accepta butonul; doua
- * praguri care nu se vorbesc ar aduce pe ecran randuri pe care butonul lor refuza sa le atinga.
+ * ⚠ MIEZUL STA IN `src/lib/olx/plati.ts`, nu aici. Actiunile incep toate cu `guard()`, care cere o
+ * sesiune de OM; cronul n-are cookie-uri, deci un pas de reconciliere scris peste actiunile astea
+ * ar fi raspuns „Neautorizat" pe fiecare rand, la fiecare trecere, fara sa se planga nimanui. Si
+ * nici exportate de aici nu puteau fi: ce se exporta dintr-un modul `"use server"` e un capat
+ * public.
  */
 export async function getOlxPlatiNelamurite(
   businessId: string,
@@ -770,200 +759,14 @@ export async function getOlxPlatiNelamurite(
   return { plati };
 }
 
-/** Fara `guard`: o cheama si cronul, care n-are sesiune de om. */
-async function platiNelamurite(
-  admin: ReturnType<typeof createAdminClient>, businessId: string, acum = Date.now(),
-): Promise<{ plati: OlxPlataNelamurita[]; error?: string }> {
-  const { data, error } = await admin
-    .from("operatii_externe")
-    .select("id, cheie, stare, creat_la, ultima_eroare")
-    .eq("business_id", businessId).eq("furnizor", "olx").eq("fel", "plata")
-    .in("stare", ["in_curs", "necunoscut"])
-    .order("creat_la", { ascending: true }).limit(50);
-  if (error) return { plati: [], error: "Nu am putut citi plățile în așteptare." };
-  const randuri = (data ?? []) as {
-    id: string; cheie: string; stare: string; creat_la: string; ultima_eroare: string | null;
-  }[];
-  return {
-    plati: randuri
-      .map((r) => ({
-        id: r.id, cheie: r.cheie, creatLa: r.creat_la, ultimaEroare: r.ultima_eroare,
-        descriere: descrieCheiaDePlata(r.cheie),
-        stare: r.stare as "in_curs" | "necunoscut",
-      }))
-      /* ⚠ Acelasi prag ca al registrului: vezi nota de mai sus. */
-      .filter((p) => eAtarnata({ stare: p.stare, creatLa: p.creatLa }, acum)),
-  };
-}
-
-/**
- * Cheia, pe intelesul omului. `plata:olx:promovare:123:top_ad:<intentie>`.
- *
- * ⚠ SE CITESTE POZITIONAL, si de-aia id-ul intentiei sta la COADA. Pus in fata, `b[2]` ar fi
- * devenit un id, nicio ramura nu s-ar mai fi potrivit, si orice plata nelamurita ar fi raspuns pe
- * veci „inca nu stim" — cu descrierea aratata omului ca sir brut.
- */
-function descrieCheiaDePlata(cheie: string): string {
-  const b = cheie.split(":");
-  if (b[2] === "promovare") return `Promovare „${b[4] ?? "?"}" pe anunțul ${b[3] ?? "?"}`;
-  if (b[2] === "pachet-anunt") return `Pachet pentru anunțul ${b[3] ?? "?"}`;
-  if (b[2] === "pachet-categorie") return `Pachet de ${b[4] ?? "?"} anunțuri în categoria ${b[3] ?? "?"}`;
-  return cheie;
-}
-
-/** Ce am aflat despre o plata nelamurita. */
-export type LamurireOlx =
-  | { stare: "intrat"; mesaj: string }
-  | { stare: "inca-nu-stim"; mesaj: string };
-
-/**
- * Intreaba OLX daca plata a intrat, si inchide randul cand se vede ca da.
- *
- * ═══ DOVADA POZITIVA POATE INCHIDE. LIPSA DOVEZII NU POATE DESCHIDE. ═══ (02.09.2026)
- *
- * Varianta dintai facea si pe dos: daca primul `GET` nu vedea promovarea, declara „n-a intrat",
- * DEBLOCA slotul si il invita pe om sa incerce din nou. Iar deblocarea nu e neutra — e chiar
- * usa catre a doua plata. Trei lucruri o faceau periculoasa, si fiecare in parte ajungea:
- *
- *   ⚠ RUTA LOR INTOARCE SI PROMOVARILE EXPIRATE. Cautata doar dupa `code`, o promovare cumparata
- *     acum zece zile si expirata arata la fel ca una activa. Deci si invers: o cumparare noua
- *     peste una expirata nu adauga niciun cod nou, si „efectul nu se vede" era fals.
- *
- *   ⚠ UN `200` CU CORP STRICAT SE CITEA CA LISTA GOALA. `call` intoarce `{ data: {} }` pentru un
- *     corp neparsabil si `{ data: undefined }` pentru `204`. `Array.isArray` da fals, lista parea
- *     goala, si o cale prin care n-a trecut nicio informatie producea acelasi verdict ca una buna.
- *
- *   ⚠ PACHETELE NU AU MARTOR. `purchaseCategoryPacket` posteaza fara niciun anunt, deci nicio linie
- *     de facturare nu va avea vreodata un `advert_id` de potrivit; iar numarul de pachete se misca
- *     singur, fiindca anunturile publicate de cron consuma sloturi. Un martor construit pe el ar fi
- *     raspuns „nu" din alcatuire, nu din fapte.
- *
- * Deci aici nu se declara NICIODATA „n-a intrat". Se inchide numai cand efectul CHIAR se vede, si
- * numai cand se poate lega de randul asta. Restul ramane „inca nu stim", iar iesirea o deschide
- * omul, asumat, cu dovezile in fata — vezi `renuntaLaOlxPlata`.
- */
 export async function lamuresteOlxPlata(
   businessId: string, operatieId: string,
 ): Promise<LamurireOlx | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  return lamurestePlata(createAdminClient(), businessId, operatieId);
-}
-
-/**
- * Miezul, fara `guard`.
- *
- * ⚠ CRONUL N-ARE SESIUNE DE OM. `guard` face `supabase.auth.getUser()` pe clientul cu cookie-uri;
- * intr-un cron nu exista cookie, deci raspunsul ar fi fost „Neautorizat" pe fiecare rand, la
- * fiecare trecere, si nimeni nu s-ar fi plans. Ar fi fost o cale care nu exista, si tocmai
- * increderea in ea ar fi facut sa nu se mai uite nimeni. Aceeasi orbire ca a veghii care arata zero.
- */
-async function lamurestePlata(
-  admin: ReturnType<typeof createAdminClient>, businessId: string, operatieId: string,
-): Promise<LamurireOlx | { error: string }> {
-  const { data, error } = await admin
-    .from("operatii_externe").select("id, cheie, stare, creat_la")
-    .eq("id", operatieId).eq("business_id", businessId)
-    .eq("furnizor", "olx").eq("fel", "plata").maybeSingle();
-  if (error) return { error: "Nu am putut citi operația." };
-  if (!data) return { error: "Operația nu mai există." };
-  if (!["in_curs", "necunoscut"].includes(String(data.stare))) {
-    return { stare: "intrat", mesaj: "Operația s-a lămurit deja pe alt drum. Reîncarcă pagina." };
-  }
-
-  const nascut = Date.parse(String(data.creat_la));
-  /*
-   * ⚠ RABDARE INAINTE DE ORICE INTREBARE. OLX nu arata pe loc ce tocmai a primit, iar un `GET` prea
-   * devreme e chiar felul de raspuns care nu inseamna nimic. Pragul e al registrului, acelasi cu
-   * cel dupa care randul apare in panou: altfel butonul ar fi aratat langa randuri pe care refuza
-   * sa le atinga.
-   */
-  if (Number.isFinite(nascut) && Date.now() - nascut < PRAG_ATARNATA_MS) {
-    return {
-      stare: "inca-nu-stim",
-      mesaj: "Plata a plecat acum câteva momente. Mai așteaptă un minut și verifică din nou.",
-    };
-  }
-
-  const bucati = String(data.cheie).split(":");
-  const fel = bucati[2];
-
-  if (fel !== "promovare") {
-    /*
-     * ⚠ PACHETELE NU SE POT DOVEDI DE AICI, si asta se spune, nu se ascunde intr-un `null`.
-     * Raspunsul lor spune cate pachete ai, nu cand le-ai luat; iar sloturile se consuma singure,
-     * pe masura ce cronul publica anunturi. Orice verdict construit pe numarul asta ar fi fost
-     * ghicit. Omul are in schimb ce-i trebuie ca sa hotarasca: soldul si pachetele, in panou.
-     */
-    return {
-      stare: "inca-nu-stim",
-      mesaj: "Pachetele nu se pot lega de o cumpărare anume prin API. Uită-te la pachetele și soldul din panou; dacă pachetul e acolo, plata a intrat.",
-    };
-  }
-
-  const advertId = Number(bucati[3]);
-  const cod = bucati[4];
-  if (!Number.isFinite(advertId) || !cod) {
-    return { stare: "inca-nu-stim", mesaj: "Nu am putut citi ce anume s-a cumpărat." };
-  }
-
-  const stim = citesteLista<OlxPaidFeature>(
-    await withToken(businessId, (token) => getAdvertPaidFeatures(token, advertId)),
-  );
-  if (!stim.stiu) {
-    return { stare: "inca-nu-stim", mesaj: `Nu am putut întreba OLX acum (${stim.motiv}). Încearcă din nou peste câteva minute.` };
-  }
-
-  const activa = promovareaEActiva(stim.date, cod);
-  if (!activa) {
-    /*
-     * ⚠ AICI NU SE DEBLOCHEAZA NIMIC. „Nu se vede" poate insemna si ca ei inca n-au asezat-o, si
-     * ca s-a cumparat una scurta care intre timp a expirat. Amandoua ar fi trimis omul sa plateasca
-     * a doua oara. Iesirea e a lui, cu butonul de renuntare, unde scrie ce isi asuma.
-     */
-    return {
-      stare: "inca-nu-stim",
-      mesaj: "La OLX nu se vede promovarea. Verifică în contul tău de pe olx.ro: dacă nici acolo nu e, deblochează cumpărarea de mai jos.",
-    };
-  }
-
-  /*
-   * ⚠ SI DOVADA POZITIVA POATE FI A ALTCUIVA. Daca omul a mai incercat o data si a doua incercare
-   * a reusit, promovarea pe care o vedem acum e a EI. Inchisa pe randul vechi, registrul ar spune
-   * ca au intrat amandoua cand a intrat una — sau ar binecuvanta tacut o plata dubla.
-   *
-   * Deci: cand mai exista un rand deschis pentru acelasi anunt si acelasi cod, nu se inchide
-   * niciunul automat. Un singur martor nu poate fi revendicat de doua randuri.
-   */
-  const { data: frati, error: eFrati } = await admin
-    .from("operatii_externe").select("id")
-    .eq("business_id", businessId).eq("furnizor", "olx").eq("fel", "plata")
-    .in("stare", ["in_curs", "necunoscut"])
-    .like("cheie", `plata:olx:promovare:${advertId}:${cod}:%`);
-  if (eFrati) return { error: "Nu am putut verifica dacă mai sunt cumpărări deschise pe același anunț." };
-  if ((frati ?? []).length > 1) {
-    return {
-      stare: "inca-nu-stim",
-      mesaj: "Promovarea se vede la OLX, dar sunt mai multe cumpărări deschise pentru același anunț și nu pot spune care dintre ele a intrat. Verifică soldul pe olx.ro.",
-    };
-  }
-
-  const { data: rez, error: eIncheiere } = await admin.rpc("incheie_operatie_externa", {
-    p_id: operatieId, p_business_id: businessId, p_stare: "reusit", p_eroare: null,
-  });
-  const r = rez as { gasit?: boolean; deja?: boolean; stare?: string } | null;
-  /*
-   * ⚠ SE CITESTE RASPUNSUL RPC-ULUI, NU DOAR `error`. `incheie_operatie_externa` nu se plange pe un
-   * rand deja asezat: intoarce `{ gasit: true, deja: true }` fara eroare. Citit doar pe `error`,
-   * codul spunea „Plata a intrat, operatia e inchisa" pe un rand pe care nu scrisese nimic — chiar
-   * capcana pe care `cuRegistru` o verifica la el cu `gasit === true && deja !== true`.
-   */
-  if (eIncheiere || r?.gasit !== true) return { error: "Nu am putut încheia operația." };
-  if (r.deja === true) {
-    return { stare: "intrat", mesaj: `Operația se lămurise deja pe alt drum (${r.stare ?? "?"}). Reîncarcă pagina.` };
-  }
-  revalidatePath(FEATURE_PATH);
-  return { stare: "intrat", mesaj: "Plata a intrat la OLX. Operația e închisă." };
+  const r = await lamurestePlata(createAdminClient(), businessId, operatieId);
+  if (!("error" in r) && r.stare === "intrat") revalidatePath(FEATURE_PATH);
+  return r;
 }
 
 /**
@@ -971,8 +774,8 @@ async function lamurestePlata(
  *
  * ⚠ HOTARAREA E A OMULUI, SI SE SCRIE CINE A LUAT-O. Deblocarea elibereaza cheia, deci urmatoarea
  * apasare CHEAMA OLX. Daca plata intrase totusi, asta e a doua plata — de aceea nu o ia niciun
- * automatism, si de aceea ramane o urma in jurnal. `deblocheazaOperatie` isi scrie singura regula:
- * „se scrie in jurnal la APELANT, nu aici, fiindca deblocarea e o decizie asumata".
+ * automatism, nici macar cronul, si de aceea ramane o urma in jurnal. `deblocheazaOperatie` isi
+ * scrie singura regula: „se scrie in jurnal la APELANT, fiindca deblocarea e o decizie asumata".
  */
 export async function renuntaLaOlxPlata(
   businessId: string, operatieId: string,
@@ -1010,11 +813,10 @@ export async function renuntaLaOlxPlata(
    * continuare — si pe buna dreptate. „Poti incerca din nou" ar fi fost o minciuna linistitoare
    * care il trimite spre un buton ce va fi refuzat.
    */
+  revalidatePath(FEATURE_PATH);
   if (r.stabilizata) {
-    revalidatePath(FEATURE_PATH);
     return { success: true, mesaj: "Operația se încheiase deja singură între timp. Reîncarcă pagina ca să vezi starea reală." };
   }
-  revalidatePath(FEATURE_PATH);
   return { success: true, mesaj: "Cumpărarea e deblocată. Poți încerca din nou." };
 }
 
@@ -1668,61 +1470,6 @@ const INTENTIE_STRICATA = "Cumpărarea nu a pornit corect din pagină. Reîncarc
  * cumpere nimic — chiar defectul de la care a pornit runda asta, mutat din cheie in browser.
  */
 export type RezultatCumparare = { success: true; nou: boolean } | { error: string };
-
-/**
- * Ce ne-au raspuns ei, cu deosebirea care conteaza: „stiu" fata de „n-am putut afla".
- *
- * ═══ FAIL-CLOSED NAIV AR FI FOST MAI RAU DECAT DEFECTUL (02.09.2026) ═══
- *
- * Verificarea „e promovarea deja activa?" era fail-open: daca citirea pica, se cumpara oricum.
- * Pentru bani, nu e destul de sigur. Dar reparatia evidenta — „orice `isOlxError` opreste
- * cumpararea" — ar fi fost mult mai rea:
- *
- * ⚠ `/adverts/{id}/paid-features` raspunde `404` pentru un anunt care n-a fost promovat NICIODATA.
- * Adica exact cazul obisnuit, prima promovare a fiecarui anunt. Tratat ca „n-am putut verifica",
- * ar fi inchis usa pentru toata lumea, mereu, in loc s-o inchida rar si pe drept.
- *
- * Deci: `404` si o lista goala inseamna „am aflat: nu e nimic acolo". Numai `401`, `403`, `429`,
- * `5xx` si caderea de retea (`status: 0`) inseamna „nu stiu".
- */
-type CeStim<T> = { stiu: true; date: T[] } | { stiu: false; motiv: string };
-
-function citesteLista<T>(r: OlxResult<T[]> | { error: string }): CeStim<T> {
-  if ("error" in r && !("status" in r)) return { stiu: false, motiv: r.error };
-  const rr = r as OlxResult<T[]>;
-  if (isOlxError(rr)) {
-    /* ⚠ 404 = „nu exista nimic de listat", raspuns limpede. Nu e o pana. */
-    if (rr.status === 404) return { stiu: true, date: [] };
-    return { stiu: false, motiv: rr.error };
-  }
-  /*
-   * ⚠ SI UN `200` POATE FI DE NECITIT. `call` intoarce `{ data: {} }` pentru un corp stricat si
-   * `{ data: undefined }` pentru `204`. Luate drept lista goala, ar fi devenit „am verificat, nu e
-   * nimic" — un verdict pe o cale prin care n-a trecut niciodata vreo informatie.
-   */
-  if (!Array.isArray(rr.data)) return { stiu: false, motiv: "raspuns fara listă" };
-  return { stiu: true, date: rr.data };
-}
-
-/**
- * Promovarea asta e ACTIVA acum pe anuntul asta?
- *
- * ⚠ PREZENTA CODULUI NU E DOVADA. Ruta lor intoarce si promovarile EXPIRATE — se vede in
- * `getOlxPromovariAnunt`, unde „expirata" se calculeaza tocmai din `valid_to` trecut. Cautat doar
- * dupa `code`, orice anunt promovat vreodata ar fi parut promovat pentru totdeauna.
- *
- * ⚠ Si cand `valid_to` LIPSESTE, raspunsul nu e „a expirat", ci „nu stiu". Aceeasi regula ca in
- * `getOlxPromovariAnunt`, care refuza sa citeasca o data lipsa ca expirare.
- */
-function promovareaEActiva(lista: OlxPaidFeature[], code: string, acum = Date.now()) {
-  return lista.find((f) => {
-    if (f.code !== code) return false;
-    const pana = (f as { valid_to?: unknown }).valid_to;
-    if (typeof pana !== "string") return true;
-    const t = Date.parse(pana);
-    return !Number.isFinite(t) || t > acum;
-  });
-}
 
 /**
  * Metoda de plata, confruntata cu ce accepta CHIAR contul lui.

@@ -5,8 +5,14 @@ import { toast } from "sonner";
 import { Activity, AlertTriangle, CheckCircle2, Loader2, Wallet } from "lucide-react";
 import {
   getOlxPlatiNelamurite, getOlxSanatate, lamuresteOlxPlata, renuntaLaOlxPlata,
-  type OlxPlataNelamurita, type OlxSanatate,
+  type OlxSanatate,
 } from "@/lib/actions/olx.actions";
+/*
+  ⚠ TIPUL VINE DIN MODULUL CU MIEZUL, nu din acțiuni: un modul `"use server"` n-are voie să
+  exporte decât funcții asincrone, iar miezul lămuririi a trebuit oricum scos de acolo ca să-l poată
+  chema și cronul, care n-are sesiune de om.
+*/
+import type { OlxPlataNelamurita } from "@/lib/olx/plati";
 import { Button } from "@/components/ui/button";
 
 /*

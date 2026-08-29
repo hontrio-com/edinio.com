@@ -10,6 +10,7 @@ import { reconciliazaAnunturile,
   PRODUCT_FIELDS, ceruStatisticile, type OlxQueueItem,
 } from "@/lib/olx/sync";
 import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
+import { lamurestePlata, platiNelamurite } from "@/lib/olx/plati";
 import { advertCommand } from "@/lib/olx/client";
 import type { MappableProduct } from "@/lib/olx/mapping";
 
@@ -616,7 +617,55 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[olx-sync] processed=${processed} failed=${failed} amanate=${amanate} status=${statusChecked} extended=${extended} reconciliate=${reconciliate} statistici=${statistici}`);
-  return NextResponse.json({ ok: true, processed, failed, amanate, statusChecked, extended, reconciliate, statistici });
+  // ── 5) Platile care au ramas nelamurite ────────────────────────────────────────
+  /*
+   * ═══ CINE NU DESCHIDE PANOUL RAMANE BLOCAT PENTRU TOTDEAUNA (02.09.2026) ═══
+   *
+   * De cand cheia unei plati poarta INTENTIA in loc de ziua UTC, un rand `necunoscut` blocheaza
+   * exact acea cumparare pe veci — inainte se desfacea singur la miezul noptii. Corect, si tocmai
+   * de aceea periculos: comerciantul care nu intra in panou vede promovarea mergand la OLX, nu
+   * intelege de ce Edinio se plange, si e ispitit sa apese „am verificat, deblocheaza" pe o plata
+   * care CHIAR a intrat. Adica a doua plata.
+   *
+   * ⚠ PASUL ASTA INCHIDE NUMAI IN SENS POZITIV. Nu deblocheaza nimic, niciodata: un automatism nu
+   * are voie sa ia hotararea care poate costa bani. Vezi nota de sus din `src/lib/olx/plati.ts`
+   * pentru de ce fiecare dovada negativa pe care o putem obtine e nesigura.
+   *
+   * ⚠ SI SE NUMARA CE A ATINS. Un pas care nu spune nimic nu se poate deosebi de unul care nu
+   * ruleaza — aceeasi orbire ca a veghii care arata zero.
+   */
+  let platiVazute = 0, platiInchise = 0;
+  {
+    const conectate = await magazineConectate(admin, "olx_config");
+    /*
+     * ⚠ O LISTA DE MAGAZINE CARE NU S-A PUTUT CITI NU E O LISTA GOALA. Tratata ca atare, pasul ar
+     * raporta linistit „zero plati de lamurit" tocmai cand n-a putut intreba.
+     */
+    if (conectate.error) {
+      await logError({
+        action: "olx-sync", severity: "warning",
+        message: `magazinele conectate nu s-au putut citi pentru lamurirea platilor: ${conectate.error}`,
+      });
+    }
+    for (const bid of conectate.ids) {
+      const { plati, error: ePlati } = await platiNelamurite(admin, bid);
+      if (ePlati) {
+        await logError({
+          action: "olx-sync", severity: "warning", businessId: bid,
+          message: `platile nelamurite nu s-au putut citi: ${ePlati}`,
+        });
+        continue;
+      }
+      for (const p of plati) {
+        platiVazute++;
+        const r = await lamurestePlata(admin, bid, p.id);
+        if (!("error" in r) && r.stare === "intrat") platiInchise++;
+        await pause(PACE_MS);
+      }
+    }
+  }
+
+  console.log(`[olx-sync] processed=${processed} failed=${failed} amanate=${amanate} status=${statusChecked} extended=${extended} reconciliate=${reconciliate} statistici=${statistici} plati=${platiVazute}/${platiInchise}`);
+  return NextResponse.json({ ok: true, processed, failed, amanate, statusChecked, extended, reconciliate, statistici, platiVazute, platiInchise });
 }
 

@@ -24,6 +24,7 @@ const mesaje = readFileSync("src/lib/actions/olx-mesaje.actions.ts", "utf8");
 const cont = readFileSync("src/lib/actions/olx-cont.actions.ts", "utf8");
 const importul = readFileSync("src/lib/actions/olx-import.actions.ts", "utf8");
 const intentie = readFileSync("src/lib/olx/intentie-de-cumparare.ts", "utf8");
+const plati = readFileSync("src/lib/olx/plati.ts", "utf8");
 /*
  * ⚠ SE CITESC SI COMPONENTELE, nu doar actiunile. Proba de pana acum cauta `platiNelamurite:` in
  * SURSA actiunilor si trecea verde peste un panou care nu afisa cifra si un `totBine` care n-o
@@ -688,12 +689,31 @@ test("⚠ o plata nelamurita se vede in panou, si are doua iesiri", () => {
   assert.match(actiuni, /export async function lamuresteOlxPlata\(/);
   assert.match(actiuni, /export async function renuntaLaOlxPlata\(/);
 
-  const i = actiuni.indexOf("async function lamurestePlata(");
-  assert.ok(i > 0, "miezul fara guard a disparut");
-  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf("\n/**", i + 10)));
+  /*
+   * ⚠ MIEZUL STA IN AFARA ACTIUNILOR, si asta e o insusire, nu o mutare de dragul ordinii.
+   * Actiunile incep toate cu `guard()`, care face `auth.getUser()` pe clientul cu cookie-uri;
+   * cronul n-are cookie, deci un pas de reconciliere scris peste ele ar fi raspuns „Neautorizat" pe
+   * fiecare rand, la fiecare trecere, si nimeni nu s-ar fi plans. Aceeasi orbire ca a veghii care
+   * arata zero. Si nici exportate de acolo nu puteau fi: ce se exporta dintr-un modul
+   * `"use server"` devine un capat public.
+   */
+  assert.match(plati, /export async function lamurestePlata\(/, "miezul fara guard a disparut");
+  /*
+   * ⚠ SE CAUTA IN COD, NU IN COMENTARII. Chiar nota de deasupra functiei explica de ce modulul nu
+   * e `"use server"` — deci o cautare in sursa BRUTA se potriveste cu propria mea proza si pica pe
+   * un fisier corect. Aceeasi capcana ca „ancora in propriul comentariu", a treia oara.
+   */
+  assert.doesNotMatch(faraComentarii(plati), /"use server"/,
+    "miezul nu are voie sa fie un capat public");
+  assert.match(plati, /loadOlxContext\(admin, businessId\)/,
+    "contextul se ia fara `guard`, altfel cronul n-ar lamuri niciodata nimic");
+  assert.doesNotMatch(plati, /withToken\(/, "`withToken` incepe cu `guard`, deci moare in cron");
+
+  const i = plati.indexOf("export async function lamurestePlata(");
+  const corp = faraComentarii(plati.slice(i));
 
   /* ⚠ Se cauta DOVADA la ei, nu se intreaba omul „a mers?". El n-are de unde sti. */
-  assert.match(corp, /getAdvertPaidFeatures\(token, advertId\)/);
+  assert.match(corp, /getAdvertPaidFeatures\(rCtx\.ctx\.token, advertId\)/);
   assert.match(corp, /p_stare: "reusit"/);
   assert.match(corp, /stare: "inca-nu-stim"/);
 
@@ -703,8 +723,11 @@ test("⚠ o plata nelamurita se vede in panou, si are doua iesiri", () => {
    * si intrarile EXPIRATE, un `200` cu corp stricat se citeste ca lista goala, iar pachetele nu se
    * pot lega de o cumparare anume. Deblocata pe un fals negativ, urmatoarea apasare plateste.
    */
-  assert.doesNotMatch(corp, /deblocheazaOperatie/,
+  assert.doesNotMatch(plati, /deblocheazaOperatie/,
     "lamurirea nu are voie sa deblocheze: dovada pozitiva inchide, lipsa dovezii nu deschide");
+  /* ⚠ Si nici cronul, care o cheama, n-are voie s-o faca pe alta cale. */
+  assert.doesNotMatch(cron, /deblocheazaOperatie/,
+    "un automatism nu ia hotararea care poate costa bani");
 
   /*
    * ⚠ SI RASPUNSUL RPC-ULUI SE CITESTE, nu doar `error`. `incheie_operatie_externa` nu se plange pe
@@ -717,11 +740,6 @@ test("⚠ o plata nelamurita se vede in panou, si are doua iesiri", () => {
   /* ⚠ Iar deblocarea asumata citeste `stabilizata`, altfel mesajul minte linistitor. */
   const iR = actiuni.indexOf("export async function renuntaLaOlxPlata");
   const corpR = faraComentarii(actiuni.slice(iR, actiuni.indexOf("\n/**", iR + 10)));
-  /*
-   * ⚠ SE CERE RAMURA, NU MENTIUNEA. `r.stabilizata` apare si in detaliile din jurnal, deci o
-   * proba care cauta doar numele a trecut verde cand am facut ramura de neatins. Aceeasi lectie ca
-   * la `if (false && …)`: inauntru era intacta, doar nu se mai deschidea.
-   */
   assert.match(corpR, /if \(r\.stabilizata\)/,
     "deblocarea nu ramifica pe randul care se asezase intre timp, deci mesajul poate minti");
   assert.match(corpR, /logError\(/, "o deblocare asumata trebuie sa lase urma cine a luat-o");
@@ -731,10 +749,13 @@ test("⚠ o plata nelamurita se vede in panou, si are doua iesiri", () => {
    * actiunilor — deci era verde peste un panou care nu afisa cifra si un `totBine` care n-o socotea.
    * Confirma ca se scrie campul, nu ca-l citeste cineva.
    */
-  assert.match(panou, /s\.platiNelamurite/, "panoul nu afiseaza plafile de verificat");
+  assert.match(panou, /s\.platiNelamurite/, "panoul nu afiseaza platile de verificat");
   assert.match(panou, /platiNelamurite === 0/, "`totBine` nu socoteste platile nelamurite");
   assert.match(panou, /lamuresteOlxPlata\(/, "panoul n-are butonul „Verifica la OLX”");
   assert.match(panou, /renuntaLaOlxPlata\(/, "panoul n-are iesirea asumata");
+
+  /* ⚠ Si cronul chiar cheama lamurirea, ca omul sa nu fie singura cale. */
+  assert.match(cron, /lamurestePlata\(admin, bid, p\.id\)/, "cronul nu lamureste nimic");
 });
 
 test("⚠ plafonul atins OPRESTE lucrarea, nu o incheie", () => {

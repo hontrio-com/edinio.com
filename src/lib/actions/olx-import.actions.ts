@@ -55,18 +55,33 @@ const MAX_RANDURI = 200;
 
 // ── Ajutoare de casa (aceleasi tipare ca in `olx.actions.ts`) ──────────────────────
 
-async function ownedBusiness(supabase: ServerClient, businessId: string, userId: string): Promise<OwnBiz | null> {
-  const { data } = await supabase
-    .from("businesses").select("id").eq("id", businessId).eq("user_id", userId).single();
-  return (data as OwnBiz) ?? null;
+/**
+ * ⚠ O CITIRE CAZUTA NU E ACELASI LUCRU CU „NU E AL TAU" (02.09.2026)
+ *
+ * `supabase-js` nu arunca: o pana de baza intoarce `data: null` — exact ce intoarce si un magazin
+ * strain. Confundate, comerciantului i se spune „Magazin negasit" despre magazinul LUI.
+ *
+ * ⚠ Fisierul asta a ramas in urma cand tiparul s-a reparat la vecini, si tocmai de aceea arata
+ * acum ca varianta corecta fara sa fie: aceleasi trei ajutoare, copiate in trei fisiere fiindca un
+ * modul `"use server"` nu are voie sa exporte decat functii asincrone. Copia care nu se schimba
+ * odata cu celelalte e cea mai greu de vazut. O proba le tine acum pe toate trei la acelasi rand.
+ */
+type Proprietate = { biz: OwnBiz } | { nuEAlTau: true } | { cazut: true };
+
+async function ownedBusiness(supabase: ServerClient, businessId: string, userId: string): Promise<Proprietate> {
+  const { data, error } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", userId).maybeSingle();
+  if (error) return { cazut: true };
+  return data ? { biz: data as OwnBiz } : { nuEAlTau: true };
 }
 
 async function guard(businessId: string): Promise<{ supabase: ServerClient; userId: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  const biz = await ownedBusiness(supabase, businessId, user.id);
-  if (!biz) return { error: "Magazin negasit" };
+  const p = await ownedBusiness(supabase, businessId, user.id);
+  if ("cazut" in p) return { error: "Nu am putut verifica magazinul. Încearcă din nou peste câteva momente." };
+  if ("nuEAlTau" in p) return { error: "Magazin negăsit" };
   return { supabase, userId: user.id };
 }
 

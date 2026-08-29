@@ -27,10 +27,12 @@ import { OlxAccountPanel } from "./OlxAccountPanel";
 import { OlxMessenger } from "./OlxMessenger";
 import { OlxImport } from "./OlxImport";
 
-export function OlxClient({ businessId, status, adverts, categories }: {
+export function OlxClient({ businessId, status, adverts, advertsError, categories }: {
   businessId: string;
   status: OlxStatus | null;
   adverts: OlxAdvertRow[];
+  /** Lista n-a putut fi citita. Se spune, in loc sa se arate un tabel gol linistitor. */
+  advertsError?: string | null;
   categories: string[];
 }) {
   const [busy, startBusy] = useTransition();
@@ -91,7 +93,7 @@ export function OlxClient({ businessId, status, adverts, categories }: {
     );
   }
 
-  return <ConnectedDashboard businessId={businessId} status={status} adverts={adverts} categories={categories} />;
+  return <ConnectedDashboard businessId={businessId} status={status} adverts={adverts} advertsError={advertsError} categories={categories} />;
 }
 
 function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
@@ -104,8 +106,8 @@ function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; 
   );
 }
 
-function ConnectedDashboard({ businessId, status, adverts, categories }: {
-  businessId: string; status: OlxStatus; adverts: OlxAdvertRow[]; categories: string[];
+function ConnectedDashboard({ businessId, status, adverts, advertsError, categories }: {
+  businessId: string; status: OlxStatus; adverts: OlxAdvertRow[]; advertsError?: string | null; categories: string[];
 }) {
   const router = useRouter();
   const [syncing, startSync] = useTransition();
@@ -295,6 +297,11 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
       <OlxImport businessId={businessId} onImportat={() => router.refresh()} />
 
       {/* Advert table */}
+      {advertsError && (
+        <p className="rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {advertsError} Tabelul de mai jos e gol fiindcă n-am putut citi, nu fiindcă n-ai anunțuri.
+        </p>
+      )}
       <AdvertTable businessId={businessId} adverts={adverts} ready={status.ready} />
 
       {/* Disconnect */}

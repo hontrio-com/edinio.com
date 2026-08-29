@@ -3,10 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Building2, Loader2, ReceiptText, Sparkles } from "lucide-react";
-import { puneOlxLogoFirma, puneOlxBannerFirma,
+import { Building2, Loader2, Plus, ReceiptText, Sparkles, X } from "lucide-react";
+import { puneOlxLogoFirma, puneOlxBannerFirma, getOlxImaginiFirma, stergeOlxImagineFirma,
   getOlxFacturare, getOlxProfilFirma, getOlxPromovariAnunt, salveazaOlxProfilFirma,
-  type OlxLinieFacturare, type OlxProfilFirma, type OlxProfilFirmaInput, type OlxPromovareActiva,
+  type OlxImaginiCont, type OlxLinieFacturare, type OlxProfilFirma, type OlxProfilFirmaInput,
+  type OlxPromovareActiva,
 } from "@/lib/actions/olx-cont.actions";
 import type { OlxAdvertRow } from "@/lib/actions/olx.actions";
 import { cn } from "@/lib/utils/cn";
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { selectCls } from "@/lib/ui";
+import { MediaPicker } from "@/components/media/MediaPicker";
 
 /*
  * ⚠ O VALOARE CARE LIPSESTE SE ARATA CA LIPSA. Zeroul e o afirmatie: „operatia asta n-a costat
@@ -126,8 +128,6 @@ function FormularProfil({ businessId, initial, onSalvat }: {
   const [codPostal, setCodPostal] = useState(initial.codPostal ?? "");
   const [oras, setOras] = useState(initial.oras ?? "");
   const [subdomeniu, setSubdomeniu] = useState(initial.subdomeniu ?? "");
-  const [logoNou, setLogoNou] = useState("");
-  const [bannerNou, setBannerNou] = useState("");
 
   function aplica(p: OlxProfilFirma) {
     setBaza(p);
@@ -205,60 +205,7 @@ function FormularProfil({ businessId, initial, onSalvat }: {
             placeholder="Ce vinde firma și de ce să cumpere de la tine." />
         </Camp>
 
-        {/*
-          Logo si banner se vad, dar nu se schimba de aici: incarcarea de imagini pe profilul de
-          firma nu merge prin API-ul de parteneri, ci doar din contul de pe olx.ro.
-        */}
-        <div className="flex flex-wrap items-end gap-2">
-          <Camp eticheta="Logo firmă (adresă imagine)">
-            <Input value={logoNou} onChange={(e) => setLogoNou(e.target.value)} placeholder="https://…" />
-          </Camp>
-          <Button size="sm" variant="outline" disabled={saving || !logoNou.trim()}
-            onClick={() => startSave(async () => {
-              const r = await puneOlxLogoFirma(businessId, logoNou.trim());
-              if ("error" in r) { toast.error(r.error); return; }
-              toast.success("Logo trimis la OLX.");
-              setLogoNou("");
-            })}>Pune logo</Button>
-          <Camp eticheta="Banner firmă (adresă imagine)">
-            <Input value={bannerNou} onChange={(e) => setBannerNou(e.target.value)} placeholder="https://…" />
-          </Camp>
-          <Button size="sm" variant="outline" disabled={saving || !bannerNou.trim()}
-            onClick={() => startSave(async () => {
-              const r = await puneOlxBannerFirma(businessId, bannerNou.trim());
-              if ("error" in r) { toast.error(r.error); return; }
-              toast.success("Banner trimis la OLX.");
-              setBannerNou("");
-            })}>Pune banner</Button>
-        </div>
-        {(baza.logoUrl || baza.bannerUrl) && (
-          <div className="flex flex-wrap items-center gap-4 border-t border-border pt-3">
-            {baza.logoUrl && (
-              <span className="flex items-center gap-2">
-                <Image src={baza.logoUrl} alt="Logo firmă" width={40} height={40} className="h-10 w-auto rounded object-contain" unoptimized />
-                <span className="text-[11px] text-muted-foreground">Logo</span>
-              </span>
-            )}
-            {baza.bannerUrl && (
-              <span className="flex items-center gap-2">
-                <Image src={baza.bannerUrl} alt="Banner firmă" width={120} height={40} className="h-10 w-auto rounded object-contain" unoptimized />
-                <span className="text-[11px] text-muted-foreground">Banner</span>
-              </span>
-            )}
-            {/*
-              ⚠ TEXTUL DE AICI SPUNEA CĂ NU SE POATE, și era neadevărat (01.09.2026). Rutele
-              `/users-business/me/logos` și `/banners` există de mult. E cel mai insidios fel de
-              neadevăr: nu se strică nimic, nimeni nu vede o eroare, iar cine citește mai târziu
-              îl ia drept fapt și nici nu mai verifică.
-
-              ⚠ Se trimite o ADRESĂ, nu un fișier: OLX vine să ia imaginea de la noi. Deci trebuie
-              să fie publică — cele din biblioteca de media a magazinului sunt.
-            */}
-            <span className="text-[11px] text-muted-foreground">
-              Lipește adresa unei imagini din biblioteca ta de media.
-            </span>
-          </div>
-        )}
+        <ImaginiFirma businessId={businessId} />
 
         <div className="flex justify-end">
           <Button size="sm" disabled={saving} onClick={salveaza}>
@@ -364,5 +311,124 @@ function Titlu({ icon: Icon, children }: { icon: React.ElementType; children: Re
     <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
       <Icon className="h-3.5 w-3.5 text-muted-foreground" /> {children}
     </p>
+  );
+}
+
+/**
+ * Logo-ul si bannerul contului de firma: ce e ACUM la ei, si cum se schimba.
+ *
+ * ═══ SE PUTEA PUNE, DAR NU SE PUTEA VEDEA (02.09.2026) ═══
+ *
+ * Runda trecută s-a reparat comentariul care spunea că logo-ul nu se poate schimba prin API, și
+ * s-a legat butonul de „pune". Dar ecranul rămăsese o supapă într-un singur sens: se putea adăuga
+ * la nesfârșit, fără să se vadă câte sunt, care e cel viu, sau cum se scoate unul.
+ *
+ * ⚠ Și lipsea tocmai răspunsul la întrebarea pe care o pune al doilea logo: care dintre ele se
+ * vede la ei? Acum se văd toate, cu un × pe fiecare.
+ *
+ * ⚠ ADRESE, NU FIȘIERE. OLX nu primește imaginea de la noi: vine el s-o ia de la adresa dată. De
+ * aceea se alege din biblioteca magazinului, care e publică, în loc să se lipească o adresă cu
+ * mâna — o adresă scrisă greșit nu dă nicio eroare la noi, doar o imagine care nu apare la ei.
+ */
+function ImaginiFirma({ businessId }: { businessId: string }) {
+  const [imagini, setImagini] = useState<OlxImaginiCont | null>(null);
+  const [eroare, setEroare] = useState<string | null>(null);
+  const [picker, setPicker] = useState<"logo" | "banner" | null>(null);
+  const [lucreaza, startLucru] = useTransition();
+
+  const reincarca = () => {
+    void getOlxImaginiFirma(businessId).then((r) => {
+      if ("error" in r) { setEroare(r.error); setImagini(null); return; }
+      setEroare(null);
+      setImagini(r);
+    });
+  };
+  useEffect(reincarca, [businessId]);
+
+  function pune(fel: "logo" | "banner", url: string) {
+    startLucru(async () => {
+      const r = fel === "logo"
+        ? await puneOlxLogoFirma(businessId, url)
+        : await puneOlxBannerFirma(businessId, url);
+      if ("error" in r) { toast.error(r.error); return; }
+      toast.success(fel === "logo" ? "Logo trimis la OLX." : "Banner trimis la OLX.");
+      reincarca();
+    });
+  }
+
+  function scoate(fel: "logo" | "banner", id: number) {
+    startLucru(async () => {
+      const r = await stergeOlxImagineFirma(businessId, fel, id);
+      if ("error" in r) { toast.error(r.error); return; }
+      toast.success("Scos de la OLX.");
+      reincarca();
+    });
+  }
+
+  /*
+    ⚠ O citire picată NU se arată ca „n-ai niciun logo". Arătată ca listă goală, ar împinge omul
+    să pună al doilea peste primul, tocmai când noi n-am putut afla ce e acolo.
+  */
+  if (eroare) {
+    return (
+      <div className="border-t border-border pt-3">
+        <p className="text-xs text-destructive">Logo și banner: {eroare}</p>
+      </div>
+    );
+  }
+  if (!imagini) return null;
+
+  const randuri: { fel: "logo" | "banner"; eticheta: string; lista: OlxImaginiCont["logos"] }[] = [
+    { fel: "logo", eticheta: "Logo firmă", lista: imagini.logos },
+    { fel: "banner", eticheta: "Banner firmă", lista: imagini.banners },
+  ];
+
+  return (
+    <div className="space-y-3 border-t border-border pt-3">
+      {randuri.map(({ fel, eticheta, lista }) => (
+        <div key={fel} className="space-y-1.5">
+          <p className="text-[11px] font-medium text-muted-foreground">{eticheta}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {lista.map((img, idx) => (
+              <span key={img.id ?? img.url ?? idx} className="relative block rounded-lg border border-border p-1">
+                {img.url
+                  ? <Image src={img.url} alt={eticheta} width={fel === "logo" ? 44 : 132} height={44}
+                      className="h-11 w-auto rounded object-contain" unoptimized />
+                  : <span className="block h-11 w-11 rounded bg-muted" />}
+                {img.id != null && (
+                  <button
+                    type="button" disabled={lucreaza}
+                    onClick={() => scoate(fel, img.id as number)}
+                    aria-label={`Scoate ${eticheta.toLowerCase()}`}
+                    className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-0.5 text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+            <Button size="sm" variant="outline" disabled={lucreaza} onClick={() => setPicker(fel)}>
+              {lucreaza ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              {lista.length > 0 ? "Schimbă" : "Alege"}
+            </Button>
+          </div>
+          {lista.length > 1 && (
+            <p className="text-[11px] text-warning">
+              Sunt {lista.length} imagini pe {fel === "logo" ? "logo" : "banner"}. OLX o folosește pe una
+              singură; scoate-le pe cele care nu îți trebuie.
+            </p>
+          )}
+        </div>
+      ))}
+      <MediaPicker
+        open={picker !== null}
+        onClose={() => setPicker(null)}
+        onSelect={(urls) => {
+          const fel = picker;
+          setPicker(null);
+          if (fel && urls[0]) pune(fel, urls[0]);
+        }}
+      />
+    </div>
   );
 }

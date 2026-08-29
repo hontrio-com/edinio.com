@@ -35,12 +35,27 @@ interface OwnBiz {
   id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string;
 }
 
-async function ownedBusiness(supabase: ServerClient, businessId: string, userId: string): Promise<OwnBiz | null> {
-  const { data } = await supabase
+/**
+ * ⚠ O CITIRE CAZUTA NU E ACELASI LUCRU CU „NU E AL TAU" (02.09.2026)
+ *
+ * `supabase-js` nu arunca: o pana de baza intoarce `data: null` — exact ce intoarce si un magazin
+ * strain. Confundate, comerciantului i se spunea „Magazin negasit" tocmai cand magazinul era al
+ * lui si baza sughitase; el pleca sa caute in locul gresit, si nimeni nu afla de ce.
+ *
+ * ⚠ Aici doare mai tare decat oriunde: prin poarta asta trec CUMPARARILE. „Magazin negasit" pe o
+ * plata suna a greseala a lui, nu a noastra, si il face sa reincerce din alt cont.
+ *
+ * `maybeSingle`, nu `single`: zero randuri e un raspuns legitim („nu e al tau"), nu o eroare.
+ */
+type Proprietate = { biz: OwnBiz } | { nuEAlTau: true } | { cazut: true };
+
+async function ownedBusiness(supabase: ServerClient, businessId: string, userId: string): Promise<Proprietate> {
+  const { data, error } = await supabase
     .from("businesses")
     .select("id, slug, custom_domain, store_name, business_name")
-    .eq("id", businessId).eq("user_id", userId).single();
-  return (data as OwnBiz) ?? null;
+    .eq("id", businessId).eq("user_id", userId).maybeSingle();
+  if (error) return { cazut: true };
+  return data ? { biz: data as OwnBiz } : { nuEAlTau: true };
 }
 
 /*
@@ -84,6 +99,33 @@ async function loadConfig(businessId: string): Promise<OlxConfig> {
   return ((data?.olx_config as OlxConfig) ?? {}) || {};
 }
 
+/**
+ * `loadConfig`, cu locul de cadere pus la vedere.
+ *
+ * ═══ ARUNCAREA CERE UN LOC DE CADERE (02.09.2026) ═══
+ *
+ * `loadConfig` arunca dinadins cand baza nu raspunde: asa o configurare NECITITA nu se poate
+ * confunda cu una goala, si nimeni nu declara „nu e conectat" pe baza unei pene. Aruncarea e buna.
+ *
+ * ⚠ Dar sapte actiuni exportate o chemau direct, fara nimic care s-o prinda. `getOlxStatus` e
+ * asteptata de o componenta de SERVER, deci o pana de baza nu dadea un mesaj intr-un panou: arunca
+ * toata pagina OLX cu „a aparut o eroare neasteptata", fara buton de reincercare si fara vreun
+ * cuvant despre ce s-a intamplat.
+ *
+ * ⚠ Intoarce un INVELIS, nu configurarea goala: `OlxConfig` are numai campuri optionale, deci
+ * `{}` trece drept configurare valida si un `{ error }` alaturat de ea nu s-ar putea deosebi la
+ * citire. Invelisul face deosebirea imposibil de ratat, si `tsc` o cere.
+ */
+async function configSauEroare(
+  businessId: string,
+): Promise<{ config: OlxConfig } | { error: string }> {
+  try {
+    return { config: await loadConfig(businessId) };
+  } catch {
+    return { error: "Nu am putut citi setările OLX. Încearcă din nou peste câteva momente." };
+  }
+}
+
 async function saveConfig(supabase: ServerClient, businessId: string, config: OlxConfig): Promise<boolean> {
   const { data: existing } = await supabase
     .from("store_settings").select("id").eq("business_id", businessId).single();
@@ -103,9 +145,10 @@ async function guard(businessId: string): Promise<{ supabase: ServerClient; user
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  const biz = await ownedBusiness(supabase, businessId, user.id);
-  if (!biz) return { error: "Magazin negasit" };
-  return { supabase, userId: user.id, biz };
+  const p = await ownedBusiness(supabase, businessId, user.id);
+  if ("cazut" in p) return { error: "Nu am putut verifica magazinul. Încearcă din nou peste câteva momente." };
+  if ("nuEAlTau" in p) return { error: "Magazin negăsit" };
+  return { supabase, userId: user.id, biz: p.biz };
 }
 
 const FEATURE_PATH = "/dashboard/features/olx";
@@ -146,7 +189,9 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(businessId);
+  const cfg = await configSauEroare(businessId);
+  if ("error" in cfg) return cfg;
+  const config = cfg.config;
 
   // Count-only queries (exact at any volume; avoids the 1000-row PostgREST cap).
   const rejectedStatuses = ["moderated", "blocked", "disabled", "removed_by_moderator", "error"];
@@ -259,7 +304,9 @@ export interface OlxSettingsInput {
 export async function saveOlxSettings(businessId: string, input: OlxSettingsInput): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(businessId);
+  const cfg = await configSauEroare(businessId);
+  if ("error" in cfg) return cfg;
+  const config = cfg.config;
 
   const next: OlxConfig = {
     /*
@@ -582,7 +629,9 @@ export async function getOlxSanatate(businessId: string): Promise<OlxSanatate | 
     if (r.error) return { error: "Nu am putut citi starea integrării OLX." };
   }
 
-  const config = await loadConfig(businessId);
+  const cfg = await configSauEroare(businessId);
+  if ("error" in cfg) return cfg;
+  const config = cfg.config;
   const nascut = ceaMaiVeche.data?.created_at ? Date.parse(ceaMaiVeche.data.created_at) : NaN;
   return {
     inCoada: coada.count ?? 0,
@@ -777,7 +826,9 @@ export async function rezolvaConflictOlx(
 export async function publishOlxProduct(businessId: string, productId: string): Promise<{ success: true; status?: string; url?: string | null } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(businessId);
+  const cfg = await configSauEroare(businessId);
+  if ("error" in cfg) return cfg;
+  const config = cfg.config;
   const readiness = olxReadinessError(config);
   if (readiness) return { error: readiness };
 
@@ -839,7 +890,9 @@ export async function publishProductsToOlx(
 ): Promise<{ queued: number; skipped: number } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(businessId);
+  const cfg = await configSauEroare(businessId);
+  if ("error" in cfg) return cfg;
+  const config = cfg.config;
   const readiness = olxReadinessError(config);
   if (readiness) return { error: readiness };
   const mapped = new Set(Object.keys(config.category_map ?? {}));
@@ -991,7 +1044,9 @@ export async function publishAllOlx(businessId: string): Promise<{ queued: numbe
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(businessId);
+  const cfg = await configSauEroare(businessId);
+  if ("error" in cfg) return cfg;
+  const config = cfg.config;
   const readiness = olxReadinessError(config);
   if (readiness) return { error: readiness };
   const mappedCategories = new Set(Object.keys(config.category_map ?? {}));
@@ -1062,18 +1117,31 @@ export interface OlxAdvertRow {
   stat_urmaritori: number | null;
 }
 
-export async function getOlxAdverts(businessId: string): Promise<OlxAdvertRow[]> {
+/**
+ * ⚠ ZEROUL E O AFIRMATIE (02.09.2026)
+ *
+ * Se citea numai `data`, si o citire picata intorcea lista goala. Ecranul spunea atunci „niciun
+ * anunt trimis inca", iar cifrele de sus aratau toate zero — adica exact imaginea unui magazin
+ * curat, pe un magazin care putea avea doua sute de anunturi vii la OLX.
+ *
+ * ⚠ Si de aici pornesc hotarari: cine vede zero apasa „Publica tot". Aceeasi lectie ca la veghea
+ * care arata zero — un zero nu se raporteaza pana nu s-a confruntat cu sursa.
+ */
+export async function getOlxAdverts(
+  businessId: string,
+): Promise<{ adverts: OlxAdvertRow[] } | { error: string }> {
   const g = await guard(businessId);
-  if ("error" in g) return [];
+  if ("error" in g) return g;
   const { supabase } = g;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("olx_adverts")
     .select("product_id, offer_id, status, olx_advert_id, olx_url, valid_to, error, last_synced_at, moderation_text, stat_vizualizari, stat_telefon, stat_urmaritori, products(name)")
     .eq("business_id", businessId)
     .order("updated_at", { ascending: false })
     .limit(200);
+  if (error) return { error: "Nu am putut citi anunțurile OLX. Reîncarcă pagina peste câteva momente." };
 
-  return (data ?? []).map((r) => {
+  const adverts = (data ?? []).map((r) => {
     const prod = r.products as { name?: string } | { name?: string }[] | null;
     const name = Array.isArray(prod) ? prod[0]?.name : prod?.name;
     return {
@@ -1092,15 +1160,31 @@ export async function getOlxAdverts(businessId: string): Promise<OlxAdvertRow[]>
       stat_urmaritori: r.stat_urmaritori,
     };
   });
+  return { adverts };
 }
 
 // ── Monetization: balance, packets, paid features ──────────────────────────────────
+/**
+ * ⚠ ARUNCAREA CERE UN LOC DE CADERE (02.09.2026)
+ *
+ * `loadConfig` arunca dinadins cand baza nu raspunde — asa o configurare necitita nu se poate
+ * confunda cu una goala. Dar aici nimeni nu prindea aruncarea: ea urca prin actiunea de server si
+ * iesea in ecran ca eroare nedigerata („An error occurred in the Server Components render"), fara
+ * niciun cuvant despre ce s-a intamplat si fara vreun buton de reincercare.
+ *
+ * Aruncarea e buna, locul de cadere lipsea.
+ */
 async function withToken<T>(businessId: string, fn: (token: string, config: OlxConfig) => Promise<T>): Promise<T | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
   const admin = createAdminClient();
-  const config = await loadConfig(businessId);
-  if (!config.connected || !config.refresh_token) return { error: "Conecteaza mai intai contul OLX." };
+  let config: OlxConfig;
+  try {
+    config = await loadConfig(businessId);
+  } catch {
+    return { error: "Nu am putut citi setările OLX. Încearcă din nou peste câteva momente." };
+  }
+  if (!config.connected || !config.refresh_token) return { error: "Conectează mai întâi contul OLX." };
   const tok = await ensureMerchantToken(admin, businessId, config);
   if ("error" in tok) return { error: tok.error };
   return fn(tok.token, tok.config);
@@ -1510,10 +1594,52 @@ export async function getOlxConversation(
   return { messages, buyer, advert };
 }
 
-export async function replyOlxThread(businessId: string, threadId: number, text: string): Promise<{ success: true } | { error: string }> {
+/**
+ * Cate fisiere pleaca odata cu un mesaj.
+ *
+ * ⚠ CIFRA E A NOASTRA, NU A LOR. Documentatia OLX nu spune nicaieri o limita, iar noi n-avem cont
+ * de probe pe care s-o masuram. Cinci e o margine aleasa de noi ca sa nu trimitem o cerere absurda;
+ * daca ei refuza mai putine, mesajul lor iese in ecran si atunci se schimba aici numarul.
+ *
+ * Se scrie asta pe fata fiindca un comentariu care ar spune „OLX permite cinci" ar deveni fapt
+ * pentru cine il citeste peste sase luni, si nimeni n-ar mai verifica.
+ */
+const MAX_ATASAMENTE = 5;
+
+export async function replyOlxThread(
+  businessId: string, threadId: number, text: string, atasamente?: string[],
+): Promise<{ success: true } | { error: string }> {
   const clean = text.trim();
   if (!clean) return { error: "Mesajul este gol." };
-  const res = await withToken(businessId, (token) => postThreadMessage(token, threadId, clean));
+
+  /*
+   * ⚠ CE NU PLEACA SE SPUNE, NU SE ARUNCA IN TACERE (02.09.2026)
+   *
+   * `postThreadMessage` filtreaza si el adresele care nu sunt `https` — si bine face, ca ultima
+   * pavaza. Dar acolo filtrarea e MUTA: omul ar fi atasat o poza, ar fi apasat „Trimite", ar fi
+   * vazut „Mesaj trimis" si cumparatorul n-ar fi primit nimic. Aici, unde apasa un OM, refuzul
+   * trebuie sa aiba cuvinte.
+   *
+   * ⚠ Si adresa trebuie sa fie PUBLICA: OLX nu primeste fisierul de la noi, ci vine si-l ia de la
+   * adresa data. Una din biblioteca magazinului e publica; una de pe calculatorul lui, nu.
+   */
+  const fisiere: string[] = [];
+  if (atasamente?.length) {
+    if (atasamente.length > MAX_ATASAMENTE) {
+      return { error: `Poți trimite cel mult ${MAX_ATASAMENTE} fișiere odată cu un mesaj.` };
+    }
+    for (const url of atasamente) {
+      const u = url.trim();
+      if (!u) continue;
+      if (!/^https:\/\//i.test(u)) {
+        return { error: "Fișierele se trimit ca adrese publice https. OLX vine să le ia, deci un fișier de pe calculatorul tău nu merge." };
+      }
+      fisiere.push(u);
+    }
+  }
+
+  const res = await withToken(businessId, (token) =>
+    postThreadMessage(token, threadId, clean, fisiere.length > 0 ? fisiere : undefined));
   if ("error" in res) return res;
   if (isOlxError(res)) return { error: res.error };
   return { success: true };

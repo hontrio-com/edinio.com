@@ -402,7 +402,12 @@ export function suggestLocationByCoords(token: string, lat: number, lon: number)
   return call<OlxLocationSuggestion[]>(token, "GET", `/locations?latitude=${lat}&longitude=${lon}`);
 }
 
-// ── Logo si banner, la nivel de cont ────────────────────────────────────────────
+/* ── Logo si banner, la nivel de cont ─────────────────────────────────────────────
+ *
+ * ⚠ POST-UL INTOARCE O LISTA, nu imaginea pusa (02.09.2026). Erau tipizate singular. Nimic nu se
+ * strica azi, fiindca apelantii nu citesc raspunsul — dar un tip gresit e o minciuna care asteapta
+ * primul om care se increde in el: `r.data.id` ar fi compilat curat si ar fi fost `undefined`.
+ */
 /*
  * ⚠ SE POT SCHIMBA PRIN API (01.09.2026). Ecranul spunea comerciantului ca „logo-ul si bannerul se
  * schimba din contul tau de pe olx.ro" — o afirmatie despre API-ul LOR, scrisa de noi, si falsa.
@@ -413,7 +418,7 @@ export function getBusinessLogos(token: string) {
 }
 
 export function addBusinessLogo(token: string, url: string) {
-  return call<OlxImagineCont>(token, "POST", "/users-business/me/logos", { url });
+  return call<OlxImagineCont[]>(token, "POST", "/users-business/me/logos", { url });
 }
 
 export function deleteBusinessLogo(token: string, logoId: number) {
@@ -425,7 +430,7 @@ export function getBusinessBanners(token: string) {
 }
 
 export function addBusinessBanner(token: string, url: string) {
-  return call<OlxImagineCont>(token, "POST", "/users-business/me/banners", { url });
+  return call<OlxImagineCont[]>(token, "POST", "/users-business/me/banners", { url });
 }
 
 export function deleteBusinessBanner(token: string, bannerId: number) {
@@ -438,7 +443,7 @@ export function getAdvertLogos(token: string, advertId: number) {
 }
 
 export function addAdvertLogo(token: string, advertId: number, url: string) {
-  return call<OlxImagineCont>(token, "POST", `/adverts/${advertId}/logos`, { url });
+  return call<OlxImagineCont[]>(token, "POST", `/adverts/${advertId}/logos`, { url });
 }
 
 export function deleteAdvertLogo(token: string, advertId: number, logoId: number) {

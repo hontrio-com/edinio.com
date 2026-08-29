@@ -15,6 +15,7 @@ import {
 import type { OlxThread } from "@/lib/olx/types";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { MediaPicker } from "@/components/media/MediaPicker";
 
 export function OlxMessenger({ businessId, adverts }: { businessId: string; adverts: OlxAdvertRow[] }) {
   const [threads, setThreads] = useState<OlxThread[] | null>(null);
@@ -375,6 +376,12 @@ function ConversationView({ businessId, thread, fallbackTitle, onLoaded, onBack 
   const [convo, setConvo] = useState<OlxConversatie | null>(null);
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState("");
+  /*
+    ⚠ ADRESE, NU FIȘIERE. OLX nu primește fișierul de la noi: vine el să-l ia de la adresa dată.
+    De aceea se aleg din biblioteca magazinului, care e publică, și nu de pe calculator.
+  */
+  const [deTrimis, setDeTrimis] = useState<string[]>([]);
+  const [pickerDeschis, setPickerDeschis] = useState(false);
   const [sending, startSend] = useTransition();
   const [atasamente, setAtasamente] = useState<Record<number, OlxAtasament[]>>({});
   const [notaAtasamente, setNotaAtasamente] = useState<string | null>(null);
@@ -462,11 +469,17 @@ function ConversationView({ businessId, thread, fallbackTitle, onLoaded, onBack 
 
   function send() {
     const text = reply.trim();
+    /*
+      ⚠ TEXTUL RĂMÂNE OBLIGATORIU, și e o alegere, nu o regulă a lor. Nu știm dacă OLX primește un
+      mesaj cu text gol și numai fișiere; un mesaj care pleacă și se pierde acolo e mai rău decât
+      unul care cere un cuvânt. Când vom putea încerca pe un cont real, aici se schimbă.
+    */
     if (!text) return;
     startSend(async () => {
-      const res = await replyOlxThread(businessId, thread.id, text);
+      const res = await replyOlxThread(businessId, thread.id, text, deTrimis.length ? deTrimis : undefined);
       if ("error" in res) { toast.error(res.error); return; }
       setReply("");
+      setDeTrimis([]);
       await reincarca();
     });
   }
@@ -559,7 +572,38 @@ function ConversationView({ businessId, thread, fallbackTitle, onLoaded, onBack 
       </div>
 
       {/* Composer */}
-      <div className="flex items-end gap-2 border-t border-border p-3">
+      <div className="border-t border-border p-3">
+      {deTrimis.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {deTrimis.map((url) => (
+            <span key={url} className="group relative block h-14 w-14 overflow-hidden rounded-lg border border-border">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" className="h-full w-full object-cover" />
+              <button
+                type="button"
+                onClick={() => setDeTrimis((p) => p.filter((u) => u !== url))}
+                aria-label="Scoate fișierul"
+                className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {deTrimis.length > 0 && !reply.trim() && (
+        <p className="mb-2 text-[11px] text-muted-foreground">Scrie și un rând de text; fișierele nu pleacă singure.</p>
+      )}
+      <div className="flex items-end gap-2">
+        <Button
+          type="button" variant="ghost" size="icon"
+          onClick={() => setPickerDeschis(true)}
+          disabled={sending || deTrimis.length >= 5}
+          title={deTrimis.length >= 5 ? "Cel mult cinci fișiere odată" : "Atașează din bibliotecă"}
+          aria-label="Atașează un fișier"
+        >
+          <Paperclip className="h-4 w-4" />
+        </Button>
         <textarea
           value={reply}
           onChange={(e) => setReply(e.target.value)}
@@ -572,6 +616,17 @@ function ConversationView({ businessId, thread, fallbackTitle, onLoaded, onBack 
           {sending ? <Loader2 className="animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
+      </div>
+      <MediaPicker
+        open={pickerDeschis}
+        onClose={() => setPickerDeschis(false)}
+        multiple
+        excludeUrls={deTrimis}
+        onSelect={(urls) => {
+          setDeTrimis((p) => [...p, ...urls.filter((u) => !p.includes(u))].slice(0, 5));
+          setPickerDeschis(false);
+        }}
+      />
     </div>
   );
 }

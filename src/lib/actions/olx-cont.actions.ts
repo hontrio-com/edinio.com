@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureMerchantToken } from "@/lib/olx/oauth";
-import { addBusinessLogo, addBusinessBanner,
-  getAdvertPaidFeatures, getBilling, getBusinessProfile, isOlxError, updateBusinessProfile,
+import { addAdvertLogo, addBusinessLogo, addBusinessBanner, deleteAdvertLogo,
+  deleteBusinessBanner, deleteBusinessLogo, getAdvertLogos, getAdvertPaidFeatures, getBilling,
+  getBusinessBanners, getBusinessLogos, getBusinessProfile, isOlxError, updateBusinessProfile,
 } from "@/lib/olx/client";
-import type { OlxBillingEntry, OlxBusinessProfile, OlxConfig, OlxPaidFeature } from "@/lib/olx/types";
+import type { OlxBillingEntry, OlxBusinessProfile, OlxConfig, OlxImagineCont, OlxPaidFeature } from "@/lib/olx/types";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -27,9 +28,18 @@ async function guard(businessId: string): Promise<{ supabase: ServerClient; user
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  const { data } = await supabase
-    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
-  if (!data) return { error: "Magazin negasit" };
+  /*
+   * ⚠ SE CITESTE SI `error`, nu doar `data` (02.09.2026). `supabase-js` nu arunca: o citire cazuta
+   * intoarce `data: null`, adica exact ce intoarce si „magazinul nu e al tau". Confundate, o pana
+   * de baza ii spunea comerciantului ca magazinul lui nu exista.
+   *
+   * ⚠ Si `maybeSingle`, nu `single`: `single` transforma „zero randuri" in EROARE, deci pana si
+   * varianta corecta de mai sus ar fi raportat o pana acolo unde raspunsul e legitim.
+   */
+  const { data, error } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).maybeSingle();
+  if (error) return { error: "Nu am putut verifica magazinul. Încearcă din nou peste câteva momente." };
+  if (!data) return { error: "Magazin negăsit" };
   return { supabase, userId: user.id };
 }
 
@@ -45,12 +55,24 @@ async function loadConfig(businessId: string): Promise<OlxConfig> {
   return ((data?.olx_config as OlxConfig) ?? {}) || {};
 }
 
+/**
+ * ⚠ ARUNCAREA CERE UN LOC DE CADERE (02.09.2026)
+ *
+ * `loadConfig` arunca dinadins cand baza nu raspunde, ca o configurare necitita sa nu se poata
+ * confunda cu una goala. Dar nimeni nu prindea aruncarea aici: ea urca prin actiunea de server si
+ * ajungea in ecran ca eroare nedigerata, fara niciun cuvant despre ce s-a intamplat.
+ */
 async function withToken<T>(businessId: string, fn: (token: string, config: OlxConfig) => Promise<T>): Promise<T | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
   const admin = createAdminClient();
-  const config = await loadConfig(businessId);
-  if (!config.connected || !config.refresh_token) return { error: "Conecteaza mai intai contul OLX." };
+  let config: OlxConfig;
+  try {
+    config = await loadConfig(businessId);
+  } catch {
+    return { error: "Nu am putut citi setările OLX. Încearcă din nou peste câteva momente." };
+  }
+  if (!config.connected || !config.refresh_token) return { error: "Conectează mai întâi contul OLX." };
   const tok = await ensureMerchantToken(admin, businessId, config);
   if ("error" in tok) return { error: tok.error };
   return fn(tok.token, tok.config);
@@ -435,13 +457,12 @@ async function puneImagineCont(
   const g = await guard(businessId);
   if ("error" in g) return g;
   /* ⚠ Numai adrese publice `https`: OLX vine sa ia imaginea, deci una locala n-ar avea de unde. */
-  if (!/^https:\/\//i.test(url)) {
+  if (!ADRESA_PUBLICA.test(url)) {
     return { error: "Adresa imaginii trebuie să fie publică și să înceapă cu https." };
   }
-  const config = await loadConfig(businessId);
-  if (config.advertiser_type !== "business") {
-    return { error: "Contul OLX nu este de firmă." };
-  }
+  const cont = await tipDeCont(businessId);
+  if ("error" in cont) return cont;
+  if (!cont.firma) return { error: "Contul OLX nu este de firmă." };
   const res = await withToken(businessId, async (token): Promise<{ ok: true } | { error: string }> => {
     const r = fel === "logo" ? await addBusinessLogo(token, url) : await addBusinessBanner(token, url);
     if (isOlxError(r)) return { error: r.error };
@@ -450,4 +471,170 @@ async function puneImagineCont(
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/features/olx");
   return { success: true };
+}
+
+/**
+ * ⚠ OLX NU PRIMESTE FISIERUL, VINE SI-L IA. Deci orice imagine trimisa spre ei — logo de firma,
+ * banner, logo de anunt — trebuie sa stea la o adresa publica. Una din biblioteca magazinului e;
+ * una de pe calculatorul comerciantului, nu.
+ */
+const ADRESA_PUBLICA = /^https:\/\//i;
+
+/**
+ * E cont de firma? Cu locul de cadere pentru aruncarea lui `loadConfig`.
+ *
+ * ⚠ `loadConfig` arunca dinadins cand baza nu raspunde, ca o configurare necitita sa nu se poata
+ * confunda cu una goala. Chemat direct dintr-o actiune, aruncarea urca in ecran ca eroare
+ * nedigerata; asa a stat pana acum in `puneImagineCont`.
+ */
+async function tipDeCont(businessId: string): Promise<{ firma: boolean } | { error: string }> {
+  try {
+    const config = await loadConfig(businessId);
+    return { firma: config.advertiser_type === "business" };
+  } catch {
+    return { error: "Nu am putut citi setările OLX. Încearcă din nou peste câteva momente." };
+  }
+}
+
+/* ── Ce logo si ce banner sunt ACUM pe cont ───────────────────────────────── */
+
+/**
+ * ═══ SE PUTEA PUNE, DAR NU SE PUTEA VEDEA (02.09.2026) ═══
+ *
+ * Runda trecuta s-a reparat comentariul care spunea ca logo-ul nu se poate schimba prin API si s-a
+ * legat butonul de „pune". Dar a ramas un ecran din care se poate ADAUGA la nesfarsit si din care
+ * nu se vede nimic: nici cate sunt, nici care e cel viu, nici cum se scoate unul.
+ *
+ * ⚠ Un „pune" fara „vezi" si „scoate" nu e o functie intreaga, e o supapa intr-un singur sens. Al
+ * doilea logo pus peste primul e o intrebare careia ecranul nu-i raspundea: care se vede la ei?
+ */
+export interface OlxImaginiCont {
+  logos: OlxImagineCont[];
+  banners: OlxImagineCont[];
+}
+
+export async function getOlxImaginiFirma(
+  businessId: string,
+): Promise<OlxImaginiCont | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const cont = await tipDeCont(businessId);
+  if ("error" in cont) return cont;
+  if (!cont.firma) return { logos: [], banners: [] };
+  return withTokenSauEroare<OlxImaginiCont>(businessId, async (token) => {
+    const [l, b] = await Promise.all([getBusinessLogos(token), getBusinessBanners(token)]);
+    /*
+     * ⚠ O CITIRE PICATA NU E O LISTA GOALA. Aratata ca goala, ecranul ar spune „n-ai niciun logo"
+     * unui cont care are unul, iar omul ar pune al doilea peste primul.
+     */
+    if (isOlxError(l)) return { error: l.error };
+    if (isOlxError(b)) return { error: b.error };
+    return {
+      logos: Array.isArray(l.data) ? l.data : [],
+      banners: Array.isArray(b.data) ? b.data : [],
+    };
+  });
+}
+
+export async function stergeOlxImagineFirma(
+  businessId: string, fel: "logo" | "banner", imagineId: number,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const r = await withTokenSauEroare<{ ok: true }>(businessId, async (token) => {
+    const res = fel === "logo"
+      ? await deleteBusinessLogo(token, imagineId)
+      : await deleteBusinessBanner(token, imagineId);
+    if (isOlxError(res)) return { error: res.error };
+    return { ok: true as const };
+  });
+  if ("error" in r) return r;
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/**
+ * Inlocuieste logo-ul sau bannerul: pune intai ce e nou, apoi scoate ce era.
+ *
+ * ⚠ ORDINEA E TOATA INTELEPCIUNEA AICI. Sters intai, un „pune" picat ar lasa profilul GOL — adica
+ * mai rau decat inainte de apasare, si tocmai in vitrina firmei. Pus intai, cel mai rau lucru care
+ * se poate intampla e ca raman doua, si se vede in lista ca mai e unul de scos.
+ */
+export async function inlocuiesteOlxImagineFirma(
+  businessId: string, fel: "logo" | "banner", url: string, vechiId: number,
+): Promise<{ success: true } | { error: string }> {
+  const pus = await puneImagineCont(businessId, url, fel);
+  if ("error" in pus) return pus;
+  const sters = await stergeOlxImagineFirma(businessId, fel, vechiId);
+  if ("error" in sters) {
+    return { error: `${fel === "logo" ? "Logo-ul" : "Bannerul"} nou e pus, dar cel vechi n-a putut fi scos: ${sters.error}` };
+  }
+  return { success: true };
+}
+
+/* ── Logo pe un anunt anume ───────────────────────────────────────────────── */
+
+/**
+ * ⚠ RUTELE EXISTAU IN CLIENT SI NU AJUNGEAU LA NIMENI (02.09.2026). `getAdvertLogos`,
+ * `addAdvertLogo` si `deleteAdvertLogo` erau scrise, si chiar probate pe fir, dar nicio actiune de
+ * server nu le chema — deci comerciantul n-avea de unde sa le atinga. Cod care exista si nu se
+ * poate folosi arata, dintr-un inventar de functii, exact ca o functie livrata.
+ */
+export async function getOlxLogosAnunt(
+  businessId: string, advertId: number,
+): Promise<{ logos: OlxImagineCont[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  return withTokenSauEroare<{ logos: OlxImagineCont[] }>(businessId, async (token) => {
+    const r = await getAdvertLogos(token, advertId);
+    if (isOlxError(r)) return { error: r.error };
+    return { logos: Array.isArray(r.data) ? r.data : [] };
+  });
+}
+
+export async function puneOlxLogoAnunt(
+  businessId: string, advertId: number, url: string,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  if (!ADRESA_PUBLICA.test(url.trim())) {
+    return { error: "Adresa imaginii trebuie să fie publică și să înceapă cu https." };
+  }
+  const r = await withTokenSauEroare<{ ok: true }>(businessId, async (token) => {
+    const res = await addAdvertLogo(token, advertId, url.trim());
+    if (isOlxError(res)) return { error: res.error };
+    return { ok: true as const };
+  });
+  if ("error" in r) return r;
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+export async function stergeOlxLogoAnunt(
+  businessId: string, advertId: number, logoId: number,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const r = await withTokenSauEroare<{ ok: true }>(businessId, async (token) => {
+    const res = await deleteAdvertLogo(token, advertId, logoId);
+    if (isOlxError(res)) return { error: res.error };
+    return { ok: true as const };
+  });
+  if ("error" in r) return r;
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/**
+ * `withToken`, dar cu tipul turtit la „ori rodul, ori o eroare".
+ *
+ * ⚠ `withToken` intoarce `T | { error: string }`, iar cand `T` are el insusi o ramura cu `error`
+ * cele doua nu se mai pot deosebi la citire. Se aplatizeaza o singura data, aici, ca fiecare
+ * apelant sa nu repete verificarea si sa n-o uite tocmai unul.
+ */
+async function withTokenSauEroare<T extends object>(
+  businessId: string, fn: (token: string) => Promise<T | { error: string }>,
+): Promise<T | { error: string }> {
+  const r = await withToken(businessId, (token) => fn(token));
+  return r as T | { error: string };
 }

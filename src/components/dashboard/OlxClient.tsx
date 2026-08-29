@@ -1,20 +1,26 @@
 "use client";
 
-import { useEffect, useState, useTransition, useRef } from "react";
+import { useCallback, useEffect, useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Archive,
   Loader2, RefreshCw, Check, X, CircleCheck, Clock, CircleX, Settings as SettingsIcon,
   Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag, ShoppingCart,
+  MapPin, Image as ImageIcon,
 } from "lucide-react";
-import { suggestOlxCityFromShop, reincearcaOlxOprite,
+import { suggestOlxCityFromShop, suggestOlxLocationByCoords, reincearcaOlxOprite,
   startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx,
   publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert, finishOlxAdvert,
   buyOlxAdvertPacket, searchCities, getCityDistricts,
   type OlxStatus, type OlxAdvertRow,
 } from "@/lib/actions/olx.actions";
 import type { OlxCity, OlxDistrict } from "@/lib/olx/types";
+import Image from "next/image";
 import { GpsrSettings } from "./GpsrSettings";
+import { MediaPicker } from "@/components/media/MediaPicker";
+import {
+  getOlxLogosAnunt, puneOlxLogoAnunt, stergeOlxLogoAnunt,
+} from "@/lib/actions/olx-cont.actions";
 import { cn } from "@/lib/utils/cn";
 import { cePachetAnunt, incheieIntentia, intentiaPentru } from "@/lib/olx/intentie-de-cumparare";
 import { Button } from "@/components/ui/button";
@@ -389,6 +395,43 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
     setDistrictId(undefined);
   }
 
+  /*
+    ⚠ COORDONATELE VIN DE LA BROWSER, la apăsarea omului. Edinio nu ține nicăieri latitudinea
+    magazinului: coloanele `businesses.lat`/`lng` există în schemă, dar nimic nu le scrie. Deci
+    singura sursă adevărată de punct pe hartă e chiar browserul lui, cu permisiunea lui.
+
+    ⚠ Ruta OLX `/locations` dă și CARTIERUL, nu doar orașul — iar la București un anunț fără sector
+    se vede mult mai prost. Căutarea după nume nu poate da asta.
+  */
+  const [cautaPunct, setCautaPunct] = useState(false);
+  function dupaCoordonate() {
+    if (!navigator.geolocation) {
+      toast.error("Browserul tău nu poate da poziția. Caută localitatea după nume.");
+      return;
+    }
+    setCautaPunct(true);
+    navigator.geolocation.getCurrentPosition(
+      (poz) => {
+        void suggestOlxLocationByCoords(businessId, poz.coords.latitude, poz.coords.longitude)
+          .then((r) => {
+            setCautaPunct(false);
+            if ("error" in r) { toast.error(r.error); return; }
+            if ("gasit" in r) { toast.info("OLX nu are nicio localitate pentru punctul ăsta."); return; }
+            pickCity(r.oras);
+            if (r.cartier?.id != null) setDistrictId(r.cartier.id);
+            toast.success(r.cartier?.name
+              ? `Am găsit ${r.oras.name}, ${r.cartier.name}.`
+              : `Am găsit ${r.oras.name}.`);
+          });
+      },
+      () => {
+        setCautaPunct(false);
+        toast.error("Nu am primit poziția. Caută localitatea după nume.");
+      },
+      { timeout: 10_000 },
+    );
+  }
+
   return (
     <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
       <h3 className="text-sm font-semibold text-foreground">Setări anunțuri OLX</h3>
@@ -432,6 +475,14 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
               ))}
             </div>
           )}
+          <Button
+            size="sm" variant="ghost" className="mt-1.5" disabled={cautaPunct}
+            onClick={dupaCoordonate}
+          >
+            {cautaPunct
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Caut…</>
+              : <><MapPin className="h-3.5 w-3.5" /> Detectează după poziția mea</>}
+          </Button>
           {cityResults.length > 0 && (
             <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-border bg-popover shadow-lg">
               {cityResults.map((city) => (
@@ -492,6 +543,13 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
 }
 
 function AdvertTable({ businessId, adverts, ready }: { businessId: string; adverts: OlxAdvertRow[]; ready: boolean }) {
+  /*
+    ⚠ RUTELE DE LOGO PE ANUNȚ EXISTAU ÎN CLIENT ȘI NU AJUNGEAU LA NIMENI. `getAdvertLogos`,
+    `addAdvertLogo` și `deleteAdvertLogo` erau scrise, ba chiar probate pe fir, dar nicio acțiune
+    de server nu le chema — deci comerciantul n-avea de unde să le atingă. Cod care există și nu se
+    poate folosi arată, dintr-un inventar de funcții, exact ca o funcție livrată.
+  */
+  const [logoPentru, setLogoPentru] = useState<{ id: number; nume: string } | null>(null);
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -576,7 +634,18 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
                       )}
                       {isLimited && (
                         <IconBtn title="Cumpără pachet și activează" onClick={() => {
-                          if (!window.confirm(`Cumperi un pachet pentru anunțul „${a.name}” (se plătește din creditul contului tău OLX) și îl activezi?`)) return;
+                          /*
+                            ⚠ ACELAȘI TEXT CA LA CELELALTE DOUĂ BUTOANE CU BANI. Erau trei purtări:
+                            unul fără confirmare și fără preț, unul cu preț dar fără confirmare, și ăsta
+                            cu confirmare dar fără sumă. Aici suma chiar n-o știm: prețul pachetului de
+                            anunț îl stabilește OLX și nu ni-l spune dinainte — și se spune asta, în loc
+                            să se tăinuiască.
+                          */
+                          if (!window.confirm(
+                            `Cumperi un pachet pentru anunțul „${a.name}" și îl activezi?`
+                            + "\n\nSe plătește din creditul contului tău OLX; suma o stabilește OLX și nu ne-o spune dinainte."
+                            + "\n\nPlata nu se poate anula din Edinio.",
+                          )) return;
                           /*
                             ⚠ INTENȚIA STĂ PE RÂND, nu în panou. Aici nu există niciun loc unde să
                             trăiască o stare de componentă — e un buton dintr-un tabel — iar
@@ -596,6 +665,11 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
                         nu voia, anunțul rămânea acolo, numărat, pentru totdeauna. `finish` îl mută
                         în „încheiate" la ei — nu e ștergere, istoricul rămâne, și poate reveni.
                       */}
+                      {a.olx_advert_id && (
+                        <IconBtn title="Logo pe anunț" onClick={() => setLogoPentru({ id: a.olx_advert_id!, nume: a.name })}>
+                          <ImageIcon className="h-3.5 w-3.5" />
+                        </IconBtn>
+                      )}
                       {isLimited && a.olx_advert_id && (
                         <IconBtn title="Închide anunțul (fără să cumperi)" onClick={() => {
                           if (!window.confirm(`Închizi anunțul „${a.name}” pe OLX? Nu se șterge — îl poți reactiva mai târziu cumpărând un pachet.`)) return;
@@ -614,6 +688,107 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
           })}
         </div>
       )}
+      {logoPentru && (
+        <LogoAnunt
+          businessId={businessId} advertId={logoPentru.id} nume={logoPentru.nume}
+          onClose={() => setLogoPentru(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Logo-urile puse pe UN anunț: ce e acum acolo, ce se adaugă, ce se scoate.
+ *
+ * ⚠ ADRESE, NU FIȘIERE. OLX nu primește imaginea de la noi: vine el s-o ia de la adresa dată. De
+ * aceea se alege din biblioteca magazinului, care e publică.
+ *
+ * ⚠ O citire picată NU se arată ca „n-are niciun logo": arătată așa, l-ar împinge pe om să pună al
+ * doilea peste primul, tocmai când noi n-am putut afla ce e acolo.
+ */
+function LogoAnunt({ businessId, advertId, nume, onClose }: {
+  businessId: string; advertId: number; nume: string; onClose: () => void;
+}) {
+  const [logos, setLogos] = useState<{ id?: number; url?: string }[] | null>(null);
+  const [eroare, setEroare] = useState<string | null>(null);
+  const [picker, setPicker] = useState(false);
+  const [lucreaza, startLucru] = useTransition();
+
+  const reincarca = useCallback(() => {
+    void getOlxLogosAnunt(businessId, advertId).then((r) => {
+      if ("error" in r) { setEroare(r.error); setLogos(null); return; }
+      setEroare(null);
+      setLogos(r.logos);
+    });
+  }, [businessId, advertId]);
+  useEffect(reincarca, [reincarca]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="w-full max-w-md space-y-3 rounded-2xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">Logo pe anunț</h4>
+            <p className="text-[11px] text-muted-foreground">{nume}</p>
+          </div>
+          <button onClick={onClose} aria-label="Închide" className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {eroare && <p className="text-xs text-destructive">{eroare}</p>}
+        {!eroare && logos && (
+          <div className="flex flex-wrap items-center gap-2">
+            {logos.map((l, i) => (
+              <span key={l.id ?? l.url ?? i} className="relative block rounded-lg border border-border p-1">
+                {l.url
+                  ? <Image src={l.url} alt="Logo anunț" width={48} height={48} className="h-12 w-auto rounded object-contain" unoptimized />
+                  : <span className="block h-12 w-12 rounded bg-muted" />}
+                {l.id != null && (
+                  <button
+                    type="button" disabled={lucreaza} aria-label="Scoate logo-ul"
+                    onClick={() => startLucru(async () => {
+                      const r = await stergeOlxLogoAnunt(businessId, advertId, l.id as number);
+                      if ("error" in r) { toast.error(r.error); return; }
+                      toast.success("Logo scos.");
+                      reincarca();
+                    })}
+                    className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-0.5 text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+            {logos.length === 0 && (
+              <p className="text-[11px] text-muted-foreground">Anunțul n-are niciun logo.</p>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" disabled={lucreaza} onClick={() => setPicker(true)}>
+            {lucreaza ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Adaugă din bibliotecă"}
+          </Button>
+        </div>
+
+        <MediaPicker
+          open={picker}
+          onClose={() => setPicker(false)}
+          onSelect={(urls) => {
+            setPicker(false);
+            const url = urls[0];
+            if (!url) return;
+            startLucru(async () => {
+              const r = await puneOlxLogoAnunt(businessId, advertId, url);
+              if ("error" in r) { toast.error(r.error); return; }
+              toast.success("Logo trimis la OLX.");
+              reincarca();
+            });
+          }}
+        />
+      </div>
     </div>
   );
 }

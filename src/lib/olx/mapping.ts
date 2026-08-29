@@ -6,6 +6,7 @@
 // Violations get the advert rejected at POST time, so we sanitize proactively.
 
 import { gpsrEfectiv, gpsrPentruOlx, type GpsrConfig } from "@/lib/gpsr";
+import { adresaPublicaImagine } from "@/lib/trendyol/mapping";
 import { OLX_CURRENCY, type OlxAttributeDef, type OlxCategoryMapEntry, type OlxConfig } from "./types";
 import { rezolvaAtributele } from "./atribute";
 
@@ -134,7 +135,20 @@ export function toOlxAdvertBody(
    * atunci — iar OLX are categorii cu limita zero si raspunde „Image limit exceeded". Adica
    * publicarea pica intreaga, pentru o poza pe care noi am hotarat s-o trimitem oricum.
    */
+  /*
+   * ⚠ ADRESA DE INCERCARI NU SE TRIMITE LA EI (02.09.2026). Trendyol, eMAG si About You trec
+   * fiecare adresa prin `adresaPublicaImagine`, care muta `pub-*.r2.dev` pe domeniul propriu; OLX
+   * le trimitea brut. Nota buna nu trecuse la integrarea urmatoare.
+   *
+   * ⚠ CONTEAZA FIINDCA EI VIN SINGURI SA IA IMAGINEA. Pe domeniul de incercari al bucket-ului,
+   * despre care Cloudflare spune raspicat sa nu-l folosesti in productie, publicarea poate cadea
+   * din motive care n-au nimic de-a face cu anuntul — si mesajul lor n-ar spune de ce.
+   *
+   * ⚠ Si `https`, ca peste tot: OLX nu poate lua o imagine de pe o adresa care nu e publica.
+   */
   const images = (Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [])
+    .map((u) => adresaPublicaImagine(u.trim()))
+    .filter((u) => /^https:\/\//i.test(u))
     .slice(0, Math.max(0, entry.photos_limit ?? 8));
 
   /*

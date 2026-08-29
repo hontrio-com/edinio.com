@@ -16,6 +16,7 @@ import {
   advertCommand, getAccountBalance, getAdvert, getAdvertPaidFeatures, getAvailablePackets, getBoughtPackets,
   getPaidFeatures, getPaymentMethods, getThreadMessages, getThreads, getUser, isOlxError,
   markThreadRead, postThreadMessage, purchaseAdvertPacket, purchaseCategoryPacket, purchasePaidFeature,
+  suggestLocationByCoords,
 } from "@/lib/olx/client";
 import {
   getOlxCategoriesCached, getOlxCategoryAttributesCached, getOlxCityDistrictsCached,
@@ -30,7 +31,8 @@ import { verdictulPlatii } from "@/lib/olx/verdictul-platii";
 import { legatoriDeAtribute, nereguliAtribute } from "@/lib/olx/atribute";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
-  OlxCity, OlxConfig, OlxDistrict, OlxMessage, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread,
+  OlxCity, OlxConfig, OlxDistrict, OlxLocationSuggestion, OlxMessage, OlxPacket, OlxPaidFeature,
+  OlxPaymentMethod, OlxThread,
 } from "@/lib/olx/types";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -395,9 +397,17 @@ export async function saveOlxSettings(businessId: string, input: OlxSettingsInpu
  * ⚠ E O SUGESTIE, NU O HOTARARE. Adresa magazinului poate fi un depozit, iar anunturile pot trebui
  * puse in alt oras. Se arata si se confirma; nu se scrie singura.
  *
- * ⚠ Auditul cerea cautarea dupa COORDONATE. Edinio nu are latitudine si longitudine nicaieri —
- * doar orasul, scris de om. Cautarea dupa nume foloseste chiar ce avem, si e mai directa: un nume
- * scris de el se potriveste cu nomenclatorul lor mai bine decat un punct pe harta.
+ * ⚠ COMENTARIUL DE AICI SPUNEA CA NU AVEM COORDONATE, SI ERA FALS (02.09.2026). Scria „Edinio nu
+ * are latitudine si longitudine nicaieri". `businesses.lat` si `businesses.lng` exista in schema
+ * si se pot scrie. Adevarul e mai ingust: COLOANELE exista, dar nimic nu le populeaza azi.
+ *
+ * ⚠ E aceeasi greseala ca „precautia noastra nu e regula lor", doar ca despre propria noastra baza:
+ * o afirmatie de fapt, scrisa ca justificare a unei hotarari, pe care cine o citeste peste trei
+ * luni n-o mai verifica.
+ *
+ * Cautarea dupa nume ramane calea de-a dreptul, fiindca numele chiar exista. Pentru coordonate e
+ * `suggestOlxLocationByCoords`, care foloseste ruta lor `/locations` si primeste punctul de la
+ * browser — singura sursa de coordonate pe care o avem cu adevarat.
  */
 export async function suggestOlxCityFromShop(
   businessId: string,
@@ -413,6 +423,43 @@ export async function suggestOlxCityFromShop(
   const potriviri = await searchOlxCities(oras);
   if (potriviri === null) return { error: "Nu am putut căuta localitatea la OLX. Încearcă din nou." };
   return { oras, potriviri: potriviri.slice(0, 5) };
+}
+
+/**
+ * Localitatea si cartierul, dupa un punct pe harta.
+ *
+ * ⚠ RUTA LOR EXISTA SI ERA NEFOLOSITA. `suggestLocationByCoords` (`/locations`) a fost reparata
+ * runda trecuta — era `/cities?latitude=…`, o ruta care nu exista — si de atunci statea in client
+ * fara sa o cheme nimeni. Cod care exista si nu se poate atinge arata, dintr-un inventar de
+ * functii, exact ca o functie livrata.
+ *
+ * ⚠ PUNCTUL VINE DE LA BROWSER, la apasarea omului. E singura sursa de coordonate pe care o avem:
+ * `businesses.lat`/`lng` exista ca ni-i cere schema, dar nimic nu le scrie. Iar cartierul conteaza
+ * mai mult decat pare — la Bucuresti, un anunt fara sector se vede mult mai prost.
+ *
+ * ⚠ Si tot o SUGESTIE ramane. Punctul e unde sta omul cand apasa, nu neaparat unde e marfa.
+ */
+export async function suggestOlxLocationByCoords(
+  businessId: string, lat: number, lon: number,
+): Promise<{ oras: OlxCity; cartier: OlxDistrict | null } | { error: string } | { gasit: false }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)
+      || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return { error: "Coordonatele primite nu sunt valide." };
+  }
+  const r = await withToken(businessId, (token) => suggestLocationByCoords(token, lat, lon));
+  if ("error" in r && !("status" in r)) return { error: r.error };
+  const rr = r as OlxResult<OlxLocationSuggestion[]>;
+  if (isOlxError(rr)) return { error: "Nu am putut căuta localitatea la OLX. Încearcă din nou." };
+  /*
+   * ⚠ O citire fara lista NU e „nu s-a gasit nimic". `call` intoarce `{ data: {} }` pentru un corp
+   * stricat; luata drept lista goala, i-am fi spus omului ca nu exista nicio localitate acolo.
+   */
+  if (!Array.isArray(rr.data)) return { error: "Răspunsul OLX nu a putut fi citit. Încearcă din nou." };
+  const prima = rr.data.find((x) => x?.city?.id != null);
+  if (!prima?.city) return { gasit: false };
+  return { oras: prima.city, cartier: prima.district ?? null };
 }
 
 // ── Location pickers ──────────────────────────────────────────────────────────────

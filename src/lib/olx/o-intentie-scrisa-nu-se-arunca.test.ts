@@ -344,11 +344,20 @@ test("⚠ indoiala la o plata tine slotul, nu-l elibereaza", () => {
    * reincerca. Pentru o operatie cu bani, indoiala se plateste cu o intrebare, nu cu inca o plata
    * — deci IMPLICITUL e „necunoscut".
    */
+  /*
+   * ⚠ HOTARAREA S-A MUTAT INTR-UN MODUL CURAT, `src/lib/olx/verdictul-platii.ts`, unde se poate
+   * proba cu mesaje adevarate — vezi `verdictul-platii.test.ts`. Aici ramane doar legatura: ca
+   * `olx.actions.ts` chiar o foloseste si nu-si tine o a doua parere pe langa.
+   */
   const i = actiuni.indexOf("function verdictOlxPlata(");
   assert.ok(i > 0);
-  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf("}", actiuni.indexOf("return", i))));
-  assert.match(corp, /\? "esuat" : "necunoscut"/,
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf("\n}", i)));
+  assert.match(corp, /verdictulPlatii\(\{ brut: e\.brut, status: e\.status \}\)/,
+    "verdictul se ia din raspunsul LOR, prin functia probabila");
+  assert.match(corp, /return "necunoscut";/,
     "implicitul trebuie sa fie `necunoscut`: altfel o indoiala devine a doua plata");
+  assert.doesNotMatch(corp, /REFUZ_LIMPEDE/,
+    "o a doua lista alba aici ar putea sa se departeze tacut de cea probata");
 });
 
 test("⚠ activarea de dupa pachet NU sta sub aceeasi cheie", () => {
@@ -556,20 +565,29 @@ test("⚠ „Ignoră” tine minte, si textul spune adevarul", () => {
 
 /* ── Platile: cheia, verdictul, si iesirea din indoiala ──────────────────── */
 
-test("⚠ „unknown” nu dovedeste ca plata n-a intrat", () => {
+test("⚠ lista alba a refuzurilor traieste intr-un singur loc", () => {
   /*
    * ═══ LISTA E ALBA, NU NEAGRA (01.09.2026) ═══
    *
    * Prima varianta cauta `/insufficient|not enough|invalid|unknown|refuz/` si, la potrivire,
    * ELIBERA slotul. Dar „Unknown error" spune exact pe dos: serverul nu stie ce s-a intamplat.
-   * Eliberat pe un mesaj ca acela, slotul lasa a doua apasare sa treaca — si plata se face de doua
-   * ori, tocmai in cazul in care nimeni nu stie daca prima a intrat.
+   *
+   * ═══ SI PROBA ASTA NU-I DADEA NICIODATA UN MESAJ ADEVARAT (02.09.2026) ═══
+   *
+   * Verifica doar ca lista EXISTA si ca nu contine „unknown". Daca i-ar fi dat un mesaj real, ar fi
+   * aflat ca cel mai obisnuit refuz al lor — soldul insuficient — nu se potrivea cu niciun tipar,
+   * fiindca il traduceam in romana INAINTE de confruntare. Mesajele adevarate se probeaza acum in
+   * `verdictul-platii.test.ts`; aici ramane doar ca lista sa nu se dubleze.
    */
   const cod = faraComentarii(actiuni);
-  assert.match(cod, /const REFUZ_LIMPEDE = \[/);
-  assert.match(cod, /REFUZ_LIMPEDE\.some\(\(r\) => r\.test\(mesaj\)\) \? "esuat" : "necunoscut"/);
-  const i = cod.indexOf("const REFUZ_LIMPEDE");
-  const lista = cod.slice(i, cod.indexOf("]", i));
+  assert.doesNotMatch(cod, /const REFUZ_LIMPEDE = \[/,
+    "lista alba sta in `verdictul-platii.ts`, unde se poate proba cu mesaje adevarate");
+  assert.match(cod, /verdictulPlatii\(/, "actiunile trebuie sa foloseasca hotararea probata");
+
+  const verdict = readFileSync("src/lib/olx/verdictul-platii.ts", "utf8");
+  const i = verdict.indexOf("const REFUZ_LIMPEDE");
+  assert.ok(i > 0, "lista alba a disparut cu totul");
+  const lista = verdict.slice(i, verdict.indexOf("]", i));
   assert.doesNotMatch(lista, /unknown/i, "un „unknown” inseamna „nu stiu”, nu „n-am facut”");
 });
 

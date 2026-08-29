@@ -26,6 +26,7 @@ import { olxReadinessError, categoriaNuPrimesteProduse, atributeObligatoriiLipsa
 import { cuRegistru, cheieOperatie, deblocheazaOperatie, eAtarnata, PRAG_ATARNATA_MS,
   type RezultatOperatie, type Verdict } from "@/lib/operatii/registru";
 import { FORMA_INTENTIEI, cePachetAnunt, cePachetCategorie, cePromovare } from "@/lib/olx/intentie-de-cumparare";
+import { verdictulPlatii } from "@/lib/olx/verdictul-platii";
 import { legatoriDeAtribute, nereguliAtribute } from "@/lib/olx/atribute";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
@@ -1498,18 +1499,59 @@ export async function getOlxPackets(businessId: string): Promise<OlxPacketsResul
  * nimic; orice altceva, inclusiv un text pe care nu-l recunoastem, ramane `necunoscut`. Pentru o
  * operatie cu bani, indoiala se plateste cu o intrebare, nu cu inca o plata.
  */
-const REFUZ_LIMPEDE = [
-  /insufficient\s+(funds|credits|balance)/i,
-  /not\s+enough\s+(funds|credits|money|balance)/i,
-  /invalid\s+payment\s+method/i,
-  /payment\s+method\s+not\s+(allowed|supported|available)/i,
-  /postpaid\s+not\s+activated/i,
-  /fonduri\s+insuficiente/i,
-];
+/**
+ * Ce s-a rupt la o plata: mesajul pentru OM, si ce ne-au spus EI, separat.
+ *
+ * ⚠ TRADUCEREA NOASTRA OMORA LISTA ALBA. Se arunca `new Error(mapPaymentError(res.error))` —
+ * textul deja tradus in romana — iar verdictul cauta tiparele englezesti tocmai in textul ala.
+ * Cel mai obisnuit refuz, soldul insuficient, nu se putea potrivi niciodata: iesea `necunoscut`,
+ * slotul RAMANEA blocat, si omul care alimenta portofelul primea „o cumparare identica e deja in
+ * curs". Vezi `src/lib/olx/verdictul-platii.ts`, unde hotararea se poate proba cu mesaje adevarate.
+ */
+class EroareDePlataOlx extends Error {
+  constructor(mesaj: string, readonly brut: string, readonly status: number) {
+    super(mesaj);
+    this.name = "EroareDePlataOlx";
+  }
+}
 
 function verdictOlxPlata(e: unknown): Verdict {
-  const mesaj = e instanceof Error ? e.message : String(e);
-  return REFUZ_LIMPEDE.some((r) => r.test(mesaj)) ? "esuat" : "necunoscut";
+  if (e instanceof EroareDePlataOlx) return verdictulPlatii({ brut: e.brut, status: e.status });
+  /*
+   * ⚠ Orice altceva a picat INAINTE de apelul lor (o aruncare din codul nostru), deci nimic nu
+   * s-a intamplat la ei. Dar aici nu se poate DOVEDI asta, si o cheie eliberata pe o presupunere
+   * costa bani: ramane `necunoscut`, iar omul are butonul de lamurire.
+   */
+  return "necunoscut";
+}
+
+/**
+ * Jetonul, luat INAINTE de registru.
+ *
+ * ⚠ `withToken` faceau si el trei lucruri care pot cadea: `guard`, `loadConfig` (care ARUNCA la o
+ * pana de baza) si `ensureMerchantToken` (o cerere HTTP la ei, plus o scriere de config). Chemat
+ * dinauntrul lui `executa`, oricare dintre ele bloca cheia unei plati pe care OLX n-o vazuse
+ * niciodata — „Sesiunea OLX a expirat" ajungea sa opreasca urmatoarea cumparare.
+ *
+ * ⚠ Inauntrul registrului ramane acum EXACT apelul ireversibil, si nimic altceva.
+ */
+async function jetonulPentruPlata(
+  businessId: string,
+): Promise<{ token: string } | { error: string }> {
+  const cfg = await configSauEroare(businessId);
+  if ("error" in cfg) return cfg;
+  if (!cfg.config.connected || !cfg.config.refresh_token) {
+    return { error: "Conectează mai întâi contul OLX." };
+  }
+  const tok = await ensureMerchantToken(createAdminClient(), businessId, cfg.config);
+  if ("error" in tok) return { error: tok.error };
+  return { token: tok.token };
+}
+
+/** Aruncarea din `executa`, cu amandoua fetele: cea pentru om si cea pentru verdict. */
+function aruncaPlata(r: OlxResult<unknown>): never {
+  const e = r as { error: string; status: number };
+  throw new EroareDePlataOlx(mapPaymentError(e.error), e.error, e.status);
 }
 
 /**
@@ -1676,6 +1718,8 @@ export async function buyOlxCategoryPacket(
   /* ⚠ Inainte de registru: aici inca nu s-a rezervat nimic, deci un refuz nu blocheaza nicio cheie. */
   const m = await metodaDePlata(businessId, paymentMethod);
   if ("error" in m) return m;
+  const jeton = await jetonulPentruPlata(businessId);
+  if ("error" in jeton) return jeton;
 
   const r = await cuRegistru(
     createAdminClient(),
@@ -1683,11 +1727,11 @@ export async function buyOlxCategoryPacket(
       businessId, orderId: null, fel: "plata", furnizor: "olx",
       cheie: cheiaPlatii(cePachetCategorie(categoryId, size, type), intentId),
     },
+    /* ⚠ Inauntru sta EXACT apelul ireversibil: jetonul e deja luat, metoda e deja aflata. */
     async () => {
-      const res = await withToken(businessId, (token) =>
-        purchaseCategoryPacket(token, { category_id: categoryId, size, payment_method: m.metoda, type }));
-      if ("error" in res) throw new Error(res.error);
-      if (isOlxError(res)) throw new Error(mapPaymentError(res.error));
+      const res = await purchaseCategoryPacket(
+        jeton.token, { category_id: categoryId, size, payment_method: m.metoda, type });
+      if (isOlxError(res)) aruncaPlata(res);
       return { referinta: `${categoryId}:${size}:${type}`, valoare: true as const };
     },
     verdictOlxPlata,
@@ -1721,6 +1765,8 @@ export async function buyOlxAdvertPacket(
    */
   const m = await metodaDePlata(businessId);
   if ("error" in m) return m;
+  const jeton = await jetonulPentruPlata(businessId);
+  if ("error" in jeton) return jeton;
 
   const r = await cuRegistru(
     createAdminClient(),
@@ -1729,10 +1775,9 @@ export async function buyOlxAdvertPacket(
       cheie: cheiaPlatii(cePachetAnunt(advertId, isPremium), intentId),
     },
     async () => {
-      const res = await withToken(businessId, (token) =>
-        purchaseAdvertPacket(token, advertId, { payment_method: m.metoda, is_premium: isPremium }));
-      if ("error" in res) throw new Error(res.error);
-      if (isOlxError(res)) throw new Error(mapPaymentError(res.error));
+      const res = await purchaseAdvertPacket(
+        jeton.token, advertId, { payment_method: m.metoda, is_premium: isPremium });
+      if (isOlxError(res)) aruncaPlata(res);
       return { referinta: String(advertId), valoare: true as const };
     },
     verdictOlxPlata,
@@ -1877,6 +1922,8 @@ export async function buyOlxPaidFeature(
 
   const m = await metodaDePlata(businessId, paymentMethod);
   if ("error" in m) return m;
+  const jeton = await jetonulPentruPlata(businessId);
+  if ("error" in jeton) return jeton;
 
   const r = await cuRegistru(
     createAdminClient(),
@@ -1885,10 +1932,8 @@ export async function buyOlxPaidFeature(
       cheie: cheiaPlatii(cePromovare(advertId, code), intentId),
     },
     async () => {
-      const res = await withToken(businessId, (token) =>
-        purchasePaidFeature(token, advertId, { code, payment_method: m.metoda }));
-      if ("error" in res) throw new Error(res.error);
-      if (isOlxError(res)) throw new Error(mapPaymentError(res.error));
+      const res = await purchasePaidFeature(jeton.token, advertId, { code, payment_method: m.metoda });
+      if (isOlxError(res)) aruncaPlata(res);
       return { referinta: `${advertId}:${code}`, valoare: true as const };
     },
     verdictOlxPlata,

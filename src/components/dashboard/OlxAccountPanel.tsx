@@ -159,6 +159,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
                 hasMappedCategories={packets?.hasMappedCategories ?? false}
                 eroare={erori.pachete}
                 nereusite={packets?.nereusite ?? []}
+                metodaGhicita={packets?.metodaGhicita ?? false}
                 moneda={account?.balance?.currency ?? null}
                 methods={methods}
                 defaultMethod={packets?.paymentMethod ?? "account"}
@@ -177,13 +178,15 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   );
 }
 
-function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod, eroare, nereusite, moneda }: {
+function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod, eroare, nereusite, metodaGhicita, moneda }: {
   businessId: string; groups: OlxPacketGroup[]; hasMappedCategories: boolean; methods: OlxPaymentMethod[];
   defaultMethod: OlxPaymentMethod;
   /** Lista n-a putut fi citita. Se spune, in loc sa se arate un gol linistitor. */
   eroare?: string;
   /** Categoriile pentru care intrebarea a picat. Golul lor NU inseamna „n-are pachete". */
   nereusite?: string[];
+  /** Preturile sunt ale unei metode ghicite: lista adevarata n-a putut fi citita. */
+  metodaGhicita?: boolean;
   /** Moneda soldului, ca pretul din confirmare sa fie in ce plateste el. */
   moneda?: string | null;
 }) {
@@ -200,6 +203,13 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
   return (
     <div>
       <SectionLabel icon={ShoppingCart}>Cumpără pachet de anunțuri</SectionLabel>
+      {metodaGhicita && (
+        /* ⚠ Prețurile de mai jos sunt ale unei metode GHICITE: lista adevărată n-a putut fi citită. */
+        <p className="mb-2 text-[11px] text-warning">
+          N-am putut citi metodele de plată din contul tău OLX, deci prețurile de mai jos sunt
+          orientative. Cumpărarea nu pleacă până nu le putem citi.
+        </p>
+      )}
       {nereusite && nereusite.length > 0 && (
         /* ⚠ O categorie a cărei citire a picat NU e o categorie fără pachete. */
         <p className="mb-2 text-[11px] text-warning">

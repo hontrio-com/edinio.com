@@ -1270,13 +1270,23 @@ export interface OlxPacketsResult {
   nereusite: string[];
   /** Lista pachetelor cumparate s-a citit INTREAGA? O lista scurtata arata la fel ca una completa. */
   boughtIntreg: boolean;
+  /** N-am putut citi metodele de plata, deci preturile de mai jos sunt ale unei metode GHICITE. */
+  metodaGhicita: boolean;
 }
 
 export async function getOlxPackets(businessId: string): Promise<OlxPacketsResult | { error: string }> {
   return withToken(businessId, async (token, config) => {
-    // Price packets against the wallet-credit method when available.
-    const pmRes = await getPaymentMethods(token);
-    const methods = isOlxError(pmRes) ? [] : (Array.isArray(pmRes.data) ? pmRes.data : []);
+    /*
+     * Pachetele se pretuiesc dupa metoda de plata, deci trebuie una aleasa ca sa se poata intreba.
+     *
+     * ⚠ AICI GHICITUL E INGADUIT, DAR NU TACUT (02.09.2026). E o CITIRE, nu o plata: cumpararea
+     * isi confrunta oricum metoda cu lista adevarata, in `metodaDePlata`, si refuza daca n-o poate
+     * citi. Dar preturile aratate ar fi ale altei metode decat cea pe care o are contul lui, si
+     * omul isi face socoteala pe ele — deci se spune in ecran ca sunt orientative.
+     */
+    const pm = citesteLista<OlxPaymentMethod>(await getPaymentMethods(token));
+    const methods = pm.stiu ? pm.date : [];
+    const metodaGhicita = !pm.stiu;
     const paymentMethod: OlxPaymentMethod = methods.includes("account") ? "account" : (methods[0] ?? "account");
 
     // Packets are per category — fetch for each distinct mapped OLX category.
@@ -1321,7 +1331,7 @@ export async function getOlxPackets(businessId: string): Promise<OlxPacketsResul
 
     return {
       groups, bought, paymentMethod, hasMappedCategories: cats.size > 0,
-      nereusite, boughtIntreg,
+      nereusite, boughtIntreg, metodaGhicita,
     };
   });
 }

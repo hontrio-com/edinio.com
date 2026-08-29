@@ -7,14 +7,35 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 
 interface Props {
   params: Promise<{ productId: string }>;
-  searchParams: Promise<{ page?: string }>;
+  /** Filtrele listei din care a venit omul. Vezi `intoarcereLaLista`. */
+  searchParams: Promise<{ page?: string; search?: string; cat?: string; stare?: string; stoc?: string }>;
+}
+
+/**
+ * Adresa listei din care a venit, refacuta intreaga.
+ *
+ * ⚠ SE PASTRA NUMAI PAGINA. Cine cautase ceva se intorcea dupa „Salveaza" intr-o lista
+ * NEFILTRATA, la aceeasi pagina dar cu alte produse — iar daca lista lui filtrata avea o singura
+ * pagina, se intorcea chiar la inceputul catalogului.
+ *
+ * ⚠ Se citesc numai cheile pe care le stie lista. Orice altceva din adresa nu se duce mai departe:
+ * ce nu intelegem n-avem ce cara.
+ */
+function intoarcereLaLista(sp: { page?: string; search?: string; cat?: string; stare?: string; stoc?: string }): string {
+  const p = new URLSearchParams();
+  if (sp.search?.trim()) p.set("search", sp.search.trim().slice(0, 100));
+  if (sp.cat?.trim()) p.set("cat", sp.cat.trim().slice(0, 200));
+  if (sp.stare === "active" || sp.stare === "inactive") p.set("stare", sp.stare);
+  if (sp.stoc === "in" || sp.stoc === "out") p.set("stoc", sp.stoc);
+  const pagina = Number(sp.page);
+  if (Number.isFinite(pagina) && pagina > 1) p.set("page", String(Math.floor(pagina)));
+  const qs = p.toString();
+  return qs ? `/dashboard/products?${qs}` : "/dashboard/products";
 }
 
 export default async function EditProductPage({ params, searchParams }: Props) {
   const { productId } = await params;
-  const { page } = await searchParams;
-  // Preserve the products-list page the merchant came from, so saving returns there.
-  const backHref = page && Number(page) > 1 ? `/dashboard/products?page=${encodeURIComponent(page)}` : "/dashboard/products";
+  const backHref = intoarcereLaLista(await searchParams);
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");

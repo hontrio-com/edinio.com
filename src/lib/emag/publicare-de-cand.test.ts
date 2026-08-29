@@ -99,15 +99,25 @@ test("⚠ publicarea ceruta de om are VERDICT, nu numar", () => {
   assert.match(q, /enqueueManyDetaliat\(businessId, productIds, "oferta", \{ publicaSiFaraOferta: true \}\)/);
 
   const act = viu("src/lib/actions/emag.actions.ts");
-  /* ⚠ AMANDOUA butoanele, nu unul: „publica toata categoria" si „publica produsele alese".
-     Reparat doar unul, defectul ar fi ramas intreg pe celalalt drum. */
+  /*
+   * ⚠ TOATE butoanele de publicare, nu un numar scris de mana.
+   *
+   * Prima forma cerea exact DOUA — „publica toata categoria" si „publica produsele alese". Cand a
+   * aparut al treilea drum (publicarea din bara de selectie a listei de produse), proba a picat pe
+   * un cod CORECT, si singura reparatie evidenta ar fi fost sa i se mareasca numarul. Atunci
+   * urmatorul drum ar fi putut fi adaugat FARA verdict, si numarul ar fi ramas bun.
+   *
+   * Regula e „fiecare chemare isi citeste verdictul", si asa se si cere acum.
+   */
+  const chemari = (act.match(/await publicaPeEmagStrict\(/g) ?? []).length;
+  assert.ok(chemari >= 2, `asteptam cel putin doua drumuri de publicare, sunt ${chemari}`);
   assert.equal(
-    (act.match(/const verdict = await publicaPeEmagStrict\(/g) ?? []).length, 2,
-    "ambele butoane de publicare cer verdictul",
+    (act.match(/const verdict = await publicaPeEmagStrict\(/g) ?? []).length, chemari,
+    "fiecare chemare trebuie sa-si pastreze verdictul, nu doar numarul",
   );
   assert.equal(
-    (act.match(/if \(verdict\.fel === "eroare"\) \{/g) ?? []).length, 2,
-    "si amandoua spun pana ca pana",
+    (act.match(/if \(verdict\.fel === "eroare"\) \{/g) ?? []).length, chemari,
+    "si fiecare spune pana ca pana",
   );
   assert.doesNotMatch(act, /publicaPeEmagMany/, "invelisul pe numar n-are ce cauta pe drumul omului");
 });

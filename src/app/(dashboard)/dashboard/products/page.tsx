@@ -29,7 +29,7 @@ export default async function ProductsPage({
   const [{ data: bizRow }, sp, { data: profile }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id, store_settings(olx_config)")
+      .select("id, store_settings(olx_config, trendyol_config, emag_config)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -43,23 +43,53 @@ export default async function ProductsPage({
   const plan = profile?.plan ?? "free";
   const productLimit = getProductLimit(plan);
 
-  const olxSettings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] : bizRow.store_settings;
-  const olxConnected = !!(olxSettings?.olx_config as { connected?: boolean } | null)?.connected;
+  const setari = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] : bizRow.store_settings;
+  /*
+   * ⚠ NUMAI `connected`. Restul configurarilor poarta acreditari, iar citite cu clientul
+   * comerciantului vin criptate — regula casei despre `createAdminClient`. Aici nu ne trebuie
+   * decat sa stim ce butoane sa aratam.
+   *
+   * ⚠ About You lipseste dinadins: coada lui atinge numai produsele care AU deja o listare, deci
+   * un buton „Publica pe About You" ar fi sarit tacut exact produsele pe care le-ar bifa cineva.
+   * Vezi nota din bara de selectie.
+   */
+  const olxConnected = !!(setari?.olx_config as { connected?: boolean } | null)?.connected;
+  const trendyolConnected = !!(setari?.trendyol_config as { connected?: boolean } | null)?.connected;
+  const emagConnected = !!(setari?.emag_config as { connected?: boolean } | null)?.connected;
 
   const filtre = citesteFiltreProduse(sp);
 
   return (
     <div className="p-4 sm:p-6">
-      {/* `key` pe filtre: la o filtrare noua lista se remonteaza, deci starea de
-          selectie si pagina pornesc curate — altfel ar fi ramas bifate produse
-          care nu mai sunt in lista. */}
-      <Suspense key={JSON.stringify(filtre)} fallback={<ScheletProduse />}>
+      {/*
+        ═══ ⚠ `key` PE FILTRE PIERDEA FOCUSUL LA FIECARE LITERA (30.08.2026) ═══
+
+        Cheia cuprindea si textul cautat. Deci fiecare litera care ajungea la server schimba
+        cheia, iar React DEMONTA tot `ProductsClient` si il facea din nou: caseta de cautare
+        devenea alt nod DOM, focusul se ducea, si intre timp se vedea scheletul.
+
+        ⚠ Un om care scrie repede nu simtea nimic — asteptarea de 400 ms ii aduna literele
+        intr-o singura cerere. Unul care scrie incet trecea de fiecare data de prag, deci
+        pierdea focusul DUPA FIECARE LITERA si trebuia sa dea click inapoi in caseta.
+        Reclamat de un comerciant cu dificultati locomotorii; defectul lovea exact pe cine
+        scrie mai greu.
+
+        ⚠ Remontarea avea un rost adevarat — sa nu ramana bifate produse care nu mai sunt in
+        lista. Rostul ramane, mijlocul se schimba: selectia se goleste acum in `ProductsClient`,
+        cand se schimba filtrele. Vezi nota de acolo.
+
+        ⚠ Si fara cheie, `startTransition` din client isi face treaba: lista veche ramane pe
+        ecran, estompata, in loc sa fie inlocuita de schelet la fiecare tasta.
+      */}
+      <Suspense fallback={<ScheletProduse />}>
         <ListaProduse
           businessId={bizRow.id}
           filtre={filtre}
           productLimit={productLimit}
           plan={plan}
           olxConnected={olxConnected}
+          trendyolConnected={trendyolConnected}
+          emagConnected={emagConnected}
         />
       </Suspense>
     </div>
@@ -98,12 +128,16 @@ async function ListaProduse({
   productLimit,
   plan,
   olxConnected,
+  trendyolConnected,
+  emagConnected,
 }: {
   businessId: string;
   filtre: FiltreProduse;
   productLimit: number;
   plan: string;
   olxConnected: boolean;
+  trendyolConnected: boolean;
+  emagConnected: boolean;
 }) {
   const supabase = await createClient();
 
@@ -168,6 +202,8 @@ async function ListaProduse({
       productCount={totalCatalog ?? 0}
       plan={plan}
       olxConnected={olxConnected}
+      trendyolConnected={trendyolConnected}
+      emagConnected={emagConnected}
     />
   );
 }

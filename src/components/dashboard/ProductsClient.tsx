@@ -1,12 +1,15 @@
 "use client";
 
 import { FARA_CATEGORIE } from "@/lib/dashboard/produse-filtre";
+import { SiglaMarketplace } from "./SiglaMarketplace";
 import { useState, useMemo, useOptimistic, useTransition, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent } from "lucide-react";
 import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
+import { bulkPublishTrendyol } from "@/lib/actions/trendyol.actions";
+import { publicaSelectiaPeEmag } from "@/lib/actions/emag.actions";
 import { publishProductsToOlx } from "@/lib/actions/olx.actions";
 import { idurileProduselorFiltrate } from "@/lib/actions/produse-selectie.actions";
 import type { FiltreProduse } from "@/lib/dashboard/produse-filtre";
@@ -23,7 +26,7 @@ type Product = Pick<
   "id" | "name" | "slug" | "sku" | "price" | "compare_at_price" | "images" | "category" | "is_active" | "is_featured" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
 >;
 
-export function ProductsClient({ products, businessId, filtre, totalFiltrate, categories = [], productLimit, productCount, plan, olxConnected = false }: {
+export function ProductsClient({ products, businessId, filtre, totalFiltrate, categories = [], productLimit, productCount, plan, olxConnected = false, trendyolConnected, emagConnected}: {
   products: Product[];
   businessId: string;
   /**
@@ -39,6 +42,8 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   productCount: number;
   plan: string;
   olxConnected?: boolean;
+  trendyolConnected?: boolean;
+  emagConnected?: boolean;
 }) {
   const router = useRouter();
   const didMountRef = useRef(false);
@@ -172,8 +177,31 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   const totalPages = Math.max(1, Math.ceil(totalFiltrate / PAGE_SIZE));
   const currentPage = Math.min(filtre.pagina, totalPages);
   const paginated = produse;
-  // Carry the current page into the edit URL so save/cancel returns to it.
-  const editHref = (id: string) => `/dashboard/products/${id}/edit${currentPage > 1 ? `?page=${currentPage}` : ""}`;
+
+  /**
+   * Adresa listei asa cum o vede omul ACUM: filtre, cautare si pagina.
+   *
+   * ⚠ SE DUCEA NUMAI PAGINA, SI NU AJUNGEA. Cine cautase ceva, sau filtrase dupa categorie, se
+   * intorcea dupa „Salveaza" intr-o lista NEFILTRATA — la aceeasi pagina, dar cu alte produse.
+   * Iar cand lista filtrata avea o singura pagina, `currentPage` era 1, deci nu se trimitea nimic
+   * si intoarcerea ateriza chiar la inceput.
+   *
+   * Se compune la fel ca in `cereFiltre`, ca sa nu existe doua raspunsuri la aceeasi intrebare.
+   */
+  const interogareLista = () => {
+    const p = new URLSearchParams();
+    if (filtre.cautare.trim()) p.set("search", filtre.cautare.trim());
+    if (filtre.categorie) p.set("cat", filtre.categorie);
+    if (filtre.stare !== "all") p.set("stare", filtre.stare);
+    if (filtre.stoc !== "all") p.set("stoc", filtre.stoc);
+    if (currentPage > 1) p.set("page", String(currentPage));
+    return p.toString();
+  };
+
+  const editHref = (id: string) => {
+    const qs = interogareLista();
+    return `/dashboard/products/${id}/edit${qs ? `?${qs}` : ""}`;
+  };
 
   /*
    * Cautarea se trimite cu INTARZIERE, nu la fiecare tasta.
@@ -215,6 +243,25 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   }
   function clearSelection() { setSelected(new Set()); setSelectieTotala(false); setBulkPanel(null); setConfirmBulkDelete(false); }
 
+  /*
+   * ⚠ SELECTIA SE GOLESTE CAND SE SCHIMBA CE SE VEDE (30.08.2026)
+   *
+   * Pana acum o facea `<Suspense key={…}>` din pagina, remontand tot componentul. Rostul era bun
+   * — altfel ar fi ramas bifate produse care nu mai sunt in lista, iar actiunile in masa, inclusiv
+   * STERGEREA, ar fi lucrat pe ele. Dar mijlocul arunca si caseta de cautare, deci focusul se
+   * pierdea la fiecare litera scrisa.
+   *
+   * ⚠ Se cheama chiar `clearSelection`, nu o a doua golire scrisa alaturi: doua locuri care golesc
+   * aceeasi stare se despart la prima stare noua adaugata.
+   */
+  const semnaturaFiltre = JSON.stringify(filtre);
+  const semnaturaVeche = useRef(semnaturaFiltre);
+  useEffect(() => {
+    if (semnaturaVeche.current === semnaturaFiltre) return;
+    semnaturaVeche.current = semnaturaFiltre;
+    clearSelection();
+  }, [semnaturaFiltre]);
+
   function runBulk(action: BulkAction, successMsg: string) {
     const ids = [...selected];
     setBulkBusy(true);
@@ -241,6 +288,50 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
     if (bulkCategory === "") { toast.error("Alege o categorie."); return; }
     runBulk({ kind: "category", value: bulkCategory === "__none__" ? null : bulkCategory }, "Categorie setata la {n} produse");
   }
+  /*
+   * ⚠ CE MARKETPLACE APARE AICI, SI CE NU (30.08.2026)
+   *
+   * Cerut de comerciant: „daca selectez in masa, n-ar trebui sa am si «Publica pe eMAG»,
+   * «Publica pe Trendyol»?". Da — dar numai acolo unde exista o cale care chiar publica o
+   * LISTA de id-uri.
+   *
+   * ⚠ ABOUT YOU LIPSESTE DINADINS. Singurele lui cai in masa (`enqueueAboutYouSyncMany` si
+   * `enqueueForListings`) pornesc de la `aboutyou_listings`, deci ating numai produsele care AU
+   * DEJA o listare acolo. Un buton „Publica pe About You" ar fi sarit tacut exact produsele pe
+   * care le-ar bifa cineva care vrea sa le publice — chiar defectul documentat la eMAG, unde
+   * „la prima folosire nu se punea nimic la rand" si mesajul dadea vina pe altceva. Pana exista
+   * o cale pe id-uri, publicarea pe About You ramane in pagina integrarii.
+   */
+  async function publishSelectedToTrendyol() {
+    setBulkBusy(true);
+    const res = await bulkPublishTrendyol(businessId, [...selected]);
+    setBulkBusy(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    if (res.submitted === 0) {
+      toast.error(res.failed > 0
+        ? `Niciun produs trimis. ${res.failed} au fost respinse — vezi motivele in pagina Trendyol.`
+        : "Niciun produs de trimis.");
+      return;
+    }
+    toast.success(res.failed > 0
+      ? `${res.submitted} produse trimise la Trendyol. ${res.failed} respinse.`
+      : `${res.submitted} produse trimise la Trendyol.`);
+    clearSelection();
+    router.refresh();
+  }
+
+  async function publishSelectedToEmag() {
+    setBulkBusy(true);
+    const res = await publicaSelectiaPeEmag(businessId, [...selected]);
+    setBulkBusy(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    toast.success(res.sarite > 0
+      ? `${res.puse} produse trimise la eMAG. ${res.sarite} sarite (oferte preluate din contul tau).`
+      : `${res.puse} produse trimise la eMAG.`);
+    clearSelection();
+    router.refresh();
+  }
+
   async function publishSelectedToOlx() {
     setBulkBusy(true);
     const res = await publishProductsToOlx(businessId, [...selected]);
@@ -425,7 +516,17 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "category" ? null : "category"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "category" && "border-primary ring-1 ring-primary/30")}><Tag className="h-3.5 w-3.5" /> Categorie</button>
             {olxConnected && (
               <button type="button" disabled={bulkBusy} onClick={publishSelectedToOlx} className={bulkBtn}>
-                <Image src="/integrations/olx.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 rounded-[3px]" /> Publica pe OLX
+                <SiglaMarketplace piata="olx" inaltime={14} /> Publică pe OLX
+              </button>
+            )}
+            {trendyolConnected && (
+              <button type="button" disabled={bulkBusy} onClick={publishSelectedToTrendyol} className={bulkBtn}>
+                <SiglaMarketplace piata="trendyol" inaltime={14} latimeMax={56} /> Publică pe Trendyol
+              </button>
+            )}
+            {emagConnected && (
+              <button type="button" disabled={bulkBusy} onClick={publishSelectedToEmag} className={bulkBtn}>
+                <SiglaMarketplace piata="emag" inaltime={14} latimeMax={56} /> Publică pe eMAG
               </button>
             )}
             <button type="button" disabled={bulkBusy} onClick={() => { setConfirmBulkDelete(true); setBulkPanel(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/20 bg-surface hover:bg-destructive/5 rounded-lg transition-colors disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Sterge</button>

@@ -84,8 +84,20 @@ test("⚠ mesajul de zero nu mai da o cauza imposibila", () => {
    */
   const act = readFileSync("src/lib/actions/emag.actions.ts", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+  /*
+   * ⚠ SE NUMARA FATA DE DRUMURI, nu fata de un numar scris de mana.
+   *
+   * Prima forma cerea exact DOUA. Cand a aparut al treilea drum de publicare (bara de selectie din
+   * lista de produse), proba a picat pe un cod CORECT — iar reparatia evidenta ar fi fost sa i se
+   * mareasca numarul, dupa care al patrulea drum ar fi putut veni FARA mesaj si numarul ar fi
+   * ramas bun. Regula e „fiecare zero isi spune cauza adevarata".
+   */
+  /* ⚠ Ancora e chemarea de PUBLICARE, nu orice `puse === 0`: exista si drumuri de pret si de
+     stoc care ies pe zero din alte motive si spun alte lucruri. */
+  const zerouri = (act.match(/await publicaPeEmagStrict\(/g) ?? []).length;
+  assert.ok(zerouri >= 2, `asteptam cel putin doua drumuri de publicare, sunt ${zerouri}`);
   const cate = (act.match(/contul eMAG nu e conectat\. Conectează-l din setările integrării\./g) ?? []).length;
-  assert.equal(cate, 2, `asteptam 2 locuri (produse + categorie), sunt ${cate}`);
+  assert.equal(cate, zerouri, `fiecare zero trebuie sa spuna cauza adevarata (${cate} din ${zerouri})`);
 
   /* ⚠ Si cealalta ramura trimite mai departe, nu se opreste la constatare. */
   assert.match(act, /Folosește „Trimite acum” pe/);

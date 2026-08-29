@@ -2274,6 +2274,49 @@ export async function publicaCategoriaPeEmag(
   return { puse };
 }
 
+/**
+ * Publica pe eMAG produsele BIFATE in lista din panou.
+ *
+ * ⚠ ACELASI MIEZ CA LA PUBLICAREA PE CATEGORIE, dinadins: `publicaPeEmagStrict`, nu
+ * `enqueueEmagSyncMany`. Butonul spune „publica", deci are voie sa atinga si produsele care n-au
+ * fost NICIODATA pe eMAG — coada obisnuita le-ar fi sarit pe toate, si la prima folosire nu s-ar
+ * fi pus nimic la rand, cu un mesaj de eroare care da vina pe altceva.
+ *
+ * ⚠ SE INTOARCE CATE AU INTRAT, nu cate s-au bifat. Un „25 de produse puse la rand" peste o coada
+ * care n-a primit nimic e chiar forma incidentului VetDepo.
+ */
+export async function publicaSelectiaPeEmag(
+  businessId: string,
+  productIds: string[],
+): Promise<{ puse: number; sarite: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return { error: g.error };
+
+  const config = await loadConfig(businessId);
+  const lipsa = ceLipsestePentruPublicare(config);
+  if (lipsa) return { error: lipsa };
+
+  const ids = [...new Set((productIds ?? []).filter(Boolean))];
+  if (ids.length === 0) return { error: "Niciun produs selectat." };
+
+  const verdict = await publicaPeEmagStrict(businessId, ids);
+  if (verdict.fel === "eroare") {
+    return { error: "Nu am putut pune produsele la rând. Încearcă din nou." };
+  }
+  const puse = verdict.fel === "puse" ? verdict.cate : 0;
+  if (puse === 0) {
+    return {
+      error: !config.connected
+        ? "Nu s-a pus nimic la rând: contul eMAG nu e conectat. Conectează-l din setările integrării."
+        : "Nu s-a pus nimic la rând: ofertele produselor selectate sunt preluate din contul tău " +
+          "eMAG, iar acelea nu se rescriu automat. Folosește „Trimite acum” pe produsul care te interesează.",
+    };
+  }
+
+  revalidatePath(FEATURE_PATH);
+  return { puse, sarite: ids.length - puse };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    AWB: CE SE ȘTIE ÎNAINTE DE APĂSARE
    ═══════════════════════════════════════════════════════════════════════════ */

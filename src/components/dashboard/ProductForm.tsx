@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { SiglaMarketplace } from "./SiglaMarketplace";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -953,7 +954,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
                 {olxPublishing
                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Image src="/integrations/olx.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                  : <SiglaMarketplace piata="olx" />}
                 Postează pe OLX
               </button>
             )}
@@ -962,7 +963,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
                 {tyPublishing
                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Image src="/integrations/trendyol.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                  : <SiglaMarketplace piata="trendyol" />}
                 Publică pe Trendyol
               </button>
             )}
@@ -971,7 +972,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
                 {emagPublishing
                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Image src="/integrations/emag.webp" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                  : <SiglaMarketplace piata="emag" />}
                 Publică pe eMAG
               </button>
             )}

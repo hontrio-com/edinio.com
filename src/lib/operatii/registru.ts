@@ -237,6 +237,8 @@ async function incearca<T>(
     rezervat?: boolean; id?: string; motiv?: string;
     referinta_externa?: string | null; detalii?: Json | null;
     incercari?: number; creat_la?: string;
+    /** Starea randului BLOCANT, la `alta_intentie`. Vezi nota din `mesajBlocat`. */
+    stare?: string;
   } | null;
 
   /*
@@ -276,7 +278,7 @@ async function incearca<T>(
       fel: "blocat",
       cheie: cerere.cheie,
       operatieId: r.id ?? null,
-      mesaj: mesajBlocat(r.motiv, cerere, r.incercari, r.creat_la),
+      mesaj: mesajBlocat(r.motiv, cerere, r.incercari, r.creat_la, r.stare),
     };
   }
 
@@ -357,11 +359,22 @@ async function incheie(
  * catre butonul pe care nu vrem sa-l apese — vezi si `slotFacturare`, unde lectia
  * a fost aceeasi.
  */
-function mesajBlocat(
+/**
+ * Ce i se spune omului cand rezervarea a fost refuzata.
+ *
+ * ⚠ EXPORTATA CA SA POATA FI PROBATA PE PURTARE, nu pe forma. Prima proba cerea literal
+ * `eAtarnata({ stare: "in_curs", creatLa })` — adica fixa chiar greseala de mai jos, si ar fi
+ * ramas verde peste ea. O proba care cere o forma apara forma, nu regula.
+ *
+ * Modulul nu e `"use server"`, deci exportul nu deschide niciun capat public.
+ */
+export function mesajBlocat(
   motiv: string | undefined,
   cerere: CerereOperatie,
   incercari: number | undefined,
   creatLa?: string,
+  /** Starea randului BLOCANT. `in_curs` si `necunoscut` cer sfaturi DIFERITE. */
+  stareBlocanta?: string,
 ): string {
   const nume = numeOperatie(cerere.fel);
   switch (motiv) {
@@ -384,12 +397,19 @@ function mesajBlocat(
        * facut — de verificat la furnizor si de lamurit din panou.
        */
       /*
-       * ⚠ SI PRAGUL E ACELASI CU AL PANOULUI. `eAtarnata` ascunde din panou o operatie `in_curs`
-       * mai tanara de trei minute, tocmai ca omul sa nu deblocheze una care CHIAR se executa. Fara
-       * deosebirea de mai jos, mesajul l-ar fi trimis „in panoul de sanatate" dupa un rand pe care
-       * panoul inca nu-l arata — doua praguri care nu se vorbesc, si un sfat care nu duce nicaieri.
+       * ⚠ SI PRAGUL E ACELASI CU AL PANOULUI — dar numai daca i se da STAREA ADEVARATA.
+       *
+       * `eAtarnata` ascunde din panou o operatie `in_curs` mai tanara de trei minute, tocmai ca
+       * omul sa nu deblocheze una care CHIAR se executa. Pentru `necunoscut` insa nu are niciun
+       * prag: acolo apelul S-A incheiat, doar raspunsul a fost neinteligibil, deci n-avem ce
+       * astepta si randul se vede in panou PE LOC.
+       *
+       * ⚠ Prima varianta scria starea de mana: `eAtarnata({ stare: "in_curs", creatLa })`. Pe un
+       * rand blocant `necunoscut` de patruzeci de secunde iesea „tocmai a plecat, asteapta un
+       * minut" — exact pe dos fata de panou, care il arata deja cu buton cu tot. Omul astepta un
+       * raspuns care venise, si nu se mai schimba.
        */
-      if (creatLa && !eAtarnata({ stare: "in_curs", creatLa }))
+      if (creatLa && !eAtarnata({ stare: stareBlocanta === "necunoscut" ? "necunoscut" : "in_curs", creatLa }))
         return `${nume} pentru acelasi lucru tocmai a plecat catre ${cerere.furnizor} si asteapta raspuns. Nu trimitem a doua oara. Asteapta un minut si incearca din nou.`;
       return `${nume} pentru acelasi lucru a fost deja trimisa la ${cerere.furnizor} si inca nu stim cum s-a terminat. Nu trimitem a doua oara. Verifica in contul ${cerere.furnizor}, apoi lamureste-o din panoul de sanatate.`;
     case "cursa":

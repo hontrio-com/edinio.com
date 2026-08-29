@@ -164,9 +164,16 @@ export async function lamurestePlata(
   const nascut = Date.parse(String(data.creat_la));
   /*
    * ⚠ RABDARE INAINTE DE ORICE INTREBARE. OLX nu arata pe loc ce tocmai a primit, iar un `GET` prea
-   * devreme e chiar felul de raspuns care nu inseamna nimic. Pragul e al registrului, acelasi dupa
-   * care randul apare in panou: altfel butonul ar fi aratat langa randuri pe care refuza sa le
-   * atinga.
+   * devreme e chiar felul de raspuns care nu inseamna nimic.
+   *
+   * ⚠ SI PRAGUL DE AICI E AL INTARZIERII LOR, nu o potrivire cu cel al panoului. Comentariul de
+   * dinainte sustinea ca e „acelasi dupa care randul apare in panou" — si era fals tocmai pentru
+   * `necunoscut`, adica starea pe care functia asta o lamureste cel mai des: `eAtarnata` o arata
+   * PE LOC, fara niciun prag. Se imprumuta doar CIFRA, fiindca e o margine buna pentru cat le ia
+   * lor sa aseze un efect; nu se imprumuta si motivul.
+   *
+   * ⚠ Afirmatia falsa apucase deja sa fie copiata in `renuntaLaOlxPlata`, unde n-avea niciun
+   * temei. Asa se raspandeste: o motivare scrisa langa cod devine fapt pentru cine o citeste.
    */
   if (Number.isFinite(nascut) && Date.now() - nascut < PRAG_ATARNATA_MS) {
     return {

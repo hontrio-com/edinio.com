@@ -212,7 +212,70 @@ $function$;
 comment on function public.rezerva_operatie_externa(uuid, uuid, text, text, text, text) is
   'Rezerva o operatie externa sub DOUA incuietori: `cheie` (intentia exacta, inclusiv `reusit`) si `tinta_idempotenta` (lucrul cumparat, numai cat timp e `in_curs`/`necunoscut`). Hotararea sta in INSERT, ca doua cereri simultane sa nu treaca amandoua.';
 
--- ── 4) Drepturi ────────────────────────────────────────────────────────────
+-- ── 4) Randurile DESCHISE de dinainte primesc si ele o tinta ──────────────
+--
+-- ⚠ FARA ASTA, INCUIETOAREA NU VEDE TOCMAI CAZUL PENTRU CARE S-A FACUT.
+--
+-- O plata ramasa `necunoscut` INAINTE de migratie are `tinta_idempotenta` NULL, iar
+-- indexul are `tinta_idempotenta is not null` in predicat — deci randul acela nu e
+-- nici in index, si nici gasit de cautarea din functie. A doua zi, de pe alt
+-- calculator, aceeasi cumparare ar fi trecut nestingherita.
+--
+-- ⚠ Si la pachete nu mai exista nicio alta plasa: la promovari se intreaba OLX daca
+-- e deja activa, la pachete nu se poate dovedi nimic.
+--
+-- Tinta se scoate din cheie, taind sufixul de intentie. Amandoua formele de sufix,
+-- fiindca in registru pot sta chei din amandoua epocile:
+--
+--     …:0f8b9c1d-2e3a-4b5c-8d7e-9f0a1b2c3d4e   intentie (UUID)
+--     …:a1b2c3d4e5f60718293a4b5c6d7e8f90       intentie (context nesigur, fara cratime)
+--     …:2026-09-01                             CHEIA VECHE, cu ziua UTC
+--     …                                        cea mai veche, fara niciun sufix
+--
+-- ⚠ SI `row_number()`, NU un `update` simplu. Daca doua randuri deschise ar ajunge pe
+-- aceeasi tinta — adica plata dubla S-A intamplat deja — indexul unic ar face sa pice
+-- INTREG `update`-ul cu 23505, si n-ar ramane nimic scris. Asa se scrie tinta pe cel
+-- mai VECHI, iar perechea lui ramane cu NULL si se lamureste cu mana. Un esec partial
+-- si vizibil bate unul total si tacut.
+--
+-- Rulat pe productie la 03.09.2026: 0 randuri (registrul n-avea nicio plata OLX).
+-- Extragerea a fost probata separat pe cele patru forme de cheie de mai sus.
+with candidat as (
+  select
+    id, business_id, furnizor, fel, creat_la,
+    nullif(
+      regexp_replace(
+        substring(cheie from '^plata:olx:(.*)$'),
+        ':([A-Za-z0-9_-]{16,64}|[0-9]{4}-[0-9]{2}-[0-9]{2})$', ''
+      ), ''
+    ) as tinta
+  from public.operatii_externe
+  where furnizor = 'olx'
+    and fel = 'plata'
+    and stare in ('in_curs', 'necunoscut')
+    and tinta_idempotenta is null
+    and cheie like 'plata:olx:%'
+),
+unice as (
+  select id, tinta from (
+    select
+      c.*,
+      row_number() over (
+        partition by coalesce(c.business_id, '00000000-0000-0000-0000-000000000000'::uuid),
+                     c.furnizor, c.fel, c.tinta
+        order by c.creat_la
+      ) as n
+    from candidat c
+    where c.tinta is not null
+  ) t
+  where n = 1
+)
+update public.operatii_externe o
+   set tinta_idempotenta = u.tinta
+  from unice u
+ where o.id = u.id;
+
+-- ── 5) Drepturi ────────────────────────────────────────────────────────────────────
 --
 -- ⚠ `revoke … from public` NU AJUNGE, si asta era sa treaca (03.09.2026).
 --

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { mesajBlocat } from "@/lib/operatii/registru";
 
 /* ══════════════════════════════════════════════════════════════════════════
    CHEIA APARA INTENTIA. TINTA CERE O A DOUA INCUIETOARE.        (03.09.2026)
@@ -134,16 +135,52 @@ test("⚠ registrul duce tinta pana la baza, si stie sa spuna ce s-a intamplat",
     "mesajul trebuie sa spuna ce e de facut, nu sa trimita la o reincarcare fara rost");
   assert.match(ram, /lamureste-o din panoul/, "mesajul trebuie sa numeasca iesirea adevarata");
 
+  assert.match(faraComentarii(registru), /mesajBlocat\(r\.motiv, cerere, r\.incercari, r\.creat_la, r\.stare\)/,
+    "fara `creat_la` si `stare`, mesajul nu poate alege sfatul potrivit");
+});
+
+test("⚠ sfatul se potriveste cu STAREA randului blocant, nu doar cu varsta lui", () => {
   /*
-   * ⚠ SI PRAGUL E ACELASI CU AL PANOULUI. `eAtarnata` ascunde din panou o operatie `in_curs` mai
-   * tanara de trei minute, tocmai ca omul sa nu deblocheze una care CHIAR se executa. Fara
-   * deosebire, mesajul l-ar fi trimis „in panoul de sanatate" dupa un rand pe care panoul inca nu-l
-   * arata — doua praguri care nu se vorbesc, si un sfat care nu duce nicaieri.
+   * ═══ O PROBA CARE CEREA O FORMA APARA CHIAR DEFECTUL (03.09.2026) ═══
+   *
+   * Prima varianta cerea literal `eAtarnata({ stare: "in_curs", creatLa })` — adica fixa exact
+   * greseala: starea era scrisa DE MANA. Pe un rand blocant `necunoscut` de patruzeci de secunde
+   * `eAtarnata` intoarce `true` (acolo nu exista prag: apelul S-A incheiat, doar raspunsul a fost
+   * neinteligibil), dar cu starea inlocuita cu `in_curs` iesea `false` — si mesajul spunea
+   * „tocmai a plecat, asteapta un minut".
+   *
+   * ⚠ Exact pe dos fata de panou, care il arata DEJA, cu butonul de deblocare langa el. Omul
+   * astepta un raspuns care venise si nu se mai schimba, si tot asa pana la minutul trei.
+   *
+   * Proba de acum cere PURTAREA: acelasi rand, doua stari, doua sfaturi.
    */
-  assert.match(ram, /eAtarnata\(\{ stare: "in_curs", creatLa \}\)/,
-    "mesajul trebuie sa foloseasca ACELASI prag ca panoul");
-  assert.match(faraComentarii(registru), /mesajBlocat\(r\.motiv, cerere, r\.incercari, r\.creat_la\)/,
-    `fara creat_la, mesajul nu poate deosebi „tocmai a plecat” de „a ramas asa”`);
+  const acum = Date.now();
+  const cerere = {
+    businessId: "b", orderId: null, fel: "plata" as const, furnizor: "olx" as const,
+    cheie: "plata:olx:x", tinta: "x",
+  };
+  const acumUnMinut = new Date(acum - 60_000).toISOString();
+
+  const inCurs = mesajBlocat("alta_intentie", cerere, 1, acumUnMinut, "in_curs");
+  assert.match(inCurs, /Asteapta un minut/,
+    "un rand `in_curs` de un minut chiar poate fi in zbor: se asteapta");
+
+  const necunoscut = mesajBlocat("alta_intentie", cerere, 1, acumUnMinut, "necunoscut");
+  assert.match(necunoscut, /lamureste-o din panoul/,
+    "un rand `necunoscut` se vede DEJA in panou: sfatul trebuie sa trimita acolo");
+  assert.doesNotMatch(necunoscut, /Asteapta un minut/,
+    "pe `necunoscut` n-avem ce astepta: apelul s-a incheiat, doar raspunsul a fost neinteligibil");
+
+  /* ⚠ Si dupa prag, amandoua trimit in panou. */
+  const vechi = new Date(acum - 10 * 60_000).toISOString();
+  for (const stare of ["in_curs", "necunoscut"]) {
+    assert.match(mesajBlocat("alta_intentie", cerere, 1, vechi, stare), /lamureste-o din panoul/,
+      `dupa prag, ${stare} trebuie sa trimita in panou`);
+  }
+
+  /* ⚠ Iar sfatul din panou trebuie sa fie si CU PUTINTA: deblocarea foloseste acelasi cantar. */
+  assert.match(faraComentarii(actiuni), /eAtarnata\(\{\s*stare: data\.stare === "necunoscut"/,
+    "deblocarea trebuie sa cantareasca la fel ca panoul, altfel butonul refuza randuri pe care ecranul le arata");
 });
 
 test("⚠ toate cele trei cumparari trimit tinta, si e ALTA decat cheia", () => {

@@ -24,7 +24,7 @@ import {
 } from "@/lib/olx/categories";
 import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNow, deleteAdvertNow, rezolvaConflictul } from "@/lib/olx/sync";
 import { olxReadinessError, categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
-import { cuRegistru, cheieOperatie, deblocheazaOperatie, eAtarnata, PRAG_ATARNATA_MS,
+import { cuRegistru, cheieOperatie, deblocheazaOperatie, eAtarnata,
   type RezultatOperatie, type Verdict } from "@/lib/operatii/registru";
 import { FORMA_INTENTIEI, cePachetAnunt, cePachetCategorie, cePromovare } from "@/lib/olx/intentie-de-cumparare";
 import { verdictulPlatii } from "@/lib/olx/verdictul-platii";
@@ -791,9 +791,23 @@ export async function renuntaLaOlxPlata(
   if (error) return { error: "Nu am putut citi operația." };
   if (!data) return { error: "Operația nu mai există." };
 
-  const nascut = Date.parse(String(data.creat_la));
-  /* ⚠ Aceeasi rabdare: o operatie care CHIAR se executa acum nu are voie sa fie deblocata. */
-  if (Number.isFinite(nascut) && Date.now() - nascut < PRAG_ATARNATA_MS) {
+  /*
+   * ⚠ ACELASI CANTAR CA AL PANOULUI, nu o socoteala paralela.
+   *
+   * Era o comparatie bruta cu `PRAG_ATARNATA_MS`, fara sa se uite la STAREA randului — desi
+   * tocmai o citise. `eAtarnata` tine rabdarea de trei minute numai pentru `in_curs`, unde apelul
+   * chiar poate fi in zbor; pentru `necunoscut` n-are niciun prag, fiindca acolo apelul s-a
+   * incheiat si doar raspunsul a fost neinteligibil.
+   *
+   * ⚠ Deosebirea nu era teoretica: panoul ARATA pe loc un rand `necunoscut`, cu butonul de
+   * deblocare langa el, iar mesajul care blocheaza a doua cumparare il trimite tocmai acolo. Pana
+   * la trei minute, singura iesire numita de mesaj raspundea cu o eroare.
+   */
+  const atarna = eAtarnata({
+    stare: data.stare === "necunoscut" ? "necunoscut" : "in_curs",
+    creatLa: String(data.creat_la),
+  });
+  if (!atarna) {
     return { error: "Cumpărarea a plecat acum câteva momente și încă poate primi răspuns. Mai așteaptă un minut." };
   }
 

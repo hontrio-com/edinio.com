@@ -29,12 +29,21 @@ const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8");
 const mapping = readFileSync("src/lib/olx/mapping.ts", "utf8");
 
 test("⚠ daca nu putem verifica, nu cream", () => {
-  const iPaza = sync.indexOf("if (isOlxError(existente)) {");
+  /*
+   * ⚠ Ancora cerea `if (isOlxError(existente)) {`. **Avea dreptate sub premisa de-atunci**: paza
+   * chema `listAdverts` de-a dreptul. De cand trece prin `anunturileLorPentru` — acelasi rezolvitor
+   * ca la stoc, stergere si butoanele manuale — raspunsul e `{ ok, esec }`, nu un `OlxResult`.
+   *
+   * Regula n-a schimbat-o nimic, ba s-a INTARIT: rezolvitorul pagineaza, cere doi martori, si se
+   * opreste si la plafon, nu doar la o cerere picata.
+   */
+  const iPaza = sync.indexOf("if (!existente.ok) return existente.esec;");
   const iCreare = sync.indexOf("await createAdvert(ctx.token, body)");
   assert.ok(iPaza > 0, "lipseste iesirea pe interogare picata");
   assert.ok(iCreare > iPaza, "paza vine INAINTEA crearii, altfel nu pazeste nimic");
-  /* ⚠ `permanent: false` — se reia, si atunci se verifica din nou. */
-  assert.match(sync.slice(iPaza, iCreare), /permanent: false/);
+  /* ⚠ Si chiar rezolvitorul central, nu inca o chemare cu alta regula. */
+  const iCautare = sync.indexOf("const existente = await anunturileLorPentru(ctx, product.id, false);");
+  assert.ok(iCautare > 0 && iCautare < iPaza, "crearea trebuie sa foloseasca rezolvitorul paginat");
   assert.doesNotMatch(sync, /Un esec al interogarii NU opreste crearea/,
     "s-a intors comentariul care indreptatea crearea pe nevazute");
 });

@@ -86,11 +86,18 @@ test("⚠ butonul „Șterge anunțul” NU trece prin paza asta", () => {
    * ⚠ Acolo omul vrea ANUME anuntul sters, cu produsul pastrat. Paza e numai pe `op: "delete"` din
    * coada, si tocmai fiindca `deleteAdvertNow` merge direct la `removeRemote`, fara coada.
    */
-  assert.match(sync, /export async function deleteAdvertNow\([\s\S]{0,300}?removeRemote\(admin, ctx, businessId, await getRow/);
   const i = sync.indexOf("export async function deleteAdvertNow");
-  const corp = sync.slice(i, i + 400);
+  assert.ok(i > 0, "butonul a disparut");
+  const corp = sync.slice(i, i + 500);
   assert.doesNotMatch(corp, /stergeDacaProdusulChiarNuMaiE/,
     "paza pusa aici ar face butonul sa nu mai stearga niciodata nimic");
+  /*
+   * ⚠ SI EL E ASUPRA PRODUSULUI (01.09.2026). Ramasese pe vechiul drum — `getRow` si un singur
+   * `olx_advert_id` — deci pe un produs cu duplicat istoric stergea 111 si lasa 222 la vanzare.
+   * Iar butonul ii promite textual „Acțiunea nu poate fi anulată": ii spuneam ca s-a terminat ceva
+   * ce nu se terminase.
+   */
+  assert.match(corp, /stergeTotulPentruProdus\(admin, ctx, businessId, offerId, await getRow/);
 });
 
 /* ── Reactivarea ─────────────────────────────────────────────────────────── */
@@ -527,4 +534,106 @@ test("⚠ „Ignoră” tine minte, si textul spune adevarul", () => {
   const ecran = readFileSync("src/components/dashboard/OlxImport.tsx", "utf8");
   assert.match(ecran, /„Ignoră” ține minte alegerea/);
   assert.doesNotMatch(ecran, /anunțul apare din nou/, "textul vechi a ramas peste purtarea noua");
+});
+
+/* ── Platile: cheia, verdictul, si iesirea din indoiala ──────────────────── */
+
+test("⚠ „unknown” nu dovedeste ca plata n-a intrat", () => {
+  /*
+   * ═══ LISTA E ALBA, NU NEAGRA (01.09.2026) ═══
+   *
+   * Prima varianta cauta `/insufficient|not enough|invalid|unknown|refuz/` si, la potrivire,
+   * ELIBERA slotul. Dar „Unknown error" spune exact pe dos: serverul nu stie ce s-a intamplat.
+   * Eliberat pe un mesaj ca acela, slotul lasa a doua apasare sa treaca — si plata se face de doua
+   * ori, tocmai in cazul in care nimeni nu stie daca prima a intrat.
+   */
+  const cod = faraComentarii(actiuni);
+  assert.match(cod, /const REFUZ_LIMPEDE = \[/);
+  assert.match(cod, /REFUZ_LIMPEDE\.some\(\(r\) => r\.test\(mesaj\)\) \? "esuat" : "necunoscut"/);
+  const i = cod.indexOf("const REFUZ_LIMPEDE");
+  const lista = cod.slice(i, cod.indexOf("]", i));
+  assert.doesNotMatch(lista, /unknown/i, "un „unknown” inseamna „nu stiu”, nu „n-am facut”");
+});
+
+test("⚠ o cheie de plata poarta si ZIUA, ca sa nu blocheze pe veci", () => {
+  /*
+   * Cheia era `promovare:${advertId}:${code}` — pentru totdeauna. Dar promovarile OLX EXPIRA:
+   *
+   *     azi:           omul cumpara „Evidențiază" pentru sapte zile ✅
+   *     peste 10 zile: a expirat, omul apasa din nou
+   *     -> registrul vede cheia ca `reusit` -> `deja` -> OLX NU e chemat
+   *     -> Edinio raporteaza succes, si nu s-a intamplat nimic
+   */
+  assert.match(actiuni, /function ziuaCheii\(\): string \{/);
+  const chei = [...actiuni.matchAll(/cheieOperatie\("plata", "olx", `([^`]*)`\)/g)];
+  assert.equal(chei.length, 3, `asteptam trei chei de plata, sunt ${chei.length}`);
+  for (const m of chei) {
+    assert.match(m[1], /\$\{ziuaCheii\(\)\}$/, `cheia \`${m[1]}\` nu poarta ziua`);
+  }
+});
+
+test("⚠ promovarea se verifica la EI inainte sa se plateasca", () => {
+  /*
+   * ⚠ Cheia apara de APASAREA dubla; asta apara de HOTARAREA dubla — omul care a uitat ca a
+   * cumparat saptamana trecuta. OLX nu refuza o promovare peste una activa: o ia si o incaseaza.
+   */
+  const i = actiuni.indexOf("export async function buyOlxPaidFeature");
+  const corp = actiuni.slice(i, actiuni.indexOf(`
+export `, i + 10));
+  const iVerificare = corp.indexOf("getAdvertPaidFeatures");
+  const iPlata = corp.indexOf("cuRegistru");
+  assert.ok(iVerificare > 0 && iPlata > iVerificare, "intrebarea vine INAINTEA platii");
+  assert.match(corp, /Promovarea e deja activă/);
+});
+
+test("⚠ o plata nelamurita are o iesire, nu e un fund de sac", () => {
+  /*
+   * ⚠ Registrul tine slotul dinadins cand nu stie ce s-a intamplat. Dar mecanismul generic de
+   * deblocare lucreaza pe pagina unei COMENZI, iar platile OLX au `orderId: null` — deci un `POST`
+   * cu raspuns pierdut lasa cumpararea blocata practic pentru totdeauna.
+   */
+  assert.match(actiuni, /export async function getOlxPlatiNelamurite\(/);
+  assert.match(actiuni, /export async function lamuresteOlxPlata\(/);
+  const i = actiuni.indexOf("export async function lamuresteOlxPlata");
+  const corp = actiuni.slice(i);
+  /* ⚠ Se cauta DOVADA la ei, nu se intreaba omul „a mers?". El n-are de unde sti. */
+  assert.match(corp, /getAdvertPaidFeatures\(token, advertId\)/);
+  assert.match(corp, /p_stare: "reusit"/);
+  /* ⚠ Si lipsa dovezii NU e acelasi lucru cu „n-am putut intreba". */
+  assert.match(corp, /stare: "inca-nu-stim"/);
+  /* ⚠ Iar numarul lor se vede in panoul de sanatate. */
+  assert.match(actiuni, /platiNelamurite: plati\.count \?\? 0,/);
+});
+
+test("⚠ plafonul atins OPRESTE lucrarea, nu o incheie", () => {
+  /*
+   * ═══ COMENTARIUL SPUNEA UN LUCRU, `return`-UL FACEA ALTUL (01.09.2026) ═══
+   *
+   * Scria „nu se pretinde ca lista e completa" — si intorcea `ok: true`, adica exact asta. Iar cine
+   * cheama foloseste raspunsul ca sa RETRAGA sau sa STINGA tot ce e al produsului: o curatenie
+   * „exhaustiva" pe o lista incompleta lasa anunturi vii, si apoi raporteaza ca a terminat.
+   */
+  const i = sync.indexOf("cautarea dupa external_id a atins plafonul");
+  assert.ok(i > 0, "strigatul de plafon a disparut");
+  const dupa = sync.slice(i, i + 700);
+  assert.match(dupa, /ok: false/, "plafonul atins nu are voie sa se raporteze ca lista completa");
+  assert.match(dupa, /permanent: true/, "se opreste pana se uita un om, nu se reia la nesfarsit");
+});
+
+test("⚠ `finish` confirma starea, nu presupune din `400`", () => {
+  /*
+   * ⚠ `400` e familia intreaga de refuzuri de validare la ei. Concluzia gresita ii spune omului ca
+   * anuntul s-a inchis cand el e in continuare acolo. Aceeasi regula ca la `stingeLaEi`.
+   */
+  const i = actiuni.indexOf("export async function finishOlxAdvert");
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf(`
+export `, i + 10)));
+  assert.match(corp, /getAdvert\(token, advertId\)/, "un `400` se lamureste intrebandu-i");
+  assert.match(corp, /INCHEIAT\.includes\(stare\)/);
+  /* ⚠ Si activarea de dupa un pachet, la fel. */
+  const j = actiuni.indexOf("export async function buyOlxAdvertPacket");
+  const corpP = faraComentarii(actiuni.slice(j, actiuni.indexOf(`
+export `, j + 10)));
+  assert.match(corpP, /getAdvert\(token, advertId\)/,
+    "un pachet cumparat cu activarea neconfirmata nu e o reusita");
 });

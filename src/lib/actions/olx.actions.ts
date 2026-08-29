@@ -12,7 +12,7 @@ import {
   buildAuthUrl, ensureMerchantToken, olxConfigured, signState,
 } from "@/lib/olx/oauth";
 import {
-  advertCommand, getAccountBalance, getAdvert, getAvailablePackets, getBoughtPackets,
+  advertCommand, getAccountBalance, getAdvert, getAdvertPaidFeatures, getAvailablePackets, getBoughtPackets,
   getPaidFeatures, getPaymentMethods, getThreadMessages, getThreads, getUser, isOlxError,
   markThreadRead, postThreadMessage, purchaseAdvertPacket, purchaseCategoryPacket, purchasePaidFeature,
 } from "@/lib/olx/client";
@@ -22,7 +22,7 @@ import {
 } from "@/lib/olx/categories";
 import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNow, deleteAdvertNow, rezolvaConflictul } from "@/lib/olx/sync";
 import { olxReadinessError, categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
-import { cuRegistru, cheieOperatie, type Verdict } from "@/lib/operatii/registru";
+import { cuRegistru, cheieOperatie, deblocheazaOperatie, type Verdict } from "@/lib/operatii/registru";
 import { legatoriDeAtribute, nereguliAtribute } from "@/lib/olx/atribute";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
@@ -546,6 +546,8 @@ export interface OlxSanatate {
   oprite: number;
   conflicte: number;
   respinse: number;
+  /** Plati catre OLX al caror rezultat n-a fost confirmat. Vezi `getOlxPlatiNelamurite`. */
+  platiNelamurite: number;
   ultimaSincronizare: string | null;
   cereReconectare: boolean;
 }
@@ -555,7 +557,7 @@ export async function getOlxSanatate(businessId: string): Promise<OlxSanatate | 
   if ("error" in g) return g;
   const admin = createAdminClient();
 
-  const [coada, oprite, conflicte, respinse, ceaMaiVeche] = await Promise.all([
+  const [coada, oprite, conflicte, respinse, plati, ceaMaiVeche] = await Promise.all([
     admin.from("olx_sync_queue").select("id", { count: "exact", head: true })
       .eq("business_id", businessId).is("abandonat_la", null),
     admin.from("olx_sync_queue").select("id", { count: "exact", head: true })
@@ -564,6 +566,9 @@ export async function getOlxSanatate(businessId: string): Promise<OlxSanatate | 
       .eq("business_id", businessId).not("conflict_la", "is", null),
     admin.from("olx_adverts").select("id", { count: "exact", head: true })
       .eq("business_id", businessId).not("moderation_text", "is", null),
+    admin.from("operatii_externe").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("furnizor", "olx").eq("fel", "plata")
+      .in("stare", ["in_curs", "necunoscut"]),
     admin.from("olx_sync_queue").select("created_at")
       .eq("business_id", businessId).is("abandonat_la", null)
       .order("created_at", { ascending: true }).limit(1).maybeSingle(),
@@ -573,7 +578,7 @@ export async function getOlxSanatate(businessId: string): Promise<OlxSanatate | 
    * ⚠ O CITIRE PICATA NU E UN ZERO. Un panou de sanatate care arata „0 probleme" fiindca n-a putut
    * intreba e mai rau decat unul care lipseste: linisteste exact cand n-ar trebui.
    */
-  for (const r of [coada, oprite, conflicte, respinse, ceaMaiVeche]) {
+  for (const r of [coada, oprite, conflicte, respinse, plati, ceaMaiVeche]) {
     if (r.error) return { error: "Nu am putut citi starea integrării OLX." };
   }
 
@@ -585,8 +590,128 @@ export async function getOlxSanatate(businessId: string): Promise<OlxSanatate | 
     oprite: oprite.count ?? 0,
     conflicte: conflicte.count ?? 0,
     respinse: respinse.count ?? 0,
+    platiNelamurite: plati.count ?? 0,
     ultimaSincronizare: config.last_sync_at ?? null,
     cereReconectare: config.needs_reconnect === true,
+  };
+}
+
+/* ── Platile ramase nelamurite ────────────────────────────────────────────── */
+
+/** O plata catre OLX al carei rezultat n-a fost confirmat. */
+export interface OlxPlataNelamurita {
+  id: string;
+  cheie: string;
+  creatLa: string;
+  ultimaEroare: string | null;
+  /** Ce anume s-a incercat, citit din cheie: `promovare:123:top_ad:2026-09-01`. */
+  descriere: string;
+}
+
+/**
+ * Platile care au ramas `in_curs` sau `necunoscut`.
+ *
+ * ═══ O INDOIALA CARE NU SE LAMURESTE E UN FUND DE SAC (01.09.2026) ═══
+ *
+ * Registrul tine slotul dinadins cand nu stie ce s-a intamplat — asa nu se plateste de doua ori.
+ * Dar mecanismul generic de deblocare lucreaza pe pagina unei COMENZI, iar platile OLX au
+ * `orderId: null`. Deci un `POST` cu raspuns pierdut lasa cumpararea blocata practic pentru
+ * totdeauna, si comerciantul nu vede nicaieri de ce.
+ *
+ * ⚠ Se arata, si se pot LAMURI: intrebam OLX daca efectul chiar e acolo.
+ */
+export async function getOlxPlatiNelamurite(
+  businessId: string,
+): Promise<{ plati: OlxPlataNelamurita[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("operatii_externe")
+    .select("id, cheie, stare, creat_la, ultima_eroare")
+    .eq("business_id", businessId).eq("furnizor", "olx").eq("fel", "plata")
+    .in("stare", ["in_curs", "necunoscut"])
+    .order("creat_la", { ascending: true }).limit(20);
+  if (error) return { error: "Nu am putut citi plățile în așteptare." };
+  return {
+    plati: ((data ?? []) as { id: string; cheie: string; creat_la: string; ultima_eroare: string | null }[])
+      .map((r) => ({
+        id: r.id, cheie: r.cheie, creatLa: r.creat_la, ultimaEroare: r.ultima_eroare,
+        descriere: descrieCheiaDePlata(r.cheie),
+      })),
+  };
+}
+
+/** Cheia, pe intelesul omului. `plata:olx:promovare:123:top_ad:2026-09-01`. */
+function descrieCheiaDePlata(cheie: string): string {
+  const b = cheie.split(":");
+  if (b[2] === "promovare") return `Promovare „${b[4] ?? "?"}" pe anunțul ${b[3] ?? "?"}`;
+  if (b[2] === "pachet-anunt") return `Pachet pentru anunțul ${b[3] ?? "?"}`;
+  if (b[2] === "pachet-categorie") return `Pachet de ${b[4] ?? "?"} anunțuri în categoria ${b[3] ?? "?"}`;
+  return cheie;
+}
+
+/**
+ * Intreaba OLX daca plata a intrat, si incheie randul din registru.
+ *
+ * ⚠ SE CAUTA DOVADA LA EI, nu se intreaba omul „a mers?". El n-are de unde sti; noi avem.
+ *
+ * ⚠ Si cand dovada LIPSESTE, nu se declara esec pe tacere: se elibereaza slotul si i se spune
+ * limpede ca poate incerca din nou. Deosebirea conteaza — „n-am gasit promovarea" poate insemna si
+ * ca ei n-au raspuns, iar atunci a doua apasare ar fi a doua plata.
+ */
+export async function lamuresteOlxPlata(
+  businessId: string, operatieId: string,
+): Promise<{ stare: "intrat" | "nu-a-intrat" | "inca-nu-stim"; mesaj: string } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("operatii_externe").select("id, cheie, stare")
+    .eq("id", operatieId).eq("business_id", businessId).maybeSingle();
+  if (error) return { error: "Nu am putut citi operația." };
+  if (!data) return { error: "Operația nu mai există." };
+
+  const bucati = (data.cheie as string).split(":");
+  const fel = bucati[2];
+  let dovada: boolean | null = null;
+
+  if (fel === "promovare") {
+    const advertId = Number(bucati[3]);
+    const cod = bucati[4];
+    const res = await withToken(businessId, async (token) => getAdvertPaidFeatures(token, advertId));
+    if (typeof res === "object" && res !== null && !("error" in res)) {
+      const lista = Array.isArray(res.data) ? res.data : [];
+      dovada = lista.some((f) => (f as unknown as { code?: unknown }).code === cod);
+    }
+  } else if (fel === "pachet-categorie" || fel === "pachet-anunt") {
+    /*
+     * ⚠ Pachetele nu se pot lega de o cumparare anume: raspunsul spune cate sunt, nu cand s-au luat.
+     * Deci „intrat" nu se poate DOVEDI aici — se poate doar arata omului soldul si lista, ca sa
+     * hotarasca el. Se intoarce „inca nu stim", nu o presupunere.
+     */
+    dovada = null;
+  }
+
+  if (dovada === true) {
+    const { error: eIncheiere } = await admin.rpc("incheie_operatie_externa", {
+      p_id: operatieId, p_business_id: businessId, p_stare: "reusit",
+      p_eroare: null,
+    });
+    if (eIncheiere) return { error: "Nu am putut încheia operația." };
+    revalidatePath(FEATURE_PATH);
+    return { stare: "intrat", mesaj: "Plata a intrat la OLX. Operația e închisă." };
+  }
+  if (dovada === false) {
+    const r = await deblocheazaOperatie(admin, businessId, operatieId,
+      "verificat la OLX: efectul nu exista");
+    if (!r.ok) return { error: r.mesaj };
+    revalidatePath(FEATURE_PATH);
+    return { stare: "nu-a-intrat", mesaj: "La OLX nu există nimic. Poți încerca din nou." };
+  }
+  return {
+    stare: "inca-nu-stim",
+    mesaj: "Nu am putut afla de la OLX. Verifică în contul tău de pe olx.ro și încearcă din nou peste câteva minute.",
   };
 }
 
@@ -1069,14 +1194,58 @@ export async function getOlxPackets(businessId: string): Promise<OlxPacketsResul
  *
  * ⚠ Nu se da `legaturaVie`: „deja" inseamna aici ca banii s-au dus o data, si asta nu se desface.
  */
+/**
+ * Refuzurile pe care le RECUNOASTEM, si numai ele, inseamna „sigur nu s-a intamplat nimic".
+ *
+ * ═══ „UNKNOWN" NU E O DOVADA CA PLATA N-A INTRAT (01.09.2026) ═══
+ *
+ * Prima varianta cauta `/insufficient|not enough|invalid|unknown|refuz/` si, la potrivire, elibera
+ * slotul. Dar „Unknown error" spune exact pe dos: SERVERUL nu stie ce s-a intamplat. Eliberat pe
+ * un mesaj ca acela, slotul lasa a doua apasare sa treaca — si atunci plata se face de doua ori,
+ * tocmai in cazul in care nimeni nu stie daca prima a intrat.
+ *
+ * ⚠ LISTA E ALBA, NU NEAGRA. Se numesc situatiile in care ei ne-au spus limpede ca n-au facut
+ * nimic; orice altceva, inclusiv un text pe care nu-l recunoastem, ramane `necunoscut`. Pentru o
+ * operatie cu bani, indoiala se plateste cu o intrebare, nu cu inca o plata.
+ */
+const REFUZ_LIMPEDE = [
+  /insufficient\s+(funds|credits|balance)/i,
+  /not\s+enough\s+(funds|credits|money|balance)/i,
+  /invalid\s+payment\s+method/i,
+  /payment\s+method\s+not\s+(allowed|supported|available)/i,
+  /postpaid\s+not\s+activated/i,
+  /fonduri\s+insuficiente/i,
+];
+
 function verdictOlxPlata(e: unknown): Verdict {
   const mesaj = e instanceof Error ? e.message : String(e);
-  /*
-   * ⚠ „esuat" inseamna „sigur nu s-a intamplat nimic", deci slotul se elibereaza si omul poate
-   * reincerca. „necunoscut" tine slotul, si e IMPLICITUL: pentru o operatie cu bani, indoiala se
-   * plateste cu o intrebare, nu cu inca o plata.
-   */
-  return /insufficient|not enough|invalid|unknown|refuz/i.test(mesaj) ? "esuat" : "necunoscut";
+  return REFUZ_LIMPEDE.some((r) => r.test(mesaj)) ? "esuat" : "necunoscut";
+}
+
+/**
+ * Ziua de azi, ca bucata din cheia unei plati.
+ *
+ * ═══ O CHEIE FARA TIMP BLOCHEAZA CUMPARAREA DE PESTE O LUNA (01.09.2026) ═══
+ *
+ * Cheia era `promovare:${advertId}:${code}` — pentru totdeauna. Dar promovarile OLX EXPIRA, si au
+ * chiar `valid_to`. Deci:
+ *
+ *     azi:      omul cumpara „Evidențiază" pentru sapte zile ✅
+ *     peste 10 zile: promovarea a expirat, omul apasa din nou
+ *     -> registrul vede cheia ca `reusit` -> intoarce `deja`
+ *     -> OLX NU e chemat, iar Edinio raporteaza succes
+ *     -> el crede ca a cumparat, si nu s-a intamplat nimic
+ *
+ * ⚠ Ziua e bucata potrivita: fereastra in care un raspuns pierdut duce la a doua apasare se
+ * masoara in secunde, nu in zile — deci dedublarea tine cat trebuie. Iar o cumparare legitima de
+ * saptamana viitoare are alta cheie, si trece.
+ *
+ * ⚠ SI TOT NU E SINGURA PAZA. Inainte de o promovare se intreaba OLX daca aceeasi promovare e inca
+ * ACTIVA; daca da, nu se cumpara si i se spune pana cand tine. Cheia apara de apasarea dubla,
+ * intrebarea apara de hotararea dubla.
+ */
+function ziuaCheii(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export async function buyOlxCategoryPacket(
@@ -1088,7 +1257,7 @@ export async function buyOlxCategoryPacket(
     createAdminClient(),
     {
       businessId, orderId: null, fel: "plata", furnizor: "olx",
-      cheie: cheieOperatie("plata", "olx", `pachet-categorie:${categoryId}:${size}:${type}`),
+      cheie: cheieOperatie("plata", "olx", `pachet-categorie:${categoryId}:${size}:${type}:${ziuaCheii()}`),
     },
     async () => {
       const res = await withToken(businessId, (token) =>
@@ -1122,7 +1291,7 @@ export async function buyOlxAdvertPacket(
     createAdminClient(),
     {
       businessId, orderId: null, fel: "plata", furnizor: "olx",
-      cheie: cheieOperatie("plata", "olx", `pachet-anunt:${advertId}:${isPremium ? "premium" : "normal"}`),
+      cheie: cheieOperatie("plata", "olx", `pachet-anunt:${advertId}:${isPremium ? "premium" : "normal"}:${ziuaCheii()}`),
     },
     async () => {
       const res = await withToken(businessId, async (token) => {
@@ -1143,7 +1312,18 @@ export async function buyOlxAdvertPacket(
   /* Pachetul e cumparat (acum sau mai devreme). Activarea se reia fara sa mai coste nimic. */
   const act = await withToken(businessId, (token) => advertCommand(token, advertId, "activate"));
   if ("error" in act) return { error: act.error };
-  if (isOlxError(act) && act.status !== 400) return { error: mapPaymentError(act.error) };
+  if (isOlxError(act)) {
+    /* ⚠ Aceeasi regula: `400` se confirma din starea LOR, nu se ia drept „deja activ". */
+    if (act.status !== 400) return { error: mapPaymentError(act.error) };
+    const lor = await withToken(businessId, (token) => getAdvert(token, advertId));
+    if ("error" in lor || isOlxError(lor)) {
+      return { error: "Pachetul e cumpărat, dar nu am putut confirma activarea. Reîncarcă pagina peste câteva momente." };
+    }
+    const stare = String(lor.data?.status ?? "").toLowerCase();
+    if (!["active", "new", "unconfirmed"].includes(stare)) {
+      return { error: `Pachetul e cumpărat, dar anunțul e în continuare „${stare}". Încearcă activarea din listă.` };
+    }
+  }
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -1170,8 +1350,28 @@ export async function finishOlxAdvert(
   if ("error" in g) return g;
   const res = await withToken(businessId, (token) => advertCommand(token, advertId, "finish"));
   if ("error" in res) return res;
-  /* ⚠ `400` inseamna de obicei „e deja intr-o stare in care comanda n-are rost": nu e un esec. */
-  if (isOlxError(res) && res.status !== 400) return { error: res.error };
+  if (isOlxError(res)) {
+    /*
+     * ═══ UN `400` NU E O DOVADA DE STARE (01.09.2026) ═══
+     *
+     * Aici se socotea orice `400` drept „e deja incheiat, deci gata". Dar `400` e familia intreaga
+     * de refuzuri de validare la ei, iar concluzia gresita ii spune omului ca anuntul s-a inchis
+     * cand el e in continuare acolo. Aceeasi regula ca la `stingeLaEi`: se intreaba.
+     */
+    if (res.status !== 400) return { error: res.error };
+    const lor = await withToken(businessId, (token) => getAdvert(token, advertId));
+    if ("error" in lor) return { error: "OLX a refuzat închiderea și nu am putut citi starea anunțului. Încearcă din nou." };
+    if (isOlxError(lor)) {
+      /* `404` = nu mai e acolo. Starea dorita e atinsa, cu varf. */
+      if (lor.status !== 404) return { error: res.error };
+    } else {
+      const stare = String(lor.data?.status ?? "").toLowerCase();
+      const INCHEIAT = ["finished", "removed_by_user", "outdated", "removed_by_moderator", "blocked", "disabled"];
+      if (!INCHEIAT.includes(stare)) {
+        return { error: `OLX a refuzat închiderea, iar anunțul e în continuare „${stare}": ${res.error}` };
+      }
+    }
+  }
 
   const admin = createAdminClient();
   const { error } = await admin.from("olx_adverts")
@@ -1201,11 +1401,41 @@ export async function buyOlxPaidFeature(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
+
+  /*
+   * ⚠ SE INTREABA EI INAINTE SA SE PLATEASCA. OLX nu refuza o promovare pusa peste una care merge
+   * deja: o ia, o incaseaza, si o pune peste. Cheia din registru apara de APASAREA dubla; asta
+   * apara de HOTARAREA dubla — omul care a uitat ca a cumparat saptamana trecuta.
+   *
+   * ⚠ Daca nu putem intreba, se merge mai departe: o promovare necumparata dintr-o pana de retea
+   * ar fi o paguba sigura, pe cand riscul aici e o promovare in plus, si numai daca omul chiar a
+   * mai cumparat una activa. Se spune insa in jurnal.
+   */
+  const active = await withToken(businessId, async (token) => getAdvertPaidFeatures(token, advertId));
+  if (typeof active === "object" && active !== null && !("error" in active)) {
+    const lista = Array.isArray(active.data) ? active.data : [];
+    const inca = lista.find((f) => {
+      const c = (f as unknown as { code?: unknown }).code;
+      if (c !== code) return false;
+      const pana = (f as unknown as { valid_to?: unknown }).valid_to;
+      if (typeof pana !== "string") return true;
+      const t = Date.parse(pana);
+      return !Number.isFinite(t) || t > Date.now();
+    });
+    if (inca) {
+      const pana = (inca as unknown as { valid_to?: unknown }).valid_to;
+      return {
+        error: typeof pana === "string"
+          ? `Promovarea e deja activă pe acest anunț, până pe ${new Date(pana).toLocaleDateString("ro-RO")}. Nu se cumpără a doua oară.`
+          : "Promovarea e deja activă pe acest anunț. Nu se cumpără a doua oară.",
+      };
+    }
+  }
   const r = await cuRegistru(
     createAdminClient(),
     {
       businessId, orderId: null, fel: "plata", furnizor: "olx",
-      cheie: cheieOperatie("plata", "olx", `promovare:${advertId}:${code}`),
+      cheie: cheieOperatie("plata", "olx", `promovare:${advertId}:${code}:${ziuaCheii()}`),
     },
     async () => {
       const res = await withToken(businessId, (token) =>

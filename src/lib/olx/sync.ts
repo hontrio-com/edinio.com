@@ -382,13 +382,30 @@ async function anunturileLorPentru(
     }
     if (pagina.length < PAGINA_EXTERNAL_ID) return { ok: true, anunturi };
   }
-  /* ⚠ Am atins plafonul: nu se tace, si nu se pretinde ca lista e completa. */
+  /*
+   * ═══ COMENTARIUL SPUNEA UN LUCRU, `return`-UL FACEA ALTUL (01.09.2026) ═══
+   *
+   * Scria „nu se pretinde ca lista e completa" — si intorcea `ok: true`, adica exact asta. Iar cine
+   * cheama foloseste raspunsul ca sa RETRAGA sau sa STINGA tot ce e al produsului. O curatenie
+   * „exhaustiva" pe o lista despre care stim chiar noi ca poate fi incompleta lasa anunturi vii, si
+   * apoi raporteaza ca a terminat.
+   *
+   * ⚠ Se opreste lucrarea. Cinci sute de anunturi cu acelasi `external_id` nu e o intarziere, e o
+   * situatie pe care n-o intelegem — si atunci nu se atinge nimic pana nu se uita un om.
+   */
   await logError({
     action: "olx.anunturileLor", severity: "critical",
-    message: `cautarea dupa external_id a atins plafonul de ${MAX_EXTERNAL_ID}; lista poate fi incompleta`,
+    message: `cautarea dupa external_id a atins plafonul de ${MAX_EXTERNAL_ID}; lucrarea se opreste`,
     details: { externalId, gasite: anunturi.length },
   });
-  return { ok: true, anunturi };
+  return {
+    ok: false,
+    esec: {
+      ok: false, permanent: true,
+      error: `Produsul are peste ${MAX_EXTERNAL_ID} anunțuri cu același identificator la OLX. `
+        + "Lucrarea s-a oprit ca să nu atingem o listă pe care nu o putem citi întreagă.",
+    },
+  };
 }
 
 /**
@@ -945,8 +962,14 @@ async function upsertRemote(
    * tacut pretul si stocul pe marketplace — exact motivul pentru care cablarea
    * marketplace-ului sub registru a fost scoasa (commit a0724b3).
    */
-  const existente = await listAdverts(ctx.token, { external_id: product.id, limit: 20 });
-  if (!isOlxError(existente)) {
+  /*
+   * ⚠ ACELASI REZOLVITOR CA PESTE TOT (01.09.2026). Aici se chema `listAdverts` cu `limit: 20`,
+   * deci un anunt aflat pe pozitia douazeci si unu nu se vedea — si atunci paza anti-duplicat il
+   * rata tocmai pe cel de care ne temem. Sase locuri care intreaba acelasi lucru n-au voie sa aiba
+   * sase raspunsuri: `anunturileLorPentru` pagineaza, cere doi martori, si se opreste la plafon.
+   */
+  const existente = await anunturileLorPentru(ctx, product.id, false);
+  if (existente.ok) {
     /*
      * ⚠ NU se ia „primul din lista". Se ia primul care trece DOUA probe.
      *
@@ -961,13 +984,8 @@ async function upsertRemote(
      *    actualizare ar lovi un anunt mort. `outdated`/`removed_by_user` sunt
      *    reactivabile si se adopta — pentru ele exista deja `activateRemote`.
      */
-    const MOARTE = ["removed_by_moderator", "moderated", "blocked", "deleted", "removed"];
-    const candidati = (existente.data ?? []).filter((a) => {
-      if (!a?.id) return false;
-      const ext = (a as unknown as { external_id?: unknown }).external_id;
-      if (typeof ext !== "string" || ext !== product.id) return false;
-      return !MOARTE.includes(String(a.status ?? "").toLowerCase());
-    });
+    /* Doi martori si starile moarte le filtreaza deja `anunturileLorPentru`. */
+    const candidati = existente.anunturi;
     /*
      * ═══ DOUA ANUNTURI VII: SE INTREABA OMUL, NU SE ALEGE (01.09.2026) ═══
      *
@@ -1068,12 +1086,7 @@ async function upsertRemote(
    *
    * ⚠ Deci: daca nu putem VERIFICA, nu CREAM. Se reia, si atunci se verifica din nou.
    */
-  if (isOlxError(existente)) {
-    return {
-      ok: false, permanent: false, asteptare: asteptareaLor(existente),
-      error: `Nu am putut verifica daca anuntul exista deja la OLX (${existente.status}): ${existente.error}`,
-    };
-  }
+  if (!existente.ok) return existente.esec;
 
   const res: OlxResult<OlxAdvert> = await createAdvert(ctx.token, body);
   if (isOlxError(res)) {
@@ -1342,8 +1355,49 @@ export async function activateProductNow(admin: Db, ctx: OlxSyncContext, busines
   });
 }
 
+/**
+ * Sterge TOATE anunturile produsului la ei, si pune piatra pe randul canonic.
+ *
+ * ═══ SI APASAREA „ȘTERGE ANUNȚUL" E ASUPRA PRODUSULUI (01.09.2026) ═══
+ *
+ * Sora ei, `stingeTotulPentruProdus`, invatase deja asta. Aici ramasese vechiul drum: `getRow` si
+ * un singur `olx_advert_id`. Deci pe un produs cu duplicat istoric:
+ *
+ *     OLX:    111 ACTIVE (external_id = P)  si  222 ACTIVE (external_id = P)
+ *     Edinio: `olx_adverts` -> 111
+ *     omul apasa „Șterge anunțul" -> 111 dispare, 222 RAMANE la vanzare
+ *
+ * Iar butonul ii promite textual „Acțiunea nu poate fi anulată" — deci ii spunem ca s-a terminat
+ * ceva ce nu s-a terminat.
+ *
+ * ⚠ SE INTREABA INTAI, SI ABIA APOI SE STERGE. Daca intrebarea pica, nu se atinge nimic si se reia.
+ */
+async function stergeTotulPentruProdus(
+  admin: Db, ctx: OlxSyncContext, businessId: string, offerId: string, row: OlxAdvertRow | null,
+): Promise<SyncOutcome> {
+  const lor = await anunturileLorPentru(ctx, offerId, false);
+  if (!lor.ok) return lor.esec;
+
+  const cunoscut = row?.olx_advert_id ?? null;
+  const inPlus = lor.anunturi.filter((a) => a.id !== cunoscut);
+  if (inPlus.length > 0) {
+    await logError({
+      action: "olx.stergere", severity: "critical",
+      message: `produsul are ${lor.anunturi.length} anunturi cu acelasi external_id; se sterg toate`,
+      details: { offerId, cunoscut, iduri: lor.anunturi.map((a) => a.id) }, businessId,
+    });
+    for (const a of inPlus) {
+      const r = await retrageLaEi(ctx, a.id, String(a.status ?? ""));
+      if (!r.ok) return r.esec;
+    }
+  }
+  /* Randul cunoscut isi urmeaza calea obisnuita: el poarta si piatra hotararii. */
+  return removeRemote(admin, ctx, businessId, row);
+}
+
 export async function deleteAdvertNow(admin: Db, ctx: OlxSyncContext, businessId: string, offerId: string): Promise<SyncOutcome> {
-  return faraCitiriPicate(async () => removeRemote(admin, ctx, businessId, await getRow(admin, businessId, offerId)));
+  return faraCitiriPicate(async () =>
+    stergeTotulPentruProdus(admin, ctx, businessId, offerId, await getRow(admin, businessId, offerId)));
 }
 
 // Refresh one advert's status from OLX (used by the cron poll).

@@ -46,6 +46,57 @@ reaplicarea ei e inofensiva.**
 Iar `2026-08-04-DUPA-DEPLOY-buckets.sql` are nevoie de `storage.objects` /
 `storage.buckets`, care nu exista nici in preludiu, nici in baseline.
 
+## ⚠ La restaurarea pe un proiect Supabase NOU: granturile implicite
+
+**Masurat pe 03.09.2026.** `pg_default_acl` al proiectului da, pentru schema `public`
+si pentru obiectele de tip functie create de rolul `postgres`:
+
+```
+{postgres=X/postgres, anon=X/postgres, authenticated=X/postgres, service_role=X/postgres}
+```
+
+Adica **orice functie creata acolo primeste EXECUTE pentru `anon` si `authenticated`,
+pe nume.** Iar baseline-ul emite, in sectiunea lui de revocari, numai
+`revoke execute on function … from public` — o revocare de la `public` **nu** stinge
+granturile date pe nume.
+
+Urmarea: pe o **productie vie** totul e in regula (granturile de acolo sunt cele
+corecte, si o proba le pazeste — `src/lib/emag/granturi-rpc.test.ts`). Dar
+**restaurand baseline-ul pe un proiect Supabase nou**, fiecare functie `security
+definer` din `public` ar ramane chemabila cu o cheie `anon`.
+
+CI-ul nu prinde asta: restaureaza pe un PostgreSQL curat, unde nu exista nici
+rolurile Supabase, nici privilegiile implicite.
+
+**Deci, dupa o restaurare pe un proiect Supabase nou, INAINTE de a-l deschide:**
+
+```sql
+-- pentru fiecare functie din `public`, in ordinea asta:
+--   1) revoke de la public, anon, authenticated
+--   2) apoi se reaplica granturile din baseline (sectiunea de `grant`),
+--      care redau exact ce are productia — inclusiv `anon` acolo unde CHIAR trebuie
+--      (`semnatura_cuvant`, `site_analytics_breakdown`, si celelalte cateva).
+do $$
+declare f record;
+begin
+  for f in
+    select p.oid::regprocedure as sig
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+  loop
+    execute format('revoke execute on function %s from public, anon, authenticated', f.sig);
+  end loop;
+end $$;
+```
+
+Apoi se ruleaza `npm test` (proba de granturi) pe noul proiect.
+
+⚠ Nu s-a schimbat generatorul (`genereaza_schema_baseline()`) fiindca ar cere
+reasezarea sectiunilor — revocarile trebuie sa vina INAINTEA granturilor, altfel ar
+sterge chiar accesul legitim al lui `anon` la cele cateva functii publice — si
+singura dovada adevarata ar fi o restaurare reala pe un proiect Supabase, pe care
+n-o putem face din CI.
+
 ## Marcajul de taiere (cutover)
 
 Nu e o variabila si nu e data din numele fisierelor — **datele din nume nu sunt

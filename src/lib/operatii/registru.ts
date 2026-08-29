@@ -276,7 +276,7 @@ async function incearca<T>(
       fel: "blocat",
       cheie: cerere.cheie,
       operatieId: r.id ?? null,
-      mesaj: mesajBlocat(r.motiv, cerere, r.incercari),
+      mesaj: mesajBlocat(r.motiv, cerere, r.incercari, r.creat_la),
     };
   }
 
@@ -361,6 +361,7 @@ function mesajBlocat(
   motiv: string | undefined,
   cerere: CerereOperatie,
   incercari: number | undefined,
+  creatLa?: string,
 ): string {
   const nume = numeOperatie(cerere.fel);
   switch (motiv) {
@@ -382,6 +383,14 @@ function mesajBlocat(
        * ⚠ Textul nu spune „reincarca pagina": aici reincarcarea nu schimba nimic. Spune ce e de
        * facut — de verificat la furnizor si de lamurit din panou.
        */
+      /*
+       * ⚠ SI PRAGUL E ACELASI CU AL PANOULUI. `eAtarnata` ascunde din panou o operatie `in_curs`
+       * mai tanara de trei minute, tocmai ca omul sa nu deblocheze una care CHIAR se executa. Fara
+       * deosebirea de mai jos, mesajul l-ar fi trimis „in panoul de sanatate" dupa un rand pe care
+       * panoul inca nu-l arata — doua praguri care nu se vorbesc, si un sfat care nu duce nicaieri.
+       */
+      if (creatLa && !eAtarnata({ stare: "in_curs", creatLa }))
+        return `${nume} pentru acelasi lucru tocmai a plecat catre ${cerere.furnizor} si asteapta raspuns. Nu trimitem a doua oara. Asteapta un minut si incearca din nou.`;
       return `${nume} pentru acelasi lucru a fost deja trimisa la ${cerere.furnizor} si inca nu stim cum s-a terminat. Nu trimitem a doua oara. Verifica in contul ${cerere.furnizor}, apoi lamureste-o din panoul de sanatate.`;
     case "cursa":
       return "Operatia tocmai s-a incheiat pe alt drum. Reincarca pagina.";

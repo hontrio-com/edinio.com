@@ -133,6 +133,17 @@ test("⚠ registrul duce tinta pana la baza, si stie sa spuna ce s-a intamplat",
   assert.doesNotMatch(faraComentarii(ram), /Reincarca pagina|reincarca pagina/,
     "mesajul trebuie sa spuna ce e de facut, nu sa trimita la o reincarcare fara rost");
   assert.match(ram, /lamureste-o din panoul/, "mesajul trebuie sa numeasca iesirea adevarata");
+
+  /*
+   * ⚠ SI PRAGUL E ACELASI CU AL PANOULUI. `eAtarnata` ascunde din panou o operatie `in_curs` mai
+   * tanara de trei minute, tocmai ca omul sa nu deblocheze una care CHIAR se executa. Fara
+   * deosebire, mesajul l-ar fi trimis „in panoul de sanatate" dupa un rand pe care panoul inca nu-l
+   * arata — doua praguri care nu se vorbesc, si un sfat care nu duce nicaieri.
+   */
+  assert.match(ram, /eAtarnata\(\{ stare: "in_curs", creatLa \}\)/,
+    "mesajul trebuie sa foloseasca ACELASI prag ca panoul");
+  assert.match(faraComentarii(registru), /mesajBlocat\(r\.motiv, cerere, r\.incercari, r\.creat_la\)/,
+    `fara creat_la, mesajul nu poate deosebi „tocmai a plecat” de „a ramas asa”`);
 });
 
 test("⚠ toate cele trei cumparari trimit tinta, si e ALTA decat cheia", () => {

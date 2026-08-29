@@ -23,6 +23,16 @@ const actiuni = readFileSync("src/lib/actions/olx.actions.ts", "utf8");
 const mesaje = readFileSync("src/lib/actions/olx-mesaje.actions.ts", "utf8");
 const cont = readFileSync("src/lib/actions/olx-cont.actions.ts", "utf8");
 const importul = readFileSync("src/lib/actions/olx-import.actions.ts", "utf8");
+const intentie = readFileSync("src/lib/olx/intentie-de-cumparare.ts", "utf8");
+/*
+ * ⚠ SE CITESC SI COMPONENTELE, nu doar actiunile. Proba de pana acum cauta `platiNelamurite:` in
+ * SURSA actiunilor si trecea verde peste un panou care nu afisa cifra si un `totBine` care n-o
+ * socotea: confirma ca se SCRIE campul, nu ca-l citeste cineva. Un capat de fir care nu se leaga
+ * nicaieri arata, dintr-un inventar, exact ca o functie livrata.
+ */
+const panou = readFileSync("src/components/dashboard/OlxSanatate.tsx", "utf8");
+const panouCont = readFileSync("src/components/dashboard/OlxAccountPanel.tsx", "utf8");
+const ecran = readFileSync("src/components/dashboard/OlxClient.tsx", "utf8");
 
 function faraComentarii(t: string): string {
   return t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
@@ -290,8 +300,16 @@ test("⚠ toate cele trei cumparari trec prin registru", () => {
     const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf(`
 export `, i + 10)));
     assert.match(corp, /await cuRegistru\(/, `${fn} cheltuie bani fara registru`);
-    assert.match(corp, /cheieOperatie\("plata", "olx",/, `${fn} n-are cheie de plata`);
-    assert.match(corp, /if \(r\.fel === "blocat"\)/, `${fn} nu spune omului ca e una in curs`);
+    assert.match(corp, /cheie: cheiaPlatii\(/, `${fn} n-are cheie de plata`);
+    /*
+     * ⚠ SI NIMENI NU-SI FACE SINGUR CHEIA. Un `cheieOperatie("plata", …)` scris de mana ar ocoli
+     * `cheiaPlatii`, adica si intentia: cheia ar redeveni una compusa pe loc, si dedublarea peste
+     * reincercari ar disparea fara ca nimic sa se planga.
+     */
+    assert.doesNotMatch(corp, /cheieOperatie\("plata"/,
+      `${fn} isi compune cheia pe langa cheiaPlatii`);
+    assert.match(corp, /if \(r\.fel === "blocat"\) return \{ error: r\.mesaj \}|raportCumparare\(r\)/,
+      `${fn} nu duce mai departe mesajul registrului`);
     /* ⚠ Si apelul catre ei sta INAUNTRUL registrului, nu inaintea lui. */
     const iReg = corp.indexOf("await cuRegistru(");
     assert.ok(corp.indexOf("purchase", iReg) > iReg,
@@ -555,20 +573,72 @@ test("⚠ „unknown” nu dovedeste ca plata n-a intrat", () => {
   assert.doesNotMatch(lista, /unknown/i, "un „unknown” inseamna „nu stiu”, nu „n-am facut”");
 });
 
-test("⚠ o cheie de plata poarta si ZIUA, ca sa nu blocheze pe veci", () => {
+test("⚠ cheia unei plati poarta INTENTIA, si intentia vine de la apelant", () => {
   /*
-   * Cheia era `promovare:${advertId}:${code}` — pentru totdeauna. Dar promovarile OLX EXPIRA:
+   * ═══ ZIUA FACEA DOUA TREBURI, SI LE FACEA PROST PE AMANDOUA (02.09.2026) ═══
    *
-   *     azi:           omul cumpara „Evidențiază" pentru sapte zile ✅
-   *     peste 10 zile: a expirat, omul apasa din nou
-   *     -> registrul vede cheia ca `reusit` -> `deja` -> OLX NU e chemat
-   *     -> Edinio raporteaza succes, si nu s-a intamplat nimic
+   * Cheia era `promovare:${advertId}:${code}:${ziuaCheii()}`.
+   *
+   *   DEDUBLA PREA MULT: doua cumparari legitime ale aceluiasi lucru in aceeasi zi UTC primeau
+   *   aceeasi cheie, a doua intorcea `deja`, OLX nu era chemat, si Edinio raporta succes.
+   *
+   *   DEDUBLA PREA PUTIN: un timeout inainte de hotarul zilei UTC, reluat dupa, primea alta cheie
+   *   si putea plati a doua oara.
+   *
+   * ⚠ CE APARA PROBA ASTA nu e ca exista un id in cheie, ci ca id-ul VINE DE LA APELANT. Un
+   * `randomUUID()` chemat in corpul actiunii ar da alta cheie la fiecare apasare si ar desfiinta
+   * complet paza — fiecare reincercare ar deveni a doua plata. Cu o proba care cere doar „e un
+   * uuid in cheie", stricaciunea aia ar trece verde.
    */
-  assert.match(actiuni, /function ziuaCheii\(\): string \{/);
-  const chei = [...actiuni.matchAll(/cheieOperatie\("plata", "olx", `([^`]*)`\)/g)];
-  assert.equal(chei.length, 3, `asteptam trei chei de plata, sunt ${chei.length}`);
-  for (const m of chei) {
-    assert.match(m[1], /\$\{ziuaCheii\(\)\}$/, `cheia \`${m[1]}\` nu poarta ziua`);
+  assert.doesNotMatch(actiuni, /function ziuaCheii/, "ziua din cheie a fost inlocuita de intentie");
+
+  for (const fn of ["buyOlxCategoryPacket", "buyOlxAdvertPacket", "buyOlxPaidFeature"]) {
+    const i = actiuni.indexOf(`export async function ${fn}(`);
+    assert.ok(i > 0, `${fn} a disparut`);
+    const antet = actiuni.slice(i, actiuni.indexOf(")", actiuni.indexOf("(", i + 30)) + 1);
+    assert.match(antet, /intentId: string/, `${fn} nu primeste intentia de la apelant`);
+    const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf(`
+export `, i + 10)));
+    assert.doesNotMatch(corp, /randomUUID/, `${fn} isi face singur intentia, deci n-o mai apara`);
+    assert.match(corp, /intentieValida\(intentId\)/, `${fn} nu verifica forma intentiei`);
+  }
+
+  /*
+   * ⚠ ID-UL STA LA COADA CHEII. `descrieCheiaDePlata` si lamurirea citesc cheia POZITIONAL: pus in
+   * fata, `b[2]` ar deveni un id, nicio ramura nu s-ar mai potrivi, si orice plata nelamurita ar
+   * raspunde pe veci „inca nu stim" — cu descrierea aratata omului ca sir brut.
+   */
+  const i2 = actiuni.indexOf("function cheiaPlatii(");
+  assert.ok(i2 > 0, "cheiaPlatii a disparut");
+  const corpCheie = faraComentarii(actiuni.slice(i2, actiuni.indexOf("\n}", i2)));
+  assert.match(corpCheie, /\$\{ceSeCumpara\}:\$\{intentId\}/,
+    "intentia trebuie sa fie ULTIMA bucata a cheii");
+
+  /*
+   * ⚠ SI INTENTIA TREBUIE SA SUPRAVIETUIASCA ECRANULUI. Prima varianta o tinea intr-un `useRef`;
+   * panoul de cont e un acordeon, deci se demonteaza, iar a doua apasare ar fi trimis alt id si ar
+   * fi chemat OLX A DOUA OARA. Ar fi fost mai rau decat ziua din cheie, care tinea pana la miezul
+   * noptii. De-aia intentia sta in `localStorage`.
+   */
+  assert.match(intentie, /globalThis\.localStorage/, "intentia nu supravietuieste reincarcarii");
+  assert.doesNotMatch(faraComentarii(intentie), /sessionStorage/,
+    "sessionStorage nu se vede din a doua fila");
+  /*
+   * ⚠ SE CERE LA FIECARE APASARE, nu o data pe fisier. Prima forma a probei cauta
+   * `incheieIntentia(businessId,` oriunde in componenta — si a trecut VERDE cand am scos-o de la
+   * unul din cele doua butoane, fiindca celalalt o mai avea. Confruntarea cu defectul a aratat-o;
+   * citita, parea sa apere amandoua drumurile.
+   */
+  for (const [nume, sursa] of [["OlxAccountPanel", panouCont], ["OlxClient", ecran]] as const) {
+    const apeluri = [...sursa.matchAll(/await buyOlx[A-Za-z]+\(/g)];
+    assert.ok(apeluri.length > 0, `${nume} nu mai cumpara nimic`);
+    for (const m of apeluri) {
+      const dupa = sursa.slice(m.index ?? 0, (m.index ?? 0) + 1200);
+      assert.match(dupa, /intentiaPentru\(businessId,/,
+        `${nume}: o cumparare fara intentie trimisa`);
+      assert.match(dupa, /incheieIntentia\(businessId,/,
+        `${nume}: o cumparare care nu arunca intentia dupa un raspuns limpede; a doua cumparare ar primi „deja"`);
+    }
   }
 });
 
@@ -586,23 +656,67 @@ export `, i + 10));
   assert.match(corp, /Promovarea e deja activă/);
 });
 
-test("⚠ o plata nelamurita are o iesire, nu e un fund de sac", () => {
+test("⚠ o plata nelamurita se vede in panou, si are doua iesiri", () => {
   /*
    * ⚠ Registrul tine slotul dinadins cand nu stie ce s-a intamplat. Dar mecanismul generic de
-   * deblocare lucreaza pe pagina unei COMENZI, iar platile OLX au `orderId: null` — deci un `POST`
-   * cu raspuns pierdut lasa cumpararea blocata practic pentru totdeauna.
+   * deblocare lucreaza pe pagina unei COMENZI (`operatiiAtarnate` se ingusteaza cu `order_id`), iar
+   * platile OLX au `orderId: null` — deci un `POST` cu raspuns pierdut lasa cumpararea blocata.
+   *
+   * ⚠ Si de cand cheia poarta intentia in loc de zi, blocajul nu mai expira peste noapte. Iesirea
+   * asta a trecut din „bine de avut" in „obligatoriu": fara ea, reparatia ar fi inlocuit o plata
+   * dubla cu un fund de sac.
    */
   assert.match(actiuni, /export async function getOlxPlatiNelamurite\(/);
   assert.match(actiuni, /export async function lamuresteOlxPlata\(/);
-  const i = actiuni.indexOf("export async function lamuresteOlxPlata");
-  const corp = actiuni.slice(i);
+  assert.match(actiuni, /export async function renuntaLaOlxPlata\(/);
+
+  const i = actiuni.indexOf("async function lamurestePlata(");
+  assert.ok(i > 0, "miezul fara guard a disparut");
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf("\n/**", i + 10)));
+
   /* ⚠ Se cauta DOVADA la ei, nu se intreaba omul „a mers?". El n-are de unde sti. */
   assert.match(corp, /getAdvertPaidFeatures\(token, advertId\)/);
   assert.match(corp, /p_stare: "reusit"/);
-  /* ⚠ Si lipsa dovezii NU e acelasi lucru cu „n-am putut intreba". */
   assert.match(corp, /stare: "inca-nu-stim"/);
-  /* ⚠ Iar numarul lor se vede in panoul de sanatate. */
-  assert.match(actiuni, /platiNelamurite: plati\.count \?\? 0,/);
+
+  /*
+   * ⚠ LIPSA DOVEZII NU DESCHIDE NIMIC, si asta e insusirea cea mai importanta a functiei. Fiecare
+   * dovada negativa pe care o putem lua de la OLX s-a dovedit nesigura: ruta de promovari intoarce
+   * si intrarile EXPIRATE, un `200` cu corp stricat se citeste ca lista goala, iar pachetele nu se
+   * pot lega de o cumparare anume. Deblocata pe un fals negativ, urmatoarea apasare plateste.
+   */
+  assert.doesNotMatch(corp, /deblocheazaOperatie/,
+    "lamurirea nu are voie sa deblocheze: dovada pozitiva inchide, lipsa dovezii nu deschide");
+
+  /*
+   * ⚠ SI RASPUNSUL RPC-ULUI SE CITESTE, nu doar `error`. `incheie_operatie_externa` nu se plange pe
+   * un rand deja asezat: intoarce `{ gasit: true, deja: true }` fara eroare. Citit doar pe `error`,
+   * codul spunea „Plata a intrat" pe un rand pe care nu scrisese nimic.
+   */
+  assert.match(corp, /r\?\.gasit !== true/, "nu se citeste `gasit` din raspunsul RPC-ului");
+  assert.match(corp, /r\.deja === true/, "nu se citeste `deja` din raspunsul RPC-ului");
+
+  /* ⚠ Iar deblocarea asumata citeste `stabilizata`, altfel mesajul minte linistitor. */
+  const iR = actiuni.indexOf("export async function renuntaLaOlxPlata");
+  const corpR = faraComentarii(actiuni.slice(iR, actiuni.indexOf("\n/**", iR + 10)));
+  /*
+   * ⚠ SE CERE RAMURA, NU MENTIUNEA. `r.stabilizata` apare si in detaliile din jurnal, deci o
+   * proba care cauta doar numele a trecut verde cand am facut ramura de neatins. Aceeasi lectie ca
+   * la `if (false && …)`: inauntru era intacta, doar nu se mai deschidea.
+   */
+  assert.match(corpR, /if \(r\.stabilizata\)/,
+    "deblocarea nu ramifica pe randul care se asezase intre timp, deci mesajul poate minti");
+  assert.match(corpR, /logError\(/, "o deblocare asumata trebuie sa lase urma cine a luat-o");
+
+  /*
+   * ⚠ SI SE VEDE IN ECRAN. Proba de dinainte cauta `platiNelamurite: plati.count ?? 0,` in SURSA
+   * actiunilor — deci era verde peste un panou care nu afisa cifra si un `totBine` care n-o socotea.
+   * Confirma ca se scrie campul, nu ca-l citeste cineva.
+   */
+  assert.match(panou, /s\.platiNelamurite/, "panoul nu afiseaza plafile de verificat");
+  assert.match(panou, /platiNelamurite === 0/, "`totBine` nu socoteste platile nelamurite");
+  assert.match(panou, /lamuresteOlxPlata\(/, "panoul n-are butonul „Verifica la OLX”");
+  assert.match(panou, /renuntaLaOlxPlata\(/, "panoul n-are iesirea asumata");
 });
 
 test("⚠ plafonul atins OPRESTE lucrarea, nu o incheie", () => {

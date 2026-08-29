@@ -16,6 +16,7 @@ import { suggestOlxCityFromShop, reincearcaOlxOprite,
 import type { OlxCity, OlxDistrict } from "@/lib/olx/types";
 import { GpsrSettings } from "./GpsrSettings";
 import { cn } from "@/lib/utils/cn";
+import { cePachetAnunt, incheieIntentia, intentiaPentru } from "@/lib/olx/intentie-de-cumparare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
@@ -576,7 +577,18 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
                       {isLimited && (
                         <IconBtn title="Cumpără pachet și activează" onClick={() => {
                           if (!window.confirm(`Cumperi un pachet pentru anunțul „${a.name}” (se plătește din creditul contului tău OLX) și îl activezi?`)) return;
-                          act(a.offer_id, () => buyOlxAdvertPacket(businessId, a.olx_advert_id!), "Pachet cumpărat, anunț activat.");
+                          /*
+                            ⚠ INTENȚIA STĂ PE RÂND, nu în panou. Aici nu există niciun loc unde să
+                            trăiască o stare de componentă — e un buton dintr-un tabel — iar
+                            `localStorage`, cheiat pe ce se cumpără, e chiar răspunsul: același anunț
+                            înseamnă aceeași intenție, orice s-ar întâmpla cu ecranul între timp.
+                          */
+                          const ce = cePachetAnunt(a.olx_advert_id!, false);
+                          act(a.offer_id, async () => {
+                            const r = await buyOlxAdvertPacket(businessId, a.olx_advert_id!, intentiaPentru(businessId, ce));
+                            if (!("error" in r)) incheieIntentia(businessId, ce);
+                            return r;
+                          }, "Pachet cumpărat, anunț activat.");
                         }}><ShoppingCart className="h-3.5 w-3.5" /></IconBtn>
                       )}
                       {/*

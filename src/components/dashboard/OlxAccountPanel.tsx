@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import {
+  cePachetCategorie, cePromovare, incheieIntentia, intentiaPentru,
+} from "@/lib/olx/intentie-de-cumparare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -169,9 +172,26 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
             <Button
               disabled={saving || !chosen || !group}
               onClick={() => chosen && group && startSave(async () => {
-                const res = await buyOlxCategoryPacket(businessId, group.categoryId, chosen.size, method, (chosen.type as "base" | "mega") ?? "base");
+                /*
+                  ⚠ INTENȚIA, NU APĂSAREA. Id-ul trăiește în `localStorage` sub numele a ceea ce se
+                  cumpără, deci supraviețuiește închiderii panoului, reîncărcării paginii și celei
+                  de-a doua file. Ținut într-un `useRef`, ar fi murit odată cu componenta — iar
+                  panoul e un acordeon, deci ar fi murit des, exact în clipele proaste.
+                */
+                const tip = (chosen.type as "base" | "mega") ?? "base";
+                const ce = cePachetCategorie(group.categoryId, chosen.size, tip);
+                const res = await buyOlxCategoryPacket(
+                  businessId, group.categoryId, chosen.size, method, intentiaPentru(businessId, ce), tip);
                 if ("error" in res) { toast.error(res.error); return; }
-                toast.success("Pachet cumpărat.");
+                /*
+                  ⚠ SE ARUNCA INTENȚIA ȘI CÂND RĂSPUNSUL E „era deja făcută". Altfel intenția veche
+                  ar rămâne în `localStorage`, iar omul care chiar vrea al doilea pachet ar primi „gata"
+                  la nesfârșit fără să cumpere nimic — exact defectul de la care a pornit runda asta,
+                  doar mutat din cheie în browser.
+                */
+                incheieIntentia(businessId, ce);
+                if (res.nou) toast.success("Pachet cumpărat.");
+                else toast.info("Cumpărarea asta era deja făcută; nu s-a plătit a doua oară. Apasă din nou dacă vrei încă un pachet.");
                 router.refresh();
               })}>
               {saving ? <Loader2 className="animate-spin" /> : "Cumpără"}
@@ -218,9 +238,13 @@ function PromoteAdvert({ businessId, adverts, features, methods }: {
           <Button
             disabled={saving || !advertId || !code}
             onClick={() => startSave(async () => {
-              const res = await buyOlxPaidFeature(businessId, Number(advertId), code, method);
+              const ce = cePromovare(Number(advertId), code);
+              const res = await buyOlxPaidFeature(
+                businessId, Number(advertId), code, method, intentiaPentru(businessId, ce));
               if ("error" in res) { toast.error(res.error); return; }
-              toast.success("Promovare activată.");
+              incheieIntentia(businessId, ce);
+              if (res.nou) toast.success("Promovare activată.");
+              else toast.info("Promovarea asta era deja cumpărată; nu s-a plătit a doua oară.");
               router.refresh();
             })}>
             {saving ? <Loader2 className="animate-spin" /> : "Promovează"}

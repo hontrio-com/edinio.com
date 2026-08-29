@@ -442,8 +442,19 @@ export function getAdvertLogos(token: string, advertId: number) {
   return call<OlxImagineCont[]>(token, "GET", `/adverts/${advertId}/logos`);
 }
 
+/**
+ * ⚠ AICI POST-UL INTOARCE UNUL SINGUR, nu o lista (03.09.2026).
+ *
+ * La logo-ul si bannerul de FIRMA, POST-ul lor intoarce o lista; la logo-ul de ANUNT, un singur
+ * obiect — iar `GET`-ul, si acolo, o lista. Doua rute care se scriu la fel si raspund altfel.
+ * Runda trecuta le-am aliniat pe amandoua la lista, adica am inlocuit o presupunere cu alta.
+ *
+ * Nici acum nu se strica nimic, fiindca apelantul nu citeste raspunsul — dar un tip gresit e o
+ * minciuna care asteapta primul om care se increde in ea: `r.data.id` ar compila curat si ar fi
+ * `undefined`.
+ */
 export function addAdvertLogo(token: string, advertId: number, url: string) {
-  return call<OlxImagineCont[]>(token, "POST", `/adverts/${advertId}/logos`, { url });
+  return call<OlxImagineCont>(token, "POST", `/adverts/${advertId}/logos`, { url });
 }
 
 export function deleteAdvertLogo(token: string, advertId: number, logoId: number) {

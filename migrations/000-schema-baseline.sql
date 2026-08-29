@@ -4105,7 +4105,7 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text)
+CREATE OR REPLACE FUNCTION public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text, p_tinta text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -4116,6 +4116,7 @@ declare
   v_numar  text;
   v_id     uuid;
   v_ex     public.operatii_externe%rowtype;
+  v_tinta  text := nullif(btrim(coalesce(p_tinta, '')), '');
   v_nul constant uuid := '00000000-0000-0000-0000-000000000000';
 begin
   if coalesce(btrim(p_cheie), '') = '' then
@@ -4140,12 +4141,10 @@ begin
   end if;
 
   insert into public.operatii_externe
-    (business_id, order_id, order_number, fel, furnizor, cheie, incercari)
+    (business_id, order_id, order_number, fel, furnizor, cheie, incercari, tinta_idempotenta)
   values
-    (p_business_id, p_order_id, v_numar, p_fel, p_furnizor, p_cheie, 1)
-  on conflict (coalesce(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie)
-    where stare in ('in_curs', 'reusit', 'necunoscut')
-  do nothing
+    (p_business_id, p_order_id, v_numar, p_fel, p_furnizor, p_cheie, 1, v_tinta)
+  on conflict do nothing
   returning id into v_id;
 
   if v_id is not null then
@@ -4160,20 +4159,42 @@ begin
      and o.stare in ('in_curs', 'reusit', 'necunoscut')
   returning o.* into v_ex;
 
-  if not found then
-    return jsonb_build_object('rezervat', false, 'motiv', 'cursa');
+  if found then
+    return jsonb_build_object(
+      'rezervat',          false,
+      'motiv',             v_ex.stare,
+      'id',                v_ex.id,
+      'referinta_externa', v_ex.referinta_externa,
+      'detalii',           v_ex.detalii,
+      'incercari',         v_ex.incercari,
+      'ultima_eroare',     v_ex.ultima_eroare,
+      'creat_la',          v_ex.creat_la
+    );
   end if;
 
-  return jsonb_build_object(
-    'rezervat',          false,
-    'motiv',             v_ex.stare,
-    'id',                v_ex.id,
-    'referinta_externa', v_ex.referinta_externa,
-    'detalii',           v_ex.detalii,
-    'incercari',         v_ex.incercari,
-    'ultima_eroare',     v_ex.ultima_eroare,
-    'creat_la',          v_ex.creat_la
-  );
+  if v_tinta is not null then
+    select * into v_ex
+      from public.operatii_externe o
+     where coalesce(o.business_id, v_nul) = coalesce(p_business_id, v_nul)
+       and o.furnizor = p_furnizor
+       and o.fel = p_fel
+       and o.tinta_idempotenta = v_tinta
+       and o.stare in ('in_curs', 'necunoscut')
+     limit 1;
+
+    if found then
+      return jsonb_build_object(
+        'rezervat',      false,
+        'motiv',         'alta_intentie',
+        'id',            v_ex.id,
+        'stare',         v_ex.stare,
+        'creat_la',      v_ex.creat_la,
+        'ultima_eroare', v_ex.ultima_eroare
+      );
+    end if;
+  end if;
+
+  return jsonb_build_object('rezervat', false, 'motiv', 'cursa');
 end;
 $function$
 ;
@@ -5784,7 +5805,8 @@ create table if not exists public.operatii_externe (
   incercari integer default 0 not null,
   ultima_eroare text,
   creat_la timestamp with time zone default now() not null,
-  actualizat_la timestamp with time zone default now() not null);
+  actualizat_la timestamp with time zone default now() not null,
+  tinta_idempotenta text);
 
 create table if not exists public.orders (
   id uuid default gen_random_uuid() not null,
@@ -6924,6 +6946,7 @@ CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btre
 CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
 CREATE INDEX operatii_externe_order_id_idx ON public.operatii_externe USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);
+CREATE UNIQUE INDEX operatii_externe_tinta_deschisa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), furnizor, fel, tinta_idempotenta) WHERE ((tinta_idempotenta IS NOT NULL) AND (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text])));
 CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_status, status, created_at) WHERE (discount_code IS NOT NULL);
 CREATE INDEX orders_dhl_urmarire_idx ON public.orders USING btree (dhl_status_checked_at NULLS FIRST) WHERE ((dhl_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_ecolet_emitere_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_order_to_send_id IS NOT NULL) AND (ecolet_awb_number IS NULL));
@@ -9522,7 +9545,7 @@ grant execute on function public.revendica_din_coada(p_coada text, p_limita inte
 grant execute on function public.revendica_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.revendica_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
-grant execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text) to service_role;
+grant execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text, p_tinta text) to service_role;
 grant execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) to service_role;
 grant execute on function public.scade_variante_raportat(p_items jsonb) to service_role;
 grant execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) to service_role;
@@ -9659,7 +9682,7 @@ revoke execute on function public.revendica_din_coada(p_coada text, p_limita int
 revoke execute on function public.revendica_stoc_batch(p_items jsonb) from public;
 revoke execute on function public.revendica_stoc_comanda(p_order_id uuid) from public;
 revoke execute on function public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
-revoke execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text) from public;
+revoke execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text, p_tinta text) from public;
 revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;

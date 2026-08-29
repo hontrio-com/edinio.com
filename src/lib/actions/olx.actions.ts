@@ -1578,6 +1578,8 @@ export async function buyOlxCategoryPacket(
     {
       businessId, orderId: null, fel: "plata", furnizor: "olx",
       cheie: cheiaPlatii(cePachetCategorie(categoryId, size, type), intentId),
+      /* ⚠ A doua incuietoare: acelasi lucru, sub alta intentie, nu pleaca a doua oara. */
+      tinta: cePachetCategorie(categoryId, size, type),
     },
     /* ⚠ Inauntru sta EXACT apelul ireversibil: jetonul e deja luat, metoda e deja aflata. */
     async () => {
@@ -1625,6 +1627,8 @@ export async function buyOlxAdvertPacket(
     {
       businessId, orderId: null, fel: "plata", furnizor: "olx",
       cheie: cheiaPlatii(cePachetAnunt(advertId, isPremium), intentId),
+      /* ⚠ A doua incuietoare: acelasi lucru, sub alta intentie, nu pleaca a doua oara. */
+      tinta: cePachetAnunt(advertId, isPremium),
     },
     async () => {
       const res = await purchaseAdvertPacket(
@@ -1795,6 +1799,8 @@ export async function buyOlxPaidFeature(
     {
       businessId, orderId: null, fel: "plata", furnizor: "olx",
       cheie: cheiaPlatii(cePromovare(advertId, code), intentId),
+      /* ⚠ A doua incuietoare: acelasi lucru, sub alta intentie, nu pleaca a doua oara. */
+      tinta: cePromovare(advertId, code),
     },
     async () => {
       const res = await purchasePaidFeature(jeton.token, advertId, { code, payment_method: m.metoda });

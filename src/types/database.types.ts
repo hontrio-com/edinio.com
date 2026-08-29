@@ -3001,6 +3001,7 @@ export type Database = {
           order_number: string | null
           referinta_externa: string | null
           stare: string
+          tinta_idempotenta: string | null
           ultima_eroare: string | null
         }
         Insert: {
@@ -3017,6 +3018,7 @@ export type Database = {
           order_number?: string | null
           referinta_externa?: string | null
           stare?: string
+          tinta_idempotenta?: string | null
           ultima_eroare?: string | null
         }
         Update: {
@@ -3033,6 +3035,7 @@ export type Database = {
           order_number?: string | null
           referinta_externa?: string | null
           stare?: string
+          tinta_idempotenta?: string | null
           ultima_eroare?: string | null
         }
         Relationships: []
@@ -5322,7 +5325,9 @@ export type Database = {
       curata_ritm_extern: { Args: Record<PropertyKey, never>; Returns: number }
       revendica_din_coada: { Args: { p_coada: string; p_limita?: number; p_lease?: unknown }; Returns: Json[] }
       revendica_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: Json }
-      rezerva_operatie_externa: { Args: { p_business_id: string | null; p_order_id: string | null; p_fel: string; p_furnizor: string; p_cheie: string }; Returns: Json }
+      /* ⚠ `p_tinta` e A DOUA INCUIETOARE: lucrul cumparat, fara id-ul de intentie. Optionala,
+         deci ceilalti furnizori raman neatinsi. Vezi migrations/2026-12-26-registru-tinta-idempotenta.sql */
+      rezerva_operatie_externa: { Args: { p_business_id: string | null; p_order_id: string | null; p_fel: string; p_furnizor: string; p_cheie: string; p_tinta?: string | null }; Returns: Json }
       incheie_operatie_externa: { Args: { p_id: string; p_business_id: string | null; p_stare: string; p_referinta_externa?: string | null; p_detalii?: Json; p_eroare?: string | null }; Returns: Json }
       marcheaza_operatie_anulata: { Args: { p_business_id: string | null; p_cheie: string }; Returns: Json }
       aboutyou_elibereaza_anulari: { Args: { p_business_id: string; p_order_number: string; p_linii: Json }; Returns: Json }

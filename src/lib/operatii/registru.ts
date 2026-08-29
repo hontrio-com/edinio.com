@@ -99,6 +99,27 @@ export interface CerereOperatie {
    * vezi `cheieDocument` din src/lib/billing/refacturare.ts:94.
    */
   cheie: string;
+  /**
+   * A DOUA INCUIETOARE: lucrul cumparat, FARA id-ul de intentie.
+   *
+   * ═══ CHEIA APARA INTENTIA. TINTA CERE O A DOUA INCUIETOARE (03.09.2026) ═══
+   *
+   * `cheie` cuprinde id-ul de intentie, iar acela traieste in `localStorage`. Deci registrul e
+   * atomic pentru ACEEASI apasare — nu si pentru acelasi LUCRU cumparat sub doua intentii. Trei
+   * drumuri catre plata dubla, toate reale:
+   *
+   *   ALT CALCULATOR — `localStorage` gol, intentie noua, alta cheie, `POST` a doua oara.
+   *   INTENTIA EXPIRA — o tinem sase ore; randul poate fi INCA `necunoscut` la sapte.
+   *   DOUA FILE — amandoua citesc `localStorage` gol in aceeasi clipa si isi scriu intentia.
+   *
+   * ⚠ SI SE OPRESTE NUMAI CAT TIMP CEALALTA E DESCHISA. Indexul din baza cuprinde `in_curs` si
+   * `necunoscut`, dar NU `reusit`: altfel un pachet cumparat cu succes ar face imposibila a doua
+   * cumparare a aceluiasi pachet, pentru totdeauna.
+   *
+   * ⚠ Nedata (`undefined`), purtarea ramane exact cea de pana acum. Toti ceilalti furnizori o lasa
+   * nedata dinadins: la ei cheia poarta deja comanda, deci tinta ar fi aceeasi cu cheia.
+   */
+  tinta?: string;
 }
 
 /** Ce intoarce apelul extern: ce se scrie in registru si ce primeste apelantul. */
@@ -209,6 +230,7 @@ async function incearca<T>(
     p_fel: cerere.fel,
     p_furnizor: cerere.furnizor,
     p_cheie: cerere.cheie,
+    p_tinta: cerere.tinta ?? null,
   });
 
   const r = rez as {
@@ -351,6 +373,16 @@ function mesajBlocat(
     case "alt magazin":
     case "comanda negasita":
       return "Comanda nu apartine acestui magazin.";
+    case "alta_intentie":
+      /*
+       * ⚠ ALTA APASARE, ACELASI LUCRU. Nu e aceeasi operatie — e o a doua cerere pentru acelasi
+       * lucru, pornita din alta fila, de pe alt calculator, sau dupa ce intentia dintai a expirat
+       * in browser. Prima inca nu se stie cum s-a terminat, deci a doua NU pleaca.
+       *
+       * ⚠ Textul nu spune „reincarca pagina": aici reincarcarea nu schimba nimic. Spune ce e de
+       * facut — de verificat la furnizor si de lamurit din panou.
+       */
+      return `${nume} pentru acelasi lucru a fost deja trimisa la ${cerere.furnizor} si inca nu stim cum s-a terminat. Nu trimitem a doua oara. Verifica in contul ${cerere.furnizor}, apoi lamureste-o din panoul de sanatate.`;
     case "cursa":
       return "Operatia tocmai s-a incheiat pe alt drum. Reincarca pagina.";
     default:

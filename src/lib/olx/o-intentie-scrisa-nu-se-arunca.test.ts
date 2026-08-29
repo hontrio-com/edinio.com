@@ -228,3 +228,34 @@ test("⚠ ce n-a apucat reconcilierea SE SPUNE", () => {
   assert.match(cron, /if \(conectate\.length > vizitate\) \{/);
   assert.match(cron, /reconciliere: \$\{vizitate\}\/\$\{conectate\.length\} magazine/);
 });
+
+test("⚠ publicarea in masa nu mai numara produse pe care nu le-a citit", () => {
+  /*
+   * ═══ O BUCATA PICATA FACEA PRODUSELE SA DISPARA IN TACERE (31.08.2026) ═══
+   *
+   * `data ?? []` da acelasi lucru si pentru „interogare reusita, zero produse", si pentru
+   * „interogarea a picat". Iar mai jos se raporteaza `queued: rows.length`, deci omul vedea
+   * „250 produse trimise catre OLX" pentru o lucrare din care lipseau tocmai cele necitite — si
+   * nimic, nicaieri, nu spunea ca s-a pierdut ceva.
+   *
+   * ⚠ SE CERE REGULA, NU TEXTUL: orice citire de produse din corpul functiei trebuie sa-si lege
+   * eroarea SI sa iasa inainte de prima adaugare in lista. Un `if (error)` cerut literal ar trece
+   * si peste un `void error;`.
+   */
+  const i = actiuni.indexOf("export async function publishProductsToOlx");
+  assert.notEqual(i, -1);
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf(`
+export `, i + 10)));
+  const iPush = corp.indexOf("prods.push(");
+  assert.ok(iPush > 0, "adaugarea in lista a disparut");
+  const citiri = [...corp.matchAll(/\.from\("products"\)/g)];
+  assert.ok(citiri.length > 0, "citirea produselor a disparut");
+  for (const m of citiri) {
+    const inainte = corp.slice(Math.max(0, (m.index ?? 0) - 90), m.index);
+    assert.match(inainte, /const \{ data, error \} = /,
+      "o citire de produse care nu-si leaga eroarea pierde produse in tacere");
+    const pana = corp.slice(m.index ?? 0, iPush);
+    assert.match(pana, /if \(error\) return \{ error:/,
+      "iesirea trebuie sa vina INAINTEA primei adaugari, nu dupa");
+  }
+});

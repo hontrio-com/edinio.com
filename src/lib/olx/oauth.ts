@@ -210,11 +210,39 @@ export async function ensureMerchantToken(
    * declara „sesiune moarta" ar trimite comerciantul sa reconecteze un cont viu.
    */
   const vazut = config.token_updated_at ?? null;
-  const { data: aScris, error: eRotatie } = await db.rpc("olx_roteste_tokenul", {
-    p_business_id: businessId,
-    p_vazut: vazut,
-    p_patch: petic as unknown as Json,
-  });
+  /*
+   * ═══ CAS-UL SE REINCEARCA, SI DE-AIA E SIGUR (31.08.2026) ═══
+   *
+   * O pana de-o clipa la baza (lock timeout, conexiune taiata) lasa refresh tokenul ROTIT numai in
+   * memoria procesului asta — iar cel din baza nu mai e bun, fiindca OLX l-a consumat. Pana azi se
+   * iesea din prima, cu un esec trecator: corect, dar risipitor, fiindca urmatoarea trecere trebuie
+   * sa ceara ALT token de la ei.
+   *
+   * ⚠ SI RELUAREA E SIGURA, nu doar comoda — se vede din corpul RPC-ului. Peticul muta chiar
+   * `token_updated_at`, martorul pe care se face compararea:
+   *
+   *     daca prima chemare a PICAT       -> martorul e neschimbat -> a doua scrie, ca si prima
+   *     daca a REUSIT si raspunsul s-a pierdut -> martorul e mutat -> a doua intoarce `false`
+   *                                        -> ramura „am pierdut cursa" reciteste configul
+   *                                        -> si gaseste acolo chiar scrierea NOASTRA
+   *
+   * ⚠ Se trimit ACELASI martor si ACELASI petic la fiecare incercare. Un martor recitit intre
+   * incercari ar transforma reluarea intr-o scriere neconditionata, adica exact caderea fara CAS pe
+   * care am scos-o.
+   */
+  let aScris: boolean | null = null;
+  let eRotatie: { message: string } | null = null;
+  for (let incercare = 0; incercare < 3; incercare++) {
+    const r = await db.rpc("olx_roteste_tokenul", {
+      p_business_id: businessId,
+      p_vazut: vazut,
+      p_patch: petic as unknown as Json,
+    });
+    aScris = r.data as boolean | null;
+    eRotatie = r.error;
+    if (!eRotatie) break;
+    if (incercare < 2) await new Promise((gata) => setTimeout(gata, 200 * (incercare + 1)));
+  }
 
   if (!eRotatie && aScris === false) {
     /* Altcineva a rotit intre timp: se ia ce a scris el, nu se scrie peste. */
@@ -246,7 +274,7 @@ export async function ensureMerchantToken(
   if (eRotatie) {
     await logError({
       action: "olx.rotatie", severity: "warning",
-      message: `rotatia tokenului nu s-a putut scrie sub CAS: ${eRotatie.message}`,
+      message: `rotatia tokenului nu s-a putut scrie sub CAS, nici dupa trei incercari: ${eRotatie.message}`,
       businessId,
     });
   }

@@ -210,14 +210,20 @@ test("⚠ un `404` inseamna acelasi lucru pe amandoua caile", () => {
    */
   /* ⚠ Se pleaca de la `404` INAINTE, nu inapoi de la piatra: intre ele sta o nota lunga. */
   const cod = faraComentarii(sync);
+  /*
+   * ⚠ SE CER USILE, NU NUMARUL LOR. Prima varianta cerea „exact doua"; de cand si dezactivarea stie
+   * ce inseamna un `404`, sunt trei — iar un numar fix ar fi picat tocmai la ADAUGAREA celei de-a
+   * treia, adica exact cand regula se respecta mai bine.
+   */
   const usi = [...cod.matchAll(/res\.status === 404/g)];
-  assert.equal(usi.length, 2, `asteptam doua usi de \`404\`, sunt ${usi.length}`);
+  assert.ok(usi.length >= 3, `asteptam cel putin trei usi de \`404\`, sunt ${usi.length}`);
   for (const m of usi) {
     const ramura = cod.slice(m.index ?? 0, (m.index ?? 0) + 500);
     assert.match(ramura, /status: "sters_de_om"/, "un `404` fara piatra lasa anuntul sa reapara");
     assert.match(ramura, /sters_de_om_la: now/);
   }
-  assert.equal((cod.match(/sters_de_om_la: now/g) ?? []).length, 2);
+  assert.equal((cod.match(/sters_de_om_la: now/g) ?? []).length, usi.length,
+    "fiecare usa de `404` isi pune piatra ei");
   /* ⚠ Pe COD, nu pe fisier: nota de mai sus citeaza chiar vorba veche, si a picat proba de trei ori. */
   assert.doesNotMatch(cod, /va fi recreat/,
     "recrearea dupa un `404` desface hotararea omului");

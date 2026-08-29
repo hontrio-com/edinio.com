@@ -90,7 +90,13 @@ test("⚠ o dezactivare facuta direct pe OLX se insemneaza ca fiind a omului", (
   assert.match(corp, /const aStinsElInsusi = stareaLor === "removed_by_user"/);
   assert.match(corp, /inainte\?\.status !== "removed_by_user"/);
   assert.match(corp, /\(inainte\?\.dezactivat_de \?\? null\) === null/);
-  assert.match(corp, /\.\.\.\(aStinsElInsusi \? \{ dezactivat_de: "om" \} : \{\}\)/);
+  assert.match(corp, /\.\.\.\(aStinsElInsusi\s*\n?\s*\? \{ dezactivat_de: "om" \}/);
+  /*
+   * ⚠ SI MOTIVUL SE STINGE CAND DEZACTIVAREA S-A INCHEIAT (31.08.2026). Daca ei spun ca anuntul NU
+   * mai e stins, orice motiv scris e de la o dezactivare trecuta — iar lasat acolo, ar face ca o
+   * dezactivare viitoare facuta de OM sa fie citita ca fiind a noastra, si s-o desfacem.
+   */
+  assert.match(corp, /: stareaLor !== "removed_by_user" \? \{ dezactivat_de: null \} : \{\}\)/);
   /* ⚠ Si cronul chiar ii da ce stia dinainte — altfel paza n-ar avea cu ce compara. */
   const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8");
   assert.match(cron, /\.select\("id, business_id, olx_advert_id, status, dezactivat_de"\)/);

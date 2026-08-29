@@ -488,8 +488,19 @@ export async function publishProductsToOlx(
 
   const prods: { id: string; category: string | null; is_active: boolean }[] = [];
   for (const bucata of bucatiDeIduri(ids)) {
-    const { data } = await g.supabase
+    const { data, error } = await g.supabase
       .from("products").select("id, category, is_active").eq("business_id", businessId).in("id", bucata);
+    /*
+     * ⚠ O BUCATA PICATA FACEA PRODUSELE SA DISPARA IN TACERE (31.08.2026).
+     *
+     * `data ?? []` da acelasi lucru si pentru „interogare reusita, zero produse", si pentru
+     * „interogarea a picat". Iar mai jos se raporteaza `queued: rows.length`, deci omul vedea
+     * „N produse trimise catre OLX" pentru o lucrare din care lipseau tocmai cele necitite —
+     * si nimic, nicaieri, nu spunea ca s-a pierdut ceva.
+     *
+     * ⚠ Nu se trimite o parte si se tace despre rest: ori intra toate, ori omul afla si reia.
+     */
+    if (error) return { error: `Nu am putut citi produsele selectate: ${error.message}` };
     prods.push(...((data ?? []) as typeof prods));
   }
   const rows = prods

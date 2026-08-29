@@ -323,6 +323,66 @@ async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, 
 export type SursaDezactivarii = "om" | "stoc" | "produs-inactiv" | "inainte-de-stergere";
 
 /**
+ * Starile in care un anunt NU e la vanzare la ei.
+ *
+ * `removed_by_user` e ce lasa in urma chiar comanda noastra de dezactivare. Celelalte inseamna
+ * altceva — expirat, oprit de moderator — si de-aia se deosebesc mai jos.
+ */
+const STINS_LA_EI = ["removed_by_user", "outdated", "removed_by_moderator", "moderated", "blocked", "disabled"];
+/** Starile in care anuntul chiar e (sau tocmai devine) vizibil. */
+const VIU_LA_EI = ["active", "new", "unconfirmed"];
+/**
+ * Starile in care anuntul NU e la vanzare — mai larg decat `STINS_LA_EI`.
+ *
+ * ⚠ `limited` (cota gratuita epuizata) si `unpaid` inseamna un anunt care EXISTA la ei dar nu se
+ * vede. Pentru intrebarea „mai trebuie dezactivat?" raspunsul e nu, si de-aia intra aici.
+ *
+ * ⚠ Fara ele, un magazin ajuns peste cota gratuita ar fi intrat in bucla: fiecare produs fara stoc
+ * cu anunt `limited` cere `deactivate` -> `400` -> starea lor e tot `limited` -> se reia. Cinci
+ * incercari, apoi scrisoare moarta — si asta la FIECARE editare de pret sau stoc. Adica tocmai
+ * magazinul care a atins limita ar fi vazut contorul de esecuri umplandu-se singur.
+ */
+const NU_E_LA_VANZARE = [...STINS_LA_EI, "limited", "unpaid"];
+
+/**
+ * Ce zice OLX ca e acum, cand a refuzat comanda noastra cu `400`.
+ *
+ * ═══ RELUAREA TREBUIE SA STIE CE INCERCA, NU DOAR CE A PATIT (31.08.2026) ═══
+ *
+ * Dupa „la ei a mers, la noi n-a intrat", a doua incercare loveste un anunt care e DEJA in starea
+ * ceruta — iar OLX raspunde `400`. Pana azi asta se citea ca „gata, n-am ce face", si starea locala
+ * ramanea nescrisa pentru totdeauna:
+ *
+ *     stoc 5 -> 0, `deactivateRemote("stoc")`
+ *     OLX dezactiveaza ✅, scrierea lui `dezactivat_de = "stoc"` PICA ❌ -> se reia (bine)
+ *     a doua incercare: `400`, fiindca e deja inactiv
+ *     -> se scria doar `last_status_at`, iar `dezactivat_de` ramanea NULL
+ *     -> sondarea vede `removed_by_user` peste un rand care spunea `active` si fara motiv scris,
+ *        deci il socoteste hotararea OMULUI si scrie `dezactivat_de = "om"`
+ *     -> stocul se intoarce, si anuntul nu se mai aprinde NICIODATA
+ *
+ * ⚠ Deci un `400` nu inseamna „esec" si nici „gata": inseamna „intreaba-i cum e". Se citeste starea
+ * lor si se scrie ADEVARUL — o singura cerere in plus, si numai pe drumul rar.
+ */
+async function stareaLorAcum(
+  ctx: OlxSyncContext, olxAdvertId: number,
+): Promise<{ ok: true; stare: string } | { ok: false; esec: SyncOutcome }> {
+  const res = await getAdvert(ctx.token, olxAdvertId);
+  if (isOlxError(res)) {
+    /* ⚠ Nu putem confirma: nu se pretinde nimic, se reia. */
+    return {
+      ok: false,
+      esec: {
+        ok: false, permanent: false, asteptare: asteptareaLor(res),
+        error: `OLX a refuzat comanda si nu am putut citi starea anuntului: ${res.error}`,
+      },
+    };
+  }
+  return { ok: true, stare: res.data?.status || "" };
+}
+
+
+/**
  * Scrie starea locala DUPA un efect remote reusit, si spune daca a intrat.
  *
  * ═══ ⚠ „S-A FACUT LA EI, DAR NU S-A SCRIS LA NOI" NU E UN SUCCES (30.08.2026, tarziu) ═══
@@ -368,11 +428,53 @@ async function deactivateRemote(
     if (!scris.ok) return scris;
     return { ok: true, action: "deactivated", status: "removed_by_user" };
   }
-  // 400 = deja inactiv (invalid status) — force a status refresh instead of failing.
   if (res.status === 400) {
-    const scris = await scrieStareaLocala(admin, row.id,
-      { last_status_at: null, updated_at: now }, "Reimprospatarea starii");
-    if (!scris.ok) return scris;
+    /* ⚠ „Deja inactiv" e cel mai des raspunsul la o RELUARE a propriei noastre comenzi. Vezi nota
+       de la `stareaLorAcum`: se intreaba, nu se ghiceste. */
+    const lor = await stareaLorAcum(ctx, row.olx_advert_id);
+    if (!lor.ok) return lor.esec;
+    if (NU_E_LA_VANZARE.includes(lor.stare)) {
+      /*
+       * ⚠ MOTIVUL OMULUI NU SE CALCA. Daca randul spunea deja „om", anuntul fusese stins de el, iar
+       * comanda noastra doar a picat peste o hotarare care exista. Altfel, ce a stins anuntul e
+       * chiar intentia pe care o duceam — si ea trebuie scrisa, altfel nimeni n-o mai afla.
+       */
+      /*
+       * ⚠ MOTIVUL SE SCRIE NUMAI PE O DEZACTIVARE ADEVARATA. `limited` nu e o dezactivare, e o
+       * cota epuizata: pus acolo, `dezactivat_de` ar face ca la intoarcerea stocului sa incercam
+       * o reactivare pe care ei o refuza oricum.
+       *
+       * ⚠ Si motivul OMULUI nu se calca: daca randul spunea deja „om", anuntul fusese stins de el,
+       * iar comanda noastra doar a picat peste o hotarare care exista.
+       */
+      const eStins = STINS_LA_EI.includes(lor.stare);
+      const patch: Record<string, unknown> = {
+        status: lor.stare, error: null, last_status_at: now, updated_at: now,
+        ...(eStins && row.dezactivat_de !== "om" ? { dezactivat_de: sursa } : {}),
+      };
+      const scris = await scrieStareaLocala(admin, row.id, patch, "Dezactivarea");
+      if (!scris.ok) return scris;
+      return { ok: true, action: "deactivated", status: lor.stare };
+    }
+    /* ⚠ Anuntul e VIU si totusi ne-au refuzat: `400` venea din altceva. Nu e o dezactivare reusita. */
+    return { ok: false, permanent: false, error: `OLX a refuzat dezactivarea (anuntul e „${lor.stare}"): ${res.error}` };
+  }
+  if (res.status === 404) {
+    /*
+     * ⚠ A TREIA USA CU ACELASI INTELES. Sondarea si actualizarea invatasera deja ca un `404`
+     * inseamna „omul l-a sters de mana pe OLX"; dezactivarea nu stia, si se reincerca de cinci ori
+     * pana devenea scrisoare moarta. Piatra e aceeasi, si hotararea lui la fel.
+     */
+    const { error: ePiatra } = await admin.from("olx_adverts").update({
+      olx_advert_id: null, status: "sters_de_om", olx_url: null, error: null,
+      sters_de_om_la: now, last_status_at: now, updated_at: now,
+    } as never).eq("id", row.id);
+    if (ePiatra) {
+      return {
+        ok: false, permanent: false,
+        error: `Anuntul nu mai exista pe OLX, dar piatra nu s-a putut scrie: ${ePiatra.message}`,
+      };
+    }
     return { ok: true, action: "skipped" };
   }
   return { ok: false, permanent: false, asteptare: asteptareaLor(res), error: res.error };
@@ -412,6 +514,26 @@ async function activateRemote(admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow)
       });
     }
     return { ok: false, permanent: true, error: "Cota de anunturi gratuite este epuizata. Cumpara un pachet OLX si activeaza anuntul." };
+  }
+  if (res.status === 400) {
+    /*
+     * ⚠ IN OGLINDA FATA DE DEZACTIVARE, si la fel de important. Un `400` care nu e despre pachete
+     * inseamna, cel mai des, „anuntul e deja activ" — adica exact reluarea comenzii noastre dupa ce
+     * scrierea locala picase. Tratat ca refuz PERMANENT (asa facea `classify`), elementul se stergea
+     * din coada si starea locala ramanea „stins" peste un anunt VIU la ei: produsul aparea in ecran
+     * ca dezactivat, si nimic nu-l mai indrepta.
+     */
+    const lor = await stareaLorAcum(ctx, row.olx_advert_id);
+    if (!lor.ok) return lor.esec;
+    if (VIU_LA_EI.includes(lor.stare)) {
+      const scris = await scrieStareaLocala(admin, row.id, {
+        status: lor.stare, dezactivat_de: null, error: null, last_status_at: null, updated_at: now,
+      }, "Activarea");
+      if (!scris.ok) return scris;
+      return { ok: true, action: "activated", status: lor.stare };
+    }
+    /* Chiar e stins acolo, si tot ne-au refuzat: refuzul e adevarat. */
+    return { ok: false, ...classify(res), error: res.error };
   }
   return { ok: false, ...classify(res), error: res.error };
 }
@@ -816,6 +938,72 @@ async function stergeDacaProdusulChiarNuMaiE(
       error: "produsul inca exista in magazin, deci retragerea se amana",
     };
   }
+  const rand = await getRow(admin, item.business_id, item.offer_id);
+  if (rand?.olx_advert_id) return removeRemote(admin, ctx, item.business_id, rand);
+
+  /*
+   * ═══ UN ANUNT PE CARE NU-L STIM E TOT AL NOSTRU (31.08.2026) ═══
+   *
+   * Fara rand local, `removeRemote` iesea cu `skipped` fara sa intrebe pe nimeni. Dar exista o
+   * fereastra in care anuntul TRAIESTE la ei si noi nu stim de el:
+   *
+   *     `POST /adverts` reuseste ✅, scrierea in `olx_adverts` pica ❌
+   *     reluarile pica si ele, lucrarea devine scrisoare moarta
+   *     omul sterge produsul
+   *     -> nimeni nu mai are de unde sti ca anuntul exista
+   *     -> ramane la vanzare, si cumparatorii scriu pentru marfa care nu mai e
+   *
+   * Iar reconcilierea nu-l poate salva: ea vede un anunt al carui `external_id` nu mai e un produs
+   * al magazinului si il lasa in pace, dinadins.
+   *
+   * ⚠ SE INTREABA CU ACELASI FELINAR CA LA CREARE: `external_id`. Costa o cerere in plus pentru
+   * fiecare produs sters de pe un magazin conectat — si merita, fiindca paguba de cealalta parte nu
+   * se mai poate desface de nicaieri.
+   *
+   * ⚠ Numele `viiLaEi`, nu `existente`: proba anti-duplicat de la creare se ancoreaza pe
+   * `sync.indexOf("if (isOlxError(existente)) {")`, iar o a doua aparitie mai devreme in fisier i-ar
+   * muta ancora cu cinci sute de linii si ar lasa-o verde fara sa mai dovedeasca nimic.
+   */
+  const viiLaEi = await listAdverts(ctx.token, { external_id: item.offer_id, limit: 20 });
+  /* ⚠ Daca nu putem INTREBA, nu incheiem: se reia. */
+  if (isOlxError(viiLaEi)) {
+    return {
+      ok: false, permanent: false, asteptare: asteptareaLor(viiLaEi),
+      error: `nu am putut verifica daca produsul sters a lasat un anunt la OLX: ${viiLaEi.error}`,
+    };
+  }
+  const MOARTE = ["removed_by_moderator", "moderated", "blocked", "deleted", "removed"];
+  const orfan = (viiLaEi.data ?? []).find((a) => {
+    if (!a?.id) return false;
+    /* ⚠ Doi martori, ca la adoptare: daca ei ignora filtrul, raspunsul e primele anunturi ale
+       contului — si am sterge un anunt STRAIN, care n-are nicio treaba cu produsul sters. */
+    const ext = (a as unknown as { external_id?: unknown }).external_id;
+    if (typeof ext !== "string" || ext !== item.offer_id) return false;
+    return !MOARTE.includes(String(a.status ?? "").toLowerCase());
+  });
+  if (!orfan?.id) return { ok: true, action: "skipped" };
+
+  await logError({
+    action: "olx.stergere", severity: "warning",
+    message: `produsul sters lasase un anunt viu la OLX (${orfan.id}), necunoscut la noi; se retrage`,
+    details: { offerId: item.offer_id, advertId: orfan.id, status: orfan.status },
+    businessId: item.business_id,
+  });
+  /*
+   * Se scrie randul INAINTE de retragere, ca `removeRemote` sa aiba pe ce lucra si ca urma sa ramana
+   * daca ceva pica la mijloc. Piatra si-o pune el.
+   */
+  const acum = new Date().toISOString();
+  const { error: eLegat } = await admin.from("olx_adverts").upsert(
+    { business_id: item.business_id, offer_id: item.offer_id, product_id: null, ...advertPatch(orfan, acum) } as never,
+    { onConflict: "business_id,offer_id" },
+  );
+  if (eLegat) {
+    return {
+      ok: false, permanent: false,
+      error: `anuntul orfan ${orfan.id} nu s-a putut lega inainte de retragere: ${eLegat.message}`,
+    };
+  }
   return removeRemote(admin, ctx, item.business_id, await getRow(admin, item.business_id, item.offer_id));
 }
 
@@ -945,7 +1133,15 @@ export async function refreshAdvertStatus(
     status: stareaLor,
     olx_url: advert.url ?? null,
     valid_to: advert.valid_to ? new Date(advert.valid_to.replace(" ", "T") + "+03:00").toISOString() : null,
-    ...(aStinsElInsusi ? { dezactivat_de: "om" } : {}),
+    /*
+     * ⚠ SI MOTIVUL SE STINGE CAND DEZACTIVAREA S-A INCHEIAT (31.08.2026). Daca ei spun ca anuntul
+     * NU mai e stins, orice motiv scris e de la o dezactivare trecuta — iar lasat acolo, ar face
+     * ca o dezactivare viitoare facuta de OM sa fie citita ca fiind a noastra, si s-o desfacem.
+     * Aceeasi regula pe care `activateRemote` o scrie de mult pe nume.
+     */
+    ...(aStinsElInsusi
+      ? { dezactivat_de: "om" }
+      : stareaLor !== "removed_by_user" ? { dezactivat_de: null } : {}),
     last_status_at: now,
     updated_at: now,
   } as never).eq("id", rowId);

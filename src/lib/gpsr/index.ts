@@ -15,9 +15,19 @@
  * doar cand e conectata o integrare care le foloseste.
  */
 
-/** O persoana raspunzatoare: producatorul, sau reprezentantul din Uniune. */
+/**
+ * O persoana raspunzatoare: producatorul, sau reprezentantul din Uniune.
+ *
+ * ⚠ `country` E CERUT DE OLX si lipsea cu totul (30.08.2026, tarziu). Schema lor pentru
+ * `ProductSafetyRegulationsParty` are `name`, `country`, `address`, `email` — si atat.
+ *
+ * ⚠ `phone` RAMANE AICI, dar NU pleaca la OLX. Alte marketplace-uri il cer, iar structura asta e
+ * comuna; ce nu incape in schema fiecaruia se lasa afara la maparea LUI, nu se sterge de la toti.
+ */
 export interface GpsrPersoana {
   name?: string;
+  /** Codul de tara, doua litere (`RO`, `DE`). Cerut de OLX. */
+  country?: string;
   address?: string;
   email?: string;
   phone?: string;
@@ -44,13 +54,16 @@ export type GpsrConfig = Pick<GpsrDate, "manufacturer" | "contact_person" | "war
 
 function persoanaAreCeva(p: GpsrPersoana | undefined): boolean {
   if (!p) return false;
-  return [p.name, p.address, p.email, p.phone].some((x) => typeof x === "string" && x.trim() !== "");
+  return [p.name, p.country, p.address, p.email, p.phone]
+    .some((x) => typeof x === "string" && x.trim() !== "");
 }
 
 function curataPersoana(p: GpsrPersoana | undefined): GpsrPersoana | undefined {
   if (!persoanaAreCeva(p)) return undefined;
   const out: GpsrPersoana = {};
   if (p!.name?.trim()) out.name = p!.name.trim();
+  /* ⚠ Cod de tara, deci se aduce la forma pe care o cer: doua litere mari. */
+  if (p!.country?.trim()) out.country = p!.country.trim().toUpperCase().slice(0, 2);
   if (p!.address?.trim()) out.address = p!.address.trim();
   if (p!.email?.trim()) out.email = p!.email.trim();
   if (p!.phone?.trim()) out.phone = p!.phone.trim();
@@ -107,7 +120,48 @@ export function gpsrLipsuri(date: GpsrDate | null): string[] {
   const lipsuri: string[] = [];
   if (!date?.manufacturer?.name) lipsuri.push("numele producătorului");
   if (!date?.manufacturer?.address) lipsuri.push("adresa producătorului");
-  const areContact = !!(date?.contact_person?.name || date?.contact_person?.email);
-  if (!areContact) lipsuri.push("persoana responsabilă din UE (nume și e-mail sau telefon)");
+  if (!date?.manufacturer?.country) lipsuri.push("țara producătorului");
+  /*
+   * ⚠ NUME SI E-MAIL, nu „e-mail sau telefon": schema OLX pentru persoana responsabila n-are
+   * `phone` deloc. Ceruta asa, validarea noastra ar fi spus ca e in regula un contact pe care ei
+   * nu-l pot primi — iar omul ar fi aflat abia din refuzul lor.
+   */
+  const areContact = !!(date?.contact_person?.name && date?.contact_person?.email);
+  if (!areContact) lipsuri.push("persoana responsabilă din UE (nume și e-mail)");
   return lipsuri;
+}
+
+/**
+ * Declaratia, in schema pe care o cere CHIAR OLX.
+ *
+ * ═══ ⚠ STRUCTURA COMUNA NU E STRUCTURA LOR (30.08.2026, tarziu) ═══
+ *
+ * `GpsrDate` e comuna celor trei marketplace-uri, fiindca informatia e aceeasi. Dar schema OLX
+ * pentru `ProductSafetyRegulationsParty` are exact `name`, `country`, `address`, `email`. Trimis
+ * asa cum il tinem noi, corpul purta un `phone` pe care schema lor nu-l cunoaste — iar campurile in
+ * plus sunt tocmai ce respinge o validare stricta.
+ *
+ * ⚠ Deci maparea LOR taie ce nu incape, in loc sa saracim structura comuna: telefonul ramane pentru
+ * cine il cere.
+ */
+export function gpsrPentruOlx(date: GpsrDate | null): Record<string, unknown> | null {
+  if (!date) return null;
+  const parte = (p: GpsrPersoana | undefined) => {
+    if (!p) return undefined;
+    const out: Record<string, string> = {};
+    if (p.name) out.name = p.name;
+    if (p.country) out.country = p.country;
+    if (p.address) out.address = p.address;
+    if (p.email) out.email = p.email;
+    return Object.keys(out).length > 0 ? out : undefined;
+  };
+  const out: Record<string, unknown> = {};
+  if (date.placed_before_2024) out.placed_before_2024 = true;
+  const man = parte(date.manufacturer);
+  if (man) out.manufacturer = man;
+  const con = parte(date.contact_person);
+  if (con) out.contact_person = con;
+  if (date.warning_and_safety) out.warning_and_safety = date.warning_and_safety;
+  /* ⚠ Ca si `gpsrEfectiv`: un obiect gol inseamna „am declarat ceva", si nu e adevarat. */
+  return Object.keys(out).length > 0 ? out : null;
 }

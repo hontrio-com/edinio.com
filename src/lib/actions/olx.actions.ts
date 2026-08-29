@@ -238,7 +238,20 @@ export async function saveOlxSettings(businessId: string, input: OlxSettingsInpu
   const config = await loadConfig(businessId);
 
   const next: OlxConfig = {
-    ...config,
+    /*
+     * ═══ ⚠ COMENTARIUL DE MAI JOS MINTEA (30.08.2026, tarziu) ═══
+     *
+     * Scria „PETIC, NU CONFIG INTREG" — dar obiectul incepea cu `...config`, adica peticul purta
+     * TOT ce fusese citit cu o clipa inainte, inclusiv `access_token`, `refresh_token` si
+     * `token_updated_at`. `jsonb_merge_config` nu ajuta cu nimic cand peticul e configul vechi:
+     *
+     *     Setarile citesc: refresh R1
+     *     cronul reimprospateaza: R1 -> R2
+     *     omul salveaza telefonul -> peticul contine si R1
+     *     -> R2 e inlocuit cu R1, iar conexiunea moare la urmatoarea reimprospatare
+     *
+     * ⚠ Acum peticul poarta DOAR ce a atins omul in ecranul de setari. Ce nu e aici nu se atinge.
+     */
     advertiser_type: input.advertiser_type ?? config.advertiser_type ?? "private",
     default_city_id: input.city_id ?? config.default_city_id,
     default_city_name: input.city_name ?? config.default_city_name,
@@ -250,11 +263,6 @@ export async function saveOlxSettings(businessId: string, input: OlxSettingsInpu
     auto_sync: input.auto_sync ?? config.auto_sync,
     auto_extend: input.auto_extend ?? config.auto_extend,
   };
-  /*
-   * ⚠ PETIC, NU CONFIG INTREG (29.08.2026, noaptea). Scris intreg, salvarea asta rescria si
-   * tokenul citit cu o clipa inainte — iar daca intre timp se reimprospatase, refresh tokenul NOU
-   * era inlocuit cu cel vechi si conexiunea murea la urmatoarea reimprospatare.
-   */
   try {
     await patchOlxConfig(createAdminClient(), businessId, next);
   } catch {

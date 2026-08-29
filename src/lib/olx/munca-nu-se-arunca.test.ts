@@ -39,14 +39,19 @@ test("⚠ fiecare scriere in coada isi citeste raspunsul", () => {
    * `const { error: eCoada } = `. Ce deosebeste o scriere pazita de una oarba nu e cererea, ci ce
    * se face cu raspunsul ei.
    */
+  /*
+   * ⚠ SE CER CAILE, NU NUMARUL LOR. Prima varianta cerea „exact trei"; de cand exista si retragerea
+   * durabila dinaintea stergerii, sunt patru — iar un numar fix ar fi picat tocmai la ADAUGAREA
+   * unei cai noi, adica exact cand regula se respecta mai bine. Se cere ca fiecare scriere sa-si
+   * citeasca raspunsul, oricate ar fi.
+   */
   const scrieri = [...coada.matchAll(/await admin\.from\("olx_sync_queue"\)\.upsert\(/g)];
-  assert.equal(scrieri.length, 3, "cele trei functii de punere la coada");
+  assert.ok(scrieri.length >= 3, `asteptam cel putin trei cai de punere la coada, sunt ${scrieri.length}`);
   for (const m of scrieri) {
-    const inainte = coada.slice(Math.max(0, (m.index ?? 0) - 30), m.index);
-    assert.match(inainte, /const \{ error: eCoada \} = $/,
-      `o scriere in coada nu-si prinde eroarea: …${coada.slice(Math.max(0, (m.index ?? 0) - 60), (m.index ?? 0) + 30)}`);
+    const inainte = coada.slice(Math.max(0, (m.index ?? 0) - 34), m.index);
+    assert.match(inainte, /const \{ error(: eCoada)? \} = $/,
+      `o scriere in coada nu-si prinde eroarea: …${coada.slice(Math.max(0, (m.index ?? 0) - 70), (m.index ?? 0) + 30)}`);
   }
-  assert.equal((coada.match(/if \(eCoada\) throw new Error/g) ?? []).length, 3);
 });
 
 test("⚠ si citirea configului: o pana nu inseamna „magazinul n-are OLX”", () => {
@@ -56,8 +61,13 @@ test("⚠ si citirea configului: o pana nu inseamna „magazinul n-are OLX”", 
    */
   const citiri = [...coada.matchAll(/\.select\("olx_config"\)/g)];
   assert.ok(citiri.length >= 2, "amandoua functiile citesc configul");
-  assert.equal((coada.match(/if \(eConfig\) throw new Error/g) ?? []).length, citiri.length,
-    "fiecare citire de config trebuie sa-si prinda eroarea");
+  /*
+   * ⚠ Fiecare citire isi prinde eroarea — dar nu toate ARUNCA: retragerea dinaintea stergerii
+   * intoarce `nesigur`, fiindca acolo cine cheama trebuie sa AFLE, ca sa nu stearga produsul.
+   * Se cere fapta (eroarea e citita si opreste drumul), nu forma ei.
+   */
+  const pazite = (coada.match(/if \(eConfig\)/g) ?? []).length;
+  assert.equal(pazite, citiri.length, "fiecare citire de config trebuie sa-si prinda eroarea");
 });
 
 test("⚠ contextul spune DE CE, nu doar „nu”", () => {
@@ -162,4 +172,85 @@ test("⚠ rotatia tokenului are un singur castigator", () => {
     "`is distinct from` acopera si cazul „niciunul nu exista inca”");
   /* ⚠ Si nu se rescrie logica de secrete: se sprijina pe `jsonb_merge_config`. */
   assert.match(corp, /perform public\.jsonb_merge_config\(p_business_id, 'olx_config', p_patch\)/);
+});
+
+/* ── Retragerea durabila inaintea stergerii ──────────────────────────────── */
+
+test("⚠ produsul nu se sterge pana retragerea de pe OLX nu e SCRISA", () => {
+  /*
+   * ═══ ⚠ STERGEREA UNUI PRODUS NU GARANTA RETRAGEREA (30.08.2026, tarziu) ═══
+   *
+   * `enqueueOlxSync(..., "delete")` se chema DUPA stergere, prin `dupaRaspuns`, iar functia e
+   * dinadins non-throwing:
+   *
+   *     produsul se sterge din Edinio ✅
+   *     punerea la coada pica -> se scrie in jurnal
+   *     dar produsul a DISPARUT deja
+   *     -> anuntul ramane ACTIV la OLX, si nimic nu mai stie de el ❌
+   *
+   * eMAG avea deja apararea asta; OLX nu. Nu se asteapta dupa OLX — doar ca lucrarea sa fie SCRISA.
+   */
+  const q = readFileSync("src/lib/olx/queue.ts", "utf8");
+  assert.match(q, /export async function enqueueOlxRetragereInainteDeStergere\(/);
+  /* ⚠ Si „n-am putut citi" NU e „nu e conectat": puse sub acelasi raspuns, o pana lasa stergerea sa treaca. */
+  assert.match(q, /if \(eConfig\) \{[\s\S]{0,180}?fel: "nesigur"/);
+  assert.match(q, /if \(!config\.connected \|\| !config\.refresh_token\) return \{ fel: "gata" \};/);
+  /* ⚠ Si aici NU se inghite, spre deosebire de restul fisierului: cine cheama trebuie sa afle. */
+  assert.match(q, /scrieEsecul\("retragereInainteDeStergere"[\s\S]{0,140}?fel: "nesigur"/);
+
+  const act = readFileSync("src/lib/actions/product.actions.ts", "utf8");
+  /* ⚠ Si chiar INAINTEA stergerii, pe amandoua caile — una singura lasata pe dinafara ajunge. */
+  for (const nume of ["deleteProduct", "bulk"]) void nume;
+  const chemari = [...act.matchAll(/enqueueOlxRetragereInainteDeStergere\(/g)];
+  assert.equal(chemari.length, 2, "si stergerea unui produs, si cea in masa");
+  for (const m of chemari) {
+    const dupa = act.slice(m.index ?? 0, (m.index ?? 0) + 400);
+    assert.match(dupa, /fel === "nesigur"/, "rezultatul retragerii trebuie citit");
+  }
+  const iRetragere = act.indexOf("enqueueOlxRetragereInainteDeStergere(businessId, [productId])");
+  const iStergere = act.indexOf('.from("products").delete()', iRetragere);
+  assert.ok(iRetragere > 0 && iStergere > iRetragere, "retragerea se scrie INAINTEA stergerii");
+});
+
+test("⚠ o intentie noua reinvie o scrisoare moarta", () => {
+  /*
+   * Dupa cinci incercari elementul primeste `abandonat_la`, iar `revendica_din_coada` il ocoleste.
+   * Dar `upsert`-ul nu atingea campurile alea, deci nici urmatoarea modificare a produsului nu-l
+   * readucea: pretul nou nu pleca NICIODATA.
+   *
+   * ⚠ Aici ajung doar apasarile omului — reincercarile cronului trec prin `scrieDacaNeschimbat` —
+   * deci resetarea nu poate face o roata perfecta din ceva ce esueaza mereu.
+   */
+  assert.match(coada, /const REINVIE = \{ attempts: 0, last_error: null, next_retry_at: null, abandonat_la: null \}/);
+  const scrieri = [...coada.matchAll(/await admin\.from\("olx_sync_queue"\)\.upsert\(/g)];
+  for (const m of scrieri) {
+    const dupa = coada.slice(m.index ?? 0, (m.index ?? 0) + 420);
+    assert.match(dupa, /\.\.\.REINVIE/, "o punere la coada care nu reinvie lasa lucrarea moarta");
+  }
+  /* ⚠ Si NU atinge `generation`: declansatorul o creste singur, deci lucratorul vechi nu mai scrie. */
+  assert.doesNotMatch(coada, /generation:/);
+});
+
+test("⚠ o pana la citirea produselor nu mai sterge anunturi vii", () => {
+  /*
+   * ═══ ⚠ CEL MAI SCUMP DEFECT DIN TOATA INTEGRAREA ═══
+   *
+   * Citirea produselor mergea oarba, iar `productMap.get(...) ?? null` da `null` pentru orice
+   * produs negasit. `upsertRemote` citeste `null` ca „produsul a fost sters din magazin" si cheama
+   * `removeRemote` — adica dezactiveaza SI STERGE anuntul la OLX:
+   *
+   *     produsul exista, anuntul e ACTIV la OLX
+   *     SELECT-ul pica o clipa -> harta e goala -> product = null
+   *     -> DELETE la OLX ❌
+   *
+   * ⚠ `null` ARE VOIE SA INSEMNE UN SINGUR LUCRU: „am putut intreba, si produsul chiar nu mai e".
+   */
+  const i = cron.indexOf("const { data: prods, error: eProduse }");
+  assert.notEqual(i, -1, "citirea produselor nu-si prinde eroarea");
+  const dupa = cron.slice(i, cron.indexOf("for (const item of items)", i));
+  assert.match(dupa, /if \(eProduse\) \{[\s\S]{0,700}?continue;/,
+    "o citire picata trebuie sa opreasca TOT lucrul pentru magazinul asta");
+  /* ⚠ Si lucrarile raman: se amana, nu se arunca. */
+  assert.match(dupa, /next_retry_at: asteptareaUrmatoare\(attempts\)/);
+  assert.doesNotMatch(dupa, /stergeDacaNeschimbat/);
 });

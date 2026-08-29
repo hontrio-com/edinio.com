@@ -105,11 +105,18 @@ test("⚠ contul de firma se afla de la ei, si nu calca ce a ales omul", () => {
   const tipuri = readFileSync("src/lib/olx/types.ts", "utf8");
   assert.match(tipuri, /is_business\?: boolean;/, "tipul nici nu cuprindea campul");
   const callback = readFileSync("src/app/api/olx/oauth/callback/route.ts", "utf8");
-  assert.match(callback, /config\.advertiser_type \?\?= "business"/);
   /*
-   * ⚠ `??=`, nu `=`: o reconectare (token expirat, cont schimbat) n-are voie sa calce ce a ales
-   * omul intre timp. Se completeaza doar ce e gol.
+   * ⚠ Ancora cerea `config.advertiser_type ??= "business"`. **Avea dreptate sub premisa de-atunci**:
+   * `config` ERA obiectul citit din baza, deci `??=` insemna „doar daca nu scrie deja ceva".
+   *
+   * De cand callback-ul scrie un PETIC — ca sa nu mai calce un token reimprospatat intre timp —
+   * `config` e obiectul NOU, gol, iar `??=` pe el n-ar mai apara nimic: ar scrie mereu. Alegerea
+   * omului sta acum in `existent`, si de-acolo se citeste.
+   *
+   * Regula n-a schimbat-o nimic: o reconectare nu are voie sa calce ce a ales el intre timp.
    */
-  assert.doesNotMatch(callback, /config\.advertiser_type = "business"/);
-  assert.match(callback, /config\.contact_name \?\?=/);
+  assert.match(callback, /config\.advertiser_type = existent\.advertiser_type \?\? "business"/);
+  assert.doesNotMatch(callback, /config\.advertiser_type = "business";/,
+    "s-a intors scrierea neconditionata, care calca alegerea omului");
+  assert.match(callback, /config\.contact_name = existent\.contact_name \?\?/);
 });

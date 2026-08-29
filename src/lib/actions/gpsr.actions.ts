@@ -53,7 +53,12 @@ export async function saveGpsrConfig(
   const persoana = (p: unknown) => {
     const o = (p ?? {}) as Record<string, unknown>;
     const camp = (k: string) => (typeof o[k] === "string" ? (o[k] as string).trim().slice(0, 300) : "");
-    const out = { name: camp("name"), address: camp("address"), email: camp("email"), phone: camp("phone") };
+    /* ⚠ `country` e cerut de OLX si se aduce la forma lor: doua litere mari. */
+    const tara = camp("country").toUpperCase().slice(0, 2);
+    const out = {
+      name: camp("name"), country: tara,
+      address: camp("address"), email: camp("email"), phone: camp("phone"),
+    };
     return Object.values(out).some((x) => x !== "") ? out : undefined;
   };
   const curat: GpsrConfig = {

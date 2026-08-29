@@ -257,6 +257,38 @@ async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, 
 /** Cine a cerut dezactivarea. Vezi migratia 2026-12-19: `removed_by_user` singur nu spune. */
 export type SursaDezactivarii = "om" | "stoc" | "produs-inactiv" | "inainte-de-stergere";
 
+/**
+ * Scrie starea locala DUPA un efect remote reusit, si spune daca a intrat.
+ *
+ * ═══ ⚠ „S-A FACUT LA EI, DAR NU S-A SCRIS LA NOI" NU E UN SUCCES (30.08.2026, tarziu) ═══
+ *
+ * Scrierile de dupa un apel reusit mergeau oarbe, iar functia raporta `ok`. Cronul stergea atunci
+ * elementul din coada — deci nimic nu mai reincerca, si starea locala ramanea in urma pentru
+ * totdeauna. Cel mai scump exemplu, chiar din leacul de ieri:
+ *
+ *     stoc 5 -> 0 -> OLX dezactiveaza ✅
+ *     scrierea lui `dezactivat_de = "stoc"` PICA ❌ -> se raporteaza `ok`, coada se goleste
+ *     mai tarziu randul spune `removed_by_user` cu `dezactivat_de` NULL
+ *     iar `null` se citeste prudent, ca „omul a hotarat"
+ *     -> stocul se intoarce, anuntul NU se mai reactiveaza niciodata
+ *
+ * Adica exact insusirea reparata ieri, pierduta printr-o singura eroare de baza.
+ *
+ * ⚠ `permanent: false` INSEAMNA „SE REIA", si reluarea e sigura: comenzile OLX de mai sus sunt
+ * idempotente — a dezactiva un anunt deja dezactivat raspunde `400 invalid status`, pe care il
+ * tratam ca „gata".
+ */
+async function scrieStareaLocala(
+  admin: Db, rowId: string, patch: Record<string, unknown>, ce: string,
+): Promise<{ ok: true } | { ok: false; permanent: false; error: string }> {
+  const { error } = await admin.from("olx_adverts").update(patch as never).eq("id", rowId);
+  if (!error) return { ok: true };
+  return {
+    ok: false, permanent: false,
+    error: `${ce} a reusit la OLX, dar starea locala nu s-a putut salva: ${error.message}`,
+  };
+}
+
 async function deactivateRemote(
   admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow, sursa: SursaDezactivarii,
 ): Promise<SyncOutcome> {
@@ -265,14 +297,17 @@ async function deactivateRemote(
   const res = await advertCommand(ctx.token, row.olx_advert_id, "deactivate", { sAVandut: false });
   const now = new Date().toISOString();
   if (!isOlxError(res)) {
-    await admin.from("olx_adverts")
-      .update({ status: "removed_by_user", dezactivat_de: sursa, error: null, last_status_at: now, updated_at: now })
-      .eq("id", row.id);
+    const scris = await scrieStareaLocala(admin, row.id, {
+      status: "removed_by_user", dezactivat_de: sursa, error: null, last_status_at: now, updated_at: now,
+    }, "Dezactivarea");
+    if (!scris.ok) return scris;
     return { ok: true, action: "deactivated", status: "removed_by_user" };
   }
   // 400 = deja inactiv (invalid status) — force a status refresh instead of failing.
   if (res.status === 400) {
-    await admin.from("olx_adverts").update({ last_status_at: null, updated_at: now }).eq("id", row.id);
+    const scris = await scrieStareaLocala(admin, row.id,
+      { last_status_at: null, updated_at: now }, "Reimprospatarea starii");
+    if (!scris.ok) return scris;
     return { ok: true, action: "skipped" };
   }
   return { ok: false, permanent: false, error: res.error };
@@ -283,14 +318,34 @@ async function activateRemote(admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow)
   const res = await advertCommand(ctx.token, row.olx_advert_id, "activate");
   const now = new Date().toISOString();
   if (!isOlxError(res)) {
+    /*
+     * ═══ ⚠ SI MOTIVUL DEZACTIVARII SE STINGE (30.08.2026, tarziu) ═══
+     *
+     * Lasat, `dezactivat_de` ramanea „stoc" pe un anunt care e acum ACTIV. Iar daca mai tarziu
+     * comerciantul intra pe OLX si il dezactiveaza EL, de mana, sondarea vede `removed_by_user`
+     * peste un `dezactivat_de` invechit — si il reactivam noi, desfacand hotararea lui.
+     *
+     * Motivul apartine dezactivarii curente. Cand ea se incheie, motivul se duce cu ea.
+     */
     // Activation may pass through moderation again — poll will settle it.
-    await admin.from("olx_adverts")
-      .update({ status: "new", error: null, last_status_at: null, updated_at: now })
-      .eq("id", row.id);
+    const scris = await scrieStareaLocala(admin, row.id, {
+      status: "new", dezactivat_de: null, error: null, last_status_at: null, updated_at: now,
+    }, "Activarea");
+    if (!scris.ok) return scris;
     return { ok: true, action: "activated", status: "new" };
   }
   if (res.status === 400 && /limit|packet|pachet/i.test(res.error)) {
-    await admin.from("olx_adverts").update({ status: "limited", updated_at: now }).eq("id", row.id);
+    /* ⚠ Aici scrierea NU schimba verdictul: oricum iesim cu un refuz permanent, si mesajul lui e
+       ce conteaza pentru om. Dar se citeste, ca o pana sa nu treaca tacut. */
+    const { error: eLimita } = await admin.from("olx_adverts")
+      .update({ status: "limited", updated_at: now } as never).eq("id", row.id);
+    if (eLimita) {
+      await logError({
+        action: "olx.activare", severity: "warning",
+        message: `starea „limited" nu s-a putut scrie: ${eLimita.message}`,
+        details: { rowId: row.id },
+      });
+    }
     return { ok: false, permanent: true, error: "Cota de anunturi gratuite este epuizata. Cumpara un pachet OLX si activeaza anuntul." };
   }
   const { permanent } = classify(res);
@@ -456,10 +511,21 @@ async function upsertRemote(
         return { ok: false, permanent, error: dupaAdoptare.error };
       }
       const proaspat = dupaAdoptare.data ?? gasit;
-      await admin.from("olx_adverts").upsert(
+      /*
+       * ⚠ SI ASTA ISI CITESTE RASPUNSUL. Corpul proaspat a plecat deja la OLX; nescrisa local,
+       * legatura ramane pe valorile de dinainte, iar noi raportam `ok` — deci coada se goleste si
+       * nimeni nu mai reia. `permanent: false` face reluarea, iar adoptarea o regaseste.
+       */
+      const { error: eProaspat } = await admin.from("olx_adverts").upsert(
         { business_id: businessId, offer_id: offerId, product_id: product.id, ...advertPatch(proaspat, now) } as never,
         { onConflict: "business_id,offer_id" },
       );
+      if (eProaspat) {
+        return {
+          ok: false, permanent: false,
+          error: `anuntul s-a actualizat la OLX, dar legatura locala nu s-a putut scrie: ${eProaspat.message}`,
+        };
+      }
       return { ok: true, action: "updated", status: proaspat.status, url: proaspat.url ?? null };
     }
   }
@@ -612,24 +678,84 @@ export async function deleteAdvertNow(admin: Db, ctx: OlxSyncContext, businessId
 // Refresh one advert's status from OLX (used by the cron poll).
 export async function refreshAdvertStatus(
   admin: Db, ctx: OlxSyncContext, rowId: string, olxAdvertId: number,
+  /** Ce stiam despre rand INAINTE de sondare. Vezi cele doua note de mai jos. */
+  inainte?: { status?: string | null; dezactivat_de?: string | null },
 ): Promise<void> {
   const now = new Date().toISOString();
   const res = await getAdvert(ctx.token, olxAdvertId);
   if (isOlxError(res)) {
     if (res.status === 404) {
-      // Removed on OLX directly — reflect locally.
-      await admin.from("olx_adverts").delete().eq("id", rowId);
+      /*
+       * ═══ ⚠ `404` INSEAMNA CA OMUL L-A STERS PE OLX, NU CA N-A EXISTAT (30.08.2026, tarziu) ═══
+       *
+       * Randul se STERGEA, iar cu el si singura urma a hotararii lui. Coada OLX se umple dupa
+       * fiecare editare de pret sau stoc, deci la prima atingere a produsului `getRow` nu gasea
+       * nimic, se intra pe ramura de creare, si anuntul REAPAREA — impotriva a ceea ce facuse el,
+       * de mana, in contul lui.
+       *
+       * ⚠ Aceeasi piatra ca la „Șterge anunțul" din ecranul nostru: nu conteaza pe ce usa a intrat
+       * hotararea, ci ca a fost a lui. Iesirea e tot „Postează pe OLX".
+       */
+      const { error: ePiatra } = await admin.from("olx_adverts").update({
+        olx_advert_id: null, status: "sters_de_om", olx_url: null, error: null,
+        sters_de_om_la: now, last_status_at: now, updated_at: now,
+      } as never).eq("id", rowId);
+      if (ePiatra) {
+        await logError({
+          action: "olx.sondare", severity: "warning",
+          message: `anuntul nu mai exista la OLX, dar piatra nu s-a putut scrie: ${ePiatra.message}`,
+          details: { rowId, olxAdvertId },
+        });
+      }
       return;
     }
-    await admin.from("olx_adverts").update({ last_status_at: now }).eq("id", rowId);
+    /* ⚠ O pana trecatoare: se amana sondarea, dar nu se pretinde ca stim ceva despre anunt. */
+    const { error: eAmanare } = await admin.from("olx_adverts")
+      .update({ last_status_at: now } as never).eq("id", rowId);
+    if (eAmanare) {
+      await logError({
+        action: "olx.sondare", severity: "warning",
+        message: `marcajul de sondare nu s-a putut scrie: ${eAmanare.message}`,
+        details: { rowId, olxAdvertId },
+      });
+    }
     return;
   }
   const advert = res.data;
-  await admin.from("olx_adverts").update({
-    status: advert.status || "new",
+  const stareaLor = advert.status || "new";
+
+  /*
+   * ═══ ⚠ O DEZACTIVARE FACUTA DIRECT PE OLX E TOT A OMULUI (30.08.2026, tarziu) ═══
+   *
+   * Daca noi am stins anuntul, `deactivateRemote` a scris deja si `dezactivat_de`. Deci un
+   * `removed_by_user` care apare AICI, peste un rand care nu era asa si n-are motiv scris, nu poate
+   * veni decat din contul lui: a intrat pe OLX si a apasat „Dezactivează".
+   *
+   * Fara insemnarea asta, `dezactivat_de` ramanea NULL — iar `null` se citeste prudent ca „om", deci
+   * azi n-ar strica nimic. Dar prudenta aia e o presupunere, si ea tine doar cat timp nimeni nu
+   * scrie altceva acolo. Scris pe nume, adevarul nu mai depinde de o conventie.
+   */
+  const aStinsElInsusi = stareaLor === "removed_by_user"
+    && inainte?.status !== "removed_by_user"
+    && (inainte?.dezactivat_de ?? null) === null;
+
+  const { error: eStare } = await admin.from("olx_adverts").update({
+    status: stareaLor,
     olx_url: advert.url ?? null,
     valid_to: advert.valid_to ? new Date(advert.valid_to.replace(" ", "T") + "+03:00").toISOString() : null,
+    ...(aStinsElInsusi ? { dezactivat_de: "om" } : {}),
     last_status_at: now,
     updated_at: now,
-  }).eq("id", rowId);
+  } as never).eq("id", rowId);
+  if (eStare) {
+    /*
+     * ⚠ Nescrisa, starea ramane cea veche si sondarea se reia — ceea ce e ieftin si idempotent.
+     * Dar tacut, un rand care nu se mai actualizeaza niciodata n-ar avea cum sa fie observat.
+     */
+    await logError({
+      action: "olx.sondare", severity: "warning",
+      message: `starea citita de la OLX nu s-a putut scrie: ${eStare.message}`,
+      details: { rowId, olxAdvertId, stareaLor },
+    });
+  }
 }

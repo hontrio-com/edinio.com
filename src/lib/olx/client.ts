@@ -38,6 +38,18 @@ async function call<T>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
       // Nomenclatoare mici pe Vercel = no-store (Data Cache dadea 500 la runtime).
       cache: "no-store",
+      /*
+       * ═══ ⚠ O CERERE FARA CAPAT TINE INTREG CRONUL (30.08.2026, tarziu) ═══
+       *
+       * Cronul porneste din minut in minut si lucreaza cu randuri REVENDICATE, cu termen de cinci
+       * minute. O cerere care atarna nu doar ca pierde elementul ei: tine lucratorul ocupat, iar
+       * celelalte douazeci si noua de elemente revendicate cu el asteapta degeaba. Cand instanta e
+       * taiata la durata maxima, ele raman marcate pana expira termenul.
+       *
+       * ⚠ Douazeci de secunde: destul pentru cea mai lenta cerere obisnuita a lor, si mult sub
+       * fereastra cronului. O intrerupere se citeste ca eroare trecatoare, deci se reia.
+       */
+      signal: AbortSignal.timeout(20_000),
     });
     if (res.status === 204) return { data: undefined as T };
     const text = await res.text();

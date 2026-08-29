@@ -15,7 +15,10 @@ import { resolveUniqueProductSlug } from "@/lib/slug";
 import { readBundleConfig } from "@/lib/bundles";
 import { construiesteTrepte, mesajProblemaTrepte, problemaMonotonie } from "@/lib/storefront/quantity-tiers";
 import { enqueueGmcSync, enqueueGmcStergereMany, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
-import { enqueueOlxSync, enqueueOlxStergereMany, enqueueOlxSyncMany } from "@/lib/olx/queue";
+import {
+  enqueueOlxSync, enqueueOlxStergereMany, enqueueOlxSyncMany,
+  enqueueOlxRetragereInainteDeStergere,
+} from "@/lib/olx/queue";
 import { enqueueAboutYouSync, enqueueAboutYouStergereMany, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolSync, enqueueTrendyolStergereMany, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
 import {
@@ -505,6 +508,21 @@ export async function deleteProduct(productId: string, businessId: string) {
         + `(${retragerea.motiv}) Încearcă din nou peste câteva momente.`,
     };
   }
+  /*
+   * ⚠ SI OLX, DIN ACELASI MOTIV (30.08.2026, tarziu). Retragerea lui se punea la coada DUPA
+   * stergere, prin `dupaRaspuns`, iar `enqueueOlxSync` e dinadins non-throwing: o punere la coada
+   * picata lasa anuntul ACTIV la OLX pentru un produs care nu mai exista nicaieri. Marfa se vinde
+   * acolo, iar comerciantul afla cand primeste comanda.
+   *
+   * ⚠ Nu se asteapta dupa OLX — doar ca lucrarea sa fie SCRISA.
+   */
+  const retragereaOlx = await enqueueOlxRetragereInainteDeStergere(businessId, [productId]);
+  if (retragereaOlx.fel === "nesigur") {
+    return {
+      error: "Produsul n-a fost șters: retragerea anunțului de pe OLX nu s-a putut programa "
+        + `(${retragereaOlx.motiv}) Încearcă din nou peste câteva momente.`,
+    };
+  }
 
   const { error } = await supabase.from("products").delete()
     .eq("id", productId).eq("business_id", businessId);
@@ -668,6 +686,15 @@ export async function bulkProductAction(
         return {
           error: "Produsele n-au fost șterse: retragerea ofertelor de pe eMAG nu s-a putut "
             + `programa (${retragerea.motiv}) Încearcă din nou peste câteva momente.`,
+        };
+      }
+      /* ⚠ Si OLX, la fel. Aici cantareste si mai mult: o stergere in masa poate lasa sute de
+         anunturi la vanzare deodata. */
+      const retragereaOlx = await enqueueOlxRetragereInainteDeStergere(businessId, ids);
+      if (retragereaOlx.fel === "nesigur") {
+        return {
+          error: "Produsele n-au fost șterse: retragerea anunțurilor de pe OLX nu s-a putut "
+            + `programa (${retragereaOlx.motiv}) Încearcă din nou peste câteva momente.`,
         };
       }
 

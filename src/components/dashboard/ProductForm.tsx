@@ -135,7 +135,7 @@ interface FormState {
  * imbinate camp cu camp, s-ar naste o adresa jumatate a unui producator si jumatate a altuia — o
  * informatie legala falsa, si mai rea decat una lipsa.
  */
-interface GpsrPersoanaState { name: string; address: string; email: string; phone: string }
+interface GpsrPersoanaState { name: string; country: string; address: string; email: string; phone: string }
 interface GpsrState {
   placed_before_2024: boolean;
   manufacturer: GpsrPersoanaState;
@@ -252,8 +252,8 @@ const EMPTY_FORM: FormState = {
    */
   gpsr: {
     placed_before_2024: false,
-    manufacturer: { name: "", address: "", email: "", phone: "" },
-    contact_person: { name: "", address: "", email: "", phone: "" },
+    manufacturer: { name: "", country: "", address: "", email: "", phone: "" },
+    contact_person: { name: "", country: "", address: "", email: "", phone: "" },
     warning_and_safety: "",
   },
 };
@@ -338,7 +338,7 @@ function productToForm(p: Product): FormState {
       const p = (x: unknown) => {
         const o = (x ?? {}) as Record<string, unknown>;
         const c = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
-        return { name: c("name"), address: c("address"), email: c("email"), phone: c("phone") };
+        return { name: c("name"), country: c("country"), address: c("address"), email: c("email"), phone: c("phone") };
       };
       return {
         placed_before_2024: g.placed_before_2024 === true,
@@ -870,8 +870,11 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
          * ca o suprascriere — iar produsul ar pleca fara producator, in loc sa-l ia din setari.
          */
         gpsr: (() => {
-          const p = (o: { name: string; address: string; email: string; phone: string }) => {
-            const v = { name: o.name.trim(), address: o.address.trim(), email: o.email.trim(), phone: o.phone.trim() };
+          const p = (o: GpsrPersoanaState) => {
+            const v = {
+              name: o.name.trim(), country: o.country.trim().toUpperCase().slice(0, 2),
+              address: o.address.trim(), email: o.email.trim(), phone: o.phone.trim(),
+            };
             return Object.values(v).some((x) => x !== "") ? v : undefined;
           };
           const out: Record<string, unknown> = {};
@@ -1868,8 +1871,8 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {([
-                            ["name", "Denumire"], ["address", "Adresă completă"],
-                            ["email", "E-mail"], ["phone", "Telefon"],
+                            ["name", "Denumire"], ["country", "Țara (RO, DE, CN…)"],
+                            ["address", "Adresă completă"], ["email", "E-mail"], ["phone", "Telefon"],
                           ] as const).map(([camp, eticheta]) => (
                             <input
                               key={camp}

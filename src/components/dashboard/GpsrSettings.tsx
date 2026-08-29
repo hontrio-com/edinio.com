@@ -20,7 +20,7 @@ import type { GpsrConfig, GpsrPersoana } from "@/lib/gpsr";
  * hotărârea rămâne a omului.
  */
 
-const GOL: GpsrPersoana = { name: "", address: "", email: "", phone: "" };
+const GOL: GpsrPersoana = { name: "", country: "", address: "", email: "", phone: "" };
 
 function Persoana({
   titlu, ajutor, valoare, seteaza,
@@ -43,6 +43,10 @@ function Persoana({
         <Input
           value={valoare.address ?? ""} placeholder="Adresă completă"
           onChange={(e) => seteaza({ ...valoare, address: e.target.value })} />
+        {/* ⚠ Cod de țară din două litere: OLX îl cere explicit în schema lui. */}
+        <Input
+          value={valoare.country ?? ""} placeholder="Țara (RO, DE, CN…)" maxLength={2}
+          onChange={(e) => seteaza({ ...valoare, country: e.target.value.toUpperCase() })} />
         <Input
           value={valoare.email ?? ""} placeholder="E-mail" type="email"
           onChange={(e) => seteaza({ ...valoare, email: e.target.value })} />

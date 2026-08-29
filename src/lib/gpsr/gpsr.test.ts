@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { gpsrEfectiv, gpsrLipsuri, gpsrDinProdus, type GpsrConfig } from "./index";
+import { gpsrEfectiv, gpsrLipsuri, gpsrDinProdus, gpsrPentruOlx, type GpsrConfig } from "./index";
 
 /* ══════════════════════════════════════════════════════════════════════════
    GPSR: CINE RASPUNDE PENTRU SIGURANTA PRODUSULUI (30.08.2026)
@@ -23,8 +23,8 @@ import { gpsrEfectiv, gpsrLipsuri, gpsrDinProdus, type GpsrConfig } from "./inde
 */
 
 const CONFIG: GpsrConfig = {
-  manufacturer: { name: "Fabrica SRL", address: "Str. Uzinei 1, Cluj", email: "info@fabrica.ro" },
-  contact_person: { name: "Reprezentant SRL", address: "Bd. UE 5, București", email: "ue@rep.ro" },
+  manufacturer: { name: "Fabrica SRL", country: "RO", address: "Str. Uzinei 1, Cluj", email: "info@fabrica.ro" },
+  contact_person: { name: "Reprezentant SRL", country: "RO", address: "Bd. UE 5, București", email: "ue@rep.ro" },
   warning_and_safety: "A nu se lăsa la îndemâna copiilor.",
 };
 
@@ -78,9 +78,16 @@ test("⚠ `placed_before_2024` singur e destul, si vine numai de pe produs", () 
 });
 
 test("⚠ lipsurile se numesc, ca omul sa afle inainte de refuzul lor", () => {
+  /*
+   * ⚠ SI TARA E IN LISTA. Schema OLX pentru `ProductSafetyRegulationsParty` are `name`, `country`,
+   * `address`, `email` — iar `country` lipsea cu totul de la noi.
+   *
+   * ⚠ Si contactul cere NUME SI E-MAIL, nu „e-mail sau telefon": schema lor n-are `phone` deloc.
+   * Ceruta asa, validarea noastra ar fi spus ca e in regula un contact pe care ei nu-l pot primi.
+   */
   assert.deepEqual(gpsrLipsuri(gpsrEfectiv(null, null)), [
-    "numele producătorului", "adresa producătorului",
-    "persoana responsabilă din UE (nume și e-mail sau telefon)",
+    "numele producătorului", "adresa producătorului", "țara producătorului",
+    "persoana responsabilă din UE (nume și e-mail)",
   ]);
   assert.deepEqual(gpsrLipsuri(gpsrEfectiv(null, CONFIG)), []);
 });
@@ -118,4 +125,28 @@ test("⚠ sectiunea din editor se arata doar cand un marketplace o cere", () => 
   assert.match(form, /\{\(olxConnected \|\| emagConnected\) && \(/);
   /* ⚠ Si e deschisa din start daca produsul are deja o suprascriere: inchisa, ar ascunde date. */
   assert.match(form, /const \[showGpsr, setShowGpsr\] = useState\(/);
+});
+
+test("⚠ catre OLX pleaca STRICT schema lor, fara campuri in plus", () => {
+  /*
+   * ═══ ⚠ STRUCTURA COMUNA NU E STRUCTURA LOR (30.08.2026, tarziu) ═══
+   *
+   * `GpsrDate` e comuna celor trei marketplace-uri, fiindca informatia e aceeasi. Dar schema OLX
+   * pentru `ProductSafetyRegulationsParty` are exact `name`, `country`, `address`, `email`. Trimis
+   * asa cum il tinem noi, corpul purta un `phone` pe care schema lor nu-l cunoaste — iar campurile
+   * in plus sunt tocmai ce respinge o validare stricta.
+   *
+   * ⚠ Taierea se face la MAPAREA LOR, nu prin saracirea structurii comune: telefonul ramane pentru
+   * cine il cere.
+   */
+  const date = gpsrEfectiv({ gpsr: { manufacturer: { name: "X", country: "ro", address: "A", email: "e@x.ro", phone: "0700" } } }, null);
+  assert.equal(date?.manufacturer?.phone, "0700", "structura comuna pastreaza telefonul");
+  const alLor = gpsrPentruOlx(date);
+  const man = alLor?.manufacturer as Record<string, unknown>;
+  assert.deepEqual(Object.keys(man).sort(), ["address", "country", "email", "name"]);
+  assert.equal(man.phone, undefined, "`phone` nu are ce cauta in schema OLX");
+  /* ⚠ Si codul de tara pleaca in forma pe care o cer: doua litere mari. */
+  assert.equal(man.country, "RO");
+  /* ⚠ Iar cand n-avem nimic, nu se trimite un obiect gol. */
+  assert.equal(gpsrPentruOlx(null), null);
 });

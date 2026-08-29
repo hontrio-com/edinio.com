@@ -52,7 +52,13 @@ const CAZURI = [
 for (const c of CAZURI) {
   test(`⚠ ${c.nume}: scrierea conexiunii isi citeste raspunsul`, () => {
     const ruta = readFileSync(c.ruta, "utf8");
-    assert.match(ruta, /const \{ error: eScris \} = ss\?\.id/,
+    /*
+     * ⚠ Ancora cerea `const { error: eScris } = ss?.id ?`. De cand OLX scrie un PETIC ATOMIC prin
+     * `jsonb_merge_config` — ca sa nu mai calce un token reimprospatat intre timp — ramura de
+     * actualizare nu mai e o cerere PostgREST, ci un apel care arunca. Regula n-a schimbat-o nimic:
+     * rezultatul se citeste si o scriere picata NU se raporteaza drept conectare.
+     */
+    assert.match(ruta, /const eScris = ss\?\.id|const \{ error: eScris \} = ss\?\.id/,
       "scrierea trebuie sa-si prinda eroarea, in amandoua ramurile");
     /* ⚠ Si o scriere picata NU se raporteaza drept conectare reusita. */
     assert.match(ruta, new RegExp(`if \\(eScris\\) \\{[\\s\\S]{0,220}?back\\(req, "${c.prefix}=save_failed"\\)`));
@@ -67,11 +73,18 @@ for (const c of CAZURI) {
      */
     const ruta = readFileSync(c.ruta, "utf8");
     const scrieri = [...ruta.matchAll(/await supabase\s*\n?\s*\.?from\("store_settings"\)/g)];
-    assert.ok(scrieri.length >= 2, "asteptam amandoua ramurile, actualizare si inserare");
     for (const m of scrieri) {
       const inainte = ruta.slice(Math.max(0, (m.index ?? 0) - 4), m.index);
-      assert.match(inainte, /[?:] $/,
+      assert.match(inainte, /[?:(] $|[?:(]$/,
         `o scriere de config nu e ramura atribuirii care ii citeste eroarea: …${ruta.slice(Math.max(0, (m.index ?? 0) - 60), (m.index ?? 0) + 40)}`);
+    }
+    /*
+     * ⚠ Si daca vreo ramura a trecut pe un petic atomic, tot trebuie sa-si citeasca rezultatul:
+     * `patchOlxConfig` ARUNCA, deci se cere prins si transformat in acelasi `eScris`.
+     */
+    if (/patchOlxConfig\(/.test(ruta)) {
+      assert.match(ruta, /catch \(e\) \{ return e as Error; \}/,
+        "peticul atomic trebuie sa-si prinda aruncarea, nu s-o lase sa treaca");
     }
   });
 

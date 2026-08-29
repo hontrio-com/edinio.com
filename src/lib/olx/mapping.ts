@@ -5,7 +5,7 @@
 //  - capital letters must stay under 50% of the text
 // Violations get the advert rejected at POST time, so we sanitize proactively.
 
-import { gpsrEfectiv, type GpsrConfig } from "@/lib/gpsr";
+import { gpsrEfectiv, gpsrPentruOlx, type GpsrConfig } from "@/lib/gpsr";
 import { OLX_CURRENCY, type OlxCategoryMapEntry, type OlxConfig } from "./types";
 
 export interface MappableBusiness {
@@ -147,7 +147,8 @@ export function toOlxAdvertBody(
   const phone = (config.contact_phone ?? "").replace(/\s+/g, "");
   if (phone) contact.phone = phone;
 
-  const gpsr = gpsrEfectiv(product.page_sections, gpsrConfig);
+  /* ⚠ Trecut prin maparea LOR: schema OLX n-are `phone`, iar campurile in plus se resping. */
+  const gpsr = gpsrPentruOlx(gpsrEfectiv(product.page_sections, gpsrConfig));
 
   const body: Record<string, unknown> = {
     title: buildOlxTitle(product, business),

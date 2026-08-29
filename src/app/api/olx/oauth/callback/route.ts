@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { patchOlxConfig } from "@/lib/olx/config";
 import { verifyState, exchangeCode } from "@/lib/olx/oauth";
 import { getMe, isOlxError } from "@/lib/olx/client";
 import type { OlxConfig } from "@/lib/olx/types";
@@ -45,16 +46,33 @@ export async function GET(req: NextRequest) {
    * (`businesses.id = businessId AND businesses.user_id = user.id`).
    */
   const admin = createAdminClient();
-  const { data: ss } = await admin
+  /*
+   * ═══ ⚠ SE SCRIE UN PETIC, NU CONFIGUL INTREG (30.08.2026, tarziu) ═══
+   *
+   * Pana azi se citea configul intreg, se modifica in memorie si se scria inapoi tot. Intre citire
+   * si scriere incape orice — inclusiv o reimprospatare de token facuta de cron, care ar fi fost
+   * apoi inlocuita cu valorile citite aici.
+   *
+   * ⚠ Citirea ramane, dar numai ca sa AFLAM ce e deja acolo (`auto_sync`, alegerile omului), nu ca
+   * sa scriem peste. Ce se scrie e strict ce s-a schimbat prin conectare.
+   */
+  const { data: ss, error: eCitire } = await admin
     .from("store_settings").select("id, olx_config").eq("business_id", businessId).single();
-  const config: OlxConfig = (ss?.olx_config as OlxConfig) ?? {};
-  config.connected = true;
-  config.access_token = tok.accessToken;
-  config.access_token_expires_at = tok.expiresAt;
-  config.refresh_token = tok.refreshToken;
-  config.token_updated_at = new Date().toISOString();
-  config.needs_reconnect = false;
-  if (config.auto_sync === undefined) config.auto_sync = true;
+  if (eCitire) {
+    console.error("[olx/oauth] configul nu s-a putut citi:", eCitire);
+    return back(req, "olx=save_failed");
+  }
+  const existent: OlxConfig = (ss?.olx_config as OlxConfig) ?? {};
+  const config: Partial<OlxConfig> = {
+    connected: true,
+    access_token: tok.accessToken,
+    access_token_expires_at: tok.expiresAt,
+    refresh_token: tok.refreshToken,
+    token_updated_at: new Date().toISOString(),
+    needs_reconnect: false,
+  };
+  /* ⚠ Numai daca n-a ales omul deja: o reconectare n-are voie sa-i reporneasca sincronizarea. */
+  if (existent.auto_sync === undefined) config.auto_sync = true;
 
   // Identify the connected OLX user (for display + advertiser_type default).
   const me = await getMe(tok.accessToken);
@@ -71,10 +89,10 @@ export async function GET(req: NextRequest) {
      * ⚠ SE COMPLETEAZA DOAR CE E GOL. O reconectare (token expirat, cont schimbat) nu are voie sa
      * calce ce a ales omul intre timp: `??=` scrie numai peste nescris.
      */
-    if (me.data.is_business === true) config.advertiser_type ??= "business";
-    else if (me.data.is_business === false) config.advertiser_type ??= "private";
-    if (me.data.name) config.contact_name ??= me.data.name.slice(0, 100);
-    if (me.data.phone) config.contact_phone ??= String(me.data.phone).replace(/\s+/g, "");
+    if (me.data.is_business === true) config.advertiser_type = existent.advertiser_type ?? "business";
+    else if (me.data.is_business === false) config.advertiser_type = existent.advertiser_type ?? "private";
+    if (me.data.name) config.contact_name = existent.contact_name ?? me.data.name.slice(0, 100);
+    if (me.data.phone) config.contact_phone = existent.contact_phone ?? String(me.data.phone).replace(/\s+/g, "");
   }
 
   /*
@@ -95,12 +113,16 @@ export async function GET(req: NextRequest) {
    * ⚠ Deci se citeste raspunsul, si daca n-a intrat, omul afla ACUM — cat mai are rabdare sa apese
    * inca o data — nu peste doua zile, cand se intreaba de ce nu se sincronizeaza nimic.
    */
-  const { error: eScris } = ss?.id
-    ? await supabase.from("store_settings")
-      .update({ olx_config: config as never, updated_at: new Date().toISOString() })
-      .eq("business_id", businessId)
-    : await supabase.from("store_settings")
-      .insert({ business_id: businessId, olx_config: config as never });
+  /*
+   * ⚠ PETIC ATOMIC, ca peste tot: `jsonb_merge_config` imbina IN BAZA, deci o reimprospatare de
+   * token facuta intre timp nu mai poate fi calcata de valorile citite mai sus.
+   */
+  const eScris = ss?.id
+    ? await (async () => {
+      try { await patchOlxConfig(admin, businessId, config); return null; } catch (e) { return e as Error; }
+    })()
+    : (await supabase.from("store_settings")
+      .insert({ business_id: businessId, olx_config: config as never })).error;
 
   if (eScris) {
     console.error("[olx/oauth] conexiunea nu s-a putut salva:", eScris);

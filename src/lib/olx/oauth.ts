@@ -74,7 +74,20 @@ async function tokenRequest(body: Record<string, string>): Promise<OlxTokens | {
     if (!res.ok || !data.access_token) {
       return {
         error: data.error_description ?? data.error ?? `HTTP ${res.status}`,
-        invalidGrant: data.error === "invalid_grant" || res.status === 400 || res.status === 401,
+        /*
+         * ═══ ⚠ ORICE 400 SAU 401 TRECEA DREPT „SESIUNE MOARTA" (30.08.2026, tarziu) ═══
+         *
+         * `invalidGrant` duce, mai sus, la `needs_reconnect` — adica ii spunem comerciantului sa
+         * reconecteze contul. Dar OLX raspunde `400` si pentru `invalid_client`, `invalid_scope`,
+         * `invalid_request`, iar `401` si pentru un antet gresit sau o cheie de aplicatie schimbata.
+         * Niciuna nu inseamna ca refresh tokenul LUI a expirat.
+         *
+         * Un `400` de la o greseala de-a noastra in configurarea aplicatiei ar fi trimis TOTI
+         * comerciantii sa reconecteze conturi perfect sanatoase.
+         *
+         * ⚠ Se cere chiar codul lor. Restul raman erori trecatoare, deci se reincearca.
+         */
+        invalidGrant: data.error === "invalid_grant",
       };
     }
     const expiresAt = new Date(Date.now() + (Number(data.expires_in) || 86400) * 1000).toISOString();
@@ -124,6 +137,28 @@ export async function ensureMerchantToken(
   const res = await refreshTokens(config.refresh_token);
   if ("error" in res) {
     if (res.invalidGrant) {
+      /*
+       * ═══ ⚠ `invalid_grant` POATE INSEMNA „ALTCINEVA A ROTIT DEJA" (30.08.2026, tarziu) ═══
+       *
+       * Doua fire pornesc cu acelasi refresh token R1. Primul primeste A2 + R2 si scrie. Al doilea
+       * cere tot cu R1 — deja consumat — si OLX ii raspunde `invalid_grant`. Pana azi, al doilea
+       * scria `needs_reconnect = true` peste configul SANATOS al primului:
+       *
+       *     A repara sesiunea ✅
+       *     B o marcheaza „reconecteaza contul" ❌
+       *
+       * Iar CAS-ul de mai jos nu-l prindea, fiindca B iesea de-aici fara sa mai ajunga la el.
+       *
+       * ⚠ SE INTREABA MARTORUL INAINTE DE A DA VESTEA PROASTA: daca `token_updated_at` s-a miscat
+       * de cand am citit, altcineva a rotit — si atunci tokenul LUI e bun, iar al nostru era doar
+       * vechi. Numai daca nimeni n-a rotit, refresh tokenul chiar a murit.
+       */
+      const proaspat = await citesteConfig(db, businessId);
+      const altcinevaARotit = proaspat != null
+        && (proaspat.token_updated_at ?? null) !== (config.token_updated_at ?? null);
+      if (altcinevaARotit && proaspat.access_token && proaspat.refresh_token) {
+        return { token: proaspat.access_token, config: proaspat };
+      }
       await persistConfig(db, businessId, { needs_reconnect: true });
       return { error: "Sesiunea OLX a expirat. Reconecteaza contul OLX.", needsReconnect: true };
     }

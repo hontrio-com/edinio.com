@@ -125,11 +125,48 @@ export async function GET(req: NextRequest) {
     }
     const ctx = r.ctx;
 
-    // Preload products needed for upserts (single query).
+    /*
+     * ═══ ⚠ O PANA LA CITIREA PRODUSELOR STERGEA ANUNTURI VII (30.08.2026, tarziu) ═══
+     *
+     * Citirea asta mergea oarba, iar mai jos `productMap.get(...) ?? null` da `null` pentru orice
+     * produs negasit. Numai ca `upsertRemote` citeste `null` ca „produsul a fost sters din magazin"
+     * si cheama `removeRemote` — adica dezactiveaza SI STERGE anuntul la OLX:
+     *
+     *     produsul P exista, anuntul P e ACTIV la OLX
+     *     cronul revendica o schimbare de pret
+     *     SELECT-ul pica o clipa -> `data` e null -> harta e goala
+     *     product = null -> „a fost sters" -> DELETE la OLX ❌
+     *
+     * Un anunt viu, cu istoricul si mesajele lui, sters pentru o clipa proasta a bazei. E cea mai
+     * scumpa pierdere din toata integrarea, si venea dintr-un `{ error }` necitit.
+     *
+     * ⚠ `null` ARE VOIE SA INSEMNE UN SINGUR LUCRU: „am putut intreba baza, si produsul chiar nu
+     * mai e". Daca n-am putut intreba, nu se lucreaza nimic pentru magazinul asta acum.
+     *
+     * ⚠ Aceeasi regula o are deja `syncProductNow` prin `CitireOlxEsuata`; aici lipsea.
+     */
     const upsertIds = items.filter((i) => i.op === "upsert" && i.product_id).map((i) => i.product_id!) as string[];
     const productMap = new Map<string, MappableProduct>();
     if (upsertIds.length) {
-      const { data: prods } = await admin.from("products").select(PRODUCT_FIELDS).in("id", upsertIds);
+      const { data: prods, error: eProduse } = await admin
+        .from("products").select(PRODUCT_FIELDS).in("id", upsertIds);
+      if (eProduse) {
+        for (const it of items) {
+          const attempts = (it.attempts ?? 0) + 1;
+          await scrieDacaNeschimbat(admin, COADA, it, {
+            attempts,
+            last_error: `produsele nu s-au putut citi: ${eProduse.message}`.slice(0, 500),
+            next_retry_at: asteptareaUrmatoare(attempts),
+            ...(attempts >= MAX_ATTEMPTS ? { abandonat_la: now } : {}),
+          });
+        }
+        await logError({
+          action: "olx-sync", severity: "error",
+          message: `produsele nu s-au putut citi; nu s-a trimis nimic la OLX: ${eProduse.message}`,
+          details: { cate: items.length }, businessId,
+        });
+        continue;
+      }
       for (const p of (prods ?? []) as MappableProduct[]) productMap.set(p.id, p);
     }
 
@@ -183,7 +220,7 @@ export async function GET(req: NextRequest) {
   const staleBefore = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
   const { data: toPoll } = await admin
     .from("olx_adverts")
-    .select("id, business_id, olx_advert_id, status")
+    .select("id, business_id, olx_advert_id, status, dezactivat_de")
     .not("olx_advert_id", "is", null)
     .or(`and(status.in.(new,unconfirmed),last_status_at.lt.${newBefore}),last_status_at.is.null,last_status_at.lt.${staleBefore}`)
     .order("last_status_at", { ascending: true, nullsFirst: true })
@@ -194,7 +231,8 @@ export async function GET(req: NextRequest) {
     const rCtx = await ctxFor(row.business_id);
     const ctx = rCtx.stare === "gata" ? rCtx.ctx : null;
     if (!ctx) continue;
-    await refreshAdvertStatus(admin, ctx, row.id, row.olx_advert_id);
+    await refreshAdvertStatus(admin, ctx, row.id, row.olx_advert_id,
+      { status: row.status, dezactivat_de: row.dezactivat_de });
     statusChecked++;
     await pause(PACE_MS);
   }
@@ -215,7 +253,18 @@ export async function GET(req: NextRequest) {
    * urmatoarea citire de stare — deci pana atunci randul ar fi ramas tot in fereastra.
    */
   const soon = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
-  const deIncercat = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+  /*
+   * ⚠ CINCISPREZECE ZILE, NU DOUAZECI SI PATRU DE ORE (30.08.2026, tarziu).
+   *
+   * Prima incercare a pus o zi, ca sa opreasca bataia din minut in minut — si a oprit-o. Dar OLX
+   * spune ca un anunt nu poate fi improspatat mai des decat ingaduie tara, iar exemplul lor
+   * oficial e de PAISPREZECE zile. Cu o zi, o cerere refuzata se reia de treisprezece ori degeaba,
+   * si fiecare consuma din bugetul nostru de cereri la ei.
+   *
+   * ⚠ Si nu e nimic de pierdut: anuntul are oricum `auto_extend_enabled` la ei. Plasa asta e o a
+   * doua paza, pentru magazinele care si-au bifat reinnoirea — nu singura.
+   */
+  const deIncercat = new Date(Date.now() - 15 * 24 * 60 * 60_000).toISOString();
   const { data: expiring, error: eExpira } = await admin
     .from("olx_adverts")
     .select("id, business_id, olx_advert_id, valid_to")

@@ -79,6 +79,14 @@ create unique index if not exists operatii_externe_tinta_deschisa_idx
 
 -- ── 3) Rezervarea, cu amandoua incuietorile ────────────────────────────────
 --
+-- ⚠ `p_tinta` ARE IMPLICIT, SI DE-AIA E SIGURA FEREASTRA DINTRE MIGRATIE SI
+-- DESFASURARE. Migratia intra in productie inaintea codului; pana la desfasurare,
+-- Vercel cheama inca RPC-ul cu CINCI parametri. Cu implicitul, forma aceea rezolva in
+-- continuare si `tinta_idempotenta` ramane NULL, adica purtarea de pana acum.
+--
+-- Fara implicit, fiecare AWB, factura si plata s-ar fi oprit intre cele doua clipe.
+-- Probat pe productie la 03.09.2026, si pozitional, si pe nume (cum cheama PostgREST).
+--
 -- ⚠ SE ARUNCA SI SE RECREEAZA. Un parametru nou cu implicit ar fi facut o A DOUA
 -- functie, iar apelurile cu cinci argumente ar fi devenit ambigue („function
 -- name is not unique"). Toti apelantii sunt in depozitul asta si trec prin
@@ -354,6 +362,16 @@ notify pgrst, 'reload schema';
 --   perform public.incheie_operatie_externa((v_a->>'id')::uuid, v_biz, 'esuat', null, null, 'deblocat');
 --   v_b := public.rezerva_operatie_externa(v_biz, null, 'plata', 'olx', v_t || ':L', v_t || ':deblo');
 --   assert (v_b->>'rezervat')::boolean, '4d: dupa deblocare, tinta se elibereaza';
+--
+--   -- 4e) codul VECHI, cu cinci parametri, merge peste schema noua
+--   v_a := public.rezerva_operatie_externa(v_biz, null, 'awb', 'cargus', v_t || ':M');
+--   assert (v_a->>'rezervat')::boolean, '4e: cinci argumente pozitionale';
+--   v_b := public.rezerva_operatie_externa(
+--     p_business_id := v_biz, p_order_id := null, p_fel := 'awb',
+--     p_furnizor := 'cargus', p_cheie := v_t || ':N');
+--   assert (v_b->>'rezervat')::boolean, '4e: cinci argumente pe nume (cum cheama PostgREST)';
+--   perform 1 from public.operatii_externe where cheie = v_t || ':N' and tinta_idempotenta is null;
+--   assert found, '4e: fara p_tinta, coloana ramane NULL';
 --
 --   -- 5) fara tinta, purtarea ramane cea de pana acum
 --   v_a := public.rezerva_operatie_externa(v_biz, null, 'awb', 'proba', v_t || ':X', null);

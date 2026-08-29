@@ -371,3 +371,33 @@ test("⚠ statisticile nu se cer pentru anunturi stinse", () => {
   /* ⚠ Rotatia e a bazei, nu a noastra: cele despre care nu stim nimic vin primele. */
   assert.match(cron, /\.order\("stat_la", \{ ascending: true, nullsFirst: true \}\)/);
 });
+
+test("⚠ o mapare scoasa nu lasa anunturi care se vand mai departe", () => {
+  /*
+   * ═══ FARA MAPARE, SINCRONIZAREA TACE — DAR ANUNTUL RAMANE (01.09.2026) ═══
+   *
+   *     Edinio: pret 200 lei
+   *     OLX:    pret 150 lei, ACTIV, se vinde
+   *
+   * ⚠ DAR NU HOTARAM NOI. Sunt comercianti care scot maparea tocmai ca sa opreasca sincronizarea
+   * si sa lase anunturile in pace, si e o alegere legitima. Intrebarea li se pune o data, cu
+   * numarul in fata; pana raspund, nu se sterge nimic.
+   */
+  const i = actiuni.indexOf("export async function saveOlxCategoryMapEntry");
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf(`
+export `, i + 10)));
+  assert.match(corp, /if \(!politica\) return \{ intreaba: \{ cate: cuAnunturi\.ids\.length \} \};/);
+  /* ⚠ Si dezactivarea se SCRIE inainte ca maparea sa dispara: ordinea inversa ar lasa lucrarea
+     nescrisa peste o mapare deja stearsa. */
+  const iCoada = corp.indexOf("enqueueOlxDezactivareMany");
+  const iSterge = corp.indexOf("setOlxCategoryMapEntry");
+  assert.ok(iCoada > 0 && iSterge > iCoada, "intentia se scrie INAINTEA stergerii maparii");
+  /* ⚠ Si o punere la coada picata opreste stergerea, nu o lasa sa treaca. */
+  assert.match(corp, /if \(r\.fel === "nesigur"\) \{[\s\S]{0,200}?return \{ error:/);
+  /* ⚠ Se numara doar anunturile VII: unul deja stins n-are ce sa mai patä. */
+  const j = actiuni.indexOf("async function produseleCuAnunturi");
+  const corpNum = actiuni.slice(j, actiuni.indexOf(`
+}`, j));
+  assert.match(corpNum, /\.in\("status", \["active", "new", "unconfirmed", "limited"\]\)/);
+  assert.match(corpNum, /\.not\("olx_advert_id", "is", null\)/);
+});

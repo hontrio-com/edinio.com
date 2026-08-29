@@ -85,7 +85,7 @@ export async function enqueueOlxSync(
   businessId: string,
   productId: string | null,
   offerId: string,
-  op: "upsert" | "delete",
+  op: "upsert" | "delete" | "deactivate" | "activate",
 ): Promise<void> {
   try {
     const admin = createAdminClient();
@@ -308,4 +308,51 @@ export async function invieScrisorileMoarteOlx(
     .select("id");
   if (error) return { ok: false, error: error.message };
   return { ok: true, reluate: data?.length ?? 0 };
+}
+
+/**
+ * Pune la coada dezactivarea anunturilor pentru o multime de produse.
+ *
+ * ═══ STERGEREA UNEI MAPARI NU TREBUIE SA LASE ANUNTURI ORFANE (01.09.2026) ═══
+ *
+ * Cand comerciantul scoate maparea unei categorii, sincronizarea nu mai poate construi corpul
+ * cererii pentru produsele din ea — iar anunturile RAMAN la OLX, cu pretul si stocul de atunci:
+ *
+ *     Edinio: pret 200 lei
+ *     OLX:    pret 150 lei, ACTIV, se vinde
+ *
+ * ⚠ Dar nu decidem noi. Sunt comercianti care scot maparea tocmai ca sa opreasca sincronizarea si
+ * sa lase anunturile in pace, si e o alegere legitima. Ecranul intreaba; asta duce la capat
+ * varianta „dezactiveaza-le".
+ *
+ * ⚠ SE SCRIE INAINTE DE A SE STERGE MAPAREA, ca la retragerea dinaintea stergerii unui produs:
+ * ordinea inversa ar putea lasa lucrarea nescrisa peste o mapare deja disparuta.
+ */
+export async function enqueueOlxDezactivareMany(
+  businessId: string, productIds: string[], clientul?: SupabaseClient<Database>,
+): Promise<{ fel: "gata"; cate: number } | { fel: "nesigur"; motiv: string }> {
+  const ids = [...new Set((productIds ?? []).filter(Boolean))];
+  if (ids.length === 0) return { fel: "gata", cate: 0 };
+  try {
+    const admin = clientul ?? createAdminClient();
+    const { data: ss, error: eConfig } = await admin
+      .from("store_settings").select("olx_config").eq("business_id", businessId).single();
+    if (eConfig) return { fel: "nesigur", motiv: "Configurarea OLX nu s-a putut citi." };
+    const config = (ss?.olx_config as OlxConfig) ?? {};
+    if (!config.connected || !config.refresh_token) return { fel: "gata", cate: 0 };
+
+    for (const bucata of bucatiDeIduri(ids)) {
+      const { error } = await admin.from("olx_sync_queue").upsert(
+        bucata.map((id) => ({
+          business_id: businessId, product_id: id, offer_id: id, op: "deactivate",
+          ...REINVIE, ...CEAS_NOU(),
+        })),
+        { onConflict: "business_id,offer_id,op" },
+      );
+      if (error) return { fel: "nesigur", motiv: `Dezactivarea nu s-a putut pune in coada: ${error.message}` };
+    }
+    return { fel: "gata", cate: ids.length };
+  } catch (e) {
+    return { fel: "nesigur", motiv: (e as Error).message };
+  }
 }

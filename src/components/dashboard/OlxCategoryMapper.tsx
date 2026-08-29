@@ -164,11 +164,29 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
     });
   }
 
-  function removeMapping() {
+  /*
+    ⚠ O MAPARE SCOASĂ LASĂ ANUNȚURI CARE SE VÂND MAI DEPARTE (01.09.2026)
+
+    Fără mapare, sincronizarea nu mai poate construi corpul cererii — dar anunțurile RĂMÂN la OLX,
+    cu prețul și stocul de atunci:
+
+        Edinio: preț 200 lei
+        OLX:    preț 150 lei, ACTIV, se vinde
+
+    ⚠ Nu hotărâm noi. Sunt comercianți care scot maparea tocmai ca să oprească sincronizarea și să
+    lase anunțurile în pace — o alegere legitimă. Întrebarea li se pune o dată, cu numărul în față.
+  */
+  const [intrebare, setIntrebare] = useState<number | null>(null);
+
+  function removeMapping(politica?: "pastreaza" | "dezactiveaza") {
     startSave(async () => {
-      const res = await saveOlxCategoryMapEntry(businessId, edinioCategory, null);
+      const res = await saveOlxCategoryMapEntry(businessId, edinioCategory, null, politica);
+      if ("intreaba" in res) { setIntrebare(res.intreaba.cate); return; }
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success("Mapare ștearsă.");
+      setIntrebare(null);
+      toast.success(politica === "dezactiveaza"
+        ? "Mapare ștearsă. Anunțurile se dezactivează în câteva minute."
+        : "Mapare ștearsă. Anunțurile rămân active pe OLX.");
       router.refresh();
       onSaved(null);
     });
@@ -209,9 +227,35 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
           )}
         </div>
 
+        {intrebare !== null && (
+          <div className="w-full rounded-xl border border-warning/40 bg-warning/5 p-3">
+            <p className="text-sm font-medium text-foreground">
+              {intrebare === 1
+                ? "Un produs din această categorie are un anunț activ pe OLX."
+                : `${intrebare} produse din această categorie au anunțuri active pe OLX.`}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Fără mapare, prețul și stocul nu mai ajung la OLX — anunțurile rămân la vânzare cu
+              valorile de acum. Ce vrei să faci cu ele?
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" disabled={saving}
+                onClick={() => removeMapping("pastreaza")}>
+                Păstrează anunțurile, oprește sincronizarea
+              </Button>
+              <Button size="sm" variant="destructive" disabled={saving}
+                onClick={() => removeMapping("dezactiveaza")}>
+                Dezactivează anunțurile
+              </Button>
+              <Button size="sm" variant="ghost" disabled={saving} onClick={() => setIntrebare(null)}>
+                Anulează
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-4">
           {initial ? (
-            <Button variant="destructive" size="sm" onClick={removeMapping} disabled={saving}>Șterge maparea</Button>
+            <Button variant="destructive" size="sm" onClick={() => removeMapping()} disabled={saving}>Șterge maparea</Button>
           ) : <span />}
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose} disabled={saving}>Anulează</Button>

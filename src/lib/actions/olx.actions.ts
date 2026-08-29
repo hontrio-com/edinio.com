@@ -5,7 +5,7 @@ import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { patchOlxConfig, setOlxCategoryMapEntry } from "@/lib/olx/config";
-import { invieScrisorileMoarteOlx } from "@/lib/olx/queue";
+import { invieScrisorileMoarteOlx, enqueueOlxDezactivareMany } from "@/lib/olx/queue";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { logError } from "@/lib/error-logger";
 import {
@@ -353,9 +353,19 @@ export async function getOlxCategoryAttributes(businessId: string, categoryId: n
 }
 
 // Save/replace the mapping for one Edinio category.
+/**
+ * Ce se face cu anunturile deja publicate cand se scoate maparea unei categorii.
+ *
+ * ⚠ NU HOTARAM NOI. Sunt comercianti care scot maparea tocmai ca sa OPREASCA sincronizarea si sa
+ * lase anunturile in pace — o alegere legitima. Si sunt altii care nu banuiesc ca anunturile raman
+ * la vanzare cu pretul de atunci. Intrebarea li se pune o data, cu numarul in fata.
+ */
+export type PoliticaScoatereMapare = "pastreaza" | "dezactiveaza";
+
 export async function saveOlxCategoryMapEntry(
   businessId: string, edinioCategory: string, entry: OlxCategoryMapEntry | null,
-): Promise<{ success: true } | { error: string }> {
+  politica?: PoliticaScoatereMapare,
+): Promise<{ success: true } | { error: string } | { intreaba: { cate: number } }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
   /*
@@ -397,6 +407,33 @@ export async function saveOlxCategoryMapEntry(
     if (lipsa.length > 0) return { error: `Completează atributele obligatorii: ${lipsa.join(", ")}` };
   }
   /*
+   * ═══ O MAPARE SCOASA LASA ANUNTURI CARE SE VAND MAI DEPARTE (01.09.2026) ═══
+   *
+   * Fara mapare, sincronizarea nu mai poate construi corpul cererii pentru produsele categoriei —
+   * dar anunturile RAMAN la OLX, cu pretul si stocul de atunci:
+   *
+   *     Edinio: pret 200 lei
+   *     OLX:    pret 150 lei, ACTIV, se vinde
+   *
+   * ⚠ Se intreaba o data, cu numarul in fata, si abia dupa raspuns se face ceva. Iar daca omul cere
+   * dezactivarea, ea se SCRIE in coada INAINTE ca maparea sa dispara: ordinea inversa ar lasa
+   * lucrarea nescrisa peste o mapare deja stearsa.
+   */
+  if (entry === null) {
+    const cuAnunturi = await produseleCuAnunturi(businessId, edinioCategory);
+    if ("error" in cuAnunturi) return cuAnunturi;
+    if (cuAnunturi.ids.length > 0) {
+      if (!politica) return { intreaba: { cate: cuAnunturi.ids.length } };
+      if (politica === "dezactiveaza") {
+        const r = await enqueueOlxDezactivareMany(businessId, cuAnunturi.ids);
+        if (r.fel === "nesigur") {
+          return { error: `Maparea n-a fost ștearsă: dezactivarea anunțurilor nu s-a putut programa (${r.motiv})` };
+        }
+      }
+    }
+  }
+
+  /*
    * ⚠ NU SE MAI CITESTE HARTA CA S-O SCRIEM INAPOI. Citeste-modifica-scrie pe un obiect impartit
    * pierde maparea celeilalte file, tacut — vezi nota de la `setOlxCategoryMapEntry`. Baza schimba
    * acum exact cheia asta, sub lacatul randului.
@@ -426,6 +463,35 @@ export async function reincearcaOlxOprite(
   if (!r.ok) return { error: "Nu am putut relua lucrările oprite. Încearcă din nou." };
   revalidatePath(FEATURE_PATH);
   return { success: true, reluate: r.reluate };
+}
+
+/**
+ * Produsele dintr-o categorie Edinio care au un anunt VIU la OLX.
+ *
+ * ⚠ Numai cele vii: unul deja stins sau sters n-are ce sa mai patä de la scoaterea maparii, iar
+ * numarul aratat omului trebuie sa fie cel despre care chiar e vorba.
+ */
+async function produseleCuAnunturi(
+  businessId: string, edinioCategory: string,
+): Promise<{ ids: string[] } | { error: string }> {
+  const admin = createAdminClient();
+  const { data: prods, error: eProduse } = await admin
+    .from("products").select("id").eq("business_id", businessId).eq("category", edinioCategory);
+  if (eProduse) return { error: "Nu am putut citi produsele categoriei." };
+  const ids = ((prods ?? []) as { id: string }[]).map((p) => p.id);
+  if (ids.length === 0) return { ids: [] };
+
+  const cuAnunt: string[] = [];
+  for (const bucata of bucatiDeIduri(ids)) {
+    const { data, error } = await admin
+      .from("olx_adverts").select("offer_id")
+      .eq("business_id", businessId).in("offer_id", bucata)
+      .not("olx_advert_id", "is", null)
+      .in("status", ["active", "new", "unconfirmed", "limited"]);
+    if (error) return { error: "Nu am putut citi anunțurile categoriei." };
+    for (const r of (data ?? []) as { offer_id: string }[]) cuAnunt.push(r.offer_id);
+  }
+  return { ids: cuAnunt };
 }
 
 /** Un produs cu doua anunturi vii la OLX, si ce are omul de ales. */

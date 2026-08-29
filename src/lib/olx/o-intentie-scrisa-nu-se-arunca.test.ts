@@ -22,6 +22,7 @@ const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8");
 const actiuni = readFileSync("src/lib/actions/olx.actions.ts", "utf8");
 const mesaje = readFileSync("src/lib/actions/olx-mesaje.actions.ts", "utf8");
 const cont = readFileSync("src/lib/actions/olx-cont.actions.ts", "utf8");
+const importul = readFileSync("src/lib/actions/olx-import.actions.ts", "utf8");
 
 function faraComentarii(t: string): string {
   return t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
@@ -484,4 +485,46 @@ test("⚠ profilul de firma se pazeste si la SCRIERE, nu doar la citire", () => 
   assert.ok(i > 0);
   const corp = cont.slice(i, i + 900);
   assert.match(corp, /advertiser_type !== "business"/, "scrierea nu-si verifica poarta");
+});
+
+test("⚠ importul nu atinge NIMIC la OLX", () => {
+  /*
+   * ⚠ Contul lui de OLX e al lui. Un import care ar modifica anunturi vechi ar fi cel mai rau fel
+   * de a-l ajuta: ar strica lucruri care mergeau, in locul in care nici nu se uita.
+   */
+  const cod = faraComentarii(importul);
+  for (const scriere of ["updateAdvert", "createAdvert", "deleteAdvert", "advertCommand", "purchase"]) {
+    assert.ok(!cod.includes(scriere), `importul cheama \`${scriere}\`, deci scrie la ei`);
+  }
+});
+
+test("⚠ importul nu propune un produs care are deja rand", () => {
+  /*
+   * ⚠ Conectarea l-ar rescrie, deci o legatura BUNA ar fi inlocuita cu o presupunere pe titlu.
+   * Randul ramane exclus indiferent de starea lui: si unul sters de om, si unul respins, sunt
+   * hotarari sau fapte deja scrise despre produs.
+   */
+  assert.match(importul, /produse\.filter\(\(p\) => !legaturi\.produseLuate\.has\(p\.id\)\)/);
+});
+
+test("⚠ „Ignoră” tine minte, si textul spune adevarul", () => {
+  /*
+   * ═══ RESPINS O DATA INSEAMNA RESPINS (01.09.2026) ═══
+   *
+   * Fara asta, butonul scotea randul doar din lista de ACUM. Un comerciant cu optzeci si patru de
+   * anunturi vechi respinge saizeci si le vede pe toate din nou la scanarea urmatoare — iar a doua
+   * oara nu le mai citeste una cate una, le sare pe toate, si atunci nici pe cele care chiar erau
+   * ale lui.
+   */
+  assert.match(importul, /export async function ignoraAnuntOlx\(/);
+  assert.match(importul, /if \(ignorate\.has\(a\.id\)\) continue;/, "lista respinsa trebuie sa si filtreze");
+  /* ⚠ Se scrie prin peticul atomic: citit si scris intreg, ar fi putut calca un token rotit. */
+  assert.match(importul, /await patchOlxConfig\(admin, businessId, \{ import_ignorate:/);
+  /* ⚠ Si o citire picata NU se ia drept lista goala: am uita tot ce respinsese pana atunci. */
+  const i = importul.indexOf("export async function ignoraAnuntOlx");
+  assert.match(importul.slice(i), /if \(eConfig\) return \{ error:/);
+  /* ⚠ Iar textul din ecran nu mai promite ce nu tinem, si nici invers. */
+  const ecran = readFileSync("src/components/dashboard/OlxImport.tsx", "utf8");
+  assert.match(ecran, /„Ignoră” ține minte alegerea/);
+  assert.doesNotMatch(ecran, /anunțul apare din nou/, "textul vechi a ramas peste purtarea noua");
 });

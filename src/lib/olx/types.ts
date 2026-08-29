@@ -53,6 +53,17 @@ export interface OlxConfig {
    * n-a vazut NICIODATA nimic dupa produsul 500 dintr-un catalog de 1033.
    */
   reconcile_offset?: number;
+  /**
+   * Anunturile din contul lui pe care le-a respins la import.
+   *
+   * ⚠ FARA ASTA, „Ignoră" nu tine minte nimic. Un comerciant cu optzeci si patru de anunturi vechi
+   * respinge saizeci si le vede pe toate din nou la scanarea urmatoare — iar a doua oara nu le mai
+   * citeste, le sare pe toate, si atunci nici pe cele care CHIAR erau ale lui.
+   *
+   * ⚠ Se tin ID-urile LOR, nu ale noastre: anunturile astea n-au rand la noi, tocmai de-aia sunt
+   * in lista de import.
+   */
+  import_ignorate?: number[];
   last_sync_at?: string;
 }
 

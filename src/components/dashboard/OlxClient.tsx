@@ -25,6 +25,7 @@ import { selectCls } from "@/lib/ui";
 import { OlxCategoryMapper } from "./OlxCategoryMapper";
 import { OlxAccountPanel } from "./OlxAccountPanel";
 import { OlxMessenger } from "./OlxMessenger";
+import { OlxImport } from "./OlxImport";
 
 export function OlxClient({ businessId, status, adverts, categories }: {
   businessId: string;
@@ -279,6 +280,19 @@ function ConnectedDashboard({ businessId, status, adverts, categories }: {
 
       {/* Buyer messages (OLX-style messenger) */}
       <OlxMessenger businessId={businessId} adverts={adverts} />
+
+      {/*
+        ⚠ ANUNȚURILE DE DINAINTE DE EDINIO (etapa 16).
+
+        Reconcilierea adoptă singură doar anunțurile care poartă `external_id` = produsul Edinio.
+        Cine folosea OLX înainte n-are așa ceva pe niciun anunț, iar fără ecranul ăsta singura lui
+        ieșire era să publice din nou din Edinio: două anunțuri vii pentru același produs, unul cu
+        istoricul și mesajele, altul nou și gol.
+
+        ⚠ Se scanează la cerere, nu la încărcarea paginii: citirea contului lor durează și nu are
+        de ce să pornească singură de fiecare dată când intră cineva pe panou.
+      */}
+      <OlxImport businessId={businessId} onImportat={() => router.refresh()} />
 
       {/* Advert table */}
       <AdvertTable businessId={businessId} adverts={adverts} ready={status.ready} />

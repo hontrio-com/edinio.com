@@ -259,3 +259,64 @@ export `, i + 10)));
       "iesirea trebuie sa vina INAINTEA primei adaugari, nu dupa");
   }
 });
+
+/* ── Banii se cheltuiesc o singura data ──────────────────────────────────── */
+
+test("⚠ toate cele trei cumparari trec prin registru", () => {
+  /*
+   * ═══ UN RASPUNS AMBIGUU NU ARE VOIE SA COSTE DE DOUA ORI (01.09.2026) ═══
+   *
+   *     omul apasa „Cumpără promovare"
+   *     OLX ia banii si aplica promovarea ✅
+   *     raspunsul se pierde ❌ -> ecranul arata eroare
+   *     omul apasa din nou -> A DOUA promovare, platita
+   *
+   * ⚠ Registrul scrie rezervarea INAINTE de apel: daca incheierea se pierde, randul ramane
+   * `in_curs` si a doua apasare e REFUZATA, cu cheia in mesaj.
+   */
+  for (const fn of ["buyOlxCategoryPacket", "buyOlxAdvertPacket", "buyOlxPaidFeature"]) {
+    const i = actiuni.indexOf(`export async function ${fn}(`);
+    assert.ok(i > 0, `${fn} a disparut`);
+    const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf(`
+export `, i + 10)));
+    assert.match(corp, /await cuRegistru\(/, `${fn} cheltuie bani fara registru`);
+    assert.match(corp, /cheieOperatie\("plata", "olx",/, `${fn} n-are cheie de plata`);
+    assert.match(corp, /if \(r\.fel === "blocat"\)/, `${fn} nu spune omului ca e una in curs`);
+    /* ⚠ Si apelul catre ei sta INAUNTRUL registrului, nu inaintea lui. */
+    const iReg = corp.indexOf("await cuRegistru(");
+    assert.ok(corp.indexOf("purchase", iReg) > iReg,
+      `${fn} cheama furnizorul inaintea rezervarii`);
+  }
+});
+
+test("⚠ indoiala la o plata tine slotul, nu-l elibereaza", () => {
+  /*
+   * ⚠ „esuat" inseamna „sigur nu s-a intamplat nimic", deci slotul se elibereaza si omul poate
+   * reincerca. Pentru o operatie cu bani, indoiala se plateste cu o intrebare, nu cu inca o plata
+   * — deci IMPLICITUL e „necunoscut".
+   */
+  const i = actiuni.indexOf("function verdictOlxPlata(");
+  assert.ok(i > 0);
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf("}", actiuni.indexOf("return", i))));
+  assert.match(corp, /\? "esuat" : "necunoscut"/,
+    "implicitul trebuie sa fie `necunoscut`: altfel o indoiala devine a doua plata");
+});
+
+test("⚠ activarea de dupa pachet NU sta sub aceeasi cheie", () => {
+  /*
+   * ⚠ Doua efecte, si numai unul costa bani. Activarea e idempotenta la ei (`400 invalid status`
+   * pe un anunt deja activ), deci se poate relua oricat. Pusa sub aceeasi cheie, o activare picata
+   * ar fi tinut slotul „in curs" si a doua apasare ar fi fost refuzata — desi tocmai partea gratis
+   * mai avea de facut.
+   */
+  const i = actiuni.indexOf("export async function buyOlxAdvertPacket(");
+  const corp = faraComentarii(actiuni.slice(i, actiuni.indexOf(`
+export `, i + 10)));
+  const iReg = corp.indexOf("await cuRegistru(");
+  const iBlocat = corp.indexOf('r.fel === "blocat"');
+  const iActivare = corp.indexOf('advertCommand(token, advertId, "activate")');
+  assert.ok(iActivare > iBlocat && iBlocat > iReg,
+    "activarea trebuie sa vina DUPA ce registrul s-a incheiat");
+  assert.match(corp.slice(iActivare - 200, iActivare + 200), /act\.status !== 400/,
+    "un anunt deja activ nu e un esec al activarii");
+});

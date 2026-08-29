@@ -22,6 +22,7 @@ import {
 } from "@/lib/olx/categories";
 import { loadOlxContext, syncProductNow, deactivateProductNow, activateProductNow, deleteAdvertNow } from "@/lib/olx/sync";
 import { olxReadinessError, categoriaNuPrimesteProduse, atributeObligatoriiLipsa } from "@/lib/olx/mapping";
+import { cuRegistru, cheieOperatie, type Verdict } from "@/lib/operatii/registru";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
   OlxCity, OlxConfig, OlxDistrict, OlxMessage, OlxPacket, OlxPaidFeature, OlxPaymentMethod, OlxThread,
@@ -788,13 +789,62 @@ export async function getOlxPackets(businessId: string): Promise<OlxPacketsResul
   });
 }
 
+/*
+ * ═══ OPERATIILE CU BANI SE FAC O SINGURA DATA (01.09.2026) ═══
+ *
+ * Cele trei cumparari de mai jos erau apeluri goale: `POST`, si atat. Iar raspunsul lor poate fi
+ * AMBIGUU — timeout, instanta taiata, retea — si atunci:
+ *
+ *     omul apasa „Cumpără promovare"
+ *     OLX ia banii si aplica promovarea ✅
+ *     raspunsul se pierde ❌ -> ecranul arata eroare
+ *     omul apasa din nou -> A DOUA promovare, platita
+ *
+ * Si mai rau la pachetul pe anunt, unde sunt DOUA efecte: cumpararea reuseste, activarea pica,
+ * actiunea intoarce eroare — iar reluarea cumpara inca o data.
+ *
+ * ⚠ Registrul operatiilor externe exista deja in depozit exact pentru asta, si `olx` e de mult in
+ * lista lui de furnizori. Rezervarea se scrie INAINTE de apel: daca incheierea de dupa se pierde,
+ * randul ramane `in_curs` si a doua apasare e REFUZATA, cu cheia in mesaj. Adica pierderea unei
+ * scrieri nu mai poate produce o plata dubla, ci cel mult o operatie de lamurit.
+ *
+ * ⚠ CHEIA E DETERMINISTA SI POARTA CE SE CUMPARA. Doua promovari deosebite pe acelasi anunt sunt
+ * doua operatii legitime; a doua apasare pe ACEEASI promovare nu e.
+ *
+ * ⚠ Nu se da `legaturaVie`: „deja" inseamna aici ca banii s-au dus o data, si asta nu se desface.
+ */
+function verdictOlxPlata(e: unknown): Verdict {
+  const mesaj = e instanceof Error ? e.message : String(e);
+  /*
+   * ⚠ „esuat" inseamna „sigur nu s-a intamplat nimic", deci slotul se elibereaza si omul poate
+   * reincerca. „necunoscut" tine slotul, si e IMPLICITUL: pentru o operatie cu bani, indoiala se
+   * plateste cu o intrebare, nu cu inca o plata.
+   */
+  return /insufficient|not enough|invalid|unknown|refuz/i.test(mesaj) ? "esuat" : "necunoscut";
+}
+
 export async function buyOlxCategoryPacket(
   businessId: string, categoryId: number, size: number, paymentMethod: OlxPaymentMethod, type: "base" | "mega" = "base",
 ): Promise<{ success: true } | { error: string }> {
-  const res = await withToken(businessId, (token) =>
-    purchaseCategoryPacket(token, { category_id: categoryId, size, payment_method: paymentMethod, type }));
-  if ("error" in res) return res;
-  if (isOlxError(res)) return { error: mapPaymentError(res.error) };
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId, orderId: null, fel: "plata", furnizor: "olx",
+      cheie: cheieOperatie("plata", "olx", `pachet-categorie:${categoryId}:${size}:${type}`),
+    },
+    async () => {
+      const res = await withToken(businessId, (token) =>
+        purchaseCategoryPacket(token, { category_id: categoryId, size, payment_method: paymentMethod, type }));
+      if ("error" in res) throw new Error(res.error);
+      if (isOlxError(res)) throw new Error(mapPaymentError(res.error));
+      return { referinta: `${categoryId}:${size}:${type}`, valoare: true as const };
+    },
+    verdictOlxPlata,
+  );
+  if (r.fel === "eroare") return { error: r.mesaj };
+  if (r.fel === "blocat") return { error: "O cumpărare identică e deja în curs. Reîncarcă pagina peste câteva momente." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -804,17 +854,40 @@ export async function buyOlxCategoryPacket(
 export async function buyOlxAdvertPacket(
   businessId: string, advertId: number, isPremium = false,
 ): Promise<{ success: true } | { error: string }> {
-  const res = await withToken(businessId, async (token) => {
-    const pmRes = await getPaymentMethods(token);
-    const methods = isOlxError(pmRes) ? [] : (Array.isArray(pmRes.data) ? pmRes.data : []);
-    const method: OlxPaymentMethod = methods.includes("account") ? "account" : (methods[0] ?? "account");
-    const buy = await purchaseAdvertPacket(token, advertId, { payment_method: method, is_premium: isPremium });
-    if (isOlxError(buy)) return buy;
-    // After buying, activate the (previously limited) advert.
-    return advertCommand(token, advertId, "activate");
-  });
-  if ("error" in res) return res;
-  if (isOlxError(res)) return { error: mapPaymentError(res.error) };
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  /*
+   * ⚠ DOUA EFECTE, SI NUMAI UNUL COSTA BANI. Sub aceeasi cheie se pune numai CUMPARAREA; activarea
+   * de dupa e idempotenta la ei (`400 invalid status` pe un anunt deja activ) si se poate relua
+   * oricat. Puse impreuna, o activare picata ar fi tinut slotul „in curs" si a doua apasare ar fi
+   * fost refuzata — desi tocmai activarea, care e gratis, mai avea de facut.
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId, orderId: null, fel: "plata", furnizor: "olx",
+      cheie: cheieOperatie("plata", "olx", `pachet-anunt:${advertId}:${isPremium ? "premium" : "normal"}`),
+    },
+    async () => {
+      const res = await withToken(businessId, async (token) => {
+        const pmRes = await getPaymentMethods(token);
+        const methods = isOlxError(pmRes) ? [] : (Array.isArray(pmRes.data) ? pmRes.data : []);
+        const method: OlxPaymentMethod = methods.includes("account") ? "account" : (methods[0] ?? "account");
+        return purchaseAdvertPacket(token, advertId, { payment_method: method, is_premium: isPremium });
+      });
+      if ("error" in res) throw new Error(res.error);
+      if (isOlxError(res)) throw new Error(mapPaymentError(res.error));
+      return { referinta: String(advertId), valoare: true as const };
+    },
+    verdictOlxPlata,
+  );
+  if (r.fel === "eroare") return { error: r.mesaj };
+  if (r.fel === "blocat") return { error: "O cumpărare identică e deja în curs. Reîncarcă pagina peste câteva momente." };
+
+  /* Pachetul e cumparat (acum sau mai devreme). Activarea se reia fara sa mai coste nimic. */
+  const act = await withToken(businessId, (token) => advertCommand(token, advertId, "activate"));
+  if ("error" in act) return { error: act.error };
+  if (isOlxError(act) && act.status !== 400) return { error: mapPaymentError(act.error) };
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -829,9 +902,25 @@ export async function getOlxPaidFeatures(businessId: string): Promise<{ features
 export async function buyOlxPaidFeature(
   businessId: string, advertId: number, code: string, paymentMethod: OlxPaymentMethod,
 ): Promise<{ success: true } | { error: string }> {
-  const res = await withToken(businessId, (token) => purchasePaidFeature(token, advertId, { code, payment_method: paymentMethod }));
-  if ("error" in res) return res;
-  if (isOlxError(res)) return { error: mapPaymentError(res.error) };
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId, orderId: null, fel: "plata", furnizor: "olx",
+      cheie: cheieOperatie("plata", "olx", `promovare:${advertId}:${code}`),
+    },
+    async () => {
+      const res = await withToken(businessId, (token) =>
+        purchasePaidFeature(token, advertId, { code, payment_method: paymentMethod }));
+      if ("error" in res) throw new Error(res.error);
+      if (isOlxError(res)) throw new Error(mapPaymentError(res.error));
+      return { referinta: `${advertId}:${code}`, valoare: true as const };
+    },
+    verdictOlxPlata,
+  );
+  if (r.fel === "eroare") return { error: r.mesaj };
+  if (r.fel === "blocat") return { error: "O cumpărare identică e deja în curs. Reîncarcă pagina peste câteva momente." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }

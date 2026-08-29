@@ -19,7 +19,25 @@ import type { MappableProduct } from "@/lib/olx/mapping";
 const QUEUE_BATCH = 30;
 const STATUS_BATCH = 25;
 /** Cate magazine se reconciliaza intr-un sfert de ora. */
-const RECONCILE_MAGAZINE = 2;
+const RECONCILE_MAGAZINE = 5;
+
+/**
+ * Cate pagini de anunturi se trec pentru un magazin, intr-o singura vizita.
+ *
+ * ⚠ O pagina pe vizita inseamna, pentru un magazin cu cinci sute de anunturi, zece vizite — adica
+ * doua ore si jumatate pana la o trecere completa, si asta doar daca ii vine randul de fiecare
+ * data. Plasa care trebuie sa prinda „creat la ei, nescris la noi" n-are voie sa fie atat de lenta.
+ */
+const RECONCILE_PAGINI = 4;
+
+/**
+ * Cat timp are voie sa ia tot pasul de reconciliere.
+ *
+ * ⚠ SE RIDICA DEBITUL NUMAI CU UN CEAS LANGA EL. Cronul mai are dupa el sondarea de stare si
+ * prelungirile; o reconciliere care se intinde le taie pe alea, si taierea nu se vede nicaieri.
+ * Bugetul se verifica INAINTE de fiecare cerere, nu dupa.
+ */
+const RECONCILE_BUGET_MS = 20_000;
 
 /**
  * Cat se asteapta intre doua incercari cat timp sesiunea cere mana omului.
@@ -298,7 +316,17 @@ export async function GET(req: NextRequest) {
       }
       await pause(PACE_MS);
     }
-    await patchOlxConfig(admin, businessId, { last_sync_at: now });
+    /* ⚠ Un marcaj informativ n-are voie sa opreasca restul trecerii: de cand `patchOlxConfig`
+       arunca (n-are cale de rezerva, ca sa nu calce tokenul), aruncarea se prinde aici. */
+    try {
+      await patchOlxConfig(admin, businessId, { last_sync_at: now });
+    } catch (e) {
+      await logError({
+        action: "olx-sync", severity: "warning",
+        message: `marcajul ultimei sincronizari nu s-a putut scrie: ${(e as Error).message}`,
+        businessId,
+      });
+    }
   }
 
   // ── 2) Poll statuses — prioritize freshly-posted (`new`) adverts ────────────────
@@ -422,23 +450,52 @@ export async function GET(req: NextRequest) {
         message: `magazinele conectate nu s-au putut citi pentru reconciliere: ${eConectate}`,
       });
     }
-    for (const bid of alegeInRotatie(conectate, RECONCILE_MAGAZINE, 15)) {
+    const alese = alegeInRotatie(conectate, RECONCILE_MAGAZINE, 15);
+    const pana = Date.now() + RECONCILE_BUGET_MS;
+    let vizitate = 0;
+    for (const bid of alese) {
+      if (Date.now() >= pana) break;
       const rRec = await ctxFor(bid);
       if (rRec.stare !== "gata") continue;
-      const deLa = Math.max(0, rRec.ctx.config.reconcile_offset ?? 0);
-      const r = await reconciliazaAnunturile(admin, rRec.ctx, bid, deLa);
-      if (!r.ok) {
-        /* ⚠ Cursorul NU se muta peste o pagina pe care n-am putut-o citi: ar sari peste ea. */
-        await logError({
-          action: "olx-sync", severity: "warning",
-          message: `reconcilierea nu s-a putut face: ${r.error}`,
-          details: { deLa }, businessId: bid,
-        });
-        continue;
+      vizitate++;
+      let deLa = Math.max(0, rRec.ctx.config.reconcile_offset ?? 0);
+      for (let pagina = 0; pagina < RECONCILE_PAGINI && Date.now() < pana; pagina++) {
+        const r = await reconciliazaAnunturile(admin, rRec.ctx, bid, deLa);
+        if (!r.ok) {
+          /* ⚠ Cursorul NU se muta peste o pagina pe care n-am putut-o citi: ar sari peste ea. */
+          await logError({
+            action: "olx-sync", severity: "warning",
+            message: `reconcilierea nu s-a putut face: ${r.error}`,
+            details: { deLa }, businessId: bid,
+          });
+          break;
+        }
+        reconciliate += r.adoptate;
+        try {
+          await patchOlxConfig(admin, bid, { reconcile_offset: r.urmatorul });
+        } catch (e) {
+          /* ⚠ Cursorul nescris inseamna doar ca pagina asta se reciteste; nu opreste cronul. */
+          await logError({
+            action: "olx-sync", severity: "warning",
+            message: `cursorul de reconciliere nu s-a putut scrie: ${(e as Error).message}`,
+            businessId: bid,
+          });
+          break;
+        }
+        /* Roata s-a inchis: restul paginilor din vizita asta n-ar avea ce citi. */
+        if (r.urmatorul === 0) break;
+        deLa = r.urmatorul;
+        await pause(PACE_MS);
       }
-      reconciliate += r.adoptate;
-      await patchOlxConfig(admin, bid, { reconcile_offset: r.urmatorul });
       await pause(PACE_MS);
+    }
+    /*
+     * ⚠ CE N-A APUCAT SE SPUNE. O plasa care acopera cinci magazine din o mie arata, din afara,
+     * exact ca una care le acopera pe toate — si tocmai tacerea ar face-o sa para de ajuns. Cand
+     * numarul asta creste, se schimba modelul: lucrator separat, sau coada de reconciliere.
+     */
+    if (conectate.length > vizitate) {
+      console.log(`[olx-sync] reconciliere: ${vizitate}/${conectate.length} magazine in tura asta`);
     }
   }
 

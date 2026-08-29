@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { randCitit } from "@/lib/supabase/rand-citit";
 import type { Database, Json } from "@/types/database.types";
 import type { OlxConfig } from "./types";
 
@@ -31,21 +30,28 @@ export async function patchOlxConfig(admin: Db, businessId: string, patch: Parti
     /* `OlxConfig` e jsonb valid, dar tipul lui n-are semnatura de index. */
     p_patch: patch as unknown as Json,
   });
-  if (!error) return;
-
   /*
-   * ⚠ STRICT, si aici mai mult ca oriunde: calea asta face chiar CITESTE-MODIFICA-SCRIE. Inghitita,
-   * o citire picata dadea `{}`, iar scrierea de dedesubt ar fi pus peste configul intreg un obiect
-   * din care lipseste TOT — tokenul, maparea de categorii, setarile. Adica deconectarea
-   * magazinului, dintr-o clipa proasta a bazei.
+   * ═══ CALEA DE REZERVA ERA CHIAR DEFECTUL DE CARE FUGIM (31.08.2026) ═══
+   *
+   * Pana azi, un RPC picat cobora pe citeste-modifica-scrie: se citea `olx_config` intreg si se
+   * scria inapoi cu peticul deasupra. Adica exact cursa pentru care exista `jsonb_merge_config`:
+   *
+   *     rezerva citeste configul: refresh R1
+   *     intre timp cronul roteste: R1 -> R2, si scrie R2
+   *     rezerva scrie configul citit + petic -> R1 se intoarce peste R2
+   *     -> la urmatoarea reimprospatare, R1 nu mai e bun: „Reconectează contul OLX"
+   *
+   * ⚠ O rezerva care poate strica o conexiune OAuth e mai rea decat lipsa ei. O salvare de setari
+   * care spune „Încearcă din nou" costa omului o apasare; un refresh token pierdut il costa tot
+   * dansul de autorizare, si afla abia peste ore.
+   *
+   * ⚠ Aceeasi regula e scrisa si la `setOlxCategoryMapEntry`, si din acelasi motiv: orice rezerva
+   * la o imbinare atomica e, prin fire, un citeste-modifica-scrie.
+   *
+   * ⚠ CINE CHEAMA TREBUIE SA PRINDA. Cele doua locuri din cron scriu marcaje (`last_sync_at`,
+   * `reconcile_offset`) si le prind singure: o aruncare acolo ar opri restul trecerii.
    */
-  const ss = randCitit<{ olx_config: unknown }>("olx.configDeCarpit", await admin
-    .from("store_settings").select("olx_config").eq("business_id", businessId).single());
-  const config = (ss?.olx_config as OlxConfig) ?? {};
-  const { error: eScriere } = await admin.from("store_settings")
-    .update({ olx_config: { ...config, ...patch } as never })
-    .eq("business_id", businessId);
-  if (eScriere) throw new Error(`configul OLX nu s-a putut scrie: ${eScriere.message}`);
+  if (error) throw new Error(`configul OLX nu s-a putut scrie: ${error.message}`);
 }
 
 /**

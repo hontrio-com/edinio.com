@@ -140,7 +140,7 @@ test("⚠ cursorul se invarte, si nu sare peste o pagina necitita", () => {
   /* ⚠ Iar cronul NU muta cursorul cand trecerea n-a reusit: ar sari peste pagina aceea. */
   const j = cron.indexOf("const r = await reconciliazaAnunturile(");
   assert.notEqual(j, -1);
-  const ramura = cron.slice(j, cron.indexOf("await pause(PACE_MS);", j));
+  const ramura = cron.slice(j, cron.indexOf("if (r.urmatorul === 0) break;", j));
   const iEsec = ramura.indexOf("if (!r.ok)");
   assert.ok(iEsec >= 0, "ramura de esec a disparut");
   /*
@@ -149,7 +149,11 @@ test("⚠ cursorul se invarte, si nu sare peste o pagina necitita", () => {
    * INAUNTRUL ramurii de esec si il mai scria o data si dupa. Regula e ca in ramura aceea sa nu
    * existe NICIO scriere de cursor.
    */
-  const ramuraEsec = ramura.slice(iEsec, ramura.indexOf("continue;", iEsec));
+  /*
+   * ⚠ Se incheie cu `break`, nu cu `continue`, de cand vizita unui magazin trece prin mai multe
+   * pagini: o pagina necitita opreste vizita, nu sare la magazinul urmator. Regula e aceeasi.
+   */
+  const ramuraEsec = ramura.slice(iEsec, ramura.indexOf("break;", iEsec));
   assert.doesNotMatch(ramuraEsec, /reconcile_offset/,
     "o pagina necitita nu are voie sa mute cursorul: ar sari peste ea pe veci");
   assert.ok(ramura.indexOf("reconcile_offset: r.urmatorul") > iEsec,

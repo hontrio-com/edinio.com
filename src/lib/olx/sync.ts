@@ -297,7 +297,18 @@ async function removeRemote(admin: Db, ctx: OlxSyncContext, businessId: string, 
    */
   const { error: eUrma } = await admin.from("olx_adverts")
     .update({
-      olx_advert_id: null, status: "sters_de_om", url: null, error: null,
+      /*
+       * ⚠ `olx_url`, NU `url` (31.08.2026). Coloana `url` nu exista in `olx_adverts`, iar `as never`
+       * de mai jos opreste tocmai verificarea care ar fi prins-o. PostgREST respinge INTREAGA
+       * scriere cu `PGRST204`, deci piatra nu s-a scris NICIODATA:
+       *
+       *     omul apasa „Șterge anunțul" -> anuntul chiar dispare la OLX
+       *     scrierea pietrei pica -> i se arata o eroare, desi la ei s-a facut
+       *     iar din coada, aceeasi lucrare moare dupa cinci incercari
+       *
+       * Masurat pe productie: `url` -> `PGRST204: Could not find the 'url' column`; `olx_url` trece.
+       */
+      olx_advert_id: null, status: "sters_de_om", olx_url: null, error: null,
       sters_de_om_la: new Date().toISOString(), updated_at: new Date().toISOString(),
     } as never)
     .eq("id", row.id);
@@ -529,7 +540,28 @@ async function upsertRemote(
       && row.dezactivat_de != null && row.dezactivat_de !== "om";
     if (stareaAcum === "outdated" || stinsDeNoi) {
       const freshRow = await getRow(admin, businessId, offerId);
-      if (freshRow) await activateRemote(admin, ctx, freshRow);
+      if (freshRow) {
+        /*
+         * ═══ REZULTATUL REACTIVARII SE CITESTE (31.08.2026) ═══
+         *
+         * Se chema si se arunca, iar mai jos se intorcea `ok`. Deci cronul stergea lucrarea din
+         * coada, si tocmai drumul cel mai obisnuit ramanea neterminat:
+         *
+         *     stoc 10 -> 0   -> OLX dezactiveaza, `dezactivat_de = "stoc"`
+         *     stoc 0  -> 10  -> `PUT` reuseste ✅, reactivarea da 429 sau 500 ❌
+         *     -> se raporteaza `ok`, coada se goleste
+         *     -> produsul e vandabil la noi si anuntul ramane STINS la ei
+         *
+         * ⚠ Si nimic nu-l mai aprinde: sondarea de stare vede `removed_by_user` cu
+         * `dezactivat_de` scris, adica exact ce se astepta sa vada. Numai o noua atingere a
+         * produsului ar reincerca — poate niciodata.
+         *
+         * ⚠ Reluarea e ieftina si sigura: `PUT`-ul de mai sus e idempotent, iar o comanda de
+         * activare pe un anunt deja activ raspunde `400 invalid status`, pe care il tratam ca gata.
+         */
+        const activare = await activateRemote(admin, ctx, freshRow);
+        if (!activare.ok) return activare;
+      }
     }
     return { ok: true, action: "updated", status: advert.status, url: advert.url ?? null };
   }
@@ -717,6 +749,76 @@ async function faraCitiriPicate(fn: () => Promise<SyncOutcome>): Promise<SyncOut
   }
 }
 
+/**
+ * Sterge anuntul de la OLX — dar numai dupa ce se vede ca produsul chiar a disparut.
+ *
+ * ═══ INTENTIA DE RETRAGERE SE SCRIE INAINTE DE STERGERE, SI POATE RAMANE SINGURA (31.08.2026) ═══
+ *
+ * `deleteProduct` si stergerea in masa scriu intai lucrarea de retragere in coada — dinadins,
+ * ca un produs sters sa nu ramana la vanzare pe OLX. Dar cele doua nu sunt legate tranzactional:
+ *
+ *     retragerea se scrie in coada ✅
+ *     `DELETE` pe `products` PICA (timeout, constrangere, RLS) ❌
+ *     omul vede „Eroare la stergere", si produsul e tot acolo
+ *     cronul executa oricum lucrarea: dezactiveaza, STERGE anuntul, si pune piatra
+ *     -> produs viu in Edinio, anunt sters la OLX, si republicarea automata blocata
+ *
+ * ⚠ La stergerea IN MASA e si mai rau: `DELETE` merge pe bucati de 200, iar o bucata picata la
+ * mijloc lasa sute de produse vii cu retragerea deja scrisa pentru toate.
+ *
+ * ⚠ PAZA STA LA LUCRATOR, NU LA CHEMATOR, si asta e alegerea. O tranzactie ar cere sa se mute in
+ * baza cinci cozi de marketplace deodata; paza de aici acopera si orice chemator viitor, si tot
+ * ce s-a scris deja in coada. Iar stergerea unui anunt e singurul efect din integrare care nu se
+ * poate desface: merita intrebat inca o data.
+ *
+ * ⚠ NU ATINGE BUTONUL „Șterge anunțul". Acela cheama `deleteAdvertNow` DIRECT, fara coada — acolo
+ * omul chiar vrea anuntul sters cu produsul pastrat. `op: "delete"` din coada are un singur
+ * inteles: „produsul nu mai exista". `offer_id` E id-ul produsului, pentru toate cele doua cai
+ * care pun lucrari de stergere.
+ */
+async function stergeDacaProdusulChiarNuMaiE(
+  admin: Db, ctx: OlxSyncContext, item: OlxQueueItem,
+): Promise<SyncOutcome> {
+  const { data: inca, error: eProdus } = await admin
+    .from("products").select("id")
+    .eq("business_id", item.business_id).eq("id", item.offer_id).maybeSingle();
+  /* ⚠ Daca nu putem INTREBA, nu stergem. Aceeasi regula ca la paza anti-duplicat de la creare. */
+  if (eProdus) {
+    return {
+      ok: false, permanent: false,
+      error: `nu am putut verifica daca produsul mai exista, deci nu stergem anuntul: ${eProdus.message}`,
+    };
+  }
+  if (inca) {
+    /*
+     * ═══ „INCA EXISTA" INSEAMNA „NU INCA", NU „NU E NIMIC DE FACUT" (31.08.2026) ═══
+     *
+     * Prima varianta intorcea `ok`. Gresit, si tocmai pe dos fata de rostul lucrarii: `ok` face
+     * cronul sa STEARGA randul din coada — adica arunca chiar intentia durabila scrisa INAINTE de
+     * `DELETE`, care exista ca sa nu se piarda. Doua ferestre reale o pierdeau:
+     *
+     *   (a) STERGEREA IN MASA scrie retragerile pentru toate id-urile deodata, apoi sterge pe
+     *       bucati de cate sase sute — secunde bune. Cronul porneste in fiecare minut si nu e
+     *       sincronizat cu nimic: o trecere cazuta la mijlocul buclei vede produsele inca
+     *       nesterse, arunca retragerile, iar `DELETE`-ul lor reuseste o clipa mai tarziu.
+     *       -> anunturi VII la OLX pentru produse care nu mai exista.
+     *
+     *   (b) MAGAZINELE CU `auto_sync` STINS. Retragerea dinaintea stergerii ignora dinadins
+     *       comutatorul; amandoua plasele de DUPA stergere ies devreme pe el. Deci acolo randul
+     *       asta e SINGURA retragere care va exista vreodata.
+     *
+     * ⚠ Se AMANA, deci. Nu arde incercari — nu e un esec, e o stare care inca nu s-a asezat — iar
+     * capatul de varsta al cronului o face scrisoare moarta vizibila daca stergerea chiar n-a mers
+     * niciodata. Si nu costa nimic la ei: pe ramura asta nu se atinge OLX.
+     */
+    return {
+      ok: false, permanent: false, asteptare: 5 * 60_000,
+      error: "produsul inca exista in magazin, deci retragerea se amana",
+    };
+  }
+  return removeRemote(admin, ctx, item.business_id, await getRow(admin, item.business_id, item.offer_id));
+}
+
 export async function processQueueItem(
   admin: Db, ctx: OlxSyncContext, item: OlxQueueItem, product: MappableProduct | null,
 ): Promise<SyncOutcome> {
@@ -728,7 +830,7 @@ async function processQueueItemIntern(
 ): Promise<SyncOutcome> {
   switch (item.op) {
     case "delete":
-      return removeRemote(admin, ctx, item.business_id, await getRow(admin, item.business_id, item.offer_id));
+      return stergeDacaProdusulChiarNuMaiE(admin, ctx, item);
     case "deactivate": {
       const row = await getRow(admin, item.business_id, item.offer_id);
       return row ? deactivateRemote(admin, ctx, row, "om") : { ok: true, action: "skipped" };

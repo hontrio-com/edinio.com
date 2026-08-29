@@ -117,8 +117,29 @@ test("⚠ cine pierde cursa rotatiei nu declara sesiunea moarta", () => {
   const i = oauth.indexOf("if (res.invalidGrant) {");
   assert.notEqual(i, -1);
   const ramura = oauth.slice(i, oauth.indexOf("needsReconnect: true };", i) + 30);
-  assert.match(ramura, /const proaspat = await citesteConfig\(db, businessId\);/);
+  /*
+   * ⚠ Ancora cerea `const proaspat = await citesteConfig(db, businessId);`. **Avea dreptate sub
+   * premisa de-atunci**: citirea intorcea `OlxConfig | null`. De cand deosebeste „n-am putut citi"
+   * de „nu scrie nimic", intoarce `{ ok, config }` — iar regula nu s-a schimbat, s-a INTARIT.
+   */
+  assert.match(ramura, /const citit = await citesteConfig\(db, businessId\);/);
   assert.match(ramura, /const altcinevaARotit = proaspat != null[\s\S]{0,220}?token_updated_at/);
+  /*
+   * ⚠ SI FARA MARTOR NU SE DA VESTEA PROASTA (31.08.2026). `citesteConfig` inghitea eroarea si
+   * intorcea `null`, iar `null` se citea ca „nimeni n-a rotit":
+   *
+   *     doua fire pornesc cu R1; A castiga si scrie R2
+   *     B primeste `invalid_grant`, pe drept
+   *     B reciteste martorul -> baza da timeout -> `null`
+   *     -> B scrie `needs_reconnect` peste conexiunea SANATOASA a lui A
+   *
+   * Adica o clipa proasta a bazei stingea un cont viu.
+   */
+  assert.match(ramura, /if \(!citit\.ok\) \{[\s\S]{0,220}?needsReconnect: false \};/);
+  const iFaraMartor = ramura.indexOf("if (!citit.ok)");
+  const iMarcaj = ramura.indexOf("needs_reconnect: true");
+  assert.ok(iFaraMartor > 0 && iMarcaj > iFaraMartor,
+    "iesirea fara martor trebuie sa vina INAINTEA marcarii reconectarii");
   /* ⚠ Si intoarcerea „tokenul lui e bun" vine INAINTEA marcarii reconectarii. */
   const iBun = ramura.indexOf("return { token: proaspat.access_token");
   const iRau = ramura.indexOf("needs_reconnect: true");

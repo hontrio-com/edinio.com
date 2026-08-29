@@ -173,8 +173,8 @@ export async function getOlxStatus(businessId: string): Promise<OlxStatus | { er
     advertiserType: config.advertiser_type ?? "private",
     cityId: config.default_city_id,
     cityName: config.default_city_name,
-    districtId: config.default_district_id,
-    districtName: config.default_district_name,
+    districtId: config.default_district_id ?? undefined,
+    districtName: config.default_district_name ?? undefined,
     contactName: config.contact_name,
     contactPhone: config.contact_phone,
     courierEnabled: config.courier_enabled === true,
@@ -273,8 +273,22 @@ export async function saveOlxSettings(businessId: string, input: OlxSettingsInpu
     advertiser_type: input.advertiser_type ?? config.advertiser_type ?? "private",
     default_city_id: input.city_id ?? config.default_city_id,
     default_city_name: input.city_name ?? config.default_city_name,
-    default_district_id: input.district_id === null ? undefined : (input.district_id ?? config.default_district_id),
-    default_district_name: input.district_id === null ? undefined : (input.district_name ?? config.default_district_name),
+    /*
+     * ═══ `undefined` NU STERGE NIMIC (31.08.2026) ═══
+     *
+     * Cand omul schimba orasul si noul oras n-are cartierul ales, ecranul trimite `district_id:
+     * null`. Peticul punea atunci `undefined` — iar `JSON.stringify` scoate cheia cu totul din
+     * corpul cererii, deci `jsonb_merge_config` nici n-o vede:
+     *
+     *     Cluj-Napoca + Mănăștur  ->  omul alege București
+     *     peticul trimite doar orasul
+     *     -> in baza ramane București cu ID-ul de cartier din Cluj
+     *     -> anuntul pleaca la OLX cu o localizare care nu exista, sau e refuzat
+     *
+     * `null` se trimite si se scrie. `mapping.ts` il citeste ca lipsa (`if (config.default_...)`).
+     */
+    default_district_id: input.district_id === null ? null : (input.district_id ?? config.default_district_id),
+    default_district_name: input.district_id === null ? null : (input.district_name ?? config.default_district_name),
     contact_name: input.contact_name?.trim() ?? config.contact_name,
     contact_phone: input.contact_phone?.trim() ?? config.contact_phone,
     courier_enabled: input.courier_enabled ?? config.courier_enabled,

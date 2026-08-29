@@ -27,8 +27,13 @@ export interface OlxConfig {
   advertiser_type?: "private" | "business";
   default_city_id?: number;
   default_city_name?: string;
-  default_district_id?: number;
-  default_district_name?: string;
+  /**
+   * ⚠ `null` INSEAMNA „sters", si de-aia tipul il primeste. Un `undefined` nu ajunge niciodata in
+   * baza: `JSON.stringify` il scoate din petic, iar `jsonb_merge_config` imbina doar cheile
+   * primite — deci cartierul vechi ramanea peste noul oras.
+   */
+  default_district_id?: number | null;
+  default_district_name?: string | null;
   contact_name?: string;
   contact_phone?: string;
   courier_enabled?: boolean;        // OLX delivery (courier flag on adverts, RO)

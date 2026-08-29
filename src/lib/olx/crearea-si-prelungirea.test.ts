@@ -53,7 +53,8 @@ test("⚠ prelungirea isi tine minte incercarea, la reusita SI la refuz", () => 
    * ⚠ La reusita, `valid_to` se muta abia dupa urmatoarea citire de stare — deci fara marcaj randul
    * ar fi ramas in fereastra si l-am fi batut iar peste un minut, exact ca la refuz.
    */
-  const i = cron.indexOf("for (const row of expiring ?? [])");
+  const i = cron.indexOf("for (const row of deReinnoit)");
+  assert.ok(i > 0, "bucla de prelungire a disparut");
   const corp = cron.slice(i, cron.indexOf("console.log(`[olx-sync]", i));
   const iMarcaj = corp.indexOf("ultima_prelungire_la: now");
   const iSocoteala = corp.indexOf('if (!("error" in res)) extended++;');
@@ -63,6 +64,30 @@ test("⚠ prelungirea isi tine minte incercarea, la reusita SI la refuz", () => 
   assert.match(cron, /\.or\(`ultima_prelungire_la\.is\.null,ultima_prelungire_la\.lt\.\$\{deIncercat\}`\)/);
   /* ⚠ Si un marcaj nescris se vede: altfel il batem iar, tacut. */
   assert.match(corp, /if \(eMarcaj\) \{[\s\S]{0,300}?prelungirea s-a incercat, dar marcajul nu s-a scris/);
+});
+
+test("⚠ prelungirea alege dintre magazinele care AU cerut-o, nu din primele cincisprezece randuri", () => {
+  /*
+   * ═══ ROATA CARE NU SE INVARTEA (02.09.2026) ═══
+   *
+   * Citirea lua `.limit(15)` peste `olx_adverts` din TOATE magazinele, FARA `order`, iar filtrul
+   * „magazinul a bifat reinnoirea" se aplica abia pe rand, cu `continue` — adica DUPA taietura.
+   *
+   * ⚠ Un magazin care N-A cerut prelungirea putea ocupa toate cele cincisprezece locuri, la fiecare
+   * minut, la nesfarsit; plasa celor care CHIAR au bifat-o nu pornea niciodata. Iar fara `order`,
+   * „aceleasi cincisprezece" nu e o presupunere, e purtarea obisnuita a bazei.
+   */
+  assert.match(cron, /\.order\("valid_to", \{ ascending: true \}\)/,
+    "fara `order`, taietura scoate randuri la intamplare");
+  assert.match(cron, /\.limit\(EXTEND_CANDIDATI\)/,
+    "taietura se face DUPA filtrarea in cod, dintr-o fereastra mai larga");
+  /* ⚠ Si filtrul vine INAINTEA taieturii. */
+  const iFiltru = cron.indexOf("auto_extend !== true");
+  const iTaiere = cron.indexOf("deReinnoit.length >= EXTEND_BATCH");
+  assert.ok(iFiltru > 0 && iTaiere > iFiltru,
+    "filtrul `auto_extend` trebuie sa se aplice inaintea taieturii, altfel locurile se umplu degeaba");
+  /* ⚠ Si ce n-a incaput se spune: o plasa care acopera o parte arata ca una care acopera tot. */
+  assert.match(cron, /fereastra de \$\{EXTEND_CANDIDATI\} candidati e plina/);
 });
 
 test("⚠ `photos_limit = 0` chiar inseamna zero", () => {

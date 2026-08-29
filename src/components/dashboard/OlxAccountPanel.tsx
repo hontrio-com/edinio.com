@@ -130,6 +130,17 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
               {packets && packets.bought.length > 0 && (
                 <div>
                   <SectionLabel icon={Package}>Pachete active</SectionLabel>
+                  {/*
+                    ⚠ O LISTĂ SCURTATĂ ARATĂ EXACT CA UNA COMPLETĂ. Paginația se oprea la prima
+                    pagină picată și întorcea ce apucase — iar omul se uită aici tocmai ca să
+                    hotărască dacă mai cumpără un pachet. Ștearsă pe jumătate, îl face să cumpere
+                    ce are deja.
+                  */}
+                  {packets && !packets.boughtIntreg && (
+                    <p className="text-[11px] text-warning">
+                      Lista de mai jos poate fi incompletă: OLX n-a răspuns la toate paginile.
+                    </p>
+                  )}
                   <div className="space-y-1.5">
                     {packets.bought.map((p) => (
                       <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm">
@@ -147,6 +158,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
                 groups={packets?.groups ?? []}
                 hasMappedCategories={packets?.hasMappedCategories ?? false}
                 eroare={erori.pachete}
+                nereusite={packets?.nereusite ?? []}
                 moneda={account?.balance?.currency ?? null}
                 methods={methods}
                 defaultMethod={packets?.paymentMethod ?? "account"}
@@ -165,11 +177,13 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   );
 }
 
-function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod, eroare, moneda }: {
+function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod, eroare, nereusite, moneda }: {
   businessId: string; groups: OlxPacketGroup[]; hasMappedCategories: boolean; methods: OlxPaymentMethod[];
   defaultMethod: OlxPaymentMethod;
   /** Lista n-a putut fi citita. Se spune, in loc sa se arate un gol linistitor. */
   eroare?: string;
+  /** Categoriile pentru care intrebarea a picat. Golul lor NU inseamna „n-are pachete". */
+  nereusite?: string[];
   /** Moneda soldului, ca pretul din confirmare sa fie in ce plateste el. */
   moneda?: string | null;
 }) {
@@ -186,6 +200,13 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
   return (
     <div>
       <SectionLabel icon={ShoppingCart}>Cumpără pachet de anunțuri</SectionLabel>
+      {nereusite && nereusite.length > 0 && (
+        /* ⚠ O categorie a cărei citire a picat NU e o categorie fără pachete. */
+        <p className="mb-2 text-[11px] text-warning">
+          N-am putut întreba OLX pentru: {nereusite.join(", ")}. Lipsa lor de mai jos nu înseamnă că
+          n-au pachete.
+        </p>
+      )}
       {eroare ? (
         /* ⚠ „N-am putut citi" nu se scrie ca „nu există". Vezi nota de la `loadAll`. */
         <p className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">

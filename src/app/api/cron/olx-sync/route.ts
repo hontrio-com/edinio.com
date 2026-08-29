@@ -56,6 +56,24 @@ const RECONCILE_BUGET_MS = 20_000;
  */
 const ASTEPTARE_RECONECTARE_MS = 5 * 60_000;
 const EXTEND_BATCH = 15;
+/**
+ * Cate randuri se CITESC ca sa se aleaga cele `EXTEND_BATCH` de prelungit.
+ *
+ * ═══ CINCISPREZECE RANDURI ALESE LA INTAMPLARE DIN TOATE MAGAZINELE (02.09.2026) ═══
+ *
+ * Citirea lua `.limit(15)` peste `olx_adverts` din TOATE magazinele, FARA `order`. Iar filtrul
+ * „magazinul a bifat reinnoirea" se aplica abia pe rand, cu `continue`, adica DUPA taietura si
+ * inainte de orice marcaj.
+ *
+ * ⚠ Deci un magazin care N-A cerut prelungirea putea ocupa toate cele cincisprezece locuri, la
+ * fiecare minut, la nesfarsit — si plasa celor care CHIAR au bifat-o nu pornea niciodata. Fara
+ * `order`, „aceleasi cincisprezece" nu e nici macar o presupunere: e purtarea obisnuita a bazei
+ * cand planul nu se schimba. Aceeasi roata care nu se invarte.
+ *
+ * ⚠ Se citeste acum ordonat dupa `valid_to` — cine expira mai devreme are si dreptate sa fie
+ * primul — si se alege dintr-o fereastra mai larga, dupa filtrarea in cod.
+ */
+const EXTEND_CANDIDATI = 200;
 const MAX_ATTEMPTS = 5;
 
 /**
@@ -464,7 +482,10 @@ export async function GET(req: NextRequest) {
     .not("valid_to", "is", null)
     .lt("valid_to", soon)
     .or(`ultima_prelungire_la.is.null,ultima_prelungire_la.lt.${deIncercat}`)
-    .limit(EXTEND_BATCH);
+    /* ⚠ Ordonat, si nu dupa un camp scris de EI: `valid_to` vine de la OLX, dar aici e chiar
+       criteriul dupa care alegem — cine expira mai devreme merge primul. */
+    .order("valid_to", { ascending: true })
+    .limit(EXTEND_CANDIDATI);
   if (eExpira) {
     await logError({
       action: "olx-sync", severity: "warning",
@@ -472,12 +493,32 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  /*
+   * ⚠ FILTRUL VINE INAINTEA TAIETURII, nu dupa. Altfel cele `EXTEND_BATCH` locuri se umplu cu
+   * randuri care oricum se vor sari, si magazinele care au bifat reinnoirea nu ajung niciodata la
+   * rand. Vezi nota de la `EXTEND_CANDIDATI`.
+   */
+  const deReinnoit: typeof expiring = [];
   for (const row of expiring ?? []) {
     if (!row.olx_advert_id) continue;
     const rExt = await ctxFor(row.business_id);
     if (rExt.stare !== "gata" || rExt.ctx.config.auto_extend !== true) continue;
+    deReinnoit.push(row);
+    if (deReinnoit.length >= EXTEND_BATCH) break;
+  }
+  /*
+   * ⚠ CE N-A INCAPUT SE SPUNE. O plasa care acopera cincisprezece randuri dintr-o suta arata, din
+   * afara, exact ca una care le acopera pe toate — si tocmai tacerea ar face-o sa para de ajuns.
+   */
+  if ((expiring ?? []).length >= EXTEND_CANDIDATI) {
+    console.log(`[olx-sync] prelungiri: fereastra de ${EXTEND_CANDIDATI} candidati e plina; unele randuri n-au fost nici macar cantarite`);
+  }
+
+  for (const row of deReinnoit) {
+    const rExt = await ctxFor(row.business_id);
+    if (rExt.stare !== "gata") continue;
     const ctx = rExt.ctx;
-    const res = await advertCommand(ctx.token, row.olx_advert_id, "extend");
+    const res = await advertCommand(ctx.token, row.olx_advert_id!, "extend");
     /* ⚠ Se scrie INAINTE de a socoti reusita: si un refuz trebuie sa tina randul deoparte o zi. */
     const { error: eMarcaj } = await admin.from("olx_adverts")
       .update({

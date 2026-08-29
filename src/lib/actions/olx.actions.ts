@@ -1468,6 +1468,10 @@ export interface OlxPacketsResult {
   bought: OlxBoughtPacket[];
   paymentMethod: OlxPaymentMethod;
   hasMappedCategories: boolean;
+  /** Categoriile pentru care intrebarea la OLX a picat. Golul lor nu e „n-are pachete". */
+  nereusite: string[];
+  /** Lista pachetelor cumparate s-a citit INTREAGA? O lista scurtata arata la fel ca una completa. */
+  boughtIntreg: boolean;
 }
 
 export async function getOlxPackets(businessId: string): Promise<OlxPacketsResult | { error: string }> {
@@ -1483,12 +1487,19 @@ export async function getOlxPackets(businessId: string): Promise<OlxPacketsResul
       if (entry?.category_id) cats.set(entry.category_id, entry.label);
     }
     const groups: OlxPacketGroup[] = [];
+    const nereusite: string[] = [];
     let fetched = 0;
     for (const [categoryId, label] of cats) {
       if (fetched >= 20) break; // bound the panel load
       fetched++;
       const res = await getAvailablePackets(token, { category_id: categoryId, payment_method: paymentMethod, type: "all", with_features: true });
-      if (!isOlxError(res) && Array.isArray(res.data) && res.data.length > 0) {
+      /*
+       * ⚠ O CATEGORIE A CAREI CITIRE PICA NU E O CATEGORIE FARA PACHETE (02.09.2026). Sarita
+       * tacut, ecranul spunea „nu sunt pachete disponibile pentru categoriile tale" — o afirmatie
+       * despre contul LUI, pe o intrebare la care n-am primit raspuns.
+       */
+      if (isOlxError(res)) { nereusite.push(label); continue; }
+      if (Array.isArray(res.data) && res.data.length > 0) {
         groups.push({ categoryId, label, packets: res.data });
       }
       await new Promise((r) => setTimeout(r, 250)); // pace OLX calls
@@ -1496,15 +1507,24 @@ export async function getOlxPackets(businessId: string): Promise<OlxPacketsResul
 
     // Bought packets — paginate past the default page size of 50.
     const bought: OlxBoughtPacket[] = [];
+    let boughtIntreg = true;
     for (let offset = 0; offset < 1000; offset += 50) {
       const res = await getBoughtPackets(token, { availability: "active", offset, limit: 50 });
-      if (isOlxError(res)) break;
+      /*
+       * ⚠ O PAGINA PICATA TAIA LISTA IN TACERE. Iesirea cu `break` intoarcea o lista SCURTA care
+       * arata exact ca una completa. Pe un ecran unde omul se uita ca sa hotarasca daca mai cumpara
+       * un pachet, o lista scurtata il face sa cumpere ce are deja.
+       */
+      if (isOlxError(res)) { boughtIntreg = false; break; }
       const batch = Array.isArray(res.data) ? res.data : [];
       bought.push(...batch);
       if (batch.length < 50) break;
     }
 
-    return { groups, bought, paymentMethod, hasMappedCategories: cats.size > 0 };
+    return {
+      groups, bought, paymentMethod, hasMappedCategories: cats.size > 0,
+      nereusite, boughtIntreg,
+    };
   });
 }
 
@@ -1754,6 +1774,35 @@ function raportCumparare(r: RezultatOperatie<true>): RezultatCumparare {
   return { success: true, nou: r.fel === "facut" };
 }
 
+/**
+ * Pachetul cerut exista chiar asa la ei?
+ *
+ * ═══ ACTIUNEA DE SERVER E O ADRESA, NU UN FORMULAR (02.09.2026) ═══
+ *
+ * `categoryId`, `size` si `type` veneau din ecran si plecau nemodificate in `POST`-ul de
+ * cumparare. Regula casei e scrisa la doua sute de linii mai sus, la harta categoriilor: „se
+ * verifica AICI, nu numai in ecran". Pe un drum cu bani cu atat mai mult — o marime care nu exista
+ * inseamna, in cel mai bun caz, un refuz al lor tradus intr-un mesaj care nu ajuta.
+ *
+ * ⚠ Si tot fail-closed: daca nu putem citi ce ofera, nu cumparam. Aceeasi regula ca la promovari.
+ */
+async function pachetulExista(
+  token: string, categoryId: number, size: number, type: string, metoda: OlxPaymentMethod,
+): Promise<{ ok: true; pret: number | null } | { error: string }> {
+  const r = await getAvailablePackets(token, {
+    category_id: categoryId, payment_method: metoda, type: "all", with_features: true,
+  });
+  const stim = citesteLista<OlxPacket>(r);
+  if (!stim.stiu) {
+    return { error: "Nu am putut citi pachetele oferite de OLX pentru categoria asta. Încearcă din nou peste câteva momente." };
+  }
+  const gasit = stim.date.find((p) => Number(p.size) === size && String(p.type ?? "base") === type);
+  if (!gasit) {
+    return { error: "Pachetul ales nu mai e disponibil la OLX. Reîncarcă panoul și alege din nou." };
+  }
+  return { ok: true, pret: typeof gasit.price === "number" ? gasit.price : null };
+}
+
 export async function buyOlxCategoryPacket(
   businessId: string, categoryId: number, size: number, paymentMethod: OlxPaymentMethod,
   intentId: string, type: "base" | "mega" = "base",
@@ -1767,6 +1816,9 @@ export async function buyOlxCategoryPacket(
   if ("error" in m) return m;
   const jeton = await jetonulPentruPlata(businessId);
   if ("error" in jeton) return jeton;
+
+  const oferit = await pachetulExista(jeton.token, categoryId, size, type, m.metoda);
+  if ("error" in oferit) return oferit;
 
   const r = await cuRegistru(
     createAdminClient(),
@@ -1971,6 +2023,19 @@ export async function buyOlxPaidFeature(
   if ("error" in m) return m;
   const jeton = await jetonulPentruPlata(businessId);
   if ("error" in jeton) return jeton;
+
+  /*
+   * ⚠ SI CODUL PROMOVARII SE CONFRUNTA CU CE OFERA EI. Venea din ecran si pleca nemodificat in
+   * `POST`. Actiunea de server e o adresa, nu un formular — regula e scrisa in fisierul asta, la
+   * harta categoriilor. Fail-closed, ca peste tot pe drumul cu bani.
+   */
+  const toate = citesteLista<OlxPaidFeature>(await getPaidFeatures(jeton.token));
+  if (!toate.stiu) {
+    return { error: "Nu am putut citi promovările oferite de OLX. Încearcă din nou peste câteva momente." };
+  }
+  if (!toate.date.some((f) => f.code === code)) {
+    return { error: "Promovarea aleasă nu mai e oferită de OLX. Reîncarcă panoul și alege din nou." };
+  }
 
   const r = await cuRegistru(
     createAdminClient(),

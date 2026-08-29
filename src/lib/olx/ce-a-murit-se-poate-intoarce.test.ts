@@ -102,13 +102,23 @@ test("⚠ serverul verifica el insusi, si cu ACEEASI regula ca ecranul", () => {
   assert.match(corp, /if \(attributes === null\) return \{ error:/,
     "daca nu putem verifica, nu salvam");
   assert.match(corp, /categoriaNuPrimesteProduse\(attributes\)/);
-  assert.match(corp, /atributeObligatoriiLipsa\(attributes, entry\.attributes\)/);
+  /*
+   * ⚠ Ancora cerea `atributeObligatoriiLipsa(attributes, entry.attributes)`. **Avea dreptate sub
+   * premisa de-atunci**: maparea ERA un `Record<string, string | string[]>`, deci se putea da
+   * direct. De cand fiecare atribut are o SURSA — camp al produsului, specificatie, varianta —
+   * valorile nu mai exista in clipa salvarii, si se verifica doar ca legatura EXISTA.
+   *
+   * Regula n-a schimbat-o nimic: serverul cheama ACEEASI functie ca ecranul.
+   */
+  assert.match(corp, /atributeObligatoriiLipsa\(attributes, legatoriDeAtribute\(entry\.attributes\)\)/);
+  /* ⚠ Si tot aici se verifica regulile LOR, nu doar „obligatoriu". */
+  assert.match(corp, /nereguliAtribute\(attributes, constante\)/);
   /*
    * ⚠ Si ecranul cheama ACELEASI functii, nu o copie a lor. Scrise de doua ori, s-ar fi despartit
    * la prima schimbare — iar ecranul ar fi lasat sa treaca exact ce serverul refuza.
    */
   assert.match(mapper, /categoriaNuPrimesteProduse\(attributes \?\? \[\]\)/);
-  assert.match(mapper, /atributeObligatoriiLipsa\(attributes \?\? \[\], attrValues\)/);
+  assert.match(mapper, /atributeObligatoriiLipsa\(attributes \?\? \[\], legatoriDeAtribute\(attrValues\)\)/);
   assert.doesNotMatch(faraComentarii(mapper), /validation\?\.required && a\.validation\?\.type === "attribute"/,
     "regula copiata in ecran se desparte de cea de pe server");
 });

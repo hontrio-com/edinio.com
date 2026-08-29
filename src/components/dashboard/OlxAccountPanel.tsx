@@ -12,6 +12,7 @@ import {
   type OlxAdvertRow, type OlxAccountInfo, type OlxPacketGroup, type OlxPacketsResult,
 } from "@/lib/actions/olx.actions";
 import type { OlxPaidFeature, OlxPaymentMethod } from "@/lib/olx/types";
+import { OlxCont } from "./OlxCont";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { selectCls } from "@/lib/ui";
@@ -110,6 +111,9 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
 
               {/* Promote advert */}
               <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} />
+
+              {/* Facturare, profil de firma si promovarile pe care anuntul le are deja */}
+              <OlxCont businessId={businessId} adverts={activeAdverts} />
             </>
           )}
         </div>

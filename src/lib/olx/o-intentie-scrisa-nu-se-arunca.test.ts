@@ -287,6 +287,27 @@ export `, i + 10)));
     assert.ok(corp.indexOf("purchase", iReg) > iReg,
       `${fn} cheama furnizorul inaintea rezervarii`);
   }
+  /*
+   * ⚠ CE DOVEDESTE CE. Proba asta arata ca DRUMUL trece prin registru; ca registrul chiar nu
+   * cheama furnizorul a doua oara e dovedit acolo unde e scris, in
+   * `src/lib/operatii/registru.test.ts`:
+   *
+   *     „rezervare refuzata cu `reusit` -> se ADOPTA rezultatul, fara al doilea apel"
+   *     „rezervare refuzata cu `in_curs` -> furnizorul NU e chemat"
+   *     „implicitul e `necunoscut`: un timeout nu se ia drept refuz"
+   *
+   * Copiate aici, ar fi fost aceleasi probe cu alt nume — si s-ar fi despartit de original la
+   * prima schimbare. Se cere doar sa existe, ca lantul sa se vada.
+   */
+  const registru = readFileSync("src/lib/operatii/registru.test.ts", "utf8");
+  for (const garantie of [
+    "se ADOPTA rezultatul, fara al doilea apel",
+    "furnizorul NU e chemat",
+    "un timeout nu se ia drept refuz",
+  ]) {
+    assert.ok(registru.includes(garantie),
+      `garantia „${garantie}" nu mai e probata in registru — plata OLX se sprijina pe ea`);
+  }
 });
 
 test("⚠ indoiala la o plata tine slotul, nu-l elibereaza", () => {

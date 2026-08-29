@@ -5,6 +5,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { Building2, Loader2, Plus, ReceiptText, Sparkles, X } from "lucide-react";
 import { puneOlxLogoFirma, puneOlxBannerFirma, getOlxImaginiFirma, stergeOlxImagineFirma,
+  inlocuiesteOlxImagineFirma,
   getOlxFacturare, getOlxProfilFirma, getOlxPromovariAnunt, salveazaOlxProfilFirma,
   type OlxImaginiCont, type OlxLinieFacturare, type OlxProfilFirma, type OlxProfilFirmaInput,
   type OlxPromovareActiva,
@@ -345,11 +346,23 @@ function ImaginiFirma({ businessId }: { businessId: string }) {
   };
   useEffect(reincarca, [businessId]);
 
-  function pune(fel: "logo" | "banner", url: string) {
+  /**
+   * Pune imaginea; daca era deja una, o INLOCUIESTE.
+   *
+   * ⚠ ORDINEA E TOATĂ ÎnȚELEPCIUNEA. Șters întâi, un „pune" picat ar lăsa profilul GOL — adică
+   * mai rău decât înainte de apăsare, și tocmai în vitrina firmei. Pus întâi, cel mai rău lucru care
+   * se poate întâmpla e că rămân două, și se vede în listă că mai e unul de scos.
+   *
+   * ⚠ Și „adaugă" nu e același lucru cu „schimbă". Până acum butonul doar adăuga, deci al doilea
+   * logo se așeza peste primul fără ca cineva să știe care se vede la ei.
+   */
+  function pune(fel: "logo" | "banner", url: string, vechiId?: number) {
     startLucru(async () => {
-      const r = fel === "logo"
-        ? await puneOlxLogoFirma(businessId, url)
-        : await puneOlxBannerFirma(businessId, url);
+      const r = vechiId != null
+        ? await inlocuiesteOlxImagineFirma(businessId, fel, url, vechiId)
+        : fel === "logo"
+          ? await puneOlxLogoFirma(businessId, url)
+          : await puneOlxBannerFirma(businessId, url);
       if ("error" in r) { toast.error(r.error); return; }
       toast.success(fel === "logo" ? "Logo trimis la OLX." : "Banner trimis la OLX.");
       reincarca();
@@ -426,7 +439,12 @@ function ImaginiFirma({ businessId }: { businessId: string }) {
         onSelect={(urls) => {
           const fel = picker;
           setPicker(null);
-          if (fel && urls[0]) pune(fel, urls[0]);
+          if (!fel || !urls[0]) return;
+          /* ⚠ Când e deja exact una, „Schimbă" înseamnă înlocuire. Când sunt mai multe, nu putem
+             ghici pe care o vrea scoasă, deci se adaugă și le scoate el cu ×. */
+          const lista = fel === "logo" ? imagini.logos : imagini.banners;
+          const vechi = lista.length === 1 && lista[0].id != null ? lista[0].id : undefined;
+          pune(fel, urls[0], vechi);
         }}
       />
     </div>

@@ -14,8 +14,8 @@ import {
 import type { OlxResult } from "@/lib/olx/client";
 import {
   advertCommand, getAccountBalance, getAdvert, getAdvertPaidFeatures, getAvailablePackets, getBoughtPackets,
-  getPaidFeatures, getPaymentMethods, getThreadMessages, getThreads, getUser, isOlxError,
-  markThreadRead, postThreadMessage, purchaseAdvertPacket, purchaseCategoryPacket, purchasePaidFeature,
+  getPaidFeatures, getPaymentMethods, isOlxError,
+  postThreadMessage, purchaseAdvertPacket, purchaseCategoryPacket, purchasePaidFeature,
   suggestLocationByCoords,
 } from "@/lib/olx/client";
 import {
@@ -35,8 +35,8 @@ import {
 import { legatoriDeAtribute, nereguliAtribute } from "@/lib/olx/atribute";
 import type {
   OlxAttributeDef, OlxBoughtPacket, OlxCategory, OlxCategoryMapEntry, OlxCategorySuggestion,
-  OlxCity, OlxConfig, OlxDistrict, OlxLocationSuggestion, OlxMessage, OlxPacket, OlxPaidFeature,
-  OlxPaymentMethod, OlxThread,
+  OlxCity, OlxConfig, OlxDistrict, OlxLocationSuggestion, OlxPacket, OlxPaidFeature,
+  OlxPaymentMethod,
 } from "@/lib/olx/types";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
@@ -1150,10 +1150,6 @@ export async function publishAllOlx(businessId: string): Promise<{ queued: numbe
   return { queued: rows.length, sarite: sterseDeOm.size };
 }
 
-export async function retryOlxProduct(businessId: string, productId: string): Promise<{ success: true } | { error: string }> {
-  return publishOlxProduct(businessId, productId).then((r) => ("error" in r ? r : { success: true }));
-}
-
 // ── Product table ───────────────────────────────────────────────────────────────
 export interface OlxAdvertRow {
   product_id: string | null;
@@ -1801,63 +1797,19 @@ export async function buyOlxPaidFeature(
   return raportCumparare(r);
 }
 
-// ── Inbox (buyer leads) ────────────────────────────────────────────────────────────
-export async function getOlxThreads(businessId: string): Promise<{ threads: OlxThread[] } | { error: string }> {
-  const res = await withToken(businessId, (token) => getThreads(token, { limit: 50 }));
-  if ("error" in res) return res;
-  if (isOlxError(res)) return { error: res.error };
-  return { threads: Array.isArray(res.data) ? res.data : [] };
-}
-
-export interface OlxConversation {
-  messages: OlxMessage[];
-  buyer: { id: number; name: string; avatar: string | null } | null;
-  advert: { id: number; title: string; url: string | null; price: string | null; image: string | null } | null;
-}
-
-// One round-trip for a full OLX-style conversation view: messages + the buyer's
-// profile (name/avatar) + the advert card (title/price/thumbnail). Marks read.
-export async function getOlxConversation(
-  businessId: string, threadId: number, opts: { advertId?: number; interlocutorId?: number } = {},
-): Promise<OlxConversation | { error: string }> {
-  const res = await withToken(businessId, async (token, config) => {
-    const [msgsRes, buyerRes, advertRes] = await Promise.all([
-      getThreadMessages(token, threadId),
-      opts.interlocutorId ? getUser(token, opts.interlocutorId) : Promise.resolve(null),
-      opts.advertId ? getAdvert(token, opts.advertId) : Promise.resolve(null),
-    ]);
-    void markThreadRead(token, threadId);
-    return { msgsRes, buyerRes, advertRes, sellerName: config.olx_user_name ?? "" };
-  });
-  if ("error" in res) return res;
-  const { msgsRes, buyerRes, advertRes, sellerName } = res;
-  if (isOlxError(msgsRes)) return { error: msgsRes.error };
-
-  // API can return newest-first — sort ascending by id for a chat view.
-  const messages = (Array.isArray(msgsRes.data) ? msgsRes.data : []).slice().sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-  // Buyer profile: keep it only when it's a real, distinct name. OLX sometimes
-  // returns the seller's own account here — drop it so the UI falls back to a
-  // generic label instead of showing the shop's own name as the "buyer".
-  let buyer: OlxConversation["buyer"] = null;
-  if (buyerRes && !isOlxError(buyerRes) && buyerRes.data) {
-    const name = (buyerRes.data.name ?? "").trim();
-    if (name && name.toLowerCase() !== sellerName.trim().toLowerCase()) {
-      buyer = { id: buyerRes.data.id, name, avatar: buyerRes.data.avatar ?? null };
-    }
-  }
-  let advert: OlxConversation["advert"] = null;
-  if (advertRes && !isOlxError(advertRes) && advertRes.data) {
-    const a = advertRes.data;
-    advert = {
-      id: a.id,
-      title: a.title ?? "",
-      url: a.url ?? null,
-      price: a.price?.value != null ? `${a.price.value} ${a.price.currency ?? "RON"}` : null,
-      image: a.images?.[0]?.url ?? null,
-    };
-  }
-  return { messages, buyer, advert };
-}
+/* ── Mesajele catre cumparatori ───────────────────────────────────────────────
+ *
+ * ⚠ TREI ACTIUNI MOARTE, SCOASE (02.09.2026). `getOlxThreads` si `getOlxConversation` au fost
+ * inlocuite de `getOlxThreadsPage` si `deschideOlxConversatia` din `olx-mesaje.actions.ts`, iar
+ * `retryOlxProduct` era un invelis de un rand peste `publishOlxProduct`. Niciuna n-avea vreun
+ * apelant in `src/components` sau `src/app`.
+ *
+ * ⚠ Si nu erau doar cod mort: intr-un modul `"use server"`, fiecare functie exportata e un CAPAT
+ * public. Trei capete care chemau OLX cu jetonul comerciantului si pe care nu le mai citea nimeni
+ * — deci nimeni n-ar fi observat daca s-ar fi purtat gresit.
+ *
+ * `replyOlxThread` ramane: Messenger-ul chiar o cheama.
+ */
 
 /**
  * Cate fisiere pleaca odata cu un mesaj.

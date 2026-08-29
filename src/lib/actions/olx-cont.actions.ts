@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureMerchantToken } from "@/lib/olx/oauth";
-import {
+import { addBusinessLogo, addBusinessBanner,
   getAdvertPaidFeatures, getBilling, getBusinessProfile, isOlxError, updateBusinessProfile,
 } from "@/lib/olx/client";
 import type { OlxBillingEntry, OlxBusinessProfile, OlxConfig, OlxPaidFeature } from "@/lib/olx/types";
@@ -113,7 +113,11 @@ export interface OlxProfilFirma {
   descriere: string | null;
   website: string | null;
   telefon: string | null;
-  adresa: string | null;
+  telefonAlDoilea: string | null;
+  strada: string | null;
+  numar: string | null;
+  codPostal: string | null;
+  oras: string | null;
   subdomeniu: string | null;
   logoUrl: string | null;
   bannerUrl: string | null;
@@ -135,9 +139,18 @@ function citesteProfil(d: OlxBusinessProfile): OlxProfilFirma {
   return {
     nume: textSauNimic(d.name),
     descriere: textSauNimic(d.description),
-    website: textSauNimic(d.website),
-    telefon: textSauNimic(d.phone),
-    adresa: textSauNimic(d.address),
+    /*
+     * ⚠ SCHEMA E A LOR (01.09.2026). Era `website`, `phone`, `address: string` — nume firesti si
+     * niciunul al lor. Ei cer `website_url`, `phones: string[]` si o adresa DESFACUTA. Citita
+     * gresit, formularul aparea gol pe un profil care CHIAR avea datele completate.
+     */
+    website: textSauNimic(d.website_url),
+    telefon: textSauNimic(Array.isArray(d.phones) ? d.phones[0] : undefined),
+    telefonAlDoilea: textSauNimic(Array.isArray(d.phones) ? d.phones[1] : undefined),
+    strada: textSauNimic(d.address?.street),
+    numar: textSauNimic(d.address?.number),
+    codPostal: textSauNimic(d.address?.postcode),
+    oras: textSauNimic(d.address?.city),
     subdomeniu: textSauNimic(d.subdomain),
     logoUrl: media(d.logo),
     bannerUrl: media(d.banner),
@@ -180,7 +193,11 @@ export interface OlxProfilFirmaInput {
   descriere?: string;
   website?: string;
   telefon?: string;
-  adresa?: string;
+  telefonAlDoilea?: string;
+  strada?: string;
+  numar?: string;
+  codPostal?: string;
+  oras?: string;
   subdomeniu?: string;
 }
 
@@ -208,12 +225,53 @@ export async function salveazaOlxProfilFirma(
    * STERGE. Ce n-a atins omul in formular nici nu pleaca — altfel o descriere pe care ecranul
    * n-a apucat s-o incarce ar sterge descrierea adevarata a firmei.
    */
+  /*
+   * ⚠ SE CITESTE PROFILUL DE ACUM, si nu din comoditate. Telefoanele si adresa sunt o LISTA si un
+   * OBIECT la ei: trimise pe jumatate, jumatatea lipsa se sterge. Deci ce n-a atins omul se ia de
+   * la ei, nu se lasa gol.
+   *
+   * ⚠ O citire picata opreste salvarea. Mai bine ii spunem sa reincerce decat sa-i stergem al
+   * doilea telefon fiindca n-am putut afla care era.
+   */
+  let profilCitit: OlxProfilFirma | null = null;
+  if (input.telefon !== undefined || input.telefonAlDoilea !== undefined
+      || input.strada !== undefined || input.numar !== undefined
+      || input.codPostal !== undefined || input.oras !== undefined) {
+    const acum = await withToken(businessId, async (token): Promise<{ profil: OlxProfilFirma } | { error: string }> => {
+      const r = await getBusinessProfile(token);
+      if (isOlxError(r)) return { error: r.error };
+      return { profil: citesteProfil(r.data ?? {}) };
+    });
+    if ("error" in acum) {
+      return { error: "Nu am putut citi profilul de la OLX ca să nu ștergem ce nu ai atins. Încearcă din nou." };
+    }
+    profilCitit = acum.profil;
+  }
+
   const corp: Partial<OlxBusinessProfile> = {};
   if (input.nume !== undefined) corp.name = input.nume.trim();
   if (input.descriere !== undefined) corp.description = input.descriere.trim();
-  if (input.website !== undefined) corp.website = input.website.trim();
-  if (input.telefon !== undefined) corp.phone = input.telefon.trim();
-  if (input.adresa !== undefined) corp.address = input.adresa.trim();
+  if (input.website !== undefined) corp.website_url = input.website.trim();
+  /*
+   * ⚠ TELEFOANELE SUNT O LISTA la ei, si o lista se trimite INTREAGA: trimisa cu unul singur, l-ar
+   * sterge pe al doilea. De-aia se trimite doar cand omul a atins vreunul dintre ele, si atunci se
+   * compune din amandoua — cel neatins luat din profilul citit.
+   */
+  if (input.telefon !== undefined || input.telefonAlDoilea !== undefined) {
+    const unu = (input.telefon ?? profilCitit?.telefon ?? "").trim();
+    const doi = (input.telefonAlDoilea ?? profilCitit?.telefonAlDoilea ?? "").trim();
+    corp.phones = [unu, doi].filter(Boolean);
+  }
+  /* ⚠ Adresa la fel: e un obiect, si cheia lipsa dintr-un obiect trimis inseamna „sterge". */
+  if (input.strada !== undefined || input.numar !== undefined
+      || input.codPostal !== undefined || input.oras !== undefined) {
+    corp.address = {
+      street: (input.strada ?? profilCitit?.strada ?? "").trim() || undefined,
+      number: (input.numar ?? profilCitit?.numar ?? "").trim() || undefined,
+      postcode: (input.codPostal ?? profilCitit?.codPostal ?? "").trim() || undefined,
+      city: (input.oras ?? profilCitit?.oras ?? "").trim() || undefined,
+    };
+  }
   if (input.subdomeniu !== undefined) corp.subdomain = input.subdomeniu.trim();
   if (Object.keys(corp).length === 0) return { error: "Nu ai modificat nimic." };
 
@@ -254,7 +312,8 @@ export async function getOlxFacturare(
   /* ⚠ Marginit: e o lista de citit langa sold, nu un export contabil. */
   const cate = Math.min(Math.max(Math.trunc(limit) || 30, 1), 100);
   const res = await withToken(businessId, async (token): Promise<{ brute: OlxBillingEntry[] } | { error: string }> => {
-    const r = await getBilling(token, { offset: 0, limit: cate });
+    /* ⚠ `page`, si ea incepe de la UNU. `offset` nu e un parametru al lor aici. */
+    const r = await getBilling(token, { page: 1, limit: cate });
     if (isOlxError(r)) return { error: `Nu am putut citi facturarea de la OLX: ${r.error}` };
     /* Conturile fara nicio miscare intorc corp gol, nu lista goala. */
     const brute: OlxBillingEntry[] = Array.isArray(r.data) ? r.data : [];
@@ -264,12 +323,20 @@ export async function getOlxFacturare(
 
   return {
     linii: res.brute.map((e, i) => {
-      const suma = citesteSuma(e.amount);
+      /*
+       * ⚠ NUMELE SUNT ALE LOR (01.09.2026). Cautam `created_at`, `description`, `amount`, `type` —
+       * nume firesti, si niciunul al lor. Exemplul lor are `id`, `name`, `date`, `price`,
+       * `advert_id`. Citita gresit, tabela s-ar fi umplut cu „necunoscut" pe randuri care CHIAR
+       * aveau date — si nimeni n-ar fi banuit ca de vina e citirea, nu contul.
+       *
+       * ⚠ Formele vechi raman citite ca a doua incercare: daca ei le si trimit, nu stricam nimic.
+       */
+      const suma = typeof e.price === "number" ? { valoare: e.price, moneda: null } : citesteSuma(e.amount);
       return {
         cheie: e.id != null ? String(e.id) : `linie-${i}`,
-        data: dataSauNimic(e.created_at),
-        descriere: textSauNimic(e.description),
-        tip: textSauNimic(e.type),
+        data: dataSauNimic(e.date ?? e.created_at),
+        descriere: textSauNimic(e.name ?? e.description),
+        tip: e.advert_id != null ? `Anunț ${e.advert_id}` : null,
         suma: suma.valoare,
         moneda: suma.moneda,
       };
@@ -331,4 +398,56 @@ export async function getOlxPromovariAnunt(
       })
       .filter((p): p is OlxPromovareActiva => p !== null),
   };
+}
+
+/* ── Logo si banner ──────────────────────────────────────────────────────── */
+
+/**
+ * Pune un logo sau un banner pe contul de firma.
+ *
+ * ═══ COMENTARIUL NOSTRU SPUNEA CA NU SE POATE (01.09.2026) ═══
+ *
+ * Ecranul ii spunea comerciantului „logo-ul si bannerul se schimba din contul tau de pe olx.ro" —
+ * o afirmatie despre API-ul LOR, scrisa de noi, si falsa. Rutele exista de mult.
+ *
+ * ⚠ E cel mai insidios fel de neadevar din depozitul asta: nu se strica nimic, nimeni nu vede o
+ * eroare, iar cine citeste mai tarziu il ia drept fapt si nici nu mai verifica. Aceeasi lectie ca
+ * la „precautia noastra nu e regula lor".
+ *
+ * ⚠ SE TRIMITE O ADRESA, nu un fisier: OLX aduce imaginea de la noi. Deci trebuie sa fie o adresa
+ * publica — cele din biblioteca de media a magazinului sunt.
+ */
+export async function puneOlxLogoFirma(
+  businessId: string, url: string,
+): Promise<{ success: true } | { error: string }> {
+  return puneImagineCont(businessId, url, "logo");
+}
+
+export async function puneOlxBannerFirma(
+  businessId: string, url: string,
+): Promise<{ success: true } | { error: string }> {
+  return puneImagineCont(businessId, url, "banner");
+}
+
+async function puneImagineCont(
+  businessId: string, url: string, fel: "logo" | "banner",
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  /* ⚠ Numai adrese publice `https`: OLX vine sa ia imaginea, deci una locala n-ar avea de unde. */
+  if (!/^https:\/\//i.test(url)) {
+    return { error: "Adresa imaginii trebuie să fie publică și să înceapă cu https." };
+  }
+  const config = await loadConfig(businessId);
+  if (config.advertiser_type !== "business") {
+    return { error: "Contul OLX nu este de firmă." };
+  }
+  const res = await withToken(businessId, async (token): Promise<{ ok: true } | { error: string }> => {
+    const r = fel === "logo" ? await addBusinessLogo(token, url) : await addBusinessBanner(token, url);
+    if (isOlxError(r)) return { error: r.error };
+    return { ok: true };
+  });
+  if ("error" in res) return { error: res.error };
+  revalidatePath("/dashboard/features/olx");
+  return { success: true };
 }

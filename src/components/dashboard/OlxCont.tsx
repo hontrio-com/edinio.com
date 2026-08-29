@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Building2, Loader2, ReceiptText, Sparkles } from "lucide-react";
-import {
+import { puneOlxLogoFirma, puneOlxBannerFirma,
   getOlxFacturare, getOlxProfilFirma, getOlxPromovariAnunt, salveazaOlxProfilFirma,
   type OlxLinieFacturare, type OlxProfilFirma, type OlxProfilFirmaInput, type OlxPromovareActiva,
 } from "@/lib/actions/olx-cont.actions";
@@ -115,13 +115,27 @@ function FormularProfil({ businessId, initial, onSalvat }: {
   const [descriere, setDescriere] = useState(initial.descriere ?? "");
   const [website, setWebsite] = useState(initial.website ?? "");
   const [telefon, setTelefon] = useState(initial.telefon ?? "");
-  const [adresa, setAdresa] = useState(initial.adresa ?? "");
+  const [telefonAlDoilea, setTelefonAlDoilea] = useState(initial.telefonAlDoilea ?? "");
+  /*
+    ⚠ ADRESA E DESFĂCUTĂ, fiindcă așa o cere schema lor: stradă, număr, cod poștal, oraș. Un
+    singur câmp „Adresă" ar fi părut mai simplu, dar ar fi trebuit spart la trimitere — și orice
+    spargere după virgulă e o presupunere despre cum scrie omul.
+  */
+  const [strada, setStrada] = useState(initial.strada ?? "");
+  const [numar, setNumar] = useState(initial.numar ?? "");
+  const [codPostal, setCodPostal] = useState(initial.codPostal ?? "");
+  const [oras, setOras] = useState(initial.oras ?? "");
   const [subdomeniu, setSubdomeniu] = useState(initial.subdomeniu ?? "");
+  const [logoNou, setLogoNou] = useState("");
+  const [bannerNou, setBannerNou] = useState("");
 
   function aplica(p: OlxProfilFirma) {
     setBaza(p);
     setNume(p.nume ?? ""); setDescriere(p.descriere ?? ""); setWebsite(p.website ?? "");
-    setTelefon(p.telefon ?? ""); setAdresa(p.adresa ?? ""); setSubdomeniu(p.subdomeniu ?? "");
+    setTelefon(p.telefon ?? ""); setTelefonAlDoilea(p.telefonAlDoilea ?? "");
+    setStrada(p.strada ?? ""); setNumar(p.numar ?? "");
+    setCodPostal(p.codPostal ?? ""); setOras(p.oras ?? "");
+    setSubdomeniu(p.subdomeniu ?? "");
     onSalvat(p);
   }
 
@@ -136,7 +150,11 @@ function FormularProfil({ businessId, initial, onSalvat }: {
     if (descriere.trim() !== (baza.descriere ?? "")) patch.descriere = descriere;
     if (website.trim() !== (baza.website ?? "")) patch.website = website;
     if (telefon.trim() !== (baza.telefon ?? "")) patch.telefon = telefon;
-    if (adresa.trim() !== (baza.adresa ?? "")) patch.adresa = adresa;
+    if (telefonAlDoilea.trim() !== (baza.telefonAlDoilea ?? "")) patch.telefonAlDoilea = telefonAlDoilea;
+    if (strada.trim() !== (baza.strada ?? "")) patch.strada = strada;
+    if (numar.trim() !== (baza.numar ?? "")) patch.numar = numar;
+    if (codPostal.trim() !== (baza.codPostal ?? "")) patch.codPostal = codPostal;
+    if (oras.trim() !== (baza.oras ?? "")) patch.oras = oras;
     if (subdomeniu.trim() !== (baza.subdomeniu ?? "")) patch.subdomeniu = subdomeniu;
     if (Object.keys(patch).length === 0) { toast.error("Nu ai modificat nimic în profil."); return; }
 
@@ -166,8 +184,20 @@ function FormularProfil({ businessId, initial, onSalvat }: {
           <Camp eticheta="Website">
             <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://" />
           </Camp>
-          <Camp eticheta="Adresă">
-            <Input value={adresa} onChange={(e) => setAdresa(e.target.value)} placeholder="Strada, oraș" />
+          <Camp eticheta="Al doilea telefon">
+            <Input value={telefonAlDoilea} onChange={(e) => setTelefonAlDoilea(e.target.value)} placeholder="opțional" />
+          </Camp>
+          <Camp eticheta="Stradă">
+            <Input value={strada} onChange={(e) => setStrada(e.target.value)} />
+          </Camp>
+          <Camp eticheta="Număr">
+            <Input value={numar} onChange={(e) => setNumar(e.target.value)} />
+          </Camp>
+          <Camp eticheta="Cod poștal">
+            <Input value={codPostal} onChange={(e) => setCodPostal(e.target.value)} />
+          </Camp>
+          <Camp eticheta="Oraș">
+            <Input value={oras} onChange={(e) => setOras(e.target.value)} placeholder="București" />
           </Camp>
         </div>
         <Camp eticheta="Descriere">
@@ -179,6 +209,28 @@ function FormularProfil({ businessId, initial, onSalvat }: {
           Logo si banner se vad, dar nu se schimba de aici: incarcarea de imagini pe profilul de
           firma nu merge prin API-ul de parteneri, ci doar din contul de pe olx.ro.
         */}
+        <div className="flex flex-wrap items-end gap-2">
+          <Camp eticheta="Logo firmă (adresă imagine)">
+            <Input value={logoNou} onChange={(e) => setLogoNou(e.target.value)} placeholder="https://…" />
+          </Camp>
+          <Button size="sm" variant="outline" disabled={saving || !logoNou.trim()}
+            onClick={() => startSave(async () => {
+              const r = await puneOlxLogoFirma(businessId, logoNou.trim());
+              if ("error" in r) { toast.error(r.error); return; }
+              toast.success("Logo trimis la OLX.");
+              setLogoNou("");
+            })}>Pune logo</Button>
+          <Camp eticheta="Banner firmă (adresă imagine)">
+            <Input value={bannerNou} onChange={(e) => setBannerNou(e.target.value)} placeholder="https://…" />
+          </Camp>
+          <Button size="sm" variant="outline" disabled={saving || !bannerNou.trim()}
+            onClick={() => startSave(async () => {
+              const r = await puneOlxBannerFirma(businessId, bannerNou.trim());
+              if ("error" in r) { toast.error(r.error); return; }
+              toast.success("Banner trimis la OLX.");
+              setBannerNou("");
+            })}>Pune banner</Button>
+        </div>
         {(baza.logoUrl || baza.bannerUrl) && (
           <div className="flex flex-wrap items-center gap-4 border-t border-border pt-3">
             {baza.logoUrl && (
@@ -193,7 +245,18 @@ function FormularProfil({ businessId, initial, onSalvat }: {
                 <span className="text-[11px] text-muted-foreground">Banner</span>
               </span>
             )}
-            <span className="text-[11px] text-muted-foreground">Logo-ul și bannerul se schimbă din contul tău de pe olx.ro.</span>
+            {/*
+              ⚠ TEXTUL DE AICI SPUNEA CĂ NU SE POATE, și era neadevărat (01.09.2026). Rutele
+              `/users-business/me/logos` și `/banners` există de mult. E cel mai insidios fel de
+              neadevăr: nu se strică nimic, nimeni nu vede o eroare, iar cine citește mai târziu
+              îl ia drept fapt și nici nu mai verifică.
+
+              ⚠ Se trimite o ADRESĂ, nu un fișier: OLX vine să ia imaginea de la noi. Deci trebuie
+              să fie publică — cele din biblioteca de media a magazinului sunt.
+            */}
+            <span className="text-[11px] text-muted-foreground">
+              Lipește adresa unei imagini din biblioteca ta de media.
+            </span>
           </div>
         )}
 

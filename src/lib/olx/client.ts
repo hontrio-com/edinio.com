@@ -6,7 +6,8 @@
 import type {
   OlxAccountBalance, OlxAdvert, OlxAdvertStats, OlxAttributeDef, OlxBillingEntry,
   OlxBoughtPacket, OlxBusinessProfile, OlxCategory, OlxCategorySuggestion, OlxCity,
-  OlxDistrict, OlxMessage, OlxMessageFull, OlxModerationReason, OlxPacket,
+  OlxDistrict, OlxImagineCont, OlxLocationSuggestion, OlxMessage, OlxMessageFull,
+  OlxModerationReason, OlxPacket,
   OlxPaidFeature, OlxPaymentMethod, OlxThread, OlxUser,
 } from "./types";
 
@@ -276,8 +277,23 @@ export function getThreadMessages(token: string, threadId: number) {
   return call<OlxMessage[]>(token, "GET", `/threads/${threadId}/messages`);
 }
 
-export function postThreadMessage(token: string, threadId: number, text: string) {
-  return call<undefined>(token, "POST", `/threads/${threadId}/messages`, { text });
+/**
+ * Trimite un mesaj intr-o conversatie, cu sau fara atasamente.
+ *
+ * ⚠ ATASAMENTELE SE TRIMIT CA ADRESE, nu ca fisiere: OLX vine sa ia imaginea de la noi. Deci
+ * trebuie sa fie publice — cele din biblioteca de media a magazinului sunt.
+ *
+ * ⚠ Cheia lipseste cu totul cand n-avem ce trimite. Un `attachments: []` inseamna „am declarat o
+ * lista, si e goala" — alt lucru decat „n-am declarat nimic", si nu stim ce fac ei cu deosebirea.
+ */
+export function postThreadMessage(
+  token: string, threadId: number, text: string, atasamente?: string[],
+) {
+  const urls = (atasamente ?? []).filter((u) => /^https:\/\//i.test(u));
+  return call<undefined>(token, "POST", `/threads/${threadId}/messages`, {
+    text,
+    ...(urls.length > 0 ? { attachments: urls.map((url) => ({ url })) } : {}),
+  });
 }
 
 export function markThreadRead(token: string, threadId: number) {
@@ -316,12 +332,18 @@ export function updateBusinessProfile(token: string, body: Partial<OlxBusinessPr
 }
 
 // ── Facturare ───────────────────────────────────────────────────────────────────
-export function getBilling(token: string, params: { offset?: number; limit?: number } = {}) {
+/**
+ * Istoricul de facturare.
+ *
+ * ⚠ `page`, NU `offset`, si ea INCEPE DE LA UNU. Prima varianta trimitea `offset=0&limit=30` —
+ * parametri pe care ei nu-i cunosc aici, deci ii ignora si intorc ce vor. Nu da eroare: da alt
+ * raspuns decat cel cerut, ceea ce e mai greu de vazut.
+ */
+export function getBilling(token: string, params: { page?: number; limit?: number } = {}) {
   const q = new URLSearchParams();
-  if (params.offset != null) q.set("offset", String(params.offset));
+  q.set("page", String(Math.max(1, params.page ?? 1)));
   if (params.limit != null) q.set("limit", String(params.limit));
-  const qs = q.toString();
-  return call<OlxBillingEntry[]>(token, "GET", `/users/me/billing${qs ? `?${qs}` : ""}`);
+  return call<OlxBillingEntry[]>(token, "GET", `/users/me/billing?${q.toString()}`);
 }
 
 // ── Messenger, restul ───────────────────────────────────────────────────────────
@@ -343,8 +365,18 @@ export function getMessage(token: string, threadId: number, messageId: number) {
   return call<OlxMessageFull>(token, "GET", `/threads/${threadId}/messages/${messageId}`);
 }
 
+/**
+ * Marcheaza o conversatie ca favorita.
+ *
+ * ⚠ COMANDA E IN CORP, NU IN ADRESA. Prima varianta cerea
+ * `POST /threads/{id}/commands/set-favourite` — o ruta care nu exista, deci butonul raspundea `404`
+ * si nu facea nimic. La fel ca la anunturi, ruta e `/commands` iar comanda merge in corp.
+ */
 export function setThreadFavourite(token: string, threadId: number, favourite: boolean) {
-  return call<undefined>(token, "POST", `/threads/${threadId}/commands/set-favourite`, { is_favourite: favourite });
+  return call<undefined>(token, "POST", `/threads/${threadId}/commands`, {
+    command: "set-favourite",
+    is_favourite: favourite,
+  });
 }
 
 // ── Localitate dupa coordonate ──────────────────────────────────────────────────
@@ -354,6 +386,49 @@ export function setThreadFavourite(token: string, threadId: number, favourite: b
  * ⚠ Se foloseste ca SUGESTIE, niciodata ca hotarare: adresa magazinului poate fi un depozit, iar
  * anuntul poate trebui pus in alt loc. Omul confirma.
  */
-export function suggestCityByCoords(token: string, lat: number, lon: number) {
-  return call<OlxCity[]>(token, "GET", `/cities?latitude=${lat}&longitude=${lon}`);
+export function suggestLocationByCoords(token: string, lat: number, lon: number) {
+  return call<OlxLocationSuggestion[]>(token, "GET", `/locations?latitude=${lat}&longitude=${lon}`);
+}
+
+// ── Logo si banner, la nivel de cont ────────────────────────────────────────────
+/*
+ * ⚠ SE POT SCHIMBA PRIN API (01.09.2026). Ecranul spunea comerciantului ca „logo-ul si bannerul se
+ * schimba din contul tau de pe olx.ro" — o afirmatie despre API-ul LOR, scrisa de noi, si falsa.
+ * Rutele exista de mult.
+ */
+export function getBusinessLogos(token: string) {
+  return call<OlxImagineCont[]>(token, "GET", "/users-business/me/logos");
+}
+
+export function addBusinessLogo(token: string, url: string) {
+  return call<OlxImagineCont>(token, "POST", "/users-business/me/logos", { url });
+}
+
+export function deleteBusinessLogo(token: string, logoId: number) {
+  return call<undefined>(token, "DELETE", `/users-business/me/logos/${logoId}`);
+}
+
+export function getBusinessBanners(token: string) {
+  return call<OlxImagineCont[]>(token, "GET", "/users-business/me/banners");
+}
+
+export function addBusinessBanner(token: string, url: string) {
+  return call<OlxImagineCont>(token, "POST", "/users-business/me/banners", { url });
+}
+
+export function deleteBusinessBanner(token: string, bannerId: number) {
+  return call<undefined>(token, "DELETE", `/users-business/me/banners/${bannerId}`);
+}
+
+// ── Logo pe un anunt anume ──────────────────────────────────────────────────────
+export function getAdvertLogos(token: string, advertId: number) {
+  return call<OlxImagineCont[]>(token, "GET", `/adverts/${advertId}/logos`);
+}
+
+export function addAdvertLogo(token: string, advertId: number, url: string) {
+  return call<OlxImagineCont>(token, "POST", `/adverts/${advertId}/logos`, { url });
+}
+
+export function deleteAdvertLogo(token: string, advertId: number, logoId: number) {
+  return call<undefined>(token, "DELETE", `/adverts/${advertId}/logos/${logoId}`);
 }

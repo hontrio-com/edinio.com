@@ -242,27 +242,69 @@ export interface OlxModerationReason {
   fields?: { field?: string; message?: string }[];
 }
 
-/** Profilul de firma al contului OLX. */
+/**
+ * Profilul de firma al contului OLX.
+ *
+ * ═══ FORMA E A LOR, NU CEA CARE NI SE PARE FIREASCA (01.09.2026) ═══
+ *
+ * Prima varianta avea `website`, `phone` si `address: string` — adica exact cum ar scrie oricine
+ * un profil de firma. Schema lor cere `website_url`, `phones: string[]` si o adresa DESFACUTA in
+ * strada, numar, cod postal si oras.
+ *
+ * ⚠ Greseala nu se vedea: un `PUT` cu chei pe care ei nu le cunosc nu strica nimic si nu se
+ * plange — pur si simplu nu schimba nimic, iar comerciantul crede ca a salvat.
+ */
+export interface OlxBusinessAddress {
+  street?: string;
+  number?: string;
+  postcode?: string;
+  city?: string;
+}
+
 export interface OlxBusinessProfile {
   id?: number;
   name?: string;
   description?: string;
   subdomain?: string;
-  website?: string;
-  phone?: string;
-  address?: string;
+  website_url?: string;
+  address?: OlxBusinessAddress | null;
+  phones?: string[];
   logo?: { url?: string } | null;
   banner?: { url?: string } | null;
 }
 
-/** O linie din istoricul de facturare al contului. */
+/** Un logo sau un banner incarcat la ei. */
+export interface OlxImagineCont {
+  id?: number;
+  url?: string;
+}
+
+/** Ce ne raspunde `/locations` pentru o pereche de coordonate. */
+export interface OlxLocationSuggestion {
+  city?: OlxCity;
+  district?: OlxDistrict | null;
+}
+
+/**
+ * O linie din istoricul de facturare al contului.
+ *
+ * ⚠ Prima varianta cauta `created_at`, `description`, `amount`, `balance_after` — nume firesti, si
+ * niciunul al lor. Exemplul lor are `id`, `name`, `date`, `price`, `advert_id`. Citita gresit,
+ * tabela s-ar fi umplut cu „necunoscut" pe randuri care CHIAR aveau date.
+ *
+ * ⚠ Campurile vechi raman citite ca a doua incercare: daca ei le si trimit, nu stricam nimic;
+ * daca nu, nu se pierde nimic.
+ */
 export interface OlxBillingEntry {
   id?: number;
+  name?: string;
+  date?: string;
+  price?: number;
+  advert_id?: number;
+  /* Forme alternative, citite prudent — vezi nota de mai sus. */
   created_at?: string;
-  type?: string;
   description?: string;
   amount?: { value?: number; currency?: string } | number;
-  balance_after?: number;
 }
 
 /** Un mesaj cu tot ce poarta el, inclusiv atasamente. */

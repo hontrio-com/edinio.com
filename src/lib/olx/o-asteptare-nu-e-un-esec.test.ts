@@ -127,8 +127,21 @@ test("⚠ dar asteptarea are si ea un capat, altfel lucrarea sta pe veci", () =>
   assert.match(cron, /const VIATA_MAXIMA_MS = 24 \* 60 \* 60_000;/);
   assert.match(cron, /res\.asteptare != null && !preaBatran\(item\)/,
     "fara paza de varsta, asteptarea n-are capat");
-  /* Si abandonul obisnuit tine seama tot de ea. */
-  assert.match(cron, /attempts >= MAX_ATTEMPTS \|\| preaBatran\(item\) \? \{ abandonat_la: now \}/);
+  /*
+   * ⚠ DAR ABANDONUL OBISNUIT NU SE UITA LA VARSTA, si e o deosebire pe care am gresit-o o data.
+   * Un rand poate sta zile intregi fara sa fie nici macar incercat — magazinul cere reconectare,
+   * iar cronul il lasa neatins dinadins. Judecat dupa varsta, ar fi murit la PRIMA lui incercare
+   * de dupa reconectare, in loc sa-si primeasca cele cinci. Varsta spune ce s-a AMANAT, nu ce a
+   * esuat.
+   */
+  assert.match(cron, /\.\.\.\(attempts >= MAX_ATTEMPTS \? \{ abandonat_la: now \} : \{\}\)/);
+  /* ⚠ Al DOILEA `failed++`: primul e al ramurii permanente, si o taietura de acolo inghitea si
+     ramura de asteptare — care are dreptul la `preaBatran`. */
+  const iEsec = cron.indexOf(`failed++;
+        const attempts`);
+  const ramuraEsec = cron.slice(iEsec, cron.indexOf("await pause(PACE_MS);", iEsec));
+  assert.doesNotMatch(ramuraEsec, /preaBatran/,
+    "varsta n-are ce cauta in abandonul dupa un esec adevarat");
   /* ⚠ Iar o data necitibila NU inseamna „batran": ar fi aruncat lucrarea din prima. */
   assert.match(cron, /Number\.isFinite\(nascut\) && Date\.now\(\) - nascut > VIATA_MAXIMA_MS/);
 });
@@ -208,4 +221,39 @@ test("⚠ un `404` inseamna acelasi lucru pe amandoua caile", () => {
   /* ⚠ Pe COD, nu pe fisier: nota de mai sus citeaza chiar vorba veche, si a picat proba de trei ori. */
   assert.doesNotMatch(cod, /va fi recreat/,
     "recrearea dupa un `404` desface hotararea omului");
+});
+
+test("⚠ o sesiune care cere mana omului nu arde incercari", () => {
+  /*
+   * ═══ COMENTARIUL SPUNEA UN LUCRU, CODUL FACEA ALTUL (31.08.2026) ═══
+   *
+   * Nota de langa ramura scria „elementul ramane in coada; daca omul reconecteaza maine, pleaca de
+   * la sine". Dar codul ardea o incercare de fiecare data, iar cronul porneste din minut in minut:
+   *
+   *     tokenul expira la ora 9
+   *     9:01, 9:02, 9:04, 9:08, 9:15 -> cele cinci incercari
+   *     9:15: toata coada magazinului e moarta
+   *     18:00, omul reconecteaza -> nimic nu mai era acolo sa porneasca
+   *
+   * ⚠ Adica CHIAR asta era boala pentru care invierea la reconectare e leacul. Deosebirea e aceeasi
+   * ca la `429`: sesiunea nu spune nimic despre lucrare, spune ceva despre CLIPA.
+   */
+  const i = cron.indexOf("const cereMana = r.stare === \"cere-reconectare\";");
+  assert.notEqual(i, -1, "ramura de asteptare la reconectare a disparut");
+  const ramura = faraComentarii(cron.slice(i, cron.indexOf("const attempts = (it.attempts ?? 0) + 1;", i)));
+  assert.doesNotMatch(ramura, /attempts/, "asteptarea dupa mana omului n-are voie sa arda incercari");
+  assert.doesNotMatch(ramura, /abandonat_la/);
+  assert.match(ramura, /next_retry_at: new Date\(Date\.now\(\) \+ ASTEPTARE_RECONECTARE_MS\)/);
+  /*
+   * ⚠ CONDITIA INTREAGA, nu o bucata din ea. O proba care cere doar ca `cereMana && !preaBatran`
+   * sa apara undeva a lasat sa treaca un `if (false && cereMana && !preaBatran(it))` — ramura era
+   * pe loc, cu tot ce trebuie inauntru, si nu se mai deschidea niciodata.
+   */
+  assert.ok(cron.includes("        if (cereMana && !preaBatran(it)) {"),
+    "conditia ramurii de asteptare s-a schimbat");
+  /*
+   * ⚠ NUMAI „cere-reconectare". O pana trecatoare — retea, baza, OLX cazut — e un esec adevarat si
+   * isi arde incercarile: altfel n-ar mai muri niciodata nimic.
+   */
+  assert.match(cron, /const cereMana = r\.stare === "cere-reconectare";/);
 });

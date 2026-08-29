@@ -20,11 +20,19 @@ const QUEUE_BATCH = 30;
 const STATUS_BATCH = 25;
 /** Cate magazine se reconciliaza intr-un sfert de ora. */
 const RECONCILE_MAGAZINE = 2;
+
+/**
+ * Cat se asteapta intre doua incercari cat timp sesiunea cere mana omului.
+ *
+ * ⚠ Cinci minute, nu un minut: nimic nu se schimba pana nu apasa el, iar o incercare pe minut ar
+ * fi cinci sute de cereri degeaba pana isi bea cafeaua.
+ */
+const ASTEPTARE_RECONECTARE_MS = 5 * 60_000;
 const EXTEND_BATCH = 15;
 const MAX_ATTEMPTS = 5;
 
 /**
- * O lucrare care asteapta de prea mult timp nu mai asteapta.
+ * O lucrare care AMANA de prea mult timp nu mai amana.
  *
  * ═══ CAPATUL DE SUS AL RABDARII (31.08.2026) ═══
  *
@@ -32,8 +40,13 @@ const MAX_ATTEMPTS = 5;
  * limitat la nesfarsit ar avea lucrari amanate din minut in minut, la infinit, fara ca nimeni sa
  * afle ca pretul lui nu s-a dus niciodata.
  *
- * Varsta o marginește. Dupa o zi lucrarea devine scrisoare moarta ca oricare alta: se vede in
- * ecran, cu motivul ei, si intra in „Reincearca tot".
+ * Varsta o marginește — dar NUMAI amanarea. Dupa o zi de amanari, lucrarea cade inapoi pe drumul
+ * obisnuit: isi arde incercarile ca oricare alta, si moare la a cincea.
+ *
+ * ⚠ ABANDONUL OBISNUIT NU SE UITA LA VARSTA, si e o deosebire pe care am gresit-o o data. Un rand
+ * poate sta zile intregi fara sa fie nici macar incercat — magazinul cere reconectare, iar cronul
+ * il lasa neatins dinadins. Judecat dupa varsta, ar fi murit la PRIMA lui incercare de dupa
+ * reconectare, in loc sa-si primeasca cele cinci. Varsta spune ce s-a amanat, nu ce a esuat.
  *
  * `created_at` se rescrie la fiecare intentie noua a omului (vezi `REINVIE` din `queue.ts`), deci
  * ceasul masoara varsta INTENTIEI, nu a randului.
@@ -126,14 +139,44 @@ export async function GET(req: NextRequest) {
        * pentru o clipa proasta, fara ca nimeni sa afle.
        *
        * ⚠ Deconectat: lucrarile chiar n-au unde pleca — se sterg, ca sa nu se adune la nesfarsit.
-       * ⚠ Cere reconectare / trecatoare: se ASTEAPTA. Elementul ramane in coada, cu asteptare
-       * crescatoare; daca omul reconecteaza maine, pleaca de la sine.
+       * ⚠ Cere reconectare: se ASTEAPTA pe bune. Vezi nota de dedesubt.
+       * ⚠ Trecatoare: o pana adevarata la ei sau la baza, deci isi arde incercarile ca oricare alta.
        */
       if (r.stare === "deconectat") {
         for (const it of items) await stergeDacaNeschimbat(admin, COADA, it);
         continue;
       }
+      /*
+       * ═══ COMENTARIUL DE MAI SUS ERA O MINCIUNA (31.08.2026) ═══
+       *
+       * Scria „elementul ramane in coada; daca omul reconecteaza maine, pleaca de la sine". Dar
+       * codul de dedesubt ardea o incercare de fiecare data, iar cronul porneste din minut in
+       * minut — deci in cincisprezece minute totul era `abandonat_la`, si maine nu mai pleca nimic:
+       *
+       *     tokenul expira la ora 9
+       *     9:01, 9:02, 9:04, 9:08, 9:15 -> cele cinci incercari
+       *     9:15: toata coada magazinului e moarta
+       *     18:00, omul reconecteaza -> nimic nu mai era acolo sa porneasca
+       *
+       * Adica CHIAR asta era boala pentru care „Reîncearcă" si invierea la reconectare sunt leacul.
+       *
+       * ⚠ Iar deosebirea e aceeasi ca la `429`: o sesiune care cere mana omului nu spune nimic
+       * despre lucrare, spune ceva despre CLIPA. `attempts` numara cat de rau e peticul, nu cat de
+       * departe e comerciantul de tastatura.
+       *
+       * ⚠ Capatul e tot varsta: dupa o zi de asteptat, lucrarea cade inapoi pe drumul obisnuit si
+       * moare ca oricare alta — vizibila, cu motivul ei, si gata de reinviat la reconectare.
+       */
+      const cereMana = r.stare === "cere-reconectare";
       for (const it of items) {
+        if (cereMana && !preaBatran(it)) {
+          amanate++;
+          await scrieDacaNeschimbat(admin, COADA, it, {
+            last_error: r.motiv.slice(0, 500),
+            next_retry_at: new Date(Date.now() + ASTEPTARE_RECONECTARE_MS).toISOString(),
+          });
+          continue;
+        }
         const attempts = (it.attempts ?? 0) + 1;
         await scrieDacaNeschimbat(admin, COADA, it, {
           attempts,
@@ -217,8 +260,8 @@ export async function GET(req: NextRequest) {
          * `attempts` ramane NEATINS: numara cat de rau e peticul, nu cat de ocupati sunt ei.
          *
          * Capatul e `preaBatran`, nu contorul: fara el, un magazin limitat pe veci ar avea lucrari
-         * amanate la nesfarsit, si nimeni n-ar afla. Cu el, dupa o zi lucrarea devine scrisoare
-         * moarta ca oricare alta — vizibila, cu motivul ei, si gata de „Reincearca".
+         * amanate la nesfarsit, si nimeni n-ar afla. Cu el, dupa o zi de amanari lucrarea cade
+         * inapoi pe drumul obisnuit si isi arde incercarile ca oricare alta.
          */
         await scrieDacaNeschimbat(admin, COADA, item, {
           last_error: res.error.slice(0, 500),
@@ -243,9 +286,9 @@ export async function GET(req: NextRequest) {
           attempts,
           last_error: res.error.slice(0, 500),
           next_retry_at: asteptareaUrmatoare(attempts),
-          ...(attempts >= MAX_ATTEMPTS || preaBatran(item) ? { abandonat_la: now } : {}),
+          ...(attempts >= MAX_ATTEMPTS ? { abandonat_la: now } : {}),
         });
-        if (attempts >= MAX_ATTEMPTS || preaBatran(item)) {
+        if (attempts >= MAX_ATTEMPTS) {
           await logError({
             action: "olx-sync", severity: "critical",
             message: `o lucrare OLX a fost abandonata dupa ${attempts} incercari: ${res.error.slice(0, 200)}`,

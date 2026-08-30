@@ -171,3 +171,41 @@ export async function articoleInrudite(
 
   return gasite.slice(0, cate);
 }
+
+/** Un autor, după adresa lui. `null` dacă nu există. */
+export async function autorDupaSlug(slug: string): Promise<AutorBlog | null> {
+  const { data } = await (await db())
+    .from("blog_authors").select("*").eq("slug", slug).maybeSingle();
+  return (data as AutorBlog) ?? null;
+}
+
+/** Articolele publicate ale unui autor. */
+export async function articoleleAutorului(idAutor: string, limita = 50): Promise<ArticolDeLista[]> {
+  const { data } = await (await db())
+    .from("blog_posts")
+    .select(CAMPURI_LISTA)
+    .eq("author_id", idAutor)
+    .order("published_at", { ascending: false })
+    .limit(limita);
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
+}
+
+/**
+ * Autorii care au măcar un articol publicat.
+ *
+ * ⚠ CEILALȚI N-AU PAGINĂ. Un autor fără articole ar avea o pagină goală, care
+ * pentru Google e o pagină subțire — mai rău decât niciuna. Se folosește și la
+ * sitemap, ca să nu se anunțe adrese care nu spun nimic.
+ */
+export async function autoriCuArticole(): Promise<AutorBlog[]> {
+  const client = await db();
+  const { data: articole } = await client
+    .from("blog_posts").select("author_id").not("author_id", "is", null);
+  const idUri = [
+    ...new Set(((articole ?? []) as { author_id: string }[]).map((a) => a.author_id)),
+  ];
+  if (idUri.length === 0) return [];
+  const { data } = await client
+    .from("blog_authors").select("*").in("id", idUri).order("name");
+  return (data ?? []) as unknown as AutorBlog[];
+}

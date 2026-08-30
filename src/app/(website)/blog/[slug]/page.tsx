@@ -92,14 +92,18 @@ export default async function ArticolBlogPage({ params }: Props) {
             încredere pentru cititor, și de prospețime pentru motoare. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-hairline pb-6 text-[13.5px] text-ink-2">
           {a.autor && (
-            <span className="flex items-center gap-2">
+            /* Legătura către pagina autorului nu e doar comoditate: ea face ca
+               `@id`-ul de persoană din datele structurate să aibă un drum pe
+               care poate merge și un motor, și un cititor. */
+            <Link href={`/blog/autor/${a.autor.slug}`}
+              className="flex items-center gap-2 transition-colors hover:text-ink">
               {a.autor.avatar_url && (
                 <Image src={a.autor.avatar_url} alt="" width={28} height={28}
                   className="h-7 w-7 rounded-full object-cover" />
               )}
               <span className="font-medium text-ink">{a.autor.name}</span>
               {a.autor.role_title && <span className="text-ink-3">· {a.autor.role_title}</span>}
-            </span>
+            </Link>
           )}
           {data && <time dateTime={a.published_at ?? undefined}>{data}</time>}
           {actualizat && <span className="text-ink-3">Actualizat {actualizat}</span>}
@@ -165,7 +169,10 @@ export default async function ArticolBlogPage({ params }: Props) {
                     className="h-14 w-14 shrink-0 rounded-full object-cover" />
                 )}
                 <div>
-                  <p className="text-[15px] font-semibold text-ink">{a.autor.name}</p>
+                  <Link href={`/blog/autor/${a.autor.slug}`}
+                    className="text-[15px] font-semibold text-ink underline-offset-4 hover:underline">
+                    {a.autor.name}
+                  </Link>
                   {a.autor.role_title && <p className="text-[13px] text-ink-3">{a.autor.role_title}</p>}
                   <p className="mt-2 text-[14px] leading-[1.6] text-ink-2">{a.autor.bio}</p>
                 </div>

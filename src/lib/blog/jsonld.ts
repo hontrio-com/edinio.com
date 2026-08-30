@@ -1,5 +1,6 @@
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 import { ID_ORGANIZATIE, ID_SITE } from "@/lib/website-jsonld";
+import { adreseBune } from "./types";
 import type { ArticolIntreg } from "./citire";
 
 /**
@@ -66,7 +67,7 @@ export function articolJsonLd(a: ArticolIntreg): object {
       ...(a.autor.role_title ? { jobTitle: a.autor.role_title } : {}),
       ...(a.autor.bio ? { description: a.autor.bio } : {}),
       ...(a.autor.avatar_url ? { image: a.autor.avatar_url } : {}),
-      ...(a.autor.sameas?.length ? { sameAs: a.autor.sameas } : {}),
+      ...(adreseBune(a.autor.sameas).length ? { sameAs: adreseBune(a.autor.sameas) } : {}),
       worksFor: { "@id": ID_ORGANIZATIE },
     };
   } else {
@@ -121,6 +122,56 @@ export function listaBlogJsonLd(): object {
         inLanguage: "ro-RO",
         isPartOf: { "@id": ID_SITE },
         publisher: { "@id": ID_ORGANIZATIE },
+      },
+    ],
+  };
+}
+
+/**
+ * Datele structurate ale paginii unui autor.
+ *
+ * ⚠ ACELAȘI `@id` CA ÎN ARTICOLE, dinadins. În `articolJsonLd` autorul are
+ * `@id` pe `/blog/autor/<slug>#persoana`; aici nodul întreg stă la aceeași
+ * adresă. Așa un motor care citește un articol și apoi pagina asta știe că e
+ * vorba de aceeași persoană — nu de două cu același nume.
+ *
+ * Fără pagina asta, `@id`-ul din articole era doar un identificator care nu
+ * ducea nicăieri. Valid, dar nedovedit.
+ */
+export function autorJsonLd(
+  autor: { slug: string; name: string; role_title: string | null; bio: string | null; avatar_url: string | null; sameas: string[] },
+  /**
+   * Subiectele despre care chiar a scris, adică numele categoriilor articolelor
+   * lui.
+   *
+   * ⚠ NU O LISTĂ SCRISĂ DE MÂNĂ. `knowsAbout` e o declarație despre competența
+   * cuiva; una inventată e exact genul de afirmație pe care un motor o poate
+   * dezminți citind articolele. Derivată din ce a publicat, nu poate să mintă.
+   */
+  subiecte: string[],
+): object {
+  const adresa = `${PLATFORM_ORIGIN}/blog/autor/${autor.slug}`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "ProfilePage",
+        "@id": `${adresa}#pagina`,
+        url: adresa,
+        isPartOf: { "@id": ID_SITE },
+        mainEntity: { "@id": `${adresa}#persoana` },
+      },
+      {
+        "@type": "Person",
+        "@id": `${adresa}#persoana`,
+        name: autor.name,
+        url: adresa,
+        ...(autor.role_title ? { jobTitle: autor.role_title } : {}),
+        ...(autor.bio ? { description: autor.bio } : {}),
+        ...(autor.avatar_url ? { image: autor.avatar_url } : {}),
+        ...(adreseBune(autor.sameas).length ? { sameAs: adreseBune(autor.sameas) } : {}),
+        worksFor: { "@id": ID_ORGANIZATIE },
+        ...(subiecte.length ? { knowsAbout: subiecte } : {}),
       },
     ],
   };

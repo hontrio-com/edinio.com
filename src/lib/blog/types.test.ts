@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { asteaptaCeasul, minuteDeCitit, seVede, slugDin } from "./types";
+import { adreseBune, asteaptaCeasul, minuteDeCitit, seVede, slugDin } from "./types";
 
 /*
   Regula care hotaraste daca un articol se vede e scrisa in DOUA locuri: ca
@@ -119,4 +119,55 @@ test("minutele se socotesc pe text, nu pe etichete HTML", () => {
 test("un articol gol are macar un minut, nu zero", () => {
   assert.equal(minuteDeCitit(""), 1);
   assert.equal(minuteDeCitit("<p></p>"), 1);
+});
+
+// ── Profilurile publice ale autorului ──
+
+/*
+  ⚠ DE CE E FUNCȚIA ASTA PROBATĂ SEPARAT.
+
+  Pe 30.08.2026 filtrarea exista DOAR în acțiunea de server, adică doar pe drumul
+  prin care scrie omul. Un rând pus direct în bază („nu-e-adresa") a trecut
+  netulburat și a ajuns întreg în `Person.sameAs` din datele structurate, și ca
+  buton în pagină.
+
+  `sameAs` e o declarație verificabilă despre cine e autorul. Una care nu duce
+  nicăieri e mai rea decât lipsa ei: trece drept afirmație și cade la prima
+  verificare. Acum funcția se cheamă și la scriere, și la afișare.
+*/
+
+test("un rand care nu e adresa nu trece", () => {
+  assert.deepEqual(adreseBune(["nu-e-adresa"]), []);
+  assert.deepEqual(adreseBune(["www.linkedin.com/in/x"]), [], "lipsa protocolului nu face o adresa");
+  assert.deepEqual(adreseBune([""]), []);
+  assert.deepEqual(adreseBune(["   "]), []);
+});
+
+test("adresele bune trec, si se curata de spatii", () => {
+  assert.deepEqual(
+    adreseBune(["  https://www.linkedin.com/in/x  ", "http://exemplu.ro"]),
+    ["https://www.linkedin.com/in/x", "http://exemplu.ro"],
+  );
+});
+
+test("scheme periculoase nu trec", () => {
+  // `javascript:` ar deveni un buton apasabil in pagina de autor.
+  assert.deepEqual(adreseBune(["javascript:alert(1)"]), []);
+  assert.deepEqual(adreseBune(["data:text/html,<script>x</script>"]), []);
+  assert.deepEqual(adreseBune(["file:///etc/passwd"]), []);
+});
+
+test("lista goala sau lipsa nu strica nimic", () => {
+  assert.deepEqual(adreseBune([]), []);
+  assert.deepEqual(adreseBune(null), []);
+  assert.deepEqual(adreseBune(undefined), []);
+});
+
+test("rele si bune amestecate: raman doar bunele", () => {
+  // Cazul adevarat: un rand gresit langa unul corect nu trebuie sa le piarda pe
+  // amandoua, dar nici sa treaca cu ele.
+  assert.deepEqual(
+    adreseBune(["https://x.ro", "stricat", "https://y.ro"]),
+    ["https://x.ro", "https://y.ro"],
+  );
 });

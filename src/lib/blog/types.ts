@@ -166,3 +166,30 @@ export function slugDin(text: string): string {
     .slice(0, 80)
     .replace(/-+$/g, "");
 }
+
+/**
+ * Păstrează doar rândurile care chiar sunt adrese web.
+ *
+ * ⚠ SE CHEAMĂ ȘI LA SCRIERE, ȘI LA AFIȘARE. La scriere, ca omul să nu salveze
+ * un rând greșit. La afișare, fiindcă validarea de la scriere NU apără împotriva
+ * datelor venite pe altă cale — un import, o reparație făcută cu SQL, un rând
+ * mai vechi decât regula.
+ *
+ * Găsit exact așa, pe 30.08.2026: un rând scris direct în bază a ajuns întreg
+ * în `Person.sameAs`. `sameAs` e o declarație verificabilă despre cine e omul;
+ * una care nu duce nicăieri e mai rea decât lipsa ei, fiindcă trece drept
+ * afirmație și cade la prima verificare.
+ */
+export function adreseBune(intrari: string[] | null | undefined): string[] {
+  return (intrari ?? [])
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .filter((s) => {
+      try {
+        const u = new URL(s);
+        return u.protocol === "https:" || u.protocol === "http:";
+      } catch {
+        return false;
+      }
+    });
+}

@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-guard";
 import {
+  adreseBune,
   minuteDeCitit,
   seVede,
   slugDin,
@@ -94,28 +95,6 @@ export type AutorInput = {
   avatar_url?: string | null;
   sameas?: string[];
 };
-
-/**
- * Pastreaza doar adresele care chiar sunt adrese.
- *
- * ⚠ ASTEA PLEACA IN `Person.sameAs` DIN DATELE STRUCTURATE. Un rand scris
- * gresit acolo nu strica pagina, dar strica exact ce trebuia sa faca: leaga
- * autorul de o persoana cunoscuta. O adresa invalida e mai rea decat lipsa ei,
- * fiindca trece drept declaratie si nu duce nicaieri.
- */
-function adreseBune(intrari: string[] | undefined): string[] {
-  return (intrari ?? [])
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .filter((s) => {
-      try {
-        const u = new URL(s);
-        return u.protocol === "https:" || u.protocol === "http:";
-      } catch {
-        return false;
-      }
-    });
-}
 
 export async function creeazaAutor(intrare: AutorInput): Promise<RaspunsCu<{ id: string }>> {
   if (!(await requireAdminApi())) return { error: "Neautorizat" };

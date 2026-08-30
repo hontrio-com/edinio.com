@@ -230,6 +230,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const categoriiCuArticole = [
     ...new Set(articoleBlog.map((a) => a.categorie?.slug).filter((s): s is string => !!s)),
   ];
+  /* Din aceleași rânduri, fără încă o interogare: autorul vine deja legat de
+     fiecare articol. */
+  const autoriDeAratat = [
+    ...new Set(articoleBlog.map((a) => a.autor?.slug).filter((s): s is string => !!s)),
+  ];
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: PLATFORM_ORIGIN, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
@@ -318,6 +323,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.5,
+    })),
+    /* Doar autorii cu articole. Ceilalți dau 404 dinadins — o pagină cu un nume
+       și nimic altceva e o pagină subțire, iar un sitemap care o anunță trimite
+       crawlerul degeaba. */
+    ...autoriDeAratat.map((slug) => ({
+      url: `${PLATFORM_ORIGIN}/blog/autor/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.4,
     })),
   ];
 

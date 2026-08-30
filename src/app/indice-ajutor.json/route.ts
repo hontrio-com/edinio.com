@@ -6,7 +6,7 @@ import { construiesteIndex } from "@/lib/website/ajutor-cautare";
  *
  * ═══ DE CE UN FIȘIER ȘI NU DATELE ÎN PACHET ═══
  *
- * Căutarea are nevoie de toate cele 531 de ghiduri, dar NUMAI atunci când omul
+ * Căutarea are nevoie de toate cele 406 de ghiduri, dar NUMAI atunci când omul
  * chiar scrie ceva în câmp. Împachetate cu pagina, cele 1,1 MB de text plecau spre
  * fiecare vizitator, inclusiv spre cei care deschid `/ajutor`, se uită la
  * categorii și apasă pe una. Se vedea: pagina se randa în secunde.

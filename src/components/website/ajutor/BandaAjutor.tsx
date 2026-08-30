@@ -49,9 +49,7 @@ export function BandaAjutor() {
             banda e același obiect, deci se așază la fel peste tot. */}
         <BandaContact cai={CAI_AJUTOR} className="mx-auto mt-8 max-w-[820px] text-start" />
 
-        <p className="mt-6 text-[14px] text-ink-3">
-          Îți răspunde un om, {PROGRAM.zile.toLowerCase()}, între {PROGRAM.ore}.
-        </p>
+        <p className="mt-6 text-[14px] text-ink-3">{PROGRAM.fraza}</p>
       </div>
     </section>
   );

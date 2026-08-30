@@ -72,10 +72,35 @@ export const VERDE_WHATSAPP = "#25D366";
  * așa scria undeva e o promisiune încălcată, nu o greșeală de redactare.
  */
 export const PROGRAM = {
-  zile: "Luni - Duminică",
-  ore: "08:00 - 20:00",
+  /*
+   * Bucățile stau separat, iar formele se construiesc din ele.
+   *
+   * Motivul e o cerere din 30.08: în centrul de ajutor programul trebuie citit
+   * curgător, „de Luni până Duminică între orele 08:00 și 20:00”, nu cu liniuțe.
+   * Din `"Luni - Duminică"` nu se poate scoate fraza aia fără să tai șirul cu
+   * un `split`, iar un `split` pe un text scris de om se rupe tăcut la prima
+   * schimbare de cratimă. Așa, fiecare formă se scrie o dată și pornește din
+   * aceleași patru valori.
+   */
+  ziIntai: "Luni",
+  ziUltima: "Duminică",
+  oraDeschidere: "08:00",
+  oraInchidere: "20:00",
+
+  /** „Luni - Duminică”, pentru tabele și etichete. */
+  get zile(): string {
+    return `${this.ziIntai} - ${this.ziUltima}`;
+  },
+  /** „08:00 - 20:00”, pentru tabele și etichete. */
+  get ore(): string {
+    return `${this.oraDeschidere} - ${this.oraInchidere}`;
+  },
   /** Rândul întreg, pentru un singur loc de afișare. */
   get intreg(): string {
     return `${this.zile}, ${this.ore}`;
+  },
+  /** Fraza întreagă, pentru unde se citește ca o propoziție, nu ca o etichetă. */
+  get fraza(): string {
+    return `Suntem disponibili de ${this.ziIntai} până ${this.ziUltima} între orele ${this.oraDeschidere} și ${this.oraInchidere}.`;
   },
 };

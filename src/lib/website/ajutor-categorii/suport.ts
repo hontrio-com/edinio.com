@@ -26,7 +26,7 @@ export const SUPORT: CategorieAjutor = {
             "Intră în panoul de administrare > Suport.",
             {
               text: "Apasă „Tichet nou” din dreapta sus. Se deschide fereastra „Tichet nou de suport”.",
-              captura: { alt: "Fereastra „Tichet nou de suport” cu câmpurile Subiect, Categorie, Prioritate, Descriere și Atașamente.", raport: 16 / 10 },
+              captura: { alt: "Fereastra „Tichet nou de suport” cu câmpurile Subiect, Categorie, Prioritate, Descriere și Atașamente.", src: "/capturi/ajutor/suport/cum-deschizi-un-tichet-de-suport.webp", raport: 16 / 10 },
             },
             "Dacă ai mai multe magazine, alege magazinul din lista „Magazin” sau alege „Cont general”.",
             "Scrie „Subiect”, adică problema pe scurt.",
@@ -58,10 +58,7 @@ export const SUPORT: CategorieAjutor = {
             "Se deschide pagina „Suport”, cu subtitlul „Deschide un tichet și echipa noastră te va ajuta”.",
             "Sub subtitlu vezi caseta „Ai nevoie de ajutor urgent?”, cu numărul de telefon și butonul WhatsApp.",
             "Mai jos sunt patru contoare: „Deschise”, „În lucru”, „Rezolvate” și „Răspunsuri noi”.",
-            {
-              text: "Sub contoare este lista tichetelor tale, cel mai recent actualizat primul.",
-              captura: { alt: "Pagina Suport cu cele patru contoare și lista de tichete.", raport: 16 / 10 },
-            },
+            "Sub contoare este lista tichetelor tale, cel mai recent actualizat primul.",
             "Apeși pe rândul unui tichet ca să deschizi conversația.",
           ],
           detalii: [
@@ -84,10 +81,7 @@ export const SUPORT: CategorieAjutor = {
           pasi: [
             "În fereastra „Tichet nou de suport”, mergi la câmpul „Atașamente (opțional, max 5 fișiere, 10MB fiecare)”.",
             "Apasă butonul punctat „Adaugă fișier” și alege unul sau mai multe fișiere din calculator sau din telefon.",
-            {
-              text: "Fișierele acceptate apar într-o listă, fiecare cu numele și dimensiunea în KB.",
-              captura: { alt: "Câmpul Atașamente cu două fișiere adăugate, fiecare cu nume, dimensiune și X.", raport: 16 / 10 },
-            },
+            "Fișierele acceptate apar într-o listă, fiecare cu numele și dimensiunea în KB.",
             "Dacă ai ales greșit, apasă X-ul din dreapta fișierului ca să îl scoți din listă.",
             "Într-un tichet deja deschis, folosește butonul cu agrafă de lângă caseta de răspuns, cu indiciul „Adaugă fișier”. Fișierele apar ca etichete deasupra casetei și le scoți tot cu X.",
           ],
@@ -112,10 +106,7 @@ export const SUPORT: CategorieAjutor = {
             "Apasă oriunde pe rândul tichetului. Se deschide pagina tichetului.",
             "Citește antetul: subiectul, eticheta de status, prioritatea, categoria și numărul scurt al tichetului.",
             "Sub antet vezi „Deschis pe” și data și ora la care a fost creat tichetul.",
-            {
-              text: "Parcurge conversația: mesajele tale sunt în dreapta, răspunsurile echipei în stânga.",
-              captura: { alt: "Pagina unui tichet cu antetul, data creării și conversația.", raport: 16 / 10 },
-            },
+            "Parcurge conversația: mesajele tale sunt în dreapta, răspunsurile echipei în stânga.",
             "Apasă „Înapoi la tichete” ca să revii în listă.",
           ],
           detalii: [
@@ -135,10 +126,7 @@ export const SUPORT: CategorieAjutor = {
           rezumat: "Scrii in caseta din josul paginii tichetului, poti atasa fisiere si trimiti cu butonul verde sau cu Ctrl+Enter.",
           pasi: [
             "Intră în panoul de administrare > Suport și deschide tichetul.",
-            {
-              text: "Mergi la caseta de scriere din josul paginii, cu sugestia „Scrie un mesaj... (Ctrl+Enter pentru a trimite)”.",
-              captura: { alt: "Caseta de răspuns din josul paginii, cu butonul cu agrafă și butonul verde de trimitere.", raport: 16 / 10 },
-            },
+            "Mergi la caseta de scriere din josul paginii, cu sugestia „Scrie un mesaj... (Ctrl+Enter pentru a trimite)”.",
             "Scrie mesajul. Caseta crește singură pe măsură ce scrii.",
             "Dacă ai fișiere de trimis, apasă butonul cu agrafă și alege-le.",
             "Trimite cu butonul verde din dreapta sau cu Ctrl+Enter, respectiv Cmd+Enter pe Mac.",
@@ -160,10 +148,7 @@ export const SUPORT: CategorieAjutor = {
           rezumat: "Din antetul tichetului poti pune statusul Rezolvat, iar apoi il poti readuce la Deschis.",
           pasi: [
             "Intră în panoul de administrare > Suport și deschide tichetul.",
-            {
-              text: "În dreapta sus, în antet, apasă „Marcare rezolvat”.",
-              captura: { alt: "Antetul tichetului cu butonul „Marcare rezolvat” în dreapta sus.", raport: 16 / 10 },
-            },
+            "În dreapta sus, în antet, apasă „Marcare rezolvat”.",
             "Eticheta de status devine „Rezolvat”, apare mesajul „Tichetul a fost marcat ca rezolvat”, iar la finalul conversației apare linia „Tichet marcat ca rezolvat”.",
             "Butonul este înlocuit de „Redeschide”.",
             "Dacă problema revine, apasă „Redeschide”. Statusul devine „Deschis” și apare mesajul „Tichetul a fost redeschis”.",
@@ -183,10 +168,7 @@ export const SUPORT: CategorieAjutor = {
           titlu: "Cum afli că ai primit un răspuns de la suport",
           rezumat: "Vezi un numar langa Suport in meniu, eticheta Raspuns nou pe randul tichetului si primesti un email.",
           pasi: [
-            {
-              text: "Verifică meniul lateral. Lângă „Suport” apare un număr pe fundal verde, cu cifra albă, cât timp ai tichete cu răspunsuri necitite.",
-              captura: { alt: "Meniul lateral cu numărul verde de răspunsuri necitite lângă Suport.", raport: 16 / 10 },
-            },
+            "Verifică meniul lateral. Lângă „Suport” apare un număr pe fundal verde, cu cifra albă, cât timp ai tichete cu răspunsuri necitite.",
             "Intră în panoul de administrare > Suport. Tichetul cu răspuns are un bulin în stânga și eticheta „Răspuns nou”, iar contorul „Răspunsuri noi” din capul paginii crește.",
             "Verifică și emailul. Primești un mesaj cu subiectul „Răspuns la tichetul tău: {subiect}”, cu butonul „Răspunde sau vezi conversația”.",
             "Deschide tichetul. Răspunsul este marcat ca citit, iar eticheta „Răspuns nou” dispare.",
@@ -208,10 +190,7 @@ export const SUPORT: CategorieAjutor = {
             "Intră în panoul de administrare > Suport și deschide tichetul.",
             "În antet vezi eticheta „Închis”, în locul butoanelor de status.",
             "La finalul conversației apare linia „Tichet închis”.",
-            {
-              text: "În locul casetei de răspuns citești „Acest tichet este închis. Deschide un tichet nou dacă mai ai nevoie de ajutor.”.",
-              captura: { alt: "Finalul unui tichet închis, cu linia „Tichet închis” și textul care înlocuiește caseta de răspuns.", raport: 16 / 10 },
-            },
+            "În locul casetei de răspuns citești „Acest tichet este închis. Deschide un tichet nou dacă mai ai nevoie de ajutor.”.",
             "Apasă linkul verde „Tichet nou” de sub acest text. Ești dus în lista de tichete.",
             "Din listă apasă din nou „Tichet nou” ca să se deschidă formularul.",
           ],
@@ -219,7 +198,7 @@ export const SUPORT: CategorieAjutor = {
             { titlu: "De ce sunt doi pași până la formular", text: "Linkul „Tichet nou” din pagina tichetului închis doar te duce în lista de tichete. Formularul se deschide de la butonul „Tichet nou” din dreapta sus a paginii Suport." },
             { titlu: "Nu poți scrie în tichetul închis", text: "Caseta de răspuns nu mai există, iar dacă mesajul ajunge totuși la server, răspunsul lui este „Tichetul este închis”." },
             { titlu: "Nu ai buton de redeschidere", text: "Pentru un tichet închis, panoul nu îți oferă niciun buton de redeschidere. Antetul afișează doar eticheta „Închis”. Butonul „Redeschide” apare numai la tichetele cu statusul „Rezolvat”." },
-            { titlu: "Cum legi tichetul nou de cel vechi", text: "În descrierea tichetului nou scrie numărul scurt al tichetului închis, cel din antet, format din diez și primele opt caractere. Astfel echipa găsește repede discuția anterioară." },
+            { titlu: "Cum legi tichetul nou de cel vechi", text: "În descrierea tichetului nou scrie numărul scurt al tichetului închis, cel din antet, format din diez și primele opt caractere. Cu el, echipa găsește repede discuția anterioară." },
             { titlu: "Tichetul închis rămâne în listă", text: "Nu poți șterge și nu poți arhiva tichetele. Cel închis rămâne în listă, cu eticheta „Închis”, și este numărat de contorul „Rezolvate”, împreună cu tichetele rezolvate." },
           ],
           termeni: ["tichet blocat", "nu pot scrie", "conversatie incheiata", "continui discutia"],
@@ -230,10 +209,7 @@ export const SUPORT: CategorieAjutor = {
           rezumat: "Din pagina Suport poti suna direct sau deschide o conversatie WhatsApp cu echipa Edinio.",
           pasi: [
             "Intră în panoul de administrare > Suport.",
-            {
-              text: "Sub subtitlul paginii găsești caseta „Ai nevoie de ajutor urgent?”, cu textul „Pentru probleme urgente, contactează-ne direct prin telefon sau WhatsApp.”.",
-              captura: { alt: "Caseta „Ai nevoie de ajutor urgent?” cu butonul de telefon și butonul WhatsApp.", raport: 16 / 10 },
-            },
+            "Sub subtitlul paginii găsești caseta „Ai nevoie de ajutor urgent?”, cu textul „Pentru probleme urgente, contactează-ne direct prin telefon sau WhatsApp.”.",
             "Apasă „0750 456 809” ca să pornești un apel telefonic.",
             "Sau apasă „WhatsApp” ca să deschizi o conversație cu numărul 40750456809, într-o filă nouă.",
           ],

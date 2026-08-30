@@ -27,7 +27,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "După ce ești în secțiune, sub \"Comenzi\" apar subpaginile \"Toate comenzile\" și \"Retururi\".",
             {
               text: "Apasă \"Toate comenzile\". Pagina se numește \"Comenzi\" și sub titlu scrie \"Toate comenzile primite\".",
-              captura: { alt: "Pagina Comenzi cu tabelul de comenzi, taburile de status și pastila cu numărul comenzilor în așteptare.", raport: 16 / 10 },
+              captura: { alt: "Pagina Comenzi cu tabelul de comenzi, taburile de status și pastila cu numărul comenzilor în așteptare.", src: "/capturi/ajutor/comenzi-si-livrare/cum-deschizi-lista-de-comenzi.webp", raport: 16 / 10 },
             },
             "Dacă ai comenzi neprocesate, în dreapta sus vezi pastila cu numărul lor, de forma \"3 în așteptare\".",
             "Apasă pe un rând ca să deschizi comanda. Apasă în afara căsuței de bifat și a butoanelor din coloanele de AWB și de facturare, pentru că acelea fac altceva.",
@@ -44,83 +44,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["unde vad comenzile", "tabel comenzi", "coloane comenzi", "paginare comenzi", "50 pe pagina", "comenzi in asteptare"],
         },
         {
-          slug: "cum-cauti-o-comanda",
-          titlu: "Cum cauți o comandă după număr, client sau telefon",
-          rezumat: "Câmpul de căutare din pagina de comenzi caută în numărul comenzii, în numele clientului și în telefonul lui.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile.",
-            {
-              text: "Scrie în câmpul cu lupă de sub titlu, cel cu textul \"Caută comandă, client...\".",
-              captura: { alt: "Câmpul de căutare din pagina Comenzi, cu un termen scris și rândul de rezultate sub taburi.", raport: 16 / 10 },
-            },
-            "Nu apăsa nimic. Căutarea pornește singură la scurt timp după ce te oprești din scris.",
-            "Citește rândul de sub taburi. Acolo scrie câte rezultate ai pentru termenul căutat sau \"Niciun rezultat pentru\" și termenul.",
-            "Apasă X din dreapta câmpului ca să ștergi textul și să aduci înapoi toată lista.",
-          ],
-          detalii: [
-            { titlu: "Unde caută și unde nu", text: "Se caută în același timp în numărul comenzii, în numele clientului și în telefonul clientului. Nu se caută după email, după adresă, după produsele din comandă și nici după numărul AWB. Dacă ai doar adresa de email a clientului, caută-l mai întâi după nume sau după telefon." },
-            { titlu: "Ce se întâmplă cu ce scrii", text: "Termenul este tăiat la 80 de caractere. Virgulele, parantezele și ghilimelele sunt transformate în spații înainte de căutare, așa că nu are rost să lipești în câmp un text copiat cu semne de punctuație." },
-            { titlu: "Când nu găsește nimic", text: "În tabel apare \"Niciun rezultat\", sub el \"Încearcă un alt termen de căutare\" și butonul \"Șterge căutarea\", care te readuce la lista completă." },
-            { titlu: "Efectul asupra selecției", text: "Orice căutare nouă șterge bifele făcute înainte. Dacă ai selectat comenzi pentru o acțiune în masă, fă acțiunea înainte să cauți altceva." },
-          ],
-          nota: "Numerele de pe taburile de status rămân calculate pe tot magazinul, nu se restrâng după termenul căutat.",
-          termeni: ["cauta comanda", "gasesc comanda dupa telefon", "cautare dupa nume client", "numar comanda", "niciun rezultat"],
-        },
-        {
-          slug: "cum-filtrezi-comenzile-dupa-status",
-          titlu: "Cum filtrezi comenzile după status",
-          rezumat: "Taburile de sub căutare îți arată doar comenzile cu un anumit status și numărul lor.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile.",
-            {
-              text: "Sub câmpul de căutare apasă pe tabul care te interesează.",
-              captura: { alt: "Bara de taburi de status din pagina Comenzi, cu numărul de comenzi lângă fiecare status.", raport: 16 / 10 },
-            },
-            "Citește numărul de lângă denumirea tabului. Acela e numărul de comenzi cu acel status.",
-            "Tabul apăsat se colorează, lista de dedesubt se filtrează și sare la pagina 1.",
-          ],
-          detalii: [
-            { titlu: "Taburile disponibile", text: "\"Toate\", \"În așteptare\", \"Confirmate\", \"În procesare\", \"Expediate\", \"Livrate\", \"Anulate\", \"Rambursate\"." },
-            { titlu: "De ce nu vezi toate taburile", text: "Un tab apare doar dacă există cel puțin o comandă cu acel status. Singurul mereu vizibil este \"Toate\". Dacă nu ai nicio comandă rambursată, tabul \"Rambursate\" lipsește din bară." },
-            { titlu: "Când filtrul nu are rezultate", text: "În tabel scrie \"Nicio comandă cu statusul\" și statusul ales. Dacă magazinul nu are nicio comandă, mesajul este \"Nicio comandă încă\" și \"Comenzile clienților vor apărea aici\"." },
-            { titlu: "Filtru și căutare împreună", text: "Poți combina tabul cu un termen de căutare. Numărul de pe taburi rămâne calculat pe tot magazinul, deci poate fi mai mare decât numărul de rânduri pe care le vezi când ai și o căutare activă." },
-          ],
-          nota: "Schimbarea tabului șterge bifele de selecție, ca să nu aplici o acțiune pe comenzi pe care nu le mai ai pe ecran.",
-          termeni: ["taburi status", "comenzi anulate", "comenzi expediate", "filtru comenzi", "comenzi livrate"],
-        },
-        {
-          slug: "cum-selectezi-comenzi-pentru-actiuni-in-masa",
-          titlu: "Cum selectezi mai multe comenzi pentru acțiuni în masă",
-          rezumat: "Bifezi comenzile din tabel și deasupra apare bara cu acțiunile care se pot aplica pe toate deodată.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile.",
-            "Bifează căsuța din capul tabelului ca să selectezi toate comenzile de pe pagina curentă. Eticheta ei de accesibilitate este \"Selectează toate comenzile de pe pagină\".",
-            "Sau bifează individual căsuța de pe fiecare rând, cu eticheta \"Selectează comanda\" și numărul comenzii.",
-            {
-              text: "Deasupra tabelului apare o bară lipită de marginea de sus, care îți spune câte comenzi ai selectat.",
-              captura: { alt: "Bara de acțiuni în masă apărută deasupra tabelului, cu numărul de comenzi selectate.", raport: 16 / 10 },
-            },
-            "Din bară alegi acțiunea. Apasă \"Deselectează\" dacă vrei să golești selecția.",
-          ],
-          detalii: [
-            { titlu: "Selecția ține doar de pagina vizibilă", text: "Bifele se golesc dacă schimbi pagina, dacă schimbi tabul de status sau dacă faci o căutare nouă. E intenționat, ca să nu aplici o acțiune pe comenzi care nu mai sunt pe ecran." },
-            { titlu: "Limita pe acțiune", text: "O acțiune în masă lucrează pe cel mult 50 de comenzi, exact cât încape pe o pagină. Dacă ai de procesat mai multe, le iei pagină cu pagină." },
-            { titlu: "Ce poți face din bară", text: "Schimbi statusul comenzilor selectate, generezi facturi pentru ele sau generezi AWB-uri. Ce butoane vezi depinde de integrările pe care le ai conectate." },
-          ],
-          nota: "Bifa de pe rând nu deschide comanda. Celula cu bifa nu răspunde la click-ul care deschide detaliul.",
-          termeni: ["bifez comenzi", "selectie multipla", "actiuni in masa", "bulk", "50 de comenzi"],
-        },
-        {
           slug: "cum-schimbi-statusul-mai-multor-comenzi",
           titlu: "Cum schimbi statusul mai multor comenzi deodată",
           rezumat: "Bifezi comenzile, alegi noul status din bara de acțiuni și apeși Aplică.",
           pasi: [
             "Intră în Comenzi > Toate comenzile și bifează comenzile care te interesează.",
             "În bara de acțiuni deschide lista de statusuri. Ea arată \"Schimbă status...\" până alegi ceva.",
-            {
-              text: "Alege noul status.",
-              captura: { alt: "Lista de statusuri deschisă în bara de acțiuni în masă, lângă butonul Aplică.", raport: 16 / 10 },
-            },
+            "Alege noul status.",
             "Apasă \"Aplică\".",
             "La final vezi un mesaj cu numărul de comenzi și statusul aplicat, iar selecția se golește.",
           ],
@@ -134,40 +64,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["status in masa", "marchez expediat", "schimb status mai multe comenzi", "bulk status"],
         },
         {
-          slug: "cum-generezi-facturi-pentru-mai-multe-comenzi",
-          titlu: "Cum generezi facturi pentru mai multe comenzi deodată",
-          rezumat: "Din bara de acțiuni emiți facturi pentru comenzile bifate, cu furnizorul ales de tine sau cel automat.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile și bifează comenzile de facturat.",
-            "Dacă ai mai mulți furnizori de facturare conectați, alege furnizorul din listă. Implicit este \"Factură: automat\".",
-            {
-              text: "Apasă \"Generează facturi\".",
-              captura: { alt: "Butonul Generează facturi și lista de furnizori din bara de acțiuni în masă.", raport: 16 / 10 },
-            },
-            "Confirmă în fereastra browserului. Textul te avertizează că se emit documente fiscale reale, care nu pot fi șterse, doar stornate.",
-            "Citește bilanțul de la final: câte au fost reușite, câte sărite și câte eșuate.",
-          ],
-          detalii: [
-            { titlu: "Ce înseamnă automat", text: "Pe \"Factură: automat\" se folosește primul furnizor conectat, în ordinea SmartBill, apoi Oblio, apoi fGO. Lista de alegere apare doar dacă ai mai mult de un furnizor conectat. Cu unul singur, butonul lucrează direct cu acela." },
-            { titlu: "Ce comenzi sunt sărite", text: "O comandă care are deja factură la oricare dintre cei trei furnizori este sărită, ca să nu se factureze a doua oară." },
-            { titlu: "Ce îți trebuie conectat", text: "Cel puțin o integrare de facturare activă: SmartBill activat, sau Oblio activat cu client_id, CIF și serie de factură, sau fGO activat cu cod unic, cheie privată și serie. Dacă alegi din listă un furnizor care nu e configurat, primești \"Niciun furnizor de facturare activ pentru optiunea aleasa.\"." },
-            { titlu: "De ce durează", text: "Facturile se emit una câte una, ca numerele de document să iasă în ordine. Pe un lot mare, lasă pagina deschisă până apare bilanțul." },
-            { titlu: "Documentele sunt reale", text: "Nu sunt simulări. Ce s-a emis rămâne emis la furnizorul tău de facturare și se anulează doar prin storno, din detaliul comenzii." },
-          ],
-          nota: "Se facturează cel mult 50 de comenzi pe acțiune. Contul și seriile de facturare sunt ale tale, la furnizorul tău. Edinio doar trimite documentele acolo.",
-          termeni: ["facturi in masa", "emit facturi multiple", "smartbill oblio fgo bulk", "facturare automata"],
-        },
-        {
           slug: "cum-generezi-awb-uri-pentru-mai-multe-comenzi",
           titlu: "Cum generezi AWB-uri pentru mai multe comenzi deodată",
           rezumat: "Bifezi comenzile și generezi AWB-urile cu Cargus, Sameday, FAN Courier sau DPD.",
           pasi: [
             "Intră în Comenzi > Toate comenzile și bifează comenzile de expediat.",
             "Dacă ai mai mulți curieri conectați, alege curierul din listă. Implicit este \"AWB: după client\", adică se folosește curierul ales de fiecare client la finalizarea comenzii.",
-            {
-              text: "Apasă \"Generează AWB-uri\". Când ai un singur curier conectat, butonul poartă numele lui.",
-              captura: { alt: "Butonul de generare AWB-uri și lista de curieri din bara de acțiuni în masă.", raport: 16 / 10 },
-            },
+            "Apasă \"Generează AWB-uri\". Când ai un singur curier conectat, butonul poartă numele lui.",
             "Așteaptă bilanțul cu reușite, sărite și eșuate.",
             "Pentru comenzile eșuate, citește motivul din lista de sub bară și reia-le individual din tabel.",
           ],
@@ -187,10 +90,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "După fiecare acțiune în masă apare un raport cu bilanțul și cu motivul pentru fiecare comandă eșuată.",
           pasi: [
             "Rulează acțiunea în masă, de facturi sau de AWB-uri.",
-            {
-              text: "Sub bara de acțiuni apare un rând cu titlul acțiunii, \"Facturi\" sau \"AWB-uri\", și bilanțul: câte reușite, câte sărite, câte eșuate.",
-              captura: { alt: "Raportul de sub bara de acțiuni, cu bilanțul și lista de comenzi eșuate.", raport: 16 / 10 },
-            },
+            "Sub bara de acțiuni apare un rând cu titlul acțiunii, \"Facturi\" sau \"AWB-uri\", și bilanțul: câte reușite, câte sărite, câte eșuate.",
             "Citește lista de sub bilanț. Pentru fiecare comandă eșuată vezi numărul comenzii și motivul returnat de furnizor sau de curier.",
             "Rezolvă cauza și reia comenzile respective individual, din tabel.",
             "Închide raportul cu X din dreapta lui.",
@@ -210,10 +110,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Intră în Comenzi > Toate comenzile și apasă pe rândul comenzii.",
             "Sus vezi numărul comenzii, pastila de status, pastila de status al plății și data.",
-            {
-              text: "Sub ele citești banda cu etapele: \"Primită\", \"Confirmată\", \"Expediată\", \"Livrată\".",
-              captura: { alt: "Pagina unei comenzi, cu banda de etape și cardurile Informații client și Produse comandate.", raport: 16 / 10 },
-            },
+            "Sub ele citești banda cu etapele: \"Primită\", \"Confirmată\", \"Expediată\", \"Livrată\".",
             "Coboară la cardul \"Informații client\" pentru datele de contact și adresă.",
             "Citește cardul \"Produse comandate\" și blocul de totaluri de sub el.",
             "Apasă \"Înapoi\", în stânga sus, ca să te întorci la listă.",
@@ -236,10 +133,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "În cardul \"Status comandă\" apasă pastila cu noul status.",
             "Sub eticheta \"Status plată\" apasă pastila potrivită.",
             "Apasă \"Salvează modificările\". Butonul rămâne blocat dacă nu ai schimbat nimic.",
-            {
-              text: "În fereastra \"Confirmi modificările?\" verifică ce scrie la \"Status comandă:\" și \"Status plată:\" și apasă \"Confirmă\".",
-              captura: { alt: "Fereastra de confirmare a modificărilor, cu statusul comenzii și statusul plății.", raport: 16 / 10 },
-            },
+            "În fereastra \"Confirmi modificările?\" verifică ce scrie la \"Status comandă:\" și \"Status plată:\" și apasă \"Confirmă\".",
             "La final apare mesajul \"Comanda actualizata.\".",
           ],
           detalii: [
@@ -252,88 +146,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["marchez comanda livrata", "status plata", "confirm comanda", "anulez comanda", "notificare status"],
         },
         {
-          slug: "cum-emiti-facturi-smartbill-dintr-o-comanda",
-          titlu: "Cum emiți facturi SmartBill dintr-o comandă",
-          rezumat: "Din cardul Facturare emiți proformă sau factură SmartBill, o trimiți pe email, o descarci sau o stornezi.",
-          pasi: [
-            "Deschide comanda din Comenzi > Toate comenzile și coboară la cardul \"Facturare\".",
-            "Dacă ai mai mulți furnizori de facturare conectați, apasă fila \"SmartBill\". Cu unul singur, conținutul apare direct, iar sigla furnizorului se vede în antetul cardului.",
-            {
-              text: "În secțiunea \"Proformă\" apasă \"Generează proformă\". Pe durata operațiunii butonul scrie \"Se generează...\".",
-              captura: { alt: "Cardul Facturare cu secțiunile Proformă și Factură pentru SmartBill.", raport: 16 / 10 },
-            },
-            "Apasă \"Convertește în factură\" dacă vrei să transformi proforma în factură.",
-            "Sau, în secțiunea \"Factură\", apasă \"Genereaza factura\" ca să emiți direct factura.",
-            "După emitere ai la dispoziție \"PDF\" pentru descărcare, \"Retrimite\" pentru email și legătura \"SmartBill\" către document.",
-          ],
-          detalii: [
-            { titlu: "Retrimiterea pe email", text: "Apeși \"Retrimite\", verifici adresa din câmp, care e precompletată cu emailul clientului, și apeși \"Trimite\". La final vezi \"Factura retrimisa pe email.\" sau \"Proforma retrimisa pe email.\"." },
-            { titlu: "Storno", text: "Butonul \"Emite storno\" apare de îndată ce alegi pastila \"Anulat\" sau \"Rambursat\" în cardul \"Status comandă\", chiar înainte de salvare, și doar dacă nu s-a emis deja storno. După ce apeși, confirmi în caseta roșie cu \"Confirmă storno\". Textul de acolo spune clar: \"Aceasta actiune storneaza factura in SmartBill. Nu poate fi anulata.\"." },
-            { titlu: "Când SmartBill nu returnează număr de storno", text: "Uneori stornarea reușește, dar SmartBill nu trimite înapoi un număr propriu de document. Atunci vezi doar mesajul care îți spune că factura a fost stornată și că documentul de stornare este disponibil în contul tău SmartBill. Butonul de descărcare nu apare în acest caz." },
-            { titlu: "Când lipsește secțiunea Proformă", text: "Secțiunea apare doar dacă ai o serie de proformă configurată în SmartBill. În plus, butonul de generare proformă dispare după ce comanda are deja factură." },
-            { titlu: "Din tabelul de comenzi", text: "În coloana \"Documente\" ai butonul \"Factură\", cu sigla SmartBill. De acolo se poate doar emite factura, iar după emitere rândul arată doar o pastilă de stare: \"Factură\", \"Proformă\" sau \"Storno\". Proforma, stornarea, PDF-ul și retrimiterea pe email se fac din detaliul comenzii. Coloana este ascunsă pe ecranele mici." },
-            { titlu: "Erori", text: "Dacă descărcarea nu merge, apare \"Eroare la descarcarea PDF-ului.\". Dacă documentul s-a emis, dar emailul către client nu a plecat, primești un avertisment separat, iar factura rămâne emisă." },
-          ],
-          nota: "SmartBill trebuie activat în setările magazinului. Contul și seriile de documente sunt ale tale, Edinio doar trimite datele comenzii acolo.",
-          termeni: ["smartbill", "proforma", "storno factura", "retrimit factura pe email", "pdf factura"],
-        },
-        {
-          slug: "cum-emiti-documente-oblio",
-          titlu: "Cum emiți facturi și proforme Oblio",
-          rezumat: "Emiți documente Oblio din detaliul comenzii sau direct din coloana Oblio a tabelului.",
-          pasi: [
-            "Deschide comanda din Comenzi > Toate comenzile și coboară la cardul \"Facturare\".",
-            "Dacă ai mai mulți furnizori conectați, apasă fila \"Oblio\".",
-            {
-              text: "Apasă \"Genereaza factura\" sau \"Genereaza proforma\".",
-              captura: { alt: "Fila Oblio din cardul Facturare, cu butoanele de generare factură și proformă.", raport: 16 / 10 },
-            },
-            "După emitere vezi documentul cu seria și numărul lui, butonul \"PDF\" dacă Oblio a returnat un link și butonul \"Emite storno\".",
-            "Pentru un mesaj rapid pe mai multe comenzi, folosește aceleași butoane din coloana \"Oblio\" a tabelului.",
-          ],
-          detalii: [
-            { titlu: "Butonul Factură de lângă o proformă", text: "Dacă ai deja o proformă și apeși \"Factura\", se emite o factură nouă, pe seria de facturi. Proforma nu se transformă și rămâne emisă în Oblio. Dacă nu vrei să rămână acolo, ocupă-te de ea din contul tău Oblio." },
-            { titlu: "Proforma cere o serie separată", text: "Butonul de proformă se afișează pe baza integrării active, dar emiterea are nevoie de o serie de proformă configurată în Oblio. Fără ea primești \"Seria pentru proforma nu este configurata in Oblio\"." },
-            { titlu: "După storno", text: "Rămâne doar documentul de storno cu seria și numărul lui, plus \"PDF\" dacă există link. Pe acea comandă nu mai ai nicio acțiune Oblio disponibilă." },
-            { titlu: "Din tabel", text: "Coloana \"Oblio\" apare doar dacă integrarea este activată și completă și este ascunsă pe ecranele mici. Butoanele de acolo fac același lucru ca cele din detaliul comenzii, iar mesajul de reușită îți spune ce document s-a emis, cu seria și numărul." },
-          ],
-          nota: "Integrarea cere Oblio activat, cu client_id, CIF și serie de factură completate. Contul Oblio este al tău.",
-          termeni: ["oblio", "factura oblio", "proforma oblio", "storno oblio", "serie factura"],
-        },
-        {
-          slug: "cum-emiti-facturi-fgo",
-          titlu: "Cum emiți facturi fGO dintr-o comandă",
-          rezumat: "Din cardul Facturare sau din coloana fGO emiți factura și, la nevoie, stornul ei.",
-          pasi: [
-            "Deschide comanda din Comenzi > Toate comenzile și coboară la cardul \"Facturare\".",
-            "Dacă ai mai mulți furnizori conectați, apasă fila \"fGO\".",
-            {
-              text: "Apasă \"Genereaza factura\".",
-              captura: { alt: "Fila fGO din cardul Facturare, cu butonul de generare factură.", raport: 16 / 10 },
-            },
-            "După emitere vezi factura cu seria și numărul, butonul \"PDF\" și butonul \"Emite storno\".",
-            "Aceleași butoane le ai și în coloana \"fGO\" din tabelul de comenzi.",
-          ],
-          detalii: [
-            { titlu: "fGO nu are proformă aici", text: "În cardul de facturare din comandă poți emite doar factură și storno. Nu există buton de proformă pentru fGO." },
-            { titlu: "Butonul PDF", text: "Apare doar dacă fGO a returnat un link pentru documentul respectiv. Se deschide într-o filă nouă. Dacă lipsește, documentul se ia din contul tău fGO." },
-            { titlu: "După storno", text: "Rămân doar informațiile documentului de storno, fără butoane de acțiune pe acea comandă." },
-            { titlu: "Coloana din tabel", text: "Apare doar cu integrarea activată și completă și este ascunsă pe ecranele mici. Mesajul de reușită îți spune ce s-a emis, cu seria și numărul." },
-          ],
-          nota: "fGO trebuie activat cu cod unic, cheie privată și serie. Contul fGO este al tău.",
-          termeni: ["fgo", "factura fgo", "storno fgo", "pdf fgo"],
-        },
-        {
           slug: "cum-creezi-awb-pentru-o-comanda",
           titlu: "Cum creezi AWB pentru o comandă",
           rezumat: "Generezi AWB-ul dintr-o singură comandă, din cardul Expediere sau din coloana curierului.",
           pasi: [
             "Deschide comanda din Comenzi > Toate comenzile.",
             "Coboară la cardul \"Expediere\". Sus vezi curierul propus, cu eticheta \"Clientul a ales\" sau \"Curier recomandat\".",
-            {
-              text: "Apasă \"Creează AWB\" și numele curierului.",
-              captura: { alt: "Cardul Expediere cu butonul de creare AWB și lista de curieri alternativi.", raport: 16 / 10 },
-            },
+            "Apasă \"Creează AWB\" și numele curierului.",
             "Completează câmpurile obligatorii în fereastra curierului și apasă butonul de generare. La Cargus scrie \"Genereaza AWB Cargus\".",
             "După generare cardul arată \"Expediat cu\" și numele curierului, plus \"AWB:\" și numărul. De acolo apeși \"Gestionează AWB\" ca să revii la fereastra curierului și să descarci eticheta.",
           ],
@@ -349,81 +168,12 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["awb", "eticheta colet", "cargus awb", "creez awb", "gestioneaza awb", "locker"],
         },
         {
-          slug: "cum-chemi-curierul-fan-courier",
-          titlu: "Cum chemi curierul FAN Courier",
-          rezumat: "Programezi ridicarea coletelor FAN dintr-un buton aflat sus, în pagina de comenzi.",
-          intro: "AWB-ul singur nu aduce curierul la ușă. Fără o ridicare programată, coletele rămân la tine.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile și apasă \"Cheamă curierul FAN\", în dreapta sus.",
-            {
-              text: "În fereastra de programare alege \"Data ridicării\".",
-              captura: { alt: "Fereastra de programare a ridicării FAN Courier, cu data, orele și numărul de colete.", raport: 16 / 10 },
-            },
-            "Alege \"De la ora\" și \"Până la ora\".",
-            "Completează \"Nr. colete\" și \"Greutate totală (kg)\".",
-            "Scrie, dacă e nevoie, indicații pentru curier în \"Observații\".",
-            "Apasă \"Programează ridicarea\".",
-          ],
-          detalii: [
-            { titlu: "O programare acoperă o zi întreagă", text: "O singură programare acoperă toate AWB-urile din ziua respectivă. Nu trebuie să chemi curierul pentru fiecare comandă." },
-            { titlu: "Zilele și orele", text: "Duminica nu se fac ridicări, iar butonul rămâne blocat cu mesajul \"Duminica nu se fac ridicari. Alege alta zi.\". Pentru sâmbătă, fereastra îți amintește că ridicările se fac între 09:00 și 14:00. Sub cele două liste de ore scrie permanent textul cu intervalul de minim 2 ore și cu programul de ridicări, luni până vineri, până la 19:00 în București și până la 17:00 în provincie. Ora de sfârșit se ajustează singură când schimbi ora de început." },
-            { titlu: "Dacă ai deja o programare", text: "Vezi un avertisment cu data ei. Butonul \"Anulează ridicarea existentă\" apare doar dacă programarea are și un număr de comandă salvat. După anulare primești mesajul că ridicarea programată a fost anulată." },
-          ],
-          nota: "Butonul apare doar dacă ai FAN Courier activat și configurat, cu utilizator și client_id. Contractul cu FAN Courier este al tău, Edinio doar trimite cererea de ridicare.",
-          termeni: ["ridicare colete", "programare curier", "fan courier pickup", "chem curierul", "predare colete"],
-        },
-        {
-          slug: "cum-chemi-curierul-dpd",
-          titlu: "Cum chemi curierul DPD",
-          rezumat: "Soliciți ridicarea coletelor DPD dintr-un singur buton, fără să completezi nimic.",
-          pasi: [
-            {
-              text: "Intră în Comenzi > Toate comenzile și apasă \"Cheamă curierul DPD\", în dreapta sus.",
-              captura: { alt: "Butonul Cheamă curierul DPD din pagina Comenzi și fereastra de solicitare.", raport: 16 / 10 },
-            },
-            "Citește explicația din fereastra de programare.",
-            "Apasă \"Solicită ridicarea\".",
-            "Mesajul de reușită îți spune pentru câte expediții s-a programat ridicarea.",
-          ],
-          detalii: [
-            { titlu: "Ce colete intră în ridicare", text: "Se solicită ridicarea pentru toate AWB-urile DPD generate în ultimele 24 de ore. Nu poți alege comenzi anume din listă." },
-            { titlu: "Ora la care vine curierul", text: "Curierul vine până la ora 19:00. Dacă solicitarea ajunge prea târziu, DPD mută singur vizita în următoarea zi lucrătoare." },
-            { titlu: "Când nu e nevoie de programare", text: "Dacă ai contract cu ridicare zilnică, curierul vine oricum. În rest, fără o ridicare programată coletele nu sunt luate." },
-          ],
-          nota: "Butonul apare doar dacă ai DPD activat și configurat, cu utilizator și client_id. Contractul cu DPD este al tău.",
-          termeni: ["dpd ridicare", "chem curierul dpd", "predare colete dpd", "pickup dpd"],
-        },
-        {
-          slug: "cum-chemi-curierul-cargus",
-          titlu: "Cum chemi curierul Cargus",
-          rezumat: "Validezi comanda de ridicare Cargus alegând ziua și intervalul orar.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile și apasă \"Cheamă curierul Cargus\", în dreapta sus.",
-            {
-              text: "În fereastra de validare alege \"Data ridicării\".",
-              captura: { alt: "Fereastra de validare a comenzii de ridicare Cargus, cu data și intervalul orar.", raport: 16 / 10 },
-            },
-            "Alege \"De la ora\" și \"Până la ora\".",
-            "Apasă \"Validează ridicarea\".",
-            "La reușită vezi confirmarea că a fost validată comanda de ridicare, cu numărul ei dacă Cargus l-a returnat.",
-          ],
-          detalii: [
-            { titlu: "Cum funcționează la Cargus", text: "AWB-urile Cargus se adună într-o comandă deschisă pe punctul tău de ridicare. Aceasta se validează automat la ora AutomaticEOD setată în WebExpress. Dacă punctul tău nu are AutomaticEOD, comanda rămâne nevalidată și curierul nu vine. Atunci o validezi manual, de aici." },
-            { titlu: "Restricții de zi și oră", text: "Duminica nu se fac ridicări. Ora de sfârșit trebuie să fie după ora de început, altfel primești mesajul corespunzător și butonul nu trece mai departe." },
-          ],
-          nota: "Butonul apare doar dacă ai Cargus activat și configurat, cu utilizator, cheie de abonament și locație. Contul Cargus și setarea AutomaticEOD sunt la tine, în WebExpress.",
-          termeni: ["cargus ridicare", "validare comanda ridicare", "automaticeod", "webexpress", "chem curierul cargus"],
-        },
-        {
           slug: "cum-editezi-o-comanda",
           titlu: "Cum editezi o comandă",
           rezumat: "Corectezi datele clientului și adresa de livrare și poți adăuga produse noi în comandă.",
           pasi: [
             "Deschide comanda din Comenzi > Toate comenzile.",
-            {
-              text: "Apasă \"Editează comanda\", în dreapta sus. Pe ecrane mici butonul scrie doar \"Editează\".",
-              captura: { alt: "Fereastra Editează comandă, cu secțiunile Date client, Adresă de livrare și Adaugă produse.", raport: 16 / 10 },
-            },
+            "Apasă \"Editează comanda\", în dreapta sus. Pe ecrane mici butonul scrie doar \"Editează\".",
             "În secțiunea \"Date client\" corectează \"Nume complet\", \"Telefon\" și \"Email (opțional)\".",
             "În secțiunea \"Adresă de livrare\" corectează \"Strada și număr\", \"Oraș\", \"Județ\" și \"Cod poștal (opțional)\".",
             "În secțiunea \"Adaugă produse în comandă\" caută produsul, apasă pe el ca să îl adaugi și reglează cantitatea din butoanele minus și plus.",
@@ -444,39 +194,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["corectez adresa", "schimb telefon client", "adaug produs in comanda", "modific comanda", "total nou"],
         },
         {
-          slug: "cum-anulezi-awb-ul-unei-comenzi",
-          titlu: "Cum anulezi AWB-ul unei comenzi",
-          rezumat: "AWB-ul deja emis se anulează din fereastra de editare a comenzii, ca să poți genera altul cu datele corecte.",
-          pasi: [
-            "Deschide comanda din Comenzi > Toate comenzile și apasă \"Editează comanda\".",
-            {
-              text: "Sus, în blocul galben, vezi avertismentul că modificările nu ajung la curier pe AWB-ul existent.",
-              captura: { alt: "Blocul de avertizare cu AWB-urile existente și butonul de anulare, din fereastra de editare.", raport: 16 / 10 },
-            },
-            "Pentru fiecare AWB vezi curierul și numărul lui. Apasă \"Anulează AWB\".",
-            "La Colete Online butonul se numește \"Detașează AWB\".",
-            "Salvează modificările din comandă, apoi generează un AWB nou din cardul \"Expediere\".",
-          ],
-          detalii: [
-            { titlu: "Ce curieri apar aici", text: "Blocul afișează AWB-urile existente pe Woot, Sameday, Cargus, DPD, FAN Courier și Colete Online." },
-            { titlu: "Colete Online", text: "Nu permite anularea prin API. Anulezi expedierea din contul tău Colete Online, apoi apeși \"Detașează AWB\" în Edinio, ca să poți genera unul nou. După detașare, mesajul îți amintește exact acest lucru." },
-            { titlu: "Woot", text: "Dacă lipsește identificatorul expedierii, primești mesajul care îți cere să anulezi AWB-ul din contul Woot și apoi să contactezi suportul." },
-            { titlu: "De ce contează ordinea", text: "Un AWB deja emis nu se actualizează. Orice modificare de adresă sau de telefon făcută după emitere rămâne doar în Edinio, iar coletul pleacă cu datele vechi." },
-          ],
-          nota: "Anularea AWB-ului nu este obligatorie ca să salvezi modificările din comandă, dar fără ea curierul livrează după datele de pe AWB-ul vechi.",
-          termeni: ["anulez awb", "detasez awb", "colete online", "refac awb", "awb gresit"],
-        },
-        {
           slug: "cum-trimiti-un-email-clientului",
           titlu: "Cum trimiți un email clientului despre comandă",
           rezumat: "Din cardul Notificări client alegi un șablon, îl ajustezi și trimiți emailul direct din comandă.",
           pasi: [
             "Deschide comanda din Comenzi > Toate comenzile și coboară la cardul \"Notificări client\".",
             "Alege fila \"Email\".",
-            {
-              text: "Apasă pe unul dintre șabloane. Subiectul și mesajul se completează singure.",
-              captura: { alt: "Cardul Notificări client, fila Email, cu șabloanele și câmpurile de subiect și mesaj.", raport: 16 / 10 },
-            },
+            "Apasă pe unul dintre șabloane. Subiectul și mesajul se completează singure.",
             "Modifică textul din \"Subiect\" și din \"Mesaj\" dacă e nevoie.",
             "Verifică adresa de la \"Către:\" și apasă \"Trimite email\". La reușită apare \"Notificarea a fost trimisa clientului.\".",
           ],
@@ -496,10 +220,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Deschide comanda din Comenzi > Toate comenzile și coboară la cardul \"Notificări client\".",
             "Alege fila \"SMS\".",
-            {
-              text: "Apasă pe un șablon. Textul se completează singur.",
-              captura: { alt: "Cardul Notificări client, fila SMS, cu șabloanele, câmpul de mesaj și contorul de caractere.", raport: 16 / 10 },
-            },
+            "Apasă pe un șablon. Textul se completează singur.",
             "Ajustează textul din câmpul \"Mesaj SMS\".",
             "Verifică sub câmp contorul de caractere și numărul de SMS-uri, apoi numărul de la \"Către:\".",
             "Apasă \"Trimite SMS\". La reușită apare \"SMS trimis clientului.\".",
@@ -520,10 +241,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "Comenzile Trendyol se expediază din cardul Expediere Trendyol, în doi pași, cu AWB-ul făcut de tine dacă e cazul.",
           pasi: [
             "Deschide comanda din Comenzi > Toate comenzile. La comenzile Trendyol, în loc de cardul \"Expediere\" vezi \"Expediere Trendyol\".",
-            {
-              text: "Citește numărul pachetului și starea lui, afișate în card.",
-              captura: { alt: "Cardul Expediere Trendyol cu numărul pachetului, starea lui și cei doi pași de marcare.", raport: 16 / 10 },
-            },
+            "Citește numărul pachetului și starea lui, afișate în card.",
             "Apasă \"1. Marchează „În pregătire”\".",
             "Apasă \"2. Marchează „Facturat” (predă curierului)\".",
             "Dacă expediezi cu un curier plătit de tine, în secțiunea \"Trimite AWB-ul tău\" alegi curierul din listă, scrii numărul în câmpul \"Număr AWB\" și apeși \"Trimite AWB la Trendyol\".",
@@ -545,10 +263,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Deschide comanda din Comenzi > Toate comenzile.",
             "Coboară până jos, la cardul cu chenar roșu \"Șterge comanda\".",
-            {
-              text: "Apasă \"Șterge definitiv\".",
-              captura: { alt: "Cardul roșu Șterge comanda și fereastra de confirmare a ștergerii.", raport: 16 / 10 },
-            },
+            "Apasă \"Șterge definitiv\".",
             "În fereastra de confirmare citește avertismentul și apasă din nou \"Șterge definitiv\". Dacă te răzgândești, apeși \"Anulează\".",
             "La reușită apare \"Comanda a fost stearsa.\" și ești dus înapoi la lista de comenzi.",
           ],
@@ -570,10 +285,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Pentru AWB, în cardul „Expediere” apasă „Creează AWB {numele curierului}”. Butonul deschide modalul curierului.",
             "Completează formularul din modal și apasă butonul de emitere din el, la Cargus „Generează AWB Cargus” (cât timp merge scrie „Se generează AWB...”).",
             "Pentru facturi, în cardul „Facturare” apasă „Generează factură”, „Generează proformă” sau „Emite storno”.",
-            {
-              text: "Dacă operația e deja pornită la furnizor, cererea nu se trimite și primești un mesaj de eroare.",
-              captura: { alt: "Mesajul de eroare afișat după apăsarea butonului de emitere", raport: 16 / 10 },
-            },
+            "Dacă operația e deja pornită la furnizor, cererea nu se trimite și primești un mesaj de eroare.",
             "Citește mesajul: îți spune ce operație e oprită, la ce furnizor și ce ai de verificat înainte de a încerca din nou.",
           ],
           detalii: [
@@ -599,10 +311,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
             "Uită-te imediat sub antetul comenzii, deasupra coloanelor cu „Informații client”, „Facturare” și „Expediere”.",
             "Dacă nu apare niciun chenar acolo, nu e nimic neterminat pe comanda asta.",
-            {
-              text: "Când apare, citește titlul: „O operație a rămas neterminată” sau „<N> operații au rămas neterminate”.",
-              captura: { alt: "Panoul de avertizare din pagina comenzii, cu un rând de operație neterminată", raport: 16 / 10 },
-            },
+            "Când apare, citește titlul: „O operație a rămas neterminată” sau „<N> operații au rămas neterminate”.",
             "Citește fiecare rând: ce operație este, la ce furnizor, în ce stare, data și ora, iar dedesubt ultima eroare, dacă furnizorul a întors una.",
           ],
           detalii: [
@@ -651,10 +360,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           intro: "Deblocarea se face rând cu rând, din panoul de avertizare al comenzii, după ce ai verificat în contul furnizorului.",
           pasi: [
             "În rândul operației apasă „Am verificat, deblochează”. Butonul e înlocuit de formular.",
-            {
-              text: "În câmpul „Ce ai verificat în contul <furnizor>?” scrie pe scurt ce ai găsit. Textul-exemplu din câmp este „ex: nu există niciun AWB pe comanda asta”.",
-              captura: { alt: "Formularul de deblocare cu câmpul „Ce ai verificat în contul furnizorului?\"", raport: 16 / 10 },
-            },
+            "În câmpul „Ce ai verificat în contul <furnizor>?” scrie pe scurt ce ai găsit. Textul-exemplu din câmp este „ex: nu există niciun AWB pe comanda asta”.",
             "Apasă „Confirmă deblocarea”. Cât timp merge, butonul e dezactivat.",
             "Rândul dispare din panou și primești „Operația a fost deblocată. Poți încerca din nou.”",
             "Întoarce-te în cardul „Expediere” sau „Facturare” și apasă din nou butonul de emitere.",
@@ -710,7 +416,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Apasă „Retururi”.",
             {
               text: "Se deschide ecranul „Retururi”, cu subtitlul „Cererile de retragere din contract trimise de clienti (OUG 18/2026).”",
-              captura: { alt: "Ecranul Retururi cu lista de carduri și eticheta de status pe fiecare cerere.", raport: 16 / 10 },
+              captura: { alt: "Ecranul Retururi cu lista de carduri și eticheta de status pe fiecare cerere.", src: "/capturi/ajutor/comenzi-si-livrare/cum-deschizi-lista-cererilor-de-retur.webp", raport: 16 / 10 },
             },
             "Ca să ieși, apasă săgeata din stânga titlului. Te duce înapoi la pagina principală a panoului.",
           ],
@@ -726,44 +432,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["retragere din contract", "OUG 18/2026", "dashboard returns", "cereri de la clienți", "retur online"],
         },
         {
-          slug: "cum-citesti-o-cerere-de-retur",
-          titlu: "Cum citești o cerere de retur",
-          rezumat: "Tot conținutul unei cereri stă în cardul din listă: comandă, client, produse, motiv și metodă de rambursare.",
-          pasi: [
-            "Intră în Comenzi > Retururi.",
-            "Găsește cardul cererii. Nu trebuie apăsat nimic ca să îl deschizi, conținutul e vizibil.",
-            {
-              text: "Sus în card citești „Comanda” urmat de numărul comenzii și eticheta de status: „Nou”, „Aprobat”, „Respins” sau „Rambursat”.",
-              captura: { alt: "Cardul unei cereri de retur, cu numărul comenzii, eticheta de status și lista de produse.", raport: 16 / 10 },
-            },
-            "Sub titlu vezi data și ora la care a fost înregistrată cererea.",
-            "Pe rândul următor sunt datele clientului: numele, telefonul și emailul.",
-            "Sub ele e tabelul cu produsele returnate, cu cantitatea și valoarea.",
-            "La final apar, dacă există, rândul „Motiv: ” și rândul „Rambursare:”.",
-          ],
-          detalii: [
-            { titlu: "Cum citești produsele", text: "Pentru fiecare produs vezi numele, „x” urmat de cantitatea returnată și valoarea, adică prețul înmulțit cu acea cantitate. Dacă un client returnează 2 bucăți dintr-un produs de 99 lei, pe rând scrie x2 și 198 lei." },
-            { titlu: "De unde vin datele", text: "Numele clientului, produsele, prețurile și cantitățile nu vin de la client, ci sunt recitite din comanda originală, iar cantitatea returnată e limitată la cât s-a comandat efectiv. Din acest motiv nimic din card nu se poate edita în panou." },
-            { titlu: "Ce nu poate fi returnat prin formular", text: "Extraopțiunile adăugate la finalizarea comenzii sunt excluse automat și nu apar în cerere. Dacă o comandă conține doar astfel de linii, clientul nici nu poate trimite cererea: primește mesajul că acea comandă nu conține produse care pot fi returnate online și e îndrumat să contacteze magazinul." },
-            { titlu: "Motivul returului", text: "Clientul nu e obligat să scrie un motiv. Când scrie, textul apare pe rândul „Motiv: ” și este limitat la 2000 de caractere. Când lipsește, rândul nu apare deloc." },
-            { titlu: "Rândul de rambursare", text: "Arată metoda aleasă de client. Din formularul public pot veni „Aceeasi metoda de plata” și „Transfer bancar (IBAN)”, iar lista de etichete a panoului conține și „Pe card”. La transfer bancar, după metodă apare „IBAN:” cu contul, scris cu caractere monospațiate. IBAN-ul e salvat fără spații, cu majuscule, și e limitat la 34 de caractere." },
-            { titlu: "Cum iei legătura cu clientul", text: "Telefonul și emailul din card sunt linkuri. Apeși pe număr și se deschide apelul, apeși pe adresă și se deschide programul tău de email cu adresa completată. Rândurile lipsesc dacă acele date nu au fost lăsate la comandă. În panou nu există câmp de răspuns către client, deci discuția se poartă prin telefon sau email, în afara platformei." },
-            { titlu: "Cum arată o cerere necitită", text: "Are un punct colorat în fața numărului comenzii și fundal accentuat. O cerere nouă intră ca „Nou” și necitită." },
-          ],
-          nota: "Nu există un ecran separat cu detaliul cererii și nici legătură directă către comanda din care provine returul. Numărul comenzii îl cauți manual în Comenzi.",
-          termeni: ["conținut cerere retur", "date client retur", "IBAN rambursare", "motiv retur", "produse returnate"],
-        },
-        {
           slug: "cum-schimbi-statusul-unei-cereri-de-retur",
           titlu: "Cum schimbi statusul unei cereri de retur",
           rezumat: "Statusul se alege din lista de jos a cardului și se salvează singur.",
           pasi: [
             "Intră în Comenzi > Retururi.",
             "Coboară în cardul cererii, la rândul „Status:”.",
-            {
-              text: "Desfășoară lista și alege una dintre valori: „Nou”, „Aprobat”, „Respins”, „Rambursat”.",
-              captura: { alt: "Lista de status desfășurată în cardul unei cereri, cu cele patru valori.", raport: 16 / 10 },
-            },
+            "Desfășoară lista și alege una dintre valori: „Nou”, „Aprobat”, „Respins”, „Rambursat”.",
             "Alegerea se salvează imediat, nu există buton de salvare.",
             "Apare mesajul „Status actualizat.” și eticheta colorată din capul cardului se schimbă.",
           ],
@@ -779,61 +454,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["aprobat respins rambursat", "stare cerere retur", "procesare retur", "status actualizat"],
         },
         {
-          slug: "cum-marchezi-o-cerere-de-retur-citita",
-          titlu: "Cum marchezi o cerere de retur ca citită sau necitită",
-          rezumat: "Butonul cu plic din colțul cardului schimbă semnul de citit și recalculează bulina din meniu.",
-          pasi: [
-            "Intră în Comenzi > Retururi.",
-            {
-              text: "Sus în dreapta cardului sunt două butoane. Apasă butonul cu plic.",
-              captura: { alt: "Colțul din dreapta sus al cardului, cu butonul cu plic și butonul de ștergere.", raport: 16 / 10 },
-            },
-            "Dacă cererea era necitită, indiciul butonului e „Marcheaza citit”. Dacă era deja citită, e „Marcheaza necitit”.",
-            "Punctul colorat din fața numărului comenzii apare sau dispare, iar fundalul cardului se schimbă.",
-            "Bulina cu număr de lângă „Comenzi”, din meniul lateral, se recalculează.",
-          ],
-          detalii: [
-            { titlu: "La ce folosește", text: "Semnul de citit e doar pentru tine, ca să știi ce ai parcurs. Nu are legătură cu statusul cererii și nu schimbă nimic pentru client." },
-            { titlu: "Fără mesaj de confirmare", text: "La reușită nu apare niciun mesaj, se schimbă doar aspectul cardului și bulina. Dacă salvarea nu merge, apare „Eroare la salvare.”, iar dacă sesiunea a expirat sau cererea nu e a magazinului tău, apare „Neautorizat”." },
-            { titlu: "Fără operații în masă", text: "Nu există „marchează toate ca citite” pentru retururi și nici selecție multiplă. Se lucrează cerere cu cerere." },
-            { titlu: "Nu îl confunda cu clopoțelul", text: "Butonul „Marcheaza ca citite” din panoul „Notificari”, deschis din clopoțelul barei de sus, privește notificările. El nu schimbă semnul de citit al cererilor din ecranul Retururi și nici bulina de lângă „Comenzi”." },
-          ],
-          nota: "Cererile noi intră ca necitite, deci bulina crește singură la fiecare cerere primită.",
-          termeni: ["citit necitit", "punct albastru cerere", "bulina Comenzi", "notificare retur necitit"],
-        },
-        {
-          slug: "cum-stergi-o-cerere-de-retur",
-          titlu: "Cum ștergi o cerere de retur",
-          rezumat: "Ștergerea se face din butonul roșu al cardului și este definitivă.",
-          pasi: [
-            "Intră în Comenzi > Retururi.",
-            "Sus în dreapta cardului, apasă butonul roșu cu coș de gunoi. Indiciul lui e „Sterge”.",
-            {
-              text: "Apare întrebarea „Stergi aceasta cerere de retur definitiv?”. Confirmă ca să continui sau anulează ca să renunți.",
-              captura: { alt: "Fereastra de confirmare a ștergerii unei cereri de retur.", raport: 16 / 10 },
-            },
-            "Dacă a mers, apare mesajul „Cerere stearsa.” și cardul dispare din listă.",
-          ],
-          detalii: [
-            { titlu: "Ștergerea nu se poate anula", text: "Nu există coș de gunoi, arhivă sau revenire după ștergere. Cererea dispare din panou și nu mai poate fi recuperată din ecran." },
-            { titlu: "Ce rămâne după ștergere", text: "Emailul de înștiințare pe care l-ai primit tu și confirmarea trimisă clientului rămân în căsuțele voastre. Comanda din care venea returul nu este atinsă. Clientul nu e anunțat că ai șters cererea." },
-            { titlu: "Mesaje de eroare", text: "„Eroare la stergere.” înseamnă că operația nu a ajuns la server: reîncarcă pagina și încearcă din nou. „Neautorizat” apare când sesiunea a expirat sau cererea nu aparține magazinului tău." },
-            { titlu: "Alternativă la ștergere", text: "Dacă vrei doar să scoți cererea din atenție, marcheaz-o ca citită și pune-i statusul potrivit. Cardul rămâne în listă, dar nu mai apare ca necitit." },
-          ],
-          nota: "Nu poți șterge mai multe cereri deodată. Fiecare se șterge separat, cu confirmare.",
-          termeni: ["ștergere definitivă", "coș de gunoi cerere", "elimină retur"],
-        },
-        {
           slug: "cum-afli-ca-ai-primit-o-cerere-de-retur",
           titlu: "Cum afli că ai primit o cerere de retur",
           rezumat: "Anunțul vine pe email, iar în panou apar bulina de lângă Comenzi și notificarea din clopoțel.",
           pasi: [
             "Primești un email cu subiectul „Cerere de retur”, numărul comenzii și numele clientului.",
             "În email vezi titlul „Cerere de retragere (retur)” și rândurile Comanda, Client, Email, Telefon, Data cererii, Rambursare și IBAN, plus lista „Produse returnate” și motivul, dacă a fost scris.",
-            {
-              text: "Apasă butonul verde „Vezi cererile de retur”. Te duce direct în Comenzi > Retururi.",
-              captura: { alt: "Emailul „Cerere de retragere (retur)” cu butonul verde „Vezi cererile de retur”.", raport: 16 / 10 },
-            },
+            "Apasă butonul verde „Vezi cererile de retur”. Te duce direct în Comenzi > Retururi.",
             "În panou, lângă „Comenzi” din meniul lateral, apare o bulină cu numărul cererilor de retur necitite.",
             "În bara de sus, apasă clopoțelul. În panoul „Notificari” cererea apare cu titlul „Cerere de retur”, iar dedesubt numărul comenzii și numele clientului.",
           ],
@@ -853,10 +480,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "Adresa se scrie în Setări > Notificări și acoperă și cererile de retur.",
           pasi: [
             "Intră în Setări și alege secțiunea „Notificari”.",
-            {
-              text: "Completează câmpul de sub „Adresa de email pentru notificari”. Sub el scrie „Toate notificarile vor fi trimise pe aceasta adresa”.",
-              captura: { alt: "Secțiunea Notificări din Setări, cu câmpul pentru adresa de email.", raport: 16 / 10 },
-            },
+            "Completează câmpul de sub „Adresa de email pentru notificari”. Sub el scrie „Toate notificarile vor fi trimise pe aceasta adresa”.",
             "Apasă „Salveaza notificarile”.",
             "Dacă a mers, apare mesajul „Setarile de notificari au fost salvate.”",
             "Verifică apăsând „Trimite email de test”, la „Testeaza notificarile”.",
@@ -878,10 +502,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Deschide magazinul tău public.",
             "În subsol, la „Informatii legale”, apasă „Retrage-te din contract”.",
-            {
-              text: "Se deschide pagina „Retrage-te din contract”, cu formularul în doi pași: „1. Identificare” și „2. Produse”.",
-              captura: { alt: "Pagina publică „Retrage-te din contract” cu pașii 1. Identificare și 2. Produse.", raport: 16 / 10 },
-            },
+            "Se deschide pagina „Retrage-te din contract”, cu formularul în doi pași: „1. Identificare” și „2. Produse”.",
             "Dacă folosești aspectul de tip market și bara de sus este activă, același formular se deschide și din linkul „Retur produs”, din bara de sus.",
           ],
           detalii: [
@@ -902,10 +523,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "La „1. Identificare” clientul scrie „Numarul comenzii” și „Email sau telefon (folosit la comanda)”, apoi apasă „Continua”.",
             "La „2. Produse” vede numărul comenzii și o notă despre termenul de 14 zile.",
-            {
-              text: "Sub „Ce produse returnezi?” toate produsele sunt deja bifate, la cantitatea comandată. Clientul debifează ce nu returnează.",
-              captura: { alt: "Pasul 2 al formularului, cu produsele bifate și metoda de rambursare.", raport: 16 / 10 },
-            },
+            "Sub „Ce produse returnezi?” toate produsele sunt deja bifate, la cantitatea comandată. Clientul debifează ce nu returnează.",
             "Poate scrie ceva la „Motiv (optional)”, dar nu e obligat.",
             "La „Metoda de rambursare” e aleasă din start „Aceeasi metoda de plata”. Dacă alege „Transfer bancar (IBAN)”, apare câmpul pentru cont.",
             "Apasă „Confirma retragerea din contract”.",
@@ -930,10 +548,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Intră în Setări și alege secțiunea „Politici”.",
             "Găsește cardul „Politica de retur”.",
-            {
-              text: "Scrie textul în editorul din card. Indiciul din câmp este „Descrie conditiile de retur si inlocuire a produselor...”.",
-              captura: { alt: "Cardul „Politica de retur” din Setări, cu editorul de text și comutatorul.", raport: 16 / 10 },
-            },
+            "Scrie textul în editorul din card. Indiciul din câmp este „Descrie conditiile de retur si inlocuire a produselor...”.",
             "Verifică dacă comutatorul din capul cardului e pornit. Când e oprit, apare eticheta „Dezactivata” și editorul se ascunde.",
             "Apasă „Salveaza politicile”.",
           ],
@@ -953,28 +568,6 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
       titlu: "Curieri",
       ghiduri: [
         {
-          slug: "cum-gasesti-integrarile-de-curier",
-          titlu: "Cum găsești integrările de curier în panoul de administrare",
-          rezumat: "Toți curierii se conectează din Integrări > Curieri, de unde intri în pagina fiecăruia.",
-          intro: "Toate integrările de curier stau într-un singur loc în panoul de administrare.",
-          pasi: [
-            "Apasă \"Integrări\" în meniul lateral.",
-            {
-              text: "Derulează până la secțiunea cu eticheta \"Curieri\".",
-              captura: { alt: "Secțiunea Curieri din pagina Integrări, cu cele șase carduri și etichetele Activ sau Configurează.", raport: 16 / 10 },
-            },
-            "Apasă pe cardul curierului pe care vrei să îl configurezi.",
-          ],
-          detalii: [
-            { titlu: "Ce carduri vezi în secțiunea Curieri", text: "În secțiune apar cardurile Fan Courier, DPD, Cargus, Sameday, Woot și Colete Online. Toate sunt deschise, niciunul nu are lacăt. În codul integrărilor nu există nicio condiționare pe plan de abonament pentru curieri." },
-            { titlu: "Ce înseamnă eticheta Activ de pe card", text: "Fiecare card arată fie eticheta verde \"Activ\", cu bifă, fie \"Configurează\". \"Activ\" apare doar când configurația curierului este completă: FAN Courier și DPD cer integrarea pornită plus username și client ID, Cargus cere username, Subscription Key și punct de ridicare, Sameday cere username și punct de ridicare, iar Colete Online cere Client ID și Client Secret." },
-            { titlu: "Ce îți trebuie ca să ajungi acolo", text: "Trebuie să fii autentificat, altfel ești trimis la pagina de autentificare. Pagina Integrări se deschide și fără magazin creat, doar că niciun card nu apare \"Activ\". Pagina de configurare a unui curier are nevoie de un magazin creat, altfel ești trimis înapoi în panou." },
-            { titlu: "Ce ține de tine și ce ține de Edinio", text: "Edinio face integrarea, dar contul și contractul cu curierul trebuie să fie ale tale. Credențialele de API se cer direct curierului, iar fiecare pagină de configurare are un bloc de ajutor cu pașii și linkul către platforma lui." },
-          ],
-          nota: "Cardul Woot apare în aceeași secțiune \"Curieri\", dar configurarea lui nu este acoperită aici.",
-          termeni: ["curieri", "conectare curier", "livrare", "awb", "fan courier", "dpd", "cargus", "sameday", "colete online", "api curier"],
-        },
-        {
           slug: "cum-conectezi-fan-courier",
           titlu: "Cum conectezi FAN Courier",
           rezumat: "Conectezi contul selfAWB, alegi branch-ul expeditor și salvezi configurația.",
@@ -982,10 +575,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Integrări > Fan Courier.",
             "În panoul 1, \"Credențiale cont selfAWB\", completează \"Username selfAWB\" și \"Parolă\".",
             "Apasă \"Conectează și încarcă datele\".",
-            {
-              text: "În panoul 2, \"Branch expeditor\", alege un branch din lista \"Client / Branch\".",
-              captura: { alt: "Panoul \"Branch expeditor\" cu lista \"Client / Branch\" deschisă și bifa ePOD dedesubt.", raport: 16 / 10 },
-            },
+            "În panoul 2, \"Branch expeditor\", alege un branch din lista \"Client / Branch\".",
             "Bifează \"Etichetă proprie (ePOD)\" dacă îți printezi singur etichetele.",
             "Apasă \"Salvează configurația\".",
           ],
@@ -1007,10 +597,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > DPD.",
             "În panoul 1, \"Credențiale cont DPD\", completează \"Username\" și \"Parolă\".",
-            {
-              text: "Apasă \"Testează și conectează\".",
-              captura: { alt: "Panoul \"Credențiale cont DPD\" cu butonul \"Testează și conectează\" și rândul verde de confirmare.", raport: 16 / 10 },
-            },
+            "Apasă \"Testează și conectează\".",
             "Verifică rândul verde de sub buton, care arată numele contului și ID-ul.",
             "Continuă cu setările din panourile care tocmai s-au deschis și apasă \"Salvează configurația\".",
           ],
@@ -1034,10 +621,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Pornește comutatorul \"Livrare internațională (UE)\" dacă vrei comenzi din UE.",
             "Bifează \"Calculează după greutatea reală a produselor.\" dacă vrei prețul din greutățile produselor.",
             "În panoul \"Opțiuni expediere\" bifează \"Asigurare (valoare declarată).\" dacă vrei asigurare pe fiecare AWB.",
-            {
-              text: "Alege o opțiune la \"Deschidere / testare la livrare (OBPD)\" și, dacă nu ai lăsat \"Dezactivat\", alege cine plătește returul.",
-              captura: { alt: "Panoul \"Opțiuni expediere\" cu bifa de asigurare și cele două liste OBPD.", raport: 16 / 10 },
-            },
+            "Alege o opțiune la \"Deschidere / testare la livrare (OBPD)\" și, dacă nu ai lăsat \"Dezactivat\", alege cine plătește returul.",
             "Apasă \"Salvează configurația\".",
           ],
           detalii: [
@@ -1058,10 +642,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Integrări > Cargus.",
             "În panoul 1, \"Credențiale cont Cargus\", completează \"Username Webexpress\", \"Parolă\" și \"Subscription Key\".",
             "Apasă \"Conectează și încarcă datele\".",
-            {
-              text: "În panoul 2, \"Punct de ridicare și tarif\", alege \"Punct de ridicare expeditor\".",
-              captura: { alt: "Panoul \"Punct de ridicare și tarif\" cu listele de puncte și tarife încărcate.", raport: 16 / 10 },
-            },
+            "În panoul 2, \"Punct de ridicare și tarif\", alege \"Punct de ridicare expeditor\".",
             "Alege \"Tarif contractat\".",
             "Alege la \"Returnarea rambursului\" cum primești banii.",
             "Bifează \"Asigurare (valoare declarată).\" dacă vrei asigurare pe fiecare AWB.",
@@ -1087,10 +668,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "În panoul 1, \"Credențiale cont Sameday\", completează \"Username\" și \"Parolă\".",
             "Bifează \"Mod sandbox (testare)\" dacă vrei să lucrezi pe mediul de test.",
             "Apasă \"Conectează și încarcă datele\".",
-            {
-              text: "În panoul 2, \"Configurare punct ridicare și serviciu\", alege \"Punct de ridicare\".",
-              captura: { alt: "Panoul \"Configurare punct ridicare și serviciu\" cu cele trei liste completate.", raport: 16 / 10 },
-            },
+            "În panoul 2, \"Configurare punct ridicare și serviciu\", alege \"Punct de ridicare\".",
             "Alege \"Persoana de contact\".",
             "Alege \"Serviciu\".",
             "Apasă \"Salvează configurația\".",
@@ -1116,10 +694,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "În panoul \"Configurare integrare\" pornește comutatorul \"Activat\".",
             "Pornește \"Mod test (Staging)\" dacă vrei să lucrezi pe serverul de test.",
             "La \"Credențiale API\" completează \"Client ID\" și \"Client Secret\".",
-            {
-              text: "Apasă \"Testează conexiunea\".",
-              captura: { alt: "Panoul \"Configurare integrare\" cu câmpurile de credențiale și rezultatul testului de conexiune.", raport: 16 / 10 },
-            },
+            "Apasă \"Testează conexiunea\".",
           ],
           detalii: [
             { titlu: "De unde iei credențialele", text: "Client ID și Client Secret sunt furnizate de echipa Colete Online, la cerere. În pagină ai panoul \"Despre Colete Online\" cu linkul \"Solicită acces API\"." },
@@ -1139,10 +714,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Integrări > Colete Online.",
             "În panoul \"Adresa expeditor (sender)\" completează \"Nume contact\" și \"Telefon\".",
             "Completează, dacă vrei, \"Email\" și \"Firma\".",
-            {
-              text: "Completează \"Județ\", \"Oraș/Localitate\", \"Strada\", \"Număr\" și \"Cod poștal\".",
-              captura: { alt: "Panoul \"Adresa expeditor (sender)\" cu toate câmpurile de adresă completate.", raport: 16 / 10 },
-            },
+            "Completează \"Județ\", \"Oraș/Localitate\", \"Strada\", \"Număr\" și \"Cod poștal\".",
             "În panoul \"Opțiuni expediere\" bifează \"Asigurare (valoare declarată).\" dacă vrei asigurare.",
             "La \"Încasare ramburs\" alegi \"Numerar la curier\" sau \"În cont bancar\".",
             "Dacă ai ales \"În cont bancar\", completează \"IBAN\" și, dacă vrei, \"Titular cont\".",
@@ -1159,39 +731,12 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["expeditor", "punct ridicare colete", "ramburs cont bancar", "iban", "asigurare"],
         },
         {
-          slug: "cum-activezi-curierul-la-checkout",
-          titlu: "Cum activezi un curier ca metodă de livrare la checkout",
-          rezumat: "Integrarea singură nu apare la clienți, curierul trebuie pornit din Setări > Livrare.",
-          pasi: [
-            "Intră în Setări > Livrare.",
-            "Pornește comutatorul \"Livrare activată\".",
-            {
-              text: "În lista \"Metode de livrare\" pornește comutatorul de lângă curierul dorit.",
-              captura: { alt: "Lista \"Metode de livrare\" cu un curier pornit și unul estompat, care are linkul \"Configurează integrarea\".", raport: 16 / 10 },
-            },
-            "Alege \"Preț automat (din contract)\" sau \"Preț fix\".",
-            "Dacă ai ales preț fix, scrie suma în lei.",
-            "Scrie, dacă vrei, alt text la \"Nume afișat la checkout\".",
-          ],
-          detalii: [
-            { titlu: "Ce metode apar în listă", text: "Fan Courier, DPD, Cargus, Sameday, Woot, Colete Online, Curier propriu și Ridicare personală." },
-            { titlu: "De ce un curier apare estompat", text: "Dacă integrarea nu e făcută, rândul curierului e estompat, comutatorul e blocat, iar sub nume apare linkul \"Configurează integrarea\", care te duce în pagina de integrări. Un curier e considerat integrat după aceleași reguli după care apare eticheta \"Activ\" în Integrări." },
-            { titlu: "Diferența dintre preț automat și preț fix", text: "\"Preț automat (din contract)\" există doar la curierii integrați prin API și ia prețul din contractul tău. \"Curier propriu\" și \"Ridicare personală\" au doar preț fix." },
-            { titlu: "Prețurile implicite", text: "Când pornești o metodă, are deja o valoare implicită: Fan Courier 20, DPD 18, Cargus 17, Sameday 19, Woot 16, Colete Online 15, Curier propriu 10, Ridicare personală 0. Le poți schimba dacă alegi preț fix." },
-            { titlu: "Numele afișat la checkout", text: "Așa apare metoda în formularul de comandă. Lasă câmpul gol pentru numele implicit. Textul are maximum 60 de caractere." },
-          ],
-          termeni: ["metode de livrare", "checkout", "pret livrare", "transport", "curier propriu", "ridicare personala"],
-        },
-        {
           slug: "cum-generezi-awb-fan-courier",
           titlu: "Cum generezi un AWB FAN Courier pentru o comandă",
           rezumat: "Deschizi comanda, verifici datele destinatarului și ale coletului, apoi generezi AWB-ul.",
           pasi: [
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
-            {
-              text: "În cardul \"Expediere\" apasă \"Creează AWB FAN Courier\".",
-              captura: { alt: "Fereastra \"AWB FAN Courier\" deschisă peste pagina comenzii, cu secțiunile Destinatar și Detalii colet.", raport: 16 / 10 },
-            },
+            "În cardul \"Expediere\" apasă \"Creează AWB FAN Courier\".",
             "La \"Destinatar\" verifică \"Nume\", \"Telefon\", \"Email\", \"Județ\", \"Localitate\", \"Strada\", \"Nr.\" și \"Cod poștal\".",
             "La \"Detalii colet\" completează \"Greutate (kg)\" și \"Nr. colete\", plus \"L (cm)\", \"l (cm)\" și \"H (cm)\" dacă le ai.",
             "La \"Opțiuni\" completează \"Ramburs (lei)\", \"Conținut colet\" și \"Observații\".",
@@ -1216,10 +761,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
             "În cardul \"Expediere\" apasă butonul de creare AWB pentru Cargus.",
             "La \"Destinatar\" verifică \"Nume\", \"Telefon\", \"Email\", \"Județ\", \"Localitate\", \"Adresa\" și \"Cod poștal\".",
-            {
-              text: "La \"Detalii colet\" alege \"Colet\" sau \"Plic\", completează \"Greutate totală (kg)\" și numărul de bucăți.",
-              captura: { alt: "Secțiunea \"Detalii colet\" din fereastra AWB Cargus, cu butoanele Colet și Plic și banda de serviciu.", raport: 16 / 10 },
-            },
+            "La \"Detalii colet\" alege \"Colet\" sau \"Plic\", completează \"Greutate totală (kg)\" și numărul de bucăți.",
             "Completează dimensiunile dacă le ai.",
             "La \"Opțiuni\" completează \"Ramburs (lei)\" și pornește, după caz, \"Deschidere la livrare\" și \"Livrare sâmbătă\".",
             "Completează \"Conținut colet\" și \"Observații\".",
@@ -1241,10 +783,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "Completezi destinatarul, greutatea și conținutul coletului, iar serviciul se alege după destinație.",
           pasi: [
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
-            {
-              text: "În cardul \"Expediere\" apasă butonul de creare AWB pentru DPD.",
-              captura: { alt: "Fereastra \"AWB DPD\" cu datele destinatarului și rândul de serviciu.", raport: 16 / 10 },
-            },
+            "În cardul \"Expediere\" apasă butonul de creare AWB pentru DPD.",
             "Completează \"Nume\", \"Telefon\" și \"Email\".",
             "Completează \"Oraș/Localitate\", \"Județ\", \"Strada\", \"Nr.\" și \"Detalii adresă\".",
             "La \"Detalii colet\" completează \"Greutate (kg)\" și, dacă le ai, dimensiunile.",
@@ -1270,10 +809,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "În cardul \"Expediere\" apasă butonul de creare AWB pentru Sameday.",
             "Completează \"Nume\" și \"Telefon\".",
             "Completează \"Județ\", \"Localitate\", \"Adresa\" și \"Cod poștal\".",
-            {
-              text: "La \"Detalii colet\" alege tipul, completează \"Greutate totală (kg)\" și \"Nr. colete\".",
-              captura: { alt: "Secțiunea \"Detalii colet\" din fereastra AWB Sameday, cu tipurile de expediere.", raport: 16 / 10 },
-            },
+            "La \"Detalii colet\" alege tipul, completează \"Greutate totală (kg)\" și \"Nr. colete\".",
             "La \"Opțiuni\" completează \"Ramburs (lei)\", \"Valoare asigurată (lei)\" și \"Observații\".",
             "Apasă \"Generează AWB Sameday\".",
           ],
@@ -1297,10 +833,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "La pachet completează \"Lung. (cm)\", \"Lat. (cm)\" și \"Înăl. (cm)\".",
             "Completează \"Ramburs (RON)\" și pornește, după caz, \"Deschidere la livrare\" și \"Livrare sâmbătă\".",
             "Apasă \"Calculează prețuri\".",
-            {
-              text: "Alege o ofertă din lista \"Selectează curier\" și apasă \"Creează AWB\".",
-              captura: { alt: "Lista \"Selectează curier\" cu ofertele primite, fiecare cu preț și serviciu.", raport: 16 / 10 },
-            },
+            "Alege o ofertă din lista \"Selectează curier\" și apasă \"Creează AWB\".",
           ],
           detalii: [
             { titlu: "Ce vezi în ofertele primite", text: "Fiecare ofertă arată numele curierului, numele serviciului, prețul în lei și valoarea fără TVA. Ofertele apar sortate crescător după preț. Dacă clientul a ales un curier la checkout și acesta e încă oferit, se preselectează." },
@@ -1319,10 +852,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Deschide comanda care are deja AWB. În cardul \"Expediere\" scrie cu ce curier e expediată și numărul AWB-ului.",
             "Apasă \"Gestionează AWB\".",
-            {
-              text: "În zona \"AWB generat\" apasă butonul de descărcare al curierului.",
-              captura: { alt: "Zona \"AWB generat\" din fereastra unui AWB, cu butoanele de descărcare și linkul de urmărire.", raport: 16 / 10 },
-            },
+            "În zona \"AWB generat\" apasă butonul de descărcare al curierului.",
             "Apasă \"Urmărește expedierea\" pentru pagina de tracking a curierului.",
           ],
           detalii: [
@@ -1339,10 +869,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "Ștergerea se face din fereastra AWB-ului și merge doar cât timp coletul nu a fost preluat.",
           pasi: [
             "Deschide comanda și apasă \"Gestionează AWB\".",
-            {
-              text: "Jos în fereastră apasă \"Șterge AWB\".",
-              captura: { alt: "Butonul de ștergere din partea de jos a ferestrei unui AWB.", raport: 16 / 10 },
-            },
+            "Jos în fereastră apasă \"Șterge AWB\".",
             "La DPD butonul se numește \"Anulează expediția\".",
             "Confirmă din mesajul care apare că operațiunea a reușit.",
           ],
@@ -1361,10 +888,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Intră în Comenzi > Toate comenzile.",
             "Apasă butonul \"Cheamă curierul FAN\" din capul paginii.",
-            {
-              text: "Alege \"Data ridicării\", apoi \"De la ora\" și \"Până la ora\".",
-              captura: { alt: "Fereastra \"Cheamă curierul\" cu data ridicării și intervalul orar.", raport: 16 / 10 },
-            },
+            "Alege \"Data ridicării\", apoi \"De la ora\" și \"Până la ora\".",
             "Completează \"Nr. colete\" și \"Greutate totală (kg)\".",
             "Scrie, dacă e cazul, \"Observații\".",
             "Apasă \"Programează ridicarea\".",
@@ -1384,10 +908,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "Ceri ridicarea dintr-un singur buton, iar cererea acoperă toate AWB-urile DPD din ultimele 24 de ore.",
           pasi: [
             "Intră în Comenzi > Toate comenzile.",
-            {
-              text: "Apasă \"Cheamă curierul DPD\" din capul paginii.",
-              captura: { alt: "Fereastra \"Cheamă curierul DPD\" cu butonul \"Solicită ridicarea\".", raport: 16 / 10 },
-            },
+            "Apasă \"Cheamă curierul DPD\" din capul paginii.",
             "Apasă \"Solicită ridicarea\".",
           ],
           detalii: [
@@ -1404,10 +925,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Intră în Comenzi > Toate comenzile.",
             "Apasă \"Cheamă curierul Cargus\" din capul paginii.",
-            {
-              text: "Alege \"Data ridicării\".",
-              captura: { alt: "Fereastra \"Cheamă curierul Cargus\" cu data și intervalul de ridicare.", raport: 16 / 10 },
-            },
+            "Alege \"Data ridicării\".",
             "Alege \"De la ora\" și \"Până la ora\".",
             "Apasă \"Validează ridicarea\".",
           ],
@@ -1420,60 +938,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["automaticeod", "webexpress", "comanda de ridicare", "validare ridicare"],
         },
         {
-          slug: "cum-generezi-awb-uri-in-masa",
-          titlu: "Cum generezi AWB-uri pentru mai multe comenzi deodată",
-          rezumat: "Bifezi comenzile din tabel, alegi curierul și generezi AWB-urile într-o singură acțiune.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile.",
-            "Bifează comenzile pentru care vrei AWB.",
-            {
-              text: "În bara de acțiuni în masă alege din lista \"Curier AWB\" fie \"AWB: după client\", fie un curier anume.",
-              captura: { alt: "Bara de acțiuni în masă cu lista \"Curier AWB\" și butonul de generare.", raport: 16 / 10 },
-            },
-            "Apasă butonul de generare a AWB-urilor.",
-            "Citește rezultatul și erorile listate dedesubt.",
-          ],
-          detalii: [
-            { titlu: "Ce înseamnă AWB după client", text: "Pentru fiecare comandă se folosește curierul ales de client la checkout. Dacă vrei același curier pentru tot, alegi curierul din listă." },
-            { titlu: "Ce curieri merg în masă", text: "Doar Cargus, Sameday, FAN Courier și DPD. Comenzile Woot sau Colete Online și cele fără curier potrivit se generează individual din tabel." },
-            { titlu: "Cum arată butonul", text: "Când ai un singur curier conectat, lista nu mai e necesară, iar butonul poartă și numele curierului, de exemplu \"Generează AWB Cargus\"." },
-            { titlu: "Limitele generării în masă", text: "Se procesează cel mult 50 de comenzi pe apel, restul selecției se taie. Comenzile care au deja AWB la curierul ales sunt sărite. AWB-urile generate așa folosesc greutatea implicită de 1 kg pe colet, deci pentru colete mai grele generează AWB-ul din pagina comenzii." },
-            { titlu: "Ce vezi la final", text: "Un rezultat de forma AWB-uri, cu numărul de reușite, sărite și eșuate. Erorile pe fiecare comandă apar sub el, ca să știi ce mai ai de corectat." },
-            { titlu: "Ce te poate opri", text: "Fără nicio comandă bifată primești \"Nicio comandă selectată.\". Dacă niciun curier compatibil nu e conectat sau dacă cel ales nu e configurat, primești mesajul corespunzător." },
-          ],
-          termeni: ["bulk", "actiuni in masa", "mai multe comenzi", "selectie comenzi"],
-        },
-        {
-          slug: "cum-creezi-awb-din-tabelul-de-comenzi",
-          titlu: "Cum vezi și creezi AWB-uri direct din tabelul de comenzi",
-          rezumat: "Tabelul are câte o coloană pentru fiecare curier conectat, cu numărul AWB sau butonul de creare.",
-          pasi: [
-            "Intră în Comenzi > Toate comenzile.",
-            {
-              text: "Caută coloanele de AWB din partea dreaptă a tabelului.",
-              captura: { alt: "Tabelul de comenzi cu coloanele de AWB, unele cu număr, altele cu butonul Creează AWB.", raport: 16 / 10 },
-            },
-            "Dacă în celulă apare un număr, apasă pe el ca să redeschizi fereastra curierului.",
-            "Dacă în celulă apare \"Creează AWB\", apasă butonul ca să deschizi fereastra curierului.",
-          ],
-          detalii: [
-            { titlu: "Ce coloane vezi", text: "În ordine: \"AWB Woot\", \"AWB Cargus\", \"AWB DPD\", \"AWB FAN Courier\", \"AWB Sameday\" și \"AWB Colete\". Coloana unui curier apare doar dacă acel curier e conectat, deci tabelul arată diferit de la magazin la magazin." },
-            { titlu: "Numărul AWB este și buton", text: "Când AWB-ul există, numărul lui nu e doar text. Apeși pe el și se redeschide fereastra curierului, de unde descarci eticheta sau urmărești expedierea." },
-            { titlu: "Pe telefon coloanele nu apar", text: "Coloanele de AWB sunt ascunse pe ecrane mici și apar de la lățimi mari în sus. Pe telefon intri în comandă și lucrezi din cardul \"Expediere\"." },
-          ],
-          termeni: ["tabel comenzi", "coloane awb", "lista comenzi", "numar awb"],
-        },
-        {
           slug: "cum-expediezi-cu-alt-curier",
           titlu: "Cum expediezi o comandă cu alt curier decât cel ales de client",
           rezumat: "În cardul Expediere ai și lista celorlalți curieri conectați, de unde poți genera AWB-ul.",
           pasi: [
             "Deschide comanda din Comenzi > Toate comenzile.",
             "În cardul \"Expediere\" uită-te la curierul propus, marcat cu \"Clientul a ales\" sau \"Curier recomandat\".",
-            {
-              text: "Derulează la lista \"Sau expediază cu alt curier\", de sub butonul principal.",
-              captura: { alt: "Cardul \"Expediere\" cu butonul principal și lista \"Sau expediază cu alt curier\".", raport: 16 / 10 },
-            },
+            "Derulează la lista \"Sau expediază cu alt curier\", de sub butonul principal.",
             "Apasă pe curierul dorit și continuă în fereastra lui.",
           ],
           detalii: [
@@ -1490,25 +961,6 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
       titlu: "Ceilalți curieri",
       ghiduri: [
         {
-          slug: "gasesti-curierul-in-catalogul-de-integrari",
-          titlu: "Cum găsești un curier în catalogul de integrări",
-          rezumat: "Toți cei unsprezece curieri noi (GLS, Poșta Română, Pall-Ex, FedEx, UPS, DHL, eColet, SmartShip, Shipo.ro, Packeta, Innoship) se configurează din aceeași pagină: Integrări, rubrica Curieri.",
-          pasi: [
-            "Intră în Meniu lateral > Integrări.",
-            "Coboară la rubrica Curieri.",
-            "Apasă cardul curierului pe care vrei să îl configurezi.",
-            "Din pagina curierului te întorci la catalog cu linkul Integrări, cel cu săgeata înapoi.",
-          ],
-          detalii: [
-            { titlu: "Ordinea cardurilor din rubrică", text: "Întâi transportatorii: Fan Courier, Cargus, Sameday, DPD, GLS, Poșta Română, Pall-Ex, FedEx, UPS, DHL. Apoi brokerii: Colete Online, Woot, eColet, SmartShip, Shipo.ro, Packeta, Innoship. Un broker îți vinde transportul altor curieri, un transportator îți livrează cu rețeaua lui." },
-            { titlu: "Ce scrie pe card", text: "Cardul arată Activ când integrarea e configurată și Configurează când nu e. Toți cei unsprezece curieri noi au eticheta Nou lângă nume, iar intrarea Integrări din meniul lateral poartă ecusonul de noutate." },
-            { titlu: "Unde te duce fiecare card", text: "/dashboard/features/gls, /posta, /pallex, /fedex, /ups, /dhl, /ecolet, /smartship, /shipo, /packeta și /innoship. Poți intra și direct pe adresă, dacă ai salvat-o." },
-            { titlu: "Ce îți trebuie ca să intri", text: "O sesiune activă și un magazin. Fără sesiune ești trimis la pagina de autentificare, fără magazin ești trimis înapoi în panoul de administrare. Niciunul dintre cei unsprezece nu e condiționat de planul de abonament, spre deosebire de alte integrări din pagină." },
-            { titlu: "Nu mai există carduri În curând", text: "Rubrica Curieri nu mai are niciun card marcat În curând. DHL, ultimul anunțat, e livrat." },
-          ],
-          nota: "Configurarea unei integrări nu o aduce singură în checkout. Metoda de livrare a curierului trebuie pornită separat din Setări > Livrare.",
-        },
-        {
           slug: "cum-conectezi-gls",
           titlu: "Cum conectezi GLS",
           rezumat: "Conectezi contul MyGLS, alegi formatul etichetei și salvezi. Edinio face integrarea, dar contul și contractul cu GLS trebuie să fie ale tale.",
@@ -1517,10 +969,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Integrări > Curieri > GLS.",
             "La Pasul 1, Date de acces MyGLS, completează Utilizator, Parolă, Client Number și Cod poștal ridicare, apoi alege Țara contractului.",
             "Lasă sau oprește comutatorul Mediu de test, care e pornit din oficiu.",
-            {
-              text: "Apasă Testează conexiunea.",
-              captura: { alt: "Pasul 1 din pagina GLS, cu datele de acces MyGLS completate și rezultatul probei de conexiune", raport: 16 / 10 },
-            },
+            "Apasă Testează conexiunea.",
             "La Pasul 2, Tipărirea etichetelor, alege Format și, dacă e cazul, Poziția pe coală.",
             "Apasă Salvează configurația.",
             "Pornește metoda GLS din Setări > Livrare.",
@@ -1546,10 +995,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           pasi: [
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
             "În panoul Expediere apasă Creează AWB GLS.",
-            {
-              text: "Completează Nume destinatar, Telefon, Oraș, Strada și numărul, iar dacă e cazul Email, Cod poștal, Număr de colete, Ramburs (lei) și Conținut.",
-              captura: { alt: "Fereastra AWB GLS cu datele destinatarului completate", raport: 16 / 10 },
-            },
+            "Completează Nume destinatar, Telefon, Oraș, Strada și numărul, iar dacă e cazul Email, Cod poștal, Număr de colete, Ramburs (lei) și Conținut.",
             "Apasă Emite AWB.",
           ],
           detalii: [
@@ -1572,10 +1018,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           intro: "Citește întâi caseta Ce poate și ce nu poate face integrarea, din capul paginii. Ea spune de la început ce rămâne de făcut la ghișeu.",
           pasi: [
             "Intră în Integrări > Curieri > Poșta Română.",
-            {
-              text: "La Pasul 1, Contul de la Poșta Română, completează Utilizator și Parolă, apoi apasă Testează conexiunea.",
-              captura: { alt: "Pasul 1 al paginii Poșta Română, cu rezultatul probei de conexiune", raport: 16 / 10 },
-            },
+            "La Pasul 1, Contul de la Poșta Română, completează Utilizator și Parolă, apoi apasă Testează conexiunea.",
             "La Pasul 2, Datele din contract, completează Cod de trimitere, Tip mandat și Tip achitare ramburs.",
             "La Pasul 3, Plaja de coduri AWB, pornește Am plajă de coduri alocată și completează Prefix, Câte cifre, De la și Până la, dacă ai plajă în contract.",
             "La Pasul 4, Cum livrăm, alege comutatoarele și valoarea declarată.",
@@ -1624,10 +1067,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           intro: "Citește întâi avertismentul din capul paginii: Pall-Ex NU încasează ramburs. Edinio face integrarea, dar contul și contractul cu Pall-Ex trebuie să fie ale tale.",
           pasi: [
             "Intră în Integrări > Curieri > Pall-Ex.",
-            {
-              text: "La Pasul 1, Date de acces ClientPlus, completează Utilizator și Parolă, apoi apasă Testează conexiunea.",
-              captura: { alt: "Rezultatul probei de conexiune Pall-Ex, cu tabelul statusurilor contractului", raport: 16 / 10 },
-            },
+            "La Pasul 1, Date de acces ClientPlus, completează Utilizator și Parolă, apoi apasă Testează conexiunea.",
             "La Pasul 2, De unde se ridică marfa, completează Cod poștal ridicare și Județ ridicare, plus restul câmpurilor de ridicare.",
             "La Pasul 3, Termene și validare, pune zilele de ridicare și de livrare și intervalul în care primește destinatarul.",
             "Apasă Salvează configurația.",
@@ -1655,10 +1095,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Completează Nume destinatar, Localitate, Județ, Strada și numărul, Cod poștal, Număr de paleți și Greutate totală (kg).",
             "Alege Data ridicării și Data livrării.",
             "Bifează serviciile la livrare de care ai nevoie.",
-            {
-              text: "Apasă Creează partida.",
-              captura: { alt: "Fereastra Partidă Pall-Ex după creare, cu butoanele Etichetă și Aviz de transport", raport: 16 / 10 },
-            },
+            "Apasă Creează partida.",
             "Apasă Vezi borderoul, apoi Validează borderoul.",
           ],
           detalii: [
@@ -1681,10 +1118,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Integrări > Curieri > FedEx.",
             "La Pasul 1, Conectare, completează API Key (client_id), Secret Key (client_secret), Numărul de cont FedEx și alege Mediu.",
             "Coboară la Pasul 2, Adresa de expediție, și completează cel puțin Oraș și Cod poștal.",
-            {
-              text: "Urcă înapoi la Pasul 1 și apasă Testează conexiunea.",
-              captura: { alt: "Pasul 1 al paginii FedEx, cu butonul Testează conexiunea și rezultatul probei", raport: 16 / 10 },
-            },
+            "Urcă înapoi la Pasul 1 și apasă Testează conexiunea.",
             "La Pasul 3, Ce se oferă în checkout, bifează serviciile pe care le arăți clienților.",
             "La Pasul 4 alege cum ajunge coletul la FedEx, formatul etichetei și dimensiunea hârtiei.",
             "La Pasul 5 completează dimensiunile coletului implicit și descrierea mărfii.",
@@ -1737,10 +1171,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Integrări > Curieri > UPS.",
             "La Pasul 1, Conectare, completează Client ID, Client Secret, Numărul de cont UPS (Shipper Number) și alege Mediu.",
             "Coboară la Pasul 2, Adresa de expediție, și completează cel puțin Oraș și Cod poștal.",
-            {
-              text: "Urcă înapoi la Pasul 1 și apasă Testează conexiunea.",
-              captura: { alt: "Pasul 1 al paginii UPS, cu rezultatul probei de conexiune", raport: 16 / 10 },
-            },
+            "Urcă înapoi la Pasul 1 și apasă Testează conexiunea.",
             "La Pasul 3 bifează serviciile arătate clienților și pornește sau oprești Cere tarifele contractului și Oferă livrare în puncte UPS Access Point.",
             "La Pasul 4 pornește Acceptă comenzi cu plată la livrare și alege Cum se încasează rambursul.",
             "La Pasul 5 alege Formatul etichetei, iar la Pasul 6 completează coletul implicit.",
@@ -1794,10 +1225,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Intră în Integrări > Curieri > DHL.",
             "La Pasul 1, Conectare, completează Utilizator MyDHL API, Parolă MyDHL API, Numărul de cont DHL Express și alege Mediu.",
             "Coboară la Pasul 2, Adresa de expediție, și completează câmpurile, inclusiv Telefon și Cod poștal.",
-            {
-              text: "Urcă înapoi la Pasul 1 și apasă Testează conexiunea.",
-              captura: { alt: "Pasul 1 al paginii DHL, cu utilizatorul MyDHL API și rezultatul probei", raport: 16 / 10 },
-            },
+            "Urcă înapoi la Pasul 1 și apasă Testează conexiunea.",
             "La Pasul 3 bifează produsele DHL pe care le arăți clienților.",
             "La Pasul 4 alege Formatul etichetei și Șablonul etichetei.",
             "La Pasul 5 completează coletul implicit, descrierea mărfii și Incoterm, apoi comutatoarele de servicii.",
@@ -1892,10 +1320,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           intro: "Citește întâi avertismentul din capul paginii: SmartShip nu are mediu de test. Edinio face integrarea, dar contul cu SmartShip trebuie să fie al tău.",
           pasi: [
             "Intră în Integrări > Curieri > SmartShip.",
-            {
-              text: "La Pasul 1 completează Cheia API, apasă Salvează, apoi Verifică și încarcă expeditorii.",
-              captura: { alt: "Pasul 1 al paginii SmartShip, cu cheia salvată și adresele de ridicare încărcate", raport: 16 / 10 },
-            },
+            "La Pasul 1 completează Cheia API, apasă Salvează, apoi Verifică și încarcă expeditorii.",
             "La Pasul 2 alege adresa de ridicare din adresele salvate în contul SmartShip.",
             "La Pasul 3 completează IBAN pentru virarea rambursului.",
             "La Pasul 4 pornește lockerele pe care le oferi, apasă Încarcă curierii și bifează curierii oferiți.",
@@ -2043,10 +1468,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           intro: "Edinio face integrarea, dar contul cu Innoship trebuie să fie al tău.",
           pasi: [
             "Intră în Integrări > Curieri > Innoship.",
-            {
-              text: "La Pasul 1 completează Cheie de API și Id depozit (External Client Location), apoi apasă Testează conexiunea.",
-              captura: { alt: "Pasul 1 al paginii Innoship, cu rezultatul probei de conexiune", raport: 16 / 10 },
-            },
+            "La Pasul 1 completează Cheie de API și Id depozit (External Client Location), apoi apasă Testează conexiunea.",
             "La Pasul 2 bifează curierii pe care îi vede cumpărătorul.",
             "La Pasul 3 copiază adresa de webhook cu butonul Copiază și pune-o în portalul Innoship, la Track push.",
             "La Pasul 4 alege Format etichetă și Tip fișier, scrie Observații pe etichetă și pornește serviciile de care ai nevoie.",
@@ -2082,49 +1504,6 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             { titlu: "Când emiterea pare nesigură", text: "Emiterea e apărată împotriva dublei apăsări. În caz de dubiu apeși Verifică la Innoship, care stă lângă butonul de emitere." },
             { titlu: "Anularea", text: "Innoship are anulare în API. În Editează comanda butonul e Anulează AWB." },
           ],
-        },
-        {
-          slug: "cum-pui-tariful-de-livrare-pentru-curier",
-          titlu: "Cum pui tariful de livrare și numele afișat la checkout",
-          rezumat: "Fiecare curier are un rând în Setări > Livrare, cu comutator, preț și nume afișat. Fără el, integrarea nu apare în checkout.",
-          pasi: [
-            "Intră în Meniu lateral > Setări > tabul Livrare.",
-            "Coboară la rubrica Metode de livrare și găsește rândul curierului.",
-            {
-              text: "Aprinde comutatorul metodei.",
-              captura: { alt: "Rubrica Metode de livrare din tabul Livrare, cu rândul unui curier deschis", raport: 16 / 10 },
-            },
-            "Alege Preț automat (din contract) sau Preț fix, iar la Preț fix scrie suma.",
-            "În câmpul Nume afișat la checkout scrie cum vrei să apară metoda.",
-          ],
-          detalii: [
-            { titlu: "Rândurile stinse", text: "Pentru un curier neconfigurat rândul e stins, iar sub nume apare linkul Configurează integrarea, care te duce la Integrări. Comutatorul nu se poate aprinde până când integrarea nu e configurată." },
-            { titlu: "Curierii care nu pot cota din contract", text: "GLS, Pall-Ex, Poșta Română și Packeta au doar un rând Preț: <sumă> lei, fără Preț automat (din contract). MyGLS nu are metodă de tarif, iar API-ul Packetei nu are nicio metodă de tarif. La ei prețul vine din contractul tău, nu din API." },
-            { titlu: "Numele afișat", text: "Cel mult 60 de caractere. Lăsat gol, se folosește numele implicit. Implicitele pentru curierii noi sunt: Livrare prin GLS, Livrare prin Poșta Română, Livrare paletizată Pall-Ex, FedEx, UPS, DHL Express, eColet, SmartShip, Shipo.ro, Livrare la adresă prin Packeta, Innoship." },
-            { titlu: "Tarifele fixe implicite", text: "Fan Courier 20, DPD 18, Cargus 17, Sameday 19, Woot 16, Colete Online 15, GLS 18, Pall-Ex 150, eColet 18, Poșta Română 16, Packeta 15, Innoship 18, SmartShip 17, Shipo.ro 17, FedEx 45, UPS 45, DHL Express 45, Curier propriu 10, Ridicare personală 0. Sunt valori de pornire scrise în panou, nu prețuri negociate. Pune-le pe ale tale." },
-            { titlu: "De ce express-ii pornesc de la 45 lei", text: "FedEx, UPS și DHL Express sunt transportatori express, nu curieri de colete ieftini. Cel mai ieftin serviciu intern al lor, FedEx Priority, UPS Express Saver, respectiv DHL Domestic Express codul N, pornește mult peste tarifele locale. Un implicit de 17 lei ar fi însemnat transport vândut în pierdere până la prima factură." },
-            { titlu: "De ce Pall-Ex pornește de la 150 lei", text: "Pall-Ex duce marfă paletizată, nu colete." },
-            { titlu: "FedEx în checkout", text: "Chiar configurat corect, FedEx apare în checkout la tariful fix, pentru că cere codul poștal al destinatarului, iar formularul de comandă îl cere doar la livrările în străinătate." },
-          ],
-        },
-        {
-          slug: "cum-generezi-awb-uri-in-lot",
-          titlu: "Cum generezi AWB-uri în lot din lista de comenzi",
-          rezumat: "Bifezi comenzile, alegi curierul și apeși un buton. Rezultatul apare pe loc, cu erorile pe comandă.",
-          pasi: [
-            "Intră în Meniu lateral > Comenzi > Toate comenzile.",
-            "Bifează comenzile din listă.",
-            "În bara de acțiuni alege din selectorul Curier AWB.",
-            "Apasă Generează AWB-uri.",
-          ],
-          detalii: [
-            { titlu: "Selectorul de curier", text: "Apare doar când sunt configurați cel puțin doi curieri. Valoarea implicită e AWB: după client, adică fiecare comandă merge cu ce a ales cumpărătorul. Poți alege și un curier anume. Când e configurat un singur curier, butonul poartă numele lui: Generează AWB <curier>." },
-            { titlu: "Ce curieri apar în listă", text: "Cargus, Sameday, FAN Courier, DPD, GLS, Pall-Ex, Poșta Română, Packeta, SmartShip, Shipo.ro, FedEx, UPS, DHL Express, Innoship. Fiecare apare doar dacă integrarea lui e pornită." },
-            { titlu: "eColet nu se generează în lot", text: "eColet nu e în lista de generare în lot. Expedierile eColet se trimit una câte una, din pagina comenzii sau din coloana AWB eColet." },
-            { titlu: "Ce vezi după rulare", text: "Sub bară apare „<titlu>: N reușite, M sărite, K eșuate”, cu lista erorilor pe fiecare comandă." },
-            { titlu: "Coloanele de AWB", text: "Lista de comenzi are câte o coloană proprie de AWB pentru unii curieri, printre care AWB GLS și AWB eColet. Se văd doar pe ecrane mari." },
-          ],
-          nota: "Generarea în lot emite AWB-uri reale la curierii care nu au mediu de test. Verifică selecția înainte de a apăsa.",
         },
         {
           slug: "cum-anulezi-sau-detasezi-awb-ul",

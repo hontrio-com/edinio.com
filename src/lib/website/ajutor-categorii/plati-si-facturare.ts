@@ -18,31 +18,6 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
       titlu: "Plăți online",
       ghiduri: [
         {
-          slug: "cum-vezi-procesatorii-de-plata-disponibili",
-          titlu: "Cum vezi procesatorii de plată disponibili și care sunt activi",
-          rezumat: "Unde găsești cei cinci procesatori de plăți și ce înseamnă eticheta de pe fiecare card.",
-          intro: "Toți procesatorii de plăți se configurează dintr-un singur loc, din lista de integrări.",
-          pasi: [
-            "Intră în panoul de administrare și, din meniul din stânga, apasă Integrări.",
-            "Derulează până la secțiunea Procesatori de plăți.",
-            {
-              text: "Uită-te la eticheta de sub numele fiecărui card. Activ înseamnă că integrarea e gata de folosit, Configurează înseamnă că mai ai ceva de completat.",
-              captura: { alt: "Secțiunea Procesatori de plăți cu cele cinci carduri și etichetele Activ sau Configurează.", raport: 16 / 10 },
-            },
-            "Apasă pe cardul procesatorului pe care vrei să îl configurezi.",
-            "Ca să te întorci la listă, apasă link-ul Integrări cu săgeată din stânga sus. Există pe ecranul fiecărei integrări.",
-          ],
-          detalii: [
-            { titlu: "Ce procesatori sunt în listă", text: "Stripe, Netopia Payments, BT iPay, Klarna și Revolut. Klarna și Revolut au în plus eticheta Nou. Niciunul dintre ei nu este blocat de plan, deci nu apare lacăt și nu îți cere upgrade pe aceste carduri." },
-            { titlu: "Când apare eticheta Activ", text: "Eticheta apare doar când integrarea e și pornită, și completată. Stripe trebuie să aibă contul conectat și încasările activate de Stripe. Netopia Payments are nevoie de POS Signature și API Key. BT iPay și Klarna au nevoie de utilizator și parolă API. Revolut are nevoie de cheia secretă. În rest, cardul arată Configurează." },
-            { titlu: "De ce ai nevoie ca să ajungi aici", text: "Trebuie să fii autentificat în contul tău Edinio, altfel ești trimis la pagina de autentificare. Ecranele Netopia Payments, BT iPay, Klarna și Revolut au nevoie și de un magazin creat, altfel te întorc în panou. Ecranul Stripe se deschide și fără magazin, dar conectarea nu pornește." },
-            { titlu: "Rambursările nu se fac din panou", text: "Nu există niciun buton care să trimită o cerere de rambursare către procesator. În panou poți doar să marchezi manual o comandă ca Rambursat, din pagina comenzii, atât la statusul comenzii cât și la statusul plății." },
-            { titlu: "Textul din josul paginii", text: "Sub liste apare mesajul Vrei o integrare specifică mai repede, cu invitația de a ne contacta. Este doar text informativ, nu un formular." },
-          ],
-          nota: "Un procesator apare în formularul de comandă doar după ce este activat și are toate datele completate.",
-          termeni: ["integrări", "checkout", "plăți cu cardul", "card online", "Stripe", "Netopia", "BT iPay", "Klarna", "Revolut", "activ"],
-        },
-        {
           slug: "cum-conectezi-netopia-payments",
           titlu: "Cum conectezi Netopia Payments",
           rezumat: "Pașii pentru plata cu cardul prin Netopia, de la POS Signature și API Key până la activare.",
@@ -55,10 +30,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Înapoi în Edinio, pornește comutatorul Activează Netopia Payments.",
             "Alege mediul din comutatorul Mod Sandbox (testare). Pornit înseamnă plăți de test, oprit înseamnă plăți reale.",
             "Completează Titlu afișaj checkout sau lasă textul implicit, Card online (Netopia).",
-            {
-              text: "Lipește valoarea copiată în câmpul POS Signature și cheia generată în câmpul API Key.",
-              captura: { alt: "Formularul Netopia din Edinio, cu comutatoarele de activare și mod, plus câmpurile POS Signature și API Key.", raport: 16 / 10 },
-            },
+            "Lipește valoarea copiată în câmpul POS Signature și cheia generată în câmpul API Key.",
             "Apasă Salvează. Dacă totul e în regulă apare mesajul Configurația Netopia a fost salvată.",
           ],
           detalii: [
@@ -80,16 +52,13 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "La tipul de platformă alege HTML/IFRAME.",
             "Selectează punctul de vânzare potrivit și copiază codul generat.",
             "În Edinio intră în Integrări > Netopia Payments și coboară la câmpul Logo Netopia pentru footer (Identitate Vizuală).",
-            {
-              text: "Lipește codul în caseta de text.",
-              captura: { alt: "Câmpul Logo Netopia pentru footer, cu instrucțiunile de obținere a codului deasupra casetei de text.", raport: 16 / 10 },
-            },
+            "Lipește codul în caseta de text.",
             "Apasă Salvează.",
             "Deschide magazinul și verifică footerul. Logo-ul apare sub titlul Plată securizată.",
           ],
           detalii: [
             { titlu: "Doar formatul HTML/IFRAME", text: "Câmpul acceptă doar codul de tip HTML/IFRAME de la Netopia. Variantele Script, React sau Angular nu se afișează, chiar dacă le lipești și salvezi." },
-            { titlu: "Ce se păstrează din codul lipit", text: "La salvare, codul este filtrat. Rămân doar elementele iframe, a, div, span, img, picture și source, și doar adresele https. În plus, pentru iframe se acceptă numai domeniile Netopia, adică mny.ro, netopia-payments.com, netopia.ro și mobilpay.ro. Restul este eliminat și nu ajunge în magazin." },
+            { titlu: "Ce se păstrează din codul lipit", text: "La salvare, codul este filtrat. Rămân doar elementele iframe, a, div, span, img, picture și source, și doar adresele https. Pentru iframe se acceptă numai domeniile Netopia, adică mny.ro, netopia-payments.com, netopia.ro și mobilpay.ro. Restul este eliminat și nu ajunge în magazin." },
             { titlu: "Dacă logo-ul nu apare în magazin", text: "Verifică întâi dacă integrarea Netopia este pornită, pentru că logo-ul nu se afișează cât timp integrarea e oprită. Apoi verifică formatul codului, generându-l din nou ca HTML/IFRAME pentru punctul tău de vânzare." },
           ],
           nota: "Afișarea logo-ului Netopia este obligatorie când accepți plata cu cardul prin Netopia.",
@@ -103,10 +72,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > Stripe.",
             "Verifică caseta de stare. Dacă scrie Stripe neconectat, nu ai încă niciun cont legat.",
-            {
-              text: "Apasă butonul Conectează cu Stripe.",
-              captura: { alt: "Ecranul Stripe cu starea Stripe neconectat și butonul Conectează cu Stripe.", raport: 16 / 10 },
-            },
+            "Apasă butonul Conectează cu Stripe.",
             "Completează pe Stripe datele cerute despre tine și despre firmă.",
             "Întoarce-te în Edinio. Starea din pagină se actualizează singură, fără să mai salvezi ceva.",
           ],
@@ -125,10 +91,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "Ce înseamnă fiecare stare a contului Stripe și ce buton apeși în fiecare caz.",
           pasi: [
             "Intră în Integrări > Stripe.",
-            {
-              text: "Citește caseta de stare din partea de sus a paginii.",
-              captura: { alt: "Caseta de stare Stripe cu textul despre verificarea contului și butoanele disponibile.", raport: 16 / 10 },
-            },
+            "Citește caseta de stare din partea de sus a paginii.",
             "Dacă scrie Onboarding incomplet, apasă Continuă onboarding și termină pașii rămași pe Stripe.",
             "Dacă scrie că ai contul conectat și că Stripe îl verifică, apasă Verifică din nou pentru a reciti starea, sau Continuă pe Stripe pentru a completa ce îți mai cere Stripe.",
             "Dacă scrie Stripe conectat, plățile cu cardul sunt gata. Apasă Accesează dashboard Stripe ca să treci în contul tău Stripe.",
@@ -152,10 +115,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Pornește comutatorul Activează BT iPay.",
             "Alege mediul din comutatorul Mod Sandbox (testare). Pornit înseamnă mediu de test, oprit înseamnă plăți reale.",
             "Completează Titlu afișaj checkout sau lasă textul implicit, Card bancar (BT iPay).",
-            {
-              text: "Completează Utilizator API și Parolă API.",
-              captura: { alt: "Câmpurile Utilizator API și Parolă API din ecranul BT iPay.", raport: 16 / 10 },
-            },
+            "Completează Utilizator API și Parolă API.",
             "Apasă Salvează. Dacă totul e în regulă apare mesajul Configurația BT iPay a fost salvată.",
           ],
           detalii: [
@@ -178,10 +138,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Înapoi în Edinio, pornește comutatorul Activează Klarna.",
             "Alege mediul din comutatorul Mod Playground (testare). Pornit înseamnă mediul de test Klarna, oprit înseamnă plăți reale.",
             "Completează Titlu afișaj checkout sau lasă textul implicit, Klarna.",
-            {
-              text: "Completează Utilizator API și Parolă API.",
-              captura: { alt: "Câmpurile Utilizator API și Parolă API din ecranul Klarna, cu comutatorul de mod deasupra.", raport: 16 / 10 },
-            },
+            "Completează Utilizator API și Parolă API.",
             "Apasă Salvează. Dacă totul e în regulă apare mesajul Configurația Klarna a fost salvată.",
           ],
           detalii: [
@@ -204,10 +161,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Înapoi în Edinio, pornește comutatorul Activează Revolut.",
             "Alege mediul din comutatorul Mod Sandbox (testare).",
             "Completează Titlu afișaj checkout sau lasă textul implicit, Revolut.",
-            {
-              text: "Lipește cheia în câmpul Cheie secretă API (Merchant). Începe cu sk_ și se introduce mascat.",
-              captura: { alt: "Câmpul Cheie secretă API (Merchant) din ecranul Revolut.", raport: 16 / 10 },
-            },
+            "Lipește cheia în câmpul Cheie secretă API (Merchant). Începe cu sk_ și se introduce mascat.",
             "Apasă Salvează.",
           ],
           detalii: [
@@ -220,38 +174,13 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           termeni: ["Revolut Business", "merchant", "cheie secretă", "webhook", "sk_", "Apple Pay", "Google Pay"],
         },
         {
-          slug: "cum-deconectezi-un-procesator-de-plata",
-          titlu: "Cum deconectezi un procesator de plăți",
-          rezumat: "Ștergi configurația Netopia, BT iPay, Klarna, Revolut sau Stripe din ecranul integrării.",
-          pasi: [
-            "Intră în Integrări și apasă pe cardul procesatorului pe care vrei să îl scoți.",
-            {
-              text: "La Netopia Payments, BT iPay, Klarna și Revolut, apasă butonul Deconectează, de lângă Salvează.",
-              captura: { alt: "Butoanele Salvează și Deconectează din josul unui ecran de integrare.", raport: 16 / 10 },
-            },
-            "La Stripe, apasă butonul roșu Deconectează și confirmă în fereastra care te întreabă dacă vrei să dezactivezi plățile cu cardul.",
-            "Verifică mesajul de confirmare. Pentru celelalte integrări apare, de exemplu, Netopia deconectat, iar câmpurile revin la valorile implicite.",
-          ],
-          detalii: [
-            { titlu: "Când apare butonul", text: "La Netopia butonul apare doar dacă ai salvat deja POS Signature și API Key. La BT iPay și Klarna, doar dacă ai salvat utilizator și parolă. La Revolut, doar dacă ai salvat o cheie secretă. La Stripe apare în starea conectat și în starea de verificare, dar nu apare în Onboarding incomplet." },
-            { titlu: "Doar Stripe cere confirmare", text: "La Netopia, BT iPay, Klarna și Revolut nu apare nicio fereastră de confirmare. Apăsarea butonului șterge imediat configurația, deci ai nevoie din nou de credentiale ca să reconectezi." },
-            { titlu: "Ce se întâmplă la Revolut", text: "Odată cu configurația se șterge și webhook-ul înregistrat în contul tău Revolut. La o reconectare ulterioară, webhook-ul se înregistrează din nou la salvare." },
-            { titlu: "După deconectare", text: "Metoda nu mai apare în formularul de comandă. Comenzile deja plătite rămân în panou, cu statusul lor." },
-            { titlu: "Dacă apare o eroare", text: "La Netopia, BT iPay, Klarna și Revolut poate apărea Eroare la ștergere. La Stripe poate apărea Eroare la deconectare sau Eroare de rețea. Încearcă din nou, apoi reîncarcă pagina ca să vezi starea curentă." },
-          ],
-          termeni: ["ștergere integrare", "dezactivare plăți", "reconectare", "credentiale"],
-        },
-        {
           slug: "cum-alegi-metodele-de-plata-la-checkout",
           titlu: "Cum alegi și ordonezi metodele de plată din formularul de comandă",
           rezumat: "Din Setări > Metode de plată pornești, redenumești și reordonezi ce văd clienții la finalizarea comenzii.",
           pasi: [
             "Intră în Setări, din meniul din stânga.",
             "Din lista de secțiuni alege Metode de plată.",
-            {
-              text: "Folosește cele două săgeți, sus și jos, din dreptul fiecărei metode ca să schimbi ordinea afișării.",
-              captura: { alt: "Lista metodelor de plată cu săgețile de reordonare, câmpul de denumire și comutatorul fiecărei metode.", raport: 16 / 10 },
-            },
+            "Folosește cele două săgeți, sus și jos, din dreptul fiecărei metode ca să schimbi ordinea afișării.",
             "Scrie în câmpul de text denumirea pe care o vede clientul.",
             "Pornește sau oprește metoda din comutatorul din dreapta.",
             "Apasă Salvează. Dacă totul e în regulă apare mesajul Metodele de plată au fost salvate.",
@@ -273,10 +202,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Intră în Setări > Metode de plată.",
             "Găsește cardul Discount la plata cu cardul.",
             "Pornește comutatorul din dreapta titlului.",
-            {
-              text: "La Tip discount alege Procent (%) sau Sumă fixă (lei).",
-              captura: { alt: "Cardul Discount la plata cu cardul, cu opțiunile Procent (%) și Sumă fixă (lei).", raport: 16 / 10 },
-            },
+            "La Tip discount alege Procent (%) sau Sumă fixă (lei).",
             "Completează Valoare discount (%) sau Valoare discount (lei).",
             "Apasă Salvează. Dacă totul e în regulă apare mesajul Discountul la plata cu cardul a fost salvat.",
           ],
@@ -296,27 +222,6 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
       titlu: "Facturare",
       ghiduri: [
         {
-          slug: "cum-gasesti-integrarile-de-facturare",
-          titlu: "Cum găsești și deschizi o integrare de facturare",
-          rezumat: "SmartBill, Oblio și fGO stau în catalogul de integrări, în secțiunea Facturare.",
-          pasi: [
-            "Intră în panoul de administrare și apasă „Integrări” în meniul lateral.",
-            {
-              text: "Derulează pagina „Integrări” până la secțiunea „Facturare”.",
-              captura: { alt: "Secțiunea Facturare din pagina Integrări, cu cardurile SmartBill, Oblio și fGo și etichetele Activ sau Configurează.", raport: 16 / 10 },
-            },
-            "Alege cardul integrării pe care o vrei: „SmartBill”, „Oblio” sau „fGo”.",
-            "Apasă cardul ca să deschizi pagina de configurare a acelei integrări.",
-          ],
-          detalii: [
-            { titlu: "Ce înseamnă eticheta de pe card", text: "Sub numele integrării vezi „Activ” sau „Configurează”. „Activ” la SmartBill apare doar pe baza comutatorului de activare din pagina lui. La Oblio și la fGO apare numai dacă sunt salvate și credențialele, și seria de documente. „Configurează” înseamnă că integrarea nu e încă pregătită de folosit." },
-            { titlu: "Ce îți trebuie ca să ajungi în pagină", text: "Trebuie să fii autentificat și să ai un magazin creat. Fără autentificare ești trimis la pagina de login, iar fără magazin ești trimis înapoi în panoul de administrare." },
-            { titlu: "Ce ține de tine și ce ține de Edinio", text: "Edinio face legătura cu softul de facturare, dar contul SmartBill, Oblio sau fGO trebuie să fie al tău, cu datele de acces generate de tine. Cele trei integrări de facturare sunt deschise pentru toate conturile, nu depind de planul tău din Edinio." },
-          ],
-          nota: "În catalog, cardul este scris „fGo”, iar în paginile de configurare și în comenzi integrarea apare ca „fGO”. Este aceeași integrare.",
-          termeni: ["catalog integrari", "soft de facturare", "unde configurez smartbill", "conectare oblio", "conectare fgo", "factura automata magazin"],
-        },
-        {
           slug: "cum-conectezi-smartbill",
           titlu: "Cum conectezi SmartBill la magazinul tău",
           rezumat: "Completezi emailul, tokenul și CUI-ul din contul tău SmartBill, testezi conexiunea, alegi seria facturilor și salvezi.",
@@ -327,10 +232,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Completează „Email cont SmartBill” cu adresa contului tău SmartBill.",
             "Completează „Token API SmartBill” cu tokenul copiat din contul tău.",
             "Completează „CUI firmă”, cu sau fără prefixul RO.",
-            {
-              text: "Apasă „Testează conexiunea” și așteaptă răspunsul.",
-              captura: { alt: "Pagina SmartBill după testare, cu caseta verde de confirmare și listele de serii de facturi și de proforme.", raport: 16 / 10 },
-            },
+            "Apasă „Testează conexiunea” și așteaptă răspunsul.",
             "În lista de serii de facturi apasă seria pe care o folosești; ea intră singură în câmpul „Seria facturilor”.",
             "Apasă „Salvează”.",
           ],
@@ -353,10 +255,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Intră în Integrări > Facturare > SmartBill.",
             "Verifică dacă emailul, tokenul și CUI-ul sunt completate.",
             "Apasă „Testează conexiunea” sau butonul cu iconiță de reîncărcare de lângă listă.",
-            {
-              text: "Deschide lista „Cotă TVA”.",
-              captura: { alt: "Lista Cotă TVA deschisă, cu opțiunea pentru neplătitor de TVA și cotele aduse din contul SmartBill.", raport: 16 / 10 },
-            },
+            "Deschide lista „Cotă TVA”.",
             "Alege cota adusă din contul tău, afișată sub forma numelui urmat de procent, de exemplu „Normală (19%)”.",
             "Dacă nu ești plătitor de TVA, lasă prima opțiune din listă, cea pentru situația în care nu ești plătitor de TVA.",
             "Apasă „Salvează”.",
@@ -376,15 +275,12 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "Un comutator din pagina SmartBill face ca factura sau proforma să plece pe email către client la emitere.",
           pasi: [
             "Intră în Integrări > Facturare > SmartBill.",
-            {
-              text: "Pornește comutatorul „Trimite documentul pe email clientului”.",
-              captura: { alt: "Comutatorul Trimite documentul pe email clientului, cu caseta de sub el despre serverul de email din SmartBill.", raport: 16 / 10 },
-            },
+            "Pornește comutatorul „Trimite documentul pe email clientului”.",
             "Citește caseta care apare sub comutator.",
             "Apasă „Salvează”.",
           ],
           detalii: [
-            { titlu: "Ce trebuie să fie pregătit", text: "Clientul comenzii trebuie să aibă email salvat pe comandă. În plus, contul tău SmartBill trebuie să aibă un server de email configurat, din SmartBill: Setări, apoi Configurare email. Fără el, documentul se emite oricum, dar emailul către client nu pleacă." },
+            { titlu: "Ce trebuie să fie pregătit", text: "Clientul comenzii trebuie să aibă email salvat pe comandă, iar contul tău SmartBill trebuie să aibă un server de email configurat, din SmartBill: Setări, apoi Configurare email. Fără el, documentul se emite oricum, dar emailul către client nu pleacă." },
             { titlu: "Ce vezi când trimiterea nu reușește", text: "După emitere primești un avertisment care spune că factura a fost generată, dar emailul către client nu a putut fi trimis, urmat de motiv. Acolo ai și cele două direcții de rezolvare: configurezi serverul de email în SmartBill sau oprești trimiterea pe email din integrare." },
             { titlu: "Cine compune emailul", text: "Textul și atașamentul emailului vin din contul tău SmartBill. Edinio doar cere trimiterea la emiterea documentului." },
           ],
@@ -397,10 +293,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "În „Setări avansate” stabilești seria de proforme, încasarea la plata cu cardul, scadența și facturarea automată.",
           pasi: [
             "Intră în Integrări > Facturare > SmartBill.",
-            {
-              text: "Apasă rândul „Setări avansate” ca să desfaci secțiunea.",
-              captura: { alt: "Secțiunea Setări avansate desfăcută, cu seria proformelor, scadența și comutatorul de generare automată.", raport: 16 / 10 },
-            },
+            "Apasă rândul „Setări avansate” ca să desfaci secțiunea.",
             "Completează „Seria proformelor (opțional)” dacă emiți proforme.",
             "Pornește „Marchează factura încasată la plata online” dacă vrei ca facturile plătite cu cardul să iasă încasate.",
             "Completează „Scadența facturii (zile)”.",
@@ -428,10 +321,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Pornește comutatorul „Activat”.",
             "În panoul „Credențiale API” completează „Email cont Oblio (client_id)” cu adresa cu care te autentifici în Oblio.",
             "Completează „Token secret (client_secret)” cu tokenul din contul tău Oblio.",
-            {
-              text: "Apasă „Testează și încarcă date”.",
-              captura: { alt: "Panoul Credențiale API din pagina Oblio, cu cele două câmpuri completate și butonul Testează și încarcă date.", raport: 16 / 10 },
-            },
+            "Apasă „Testează și încarcă date”.",
             "Verifică mesajul de confirmare, care îți spune câte firme au fost găsite în cont.",
           ],
           detalii: [
@@ -450,10 +340,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > Facturare > Oblio, cu datele contului deja încărcate.",
             "În panoul „Configurare firmă și documente” alege „Firmă”.",
-            {
-              text: "Alege „Serie factură” din listă.",
-              captura: { alt: "Panoul Configurare firmă și documente din Oblio, cu firma aleasă și listele de serii.", raport: 16 / 10 },
-            },
+            "Alege „Serie factură” din listă.",
             "Alege „Serie proformă” sau lasă opțiunea fără proformă.",
             "Alege „Cotă TVA implicită”.",
             "În panoul „Opțiuni document” alege „Tip produse”.",
@@ -475,26 +362,6 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           termeni: ["serie factura oblio", "serie proforma", "spv e-factura", "tip produse marfa", "cota tva implicita oblio"],
         },
         {
-          slug: "cum-deconectezi-oblio",
-          titlu: "Cum deconectezi Oblio",
-          rezumat: "Un buton din pagina Oblio șterge configurația integrării din magazinul tău.",
-          pasi: [
-            "Intră în Integrări > Facturare > Oblio.",
-            {
-              text: "Apasă butonul roșu „Deconectează”.",
-              captura: { alt: "Butonul Deconectează din pagina de configurare Oblio.", raport: 16 / 10 },
-            },
-            "Verifică mesajul care confirmă deconectarea.",
-          ],
-          detalii: [
-            { titlu: "Când apare butonul", text: "„Deconectează” este vizibil doar când integrarea e conectată, adică sunt salvate emailul contului și CIF-ul firmei. Dacă nu ai salvat încă nimic, butonul nu apare." },
-            { titlu: "Ce se șterge", text: "Se șterge toată configurația Oblio a magazinului. Câmpurile de email, token, firmă și serii se golesc, iar comutatorul „Activat” se oprește. La reconectare introduci din nou credențialele și alegi din nou firma și seriile." },
-            { titlu: "Ce rămâne", text: "Documentele deja emise rămân în contul tău Oblio, iar numerele lor rămân pe comenzile din Edinio." },
-            { titlu: "Dacă vrei doar o pauză", text: "Ca să oprești generarea documentelor fără să pierzi datele, oprește comutatorul „Activat” și apasă „Salvează”. Credențialele și seriile rămân salvate." },
-          ],
-          termeni: ["stergere integrare oblio", "opreste oblio", "reconectare oblio", "scot oblio din magazin"],
-        },
-        {
           slug: "cum-conectezi-fgo",
           titlu: "Cum conectezi fGO",
           rezumat: "Completezi CUI-ul firmei și cheia privată API din contul fGO, apoi verifici conexiunea.",
@@ -503,10 +370,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Lasă „Mod testare (UAT)” oprit dacă lucrezi pe date reale.",
             "În panoul „Credențiale API” completează „CUI firmă” cu codul fiscal al firmei tale.",
             "Completează „Cheie privată API” cu cheia generată în contul fGO.",
-            {
-              text: "Apasă „Testează conexiunea” și așteaptă răspunsul.",
-              captura: { alt: "Panoul Credențiale API din pagina fGO, cu CUI-ul și cheia privată completate și butonul de testare.", raport: 16 / 10 },
-            },
+            "Apasă „Testează conexiunea” și așteaptă răspunsul.",
             "Verifică mesajul care confirmă conexiunea și numărul de județe disponibile.",
           ],
           detalii: [
@@ -525,10 +389,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "Stabilești seria, valuta, tipul facturii, adresa platformei și scadența, apoi salvezi configurația.",
           pasi: [
             "Intră în Integrări > Facturare > fGO.",
-            {
-              text: "În panoul „Setări documente” completează „Serie documente” cu seria din contul tău fGO.",
-              captura: { alt: "Panoul Setări documente din pagina fGO, cu seria, valuta, tipul facturii și scadența.", raport: 16 / 10 },
-            },
+            "În panoul „Setări documente” completează „Serie documente” cu seria din contul tău fGO.",
             "Alege „Valută”.",
             "Verifică „Tip factură” și lasă valoarea implicită dacă nu folosești alt tip.",
             "Completează „URL platformă”.",
@@ -548,34 +409,12 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           termeni: ["serie documente fgo", "valuta factura", "url platforma", "scadenta fgo", "salveaza configuratia"],
         },
         {
-          slug: "cum-deconectezi-fgo",
-          titlu: "Cum deconectezi fGO",
-          rezumat: "Butonul „Deconectează” din caseta fGO activ șterge configurația integrării.",
-          pasi: [
-            "Intră în Integrări > Facturare > fGO.",
-            {
-              text: "În caseta verde „fGO activ” din capul paginii apasă „Deconectează”.",
-              captura: { alt: "Caseta verde fGO activ, cu CUI-ul, seria și butonul Deconectează.", raport: 16 / 10 },
-            },
-            "Verifică mesajul care confirmă deconectarea.",
-          ],
-          detalii: [
-            { titlu: "Când apare caseta", text: "Caseta „fGO activ”, cu CUI-ul și seria configurate, apare doar dacă integrarea este salvată și are CUI, cheie privată și serie. Dacă nu apare, nu ai ce deconecta." },
-            { titlu: "Ce se întâmplă la apăsare", text: "Nu există pas de confirmare, deconectarea se aplică imediat. Se șterge toată configurația fGO a magazinului, iar CUI-ul, cheia privată și seria se golesc." },
-            { titlu: "Cum reconectezi", text: "Introduci din nou CUI-ul și cheia privată, apeși „Testează conexiunea”, completezi din nou seria și restul setărilor de document, apoi apeși „Salvează configurația”." },
-          ],
-          termeni: ["opreste fgo", "sterge configuratie fgo", "reconectare fgo"],
-        },
-        {
           slug: "cum-emiti-factura-dintr-o-comanda",
           titlu: "Cum emiți factură, proformă sau storno dintr-o comandă",
           rezumat: "Din cardul „Facturare” al comenzii generezi documentul, îl descarci ca PDF și, la SmartBill, îl retrimiți pe email.",
           pasi: [
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
-            {
-              text: "În coloana din dreapta caută cardul „Facturare”.",
-              captura: { alt: "Cardul Facturare din detaliul comenzii, cu butoanele de furnizor și butoanele de generare.", raport: 16 / 10 },
-            },
+            "În coloana din dreapta caută cardul „Facturare”.",
             "Dacă ai mai multe softuri conectate, alege furnizorul din butoanele „SmartBill”, „Oblio” și „fGO” din capul cardului.",
             "Apasă „Generează factură” sau, unde există, „Generează proformă”.",
             "Așteaptă până se termină emiterea; pe buton scrie „Se generează...”.",
@@ -600,10 +439,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           pasi: [
             "Intră în Comenzi > Toate comenzile.",
             "Bifează comenzile dorite sau folosește bifa din capul tabelului, care selectează toată pagina.",
-            {
-              text: "În bara de acțiuni în masă alege din listă „Factură: automat” sau numele unui furnizor.",
-              captura: { alt: "Bara de acțiuni în masă din lista de comenzi, cu lista de furnizor și butonul Generează facturi.", raport: 16 / 10 },
-            },
+            "În bara de acțiuni în masă alege din listă „Factură: automat” sau numele unui furnizor.",
             "Apasă „Generează facturi”.",
             "Confirmă în fereastra deschisă de browser.",
             "Citește rezumatul cu numărul de facturi reușite, sărite și eșuate.",
@@ -619,27 +455,6 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           termeni: ["facturare in masa", "selectare comenzi", "50 de comenzi", "bulk facturi", "comenzi sarite"],
         },
         {
-          slug: "cum-setezi-tva-inainte-de-facturare",
-          titlu: "Cum setezi TVA-ul magazinului înainte de facturare",
-          rezumat: "Din Setări > Taxe stabilești dacă ești plătitor de TVA și ce cotă se aplică la comenzi.",
-          pasi: [
-            "Intră în Setări din meniul lateral.",
-            {
-              text: "Deschide secțiunea „Taxe”.",
-              captura: { alt: "Secțiunea Taxe din Setări, cu comutatorul Plătitor de TVA și câmpul de cotă.", raport: 16 / 10 },
-            },
-            "Pornește „Plătitor de TVA” dacă firma ta este înregistrată ca plătitor.",
-            "La „Cotă TVA (%)” alege 19, 9 sau 5, ori scrie altă valoare.",
-          ],
-          detalii: [
-            { titlu: "Ce face setarea", text: "Cu secțiunea pornită, TVA-ul este aplicat la totalul comenzii și afișat clienților. Dacă nu ești plătitor de TVA, lași secțiunea oprită." },
-            { titlu: "Legătura cu softul de facturare", text: "Cota aleasă aici este reperul pentru integrări. În SmartBill, la câmpul „Cotă TVA”, alegi cota care corespunde acestei valori, iar SmartBill lucrează cu numele cotei, nu cu procentul. În Oblio, „Cotă TVA implicită” se aplică potrivit setărilor de TVA ale magazinului." },
-            { titlu: "Dacă apare mesajul despre magazin", text: "Dacă în secțiune vezi mesajul că nu ai un magazin activ, finalizează întâi onboarding-ul. Fără magazin activ, setările de taxe nu se pot folosi." },
-          ],
-          nota: "Setarea din Edinio nu înlocuiește configurarea de TVA din contul tău de facturare. Cele două trebuie să spună același lucru.",
-          termeni: ["setari taxe", "platitor de tva", "cota 19", "tva pe comanda", "tva magazin"],
-        },
-        {
           slug: "generare-automata-factura-smartbill",
           titlu: "Cum activezi generarea automată a facturii în SmartBill",
           rezumat: "Conectezi contul SmartBill, pornești generarea automată din „Setări avansate” și alegi la ce status al comenzii se emite factura.",
@@ -651,10 +466,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Apasă „Testează conexiunea”. Seriile din cont apar ca butoane sub „Serii de facturi (click pentru selectare):”, iar cotele se încarcă în lista „Cotă TVA”.",
             "Alege seria și, dacă folosești, cota de TVA.",
             "Deschide secțiunea „Setări avansate”.",
-            {
-              text: "Pornește comutatorul „Generare automată factură”.",
-              captura: { alt: "Secțiunea „Setări avansate” din pagina SmartBill, cu comutatorul „Generare automată factură” pornit și lista „Declanșează generarea când comanda devine” deschisă.", raport: 16 / 10 },
-            },
+            "Pornește comutatorul „Generare automată factură”.",
             "Din lista „Declanșează generarea când comanda devine” alege statusul: „Comandă Confirmată”, „În procesare”, „Expediată”, „Livrată” sau „Plătită (status plată)”.",
             "Apasă „Salvează”.",
           ],
@@ -664,7 +476,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             { titlu: "Butonul „Testează conexiunea”", text: "Rămâne inactiv până completezi email, token și CUI. Când îl apeși, configurația se salvează întâi și abia apoi se face testul, deci ce ai scris în câmpuri rămâne în cont chiar dacă testul nu trece. Dacă legătura cade, apare „Eroare de rețea.”." },
             { titlu: "Celelalte câmpuri din „Setări avansate”", text: "„Trimite documentul pe email clientului”, „Seria proformelor”, „Marchează factura încasată la plata online” și „Scadența facturii (zile)”. Pentru trimiterea pe email, panoul spune direct: „Ca emailul să fie trimis, contul tău SmartBill trebuie să aibă un server de email configurat (în SmartBill: Setări > Configurare email). Dacă nu e configurat, factura se generează oricum, dar emailul către client nu pleacă.”" },
             { titlu: "Mesaje la salvare", text: "Cu integrarea pornită, salvarea se oprește dacă lipsește ceva: „Email-ul SmartBill este obligatoriu.”, „Tokenul API este obligatoriu.”, „CUI-ul firmei este obligatoriu.”, „Seria facturilor este obligatorie.”" },
-            { titlu: "Cota de TVA", text: "SmartBill cere numele cotei, nu procentul. Dacă cota salvată nu există în contul tău, primești: „Cota „…” nu există în contul tău SmartBill. Alege una din listă — SmartBill cere numele cotei (ex. „Normala”), nu procentul.” Alege cota din lista încărcată după test." },
+            { titlu: "Cota de TVA", text: "SmartBill cere numele cotei, nu procentul. Dacă numele salvat de tine nu se regăsește în contul tău, factura se emite oricum: Edinio caută printre cotele din cont una cu același procent și o folosește pe aceea. Dacă nici după procent nu găsește ceva potrivit, trimite numele așa cum l-ai scris tu și SmartBill hotărăște mai departe. Ca să nu ajungi acolo, alege cota din lista încărcată după test." },
             { titlu: "Când nu se emite nimic", text: "Pe calea automată factura pleacă doar dacă în configurație sunt salvate integrarea activă, generarea automată, emailul, tokenul, CUI-ul și seria. Dacă pe comandă există deja o factură nestornată, nu se mai emite a doua." },
             { titlu: "Dacă factura automată nu iese", text: "Nu primești niciun mesaj de eroare în panou: eșecul se scrie doar în jurnalul de erori al platformei, vizibil administratorilor Edinio. Verifică pe rând: integrarea e pornită, generarea automată e pornită, statusul comenzii chiar a ajuns la declanșatorul ales și comanda nu are deja factură. Dacă totul pare în regulă, scrie-ne cu numărul comenzii." },
           ],
@@ -681,10 +493,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Completează „Email cont Oblio (client_id) *” și „Token secret (client_secret) *”.",
             "Apasă „Testează și încarcă date”. Firmele, seriile și cotele de TVA vin din contul tău.",
             "Alege „Firmă *” și „Serie factură *”. Dacă folosești, alege și „Serie proformă” și „Cotă TVA implicită”.",
-            {
-              text: "Coboară la blocul de sub linie și pornește „Generare automată factură”.",
-              captura: { alt: "Blocul de sub linie din pagina Oblio, cu comutatorul „Generare automată factură” pornit și lista de declanșatoare.", raport: 16 / 10 },
-            },
+            "Coboară la blocul de sub linie și pornește „Generare automată factură”.",
             "Din lista „Declanșează generarea când comanda devine” alege statusul: „Comandă Confirmată”, „În procesare”, „Expediată”, „Livrată” sau „Plătită (status plată)”.",
             "Apasă „Salvează”.",
           ],
@@ -709,10 +518,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Intră în Integrări > Facturare > fGo.",
             "În „Credențiale API” completează „CUI firmă” și „Cheie privată API”, apoi apasă „Testează conexiunea”.",
             "În „Setări documente” completează „Serie documente” și „URL platformă”. Dacă e cazul, alege „Valută”, „Tip factură” și „Scadență factură (zile)”.",
-            {
-              text: "Sub linia din josul blocului pornește comutatorul „Generare automată factură”.",
-              captura: { alt: "Blocul „Setări documente” din pagina fGo, cu comutatorul „Generare automată factură” pornit și lista de declanșatoare dedesubt.", raport: 16 / 10 },
-            },
+            "Sub linia din josul blocului pornește comutatorul „Generare automată factură”.",
             "Din lista „Declanșează generarea când comanda devine” alege statusul: „Comandă Confirmată”, „În procesare”, „Expediată”, „Livrată” sau „Plătită (status plată)”.",
             "Apasă „Salvează configurația”.",
           ],
@@ -733,10 +539,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "După ce ai configurat generarea automată, factura se emite când muți comanda pe statusul ales ca declanșator, din detaliul comenzii sau din bara de acțiuni în masă.",
           pasi: [
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
-            {
-              text: "În cardul „Status comandă” apasă butonul statusului dorit.",
-              captura: { alt: "Cardul „Status comandă” din coloana dreaptă a detaliului de comandă, cu butoanele de status și „Salvează modificările”.", raport: 16 / 10 },
-            },
+            "În cardul „Status comandă” apasă butonul statusului dorit.",
             "Dacă e cazul, schimbă și „Status plată”.",
             "Apasă „Salvează modificările” și confirmă.",
             "Dacă noul status coincide cu declanșatorul configurat, factura se emite în fundal și documentul apare în cardul „Facturare” al comenzii.",
@@ -785,52 +588,11 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           ],
           termeni: ["prioritate facturare", "SmartBill Oblio fGO", "o singură factură", "mai multe softuri de facturare", "marketplace"],
         },
-        {
-          slug: "verifici-daca-softul-de-facturare-e-conectat",
-          titlu: "Cum verifici dacă softul de facturare e conectat",
-          rezumat: "În lista de integrări, eticheta de pe cardul furnizorului îți spune dacă integrarea e pornită și configurată.",
-          pasi: [
-            "Intră în Integrări.",
-            {
-              text: "În rubrica „Facturare” citește eticheta de pe cardul furnizorului: „Activ”, cu bifă verde, sau „Configurează”.",
-              captura: { alt: "Rubrica „Facturare” din pagina Integrări, cu cardurile SmartBill, Oblio și fGo și etichetele lor de stare.", raport: 16 / 10 },
-            },
-          ],
-          detalii: [
-            { titlu: "Ce înseamnă „Activ” la fiecare furnizor", text: "SmartBill apare „Activ” după ce ai pornit comutatorul de activare. Oblio apare „Activ” când integrarea e pornită și are emailul, firma și seria de factură salvate. fGO apare „Activ” când integrarea e pornită și are CUI-ul, cheia privată și seria salvate." },
-            { titlu: "„Activ” nu înseamnă factură automată", text: "Eticheta se uită doar la activarea integrării și la credențiale. Ca să știi dacă se emit facturi singure, deschide cardul furnizorului și verifică acolo comutatorul „Generare automată factură” și declanșatorul ales. La SmartBill, comutatorul stă sub „Setări avansate”." },
-            { titlu: "Cardurile marcate „În curând”", text: "SAGA, Facturis, EasyBill și Factureaza.ro sunt doar anunțate. Cardurile lor nu deschid nimic." },
-            { titlu: "Dacă nu ajungi deloc în panou", text: "Când contul e inactiv, adică perioada gratuită a expirat sau abonamentul nu e plătit, panoul de administrare e închis complet și ești dus la pagina de reactivare. Nu e o restricție pe integrările de facturare, ci pe tot panoul." },
-          ],
-          termeni: ["integrări", "stare integrare", "Activ", "Configurează", "În curând", "facturare"],
-        },
       ],
     },
     {
       titlu: "Plan, livrare și taxe",
       ghiduri: [
-        {
-          slug: "cum-intri-in-setari-si-alegi-sectiunea",
-          titlu: "Cum intri în Setări și alegi secțiunea de care ai nevoie",
-          rezumat: "Setările se deschid din meniul lateral, iar secțiunile se aleg dintr-un al doilea meniu, în stânga ecranului.",
-          pasi: [
-            "În meniul lateral al panoului de administrare, jos de tot, apasă Setări.",
-            {
-              text: "Se deschide ecranul de setări, cu un al doilea meniu în stânga, sub titlul Setări.",
-              captura: { alt: "Ecranul de Setări cu meniul din stânga și lista secțiunilor.", raport: 16 / 10 },
-            },
-            "Apasă secțiunea de care ai nevoie: Plan, Facturare, Livrare, Taxe sau Metode de plată.",
-            "Pe telefon aceleași secțiuni apar ca o bară de butoane orizontală, sub bara de sus.",
-          ],
-          detalii: [
-            { titlu: "Toate secțiunile din Setări", text: "General, Tip magazin, Plan, Facturare, Livrare, Taxe, Metode de plată, Domeniu, SEO, Email, Notificări, Politici, Banner Cookies și Securitate." },
-            { titlu: "Ecranul pornește pe General", text: "La deschidere vezi secțiunea General, dacă nu vii dintr-o plată reușită sau dintr-o adresă cu ancoră." },
-            { titlu: "Linkuri directe către o secțiune", text: "Adresa /dashboard/settings#plan deschide direct secțiunea Plan. Merg și #abonament pentru Plan și #facturare pentru Facturare, precum și orice id de secțiune: #general, #tip-magazin, #livrare, #taxe, #plati, #domeniu, #seo, #email, #notificari, #politici, #cookies, #securitate." },
-            { titlu: "Meniul lateral nu are subpuncte pentru Setări", text: "În meniul principal al panoului există o singură intrare, Setări. Secțiunile se aleg doar din interiorul ecranului." },
-          ],
-          nota: "Ancora din adresă este citită o singură dată, la încărcarea paginii. Dacă schimbi ancora fără să reîncarci pagina, secțiunea afișată rămâne aceeași.",
-          termeni: ["dashboard settings", "unde sunt setarile", "panou de administrare", "meniu setari", "navigare setari"],
-        },
         {
           slug: "cum-vezi-planul-activ-si-data-urmatoarei-plati",
           titlu: "Cum vezi ce plan ai activ și când urmează plata",
@@ -839,7 +601,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Intră în Setări > Plan.",
             {
               text: "Sus, în cardul de plan, citește eticheta Plan activ și denumirea planului tău.",
-              captura: { alt: "Cardul de plan activ, cu denumirea planului și data următoarei plăți.", raport: 16 / 10 },
+              captura: { alt: "Cardul de plan activ, cu denumirea planului și data următoarei plăți.", src: "/capturi/ajutor/plati-si-facturare/cum-vezi-planul-activ-si-data-urmatoarei-plati.webp", raport: 16 / 10 },
             },
             "Dacă ești pe plan plătit, lângă denumire scrie plata anuală sau plata lunară.",
             "Sub denumire citește rândul Următoarea plată pe, cu data, sau Expiră pe, cu data, dacă ești pe plan neplătit.",
@@ -853,34 +615,13 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           termeni: ["abonament curent", "cand expira", "data urmatoarei plati", "ce plan am", "interval de facturare"],
         },
         {
-          slug: "cum-compari-preturile-lunare-cu-cele-anuale",
-          titlu: "Cum compari prețurile lunare cu cele anuale",
-          rezumat: "Comutatorul de sub cardul de plan schimbă prețurile afișate între lunar și anual.",
-          pasi: [
-            "Intră în Setări > Plan.",
-            "Sub cardul de plan activ, găsește comutatorul cu două butoane.",
-            "Apasă Lunar ca să vezi prețurile lunare sau Anual ca să le vezi pe cele anuale.",
-            "Citește textul de sub preț pe fiecare card, ca să vezi cum se facturează.",
-          ],
-          detalii: [
-            { titlu: "Ce scrie la fiecare variantă", text: "La Lunar, sub preț scrie Facturat lunar. La Anual scrie Facturat anual, cu suma pe an, și eticheta 3 luni gratis, care apare și pe butonul Anual." },
-            { titlu: "Cum se calculează prețul anual", text: "Prețul anual este prețul lunar înmulțit cu 9, adică plătești 9 luni și primești 12. Basic costă 99 lei pe lună, deci 891 lei pe an. Suma lei/lună afișată la Anual este totalul anual împărțit la 12, rotunjit." },
-            { titlu: "Comutatorul nu modifică abonamentul", text: "Schimbă doar ce se afișează și ce interval se trimite la plată. Abonamentul tău rămâne cum era până când apeși un buton de pe un card de plan." },
-            { titlu: "Dacă ești deja client plătitor", text: "Comutatorul pornește pe intervalul tău curent, ca planul pe care ești să apară marcat Plan activ." },
-          ],
-          termeni: ["pret anual", "reducere anuala", "facturare lunara", "3 luni gratis", "cat costa"],
-        },
-        {
           slug: "cum-cumperi-sau-schimbi-planul-de-abonament",
           titlu: "Cum cumperi sau schimbi planul de abonament",
           rezumat: "Alegi intervalul, apeși butonul de pe cardul planului dorit și plătești cu cardul pe pagina de checkout.",
           pasi: [
             "Intră în Setări > Plan.",
             "Alege intervalul din comutator: Lunar sau Anual.",
-            {
-              text: "Compară cele trei carduri: Basic, Premium și Ultra.",
-              captura: { alt: "Cele trei carduri de plan, cu prețuri și butoane de alegere.", raport: 16 / 10 },
-            },
+            "Compară cele trei carduri: Basic, Premium și Ultra.",
             "Apasă butonul de pe cardul dorit: Alege Basic, Alege Premium sau Alege Ultra.",
             "Butonul devine Se redirecționează și ajungi pe pagina de plată cu cardul.",
             "Plătește cu cardul. După o plată reușită revii în Setări, direct pe secțiunea Plan, cu un mesaj care confirmă că plata a fost procesată și planul actualizat.",
@@ -922,10 +663,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "Din Setări > Facturare intri în portalul Stripe, unde schimbi cardul, anulezi abonamentul sau descarci chitanțele.",
           pasi: [
             "Intră în Setări > Facturare.",
-            {
-              text: "În cardul Abonamentul tău citește planul și prețul, de exemplu Plan Premium, 249 lei pe lună.",
-              captura: { alt: "Cardul Abonamentul tău, cu planul, prețul, starea și butonul de gestionare.", raport: 16 / 10 },
-            },
+            "În cardul Abonamentul tău citește planul și prețul, de exemplu Plan Premium, 249 lei pe lună.",
             "Lângă el vezi eticheta de stare: Activ sau Plată restantă.",
             "Apasă butonul Gestionează abonamentul. Devine Se redirecționează și ajungi în portalul de plată.",
             "În portal actualizezi cardul, anulezi abonamentul sau descarci chitanțele.",
@@ -965,10 +703,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           pasi: [
             "Intră în Setări > Facturare.",
             "Derulează la cardul Istoricul facturilor.",
-            {
-              text: "Pe desktop vezi un tabel cu coloanele Dată, Număr factură, Plan, Sumă și Factură.",
-              captura: { alt: "Tabelul cu istoricul facturilor și linkurile de descărcare.", raport: 16 / 10 },
-            },
+            "Pe desktop vezi un tabel cu coloanele Dată, Număr factură, Plan, Sumă și Factură.",
             "În coloana Factură apasă Descarcă PDF. Documentul se deschide într-o filă nouă.",
             "Pe telefon fiecare factură este un rând cu plan, sumă și dată, iar descărcarea se face din iconița din dreapta.",
           ],
@@ -979,23 +714,6 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             { titlu: "Facturile ajung și pe email", text: "Sunt emise automat prin Smartbill la fiecare plată reușită, în numele companiei, și se trimit automat pe email. Pentru probleme de facturare, adresa din josul cardului este contact@edinio.com." },
           ],
           termeni: ["factura abonament", "smartbill", "descarcare pdf", "istoric plati", "numar factura"],
-        },
-        {
-          slug: "cum-arata-facturarea-pe-testare-sau-pe-planul-gratuit",
-          titlu: "Cum arată secțiunea Facturare când ești în testare sau pe planul gratuit",
-          rezumat: "În aceste două stări nu ai abonament, deci vezi un card informativ în loc de butoanele de plată.",
-          pasi: [
-            "Intră în Setări > Facturare.",
-            "Dacă ești în testare, vezi cardul Testare gratuită, cu textul Perioada de testare expiră pe și data.",
-            "Dacă ești pe planul gratuit, vezi cardul Niciun abonament activ, cu explicația că ești pe planul gratuit.",
-            "Ca să alegi un plan, apasă Plan în meniul din stânga al Setărilor.",
-          ],
-          detalii: [
-            { titlu: "Cuvântul Plan din aceste texte", text: "Este un buton, dar el doar schimbă ancora din adresă. Secțiunea afișată nu se schimbă fără reîncărcarea paginii, așa că folosește meniul din stânga." },
-            { titlu: "Ce lipsește în aceste stări", text: "Nu apare butonul Gestionează abonamentul și nici Reia plata, pentru că nu există un abonament asociat contului." },
-          ],
-          nota: "Ambele stări arată în secțiunea Plan aceeași denumire, Gratuit (15 zile). Diferența dintre ele se vede doar aici, în Facturare.",
-          termeni: ["perioada de proba", "trial", "plan gratuit", "fara abonament", "expira testarea"],
         },
         {
           slug: "cum-pornesti-sau-opresti-livrarea",
@@ -1020,10 +738,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "Fiecare curier are un comutator propriu în lista Metode de livrare, iar unele metode cer și un preț.",
           pasi: [
             "Intră în Setări > Livrare și coboară la lista Metode de livrare.",
-            {
-              text: "Găsește curierul dorit: Fan Courier, DPD, Cargus, Sameday, Woot, Colete Online, Curier propriu sau Ridicare personală.",
-              captura: { alt: "Lista metodelor de livrare, cu comutatoare și câmpuri de preț.", raport: 16 / 10 },
-            },
+            "Găsește curierul dorit: Fan Courier, DPD, Cargus, Sameday, Woot, Colete Online, Curier propriu sau Ridicare personală.",
             "Mută comutatorul din dreapta rândului ca să activezi metoda.",
             "La Curier propriu și Ridicare personală apare direct câmpul Preț. Scrie suma în lei.",
             "Apasă Salvează la finalul secțiunii.",
@@ -1110,10 +825,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           titlu: "Cum creezi, redenumești sau ștergi clase de transport",
           rezumat: "Clasele grupează produsele, ca Voluminos sau Fragil, ca să le poți aplica reguli de transport.",
           pasi: [
-            {
-              text: "Intră în Setări > Livrare și coboară la cardul Clase de transport.",
-              captura: { alt: "Cardul Clase de transport, cu lista claselor și câmpul de adăugare.", raport: 16 / 10 },
-            },
+            "Intră în Setări > Livrare și coboară la cardul Clase de transport.",
             "Scrie numele clasei în câmpul de jos, de exemplu Voluminos.",
             "Apasă Adaugă sau tasta Enter.",
             "Ca să redenumești o clasă, scrie direct în câmpul ei.",
@@ -1134,10 +846,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           rezumat: "Trei scenarii gata făcute: treaptă de greutate, treaptă de valoare și supliment pe clasă.",
           pasi: [
             "Intră în Setări > Livrare și coboară la cardul Reguli de transport.",
-            {
-              text: "Apasă unul dintre butoane: Treaptă de greutate, Treaptă de valoare sau Supliment pe clasă.",
-              captura: { alt: "Butoanele de reguli presetate și o treaptă de greutate completată.", raport: 16 / 10 },
-            },
+            "Apasă unul dintre butoane: Treaptă de greutate, Treaptă de valoare sau Supliment pe clasă.",
             "La treapta de greutate completează intervalul, De la și până sub, în kg, apoi prețul în lei.",
             "La treapta de valoare completează același interval, dar în lei, apoi prețul în lei.",
             "La suplimentul pe clasă alege clasa din lista Dacă coșul conține clasa și scrie suma la supliment.",
@@ -1162,10 +871,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Scrie un nume în câmpul de sus. Regula se creează cu numele Regulă nouă.",
             "Apasă Condiție și alege tipul: Greutate (kg), Valoare coș (lei), Cantitate (buc), Clasă, Categorie, Produs sau Județ.",
             "Completează condiția: intervalul de la și până sub la greutate, valoare și cantitate, sau alege din listă la clasă, categorie, produs și județ.",
-            {
-              text: "La Acțiune alege: Supliment, Preț fix (curieri fix), Transport gratuit sau Ascunde curierul.",
-              captura: { alt: "O regulă custom cu o condiție și lista de acțiuni deschisă.", raport: 16 / 10 },
-            },
+            "La Acțiune alege: Supliment, Preț fix (curieri fix), Transport gratuit sau Ascunde curierul.",
             "La Se aplică la alege curierii. Dacă nu alegi niciunul, regula se aplică tuturor.",
             "Scrie un număr la Prioritate.",
             "Apasă Salvează la finalul secțiunii Livrare.",
@@ -1182,32 +888,12 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           termeni: ["regula personalizata", "judet livrare", "ascunde curier", "supliment procent", "conditii transport"],
         },
         {
-          slug: "cum-salvezi-setarile-de-livrare",
-          titlu: "Cum salvezi setările de livrare",
-          rezumat: "Un singur buton, la finalul secțiunii Livrare, salvează tot ce ai modificat acolo.",
-          pasi: [
-            "După ce ai făcut modificările, coboară la finalul secțiunii Livrare.",
-            "Apasă butonul Salvează.",
-            "Dacă a mers, apare mesajul că setările de livrare au fost salvate.",
-          ],
-          detalii: [
-            { titlu: "Ce se salvează deodată", text: "Comutatorul de livrare, metodele activate, prețurile, numele afișate la checkout, pragul de transport gratuit, comanda minimă, clasele de transport și regulile. Nu există salvare separată pentru clase sau reguli." },
-            { titlu: "Când butonul este blocat", text: "Cât timp salvarea este în curs sau dacă nu ai un magazin activ." },
-            { titlu: "Mesaje care pot apărea", text: "Nu există un magazin asociat, Eroare la salvare, Neautorizat sau Magazin negăsit. La valori greșite apar mesajele despre pragul de transport gratuit și despre comanda minimă, care trebuie să fie numere pozitive." },
-          ],
-          nota: "Dacă pleci din secțiune fără să apeși Salvează, modificările nu rămân.",
-          termeni: ["salvare setari", "buton salveaza", "eroare la salvare", "modificari pierdute"],
-        },
-        {
           slug: "cum-te-declari-platitor-de-tva",
           titlu: "Cum te declari plătitor de TVA și alegi cota",
           rezumat: "Secțiunea Taxe pornește calculul TVA pentru comenzile din magazinul tău.",
           pasi: [
             "Intră în Setări > Taxe.",
-            {
-              text: "Mută comutatorul de la Plătitor de TVA.",
-              captura: { alt: "Secțiunea Taxe cu comutatorul Plătitor de TVA pornit și butoanele de cotă.", raport: 16 / 10 },
-            },
+            "Mută comutatorul de la Plătitor de TVA.",
             "La Cota TVA (%) apasă unul dintre butoanele 19%, 9% sau 5%, ori scrie altă valoare în câmpul liber.",
             "Apasă Salvează setările TVA.",
           ],
@@ -1252,85 +938,6 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             { titlu: "Ce se schimbă de fapt", text: "Doar afișarea. Dacă ești plătitor de TVA, TVA-ul se calculează oricum, indiferent dacă rândul se vede sau nu în sumar." },
           ],
           termeni: ["defalcare tva", "sumar cos", "afisare taxe client"],
-        },
-        {
-          slug: "cum-activezi-si-ordonezi-metodele-de-plata",
-          titlu: "Cum activezi, ordonezi și redenumești metodele de plată",
-          rezumat: "Lista din Setări > Metode de plată decide ce vede clientul în formularul de comandă și în ce ordine.",
-          pasi: [
-            "Intră în Setări > Metode de plată.",
-            {
-              text: "În cardul Metode de plată vezi lista metodelor disponibile, cu tipul lor pe fiecare rând.",
-              captura: { alt: "Lista metodelor de plată, cu săgeți de ordonare, câmpuri de nume și comutatoare.", raport: 16 / 10 },
-            },
-            "Folosește săgețile sus și jos din stânga rândului ca să schimbi ordinea.",
-            "Scrie în câmpul de text al rândului numele pe care vrei să îl vadă clientul.",
-            "Mută comutatorul din dreapta ca să activezi sau să dezactivezi metoda.",
-            "Apasă Salvează.",
-          ],
-          detalii: [
-            { titlu: "Ce metode pot apărea", text: "Ramburs, cu numele implicit Ramburs la curier, Netopia cu Card online (Netopia), Stripe cu Card online (Stripe), BT iPay cu Card bancar (BT iPay), Klarna și Revolut cu Card online (Revolut)." },
-            { titlu: "Ramburs este mereu în listă", text: "Este activ implicit, indiferent de integrări. Metodele cu card apar în listă abia după ce procesatorul respectiv este configurat în Integrări, din meniul lateral al panoului." },
-            { titlu: "Când scrie Neconfigurat", text: "Sub câmpul de nume apare mesajul că metoda nu este configurată și că nu apare la checkout până nu o configurezi în Integrări." },
-            { titlu: "Reguli la nume și la ordonare", text: "Numele are maximum 40 de caractere, iar lăsat gol se folosește numele implicit. Săgeata în sus este blocată pe primul rând, cea în jos pe ultimul." },
-            { titlu: "Ce nu poți face", text: "Nu poți șterge o metodă din listă, doar o dezactivezi. Și nu le poți dezactiva pe toate: la încercare apare mesajul că trebuie să rămână cel puțin o metodă de plată activă." },
-            { titlu: "Mesaje la salvare", text: "La reușită apare confirmarea că metodele de plată au fost salvate. La eșec apare Eroare la salvarea metodelor de plată, iar fără magazin apare Nu există un magazin asociat." },
-          ],
-          termeni: ["ramburs", "netopia", "bt ipay", "plata online", "ordine metode checkout"],
-        },
-        {
-          slug: "cum-oferi-discount-la-plata-cu-cardul",
-          titlu: "Cum oferi un discount clienților care plătesc cu cardul",
-          rezumat: "Reducerea se aplică automat comenzilor plătite online cu cardul, nu și celor cu ramburs.",
-          pasi: [
-            "Intră în Setări > Metode de plată și coboară la cardul Discount la plata cu cardul.",
-            "Pornește comutatorul din dreapta titlului.",
-            "La Tip discount alege Procent (%) sau Sumă fixă (lei).",
-            "Completează valoarea în câmpul Valoare discount.",
-            "Apasă Salvează din josul cardului.",
-          ],
-          detalii: [
-            { titlu: "Pe ce se calculează", text: "Pe valoarea produselor, fără transport, după eventualul cod de reducere. Dacă produsele fac 200 lei și pui 5%, clientul primește 10 lei reducere, indiferent cât costă livrarea." },
-            { titlu: "Când are efect real", text: "Doar dacă ai cel puțin o metodă de plată cu cardul activă și configurată: Netopia, Stripe sau BT iPay. La ramburs nu se aplică niciodată." },
-            { titlu: "Ce valori sunt acceptate", text: "Valoarea trebuie să fie mai mare ca 0, altfel apare mesajul că trebuie să introduci o valoare mai mare ca 0. La procent, maximum 100, altfel apare mesajul că procentul nu poate depăși 100%. O valoare 0 salvată înseamnă discount oprit." },
-            { titlu: "Mesaje la salvare", text: "La reușită apare confirmarea că discountul la plata cu cardul a fost salvat. La eșec apare Eroare la salvarea discountului la plata cu cardul." },
-          ],
-          termeni: ["reducere card online", "discount automat", "plata online reducere"],
-        },
-        {
-          slug: "cum-oferi-discount-la-plata-ramburs",
-          titlu: "Cum oferi un discount clienților care aleg plata ramburs",
-          rezumat: "Reducerea se aplică automat comenzilor plătite la livrare, nu și celor cu cardul.",
-          pasi: [
-            "Intră în Setări > Metode de plată și coboară la cardul Discount la plata ramburs.",
-            "Pornește comutatorul din dreapta titlului.",
-            "La Tip discount alege Procent (%) sau Sumă fixă (lei).",
-            "Completează valoarea în câmpul Valoare discount.",
-            "Apasă Salvează din josul cardului.",
-          ],
-          detalii: [
-            { titlu: "Pe ce se calculează", text: "Pe valoarea produselor, fără transport, după eventualul cod de reducere." },
-            { titlu: "Nu se cumulează cu discountul pe card", text: "O comandă are o singură metodă de plată, deci clientul primește ori reducerea pe ramburs, ori pe cea pe card." },
-            { titlu: "Ce valori sunt acceptate", text: "Valoarea trebuie să fie mai mare ca 0. La procent, maximum 100, altfel apare mesajul că procentul nu poate depăși 100%." },
-            { titlu: "Mesaje la salvare", text: "La reușită apare confirmarea că discountul la plata ramburs a fost salvat. La eșec apare Eroare la salvarea discountului la plata ramburs." },
-          ],
-          termeni: ["reducere ramburs", "plata la livrare", "discount cash on delivery"],
-        },
-        {
-          slug: "cum-ajungi-la-plan-din-bannerul-de-upgrade",
-          titlu: "Cum ajungi în secțiunea Plan din bannerul meniului lateral",
-          rezumat: "Pe planul gratuit, în josul meniului lateral apare un card care duce direct la secțiunea Plan.",
-          pasi: [
-            "Uită-te în josul meniului lateral al panoului de administrare, la cardul Plan Gratuit.",
-            "Apasă butonul verde Upgrade acum.",
-            "Se deschide ecranul de Setări, direct pe secțiunea Plan.",
-          ],
-          detalii: [
-            { titlu: "Când apare bannerul", text: "Doar când planul contului tău este cel gratuit. Pe un plan plătit nu se mai vede." },
-            { titlu: "Dacă ești deja în Setări", text: "Butonul folosește o ancoră citită doar la încărcarea paginii, așa că s-ar putea să nu se schimbe secțiunea. Apasă atunci Plan în meniul din stânga al Setărilor." },
-            { titlu: "Textul spune Upgrade la Pro", text: "În secțiunea Plan nu există un plan numit Pro. Planurile plătite sunt Basic, Premium și Ultra." },
-          ],
-          termeni: ["upgrade acum", "banner plan gratuit", "sidebar upgrade"],
         },
       ],
     },

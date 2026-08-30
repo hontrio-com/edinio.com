@@ -18,31 +18,6 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
       titlu: "Design magazin",
       ghiduri: [
         {
-          slug: "cum-deschizi-design-magazin",
-          titlu: "Cum deschizi Design magazin și cum folosești previzualizarea",
-          rezumat: "Unde găsești ecranul de editare a magazinului și cum verifici rezultatul modificărilor.",
-          intro: "Design magazin este ecranul din care schimbi tot ce se vede public: date de contact, logo, bannere, culori, secțiunile de pe pagina produsului și de pe pagina magazinului.",
-          pasi: [
-            "Intră în panoul de administrare și apasă „Editează magazinul” în meniul lateral.",
-            "Apasă „Design magazin”. Sub „Editează magazinul” se deschide și sub-meniul cu „Design secțiuni” și „Biblioteca Media”.",
-            {
-              text: "În stânga apar secțiunile de editare, iar în dreapta, pe calculator, stă permanent panoul „Previzualizare”, cu magazinul într-un cadru de telefon.",
-              captura: { alt: "Ecranul Design magazin cu lista de secțiuni în stânga și panoul Previzualizare în dreapta.", raport: 16 / 10 },
-            },
-            "Apasă pe o secțiune ca să o deschizi, fă modificările și apasă „Salvează”.",
-            "Apasă „Deschide în tab nou” dacă vrei să vezi magazinul real, într-un tab separat.",
-          ],
-          detalii: [
-            { titlu: "Previzualizarea se reîncarcă doar la salvare", text: "Cadrul din dreapta nu se schimbă pe măsură ce scrii. Se reîncarcă după ce apeși „Salvează” într-o secțiune. Comutatorul din „Publicare” face excepție: schimbă starea magazinului, dar nu reîncarcă previzualizarea." },
-            { titlu: "Ce vezi în previzualizare", text: "Previzualizarea folosește adresa magazinului tău cu parametrul preview, deci îți arată magazinul chiar dacă nu este publicat. Ce vezi acolo nu înseamnă că este vizibil și pentru clienți." },
-            { titlu: "Pe telefon comuți între editare și previzualizare", text: "În dreapta titlului sunt două iconițe: pensula te duce la editare, iar iconița cu telefonul deschide previzualizarea. Iconița cu telefonul nu are text lângă ea, o recunoști doar după desen. Din previzualizare te întorci cu butonul „Editor”." },
-            { titlu: "Unde duce „Deschide în tab nou”", text: "Dacă ai un domeniu propriu conectat, linkul duce la domeniul tău. Dacă nu, duce la adresa edinio.com urmată de slug-ul magazinului." },
-            { titlu: "Meniul lateral pe ecrane mici", text: "Meniul lateral se afișează doar pe ecrane mari. Sub-meniul cu „Design magazin” apare numai când ești deja într-o pagină din „Editează magazinul”." },
-          ],
-          nota: "Ai nevoie de un cont conectat și de un magazin creat. Fără sesiune activă ești trimis la pagina de autentificare, iar dacă nu ai niciun magazin ești trimis înapoi în panoul de administrare.",
-          termeni: ["editor magazin", "preview", "cum arata magazinul", "dashboard editor", "previzualizare mobil"],
-        },
-        {
           slug: "cum-completezi-informatiile-generale-editor-design",
           titlu: "Cum completezi datele de bază ale magazinului",
           rezumat: "Numele, sloganul, descrierea și datele de contact se completează în secțiunea Informații generale.",
@@ -50,7 +25,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Editează magazinul > Design magazin.",
             {
               text: "Apasă pe rândul „Informații generale” ca să îl deschizi.",
-              captura: { alt: "Secțiunea Informații generale deschisă, cu câmpurile de nume, slogan și descriere.", raport: 16 / 10 },
+              captura: { alt: "Secțiunea Informații generale deschisă, cu câmpurile de nume, slogan și descriere.", src: "/capturi/ajutor/design-si-pagini/cum-completezi-informatiile-generale-editor-design.webp", raport: 16 / 10 },
             },
             "Completează „Numele magazinului”.",
             "Completează „Slogan”, de exemplu Livrare rapidă în toată țara.",
@@ -76,10 +51,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Adresa se completează în cutia Locație din Informații generale și apare în footer și la datele de contact.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Informații generale.",
-            {
-              text: "Coboară la cutia „Locație”.",
-              captura: { alt: "Cutia Locație cu câmpurile Adresă, Oraș și Județ.", raport: 16 / 10 },
-            },
+            "Coboară la cutia „Locație”.",
             "Completează „Adresă”.",
             "Completează „Oraș” și „Județ”.",
             "Apasă „Salvează”.",
@@ -98,10 +70,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Cele două comutatoare din Informații generale adaugă pe magazin butoanele prin care clientul te contactează direct.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Informații generale.",
-            {
-              text: "Coboară la cutia „Butoane flotante”.",
-              captura: { alt: "Cutia Butoane flotante cu cele două comutatoare.", raport: 16 / 10 },
-            },
+            "Coboară la cutia „Butoane flotante”.",
             "Apasă comutatorul de lângă „Buton WhatsApp” ca să îl pornești sau să îl oprești.",
             "Apasă comutatorul de lângă „Buton Apel”.",
             "Apasă „Salvează”.",
@@ -121,10 +90,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin.",
             "Apasă pe rândul „Identitate vizuală”.",
-            {
-              text: "La „Logo” apasă în zona punctată „Încarcă imagine” și alege fișierul de pe dispozitiv.",
-              captura: { alt: "Câmpul Logo din Identitate vizuală, cu zona punctată de încărcare.", raport: 16 / 10 },
-            },
+            "La „Logo” apasă în zona punctată „Încarcă imagine” și alege fișierul de pe dispozitiv.",
             "Dacă imaginea este deja în bibliotecă, apasă „Alege din Biblioteca Media”, rămâi pe tabul „Bibliotecă”, caută imaginea, apasă pe ea și apoi pe „Adaugă”.",
             "Ca să scoți logo-ul, apasă X-ul din colțul imaginii.",
             "Apasă „Salvează”.",
@@ -145,10 +111,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Favicon-ul este imaginea mică din tabul browserului și se încarcă din Identitate vizuală.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Identitate vizuală.",
-            {
-              text: "La „Favicon (iconița din tab)” apasă „Încarcă imagine” și alege fișierul.",
-              captura: { alt: "Câmpul Favicon din Identitate vizuală, cu textul de ajutor sub el.", raport: 16 / 10 },
-            },
+            "La „Favicon (iconița din tab)” apasă „Încarcă imagine” și alege fișierul.",
             "Sau apasă „Alege din Biblioteca Media” și selectează o imagine deja încărcată.",
             "Apasă „Salvează”.",
           ],
@@ -167,10 +130,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Două cursoare din Identitate vizuală controlează cât de mare apare logo-ul sus și jos în magazin.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Identitate vizuală.",
-            {
-              text: "Trage cursorul de la „Mărime logo”. Valoarea în pixeli se vede în dreapta etichetei.",
-              captura: { alt: "Cursorul Mărime logo cu previzualizarea antetului sub el.", raport: 16 / 10 },
-            },
+            "Trage cursorul de la „Mărime logo”. Valoarea în pixeli se vede în dreapta etichetei.",
             "Uită-te la caseta de sub cursor: este o previzualizare a antetului.",
             "Trage cursorul de la „Mărime logo footer” și verifică în caseta cu fundal negru.",
             "Apasă „Salvează”.",
@@ -189,10 +149,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Poți pune până la cinci bannere în Identitate vizuală, fiecare cu un link propriu la apăsare.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Identitate vizuală.",
-            {
-              text: "Coboară la „Bannere magazin (max 5)”.",
-              captura: { alt: "Lista Bannere magazin cu contorul, săgețile de ordonare și câmpul de link.", raport: 16 / 10 },
-            },
+            "Coboară la „Bannere magazin (max 5)”.",
             "Apasă butonul punctat „Adaugă banner (0/5)” și alege o imagine de pe dispozitiv.",
             "Sau apasă „Alege din Biblioteca Media”, selectează una sau mai multe imagini și confirmă cu „Adaugă”.",
             "Sub fiecare banner completează câmpul de link, dacă vrei ca imaginea să ducă undeva la apăsare.",
@@ -218,10 +175,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin > Identitate vizuală.",
             "Coboară sub lista de bannere.",
-            {
-              text: "Apasă comutatorul de la „Afișează conținutul peste banner”.",
-              captura: { alt: "Comutatorul Afișează conținutul peste banner, sub lista de bannere.", raport: 16 / 10 },
-            },
+            "Apasă comutatorul de la „Afișează conținutul peste banner”.",
             "Apasă „Salvează”.",
           ],
           detalii: [
@@ -238,10 +192,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Culoarea principală se setează în Identitate vizuală, din presetări, din selectorul de culoare sau prin cod hex.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Identitate vizuală.",
-            {
-              text: "Coboară la „Culoare principală”.",
-              captura: { alt: "Zona Culoare principală cu cele opt cercuri și câmpul hex.", raport: 16 / 10 },
-            },
+            "Coboară la „Culoare principală”.",
             "Apasă unul dintre cele opt cercuri colorate.",
             "Sau apasă pătratul de culoare și alege orice nuanță din selectorul sistemului.",
             "Sau scrie codul hex în câmpul alăturat, de exemplu #1AB554.",
@@ -261,10 +212,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Secțiunea Social media are patru câmpuri, pentru Instagram, Facebook, TikTok și YouTube.",
           pasi: [
             "Intră în Editează magazinul > Design magazin.",
-            {
-              text: "Apasă pe rândul „Social media”.",
-              captura: { alt: "Secțiunea Social media cu cele patru câmpuri de adrese.", raport: 16 / 10 },
-            },
+            "Apasă pe rândul „Social media”.",
             "Completează câmpul Instagram cu adresa completă a paginii tale.",
             "Completează la fel Facebook, TikTok și YouTube.",
             "Apasă „Salvează”.",
@@ -284,10 +232,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin.",
             "Apasă pe rândul „Pagina produs”.",
-            {
-              text: "Apasă comutatorul de la „Banner anunț (top)”.",
-              captura: { alt: "Comutatorul Banner anunț (top) cu câmpul de text și cursorul de viteză.", raport: 16 / 10 },
-            },
+            "Apasă comutatorul de la „Banner anunț (top)”.",
             "Scrie textul în câmpul care apare.",
             "Alege culoarea din pătratul de lângă „Culoare fundal banner”.",
             "Trage cursorul de la „Viteza de redare”. Eticheta din dreapta îți arată treapta aleasă.",
@@ -309,10 +254,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
             "Găsește „Culoare fundal magazin”.",
-            {
-              text: "Apasă unul dintre cele opt cercuri predefinite.",
-              captura: { alt: "Rândul Culoare fundal magazin cu cele opt cercuri predefinite.", raport: 16 / 10 },
-            },
+            "Apasă unul dintre cele opt cercuri predefinite.",
             "Sau apasă pătratul de culoare de la capătul rândului și alege orice nuanță.",
             "Apasă „Salvează”.",
           ],
@@ -330,10 +272,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Cele patru carduri cu livrare, plată, retur și suport se completează în secțiunea Pagina produs.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
-            {
-              text: "Verifică să fie pornit comutatorul de la „Garanții (4 carduri)”.",
-              captura: { alt: "Cele patru carduri de garanții cu câmpurile de titlu, icon și descriere.", raport: 16 / 10 },
-            },
+            "Verifică să fie pornit comutatorul de la „Garanții (4 carduri)”.",
             "Pentru fiecare card completează „Titlu”.",
             "Alege din lista „Icon” una dintre variantele Livrare, Protecție, Retur sau Telefon.",
             "Scrie descrierea scurtă a cardului.",
@@ -354,10 +293,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Adaugi rânduri cu titlu și descriere care explică de ce merită cumpărat produsul.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
-            {
-              text: "Pornește comutatorul de la „Secțiunea Beneficii”.",
-              captura: { alt: "Secțiunea Beneficii cu titlul de secțiune și butonul Adaugă beneficiu.", raport: 16 / 10 },
-            },
+            "Pornește comutatorul de la „Secțiunea Beneficii”.",
             "Scrie titlul secțiunii în câmpul de sus.",
             "Apasă „Adaugă beneficiu”.",
             "Completează „Titlu” și „Descriere” pentru rândul nou.",
@@ -382,10 +318,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
             "Pornește comutatorul de la „Secțiunea Cum funcționează”.",
             "Scrie titlul secțiunii.",
-            {
-              text: "Apasă „Adaugă pas”.",
-              captura: { alt: "Lista de pași din secțiunea Cum funcționează, cu butonul Adaugă pas.", raport: 16 / 10 },
-            },
+            "Apasă „Adaugă pas”.",
             "Completează „Titlu pas” și „Descriere pas”.",
             "Repetă pentru fiecare pas, până la cinci.",
             "Șterge un pas cu X-ul de lângă el.",
@@ -408,10 +341,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
             "Pornește comutatorul de la „Secțiunea FAQ”.",
             "Scrie titlul secțiunii.",
-            {
-              text: "Apasă „Adaugă întrebare”.",
-              captura: { alt: "Secțiunea FAQ cu o pereche de întrebare și răspuns completată.", raport: 16 / 10 },
-            },
+            "Apasă „Adaugă întrebare”.",
             "Completează „Întrebare” și „Răspuns”.",
             "Repetă pentru fiecare pereche.",
             "Șterge o pereche cu X-ul de lângă întrebare.",
@@ -431,10 +361,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Comutatorul Estimare livrare arată clientului un interval de zile calculat din valorile pe care le pui tu.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
-            {
-              text: "Pornește comutatorul de la „Estimare livrare”.",
-              captura: { alt: "Comutatorul Estimare livrare cu câmpurile de zile minim și maxim.", raport: 16 / 10 },
-            },
+            "Pornește comutatorul de la „Estimare livrare”.",
             "Scrie eticheta în primul câmp, de exemplu Estimare livrare.",
             "Completează „Zile minim”.",
             "Completează „Zile maxim”.",
@@ -455,10 +382,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Trei comutatoare din Pagina produs schimbă modul în care sunt afișate imaginea și etichetele produsului.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
-            {
-              text: "Apasă comutatorul de la „Zoom imagine la hover”.",
-              captura: { alt: "Comutatoarele Zoom imagine la hover, Contor vizitatori live și Badge Calitate verificată.", raport: 16 / 10 },
-            },
+            "Apasă comutatorul de la „Zoom imagine la hover”.",
             "Apasă comutatorul de la „Contor vizitatori live”.",
             "Apasă comutatorul de la „Badge Calitate verificată”.",
             "Apasă „Salvează”.",
@@ -479,10 +403,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina produs.",
             "Coboară la „Efect buton Comandă acum”.",
-            {
-              text: "Apasă una dintre cele șase casete.",
-              captura: { alt: "Cele șase casete cu efecte pentru butonul Comandă acum.", raport: 16 / 10 },
-            },
+            "Apasă una dintre cele șase casete.",
             "Apasă „Salvează”.",
           ],
           detalii: [
@@ -500,10 +421,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Trei comutatoare din Pagina magazin controlează ce produse se văd în listă și dacă apare categoria pe carduri.",
           pasi: [
             "Intră în Editează magazinul > Design magazin.",
-            {
-              text: "Apasă pe rândul „Pagina magazin”.",
-              captura: { alt: "Cele trei comutatoare din secțiunea Pagina magazin.", raport: 16 / 10 },
-            },
+            "Apasă pe rândul „Pagina magazin”.",
             "Apasă comutatorul de la „Etichetă categorie pe produse” dacă vrei să afișezi sau să ascunzi categoria.",
             "Apasă comutatorul de la „Ascunde produsele fără imagini”.",
             "Apasă comutatorul de la „Ascunde produsele fără stoc”.",
@@ -524,10 +442,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Comutatorul stă în Pagina magazin și funcționează doar pe un plan plătit.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina magazin.",
-            {
-              text: "Găsește rândul „Afișează creditul Edinio în footer”.",
-              captura: { alt: "Rândul Afișează creditul Edinio în footer, cu textul explicativ.", raport: 16 / 10 },
-            },
+            "Găsește rândul „Afișează creditul Edinio în footer”.",
             "Apasă comutatorul ca să îl oprești.",
             "Apasă „Salvează”.",
           ],
@@ -547,10 +462,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Editează magazinul > Design magazin > Pagina magazin.",
             "Pornește comutatorul de la „Secțiunea Beneficii”.",
             "Scrie titlul secțiunii, apoi apasă „Adaugă beneficiu” și completează „Titlu” și „Descriere”.",
-            {
-              text: "Coboară la „Garanții (4 carduri)” și pornește comutatorul.",
-              captura: { alt: "Secțiunea Garanții (4 carduri) din Pagina magazin, cu cele patru carduri.", raport: 16 / 10 },
-            },
+            "Coboară la „Garanții (4 carduri)” și pornește comutatorul.",
             "Pentru fiecare card completează „Titlu”, alege „Icon” și scrie descrierea scurtă.",
             "Apasă „Salvează”.",
           ],
@@ -569,10 +481,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Două comutatoare din Pagina magazin, fiecare cu o condiție care trebuie pregătită în altă parte.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina magazin.",
-            {
-              text: "Apasă comutatorul de la „Secțiunea produse recomandate”.",
-              captura: { alt: "Comutatorul Secțiunea produse recomandate cu câmpul de titlu.", raport: 16 / 10 },
-            },
+            "Apasă comutatorul de la „Secțiunea produse recomandate”.",
             "Completează „Titlu secțiune”, de exemplu Recomandate.",
             "Apasă comutatorul de la „Bară progres livrare gratuită”.",
             "Apasă „Salvează”.",
@@ -594,10 +503,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Editează magazinul > Design magazin > Pagina magazin.",
             "Pornește comutatorul de la „Secțiunea Recenzii”.",
             "Scrie titlul secțiunii, de exemplu Ce spun clienții noștri.",
-            {
-              text: "Apasă „Adaugă recenzie”.",
-              captura: { alt: "O recenzie în editare, cu stelele, poza, numele și textul.", raport: 16 / 10 },
-            },
+            "Apasă „Adaugă recenzie”.",
             "Apasă pe stele ca să pui nota, de la 1 la 5.",
             "Apasă cercul punctat dacă vrei să încarci o poză. O scoți cu X-ul de pe ea.",
             "Completează numele clientului și data.",
@@ -620,10 +526,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Patru comutatoare din Pagina magazin schimbă modul în care sunt afișate banda de anunț, coșul pe mobil, produsele noi și prețurile variabile.",
           pasi: [
             "Intră în Editează magazinul > Design magazin > Pagina magazin.",
-            {
-              text: "Apasă comutatorul de la „Announcement bar pe magazin”.",
-              captura: { alt: "Comutatoarele de comportament din secțiunea Pagina magazin.", raport: 16 / 10 },
-            },
+            "Apasă comutatorul de la „Announcement bar pe magazin”.",
             "Apasă comutatorul de la „Bară coș pe mobil”.",
             "Apasă comutatorul de la „Badge Nou pe produse” și completează numărul de zile.",
             "Apasă comutatorul de la „Interval de preț la produse variabile”.",
@@ -645,10 +548,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin.",
             "Apasă pe rândul „Secțiuni produse”.",
-            {
-              text: "Apasă butonul punctat „Adaugă secțiune”.",
-              captura: { alt: "Un card de secțiune de produse cu modurile Manual, Categorie și Pachete.", raport: 16 / 10 },
-            },
+            "Apasă butonul punctat „Adaugă secțiune”.",
             "Scrie numele rândului în câmpul de titlu.",
             "Alege modul: „Manual”, „Categorie” sau „Pachete”.",
             "La „Manual” scrie în câmpul de căutare și apasă pe produsele găsite. Produsele alese apar deasupra, cu X pentru scoatere.",
@@ -675,10 +575,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Câmpurile opționale din formularul de comandă se pornesc din secțiunea Formular de comandă.",
           pasi: [
             "Intră în Editează magazinul > Design magazin.",
-            {
-              text: "Apasă pe rândul „Formular de comandă”.",
-              captura: { alt: "Zona Câmpuri standard cu comutatoarele Cod discount și Câmp Email.", raport: 16 / 10 },
-            },
+            "Apasă pe rândul „Formular de comandă”.",
             "La „Cod discount” apasă comutatorul ca să îl arăți clienților.",
             "La „Câmp Email” apasă comutatorul ca să îl activezi.",
             "Dacă l-ai activat, apare rândul „Obligatoriu”. Apasă comutatorul dacă vrei ca emailul să fie completat obligatoriu.",
@@ -700,10 +597,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin > Formular de comandă.",
             "Coboară la „Câmpuri suplimentare”.",
-            {
-              text: "Apasă „Adaugă câmp”.",
-              captura: { alt: "Un câmp suplimentar în editare, cu eticheta, tipul și bifa Obligatoriu.", raport: 16 / 10 },
-            },
+            "Apasă „Adaugă câmp”.",
             "Scrie numele câmpului în caseta de etichetă.",
             "Alege tipul din lista „Tip”.",
             "Bifează „Obligatoriu” dacă clientul trebuie să îl completeze.",
@@ -728,10 +622,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul > Design magazin > Formular de comandă.",
             "Coboară la „Opțiuni extra plătite”.",
-            {
-              text: "Apasă „Adaugă opțiune extra”.",
-              captura: { alt: "O opțiune extra în editare, cu denumirea, prețul și descrierea.", raport: 16 / 10 },
-            },
+            "Apasă „Adaugă opțiune extra”.",
             "Scrie denumirea, de exemplu Prioritizează comanda mea.",
             "Completează „Preț (lei)”.",
             "Completează descrierea scurtă, dacă ajută, de exemplu livrat în 24h.",
@@ -752,10 +643,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Secțiunea Publicare are un singur comutator, care se aplică imediat, fără buton de salvare.",
           pasi: [
             "Intră în Editează magazinul > Design magazin.",
-            {
-              text: "Apasă pe rândul „Publicare”.",
-              captura: { alt: "Cutia de publicare cu starea magazinului și comutatorul.", raport: 16 / 10 },
-            },
+            "Apasă pe rândul „Publicare”.",
             "Citește starea din cutie: „Magazin publicat” sau „Magazin nepublicat”.",
             "Apasă comutatorul mare din dreapta ca să schimbi starea.",
             "Sub cutie vezi adresa publică a magazinului. Apasă iconița de link ca să o deschizi într-un tab nou.",
@@ -776,10 +664,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Fă modificările într-o secțiune.",
             "Apasă butonul „Salvează” din josul secțiunii.",
-            {
-              text: "Butonul afișează un indicator de încărcare, apoi devine „Salvat” pentru câteva secunde.",
-              captura: { alt: "Butonul Salvează din josul unei secțiuni, în starea Salvat.", raport: 16 / 10 },
-            },
+            "Butonul afișează un indicator de încărcare, apoi devine „Salvat” pentru câteva secunde.",
             "Previzualizarea din dreapta se reîncarcă automat după salvare.",
           ],
           detalii: [
@@ -800,10 +685,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "În meniul lateral apasă „Design secțiuni”, rândul cu eticheta Beta.",
             "În coloana din stânga apasă linkul „Ordinea secțiunilor”.",
-            {
-              text: "Apasă pe o secțiune ca să o selectezi. Previzualizarea derulează până la ea.",
-              captura: { alt: "Ecranul Ordinea secțiunilor, cu lista de secțiuni în stânga și previzualizarea în dreapta.", raport: 16 / 10 },
-            },
+            "Apasă pe o secțiune ca să o selectezi. Previzualizarea derulează până la ea.",
             "Dacă secțiunea are mai multe variante, apasă „Schimbă designul” și alege una.",
             "Apasă „Adaugă secțiune” ca să deschizi paleta de secțiuni disponibile.",
             "Comută previzualizarea între telefon, tabletă și calculator din cele trei iconițe din dreapta sus.",
@@ -826,68 +708,6 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
       titlu: "Secțiuni",
       ghiduri: [
         {
-          slug: "cum-deschizi-design-sectiuni",
-          titlu: "Cum deschizi ecranul Design secțiuni",
-          rezumat: "Design secțiuni adună într-un singur loc design-urile pentru header, footer, hero, pagina de produs, pagina Magazin, coș și finalizare comandă.",
-          pasi: [
-            "Intră în panoul de administrare, de pe calculator.",
-            "În meniul din stânga apasă „Editează magazinul”.",
-            "Sub el se desfășoară „Design magazin”, „Design secțiuni” și „Biblioteca Media”.",
-            "Apasă „Design secțiuni”.",
-            {
-              text: "Se deschide pagina cu titlul „Design secțiuni” și subtitlul „Alege cum arată fiecare parte a magazinului și reglează-i setările”.",
-              captura: { alt: "Pagina Design secțiuni, cu lista de secțiuni în stânga și cardurile de design în dreapta.", raport: 16 / 10 },
-            },
-          ],
-          detalii: [
-            { titlu: "Ce vezi pe ecran", text: "În stânga stă lista secțiunilor magazinului, în dreapta cardurile cu design-uri pentru secțiunea selectată. Sub titlu stă anunțul „Secțiune în lucru”, care nu se poate închide. Bara de publicare apare jos doar după ce schimbi ceva." },
-            { titlu: "Pe telefon nu există intrarea în meniu", text: "Bara laterală apare doar pe ecran mare. Pe telefon, meniul de jos are o singură intrare de editor, „Editor”, fără sub-intrări. Poți ajunge la ecran scriind direct adresa /dashboard/editor/sectiuni sau prin butonul „Înapoi la Design secțiuni” din ecranul „Ordinea secțiunilor”." },
-            { titlu: "Sub-intrările se văd doar din editor", text: "„Design magazin”, „Design secțiuni” și „Biblioteca Media” se desfășoară în bara laterală doar cât timp ești pe o pagină din editor. Dacă ești în altă parte a panoului, apasă întâi „Editează magazinul”." },
-            { titlu: "Ce te poate opri să intri", text: "Fără cont autentificat ajungi la pagina de autentificare. Dacă nu ai încă un magazin pe cont, ajungi pe pagina principală a panoului. Dacă nu ai terminat pașii de început, ajungi la finalizarea contului. Dacă abonamentul nu mai e activ, tot panoul te trimite la pagina de reactivare. Nu există nicio limitare de plan pentru acest ecran." },
-            { titlu: "Dacă un design arată greșit în magazinul tău", text: "În anunțul de sus apasă „scrie-ne la suport” și ajungi în zona de suport a panoului." },
-          ],
-          nota: "Ecranul e marcat „Beta”. Anunțul de sus rămâne pe pagină și nu se poate închide.",
-          termeni: ["teme", "sabloane", "layout", "aspect", "beta", "dashboard"],
-        },
-        {
-          slug: "cum-alegi-sectiunea-din-lista",
-          titlu: "Cum alegi secțiunea căreia îi schimbi designul",
-          rezumat: "Alegi întâi secțiunea din listă, apoi îi vezi design-urile disponibile în dreapta.",
-          pasi: [
-            "Intră în Editează magazinul > Design secțiuni.",
-            "În coloana din stânga apasă numele secțiunii, de exemplu „Header”. Butonul selectat se colorează.",
-            "În dreapta apare numele secțiunii și rândul „Acum:”, cu designul folosit în magazin.",
-            "Când secțiunea are mai multe design-uri, lângă el scrie și câte variante sunt.",
-          ],
-          detalii: [
-            { titlu: "Ce se reglează aici", text: "Grupul „Cap și subsol” are Header, cu 8 design-uri, și Footer, cu 3. „Pagina magazinului” are Hero, cu 3. „Pagina de produs” are 2. „Pagina Magazin” are 4. „Coș și comandă” are Coș, cu 4, și Finalizare comandă, cu 2. Numărul scrie și în listă, lângă fiecare nume." },
-            { titlu: "Ce nu se reglează aici", text: "Bara de anunț, Beneficii pe scurt, Căutare și filtre, Categorii, Prag transport gratuit, Rând de produse, Catalog produse, Beneficii, Recenzii, Galerie, Despre noi, Contact și Card de produs nu apar în acest ecran. Pe acelea le reglezi din Editează magazinul > Design magazin." },
-            { titlu: "Cum arată lista pe ecran mic", text: "Pe telefon lista devine o bandă orizontală derulabilă, cu butoanele secțiunilor unul după altul. Titlurile de grup nu se văd acolo. Cardurile cu design-uri stau sub bandă, nu în dreapta." },
-            { titlu: "Dacă nu apare nicio secțiune", text: "Când magazinul nu are nicio secțiune de configurat, în dreapta scrie „Magazinul nu are încă secțiuni de configurat”. Un grup fără nicio secțiune disponibilă nu se afișează deloc." },
-          ],
-          nota: "Cât timp panoul „Setări” e deschis, restul ecranului e acoperit. Un clic pe listă doar închide panoul, fără să schimbe secțiunea. Închide-l întâi, apoi alege altă secțiune.",
-          termeni: ["header", "footer", "hero", "cos", "checkout", "lista"],
-        },
-        {
-          slug: "cum-vezi-design-urile-pe-calculator-si-telefon",
-          titlu: "Cum vezi design-urile pe calculator și pe telefon",
-          rezumat: "Două iconițe de lângă numele secțiunii schimbă lățimea la care se desenează toate miniaturile.",
-          pasi: [
-            "Alege secțiunea din listă.",
-            "Lângă numele secțiunii apasă iconița de monitor pentru „Pe calculator”.",
-            "Apasă iconița de telefon pentru „Pe telefon”.",
-            "Toate miniaturile se redesenează la lățimea aleasă.",
-          ],
-          detalii: [
-            { titlu: "Ce lățimi folosește", text: "„Pe calculator” desenează secțiunea la 1280 px, „Pe telefon” la 390 px. Pe telefon cardurile se așază pe două sau trei coloane, ca să vezi mai multe deodată. Miniatura se micșorează cât e nevoie, dar nu se mărește peste mărimea reală." },
-            { titlu: "Când comutatorul nu schimbă nimic", text: "Coș „Sertar lateral” și Finalizare comandă „Formular în fereastră” se desenează întotdeauna la lățime de telefon. La fel, orice card mai îngust de 560 px arată miniatura la lățime de telefon, indiferent de ce ai ales." },
-            { titlu: "Ce arată de fapt miniatura", text: "Miniatura păstrează logo-ul, culorile și sloganul magazinului tău, dar meniul, bannerele, categoriile și produsele din ea sunt demonstrative. Secțiunea e desenată cu valorile implicite ale designului, nu cu setările tale. Rezultatul real îl vezi în magazin, după publicare." },
-            { titlu: "Cum se încarcă miniaturile", text: "Se desenează câte două deodată, pe măsură ce cardul se apropie de ecran. Dacă una nu se încarcă în opt secunde, cedează rândul următoarei." },
-          ],
-          nota: "Etichetele „Pe calculator” și „Pe telefon” apar doar la trecerea cu mouse-ul peste iconițe, nu scrise pe buton.",
-          termeni: ["previzualizare", "preview", "mobil", "miniatura", "desktop"],
-        },
-        {
           slug: "cum-schimbi-designul-unei-sectiuni",
           titlu: "Cum schimbi designul unei secțiuni",
           rezumat: "Alegi un card de design, apoi apeși Publică în magazin ca să îl vadă și clienții.",
@@ -896,7 +716,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Derulează cardurile. Designul folosit acum are rama colorată și scrie „Activ” în locul butonului.",
             {
               text: "Pe cardul dorit apasă „Alege”.",
-              captura: { alt: "Cardurile de design ale unei secțiuni, cu eticheta Activ pe cel folosit și butonul Alege pe celelalte.", raport: 16 / 10 },
+              captura: { alt: "Cardurile de design ale unei secțiuni, cu eticheta Activ pe cel folosit și butonul Alege pe celelalte.", src: "/capturi/ajutor/design-si-pagini/cum-schimbi-designul-unei-sectiuni.webp", raport: 16 / 10 },
             },
             "Apare mesajul „Design ales”, cu numele lui, iar jos apare bara „Modificările nu sunt încă în magazin”.",
             "Apasă „Publică în magazin”.",
@@ -927,43 +747,6 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           ],
           nota: "În acest ecran nu există previzualizare a întregului magazin, doar miniaturile de pe carduri. Verificarea finală o faci în magazin, după publicare.",
           termeni: ["salvare", "ciorna", "live", "eroare", "publicare"],
-        },
-        {
-          slug: "cum-renunti-la-modificarile-nepublicate",
-          titlu: "Cum renunți la modificările nepublicate",
-          rezumat: "Butonul Renunță șterge ciorna și readuce ecranul la designul care e acum în magazin.",
-          pasi: [
-            "Cât timp bara de jos e afișată, apasă „Renunță”. Pe ecran îngust apare doar iconița cu săgeată.",
-            "Apare mesajul „Modificările au fost anulate”.",
-            "Ecranul revine la designul publicat, iar bara dispare.",
-          ],
-          detalii: [
-            { titlu: "Ce se șterge", text: "Se șterge toată ciorna, nu doar ultima modificare. Nu există pas de confirmare și nu se poate reface." },
-            { titlu: "Designul din magazin nu e atins", text: "Clienții văd în continuare designul publicat, și înainte, și după ce apeși „Renunță”." },
-            { titlu: "Atenție la celălalt ecran", text: "„Design secțiuni” și „Ordinea secțiunilor” scriu în aceeași ciornă. Renunțarea le pierde pe amândouă." },
-          ],
-          nota: "Butonul există doar cât timp ai modificări nepublicate.",
-          termeni: ["anuleaza", "revino", "sterge", "ciorna"],
-        },
-        {
-          slug: "cum-deschizi-setarile-unei-sectiuni",
-          titlu: "Cum deschizi setările unei secțiuni",
-          rezumat: "Butonul Setări deschide reglajele designului activ, iar modificările se aplică pe loc.",
-          pasi: [
-            "Alege secțiunea din listă.",
-            "Lângă comutatorul de previzualizare apasă „Setări”.",
-            "Pe ecran îngust panoul urcă de jos, iar de la 640 px în sus se lipește în dreapta.",
-            "Modifică ce ai nevoie. În panou nu există buton de salvare.",
-            "Închide cu X, cu tasta Escape sau cu un clic pe fundalul întunecat.",
-            "Apasă „Publică în magazin”.",
-          ],
-          detalii: [
-            { titlu: "Când butonul Setări nu apare", text: "Butonul apare doar dacă designul activ are cel puțin un reglaj. Nu au niciun reglaj: Header „Simplu”, Hero „Doar imagini” și „Imagine cu text peste”, Pagina Magazin „Produsele stau pe pagina principală”, Coș „Sertar lateral”, Finalizare comandă „Formular în fereastră” și „Pagină separată, cu rezumat lateral”." },
-            { titlu: "Setările țin de designul activ", text: "Schimbi designul, se schimbă și lista de reglaje. Valorile comune se păstrează, restul repornesc de la valorile implicite ale designului nou." },
-            { titlu: "Cum se numește panoul", text: "În capul panoului scrie „Setări” și numele secțiunii cu litere mici: „Setări header”, „Setări footer”, „Setări hero”, „Setări pagina de produs”, „Setări pagina magazin”, „Setări coș”." },
-          ],
-          nota: "Cât timp panoul e deschis, restul ecranului e acoperit de un fundal întunecat. Ca să treci la altă secțiune, închide întâi panoul.",
-          termeni: ["reglaje", "optiuni", "panou", "sertar"],
         },
         {
           slug: "cum-reglezi-headerul-magazinului",
@@ -1051,10 +834,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Alege „Pagina Magazin” din lista de secțiuni.",
             "Alege „Filtre în bara laterală”, „Filtre în capul paginii” sau „Compact, pentru cataloage mari”.",
-            {
-              text: "Apasă „Setări”.",
-              captura: { alt: "Panoul Setări pagina magazin, deschis peste cardurile de design.", raport: 16 / 10 },
-            },
+            "Apasă „Setări”.",
             "Hotărăște din primul comutator dacă produsele rămân și pe pagina principală.",
             "Completează antetul, grila, filtrele, sortarea și textul de sub produse.",
             "Apasă „Publică în magazin”.",
@@ -1143,52 +923,11 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           ],
           termeni: ["media", "imagine", "cover", "incarcare", "biblioteca"],
         },
-        {
-          slug: "cum-treci-la-ordinea-sectiunilor",
-          titlu: "Cum treci la ecranul Ordinea secțiunilor",
-          rezumat: "Ordinea secțiunilor se deschide dintr-un link aflat sub lista de secțiuni și lucrează pe aceeași ciornă.",
-          pasi: [
-            "Deschide Editează magazinul > Design secțiuni, pe calculator.",
-            "Sub lista de secțiuni din stânga apasă „Ordinea secțiunilor”.",
-            "Se deschide ecranul „Ordinea secțiunilor”, cu previzualizarea magazinului și cu butoanele „Publică” și „Renunță”.",
-            "Ca să te întorci, apasă săgeata din stânga sus, „Înapoi la Design secțiuni”.",
-          ],
-          detalii: [
-            { titlu: "Linkul se vede doar pe ecran mare", text: "Pe telefon linkul lipsește. Ecranul nu apare nici în meniul lateral, se ajunge la el doar din acest link." },
-            { titlu: "Aceeași ciornă", text: "Ambele ecrane scriu în aceeași ciornă. Ce ai schimbat și nu ai publicat într-unul se vede și în celălalt, iar „Renunță” golește ciorna pentru amândouă." },
-          ],
-          termeni: ["reordonare", "aranjare", "mutare", "previzualizare"],
-        },
       ],
     },
     {
       titlu: "Bibliotecă media",
       ghiduri: [
-        {
-          slug: "cum-deschizi-biblioteca-media",
-          titlu: "Cum deschizi Biblioteca Media",
-          rezumat: "Biblioteca Media ține la un loc toate imaginile și videoclipurile magazinului tău.",
-          intro: "Biblioteca Media este pagina din care vezi, cauți și ștergi fișierele magazinului tău.",
-          pasi: [
-            "Intră în panoul de administrare.",
-            "În meniul lateral apasă „Editează magazinul”.",
-            "În submeniu apasă „Biblioteca Media”. Pe desktop submeniul, cu „Design magazin”, „Design secțiuni” și „Biblioteca Media”, se deschide doar când ești deja în secțiune.",
-            {
-              text: "Se deschide pagina „Biblioteca Media”, cu textul „Toate imaginile și videoclipurile magazinului tău, într-un singur loc.”",
-              captura: { alt: "Pagina Biblioteca Media, cu bara de unelte sus și grila de miniaturi dedesubt.", raport: 16 / 10 },
-            },
-            "Așteaptă să se încarce lista. Cât timp se aduc fișierele, în mijlocul paginii se rotește un indicator.",
-          ],
-          detalii: [
-            { titlu: "Pe telefon", text: "Deschide meniul din bara de sus, apasă „Editează magazinul”, apoi „Biblioteca Media”. În meniul de pe telefon secțiunea are doar „Design magazin” și „Biblioteca Media”. „Design secțiuni” apare numai în meniul lateral de pe desktop." },
-            { titlu: "Ce trebuie să fie în ordine pe cont", text: "Trebuie să fii autentificat, să ai onboarding-ul finalizat și contul activ. Dacă perioada de probă nu mai e valabilă sau abonamentul e neplătit și perioada de grație a expirat, panoul te trimite la pagina de reactivare și nu ajungi în Bibliotecă. Dacă pe cont nu există niciun magazin, acțiunile răspund cu „Magazin negăsit.”" },
-            { titlu: "Ce fișiere vezi aici", text: "Biblioteca arată fișierele celui mai recent magazin creat pe cont. În pagină nu există un selector de magazin. Se încarcă cel mult 5000 de fișiere; peste acest prag restul nu mai sunt aduse și în interfață nu apare niciun mesaj despre asta." },
-            { titlu: "Lista se actualizează singură la deschidere", text: "De fiecare dată când intri în pagină, platforma verifică fișierele folosite în magazin și adaugă în bibliotecă ce lipsește. Nu trebuie să faci nimic pentru asta." },
-            { titlu: "Planul nu contează", text: "Accesul la Biblioteca Media nu este condiționat de un anumit plan." },
-          ],
-          nota: "Ordinea listei este fixă, cele mai noi fișiere primele. În pagină nu există opțiune de sortare, de redenumire a unui fișier, de mutare între surse sau de înlocuire cu o versiune nouă.",
-          termeni: ["media", "fișiere magazin", "unde găsesc pozele", "galerie imagini", "video magazin"],
-        },
         {
           slug: "cum-incarci-imagini-si-videoclipuri-in-biblioteca-media",
           titlu: "Cum încarci imagini și videoclipuri în Biblioteca Media",
@@ -1197,7 +936,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
             {
               text: "Apasă butonul verde „Încarcă” din colțul din dreapta sus.",
-              captura: { alt: "Butoanele „Re-scanează” și „Încarcă” din colțul din dreapta sus al paginii Biblioteca Media.", raport: 16 / 10 },
+              captura: { alt: "Butoanele „Re-scanează” și „Încarcă” din colțul din dreapta sus al paginii Biblioteca Media.", src: "/capturi/ajutor/design-si-pagini/cum-incarci-imagini-si-videoclipuri-in-biblioteca-media.webp", raport: 16 / 10 },
             },
             "În selectorul de fișiere al dispozitivului alege ce vrei să încarci. Poți selecta mai multe fișiere deodată.",
             "Confirmă selecția. Încărcarea pornește imediat, nu mai trebuie apăsat alt buton.",
@@ -1224,10 +963,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Pornește o încărcare din butonul „Încarcă”. Panoul apare singur sub bara de unelte.",
             "Citește sus în panou „Se încarcă… 3/10”, bara de progres și avertismentul „Nu închide pagina până nu se termină încărcarea.”",
-            {
-              text: "Sub bară vezi fiecare fișier cu numele și starea lui.",
-              captura: { alt: "Panoul de progres cu bara de încărcare și lista fișierelor, fiecare cu starea lui.", raport: 16 / 10 },
-            },
+            "Sub bară vezi fiecare fișier cu numele și starea lui.",
             "Dacă vrei să oprești restul lotului, apasă „Anulează” din dreapta sus a panoului.",
             "După ce se termină, titlul devine „Încărcare finalizată · 10 reușite”, iar butonul devine „Închide”.",
             "Apasă „Închide” ca să faci panoul să dispară.",
@@ -1249,10 +985,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
             "Apasă „Re-scanează”, butonul de lângă „Încarcă”.",
             "Așteaptă. Iconița se rotește și butonul rămâne blocat cât timp scanează.",
-            {
-              text: "Citește rezultatul: fie „12 fișier(e) adăugate.”, fie „Biblioteca este la zi.”",
-              captura: { alt: "Mesajul de final după re-scanare, cu numărul de fișiere adăugate.", raport: 16 / 10 },
-            },
+            "Citește rezultatul: fie „12 fișier(e) adăugate.”, fie „Biblioteca este la zi.”",
             "Lista se reîncarcă singură și sare înapoi la pagina 1.",
           ],
           detalii: [
@@ -1266,38 +999,13 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           termeni: ["scanare", "sincronizare", "fișiere lipsă", "import bibliotecă", "reîmprospătare"],
         },
         {
-          slug: "cum-cauti-un-fisier-in-biblioteca-media",
-          titlu: "Cum cauți un fișier în Biblioteca Media",
-          rezumat: "Câmpul de căutare filtrează lista pe măsură ce scrii, după nume și după datele completate.",
-          pasi: [
-            "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
-            {
-              text: "Scrie în câmpul cu lupă din bara de unelte, cel cu textul „Caută după nume, titlu, text alternativ...”.",
-              captura: { alt: "Câmpul de căutare din bara de unelte, cu rezultatele filtrate dedesubt.", raport: 16 / 10 },
-            },
-            "Rezultatele se filtrează pe măsură ce scrii, iar lista sare automat la pagina 1.",
-            "Sub bara de unelte citești câte fișiere au rămas, de exemplu „37 rezultate filtrate”.",
-            "Golește câmpul ca să revii la toată lista.",
-          ],
-          detalii: [
-            { titlu: "În ce câmpuri caută", text: "În numele fișierului și în „Titlu”, „Text alternativ (alt)”, „Descriere” și „Etichete”. Câmpul „Text asociat (caption)” nu este acoperit de căutare, deci un fișier nu poate fi găsit după ce ai scris acolo." },
-            { titlu: "Cum se potrivește textul", text: "Literele mari și mici nu contează, iar textul scris este căutat oriunde în interiorul câmpurilor, nu doar la început. Dacă scrii „vara”, găsești și fișierul numit „banner-vara-2025.webp”." },
-            { titlu: "Se combină cu filtrele", text: "Căutarea funcționează împreună cu filtrele de tip, sursă și folosire. Dacă ai pus „Doar nefolosite” și scrii în căutare, vezi doar fișierele nefolosite care se potrivesc textului." },
-            { titlu: "Ca să găsești mai ușor mai târziu", text: "Completează „Titlu” și „Etichete” în panoul de detalii al fișierului. Sunt câmpurile după care se caută cel mai bine, mai ales când numele fișierului venit din telefon nu spune nimic." },
-          ],
-          termeni: ["găsește imagine", "filtrare text", "lupă", "nume fișier", "etichete"],
-        },
-        {
           slug: "cum-filtrezi-fisierele-dupa-tip-sursa-si-folosire",
           titlu: "Cum filtrezi fișierele după tip, sursă și folosire",
           rezumat: "Cele trei liste derulante din bara de unelte restrâng lista la ce te interesează.",
           pasi: [
             "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
             "Deschide prima listă derulantă și alege „Toate tipurile”, „Imagini” sau „Videoclipuri”.",
-            {
-              text: "Deschide a doua listă derulantă și alege sursa fișierelor.",
-              captura: { alt: "Cele trei liste derulante din bara de unelte, deschisă fiind cea de surse.", raport: 16 / 10 },
-            },
+            "Deschide a doua listă derulantă și alege sursa fișierelor.",
             "Deschide a treia listă derulantă și alege „Folosite și nefolosite”, „Doar folosite” sau „Doar nefolosite”.",
             "Lista se filtrează imediat după fiecare alegere și sare la pagina 1.",
           ],
@@ -1311,62 +1019,13 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           termeni: ["nefolosite", "curățenie", "sortare surse", "doar video", "doar imagini"],
         },
         {
-          slug: "cum-navighezi-prin-lista-de-fisiere",
-          titlu: "Cum navighezi prin lista de fișiere",
-          rezumat: "Rândul de totaluri, opțiunea „Pe pagină:” și butoanele de sub grilă te plimbă prin bibliotecă.",
-          pasi: [
-            "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
-            {
-              text: "Citește sub filtre rândul de totaluri, de exemplu „128 fișiere în total · 120 imagini · 8 videoclipuri”.",
-              captura: { alt: "Rândul de totaluri cu numărul de fișiere și opțiunea „Pe pagină:”.", raport: 16 / 10 },
-            },
-            "În dreapta rândului, la „Pe pagină:”, alege 24, 48 sau 96 de miniaturi.",
-            "Sub grilă apasă „Înainte” sau „Înapoi” ca să treci de la o pagină la alta.",
-            "La mijloc citești pe ce pagină ești, de exemplu „Pagina 2 din 5”.",
-          ],
-          detalii: [
-            { titlu: "Ce scrie în rândul de totaluri", text: "Numărul total de fișiere, apoi câte sunt imagini și câte videoclipuri. Dacă ai un filtru sau o căutare activă, se adaugă și „37 rezultate filtrate”, adică numărul fișierelor rămase după filtrare." },
-            { titlu: "Când nu vezi rândul", text: "Rândul de totaluri apare doar după ce lista s-a încărcat și doar dacă ai cel puțin un fișier în bibliotecă." },
-            { titlu: "Câte pe pagină", text: "Valoarea implicită este 48. Butoanele de paginare apar doar când există mai mult de o pagină. „Înapoi” este blocat pe prima pagină, „Înainte” pe ultima." },
-            { titlu: "Te întorci mereu la pagina 1", text: "Orice schimbare de filtru, de text în căutare sau de număr de fișiere pe pagină te aduce înapoi la pagina 1." },
-            { titlu: "Când biblioteca e goală", text: "Dacă nu ai încă niciun fișier, în locul grilei scrie „Nu ai niciun fișier media încă. Încarcă primul fișier.” Dacă ai fișiere dar filtrele nu potrivesc nimic, scrie „Niciun rezultat pentru filtrele alese.”" },
-          ],
-          termeni: ["paginare", "câte pe pagină", "total fișiere", "pagina următoare"],
-        },
-        {
-          slug: "cum-vezi-detaliile-unui-fisier",
-          titlu: "Cum vezi detaliile unui fișier",
-          rezumat: "Panoul „Detalii fișier” arată previzualizarea și fișa cu date a fișierului.",
-          pasi: [
-            "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
-            "Apasă pe miniatura fișierului din grilă.",
-            {
-              text: "Din dreapta glisează panoul „Detalii fișier”.",
-              captura: { alt: "Panoul „Detalii fișier” deschis în dreapta, cu previzualizarea și fișa de date.", raport: 16 / 10 },
-            },
-            "Sus vezi previzualizarea: imaginea, sau videoclipul cu comenzi de redare.",
-            "Sub ea citești fișa: „Nume:”, „Tip:”, „Mărime:”, „Dimensiuni:”, „Sursă:” și „Adăugat:”.",
-            "Închizi panoul cu X-ul din colțul din dreapta sus sau apăsând în afara lui, pe fundalul întunecat.",
-          ],
-          detalii: [
-            { titlu: "Ce înseamnă câmpurile din fișă", text: "„Tip:” arată „Imagine” sau „Video”. „Sursă:” arată de unde provine fișierul, iar „Adăugat:” data la care a intrat în bibliotecă. Toate datele din fișă sunt doar de citit: nu poți schimba numele, tipul, mărimea, dimensiunile, sursa sau data." },
-            { titlu: "Când apare „—”", text: "Semnul apare când mărimea nu e cunoscută, sau când lățimea și înălțimea nu au fost înregistrate. Se întâmplă de obicei la fișierele aduse prin „Re-scanează” și la videoclipuri." },
-            { titlu: "Miniaturile videoclipurilor", text: "Nu arată un cadru din film. Apar ca pătrat negru cu iconiță de film și eticheta „VIDEO”. Ca să vezi conținutul, deschide panoul de detalii și pornește redarea." },
-            { titlu: "Dacă ești în modul de selecție", text: "Cât timp butonul „Selectează” e activ, apăsarea pe miniatură bifează fișierul în loc să deschidă panoul. Ieși din modul de selecție dacă vrei detaliile." },
-          ],
-          termeni: ["dimensiuni", "mărime fișier", "previzualizare", "informații imagine"],
-        },
-        {
           slug: "cum-completezi-datele-seo-ale-unui-fisier",
           titlu: "Cum completezi datele SEO ale unui fișier",
           rezumat: "În panoul de detalii scrii titlul, textul alternativ, descrierea și etichetele, apoi salvezi.",
           pasi: [
             "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
             "Apasă pe miniatura fișierului ca să deschizi panoul „Detalii fișier”.",
-            {
-              text: "Completează „Titlu”, „Text alternativ (alt)”, „Text asociat (caption)”, „Descriere” și „Etichete (separate prin virgulă)”.",
-              captura: { alt: "Câmpurile de text din panoul „Detalii fișier”, cu butonul „Salvează” dedesubt.", raport: 16 / 10 },
-            },
+            "Completează „Titlu”, „Text alternativ (alt)”, „Text asociat (caption)”, „Descriere” și „Etichete (separate prin virgulă)”.",
             "Apasă „Salvează”. Cât timp salvează, butonul are un indicator care se rotește și nu poate fi apăsat din nou.",
             "Așteaptă mesajul „Salvat.” Dacă ceva nu merge, apare „Nu am putut salva modificările.” și încerci din nou.",
           ],
@@ -1380,26 +1039,6 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           termeni: ["alt text", "accesibilitate", "titlu imagine", "etichete", "caption", "descriere"],
         },
         {
-          slug: "cum-copiezi-adresa-unui-fisier",
-          titlu: "Cum copiezi adresa unui fișier",
-          rezumat: "Butonul „Copiază URL” din panoul de detalii pune adresa publică a fișierului în clipboard.",
-          pasi: [
-            "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
-            "Apasă pe miniatura fișierului ca să deschizi panoul „Detalii fișier”.",
-            {
-              text: "Sub fișa cu date apasă „Copiază URL”.",
-              captura: { alt: "Butonul „Copiază URL” din panoul „Detalii fișier”.", raport: 16 / 10 },
-            },
-            "Verifică bifa care apare pentru scurt timp în locul iconiței. Este singurul semn că adresa a fost copiată.",
-            "Lipește adresa unde ai nevoie.",
-          ],
-          detalii: [
-            { titlu: "Nu apare niciun mesaj de confirmare", text: "Nu se afișează o notificare. Bifa rămâne vizibilă cam o secundă și jumătate, apoi butonul revine la starea normală. Dacă ai ratat-o, apasă din nou." },
-            { titlu: "Nu există descărcare", text: "În panou nu există buton de descărcare a fișierului. Singura cale de a ajunge la fișier în afara panoului este adresa copiată, pe care o deschizi în browser." },
-          ],
-          termeni: ["link imagine", "url public", "clipboard", "adresa pozei"],
-        },
-        {
           slug: "cum-vezi-unde-e-folosit-un-fisier",
           titlu: "Cum vezi unde e folosit un fișier",
           rezumat: "Panoul de detalii listează locurile din magazin care se sprijină pe fișierul respectiv.",
@@ -1407,10 +1046,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
             "Caută în grilă miniaturile cu eticheta „Folosit” în colțul din stânga jos.",
             "Apasă pe miniatură ca să deschizi panoul „Detalii fișier”.",
-            {
-              text: "Citește caseta galbenă „Folosit în 3 loc(uri):” și lista de sub ea.",
-              captura: { alt: "Caseta galbenă din panoul de detalii, cu lista locurilor în care e folosit fișierul.", raport: 16 / 10 },
-            },
+            "Citește caseta galbenă „Folosit în 3 loc(uri):” și lista de sub ea.",
           ],
           detalii: [
             { titlu: "Ce poate apărea în listă", text: "„Produs: numele produsului”, „Pagina: titlul paginii”, „Categorie: numele categoriei”, „Magazin (logo / copertă / galerie)” și „Setări magazin”." },
@@ -1428,10 +1064,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în panoul de administrare > „Editează magazinul” > „Biblioteca Media”.",
             "Apasă pe miniatura fișierului ca să deschizi panoul „Detalii fișier”.",
             "Jos în panou apasă butonul roșu „Șterge”.",
-            {
-              text: "Citește ferestruica „Ștergi 1 fișier(e)?” și explicația „Fișierele vor fi șterse definitiv din bibliotecă și din stocare.”",
-              captura: { alt: "Ferestruica de confirmare a ștergerii, cu butoanele „Anulează” și „Șterge definitiv”.", raport: 16 / 10 },
-            },
+            "Citește ferestruica „Ștergi 1 fișier(e)?” și explicația „Fișierele vor fi șterse definitiv din bibliotecă și din stocare.”",
             "Apasă „Șterge definitiv” ca să confirmi, sau „Anulează” ca să renunți.",
             "După ștergere apare „1 fișier(e) șterse.”, panoul se închide și miniatura dispare din grilă.",
           ],
@@ -1453,10 +1086,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Pune întâi filtrele care te interesează, de exemplu „Doar nefolosite”.",
             "Apasă „Selectează”, ultimul buton din bara de unelte. Deasupra grilei apare o bară de acțiuni.",
             "Apasă pe miniaturi ca să le bifezi. În colțul din stânga sus apare bifa, iar chenarul se colorează.",
-            {
-              text: "În bara de acțiuni citești câte ai ales, de exemplu „7 selectate”.",
-              captura: { alt: "Bara de acțiuni de deasupra grilei, cu numărul de fișiere selectate și butonul roșu „Șterge”.", raport: 16 / 10 },
-            },
+            "În bara de acțiuni citești câte ai ales, de exemplu „7 selectate”.",
             "Apasă butonul roșu „Șterge” din dreapta barii și confirmă în ferestruică.",
             "La final apare „7 fișier(e) șterse.”, selecția se golește și modul de selecție se oprește singur.",
           ],
@@ -1476,10 +1106,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Deschide formularul în care vrei imaginea, de exemplu Produse > Pachete.",
             "Apasă „Alege din Biblioteca Media”.",
-            {
-              text: "În tabul „Bibliotecă” caută cu câmpul „Caută...” și apasă pe miniaturi ca să le bifezi. Bifa verde apare în colțul din dreapta sus.",
-              captura: { alt: "Ferestruica de alegere, cu tabul „Bibliotecă” deschis și două miniaturi bifate.", raport: 16 / 10 },
-            },
+            "În tabul „Bibliotecă” caută cu câmpul „Caută...” și apasă pe miniaturi ca să le bifezi. Bifa verde apare în colțul din dreapta sus.",
             "Dacă fișierul nu există încă, treci pe tabul „Încarcă” și apasă zona „Apasă pentru a încărca fișiere”.",
             "Jos verifică „2 selectat(e)” și confirmă cu „Adaugă (2)”, sau renunță cu „Anulează”.",
           ],
@@ -1499,28 +1126,6 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
       titlu: "Pagini și formulare",
       ghiduri: [
         {
-          slug: "cum-deschizi-lista-paginilor",
-          titlu: "Cum deschizi lista paginilor magazinului",
-          rezumat: "Pagini > Toate paginile îți arată paginile magazinului, starea lor și adresa publică a fiecăreia.",
-          pasi: [
-            {
-              text: "Intră în Pagini > Toate paginile.",
-              captura: { alt: "Ecranul Pagini cu butoanele Formulare și Mesaje, secțiunea Pagini de sistem și lista paginilor.", raport: 16 / 10 },
-            },
-            "Sub titlul Pagini ai două butoane rapide, Formulare și Mesaje.",
-            "Citește secțiunea Pagini de sistem, apoi lista paginilor tale.",
-            "Pe fiecare rând vezi titlul paginii, insigna Publicat sau Ciornă și adresa publică.",
-          ],
-          detalii: [
-            { titlu: "Când nu ai nicio pagină", text: "Apare textul Nicio pagină încă și îndemnul Apasă Pagină nouă pentru a începe. Butonul Pagină nouă e în dreapta sus." },
-            { titlu: "Butoanele Formulare și Mesaje", text: "Duc în aceleași locuri ca submeniul din bara laterală. Sunt puse acolo pentru telefon, unde submeniul din bara laterală nu se vede." },
-            { titlu: "Publicat și Ciornă", text: "Publicat înseamnă că pagina e vizibilă vizitatorilor. Ciornă înseamnă că o vezi doar tu, ca proprietar al magazinului. Restul vizitatorilor primesc eroare de pagină inexistentă." },
-            { titlu: "Ce magazin se afișează", text: "Ecranul lucrează cu un singur magazin, cel mai recent creat din contul tău. Dacă nu ai niciun magazin, ești trimis înapoi în Panou principal. Dacă nu ești autentificat, ești trimis la pagina de autentificare." },
-          ],
-          nota: "Ordinea paginilor din listă nu se poate schimba din acest ecran. Nu există buton de reordonare a paginilor.",
-          termeni: ["pagini magazin", "pagină contact", "despre noi", "ciornă", "panoul de administrare"],
-        },
-        {
           slug: "cum-creezi-o-pagina-noua",
           titlu: "Cum creezi o pagină nouă",
           rezumat: "Din Pagini > Toate paginile apeși Pagină nouă, pui titlul și linkul, apoi intri direct în editor.",
@@ -1529,7 +1134,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Apasă Pagină nouă, în dreapta sus.",
             {
               text: "În fereastra Pagină nouă completează Titlu pagină, de exemplu Contact.",
-              captura: { alt: "Fereastra Pagină nouă cu câmpurile Titlu pagină și Link (slug).", raport: 16 / 10 },
+              captura: { alt: "Fereastra Pagină nouă cu câmpurile Titlu pagină și Link (slug).", src: "/capturi/ajutor/design-si-pagini/cum-creezi-o-pagina-noua.webp", raport: 16 / 10 },
             },
             "Verifică Link (slug). Se completează singur din titlu, dar îl poți schimba.",
             "Apasă Creează și editează.",
@@ -1551,10 +1156,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Pagini > Toate paginile.",
             "Apasă butonul verde Editează de pe rândul paginii.",
             "Schimbă, dacă vrei, titlul din câmpul aflat lângă săgeata de întoarcere, sus în stânga.",
-            {
-              text: "Bifează Publicat când vrei ca pagina să fie vizibilă vizitatorilor.",
-              captura: { alt: "Bara de sus a editorului cu titlul paginii, bifa Publicat și butonul Salvează.", raport: 16 / 10 },
-            },
+            "Bifează Publicat când vrei ca pagina să fie vizibilă vizitatorilor.",
             "Apasă Salvează, în dreapta sus.",
           ],
           detalii: [
@@ -1573,10 +1175,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Din lista de pagini apeși pictograma Duplică și primești o copie nepublicată a paginii.",
           pasi: [
             "Intră în Pagini > Toate paginile.",
-            {
-              text: "Pe rândul paginii apasă pictograma Duplică.",
-              captura: { alt: "Rândul unei pagini cu pictogramele Duplică, Șterge și butonul Editează.", raport: 16 / 10 },
-            },
+            "Pe rândul paginii apasă pictograma Duplică.",
             "Așteaptă mesajul Pagina a fost duplicată. Lista se reîncarcă singură.",
           ],
           detalii: [
@@ -1594,10 +1193,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Pagini > Toate paginile.",
             "Pe rândul paginii apasă pictograma roșie Șterge.",
-            {
-              text: "Confirmă în fereastra browserului mesajul Ștergi pagina? Această acțiune nu poate fi anulată.",
-              captura: { alt: "Fereastra de confirmare a ștergerii unei pagini.", raport: 16 / 10 },
-            },
+            "Confirmă în fereastra browserului mesajul Ștergi pagina? Această acțiune nu poate fi anulată.",
             "Așteaptă mesajul Pagina a fost ștearsă.",
           ],
           detalii: [
@@ -1614,10 +1210,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Bifezi În meniu pe rândul paginii și intrarea apare în meniul magazinului, cu titlul paginii.",
           pasi: [
             "Intră în Pagini > Toate paginile.",
-            {
-              text: "Pe rândul paginii bifează căsuța În meniu.",
-              captura: { alt: "Rândul unei pagini cu bifa În meniu.", raport: 16 / 10 },
-            },
+            "Pe rândul paginii bifează căsuța În meniu.",
             "Așteaptă să dispară rotița de salvare din dreptul butoanelor din secțiunea Meniu de navigare.",
           ],
           detalii: [
@@ -1633,10 +1226,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           titlu: "Cum construiești meniul de navigare al magazinului",
           rezumat: "Din secțiunea Meniu de navigare stabilești ce intrări are meniul magazinului, ce scrie pe ele și în ce ordine apar.",
           pasi: [
-            {
-              text: "Intră în Pagini > Toate paginile și derulează sub lista paginilor, la caseta Meniu de navigare.",
-              captura: { alt: "Caseta Meniu de navigare cu intrările, săgețile de mutare și butoanele de adăugare.", raport: 16 / 10 },
-            },
+            "Intră în Pagini > Toate paginile și derulează sub lista paginilor, la caseta Meniu de navigare.",
             "Mută o intrare cu săgețile sus și jos din stânga ei.",
             "Schimbă textul din câmpul Etichetă. Se salvează când ieși din câmp.",
             "La intrările de tip link completează adresa în câmpul cu exemplul https://.",
@@ -1659,10 +1249,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Secțiunea Pagini de sistem îți arată dacă Acasă, Magazin, Coș și Finalizare comandă sunt pagini separate sau apar altfel.",
           pasi: [
             "Intră în Pagini > Toate paginile.",
-            {
-              text: "Deasupra listei de pagini citește secțiunea Pagini de sistem, cu rândurile Acasă, Magazin, Coș și Finalizare comandă.",
-              captura: { alt: "Secțiunea Pagini de sistem cu cele patru rânduri și insignele lor.", raport: 16 / 10 },
-            },
+            "Deasupra listei de pagini citește secțiunea Pagini de sistem, cu rândurile Acasă, Magazin, Coș și Finalizare comandă.",
             "Uită-te la insigna fiecărui rând.",
             "Apasă Alege designul dacă vrei să schimbi felul în care apar.",
           ],
@@ -1683,10 +1270,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Pagini > Toate paginile și apasă Editează pe pagina dorită.",
             "Dacă pagina e goală, apasă Adaugă bloc din mijlocul ecranului.",
             "Dacă pagina are deja conținut, treci cu mouse-ul între două blocuri și apasă butonul rotund plus, sau folosește Adaugă bloc de la finalul paginii.",
-            {
-              text: "În fereastra Adaugă un bloc apasă tipul dorit.",
-              captura: { alt: "Fereastra Adaugă un bloc cu toate tipurile de blocuri.", raport: 16 / 10 },
-            },
+            "În fereastra Adaugă un bloc apasă tipul dorit.",
             "Completează setările blocului din panoul din dreapta, apoi apasă Salvează.",
           ],
           detalii: [
@@ -1706,10 +1290,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Pagini > Toate paginile și apasă Editează pe pagina dorită.",
             "Treci cu mouse-ul peste bloc sau apasă o dată pe el.",
-            {
-              text: "În colțul din dreapta sus al blocului apare bara de unelte, care începe cu numele tipului de bloc.",
-              captura: { alt: "Bara de unelte a unui bloc, cu numele tipului și butoanele Sus, Jos, Duplică, Setări, Șterge.", raport: 16 / 10 },
-            },
+            "În colțul din dreapta sus al blocului apare bara de unelte, care începe cu numele tipului de bloc.",
             "Apasă butonul dorit: Sus, Jos, Duplică, Setări sau Șterge.",
             "Apasă Salvează după ce termini.",
           ],
@@ -1727,10 +1308,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Blocul Coloane îți dă mai multe celule pe același rând, iar în fiecare celulă poți pune alte blocuri.",
           pasi: [
             "În editor adaugă blocul Coloane. Vine cu două coloane goale.",
-            {
-              text: "Selectează blocul și alege macheta din lista Aspect coloane.",
-              captura: { alt: "Setările blocului Coloane cu lista de machete Aspect coloane.", raport: 16 / 10 },
-            },
+            "Selectează blocul și alege macheta din lista Aspect coloane.",
             "În pânză, apasă Adaugă bloc din mijlocul unei coloane goale.",
             "În fereastra Adaugă în coloană alege tipul de bloc.",
             "Pentru coloanele care au deja conținut, folosește Adaugă de sub blocuri sau butonul rotund plus dintre ele.",
@@ -1754,10 +1332,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Pagini > Toate paginile și apasă Editează pe pagina dorită.",
             "În panoul din dreapta alege tabul Pagină.",
             "Completează Titlu pagină și Link (slug). Sub câmpul de link vezi adresa publică rezultată.",
-            {
-              text: "La secțiunea SEO completează Titlu SEO (opțional) și Descriere SEO (opțional).",
-              captura: { alt: "Tabul Pagină cu previzualizarea Google și câmpurile de SEO.", raport: 16 / 10 },
-            },
+            "La secțiunea SEO completează Titlu SEO (opțional) și Descriere SEO (opțional).",
             "Încarcă o poză la Imagine la distribuire (Facebook/WhatsApp) sau lipește o adresă în câmpul sau lipește un URL.",
             "Apasă Salvează în bara de sus.",
           ],
@@ -1779,10 +1354,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Hero este banda mare din capul paginii, cu titlu, subtitlu, buton și imagine de fundal.",
           pasi: [
             "În editor adaugă blocul Hero și selectează-l.",
-            {
-              text: "Completează Titlu și Subtitlu.",
-              captura: { alt: "Setările blocului Hero cu câmpurile Titlu, Subtitlu și butonul.", raport: 16 / 10 },
-            },
+            "Completează Titlu și Subtitlu.",
             "Completează Text buton și Link buton.",
             "Alege Culoare buton și Culoare text buton.",
             "Încarcă o poză la Imagine fundal, dacă vrei fundal cu imagine.",
@@ -1807,10 +1379,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "În editor adaugă blocul Titlu și scrie textul în câmpul Text.",
             "Alege Mărime, Culoare text și Tip titlu (pentru SEO).",
             "Adaugă blocul Text și scrie în câmpul Conținut.",
-            {
-              text: "Formatează textul din bara de unelte a editorului.",
-              captura: { alt: "Editorul de text din blocul Text, cu bara de unelte.", raport: 16 / 10 },
-            },
+            "Formatează textul din bara de unelte a editorului.",
             "Reglează secțiunea Aspect, apoi apasă Salvează.",
           ],
           detalii: [
@@ -1828,10 +1397,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Blocul Imagine pune o singură poză, blocul Galerie pune mai multe poze pe coloane.",
           pasi: [
             "În editor adaugă blocul Imagine și selectează-l.",
-            {
-              text: "La câmpul Imagine apasă zona punctată Încarcă imagine și alege fișierul, apasă Alege din Biblioteca Media sau lipește o adresă în câmpul sau lipește un URL.",
-              captura: { alt: "Câmpul Imagine cu zona de încărcare și butonul Alege din Biblioteca Media.", raport: 16 / 10 },
-            },
+            "La câmpul Imagine apasă zona punctată Încarcă imagine și alege fișierul, apasă Alege din Biblioteca Media sau lipește o adresă în câmpul sau lipește un URL.",
             "Completează Text alternativ (alt), Link (opțional) și Descriere sub imagine.",
             "Reglează Lățime imagine, Aliniere și bifa Colțuri rotunjite.",
             "Pentru mai multe poze, adaugă blocul Galerie și alege Coloane, Distanță între poze și Sub fiecare poză.",
@@ -1854,10 +1420,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "În editor adaugă blocul Buton și selectează-l.",
             "Completează Text buton și Link.",
-            {
-              text: "Alege Stil, Mărime, Colțuri și Efect.",
-              captura: { alt: "Setările blocului Buton cu Stil, Mărime, Colțuri și Efect.", raport: 16 / 10 },
-            },
+            "Alege Stil, Mărime, Colțuri și Efect.",
             "Alege Culoare buton și Culoare text.",
             "Bifează, dacă vrei, Lățime completă și Deschide în tab nou.",
             "Apasă Salvează.",
@@ -1877,10 +1440,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Blocul Video acceptă fie un fișier încărcat de tine, fie un link de YouTube sau Vimeo.",
           pasi: [
             "În editor adaugă blocul Video și selectează-l.",
-            {
-              text: "Alege tabul Încarcă video sau tabul Link YouTube / Vimeo.",
-              captura: { alt: "Blocul Video cu cele două taburi, Încarcă video și Link YouTube / Vimeo.", raport: 16 / 10 },
-            },
+            "Alege tabul Încarcă video sau tabul Link YouTube / Vimeo.",
             "La Încarcă video apasă zona punctată Încarcă videoclip sau alege un fișier cu Alege din Biblioteca Media.",
             "La Link YouTube / Vimeo lipește adresa clipului în câmpul cu același nume.",
             "În secțiunea Redare bifează ce vrei: Pornire automată, Redare în buclă, Fără sunet, Afișează controalele de redare.",
@@ -1905,7 +1465,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "În editor adaugă blocul Hartă și selectează-l.",
             {
               text: "Scrie adresa în câmpul Adresă sau coordonate.",
-              captura: { alt: "Setările blocului Hartă cu câmpul Adresă sau coordonate.", raport: 16 / 10 },
+              captura: { alt: "Setările blocului Hartă cu câmpul Adresă sau coordonate.", src: "/capturi/ajutor/design-si-pagini/cum-adaugi-o-harta-in-pagina.webp", raport: 16 / 10 },
             },
             "Setează Înălțime (px).",
             "Apasă Salvează.",
@@ -1925,10 +1485,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "În editor adaugă blocul Întrebări (FAQ) și selectează-l.",
             "Completează Titlu secțiune.",
-            {
-              text: "Pentru fiecare element completează câmpul Întrebare și câmpul Răspuns.",
-              captura: { alt: "Setările blocului Întrebări (FAQ) cu câmpurile Întrebare și Răspuns.", raport: 16 / 10 },
-            },
+            "Pentru fiecare element completează câmpul Întrebare și câmpul Răspuns.",
             "Apasă Adaugă întrebare pentru încă un element.",
             "Șterge un element cu butonul roșu X din dreptul lui.",
             "Apasă Salvează.",
@@ -1951,7 +1508,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Bifează, dacă vrei, Afișează fiecare ca un card.",
             {
               text: "Pentru fiecare beneficiu apasă câmpul Pictogramă și alege una din listă.",
-              captura: { alt: "Selectorul de pictograme cu câmpul de căutare.", raport: 16 / 10 },
+              captura: { alt: "Selectorul de pictograme cu câmpul de căutare.", src: "/capturi/ajutor/design-si-pagini/cum-adaugi-blocul-beneficii.webp", raport: 16 / 10 },
             },
             "Completează Titlu și Descriere pentru fiecare beneficiu.",
             "Apasă Adaugă beneficiu pentru încă unul, apoi Salvează.",
@@ -1971,10 +1528,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "În editor adaugă blocul Produse și selectează-l.",
             "Completează Titlu secțiune.",
-            {
-              text: "Alege din lista Afișează cum se aleg produsele.",
-              captura: { alt: "Setările blocului Produse cu lista Afișează și numărul de coloane.", raport: 16 / 10 },
-            },
+            "Alege din lista Afișează cum se aleg produsele.",
             "Dacă ai ales Dintr-o categorie, alege categoria din lista Categorie.",
             "Dacă ai ales Selectate manual, caută produsele în câmpul Caută produse după nume și apasă pe ele.",
             "Alege Coloane și Aspect, setează Număr maxim de produse, apoi apasă Salvează.",
@@ -1997,10 +1551,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "În editor adaugă blocul Social și selectează-l.",
             "Completează Titlu.",
-            {
-              text: "Intră în Editează magazinul > Design magazin, la secțiunea Social media.",
-              captura: { alt: "Secțiunea Social media din Design magazin, cu câmpurile de rețele.", raport: 16 / 10 },
-            },
+            "Intră în Editează magazinul > Design magazin, la secțiunea Social media.",
             "Completează câmpurile instagram, facebook, tiktok și youtube.",
             "Întoarce-te în editorul paginii și apasă Salvează.",
           ],
@@ -2013,36 +1564,12 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           termeni: ["instagram", "facebook", "tiktok", "youtube", "rețele sociale"],
         },
         {
-          slug: "cum-adaugi-spatiu-si-linie",
-          titlu: "Cum adaugi spațiu gol sau o linie despărțitoare",
-          rezumat: "Blocul Spațiu lasă loc gol între secțiuni, blocul Linie trage o linie despărțitoare.",
-          pasi: [
-            {
-              text: "În editor adaugă blocul Spațiu și alege Înălțime spațiu.",
-              captura: { alt: "Setările blocului Spațiu cu lista Înălțime spațiu.", raport: 16 / 10 },
-            },
-            "Dacă vrei o valoare exactă, alege Personalizat și mută glisorul Înălțime.",
-            "Adaugă blocul Linie și alege Stil linie.",
-            "Reglează Grosime, Lățime și Culoare.",
-            "Apasă Salvează.",
-          ],
-          detalii: [
-            { titlu: "Valorile pentru spațiu", text: "Înălțime spațiu are Mic, Mediu, Mare, Foarte mare și Personalizat. La Personalizat, glisorul Înălțime merge de la 4 la 400. Blocul nu are alte setări și nu are secțiunea Aspect." },
-            { titlu: "Valorile pentru linie", text: "Stil linie are Continuă, Întreruptă și Punctată. Grosimea merge de la 1 la 12. Lățimea merge de la 10% la 100%, din 5 în 5. Butonul cu X din selectorul de culoare înseamnă Fără. Nici acest bloc nu are secțiunea Aspect." },
-            { titlu: "Când folosești fiecare", text: "Spațiul separă vizual două secțiuni fără să adauge ceva de citit. Linia marchează clar sfârșitul unei zone, de exemplu între descrierea magazinului și lista de produse." },
-          ],
-          termeni: ["separator", "divider", "spațiere", "distanță între secțiuni"],
-        },
-        {
           slug: "cum-adaugi-cod-personalizat",
           titlu: "Cum adaugi cod personalizat într-o pagină",
           rezumat: "Blocul Cod personalizat primește HTML, CSS și JavaScript, cu limitări de siguranță.",
           pasi: [
             "În editor adaugă blocul Cod personalizat și selectează-l.",
-            {
-              text: "Scrie codul în câmpul HTML.",
-              captura: { alt: "Blocul Cod personalizat cu câmpurile HTML, CSS și JavaScript.", raport: 16 / 10 },
-            },
+            "Scrie codul în câmpul HTML.",
             "Scrie stilurile în câmpul CSS.",
             "Scrie scriptul în câmpul JavaScript, dacă e nevoie.",
             "Apasă Salvează și verifică rezultatul pe pagina publică.",
@@ -2063,10 +1590,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "În editor adaugă blocul Formular contact și selectează-l.",
             "Completează Titlu (deasupra formularului).",
-            {
-              text: "Din lista Formular alege Contact simplu (implicit) sau unul dintre formularele tale.",
-              captura: { alt: "Setările blocului Formular contact cu lista Formular.", raport: 16 / 10 },
-            },
+            "Din lista Formular alege Contact simplu (implicit) sau unul dintre formularele tale.",
             "La contactul simplu completează Text buton și Mesaj de confirmare.",
             "Bifează Câmp telefon și Câmp mesaj după cum ai nevoie.",
             "Bifează, dacă vrei, Trimite-mi completările pe email, apoi apasă Salvează.",
@@ -2087,10 +1611,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Din Pagini > Formulare apeși Formular nou, îi dai un nume și intri direct în editorul formularului.",
           pasi: [
             "Intră în Pagini > Formulare.",
-            {
-              text: "Apasă Formular nou.",
-              captura: { alt: "Fereastra Formular nou cu câmpul Numele formularului.", raport: 16 / 10 },
-            },
+            "Apasă Formular nou.",
             "Completează Numele formularului, de exemplu Cerere ofertă.",
             "Apasă Creează sau tasta Enter.",
           ],
@@ -2109,10 +1630,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "În editorul formularului adaugi câmpuri, le alegi tipul, le pui etichete și stabilești care sunt obligatorii.",
           pasi: [
             "Intră în Pagini > Formulare și apasă Editează pe rândul formularului.",
-            {
-              text: "Sub eticheta CÂMPURI completează Eticheta câmpului pentru fiecare câmp.",
-              captura: { alt: "Editorul de formular cu secțiunea CÂMPURI și tipurile de câmp.", raport: 16 / 10 },
-            },
+            "Sub eticheta CÂMPURI completează Eticheta câmpului pentru fiecare câmp.",
             "Alege tipul din lista din dreapta etichetei.",
             "Completează Text exemplu (placeholder), dacă ajută vizitatorul.",
             "Bifează Obligatoriu pentru câmpurile care trebuie completate.",
@@ -2136,10 +1654,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "În secțiunea SETĂRI a formularului stabilești textul butonului, mesajul de după trimitere, emailul și sincronizarea cu Mailchimp, Brevo sau Klaviyo.",
           pasi: [
             "Intră în Pagini > Formulare și apasă Editează pe rândul formularului.",
-            {
-              text: "Derulează sub câmpuri, la eticheta SETĂRI.",
-              captura: { alt: "Secțiunea SETĂRI a formularului, cu bifele de integrare și cea de email.", raport: 16 / 10 },
-            },
+            "Derulează sub câmpuri, la eticheta SETĂRI.",
             "Completează Text buton trimitere.",
             "Completează Mesaj după trimitere (răspunsul formularului).",
             "Bifează Trimite-mi completările și pe email și, dacă vrei altă adresă, completează câmpul de email.",
@@ -2162,10 +1677,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Din Pagini > Formulare ai pictogramele Duplică și Șterge pe rândul fiecărui formular.",
           pasi: [
             "Intră în Pagini > Formulare.",
-            {
-              text: "Pentru o copie, apasă pictograma Duplică. Apare mesajul Formular duplicat.",
-              captura: { alt: "Rândul unui formular cu pictogramele Duplică și Șterge.", raport: 16 / 10 },
-            },
+            "Pentru o copie, apasă pictograma Duplică. Apare mesajul Formular duplicat.",
             "Pentru ștergere, apasă pictograma roșie Șterge.",
             "Confirmă mesajul: Ștergi formularul? Paginile care îl folosesc vor reveni la contactul simplu.",
             "Așteaptă mesajul Formular șters.",
@@ -2184,10 +1696,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Pagini > Mesaje îți arată completările trimise prin formularele din paginile tale.",
           pasi: [
             "Intră în Pagini > Mesaje.",
-            {
-              text: "Citește lista. Cele mai noi mesaje sunt primele.",
-              captura: { alt: "Lista Mesaje cu un mesaj necitit evidențiat.", raport: 16 / 10 },
-            },
+            "Citește lista. Cele mai noi mesaje sunt primele.",
             "Pe fiecare mesaj vezi data și ora completării, iar sub ele perechile etichetă și valoare completate de vizitator.",
           ],
           detalii: [
@@ -2205,10 +1714,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Fiecare mesaj are o pictogramă de plic pentru citit și necitit și o pictogramă roșie pentru ștergere.",
           pasi: [
             "Intră în Pagini > Mesaje.",
-            {
-              text: "Apasă pictograma de plic din dreptul mesajului ca să îl marchezi citit sau necitit.",
-              captura: { alt: "Pictogramele de plic și de ștergere din dreptul unui mesaj.", raport: 16 / 10 },
-            },
+            "Apasă pictograma de plic din dreptul mesajului ca să îl marchezi citit sau necitit.",
             "Pentru ștergere, apasă pictograma roșie Șterge.",
             "Confirmă mesajul Ștergi acest mesaj definitiv?",
             "Așteaptă confirmarea Mesaj șters.",
@@ -2228,10 +1734,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Publică pagina și publică magazinul.",
             "Deschide pagina publică într-un tab nou, din butonul Vezi din editor sau din pictograma Vezi pagina din lista de pagini.",
-            {
-              text: "Completează formularul ca un vizitator obișnuit.",
-              captura: { alt: "Formularul de pe pagina publică, cu câmpurile obligatorii marcate.", raport: 16 / 10 },
-            },
+            "Completează formularul ca un vizitator obișnuit.",
             "Verifică mesajul afișat după trimitere și apoi caută completarea în Pagini > Mesaje.",
           ],
           detalii: [

@@ -18,178 +18,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
       titlu: "Clienți",
       ghiduri: [
         {
-          slug: "cum-deschizi-zona-clienti",
-          titlu: "Cum deschizi zona Clienți și ce vezi în ea",
-          rezumat: "Zona Clienți îți arată toți cumpărătorii magazinului, grupați automat după numărul de telefon.",
-          intro: "Clienții nu se adaugă de mână. Lista se construiește din datele lăsate pe comenzi și este recalculată de fiecare dată când deschizi pagina.",
-          pasi: [
-            "Intră în panoul de administrare > Clienți. Pe desktop, intrarea din meniul lateral stă imediat sub Comenzi.",
-            "Pe telefon, deschide meniul cu butonul din bara de sus, apoi apasă Clienți.",
-            {
-              text: "Se deschide pagina Clienți, cu textul „Toți clienții care au comandat din magazin, grupați automat după numărul de telefon.”",
-              captura: { alt: "Pagina Clienți cu titlul, cele patru casete de rezumat, bara de căutare și primele rânduri din listă.", raport: 16 / 10 },
-            },
-            "Sub titlu ai patru casete de rezumat, apoi bara de căutare și sortare, apoi lista de clienți.",
-          ],
-          detalii: [
-            { titlu: "Cele patru casete de sus", text: "În ordine sunt: „Clienți”, „Clienți fideli”, „Venit total” și „Valoare medie comandă”. Primele două arată numere întregi, ultimele două arată sume în lei." },
-            { titlu: "Casetele nu se schimbă când cauți sau sortezi", text: "Cele patru numere sunt calculate pe tot magazinul, separat de lista de dedesubt. Dacă scrii ceva în căutare, lista se filtrează, dar casetele rămân la fel." },
-            { titlu: "Cum sunt scrise sumele", text: "Sumele apar în lei, cu punct la mii și virgulă la zecimale, de exemplu 1.250,50 lei. Când zecimalele sunt .00, ele nu se mai afișează, deci vezi 1.250 lei." },
-            { titlu: "Despre „Clienți fideli”", text: "Caseta arată câți clienți sunt socotiți ca revenind. Eticheta „Fidel” din listă apare la clienții cu mai mult de o comandă care contează ca venit, dar nu putem confirma că numărul din casetă folosește exact același prag." },
-            { titlu: "Ce te poate opri înainte să ajungi pe pagină", text: "Dacă nu ești autentificat, ești trimis la pagina de autentificare. Dacă nu ai terminat pașii de configurare a contului, ești trimis la configurarea contului. Dacă magazinul tău nu există încă, ajungi înapoi în Panoul principal. Dacă abonamentul nu mai este activ, ești trimis la pagina de reactivare, cu excepția conturilor de administrator." },
-            { titlu: "Ce nu se poate face în această zonă", text: "Nu există buton de adăugare, editare sau ștergere de client și nu există export sau descărcare a listei. Totul se citește din comenzi." },
-          ],
-          nota: "Pe telefon, Clienți apare doar în meniul care se deschide din bara de sus. În bara de jos nu există intrare pentru Clienți.",
-          termeni: ["cumparatori", "baza de clienti", "lista de cumparatori", "unde vad clientii", "crm magazin"],
-        },
-        {
-          slug: "cum-cauti-un-client",
-          titlu: "Cum cauți un client după nume, telefon sau email",
-          rezumat: "Scrii în câmpul cu lupă și lista se filtrează singură, fără buton de căutare.",
-          pasi: [
-            "Intră în panoul de administrare > Clienți.",
-            "Apasă în câmpul cu lupă, cel care are textul „Caută după nume, telefon sau email...”.",
-            {
-              text: "Scrie ce cauți. Nu apăsa Enter, nu există buton de căutare.",
-              captura: { alt: "Bara de căutare din pagina Clienți, cu text scris în câmp și lista filtrată dedesubt.", raport: 16 / 10 },
-            },
-            "La aproximativ 0,4 secunde după ultima tastă, lista se reîncarcă singură. Cât timp se încarcă, lista devine ușor transparentă.",
-          ],
-          detalii: [
-            { titlu: "Unde stă câmpul de căutare", text: "Pe desktop și pe tabletă, căutarea este în stânga barei, iar lista de sortare în dreapta ei. Pe telefon, căutarea este sus și sortarea dedesubt." },
-            { titlu: "Cât text se ia în calcul", text: "Se folosesc cel mult 80 de caractere. Ce depășește este tăiat, iar spațiile de la începutul și de la sfârșitul textului sunt eliminate." },
-            { titlu: "Linkul poate fi salvat", text: "Textul căutat intră în adresa paginii, ca parametru q. Poți salva adresa la favorite sau o poți trimite unui coleg cu acces la panou, iar pagina se deschide direct cu acea căutare." },
-            { titlu: "Butonul înapoi al browserului", text: "Căutarea nu adaugă intrări în istoricul browserului, deci butonul înapoi nu te plimbă prin fiecare literă tastată. Schimbarea sortării și schimbarea paginii, în schimb, se adună în istoric." },
-            { titlu: "Când nu găsește nimic", text: "În locul listei apare „Niciun client găsit”, cu indicația „Încearcă altă căutare.”" },
-            { titlu: "Caractere speciale", text: "Semnele % și _ sunt tratate ca text obișnuit, nu ca simboluri de căutare." },
-            { titlu: "Ce nu putem confirma", text: "Interfața spune că se caută după nume, telefon sau email. Potrivirea se face în baza de date, așa că nu putem confirma dacă se caută și după oraș sau adresă, dacă diacriticele contează și dacă se potrivește orice fragment sau doar începutul cuvântului." },
-          ],
-          nota: "Orice căutare nouă te readuce pe pagina 1 a listei.",
-          termeni: ["filtrare clienti", "gaseste client dupa telefon", "cautare dupa email", "q"],
-        },
-        {
-          slug: "cum-sortezi-lista-de-clienti",
-          titlu: "Cum sortezi lista de clienți",
-          rezumat: "Patru ordini de afișare, alese din lista derulantă de lângă căutare.",
-          pasi: [
-            "Intră în panoul de administrare > Clienți.",
-            {
-              text: "Apasă lista derulantă cu pictograma cu două săgeți, sus și jos. Pe desktop este în dreapta câmpului de căutare, pe telefon este sub el.",
-              captura: { alt: "Lista derulantă de sortare deschisă, cu cele patru opțiuni vizibile.", raport: 16 / 10 },
-            },
-            "Alege una dintre opțiuni.",
-            "Lista se reîncarcă imediat în noua ordine.",
-          ],
-          detalii: [
-            { titlu: "Opțiunile disponibile", text: "„Activitate recentă”, „Total cheltuit”, „Număr comenzi” și „Nume (A-Z)”. Alte opțiuni nu există." },
-            { titlu: "Sortarea implicită", text: "Lista pornește pe „Activitate recentă”. Dacă în adresa paginii ajunge o valoare necunoscută, se revine tot la „Activitate recentă”." },
-            { titlu: "Nu există inversare a ordinii", text: "Nu ai buton de crescător sau descrescător. Fiecare opțiune are o singură ordine, iar ordinea exactă pentru fiecare dintre ele nu este afișată în interfață." },
-            { titlu: "Sortarea rămâne în adresa paginii", text: "Alegerea se salvează în adresă, ca parametru sort, deci linkul poate fi salvat. Pentru „Activitate recentă” parametrul nu apare deloc în adresă, fiind opțiunea implicită." },
-          ],
-          nota: "Când schimbi sortarea, revii pe pagina 1.",
-          termeni: ["ordonare clienti", "cei mai buni clienti", "cine a cheltuit cel mai mult", "sort"],
-        },
-        {
-          slug: "cum-navighezi-intre-paginile-listei-de-clienti",
-          titlu: "Cum navighezi între paginile listei de clienți",
-          rezumat: "Lista arată 50 de clienți pe pagină, cu o bară de navigare în josul ei.",
-          pasi: [
-            "Intră în panoul de administrare > Clienți.",
-            "Derulează până la baza listei.",
-            {
-              text: "În stânga citești contorul, de forma „1–50 din 320 clienți”.",
-              captura: { alt: "Bara de paginare din josul listei, cu contorul în stânga și numerele de pagină în dreapta.", raport: 16 / 10 },
-            },
-            "În dreapta apasă săgeata stânga, săgeata dreapta sau direct numărul paginii pe care o vrei.",
-          ],
-          detalii: [
-            { titlu: "Câți clienți sunt pe o pagină", text: "50. Bara de navigare apare numai dacă rezultatele nu încap pe o singură pagină." },
-            { titlu: "Ce înseamnă contorul", text: "Prima cifră este primul client afișat pe pagina curentă, a doua este ultimul. Pe ultima pagină, când nu e plină, a doua cifră este chiar totalul, de exemplu „101–137 din 137 clienți”." },
-            { titlu: "Săgețile", text: "Săgeata stânga este dezactivată cât timp ești pe prima pagină, iar săgeata dreapta pe ultima." },
-            { titlu: "De ce apar puncte între numere", text: "Sunt afișate ca butoane doar prima pagină, ultima pagină și paginile aflate la o poziție de cea curentă. Restul sunt înlocuite cu „...”. Pagina pe care ești acum este marcată colorat." },
-            { titlu: "Pagina rămâne în adresă", text: "Numărul paginii se salvează în adresă, ca parametru page. Pentru pagina 1 parametrul nu apare. Dacă ceri manual în adresă o pagină care nu există, lista vine goală." },
-          ],
-          termeni: ["paginare", "urmatoarea pagina", "50 de clienti", "page"],
-        },
-        {
-          slug: "cum-citesti-randul-unui-client",
-          titlu: "Cum citești rândul unui client din listă",
-          rezumat: "Fiecare rând din listă arată datele de contact, numărul de comenzi și suma cheltuită.",
-          pasi: [
-            "Intră în panoul de administrare > Clienți.",
-            {
-              text: "În stânga rândului vezi un cerculeț cu prima literă a numelui, apoi numele clientului și, când e cazul, eticheta „Fidel”.",
-              captura: { alt: "Un rând de client din listă, cu inițiala, numele, eticheta Fidel, telefonul și suma cheltuită.", raport: 16 / 10 },
-            },
-            "Sub nume vezi telefonul și, dacă există, emailul, despărțite printr-un punct.",
-            "Pe ecrane mari, în dreapta apare numărul de comenzi și data ultimei comenzi.",
-            "La capătul din dreapta apare suma cheltuită, cu cuvântul „cheltuit” sub ea, și o săgeată către dreapta.",
-          ],
-          detalii: [
-            { titlu: "Când apare eticheta „Fidel”", text: "Apare la clienții cu mai mult de o comandă care contează ca venit." },
-            { titlu: "Eticheta „Fidel” pe telefon", text: "În listă, pe ecrane mici, eticheta este ascunsă. Se vede de la lățime de tabletă în sus. În fișa clientului apare întotdeauna, indiferent de ecran." },
-            { titlu: "Numărul de comenzi", text: "Textul se acordă singur, deci vezi „1 comandă” sau, de exemplu, „7 comenzi”." },
-            { titlu: "Cum sunt scrise datele", text: "În format lung românesc, de exemplu 3 martie 2026." },
-            { titlu: "Când numele lipsește", text: "Dacă pe comandă nu a rămas un nume, în cerculeț apare litera C." },
-          ],
-          nota: "Coloana cu numărul de comenzi și data ultimei comenzi nu se vede pe ecrane mici. Aceleași informații le găsești în fișa clientului.",
-          termeni: ["ce inseamna fidel", "client fidel", "suma cheltuita", "ultima comanda"],
-        },
-        {
-          slug: "cum-deschizi-fisa-unui-client",
-          titlu: "Cum deschizi fișa unui client",
-          rezumat: "Fișa adună datele de contact, cifrele clientului și istoricul lui de comenzi, într-o fereastră peste pagină.",
-          pasi: [
-            "Intră în panoul de administrare > Clienți.",
-            "Apasă oriunde pe rândul clientului.",
-            {
-              text: "Se deschide o fereastră peste pagină. Pe telefon urcă de jos, pe desktop apare centrată.",
-              captura: { alt: "Fișa unui client deschisă peste listă, cu antetul de contact și cele trei casete de cifre.", raport: 16 / 10 },
-            },
-            "În antet citești inițiala, numele, eticheta „Fidel” dacă e cazul, telefonul, emailul și adresa.",
-            "În corp ai trei casete cu cifre, rândul cu datele primei și ultimei comenzi și secțiunea „Istoric comenzi”.",
-          ],
-          detalii: [
-            { titlu: "Ce arată cele trei casete", text: "„Comenzi” este numărul total de comenzi ale clientului, inclusiv cele anulate sau rambursate. „Total cheltuit” este suma comenzilor care contează ca venit. „Valoare medie” este totalul cheltuit împărțit la comenzile care contează ca venit." },
-            { titlu: "Rândul cu date", text: "„Prima comandă:” arată data primei comenzi, „Ultima:” data celei mai recente. Ambele în format lung, de exemplu 3 martie 2026." },
-            { titlu: "Ce apare doar dacă există", text: "Telefonul, emailul și adresa se afișează numai dacă au fost lăsate pe comandă. Dacă lipsesc, rândurile respective nu apar deloc." },
-            { titlu: "Fișa este doar de citit", text: "Nu există câmpuri editabile, buton de salvare, notițe sau etichete de client. În antet ai doar telefonul, emailul, adresa și butonul de închidere, fără buton de WhatsApp sau SMS." },
-            { titlu: "Cum închizi fișa", text: "Apasă X din colțul din dreapta sus sau apasă pe zona întunecată din afara ferestrei. Apăsarea în interiorul ferestrei nu o închide." },
-            { titlu: "Titlul secțiunii de istoric", text: "Secțiunea se numește „Istoric comenzi” și este scrisă cu majuscule pe ecran." },
-          ],
-          termeni: ["detalii client", "profil client", "cat a cheltuit un client", "fereastra client"],
-        },
-        {
-          slug: "cum-suni-sau-trimiti-email-unui-client",
-          titlu: "Cum suni sau trimiți email unui client din fișă",
-          rezumat: "Rândul cu telefonul deschide aplicația de apelare, rândul cu emailul deschide programul de email.",
-          pasi: [
-            "Intră în panoul de administrare > Clienți și apasă pe rândul clientului.",
-            {
-              text: "În antetul fișei, apasă pe rândul cu pictograma de telefon ca să deschizi aplicația de apelare a dispozitivului, cu numărul deja completat.",
-              captura: { alt: "Antetul fișei de client, cu rândul de telefon și rândul de email.", raport: 16 / 10 },
-            },
-            "Apasă pe rândul cu pictograma de plic ca să deschizi programul de email al dispozitivului, cu destinatarul deja completat.",
-          ],
-          detalii: [
-            { titlu: "Rândurile apar doar dacă ai datele", text: "Rândul cu telefon apare doar dacă pe comandă a fost lăsat un număr. La fel și rândul cu email. Dacă lipsesc, nu ai de unde suna sau scrie din fișă." },
-            { titlu: "Emailul se deschide gol", text: "Se completează doar adresa destinatarului. Subiectul și textul rămân goale, le scrii tu. Nu există trimitere de email din panou către acest client." },
-            { titlu: "Cum arată numărul de telefon", text: "Numărul se afișează exact așa cum vine din baza de date. Interfața nu îl reformatează și nu adaugă prefixe." },
-            { titlu: "Ce depinde de dispozitivul tău", text: "Ce aplicație se deschide la apăsare este decis de telefonul sau calculatorul tău, nu de Edinio. Pe un calculator fără aplicație de apelare configurată, apăsarea pe număr poate să nu facă nimic." },
-          ],
-          termeni: ["suna clientul", "apel client", "mailto", "contact client"],
-        },
-        {
           slug: "cum-vezi-istoricul-de-comenzi-al-unui-client",
           titlu: "Cum vezi istoricul de comenzi al unui client",
           rezumat: "Secțiunea „Istoric comenzi” din fișă listează comenzile clientului și te duce la fiecare dintre ele.",
           pasi: [
             "Intră în panoul de administrare > Clienți și apasă pe rândul clientului.",
             "Istoricul începe să se încarce singur. Cât timp se încarcă vezi un cerc care se rotește.",
-            {
-              text: "Citește rândurile: numărul comenzii precedat de #, eticheta colorată de stare, data, numărul de produse și, în dreapta, totalul comenzii.",
-              captura: { alt: "Secțiunea Istoric comenzi din fișa clientului, cu câteva comenzi și butonul de încărcare.", raport: 16 / 10 },
-            },
+            "Citește rândurile: numărul comenzii precedat de #, eticheta colorată de stare, data, numărul de produse și, în dreapta, totalul comenzii.",
             "Apasă pe rândul unei comenzi ca să deschizi pagina ei de detaliu din zona Comenzi.",
             "Dacă ai mai multe comenzi decât cele afișate, apasă „Încarcă mai multe (N rămase)” din josul secțiunii.",
           ],
@@ -203,35 +38,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["comenzile unui client", "ce a comandat", "istoric cumparaturi", "incarca mai multe"],
         },
         {
-          slug: "cum-rezolvi-eroarea-la-incarcarea-istoricului",
-          titlu: "Cum rezolvi eroarea la încărcarea istoricului de comenzi",
-          rezumat: "Când istoricul nu se încarcă, ai un mesaj roșu și un buton de reîncercare în locul listei.",
-          pasi: [
-            {
-              text: "În fișa clientului, la secțiunea „Istoric comenzi”, citește mesajul scris cu roșu.",
-              captura: { alt: "Mesajul de eroare roșu din secțiunea Istoric comenzi, cu butonul Încearcă din nou.", raport: 16 / 10 },
-            },
-            "Dacă scrie „Nu am putut încărca istoricul comenzilor.”, apasă butonul „Încearcă din nou” de sub mesaj.",
-            "Dacă scrie „Trebuie să fii autentificat.”, sesiunea ta a expirat. Intră din nou în cont și redeschide fișa clientului.",
-          ],
-          detalii: [
-            { titlu: "Ce face butonul „Încearcă din nou”", text: "Reia încărcarea de unde a rămas, adică de la comenzile deja afișate. Nu reîncarcă lista de la zero." },
-            { titlu: "Cât timp ține mesajul", text: "Cât timp eroarea persistă, mesajul ține locul listei de comenzi. Restul fișei, adică datele de contact și cele trei casete, rămân vizibile." },
-            { titlu: "Dacă reîncercarea nu ajută", text: "Închide fișa cu X și deschide-o din nou. Dacă nici așa nu se încarcă, scrie-ne cu numele clientului și ora la care s-a întâmplat." },
-          ],
-          termeni: ["eroare istoric", "nu se incarca comenzile", "sesiune expirata", "reincearca"],
-        },
-        {
           slug: "cum-apar-si-cum-se-grupeaza-clientii",
           titlu: "Cum apar clienții în listă și cum sunt grupați",
           rezumat: "Lista se construiește din comenzi, iar cumpărătorii sunt grupați după numărul de telefon.",
           intro: "Nu există un buton de adăugare a unui client. Fiecare comandă poartă cu ea numele, telefonul și emailul cumpărătorului, iar lista de clienți este calculată din aceste date de fiecare dată când deschizi pagina.",
           pasi: [
             "Intră în panoul de administrare > Clienți.",
-            {
-              text: "Dacă lista vine goală și câmpul de căutare este gol, vezi „Niciun client încă” și „Clienții apar aici după prima comandă din magazin.”",
-              captura: { alt: "Pagina Clienți cu lista goală și mesajul Niciun client încă.", raport: 16 / 10 },
-            },
+            "Dacă lista vine goală și câmpul de căutare este gol, vezi „Niciun client încă” și „Clienții apar aici după prima comandă din magazin.”",
             "Dacă ai text în câmpul de căutare și nimic nu se potrivește, vezi „Niciun client găsit” și „Încearcă altă căutare.”",
             "Pe măsură ce intră comenzi, clienții apar în listă fără să faci ceva.",
           ],
@@ -251,10 +64,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Clienți.",
             "Apasă butonul „Importă clienți”, sus în dreapta, lângă titlul „Clienți”.",
-            {
-              text: "În fereastra „Importă clienți” apasă zona punctată „Alege fișierul” și alege fișierul din calculator.",
-              captura: { alt: "Fereastra „Importă clienți” cu zona punctată „Alege fișierul”", raport: 16 / 10 },
-            },
+            "În fereastra „Importă clienți” apasă zona punctată „Alege fișierul” și alege fișierul din calculator.",
             "Așteaptă cât scrie „Citesc fișierul...”. Când s-a citit, sub titlul ferestrei apar numele fișierului și numărul de rânduri.",
             "Pe ecranul cu coloanele verifică ce a potrivit aplicația singură și corectează din liste ce nu e bine. Trebuie aleasă cel puțin coloana de email sau cea de telefon.",
             "Apasă „Vezi ce se schimbă”.",
@@ -393,7 +203,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Apasă „Cod nou” din dreapta sus. Pe ecrane mici butonul scrie doar „Nou”. Dacă nu ai încă niciun cod, poți folosi și butonul „Creează primul discount” din mijlocul paginii, care deschide aceeași fereastră.",
             {
               text: "În fereastra „Discount nou”, scrie codul în câmpul „Cod discount”. Textul se transformă singur în MAJUSCULE pe măsură ce tastezi.",
-              captura: { alt: "Fereastra „Discount nou” cu câmpul „Cod discount” completat și tipul „Procent” selectat.", raport: 16 / 10 },
+              captura: { alt: "Fereastra „Discount nou” cu câmpul „Cod discount” completat și tipul „Procent” selectat.", src: "/capturi/ajutor/marketing-si-clienti/cum-creezi-un-cod-de-discount.webp", raport: 16 / 10 },
             },
             "Alege tipul din cele trei butoane de la „Tip discount”: „Procent”, „Sumă fixă” sau „Transport gratuit”.",
             "Completează valoarea. La „Procent” câmpul se numește „Procent reducere” și vine deja completat cu 10. La „Sumă fixă” se numește „Sumă reducere (lei)”. La „Transport gratuit” câmpul de valoare nu apare deloc.",
@@ -415,36 +225,12 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["cupon", "voucher", "reducere", "promotie", "cod promotional", "oferta", "campanie reduceri"],
         },
         {
-          slug: "cum-generezi-automat-un-cod-aleatoriu",
-          titlu: "Cum generezi automat un cod aleatoriu",
-          rezumat: "Butonul cu săgeți circulare de lângă câmpul „Cod discount” completează singur un cod de 8 caractere.",
-          pasi: [
-            "Deschide fereastra „Discount nou” din Discounturi > Cod nou, sau fereastra „Editează discount” de pe rândul unui cod existent.",
-            {
-              text: "Apasă butonul mic cu săgeți circulare din dreapta câmpului „Cod discount”. Când ții cursorul pe el apare textul „Generează cod aleatoriu”.",
-              captura: { alt: "Câmpul „Cod discount” cu butonul de generare din dreapta și textul ajutător „Generează cod aleatoriu”.", raport: 16 / 10 },
-            },
-            "Câmpul se completează singur cu un cod nou.",
-            "Apasă din nou dacă vrei alt cod, sau scrie tu peste el direct în câmp.",
-          ],
-          detalii: [
-            { titlu: "Ce fel de cod primești", text: "Codul generat are exact 8 caractere și folosește doar literele de la A la Z și cifrele de la 0 la 9. Nu poți alege lungimea sau forma lui." },
-            { titlu: "Butonul suprascrie ce era în câmp", text: "Dacă aveai deja ceva scris la „Cod discount”, apăsarea butonului îl înlocuiește. Nu există o cale de a reveni la textul anterior în afară de a-l scrie din nou." },
-            { titlu: "Când merită un cod generat și când nu", text: "Un cod din litere și cifre amestecate este greu de ghicit, deci se potrivește atunci când trimiți codul unei singure persoane sau într-un mesaj privat.\nPentru o campanie publică, un cod scris de tine, de tipul VARA20, se reține și se scrie mai bine de către clienți." },
-          ],
-          nota: "Dacă folosești butonul în fereastra „Editează discount”, codul vechi se pierde la salvare. Clienții care au primit vechiul cod vor primi mesajul „Codul de discount nu este valid.”.",
-          termeni: ["cod aleatoriu", "genereaza cod", "cod unic", "cupon generat"],
-        },
-        {
           slug: "cum-modifici-un-cod-de-discount",
           titlu: "Cum modifici un cod de discount",
           rezumat: "Deschizi fereastra „Editează discount” de pe rândul codului și schimbi codul, tipul, valoarea sau condițiile.",
           pasi: [
             "Intră în panoul de administrare > Discounturi.",
-            {
-              text: "Pe rândul codului, apasă butonul cu creion din dreapta.",
-              captura: { alt: "Rândul unui cod din tabel, cu butonul cu creion din partea dreaptă.", raport: 16 / 10 },
-            },
+            "Pe rândul codului, apasă butonul cu creion din dreapta.",
             "În fereastra „Editează discount” toate câmpurile sunt deja completate cu valorile actuale.",
             "Schimbă ce ai nevoie: „Cod discount”, „Tip discount”, valoarea, „Valoare minimă comandă (opțional)”, „Număr maxim de utilizări (opțional)”, „Data expirare (opțional)” sau comutatorul „Discount activ”.",
             "Apasă „Salvează”. Fereastra se închide și apare mesajul „Discount actualizat.”.",
@@ -465,10 +251,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           rezumat: "Comutatorul din coloana „Status” pornește și oprește un cod fără să deschizi fereastra de editare.",
           pasi: [
             "Intră în panoul de administrare > Discounturi.",
-            {
-              text: "În coloana „Status”, apasă pe comutatorul de pe rândul codului.",
-              captura: { alt: "Coloana „Status” din tabel, cu comutatorul și eticheta „Activ”.", raport: 16 / 10 },
-            },
+            "În coloana „Status”, apasă pe comutatorul de pe rândul codului.",
             "Dacă era pornit, codul devine inactiv și eticheta se schimbă în „Inactiv”.",
             "Dacă era oprit, codul pornește și eticheta devine „Activ”.",
             "Același lucru îl poți face și din fereastra de editare, cu comutatorul „Discount activ”.",
@@ -484,32 +267,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["opresti cupon", "pornesti cod", "inactiv", "status discount"],
         },
         {
-          slug: "cum-copiezi-un-cod-de-discount",
-          titlu: "Cum copiezi un cod de discount",
-          rezumat: "Pictograma de copiere din coloana „Cod” pune codul în clipboard, ca să îl lipești într-un mesaj sau într-o postare.",
-          pasi: [
-            "Intră în panoul de administrare > Discounturi.",
-            "În coloana „Cod”, apasă pictograma de copiere de lângă codul dorit.",
-            "Apare mesajul „Cod copiat!” și pictograma se schimbă scurt într-o bifă verde.",
-            "Lipește codul unde ai nevoie, într-o postare, într-un email sau într-un mesaj către clienți.",
-          ],
-          detalii: [
-            { titlu: "Ce se copiază", text: "Se copiază doar textul codului, așa cum e salvat, cu majuscule. Nu se copiază și adresa magazinului sau un link de reducere." },
-            { titlu: "Confirmarea dispare singură", text: "Bifa verde ține aproximativ o jumătate de secundă, apoi pictograma revine la forma normală. Codul rămâne în clipboard până copiezi altceva." },
-          ],
-          termeni: ["clipboard", "copiere cupon", "trimiti cod clientilor"],
-        },
-        {
           slug: "cum-stergi-un-cod-de-discount",
           titlu: "Cum ștergi un cod de discount",
           rezumat: "Butonul cu coșul de gunoi de pe rândul codului deschide o confirmare, iar ștergerea nu se poate anula.",
           pasi: [
             "Intră în panoul de administrare > Discounturi.",
             "Pe rândul codului, apasă butonul cu coșul de gunoi din dreapta.",
-            {
-              text: "Se deschide fereastra „Șterge discount”, cu întrebarea dacă vrei să ștergi codul respectiv și cu precizarea „Acțiunea nu poate fi anulată.”.",
-              captura: { alt: "Fereastra „Șterge discount” cu butoanele „Anulează” și „Șterge”.", raport: 16 / 10 },
-            },
+            "Se deschide fereastra „Șterge discount”, cu întrebarea dacă vrei să ștergi codul respectiv și cu precizarea „Acțiunea nu poate fi anulată.”.",
             "Apasă „Șterge” ca să confirmi. Cât durează ștergerea, butonul scrie „Se șterge...”.",
             "Apare mesajul „Discount șters.” și fereastra se închide.",
           ],
@@ -530,10 +294,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în panoul de administrare și apasă „Discounturi” în meniul lateral, la pictograma de tichet.",
             "Se deschide pagina „Discounturi”, cu subtitlul „Creează și gestionează coduri promoționale”.",
             "Dacă nu ai încă niciun cod, vezi ecranul „Niciun cod de discount” și butonul „Creează primul discount”.",
-            {
-              text: "Dacă ai coduri, citește tabelul cu coloanele „Cod”, „Tip”, „Valoare”, „Utilizări”, „Expiră” și „Status”.",
-              captura: { alt: "Tabelul de discounturi cu toate coloanele și casetele de statistici de sub el.", raport: 16 / 10 },
-            },
+            "Dacă ai coduri, citește tabelul cu coloanele „Cod”, „Tip”, „Valoare”, „Utilizări”, „Expiră” și „Status”.",
             "Sub tabel găsești cele patru casete: „Total coduri”, „Active”, „Total utilizări” și „Expirate / Epuizate”.",
           ],
           detalii: [
@@ -554,10 +315,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Editează magazinul > Design magazin.",
             "Deschide secțiunea „Formular de comandă”.",
-            {
-              text: "La grupul „Câmpuri standard” caută rândul „Cod discount”, cu explicația „Permite clienților să aplice un cod de reducere”.",
-              captura: { alt: "Rândul „Cod discount” din grupul „Câmpuri standard”, cu comutatorul din dreapta.", raport: 16 / 10 },
-            },
+            "La grupul „Câmpuri standard” caută rândul „Cod discount”, cu explicația „Permite clienților să aplice un cod de reducere”.",
             "Pornește comutatorul din dreapta rândului.",
             "Salvează modificările.",
           ],
@@ -600,10 +358,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Creează codul în Discounturi și lasă-l activ.",
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Adaugă un pas nou al automatizării sau deschide unul existent.",
-            {
-              text: "Din lista derulantă de coduri alege codul dorit. Prima opțiune este „Fără cod reducere”, adică pasul se trimite fără reducere.",
-              captura: { alt: "Lista derulantă de coduri dintr-un pas al automatizării, cu opțiunea „Fără cod reducere” prima.", raport: 16 / 10 },
-            },
+            "Din lista derulantă de coduri alege codul dorit. Prima opțiune este „Fără cod reducere”, adică pasul se trimite fără reducere.",
             "Salvează pasul.",
           ],
           detalii: [
@@ -649,10 +404,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare de pe laptop sau desktop.",
             "În meniul lateral apeși pe \"Oferte\". Lângă denumire ai o pastilă \"Beta\".",
-            {
-              text: "Se deschide ecranul \"Oferte\", cu subtitlul \"Upsell, cross-sell si \"cumparate impreuna\" ca sa cresti valoarea comenzii.\".",
-              captura: { alt: "Ecranul Oferte cu caseta Funcție în BETA și lista de oferte.", raport: 16 / 10 },
-            },
+            "Se deschide ecranul \"Oferte\", cu subtitlul \"Upsell, cross-sell si \"cumparate impreuna\" ca sa cresti valoarea comenzii.\".",
             "Citești caseta \"Funcție în BETA\" de sub titlu.",
             "Dacă nu ai nicio ofertă, vezi \"Nicio ofertă încă\" și butonul \"Creează prima ofertă\".",
             "Dacă ai oferte, vezi lista lor, cu butonul \"Ofertă nouă\" în dreapta sus.",
@@ -670,35 +422,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["upsell", "cross-sell", "cumparate frecvent impreuna", "unde gasesc ofertele", "valoarea medie a comenzii", "beta"],
         },
         {
-          slug: "cum-cauti-o-oferta-in-lista",
-          titlu: "Cum cauți o ofertă în listă",
-          rezumat: "Filtrezi lista de oferte după nume sau după tipul ofertei.",
-          pasi: [
-            "Intră în panoul de administrare > Oferte.",
-            "Scrie în câmpul cu textul \"Caută o ofertă...\", de deasupra listei.",
-            "Lista se filtrează în timp ce scrii.",
-            "Șterge textul din câmp ca să vezi din nou toate ofertele.",
-          ],
-          detalii: [
-            { titlu: "După ce caută câmpul", text: "Căutarea se uită doar la numele ofertei și la eticheta tipului. Dacă scrii \"recomandari\", primești toate ofertele de tip Recomandări, chiar dacă acel cuvânt nu apare în numele lor. Nu poți căuta după produsele din ofertă sau după categorii." },
-            { titlu: "Literele mari nu contează", text: "Poți scrie cu majuscule sau cu litere mici, rezultatul e același." },
-            { titlu: "Când nu vezi câmpul de căutare", text: "Câmpul apare doar dacă ai cel puțin o ofertă creată. Pe un magazin fără oferte vezi doar starea goală, cu butonul \"Creează prima ofertă\"." },
-            { titlu: "Când nu se potrivește nimic", text: "Sub câmp apare mesajul \"Nicio ofertă pentru căutarea ta.\". Șterge o parte din text și încearcă cu mai puține cuvinte." },
-          ],
-          nota: "Numele intern al ofertei este cel după care cauți, nu titlul afișat clienților.",
-          termeni: ["filtrare oferte", "gasesc o oferta", "cautare in panou"],
-        },
-        {
           slug: "cum-creezi-o-oferta-cumparate-impreuna",
           titlu: "Cum creezi o ofertă \"Cumpărate împreună\"",
           rezumat: "Pui produsul de pe pagină într-un set cu alte produse, la un preț mai mic.",
           pasi: [
             "Intră în panoul de administrare > Oferte.",
             "Apeși \"Ofertă nouă\" din dreapta sus. Dacă nu ai nicio ofertă, apeși \"Creează prima ofertă\".",
-            {
-              text: "Pe ecranul \"Ofertă nouă\" apeși cartonașul \"Cumpărate împreună\". El este selectat din start.",
-              captura: { alt: "Ecranul Ofertă nouă cu cele trei cartonașe de tip și cel de Cumpărate împreună selectat.", raport: 16 / 10 },
-            },
+            "Pe ecranul \"Ofertă nouă\" apeși cartonașul \"Cumpărate împreună\". El este selectat din start.",
             "Completezi \"Nume ofertă (intern)\", de exemplu \"Set laptop plus geantă\".",
             "Dacă vrei, completezi \"Titlu afișat clienților (opțional)\".",
             "În secțiunea \"Când apare\" alegi \"Anumite produse\", \"O categorie\" sau \"Toate produsele\" și faci selecția.",
@@ -732,10 +462,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Completezi \"Nume ofertă (intern)\".",
             "Dacă vrei, completezi \"Titlu afișat clienților (opțional)\".",
             "În secțiunea \"Când apare\" alegi \"Anumite produse\", \"O categorie\" sau \"Toate produsele\".",
-            {
-              text: "În secțiunea \"Ce ofer\" adaugi manual produsele recomandate, sau pornești comutatorul \"Alege automat produse din aceeași categorie\".",
-              captura: { alt: "Secțiunea Ce ofer, cu comutatorul Alege automat produse din aceeași categorie.", raport: 16 / 10 },
-            },
+            "În secțiunea \"Ce ofer\" adaugi manual produsele recomandate, sau pornești comutatorul \"Alege automat produse din aceeași categorie\".",
             "Lași pornit comutatorul \"Activă (vizibilă în magazin)\" sau îl oprești.",
             "Apeși \"Creează oferta\" și aștepți mesajul \"Oferta creată.\".",
           ],
@@ -763,10 +490,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "În secțiunea \"Când apare\" alegi ce trebuie să conțină coșul: \"Anumite produse\", \"O categorie\" sau \"Toate produsele\".",
             "În secțiunea \"Ce ofer\" cauți în câmpul \"Caută produsul oferit...\" și apeși pe produs. Se poate alege un singur produs.",
             "În secțiunea \"Cât reduc\" alegi \"Reducere %\", \"Reducere sumă\" sau \"Preț fix\" și scrii valoarea.",
-            {
-              text: "Verifici caseta \"Preț special:\" de sub câmpuri.",
-              captura: { alt: "Previzualizarea Preț special, cu prețul nou și prețul vechi tăiat.", raport: 16 / 10 },
-            },
+            "Verifici caseta \"Preț special:\" de sub câmpuri.",
             "Apeși \"Creează oferta\" și aștepți mesajul \"Oferta creată.\".",
           ],
           detalii: [
@@ -788,10 +512,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în panoul de administrare > Oferte.",
             "Apeși \"Ofertă nouă\", sau apeși butonul cu creion de pe rândul unei oferte existente.",
             "Mergi la secțiunea \"Când apare\".",
-            {
-              text: "Alegi unul dintre butoanele \"Anumite produse\", \"O categorie\" sau \"Toate produsele\". Din start e ales \"Anumite produse\".",
-              captura: { alt: "Secțiunea Când apare, cu cele trei butoane și lista de produse alese.", raport: 16 / 10 },
-            },
+            "Alegi unul dintre butoanele \"Anumite produse\", \"O categorie\" sau \"Toate produsele\". Din start e ales \"Anumite produse\".",
             "Pentru \"Anumite produse\", scrii în câmpul \"Caută produsul pe pagina căruia apare oferta...\" și apeși pe produsul din rezultate. El se adaugă ca etichetă cu poză și nume.",
             "Scoți un produs adăugat din greșeală cu X de pe eticheta lui.",
             "Pentru \"O categorie\", apeși pe categoriile dorite din lista de butoane. Apeși din nou pe una ca s-o deselectezi.",
@@ -865,10 +586,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Oferte.",
             "Pe rândul ofertei apeși butonul cu pictograma de creion.",
-            {
-              text: "Se deschide ecranul \"Editează oferta\", cu o pastilă lângă titlu care arată tipul ofertei.",
-              captura: { alt: "Ecranul Editează oferta, cu pastila de tip lângă titlu.", raport: 16 / 10 },
-            },
+            "Se deschide ecranul \"Editează oferta\", cu o pastilă lângă titlu care arată tipul ofertei.",
             "Modifici ce ai nevoie: numele, titlul afișat, secțiunile \"Când apare\", \"Ce ofer\", \"Cât reduc\" și comutatorul \"Activă (vizibilă în magazin)\".",
             "Apeși \"Salvează\". Cât timp se salvează, butonul arată \"Se salvează...\".",
             "Apare mesajul \"Oferta actualizată.\" și te întorci la listă.",
@@ -960,7 +678,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Citește ecranul „Recuperează coșurile abandonate”.",
             {
               text: "Apasă butonul ACTIVEAZĂ FUNCȚIA.",
-              captura: { alt: "Ecranul „Recuperează coșurile abandonate” cu cele trei casete și butonul ACTIVEAZĂ FUNCȚIA.", raport: 16 / 10 },
+              captura: { alt: "Ecranul „Recuperează coșurile abandonate” cu cele trei casete și butonul ACTIVEAZĂ FUNCȚIA.", src: "/capturi/ajutor/marketing-si-clienti/cum-activezi-recuperarea-cosurilor-abandonate.webp", raport: 16 / 10 },
             },
             "Așteaptă cât timp pe buton scrie „Se activează...”.",
             "Verifică notificarea „Funcția a fost activată. Coșurile vor apărea pe măsură ce clienții le abandonează.” și că pagina s-a încărcat în modul activ.",
@@ -985,10 +703,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Rămâi pe fila Coșuri.",
             "Citește bannerul „Potențial de recuperat luna aceasta”.",
-            {
-              text: "Citește cele cinci casete de sub banner.",
-              captura: { alt: "Bannerul de potențial și cele cinci casete cu KPI-uri.", raport: 16 / 10 },
-            },
+            "Citește cele cinci casete de sub banner.",
             "Coboară la casetele „Cele mai abandonate produse” și „Activitate recentă”.",
           ],
           detalii: [
@@ -1012,10 +727,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Rămâi pe fila Coșuri și coboară la lista „Coșuri abandonate”.",
             "Uită-te la numărul dintre paranteze din titlul listei.",
-            {
-              text: "Citește rândurile clienților.",
-              captura: { alt: "Lista Coșuri abandonate cu etichetele și butoanele de pe un rând.", raport: 16 / 10 },
-            },
+            "Citește rândurile clienților.",
           ],
           detalii: [
             { titlu: "Ce scrie pe un rând", text: "Numele clientului sau „Client anonim”, etichetele coșului, apoi contactul sub forma telefon · email sau textul „Fără contact”, iar la final „N produse · <sumă> · acum X ore”." },
@@ -1037,10 +749,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Găsește clientul în lista „Coșuri abandonate”.",
-            {
-              text: "Apasă butonul Mail de pe rândul lui.",
-              captura: { alt: "Fereastra „Trimite email de recuperare” cu mesajul pre-completat și lista de coduri.", raport: 16 / 10 },
-            },
+            "Apasă butonul Mail de pe rândul lui.",
             "Verifică rândul „Către”, unde apar numele și adresa clientului.",
             "Lasă textul pre-completat sau scrie mesajul tău.",
             "La „Cod reducere (opțional)” alege un cod sau lasă „Fără cod reducere”.",
@@ -1066,10 +775,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Integrări.",
             "Mergi la categoria SMS.",
-            {
-              text: "Deschide Notice.ro și pornește comutatorul „SMS coș abandonat”.",
-              captura: { alt: "Comutatorul „SMS coș abandonat” din pagina Notice.ro.", raport: 16 / 10 },
-            },
+            "Deschide Notice.ro și pornește comutatorul „SMS coș abandonat”.",
             "Dacă folosești SMSO, deschide Smso.ro și completează cheia API și senderul.",
             "Întoarce-te în Coșuri abandonate și verifică dacă butonul SMS apare pe rândurile clienților.",
           ],
@@ -1091,10 +797,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Găsește clientul în lista „Coșuri abandonate”.",
-            {
-              text: "Apasă butonul SMS de pe rândul lui.",
-              captura: { alt: "Fereastra „Trimite SMS de recuperare” cu numărătoarea de caractere.", raport: 16 / 10 },
-            },
+            "Apasă butonul SMS de pe rândul lui.",
             "Verifică rândul „Către”, unde apar numele și numărul de telefon.",
             "Lasă textul pre-completat sau scrie mesajul tău.",
             "Verifică numărătoarea de sub casetă.",
@@ -1119,10 +822,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Găsește rândul clientului în lista „Coșuri abandonate”.",
-            {
-              text: "Apasă butonul pătrat cu pictograma de coș de gunoi, care la trecerea cu mouse-ul arată „Șterge”.",
-              captura: { alt: "Butonul de ștergere de la capătul unui rând din listă.", raport: 16 / 10 },
-            },
+            "Apasă butonul pătrat cu pictograma de coș de gunoi, care la trecerea cu mouse-ul arată „Șterge”.",
             "Așteaptă până lista se reîncarcă și rândul dispare.",
           ],
           detalii: [
@@ -1141,10 +841,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Rămâi pe fila Coșuri.",
-            {
-              text: "În dreapta titlului „Coșuri abandonate”, apasă Dezactivează.",
-              captura: { alt: "Butonul Dezactivează din dreapta titlului paginii.", raport: 16 / 10 },
-            },
+            "În dreapta titlului „Coșuri abandonate”, apasă Dezactivează.",
             "Verifică notificarea „Funcția a fost dezactivată.” și faptul că pagina a revenit la ecranul de activare.",
           ],
           detalii: [
@@ -1165,10 +862,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Apasă fila Automatizări.",
             "Pornește comutatorul „Activează automatizările”.",
-            {
-              text: "Apasă „Folosește secvența recomandată” dacă nu ai niciun pas, sau „Adaugă pas” ca să construiești tu.",
-              captura: { alt: "Caseta „Secvența de mesaje” cu cei trei pași ai secvenței recomandate.", raport: 16 / 10 },
-            },
+            "Apasă „Folosește secvența recomandată” dacă nu ai niciun pas, sau „Adaugă pas” ca să construiești tu.",
             "Pentru fiecare pas completează câmpul „După ... ore”.",
             "Alege canalul, Email sau SMS.",
             "Scrie mesajul pasului sau lasă textul standard.",
@@ -1198,10 +892,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în panoul de administrare > Coșuri abandonate.",
             "Apasă fila Automatizări și coboară la caseta Reguli.",
-            {
-              text: "La „Valoare minimă coș (opțional)” scrie suma de la care trimiți mesaje.",
-              captura: { alt: "Caseta Reguli cu valoarea minimă și intervalul de ore liniștite.", raport: 16 / 10 },
-            },
+            "La „Valoare minimă coș (opțional)” scrie suma de la care trimiți mesaje.",
             "Bifează „Ore liniștite (fără SMS)” dacă vrei un interval fără SMS.",
             "Completează ora de început la „de la” și ora de sfârșit la „până la”.",
             "Apasă „Salvează automatizarea”.",
@@ -1223,10 +914,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           intro: "Nu există buton de trimitere pe loc pentru automatizări. Platforma verifică singură coșurile la fiecare 15 minute și trimite pașii ajunși la scadență.",
           pasi: [
             "Intră în panoul de administrare > Coșuri abandonate și verifică dacă funcția este activată.",
-            {
-              text: "Deschide fila Automatizări și verifică dacă e pornit comutatorul „Activează automatizările”.",
-              captura: { alt: "Comutatorul „Activează automatizările” din fila Automatizări.", raport: 16 / 10 },
-            },
+            "Deschide fila Automatizări și verifică dacă e pornit comutatorul „Activează automatizările”.",
             "Verifică dacă ai cel puțin un pas salvat în „Secvența de mesaje”.",
             "Verifică dacă planul contului este Premium sau Ultra.",
             "Urmărește etichetele „Mail trimis” și „SMS trimis” din lista de coșuri ca să vezi ce a plecat.",
@@ -1249,10 +937,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           rezumat: "Textul emailului se schimbă din șablonul Coș abandonat, iar linkul din el reface coșul clientului în magazin.",
           pasi: [
             "Intră în panoul de administrare > Setări > Email.",
-            {
-              text: "Deschide șablonul „Coș abandonat”.",
-              captura: { alt: "Șablonul „Coș abandonat” deschis în Setări > Email.", raport: 16 / 10 },
-            },
+            "Deschide șablonul „Coș abandonat”.",
             "Modifică subiectul, titlul, textul de introducere și textul butonului.",
             "Salvează șablonul.",
           ],
@@ -1283,10 +968,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Deschide-ți contul de pe smso.ro. Dacă nu ai unul, înregistrează-te.",
             "În SMSO mergi la Setări > Dezvoltatori > API și copiază cheia API generată. Din Edinio ajungi acolo cu linkul \"Deschide în SMSO\" de la pasul 2.",
             "În SMSO mergi la Sendere, adaugă un sender și notează ID-ul numeric afișat în listă. Linkul \"Deschide în SMSO\" de la pasul 3 te duce direct acolo.",
-            {
-              text: "Înapoi în Edinio, pornește comutatorul \"Activează SMSO\".",
-              captura: { alt: "Pagina Integrări > Smso.ro cu comutatorul Activează SMSO pornit și câmpurile Cheie API SMSO și Sender ID.", raport: 16 / 10 },
-            },
+            "Înapoi în Edinio, pornește comutatorul \"Activează SMSO\".",
             "Lipește cheia în câmpul \"Cheie API SMSO\".",
             "Scrie numărul notat în câmpul \"Sender ID\".",
             "Apasă \"Salvează integrarea\".",
@@ -1309,10 +991,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în Integrări > Smso.ro.",
             "Completează \"Cheie API SMSO\" și \"Sender ID\".",
             "Coboară la panoul \"Testează integrarea\".",
-            {
-              text: "Scrie numărul tău în câmpul cu textul-ghid \"07XXXXXXXX sau +407XXXXXXXX\".",
-              captura: { alt: "Panoul Testează integrarea cu câmpul de număr de telefon și butonul Trimite test.", raport: 16 / 10 },
-            },
+            "Scrie numărul tău în câmpul cu textul-ghid \"07XXXXXXXX sau +407XXXXXXXX\".",
             "Apasă \"Trimite test\". Cât se trimite, butonul scrie \"Se trimite...\".",
             "Citește caseta de rezultat de deasupra câmpului.",
           ],
@@ -1333,10 +1012,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în Integrări > Smso.ro.",
             "Verifică dacă \"Activează SMSO\" este pornit. Cât timp e stins, comutatorul de mai jos nu se poate apăsa.",
             "Coboară la rândul \"SMS automat la schimbarea statusului\".",
-            {
-              text: "Pornește comutatorul din dreapta.",
-              captura: { alt: "Rândul SMS automat la schimbarea statusului, cu comutatorul pornit.", raport: 16 / 10 },
-            },
+            "Pornește comutatorul din dreapta.",
             "Apasă \"Salvează integrarea\".",
           ],
           detalii: [
@@ -1349,46 +1025,6 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["notificare comanda", "sms client", "status comanda", "expediat", "awb", "mesaj automat"],
         },
         {
-          slug: "deschizi-ecranul-sms-marketing",
-          titlu: "Cum deschizi ecranul SMS Marketing",
-          rezumat: "Intrarea din meniu apare abia după ce integrarea SMSO este activată.",
-          pasi: [
-            "Intră în Integrări > Smso.ro și pornește \"Activează SMSO\", dacă nu ai făcut-o deja.",
-            {
-              text: "În meniul lateral, sub lista obișnuită de secțiuni, apasă \"SMS Marketing\".",
-              captura: { alt: "Meniul lateral cu intrarea SMS Marketing sub lista obișnuită de secțiuni.", raport: 16 / 10 },
-            },
-            "Pe telefon, deschide meniul din bara de sus și apasă tot \"SMS Marketing\".",
-          ],
-          detalii: [
-            { titlu: "Ce găsești pe pagină", text: "Sus, titlul \"SMS Marketing\" și textul \"Trimite campanii SMS catre clientii tai\". În dreapta sus, caseta \"Credit SMSO\". Apoi, de sus în jos: panoul \"Filtrează destinatarii\", panoul \"Șabloane\", panoul \"Compune mesajul\", butonul de trimitere și panoul \"Istoric campanii\"." },
-            { titlu: "Dacă intrarea nu apare în meniu", text: "Înseamnă că integrarea SMSO nu este activată. Dacă intri direct pe adresa paginii fără SMSO pornit, ești dus în Setări, unde nu există niciun formular pentru SMSO. Singurul loc de configurare este Integrări > Smso.ro." },
-            { titlu: "Cine poate intra", text: "Ecranul nu depinde de planul tău. Acțiunile din pagină, previzualizarea destinatarilor, șabloanele și trimiterea, cer să fii proprietarul magazinului. Altfel primești \"Neautorizat\" sau \"Acces interzis\"." },
-          ],
-          termeni: ["meniu sms", "campanii sms", "unde gasesc sms marketing", "dashboard sms"],
-        },
-        {
-          slug: "verifici-creditul-smso",
-          titlu: "Cum verifici creditul SMSO din SMS Marketing",
-          rezumat: "Apeși un buton în dreapta sus și vezi cât credit mai ai în contul SMSO.",
-          pasi: [
-            "Intră în SMS Marketing.",
-            {
-              text: "În colțul din dreapta sus, sub eticheta \"Credit SMSO\", apasă \"Vezi creditul\".",
-              captura: { alt: "Caseta Credit SMSO din dreapta sus, cu butonul Vezi creditul.", raport: 16 / 10 },
-            },
-            "Cât se încarcă, butonul afișează trei puncte.",
-            "Citește suma apărută în locul butonului.",
-          ],
-          detalii: [
-            { titlu: "Cum se comportă butonul", text: "Creditul nu se încarcă singur la deschiderea paginii, trebuie apăsat butonul. După ce suma apare, butonul dispare din pagină. Ca să vezi o valoare actualizată, reîncarci pagina și apeși din nou." },
-            { titlu: "Ce arată suma", text: "Este valoarea din contul tău SMSO, afișată cu semnul dolarului în față și cu două zecimale." },
-            { titlu: "Mesajele de eroare", text: "\"SMSO nu este configurat.\" înseamnă că nu există o cheie API salvată pentru magazin, deci mergi în Integrări > Smso.ro și salvezi integrarea. \"Nu am putut obține creditul.\", \"Eroare la obținerea creditului.\" și \"Eroare la verificarea creditului.\" apar când răspunsul de la SMSO nu ajunge, iar atunci încerci din nou peste puțin timp. \"Neautorizat\" și \"Acces interzis\" apar dacă nu ești proprietarul magazinului." },
-          ],
-          nota: "Edinio nu afișează prețul unui SMS și nici costul unei campanii. Alimentarea și tarifele țin de contul tău SMSO.",
-          termeni: ["credit sms", "sold smso", "cati bani am", "alimentare cont sms"],
-        },
-        {
           slug: "alegi-destinatarii-campaniei-sms",
           titlu: "Cum alegi destinatarii unei campanii SMS",
           rezumat: "Pui filtre pe comenzi și afli, înainte de trimitere, câți clienți prinde campania.",
@@ -1398,10 +1034,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Scrie un prag în \"Suma minimă comandă (lei)\".",
             "La \"Status comandă\" apasă statusurile dorite. Apeși din nou pe un status ca să îl deselectezi.",
             "Apasă \"Județe\" ca să desfășori lista și bifează județele dorite.",
-            {
-              text: "Apasă \"Preview destinatari\". Cât se calculează, butonul scrie \"Se calculează...\".",
-              captura: { alt: "Panoul Filtrează destinatarii cu filtre puse și caseta de rezultat de sub butonul Preview destinatari.", raport: 16 / 10 },
-            },
+            "Apasă \"Preview destinatari\". Cât se calculează, butonul scrie \"Se calculează...\".",
             "Citește caseta cu rezultatul, de sub buton.",
           ],
           detalii: [
@@ -1422,10 +1055,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în SMS Marketing și coboară la panoul \"Compune mesajul\".",
             "Scrie textul în câmpul mare.",
-            {
-              text: "Urmărește contorul din dreapta sus, care arată câte caractere ai scris din 160.",
-              captura: { alt: "Panoul Compune mesajul cu textul scris și contorul de caractere din dreapta sus.", raport: 16 / 10 },
-            },
+            "Urmărește contorul din dreapta sus, care arată câte caractere ai scris din 160.",
             "Verifică, lângă contor, câte SMS-uri consumă fiecare destinatar.",
           ],
           detalii: [
@@ -1443,10 +1073,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în SMS Marketing.",
             "Apasă rândul \"Șabloane\" ca să deschizi panoul. Este închis din start.",
-            {
-              text: "Apasă \"Șablon nou\".",
-              captura: { alt: "Panoul Șabloane deschis, cu formularul de șablon nou.", raport: 16 / 10 },
-            },
+            "Apasă \"Șablon nou\".",
             "Scrie numele în câmpul cu textul-ghid \"Nume sablon (ex: Reducere 20%)\".",
             "Scrie textul în câmpul cu textul-ghid \"Textul mesajului SMS...\".",
             "Apasă \"Salvează\". Dacă te răzgândești, apasă \"Anulează\".",
@@ -1467,10 +1094,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în SMS Marketing și apasă rândul \"Șabloane\".",
             "La șablonul dorit apasă \"Aplică\". Textul intră în câmpul din \"Compune mesajul\" și apare confirmarea \"Sablon aplicat.\"",
-            {
-              text: "Ca să ștergi un șablon, apasă pictograma de coș de gunoi de pe rândul lui.",
-              captura: { alt: "Lista de șabloane cu butonul Aplică și pictograma de coș pe fiecare rând.", raport: 16 / 10 },
-            },
+            "Ca să ștergi un șablon, apasă pictograma de coș de gunoi de pe rândul lui.",
             "Pe același rând apar \"Da, șterge\" și \"Anulează\".",
             "Apasă \"Da, șterge\" ca să confirmi.",
           ],
@@ -1490,10 +1114,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Pune filtrele și apasă \"Preview destinatari\".",
             "Scrie textul în panoul \"Compune mesajul\".",
             "Apasă butonul mare de sub panou, care arată către câți clienți pleacă mesajul.",
-            {
-              text: "În fereastra \"Confirmă trimiterea\" citește câte SMS-uri pleacă și previzualizarea mesajului.",
-              captura: { alt: "Fereastra Confirmă trimiterea, cu numărul de SMS-uri și previzualizarea mesajului.", raport: 16 / 10 },
-            },
+            "În fereastra \"Confirmă trimiterea\" citește câte SMS-uri pleacă și previzualizarea mesajului.",
             "Apasă \"Trimite\". Dacă vrei să renunți, apasă \"Anulează\".",
           ],
           detalii: [
@@ -1506,64 +1127,18 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           nota: "Trimiterea nu poate fi programată pentru mai târziu și nu poate fi oprită după ce ai apăsat \"Trimite\".",
           termeni: ["campanie sms", "trimitere in masa", "confirmare trimitere", "marketing sms"],
         },
-        {
-          slug: "citesti-istoricul-campaniilor-sms",
-          titlu: "Cum citești istoricul campaniilor SMS",
-          rezumat: "Vezi ce campanii au plecat, către câți clienți și câte mesaje au eșuat.",
-          pasi: [
-            "Intră în SMS Marketing.",
-            {
-              text: "Coboară la panoul \"Istoric campanii\", aflat jos pe pagină.",
-              captura: { alt: "Panoul Istoric campanii cu rânduri de campanii și etichetele de stare.", raport: 16 / 10 },
-            },
-            "Citește pe fiecare rând textul mesajului, eticheta de stare și cifrele campaniei.",
-          ],
-          detalii: [
-            { titlu: "Ce înseamnă etichetele", text: "\"Trimis\" arată că toate mesajele au plecat. \"Parțial\" arată că o parte au eșuat. \"Eșuat\" arată că nu a plecat niciunul. Dacă vezi \"Eșuat\" pe o campanie întreagă, verifică creditul din contul SMSO și datele integrării din Integrări > Smso.ro." },
-            { titlu: "Ce cifre apar pe rând", text: "Numărul de destinatari, numărul de mesaje trimise și, dacă a fost cazul, numărul de mesaje eșuate. La final apare data campaniei, în forma 19 august 2026. Din textul mesajului se văd primele două rânduri." },
-            { titlu: "Cât se încarcă", text: "Ultimele 50 de campanii, cele mai noi primele. Campaniile mai vechi de acestea nu se pot deschide din ecran." },
-            { titlu: "Ce nu găsești aici", text: "Nu există buton de retrimitere, de ștergere sau de deschidere a detaliilor unei campanii. Nu apar filtrele folosite la campania respectivă și nici costul ei." },
-            { titlu: "Când lista este goală", text: "Dacă nu ai trimis nimic încă, panoul arată \"Nicio campanie trimisa inca.\"" },
-          ],
-          termeni: ["istoric sms", "campanii trimise", "esuate", "raport campanie"],
-        },
       ],
     },
     {
       titlu: "Marketing și analytics",
       ghiduri: [
         {
-          slug: "unde-gasesti-integrarile-de-marketing-si-statistici",
-          titlu: "Cum ajungi la integrările de marketing și statistici",
-          rezumat: "Toate integrările de marketing, email și statistici se configurează din pagina Integrări a panoului de administrare.",
-          pasi: [
-            "Intră în panoul de administrare și apasă Integrări în meniul lateral.",
-            {
-              text: "Derulează până la secțiunea de care ai nevoie. În pagină apar, în ordine, SMS, Email marketing, Marketing și Statistici.",
-              captura: { alt: "Pagina Integrări cu secțiunile Marketing și Statistici și cardurile lor", raport: 16 / 10 },
-            },
-            "Apasă pe cardul integrării pe care vrei să o configurezi.",
-          ],
-          detalii: [
-            { titlu: "Ce găsești în fiecare secțiune", text: "SMS: Notice.ro și Smso.ro. Email marketing: Mailchimp, Brevo și Klaviyo. Marketing: Facebook Pixel, TikTok Pixel, Google Ads, Google Merchant Center și Facebook Catalog. Statistici: Google Analytics." },
-            { titlu: "Ce înseamnă eticheta de pe card", text: "Sub numele integrării vezi fie eticheta verde Activ, fie Configurează. Activ înseamnă că integrarea are datele salvate: la Facebook Pixel un Pixel ID, la TikTok Pixel un Pixel ID, la Google Ads un Tag ID, la Google Analytics o conexiune făcută, iar la Mailchimp, Brevo și Klaviyo un cont conectat și o listă sau audiență aleasă. Doar contul conectat, fără listă aleasă, nu duce cardul pe Activ." },
-            { titlu: "Eticheta Nou", text: "În secțiunile de marketing și email, eticheta Nou apare lângă numele Mailchimp, Brevo, Klaviyo și Facebook Catalog." },
-            { titlu: "Ce îți trebuie ca să intri", text: "Trebuie să fii autentificat. Lista de integrări se deschide și fără magazin creat, dar paginile individuale ale integrărilor te trimit înapoi în panou dacă nu ai un magazin. Dacă abonamentul nu mai este activ, panoul te duce la pagina de reactivare înainte să ajungi aici." },
-            { titlu: "Din interiorul unei integrări", text: "În partea de sus a fiecărei pagini de integrare ai o legătură de întoarcere către Integrări. La Mailchimp, Brevo și Klaviyo, legătura scrie Înapoi la integrări." },
-          ],
-          nota: "Secțiunea Statistici din pagina Integrări nu este același lucru cu pagina Statistici din meniul lateral. Aici configurezi doar legătura cu Google Analytics.",
-          termeni: ["integrari", "pixel", "tracking", "analytics", "conectare servicii externe", "carduri"],
-        },
-        {
           slug: "cum-conectezi-facebook-pixel",
           titlu: "Cum conectezi Facebook Pixel",
           rezumat: "Lipești Pixel ID-ul din Events Manager în pagina Facebook Pixel și salvezi.",
           pasi: [
             "Intră în Integrări > Facebook Pixel.",
-            {
-              text: "În panoul Pixel ID lipește ID-ul pixelului tău. Câmpul are exemplul „ex: 1234567890123456”.",
-              captura: { alt: "Panoul Pixel ID din pagina Facebook Pixel, cu câmpul completat și butonul Salvează", raport: 16 / 10 },
-            },
+            "În panoul Pixel ID lipește ID-ul pixelului tău. Câmpul are exemplul „ex: 1234567890123456”.",
             "Apasă Salvează. Cât durează salvarea, butonul scrie Se salvează.",
             "Verifică sus caseta verde Facebook Pixel activ, cu ID-ul afișat.",
           ],
@@ -1584,10 +1159,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           rezumat: "Lipești Pixel ID-ul din TikTok Events Manager în pagina TikTok Pixel și salvezi.",
           pasi: [
             "Intră în Integrări > TikTok Pixel.",
-            {
-              text: "În panoul Pixel ID lipește ID-ul pixelului. Câmpul are exemplul „ex: C4ABCDEF1234567890”.",
-              captura: { alt: "Panoul Pixel ID din pagina TikTok Pixel cu câmpul completat", raport: 16 / 10 },
-            },
+            "În panoul Pixel ID lipește ID-ul pixelului. Câmpul are exemplul „ex: C4ABCDEF1234567890”.",
             "Apasă Salvează.",
             "Verifică caseta verde TikTok Pixel activ, cu ID-ul afișat.",
           ],
@@ -1627,10 +1199,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > Google Ads.",
             "Completează câmpul Tag ID. Exemplul din câmp este „ex: AW-123456789 sau G-XXXXXXXXXX”.",
-            {
-              text: "Completează Conversion Label (Purchase), dacă vrei ca acțiunile de conversie din Google Ads să primească comenzile.",
-              captura: { alt: "Câmpurile Tag ID și Conversion Label (Purchase) din pagina Google Ads", raport: 16 / 10 },
-            },
+            "Completează Conversion Label (Purchase), dacă vrei ca acțiunile de conversie din Google Ads să primească comenzile.",
             "Apasă Salvează.",
             "Verifică caseta verde Google Tag activ, cu valoarea afișată.",
           ],
@@ -1651,10 +1220,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           rezumat: "Introduci ID-ul de măsurare GA4 în pagina Google Analytics și măsurarea pornește pe magazin, fără cod.",
           pasi: [
             "Intră în Integrări > Google Analytics.",
-            {
-              text: "În câmpul ID de măsurare GA4 scrie ID-ul proprietății tale, în formatul G-XXXXXXXXXX.",
-              captura: { alt: "Câmpul ID de măsurare GA4 și butonul Activează", raport: 16 / 10 },
-            },
+            "În câmpul ID de măsurare GA4 scrie ID-ul proprietății tale, în formatul G-XXXXXXXXXX.",
             "Apasă Activează, sau tasta Enter din câmp.",
             "Verifică mesajul „Măsurarea Google Analytics este activă pe magazin.” Pagina se reîncarcă în ecranul Google Analytics conectat manual, unde apare ID de măsurare cu valoarea ta.",
           ],
@@ -1674,10 +1240,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           rezumat: "Conectezi contul Google prin autorizare și aduci rapoartele Google Analytics în panou.",
           pasi: [
             "Intră în Integrări > Google Analytics.",
-            {
-              text: "Apasă Conectează Google Analytics. Cât se încarcă, butonul scrie Se deschide Google.",
-              captura: { alt: "Ecranul Conectează Google Analytics cu butonul de conectare", raport: 16 / 10 },
-            },
+            "Apasă Conectează Google Analytics. Cât se încarcă, butonul scrie Se deschide Google.",
             "Pe pagina Google alege contul și acceptă accesul.",
             "La revenire citește mesajul afișat de Edinio și, dacă ți se cere, alege proprietatea.",
           ],
@@ -1772,10 +1335,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > Google Analytics. Sus vezi banda Conectat la Google Analytics, cu numele proprietății, ID-ul ei și adresa de email a contului Google.",
             "Alege perioada din butoanele 7 zile, 28 zile sau 90 zile. Implicit este 28 zile.",
-            {
-              text: "Citește cele opt casete de indicatori și procentul de creștere sau scădere față de perioada precedentă.",
-              captura: { alt: "Casetele de indicatori și selectorul de perioadă din raportul Google Analytics", raport: 16 / 10 },
-            },
+            "Citește cele opt casete de indicatori și procentul de creștere sau scădere față de perioada precedentă.",
             "Derulează la graficul Utilizatori și sesiuni și apoi la tabele.",
             "Apasă Actualizează dacă vrei date reîncărcate, sau Deschide în GA ca să mergi în contul tău Google Analytics.",
           ],
@@ -1791,32 +1351,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["trafic", "surse", "canale", "venit", "tranzactii", "vizitatori acum", "perioada"],
         },
         {
-          slug: "cum-deconectezi-google-analytics",
-          titlu: "Cum deconectezi Google Analytics",
-          rezumat: "Scoți legătura cu Google Analytics dintr-o singură apăsare, de la baza paginii.",
-          pasi: [
-            "Intră în Integrări > Google Analytics.",
-            "Derulează la baza paginii.",
-            "Apasă Deconectează Google Analytics.",
-            "Citește mesajul „Google Analytics deconectat.”",
-          ],
-          detalii: [
-            { titlu: "Unde apare butonul", text: "Îl găsești în ecranul Google Analytics conectat manual și în ecranul cu rapoarte. Nu apare în ecranul de conectare și nici în ecranul Alege proprietatea Google Analytics." },
-          ],
-          nota: "Dacă vrei doar să oprești măsurarea pe magazin, fără să scoți conexiunea, folosește comutatorul din caseta Măsurare pe magazin.",
-          termeni: ["scoate analytics", "sterge conexiune", "deconectare cont google"],
-        },
-        {
           slug: "cum-conectezi-mailchimp",
           titlu: "Cum conectezi contul Mailchimp",
           rezumat: "Generezi o cheie API în Mailchimp și o lipești în pagina integrării.",
           pasi: [
             "Intră în Integrări > Mailchimp.",
             "În Mailchimp deschide Account > Extras > API keys și generează o cheie.",
-            {
-              text: "Lipește cheia în câmpul Cheie API Mailchimp. Exemplul din câmp este „ex: 0123abcd...-us21”.",
-              captura: { alt: "Câmpul Cheie API Mailchimp și butonul Conectează contul", raport: 16 / 10 },
-            },
+            "Lipește cheia în câmpul Cheie API Mailchimp. Exemplul din câmp este „ex: 0123abcd...-us21”.",
             "Apasă Conectează contul.",
             "Verifică caseta verde Conectat, care arată numele contului tău Mailchimp.",
           ],
@@ -1835,10 +1376,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           rezumat: "Selectezi audiența în care intră abonații și decizi de unde vin ei.",
           pasi: [
             "Intră în Integrări > Mailchimp.",
-            {
-              text: "În panoul Audiența (listă) alege audiența din lista derulantă. Fiecare apare cu numele și numărul de abonați.",
-              captura: { alt: "Panoul Audiența (listă) cu lista derulantă și comutatoarele de setări", raport: 16 / 10 },
-            },
+            "În panoul Audiența (listă) alege audiența din lista derulantă. Fiecare apare cu numele și numărul de abonați.",
             "Pornește sau oprește comutatoarele de care ai nevoie.",
             "Completează, dacă vrei, câmpul Etichete implicite (opțional). Exemplul din câmp este „ex: Edinio, Newsletter”.",
             "Apasă Salvează. Mesajul este „Setări salvate.”",
@@ -1883,10 +1421,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > Brevo.",
             "În Brevo deschide SMTP & API > API Keys și generează o cheie.",
-            {
-              text: "Lipește cheia în câmpul Cheie API Brevo. Exemplul din câmp este „ex: xkeysib-...”.",
-              captura: { alt: "Câmpul Cheie API Brevo și panoul Listă de contacte", raport: 16 / 10 },
-            },
+            "Lipește cheia în câmpul Cheie API Brevo. Exemplul din câmp este „ex: xkeysib-...”.",
             "Apasă Conectează contul.",
             "În panoul Listă de contacte alege lista din lista derulantă. Fiecare apare cu numele și numărul de contacte.",
             "Pornește comutatoarele de care ai nevoie și apasă Salvează.",
@@ -1929,10 +1464,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > Klaviyo.",
             "În Klaviyo mergi la Settings > API keys și creează o cheie privată, cu acces complet.",
-            {
-              text: "Lipește cheia în câmpul Cheie API privată Klaviyo. Exemplul din câmp este „ex: pk_...”.",
-              captura: { alt: "Câmpul Cheie API privată Klaviyo și butonul Conectează contul", raport: 16 / 10 },
-            },
+            "Lipește cheia în câmpul Cheie API privată Klaviyo. Exemplul din câmp este „ex: pk_...”.",
             "Apasă Conectează contul.",
             "În panoul Listă de contacte alege lista din lista derulantă.",
             "Pornește comutatoarele de care ai nevoie și apasă Salvează.",
@@ -1976,10 +1508,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Intră în Integrări > Notice.ro.",
             "Înregistrează-te pe notice.ro și adaugă credit SMS, dacă nu ai deja cont.",
             "Generează tokenul API în contul notice.ro.",
-            {
-              text: "Lipește tokenul în câmpul Token API notice.ro.",
-              captura: { alt: "Câmpul Token API notice.ro și butonul Testează conexiunea", raport: 16 / 10 },
-            },
+            "Lipește tokenul în câmpul Token API notice.ro.",
             "Apasă Testează conexiunea. Cât durează, butonul scrie Se testează.",
             "Citește caseta verde care spune că legătura a reușit și câte șabloane au fost găsite în contul tău.",
           ],
@@ -2002,10 +1531,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Pornește comutatorul Activează notice.ro.",
             "Lasă pornit sau oprește comutatorul Elimină diacriticele (SMS).",
             "Derulează la Notificări la status comandă și la Notificări la status plată.",
-            {
-              text: "La fiecare scenariu dorit pornește canalele: SMS, WhatsApp sau Apel.",
-              captura: { alt: "Secțiunea Notificări la status comandă cu comutatoarele de canal și lista de șabloane", raport: 16 / 10 },
-            },
+            "La fiecare scenariu dorit pornește canalele: SMS, WhatsApp sau Apel.",
             "Alege din lista Șablon notice.ro mesajul pentru fiecare scenariu pornit.",
             "Apasă Salvează integrarea. Mesajul este „Integrarea notice.ro a fost salvată.”",
           ],
@@ -2026,10 +1552,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "Intră în Integrări > Notice.ro. Ai nevoie de token în câmp și de comutatorul Activează notice.ro pornit.",
             "În panoul Conectează WhatsApp apasă butonul Conectează WhatsApp.",
-            {
-              text: "În caseta Conectare cu cod (recomandat) scrie numărul, în formatul 07XXXXXXXX, și apasă Obține cod.",
-              captura: { alt: "Caseta Conectare cu cod (recomandat) cu câmpul de număr și butonul Obține cod", raport: 16 / 10 },
-            },
+            "În caseta Conectare cu cod (recomandat) scrie numărul, în formatul 07XXXXXXXX, și apasă Obține cod.",
             "Codul apare sub eticheta Cod de asociere.",
             "Pe telefon deschide WhatsApp și mergi la Dispozitive conectate > Conectează un dispozitiv > Conectează cu număr de telefon.",
             "Introdu codul de 6 cifre și așteaptă. Mesajul de reușită este „WhatsApp conectat cu succes.”",
@@ -2120,30 +1643,6 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["test sms", "test whatsapp", "test apel", "credit consumat", "verificare integrare"],
         },
         {
-          slug: "unde-gasesti-feedurile-meta-segmentate",
-          titlu: "Cum ajungi la feedurile Meta segmentate",
-          rezumat: "Drumul până la panoul „Feeduri segmentate” din integrarea Facebook Catalog și ce vezi acolo.",
-          intro: "Feedurile segmentate sunt adrese separate ale catalogului tău, fiecare cu regulile ei: numai anumite categorii, numai anumite produse, numai un interval de preț. Le găsești în integrarea Facebook Catalog.",
-          pasi: [
-            "Intră în panoul de administrare > Integrări.",
-            "Coboară la rubrica „Marketing”.",
-            "Apasă cardul „Facebook Catalog”, cel cu eticheta „Nou”.",
-            "Se deschide pagina integrării, cu link înapoi spre „Integrări” în antet.",
-            {
-              text: "Coboară sub blocul de conectare a catalogului, la panoul „Feeduri segmentate”.",
-              captura: { alt: "Panoul „Feeduri segmentate” din pagina integrării Facebook Catalog", raport: 16 / 10 },
-            },
-          ],
-          detalii: [
-            { titlu: "Cardul rămâne pe „Configurează”", text: "Cardul „Facebook Catalog” din lista de integrări arată „Configurează” tot timpul, și după ce ți-ai făcut feedurile. Eticheta „Activ” nu apare pentru această integrare, oricâte feeduri ai configura. Confirmarea că ai treaba făcută o vezi în lista din panoul „Feeduri segmentate”, nu pe card." },
-            { titlu: "Ce conține panoul", text: "Primul rând din listă este feedul implicit „Toate produsele”, cu numărul de produse active din magazin și adresa completă. Sub el stau feedurile tale segmentate. Dacă nu ai niciun feed segmentat, scrie „Niciun feed segmentat. Cel de mai sus trimite tot catalogul.”" },
-            { titlu: "Adresa feedului implicit", text: "Feedul „Toate produsele” are adresa magazinului urmată de /facebook-catalog.xml, fără parametri. Câmpul cu adresa se poate doar citi și se selectează singur când dai clic în el. Butonul cu pictograma de copiere pune adresa în clipboard și apare mesajul „Adresa copiată.” Feedurile segmentate au aceeași adresă, plus ?feed= și cheia feedului." },
-            { titlu: "Dacă pagina te trimite în altă parte", text: "Ai nevoie de cont autentificat cu onboarding terminat, altfel ajungi la autentificare sau la pașii de onboarding. Dacă abonamentul nu mai e valid sau perioada de trial a expirat, întreg panoul de administrare te trimite la pagina de reactivare. Dacă utilizatorul tău nu are niciun magazin legat, ajungi înapoi în panou." },
-          ],
-          nota: "Adresa feedului folosește domeniul tău propriu dacă l-ai conectat. Fără domeniu propriu, adresa este pe edinio.com.",
-          termeni: ["feed segmentat", "Facebook Catalog", "Integrări", "Marketing", "catalog Meta", "facebook-catalog.xml"],
-        },
-        {
           slug: "cand-ai-nevoie-de-feed-segmentat",
           titlu: "Când ai nevoie de un feed segmentat și când nu",
           rezumat: "Pentru reclamă la o parte din produse se folosește un Product Set în Commerce Manager. Feedurile segmentate sunt pentru cataloage separate.",
@@ -2171,10 +1670,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Se adaugă un rând gol și i se deschid automat regulile. În locul adresei scrie „Adresa se generează la salvare.”",
             "Scrie numele în câmpul „Numele feedului”, de exemplu „Campanie iarnă” sau „Catalog agenție”.",
             "Setează regulile feedului, dacă știi deja ce produse vrei în el.",
-            {
-              text: "Apasă „Salvează feedurile”. Apare mesajul „Feeduri salvate.”",
-              captura: { alt: "Rând de feed nou cu numele completat și butonul „Salvează feedurile”", raport: 16 / 10 },
-            },
+            "Apasă „Salvează feedurile”. Apare mesajul „Feeduri salvate.”",
             "Pe rândul feedului apare acum adresa, cu ?feed= la final. Apasă butonul de copiere ca să o iei.",
           ],
           detalii: [
@@ -2194,10 +1690,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "În „Feeduri segmentate”, pe rândul feedului apasă „Reguli”. Butonul devine „Ascunde” cât timp panoul e deschis.",
             "La „Categorii” bifează categoriile care intră în feed. O categorie aleasă aduce și subcategoriile ei.",
-            {
-              text: "La „Produse” apasă „Alege produse”, caută după nume în câmpul „Caută după nume...” și bifează produsele.",
-              captura: { alt: "Panoul de reguli deschis, cu lista de categorii și butoanele „Alege produse” și „Exclude produse”", raport: 16 / 10 },
-            },
+            "La „Produse” apasă „Alege produse”, caută după nume în câmpul „Caută după nume...” și bifează produsele.",
             "Pentru produse care nu trebuie să apară, apasă „Exclude produse” și bifează-le la fel.",
             "Închide selectorul cu X din colțul din dreapta sus.",
             "Apasă „Salvează feedurile”.",
@@ -2222,10 +1715,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "În „Feeduri segmentate”, pe rândul feedului apasă „Reguli”.",
             "Bifează „Doar produse în stoc” dacă vrei ca produsele epuizate să nu ajungă în reclame.",
             "Scrie o valoare în „Preț minim” dacă vrei un prag de jos.",
-            {
-              text: "Scrie o valoare în „Preț maxim” dacă vrei un prag de sus.",
-              captura: { alt: "Rândul cu bifa „Doar produse în stoc” și câmpurile „Preț minim” și „Preț maxim”", raport: 16 / 10 },
-            },
+            "Scrie o valoare în „Preț maxim” dacă vrei un prag de sus.",
             "Apasă „Salvează feedurile”.",
           ],
           detalii: [
@@ -2244,10 +1734,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           pasi: [
             "În „Feeduri segmentate”, pe rândul feedului apasă „Reguli”.",
             "Apasă „Câte produse intră?”.",
-            {
-              text: "Citește rezultatul de lângă buton, sub forma „N produse”.",
-              captura: { alt: "Butonul „Câte produse intră?” cu rezultatul afișat lângă el", raport: 16 / 10 },
-            },
+            "Citește rezultatul de lângă buton, sub forma „N produse”.",
             "Dacă rezultatul e 0, corectează regulile și numără din nou înainte să folosești adresa.",
           ],
           detalii: [
@@ -2265,10 +1752,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           titlu: "Cum conectezi un feed segmentat în Meta Commerce Manager",
           rezumat: "Copiezi adresa feedului și o adaugi ca sursă de date într-un catalog Meta.",
           pasi: [
-            {
-              text: "În „Feeduri segmentate”, apasă butonul de copiere de pe rândul feedului. Apare mesajul „Adresa copiată.”",
-              captura: { alt: "Rândul unui feed segmentat cu adresa și butonul de copiere", raport: 16 / 10 },
-            },
+            "În „Feeduri segmentate”, apasă butonul de copiere de pe rândul feedului. Apare mesajul „Adresa copiată.”",
             "Apasă „Deschide Commerce Manager” și creează acolo un catalog de tip E-commerce.",
             "În catalog intră la Data Sources (Surse de date) > Add > Use a URL și lipește adresa copiată.",
             "Setează actualizarea zilnică.",
@@ -2291,10 +1775,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           rezumat: "Redenumirea nu schimbă adresa. Ștergerea nu cere confirmare și devine reală la salvare.",
           pasi: [
             "Pentru redenumire, scrie alt nume în câmpul de pe rândul feedului și apasă „Salvează feedurile”.",
-            {
-              text: "Pentru ștergere, apasă butonul roșu cu coșul de pe rândul feedului.",
-              captura: { alt: "Rândul unui feed cu câmpul de nume și butonul de ștergere", raport: 16 / 10 },
-            },
+            "Pentru ștergere, apasă butonul roșu cu coșul de pe rândul feedului.",
             "Rândul dispare din listă și panoul de reguli se închide.",
             "Apasă „Salvează feedurile”. Abia acum ștergerea e reală.",
           ],
@@ -2314,84 +1795,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
       titlu: "Statistici",
       ghiduri: [
         {
-          slug: "cum-deschizi-zona-statistici",
-          titlu: "Cum deschizi zona Statistici",
-          rezumat: "Unde găsești Statistici în panoul de administrare și ce vezi la prima deschidere.",
-          intro: "Statistici este ecranul unde vezi cum merge magazinul tău: vânzări, comenzi, vizitatori și comenzi pe județ.",
-          pasi: [
-            "Intră în panoul de administrare.",
-            "În meniul lateral din stânga apasă \"Statistici\", intrarea cu pictograma de grafic cu bare. Aceeași intrare există și în meniul din bara de sus.",
-            {
-              text: "Se deschide pagina cu titlul \"Statistici\" și subtitlul \"Performanța magazinului tău\".",
-              captura: { alt: "Pagina Statistici deschisă pe tabul Prezentare, cu perioada 30 zile evidențiată.", raport: 16 / 10 },
-            },
-            "Pagina pornește pe tabul \"Prezentare\", cu perioada \"30 zile\" deja selectată.",
-          ],
-          detalii: [
-            { titlu: "Ce trebuie să ai ca să intri", text: "Trebuie să fii autentificat în cont și să ai deja un magazin creat. Dacă nu ai magazin, ești trimis înapoi în panou. Dacă onboardingul nu este finalizat, ești trimis să îl termini. Dacă abonamentul contului a expirat, ești trimis la pagina de reactivare în loc de Statistici. Conturile cu rol de administrator fac excepție de la această verificare." },
-            { titlu: "Zona nu depinde de planul tău", text: "Intrarea \"Statistici\" apare în meniu la orice cont, iar pagina nu verifică planul. Nu ai ce activa ca să vezi cifrele." },
-            { titlu: "Primele secunde după deschidere", text: "Datele se cer din browser abia după ce pagina s-a deschis. Până sosesc, în locul cifrelor vezi casete gri de încărcare. Dacă intri direct pe tabul \"Live\", harta poate fi încă integral gri în acel moment." },
-            { titlu: "Statistici nu are subpagini", text: "Tot ce ține de această zonă stă pe un singur ecran, împărțit în tabul \"Prezentare\" și tabul \"Live\". Nu există alte pagini în care să te adâncești." },
-            { titlu: "De unde vin cifrele", text: "Toate numerele din acest ecran se calculează din datele magazinului tău din Edinio: comenzile tale și vizitele înregistrate pe magazin. Ecranul nu citește date din Google Analytics." },
-          ],
-          nota: "În această zonă nu există export, descărcare, tipărire, trimitere pe email sau alerte configurabile.",
-          termeni: ["analytics", "rapoarte", "performanta magazin", "date vanzari", "panou statistici", "dashboard analytics"],
-        },
-        {
-          slug: "cum-alegi-perioada-in-statistici",
-          titlu: "Cum alegi perioada analizată în Statistici",
-          rezumat: "Cum treci între 7, 30 și 90 de zile și ce se schimbă efectiv pe ecran.",
-          pasi: [
-            "Intră în panoul de administrare > Statistici.",
-            {
-              text: "Sub titlul \"Statistici\" găsești un grup cu trei butoane: \"7 zile\", \"30 zile\" și \"90 zile\".",
-              captura: { alt: "Grupul de butoane 7 zile, 30 zile, 90 zile, sub titlul paginii.", raport: 16 / 10 },
-            },
-            "Apasă perioada pe care o vrei.",
-            "Butonul ales rămâne evidențiat pe fundal alb, iar cardurile, graficul, \"Surse de trafic\" și \"Dispozitive\" se reîncarcă pentru perioada aleasă.",
-          ],
-          detalii: [
-            { titlu: "Ce nu se schimbă odată cu perioada", text: "Harta \"Comenzi pe județ\" din tabul \"Live\" arată totalul comenzilor din toată istoria magazinului, oricare buton de perioadă ai apăsat. Tabul \"Live\" se uită mereu la ultimele 5 minute, deci nici el nu ține cont de perioadă." },
-            { titlu: "Cu ce se compară perioada aleasă", text: "Procentele și rândul \"vs N perioada anterioară\" se raportează la intervalul imediat anterior, de aceeași lungime. Dacă ai ales \"30 zile\", comparația se face cu cele 30 de zile dinaintea lor. Nu poți alege altă bază de comparație." },
-            { titlu: "Etichetele de pe axa graficului", text: "Densitatea etichetelor de zile se schimbă singură cu perioada: la 7 zile se văd toate zilele, la 30 de zile din 5 în 5, la 90 de zile din 10 în 10. Nu se poate regla manual." },
-            { titlu: "Alegerea nu se reține", text: "La fiecare intrare în Statistici perioada pornește de la \"30 zile\". Alegerea ta nu se salvează în adresa paginii și nici în cont, deci nu poți trimite cuiva un link care se deschide direct pe 90 de zile." },
-          ],
-          nota: "Nu există interval calendaristic personalizat. Poți alege doar între cele trei valori fixe.",
-          termeni: ["interval de timp", "ultimele 7 zile", "ultimele 90 de zile", "filtru perioada", "comparatie perioada anterioara"],
-        },
-        {
-          slug: "cum-comuti-intre-prezentare-si-live",
-          titlu: "Cum comuți între tabul Prezentare și tabul Live",
-          rezumat: "Ce conține fiecare tab, ca să știi unde cauți fiecare informație.",
-          pasi: [
-            "Intră în panoul de administrare > Statistici.",
-            {
-              text: "În dreapta butoanelor de perioadă găsești al doilea grup, cu două butoane.",
-              captura: { alt: "Comutatorul cu butoanele Prezentare și Live, lângă butoanele de perioadă.", raport: 16 / 10 },
-            },
-            "Apasă \"Prezentare\" pentru cifrele, graficul și clasamentele pe perioada aleasă.",
-            "Apasă \"Live\" pentru vizitatorii activi acum, activitatea recentă și harta comenzilor pe județ.",
-          ],
-          detalii: [
-            { titlu: "Ce vezi în \"Prezentare\"", text: "Cele patru carduri de indicatori din rândul de sus, graficul \"Vânzări zilnice\", caseta \"Surse de trafic\", caseta \"Dispozitive\" și, la bază, rândul cu \"Vânzări totale brute\", \"Valoare medie comandă (AOV)\" și \"Rată conversie\"." },
-            { titlu: "Ce vezi în \"Live\"", text: "Numărul de vizitatori activi din ultimele 5 minute, caseta \"Activitate recentă\" și caseta \"Comenzi pe județ\" cu harta României." },
-            { titlu: "Harta se caută în \"Live\", nu în \"Prezentare\"", text: "Harta \"Comenzi pe județ\" apare doar în tabul \"Live\". În \"Prezentare\" nu există deloc, oricât ai derula." },
-            { titlu: "Tabul nu se reține", text: "La fiecare intrare în Statistici se deschide \"Prezentare\". Dacă lucrezi mai mult cu \"Live\", trebuie să apeși butonul de fiecare dată." },
-          ],
-          nota: "Perioada aleasă rămâne aceeași când treci dintr-un tab în altul, dar tabul \"Live\" nu o folosește.",
-          termeni: ["taburi statistici", "vizitatori in timp real", "sectiuni analytics", "unde e harta"],
-        },
-        {
           slug: "cum-citesti-cardurile-de-indicatori",
           titlu: "Cum citești cele patru carduri de indicatori",
           rezumat: "Ce înseamnă Vânzări, Comenzi, Valoare medie comandă și Rată de conversie, și de unde vin procentele.",
           pasi: [
             "Intră în panoul de administrare > Statistici.",
             "Rămâi pe tabul \"Prezentare\" și alege perioada dorită.",
-            {
-              text: "Citește rândul de sus, cu patru carduri: \"Vânzări (30 zile)\", \"Comenzi\", \"Valoare medie comandă\" și \"Rată de conversie\".",
-              captura: { alt: "Rândul de sus cu cele patru carduri și pastilele de procent.", raport: 16 / 10 },
-            },
+            "Citește rândul de sus, cu patru carduri: \"Vânzări (30 zile)\", \"Comenzi\", \"Valoare medie comandă\" și \"Rată de conversie\".",
             "Uită-te în colțul din dreapta sus al cardurilor \"Vânzări\" și \"Comenzi\" pentru pastila cu procentul față de perioada anterioară.",
           ],
           detalii: [
@@ -2406,39 +1816,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["AOV", "valoare medie cos", "conversie magazin", "total incasari", "crestere fata de luna trecuta"],
         },
         {
-          slug: "cum-citesti-graficul-vanzari-zilnice",
-          titlu: "Cum citești graficul Vânzări zilnice",
-          rezumat: "Ce arată barele, ce apare la trecerea cu mouse-ul și ce vezi când nu ai vânzări.",
-          pasi: [
-            "Intră în panoul de administrare > Statistici, pe tabul \"Prezentare\".",
-            "Sub cardurile de indicatori găsești caseta \"Vânzări zilnice - ultimele 30 zile\". Numărul din titlu urmează perioada aleasă.",
-            "Fiecare bară este o zi, iar eticheta de sub ea are forma \"14 Mar\".",
-            {
-              text: "Treci cu mouse-ul peste o bară ca să vezi o casetă cu ziua și rândul \"Vânzări:\" urmat de suma în lei.",
-              captura: { alt: "Graficul cu bare și caseta care apare la trecerea cu mouse-ul peste o zi.", raport: 16 / 10 },
-            },
-          ],
-          detalii: [
-            { titlu: "Ce măsoară barele", text: "Înălțimea barei este valoarea vânzărilor din ziua respectivă, în lei, rotunjită la leu întreg. Numărul de comenzi pe zi nu se afișează nicăieri în grafic, nici în caseta de la trecerea cu mouse-ul." },
-            { titlu: "Zilele fără vânzări", text: "Rămân în grafic, cu valoarea 0. Nu sunt sărite, deci axa orizontală păstrează toate zilele din perioadă." },
-            { titlu: "Cifrele de pe axa verticală", text: "Valorile peste 1000 se scurtează la mii. De exemplu, 12000 apare ca \"12k\"." },
-            { titlu: "Prescurtările lunilor", text: "Lunile apar scurtate: Ian, Feb, Mar, Apr, Mai, Iun, Iul, Aug, Sep, Oct, Nov, Dec." },
-            { titlu: "Când nu ai nicio vânzare", text: "Dacă în perioada aleasă nu s-a vândut nimic, în locul graficului apare textul \"Nu există vânzări în această perioadă\". Schimbă perioada pe \"90 zile\" dacă vrei să verifici un interval mai lung." },
-          ],
-          nota: "Graficul nu are buton de descărcare sau export.",
-          termeni: ["grafic vanzari", "evolutie zilnica", "bare vanzari", "tooltip grafic", "vanzari pe zi"],
-        },
-        {
           slug: "cum-vezi-sursele-de-trafic",
           titlu: "Cum vezi de unde vin vizitatorii magazinului",
           rezumat: "Cum citești caseta Surse de trafic și ce vizite intră de fapt în ea.",
           pasi: [
             "Intră în panoul de administrare > Statistici, pe tabul \"Prezentare\".",
             "Sub grafic, în stânga, găsești caseta \"Surse de trafic\".",
-            {
-              text: "Citește rândurile: fiecare are numele sursei, o bară de proporție, numărul de vizite și procentul din total.",
-              captura: { alt: "Caseta Surse de trafic cu rândurile de proporție și procentele.", raport: 16 / 10 },
-            },
+            "Citește rândurile: fiecare are numele sursei, o bară de proporție, numărul de vizite și procentul din total.",
             "Rândurile sunt ordonate descrescător, de la sursa cu cele mai multe vizite.",
           ],
           detalii: [
@@ -2452,62 +1836,13 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
           termeni: ["trafic magazin", "de unde vin clientii", "referral", "vizite site", "canale de achizitie"],
         },
         {
-          slug: "cum-vezi-dispozitivele-vizitatorilor",
-          titlu: "Cum vezi de pe ce dispozitive intră vizitatorii",
-          rezumat: "Cum citești caseta Dispozitive și cum se stabilește tipul aparatului.",
-          pasi: [
-            "Intră în panoul de administrare > Statistici, pe tabul \"Prezentare\".",
-            "Sub grafic, în dreapta, găsești caseta \"Dispozitive\".",
-            {
-              text: "Citește rândurile: tipul aparatului, o bară de proporție, numărul de înregistrări și procentul din total.",
-              captura: { alt: "Caseta Dispozitive cu rândurile Mobil, Tabletă și Desktop.", raport: 16 / 10 },
-            },
-            "Etichetele afișate sunt \"Mobil\", \"Tabletă\" și \"Desktop\".",
-          ],
-          detalii: [
-            { titlu: "Cum se stabilește tipul aparatului", text: "Se determină automat, din identificarea trimisă de browserul vizitatorului. Dacă textul conține mobile, intrarea se numără la \"Mobil\", dacă conține tablet se numără la \"Tabletă\", în rest la \"Desktop\". Nu se poate corecta manual." },
-            { titlu: "Aceleași excluderi ca la surse", text: "Vizitele tale ca proprietar și cele de pe adrese care nu sunt de producție nu se numără nici aici." },
-            { titlu: "De ce totalul poate diferi de \"Surse de trafic\"", text: "Caseta \"Dispozitive\" numără toate înregistrările de analiză care au dispozitivul completat, nu doar pe cele de tip vizită. Astăzi cele două totaluri coincid, pentru că singurul tip înregistrat este vizita, dar nu sunt garantat egale." },
-            { titlu: "Când nu există date", text: "Dacă nu s-a înregistrat nimic în perioada aleasă, în casetă apare textul \"Nu există date\"." },
-            { titlu: "Caseta este doar de citit", text: "Nu poți filtra și nu poți da clic pe un rând ca să vezi detalii." },
-          ],
-          nota: "Dacă majoritatea vizitatorilor apar la \"Mobil\", verifică pe telefon cum arată magazinul tău.",
-          termeni: ["mobil sau desktop", "tip dispozitiv", "telefon tableta", "procent vizitatori mobil"],
-        },
-        {
-          slug: "cum-citesti-rezumatul-de-la-baza-paginii",
-          titlu: "Cum citești rezumatul de la baza paginii",
-          rezumat: "Cele trei casete de jos: Vânzări totale brute, Valoare medie comandă (AOV) și Rată conversie.",
-          pasi: [
-            "Intră în panoul de administrare > Statistici, pe tabul \"Prezentare\".",
-            {
-              text: "Derulează până la finalul paginii.",
-              captura: { alt: "Cele trei casete de rezumat de la baza tabului Prezentare.", raport: 16 / 10 },
-            },
-            "Prima casetă, \"Vânzări totale brute\", arată suma încasată în perioada aleasă.",
-            "A doua casetă, \"Valoare medie comandă (AOV)\", arată media pe comandă.",
-            "A treia casetă, \"Rată conversie\", arată procentul cu două zecimale, iar dedesubt rândul \"N comenzi / M vizite\".",
-          ],
-          detalii: [
-            { titlu: "Când apare rândul acesta", text: "Cele trei casete se afișează doar dacă există cel puțin o comandă în perioada aleasă. Fără comenzi, rândul lipsește complet, nu apare cu valori zero. Dacă nu îl găsești, treci pe o perioadă mai lungă." },
-            { titlu: "Sunt aceleași cifre ca sus", text: "\"Vânzări totale brute\" este exact valoarea din cardul \"Vânzări\". \"Rată conversie\" este același număr ca în cardul \"Rată de conversie\", doar că aici are două zecimale, iar sus are una." },
-            { titlu: "Când nu ai vizite înregistrate", text: "În locul procentului din caseta \"Rată conversie\" apare \"N/A\". Comenzile există, dar nu ai vizite din care să se calculeze procentul." },
-            { titlu: "La ce ajută rândul \"N comenzi / M vizite\"", text: "Îți arată numerele exacte din care s-a calculat procentul, ca să știi dacă rata se sprijină pe suficiente vizite sau pe câteva zeci." },
-          ],
-          nota: "Perioada aleasă sus se aplică și acestor casete.",
-          termeni: ["rezumat statistici", "incasari brute", "rata de conversie doua zecimale", "N/A conversie"],
-        },
-        {
           slug: "cum-urmaresti-vizitatorii-activi-live",
           titlu: "Cum urmărești vizitatorii activi în timp real",
           rezumat: "Numărătorul din tabul Live și lista Activitate recentă, cu ce arată fiecare.",
           pasi: [
             "Intră în panoul de administrare > Statistici.",
             "Apasă butonul \"Live\".",
-            {
-              text: "Sus vezi un număr mare, urmat de \"vizitator activ\" sau \"vizitatori activi\", iar sub el scrie \"În ultimele 5 minute\".",
-              captura: { alt: "Tabul Live cu numărătorul de vizitatori activi și eticheta LIVE.", raport: 16 / 10 },
-            },
+            "Sus vezi un număr mare, urmat de \"vizitator activ\" sau \"vizitatori activi\", iar sub el scrie \"În ultimele 5 minute\".",
             "Dacă există cel puțin un vizitator, în dreapta apar eticheta \"LIVE\" și un punct verde care pulsează.",
             "Sub numărător, caseta \"Activitate recentă\" listează intrările, de la cea mai recentă la cea mai veche.",
           ],
@@ -2532,7 +1867,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             "Derulează până la caseta \"Comenzi pe județ\", cu subtitlul \"Total comenzi primite per regiune\".",
             {
               text: "Treci cu mouse-ul peste un județ ca să vezi numele lui și textul \"N comenzi\", sau \"1 comandă\" când este una singură.",
-              captura: { alt: "Harta României colorată, cu caseta care apare peste un județ.", raport: 16 / 10 },
+              captura: { alt: "Harta României colorată, cu caseta care apare peste un județ.", src: "/capturi/ajutor/marketing-si-clienti/cum-vezi-harta-comenzi-pe-judet.webp", raport: 16 / 10 },
             },
             "Sub hartă citește legenda: \"Fără comenzi\", \"Puține\", \"Mediu\", \"Ridicat\".",
             "Sub legendă găsești clasamentul județelor cu comenzi, ordonat descrescător.",

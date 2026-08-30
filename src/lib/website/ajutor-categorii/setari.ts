@@ -18,37 +18,12 @@ export const SETARI: CategorieAjutor = {
       titlu: "Magazin, domeniu și SEO",
       ghiduri: [
         {
-          slug: "cum-intri-in-setari-si-te-muti-intre-sectiuni",
-          titlu: "Cum intri în Setări și te muți între secțiuni",
-          rezumat: "Setările se deschid din meniul lateral și grupează paisprezece secțiuni, de la General până la Securitate.",
-          pasi: [
-            "În meniul lateral, jos de tot, apasă \"Setări\".",
-            "Pe ecran mic, deschide meniul din bara de sus și apasă \"Setări\". Din meniul de utilizator, dreapta sus, ai și \"Setări cont\".",
-            {
-              text: "În pagină, alege secțiunea din coloana din stânga, sub titlul \"Setări\".",
-              captura: { alt: "Pagina Setări cu coloana de secțiuni din stânga și secțiunea General deschisă în dreapta.", raport: 16 / 10 },
-            },
-            "Pe telefon și tabletă, alege secțiunea din banda orizontală lipită sub bara de sus.",
-          ],
-          detalii: [
-            { titlu: "Ce secțiuni există", text: "General, Tip magazin, Plan, Facturare, Livrare, Taxe, Metode de plată, Domeniu, SEO, Email, Notificări, Politici, Banner Cookies, Securitate. Secțiunea aleasă se deschide în dreapta, fără să pleci din pagină." },
-            { titlu: "Pe ecrane mici", text: "Coloana de secțiuni din stânga se vede doar pe ecrane mari. Sub acest prag, aceleași denumiri apar într-o bandă orizontală derulabilă." },
-            { titlu: "Deschizi o secțiune direct din adresă", text: "Adresa /dashboard/settings acceptă ancore. #seo deschide SEO, #domeniu deschide Domeniu, #securitate deschide Securitate. Pentru Plan merg atât #abonament, cât și #plan, iar #facturare deschide Facturare." },
-            { titlu: "Când te întorci de la o plată", text: "Dacă adresa conține ?plan_success=1, se deschide automat secțiunea Plan. Dacă are ?domain_success=1, se deschide automat Domeniu." },
-          ],
-          nota: "Setările cer cont autentificat. Fără sesiune activă, pagina te trimite la autentificare.",
-          termeni: ["panou de administrare", "navigare", "meniu lateral", "dashboard settings", "unde sunt setările"],
-        },
-        {
           slug: "cum-schimbi-numele-contului",
           titlu: "Cum schimbi numele contului",
           rezumat: "Numele tău de utilizator se editează în Setări > General, în cardul \"Contul tău\".",
           pasi: [
             "Intră în Setări > General.",
-            {
-              text: "În cardul \"Contul tău\", scrie numele în câmpul \"Numele complet\".",
-              captura: { alt: "Cardul \"Contul tău\" cu câmpul \"Numele complet\" și emailul blocat dedesubt.", raport: 16 / 10 },
-            },
+            "În cardul \"Contul tău\", scrie numele în câmpul \"Numele complet\".",
             "Apasă \"Salvează contul\". Cât timp se salvează, butonul scrie \"Se salvează...\".",
           ],
           detalii: [
@@ -66,10 +41,7 @@ export const SETARI: CategorieAjutor = {
           intro: "Aceste date apar pe documente, pe facturi și în footer-ul magazinului.",
           pasi: [
             "Intră în Setări > General.",
-            {
-              text: "Completează câmpurile din cardul \"Datele magazinului\".",
-              captura: { alt: "Cardul \"Datele magazinului\" cu toate câmpurile completate.", raport: 16 / 10 },
-            },
+            "Completează câmpurile din cardul \"Datele magazinului\".",
             "Coboară la baza secțiunii și apasă \"Salvează setările generale\". Cât timp se salvează, butonul scrie \"Se salvează...\".",
           ],
           detalii: [
@@ -89,10 +61,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intră în Setări > General, la cardul \"Datele magazinului\".",
             "Scrie codul fiscal în câmpul \"CUI / CIF\". Prefixul RO este acceptat.",
-            {
-              text: "Apasă \"Completează automat\". Cât durează interogarea, butonul scrie \"Se caută...\".",
-              captura: { alt: "Câmpul \"CUI / CIF\" cu butonul \"Completează automat\" alături.", raport: 16 / 10 },
-            },
+            "Apasă \"Completează automat\". Cât durează interogarea, butonul scrie \"Se caută...\".",
             "Verifică datele aduse și apasă \"Salvează setările generale\".",
           ],
           detalii: [
@@ -110,10 +79,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "În Setări > General alegi între numerotare secvențială și cod aleatoriu pentru comenzi.",
           pasi: [
             "Intră în Setări > General și coboară la cardul \"Formatul numărului de comandă\".",
-            {
-              text: "Bifează \"Secvențial\" sau \"Random\".",
-              captura: { alt: "Cardul \"Formatul numărului de comandă\" cu cele două variante și exemplele lor.", raport: 16 / 10 },
-            },
+            "Bifează \"Secvențial\" sau \"Random\".",
             "Apasă \"Salvează setările generale\".",
           ],
           detalii: [
@@ -131,10 +97,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intră în Setări > Tip magazin.",
             "Pornește comutatorul de lângă \"Afișează un singur produs\".",
-            {
-              text: "Din lista \"Produsul principal *\" alege produsul.",
-              captura: { alt: "Cardul One Product Store cu comutatorul pornit și lista \"Produsul principal\" deschisă.", raport: 16 / 10 },
-            },
+            "Din lista \"Produsul principal *\" alege produsul.",
             "Apasă \"Salvează\". Cât timp se salvează, butonul scrie \"Se salvează...\".",
           ],
           detalii: [
@@ -157,10 +120,7 @@ export const SETARI: CategorieAjutor = {
             "Intră în Setări > Domeniu.",
             "Rămâi pe tabul \"Cumpără domeniu\", care este activ implicit.",
             "Scrie numele dorit în câmpul de căutare, cel cu lupa și textul \"Caută un domeniu (ex: magazinul-meu)\".",
-            {
-              text: "Așteaptă verificarea și citește starea afișată sub fiecare extensie.",
-              captura: { alt: "Rezultatele căutării, cu .ro marcat Disponibil și .com marcat Indisponibil.", raport: 16 / 10 },
-            },
+            "Așteaptă verificarea și citește starea afișată sub fiecare extensie.",
           ],
           detalii: [
             { titlu: "Ce se poate scrie în câmp", text: "Minim 2 caractere, doar litere, cifre și cratimă. Altfel apare \"Minim 2 caractere (litere, cifre, cratimă).\" Dacă scrii și extensia, de exemplu suplio.ro, extensia este scoasă și se caută eticheta suplio." },
@@ -179,10 +139,7 @@ export const SETARI: CategorieAjutor = {
             "În Setări > Domeniu, caută numele dorit și apasă \"Comandă\" pe extensia liberă.",
             "Alege \"Perioada de înregistrare\": 1 an, 2 ani sau 3 ani. Sub fiecare variantă scrie prețul total.",
             "La \"Date titular\" alege \"Persoană fizică\" sau \"Persoană juridică\".",
-            {
-              text: "Completează câmpurile marcate cu *.",
-              captura: { alt: "Fereastra de comandă cu perioada aleasă și câmpurile de titular completate.", raport: 16 / 10 },
-            },
+            "Completează câmpurile marcate cu *.",
             "Verifică \"Total\" din josul ferestrei și apasă butonul de plată. Cât se pregătește plata, scrie \"Redirectare la plată...\".",
             "Finalizează plata cu cardul, în pagina Stripe.",
           ],
@@ -204,10 +161,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intră în Setări > Domeniu.",
             "Rămâi pe tabul \"Cumpără domeniu\".",
-            {
-              text: "Citește cardurile de sub căutare: \"Comenzi în curs\", \"Domeniile tale\", \"Istoric comenzi domenii\".",
-              captura: { alt: "Cardurile \"Comenzi în curs\" și \"Domeniile tale\" din tabul Cumpără domeniu.", raport: 16 / 10 },
-            },
+            "Citește cardurile de sub căutare: \"Comenzi în curs\", \"Domeniile tale\", \"Istoric comenzi domenii\".",
           ],
           detalii: [
             { titlu: "Ce intră în \"Comenzi în curs\"", text: "Doar comenzile cu starea \"În așteptare\" și \"Se procesează\". Sub listă scrie: \"Domeniul va fi activat în maximum 24 de ore de la plasarea comenzii.\"" },
@@ -224,10 +178,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Dacă ai deja un domeniu în altă parte, îl adaugi din tabul \"Conectează domeniu\" și apoi îi setezi DNS-ul.",
           pasi: [
             "Intră în Setări > Domeniu și apasă tabul \"Conectează domeniu\".",
-            {
-              text: "Scrie domeniul în câmpul cu exemplul \"ex: magazinul-tău.ro\".",
-              captura: { alt: "Tabul \"Conectează domeniu\" cu câmpul de domeniu completat.", raport: 16 / 10 },
-            },
+            "Scrie domeniul în câmpul cu exemplul \"ex: magazinul-tău.ro\".",
             "Apasă \"Salvează\".",
             "Urmează instrucțiunile din cardul \"Configurează domeniul\", care apare după conectare.",
           ],
@@ -246,10 +197,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "După conectare, alegi între schimbarea nameserverelor și adăugarea a două înregistrări DNS la registrarul tău.",
           pasi: [
             "În Setări > Domeniu > \"Conectează domeniu\", mergi la cardul \"Configurează domeniul\".",
-            {
-              text: "Alege metoda: \"Nameservere\", marcată Recomandat, sau \"Înregistrări DNS\".",
-              captura: { alt: "Cardul \"Configurează domeniul\" cu cele două metode și valorile de copiat.", raport: 16 / 10 },
-            },
+            "Alege metoda: \"Nameservere\", marcată Recomandat, sau \"Înregistrări DNS\".",
             "Copiază valorile cu butonul de copiere de lângă fiecare rând.",
             "Aplică-le la registrarul unde ai cumpărat domeniul.",
             "Verifică propagarea prin linkul DNSChecker din josul cardului.",
@@ -269,10 +217,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Domeniul se scoate dintr-o singură apăsare, din bannerul de sus al secțiunii Domeniu.",
           pasi: [
             "Intră în Setări > Domeniu.",
-            {
-              text: "În bannerul de sus, \"Domeniu conectat\", apasă butonul cu X din dreapta. La trecerea cu mausul apare titlul \"Deconectează domeniul\".",
-              captura: { alt: "Bannerul \"Domeniu conectat\" cu butonul X din dreapta.", raport: 16 / 10 },
-            },
+            "În bannerul de sus, \"Domeniu conectat\", apasă butonul cu X din dreapta. La trecerea cu mausul apare titlul \"Deconectează domeniul\".",
           ],
           detalii: [
             { titlu: "Nu există pas de confirmare", text: "Deconectarea se face la o singură apăsare, fără fereastră de confirmare, deci apasă X doar când chiar vrei să scoți domeniul." },
@@ -290,10 +235,7 @@ export const SETARI: CategorieAjutor = {
             "Intră în Setări > SEO.",
             "Completează \"Titlu meta\" și urmărește numărătoarea de caractere din dreapta.",
             "Completează \"Descriere meta\".",
-            {
-              text: "Vezi cum arată rezultatul în \"Previzualizare în Google\".",
-              captura: { alt: "Câmpurile Titlu meta și Descriere meta, cu blocul \"Previzualizare în Google\" dedesubt.", raport: 16 / 10 },
-            },
+            "Vezi cum arată rezultatul în \"Previzualizare în Google\".",
             "Apasă \"Salvează SEO\", jos în dreapta. Cât timp se salvează, butonul scrie \"Se salvează...\".",
           ],
           detalii: [
@@ -311,10 +253,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Imaginea afișată pe Facebook sau WhatsApp se încarcă din Setări > SEO, în cardul \"Imagine la distribuire\".",
           pasi: [
             "Intră în Setări > SEO și coboară la \"Imagine la distribuire\".",
-            {
-              text: "Apasă zona punctată \"Încarcă imagine (rec. 1200×630px)\" și alege fișierul. Cât durează, scrie \"Se încarcă...\".",
-              captura: { alt: "Cardul \"Imagine la distribuire\" cu zona de încărcare și câmpul de URL.", raport: 16 / 10 },
-            },
+            "Apasă zona punctată \"Încarcă imagine (rec. 1200×630px)\" și alege fișierul. Cât durează, scrie \"Se încarcă...\".",
             "Sau lipește o adresă în câmpul de dedesubt, \"sau lipește un URL\".",
             "Apasă \"Salvează SEO\".",
           ],
@@ -332,10 +271,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "O casetă din Setări > SEO scoate magazinul din motoarele de căutare.",
           pasi: [
             "Intră în Setări > SEO.",
-            {
-              text: "Bifează \"Ascunde magazinul din Google (noindex)\".",
-              captura: { alt: "Caseta \"Ascunde magazinul din Google (noindex)\" cu textul de avertizare.", raport: 16 / 10 },
-            },
+            "Bifează \"Ascunde magazinul din Google (noindex)\".",
             "Apasă \"Salvează SEO\".",
           ],
           detalii: [
@@ -352,10 +288,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "În Setări > SEO bifezi care pagini de politici apar în Google și în sitemap.",
           pasi: [
             "Intră în Setări > SEO și coboară la \"Paginile de politici în Google\".",
-            {
-              text: "Bifează paginile care să apară în Google și debifează-le pe celelalte.",
-              captura: { alt: "Lista celor șase politici cu casetele de bifare.", raport: 16 / 10 },
-            },
+            "Bifează paginile care să apară în Google și debifează-le pe celelalte.",
             "Apasă \"Salvează SEO\".",
           ],
           detalii: [
@@ -374,10 +307,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intră în Setări > SEO și coboară la \"Google Search Console\".",
             "Copiază adresa magazinului cu butonul \"Copiază\" de lângă primul câmp, apoi adaugă în Search Console o proprietate de tip Prefix URL cu ea.",
-            {
-              text: "La verificare alege metoda Etichetă HTML, copiază codul de la Google și lipește-l în câmpul de verificare.",
-              captura: { alt: "Cardul Google Search Console cu cei trei pași și câmpul pentru codul de verificare.", raport: 16 / 10 },
-            },
+            "La verificare alege metoda Etichetă HTML, copiază codul de la Google și lipește-l în câmpul de verificare.",
             "Apasă \"Salvează SEO\", apoi apasă Verifică în Search Console.",
             "După verificare, copiază adresa sitemap-ului cu al doilea buton \"Copiază\" și adaug-o la secțiunea Sitemaps din Search Console.",
           ],
@@ -397,10 +327,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Parola se schimbă din Setări > Securitate, fără să introduci parola veche.",
           pasi: [
             "Intră în Setări > Securitate.",
-            {
-              text: "Scrie noua parolă în câmpul \"Parolă nouă\".",
-              captura: { alt: "Cardul \"Schimbă parola\" cu cele două câmpuri.", raport: 16 / 10 },
-            },
+            "Scrie noua parolă în câmpul \"Parolă nouă\".",
             "Repet-o în \"Confirmă parola nouă\".",
             "Apasă \"Schimbă parola\". Cât durează, butonul scrie \"Se schimbă...\".",
           ],
@@ -421,10 +348,7 @@ export const SETARI: CategorieAjutor = {
             "Intră în Setări > Securitate.",
             "În cardul \"Autentificare în doi pași (2FA)\" apasă \"Activează 2FA\". Cât se trimite codul, butonul scrie \"Se trimite codul...\".",
             "Deschide emailul contului și citește codul de 6 cifre.",
-            {
-              text: "Scrie codul în câmpul \"Cod de verificare\".",
-              captura: { alt: "Cardul 2FA cu câmpul \"Cod de verificare\" și butonul \"Verifică și activează\".", raport: 16 / 10 },
-            },
+            "Scrie codul în câmpul \"Cod de verificare\".",
             "Apasă \"Verifică și activează\" sau tasta Enter.",
           ],
           detalii: [
@@ -444,10 +368,7 @@ export const SETARI: CategorieAjutor = {
             "Intră în Setări > Securitate.",
             "Apasă \"Dezactivează 2FA\". Cât se trimite codul, butonul scrie \"Se trimite codul...\".",
             "Citește codul primit pe emailul contului.",
-            {
-              text: "Scrie-l în \"Cod de verificare\" și apasă \"Confirmă dezactivarea\" sau tasta Enter.",
-              captura: { alt: "Cardul 2FA în timpul dezactivării, cu butonul \"Confirmă dezactivarea\".", raport: 16 / 10 },
-            },
+            "Scrie-l în \"Cod de verificare\" și apasă \"Confirmă dezactivarea\" sau tasta Enter.",
           ],
           detalii: [
             { titlu: "Nu se poate opri fără email", text: "Și dezactivarea cere codul trimis pe adresa contului. Fără acces la acea căsuță, 2FA nu poate fi oprit din acest ecran." },
@@ -466,10 +387,7 @@ export const SETARI: CategorieAjutor = {
             "Intră în Setări > Securitate și coboară la \"Zona periculoasă\".",
             "Apasă \"Șterge contul\".",
             "Citește avertismentul din \"Confirmă ștergerea contului\".",
-            {
-              text: "Scrie adresa de email a contului în câmpul cerut. Eticheta arată exact adresa care trebuie tastată.",
-              captura: { alt: "Fereastra \"Confirmă ștergerea contului\" cu câmpul de email și butonul blocat.", raport: 16 / 10 },
-            },
+            "Scrie adresa de email a contului în câmpul cerut. Eticheta arată exact adresa care trebuie tastată.",
             "Apasă \"Confirmă ștergerea\". Cât durează, butonul scrie \"Se șterge...\".",
           ],
           detalii: [
@@ -487,27 +405,6 @@ export const SETARI: CategorieAjutor = {
       titlu: "Email, notificări și politici",
       ghiduri: [
         {
-          slug: "cum-deschizi-setarile-email-notificari-politici-cookies",
-          titlu: "Cum deschizi secțiunile Email, Notificări, Politici și Banner Cookies din Setări",
-          rezumat: "Unde găsești cele patru secțiuni în panoul de administrare și cum treci de la una la alta.",
-          pasi: [
-            "În meniul din stânga al panoului de administrare, jos de tot, apeși „Setări”.",
-            {
-              text: "În coloana din stânga a ecranului de setări, sub titlul „SETĂRI”, apeși secțiunea dorită: „Email”, „Notificări”, „Politici” sau „Banner Cookies”.",
-              captura: { alt: "Coloana din stânga a ecranului de setări, cu secțiunea Email selectată.", raport: 16 / 10 },
-            },
-            "Titlul mare din capul paginii se schimbă în numele secțiunii alese și conținutul ei apare în dreapta.",
-          ],
-          detalii: [
-            { titlu: "Toate secțiunile din listă", text: "Coloana din stânga are, în ordine: General, Tip magazin, Plan, Facturare, Livrare, Taxe, Metode de plată, Domeniu, SEO, Email, Notificări, Politici, Banner Cookies, Securitate." },
-            { titlu: "Pe telefon și pe ecrane mici", text: "Lista din stânga dispare. Aceleași nume apar într-o bară orizontală, lipită sub bara de sus, pe care o derulezi lateral până ajungi la secțiunea căutată." },
-            { titlu: "Link direct către o secțiune", text: "Poți intra direct pe secțiune dacă adresa se termină în #email, #notificari, #politici sau #cookies. Când apeși pe o secțiune din listă, adresa din bara browserului nu se schimbă, deci nu poți salva un link către ea doar dând click." },
-            { titlu: "Când vii dintr-o plată", text: "Dacă tocmai ai plătit un plan sau un domeniu, pagina de setări se deschide forțat pe „Plan”, respectiv „Domeniu”, iar terminația de adresă pe care ai pus-o tu este ignorată." },
-          ],
-          nota: "Trebuie să fii autentificat. Fără sesiune activă, pagina de setări te trimite la pagina de autentificare.",
-          termeni: ["unde sunt setarile", "panou de administrare", "meniu lateral", "dashboard settings", "sectiuni setari"],
-        },
-        {
           slug: "cum-conectezi-emailul-propriu-smtp",
           titlu: "Cum trimiți emailurile magazinului de pe adresa ta (SMTP propriu)",
           rezumat: "Conectezi contul tău de email ca emailurile către clienți să plece de pe domeniul tău, nu de pe Edinio.",
@@ -517,11 +414,11 @@ export const SETARI: CategorieAjutor = {
             "Pui pe pornit comutatorul „Trimite de pe emailul meu”.",
             {
               text: "La eticheta „Furnizor” apeși butonul furnizorului tău: „Google Workspace / Gmail”, „Microsoft 365 / Outlook”, „Zoho Mail” sau „Alt server (cPanel / hosting propriu)”.",
-              captura: { alt: "Butoanele de furnizor din secțiunea Email, cu câmpurile de server și port completate automat.", raport: 16 / 10 },
+              captura: { alt: "Butoanele de furnizor din secțiunea Email, cu câmpurile de server și port completate automat.", src: "/capturi/ajutor/setari/cum-conectezi-emailul-propriu-smtp.webp", raport: 16 / 10 },
             },
             "Completezi „Utilizator (email)” cu adresa contului și „Parola” cu parola SMTP sau parola de aplicație.",
             "Completezi „Nume expeditor” și „Email expeditor”. Dacă vrei răspunsurile clienților pe altă adresă, completezi și „Reply-to (opțional)”.",
-            "Apeși „Salvează”. Cât timp lucrează, butonul scrie „Se salvează...”.",
+            "Apeși „Salvează”.",
             "Dacă datele sunt bune, apare mesajul „Email propriu conectat.”",
           ],
           detalii: [
@@ -542,10 +439,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intri în Setări > Email.",
             "Te asiguri că ai comutatorul „Trimite de pe emailul meu” pornit și configurarea deja salvată cu „Salvează”.",
-            {
-              text: "Apeși „Trimite email de test”.",
-              captura: { alt: "Butonul Trimite email de test din secțiunea Email, lângă butonul Salvează.", raport: 16 / 10 },
-            },
+            "Apeși „Trimite email de test”.",
             "Dacă reușește, apare mesajul „Email de test trimis. Verifică-ți inboxul.”",
           ],
           detalii: [
@@ -564,10 +458,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intri în Setări > Email și cobori la cardul „Brandingul emailurilor”.",
             "Apeși „Schimbă logo”. Poți da click și direct pe logo, în previzualizarea unui șablon deschis.",
-            {
-              text: "În fereastra care se deschide alegi tab-ul „Bibliotecă” și o imagine deja încărcată, sau tab-ul „Încarcă” și apeși „Apasă pentru a încărca fișiere”.",
-              captura: { alt: "Fereastra de alegere a imaginii, cu tab-urile Bibliotecă și Încarcă.", raport: 16 / 10 },
-            },
+            "În fereastra care se deschide alegi tab-ul „Bibliotecă” și o imagine deja încărcată, sau tab-ul „Încarcă” și apeși „Apasă pentru a încărca fișiere”.",
             "Apeși butonul „Adaugă”. După ce ai selectat o imagine, pe buton apare și numărul selecției, „Adaugă (1)”.",
             "Pentru culoare, apeși pătratul de lângă eticheta „Culoare” și alegi nuanța dorită.",
             "Închizi selectorul de culoare. Apare mesajul „Branding email salvat.” și previzualizările se actualizează.",
@@ -589,10 +480,7 @@ export const SETARI: CategorieAjutor = {
             "Intri în Setări > Email și cobori la cardul „Șabloane de email”.",
             "Apeși pe rândul șablonului pe care vrei să îl modifici ca să îl deschizi.",
             "Scrii textul dorit în câmpul „Subiect”.",
-            {
-              text: "Sub textul „Editează direct pe email (apasă pe titlu, text, buton sau logo)” dai click în previzualizare pe titlu, pe paragraf sau pe buton și scrii peste.",
-              captura: { alt: "Previzualizarea unui email cu titlul selectat pentru editare.", raport: 16 / 10 },
-            },
+            "Sub textul „Editează direct pe email (apasă pe titlu, text, buton sau logo)” dai click în previzualizare pe titlu, pe paragraf sau pe buton și scrii peste.",
             "Apeși „Salvează șablonul”. Apare mesajul „Șablon salvat.” și rândul primește eticheta „Personalizat”.",
           ],
           detalii: [
@@ -610,10 +498,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Copiezi variabile de tipul {{nume_client}} și le pui în subiect sau în text ca să se completeze automat la trimitere.",
           pasi: [
             "Intri în Setări > Email > Șabloane de email și deschizi șablonul dorit.",
-            {
-              text: "Sub previzualizare, la textul „Variabile disponibile (apasă ca să copiezi):”, apeși eticheta variabilei.",
-              captura: { alt: "Lista de variabile disponibile sub previzualizarea unui șablon.", raport: 16 / 10 },
-            },
+            "Sub previzualizare, la textul „Variabile disponibile (apasă ca să copiezi):”, apeși eticheta variabilei.",
             "Primești confirmarea „Copiat” împreună cu variabila.",
             "O lipești în câmpul „Subiect” sau în textul din previzualizare, acolo unde vrei să apară datele clientului.",
             "Apeși „Salvează șablonul”.",
@@ -632,10 +517,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intri în Setări > Email > Șabloane de email.",
             "Deschizi șablonul care are eticheta „Personalizat”.",
-            {
-              text: "În stânga jos apeși „Resetează la standard”.",
-              captura: { alt: "Butonul Resetează la standard, în stânga jos a unui șablon personalizat.", raport: 16 / 10 },
-            },
+            "În stânga jos apeși „Resetează la standard”.",
             "Textele revin la cele standard și apare mesajul „Revenit la șablonul standard.”",
           ],
           detalii: [
@@ -651,11 +533,8 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Alegi adresa de email unde ajung anunțurile despre activitatea magazinului tău.",
           pasi: [
             "Intri în Setări > Notificări.",
-            {
-              text: "În cardul „Adresă de email pentru notificări” scrii adresa pe care vrei să primești anunțurile.",
-              captura: { alt: "Cardul Adresă de email pentru notificări, cu adresa completată.", raport: 16 / 10 },
-            },
-            "Apeși „Salvează notificările”. Cât timp lucrează, butonul scrie „Se salvează...”.",
+            "În cardul „Adresă de email pentru notificări” scrii adresa pe care vrei să primești anunțurile.",
+            "Apeși „Salvează notificările”.",
             "Apare mesajul „Setările de notificări au fost salvate.”",
           ],
           detalii: [
@@ -674,10 +553,7 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Alegi dacă primești un email de fiecare dată când un client plasează o comandă.",
           pasi: [
             "Intri în Setări > Notificări și cobori la cardul „Evenimente”.",
-            {
-              text: "Pe rândul „Comandă nouă” muți comutatorul din dreapta pe pornit sau pe oprit.",
-              captura: { alt: "Cardul Evenimente, cu rândul Comandă nouă și comutatorul lui.", raport: 16 / 10 },
-            },
+            "Pe rândul „Comandă nouă” muți comutatorul din dreapta pe pornit sau pe oprit.",
             "Apeși „Salvează notificările”.",
           ],
           detalii: [
@@ -694,11 +570,8 @@ export const SETARI: CategorieAjutor = {
           rezumat: "Verifici că adresa de notificări primește emailuri, fără să aștepți o comandă reală.",
           pasi: [
             "Intri în Setări > Notificări și cobori la cardul „Testează notificările”.",
-            "Apeși „Trimite email de test”. Cât timp lucrează, butonul scrie „Se trimite...”.",
-            {
-              text: "Citești caseta de rezultat care apare sub buton.",
-              captura: { alt: "Caseta verde de rezultat după un email de test trimis cu succes.", raport: 16 / 10 },
-            },
+            "Apeși „Trimite email de test”.",
+            "Citești caseta de rezultat care apare sub buton.",
           ],
           detalii: [
             { titlu: "Cum arată rezultatul", text: "La reușită apare o casetă verde cu „Succes” și textul „Email trimis cu succes către” urmat de adresă, plus o linie cu expeditorul și cu ID-ul mesajului. La eșec apare o casetă roșie cu „Eroare” și motivul." },
@@ -717,12 +590,9 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intri în Setări > Politici.",
             "Găsești cardul politicii dorite și citești textul deja completat în editorul din el.",
-            {
-              text: "Modifici sau rescrii textul direct în editor.",
-              captura: { alt: "Cardul unei politici cu editorul deschis și bara de formatare.", raport: 16 / 10 },
-            },
+            "Modifici sau rescrii textul direct în editor.",
             "Folosești butoanele din bara editorului pentru formatare, liste, aliniere, link sau pentru codul HTML.",
-            "Apeși „Salvează politicile”. Cât timp lucrează, butonul scrie „Se salvează...”.",
+            "Apeși „Salvează politicile”.",
             "Apare mesajul „Politicile au fost salvate.” și magazinul public se actualizează.",
           ],
           detalii: [
@@ -743,10 +613,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intri în Setări > Politici.",
             "În capul cardului politicii muți comutatorul din dreapta pe oprit.",
-            {
-              text: "Cardul primește eticheta „Dezactivată”, iar editorul dispare din card.",
-              captura: { alt: "Cardul unei politici cu eticheta Dezactivată și editorul ascuns.", raport: 16 / 10 },
-            },
+            "Cardul primește eticheta „Dezactivată”, iar editorul dispare din card.",
             "Apeși „Salvează politicile”.",
           ],
           detalii: [
@@ -765,11 +632,8 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intri în Setări > Banner Cookies.",
             "În cardul „Afișează bannerul de cookie-uri” muți comutatorul pe pornit sau pe oprit.",
-            {
-              text: "În cardul „Poziționare” apeși una dintre cele patru variante. Varianta aleasă primește o bifă.",
-              captura: { alt: "Cardul Poziționare cu cele patru variante, una dintre ele bifată.", raport: 16 / 10 },
-            },
-            "Apeși „Salvează bannerul”. Cât timp lucrează, butonul scrie „Se salvează...”.",
+            "În cardul „Poziționare” apeși una dintre cele patru variante. Varianta aleasă primește o bifă.",
+            "Apeși „Salvează bannerul”.",
             "Apare mesajul „Bannerul de cookie-uri a fost salvat.” și magazinul public se actualizează.",
           ],
           detalii: [
@@ -789,10 +653,7 @@ export const SETARI: CategorieAjutor = {
           pasi: [
             "Intri în Setări > Banner Cookies.",
             "Cobori la cardul „Categorii afișate în banner”.",
-            {
-              text: "Citești etichetele afișate acolo.",
-              captura: { alt: "Cardul Categorii afișate în banner, cu etichetele active.", raport: 16 / 10 },
-            },
+            "Citești etichetele afișate acolo.",
           ],
           detalii: [
             { titlu: "Nu este o setare", text: "Categoriile nu se bifează, nu se adaugă și nu se scot din acest card. Ele se adaptează automat la integrările pe care le ai active, iar butonul „Salvează bannerul” nu le salvează, pentru că sunt deduse." },

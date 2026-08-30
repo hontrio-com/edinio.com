@@ -105,7 +105,7 @@ export interface Ghid {
 /**
  * Un grup de ghiduri dintr-o categorie.
  *
- * ⚠ GRUPURILE EXISTĂ FIINDCĂ SUNT 453 DE GHIDURI. O categorie cu nouăzeci de
+ * ⚠ GRUPURILE EXISTĂ FIINDCĂ SUNT 406 DE GHIDURI. O categorie cu nouăzeci de
  * rânduri unul sub altul nu se citește, se derulează. Grupurile o taie pe zonele
  * panoului, adică fix după cum caută omul: cine are o problemă cu retururile nu
  * vrea să treacă peste tot ce ține de comenzi.

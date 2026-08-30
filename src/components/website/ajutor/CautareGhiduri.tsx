@@ -16,7 +16,7 @@ import {
  *
  * ═══ INDEXUL SE ADUCE LA PRIMA ATINGERE, NU LA DESCHIDEREA PAGINII ═══
  *
- * Centrul are 531 de ghiduri. Împachetate cu pagina, ca să poată fi căutate pe
+ * Centrul are 406 de ghiduri. Împachetate cu pagina, ca să poată fi căutate pe
  * loc, ajungeau 1,1 MB de text în fiecare browser, inclusiv la cine deschide
  * `/ajutor`, se uită la categorii și apasă pe una. Pagina se randa în secunde.
  *
@@ -244,7 +244,7 @@ function Rezultate({
   }
 
   /*
-    ⚠ SE ARATĂ CEL MULT 30. La 531 de ghiduri, un cuvânt des scris întoarce peste
+    ⚠ SE ARATĂ CEL MULT 30. La 406 de ghiduri, un cuvânt des scris întoarce peste
     o sută de rânduri, iar o listă atât de lungă nu se citește: cine n-a găsit
     răspunsul în primele zece scrie alt cuvânt, nu derulează. Numărul întreg se
     scrie deasupra, ca omul să știe că mai sunt.

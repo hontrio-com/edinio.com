@@ -3,7 +3,7 @@
  *
  * ⚠ STAU SEPARAT DE DATE, ȘI ĂSTA E TOT ROSTUL FIȘIERULUI. `CautareGhiduri` e
  * componentă de client și are nevoie de textul substituentului din câmp. Luat din
- * `ajutor.ts`, ar fi tras după el toate cele 531 de ghiduri în pachetul trimis
+ * `ajutor.ts`, ar fi tras după el toate cele 406 de ghiduri în pachetul trimis
  * browserului, adică exact lucrul pe care indexul separat îl repară.
  *
  * Din schița clientului, cuvânt cu cuvânt. Singura schimbare sunt diacriticele,

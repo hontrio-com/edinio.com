@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./scripts/tests/register.mjs --test \"src/**/*.test.ts\"",
+    "verifica:rpc-blog": "node scripts/tests/blog-rpc-chemabile.mjs",
     "verifica:coloane": "node scripts/tests/coloane-cerute-exista.mjs",
     "bundle": "node scripts/tests/bundle-size.mjs",
     "capturi": "node --import ./scripts/tests/register.mjs scripts/leaga-capturi.mjs",

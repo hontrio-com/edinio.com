@@ -905,7 +905,15 @@ export async function stergeArticol(id: string): Promise<Raspuns> {
   }
 
   if (articol) {
-    await blogDb().from("blog_redirects").delete().eq("to_slug", articol.slug);
+    /* ⚠ SI `fel`, nu doar slugul.
+
+       De cand redirectarile au un fel, o rubrica si un articol pot pleca de la
+       acelasi slug — stau pe cai diferite, deci n-au de ce sa se incurce. Fara
+       randul cu `fel`, stergerea unui articol ar fi sters si redirectarea unei
+       rubrici cu acelasi nume, adica ar fi omorat o pagina care n-are nicio
+       legatura cu ce se sterge. */
+    await blogDb().from("blog_redirects").delete()
+      .eq("fel", "articol").eq("to_slug", articol.slug);
   }
 
   const { error } = await blogDb().from("blog_posts").delete().eq("id", id);

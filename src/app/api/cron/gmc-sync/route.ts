@@ -1,3 +1,7 @@
+import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
+import { logError } from "@/lib/error-logger";
+import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
+import { verificaCron } from "@/lib/cron-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -12,8 +16,13 @@ const STATUS_BATCH = 40;
 const MAX_ATTEMPTS = 5;
 
 function verifyCron(req: NextRequest): boolean {
-  return req.headers.get("authorization")?.replace("Bearer ", "") === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
+
+/** ⚠ Scris o data: fiecare scriere in coada trece prin CAS pe generatie. */
+const COADA = "gmc_sync_queue" as const;
 
 export async function GET(req: NextRequest) {
   if (!verifyCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,11 +36,33 @@ export async function GET(req: NextRequest) {
   let synced = 0, deleted = 0, failed = 0, statusChecked = 0;
 
   // ── 1) Process the sync queue, grouped by business ─────────────────────────────
-  const { data: queue } = await admin
-    .from("gmc_sync_queue").select("id, business_id, product_id, offer_id, op, attempts")
-    .order("created_at", { ascending: true }).limit(QUEUE_BATCH);
+  /*
+   * Randurile se REVENDICA, nu doar se citesc.
+   *
+   * Cronul asta porneste din minut in minut si face apeluri externe care pot
+   * dura. Cu un simplu `select ... limit N`, o rulare mai lunga de un minut si
+   * urmatoarea citesc ACELEASI randuri — si trimit de doua ori la marketplace.
+   *
+   * `revendica_din_coada` le incuie (`for update skip locked`) si le marcheaza cu
+   * un termen: al doilea lucrator primeste randurile URMATOARE, nu aceleasi. Vezi
+   * migratia `2026-08-19-lease-cozi-marketplace`.
+   */
+  const { data: revendicate, error: eCoada } = await admin.rpc("revendica_din_coada", {
+    p_coada: "gmc_sync_queue", p_limita: QUEUE_BATCH,
+  });
+  if (eCoada) {
+    await logError({ action: "gmc-sync", message: `coada nu s-a putut revendica: ${eCoada.message}`, severity: "critical" });
+    return NextResponse.json({ ok: false, error: "coada indisponibila" }, { status: 503 });
+  }
+  // Forma randului de coada, scrisa aici: RPC-ul intoarce `jsonb`, deci tipurile
+  // generate n-au ce sa deduca.
+  type RandCoada = {
+    id: string; business_id: string; product_id: string | null;
+    offer_id: string; op: string; attempts: number | null;
+  };
+  const queue = (revendicate ?? []) as unknown as RandCoada[];
 
-  const byBiz = new Map<string, typeof queue>();
+  const byBiz = new Map<string, RandCoada[]>();
   for (const item of queue ?? []) {
     if (!byBiz.has(item.business_id)) byBiz.set(item.business_id, []);
     byBiz.get(item.business_id)!.push(item);
@@ -41,7 +72,7 @@ export async function GET(req: NextRequest) {
     const ctx = await loadBusinessContext(admin, businessId);
     if (!ctx) {
       // Not connected — drop its queue items.
-      await admin.from("gmc_sync_queue").delete().in("id", (items ?? []).map((i) => i.id));
+      for (const it of (items ?? [])) await stergeDacaNeschimbat(admin, COADA, it);
       continue;
     }
     const { token, config, business } = ctx;
@@ -76,14 +107,41 @@ export async function GET(req: NextRequest) {
           }
           await admin.from("gmc_products").delete().eq("business_id", businessId)
             .or(`product_id.eq.${productKey},offer_id.eq.${item.offer_id}`);
-          await admin.from("gmc_sync_queue").delete().eq("id", item.id);
+          await stergeDacaNeschimbat(admin, COADA, item);
           deleted++;
         } else {
           // Expand into one offer (simple) or one per enabled variant (linked by
           // itemGroupId), then reconcile: any previously-synced offer for this
           // product that is no longer produced gets deleted from Google.
           const product = productMap.get(item.product_id!)!;
-          const offers = expandProductOffers(business, product, config);
+          /*
+           * Pachetul: disponibilitatea vine din componente, nu din randul lui.
+           *
+           * Fara asta, orice pachet pleaca „IN_STOCK" catre Merchant Center — si
+           * de cand pagina lui spune corect „Stoc epuizat", divergenta e chiar
+           * tiparul din care ies suspendarile de cont. O interogare in plus,
+           * doar cand produsul chiar e pachet: sunt 12 in tot sistemul.
+           */
+          let pachetDisponibil: boolean | undefined;
+          const cfgPachet = product.is_bundle ? readBundleConfig(product.page_sections) : null;
+          if (product.is_bundle) {
+            const ids = (cfgPachet?.items ?? []).map((i) => i.product_id);
+            const { data: comps } = ids.length
+              ? await admin.from("products").select("id, is_active, track_inventory, stock_quantity")
+                  .eq("business_id", businessId).in("id", ids)
+              : { data: [] as { id: string; is_active: boolean; track_inventory: boolean; stock_quantity: number | null }[] };
+            const dupaId = new Map((comps ?? []).map((c) => [c.id, c]));
+            pachetDisponibil = disponibilitatePachet((cfgPachet?.items ?? []).map((it) => {
+              const c = dupaId.get(it.product_id);
+              return {
+                quantity: it.quantity,
+                vandabila: !!c && c.is_active,
+                track_inventory: !!c?.track_inventory,
+                stock_quantity: c?.stock_quantity ?? null,
+              };
+            })).inStock;
+          }
+          const offers = expandProductOffers(business, { ...product, pachetDisponibil }, config);
           const desired = new Set(offers.map((o) => o.offerId));
           for (const offer of offers) {
             const res = await insertProductInput(token, config.account_id!, config.data_source_name!, offer.input);
@@ -102,13 +160,13 @@ export async function GET(req: NextRequest) {
             if ("error" in res && res.status !== 404) continue; // best-effort; retried next pass
             await admin.from("gmc_products").delete().eq("business_id", businessId).eq("offer_id", row.offer_id);
           }
-          await admin.from("gmc_sync_queue").delete().eq("id", item.id);
+          await stergeDacaNeschimbat(admin, COADA, item);
         }
       } catch (e) {
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
         if (attempts >= MAX_ATTEMPTS) {
-          await admin.from("gmc_sync_queue").delete().eq("id", item.id);
+          await stergeDacaNeschimbat(admin, COADA, item);
           if (item.product_id) {
             await admin.from("gmc_products").upsert(
               { business_id: businessId, product_id: item.product_id, offer_id: item.offer_id, status: "error", error: String((e as Error).message).slice(0, 500), updated_at: now },
@@ -116,7 +174,7 @@ export async function GET(req: NextRequest) {
             );
           }
         } else {
-          await admin.from("gmc_sync_queue").update({ attempts }).eq("id", item.id);
+          await scrieDacaNeschimbat(admin, COADA, item, { attempts });
         }
       }
     }

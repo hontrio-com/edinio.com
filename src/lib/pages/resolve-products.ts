@@ -3,6 +3,8 @@ import type { Database } from "@/types/database.types";
 import type { Block, ProductsBlock } from "@/lib/pages/blocks.types";
 import { flattenBlocks } from "@/lib/pages/block-tree";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
+import { getProductPriceRange } from "@/lib/utils/product-price";
+import { numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 
 type DB = SupabaseClient<Database>;
 
@@ -19,9 +21,17 @@ const MAX = 24;
 export interface ProductVisibility {
   hideNoImage?: boolean;
   hideOutOfStock?: boolean;
+  /**
+   * Numele de categorie stinse din panou. Se calculeaza o data per pagina, in
+   * `resolveAllProductsBlocks` — un bloc de produse de pe o pagina proprie e tot
+   * o vitrina a magazinului, deci un raion stins n-are ce cauta in el, indiferent
+   * daca blocul alege pe categorie, pe „recomandate" sau produs cu produs.
+   */
+  numeCategoriiStinse?: ReadonlySet<string>;
 }
 
-function isVisible(p: { images: unknown; is_bundle: boolean | null; track_inventory: boolean | null; stock_quantity: number | null }, v: ProductVisibility): boolean {
+function isVisible(p: { images: unknown; category: unknown; is_bundle: boolean | null; track_inventory: boolean | null; stock_quantity: number | null }, v: ProductVisibility): boolean {
+  if (v.numeCategoriiStinse?.size && typeof p.category === "string" && v.numeCategoriiStinse.has(p.category)) return false;
   if (v.hideNoImage) {
     const imgs = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
     if (imgs.length === 0) return false;
@@ -42,6 +52,7 @@ function toPageProduct(p: Record<string, unknown>): PageProduct {
     category: (p.category as string | null) ?? null,
     is_featured: !!p.is_featured,
     page_sections: p.page_sections ?? null,
+    price_range: getProductPriceRange(Number(p.price), p.page_sections ?? null),
   };
 }
 
@@ -76,6 +87,25 @@ export async function resolveAllProductsBlocks(supabase: DB, businessId: string,
   const map: Record<string, PageProduct[]> = {};
   // flatten so products blocks nested inside columns are resolved too.
   const productBlocks = flattenBlocks(blocks).filter((b): b is ProductsBlock => b.type === "products");
-  await Promise.all(productBlocks.map(async (b) => { map[b.id] = await resolveBlockProducts(supabase, businessId, b, visibility); }));
+  if (productBlocks.length === 0) return map;
+
+  /*
+   * Categoriile stinse, citite O DATA pentru toata pagina si numai cand chiar
+   * exista blocuri de produse: o pagina „Despre noi" n-are de ce sa plateasca o
+   * interogare in plus. Tabelul e mic (zeci de randuri), iar subarborele nu se
+   * poate cere din SQL cu un `.eq("is_active", true)` — o categorie aprinsa sub
+   * un parinte stins e tot ascunsa.
+   */
+  const { data: categorii } = await supabase
+    .from("categories")
+    .select("id, name, parent_id, is_active")
+    .eq("business_id", businessId)
+    .limit(1000);
+  const vizibilitate: ProductVisibility = {
+    ...visibility,
+    numeCategoriiStinse: numeCategoriiAscunse(categorii ?? []),
+  };
+
+  await Promise.all(productBlocks.map(async (b) => { map[b.id] = await resolveBlockProducts(supabase, businessId, b, vizibilitate); }));
   return map;
 }

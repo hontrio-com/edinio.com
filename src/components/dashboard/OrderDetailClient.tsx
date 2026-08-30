@@ -9,10 +9,13 @@ import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
   FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
-  ExternalLink, Pencil, Compass,
+  ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
+import { marketplaceCareTineComanda, cineTineComanda } from "@/lib/orders/origin";
+import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
+import { totaluriComanda, type SetariTvaMagazin } from "@/lib/orders/totals-box";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
 import {
   generateOrderInvoice,
@@ -30,8 +33,21 @@ import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
+import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
+import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
+import { EcoletAwbModal } from "@/components/dashboard/EcoletAwbModal";
+import { PostaAwbModal } from "@/components/dashboard/PostaAwbModal";
+import { PacketaAwbModal } from "@/components/dashboard/PacketaAwbModal";
+import { SmartshipAwbModal } from "@/components/dashboard/SmartshipAwbModal";
+import { ShipoAwbModal } from "@/components/dashboard/ShipoAwbModal";
+import { FedexAwbModal } from "@/components/dashboard/FedexAwbModal";
+import { UpsAwbModal } from "@/components/dashboard/UpsAwbModal";
+import { DhlAwbModal } from "@/components/dashboard/DhlAwbModal";
+import { InnoshipAwbModal } from "@/components/dashboard/InnoshipAwbModal";
+import { EmagFulfillmentPanel } from "@/components/dashboard/EmagFulfillmentPanel";
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
+import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -210,6 +226,7 @@ const CARD = "bg-surface border border-border rounded-xl";
 export function OrderDetailClient({
   order,
   businessId,
+  setariTva,
   smartbillEnabled,
   hasEstimateSeries,
   wootEnabled,
@@ -218,12 +235,32 @@ export function OrderDetailClient({
   fgoEnabled,
   cargusEnabled,
   dpdEnabled,
+  glsEnabled,
+  pallexEnabled,
+  pallexZile,
+  ecoletEnabled,
+  postaEnabled,
+  packetaEnabled,
+  smartshipEnabled,
+  shipoEnabled,
+  fedexEnabled,
+  upsEnabled,
+  dhlEnabled,
+  postaZilePrezentare,
+  innoshipEnabled,
   fanCourierEnabled,
   samedayEnabled,
   smsoEnabled,
 }: {
   order: Order;
   businessId: string;
+  /*
+   * OBLIGATORIU, nu optional cu implicit: fara el, caseta de totaluri nu poate
+   * sti daca `orders.vat_amount` e o suma de adunat sau una deja continuta in
+   * total, si a ghicit gresit pe 20 din 96 de comenzi. Un camp optional s-ar
+   * putea uita din nou la urmatoarea pagina care randeaza componenta.
+   */
+  setariTva: SetariTvaMagazin;
   smartbillEnabled: boolean;
   hasEstimateSeries: boolean;
   wootEnabled?: boolean;
@@ -232,6 +269,19 @@ export function OrderDetailClient({
   fgoEnabled?: boolean;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
+  glsEnabled?: boolean;
+  pallexEnabled?: boolean;
+  pallexZile?: { ridicare: number; livrare: number };
+  ecoletEnabled?: boolean;
+  postaEnabled?: boolean;
+  packetaEnabled?: boolean;
+  smartshipEnabled?: boolean;
+  shipoEnabled?: boolean;
+  fedexEnabled?: boolean;
+  upsEnabled?: boolean;
+  dhlEnabled?: boolean;
+  postaZilePrezentare?: number;
+  innoshipEnabled?: boolean;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   smsoEnabled?: boolean;
@@ -242,11 +292,37 @@ export function OrderDetailClient({
   const [isPending, startTransition] = useTransition();
 
   const items = (order.items as unknown as OrderItem[]) ?? [];
+  const totaluri = totaluriComanda({
+    items,
+    subtotal: order.subtotal,
+    shippingCost: order.shipping_cost,
+    discountAmount: order.discount_amount,
+    cardDiscount: order.card_discount_amount,
+    codDiscount: order.cod_discount_amount,
+    codFee: order.cod_fee_amount,
+    vatAmount: order.vat_amount,
+    vatRate: order.vat_rate,
+    total: order.total,
+    setariTva,
+  });
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
+  const firma = readBillingCompany(order.billing_company);
   const notes = order.notes as Record<string, string> | null;
   const ord = order as unknown as Record<string, unknown>;
   // Trendyol ships with its own cargo (no courier AWB) — swap the shipping panel.
   const isTrendyol = (order.order_source as { marketplace?: string } | null)?.marketplace === "trendyol";
+  /*
+   * eMAG e altfel decat Trendyol: ingaduie SI AWB prin contul lor de curier, SI
+   * curierul comerciantului. Deci cartea lui se ADAUGA deasupra, nu ia locul
+   * curierilor — un comerciant cu contract propriu mai bun n-are de ce sa fie silit
+   * sa plateasca transportul lor.
+   */
+  const isEmag = (order.order_source as { marketplace?: string } | null)?.marketplace === "emag";
+
+  /* ⚠ Aceeasi regula ca pe server, din acelasi loc — nu o a doua copie. Vezi
+     `marketplaceCareTineComanda`: cine tine ciclul comenzii, tine si starea. */
+  const cineTine = marketplaceCareTineComanda(order.order_source);
+  const tinutaDeEi = cineTine != null;
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -296,6 +372,17 @@ export function OrderDetailClient({
   const [wootModalOpen, setWootModalOpen] = useState(false);
   const [cargusModalOpen, setCargusModalOpen] = useState(false);
   const [dpdModalOpen, setDpdModalOpen] = useState(false);
+  const [glsModalOpen, setGlsModalOpen] = useState(false);
+  const [pallexModalOpen, setPallexModalOpen] = useState(false);
+  const [ecoletModalOpen, setEcoletModalOpen] = useState(false);
+  const [postaModalOpen, setPostaModalOpen] = useState(false);
+  const [packetaModalOpen, setPacketaModalOpen] = useState(false);
+  const [smartshipModalOpen, setSmartshipModalOpen] = useState(false);
+  const [shipoModalOpen, setShipoModalOpen] = useState(false);
+  const [fedexModalOpen, setFedexModalOpen] = useState(false);
+  const [upsModalOpen, setUpsModalOpen] = useState(false);
+  const [dhlModalOpen, setDhlModalOpen] = useState(false);
+  const [innoshipModalOpen, setInnoshipModalOpen] = useState(false);
   const [fanCourierModalOpen, setFanCourierModalOpen] = useState(false);
   const [samedayModalOpen, setSamedayModalOpen] = useState(false);
   const [coleteModalOpen, setColeteModalOpen] = useState(false);
@@ -328,6 +415,39 @@ export function OrderDetailClient({
     { id: "fan-courier", name: "FAN Courier", logo: "/integrations/fan-courier.svg", enabled: !!fanCourierEnabled, awb: (order.fan_courier_awb_number as string | null) ?? null, open: () => setFanCourierModalOpen(true) },
     { id: "cargus", name: "Cargus", logo: "/integrations/cargus.svg", enabled: !!cargusEnabled, awb: (order.cargus_awb_number as string | null) ?? null, open: () => setCargusModalOpen(true) },
     { id: "dpd", name: "DPD", logo: "/integrations/dpd.svg", enabled: !!dpdEnabled, awb: (order.dpd_awb_number as string | null) ?? null, open: () => setDpdModalOpen(true) },
+    { id: "gls", name: "GLS", logo: "/integrations/gls.svg", enabled: !!glsEnabled, awb: (order.gls_awb_number as string | null) ?? null, open: () => setGlsModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
+       `shipping_address.courier` — altfel `chosenCourier` ramane nedefinit si
+       panoul arata „Curier recomandat" in loc de „Clientul a ales". */
+    { id: "pallex", name: "Pall-Ex", logo: "/integrations/pallex.avif", enabled: !!pallexEnabled, awb: (order.pallex_awb_number as string | null) ?? null, open: () => setPallexModalOpen(true) },
+    { id: "ecolet", name: "eColet", logo: "/integrations/ecolet.png", enabled: !!ecoletEnabled, awb: (order.ecolet_awb_number as string | null) ?? null, open: () => setEcoletModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
+       `shipping_address.courier` — vezi nota de la Pall-Ex. */
+    { id: "posta", name: "Poșta Română", logo: "/integrations/posta_romana.svg", enabled: !!postaEnabled, awb: (order.posta_awb_number as string | null) ?? null, open: () => setPostaModalOpen(true) },
+    { id: "innoship", name: "Innoship", logo: "/integrations/innoship.svg", enabled: !!innoshipEnabled, awb: (order.innoship_awb_number as string | null) ?? null, open: () => setInnoshipModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
+       `shipping_address.courier` — vezi nota de la Pall-Ex. */
+    { id: "packeta", name: "Packeta", logo: "/integrations/packeta.png", enabled: !!packetaEnabled, awb: (order.packeta_packet_id as string | null) ?? null, open: () => setPacketaModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
+       `shipping_address.courier` — vezi nota de la Pall-Ex. */
+    { id: "smartship", name: "SmartShip", logo: "/integrations/smartship.png", enabled: !!smartshipEnabled, awb: (order.smartship_awb_number as string | null) ?? null, open: () => setSmartshipModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
+       `shipping_address.courier`, cu `SHIPPING_METHODS`, cu `activeCourierIds` si
+       cu `COURIER_LABELS`. „shipo" contra „shipo-ro" nu produce nicio eroare:
+       `chosenCourier` ramane `undefined` si comerciantului i se propune butonul
+       ALTUI curier decat cel platit de client. */
+    { id: "shipo", name: "Shipo.ro", logo: "/integrations/shipo.ro.svg", enabled: !!shipoEnabled, awb: (order.shipo_awb_number as string | null) ?? null, open: () => setShipoModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
+       `shipping_address.courier` — vezi nota de la Shipo. */
+    { id: "fedex", name: "FedEx", logo: "/integrations/fedex.svg", enabled: !!fedexEnabled, awb: (order.fedex_awb_number as string | null) ?? null, open: () => setFedexModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
+       `shipping_address.courier` — vezi nota de la Shipo. */
+    { id: "ups", name: "UPS", logo: "/integrations/ups.svg", enabled: !!upsEnabled, awb: (order.ups_awb_number as string | null) ?? null, open: () => setUpsModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
+       `shipping_address.courier` — vezi nota de la Shipo. La DHL sirul e „dhl", scurt si
+       usor de confundat cu numele afisat „DHL Express": numele e pentru om, `id`-ul e
+       pentru `chosenCourier`. */
+    { id: "dhl", name: "DHL Express", logo: "/integrations/dhl.svg", enabled: !!dhlEnabled, awb: (order.dhl_awb_number as string | null) ?? null, open: () => setDhlModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
     { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
@@ -771,6 +891,14 @@ export function OrderDetailClient({
         </button>
       </div>
 
+      {/*
+        Operatiile externe ramase atarnate. Nu se vede nimic in cazul normal —
+        componenta intoarce `null` cand lista e goala. Sta SUS, inaintea celor doua
+        coloane: cand exista, e primul lucru care trebuie citit, fiindca explica de
+        ce un buton de AWB sau de factura refuza sa mai faca ceva.
+      */}
+      <OperatiiAtarnate businessId={businessId} orderId={order.id as string} />
+
       {/* ── Two-column operational area (single column on mobile) ── */}
       <div className="flex flex-col lg:flex-row lg:gap-5 lg:items-start gap-5">
         {/* MAIN: order content */}
@@ -809,6 +937,49 @@ export function OrderDetailClient({
                   </div>
                 </div>
               )}
+              {/* Comanda pe firma. Numele de mai sus ramane persoana de contact;
+                  aici sunt datele care ajung pe factura. */}
+              {firma && (
+                <div className="flex items-start gap-2.5 text-sm pt-2.5 border-t border-border">
+                  <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <div className="leading-relaxed min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-foreground">{firma.company_name}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary">
+                        Persoana juridica
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      CUI {firma.vat_payer ? `RO${firma.cui}` : firma.cui}
+                      {firma.reg_com ? ` | ${firma.reg_com}` : ""}
+                    </div>
+                    {(firma.address || firma.city || firma.county) && (
+                      <div className="text-muted-foreground">
+                        Sediu: {[firma.address, firma.city, firma.county].filter(Boolean).join(", ")}
+                      </div>
+                    )}
+                    {/* Statutul de TVA se afirma doar cand ANAF l-a confirmat.
+                        Cand serviciul n-a raspuns la plasarea comenzii, datele
+                        sunt cele scrise de client si comerciantul trebuie sa le
+                        verifice inainte de a emite factura. */}
+                    {firma.verified && !firma.vat_payer && (
+                      <div className="text-muted-foreground">Neplatitor de TVA</div>
+                    )}
+                    {!firma.verified && (
+                      <div className="flex items-start gap-1 text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>Date neconfirmate la ANAF. Verifica-le inainte de a emite factura.</span>
+                      </div>
+                    )}
+                    {firma.inactive && (
+                      <div className="flex items-start gap-1 text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span>Firma figureaza ca inactiva fiscal in registrul ANAF.</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2.5 text-sm">
                 <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="text-muted-foreground">
@@ -837,11 +1008,23 @@ export function OrderDetailClient({
             <div className="space-y-2">
               {items.map((item, i) => (
                 <div key={i}>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                      <span className="text-foreground truncate min-w-0">{item.name}</span>
-                      <span className="text-muted-foreground flex-shrink-0">x{item.quantity}</span>
+                  {/*
+                    Numele produsului se vede INTREG, pe cate randuri e nevoie.
+                    Avea `truncate`, iar pe telefon taia exact partea care
+                    deosebeste produsele intre ele: din zece randuri cu "Tulipan
+                    Negro Gel Dus ..." nu se mai vedea care e care.
+                    Alinierea trece pe `items-start`, ca iconita, bucata si pretul
+                    sa stea in dreptul PRIMULUI rand, nu la mijlocul unui nume de
+                    trei randuri. Bucata sta lipita de nume, in aceeasi curgere,
+                    ca sa nu ramana singura pe un rand nou.
+                  */}
+                  <div className="flex items-start justify-between gap-3 text-sm">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-[3px]" />
+                      <span className="min-w-0 break-words text-foreground">
+                        {item.name}
+                        <span className="ml-1.5 whitespace-nowrap text-muted-foreground">x{item.quantity}</span>
+                      </span>
                     </div>
                     <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
                   </div>
@@ -875,29 +1058,92 @@ export function OrderDetailClient({
                 </div>
               ))}
             </div>
+            {/*
+                Toate cifrele de aici vin din `totaluriComanda`, nu din coloane
+                citite una cate una: randurile trebuie sa DEA totalul de sub ele,
+                iar regula asta se tine intr-un singur loc, cu test. Vezi
+                `lib/orders/totals-box.ts`.
+            */}
             <div className="border-t border-border pt-3 space-y-1.5 text-sm">
               <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span>{formatPrice(Number(order.subtotal))}</span>
+                <span>Subtotal</span><span>{formatPrice(totaluri.subtotal)}</span>
               </div>
-              {Number(order.discount_amount) > 0 && (
+              {/* Extraoptiunile sunt listate sus, la produse, dar nu intra in
+                  `orders.subtotal`. Fara randul asta, cei 5 lei de pe comanda
+                  #0018 se vedeau in lista si dispareau din socoteala. Aceeasi
+                  eticheta ca la finalizare (`CheckoutSummary`). */}
+              {totaluri.extras > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Optiuni extra</span>
+                  <span className="font-medium">+{formatPrice(totaluri.extras)}</span>
+                </div>
+              )}
+              {totaluri.reducere > 0 && (
                 <div className="flex justify-between text-success">
                   <span>Discount {order.discount_code ? `(${order.discount_code})` : ""}</span>
-                  <span className="font-medium">-{formatPrice(Number(order.discount_amount))}</span>
+                  <span className="font-medium">-{formatPrice(totaluri.reducere)}</span>
+                </div>
+              )}
+              {/* Reducerile si taxa de plata lipseau din caseta asta, desi sunt
+                  in `total`: subtotal + transport + TVA nu dadeau totalul, iar
+                  diferenta nu avea nicio explicatie pe ecran. */}
+              {totaluri.reducereCard > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Reducere plata cu cardul</span>
+                  <span className="font-medium">-{formatPrice(totaluri.reducereCard)}</span>
+                </div>
+              )}
+              {totaluri.reducereRamburs > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Reducere plata ramburs</span>
+                  <span className="font-medium">-{formatPrice(totaluri.reducereRamburs)}</span>
+                </div>
+              )}
+              {totaluri.taxaRamburs > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Taxa plata ramburs</span>
+                  <span className="font-medium">{formatPrice(totaluri.taxaRamburs)}</span>
                 </div>
               )}
               <div className="flex justify-between text-muted-foreground">
                 <span>Transport</span>
-                <span>{Number(order.shipping_cost) === 0 ? "Gratuit" : formatPrice(Number(order.shipping_cost))}</span>
+                <span>{totaluri.transport === 0 ? "Gratuit" : formatPrice(totaluri.transport)}</span>
               </div>
-              {Number(order.vat_amount) > 0 && (
+              {totaluri.tvaEticheta && (
                 <div className="flex justify-between text-muted-foreground">
-                  <span>TVA ({Number(order.vat_rate)}%)</span>
-                  <span>{formatPrice(Number(order.vat_amount))}</span>
+                  {/* La preturi cu TVA inclus eticheta poarta cuvantul „inclus" si
+                      cifra NU se aduna: e portiunea extrasa din randurile de mai
+                      sus, nu o suma in plus. Pe comanda #0074, adunata, ducea
+                      coloana la 66,94 sub un Total de 60. */}
+                  <span>{totaluri.tvaEticheta}</span>
+                  <span>{formatPrice(totaluri.tva)}</span>
+                </div>
+              )}
+              {/* Cand socoteala tot nu se inchide, diferenta se SPUNE. Se intampla
+                  azi pe 2 comenzi din 96, ambele din 9 iunie, unde `orders.total`
+                  insusi a fost scris de codul de dinaintea reparatiei de TVA din
+                  24 iulie. Un rand de umplutura ar fi ascuns tocmai comanda care
+                  trebuie verificata pe factura. Reincarcarea paginii nu schimba
+                  nimic, deci nici nu o cerem. */}
+              {Math.abs(totaluri.diferenta) >= 0.01 && (
+                <div className="flex justify-between text-warning">
+                  {/* Cand diferenta e chiar cat TVA-ul, ea are un nume: caseta nu
+                      mai tipareste acelasi numar de doua ori, o data ca „TVA
+                      inclus" si o data ca „nejustificat". */}
+                  <span>{totaluri.tvaAdunatPesteTotal ? "TVA adunat peste total la plasare" : "Diferenta nejustificata"}</span>
+                  <span className="font-medium">{totaluri.diferenta > 0 ? "-" : "+"}{formatPrice(Math.abs(totaluri.diferenta))}</span>
                 </div>
               )}
               <div className="flex justify-between font-semibold text-foreground text-base pt-1 border-t border-border">
-                <span>Total</span><span>{formatPrice(Number(order.total))}</span>
+                <span>Total</span><span>{formatPrice(totaluri.total)}</span>
               </div>
+              {Math.abs(totaluri.diferenta) >= 0.01 && (
+                <p className="text-[11px] text-warning leading-snug">
+                  {totaluri.tvaAdunatPesteTotal
+                    ? "Comanda a fost plasata cand TVA-ul se aduna peste preturi, desi magazinul le are cu TVA inclus. Totalul incasat e cel de mai jos; factura trebuie sa il contina pe el."
+                    : "Totalul salvat pe comanda nu se explica din randurile de mai sus. Compara-l cu factura inainte de a incasa sau storna."}
+                </p>
+              )}
             </div>
           </div>
 
@@ -924,12 +1170,35 @@ export function OrderDetailClient({
           {/* Status & plata */}
           <div className={`${CARD} p-5 space-y-4`}>
             <h2 className="text-sm font-semibold text-foreground">Status comanda</h2>
+
+            {/*
+              ⚠ LA O COMANDA DE MARKETPLACE STAREA E A LOR, SI SE VEDE CA ATARE (25.08.2026).
+
+              ⚠ SI TEXTUL ISI IA NUMELE DIN COMANDA (26.08.2026). Scria „eMAG" oricare ar fi
+              fost marketplace-ul, fiindca atunci eMAG era singurul din lista. Cand a intrat
+              si Trendyol, o comanda Trendyol si-ar fi trimis comerciantul in contul eMAG sa
+              caute o comanda care acolo nu exista.
+
+              Serverul refuza schimbarea (`marketplaceCareTineComanda`), dar un buton care
+              arata apasabil si da eroare abia dupa apasare e o cursa. Aici se spune
+              dinainte, si se spune UNDE se face — nu doar ca nu se poate.
+
+              Butoanele raman VIZIBILE, ca omul sa vada in ce stare e comanda; doar ca nu
+              mai raspund la apasare.
+            */}
+            {tinutaDeEi && (
+              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+                {cineTineComanda(cineTine!).titlu}{" "}{cineTineComanda(cineTine!).urmator}
+              </p>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {STATUS_OPTIONS.map(opt => (
-                <button key={opt.value} type="button" onClick={() => setStatus(opt.value)}
+                <button key={opt.value} type="button" disabled={tinutaDeEi}
+                  onClick={() => setStatus(opt.value)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                     status === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                  }`}>
+                  } ${tinutaDeEi ? "cursor-not-allowed opacity-60" : ""}`}>
                   {opt.label}
                 </button>
               ))}
@@ -938,18 +1207,21 @@ export function OrderDetailClient({
               <label className="block text-xs font-medium text-muted-foreground mb-2">Status plata</label>
               <div className="flex flex-wrap gap-2">
                 {PAYMENT_OPTIONS.map(opt => (
-                  <button key={opt.value} type="button" onClick={() => setPaymentStatus(opt.value)}
+                  <button key={opt.value} type="button" disabled={tinutaDeEi}
+                    onClick={() => setPaymentStatus(opt.value)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       paymentStatus === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                    }`}>
+                    } ${tinutaDeEi ? "cursor-not-allowed opacity-60" : ""}`}>
                     <CreditCard className="h-3 w-3" />{opt.label}
                   </button>
                 ))}
               </div>
             </div>
-            <Button onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges} className="w-full">
-              {isPending ? "Se salveaza..." : "Salveaza modificarile"}
-            </Button>
+            {!tinutaDeEi && (
+              <Button onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges} className="w-full">
+                {isPending ? "Se salveaza..." : "Salveaza modificarile"}
+              </Button>
+            )}
           </div>
 
           {/* Facturare (unified) */}
@@ -983,6 +1255,7 @@ export function OrderDetailClient({
           )}
 
           {/* Expediere */}
+          {isEmag && <EmagFulfillmentPanel businessId={businessId} order={order} />}
           {isTrendyol ? (
             <TrendyolFulfillmentPanel businessId={businessId} orderId={order.id} />
           ) : enabledCouriers.length > 0 ? (
@@ -1133,7 +1406,19 @@ export function OrderDetailClient({
         )}
       </div>
 
-      {/* ── Danger zone ── */}
+      {/*
+        ── Danger zone ──
+
+        ⚠ NU SE ARATA DELOC LA O COMANDA TINUTA DE MARKETPLACE (25.08.2026).
+
+        Serverul o refuza deja (`deleteOrder`), deci integritatea era in regula. Dar un
+        buton rosu care arata apasabil si da eroare abia dupa apasare e o cursa: omul crede
+        ca a facut o greseala, incearca din nou, si abia apoi citeste.
+
+        ⚠ Se ascunde CARTEA intreaga, nu doar butonul: un titlu „Sterge comanda" deasupra
+        unui buton mort ar fi fost la fel de mincinos.
+      */}
+      {!tinutaDeEi && (
       <div className={`${CARD} border-destructive/30 p-5 flex items-center justify-between gap-3 mt-5`}>
         <div>
           <h2 className="text-sm font-semibold text-foreground">Sterge comanda</h2>
@@ -1143,6 +1428,7 @@ export function OrderDetailClient({
           <Trash2 /> Sterge definitiv
         </Button>
       </div>
+      )}
 
       {/* ── Mobile sticky action bar (above bottom nav) ── */}
       {mobileAction && (
@@ -1180,6 +1466,39 @@ export function OrderDetailClient({
       )}
       {coleteEnabled && (
         <ColeteAwbModal open={coleteModalOpen} onClose={() => setColeteModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setColeteModalOpen(false); router.refresh(); }} />
+      )}
+      {glsEnabled && (
+        <GlsAwbModal open={glsModalOpen} onClose={() => setGlsModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setGlsModalOpen(false); router.refresh(); }} />
+      )}
+      {pallexEnabled && (
+        <PallexAwbModal zile={pallexZile} open={pallexModalOpen} onClose={() => setPallexModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setPallexModalOpen(false); router.refresh(); }} />
+      )}
+      {ecoletEnabled && (
+        <EcoletAwbModal open={ecoletModalOpen} onClose={() => setEcoletModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setEcoletModalOpen(false); router.refresh(); }} />
+      )}
+      {postaEnabled && (
+        <PostaAwbModal zilePrezentare={postaZilePrezentare} open={postaModalOpen} onClose={() => setPostaModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setPostaModalOpen(false); router.refresh(); }} />
+      )}
+      {shipoEnabled && (
+        <ShipoAwbModal open={shipoModalOpen} onClose={() => setShipoModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setShipoModalOpen(false); router.refresh(); }} />
+      )}
+      {fedexEnabled && (
+        <FedexAwbModal open={fedexModalOpen} onClose={() => setFedexModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setFedexModalOpen(false); router.refresh(); }} />
+      )}
+      {dhlEnabled && (
+        <DhlAwbModal open={dhlModalOpen} onClose={() => setDhlModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setDhlModalOpen(false); router.refresh(); }} />
+      )}
+      {upsEnabled && (
+        <UpsAwbModal open={upsModalOpen} onClose={() => setUpsModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setUpsModalOpen(false); router.refresh(); }} />
+      )}
+      {smartshipEnabled && (
+        <SmartshipAwbModal open={smartshipModalOpen} onClose={() => setSmartshipModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setSmartshipModalOpen(false); router.refresh(); }} />
+      )}
+      {packetaEnabled && (
+        <PacketaAwbModal open={packetaModalOpen} onClose={() => setPacketaModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setPacketaModalOpen(false); router.refresh(); }} />
+      )}
+      {innoshipEnabled && (
+        <InnoshipAwbModal open={innoshipModalOpen} onClose={() => setInnoshipModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setInnoshipModalOpen(false); router.refresh(); }} />
       )}
 
       {/* ── Status/payment change confirmation ── */}

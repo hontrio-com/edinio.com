@@ -1,3 +1,6 @@
+import { pentruBrowser } from "@/lib/storefront/business-public";
+import { textCurat } from "@/lib/storefront/date-structurate";
+import { disponibilitatePachet } from "@/lib/bundles";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -8,6 +11,7 @@ import { storeBaseUrl } from "@/lib/seo";
 import { parseStoreMode, parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { enrichStoreProduct } from "@/lib/storefront/product-data";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
+import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
 import { resolveProductOffers } from "@/lib/offers/offers";
@@ -16,6 +20,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
+import { jsonLdSafe } from "@/lib/json-ld";
 
 interface Props {
   params: Promise<{ slug: string; productSlug: string }>;
@@ -68,8 +73,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const seo = ps?.seo;
   const title = seo?.title || product.name;
   const description = seo?.description
-    || (ps?.short_description ? ps.short_description.replace(/<[^>]+>/g, "").slice(0, 155) : "")
-    || (product.description ? product.description.replace(/<[^>]+>/g, "").slice(0, 155) : product.name);
+    /* ⚠ `textCurat`, nu o taiere proprie: eticheta devine SPATIU, altfel „…cazare.Beneficii:". */
+    || textCurat(ps?.short_description, 155)
+    || (product.description ? textCurat(product.description, 155) : product.name);
   const images = product.images as string[] | null;
   const canonicalSlug = product.slug ?? productSlug;
   const { customDomain, storeMode } = await getBusinessMetaCached(slug);
@@ -142,7 +148,11 @@ export default async function ProductDetailPage({ params }: Props) {
   // store_settings is no longer anon-readable — fetch the public-safe columns via service role.
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design")
+    // Coloanele de TVA lipseau, iar pagina le citeste: eticheta „(TVA inclus)" /
+    // „(fara TVA)" de langa pret nu s-a afisat NICIODATA, la niciun magazin,
+    // fiindca `vat_enabled` venea `undefined` si cadea pe rezerva `false`.
+    // Sunt sigure public — se dau oricum prin `getPublicStoreConfig`.
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, vat_rate, prices_include_vat, show_vat_label, show_vat_breakdown")
     .eq("business_id", business.id)
     .single();
 
@@ -175,9 +185,17 @@ export default async function ProductDetailPage({ params }: Props) {
   const storeBase = storeBaseUrl(business);
   const productUrl = `${storeBase}/product/${product.slug ?? productSlug}`;
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 0) || 0;
-  const de = (storeSettings?.page_content as { delivery_estimate?: { enabled?: boolean; min_days?: number; max_days?: number } } | null)?.delivery_estimate;
-  const delivery = de?.enabled ? { min: de.min_days ?? 1, max: de.max_days ?? 3 } : { min: 1, max: 3 };
-  const jsonLd = buildProductJsonLd(product, productUrl, brand, { cost: shippingCost, min: delivery.min, max: delivery.max });
+  // Termenul de livrare: Setari → Livrare, cu rezerva pe estimarea din editor.
+  // Aceleasi zile pe care le arata casuta „Estimare livrare" de pe pagina.
+  const timpLivrare = parseTimpDeLivrare(storeSettings?.page_content ?? null);
+  const jsonLd = buildProductJsonLd(product, productUrl, brand, {
+    cost: shippingCost,
+    min: timpLivrare?.tranzitMin ?? null,
+    max: timpLivrare?.tranzitMax ?? null,
+    handlingMin: timpLivrare?.procesareMin,
+    handlingMax: timpLivrare?.procesareMax,
+  },
+    product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
 
   // Acelasi header si footer ca pe pagina de magazin, din aceeasi configuratie.
@@ -205,6 +223,12 @@ export default async function ProductDetailPage({ params }: Props) {
       shippingCost: Number(storeSettings?.default_shipping_cost ?? 0),
       freeShippingThreshold: storeSettings?.free_shipping_threshold ?? null,
       minOrderAmount: storeSettings?.min_order_amount ?? null,
+      vat: {
+        vat_enabled: storeSettings?.vat_enabled ?? false,
+        vat_rate: Number(storeSettings?.vat_rate ?? 19),
+        prices_include_vat: storeSettings?.prices_include_vat ?? true,
+        show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+      },
     },
   });
 
@@ -212,18 +236,18 @@ export default async function ProductDetailPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(breadcrumbJsonLd) }}
       />
       <StorefrontThemeScope style={resolved.style}>
         <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen">
           <ProductPageSection
             variant={resolved.design.product.page.variant}
                 setari={resolved.design.product.page.settings}
-            business={business as never}
+            business={pentruBrowser(business) as never}
             product={product}
             storeSettings={storeSettings as never}
             basePath={basePath}

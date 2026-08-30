@@ -1,0 +1,625 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   NU CONTROLAM ORDINEA LA EI — DECI SPUNEM ADEVARUL LA URMA (27.08.2026, tarziu)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Generatia apara starea NOASTRA: un lot vechi care se aseaza nu mai scrie nimic la noi. Dar nu
+   poate anula ce a facut el LA EI:
+
+       GEN 10 → produsul ROSU → cererea ajunge la ei → conexiunea cade inainte de raspuns
+       comerciantul schimba pe ALBASTRU
+       GEN 11 → ALBASTRU → `completed` ✅
+       mai tarziu, GEN 10 se prelucreaza la ei → ramane ROSU ❌
+
+   Iar `inchideLoturileDepasite` scria ca „ce a trimis el a fost oricum inlocuit de ce am trimis
+   dupa". Nu e garantat: loturile lor se prelucreaza asincron, si nicaieri in contract nu scrie ca
+   doua loturi diferite se aseaza in ordinea trimiterii.
+
+   ⚠ CE SE POATE FACE: nu presupunem ca noul a castigat - ne asiguram ca ULTIMUL lucru pe care il
+   primesc e cel adevarat.
+*/
+
+const viu = (p: string) =>
+  readFileSync(p, "utf8").replace(/^[ \t]*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+const sync = viu("src/lib/aboutyou/sync.ts");
+const actiuni = viu("src/lib/actions/aboutyou.actions.ts");
+
+test("⚠ dupa un lot dintr-o generatie depasita se retrimite starea de ACUM", () => {
+  assert.match(sync, /async function reasertaStareaCurenta\(/);
+  /* Calea pe care il VEDEM asezandu-se: retrimitere imediata. */
+  assert.match(sync, /reasertaStareaCurenta\(admin, ctx\.businessId, listing\.product_id, listing\.style_key\)/);
+  /* Si nu se mai spune „se ignora": lotul chiar a facut ceva la ei. */
+  assert.doesNotMatch(sync, /se ignora`/);
+
+  /*
+   * ═══ ⚠ SI RETRIMITEREA NEPUSA LA COADA TINE LOTUL DESCHIS (27.08.2026, noaptea) ═══
+   *
+   * Raspunsul lui `reasertaStareaCurenta` se arunca aici: `await` gol, si mai departe. Deci exact
+   * in clipa in care STIM ca la ei s-a asezat o versiune veche, o clipa proasta a bazei facea sa
+   * nu mai ramana nimic care sa oblige retrimiterea — iar lotul se inchidea ca reusit.
+   */
+  assert.match(sync,
+    /if \(!await reasertaStareaCurenta\(admin, ctx\.businessId, listing\.product_id, listing\.style_key\)\) \{[\s\S]{0,200}?asezat = false;/);
+});
+
+test("⚠ si lotul ORB nu mai primeste o retrimitere GHICITA, ci una VERIFICATA", () => {
+  /*
+   * ═══ ⚠ SASE ORE NU ERA O GARANTIE A NIMANUI (27.08.2026) ═══
+   *
+   * Un `necunoscut` fara `batchRequestId` se poate aseza la ei ORICAND. Raspunsul de dimineata era
+   * o retrimitere amanata sase ore, cu speranta ca intre timp s-a asezat. Daca lotul vechi ajungea
+   * la a opta ora, ramanea el - si nu mai exista nimic care sa declanseze alta retrimitere.
+   *
+   * ⚠ SE POATE CITI CE AU EI. `GET /products/` intoarce 23 de campuri, printre care stocul,
+   * preturile, culoarea si marimea - MASURAT pe sandbox, o cerere, raspuns 200. Comentariile
+   * noastre spuneau de saptamani ca „nici deriva nu se poate masura"; era fals, si nimeni nu
+   * ceruse vreodata.
+   */
+  assert.match(sync, /async function derivaFataDeEi\(/);
+  assert.match(sync, /getProducts\(ctx\.auth, \{ style_key: listing\.style_key, page, per_page: 100 \}\)/);
+  assert.match(sync, /if \(deriva\.fel === "diferit"\)/);
+  /* Si amanarea ghicita a disparut cu totul. */
+  assert.doesNotMatch(sync, /ASTEPTAREA_LOTULUI_ORB_MS/);
+});
+
+test("⚠ si citirea merge pana la capat, nu doar prima suta", () => {
+  /*
+   * ═══ ⚠ `per_page` E PLAFONAT LA 100 LA EI (27.08.2026, noaptea) ═══
+   *
+   * Chiar de-aia `POST /products/` se rupe in loturi de 100. Prima varianta a comparatiei cerea o
+   * singura pagina, deci la un produs cu 250 de variante:
+   *
+   *     ce vrem noi:   250 de SKU-uri
+   *     ce vedem:      primele 100
+   *     concluzia:     varianta 101 „lipseste la ei" -> deriva -> retrimitere
+   *
+   * La FIECARE citire, pentru totdeauna. Iar SKU-urile in plus de pe paginile 2 si 3 — chiar
+   * scurgerile pe care comparatia inversa le cauta — n-ar fi fost vazute niciodata.
+   */
+  assert.match(sync, /for \(let page = 1; page <= MAX_PAGINI_DERIVA; page\+\+\)/);
+  /* ⚠ Oprirea se ia din LUNGIMEA lotului: `pagination.pages` e nulabil in schema lor. */
+  assert.match(sync, /if \(items\.length < 100\) \{ taiat = false; break; \}/);
+  /* ⚠ Si „n-am vazut tot" nu e „e bine": nu se declara nimic despre produsul acela. */
+  assert.match(sync, /if \(taiat\) return \{ fel: "necitibil", \.\.\.nimic \};/);
+});
+
+test("⚠ si se compara SI INVERS: ce au ei si noi nu", () => {
+  /*
+   * ═══ ⚠ O VARIANTA RETRASA CARE REDEVINE VANDABILA (27.08.2026, noaptea) ═══
+   *
+   *     SKU A si SKU B publicate; SKU B se retrage -> stoc 0 la ei, `removed` la noi
+   *     un lot vechi intarziat reaplica SKU B      -> la ei are iar stoc
+   *     starea dorita de acum contine doar SKU A
+   *
+   * Comparatia mergea intr-o singura directie: fiecare SKU pe care il VREM trebuie sa fie la ei.
+   * B nu e in lista noastra, deci nimeni nu-l cauta; iar fiindca local e `removed`,
+   * `reconciliazaVariante` nu-l mai pune niciodata in `deScos`. Marfa scoasa de la vanzare se
+   * vinde mai departe, si nimic la noi n-o arata vreodata.
+   */
+  assert.match(sync, /if \(aleNoastre\.has\(sku\)\) continue;/);
+  assert.match(sync, /if \(\(alLor\.quantity \?\? 0\) > 0\) \{/);
+  /* ⚠ Piatra de mormant se ridica: altfel retrimiterea n-ar folosi la nimic, `deScos` o sare. */
+  assert.match(sync, /if \(local\.ay_status === "removed"\) dePiatraRidicata\.push\(local\.id\);/);
+  assert.match(sync, /\.update\(\{ ay_status: null, updated_at: new Date\(\)\.toISOString\(\) \} as never\)/);
+  /* ⚠ Iar daca ridicarea pietrei nu se scrie, nu se declara „diferit": s-ar trimite degeaba. */
+  assert.match(sync, /if \(error\) return \{ fel: "necitibil", \.\.\.nimic \};/);
+  /* ⚠ Un SKU cu totul strain NU se atinge: nu stim ce e, si nu luam hotarari in locul omului. */
+  assert.match(sync, /straine\.push\(sku\); continue;/);
+});
+
+test("⚠ amprenta cuprinde ce s-a MASURAT ca se intoarce neschimbat", () => {
+  /*
+   * ═══ ⚠ CE INTRA SI CE NU, DUPA O MASURATOARE (27.08.2026, noaptea) ═══
+   *
+   * Amprenta lasa afara atributele si imaginile, cu explicatia ca „se pot rescrie sau reordona la
+   * ei". Nu se masurase nimic. Pus langa raspunsul lor real, pe acelasi produs:
+   *
+   *   `attributes`  aceleasi numere, ALTA ORDINE  -> sortate, se compara exact
+   *   materiale     identice pana la ordine       -> intra
+   *   `weight`      300 trimis, 300 primit        -> intra
+   *   `images`      REGAZDUITE si transcodate     -> NU intra deloc
+   *
+   * ⚠ URL-urile NU se compara, si nu din lene: plecam cu `edinio-cdn.com/….webp` si primim
+   * `ayou-live-sellerscenter-s3.s3.amazonaws.com/….jpg`. Confruntate literal, fiecare citire ar
+   * gasi „deriva" pe fiecare produs sanatos — o retrimitere fara capat a catalogului intreg.
+   */
+  assert.match(sync, /a: \[\.\.\.\(x\.attributes \?\? \[\]\)\]\.sort/);
+  assert.match(sync, /g: x\.weight \?\? null,/);
+  assert.match(sync, /mt: canonicMateriale\(x\.material_composition_textile\)/);
+  assert.match(sync, /mn: canonicMateriale\(x\.material_composition_non_textile\)/);
+  /*
+   * ⚠ SI NICI MACAR NUMARUL DE IMAGINI. Produsul masurat are o singura culoare, iar noi trimitem
+   * lista PE CULOARE: ce intorc ei pe unul multicolor nu stiu. Ramane doar comparatia intr-o
+   * singura directie, din `derivaFataDeEi`. Vezi `veghea-lotului-orb.test.ts`.
+   */
+  assert.doesNotMatch(sync, /im: \(x\.images/);
+});
+
+test("⚠ „n-am putut verifica” nu inchide lotul", () => {
+  /*
+   * Inchis atunci, n-ar mai exista nimic care sa ne aduca inapoi la produsul asta. Se reia la
+   * trecerea urmatoare - acelasi principiu ca peste tot: necunoscutul nu se trateaza ca „e bine".
+   */
+  assert.match(sync, /if \(deriva\.fel === "necitibil"\) \{[\s\S]{0,400}?continue;/);
+});
+
+test("⚠ si reasertarea trebuie sa REUSEASCA inainte de a inchide lotul", () => {
+  /*
+   * Inainte scria un `critical` si iesea `void`. Deci, exact in clipa in care STIM ca la ei poate
+   * fi o stare veche, o clipa proasta a bazei facea sa nu mai ramana nimic care sa oblige
+   * retrimiterea: lotul se inchidea, iar produsul ramanea stricat acolo, tacut.
+   */
+  assert.match(sync, /\): Promise<boolean> \{[\s\S]{0,900}?if \(!productId\) return false;/);
+  assert.match(sync, /if \(!await reasertaStareaCurenta\(admin, businessId, listing\.product_id, styleKey\)\) continue;/);
+});
+
+test("⚠ si nu se mai scaneaza 500 de listari sanatoase", () => {
+  /*
+   * Prima varianta citea `aboutyou_listings … limit(500)`. La zece mii de produse listate vedea o
+   * douazecime, mereu aceleasi primele: fara cursor si fara rotatie, un lot orb al produsului
+   * numarul opt mii n-ar fi primit niciodata nici macar reasertarea.
+   *
+   * Se porneste invers, de la LOTURILE problematice - putine, trecatoare, si cu index partial.
+   */
+  assert.match(sync, /\.from\("aboutyou_batches"\)\.select\("id, related_ids, generatie"\)/);
+  assert.doesNotMatch(sync, /from\("aboutyou_listings"\)\.select\("style_key, generatie, product_id"\)/);
+  assert.match(sync, /const MAX_LOTURI_ORBE = 20;/);
+});
+
+test("⚠ o setare globala schimbata repune produsele la coada", () => {
+  /*
+   * Comerciantul schimba cursul din 5 in 4.5. Se salva `fx.updated_at` - corect - dar NU se punea
+   * nimic la coada, deci la About You ramaneau preturile vechi pana cand produsul se schimba din
+   * alt motiv, poate niciodata. `valid_at` nu ajuta cu nimic: el apara ordinea intre doua
+   * trimiteri, nu inlocuieste o trimitere care nu se face deloc.
+   */
+  assert.match(actiuni, /const doarPret = fxChanged/);
+  assert.match(actiuni, /const op = dinNou \? "upsert" as const : "price" as const;/);
+  assert.match(actiuni, /await enqueueForListings\(g\.supabase, businessId, op, undefined, undefined, lucrare\.dupa\)/);
+
+  /*
+   * ═══ ⚠ SI „INCOMPLET" NU MAI E UN CAPAT DE DRUM (27.08.2026) ═══
+   *
+   * Se scria in jurnal si se raspundea `success`. La douazeci si cinci de mii de produse, primele
+   * douazeci de mii intrau in coada si ultimele cinci mii NU - iar ecranul spunea „Salvat".
+   * Preturile alea puteau ramane vechi la About You pentru totdeauna. Nu e o limitare de
+   * comoditate: e deriva de date, tacuta.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /export async function continuaLucrarileInMasa\(/);
+  /* ⚠ Reluarea e EXACTA: ordinea e `product_id` crescator, deci nu poate nici sari, nici repeta. */
+  assert.match(sync, /if \(dupa\) q = q\.gt\("product_id", dupa\);/);
+  assert.match(sync, /\.order\("product_id", \{ ascending: true \}\)/);
+  /* ⚠ Si lucrarea se inchide ABIA cand s-a terminat. */
+  assert.match(sync, /\.\.\.\(gata \? \{ status: "gata", terminat_la: acum \} : \{\}\)/);
+  /* Si cronul chiar continua, altfel cursorul ar fi doar o nota. */
+  const cron = viu("src/app/api/cron/aboutyou-sync/route.ts");
+  assert.match(cron, /raspandite \+= await continuaLucrarileInMasa\(admin, ctx\)/);
+  /* ⚠ Si se alege ce e mai ieftin: `upsert` inseamna produsul intreg, cu verificari si loturi. */
+  assert.match(actiuni, /input\.ship_countries != null/);
+});
+
+test("⚠ urma lucrarii se scrie INAINTEA lucrului, nu dupa", () => {
+  /*
+   * ═══ ⚠ CURSORUL SE SCRIA LA SFARSIT, SI FARA SA I SE CITEASCA RASPUNSUL (27.08.2026, noaptea) ═══
+   *
+   *     25.000 de listari
+   *     primele 20.000 intra in coada     ✅
+   *     scrierea cursorului pica          ❌
+   *     omul vede „Salvat"                ✅
+   *
+   * Ultimele 5.000 nu mai au NIMIC care sa le atinga vreodata. Aceeasi lectie ca la
+   * `cuLotDurabil`, unde intentia se scrie inaintea cererii: ordinea nu e un amanunt.
+   */
+  const iDeschide = actiuni.indexOf("async function deschideLucrarea(");
+  assert.ok(iDeschide > 0, "lucrarea trebuie sa se poata deschide inainte de lucru");
+  /* ⚠ Randul se INSEREAZA, deci exista inainte ca vreo transa sa plece. */
+  assert.match(actiuni, /\.from\("aboutyou_bulk_jobs"\)[\s\S]{0,80}?\.insert\(/);
+  /* ⚠ Iar daca nu s-a putut deschide, actiunea NU spune ca a pornit. */
+  assert.match(actiuni, /if \(!lucrare\) return \{ error: "Nu am putut porni sincronizarea/);
+  assert.match(actiuni, /if \(!lucrare\) return \{ error: "Nu am putut porni publicarea/);
+});
+
+test("⚠ „Sincronizeaza tot” si „Publica toate” n-au plafon terminal", () => {
+  /*
+   * ═══ ⚠ LA 30.000 DE PRODUSE, ULTIMELE 10.000 NU PLECAU NICIODATA (27.08.2026, noaptea) ═══
+   *
+   * `enqueueForListings` se opreste la 20.000 si intoarce `incomplet`. Pentru schimbarile de
+   * setari exista o reluare; pentru cele doua butoane manuale NU exista niciuna. Iar o noua
+   * apasare pornea iar DE LA INCEPUT — deci nu era o intarziere, era infometare: exact ultimele
+   * produse nu apucau sa plece vreodata.
+   *
+   * ⚠ SI UN SINGUR CAMP IN CONFIG SE CALCA IN PICIOARE: „Publica toate" scria `fanout = publish`,
+   * iar o salvare de setari un minut mai tarziu il inlocuia cu `price`. Publicarea disparea in
+   * tacere. Un RAND per lucrare nu are cum.
+   */
+  assert.match(actiuni, /deschideLucrarea\(businessId, "upsert"\)/);
+  assert.match(actiuni, /deschideLucrarea\(businessId, "publish", "draft", true\)/);
+  /* ⚠ Cursorul lucrarii se transmite mai departe, altfel fiecare trecere ar relua de la zero. */
+  assert.match(actiuni, /"publish", "draft", true, lucrare\.dupa\)/);
+
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  /* ⚠ Si reluarea din cron citeste ACEEASI multime: filtrele se tin minte pe rand. */
+  assert.match(sync, /if \(lucrare\.status_filtru\) q = q\.eq\("status", lucrare\.status_filtru\);/);
+  assert.match(sync, /if \(lucrare\.doar_trimise\) q = q\.not\("last_synced_at", "is", null\);/);
+});
+
+test("⚠ si mesajul de pe ecran nu mai cere ce nu mai trebuie facut", () => {
+  /*
+   * ⚠ „Repeta operatia" era ADEVARAT cat timp plafonul era terminal: ce nu incapea nu mai pleca
+   * niciodata. Acum lucrarea se continua singura, iar a doua apasare nici macar nu porneste una
+   * noua — o continua pe cea care merge. Cerut sa repete, omul ar apasa degeaba.
+   *
+   * ⚠ Un text ramas in urma codului minte, si minte cu incredere. E a patra oara luna asta.
+   */
+  const ecran = readFileSync("src/components/dashboard/AboutYouListings.tsx", "utf8");
+  const viuEcran = ecran.replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(viuEcran, /Repetă operația/);
+  assert.match(viuEcran, /Restul catalogului continuă automat, în fundal/);
+  assert.match(viuEcran, /Restul continuă automat, în fundal/);
+});
+
+test("⚠ si un `fanout` vechi din config nu se pierde la desfasurare", () => {
+  /*
+   * ⚠ INTRE COMIT SI DESFASURARE, baza poate avea magazine cu campul vechi inca plin — iar el
+   * inseamna „mai am catalog de pus la coada". Codul nou care doar l-ar ignora ar lasa exact
+   * produsele alea neatinse de nimic. Se preia intr-o lucrare, si abia atunci se sterge.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /const f = ctx\.config\.fanout;/);
+  assert.match(sync, /if \(!error \|\| \(error as \{ code\?: string \}\)\.code === "23505"\) \{[\s\S]{0,160}?fanout: null/);
+});
+
+/*
+ * ⚠ REGULA A RAMAS, LOCUL EI S-A SCHIMBAT (28.08.2026, noaptea).
+ *
+ * Probele de mai jos cereau, pana azi, forma din TypeScript: `const APROBATE = new Set([...])`,
+ * `dupaSku.get(sku)`, `if (!vechea) continue;`. **Aveau dreptate cand s-au scris** — atunci acolo
+ * era singura verificare. Au incetat sa aiba cand s-a vazut ca verificarea si scrierea stateau in
+ * locuri deosebite, cu cateva cereri intre ele:
+ *
+ *     salvarea citeste: status `pending_approval` -> regula ingaduie schimbarea
+ *     About You aproba produsul; reconcilierea scrie `active`
+ *     salvarea scrie categoria noua -> exact ce regula voia sa impiedice
+ *
+ * Masurat pe baza adevarata: fara incuietoare, scrierea cronului a intrat in fereastra la 589ms;
+ * cu ea, a asteptat toate cele trei secunde si hotararea s-a luat pe statusul adevarat.
+ *
+ * Deci probele se uita acum la SQL — la temelia regenerata din productie, nu la migratie — si
+ * cer, pe langa regula, chiar incuietoarea si ordinea care o fac adevarata.
+ */
+const temelie = viu("migrations/000-schema-baseline.sql");
+
+/** Corpul lui `aboutyou_salveaza_listarea`, dintre cele doua `$function$` care il incadreaza. */
+function corpulSalvarii(): string {
+  const i = temelie.indexOf("FUNCTION public.aboutyou_salveaza_listarea(");
+  assert.notEqual(i, -1, "functia de salvare lipseste din temelia schemei");
+  const inceput = temelie.indexOf("AS $function$", i);
+  const sfarsit = temelie.indexOf("$function$", inceput + "AS $function$".length);
+  assert.ok(inceput !== -1 && sfarsit !== -1);
+  return temelie.slice(inceput, sfarsit);
+}
+
+test("⚠ categoria nu se mai poate schimba dupa aprobare, si nu doar se avertizeaza", () => {
+  /*
+   * ⚠ Se opreste la SALVARE, nu la trimitere: oprita la trimitere, schimbarea era deja salvata la
+   * noi, iar de-acolo orice comparatie intre ce credem si ce e la ei ar fi mintit.
+   */
+  const corp = corpulSalvarii();
+  /*
+   * ⚠ NU MAI E O LISTA DE STARI, e un SEMN. Vezi nota din `ciclul-aprobarii.test.ts`: statusul se
+   * rescrie — inclusiv pe `error`, dintr-unsprezece locuri — iar „a fost aprobat" e o intamplare
+   * din trecut, care nu se poate deduce dintr-o valoare de acum.
+   */
+  assert.match(corp, /v_aprobat or v_status = any\(c_in_asteptare\)/);
+  assert.match(corp, /c_in_asteptare constant text\[\] := array\['pending_approval', 'draft_pending'\]/);
+  assert.doesNotMatch(corp, /c_aprobate/, "s-a intors deducerea din starea de acum");
+  assert.match(corp, /categorie-blocata/);
+  /* ⚠ Si mesajul, cu IESIREA lui scrisa, a ramas acolo unde il vede omul. */
+  assert.match(actiuni, /nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat/);
+  /*
+   * ⚠ SFATUL VECHI NU FUNCTIONA, si proba il cerea. „Elimină listarea și creează una nouă" —
+   * dar `style_key` E CHIAR `productId`, deci listarea refacuta poarta aceeasi cheie, iar pentru
+   * About You e ACELASI product master, inca aprobat. Omul si-ar fi stricat listarea degeaba si
+   * s-ar fi lovit de acelasi refuz.
+   *
+   * ⚠ Un master NOU cere o CHEIE noua, iar cheia vine din produsul din magazin. Deci iesirea
+   * adevarata e un produs nou — si asta scrie acum.
+   */
+  assert.match(actiuni, /fă un produs nou în magazin/);
+  assert.match(actiuni, /Nici eliminarea și relistarea nu ajută/);
+  assert.doesNotMatch(actiuni, /elimină listarea și creează una nouă/,
+    "s-a intors sfatul care trimite omul pe un drum ce nu duce nicaieri");
+  /* ⚠ Si nu s-a lasat o copie in TypeScript: doua liste s-ar departa tacut, iar cea veche ar parea paza. */
+  assert.doesNotMatch(actiuni, /const APROBATE = new Set\(/);
+});
+
+test("⚠ marimea la fel, si comparata PE SKU, nu pe pozitie", () => {
+  /* Variantele se pot reordona intre doua deschideri ale editorului; comparate pe indice, ar fi
+     parut schimbate toate. */
+  const corp = corpulSalvarii();
+  assert.match(corp, /v\.sku = r->>'sku'/, "potrivirea se face pe SKU, nu pe pozitie");
+  assert.match(corp, /marime-blocata/);
+  /*
+   * ⚠ SE NUMESC TOATE, IN ORDINE. `limit 1` fara `order by` numea oricare — iar cu trei marimi
+   * schimbate, omul repara una, apasa iar, si afla de urmatoarea: o scara urcata in alta ordine
+   * decat cea de pe ecran. Si nici macar aceeasi de doua ori.
+   */
+  assert.match(corp, /array_agg\(distinct v\.sku order by v\.sku\)/,
+    "SKU-urile blocate se aduna toate, si in ordine");
+  assert.doesNotMatch(corp, /marime-blocata[\s\S]{0,80}?limit 1/,
+    "s-a intors alegerea nedeterminista a unui singur SKU");
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  assert.match(act, /skuri\.slice\(0, 3\)/, "mesajul numeste primele trei");
+  assert.match(act, /și încă \$\{skuri\.length - 3\}/, "si spune cate au mai ramas");
+  /* ⚠ O varianta NOUA n-are ce sa incalce: `join` o lasa pe dinafara, ca `if (!vechea) continue`. */
+  assert.match(corp, /join public\.aboutyou_variants/);
+  /* ⚠ Si una a carei marime veche e nescrisa n-a fost niciodata aprobata cu o marime. */
+  assert.match(corp, /v\.size_id is not null/);
+  /* ⚠ `is distinct from`, nu `<>`: cu `<>`, o marime devenita null ar fi trecut neobservata. */
+  assert.match(corp, /is distinct from/);
+  /*
+   * ⚠ Textul s-a schimbat odata cu codul: de cand se numesc TOATE variantele blocate, mesajul nu
+   * mai poate spune „la varianta X". Se cere fapta — ca refuzul vorbeste despre marime dupa
+   * aprobare — si iesirea lui scrisa, nu ortografia de ieri.
+   */
+  assert.match(actiuni, /nu mai acceptă schimbarea mărimii după aprobare/);
+  assert.match(actiuni, /cu SKU nou, pentru mărimea corectă/);
+  assert.doesNotMatch(actiuni, /const vechea = dupaSku\.get\(sku\);/);
+});
+
+test("⚠ si regula se citeste sub aceeasi incuietoare cu scrierea", () => {
+  /*
+   * ⚠ AICI E TOT MIEZUL, si nu se vede din regula insasi: verificarea trebuie sa fie DUPA
+   * `for update` pe randul de listare si INAINTEA oricarei scrieri. Mutata dupa scriere, ar
+   * respinge o salvare deja facuta; facuta fara incuietoare, ar hotari pe un status invechit.
+   */
+  const corp = corpulSalvarii();
+  /*
+   * ⚠ SE DECUPEAZA CHIAR CITIREA CARE HOTARASTE, nu se cauta „for update" oriunde. In functie sunt
+   * DOUA incuietori — a doua, in ramura de creare, e tot inaintea regulii; cautat asa, testul ar fi
+   * trecut verde cu prima scoasa. Confruntat cu mutatia: cu ancora larga trecea, cu asta cade.
+   */
+  const citirea = corp.slice(0, corp.indexOf("if found then"));
+  assert.match(citirea, /select id, status, category_id, aprobat_odata[\s\S]{0,220}?for update/i,
+    "citirea care hotaraste isi incuie randul, altfel statusul se poate invechi sub ea");
+  const iIncuietoare = citirea.indexOf("for update");
+  /*
+   * ⚠ SE CAUTA FOLOSIREA, NU DECLARATIA. `c_aprobate` apare intai in blocul `declare`, care e
+   * INAINTEA oricarei incuietori — cautat asa, testul cadea desi codul era bun, si tot asa ar fi
+   * trecut verde daca regula ar fi fost mutata gresit. A doua oara in doua zile.
+   */
+  const iRegula = corp.indexOf("if v_aprobat or v_status = any(c_in_asteptare)");
+  const iScriere = corp.indexOf("update public.aboutyou_listings set (%s)");
+  assert.ok(iIncuietoare > 0 && iRegula > 0 && iScriere > 0);
+  assert.ok(iIncuietoare < iRegula, "randul se incuie inainte ca regula sa-i citeasca statusul");
+  assert.ok(iRegula < iScriere, "regula se judeca inaintea oricarei scrieri");
+});
+
+test("⚠ categoria trimisa se ingheata pe rand, altfel regula n-are ce compara", () => {
+  /*
+   * ═══ ⚠ O GAURA PE SUB REGULA (28.08.2026, noaptea) ═══
+   *
+   * Categoria care pleaca la ei nu e mereu cea de pe listare: `effectiveCategoryId` cade pe harta
+   * din setari cand randul n-are una scrisa. Iar atunci regula de mai sus tace — ea cere
+   * `category_id` nenul — si nici n-ar avea ce compara:
+   *
+   *     listarea are `category_id` null; harta zice 1234; produsul e APROBAT cu 1234
+   *     comerciantul reface maparea: acum harta zice 5678
+   *     urmatoarea trimitere pleaca cu 5678, pe un produs aprobat pe 1234
+   *
+   * ⚠ Deci se scrie CE CHIAR PLEACA, inaintea cererii. De-atunci `effectiveCategoryId` intoarce
+   * valoarea de pe rand, harta nu mai poate schimba nimic pe la spate, iar regula are un martor.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  /* ⚠ Inaintea cererii, ca `remote_poate_exista` — dupa, ar exista o clipa in care la ei e o
+     categorie despre care la noi nu scrie nimic. */
+  const iInghetare = sync.indexOf("if (listing.category_id == null && categoria != null)");
+  const iCerere = sync.indexOf("const transe = Math.ceil(built.items.length / 100);");
+  assert.ok(iInghetare > 0, "categoria trimisa nu se scrie pe rand");
+  assert.ok(iCerere > iInghetare, "inghetarea vine INAINTEA transelor care pleaca la ei");
+  /* ⚠ Si nu se suprascrie una aleasa de om: acolo alegerea lui e mai tare. */
+  assert.match(sync, /listing\.category_id == null && categoria != null/);
+  /* ⚠ Si daca nu se scrie, NU se trimite: aceeasi masura ca `remote_poate_exista`. */
+  assert.match(sync, /if \(ePoate\) \{[\s\S]{0,200}?ok: false, status: 0/);
+});
+
+test("⚠ avertismentul si oprirea pun ACEEASI intrebare, nu doua liste care se pot departa", () => {
+  /*
+   * ═══ ⚠ COPIA A SUPRAVIETUIT SUB ALT NUME, SI APOI S-A DEPARTAT ═══
+   *
+   * Cand regula s-a mutat in SQL am scris ca „nu s-a lasat si aici o copie". Nu era adevarat:
+   * `dupaAprobare` — aceeasi lista, alt nume — statea in avertismentul din editor. Proba care
+   * pazea cerea NUMELE `APROBATE`, deci a trecut verde peste chiar lucrul pe care il apara.
+   *
+   * ⚠ SI COPIA CHIAR S-A DEPARTAT, o zi mai tarziu: oprirea a trecut pe `aprobat_odata`, lista de
+   * stari a ramas pe loc. Un produs aprobat cazut pe `error` ar fi fost OPRIT fara sa fi fost
+   * AVERTIZAT — iar un avertisment care tace inaintea unui refuz e mai rau decat niciunul.
+   *
+   * ⚠ ACUM NU MAI SUNT DOUA LISTE, e aceeasi intrebare pusa in doua locuri: semnul persistent,
+   * plus cele doua stari de asteptare. Proba le confrunta pe amandoua.
+   */
+  const act = viu("src/lib/actions/aboutyou.actions.ts");
+  const corp = corpulSalvarii();
+
+  /* ⚠ Amandoua citesc SEMNUL, nu starea de acum. */
+  assert.match(act, /rand\.aprobat_odata === true/);
+  assert.match(corp, /v_aprobat or /);
+
+  /* ⚠ Si aceleasi doua stari de asteptare, comparate element cu element, nu ca text. */
+  const inTs = act.match(/const inAsteptare = new Set\(\[([^\]]+)\]\)/);
+  assert.ok(inTs, "avertismentul nu mai are starile de asteptare");
+  const stariTs = [...inTs[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
+
+  const inSql = corp.match(/c_in_asteptare constant text\[\] := array\[([^\]]+)\]/);
+  assert.ok(inSql, "oprirea nu mai are starile de asteptare");
+  const stariSql = [...inSql[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+
+  assert.deepEqual(stariTs, stariSql,
+    "avertismentul si oprirea vorbesc despre stari diferite: unul ar minti");
+});
+
+test("⚠ semnul aprobarii se aprinde din declansator, si nu se stinge niciodata", () => {
+  /*
+   * ⚠ SCRIS IN COD, s-ar fi pus in unsprezece locuri — si uitat intr-unul din ele. Statusul se
+   * scrie din `syncProductNow`, din `setRemoteStatus`, din reconciliere, din asezarea loturilor.
+   * Un declansator il prinde pe toate, si pe cele de maine.
+   */
+  const temelie2 = viu("migrations/000-schema-baseline.sql");
+  assert.match(temelie2, /FUNCTION public\.aboutyou_marcheaza_aprobarea/);
+  /*
+   * ⚠ PE UPDATE INTREG, NU DOAR `OF status` (29.08.2026, dupa-amiaza). Cat timp asculta doar
+   * coloana `status`, o scriere care atingea NUMAI `aprobat_odata` nu-l pornea — deci tocmai calea
+   * de stins ramanea deschisa. Masurat: pana la schimbarea asta, un `update` direct chiar il
+   * stingea.
+   */
+  assert.match(temelie2, /trg_aboutyou_marcheaza_aprobarea[\s\S]{0,200}?BEFORE INSERT OR UPDATE ON/i);
+  assert.doesNotMatch(temelie2, /trg_aboutyou_marcheaza_aprobarea[\s\S]{0,200}?UPDATE OF status/i);
+  /* ⚠ Numai in sus: nu se uita la `old`, deci nu poate stinge nimic. */
+  /*
+   * ⚠ Prima socoteala taia corpul INAINTE sa inceapa: `indexOf("$function$", inceput) + 10` cade
+   * chiar pe deschizatorul lui. Se ia bucata dintre cele doua marcaje, ca peste tot.
+   */
+  const iTrg = temelie2.indexOf("FUNCTION public.aboutyou_marcheaza_aprobarea");
+  const iDesc = temelie2.indexOf("AS $function$", iTrg) + "AS $function$".length;
+  const corpTrg = temelie2.slice(iDesc, temelie2.indexOf("$function$", iDesc));
+  assert.match(corpTrg, /new\.aprobat_odata := true/);
+  assert.doesNotMatch(corpTrg, /aprobat_odata := false/, "semnul nu are voie sa se stinga");
+
+  /*
+   * ⚠ SI `inactive` NU E IN LISTA, dinadims. E singura stare dintre cele care dovedeau aprobarea
+   * pe care o scriem SI NOI, optimist, inainte de verdictul lor (`setRemoteStatus`:
+   * `published -> pending`, `draft -> draft`, dar `inactive -> inactive`). Deci singura despre
+   * care declansatorul n-are cum sa stie cine a scris-o:
+   *
+   *     produs NEAPROBAT pe `error` -> se cere retragerea -> `inactive` la ei
+   *     cererea e acceptata -> scriem local `inactive` -> semnul se aprindea ❌
+   *     ei resping -> revenim la `error`, dar semnul e ireversibil dinadins
+   *     -> categoria si marimile blocate pe veci, pe un produs care n-a fost aprobat niciodata
+   */
+  assert.doesNotMatch(corpTrg, /'inactive'/,
+    "`inactive` se scrie si optimist, deci nu poate dovedi singura aprobarea");
+  for (const st of ["active", "published", "pending_active", "problem"]) {
+    assert.match(corpTrg, new RegExp(`'${st}'`), `starea ${st} lipseste din dovada`);
+  }
+
+  /*
+   * ⚠ SI SEMNUL E MONOTON PRIN REGULA, nu doar prin obicei. „Nu se stinge niciodata" era pana azi
+   * o OBSERVATIE — adevarata doar fiindca niciun cod nu scria `false`. Masurat: o scriere directa
+   * chiar il stingea.
+   */
+  assert.match(corpTrg, /new\.aprobat_odata := coalesce\(old\.aprobat_odata, false\) or/,
+    "valoarea veche trebuie sa supravietuiasca oricarei scrieri");
+  /* ⚠ Si coloana e `not null`, ca sa nu existe „nu stiu" acolo unde regula cere un raspuns. */
+  assert.match(temelie2, /aprobat_odata boolean DEFAULT false NOT NULL/i);
+});
+
+/* ── Tinta retragerii ────────────────────────────────────────────────────── */
+
+test("⚠ tinta retragerii se citeste din semn, nu se ghiceste din stare", () => {
+  /*
+   * ═══ ⚠ ACEEASI DEDUCERE, INTR-UN AL DOILEA LOC (29.08.2026, dupa-amiaza) ═══
+   *
+   * `aprobat_odata` s-a nascut fiindca „a fost aprobat?" nu se poate citi din starea de acum. Dar
+   * `tintaRetragere` continua sa faca exact asta, cu `INAINTE_DE_APROBARE = {draft,
+   * pending_approval, rejected}` — si cadea la fel, pe `error`:
+   *
+   *     produs NEAPROBAT, o trimitere pica -> `status = 'error'`
+   *     `error` nu e in lista -> tinta iese `inactive`
+   *     cererea e acceptata -> scriem local `inactive` -> semnul se aprindea
+   *
+   * Deci cele doua defecte erau unul singur, vazut din doua parti.
+   *
+   * ⚠ SI CAND NU STIM, SE CERE `draft`. Cele doua greseli nu costa la fel: `inactive` cerut pentru
+   * un produs neaprobat il face sa PARA aprobat la noi; `draft` cerut pentru unul aprobat e doar
+   * refuzat de ei, zgomotos si reparabil.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /function tintaRetragere\(listing: Pick<ListingRow, "aprobat_odata">\)/,
+    "tinta primeste listarea, nu un sir de stare");
+  assert.match(sync, /return listing\.aprobat_odata \? "inactive" : "draft";/);
+  assert.doesNotMatch(sync, /INAINTE_DE_APROBARE/,
+    "s-a intors lista de stari din care se deducea aprobarea");
+
+  /* ⚠ Si TOATE apelurile trimit listarea: unul singur ramas pe `status` ar readuce defectul. */
+  const apeluri = [...sync.matchAll(/tintaRetragere\(([^)]*)\)/g)].map((m) => m[1]);
+  const chemari = apeluri.filter((a) => a !== 'listing: Pick<ListingRow, "aprobat_odata">');
+  assert.ok(chemari.length >= 3, `asteptam cel putin trei apeluri, sunt ${chemari.length}`);
+  for (const a of chemari) {
+    assert.equal(a, "listing", `un apel inca trimite \`${a}\``);
+  }
+});
+
+test("⚠ semnul intra in randul citit, altfel codul n-are ce citi", () => {
+  /*
+   * ⚠ Proba care scaneaza sursa confirma ca SCRIE `listing.aprobat_odata`, nu ca are ce citi. De
+   * aia se cere si coloana in cele doua selecturi, si campul in tipul randului — chiar lantul care
+   * lipsea: interfata si tipurile ramasesera in urma migratiei.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /^\s*aprobat_odata: boolean;$/m, "`ListingRow` trebuie sa poarte semnul");
+  const selecturi = [...sync.matchAll(/\.select\("id, product_id, style_key, status,[^"]*"\)/g)];
+  assert.equal(selecturi.length, 2, "cele doua citiri de listare");
+  for (const sel of selecturi) {
+    assert.match(sel[0], /aprobat_odata/, "un select nu aduce semnul, deci codul l-ar citi `undefined`");
+  }
+  /* ⚠ Si tipurile bazei il stiu: fara asta, clientul tipizat respinge chiar coloana. */
+  const tipuri = viu("src/types/database.types.ts");
+  assert.match(tipuri, /aprobat_odata: boolean/);
+  assert.match(tipuri, /aprobat_odata\?: boolean/);
+});
+
+test("⚠ reconcilierea aprinde semnul pentru adevarul LOR despre `inactive`", () => {
+  /*
+   * `inactive` a iesit din declansator fiindca o scriem si noi, optimist. Dar la reconciliere
+   * starea vine chiar de la ei — un produs dezactivat la ei a trecut de aprobare, altfel n-ar fi
+   * avut de unde sa fie dezactivat. Deci semnul se aprinde de acolo, pe nume.
+   */
+  const sync = viu("src/lib/aboutyou/sync.ts");
+  assert.match(sync, /const dovedesteAprobarea = \[[^\]]*"inactive"[^\]]*\]\s*\n?\s*\.includes\(status\)/,
+    "reconcilierea trebuie sa socoteasca `inactive` drept dovada");
+  assert.match(sync, /\.\.\.\(dovedesteAprobarea \? \{ aprobat_odata: true \} : \{\}\)/,
+    "si sa scrie semnul odata cu starea, in aceeasi scriere");
+  /* ⚠ Numai `true`, niciodata `false`: semnul nu se stinge de aici. */
+  assert.doesNotMatch(sync, /aprobat_odata: false/);
+});
+
+test("⚠ aprobarea tine de CHEIA DE STIL, deci supravietuieste eliminarii si relistarii", () => {
+  /*
+   * ═══ ⚠ SEMNUL MUREA ODATA CU RANDUL, DAR APROBAREA LOR NU MOARE (29.08.2026, noaptea) ═══
+   *
+   *     L1, `style_key = PROD123`, aprobat la ei, semnul aprins
+   *     omul elimina listarea -> randul local se sterge, semnul se duce cu el
+   *     omul relisteaza acelasi produs -> L2, `style_key` TOT `PROD123`
+   *     L2 se naste „neaprobat" -> categoria si marimile redevin schimbabile ❌
+   *
+   * Dar pentru About You `PROD123` e ACELASI product master, si el ramane aprobat: un produs
+   * `inactive` se poate reactiva, iar republicarea sare peste aprobare.
+   *
+   * ⚠ ACEEASI LECTIE CA LA GENERATIE: starea tine de `style_key`, care supravietuieste
+   * relistarii, nu de randul care moare. Masurat, in amandoua directiile: aprobat -> eliminat ->
+   * relistat ramane blocat; neaprobat ramane liber.
+   */
+  const temelie3 = viu("migrations/000-schema-baseline.sql");
+  /* ⚠ Semnul sta pe ceas, care traieste peste eliminare. */
+  assert.match(temelie3, /CREATE TABLE IF NOT EXISTS public\.aboutyou_ceas_stare[\s\S]{0,600}?aprobat_odata boolean/i);
+
+  const corpTrg = (() => {
+    const i = temelie3.indexOf("FUNCTION public.aboutyou_marcheaza_aprobarea");
+    const d = temelie3.indexOf("AS $function$", i) + "AS $function$".length;
+    return temelie3.slice(d, temelie3.indexOf("$function$", d));
+  })();
+  /* ⚠ La nastere se ia de pe ceas: altfel L2 s-ar naste neaprobat. */
+  assert.match(corpTrg, /tg_op = 'INSERT'[\s\S]{0,300}?from public\.aboutyou_ceas_stare/);
+  /* ⚠ Si se scrie inapoi in ceas, ca sa supravietuiasca randului. */
+  assert.match(corpTrg, /insert into public\.aboutyou_ceas_stare[\s\S]{0,200}?do update set aprobat_odata = true/);
+  /* ⚠ Si NU atinge `generatie`: ea are stapanul ei. */
+  assert.doesNotMatch(corpTrg, /do update set[^;]*generatie/);
+
+  /* ⚠ Iar salvarea intreaba CEASUL, nu doar randul: randul e oglinda, ceasul e izvorul. */
+  const corp = corpulSalvarii();
+  assert.match(corp, /v_aprobat := coalesce\(v_aprobat, false\) or coalesce\(\([\s\S]{0,220}?from public\.aboutyou_ceas_stare/);
+});

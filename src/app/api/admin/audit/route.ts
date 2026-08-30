@@ -4,7 +4,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 interface AuditLog {
   id: string;
-  admin_id: string;
+  /**
+   * Poate fi null: adminul care a facut actiunea poate fi sters ulterior, iar
+   * cheia strina e ON DELETE SET NULL. Coloana a fost facuta nullabila in baza
+   * pe 23 iulie, cand s-a reparat stergerea adminilor, dar tipul de aici a ramas
+   * pe `string` pana la regenerarea fisierului de tipuri.
+   */
+  admin_id: string | null;
   action: string;
   target_type: string;
   target_id: string | null;
@@ -56,7 +62,11 @@ export async function GET(req: NextRequest) {
   }
 
   // Collect unique admin IDs to fetch names
-  const adminIds = [...new Set((logs ?? []).map((l: AuditLog) => l.admin_id).filter(Boolean))];
+  /* `filter(Boolean)` curata valorile, dar nu ingusteaza tipul, deci ramaneau
+     `null`-uri in tip si `.in()` le refuza. */
+  const adminIds = [
+    ...new Set((logs ?? []).map((l: AuditLog) => l.admin_id).filter((id): id is string => !!id)),
+  ];
 
   let adminNames: Record<string, string> = {};
   if (adminIds.length > 0) {
@@ -75,7 +85,7 @@ export async function GET(req: NextRequest) {
   // Attach admin name to each log
   const enrichedLogs = (logs ?? []).map((log: AuditLog) => ({
     ...log,
-    admin_name: adminNames[log.admin_id] ?? null,
+    admin_name: log.admin_id ? adminNames[log.admin_id] ?? null : null,
   }));
 
   return NextResponse.json({ logs: enrichedLogs, total: count ?? 0 });

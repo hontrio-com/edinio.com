@@ -1,5 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { stripDiacritics, normalizeCountyName, normalizeLocalityName } from "@/lib/utils/ro-address";
+import { eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const BASE_URL = "https://api.dpd.ro/v1";
 
@@ -15,8 +16,13 @@ export type DpdConfig = {
   client_id: number;
   /** Opt-in to international (EU) delivery — shows the country field at checkout. */
   international_enabled?: boolean;
-  /** Opt-in: price international orders by the real product weight (else a 1kg estimate). */
-  use_product_weight?: boolean;
+  /*
+   * `use_product_weight` a DISPARUT: greutatea se calculeaza acum intotdeauna din
+   * cosul incarcat din baza, si la intern, si la international. Comutatorul nu
+   * mai avea ce sa porneasca, iar in pozitia „oprit" ar fi cerut curierului
+   * tariful unui kilogram pentru un colet de zece. Campul poate exista in
+   * `dpd_config` la magazinele vechi; nimeni nu-l mai citeste.
+   */
   /** Sender IBAN — required by DPD to pay back COD (ramburs) collected from recipients. */
   iban?: string;
   /** Bank account holder (the merchant). Sent alongside the IBAN. */
@@ -84,12 +90,24 @@ async function dpdPost<T>(path: string, body: unknown): Promise<T> {
   try {
     data = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    throw new Error(`DPD ${path}: ${(text || res.statusText).slice(0, 250)}`);
+    // Corp necitibil: nu stim daca cererea a fost prelucrata sau nu. Mesajul e
+    // acelasi ca inainte; se adauga doar verdictul, pentru registrul de operatii
+    // externe (src/lib/operatii/eroare-furnizor.ts).
+    throw eroareNesigura(`DPD ${path}: ${(text || res.statusText).slice(0, 250)}`);
   }
   if (!res.ok || data["error"]) {
     const errInfo = data["error"] as Record<string, unknown> | null | undefined;
     const msg = errInfo?.["message"] ?? data["message"] ?? res.statusText;
-    throw new Error(`DPD ${path}: ${msg}`);
+    /*
+     * ⚠ DPD raspunde 200 cu `error` in corp — deci statusul HTTP nu spune adevarul.
+     * Un `data["error"]` pe un raspuns reusit inseamna ca DPD a primit cererea, a
+     * inteles-o si a refuzat-o: nimic nu s-a creat, deci reincercarea e libera.
+     * Dedus din status, cazul asta ar fi iesit „nu stim" si ar fi blocat comanda
+     * degeaba.
+     */
+    const refuzDovedit = !!data["error"] || (res.status >= 400 && res.status < 500 && res.status !== 408);
+    const mesaj = `DPD ${path}: ${msg}`;
+    throw refuzDovedit ? eroareRefuz(mesaj) : eroareNesigura(mesaj);
   }
   return data as T;
 }
@@ -227,7 +245,10 @@ function buildDpdShipmentBody(
   if (hasCod) {
     const iban = (config.iban ?? "").replace(/\s/g, "");
     if (!iban) {
-      throw new Error("Pentru comenzi cu ramburs, adauga IBAN-ul in setarile DPD (necesar pentru returnarea banilor incasati).");
+      // `eroareRefuz`: validare PUR LOCALA, in `buildDpdShipmentBody`, inainte de
+      // orice POST catre DPD. Nimic nu s-a creat, deci reincercarea dupa completarea
+      // IBAN-ului trebuie sa ramana libera. Vezi src/lib/operatii/eroare-furnizor.ts.
+      throw eroareRefuz("Pentru comenzi cu ramburs, adauga IBAN-ul in setarile DPD (necesar pentru returnarea banilor incasati).");
     }
     payment.senderBankAccount = {
       iban,
@@ -339,7 +360,9 @@ export async function createDpdShipment(
       : { countryId: 642, siteName: normalizeLocalityName(input.recipientCity, input.recipientCounty) },
   );
   const serviceId = pickPreferredDpdService(ids);
-  if (!serviceId) throw new Error("DPD nu a returnat niciun serviciu pentru aceasta destinatie. Verifica orasul/judetul destinatarului.");
+  // Descoperirea serviciului e o CITIRE; expedierea se trimite abia mai jos. Un
+  // esec aici dovedeste ca nu s-a creat nimic.
+  if (!serviceId) throw eroareRefuz("DPD nu a returnat niciun serviciu pentru aceasta destinatie. Verifica orasul/judetul destinatarului.");
   return sendDpdShipment(buildDpdShipmentBody(config, input, { countryId: 642, serviceId, siteId: siteId ?? undefined }));
 }
 
@@ -524,7 +547,7 @@ export async function createDpdIntlShipment(
     const ids = await getDpdDestinationServiceIds(config, { countryId: input.countryId, postCode });
     serviceId = ids[0];
   }
-  if (!serviceId) throw new Error("DPD nu are serviciu international disponibil pentru aceasta destinatie.");
+  if (!serviceId) throw eroareRefuz("DPD nu are serviciu international disponibil pentru aceasta destinatie.");
 
   // DPD international services do not support cash-on-delivery (ramburs), so it is
   // never sent for foreign shipments — international orders are paid online.

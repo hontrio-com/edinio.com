@@ -2,10 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { sendNewSupportTicketToAdmin } from "@/lib/email";
+import { rateLimit } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 
 export async function POST(req: NextRequest) {
   const user = await getCachedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Fiecare tichet scrie doua randuri SI trimite un email prin Resend catre
+  // adresa de suport. Doua linii: cea din memorie taie rafala fara sa atinga
+  // baza, cea durabila e singura care tine intre instantele serverless.
+  // Cheia e pe UTILIZATOR, nu pe IP: ruta e doar-autentificat, iar o cheie pe IP
+  // ar lovi colateral mai multi comercianti din acelasi birou sau NAT.
+  if (!rateLimit(`support-tichet:${user.id}`, 3, 60_000)) {
+    return NextResponse.json({ error: "Prea multe tichete prea repede. Incearca peste un minut." }, { status: 429 });
+  }
+  if (!(await consumaLimita(`support-tichet:${user.id}`, 10, 3600)).permis) {
+    return NextResponse.json({ error: "Ai deschis prea multe tichete in ultima ora. Raspunde in cele existente sau incearca mai tarziu." }, { status: 429 });
+  }
 
   const body = await req.json() as {
     subject?: string;
@@ -23,11 +37,22 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient();
 
-  // Get business name for email
+  // `business_id` vine din corpul cererii. Verificam ca magazinul e AL LUI:
+  // altfel tichetul se atasa magazinului altui comerciant, iar raspunsul si
+  // emailul catre suport ii dezvaluiau numele. Daca nu e al lui, il ignoram.
   let businessName: string | null = null;
+  let businessIdValidat: string | null = null;
   if (business_id) {
-    const { data: biz } = await supabase.from("businesses").select("business_name, store_name").eq("id", business_id).single();
-    businessName = biz?.store_name ?? biz?.business_name ?? null;
+    const { data: biz } = await supabase
+      .from("businesses")
+      .select("id, business_name, store_name")
+      .eq("id", business_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (biz) {
+      businessIdValidat = biz.id;
+      businessName = biz.store_name ?? biz.business_name ?? null;
+    }
   }
 
   // Create ticket
@@ -35,7 +60,7 @@ export async function POST(req: NextRequest) {
     .from("support_tickets")
     .insert({
       user_id: user.id,
-      business_id: business_id ?? null,
+      business_id: businessIdValidat,
       subject: subject.trim(),
       category,
       priority,

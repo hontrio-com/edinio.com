@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -32,7 +33,7 @@ export default function IPayConfigClient({
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
-  const isConfigured = !!initialConfig?.username && !!initialConfig?.password;
+  const isConfigured = !!initialConfig?.username && (!!initialConfig?.password || secretulEsteSalvat(initialConfig, "password"));
 
   function set<K extends keyof IPayConfig>(key: K, value: IPayConfig[K]) {
     setCfg((c) => ({ ...c, [key]: value }));
@@ -40,7 +41,7 @@ export default function IPayConfigClient({
 
   function save() {
     if (!cfg.username.trim()) { toast.error("Utilizatorul API este obligatoriu."); return; }
-    if (!cfg.password.trim()) { toast.error("Parola API este obligatorie."); return; }
+    if ((!cfg.password.trim() && !secretulEsteSalvat(initialConfig, "password"))) { toast.error("Parola API este obligatorie."); return; }
     startSave(async () => {
       const result = await saveIpayConfig(businessId, { ...cfg, username: cfg.username.trim(), password: cfg.password, title: cfg.title.trim() || DEFAULT_CONFIG.title });
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
@@ -150,7 +151,7 @@ export default function IPayConfigClient({
                 Parola API
               </label>
               <Input type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
-                placeholder="Parola API iPay" autoComplete="new-password" />
+                placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
             </div>
           </div>
 

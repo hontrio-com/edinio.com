@@ -247,6 +247,25 @@ export type Block =
   | ButtonBlock | ColumnsBlock | SpacerBlock | DividerBlock | VideoBlock
   | MapBlock | FaqBlock | TrustBlock | ProductsBlock | SocialBlock | ContactBlock | HtmlBlock;
 
+/**
+ * Ce fel de pagina e, pentru datele structurate.
+ *
+ * Se DECLARA, nu se ghiceste. „Cum alegi prosoapele pentru hotel" si „Prosoape
+ * Hotel" arata la fel din cod — una e un articol, cealalta un raft — iar un
+ * `BlogPosting` pus pe o pagina de vitrina e o afirmatie falsa despre ce se afla
+ * la acea adresa. Lipsa valorii inseamna `"pagina"`, deci nicio pagina existenta
+ * nu isi schimba intelesul cand campul apare.
+ */
+export type TipPaginaProprie = "pagina" | "articol" | "lista-articole" | "colectie" | "contact";
+
+export const TIPURI_PAGINA_PROPRIE: { valoare: TipPaginaProprie; eticheta: string; ajutor: string }[] = [
+  { valoare: "pagina", eticheta: "Pagina obisnuita", ajutor: "Orice pagina de continut: Despre noi, Termeni, o prezentare." },
+  { valoare: "articol", eticheta: "Articol de blog", ajutor: "Google o poate arata ca articol, cu titlu, imagine si data publicarii." },
+  { valoare: "lista-articole", eticheta: "Lista de articole (blog)", ajutor: "Pagina care aduna articolele. Le listeaza automat pe cele marcate ca articol." },
+  { valoare: "colectie", eticheta: "Colectie / categorie de produse", ajutor: "Pagina care prezinta o familie de produse (ex. Prosoape Hotel)." },
+  { valoare: "contact", eticheta: "Pagina de contact", ajutor: "Pagina cu datele de contact sau formularul de contact." },
+];
+
 /** SEO stored on the page row (custom_pages.seo jsonb). */
 export interface PageSeo {
   title?: string;
@@ -254,6 +273,18 @@ export interface PageSeo {
   keywords?: string;
   ogImage?: string | null;
   noindex?: boolean;
+  /** Vezi `TipPaginaProprie`. Lipsa = „pagina". */
+  tip?: TipPaginaProprie;
+  /** Doar pentru articole: cine semneaza. Gol = semneaza magazinul. */
+  autor?: string;
+  /**
+   * Doar pentru articole: data publicarii, `AAAA-LL-ZZ`.
+   *
+   * Rezerva e `custom_pages.created_at` — data la care s-a creat pagina, adica
+   * cel mai apropiat fapt de care dispunem. Campul exista fiindca articolele
+   * mutate de pe un site vechi au o data reala, alta decat cea de creare aici.
+   */
+  dataPublicarii?: string;
 }
 
 /* ─── Editor palette metadata ──────────────────────────────────────────────── */

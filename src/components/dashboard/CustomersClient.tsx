@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Users, Search, Phone, Mail, MapPin, ShoppingBag, TrendingUp, Repeat,
-  X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2,
+  X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2, Upload,
 } from "lucide-react";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -13,6 +13,7 @@ import type { Customer, CustomerOrder, CustomersSummary } from "@/lib/customers"
 import { getCustomerOrders } from "@/lib/actions/customer.actions";
 import { CUSTOMERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { orderStatus } from "@/lib/orders/status";
+import { CustomerImportModal } from "./CustomerImportModal";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
 
@@ -56,6 +57,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   const [searchInput, setSearchInput] = useState(searchQuery);
   const lastNavQ = useRef(searchQuery);
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [importing, setImporting] = useState(false);
 
   // Datele vin gata agregate/cautate/paginate din SQL; interactiunile devin
   // parametri de URL (q, sort, page), deci functioneaza la orice volum.
@@ -99,12 +101,22 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   return (
     <div>
       {/* Header */}
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-foreground">Clienti</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Toti clientii care au comandat din magazin, grupati automat dupa numarul de telefon.
-        </p>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Clienti</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Clientii care au comandat, plus cei adusi prin import, grupati automat dupa numarul de telefon.
+          </p>
+        </div>
+        <button
+          onClick={() => setImporting(true)}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl border border-border bg-surface text-foreground hover:bg-muted transition-colors flex-shrink-0"
+        >
+          <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importa clienti</span>
+        </button>
       </div>
+
+      {importing && <CustomerImportModal onClose={() => setImporting(false)} />}
 
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
@@ -148,7 +160,9 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             {searchQuery ? "Niciun client gasit" : "Niciun client inca"}
           </p>
           <p className="text-sm text-muted-foreground">
-            {searchQuery ? "Incearca alta cautare." : "Clientii apar aici dupa prima comanda din magazin."}
+            {searchQuery
+              ? "Incearca alta cautare."
+              : "Clientii apar aici dupa prima comanda din magazin, sau ii poti aduce acum prin import."}
           </p>
         </div>
       ) : (
@@ -176,9 +190,16 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                   {c.phone}{c.email ? ` · ${c.email}` : ""}
                 </p>
               </div>
+              {/* Un client importat n-a comandat inca: nu are nici numar, nici data. */}
               <div className="hidden sm:block text-right flex-shrink-0">
-                <p className="text-xs text-muted-foreground">{c.orderCount} {c.orderCount === 1 ? "comanda" : "comenzi"}</p>
-                <p className="text-[11px] text-muted-foreground/70">{formatDate(c.lastOrderAt)}</p>
+                {c.lastOrderAt ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">{c.orderCount} {c.orderCount === 1 ? "comanda" : "comenzi"}</p>
+                    <p className="text-[11px] text-muted-foreground/70">{formatDate(c.lastOrderAt)}</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground/70">Fara comenzi</p>
+                )}
               </div>
               <div className="text-right flex-shrink-0 w-24">
                 <p className="text-sm font-bold text-foreground tabular-nums">{formatPrice(c.totalSpent)}</p>
@@ -336,12 +357,21 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1.5 text-muted-foreground">
-              <Calendar className="h-3.5 w-3.5" /> Prima comanda: <span className="text-foreground font-medium">{formatDate(customer.firstOrderAt)}</span>
-            </span>
-            <span className="text-muted-foreground">Ultima: <span className="text-foreground font-medium">{formatDate(customer.lastOrderAt)}</span></span>
-          </div>
+          {/* Datele de comanda exista doar daca a comandat. Un client adus dintr-un
+              import apare pana atunci cu contactul si adresa lui, si atat. */}
+          {customer.firstOrderAt && customer.lastOrderAt ? (
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Calendar className="h-3.5 w-3.5" /> Prima comanda: <span className="text-foreground font-medium">{formatDate(customer.firstOrderAt)}</span>
+              </span>
+              <span className="text-muted-foreground">Ultima: <span className="text-foreground font-medium">{formatDate(customer.lastOrderAt)}</span></span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Calendar className="h-3.5 w-3.5" />
+              Nu a plasat nicio comanda. Contactul a fost adus prin import.
+            </div>
+          )}
 
           {/* Order history */}
           <div>

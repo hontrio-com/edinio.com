@@ -1,11 +1,12 @@
 import { headers } from "next/headers";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin";
 import { FacebookPixel } from "@/components/public/FacebookPixel";
 import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { GoogleTag } from "@/components/public/GoogleTag";
 import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
 import { AttributionCapture } from "@/components/public/AttributionCapture";
+import { DoarInMagazinReal } from "@/components/public/DoarInMagazinReal";
 import type { MarketingConfig } from "@/lib/marketing";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
@@ -33,14 +34,9 @@ interface Props {
  */
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const { data } = await createAdminClient()
-    .from("businesses")
-    .select("logo_url, business_name, store_name, store_city, description, tagline, cover_url, store_settings(page_content)")
-    .eq("slug", slug)
-    .single();
+  const data = await incarcaAntetMagazin(slug);
   if (!data) return {};
-  const rawSettings = (data as unknown as { store_settings: { page_content: unknown } | { page_content: unknown }[] | null }).store_settings;
-  const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
+  const settings = setarileDin<{ page_content: unknown }>(data);
   const favicon = ((settings?.page_content ?? null) as { favicon_url?: string | null } | null)?.favicon_url || data.logo_url;
   // Google Search Console "HTML tag" verification, set in Settings > SEO.
   const seo = parseStoreSeo(settings?.page_content ?? null);
@@ -82,13 +78,10 @@ export default async function StoreLayout({ children, params }: Props) {
   const { slug } = await params;
   // Service role: marketing_config (public pixel IDs) lives in store_settings,
   // which is no longer anon-readable. Read it server-side and pass only pixel IDs.
-  const admin = createAdminClient();
-
-  const { data: business } = await admin
-    .from("businesses")
-    .select("id, slug, store_name, business_name, primary_color, custom_domain, store_settings(marketing_config, cookie_banner_config, google_analytics_config)")
-    .eq("slug", slug)
-    .single();
+  // Acelasi rand pe care l-a citit deja `generateMetadata` in aceasta randare:
+  // `incarcaAntetMagazin` e invelit in `cache` din React, deci al doilea apel nu
+  // mai atinge baza.
+  const business = await incarcaAntetMagazin(slug);
 
   let fbPixelId: string | null = null;
   let ttPixelId: string | null = null;
@@ -129,28 +122,40 @@ export default async function StoreLayout({ children, params }: Props) {
   // the gate is bypassed and trackers load unconditionally (merchant owns the
   // GDPR responsibility — a warning is shown in Settings → Banner Cookies).
   const requireConsent = cookieConfig.enabled;
+  /*
+   * Tot ce nu e magazinul propriu-zis sta sub `DoarInMagazinReal`.
+   *
+   * In previzualizarea din editor, bannerul de cookie-uri acoperea cadrul si
+   * fiecare reincarcare a iframe-ului trimitea un `PageView` fals in Facebook
+   * Pixel, TikTok si Google — iar iframe-ul se reincarca la fiecare salvare.
+   * Vezi componenta pentru intreaga poveste.
+   */
   return (
     <>
-      <AttributionCapture />
-      {fbPixelId && (
-        <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
-      )}
-      {ttPixelId && (
-        <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
-      )}
-      {googleTagIds.length > 0 && (
-        <ConsentGate slug={slug} category="analytics" bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} /></ConsentGate>
-      )}
+      <DoarInMagazinReal>
+        <AttributionCapture />
+        {fbPixelId && (
+          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
+        )}
+        {ttPixelId && (
+          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
+        )}
+        {googleTagIds.length > 0 && (
+          <ConsentGate slug={slug} category="analytics" bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} /></ConsentGate>
+        )}
+      </DoarInMagazinReal>
       {children}
       {cookieConfig.enabled && (
-        <CookieConsent
-          slug={slug}
-          color={color}
-          categories={consentCategories}
-          position={cookieConfig.position}
-          policyHref={`${basePath}/politici/confidentialitate`}
-          storeName={storeName}
-        />
+        <DoarInMagazinReal>
+          <CookieConsent
+            slug={slug}
+            color={color}
+            categories={consentCategories}
+            position={cookieConfig.position}
+            policyHref={`${basePath}/politici/confidentialitate`}
+            storeName={storeName}
+          />
+        </DoarInMagazinReal>
       )}
     </>
   );

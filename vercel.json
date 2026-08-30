@@ -1,5 +1,10 @@
 {
+  "regions": ["arn1"],
   "crons": [
+    {
+      "path": "/api/cron/santinela",
+      "schedule": "17 */2 * * *"
+    },
     {
       "path": "/api/cron/email-automations",
       "schedule": "0 */1 * * *"
@@ -7,6 +12,18 @@
     {
       "path": "/api/cron/ipay-reconcile",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/stripe-reconcile",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/revolut-reconcile",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/klarna-reconcile",
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/reconcile-subscriptions",
@@ -35,6 +52,74 @@
     {
       "path": "/api/cron/trendyol-sync",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/emag-sync",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/catalog-proiector",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/stock-feeds",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/discount-release",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/domains-reconcile",
+      "schedule": "23 * * * *"
+    },
+    {
+      "path": "/api/cron/gls-tracking",
+      "schedule": "41 */2 * * *"
+    },
+    {
+      "path": "/api/cron/pallex-tracking",
+      "schedule": "53 */3 * * *"
+    },
+    {
+      "path": "/api/cron/ecolet-tracking",
+      "schedule": "17 */2 * * *"
+    },
+    {
+      "path": "/api/cron/posta-tracking",
+      "schedule": "29 */2 * * *"
+    },
+    {
+      "path": "/api/cron/innoship-tracking",
+      "schedule": "7 */6 * * *"
+    },
+    {
+      "path": "/api/cron/packeta-tracking",
+      "schedule": "41 */2 * * *"
+    },
+    {
+      "path": "/api/cron/smartship-tracking",
+      "schedule": "53 */2 * * *"
+    },
+    {
+      "path": "/api/cron/shipo-tracking",
+      "schedule": "35 */2 * * *"
+    },
+    {
+      "path": "/api/cron/fedex-tracking",
+      "schedule": "47 */2 * * *"
+    },
+    {
+      "path": "/api/cron/ups-tracking",
+      "schedule": "23 */2 * * *"
+    },
+    {
+      "path": "/api/cron/sameday-tracking",
+      "schedule": "11 */2 * * *"
+    },
+    {
+      "path": "/api/cron/dhl-tracking",
+      "schedule": "11 */3 * * *"
     }
   ]
 }

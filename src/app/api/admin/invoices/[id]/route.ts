@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createSmartbillInvoice } from "@/lib/smartbill";
+import { emiteFacturaPlatforma } from "@/lib/billing/factura-platforma";
 import { logAudit } from "@/lib/audit";
 
 // PATCH: update invoice status (cancel = void)
@@ -48,7 +48,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { data: invoice } = await adminClient
     .from("invoices")
-    .select("id, user_id, plan, amount, smartbill_series")
+    .select("id, user_id, plan, amount, smartbill_series, stripe_invoice_id")
     .eq("id", id)
     .single();
 
@@ -67,7 +67,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const productName = invoice.plan === "domain" ? `Domeniu (factura #${invoice.id.slice(0, 8)})` : `Abonament Edinio ${invoice.plan}`;
 
-  const sbResult = await createSmartbillInvoice(
+  /*
+   * ⚠ BUTONUL ASTA ERA CHIAR MECANISMUL CARE PRODUCEA DUPLICATUL.
+   *
+   * `createSmartbillInvoice` prinde orice excepție de retea si intoarce `{error}`,
+   * deci o factura CHIAR EMISA al carei raspuns s-a pierdut ajunge pe rand ca
+   * `smartbill_error` — adica exact starea in care administratorul vede „a esuat" si
+   * apasa „Reincearca". Al doilea document fiscal pe aceeasi incasare.
+   *
+   * Cheia se compune din ACEEASI incasare Stripe ca in webhook (`stripe_invoice_id`),
+   * nu din randul `invoices` — altfel butonul ar avea cheia lui si ar ocoli complet
+   * registrul, ceea ce n-ar repara nimic.
+   */
+  const sbResult = await emiteFacturaPlatforma(
+    adminClient,
+    (invoice.stripe_invoice_id as string | null) ?? null,
+    invoice.id as string,
     {
       name: clientName,
       email: userEmail,
@@ -79,20 +94,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     { name: productName, price: Number(invoice.amount), quantity: 1 }
   );
 
-  if ("error" in sbResult) {
-    await adminClient.from("invoices").update({ smartbill_error: sbResult.error }).eq("id", id);
-    return NextResponse.json({ error: sbResult.error }, { status: 500 });
+  if (sbResult.fel === "eroare") {
+    await adminClient.from("invoices").update({ smartbill_error: sbResult.mesaj }).eq("id", id);
+    return NextResponse.json({ error: sbResult.mesaj }, { status: 500 });
   }
 
   await adminClient.from("invoices").update({
-    smartbill_series: sbResult.series ?? null,
-    smartbill_number: sbResult.number ?? null,
+    smartbill_series: sbResult.series || null,
+    smartbill_number: sbResult.number || null,
     smartbill_error: null,
   }).eq("id", id);
 
+  // `adoptata` = documentul exista deja si NU s-a mai chemat SmartBill. Se scrie in
+  // jurnal ca atare: altfel ar arata ca o emitere noua care n-a avut loc.
   await logAudit(admin.id, "invoice.smartbill_retry", "invoice", id, {
     series: sbResult.series,
     number: sbResult.number,
+    adoptata: sbResult.fel === "adoptata",
   });
 
   return NextResponse.json({ success: true, series: sbResult.series, number: sbResult.number });

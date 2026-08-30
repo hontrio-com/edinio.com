@@ -4,13 +4,44 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
- * Banda orizontala de categorii, cu afordante de desktop: tragere cu mouse-ul
+ * Banda orizontala derulabila, cu afordante de desktop: tragere cu mouse-ul
  * (limitata la `pointerType === "mouse"`, ca pe mobil sa ramana derularea nativa)
  * si sageti inainte/inapoi afisate de la md in sus, cand mai e ce derula.
  *
  * Extrasa din `MiniStoreRenderer` fara schimbari de comportament.
+ *
+ * Copilul trebuie sa fie UN singur element cu latimea data de continut (`w-max`):
+ * pe el sta observatorul de dimensiune, si tot din latimea lui se vede daca mai e
+ * ce derula. Un copil intins pe toata banda ar avea mereu latimea containerului,
+ * deci sagetile n-ar aparea niciodata.
  */
-export function CategoryScroller({ children, className }: { children: ReactNode; className?: string }) {
+export function CategoryScroller({
+  children,
+  className,
+  etichetaInapoi = "Categorii anterioare",
+  etichetaInainte = "Categorii urmatoare",
+  paleta = "border border-border bg-surface text-foreground hover:bg-muted",
+}: {
+  children: ReactNode;
+  className?: string;
+  /**
+   * Numele sagetilor pentru cititoarele de ecran.
+   *
+   * Implicit vorbesc despre categorii, fiindca de acolo vine componenta. Orice
+   * alta banda trebuie sa si le spuna pe ale ei: „Categorii urmatoare" citit
+   * peste un meniu de pagini e pur si simplu fals.
+   */
+  etichetaInapoi?: string;
+  etichetaInainte?: string;
+  /**
+   * Culorile sagetii: chenar, fundal, text si starea de hover.
+   *
+   * Implicit sunt token-ii aplicatiei, ca pana acum. Variantele de header care
+   * se picteaza din `--st-*` isi trimit paleta magazinului — altfel o pastila
+   * alba ar sta lipita peste un antet colorat de comerciant.
+   */
+  paleta?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
   const [canLeft, setCanLeft] = useState(false);
@@ -51,17 +82,19 @@ export function CategoryScroller({ children, className }: { children: ReactNode;
   // sloturi raman prezente (cea inactiva doar se estompeaza), ca derularea sa nu
   // mute layout-ul.
   const hasOverflow = canLeft || canRight;
+  // Culoarea sta pe BUTON, nu pe pictograma: sageata lui `lucide` deseneaza cu
+  // `currentColor`, deci mosteneste, iar paleta ramane un singur sir de schimbat.
   const arrowBtn =
-    "hidden md:flex shrink-0 w-8 h-8 rounded-full items-center justify-center border border-border bg-surface transition-opacity";
+    `hidden md:flex shrink-0 w-8 h-8 rounded-full items-center justify-center transition-opacity ${paleta}`;
 
   return (
     <div className={className}>
       <div className="flex items-center md:gap-1.5">
         {hasOverflow && (
-          <button type="button" aria-label="Categorii anterioare" disabled={!canLeft}
+          <button type="button" aria-label={etichetaInapoi} disabled={!canLeft}
             onClick={() => ref.current?.scrollBy({ left: -240, behavior: "smooth" })}
-            className={`${arrowBtn} ${canLeft ? "opacity-100 hover:bg-muted" : "opacity-30 pointer-events-none"}`}>
-            <ChevronLeft className="h-4 w-4 text-foreground" />
+            className={`${arrowBtn} ${canLeft ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
+            <ChevronLeft className="h-4 w-4" />
           </button>
         )}
         <div
@@ -90,10 +123,10 @@ export function CategoryScroller({ children, className }: { children: ReactNode;
           {children}
         </div>
         {hasOverflow && (
-          <button type="button" aria-label="Categorii urmatoare" disabled={!canRight}
+          <button type="button" aria-label={etichetaInainte} disabled={!canRight}
             onClick={() => ref.current?.scrollBy({ left: 240, behavior: "smooth" })}
-            className={`${arrowBtn} ${canRight ? "opacity-100 hover:bg-muted" : "opacity-30 pointer-events-none"}`}>
-            <ChevronRight className="h-4 w-4 text-foreground" />
+            className={`${arrowBtn} ${canRight ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
+            <ChevronRight className="h-4 w-4" />
           </button>
         )}
       </div>

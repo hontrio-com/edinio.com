@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { IPayConfig } from "@/lib/ipay";
 
 export async function saveIpayConfig(
@@ -20,9 +22,19 @@ export async function saveIpayConfig(
     .single();
   if (!biz) return { success: false, error: "Acces interzis" };
 
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  // Configul vechi se citeste cu SERVICE ROLE: pe clientul comerciantului campurile
+  // secrete sosesc ca siruri `enc.v1.…`, iar `pastreazaSecretele` le-ar „pastra" asa.
+  // Proprietatea magazinului e dovedita mai sus. Vezi src/lib/integrari/secrete.ts.
+  const { data: vechi } = await createAdminClient()
+    .from("store_settings").select("ipay_config").eq("business_id", businessId).maybeSingle();
+  const configFinal = pastreazaSecretele("ipay_config", config, vechi?.ipay_config);
+
   const { error } = await supabase
     .from("store_settings")
-    .update({ ipay_config: config as never, updated_at: new Date().toISOString() })
+    .update({ ipay_config: configFinal as never, updated_at: new Date().toISOString() })
     .eq("business_id", businessId);
 
   if (error) return { success: false, error: "Eroare la salvare" };

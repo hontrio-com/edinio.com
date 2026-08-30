@@ -11,7 +11,13 @@ import { cn } from "@/lib/utils/cn";
 
 interface AuditLog {
   id: string;
-  admin_id: string;
+  /**
+   * Poate fi null: adminul care a facut actiunea poate fi sters ulterior, iar
+   * cheia strina e ON DELETE SET NULL. Coloana a fost facuta nullabila in baza
+   * pe 23 iulie, cand s-a reparat stergerea adminilor, dar tipul de aici a ramas
+   * pe `string` pana la regenerarea fisierului de tipuri.
+   */
+  admin_id: string | null;
   action: string;
   target_type: string;
   target_id: string | null;
@@ -27,6 +33,7 @@ const ACTION_LABELS: Record<string, string> = {
   "user.delete": "A sters contul",
   "user.edit": "A editat detaliile",
   "user.impersonate": "S-a conectat ca utilizator",
+  "user.impersonate_refuzat": "Impersonare refuzata (tinta e admin)",
   "user.notify": "A trimis notificare",
   "user.bulk_plan_change": "Schimbare plan in masa",
   "business.publish": "A publicat magazinul",
@@ -144,7 +151,7 @@ export function AdminActivityClient({
     if (query) {
       const q = query.toLowerCase();
       list = list.filter((l) => {
-        const adminName = (adminNames[l.admin_id] ?? "").toLowerCase();
+        const adminName = (l.admin_id ? adminNames[l.admin_id] ?? "" : "").toLowerCase();
         const targetId = (l.target_id ?? "").toLowerCase();
         return adminName.includes(q) || targetId.includes(q);
       });
@@ -254,7 +261,10 @@ export function AdminActivityClient({
               const colors = CATEGORY_COLORS[category] ?? CATEGORY_COLORS.settings;
               const IconComp = CATEGORY_ICONS[category] ?? History;
               const actionLabel = ACTION_LABELS[log.action] ?? log.action;
-              const adminName = adminNames[log.admin_id] ?? log.admin_id.slice(0, 8);
+              /* Adminul poate fi sters: atunci nu avem nici nume, nici id. */
+              const adminName = log.admin_id
+                ? adminNames[log.admin_id] ?? log.admin_id.slice(0, 8)
+                : "Cont sters";
               const targetHref = getTargetHref(log.target_type, log.target_id);
               const isExpanded = expandedId === log.id;
 

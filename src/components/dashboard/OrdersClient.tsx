@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Package, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
+import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
 import {
   bulkGenerateInvoices, bulkGenerateAwbs, bulkUpdateOrderStatus,
   type BulkResult, type InvoiceProvider, type BulkCourier,
@@ -15,6 +16,9 @@ import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from 
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
+import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
+import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
+import { EcoletAwbModal } from "@/components/dashboard/EcoletAwbModal";
 import { FanCourierAwbModal } from "@/components/dashboard/FanCourierAwbModal";
 import { FanCourierPickupModal } from "@/components/dashboard/FanCourierPickupModal";
 import { DpdPickupModal } from "@/components/dashboard/DpdPickupModal";
@@ -25,6 +29,7 @@ import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
 import { ORDERS_PAGE_SIZE } from "@/lib/orders/pagination";
+import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -40,7 +45,7 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -50,6 +55,8 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   page: number;
   searchQuery: string;
   statusFilter: string;
+  sourceFilter: string;
+  sourceCounts: Record<string, number>;
   pendingCount: number;
   smartbillEnabled?: boolean;
   wootEnabled?: boolean;
@@ -58,6 +65,18 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   fgoEnabled?: boolean;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
+  glsEnabled?: boolean;
+  pallexEnabled?: boolean;
+  postaEnabled?: boolean;
+  packetaEnabled?: boolean;
+  smartshipEnabled?: boolean;
+  shipoEnabled?: boolean;
+  fedexEnabled?: boolean;
+  upsEnabled?: boolean;
+  dhlEnabled?: boolean;
+  innoshipEnabled?: boolean;
+  pallexZile?: { ridicare: number; livrare: number };
+  ecoletEnabled?: boolean;
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   businessId?: string;
@@ -77,6 +96,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [, startOblioTransition] = useTransition();
   const [cargusModalOrder, setCargusModalOrder] = useState<Order | null>(null);
   const [dpdModalOrder, setDpdModalOrder] = useState<Order | null>(null);
+  const [glsModalOrder, setGlsModalOrder] = useState<Order | null>(null);
+  const [pallexModalOrder, setPallexModalOrder] = useState<Order | null>(null);
+  const [ecoletModalOrder, setEcoletModalOrder] = useState<Order | null>(null);
   const [fanCourierModalOrder, setFanCourierModalOrder] = useState<Order | null>(null);
   const [fanPickupOpen, setFanPickupOpen] = useState(false);
   const [dpdPickupOpen, setDpdPickupOpen] = useState(false);
@@ -93,6 +115,28 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [invoiceProvider, setInvoiceProvider] = useState<InvoiceProvider>("auto");
   const [awbCourier, setAwbCourier] = useState<BulkCourier>("auto");
   const [bulkStatus, setBulkStatus] = useState("");
+  const [, startStatusTransition] = useTransition();
+
+  /*
+   * Doar schimbarea de status merge optimist: valoarea noua e aleasa din lista, deci
+   * o stim inainte sa raspunda serverul si eticheta din tabel se poate misca imediat.
+   * Facturile si AWB-urile NU intra aici — numarul documentului vine de la furnizor,
+   * nu avem ce afisa pana nu raspunde.
+   *
+   * DOUA EXCEPTII, si nu sunt cosmetice. „Anulata" si „Rambursata" nu sunt simple
+   * etichete: pe server declanseaza emiterea automata a unui document fiscal si
+   * eliberarea cuponului folosit (bulk-orders.actions.ts). Nu aratam „Rambursata"
+   * inainte sa stim ca s-a intamplat.
+   */
+  const STATUSURI_CU_EFECTE = new Set(["cancelled", "refunded"]);
+  const [comenzi, aplicaOptimistStatus] = useOptimistic(
+    orders,
+    (stare: Order[], a: { ids: string[]; status: string }) => {
+      if (STATUSURI_CU_EFECTE.has(a.status)) return stare;
+      const vizate = new Set(a.ids);
+      return stare.map((o) => (vizate.has(o.id) ? { ...o, status: a.status } : o));
+    },
+  );
 
   const invoiceProviders = useMemo(() => {
     const list: { key: InvoiceProvider; label: string }[] = [];
@@ -109,8 +153,22 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (samedayEnabled) list.push({ key: "sameday", label: "Sameday" });
     if (fanCourierEnabled) list.push({ key: "fancourier", label: "FAN Courier" });
     if (dpdEnabled) list.push({ key: "dpd", label: "DPD" });
+    if (glsEnabled) list.push({ key: "gls", label: "GLS" });
+    if (pallexEnabled) list.push({ key: "pallex", label: "Pall-Ex" });
+    if (postaEnabled) list.push({ key: "posta", label: "Poșta Română" });
+    if (packetaEnabled) list.push({ key: "packeta", label: "Packeta" });
+    if (smartshipEnabled) list.push({ key: "smartship", label: "SmartShip" });
+    if (shipoEnabled) list.push({ key: "shipo", label: "Shipo.ro" });
+    if (fedexEnabled) list.push({ key: "fedex", label: "FedEx" });
+    if (upsEnabled) list.push({ key: "ups", label: "UPS" });
+    if (dhlEnabled) list.push({ key: "dhl", label: "DHL Express" });
+    if (innoshipEnabled) list.push({ key: "innoship", label: "Innoship" });
     return list;
-  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled]);
+    /* ⚠ Steagul nou TREBUIE trecut si in vectorul de dependinte. Lipsa lui nu produce
+       nicio eroare: `useMemo` pastreaza lista veche, deci meniul „Genereaza AWB" pe lot
+       ramane fara DHL pana la urmatoarea rerandare care schimba altceva din vector.
+       Comerciantul vede o optiune care lipseste fara motiv si crede ca nu e configurat. */
+  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled]);
   const anyAwb = awbCouriers.length > 0;
 
   const pageOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);
@@ -164,12 +222,37 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   function runBulkStatus() {
     if (!bulkStatus) { toast.error("Alege un status."); return; }
     const label = ORDER_STATUS[bulkStatus as OrderStatus]?.label ?? bulkStatus;
+    const ids = [...selected];
     setBulkBusy(true);
     setBulkResult(null);
-    bulkUpdateOrderStatus(businessId!, [...selected], bulkStatus).then((res) => {
+    startStatusTransition(async () => {
+      aplicaOptimistStatus({ ids, status: bulkStatus });
+      const res = await bulkUpdateOrderStatus(businessId!, ids, bulkStatus);
       setBulkBusy(false);
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success(`${res.updated} comenzi → ${label}`);
+      /*
+       * Cate au picat se SPUNE, nu se tace.
+       *
+       * Actualizarea optimista de mai sus a colorat deja TOATE randurile, iar
+       * mesajul vechi numara doar reusitele — deci un lot in care doua comenzi
+       * n-au fost mutate deloc arata pe ecran ca mutat complet. `router.refresh()`
+       * readuce adevarul din server, dar nimeni nu se uita la un rand care
+       * „tocmai a mers".
+       */
+      /*
+       * ⚠ SI CATE AU FOST SARITE. Comenzile ținute de un marketplace nu se mută de aici —
+       * starea lor vine de la ei. Fără vorba asta, o selecție de 30 din care 10 sunt eMAG
+       * ar fi arătat „20 comenzi → Livrat" și atât, iar omul ar fi căutat celelalte zece
+       * prin filtre.
+       */
+      const sarite = res.sarite ? ` ${res.sarite} sunt din marketplace și se schimbă din contul de acolo.` : "";
+      if (res.esuate) {
+        toast.error(`${res.updated} comenzi → ${label}. ${res.esuate} NU s-au putut muta — vezi Jurnalul.${sarite}`);
+      } else if (res.sarite) {
+        toast.warning(`${res.updated} comenzi → ${label}.${sarite}`);
+      } else {
+        toast.success(`${res.updated} comenzi → ${label}`);
+      }
       clearSelection();
       router.refresh();
     });
@@ -181,17 +264,19 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const currentPage = Math.min(page, totalPages);
   const allCount = Object.values(statusCounts).reduce((s, n) => s + n, 0);
 
-  const buildUrl = useCallback((next: { q?: string; status?: string; page?: number }) => {
+  const buildUrl = useCallback((next: { q?: string; status?: string; source?: string; page?: number }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? searchQuery;
     const nstatus = next.status ?? statusFilter;
+    const nsource = next.source ?? sourceFilter;
     const npage = next.page ?? page;
     if (nq) params.set("q", nq);
     if (nstatus !== "all") params.set("status", nstatus);
+    if (nsource !== "all") params.set("source", nsource);
     if (npage > 1) params.set("page", String(npage));
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchQuery, statusFilter, page]);
+  }, [pathname, searchQuery, statusFilter, sourceFilter, page]);
 
   // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
   useEffect(() => {
@@ -213,7 +298,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
-  function goTo(next: { q?: string; status?: string; page?: number }) {
+  function goTo(next: { q?: string; status?: string; source?: string; page?: number }) {
     // Selection is per-view — reset it when changing page / filter so a bulk
     // action never spans invisible orders on other pages.
     setSelected(new Set());
@@ -224,6 +309,21 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   function handleFilterChange(key: string) {
     goTo({ status: key, page: 1 });
   }
+
+  function handleSourceChange(key: string) {
+    goTo({ source: key, page: 1 });
+  }
+
+  // Sursele care chiar au comenzi in magazinul asta. „Magazin" intra in lista
+  // doar daca exista si un marketplace de deosebit de el.
+  const marketplacePrezent = Object.keys(MARKETPLACE_ORIGINI).filter((k) => (sourceCounts[k] ?? 0) > 0);
+  // Coloana „Sursă" are rost doar unde exista mai multe surse. Intr-un magazin
+  // fara marketplace ar fi o coloana cu aceeasi valoare pe fiecare rand.
+  const arataSursa = marketplacePrezent.length > 0;
+  const sursePrezente = marketplacePrezent.length === 0 ? [] : [
+    { key: "store", label: "Magazin" },
+    ...marketplacePrezent.map((k) => ({ key: k, label: MARKETPLACE_ORIGINI[k].label })),
+  ];
 
   function handleSearch(q: string) {
     setSearchInput(q);
@@ -315,6 +415,34 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
           order={dpdModalOrder}
           businessId={businessId}
           onSuccess={() => { setDpdModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {glsModalOrder && businessId && (
+        <GlsAwbModal
+          open={!!glsModalOrder}
+          onClose={() => setGlsModalOrder(null)}
+          order={glsModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setGlsModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {pallexModalOrder && businessId && (
+        <PallexAwbModal
+          zile={pallexZile}
+          open={!!pallexModalOrder}
+          onClose={() => setPallexModalOrder(null)}
+          order={pallexModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setPallexModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {ecoletModalOrder && businessId && (
+        <EcoletAwbModal
+          open={!!ecoletModalOrder}
+          onClose={() => setEcoletModalOrder(null)}
+          order={ecoletModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setEcoletModalOrder(null); router.refresh(); }}
         />
       )}
       {fanCourierModalOrder && businessId && (
@@ -460,6 +588,42 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
         })}
       </div>
 
+      {/*
+        * Filtrele de sursa apar DOAR daca magazinul chiar vinde si pe un
+        * marketplace. Pentru cei care vand doar prin magazinul propriu, un rand
+        * de filtre cu un singur buton n-ar spune nimic si ar incarca ecranul.
+        */}
+      {sursePrezente.length > 0 && (
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-4 scrollbar-hide">
+          {[{ key: "all", label: "Toate sursele" }, ...sursePrezente].map((tab) => {
+            const count = tab.key === "all"
+              ? Object.values(sourceCounts).reduce((s, n) => s + n, 0)
+              : (sourceCounts[tab.key] ?? 0);
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => handleSourceChange(tab.key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors",
+                  sourceFilter === tab.key
+                    ? "bg-foreground text-background"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {tab.label}
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded-full text-[10px] font-bold",
+                  sourceFilter === tab.key ? "bg-background/20 text-background" : "bg-background text-muted-foreground"
+                )}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Search result info */}
       {searchQuery.trim() && (
         <p className="text-sm text-muted-foreground mb-3">
@@ -597,7 +761,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
 
       {/* Table */}
       <div className={cn("bg-surface border border-border rounded-xl overflow-hidden transition-opacity", isPending && "opacity-60")}>
-        {orders.length > 0 ? (
+        {comenzi.length > 0 ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -617,6 +781,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Client</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                    {arataSursa && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Sursă</th>
+                    )}
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Data</th>
                     {wootEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Woot</th>
@@ -626,6 +793,18 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     )}
                     {dpdEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB DPD</th>
+                    )}
+                    {glsEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB GLS</th>
+                    )}
+                    {/* ⚠ Ordinea coloanelor din <thead> si din <tbody> trebuie sa fie
+                        ACEEASI: gardate de acelasi steag dar asezate altfel, tabelul
+                        se decaleaza pe latime si nimic nu semnaleaza asta. */}
+                    {pallexEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Partida Pall-Ex</th>
+                    )}
+                    {ecoletEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB eColet</th>
                     )}
                     {fanCourierEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB FAN Courier</th>
@@ -649,8 +828,10 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {orders.map((order) => {
+                  {comenzi.map((order) => {
                     const status = orderStatus(order.status);
+                    const origine = deriveOrigin(order.order_source);
+                    const moneda = monedaComenzii(order.order_source);
                     return (
                       <tr
                         key={order.id}
@@ -669,14 +850,40 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                         <td className="px-5 py-3.5 font-mono text-sm font-semibold text-foreground">{order.order_number}</td>
                         <td className="px-5 py-3.5 text-muted-foreground hidden sm:table-cell">
                           <div className="font-medium text-foreground">{order.customer_name}</div>
+                          {/* Numele ramane al persoanei de contact; denumirea firmei
+                              e pe randul de sub el, ca sa se vada dintr-o privire
+                              pe ce se emite factura. */}
+                          {(() => {
+                            const firma = readBillingCompany(order.billing_company);
+                            return firma ? (
+                              <div className="text-xs text-foreground/80">
+                                {firma.company_name}
+                                <span className="ml-1.5 px-1 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary align-middle">PJ</span>
+                              </div>
+                            ) : null;
+                          })()}
                           <div className="text-xs">{order.customer_phone}</div>
                         </td>
-                        <td className="px-5 py-3.5 font-medium text-foreground">{formatPrice(Number(order.total))}</td>
+                        <td className="px-5 py-3.5 font-medium text-foreground whitespace-nowrap">
+                          {/* Comenzile de marketplace vin in moneda lor: „40 lei"
+                              pe o comanda de 40 EUR ar fi mai putin de jumatate. */}
+                          {moneda ? `${Number(order.total).toFixed(2)} ${moneda}` : formatPrice(Number(order.total))}
+                        </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap", status.className)}>
                             {status.label}
                           </span>
                         </td>
+                        {arataSursa && (
+                          <td className="px-5 py-3.5 hidden sm:table-cell">
+                            <span className={cn(
+                              "inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-medium whitespace-nowrap",
+                              claseSursa(origine),
+                            )}>
+                              {origine.label}
+                            </span>
+                          </td>
+                        )}
                         <td className="px-5 py-3.5 text-muted-foreground hidden md:table-cell">
                           {formatDate(new Date(order.created_at))}
                         </td>
@@ -741,6 +948,87 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); setDpdModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {glsEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["gls_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setGlsModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["gls_awb_number"] as string}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setGlsModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {pallexEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["pallex_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setPallexModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["pallex_awb_number"] as string}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setPallexModalOrder(order); }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza partida
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {ecoletEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["ecolet_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEcoletModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {(order as unknown as Record<string, unknown>)["ecolet_awb_number"] as string}
+                              </button>
+                            ) : (order as unknown as Record<string, unknown>)["ecolet_order_to_send_id"] ? (
+                              /* Starea proprie eColet: expedierea a plecat, AWB-ul inca nu exista.
+                                 Fara randul asta comerciantul ar vedea „Creeaza AWB" pe o comanda
+                                 care are deja un transport real in curs — si ar apasa. */
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEcoletModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                se emite...
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setEcoletModalOrder(order); }}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
                               >
                                 <Package className="h-3 w-3" />

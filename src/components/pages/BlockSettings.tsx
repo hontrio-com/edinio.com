@@ -610,23 +610,16 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
           <Area label="HTML" value={b.html} onChange={(v) => patch({ html: v })} mono placeholder="<div>...</div>" />
           <Area label="CSS" value={b.css} onChange={(v) => patch({ css: v })} mono placeholder=".clasa { ... }" />
           <Area label="JavaScript" value={b.js} onChange={(v) => patch({ js: v })} mono placeholder="// codul tau" />
-          {hasJs && !b.raw && (
+          {hasJs && (
             <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-[11px] text-blue-700">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               JavaScript-ul ruleaza izolat intr-un cadru securizat (nu poate accesa cosul sau datele magazinului).
             </div>
           )}
-          {isAdmin ? (
-            <div className="pt-3 border-t border-border">
-              <Toggle label="Mod raw (admin): injecteaza codul direct in pagina" checked={!!b.raw} onChange={(v) => patch({ raw: v, rawApprovedBy: v ? b.rawApprovedBy : null })} />
-              {b.raw && (
-                <div className="flex items-start gap-2 p-2.5 mt-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  Codul ruleaza cu acces complet la pagina. Foloseste doar cod de incredere.
-                </div>
-              )}
-            </div>
-          ) : (
+          {/* Comutatorul „Mod raw (admin)" a fost ELIMINAT: randarea nu mai
+              injecteaza cod nefiltrat in pagina publica, deci un comutator care
+              promitea asta ar induce in eroare. Vezi HtmlBlockView.tsx. */}
+          {!isAdmin && (
             <p className="text-[11px] text-muted-foreground">HTML/CSS simplu este curatat automat pentru siguranta.</p>
           )}
         </div>

@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTrendyolItems, tvaPentruVitrina, verificaBarcode, type MappableProduct } from "./mapping";
+import {
+  adresaPublicaImagine, buildTrendyolItems, deriveVariantSlots, resolveVariantQuantity,
+  tvaPentruVitrina, verificaBarcode, type MappableProduct,
+} from "./mapping";
 import { fereastraComenzi } from "./orders";
-import { grupeazaInLoturi } from "./sync";
+import {
+  barcodeArticol, eTrecatoare, existaLaTrendyol, faraStocSiPret, grupeazaInLoturi,
+  listariDeRepus, MAX_REPUNERI_STOC, putemSuprascrieContinutul, rutaDeTrimitere, stareLot,
+} from "./sync";
+import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
+import { edinioStatusForTrendyol } from "./webhooks";
 import { traduMesajTrendyol, mesajDupaStatus } from "./errors";
-import { coteTvaVitrina, curieriVitrina, esteAdresaDe, infoVitrina, tvaImplicitVitrina } from "./types";
+import {
+  coteTvaVitrina, curieriVitrina, esteAdresaDe, infoVitrina, necesitaSgr, pretSgr,
+  TRENDYOL_CATEGORII_SGR, tvaImplicitVitrina,
+} from "./types";
 import type { TrendyolConfig } from "./types";
 
 /**
@@ -122,6 +133,26 @@ test("imaginile http sunt sarite, fiindca Trendyol le refuza", () => {
   assert.deepEqual(itemuri()[0].images, [{ url: "https://cdn.edinio.com/a.jpg" }]);
 });
 
+test("imaginile de pe domeniul de dezvoltare al Cloudflare pleaca de pe cel public", () => {
+  /*
+   * `pub-<hash>.r2.dev` e domeniul de INCERCARI al unui bucket R2, si Cloudflare
+   * spune raspicat sa nu fie folosit in productie. Trendyol isi aduce singur
+   * imaginile de pe adresele pe care i le dam si respinge produsul cand nu le
+   * poate lua — „Eroare de conexiune la serverul de imagini", pe un produs real.
+   * Verificat: ambele domenii servesc acelasi obiect, aceeasi suma de control.
+   */
+  const cale = "products/abc/1782138246453-61i24.webp";
+  assert.equal(
+    adresaPublicaImagine(`https://pub-8ae4618934a2401a8af94e89f0371faf.r2.dev/${cale}`),
+    `https://edinio-cdn.com/${cale}`,
+  );
+  // Ce e deja pe domeniul public, sau oriunde altundeva, ramane neatins.
+  assert.equal(adresaPublicaImagine(`https://edinio-cdn.com/${cale}`), `https://edinio-cdn.com/${cale}`);
+  assert.equal(adresaPublicaImagine("https://alt-cdn.ro/x.webp"), "https://alt-cdn.ro/x.webp");
+  // Si nu confunda un domeniu care doar CONTINE „r2.dev".
+  assert.equal(adresaPublicaImagine("https://pub-x.r2.dev.altceva.ro/y.webp"), "https://pub-x.r2.dev.altceva.ro/y.webp");
+});
+
 test("TVA-ul trimis e cel al vitrinei", () => {
   assert.equal(itemuri()[0].vatRate, 21);
 });
@@ -136,12 +167,34 @@ test("pretul taiat devine listPrice, cel curent salePrice", () => {
 const ACUM = 1_800_000_000_000;
 const DOUA_SAPTAMANI = 14 * 24 * 60 * 60 * 1000;
 
-test("nu cerem niciodata mai mult de doua saptamani de comenzi", () => {
-  // Un magazin nesincronizat de o luna ar fi cerut o fereastra respinsa de
-  // Trendyol, deci tocmai el nu si-ar mai fi luat comenzile.
+test("⚠ o CERERE nu cere mai mult de doua saptamani, dar recuperarea merge mai in urma", () => {
+  /*
+   * ═══ ⚠ PROBA ASTA CEREA PANA AZI EXACT DEFECTUL (26.08.2026) ═══
+   *
+   * Cerea `endDate === ACUM` — adica taman saritura care pierdea datele. Sunt doua plafoane
+   * deosebite la ei, iar noi le tratam ca pe unul:
+   *
+   *     LATIMEA UNEI CERERI    cel mult 14 zile
+   *     CAT DE MULT IN URMA    capatul clasic da date pe ultima LUNA
+   *
+   * Cu ele confundate, un magazin oprit o luna cerea `acum - 14 zile`, citea cu bine, iar
+   * marcajul sarea la „acum" — si cele saisprezece zile dintre ele se pierdeau DEFINITIV.
+   *
+   * Acum se merge fereastra cu fereastra: latimea ramane paisprezece zile, dar inceputul
+   * porneste de unde s-a ramas, iar marcajul se opreste la sfarsitul ferestrei citite.
+   */
+  const f = fereastraComenzi(ACUM - 20 * 24 * 60 * 60 * 1000, ACUM);
+  assert.equal(f.endDate - f.startDate, DOUA_SAPTAMANI, "o cerere ramane de doua saptamani");
+  assert.ok(f.endDate < ACUM, "dar NU se inchide la „acum”, ca sa nu se sara peste gaura");
+  assert.equal(f.taiat, false, "si nimic nu s-a pierdut: douazeci de zile incap in orizontul lor");
+});
+
+test("⚠ peste orizontul lor, ce nu se poate lua se SPUNE", () => {
+  /* Capatul clasic da date doar pe ultima luna. O pierdere pe care n-o putem evita e cu totul
+     altceva decat una pe care o ascundem. */
   const f = fereastraComenzi(ACUM - 60 * 24 * 60 * 60 * 1000, ACUM);
-  assert.ok(ACUM - f.startDate < DOUA_SAPTAMANI);
-  assert.equal(f.endDate, ACUM);
+  assert.equal(f.taiat, true);
+  assert.ok(ACUM - f.startDate <= 30 * 24 * 60 * 60 * 1000);
 });
 
 test("un reper recent e pastrat asa cum e", () => {
@@ -150,9 +203,13 @@ test("un reper recent e pastrat asa cum e", () => {
 });
 
 test("fara reper, luam ultimele doua saptamani", () => {
+  /* ⚠ Fara marcaj se cer exact doua saptamani — nu tot orizontul de o luna. Prima sincronizare
+     a unui magazin nou n-are de ce sa care o luna de comenzi vechi, care oricum nu sunt ale
+     integrarii; recuperarea in urma e pentru cine A AVUT marcaj si l-a pierdut. */
   const f = fereastraComenzi(undefined, ACUM);
-  assert.ok(ACUM - f.startDate < DOUA_SAPTAMANI);
+  assert.ok(ACUM - f.startDate <= DOUA_SAPTAMANI);
   assert.ok(ACUM - f.startDate > DOUA_SAPTAMANI - 5 * 60 * 1000);
+  assert.equal(f.endDate, ACUM, "si se inchide la prezent: n-are ce recupera");
 });
 
 // ── Mesaje in romana ──────────────────────────────────────────────────────────
@@ -167,13 +224,33 @@ test("un mesaj nerecunoscut e pastrat, dar atribuit lor", () => {
 });
 
 test("401 si 429 sunt explicate, nu aratate ca numere", () => {
-  assert.ok(mesajDupaStatus(401)?.includes("Cheile API"));
+  const m401 = mesajDupaStatus(401) ?? "";
+  assert.ok(m401.includes("API Key"));
+  /*
+   * 401 vine SI de la un Seller ID gresit, cu chei perfect valide — probat pe
+   * API-ul lor, care raspunde tot `401`, nu `403`. Mesajul care dadea vina doar
+   * pe chei trimitea comerciantul sa le regenereze la nesfarsit.
+   */
+  assert.ok(m401.includes("Seller ID"));
   assert.ok(mesajDupaStatus(429)?.includes("Prea multe cereri"));
   assert.equal(mesajDupaStatus(200), null);
 });
 
-test("pe stage spunem ca trebuie autorizat IP-ul", () => {
+test("pe stage spunem ca trebuie autorizat IP-ul, pe orice cod ne-ar da", () => {
+  // Gazda de stage sta in spatele unui filtru de retea si raspunde 403 cu HTML,
+  // nu 503 cu JSON: ramura legata doar de 503 nu se declansa niciodata.
   assert.ok(mesajDupaStatus(503, "stage")?.includes("IP"));
+  assert.ok(mesajDupaStatus(403, "stage")?.includes("IP"));
+  // Iar pe productie, 403 ramane 403 — nu se vorbeste despre mediul de test.
+  assert.equal(mesajDupaStatus(403, "production")?.includes("IP"), false);
+});
+
+test("cheia stabila bate textul localizat", () => {
+  // Documentatia lor: `key` e identificatorul stabil, `message` e localizat de
+  // `Accept-Language` si nu are voie sa fie discriminant.
+  const m = traduMesajTrendyol("herhangi bir metin", 401, "supplier.api.supplier.not.found");
+  assert.ok(m.includes("vanzator"));
+  assert.equal(m.includes("herhangi"), false);
 });
 
 // ── Adrese ────────────────────────────────────────────────────────────────────
@@ -221,4 +298,499 @@ test("un produs mai mare decat plafonul pleaca totusi intreg", () => {
 
 test("fara produse nu se trimite nicio cerere", () => {
   assert.deepEqual(grupeazaInLoturi([], 200), []);
+});
+
+// ── Variante: barcode, stoc, titlu ─────────────────────────────────────────────
+/*
+ * Cele trei defecte care tineau integrarea pe loc, fiecare cu proba lui.
+ * Toate au fost gasite pe date reale, nu prin citirea codului.
+ */
+
+/** Produs cu marimi: trei combinatii, fiecare cu stocul si codul ei. */
+const produsCuMarimi: MappableProduct = {
+  ...produs,
+  id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  sku: null,
+  stock_quantity: 15,
+  page_sections: {
+    variants: {
+      enabled: true,
+      options: [{ name: "Mărime", values: ["S", "M", "L"] }],
+      combinations: [
+        { id: "c1c1c1c1-1111-1111-1111-111111111111", title: "S", price: "", compare_at_price: "", sku: "", gtin: "5901234123457", stock_quantity: "5", image: "", enabled: true },
+        { id: "c2c2c2c2-2222-2222-2222-222222222222", title: "M", price: "", compare_at_price: "", sku: "ROCHIE-M", stock_quantity: "5", image: "", enabled: true },
+        { id: "c3c3c3c3-3333-3333-3333-333333333333", title: "L", price: "", compare_at_price: "", sku: "", stock_quantity: "5", image: "", enabled: true },
+      ],
+    },
+  },
+} as unknown as MappableProduct;
+
+test("barcode-ul derivat incape in cele 40 de caractere ale lui Trendyol", () => {
+  /*
+   * Forma veche era `${product.id}-${combo.id}`: doua uuid-uri, 73 de caractere,
+   * peste limita pe care tot noi o verificam. 78 de produse reale erau blocate
+   * de un barcode fabricat de noi, cu un mesaj care dadea vina pe comerciant.
+   */
+  for (const s of deriveVariantSlots(produsCuMarimi)) {
+    assert.equal(verificaBarcode(s.barcode), null, `barcode invalid: ${s.barcode} (${s.barcode.length} car.)`);
+  }
+});
+
+test("GTIN-ul umple golul, dar SKU-ul ramane identitatea", () => {
+  const s = deriveVariantSlots(produsCuMarimi);
+  // Combinatia fara SKU isi ia GTIN-ul: erau aproape zece mii de combinatii cu
+  // GTIN completat in Edinio si niciuna nu pleca la marketplace.
+  assert.equal(s[0].barcode, "5901234123457");
+  // Cea cu SKU si-l pastreaza, chiar daca ar avea si GTIN.
+  assert.equal(s[1].barcode, "ROCHIE-M");
+  // A treia n-are nici GTIN, nici SKU: se deriva, si tot trebuie sa fie valida.
+  assert.equal(verificaBarcode(s[2].barcode), null);
+});
+
+test("SKU-ul bate GTIN-ul, ca sa nu se schimbe identitatea unei variante deja listate", () => {
+  /*
+   * Barcode-ul NU e o preferinta, e identitatea articolului la Trendyol. Pus
+   * GTIN-ul primul, o varianta care are si SKU si GTIN si-ar fi schimbat codul
+   * la prima salvare: al doilea produs pe Trendyol, primul ramas acolo orfan si
+   * VANDABIL, si niciun rand la noi din care sa-l mai putem pune pe zero.
+   */
+  const amandoua = {
+    ...produsCuMarimi,
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ name: "Mărime", values: ["S"] }],
+        combinations: [
+          { id: "e1", title: "S", price: "", compare_at_price: "", sku: "VECHI-S", gtin: "5901234123457", stock_quantity: "4", image: "", enabled: true },
+        ],
+      },
+    },
+  } as unknown as MappableProduct;
+  assert.equal(deriveVariantSlots(amandoua)[0].barcode, "VECHI-S");
+
+  // Si la produsul FARA variante, unde nu exista titlu de combinatie pe care sa
+  // se potriveasca randul salvat: acolo barcode-ul e SINGURA legatura.
+  const faraVariante = { ...produs, sku: "PARF-001", page_sections: { google: { gtin: "5941234567890" } } } as unknown as MappableProduct;
+  assert.equal(deriveVariantSlots(faraVariante)[0].barcode, "PARF-001");
+  // Fara SKU, GTIN-ul e binevenit: altfel pleca un uuid drept cod de bare.
+  const faraSku = { ...faraVariante, sku: null } as unknown as MappableProduct;
+  assert.equal(deriveVariantSlots(faraSku)[0].barcode, "5941234567890");
+});
+
+test("doua combinatii cu ACELASI titlu se reduc la prima, ca peste tot in aplicatie", () => {
+  /*
+   * Sunt produse reale asa: 37 de titluri duplicate pe 8 produse. `findCombo`,
+   * `comboStockMap` si scaderea de stoc aleg toate PRIMA — daca aici ar iesi
+   * doua sloturi cu acelasi titlu, potrivirea din editor le-ar prabusi pe
+   * acelasi rand, salvarea ar sterge toate variantele si ar cadea pe cheia
+   * unica, iar listarea ar ramane fara nicio varianta.
+   */
+  const titluriDuble = {
+    ...produsCuMarimi,
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ name: "Mărime", values: ["M"] }],
+        combinations: [
+          { id: "f1", title: "M", price: "", compare_at_price: "", sku: "A", stock_quantity: "3", image: "", enabled: true },
+          { id: "f2", title: "M", price: "", compare_at_price: "", sku: "B", stock_quantity: "7", image: "", enabled: true },
+        ],
+      },
+    },
+  } as unknown as MappableProduct;
+  const s = deriveVariantSlots(titluriDuble);
+  assert.equal(s.length, 1);
+  assert.equal(s[0].barcode, "A");
+  assert.equal(s[0].quantity, 3);
+});
+
+test("stocul TOTAL al produsului nu se da drept stoc de varianta", () => {
+  /*
+   * Cand combinatiile n-au stoc propriu, fondul e COMUN. Marcat „viu", ajungea
+   * sa bata cantitatea scrisa de comerciant in editor si sa-i blocheze campul:
+   * un tricou cu 15 bucati si S/M/L fara stoc pe combinatie pleca la Trendyol
+   * cu 15 pe FIECARE marime, peste cele 5/5/5 completate de om.
+   */
+  const faraStocPeCombinatie = {
+    ...produsCuMarimi,
+    stock_quantity: 15,
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ name: "Mărime", values: ["S", "M"] }],
+        combinations: [
+          { id: "g1", title: "S", price: "", compare_at_price: "", sku: "S1", stock_quantity: "", image: "", enabled: true },
+          { id: "g2", title: "M", price: "", compare_at_price: "", sku: "M1", stock_quantity: "", image: "", enabled: true },
+        ],
+      },
+    },
+  } as unknown as MappableProduct;
+  for (const s of deriveVariantSlots(faraStocPeCombinatie)) {
+    assert.equal(s.stocViu, false, `${s.label} nu are stoc propriu, deci nu e „viu"`);
+  }
+  // Produsul FARA combinatii, in schimb, chiar isi are stocul pe varianta.
+  assert.equal(deriveVariantSlots(produs)[0].stocViu, true);
+});
+
+test("doua variante nu pot pleca cu acelasi barcode", () => {
+  const acelasiSku = {
+    ...produsCuMarimi,
+    page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ name: "Mărime", values: ["S", "M"] }],
+        combinations: [
+          { id: "d1", title: "S", price: "", compare_at_price: "", sku: "ACELASI", stock_quantity: "2", image: "", enabled: true },
+          { id: "d2", title: "M", price: "", compare_at_price: "", sku: "ACELASI", stock_quantity: "3", image: "", enabled: true },
+        ],
+      },
+    },
+  } as unknown as MappableProduct;
+  const barcoduri = deriveVariantSlots(acelasiSku).map((s) => s.barcode);
+  // Trendyol ar accepta prima varianta si ar suprascrie-o cu a doua: produsul ar
+  // aparea cu o singura marime, fara nicio eroare.
+  assert.equal(new Set(barcoduri).size, barcoduri.length);
+});
+
+test("fiecare marime pleaca cu stocul EI, nu cu totalul produsului", () => {
+  /*
+   * S=5, M=5, L=5 inseamna 15 bucati. Trimis totalul pe fiecare barcode, ies 45
+   * de bucati vandabile din 15 — iar `reconcileInventory` foloseste aceeasi
+   * functie, deci confirma cifra gresita in loc s-o corecteze.
+   */
+  const stocuri = deriveVariantSlots(produsCuMarimi).map((s) => s.quantity);
+  assert.deepEqual(stocuri, [5, 5, 5]);
+  assert.equal(stocuri.reduce((a, b) => a + b, 0), 15);
+});
+
+test("titlul combinatiei se pastreaza, ca vanzarea sa stie ce marime sa scada", () => {
+  const s = deriveVariantSlots(produsCuMarimi);
+  assert.deepEqual(s.map((x) => x.variantTitle), ["S", "M", "L"]);
+  // Produsul fara variante n-are nicio combinatie de potrivit: `null`, nu eticheta.
+  assert.equal(deriveVariantSlots(produs)[0].variantTitle, null);
+});
+
+test("stocul viu al combinatiei bate numarul scris o data in editor", () => {
+  // Numarul din editor e o fotografie care nu se mai misca; stocul combinatiei
+  // se schimba la fiecare vanzare.
+  assert.equal(resolveVariantQuantity(produsCuMarimi, 99, false, false, 5), 5);
+  // Fara stoc pe combinatie, numarul din editor ramane valabil.
+  assert.equal(resolveVariantQuantity(produsCuMarimi, 99, false, false, null), 99);
+  // `forceZero` bate tot: asa se scoate un produs din vanzare la ei.
+  assert.equal(resolveVariantQuantity(produsCuMarimi, 99, false, true, 5), 0);
+});
+
+// ── Loturi ────────────────────────────────────────────────────────────────────
+test("un lot pe care Trendyol nu-l mai recunoaste NU e un lot reusit", () => {
+  /*
+   * Peste patru ore, `batch-requests` raspunde HTTP 200 cu plicul intreg si
+   * TOATE campurile pe `null`. Citit ca „nu e FAILED, deci a mers", produsele
+   * erau marcate „create pe Trendyol" fara sa fi ajuns vreodata acolo — si nimic
+   * nu le mai reincerca, fiindca lotul se inchidea ca reusit.
+   */
+  assert.equal(stareLot({ status: null, itemCount: null, batchRequestType: null, items: [] }), "necunoscut");
+  assert.equal(stareLot(null), "necunoscut");
+  /*
+   * ⚠ Aici scria „gata", si productia a aratat ca e FALS: un lot poate raspunde
+   * `COMPLETED` cu `items` inca gol si sa raporteze esecul cateva minute mai
+   * tarziu. Vezi proba de mai jos.
+   */
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 3, items: [{ status: "SUCCESS" }] }), "gata");
+  assert.equal(stareLot({ status: "FAILED", itemCount: 3, items: [{ status: "FAILED" }] }), "gata");
+  assert.equal(stareLot({ status: "IN_PROGRESS", itemCount: 3, items: [] }), "in_lucru");
+});
+
+test("un lot cu substanta dar fara `status` NU se blocheaza", () => {
+  /*
+   * Garda de mai sus era cat pe ce sa opreasca TOATE loturile de stoc: un
+   * raspuns care raporteaza `itemCount` si articole terminale, dar caruia ii
+   * lipseste campul `status`, ar fi fost reincercat de sase ori si apoi inchis
+   * ca esuat — desi reusise. Nicio impingere de stoc nu s-ar mai fi confirmat.
+   */
+  assert.equal(stareLot({ itemCount: 1, batchRequestType: "ProductInventoryUpdate", items: [{ status: "SUCCESS" }] }), "gata");
+  assert.equal(stareLot({ itemCount: 1, batchRequestType: "ProductInventoryUpdate", items: [{ status: "IN_PROGRESS" }] }), "in_lucru");
+  // Dar plicul cu adevarat gol ramane necunoscut — asa raspunde Trendyol la un
+  // lot pe care nu-l mai stie, iar acela nu are voie sa treaca drept succes.
+  assert.equal(stareLot({ items: [] }), "necunoscut");
+});
+
+test("barcode-ul articolului se citeste in ambele forme", () => {
+  // `ProductV2OnBoarding` il invele in `product`; loturile de stoc il trimit direct.
+  assert.equal(barcodeArticol({ requestItem: { product: { barcode: "AAA" } } }), "AAA");
+  assert.equal(barcodeArticol({ requestItem: { barcode: "BBB" } }), "BBB");
+  assert.equal(barcodeArticol({ requestItem: {} }), null);
+});
+
+// ── Coada ─────────────────────────────────────────────────────────────────────
+test("un 429 sau un 503 nu arde incercarile elementului din coada", () => {
+  // Cinci minute de indisponibilitate la Trendyol goleau coada definitiv.
+  assert.equal(eTrecatoare(429), true);
+  assert.equal(eTrecatoare(503), true);
+  assert.equal(eTrecatoare(0), true);
+  // Un refuz adevarat, in schimb, trebuie sa consume incercari.
+  assert.equal(eTrecatoare(400), false);
+  assert.equal(eTrecatoare(401), false);
+  assert.equal(eTrecatoare(undefined), false);
+});
+
+test("repunerea la coada dupa un lot de stoc esuat se opreste la plafon", () => {
+  /*
+   * ⚠ Un contor care nu creste nu margineste nimic.
+   *
+   * Prima incercare tinea contorul in `trendyol_sync_queue`. Dar randul de acolo
+   * se sterge in clipa in care Trendyol raspunde 200 la impingere — si 200
+   * inseamna doar „primit", nu „aplicat". Esecul apare abia in lot, cand randul
+   * nu mai exista, deci contorul se citea MEREU ca zero: impinge, esueaza,
+   * repune, impinge, la nesfarsit, cate doua apeluri pe minut pentru fiecare
+   * produs otravit, pana cand coada magazinului nu mai avea loc de altceva.
+   */
+  const listari = [
+    { product_id: "p-nou", inventory_retries: 0 },
+    { product_id: "p-la-mijloc", inventory_retries: MAX_REPUNERI_STOC - 1 },
+    { product_id: "p-epuizat", inventory_retries: MAX_REPUNERI_STOC },
+    { product_id: "p-peste", inventory_retries: MAX_REPUNERI_STOC + 5 },
+    // Listare fara produs in Edinio: n-are ce repune la coada.
+    { product_id: null, inventory_retries: 0 },
+  ];
+  assert.deepEqual(listariDeRepus(listari).map((l) => l.product_id), ["p-nou", "p-la-mijloc"]);
+  // Si, cel mai important: plafonul chiar SE ATINGE. Un contor blocat pe zero ar
+  // trece toate cele cinci si bucla ar fi tot infinita.
+  assert.equal(listariDeRepus(listari.map((l) => ({ ...l, inventory_retries: 0 }))).length, 4);
+});
+
+test("doua atribute cu ACELASI nume se deosebesc, nu se repeta", () => {
+  /*
+   * Categoria „Genți de umăr" (971) cere de doua ori „Culoare", verificat pe
+   * API-ul real: id 47 — text liber, `slicer`, culoarea dupa care Trendyol
+   * grupeaza variantele pe pagina lor; id 348 — aleasa din 26 de valori
+   * standard, folosita la filtrele lor. Sunt lucruri diferite si obligatorii
+   * amandoua, dar afisate identic pareau un camp desenat de doua ori.
+   */
+  const lipsa = [
+    { attributeId: 47, nume: "Culoare", acceptaTextLiber: true },
+    { attributeId: 348, nume: "Culoare", acceptaTextLiber: false },
+    { attributeId: 338, nume: "Mărime", acceptaTextLiber: false },
+  ];
+  const m = mesajAtributeLipsa(lipsa);
+  assert.ok(m.includes("Culoare (scrisă de tine)"), m);
+  assert.ok(m.includes("Culoare (din lista Trendyol)"), m);
+  // „Mărime" apare o singura data in categorie, deci ramane neatins.
+  assert.ok(m.includes("Mărime") && !m.includes("Mărime ("), m);
+  // Si nu mai apare nicaieri „Culoare si Culoare".
+  assert.equal(/Culoare(?!\s\()/.test(m.replace(/Culoare \([^)]*\)/g, "")), false, m);
+});
+
+// ── Ruta de trimitere: creare vs actualizare ──────────────────────────────────
+test("un produs care exista deja la ei se ACTUALIZEAZA, nu se recreeaza", () => {
+  /*
+   * ⚠ Cazul care a costat: un produs respins la revizuie pentru imagini.
+   * Comerciantul apasa „Reincearca", noi il trimiteam iar prin `createProducts`,
+   * si Trendyol raspundea de fiecare data „codul de bare exista deja". Oricate
+   * reincercari, reparatia nu ajungea NICIODATA la ei.
+   */
+  assert.equal(rutaDeTrimitere({ status: "rejected", creat_de_edinio: true }), "actualizare_neaprobat");
+  assert.equal(rutaDeTrimitere({ status: "created", creat_de_edinio: true }), "actualizare_neaprobat");
+
+  // Produs aprobat: continutul se schimba pe `contentId`, nu pe barcode.
+  assert.equal(
+    rutaDeTrimitere({ status: "approved", creat_de_edinio: true, ty_content_id: 123 }),
+    "actualizare_aprobat",
+  );
+  // Fara `contentId` nu exista cheie pentru ruta aia: nu trimitem o cerere
+  // invalida, ci lasam refuzul explicit de la creare.
+  assert.equal(rutaDeTrimitere({ status: "approved", creat_de_edinio: true }), "creare");
+
+  /*
+   * ⚠ `inactive` NU merge pe ruta de continut.
+   *
+   * Inseamna „i-am pus stocul pe zero" — iar actualizarea nu duce cantitate, si
+   * niciun cron nu se uita la `inactive`. Un produs reactivat ar fi ramas
+   * invizibil la ei pentru totdeauna. Reactivarea se trateaza separat.
+   */
+  assert.notEqual(
+    rutaDeTrimitere({ status: "inactive", creat_de_edinio: true, ty_content_id: 5 }),
+    "actualizare_aprobat",
+  );
+
+  // Prima trimitere, si listarile pe eroare care n-au ajuns niciodata la ei.
+  assert.equal(rutaDeTrimitere({ status: "pending" }), "creare");
+  assert.equal(rutaDeTrimitere({ status: "draft" }), "creare");
+  assert.equal(rutaDeTrimitere({ status: "error" }), "creare");
+
+  // Listarea ADOPTATA exista la ei chiar daca n-am creat-o noi.
+  assert.equal(
+    rutaDeTrimitere({ status: "approved", creat_de_edinio: false, auto_inventory: false, ty_content_id: 9 }),
+    "actualizare_aprobat",
+  );
+});
+
+test("„exista la ei” si „avem voie sa-i scriem” sunt intrebari DIFERITE", () => {
+  /*
+   * Confundate o data, rezultatul era ca titlul, descrierea si imaginile lucrate
+   * de comerciant in panoul Trendyol se inlocuiau tacit cu cele din Edinio — la
+   * orice editare de produs, fara mesaj si fara cale de intoarcere.
+   */
+  const adoptata = { creat_de_edinio: false, auto_inventory: false };
+  assert.equal(existaLaTrendyol(adoptata), true);
+  assert.equal(putemSuprascrieContinutul(adoptata), false);
+
+  const aNoastra = { creat_de_edinio: true, auto_inventory: true };
+  assert.equal(existaLaTrendyol(aNoastra), true);
+  assert.equal(putemSuprascrieContinutul(aNoastra), true);
+
+  const netrimisa = { creat_de_edinio: false, auto_inventory: true };
+  assert.equal(existaLaTrendyol(netrimisa), false);
+});
+
+test("payload-ul de actualizare nu duce stoc si pret", () => {
+  // Documentat: alea se schimba NUMAI prin `price-and-inventory`. Trimise aici,
+  // sunt ignorate in cel mai bun caz si resping lotul in cel mai rau.
+  const item = itemuri()[0];
+  const actualizare = faraStocSiPret(item) as unknown as Record<string, unknown>;
+  assert.equal(actualizare.quantity, undefined);
+  assert.equal(actualizare.listPrice, undefined);
+  assert.equal(actualizare.salePrice, undefined);
+  // Restul ramane intreg: documentatia cere setul COMPLET la update de ciorna.
+  assert.equal(actualizare.barcode, item.barcode);
+  assert.equal(actualizare.title, item.title);
+  assert.deepEqual(actualizare.images, item.images);
+});
+
+// ── Comenzi ───────────────────────────────────────────────────────────────────
+test("pachetul spart (UnPacked) e terminal, altfel stocul se consuma de doua ori", () => {
+  /*
+   * Cand Trendyol imparte o comanda in mai multe colete, pachetul initial trece
+   * pe `UnPacked` si se creeaza altele noi PENTRU ACELEASI LINII. Netratat ca
+   * terminal, pachetul mort ramanea activ si liniile lui scadeau marfa a doua oara.
+   */
+  assert.equal(edinioStatusForTrendyol("UnPacked"), "cancelled");
+  assert.equal(edinioStatusForTrendyol("Cancelled"), "cancelled");
+  assert.equal(edinioStatusForTrendyol("Delivered"), "delivered");
+  assert.equal(edinioStatusForTrendyol("Shipped"), "shipped");
+});
+
+// ── Atribute obligatorii ──────────────────────────────────────────────────────
+test("atributele obligatorii se verifica pe TOATE variantele, nu doar pe prima", () => {
+  /*
+   * Verificarea rula pe `items[0]`. Dar tocmai atributele `varianter` — marimea
+   * si culoarea — sunt cele care difera intre variante: prima putea fi completa
+   * si a treia goala, produsul trecea de garda noastra si era respins pe lot.
+   */
+  const aleCategoriei = [
+    { attribute: { id: 47, name: "Culoare" }, required: true, varianter: true },
+    { attribute: { id: 338, name: "Material" }, required: true },
+  ];
+  const articole = [
+    { barcode: "A", attributes: [{ attributeId: 47, attributeValueId: 1 }, { attributeId: 338, attributeValueId: 9 }] },
+    { barcode: "B", attributes: [{ attributeId: 338, attributeValueId: 9 }] },
+  ];
+  const lipsa = atributeLipsaPeVariante(aleCategoriei, articole);
+  assert.equal(lipsa.length, 1);
+  assert.equal(lipsa[0].nume, "Culoare");
+  assert.equal(lipsa[0].varianta, "B");
+  // Prima varianta singura ar fi trecut curat — exact defectul.
+  assert.equal(atributeLipsaPeVariante(aleCategoriei, [articole[0]]).length, 0);
+});
+
+test("filtrul de stergere a variantelor scapate se construieste corect", () => {
+  /*
+   * `.not("barcode","in", ...)` pleaca in ADRESA cererii, ca sir. Barcodurile se
+   * ghilimeleaza: fara ghilimele, unul care contine o virgula (sau punct) ar
+   * rupe lista si ar sterge randuri care trebuiau pastrate.
+   */
+  const barcoduri = ["8720857827439", "ROCHIE-1_A.2", "ABC-1"];
+  const filtru = `(${barcoduri.map((b) => `"${b}"`).join(",")})`;
+  assert.equal(filtru, '("8720857827439","ROCHIE-1_A.2","ABC-1")');
+  // Barcode-urile permit doar litere, cifre, punct, liniuta si underscore
+  // (`verificaBarcode`), deci ghilimelele nu pot fi inchise din interior.
+  for (const b of barcoduri) assert.equal(verificaBarcode(b), null);
+  assert.equal(barcoduri.some((b) => b.includes('"')), false);
+});
+
+test("un lot „COMPLETED” fara articole raportate NU e terminat", () => {
+  /*
+   * ⚠ Probat in productie: la 5 secunde dupa trimitere, lotul raspundea
+   * `COMPLETED` cu `items: []` si `failedItemCount: 0`. Cateva minute mai
+   * tarziu, ACELASI lot raporta `failedItemCount: 1` si articolul `FAILED` cu
+   * „codul de bare exista deja".
+   *
+   * Citit ca terminal, primul raspuns inseamna „a mers" — si atunci produsul se
+   * marcheaza drept creat la Trendyol fara sa existe acolo.
+   */
+  assert.equal(stareLot({ status: "COMPLETED", items: [] }), "in_lucru");
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 1, items: [] }), "in_lucru");
+  // Raspunsul complet, cu articolul raportat: abia acum e terminat.
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 1, items: [{ status: "FAILED" }] }), "gata");
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 1, items: [{ status: "SUCCESS" }] }), "gata");
+  // Un lot care chiar n-are articole de raportat nu trebuie sa astepte degeaba.
+  assert.equal(stareLot({ status: "COMPLETED", itemCount: 0, items: [] }), "gata");
+});
+
+// ── SGR (garantia de ambalaj, obligatorie in Romania) ─────────────────────────
+test("SGR se cere doar pe RO si doar pe categoriile de bauturi si uleiuri", () => {
+  // Transcrise una cate una din tabelul lor: 38 de categorii, nu un interval.
+  assert.equal(TRENDYOL_CATEGORII_SGR.size, 38);
+  assert.equal(necesitaSgr(5654, "RO"), true);    // bere
+  assert.equal(necesitaSgr(1420, "RO"), true);    // apa
+  assert.equal(necesitaSgr(1439, "RO"), true);    // uleiuri de gatit
+  // Categoria reala a comerciantului (genti) NU cere SGR.
+  assert.equal(necesitaSgr(971, "RO"), false);
+  // „SGR is valid only for the listings in Romania" — pe alta vitrina, niciodata.
+  assert.equal(necesitaSgr(5654, "BG"), false);
+  assert.equal(necesitaSgr(5654, undefined), false);
+  assert.equal(necesitaSgr(null, "RO"), false);
+});
+
+test("garantia SGR se calculeaza pe AMBALAJ, nu pe produs", () => {
+  // Un bax de sase doze inseamna 3 lei, nu 0,50.
+  assert.equal(pretSgr(6), 3);
+  assert.equal(pretSgr(1), 0.5);
+  // Lipsa, zero sau negativ inseamna o singura unitate — nu zero garantie.
+  assert.equal(pretSgr(null), 0.5);
+  assert.equal(pretSgr(0), 0.5);
+  assert.equal(pretSgr(-3), 0.5);
+});
+
+test("sgrPrice pleaca in payload doar cand categoria il cere", () => {
+  const faraSgr = itemuri({ storefront: "RO" })[0] as unknown as Record<string, unknown>;
+  assert.equal(faraSgr.sgrPrice, undefined);
+
+  const cuSgr = buildTrendyolItems({
+    config: { storefront: "RO" },
+    product: produs,
+    listing: { ...listing, category_id: 5654, sgr_units: 6 },
+    variants: [varianta],
+  });
+  if ("error" in cuSgr) throw new Error(cuSgr.error);
+  assert.equal(cuSgr.items[0].sgrPrice, 3);
+});
+
+// ── Cross Country ─────────────────────────────────────────────────────────────
+test("un vanzator ROMAN pastreaza cotele romanesti pe GR si BG", () => {
+  /*
+   * Documentat: sub Cross Country, un vanzator cu originea in Romania poate
+   * folosi si cotele RO (11 si 21) pe vitrinele de destinatie. Un tabel fix
+   * „GR ⇒ {0,6,13,24}" ar respinge cote perfect legale, iar `tvaPentruVitrina`
+   * le-ar „corecta" tacit — produsul s-ar lista cu TVA gresit si s-ar vinde asa.
+   */
+  const gr = coteTvaVitrina("GR", "RO");
+  assert.equal(gr.includes(21), true);
+  assert.equal(gr.includes(11), true);
+  assert.equal(gr.includes(24), true, "cotele locale raman valabile");
+  // 21 e legal pentru el, deci nu se mai muta la 24.
+  assert.equal(tvaPentruVitrina({ storefront: "GR", origine: "RO" }, 21), 21);
+
+  /*
+   * ⚠ Fara origine DECLARATA, vitrina isi pastreaza strict cotele ei.
+   *
+   * Presupunand „RO" pentru oricine, un comerciant cu cont inregistrat in Grecia
+   * ar fi vazut ca valide cote pe care Trendyol i le respinge — o largire a
+   * validarii bazata pe o presupunere despre altcineva.
+   */
+  assert.deepEqual(coteTvaVitrina("GR"), [0, 6, 13, 24]);
+  assert.deepEqual(coteTvaVitrina("GR", undefined), [0, 6, 13, 24]);
+  assert.equal(tvaPentruVitrina({ storefront: "GR" }, 21), 24, "fara origine, 21 nu e legal pe GR");
+  assert.deepEqual(coteTvaVitrina("GR", "DE"), [0, 6, 13, 24]);
+  // Si nu se aplica pe vitrine care nu sunt destinatii Cross Country.
+  assert.deepEqual(coteTvaVitrina("DE", "RO"), [0, 7, 19]);
 });

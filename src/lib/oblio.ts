@@ -1,3 +1,5 @@
+import { eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+
 const OBLIO_BASE = "https://www.oblio.eu";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -71,6 +73,8 @@ export type OblioInvoiceData = {
   client: {
     name: string;
     cif?: string;
+    /** Numarul de la registrul comertului. Doar la persoane juridice. */
+    rc?: string;
     address?: string;
     state?: string;
     city?: string;
@@ -174,10 +178,21 @@ async function oblioReq<T>(
     cache: "no-store",
   });
 
+  // Un corp necitibil arunca de aici NEMARCAT, deci registrul il ia drept
+  // „nu stim" — ceea ce e corect: cererea a ajuns si nu stim ce a facut cu ea.
   const json = await res.json() as { status: number; statusMessage: string; data: T };
 
   if (json.status < 200 || json.status >= 300) {
-    throw new Error(json.statusMessage ?? `Eroare Oblio (status ${json.status})`);
+    const mesaj = json.statusMessage ?? `Eroare Oblio (status ${json.status})`;
+    /*
+     * ⚠ Oblio isi pune statusul in CORP, nu in HTTP (raspunsul e 200 si cand
+     * refuza). Un 4xx acolo inseamna ca a primit cererea, a inteles-o si a
+     * respins-o — nimic nu s-a emis, deci reincercarea dupa corectarea datelor e
+     * libera. Un 5xx e ambiguu: a picat la ei DUPA ce au primit-o, si documentul
+     * poate exista. Vezi src/lib/operatii/eroare-furnizor.ts.
+     */
+    const refuzDovedit = json.status >= 400 && json.status < 500 && json.status !== 408;
+    throw refuzDovedit ? eroareRefuz(mesaj) : eroareNesigura(mesaj);
   }
 
   return json.data;

@@ -18,7 +18,46 @@ export function moveSection(design: StoreDesign, from: number, to: number): Stor
   const next = clone(design);
   const [mutata] = next.home.splice(from, 1);
   next.home.splice(to, 0, mutata);
+  /*
+   * Semnul se pune DOAR daca s-a schimbat ordinea randurilor de produse intre
+   * ele.
+   *
+   * ⚠ Pus la orice mutare, o singura tragere de „Beneficii" cu o pozitie mai sus
+   * omora pentru totdeauna sagetile din „Editeaza magazinul": ele scriau mai
+   * departe in `page_content.product_sections`, aratau „Salvat", si magazinul
+   * pastra ordinea veche. Doua controale fara nicio legatura intre ele, unul
+   * dezactivandu-l tacut pe celalalt.
+   */
+  if (ordineaRandurilor(design.home) !== ordineaRandurilor(next.home)) next.ordineAtinsa = true;
   return next;
+}
+
+/** Secventa de randuri de produse, ca sir: din ea se vede daca s-au reasezat intre ele. */
+function ordineaRandurilor(home: SectionInstance[]): string {
+  return home.filter((s) => s.kind === "product_row").map((s) => s.id).join("|");
+}
+
+/**
+ * Toate sectiunile designului, intr-o singura lista.
+ *
+ * Scrisa de mana, si asta e important: o sectiune noua adaugata in `types.ts`
+ * exista in date si se salveaza, dar nu apare nicaieri in editor pana nu intra
+ * si aici. Pare ca deployul n-a prins.
+ *
+ * Bara de anunt poate lipsi (`null`), deci se adauga conditionat.
+ */
+export function toateSectiunile(design: StoreDesign): SectionInstance[] {
+  return [
+    ...(design.chrome.announcement ? [design.chrome.announcement] : []),
+    design.chrome.header,
+    ...design.home,
+    design.chrome.footer,
+    design.product.page,
+    design.shop.page,
+    design.commerce.productCard,
+    design.commerce.cartDrawer,
+    design.commerce.checkout,
+  ];
 }
 
 /**
@@ -47,12 +86,21 @@ function findSection(design: StoreDesign, id: string): SectionInstance | undefin
 export function updateSection(
   design: StoreDesign,
   id: string,
-  patch: Partial<Pick<SectionInstance, "variant" | "enabled" | "settings">>,
+  patch: Partial<Pick<SectionInstance, "variant" | "enabled" | "enabledOverride" | "settings">>,
 ): StoreDesign {
   const next = clone(design);
   const tinta = findSection(next, id);
   if (!tinta) return design;
   Object.assign(tinta, patch);
+
+  /*
+   * O varianta aleasa de om se si tine minte ca fiind aleasa de om.
+   *
+   * Fara semnul asta, parserul re-deriva varianta hero-ului din comutatorul
+   * „Afiseaza continutul peste banner" si stergea alegerea din galerie la prima
+   * citire — doua din design-urile de hero nu puteau fi alese deloc.
+   */
+  if (patch.variant !== undefined) tinta.variantOverride = patch.variant;
 
   /*
    * La schimbarea variantei, reglajele pornesc de la valorile implicite ALE EI.
@@ -75,10 +123,19 @@ export function updateSection(
   return next;
 }
 
+/**
+ * Aprinde sau stinge o sectiune din editorul de design.
+ *
+ * ⚠ Scrie SI `enabledOverride`, nu doar `enabled`. Sectiunile derivate isi iau
+ * starea din `page_content` la fiecare citire, deci fara semnul explicit
+ * alegerea de aici traia exact pana la prima reincarcare: sectiunea disparea din
+ * previzualizare, comerciantul apasa Publica — si revenea. Vezi `parse.ts`.
+ */
 export function toggleSection(design: StoreDesign, id: string): StoreDesign {
   const curenta = findSection(design, id);
   if (!curenta) return design;
-  return updateSection(design, id, { enabled: !curenta.enabled });
+  const nou = !curenta.enabled;
+  return updateSection(design, id, { enabled: nou, enabledOverride: nou });
 }
 
 /**
@@ -95,6 +152,16 @@ export function removeSection(design: StoreDesign, id: string): StoreDesign {
   // paginii de produs si ale cosului fac parte din structura, nu din aranjament.
   if (design.chrome.announcement?.id !== id && !design.home.some((s) => s.id === id)) return design;
   const next = clone(design);
+  /*
+   * Id-ul intra in lista de sterse, altfel stergerea se anuleaza singura.
+   *
+   * Parserul readuce din designul „classic" sectiunile aprinse care lipsesc —
+   * regula exista pentru designurile salvate de versiuni mai vechi. Fara semnul
+   * asta, ea nu poate deosebi o sectiune stearsa anume de una care n-a existat
+   * niciodata, deci o readucea la prima citire: sectiunea disparea din
+   * previzualizare, comerciantul apasa Publica, si ea era inapoi.
+   */
+  next.sterse = [...new Set([...(next.sterse ?? []), id])];
   if (next.chrome.announcement?.id === id) {
     next.chrome.announcement = null;
     return next;
@@ -103,12 +170,27 @@ export function removeSection(design: StoreDesign, id: string): StoreDesign {
   return next;
 }
 
+/**
+ * Se poate duplica sectiunea?
+ *
+ * Doua conditii, nu una. Sa poata exista de mai multe ori — si sa nu-si ia
+ * continutul din `page_content`: o copie a unui rand de produse ar primi un id
+ * fara pereche acolo, deci ar ramane pentru totdeauna un rand gol in magazin.
+ *
+ * Exportata ca lista de sectiuni sa afiseze butonul dupa aceeasi regula dupa
+ * care il si executa. Butoanele care nu pot face nimic sunt exact felul de
+ * defect pe care nimeni nu-l raporteaza.
+ */
+export function poateFiDuplicata(kind: SectionKind): boolean {
+  return sectionMeta(kind)?.singleton === false && !CONTINUT_DIN_PAGE_CONTENT.includes(kind);
+}
+
 /** Duplica o sectiune, imediat sub original. Doar cele care pot exista de mai multe ori. */
 export function duplicateSection(design: StoreDesign, id: string): StoreDesign {
   const index = design.home.findIndex((s) => s.id === id);
   if (index < 0) return design;
   const original = design.home[index];
-  if (sectionMeta(original.kind)?.singleton !== false) return design;
+  if (!poateFiDuplicata(original.kind)) return design;
   const next = clone(design);
   next.home.splice(index + 1, 0, { ...structuredClone(original), id: newSectionId() });
   return next;

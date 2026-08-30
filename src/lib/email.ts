@@ -1,9 +1,14 @@
 import { Resend } from "resend";
 import { formatPrice } from "@/lib/utils/format";
+import { escapeHtml as esc, escapeUrl } from "@/lib/utils/html-escape";
 import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
 import { deliverStoreEmail } from "@/lib/email/deliver";
 import { renderTemplate } from "@/lib/email/templates";
+import type { BillingCompany } from "@/lib/billing/company";
+// Randurile de bani ale unei comenzi (Subtotal, extraoptiuni, reduceri, TVA) se
+// construiesc INTR-UN SINGUR LOC, pentru amandoua emailurile. Vezi acolo de ce.
+import { randuriDeBani, type BaniComanda } from "@/lib/email/order-totals";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -25,6 +30,29 @@ export function parseNotificationsConfig(raw: Record<string, unknown>): Notifica
     new_order: raw.new_order !== false,
   };
 }
+
+/*
+ * Regula de escapare in acest fisier, ca sa nu se mai piarda (2026-08-04).
+ *
+ * Fiecare `${...}` din sabloane e de UNA din trei feluri:
+ *   1. text variabil (nume de client, de produs, de magazin, cod de reducere,
+ *      continut de tichet) -> trece prin `esc`. Fara exceptii: pana acum
+ *      `sendOrderConfirmationToCustomer` nu escapa NIMIC, iar `placeOrder` e
+ *      export „use server" cu adresa de destinatie aleasa de apelant.
+ *   2. fragment HTML compus tot aici (`itemsRows`, `discountRow`, `intro`,
+ *      `bodyHtml`, `rows`, `heading`) -> NU se escapeaza, altfel clientul
+ *      primeste marcaj brut pe ecran. Sunt vreo cincisprezece.
+ *   3. numar deja formatat (`formatPrice`, `toLocaleString`, cantitati) -> nu
+ *      poate contine caractere speciale, se lasa in pace.
+ *
+ * Adresele din `href` care CONTIN date variabile trec prin `escapeUrl`, nu prin
+ * `esc`: acolo escaparea inchide iesirea din atribut, dar nu opreste
+ * `javascript:`. Cele compuse doar din `SITE_URL` si text fix se lasa asa cum
+ * sunt — n-au ce sa poarte.
+ *
+ * SUBIECTELE nu se escapeaza niciodata — sunt anteturi de email, nu HTML, si
+ * un „&amp;" acolo se vede ca atare in casuta destinatarului.
+ */
 
 function baseTemplate(content: string): string {
   return `<!DOCTYPE html>
@@ -70,23 +98,43 @@ function baseTemplate(content: string): string {
 </html>`;
 }
 
-// Send a store-facing email: when the store opted in (sender.smtp present) use its
-// own branding + SMTP; otherwise the Edinio sender + Edinio shell (unchanged default).
+/**
+ * Trimite un email care vine DIN PARTEA MAGAZINULUI.
+ *
+ * Invelisul cu marca magazinului era legat de SMTP, nu de magazin: cine nu-si
+ * conectase server propriu de email isi trimitea clientii cu logo Edinio, subsol
+ * Edinio si expeditor „Edinio.com". Adica exact comerciantii care n-aveau cum sa
+ * repare asta. Acum conteaza doar sa existe un magazin.
+ *
+ * SMTP-ul rimane ce a fost mereu: alegerea DRUMULUI pe care pleaca mesajul, si
+ * singurul fel in care adresa poate fi chiar a lor. Marca, insa, e a lor
+ * oricum.
+ *
+ * Fara magazin (emailuri ale Edinio catre comerciant: bun venit, cod de
+ * verificare, abonament) ramane invelisul Edinio, fiindca acolo chiar Edinio
+ * scrie.
+ */
 async function sendStoreOrEdinio(sender: StoreEmailSender | undefined, to: string, subject: string, content: string): Promise<void> {
-  if (sender?.smtp) {
-    await deliverStoreEmail(sender, { to, subject, html: storeEmailShell(sender.branding, content) });
+  // Curatarea sta AICI, nu la fiecare apelant, fiindca subiectele care trec pe
+  // aici sunt compuse din text scris de cumparator (`customer_name`) sau de
+  // comerciant (sablonul lui cu `{{nume_client}}`, randat de `renderTemplate`,
+  // care nu curata nimic). Un singur punct acopera si valoarea implicita, si
+  // suprascrierea din sablon.
+  const subiect = subiectSigur(subject);
+  if (sender) {
+    await deliverStoreEmail(sender, { to, subject: subiect, html: storeEmailShell(sender.branding, content) });
     return;
   }
   if (!process.env.RESEND_API_KEY) return;
-  await getResend().emails.send({ from: FROM, to, subject, html: baseTemplate(content) });
+  await getResend().emails.send({ from: FROM, to, subject: subiect, html: baseTemplate(content) });
 }
 
 export function buildAdminNotifyHtml(name: string, message: string): string {
   return baseTemplate(`
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj de la echipa Edinio</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${name ? `, ${name}` : ""},</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${name ? `, ${esc(name)}` : ""},</p>
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.6;white-space:pre-wrap;">${message}</p>
+      <p style="margin:0;font-size:14px;color:#18181b;line-height:1.6;white-space:pre-wrap;">${esc(message)}</p>
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;">Daca ai intrebari, raspunde direct la acest email.</p>
   `);
@@ -98,7 +146,7 @@ export function baseTemplateForTest(from: string): string {
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Notificarile Edinio functioneaza corect.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
       <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Configuratie activa</p>
-      <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Trimis de pe: <strong>${from}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Trimis de pe: <strong>${esc(from)}</strong></p>
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;">Cand vine o comanda noua in magazinul tau vei primi un email similar cu detaliile comenzii.</p>
   `);
@@ -106,17 +154,10 @@ export function baseTemplateForTest(from: string): string {
 
 export async function sendOrderConfirmationToCustomer(
   to: string,
-  order: {
+  order: BaniComanda & {
     order_number: string;
     customer_name: string;
-    total: number;
-    items: { name: string; quantity: number; price: number }[];
-    shipping_cost: number;
     business_name: string;
-    discount_code?: string;
-    discount_amount?: number;
-    card_discount_amount?: number;
-    cod_discount_amount?: number;
     payment_method?: string;
     store_url?: string;
   },
@@ -128,32 +169,33 @@ export async function sendOrderConfirmationToCustomer(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${i.name} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
     .join("");
 
-  const discountRow = order.discount_code && order.discount_amount
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere (${order.discount_code})</td>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.discount_amount)}</td>
-      </tr>`
-    : "";
-
-  const cardDiscountRow = order.card_discount_amount && order.card_discount_amount > 0
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere plata cu cardul</td>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.card_discount_amount)}</td>
-      </tr>`
-    : "";
-
-  const codDiscountRow = order.cod_discount_amount && order.cod_discount_amount > 0
-    ? `<tr>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;">Reducere plata ramburs</td>
-        <td style="padding-top:10px;font-size:14px;color:#16a34a;text-align:right;">- ${formatPrice(order.cod_discount_amount)}</td>
-      </tr>`
-    : "";
+  /*
+   * Randurile de bani, din `randuriDeBani` — aceeasi socoteala ca in emailul
+   * comerciantului si ca in caseta din panou.
+   *
+   * „Subtotal" si „Optiuni extra" se sar: produsele sunt insirate mai sus unul
+   * cate unul, extraoptiunile printre ele, deci suma lor e deja pe ecran. Randul
+   * de TVA se ARATA acum si aici (pana pe 2026-08-03 lipsea cu totul): la
+   * magazinele cu preturi fara TVA, produsele si transportul nu dadeau „Total de
+   * plata" si nimic din email nu spunea de ce. Eticheta lui vine tot din
+   * `totaluriComanda`, deci poarta cuvantul „inclus" cand cifra nu se aduna.
+   */
+  const totalsRows = randuriDeBani(order)
+    .filter((r) => r.cheie !== "subtotal" && r.cheie !== "extras")
+    .map((r) => {
+      const col = r.verde ? "#16a34a" : "#71717a";
+      return `<tr>
+        <td style="padding-top:10px;font-size:14px;color:${col};">${esc(r.eticheta)}</td>
+        <td style="padding-top:10px;font-size:14px;color:${col};text-align:right;white-space:nowrap;">${r.valoare}</td>
+      </tr>`;
+    })
+    .join("");
 
   const paymentLabel = order.payment_method === "stripe"
     ? "Card online (Stripe)"
@@ -170,8 +212,11 @@ export async function sendOrderConfirmationToCustomer(
   const { subject, intro, heading } = renderTemplate(sender, "order_confirmation", {
     subject: `Comanda ta ${order.order_number} a fost primita`,
     heading: "Comanda ta a fost plasata!",
-    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${order.customer_name}</strong>! Comanda ta la <strong>${order.business_name}</strong> a fost primita si va fi procesata in curand.</p>`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Multumim, <strong>${esc(order.customer_name)}</strong>! Comanda ta la <strong>${esc(order.business_name)}</strong> a fost primita si va fi procesata in curand.</p>`,
   }, {
+    // Variabilele de sablon pleaca NEESCAPATE: `renderTemplate` le inlocuieste
+    // in textul comerciantului si escapeaza rezultatul. Escapate aici, ar iesi
+    // „Jack&amp;amp;Jones".
     nume_client: order.customer_name,
     nume_magazin: order.business_name,
     numar_comanda: order.order_number,
@@ -182,7 +227,7 @@ export async function sendOrderConfirmationToCustomer(
     ${intro}
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;box-sizing:border-box;overflow:hidden;">
-      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${order.order_number}</p>
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Comanda ${esc(order.order_number)}</p>
     </div>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
@@ -190,13 +235,7 @@ export async function sendOrderConfirmationToCustomer(
         <td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produsele tale</td>
       </tr>
       ${itemsRows}
-      ${discountRow}
-      ${cardDiscountRow}
-      ${codDiscountRow}
-      <tr>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;">Transport</td>
-        <td style="padding-top:10px;font-size:14px;color:#71717a;text-align:right;">${order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost)}</td>
-      </tr>
+      ${totalsRows}
       <tr>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total de plata</td>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#1AB554;text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(order.total)}</td>
@@ -206,7 +245,7 @@ export async function sendOrderConfirmationToCustomer(
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:20px;">
       <p style="margin:0;font-size:13px;color:#71717a;">Metoda de plata: <strong>${paymentLabel}</strong></p>
     </div>
-    ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
+    ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
 
   await sendStoreOrEdinio(sender, to, subject, content);
@@ -228,14 +267,17 @@ export async function sendAbandonedCartRecovery(
   sender?: StoreEmailSender,
 ) {
   if (!process.env.RESEND_API_KEY) return;
-  const color = data.color || "#1AB554";
+  // `primary_color` vine din setarile magazinului si intra intr-un atribut
+  // `style`. Masurat 2026-08-04: toate cele 127 de magazine au azi un hex valid,
+  // deci escaparea nu schimba nimic pe ecran, doar inchide iesirea din atribut.
+  const color = esc(data.color || "#1AB554");
   const first = data.customerName?.trim().split(/\s+/)[0];
 
   const itemsRows = data.items
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${i.name} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -244,15 +286,22 @@ export async function sendAbandonedCartRecovery(
   const { subject, intro: tplIntro, heading, button } = renderTemplate(sender, "abandoned_cart", {
     subject: `${first ? `${first}, ai ` : "Ai "}uitat ceva in cos la ${data.storeName}`,
     heading: "Ti-au ramas produse in cos",
-    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${first}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${data.storeName}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${first ? `, ${esc(first)}` : ""}! Ai lasat cateva produse in cosul tau la <strong>${esc(data.storeName)}</strong>. Le-am pastrat pentru tine &mdash; finalizeaza comanda inainte sa se epuizeze.</p>`,
     button: "Finalizeaza comanda",
   }, {
     nume_client: first ?? "",
     nume_magazin: data.storeName,
   });
   // Per-campaign message (recovery automation) takes priority over the template/default.
+  //
+  // Se escapeaza, ca si textul de sablon din `renderTemplate`: e acelasi text
+  // scris de comerciant, si pana acum aceeasi valoare era escapata pe o cale si
+  // nu si pe cealalta. Masurat 2026-08-04 in `store_settings.abandoned_cart_automation`,
+  // de unde vine chiar campul asta: din 127 de magazine unul singur are
+  // automatizarea pornita si NICIUN pas n-are text propriu, deci pe ecran nu se
+  // schimba nimic.
   const intro = data.message?.trim()
-    ? `<p style="margin:0 0 24px 0;font-size:14px;color:#3f3f46;line-height:1.6;white-space:pre-wrap;">${data.message.trim()}</p>`
+    ? `<p style="margin:0 0 24px 0;font-size:14px;color:#3f3f46;line-height:1.6;white-space:pre-wrap;">${esc(data.message.trim())}</p>`
     : tplIntro;
 
   const content = `
@@ -270,18 +319,18 @@ export async function sendAbandonedCartRecovery(
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
       <tr><td align="center" style="background:#f0fdf4;border:1px dashed #86efac;border-radius:10px;padding:14px;">
         <p style="margin:0 0 2px 0;font-size:12px;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cod reducere</p>
-        <p style="margin:0;font-size:22px;font-weight:800;color:#15803d;letter-spacing:1px;">${data.discountCode}</p>
+        <p style="margin:0;font-size:22px;font-weight:800;color:#15803d;letter-spacing:1px;">${esc(data.discountCode)}</p>
         <p style="margin:4px 0 0 0;font-size:12px;color:#16a34a;">Se aplica automat la finalizare.</p>
       </td></tr>
     </table>` : ""}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
       <tr><td align="center">
-        <a href="${data.recoverUrl}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">${button}</a>
+        <a href="${escapeUrl(data.recoverUrl)}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;">${button}</a>
       </td></tr>
     </table>
     ${data.unsubscribeUrl ? `
     <p style="margin:24px 0 0 0;font-size:11px;color:#a1a1aa;text-align:center;">
-      Nu mai vrei aceste mesaje? <a href="${data.unsubscribeUrl}" style="color:#a1a1aa;">Dezaboneaza-te</a>
+      Nu mai vrei aceste mesaje? <a href="${escapeUrl(data.unsubscribeUrl)}" style="color:#a1a1aa;">Dezaboneaza-te</a>
     </p>` : ""}
   `;
 
@@ -295,7 +344,7 @@ export async function sendAccountWelcomeEmail(
   if (!process.env.RESEND_API_KEY) return;
   const dashboardUrl = `${SITE_URL}/onboarding/details`;
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Bine ai venit pe Edinio${data.name ? `, ${data.name}` : ""}!</h2>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Bine ai venit pe Edinio${data.name ? `, ${esc(data.name)}` : ""}!</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Contul tau a fost creat cu succes. Esti la un pas de a-ti lansa magazinul online.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
@@ -325,13 +374,13 @@ export async function sendWelcomeEmail(
   const storeUrl = `${SITE_URL}/${data.slug}`;
   const dashboardUrl = `${SITE_URL}/dashboard`;
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Felicitari${data.name ? `, ${data.name}` : ""}!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Magazinul tau <strong>${data.business_name}</strong> a fost creat cu succes si este acum live pe Edinio.</p>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Felicitari${data.name ? `, ${esc(data.name)}` : ""}!</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Magazinul tau <strong>${esc(data.business_name)}</strong> a fost creat cu succes si este acum live pe Edinio.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Magazinul tau este online</p>
       <p style="margin:4px 0 0 0;font-size:13px;">
-        <a href="${storeUrl}" style="color:#15803d;text-decoration:none;">${storeUrl}</a>
+        <a href="${escapeUrl(storeUrl)}" style="color:#15803d;text-decoration:none;">${esc(storeUrl)}</a>
       </p>
     </div>
 
@@ -346,7 +395,7 @@ export async function sendWelcomeEmail(
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `Magazinul tau ${data.business_name} este live!`,
+    subject: subiectSigur(`Magazinul tau ${data.business_name} este live!`),
     html: baseTemplate(content),
   });
 }
@@ -357,7 +406,7 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cod de verificare</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Foloseste codul de mai jos pentru a confirma autentificarea in contul tau Edinio.</p>
     <div style="text-align:center;margin:28px 0;padding:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
-      <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#1AB554;font-family:monospace;">${otp}</span>
+      <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#1AB554;font-family:monospace;">${esc(otp)}</span>
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;text-align:center;">Codul este valabil <strong>10 minute</strong>. Daca nu ai initiat tu aceasta autentificare, ignora acest email.</p>
   `;
@@ -375,8 +424,6 @@ export async function sendPageFormEmail(
   data: { storeName: string; pageTitle: string; pageUrl?: string; fields: { label: string; value: string }[] },
 ) {
   if (!process.env.RESEND_API_KEY) return;
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const rows = data.fields
     .map(
       (f) => `
@@ -390,12 +437,12 @@ export async function sendPageFormEmail(
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Mesaj nou de pe ${esc(data.storeName)}</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Trimis din formularul paginii "${esc(data.pageTitle)}".</p>
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:18px;">${rows}</div>
-    ${data.pageUrl ? `<p style="margin:18px 0 0 0;font-size:13px;"><a href="${data.pageUrl}" style="color:#15803d;text-decoration:none;">Vezi pagina</a></p>` : ""}
+    ${data.pageUrl ? `<p style="margin:18px 0 0 0;font-size:13px;"><a href="${escapeUrl(data.pageUrl)}" style="color:#15803d;text-decoration:none;">Vezi pagina</a></p>` : ""}
   `;
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `Mesaj nou de pe ${data.storeName}`,
+    subject: `Mesaj nou de pe ${subiectSigur(data.storeName)}`,
     html: baseTemplate(content),
   });
 }
@@ -410,16 +457,6 @@ const SUPPORT_ADMIN_EMAIL = process.env.SUPPORT_ADMIN_EMAIL ?? "support@edinio.c
  * afisata public pe site.
  */
 const CONTACT_ADMIN_EMAIL = process.env.CONTACT_ADMIN_EMAIL ?? "contact@edinio.com";
-
-/** Escapare HTML. Nimic din ce vine dintr-un formular public nu intra neatins. */
-function esc(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export interface MesajDeContact {
   nume: string;
@@ -647,6 +684,245 @@ export async function sendMigrationConfirmationToCustomer(data: CerereDeMigrare)
   });
 }
 
+/*
+ * ⚠ `sendMigrationLeadToAdmin` A FOST READUSA PE 30.08.2026, CU PLAFOANELE CERUTE.
+ *
+ * Fusese stearsa pe 05.08 odata cu pagina /migrare, iar nota de atunci spunea:
+ * „nu o readuce fara sa aduci si plafoanele", fiindca singurul ei apelant era o
+ * actiune de server PUBLICA, fara autentificare si fara nicio limita, care
+ * trimitea email pe cheia Resend a platformei. Nota mai spunea ca nu era
+ * exploatabila doar fiindca modulul ramasese orfan, si ca s-ar rupe la loc, in
+ * tacere, „in ziua in care cineva refacea pagina".
+ *
+ * Ziua aceea a venit: ramura de site a refacut /migrare ca pagina de site, cu
+ * formular viu. Nu s-a rupt la loc fiindca `migration.actions.ts` a fost rescrisa
+ * odata cu ea: plafon de rata pe IP in PRIMA linie (3 la 60s), validare, si
+ * reCAPTCHA — aceeasi croiala ca formularul de contact.
+ *
+ * Deci previziunea din nota veche s-a adeverit intocmai, iar conditia pe care o
+ * punea e indeplinita. Nu scoate plafonul din actiune fara sa stergi si asta.
+ */
+
+/**
+ * O problema de domeniu, asa cum o produce cronul de reconciliere.
+ *
+ * `alNostru` e campul care schimba TOT, si lipsa lui e jumatate din incidentul
+ * esafe.ro (10.08.2026). Doua situatii care arata identic din afara cer raspunsuri
+ * opuse de la comerciant:
+ *   - domeniul e deja indreptat catre noi si NOI n-am terminat configurarea:
+ *     el nu are ce sa faca, si orice instructiune de DNS trimisa lui e o pista
+ *     falsa care il tine si mai mult cazut;
+ *   - DNS-ul lui nu raspunde deloc (registrar expirat, zona stearsa): acolo noi
+ *     nu putem intra, si doar el poate repara.
+ *
+ * `problem` e diagnosticul tehnic si ajunge NUMAI la suport. Catre comerciant
+ * pleaca `pasi`, in cuvintele lui.
+ */
+export type DomeniuStricat = {
+  /** Numele magazinului, pentru cine citeste alerta la suport. */
+  store: string;
+  /** Slugul: adresa de rezerva de pe edinio.com, care merge si cu domeniul mort. */
+  slug: string | null;
+  domain: string;
+  /** Diagnosticul tehnic. Pentru suport, nu pentru comerciant. */
+  problem: string;
+  /** Ce are de facut comerciantul, pe intelesul lui. Poate fi gol. */
+  pasi: string[];
+  /** `true` cand domeniul e delegat catre noi, deci reparatia e a NOASTRA. */
+  alNostru: boolean;
+  /** Adresa proprietarului magazinului, cand o stim. */
+  ownerEmail?: string | null;
+  /**
+   * Adresa proprietarului e chiar pe domeniul cazut, deci alerta NU are cum sa
+   * ajunga la el: cu nameserverele mute pica si MX-ul. Suportul trebuie sa stie
+   * ca trebuie sunat, nu doar scris.
+   */
+  ownerEmailPeDomeniu?: boolean;
+};
+
+/** Un domeniu despre care nu am putut afla nimic. Nici sanatos, nici stricat. */
+export type DomeniuNeverificat = { domain: string; motiv: string };
+
+/**
+ * Alerta catre SUPORT pentru domenii custom care nu functioneaza.
+ *
+ * Se cheama DOAR din cronul orar (`/api/cron/domains-reconcile`), deci nu are
+ * suprafata publica si nu-i trebuie plafon — spre deosebire de
+ * `sendMigrationLeadToAdmin` de mai sus. Continutul e compus integral aici din
+ * date interne; nimic din el nu vine dintr-un formular.
+ *
+ * Franarea (un email la 12 ore, per destinatar) sta la apelant, fiindca acolo e
+ * baza de date in care se tine marcajul.
+ */
+export async function sendBrokenDomainsToAdmin(
+  items: DomeniuStricat[],
+  neverificate: DomeniuNeverificat[] = [],
+) {
+  if (!process.env.RESEND_API_KEY) return;
+  if (items.length === 0 && neverificate.length === 0) return;
+
+  const rows = items
+    .map(
+      (it) => `
+    <tr>
+      <td style="padding:12px 16px;border-bottom:1px solid #f4f4f5;">
+        <p style="margin:0;font-size:15px;color:#18181b;font-weight:600;">${esc(it.domain)}</p>
+        <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${esc(it.store)}</p>
+        <p style="margin:6px 0 0 0;font-size:13px;color:${it.alNostru ? "#dc2626" : "#b45309"};">
+          <strong>${it.alNostru ? "AL NOSTRU" : "de reparat la client"}</strong> &mdash; ${esc(it.problem)}
+        </p>
+        <p style="margin:6px 0 0 0;font-size:12px;color:#71717a;">
+          ${it.ownerEmail
+            ? `Proprietar: ${esc(it.ownerEmail)}`
+            : "PROPRIETARUL NU POATE FI ANUNTAT: magazinul nu are nicio adresa de email."}
+          ${it.ownerEmailPeDomeniu
+            ? ` &mdash; <strong style="color:#dc2626;">adresa e pe domeniul cazut, deci emailul NU ajunge. Suna-l.</strong>`
+            : ""}
+        </p>
+      </td>
+    </tr>`,
+    )
+    .join("");
+
+  /*
+   * Sectiunea asta exista fiindca lipsa ei a tinut esafe.ro cazut ore intregi:
+   * un domeniu despre care nu se putea citi nimic cadea in „asteptam clientul",
+   * o categorie care prin proiectare nu alerteaza pe nimeni. „Nu stiu" nu mai are
+   * voie sa fie tacut.
+   */
+  const bloculNeverificat = neverificate.length
+    ? `
+    <p style="margin:24px 0 8px 0;font-size:13px;font-weight:600;color:#a16207;">
+      ${neverificate.length} ${neverificate.length === 1 ? "domeniu pe care NU l-am putut verifica" : "domenii pe care NU le-am putut verifica"}
+    </p>
+    <p style="margin:0 0 10px 0;font-size:12px;color:#71717a;">Nu sunt declarate nici sanatoase, nici stricate. Daca revin la fiecare rulare, citirea e stricata, nu domeniul.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;overflow:hidden;">
+      ${neverificate
+        .map(
+          (n) => `
+      <tr>
+        <td style="padding:10px 16px;border-bottom:1px solid #fef3c7;">
+          <p style="margin:0;font-size:14px;color:#18181b;font-weight:600;">${esc(n.domain)}</p>
+          <p style="margin:2px 0 0 0;font-size:12px;color:#92400e;">${esc(n.motiv)}</p>
+        </td>
+      </tr>`,
+        )
+        .join("")}
+    </table>`
+    : "";
+
+  const titlu =
+    items.length === 0
+      ? "Domenii neverificate"
+      : items.length === 1
+        ? "Un domeniu nu functioneaza"
+        : `${items.length} domenii nu functioneaza`;
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${titlu}</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Reconcilierea automata face doar reparatii care adauga. Ce e marcat „AL NOSTRU" inseamna ca domeniul e deja indreptat catre Vercel si asteapta o interventie de la noi — pana atunci e cazut complet, si site, si email.</p>
+    ${rows
+      ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">${rows}</table>`
+      : ""}
+    ${bloculNeverificat}
+  `;
+
+  const subiect = items.length
+    ? `[Domenii] ${items.length} ${items.length === 1 ? "domeniu cazut" : "domenii cazute"}`
+    : `[Domenii] ${neverificate.length} neverificate`;
+
+  await getResend().emails.send({
+    from: FROM,
+    to: SUPPORT_ADMIN_EMAIL,
+    subject: subiect,
+    html: baseTemplate(content),
+  });
+}
+
+/**
+ * Aceeasi problema, spusa PROPRIETARULUI magazinului.
+ *
+ * Pana pe 10.08.2026 alerta pleca exclusiv catre `SUPPORT_ADMIN_EMAIL`, adica in
+ * aceeasi cutie cu tichetele si cu notificarile de utilizator nou — iar omul al
+ * carui magazin era cazut nu afla niciodata. eSafe a stat inaccesibil o zi
+ * intreaga fara ca proprietarul sa primeasca un rand.
+ *
+ * Aici nu intra niciun diagnostic tehnic: comerciantul primeste doar ce inseamna
+ * pentru el (magazinul e inchis pe domeniul lui), ce are de facut, si adresa de
+ * rezerva pe care poate trimite clientii chiar acum.
+ */
+export async function sendBrokenDomainToOwner(to: string, items: DomeniuStricat[]) {
+  if (!process.env.RESEND_API_KEY || items.length === 0) return;
+
+  const blocuri = items
+    .map((it) => {
+      const rezerva = it.slug ? `${SITE_URL}/${it.slug}` : SITE_URL;
+      const pasi = it.pasi.length
+        ? `<ol style="margin:12px 0 0 0;padding-left:20px;font-size:14px;color:#3f3f46;line-height:1.7;">${it.pasi
+            .map((p) => `<li style="margin-bottom:4px;">${esc(p)}</li>`)
+            .join("")}</ol>`
+        : "";
+      return `
+      <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:18px;margin-bottom:16px;">
+        <p style="margin:0;font-size:15px;font-weight:700;color:#18181b;">${esc(it.domain)}</p>
+        <p style="margin:8px 0 0 0;font-size:14px;color:#3f3f46;line-height:1.6;">
+          ${
+            it.alNostru
+              ? "Ai facut deja tot ce tinea de tine: domeniul este indreptat catre noi. Configurarea de la noi nu este insa gata, si pana o terminam domeniul nu raspunde. Ne ocupam."
+              : "Domeniul nu raspunde deloc, asa ca nici magazinul si nici emailul de pe el nu functioneaza. Ce trebuie schimbat este la firma de la care ai domeniul, iar acolo nu putem intra noi in locul tau."
+          }
+        </p>
+        ${pasi}
+        <p style="margin:14px 0 0 0;font-size:13px;color:#71717a;">
+          Pana se rezolva, magazinul tau este deschis si functioneaza la adresa
+          <a href="${escapeUrl(rezerva)}" style="color:#15803d;text-decoration:none;font-weight:600;">${esc(rezerva)}</a>.
+          Poti trimite clientii acolo fara nicio grija.
+        </p>
+      </div>`;
+    })
+    .join("");
+
+  const unul = items.length === 1;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${unul ? "Domeniul tau nu functioneaza" : "Domeniile tale nu functioneaza"}</h2>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Verificam din ora in ora domeniile conectate la Edinio. La ${unul ? "domeniul tau" : "domeniile tale"} am gasit o problema si vrem sa afli de la noi, nu de la un client care nu a putut intra in magazin.</p>
+    ${blocuri}
+    <div style="text-align:center;margin-top:24px;">
+      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Deschide setarile de domeniu
+      </a>
+    </div>
+    <p style="margin:20px 0 0 0;font-size:13px;color:#71717a;">Daca ceva nu iti este clar, raspunde la acest email si te ajutam noi.</p>
+  `;
+
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: subiectSigur(unul ? `Domeniul ${items[0].domain} nu functioneaza` : `${items.length} domenii ale magazinului tau nu functioneaza`),
+    html: baseTemplate(content),
+  });
+}
+
+/**
+ * Subiect curatat pentru antetul `Subject:`.
+ *
+ * `data.subject` e scris integral de utilizator si intra direct in antet.
+ * Aceeasi clasa pe care proiectul a tratat-o deja la `fromLine`: un CR sau LF
+ * strecurat acolo inseamna injectie de anteturi de email. Taiem si lungimea, ca
+ * un subiect de 10.000 de caractere sa nu ajunga in antet.
+ *
+ * Cat valoreaza, exact: injectia propriu-zisa e INCHISA de ambele transporturi —
+ * nodemailer inlocuieste CR/LF cu spatiu inainte de a scrie antetul, iar Resend
+ * primeste subiectul ca sir intr-un JSON si compune MIME-ul la el. Garda asta e
+ * deci igiena si consecventa (un subiect ramane un subiect, de o linie si de
+ * lungime rezonabila), nu bariera care opreste un atac. Pana pe 05.08.2026 era
+ * chemata doar pe doua din caile de suport, desi restul primeau la fel de mult
+ * text de la utilizator; acum trece prin ea tot ce contine text strain.
+ */
+function subiectSigur(brut: string): string {
+  return (brut ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 180);
+}
+
 export async function sendNewSupportTicketToAdmin(data: {
   ticketId: string;
   subject: string;
@@ -673,7 +949,7 @@ export async function sendNewSupportTicketToAdmin(data: {
       <tr>
         <td style="padding:10px 14px;background:#f4f4f5;border-radius:8px 8px 0 0;border-bottom:1px solid #e4e4e7;">
           <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;">Subiect</span>
-          <p style="margin:2px 0 0 0;font-size:15px;font-weight:600;color:#18181b;">${data.subject}</p>
+          <p style="margin:2px 0 0 0;font-size:15px;font-weight:600;color:#18181b;">${esc(data.subject)}</p>
         </td>
       </tr>
       <tr>
@@ -682,27 +958,27 @@ export async function sendNewSupportTicketToAdmin(data: {
             <tr>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Categorie</span>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${categoryLabel[data.category] ?? data.category}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${categoryLabel[data.category] ?? esc(data.category)}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Prioritate</span>
-                <p style="margin:2px 0 0 0;font-size:13px;font-weight:600;color:${priorityColor[data.priority] ?? "#3f3f46"};">${priorityLabel[data.priority] ?? data.priority}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;font-weight:600;color:${priorityColor[data.priority] ?? "#3f3f46"};">${priorityLabel[data.priority] ?? esc(data.priority)}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Client</span>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${data.userEmail}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${esc(data.userEmail)}</p>
               </td>
             </tr>
           </table>
         </td>
       </tr>
     </table>
-    ${data.businessName ? `<p style="margin:0 0 16px 0;font-size:13px;color:#71717a;">Magazin: <strong>${data.businessName}</strong></p>` : ""}
+    ${data.businessName ? `<p style="margin:0 0 16px 0;font-size:13px;color:#71717a;">Magazin: <strong>${esc(data.businessName)}</strong></p>` : ""}
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${data.content}</p>
+      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard/suport/${data.ticketId}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi tichetul
       </a>
     </div>
@@ -710,7 +986,7 @@ export async function sendNewSupportTicketToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Suport] ${data.subject} — ${data.userEmail}`,
+    subject: `[Suport] ${subiectSigur(data.subject)} — ${data.userEmail}`,
     html: baseTemplate(content),
   });
 }
@@ -724,12 +1000,12 @@ export async function sendSupportReplyToAdmin(data: {
   if (!process.env.RESEND_API_KEY) return;
   const emailContent = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Raspuns nou la tichet</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;"><strong>${data.userEmail}</strong> a raspuns la tichetul <em>${data.subject}</em>.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;"><strong>${esc(data.userEmail)}</strong> a raspuns la tichetul <em>${esc(data.subject)}</em>.</p>
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${data.content}</p>
+      <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard/suport/${data.ticketId}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Raspunde
       </a>
     </div>
@@ -737,7 +1013,7 @@ export async function sendSupportReplyToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Suport] RE: ${data.subject} — ${data.userEmail}`,
+    subject: `[Suport] RE: ${subiectSigur(data.subject)} — ${data.userEmail}`,
     html: baseTemplate(emailContent),
   });
 }
@@ -752,12 +1028,12 @@ export async function sendAgentReplyToUser(data: {
   const ticketUrl = `${SITE_URL}/dashboard/suport/${data.ticketId}`;
   const emailContent = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Raspuns la tichetul tau</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Echipa Edinio a raspuns la tichetul tau: <strong>${data.subject}</strong>.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Echipa Edinio a raspuns la tichetul tau: <strong>${esc(data.subject)}</strong>.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#15803d;white-space:pre-wrap;">${data.content}</p>
+      <p style="margin:0;font-size:13px;color:#15803d;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${ticketUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(ticketUrl)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Raspunde sau vezi conversatia
       </a>
     </div>
@@ -765,7 +1041,7 @@ export async function sendAgentReplyToUser(data: {
   await getResend().emails.send({
     from: FROM,
     to: data.to,
-    subject: `Raspuns la tichetul tau: ${data.subject}`,
+    subject: `Raspuns la tichetul tau: ${subiectSigur(data.subject)}`,
     html: baseTemplate(emailContent),
   });
 }
@@ -784,16 +1060,17 @@ export async function sendDomainOrderToAdmin(data: {
   cui?: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
+  // Fragment HTML (are `&middot;`), deci se escapeaza doar CUI-ul si CNP-ul din el.
   const registrantLine = data.entityType === "pj"
-    ? `Persoana juridica${data.cui ? ` &middot; CUI ${data.cui}` : ""}`
-    : `Persoana fizica${data.cnp ? ` &middot; CNP ${data.cnp}` : ""}`;
+    ? `Persoana juridica${data.cui ? ` &middot; CUI ${esc(data.cui)}` : ""}`
+    : `Persoana fizica${data.cnp ? ` &middot; CNP ${esc(data.cnp)}` : ""}`;
   const adminUrl = `${SITE_URL}/admin/domenii`;
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda noua de domeniu</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Un client a comandat un domeniu care trebuie inregistrat manual.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:18px;font-weight:700;color:#16a34a;font-family:monospace;">${data.domain}</p>
+      <p style="margin:0;font-size:18px;font-weight:700;color:#16a34a;font-family:monospace;">${esc(data.domain)}</p>
     </div>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
@@ -803,13 +1080,13 @@ export async function sendDomainOrderToAdmin(data: {
             <tr>
               <td style="width:50%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Titular</span>
-                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${data.customerName}</p>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${data.customerEmail}</p>
+                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${esc(data.customerName)}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#71717a;">${esc(data.customerEmail)}</p>
                 <p style="margin:2px 0 0 0;font-size:12px;color:#71717a;">${registrantLine}</p>
               </td>
               <td style="width:50%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Magazin</span>
-                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${data.businessName}</p>
+                <p style="margin:2px 0 0 0;font-size:14px;font-weight:600;color:#18181b;">${esc(data.businessName)}</p>
               </td>
             </tr>
           </table>
@@ -821,7 +1098,7 @@ export async function sendDomainOrderToAdmin(data: {
             <tr>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Extensie</span>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${data.tld}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${esc(data.tld)}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Perioada</span>
@@ -846,7 +1123,7 @@ export async function sendDomainOrderToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Domeniu] Comanda noua: ${data.domain} — ${data.customerName}`,
+    subject: subiectSigur(`[Domeniu] Comanda noua: ${data.domain} — ${data.customerName}`),
     html: baseTemplate(content),
   });
 }
@@ -862,15 +1139,15 @@ export async function sendAdminNewUserNotification(data: {
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cont nou creat</h2>
     <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un utilizator nou s-a inregistrat pe Edinio.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
-      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${data.name}</strong></p>
-      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${data.email}</p>
+      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${esc(data.name)}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${esc(data.email)}</p>
       <p style="margin:4px 0 0 0;font-size:12px;color:#a1a1aa;">${date}</p>
     </div>
   `;
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Edinio] Cont nou: ${data.name} (${data.email})`,
+    subject: `[Edinio] Cont nou: ${subiectSigur(data.name)} (${data.email})`,
     html: baseTemplate(content),
   });
 }
@@ -886,17 +1163,17 @@ export async function sendAdminNewStoreNotification(data: {
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Magazin nou creat</h2>
     <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un utilizator si-a creat magazinul pe Edinio.</p>
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
-      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${data.businessName}</strong></p>
-      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${data.ownerName} (${data.ownerEmail})</p>
+      <p style="margin:0;font-size:14px;color:#18181b;"><strong>${esc(data.businessName)}</strong></p>
+      <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${esc(data.ownerName)} (${esc(data.ownerEmail)})</p>
       <p style="margin:6px 0 0 0;font-size:13px;">
-        <a href="${SITE_URL}/${data.slug}" style="color:#1AB554;text-decoration:none;font-weight:600;">edinio.com/${data.slug}</a>
+        <a href="${escapeUrl(`${SITE_URL}/${data.slug}`)}" style="color:#1AB554;text-decoration:none;font-weight:600;">edinio.com/${esc(data.slug)}</a>
       </p>
     </div>
   `;
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Edinio] Magazin nou: ${data.businessName} (${data.ownerEmail})`,
+    subject: `[Edinio] Magazin nou: ${subiectSigur(data.businessName)} (${data.ownerEmail})`,
     html: baseTemplate(content),
   });
 }
@@ -912,20 +1189,11 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 export async function sendNewOrderEmail(
   to: string,
-  order: {
+  order: BaniComanda & {
     order_number: string;
     customer_name: string;
     customer_phone: string;
     customer_email?: string | null;
-    total: number;
-    subtotal?: number;
-    items: { name: string; quantity: number; price: number }[];
-    shipping_cost: number;
-    discount_code?: string | null;
-    discount_amount?: number;
-    card_discount_amount?: number;
-    cod_discount_amount?: number;
-    vat_amount?: number;
     payment_method?: string;
     business_name: string;
     order_id: string;
@@ -936,12 +1204,12 @@ export async function sendNewOrderEmail(
     delivery_type?: string | null;
     locker_name?: string | null;
     custom_fields?: Record<string, string> | null;
+    billing_company?: BillingCompany | null;
   },
   sender?: StoreEmailSender,
 ) {
   if (!process.env.RESEND_API_KEY) return;
 
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const sectionLabel = (t: string) =>
     `<tr><td colspan="2" style="font-size:13px;color:#a1a1aa;padding:18px 0 8px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid #f4f4f5;">${t}</td></tr>`;
   const infoRow = (label: string, value: string) =>
@@ -964,6 +1232,22 @@ export async function sendNewOrderEmail(
     )
     .join("");
 
+  /*
+   * Randurile de bani, din `randuriDeBani`. Aici se pastreaza si „Subtotal", si
+   * randul de extraoptiuni care lipsea: `orders.subtotal` NU le contine, desi
+   * `itemsRows` de deasupra le insira ca produse. Randul de mai jos e singurul
+   * loc din email in care cei 5 lei ai „Comenzii cu Prioritate" de pe #0073 intra
+   * in coloana.
+   *
+   * Nota „din care TVA" de la coada tabelului a plecat: era mereu dedesubtul
+   * Totalului, deci nu spunea nimic la magazinele cu preturi FARA TVA, unde suma
+   * chiar se adauga. Acum e un rand ca oricare altul, iar eticheta lui spune
+   * „inclus" cand nu se aduna.
+   */
+  const totalsRows = randuriDeBani(order)
+    .map((r) => totalRow(esc(r.eticheta), r.valoare, r.verde ? { color: "#16a34a" } : {}))
+    .join("");
+
   const addrParts = [order.address, order.city, order.county]
     .map((x) => (x ? String(x).trim() : ""))
     .filter(Boolean)
@@ -982,10 +1266,30 @@ export async function sendNewOrderEmail(
     ? "Se incaseaza la livrare"
     : "In asteptarea confirmarii platii";
 
+  // Comanda pe firma: comerciantul trebuie sa vada datele de facturare inca din
+  // notificare, ca sa nu deschida panoul doar ca sa afle daca emite pe persoana
+  // fizica sau pe firma. Numele de mai sus ramane persoana de contact.
+  const firma = order.billing_company ?? null;
   const customerRows = [
     infoRow("Nume", esc(order.customer_name)),
     infoRow("Telefon", esc(order.customer_phone)),
     order.customer_email ? infoRow("Email", esc(order.customer_email)) : "",
+    firma ? infoRow("Firma", esc(firma.company_name)) : "",
+    firma
+      ? infoRow(
+          "CUI",
+          esc(firma.vat_payer ? `RO${firma.cui}` : firma.cui) +
+            // Fara confirmare, denumirea si statutul de TVA sunt cele scrise de
+            // client. Se spune AICI, in notificare, nu doar in panou: emailul e
+            // ce citeste comerciantul inainte sa emita factura.
+            (firma.verified ? "" : ' <span style="color:#b45309;">(date neconfirmate la ANAF)</span>') +
+            (firma.inactive ? ' <span style="color:#b45309;">(firma inactiva fiscal)</span>' : "")
+        )
+      : "",
+    firma && firma.reg_com ? infoRow("Reg. com.", esc(firma.reg_com)) : "",
+    firma && (firma.address || firma.city || firma.county)
+      ? infoRow("Sediu", esc([firma.address, firma.city, firma.county].filter(Boolean).join(", ")))
+      : "",
   ].join("");
 
   const customRows = order.custom_fields && Object.keys(order.custom_fields).length
@@ -1027,17 +1331,12 @@ export async function sendNewOrderEmail(
         <td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Produse</td>
       </tr>
       ${itemsRows}
-      ${order.subtotal != null ? totalRow("Subtotal", formatPrice(order.subtotal)) : ""}
-      ${order.discount_amount && order.discount_amount > 0 ? totalRow(`Reducere${order.discount_code ? ` (${esc(order.discount_code)})` : ""}`, `- ${formatPrice(order.discount_amount)}`, { color: "#16a34a" }) : ""}
-      ${order.card_discount_amount && order.card_discount_amount > 0 ? totalRow("Reducere plata cu cardul", `- ${formatPrice(order.card_discount_amount)}`, { color: "#16a34a" }) : ""}
-      ${order.cod_discount_amount && order.cod_discount_amount > 0 ? totalRow("Reducere plata ramburs", `- ${formatPrice(order.cod_discount_amount)}`, { color: "#16a34a" }) : ""}
-      ${totalRow("Transport", order.shipping_cost === 0 ? "Gratuit" : formatPrice(order.shipping_cost))}
+      ${totalsRows}
       ${totalRow("Total", formatPrice(order.total), { bold: true, color: "#1AB554", border: true })}
-      ${order.vat_amount && order.vat_amount > 0 ? `<tr><td colspan="2" style="padding-top:6px;font-size:12px;color:#a1a1aa;text-align:right;">din care TVA: ${formatPrice(order.vat_amount)}</td></tr>` : ""}
     </table>
 
     <div style="text-align:center;margin-top:28px;">
-      <a href="${dashboardUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(dashboardUrl)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi comanda in dashboard
       </a>
     </div>
@@ -1103,18 +1402,18 @@ export async function sendOrderStatusToCustomer(
 
   // Right of withdrawal is most relevant once the parcel is on its way / received.
   const returnLink = order.store_url && (order.status === "shipped" || order.status === "delivered")
-    ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>`
+    ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>`
     : "";
 
   const awbSection = order.status === "shipped" && order.awb
     ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
-        <p style="margin:0;font-size:13px;color:#71717a;">Numar AWB: <strong style="color:#18181b;font-family:monospace;">${order.awb}</strong></p>
+        <p style="margin:0;font-size:13px;color:#71717a;">Numar AWB: <strong style="color:#18181b;font-family:monospace;">${esc(order.awb)}</strong></p>
       </div>`
     : "";
 
   const { subject, intro } = renderTemplate(sender, "order_status", {
     subject: `${cfg.subject} — ${order.order_number}`,
-    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${order.customer_name}</strong>! Iti trimitem un update despre comanda ta la <strong>${order.business_name}</strong>.</p>`,
+    intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${esc(order.customer_name)}</strong>! Iti trimitem un update despre comanda ta la <strong>${esc(order.business_name)}</strong>.</p>`,
   }, {
     nume_client: order.customer_name,
     nume_magazin: order.business_name,
@@ -1129,7 +1428,7 @@ export async function sendOrderStatusToCustomer(
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td>
-            <p style="margin:0;font-size:13px;color:${cfg.color};font-weight:600;">Comanda ${order.order_number}</p>
+            <p style="margin:0;font-size:13px;color:${cfg.color};font-weight:600;">Comanda ${esc(order.order_number)}</p>
             <p style="margin:4px 0 0 0;font-size:13px;color:${cfg.color};">Status: <strong>${cfg.label}</strong></p>
           </td>
           <td style="text-align:right;vertical-align:top;">
@@ -1156,7 +1455,6 @@ export async function sendCustomerMessage(
 ): Promise<{ success: true } | { error: string }> {
   if (!process.env.RESEND_API_KEY) return { error: "Serviciul de email nu este configurat." };
 
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const bodyHtml = esc(data.message).replace(/\n/g, "<br />");
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${esc(data.subject)}</h2>
@@ -1186,13 +1484,13 @@ export async function sendSubscriptionActivatedEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Abonamentul tau este activ!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Felicitari${data.name ? `, ${data.name}` : ""}! Plata a fost procesata cu succes.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Felicitari${data.name ? `, ${esc(data.name)}` : ""}! Plata a fost procesata cu succes.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
           <td>
-            <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${data.plan}</p>
+            <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${esc(data.plan)}</p>
             <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Activ pana la: <strong>${formattedDate}</strong></p>
           </td>
         </tr>
@@ -1232,10 +1530,10 @@ export async function sendPaymentRecoveredEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Plata a reusit. Abonamentul este activ din nou!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Am procesat cu succes plata pentru abonamentul tau <strong>${data.plan}</strong>. Iti multumim!</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${esc(data.name)}` : ""}. Am procesat cu succes plata pentru abonamentul tau <strong>${esc(data.plan)}</strong>. Iti multumim!</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
-      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${data.plan}</p>
+      <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Plan ${esc(data.plan)}</p>
       <p style="margin:4px 0 0 0;font-size:13px;color:#15803d;">Activ pana la: <strong>${formattedDate}</strong></p>
     </div>
 
@@ -1266,7 +1564,7 @@ export async function sendPaymentFailedEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Plata nu a putut fi procesata</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Am incercat sa procesam plata pentru abonamentul tau <strong>${data.plan}</strong>, dar aceasta nu a reusit.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${esc(data.name)}` : ""}. Am incercat sa procesam plata pentru abonamentul tau <strong>${esc(data.plan)}</strong>, dar aceasta nu a reusit.</p>
 
     <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">Plata esuata</p>
@@ -1304,7 +1602,7 @@ export async function sendStoreSuspendedEmail(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Magazinul tau va fi suspendat</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${data.name}` : ""}. Abonamentul tau Edinio a fost anulat din cauza unei plati esuate.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna${data.name ? `, ${esc(data.name)}` : ""}. Abonamentul tau Edinio a fost anulat din cauza unei plati esuate.</p>
 
     <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#dc2626;font-weight:600;">Perioada de gratie: pana la ${formattedDate}</p>
@@ -1339,7 +1637,6 @@ const REFUND_METHOD_LABELS: Record<string, string> = {
 };
 
 function returnItemsRows(items: { name: string; quantity: number }[]): string {
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return items
     .map(
       (i) =>
@@ -1349,6 +1646,13 @@ function returnItemsRows(items: { name: string; quantity: number }[]): string {
 }
 
 /** Durable-medium confirmation of a withdrawal request, sent to the customer. */
+/**
+ * Confirmarea de retragere catre CLIENT, ceruta de lege pe suport durabil.
+ *
+ * Mergea direct la Resend, cu invelisul si expeditorul Edinio, si nici macar nu
+ * primea magazinul: era singurul email de client care ramanea Edinio chiar si la
+ * comerciantii cu SMTP propriu. Acum trece pe acelasi drum ca restul.
+ */
 export async function sendReturnConfirmationToCustomer(
   to: string,
   data: {
@@ -1358,10 +1662,9 @@ export async function sendReturnConfirmationToCustomer(
     items: { name: string; quantity: number }[];
     reason?: string | null;
     receivedAt: string;
-  }
+  },
+  sender?: StoreEmailSender,
 ) {
-  if (!process.env.RESEND_API_KEY) return;
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const first = data.customer_name?.trim().split(/\s+/)[0];
   const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
     day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -1385,12 +1688,7 @@ export async function sendReturnConfirmationToCustomer(
     <p style="margin:0;font-size:14px;color:#71717a;line-height:1.6;">Vom analiza cererea si te vom contacta cu pasii urmatori (instructiuni de returnare si rambursare). Ai la dispozitie 14 zile de la primirea produsului pentru a-l returna. Rambursarea se face in maximum 14 zile de la primirea cererii.</p>
   `;
 
-  await getResend().emails.send({
-    from: FROM,
-    to,
-    subject: `Cerere de retragere inregistrata - ${data.order_number}`,
-    html: baseTemplate(content),
-  });
+  await sendStoreOrEdinio(sender, to, `Cerere de retragere inregistrata - ${data.order_number}`, content);
 }
 
 /** Notify the merchant about a new withdrawal (return) request. */
@@ -1410,7 +1708,6 @@ export async function sendReturnRequestToMerchant(
   }
 ) {
   if (!process.env.RESEND_API_KEY) return;
-  const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const infoRow = (label: string, value: string) =>
     `<tr><td style="padding:3px 0;font-size:14px;color:#71717a;width:140px;vertical-align:top;">${label}</td><td style="padding:3px 0;font-size:14px;color:#18181b;font-weight:500;vertical-align:top;">${value}</td></tr>`;
   const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
@@ -1452,7 +1749,7 @@ export async function sendReturnRequestToMerchant(
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `Cerere de retur ${data.order_number} - ${data.customer_name ?? ""}`.trim(),
+    subject: subiectSigur(`Cerere de retur ${data.order_number} - ${data.customer_name ?? ""}`),
     html: baseTemplate(content),
   });
 }

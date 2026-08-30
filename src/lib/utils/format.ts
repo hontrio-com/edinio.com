@@ -31,6 +31,22 @@ export function formatPrice(amount: number): string {
   return `${formatPriceValue(amount)} lei`;
 }
 
+/**
+ * Se poate arata pretul unitar langa totalul liniei, sau s-ar contrazice cu el?
+ *
+ * Pretul unitar al unui pachet e NEROTUNJIT in comanda (250 lei pe 3 bucati
+ * inseamna 83,3333), fiindca `pret x cantitate` trebuie sa dea exact subtotalul.
+ * Afisat, el se scurteaza la „83,33", iar clientul care inmulteste obtine 249,99
+ * langa un total scris 250,00 — un ban care nu se explica.
+ *
+ * Deci pretul unitar se arata numai cand se INCHIDE: cand cifrele de pe ecran,
+ * inmultite, dau chiar totalul de langa ele.
+ */
+export function unitarSeInchide(price: number, quantity: number): boolean {
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return r2(Number(Number(price).toFixed(2)) * quantity) === r2(Number(price) * quantity);
+}
+
 // Afiseaza pretul unui produs variabil cu mai multe preturi.
 // Implicit: interval "De la X – Y lei". Daca lowestOnly e true (sau exista un
 // singur pret efectiv), afiseaza doar pretul minim "X lei".

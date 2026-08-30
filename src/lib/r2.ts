@@ -22,7 +22,19 @@ const PUBLIC_URL = process.env.R2_PUBLIC_URL!; // raw bucket (*.r2.dev) or the C
 export async function uploadToR2(
   buffer: Buffer,
   key: string,
-  contentType: string
+  contentType: string,
+  /**
+   * ⚠ Implicitul e bun pentru imagini de produs si GRESIT pentru documente.
+   *
+   * `public, max-age=31536000, immutable` inseamna ca fisierul poate fi tinut un
+   * an de orice intermediar si de CDN. Pentru o poza de produs e chiar ce vrem.
+   * Pentru o eticheta AWB — care contine numele, adresa si telefonul
+   * CUMPARATORULUI — e exact ce se straduieste sa evite ruta care o serveste, cu
+   * `Cache-Control: private, no-store`. Cele doua se bateau cap in cap.
+   *
+   * Apelantii care urca documente cu date personale dau `private, no-store`.
+   */
+  cacheControl = "public, max-age=31536000, immutable",
 ): Promise<string> {
   await s3.send(
     new PutObjectCommand({
@@ -30,7 +42,7 @@ export async function uploadToR2(
       Key: key,
       Body: buffer,
       ContentType: contentType,
-      CacheControl: "public, max-age=31536000, immutable",
+      CacheControl: cacheControl,
     })
   );
   return `${PUBLIC_URL}/${key}`;
@@ -46,9 +58,18 @@ export async function uploadToR2(
 export async function createPresignedPutUrl(
   key: string,
   contentType: string,
-  expiresIn = 600
+  expiresIn = 600,
+  /** Cand e dat, intra in semnatura: incarcarea reala trebuie sa aiba EXACT
+   *  aceasta dimensiune, altfel R2 o refuza. Fara el, limita de dimensiune
+   *  verificata pe server era doar o promisiune a clientului. */
+  contentLength?: number,
 ): Promise<{ uploadUrl: string; publicUrl: string }> {
-  const command = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType });
+  const command = new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ContentType: contentType,
+    ...(contentLength !== undefined ? { ContentLength: contentLength } : {}),
+  });
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn });
   return { uploadUrl, publicUrl: `${PUBLIC_URL}/${key}` };
 }

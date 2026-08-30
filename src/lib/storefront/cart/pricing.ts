@@ -12,6 +12,8 @@
  * iese e ce se afiseaza.
  */
 
+import { computeVat, vatBase } from "@/lib/utils/vat";
+
 export interface CartPricingInput {
   /** Valoarea produselor din cos, inainte de transport. */
   total: number;
@@ -20,6 +22,21 @@ export interface CartPricingInput {
   freeShippingThreshold: number | null;
   /** `null` = magazinul nu impune o valoare minima de comanda. */
   minOrderAmount: number | null;
+  /**
+   * Regimul de TVA al magazinului. Lipsa inseamna „nu stim inca", adica exact
+   * purtarea de pana acum: fara TVA in socoteala.
+   *
+   * Fara el, cosul era GRESIT, nu doar sarac: la magazinele cu preturi fara TVA
+   * arata un total din care lipsea taxa, iar la finalizare aparea alt numar, mai
+   * mare. eSAFE, cu cota de 21%, arata 120 lei in cos si cerea 141 la checkout.
+   */
+  vat?: {
+    vat_enabled: boolean;
+    vat_rate: number;
+    prices_include_vat: boolean;
+    /** Comerciantul vrea sa vada clientul linia de TVA. Suma se aduna oricum. */
+    show_vat_breakdown?: boolean;
+  };
 }
 
 export interface CartPricing {
@@ -41,6 +58,24 @@ export interface CartPricing {
   freeShippingRemaining: number;
   /** Progresul catre livrarea gratuita, 0-100. 100 cand nu exista prag. */
   freeShippingPct: number;
+  /**
+   * TVA-ul de aratat pe o linie separata, sau `null` cand nu e nimic de aratat
+   * (magazin neplatitor, ori comerciantul a stins defalcarea).
+   *
+   * La preturi CU TVA e portiunea extrasa din total, informativa. La preturi
+   * FARA TVA e suma chiar adaugata la total.
+   */
+  vatAmount: number | null;
+  /**
+   * Eticheta randului de TVA, gata facuta: „TVA (21%) inclus" sau „TVA (21%)".
+   *
+   * Vine de aici, nu din marcaj, fiindca sertarul si paginile de cos scriau doar
+   * „TVA" langa un numar care la preturi cu TVA inclus e DEJA in total: randurile
+   * de deasupra se adunau la mai mult decat totalul, fara niciun cuvant care sa
+   * spuna de ce. Pagina de finalizare o scria corect, deci doua suprafete ale
+   * aceleiasi comenzi spuneau lucruri diferite.
+   */
+  vatLabel: string | null;
 }
 
 export function computeCartPricing({
@@ -48,6 +83,7 @@ export function computeCartPricing({
   shippingCost,
   freeShippingThreshold,
   minOrderAmount,
+  vat,
 }: CartPricingInput): CartPricing {
   // Comparatiile se fac pe subtotalul ROTUNJIT LA BANI, adica pe numarul pe
   // care il si citeste clientul. Suma bruta e in virgula mobila: 10 bucati x
@@ -64,11 +100,34 @@ export function computeCartPricing({
   const shipping = shippingIsFree ? 0 : shippingCost;
   const belowMinOrder = minOrderAmount !== null && totalBani < minOrderAmount;
 
+  /*
+   * TVA-ul, cu ACELASI helper ca formularul de comanda si ca serverul.
+   *
+   * In cos nu exista inca extraoptiuni, cod de reducere, metoda de plata sau
+   * taxa de ramburs: alea se aleg abia la finalizare. Deci baza e chiar marfa.
+   * Cand clientul ajunge la checkout si adauga un cupon, numarul se reface
+   * acolo, pe baza intreaga.
+   *
+   * Trece totusi prin `vatBase`, chiar cu restul campurilor pe zero: transportul
+   * INTRA in baza, iar calculul scris de mana aici era singurul din tot proiectul
+   * pe care compilatorul nu-l semnaleaza cand se schimba regula. Lasat asa, cosul
+   * ar fi aratat un total, iar finalizarea ar fi incasat altul.
+   */
+  const { vatAmount, vatAddOn } = vat
+    ? computeVat(vatBase({ goods: totalBani, extras: 0, shipping, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0 }), vat)
+    : { vatAmount: 0, vatAddOn: 0 };
+
   return {
     shipping,
     shippingIsFree,
     areaPrag,
-    grandTotal: laBani(totalBani + shipping),
+    grandTotal: laBani(totalBani + shipping + vatAddOn),
+    // Suma se ADUNA oricum la total; comutatorul spune doar daca se si ARATA pe
+    // o linie. Stins, clientul vede totalul corect, fara defalcare.
+    vatAmount: vat?.vat_enabled && vat.show_vat_breakdown !== false ? vatAmount : null,
+    vatLabel: vat?.vat_enabled && vat.show_vat_breakdown !== false
+      ? `TVA (${vat.vat_rate}%)${vat.prices_include_vat ? " inclus" : ""}`
+      : null,
     belowMinOrder,
     minOrderRemaining: belowMinOrder ? laBani(minOrderAmount! - totalBani) : 0,
     freeShippingRemaining: areaPrag && !shippingIsFree ? laBani(freeShippingThreshold - totalBani) : 0,

@@ -1,0 +1,429 @@
+# Poarta care lipsea.
+#
+# Repo-ul are 1132 de teste si nimic nu obliga un deploy sa treaca prin ele. In
+# aceeasi saptamana au iesit patru defecte grave peste care `tsc`, testele si
+# build-ul trecusera toate — dar alea sunt defecte de CONTINUT, si pentru ele
+# exista santinela. Ce prinde poarta asta e mai banal si la fel de scump: o
+# eroare de tip sau un test rupt care ajunge in productie fiindca cineva (eu, de
+# obicei) a dat push inainte sa ruleze totul.
+#
+# Nu inlocuieste verificarea de dinainte de push. O face obligatorie.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Un push nou peste altul in curs il opreste pe cel vechi: pe `main` conteaza
+# doar ultimul commit, iar rulari paralele pe acelasi branch se calca reciproc.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifica:
+    name: tipuri · teste · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Aceeasi linie majora ca local (v24) si ca pe Vercel. O versiune mai
+          # veche ar trece aici si ar cadea la deploy — adica exact pe dos.
+          node-version: '24'
+          # FARA `cache: npm`, deliberat.
+          #
+          # `npm ci` cade in ~2s, adica in faza de SCRIERE, nu la validare
+          # (`--dry-run` trece, si e verificat ca el chiar prinde o desincronizare:
+          # pus `zod@^99`, da `ETARGET`). O cadere imediata la scriere arata a cache
+          # stricat restaurat intre rulari — `EINTEGRITY` se poarta exact asa.
+          # Costa ~20s pe rulare; certitudinea face mai mult.
+
+      # Pasii de instalare sunt SEPARATI si numiti anume.
+      #
+      # Nu din pedanterie: logurile unui job se pot citi doar cu drepturi de admin,
+      # dar NUMELE si rezultatul fiecarui pas se vad din API oricui. Cu un singur
+      # `npm ci`, „a picat instalarea" e tot ce afli. Impartit asa, se vede
+      # DE CE: lockfile nesincronizat, sau retea/integritate.
+      - name: Unelte
+        run: node -v && npm -v
+
+      # ── Instalarea, in DOI pasi, ca sa se vada care drum a mers ────────────
+      #
+      # `npm ci` pica pe Linux nedeterminist: din patru rulari pe acelasi cod, a
+      # trecut o data. Caderile sunt IMEDIATE (~2s), deci e o eroare de validare,
+      # nu de retea sau de descarcare.
+      #
+      # Ce am verificat si e in regula: clona curata instaleaza 842 de pachete
+      # fara eroare (pe Windows), `package.json` e identic cu radacina
+      # lockfile-ului, toate cele 919 pachete vin din registrul public, binarele de
+      # Linux au si `resolved` si `integrity`, nicio dependenta optionala nu
+      # lipseste, si niciun pachet neoptional n-are restrictie de platforma.
+      # `npm ci --dry-run` trece si el pe Linux. Cauza reala cere logul jobului,
+      # care se poate citi doar cu drepturi de admin.
+      #
+      # Pana atunci: pasul strict incearca, si daca nu reuseste se cade pe
+      # `npm install` — dar ca PAS SEPARAT, nu ascuns intr-un `||`. Asa se vede din
+      # afara, din simpla lista de pasi, daca drumul strict a mers sau nu. O poarta
+      # care nu poate rula nu apara nimic; una care minte ca a rulat strict e mai
+      # rau. Asta nici nu ruleaza degeaba, nici nu minte.
+      - name: Instaleaza (npm ci)
+        id: instalare_stricta
+        continue-on-error: true
+        # Iesirea se PASTREAZA, nu doar se afiseaza. Vezi pasul de diagnostic.
+        run: |
+          set -o pipefail
+          npm ci --loglevel verbose 2>&1 | tee /tmp/npm-ci-1.log             || (sleep 20 && npm ci --loglevel verbose 2>&1 | tee /tmp/npm-ci-2.log)
+
+      # ── Ce a picat, citibil FARA drepturi de admin pe repo ─────────────────
+      #
+      # `npm ci` pica pe Linux nedeterminist de saptamani, si toate ipotezele
+      # ieftine au fost excluse cu probe (lockfile nesincronizat, lockfile stricat,
+      # dependinte optionale, pachete legate de platforma, scripturi de instalare,
+      # cache). Ce lipsea era chiar CAUZA din log — iar logurile unui job se pot
+      # citi doar cu drepturi de admin, si API-ul raspunde 403.
+      #
+      # Deci logul iese pe DOUA cai care nu cer nimic: ultimele randuri intra in
+      # rezumatul rularii, iar logul intreg pleaca drept artefact descarcabil.
+      # Fara asta, urmatoarea cadere e la fel de oarba ca toate cele dinainte.
+      - name: Ce a picat la npm ci
+        if: steps.instalare_stricta.outcome == 'failure'
+        # ⚠ `continue-on-error`: pasii astia stau INTRE `npm ci` picat si instalarea
+        # de rezerva. Fara el, o cadere a diagnosticului (o comanda lipsa pe runner,
+        # artefact care nu se poate incarca) ar opri jobul chiar inainte de pasul
+        # care il salveaza — diagnosticul ar deveni cauza avariei pe care o descrie.
+        continue-on-error: true
+        run: |
+          {
+            echo "### Cauza caderii \`npm ci\`"
+            echo
+            echo "Node: $(node -v) · npm: $(npm -v) · runner: $(uname -srm)"
+            echo "Spatiu: $(df -h . | tail -1)"
+            echo
+            echo '```'
+            for f in /tmp/npm-ci-1.log /tmp/npm-ci-2.log; do
+              [ -f "$f" ] || continue
+              echo "── $f (ultimele 60 de randuri)"
+              tail -60 "$f"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pastreaza logul npm ci
+        if: steps.instalare_stricta.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-ci-log
+          path: /tmp/npm-ci-*.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Daca pasul asta apare ca rulat, `npm ci` inca nu merge. Ce se instaleaza aici
+      # nu se ia insa pe incredere: pasul urmator DOVEDESTE ca arborele e tot cel din
+      # lockfile, si cade rosu daca nu e.
+      - name: Instaleaza (rezerva - npm ci a picat)
+        if: steps.instalare_stricta.outcome == 'failure'
+        run: npm install --no-audit --no-fund
+
+      # ⚠ SI SE DOVEDESTE CA ARBORELE E TOT CEL DIN LOCKFILE (25.08.2026)
+      #
+      # Auditul extern cerea `npm ci` strict, iar un job rosu la fiecare cadere. Cererea
+      # e intemeiata — un verde nu trebuie sa insemne „poate am testat altceva" — dar
+      # leacul propus opreste orice imbinare pentru o cadere nedeterminista de infra-
+      # structura, a carei cauza n-a putut fi citita inca (logurile jobului cer drepturi
+      # de admin, iar API-ul raspunde 403).
+      #
+      # Asta raspunde la INTREBAREA din spatele cererii, nu la forma ei: nu conteaza CU CE
+      # comanda s-a instalat, conteaza daca arborele instalat e cel din `package-lock.json`.
+      #
+      # `npm install` rescrie lockfile-ul EXACT atunci cand arborele rezolvat difera de el.
+      # Deci un lockfile neatins e dovada ca rezerva a instalat acelasi arbore. Iar daca
+      # l-a atins, jobul cade ROSU — atunci chiar am fi masurat altceva decat pleaca in
+      # productie, si asta e o poarta care merita inchisa.
+      #
+      # ⚠ `--exit-code`, nu un `diff` citit cu ochiul: o poarta care raporteaza dar nu
+      # opreste e o poarta pe care nimeni n-o citeste.
+      - name: Arborele instalat e tot cel din lockfile
+        if: steps.instalare_stricta.outcome == 'failure'
+        run: |
+          if ! git diff --exit-code -- package-lock.json; then
+            echo "::error title=Lockfile rescris::\`npm install\` a schimbat \`package-lock.json\`, deci arborele instalat NU e cel din lockfile. Typecheck, teste si build ar masura altceva decat pleaca in productie." >&2
+            exit 1
+          fi
+          echo "\`package-lock.json\` neatins de \`npm install\`: arborele instalat e cel din lockfile." >> "$GITHUB_STEP_SUMMARY"
+
+      # ⚠ Verdele jobului nu are voie sa spuna ceva ce nu s-a verificat.
+      #
+      # Pasul de deasupra a dovedit ca arborele e cel din lockfile, deci verdele NU mai
+      # minte. Ce ramane de spus e altceva: ca drumul strict n-a mers, si ca asta e o
+      # problema de infrastructura care inca asteapta o cauza. Scris in rezumat, se vede
+      # fara sa te uiti in lista de pasi.
+      #
+      # NU se iese cu 1 DE AICI: caderea lui `npm ci` singura nu mai inseamna ca am
+      # masurat altceva. Ce inseamna asta — un lockfile rescris — cade rosu mai sus.
+      - name: Semnaleaza instalarea degradata
+        if: steps.instalare_stricta.outcome == 'failure'
+        run: |
+          echo "::warning title=Instalare degradata::\`npm ci\` a picat; s-a folosit \`npm install\`. Arborele instalat poate diferi de lockfile." >&2
+          {
+            echo "### ⚠ Instalare degradata"
+            echo
+            echo "\`npm ci\` a picat, iar pasii urmatori au rulat peste un arbore instalat cu \`npm install\`."
+            echo "Pasul urmator verifica totusi ca \`npm install\` n-a rescris \`package-lock.json\`."
+            echo "Daca l-ar fi rescris, jobul cade rosu: atunci arborele chiar ar fi altul."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca
+      # trece cu `.env.example`: Next.js are nevoie ca VARIABILELE SA EXISTE, nu
+      # ca ele sa fie adevarate. Asta face ca poarta sa mearga si pe fork-uri,
+      # unde secretele nu sunt disponibile.
+      - name: Mediu de proba
+        run: cp .env.example .env.local
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+  # ── Deriva de schema ────────────────────────────────────────────────────────
+  #
+  # Job SEPARAT, si care NU pica lipsa secretului: pe un fork sau intr-un repo
+  # proaspat clonat nu exista cheie, iar o poarta care cade acolo devine zgomot
+  # si pe urma se ignora. Cand cheia exista, compara schema din Git cu productia.
+  #
+  # Asta e verificarea care ar fi prins `catalog_cuvinte_murdar`: tabela exista in
+  # productie fiindca o crease cineva dintr-o consola SQL, si nicaieri in repo.
+  schema:
+    name: schema din Git = productie
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verifica deriva
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Fara SUPABASE_SERVICE_ROLE_KEY in secretele repo-ului — verificarea de schema se sare."
+            echo "Adauga secretele SUPABASE_URL si SUPABASE_SERVICE_ROLE_KEY ca sa fie pornita."
+            exit 0
+          fi
+          bash scripts/schema-baseline.sh --check
+
+  # ── Deriva TIPURILOR fata de schema din Git ─────────────────────────────────
+  #
+  # Job separat, si fara niciun secret: compara `src/types/database.types.ts` cu
+  # `migrations/000-schema-baseline.sql`. Nu cere deriva ZERO — cere doar sa nu
+  # CREASCA fata de pragul comis. Asta e diferenta dintre o poarta care se poate
+  # trece si una care se ignora.
+  #
+  # Motivul e ca peste 250 de locuri din cod foloseau `as never` ca sa compenseze
+  # tipuri ramase in urma, iar sub el TypeScript nu mai verifica nici numele
+  # tabelei, nici al coloanei, nici argumentele unui RPC.
+  tipuri:
+    name: tipurile DB nu raman in urma schemei
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/verifica-tipuri-db.mjs --check
+
+  # ── Restaurare pe o baza GOALA ──────────────────────────────────────────────
+  #
+  # Diferenta dintre „avem schema in Git" si „stim ca putem reface Edinio".
+  # Scriptul de baseline documenta procesul; jobul asta il DEMONSTREAZA.
+  #
+  # Nu are nevoie de niciun secret: ruleaza pe un Postgres gol, pornit aici.
+  # Deci merge si pe fork-uri, si nu atinge productia in niciun fel.
+  restaurare:
+    name: schema se aplica pe o baza goala
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: proba
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        ports: ["5432:5432"]
+    steps:
+      # `fetch-depth: 0`: pasul de migratii post-baseline are nevoie de istoric ca
+      # sa afle commit-ul ultimei regenerari a baseline-ului.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Trei extensii din baseline nu exista pe un Postgres obisnuit:
+      #   pg_graphql, supabase_vault  — nu sunt in contrib, le pune Supabase;
+      #   pg_stat_statements          — e in contrib, dar cere shared_preload_libraries.
+      #
+      # Se scot DOAR pentru proba de portabilitate. Baseline-ul ramane neatins:
+      # el descrie productia asa cum e, iar productia chiar le are. Ce se verifica
+      # aici e ca RESTUL schemei — tabele, functii, politici, chei — se aplica pe o
+      # baza goala. Niciuna din cele trei nu e folosita de `public` sau `privat`
+      # (verificat: zero referinte la `graphql.`, iar din `vault` se citeste printr-o
+      # vedere pe care o pune preludiul).
+      - name: Pregateste baseline-ul pentru un Postgres obisnuit
+        run: |
+          set -euo pipefail
+          grep -vE '^create extension if not exists (pg_graphql|supabase_vault|pg_stat_statements) '             migrations/000-schema-baseline.sql > /tmp/baseline-portabil.sql
+          echo "scoase: $(grep -cE '^create extension if not exists (pg_graphql|supabase_vault|pg_stat_statements) ' migrations/000-schema-baseline.sql) extensii ale platformei"
+          # Daca filtrul n-a lasat nimic, mai bine cade acum decat sa „treaca" pe gol.
+          grep -q 'create table' /tmp/baseline-portabil.sql
+
+      - name: Preludiu
+        env:
+          PGPASSWORD: proba
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f migrations/000-prelude-platforma.sql
+
+      # Baseline-ul se aplica PE SECTIUNI, si nu din pedanterie: logurile unui job
+      # se citesc doar cu drepturi de admin, dar NUMELE pasului cazut se vede din
+      # API oricui. Cu o singura aplicare, „a picat" e tot ce afli.
+      # ⚠ `set check_function_bodies = off` din antetul baseline-ului NU se mostenește
+      # intre pasi: `SET` e pe SESIUNE, iar fiecare `psql -f` deschide alta. Fara
+      # `-c` pe fiecare pas, functiile care se refera la tabele inca inexistente pica
+      # — desi fisierul intreg, aplicat dintr-o bucata, ar fi mers.
+      - name: Taie baseline-ul pe sectiuni
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/sect
+          awk '/^-- ── /{n++} {print > sprintf("/tmp/sect/%02d.sql", n+0)}' /tmp/baseline-portabil.sql
+          ls -1 /tmp/sect | wc -l
+          # ⚠ Pasii de mai jos enumera fisierele 00..14 CABLAT. Daca generatorul
+          # adauga vreodata o sectiune, ea n-ar fi mentionata de niciun pas si ar
+          # disparea in tacere — jobul ar ramane verde peste o schema incompleta,
+          # fiindca `set -euo pipefail` nu are cum sa observe un fisier de care nu
+          # vorbeste nimeni. Deci se NUMARA.
+          asteptate=15
+          gasite=$(ls -1 /tmp/sect | wc -l)
+          if [ "$gasite" -ne "$asteptate" ]; then
+            echo "PICAT: baseline-ul are $gasite sectiuni, pasii acopera $asteptate."
+            echo "Adauga sectiunea noua intr-un pas de mai jos si actualizeaza numarul."
+            exit 1
+          fi
+
+      - name: 1 extensii, tipuri, secvente
+        env: { PGPASSWORD: proba }
+        run: for f in /tmp/sect/00.sql /tmp/sect/01.sql /tmp/sect/02.sql /tmp/sect/03.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f "$f"; done
+
+      - name: 2 functii
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/04.sql
+
+      - name: 3 tabele
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/05.sql
+
+      - name: 4 constrangeri
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/06.sql
+
+      - name: 5 indexuri
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/07.sql
+
+      - name: 6 vederi
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/08.sql
+
+      - name: 7 declansatoare
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/09.sql
+
+      - name: 8 RLS si politici
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/10.sql
+
+      - name: 9 granturi
+        env: { PGPASSWORD: proba }
+        run: for f in /tmp/sect/11.sql /tmp/sect/12.sql /tmp/sect/13.sql /tmp/sect/14.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f "$f"; done
+
+      # O aplicare fara eroare nu inseamna ca a construit ceva: `create table if
+      # not exists` peste un fisier gol „reuseste" la fel de linistit. Se NUMARA.
+      - name: Proba de fum - chiar s-a construit
+        env:
+          PGPASSWORD: proba
+        run: |
+          set -euo pipefail
+          verifica() {
+            local nume="$1" sql="$2" minim="$3"
+            local n
+            n=$(psql -h localhost -U postgres -d postgres -tAc "$sql")
+            echo "  $nume: $n (minim $minim)"
+            [ "$n" -ge "$minim" ] || { echo "PICAT: $nume"; exit 1; }
+          }
+          verifica "tabele"        "select count(*) from pg_tables where schemaname in ('public','privat')" 60
+          verifica "functii"       "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','privat')" 80
+          verifica "politici RLS"  "select count(*) from pg_policies where schemaname in ('public','privat')" 70
+          verifica "indexuri"      "select count(*) from pg_indexes where schemaname in ('public','privat')" 100
+          verifica "chei straine"  "select count(*) from pg_constraint c join pg_class r on r.oid=c.conrelid join pg_namespace n on n.oid=r.relnamespace where n.nspname='public' and c.contype='f'" 30
+          # Piesele fara de care platforma nu merge, verificate PE NUME.
+          verifica "revendica_stoc_complet"    "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='revendica_stoc_complet'" 1
+          verifica "aplica_tranzitia_comenzii" "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='aplica_tranzitia_comenzii'" 1
+          verifica "privat.store_settings"     "select count(*) from pg_tables where schemaname='privat' and tablename='store_settings'" 1
+          verifica "vederea store_settings"    "select count(*) from pg_views where schemaname='public' and viewname='store_settings'" 1
+          # Si ca declansatorul de insumare a stocului chiar exista: fara el,
+          # coloana produsului nu mai e suma marimilor si tot inventarul se schimba.
+          verifica "declansator sync_variant_stock" "select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid where c.relname='products' and t.tgname='products_sync_variant_stock'" 1
+
+      # ── Migratiile de DUPA baseline ─────────────────────────────────────────
+      #
+      # Pana acum, jobul asta aplica baseline-ul si atat — deci NU putea prinde o
+      # migratie care nu se aplica peste el. Iar regula „ce se reaplica si ce nu"
+      # nu era scrisa nicaieri corect (vezi migrations/CITESTE-INTAI.md).
+      #
+      # Marcajul de taiere NU e data din numele fisierului: numele merg mai
+      # departe decat commit-urile, iar cele doua dosare au conventii diferite de
+      # numire. Marcajul e commit-ul ultimei regenerari a baseline-ului.
+      #
+      # Azi lista e goala, fiindca baseline-ul se regenereaza odata cu fiecare
+      # schimbare de schema — si tocmai de aia pasul merita sa existe: prinde
+      # PRIMA migratie care ajunge pe main fara regenerare.
+      - name: Baseline-ul acopera toate migratiile
+        run: |
+          set -euo pipefail
+          taiere=$(git log -1 --format=%H -- migrations/000-schema-baseline.sql)
+          # ⚠ Poarta trebuie sa cada INCHIS. Un marcaj gol (istoric trunchiat,
+          # fisier redenumit) ar face `"$taiere..HEAD"` sa nu insemne nimic si pasul
+          # ar iesi verde fara sa fi verificat nimic — chiar tiparul pe care restul
+          # jobului il combate.
+          if [ -z "$taiere" ]; then
+            echo "PICAT: nu s-a putut afla commit-ul ultimei regenerari a baseline-ului."
+            exit 1
+          fi
+          echo "baseline regenerat ultima data in $taiere"
+          noi=$(git log --diff-filter=A --format= --name-only "$taiere..HEAD" -- migrations/ scripts/migrations/ | grep -E '\.sql$' | sort -u || true)
+          if [ -z "$noi" ]; then
+            echo "0 migratii post-baseline — refacerea e preludiu + baseline."
+            exit 0
+          fi
+          # ⚠ NU se aplica automat, si NU din lene.
+          #
+          # Ordinea corecta a doua migratii nu se poate deduce aici: numele au
+          # conventii diferite intre cele doua dosare (`2026-06-15_x.sql` cu
+          # underscore, `2026-07-31-x.sql` cu liniuta), iar datele din nume nu sunt
+          # datele reale. O aplicare in ordine alfabetica de CALE ar fi exact
+          # greseala pe care migrations/CITESTE-INTAI.md o interzice.
+          #
+          # Regula proiectului e ca baseline-ul se regenereaza odata cu fiecare
+          # schimbare de schema, deci lista de mai jos ar trebui sa fie mereu goala.
+          # Cand nu e, raspunsul nu e „ghicim ordinea", ci „regenereaza baseline-ul".
+          echo "PICAT: exista migratii adaugate dupa ultima regenerare a baseline-ului:"
+          echo "$noi"
+          echo
+          echo "Ruleaza: bash scripts/schema-baseline.sh   (apoi --check), si comite baseline-ul."
+          echo "Vezi migrations/CITESTE-INTAI.md pentru de ce nu se reaplica istoricul."
+          exit 1

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -80,7 +81,7 @@ export function SmartbillConfigClient({
   // Auto-load the VAT rates on open if creds are already saved (state set only
   // after the await, never synchronously inside the effect).
   useEffect(() => {
-    if (!(initialConfig.email && initialConfig.token && initialConfig.company_vat_code)) return;
+    if (!(initialConfig.email && (initialConfig.token || secretulEsteSalvat(initialConfig, "token")) && initialConfig.company_vat_code)) return;
     let active = true;
     void (async () => {
       const res = await getSmartbillTaxes(businessId);
@@ -96,7 +97,7 @@ export function SmartbillConfigClient({
   function save() {
     if (cfg.enabled) {
       if (!cfg.email.trim()) { toast.error("Email-ul SmartBill este obligatoriu."); return; }
-      if (!cfg.token.trim()) { toast.error("Tokenul API este obligatoriu."); return; }
+      if ((!cfg.token.trim() && !secretulEsteSalvat(initialConfig, "token"))) { toast.error("Tokenul API este obligatoriu."); return; }
       if (!cfg.company_vat_code.trim()) { toast.error("CUI-ul firmei este obligatoriu."); return; }
       if (!cfg.series_name.trim()) { toast.error("Seria facturilor este obligatorie."); return; }
     }
@@ -109,7 +110,7 @@ export function SmartbillConfigClient({
   }
 
   async function testConnection() {
-    if (!cfg.email.trim() || !cfg.token.trim() || !cfg.company_vat_code.trim()) {
+    if (!cfg.email.trim() || (!cfg.token.trim() && !secretulEsteSalvat(initialConfig, "token")) || !cfg.company_vat_code.trim()) {
       toast.error("Completeaza email-ul, tokenul si CUI-ul inainte de a testa.");
       return;
     }
@@ -134,7 +135,7 @@ export function SmartbillConfigClient({
     }
   }
 
-  const canTest = !!(cfg.email.trim() && cfg.token.trim() && cfg.company_vat_code.trim());
+  const canTest = !!(cfg.email.trim() && (cfg.token.trim() || secretulEsteSalvat(initialConfig, "token")) && cfg.company_vat_code.trim());
 
   return (
     <div className="p-6 max-w-2xl">
@@ -233,7 +234,7 @@ export function SmartbillConfigClient({
               </label>
               <Input type="password" value={cfg.token}
                 onChange={e => set("token", e.target.value)}
-                placeholder="Tokenul din Contul meu > Integrari > API" />
+                placeholder={secretulEsteSalvat(initialConfig, "token") ? PLACEHOLDER_SECRET_SALVAT : ""} />
             </div>
 
             {/* CUI */}

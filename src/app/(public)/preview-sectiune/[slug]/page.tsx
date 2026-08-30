@@ -1,3 +1,4 @@
+import { COLOANE_BUSINESS_PUBLIC } from "@/lib/storefront/business-public";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
@@ -9,6 +10,7 @@ import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { construiesteFatete } from "@/lib/storefront/catalog/facets";
 import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
+import { toateSectiunile } from "@/lib/storefront/design/edit";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionKind } from "@/lib/storefront/design/types";
@@ -46,14 +48,33 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   if (!kind || !sectionMeta(kind) || !variantParam || !variantMeta(kind, variantParam)) notFound();
 
   const supabase = await createClient();
-  const { data: business } = await supabase.from("businesses").select("*").eq("slug", slug).single();
+  const { data: business } = await supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single();
   if (!business) notFound();
 
+  /*
+   * Ciorna, pentru proprietar. Publicatul, pentru oricine altcineva.
+   *
+   * ⚠ Miniaturile citeau doar designul PUBLICAT, deci cardul marcat „Activ"
+   * arata starea de dinaintea ultimelor modificari: comerciantul alegea un
+   * design, apoi apasa Publica, primea „Designul e live" — si toate cardurile
+   * ramaneau neschimbate pana la o reincarcare cu F5. Aceeasi regula ca pe
+   * storefront (`[slug]/page.tsx`), ca miniatura si magazinul sa nu spuna doua
+   * lucruri diferite.
+   */
+  const { data: { user } } = await supabase.auth.getUser();
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("page_content, storefront_design")
+    .select("page_content, storefront_design, storefront_design_draft")
     .eq("business_id", business.id)
     .single();
+  const esteProprietar = !!user && user.id === business.user_id;
+  const designDeCitit = esteProprietar && storeSettings?.storefront_design_draft
+    ? storeSettings.storefront_design_draft
+    : storeSettings?.storefront_design;
+  // Randul FARA coloana de ciorna, singurul care are voie sa plece catre client.
+  const faraCiorna = storeSettings
+    ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest; })()
+    : {};
   const produseDemo = demoProducts(business.id);
   const paginaProdusDemo = demoProductPage(business.id);
   /*
@@ -83,13 +104,17 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   };
   // Designul se deriva din configuratia REALA: ce sectiuni are magazinul aprinse
   // si ce varianta foloseste nu trebuie sa depinda de continutul demonstrativ.
-  const resolved = resolveDesign(storeSettings?.storefront_design, {
+  const resolved = resolveDesign(designDeCitit, {
     primaryColor: business.primary_color ?? "#1AB554",
     pageContent: realPageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
+
+  // Sectiunea pe care magazinul o are ACUM pentru acest tip. Prima instanta e
+  // reprezentanta: designul se aplica oricum tuturor (vezi SectionDesignBrowser).
+  const sectiuneaReala = toateSectiunile(resolved.design).find((s) => s.kind === kind) ?? null;
 
   const chrome = {
     ...buildChromeData({
@@ -121,9 +146,21 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
           kind,
           variant: variantParam,
           enabled: true,
-          // Cu setarile implicite ale variantei, ca miniatura sa arate exact ce
-          // primeste comerciantul daca o alege.
-          settings: { ...(variantMeta(kind, variantParam)?.defaults ?? {}) },
+          /*
+           * Setarile REALE cand miniatura arata varianta pe care magazinul o
+           * foloseste deja; implicitele variantei in rest.
+           *
+           * ⚠ Cu implicitele peste tot, panoul de Setari din „Design sectiuni"
+           * nu avea nicio previzualizare: comerciantul schimba un titlu, un numar
+           * de coloane sau un comutator, si nici macar cardul marcat „Activ" nu
+           * se schimba. Pentru variantele NEALESE implicitele raman corecte —
+           * acolo intrebarea e „cum arata daca o aleg", iar reglajele actuale
+           * apartin altei variante.
+           */
+          settings: {
+            ...(variantMeta(kind, variantParam)?.defaults ?? {}),
+            ...(sectiuneaReala?.variant === variantParam ? sectiuneaReala.settings : {}),
+          },
         }}
         products={produseCuFatete}
         categories={DEMO_CATEGORIES}
@@ -134,7 +171,17 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
         produsDemo={{
           product: paginaProdusDemo.product as never,
           storeSettings: {
-            ...(storeSettings ?? {}),
+            /*
+             * ⚠ CIORNA NU ARE VOIE SA IASA DIN FUNCTIA ASTA.
+             *
+             * `storeSettings` ajunge INTREG ca prop la o componenta de client, iar
+             * React serializeaza props-urile in HTML. Din clipa in care randul
+             * cuprinde si coloana de ciorna — pana la 200 KB de design nepublicat —
+             * ea ajunge in sursa paginii, iar ruta asta n-are nicio poarta de
+             * autentificare: `?kind=header&variant=classic` pe slugul oricui o
+             * serveste oricui. Aceeasi curatare ca in `[slug]/page.tsx`.
+             */
+            ...faraCiorna,
             page_content: { ...realPageContent, ...paginaProdusDemo.pageContent },
             default_shipping_cost: DEMO_TRANSPORT,
             free_shipping_threshold: null,

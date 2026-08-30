@@ -26,7 +26,7 @@ const ACTIVE_FEATURES: {
 }[] = [
   { key: "show_gallery", icon: Image, title: "Galerie foto", description: "Afiseaza o galerie de fotografii pe pagina magazinului." },
   { key: "show_about", icon: ShoppingBag, title: "Descriere magazin", description: "Afiseaza sectiunea de descriere si despre noi pe mini-store." },
-  { key: "show_contact", icon: MapPin, title: "Informatii de contact", description: "Afiseaza telefon, email, adresa si locatia la baza paginii." },
+  { key: "show_contact", icon: MapPin, title: "Informatii de contact", description: "Repeta telefonul, emailul si adresa in corpul paginii principale. Oprit implicit: le ai deja in footer." },
   { key: "floating_whatsapp", icon: MessageCircle, title: "Buton WhatsApp flotant", description: "Buton fix in colt pentru contact rapid pe WhatsApp.", requiresWhatsApp: true },
 ];
 
@@ -46,7 +46,8 @@ export function FeaturesClient({ business }: { business: Business }) {
   const [features, setFeatures] = useState<Features>({
     show_gallery: rawFeatures.show_gallery !== false,
     show_about: rawFeatures.show_about !== false,
-    show_contact: rawFeatures.show_contact !== false,
+    /* Singurul oprit implicit: datele de contact sunt deja in footer. */
+    show_contact: rawFeatures.show_contact === true,
     floating_whatsapp: rawFeatures.floating_whatsapp !== false,
   });
 

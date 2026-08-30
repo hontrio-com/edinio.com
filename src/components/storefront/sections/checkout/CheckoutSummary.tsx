@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { formatPrice } from "@/lib/utils/format";
-import { lineKey } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import type { CheckoutEngine } from "./checkout-core";
 
 /**
@@ -20,6 +20,9 @@ import type { CheckoutEngine } from "./checkout-core";
 /** Liniile de cos, asa cum apar in formularul de comanda. */
 export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; color: string }) {
   const { items } = motor;
+  // Totalul liniei vine tot de la cos, ca sa fie acelasi numar aici, in sertar,
+  // pe pagina de cos si la server.
+  const { lineTotal, lineSavings, lineUnit } = useCart();
   return (
       <div className="space-y-2">
         {items.map((item) => (
@@ -30,9 +33,19 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm text-foreground truncate">{item.name}</p>
               {item.variantTitle && <p className="text-xs text-muted-foreground truncate">{item.variantTitle}</p>}
-              <p className="text-xs text-muted-foreground mt-0.5">{item.quantity} buc &times; {formatPrice(item.price)}</p>
+              {/* Pretul pe bucata vine de la COS, nu din `item.price`: acela e
+                  instantaneul din localStorage, iar totalul de langa el vine deja
+                  de la server. Aici e capatul fluxului pe care il repara
+                  constatarea 20 — degeaba se aduna randurile in sertar daca la
+                  finalizare tot doua numere care nu se inmultesc se vad. */}
+              <p className="text-xs text-muted-foreground mt-0.5">{item.quantity} buc &times; {formatPrice(lineUnit(item))}</p>
             </div>
-            <p className="text-sm font-bold shrink-0" style={{ color }}>{formatPrice(item.price * item.quantity)}</p>
+            <div className="shrink-0 text-right">
+              <p className="text-sm font-bold" style={{ color }}>{formatPrice(lineTotal(item))}</p>
+              {lineSavings(item) > 0 && (
+                <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(lineUnit(item) * item.quantity)}</p>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -50,7 +63,7 @@ export function CheckoutTotals({
   freeShippingThreshold: number | null;
 }) {
   const {
-    acceptedBumpOffers, appliedDiscount, cardDiscountAmount, codDiscountAmount, discountAmount,
+    acceptedBumpOffers, appliedDiscount, cardDiscountAmount, codDiscountAmount, codFeeAmount, discountAmount,
     extrasTotal, goodsTotal, grandTotal, isFreeShippingDiscount, shipping,
     total, vatAmount, vatConfig,
   } = motor;
@@ -100,6 +113,14 @@ export function CheckoutTotals({
           <div className="flex justify-between" style={{ color }}>
             <span>Reducere plata ramburs</span>
             <span className="font-medium">-{formatPrice(codDiscountAmount)}</span>
+          </div>
+        )}
+        {/* Taxa de ramburs se aduna, deci NU poarta culoarea magazinului: aia e
+            rezervata sumelor in favoarea clientului. */}
+        {codFeeAmount > 0 && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>Taxa plata ramburs</span>
+            <span className="font-medium">{formatPrice(codFeeAmount)}</span>
           </div>
         )}
         {freeShippingThreshold && goodsTotal < freeShippingThreshold && (

@@ -289,23 +289,42 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
   const fetchAnalytics = useCallback(async (p: number) => {
     setLoading(true);
     const supabase = createClient();
-    const now = Date.now();
-    const since = new Date(now - p * 86400000).toISOString();
-    const prevSince = new Date(now - p * 2 * 86400000).toISOString();
+    /*
+     * Fereastra e in ZILE CALENDARISTICE, si o taie baza, nu browserul.
+     *
+     * Pana acum era `now - p * 86400000`, adica o fereastra care aluneca: aceeasi
+     * pagina reincarcata o ora mai tarziu dadea alt numar, iar comparatia cu
+     * perioada precedenta era decalata cu ore fata de ea. Butoanele scriu „7 / 30
+     * / 90 zile" si graficul „ultimele 30 zile" — asta si inseamna acum.
+     *
+     * Taiata in SQL fiindca ziua e a ROMANIEI: calculata aici, ar fi trebuit
+     * dedusa trecerea la ora de vara din `Intl`, adica exact codul care se strica
+     * de doua ori pe an. Si fiindca marginea trebuie sa fie ACEEASI pentru vizite
+     * si pentru comenzi — calculate separat, rata de conversie ar imparti vizite
+     * dintr-o fereastra la comenzi din alta.
+     *
+     * Castigul: zilele incheiate vin din `business_daily_stats` (33,8 randuri
+     * stranse in unul), iar tabela bruta poate in sfarsit sa capete retentie.
+     */
 
     // Totul vine agregat din SQL (functiile *_breakdown / orders_daily_revenue /
     // orders_county_counts): fetch-ul de evenimente/comenzi brute se trunchia
     // silentios la 1000 de randuri, deci cifrele mineau la magazine cu volum.
     const [eventsRes, dailyRes, prevDailyRes, countyRes] = await Promise.all([
-      supabase.rpc("site_analytics_breakdown", { bid: businessId, t_from: since }),
-      supabase.rpc("orders_daily_revenue", { bid: businessId, t_from: since }),
-      supabase.rpc("orders_daily_revenue", { bid: businessId, t_from: prevSince, t_to: since }),
+      /* `as never` pe numele functiilor: tipurile generate nu le stiu inca, iar
+         regenerarea lor rescrie `store_settings` din tabela in VEDERE si rupe
+         patruzeci de locuri. Formele raspunsurilor se declara mai jos, explicit. */
+      supabase.rpc("site_analytics_breakdown_zile", { bid: businessId, p_zile: p }),
+      supabase.rpc("orders_venit_zilnic", { bid: businessId, p_zile: p }),
+      supabase.rpc("orders_venit_zilnic", { bid: businessId, p_zile: p, p_deplasare: 1 }),
       supabase.rpc("orders_county_counts", { bid: businessId }),
     ]);
 
-    const events = eventsRes.data ?? [];
-    const daily = dailyRes.data ?? [];
-    const prevDaily = prevDailyRes.data ?? [];
+    type RandVizite = { event_type: string; device: string | null; source: string | null; cnt: number };
+    type RandZi = { day: string; revenue: number; order_count: number };
+    const events = (eventsRes.data ?? []) as RandVizite[];
+    const daily = (dailyRes.data ?? []) as RandZi[];
+    const prevDaily = (prevDailyRes.data ?? []) as RandZi[];
     const countyRows = countyRes.data ?? [];
 
     // Metrics (statusurile anulate/rambursate sunt deja excluse in SQL)
@@ -320,10 +339,18 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
 
     // Daily sales
     const dailyMap = new Map(daily.map(r => [r.day, r]));
+    /*
+     * Zilele graficului se construiesc din ZIUA LOCALA, nu dintr-un `now` numeric.
+     *
+     * `toISOString()` pe o data adusa la miezul noptii LOCAL da ziua precedenta
+     * pentru orice fus la est de Greenwich — adica pentru Romania, mereu. Bug-ul
+     * era mascat cat timp fereastra aluneca oricum; cu zile calendaristice, o zi
+     * decalata ar fi lasat ultima coloana a graficului goala.
+     */
+    const azi = new Date();
     const salesByDay: DayData[] = Array.from({ length: p }, (_, i) => {
-      const d = new Date(now - (p - 1 - i) * 86400000);
-      d.setHours(0, 0, 0, 0);
-      const dayStr = d.toISOString().slice(0, 10);
+      const d = new Date(azi.getFullYear(), azi.getMonth(), azi.getDate() - (p - 1 - i));
+      const dayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const dayRow = dailyMap.get(dayStr);
       return {
         date: dayStr,

@@ -4,6 +4,7 @@
 
 import { uploadToR2 } from "@/lib/r2";
 import { isOurR2Url } from "@/lib/r2-url";
+import { detectImageMime } from "@/lib/utils/file-signature";
 import { safeFetchImage } from "./ssrf";
 
 const EXT_BY_TYPE: Record<string, string> = {
@@ -14,6 +15,26 @@ const EXT_BY_TYPE: Record<string, string> = {
   "image/gif": "gif",
   "image/avif": "avif",
 };
+
+/**
+ * Tipul REAL al fisierului, citit din primii octeti.
+ *
+ * `detectImageMime` nu cunoaste AVIF (lista lui de marci ISO-BMFF se opreste la
+ * HEIC), iar AVIF e in `EXT_BY_TYPE` de la inceput. Fara ramura de mai jos, orice
+ * furnizor care serveste .avif ar ramane brusc negazduit — de aceea completarea
+ * sta aici, si nu prin schimbarea helperului comun folosit de incarcarile din
+ * formular.
+ */
+function tipRealImagine(buffer: Buffer): string | null {
+  const detectat = detectImageMime(buffer);
+  if (detectat) return detectat;
+
+  if (buffer.length >= 12 && buffer.toString("ascii", 4, 8) === "ftyp") {
+    const marca = buffer.toString("ascii", 8, 12).toLowerCase();
+    if (marca === "avif" || marca === "avis") return "image/avif";
+  }
+  return null;
+}
 
 /** True if a URL already points at our own R2 bucket (already rehosted). */
 export function isR2Url(url: string): boolean {
@@ -30,30 +51,65 @@ export function needsRehost(images: string[]): boolean {
  * original URL on failure (best-effort: a broken rehost never drops the image).
  * `cache` dedupes identical URLs within one processing chunk.
  */
+/**
+ * Cache-ul de rehostare tine PROMISIUNI, nu adrese gata rezolvate.
+ *
+ * Cat timp rehostarea era strict seriala, o harta de siruri ajungea: cine venea
+ * al doilea gasea adresa deja scrisa. Cu rehostarea in paralel, doi lucratori pot
+ * rata amandoi cache-ul pentru ACEEASI adresa in aceeasi clipa, si atunci ar
+ * descarca-o de doua ori si ar urca doua obiecte in R2 — spatiu platit de doua
+ * ori, si doua adrese diferite pentru aceeasi poza, din care produsele ar apuca
+ * care pe care. Cu promisiuni, al doilea o asteapta pe a primului.
+ *
+ * Se retine si ESECUL, nu doar reusita: o adresa moarta impartita de cincizeci de
+ * produse era ceruta de cincizeci de ori, si de fiecare data astepta acelasi
+ * timeout. Cache-ul traieste cat un import, deci nu poate „ingheta" o eroare
+ * trecatoare mai mult decat atat.
+ */
+export type CacheRehostare = Map<string, Promise<{ url: string; ok: boolean }>>;
+
 export async function rehostImageUrl(
   url: string,
   businessId: string,
   importId: string,
-  cache: Map<string, string>,
+  cache: CacheRehostare,
 ): Promise<{ url: string; ok: boolean }> {
   if (isR2Url(url)) return { url, ok: true };
-  const cached = cache.get(url);
-  if (cached) return { url: cached, ok: true };
+  const inZbor = cache.get(url);
+  if (inZbor) return inZbor;
 
+  const promisiune = rehosteazaAcum(url, businessId, importId);
+  cache.set(url, promisiune);
+  return promisiune;
+}
+
+async function rehosteazaAcum(
+  url: string,
+  businessId: string,
+  importId: string,
+): Promise<{ url: string; ok: boolean }> {
   const result = await safeFetchImage(url);
   if ("error" in result) return { url, ok: false };
 
-  // SVG is intentionally not in EXT_BY_TYPE (can carry scripts); skip rehosting it.
-  const ext = EXT_BY_TYPE[result.contentType];
-  if (!ext) return { url, ok: false };
+  /*
+   * Tipul se ia din OCTETI, nu din antetul serverului strain — exact ca la
+   * incarcarile prin formular (/api/upload). Antetul e ales de cel care serveste
+   * fisierul: cu `Content-Type: image/png` peste orice continut, comerciantul isi
+   * putea gazdui octeti arbitrari pe CDN-ul platformei, cu eticheta pusa de el.
+   * Tot tipul detectat se scrie si in R2.
+   *
+   * SVG lipseste dinadins din EXT_BY_TYPE (poate purta scripturi).
+   */
+  const tipReal = tipRealImagine(result.buffer);
+  const ext = tipReal ? EXT_BY_TYPE[tipReal] : undefined;
+  if (!tipReal || !ext) return { url, ok: false };
 
   const key = `products/${businessId}/imported/${importId}/${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 9)}.${ext}`;
 
   try {
-    const r2Url = await uploadToR2(result.buffer, key, result.contentType);
-    cache.set(url, r2Url);
+    const r2Url = await uploadToR2(result.buffer, key, tipReal);
     return { url: r2Url, ok: true };
   } catch {
     return { url, ok: false };
@@ -68,22 +124,29 @@ export async function rehostProductImages(
   images: string[],
   businessId: string,
   importId: string,
-  cache: Map<string, string>,
+  cache: CacheRehostare,
 ): Promise<{ images: string[]; done: number; failed: number }> {
-  const out: string[] = [];
-  let done = 0;
-  let failed = 0;
-
-  for (const url of images) {
-    if (isR2Url(url)) {
-      out.push(url);
-      continue;
-    }
+  /*
+   * Imaginile unui produs se cer DEODATA, nu una dupa alta.
+   *
+   * Sunt de obicei doua-cinci, fiecare inseamna o descarcare de pe serverul
+   * altcuiva plus o urcare in R2 — masurat, 1,17 s bucata. Puse la coada, un
+   * produs cu cinci poze tinea sase secunde de unul singur. Numarul de cereri
+   * catre gazda-sursa e marginit mai sus, de bazinul din `committer.ts`.
+   *
+   * Ordinea din `images` se pastreaza: `Promise.all` intoarce rezultatele in
+   * ordinea intrarilor, nu in ordinea in care s-au terminat. Prima imagine e
+   * coperta produsului, deci o reordonare ar fi schimbat cardul.
+   */
+  const rezultate = await Promise.all(images.map(async (url) => {
+    if (isR2Url(url)) return { url, ok: true, sarita: true };
     const res = await rehostImageUrl(url, businessId, importId, cache);
-    out.push(res.url);
-    if (res.ok) done++;
-    else failed++;
-  }
+    return { ...res, sarita: false };
+  }));
 
-  return { images: out, done, failed };
+  return {
+    images: rezultate.map((r) => r.url),
+    done: rezultate.filter((r) => !r.sarita && r.ok).length,
+    failed: rezultate.filter((r) => !r.sarita && !r.ok).length,
+  };
 }

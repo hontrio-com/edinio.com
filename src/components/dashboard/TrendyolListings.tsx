@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, Send, X } from "lucide-react";
 import {
-  bulkPublishTrendyol, getTrendyolProductIds, getTrendyolProductPage, removeTrendyolListing, syncTrendyolProduct,
+  bulkPublishTrendyol, getTrendyolProductIds, getTrendyolProductPage, pushTrendyolInventory,
+  removeTrendyolListing, syncTrendyolProduct,
   type TrendyolProductPage, type TrendyolProductStatusFilter,
 } from "@/lib/actions/trendyol.actions";
 import { TrendyolListingEditor } from "@/components/dashboard/TrendyolListingEditor";
@@ -18,7 +19,10 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   created: { text: "În aprobare", cls: "bg-amber-100 text-amber-700" },
   draft: { text: "Ciornă", cls: "bg-muted text-muted-foreground" },
   inactive: { text: "Inactiv", cls: "bg-muted text-muted-foreground" },
-  rejected: { text: "Respins", cls: "bg-red-100 text-red-700" },
+  // „Revizuire necesară" e chiar cuvantul din panoul Trendyol: produsul e la ei,
+  // dar nu se vinde pana nu repari ce-ti cer. Nu e o respingere definitiva —
+  // odata reparat, reintra singur in aprobare.
+  rejected: { text: "Revizuire necesară", cls: "bg-amber-100 text-amber-800" },
   error: { text: "Eroare", cls: "bg-red-100 text-red-700" },
 };
 
@@ -92,9 +96,22 @@ export function TrendyolListings({
     aplicaRezultatul(await getTrendyolProductPage(businessId, { q: cautare, category: categorie, status, page: pagina }));
   }, [businessId, cautare, categorie, status, pagina, aplicaRezultatul]);
 
+  // Eliminarea sterge listarea, deci produsul ramane sigur "Nelistat". O aratam pe
+  // loc, ca sa nu astepte doua drumuri la server (actiunea + reincarcarea paginii).
+  // Trimiterea in masa si "Reincearca" nu intra aici: acolo raspunsul serverului
+  // spune ce s-a intamplat, nu-l putem ghici.
+  const [datePagina, aplicaOptimistElimina] = useOptimistic(
+    date,
+    (stare: TrendyolProductPage | null, productId: string) => stare && {
+      ...stare,
+      items: stare.items.map((i) => (i.id === productId ? { ...i, status: null, error: null } : i)),
+    },
+  );
+
   const remove = (productId: string) => {
     if (!window.confirm("Elimini această listare de pe Trendyol?")) return;
     startTransition(async () => {
+      aplicaOptimistElimina(productId);
       const res = await removeTrendyolListing(businessId, productId);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Listare eliminată.");
@@ -106,6 +123,21 @@ export function TrendyolListings({
     const res = await syncTrendyolProduct(businessId, productId);
     if ("error" in res) { toast.error(res.error); return; }
     toast.success("Retrimis pe Trendyol.");
+    await incarcaPagina();
+    router.refresh();
+  });
+  /*
+   * Preluarea stocului pe o listare adoptata.
+   *
+   * Din clipa asta, Edinio incepe sa impinga stocul si pretul si pentru produsul
+   * ala — deci merita spus, nu doar facut.
+   */
+  const impingeStocul = (productId: string) => startTransition(async () => {
+    const res = await pushTrendyolInventory(businessId, productId);
+    if ("error" in res) { toast.error(res.error); return; }
+    toast.success(res.trimis
+      ? "Stocul și prețul au plecat spre Trendyol."
+      : "Nu era nimic de trimis: produsul nu e (încă) listat pe Trendyol.");
     await incarcaPagina();
     router.refresh();
   });
@@ -281,7 +313,7 @@ export function TrendyolListings({
       )}
 
       <div className={`divide-y divide-border ${incarca ? "opacity-60" : ""}`}>
-        {(date?.items ?? []).map((p) => {
+        {(datePagina?.items ?? []).map((p) => {
           const status = p.status ? (STATUS_LABEL[p.status] ?? { text: p.status, cls: "bg-muted text-muted-foreground" }) : null;
           const isOpen = openId === p.id;
           return (
@@ -302,6 +334,45 @@ export function TrendyolListings({
                   ) : (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Nelistat</span>
                   )}
+                  {/*
+                    Listare ADOPTATA: produsul exista deja in contul Trendyol al
+                    comerciantului, listat manual sau cu alt tool. L-am legat ca
+                    sa curga comenzile, dar nu-i atingem pretul si stocul puse
+                    acolo — asta o spune eticheta, iar butonul e cum preia el.
+                  */}
+                  {/*
+                    ═══ ⚠ PRODUSE CARE NU MAI PRIMESC NIMIC, SI ARATA SANATOASE ═══
+
+                    Masurat pe 24.08.2026: 23 de listari cu `status: 'approved'`,
+                    `error: null` si `issues: []`, care nu mai primeau NICIODATA nici pret,
+                    nici stoc. Trendyol le refuzase de trei ori (produs inchis pentru
+                    vanzare, arhivat, sau negasit), plafonul de reluari se atinsese, si
+                    bucla se oprise — corect. Doar ca nimeni nu i-o spunea.
+
+                    ⚠ Nu se scrie in `error`: acolo umbla reconcilierile, care il pun pe
+                    `null` cand produsul apare aprobat, in ACEEASI trecere de cron.
+                  */}
+                  {p.probleme.length > 0 && (
+                    <span
+                      className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                      title={p.probleme.join(" · ")}
+                    >
+                      Nu se mai trimite
+                    </span>
+                  )}
+                  {p.adoptata && (
+                    <>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700"
+                        title="Produsul exista deja pe Trendyol, listat pe alta cale. Edinio l-a legat, dar nu-i schimba stocul si pretul.">
+                        Preluat
+                      </span>
+                      <button onClick={() => impingeStocul(p.id)} disabled={pending}
+                        className="text-xs text-primary hover:underline disabled:opacity-60"
+                        title="Trimite acum stocul si pretul din Edinio catre Trendyol, pentru acest produs.">
+                        Trimite stocul
+                      </button>
+                    </>
+                  )}
                   {p.status === "error" && (
                     <button onClick={() => retry(p.id)} disabled={pending} className="text-xs text-primary hover:underline disabled:opacity-60">Reîncearcă</button>
                   )}
@@ -311,7 +382,28 @@ export function TrendyolListings({
                 </div>
               </div>
 
-              {p.error && <p className="text-xs text-red-600 mt-1 ml-6">{p.error}</p>}
+              {/*
+                Motivul respingerii vine de la Trendyol tradus in romana si e
+                lung (contine si indrumarea lor). Il aratam INTREG: e singurul
+                lucru din care comerciantul poate afla ce sa repare. Pana acum
+                nu-l vedea deloc — produsul aparea „in aprobare" la nesfarsit.
+              */}
+              {p.error && (
+                <p className={`text-xs mt-1 ml-6 whitespace-pre-line ${p.status === "rejected" ? "text-amber-700" : "text-red-600"}`}>
+                  {p.status === "rejected" && <span className="font-semibold">Trendyol cere o corectură: </span>}
+                  {p.error}
+                </p>
+              )}
+
+              {/* ⚠ MOTIVUL SE VEDE, nu sta intr-un `title`. Bulina „Preluat" avea explicatia
+                  intr-un tooltip, si comerciantul a aflat abia dintr-o comanda vanduta cu 4
+                  lei sub pretul din magazin. Nu repetam forma aia pe acelasi ecran. */}
+              {p.probleme.length > 0 && (
+                <p className="mt-1 ml-6 whitespace-pre-line text-xs text-amber-700 dark:text-amber-300">
+                  <span className="font-semibold">Nu mai primește preț și stoc: </span>
+                  {p.probleme.join(" · ")}
+                </p>
+              )}
 
               {isOpen && (
                 <div className="mt-3 ml-6">

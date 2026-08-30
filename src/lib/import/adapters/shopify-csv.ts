@@ -16,8 +16,7 @@ import {
   splitTags,
   sanitizeDescription,
   truncate,
-  htmlToText,
-} from "../normalize";
+  htmlToText, MAX_IMAGINI_PE_PRODUS } from "../normalize";
 
 const MAX_COMBINATIONS = 100;
 const dedupe = (a: string[]) => [...new Set(a)];
@@ -121,7 +120,8 @@ function collectImages(rows: Record<string, string>[]): StagedProduct["images"] 
       position: parseIntOrNull(r["Image Position"]) ?? undefined,
     });
   }
-  return imgs.sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+  // slice DUPA sort, ca sa ramana pozitiile mici (primele imagini ale produsului).
+  return imgs.sort((a, b) => (a.position ?? 999) - (b.position ?? 999)).slice(0, MAX_IMAGINI_PE_PRODUS);
 }
 
 function buildVariants(

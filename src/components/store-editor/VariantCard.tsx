@@ -55,6 +55,7 @@ export function VariantCard({
   motivIndisponibil,
   peMobil = false,
   latimeFixa,
+  versiune = 0,
 }: {
   slug: string;
   kind: string;
@@ -73,6 +74,15 @@ export function VariantCard({
    * panza de desktop ar fi o fasie intr-un camp gol, oricat de lat ar fi cardul.
    */
   latimeFixa?: number;
+  /**
+   * Bumpata cand designul salvat s-a schimbat (Publica, Renunta, alta varianta).
+   *
+   * ⚠ Fara ea, miniaturile ramaneau exact cum erau pana la un F5. Iframe-ul
+   * n-avea nici `key`, nici vreo cheie de invalidare in adresa, deci nici
+   * remontarea, nici cache-ul browserului n-aveau motiv sa aduca ceva nou — iar
+   * cardul marcat „Activ" arata starea de dinaintea publicarii.
+   */
+  versiune?: string | number;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const rama = useRef<HTMLIFrameElement>(null);
@@ -179,7 +189,8 @@ export function VariantCard({
         {vizibil && scara > 0 && (
           <iframe
             ref={rama}
-            src={`/preview-sectiune/${slug}?kind=${encodeURIComponent(kind)}&variant=${encodeURIComponent(variantId)}`}
+            key={versiune}
+            src={`/preview-sectiune/${slug}?kind=${encodeURIComponent(kind)}&variant=${encodeURIComponent(variantId)}&v=${encodeURIComponent(versiune)}`}
             title={`Previzualizare ${label}`}
             onLoad={elibereaza}
             tabIndex={-1}

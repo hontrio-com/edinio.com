@@ -16,6 +16,7 @@ import { CartControl } from "@/components/storefront/sections/_shared/CartContro
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { radacinaMagazin, hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
+import { stilSigla } from "@/lib/storefront/logo-box";
 
 const STROKE = 1.7;
 
@@ -113,8 +114,8 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                className="w-auto max-w-full object-contain" />
+                style={stilSigla(logoSize)}
+                className="w-auto object-contain" />
             ) : (
               <span className="text-xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
             )}

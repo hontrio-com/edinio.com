@@ -7,7 +7,10 @@
 // what makes Advantage+ dynamic ads work.
 
 import { storeBaseUrl } from "@/lib/seo";
-import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice } from "@/lib/storefront/variants";
+// GTIN invalid = produs respins, deci se lasa afara. Aceeasi verificare pe care
+// o folosesc feedul Google Merchant si datele structurate ale paginii.
+import { isValidGtin } from "@/lib/gtin";
+import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, combinatiiActiveUnice } from "@/lib/storefront/variants";
 
 const CURRENCY = "RON";
 
@@ -30,6 +33,9 @@ export interface CatalogProduct {
   track_inventory: boolean;
   stock_quantity: number | null;
   page_sections?: unknown;
+  is_bundle?: boolean;
+  /** Verdictul `disponibilitatePachet` pentru pachete. Calculat de apelant. */
+  pachetDisponibil?: boolean;
 }
 
 // Per-product Google/Meta attribute overrides, stored in page_sections.google
@@ -76,16 +82,6 @@ function plainText(html: string | null, fallback: string): string {
   return (text || fallback).slice(0, 5000);
 }
 
-// GTIN: 8/12/13/14 digits with a valid mod-10 check digit (invalid -> dropped).
-function isValidGtin(raw: string | undefined): boolean {
-  const s = (raw ?? "").replace(/\s/g, "");
-  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
-  const d = s.split("").map(Number);
-  const check = d.pop()!;
-  const sum = d.reverse().reduce((acc, n, i) => acc + n * (i % 2 === 0 ? 3 : 1), 0);
-  return (10 - (sum % 10)) % 10 === check;
-}
-
 const CONDITIONS = new Set(["new", "refurbished", "used"]);
 const GENDERS = new Set(["male", "female", "unisex"]);
 const AGE_GROUPS = new Set(["adult", "kids", "toddler", "infant", "newborn"]);
@@ -125,10 +121,21 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
 
   const basePrice = Number(product.price) || 0;
   const baseCompare = product.compare_at_price != null ? Number(product.compare_at_price) : null;
-  const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
+  /*
+   * Pachetul se scrie cu `track_inventory: false`, deci prima ramura era mereu
+   * adevarata si feedul anunta „in stock" orice pachet — inclusiv unul cu toate
+   * componentele sterse. Disponibilitatea lui vine din componente, si se
+   * primeste calculata: aici nu exista acces la baza.
+   */
+  const inStock = product.is_bundle
+    ? product.pachetDisponibil !== false
+    : (!product.track_inventory || (product.stock_quantity ?? 0) > 0);
 
   const variants = parseVariants(product.page_sections);
-  const enabled = variants?.combinations.filter((c) => c.enabled && c.title) ?? [];
+  // Cate o oferta pe TITLU, nu pe rand: titlurile duplicate au si `id` duplicat,
+  // deci a doua oferta o suprascria pe prima la Google (acelasi `offerId`) si
+  // feedul publica alt pret decat pagina. Prima castiga, ca peste tot.
+  const enabled = combinatiiActiveUnice(variants);
 
   if (!variants || enabled.length === 0) {
     const hasSale = baseCompare != null && baseCompare > basePrice;
@@ -196,10 +203,13 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
       imageLink: combo.image || primaryImage,
       additionalImageLinks: additional,
       brand,
-      // No per-variant identifiers in the model; a shared GTIN across variants is a
-      // duplicate-GTIN error, so variants omit gtin/mpn.
-      gtin: undefined,
-      mpn: undefined,
+      // Codul de bare AL COMBINATIEI: fiecare culoare sau marime isi are codul
+      // ei. Codul de pe produs NU se foloseste aici nici ca rezerva — pus pe mai
+      // multe variante, ar fi cod duplicat, iar Meta le respinge.
+      gtin: isValidGtin(combo.gtin) ? combo.gtin!.replace(/\s/g, "") : undefined,
+      // `mpn` se poate repeta intre variantele aceluiasi model, deci ramane cel
+      // de pe produs.
+      mpn: g.mpn?.trim() || undefined,
       googleProductCategory: googleCat,
       productType,
       color: slots.color ?? (g.color?.trim() || undefined),

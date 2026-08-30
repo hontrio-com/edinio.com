@@ -1,0 +1,37 @@
+# ⚠ Baseline-ul de schema se compara OCTET CU OCTET, deci finalul de linie nu e cosmetic.
+#
+# `scripts/schema-baseline.sh --check` cere dump-ul din productie si face `diff` intre el si
+# fisierul din arborele de lucru. Dump-ul vine din Postgres cu LF. Depozitul are insa
+# `core.autocrlf=true`, iar fara regula de mai jos un `clone` sau un `checkout` proaspat scrie
+# fisierul pe disc cu CRLF — si atunci `--check` raporteaza DERIVA PE TOT FISIERUL (mii de
+# randuri sterse si adaugate) pentru o schema IDENTICA.
+#
+# Nu e o teama teoretica: aceeasi familie de defecte a costat deja de doua ori.
+#   * 15.08.2026 — scriptul scria prin `sys.stdout.write`, care pe Windows deschide iesirea in
+#     mod TEXT si traduce fiecare LF in CRLF. Reparat atunci cu `.buffer`, adica pe capatul de
+#     SCRIERE. Capatul de CHECKOUT a ramas deschis pana acum.
+#   * Tot atunci, md5-ul fisierului nu se potrivea cu `md5(genereaza_schema_baseline())` rulat
+#     in baza, din aceeasi cauza — si a pus pe ganduri degeaba.
+#
+# Regula e ingusta dinadins: NUMAI fisierul care se compara octet cu octet. O regula lata
+# (`*.sql text eol=lf`) ar renormaliza si celelalte ~90 de migratii la urmatorul checkout,
+# adica un diff mare si fara legatura cu nimic.
+migrations/000-schema-baseline.sql text eol=lf
+
+# ⚠ A TREIA OARA, 23.08.2026: fisierele care RULEAZA PE LINUX.
+#
+# `scripts/emag-proxy/` se copiaza cu `scp` pe serverul de iesire catre eMAG si se
+# executa acolo. Cu CRLF, bash citeste prima linie a scriptului ca `set -euo pipefail`
+# si raspunde „invalid option name" — iar `` face terminalul sa SUPRASCRIE randul, deci
+# pana si mesajul de eroare iese ilizibil („: invalid option namealeaza.sh: line 19").
+#
+# Pierdut in productie, la mijlocul instalarii, tocmai fiindca regula de deasupra e
+# ingusta si nu acoperea decat un singur fisier.
+#
+# `squid.conf` intra si el: nu e executat, dar e citit de squid, iar un `` la capatul
+# unei valori ajunge PARTE DIN VALOARE — o gazda din lista alba ar fi devenit
+# „marketplace-api.emag.ro" si nu s-ar mai fi potrivit cu nimic. Adica proxy-ul ar fi
+# refuzat exact cererile pentru care exista, fara ca nimic sa dea eroare.
+#
+# Regula ramane ingusta: numai dosarul asta, nu `*.sh` peste tot.
+scripts/emag-proxy/** text eol=lf

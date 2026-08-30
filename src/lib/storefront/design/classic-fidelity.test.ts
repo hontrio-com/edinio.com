@@ -152,7 +152,17 @@ function randareaDeAzi(ctx: DesignContext) {
     reviews: reviews?.enabled === true,
     gallery: f.show_gallery !== false,
     about: f.show_about !== false,
-    contact: f.show_contact !== false,
+    /*
+     * SINGURA abatere voita de la randarea de dinainte.
+     *
+     * Contactul era pornit implicit, ca galeria si descrierea. Acum e opt-in:
+     * telefonul, emailul si orasul sunt deja in coloana Contact din footer, iar
+     * identitatea firmei cu tot cu sediile e in blocul legal de sub el, care nici
+     * nu se poate ascunde. Repetate si in corpul paginii, doar lungeau pagina.
+     *
+     * Restul liniilor de aici ramin oglinda fidela a ce se randa inainte.
+     */
+    contact: f.show_contact === true,
   };
 }
 
@@ -215,3 +225,32 @@ for (const { nume, ctx } of FIXTURES) {
     }
   });
 }
+
+// ── Contactul e opt-in ─────────────────────────────────────────────────────
+//
+// Test separat, cu numele intentiei, ca schimbarea sa nu poata fi intoarsa din
+// greseala la un `notFalse` odata cu alta modificare in `defaults.ts`.
+
+test("contactul e OPRIT cand nimeni nu l-a cerut", () => {
+  for (const features of [{}, { show_contact: undefined }, { show_gallery: true }]) {
+    const d = buildClassicDesign(base({ features }));
+    assert.equal(find(d.home, "contact")?.enabled, false, JSON.stringify(features));
+  }
+});
+
+test("contactul apare doar cand e pornit explicit", () => {
+  const d = buildClassicDesign(base({ features: { show_contact: true } }));
+  assert.equal(find(d.home, "contact")?.enabled, true);
+});
+
+test("un `false` salvat de dinainte tine sectiunea oprita", () => {
+  const d = buildClassicDesign(base({ features: { show_contact: false } }));
+  assert.equal(find(d.home, "contact")?.enabled, false);
+});
+
+test("galeria si descrierea RAMAN pornite implicit", () => {
+  // Doar contactul s-a schimbat. Daca cineva atinge si pe celelalte doua, se vede.
+  const d = buildClassicDesign(base());
+  assert.equal(find(d.home, "gallery")?.enabled, true, "galeria");
+  assert.equal(find(d.home, "about")?.enabled, true, "descrierea");
+});

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logError } from "@/lib/error-logger";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { sendAbandonedCartRecovery } from "@/lib/email";
@@ -10,33 +12,77 @@ import { storeBaseUrl, PLATFORM_ORIGIN } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
 import {
   readAutomationConfig, isQuietHour, buildRecoverUrl, defaultRecoverySms, interpolateRecoveryMessage,
-  ABANDON_MINUTES, type AbandonedCartItem,
+  ABANDON_MINUTES, cosRecuperabil, type AbandonedCartItem,
 } from "@/lib/abandoned-cart";
+import { urlDezabonare } from "@/lib/recovery-unsubscribe";
 
 type Admin = SupabaseClient<Database>;
 
 function verifyCron(req: NextRequest): boolean {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  return secret === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 // Advance a cart's automation pointer; record the send when a channel fired.
-async function advance(
+/**
+ * Revendica pasul urmator al unui cos, prin compare-and-swap.
+ *
+ * ═══ SE REVENDICA INAINTE DE TRIMITERE, NU DUPA ═══
+ *
+ * Pana acum se trimitea intai si se avansa pe urma, iar rezultatul scrierii nici
+ * nu se verifica. Doua defecte dintr-o data:
+ *
+ *   * scrierea pica -> pasul ramane pe loc -> la urmatoarea rulare (15 minute)
+ *     ACELASI email pleaca din nou, si tot asa;
+ *   * doua rulari care se suprapun apuca amandoua acelasi cos inainte ca vreuna
+ *     sa-l avanseze, si clientul primeste mesajul de doua ori.
+ *
+ * Inversat, cel mai rau caz devine un email de marketing PIERDUT — mult mai ieftin
+ * decat unul trimis de doua ori unui om care abia si-a abandonat cosul.
+ *
+ * `.eq("automation_step", pasCurent)` e chiar compare-and-swap-ul: daca alt
+ * lucrator a luat cosul intre timp, nu se potriveste niciun rand si primim
+ * `false`. Fara lease, fara tabela noua, o singura instructiune.
+ */
+async function revendicaPasul(
   admin: Admin, cartId: string,
-  cart: { automation_step: number; recovery_count: number },
-  now: Date, channel?: "email" | "sms",
-): Promise<void> {
-  const patch: Record<string, unknown> = {
-    automation_step: (cart.automation_step ?? 0) + 1,
-    last_recovery_at: now.toISOString(),
-    updated_at: now.toISOString(),
-  };
-  if (channel) {
-    patch.recovery_count = (cart.recovery_count ?? 0) + 1;
-    if (channel === "email") patch.recovery_email_sent_at = now.toISOString();
-    else patch.recovery_sms_sent_at = now.toISOString();
+  cart: { automation_step: number },
+  now: Date,
+): Promise<boolean> {
+  const pasCurent = cart.automation_step ?? 0;
+  const { data, error } = await admin
+    .from("abandoned_carts")
+    .update({
+      automation_step: pasCurent + 1,
+      last_recovery_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    } as never)
+    .eq("id", cartId)
+    .eq("automation_step", pasCurent)
+    .select("id");
+  if (error) {
+    // Nu stim daca am luat pasul, deci NU trimitem: la indoiala, tacere.
+    console.error("[abandoned-recovery] revendicarea pasului a esuat:", cartId, error.message);
+    return false;
   }
-  await admin.from("abandoned_carts").update(patch as never).eq("id", cartId);
+  return (data ?? []).length > 0;
+}
+
+/** Marcheaza CE s-a trimis, dupa ce chiar a plecat. Pasul e deja revendicat. */
+async function marcheazaTrimis(
+  admin: Admin, cartId: string,
+  cart: { recovery_count: number }, now: Date, channel: "email" | "sms",
+): Promise<void> {
+  const patch: Record<string, unknown> = { recovery_count: (cart.recovery_count ?? 0) + 1 };
+  if (channel === "email") patch.recovery_email_sent_at = now.toISOString();
+  else patch.recovery_sms_sent_at = now.toISOString();
+  const { error } = await admin.from("abandoned_carts").update(patch as never).eq("id", cartId);
+  if (error) {
+    // Contorul ramane in urma, dar pasul e avansat, deci NU se retrimite nimic.
+    // Se vede in loguri fiindca raportarea catre comerciant iese mai mica.
+    console.error("[abandoned-recovery] marcarea trimiterii a esuat:", cartId, error.message);
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -100,14 +146,33 @@ export async function GET(req: NextRequest) {
   }
   const planMap = new Map(profiles.map((p) => [p.id, p.plan]));
 
-  // Optout-urile pot fi multe per magazin — ferestre .range() per chunk.
+  /*
+   * ═══ DEZABONARILE: O CITIRE PICATA OPRESTE TOT ═══
+   *
+   * `const { data } = ...` fara `error`: la o interogare picata iesea o lista
+   * GOALA, iar `optoutSet` gol inseamna „nimeni nu s-a dezabonat". Adica exact
+   * oamenii care ceruse sa nu mai fie contactati primeau email.
+   *
+   * Asta nu e o scapare tehnica ca celelalte — e o promisiune incalcata, si una
+   * pe care legea o ia in serios. Deci aici nu se degradeaza nimic: daca nu putem
+   * citi dezabonarile, cronul se opreste si nu pleaca NICIUN mesaj. Se reia peste
+   * un sfert de ora.
+   */
   const optouts: { business_id: string; email: string }[] = [];
   for (let i = 0; i < bizIds.length; i += 500) {
     const chunk = bizIds.slice(i, i + 500);
     for (let from = 0; ; from += 1000) {
-      const { data } = await admin
+      const { data, error } = await admin
         .from("recovery_optout").select("business_id, email").in("business_id", chunk)
         .order("business_id").order("email").range(from, from + 999);
+      if (error) {
+        await logError({
+          action: "abandoned-recovery",
+          message: `Lista de dezabonari nu s-a putut citi; NU s-a trimis nimic: ${error.message}`,
+          severity: "critical",
+        });
+        return NextResponse.json({ ok: false, error: "optout indisponibil" }, { status: 503 });
+      }
       optouts.push(...(data ?? []));
       if (!data || data.length < 1000) break;
     }
@@ -123,13 +188,19 @@ export async function GET(req: NextRequest) {
     const smsoReady = !!(store.smso?.enabled && store.smso.api_key && store.smso.sender_id);
     const noticeReady = !!(store.notice?.enabled && store.notice.api_token && store.notice.abandoned?.enabled);
 
-    const { data: carts } = await admin
+    const { data: carts, error: eCarts } = await admin
       .from("abandoned_carts")
       .select("id, customer_name, email, phone, items, subtotal, created_at, automation_step, recovery_count, last_recovery_at")
       .eq("business_id", store.businessId)
       .eq("status", "open")
       .lt("last_activity_at", thresholdIso)
       .limit(500);
+      if (eCarts) {
+        // Magazinul asta se sare, dar SE SPUNE: altfel un magazin cu o citire
+        // picata n-ar mai trimite niciodata nimic si nimeni n-ar sti de ce.
+        await logError({ action: "abandoned-recovery", message: `cosurile nu s-au putut citi: ${eCarts.message}`, businessId: store.businessId, severity: "critical" });
+        continue;
+      }
 
     for (const cart of carts ?? []) {
       const step = store.automation.steps[cart.automation_step];
@@ -146,26 +217,47 @@ export async function GET(req: NextRequest) {
 
       if (step.channel === "email") {
         const optedOut = !!(cart.email && optoutSet.has(`${store.businessId}:${cart.email.toLowerCase()}`));
-        if (!cart.email || optedOut) { await advance(admin, cart.id, cart, now); continue; }
+        if (!cart.email || optedOut) { await revendicaPasul(admin, cart.id, cart, now); continue; }
+        // Preturile din `cart.items` sunt cele inghetate in localStorage la
+        // captura. Emailul e semnat de magazin, deci nu are voie sa republice un
+        // pret pe care magazinul nu-l mai onoreaza: se repretuiesc din catalog,
+        // prin acelasi calcul ca linkul de recuperare din email.
+        const proaspat = await cosRecuperabil(admin, store.businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
+        // Niciun produs recuperabil: linkul ar duce clientul la un cos gol. Se
+        // avanseaza pasul fara sa se numere o trimitere, ca secventa sa nu se
+        // blocheze pe cosul asta la fiecare rulare orara.
+        if (proaspat.items.length === 0) { await revendicaPasul(admin, cart.id, cart, now); continue; }
+        // Pasul se ia INAINTE de trimitere. Daca alt lucrator l-a luat deja, se
+        // sare: asa nu poate pleca acelasi mesaj de doua ori.
+        if (!(await revendicaPasul(admin, cart.id, cart, now))) continue;
         try {
           const emailSender = await getStoreEmailSender(admin, store.businessId);
           await sendAbandonedCartRecovery(cart.email, {
             storeName,
             recoverUrl,
             customerName: cart.customer_name,
-            items: (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[],
-            total: Number(cart.subtotal || 0),
+            items: proaspat.items,
+            total: proaspat.total,
             color: biz.primary_color ?? "#1AB554",
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,
-            unsubscribeUrl: `${PLATFORM_ORIGIN}/api/recovery/unsubscribe?b=${store.businessId}&e=${encodeURIComponent(cart.email)}`,
+            unsubscribeUrl: urlDezabonare(PLATFORM_ORIGIN, store.businessId, cart.email),
           }, emailSender);
-          await advance(admin, cart.id, cart, now, "email");
+          await marcheazaTrimis(admin, cart.id, cart, now, "email");
           sent++;
-        } catch { /* leave for next run */ }
+        } catch {
+          /*
+           * Trimiterea a picat DUPA ce pasul a fost revendicat, deci mesajul asta
+           * e pierdut si nu se reincearca. Aleg pierderea: alternativa —
+           * intoarcerea pasului — ar face ca doua rulari suprapuse sa poata trimite
+           * de doua ori, iar un email de marketing dublat unui om care abia si-a
+           * abandonat cosul costa mai mult decat unul lipsa.
+           */
+        }
       } else {
-        if (!cart.phone || (!smsoReady && !noticeReady)) { await advance(admin, cart.id, cart, now); continue; }
+        if (!cart.phone || (!smsoReady && !noticeReady)) { await revendicaPasul(admin, cart.id, cart, now); continue; }
         if (isQuietHour(store.automation.quiet_hours, nowHour)) continue; // defer SMS
+        if (!(await revendicaPasul(admin, cart.id, cart, now))) continue;
         const body = step.message
           ? `${interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName })} ${recoverUrl}`
           : defaultRecoverySms({ name: cart.customer_name, storeName, url: recoverUrl, code: step.discount_code ?? null });
@@ -180,7 +272,7 @@ export async function GET(req: NextRequest) {
           });
           smsOk = res.success;
         }
-        if (smsOk) { await advance(admin, cart.id, cart, now, "sms"); sent++; }
+        if (smsOk) { await marcheazaTrimis(admin, cart.id, cart, now, "sms"); sent++; }
       }
     }
   }

@@ -12,7 +12,33 @@ import { getShippingOptions, getLockers, type ShippingOption, type LockerItem } 
  * nevoie de ea si la initializarea starii, inainte de corpul componentei.
  */
 function optionKey(o: ShippingOption) {
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}`;
+  /*
+   * ⚠ Cheia trebuie sa cuprinda TOT ce deosebeste doua oferte ale aceluiasi
+   * curier. La Innoship asta inseamna trei campuri: el intoarce cate o oferta
+   * per curier real, toate sub acelasi `courier: "innoship"` si acelasi
+   * `deliveryType: "address"` — deci fara ele s-ar prabusi una peste alta, iar
+   * clientul ar alege una si ar primi alta.
+   */
+  /*
+   * ⚠ La SmartShip sunt DOUA parti, si a doua e usor de trecut cu vederea: cu
+   * `show_byoc` acelasi curier apare o data pe contractul comerciantului si o
+   * data pe cel SmartShip, la preturi diferite. Iar reteaua de lockere (easybox
+   * / FANbox) tine tot de cheie: sunt nomenclatoare separate.
+   */
+  /*
+   * ⚠ La FedEx deosebirea e SERVICIUL: `FEDEX_PRIORITY`, `FEDEX_PRIORITY_EXPRESS`
+   * si `FEDEX_FIRST` vin toate sub `courier: "fedex"` si `deliveryType: "address"`,
+   * la preturi si termene diferite. Fara el, cele trei s-ar prabusi una peste alta.
+   */
+  /*
+   * ⚠ La DHL deosebirea e PRODUSUL, si acolo miza e mai mare decat o cheie duplicata:
+   * `productCode` e camp OBLIGATORIU la emitere, nu unul optional ca la UPS. Cinci
+   * produse (Express Worldwide, Economy Select, Express 9:00, Express 12:00, Domestic
+   * Express) vin toate sub `courier: "dhl"` si `deliveryType: "address"`, la preturi si
+   * termene diferite. Pierdut aici, produsul nu ajunge pe comanda si DHL REFUZA cererea
+   * de AWB — nu factureaza tacit cel mai scump, cum ar face UPS.
+   */
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}::${o.dhlProductCode ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -27,18 +53,62 @@ export interface CourierSelection {
   // the locker's locality, not the customer's, so they must survive into the order.
   lockerCity?: string;
   lockerCounty?: string;
+  /** Codul postal al punctului; GLS il cere obligatoriu pe adresa de livrare. */
+  lockerPostCode?: string;
   wootServiceId?: number;
   wootCourierName?: string;
   wootServiceName?: string;
   coleteServiceId?: number;
   coleteServiceName?: string;
+  /* ⚠ La eColet cheia serviciului e un SLUG, nu un id numeric. */
+  ecoletServiceSlug?: string;
+  ecoletCourierName?: string;
+  ecoletServiceName?: string;
+  /* ⚠ Cheia ofertei Innoship are TREI parti. Vezi . */
+  innoshipCourierId?: number;
+  innoshipServiceId?: number;
+  innoshipOptionId?: string;
+  innoshipCourierName?: string;
+  innoshipServiceName?: string;
+  /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe care a
+     fost cotata. Vezi lib/smartship/preturi.ts. */
+  smartshipCourierId?: number;
+  smartshipCourierName?: string;
+  smartshipOwnContract?: boolean;
+  /** Care retea de lockere: easybox (Sameday) sau FANbox (FAN Courier). */
+  smartshipLockerNet?: "easybox" | "fanbox";
+  /* ⚠ Cheia ofertei Shipo are O SINGURA parte, dar ea nu e curierul: e serviciul.
+     Acelasi curier apare la adresa, in locker si in PUDO, la preturi diferite,
+     iar `rate_id` e si identitatea ofertei, si ce se trimite la emitere.
+     Vezi lib/shipo/preturi.ts. */
+  shipoRateId?: number;
+  shipoCourierSlug?: string;
+  shipoCourierName?: string;
+  /* ⚠ Cheia ofertei FedEx e SERVICIUL, si e de ajuns: FedEx e transportator, nu
+     broker, deci acelasi `serviceType` nu apare de doua ori. Vezi lib/fedex/preturi.ts. */
+  fedexServiceType?: string;
+  fedexServiceName?: string;
+  /* ⚠ Cheia ofertei UPS e CODUL SERVICIULUI, si e de ajuns: UPS e transportator, nu
+     broker, deci acelasi cod nu apare de doua ori. Pierdut, reemiterea ar pleca pe
+     implicitul LOR — „UPS Express", cel mai scump produs. Vezi lib/ups/preturi.ts. */
+  upsServiceCode?: string;
+  upsServiceName?: string;
+  /* ⚠ Cheia ofertei DHL e CODUL PRODUSULUI, si spre deosebire de UPS nu e o comoditate:
+     `productCode` e in `required` la emitere, deci pierdut aici AWB-ul nu se mai poate
+     face deloc si comerciantul afla abia la expediere. Vezi lib/dhl/preturi.ts.
+     `dhlLocalProductCode` merge la pachet cu el: DHL intoarce si un cod local pe
+     livrarile interne, iar cele doua se trimit impreuna la creare. */
+  dhlProductCode?: string;
+  dhlProductName?: string;
+  dhlLocalProductCode?: string;
+  /** Semnatura pretului cotat, dusa mai departe pana la plasarea comenzii. */
+  token?: string;
 }
 
 interface Props {
   businessId: string;
   county: string;
   city: string;
-  weightKg?: number;
   cod?: number;
   color: string;
   /** EU ISO alpha-2 for international; absent or "RO" = domestic. */
@@ -58,7 +128,7 @@ interface Props {
   optiuniDemo?: ShippingOption[];
 }
 
-export function CourierSelector({ businessId, county, city, weightKg, cod, color, country, postCode, cart, subtotal, onSelect, optiuniDemo }: Props) {
+export function CourierSelector({ businessId, county, city, cod, color, country, postCode, cart, subtotal, onSelect, optiuniDemo }: Props) {
   const [options, setOptions] = useState<ShippingOption[]>(optiuniDemo ?? []);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -86,7 +156,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     // cod is part of the key: COD switches FAN to "Cont Colector" (extra fee)
     // and changes Woot repayment quotes, so prices must refresh with payment.
     if (optiuniDemo) return;
-    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${weightKg ?? ""}::${cod ?? ""}::${subtotal ?? ""}::${cartSig}`;
+    const key = `${country ?? "RO"}::${county}::${city}::${postCode ?? ""}::${cod ?? ""}::${subtotal ?? ""}::${cartSig}`;
     if (!ready) {
       setOptions([]);
       setSelectedKey(null);
@@ -100,29 +170,74 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     const thisReq = ++reqId.current;
     setLoading(true);
     setLoadError(false);
+    /*
+     * ⚠ Ce alesese clientul se tine minte peste reincarcare.
+     *
+     * Reincarcarea se declanseaza si de `cod`, adica de METODA DE PLATA — nu doar
+     * de adresa. Aruncand selectia neconditionat, un simplu clic pe alta metoda de
+     * plata ii schimba clientului si curierul, pe cel mai ieftin din lista (opts
+     * vin sortate dupa pret). La Pall-Ex asta devenea o bucla completa: alegerea
+     * lui scoate rambursul din metodele de plata (Pall-Ex nu incaseaza), schimbarea
+     * metodei schimba `cod`, iar reincercarea arunca tocmai alegerea Pall-Ex si
+     * cadea pe un curier de COLETE — care nu poate duce un palet.
+     *
+     * Se pastreaza deci cheia curenta si se re-potriveste in lista noua; abia daca
+     * optiunea a disparut cu adevarat se cade pe prima.
+     */
+    const cheieAnterioara = selectedKey;
     setSelectedKey(null);
     setSelectedLocker(null);
     onSelect(null);
 
-    getShippingOptions(businessId, { county, city, weightKg, cod, country, postCode, cart, subtotal })
+    getShippingOptions(businessId, { county, city, cod, country, postCode, cart, subtotal })
       .then((opts) => {
         if (thisReq !== reqId.current) return; // stale response
         setOptions(opts);
-        // Auto-select first option
+        // Auto-select: intai ce alesese clientul, si abia apoi prima optiune.
         if (opts.length > 0) {
-          const first = opts[0];
-          const k = optionKey(first);
+          const pastrata = cheieAnterioara
+            ? opts.find((o) => optionKey(o) === cheieAnterioara)
+            : undefined;
+          const ales = pastrata ?? opts[0];
+          const k = optionKey(ales);
           setSelectedKey(k);
           onSelect({
-            courier: first.courier,
-            courierLabel: first.courierLabel,
-            deliveryType: first.deliveryType,
-            price: first.price,
-            wootServiceId: first.wootServiceId,
-            wootCourierName: first.wootCourierName,
-            wootServiceName: first.wootServiceName,
-            coleteServiceId: first.coleteServiceId,
-            coleteServiceName: first.coleteServiceName,
+            courier: ales.courier,
+            courierLabel: ales.courierLabel,
+            deliveryType: ales.deliveryType,
+            price: ales.price,
+            wootServiceId: ales.wootServiceId,
+            wootCourierName: ales.wootCourierName,
+            wootServiceName: ales.wootServiceName,
+            coleteServiceId: ales.coleteServiceId,
+            coleteServiceName: ales.coleteServiceName,
+            ecoletServiceSlug: ales.ecoletServiceSlug,
+            ecoletCourierName: ales.ecoletCourierName,
+            ecoletServiceName: ales.ecoletServiceName,
+            innoshipCourierId: ales.innoshipCourierId,
+            innoshipServiceId: ales.innoshipServiceId,
+            innoshipOptionId: ales.innoshipOptionId,
+            innoshipCourierName: ales.innoshipCourierName,
+            innoshipServiceName: ales.innoshipServiceName,
+            smartshipCourierId: ales.smartshipCourierId,
+            smartshipCourierName: ales.smartshipCourierName,
+            smartshipOwnContract: ales.smartshipOwnContract,
+            smartshipLockerNet: ales.smartshipLockerNet,
+            shipoRateId: ales.shipoRateId,
+            shipoCourierSlug: ales.shipoCourierSlug,
+            shipoCourierName: ales.shipoCourierName,
+            fedexServiceType: ales.fedexServiceType,
+            fedexServiceName: ales.fedexServiceName,
+            upsServiceCode: ales.upsServiceCode,
+            upsServiceName: ales.upsServiceName,
+            /* ⚠ Cele trei campuri DHL se propaga in TOATE CELE TREI locuri de `onSelect`
+               (auto-selectia de aici, alegerea pe adresa si alegerea in punct). Un singur
+               loc uitat pierde produsul exact pe una din cai, iar comenzile venite pe ea
+               ajung la emitere fara `productCode` — adica fara AWB. */
+            dhlProductCode: ales.dhlProductCode,
+            dhlProductName: ales.dhlProductName,
+            dhlLocalProductCode: ales.dhlLocalProductCode,
+            token: ales.token,
           });
         }
       })
@@ -135,7 +250,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         if (thisReq === reqId.current) setLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [county, city, country, postCode, weightKg, cod, subtotal, cartSig]);
+  }, [county, city, country, postCode, cod, subtotal, cartSig]);
 
   // Fetch lockers when a locker option is selected
   useEffect(() => {
@@ -149,7 +264,25 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
     setLockersLoading(true);
     setSelectedLocker(null);
     setLockerSearch("");
-    getLockers(businessId, opt.courier, city, cod)
+    /*
+     * ⚠ Al cincilea argument poarta doua lucruri diferite, dupa curier.
+     *
+     * La SmartShip e RETEAUA de lockere (easybox / FANbox), fiindca sunt
+     * nomenclatoare separate. La Shipo e SERVICIUL (`rate_id`), fiindca acolo
+     * punctele nu se cer pe curier: curierul si tipul punctului sunt deduse de ei
+     * din serviciu, iar doua servicii ale aceluiasi curier dau liste diferite.
+     * Vezi `getLockers` — valoarea se ingusteaza acolo, la primire.
+     */
+    getLockers(
+      businessId, opt.courier, city, cod,
+      /* ⚠ La UPS al cincilea parametru poarta JUDETUL, nu o retea de lockere.
+         `Locator` cere combinatia „City + State/Province" SAU codul postal, iar
+         checkout-ul intern nu cere cod postal — deci judetul e singurul al doilea
+         semnal pe care il avem. Se ingusteaza tot acolo, la primire. */
+      opt.courier === "shipo" ? String(opt.shipoRateId ?? "")
+        : opt.courier === "ups" ? county
+          : opt.smartshipLockerNet,
+    )
       .then(setLockers)
       .catch(() => setLockers([]))
       .finally(() => setLockersLoading(false));
@@ -174,6 +307,29 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         wootServiceName: opt.wootServiceName,
         coleteServiceId: opt.coleteServiceId,
         coleteServiceName: opt.coleteServiceName,
+        ecoletServiceSlug: opt.ecoletServiceSlug,
+        ecoletCourierName: opt.ecoletCourierName,
+        ecoletServiceName: opt.ecoletServiceName,
+        innoshipCourierId: opt.innoshipCourierId,
+        innoshipServiceId: opt.innoshipServiceId,
+        innoshipOptionId: opt.innoshipOptionId,
+        innoshipCourierName: opt.innoshipCourierName,
+        innoshipServiceName: opt.innoshipServiceName,
+        smartshipCourierId: opt.smartshipCourierId,
+        smartshipCourierName: opt.smartshipCourierName,
+        smartshipOwnContract: opt.smartshipOwnContract,
+        smartshipLockerNet: opt.smartshipLockerNet,
+        shipoRateId: opt.shipoRateId,
+        shipoCourierSlug: opt.shipoCourierSlug,
+        shipoCourierName: opt.shipoCourierName,
+        fedexServiceType: opt.fedexServiceType,
+        fedexServiceName: opt.fedexServiceName,
+        upsServiceCode: opt.upsServiceCode,
+        upsServiceName: opt.upsServiceName,
+        dhlProductCode: opt.dhlProductCode,
+        dhlProductName: opt.dhlProductName,
+        dhlLocalProductCode: opt.dhlLocalProductCode,
+        token: opt.token,
       });
     }
   }
@@ -193,6 +349,29 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
         lockerAddress: locker.address,
         lockerCity: locker.city,
         lockerCounty: locker.county,
+        lockerPostCode: locker.postCode,
+        /* ⚠ La SmartShip optiunea de locker POARTA curierul (12 easybox / 3
+           FANbox) si reteaua. Pierdute aici, emiterea n-ar mai sti cu ce curier
+           sa trimita coletul in punctul ales de client. */
+        smartshipCourierId: opt.smartshipCourierId,
+        smartshipCourierName: opt.smartshipCourierName,
+        smartshipOwnContract: opt.smartshipOwnContract,
+        smartshipLockerNet: opt.smartshipLockerNet,
+        shipoRateId: opt.shipoRateId,
+        shipoCourierSlug: opt.shipoCourierSlug,
+        shipoCourierName: opt.shipoCourierName,
+        fedexServiceType: opt.fedexServiceType,
+        fedexServiceName: opt.fedexServiceName,
+        upsServiceCode: opt.upsServiceCode,
+        upsServiceName: opt.upsServiceName,
+        /* ⚠ Se propaga si pe calea „punct", desi DHL nu ofera livrare in punct la noi.
+           Ramura asta se atinge cand comerciantul are activat si un curier cu lockere:
+           `opt` e mereu optiunea selectata, iar campurile goale nu strica nimic. Ce ar
+           strica e sa lipseasca, daca DHL capata vreodata puncte. */
+        dhlProductCode: opt.dhlProductCode,
+        dhlProductName: opt.dhlProductName,
+        dhlLocalProductCode: opt.dhlLocalProductCode,
+        token: opt.token,
       });
     }
   }
@@ -231,6 +410,22 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
 
   const selectedOpt = options.find((o) => optionKey(o) === selectedKey);
   const isLockerSelected = selectedOpt?.deliveryType === "locker";
+
+  /*
+   * ⚠ La Posta Romana punctul NU e un locker, e un OFICIU POSTAL.
+   *
+   * Livrarea „post-restant" merge pe acelasi drum ca lockerele (`deliveryType:
+   * "locker"`, alegerea in `locker_id`), fiindca pentru cumparator arata la fel:
+   * alege un loc de unde isi ia coletul. Dar cuvantul nu se poate imprumuta —
+   * „Selecteaza un locker" pentru un ghiseu de posta il pune pe om sa caute un
+   * dulap care nu exista.
+   *
+   * Se schimba DOAR substantivul, si doar pentru Posta: ceilalti curieri raman
+   * exact cum erau.
+   */
+  const laOficiuPostal = selectedOpt?.courier === "posta";
+  const punctul = laOficiuPostal ? "oficiu poștal" : "locker";
+  const punctele = laOficiuPostal ? "oficii poștale" : "lockere";
 
   return (
     <div className="space-y-2">
@@ -303,7 +498,10 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground">{opt.courierLabel}</p>
-              <p className="text-xs text-muted-foreground">Ridicare din locker</p>
+              {/* Per OPTIUNE, nu dupa cea selectata: randul asta se vede si inainte de a alege. */}
+              <p className="text-xs text-muted-foreground">
+                {opt.courier === "posta" ? "Ridicare de la oficiu poștal" : "Ridicare din locker"}
+              </p>
             </div>
             <div className="text-right shrink-0">
               <p className="text-sm font-bold" style={{ color: selected ? color : "var(--color-foreground)" }}>
@@ -334,11 +532,11 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
           {lockersLoading ? (
             <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-muted/40">
               <Loader2 size={14} className="animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Se incarca lockerele...</span>
+              <span className="text-xs text-muted-foreground">Se incarca {punctele}...</span>
             </div>
           ) : lockers.length === 0 ? (
             <div className="p-3 rounded-lg border border-warning/20 bg-warning/10">
-              <p className="text-xs text-warning">Nu au fost gasite lockere in aceasta localitate.</p>
+              <p className="text-xs text-warning">Nu au fost gasite {punctele} in aceasta localitate.</p>
             </div>
           ) : (
             <div className="relative">
@@ -354,7 +552,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
               >
                 <MapPin size={14} className="text-muted-foreground shrink-0" />
                 <span className="flex-1 text-sm truncate" style={{ color: selectedLocker ? "var(--color-foreground)" : "var(--color-muted-foreground)" }}>
-                  {selectedLocker ? selectedLocker.name : "Selecteaza un locker..."}
+                  {selectedLocker ? selectedLocker.name : `Selecteaza un ${punctul}...`}
                 </span>
                 <ChevronDown size={14} className="text-muted-foreground shrink-0" />
               </button>
@@ -373,7 +571,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
                       type="text"
                       value={lockerSearch}
                       onChange={(e) => setLockerSearch(e.target.value)}
-                      placeholder="Cauta locker..."
+                      placeholder={`Cauta ${punctul}...`}
                       className="flex-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none bg-transparent"
                     />
                     {lockerSearch && (
@@ -385,7 +583,7 @@ export function CourierSelector({ businessId, county, city, weightKg, cod, color
                   {/* List */}
                   <div className="overflow-y-auto max-h-52">
                     {filteredLockers.length === 0 ? (
-                      <p className="text-xs text-muted-foreground p-3 text-center">Niciun locker gasit</p>
+                      <p className="text-xs text-muted-foreground p-3 text-center">Niciun rezultat</p>
                     ) : (
                       filteredLockers.slice(0, 50).map((locker) => (
                         <button

@@ -2,12 +2,17 @@
 
 import { createClient } from "@/lib/supabase/server";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
+import { getProductPriceRange } from "@/lib/utils/product-price";
 
-const COLS = "id, name, slug, price, compare_at_price, images, category, is_featured";
+// `page_sections` e cerut pentru intervalul de pret: fara el, previzualizarea din
+// page-builder ar arata pretul de baza acolo unde pagina publicata arata minimul
+// vandabil, si comerciantul ar aseza blocul dupa un numar care nu se incaseaza.
+const COLS = "id, name, slug, price, compare_at_price, images, category, is_featured, page_sections";
 
 function toPageProduct(p: {
   id: string; name: string; slug: string | null; price: number | string;
-  compare_at_price: number | string | null; images: unknown; category: string | null; is_featured: boolean | null;
+  compare_at_price: number | string | null; images: unknown; category: string | null;
+  is_featured: boolean | null; page_sections?: unknown;
 }): PageProduct {
   return {
     id: p.id,
@@ -18,6 +23,11 @@ function toPageProduct(p: {
     images: Array.isArray(p.images) ? (p.images as unknown[]).map(String).filter(Boolean) : [],
     category: p.category,
     is_featured: !!p.is_featured,
+    // `page_sections` se CERE (pentru interval) dar NU se trimite inapoi:
+    // selectorul citeste doar id, nume si prima imagine, iar blob-ul e in medie
+    // 3 KB pe rand — 75 KB la fiecare cautare si pana la 311 KB la incarcarea
+    // blocului.
+    price_range: getProductPriceRange(Number(p.price), p.page_sections ?? null),
   };
 }
 

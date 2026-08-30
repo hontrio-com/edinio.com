@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCargusAwbPdf, type CargusConfig } from "@/lib/cargus";
 
 export async function GET(req: NextRequest) {
@@ -20,8 +21,13 @@ export async function GET(req: NextRequest) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
 
+  // Configul se citeste cu service role: vederea public.store_settings nu mai
+  // decripteaza pentru `authenticated`, iar cu parola `enc.v1.…` Cargus nu ar
+  // mai da PDF-ul AWB-ului. Service role OCOLESTE RLS — proprietatea magazinului
+  // e verificata chiar deasupra.
+  const admin = createAdminClient();
   const [{ data: settings }, { data: order }] = await Promise.all([
-    supabase.from("store_settings").select("cargus_config").eq("business_id", businessId).single(),
+    admin.from("store_settings").select("cargus_config").eq("business_id", businessId).single(),
     supabase.from("orders").select("cargus_awb_number").eq("id", orderId).eq("business_id", businessId).single(),
   ]);
 

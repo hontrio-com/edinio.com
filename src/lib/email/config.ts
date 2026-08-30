@@ -50,6 +50,63 @@ export interface StoreEmailSender {
   smtp?: SmtpConfig;      // present only when SMTP is enabled + complete -> custom send
   branding: EmailBranding;
   templates: Partial<Record<EmailTemplateKind, EmailTemplateOverride>>;
+  /**
+   * Unde ajung raspunsurile clientului.
+   *
+   * Adresa de expediere ramane a Edinio cand magazinul n-are SMTP propriu, si nu
+   * are cum sa fie altfel: trimisa de pe domeniul lor prin serverul nostru, n-ar
+   * trece de SPF si DKIM si ar ajunge la spam. Dar clientul care apasa
+   * „Raspunde" trebuie sa scrie COMERCIANTULUI, nu intr-o cutie no-reply.
+   */
+  replyTo?: string;
+}
+
+/**
+ * Ce scrie la expeditor: numele magazinului, adresa data.
+ *
+ * NUMELE e al magazinului, adresa ramane a Edinio cand comerciantul n-are server
+ * propriu de email. Adresa nu are cum sa fie a lui: trimisa de pe domeniul lui
+ * prin serverul nostru, n-ar trece de SPF si DKIM si ar ajunge la spam. Numele,
+ * in schimb, e liber, si el e ce vede omul in lista de mesaje — adresa apare
+ * abia daca deschide detaliile.
+ *
+ * Fiindca domeniul din `From` ramane acelasi cu cel semnat DKIM, Gmail NU pune
+ * eticheta „via edinio.com". Fortand domeniul comerciantului, ar pune-o, si ar
+ * arata mai rau decat adresa noastra.
+ *
+ * Numele vine de la comerciant si ajunge intr-un ANTET de email, deci se curata
+ * inainte: o linie noua in el ar putea adauga anteturi de la sine (un `Bcc`
+ * catre altcineva), iar ghilimelele si parantezele unghiulare rup sintaxa
+ * adresei si mesajul nu mai pleaca deloc.
+ */
+export function fromLine(storeName: string | null | undefined, address: string): string {
+  const nume = (storeName ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/["\\<>]/g, "")
+    // `@` iese si el, desi nu strica sintaxa. Un nume afisat care contine `@`
+    // arata a adresa de email, iar cand acea „adresa" nu se potriveste cu cea
+    // reala, Gmail o trateaza ca imitare de expeditor si pune avertisment sau
+    // duce mesajul la spam. Un singur magazin are asa ceva azi („@Fp smart@"),
+    // dar pretul unei greseli aici e sa nu mai ajunga emailurile deloc.
+    .replace(/@/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 78);
+  return nume ? `"${nume}" <${address}>` : `Edinio.com <${address}>`;
+}
+
+/**
+ * Adresa arata a adresa?
+ *
+ * Conservator dinadins. Ajunge in antetul `Reply-To`, iar o valoare pe care
+ * Resend o respinge nu strica doar antetul: mesajul NU mai pleaca deloc. Nimic
+ * nu valideaza `businesses.email` la scriere, deci un singur camp completat
+ * gresit ar taia toate emailurile catre clientii magazinului aceluia. Azi nu
+ * exista niciunul invalid, dar asta e o stare, nu o garantie.
+ */
+export function looksLikeEmail(raw: string | null | undefined): boolean {
+  const s = (raw ?? "").trim();
+  return s.length <= 254 && /^[^\s@<>",;:\\]+@[^\s@<>",;:\\]+\.[a-zA-Z]{2,}$/.test(s);
 }
 
 export function parseEmailConfig(raw: unknown): EmailConfig {
@@ -69,6 +126,8 @@ export interface SenderBusiness {
   primary_color: string | null;
   slug: string;
   custom_domain: string | null;
+  /** Emailul de contact al comerciantului, folosit ca Reply-To. */
+  email?: string | null;
 }
 
 export function buildStoreSender(emailConfig: EmailConfig, business: SenderBusiness): StoreEmailSender {
@@ -84,6 +143,7 @@ export function buildStoreSender(emailConfig: EmailConfig, business: SenderBusin
       storeUrl: storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain }),
     },
     templates: emailConfig.templates ?? {},
+    replyTo: looksLikeEmail(business.email) ? business.email!.trim() : undefined,
   };
 }
 

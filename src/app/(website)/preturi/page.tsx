@@ -8,6 +8,8 @@ import { PlatformEvent } from "@/components/platform/PlatformEvent";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { PRICING_EYEBROW, PRICING_LEAD } from "@/lib/website/pricing";
 import { siteMetadata } from "@/lib/website/metadata";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 /*
   Metadatele treceau prin obiectul scris de mana, ca la `/contact`, deci adresa
@@ -23,9 +25,23 @@ export const metadata: Metadata = siteMetadata({
 
 const FIRIMITURI = [ACASA, { label: PRICING_EYEBROW }];
 
+/*
+ * Doar `WebPage` + firimituri, fara oferte.
+ *
+ * Ofertele cu abonament stau pe nodul `SoftwareApplication` de pe pagina
+ * principala, si acolo raman: doua adrese care declara amandoua acelasi produs
+ * cu aceleasi preturi ar fi doua entitati care se bat pe acelasi lucru.
+ */
+const jsonLd = paginaSiteJsonLd({
+  cale: "preturi",
+  nume: "Preturi",
+  descriere: metadata.description as string,
+});
+
 export default function PreturiPage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <PlatformEvent event="ViewContent" data={{ content_name: "Preturi", content_category: "pricing" }} />
 
       {/*

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
 import {
-  connectTrendyol, disconnectTrendyol, getTrendyolAddresses, saveTrendyolSettings,
+  connectTrendyol, disconnectTrendyol, getTrendyolAddresses,
+  pornesteSincronizareaAdoptatelor, saveTrendyolSettings,
   subscribeTrendyolWebhook, unsubscribeTrendyolWebhook,
   type TrendyolStatus,
 } from "@/lib/actions/trendyol.actions";
@@ -26,6 +27,32 @@ type Actiune = null | "conectare" | "deconectare" | "setari" | "webhook";
 export function TrendyolClient({ businessId, status }: { businessId: string; status: TrendyolStatus | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  /*
+   * ⚠ Se confirmă înainte. Cele preluate au prețul pus de comerciant DIRECT în panoul
+   * Trendyol, poate dinadins altul decât cel din magazin (comision, concurență).
+   * Aprinderea îi șterge exact acea hotărâre, pe toate deodată.
+   */
+  function pornesteAdoptatele() {
+    /* ⚠ `status?.` fiindca ingustarea de mai jos nu trece in inchidere. */
+    const cate = status?.counts.preluate ?? 0;
+    if (!window.confirm(
+      `Preiei conducerea prețului și stocului pentru ${cate} ${cate === 1 ? "produs" : "produse"}?
+
+`
+      + "De acum valorile din Edinio le vor rescrie pe cele puse de tine în panoul Trendyol.",
+    )) return;
+    startTransition(async () => {
+      const r = await pornesteSincronizareaAdoptatelor(businessId);
+      if ("error" in r) { toast.error(r.error); return; }
+      toast.success(
+        r.cate === 0
+          ? "Nu era nimic de pornit."
+          : `Gata: ${r.cate} ${r.cate === 1 ? "produs își trimite" : "produse își trimit"} de acum prețul și stocul din Edinio.`,
+      );
+      router.refresh();
+    });
+  }
   // Care buton a pornit tranzitia. `useTransition` da un singur `pending` pe toata
   // componenta, deci fara asta salvarea setarilor punea spinner si pe butonul de
   // webhook, de parca s-ar fi intamplat doua lucruri deodata.
@@ -41,8 +68,17 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [shipmentAddressId, setShipmentAddressId] = useState(status?.shipmentAddressId != null ? String(status.shipmentAddressId) : "");
   const [returningAddressId, setReturningAddressId] = useState(status?.returningAddressId != null ? String(status.returningAddressId) : "");
   const [carrierCode, setCarrierCode] = useState(status?.defaultCarrierCode ?? "");
+  /* „" = nu trimitem campul, deci Trendyol pastreaza termenul contului. Vezi eticheta. */
+  const [termenExpediere, setTermenExpediere] = useState(
+    status?.deliveryDuration != null ? String(status.deliveryDuration) : "");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
+  const [autoPublish, setAutoPublish] = useState(status?.autoPublish ?? false);
+  const [taraOrigine, setTaraOrigine] = useState(status?.defaultCountryOfOrigin ?? "");
+  const [facturam, setFacturam] = useState(status?.factureazaClientul ?? false);
   const [addresses, setAddresses] = useState<TrendyolSupplierAddress[]>([]);
+  // Eticheta si butonul de webhook se schimba instant; actiunea reuseste sau nu,
+  // nu are alt rezultat de aratat. La eroare React readuce singur starea reala.
+  const [webhookActiv, aplicaWebhook] = useOptimistic(status?.webhookActive ?? false, (_stare, nou: boolean) => nou);
 
   useEffect(() => {
     if (!status?.connected) return;
@@ -108,8 +144,27 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     startTransition(async () => {
       const res = await saveTrendyolSettings(businessId, {
         shipment_address_id: ship, returning_address_id: ret,
+        /* „" inseamna „las cum e in contul Trendyol", nu zero. Vezi eticheta campului. */
+        delivery_duration: termenExpediere === "" ? null : Number(termenExpediere),
         default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
         auto_sync: autoSync,
+        /*
+         * ⚠ SE TRIMITE CE A BIFAT OMUL (26.08.2026).
+         *
+         * Era `autoSync && autoPublish`, cu explicatia ca „publicarea automata n-are sens fara
+         * sincronizare". A fost adevarat, si a incetat sa fie: coada lasa acum sa treaca un
+         * produs NOU cand `auto_publish` e aprins, chiar cu `auto_sync` stins (`queue.ts`).
+         *
+         * ⚠ Deci ecranul mintea: omul bifa „Publicare automata", vedea bifa ramasa bifata dupa
+         * salvare, si in baza se scria `false`. Comentariul de aici a supravietuit codului pe
+         * care il descria — chiar felul de defect care nu da nicio eroare.
+         *
+         * Cele doua comutatoare sunt acum ce par: unul pentru schimbarile la produsele DEJA
+         * publicate, altul pentru produsele NOI.
+         */
+        auto_publish: autoPublish,
+        default_country_of_origin: taraOrigine,
+        factureaza_clientul: facturam,
       });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
@@ -120,7 +175,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const handleSubscribeWebhook = () => {
     setActiune("webhook");
     startTransition(async () => {
+      aplicaWebhook(true);
       const res = await subscribeTrendyolWebhook(businessId);
+      // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Webhook comenzi activat.");
       router.refresh();
@@ -130,7 +187,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const handleUnsubscribeWebhook = () => {
     setActiune("webhook");
     startTransition(async () => {
+      aplicaWebhook(false);
       const res = await unsubscribeTrendyolWebhook(businessId);
+      // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Webhook dezactivat.");
       router.refresh();
@@ -277,7 +336,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
           {/* Settings */}
           <div className="rounded-xl border border-border bg-surface p-5">
             <h2 className="text-base font-semibold text-foreground mb-4">Setări</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Adresă expediere</label>
                 {addresses.length > 0 ? (
@@ -292,6 +351,29 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   <input type="number" min="0" inputMode="numeric" value={shipmentAddressId} onChange={(e) => setShipmentAddressId(e.target.value)}
                     placeholder="ID adresă" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
                 )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">În câte zile expediezi</label>
+                <select value={termenExpediere} onChange={(e) => setTermenExpediere(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                  {/*
+                    * ⚠ DOUA OPTIUNI, NU O LISTA DE ZILE, si nu din lene.
+                    *
+                    * La eMAG comerciantul alege dintr-o lista pe care ei ne-o dau
+                    * (`/handling_time/read`). Trendyol n-are asa ceva: documentatia lor da inteles
+                    * doar lui `0` („azi in curier") si `1` („cel tarziu maine"), iar OpenAPI-ul
+                    * spune atat, `integer`, fara minim, maxim sau lista. Fraza lor e „poti
+                    * introduce durate in intervalele indicate de echipele de operatiuni" — un
+                    * interval care nu e publicat nicaieri.
+                    *
+                    * Un camp liber ar fi lasat omul sa scrie 3, iar noi n-avem cum sa stim daca
+                    * il primesc. Cand se probeaza pe un cont adevarat si se afla plaja, aici se
+                    * adauga optiuni; pana atunci nu promitem ce nu stim.
+                    */}
+                  <option value="">Cum e setat în contul Trendyol</option>
+                  <option value="0">În aceeași zi</option>
+                  <option value="1">Cel târziu a doua zi</option>
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Adresă retur</label>
@@ -326,9 +408,147 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               „plătiți de Trendyol” își completează singuri AWB-ul; la cei plătiți de tine, trimiți tu numărul AWB din pagina comenzii.
             </p>
 
+            {/*
+              ═══ ⚠ CONDUCTA EXISTA DE-O SAPTAMANA, ROBINETUL NU (26.08.2026) ═══
+
+              `trendyol_listings.country_of_origin`, `config.default_country_of_origin` si
+              `payload.origin` erau toate scrise si legate. Dar nicaieri in panoul Trendyol nu
+              se putea COMPLETA vreuna — deci campul pleca gol la toata lumea, mereu.
+
+              ⚠ Din 23.10.2026 ei il cer obligatoriu. Pana atunci lipsa lui nu strica nimic, si
+              de-aia nu se blocheaza publicarea azi: ar opri magazine care merg, pentru o regula
+              care inca nu e in vigoare.
+
+              ⚠ SI NU SE PUNE „RO" DE LA SINE. Un magazin din Romania vinde hrana facuta in
+              Germania si jucarii facute in China; un „RO" pus de noi peste tot ar fi o
+              declaratie falsa despre marfa lui, nu o completare la indemana.
+            */}
+            <div className="mt-4">
+              <label className="block text-sm text-foreground">
+                Țara de fabricație implicită
+                <input
+                  value={taraOrigine}
+                  onChange={(e) => setTaraOrigine(e.target.value.toUpperCase().slice(0, 2))}
+                  placeholder="ex. DE"
+                  maxLength={2}
+                  className="mt-1 w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono uppercase"
+                />
+              </label>
+              <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                Codul de țară din două litere unde se fabrică marfa, nu unde ești tu. Se
+                folosește la produsele care n-au una a lor. Trendyol o cere obligatoriu de la
+                23 octombrie 2026; lasă câmpul gol dacă produsele tale vin din țări diferite și
+                completeaz-o pe fiecare listare în parte.
+              </p>
+            </div>
+
             <label className="mt-4 flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} className="rounded" />
               Sincronizează automat schimbările de produs, stoc și preț
+            </label>
+
+            {/*
+              ═══ ⚠ BIFA DE DEASUPRA NU E ÎNTREGUL ADEVĂR (24.08.2026) ═══
+
+              Sunt două comutatoare, la două niveluri. Bifa hotărăște dacă integrarea
+              PORNEȘTE la o schimbare. `trendyol_listings.auto_inventory` hotărăște dacă
+              schimbarea AJUNGE la Trendyol, iar la o listare adoptată e stinsă.
+
+              Deci modificarea de preț trece de bifă, intră în coadă, ajunge la
+              `sync.ts:854` și se oprește tăcut: `return null`. Bifa rămâne bifată, coada
+              se golește, zero erori. Din panou arată identic cu „totul e sincronizat".
+
+              ⚠ CE A COSTAT: 29 de listări înghețate la prețul din 19.08, cu bifa pornită.
+              Comerciantul a aflat dintr-o comandă vândută cu 39,99 pentru un produs care
+              în magazin e 43,99. Singurul semn contrar era o bulină „Preluat" pe rândul
+              produsului, în ALTĂ listă, cu explicația într-un tooltip.
+
+              Deci excepția se scrie chiar sub comutatorul pe care îl contrazice.
+            */}
+            {status.counts.preluate > 0 && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                <p>
+                  <strong>
+                    {status.counts.preluate}{" "}
+                    {status.counts.preluate === 1 ? "produs nu ascultă" : "produse nu ascultă"} de
+                    bifa asta.
+                  </strong>{" "}
+                  {status.counts.preluate === 1 ? "E preluat" : "Sunt preluate"} din contul tău
+                  Trendyol, unde {status.counts.preluate === 1 ? "exista" : "existau"} dinainte cu
+                  prețul pus de tine acolo. Edinio nu-l suprascrie fără să ceri, deci prețul lor de
+                  pe Trendyol rămâne cel vechi oricâte modificări faci în magazin.
+                </p>
+                <button
+                  type="button"
+                  onClick={pornesteAdoptatele}
+                  disabled={pending}
+                  className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:bg-transparent dark:hover:bg-amber-900/30"
+                >
+                  Preia conducerea prețului și pentru {status.counts.preluate === 1 ? "el" : "ele"}
+                </button>
+              </div>
+            )}
+
+            {/*
+              ═══ ⚠ LA TRENDYOL, COMERCIANTUL FACTUREAZĂ CLIENTUL FINAL (26.08.2026) ═══
+
+              Codul casei credea opusul — „marketplace-urile facturează ele clientul" — și de-aia
+              niciuna dintre comenzile Trendyol ale comerciantului n-a fost vreodată facturată.
+              Măsurat pe API-ul lor: `invoiceStatus: "NotInvoiced"` și `invoiceNumber: ""` pe
+              toate, iar `invoiceAddress` poartă numele CLIENTULUI.
+
+              ⚠ STINS DIN START, și rămâne alegerea lui: răspunderea fiscală e a comerciantului,
+              iar el poate emite deja facturile astea de mână în altă parte. Pornit de noi, ar
+              ieși două documente fiscale pentru aceeași marfă.
+
+              ⚠ Și se spune că nu se poate desface: ei n-au niciun capăt de corecție sau
+              ștergere, iar la a doua trimitere pe același pachet răspund 409.
+            */}
+            <label className="mt-4 flex items-start gap-2 text-sm text-foreground cursor-pointer">
+              <input
+                type="checkbox" checked={facturam}
+                onChange={(e) => setFacturam(e.target.checked)}
+                className="rounded mt-0.5"
+              />
+              <span>
+                Emite și trimite facturile către Trendyol
+                <span className="block text-[11px] text-muted-foreground">
+                  La Trendyol tu facturezi clientul final, nu marketplace-ul. Cu bifa asta,
+                  Edinio emite factura prin SmartBill, Oblio sau fGO și îi trimite linkul lui
+                  Trendyol, care o arată clientului.
+                </span>
+                <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
+                  Bifeaz-o doar dacă nu emiți deja facturile astea în altă parte: o factură
+                  trimisă la ei nu se mai poate corecta sau șterge.
+                </span>
+              </span>
+            </label>
+
+            <label className="mt-3 flex items-start gap-2 text-sm text-foreground cursor-pointer">
+              <input
+                type="checkbox" checked={autoPublish}
+                onChange={(e) => setAutoPublish(e.target.checked)}
+                className="rounded mt-0.5"
+              />
+              <span>
+                Publicare automată
+                <span className="block text-[11px] text-muted-foreground">
+                  Fiecare produs nou din magazin pleacă singur pe Trendyol, folosind categoria mapată și brandul ei.
+                  Produsele cu categoria nemapată rămân pe loc și îți apar ca eroare aici.
+                </span>
+                {/*
+                  ⚠ BIFA ASTA MERGE SI FARA CEA DE DEASUPRA, si asta se spune pe fata: pana
+                  azi era stinsa cand sincronizarea era stinsa, desi coada le trata deja
+                  separat. Cine vrea sa listeze produse noi fara sa lase Edinio sa umble la
+                  preturile celor vechi are chiar nevoie de combinatia asta.
+                */}
+                {!autoSync && autoPublish && (
+                  <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
+                    Cu sincronizarea stinsă, produsele noi tot pleacă pe Trendyol, dar
+                    schimbările de preț și stoc de la cele deja publicate nu mai pleacă.
+                  </span>
+                )}
+              </span>
             </label>
 
             <div className="mt-4">
@@ -352,12 +572,12 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   {status.ordersSyncedAt ? ` · ultima sincronizare ${new Date(status.ordersSyncedAt).toLocaleString("ro-RO")}` : ""}
                 </p>
               </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0 ${status.webhookActive ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-                {status.webhookActive ? "Webhook activ" : "Webhook inactiv"}
+              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0 ${webhookActiv ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                {webhookActiv ? "Webhook activ" : "Webhook inactiv"}
               </span>
             </div>
             <div className="mt-3">
-              {status.webhookActive ? (
+              {webhookActiv ? (
                 <button onClick={handleUnsubscribeWebhook} disabled={pending}
                   className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60">
                   {ruleaza("webhook") ? "Se procesează..." : "Dezactivează webhook"}

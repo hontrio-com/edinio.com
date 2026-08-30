@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cdnImage } from "@/lib/cdn-image";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
-import { getProductPriceRange } from "@/lib/utils/product-price";
+import { documentDeCautare } from "@/lib/storefront/catalog/doc-cautare";
+import { cautaSugestii } from "@/lib/actions/cautare-storefront.actions";
+import type { StorefrontProduct } from "@/lib/storefront/product.types";
 
 /**
  * Produsele gasite, chiar sub caseta de cautare din header.
@@ -45,30 +47,90 @@ export function RezultateCautare({
   inFlux?: boolean;
 }) {
   const catalog = useStorefrontOptional();
-  const produse = catalog?.visibleProducts;
+  /*
+   * Pe palierul server catalogul din browser e o SINGURA pagina, deci nu se
+   * cauta local: panoul ar fi raspuns „2 produse gasite" pentru un termen care
+   * are 300 in magazin. Nu gol — GRESIT, care e mai rau, fiindca arata a raspuns.
+   */
+  const peServer = catalog?.catalogPeServer === true;
+  const produse = peServer ? undefined : catalog?.visibleProducts;
 
   const index = useMemo(
-    () => buildProductSearchIndex((produse ?? []).map((p) => ({
-      id: p.id, name: p.name, category: p.category, description: p.description,
-    }))),
+    () => buildProductSearchIndex((produse ?? []).map(documentDeCautare)),
     [produse],
   );
 
-  const gasite = useMemo(() => {
+  /*
+   * O SINGURA interogare per tastare, si numarul iese din ea.
+   *
+   * Numarul total se lua dintr-un al doilea `queryProductSearchIndex` chemat in
+   * corpul randarii, cu ACELASI index si acelasi text — deci fiecare litera
+   * tastata platea de doua ori cautarea peste tot catalogul. La 3351 de produse
+   * asta e partea grea a scrisului, nu randarea.
+   *
+   * Lista taiata si numarul intreg ies acum din acelasi memo: numarul e cat a
+   * gasit cautarea, lista e ce incape in panou.
+   */
+  const gasiteLocal = useMemo(() => {
     if (!produse || text.trim().length < MIN_LITERE) return null;
     const potriviri = queryProductSearchIndex(index, text);
     if (!potriviri) return null;
-    return produse
+    const lista = produse
       .filter((p) => potriviri.has(p.id))
-      .sort((a, b) => (potriviri.get(b.id) ?? 0) - (potriviri.get(a.id) ?? 0))
+      // Departajare pe id: scoruri egale sunt banale, iar fara ea panoul putea
+      // arata alta ordine decat grila pentru aceeasi cautare. Vezi
+      // lib/storefront/catalog/sortare.ts.
+      .sort((a, b) =>
+        ((potriviri.get(b.id) ?? 0) - (potriviri.get(a.id) ?? 0))
+        || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
       .slice(0, MAX_REZULTATE);
+    return { lista, total: potriviri.size };
   }, [produse, index, text]);
+
+  /*
+   * Pe palierul server, aceleasi rezultate vin de la server, prin ACELASI motor.
+   *
+   * Se cere cu intarziere si o singura cerere in zbor: la fiecare tasta ar fi fost
+   * o cautare completa pe catalog, adica cea mai scumpa interogare a paginii,
+   * inmultita cu numarul de litere. Cererea are si limitator pe IP, in actiune.
+   */
+  const [gasiteServer, setGasiteServer] = useState<{ lista: StorefrontProduct[]; total: number } | null>(null);
+  const businessId = catalog?.business?.id;
+  const faraImagini = catalog?.pageContent?.hide_products_without_images === true;
+  const faraStocAscuns = catalog?.pageContent?.hide_out_of_stock_products === true;
+  useEffect(() => {
+    if (!peServer || !businessId || text.trim().length < MIN_LITERE) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGasiteServer(null);
+      return;
+    }
+    let renuntat = false;
+    const id = window.setTimeout(() => {
+      cautaSugestii({ businessId, q: text, faraImagini, faraStocAscuns })
+        .then((r) => {
+          if (renuntat) return;
+          setGasiteServer(r ? { lista: r.produse, total: r.total } : null);
+        })
+        // Panoul e un ajutor, nu o functie: la orice esec pur si simplu nu apare,
+        // iar Enter duce in catalog unde raspunsul e intreg.
+        .catch(() => { if (!renuntat) setGasiteServer(null); });
+    }, 250);
+    return () => { renuntat = true; window.clearTimeout(id); };
+  }, [peServer, businessId, text, faraImagini, faraStocAscuns]);
+
+  const gasite = peServer ? gasiteServer : gasiteLocal;
 
   // Fara catalog incarcat nu avem ce cauta pe loc: acolo panoul nu se arata
   // deloc, iar Enter duce la catalog cu termenul in adresa.
   if (!catalog || gasite === null) return null;
 
-  const total = queryProductSearchIndex(index, text)?.size ?? 0;
+  // Dupa paza de mai sus `catalog` exista sigur, deci regula de stoc se ia de-a
+  // dreptul din context — a SASEA formulare a aceleiasi intrebari avea o rezerva
+  // locala care nu stia de pachete, si numai tipurile o cereau. Cu ea, „Pachet
+  // Femei" aparea in rezultate cu „In stoc" scris cu verde, in timp ce pagina lui
+  // avea butonul stins.
+  const esteFaraStoc = catalog.isProductOutOfStock;
+  const { lista, total } = gasite;
 
   return (
     <div className={inFlux
@@ -81,19 +143,19 @@ export function RezultateCautare({
         </span>
       </div>
 
-      {gasite.length === 0 ? (
+      {lista.length === 0 ? (
         <p className="px-3.5 py-6 text-sm text-[var(--st-muted)] text-center">
           Nimic pentru „{text.trim()}”. Incearca alt cuvant.
         </p>
       ) : (
         <ul className="max-h-[22rem] overflow-y-auto">
-          {gasite.map((p) => {
+          {lista.map((p) => {
             // Coercit la sir aici: `images` e jsonb, deci `unknown[]`, iar un
             // `unknown` folosit direct ca fiu JSX nu trece de tipuri.
             const imagini = Array.isArray(p.images) ? (p.images as unknown[]).filter(Boolean) : [];
             const imagine = imagini.length > 0 ? String(imagini[0]) : "";
-            const interval = p.price_range ?? getProductPriceRange(Number(p.price), p.page_sections);
-            const faraStoc = !!(p.track_inventory && (p.stock_quantity ?? 0) <= 0);
+            const interval = p.price_range;
+            const faraStoc = esteFaraStoc(p);
             return (
               <li key={p.id} className="border-b border-[var(--st-border)] last:border-0">
                 <a href={`${basePath}/product/${p.slug ?? p.id}`} onClick={onAlege}
@@ -116,9 +178,11 @@ export function RezultateCautare({
                     </span>
                   </span>
                   <span className="text-sm font-semibold text-[var(--st-text)] shrink-0 whitespace-nowrap">
+                    {/* Minimul intervalului, nu pretul de baza: pe ANTIFOANE
+                        panoul scria 156,80 pentru un produs care se vinde cu 438. */}
                     {interval.hasRange
                       ? formatPriceRange(interval.min, interval.max)
-                      : formatPrice(Number(p.price))}
+                      : formatPrice(interval.min)}
                   </span>
                 </a>
               </li>
@@ -127,7 +191,7 @@ export function RezultateCautare({
         </ul>
       )}
 
-      {total > gasite.length && (
+      {total > lista.length && (
         <div className="px-3.5 py-2 border-t border-[var(--st-border)] bg-[var(--st-bg)] text-center">
           <span className="text-[12px] text-[var(--st-muted)]">
             Apasa Enter ca sa le vezi pe toate {total}

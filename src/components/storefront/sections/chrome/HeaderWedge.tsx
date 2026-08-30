@@ -13,6 +13,7 @@ import { CartControl } from "@/components/storefront/sections/_shared/CartContro
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { stilSigla } from "@/lib/storefront/logo-box";
 
 const STROKE = 1.7;
 
@@ -84,8 +85,8 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                  style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                  className="w-auto max-w-full object-contain" />
+                  style={stilSigla(logoSize)}
+                  className="w-auto object-contain" />
               ) : (
                 /*
                   `pr-1 -mr-1`: numele e ITALIC, deci ultima litera se apleaca in

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "crypto";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { handleStockUpdated, readSignatureHeader, verifyAboutYouSignature } from "@/lib/aboutyou/webhooks";
-import { extractOrderNumber, ingestOrderByNumber } from "@/lib/aboutyou/orders";
+import { readSignatureHeader, verifyAboutYouSignature } from "@/lib/aboutyou/webhooks";
+import { amanareInbox, prelucreazaEveniment } from "@/lib/aboutyou/inbox";
+import { EroareNecorelata, EroareTrecatoare } from "@/lib/aboutyou/erori";
+import { cercetareSemnatura } from "@/lib/aboutyou/semnatura-descoperire";
+import { patchAboutYouConfig } from "@/lib/aboutyou/config";
+import { EroareCitireBaza } from "@/lib/supabase/rand-citit";
+import { logError } from "@/lib/error-logger";
 import type { AboutYouConfig } from "@/lib/aboutyou/types";
 
 /**
@@ -11,6 +17,19 @@ import type { AboutYouConfig } from "@/lib/aboutyou/types";
  * answers 200 so About You does not retry-storm (it retries hourly for up to 2
  * days). Order events are handled starting in Faza 3.
  */
+/*
+ * ⚠ FEREASTRA DE EXECUTIE, DECLARATA (26.08.2026).
+ *
+ * Ruta face apel EXTERN inauntrul cererii lor: `prelucreazaEveniment` cheama `ingestOrderByNumber`,
+ * care intreaba About You, apoi scrie comanda, retururile si consuma stocul — tot sincron. Fara
+ * `maxDuration`, cadea pe limita implicita a platformei, iar o taiere la mijloc ar fi lasat
+ * ingestia pe jumatate.
+ *
+ * ⚠ Acum e mai putin grav decat era: evenimentul e deja scris in inbox inainte de prelucrare, deci
+ * o taiere nu-l mai pierde — cronul il reia. Dar tot n-are rost sa fie taiat.
+ */
+export const maxDuration = 30;
+
 export async function POST(request: NextRequest) {
   const ok = () => NextResponse.json({ received: true });
   const businessId = request.nextUrl.searchParams.get("businessId");
@@ -23,31 +42,243 @@ export async function POST(request: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const { data: settings } = await admin
+  /*
+   * ═══ ⚠ O PANA A BAZEI RASPUNDEA `200`, INAINTE DE ORICE SCRIERE (27.08.2026) ═══
+   *
+   * Eroarea citirii se inghitea, `cfg` iesea `null`, si codul cadea pe ramura „magazinul n-are
+   * secret de webhook" — care raspunde `200` DINADINS, fiindca acolo reincercarea lor n-ar ajuta
+   * cu nimic. Numai ca aici ar fi ajutat: evenimentul nici nu apucase sa ajunga in inbox, deci
+   * `200` il pierdea definitiv. Sondarea nu-l recupereaza: filtreaza dupa data CREARII comenzii.
+   *
+   * Cele patru raspunsuri, si nu se mai confunda intre ele:
+   *   citirea a picat   → 503, ca ei sa reincerce
+   *   config lipsa      → 200, hotarare veche si buna
+   *   autentificare rea → 200, o reincercare n-ar schimba nimic
+   *   scris in inbox    → 200
+   */
+  const { data: settings, error: eSettings } = await admin
     .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
+  if (eSettings && eSettings.code !== "PGRST116") {
+    console.error("[aboutyou/webhook] configul nu s-a putut citi", businessId, eSettings.message);
+    return NextResponse.json({ error: "configurare indisponibila" }, { status: 503 });
+  }
   const cfg = settings?.aboutyou_config as AboutYouConfig | null;
-  if (!cfg?.webhook_secret) return ok();
-
-  const valid = verifyAboutYouSignature(cfg.webhook_secret, readSignatureHeader(request.headers), rawBody);
-  if (!valid) {
-    console.error("[aboutyou/webhook] invalid signature", { businessId });
+  if (!cfg?.webhook_secret) {
+    /*
+     * Ieșirea asta stingea webhookul COMPLET, inaintea oricarui log: un secret
+     * pierdut la o resalvare de config facea ca fiecare eveniment sa fie inghitit
+     * cu 200, iar la noi nu rămânea nicio urma.
+     *
+     * ⚠ LOGUL E STRANS DIN DOUA MOTIVE, nu din delicatete. Ruta e publica si
+     * scutita de poarta, iar `businessId` vine din URL: fara conditia de mai jos,
+     * oricine putea umple `error_logs` cu un uuid inventat, o cerere = un rand.
+     * Iar About You reincearca din ora in ora doua zile, deci un singur abonament
+     * rupt ar scrie sute de intrari identice — zgomot care ingroapa alarmele reale.
+     * Deci: doar magazine CONECTATE, si cel mult o data la sase ore.
+     */
+    if (cfg?.connected && deSemnalat(businessId)) {
+      await logError({
+        action: "aboutyou/webhook",
+        message: "Eveniment ignorat: magazinul nu are secret de webhook salvat. Reactivează notificările About You.",
+        details: { businessId }, businessId, severity: "warning",
+      });
+    }
     return ok();
   }
 
-  let event: { event?: string; type?: string; data?: unknown };
+  /*
+   * DOUA INCUIETORI, pentru ca prima nu e sigura.
+   *
+   * ⚠ SCHEMA E ACUM CONFIRMATA — masurata pe doua livrari adevarate, vezi `webhooks.ts`:
+   * HMAC-SHA256 peste corpul brut, hexa, pe `x-signature`. Nota de aici spunea pana azi ca e
+   * „dedusa" si ca „daca e gresita, verificarea pica mereu"; nu mai e adevarat.
+   *
+   * ⚠ TOKENUL RAMANE TOTUSI, si nu din obisnuinta: secretul se poate pierde la o resalvare de
+   * config, iar atunci el e singurul lucru care mai tine webhookul in viata. Doua incuietori
+   * inseamna ca niciuna nu e singurul punct de cadere.
+   *
+   * De aceea adaugam un secret propriu in chiar URL-ul cu care ne abonam
+   * (`?token=`). El nu depinde de nimic ce trebuie ghicit: doar About You il
+   * cunoaste, pentru ca doar lui i l-am dat. Cand tokenul e prezent si corect,
+   * evenimentul e autentic chiar daca semnatura nu se poate verifica.
+   */
+  const token = request.nextUrl.searchParams.get("token");
+  const tokenOk = !!cfg.webhook_token && !!token && egalConstant(token, cfg.webhook_token);
+  const semnaturaOk = verifyAboutYouSignature(cfg.webhook_secret, readSignatureHeader(request.headers), rawBody);
+  if (!tokenOk && !semnaturaOk) {
+    console.error("[aboutyou/webhook] eveniment neautentificat", { businessId, areToken: !!token });
+    return ok();
+  }
+
+  /*
+   * ═══ ⚠ CE FEL DE SEMNĂTURĂ PUNE, DE FAPT (27.08.2026) ═══
+   *
+   * `verifyAboutYouSignature` e o DEDUCȚIE: HMAC-SHA256 peste corpul brut, în hex, pe patru antete
+   * ghicite. Documentația spune că la abonare primești un `client_secret`, dar nu descrie antetul,
+   * algoritmul, codificarea sau ce anume se semnează. De-aia există a doua încuietoare, tokenul.
+   *
+   * ⚠ RĂSPUNSUL VINE ÎN FIECARE CERERE, iar noi îl aruncam. Antetele unei livrări adevărate conțin
+   * exact ce ne lipsește; ne uitam doar la cele patru ghicite și, când niciunul nu se potrivea,
+   * mergeam mai departe pe token fără să vedem ce era acolo.
+   *
+   * ⚠ SE UITĂ NUMAI CÂND TOKENUL A TRECUT ȘI SEMNĂTURA NU. Atunci știm sigur două lucruri: că
+   * cererea e autentică (doar About You are tokenul) și că presupunerea noastră e greșită. Fix
+   * situația în care merită să ne uităm.
+   *
+   * ⚠ NU HOTĂRĂȘTE NIMIC ȘI NU SCRIE NICIUN SECRET. Vezi `cercetareSemnatura`: se scriu numele
+   * antetelor, forma valorilor (hexa/base64 și lungimea) și care combinație s-a potrivit. O
+   * singură dată pe magazin — un webhook des ar umple jurnalul cu același lucru.
+   */
+  /*
+   * ═══ ⚠ SE UITA SI CAND SEMNATURA TRECE (27.08.2026) ═══
+   *
+   * Prima varianta se uita numai la esec. Dar prima livrare adevarata a TRECUT de verificare —
+   * deci deductia era corecta — si tocmai de-aia n-am aflat nimic: nu stiam PE CARE dintre cele
+   * patru antete, nici in ce codificare. Iar fara asta nu se poate strange `verifyAboutYouSignature`
+   * la schema adevarata; ar ramane sa incerce toate patru la nesfarsit.
+   *
+   * ⚠ O reusita necercetata e tot o necunoscuta. Se scrie o data, la fel, si tot fara secret.
+   */
+  if (tokenOk && !cfg.semnatura_cercetata) {
+    const c = cercetareSemnatura(cfg.webhook_secret, request.headers, rawBody);
+    await logError({
+      action: "aboutyou/semnatura", severity: c.potrivire ? "info" : "warning",
+      message: c.potrivire
+        ? `schema de semnătură AFLATĂ: ${c.potrivire} pe antetul „${c.potrivirePeAntet}”`
+          + (semnaturaOk ? " (verificarea de azi o accepta deja)" : " (verificarea de azi NU o accepta)")
+        : "nicio combinație cunoscută nu se potrivește; antetele primite sunt în detalii",
+      details: {
+        potrivire: c.potrivire, antet: c.potrivirePeAntet, treceaDeja: semnaturaOk,
+        antete: c.antete, toateAnteteleNume: c.toateAnteteleNume,
+      },
+      businessId,
+    });
+    /* Se însemnează, ca să nu se repete. Eșecul scrierii nu oprește nimic: e o măsurătoare. */
+    await patchAboutYouConfig(admin, businessId, { semnatura_cercetata: true }).catch(() => {});
+  }
+
+  let event: { id?: unknown; event?: string; type?: string; data?: unknown; message?: unknown };
   try { event = JSON.parse(rawBody); } catch { return ok(); }
   const name = event.event ?? event.type;
 
-  if (name === "stock.updated") {
-    await handleStockUpdated(admin, businessId, event);
-  } else if (name && name.startsWith("order") && cfg.api_key) {
-    // order.* / order_items.* -> (re-)ingest the order by number (idempotent).
-    const orderNumber = extractOrderNumber(event);
-    if (orderNumber) {
-      const ctx = { auth: { apiKey: cfg.api_key, environment: cfg.environment }, config: cfg, businessId };
-      await ingestOrderByNumber(admin, ctx, orderNumber);
-    }
+  /*
+   * ═══ ⚠ SE SCRIE INTAI, SE PRELUCREAZA PE URMA (26.08.2026) ═══
+   *
+   * About You reincearca livrarea vreo doua zile daca nu primeste un raspuns bun. Ruta raspundea
+   * insa `200` pe TOATE caile, inclusiv cand ingestia pica — o pana de baza, o exceptie, o comanda
+   * pe care n-o gasim. Pentru ei, evenimentul era livrat: nu-l mai reincercau. Iar sondarea nu-l
+   * poate recupera, fiindca filtreaza dupa data CREARII comenzii.
+   *
+   * ⚠ CELE TREI `200` DE LA AUTENTIFICARE RAMAN, si sunt o hotarare buna: un eveniment fara secret
+   * sau cu semnatura gresita n-are cum sa devina bun daca il mai trimit o data. Acolo reincercarea
+   * e zgomot curat. Se schimba numai calea de DUPA autentificare.
+   *
+   * ⚠ SI CALEA RAPIDA RAMANE. Scris in inbox, evenimentul e in siguranta — dar prelucrarea nu
+   * asteapta cronul: se incearca pe loc, iar daca pica, randul ramane neprelucrat si cronul il
+   * reia. Fara asta, fiecare expediere ar intarzia pana la un minut degeaba.
+   */
+  const eventId = idEvenimentului(event, rawBody);
+  const { error: eInbox } = await admin.from("aboutyou_webhook_inbox").upsert(
+    {
+      business_id: businessId, event_id: eventId, event_name: name ?? null,
+      payload: event as never,
+    },
+    { onConflict: "business_id,event_id", ignoreDuplicates: true },
+  );
+  if (eInbox) {
+    /*
+     * ⚠ SINGURUL LOC UNDE RASPUNDEM CU ESEC, si singurul unde reincercarea lor chiar ajuta: n-am
+     * pastrat evenimentul, deci daca ne oprim aici e pierdut definitiv.
+     */
+    await logError({
+      action: "aboutyou/webhook", severity: "critical",
+      message: `evenimentul n-a putut fi scris in inbox: ${eInbox.message}`,
+      details: { businessId, eventId, name }, businessId,
+    });
+    return NextResponse.json({ error: "inbox indisponibil" }, { status: 503 });
+  }
+
+  /* ⚠ De-aici incolo, un esec nu mai pierde nimic: randul ramane neprelucrat si cronul il reia. */
+  try {
+    await prelucreazaEveniment(admin, businessId, cfg, event);
+    /*
+     * ═══ ⚠ REUSITA NU SE MARCA, DECI CRONUL REFACEA TOT (27.08.2026) ═══
+     *
+     * Calea rapida prelucra evenimentul si il lasa neatins in inbox. Randul ramanea `prelucrat_la`
+     * null, deci cronul il lua de la capat la minutul urmator — fiecare eveniment prelucrat de
+     * DOUA ori. Ingestul e idempotent, deci nu se pierdea nimic; se cheltuiau insa o recitire a
+     * comenzii de la ei si un loc din cele douazeci pe trecere, degeaba.
+     *
+     * ⚠ SE MARCHEAZA DUPA ce prelucrarea a mers, nu inainte: invers, un esec ar fi inchis randul
+     * definitiv, adica exact pierderea pe care inbox-ul o inlatura.
+     */
+    await admin.from("aboutyou_webhook_inbox")
+      .update({ prelucrat_la: new Date().toISOString(), last_error: null } as never)
+      .eq("business_id", businessId).eq("event_id", eventId);
+  } catch (e) {
+    /*
+     * ═══ ⚠ SI CALEA RAPIDA DEOSEBESTE CAUZELE (27.08.2026, tarziu) ═══
+     *
+     * Scria `incercari: 1` pentru ORICE exceptie, inclusiv o pana a bazei — deci prima incercare
+     * era arsa chiar de indisponibilitatea care n-are nicio legatura cu evenimentul. Acum
+     * trecatoarele lasa contorul pe zero, ca in cron.
+     */
+    /*
+     * ⚠ SI „INCA NU SE POATE CORELA" LASA CONTORUL PE ZERO AICI. Randul tocmai s-a scris, deci e
+     * cel mai tanar cu putinta — iar `order_items.*` sosit inaintea comenzii e chiar cazul
+     * obisnuit pe calea rapida, nu o exceptie. Vezi `numaraIncercarea` din `inbox.ts`, care ia
+     * aceeasi hotarare pe varsta randului.
+     */
+    const trecator = e instanceof EroareTrecatoare || e instanceof EroareCitireBaza
+      || e instanceof EroareNecorelata;
+    await admin.from("aboutyou_webhook_inbox")
+      .update({
+        incercari: trecator ? 0 : 1,
+        last_error: (e instanceof Error ? e.message : String(e)).slice(0, 500),
+        /* ⚠ Si amanarea porneste de aici: fara ea, cronul ar relua imediat exact ce tocmai a picat. */
+        urmatoarea_incercare: new Date(Date.now() + amanareInbox(1)).toISOString(),
+      } as never)
+      .eq("business_id", businessId).eq("event_id", eventId);
   }
 
   return ok();
+}
+
+/**
+ * Cheia dupa care acelasi eveniment livrat de doua ori nu face doua randuri.
+ *
+ * ⚠ `id`-ul din plicul lor e cheia adevarata. Cand lipseste, se face o amprenta din corp — ca
+ * aceeasi livrare sa nimereasca acelasi rand, nu unul nou la fiecare reincercare.
+ */
+function idEvenimentului(event: { id?: unknown }, rawBody: string): string {
+  if (typeof event.id === "string" && event.id.trim()) return event.id.trim();
+  if (typeof event.id === "number") return String(event.id);
+  return `amprenta:${createHash("sha256").update(rawBody).digest("hex").slice(0, 32)}`;
+}
+
+
+// Comparatie in timp constant: o comparatie obisnuita se opreste la prima
+// diferenta, deci scurgerea de timp lasa tokenul sa fie ghicit caracter cu caracter.
+function egalConstant(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  if (x.length !== y.length) return false;
+  try { return timingSafeEqual(x, y); } catch { return false; }
+}
+
+/*
+ * Strangulator de alarme, pe proces.
+ *
+ * Nu e o solutie perfecta — pe mai multe instante se scrie de mai multe ori — dar
+ * taie exact tiparul care conteaza: acelasi abonament rupt care reincearca din ora
+ * in ora, doua zile.
+ */
+const semnalatLa = new Map<string, number>();
+const SASE_ORE = 6 * 60 * 60 * 1000;
+function deSemnalat(cheie: string): boolean {
+  const acum = Date.now();
+  const ultim = semnalatLa.get(cheie);
+  if (ultim != null && acum - ultim < SASE_ORE) return false;
+  semnalatLa.set(cheie, acum);
+  return true;
 }

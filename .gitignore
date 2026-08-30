@@ -56,3 +56,16 @@ next-env.d.ts
 !/scripts/migrations/
 !/scripts/tests/
 !/scripts/leaga-capturi.mjs
+# Generatorul de baseline: NU e scratch, e unealta. CI-ul il ruleaza
+# (`schema-baseline.sh --check`), iar fara el jobul de deriva n-are ce executa.
+!/scripts/schema-baseline.sh
+# ⚠ Fara randurile astea, jobul de CI care le ruleaza cade la FIECARE push:
+# fisierele exista local, dar nu ajung niciodata in depozit.
+!/scripts/verifica-tipuri-db.mjs
+!/scripts/tipuri-db-prag.json
+# Iesirea catre eMAG: NU e scratch, e infrastructura. eMAG accepta apeluri doar de la
+# IP-uri albite, iar Vercel n-are IP fix — deci exista un server propriu, cu proxy
+# CONNECT, iar dosarul asta e TOATA starea lui. Chiar de aia nu se plateste copie de
+# siguranta la Contabo: serverul se reface de aici in zece minute. Netinut in depozit,
+# afirmatia aia ar fi fost falsa.
+!/scripts/emag-proxy/

@@ -10,10 +10,14 @@
 // client — only a masked preview and booleans.
 
 import { randomBytes } from "crypto";
+import { randuriCitite } from "@/lib/supabase/rand-citit";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { enqueueTrendyolLivrareMany } from "@/lib/trendyol/queue";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { patchTrendyolConfig } from "@/lib/trendyol/config";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { trendyolGloballyEnabled, maskSecret, trendyolWebhookUrl } from "@/lib/trendyol/auth";
 import { createWebhook, deleteWebhook, getWebhooks, isTrendyolError, testConnection, type TrendyolAuth } from "@/lib/trendyol/client";
@@ -24,9 +28,14 @@ import {
 } from "@/lib/trendyol/taxonomy";
 import { indexeazaFrunze, potrivesteIndexat, type PotrivireCategorie } from "@/lib/trendyol/category-match";
 import { sugereazaAtribute, type SugestieAtribut, type ValoriAtribut } from "@/lib/trendyol/attribute-autofill";
-import { loadTrendyolContext, removeProductNow, syncProductNow, syncProductsBulk } from "@/lib/trendyol/sync";
-import { setPackageStatus, sendTrackingNumber, getFulfillmentState, type TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
-import { deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
+import {
+  loadTrendyolContext, pushInventoryNow, removeProductNow, syncProductNow, syncProductsBulk,
+} from "@/lib/trendyol/sync";
+import {
+  setPackageStatus, sendTrackingNumber, getFulfillmentState, nuPotFurniza,
+  type TrendyolFulfillmentState,
+} from "@/lib/trendyol/fulfillment";
+import { barcodeDerivat, deriveVariantSlots, verificaBarcode, type MappableProduct } from "@/lib/trendyol/mapping";
 import type {
   TrendyolBrand, TrendyolCategoryAttribute, TrendyolCategoryMapEntry, TrendyolConfig,
   TrendyolEnvironment, TrendyolProductAttribute, TrendyolStoreFront, TrendyolSupplierAddress,
@@ -56,9 +65,44 @@ async function guard(businessId: string): Promise<{ supabase: ServerClient; user
   return { supabase, userId: user.id, biz };
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<TrendyolConfig> {
-  const { data } = await supabase
-    .from("store_settings").select("trendyol_config").eq("business_id", businessId).single();
+/*
+ * Citirea se face cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`,
+ * deci pe clientul utilizatorului vederea intoarce `api_key`/`api_secret` ca
+ * siruri `enc.v1.…` si Trendyol raspunde 401 la fiecare apel. Asimetria facea
+ * defectul greu de recunoscut: publicarea produselor si fulfillment-ul MERGEAU
+ * (`loadTrendyolContext` primeste service role de la cron si de la actiuni),
+ * doar ecranele de nomenclator si dezabonarea webhook-ului cadeau.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat. Toti apelantii trec prin `guard()` inainte.
+ *
+ * Parametrul cu clientul utilizatorului a fost SCOS dinadins: lasat pe loc, ar
+ * fi invitat pe urmatorul sa creada ca citirea se face cu el.
+ */
+/*
+ * ⚠ O CITIRE CAZUTA NU ARE VOIE SA ARATE CA O CONFIGURARE GOALA.
+ *
+ * Forma dinainte ignora `error` si intorcea `{}` cand citirea dadea gres. Iar apelantii
+ * fac apoi `saveConfig(...)` cu INTREGUL obiect — deci un gol inchipuit se scria peste
+ * acreditari, si integrarea se deconecta singura, fara nicio eroare nicaieri.
+ *
+ * S-a intamplat: 24.08.2026, un magazin cu Trendyol si 1272 de listari active a ramas
+ * cu `trendyol_config = {"reconcile_page": 20}`. Comerciantul n-a atins nimic.
+ *
+ * ⚠ `maybeSingle`, nu `single`: un magazin FARA rand e o stare legitima (nou creat), si
+ * acolo `{}` e chiar raspunsul corect. Ce nu e legitim e sa nu poti citi si sa spui gol.
+ * `single` le confunda: lipsa randului iesea tot ca eroare.
+ *
+ * ⚠ Aruncarea e voita. Apelantii au deja ramuri de esec; un gol tacut n-are.
+ */
+async function loadConfig(businessId: string): Promise<TrendyolConfig> {
+  const { data, error } = await createAdminClient()
+    .from("store_settings").select("trendyol_config").eq("business_id", businessId).maybeSingle();
+  if (error) {
+    throw new Error(`Configurarea nu s-a putut citi: ${error.message}`);
+  }
   return ((data?.trendyol_config as TrendyolConfig) ?? {}) || {};
 }
 
@@ -101,34 +145,56 @@ export interface TrendyolStatus {
   apiKeyMasked: string | null;
   sellerName?: string;
   shipmentAddressId?: number;
+  /** In cate zile expediaza. `null` = „las cum e in contul Trendyol". */
+  deliveryDuration?: number | null;
   returningAddressId?: number;
   defaultCarrierCode?: string;
   currency: string;
   brandId?: number;
   brandName?: string;
   autoSync: boolean;
+  autoPublish: boolean;
+  /** Tara de FABRICATIE implicita a magazinului (ISO2), sau `""` daca n-a ales niciuna. */
+  defaultCountryOfOrigin: string;
+  /** Emitem si urcam facturile catre clientii lui de pe Trendyol? Stins din start. */
+  factureazaClientul: boolean;
   lastSyncAt?: string;
   webhookActive: boolean;
   ordersSyncedAt?: string;
   ready: boolean;
   readinessError: string | null;
   categoryMap: Record<string, TrendyolCategoryMapEntry>;
-  counts: { listings: number; approved: number; rejected: number; variants: number; queued: number; orders: number };
+  /*
+   * ⚠ `preluate` NU e o statistică, e o EXCEPȚIE de la comutatorul de mai sus.
+   *
+   * Listările adoptate au `auto_inventory = false`, iar `sync.ts:854` le oprește tăcut:
+   * `if (listing.auto_inventory === false && !manual && !forceZero) return null`.
+   * Deci bifa „Sincronizează automat schimbările de produs, stoc și preț" poate fi
+   * pornită, coada goală, zero erori, și prețul de pe Trendyol să rămână cel vechi.
+   *
+   * ⚠ Măsurat pe contul real, 24.08.2026: 29 de listări adoptate din 1287. Comerciantul
+   * a aflat dintr-o comandă vândută cu 39,99 pentru un produs care în magazin e 43,99.
+   */
+  counts: { listings: number; approved: number; rejected: number; variants: number; queued: number; orders: number; preluate: number };
 }
 
 export async function getTrendyolStatus(businessId: string): Promise<TrendyolStatus | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
 
-  const [{ count: listings }, { count: approved }, { count: rejected }, { count: variants }, { count: queued }, { count: orders }] = await Promise.all([
+  const [{ count: listings }, { count: approved }, { count: rejected }, { count: variants }, { count: queued }, { count: orders }, { count: preluate }] = await Promise.all([
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).in("status", ["approved", "active"]),
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "rejected"),
     supabase.from("trendyol_variants").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("trendyol_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("trendyol_orders").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+    /* ⚠ Chiar steagul pe care se filtrează împingerea (`sync.ts:854`), ca numărătoarea de
+       aici și fapta de acolo să citească ACELAȘI lucru. */
+    supabase.from("trendyol_listings").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("auto_inventory", false),
   ]);
 
   const vitrina = config.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
@@ -143,14 +209,22 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     supplierId: config.supplier_id,
     apiKeyMasked: config.api_key ? maskSecret(config.api_key) : null,
     sellerName: config.seller_name,
-    shipmentAddressId: config.shipment_address_id,
-    returningAddressId: config.returning_address_id,
-    defaultCarrierCode: config.default_carrier_code,
+    /* ⚠ `?? undefined`: configul poate purta acum `null` pentru un camp GOLIT de om, iar
+       ecranul face aceeasi treaba cu amandoua. Vezi nota din `types.ts`. */
+    shipmentAddressId: config.shipment_address_id ?? undefined,
+    deliveryDuration: config.delivery_duration ?? null,
+    returningAddressId: config.returning_address_id ?? undefined,
+    defaultCarrierCode: config.default_carrier_code ?? undefined,
     // Moneda o dicteaza vitrina, nu noi: preturile trimise sunt citite in ea.
     currency: info.moneda,
-    brandId: config.brand_id,
-    brandName: config.brand_name,
+    brandId: config.brand_id ?? undefined,
+    brandName: config.brand_name ?? undefined,
     autoSync: config.auto_sync !== false,
+    autoPublish: config.auto_publish === true,
+    /* ⚠ Se intoarce GOL cand nu s-a ales, nu „RO": ecranul trebuie sa arate ca lipseste, nu
+       sa para completat. */
+    defaultCountryOfOrigin: (config.default_country_of_origin ?? "").toUpperCase(),
+    factureazaClientul: config.factureaza_clientul === true,
     lastSyncAt: config.last_sync_at,
     webhookActive: !!config.webhook_id && !!config.webhook_secret,
     ordersSyncedAt: config.orders_synced_at,
@@ -160,8 +234,61 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     counts: {
       listings: listings ?? 0, approved: approved ?? 0, rejected: rejected ?? 0,
       variants: variants ?? 0, queued: queued ?? 0, orders: orders ?? 0,
+      preluate: preluate ?? 0,
     },
   };
+}
+
+/**
+ * Pornește trimiterea automată a prețului și stocului pentru TOATE listările adoptate.
+ *
+ * ═══ ⚠ DE CE EXISTĂ (24.08.2026) ═══
+ *
+ * O listare adoptată are `auto_inventory = false`, pus dinadins: produsul exista deja în
+ * contul lui Trendyol, cu prețul pus de el acolo, și nu-l suprascriem fără să ceară.
+ *
+ * Dar cererea aia n-avea nicio formă la scara catalogului. Butonul „Trimite stocul" de pe
+ * rândul produsului face o singură împingere (`manual: true`) și NU aprinde steagul —
+ * deci la următoarea schimbare de preț se blochează iar. Ca să conducă din Edinio,
+ * comerciantul trebuia să apese pe fiecare produs, la fiecare schimbare, pentru
+ * totdeauna.
+ *
+ * ⚠ CE A COSTAT: 29 de listări înghețate la prețul din 19.08, cu bifa „Sincronizează
+ * automat schimbările de produs, stoc și preț" PORNITĂ pe pagina de setări. A aflat
+ * dintr-o comandă vândută cu 4 lei sub prețul din magazin.
+ *
+ * ⚠ Nu împinge nimic pe loc: doar aprinde steagul. Trimiterea a mii de listări deodată ar
+ * arde limita contului, aceeași prin care pleacă o mișcare de stoc după o vânzare.
+ * Prima atingere a produsului, sau deriva, le duce.
+ */
+export async function pornesteSincronizareaAdoptatelor(
+  businessId: string,
+): Promise<{ success: true; cate: number } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+
+  /*
+   * ═══ ⚠ CLIENT DE SERVICIU, NU AL COMERCIANTULUI (indreptat 24.08.2026) ═══
+   *
+   * Prima forma folosea `g.supabase`. `trendyol_listings` are o SINGURA politica RLS,
+   * `owner_select_trendyol_listings`, si aceea numai pe SELECT — scrierile sunt service-role
+   * peste toata integrarea.
+   *
+   * ⚠ Iar un UPDATE oprit de RLS NU da eroare: atinge zero randuri si raspunde linistit.
+   * Deci butonul a raspuns „Nu era nimic de pornit" pentru 29 de listari care erau chiar
+   * acolo. Cel mai prost fel de a gresi: un mesaj de reusita pentru o fapta care n-a avut
+   * loc, pe un ecran facut anume ca sa nu mai minta.
+   *
+   * `guard()` de mai sus a verificat deja ca omul e proprietarul magazinului — el e
+   * autorizarea, nu RLS-ul.
+   */
+  const { count, error } = await createAdminClient().from("trendyol_listings")
+    .update({ auto_inventory: true, updated_at: new Date().toISOString() }, { count: "exact" })
+    .eq("business_id", businessId).eq("auto_inventory", false);
+  if (error) return { error: error.message };
+
+  revalidatePath(FEATURE_PATH);
+  return { success: true, cate: count ?? 0 };
 }
 
 // ── Connect / disconnect ────────────────────────────────────────────────────────
@@ -193,7 +320,7 @@ export async function connectTrendyol(
   const test = await testConnection({ supplierId, apiKey, apiSecret, environment: env, storefront: vitrina, userAgentCompany: company });
   if (!test.ok) return { error: test.error };
 
-  const prev = await loadConfig(g.supabase, businessId);
+  const prev = await loadConfig(businessId);
   const next: TrendyolConfig = {
     ...prev,
     connected: true,
@@ -220,7 +347,7 @@ export async function disconnectTrendyol(businessId: string): Promise<{ success:
   const g = await guard(businessId);
   if ("error" in g) return g;
   // Best-effort: remove the order webhook on Trendyol before we drop the credentials.
-  const prev = await loadConfig(g.supabase, businessId);
+  const prev = await loadConfig(businessId);
   const prevAuth = authFromConfig(prev);
   if (prevAuth && prev.webhook_id) { try { await deleteWebhook(prevAuth, prev.webhook_id); } catch { /* ignore */ } }
   await saveConfig(g.supabase, businessId, {});
@@ -236,11 +363,31 @@ export async function disconnectTrendyol(businessId: string): Promise<{ success:
 // ── Settings ────────────────────────────────────────────────────────────────────
 export interface TrendyolSettingsInput {
   shipment_address_id?: number | null;
+  /** In cate zile expediaza. `null` = „las cum e in contul Trendyol". Vezi `TrendyolConfig`. */
+  delivery_duration?: number | null;
   returning_address_id?: number | null;
   default_carrier_code?: string | null;
   brand_id?: number | null;
   brand_name?: string | null;
   auto_sync?: boolean;
+  auto_publish?: boolean;
+  /**
+   * ⚠ Tara de FABRICATIE implicita, ISO2. Din 23.10.2026 ei cer campul `origin` la nivel de
+   * produs; pana atunci, unele categorii il cer si ca atribut.
+   *
+   * ⚠ NU SE PUNE „RO" DE LA SINE. Un magazin din Romania vinde in mare parte marfa fabricata
+   * altundeva, iar o tara de origine declarata gresit e o declaratie vamala falsa, nu o
+   * scapare de completare. Lipsa opreste publicarea cu mesaj; ghicita, ar fi trecut tacut.
+   */
+  default_country_of_origin?: string | null;
+  /**
+   * Comerciantul vrea ca Edinio sa emita si sa urce facturile catre clientii lui de pe Trendyol.
+   *
+   * ⚠ STINS DIN START, si nu din nehotarare: raspunderea fiscala e a lui, iar el poate emite
+   * deja facturile astea de mana in alta parte. Pornit de noi, ar iesi doua documente fiscale
+   * pentru aceeasi marfa.
+   */
+  factureaza_clientul?: boolean;
 }
 
 export async function saveTrendyolSettings(
@@ -248,7 +395,7 @@ export async function saveTrendyolSettings(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
 
   // Curierul trebuie sa existe si sa fie valabil pe vitrina magazinului; altfel
   // AWB-ul e respins abia la expediere, cand comerciantul are coletul in mana.
@@ -260,18 +407,86 @@ export async function saveTrendyolSettings(
     carrier = undefined;
   }
 
-  const next: TrendyolConfig = {
-    ...config,
-    shipment_address_id: input.shipment_address_id === null ? undefined : (input.shipment_address_id ?? config.shipment_address_id),
-    returning_address_id: input.returning_address_id === null ? undefined : (input.returning_address_id ?? config.returning_address_id),
-    default_carrier_code: carrier,
-    brand_id: input.brand_id === null ? undefined : (input.brand_id ?? config.brand_id),
-    brand_name: input.brand_name === null ? undefined : (input.brand_name ?? config.brand_name),
+  /*
+   * ═══ ⚠ PETIC, NU OBIECTUL INTREG (26.08.2026) ═══
+   *
+   * Forma dinainte pornea de la `...config` — configurarea citita cu cateva zeci de
+   * milisecunde mai devreme — si scria inapoi TOT. Intre citire si scriere, cronul apuca sa
+   * scrie marcaje de-ale lui in acelasi JSON, iar acelea se pierdeau:
+   *
+   *   cursorul de comenzi per vitrina, `reconcile_page`, `last_sync_at`, `needs_reconnect`
+   *
+   * Un cursor intors inapoi se repara singur — dedublarea prinde comenzile recitite. Dar
+   * `catalog_citit_la` si marcajele scrise O SINGURA DATA nu se repara: pierdute, raman
+   * pierdute.
+   *
+   * Acum pleaca numai campurile pe care le-a atins omul, iar imbinarea o face Postgres pe
+   * randul INCUIAT (`jsonb_merge_config`). Ce n-a atins nimeni de aici nu se mai poate pierde
+   * de aici.
+   *
+   * ⚠ CAMPUL GOLIT SE TRIMITE `null`, NU `undefined`. Intr-o imbinare, cheia absenta inseamna
+   * „las-o cum e", iar `undefined` dispare cu totul la serializare — deci adresa stearsa de
+   * comerciant ar fi ramas pe loc. Cititorii iau deja `null` drept lipsa.
+   */
+  const petic: Partial<TrendyolConfig> = {
+    ...(input.shipment_address_id !== undefined
+      ? { shipment_address_id: input.shipment_address_id ?? null } : {}),
+    /*
+     * ⚠ `null` inseamna „nu trimite campul", deci Trendyol pastreaza termenul implicit al
+     * contului. Nu inseamna „zero zile" — vezi nota de la `TrendyolConfig.delivery_duration`.
+     */
+    ...(input.delivery_duration !== undefined
+      ? { delivery_duration: input.delivery_duration ?? null } : {}),
+    ...(input.returning_address_id !== undefined
+      ? { returning_address_id: input.returning_address_id ?? null } : {}),
+    ...(input.default_carrier_code !== undefined
+      ? { default_carrier_code: carrier ?? null } : {}),
+    ...(input.brand_id !== undefined ? { brand_id: input.brand_id ?? null } : {}),
+    ...(input.brand_name !== undefined ? { brand_name: input.brand_name ?? null } : {}),
+    ...(input.auto_sync !== undefined ? { auto_sync: input.auto_sync } : {}),
+    ...(input.auto_publish !== undefined ? { auto_publish: input.auto_publish } : {}),
+    /* ⚠ Golita dinadins => `null`, nu „lasa cum era": altfel comerciantul nu si-ar putea SCOATE
+       niciodata o tara pusa gresit. */
+    ...(input.factureaza_clientul !== undefined ? { factureaza_clientul: input.factureaza_clientul } : {}),
+    ...(input.default_country_of_origin !== undefined ? {
+      default_country_of_origin:
+        (input.default_country_of_origin ?? "").trim().toUpperCase() || null,
+    } : {}),
+    /* ⚠ Moneda NU vine de la om: se deduce din vitrina si se rescrie la fiecare salvare, ca
+       sa nu ramana o moneda veche dupa o schimbare de vitrina. */
     currency: infoVitrina(config.storefront).moneda,
-    auto_sync: input.auto_sync ?? config.auto_sync,
   };
-  const ok = await saveConfig(g.supabase, businessId, next);
+
+  const admin = createAdminClient();
+  const ok = await patchTrendyolConfig(admin, businessId, petic);
   if (!ok) return { error: "Eroare la salvare." };
+
+  /*
+   * ═══ ⚠ SETAREA SALVATA NU AJUNGE SINGURA LA PRODUSE (27.08.2026) ═══
+   *
+   * Termenul de expediere pleaca in incarcatura de produs — deci, fara pasul asta, la Trendyol ar
+   * ramane cel vechi pana cand produsul se modifica din alt motiv. Poate niciodata. Iar setarea
+   * SE SALVEAZA, deci ecranul arata ca a mers: chiar felul de defect care nu se plange.
+   *
+   * ⚠ E ACELASI LUCRU REPARAT AZI LA ABOUT YOU, unde o schimbare de curs nu ajungea la preturi.
+   * A doua oara intr-o zi, in doua integrari — semn ca e usor de scapat, nu ca am fost neatent
+   * intr-un singur loc.
+   *
+   * ⚠ SE PUNE `livrare`, NU `upsert`: `upsert` trimite continutul intreg si trece produsul din
+   * nou prin revizuia lor, pentru un singur numar. Vezi `pushLivrareNow`.
+   */
+  const termenSchimbat = input.delivery_duration !== undefined
+    && (input.delivery_duration ?? null) !== (config.delivery_duration ?? null);
+  if (termenSchimbat && (input.delivery_duration ?? null) != null) {
+    const ids = randuriCitite<{ product_id: string | null }>("trendyol.listariPentruLivrare", await admin
+      .from("trendyol_listings").select("product_id").eq("business_id", businessId)
+      .not("product_id", "is", null).limit(5000) as never);
+    dupaRaspuns(
+      () => enqueueTrendyolLivrareMany(businessId, ids.map((r: { product_id: string | null }) => r.product_id)),
+      "enqueueTrendyolLivrareMany", businessId,
+    );
+  }
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -334,7 +549,7 @@ async function guardedAuth(
 ): Promise<{ supabase: ServerClient; userId: string; config: TrendyolConfig; auth: TrendyolAuth } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const auth = authFromConfig(config);
   if (!auth) return { error: "Conectează mai întâi contul Trendyol." };
   return { supabase: g.supabase, userId: g.userId, config, auth };
@@ -417,7 +632,22 @@ export async function suggestTrendyolAttributes(
 export async function searchTrendyolBrands(businessId: string, query: string): Promise<{ brands: TrendyolBrand[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const brands = await searchBrands(g.auth, query);
+  const q = query.trim();
+
+  /*
+   * Un numar curat se accepta ca ID de brand.
+   *
+   * Ultima portita a comerciantului cand cautarea dupa nume nu-i arata brandul:
+   * ia ID-ul din panoul Trendyol si il scrie aici. Nu il putem verifica —
+   * Trendyol n-are serviciu „brand dupa id", iar lista completa are peste doua
+   * sute de mii de randuri — deci il luam ca atare. Daca e gresit, refuzul vine
+   * de la ei, cu mesaj explicit, la trimitere.
+   */
+  if (/^\d{4,12}$/.test(q)) {
+    return { brands: [{ id: Number(q), name: `Brand #${q}` }] };
+  }
+
+  const brands = await searchBrands(g.auth, q);
   if (brands === null) return { error: "Nu am putut căuta brandurile." };
   return { brands };
 }
@@ -476,7 +706,7 @@ export async function applyTrendyolCategoryMap(
   if ("error" in g) return g;
   if (intrari.length === 0) return { error: "Nu ai selectat nicio mapare." };
 
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.category_map ?? {}) };
   let aplicate = 0;
   for (const intrare of intrari) {
@@ -489,7 +719,8 @@ export async function applyTrendyolCategoryMap(
     aplicate++;
   }
   if (aplicate === 0) return { error: "Nicio mapare validă." };
-  if (!(await saveConfig(g.supabase, businessId, { ...config, category_map: map }))) {
+  /* ⚠ Numai harta, nu tot configul: altfel cursoarele scrise de cron intre timp se pierd. */
+  if (!(await patchTrendyolConfig(createAdminClient(), businessId, { category_map: map }))) {
     return { error: "Eroare la salvarea mapărilor." };
   }
   revalidatePath(FEATURE_PATH);
@@ -502,11 +733,12 @@ export async function saveTrendyolCategoryMapEntry(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];
   else map[edinioCategory] = entry;
-  const ok = await saveConfig(g.supabase, businessId, { ...config, category_map: map });
+  /* ⚠ Idem: petic, nu obiectul intreg. */
+  const ok = await patchTrendyolConfig(createAdminClient(), businessId, { category_map: map });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -515,6 +747,10 @@ export async function saveTrendyolCategoryMapEntry(
 // ── Per-product listing editor ──────────────────────────────────────────────────
 export interface TrendyolEditorVariant {
   key: string; label: string; barcode: string; ron_price: number;
+  /** Titlul combinatiei din Edinio; trimis inapoi la salvare, ca sa nu se piarda. */
+  variant_title: string | null;
+  /** Stocul viu al combinatiei, cand exista unul. Cand e `null`, stocul e scris de mana. */
+  stoc_viu: number | null;
   stock_code: string | null; attributes: TrendyolProductAttribute[];
   quantity: number | null; list_price: number | null; sale_price: number | null; vat_rate: number | null; enabled: boolean;
 }
@@ -532,21 +768,23 @@ export interface TrendyolEditorData {
   listing: {
     brand_id: number | null; category_id: number | null; attributes: TrendyolProductAttribute[];
     dimensional_weight: number | null; cargo_company_id: number | null; status: string;
+    sgr_units: number | null;
+    country_of_origin: string | null;
   } | null;
   variants: TrendyolEditorVariant[];
 }
 interface StoredVariantRow {
-  barcode: string; stock_code: string | null; attributes: unknown; quantity: number | null;
+  barcode: string; stock_code: string | null; variant_title: string | null; attributes: unknown; quantity: number | null;
   list_price: number | null; sale_price: number | null; vat_rate: number | null; enabled: boolean;
 }
 
 export async function getTrendyolListingEditor(businessId: string, productId: string): Promise<TrendyolEditorData | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const { data: product } = await g.supabase
-    .from("products").select("id, name, category, images, price, compare_at_price, sku, page_sections")
+    .from("products").select("id, name, category, images, price, compare_at_price, sku, page_sections, track_inventory, stock_quantity")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
 
@@ -554,23 +792,94 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
 
   const { data: listing } = await g.supabase
     .from("trendyol_listings")
-    .select("id, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, status")
+    .select("id, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, status, sgr_units, country_of_origin")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
 
   let stored: StoredVariantRow[] = [];
   if (listing) {
     const { data: vs } = await g.supabase
       .from("trendyol_variants")
-      .select("barcode, stock_code, attributes, quantity, list_price, sale_price, vat_rate, enabled")
+      .select("barcode, stock_code, variant_title, attributes, quantity, list_price, sale_price, vat_rate, enabled")
       .eq("listing_id", (listing as { id: string }).id);
     stored = (vs ?? []) as StoredVariantRow[];
   }
   const byBarcode = new Map(stored.map((v) => [v.barcode, v]));
+  /*
+   * `byTitle` pastreaza PRIMUL rand al unui titlu, nu ultimul.
+   *
+   * `new Map(...)` pe o lista cu chei duplicate pastreaza ultima intrare — deci
+   * doua variante cu acelasi titlu ar fi primit amandoua acelasi rand.
+   */
+  const byTitle = new Map<string, StoredVariantRow>();
+  for (const v of stored) {
+    if (v.variant_title && !byTitle.has(v.variant_title)) byTitle.set(v.variant_title, v);
+  }
+  /*
+   * ⚠ UN RAND SALVAT NU POATE FI REVENDICAT DE DOUA SLOTURI.
+   *
+   * Fara evidenta asta, doua sloturi puteau iesi din editor cu ACELASI barcode.
+   * Salvarea sterge intai toate randurile listarii si abia apoi insereaza, deci
+   * insertul cadea pe cheia unica `(business_id, barcode)` DUPA stergere:
+   * listarea ramanea cu zero variante, stocul nu mai pleca niciodata la Trendyol
+   * si comenzile de acolo nu mai gaseau produsul de scazut.
+   */
+  const revendicate = new Set<string>();
+  /*
+   * Si barcodurile care IES din editor trebuie sa fie distincte intre ele.
+   *
+   * `revendicate` apara doar randurile salvate. Un slot respins de el cade pe
+   * barcode-ul derivat, care poate fi exact codul adoptat de slotul dinainte:
+   * comerciantul care corecteaza SKU-uri incrucisat („S" avea codul lui „M")
+   * vedea doua variante cu acelasi cod, fara niciun avertisment, si salvarea ii
+   * era refuzata pana ghicea singur ce camp sa schimbe.
+   */
+  const emise = new Set<string>();
 
-  const variants: TrendyolEditorVariant[] = slots.map((s) => {
-    const ex = byBarcode.get(s.barcode);
+  const variants: TrendyolEditorVariant[] = slots.map((s, i) => {
+    /*
+     * Potrivirea se face INTAI pe titlul combinatiei, si abia apoi pe barcode.
+     *
+     * Barcode-ul derivat azi poate sa nu mai fie cel de la crearea listarii —
+     * si nici nu trebuie sa fie: odata trimis la Trendyol, barcode-ul ESTE
+     * identitatea articolului acolo. Potrivit doar pe el, o varianta deja
+     * listata s-ar fi intors in editor goala (fara pretul, atributele si TVA-ul
+     * completate), iar salvarea ar fi trimis un barcode nou — adica un al doilea
+     * produs pe Trendyol, cu primul ramas orfan si vandabil.
+     */
+    /*
+     * A treia plasa, pentru produsul FARA variante.
+     *
+     * Acolo `variantTitle` e `null`, deci potrivirea pe titlu nu-l atinge, iar
+     * barcode-ul e singura legatura — exact cel care se poate schimba. Se
+     * intampla real: un produs fara SKU era listat cu uuid-ul lui drept cod, iar
+     * dupa ce comerciantul ii completeaza GTIN-ul in formular, derivarea da alt
+     * barcode. Randul salvat devine negasibil, editorul arata varianta goala, si
+     * salvarea creeaza AL DOILEA produs pe Trendyol — primul ramas acolo
+     * vandabil si fara niciun rand la noi din care sa-l mai oprim.
+     *
+     * O singura varianta si un singur rand inseamna, fara dubiu, ca ele sunt
+     * acelasi lucru. Barcode-ul ramane cel deja trimis la ei.
+     */
+    const singurul = slots.length === 1 && stored.length === 1 ? stored[0] : undefined;
+    const candidat = (s.variantTitle ? byTitle.get(s.variantTitle) : undefined)
+      ?? byBarcode.get(s.barcode)
+      ?? singurul;
+    // Deja luat de alt slot: mai bine o varianta noua, goala, decat doua
+    // variante cu acelasi barcode si o listare golita la salvare.
+    const ex = candidat && !revendicate.has(candidat.barcode) ? candidat : undefined;
+    if (ex) revendicate.add(ex.barcode);
+    // Varianta deja salvata isi pastreaza barcode-ul; cel derivat e doar
+    // propunerea pentru variantele care inca n-au plecat nicaieri — si atunci
+    // cedeaza in fata unuia deja emis, ca sa nu iasa doua variante identice.
+    let barcode = ex?.barcode ?? s.barcode;
+    if (!ex && emise.has(barcode)) barcode = barcodeDerivat(productId, s.key, i);
+    emise.add(barcode);
     return {
-      key: s.key, label: s.label, barcode: s.barcode, ron_price: s.ron_price,
+      key: s.key, label: s.label,
+      barcode,
+      ron_price: s.ron_price,
+      variant_title: s.variantTitle,
+      stoc_viu: s.stocViu ? s.quantity : null,
       stock_code: ex?.stock_code ?? null,
       attributes: Array.isArray(ex?.attributes) ? (ex.attributes as unknown as TrendyolProductAttribute[]) : [],
       quantity: ex?.quantity ?? null, list_price: ex?.list_price ?? null, sale_price: ex?.sale_price ?? null,
@@ -597,6 +906,8 @@ export async function getTrendyolListingEditor(businessId: string, productId: st
       dimensional_weight: (l.dimensional_weight as number | null) ?? null,
       cargo_company_id: (l.cargo_company_id as number | null) ?? null,
       status: (l.status as string) ?? "draft",
+      sgr_units: (l.sgr_units as number | null) ?? null,
+      country_of_origin: (l.country_of_origin as string | null) ?? null,
     } : null,
     variants,
   };
@@ -611,8 +922,24 @@ export interface TrendyolListingInput {
   brand_name?: string | null;
   dimensional_weight: number | null;
   cargo_company_id: number | null;
+  /** Cate ambalaje are produsul, pentru garantia SGR (doar RO, doar bauturi si uleiuri). */
+  sgr_units?: number | null;
+  /**
+   * ⚠ Tara in care s-a FABRICAT produsul (ISO2), nu tara vanzatorului. Goala, se cade pe cea
+   * din setarile magazinului. Ceruta de ei la nivel de produs din 23.10.2026.
+   */
+  country_of_origin?: string | null;
   variants: {
     barcode: string; stock_code: string | null; attributes: TrendyolProductAttribute[];
+    /**
+     * Titlul combinatiei din Edinio, trimis de editor.
+     *
+     * Fara el, salvarea (care sterge si reinsereaza randurile) golea coloana
+     * scrisa la crearea listarii, iar comanda venita de pe Trendyol nu mai stia
+     * ce marime sa scada. Serverul il rededuce oricum din produs cand lipseste,
+     * ca un editor vechi sa nu poata sterge legatura.
+     */
+    variant_title?: string | null;
     quantity: number | null; list_price: number | null; sale_price: number | null; vat_rate: number | null; enabled: boolean;
   }[];
 }
@@ -623,7 +950,10 @@ export async function saveTrendyolListing(
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { data: product } = await g.supabase
-    .from("products").select("id").eq("id", productId).eq("business_id", businessId).maybeSingle();
+    // `page_sections` si `sku`: din ele se rededuc combinatiile, ca sa putem
+    // recompune titlul variantei cand editorul nu-l trimite.
+    .from("products").select("id, sku, price, page_sections")
+    .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
 
   const admin = createAdminClient();
@@ -633,20 +963,68 @@ export async function saveTrendyolListing(
       business_id: businessId, product_id: productId, product_main_id: productId,
       brand_id: input.brand_id, category_id: input.category_id,
       attributes: (input.attributes as unknown) as never,
-      dimensional_weight: input.dimensional_weight, cargo_company_id: input.cargo_company_id, updated_at: now,
+      dimensional_weight: input.dimensional_weight, cargo_company_id: input.cargo_company_id,
+      sgr_units: input.sgr_units ?? null,
+      /* ⚠ Tara de FABRICATIE a produsului. Goala aici, se foloseste cea din setari; lipsind si
+         aia, publicarea se opreste cu mesaj in loc sa declare ceva neadevarat. */
+      country_of_origin: (input.country_of_origin ?? "").trim().toUpperCase() || null,
+      updated_at: now,
     } as never,
     { onConflict: "business_id,product_main_id" },
   ).select("id").single();
   if (upErr || !up) return { error: "Eroare la salvarea listării." };
   const listingId = (up as { id: string }).id;
 
+  /*
+   * Titlul combinatiei se PASTREAZA la salvare.
+   *
+   * Salvarea sterge randurile si le reinsereaza. Cat timp `variant_title` nu era
+   * printre campurile scrise, fiecare salvare golea coloana pe care crearea
+   * listarii o completase — deci o comanda de pe Trendyol nu mai stia ce marime
+   * sa scada si scadea din stocul de produs, de unde disparea la prima editare
+   * de variante (declansatorul recalculeaza coloana din suma combinatiilor).
+   *
+   * Trei surse, in ordine: ce trimite editorul, ce deduce serverul din produs,
+   * si ce era deja salvat. Ultimele doua exista ca un editor vechi, sau un
+   * barcode schimbat de mana, sa nu poata rupe legatura in tacere.
+   */
+  const titluriDerivate = new Map(
+    deriveVariantSlots(product as unknown as MappableProduct).map((s) => [s.barcode, s.variantTitle]),
+  );
+  const { data: existente } = await admin.from("trendyol_variants")
+    .select("barcode, variant_title, exista_la_ei").eq("listing_id", listingId);
+  const titluriSalvate = new Map(
+    (existente ?? []).map((v) => [(v as { barcode: string }).barcode, (v as { variant_title: string | null }).variant_title]),
+  );
+  /*
+   * ⚠ „BARCODUL E DEJA LA TRENDYOL" TREBUIE SA SUPRAVIETUIASCA SALVARII.
+   *
+   * Salvarea sterge randurile si le reinsereaza, iar orice coloana lipsa din
+   * payload-ul de inserare se intoarce la valoarea implicita. Pe `variant_title`
+   * exact asta s-a intamplat o data si e reparat mai sus — apoi am introdus
+   * `exista_la_ei` cu ACELASI viciu, si a costat imediat:
+   *
+   * Un produs respins la revizuie, salvat din editor si retrimis, pleca pe
+   * CREARE in loc de actualizare (fiindca marcajul fusese sters), iar Trendyol
+   * il refuza cu „codul de bare exista deja". Adica exact bucla pe care ruta de
+   * actualizare tocmai o desfacuse. Vazut in productie, la 22:14:27.
+   */
+  const laEiSalvate = new Map(
+    (existente ?? []).map((v) => [(v as { barcode: string }).barcode, (v as { exista_la_ei: boolean | null }).exista_la_ei === true]),
+  );
+
   // Guard against cross-product barcode clashes BEFORE deleting anything, so a
   // duplicate barcode never wipes a listing's variants.
-  const rows = input.variants.filter((v) => v.barcode?.trim()).map((v) => ({
-    listing_id: listingId, business_id: businessId, product_id: productId,
-    barcode: v.barcode.trim(), stock_code: v.stock_code, attributes: (v.attributes as unknown) as never,
-    quantity: v.quantity, list_price: v.list_price, sale_price: v.sale_price, vat_rate: v.vat_rate, enabled: v.enabled,
-  }));
+  const rows = input.variants.filter((v) => v.barcode?.trim()).map((v) => {
+    const barcode = v.barcode.trim();
+    return {
+      listing_id: listingId, business_id: businessId, product_id: productId,
+      barcode, stock_code: v.stock_code, attributes: (v.attributes as unknown) as never,
+      variant_title: v.variant_title ?? titluriDerivate.get(barcode) ?? titluriSalvate.get(barcode) ?? null,
+      exista_la_ei: laEiSalvate.get(barcode) ?? false,
+      quantity: v.quantity, list_price: v.list_price, sale_price: v.sale_price, vat_rate: v.vat_rate, enabled: v.enabled,
+    };
+  });
   // Barcode is Trendyol's cross-endpoint identifier (create, inventory, order match):
   // validate here so the merchant sees the problem while editing, not hours later in
   // a batch result that only names the barcode.
@@ -655,18 +1033,53 @@ export async function saveTrendyolListing(
     if (problema) return { error: problema };
   }
 
+  /*
+   * ⚠ DUPLICATELE DIN ACEEASI LISTARE SE PRIND INAINTE DE STERGERE.
+   *
+   * Verificarea de mai jos cauta doar conflicte cu ALTE listari. Doua randuri cu
+   * acelasi barcode in aceeasi listare treceau de ea, se executa `delete` pe
+   * toate variantele, si abia insertul cadea pe cheia unica `(business_id,
+   * barcode)` — cu stergerea deja commitata. Listarea ramanea fara nicio
+   * varianta: stocul nu mai pleca la Trendyol, iar comenzile de acolo nu mai
+   * gaseau ce produs sa scada.
+   */
   const newBarcodes = rows.map((r) => r.barcode);
+  const duplicat = newBarcodes.find((b, i) => newBarcodes.indexOf(b) !== i);
+  if (duplicat) {
+    return { error: `Barcode-ul „${duplicat}" apare la două variante ale aceluiași produs. Fiecare variantă are nevoie de un cod unic.` };
+  }
   if (newBarcodes.length > 0) {
     const { data: clash } = await admin.from("trendyol_variants")
       .select("barcode, listing_id").eq("business_id", businessId).in("barcode", newBarcodes);
     const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
     if (conflict) return { error: `Barcode-ul „${(conflict as { barcode: string }).barcode}" este deja folosit de alt produs. Folosește barcode-uri unice.` };
   }
-  await admin.from("trendyol_variants").delete().eq("listing_id", listingId);
+  /*
+   * ⚠ SE FACE UPSERT, NU „STERGE TOT SI REINSEREAZA".
+   *
+   * Reinserarea readuce la valoarea implicita ORICE coloana care nu e in
+   * payload. A costat de doua ori, pe coloane diferite: intai `variant_title`
+   * (o vanzare de pe Trendyol nu mai stia ce marime sa scada), apoi
+   * `exista_la_ei` (un produs respins, salvat din editor, pleca pe creare in loc
+   * de actualizare si Trendyol il refuza ca duplicat).
+   *
+   * Reparate una cate una, urmatoarea coloana adaugata ar fi cazut la fel.
+   * `upsert` scrie doar campurile trimise si lasa restul neatinse — deci
+   * problema dispare din clasa, nu doar din cazul de fata.
+   *
+   * Randurile care nu mai sunt in payload se sterg dupa, tintit: o varianta
+   * scoasa din produs nu trebuie sa ramana agatata de listare.
+   */
   if (rows.length > 0) {
-    const { error: vErr } = await admin.from("trendyol_variants").insert(rows as never);
+    const { error: vErr } = await admin.from("trendyol_variants")
+      .upsert(rows as never, { onConflict: "business_id,barcode" });
     if (vErr) return { error: "Eroare la salvarea variantelor. Verifică barcode-urile duplicate." };
   }
+  const stergere = admin.from("trendyol_variants").delete().eq("listing_id", listingId);
+  const { error: dErr } = rows.length > 0
+    ? await stergere.not("barcode", "in", `(${rows.map((r) => `"${r.barcode}"`).join(",")})`)
+    : await stergere;
+  if (dErr) return { error: "Eroare la curățarea variantelor vechi." };
 
   // „Salvează ca implicite": munca facuta pe primul produs dintr-o categorie se
   // aplica de la sine pe urmatoarele. Explicit, nu automat — unele atribute chiar
@@ -676,7 +1089,7 @@ export async function saveTrendyolListing(
       .from("products").select("category").eq("id", productId).eq("business_id", businessId).maybeSingle();
     const cat = (prod as { category: string | null } | null)?.category;
     if (cat) {
-      const config = await loadConfig(g.supabase, businessId);
+      const config = await loadConfig(businessId);
       const map = { ...(config.category_map ?? {}) };
       const prev = map[cat];
       if (prev) {
@@ -686,7 +1099,7 @@ export async function saveTrendyolListing(
           brand_name: input.brand_name ?? prev.brand_name,
           attributes: input.attributes,
         };
-        await saveConfig(g.supabase, businessId, { ...config, category_map: map });
+        await patchTrendyolConfig(createAdminClient(), businessId, { category_map: map });
       }
     }
   }
@@ -706,7 +1119,8 @@ async function withContext<T>(businessId: string, fn: (admin: ReturnType<typeof 
 }
 
 export async function syncTrendyolProduct(businessId: string, productId: string): Promise<{ success: true } | { error: string }> {
-  const res = await withContext(businessId, (admin, ctx) => syncProductNow(admin, ctx, productId));
+  // `manual`: apasarea comerciantului trece si peste garda listarilor adoptate.
+  const res = await withContext(businessId, (admin, ctx) => syncProductNow(admin, ctx, productId, true));
   if ("error" in res) {
     logError({ action: "trendyol.sync", message: res.error, details: { businessId, productId }, businessId });
     return { error: res.error };
@@ -714,6 +1128,28 @@ export async function syncTrendyolProduct(businessId: string, productId: string)
   revalidatePath(FEATURE_PATH);
   revalidatePath("/dashboard/products");
   return { success: true };
+}
+
+/**
+ * Împinge acum stocul și prețul din Edinio către Trendyol, pentru un produs.
+ *
+ * Există pentru listările ADOPTATE — cele legate de produse pe care comerciantul
+ * le avea deja în contul lui Trendyol, listate pe altă cale. Acolo nu
+ * suprascriem nimic din oficiu, fiindcă valorile de acolo sunt ale lui; dar
+ * trebuie să poată cere el însuși, când vrea, ca Edinio să preia.
+ */
+export async function pushTrendyolInventory(
+  businessId: string, productId: string,
+): Promise<{ success: true; trimis: boolean } | { error: string }> {
+  const res = await withContext(businessId, (admin, ctx) =>
+    pushInventoryNow(admin, ctx, productId, false, true));
+  if ("error" in res) {
+    logError({ action: "trendyol.inventory", message: res.error, details: { businessId, productId }, businessId });
+    return { error: res.error };
+  }
+  revalidatePath(FEATURE_PATH);
+  // `skipped` = listarea nu e (inca) pe Trendyol, deci n-avea ce impinge.
+  return { success: true, trimis: res.ok && res.action === "submitted" };
 }
 
 /**
@@ -732,12 +1168,12 @@ export async function publishTrendyolProduct(
 ): Promise<{ success: true; creatAcum: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const gata = trendyolReadinessError(config);
   if (gata) return { error: gata };
 
   const { data: product } = await g.supabase
-    .from("products").select("id, name, category, price, sku, page_sections, is_active")
+    .from("products").select("id, name, category, price, sku, page_sections, is_active, track_inventory, stock_quantity")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
   if ((product as { is_active?: boolean }).is_active === false) {
@@ -785,6 +1221,10 @@ export async function publishTrendyolProduct(
     const rows = slots.map((s) => ({
       listing_id: listingId, business_id: businessId, product_id: productId,
       barcode: s.barcode.trim(), stock_code: null, attributes: [] as unknown as never,
+      // Titlul combinatiei, fara de care o vanzare de pe Trendyol nu stie ce
+      // marime sa scada si dispare din stoc la prima editare de variante.
+      // `ensureListingFromMapping` il scria deja; calea asta nu.
+      variant_title: s.variantTitle,
       quantity: null, list_price: null, sale_price: null, vat_rate: null, enabled: true,
     }));
     // Acelasi barcode nu poate sta la doua produse: Trendyol l-ar suprascrie pe primul.
@@ -862,6 +1302,26 @@ export interface TrendyolProductRow {
   status: string | null;
   error: string | null;
   lastSyncedAt: string | null;
+  /**
+   * Listare ADOPTATA: produsul exista deja in contul Trendyol al comerciantului,
+   * listat pe alta cale. Edinio l-a legat, dar NU-i suprascrie stocul si pretul.
+   */
+  adoptata: boolean;
+  /**
+   * Necazuri pe care le stim, dar care NU sunt `error`.
+   *
+   * ═══ ⚠ SE SCRIAU SI NU LE CITEA NIMENI (24.08.2026) ═══
+   *
+   * `trendyol_listings.issues` era scris de doua cai — esecul unei actualizari si, de
+   * azi, epuizarea reluarilor de stoc — si nu ajungea in niciun rand de ecran. Masurat:
+   * 23 de listari cu `status: 'approved'` si `error: null` care nu mai primeau nici pret,
+   * nici stoc, si aratau perfect sanatoase.
+   *
+   * ⚠ De ce nu se scrie in `error`: acolo umbla reconcilierile, care il pun pe `null`
+   * cand produsul apare aprobat — in ACEEASI trecere de cron. Mesajul ar fi disparut
+   * inainte sa-l vada cineva.
+   */
+  probleme: string[];
 }
 
 export interface TrendyolProductPage {
@@ -897,9 +1357,9 @@ export async function getTrendyolProductPage(
 
   // Listarile sunt doar cate produse a configurat comerciantul, deci se pot tine
   // in memorie fara grija; produsele nu.
-  const listari = await fetchAllRows<{ product_id: string | null; status: string; error: string | null; last_synced_at: string | null }>(
+  const listari = await fetchAllRows<{ product_id: string | null; status: string; error: string | null; last_synced_at: string | null; auto_inventory: boolean | null; issues: unknown }>(
     "trendyol.listings", (from, to) =>
-      supabase.from("trendyol_listings").select("product_id, status, error, last_synced_at")
+      supabase.from("trendyol_listings").select("product_id, status, error, last_synced_at, auto_inventory, issues")
         .eq("business_id", businessId).order("product_id").range(from, to),
   );
   const dupaProdus = new Map(listari.filter((l) => l.product_id).map((l) => [l.product_id as string, l]));
@@ -914,6 +1374,12 @@ export async function getTrendyolProductPage(
       return {
         id: p.id, name: p.name, category: p.category, is_active: p.is_active,
         status: l?.status ?? null, error: l?.error ?? null, lastSyncedAt: l?.last_synced_at ?? null,
+        adoptata: l?.auto_inventory === false,
+        /* ⚠ Forma lui `issues` vine din jsonb, deci poate fi orice. Se citeste aparat: un
+           obiect stalcit ar fi ajuns pe rand ca „[object Object]". */
+        probleme: (Array.isArray(l?.issues) ? (l.issues as unknown[]) : [])
+          .map((x) => (x && typeof x === "object" ? String((x as { mesaj?: unknown }).mesaj ?? "") : String(x)))
+          .filter((t) => t.trim() !== ""),
       };
     });
 
@@ -1016,7 +1482,7 @@ export async function bulkPublishTrendyol(
 ): Promise<{ submitted: number; failed: number; errors: { product: string; message: string }[] } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const gata = trendyolReadinessError(config);
   if (gata) return { error: gata };
 
@@ -1028,10 +1494,45 @@ export async function bulkPublishTrendyol(
   if (!ctx) return { error: "Conexiunea Trendyol nu este disponibilă. Reconectează contul." };
 
   const res = await syncProductsBulk(admin, ctx, ids);
+
+  /*
+   * MOTIVELE se scriu in log, nu doar numerele.
+   *
+   * Pana acum se inregistra `submitted=0 failed=25` si atat. Cele mai multe
+   * produse pica INAINTE de trimitere (categorie nemapata, fara brand, barcode
+   * invalid), deci nu apuca sa aiba nici macar un rand in `trendyol_listings` —
+   * adica motivul exista doar in raspunsul catre interfata si dispare in clipa in
+   * care comerciantul inchide pagina. Verificat pe productie: 52 de esecuri in
+   * trei rulari, din care DOUA au lasat vreo urma.
+   *
+   * Se grupeaza dupa mesaj, nu se scriu toate: douazeci si cinci de produse pica
+   * de obicei din acelasi motiv, iar o lista de douazeci si cinci de randuri
+   * identice ascunde tocmai asta. Se pastreaza si un exemplu de produs pentru
+   * fiecare motiv, ca sa se poata deschide unul si vedea.
+   *
+   * `warning` cand a picat ceva, `info` cand a mers tot: un esec tacut la
+   * severitatea `info` nu se vede in /admin/logs printre rularile reusite.
+   */
+  const peMotiv = new Map<string, { nr: number; exemplu: string }>();
+  for (const e of res.errors) {
+    const cheie = e.message.slice(0, 200);
+    const intrare = peMotiv.get(cheie);
+    if (intrare) intrare.nr++;
+    else peMotiv.set(cheie, { nr: 1, exemplu: e.product });
+  }
   logError({
     action: "trendyol.bulkPublish",
     message: `submitted=${res.submitted} failed=${res.failed}`,
-    details: { businessId, cerute: ids.length }, businessId, userId: g.userId, severity: "info",
+    details: {
+      businessId,
+      cerute: ids.length,
+      motive: [...peMotiv.entries()]
+        .sort((a, b) => b[1].nr - a[1].nr)
+        .slice(0, 10)
+        .map(([mesaj, v]) => ({ mesaj, produse: v.nr, exemplu: v.exemplu })),
+    },
+    businessId, userId: g.userId,
+    severity: res.failed > 0 ? "warning" : "info",
   });
   revalidatePath(FEATURE_PATH);
   revalidatePath("/dashboard/products");
@@ -1073,20 +1574,46 @@ export async function getTrendyolOrderFulfillment(
 
 export async function markTrendyolPicking(
   businessId: string, orderId: string,
-): Promise<{ success: true; status: string } | { error: string }> {
+): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => setPackageStatus(admin, ctx, orderId, "Picking"));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
-  return { success: true, status: res.status };
+  // `avertisment` = s-a facut la Trendyol, dar comanda locala n-a preluat starea.
+  // Se DUCE pana la om: altfel panoul spune „reusit" peste o divergenta reala.
+  return { success: true, status: res.status, avertisment: res.avertisment };
 }
 
 export async function markTrendyolInvoiced(
   businessId: string, orderId: string, invoiceNumber?: string,
-): Promise<{ success: true; status: string } | { error: string }> {
+): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => setPackageStatus(admin, ctx, orderId, "Invoiced", invoiceNumber?.trim() || undefined));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
-  return { success: true, status: res.status };
+  return { success: true, status: res.status, avertisment: res.avertisment };
+}
+
+/**
+ * „Nu pot furniza comanda asta": anulare adevarata, la ei si la noi.
+ *
+ * ═══ ⚠ ASTA INLOCUIESTE „ANULAT" DIN SELECTORUL GENERIC ═══
+ *
+ * Selectorul generic schimba starea doar la noi. Comanda ramanea activa la Trendyol si pleca
+ * la client, iar recitirea revendica marfa inapoi in stoc. De azi comenzile Trendyol sunt in
+ * `MARKETPLACE_CU_CICLU_PROPRIU`, deci selectorul nu le mai atinge — si asta e iesirea.
+ *
+ * ⚠ MOTIVUL E OBLIGATORIU LA EI, si e si drept: o anulare fara motiv le ramane in socoteala
+ * vanzatorului fara sa se stie de ce.
+ */
+export async function anuleazaComandaTrendyol(
+  businessId: string, orderId: string, reasonId: number,
+  /* ⚠ Lipsa inseamna „tot pachetul", ca pana acum. Cu linii, se anuleaza doar ele, iar restul
+     comenzii pleaca mai departe la client. */
+  liniiAlese?: { lineId: number; quantity: number }[],
+): Promise<{ success: true; status: string; avertisment?: string } | { error: string }> {
+  const res = await withContext(businessId, (admin, ctx) => nuPotFurniza(admin, ctx, orderId, reasonId, liniiAlese));
+  if ("error" in res) return { error: res.error };
+  revalidatePath("/dashboard/orders");
+  return { success: true, status: res.status, avertisment: res.avertisment };
 }
 
 /**
@@ -1099,9 +1626,9 @@ export async function markTrendyolInvoiced(
 export async function sendTrendyolTracking(
   businessId: string, orderId: string,
   input: { trackingNumber: string; providerCode: string; returnTrackingNumber?: string },
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true; avertisment?: string } | { error: string }> {
   const res = await withContext(businessId, (admin, ctx) => sendTrackingNumber(admin, ctx, orderId, input));
   if ("error" in res) return { error: res.error };
   revalidatePath("/dashboard/orders");
-  return { success: true };
+  return { success: true, avertisment: res.avertisment };
 }

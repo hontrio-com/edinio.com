@@ -24,7 +24,7 @@ export default async function CategoriesPage() {
   const categories = await fetchAllRows("dashboard.categories", (from, to) =>
     supabase
       .from("categories")
-      .select("id, business_id, parent_id, name, sort_order, image_url, created_at, updated_at")
+      .select("id, business_id, parent_id, name, sort_order, is_active, image_url, created_at, updated_at")
       .eq("business_id", business.id)
       .order("sort_order")
       .order("created_at")

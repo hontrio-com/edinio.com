@@ -1,18 +1,25 @@
 /**
- * Customers ("Clienti") — a CRM view derived from the orders table.
+ * Customers ("Clienti") — a CRM view over TWO sources, merged in Postgres.
  *
- * Stores don't have a separate customers table: every order carries the buyer's
- * name/phone/email inline, and unique customers are AGGREGATED IN POSTGRES so
- * the numbers stay correct at any order volume — PostgREST silently caps every
- * response at 1000 rows, so aggregating fetched orders in JS breaks past that.
- * See the SQL functions `customers_aggregate`, `customers_summary` and
- * `customer_orders` (migration `orders_scale_rpcs`); this module keeps only the
- * shared types and the phone/email normalizers.
+ * 1. Orders. Every order carries the buyer's name/phone/email inline, and unique
+ *    customers are AGGREGATED IN POSTGRES so the numbers stay correct at any
+ *    order volume — PostgREST silently caps every response at 1000 rows, so
+ *    aggregating fetched orders in JS breaks past that.
+ * 2. The `customers` table: people imported from another platform, or added by
+ *    hand, who have not bought yet. Added 2026-07-31 for merchants migrating in
+ *    with an existing customer base.
+ *
+ * The two are joined on the same dedup key, so an imported customer sticks to
+ * their own record the moment they place an order — no duplicate row appears.
+ * Order data always wins; the import only fills gaps (e.g. the address of
+ * someone who ordered by phone). See `customers_aggregate`, `customers_summary`,
+ * `customer_orders` and migration `2026-07-31-customers-table.sql`.
  *
  * Matching key (dedup): the normalized phone number — it is required on every
  * order and is the most reliable identity in Romanian e-commerce. Email is a
  * fallback only when a phone is somehow missing. Revenue/AOV exclude
- * cancelled & refunded orders.
+ * cancelled & refunded orders, and imported customers contribute ZERO to both:
+ * bringing a contact list in must not move the revenue figures.
  */
 
 /** One order row in a customer's history (modal), computed by `customer_orders`. */
@@ -45,9 +52,17 @@ export interface Customer {
   totalSpent: number;
   /** totalSpent / paidOrderCount (0 if none). */
   aov: number;
-  firstOrderAt: string;
-  lastOrderAt: string;
-  lastStatus: string;
+  /** `null` for an imported customer who has not ordered yet. */
+  firstOrderAt: string | null;
+  /** `null` for an imported customer who has not ordered yet. */
+  lastOrderAt: string | null;
+  /** `null` for an imported customer who has not ordered yet. */
+  lastStatus: string | null;
+}
+
+/** Has this customer ever ordered? Imported-only contacts have not. */
+export function hasOrders(c: Customer): boolean {
+  return c.orderCount > 0;
 }
 
 export interface CustomersSummary {

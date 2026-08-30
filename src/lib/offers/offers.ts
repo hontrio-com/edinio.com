@@ -9,9 +9,17 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { computeBundlePricing, type BundlePricingMode } from "@/lib/bundles";
+import { esteUuid } from "@/lib/supabase/ids";
 import { hasVariants } from "@/lib/storefront/variants";
-import { aplicaBumpPeOBucata, type BumpItem } from "@/lib/offers/bump-pricing";
+import { type BumpItem } from "@/lib/offers/bump-pricing";
+import { pretulSetului } from "@/lib/offers/fbt-pricing";
+import {
+  cereArboreleDeCategorii, expandarePeOferta, normalizeazaIds,
+  opresteComanda, pretuiesteOfertele,
+  triggerMatchesCart, triggerMatchesProduct, withinWindow,
+  MAX_BUMPURI_AFISATE,
+  type MotivRefuz, type OfertaCuReguli,
+} from "@/lib/offers/offer-pricing";
 import {
   parseOfferTrigger, parseOfferConfig, parseOfferDisplay,
   defaultTitleFor, isOfferType, PHASE1_OFFER_TYPES,
@@ -20,10 +28,6 @@ import {
 } from "./offer.types";
 
 type Client = SupabaseClient<Database>;
-
-function round2(n: number): number {
-  return Math.round((Number(n) || 0) * 100) / 100;
-}
 
 function firstImage(images: unknown): string | null {
   return Array.isArray(images) && images.length ? String(images[0]) : null;
@@ -44,11 +48,9 @@ interface LoadedOffer {
   display: OfferDisplay;
 }
 
-function withinWindow(startsAt: string | null, endsAt: string | null, nowMs: number): boolean {
-  if (startsAt && new Date(startsAt).getTime() > nowMs) return false;
-  if (endsAt && new Date(endsAt).getTime() < nowMs) return false;
-  return true;
-}
+// `withinWindow`, `triggerMatchesProduct` si `triggerMatchesCart` stau in
+// `offer-pricing.ts`: sunt reguli fara baza de date, folosite si la afisare, si
+// la incasare, deci au voie sa existe o singura data si sa fie testate.
 
 // Load + parse the store's active, in-window, Faza-1 offers (highest priority first).
 async function loadActiveOffers(admin: Client, businessId: string): Promise<LoadedOffer[]> {
@@ -57,7 +59,11 @@ async function loadActiveOffers(admin: Client, businessId: string): Promise<Load
     .select("id, type, trigger, config, display, priority, starts_at, ends_at")
     .eq("business_id", businessId)
     .eq("is_active", true)
-    .order("priority", { ascending: false });
+    // Cheie secundara pe id: fara ea, doua oferte cu aceeasi prioritate veneau in
+    // ordinea arbitrara a bazei, iar magazinul putea arata alt subset la fiecare
+    // incarcare — de cand lista de bump-uri se si taie, ordinea decide ce se vede.
+    .order("priority", { ascending: false })
+    .order("id", { ascending: true });
   const nowMs = Date.now();
   return (data ?? [])
     .filter((o) => isOfferType(o.type) && PHASE1_OFFER_TYPES.includes(o.type as OfferType))
@@ -71,67 +77,19 @@ async function loadActiveOffers(admin: Client, businessId: string): Promise<Load
     }));
 }
 
-// Does an offer's trigger fire for a single (anchor) product?
-function triggerMatchesProduct(
-  trigger: OfferTrigger,
-  product: { id: string; category: string | null },
-  categoriiExtinse?: Set<string>,
-): boolean {
-  if (trigger.scope === "all") return true;
-  if (trigger.scope === "products") return trigger.productIds.includes(product.id);
-  if (trigger.scope === "categories") {
-    if (product.category == null) return false;
-    return (categoriiExtinse ?? new Set(trigger.categories)).has(product.category);
-  }
-  return false;
-}
-
 /**
- * Numele categoriilor alese, IMPREUNA cu toate cele de sub ele.
+ * Arborele de categorii al magazinului, citit O SINGURA DATA pe cerere.
  *
- * Comerciantul isi alege declansatorul dintr-un arbore, deci alege firesc o
- * categorie-parinte („Imbracaminte Femei"). Produsele stau insa in frunze
- * („Rochii", „Fuste"), iar potrivirea pe text exact nu gasea niciodata nimic:
- * oferta parea activa in panou si nu aparea nicaieri, fara niciun mesaj.
- * Catalogul magazinului coboara deja in arbore la filtrare — ofertele fac acum
- * la fel, ca aceeasi alegere sa insemne acelasi lucru in ambele locuri.
+ * Coborarea in subarbore sta in `extindeCategoriile` (pur, deci testabil) si se
+ * face separat pentru fiecare oferta: o multime comuna tuturor ofertelor aprindea
+ * oferta unei categorii pe produsele alteia.
  */
-async function extindeCategorii(
-  admin: Client, businessId: string, alese: string[],
-): Promise<Set<string>> {
-  const out = new Set(alese);
-  if (alese.length === 0) return out;
-  const { data } = await admin
+async function incarcaArborele(
+  admin: Client, businessId: string,
+): Promise<{ randuri: { id: string; name: string; parent_id: string | null }[]; eroare: boolean }> {
+  const { data, error } = await admin
     .from("categories").select("id, name, parent_id").eq("business_id", businessId);
-  const randuri = data ?? [];
-  const copiiiLui = new Map<string, typeof randuri>();
-  for (const c of randuri) {
-    if (!c.parent_id) continue;
-    const arr = copiiiLui.get(c.parent_id);
-    if (arr) arr.push(c); else copiiiLui.set(c.parent_id, [c]);
-  }
-  // Parcurgere iterativa, cu multime de vizitate: un ciclu de parinti gresit
-  // introdus in date n-are voie sa blocheze randarea magazinului.
-  const stiva = randuri.filter((c) => out.has(c.name));
-  const vazute = new Set<string>();
-  while (stiva.length) {
-    const nod = stiva.pop()!;
-    if (vazute.has(nod.id)) continue;
-    vazute.add(nod.id);
-    out.add(nod.name);
-    for (const copil of copiiiLui.get(nod.id) ?? []) stiva.push(copil);
-  }
-  return out;
-}
-
-// Does an offer's trigger fire for ANY product in a set (cart)?
-function triggerMatchesCart(
-  trigger: OfferTrigger,
-  products: { id: string; category: string | null }[],
-  categoriiExtinse?: Set<string>,
-): boolean {
-  if (trigger.scope === "all") return true;
-  return products.some((p) => triggerMatchesProduct(trigger, p, categoriiExtinse));
+  return { randuri: data ?? [], eroare: !!error };
 }
 
 function toOfferProduct(p: {
@@ -151,8 +109,11 @@ function toOfferProduct(p: {
   };
 }
 
+// `category` intra aici pentru re-evaluarea de la comanda: declansatoarele pe
+// categorii au nevoie de ea, si asa se ia dintr-o singura interogare, impreuna
+// cu preturile si stocul.
 const OFFER_PRODUCT_COLS =
-  "id, name, slug, price, compare_at_price, images, is_bundle, is_active, track_inventory, stock_quantity, page_sections";
+  "id, name, slug, price, compare_at_price, images, is_bundle, is_active, track_inventory, stock_quantity, page_sections, category";
 
 // Resolve product ids to authoritative display data. Skips missing, inactive,
 // bundle, and excluded products; preserves the requested order.
@@ -194,24 +155,11 @@ async function fetchCategoryProducts(
   return out;
 }
 
-// Map the offer discount mode to the shared bundle pricing helper.
-function discountModeToBundleMode(mode: OfferConfig["discountMode"]): BundlePricingMode | null {
-  if (mode === "percent") return "discount_percent";
-  if (mode === "amount") return "discount_amount";
-  if (mode === "fixed_price") return "fixed";
-  return null; // "none"
-}
-
 // Combined price for a set of products (FBT anchor + companions, or a single bump).
+// Formula sta in `fbt-pricing.ts`, ca afisarea si incasarea sa nu poata apuca pe
+// drumuri diferite.
 function computeSetPricing(prices: number[], config: OfferConfig): ResolvedOffer["pricing"] {
-  const mode = discountModeToBundleMode(config.discountMode);
-  const compareAt = round2(prices.reduce((s, p) => s + p, 0));
-  if (!mode) return { price: compareAt, compareAt, savings: 0 };
-  return computeBundlePricing(
-    prices.map((p) => ({ price: p, quantity: 1 })),
-    mode,
-    { fixedPrice: config.fixedPrice, discountPercent: config.discountPercent, discountAmount: config.discountAmount },
-  );
+  return pretulSetului(prices, config);
 }
 
 /**
@@ -224,15 +172,16 @@ export async function resolveProductOffers(
   admin: Client, businessId: string, anchor: OfferAnchor,
 ): Promise<ResolvedOffer[]> {
   const offers = await loadActiveOffers(admin, businessId);
-  // O singura citire a arborelui de categorii, refolosita de toate ofertele.
-  const extinse = offers.some((o) => o.trigger.scope === "categories")
-    ? await extindeCategorii(admin, businessId, [...new Set(offers.flatMap((o) => o.trigger.categories))])
-    : undefined;
+  // O singura citire a arborelui de categorii, coborata separat pentru fiecare
+  // oferta: o multime comuna aprindea oferta unei categorii pe produsele alteia.
+  const extinsele = expandarePeOferta(
+    offers.some(cereArboreleDeCategorii) ? (await incarcaArborele(admin, businessId)).randuri : [],
+  );
   const applicable = offers.filter(
     (o) =>
       (o.type === "frequently_bought" || o.type === "cross_sell") &&
       o.display.surfaces.includes("product_page") &&
-      triggerMatchesProduct(o.trigger, anchor, extinse),
+      triggerMatchesProduct(o.trigger, anchor, extinsele(o)),
   );
   if (applicable.length === 0) return [];
 
@@ -246,9 +195,7 @@ export async function resolveProductOffers(
      * exclusa, deci oferta disparea. Cu declansator pe categorii se cauta in tot
      * subarborele ales; la „toate" sau pe produse ramane categoria produsului.
      */
-    const bazin = o.trigger.scope === "categories"
-      ? (extinse ?? new Set(o.trigger.categories))
-      : new Set(anchor.category ? [anchor.category] : []);
+    const bazin = extinsele(o) ?? new Set(anchor.category ? [anchor.category] : []);
     const products = o.type === "cross_sell" && o.config.autoByCategory
       ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts)
       : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
@@ -294,14 +241,15 @@ export async function resolveCartOffers(
     .eq("business_id", businessId).in("id", [...new Set(cartProductIds)]);
   const cartProducts = (cartRows ?? []).map((r) => ({ id: r.id, category: r.category }));
 
-  // O singura citire a arborelui de categorii, refolosita de toate ofertele.
-  const extinse = offers.some((o) => o.trigger.scope === "categories")
-    ? await extindeCategorii(admin, businessId, [...new Set(offers.flatMap((o) => o.trigger.categories))])
-    : undefined;
+  // O singura citire a arborelui de categorii, coborata separat pentru fiecare
+  // oferta: o multime comuna aprindea oferta unei categorii pe produsele alteia.
+  const extinsele = expandarePeOferta(
+    offers.some(cereArboreleDeCategorii) ? (await incarcaArborele(admin, businessId)).randuri : [],
+  );
 
   const wantType: OfferType = surface === "checkout" ? "order_bump" : "cross_sell";
   const applicable = offers.filter(
-    (o) => o.type === wantType && o.display.surfaces.includes(surface) && triggerMatchesCart(o.trigger, cartProducts, extinse),
+    (o) => o.type === wantType && o.display.surfaces.includes(surface) && triggerMatchesCart(o.trigger, cartProducts, extinsele(o)),
   );
   if (applicable.length === 0) return [];
 
@@ -315,10 +263,8 @@ export async function resolveCartOffers(
     // Acelasi bazin ca pe pagina de produs: alegerea comerciantului, cu tot
     // subarborele ei. Cu categoria-frunza a produsului din cos, un magazin cu un
     // singur produs pe categorie nu putea recomanda niciodata nimic.
-    const declansator = cartProducts.find((p) => triggerMatchesProduct(o.trigger, p, extinse) && p.category);
-    const bazin = o.trigger.scope === "categories"
-      ? (extinse ?? new Set(o.trigger.categories))
-      : new Set(declansator?.category ? [declansator.category] : []);
+    const declansator = cartProducts.find((p) => triggerMatchesProduct(o.trigger, p, extinsele(o)) && p.category);
+    const bazin = extinsele(o) ?? new Set(declansator?.category ? [declansator.category] : []);
     const products = o.type === "cross_sell" && o.config.autoByCategory
       ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts)
       : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
@@ -347,108 +293,184 @@ export async function resolveCartOffers(
     }
     resolved.push(base);
   }
-  return resolved;
+  // Magazinul nu arata mai multe bump-uri decat accepta comanda. Altfel un
+  // comerciant cu noua oferte pe acelasi cos ar fi pus clientul in situatia sa
+  // bifeze tot, iar serverul sa-i refuze comanda pentru un plafon despre care
+  // interfata nu stia nimic.
+  return surface === "checkout" ? resolved.slice(0, MAX_BUMPURI_AFISATE) : resolved;
 }
 
 export type { BumpItem };
 
+/* ─── Re-evaluarea ofertelor la plasarea comenzii ─────────────────────────── */
+
 /**
- * Order-time enforcement for accepted order-bump offers. Re-prices any order line
- * covered by an accepted bump offer to the offer's AUTHORITATIVE discounted price
- * (computed from the offer config in the DB — the client can never forge it).
+ * Un singur mesaj pentru toate motivele de refuz. Motivele sunt schimbari facute
+ * de comerciant, la care clientul n-are ce raspunde decat reincarcand, iar unul
+ * granular i-ar spune unui atacator exact ce verificare a picat.
+ */
+const OFERTA_INDISPONIBILA =
+  "Oferta pe care ai acceptat-o nu mai este disponibila. Reincarca pagina si incearca din nou.";
+
+/** Cand nu am PUTUT verifica oferta (baza a cazut), raspunsul e sa mai incerce, nu sa reincarce. */
+const OFERTA_NEVERIFICATA =
+  "Nu am putut verifica oferta acceptata. Te rugam incearca din nou in cateva momente.";
+
+export interface ContextOferte {
+  /**
+   * Comanda directa: produsul din formular, cu AMBELE preturi de care are nevoie
+   * setul „cumparate frecvent impreuna" — cel de catalog, cu care s-a calculat
+   * economia aratata pe card, si cel unitar chiar platit (varianta aleasa), dupa
+   * care se imparte economia. `null` pe calea cosului, care n-are ancora.
+   */
+  anchor: { productId: string; basePrice: number; unitPrice: number } | null;
+  /** Produsele comenzii pentru care clientul a ales o varianta — vin sigur din cos. */
+  cuVariantaAleasa?: Set<string>;
+}
+
+export interface RezultatOferte {
+  items: BumpItem[];
+  savings: number;
+  applied: string[];
+  rejected: { id: string; motiv: MotivRefuz }[];
+  /** Venitul adus de fiecare oferta aplicata — vezi `IesireOferte.venitPeOferta`. */
+  venitPeOferta: Record<string, number>;
+  /** Cand e prezent, comanda se OPRESTE cu mesajul asta. */
+  error?: string;
+}
+
+/**
+ * Pretul ofertelor acceptate, RE-EVALUAT integral pe server.
  *
- * The bump discount lives in the item price (no separate discount line), so subtotal,
- * total, invoices and emails all stay correct automatically with zero extra plumbing.
- * A pure no-op when `acceptedOfferIds` is empty — so order creation is byte-identical
- * to today unless the storefront actually sends accepted bump offers.
+ * Pana acum existau doua functii (`applyBumpPricing` si `applyFbtPricing`) care
+ * citeau din `offers` doar `id, type, config, starts_at, ends_at`: `trigger` si
+ * `display` nici nu ajungeau in memorie. Nu se verifica deci nici daca oferta se
+ * aprinde pe comanda asta, nici daca se arata pe suprafata de unde vine comanda,
+ * si se repretuia ORICE linie al carei produs aparea in `config.productIds` —
+ * fara regulile pe care le aplica magazinul cand alege ce produs sa arate
+ * (primele `maxProducts`, doar cele cu stoc si fara variante). Id-ul ofertei
+ * ajunge in browser prin `getCheckoutBumps`, deci oricine il putea trimite pe o
+ * comanda straina si incasa reducerea.
+ *
+ * Acum se reface tot drumul magazinului, cu ACELEASI functii, iar o oferta care
+ * nu se mai poate justifica OPRESTE comanda in loc sa dispara in tacere: bump-ul
+ * nu promite doar un pret, ci adauga un produs, si a-l lasa in comanda la pretul
+ * intreg inseamna ca ecranul scria una si curierul incaseaza alta. Exact
+ * tratamentul cuponului respins. Singura exceptie e „lipsa_din_comanda": acolo
+ * nu s-a promis nimic si nu s-a miscat niciun leu.
+ *
+ * Cost: doua interogari, exact cat cereau cele doua functii inlocuite (care
+ * citeau de doua ori aceleasi randuri), plus una pe arborele de categorii doar
+ * daca vreo oferta acceptata se declanseaza pe categorii.
  */
-export async function applyBumpPricing(
-  admin: Client, businessId: string, acceptedOfferIds: string[], items: BumpItem[],
-): Promise<{ items: BumpItem[]; savings: number }> {
-  const ids = [...new Set((acceptedOfferIds ?? []).filter((x) => typeof x === "string" && x))];
-  if (ids.length === 0) return { items, savings: 0 };
+export async function applyOfferPricing(
+  admin: Client,
+  businessId: string,
+  acceptedOfferIds: string[] | undefined,
+  items: BumpItem[],
+  ctx: ContextOferte,
+): Promise<RezultatOferte> {
+  const oprit = (rejected: { id: string; motiv: MotivRefuz }[], error?: string): RezultatOferte =>
+    ({ items, savings: 0, applied: [], rejected, venitPeOferta: {}, error });
 
-  const { data } = await admin
+  const { ids, preaMulte } = normalizeazaIds(acceptedOfferIds);
+  if (ids.length === 0) return oprit([]);
+  if (preaMulte) {
+    return oprit(ids.map((id) => ({ id, motiv: "prea_multe" as const })), OFERTA_INDISPONIBILA);
+  }
+
+  const { data, error } = await admin
     .from("offers")
-    .select("id, type, config, starts_at, ends_at")
+    .select("id, type, trigger, config, display, priority, starts_at, ends_at")
     .eq("business_id", businessId)
     .eq("is_active", true)
     .in("id", ids);
-  if (!data || data.length === 0) return { items, savings: 0 };
+  // O interogare cazuta NU inseamna „oferta nu mai e valabila": fara `error`
+  // citit, `data` null transforma orice id revendicat in „inexistenta" si o pana
+  // de o secunda a bazei ar refuza comenzi spunandu-i clientului sa reincarce
+  // pagina, cand singurul raspuns corect e sa mai incerce o data.
+  if (error) return oprit([], OFERTA_NEVERIFICATA);
 
-  const nowMs = Date.now();
-  const out = items.map((i) => ({ ...i }));
-  let savings = 0;
-  for (const o of data) {
-    if (o.type !== "order_bump" || !withinWindow(o.starts_at, o.ends_at, nowMs)) continue;
-    const cfg = parseOfferConfig(o.config);
-    // ORICARE dintre produsele ofertei, nu doar primul: magazinul arata primul
-    // produs care chiar poate fi luat dintr-o apasare, deci cand primul din
-    // lista e epuizat sau are variante, clientul vede altul. Cu potrivirea pe
-    // primul, serverul nu gasea linia si taxa pretul INTREG, in tacere.
-    // De la coada catre inceput: liniile de bump se adauga DUPA cele din cos,
-    // deci cand acelasi produs e si in cos si oferit ca bump, cautarea de la
-    // inceput nimerea linia din cos si reducerea ateriza pe cantitatea ei.
-    let line: BumpItem | undefined;
-    for (let k = out.length - 1; k >= 0; k--) {
-      if (cfg.productIds.includes(out[k].product_id)) { line = out[k]; break; }
-    }
-    if (!line) continue; // the customer didn't actually add the bump product — no discount
-    const priced = computeSetPricing([line.price], cfg);
-    if (!priced || priced.price >= line.price) continue;
+  const rejected: { id: string; motiv: MotivRefuz }[] = [];
+  const randuri = (data ?? []).filter((r) => isOfferType(r.type));
+  const gasite = new Set(randuri.map((r) => r.id));
+  for (const id of ids) if (!gasite.has(id)) rejected.push({ id, motiv: "inexistenta" });
 
-    savings = round2(savings + aplicaBumpPeOBucata(out, line, priced.price));
+  const oferte: OfertaCuReguli[] = randuri.map((r) => ({
+    id: r.id,
+    type: r.type as OfferType,
+    trigger: parseOfferTrigger(r.trigger),
+    config: parseOfferConfig(r.config),
+    display: parseOfferDisplay(r.display, r.type as OfferType),
+    startsAt: r.starts_at,
+    endsAt: r.ends_at,
+    priority: Number(r.priority) || 0,
+  }));
+
+  // O SINGURA interogare de produse, peste reuniunea de id-uri: liniile comenzii
+  // (pentru declansator), ancora, si tot ce ofera ofertele revendicate (pentru
+  // pret, stoc, variante si pachet).
+  const idProduse = new Set<string>(items.map((i) => i.product_id).filter(esteUuid));
+  if (esteUuid(ctx.anchor?.productId)) idProduse.add(ctx.anchor!.productId);
+  for (const o of oferte) for (const pid of o.config.productIds) if (esteUuid(pid)) idProduse.add(pid);
+  const produseCerute = idProduse.size
+    ? await admin.from("products").select(OFFER_PRODUCT_COLS)
+        .eq("business_id", businessId).in("id", [...idProduse])
+    : null;
+  if (produseCerute?.error) return oprit([], OFERTA_NEVERIFICATA);
+  const randuriProduse = produseCerute?.data ?? [];
+
+  const categoriaLui = new Map<string, string | null>();
+  const oferibile = new Map<string, OfferProduct>();
+  for (const p of randuriProduse) {
+    categoriaLui.set(p.id, p.category);
+    // Aceleasi doua conditii ca `fetchOfferProducts`: ce nu se poate oferi la
+    // afisare nu se poate nici pretui la incasare.
+    if (p.is_active && !p.is_bundle) oferibile.set(p.id, toOfferProduct(p));
   }
-  return { items: out, savings };
-}
 
-/**
- * Distribute an FBT set's savings across the COMPANION prices — the anchor stays at
- * full price (it's the main product being ordered via the buy box). Deterministic and
- * shared by the storefront preview and the order-time enforcement, so the two always
- * compute identical companion prices (no client/server mismatch). Savings are capped
- * at the companions' total (companions never go below 0).
- */
-export function fbtCompanionPrices(anchorPrice: number, companionPrices: number[], config: OfferConfig): number[] {
-  const pricing = computeSetPricing([anchorPrice, ...companionPrices], config);
-  const compTotal = round2(companionPrices.reduce((s, p) => s + p, 0));
-  const savings = pricing ? Math.min(pricing.savings, compTotal) : 0;
-  if (savings <= 0 || compTotal <= 0) return companionPrices.map((p) => round2(p));
-  return companionPrices.map((p) => round2(Math.max(0, p - savings * (p / compTotal))));
-}
+  // La AFISARE, un arbore necitit inseamna cel mult o oferta care nu se arata; la
+  // INCASARE ar insemna un declansator evaluat pe date lipsa, deci un refuz cu
+  // mesajul gresit. De aceea aici pana se spune pe fata.
+  const arbore = oferte.some(cereArboreleDeCategorii)
+    ? await incarcaArborele(admin, businessId)
+    : { randuri: [], eroare: false };
+  if (arbore.eroare) return oprit([], OFERTA_NEVERIFICATA);
+  const extinsele = expandarePeOferta(arbore.randuri);
 
-/**
- * Order-time enforcement for accepted "frequently bought together" offers. Re-prices
- * the companion lines to their AUTHORITATIVE FBT share (computed from the offer config
- * in the DB + the anchor's unit price — the client can never forge it). The discount
- * lives in the companion item prices, so totals/invoices/emails stay correct with no
- * extra plumbing. No-op unless an accepted FBT offer's companions are in the order.
- */
-export async function applyFbtPricing(
-  admin: Client, businessId: string, acceptedOfferIds: string[],
-  anchorProductId: string, anchorUnitPrice: number, items: BumpItem[],
-): Promise<{ items: BumpItem[] }> {
-  const ids = [...new Set((acceptedOfferIds ?? []).filter((x) => typeof x === "string" && x))];
-  if (ids.length === 0) return { items };
-
-  const { data } = await admin
-    .from("offers")
-    .select("id, type, config, starts_at, ends_at")
-    .eq("business_id", businessId)
-    .eq("is_active", true)
-    .in("id", ids);
-  if (!data || data.length === 0) return { items };
-
-  const nowMs = Date.now();
+  const cuCategorie = (id: string) => ({ id, category: categoriaLui.get(id) ?? null });
   const out = items.map((i) => ({ ...i }));
-  for (const o of data) {
-    if (o.type !== "frequently_bought" || !withinWindow(o.starts_at, o.ends_at, nowMs)) continue;
-    const cfg = parseOfferConfig(o.config);
-    const compIds = new Set(cfg.productIds);
-    const compLines = out.filter((i) => compIds.has(i.product_id) && i.product_id !== anchorProductId);
-    if (compLines.length === 0) continue;
-    const discounted = fbtCompanionPrices(anchorUnitPrice, compLines.map((l) => l.price), cfg);
-    compLines.forEach((l, idx) => { if (discounted[idx] < l.price) l.price = discounted[idx]; });
-  }
-  return { items: out };
+  const rez = pretuiesteOfertele({
+    oferte,
+    linii: out,
+    ctx: {
+      ancora: ctx.anchor ? cuCategorie(ctx.anchor.productId) : null,
+      produse: [...new Set([...(ctx.anchor ? [ctx.anchor.productId] : []), ...items.map((i) => i.product_id)])]
+        .map(cuCategorie),
+      cuVariantaAleasa: ctx.cuVariantaAleasa,
+    },
+    oferibile,
+    ancora: { basePrice: ctx.anchor?.basePrice ?? 0, unitPrice: ctx.anchor?.unitPrice ?? 0 },
+    extinsele,
+    nowMs: Date.now(),
+  });
+
+  rejected.push(...rez.rejected);
+  if (opresteComanda(rejected)) return oprit(rejected, OFERTA_INDISPONIBILA);
+
+  /*
+   * ACCEPTARILE nu se numara AICI.
+   *
+   * `applyOfferPricing` e singurul loc prin care trec ambele cai de comanda, deci
+   * era tentant — dar intre el si insertul comenzii stau SASE iesiri cu eroare:
+   * comanda minima neatinsa, verificarea firmei la ANAF, cuponul respins intre
+   * timp, stocul pierdut la expandarea pachetelor, limita cuponului, si insertul
+   * insusi. Numarate aici, toate ar fi intrat in contor ca „acceptari", iar
+   * clientul care corecteaza eroarea si retrimite ar fi adaugat inca una.
+   *
+   * `applied` si `venitPeOferta` se intorc mai jos tocmai ca sa poata fi scrise de
+   * apelant, DUPA ce comanda a intrat cu adevarat.
+   */
+
+  return { items: out, savings: rez.savings, applied: rez.applied, rejected, venitPeOferta: rez.venitPeOferta };
 }

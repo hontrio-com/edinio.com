@@ -12,31 +12,26 @@ import { formatPrice } from "@/lib/utils/format";
 import { placeOrder } from "@/lib/actions/order.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
-import { computeVat, type VatConfig } from "@/lib/utils/vat";
+import { computeVat, vatBase, type VatConfig } from "@/lib/utils/vat";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
+import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
+import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
-import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { CompanyFields, useCompanyBilling } from "./CompanyFields";
+import { JUDETE } from "@/lib/ro/judete";
+import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { OrderBump } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
+import { fbtInCos } from "@/lib/offers/fbt-in-cos";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 
-const JUDETE = [
-  "Municipiul Bucuresti","Alba","Arad","Arges","Bacau","Bihor","Bistrita-Nasaud","Botosani",
-  "Braila","Brasov","Buzau","Calarasi","Cluj","Constanta","Covasna","Dambovita","Dolj",
-  "Galati","Giurgiu","Gorj","Harghita","Hunedoara","Ialomita","Iasi","Ilfov","Maramures",
-  "Mehedinti","Mures","Neamt","Olt","Prahova","Salaj","Satu Mare","Sibiu","Suceava",
-  "Teleorman","Timis","Tulcea","Vaslui","Valcea","Vrancea",
-];
 
-export interface QuantityTier {
-  qty: number;
-  price: number;   // total bundle price
-  badge?: string;
-}
+export type { QuantityTier };
 
 export interface CustomizationFieldDef {
   id: string;
@@ -57,6 +52,7 @@ interface CheckoutConfig {
   extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
   hidden_fields?: string[];
   email_field?: { enabled: boolean; required: boolean };
+  company_fields?: { enabled: boolean };
 }
 
 interface Props {
@@ -68,7 +64,12 @@ interface Props {
     price: number;
     compare_at_price?: number | null;
     images: string[];
-    weight_grams?: number | null;
+      /**
+     * Combinatia aleasa, separat de nume. Serverul o foloseste ca sa pretuiasca
+     * produsul din combinatia LUI: fara ea, orice pret de varianta activa trecea
+     * pentru orice varianta.
+     */
+    variantTitle?: string | null;
   };
   business: {
     id: string;
@@ -101,6 +102,17 @@ interface Props {
    * cos cand s-a deschis modalul.
    */
   onCartConsumed?: (liniiComandate: { productId: string; variantTitle?: string }[]) => void;
+  /**
+   * Clientul a schimbat o linie de cos din formular: `qty` zero inseamna stearsa.
+   *
+   * Sectiunea „Din cosul tau" arata cosul REAL al magazinului, deci si editarea
+   * trebuie sa ajunga acolo. Cat timp raminea doar in starea locala, stergerea
+   * disparea la prima reinchidere a formularului, fiindca modalul isi reciteste
+   * liniile din `cartItems` la fiecare deschidere.
+   *
+   * Cheia are forma din `lineKey` (produs, sau produs::varianta).
+   */
+  onCartLineChange?: (key: string, qty: number) => void;
   /** Pre-accepted "frequently bought together" set — companions at FBT-distributed prices. */
   fbtOffer?: { id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] };
 }
@@ -120,8 +132,12 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, customizationFields, cartItems, onCartConsumed, fbtOffer }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, customizationFields, cartItems, onCartConsumed, onCartLineChange, fbtOffer }: Props) {
   const color = business.primary_color;
+  // Cosul magazinului, cand exista: de acolo vin preturile autoritare ale liniilor
+  // purtate. Lipseste in miniatura din catalogul de design-uri, care randeaza
+  // formularul fara provider.
+  const cosMagazin = useCartOptional();
   // Upsell-ul de cantitate se suprima in fluxul "Cumpara impreuna" (FBT): setul FBT
   // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
   // discount FBT), fara ca discountul de cantitate sa se cumuleze peste cel de set.
@@ -134,12 +150,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
+  const [codFeeConfig, setCodFeeConfig] = useState<CodFeeConfig>(DEFAULT_COD_FEE);
   const [vatConfig, setVatConfig] = useState<VatConfig>({ vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const customFields = liveCheckoutConfig?.custom_fields ?? [];
   const extras = liveCheckoutConfig?.extras ?? [];
   // Discount code is OFF by default (hidden unless the merchant enabled it in the editor).
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? ["discount"];
-  const emailField = liveCheckoutConfig?.email_field ?? { enabled: true, required: false };
+  const emailFieldBrut = liveCheckoutConfig?.email_field ?? { enabled: true, required: false };
+  // Comenzi pe firma — acelasi reglaj si acelasi carlig ca in formularul pe cos,
+  // ca validarea CUI-ului sa nu poata diverge intre cele doua cai de comanda.
+  const companyFieldsOn = liveCheckoutConfig?.company_fields?.enabled === true;
 
   // `onClose` vine ca functie noua la fiecare randare a paginii gazda. Citita
   // direct in efectul de resetare, il re-declansa si golea formularul sub
@@ -147,14 +167,53 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const inchide = useRef(onClose);
   useEffect(() => { inchide.current = onClose; }, [onClose]);
 
-  const [selectedTierIdx, setSelectedTierIdx] = useState(0);
+  // Treapta aleasa NU are stare proprie: se deduce din `quantity` (vezi
+  // `pretPeTrepte`). Cat timp a avut, butonul de treapta scria cantitatea iar
+  // bifa citea starea, deci apasarea pe „2 bucati" nu misca nimic pe ecran, iar
+  // comanda pleca cu pretul treptei ramase in stare — cea de o bucata.
   const [quantity, setQuantity] = useState(1);
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  /*
+   * Bucurestiul se alege pe sectoare — vezi nota lunga din `CheckoutForm.tsx`.
+   * ⚠ `sectorAles` se DERIVA din `form.city`: tinut separat, o valoare veche ar
+   * ramane in stare in timp ce selectorul arata gol, si ar pleca pe comanda.
+   */
+  const inBucuresti = normalizeCountyName(form.county || "").toLowerCase() === "bucuresti";
+  const sectorAles = (() => {
+    const n = sectorBucuresti(form.city);
+    return n ? `Sector ${n}` : "";
+  })();
+  const schimbaJudetul = (judet: string) => {
+    const spreBucuresti = normalizeCountyName(judet).toLowerCase() === "bucuresti";
+    setForm((f) => {
+      const n = sectorBucuresti(f.city);
+      const pastreaza = spreBucuresti ? n !== null : n === null;
+      return { ...f, county: judet, city: pastreaza ? (spreBucuresti ? `Sector ${n}` : f.city) : "" };
+    });
+  };
+
   const [isPending, startTransition] = useTransition();
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
+
+  /*
+   * ⚠ Livrarea la punct GLS PORNESTE campul de email, nu doar il face
+   * obligatoriu. MyGLS il cere la serviciul PSD (pagina 36): coletul ajunge la
+   * un ghiseu, iar omul trebuie sa afle ca il poate ridica. Intr-un magazin
+   * care a oprit campul, verificarea de mai jos cerea un email pe un camp CARE
+   * NU EXISTA pe ecran — comanda nu se putea trimite si nimic nu spunea de ce.
+   */
+  /* ⚠ Doi curieri cer emailul la livrarea in punct, si numai ei: GLS il are camp
+     obligatoriu pe adresa de livrare, iar Shipo trimite ACOLO codul de ridicare
+     („emailul este obligatoriu pentru locker/pudo" — documentatia lor). Largita la
+     toate lockerele, regula ar bloca degeaba comenzi care azi merg la SmartShip si
+     Packeta, unde emailul nu se cere. */
+  const laPunctGls = courierSelection?.deliveryType === "locker"
+    && (courierSelection?.courier === "gls" || courierSelection?.courier === "shipo");
+  const emailField = laPunctGls ? { enabled: true, required: true } : emailFieldBrut;
   // Order created by a previous identical submit (e.g. retry after the card
   // processor errored) — reused so the retry doesn't place a duplicate order
   // and re-send merchant/customer notifications.
@@ -168,20 +227,34 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
   const [intlEnabled, setIntlEnabled] = useState(false);
-  const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
+  // In afara tarii, blocul de firma nu se arata: cifra de control a CUI-ului e
+  // romaneasca, deci un cod de TVA european ar fi respins si ar bloca comanda.
+  const companyEnabled = companyFieldsOn && !isIntl;
+  const companyBilling = useCompanyBilling(companyEnabled);
   // DPD international services don't support cash-on-delivery — EU orders pay online.
   // Klarna is hardcoded to RO/RON (the store currency); Klarna requires the consumer
   // country to match the currency, so it can't serve non-RO orders — exclude it abroad.
-  const availablePaymentMethods = isIntl
-    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && m.type !== "klarna")
+  /*
+   * ⚠ PALL-EX NU INCASEAZA LA LIVRARE, deci rambursul nu are ce cauta pe el.
+   *
+   * API-ul ClientPlus n-are niciun camp de incasare. Lasata la vedere, combinatia
+   * „Livrare paletizata Pall-Ex" + „Plata la livrare" se putea chiar plasa:
+   * comanda iesea `unpaid`, cu taxa de ramburs incasata pentru un serviciu care
+   * nu exista, iar la emitere formularul ii cerea comerciantului sa confirme ca
+   * trimite marfa fara nicio cale de a lua banii. Clientului i se promisese ceva
+   * imposibil.
+   */
+  const faraRamburs = isIntl || courierSelection?.courier === "pallex";
+  const availablePaymentMethods = faraRamburs
+    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && (!isIntl || m.type !== "klarna"))
     : paymentMethods;
   useEffect(() => {
-    if (isIntl && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
+    if (faraRamburs && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
       setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntl]);
+  }, [isIntl, faraRamburs]);
 
   // Customization state
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
@@ -198,16 +271,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // leave to hunt for codes). Revealed on demand via "Ai un cod?".
   const [showDiscountField, setShowDiscountField] = useState(false);
 
-  // Derive effective qty and raw subtotal (before discount)
-  //
-  // Treptele se aplica doar cand cantitatea ceruta CHIAR e o treapta. Paginile
-  // de produs cu selector de bucati pot cere orice numar, iar lista de trepte
-  // contine mereu si intrarea de o bucata: fara verificarea asta, cine alegea 7
-  // bucati pe pagina ajungea in formular cu una singura, fara niciun semn.
-  const treaptaPotrivita = hasTiers ? tiers!.findIndex((t) => t.qty === quantity) : -1;
-  const peTrepte = treaptaPotrivita >= 0;
-  const effectiveQty = peTrepte ? tiers![treaptaPotrivita].qty : quantity;
-  const productSubtotal = peTrepte ? tiers![treaptaPotrivita].price : product.price * quantity;
+  // Cantitatea, totalul afisat si pretul unitar trimis serverului ies TOATE din
+  // acelasi calcul, ca sa nu mai poata spune lucruri diferite (vezi
+  // `pretPeTrepte`). Bifa de pe butonul de treapta citeste tot de acolo.
+  const treapta = pretPeTrepte(hasTiers ? tiers : undefined, quantity, product.price);
+  const productSubtotal = treapta.subtotal;
   // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
@@ -215,7 +283,41 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // A carried line is identified by product + variant, so two variants of the same
   // product stay distinct when editing quantity / removing / rendering.
   const cartLineKey = (l: { productId: string; variantTitle?: string }) => l.variantTitle ? `${l.productId}::${l.variantTitle}` : l.productId;
-  const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  // Liniile purtate din cos se socotesc prin cos, ca sa poarte cu ele treptele de
+  // cantitate: acelasi numar in sertar, pe pagina de cos, aici si la server.
+  const totalLinieCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
+    cosMagazin ? cosMagazin.lineTotal({ ...i, name: "", imageUrl: null } as never) : i.price * i.quantity;
+  // Si pretul pe bucata trece prin cos, din exact acelasi motiv ca totalul de mai
+  // sus: `i.price` e instantaneul salvat in localStorage la adaugare in cos, deci
+  // eticheta „X lei bucata" statea langa un total calculat la zi si cele doua nu
+  // se inmulteau. 
+  const pretBucataCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
+    cosMagazin ? cosMagazin.lineUnit({ ...i, name: "", imageUrl: null } as never) : i.price;
+  /*
+   * Setul „cumparate frecvent impreuna" asezat peste liniile purtate din cos.
+   *
+   * Companionul aflat DEJA in cos nu se mai adauga a doua oara: linia lui ramane
+   * cu toate bucatile si primeste pretul de set pe UNA SINGURA, exact ce face
+   * serverul in `aplicaOfertaPeLinii`. Companionul care nu e in cos iese prin
+   * `companioniNoi` si pleaca ca linie proprie, ca pana acum.
+   *
+   * Pretul pe bucata e chiar cel cu care pleaca linia catre server: totalul ei
+   * (cu trepte cu tot) impartit la cantitate, NEROTUNJIT, ca in `pretPeTrepte`.
+   */
+  const fbt = fbtInCos(
+    cart.map((i) => ({
+      product_id: i.productId,
+      name: i.name,
+      price: i.quantity > 0 ? totalLinieCos(i) / i.quantity : 0,
+      quantity: i.quantity,
+    })),
+    fbtOffer?.items ?? [],
+  );
+  const economiaFbtPeLinie = (idx: number) => fbt.economiePeLinie[idx] ?? 0;
+  /** Linia din cos e chiar un companion al setului acceptat? */
+  const esteCompanionFbt = (i: { productId: string }) =>
+    (fbtOffer?.items ?? []).some((c) => c.product_id === i.productId);
+  const cartSubtotal = cart.reduce((s, i) => s + totalLinieCos(i), 0) - fbt.economieTotala;
   // Accepted order bumps add their discounted product to the goods subtotal, so it
   // flows through discount, free-shipping, card-discount and total automatically.
   // Hide a bump when its product is already in the order (carried cart or FBT set) — it
@@ -229,11 +331,19 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   });
   const acceptedBumpOffers = visibleBumps.filter((o) => acceptedBumps.has(o.id) && o.pricing && o.products[0]);
   const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
-  const fbtSubtotal = fbtOffer ? fbtOffer.items.reduce((s, i) => s + i.price * i.quantity, 0) : 0;
+  const fbtSubtotal = fbt.companioniNoi.reduce((s, i) => s + i.price * i.quantity, 0);
   const subtotal = Math.round((productSubtotal + cartSubtotal + bumpSubtotal + fbtSubtotal) * 100) / 100;
-  const setCartQty = (key: string, qty: number) =>
+  // Editarea scrie in DOUA locuri: starea locala, ca formularul sa se actualizeze
+  // pe loc, si cosul magazinului prin `onCartLineChange`, ca modificarea sa
+  // supravietuiasca inchiderii formularului.
+  const setCartQty = (key: string, qty: number) => {
     setCartLines((lines) => qty <= 0 ? lines.filter((l) => cartLineKey(l) !== key) : lines.map((l) => cartLineKey(l) === key ? { ...l, quantity: qty } : l));
-  const removeCartLine = (key: string) => setCartLines((lines) => lines.filter((l) => cartLineKey(l) !== key));
+    onCartLineChange?.(key, Math.max(0, qty));
+  };
+  const removeCartLine = (key: string) => {
+    setCartLines((lines) => lines.filter((l) => cartLineKey(l) !== key));
+    onCartLineChange?.(key, 0);
+  };
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
 
   // Apply discount to subtotal
@@ -254,12 +364,23 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
   // Ramburs discount (mirrors the server): only when the customer picks cash on delivery.
   const codDiscountAmount = computeCodDiscount(codDiscountConfig, paymentMethod, discountedSubtotal + extrasTotal);
-  // VAT (shared helper — identical formula on server + CartCheckoutModal). Base is
-  // the PRE-discount goods+extras so the add-on matches the server grand total.
-  const vatBase = subtotal + extrasTotal;
-  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
+  // Taxa de ramburs (oglinda serverului): calculata INAINTEA TVA-ului, fiindca
+  // intra in baza lui alaturi de marfa si extraoptiuni.
+  const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, discountedSubtotal + extrasTotal, vatConfig);
+  // VAT: aceeasi baza si acelasi helper ca serverul si ca finalizarea cosului —
+  // marfa, extraoptiunile si TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs.
+  const bazaTva = vatBase({
+    goods: subtotal,
+    extras: extrasTotal,
+    shipping,
+    discount: discountAmount,
+    cardDiscount: cardDiscountAmount,
+    codDiscount: codDiscountAmount,
+    codFee: codFeeAmount,
+  });
+  const { vatAmount, vatAddOn } = computeVat(bazaTva, vatConfig);
   // Round to 2 decimals (cents): float math would otherwise show e.g. 179.35999999999999.
-  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount + vatAddOn) * 100) / 100);
+  const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount + codFeeAmount + vatAddOn) * 100) / 100);
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
@@ -274,7 +395,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!open || !sessionId) return;
     const phoneDigits = form.phone.replace(/\D/g, "");
     if (!form.email.includes("@") && phoneDigits.length < 6) return;
-    const unit = effectiveQty > 0 ? Math.round((productSubtotal / effectiveQty) * 100) / 100 : product.price;
+    const unit = quantity > 0 ? Math.round((productSubtotal / quantity) * 100) / 100 : product.price;
     if (trackTimer.current) clearTimeout(trackTimer.current);
     trackTimer.current = setTimeout(() => {
       void trackAbandonedCart({
@@ -284,11 +405,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         name: form.name.trim() || undefined,
         email: form.email.trim() || undefined,
         phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
-        items: [{ product_id: product.id, name: product.name, price: unit, quantity: effectiveQty, image_url: product.images?.[0] ?? null }],
+        items: [{ product_id: product.id, name: product.name, price: unit, quantity, image_url: product.images?.[0] ?? null }],
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
-  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, effectiveQty, product.id, product.name, product.price, product.images]);
+  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, quantity, product.id, product.name, product.price, product.images]);
 
   // Funnel event: opening the order form = InitiateCheckout / begin_checkout.
   // The single-product buy-now flow has no cart step, so this is where the
@@ -304,12 +425,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Reset on open
   useEffect(() => {
     if (!open) return;
-    // Cantitatea aleasa pe pagina, cand pagina are selector. Cu trepte de
-    // cantitate, se preselecteaza treapta cu exact atatea bucati, daca exista.
+    // Cantitatea aleasa pe pagina, cand pagina are selector. Treapta se bifeaza
+    // singura daca exista una cu exact atatea bucati.
+    //
+    // In fluxul „cumpara impreuna" ramane 1: cardul ofera setul o data si
+    // formularul scrie „1 buc" langa ancora, dar cantitatea de pe pagina venea
+    // prin `initialQuantity` si se incasau toate bucatile.
     const cerute = Math.max(1, Math.floor(Number(initialQuantity) || 1));
-    const treapta = tiers ? tiers.findIndex((t) => t.qty === cerute) : -1;
-    setSelectedTierIdx(treapta >= 0 ? treapta : 0);
-    setQuantity(cerute);
+    setQuantity(fbtOffer ? 1 : cerute);
     setErrors({});
     setDiscountInput("");
     setAppliedDiscount(null);
@@ -319,9 +442,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setHasCouriers(false);
     setAcceptedBumps(new Set());
     // Re-sync the carried cart from the latest prop on open, so products added from the
-    // page's cross-sell after this modal first mounted are included in the order. Drop any
-    // items that are part of an accepted FBT set — they show in that set, not twice.
-    setCartLines((cartItems ?? []).filter((c) => !fbtOffer?.items.some((i) => i.product_id === c.productId)));
+    // page's cross-sell after this modal first mounted are included in the order.
+    //
+    // Liniile companionilor din setul FBT RAMAN aici, cu cantitatea lor. Pana pe
+    // 2026-08-04 se scoteau de tot, iar setul intra cu 1 bucata fixa: cine avea
+    // 3 bucati din companion in cos nu-l mai vedea nicaieri in formular si pleca
+    // cu una. Acum linia ramane si primeste pretul de set pe o bucata (`fbtInCos`),
+    // exact ca la server.
+    setCartLines(cartItems ?? []);
     setCustValues(() => {
       const defaults: Record<string, string | string[]> = {};
       for (const f of customizationFields ?? []) {
@@ -366,7 +494,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       }
       setIntlEnabled(data.international_shipping === true);
       setNewsletterOffer(data.mailchimp_newsletter === true || data.brevo_newsletter === true || data.klaviyo_newsletter === true);
-      setDpdUseWeight(data.dpd_use_weight === true);
       setVatConfig({
         vat_enabled: data.vat_enabled,
         vat_rate: data.vat_rate,
@@ -378,6 +505,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
       setCodDiscountConfig(data.cod_discount);
+      setCodFeeConfig(data.cod_fee);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
@@ -386,14 +514,24 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   }, [open, business.id]);
 
   // Order-bump offers applicable to this order (the buy-now product + carried cart).
+  //
+  // Se recitesc si cand se schimba liniile purtate din cos, nu doar la deschidere:
+  // serverul verifica acum declansatorul la plasarea comenzii, iar un bump aprins
+  // de un produs pe care clientul tocmai l-a scos din formular ar fi ramas bifat
+  // si ar fi oprit comanda. Lista reincarcata il scoate singura, fiindca
+  // `acceptedBumpOffers` se filtreaza pe ofertele inca aplicabile.
+  const idProduseComanda = [product.id, ...cart.map((c) => c.productId)].join(",");
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    const ids = [product.id, ...(cartItems ?? []).map((c) => c.productId)];
-    getCheckoutBumps(business.id, ids).then((b) => { if (!cancelled) setBumps(b ?? []); }).catch(() => {});
+    // Pe esec lista se GOLESTE, nu ramane cea veche: `acceptedBumpOffers` se
+    // filtreaza prin ea, deci o lista invechita ar trimite la server un bump pe
+    // care el il refuza acum, si comanda s-ar opri din cauza unei erori de retea.
+    getCheckoutBumps(business.id, idProduseComanda.split(","))
+      .then((b) => { if (!cancelled) setBumps(b ?? []); })
+      .catch(() => { if (!cancelled) setBumps([]); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, business.id, product.id]);
+  }, [open, business.id, idProduseComanda]);
 
   // Re-validate discount when quantity/tier changes (min_order_amount may no longer be met)
   useEffect(() => {
@@ -480,9 +618,37 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       if (!form.county) e.county = "Selectati judetul";
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
+    /* ⚠ Aceeasi regula ca in checkout-ul de pagina (`checkout-core.ts`). Cele
+       doua formulare sunt scrise separat, deci o regula pusa intr-unul singur
+       lasa cealalta jumatate din comenzi cu orasul stricat. */
+    else if (!isIntl && normalizeCountyName(form.county || "").toLowerCase() === "bucuresti"
+             && sectorBucuresti(form.city) === null) {
+      e.city = "Alegeti sectorul";
+    }
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
+    Object.assign(e, companyBilling.validateCompany());
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
-    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
+    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) {
+      /* La Posta punctul e un OFICIU POSTAL, nu un locker: mesajul il trimite pe
+         cumparator sa caute un dulap care nu exista. Vezi si CourierSelector. */
+      e.courier = courierSelection.courier === "posta" ? "Alege un oficiu postal" : "Selecteaza un locker";
+    }
+    /*
+     * ⚠ Livrarea la punct GLS cere emailul, chiar daca magazinul l-a facut
+     * optional.
+     *
+     * MyGLS il cere obligatoriu la serviciul PSD, si pe buna dreptate: coletul
+     * ajunge la un ghiseu, iar cumparatorul trebuie sa AFLE ca il poate ridica.
+     * Fara instiintare, coletul sta pana expira termenul si se intoarce la
+     * comerciant, care plateste si dusul, si intorsul.
+     *
+     * Cerut aici, la alegere, nu la emiterea AWB-ului: acolo comanda e deja
+     * plasata, iar comerciantul ar ramane cu un colet pe care nu-l poate expedia
+     * si fara nicio cale de a mai obtine emailul de la client.
+     */
+    if (laPunctGls && !form.email.trim()) {
+      e.email = "Emailul e obligatoriu pentru livrarea la punct GLS";
+    }
     for (const field of customFields) {
       if (field.required) {
         if (field.type === "checkbox" && customValues[field.id] !== "da") {
@@ -510,7 +676,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
-    const unitPrice = hasTiers ? tiers![selectedTierIdx].price / tiers![selectedTierIdx].qty : product.price;
+    const unitPrice = treapta.unitPrice;
     startTransition(async () => {
       // Build customization payload
       const customizationPayload = hasCustomization
@@ -525,7 +691,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       const allAdditional = [
         ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
-        ...(fbtOffer ? fbtOffer.items.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })) : []),
+        // Doar companionii FARA linie in cos: ceilalti au plecat deja mai sus, cu
+        // cantitatea lor reala. Trimisi si aici, serverul ar fi vazut DOUA linii
+        // ale aceluiasi produs, ar fi redus-o pe prima (cea din cos) si ar fi
+        // incasat-o pe a doua intreaga — companionul platit inca o data.
+        ...fbt.companioniNoi.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })),
       ];
       const acceptedOfferIds = [...acceptedBumpOffers.map((o) => o.id), ...(fbtOffer ? [fbtOffer.id] : [])];
       const payload = {
@@ -533,9 +703,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         cart_session_id: sessionId || undefined,
         product_id: product.id,
         product_name: product.name,
+        variant_title: product.variantTitle ?? undefined,
         product_price: unitPrice,
-        quantity: effectiveQty,
+        quantity,
         shipping_cost: shipping,
+        shipping_token: courierSelection?.token,
+        // Rambursul pentru care s-a cerut chiar cotatia de mai sus. Serverul il
+        // compara cu totalul real si jurnalizeaza diferenta; nu decide nimic pe el.
+        cod_declarat: paymentMethod === "cash_on_delivery" ? subtotal : 0,
         customer_name: form.name,
         customer_phone: form.phone.replace(/[\s\-().]/g, ""),
         customer_email: form.email.trim() || undefined,
@@ -547,6 +722,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
+        // Datele de pe factura pentru comenzile pe firma. Separate de adresa de
+        // livrare de mai sus, care ramane cea pe care s-a cotat transportul.
+        billing_company: companyBilling.billingPayload() ?? undefined,
         discount_id: appliedDiscount?.id,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
@@ -564,11 +742,49 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         locker_address: courierSelection?.lockerAddress,
         locker_city: courierSelection?.lockerCity,
         locker_county: courierSelection?.lockerCounty,
+        /* ⚠ La livrarea in punct, adresa de livrare E a punctului, iar GLS cere
+           obligatoriu codul postal — pe care comenzile romanesti nu-l primesc din
+           checkout. Acolo unde curierul il da, ajunge asa pe comanda. */
+        locker_post_code: courierSelection?.lockerPostCode,
         woot_service_id: courierSelection?.wootServiceId,
         woot_courier_name: courierSelection?.wootCourierName,
         woot_service_name: courierSelection?.wootServiceName,
         colete_service_id: courierSelection?.coleteServiceId,
         colete_service_name: courierSelection?.coleteServiceName,
+        ecolet_service_slug: courierSelection?.ecoletServiceSlug,
+        ecolet_courier_name: courierSelection?.ecoletCourierName,
+        ecolet_service_name: courierSelection?.ecoletServiceName,
+        innoship_courier_id: courierSelection?.innoshipCourierId,
+        innoship_service_id: courierSelection?.innoshipServiceId,
+        innoship_option_id: courierSelection?.innoshipOptionId,
+        innoship_courier_name: courierSelection?.innoshipCourierName,
+        innoship_service_name: courierSelection?.innoshipServiceName,
+        /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe
+           care a fost cotata (`show_byoc` intoarce acelasi curier de doua ori, la
+           preturi diferite). Iar la locker se adauga si reteaua, fiindca easybox
+           si FANbox sunt nomenclatoare separate. */
+        smartship_courier_id: courierSelection?.smartshipCourierId,
+        smartship_courier_name: courierSelection?.smartshipCourierName,
+        smartship_own_contract: courierSelection?.smartshipOwnContract,
+        /* ⚠ Numele astea sunt citite mai tarziu de `ShipoAwbModal`, litera cu
+           litera. Un camp scris altfel se pierde TACUT: alegerea clientului n-ar
+           ajunge niciodata pe comanda, si comerciantul ar emite pe alt serviciu. */
+        shipo_rate_id: courierSelection?.shipoRateId,
+        shipo_courier_slug: courierSelection?.shipoCourierSlug,
+        shipo_courier_name: courierSelection?.shipoCourierName,
+        fedex_service_type: courierSelection?.fedexServiceType,
+        fedex_service_name: courierSelection?.fedexServiceName,
+        ups_service_code: courierSelection?.upsServiceCode,
+        ups_service_name: courierSelection?.upsServiceName,
+        /* ⚠ Sunt DOUA checkout-uri scrise separat: asta si `checkout-core.ts` din
+           storefront. Completat doar unul, jumatate din comenzile DHL ajung fara produs.
+           ⚠ Si spre deosebire de serviciul UPS de deasupra, produsul DHL nu e o
+           comoditate: `productCode` e obligatoriu la emitere, deci o comanda fara el nu
+           poate primi AWB pana cand comerciantul nu recoteaza de mana. */
+        dhl_product_code: courierSelection?.dhlProductCode,
+        dhl_product_name: courierSelection?.dhlProductName,
+        dhl_local_product_code: courierSelection?.dhlLocalProductCode,
+        smartship_locker_net: courierSelection?.smartshipLockerNet,
         additional_items: allAdditional.length > 0 ? allAdditional : undefined,
         accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,
         source: getAttribution() ?? undefined,
@@ -658,7 +874,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Alege cantitatea</p>
                   {tiers!.map((tier, i) => {
-                    const selected = selectedTierIdx === i;
+                    const selected = treapta.index === i;
                     const unitPrice = tier.price / tier.qty;
                     const baseTotal = product.price * tier.qty;
                     const savings = baseTotal - tier.price;
@@ -739,8 +955,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     <Package size={12} /> Din cosul tau
                   </p>
-                  {cart.map((ci) => {
+                  {cart.map((ci, idx) => {
                     const key = cartLineKey(ci);
+                    const economieSet = economiaFbtPeLinie(idx);
                     return (
                     <div key={key} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-border bg-muted/40">
                       <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border shrink-0 bg-surface flex-shrink-0">
@@ -753,7 +970,34 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-foreground truncate">{ci.name}</p>
                         {ci.variantTitle && <p className="text-xs text-muted-foreground truncate">{ci.variantTitle}</p>}
-                        <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(ci.price)}</p>
+                        <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(totalLinieCos(ci))}</p>
+                        {ci.quantity > 1 && (
+                          <p className="text-[11px] text-muted-foreground">{formatPrice(pretBucataCos(ci))} bucata</p>
+                        )}
+                        {/* Setul se da pe O bucata din linie, nu pe toata linia
+                            (`aplicaBumpPeOBucata`). Spus pe fata, ca sa nu mai
+                            existe cazul in care clientul avea 3 bucati, accepta
+                            setul si pleca cu 1 fara ca ecranul sa zica nimic. */}
+                        {economieSet > 0 ? (
+                          <p className="text-[11px] font-semibold" style={{ color }}>
+                            1 buc la pret de set: -{formatPrice(economieSet)}
+                          </p>
+                        ) : fbtOffer && esteCompanionFbt(ci) && (
+                          /*
+                           * Setul nu mai are ce sa reduca pe linia asta.
+                           *
+                           * `aplicaBumpPeOBucata` nu coboara niciodata pretul: cand
+                           * linia din cos are deja o treapta de cantitate mai buna
+                           * decat pretul de set, economia iese 0 — serverul face
+                           * exact la fel, deci nu e nicio divergenta de bani. Dar
+                           * clientul a apasat un buton pe care scria „Economisesti
+                           * X" si trebuie sa afle de ce nu vede nimic, altfel setul
+                           * pare pierdut.
+                           */
+                          <p className="text-[11px] text-muted-foreground">
+                            Pretul pe care il ai deja pentru cantitatea asta e mai bun decat cel de set.
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button type="button" aria-label="Scade cantitatea" onClick={() => setCartQty(key, ci.quantity - 1)}
@@ -914,6 +1158,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               )}
 
+              {/*
+                Alegerea „persoana fizica / juridica" sta PRIMA, inaintea
+                numelui. A stat o vreme dupa adresa, dar asa omul completa tot
+                formularul si abia la sfarsit afla ca putea comanda pe firma.
+                Intrebarea „cine esti" vine inaintea datelor, nu dupa ele.
+              */}
+              {companyEnabled && (
+                <CompanyFields motor={companyBilling} color={color} errors={errors} fieldCls={inputCls} Wrap={IconInput} />
+              )}
+
               {/* Customer fields */}
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">
@@ -989,7 +1243,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     Judet <span className="text-red-500">*</span>
                   </label>
                   <IconInput icon={MapPin} error={!!errors.county}>
-                    <select value={form.county} onChange={e => setForm(f => ({ ...f, county: e.target.value }))}
+                    <select value={form.county} onChange={e => schimbaJudetul(e.target.value)}
                       className={`${inputCls} bg-surface`}>
                       <option value="">Selecteaza judetul</option>
                       {JUDETE.map(j => <option key={j} value={j}>{j}</option>)}
@@ -1001,11 +1255,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">
-                  Oras <span className="text-red-500">*</span>
+                  {inBucuresti ? "Sector" : "Oras"} <span className="text-red-500">*</span>
                 </label>
                 <IconInput icon={MapPin} error={!!errors.city}>
-                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
-                    placeholder="Oras / Localitate" className={inputCls} />
+                  {/* ⚠ In Bucuresti se ALEGE sectorul — vezi nota lunga din
+                      `CheckoutForm.tsx`. Sameday nu stie orasul „Bucuresti". */}
+                  {inBucuresti ? (
+                    <select value={sectorAles} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                      className={`${inputCls} bg-surface`}>
+                      <option value="">Alege sectorul</option>
+                      {[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={`Sector ${n}`}>{`Sector ${n}`}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                      placeholder="Oras / Localitate" className={inputCls} />
+                  )}
                 </IconInput>
                 {errors.city && <p className="text-xs text-red-500 mt-0.5">{errors.city}</p>}
               </div>
@@ -1030,12 +1294,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   color={color}
                   country={isIntl ? form.country : undefined}
                   postCode={isIntl ? form.postCode : undefined}
-                  weightKg={isIntl && dpdUseWeight && product.weight_grams ? (product.weight_grams * effectiveQty) / 1000 : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
                   cart={[
-                    { productId: product.id, quantity: effectiveQty },
+                    { productId: product.id, quantity },
                     ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-                    ...(fbtOffer ? fbtOffer.items.map((i) => ({ productId: i.product_id, quantity: i.quantity })) : []),
+                    // Aceleasi linii ca in `allAdditional`: companionul din cos e
+                    // numarat o data, cu toate bucatile lui. Pana acum coletul se
+                    // cota pe 1 bucata acolo unde clientul comanda 3.
+                    ...fbt.companioniNoi.map((i) => ({ productId: i.product_id, quantity: i.quantity })),
                     ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
                   ]}
                   subtotal={Math.max(0, discountedSubtotal)}
@@ -1195,13 +1461,26 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {/* Order summary */}
               <div className="rounded-xl p-3 space-y-1.5 text-sm bg-muted/40 border border-border">
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Produs ({effectiveQty} buc)</span>
+                  <span>Produs ({quantity} buc)</span>
                   <span className="font-medium text-foreground">{formatPrice(productSubtotal)}</span>
                 </div>
-                {cart.map((ci) => (
-                  <div key={ci.productId} className="flex justify-between text-muted-foreground">
-                    <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
-                    <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Math.round(ci.price * ci.quantity * 100) / 100)}</span>
+                {/* Cheia pe produs+varianta, nu pe produs: doua marimi ale
+                    aceluiasi produs se ciocneau si React randa o singura linie. */}
+                {cart.map((ci, idx) => (
+                  <div key={cartLineKey(ci)} className="space-y-1.5">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span className="truncate pr-2">{ci.name}{ci.quantity > 1 ? ` (${ci.quantity} buc)` : ""}</span>
+                      <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Math.round(totalLinieCos(ci) * 100) / 100)}</span>
+                    </div>
+                    {/* Rand separat, nu un numar mai mic pe randul de sus: asa
+                        coloana se aduna in continuare la totalul de pe buton si
+                        se vede DE CE a scazut. */}
+                    {economiaFbtPeLinie(idx) > 0 && (
+                      <div className="flex justify-between" style={{ color }}>
+                        <span className="truncate pr-2">Set: 1 buc {ci.name}</span>
+                        <span className="font-semibold whitespace-nowrap">-{formatPrice(economiaFbtPeLinie(idx))}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {acceptedBumpOffers.map((o) => (
@@ -1210,7 +1489,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <span className="font-medium whitespace-nowrap">{formatPrice(o.pricing!.price)}</span>
                   </div>
                 ))}
-                {fbtOffer?.items.map((i) => (
+                {/* Doar companionii care intra ca linie noua. Cei aflati deja in
+                    cos si-au aratat randul lor mai sus, cu reducerea de set sub el. */}
+                {fbt.companioniNoi.map((i) => (
                   <div key={i.product_id} className="flex justify-between" style={{ color }}>
                     <span className="truncate pr-2">+ {i.name}</span>
                     <span className="font-medium whitespace-nowrap">{formatPrice(Math.round(i.price * i.quantity * 100) / 100)}</span>
@@ -1222,10 +1503,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <span className="font-medium text-foreground">+{formatPrice(extrasTotal)}</span>
                   </div>
                 )}
-                {appliedDiscount && discountAmount > 0 && (
+                {/* Un cupon de transport gratuit nu scade nimic din marfa, deci
+                    valoarea randului e cuvantul, nu o cifra. Pana pe 2026-08-04
+                    aici se scria „-{transportul implicit}" pe un rand separat,
+                    desi `shipping` era deja 0 si totalul aduna +0: la un curier
+                    cotat 24,99 si tarif implicit 20 coloana dadea 80, butonul
+                    spunea 100, iar economia adevarata era 24,99 — trei numere
+                    diferite. Aceeasi forma ca in `CheckoutSummary`, ca sertarul
+                    si formularul sa nu mai spuna lucruri diferite despre acelasi
+                    cupon. 4 cupoane `free_shipping` active in productie. */}
+                {appliedDiscount && (discountAmount > 0 || isFreeShipping) && (
                   <div className="flex justify-between" style={{ color }}>
                     <span>Discount ({appliedDiscount.code})</span>
-                    <span className="font-semibold">-{formatPrice(discountAmount)}</span>
+                    <span className="font-semibold">
+                      {isFreeShipping && discountAmount === 0 ? "Transport gratuit" : `-${formatPrice(discountAmount)}`}
+                    </span>
                   </div>
                 )}
                 {cardDiscountAmount > 0 && (
@@ -1240,10 +1532,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <span className="font-semibold">-{formatPrice(codDiscountAmount)}</span>
                   </div>
                 )}
-                {appliedDiscount?.type === "free_shipping" && (
-                  <div className="flex justify-between" style={{ color }}>
-                    <span>Transport gratuit ({appliedDiscount.code})</span>
-                    <span className="font-semibold">-{formatPrice(shippingCost)}</span>
+                {/* Taxa se aduna, deci fara culoarea magazinului: aia e pentru
+                    sumele in favoarea clientului. */}
+                {codFeeAmount > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Taxa plata ramburs</span>
+                    <span className="font-semibold">{formatPrice(codFeeAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-muted-foreground">

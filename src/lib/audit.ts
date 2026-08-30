@@ -9,6 +9,7 @@ export type AuditAction =
   | "user.delete"
   | "user.edit"
   | "user.impersonate"
+  | "user.impersonate_refuzat"
   | "user.notify"
   | "user.bulk_plan_change"
   | "business.publish"

@@ -11,6 +11,8 @@ import {
   POVESTE_TITLU,
 } from "@/lib/website/despre";
 import { siteMetadata } from "@/lib/website/metadata";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 /**
  * Despre Edinio.
@@ -70,9 +72,20 @@ export const metadata: Metadata = siteMetadata({
   path: "/despre",
 });
 
+// `AboutPage` + `about` catre nodul de organizatie: semnalul „pagina ASTA
+// descrie firma", care consolideaza entitatea de brand in cautare.
+const jsonLd = paginaSiteJsonLd({
+  cale: "despre",
+  nume: "Despre noi",
+  descriere: metadata.description as string,
+  tip: "AboutPage",
+  despreFirma: true,
+});
+
 export default function DesprePage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <PageHero sir={FIRIMITURI} title={DESPRE_TITLU} lead={DESPRE_LEAD} />
 
       <section className="bg-white py-14 lg:py-20">

@@ -25,6 +25,14 @@ export type SursaAtribut = "firma" | "produs";
 
 export interface SugestieAtribut extends TrendyolProductAttribute {
   sursa: SursaAtribut;
+  /**
+   * Sugestia e o DEDUCTIE slaba, nu o certitudine.
+   *
+   * ⚠ Nu se aplica singura pe atributele OBLIGATORII. Un atribut obligatoriu
+   * completat gresit nu produce o respingere — produce o listare care SE VINDE
+   * cu date false, ceea ce e mai rau. Comerciantul o vede propusa si o confirma.
+   */
+  slaba?: boolean;
 }
 
 export interface DateFirma {
@@ -138,6 +146,12 @@ export function potrivesteValoare(
 
 // ── Sugestiile ────────────────────────────────────────────────────────────────
 
+/** Atributul e cerut de categorie? Trendyol il marcheaza in doua feluri, dupa versiune. */
+function esteObligatoriu(a: TrendyolCategoryAttribute): boolean {
+  const brut = a as TrendyolCategoryAttribute & { required?: boolean; isRequired?: boolean };
+  return brut.required === true || brut.isRequired === true;
+}
+
 export function sugereazaAtribute(
   atribute: TrendyolCategoryAttribute[],
   valori: ValoriAtribut,
@@ -170,12 +184,25 @@ export function sugereazaAtribute(
       }
     }
 
-    // Ultima încercare, pentru atributele fără regulă: dacă exact O SINGURĂ opțiune
-    // apare în numele sau descrierea produsului, e aproape sigur cea corectă
-    // („Formular: Gel" pentru „Gel de duș"). Mai multe potriviri = nu ghicim.
+    /*
+     * Ultima încercare, pentru atributele fără regulă: dacă exact O SINGURĂ
+     * opțiune apare în numele sau descrierea produsului, e aproape sigur cea
+     * corectă („Formular: Gel" pentru „Gel de duș"). Mai multe potriviri = nu
+     * ghicim.
+     *
+     * ⚠ Pe un atribut OBLIGATORIU, deducția se marchează `slaba` și nu se aplică
+     * singură. O potrivire unică tot poate fi greșită — „Negru" apare în „husă
+     * neagră pentru telefon alb" — iar un obligatoriu greșit nu e respins de
+     * Trendyol: se publică, se vinde, și ajunge pe fișa produsului.
+     */
     if (areOptiuni && optiuni.length <= 200) {
       const valId = potrivesteValoare(textProdus, optiuni);
-      if (valId != null) out.push({ attributeId: id, attributeValueId: valId, sursa: "produs" });
+      if (valId != null) {
+        out.push({
+          attributeId: id, attributeValueId: valId, sursa: "produs",
+          ...(esteObligatoriu(a) ? { slaba: true } : {}),
+        });
+      }
     }
   }
   return out;

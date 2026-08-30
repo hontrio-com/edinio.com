@@ -22,6 +22,27 @@ import { getProductPriceRange, type PriceRange } from "@/lib/utils/product-price
  */
 const SEARCH_DESCRIPTION_CHARS = 300;
 
+/**
+ * Descrierea, pregatita pentru indexul de cautare din browser.
+ *
+ * Se TAIE MARCAJUL inainte de trunchiere, si asta nu e cosmetica. Masurat in
+ * productie: 925 din 1049 de descrieri ale unui magazin contin etichete HTML.
+ * Taiate direct la 300 de caractere, o buna parte din bugetul ala se ducea pe
+ * `<p>`, `<strong>` si atribute — iar cuvintele reale erau rupte in doua de
+ * etichete, deci cautarea nu le mai gasea intregi. Dupa curatare, aceleasi 300
+ * de caractere contin text adevarat.
+ *
+ * Ca dimensiune nu schimba aproape nimic (~1 kB pe un catalog de 1000 de
+ * produse): trunchierea taia oricum. Castigul e de CALITATE a cautarii.
+ *
+ * Descrierea afisata pe pagina de produs NU trece pe aici — acolo se face fetch
+ * complet, cu marcaj cu tot.
+ */
+export function descriereDeCautare(brut: string): string {
+  const text = brut.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return text.length > SEARCH_DESCRIPTION_CHARS ? text.slice(0, SEARCH_DESCRIPTION_CHARS) : text;
+}
+
 interface CatalogRowShape {
   price: unknown;
   description: string | null;
@@ -29,11 +50,16 @@ interface CatalogRowShape {
   page_sections: unknown;
 }
 
-export function slimCatalogProduct<T extends CatalogRowShape>(p: T): T & { price_range: PriceRange } {
-  // Intervalul de pret se calculeaza INAINTE de a arunca combinatiile.
-  const price_range = getProductPriceRange(Number(p.price), p.page_sections);
-
-  const ps = (p.page_sections ?? null) as {
+/**
+ * Din `page_sections` raman doar axele de varianta si pachetul.
+ *
+ * Combinatiile sunt partea grea — pana la 91 pe un produs, in medie 3 KB pe rand
+ * — si browserul n-are ce sa faca cu ele: pretul vine gata calculat in
+ * `price_range`, iar selectorul se randeaza din axe. Se cheama si din payload-ul
+ * editorului de pagini, unde blob-ul brut insemna 183 KB.
+ */
+export function slimPageSections(pageSections: unknown): Record<string, unknown> | null {
+  const ps = (pageSections ?? null) as {
     variants?: { enabled?: boolean; options?: unknown } | null;
     bundle?: unknown;
   } | null;
@@ -45,13 +71,18 @@ export function slimCatalogProduct<T extends CatalogRowShape>(p: T): T & { price
   if (ps?.bundle) {
     slim = { ...(slim ?? {}), bundle: ps.bundle };
   }
+  return slim;
+}
+
+export function slimCatalogProduct<T extends CatalogRowShape>(p: T): T & { price_range: PriceRange } {
+  // Intervalul de pret se calculeaza INAINTE de a arunca combinatiile.
+  const price_range = getProductPriceRange(Number(p.price), p.page_sections);
+  const slim = slimPageSections(p.page_sections);
 
   const images = Array.isArray(p.images) ? (p.images as unknown[]).slice(0, 1) : p.images;
 
   const description =
-    typeof p.description === "string" && p.description.length > SEARCH_DESCRIPTION_CHARS
-      ? p.description.slice(0, SEARCH_DESCRIPTION_CHARS)
-      : p.description;
+    typeof p.description === "string" ? descriereDeCautare(p.description) : p.description;
 
   return {
     ...p,

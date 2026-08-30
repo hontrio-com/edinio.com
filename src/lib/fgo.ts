@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 export type FgoConfig = {
   enabled: boolean;
@@ -61,13 +62,30 @@ async function fgoPost<T>(
     // (this order was already invoiced in fGO) or a numbering conflict from
     // concurrent issuance. Make it actionable instead of a bare status line.
     if (res.status === 409) {
-      throw new Error("fGO: factura pare deja emisa pentru aceasta comanda (verifica in contul fGO) sau conflict de numerotare. Reincearca.");
+      /*
+       * `eroareNesigura`, desi 409 e un 4xx: aici furnizorul nu spune „n-am facut
+       * nimic", ci exact pe dos — documentul EXISTA la el, doar ca noi nu-i stim
+       * numarul. E fundatura descrisa in fgo.actions.ts:518-524. Ca „refuz" ar fi
+       * lasat comerciantul sa reincerce la nesfarsit si sa ia 409 de fiecare data,
+       * fara nicio urma; ca „nu stim", operatia iese in panoul comenzii cu mesajul
+       * care ii spune sa se uite in contul fGO.
+       */
+      /*
+       * Mesajul NU mai spune „Reincearca." — de cand emiterea e sub registru,
+       * reincercarea chiar NU mai ajunge la fGO: operatia se inchide `necunoscut`,
+       * care blocheaza. Un indemn pe care sistemul il refuza e mai rau decat niciun
+       * indemn, fiindca il trimite pe om sa apese un buton care ii raspunde „nu".
+       */
+      throw eroareNesigura("fGO: factura pare deja emisa pentru aceasta comanda, sau e un conflict de numerotare. Verifica in contul fGO: daca factura exista, ia numarul de acolo; daca nu, deblocheaza operatia din pagina comenzii si emite din nou.");
     }
-    throw new Error(`fGO API error: ${res.status} ${res.statusText}`);
+    // 4xx = a inteles si a respins, nimic nu s-a emis. 5xx = a picat la el DUPA ce
+    // a primit cererea, deci documentul poate exista.
+    throw eroareCuStatus(`fGO API error: ${res.status} ${res.statusText}`, res.status);
   }
   const data = (await res.json()) as { Success: boolean; Message?: string } & T;
   if (!data.Success) {
-    throw new Error(data.Message || "Eroare necunoscuta fGO");
+    // 200 cu `Success: false` — cererea a ajuns, a fost inteleasa si respinsa.
+    throw eroareRefuz(data.Message || "Eroare necunoscuta fGO");
   }
   return data;
 }
@@ -76,6 +94,11 @@ async function fgoPost<T>(
 
 // Nomenclatoarele fGO returneaza {Nume(afisare), Cod(valoarea de trimis)}, ex.
 // tara {Nume:"ROMANIA", Cod:"RO"}, judet {Nume:"Gorj", Cod:"GJ"}.
+//
+// ⚠ E un GET PUBLIC: nu trimite `cod_unic`, nu trimite `private_key`, nu semneaza
+// nimic. NU-l folosi ca proba de conexiune — a fost exact defectul reparat pe
+// 15.08.2026, cand butonul „Testeaza conexiunea" raspundea „reusit" pentru orice
+// credentiale. Proba autentificata e `testFgoConnection`, la finalul fisierului.
 export async function getFgoNomenclator(
   type: string,
   sandbox: boolean,
@@ -228,11 +251,89 @@ export async function cancelFgoInvoice(
 
 // ─── Test conexiune ───────────────────────────────────────────────────────────
 
-export async function testFgoConnection(config: FgoConfig): Promise<{ ok: true; judete: number } | { ok: false; error: string }> {
+/*
+ * Proba de conexiune TREBUIE sa fie AUTENTIFICATA.
+ *
+ * Pana la 15.08.2026, aici se chema `/nomenclator/judet` — un GET PUBLIC, care nu
+ * primeste nici `cod_unic`, nici `private_key`, si nu calculeaza niciun hash.
+ * Butonul „Testeaza conexiunea" raspundea deci „Conexiune reusita" pentru ORICE
+ * CUI si ORICE cheie privata; singurul lucru dovedit era ca serverul fGO e sus.
+ * Comerciantul primea confirmare verde, salva, si afla ca nu merge abia la prima
+ * comanda cu facturare automata — cel mai prost moment cu putinta.
+ *
+ * Se cheama `/factura/getstatus`, semnat, cu un numar de factura care nu poate
+ * exista. Verificat pe mediul de test fGO (15.08.2026): autentificarea se face
+ * INAINTE de cautarea facturii — un CUI neinregistrat primeste „Codul unic nu
+ * exista sau nu este asociat." indiferent ce numar trimiti. `getstatus` a fost
+ * ales dinadins in locul lui `/articol/list`, care in documentatie e marcat
+ * ENTERPRISE only si ar fi picat pe planurile mici.
+ *
+ * ⚠ RASPUNSUL SE CITESTE PE DOS. Esec DOAR daca fGO se plange de CREDENTIALE.
+ * Orice altceva — „factura nu exista", o limitare de abonament, un camp lipsa —
+ * inseamna ca fGO a trecut de autentificare, deci credentialele sunt bune. Citita
+ * normal („a mers?"), proba ar da negativ fals pe orice plan care nu are acces la
+ * endpoint, si un negativ fals e la fel de daunator ca pozitivul fals de dinainte:
+ * il trimite pe comerciant sa-si schimbe niste credentiale corecte.
+ */
+const SEMNATURI_CREDENTIALE = [
+  "codul unic", "cod unic",       // „Codul unic nu exista sau nu este asociat." (CUI necunoscut SAU cheie gresita)
+  "hash",
+  "cheia privata", "cheie privata",
+  "neautorizat", "unauthorized",
+];
+
+/** fGO intoarce exceptii .NET cu tot cu urma de stiva; comerciantul vede doar prima linie. */
+function mesajFgo(brut: string): string {
+  return (brut || "")
+    .split(/\r?\n/)[0]
+    .replace(/^System\.Exception:\s*/i, "")
+    .trim();
+}
+
+export async function testFgoConnection(
+  config: FgoConfig,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Facturile fGO incep de la 1; „0" nu poate exista. Nu ne intereseaza factura,
+  // ci ce raspunde fGO la o cerere SEMNATA cu credentialele astea.
+  const numarInexistent = "0";
+
+  let text: string;
   try {
-    const judete = await getFgoNomenclator("judet", config.sandbox);
-    return { ok: true, judete: judete.length };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    const res = await fetch(`${baseUrl(config.sandbox)}/factura/getstatus`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        CodUnic: config.cod_unic,
+        Hash: hashOperatii(config.cod_unic, config.private_key, numarInexistent),
+        Numar: numarInexistent,
+        Serie: config.serie || "",
+        PlatformaUrl: config.platforma_url,
+      }),
+    });
+    // NU se iese pe `!res.ok`: fGO raspunde 500 si la refuzurile obisnuite, cu
+    // JSON valid in corp. Statusul nu spune nimic, mesajul spune tot.
+    text = await res.text();
+  } catch {
+    return { ok: false, error: "Nu am putut contacta serverul fGO. Verifica legatura la internet si incearca din nou." };
   }
+
+  let data: { Success?: boolean; Message?: string };
+  try {
+    data = JSON.parse(text) as { Success?: boolean; Message?: string };
+  } catch {
+    return { ok: false, error: "Raspuns neasteptat de la fGO. Incearca din nou peste cateva minute." };
+  }
+
+  if (data.Success) return { ok: true };
+
+  const mesaj = mesajFgo(data.Message ?? "");
+  const dinCredentiale = SEMNATURI_CREDENTIALE.some((s) => mesaj.toLowerCase().includes(s));
+  if (!dinCredentiale) return { ok: true }; // a trecut de autentificare — vezi comentariul de mai sus
+
+  return {
+    ok: false,
+    error: mesaj
+      ? `fGO a respins credentialele: ${mesaj}`
+      : "fGO a respins credentialele. Verifica CUI-ul si cheia privata.",
+  };
 }

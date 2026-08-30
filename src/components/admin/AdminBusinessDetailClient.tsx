@@ -35,6 +35,8 @@ interface Domain {
   expiry_date: string | null; auto_renew: boolean; created_at: string;
 }
 interface StoreSettings {
+  /** Derivat pe server: cheie/eticheta/activ, fara nimic sensibil. */
+  listaPlati: { key: string; label: string; enabled: boolean }[];
   currency: string;
   default_shipping_cost: number;
   free_shipping_threshold: number | null;
@@ -44,22 +46,13 @@ interface StoreSettings {
   show_vat_breakdown: boolean;
   order_counter: number;
   order_number_format: string;
-  payment_methods: unknown;
-  shipping_zones: unknown;
-  sameday_config: unknown;
-  fan_courier_config: unknown;
-  cargus_config: unknown;
-  dpd_config: unknown;
-  colete_config: unknown;
-  fgo_config: unknown;
-  netopia_config: unknown;
-  stripe_config: unknown;
-  smartbill_config: unknown;
-  oblio_config: unknown;
-  smso_config: unknown;
-  notifications_config: unknown;
-  marketing_config: unknown;
-  store_policies: unknown;
+  /** Doar aprins/stins per integrare. Credentialele NU pleaca spre browser —
+   *  proiectia se face pe server, vezi app/(admin)/admin/magazine/[id]/page.tsx */
+  activ: {
+    sameday: boolean; fanCourier: boolean; cargus: boolean; dpd: boolean;
+    colete: boolean; fgo: boolean; stripe: boolean; netopia: boolean;
+    smartbill: boolean; oblio: boolean; smso: boolean; marketing: boolean;
+  };
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -75,8 +68,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 const PAGE_SIZE = 20;
 type OrderSortKey = "created_at" | "total" | "order_number";
 
-function CourierStatus({ config, name }: { config: unknown; name: string }) {
-  const enabled = config && typeof config === "object" && "enabled" in config && (config as { enabled: boolean }).enabled;
+function CourierStatus({ enabled, name }: { enabled: boolean; name: string }) {
   return (
     <div className="flex items-center justify-between py-1.5">
       <span className="text-sm text-zinc-600 dark:text-zinc-400">{name}</span>
@@ -188,18 +180,9 @@ export function AdminBusinessDetailClient({
     }
   }
 
-  // Payment methods helper (new format: [{ type, enabled, label }]; tolerates legacy strings)
-  const paymentMethodsRaw = settings?.payment_methods;
-  const paymentList: { key: string; label: string; enabled: boolean }[] = Array.isArray(paymentMethodsRaw)
-    ? (paymentMethodsRaw as unknown[]).flatMap((m) => {
-        if (m && typeof m === "object" && "type" in m) {
-          const o = m as { type?: string; label?: string; enabled?: boolean };
-          return [{ key: String(o.type ?? ""), label: o.label || String(o.type ?? ""), enabled: o.enabled !== false }];
-        }
-        if (typeof m === "string") return [{ key: m, label: m, enabled: true }];
-        return [];
-      })
-    : [];
+  // Metodele de plata vin deja normalizate de pe server (vezi pagina): asa nu
+  // ajunge in browser obiectul brut store_settings.payment_methods.
+  const paymentList = settings?.listaPlati ?? [];
 
   return (
     <div className="space-y-6">
@@ -543,12 +526,12 @@ export function AdminBusinessDetailClient({
                 )}
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 mt-3">
                   <p className="text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wide">Curieri configurati</p>
-                  <CourierStatus config={settings.sameday_config} name="Sameday" />
-                  <CourierStatus config={settings.fan_courier_config} name="FanCourier" />
-                  <CourierStatus config={settings.cargus_config} name="Cargus" />
-                  <CourierStatus config={settings.dpd_config} name="DPD" />
-                  <CourierStatus config={settings.colete_config} name="Colete Online" />
-                  <CourierStatus config={settings.fgo_config} name="FGO" />
+                  <CourierStatus enabled={settings.activ.sameday} name="Sameday" />
+                  <CourierStatus enabled={settings.activ.fanCourier} name="FanCourier" />
+                  <CourierStatus enabled={settings.activ.cargus} name="Cargus" />
+                  <CourierStatus enabled={settings.activ.dpd} name="DPD" />
+                  <CourierStatus enabled={settings.activ.colete} name="Colete Online" />
+                  <CourierStatus enabled={settings.activ.fgo} name="FGO" />
                 </div>
               </div>
             ) : (
@@ -600,14 +583,14 @@ export function AdminBusinessDetailClient({
 
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 mt-3">
                   <p className="text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wide">Integrari plati</p>
-                  <CourierStatus config={settings.stripe_config} name="Stripe" />
-                  <CourierStatus config={settings.netopia_config} name="Netopia" />
+                  <CourierStatus enabled={settings.activ.stripe} name="Stripe" />
+                  <CourierStatus enabled={settings.activ.netopia} name="Netopia" />
                 </div>
 
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 mt-3">
                   <p className="text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wide">Facturare</p>
-                  <CourierStatus config={settings.smartbill_config} name="SmartBill" />
-                  <CourierStatus config={settings.oblio_config} name="Oblio" />
+                  <CourierStatus enabled={settings.activ.smartbill} name="SmartBill" />
+                  <CourierStatus enabled={settings.activ.oblio} name="Oblio" />
                 </div>
               </div>
             ) : (
@@ -622,8 +605,8 @@ export function AdminBusinessDetailClient({
             </h2>
             {settings ? (
               <div className="space-y-3">
-                <CourierStatus config={settings.smso_config} name="SMSO (SMS)" />
-                <CourierStatus config={settings.marketing_config} name="Marketing config" />
+                <CourierStatus enabled={settings.activ.smso} name="SMSO (SMS)" />
+                <CourierStatus enabled={settings.activ.marketing} name="Marketing config" />
                 <div className="flex items-center justify-between py-1.5">
                   <span className="text-sm text-zinc-600 dark:text-zinc-400">Counter comenzi</span>
                   <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">#{settings.order_counter}</span>
@@ -638,19 +621,9 @@ export function AdminBusinessDetailClient({
             )}
           </div>
 
-          {/* Raw JSON fallback */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white mb-4 flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-zinc-400" /> Date brute (debug)
-            </h2>
-            {settings ? (
-              <pre className="text-[10px] text-zinc-500 bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 overflow-auto max-h-64">
-                {JSON.stringify(settings, null, 2)}
-              </pre>
-            ) : (
-              <p className="text-sm text-zinc-400">Nicio setare.</p>
-            )}
-          </div>
+          {/* Blocul „Date brute (debug)" a fost ELIMINAT. Randa
+              JSON.stringify(settings) integral, adica toate credentialele
+              tertilor ale magazinului, in text clar, direct in HTML. */}
         </div>
       )}
     </div>

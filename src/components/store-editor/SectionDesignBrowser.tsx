@@ -39,12 +39,15 @@ export function SectionDesignBrowser({
   slug,
   designInitial,
   designPublicat,
+  cioarnaInitiala,
   numarBannere,
 }: {
   businessId: string;
   slug: string;
   designInitial: StoreDesign;
   designPublicat: StoreDesign;
+  /** Ce scrie ACUM in coloana de ciorna: `null` cand coloana e goala. */
+  cioarnaInitiala: StoreDesign | null;
   /** Cate bannere de hero are magazinul; unele design-uri au nevoie de cel putin unul. */
   numarBannere: number;
 }) {
@@ -56,9 +59,30 @@ export function SectionDesignBrowser({
   const [peMobil, setPeMobil] = useState(false);
   const [salvez, setSalvez] = useState(false);
   const [publica, setPublica] = useState(false);
+  /**
+   * Bumpata cand designul din baza s-a schimbat: miniaturile se randeaza pe
+   * server, deci trebuie cerute din nou ca sa arate altceva.
+   */
+  const [versiuneMiniaturi, setVersiuneMiniaturi] = useState(0);
+  /**
+   * Bumpata dupa fiecare ciorna ajunsa in baza: cardul ACTIV isi randeaza
+   * reglajele reale, deci trebuie cerut din nou ca panoul de Setari sa arate
+   * ceva. Separata de cea de mai sus tocmai ca celelalte carduri — care arata
+   * implicitele variantei lor — sa nu se reincarce degeaba la fiecare atingere.
+   */
+  const [versiuneSetari, setVersiuneSetari] = useState(0);
 
-  /** Ultima ciorna ajunsa in baza. Ref, nu stare: nu trebuie sa re-randeze. */
+  /** Ultimul design pe care nu mai are rost sa-l salvam. Ref, nu stare: nu re-randeaza. */
   const salvat = useRef<StoreDesign>(designInitial);
+  /**
+   * Ce scrie ACUM in coloana de ciorna. `null` cand coloana e goala.
+   *
+   * Separat de `salvat`: acela e ce s-a vazut pe ecran, iar la prima intrare in
+   * editor ecranul arata designul PUBLICAT, nu o ciorna. Trimis asa ca „baza",
+   * verificarea de concurenta compara un obiect cu `null` si prima salvare pica
+   * pe veci cu „Designul a fost modificat in alta fila". Vezi `draft-guard.ts`.
+   */
+  const cioarnaInBaza = useRef<StoreDesign | null>(cioarnaInitiala);
   /**
    * Fiecare Publica sau Renunta incepe o „epoca" noua.
    *
@@ -78,7 +102,7 @@ export function SectionDesignBrowser({
   useEffect(() => {
     if (design === salvat.current) return;
     const gen = epoca.current;
-    const baza = salvat.current;
+    const baza = cioarnaInBaza.current;
     const id = setTimeout(async () => {
       if (gen !== epoca.current) return;
       setSalvez(true);
@@ -90,6 +114,11 @@ export function SectionDesignBrowser({
         return;
       }
       salvat.current = design;
+      cioarnaInBaza.current = design;
+      // Ciorna e in baza, deci miniatura variantei active poate arata reglajele
+      // noi. Pana acum panoul de Setari nu avea nicio previzualizare: schimbai un
+      // titlu sau un numar de coloane si nu se misca nimic pe ecran.
+      setVersiuneSetari((v) => v + 1);
     }, 1000);
     return () => clearTimeout(id);
   }, [design, businessId]);
@@ -169,6 +198,19 @@ export function SectionDesignBrowser({
     });
   }
 
+  /**
+   * Cere din nou miniaturile de la server.
+   *
+   * `router.refresh()` reia datele rutei; `versiuneMiniaturi` schimba adresa
+   * fiecarui iframe, altfel ele nu au niciun motiv sa se reincarce — traiesc pe
+   * alta ruta si nu afla nimic dintr-un refresh al acesteia. Ref-ul de router
+   * exista de mult in fisier si nu era folosit nicaieri.
+   */
+  function improspateazaMiniaturile() {
+    setVersiuneMiniaturi((v) => v + 1);
+    router.refresh();
+  }
+
   async function onPublica() {
     epoca.current += 1;
     setPublica(true);
@@ -180,6 +222,10 @@ export function SectionDesignBrowser({
     }
     setPublicat(design);
     salvat.current = design;
+    // Publicarea goleste coloana de ciorna. Fara randul asta, urmatoarea
+    // autosalvare ar porni de la ciorna dinainte de publicare si ar cadea.
+    cioarnaInBaza.current = null;
+    improspateazaMiniaturile();
     toast.success("Designul e live in magazin");
   }
 
@@ -192,6 +238,9 @@ export function SectionDesignBrowser({
     }
     setDesign(publicat);
     salvat.current = publicat;
+    // La fel ca la Publica: `discardDesignDraft` pune coloana pe `NULL`.
+    cioarnaInBaza.current = null;
+    improspateazaMiniaturile();
     toast.success("Modificarile au fost anulate");
   }
 
@@ -330,6 +379,11 @@ export function SectionDesignBrowser({
                     inaltime={v.previewHeight ?? INALTIME_IMPLICITA}
               latimeFixa={v.previewWidth}
                     activ={id === sectiune.variant}
+                    // Doar cardul ACTIV se reincarca la fiecare salvare de
+                    // setari: numai el arata reglajele reale ale magazinului,
+                    // restul arata implicitele variantei lor. Reincarcate toate,
+                    // o atingere de comutator ar cere de la server sase pagini.
+                    versiune={id === sectiune.variant ? `${versiuneMiniaturi}-${versiuneSetari}` : versiuneMiniaturi}
                     peMobil={peMobil}
                     motivIndisponibil={motivIndisponibil(v)}
                     onPick={() => alegeVarianta(id, v.label)}

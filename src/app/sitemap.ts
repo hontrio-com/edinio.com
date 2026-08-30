@@ -8,7 +8,8 @@ import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
 import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { categoriiVizibile } from "@/lib/categories/vizibilitate";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
 
@@ -89,10 +90,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.9,
       });
       // Si paginile de categorie: de cand exista, ele sunt adresele care
-      // raspund cautarilor de tip „bocanci de protectie".
-      const categorii = await fetchAllRows("sitemap.store.categories", (from, to) =>
-        supabase.from("categories").select("name").eq("business_id", biz.id).order("id").range(from, to)
-      );
+      // raspund cautarilor de tip „bocanci de protectie". Cele stinse din panou
+      // ies — pagina lor raspunde 404.
+      const categorii = categoriiVizibile(await fetchAllRowsStrict("sitemap.store.categories", (from, to) =>
+        supabase.from("categories").select("id, name, parent_id, is_active").eq("business_id", biz.id).order("id").range(from, to)
+      ));
       const vazute = new Set<string>();
       for (const c of categorii) {
         const seg = slugCategorie(c.name ?? "");
@@ -111,7 +113,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // skip the individual /product/* URLs (the main one 301s to the homepage; the
     // rest are noindex). Custom pages below still get listed.
     if (parseStoreModeFromSettings(biz.store_settings).mode !== "one_product") {
-      const products = await fetchAllRows("sitemap.store.products", (from, to) =>
+      const products = await fetchAllRowsStrict("sitemap.store.products", (from, to) =>
         supabase
           .from("products")
           .select("slug, updated_at")
@@ -145,7 +147,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       });
     }
 
-    const pages = await fetchAllRows("sitemap.store.pages", (from, to) =>
+    const pages = await fetchAllRowsStrict("sitemap.store.pages", (from, to) =>
       supabase
         .from("custom_pages")
         .select("slug, updated_at, seo")
@@ -205,7 +207,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const admin = createAdminClient();
-  const businesses = await fetchAllRows("sitemap.platform.businesses", (from, to) =>
+  const businesses = await fetchAllRowsStrict("sitemap.platform.businesses", (from, to) =>
     admin
       .from("businesses")
       .select("slug, updated_at, custom_domain, store_settings(page_content, storefront_design)")
@@ -241,35 +243,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .map((b) => b.slug),
   );
 
-  const products = await fetchAllRows("sitemap.platform.products", (from, to) =>
-    supabase
-      .from("products")
-      .select("slug, updated_at, businesses!inner(slug, is_published, custom_domain)")
-      .eq("is_active", true)
-      .eq("businesses.is_published", true)
-      .order("id")
-      .range(from, to)
-  );
-
-  const productPages: MetadataRoute.Sitemap = products
-    .filter((p) => {
-      const biz = p.businesses as unknown as { slug: string; custom_domain: string | null };
-      return p.slug && !biz.custom_domain && !opsSlugs.has(biz.slug);
-    })
-    .map((p) => {
-      const biz = p.businesses as unknown as { slug: string };
-      return {
-        url: `${PLATFORM_ORIGIN}/${biz.slug}/product/${p.slug}`,
-        lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      };
-    });
-
-  const pages = await fetchAllRows("sitemap.platform.pages", (from, to) =>
+  /*
+   * PRODUSELE NU MAI SUNT AICI. Vezi `app/produse/sitemap.ts`.
+   *
+   * Se citeau toate, ale tuturor magazinelor publicate, ca sa se pastreze primele
+   * 50.000 — la cinci milioane de produse, cinci milioane de randuri aduse in
+   * memoria functiei ca sa se arunce 99%. Si e o ruta PUBLICA, deci oricine o
+   * putea declansa.
+   *
+   * Acum sunt taiate in felii de 45.000 cu `generateSitemaps`, fiecare citindu-si
+   * exact fereastra ei. Feliile se anunta din `robots.txt`.
+   */
+  const pages = await fetchAllRowsStrict("sitemap.platform.pages", (from, to) =>
     supabase
       .from("custom_pages")
-      .select("slug, updated_at, seo, businesses!inner(slug, is_published, custom_domain)")
+      // Relatia numita explicit, ca la sitemap-ul de produse: aici nu e (inca)
+      // ambigua, dar o tabela noua cu chei straine catre `custom_pages` si
+      // `businesses` ar face-o, iar simptomul ar fi tot un sitemap gol cu 200.
+      .select("slug, updated_at, seo, businesses!custom_pages_business_id_fkey!inner(slug, is_published, custom_domain)")
       .eq("is_published", true)
       .eq("businesses.is_published", true)
       .order("id")
@@ -289,5 +280,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       };
     });
 
-  return [...staticPages, ...businessPages, ...paginiDeCatalog, ...productPages, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
+  return [...staticPages, ...businessPages, ...paginiDeCatalog, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
 }

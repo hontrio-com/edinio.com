@@ -2,9 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { startNetopiaPayment, type NetopiaConfig } from "@/lib/netopia";
 import { signNetopiaIpn } from "@/lib/netopia-ipn";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { logError } from "@/lib/error-logger";
 
 export async function POST(request: NextRequest) {
   try {
+    /*
+     * Ruta e publica si nu cere sesiune, iar cele trei verificari de mai jos
+     * (comanda exista / neplatita / neanulata) raman adevarate la infinit — deci
+     * o bucla pe acelasi orderId nu se rupea niciodata singura, si fiecare
+     * cerere deschidea o plata NOUA pe POS-ul comerciantului.
+     * Doua linii: asta taie rafala pe IP fara sa atinga baza; cea durabila de
+     * mai jos (pe comanda) e singura care tine intre instantele serverless.
+     */
+    if (!rateLimit(`pay-start:${clientIp(request)}`, 10, 60_000)) {
+      return NextResponse.json(
+        { error: "Prea multe incercari de plata. Te rugam asteapta un minut si incearca din nou." },
+        { status: 429 },
+      );
+    }
+
     const { orderId, businessId } = (await request.json()) as { orderId: string; businessId: string };
     if (!orderId || !businessId) {
       return NextResponse.json({ error: "Missing orderId or businessId" }, { status: 400 });
@@ -34,6 +52,20 @@ export async function POST(request: NextRequest) {
     const config = settings?.netopia_config as NetopiaConfig | null;
     if (!config?.enabled || !config.pos_signature || !config.api_key) {
       return NextResponse.json({ error: "Netopia not configured" }, { status: 400 });
+    }
+
+    /*
+     * Plafon DURABIL pe COMANDA, nu pe magazin: o comanda reala are nevoie de
+     * cateva reincercari de plata, nu de mii, iar o cheie pe businessId ar fi
+     * lasat un atacator sa blocheze plata pentru toti ceilalti cumparatori ai
+     * magazinului. Se consuma abia aici, dupa ce stim ca `orderId` chiar exista,
+     * ca sa nu se umple tabela de limite cu chei inventate.
+     */
+    if (!(await consumaLimita(`pay-start:${orderId}`, 5, 3600)).permis) {
+      return NextResponse.json(
+        { error: "Ai incercat de prea multe ori sa platesti aceasta comanda. Incearca din nou peste o ora sau scrie magazinului." },
+        { status: 429 },
+      );
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com";
@@ -74,6 +106,32 @@ export async function POST(request: NextRequest) {
       console.error("[netopia/start] Payment start failed:", result.error);
       // 502: upstream (Netopia) refused/failed — distinct from our own 500 below.
       return NextResponse.json({ error: result.error }, { status: 502 });
+    }
+
+    /*
+     * `ntpID` se pastreaza, nu se mai arunca.
+     *
+     * E singurul lucru dupa care s-ar putea interoga Netopia pentru o comanda
+     * anume. Fara el, Netopia ramane procesatorul FARA nicio plasa: daca IPN-ul nu
+     * ajunge, plata se pierde tacut si nimic n-o mai gaseste.
+     *
+     * Scrierea e best-effort si NU opreste plata: legatura principala vine oricum
+     * din IPN, care intoarce `order.orderID` — chiar id-ul comenzii noastre. Spre
+     * deosebire de Stripe/iPay, aici un esec de scriere nu orbeste nimic ACUM, deci
+     * n-are rost sa refuzam clientului plata pentru el.
+     */
+    if (result.ntpID) {
+      const { error } = await admin
+        .from("orders").update({ netopia_ntp_id: result.ntpID }).eq("id", orderId);
+      if (error) {
+        await logError({
+          action: "netopia/start",
+          message: `ntpID-ul Netopia nu s-a putut salva: ${error.message}`,
+          details: { orderId, ntpID: result.ntpID },
+          businessId,
+          severity: "warning",
+        });
+      }
     }
 
     return NextResponse.json({ redirectUrl: result.redirectUrl });

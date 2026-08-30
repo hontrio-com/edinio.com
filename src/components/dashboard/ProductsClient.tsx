@@ -1,14 +1,21 @@
 "use client";
 
-import { useState, useMemo, useTransition, useEffect, useRef, useCallback } from "react";
+import { FARA_CATEGORIE } from "@/lib/dashboard/produse-filtre";
+import { SiglaMarketplace } from "./SiglaMarketplace";
+import { useState, useMemo, useOptimistic, useTransition, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent } from "lucide-react";
 import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
+import { bulkPublishTrendyol } from "@/lib/actions/trendyol.actions";
+import { publicaSelectiaPeEmag } from "@/lib/actions/emag.actions";
 import { publishProductsToOlx } from "@/lib/actions/olx.actions";
+import { idurileProduselorFiltrate } from "@/lib/actions/produse-selectie.actions";
+import type { FiltreProduse } from "@/lib/dashboard/produse-filtre";
 import { toast } from "sonner";
 import { formatPrice } from "@/lib/utils/format";
+import { pretVechiDeTaiat } from "@/lib/products/compare-at";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
@@ -19,36 +26,67 @@ type Product = Pick<
   "id" | "name" | "slug" | "sku" | "price" | "compare_at_price" | "images" | "category" | "is_active" | "is_featured" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
 >;
 
-export function ProductsClient({ products, businessId, initialSearch = "", initialPage = 1, categories = [], productLimit, productCount, plan, olxConnected = false }: {
+export function ProductsClient({ products, businessId, filtre, totalFiltrate, categories = [], productLimit, productCount, plan, olxConnected = false, trendyolConnected, emagConnected}: {
   products: Product[];
   businessId: string;
-  initialSearch?: string;
-  initialPage?: number;
+  /**
+   * Filtrele CERUTE, citite din adresa pe server. Sunt sursa de adevar: lista
+   * primita e deja rezultatul lor, deci controalele nu fac decat sa le arate si
+   * sa ceara altele.
+   */
+  filtre: FiltreProduse;
+  /** Cate produse trec de filtre IN TOTAL, nu cate sunt pe pagina. */
+  totalFiltrate: number;
   categories: CategoryOption[];
   productLimit: number;
   productCount: number;
   plan: string;
   olxConnected?: boolean;
+  trendyolConnected?: boolean;
+  emagConnected?: boolean;
 }) {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const didMountRef = useRef(false);
+  const [searchQuery, setSearchQuery] = useState(filtre.cautare);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDupTransition] = useTransition();
-  const [page, setPage] = useState(initialPage);
-  const didMountRef = useRef(false);
-  // Keep the current page in the URL (?page=N) WITHOUT a server round-trip, so
-  // opening a product and returning (save / cancel / browser back) lands on the
-  // same page. The list is paginated client-side, hence history.replaceState.
-  const goToPage = useCallback((p: number) => {
-    setPage(p);
-    const params = new URLSearchParams(window.location.search);
-    if (p > 1) params.set("page", String(p)); else params.delete("page");
-    const qs = params.toString();
-    window.history.replaceState(null, "", qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
-  }, []);
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all");
+  const [naviga, startNavigare] = useTransition();
+
+  /*
+   * FILTRELE CER O PAGINA NOUA, nu mai taie o lista din memorie.
+   *
+   * Lista are acum douazeci si cinci de randuri, nu tot catalogul, deci filtrarea
+   * si paginarea NU se mai pot face aici — se cer de la server, prin adresa.
+   * Adresa devine astfel si singurul loc unde traiesc filtrele: un link catre
+   * „produse fara stoc din categoria X" se poate trimite mai departe, iar Inapoi
+   * face ce scrie pe el.
+   *
+   * `router.push`, nu `location.href`: o reincarcare intreaga ar pierde focusul
+   * din caseta de cautare la fiecare litera asezata.
+   */
+  const cereFiltre = useCallback((schimbari: Partial<FiltreProduse>) => {
+    const noi = { ...filtre, ...schimbari };
+    // Orice schimbare de filtru duce la pagina 1: pagina 7 dintr-o lista de trei
+    // pagini ar fi goala. Numai o cerere explicita de pagina o pastreaza.
+    if (schimbari.pagina === undefined) noi.pagina = 1;
+    const p = new URLSearchParams();
+    if (noi.cautare.trim()) p.set("search", noi.cautare.trim());
+    if (noi.categorie) p.set("cat", noi.categorie);
+    if (noi.stare !== "all") p.set("stare", noi.stare);
+    if (noi.stoc !== "all") p.set("stoc", noi.stoc);
+    if (noi.pagina > 1) p.set("page", String(noi.pagina));
+    const qs = p.toString();
+    startNavigare(() => router.push(qs ? `/dashboard/products?${qs}` : "/dashboard/products", { scroll: false }));
+  }, [filtre, router]);
+
+  const goToPage = useCallback((p: number) => cereFiltre({ pagina: p }), [cereFiltre]);
+
+  const categoryFilter = filtre.categorie;
+  const statusFilter = filtre.stare;
+  const stockFilter = filtre.stoc;
+  const setCategoryFilter = (v: string) => cereFiltre({ categorie: v });
+  const setStatusFilter = (v: "all" | "active" | "inactive") => cereFiltre({ stare: v });
+  const setStockFilter = (v: "all" | "in" | "out") => cereFiltre({ stoc: v });
   const [exporting, setExporting] = useState(false);
 
   // ── Bulk selection + actions ──
@@ -60,6 +98,24 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   const [priceAmount, setPriceAmount] = useState("");
   const [bulkCategory, setBulkCategory] = useState("");
   const selectAllRef = useRef<HTMLInputElement>(null);
+  const [, startBulkTransition] = useTransition();
+
+  // Doar schimbarile al caror rezultat il stim dinainte: activ/inactiv, recomandat
+  // si categoria pusa pe o valoare aleasa de utilizator. Pretul NU intra aici
+  // (rotunjirea o face serverul), nici stergerea (dezactiveaza si pachetele care
+  // contin produsele, deci lista de dupa nu e complet previzibila).
+  const [produse, aplicaOptimist] = useOptimistic(
+    products,
+    (stare: Product[], a: Extract<BulkAction, { kind: "active" | "featured" | "category" }> & { ids: string[] }) => {
+      const vizate = new Set(a.ids);
+      return stare.map((p) => {
+        if (!vizate.has(p.id)) return p;
+        if (a.kind === "active") return { ...p, is_active: a.value };
+        if (a.kind === "featured") return { ...p, is_featured: a.value };
+        return { ...p, category: a.value };
+      });
+    },
+  );
 
   const bulkBtn = "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-foreground border border-border bg-surface hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
   const bulkSelect = "px-2.5 py-1.5 text-xs border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
@@ -96,20 +152,10 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
 
   const parentCategories = useMemo(() => categories.filter(c => !c.parent_id), [categories]);
 
-  // category name -> [name, ...child names], so picking a parent includes its subcategories
-  const subtreeByName = useMemo(() => {
-    const childrenByParent = new Map<string, string[]>();
-    for (const c of categories) {
-      if (c.parent_id) {
-        const arr = childrenByParent.get(c.parent_id) ?? [];
-        arr.push(c.name);
-        childrenByParent.set(c.parent_id, arr);
-      }
-    }
-    const map: Record<string, string[]> = {};
-    for (const c of categories) map[c.name] = [c.name, ...(childrenByParent.get(c.id) ?? [])];
-    return map;
-  }, [categories]);
+  // Subarborele de categorii (parinte + copii directi) a plecat pe server, in
+  // `subarboreUnNivel`: filtrul se aplica acum in SQL, iar regula trebuie sa fie
+  // una singura. Scrisa si aici, prima nepotrivire ar fi fost o categorie care
+  // arata alte produse decat numara.
 
   const hasActiveFilters = searchQuery.trim() !== "" || categoryFilter !== "" || statusFilter !== "all" || stockFilter !== "all";
 
@@ -120,45 +166,66 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
     setStockFilter("all");
   }
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const catNames = categoryFilter ? (subtreeByName[categoryFilter] ?? [categoryFilter]) : null;
-    return products.filter(p => {
-      if (q && !(
-        p.name.toLowerCase().includes(q) ||
-        (p.category ?? "").toLowerCase().includes(q) ||
-        (p.sku ?? "").toLowerCase().includes(q)
-      )) return false;
-      if (catNames && !catNames.includes(p.category ?? "")) return false;
-      if (statusFilter === "active" && !p.is_active) return false;
-      if (statusFilter === "inactive" && p.is_active) return false;
-      if (stockFilter !== "all") {
-        const out = !!p.track_inventory && (p.stock_quantity ?? 0) <= 0;
-        if (stockFilter === "out" && !out) return false;
-        if (stockFilter === "in" && out) return false;
-      }
-      return true;
-    });
-  }, [products, searchQuery, categoryFilter, statusFilter, stockFilter, subtreeByName]);
+  /*
+   * Lista primita E rezultatul filtrelor, si E pagina ceruta.
+   *
+   * Filtrarea si felierea se faceau aici, peste tot catalogul. Refacute acum peste
+   * douazeci si cinci de randuri ar fi cel mult o no-op costisitoare — dar
+   * FELIEREA a doua oara ar goli pagina 2 (`slice(25, 50)` peste 25 de randuri da
+   * lista goala). Aceeasi lectie ca la catalogul public.
+   */
+  const totalPages = Math.max(1, Math.ceil(totalFiltrate / PAGE_SIZE));
+  const currentPage = Math.min(filtre.pagina, totalPages);
+  const paginated = produse;
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  // Carry the current page into the edit URL so save/cancel returns to it.
-  const editHref = (id: string) => `/dashboard/products/${id}/edit${currentPage > 1 ? `?page=${currentPage}` : ""}`;
+  /**
+   * Adresa listei asa cum o vede omul ACUM: filtre, cautare si pagina.
+   *
+   * ⚠ SE DUCEA NUMAI PAGINA, SI NU AJUNGEA. Cine cautase ceva, sau filtrase dupa categorie, se
+   * intorcea dupa „Salveaza" intr-o lista NEFILTRATA — la aceeasi pagina, dar cu alte produse.
+   * Iar cand lista filtrata avea o singura pagina, `currentPage` era 1, deci nu se trimitea nimic
+   * si intoarcerea ateriza chiar la inceput.
+   *
+   * Se compune la fel ca in `cereFiltre`, ca sa nu existe doua raspunsuri la aceeasi intrebare.
+   */
+  const interogareLista = () => {
+    const p = new URLSearchParams();
+    if (filtre.cautare.trim()) p.set("search", filtre.cautare.trim());
+    if (filtre.categorie) p.set("cat", filtre.categorie);
+    if (filtre.stare !== "all") p.set("stare", filtre.stare);
+    if (filtre.stoc !== "all") p.set("stoc", filtre.stoc);
+    if (currentPage > 1) p.set("page", String(currentPage));
+    return p.toString();
+  };
 
-  // Reset paging + selection whenever the filtered set changes — but NOT on the
-  // initial mount, so a page restored from the URL (?page=N) is preserved.
+  const editHref = (id: string) => {
+    const qs = interogareLista();
+    return `/dashboard/products/${id}/edit${qs ? `?${qs}` : ""}`;
+  };
+
+  /*
+   * Cautarea se trimite cu INTARZIERE, nu la fiecare tasta.
+   *
+   * Fiecare litera inseamna acum o cerere la server, nu o filtrare in memorie.
+   * Nu se trimite nici la montare: acolo caseta arata deja ce a cerut adresa.
+   */
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }
-    goToPage(1);
-    setSelected(new Set());
-    setBulkPanel(null);
-    setConfirmBulkDelete(false);
-  }, [searchQuery, categoryFilter, statusFilter, stockFilter, goToPage]);
+    if (searchQuery === filtre.cautare) return;
+    const t = window.setTimeout(() => cereFiltre({ cautare: searchQuery }), 400);
+    return () => window.clearTimeout(t);
+  }, [searchQuery, filtre.cautare, cereFiltre]);
 
-  const allSelected = filtered.length > 0 && filtered.every(p => selected.has(p.id));
-  const someSelected = !allSelected && filtered.some(p => selected.has(p.id));
+  /*
+   * „Selecteaza tot" inseamna TOT ce trece de filtre, nu pagina curenta.
+   *
+   * Asa a insemnat dintotdeauna, si de el atarna actiunile in masa — inclusiv
+   * stergerea. Cu lista redusa la o pagina, id-urile se cer de la server, dar
+   * numai CAND SE APASA: pe o incarcare obisnuita nu costa nimic.
+   */
+  const [selectieTotala, setSelectieTotala] = useState(false);
+  const allSelected = selectieTotala || (paginated.length > 0 && paginated.every(p => selected.has(p.id)));
+  const someSelected = !allSelected && paginated.some(p => selected.has(p.id));
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected;
@@ -167,21 +234,50 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
   function toggleOne(id: string) {
     setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
-  function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(filtered.map(p => p.id)));
+  async function toggleAll() {
+    if (allSelected) { setSelected(new Set()); setSelectieTotala(false); return; }
+    const r = await idurileProduselorFiltrate(businessId, filtre);
+    if ("error" in r) { toast.error(r.error); return; }
+    setSelected(new Set(r.ids));
+    setSelectieTotala(true);
   }
-  function clearSelection() { setSelected(new Set()); setBulkPanel(null); setConfirmBulkDelete(false); }
+  function clearSelection() { setSelected(new Set()); setSelectieTotala(false); setBulkPanel(null); setConfirmBulkDelete(false); }
 
-  async function runBulk(action: BulkAction, successMsg: string) {
-    setBulkBusy(true);
-    const res = await bulkProductAction(businessId, [...selected], action);
-    setBulkBusy(false);
-    if ("error" in res) { toast.error(res.error); return; }
-    toast.success(successMsg.replace("{n}", String(res.count)));
+  /*
+   * ⚠ SELECTIA SE GOLESTE CAND SE SCHIMBA CE SE VEDE (30.08.2026)
+   *
+   * Pana acum o facea `<Suspense key={…}>` din pagina, remontand tot componentul. Rostul era bun
+   * — altfel ar fi ramas bifate produse care nu mai sunt in lista, iar actiunile in masa, inclusiv
+   * STERGEREA, ar fi lucrat pe ele. Dar mijlocul arunca si caseta de cautare, deci focusul se
+   * pierdea la fiecare litera scrisa.
+   *
+   * ⚠ Se cheama chiar `clearSelection`, nu o a doua golire scrisa alaturi: doua locuri care golesc
+   * aceeasi stare se despart la prima stare noua adaugata.
+   */
+  const semnaturaFiltre = JSON.stringify(filtre);
+  const semnaturaVeche = useRef(semnaturaFiltre);
+  useEffect(() => {
+    if (semnaturaVeche.current === semnaturaFiltre) return;
+    semnaturaVeche.current = semnaturaFiltre;
     clearSelection();
-    setPriceAmount("");
-    setBulkCategory("");
-    router.refresh();
+  }, [semnaturaFiltre]);
+
+  function runBulk(action: BulkAction, successMsg: string) {
+    const ids = [...selected];
+    setBulkBusy(true);
+    startBulkTransition(async () => {
+      if (action.kind === "active" || action.kind === "featured" || action.kind === "category") {
+        aplicaOptimist({ ...action, ids });
+      }
+      const res = await bulkProductAction(businessId, ids, action);
+      setBulkBusy(false);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(successMsg.replace("{n}", String(res.count)));
+      clearSelection();
+      setPriceAmount("");
+      setBulkCategory("");
+      router.refresh();
+    });
   }
   function applyPrice() {
     const amt = Number(priceAmount);
@@ -192,6 +288,50 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
     if (bulkCategory === "") { toast.error("Alege o categorie."); return; }
     runBulk({ kind: "category", value: bulkCategory === "__none__" ? null : bulkCategory }, "Categorie setata la {n} produse");
   }
+  /*
+   * ⚠ CE MARKETPLACE APARE AICI, SI CE NU (30.08.2026)
+   *
+   * Cerut de comerciant: „daca selectez in masa, n-ar trebui sa am si «Publica pe eMAG»,
+   * «Publica pe Trendyol»?". Da — dar numai acolo unde exista o cale care chiar publica o
+   * LISTA de id-uri.
+   *
+   * ⚠ ABOUT YOU LIPSESTE DINADINS. Singurele lui cai in masa (`enqueueAboutYouSyncMany` si
+   * `enqueueForListings`) pornesc de la `aboutyou_listings`, deci ating numai produsele care AU
+   * DEJA o listare acolo. Un buton „Publica pe About You" ar fi sarit tacut exact produsele pe
+   * care le-ar bifa cineva care vrea sa le publice — chiar defectul documentat la eMAG, unde
+   * „la prima folosire nu se punea nimic la rand" si mesajul dadea vina pe altceva. Pana exista
+   * o cale pe id-uri, publicarea pe About You ramane in pagina integrarii.
+   */
+  async function publishSelectedToTrendyol() {
+    setBulkBusy(true);
+    const res = await bulkPublishTrendyol(businessId, [...selected]);
+    setBulkBusy(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    if (res.submitted === 0) {
+      toast.error(res.failed > 0
+        ? `Niciun produs trimis. ${res.failed} au fost respinse — vezi motivele in pagina Trendyol.`
+        : "Niciun produs de trimis.");
+      return;
+    }
+    toast.success(res.failed > 0
+      ? `${res.submitted} produse trimise la Trendyol. ${res.failed} respinse.`
+      : `${res.submitted} produse trimise la Trendyol.`);
+    clearSelection();
+    router.refresh();
+  }
+
+  async function publishSelectedToEmag() {
+    setBulkBusy(true);
+    const res = await publicaSelectiaPeEmag(businessId, [...selected]);
+    setBulkBusy(false);
+    if ("error" in res) { toast.error(res.error); return; }
+    toast.success(res.sarite > 0
+      ? `${res.puse} produse trimise la eMAG. ${res.sarite} sarite (oferte preluate din contul tau).`
+      : `${res.puse} produse trimise la eMAG.`);
+    clearSelection();
+    router.refresh();
+  }
+
   async function publishSelectedToOlx() {
     setBulkBusy(true);
     const res = await publishProductsToOlx(businessId, [...selected]);
@@ -214,8 +354,13 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <h1 className="text-xl font-semibold text-foreground">Produsele mele</h1>
+          {/*
+            `totalFiltrate`, nu `products.length`: al doilea e cat incape pe o
+            pagina (25), deci un magazin cu 3351 de produse afisa „25" langa
+            titlu si „1-25 din 3351" la subsol, in aceeasi pagina.
+          */}
           <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs font-semibold rounded-full">
-            {products.length}
+            {totalFiltrate}
           </span>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
@@ -268,6 +413,9 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
             className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
             <option value="">Toate categoriile</option>
+            {/* ⚠ Sta imediat sub „Toate", nu la coada listei: la un magazin cu 110
+                categorii, pus la sfarsit, nu l-ar gasi nimeni. */}
+            <option value={FARA_CATEGORIE}>Produse fara categorie</option>
             {parentCategories.map((parent) => {
               const children = categories.filter((c) => c.parent_id === parent.id);
               return children.length > 0 ? (
@@ -349,9 +497,9 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
 
       {hasActiveFilters && (
         <p className="text-sm text-muted-foreground mb-3">
-          {filtered.length === 0
+          {totalFiltrate === 0
             ? "Niciun produs gasit cu filtrele selectate"
-            : `${filtered.length} ${filtered.length === 1 ? "produs gasit" : "produse gasite"}`}
+            : `${totalFiltrate} ${totalFiltrate === 1 ? "produs gasit" : "produse gasite"}`}
         </p>
       )}
 
@@ -368,7 +516,17 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "category" ? null : "category"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "category" && "border-primary ring-1 ring-primary/30")}><Tag className="h-3.5 w-3.5" /> Categorie</button>
             {olxConnected && (
               <button type="button" disabled={bulkBusy} onClick={publishSelectedToOlx} className={bulkBtn}>
-                <Image src="/integrations/olx.svg" alt="" width={14} height={14} className="h-3.5 w-3.5 rounded-[3px]" /> Publica pe OLX
+                <SiglaMarketplace piata="olx" inaltime={14} /> Publică pe OLX
+              </button>
+            )}
+            {trendyolConnected && (
+              <button type="button" disabled={bulkBusy} onClick={publishSelectedToTrendyol} className={bulkBtn}>
+                <SiglaMarketplace piata="trendyol" inaltime={14} latimeMax={56} /> Publică pe Trendyol
+              </button>
+            )}
+            {emagConnected && (
+              <button type="button" disabled={bulkBusy} onClick={publishSelectedToEmag} className={bulkBtn}>
+                <SiglaMarketplace piata="emag" inaltime={14} latimeMax={56} /> Publică pe eMAG
               </button>
             )}
             <button type="button" disabled={bulkBusy} onClick={() => { setConfirmBulkDelete(true); setBulkPanel(null); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/20 bg-surface hover:bg-destructive/5 rounded-lg transition-colors disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Sterge</button>
@@ -423,7 +581,10 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
         </div>
       )}
 
-      {filtered.length > 0 ? (
+      {/* Filtrele fac acum un dus-intors: fara semnul asta, apesi si nu se
+          schimba nimic vizibil pentru o jumatate de secunda. */}
+      <div className={naviga ? "opacity-50 pointer-events-none transition-opacity" : "transition-opacity"} aria-busy={naviga || undefined}>
+      {totalFiltrate > 0 ? (
         <>
           {/* Mobile: card list (the table is too cramped on small screens) */}
           <div className="sm:hidden space-y-2">
@@ -462,9 +623,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                       {product.sku && <div className="text-xs text-muted-foreground font-mono truncate">SKU: {product.sku}</div>}
                       <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-sm whitespace-nowrap">{formatPrice(Number(product.price))}</span>
-                        {product.compare_at_price && (
-                          <span className="text-xs text-muted-foreground line-through whitespace-nowrap">{formatPrice(Number(product.compare_at_price))}</span>
-                        )}
+                        {(() => {
+                          // Aceeasi regula ca pe cardul din magazin: se taie doar
+                          // ce e STRICT peste pretul afisat. Vezi `compare-at.ts`.
+                          const vechi = pretVechiDeTaiat(product.compare_at_price, product.price);
+                          return vechi == null ? null : (
+                            <span className="text-xs text-muted-foreground line-through whitespace-nowrap">{formatPrice(vechi)}</span>
+                          );
+                        })()}
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                         <span className={cn(
@@ -565,11 +731,14 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
                     </td>
                     <td className="px-4 py-3">
                       <span className="font-medium text-foreground whitespace-nowrap">{formatPrice(Number(product.price))}</span>
-                      {product.compare_at_price && (
-                        <div className="text-xs text-muted-foreground line-through whitespace-nowrap">
-                          {formatPrice(Number(product.compare_at_price))}
-                        </div>
-                      )}
+                      {(() => {
+                        const vechi = pretVechiDeTaiat(product.compare_at_price, product.price);
+                        return vechi == null ? null : (
+                          <div className="text-xs text-muted-foreground line-through whitespace-nowrap">
+                            {formatPrice(vechi)}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell whitespace-nowrap">
                       {product.track_inventory ? `${product.stock_quantity ?? 0} buc` : "Nelimitat"}
@@ -622,7 +791,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
           {totalPages > 1 && (
             <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2 px-3 sm:px-5 py-3 mt-3 bg-surface border border-border rounded-xl">
               <p className="text-xs text-muted-foreground">
-                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} din {filtered.length} produse
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalFiltrate)} din {totalFiltrate} produse
               </p>
               <div className="flex items-center gap-1 self-end sm:self-auto">
                 <button onClick={() => goToPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
@@ -687,6 +856,7 @@ export function ProductsClient({ products, businessId, initialSearch = "", initi
           </div>
         </div>
       )}
+      </div>
     </>
   );
 }

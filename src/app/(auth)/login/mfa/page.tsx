@@ -3,24 +3,63 @@
 import { useState } from "react";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { verifyMfaLogin } from "@/lib/actions/auth.actions";
 
+/*
+ * DE CE PAGINA ASTA CHEAMA RUTE /api SI NU ACTIUNI DE SERVER (05.08.2026)
+ *
+ * Cei trei pasi de aici — verifica codul, cere altul, iesi din cont — sunt
+ * singurii care trebuie sa functioneze CU SESIUNEA NECONFIRMATA. Poarta MFA
+ * opreste orice actiune de server intr-o astfel de sesiune, iar o scutire pe
+ * calea /login/mfa ar fi fost o usa deschisa: id-ul unei actiuni se rezolva
+ * dintr-un manifest GLOBAL, deci un POST catre calea scutita cu id-ul oricarei
+ * alte actiuni ar fi executat-o. Detaliile in src/lib/auth/poarta-mfa.ts.
+ *
+ * DE CE EXISTA „Trimite alt cod" SI „Iesi din cont": pagina se poate deschide si
+ * fara ca vreun cod sa fi fost trimis chiar atunci (cod expirat, alta fila,
+ * sesiune veche). Fara ele, omul ar ramane pe un ecran care cere un cod pe care
+ * nu-l are, fara nicio iesire.
+ */
 export default function MfaPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [retrimite, setRetrimite] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (code.length < 6) return;
     setLoading(true);
     try {
-      const result = await verifyMfaLogin(code);
-      if (result && "error" in result) {
-        toast.error(result.error);
+      const raspuns = await fetch("/api/auth/mfa/verifica", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cod: code }),
+      });
+      const date = (await raspuns.json().catch(() => ({}))) as { catre?: string; error?: string };
+      if (!raspuns.ok) {
+        toast.error(date.error ?? "Nu am putut verifica codul. Incearca din nou.");
         setLoading(false);
+        return;
       }
+      // Navigare completa, nu `router.push`: sesiunea tocmai a fost emisa in
+      // acest raspuns, si vrem ca urmatoarea cerere sa plece cu cookie-urile ei.
+      window.location.href = date.catre ?? "/dashboard";
     } catch {
+      toast.error("Nu am putut verifica codul. Incearca din nou.");
       setLoading(false);
+    }
+  }
+
+  async function onRetrimite() {
+    setRetrimite(true);
+    try {
+      const raspuns = await fetch("/api/auth/mfa/retrimite", { method: "POST" });
+      const date = (await raspuns.json().catch(() => ({}))) as { error?: string };
+      if (!raspuns.ok) toast.error(date.error ?? "Nu am putut trimite codul.");
+      else toast.success("Ti-am trimis un cod nou pe email.");
+    } catch {
+      toast.error("Nu am putut trimite codul. Incearca din nou.");
+    } finally {
+      setRetrimite(false);
     }
   }
 
@@ -67,7 +106,25 @@ export default function MfaPage() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-xs text-muted-foreground">
+      <div className="mt-6 flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={onRetrimite}
+          disabled={retrimite}
+          className="text-xs font-medium text-primary hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {retrimite ? "Se trimite..." : "Trimite alt cod"}
+        </button>
+        {/* Formular obisnuit, nu `fetch`: iesirea din cont trebuie sa mearga si
+            daca JavaScript-ul paginii a crapat. */}
+        <form action="/api/auth/iesire" method="post">
+          <button type="submit" className="text-xs text-muted-foreground hover:underline">
+            Iesi din cont
+          </button>
+        </form>
+      </div>
+
+      <p className="mt-4 text-center text-xs text-muted-foreground">
         Codul este valabil 10 minute. Daca nu ai primit emailul, verifica folderul Spam.
       </p>
     </>

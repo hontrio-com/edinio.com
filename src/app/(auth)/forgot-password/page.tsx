@@ -26,12 +26,12 @@ export default function ForgotPasswordPage() {
 
   async function onSubmit(data: ForgotPasswordInput) {
     setLoading(true);
-    const result = await forgotPassword(data.email);
-    if (result.error) {
-      toast.error(result.error);
-    } else {
-      setSent(true);
-    }
+    // Actiunea raspunde INTOTDEAUNA cu succes, si cand adresa nu exista, si cand
+    // limita de rata s-a atins. Un mesaj diferentiat ar spune atacatorului care
+    // adrese sunt inregistrate pe platforma. Ecranul urmator zice deja neutru
+    // „Daca exista un cont cu aceasta adresa...".
+    await forgotPassword(data.email);
+    setSent(true);
     setLoading(false);
   }
 

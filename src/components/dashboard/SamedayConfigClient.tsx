@@ -9,13 +9,14 @@ import {
   disconnectSameday,
   loadSamedayAccountAction,
 } from "@/lib/actions/sameday.actions";
-import type { SamedayConfig, SamedayPickupPoint, SamedayService } from "@/lib/sameday";
+import type { SamedayConfig, SamedayPickupPoint, SamedayService } from "@/lib/sameday/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
 import { selectCls } from "@/lib/ui";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 export function SamedayConfigClient({
   businessId,
@@ -50,12 +51,12 @@ export function SamedayConfigClient({
 
   async function handleConnect() {
     if (!username.trim()) return toast.error("Completeaza username-ul Sameday");
-    if (!password.trim()) return toast.error("Completeaza parola");
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completeaza parola");
 
     setLoading(true);
     let result: Awaited<ReturnType<typeof loadSamedayAccountAction>>;
     try {
-      result = await loadSamedayAccountAction(username.trim(), password.trim(), sandbox);
+      result = await loadSamedayAccountAction(businessId, username.trim(), password.trim(), sandbox);
     } catch (e) {
       setLoading(false);
       toast.error(`Eroare la conectare: ${(e as Error).message}`);
@@ -194,7 +195,7 @@ export function SamedayConfigClient({
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Parola cont Sameday"
+              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola cont Sameday"}
             />
           </Field>
         </div>
@@ -211,7 +212,7 @@ export function SamedayConfigClient({
 
         <Button
           onClick={handleConnect}
-          disabled={loading || !username.trim() || !password.trim()}
+          disabled={loading || !username.trim() || (!password.trim() && !secretulEsteSalvat(initialConfig, "password"))}
         >
           {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
           {loading ? "Se conecteaza..." : "Conecteaza si incarca datele"}

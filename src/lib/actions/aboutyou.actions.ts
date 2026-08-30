@@ -9,24 +9,35 @@
 // other *_config secret). These actions NEVER return the raw key to the client —
 // only a masked preview and booleans.
 
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { aboutyouGloballyEnabled, aboutyouWebhookUrl, maskApiKey } from "@/lib/aboutyou/auth";
 import {
-  createWebhookSubscription, deleteWebhookSubscription, isAboutYouError, testConnection,
+  createWebhookSubscription, deleteWebhookSubscription, getOrderDocument, getWebhookSubscription,
+  isAboutYouError, mesajEroare, testConnection,
   type AboutYouAuth,
 } from "@/lib/aboutyou/client";
-import { ABOUTYOU_WEBHOOK_EVENTS } from "@/lib/aboutyou/webhooks";
+import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
+import { cancelOrderNow, returnOrderNow } from "@/lib/aboutyou/orders";
+import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import {
-  getAttributeGroupsCached, getBrandsCached, getCarriersCached, getCategoryChildrenCached,
-  getCountriesCached, searchCategories,
+  getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
+  cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
 } from "@/lib/aboutyou/taxonomy";
+import {
+  potrivesteCategorie, potrivireSigura, type PublicTinta, type SugestieCategorie,
+} from "@/lib/aboutyou/ro-taxonomy";
 import {
   loadAboutYouContext, publishProductNow, removeProductNow, syncProductNow, unpublishProductNow,
 } from "@/lib/aboutyou/sync";
-import { deriveVariantSlots, type AboutYouStoredMaterial, type MappableProduct } from "@/lib/aboutyou/mapping";
+import {
+  atasezaPreturileRon, deriveVariantSlots, TARI_EURO, validateListing,
+  type AboutYouStoredMaterial, type MappableProduct,
+} from "@/lib/aboutyou/mapping";
+import { traduMotive, type MotivAfisat } from "@/lib/aboutyou/respingeri";
 import type {
   AboutYouAttributeGroup, AboutYouBrand, AboutYouCarrier, AboutYouCategory, AboutYouCategoryMapEntry,
   AboutYouConfig, AboutYouCountriesResponse, AboutYouEnvironment, AboutYouFulfillmentType,
@@ -57,22 +68,58 @@ async function guard(businessId: string): Promise<{ supabase: ServerClient; user
   return { supabase, userId: user.id, biz };
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<AboutYouConfig> {
-  const { data } = await supabase
-    .from("store_settings").select("aboutyou_config").eq("business_id", businessId).single();
+/*
+ * Configurarea se citeste si se scrie MEREU cu clientul de serviciu, niciodata
+ * cu cel al utilizatorului.
+ *
+ * `public.store_settings` e o vedere care decripteaza campurile sensibile prin
+ * `privat.decripteaza_config`, iar aceea returneaza configul NEDECRIPTAT cand
+ * rolul apelantului e `anon` sau `authenticated` — adica exact rolul cu care
+ * ruleaza actiunile de aici. Citita asa, `api_key` iesea `enc.v1.…`, era trimisa
+ * ca `X-API-Key` si About You raspundea 401 la fiecare cerere. Conectarea parea
+ * sa reuseasca, pentru ca acolo cheia venea din formular, nu din baza.
+ *
+ * Ocolirea RLS e sigura: fiecare apelant trece intai prin `guard()`, care
+ * verifica proprietatea magazinului. E acelasi tipar folosit deja in fisier
+ * pentru tabelele `aboutyou_*`.
+ */
+/*
+ * ⚠ O CITIRE CAZUTA NU ARE VOIE SA ARATE CA O CONFIGURARE GOALA.
+ *
+ * Forma dinainte ignora `error` si intorcea `{}` cand citirea dadea gres. Iar apelantii
+ * fac apoi `saveConfig(...)` cu INTREGUL obiect — deci un gol inchipuit se scria peste
+ * acreditari, si integrarea se deconecta singura, fara nicio eroare nicaieri.
+ *
+ * S-a intamplat: 24.08.2026, un magazin cu Trendyol si 1272 de listari active a ramas
+ * cu `trendyol_config = {"reconcile_page": 20}`. Comerciantul n-a atins nimic.
+ *
+ * ⚠ `maybeSingle`, nu `single`: un magazin FARA rand e o stare legitima (nou creat), si
+ * acolo `{}` e chiar raspunsul corect. Ce nu e legitim e sa nu poti citi si sa spui gol.
+ * `single` le confunda: lipsa randului iesea tot ca eroare.
+ *
+ * ⚠ Aruncarea e voita. Apelantii au deja ramuri de esec; un gol tacut n-are.
+ */
+async function loadConfig(businessId: string): Promise<AboutYouConfig> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("store_settings").select("aboutyou_config").eq("business_id", businessId).maybeSingle();
+  if (error) {
+    throw new Error(`Configurarea nu s-a putut citi: ${error.message}`);
+  }
   return ((data?.aboutyou_config as AboutYouConfig) ?? {}) || {};
 }
 
-async function saveConfig(supabase: ServerClient, businessId: string, config: AboutYouConfig): Promise<boolean> {
-  const { data: existing } = await supabase
+async function saveConfig(businessId: string, config: AboutYouConfig): Promise<boolean> {
+  const admin = createAdminClient();
+  const { data: existing } = await admin
     .from("store_settings").select("id").eq("business_id", businessId).single();
   if (existing) {
-    const { error } = await supabase.from("store_settings")
+    const { error } = await admin.from("store_settings")
       .update({ aboutyou_config: config as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId);
     return !error;
   }
-  const { error } = await supabase.from("store_settings")
+  const { error } = await admin.from("store_settings")
     .insert({ business_id: businessId, aboutyou_config: config as never });
   return !error;
 }
@@ -82,7 +129,9 @@ async function saveConfig(supabase: ServerClient, businessId: string, config: Ab
 function aboutyouReadinessError(config: AboutYouConfig): string | null {
   if (!config.connected || !config.api_key) return "Conectează mai întâi contul About You (cheia API).";
   if (config.needs_reconnect) return "Sesiunea About You a expirat. Reconectează contul.";
-  if (!config.brand_id) return "Alege brandul About You în setări.";
+  // Brandul e per PRODUS la About You: cel din setari e doar implicitul. Mesajul
+  // de dinainte suna ca o constrangere pe tot catalogul.
+  if (!config.brand_id) return "Alege brandul About You în setări (îl poți schimba apoi pe fiecare produs).";
   if (!config.ship_countries || config.ship_countries.length === 0) return "Alege cel puțin o țară de listare.";
   if (config.price_mode !== "manual_eur" && !(config.fx?.rate && config.fx.rate > 0)) {
     return "Setează cursul valutar RON -> EUR în setări.";
@@ -107,9 +156,12 @@ export interface AboutYouStatus {
   brandId?: number;
   brandName?: string;
   shipCountries: string[];
+  targetAudience: PublicTinta | null;
   defaultCountryOfOrigin: string;
   defaultCarrierKey?: string;
   carrierMap: Record<string, string>;
+  /** Curierii la care comerciantul a declarat ca AWB-ul de tur e valabil si la retur. */
+  returBidirectional: Record<string, boolean>;
   autoSync: boolean;
   lastSyncAt?: string;
   webhookActive: boolean;
@@ -123,11 +175,14 @@ export async function getAboutYouStatus(businessId: string): Promise<AboutYouSta
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const [{ count: listings }, { count: published }, { count: rejected }, { count: variants }, { count: queued }] = await Promise.all([
     supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId),
-    supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "published"),
+    // About You raporteaza produsele publicate cu statusul `active`, nu
+    // `published` — acela e doar valoarea pe care o TRIMITEM la publicare. Numarat
+    // doar pe „published", contorul arata mereu zero.
+    supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).in("status", ["published", "active"]),
     supabase.from("aboutyou_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "rejected"),
     supabase.from("aboutyou_variants").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("aboutyou_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId),
@@ -149,9 +204,11 @@ export async function getAboutYouStatus(businessId: string): Promise<AboutYouSta
     brandId: config.brand_id,
     brandName: config.brand_name,
     shipCountries: config.ship_countries ?? [],
+    targetAudience: config.target_audience ?? null,
     defaultCountryOfOrigin: config.default_country_of_origin ?? DEFAULT_COUNTRY_OF_ORIGIN,
     defaultCarrierKey: config.default_carrier_key,
     carrierMap: config.carrier_map ?? {},
+    returBidirectional: config.retur_bidirectional ?? {},
     autoSync: config.auto_sync !== false,
     lastSyncAt: config.last_sync_at,
     webhookActive: !!config.webhook_subscription_id,
@@ -180,7 +237,7 @@ export async function connectAboutYou(
   const test = await testConnection({ apiKey, environment: env });
   if (!test.ok) return { error: test.error };
 
-  const prev = await loadConfig(g.supabase, businessId);
+  const prev = await loadConfig(businessId);
   const next: AboutYouConfig = {
     ...prev,
     connected: true,
@@ -195,7 +252,7 @@ export async function connectAboutYou(
     default_country_of_origin: prev.default_country_of_origin ?? DEFAULT_COUNTRY_OF_ORIGIN,
     auto_sync: prev.auto_sync ?? true,
   };
-  const ok = await saveConfig(g.supabase, businessId, next);
+  const ok = await saveConfig(businessId, next);
   if (!ok) {
     logError({ action: "aboutyou.connect", message: "saveConfig failed", details: { businessId }, businessId, userId: g.userId });
     return { error: "Eroare la salvarea conexiunii. Încearcă din nou." };
@@ -204,17 +261,163 @@ export async function connectAboutYou(
   return { success: true };
 }
 
-export async function disconnectAboutYou(businessId: string): Promise<{ success: true } | { error: string }> {
+/*
+ * ⚠ `avertisment` NU E O EROARE: deconectarea a reusit. E singurul lucru ramas nefacut, si e unul
+ * pe care numai comerciantul il poate duce la capat — vezi mai jos, la dezabonare.
+ */
+export async function disconnectAboutYou(businessId: string): Promise<{ success: true; avertisment?: string } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  await saveConfig(g.supabase, businessId, {});
+
+  /*
+   * Abonamentul de webhook se sterge INAINTE de a arunca configul.
+   *
+   * Odata sters `webhook_subscription_id`, nu mai avem cum sa-l dezabonam: About
+   * You continua sa trimita evenimente catre o ruta care nu mai are secretul de
+   * verificat, ora de ora, iar comerciantul nu are de unde sa-l opreasca decat
+   * din Seller Center. Esecul stergerii nu blocheaza deconectarea — omul a cerut
+   * sa se deconecteze.
+   */
+  const prev = await loadConfig(businessId);
+
+  /*
+   * ═══ ⚠ ORDINEA E FAIL-CLOSED, CA PESTE TOT (28.08.2026, tarziu) ═══
+   *
+   * Pana azi, fiecare pas se facea si se mergea mai departe, orice s-ar fi intamplat. Cel mai urat
+   * drum: dezabonarea la ei reuseste, scrierea configului PICA, iar stergerile locale se fac —
+   * adica un cont care pare inca legat (cheia e acolo) dar fara nicio stare locala: fara listari,
+   * fara variante, fara loturi. Nimic nu mai poate nici trimite, nici retrage.
+   *
+   * ⚠ SE SCRIE INTAI CA E DECONECTAT. Cat timp asta nu s-a scris, nu se sterge nimic: cel mai rau
+   * caz devine „a ramas conectat, mai incearca" — o stare intreaga, nu una pe jumatate.
+   */
   const admin = createAdminClient();
-  await admin.from("aboutyou_sync_queue").delete().eq("business_id", businessId);
-  await admin.from("aboutyou_variants").delete().eq("business_id", businessId);
-  await admin.from("aboutyou_batches").delete().eq("business_id", businessId);
-  await admin.from("aboutyou_listings").delete().eq("business_id", businessId);
+
+  /*
+   * ⚠ SI MAPAREA SKU SE SALVEAZA INAINTEA ORICAREI STERGERI, cu raspunsul citit. Aici randurile de
+   * varianta se sterg DIRECT, nu prin cascada — a patra cale prin care se pierdea legatura
+   * `sku -> produs`. Deconectarea opreste sondarea, dar nu si comenzile deja plecate: o reconectare
+   * peste doua zile ar ingera comenzi pe SKU-uri pe care nu le mai recunoastem, iar stocul nu s-ar
+   * scadea. Aceeasi regula ca la eliminarea unei listari: nesalvata, nu se sterge nimic.
+   */
+  const deSalvat = randuriCitite<{ sku: string; product_id: string | null; variant_title: string | null }>(
+    "aboutyou.mapareaLaDeconectare", await admin
+      .from("aboutyou_variants").select("sku, product_id, variant_title")
+      .eq("business_id", businessId) as never);
+  if (deSalvat.length > 0) {
+    const acum = new Date().toISOString();
+    const { error: eIstoric } = await admin.from("aboutyou_sku_istoric").upsert(
+      deSalvat.map((r) => ({
+        business_id: businessId, sku: r.sku, product_id: r.product_id,
+        variant_title: r.variant_title, scos_la: acum,
+      })) as never,
+      { onConflict: "business_id,sku" },
+    );
+    if (eIstoric) {
+      logError({
+        action: "aboutyou.disconnect", severity: "critical",
+        message: `maparea SKU nu s-a putut pastra, deci nu s-a sters nimic: ${eIstoric.message}`,
+        details: { businessId, cate: deSalvat.length }, businessId,
+      });
+      return { error: "Nu am putut păstra legătura dintre SKU-uri și produse. Încearcă din nou." };
+    }
+  }
+
+  /*
+   * ⚠ `saveConfig` INTOARCE UN BOOLEAN, nu arunca. Un `try/catch` in jurul ei ar fi fost o paza
+   * care nu se poate aprinde niciodata — chiar tiparul pe care il vanez de zile intregi. Se
+   * citeste valoarea.
+   */
+  if (!await saveConfig(businessId, {})) {
+    logError({
+      action: "aboutyou.disconnect", severity: "critical",
+      message: "deconectarea nu s-a putut scrie, deci nu s-a sters nimic",
+      details: { businessId }, businessId,
+    });
+    return { error: "Nu am putut salva deconectarea. Încearcă din nou." };
+  }
+
+  /*
+   * ⚠ DE-ABIA ACUM CURATENIA, si in ordinea in care o intrerupere lasa cea mai putina paguba:
+   * coada intai (nu mai are unde pleca), loturile pe urma, listarile la sfarsit. Ce ramane dupa o
+   * intrerupere e citit oricum ca „deconectat", fiindca configul s-a scris deja.
+   */
+  /*
+   * ⚠ SI FIECARE STERGERE ISI CITESTE RASPUNSUL. Comentariul de deasupra spunea „fail-closed", dar
+   * cele patru stergeri mergeau oarbe: o pana la mijloc lasa jumatate din stare in urma, iar
+   * functia raspundea `success`. Nu opresc deconectarea — configul e deja scris, deci magazinul E
+   * deconectat — dar se scriu, ca resturile sa poata fi gasite.
+   */
+  const resturi: string[] = [];
+  for (const tabel of ["aboutyou_sync_queue", "aboutyou_variants", "aboutyou_batches", "aboutyou_listings"] as const) {
+    const { error } = await admin.from(tabel).delete().eq("business_id", businessId);
+    if (error) resturi.push(`${tabel}: ${error.message}`);
+  }
+  if (resturi.length > 0) {
+    logError({
+      action: "aboutyou.disconnect", severity: "warning",
+      message: `magazinul e deconectat, dar au ramas randuri nesterse: ${resturi.join(" | ")}`,
+      details: { businessId }, businessId,
+    });
+  }
+
+  /*
+   * ═══ ⚠ DEZABONAREA LA EI VINE LA URMA (28.08.2026, noaptea) ═══
+   *
+   * Era prima, cu explicatia ca dupa aruncarea configului nu mai avem cu ce dezabona. Adevarat, si
+   * de-aia acreditarile se citesc INAINTE, in `prev` — dar ordinea de dinainte facea posibila
+   * starea cea mai proasta dintre toate:
+   *
+   *     abonamentul sters la ei ✅
+   *     scrierea configului pica ❌
+   *     -> la noi „conectat", la ei fara abonament: nu mai vine niciun eveniment, si nimeni nu stie
+   *
+   * ⚠ INVERS E STRICT MAI BINE. Daca dezabonarea pica dupa ce am scris deconectarea, ei mai trimit
+   * o vreme evenimente catre o ruta care le ignora — zgomot, nu pierdere. Iar cronul nu mai atinge
+   * magazinul, fiindca `connected` e fals.
+   */
+  let avertisment: string | undefined;
+  if (prev.api_key && prev.webhook_subscription_id) {
+    /*
+     * ⚠ SI RASPUNSUL DEZABONARII SE CITESTE. `deleteWebhookSubscription` nu arunca — intoarce
+     * `{ error, status }` —, deci un esec se scurgea tacut si ramanea un abonament ORFAN la ei, pe
+     * care nimeni nu-l mai poate sterge: cheia si id-ul tocmai au fost aruncate din config.
+     *
+     * ⚠ NU OPRESTE DECONECTAREA: omul a cerut-o, iar magazinul e deja deconectat la noi. Dar se
+     * scrie ID-UL, ca sa poata fi sters de mana din Seller Center — singura cale ramasa.
+     */
+    const dez = await deleteWebhookSubscription(
+      { apiKey: prev.api_key, environment: prev.environment },
+      prev.webhook_subscription_id,
+    );
+    /* ⚠ Ca mai sus: `404` inseamna ca nu mai exista, deci nu e un abonament orfan. */
+    if (isAboutYouError(dez) && dez.status !== 404) {
+      logError({
+        action: "aboutyou.disconnect", severity: "error",
+        message: `abonamentul de webhook n-a putut fi sters la About You si ramane orfan: ${dez.error}`,
+        details: { businessId, subscriptionId: prev.webhook_subscription_id, status: dez.status },
+        businessId,
+      });
+      /*
+       * ═══ ⚠ SI OMUL AFLA, FIINDCA NUMAI EL MAI POATE FACE CEVA (28.08.2026, seara) ═══
+       *
+       * Pana acum ramanea doar in jurnal, iar comerciantul vedea „Cont deconectat." si atat.
+       *
+       * ⚠ SI NU SE POATE REINCERCA MAI TARZIU. O coada de dezabonari ar trebui sa tina cheia
+       * About You ca sa aiba cu ce cere stergerea — adica sa RESCRIEM secretul pe care omul
+       * tocmai ne-a cerut sa-l aruncam. Un abonament orfan inseamna evenimente catre o ruta care
+       * le ignora, adica zgomot; o cheie pastrata dupa deconectare e cu totul altceva.
+       *
+       * Deci: nu se pastreaza nimic, dar se spune limpede ce a ramas si unde se sterge.
+       */
+      avertisment = `Contul e deconectat, dar abonamentul de notificări nu s-a putut șterge la About You`
+        + ` (id ${prev.webhook_subscription_id}). Șterge-l din Seller Center, altfel ei continuă să trimită`
+        + " notificări către o adresă care le ignoră.";
+    }
+  }
+
   revalidatePath(FEATURE_PATH);
-  return { success: true };
+  return avertisment ? { success: true, avertisment } : { success: true };
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────────
@@ -229,6 +432,45 @@ export interface AboutYouSettingsInput {
   default_country_of_origin?: string;
   default_carrier_key?: string | null;
   auto_sync?: boolean;
+  target_audience?: PublicTinta;
+}
+
+/*
+ * Tarile de listare se valideaza pe moneda, nu doar pe cod.
+ *
+ * `PriceSchema` nu are camp de moneda: About You citeste pretul in moneda TARII.
+ * Noi convertim RON in EUR o singura data si trimitem acelasi numar pentru toate
+ * tarile — corect doar acolo unde moneda chiar e euro. Un produs de 100 lei
+ * (≈20 EUR) trimis catre Polonia se citeste 20 PLN, adica sub un sfert din pret,
+ * si se vinde asa la fiecare comanda.
+ *
+ * Pana cand conversia se face per moneda, blocam aici tarile non-euro. Blocajul
+ * sta pe server, nu doar in interfata: alegerea tarii e o decizie despre bani.
+ */
+async function tariNeEuro(auth: AboutYouAuth, coduri: string[]): Promise<string[]> {
+  if (coduri.length === 0) return [];
+  const r = await getCountriesCached(auth);
+  if (!r.ok) {
+    /*
+     * ═══ ⚠ AICI CADEA DESCHIS, SI ASTA E CHIAR SLABICIUNEA (26.08.2026) ═══
+     *
+     * Scria `return []` — „fara nomenclator nu inventam un blocaj". Suna prudent si nu e: o paza
+     * care se stinge singura la o pana nu e o paza. O clipa proasta la cererea de nomenclator, si
+     * Polonia intra in lista; de-acolo, 20 EUR pleaca drept 20 de ZLOTI, la fiecare vanzare, tacut.
+     *
+     * ⚠ Se cade pe lista ZONEI EURO, care e un fapt public si nu depinde de nicio cerere. Ce nu e
+     * acolo se opreste — iar mesajul spune limpede ce sa scoata din selectie.
+     */
+    return coduri.filter((c) => !TARI_EURO.has(c.toUpperCase()));
+  }
+  const moneda = new Map((r.data.currencies ?? []).map((c) => [c.country_code, c.code]));
+  return coduri.filter((c) => {
+    const m = moneda.get(c);
+    /* ⚠ Si cand nomenclatorul lor NU stie tara, se cade tot pe lista noastra: `m == null` insemna
+       „treci", adica exact aceeasi cadere deschisa, pe alt drum. */
+    if (m == null) return !TARI_EURO.has(c.toUpperCase());
+    return m !== "EUR";
+  });
 }
 
 export async function saveAboutYouSettings(
@@ -236,7 +478,19 @@ export async function saveAboutYouSettings(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
+
+  if (input.ship_countries && input.ship_countries.length > 0) {
+    const auth = authFromConfig(config);
+    if (auth) {
+      const neEuro = await tariNeEuro(auth, input.ship_countries);
+      if (neEuro.length > 0) {
+        return {
+          error: `Momentan putem lista doar în țări cu moneda euro. Scoate din selecție: ${neEuro.join(", ")}.`,
+        };
+      }
+    }
+  }
 
   const fxRate = input.fx_rate == null ? config.fx?.rate : (input.fx_rate > 0 ? input.fx_rate : undefined);
   const fxMargin = input.fx_margin_pct == null ? config.fx?.margin_pct : Math.max(0, input.fx_margin_pct);
@@ -257,9 +511,73 @@ export async function saveAboutYouSettings(
     default_country_of_origin: input.default_country_of_origin?.trim() || config.default_country_of_origin || DEFAULT_COUNTRY_OF_ORIGIN,
     default_carrier_key: input.default_carrier_key === null ? undefined : (input.default_carrier_key ?? config.default_carrier_key),
     auto_sync: input.auto_sync ?? config.auto_sync,
+    target_audience: input.target_audience ?? config.target_audience,
   };
-  const ok = await saveConfig(g.supabase, businessId, next);
+  const ok = await saveConfig(businessId, next);
   if (!ok) return { error: "Eroare la salvare." };
+
+  /*
+   * ═══ ⚠ O SETARE GLOBALA SCHIMBATA NU AJUNGEA NICIODATA LA PRODUSELE DEJA LISTATE (27.08.2026) ═══
+   *
+   * Comerciantul are cursul 1 EUR = 5 RON, deci un produs de 100 RON e 20 EUR la About You. Schimba
+   * cursul pe 4.5. Se salva `fx.updated_at` — corect — dar NU se punea nimic la coada. La About You
+   * ramaneau 20 EUR pana cand produsul se schimba din alt motiv, poate niciodata.
+   *
+   * ⚠ `valid_at` nu ajuta cu nimic aici: el apara ordinea intre doua trimiteri, nu inlocuieste o
+   * trimitere care nu se face deloc.
+   *
+   * ⚠ CE SE PUNE LA COADA depinde de CE s-a schimbat, si nu e o subtilitate: `upsert` inseamna
+   * produsul intreg, deci trece prin verificari, taxonomie si loturi de 100 — scump si lent. Cand
+   * s-a schimbat doar un pret, `price` face exact ce trebuie si nimic in plus.
+   */
+  const doarPret = fxChanged
+    || (input.price_mode != null && input.price_mode !== (config.price_mode ?? "fx_from_ron"));
+  const dinNou = input.ship_countries != null
+    || input.brand_id !== undefined
+    || (input.default_country_of_origin != null
+      && input.default_country_of_origin.trim() !== (config.default_country_of_origin ?? ""))
+    || (input.target_audience != null && input.target_audience !== config.target_audience);
+
+  if (dinNou || doarPret) {
+    /* ⚠ Trimiterea intreaga o cuprinde si pe cea de pret: nu se pun amandoua pe acelasi produs. */
+    const op = dinNou ? "upsert" as const : "price" as const;
+    /*
+     * ═══ ⚠ „INCOMPLET" ERA UN CAPAT DE DRUM (27.08.2026) ═══
+     *
+     * Se scria in jurnal si se raspundea `success`. La douazeci si cinci de mii de produse,
+     * primele douazeci de mii intrau in coada si ultimele cinci mii NU — iar ecranul spunea
+     * „Salvat". Preturile alea puteau ramane vechi la About You pentru totdeauna.
+     *
+     * ═══ ⚠ SI CURSORUL SE SCRIA DUPA LUCRU, FARA SA I SE CITEASCA RASPUNSUL (27.08.2026, noaptea) ═══
+     *
+     * Deci scrierea lui picata lasa iar ultimele cinci mii fara nimic care sa le atinga, si tot
+     * cu „Salvat" pe ecran. Acum lucrarea se deschide INAINTE de prima transa: daca actiunea
+     * moare la jumatate, randul exista deja si cronul o duce la capat.
+     */
+    const lucrare = await deschideLucrarea(businessId, op);
+    if (!lucrare) {
+      /*
+       * ⚠ SETARILE S-AU SALVAT DEJA, deci nu se raspunde cu eroare — dar nici nu se tace: fara
+       * lucrare, produsele nu se repun la coada, iar la About You raman valorile vechi.
+       */
+      logError({
+        action: "aboutyou.saveSettings", severity: "critical",
+        message: "setarile s-au salvat, dar raspandirea catre produse n-a putut fi pornita: apasa „Sincronizează tot”",
+        details: { businessId, op }, businessId,
+      });
+    } else {
+      const r = await enqueueForListings(g.supabase, businessId, op, undefined, undefined, lucrare.dupa);
+      await mutaLucrarea(lucrare, r);
+      if (r.incomplet) {
+        logError({
+          action: "aboutyou.saveSettings", severity: "info",
+          message: `setarile s-au salvat; ${r.n} produse au intrat in coada, restul continua la trecerile urmatoare ale cronului`,
+          details: { businessId, op, dupa: r.ultimulId }, businessId,
+        });
+      }
+    }
+  }
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -274,50 +592,79 @@ async function guardedAuth(
 ): Promise<{ supabase: ServerClient; userId: string; config: AboutYouConfig; auth: AboutYouAuth } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const auth = authFromConfig(config);
   if (!auth) return { error: "Conectează mai întâi contul About You." };
   return { supabase: g.supabase, userId: g.userId, config, auth };
 }
 
+/*
+ * Un esec de nomenclator ajunge la comerciant cu motivul real, si e si scris in
+ * jurnal. Inainte, toate cadeau pe acelasi „Nu am putut …", indiferent daca era
+ * cheie invalida, limita de rata sau retea — asa a putut sta ascuns un 401 care
+ * lovea absolut fiecare cerere.
+ *
+ * Cand About You raspunde 401/403, marcam si `needs_reconnect`: bannerul din
+ * pagina spune atunci ce e de facut, in loc sa lase omul sa reincerce la infinit.
+ */
+async function esecNomenclator(
+  businessId: string, userId: string, ce: string, actiune: string, r: { error: string; status: number },
+): Promise<{ error: string }> {
+  logError({
+    action: `aboutyou.${actiune}`,
+    message: r.error,
+    details: { businessId, status: r.status },
+    businessId,
+    userId,
+  });
+  if (r.status === 401 || r.status === 403) {
+    const config = await loadConfig(businessId);
+    if (config.api_key && !config.needs_reconnect) {
+      await saveConfig(businessId, { ...config, needs_reconnect: true });
+      revalidatePath(FEATURE_PATH);
+    }
+  }
+  return { error: mesajEroare(ce, r.error, r.status) };
+}
+
 export async function getAboutYouBrands(businessId: string): Promise<{ brands: AboutYouBrand[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const brands = await getBrandsCached(g.auth);
-  if (brands === null) return { error: "Nu am putut încărca brandurile About You." };
-  return { brands };
+  const r = await getBrandsCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca brandurile About You.", "brands", r);
+  return { brands: r.data };
 }
 
 export async function getAboutYouCountries(businessId: string): Promise<{ data: AboutYouCountriesResponse } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const data = await getCountriesCached(g.auth);
-  if (data === null) return { error: "Nu am putut încărca țările About You." };
-  return { data };
+  const r = await getCountriesCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca țările About You.", "countries", r);
+  return { data: r.data };
 }
 
 export async function getAboutYouCategoryChildren(businessId: string, parentId?: number): Promise<{ categories: AboutYouCategory[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const categories = await getCategoryChildrenCached(g.auth, parentId);
-  if (categories === null) return { error: "Nu am putut încărca categoriile About You." };
-  return { categories };
+  const r = await getCategoryChildrenCached(g.auth, parentId);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca categoriile About You.", "categories", r);
+  return { categories: r.data };
 }
 
 export async function searchAboutYouCategories(businessId: string, query: string): Promise<{ categories: AboutYouCategory[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const categories = await searchCategories(g.auth, query);
-  if (categories === null) return { error: "Nu am putut căuta categorii." };
-  return { categories };
+  const r = await searchCategories(g.auth, query, { publicImplicit: g.config.target_audience ?? null });
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut căuta categorii.", "categories.search", r);
+  return { categories: r.data };
 }
 
 export async function getAboutYouAttributeGroups(businessId: string, categoryId: number): Promise<{ groups: AboutYouAttributeGroup[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const groups = await getAttributeGroupsCached(g.auth, categoryId);
-  if (groups === null) return { error: "Nu am putut încărca atributele categoriei." };
-  return { groups };
+  const r = await getAttributeGroupsCached(g.auth, categoryId);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca atributele categoriei.", "attribute-groups", r);
+  return { groups: r.data };
 }
 
 // ── Category mapping (Edinio category -> About You category) ─────────────────────
@@ -326,23 +673,147 @@ export async function saveAboutYouCategoryMapEntry(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
+
+  /*
+   * Un nod intermediar nu e o categorie de produs, si alegerea nu se poate lua
+   * inapoi: „once the product category is published & approved, there is no
+   * possibility of changing the category." Verificarea se face pe SERVER, ca sa
+   * acopere si alegerea manuala, nu doar potrivirea automata.
+   */
+  if (entry) {
+    const auth = authFromConfig(config);
+    if (auth) {
+      const tax = await getAllCategoriesCached(auth);
+      if (tax.ok && tax.data.some((c) => c.parent_id === entry.category_id)) {
+        return { error: "Categoria aleasă are subcategorii. Alege una din ultimul nivel, altfel produsele sunt respinse la aprobare." };
+      }
+    }
+  }
+
   const map = { ...(config.category_map ?? {}) };
   if (entry === null) delete map[edinioCategory];
   else map[edinioCategory] = entry;
-  const ok = await saveConfig(g.supabase, businessId, { ...config, category_map: map });
+  const ok = await saveConfig(businessId, { ...config, category_map: map });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
+}
+
+/*
+ * ── Mapare automata a categoriilor ──────────────────────────────────────────
+ *
+ * Comerciantul are „Genti", About You are `Fashion|Women|Accessories|Bags &
+ * suitcases|Handbag`. Traducem (vezi ro-taxonomy.ts), dam un scor fiecarei
+ * categorii si intoarcem propunerile.
+ *
+ * NU aplicam tot ce gasim. Se aplica singure doar potrivirile exacte, cu scor
+ * mare si cu o a doua varianta vizibil mai slaba; restul raman propuneri pe care
+ * omul le confirma dintr-un clic. O categorie mapata gresit inseamna produse
+ * respinse la aprobare, iar aia se vede abia peste zile.
+ */
+export interface SugestieMapare {
+  edinioCategory: string;
+  /** Deja mapata inainte de rulare — nu se atinge fara „suprascrie". */
+  mapataDeja: boolean;
+  sigura: boolean;
+  optiuni: { category_id: number; label: string; scor: number; motiv: string }[];
+}
+
+function optiuneDinSugestie(s: SugestieCategorie) {
+  return { category_id: s.category_id, label: s.path, scor: Math.round(s.scor * 100) / 100, motiv: s.motiv };
+}
+
+export async function suggestAboutYouCategoryMap(
+  businessId: string, categorii: string[],
+): Promise<{ sugestii: SugestieMapare[] } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+
+  const r = await getAllCategoriesCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca categoriile About You.", "categories.all", r);
+
+  const mapate = g.config.category_map ?? {};
+  const publicImplicit = g.config.target_audience ?? null;
+
+  const sugestii = categorii.slice(0, 500).map((cat) => {
+    const optiuni = potrivesteCategorie(cat, r.data, { publicImplicit, limita: 5 });
+    return {
+      edinioCategory: cat,
+      mapataDeja: !!mapate[cat],
+      sigura: potrivireSigura(optiuni) !== null,
+      optiuni: optiuni.map(optiuneDinSugestie),
+    };
+  });
+  return { sugestii };
+}
+
+/**
+ * Aplica potrivirile sigure. `suprascrie` decide daca se ating si categoriile
+ * deja mapate manual — implicit nu, ca o rulare din greseala sa nu strice o
+ * mapare corecta facuta de om.
+ */
+export async function applyAboutYouCategoryMap(
+  businessId: string, categorii: string[], suprascrie = false,
+): Promise<{ aplicate: number; ramase: number } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+
+  const r = await getAllCategoriesCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca categoriile About You.", "categories.all", r);
+
+  const config = await loadConfig(businessId);
+  const map = { ...(config.category_map ?? {}) };
+  const publicImplicit = config.target_audience ?? null;
+
+  let aplicate = 0;
+  let ramase = 0;
+  for (const cat of categorii.slice(0, 500)) {
+    if (map[cat] && !suprascrie) continue;
+    const sigura = potrivireSigura(potrivesteCategorie(cat, r.data, { publicImplicit, limita: 5 }));
+    if (!sigura) { ramase++; continue; }
+    map[cat] = { category_id: sigura.category_id, label: sigura.path };
+    aplicate++;
+  }
+
+  if (aplicate > 0 && !(await saveConfig(businessId, { ...config, category_map: map }))) {
+    return { error: "Eroare la salvarea mapării." };
+  }
+  revalidatePath(FEATURE_PATH);
+  return { aplicate, ramase };
 }
 
 // ── Carriers (courier -> About You carrier_key mapping) ─────────────────────────
 export async function getAboutYouCarriers(businessId: string): Promise<{ carriers: AboutYouCarrier[] } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const carriers = await getCarriersCached(g.auth);
-  if (carriers === null) return { error: "Nu am putut încărca curierii About You." };
-  return { carriers };
+  const r = await getCarriersCached(g.auth);
+  if (!r.ok) return esecNomenclator(businessId, g.userId, "Nu am putut încărca curierii About You.", "carriers", r);
+  return { carriers: r.data };
+}
+
+/**
+ * Comerciantul declara ca la un curier acelasi AWB e valabil si la retur.
+ *
+ * ⚠ E O DECLARATIE, NU O SETARE DE COMODITATE. `return_tracking_key` e un camp separat de
+ * `shipment_tracking_key` in schema lor, deci ei le tin drept doua documente. Daca la un curier
+ * anume sunt acelasi, stie contractul comerciantului cu curierul — nu stim noi, si nu ghicim.
+ * Nedeclarat, expedierea se opreste (vezi `shipOrderNow`).
+ */
+export async function saveAboutYouReturBidirectional(
+  businessId: string, courierCode: string, valoare: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(businessId);
+  const harta = { ...(config.retur_bidirectional ?? {}) };
+  /* Sters, nu pus pe `false`: „nedeclarat" si „declarat ca nu" duc la aceeasi oprire. */
+  if (valoare) harta[courierCode] = true;
+  else delete harta[courierCode];
+  const ok = await saveConfig(businessId, { ...config, retur_bidirectional: harta });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
 }
 
 export async function saveAboutYouCarrierMap(
@@ -350,11 +821,11 @@ export async function saveAboutYouCarrierMap(
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
   const map = { ...(config.carrier_map ?? {}) };
   if (!carrierKey) delete map[courierCode];
   else map[courierCode] = carrierKey;
-  const ok = await saveConfig(g.supabase, businessId, { ...config, carrier_map: map });
+  const ok = await saveConfig(businessId, { ...config, carrier_map: map });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -363,6 +834,8 @@ export async function saveAboutYouCarrierMap(
 // ── Per-product listing editor ──────────────────────────────────────────────────
 export interface AboutYouEditorVariant {
   key: string; label: string; sku: string; ron_price: number;
+  /** Titlul real al combinatiei (null la produsele fara variante). */
+  variantTitle: string | null;
   ean: string | null; size_id: number | null; second_size_id: number | null; color_id: number | null;
   quantity: number | null; retail_price_eur: number | null; sale_price_eur: number | null; enabled: boolean;
 }
@@ -371,10 +844,40 @@ export interface AboutYouEditorData {
   category: string | null;
   images: string[];
   mappedCategoryId: number | null;
+  /**
+   * Ce fel de compozitie cere categoria. Vine din taxonomie, nu din ce bifeaza
+   * comerciantul: About You o cere pentru aproape toate categoriile, iar
+   * textilele au si procente.
+   */
+  materialType: "textile" | "non-textile" | null;
+  /** Calea categoriei la About You; de acolo iese cate grupe de material cere. */
+  materialPath: string | null;
+  /**
+   * Taxonomia nu s-a putut citi. Nu e acelasi lucru cu „categoria nu cere
+   * material": editorul trebuie sa blocheze, nu sa ascunda sectiunea.
+   */
+  taxonomyError: string | null;
+  /**
+   * Brandul din setari, aratat ca valoare implicita. Lipsind, editorul afisa
+   * „Alege brand" gol pentru un produs care oricum ar fi plecat cu brandul
+   * global — deci comerciantul nu avea cum sa vada ce brand se trimite.
+   */
+  defaultBrandId: number | null;
+  defaultBrandName: string | null;
   listing: {
+    /**
+     * Incarnarea pe care o are omul in fata.
+     *
+     * ⚠ Se trimite inapoi la salvare (`AboutYouListingInput.incarnare`) fiindca numai browserul
+     * stie de la ce a pornit el. Serverul, recitind la salvare, vede lumea de ACUM — iar intre
+     * deschiderea editorului si „Salvează" trec minute.
+     */
+    id: string;
     brand_id: number | null; category_id: number | null; color_id: number | null;
     attributes: number[]; material: AboutYouStoredMaterial | null;
     country_of_origin: string | null; hs_code: string | null; status: string;
+    /** `null` = listarea n-a plecat niciodata spre About You, deci nu se poate publica. */
+    last_synced_at: string | null;
   } | null;
   variants: AboutYouEditorVariant[];
 }
@@ -388,10 +891,11 @@ interface StoredVariantRow {
 export async function getAboutYouListingEditor(businessId: string, productId: string): Promise<AboutYouEditorData | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const config = await loadConfig(g.supabase, businessId);
+  const config = await loadConfig(businessId);
 
   const { data: product } = await g.supabase
-    .from("products").select("id, name, category, images, price, compare_at_price, sku, page_sections")
+    .from("products")
+    .select("id, name, category, images, price, compare_at_price, sku, page_sections, weight_grams, track_inventory, stock_quantity")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
 
@@ -399,7 +903,7 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
 
   const { data: listing } = await g.supabase
     .from("aboutyou_listings")
-    .select("id, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, status")
+    .select("id, brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code, status, last_synced_at")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle();
 
   let stored: StoredVariantRow[] = [];
@@ -415,9 +919,13 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
   const variants: AboutYouEditorVariant[] = slots.map((s) => {
     const ex = bySku.get(s.sku);
     return {
-      key: s.key, label: s.label, sku: s.sku, ron_price: s.ron_price,
-      ean: ex?.ean ?? null, size_id: ex?.size_id ?? null, second_size_id: ex?.second_size_id ?? null,
-      color_id: ex?.color_id ?? null, quantity: ex?.quantity ?? null,
+      key: s.key, label: s.label, sku: s.sku, ron_price: s.ron_price, variantTitle: s.variantTitle,
+      // Codul de bare completat deja in fisa produsului se preia automat: era
+      // scris in Edinio si totusi comerciantul era pus sa-l retasteze aici.
+      ean: ex?.ean ?? s.gtin ?? null,
+      size_id: ex?.size_id ?? null, second_size_id: ex?.second_size_id ?? null,
+      color_id: ex?.color_id ?? null,
+      quantity: ex?.quantity ?? s.quantity,
       retail_price_eur: ex?.retail_price_eur ?? null, sale_price_eur: ex?.sale_price_eur ?? null,
       enabled: ex?.enabled ?? true,
     };
@@ -425,12 +933,48 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
 
   const mappedCategoryId = product.category ? (config.category_map?.[product.category]?.category_id ?? null) : null;
   const l = listing as (Record<string, unknown> & { id: string }) | null;
+
+  // Tipul compozitiei il decide categoria efectiva, nu comerciantul.
+  const categorieEfectiva = ((l?.category_id as number | null) ?? mappedCategoryId) ?? null;
+  let materialType: "textile" | "non-textile" | null = null;
+  let materialPath: string | null = null;
+  let taxonomyError: string | null = null;
+  if (categorieEfectiva) {
+    const auth = authFromConfig(config);
+    if (!auth) {
+      taxonomyError = "Conexiunea About You nu este disponibilă. Reconectează contul.";
+    } else {
+      const cerinta = await getCerintaMaterial(auth, categorieEfectiva);
+      if (cerinta.ok) {
+        materialType = cerinta.tip;
+        materialPath = cerinta.path;
+      } else {
+        // Inainte, esecul era inghitit si `materialType` ramanea `null`, ceea ce
+        // mai departe inseamna „categoria nu cere material": sectiunea disparea
+        // din formular si produsul pleca gol.
+        taxonomyError = cerinta.error;
+      }
+    }
+  }
+
   return {
     productName: product.name,
     category: product.category,
     images: Array.isArray(product.images) ? (product.images as unknown[]).map(String) : [],
     mappedCategoryId,
+    materialType,
+    materialPath,
+    taxonomyError,
+    defaultBrandId: config.brand_id ?? null,
+    defaultBrandName: config.brand_name ?? null,
     listing: l ? {
+      /*
+       * ⚠ ID-UL SE DUCE PANA IN BROWSER (28.08.2026, noaptea tarziu). Salvarea il trimite inapoi
+       * si RPC-ul cere sa fie inca acelasi rand — vezi `p_listare_asteptata`. Recitit pe server
+       * la salvare, ar acoperi doar cateva sute de milisecunde; fereastra adevarata e cat sta
+       * editorul deschis, adica minute.
+       */
+      id: l.id as string,
       brand_id: (l.brand_id as number | null) ?? null,
       category_id: (l.category_id as number | null) ?? null,
       color_id: (l.color_id as number | null) ?? null,
@@ -438,13 +982,23 @@ export async function getAboutYouListingEditor(businessId: string, productId: st
       material: (l.material_composition as AboutYouStoredMaterial | null) ?? null,
       country_of_origin: (l.country_of_origin as string | null) ?? null,
       hs_code: (l.hs_code as string | null) ?? null,
-      status: (l.status as string) ?? "draft",
+      status: (l.status as string) ?? "local",
+      last_synced_at: (l.last_synced_at as string | null) ?? null,
     } : null,
     variants,
   };
 }
 
 export interface AboutYouListingInput {
+  /**
+   * Listarea pe care o avea in fata OMUL cand a inceput sa editeze.
+   *
+   * ⚠ `null` inseamna „editorul s-a deschis fara listare" — si numai atunci se poate crea una.
+   * ⚠ `undefined` inseamna „fila e dintr-un pachet mai vechi, care inca nu-l trimite": atunci se
+   * cade pe ce citeste serverul, adica purtarea de dinainte. Deosebirea conteaza, deci nu se
+   * inlocuieste cu un singur `null`.
+   */
+  incarnare?: string | null;
   brand_id: number | null;
   category_id: number | null;
   color_id: number | null;
@@ -456,53 +1010,561 @@ export interface AboutYouListingInput {
     sku: string; ean: string | null; size_id: number | null; second_size_id: number | null;
     color_id: number | null; quantity: number | null; retail_price_eur: number | null;
     sale_price_eur: number | null; enabled: boolean;
+    /**
+     * Titlul REAL al combinatiei din Edinio („XXL / Negru"), sau `null` la un
+     * produs fara variante. Fara el, o comanda About You nu stie ce combinatie sa
+     * scada si cade pe stocul produsului, iar vitrina vinde a doua oara aceeasi
+     * marime. Inventat, ar raporta fals lipsa de stoc la fiecare comanda.
+     */
+    variant_title?: string | null;
   }[];
+}
+
+/*
+ * Tot ce blocheaza listarea, dintr-o singura trecere, INAINTE de trimitere.
+ *
+ * `validateListing` exista de la inceput in mapping.ts, dar nu era apelata de
+ * nicaieri: comerciantul salva, trimitea, si afla peste minute „produs respins",
+ * fara sa i se spuna ce lipseste. Iar cand aflau, aflau cate o problema pe rand,
+ * pentru ca `buildAboutYouItems` se opreste la prima.
+ */
+export async function validateAboutYouListing(
+  businessId: string, productId: string, input: AboutYouListingInput,
+): Promise<{ issues: string[]; warnings: string[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(businessId);
+
+  const { data: product } = await g.supabase
+    .from("products")
+    .select("id, name, description, category, images, price, compare_at_price, sku, page_sections, weight_grams, track_inventory, stock_quantity")
+    .eq("id", productId).eq("business_id", businessId).maybeSingle();
+  if (!product) return { error: "Produs negăsit." };
+  const produs = product as unknown as MappableProduct;
+
+  const categorie = input.category_id
+    ?? (product.category ? config.category_map?.[product.category]?.category_id ?? null : null);
+  /*
+   * Cerinta de material are TREI stari, nu doua.
+   *
+   * Inainte, orice esec de citire a taxonomiei lasa `materialType` pe `null`,
+   * adica exact valoarea care inseamna „categoria nu cere compozitie". Un 401 sau
+   * o limita de rata faceau validarea sa treaca, si produsul pleca fara singurul
+   * camp pe care About You il numeste explicit obligatoriu.
+   */
+  let cerintaMaterial: {
+    tip: "textile" | "non-textile" | null; path: string | null; necunoscut?: boolean;
+    cereMarime?: boolean | null;
+  };
+  if (!categorie) {
+    cerintaMaterial = { tip: null, path: null };
+  } else {
+    const auth = authFromConfig(config);
+    if (!auth) {
+      cerintaMaterial = { tip: null, path: null, necunoscut: true };
+    } else {
+      const cerinta = await getCerintaMaterial(auth, categorie);
+      // Mărimea se cere cand categoria are grup `size` — probat pe fir: About You
+      // respinge cu „Size is required for this category" chiar si o geanta.
+      const marime = await cereMarime(auth, categorie);
+      cerintaMaterial = cerinta.ok
+        ? { tip: cerinta.tip, path: cerinta.path, cereMarime: marime }
+        : { tip: null, path: null, necunoscut: true, cereMarime: marime };
+    }
+  }
+
+  const variants = atasezaPreturileRon(produs, input.variants.map((v) => ({
+    sku: v.sku, ean: v.ean, size_id: v.size_id, second_size_id: v.second_size_id,
+    color_id: v.color_id, quantity: v.quantity, retail_price_eur: v.retail_price_eur,
+    sale_price_eur: v.sale_price_eur, enabled: v.enabled,
+  })));
+
+  const { issues, warnings } = validateListing({
+    config,
+    product: produs,
+    listing: {
+      brand_id: input.brand_id, category_id: input.category_id, color_id: input.color_id,
+      attributes: input.attributes, material_composition: input.material,
+      country_of_origin: input.country_of_origin, hs_code: input.hs_code,
+    },
+    variants,
+  }, cerintaMaterial);
+
+  /*
+   * ═══ ⚠ DOUA REGULI ALE LOR PE CARE NU LE PUTEM CITI (27.08.2026) ═══
+   *
+   * Auditul spune ca (1) un produs `pending_approval` nu poate fi modificat — trebuie intors in
+   * `draft`, actualizat, si retrimis — si ca (2) categoria nu se mai poate schimba dupa aprobare.
+   * Documentatia lor sta in spatele contului de partener, deci n-am putut citi niciuna.
+   *
+   * ⚠ SE SPUN, NU SE IMPUN. Un blocaj construit pe o regula neverificata opreste lucruri care
+   * poate merg — si asta e mai rau decat o cerere respinsa, fiindca respingerea se vede si se
+   * poate relua, iar blocajul nostru nu se poate ocoli deloc. Aceeasi hotarare ca la `valid_at`
+   * si la schema de semnatura.
+   *
+   * ⚠ SI DACA EI CHIAR REFUZA, comerciantul afla de ce: motivele respingerii ajung acum pe
+   * listare prin `/products/rejected`, cerute pe nume. Deci calea „incearca si afla" nu mai e
+   * oarba, cum era.
+   */
+  const rand = randCitit<{ status: string; category_id: number | null; aprobat_odata: boolean }>(
+    "aboutyou.listareaDeVerificat", await createAdminClient()
+      .from("aboutyou_listings").select("status, category_id, aprobat_odata")
+      .eq("business_id", businessId).eq("product_id", productId).maybeSingle());
+
+  if (rand?.status === "pending_approval") {
+    warnings.push(
+      /*
+       * ⚠ TEXTUL S-A SCHIMBAT ODATA CU CODUL (27.08.2026, seara). Spunea „daca trimiterea e
+       * respinsa, apasa «Retrage»" — adevarat cat timp trimiteam oricum si asteptam refuzul. Acum
+       * `syncProductNow` face singur retragerea in ciorna si trimite la trecerea urmatoare, deci
+       * vechiul text ar fi trimis omul sa faca de mana un lucru deja facut.
+       */
+      "Produsul e în curs de aprobare la About You, iar ei nu acceptă modificări în starea asta."
+      + " Îl retragem automat în ciornă la trimitere, iar modificarea pleacă imediat după."
+      + " Va trece din nou prin aprobarea lor.",
+    );
+  }
+
+  /*
+   * ═══ ⚠ AVERTISMENTUL PREZICE PE ACEEASI TEMELIE CA OPRIREA (29.08.2026, dimineata) ═══
+   *
+   * Aici era o LISTA DE STARI, copia celei din SQL — si de-aia se putea departa de ea in tacere.
+   * S-a si departat: de cand oprirea citeste `aprobat_odata`, o listare aprobata cazuta pe `error`
+   * e oprita, dar lista de stari n-ar fi avertizat. Un avertisment care tace inaintea unui refuz
+   * e mai rau decat niciun avertisment: omul afla abia dupa ce apasa.
+   *
+   * ⚠ ACUM SE CITESTE ACELASI SEMN, si aceleasi doua stari de asteptare. Nu mai e o copie a unei
+   * liste, e aceeasi intrebare pusa in doua locuri.
+   */
+  const inAsteptare = new Set(["pending_approval", "draft_pending"]);
+  const imuabile = !!rand && (rand.aprobat_odata === true || inAsteptare.has(rand.status));
+  const categoriaCeruta = input.category_id ?? config.category_map?.[produs.category ?? ""]?.category_id ?? null;
+  if (rand && imuabile && rand.category_id != null
+    && categoriaCeruta != null && categoriaCeruta !== rand.category_id) {
+    /*
+     * ⚠ TEXTUL S-A SCHIMBAT ODATA CU CODUL. Spunea „About You POATE refuza" — adevarat cat timp
+     * salvam si asteptam refuzul lor. Acum salvarea se opreste la noi, deci avertismentul e o
+     * prevenire, nu o prezicere: omul afla inainte sa apese, nu dupa.
+     */
+    warnings.push(
+      rand.aprobat_odata === true
+        ? "Ai schimbat categoria unui produs deja aprobat. About You nu mai acceptă asta după aprobare,"
+          + " iar salvarea va fi oprită: ca să-l muți în altă categorie, fă un produs nou în magazin"
+          + " și listează-l pe acela."
+        : "Ai schimbat categoria unui produs care așteaptă verdictul About You. Salvarea va fi oprită"
+          + " până primim răspunsul lor: dacă îl aprobă între timp, ar rămâne la ei cu categoria veche.",
+    );
+  }
+
+  return { issues, warnings };
 }
 
 export async function saveAboutYouListing(
   businessId: string, productId: string, input: AboutYouListingInput,
+  /**
+   * Omul a apasat „Salvează și trimite", nu doar „Salvează".
+   *
+   * ═══ ⚠ ERAU DOUA CERERI ALE BROWSERULUI, SI A DOUA PUTEA SA NU MAI PLECE (28.08.2026, noaptea) ═══
+   *
+   * Editorul chema `saveAboutYouListing`, apoi `syncAboutYouProduct`. Intre ele, fila inchisa sau
+   * reteaua cazuta insemnau: configurarea salvata, trimiterea niciodata ceruta. Iar cutia de
+   * iesire nu ajuta: declansatorul de pe `products` nu vede editari in `aboutyou_listings` /
+   * `aboutyou_variants`, iar cel de pe variante nu poate porni o trimitere pentru o listare care
+   * n-a plecat inca la ei — plasa repara ce s-a stricat, nu porneste ce n-a fost cerut.
+   *
+   * ⚠ INTENTIA SE SCRIE INAINTEA SALVARII, si daca nu se scrie, NU se salveaza. Ordinea e chiar
+   * apararea: intoarsa, am fi avut iar „salvat, dar poate nu pleaca niciodata". Un semn scris
+   * degeaba (salvarea pica dupa el) costa o retrimitere a starii de acum — nimic.
+   */
+  siTrimite = false,
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
+
+  if (siTrimite) {
+    const { error: eIntentie } = await createAdminClient().from("aboutyou_intentii").upsert(
+      { business_id: businessId, product_id: productId, op: "upsert" } as never,
+      { onConflict: "business_id,product_id,op" },
+    );
+    if (eIntentie) {
+      logError({
+        action: "aboutyou.saveListing", severity: "critical",
+        message: `intentia de trimitere nu s-a putut scrie, deci nu s-a salvat nimic: ${eIntentie.message}`,
+        details: { businessId, productId }, businessId,
+      });
+      return { error: "Nu am putut porni trimiterea. Încearcă din nou." };
+    }
+  }
   const { data: product } = await g.supabase
     .from("products").select("id").eq("id", productId).eq("business_id", businessId).maybeSingle();
   if (!product) return { error: "Produs negăsit." };
 
   const admin = createAdminClient();
   const now = new Date().toISOString();
-  const { data: up, error: upErr } = await admin.from("aboutyou_listings").upsert(
-    {
-      business_id: businessId, product_id: productId, style_key: productId,
-      brand_id: input.brand_id, category_id: input.category_id, color_id: input.color_id,
-      attributes: input.attributes as never,
-      material_composition: ((input.material ?? {}) as unknown) as never,
-      country_of_origin: input.country_of_origin, hs_code: input.hs_code, updated_at: now,
-    } as never,
-    { onConflict: "business_id,style_key" },
-  ).select("id").single();
-  if (upErr || !up) return { error: "Eroare la salvarea listării." };
-  const listingId = (up as { id: string }).id;
 
-  // Build the new variant set and guard against cross-product SKU clashes BEFORE
-  // deleting anything, so a duplicate SKU never wipes a listing's variants.
-  const rows = input.variants.filter((v) => v.sku?.trim()).map((v) => ({
-    listing_id: listingId, business_id: businessId, product_id: productId,
+  /*
+   * „CIORNA" INSEMNA DOUA LUCRURI OPUSE, si de aici veneau publicari in gol.
+   *
+   * Randul nou primea `status` din DEFAULT-ul bazei — `draft` — adica exact
+   * valoarea pe care `pollOpenBatches` o scrie DUPA ce About You a acceptat
+   * produsul. „Publică toate" filtreaza pe `draft`, deci punea la coada si
+   * listari care nu plecasera niciodata: `PUT /products/status` nu avea pe ce
+   * lucra, elementele se reincercau de cinci ori si dispareau din coada cu tot
+   * cu motiv. Acum salvarea locala se numeste `local` si nu se confunda.
+   *
+   * Statusul se scrie DOAR la prima salvare: o listare deja activa pe About You,
+   * editata si resalvata, nu are voie sa se intoarca la „local".
+   *
+   * De aceea INSERT si UPDATE sunt despartite explicit, in loc de un `upsert`
+   * care omite coloana `status`. Un upsert ar depinde de o subtilitate: daca
+   * PostgREST include in `DO UPDATE SET` doar coloanele din payload. Chiar daca
+   * asa se comporta, un produs activ care s-ar intoarce la „local" e prea scump
+   * ca sa depinda de o presupunere pe care n-o putem proba local.
+   */
+  const campuri = {
+    brand_id: input.brand_id, category_id: input.category_id, color_id: input.color_id,
+    attributes: input.attributes as never,
+    material_composition: ((input.material ?? {}) as unknown) as never,
+    country_of_origin: input.country_of_origin, hs_code: input.hs_code, updated_at: now,
+  };
+
+  /*
+   * ═══ ⚠ DE LA CE INCARNARE PORNESTE SALVAREA (28.08.2026, noaptea) ═══
+   *
+   * Citirea asta nu mai e „ce scriu peste", ci „din ce lume am pornit". Randul se trimite mai jos
+   * la RPC ca `p_listare_asteptata`, iar acolo se cere sa fie inca ACELASI. Fara el:
+   *
+   *     citim listarea L1 si mergem mai departe (variante, coliziuni de SKU, istoric)
+   *     intre timp: scoaterea se incheie -> `inactive` la ei -> piatra -> L1 STEARSA
+   *     RPC-ul nu mai gaseste nimic dupa (business_id, style_key) -> CREEAZA L2
+   *     iar la „Salvează și trimite", produsul pleaca din nou la ei ❌
+   *
+   * ⚠ O ACTIUNE PORNITA CA „ACTUALIZEAZA" N-ARE VOIE SA SE FACA „CREEAZA" PE DRUM.
+   *
+   * ⚠ Strict: o pana citita ca „nu exista" ar porni o creare, adica exact ce inchidem. Se opreste.
+   */
+  const { data: existent, error: eExistent } = await admin.from("aboutyou_listings")
+    .select("id").eq("business_id", businessId).eq("style_key", productId).maybeSingle();
+  if (eExistent) return { error: "Nu am putut citi listarea. Încearcă din nou." };
+  /*
+   * ⚠ INCARNAREA VINE DIN BROWSER CAND O TRIMITE (28.08.2026, noaptea tarziu).
+   *
+   * Recitita aici, paza acoperea doar fereastra dintre cererile ACESTEI actiuni — cateva sute de
+   * milisecunde. Dar fereastra adevarata e alta, si e cu trei ordine de marime mai lata:
+   *
+   *     omul deschide editorul pe listarea L1
+   *     ⟵ AICI trec minute: completeaza marimi, EAN-uri, compozitie
+   *     intre timp scoaterea se incheie -> L1 STEARSA
+   *     apasa „Salvează" -> serverul citeste ACUM si nu mai gaseste nimic
+   *     -> `incarnarea` ar fi `null` -> se CREEAZA L2, si la „și trimite" pleaca iar la ei ❌
+   *
+   * Numai browserul stie de la ce a pornit OMUL. Serverul stie doar ce e acum.
+   *
+   * ⚠ `undefined` (fila dintr-un pachet mai vechi) cade pe citirea serverului: mai putin, dar nu
+   * mai rau decat inainte. `null` trimis anume inseamna „am deschis fara listare".
+   */
+  const incarnarea = input.incarnare !== undefined
+    ? input.incarnare
+    : (existent as { id: string } | null)?.id ?? null;
+
+  /*
+   * ═══ ⚠ REGULA IMUTABILITATII S-A MUTAT IN SQL (28.08.2026, noaptea) ═══
+   *
+   * „Categoria si marimea nu se mai schimba dupa aprobare" se citea AICI, cu cateva cereri
+   * inaintea scrierii. In fereastra aia, cronul apuca sa mute statusul:
+   *
+   *     salvarea citeste: status `pending_approval` -> regula ingaduie schimbarea
+   *     About You aproba produsul; reconcilierea scrie `active`
+   *     salvarea scrie categoria noua
+   *     -> la ei categoria aprobata veche, la noi cea noua ❌
+   *
+   * Adica exact starea pe care regula exista ca s-o impiedice.
+   *
+   * ⚠ LEACUL NU E O VERIFICARE MAI BUNA, CI ACELASI LOC: acum se face in
+   * `aboutyou_salveaza_listarea`, sub `for update` pe randul de listare si inaintea oricarei
+   * scrieri. Masurat pe baza adevarata: cu incuietoare, scrierea cronului a asteptat toata
+   * fereastra de trei secunde si hotararea s-a luat pe statusul adevarat; fara ea, cronul a intrat
+   * la 589ms si hotararea s-a luat pe unul invechit.
+   *
+   * ⚠ SI NU S-A LASAT SI AICI O COPIE. Doua liste ale starilor „aprobate", una in TypeScript si
+   * una in SQL, s-ar fi departat tacut la prima schimbare — iar cea din TypeScript ar fi parut
+   * paza, fara sa mai fie.
+   */
+  /*
+   * ═══ ⚠ TOATE VERIFICARILE INAINTE DE ORICE SCRIERE (28.08.2026, seara) ═══
+   *
+   * Pana acum randul de listare se scria INTAI, si abia dupa aceea se verificau SKU-urile. Deci o
+   * salvare respinsa lasa in urma jumatate din ea:
+   *
+   *     omul schimba si categoria (in `campuri`), si un SKU care se ciocneste
+   *     randul de listare se scrie cu categoria noua ✅
+   *     verificarea SKU-ului respinge -> „nu s-a salvat" ❌
+   *     dar categoria E SALVATA, iar variantele au ramas cele vechi
+   *
+   * Comerciantul citeste „nu s-a salvat", inchide editorul, si de-atunci datele locale spun
+   * altceva decat cele de la ei — chiar starea de care fugim.
+   *
+   * ⚠ Verificarile nu au nevoie de randul scris: singurul lucru pentru care il foloseau era
+   * excluderea listarii curente din cautarea de coliziuni, iar aia se face pe CHEIA DE STIL, care
+   * exista dinainte. Ce ramane nescris impreuna e doar perechea listare + variante, si acolo o
+   * cadere lasa campuri valide, nu o salvare respinsa si totusi facuta pe jumatate.
+   */
+  const variante = input.variants.filter((v) => v.sku?.trim()).map((v) => ({
+    business_id: businessId, product_id: productId,
     sku: v.sku.trim(), ean: v.ean, size_id: v.size_id, second_size_id: v.second_size_id,
     color_id: v.color_id, quantity: v.quantity, retail_price_eur: v.retail_price_eur,
     sale_price_eur: v.sale_price_eur, enabled: v.enabled,
+    variant_title: v.variant_title?.trim() || null,
   }));
-  const newSkus = rows.map((r) => r.sku);
-  if (newSkus.length > 0) {
-    const { data: clash } = await admin.from("aboutyou_variants")
-      .select("sku, listing_id").eq("business_id", businessId).in("sku", newSkus);
-    const conflict = (clash ?? []).find((c) => (c as { listing_id: string }).listing_id !== listingId);
-    if (conflict) return { error: `SKU-ul „${(conflict as { sku: string }).sku}" este deja folosit de alt produs. Folosește SKU-uri unice.` };
+
+  /*
+   * DUPLICATELE DIN INTERIORUL ACELUIASI PRODUS, prinse primele.
+   *
+   * Verificarea de mai jos filtreaza explicit listarea curenta, deci vedea doar
+   * coliziunile cu ALTE produse. Doua combinatii cu acelasi SKU in acelasi produs
+   * treceau de ea, iar insertul cadea pe `UNIQUE (business_id, sku)` DUPA ce
+   * stergerea se comisese, fara rollback: listarea rămânea fara nicio varianta,
+   * cu marimile, culorile si preturile completate manual pierdute definitiv. Iar
+   * campul de SKU al combinatiei e text liber, deci cazul e usor de atins.
+   */
+  const vazute = new Set<string>();
+  const dublate = new Set<string>();
+  for (const r of variante) {
+    if (vazute.has(r.sku)) dublate.add(r.sku); else vazute.add(r.sku);
   }
-  // Safe now (no cross-listing collision): replace this listing's variants.
-  await admin.from("aboutyou_variants").delete().eq("listing_id", listingId);
-  if (rows.length > 0) {
-    const { error: vErr } = await admin.from("aboutyou_variants").insert(rows as never);
-    if (vErr) return { error: "Eroare la salvarea variantelor. Verifică să nu ai SKU-uri duplicate." };
+  if (dublate.size > 0) {
+    const lista = [...dublate].slice(0, 3).join(", ");
+    return { error: `SKU-ul ${lista} apare la mai multe variante ale acestui produs. Fiecare variantă are nevoie de un SKU unic.` };
+  }
+
+  const newSkus = variante.map((r) => r.sku);
+  if (newSkus.length > 0) {
+    /*
+     * ═══ ⚠ O PAZA CARE CADEA DESCHIS (27.08.2026, seara) ═══
+     *
+     * `const { data: clash }` inghitea eroarea. O citire picata dadea `null`, `?? []` o facea
+     * lista goala, si de-acolo iesea „niciun conflict" — adica exact verdictul pe care paza
+     * trebuia sa-l dea numai dupa ce a VERIFICAT. Doua produse ajungeau cu acelasi SKU la About
+     * You, iar acolo al doilea il suprascrie pe primul, tacut.
+     *
+     * ⚠ Diferenta fata de citirile de AFISARE din editor: acolo o pana arata o lista goala si se
+     * vede; aici arata „e in regula" si se scrie.
+     */
+    const { data: clash, error: eClash } = await admin.from("aboutyou_variants")
+      .select("sku, listing_id").eq("business_id", businessId).in("sku", newSkus);
+    if (eClash) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
+    const gasite = (clash ?? []) as { sku: string; listing_id: string }[];
+    if (gasite.length > 0) {
+      /*
+       * ⚠ SE COMPARA CHEIA DE STIL, NU ID-UL RANDULUI. Randul se poate sa nu existe inca (salvare
+       * noua), sau sa fie altul decat cel citit mai sus — o a doua salvare a aceluiasi produs il
+       * poate crea intre timp. In amandoua cazurile propriile SKU-uri ar fi parut „ale altui
+       * produs", iar salvarea ar fi fost respinsa pe nedrept.
+       *
+       * ⚠ Si o listare pe care n-o gasim se socoteste CONFLICT, nu „liber": aici o necunoscuta
+       * inseamna doua produse cu acelasi SKU la ei, iar al doilea il suprascrie tacut pe primul.
+       */
+      const aleCui = [...new Set(gasite.map((c) => c.listing_id))];
+      const { data: listari, error: eListari } = await admin.from("aboutyou_listings")
+        .select("id, style_key").eq("business_id", businessId).in("id", aleCui);
+      if (eListari) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
+      const cheiaListarii = new Map(
+        ((listari ?? []) as { id: string; style_key: string }[]).map((l) => [l.id, l.style_key]),
+      );
+      const conflict = gasite.find((c) => cheiaListarii.get(c.listing_id) !== productId);
+      if (conflict) return { error: `SKU-ul „${conflict.sku}" este deja folosit de alt produs. Folosește SKU-uri unice.` };
+    }
+
+    /*
+     * ═══ ⚠ SI UN SKU CARE A APARTINUT CANDVA ALTUI PRODUS (28.08.2026, tarziu) ═══
+     *
+     * Verificarea de mai sus se uita doar la maparile de ACUM. Dar `aboutyou_sku_istoric` tine
+     * minte SKU-urile listarilor eliminate, tocmai ca o comanda intarziata sa se poata lega. Iar
+     * daca acelasi SKU e dat intre timp altui produs:
+     *
+     *     SKU ABC -> produsul A, listarea A eliminata -> istoric: ABC -> A
+     *     ABC dat produsului B
+     *     comanda foarte intarziata pentru A ajunge -> `aboutyou_variants` gaseste B
+     *     se scade stocul lui B, pentru marfa lui A
+     *
+     * Iar `orders.ts` cauta INTAI maparea curenta, deci B castiga — nu din greseala de cod, ci
+     * fiindca SKU-ul a incetat sa fie un identificator.
+     *
+     * ⚠ NU SE STERGE ISTORICUL CA SA FACEM LOC. Un SKU care a existat pentru alt produs pur si
+     * simplu nu se mai refoloseste: e cea mai simpla regula care tine identitatea intreaga, si
+     * mesajul spune limpede de ce.
+     */
+    const { data: vechiSku, error: eVechiSku } = await admin.from("aboutyou_sku_istoric")
+      .select("sku, product_id").eq("business_id", businessId).in("sku", newSkus);
+    if (eVechiSku) return { error: "Nu am putut verifica dacă SKU-urile sunt libere. Încearcă din nou." };
+    const refolosit = (vechiSku ?? []).find((c) => {
+      const r = c as { product_id: string | null };
+      return r.product_id != null && r.product_id !== productId;
+    });
+    if (refolosit) {
+      return {
+        error: `SKU-ul „${(refolosit as { sku: string }).sku}" a fost folosit de alt produs listat cândva pe About You. `
+          + "Folosește un SKU nou: comenzile vechi se leagă de produse după SKU, iar refolosirea lui ar scădea stocul greșit.",
+      };
+    }
+  }
+
+  /*
+   * ═══ ⚠ LISTAREA SI VARIANTELE SE SCRIU IMPREUNA SAU DELOC (28.08.2026, seara) ═══
+   *
+   * Pana acum erau doua cereri, si intre ele incapea orice — un hop de-o clipa, o pana:
+   *
+   *     randul de listare se scrie cu categoria, brandul si compozitia noi ✅
+   *     salvarea variantelor PICA ❌
+   *     comerciantul citeste „Eroare la salvarea variantelor"
+   *     dar jumatate din ce a scris E SALVATA, iar variantele au ramas cele vechi
+   *
+   * Si e chiar calea cea mai folosita din toata integrarea: fiecare apasare pe „Salvează".
+   *
+   * ⚠ VERIFICARILE DE MAI SUS inchid jumatatea cealalta — o salvare RESPINSA nu atinge nimic.
+   * Asta o inchide pe cea de dupa: o salvare ACCEPTATA care se rupe la mijloc.
+   *
+   * ⚠ SI TOT ACOLO S-A MUTAT SI NASTEREA: randul nou, statusul „local" scris o singura data, si
+   * avansarea ceasului dinaintea lui. Cursa cu o a doua salvare a aceluiasi produs se rezolva sub
+   * incuietoarea randului, nu printr-o recitire dupa un insert respins.
+   *
+   * Probat pe productie: campurile listarii scrise, apoi variantele picand pe un tip gresit —
+   * brandul si `hs_code` au ramas cele dinainte, si cantitatea la fel.
+   */
+  const { data: rez, error: eSalvare } = await admin.rpc("aboutyou_salveaza_listarea", {
+    p_business_id: businessId, p_style_key: productId, p_product_id: productId,
+    p_campuri: campuri as never, p_randuri: variante as never,
+    p_listare_asteptata: incarnarea,
+  });
+  const r = rez as {
+    stare?: string; skuri?: unknown[]; asteptam?: boolean; variante?: { stare?: string };
+  } | null;
+  if (eSalvare || !r?.stare) {
+    logError({
+      action: "aboutyou.saveListing", severity: "error",
+      message: `salvarea listarii nu s-a putut face: ${eSalvare?.message ?? "raspuns nevalid"}`,
+      details: { businessId, productId, cate: variante.length, cod: eSalvare?.code }, businessId,
+    });
+    /*
+     * ⚠ „NU GASESC FUNCTIA" NU E O GRESEALA A OMULUI. `PGRST202` apare cat timp memoria de scheme
+     * a lui PostgREST e mai veche decat baza — cateva secunde dupa o desfasurare. Imbracat in
+     * „verifică să nu ai SKU-uri duplicate", il trimiteam sa caute in datele lui un defect care e
+     * al nostru, si pe care nu-l poate repara nicicum.
+     */
+    if (eSalvare?.code === "PGRST202") {
+      return {
+        error: "Salvarea nu e disponibilă chiar acum, fiindcă aplicația tocmai se actualizează."
+          + " Încearcă din nou peste un minut; nu ai nimic de reparat.",
+      };
+    }
+    return { error: "Eroare la salvarea listării. Verifică să nu ai SKU-uri duplicate." };
+  }
+  /* ⚠ „Listarea nu exista" nu e acelasi lucru cu „a mers": ar iesi tacut, fara sa fi scris nimic. */
+  if (r.stare === "lipsa" || r.variante?.stare === "lipsa") {
+    return { error: "Listarea About You nu mai există. Reîncarcă pagina." };
+  }
+  /*
+   * ⚠ SALVAREA A PORNIT DINTR-O LISTARE CARE NU MAI E. Nu s-a scris nimic, dinadins — si mesajul
+   * spune CE SA FACA, nu doar ca n-a mers: o regula care refuza fara iesire e o usa incuiata
+   * fara clanta.
+   */
+  if (r.stare === "depasit") {
+    /*
+     * ⚠ SI SEMNUL DE TRIMITERE SE RETRAGE. Scris inaintea salvarii (vezi mai sus), ramas asa ar
+     * cere o trimitere pentru o listare care nu mai exista. Plasa l-ar sterge oricum la trecerea
+     * urmatoare — dar „oricum, mai tarziu, de altcineva" nu e acelasi lucru cu „acum, de cine a
+     * facut greseala".
+     */
+    if (siTrimite) {
+      await admin.from("aboutyou_intentii").delete()
+        .eq("business_id", businessId).eq("product_id", productId).eq("op", "upsert");
+    }
+    /*
+     * ⚠ MESAJUL SPUNE SI CE SE PIERDE. „Reîncarcă pagina" suna gratis, dar variantele au plecat
+     * odata cu listarea (`ON DELETE CASCADE`), deci marimile, EAN-urile si compozitia completate
+     * acum chiar nu se mai pot pastra. Un indemn care ascunde costul se plateste o data in date si
+     * inca o data in incredere.
+     */
+    /*
+     * ⚠ `depasit` are acum DOUA intelesuri, si mesajul le acopera pe amandoua: sau listarea de la
+     * care ai pornit a fost eliminata, sau intre timp a aparut alta (o a doua fila, o alta
+     * salvare). In amandoua cazurile lumea din care ai pornit nu mai e, iar ce ai in fata nu se
+     * mai poate lipi de ce e in baza.
+     */
+    return {
+      error: "Listarea s-a schimbat între timp — a fost eliminată sau creată din altă parte —"
+        + " așa că nu am salvat nimic. Reîncarcă pagina și configureaz-o din nou:"
+        + " ce ai completat acum nu se poate păstra, fiindcă nu mai are de ce se lega.",
+    };
+  }
+  /*
+   * ⚠ Aceleasi doua reguli ca inainte, si aceleasi doua mesaje — numai locul verificarii s-a
+   * schimbat. Fiecare isi poarta iesirea scrisa: listare noua pentru categorie, varianta noua
+   * pentru marime.
+   */
+  if (r.stare === "categorie-blocata") {
+    /*
+     * ⚠ DOUA REFUZURI DEOSEBITE, CU DOUA IESIRI DEOSEBITE. Unul e definitiv (produsul e aprobat),
+     * celalalt e trecator (asteptam verdictul lor). Spuse la fel, omul care doar trebuie sa
+     * astepte ar fi crezut ca a pierdut categoria pentru totdeauna si ar fi eliminat listarea
+     * degeaba.
+     */
+    if (r.asteptam) {
+      return {
+        error: "Produsul așteaptă verdictul About You, așa că nu putem schimba categoria acum:"
+          + " dacă ei îl aprobă între timp, ar rămâne la ei cu cea veche."
+          + " Așteaptă răspunsul lor și încearcă din nou.",
+      };
+    }
+    /*
+     * ═══ ⚠ SFATUL DE DINAINTE NU FUNCTIONA (29.08.2026, noaptea) ═══
+     *
+     * Spunea „elimină listarea și creează una nouă". Dar `style_key` E CHIAR `productId`, deci
+     * listarea refacuta poarta aceeasi cheie — iar pentru About You e ACELASI product master, inca
+     * aprobat. Omul ar fi eliminat produsul de la ei, l-ar fi relistat, si s-ar fi lovit de acelasi
+     * refuz — dupa ce si-a stricat listarea degeaba.
+     *
+     * ⚠ Un master NOU cere o CHEIE noua, iar cheia vine din produsul din magazin. Deci singura
+     * iesire adevarata e un produs nou. Asta e si mai scump de spus, si mai ieftin de urmat decat
+     * un drum care nu duce nicaieri.
+     */
+    return {
+      error: "About You nu mai acceptă schimbarea categoriei după ce produsul a fost aprobat."
+        + " Nici eliminarea și relistarea nu ajută: la ei rămâne același produs, deja aprobat."
+        + " Ca să-l muți în altă categorie, fă un produs nou în magazin și listează-l pe acela.",
+    };
+  }
+  if (r.stare === "marime-blocata") {
+    /*
+     * ⚠ SE NUMESC TOATE, NU PRIMA CARE IESE. Cu trei marimi schimbate si un singur nume in mesaj,
+     * omul repara una, apasa iar, si afla de urmatoarea — o scara urcata in alta ordine decat cea
+     * de pe ecran. Si numele veneau dintr-un `limit 1` fara `order by`, deci nici macar aceeasi
+     * de doua ori.
+     */
+    const skuri = Array.isArray(r.skuri) ? r.skuri.map(String) : [];
+    const numite = skuri.slice(0, 3).map((x) => `„${x}"`).join(", ");
+    const restul = skuri.length > 3 ? ` și încă ${skuri.length - 3}` : "";
+    const care = `${skuri.length === 1 ? "varianta" : "variantele"} ${numite}${restul}`;
+    /* ⚠ Ca la categorie: refuzul trecator si cel definitiv nu se spun la fel. */
+    if (r.asteptam) {
+      return {
+        error: `Produsul așteaptă verdictul About You, așa că nu putem schimba mărimea la ${care}:`
+          + " dacă ei îl aprobă între timp, ar rămâne la ei cu cea veche."
+          + " Așteaptă răspunsul lor și încearcă din nou.",
+      };
+    }
+    return {
+      error: `About You nu mai acceptă schimbarea mărimii după aprobare, iar tu ai schimbat-o la ${care}.`
+        + " Dezactivează varianta și adaugă una nouă, cu SKU nou, pentru mărimea corectă.",
+    };
+  }
+  if (r.stare !== "scris") {
+    logError({
+      action: "aboutyou.saveListing", severity: "error",
+      message: `salvarea listarii a raspuns „${r.stare}"`,
+      details: { businessId, productId }, businessId,
+    });
+    return { error: "Eroare la salvarea listării." };
   }
   revalidatePath(FEATURE_PATH);
   return { success: true };
@@ -551,6 +1613,146 @@ export async function removeAboutYouListing(businessId: string, productId: strin
   return { success: true };
 }
 
+/*
+ * ── Ce trebuie sa ai pregatit ────────────────────────────────────────────────
+ *
+ * Comerciantul afla cerintele blocante una cate una, pe parcurs: intra in editor,
+ * completeaza zece minute, apasa trimite si abia atunci vede „Varianta X nu are cod
+ * EAN". Iar cerintele globale — brand, tari, curs valutar — nu apar nicaieri pana
+ * la prima trimitere. Primul comerciant real a stat zece zile cu toate cele cinci
+ * tabele goale, oprit chiar in ecranul de setari.
+ *
+ * Numaratoarea se face cu interogari NUMAI DE CONTOR, nu citind produsele: doua
+ * mii de randuri intr-un panou de dashboard nu se justifica. Filtrele pe cale
+ * jsonb (`page_sections->google->>gtin`) si `images=neq.[]` sunt PROBATE pe
+ * PostgREST-ul real, nu presupuse.
+ */
+export interface PreVerificareAboutYou {
+  produseActive: number;
+  /** Produse cu combinatii: la ele codul de bare se cere PE FIECARE varianta. */
+  cuVariante: number;
+  cuGreutate: number;
+  cuImagini: number;
+  cuEanLaProdus: number;
+  cuSku: number;
+  listari: number;
+  categoriiNemapate: number;
+  exempleNemapate: string[];
+  /**
+   * Produse active FARA nicio categorie. Blocheaza total listarea si erau excluse
+   * din numaratoare, deci singurul blocaj complet nu apărea nicaieri.
+   */
+  faraCategorie: number;
+  /** Ce lipseste din setarile magazinului, in ordinea in care blocheaza. */
+  lipsuriGlobale: string[];
+}
+
+export async function getAboutYouPreVerificare(businessId: string): Promise<PreVerificareAboutYou | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const config = await loadConfig(businessId);
+  const sb = g.supabase;
+
+  const mapate = Object.keys(config.category_map ?? {});
+  // Interogare de contor pe produsele active ale magazinului.
+  const active = () => sb.from("products").select("id", { count: "exact", head: true })
+    .eq("business_id", businessId).eq("is_active", true);
+
+  const [rTotal, rGreutate, rImagini, rEan, rSku, rVariante] = await Promise.all([
+    active(),
+    active().gt("weight_grams", 0),
+    // `neq("images", "[]")` NU acopera `null`, de aceea si a doua conditie.
+    active().neq("images", "[]").not("images", "is", null),
+    /*
+     * ⚠ Doar codul de bare de la nivel de PRODUS.
+     *
+     * Codurile per combinatie stau in `page_sections.variants.combinations[].gtin`
+     * si nu se pot numara cu un filtru — de aceea eticheta din panou spune explicit
+     * „la nivel de produs". Calea jsonb e probata pe PostgREST-ul real; tipurile
+     * supabase-js nu cunosc coloane cu cale, de aici cast-ul.
+     */
+    // `not is null` NU exclude sirul gol: un `gtin: ""` era numarat drept prezent,
+    // iar `validateListing` il refuza. Panoul ar fi aratat verde peste un blocaj.
+    (active() as unknown as {
+      not: (c: string, o: string, v: null) => { neq: (c: string, v: string) => Promise<{ count: number | null }> };
+    }).not("page_sections->google->>gtin", "is", null).neq("page_sections->google->>gtin", ""),
+    active().not("sku", "is", null).neq("sku", ""),
+    /*
+     * Cate produse au VARIANTE.
+     *
+     * Pentru ele, codul de bare se cere pe FIECARE combinatie, iar acela sta in
+     * `page_sections.variants.combinations[].gtin` si nu se poate numara cu un
+     * filtru. Fara numarul asta, pastila „Gata" se facea verde pe baza codurilor de
+     * la nivel de produs — adica peste un magazin la care fiecare trimitere cade.
+     */
+    (active() as unknown as { eq: (c: string, v: string) => Promise<{ count: number | null }> })
+      .eq("page_sections->variants->>enabled", "true"),
+  ]);
+  const produseActive = rTotal.count ?? 0;
+  const cuGreutate = rGreutate.count ?? 0;
+  const cuImagini = rImagini.count ?? 0;
+  const cuEanLaProdus = rEan.count ?? 0;
+  const cuSku = rSku.count ?? 0;
+  const cuVariante = rVariante.count ?? 0;
+
+  /*
+   * Categoriile nemapate se afla prin DIFERENTA DE MULTIMI, in JS.
+   *
+   * O prima versiune construia filtrul `not.in.("a","b")` de mana. Doua defecte,
+   * amandouă tacute: escaparea ghilimelelor prin dublare nu e cea a lui PostgREST
+   * (acolo caracterul de escape e backslash-ul), deci o categorie numita
+   * `Colecția "Vară"` nu mai era exclusa si apărea veșnic drept nemapata; iar
+   * `.limit(500)` raporta un numar TRUNCHIAT ca si cum ar fi complet. Diferenta in
+   * JS nu are nici problema de escapare, nici de trunchiere.
+   */
+  const categoriiVazute = new Set<string>();
+  let faraCategorie = 0;
+  {
+    for (let de = 0; de < 20000; de += 1000) {
+      const { data, error } = await sb.from("products").select("category")
+        .eq("business_id", businessId).eq("is_active", true)
+        .order("id", { ascending: true }).range(de, de + 999);
+      if (error) break;
+      const lot = data ?? [];
+      for (const r of lot) {
+        if (r.category) categoriiVazute.add(r.category);
+        else faraCategorie++;
+      }
+      if (lot.length < 1000) break;
+    }
+  }
+  const mapateSet = new Set(mapate);
+  const nemapate = [...categoriiVazute].filter((c) => !mapateSet.has(c)).sort();
+  const categoriiNemapate = nemapate.length;
+  const exempleNemapate = nemapate.slice(0, 5);
+
+  /*
+   * Culoarea NU se numara aici, desi ar parea firesc.
+   *
+   * E validă in doua locuri — pe listare SAU pe fiecare varianta — iar un contor
+   * pe `aboutyou_listings.color_id` ar raporta „lipsa" tocmai pentru produsele
+   * multicolore, unde culoarea e pusa corect pe variante. Adica panoul ar
+   * contrazice validarea. Culoarea are oricum feedback exact chiar in editor, la
+   * locul unde se completeaza; aici putea doar sa induca in eroare.
+   */
+  const { count: listari } = await sb.from("aboutyou_listings")
+    .select("id", { count: "exact", head: true }).eq("business_id", businessId);
+
+  const lipsuriGlobale: string[] = [];
+  if (!config.brand_id) lipsuriGlobale.push("Brandul About You (îl poți schimba apoi pe fiecare produs)");
+  if (!config.ship_countries || config.ship_countries.length === 0) lipsuriGlobale.push("Cel puțin o țară de listare");
+  if (config.price_mode !== "manual_eur" && !(config.fx?.rate && config.fx.rate > 0)) {
+    lipsuriGlobale.push("Cursul valutar RON către EUR");
+  }
+  if (!config.target_audience) lipsuriGlobale.push("Publicul magazinului (folosit la maparea automată a categoriilor)");
+
+  return {
+    produseActive, cuVariante, cuGreutate, cuImagini, cuEanLaProdus, cuSku,
+    listari: listari ?? 0,
+    categoriiNemapate, exempleNemapate, faraCategorie, lipsuriGlobale,
+  };
+}
+
 // ── Listings table ────────────────────────────────────────────────────────────────
 export interface AboutYouListingRow {
   product_id: string | null;
@@ -559,7 +1761,89 @@ export interface AboutYouListingRow {
   status: string;
   error: string | null;
   rejectionCount: number;
+  /**
+   * Motivele respingerii, traduse. Se numarau si nu se afisau nicaieri: omul
+   * vedea „Respins" si nimic altceva, iar singurul loc care spune CE e greșit
+   * rămânea in baza, necitit.
+   */
+  motive: MotivAfisat[];
   lastSyncedAt: string | null;
+}
+
+/*
+ * O pagina de produse, cu listarile lor.
+ *
+ * Inainte, pagina incarca 300 de produse si 200 de listari si le imperechea in
+ * memorie. Peste atat, produsele pur si simplu lipseau din lista — iar cele
+ * listate DEJA pe About You, dar aflate dupa prima suta de listari, se afisau ca
+ * „Nelistat": comerciantul apasa „Trimite" pe ceva ce era deja acolo. Fara nicio
+ * cautare si fara paginare, la o mie de produse ecranul era inutilizabil.
+ */
+// Nu se exporta: intr-un fisier „use server" doar functiile async au voie sa fie
+// exporturi, iar o constanta exportata rupe compilarea intregului modul.
+const ABOUTYOU_PAGE_SIZE = 50;
+
+export interface AboutYouProductPage {
+  products: { id: string; name: string; category: string | null; is_active: boolean }[];
+  listings: AboutYouListingRow[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
+export async function getAboutYouProductPage(
+  businessId: string, page = 1, q = "",
+): Promise<AboutYouProductPage | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+
+  const pagina = Math.max(1, Math.floor(page));
+  const cautare = q.trim().slice(0, 80);
+  const from = (pagina - 1) * ABOUTYOU_PAGE_SIZE;
+
+  let query = g.supabase
+    .from("products").select("id, name, category, is_active", { count: "exact" })
+    .eq("business_id", businessId).eq("is_active", true);
+  if (cautare) query = query.ilike("name", `%${cautare}%`);
+
+  const { data, count } = await query
+    .order("updated_at", { ascending: false })
+    .range(from, from + ABOUTYOU_PAGE_SIZE - 1);
+
+  const products = (data ?? []) as AboutYouProductPage["products"];
+  const total = count ?? products.length;
+
+  // Listarile se cer DOAR pentru produsele de pe pagina: asa nu mai poate exista
+  // un produs listat caruia sa nu-i gasim listarea.
+  let listings: AboutYouListingRow[] = [];
+  if (products.length > 0) {
+    const { data: ls } = await g.supabase
+      .from("aboutyou_listings")
+      .select("product_id, style_key, status, error, rejection_reasons, last_synced_at, products(name)")
+      .eq("business_id", businessId)
+      .in("product_id", products.map((p) => p.id));
+    listings = (ls ?? []).map(randListare);
+  }
+
+  return { products, listings, total, page: pagina, pages: Math.max(1, Math.ceil(total / ABOUTYOU_PAGE_SIZE)) };
+}
+
+function randListare(r: {
+  product_id: string | null; style_key: string; status: string; error: string | null;
+  rejection_reasons: unknown; last_synced_at: string | null; products: unknown;
+}): AboutYouListingRow {
+  const prod = r.products as { name?: string } | { name?: string }[] | null;
+  const name = Array.isArray(prod) ? prod[0]?.name : prod?.name;
+  return {
+    product_id: r.product_id,
+    style_key: r.style_key,
+    name: name ?? "Produs",
+    status: r.status,
+    error: r.error,
+    rejectionCount: Array.isArray(r.rejection_reasons) ? r.rejection_reasons.length : 0,
+    motive: traduMotive(r.rejection_reasons),
+    lastSyncedAt: r.last_synced_at,
+  };
 }
 
 export async function getAboutYouListings(businessId: string): Promise<AboutYouListingRow[]> {
@@ -572,35 +1856,282 @@ export async function getAboutYouListings(businessId: string): Promise<AboutYouL
     .order("updated_at", { ascending: false })
     .limit(200);
 
+  // Aceeasi conversie ca pe calea paginata: erau doua copii, iar cea de aici
+  // uitase deja `motive`.
+  return (data ?? []).map(randListare);
+}
+
+/*
+ * ── Documentele comenzii ─────────────────────────────────────────────────────
+ *
+ * About You detine checkout-ul si emite factura catre cumparator, iar
+ * comerciantul are nevoie de ea pentru contabilitate. Rutele existau in
+ * specificatie si nu erau implementate nicaieri: singura cale era Seller Center.
+ *
+ * PDF-ul se intoarce ca base64: o actiune de server nu poate trimite un
+ * `ArrayBuffer` la client prin granita de serializare.
+ */
+export async function getAboutYouOrderDocument(
+  businessId: string, orderId: string, fel: "invoices" | "delivery-document",
+): Promise<{ base64: string; tip: string; numeFisier: string } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+
+  const admin = createAdminClient();
+  // Numarul comenzii se ia din randul NOSTRU, nu din ce trimite clientul: altfel
+  // un `orderId` strain ar putea cere documentele altui comerciant.
+  const { data: ay } = await admin
+    .from("aboutyou_orders").select("aboutyou_order_number")
+    .eq("business_id", businessId).eq("order_id", orderId).maybeSingle();
+  const numar = (ay as { aboutyou_order_number?: string } | null)?.aboutyou_order_number;
+  if (!numar) return { error: "Comanda nu este o comandă About You." };
+
+  const res = await getOrderDocument(g.auth, numar, fel);
+  if (isAboutYouError(res)) {
+    // 404 inseamna, cel mai adesea, „nu s-a emis inca", nu o defectiune.
+    if (res.status === 404) {
+      return { error: fel === "invoices"
+        ? "About You nu a emis încă factura pentru această comandă."
+        : "About You nu a emis încă documentul de livrare pentru această comandă." };
+    }
+    return { error: res.error };
+  }
+  return {
+    base64: Buffer.from(res.data.continut).toString("base64"),
+    tip: res.data.tip,
+    numeFisier: `${fel === "invoices" ? "factura" : "livrare"}-${numar}.pdf`,
+  };
+}
+
+/*
+ * ── Comenzile About You ──────────────────────────────────────────────────────
+ *
+ * Nu erau afisate nicaieri in panoul integrarii. Statusurile de eșec
+ * (`ship_failed`, `cancel_failed`, `return_failed`) se scriau intr-o coloana pe
+ * care n-o citea nicio pagina, deci o expediere pe care About You a respins-o
+ * rămânea nevazuta si fara nicio cale de reluare.
+ */
+export interface RandComandaAboutYou {
+  orderId: string | null;
+  numarAy: string;
+  numarEdinio: string | null;
+  status: string;
+  tara: string | null;
+  fulfillment: string | null;
+  ultimaSincronizare: string | null;
+  creata: string;
+  /**
+   * Ce se poate cere la About You pentru comanda asta.
+   *
+   * ⚠ SE SOCOTESC DIN LINII, nu din statusul comenzii. La ei starea sta pe LINIE, iar comanda cu
+   * linii in stari diferite e „mixed" — deci un buton legat de statusul comenzii ar fi fost si
+   * ascuns cand trebuia, si aratat cand nu trebuia. Regula lor: anularea merge numai pe `open`,
+   * returul numai pe `shipped`.
+   *
+   * ⚠ E ACEEASI regula pe care o pazeste si `idsArticoleInStarea` la trimitere. Aici doar nu se
+   * arata un buton care oricum ar fi refuzat; hotararea adevarata ramane pe server.
+   */
+  sePoateAnula: boolean;
+  sePoateReturna: boolean;
+}
+
+export async function getAboutYouOrders(businessId: string, doarProbleme = false): Promise<RandComandaAboutYou[]> {
+  const g = await guard(businessId);
+  if ("error" in g) return [];
+  let q = g.supabase
+    .from("aboutyou_orders")
+    .select("order_id, aboutyou_order_number, status, shop_country, fulfillment_type, items, last_synced_at, created_at, orders(order_number)")
+    .eq("business_id", businessId);
+  if (doarProbleme) q = q.in("status", ["ship_failed", "cancel_failed", "return_failed"]);
+  /* ⚠ Eroarea se citeste: inghitita, un hop al bazei ar fi aratat „nicio comanda About You". */
+  const { data, error } = await q.order("created_at", { ascending: false }).limit(100);
+  if (error) {
+    logError({
+      action: "aboutyou.getOrders", message: `lista comenzilor nu s-a putut citi: ${error.message}`,
+      details: { businessId }, businessId,
+    });
+    return [];
+  }
+
   return (data ?? []).map((r) => {
-    const prod = r.products as { name?: string } | { name?: string }[] | null;
-    const name = Array.isArray(prod) ? prod[0]?.name : prod?.name;
-    const rejections = Array.isArray(r.rejection_reasons) ? r.rejection_reasons.length : 0;
+    const o = r.orders as { order_number?: string } | { order_number?: string }[] | null;
+    const numarEdinio = Array.isArray(o) ? o[0]?.order_number : o?.order_number;
+    /*
+     * ⚠ Din LINII, nu din statusul comenzii. Vezi nota de pe `RandComandaAboutYou`. Iar
+     * comenzile onorate de ei nu se ating deloc: acolo marfa nici nu e la comerciant.
+     */
+    const linii = Array.isArray(r.items) ? (r.items as { status?: string }[]) : [];
+    const aleLor = r.fulfillment_type === "fulfillment_by_marketplace";
     return {
-      product_id: r.product_id,
-      style_key: r.style_key,
-      name: name ?? "Produs",
-      status: r.status,
-      error: r.error,
-      rejectionCount: rejections,
-      lastSyncedAt: r.last_synced_at,
+      orderId: r.order_id,
+      numarAy: r.aboutyou_order_number,
+      numarEdinio: numarEdinio ?? null,
+      status: r.status ?? "open",
+      tara: r.shop_country,
+      fulfillment: r.fulfillment_type,
+      ultimaSincronizare: r.last_synced_at,
+      creata: r.created_at,
+      sePoateAnula: !aleLor && linii.some((l) => l.status === "open"),
+      sePoateReturna: !aleLor && linii.some((l) => l.status === "shipped"),
     };
   });
 }
 
+/** Repune la coada expedierea unei comenzi About You care a eșuat. */
+export async function reincearcaExpediereaAboutYou(businessId: string, orderId: string): Promise<{ success: true } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const { error } = await admin.from("aboutyou_sync_queue").upsert(
+    { business_id: businessId, product_id: null, offer_id: orderId, op: "ship", attempts: 0, last_error: null },
+    { onConflict: "business_id,offer_id,op" },
+  );
+  if (error) return { error: "Nu am putut repune expedierea la coadă." };
+  await admin.from("aboutyou_orders")
+    .update({ status: "ship_pending", updated_at: new Date().toISOString() })
+    .eq("business_id", businessId).eq("order_id", orderId);
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+/*
+ * ═══ ⚠ ANULAREA SI RETURUL EXISTAU SI NU LE CHEMA NIMENI (27.08.2026) ═══
+ *
+ * `cancelOrderNow` si `returnOrderNow` erau scrise, cu garzile lor pe stari, si nu aveau NICIUN
+ * punct de chemare in tot depozitul. Adica: comerciantul nu putea nici anula, nici marca un
+ * retur din Edinio — trebuia sa intre in Seller Center, iar la noi comanda ramanea cum era.
+ *
+ * ⚠ AMANDOUA SUNT EFECTE EXTERNE CU UN SINGUR FOC, deci trec prin `cuLotDurabil`: urma se scrie
+ * inaintea cererii. Vezi nota de acolo.
+ */
+export async function anuleazaComandaAboutYou(
+  businessId: string, orderId: string,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const ctx = await loadAboutYouContext(admin, businessId);
+  if (!ctx) return { error: "Contul About You nu este conectat." };
+  const r = await cancelOrderNow(admin, ctx, orderId);
+  if (!r.ok) return { error: r.error };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
+export async function returneazaComandaAboutYou(
+  businessId: string, orderId: string, awbRetur: string,
+): Promise<{ success: true } | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+  /* ⚠ Verificat AICI, nu doar in ecran: o actiune de server e o ruta, si oricine o poate chema. */
+  if (!awbRetur.trim()) return { error: "Completează numărul AWB de retur." };
+  const admin = createAdminClient();
+  const ctx = await loadAboutYouContext(admin, businessId);
+  if (!ctx) return { error: "Contul About You nu este conectat." };
+  const r = await returnOrderNow(admin, ctx, orderId, awbRetur);
+  if (!r.ok) return { error: r.error };
+  revalidatePath(FEATURE_PATH);
+  return { success: true };
+}
+
 // ── Webhooks (stock.updated now; order events in Faza 3) ────────────────────────
+/*
+ * Diagnoza abonamentului: exista chiar acolo si acopera ce trebuie?
+ *
+ * Puteam doar sa CREAM si sa STERGEM un abonament, deci un abonament rupt — sters
+ * din Seller Center, expirat, sau creat cu alte evenimente — tacea la nesfarsit,
+ * iar comenzile veneau doar prin cron, cu intarziere. Acum se poate verifica.
+ */
+export interface DiagnozaWebhookAboutYou {
+  abonamentLocal: string | null;
+  existaLaEi: boolean;
+  /** Comutatorul LOR. Oprit, abonamentul exista si totusi nu livreaza nimic. */
+  activLaEi: boolean;
+  evenimenteLipsa: string[];
+  /** `true` cand URL-ul lor nu mai poarta tokenul nostru: ruta va respinge tot. */
+  tokenNepotrivit: boolean;
+  url: string | null;
+  eroare: string | null;
+}
+
+export async function getAboutYouWebhookDiagnoza(businessId: string): Promise<DiagnozaWebhookAboutYou | { error: string }> {
+  const g = await guardedAuth(businessId);
+  if ("error" in g) return g;
+  const gol = {
+    abonamentLocal: null as string | null, existaLaEi: false, activLaEi: false,
+    evenimenteLipsa: [] as string[], tokenNepotrivit: false, url: null as string | null,
+    eroare: null as string | null,
+  };
+  const id = g.config.webhook_subscription_id ?? null;
+  if (!id) return gol;
+
+  const res = await getWebhookSubscription(g.auth, id);
+  if (isAboutYouError(res)) {
+    // 404 = abonamentul nu mai exista la ei, desi noi il credem viu.
+    return { ...gol, abonamentLocal: id, eroare: res.status === 404 ? null : res.error };
+  }
+  const s = res.data ?? {};
+  const evenimente = Array.isArray(s.events) ? s.events.map(String) : [];
+  const url = typeof s.url === "string" ? s.url : null;
+  return {
+    abonamentLocal: id,
+    existaLaEi: true,
+    /*
+     * `enabled` e comutatorul LOR, si se poate schimba din Seller Center cu aceeasi
+     * cheie API. Ignorat, unealta facuta sa gaseasca abonamente rupte raporta verde
+     * peste unul oprit — cu contrariul chiar in raspunsul pe care il citea.
+     */
+    activLaEi: s.enabled !== false,
+    /*
+     * ⚠ SE COMPARA CU CELE ESENTIALE, NU CU TOATE. About You poate primi abonamentul si sa taie
+     * tacut evenimentele invechite din el. Comparat cu lista intreaga, panoul ar fi aratat pe veci
+     * „trei evenimente lipsa", iar comerciantul s-ar fi reabonat la nesfarsit ca sa repare ceva ce
+     * nu era stricat.
+     */
+    evenimenteLipsa: EVENIMENTE_ESENTIALE.filter((e) => !evenimente.includes(e)),
+    // Tokenul din URL e a doua incuietoare a rutei. Daca URL-ul lor nu-l mai
+    // poarta, fiecare eveniment va fi respins de noi, tacut.
+    tokenNepotrivit: !!g.config.webhook_token && !!url && !url.includes(g.config.webhook_token),
+    url,
+    eroare: null,
+  };
+}
+
 export async function subscribeAboutYouWebhook(businessId: string): Promise<{ success: true } | { error: string }> {
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
-  const url = `${aboutyouWebhookUrl()}?businessId=${encodeURIComponent(businessId)}`;
-  const res = await createWebhookSubscription(g.auth, { events: ABOUTYOU_WEBHOOK_EVENTS, url, description: "Edinio sync" });
+  /*
+   * Tokenul din URL e a doua incuietoare a rutei de webhook.
+   *
+   * Schema de semnatura a lui About You nu e documentata, deci verificarea ei e o
+   * deductie care poate cadea mereu. Tokenul asta il stie doar About You, pentru
+   * ca doar in URL-ul lui de abonare l-am pus — si nu depinde de nimic ghicit.
+   * Se genereaza la fiecare abonare, deci o reabonare il si roteste.
+   */
+  const token = randomBytes(24).toString("base64url");
+  const url = `${aboutyouWebhookUrl()}?businessId=${encodeURIComponent(businessId)}&token=${token}`;
+  /*
+   * ⚠ SE CER DOAR CELE ESENTIALE. Vezi `EVENIMENTE_INVECHITE`: cele trei vechi sunt marcate
+   * `deprecated` in specificatia lor si nu aduceau nimic — orice eveniment de comanda duce la
+   * aceeasi recitire intreaga a comenzii. Cerute, erau doar inca un fel in care cererea intreaga
+   * putea fi refuzata, lasand comerciantul fara NICIUN webhook.
+   *
+   * ⚠ RELUAREA PE LISTA SCURTA S-A SCOS ODATA CU ELE: lista ceruta E deja cea scurta, deci o
+   * reluare ar fi retrimis exact aceleasi nume. Un cod care se preface ca mai are o sansa e mai
+   * rau decat unul care n-are.
+   */
+  const res = await createWebhookSubscription(g.auth, { url, description: "Edinio sync", events: ABOUTYOU_WEBHOOK_EVENTS });
   if (isAboutYouError(res)) return { error: res.error };
+
   const next: AboutYouConfig = {
     ...g.config,
-    webhook_subscription_id: res.data?.id ?? g.config.webhook_subscription_id,
+    webhook_token: token,
+    // `id` vine INTREG in raspuns (SecretWebhookSubscriptionSchema), iar noi il
+    // folosim ca segment de cale la dezabonare — deci il pastram ca sir.
+    webhook_subscription_id: res.data?.id != null ? String(res.data.id) : g.config.webhook_subscription_id,
     webhook_secret: res.data?.client_secret ?? g.config.webhook_secret,
   };
-  if (!(await saveConfig(g.supabase, businessId, next))) return { error: "Eroare la salvare." };
+  if (!(await saveConfig(businessId, next))) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -609,46 +2140,208 @@ export async function unsubscribeAboutYouWebhook(businessId: string): Promise<{ 
   const g = await guardedAuth(businessId);
   if ("error" in g) return g;
   if (g.config.webhook_subscription_id) {
-    await deleteWebhookSubscription(g.auth, g.config.webhook_subscription_id);
+    /*
+     * ⚠ RASPUNSUL SE CITESTE. Ignorat, un esec lasa un abonament ORFAN la ei — iar randul de mai
+     * jos arunca tocmai `webhook_subscription_id` din config, deci nimeni nu l-ar mai putea sterge.
+     * Aici, spre deosebire de deconectare, omul n-a cerut sa plece: poate reincerca.
+     */
+    const dezabonat = await deleteWebhookSubscription(g.auth, g.config.webhook_subscription_id);
+    /*
+     * ⚠ `404` INSEAMNA „NU MAI EXISTA", adica exact ce ceream. Tratat ca eroare, se ajungea intr-un
+     * fund de sac: o incercare in care stergerea la ei reuseste dar scrierea la noi pica lasa
+     * id-ul in config, iar de-atunci fiecare reincercare primeste `404` si REFUZA sa curete —
+     * pentru totdeauna. O stergere e idempotenta prin fire: „nu e acolo" e o reusita.
+     */
+    if (isAboutYouError(dezabonat) && dezabonat.status !== 404) {
+      return { error: `Abonamentul nu s-a putut șterge la About You: ${dezabonat.error}` };
+    }
   }
-  const next: AboutYouConfig = { ...g.config, webhook_subscription_id: undefined, webhook_secret: undefined };
-  await saveConfig(g.supabase, businessId, next);
+  const next: AboutYouConfig = { ...g.config, webhook_subscription_id: undefined, webhook_secret: undefined, webhook_token: undefined };
+  /* ⚠ Si scrierea: nescrisa, ecranul ar spune „dezabonat" iar configul ar pastra un id mort. */
+  if (!await saveConfig(businessId, next)) {
+    return { error: "Abonamentul s-a șters la About You, dar nu am putut salva. Reîncarcă pagina." };
+  }
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
 
 // ── Bulk operations (Faza 5) ────────────────────────────────────────────────────
+
+/**
+ * Deschide o lucrare in masa INAINTE de a pune ceva la coada.
+ *
+ * ═══ ⚠ URMA SE SCRIE INAINTEA LUCRULUI (27.08.2026, noaptea) ═══
+ *
+ * Pana azi se punea intai la coada cat apuca actiunea, si ABIA APOI se scria cursorul. Raspunsul
+ * scrierii nici nu se citea. Deci:
+ *
+ *     25.000 de listari
+ *     primele 20.000 intra in coada     ✅
+ *     scrierea cursorului pica          ❌
+ *     omul vede „Salvat"                ✅
+ *
+ * Ultimele 5.000 nu mai au NIMIC care sa le atinga vreodata. Aceeasi lectie ca la `cuLotDurabil`,
+ * unde intentia se scrie inaintea cererii: ordinea nu e un amanunt, e chiar apararea.
+ *
+ * ⚠ INTOARCE `null` DACA LUCRAREA NU S-A PUTUT DESCHIDE, iar apelantul raspunde cu eroare. O
+ * lucrare care nu exista nu se poate relua, deci n-avem voie sa spunem „am pornit".
+ *
+ * ⚠ O A DOUA APASARE PE ACELASI BUTON nu porneste inca o lucrare: indexul unic partial o refuza,
+ * si atunci se continua cea deschisa — ceea ce si vrea omul care apasa a doua oara.
+ */
+interface Lucrare { id: string; dupa: string | null; puse: number }
+
+async function deschideLucrarea(
+  businessId: string, op: "upsert" | "publish" | "price",
+  statusFilter?: string, doarTrimise?: boolean,
+): Promise<Lucrare | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("aboutyou_bulk_jobs")
+    .insert({
+      business_id: businessId, op,
+      status_filtru: statusFilter ?? null, doar_trimise: !!doarTrimise,
+    } as never)
+    .select("id, dupa, puse").maybeSingle();
+  if (!error && data) return data as Lucrare;
+
+  if ((error as { code?: string } | null)?.code === "23505") {
+    const { data: veche } = await admin.from("aboutyou_bulk_jobs")
+      .select("id, dupa, puse").eq("business_id", businessId).eq("op", op).eq("status", "deschis")
+      .maybeSingle();
+    if (veche) return veche as Lucrare;
+  }
+  logError({
+    action: "aboutyou.deschideLucrarea", severity: "critical",
+    message: `lucrarea in masa nu s-a putut deschide: ${error?.message ?? "necunoscut"}`,
+    details: { businessId, op }, businessId,
+  });
+  return null;
+}
+
+/**
+ * Muta cursorul lucrarii, sau o inchide daca s-a terminat.
+ *
+ * ⚠ SCRIEREA ASTA PICATA NU MAI PIERDE NIMIC, si asta e tot rostul randului: lucrarea ramane
+ * deschisa cu cursorul dinainte, iar cronul reia de-acolo. Cel mai rau lucru care se intampla e
+ * ca o parte din catalog intra a doua oara in coada — o pierdere de-o cerere, nu de catalog.
+ */
+async function mutaLucrarea(l: Lucrare, r: { n: number; incomplet: boolean; ultimulId: string | null }) {
+  const acum = new Date().toISOString();
+  await createAdminClient().from("aboutyou_bulk_jobs").update({
+    dupa: r.ultimulId, puse: l.puse + r.n, atins_la: acum,
+    ...(r.incomplet ? {} : { status: "gata", terminat_la: acum }),
+  } as never).eq("id", l.id);
+}
+
 async function enqueueForListings(
-  supabase: ServerClient, businessId: string, op: "upsert" | "publish", statusFilter?: string,
-): Promise<number> {
-  let q = supabase.from("aboutyou_listings").select("product_id")
-    .eq("business_id", businessId).not("product_id", "is", null);
-  if (statusFilter) q = q.eq("status", statusFilter);
-  const { data } = await q.limit(2000);
-  const ids = [...new Set((data ?? []).map((l) => l.product_id).filter(Boolean) as string[])];
-  if (ids.length === 0) return 0;
+  supabase: ServerClient, businessId: string,
+  /* ⚠ `price` a intrat cand setarile globale au inceput sa repuna produsele la coada: o schimbare
+     de curs cere doar preturi, nu produsul intreg. Vezi `saveAboutYouSettings`. */
+  op: "upsert" | "publish" | "price", statusFilter?: string,
+  doarTrimise?: boolean,
+  /** De unde se reia, cand o trecere anterioara s-a oprit la plafon. */
+  dupa?: string | null,
+): Promise<{ n: number; incomplet: boolean; ultimulId: string | null }> {
+  /*
+   * Se citeste PE FERESTRE, nu cu `.limit(2000)`.
+   *
+   * PostgREST taie la 1000 de randuri, tacut. Peste atat, „Sincronizează tot"
+   * sincroniza o mie si raporta succes — deci comerciantul credea ca a trimis tot
+   * catalogul. Fereastra are nevoie de o ordine stabila, altfel paginile se pot
+   * suprapune sau sari.
+   */
+  const PAS = 1000;
+  const PLAFON = 20000;
+  const brute: string[] = [];
+  /*
+   * „Am trimis tot" trebuie sa fie ADEVARAT.
+   *
+   * Cele doua ieșiri de mai jos — o pagina cazuta si atingerea plafonului — dadeau
+   * o lista trunchiata pe care apelantul o raporta ca succes. Exact tiparul „taiere
+   * tacuta care se citeste ca acoperire completa".
+   */
+  let incomplet = false;
+  for (let de = 0; de < PLAFON; de += PAS) {
+    let q = supabase.from("aboutyou_listings").select("product_id")
+      .eq("business_id", businessId).not("product_id", "is", null);
+    /*
+     * ⚠ RELUAREA E EXACTA, nu aproximativa: ordinea e `product_id` crescator, deci „mai mare decat
+     * ultimul dus la capat" nu poate nici sari, nici repeta. Un `offset` ar fi alunecat la fiecare
+     * listare noua sau stearsa intre treceri.
+     */
+    if (dupa) q = q.gt("product_id", dupa);
+    if (statusFilter) q = q.eq("status", statusFilter);
+    // Publicarea are nevoie de un product master pe About You, iar acela exista
+    // doar dupa ce produsul a plecat efectiv. Aceeasi proba o foloseste si
+    // `stergeListare`: `last_synced_at` se scrie o singura data si nu se retrage.
+    if (doarTrimise) q = q.not("last_synced_at", "is", null);
+    const { data, error } = await q.order("product_id", { ascending: true }).range(de, de + PAS - 1);
+    if (error) {
+      logError({ action: "aboutyou.enqueueForListings", message: error.message, details: { businessId, op, de }, businessId });
+      incomplet = true;
+      break;
+    }
+    const lot = data ?? [];
+    brute.push(...(lot.map((l) => l.product_id).filter(Boolean) as string[]));
+    if (lot.length < PAS) break;            // ultima pagina, lista e completa
+    if (de + PAS >= PLAFON) incomplet = true; // plafon atins cu o pagina PLINA
+  }
+  const ids = [...new Set(brute)];
+  /*
+   * ⚠ ULTIMUL DUS LA CAPAT, nu ultimul CITIT: daca scrierea se opreste la mijloc, reluarea
+   * trebuie sa porneasca de la ce a intrat cu adevarat in coada. Se tine minte pe masura ce se
+   * scrie, nu la sfarsit.
+   */
+  if (ids.length === 0) return { n: 0, incomplet, ultimulId: dupa ?? null };
   const admin = createAdminClient();
   const rows = ids.map((id) => ({ business_id: businessId, product_id: id, offer_id: id, op }));
   for (let i = 0; i < rows.length; i += 1000) {
-    await admin.from("aboutyou_sync_queue").upsert(rows.slice(i, i + 1000) as never, { onConflict: "business_id,offer_id,op" });
+    const bucata = rows.slice(i, i + 1000);
+    const { error } = await admin.from("aboutyou_sync_queue")
+      .upsert(bucata as never, { onConflict: "business_id,offer_id,op" });
+    if (error) {
+      logError({ action: "aboutyou.enqueueForListings", message: error.message, details: { businessId, op }, businessId });
+      /* Ce s-a scris pana aici e bun; reluarea porneste de dupa ultimul lot dus la capat. */
+      return { n: i, incomplet: true, ultimulId: i > 0 ? ids[i - 1] : (dupa ?? null) };
+    }
   }
-  return rows.length;
+  return { n: rows.length, incomplet, ultimulId: ids[ids.length - 1] };
 }
 
+/*
+ * ═══ ⚠ „SINCRONIZEAZA TOT" SI „PUBLICA TOATE" AVEAU UN PLAFON TERMINAL (27.08.2026, noaptea) ═══
+ *
+ * Amandoua se sprijineau pe `enqueueForListings`, care se opreste la 20.000 de produse si intoarce
+ * `incomplet`. Ecranul spunea „am pus N la coada", si atat: la 30.000 de produse, ultimele 10.000
+ * nu intrau NICIODATA. Iar o noua apasare pornea de la inceput, deci exact ele n-ar fi plecat
+ * vreodata — infometare, nu intarziere.
+ *
+ * ⚠ ACUM PLAFONUL E DOAR AL UNEI TRECERI. Lucrarea se deschide INAINTE de prima transa si tine
+ * minte unde a ajuns; cronul o continua pana la capat, cu acelasi cursor exact. „Toate" inseamna
+ * toate, chiar daca ia mai multe minute.
+ */
+
 // Re-send every enriched listing to About You (create/update).
-export async function syncAllAboutYou(businessId: string): Promise<{ queued: number } | { error: string }> {
+export async function syncAllAboutYou(businessId: string): Promise<{ queued: number; incomplet: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const queued = await enqueueForListings(g.supabase, businessId, "upsert");
+  const lucrare = await deschideLucrarea(businessId, "upsert");
+  /* ⚠ Fara lucrare, nimic n-ar relua ce nu incape acum: mai bine o eroare limpede decat „Salvat". */
+  if (!lucrare) return { error: "Nu am putut porni sincronizarea. Încearcă din nou." };
+  const r = await enqueueForListings(g.supabase, businessId, "upsert", undefined, undefined, lucrare.dupa);
+  await mutaLucrarea(lucrare, r);
   revalidatePath(FEATURE_PATH);
-  return { queued };
+  return { queued: r.n, incomplet: r.incomplet };
 }
 
 // Publish every listing that already exists on About You as a draft.
-export async function publishAllAboutYou(businessId: string): Promise<{ queued: number } | { error: string }> {
+export async function publishAllAboutYou(businessId: string): Promise<{ queued: number; incomplet: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
-  const queued = await enqueueForListings(g.supabase, businessId, "publish", "draft");
+  const lucrare = await deschideLucrarea(businessId, "publish", "draft", true);
+  if (!lucrare) return { error: "Nu am putut porni publicarea. Încearcă din nou." };
+  const r = await enqueueForListings(g.supabase, businessId, "publish", "draft", true, lucrare.dupa);
+  await mutaLucrarea(lucrare, r);
   revalidatePath(FEATURE_PATH);
-  return { queued };
+  return { queued: r.n, incomplet: r.incomplet };
 }

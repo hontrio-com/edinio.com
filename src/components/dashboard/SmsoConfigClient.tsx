@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -25,7 +26,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
 
   function save() {
-    if (smso.enabled && !smso.api_key.trim()) { toast.error("Cheia API este obligatorie."); return; }
+    if (smso.enabled && (!smso.api_key.trim() && !secretulEsteSalvat(initialConfig, "api_key"))) { toast.error("Cheia API este obligatorie."); return; }
     if (smso.enabled && !smso.sender_id.trim()) { toast.error("Sender ID este obligatoriu."); return; }
     startSave(async () => {
       const result = await updateSmsoConfig(businessId, smso);
@@ -46,7 +47,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
       const res = await fetch("/api/sms/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: smso.api_key, sender_id: smso.sender_id, phone: testPhone }),
+        body: JSON.stringify({ businessId, api_key: smso.api_key, sender_id: smso.sender_id, phone: testPhone }),
       });
       const data = await res.json() as { success?: boolean; responseToken?: string; transaction_cost?: number; to?: string; error?: string };
       if (data.success) {
@@ -151,7 +152,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
                 type="password"
                 value={smso.api_key}
                 onChange={e => setSmso(s => ({ ...s, api_key: e.target.value }))}
-                placeholder="Cheia ta API de la app.smso.ro"
+                placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : ""}
               />
             </div>
             <div>
@@ -192,7 +193,7 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
         </Panel>
 
         {/* Test SMS */}
-        {smso.api_key && smso.sender_id && (
+        {(smso.api_key || secretulEsteSalvat(initialConfig, "api_key")) && smso.sender_id && (
           <Panel className="space-y-4 p-5">
             <div>
               <p className="text-sm font-semibold text-foreground">Testeaza integrarea</p>

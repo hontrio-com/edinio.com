@@ -1,12 +1,23 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { CustomersClient } from "@/components/dashboard/CustomersClient";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CUSTOMERS_PAGE_SIZE, escapeLike, firstParam, pageParam } from "@/lib/orders/pagination";
 import type { Customer, CustomersSummary } from "@/lib/customers";
 
 const SORT_KEYS = new Set(["recent", "spent", "orders", "name"]);
 
+/**
+ * Cadrul pleaca imediat; clientii curg dupa el.
+ *
+ * `customers_aggregate` si `customers_summary` parcurg TOT istoricul de comenzi
+ * ca sa scoata o pagina de clienti — la magazinele cu vechime sunt cele mai
+ * lente doua apeluri din panou. Ce e ieftin (utilizatorul si magazinul lui) se
+ * afla insa dintr-o singura interogare, deci sub `<Suspense>` intra doar
+ * rezultatul agregarii.
+ */
 export default async function CustomersPage({
   searchParams,
 }: {
@@ -32,18 +43,63 @@ export default async function CustomersPage({
 
   if (!bizRow) redirect("/dashboard");
 
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <Suspense fallback={<ScheletClienti />}>
+        <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} />
+      </Suspense>
+    </div>
+  );
+}
+
+function ScheletClienti() {
+  return (
+    <>
+      <div className="space-y-2 mb-5">
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-4 w-48" />
+      </div>
+      {/* cele patru casete de sumar, apoi cautarea, apoi tabelul */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-10 w-full rounded-xl mb-4" />
+      <div className="space-y-px">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-16 rounded-none" />
+        ))}
+      </div>
+    </>
+  );
+}
+
+async function ListaClienti({
+  businessId,
+  q,
+  sort,
+  page,
+}: {
+  businessId: string;
+  q: string;
+  sort: string;
+  page: number;
+}) {
+  const supabase = await createClient();
+
   // Clientii sunt agregati, cautati si paginati in Postgres (functiile
   // customers_aggregate / customers_summary, sub RLS) — corect la orice numar
   // de comenzi; pagina primeste doar cei CUSTOMERS_PAGE_SIZE clienti afisati.
   const [{ data: custRows }, { data: summaryRows }] = await Promise.all([
     supabase.rpc("customers_aggregate", {
-      bid: bizRow.id,
+      bid: businessId,
       search: q ? escapeLike(q) : undefined,
       sort_key: sort,
       page_limit: CUSTOMERS_PAGE_SIZE,
       page_offset: (page - 1) * CUSTOMERS_PAGE_SIZE,
     }),
-    supabase.rpc("customers_summary", { bid: bizRow.id }),
+    supabase.rpc("customers_summary", { bid: businessId }),
   ]);
 
   const customers: Customer[] = (custRows ?? []).map((r) => ({
@@ -73,16 +129,14 @@ export default async function CustomersPage({
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <CustomersClient
-        customers={customers}
-        summary={summary}
-        totalCount={totalCount}
-        page={page}
-        searchQuery={q}
-        sort={sort}
-        businessId={bizRow.id}
-      />
-    </div>
+    <CustomersClient
+      customers={customers}
+      summary={summary}
+      totalCount={totalCount}
+      page={page}
+      searchQuery={q}
+      sort={sort}
+      businessId={businessId}
+    />
   );
 }

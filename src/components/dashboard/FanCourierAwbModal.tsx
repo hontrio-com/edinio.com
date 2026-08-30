@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createFanCourierAwbAction, deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
+import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -57,7 +59,9 @@ export function FanCourierAwbModal({
     addr?.delivery_type === "locker" &&
     !!addr?.locker_id;
 
-  const [weight, setWeight] = useState("1");
+  // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
+  // `useGreutateaAwb`.
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
   const [parcels, setParcels] = useState("1");
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
@@ -88,15 +92,11 @@ export function FanCourierAwbModal({
     ? (codNum > 0 ? "FANbox Cont Colector" : "FANbox")
     : (codNum > 0 ? "Cont Colector" : "Standard");
 
+  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
+  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
   useEffect(() => {
-    if (open && !hasAwb) {
-      if (order.payment_method === "cash_on_delivery") {
-        setCod(String(Number(order.total).toFixed(2)));
-      } else {
-        setCod("0");
-      }
-    }
-  }, [open, hasAwb, order.payment_method, order.total]);
+    if (open && !hasAwb) setCod(rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2));
+  }, [open, hasAwb, order.payment_status, order.total]);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
@@ -367,6 +367,7 @@ export function FanCourierAwbModal({
                         onChange={e => setWeight(e.target.value)}
                         className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                       />
+                      {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Nr. colete</label>

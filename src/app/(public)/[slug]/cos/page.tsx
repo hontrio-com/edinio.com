@@ -7,10 +7,12 @@ import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { cartOnPage, checkoutOnPage } from "@/lib/storefront/design/commerce";
+import { cuSemnePastrate, sirDinSp } from "@/lib/storefront/preview-sticky";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CartPageClient } from "@/components/storefront/sections/cart/CartPageClient";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 
 /**
  * Pagina de cos.
@@ -26,6 +28,14 @@ import { CartPageClient } from "@/components/storefront/sections/cart/CartPageCl
 
 interface Props {
   params: Promise<{ slug: string }>;
+  /**
+   * Citit doar ca redirectarile de mai jos sa poata pastra semnele de
+   * previzualizare. Fara ele, comerciantul care se uita la cos din editor era
+   * trimis pe pagina principala FARA `preview=1` — iar pe domeniu propriu asta
+   * inseamna o redirectare cross-origin pe care `X-Frame-Options` o refuza, deci
+   * cadrul ramanea alb.
+   */
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -42,8 +52,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function CosPage({ params }: Props) {
+export default async function CosPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const sp = await searchParams;
 
   const supabase = await createClient();
   const [{ data: business }, { data: { user } }] = await Promise.all([
@@ -62,7 +73,9 @@ export default async function CosPage({ params }: Props) {
   const [{ data: storeSettings }] = await Promise.all([
     admin
       .from("store_settings")
-      .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
+      // Coloanele de TVA: fara ele, cosul arata un total din care lipsea taxa la
+      // magazinele cu preturi fara TVA, iar la finalizare aparea alt numar.
+      .select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
       .eq("business_id", business.id)
       .single(),
   ]);
@@ -83,7 +96,7 @@ export default async function CosPage({ params }: Props) {
 
   // Magazinul e pe sertar: aici n-are ce cauta nimeni. Redirect, nu 404 — un
   // link vechi catre cos trebuie sa duca la magazin, nu intr-o pagina de eroare.
-  if (!cartOnPage(resolved.design)) redirect(radacinaMagazin(basePath));
+  if (!cartOnPage(resolved.design)) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
 
   // Magazin suspendat sau abonament expirat. Pagina de magazin arata deja
   // „suspendat", dar de AICI se putea comanda mai departe, cu cosul din
@@ -102,7 +115,7 @@ export default async function CosPage({ params }: Props) {
         suspendat = new Date(ownerProfile.plan_expires_at) < new Date();
       }
     }
-    if (suspendat) redirect(radacinaMagazin(basePath));
+    if (suspendat) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
   }
 
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
@@ -130,8 +143,14 @@ export default async function CosPage({ params }: Props) {
             basePath={basePath}
             businessId={business.id}
             shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
-            freeShippingThreshold={storeSettings?.free_shipping_threshold ? Number(storeSettings.free_shipping_threshold) : null}
+            freeShippingThreshold={pragTransportGratuit(storeSettings?.free_shipping_threshold)}
             minOrderAmount={storeSettings?.min_order_amount ? Number(storeSettings.min_order_amount) : null}
+            vat={{
+              vat_enabled: storeSettings?.vat_enabled ?? false,
+              vat_rate: Number(storeSettings?.vat_rate ?? 19),
+              prices_include_vat: storeSettings?.prices_include_vat ?? true,
+              show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+            }}
             comandaPePagina={checkoutOnPage(resolved.design)}
             emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
           />

@@ -32,6 +32,9 @@ test("layout-ul classic da un singur main, dupa sectiunile pe latime completa", 
       store_benefits_section: { enabled: true },
       reviews_section: { enabled: true },
     },
+    /* Contactul e singurul oprit implicit, deci aici trebuie cerut explicit ca
+       „toate pornite" sa insemne chiar toate. */
+    features: { show_contact: true },
   });
   assert.deepEqual(forma(d.home), [
     "full:hero",

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getSamedayAwbLabel, type SamedayConfig } from "@/lib/sameday";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getSamedayAwbLabel, type SamedayConfig } from "@/lib/sameday/client";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -20,8 +21,13 @@ export async function GET(req: NextRequest) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
 
+  // Configul se citeste cu service role: vederea public.store_settings nu mai
+  // decripteaza pentru `authenticated`, iar cu parola `enc.v1.…` Sameday nu ar mai
+  // da eticheta. Service role OCOLESTE RLS — proprietatea magazinului e
+  // verificata chiar deasupra.
+  const admin = createAdminClient();
   const [{ data: settings }, { data: order }] = await Promise.all([
-    supabase.from("store_settings").select("sameday_config").eq("business_id", businessId).single(),
+    admin.from("store_settings").select("sameday_config").eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
   ]);
 

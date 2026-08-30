@@ -3,8 +3,37 @@
 import { useState, useEffect, useTransition } from "react";
 import { X, Loader2, Package, Truck, ChevronRight, Download, AlertCircle, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations, getWootReceiverLocations } from "@/lib/actions/woot.actions";
 import type { WootPriceResult, WootParcel, WootCounty, WootCity, WootLocation } from "@/lib/woot";
+import { stripDiacritics } from "@/lib/utils/ro-address";
+
+/**
+ * Potrivire de localitate intre comanda si nomenclatorul Woot.
+ *
+ * Compararea de dinainte era `a.toLowerCase().includes(b.toLowerCase())` pe text
+ * BRUT, si pica pe doua lucruri deodata:
+ *
+ *  1. diacriticele — comanda are "Comanesti" scris cu ș U+0219 (virgula
+ *     dedesubt), iar nomenclatoarele romanesti folosesc adesea ş U+015F
+ *     (sedila). Sunt caractere DIFERITE, deci `includes` da false in ambele
+ *     sensuri si orasul nu se preselecta;
+ *  2. `includes` in sine — "Bacau" se potrivea si cu "Bacau Nou".
+ *
+ * Acum: fara diacritice (helperul trateaza si ș, si ş), potrivire EXACTA intai,
+ * si abia daca nu exista una exacta acceptam un prefix.
+ */
+function potrivesteLocalitate<T extends { id: number; name: string }>(
+  lista: T[],
+  numeDinComanda: string,
+): T | undefined {
+  const cautat = stripDiacritics(numeDinComanda).trim().toLowerCase();
+  if (!cautat) return undefined;
+  const norm = (v: string) => stripDiacritics(v).trim().toLowerCase();
+  return lista.find((x) => norm(x.name) === cautat)
+      ?? lista.find((x) => norm(x.name).startsWith(cautat) || cautat.startsWith(norm(x.name)));
+}
+import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -31,7 +60,9 @@ const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2
 
 export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
-  const isCod = (order.payment_method ?? "") === "cash_on_delivery" && order.payment_status === "unpaid";
+  // Ramburs dupa BANI, nu dupa metoda: comanda #0033 a plecat cu plata online
+  // neincasata si ramburs zero. Vezi `rambursDeIncasat`.
+  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
 
   // Receiver state
   const [counties, setCounties] = useState<WootCounty[]>([]);
@@ -45,12 +76,11 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
 
   // Parcel state
   const [parcelType, setParcelType] = useState<"package" | "envelope">("package");
-  const [weight, setWeight] = useState("1");
   const [length, setLength] = useState("30");
   const [width, setWidth] = useState("20");
   const [height, setHeight] = useState("10");
   const [content, setContent] = useState("Produse comerciale");
-  const [repayment, setRepayment] = useState(isCod ? String(Math.round(Number(order.total))) : "0");
+  const [repayment, setRepayment] = useState(String(Math.round(ramburs)));
   const [opdEnabled, setOpdEnabled] = useState(false);
   const [satEnabled, setSatEnabled] = useState(false);
 
@@ -77,6 +107,21 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [cancelling, startCancel] = useTransition();
 
   const hasAwb = !!order.woot_awb_number;
+
+  // Greutatea vine din produsele comenzii, nu de la un kilogram fix. La Woot
+  // atarna de ea si lista de preturi de mai jos, nu doar eticheta: se cereau
+  // tarife pentru un kilogram si se expedia coletul adevarat.
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
+
+  // Formularul se monteaza odata cu pagina, nu la deschidere, deci suma nu are voie
+  // sa ramana cea calculata la incarcare: dupa ce comerciantul marcheaza comanda
+  // platita, campul ar fi pastrat vechiul ramburs si l-ar fi trimis pe colet.
+  // Dependinte primitive, ca o simpla reimprospatare a paginii sa nu stearga suma
+  // scrisa cu mana.
+  useEffect(() => {
+    if (open && !hasAwb) setRepayment(String(Math.round(ramburs)));
+  }, [open, hasAwb, ramburs]);
+
   // A service whose pickup isn't "door" needs the sender to hand the parcel over
   // at a Woot location, so it requires a sender location_id.
   const needsSenderLocation = !!selectedService?.service_pickup && selectedService.service_pickup !== "door";
@@ -92,11 +137,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
       .then((data: WootCounty[]) => {
         setCounties(data);
         // Auto-match county by name
-        const orderCounty = addr.county ?? "";
-        const match = data.find(c =>
-          c.name.toLowerCase().includes(orderCounty.toLowerCase()) ||
-          orderCounty.toLowerCase().includes(c.name.toLowerCase())
-        );
+        const match = potrivesteLocalitate(data, addr.county ?? "");
         if (match) setCountyId(match.id);
       })
       .catch(() => {});
@@ -112,11 +153,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
         setCities(data);
         setLoadingCities(false);
         // Auto-match city
-        const orderCity = addr.city ?? "";
-        const match = data.find(c =>
-          c.name.toLowerCase().includes(orderCity.toLowerCase()) ||
-          orderCity.toLowerCase().includes(c.name.toLowerCase())
-        );
+        const match = potrivesteLocalitate(data, addr.city ?? "");
         if (match) setCityId(match.id);
       })
       .catch(() => setLoadingCities(false));
@@ -411,6 +448,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                             onChange={e => setter(e.target.value)} className={inputCls} />
                         </div>
                       ))}
+                      {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="col-span-4 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                     </div>
                   )}
 
@@ -422,7 +460,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
-                        Ramburs (RON) {!isCod && <span className="text-muted-foreground/60">— plata online</span>}
+                        Ramburs (RON) {ramburs === 0 && <span className="text-muted-foreground/60">— comanda platita</span>}
                       </label>
                       <input type="number" min="0" step="0.01" value={repayment}
                         onChange={e => setRepayment(e.target.value)} className={inputCls} />

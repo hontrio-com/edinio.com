@@ -80,7 +80,7 @@ export function NoticeWhatsappPanel({
   async function refreshQr() {
     if (!deviceId) return;
     setBusy(true);
-    const res = await refreshNoticeWhatsappQr(token, deviceId);
+    const res = await refreshNoticeWhatsappQr(businessId, token, deviceId);
     setBusy(false);
     if ("error" in res) { toast.error(res.error); return; }
     setQr(res.qr_code);
@@ -90,7 +90,7 @@ export function NoticeWhatsappPanel({
     if (!deviceId) return;
     if (!waPhone.trim()) { toast.error("Introdu numarul de WhatsApp."); return; }
     setPairingBusy(true);
-    const res = await requestNoticeWhatsappPairing(token, deviceId, waPhone);
+    const res = await requestNoticeWhatsappPairing(businessId, token, deviceId, waPhone);
     setPairingBusy(false);
     if ("error" in res) { toast.error(res.error); return; }
     setPairing(res.pairing_code);

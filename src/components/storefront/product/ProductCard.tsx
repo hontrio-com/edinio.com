@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import { Check, Layers, Package, ShoppingCart } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
-import { getProductPriceRange } from "@/lib/utils/product-price";
 import { parseVariants } from "@/lib/storefront/variants";
 import { gtagEvent } from "@/lib/marketing";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
@@ -27,6 +26,22 @@ export interface ProductCardProps {
   newBadgeDays: number;
   outOfStock?: boolean;
   showCategoryBadge?: boolean;
+  /**
+   * Cardul e in primul ecran, deci imaginea lui se incarca nerabdator.
+   *
+   * NU inseamna „preincarca". Pana in Next 16 asta se scria `priority`, care
+   * insereaza un `<link rel=preload>` in `<head>`; documentatia lui il si
+   * depreciaza acum in favoarea lui `preload`, tocmai ca sa se vada ce face.
+   * Pentru carduri e gresit din doua motive scrise chiar acolo: preincarcarea e
+   * pentru UN element LCP, nu pentru patru candidati care depind de latimea
+   * ecranului (pe telefon se vad doua din patru), iar in `<head>` acele cereri
+   * pleaca inaintea bannerului si ii iau banda.
+   *
+   * Ce ramane e `loading="eager"` plus `fetchPriority="high"` — exact ce
+   * recomanda documentatia in locul preincarcarii: browserul le cere de indata
+   * ce parseaza eticheta, adica oricum devreme pentru primul rand, dar dupa ce
+   * a vazut bannerul.
+   */
   priority?: boolean;
   priceLowestOnly?: boolean;
 }
@@ -59,19 +74,29 @@ export function ProductCard({
   const [reper] = useState(() => Date.now());
   const isNew = newBadgeDays > 0 && reper - new Date(product.created_at).getTime() < newBadgeDays * 86400000;
   // Produs variabil cu preturi diferite -> afiseaza interval („De la X – Y") sau doar minimul.
-  // Precalculat server-side cand payload-ul e slimuit; fallback pe derivarea
-  // locala pentru apelanti care trimit page_sections complet.
-  const priceRange = product.price_range ?? getProductPriceRange(Number(product.price), product.page_sections);
+  // Calculat pe SERVER: payload-ul slim arunca combinatiile, deci o derivare
+  // locala ar raspunde „niciun pret de vanzare" pentru fiecare produs variabil.
+  const priceRange = product.price_range;
   const showPriceRange = priceRange.hasRange && !priceLowestOnly;
-  const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > Number(product.price);
+  // Reducerea se raporteaza la pretul AFISAT, nu la cel de baza: pe un produs
+  // variabil cu baza 175 si toate marimile 203, cardul scria „203 lei" taiat cu
+  // „200 lei" si o insigna de -12% care nu exista.
+  const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > priceRange.min;
   const discountPct = hasDiscount
-    ? Math.round((1 - Number(product.price) / Number(product.compare_at_price)) * 100)
+    ? Math.round((1 - priceRange.min / Number(product.compare_at_price)) * 100)
     : 0;
-  const isOutOfStock = outOfStock ?? (product.track_inventory && product.stock_quantity === 0);
+  // `faraOferta` NU intra aici: randatorul trimite mereu `outOfStock`, deci ramura
+  // n-ar rula niciodata, iar mutata in `isProductOutOfStock` ar stinge cele 12
+  // produse demonstrative din catalogul de design-uri (au `variants.enabled` fara
+  // nicio combinatie). Steagul e citit acolo unde chiar conteaza: datele
+  // structurate.
+  // Rezerva era a SAPTEA formulare a intrebarii, si nu stia de pachete. Acum
+  // cade pe steagul venit de la server, care le stie.
+  const isOutOfStock = outOfStock ?? product.fara_stoc;
   // Produs variabil: cardul deschide selectorul de optiuni in loc sa adauge direct.
   const isVariable = parseVariants(product.page_sections) !== null;
 
-  const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
+  const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: priceRange.min, quantity: 1 }] });
   // Slug-ul poate lipsi (coloana e nullable, iar importurile o lasa goala). Ruta
   // de produs rezolva si UUID-uri, deci pe id-ul produsului linkul ramane valid
   // in loc sa duca la /product/null.
@@ -86,7 +111,8 @@ export function ProductCard({
               src={imageUrl}
               alt={product.name}
               fill
-              priority={priority}
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : undefined}
               sizes={SIZES_IMAGINE}
               className="object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
             />

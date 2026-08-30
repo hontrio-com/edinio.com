@@ -292,12 +292,74 @@ export function ipayActionMessage(actionCode: number | undefined): string {
 }
 
 /**
- * Build a unique, iPay-safe orderNumber from the Edinio order number.
- * iPay requires a NEW orderNumber per attempt; non-alphanumerics (incl. the
- * forbidden % + \r \n) are stripped, then a short unique suffix is appended.
+ * `orderNumber`-ul iPay: DETERMINIST si ENUMERABIL.
+ *
+ * ═══ CE ERA GRESIT, SI DE CE CONTEAZA ═══
+ *
+ * Forma dinainte lipea `Date.now().toString(36) + Math.random()`, iar rezultatul
+ * nu se salva nicaieri. Asta anula AMANDOUA jumatatile pe care BT le ofera gratis:
+ *
+ *   1. Banca DEDUPLICA dupa `orderNumber` — `register.do` raspunde errorCode 1,
+ *      „Order with this number was already processed". Cu un sufix din ceas,
+ *      fiecare apasare producea alt numar, deci alta plata.
+ *   2. Banca permite INTEROGAREA dupa el — `getOrderStatusExtended.do` accepta
+ *      `orderNumber` in locul lui `orderId`. Nesalvat, numarul trimis la banca
+ *      disparea definitiv din univers: nici reconstruit, nici cautat.
+ *
+ * Consecinta exacta pentru clasa de defect: daca scrierea lui `ipay_order_id` pica
+ * dupa `register.do`, plata exista la banca si NIMIC nu o mai poate gasi — cronul
+ * `ipay-reconcile` filtreaza chiar pe `ipay_order_id` nenul.
+ *
+ * ═══ FORMA ═══
+ *
+ * `<numarComanda>-<incercare>`, exact ce recomanda documentatia BT (extras:
+ * „nrFactură-0, nrFactură-1, nrFactură-2"). Enumerabila: reconcilierea poate cauta
+ * orbeste `-0`, `-1`, `-2` fara sa fi salvat nimic dupa apel.
+ *
+ * ⚠ Incercarea TREBUIE sa creasca: iPay cere un numar NOU per tentativa, iar o
+ * plata expirata sau abandonata ar bloca-o pe urmatoarea cu errorCode 1. De aceea
+ * apelantul o citeste din `orders.ipay_order_number` si o incrementeaza.
+ *
+ * Caracterele nealfanumerice (inclusiv `%`, `+`, `\r`, `\n`, interzise de iPay)
+ * se scot din baza; cratima dinaintea incercarii e sigura si e chiar cea din
+ * exemplul bancii.
  */
-export function ipayOrderNumber(base: string): string {
+export function ipayOrderNumber(base: string, incercare = 0, businessId = ""): string {
   const alnum = (base || "").replace(/[^A-Za-z0-9]/g, "") || "ORD";
-  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 4);
-  return `${alnum}x${suffix}`.slice(0, 99);
+  const n = Number.isFinite(incercare) && incercare > 0 ? Math.floor(incercare) : 0;
+
+  /*
+   * ⚠ `order_number` e unic doar PER MAGAZIN.
+   *
+   * `orders_order_number_business_unique UNIQUE (business_id, order_number)`, iar
+   * contorul reporneste de la #0001 la fiecare magazin nou. Banca deduplica insa pe
+   * CONTUL DE COMERCIANT — iar doi proprietari de magazine pot foarte bine sa fi
+   * configurat acelasi cont iPay pe amandoua. Atunci comanda #0001 din magazinul A
+   * si #0001 din B ar trimite acelasi `orderNumber`, iar a doua ar fi respinsa cu
+   * errorCode 1: „Order with this number was already processed."
+   *
+   * Patru caractere din `businessId` (UUID) despart magazinele fara sa manance din
+   * bugetul de mai jos.
+   */
+  const magazin = businessId.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase();
+
+  /*
+   * ⚠ LIMITA BANCII E 32, nu 99.
+   *
+   * Documentatia BT da `orderNumber String(32)` (si la register.do, si la
+   * getOrderStatusExtended.do). Forma dinainte taia la 99 — mergea in practica doar
+   * fiindca numerele de comanda sunt scurte.
+   *
+   * Se taie BAZA, nu intregul: discriminantul de magazin si numarul incercarii
+   * trebuie sa supravietuiasca, altfel doua tentative ar ajunge la acelasi numar
+   * dupa taiere — exact ce trebuie sa nu se intample.
+   */
+  const coada = `${magazin ? `-${magazin}` : ""}-${n}`;
+  return `${alnum.slice(0, Math.max(1, 32 - coada.length))}${coada}`;
+}
+
+/** Ce incercare urmeaza, citind numarul folosit ultima data. Prima e 0. */
+export function urmatoareaIncercareIpay(ultimul: string | null | undefined): number {
+  const m = /-(\d+)$/.exec(String(ultimul ?? ""));
+  return m ? Number(m[1]) + 1 : 0;
 }

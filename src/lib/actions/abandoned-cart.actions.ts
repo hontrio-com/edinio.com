@@ -1,8 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
@@ -11,13 +16,32 @@ import { sendAbandonedCartRecovery } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
-import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 
 type CartRow = Database["public"]["Tables"]["abandoned_carts"]["Row"];
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/*
+ * Plafonul pe magazin nu mai e un refuz complet tacut: cand se atinge,
+ * comerciantul chiar pierde cosuri reale (si emailurile de recuperare care ar fi
+ * plecat din ele), deci trebuie sa ramana o urma undeva.
+ *
+ * Cel mult o alerta pe ora pe magazin — contorul durabil folosit pe dos, ca
+ * `error_logs` sa nu se umple exact in timpul abuzului pe care il semnaleaza.
+ */
+async function alertaPlafonCosuri(businessId: string, cosuriRecente: number): Promise<void> {
+  if (!(await consumaLimita(`alerta:cart:${businessId}`, 1, 3600)).permis) return;
+  await logError({
+    action: "trackAbandonedCart.plafonMagazin",
+    message: "Plafonul de cosuri noi pe magazin a fost atins; sesiunile noi nu se mai inregistreaza",
+    details: { businessId, cosuriRecente },
+    businessId,
+    severity: "warning",
+  });
 }
 
 // ── Capture (storefront, anonymous customers — admin client) ───────────────────
@@ -43,9 +67,21 @@ export async function trackAbandonedCart(input: {
     const hasContact = (!!email && email.includes("@")) || (!!phone && phone.replace(/\D/g, "").length >= 6);
     if (!hasContact) return;
 
+    // LIMITARE. Actiunea asta e un endpoint PUBLIC (export dintr-un modul
+    // "use server", importat de componente client, deci ID-ul ei e in bundle-ul
+    // public al fiecarui magazin) care scrie cu service role si al carei rezultat
+    // este alimentat mai tarziu cronului de recuperare: emailuri si SMS-uri
+    // trimise pe banii comerciantului, catre adrese si numere alese de apelant.
+    // Fara plafon, oricine putea folosi orice magazin ca sursa de spam.
+    const ip = clientIpFromHeaders(await headers());
+    if (!rateLimit(`trackCart:${ip}`, 10, 60_000)) return;
+    const lim = await consumaLimita(`cart:ip:${ip}`, 30, 3600);
+    if (!lim.permis) return;
+
     const admin = createAdminClient();
 
-    // Respect the per-store opt-in flag.
+    // Respect the per-store opt-in flag. Citit primul: pe magazinele fara optiunea
+    // activa (implicit toate) nu are rost nici numaratoarea de mai jos.
     const { data: settings } = await admin
       .from("store_settings").select("abandoned_cart_enabled").eq("business_id", input.businessId).single();
     if (!settings?.abandoned_cart_enabled) return;
@@ -56,8 +92,41 @@ export async function trackAbandonedCart(input: {
       .eq("business_id", input.businessId).eq("session_id", input.sessionId).maybeSingle();
     if (existing?.status === "converted") return;
 
-    const subtotal = round2(items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0));
-    const itemCount = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+    /*
+     * Plafon si PER MAGAZIN, ca o retea de IP-uri sa nu poata umple cosurile unui
+     * magazin anume (acelasi tipar ca in submitPageForm) — dar numai pe randurile
+     * NOI, si abia dupa ce stim ca sesiunea chiar e noua.
+     *
+     * Se aplica pana acum pe TOATE scrierile si respingea tacut orice cos peste
+     * 200 pe ora. Contorul e comun tuturor cumparatorilor, iar limita pe IP e de
+     * 30/ora, deci sapte IP-uri il umpleau; din acel moment cosurile
+     * cumparatorilor REALI nu se mai inregistrau deloc. Fara rand, cronul de
+     * recuperare nu vede nimic si emailurile de recuperare nu mai pleaca: venit
+     * pierdut pentru comerciant, invizibil, provocat de un tert.
+     *
+     * Cine revine pe o sesiune care ARE deja rand trece mai departe: acolo
+     * upsertul nu creeaza nimic, deci nu exista ce inunda.
+     */
+    if (!existing) {
+      const deLa = new Date(Date.now() - 3_600_000).toISOString();
+      const { count: cosuriRecente } = await admin
+        .from("abandoned_carts")
+        .select("id", { count: "exact", head: true })
+        .eq("business_id", input.businessId)
+        .gte("created_at", deLa);
+      if ((cosuriRecente ?? 0) >= 200) {
+        await alertaPlafonCosuri(input.businessId, cosuriRecente ?? 0);
+        return;
+      }
+    }
+
+    // Cantitatea se normalizeaza si aici, desi cosul o normalizeaza deja: actiunea
+    // e endpoint public si scrie cu client de admin. `item_count` e coloana
+    // INTEGER, deci o cantitate fractionara ar face upsertul sa cada, iar
+    // `catch`-ul de mai jos e gol — cosul s-ar pierde in tacere.
+    const cantitati = items.map((i) => normalizeazaCantitate(i.quantity));
+    const subtotal = round2(items.reduce((s, i, idx) => s + (Number(i.price) || 0) * cantitati[idx], 0));
+    const itemCount = cantitati.reduce((s, q) => s + q, 0);
     const now = new Date().toISOString();
 
     await admin.from("abandoned_carts").upsert(
@@ -68,7 +137,9 @@ export async function trackAbandonedCart(input: {
         customer_name: input.name?.trim() || null,
         email,
         phone,
-        items: items as never,
+        // Si jsonb-ul, nu doar coloanele: altfel randul se contrazice singur, iar
+        // „Top produse abandonate" si linkul de recuperare citesc tot din brut.
+        items: items.map((i, idx) => ({ ...i, quantity: cantitati[idx] })) as never,
         item_count: itemCount,
         subtotal,
         status: "open",
@@ -94,26 +165,15 @@ export async function getRecoverableCart(cartId: string): Promise<AbandonedCartI
     if (!cart || cart.status === "converted") return [];
 
     const stored = (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[];
-    const ids = stored.map((i) => i.product_id).filter(Boolean);
-    if (ids.length === 0) return [];
-
-    const { data: products } = await admin
-      .from("products").select("id, name, price, images, is_active")
-      .eq("business_id", cart.business_id).in("id", ids);
-    const pmap = new Map((products ?? []).map((p) => [p.id, p]));
-
-    const items: AbandonedCartItem[] = [];
-    for (const it of stored) {
-      const p = pmap.get(it.product_id);
-      if (!p || !p.is_active) continue;
-      items.push({
-        product_id: p.id,
-        name: p.name,
-        price: Number(p.price) || 0,
-        quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
-        image_url: (Array.isArray(p.images) && p.images.length ? (p.images[0] as string) : it.image_url) ?? null,
-      });
-    }
+    /*
+     * Repretuirea si regula „ce se poate recupera" stau acum in `abandoned-cart.ts`,
+     * fiindca linkul asta si cele doua emailuri de recuperare trebuie sa spuna
+     * exact acelasi lucru. Acolo sta si motivul pentru care produsele cu variante
+     * se sar: linia refacuta ar intra in cos fara marime, iar `restoreCart`
+     * SUPRASCRIE cosul, deci clientul ar ramane cu o comanda pe care n-o poate
+     * trimite si fara buton de stergere pe linie.
+     */
+    const { items } = await cosRecuperabil(admin, cart.business_id, stored);
     return items;
   } catch {
     return [];
@@ -329,6 +389,16 @@ export async function sendAbandonedCartEmail(
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.email) return { error: "Clientul nu a lasat un email." };
 
+  // Preturile din `cart.items` sunt cele inghetate in localStorage la captura,
+  // deci pot fi vechi de saptamani; se aduc la zi din catalog inainte sa plece
+  // spre client, prin acelasi calcul ca linkul de recuperare. Lookup-ul merge cu
+  // client de admin: dreptul asupra magazinului s-a verificat deja mai sus, iar
+  // asa raspunsul nu depinde de politicile RLS de pe `products`.
+  const proaspat = await cosRecuperabil(createAdminClient(), businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
+  if (proaspat.items.length === 0) {
+    return { error: "Produsele din acest cos nu mai sunt in catalog, sunt dezactivate sau au variante, deci linkul de recuperare ar duce clientul la un cos gol. Sterge cosul sau reactiveaza produsele." };
+  }
+
   try {
     const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
     const emailSender = await getStoreEmailSender(supabase, businessId);
@@ -336,8 +406,8 @@ export async function sendAbandonedCartEmail(
       storeName: biz.store_name ?? biz.business_name,
       recoverUrl: buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null),
       customerName: cart.customer_name,
-      items: (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[],
-      total: Number(cart.subtotal || 0),
+      items: proaspat.items,
+      total: proaspat.total,
       color: biz.primary_color ?? "#1AB554",
       message: message?.trim() ? interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name }) : undefined,
       discountCode: discountCode?.trim() || undefined,
@@ -374,7 +444,11 @@ export async function sendAbandonedCartSms(
     .eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data: settings } = await supabase
+  // Service role, dupa verificarea de proprietate de mai sus: pe clientul
+  // utilizatorului `smso_config.api_key` si `notice_config.api_token` ar veni ca
+  // siruri `enc.v1.…` (`privat.decripteaza_config` nu decripteaza pentru
+  // `authenticated`), iar furnizorul ar refuza fiecare SMS de recuperare.
+  const { data: settings } = await createAdminClient()
     .from("store_settings").select("smso_config, notice_config").eq("business_id", businessId).single();
   const smso = settings?.smso_config as SmsoConfig | null;
   const notice = settings?.notice_config as NoticeConfig | null;

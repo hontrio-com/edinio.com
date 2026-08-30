@@ -129,7 +129,7 @@ export interface RandPentruFatete {
   page_sections?: unknown;
 }
 
-interface PerecheBruta {
+export interface PerecheBruta {
   cheie: string;
   eticheta: string;
   grup: GrupFateta;
@@ -137,7 +137,7 @@ interface PerecheBruta {
 }
 
 /** Toate perechile (fateta, valoare) ale unui produs, inainte de filtrare. */
-function perechileProdusului(rand: RandPentruFatete): PerecheBruta[] {
+export function perechileProdusului(rand: RandPentruFatete): PerecheBruta[] {
   const out: PerecheBruta[] = [];
   const ps = (rand.page_sections ?? null) as {
     variants?: { enabled?: boolean; options?: unknown } | null;
@@ -219,6 +219,49 @@ function scoateDublurile(fatete: Fateta[]): Fateta[] {
  * fi calculate.
  */
 export function construiesteFatete(randuri: RandPentruFatete[]): IndexFatete {
+  return agregaFatete(randuri.map((r) => ({ id: r.id, perechi: perechileProdusului(r) })));
+}
+
+/**
+ * Reface o pereche din jetonul stocat in proiectie.
+ *
+ * `eticheta` si `grup` NU se stocheaza: sunt determinate de cheie, si le duplica
+ * degeaba pe fiecare rand. `a.Marime` e atributul „Marime", `s.Certificari` e
+ * specificatia „Certificari", `brand` si `tag` sunt fixe. Aceleasi prefixe pe care
+ * le scrie `perechileProdusului`, deci drumul e reversibil prin constructie.
+ */
+function perecheaDinJeton(j: string): PerecheBruta | null {
+  const { cheie, valoare } = despartaJeton(j);
+  if (!cheie || !valoare) return null;
+  if (cheie === CHEIE_BRAND) return { cheie, eticheta: "Brand", grup: "brand", valoare };
+  if (cheie === CHEIE_ETICHETA) return { cheie, eticheta: "Etichete", grup: "eticheta", valoare };
+  if (cheie.startsWith(PREFIX_ATRIBUT)) {
+    return { cheie, eticheta: cheie.slice(PREFIX_ATRIBUT.length), grup: "atribut", valoare };
+  }
+  if (cheie.startsWith(PREFIX_SPECIFICATIE)) {
+    return { cheie, eticheta: cheie.slice(PREFIX_SPECIFICATIE.length), grup: "specificatie", valoare };
+  }
+  return null;
+}
+
+/**
+ * Aceleasi fatete, dar din jetoanele deja calculate de proiector.
+ *
+ * Politica ramane NESCHIMBATA — praguri, deduplicare, ordonare — fiindca trece
+ * prin exact aceeasi agregare. Ce se schimba e doar de unde vin perechile: din
+ * `catalog_produs.fatete` in loc de `page_sections` brut. Asta e singurul motiv
+ * pentru care pagina de catalog nu mai are nevoie de randul intreg.
+ */
+export function construiesteFateteDinJetoane(
+  randuri: { id: string; fatete: string[] | null }[],
+): IndexFatete {
+  return agregaFatete(randuri.map((r) => ({
+    id: r.id,
+    perechi: (r.fatete ?? []).map(perecheaDinJeton).filter((p): p is PerecheBruta => p !== null),
+  })));
+}
+
+function agregaFatete(randuri: { id: string; perechi: PerecheBruta[] }[]): IndexFatete {
   // Un produs poate repeta aceeasi pereche (doua specificatii cu acelasi nume);
   // se numara o singura data, altfel „cate" ar minti.
   const perProdusBrut = new Map<string, Set<string>>();
@@ -227,7 +270,7 @@ export function construiesteFatete(randuri: RandPentruFatete[]): IndexFatete {
 
   for (const rand of randuri) {
     const alePerechii = new Set<string>();
-    for (const p of perechileProdusului(rand)) {
+    for (const p of rand.perechi) {
       const j = jeton(p.cheie, p.valoare);
       if (alePerechii.has(j)) continue;
       alePerechii.add(j);

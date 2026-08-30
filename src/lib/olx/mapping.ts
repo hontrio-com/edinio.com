@@ -5,7 +5,10 @@
 //  - capital letters must stay under 50% of the text
 // Violations get the advert rejected at POST time, so we sanitize proactively.
 
-import { OLX_CURRENCY, type OlxCategoryMapEntry, type OlxConfig } from "./types";
+import { gpsrEfectiv, gpsrPentruOlx, type GpsrConfig } from "@/lib/gpsr";
+import { adresaPublicaImagine } from "@/lib/trendyol/mapping";
+import { OLX_CURRENCY, type OlxAttributeDef, type OlxCategoryMapEntry, type OlxConfig } from "./types";
+import { rezolvaAtributele } from "./atribute";
 
 export interface MappableBusiness {
   slug: string;
@@ -26,6 +29,13 @@ export interface MappableProduct {
   is_active: boolean;
   track_inventory: boolean;
   stock_quantity: number | null;
+  /**
+   * Ce tine de produs si n-are coloana proprie: `google`, `dimensions`, `variants` — si `gpsr`.
+   *
+   * ⚠ Optional dinadims: sunt apelanti care construiesc `MappableProduct` din citiri mai vechi,
+   * fara campul asta. `gpsrDinProdus` citeste `unknown` fara sa presupuna nimic despre forma.
+   */
+  page_sections?: unknown;
 }
 
 export function isProductSellable(p: Pick<MappableProduct, "is_active" | "track_inventory" | "stock_quantity">): boolean {
@@ -111,11 +121,43 @@ export function toOlxAdvertBody(
   product: MappableProduct,
   config: OlxConfig,
   entry: OlxCategoryMapEntry,
+  /**
+   * Producatorul si persoana responsabila din UE, din setarile magazinului.
+   *
+   * ⚠ Se dau de sus, nu se citesc aici: `mapping.ts` n-are client de baza, iar o citire ascunsa
+   * intr-un constructor de sarcina utila ar fi o cerere la baza pentru fiecare produs dintr-o
+   * publicare in masa.
+   */
+  gpsrConfig?: GpsrConfig | null,
 ): Record<string, unknown> {
+  /*
+   * ⚠ `photos_limit = 0` CHIAR INSEAMNA ZERO (30.08.2026). `Math.max(1, …)` trimitea o poza si
+   * atunci — iar OLX are categorii cu limita zero si raspunde „Image limit exceeded". Adica
+   * publicarea pica intreaga, pentru o poza pe care noi am hotarat s-o trimitem oricum.
+   */
+  /*
+   * ⚠ ADRESA DE INCERCARI NU SE TRIMITE LA EI (02.09.2026). Trendyol, eMAG si About You trec
+   * fiecare adresa prin `adresaPublicaImagine`, care muta `pub-*.r2.dev` pe domeniul propriu; OLX
+   * le trimitea brut. Nota buna nu trecuse la integrarea urmatoare.
+   *
+   * ⚠ CONTEAZA FIINDCA EI VIN SINGURI SA IA IMAGINEA. Pe domeniul de incercari al bucket-ului,
+   * despre care Cloudflare spune raspicat sa nu-l folosesti in productie, publicarea poate cadea
+   * din motive care n-au nimic de-a face cu anuntul — si mesajul lor n-ar spune de ce.
+   *
+   * ⚠ Si `https`, ca peste tot: OLX nu poate lua o imagine de pe o adresa care nu e publica.
+   */
   const images = (Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [])
-    .slice(0, Math.max(1, entry.photos_limit ?? 8));
+    .map((u) => adresaPublicaImagine(u.trim()))
+    .filter((u) => /^https:\/\//i.test(u))
+    .slice(0, Math.max(0, entry.photos_limit ?? 8));
 
-  const attributes = Object.entries(entry.attributes ?? {})
+  /*
+   * ⚠ VALOAREA SE REZOLVA PER PRODUS (01.09.2026). Pana azi era o constanta pe categorie, deci toti
+   * pantofii magazinului plecau cu acelasi brand. `rezolvaAtributele` ia fiecare atribut prin lantul
+   * lui de surse — camp al produsului, specificatie, optiune de varianta, constanta — si intoarce
+   * prima care da ceva. Mapările vechi (un sir) inseamna in continuare o constanta.
+   */
+  const attributes = Object.entries(rezolvaAtributele(entry.attributes, product))
     .filter(([code, v]) => !!code && (Array.isArray(v) ? v.length > 0 : String(v).trim() !== ""))
     .map(([code, v]) => (Array.isArray(v) ? { code, values: v } : { code, value: String(v) }));
 
@@ -126,11 +168,26 @@ export function toOlxAdvertBody(
   const phone = (config.contact_phone ?? "").replace(/\s+/g, "");
   if (phone) contact.phone = phone;
 
+  /* ⚠ Trecut prin maparea LOR: schema OLX n-are `phone`, iar campurile in plus se resping. */
+  const gpsr = gpsrPentruOlx(gpsrEfectiv(product.page_sections, gpsrConfig));
+
   const body: Record<string, unknown> = {
     title: buildOlxTitle(product, business),
     description: buildOlxDescription(product, business),
     category_id: entry.category_id,
     advertiser_type: config.advertiser_type ?? "private",
+    /*
+     * ⚠ GPSR: cine raspunde pentru siguranta produsului (30.08.2026).
+     *
+     * OLX il cere prin `product_safety_regulation` la creare si la actualizare, si il refuza in
+     * categoriile unde regulamentul european il face obligatoriu. Pana azi nu trimiteam nimic, deci
+     * acolo publicarea pica fara ca noi sa fi avut vreodata datele.
+     *
+     * ⚠ NU SE TRIMITE UN OBIECT GOL: `gpsrEfectiv` intoarce `null` cand n-avem nimic, iar cheia
+     * lipseste cu totul. `{}` ar insemna „am declarat ceva" — neadevarat, si mai rau decat lipsa,
+     * fiindca refuzul lor n-ar mai spune ce lipseste.
+     */
+    ...(gpsr ? { product_safety_regulation: gpsr } : {}),
     // external_id lets us dedup; external_url is NOT sent — many partner accounts
     // are not allowed to set it and OLX rejects the advert ("partner is not
     // allowed to set external_url"). The shop link lives in the description flow.
@@ -155,4 +212,50 @@ export function olxReadinessError(config: OlxConfig): string | null {
   if (!config.contact_name) return "Completeaza numele de contact in setarile OLX.";
   if (!config.contact_phone) return "Completeaza telefonul de contact in setarile OLX.";
   return null;
+}
+
+/**
+ * De ce nu se poate mapa o categorie OLX pentru produse. `null` = se poate.
+ *
+ * ═══ ECRANUL VERIFICA, SERVERUL CREDEA PE CUVANT (31.08.2026) ═══
+ *
+ * `saveOlxCategoryMapEntry` e o actiune de server, adica o adresa. Verificarile stateau numai in
+ * `OlxCategoryMapper.save()`, deci orice cerere care nu trecea prin ecran salva ce voia — iar
+ * pretul se plateste MAI TARZIU si in alta parte:
+ *
+ *     se salveaza o mapare fara atributele obligatorii
+ *     omul publica, si OLX refuza cu un mesaj despre un cod de atribut
+ *     mesajul se scrie pe produs, dar el nu spune ce sa faca
+ *     -> produsul tace, si vina pare a produsului, nu a maparii
+ *
+ * ⚠ SI CATEGORIILE CARE NU-S PENTRU PRODUSE. Arborele OLX tine si Locuri de munca: acolo pretul nu
+ * e pret, e SALARIU (`validation.type === "salary"`), iar corpul nostru trimite un pret de produs.
+ * Un anunt de vanzare pus intr-o categorie de joburi e, in cel mai bun caz, refuzat.
+ *
+ * ⚠ Se citeste TIPUL declarat de ei, nu numele categoriei. Numele se schimba, se traduc, si sunt
+ * scrise de ei — tipul e ce foloseste chiar validarea lor.
+ */
+export function categoriaNuPrimesteProduse(attributes: OlxAttributeDef[]): string | null {
+  if (attributes.some((a) => a.validation?.type === "salary")) {
+    return "Categoria aleasă e din Locuri de muncă (are salariu, nu preț) și nu poate primi produse.";
+  }
+  return null;
+}
+
+/**
+ * Atributele obligatorii ale categoriei care lipsesc din mapare. Lista goala = e in regula.
+ *
+ * ⚠ Se cer doar cele de tip `attribute`: `price` si `salary` se scot din produs, nu din mapare.
+ * Aceeasi regula ca in ecran — scrisa o data, aici, si folosita in amandoua locurile.
+ */
+export function atributeObligatoriiLipsa(
+  attributes: OlxAttributeDef[], puse: Record<string, string | string[]> | undefined,
+): string[] {
+  return attributes
+    .filter((a) => a.validation?.required && a.validation?.type === "attribute")
+    .filter((a) => {
+      const v = puse?.[a.code];
+      return Array.isArray(v) ? v.length === 0 : !String(v ?? "").trim();
+    })
+    .map((a) => a.label);
 }

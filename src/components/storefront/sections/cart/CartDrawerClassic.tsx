@@ -7,7 +7,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { gtagEvent } from "@/lib/marketing";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
-import { computeCartPricing } from "@/lib/storefront/cart/pricing";
+import { computeCartPricing, type CartPricingInput } from "@/lib/storefront/cart/pricing";
 
 /**
  * Sertarul de cos, varianta classic.
@@ -22,10 +22,13 @@ import { computeCartPricing } from "@/lib/storefront/cart/pricing";
  */
 export function CartDrawerClassic({
   open, onClose, color, basePath, businessId, onCheckout, shippingCost, freeShippingThreshold, minOrderAmount,
+  vat,
   inline = false,
 }: {
   open: boolean; onClose: () => void; color: string; basePath: string; businessId: string; onCheckout: () => void;
   shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null;
+  /** Regimul de TVA al magazinului. Lipsa = fara TVA in socoteala, ca inainte. */
+  vat?: CartPricingInput["vat"];
   /**
    * Randare in fluxul paginii, pentru miniatura din catalogul de design-uri:
    * fara fundalul negru si fara pozitionare fixa. Un panou fix ar innegri tot
@@ -34,7 +37,7 @@ export function CartDrawerClassic({
    */
   inline?: boolean;
 }) {
-  const { items, addItem, removeItem, updateQty, total, count } = useCart();
+  const { items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, total, count } = useCart();
 
   /**
    * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
@@ -81,15 +84,18 @@ export function CartDrawerClassic({
   // 199.89999999999998, adica sub un prag de 199,90 desi se afiseaza egal).
   const {
     shipping, grandTotal, belowMinOrder, freeShippingPct: progressPct,
-    areaPrag, shippingIsFree, freeShippingRemaining, minOrderRemaining,
+    areaPrag, shippingIsFree, freeShippingRemaining, minOrderRemaining, vatAmount, vatLabel,
   } = computeCartPricing({
-    total, shippingCost, freeShippingThreshold, minOrderAmount,
+    total, shippingCost, freeShippingThreshold, minOrderAmount, vat,
   });
 
   // GA4 view_cart when the drawer opens with items.
   useEffect(() => {
     if (inline || !open || items.length === 0) return;
-    gtagEvent("view_cart", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
+    // Pretul unitar vine de la cos, ca si `value`: `i.price` e instantaneul din
+    // localStorage, deci raportul ar fi purtat pretul de la data adaugarii langa
+    // o valoare calculata la zi.
+    gtagEvent("view_cart", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -120,15 +126,18 @@ export function CartDrawerClassic({
 
   return (
     <>
-      {!inline && <div className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={onClose} />}
+      {!inline && <div className="cart-backdrop-enter fixed inset-0 bg-black/50 z-40 backdrop-blur-sm" onClick={onClose} />}
       {/* Sirul de clase e scris intreg pe fiecare ramura, nu compus din parte
           fixa si parte variabila: reordonarea claselor ar aparea ca diferenta la
           compararea marcajului cu productia, desi CSS-ul e acelasi. */}
       {/* Rolul de dialog se declara doar pe ramura fixa: in miniatura panoul e
           continut obisnuit de pagina, nu o suprapunere. */}
+      {/* Miniatura din catalogul de design-uri NU aluneca: acolo panoul e
+          continut de pagina, iar o animatie de intrare ar porni la fiecare
+          derulare prin galerie. */}
       <div className={inline
         ? "relative mx-auto h-[620px] w-full max-w-sm bg-background flex flex-col shadow-2xl"
-        : "fixed inset-y-0 right-0 w-full max-w-sm bg-background z-50 flex flex-col shadow-2xl"}
+        : "cart-drawer-enter fixed inset-y-0 right-0 w-full max-w-sm bg-background z-50 flex flex-col shadow-2xl"}
         ref={panou}
         role={inline ? undefined : "dialog"}
         aria-modal={inline ? undefined : true}
@@ -213,10 +222,17 @@ export function CartDrawerClassic({
                         para gresit — paginile de cos arata acolo chiar totalul
                         liniei. La o singura bucata cele doua coincid, deci randul
                         ramane cum era. */}
+                    {/* Pretul pe bucata si taietura vin de la cos, nu din
+                        `item.price`: acela e instantaneul salvat in localStorage
+                        la adaugare, iar totalul de dedesubt venea deja de la
+                        server.  */}
                     {item.quantity > 1 && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(item.price)} bucata</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(lineUnit(item))} bucata</p>
                     )}
-                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(item.price * item.quantity)}</p>
+                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(lineTotal(item))}</p>
+                    {lineSavings(item) > 0 && (
+                      <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(lineUnit(item) * item.quantity)}</p>
+                    )}
                     {/* Etichetele poarta numele produsului: altfel un cititor de
                         ecran anunta cate un „Scade cantitatea" identic pentru
                         fiecare linie, fara sa se poata sti la care e cursorul. */}
@@ -232,7 +248,7 @@ export function CartDrawerClassic({
                       </button>
                     </div>
                   </div>
-                  <button type="button" aria-label={`Sterge ${item.name} din cos`} onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: item.price * item.quantity, items: [{ item_id: item.productId, item_name: item.name, price: item.price, quantity: item.quantity }] }); removeItem(key); }}
+                  <button type="button" aria-label={`Sterge ${item.name} din cos`} onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: lineTotal(item), items: [{ item_id: item.productId, item_name: item.name, price: lineUnit(item), quantity: item.quantity }] }); removeItem(key); }}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors mt-0.5 rounded-md hover:bg-muted">
                     <X className="h-4 w-4" />
                   </button>
@@ -264,6 +280,12 @@ export function CartDrawerClassic({
                   {shipping === 0 ? "Gratuita" : formatPrice(shipping)}
                 </span>
               </div>
+              {vatAmount !== null && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{vatLabel}</span>
+                  <span className="font-medium text-foreground">{formatPrice(vatAmount)}</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-base text-foreground pt-2 border-t border-border">
                 <span>Total</span>
                 <span style={{ color }}>{formatPrice(grandTotal)}</span>

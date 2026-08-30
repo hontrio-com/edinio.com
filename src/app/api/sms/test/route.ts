@@ -1,19 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/smso";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { consumaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
 
-  const { api_key, sender_id, phone } = await req.json() as {
+  /*
+   * Ruta trimite un SMS REAL catre un numar ales de apelant, folosind o cheie
+   * data tot de apelant. E necesar asa: utilizatorul isi testeaza integrarea
+   * inainte de a o salva. Dar fara plafon devine o unealta de bombardare cu
+   * SMS-uri (pe cheia lui, sau pe una furata) — cateva teste pe ora sunt
+   * suficiente pentru scopul real.
+   *
+   * AMANDOUA cheile, nu doar una. Numai pe IP (cum era) doi comercianti din
+   * acelasi birou sau din spatele aceluiasi NAT isi impart cosul de 3 si se
+   * blocheaza reciproc, cu un mesaj care da vina pe cine nu trebuie. Numai pe
+   * user.id ar fi si mai rau: inregistrarea e self-serve, deci zece conturi
+   * gratuite = zece bugete noi. Bugetul de IP ramane, dar mai larg, cat sa
+   * incapa cativa oameni reali pe aceeasi iesire. Tiparul e cel din
+   * `api/admin/impersonate`.
+   */
+  if (!rateLimit(`sms-test:${user.id}`, 3, 60_000) || !rateLimit(`sms-test-ip:${clientIp(req)}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Prea multe incercari." }, { status: 429 });
+  }
+  const lim = await consumaLimita(`sms-test:${user.id}`, 5, 3600, 3600);
+  if (!lim.permis) {
+    return NextResponse.json(
+      { error: mesajLimita(lim, "Ai trimis deja destule SMS-uri de test. Incearca peste o ora.") },
+      { status: 429 },
+    );
+  }
+
+  const { api_key, sender_id, phone, businessId } = await req.json() as {
     api_key?: string;
     sender_id?: string;
     phone?: string;
+    businessId?: string;
   };
 
-  if (!api_key?.trim()) return NextResponse.json({ error: "Cheia API lipseste." }, { status: 400 });
+  /*
+   * Cheia poate veni goala din doua motive foarte diferite: ori omul n-a
+   * completat-o (si atunci refuzam), ori o are deja SALVATA si formularul o
+   * primeste mascata (si atunci ar fi absurd sa-i cerem sa o retasteze doar ca
+   * sa testeze). Cand lipseste, o citim din configuratia magazinului lui —
+   * verificand intai ca e chiar al lui.
+   */
+  let cheie = api_key?.trim() ?? "";
+  if (!cheie && businessId) {
+    const { data: biz } = await supabase
+      .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+    if (biz) {
+      // Cheia pleaca spre SMSO, deci trebuie sa fie in CLAR: vederea
+      // `store_settings` nu mai decripteaza pentru `authenticated`, iar cu
+      // clientul utilizatorului aici ar ajunge sirul `enc.v1.…` si SMS-ul de
+      // test ar esua cu „credentiale invalide". Service role ocoleste RLS —
+      // verificarea de proprietate e chiar linia de deasupra.
+      const { data: st } = await createAdminClient()
+        .from("store_settings").select("smso_config").eq("business_id", businessId).single();
+      cheie = ((st?.smso_config as { api_key?: string } | null)?.api_key ?? "").trim();
+    }
+  }
+  if (!cheie) return NextResponse.json({ error: "Cheia API lipseste." }, { status: 400 });
   if (!sender_id?.trim()) return NextResponse.json({ error: "Sender ID lipseste." }, { status: 400 });
   if (!phone?.trim()) return NextResponse.json({ error: "Numarul de telefon lipseste." }, { status: 400 });
 
@@ -24,7 +76,7 @@ export async function POST(req: NextRequest) {
     ? "+" + rawPhone
     : rawPhone;
 
-  const result = await sendSms(api_key.trim(), {
+  const result = await sendSms(cheie, {
     to: normalizedPhone,
     sender: sender_id.trim(),
     body: "Test SMS de la Edinio. Integrarea SMSO functioneaza corect!",

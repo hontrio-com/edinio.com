@@ -25,6 +25,19 @@ export interface VariantCombo {
   price: string;
   compare_at_price: string;
   sku: string;
+  /**
+   * Codul de bare AL COMBINATIEI.
+   *
+   * Un GTIN identifica un articol anume, nu o familie: cele sapte culori ale
+   * aceleiasi huse au sapte coduri diferite. Cat exista doar codul de pe produs,
+   * feedurile nu puteau trimite niciunul — acelasi cod pe toate variantele
+   * inseamna GTIN duplicat, adica respingere — si scriau `identifierExists:
+   * false` pe fiecare ofertă.
+   *
+   * Optional: combinatiile vechi nu-l au, iar produsele care chiar au un singur
+   * cod pot ramane cu cel de pe produs.
+   */
+  gtin?: string;
   stock_quantity: string;
   image: string;
   enabled: boolean;
@@ -65,6 +78,28 @@ export function parseVariants(pageSections: unknown): VariantsData | null {
   };
 }
 
+/**
+ * Combinatiile active, cate una pe titlu, in ordinea din date.
+ *
+ * Titlurile duplicate NU sunt teoretice: in productie sunt 31 pe 7 produse. Cand
+ * apar, TOATE partile trebuie sa se uite la aceeasi combinatie, altfel pretul
+ * afisat, pretul incasat, stocul verificat si oferta trimisa la Google ajung sa
+ * vina din randuri diferite ale aceluiasi titlu. Peste tot castiga PRIMA,
+ * fiindca asta alege si `findCombo`, adica exact combinatia pe care o vede
+ * clientul cand isi alege marimea.
+ */
+export function combinatiiActiveUnice(variants: VariantsData | null): VariantCombo[] {
+  if (!variants) return [];
+  const vazute = new Set<string>();
+  const out: VariantCombo[] = [];
+  for (const c of variants.combinations) {
+    if (!c?.enabled || !c.title || vazute.has(c.title)) continue;
+    vazute.add(c.title);
+    out.push(c);
+  }
+  return out;
+}
+
 /** Quick predicate for cards: does this product need a variant chosen? */
 export function hasVariants(pageSections: unknown): boolean {
   return parseVariants(pageSections) !== null;
@@ -87,9 +122,33 @@ export function findCombo(variants: VariantsData, title: string | null): Variant
 }
 
 /**
+ * Stocul declarat al unei combinatii, sau `null` cand nu e declarat.
+ *
+ * `null` NU inseamna zero: campul lasat gol inseamna „nu tin socoteala pe
+ * varianta asta", iar atunci ramane valabil stocul produsului intreg. Numai un
+ * numar scris de comerciant vorbeste despre varianta. Un text sau un numar
+ * negativ nu inseamna nimic, deci se poarta tot ca un camp gol.
+ */
+export function comboStock(combo: VariantCombo | null | undefined): number | null {
+  const brut = String(combo?.stock_quantity ?? "").trim();
+  if (brut === "") return null;
+  const n = Number(brut);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+}
+
+/** Combinatia are stoc declarat si acel stoc s-a terminat. */
+export function comboEpuizat(combo: VariantCombo | null | undefined): boolean {
+  return comboStock(combo) === 0;
+}
+
+/**
  * Whether choosing `value` for `optionName` still leads to at least one enabled
  * combination given the other current selections. Drives the strike-through /
  * disabled state on option buttons.
+ *
+ * Se uita si la STOC, nu doar la steagul `enabled`. Pana acum nu se uita: o
+ * marime cu zero bucati arata la fel ca una plina, se alegea, intra in cos si
+ * ajungea comanda. Comerciantul scrisese zero tocmai ca sa n-o mai vanda.
  */
 export function isValueAvailable(
   variants: VariantsData,
@@ -101,10 +160,23 @@ export function isValueAvailable(
     .filter(([k, v]) => k !== optionName && v)
     .map(([, v]) => v);
   return variants.combinations.some((c) => {
-    if (!c.enabled) return false;
+    if (!c.enabled || comboEpuizat(c)) return false;
     const parts = c.title.split(VARIANT_TITLE_SEP);
     return parts.includes(value) && otherSels.every((s) => parts.includes(s));
   });
+}
+
+/**
+ * Produsul are variante, dar TOATE s-au terminat.
+ *
+ * Altfel pagina ar ramane cu toate optiunile taiate si cu butonul stins, fara
+ * sa scrie nicaieri de ce. Asa poate spune „Stoc epuizat", ca la un produs
+ * simplu.
+ */
+export function toateCombinatiileEpuizate(variants: VariantsData | null): boolean {
+  if (!variants) return false;
+  const active = variants.combinations.filter((c) => c?.enabled && c.title);
+  return active.length > 0 && active.every(comboEpuizat);
 }
 
 /**
@@ -139,13 +211,21 @@ export function comboCompareAtPrice(combo: VariantCombo | null, baseCompareAt: n
  * Server helper: map of enabled combination title -> resolved unit price (base
  * fallback). Used to re-price cart items authoritatively from the live product,
  * so a browser can never forge a variant price.
+ *
+ * La titluri duplicate conteaza PRIMA, ca la `findCombo` si la `comboStockMap`.
+ * Pana acum castiga ULTIMA, iar cele trei se uitau la combinatii diferite ale
+ * aceluiasi titlu. Pe GEACA VISION de la eSAFE, „NEGRU / L" apare de doua ori,
+ * cu 203 si cu 231 de lei: pagina arata 203 si comanda intra cu 231 pe calea
+ * cosului, iar pe calea directa verificarea de pret respingea diferenta, deci
+ * produsul nu se putea comanda deloc din pagina lui. Verificarea de stoc se uita
+ * intre timp la stocul primei.
  */
 export function enabledComboPriceMap(pageSections: unknown, basePrice: number): Map<string, number> {
   const variants = parseVariants(pageSections);
   const map = new Map<string, number>();
   if (!variants) return map;
   for (const c of variants.combinations) {
-    if (!c?.enabled || !c.title) continue;
+    if (!c?.enabled || !c.title || map.has(c.title)) continue;
     map.set(c.title, comboUnitPrice(c, basePrice));
   }
   return map;
@@ -158,21 +238,25 @@ export function enabledComboPriceMap(pageSections: unknown, basePrice: number): 
  * total 40 lasa sa se comande marimea S si cand marimea S avea 0 bucati, iar
  * comerciantul afla din comanda pe care n-o putea onora. Combinatiile fara
  * numar completat lipsesc din harta — pentru ele ramane stocul produsului.
+ *
+ * Cand doua combinatii au ACELASI titlu, conteaza prima, nu ultima. Nu e o
+ * subtilitate teoretica: in productie sunt 129 de perechi asa. Pretul platit de
+ * client vine de la prima (`findCombo`), si tot din prima scade baza de date
+ * dupa comanda, deci verificarea trebuie sa se uite la aceeasi. Pana acum se
+ * uita la ultima si putea aproba o comanda din stocul altei combinatii.
  */
 export function comboStockMap(pageSections: unknown): Map<string, number> {
   const variants = parseVariants(pageSections);
   const map = new Map<string, number>();
   if (!variants) return map;
   for (const c of variants.combinations) {
-    if (!c?.enabled || !c.title) continue;
-    const brut = String(c.stock_quantity ?? "").trim();
-    if (brut === "") continue;
-    const n = Number(brut);
-    if (Number.isFinite(n) && n >= 0) map.set(c.title, Math.floor(n));
+    if (!c?.enabled || !c.title || map.has(c.title)) continue;
+    const stoc = comboStock(c);
+    if (stoc !== null) map.set(c.title, stoc);
   }
   return map;
 }
-
+
 /**
  * Optiunea asta e o marime?
  *

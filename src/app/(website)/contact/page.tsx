@@ -12,6 +12,8 @@ import { EMAIL, PROGRAM, TELEFON, VERDE_WHATSAPP, WHATSAPP } from "@/lib/website
 import { FAQ_TITLE } from "@/lib/website/faq";
 import { SOCIAL_LINKS } from "@/lib/website/footer";
 import { siteMetadata } from "@/lib/website/metadata";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 /*
   Metadatele treceau prin obiectul scris de mana, nu prin `siteMetadata`, si de
@@ -45,9 +47,27 @@ const REPERE = [
   { Icoana: Clock, eticheta: "Program", valoare: PROGRAM.zile, aditional: PROGRAM.ore },
 ];
 
+/*
+ * ⚠ Adresa NU se emite de aici.
+ *
+ * Pagina scrie „Bucuresti, Romania", iar /termeni si subsolul scriu sediul social
+ * „Str. Progresului, Nr. 2, Matasari, Jud. Gorj". Un `PostalAddress` construit
+ * din primul ar publica structurat o localitate care contrazice actele. Adresa
+ * sta o singura data, pe nodul de organizatie din layout, luata din documentele
+ * juridice; aici pagina doar arata catre el.
+ */
+const jsonLd = paginaSiteJsonLd({
+  cale: "contact",
+  nume: "Contact",
+  descriere: metadata.description as string,
+  tip: "ContactPage",
+  despreFirma: true,
+});
+
 export default function ContactPage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <PageHero
         sir={FIRIMITURI}
         title="Contact"

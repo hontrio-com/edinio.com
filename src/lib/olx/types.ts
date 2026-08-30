@@ -3,7 +3,13 @@
 
 // Attribute values chosen by the merchant for a mapped category
 // (code -> value or list of values, matching OLX attribute definitions).
-export type OlxAttributeValues = Record<string, string | string[]>;
+/**
+ * Ce s-a legat la fiecare atribut OLX.
+ *
+ * ⚠ Forma VECHE — un sir sau o lista de siruri — ramane inteleasa ca „valoare fixa", deci mapările
+ * existente ale comerciantilor nu se strica si nu cer nicio migratie de date. Vezi `atribute.ts`.
+ */
+export type OlxAttributeValues = Record<string, import("./atribute").OlxMaparecAtribut>;
 
 // One mapped Edinio category -> OLX leaf category + its required attributes.
 export interface OlxCategoryMapEntry {
@@ -27,14 +33,37 @@ export interface OlxConfig {
   advertiser_type?: "private" | "business";
   default_city_id?: number;
   default_city_name?: string;
-  default_district_id?: number;
-  default_district_name?: string;
+  /**
+   * ⚠ `null` INSEAMNA „sters", si de-aia tipul il primeste. Un `undefined` nu ajunge niciodata in
+   * baza: `JSON.stringify` il scoate din petic, iar `jsonb_merge_config` imbina doar cheile
+   * primite — deci cartierul vechi ramanea peste noul oras.
+   */
+  default_district_id?: number | null;
+  default_district_name?: string | null;
   contact_name?: string;
   contact_phone?: string;
   courier_enabled?: boolean;        // OLX delivery (courier flag on adverts, RO)
   auto_sync?: boolean;              // push product changes automatically
   auto_extend?: boolean;            // auto_extend_enabled on adverts
   category_map?: Record<string, OlxCategoryMapEntry>; // Edinio category name -> OLX
+  /**
+   * Unde a ajuns ultima trecere de reconciliere prin lista lor de anunturi.
+   *
+   * ⚠ CURSOR, NU FEREASTRA FIXA. La Trendyol, o scanare de cinci pagini pornita mereu de la zero
+   * n-a vazut NICIODATA nimic dupa produsul 500 dintr-un catalog de 1033.
+   */
+  reconcile_offset?: number;
+  /**
+   * Anunturile din contul lui pe care le-a respins la import.
+   *
+   * ⚠ FARA ASTA, „Ignoră" nu tine minte nimic. Un comerciant cu optzeci si patru de anunturi vechi
+   * respinge saizeci si le vede pe toate din nou la scanarea urmatoare — iar a doua oara nu le mai
+   * citeste, le sare pe toate, si atunci nici pe cele care CHIAR erau ale lui.
+   *
+   * ⚠ Se tin ID-urile LOR, nu ale noastre: anunturile astea n-au rand la noi, tocmai de-aia sunt
+   * in lista de import.
+   */
+  import_ignorate?: number[];
   last_sync_at?: string;
 }
 
@@ -56,7 +85,21 @@ export type OlxAdvertStatus =
   | "error";             // local-only: sync failed (validation etc.)
 
 // ── API entities (subset we consume) ─────────────────────────────────────────────
-export interface OlxUser { id: number; name: string; avatar?: string | null }
+export interface OlxUser {
+  id: number;
+  name: string;
+  avatar?: string | null;
+  /**
+   * Contul e de firma, nu de persoana.
+   *
+   * ⚠ `/users/me` ni-l spune de la prima conectare, dar tipul nostru nici nu-l cuprindea — deci un
+   * cont OLX Business ramanea la noi `advertiser_type: "private"` pana il schimba omul de mana,
+   * si nici nu avea de unde sa stie ca trebuie.
+   */
+  is_business?: boolean;
+  phone?: string | null;
+  email?: string | null;
+}
 
 export interface OlxCategory {
   id: number;
@@ -173,4 +216,98 @@ export interface OlxMessage {
   text?: string;
   is_read?: boolean;
   attachments?: { name?: string; url?: string }[] | null;
+}
+
+/* ── Statistici, motive de moderare, profil de firma, facturare ───────────── */
+
+/**
+ * Ce a facut lumea cu anuntul.
+ *
+ * ⚠ Campurile sunt optionale dinadins: nu toate categoriile si nu toate conturile intorc tot, iar
+ * un zero inventat pentru o valoare care lipseste ar arata in ecran ca „nimeni nu s-a uitat" —
+ * ceea ce e cu totul altceva decat „nu stim".
+ */
+export interface OlxAdvertStats {
+  advert_views?: number;
+  phone_views?: number;
+  users_observing?: number;
+  message_count?: number;
+}
+
+/** De ce a fost respins anuntul. Se cere numai cand starea chiar spune ca a fost. */
+export interface OlxModerationReason {
+  code?: string;
+  reason?: string;
+  message?: string;
+  fields?: { field?: string; message?: string }[];
+}
+
+/**
+ * Profilul de firma al contului OLX.
+ *
+ * ═══ FORMA E A LOR, NU CEA CARE NI SE PARE FIREASCA (01.09.2026) ═══
+ *
+ * Prima varianta avea `website`, `phone` si `address: string` — adica exact cum ar scrie oricine
+ * un profil de firma. Schema lor cere `website_url`, `phones: string[]` si o adresa DESFACUTA in
+ * strada, numar, cod postal si oras.
+ *
+ * ⚠ Greseala nu se vedea: un `PUT` cu chei pe care ei nu le cunosc nu strica nimic si nu se
+ * plange — pur si simplu nu schimba nimic, iar comerciantul crede ca a salvat.
+ */
+export interface OlxBusinessAddress {
+  street?: string;
+  number?: string;
+  postcode?: string;
+  city?: string;
+}
+
+export interface OlxBusinessProfile {
+  id?: number;
+  name?: string;
+  description?: string;
+  subdomain?: string;
+  website_url?: string;
+  address?: OlxBusinessAddress | null;
+  phones?: string[];
+  logo?: { url?: string } | null;
+  banner?: { url?: string } | null;
+}
+
+/** Un logo sau un banner incarcat la ei. */
+export interface OlxImagineCont {
+  id?: number;
+  url?: string;
+}
+
+/** Ce ne raspunde `/locations` pentru o pereche de coordonate. */
+export interface OlxLocationSuggestion {
+  city?: OlxCity;
+  district?: OlxDistrict | null;
+}
+
+/**
+ * O linie din istoricul de facturare al contului.
+ *
+ * ⚠ Prima varianta cauta `created_at`, `description`, `amount`, `balance_after` — nume firesti, si
+ * niciunul al lor. Exemplul lor are `id`, `name`, `date`, `price`, `advert_id`. Citita gresit,
+ * tabela s-ar fi umplut cu „necunoscut" pe randuri care CHIAR aveau date.
+ *
+ * ⚠ Campurile vechi raman citite ca a doua incercare: daca ei le si trimit, nu stricam nimic;
+ * daca nu, nu se pierde nimic.
+ */
+export interface OlxBillingEntry {
+  id?: number;
+  name?: string;
+  date?: string;
+  price?: number;
+  advert_id?: number;
+  /* Forme alternative, citite prudent — vezi nota de mai sus. */
+  created_at?: string;
+  description?: string;
+  amount?: { value?: number; currency?: string } | number;
+}
+
+/** Un mesaj cu tot ce poarta el, inclusiv atasamente. */
+export interface OlxMessageFull extends OlxMessage {
+  attachments?: { url?: string; name?: string; mime_type?: string }[];
 }

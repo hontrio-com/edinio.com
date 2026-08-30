@@ -15,6 +15,22 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/roadmap", destination: "/blog", permanent: true }];
   },
+  /*
+   * ⚠ AICI A FOST SI `/migrare` → `/`, ADUS DE `main`. E SCOS DINADINS.
+   *
+   * `main` il pusese pe 05.08.2026, cand pagina /migrare a fost stearsa: o
+   * redirectie e purtarea buna pentru o adresa care mai traieste in reclame.
+   * Dar ramura de site a REFACUT pagina, ca pagina de prezentare.
+   *
+   * Pastrat la unire, ar fi trimis cu 308 chiar pagina noua catre acasa —
+   * adica munca a zece commituri ar fi fost de negasit in productie, fara
+   * niciun 404 si fara nicio eroare care sa dea de banuit. Git nu semnalase
+   * conflict: fiecare ramura adaugase cate un `redirects()`, iar imbinarea a
+   * pus doua chei cu acelasi nume. Doar typecheck-ul a prins-o.
+   *
+   * Daca /migrare se scoate vreodata din nou, redirectia se pune la loc AICI,
+   * in singurul `redirects()` care trebuie sa existe.
+   */
   serverExternalPackages: ["@aws-sdk/client-s3", "sanitize-html", "sharp"],
   experimental: {
     serverActions: {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition, useRef } from "react";
-import { Search, X, Check, Loader2 } from "lucide-react";
+import { Search, X, Check, Loader2, ChevronUp, ChevronDown } from "lucide-react";
 import { searchProductsForPicker, getProductsByIds } from "@/lib/actions/product-picker.actions";
 import type { PageProduct } from "./blocks/ProductsBlock";
 
@@ -10,8 +10,20 @@ import type { PageProduct } from "./blocks/ProductsBlock";
  * resolved by id; search queries the server (debounced, limited) so a catalog of
  * thousands/tens-of-thousands never loads into the editor.
  */
-export function ProductPicker({ businessId, selectedIds, onChange }: {
-  businessId: string; selectedIds: string[]; onChange: (ids: string[]) => void;
+export function ProductPicker({ businessId, selectedIds, onChange, reordonabil = false, maxim }: {
+  businessId: string;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  /**
+   * Lista aleasa capata sageti de mutat.
+   *
+   * Optional fiindca ordinea conteaza doar unde chiar inseamna ceva: la asezarea
+   * grilei de pe prima pagina. In sectiunile de produse si in page-builder lista e
+   * o multime, iar doua sageti pe fiecare rand ar fi doar zgomot.
+   */
+  reordonabil?: boolean;
+  /** Cate produse pot fi alese. Peste atat, butoanele de adaugare se sting. */
+  maxim?: number;
 }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<PageProduct[]>([]);
@@ -40,23 +52,74 @@ export function ProductPicker({ businessId, selectedIds, onChange }: {
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [businessId, q]);
 
+  const plin = maxim != null && selectedIds.length >= maxim;
+
   function toggle(id: string) {
-    onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+    if (selectedIds.includes(id)) { onChange(selectedIds.filter((x) => x !== id)); return; }
+    // Scoaterea ramane mereu posibila; doar adaugarea se opreste la plafon.
+    if (plin) return;
+    onChange([...selectedIds, id]);
+  }
+
+  /**
+   * Muta produsul de pe pozitia `i` din lista AFISATA.
+   *
+   * ⚠ Indicii listei afisate NU sunt indicii lui `selectedIds`: `getProductsByIds`
+   * arunca id-urile pe care nu le mai gaseste (produs sters intre timp), deci
+   * lista afisata poate fi mai scurta. Interschimbate pe indicii afisati, doua
+   * sageti ar fi mutat alte produse decat cele aratate — cu atat mai perfid cu cat
+   * se intampla numai in magazinele care au sters ceva.
+   *
+   * Deci se cauta pozitiile REALE ale celor doua id-uri; id-urile moarte raman pe
+   * locul lor si nu incurca pe nimeni (pe magazin nu se potrivesc oricum cu niciun
+   * produs).
+   */
+  function muta(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= selected.length) return;
+    const a = selectedIds.indexOf(selected[i].id);
+    const b = selectedIds.indexOf(selected[j].id);
+    if (a < 0 || b < 0) return;
+    const next = selectedIds.slice();
+    [next[a], next[b]] = [next[b], next[a]];
+    onChange(next);
   }
 
   return (
     <div className="space-y-2">
       {selected.length > 0 && (
         <div className="space-y-1">
-          <p className="text-[11px] text-muted-foreground">{selected.length} produse selectate</p>
-          {selected.map((p) => (
+          <p className="text-[11px] text-muted-foreground">
+            {selected.length} produse selectate{maxim != null ? ` (maxim ${maxim})` : ""}
+          </p>
+          {selected.map((p, i) => (
             <div key={p.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-muted/40 border border-border">
+              {/* Numarul de ordine: fara el, „al treilea produs" se numara cu degetul. */}
+              {reordonabil && (
+                <span className="w-5 shrink-0 text-center text-[10px] font-semibold text-muted-foreground tabular-nums">{i + 1}</span>
+              )}
               {p.images[0]
                 // eslint-disable-next-line @next/next/no-img-element
                 ? <img src={p.images[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
                 : <div className="w-7 h-7 rounded bg-muted shrink-0" />}
               <span className="text-xs truncate flex-1 min-w-0">{p.name}</span>
-              <button type="button" onClick={() => toggle(p.id)} className="shrink-0"><X className="h-3.5 w-3.5 text-red-500" /></button>
+              {reordonabil && (
+                <>
+                  <button type="button" aria-label={`Muta „${p.name}” mai sus`} disabled={i === 0}
+                    onClick={() => muta(i, -1)}
+                    className="shrink-0 p-0.5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed">
+                    <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                  <button type="button" aria-label={`Muta „${p.name}” mai jos`} disabled={i === selected.length - 1}
+                    onClick={() => muta(i, 1)}
+                    className="shrink-0 p-0.5 rounded hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed">
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                </>
+              )}
+              <button type="button" aria-label={`Scoate „${p.name}”`} onClick={() => toggle(p.id)} className="shrink-0">
+                <X className="h-3.5 w-3.5 text-red-500" />
+              </button>
             </div>
           ))}
         </div>
@@ -72,7 +135,8 @@ export function ProductPicker({ businessId, selectedIds, onChange }: {
           {results.map((p) => {
             const sel = selectedIds.includes(p.id);
             return (
-              <button key={p.id} type="button" onClick={() => toggle(p.id)} className="w-full flex items-center gap-2 p-2 text-left hover:bg-muted">
+              <button key={p.id} type="button" onClick={() => toggle(p.id)} disabled={plin && !sel}
+                className="w-full flex items-center gap-2 p-2 text-left hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed">
                 {p.images[0]
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={p.images[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />

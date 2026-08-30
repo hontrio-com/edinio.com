@@ -1,3 +1,5 @@
+import { getProductPriceRange } from "@/lib/utils/product-price";
+import { slimPageSections } from "@/lib/storefront/catalog-slim";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -29,7 +31,7 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
 
   // Categories windowed past the 1000-row PostgREST cap (big imported taxonomies).
   const [{ data: productsRaw }, cats, { data: formsRaw }] = await Promise.all([
-    supabase.from("products").select("id, name, slug, price, compare_at_price, images, category, is_featured")
+    supabase.from("products").select("id, name, slug, price, compare_at_price, images, category, is_featured, page_sections")
       .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order").limit(60),
     fetchAllRows("dashboard.page-edit.categories", (from, to) =>
       supabase.from("categories").select("id, name").eq("business_id", business.id)
@@ -44,6 +46,13 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
     price: Number(p.price), compare_at_price: p.compare_at_price != null ? Number(p.compare_at_price) : null,
     images: Array.isArray(p.images) ? (p.images as unknown[]).map(String).filter(Boolean) : [],
     category: p.category, is_featured: !!p.is_featured,
+    // Slimuit, nu brut: previzualizarea are nevoie doar de axe, ca sa aleaga intre
+    // „Alege optiunile" si „Adauga in cos". Brut, cele 60 de randuri insemnau
+    // 183 KB in payload-ul editorului la un singur magazin.
+    page_sections: slimPageSections(p.page_sections),
+    // Acelasi pret ca pagina publicata: altfel comerciantul aseaza blocul dupa un
+    // numar pe care clientul nu-l vede.
+    price_range: getProductPriceRange(Number(p.price), p.page_sections ?? null),
   }));
 
   const forms: FormDef[] = (formsRaw ?? []).map((f) => ({

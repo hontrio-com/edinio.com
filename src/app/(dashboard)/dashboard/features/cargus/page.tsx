@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { CargusConfigClient } from "@/components/dashboard/CargusConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
@@ -11,7 +12,7 @@ export default async function CargusPage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const config = (settings?.cargus_config as CargusConfig | null) ?? null;
+  const config = (mascheazaConfig("cargus_config", settings?.cargus_config) as CargusConfig | null) ?? null;
 
   return (
     <div className="p-6 max-w-2xl">

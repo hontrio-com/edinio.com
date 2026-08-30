@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Panel } from "@/components/ui/panel";
 import { selectCls } from "@/lib/ui";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 type AccountData = {
   companies: { cif: string; name: string }[];
@@ -54,11 +55,11 @@ export default function OblioConfigClient({
   const proformaSeries = accountData?.series.filter(s => s.type === "Proforma") ?? [];
 
   function handleLoad() {
-    if (!clientId || !clientSecret) { toast.error("Introdu email-ul si secretul contului Oblio"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu email-ul si secretul contului Oblio"); return; }
     setLoadError("");
     setAccountData(null);
     startLoadTransition(async () => {
-      const result = await loadOblioAccountData(clientId, clientSecret);
+      const result = await loadOblioAccountData(businessId, clientId, clientSecret);
       if ("error" in result) {
         setLoadError(result.error);
         toast.error(result.error);
@@ -91,7 +92,7 @@ export default function OblioConfigClient({
     setCompanyName(company?.name ?? "");
     // Reload series + VAT for this CIF
     startLoadCifTransition(async () => {
-      const result = await loadOblioSeriesForCif(clientId, clientSecret, newCif);
+      const result = await loadOblioSeriesForCif(businessId, clientId, clientSecret, newCif);
       if ("error" in result) { toast.error(result.error); return; }
       setAccountData(prev => prev ? { ...prev, series: result.series, vatRates: result.vatRates } : prev);
       const defInvoice = result.series.find(s => s.type === "Factura" && s.default);
@@ -104,7 +105,7 @@ export default function OblioConfigClient({
   }
 
   function handleSave() {
-    if (!clientId || !clientSecret) { toast.error("Introdu credentialele Oblio"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu credentialele Oblio"); return; }
     if (!cif) { toast.error("Selecteaza firma"); return; }
     if (!seriesInvoice) { toast.error("Selecteaza seria pentru factura"); return; }
 
@@ -197,7 +198,7 @@ export default function OblioConfigClient({
                 type="password"
                 value={clientSecret}
                 onChange={e => setClientSecret(e.target.value)}
-                placeholder="Token din Setari > Date Cont"
+                placeholder={secretulEsteSalvat(initialConfig, "client_secret") ? PLACEHOLDER_SECRET_SALVAT : "Token din Setari > Date Cont"}
               />
             </div>
           </div>
@@ -206,7 +207,7 @@ export default function OblioConfigClient({
             variant="outline"
             size="sm"
             onClick={handleLoad}
-            disabled={loading || !clientId || !clientSecret}
+            disabled={loading || !clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))}
           >
             {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
             Testeaza si incarca date

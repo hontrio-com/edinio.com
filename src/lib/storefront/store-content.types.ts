@@ -1,5 +1,6 @@
 import type { ProductSection } from "@/lib/store-sections";
 import type { MenuItem } from "@/lib/pages/menu";
+import type { InsignaFooterStocata } from "@/lib/storefront/footer-badges";
 
 /**
  * Forma lui `store_settings.page_content` asa cum o citeste storefrontul.
@@ -40,9 +41,44 @@ export interface StorePageContent {
     extras?: Array<{ id: string; label: string; price: number; description?: string }>;
     hidden_fields?: string[];
     email_field?: { enabled: boolean; required: boolean };
+    /**
+     * Comenzi pe firma: selectorul „persoana fizica / persoana juridica" plus
+     * campul de CUI cu preluare din ANAF. Implicit OPRIT — pentru un magazin
+     * obisnuit nu se schimba nimic. Serverul recitesc comutatorul si ignora
+     * datele de firma daca e stins, fiindca actiunile de comanda sunt
+     * endpointuri publice si nu se pot baza pe ce arata interfata.
+     */
+    company_fields?: { enabled: boolean };
   };
   show_announcement_on_store?: boolean;
+  /**
+   * Sortarea si filtrele de deasupra grilei de pe PRIMA PAGINA.
+   *
+   * Se pot stinge separat fiindca magazinele care au si pagina `/magazin` le au
+   * deja acolo, cu tot cu fatete — pe prima pagina raman doua controale care
+   * ocupa un rand intreg si nu spun nimic in plus.
+   *
+   * `sort_options.enabled` exista de mult in tip, dar era SCRIS mereu `true` si
+   * nu-l citea nimeni; acum e chiar comutatorul. Ambele conteaza numai pe prima
+   * pagina: pe `/magazin` bara are propriile reglaje.
+   */
   sort_options?: { enabled: boolean; default_sort?: "newest" | "price_asc" | "price_desc" | "popular" | "name_asc" };
+  /**
+   * Asezarea produselor in grila paginii principale.
+   *
+   * ⚠ E o cheie NOUA, si nu o rescriere a lui `sort_options.default_sort`, fiindca
+   * aceea e citita si de `/magazin` (vezi `pagina-magazin.tsx`): pusa la lucru
+   * pentru pagina principala, ar fi schimbat pe tacute si ordinea paginii de
+   * catalog. Regulile de citire stau in `lib/storefront/asezare.ts`.
+   */
+  home_order?: {
+    mod?: "" | "newest" | "price_asc" | "price_desc" | "name_asc" | "popular" | "random" | "manual";
+    /** Doar la `manual`: produsele puse in fata, in ordinea aleasa. */
+    ids?: string[];
+    /** Doar la `manual`: dupa ce regula vine restul catalogului. */
+    rest?: "newest" | "price_asc" | "price_desc" | "name_asc" | "popular" | "random";
+  };
+  filter_options?: { enabled: boolean };
   sticky_cart_bar?: { enabled: boolean };
   new_badge?: { enabled: boolean; days: number };
   price_range_display?: { enabled: boolean };
@@ -55,6 +91,28 @@ export interface StorePageContent {
   show_category_badges?: boolean;
   hide_products_without_images?: boolean;
   hide_out_of_stock_products?: boolean;
+  /**
+   * Arata in navigare si categoriile fara niciun produs.
+   *
+   * Implicit stins: o categorie goala e un drum infundat printre altele care duc
+   * la produse. Pornit, magazinul arata raioanele exact cum le-a asezat
+   * comerciantul — util cand marfa vine in valuri sau cand categoriile se fac
+   * inaintea produselor. Ce e STINS din panou nu apare in niciunul din cazuri.
+   */
+  show_empty_categories?: boolean;
+  /**
+   * Insignele proprii din subsol: autorizatii, certificari, sigle de autoritate.
+   *
+   * ANPC si Netopia sunt cablate in `FooterLegal` fiindca sunt aceleasi pentru
+   * toata lumea; astea nu sunt — un magazin veterinar arata ANSVSA, altul un ISO.
+   * Regulile de citire si de siguranta stau in `lib/storefront/footer-badges.ts`,
+   * NU in randare.
+   */
+  footer_badges?: InsignaFooterStocata[];
+  /** Ce scrie deasupra lor. Golit inseamna „doar imaginile". */
+  footer_badges_title?: string;
+  /** Stins inseamna tot „doar imaginile", fara sa se piarda textul scris. */
+  footer_badges_title_enabled?: boolean;
   product_sections?: ProductSection[];
   menu?: MenuItem[];
   /** Comerciantul a sters intrarea „Acasa"; vezi `meniuCuAcasa`. */
@@ -101,4 +159,10 @@ export interface StoreCategoryNode {
   parent_id: string | null;
   image_url: string | null;
   sort_order: number;
+  /**
+   * Categoria se vede in magazin. Stinsa, ea si tot subarborele ei ies din
+   * navigare, din filtre si din grila — vezi `lib/categories/vizibilitate.ts`.
+   * Optionala fiindca sursele mai vechi n-o citeau; lipsa inseamna aprinsa.
+   */
+  is_active?: boolean | null;
 }

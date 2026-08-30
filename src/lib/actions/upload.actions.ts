@@ -1,8 +1,10 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { uploadToR2, deleteFromR2, r2KeyFromUrl, createPresignedPutUrl } from "@/lib/r2";
+import { uploadToR2, createPresignedPutUrl } from "@/lib/r2";
 import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES, MAX_VIDEO_MB, VIDEO_EXT_BY_TYPE } from "@/lib/pages/video-config";
+import { detectImageMime } from "@/lib/utils/file-signature";
 
 type UploadBucket = "logos" | "covers" | "gallery" | "products" | "avatars";
 
@@ -15,28 +17,42 @@ export async function uploadImage(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "webp";
-  const allowedTypes = ["jpg", "jpeg", "png", "webp"];
-  if (!allowedTypes.includes(ext)) {
-    return { error: "Tipul de fisier nu este acceptat. Foloseste JPG, PNG sau WebP." };
-  }
-
   if (file.size > 5 * 1024 * 1024) {
     return { error: "Fisierul este prea mare. Limita este 5MB." };
   }
 
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-  const key = folder
-    ? `${bucket}/${user.id}/${folder}/${filename}`
-    : `${bucket}/${user.id}/${filename}`;
-
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const url = await uploadToR2(buffer, key, file.type);
+    if (buffer.length === 0) return { error: "Fisierul pare gol." };
+
+    /*
+     * Verificarea era pe EXTENSIA din numele fisierului, iar `file.type` — ales
+     * tot de client — ajungea ca `Content-Type` la R2. Adica: un fisier numit
+     * "poza.png" cu `type: "text/html"` era acceptat si apoi SERVIT ca HTML de pe
+     * domeniul CDN al platformei. XSS stocat pe origine proprie.
+     *
+     * Acum decide serverul, din octeti: si ce se accepta, si ce antet se pune.
+     */
+    const PERMISE = ["image/jpeg", "image/png", "image/webp"];
+    const tipReal = detectImageMime(buffer);
+    if (!tipReal || !PERMISE.includes(tipReal)) {
+      return { error: "Tipul de fisier nu este acceptat. Foloseste JPG, PNG sau WebP." };
+    }
+    const ext = tipReal === "image/jpeg" ? "jpg" : tipReal === "image/png" ? "png" : "webp";
+
+    // Nume imprevizibil: obiectul e servit public din R2, deci numele lui e
+    // singurul lucru care il tine nelistabil. `Math.random()` in V8 nu e
+    // criptografic si isi tradeaza starea prin valorile deja returnate.
+    const filename = `${randomUUID()}.${ext}`;
+    const key = folder
+      ? `${bucket}/${user.id}/${folder}/${filename}`
+      : `${bucket}/${user.id}/${filename}`;
+
+    const url = await uploadToR2(buffer, key, tipReal);
     // Register in the Media Library (best-effort).
     const { registerMedia } = await import("@/lib/actions/media.actions");
     await registerMedia({
-      url, type: "image", mimeType: file.type, fileName: file.name || null,
+      url, type: "image", mimeType: tipReal, fileName: file.name || null,
       sizeBytes: buffer.length, folder: bucket,
     }).catch(() => {});
     return { url };
@@ -68,28 +84,34 @@ export async function createVideoUpload(input: { contentType: string; size: numb
   }
 
   const ext = VIDEO_EXT_BY_TYPE[input.contentType] ?? "mp4";
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  // Vezi `uploadImage`: numele e singura piedica in calea ghicirii unui obiect
+  // public, iar `Math.random()` nu e imprevizibil.
+  const filename = `${randomUUID()}.${ext}`;
   const key = `gallery/${user.id}/pages/videos/${filename}`;
 
   try {
-    return await createPresignedPutUrl(key, input.contentType);
+    // Dimensiunea intra in SEMNATURA. Fara ea, `input.size` era doar un numar
+    // trimis de client: se cerea URL pentru 1MB si se incarca apoi orice, direct
+    // in R2, ocolind complet limita de 50MB.
+    return await createPresignedPutUrl(key, input.contentType, 600, input.size);
   } catch {
     return { error: "Nu am putut pregati incarcarea. Incearca din nou." };
   }
 }
 
-export async function deleteImage(url: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Nu esti autentificat." };
-
-  const key = r2KeyFromUrl(url);
-  if (!key) return { error: "URL invalid." };
-
-  try {
-    await deleteFromR2(key);
-    return { success: true };
-  } catch {
-    return { error: "Stergerea a esuat." };
-  }
-}
+/*
+ * `deleteImage(url)` a fost stearsa pe 05.08.2026. Nu o readuce asa cum era.
+ *
+ * Cerea doar o sesiune, dupa care deriva cheia R2 din URL-ul primit de la
+ * apelant si o stergea — fara sa verifice al cui e obiectul. Adica orice
+ * comerciant autentificat putea sterge logo-ul, coperta sau pozele de produs
+ * ale oricui, daca stia URL-ul lor (si URL-urile alea sunt publice, stau in
+ * HTML-ul vitrinelor). Nu era exploatabila doar fiindca nu avea niciun apelant
+ * in tot src-ul, deci Turbopack n-o punea in server-reference-manifest.json si
+ * Next respingea apelul inainte de codul aplicatiei; prima componenta care ar fi
+ * chemat-o o transforma in stergere intre chiriasi, fara nicio urma.
+ *
+ * Calea corecta exista deja si e singura autoritate de stergere: `deleteMedia`
+ * din src/lib/actions/media.actions.ts, care trece prin `keyOwnedBy` inainte de
+ * `deleteFromR2`.
+ */

@@ -16,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
 import { selectCls } from "@/lib/ui";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 export function FanCourierConfigClient({
   businessId,
@@ -43,10 +44,10 @@ export function FanCourierConfigClient({
 
   async function handleConnect() {
     if (!username.trim()) return toast.error("Completeaza username-ul selfAWB");
-    if (!password.trim()) return toast.error("Completeaza parola");
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completeaza parola");
 
     setLoading(true);
-    const result = await loadFanCourierAccountAction(username.trim(), password.trim());
+    const result = await loadFanCourierAccountAction(businessId, username.trim(), password.trim());
     setLoading(false);
 
     if ("error" in result) {
@@ -146,14 +147,14 @@ export function FanCourierConfigClient({
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Parola cont selfAWB"
+              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola cont selfAWB"}
             />
           </Field>
         </div>
 
         <Button
           onClick={handleConnect}
-          disabled={loading || !username.trim() || !password.trim()}
+          disabled={loading || !username.trim() || (!password.trim() && !secretulEsteSalvat(initialConfig, "password"))}
         >
           {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
           {loading ? "Se conecteaza..." : "Conecteaza si incarca datele"}

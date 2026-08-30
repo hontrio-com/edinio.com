@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { isEmptyDesign, parseInternals, parseStoreDesign, parseStoreStyle } from "./parse";
 import { buildClassicDesign, resolveStyle } from "./defaults";
 import { styleToCssVars } from "./css-vars";
-import type { DesignContext, SectionInstance } from "./types";
+import { addSection, moveSection, removeSection, toggleSection, updateSection } from "./edit";
+import { SECTION_REGISTRY } from "./registry";
+import type { DesignContext, SectionInstance, StoreDesign } from "./types";
 
 /**
  * Parserul de design e singurul lucru care sta intre jsonb-ul din baza si ce vede
@@ -87,7 +89,11 @@ test("sectiunile necunoscute si variantele disparute nu rup layout-ul", () => {
     ctx,
   );
   assert.equal(byId(d.home, "x"), undefined);
-  assert.equal(byId(d.home, "h")?.variant, "banners");
+  // Varianta stearsa cade pe una valida, iar de acolo hero-ul intra sub regula
+  // de re-derivare: intre `banners` si `overlay` decide comutatorul din editorul
+  // magazinului, nu ce scrie in jsonb. Magazinul asta n-are niciun banner, deci
+  // varianta corecta e `overlay`.
+  assert.equal(byId(d.home, "h")?.variant, "overlay");
   assert.ok(d.home.some((s) => s.kind === "product_grid"), "catalogul se readauga daca lipseste");
 });
 
@@ -364,4 +370,380 @@ test("o configuratie salvata inainte de slot primeste implicitul, nu o gaura", (
   // Cele doua magazine cu design materializat au fost salvate fara cheia `shop`.
   const d = parseStoreDesign({ version: 1, chrome: {}, home: [] }, ctx);
   assert.equal(d.shop.page.variant, "none");
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Cele doua editoare, si cine comanda ce
+//
+// Acelasi magazin se regleaza din doua ecrane: „Editeaza magazinul" scrie in
+// `page_content`, editorul de design scrie in jsonb. Cat timp au impartit un
+// singur camp `enabled`, fiecare il anula pe celalalt — si mereu tacut.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Designul classic al unui context, trecut printr-un ciclu salvare-citire. */
+const salvatSiCitit = (d: unknown, c: DesignContext = ctx) =>
+  parseStoreDesign(JSON.parse(JSON.stringify(d)), c);
+
+test("⚠⚠ ochiul din editorul de design nu se mai anuleaza singur la salvare", () => {
+  // M8. Stingeai o sectiune, disparea instant din previzualizare (care primeste
+  // designul neparsat), apasai Publica — si revenea, fiindca `page_content` o
+  // dadea aprinsa si parserul copia de acolo neconditionat.
+  const pornit = buildClassicDesign({ ...ctx, pageContent: { show_trust_strip_on_store: true } });
+  assert.equal(byId(pornit.home, "usp")?.enabled, true);
+
+  const stins = toggleSection(pornit, "usp");
+  const dupaSalvare = salvatSiCitit(stins, { ...ctx, pageContent: { show_trust_strip_on_store: true } });
+  assert.equal(byId(dupaSalvare.home, "usp")?.enabled, false, "alegerea din editorul de design tine");
+});
+
+test("⚠ sectiunile fara comutator in editorul vechi se pot stinge, in sfarsit", () => {
+  // Designul classic le construieste cu `enabled` scris in cod, deci pana acum
+  // „Cautare si filtre", „Categorii" si „Catalog produse" nu puteau fi stinse
+  // niciodata — ochiul se misca, si nu se intampla nimic.
+  for (const id of ["toolbar", "categories", "catalog"]) {
+    const stins = toggleSection(buildClassicDesign(ctx), id);
+    assert.equal(byId(salvatSiCitit(stins).home, id)?.enabled, false, id);
+  }
+});
+
+test("fara semn explicit, comanda ramane la comutatorul din editorul magazinului", () => {
+  // Partea care mergea si inainte, si care nu trebuie pierduta: un comerciant
+  // care n-a atins niciodata editorul de design isi regleaza magazinul de unde
+  // l-a reglat mereu.
+  const design = buildClassicDesign({ ...ctx, pageContent: { show_trust_strip_on_store: true } });
+  const acumStins = salvatSiCitit(design, { ...ctx, pageContent: { show_trust_strip_on_store: false } });
+  assert.equal(byId(acumStins.home, "usp")?.enabled, false);
+});
+
+test("⚠⚠ o sectiune aprinsa in editorul magazinului se intoarce daca lipseste din design", () => {
+  // M11. Din classic se readuceau doar randurile de produse si `product_grid`.
+  // Restul, lipsa dintr-un design salvat de o versiune mai veche, nu se mai
+  // intorcea niciodata: comutatorul „Recenzii" se aprindea, se salva, arata bifa
+  // verde, si nu facea absolut nimic.
+  const faraRecenzii = buildClassicDesign(ctx);
+  faraRecenzii.home = faraRecenzii.home.filter((s) => s.id !== "reviews");
+
+  const cu = salvatSiCitit(faraRecenzii, { ...ctx, pageContent: { reviews_section: { enabled: true } } });
+  assert.equal(byId(cu.home, "reviews")?.enabled, true);
+});
+
+test("sectiunea readusa aterizeaza la locul ei, nu la coada", () => {
+  const design = buildClassicDesign(ctx);
+  design.home = design.home.filter((s) => s.id !== "reviews");
+
+  const cu = salvatSiCitit(design, { ...ctx, pageContent: { reviews_section: { enabled: true } } });
+  const iCatalog = cu.home.findIndex((s) => s.id === "catalog");
+  const iBenefits = cu.home.findIndex((s) => s.id === "benefits");
+  const iReviews = cu.home.findIndex((s) => s.id === "reviews");
+  assert.ok(iCatalog < iReviews, "dupa catalog, ca in classic");
+  assert.ok(iBenefits < iReviews, "dupa beneficii, ca in classic");
+});
+
+test("o sectiune STINSA care lipseste nu se readauga degeaba", () => {
+  const design = buildClassicDesign(ctx);
+  design.home = design.home.filter((s) => s.id !== "reviews");
+  assert.equal(byId(salvatSiCitit(design).home, "reviews"), undefined);
+});
+
+test("⚠⚠ bara de anunt se poate APRINDE din editorul magazinului", () => {
+  // M9. Bucla de resincronizare itera numai peste `home`; bara sta in `chrome`
+  // si se lua intreaga din jsonb. Mergea intr-o singura directie: stinsa de
+  // acolo disparea, aprinsa de acolo nu aparea niciodata.
+  const stinsa = buildClassicDesign(ctx);
+  assert.equal(stinsa.chrome.announcement?.enabled, false);
+
+  const dupa = salvatSiCitit(stinsa, { ...ctx, pageContent: { announcement_bar: { enabled: true } } });
+  assert.equal(dupa.chrome.announcement?.enabled, true);
+});
+
+test("bara de anunt stinsa din editorul de design ramane stinsa", () => {
+  const pornita = buildClassicDesign({ ...ctx, pageContent: { announcement_bar: { enabled: true } } });
+  const stinsa = toggleSection(pornita, pornita.chrome.announcement!.id);
+  const dupa = salvatSiCitit(stinsa, { ...ctx, pageContent: { announcement_bar: { enabled: true } } });
+  assert.equal(dupa.chrome.announcement?.enabled, false);
+});
+
+test("⚠⚠ „Afiseaza continutul peste banner\" chiar comuta hero-ul dupa salvare", () => {
+  // M10. Flagul alege doar VARIANTA in designul derivat. Odata ce designul era
+  // salvat, varianta venea din jsonb si nu se mai re-deriva: comutai, salvai,
+  // previzualizarea se reincarca — si hero-ul era identic in ambele pozitii.
+  const cuBanner = { hero_banners: ["/a.jpg"] };
+  const salvat = buildClassicDesign({ ...ctx, pageContent: cuBanner });
+  assert.equal(byId(salvat.home, "hero")?.variant, "banners");
+
+  const dupa = salvatSiCitit(salvat, { ...ctx, pageContent: { ...cuBanner, hero_show_content: true } });
+  assert.equal(byId(dupa.home, "hero")?.variant, "overlay");
+});
+
+test("o varianta de hero aleasa in editorul de design nu se re-deriva", () => {
+  // Regula atinge doar cele doua variante pe care le comuta flagul. Orice
+  // altceva e o decizie de design si ramane a comerciantului.
+  const cuBanner = { hero_banners: ["/a.jpg"] };
+  const salvat = buildClassicDesign({ ...ctx, pageContent: cuBanner });
+  const altele = Object.keys(SECTION_REGISTRY.hero?.variants ?? {}).filter(
+    (v) => v !== "banners" && v !== "overlay",
+  );
+  if (altele.length === 0) return; // hero are doar cele doua variante derivate
+
+  const ales = updateSection(salvat, "hero", { variant: altele[0] });
+  const dupa = salvatSiCitit(ales, { ...ctx, pageContent: { ...cuBanner, hero_show_content: true } });
+  assert.equal(byId(dupa.home, "hero")?.variant, altele[0]);
+});
+
+test("⚠⚠ ordinea randurilor de produse urmeaza editorul magazinului", () => {
+  // M12. Sagetile promit „Trage de sageti ca sa schimbi ordinea", scriu in
+  // `page_content.product_sections` — si nimeni nu citea ordinea aia.
+  const randuri = (ids: string[]) => ({
+    product_sections: ids.map((id) => ({ id, layout: "grid", enabled: true })),
+  });
+
+  const salvat = buildClassicDesign({ ...ctx, pageContent: randuri(["a", "b"]) });
+  const dupa = salvatSiCitit(salvat, { ...ctx, pageContent: randuri(["b", "a"]) });
+
+  const ordinea = dupa.home.filter((s) => s.kind === "product_row").map((s) => s.id);
+  assert.deepEqual(ordinea, ["featured", "b", "a"]);
+});
+
+test("reasezarea randurilor nu misca sloturile, doar cine le ocupa", () => {
+  // Pozitia blocului fata de restul paginii ramane a editorului de design.
+  const randuri = (ids: string[]) => ({
+    product_sections: ids.map((id) => ({ id, layout: "grid", enabled: true })),
+  });
+  const salvat = buildClassicDesign({ ...ctx, pageContent: randuri(["a", "b"]) });
+  const inainte = salvat.home.map((s) => s.kind);
+
+  const dupa = salvatSiCitit(salvat, { ...ctx, pageContent: randuri(["b", "a"]) });
+  assert.deepEqual(dupa.home.map((s) => s.kind), inainte, "structura paginii ramane identica");
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Ce sterge, muta si alege comerciantul in editorul de design NU se anuleaza
+//
+// Regulile de mai sus readuc sectiuni, re-deriva varianta hero-ului si reaseaza
+// randurile. Toate trei sunt corecte cat timp nimeni n-a spus altceva — si
+// dezastruoase cand rescriu o alegere facuta anume.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("⚠⚠ o sectiune STEARSA nu se readauga, oricat ar fi de aprinsa in editorul vechi", () => {
+  const pc = { announcement_bar: { enabled: true }, reviews_section: { enabled: true } };
+  const design = buildClassicDesign({ ...ctx, pageContent: pc });
+
+  const dupa = salvatSiCitit(removeSection(design, "reviews"), { ...ctx, pageContent: pc });
+  assert.equal(byId(dupa.home, "reviews"), undefined);
+});
+
+test("⚠⚠ bara de anunt stearsa ramane stearsa", () => {
+  // `removeSection` o scrie `null`. Tratata ca „lipseste", revenea la prima
+  // citire pe fiecare pagina, cat timp comutatorul vechi era pornit.
+  const pc = { announcement_bar: { enabled: true } };
+  const design = buildClassicDesign({ ...ctx, pageContent: pc });
+  assert.equal(design.chrome.announcement?.enabled, true);
+
+  const dupa = salvatSiCitit(removeSection(design, design.chrome.announcement!.id), { ...ctx, pageContent: pc });
+  assert.equal(dupa.chrome.announcement, null);
+});
+
+test("⚠ stearsa si adaugata la loc din paleta: o singura data, nu doua", () => {
+  // Sectiunea noua primeste alt id, deci cea din classic parea „lipsa" si se
+  // readauga peste ea. Rezultatul: doua galerii in magazin, si autosalvarea
+  // cadea la fiecare incercare fiindca designul nu se mai stabiliza.
+  const pc = { announcement_bar: { enabled: false } };
+  let d = buildClassicDesign({ ...ctx, pageContent: pc });
+  d = removeSection(d, "gallery");
+  d = addSection(d, "gallery");
+
+  const dupa = salvatSiCitit(d, { ...ctx, pageContent: pc });
+  assert.equal(dupa.home.filter((s) => s.kind === "gallery").length, 1);
+});
+
+test("⚠⚠ varianta de hero aleasa din galerie bate comutatorul din editorul vechi", () => {
+  // „Doar imagini" si „Imagine cu text peste" sunt si design-uri din catalog, nu
+  // doar cele doua stari ale comutatorului. Re-derivate neconditionat, nu puteau
+  // fi alese niciodata.
+  const pc = { hero_banners: ["/a.jpg"], hero_show_content: true };
+  const design = buildClassicDesign({ ...ctx, pageContent: pc });
+  assert.equal(byId(design.home, "hero")?.variant, "overlay");
+
+  const ales = updateSection(design, "hero", { variant: "banners" });
+  assert.equal(byId(salvatSiCitit(ales, { ...ctx, pageContent: pc }).home, "hero")?.variant, "banners");
+});
+
+test("fara alegere explicita, varianta de hero urmeaza mai departe comutatorul", () => {
+  const cuBanner = { hero_banners: ["/a.jpg"] };
+  const salvat = buildClassicDesign({ ...ctx, pageContent: cuBanner });
+  const dupa = salvatSiCitit(salvat, { ...ctx, pageContent: { ...cuBanner, hero_show_content: true } });
+  assert.equal(byId(dupa.home, "hero")?.variant, "overlay");
+});
+
+test("⚠⚠ ordinea aranjata in editorul de design nu se mai rescrie din page_content", () => {
+  // Aplicata neconditionat, reasezarea trimitea in slotul din capul paginii ALT
+  // rand decat cel tras acolo: editorul arata una, magazinul alta.
+  const randuri = (ids: string[]) => ({
+    product_sections: ids.map((id) => ({ id, layout: "grid", enabled: true })),
+  });
+  const pc = randuri(["a", "b"]);
+  const design = buildClassicDesign({ ...ctx, pageContent: pc });
+
+  const de = design.home.findIndex((s) => s.id === "b");
+  const la = design.home.findIndex((s) => s.id === "featured");
+  const mutat = moveSection(design, de, la);
+  const ordineaDinEditor = mutat.home.filter((s) => s.kind === "product_row").map((s) => s.id);
+
+  const dupa = salvatSiCitit(mutat, { ...ctx, pageContent: pc });
+  assert.deepEqual(dupa.home.filter((s) => s.kind === "product_row").map((s) => s.id), ordineaDinEditor);
+});
+
+test("sagetile din editorul vechi raman functionale cat timp nimeni n-a mutat nimic", () => {
+  const randuri = (ids: string[]) => ({
+    product_sections: ids.map((id) => ({ id, layout: "grid", enabled: true })),
+  });
+  const salvat = buildClassicDesign({ ...ctx, pageContent: randuri(["a", "b"]) });
+  const dupa = salvatSiCitit(salvat, { ...ctx, pageContent: randuri(["b", "a"]) });
+  assert.deepEqual(dupa.home.filter((s) => s.kind === "product_row").map((s) => s.id), ["featured", "b", "a"]);
+});
+
+test("⚠ semnele supravietuiesc unui ciclu salvare-citire", () => {
+  // `saveDesignDraft` scrie forma PARSATA. Daca parserul nu le intoarce, prima
+  // scriere le pierde si tot ce apara ele se anuleaza la citirea urmatoare.
+  const pc = {
+    announcement_bar: { enabled: true },
+    reviews_section: { enabled: true },
+    product_sections: [
+      { id: "a", layout: "grid", enabled: true },
+      { id: "b", layout: "grid", enabled: true },
+    ],
+  };
+  let d = buildClassicDesign({ ...ctx, pageContent: pc });
+  d = removeSection(d, "reviews");
+  d = moveSection(d, d.home.findIndex((s) => s.id === "b"), d.home.findIndex((s) => s.id === "featured"));
+
+  const odata = salvatSiCitit(d, { ...ctx, pageContent: pc });
+  assert.ok(odata.sterse?.includes("reviews"));
+  assert.equal(odata.ordineAtinsa, true);
+
+  const deDouaOri = salvatSiCitit(odata, { ...ctx, pageContent: pc });
+  assert.deepEqual(deDouaOri, odata, "parserul ramane idempotent");
+});
+
+test("⚠⚠ mutarea unei sectiuni FARA legatura nu omoara sagetile din editorul vechi", () => {
+  // Semnul pus la orice mutare insemna ca o singura tragere de „Beneficii" cu o
+  // pozitie mai sus dezactiva pentru totdeauna reordonarea randurilor din
+  // „Editeaza magazinul": sagetile scriau mai departe, aratau „Salvat", si
+  // magazinul pastra ordinea veche.
+  const randuri = (ids: string[]) => ({
+    product_sections: ids.map((id) => ({ id, layout: "grid", enabled: true })),
+  });
+  const d = buildClassicDesign({ ...ctx, pageContent: randuri(["a", "b"]) });
+  const mutatAltceva = moveSection(d, d.home.findIndex((s) => s.id === "benefits"), 0);
+  assert.equal(mutatAltceva.ordineAtinsa, undefined);
+
+  const dupa = salvatSiCitit(mutatAltceva, { ...ctx, pageContent: randuri(["b", "a"]) });
+  assert.deepEqual(dupa.home.filter((s) => s.kind === "product_row").map((s) => s.id), ["featured", "b", "a"]);
+});
+
+test("⚠ lista de sterse nu creste la nesfarsit si nu-si pierde ultimele intrari", () => {
+  // Plafonata si taiata de la cap, arunca tocmai cele mai NOI stergeri: prima
+  // parsare le respecta, a doua nu — iar garda de ciorna, care presupune ca
+  // parsarea e stabila, raporta un conflict inventat.
+  const pc = { reviews_section: { enabled: true } };
+  let d = buildClassicDesign({ ...ctx, pageContent: pc });
+  // Cicluri sterge/adauga pe o sectiune din paleta: fiecare adaugare da un id nou.
+  for (let i = 0; i < 45; i++) {
+    d = removeSection(d, d.home.find((s) => s.kind === "gallery")?.id ?? "gallery");
+    d = addSection(d, "gallery");
+  }
+  d = removeSection(d, "reviews");
+
+  const odata = salvatSiCitit(d, { ...ctx, pageContent: pc });
+  const deDouaOri = salvatSiCitit(odata, { ...ctx, pageContent: pc });
+  assert.equal(byId(deDouaOri.home, "reviews"), undefined, "stergerea tine si la a doua citire");
+  assert.deepEqual(deDouaOri, odata, "parserul ramane idempotent");
+  assert.ok((odata.sterse?.length ?? 0) <= buildClassicDesign(ctx).home.length + 1);
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Magazinele care EXISTAU deja cand au aparut semnele
+//
+// Cea mai urata forma de regresie e cea pe care n-o provoaca nimeni: un
+// comerciant care si-a sters o sectiune sau si-a ales un hero acum o luna nu are
+// de ce sa le vada revenind singure la un deploy.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Un design salvat de o versiune veche: fara cheia `sterse`. */
+function designVechi(d: StoreDesign): Record<string, unknown> {
+  const { sterse: _s, ordineAtinsa: _o, ...rest } = JSON.parse(JSON.stringify(d)) as Record<string, unknown>;
+  return rest;
+}
+
+test("⚠⚠ o sectiune stearsa inainte de semne NU revine la deploy", () => {
+  const pc = { reviews_section: { enabled: true } };
+  const d = buildClassicDesign({ ...ctx, pageContent: pc });
+  // Asa arata in baza un design vechi din care comerciantul stersese „Recenzii":
+  // pur si simplu lipseste din lista, fara nimic care sa spuna de ce.
+  const brut = designVechi(d) as { home: SectionInstance[] };
+  brut.home = brut.home.filter((s) => s.id !== "reviews");
+
+  const dupa = parseStoreDesign(brut, { ...ctx, pageContent: pc });
+  assert.equal(byId(dupa.home, "reviews"), undefined);
+  assert.ok(dupa.sterse?.includes("reviews"), "intentia se noteaza acum, o singura data");
+});
+
+test("⚠⚠ un hero ales din galerie inainte de semne nu se pierde", () => {
+  const pc = { hero_banners: ["/a.jpg"], hero_show_content: true };
+  const d = updateSection(buildClassicDesign({ ...ctx, pageContent: pc }), "hero", { variant: "banners" });
+  const brut = designVechi(d) as Record<string, unknown>;
+  // Semnul nu exista in designurile vechi; alegerea traia doar in `variant`.
+  (brut.home as SectionInstance[]).forEach((s) => { delete (s as { variantOverride?: string }).variantOverride; });
+
+  const dupa = parseStoreDesign(brut, { ...ctx, pageContent: pc });
+  assert.equal(byId(dupa.home, "hero")?.variant, "banners");
+});
+
+test("⚠ o varianta INVALIDA dintr-un design vechi nu conteaza ca alegere", () => {
+  // Ea cade pe prima din catalog, iar aceea poate nimeri chiar peste una
+  // derivata: fara verificarea pe jsonb-ul brut, un design stricat si-ar fi ales
+  // singur un hero, pe veci.
+  const pc = { hero_banners: ["/a.jpg"], hero_show_content: true };
+  const dupa = parseStoreDesign(
+    { version: 1, chrome: {}, home: [{ id: "hero", kind: "hero", variant: "inexistenta" }] },
+    { ...ctx, pageContent: pc },
+  );
+  assert.equal(byId(dupa.home, "hero")?.variant, "overlay", "urmeaza comutatorul, ca orice design nederivat");
+});
+
+test("⚠⚠ o ordine aranjata inainte de semne nu se rescrie", () => {
+  const randuri = (ids: string[]) => ({
+    product_sections: ids.map((id) => ({ id, layout: "grid", enabled: true })),
+  });
+  const pc = randuri(["a", "b"]);
+  const d = buildClassicDesign({ ...ctx, pageContent: pc });
+  const mutat = moveSection(d, d.home.findIndex((s) => s.id === "b"), d.home.findIndex((s) => s.id === "featured"));
+  const ordineaLui = mutat.home.filter((s) => s.kind === "product_row").map((s) => s.id);
+
+  const dupa = parseStoreDesign(designVechi(mutat), { ...ctx, pageContent: pc });
+  assert.deepEqual(dupa.home.filter((s) => s.kind === "product_row").map((s) => s.id), ordineaLui);
+  assert.equal(dupa.ordineAtinsa, true, "intentia se noteaza acum");
+});
+
+test("un design vechi NEATINS nu capata intentii inventate", () => {
+  const pc = { reviews_section: { enabled: true }, announcement_bar: { enabled: true } };
+  const d = buildClassicDesign({ ...ctx, pageContent: pc });
+
+  const dupa = parseStoreDesign(designVechi(d), { ...ctx, pageContent: pc });
+  assert.deepEqual(dupa.sterse, []);
+  assert.equal(dupa.ordineAtinsa, undefined);
+  assert.equal(dupa.chrome.announcement?.enabled, true);
+});
+
+test("⚠ dupa prima citire, semnele sunt scrise si nu se mai reconstituie", () => {
+  // Cheia `sterse` exista de acum, chiar goala: fara ea, orice sectiune adaugata
+  // mai tarziu in designul classic ar fi fost luata drept stearsa pentru
+  // totdeauna.
+  const pc = { reviews_section: { enabled: true } };
+  const odata = parseStoreDesign(designVechi(buildClassicDesign({ ...ctx, pageContent: pc })), { ...ctx, pageContent: pc });
+  assert.ok(Array.isArray(odata.sterse));
+
+  const faraGalerie = { ...odata, home: odata.home.filter((s) => s.id !== "gallery") };
+  const dupa = parseStoreDesign(JSON.parse(JSON.stringify(faraGalerie)), { ...ctx, pageContent: pc });
+  assert.ok(byId(dupa.home, "gallery"), "o sectiune lipsa dintr-un design NOU se readuce, ca inainte");
 });

@@ -1,14 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import {
   isOfferType, parseOfferTrigger, parseOfferConfig, parseOfferDisplay, PHASE1_OFFER_TYPES,
   type OfferType, type OfferTrigger, type OfferConfig, type OfferDisplay, type ResolvedOffer,
 } from "@/lib/offers/offer.types";
 import { resolveCartOffers } from "@/lib/offers/offers";
+import { idsDeAfisare, scrieStatisticiOferte } from "@/lib/offers/statistici";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -238,28 +241,45 @@ export async function deleteOffer(
 }
 
 /**
- * Storefront analytics: bump an offer's impression/conversion counters atomically.
- * Called from the public storefront, so it uses the admin client + the RPC (which is
- * execute-locked to service_role). Validates the offer belongs to the business to
- * avoid cross-store tampering; all failures are swallowed — analytics must never
- * block the storefront. Wired up in 1B/Faza 2.
+ * AFISARILE ofertelor de pe pagina de produs, numarate din BROWSER.
+ *
+ * De ce nu la randare, in `resolveProductOffers`: pagina de produs se randeaza
+ * la fiecare cerere (`headers()` o face dinamica), iar `next/link` o cere si la
+ * simpla trecere cu mausul peste un card din catalog. Un contor crescut acolo ar
+ * fi numarat preincarcarile si crawlerele ca pe niste clienti, si ar fi pus o
+ * scriere in baza pe drumul critic al FIECAREI incarcari de pagina, la toate
+ * magazinele — inclusiv la cele fara nicio oferta. Din browser se numara doar ce
+ * a ajuns intr-adevar pe un ecran, si numai magazinele care chiar au oferte
+ * platesc ceva (azi: 2 magazine publicate, 9 oferte).
+ *
+ * Cale publica si anonima, deci: limita pe IP, plafon pe cate id-uri se pot
+ * revendica dintr-o data (`idsDeAfisare`) si verificarea ca ofertele apartin
+ * magazinului — altfel oricine putea umfla contorul altui comerciant. Nu
+ * intoarce nimic si nu arunca niciodata: apelantul e o pagina de magazin.
  */
-export async function recordOfferEvent(
-  businessId: string, offerId: string, kind: "impression" | "conversion", revenue = 0,
-): Promise<void> {
+export async function recordOfferImpressions(businessId: string, offerIds: string[]): Promise<void> {
   try {
+    if (!businessId) return;
+    const ids = idsDeAfisare(offerIds);
+    if (ids.length === 0) return;
+
+    // Un magazin adevarat trimite o cerere pe incarcare de pagina. Pragul lasa
+    // loc navigarii normale (produs dupa produs) si taie doar bucatile.
+    const ip = clientIpFromHeaders(await headers());
+    if (!rateLimit(`recordOfferImpressions:${ip}`, 60, 60_000)) return;
+
     const admin = createAdminClient();
-    const { data: offer } = await admin
-      .from("offers").select("id").eq("id", offerId).eq("business_id", businessId).single();
-    if (!offer) return;
-    await admin.rpc("increment_offer_stats" as never, {
-      p_offer_id: offerId,
-      p_impressions: kind === "impression" ? 1 : 0,
-      p_conversions: kind === "conversion" ? 1 : 0,
-      p_revenue: kind === "conversion" ? Math.max(0, Number(revenue) || 0) : 0,
-    } as never);
+    // Ofertele revendicate trebuie sa fie CHIAR ale magazinului: id-ul unei
+    // oferte ajunge in browser (`ResolvedOffer.id`), deci fara filtrul asta
+    // contorul unui magazin s-ar putea umfla de pe pagina altuia.
+    const { data } = await admin
+      .from("offers").select("id").eq("business_id", businessId).in("id", ids);
+    const aleMagazinului = (data ?? []).map((o) => o.id);
+    if (aleMagazinului.length === 0) return;
+
+    await scrieStatisticiOferte(admin, aleMagazinului.map((id) => ({ offerId: id, impressions: 1 })));
   } catch {
-    // analytics best-effort
+    // statistica e best-effort
   }
 }
 
@@ -273,6 +293,18 @@ export async function getCheckoutBumps(businessId: string, cartProductIds: strin
   const ids = cartProductIds.filter((x): x is string => typeof x === "string" && x.length > 0);
   if (ids.length === 0) return [];
   const admin = createAdminClient();
+  /*
+   * Afisarile NU se numara aici.
+   *
+   * Actiunea se re-cheama la fiecare schimbare a cosului si la fiecare
+   * redeschidere a formularului — masurat: doua cereri la o singura deschidere
+   * cand cosul s-a schimbat intre timp, plus cate una la fiecare linie adaugata
+   * sau stearsa. Numarate aici, cele trei suprafete n-ar mai fi comparabile intre
+   * ele in acelasi contor: pagina de produs numara o singura data pe incarcare,
+   * prin baliza din browser, iar rata de acceptare a bump-urilor ar fi iesit de
+   * cateva ori mai mica decat cea adevarata. Balizele browserului le numara pe
+   * toate trei la fel.
+   */
   return resolveCartOffers(admin, businessId, ids, "checkout");
 }
 
@@ -286,5 +318,10 @@ export async function getCartCrossSell(businessId: string, cartProductIds: strin
   const ids = cartProductIds.filter((x): x is string => typeof x === "string" && x.length > 0);
   if (ids.length === 0) return [];
   const admin = createAdminClient();
+  // Ca mai sus: afisarea se numara din browser, o singura data, prin aceeasi
+  // baliza ca pe pagina de produs. In plus, aici oferta poate desena ecran gol —
+  // `CartRecommendations` arunca produsele epuizate si nu mai randeaza nimic —
+  // deci numarata pe server ar fi contorizat o afisare care nu s-a vazut.
   return resolveCartOffers(admin, businessId, ids, "cart");
 }
+

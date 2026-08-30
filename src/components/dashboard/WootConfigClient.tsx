@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
@@ -64,7 +65,7 @@ export default function WootConfigClient({
   const [cities, setCities] = useState<WootCity[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
 
-  const isConnected = !!initialConfig?.enabled && !!initialConfig?.public_key;
+  const isConnected = !!initialConfig?.enabled && (!!initialConfig?.public_key || secretulEsteSalvat(initialConfig, "public_key"));
 
   // Load counties on mount
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function WootConfigClient({
   }
 
   async function handleTest() {
-    if (!cfg.public_key.trim() || !cfg.secret_key.trim()) {
+    if ((!cfg.public_key.trim() && !secretulEsteSalvat(initialConfig, "public_key")) || (!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) {
       toast.error("Introdu Public Key si Secret Key inainte de testare.");
       return;
     }
@@ -116,7 +117,7 @@ export default function WootConfigClient({
   }
 
   function handleSave() {
-    if (!cfg.public_key.trim() || !cfg.secret_key.trim()) {
+    if ((!cfg.public_key.trim() && !secretulEsteSalvat(initialConfig, "public_key")) || (!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) {
       toast.error("Public Key si Secret Key sunt obligatorii.");
       return;
     }
@@ -204,14 +205,14 @@ export default function WootConfigClient({
                 <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Public Key
               </label>
               <Input type="text" value={cfg.public_key} onChange={e => set("public_key", e.target.value)}
-                placeholder="32 caractere" />
+                placeholder={secretulEsteSalvat(initialConfig, "public_key") ? PLACEHOLDER_SECRET_SALVAT : ""} />
             </div>
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Secret Key
               </label>
               <Input type="password" value={cfg.secret_key} onChange={e => set("secret_key", e.target.value)}
-                placeholder="32 caractere" />
+                placeholder={secretulEsteSalvat(initialConfig, "secret_key") ? PLACEHOLDER_SECRET_SALVAT : ""} />
             </div>
 
             {/* Test connection */}

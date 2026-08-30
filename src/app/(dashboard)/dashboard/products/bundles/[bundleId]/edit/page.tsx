@@ -25,7 +25,10 @@ export default async function EditBundlePage({ params, searchParams }: { params:
   if (!row) notFound();
 
   const cfg = readBundleConfig(row.page_sections);
-  const eligible = await getBundleEligibleProducts(biz.id);
+  // Componentele DE ACUM ale pachetului se cer explicit: fara ele, una dezactivata
+  // intre timp ar disparea din lista si formularul ar declara-o „stearsa", refuzand
+  // orice salvare pana cand comerciantul o scoate — adica pana cand o pierde.
+  const eligible = await getBundleEligibleProducts(biz.id, (cfg?.items ?? []).map((i) => i.product_id));
   const categories = Array.isArray(biz.categories) ? biz.categories.map((c) => ({ id: c.id, name: c.name })) : [];
 
   const bundle = {

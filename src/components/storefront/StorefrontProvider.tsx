@@ -1,5 +1,6 @@
 "use client";
 
+import type { StoreDesign } from "@/lib/storefront/design/types";
 import { createContext, useContext, type ReactNode } from "react";
 import type { ProductSection } from "@/lib/store-sections";
 import type { Fateta, SelectieFatete } from "@/lib/storefront/catalog/facets";
@@ -12,6 +13,7 @@ import type {
   StorePageContent,
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
+import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -28,7 +30,9 @@ import type { Database } from "@/types/database.types";
  * categorii, paginare — si exista doar pe pagina de magazin.
  */
 
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
+// Randul TAIAT, nu cel intreg: valoarea asta traverseaza granita catre client.
+// Vezi src/lib/storefront/business-public.ts.
+type Business = BusinessPublic;
 
 /**
  * Ce face butonul de cos, dupa pagina pe care ne aflam si dupa designul ales.
@@ -120,7 +124,18 @@ export interface StoreChromeValue {
    * el le cere. Optionale: unde lipsesc, butonul de cos ramane un link catre
    * magazin, ca inainte — mai bine un drum in plus decat un total gresit.
    */
-  comert?: { shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null };
+  comert?: {
+    shippingCost: number;
+    freeShippingThreshold: number | null;
+    minOrderAmount: number | null;
+    /**
+     * Regimul de TVA al magazinului, pentru totalul din sertarul de cos.
+     *
+     * Fara el, sertarul arata marfa plus transport, atat: la magazinele cu
+     * preturi FARA TVA totalul iesea mai mic decat cel cerut la finalizare.
+     */
+    vat?: import("@/lib/storefront/cart/pricing").CartPricingInput["vat"];
+  };
   openCart: () => void;
   /** Slug-ul paginii curente, pentru starea activa din meniu. */
   currentPageSlug?: string | null;
@@ -178,11 +193,28 @@ export interface StoreChromeValue {
   /** Galeria foto poate aparea pe orice pagina, deci lightbox-ul sta aici. */
   openLightbox: (url: string) => void;
   /**
-   * Pagina e deschisa in iframe-ul editorului. Doar atunci sectiunile primesc
-   * marcajul `data-st-section`: pe magazinul public ar fi zeci de elemente in
-   * plus, degeaba, si un wrapper poate rupe selectorii CSS pe copil direct.
+   * Pagina e deschisa in iframe-ul editorului de DESIGN. Doar atunci sectiunile
+   * primesc marcajul `data-st-section`: pe magazinul public ar fi zeci de
+   * elemente in plus, degeaba, si un wrapper poate rupe selectorii CSS pe copil
+   * direct.
+   *
+   * ⚠ Nu „e deschisa cu `?preview=1`". Marcajul e ce cauta blocarea de clicuri
+   * din `useDesignPreview`, iar cat timp cele doua intelesuri au fost acelasi
+   * steag, previzualizarea din „Editeaza magazinul" — care pune si ea
+   * `preview=1` — ajungea acoperita de marcaje si nu mai raspundea la niciun
+   * click. Vezi `preview-protocol.ts`.
    */
-  isPreview?: boolean;
+  esteEditorDesign?: boolean;
+  /**
+   * Designul EFECTIV al paginii, dupa ce editorul de design si-a trimis
+   * eventualele modificari live.
+   *
+   * Exista ca sa poata fi citit de continutul paginii, nu doar de header si
+   * footer: paginile fara catalog isi aleg varianta din el, iar in previzualizare
+   * varianta se schimba fara reincarcare. Optional fiindca paginile care nu
+   * trec prin `StorePageShell` nu il pun.
+   */
+  design?: StoreDesign;
 }
 
 export interface StorefrontContextValue extends StoreChromeValue {
@@ -193,6 +225,26 @@ export interface StorefrontContextValue extends StoreChromeValue {
   visibleProducts: StorefrontProduct[];
   filteredProducts: StorefrontProduct[];
   paginatedProducts: StorefrontProduct[];
+  /**
+   * Cate produse are magazinul, si cate trec de filtre — NUMERE, nu lungimi.
+   *
+   * Pana acum orice contor se citea din `.length` al listelor de mai sus, si asta
+   * mergea fiindca listele erau INTREGI: browserul avea tot catalogul si felia
+   * singur. Din clipa in care felierea se face pe server, `filteredProducts` are
+   * douazeci si patru de elemente si nimic altceva, deci
+   * „{paginatedProducts.length} din {filteredProducts.length} produse" ar scrie
+   * „24 din 24 produse" pe un catalog de trei mii.
+   *
+   * CERUTE, nu optionale, si asta e deliberat: e acelasi truc pe care codul il
+   * foloseste deja de doua ori (`price_range` in `product.types.ts`, `vandabila`
+   * in `bundles.ts`). Un camp optional s-ar fi uitat exact acolo unde conteaza;
+   * unul cerut il plimba pe `tsc` prin toate cele noua locuri care numarau, in
+   * loc sa afle cineva din raportul unui comerciant.
+   *
+   * Pe palierul client sunt chiar lungimile listelor, deci nimic nu se schimba.
+   */
+  totalVizibile: number;
+  totalFiltrate: number;
   featuredProducts: StorefrontProduct[];
   productSections: { section: ProductSection; items: StorefrontProduct[] }[];
   isProductOutOfStock: (p: StorefrontProduct) => boolean;
@@ -206,8 +258,52 @@ export interface StorefrontContextValue extends StoreChromeValue {
   /** „relevance" cat timp exista o cautare si nu s-a ales explicit alta sortare. */
   effectiveSort: string;
   hasSearchMatches: boolean;
+  /**
+   * Asezarea aleasa de comerciant pentru grila paginii principale, cand e una
+   * dintre cele care nu se pot exprima ca sortare obisnuita („random", „manual").
+   *
+   * Bara are nevoie de ea, si nu ii ajunge `effectiveSort`: dupa ce vizitatorul
+   * alege „Pret crescator", `effectiveSort` nu mai e asezarea magazinului, dar
+   * optiunea de intoarcere la ea trebuie sa RAMANA in lista. Fara asta, un
+   * `<select>` al carui `value` nu are optiune se randeaza gol.
+   */
+  asezareMagazin: "" | "random" | "manual";
   /** Varianta de header aleasa are deja o caseta de cautare. */
   headerHasSearch: boolean;
+  /**
+   * Lista vine gata filtrata din baza, o pagina la un moment dat.
+   *
+   * `false` inseamna purtarea de dintotdeauna: catalogul intreg e in browser si
+   * orice filtru se aplica pe loc. `true` schimba TREI lucruri, si toate trei
+   * fiindca lista din memorie nu mai e catalogul:
+   *
+   *   1. Cautarea se aplica la o CERERE, nu la fiecare tasta — casetele trebuie
+   *      sa fie intr-un `<form>` si sa cheme `trimiteCautarea`, altfel Enter nu
+   *      inseamna nimic si vizitatorul scrie un termen la care pagina nu raspunde.
+   *   2. Paginarea e NUMEROTATA, chiar daca reglajul cere „Incarca mai multe":
+   *      modurile care aduna cresc lista din memorie, iar aici serverul trimite
+   *      exact o pagina, deci a doua apasare ar fi inlocuit produsele in loc sa
+   *      le adauge.
+   *   3. Pastilele de varianta din filtre NU se arata: valorile lor se deriva din
+   *      produsele trimise, iar selectia lor nu ajunge in adresa — ar fi
+   *      comutatoare care se coloreaza si nu fac nimic. Rolul lor il joaca
+   *      fatetele, care vin din rezumat.
+   *
+   * Un singur steag, nu trei: sunt aceeasi consecinta a aceluiasi fapt, si trei
+   * booleeni care trebuie sa fie mereu egali se despart la prima schimbare.
+   */
+  catalogPeServer: boolean;
+  /** Aplica textul din caseta. Fara efect pe palierul client. */
+  trimiteCautarea: () => void;
+  /**
+   * O cerere de catalog e in curs (filtru, sortare sau pagina noua).
+   *
+   * Exista doar pe palierul server, si e singurul semn ca s-a intamplat ceva:
+   * pe client filtrele raspund instantaneu, aici e un dus-intors. Fara el,
+   * vizitatorul apasa o fateta, nu se schimba nimic vizibil timp de o jumatate de
+   * secunda, si apasa a doua.
+   */
+  catalogSeIncarca: boolean;
 
   /**
    * Pagina asta filtreaza pe loc, adica are o lista care raspunde la cautare.

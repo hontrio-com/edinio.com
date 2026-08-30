@@ -1667,16 +1667,36 @@
   100% { transform: translateX(-50%); }
 }
 
-/* ─── /migrare hero: button glow pulse (no gradients) ──────────────────── */
-@keyframes migrare-btn-glow {
-  0%, 100% { box-shadow: 0 10px 28px -10px rgba(26, 181, 84, 0.55); }
-  50% { box-shadow: 0 16px 44px -8px rgba(26, 181, 84, 0.95); }
+/* ─── Sertarul de cos: intrarea dinspre marginea din dreapta ─────────────────
+   Panoul exista de mult si sta unde trebuie, dar aparea DINTR-O DATA, ca o
+   fereastra, nu ca un sertar. Diferenta dintre „a aparut ceva peste pagina" si
+   „s-a deschis cosul din marginea aia" e chiar drumul de 260ms: ochiul vede de
+   unde vine si intelege singur ca se inchide tot acolo.
+
+   Numai INTRAREA e animata. Pentru iesire ar trebui tinut in pagina si dupa ce
+   s-a inchis, cu o mica masina de stari, iar castigul e mic: la deschidere te
+   uiti la el, la inchidere te uiti deja in alta parte.
+
+   Curba pleaca repede si se aseaza lin, cum se misca un sertar adevarat.
+   `ease-out` simplu pare ca frineaza prea devreme si iese lipicios. */
+@keyframes cart-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
-.migrare-btn-glow {
-  animation: migrare-btn-glow 2.4s ease-in-out infinite;
+@keyframes cart-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
+.cart-drawer-enter {
+  animation: cart-drawer-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.cart-backdrop-enter {
+  animation: cart-backdrop-in 220ms ease-out;
+}
+/* Fara miscare, sertarul apare pe loc — adica exact cum era pana acum. */
 @media (prefers-reduced-motion: reduce) {
-  .migrare-btn-glow { animation: none; }
+  .cart-drawer-enter,
+  .cart-backdrop-enter { animation: none; }
 }
 
 /* ─── Custom-page button effects (CSS-only so blocks stay server-rendered) ─── */
@@ -1872,3 +1892,16 @@
   50% { transform: translate(-50%, -50%) scale(0.9); }
 }
 
+/*
+ * `pre` e singura eticheta din lista sanitizatorului care nu se rupe singura.
+ * Implicit e `white-space: pre`, iar preflight-ul Tailwind ii da doar fontul, nu
+ * si ruperea; `img`, `table`, `iframe` si `video` sunt aruncate de
+ * `sanitize-html.ts`, deci nu ajung aici. Masurat: o singura linie de o suta de
+ * caractere lipita de comerciant in descriere ducea latimea documentului de la
+ * 384 la 898 pe un telefon — descrierea nu iesea doar ea din coloana, ci scotea
+ * toata pagina din ecran. `overflow-x` ramane ca plasa pentru arta ASCII, unde
+ * ruperea la spatii n-ar ajunge. Priveste toate cele patru locuri care poarta
+ * clasa: descrierile din ambele pagini de produs, paginile de politici, blocurile
+ * paginilor proprii si anunturile.
+ */
+.policy-content pre { white-space: pre-wrap; overflow-x: auto; }

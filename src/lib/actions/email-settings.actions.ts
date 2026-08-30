@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { parseEmailConfig, smtpReady, type SmtpConfig, type EmailConfig, type EmailTemplateKind } from "@/lib/email/config";
 import { sendViaSmtp, verifySmtp } from "@/lib/email/smtp";
 
@@ -12,8 +13,40 @@ async function owns(supabase: ServerClient, businessId: string, userId: string):
   return !!data;
 }
 
-async function loadConfig(supabase: ServerClient, businessId: string): Promise<EmailConfig> {
-  const { data } = await supabase.from("store_settings").select("email_config").eq("business_id", businessId).single();
+/*
+ * Citirea se face cu SERVICE ROLE, nu cu clientul utilizatorului.
+ *
+ * `privat.decripteaza_config` iese pe prima linie pentru `anon`/`authenticated`,
+ * deci pe clientul utilizatorului vederea intoarce `smtp.pass` ca sirul
+ * `enc.v1.…`. Parola e write-only (formularul o trimite goala cand nu s-a
+ * retastat), asa ca `pass: input.pass.trim() || prevPass` punea sirul cifrat pe
+ * post de parola: `verifySmtp` cadea, si cu SMTP-ul propriu ACTIV comerciantul
+ * nu mai putea salva nicio modificare, nici macar dezactivarea. Emailurile
+ * catre clienti au continuat sa plece corect — `lib/email/sender.ts` citeste
+ * deja cu service role; doar ecranul de Setari si butonul de test erau moarte.
+ *
+ * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE dovedita
+ * separat. Toti cei patru apelanti cheama `owns()` inainte.
+ */
+/*
+ * ⚠ O CITIRE CAZUTA NU ARE VOIE SA ARATE CA O CONFIGURARE GOALA.
+ *
+ * Forma dinainte ignora `error`, iar apelantii scriu apoi INTREGUL obiect inapoi — deci
+ * un gol inchipuit s-ar fi scris peste parola SMTP (`email_config.smtp.pass`, camp
+ * secret inregistrat), si trimiterea de mailuri s-ar fi oprit fara nicio eroare.
+ *
+ * S-a intamplat la alta integrare: 24.08.2026, un magazin cu Trendyol si 1272 de
+ * listari active a ramas cu `trendyol_config = {"reconcile_page": 20}`.
+ *
+ * ⚠ `maybeSingle`, nu `single`: un magazin fara rand e legitim, si acolo golul e chiar
+ * raspunsul corect. Ce nu e legitim e sa nu poti citi si sa spui gol.
+ */
+async function loadConfig(businessId: string): Promise<EmailConfig> {
+  const { data, error } = await createAdminClient()
+    .from("store_settings").select("email_config").eq("business_id", businessId).maybeSingle();
+  if (error) {
+    throw new Error(`Configurarea de e-mail nu s-a putut citi: ${error.message}`);
+  }
   return parseEmailConfig(data?.email_config);
 }
 
@@ -41,7 +74,7 @@ export async function updateSmtpConfig(businessId: string, input: SmtpInput): Pr
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const prevPass = config.smtp?.pass ?? "";
   const smtp: SmtpConfig = {
     enabled: input.enabled,
@@ -74,7 +107,7 @@ export async function sendTestEmail(businessId: string): Promise<{ success: true
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const smtp = (await loadConfig(supabase, businessId)).smtp;
+  const smtp = (await loadConfig(businessId)).smtp;
   if (!smtpReady(smtp)) return { error: "Configureaza si salveaza SMTP-ul mai intai." };
 
   const from = smtp.from_name ? `${smtp.from_name} <${smtp.from_email}>` : smtp.from_email;
@@ -101,7 +134,7 @@ export async function updateEmailTemplate(
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const templates = { ...(config.templates ?? {}) };
   const subject = override.subject?.trim() || undefined;
   const heading = override.heading?.trim() || undefined;
@@ -128,7 +161,7 @@ export async function updateEmailBranding(
   if (!user) return { error: "Neautorizat" };
   if (!(await owns(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
-  const config = await loadConfig(supabase, businessId);
+  const config = await loadConfig(businessId);
   const branding = { ...(config.branding ?? {}) };
   if (input.logo !== undefined) branding.logo = input.logo?.trim() ? input.logo.trim() : undefined;
   if (input.color !== undefined) branding.color = input.color?.trim() ? input.color.trim() : undefined;

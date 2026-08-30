@@ -1,4 +1,5 @@
 import type { MenuItem } from "@/lib/pages/menu";
+import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -10,7 +11,9 @@ import type { Database } from "@/types/database.types";
  * cel putin randarea are acum o singura copie.
  */
 
-export type Business = Database["public"]["Tables"]["businesses"]["Row"];
+// Randul TAIAT, nu cel intreg: tipul asta descrie ce primesc sectiunile de
+// client. Vezi src/lib/storefront/business-public.ts.
+export type Business = BusinessPublic;
 export type Product = Database["public"]["Tables"]["products"]["Row"];
 export type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
 
@@ -30,7 +33,14 @@ export interface PageContent {
   how_it_works_section?: { enabled: boolean; title: string; steps: HowItWorksStep[]; };
   faq_section?: { enabled: boolean; title: string; items: FaqItem[]; };
   image_zoom?: { enabled: boolean };
+  /** DACA se arata casuta cu termenul de livrare, si cu ce eticheta. */
   delivery_estimate?: { enabled: boolean; min_days: number; max_days: number; text?: string };
+  /**
+   * CAT dureaza livrarea, ca fapt despre magazin (Setari → Livrare). Cand
+   * exista, zilele de aici bat `min_days`/`max_days` si sunt aceleasi pe care le
+   * primeste Google — vezi `@/lib/shipping/delivery-time`.
+   */
+  delivery_time?: { enabled: boolean; handling_min: number; handling_max: number; transit_min: number; transit_max: number };
   price_range_display?: { enabled: boolean };
   button_effect?: string;
   show_social_proof?: boolean;
@@ -39,6 +49,7 @@ export interface PageContent {
   checkout_config?: {
     custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
+    company_fields?: { enabled: boolean };
   };
 }
 

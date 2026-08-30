@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -10,9 +13,11 @@ import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
 import { validatePageSlug } from "@/lib/pages/reserved-slugs";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
+import { curataSeoPagina } from "@/lib/pages/pagina-seo";
 import type { MenuItem } from "@/lib/pages/menu";
 import { sendPageFormEmail } from "@/lib/email";
 import type { Database } from "@/types/database.types";
+import { esteAdminConfirmat } from "@/lib/admin-guard";
 
 type DB = SupabaseClient<Database>;
 
@@ -31,7 +36,7 @@ async function getUserAndBusiness(
   if (!biz) return null;
   const { data: profile } = await supabase
     .from("users_profile").select("role").eq("id", user.id).single();
-  return { userId: user.id, slug: biz.slug, isAdmin: profile?.role === "admin" };
+  return { userId: user.id, slug: biz.slug, isAdmin: esteAdminConfirmat(user, profile?.role) };
 }
 
 /** Unique page slug per business: "contact", "contact-2", ... */
@@ -168,7 +173,15 @@ export async function updatePage(
     update.blocks = gated;
   }
   if (patch.page_css !== undefined) update.page_css = patch.page_css;
-  if (patch.seo !== undefined) update.seo = patch.seo;
+  /*
+   * `seo` trece prin lista alba INAINTE de coloana, nu doar la citire.
+   *
+   * Coloana e `Json`, deci accepta orice; iar de acolo, campurile ajung in
+   * `<script type="application/ld+json">` pe pagina publica. Curatat doar la
+   * citire, gunoiul ar fi ramas in baza si ar fi calatorit mai departe la
+   * fiecare duplicare. Vezi `curataSeoPagina`.
+   */
+  if (patch.seo !== undefined) update.seo = curataSeoPagina(patch.seo) as never;
   if (patch.is_published !== undefined) update.is_published = patch.is_published;
 
   const { error } = await supabase.from("custom_pages").update(update as never).eq("id", pageId);
@@ -187,14 +200,30 @@ export async function deletePage(pageId: string): Promise<{ error: string } | { 
   if (!user) return { error: "Neautorizat" };
 
   const { data: page } = await supabase
-    .from("custom_pages").select("id, business_id, slug, businesses(slug)").eq("id", pageId).single();
+    .from("custom_pages").select("id, business_id, slug").eq("id", pageId).single();
   if (!page) return { error: "Pagina negasita" };
 
-  const { error } = await supabase.from("custom_pages").delete().eq("id", pageId);
-  if (error) return { error: "Eroare la stergerea paginii." };
+  /*
+   * Singura din familie care nu cerea proprietarul (createPage, updatePage,
+   * duplicatePage si updateStoreMenu il cer toate). Citirea de mai sus reuseste
+   * si pentru pagina PUBLICATA a altui magazin — exista politica publica de
+   * SELECT — deci autorizarea atarna doar de RLS. Azi RLS chiar tine, dar in
+   * clipa in care apare o politica DELETE mai larga sau cineva trece pe clientul
+   * de admin (cum s-a intamplat in deleteSubmission), linia asta e tot ce mai
+   * sta intre chiriasi.
+   */
+  const ctx = await getUserAndBusiness(supabase, page.business_id);
+  if (!ctx) return { error: "Neautorizat" };
 
-  const bizSlug = (page as unknown as { businesses: { slug: string | null } | null }).businesses?.slug ?? null;
-  revalidatePage(bizSlug, page.slug);
+  // `.select("id")` nu e decorativ: un DELETE care nu potriveste niciun rand nu
+  // da eroare, iar functia raspundea {success:true} pentru o stergere care NU
+  // s-a intamplat — confirmare falsa in interfata.
+  const { data: sterse, error } = await supabase
+    .from("custom_pages").delete().eq("id", pageId).select("id");
+  if (error) return { error: "Eroare la stergerea paginii." };
+  if (!sterse || sterse.length === 0) return { error: "Neautorizat" };
+
+  revalidatePage(ctx.slug, page.slug);
   return { success: true };
 }
 
@@ -219,7 +248,16 @@ export async function duplicatePage(pageId: string): Promise<{ error: string } |
       slug,
       blocks: src.blocks as never,
       page_css: src.page_css,
-      seo: src.seo as never,
+      /*
+       * ⚠ Data publicarii NU se copiaza.
+       *
+       * Randul nou primeste `created_at`-ul lui, deci o copie care mosteneste
+       * `dataPublicarii` ar purta doua date care se contrazic — si tocmai cea
+       * declarata bate, adica articolul nou ar aparea in Google cu data
+       * articolului din care a fost copiat. Restul campurilor SEO se pastreaza:
+       * o copie porneste de la aceleasi setari, asta e rostul ei.
+       */
+      seo: curataSeoPagina({ ...((src.seo ?? {}) as PageSeo), dataPublicarii: undefined }) as never,
       is_published: false,
     })
     .select("id")
@@ -293,6 +331,20 @@ export async function submitPageForm(input: {
     .map((f) => ({ label: String(f.label).slice(0, 120), value: String(f.value ?? "").slice(0, 5000) }));
   if (fields.length === 0) return { error: "Formular gol." };
 
+  /*
+   * Plafon PE IP. Pana acum singurul plafon era pe MAGAZIN (8 mesaje/minut), ceea
+   * ce se intorcea impotriva comerciantului: un atacator trimitea el cele 8
+   * mesaje si formularul devenea inutilizabil pentru clientii REALI — o negare de
+   * serviciu tintita, cu efort minim.
+   */
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`pageForm:${ip}`, 5, 60_000)) {
+    return { error: "Prea multe mesaje trimise. Te rugam asteapta un minut." };
+  }
+  if (!(await consumaLimita(`formular:ip:${ip}`, 60, 3600)).permis) {
+    return { error: "Prea multe mesaje trimise. Te rugam incearca mai tarziu." };
+  }
+
   const admin = createAdminClient();
 
   // Light burst limit: cap submissions per business in the last minute.
@@ -302,7 +354,16 @@ export async function submitPageForm(input: {
     .select("id", { count: "exact", head: true })
     .eq("business_id", input.businessId)
     .gte("created_at", since);
-  if ((count ?? 0) >= 8) return { error: "Prea multe mesaje. Incearca din nou peste un minut." };
+  /*
+   * Doua praguri, nu unul.
+   *
+   * DUR (60): opreste inundarea tabelei. Un magazin real nu-l atinge niciodata.
+   * MOALE (8): mesajul se SALVEAZA in continuare si comerciantul il vede in
+   * panou, dar nu mai pleaca emailuri. Asa, o rafala nu mai poate face mesajul
+   * unui client real sa DISPARA — ceea ce se intampla cu pragul unic de dinainte.
+   */
+  if ((count ?? 0) >= 60) return { error: "Prea multe mesaje. Incearca din nou peste un minut." };
+  const pesteRafala = (count ?? 0) >= 8;
 
   const { data: biz } = await admin
     .from("businesses")
@@ -388,7 +449,9 @@ export async function submitPageForm(input: {
   }
 
   // Email the merchant ONLY when they opted in. Recipient is server-trusted.
-  if (emailEnabled) {
+  // Peste pragul moale mesajul e deja salvat; nu mai trimitem si emailuri, ca o
+  // rafala sa nu inunde cutia postala a comerciantului.
+  if (emailEnabled && !pesteRafala) {
     try {
       let to = emailTo || biz.email?.trim() || "";
       if (!to) {

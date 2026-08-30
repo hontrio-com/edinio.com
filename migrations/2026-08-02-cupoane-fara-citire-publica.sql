@@ -1,0 +1,13 @@
+-- Cupoanele nu se mai citesc public.
+--
+-- Politica `discounts_public_select USING (is_active = true)` se aplica TUTUROR
+-- rolurilor, inclusiv `anon`. Adica o singura cerere GET pe /rest/v1/discounts,
+-- cu cheia publica din pachetul JavaScript, intorcea toate cupoanele active ale
+-- platformei: cod, tip, valoare, prag minim si numar de utilizari. Nu trebuia
+-- ghicit nimic, se citeau de-a gata.
+--
+-- Singurul consumator anonim era `validateDiscount`, mutat acum pe clientul
+-- admin: el raspunde doar „valid" sau „nu" pentru un cod anume si are limita de
+-- incercari. Comerciantul isi vede in continuare cupoanele prin
+-- `discounts_owner_all`, care cere `auth.uid()`.
+drop policy if exists discounts_public_select on public.discounts;

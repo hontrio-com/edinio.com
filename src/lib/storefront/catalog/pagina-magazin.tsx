@@ -1,20 +1,33 @@
+import { pentruBrowser } from "@/lib/storefront/business-public";
+import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { after } from "next/server";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
-import { construiesteFatete } from "@/lib/storefront/catalog/facets";
-import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
-import { radacinaMagazin, slugCategorie } from "@/lib/storefront/category-href";
-import { SEGMENT_MAGAZIN, shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
+import { construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefront/catalog/facets";
+import { alegePalier } from "@/lib/storefront/catalog/tier";
+import { cautaPeServer, sortareLaCautare } from "@/lib/storefront/catalog/cauta-server";
+import { numeSubarbore } from "@/lib/storefront/catalog/subarbore";
+import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
+import { citesteSetariMagazin } from "@/lib/storefront/catalog/shop-settings";
+import { COLOANE_PROIECTIE, dinProiectie, proiectieDb, type RandProiectie } from "@/lib/storefront/catalog/din-proiectie";
+import { radacinaMagazinCuFiltre, slugCategorie } from "@/lib/storefront/category-href";
+import { SEGMENT_MAGAZIN, SEGMENT_CAUTARE, shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
 import { isNonProductionHost } from "@/lib/storefront/host";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { canonicalCatalog, citesteFiltreDinAdresa } from "@/lib/storefront/catalog/url";
-import { deriveStoreTitle, parseStoreSeo } from "@/lib/seo";
+import { parseStoreSeo, storeBaseUrl } from "@/lib/seo";
+// Ce declara pagina despre sine sta separat, intr-un modul pur si probat.
+import { construiesteDateCatalog, titluSiDescriere } from "@/lib/storefront/catalog/date-catalog";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { Json } from "@/types/database.types";
 
@@ -30,15 +43,31 @@ import type { Json } from "@/types/database.types";
  * vinde mai departe dintr-un magazin suspendat.
  */
 
-/** Coloanele cerute in plus fata de pagina principala: `tags` alimenteaza fatetele. */
-export const COLOANE_CATALOG =
-  "id, name, slug, description, price, compare_at_price, images, category, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id, page_sections, weight_grams, tags";
-
 interface Argumente {
   slug: string;
   sp: Record<string, string | string[] | undefined>;
   /** Segmentul de categorie din cale, cand pagina e a unei categorii. */
   categorieSlug?: string;
+  /**
+   * Pagina de REZULTATE ale cautarii (`/cautare?q=…`).
+   *
+   * ═══ ⚠ DE CE E UN STEAG, SI NU O A DOUA PAGINA ═══
+   *
+   * Rezultatele au nevoie de exact ce are catalogul: grila, filtrele, paginarea,
+   * fatetele, ordonarea. O pagina scrisa separat ar fi fost o a doua copie a
+   * acelorasi sapte sute de randuri, care se desparte de prima la prima schimbare.
+   *
+   * ⚠ Steagul schimba DOUA lucruri, si numai doua:
+   *
+   *   1. Nu se mai redirecteaza magazinele care n-au catalog separat. Pagina de
+   *      rezultate trebuie sa existe pentru ORICARE magazin — altfel cautarea din
+   *      header, care e in toate design-urile, ar fi dus inapoi pe pagina principala
+   *      la unii si pe o pagina adevarata la altii.
+   *   2. Nu se indexeaza. Rezultatele proprii de cautare n-au ce cauta in Google —
+   *      o spun chiar ei in indrumarul pentru webmasteri — iar spatiul de adrese e
+   *      nesfarsit: un termen scris de oricine ar fi devenit o pagina.
+   */
+  esteCautare?: boolean;
 }
 
 type CategorieMinima = { id: string; name: string; parent_id: string | null };
@@ -55,6 +84,7 @@ function potrivesteCategorie<T extends { name: string }>(lista: T[], segment: st
   return lista.find((c) => slugCategorie(c.name) === cautat) ?? null;
 }
 
+
 /** Numele de categorie care exista DOAR pe produse (importuri fara categorie in tabel). */
 async function numeCategoriiDinProduse(businessId: string): Promise<{ name: string }[]> {
   const randuri = await fetchAllRows("storefront.magazin.categoriiProduse", (from, to) =>
@@ -65,14 +95,20 @@ async function numeCategoriiDinProduse(businessId: string): Promise<{ name: stri
     .map((name) => ({ name }));
 }
 
-export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): Promise<Metadata> {
+export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: Argumente): Promise<Metadata> {
   const admin = createAdminClient();
   const { data: business } = await admin
     .from("businesses")
-    .select("id, business_name, store_name, store_city, cover_url, custom_domain, store_settings(page_content, storefront_design)")
+    .select("id, business_name, store_name, store_city, cover_url, custom_domain, is_published, store_settings(page_content, storefront_design)")
     .eq("slug", slug)
     .single();
   if (!business) return {};
+
+  // Nepublicat: pagina redirectioneaza catre vitrina, care arata „in curand
+  // disponibil". Metadata ei n-are ce cauta in index. Vezi `incarcaMagazinul`.
+  if (!business.is_published) {
+    return metadataMagazinNepublicat(business.store_name ?? business.business_name);
+  }
 
   const brut = (business as unknown as {
     store_settings: { page_content: unknown; storefront_design: unknown } | { page_content: unknown; storefront_design: unknown }[] | null;
@@ -81,9 +117,9 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   const seo = parseStoreSeo(settings?.page_content ?? null);
   const displayName = business.store_name ?? business.business_name;
 
-  const radacina = business.custom_domain
-    ? `https://${business.custom_domain}`
-    : `https://www.edinio.com/${slug}`;
+  // Aceeasi formula ca peste tot in storefront, nu una scrisa a doua oara aici:
+  // pe domeniu propriu canonicalul e domeniul, altfel adresa de pe platforma.
+  const radacina = storeBaseUrl({ slug, custom_domain: business.custom_domain });
 
   /*
    * Categoria vine ori din cale, ori din `?cat=`.
@@ -101,8 +137,12 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   let radacinaPagina = `${radacina}/${SEGMENT_MAGAZIN}`;
   // Categoria e in cale sau in interogare; in ambele cazuri se cauta in tabel, ca
   // titlul sa fie numele adevarat si canonicalul adresa adevarata.
+  // Fara subarborii stinsi: pagina lor da 404, iar metadata unei pagini care nu
+  // exista n-are ce descrie.
   const categorii = categorieSlug || catBrut
-    ? (await admin.from("categories").select("id, name, parent_id").eq("business_id", business.id).limit(1000)).data ?? []
+    ? categoriiVizibile(
+        (await admin.from("categories").select("id, name, parent_id, is_active").eq("business_id", business.id).limit(1000)).data ?? [],
+      )
     : [];
 
   if (categorieSlug) {
@@ -142,15 +182,30 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   // Categoria nu mai are ce cauta in interogarea canonicalului: o poarta calea.
   const { url, indexabila } = canonicalCatalog(radacinaPagina, { ...sp, cat: undefined });
 
-  const title = categorie
-    ? `${categorie} | ${displayName}`
-    : `Toate produsele | ${displayName}`;
-  const description =
-    seo.description
-    || (categorie
-      ? `${categorie} de la ${displayName}. Filtreaza dupa pret, brand si atribute.`
-      : `Vezi toate produsele din ${deriveStoreTitle(displayName, business.store_city)}. Filtreaza dupa categorie, pret si atribute.`);
+  // Aceleasi doua siruri le foloseste si nodul `CollectionPage` din randare.
+  const { titlu: title, descriere: description } = titluSiDescriere(seo, categorie, displayName, business.store_city);
   const images = business.cover_url ? [business.cover_url] : [];
+
+  /*
+   * ⚠ REZULTATELE DE CAUTARE NU SE INDEXEAZA, NICIODATA.
+   *
+   * Google o cere limpede in indrumarul pentru webmasteri, si are dreptate: spatiul de
+   * adrese e nesfarsit — orice termen scris de oricine ar fi devenit o pagina — iar
+   * paginile alea n-au continut propriu, doar o felie din catalog.
+   *
+   * `follow: true` ramane: legaturile catre produse merita urmarite.
+   */
+  if (esteCautare) {
+    /* ⚠ Citit ca vecinii lui: un `?q=a&q=b` ajunge tablou, iar `.trim()` pe tablou
+       ar fi cazut in randare, nu la compilare. */
+    const termen = ((Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? "").trim().slice(0, 80);
+    return {
+      title: { absolute: termen ? `Rezultate pentru „${termen}” · ${displayName}` : `Caută · ${displayName}` },
+      description,
+      robots: { index: false, follow: true },
+      alternates: { canonical: `${radacina}/${SEGMENT_CAUTARE}` },
+    };
+  }
 
   return {
     // `absolute` scoate template-ul „%s | Edinio" al radacinii: pe domeniul
@@ -166,15 +221,20 @@ export async function metadataMagazin({ slug, sp, categorieSlug }: Argumente): P
   };
 }
 
-export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
+export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: Argumente) {
   const supabase = await createClient();
-  const [{ data: business }, { data: { user } }] = await Promise.all([
-    supabase.from("businesses").select("*").eq("slug", slug).single(),
-    supabase.auth.getUser(),
-  ]);
-  if (!business) notFound();
-
-  const isOwner = user?.id === business.user_id;
+  /*
+   * Randul de magazin vine din citirea DEDUPLICATA a antetului, nu dintr-o a doua
+   * interogare. Layout-ul l-a adus deja in aceeasi randare, cu `cache()` din React.
+   *
+   * `incarcaMagazinul` poarta si refuzul: citirea de dinainte trecea prin RLS
+   * (`is_published = true`), deci pentru un strain un magazin nepublicat intorcea
+   * nimic si pagina raspundea 404. Aceeasi purtare, acum scrisa explicit.
+   */
+  const { data: { user } } = await supabase.auth.getUser();
+  const acces = await incarcaMagazinul(slug, user?.id);
+  if (!acces) notFound();
+  const { business, esteProprietar: isOwner } = acces;
 
   const admin = createAdminClient();
   const { data: storeSettings } = await admin
@@ -187,10 +247,15 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   const isCustomDomain = business.custom_domain && host === business.custom_domain;
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
-  // Ciorna se randeaza DOAR pentru proprietar si doar in preview, exact ca pe
-  // pagina principala; pana la Publica, vizitatorii vad versiunea publicata.
+  // Ciorna se randeaza DOAR in editorul de design, exact ca pe pagina
+  // principala; pana la Publica, vizitatorii vad versiunea publicata.
+  //
+  // ⚠ Nu pe `preview=1`: il pune si „Editeaza magazinul", care nu stie nimic
+  // despre ciorne. Regula sta intr-un singur loc, in `preview-protocol.ts`,
+  // fiindca prima oara cele doua suprafete au divergat tacut exact aici.
   const isPreview = sp.preview === "1";
-  const useDraft = isPreview && isOwner && !!storeSettings?.storefront_design_draft;
+  const esteEditorDesign = esteEditorDeDesign(sp as { preview?: string; editor?: string }, isOwner);
+  const useDraft = esteEditorDesign && !!storeSettings?.storefront_design_draft;
   const resolved = resolveDesign(useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design, {
     primaryColor: business.primary_color ?? "#1AB554",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
@@ -198,6 +263,9 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
+  // Citite o data, aici: le cer si felierea de pe server (`perPage`), si titlul
+  // catalogului din firimituri si din `CollectionPage`.
+  const setari = citesteSetariMagazin(resolved.design);
 
   /*
    * Magazinul cu un singur produs n-are catalog, prin definitie.
@@ -209,15 +277,24 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    * ocolit toate trei. Se verifica INAINTEA gate-ului de design.
    */
   if (parseStoreMode((storeSettings?.page_content as Json) ?? null).mode === "one_product") {
-    redirect(radacinaMagazin(basePath));
+    redirect(radacinaMagazinCuFiltre(basePath, sp));
   }
 
-  // Magazinul are produsele pe pagina principala: aici n-are ce cauta nimeni.
-  // Redirect, nu 404 — un link vechi trebuie sa duca in magazin, nu intr-o
-  // pagina de eroare.
-  if (!shopOnPage(resolved.design)) redirect(radacinaMagazin(basePath));
+  /*
+   * Magazinul are produsele pe pagina principala: pagina de CATALOG n-are ce cauta.
+   * Redirect, nu 404 — un link vechi trebuie sa duca in magazin, nu intr-o pagina de
+   * eroare.
+   *
+   * ⚠ PAGINA DE REZULTATE FACE EXCEPTIE, si asta e chiar rostul ei.
+   *
+   * Cautarea din header e in toate cele sapte design-uri. Daca rezultatele ar depinde
+   * de o alegere de design, ar fi dus la o pagina adevarata la unii comercianti si
+   * inapoi pe pagina principala — peste erou, peste randurile de produse — la altii.
+   * Chiar ce a raportat eSAFE: „sunt tot pe pagina principala".
+   */
+  if (!esteCautare && !shopOnPage(resolved.design)) redirect(radacinaMagazinCuFiltre(basePath, sp));
 
-  if (!business.is_published && !isOwner) redirect(radacinaMagazin(basePath));
+  if (!business.is_published && !isOwner) redirect(radacinaMagazinCuFiltre(basePath, sp));
 
   // Magazin suspendat sau abonament expirat: pagina principala arata deja
   // „suspendat", dar de aici se putea cumpara mai departe. Aceeasi verificare ca
@@ -242,28 +319,66 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
     }
   }
 
-  // Catalogul complet, in ferestre: un query simplu se trunchiaza silentios la
-  // 1000 de randuri (cap PostgREST) si ar ascunde produse.
-  const [productsRaw, categoriesData] = await Promise.all([
-    fetchAllRows("storefront.magazin.products", (from, to) =>
-      supabase
-        .from("products")
-        .select(COLOANE_CATALOG)
-        .eq("business_id", business.id)
-        .eq("is_active", true)
-        .order("is_featured", { ascending: false })
-        .order("sort_order")
-        .order("id")
-        .range(from, to)),
+  /*
+   * Ordinea: agregatele INTAI, decizia, apoi produsele.
+   *
+   * Decizia „cine feliaza" are nevoie de numarul total, care sta in rezumat.
+   * Citit dupa produse, palierul server ar fi citit si tot catalogul, SI pagina —
+   * adica exact invers decat scopul. Rezumatul si categoriile sunt amandoua
+   * ieftine (un rand, respectiv cateva zeci), deci valul asta nu costa nimic.
+   */
+  const pc = (storeSettings?.page_content as Record<string, unknown>) ?? {};
+  const faraImagini = pc.hide_products_without_images === true;
+  const faraStocAscuns = pc.hide_out_of_stock_products === true;
+
+  const [rezumatRaspuns, categoriesData] = await Promise.all([
+    proiectieDb()
+      .from("catalog_rezumat")
+      .select("total, price_min, price_max, categorii, fatete")
+      .eq("business_id", business.id)
+      .eq("fara_imagini", faraImagini)
+      .eq("fara_stoc_ascuns", faraStocAscuns)
+      .maybeSingle(),
     fetchAllRows("storefront.magazin.categories", (from, to) =>
       supabase
         .from("categories")
-        .select("id, name, parent_id, image_url, sort_order")
+        // `is_active` vine INTREAGA, nefiltrata: subarborele unei categorii
+        // stinse se calculeaza in `lib/categories/vizibilitate.ts`, iar el nu se
+        // mai poate deduce dupa ce randul a fost scos din lista.
+        .select("id, name, parent_id, image_url, sort_order, is_active")
         .eq("business_id", business.id)
         .order("sort_order")
         .order("id")
         .range(from, to)),
   ]);
+  const rezumat = (rezumatRaspuns.data ?? null) as unknown as {
+    total: number; price_min: number; price_max: number; categorii: string[];
+    fatete: { jetoane?: string[]; fatete?: Fateta[] };
+  } | null;
+
+  /*
+   * Ce pleaca in browser: lista FARA subarborii stinsi, plus numele lor.
+   *
+   * Amandoua se calculeaza aici, pe server. Trimisa intreaga, lista ar fi ajuns
+   * in HTML-ul fiecarui vizitator cu tot cu raioanele scoase din magazin —
+   * randuri pe care browserul nu le randeaza niciodata, dar care se citesc din
+   * sursa paginii. Numele stinse merg separat, fiindca grila are nevoie de ele ca
+   * sa scoata produsele acelor categorii.
+   */
+  const categoriiDeNavigat = categoriiVizibile(categoriesData);
+  const numeStinse = numeCategoriiAscunse(categoriesData);
+
+  /*
+   * Fara rezumat, palierul client — si nu e un caz teoretic: un magazin nou n-are
+   * randuri pana la prima trecere a cronului. Calea veche merge oricum, deci
+   * lipsa rezumatului intarzie castigul, nu strica pagina.
+   */
+  const palier = rezumat
+    ? alegePalier({ pageContent: pc, totalProduse: rezumat.total, publicat: business.is_published === true })
+    : "client";
+  const peServer = palier === "server";
+
+
 
   /*
    * Categoria din cale, daca pagina e a unei categorii.
@@ -276,18 +391,27 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   let categorieDinCale: (CategorieMinima & { areCopii: boolean; numeParinte: string | null }) | null = null;
   let numeCategorie = "";
   if (categorieSlug) {
-    const gasita = potrivesteCategorie(categoriesData, categorieSlug);
+    // Cautarea se face in lista VIZIBILA: pagina unei categorii stinse trebuie sa
+    // raspunda 404, nu sa-si arate raftul pe alta usa.
+    const gasita = potrivesteCategorie(categoriiDeNavigat, categorieSlug);
     if (gasita) {
       numeCategorie = gasita.name;
       categorieDinCale = {
         id: gasita.id,
         name: gasita.name,
         parent_id: gasita.parent_id,
-        areCopii: categoriesData.some((c) => c.parent_id === gasita.id),
-        numeParinte: categoriesData.find((c) => c.id === gasita.parent_id)?.name ?? null,
+        areCopii: categoriiDeNavigat.some((c) => c.parent_id === gasita.id),
+        numeParinte: categoriiDeNavigat.find((c) => c.id === gasita.parent_id)?.name ?? null,
       };
     } else {
-      const orfane = Array.from(new Set(productsRaw.map((p) => p.category).filter(Boolean) as string[]));
+      // Categoriile purtate DOAR de produse. Pe palierul server vin din rezumat;
+      // pe client se citesc dintr-o interogare dedicata, ca sa nu depinda de
+      // produsele care se incarca abia mai jos. Numele stinse ies si de aici,
+      // altfel o categorie stinsa si-ar fi gasit pagina pe usa din dos.
+      const orfane = (rezumat
+        ? rezumat.categorii
+        : (await numeCategoriiDinProduse(business.id)).map((c) => c.name))
+        .filter((n) => !numeStinse.has(n));
       const numeOrfan = potrivesteCategorie(orfane.map((n) => ({ name: n })), categorieSlug)?.name;
       if (!numeOrfan) notFound();
       numeCategorie = numeOrfan;
@@ -295,23 +419,214 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   }
 
   /*
-   * Fatetele se calculeaza AICI, pe randurile brute.
+   * Fatetele vin din jetoanele deja calculate de proiector.
    *
-   * `slimCatalogProduct` reconstruieste `page_sections` si pastreaza doar
-   * variantele si pachetul, deci brandul si specificatiile nu mai exista in
-   * browser. Calculate dupa slimuire, jumatate din filtre ar fi fost mereu
-   * goale.
+   * Se calculau aici, pe randul BRUT, fiindca brandul si specificatiile stau in
+   * `page_sections` si nu supravietuiau slimuirii — deci pagina trebuia sa
+   * citeasca tot randul doar ca sa afle dupa ce se poate filtra. Acum perechile
+   * sunt scrise o data, la salvarea produsului, si se citesc ca `text[]`.
+   *
+   * Politica ramane NESCHIMBATA: aceleasi praguri, aceeasi deduplicare, aceeasi
+   * ordonare. `construiesteFateteDinJetoane` trece prin exact aceeasi agregare ca
+   * `construiesteFatete`; difera doar de unde vin perechile.
    */
-  const index = construiesteFatete(productsRaw);
-  const products = productsRaw.map((p) => {
-    const slim: Record<string, unknown> = { ...slimCatalogProduct(p) };
-    // `tags` a fost cerut doar pentru fatete, care sunt gata: in browser nu il
-    // citeste nimeni, iar la 1221 de produse ar fi zeci de kilobytes degeaba.
-    delete slim.tags;
-    const f = index.perProdus.get(p.id);
-    if (f) slim.f = f;
-    return slim as unknown as StorefrontProduct;
-  });
+  /*
+   * Fatetele, filtrele si produsele — pe calea palierului.
+   *
+   * DEPENDENTA CIRCULARA, si cum se rupe: RPC-ul are nevoie de filtrele parsate;
+   * `citesteFiltreDinAdresa` are nevoie de lista de fatete, ca sa stie ce chei din
+   * adresa sunt valide; iar fatetele se construiau din produse. Pe server nu se
+   * pot astepta produsele. Deci pe server fatetele vin din REZUMAT (exista deja),
+   * iar pe client raman construite din produse, ca pana acum. Doua cai, fiecare cu
+   * sursa ei de adevar.
+   *
+   * Politica de fatete e aceeasi in ambele: `construiesteFateteDinJetoane` a scris
+   * rezumatul, si tot ea ruleaza pe calea client.
+   */
+  // Valori de pornire, nu implicite cu inteles: a doua ramura ruleaza ori de cate
+  // ori prima n-a reusit, deci amandoua le rescriu. Sunt aici doar fiindca `tsc`
+  // nu poate dovedi ca `if (...) {} if (!reusit) {}` acopera totul.
+  let fateteDePagina: Fateta[] = [];
+  let jetoaneDePagina: string[] = [];
+  let products: StorefrontProduct[] = [];
+  let totalVizibile = 0;
+  let totalFiltrate = 0;
+  let filtre = citesteFiltreDinAdresa(sp, []);
+
+  let reusitPeServer = false;
+  if (peServer && rezumat) {
+    fateteDePagina = rezumat.fatete?.fatete ?? [];
+    jetoaneDePagina = rezumat.fatete?.jetoane ?? [];
+    filtre = citesteFiltreDinAdresa(sp, fateteDePagina);
+
+    // EXACT marimea pe care o calculeaza si renderer-ul (`PRODUCTS_PER_PAGE`).
+    // Diferite, felierea de pe server si numarul de pagini din browser s-ar
+    // contrazice: ultima pagina ar fi goala, sau ar lipsi produse de pe ea.
+    const perPagina = setari.perPage;
+
+    /*
+     * Sortarea EFECTIVA, nu cea din adresa.
+     *
+     * Clientul o compune ca `sortare || sortareImplicita || default_sort`
+     * (MiniStoreRenderer). Trimis brut, un `?sort=` lipsa insemna pe server
+     * „ordinea de catalog" si in browser „newest" — aceleasi produse, alta
+     * ordine, deci alte pagini. Testul diferential a prins asta pe 20 din 20 de
+     * carduri pe prima pagina.
+     */
+    const sortareImplicita = (pc.sort_options as { default_sort?: string } | undefined)?.default_sort ?? "newest";
+    const sortareEfectiva = filtre.sortare || setari.sortareImplicita || sortareImplicita;
+
+    /*
+     * Categoria vine SI din `?cat=`, nu doar din cale.
+     *
+     * `?cat=` poate purta numele categoriei sau ID-ul ei (linkurile de meniu).
+     * Ignorate aici, serverul intorcea tot catalogul in timp ce browserul filtra
+     * — server 20, client 7. Aceeasi traducere ca `initialCategory` de mai jos;
+     * calea bate interogarea, fiindca pagina se numeste dupa ea.
+     */
+    const categoriaCeruta = numeCategorie
+      || (filtre.categorie && categoriiDeNavigat.find((c) => c.id === filtre.categorie)?.name)
+      || filtre.categorie
+      || "";
+    // Subarborele se ia din lista vizibila: o subcategorie stinsa n-are ce cauta
+    // in filtrul parintelui ei aprins. RPC-ul taie oricum si el, pe aceeasi
+    // regula (`public.categorii_ascunse`); aici e ca cele doua sa ceara la fel.
+    const numeleFiltrate = categoriaCeruta ? numeSubarbore(categoriiDeNavigat, categoriaCeruta) : null;
+    // Grupate pe cheie: SAU inauntru, SI intre chei — ca `trecefiltrele`.
+    const filtreRpc = {
+      categorii: numeleFiltrate,
+      pretMin: filtre.pretMin,
+      pretMax: filtre.pretMax,
+      reduceri: filtre.reduceri,
+      stoc: filtre.stoc,
+      faraImagini,
+      faraStocAscuns,
+      fatete: Object.entries(filtre.fatete).map(([cheie, valori]) => valori.map((v) => jeton(cheie, v))),
+    };
+
+    let pag: { randuri: RandProiectie[]; total: number } | null = null;
+    if (filtre.cautare.trim()) {
+      /*
+       * Cu `?q=`, pagina vine din cautare, nu din `catalog_pagina`.
+       *
+       * Sortarea e ALTA aici: cat timp se cauta si adresa nu cere explicit o
+       * sortare, ordinea e RELEVANTA — nu implicitul magazinului. Vezi
+       * `sortareLaCautare`, unde sta motivul si de ce e o functie cu nume.
+       *
+       * `null` inseamna „nu pot raspunde" (magazin neindexat, cuvant prea comun,
+       * RPC picat), NU „zero rezultate": atunci `reusitPeServer` ramane fals si
+       * pagina cade pe calea veche, cu catalogul intreg si cautarea in browser.
+       */
+      pag = await cautaPeServer({
+        businessId: business.id,
+        q: filtre.cautare,
+        filtre: filtreRpc,
+        sortare: sortareLaCautare(filtre.sortare),
+        limit: perPagina,
+        offset: (filtre.pagina - 1) * perPagina,
+        slug: business.slug,
+      });
+    } else {
+      const { data: raspuns, error: eroareRpc } = await proiectieDb().rpc("catalog_pagina", {
+        p_business: business.id,
+        p_filtre: { ...filtreRpc, sortare: sortareEfectiva },
+        p_limit: perPagina,
+        p_offset: (filtre.pagina - 1) * perPagina,
+      });
+      /*
+       * Un RPC stricat NU are voie sa randeze un catalog gol.
+       *
+       * Exact asta s-a intamplat la prima aprindere: `categorii: null` facea
+       * functia sa arunce (`jsonb_array_elements` pe un null JSON), clientul
+       * Supabase inghitea eroarea in `data: null`, si magazinul afisa
+       * „0 din 1049 produse" — fara nicio urma nicaieri. Un catalog gol arata a
+       * magazin fara marfa, nu a defect, deci nu-l raporteaza nimeni.
+       *
+       * De acum orice esec se scrie in loguri SI cade pe calea veche. Aia e mai
+       * lenta, dar e intreaga; palierul server e o optimizare, si o optimizare
+       * n-are voie sa fie singurul drum catre produse.
+       */
+      if (eroareRpc || !raspuns) {
+        console.error(`[catalog] catalog_pagina a esuat pentru ${business.slug}:`, eroareRpc?.message ?? "raspuns gol");
+      }
+      pag = (raspuns ?? null) as { randuri: RandProiectie[]; total: number } | null;
+    }
+    products = (pag?.randuri ?? []).map((r) => {
+      const p = dinProiectie(r);
+      // Indicii trebuie sa arate catre dictionarul REZUMATULUI, nu catre unul
+      // construit din pagina: altfel bifele din bara ar arata alte valori decat
+      // cele pe care le filtreaza serverul.
+      const f = (r.fatete ?? []).map((j) => jetoaneDePagina.indexOf(j)).filter((i) => i >= 0);
+      return f.length ? { ...p, f } : p;
+    });
+    if (pag) {
+      totalVizibile = rezumat.total;
+      totalFiltrate = pag.total;
+      reusitPeServer = true;
+
+      /*
+       * O pagina dincolo de ultima e 404, nu o pagina goala.
+       *
+       * `?page=500` pe un catalog de 53 de pagini randa un catalog fara niciun
+       * produs, cu raspuns 200. Search Console citeste asta ca SOFT 404 si ii
+       * scade increderea in restul paginilor de acelasi fel — adica exact in
+       * paginile 2..N pentru care s-a facut toata paginarea crawlabila.
+       *
+       * `notFound()` se cheama AICI, in componenta care randeaza pagina, nu
+       * intr-o bucata de sub `<Suspense>`: aruncat de acolo, invelisul ar fi fost
+       * deja trimis cu 200 si raspunsul ar fi ramas 200 cu un 404 desenat
+       * inauntru. Vezi [[suspense-coaja-pagini]].
+       *
+       * Pagina 1 goala NU e 404: un magazin fara produse, sau un filtru fara
+       * rezultate, sunt raspunsuri valide si trebuie sa arate mesajul lor.
+       */
+      if (filtre.pagina > 1 && products.length === 0) notFound();
+    }
+  }
+
+  if (!reusitPeServer) {
+    const productsRaw = await fetchAllRows("storefront.magazin.products", (from, to) =>
+      proiectieDb()
+        .from("catalog_produs")
+        .select(COLOANE_PROIECTIE)
+        .eq("business_id", business.id)
+        .order("is_featured", { ascending: false })
+        .order("sort_order")
+        .order("product_id")
+        .range(from, to));
+    const randuri = productsRaw as unknown as RandProiectie[];
+    const index = construiesteFateteDinJetoane(
+      randuri.map((r) => ({ id: r.product_id, fatete: r.fatete })),
+    );
+    fateteDePagina = index.fatete;
+    jetoaneDePagina = index.jetoane;
+    filtre = citesteFiltreDinAdresa(sp, fateteDePagina);
+    // Adnotarea tabloului, nu un cast: `as StorefrontProduct` ar fi trecut chiar
+    // daca lipsea un camp, fiindca tipul tinta e asignabil catre forme mai sarace.
+    products = randuri.map((r) => {
+      const p = dinProiectie(r);
+      const f = index.perProdus.get(r.product_id);
+      return f ? { ...p, f } : p;
+    });
+    // Pe palierul client numerele se calculeaza oricum in browser; astea sunt
+    // doar valorile de pornire.
+    totalVizibile = products.length;
+    totalFiltrate = products.length;
+  }
+
+  /*
+   * DACA S-A CAZUT PE CALEA VECHE, BROWSERUL TREBUIE SA AFLE.
+   *
+   * `palier` spune ce s-a DECIS; asta spune ce s-a INTAMPLAT, si numai al doilea
+   * are voie sa ajunga la renderer. Trimis „server" peste un `products` care e
+   * catalogul INTREG, renderer-ul nu mai filtreaza, nu mai sorteaza si mai ales nu
+   * mai feliaza — deci pagina ar fi randat toate cele 1.049 de carduri deodata,
+   * nefiltrate si necautate, la o adresa care cerea douazeci.
+   *
+   * Defectul exista deja pe calea de eroare a RPC-ului, unde era rar. Cautarea il
+   * face obisnuit: un cuvant prea comun cade pe calea veche prin proiectare.
+   */
+  const palierRandat = reusitPeServer ? palier : "client";
 
   // Analitica: aterizarile directe pe pagina de catalog sunt vizite reale, la
   // fel ca cele pe pagina principala. Aceleasi excluderi — proprietarul si
@@ -319,16 +634,45 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
   if (!isOwner && !isNonProductionHost(host)) {
     const ua = (await headers()).get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
-    supabase.from("site_analytics").insert({ business_id: business.id, event_type: "visit", device, country: "RO" }).then(() => {});
+    // `after`, ca pe pagina principala: un `.then()` lasat sa atarne nu tine
+    // raspunsul, dar nici nu e garantat sa apuce sa se scrie. Antetele se citesc
+    // AICI, nu in callback. Nu face ruta dinamica.
+    //
+    // Scriem cu SERVICE ROLE, nu cu clientul vizitatorului. Politica publica de
+    // INSERT (`with_check true`) a fost stearsa: permitea oricui cu cheia anon
+    // sa injecteze evenimente pentru ORICE magazin — statistici otravite si
+    // crestere necontrolata a bazei. Serverul stie deja ce magazin randeaza.
+    const ipVizitator = clientIpFromHeaders(await headers());
+    /*
+     * Limita pe IP inaintea scrierii.
+     *
+     * Scrierea de analitice era SINGURA scriere publica fara NICIUN limitator —
+     * nici in memorie, nici durabil. Un script care cere `/{slug}` in bucla
+     * insereaza un rand la fiecare cerere, cu service role, deci ocolind si RLS-ul
+     * si orice plafon. Tabela a ajuns a cincea ca marime a bazei doar din trafic
+     * NORMAL; e cel mai ieftin mod de a umfla baza platformei si de a otravi
+     * statisticile unui comerciant.
+     *
+     * Exact atacul pentru care s-a sters deja politica publica de INSERT — doar ca
+     * atunci s-a inchis usa clientului si a ramas deschisa cea a serverului.
+     *
+     * Sta INAUNTRUL lui `after`, deci nu intra pe drumul raspunsului. Iar `ip` se
+     * citeste AICI, in randare: antetele nu se pot citi din callback.
+     */
+    after(async () => {
+      const { permis } = await consumaLimita(`analytics:${ipVizitator}`, 120, 3600);
+      if (!permis) return;
+      await createAdminClient().from("site_analytics")
+        .insert({ business_id: business.id, event_type: "visit", device, country: "RO" });
+    });
   }
 
-  const filtre = citesteFiltreDinAdresa(sp, index.fatete);
   // `?cat=` poate purta numele categoriei (headere, footer) sau id-ul ei
   // (linkurile de meniu de tip categorie). Filtrul lucreaza pe nume, deci
   // id-urile se traduc aici; altfel linkul din meniu ar duce la un catalog gol.
   // Categoria din cale bate orice `?cat=`: pagina se numeste dupa ea.
   const initialCategory = numeCategorie
-    || (filtre.categorie && categoriesData.find((c) => c.id === filtre.categorie)?.name)
+    || (filtre.categorie && categoriiDeNavigat.find((c) => c.id === filtre.categorie)?.name)
     || filtre.categorie
     || "toate";
 
@@ -342,19 +686,54 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
    */
   const setariDeTrimis = storeSettings ? { ...storeSettings, storefront_design_draft: null } : null;
 
+  const dateStructurate = construiesteDateCatalog({
+    business,
+    seo: parseStoreSeo(storeSettings?.page_content ?? null),
+    setari,
+    sp,
+    // Filtrele PARSATE, nu `sp` brut: `citesteFiltreDinAdresa` a aruncat deja
+    // cheile care nu sunt fatete reale ale magazinului, deci `utm_source` si
+    // `gclid` — adica aterizarea din orice reclama — nu trec drept filtre.
+    filtre,
+    numeCategorie,
+    parinteCategorie: categorieDinCale?.numeParinte ?? null,
+    products,
+    reusitPeServer,
+    esteCiorna: isPreview || !business.is_published,
+  });
+
   return (
+    <>
+      {dateStructurate ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: dateStructurate }} />
+      ) : null}
     <MiniStoreRenderer
       surface="shop"
-      business={business}
+      business={pentruBrowser(business)}
       products={products}
       storeSettings={setariDeTrimis as never}
       basePath={basePath}
-      categories={categoriesData}
+      categories={categoriiDeNavigat}
       design={resolved.design}
       designStyle={resolved.style}
-      preview={isPreview && isOwner}
-      fatete={index.fatete}
-      jetoane={index.jetoane}
+      editorDesign={esteEditorDesign}
+
+      fatete={fateteDePagina}
+      jetoane={jetoaneDePagina}
+      palier={palierRandat}
+      totalVizibileServer={totalVizibile}
+      totalFiltrateServer={totalFiltrate}
+      // Numele de categorie cu produse vin din rezumat: derivate din pagina
+      // curenta, ar disparea din meniu toate categoriile fara produse pe ea.
+      numeCategoriiCuProduse={reusitPeServer ? rezumat?.categorii : undefined}
+      // Numai cand filtrarea chiar se face in browser: pe palierul server
+      // produsele vin deja taiate de RPC, iar numele stinse ar fi singurul loc
+      // din HTML din care s-ar afla ce raioane si-a stins comerciantul.
+      numeCategoriiStinse={reusitPeServer ? undefined : [...numeStinse]}
+      // Capetele filtrului de pret descriu TOT catalogul, nu pagina trimisa.
+      intervalServer={reusitPeServer && rezumat
+        ? { min: Number(rezumat.price_min), max: Number(rezumat.price_max) }
+        : undefined}
       initialPage={filtre.pagina}
       initialSearch={filtre.cautare}
       initialCategory={initialCategory}
@@ -375,5 +754,6 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug }: Argumente) {
         : null}
       parinteCategorie={categorieDinCale?.numeParinte ?? null}
     />
+    </>
   );
 }

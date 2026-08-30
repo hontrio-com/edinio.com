@@ -14,6 +14,7 @@ import { OUR_FIELDS, DEFAULT_OPTIONS, EMPTY_TOTALS } from "@/lib/import/types";
 import type { ColumnMapping, ImportOptions, ImportSource, ImportStatus, ImportTotals, StagedProduct, ValidationSummary } from "@/lib/import/types";
 import { SOURCE_LABELS } from "@/lib/import/presets";
 import { IMPORT_TEMPLATES } from "@/lib/import/templates";
+import { ACCEPT_ATTRIBUTE, hasAcceptedExtension } from "@/lib/import/tabular-formats";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -46,8 +47,8 @@ export function ImportWizard({ plan, productLimit, productCount }: { plan: strin
 
   // ── Upload ────────────────────────────────────────────────────────────────
   async function handleFile(file: File) {
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      toast.error("Te rugam incarca un fisier CSV");
+    if (!hasAcceptedExtension(file.name)) {
+      toast.error("Te rugam incarca un fisier CSV sau Excel");
       return;
     }
     setUploading(true);
@@ -321,7 +322,7 @@ function UploadStep({ dragging, uploading, fileInputRef, onDragOver, onDragLeave
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept={ACCEPT_ATTRIBUTE}
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); e.target.value = ""; }}
         />

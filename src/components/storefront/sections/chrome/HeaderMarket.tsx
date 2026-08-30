@@ -12,9 +12,11 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode, type CategoryItem } from "@/components/storefront/StorefrontProvider";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
+import { CategoryScroller } from "@/components/storefront/sections/catalog/CategoryScroller";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { radacinaMagazin, hrefCategorie } from "@/lib/storefront/category-href";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
+import { stilSigla } from "@/lib/storefront/logo-box";
 
 const STROKE = 1.6;
 
@@ -110,8 +112,8 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                className="w-auto max-w-full object-contain" />
+                style={stilSigla(logoSize)}
+                className="w-auto object-contain" />
             ) : (
               <span className="text-2xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
             )}
@@ -147,22 +149,37 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
 
             {/* Meniul se deruleaza in interiorul barii: cu multe pagini ar impinge
                 altfel toata pagina pe orizontala. Panoul de categorii ramane in
-                afara zonei derulabile, altfel l-ar taia la 48 px inaltime. */}
+                afara zonei derulabile, altfel l-ar taia la 48 px inaltime.
+
+                Randul asta traieste doar de la lg in sus, adica exact acolo unde
+                nu exista deget: bara de derulare e ascunsa, iar rotita mouse-ului
+                misca pagina, nu banda. Fara sageti, linkurile iesite din bara nu
+                erau accesibile cu mouse-ul deloc — de aceea derularea vine de la
+                `CategoryScroller`, care aduce si tragerea cu mouse-ul. Paleta i
+                se trimite in `--st-*`, ca sageata sa nu fie o pastila alba peste
+                un antet colorat de comerciant. */}
             {menu.length > 0 && (
-              <div className="flex items-center gap-7 min-w-0 overflow-x-auto scrollbar-hide">
-                {menu.map((it) => {
-                  const activ = esteActiv(it, { currentPageSlug, isHome });
-                  return (
-                    // Pagina curenta nu se marcheaza doar prin culoare: subliniere
-                    // pentru cine nu o distinge, `aria-current` pentru cititoare.
-                    <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} aria-current={activ ? "page" : undefined}
-                      className={`text-sm font-medium text-[var(--st-text)] hover:opacity-70 transition-opacity whitespace-nowrap ${meniuCls}`}
-                      style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
-                      {it.label}
-                    </a>
-                  );
-                })}
-              </div>
+              <CategoryScroller
+                className="min-w-0"
+                etichetaInapoi="Inapoi in meniu"
+                etichetaInainte="Inainte in meniu"
+                paleta="border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] hover:opacity-70"
+              >
+                <div className="flex items-center gap-7 w-max">
+                  {menu.map((it) => {
+                    const activ = esteActiv(it, { currentPageSlug, isHome });
+                    return (
+                      // Pagina curenta nu se marcheaza doar prin culoare: subliniere
+                      // pentru cine nu o distinge, `aria-current` pentru cititoare.
+                      <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} aria-current={activ ? "page" : undefined}
+                        className={`text-sm font-medium text-[var(--st-text)] hover:opacity-70 transition-opacity whitespace-nowrap ${meniuCls}`}
+                        style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
+                        {it.label}
+                      </a>
+                    );
+                  })}
+                </div>
+              </CategoryScroller>
             )}
 
             {telefonJos && (

@@ -5,22 +5,9 @@ import { ShoppingCart, Check } from "lucide-react";
 import { parseVariants } from "@/lib/storefront/variants";
 import { VariantQuickAdd, type QuickAddLine } from "@/components/ministore/VariantQuickAdd";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
-
-interface CartItem {
-  productId: string;
-  slug?: string;
-  name: string;
-  price: number;
-  imageUrl: string | null;
-  quantity: number;
-  variantTitle?: string;
-  variantSku?: string;
-}
-
-/** Same line identity the storefront cart uses: product + chosen variant. */
-function lineKey(i: { productId: string; variantTitle?: string }): string {
-  return i.variantTitle ? `${i.productId}::${i.variantTitle}` : i.productId;
-}
+import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
+import type { PriceRange } from "@/lib/utils/product-price";
+import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 /**
  * Butonul de adaugare in cos de pe blocurile de produse ale paginilor proprii.
@@ -47,6 +34,8 @@ export function AddToCartButton({ product, storeSlug, color }: {
     image: string | null;
     images?: string[];
     pageSections?: unknown;
+    /** Intervalul vandabil, de la server: sertarul il arata pana la prima bifa. */
+    priceRange: PriceRange;
   };
   storeSlug: string;
   color: string;
@@ -61,11 +50,13 @@ export function AddToCartButton({ product, storeSlug, color }: {
       if (cos) {
         cos.addItem(line);
       } else {
+        // Al doilea scriitor al aceleiasi chei, pe pagini fara `CartProvider`:
+        // trece prin ACEEASI curatare, altfel „o singura granita" ar fi o vorba.
         const key = `cart_${storeSlug}`;
-        const items = JSON.parse(localStorage.getItem(key) || "[]") as CartItem[];
+        const items = normalizeazaCos(JSON.parse(localStorage.getItem(key) || "[]"));
         const lk = lineKey(line);
         const existing = items.find((i) => lineKey(i) === lk);
-        if (existing) existing.quantity += 1;
+        if (existing) existing.quantity = normalizeazaCantitate(existing.quantity + 1);
         else items.push({ ...line, quantity: 1 });
         localStorage.setItem(key, JSON.stringify(items));
       }
@@ -108,6 +99,7 @@ export function AddToCartButton({ product, storeSlug, color }: {
             compare_at_price: product.compareAtPrice ?? null,
             images: product.images ?? (product.image ? [product.image] : []),
             page_sections: product.pageSections,
+            price_range: product.priceRange,
           }}
           color={color}
           onClose={() => setPickerOpen(false)}

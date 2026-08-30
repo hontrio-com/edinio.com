@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import {
+  cePachetCategorie, cePromovare, incheieIntentia, intentiaPentru,
+} from "@/lib/olx/intentie-de-cumparare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -12,9 +15,33 @@ import {
   type OlxAdvertRow, type OlxAccountInfo, type OlxPacketGroup, type OlxPacketsResult,
 } from "@/lib/actions/olx.actions";
 import type { OlxPaidFeature, OlxPaymentMethod } from "@/lib/olx/types";
+import { OlxCont } from "./OlxCont";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { selectCls } from "@/lib/ui";
+
+/**
+ * Intrebarea de dinaintea unei plati.
+ *
+ * ═══ TREI BUTOANE CU BANI, TREI PURTARI (02.09.2026) ═══
+ *
+ *   „Promovează"          — fara pret, fara confirmare
+ *   „Cumpără" (pachet)    — pret in eticheta, fara confirmare
+ *   „Cumpără pachet" (rand) — confirmare, dar fara suma
+ *
+ * ⚠ Nici macar cel cu confirmare nu spunea CAT. Iar plata nu se poate lua inapoi din Edinio: ce
+ * pleaca din creditul lui OLX se intoarce doar prin ei.
+ *
+ * ⚠ SI CAND NU STIM PRETUL, SE SPUNE ASTA. `OlxPaidFeature` n-are camp de pret in raspunsul lor,
+ * deci pentru promovari nu putem pune o suma. O suma inventata ar fi mai rea decat lipsa ei; un
+ * „nu stiu cat" il face pe om sa se uite la sold inainte, ceea ce si trebuie.
+ */
+function confirmaPlata(ce: string, cat: string | null): boolean {
+  return window.confirm(
+    `${ce}\n\n${cat ? `Se plătește ${cat} din creditul contului tău OLX.` : "Se plătește din creditul contului tău OLX; suma o stabilește OLX și nu ne-o spune dinainte."}`
+    + "\n\nPlata nu se poate anula din Edinio.",
+  );
+}
 
 function money(value: number | null | undefined, currency: string | null | undefined): string {
   const n = Number(value) || 0;
@@ -28,15 +55,30 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   const [packets, setPackets] = useState<OlxPacketsResult | null>(null);
   const [features, setFeatures] = useState<OlxPaidFeature[] | null>(null);
 
+  /*
+    ⚠ O CITIRE PICATĂ NU E UN „N-AI NIMIC" (02.09.2026)
+
+    Se arăta doar eroarea de la sold. Dacă pica lista de pachete, ecranul scria „Nu sunt pachete
+    disponibile pentru categoriile tale în acest moment" — o afirmație despre contul lui OLX, pe o
+    citire care n-a reușit. Iar dacă pica lista de promovări, secțiunea de promovare DISPĂREA fără
+    un cuvânt.
+
+    ⚠ Amândouă sunt același zero care liniștește: omul pleacă convins că OLX nu-i oferă nimic, când
+    de fapt noi n-am putut întreba.
+  */
+  const [erori, setErori] = useState<{ sold?: string; pachete?: string; promovari?: string }>({});
+
   async function loadAll() {
     setLoading(true);
     const [acc, pk, ft] = await Promise.all([
       getOlxAccountInfo(businessId), getOlxPackets(businessId), getOlxPaidFeatures(businessId),
     ]);
-    if (!("error" in acc)) setAccount(acc);
-    if (!("error" in pk)) setPackets(pk);
-    if (!("error" in ft)) setFeatures(ft.features);
-    if ("error" in acc) toast.error(acc.error);
+    const rele: { sold?: string; pachete?: string; promovari?: string } = {};
+    if ("error" in acc) rele.sold = acc.error; else setAccount(acc);
+    if ("error" in pk) rele.pachete = pk.error; else setPackets(pk);
+    if ("error" in ft) rele.promovari = ft.error; else setFeatures(ft.features);
+    setErori(rele);
+    if (rele.sold) toast.error(rele.sold);
     setLoading(false);
   }
 
@@ -88,6 +130,17 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
               {packets && packets.bought.length > 0 && (
                 <div>
                   <SectionLabel icon={Package}>Pachete active</SectionLabel>
+                  {/*
+                    ⚠ O LISTĂ SCURTATĂ ARATĂ EXACT CA UNA COMPLETĂ. Paginația se oprea la prima
+                    pagină picată și întorcea ce apucase — iar omul se uită aici tocmai ca să
+                    hotărască dacă mai cumpără un pachet. Ștearsă pe jumătate, îl face să cumpere
+                    ce are deja.
+                  */}
+                  {packets && !packets.boughtIntreg && (
+                    <p className="text-[11px] text-warning">
+                      Lista de mai jos poate fi incompletă: OLX n-a răspuns la toate paginile.
+                    </p>
+                  )}
                   <div className="space-y-1.5">
                     {packets.bought.map((p) => (
                       <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm">
@@ -104,12 +157,20 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
                 businessId={businessId}
                 groups={packets?.groups ?? []}
                 hasMappedCategories={packets?.hasMappedCategories ?? false}
+                eroare={erori.pachete}
+                onCumparat={loadAll}
+                nereusite={packets?.nereusite ?? []}
+                metodaGhicita={packets?.metodaGhicita ?? false}
+                moneda={account?.balance?.currency ?? null}
                 methods={methods}
                 defaultMethod={packets?.paymentMethod ?? "account"}
               />
 
               {/* Promote advert */}
-              <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} />
+              <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} eroare={erori.promovari} onCumparat={loadAll} />
+
+              {/* Facturare, profil de firma si promovarile pe care anuntul le are deja */}
+              <OlxCont businessId={businessId} adverts={activeAdverts} />
             </>
           )}
         </div>
@@ -118,8 +179,30 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   );
 }
 
-function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod }: {
-  businessId: string; groups: OlxPacketGroup[]; hasMappedCategories: boolean; methods: OlxPaymentMethod[]; defaultMethod: OlxPaymentMethod;
+function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMethod, eroare, nereusite, metodaGhicita, moneda, onCumparat }: {
+  businessId: string; groups: OlxPacketGroup[]; hasMappedCategories: boolean; methods: OlxPaymentMethod[];
+  defaultMethod: OlxPaymentMethod;
+  /** Lista n-a putut fi citita. Se spune, in loc sa se arate un gol linistitor. */
+  eroare?: string;
+  /** Categoriile pentru care intrebarea a picat. Golul lor NU inseamna „n-are pachete". */
+  nereusite?: string[];
+  /** Preturile sunt ale unei metode ghicite: lista adevarata n-a putut fi citita. */
+  metodaGhicita?: boolean;
+  /** Moneda soldului, ca pretul din confirmare sa fie in ce plateste el. */
+  moneda?: string | null;
+  /**
+   * ⚠ SOLDUL SI PACHETELE SE RECITESC DUPA FIECARE CUMPARARE.
+   *
+   * Panoul le incarca o SINGURA data, la deschidere (`if (next && account === null …)`), iar
+   * `router.refresh()` reimprospateaza numai componentele de SERVER — starea asta e in `useState`
+   * intr-o componenta de client. Deci dupa o cumparare reusita soldul si „Pachete active" ramaneau
+   * exact cele de acum cinci minute.
+   *
+   * ⚠ Si tocmai acolo se uita omul ca sa hotarasca daca mai cumpara unul — scrie chiar in fisier,
+   * la lista de pachete. Un numar care nu se misca e chiar semnalul care il face sa apese a doua
+   * oara, iar intentia tocmai a fost aruncata.
+   */
+  onCumparat?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
@@ -134,7 +217,27 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
   return (
     <div>
       <SectionLabel icon={ShoppingCart}>Cumpără pachet de anunțuri</SectionLabel>
-      {groups.length === 0 ? (
+      {metodaGhicita && (
+        /* ⚠ Prețurile de mai jos sunt ale unei metode GHICITE: lista adevărată n-a putut fi citită. */
+        <p className="mb-2 text-[11px] text-warning">
+          N-am putut citi metodele de plată din contul tău OLX, deci prețurile de mai jos sunt
+          orientative. Cumpărarea nu pleacă până nu le putem citi.
+        </p>
+      )}
+      {nereusite && nereusite.length > 0 && (
+        /* ⚠ O categorie a cărei citire a picat NU e o categorie fără pachete. */
+        <p className="mb-2 text-[11px] text-warning">
+          N-am putut întreba OLX pentru: {nereusite.join(", ")}. Lipsa lor de mai jos nu înseamnă că
+          n-au pachete.
+        </p>
+      )}
+      {eroare ? (
+        /* ⚠ „N-am putut citi" nu se scrie ca „nu există". Vezi nota de la `loadAll`. */
+        <p className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+          Nu am putut citi pachetele de la OLX: {eroare} Lista de mai jos e goală fiindcă n-am putut
+          întreba, nu fiindcă OLX nu are ce să-ți ofere.
+        </p>
+      ) : groups.length === 0 ? (
         <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
           {hasMappedCategories
             ? "Nu sunt pachete disponibile pentru categoriile tale în acest moment."
@@ -164,12 +267,46 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
             )}
             <Button
               disabled={saving || !chosen || !group}
-              onClick={() => chosen && group && startSave(async () => {
-                const res = await buyOlxCategoryPacket(businessId, group.categoryId, chosen.size, method, (chosen.type as "base" | "mega") ?? "base");
+              onClick={() => {
+                if (!chosen || !group) return;
+                const pret = typeof chosen.price === "number" ? money(chosen.price, moneda) : null;
+                if (!confirmaPlata(
+                  `Cumperi un pachet${chosen.is_premium ? " premium" : ""} de ${chosen.size} anunțuri în „${group.label}"?`,
+                  pret,
+                )) return;
+                startSave(async () => {
+                /*
+                  ⚠ INTENȚIA, NU APĂSAREA. Id-ul trăiește în `localStorage` sub numele a ceea ce se
+                  cumpără, deci supraviețuiește închiderii panoului, reîncărcării paginii și celei
+                  de-a doua file. Ținut într-un `useRef`, ar fi murit odată cu componenta — iar
+                  panoul e un acordeon, deci ar fi murit des, exact în clipele proaste.
+                */
+                const tip = (chosen.type as "base" | "mega") ?? "base";
+                /*
+                  ⚠ `premium` MERGE PESTE TOT, sau nicaieri. Ecranul arata de mult variantele premium,
+                  dar cererea nu purta deloc câmpul: omul alegea premium și pleca `POST`-ul variantei
+                  obișnuite. Și, pe deasupra, cele două cădeau pe aceeași cheie și pe aceeași țintă,
+                  deci se blocau una pe alta degeaba.
+                */
+                const premium = Boolean(chosen.is_premium);
+                const ce = cePachetCategorie(group.categoryId, chosen.size, tip, premium);
+                const res = await buyOlxCategoryPacket(
+                  businessId, group.categoryId, chosen.size, method,
+                  intentiaPentru(businessId, ce), tip, premium);
                 if ("error" in res) { toast.error(res.error); return; }
-                toast.success("Pachet cumpărat.");
+                /*
+                  ⚠ SE ARUNCA INTENȚIA ȘI CÂND RĂSPUNSUL E „era deja făcută". Altfel intenția veche
+                  ar rămâne în `localStorage`, iar omul care chiar vrea al doilea pachet ar primi „gata"
+                  la nesfârșit fără să cumpere nimic — exact defectul de la care a pornit runda asta,
+                  doar mutat din cheie în browser.
+                */
+                incheieIntentia(businessId, ce);
+                if (res.nou) toast.success("Pachet cumpărat.");
+                else toast.info("Cumpărarea asta era deja făcută; nu s-a plătit a doua oară. Apasă din nou dacă vrei încă un pachet.");
+                await onCumparat?.();
                 router.refresh();
-              })}>
+                });
+              }}>
               {saving ? <Loader2 className="animate-spin" /> : "Cumpără"}
             </Button>
           </div>
@@ -182,8 +319,12 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
   );
 }
 
-function PromoteAdvert({ businessId, adverts, features, methods }: {
+function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumparat }: {
   businessId: string; adverts: OlxAdvertRow[]; features: OlxPaidFeature[]; methods: OlxPaymentMethod[];
+  /** Lista n-a putut fi citita: se spune, nu se ascunde sectiunea. */
+  eroare?: string;
+  /** Soldul si promovarile se recitesc dupa cumparare. Vezi nota de la `BuyPacket`. */
+  onCumparat?: () => void | Promise<void>;
 }) {
   const router = useRouter();
   const [saving, startSave] = useTransition();
@@ -191,6 +332,21 @@ function PromoteAdvert({ businessId, adverts, features, methods }: {
   const [code, setCode] = useState<string>("");
   const [method, setMethod] = useState<OlxPaymentMethod>(methods[0] ?? "account");
 
+  /*
+    ⚠ SECȚIUNEA NU MAI DISPARE ÎN TĂCERE (02.09.2026). Când citirea pica, `PromoteAdvert` întorcea
+    `null` — deci promovarea dispărea din ecran fără un cuvânt, iar omul rămânea cu impresia că OLX
+    nu-i oferă nicio promovare. Un gol care liniștește exact când n-ar trebui.
+  */
+  if (eroare) {
+    return (
+      <div>
+        <SectionLabel icon={Megaphone}>Promovează un anunț</SectionLabel>
+        <p className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+          Nu am putut citi promovările de la OLX: {eroare}
+        </p>
+      </div>
+    );
+  }
   if (adverts.length === 0 || features.length === 0) return null;
 
   return (
@@ -213,12 +369,22 @@ function PromoteAdvert({ businessId, adverts, features, methods }: {
           )}
           <Button
             disabled={saving || !advertId || !code}
-            onClick={() => startSave(async () => {
-              const res = await buyOlxPaidFeature(businessId, Number(advertId), code, method);
+            onClick={() => {
+              const numeAnunt = adverts.find((a) => String(a.olx_advert_id) === advertId)?.name ?? "anunțul ales";
+              const numeProm = features.find((f) => f.code === code)?.name ?? code;
+              if (!confirmaPlata(`Cumperi promovarea „${numeProm}" pe „${numeAnunt}"?`, null)) return;
+              startSave(async () => {
+              const ce = cePromovare(Number(advertId), code);
+              const res = await buyOlxPaidFeature(
+                businessId, Number(advertId), code, method, intentiaPentru(businessId, ce));
               if ("error" in res) { toast.error(res.error); return; }
-              toast.success("Promovare activată.");
+              incheieIntentia(businessId, ce);
+              if (res.nou) toast.success("Promovare activată.");
+              else toast.info("Promovarea asta era deja cumpărată; nu s-a plătit a doua oară.");
+              await onCumparat?.();
               router.refresh();
-            })}>
+              });
+            }}>
             {saving ? <Loader2 className="animate-spin" /> : "Promovează"}
           </Button>
         </div>

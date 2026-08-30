@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { SMSMarketingClient } from "@/components/dashboard/SMSMarketingClient";
 import type { SmsoConfig } from "@/lib/smso";
 import { getSmsTemplates } from "@/lib/actions/sms.actions";
@@ -21,7 +22,17 @@ export default async function SmsMarketingPage() {
   if (!bizRow) redirect("/dashboard");
 
   const rawSettings = Array.isArray(bizRow.store_settings) ? bizRow.store_settings[0] ?? null : bizRow.store_settings ?? null;
-  const smsoConfig = rawSettings?.smso_config as SmsoConfig | null;
+  /*
+   * Configul pleaca MASCAT catre client: pagina are nevoie doar de steagul
+   * `enabled`, dar pana acum trimitea obiectul intreg, cu `api_key` cu tot,
+   * intr-o Client Component care nu-l foloseste nicaieri. Adica cheia SMSO
+   * cobora in browser degeaba, vizibila din payload-ul RSC.
+   *
+   * Nu se mascheaza de la sine dupa criptare: pe drumul asta nu se cere nimic
+   * de la SMSO, deci citirea ramane pe clientul comerciantului si campul ar
+   * sosi oricum `enc.v1.…` — tot inutil de trimis mai departe.
+   */
+  const smsoConfig = mascheazaConfig("smso_config", rawSettings?.smso_config) as SmsoConfig | null;
 
   if (!smsoConfig?.enabled) redirect("/dashboard/settings");
 

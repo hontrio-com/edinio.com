@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { eroareCuStatus, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const WOOT_BASE = "https://ws.woot.ro/latest";
 
@@ -112,9 +113,13 @@ export async function getWootToken(public_key: string, secret_key: string): Prom
     cache: "no-store",
   });
 
-  if (!res.ok) throw new Error("Autentificare Woot esuata. Verifica cheile API.");
+  // `eroareRefuz`, nu `Error` simplu: autentificarea se face INAINTE de orice
+  // POST /orders, deci un esec aici dovedeste ca la Woot NU s-a creat nimic si
+  // reincercarea (dupa corectarea cheilor) trebuie sa ramana libera. Fara marcaj,
+  // registrul ar fi presupus „poate s-a facut" si ar fi blocat comanda definitiv.
+  if (!res.ok) throw eroareRefuz("Autentificare Woot esuata. Verifica cheile API.");
   const data = await res.json() as { success: boolean; token: string; expire: number };
-  if (!data.success || !data.token) throw new Error("Autentificare Woot esuata.");
+  if (!data.success || !data.token) throw eroareRefuz("Autentificare Woot esuata.");
 
   tokenCache.set(public_key, { token: data.token, expiresAt: Date.now() + data.expire * 1000 });
   return data.token;
@@ -139,9 +144,21 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
     const raw = await res.text().catch(() => "");
     let detail = "";
     try {
-      const parsed = JSON.parse(raw) as { message?: string; error?: string; errors?: unknown };
+      const parsed = JSON.parse(raw) as { message?: string; error?: unknown; errors?: unknown };
       if (typeof parsed.message === "string") detail = parsed.message;
       else if (typeof parsed.error === "string") detail = parsed.error;
+      else if (parsed.error && typeof parsed.error === "object") {
+        /*
+         * Woot mai raspunde si cu `error` ca OBIECT camp -> motiv, nu ca sir:
+         *   {"error":{"parcels.0.weight":"...must be >= 1"}}
+         * Varianta de dinainte verifica doar `typeof error === "string"`, deci
+         * pe forma asta `detail` ramanea gol si comerciantul vedea un sec
+         * „Woot API error 400". Exact asa s-a ascuns o zi cauza reala.
+         */
+        detail = Object.entries(parsed.error as Record<string, unknown>)
+          .map(([camp, motiv]) => `${camp}: ${Array.isArray(motiv) ? motiv.join(", ") : String(motiv)}`)
+          .join("; ");
+      }
       if (parsed.errors) {
         const msgs: string[] = [];
         if (Array.isArray(parsed.errors)) {
@@ -158,7 +175,22 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
       // Non-JSON body (e.g. HTML error page) — keep a short snippet, skip markup.
       if (raw && !raw.trimStart().startsWith("<")) detail = raw.slice(0, 300);
     }
-    throw new Error(detail ? `Woot: ${detail}` : `Woot API error ${res.status}`);
+    if (!detail) {
+      // Woot raspunde uneori 400 cu un corp din care nu iese niciun motiv, si
+      // atunci comerciantul vedea doar „Woot API error 400" — nediagnosticabil.
+      // Lasam in logurile serverului calea, statusul si inceputul corpului brut.
+      // NU logam payloadul: contine numele, telefonul si adresa clientului.
+      console.error("[woot] raspuns fara motiv", {
+        path,
+        status: res.status,
+        corp: raw.slice(0, 500),
+      });
+    }
+    // Mesajul ramane EXACT cel de dinainte; statusul calatoreste pe langa el, ca
+    // registrul de operatii externe sa poata deosebi un refuz (400 pe diacritice,
+    // cazul de mai sus) de o cadere in care AWB-ul poate sa fi fost totusi creat.
+    // Vezi src/lib/operatii/eroare-furnizor.ts.
+    throw eroareCuStatus(detail ? `Woot: ${detail}` : `Woot API error ${res.status}`, res.status);
   }
 
   return res.json() as Promise<T>;

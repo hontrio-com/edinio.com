@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { X, Loader2, Package, Truck, ChevronRight, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getCOPrices, createCOAwb } from "@/lib/actions/colete.actions";
 import type { COReceiver, COParcel } from "@/lib/colete";
+import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -40,7 +42,9 @@ interface PriceItem {
 
 export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
-  const isCod = (order.payment_method ?? "") === "cash_on_delivery" && order.payment_status === "unpaid";
+  // Ramburs dupa BANI, nu dupa metoda: o comanda cu plata online ramasa neplatita
+  // pleca altfel fara nicio cale de incasare. Vezi `rambursDeIncasat`.
+  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
 
   const hasAwb = !!(order as unknown as Record<string, unknown>)["colete_awb_number"];
   const awbNumber = ((order as unknown as Record<string, unknown>)["colete_awb_number"] as string) ?? "";
@@ -59,12 +63,24 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
 
   // Parcel state
   const [parcelType, setParcelType] = useState<"package" | "envelope">("package");
-  const [weight, setWeight] = useState("1");
+  // Greutatea vine din produsele comenzii, nu de la un kilogram fix. La Colete
+  // Online atarna de ea si lista de tarife de mai jos, nu doar eticheta.
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
   const [length, setLength] = useState("30");
   const [width, setWidth] = useState("20");
   const [height, setHeight] = useState("10");
   const [content, setContent] = useState("Produse comerciale");
-  const [repayment, setRepayment] = useState(isCod ? String(Math.round(Number(order.total))) : "0");
+  const [repayment, setRepayment] = useState(String(Math.round(ramburs)));
+
+  // Formularul se monteaza odata cu pagina, nu la deschidere, deci suma nu are voie
+  // sa ramana cea calculata la incarcare: dupa ce comerciantul marcheaza comanda
+  // platita, campul ar fi pastrat vechiul ramburs si l-ar fi trimis pe colet.
+  // Dependinte primitive, ca o simpla reimprospatare a paginii sa nu stearga suma
+  // scrisa cu mana.
+  useEffect(() => {
+    if (open && !hasAwb) setRepayment(String(Math.round(ramburs)));
+  }, [open, hasAwb, ramburs]);
+
   const [openAtDelivery, setOpenAtDelivery] = useState(false);
   const [saturday, setSaturday] = useState(false);
 
@@ -290,6 +306,7 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
                     <label className="block text-xs text-muted-foreground mb-1">Continut *</label>
                     <input type="text" value={content} onChange={e => setContent(e.target.value)} className={inputCls} />
                   </div>
+                  {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="col-span-2 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                 </div>
                 {parcelType === "package" && (
                   <div className="grid grid-cols-3 gap-2">

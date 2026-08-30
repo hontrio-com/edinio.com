@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback } from "react";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -68,14 +69,14 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   }, [businessId]);
 
   const loadTemplates = useCallback(async (token: string) => {
-    if (!token.trim()) return;
+    if (!token.trim() && !secretulEsteSalvat(initialConfig, "api_token")) return;
     setTplLoading(true);
     setTplError(null);
-    const res = await listNoticeTemplates(token);
+    const res = await listNoticeTemplates(businessId, token);
     setTplLoading(false);
     if ("error" in res) { setTplError(res.error); setTemplates([]); }
     else setTemplates(res.templates);
-  }, []);
+  }, [businessId, initialConfig]);
 
   const loadStats = useCallback(async () => {
     const res = await getNoticeStats(businessId);
@@ -90,7 +91,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
     if (!token) return;
     let active = true;
     void (async () => {
-      const tpl = await listNoticeTemplates(token);
+      const tpl = await listNoticeTemplates(businessId, token);
       if (active && !("error" in tpl)) setTemplates(tpl.templates);
       const st = await getNoticeStats(businessId);
       if (active && !("error" in st)) setStats(st);
@@ -119,10 +120,10 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   }
 
   async function testConnection() {
-    if (!config.api_token.trim()) { toast.error("Introdu tokenul API."); return; }
+    if ((!config.api_token.trim() && !secretulEsteSalvat(initialConfig, "api_token"))) { toast.error("Introdu tokenul API."); return; }
     setTesting(true);
     setTestResult(null);
-    const res = await testNoticeConnection(config.api_token);
+    const res = await testNoticeConnection(businessId, config.api_token);
     setTesting(false);
     if (res.ok) {
       setTestResult({ ok: true, message: `Conexiune reusita. ${res.templateCount} sabloane gasite in contul tau.` });
@@ -136,10 +137,10 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
     if (!testPhone.trim()) { toast.error("Introdu un numar de telefon."); return; }
     setTestingChannel(channel);
     const res = channel === "whatsapp"
-      ? await sendNoticeTestWhatsapp(config.api_token, testPhone)
+      ? await sendNoticeTestWhatsapp(businessId, config.api_token, testPhone)
       : channel === "voice"
-        ? await sendNoticeTestVoice(config.api_token, testPhone)
-        : await sendNoticeTestSms(config.api_token, testPhone);
+        ? await sendNoticeTestVoice(businessId, config.api_token, testPhone)
+        : await sendNoticeTestSms(businessId, config.api_token, testPhone);
     setTestingChannel(null);
     if ("error" in res) toast.error(res.error);
     else {
@@ -150,7 +151,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   }
 
   function save() {
-    if (config.enabled && !config.api_token.trim()) { toast.error("Tokenul API este obligatoriu."); return; }
+    if (config.enabled && (!config.api_token.trim() && !secretulEsteSalvat(initialConfig, "api_token"))) { toast.error("Tokenul API este obligatoriu."); return; }
     startSave(async () => {
       const res = await updateNoticeConfig(businessId, config);
       if ("error" in res) toast.error(res.error);
@@ -158,7 +159,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
     });
   }
 
-  const hasToken = config.api_token.trim().length > 0;
+  const hasToken = config.api_token.trim().length > 0 || secretulEsteSalvat(initialConfig, "api_token");
   const waEnabled = !!config.whatsapp?.enabled;
   const voiceEnabled = !!config.voice?.enabled;
   const webhookUrl = config.webhook_secret
@@ -264,7 +265,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
               type="password"
               value={config.api_token}
               onChange={e => setConfig(c => ({ ...c, api_token: e.target.value }))}
-              placeholder="Tokenul tau API de la notice.ro"
+              placeholder={secretulEsteSalvat(initialConfig, "api_token") ? PLACEHOLDER_SECRET_SALVAT : ""}
             />
           </div>
 

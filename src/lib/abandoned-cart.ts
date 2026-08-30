@@ -2,8 +2,11 @@
 // Lives outside the actions file so order creation can reuse markCartConverted
 // with the admin client already in its scope.
 
+import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { hasVariants } from "@/lib/storefront/variants";
+import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 export interface AbandonedCartItem {
   product_id: string;
@@ -63,6 +66,128 @@ export interface AbandonedCartsData {
 
 // How long without activity before an open cart is considered "abandoned".
 export const ABANDON_MINUTES = 60;
+
+// ── Repretuirea unui cos salvat ────────────────────────────────────────────────
+
+function round2(n: number): number {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/** Randul din catalog al unui produs dintr-un cos salvat. */
+export interface ProdusCosSalvat {
+  id: string;
+  name: string;
+  price: number | null;
+  images: unknown;
+  is_active: boolean | null;
+  page_sections: unknown;
+}
+
+/**
+ * Liniile unui cos salvat, aduse la zi din catalog.
+ *
+ * REGULA SE SCRIE AICI SI NUMAI AICI, fiindca are trei consumatori care trebuie
+ * sa spuna acelasi lucru: linkul „recupereaza cosul", emailul de recuperare
+ * trimis manual din panou si cel trimis de cron. Pana pe 2026-08-04 doar linkul
+ * repretuia; cele doua emailuri randau `items` si `subtotal` exact asa cum
+ * fusesera inghetate in localStorage la captura. Masurat in productie in ziua
+ * aceea: 33 din 129 de linii salvate tineau alt pret decat catalogul, si 2
+ * emailuri plecasera deja cu asemenea linii. (Cifra e pe TOATE liniile salvate,
+ * ceea ce e potrivit aici: emailul le randeaza pe toate, si pe cele venite din
+ * formularul de comanda. Pentru defectul de AFISARE din cos, populatia e alta —
+ * vezi `CartPieces`.) Un email semnat de magazin care
+ * promite un pret pe care magazinul nu-l mai onoreaza e mai rau decat niciun
+ * email.
+ *
+ * O linie DISPARE cand produsul nu mai e in catalog, e dezactivat, sau are
+ * variante. Nu e o alegere de afisare, ci consecinta: exact astea sunt liniile pe
+ * care linkul de recuperare nu le mai poate pune inapoi in cos (produsul cu
+ * variante n-are marimea salvata nicaieri — 0 din cele 129 de linii din productie
+ * poarta vreuna). Daca emailul le-ar lista, clientul ar da clic si ar ajunge pe
+ * un cos care nu contine ce i s-a promis. In productie asta goleste 6 cosuri din
+ * 96, adica exact cele care oricum nu se pot recupera.
+ */
+/** Pretul unitar cu treptele aplicate, in unitatea in care emailul inmulteste. */
+function pretEfectiv(p: ProdusCosSalvat, cantitate: number): number {
+  const unitar = round2(Number(p.price) || 0);
+  const trepte = construiesteTrepte((p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers, unitar);
+  return pretPeTrepte(trepte, cantitate, unitar).subtotal / cantitate;
+}
+
+export function liniiRecuperabile(
+  salvate: AbandonedCartItem[],
+  catalog: Map<string, ProdusCosSalvat>,
+): AbandonedCartItem[] {
+  const out: AbandonedCartItem[] = [];
+  for (const it of salvate ?? []) {
+    const p = it && catalog.get(it.product_id);
+    if (!p || !p.is_active) continue;
+    if (hasVariants(p.page_sections)) continue;
+    out.push({
+      product_id: p.id,
+      // Si numele, si poza vin din catalog: daca produsul a fost redenumit intre
+      // timp, emailul trebuie sa spuna ce va gasi clientul in cos, nu ce scria
+      // acolo acum trei saptamani.
+      name: p.name,
+      /*
+       * Pretul purtat e cel EFECTIV, cu treptele de cantitate aplicate.
+       *
+       * Emailul randeaza `price * quantity`, iar cosul in care aterizeaza
+       * clientul dupa clic trece prin `pretPeTrepte`. Scris cu pretul de baza,
+       * emailul promitea 3 x 40 = 120 lei pentru un cos care arata 108 — si asta
+       * pe 17 cosuri din productie care erau CORECTE inainte, cu 100,52 lei
+       * supraevaluati in total. Un email semnat de magazin care cere mai mult
+       * decat cosul e a doua fata a aceleiasi minciuni pe care o repara
+       * constatarea asta.
+       *
+       * Se imparte inapoi la cantitate fiindca asta e unitatea in care emailul
+       * inmulteste; `pretPeTrepte` lasa dinadins pretul unitar nerotunjit, ca
+       * `pret x cantitate` sa dea exact subtotalul (vezi constatarea 15).
+       */
+      price: pretEfectiv(p, normalizeazaCantitate(it.quantity)),
+      quantity: normalizeazaCantitate(it.quantity),
+      image_url: (Array.isArray(p.images) && p.images.length ? (p.images[0] as string) : it.image_url) ?? null,
+    });
+  }
+  return out;
+}
+
+/**
+ * Cat face cosul repretuit — aceeasi suma pe care o va vedea clientul in cos,
+ * fiindca liniile poarta pretul cu treptele deja aplicate.
+ */
+export function totalCosRecuperabil(items: AbandonedCartItem[]): number {
+  return round2((items ?? []).reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0), 0));
+}
+
+/**
+ * Cosul salvat, adus la zi din catalog: liniile care se mai pot cumpara si cat
+ * fac ele azi.
+ *
+ * Primeste clientul ca parametru, ca `markCartConverted`, ca sa poata fi chemat
+ * si dintr-o actiune „use server", si din ruta de cron.
+ *
+ * `items` gol inseamna „nu mai e nimic de recuperat": apelantul NU trebuie sa
+ * trimita un email pe cosul asta.
+ */
+export async function cosRecuperabil(
+  client: SupabaseClient<Database>,
+  businessId: string,
+  salvate: AbandonedCartItem[],
+): Promise<{ items: AbandonedCartItem[]; total: number }> {
+  const ids = [...new Set((salvate ?? []).map((i) => i?.product_id).filter(Boolean))];
+  if (ids.length === 0) return { items: [], total: 0 };
+
+  const { data } = await client
+    .from("products")
+    .select("id, name, price, images, is_active, page_sections")
+    .eq("business_id", businessId)
+    .in("id", ids);
+
+  const catalog = new Map<string, ProdusCosSalvat>((data ?? []).map((p) => [p.id, p as ProdusCosSalvat]));
+  const items = liniiRecuperabile(salvate, catalog);
+  return { items, total: totalCosRecuperabil(items) };
+}
 
 // Called from order creation (admin client in scope): when an order is placed,
 // close any matching open cart so it leaves the "abandoned" set — and counts as

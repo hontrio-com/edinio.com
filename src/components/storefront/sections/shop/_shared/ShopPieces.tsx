@@ -5,6 +5,7 @@ import { Check, ChevronDown, SlidersHorizontal, X } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import { hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
+import { NavigareCategorii } from "@/components/storefront/sections/catalog/NavigareCategorii";
 import { cdnImage } from "@/lib/cdn-image";
 import { SORTARI_CATALOG } from "@/lib/storefront/design/registry";
 import type { Fateta } from "@/lib/storefront/catalog/facets";
@@ -338,7 +339,7 @@ export function FiltreActive() {
 export function Sortare() {
   // `effectiveSort`, nu `sort`: cat timp exista o cautare si nimeni n-a ales
   // altceva, sortarea e „relevanta", si asta trebuie sa arate si selectorul.
-  const { setSort, setSortTouched, effectiveSort, hasSearchMatches, setariMagazin } = useStorefront();
+  const { setSort, setSortTouched, effectiveSort, hasSearchMatches, setariMagazin, totalVizibile, totalFiltrate } = useStorefront();
   // O singura optiune inseamna un selector fara alegere: mai bine lipseste.
   if (setariMagazin.sortariOferite.length < 2 && !hasSearchMatches) return null;
   return (
@@ -361,10 +362,11 @@ export function Sortare() {
 }
 
 export function NumarRezultate() {
-  const { filteredProducts, visibleProducts, setariMagazin } = useStorefront();
+  const { filteredProducts, visibleProducts, setariMagazin , totalFiltrate , totalVizibile } = useStorefront();
   if (!setariMagazin.arataNumarul) return null;
-  const n = filteredProducts.length;
-  const total = visibleProducts.length;
+  // Vezi nota de la `totalVizibile` in StorefrontProvider.
+  const n = totalFiltrate;
+  const total = totalVizibile;
   return (
     <p className="text-[13px] text-[var(--st-muted)]">
       {n === total ? `${n} ${n === 1 ? "produs" : "produse"}` : `${n} din ${total} produse`}
@@ -374,17 +376,32 @@ export function NumarRezultate() {
 
 /** Caseta de cautare a paginii, ascunsa cand header-ul are deja una. */
 export function CautareCatalog() {
-  const { search, setSearch, setSortTouched, headerHasSearch } = useStorefront();
+  const { search, setSearch, setSortTouched, headerHasSearch, catalogPeServer, trimiteCautarea } = useStorefront();
   if (headerHasSearch) return null;
+  /*
+   * Formular, nu doar o caseta.
+   *
+   * Pe palierul server lista vine gata filtrata din baza, deci cautarea se aplica
+   * la o CERERE, nu la fiecare tasta: fara `<form>`, Enter n-ar face nimic si
+   * vizitatorul ar scrie un termen la care pagina nu raspunde niciodata. Pe
+   * palierul client filtrarea s-a intamplat deja la tastare, iar `trimiteCautarea`
+   * nu face nimic — dar formularul trebuie sa opreasca oricum trimiterea
+   * implicita, care ar fi reincarcat pagina.
+   */
   return (
-    <input
-      type="search"
-      value={search}
-      onChange={(e) => { if (!search && e.target.value) setSortTouched(false); setSearch(e.target.value); }}
-      placeholder="Cauta in magazin"
-      aria-label="Cauta produse"
-      className="w-full px-3.5 py-2.5 text-sm rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]"
-    />
+    <form
+      role="search"
+      onSubmit={(e) => { e.preventDefault(); trimiteCautarea(); }}
+    >
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => { if (!search && e.target.value) setSortTouched(false); setSearch(e.target.value); }}
+        placeholder={catalogPeServer ? "Cauta in magazin, apoi Enter" : "Cauta in magazin"}
+        aria-label="Cauta produse"
+        className="w-full px-3.5 py-2.5 text-sm rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]"
+      />
+    </form>
   );
 }
 
@@ -396,7 +413,7 @@ export function CautareCatalog() {
  * clientul sa vada.
  */
 export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPornite: string[]; panaLa?: "lg" | "xl" }) {
-  const { filtersOpen, setFiltersOpen, activeFilterCount, resetFilters, filteredProducts } = useStorefront();
+  const { filtersOpen, setFiltersOpen, activeFilterCount, resetFilters, totalFiltrate } = useStorefront();
   const panou = useRef<HTMLDivElement>(null);
   const declansator = useRef<HTMLButtonElement>(null);
   // Pragul vine de la model, nu e fix: la „Compact" bara laterala apare abia de
@@ -471,7 +488,7 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
               <button type="button" onClick={() => setFiltersOpen(false)}
                 className="flex-1 py-3 text-sm font-bold text-white rounded-[var(--st-radius-sm)]"
                 style={{ backgroundColor: "var(--st-primary)" }}>
-                Arata {filteredProducts.length} {filteredProducts.length === 1 ? "produs" : "produse"}
+                Arata {totalFiltrate} {totalFiltrate === 1 ? "produs" : "produse"}
               </button>
             </div>
           </div>
@@ -484,9 +501,9 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
 /* ─── Grila si paginarea ─────────────────────────────────────────────────── */
 
 export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; coloaneMobil?: number }) {
-  const { paginatedProducts, filteredProducts, activeFilterCount, resetFilters, search } = useStorefront();
+  const { paginatedProducts, filteredProducts, activeFilterCount, resetFilters, search , totalFiltrate, catalogSeIncarca } = useStorefront();
 
-  if (filteredProducts.length === 0) {
+  if (totalFiltrate === 0) {
     const cauta = !!search || activeFilterCount > 0;
     return (
       <div className="text-center py-20 border border-dashed border-[var(--st-border)] rounded-[var(--st-radius)]">
@@ -523,8 +540,17 @@ export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; c
   };
   const clase = `${PE_MOBIL[coloaneMobil] ?? "grid-cols-2"} ${PE_ECRAN_MARE[coloane] ?? PE_ECRAN_MARE[4]}`;
 
+  /*
+   * Cat timp se cere pagina noua, grila se stinge putin si nu mai primeste apasari.
+   *
+   * Pe palierul server un filtru bifat e un dus-intors, deci pana la ~o jumatate de
+   * secunda nu se schimda nimic vizibil. Fara semnul asta, vizitatorul apasa a doua
+   * fateta crezand ca prima n-a mers — si atunci chiar ajunge unde nu voia.
+   * `aria-busy` spune acelasi lucru cititoarelor de ecran.
+   */
   return (
-    <div className={`grid ${clase} gap-3 sm:gap-4`}>
+    <div className={`grid ${clase} gap-3 sm:gap-4 transition-opacity${catalogSeIncarca ? " opacity-50 pointer-events-none" : ""}`}
+      aria-busy={catalogSeIncarca || undefined}>
       {paginatedProducts.map((p, i) => (
         <StoreProductCard key={p.id} product={p} priority={i < 4} />
       ))}
@@ -543,9 +569,18 @@ export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; c
 export function Paginare() {
   const {
     currentPage, totalPages, goToPage, color, catalogRoot, radacinaPaginare, interogareFiltre,
-    setariMagazin, filteredProducts, paginatedProducts,
+    setariMagazin, filteredProducts, paginatedProducts, totalFiltrate, catalogPeServer,
   } = useStorefront();
-  const mod = setariMagazin.modPaginare;
+  /*
+   * Pe palierul server paginarea e numerotata, indiferent de reglaj.
+   *
+   * „Incarca mai multe" si derularea infinita ADUNA paginile in lista din memorie,
+   * iar acolo serverul trimite exact una: a doua apasare ar fi INLOCUIT produsele
+   * sub un buton care promite ca le adauga. Aceeasi decizie ca `aduna` din
+   * `MiniStoreRenderer`, si trebuie sa fie luata la fel in ambele — altfel butonul
+   * ar aparea aici peste o feliere care nu mai aduna.
+   */
+  const mod = catalogPeServer ? "pagini" : setariMagazin.modPaginare;
   const santinela = useRef<HTMLDivElement>(null);
   const maiSunt = currentPage < totalPages;
 
@@ -624,7 +659,7 @@ export function Paginare() {
           )}
           {mod === "infinit" && maiSunt && <div ref={santinela} className="h-px w-full" aria-hidden="true" />}
           <p className="text-[13px] text-[var(--st-muted)]" aria-live="polite">
-            {paginatedProducts.length} din {filteredProducts.length} produse
+            {paginatedProducts.length} din {totalFiltrate} produse
           </p>
         </div>
         <nav aria-label="Paginare" className="sr-only">
@@ -745,32 +780,20 @@ export function TextSubGrila() {
   );
 }
 
-/** Pastilele de categorie de sus, cand comerciantul le cere. */
+/**
+ * Banda de categorii de deasupra catalogului.
+ *
+ * ACEEASI componenta ca pe pagina principala. Pana acum era o a doua
+ * implementare, scrisa doar cu pastile text, care nu stia de imaginile
+ * categoriilor: la un magazin cu poze pe toate raioanele, prima pagina le arata
+ * si pagina de catalog nu — iar subcategoriile care aveau poza n-o aratau
+ * NICAIERI, fiindca la ele se ajunge doar prin banda asta.
+ *
+ * Forma (cercuri cu imagini sau pastile) se alege automat din date, deci
+ * magazinele fara poze raman exact cum erau.
+ */
 export function CategoriiSus() {
-  const { currentCategoryItems, categoryFilter, selectCategoryItem, resetCategory, isDrilled, goBackCategory, hasCategories, categoriiRoot, categoriiPePagina, color } =
-    useStorefront();
-  if (!hasCategories) return null;
-  const pastila = "px-3.5 py-1.5 rounded-full text-[13px] border whitespace-nowrap transition-colors";
-  const inactiv = { backgroundColor: "transparent", color: "var(--st-text)", borderColor: "var(--st-border)" };
-  const activ = { backgroundColor: color, color: "#fff", borderColor: color };
-
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1">
-      <button type="button" onClick={isDrilled ? goBackCategory : resetCategory}
-        className={pastila} style={categoryFilter === "toate" ? activ : inactiv}>
-        {isDrilled ? "Inapoi" : "Toate"}
-      </button>
-      {currentCategoryItems.map((c) => (
-        <a key={c.key} href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina)}
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-            e.preventDefault();
-            selectCategoryItem(c);
-          }}
-          className={pastila} style={categoryFilter === c.name ? activ : inactiv}>
-          {c.name}
-        </a>
-      ))}
-    </div>
-  );
+  // Fara margine proprie: pe pagina de catalog spatierea o da `space-y-3` al
+  // antetului, iar `mb-6` al paginii principale ar fi adaugat inca un rand gol.
+  return <NavigareCategorii />;
 }

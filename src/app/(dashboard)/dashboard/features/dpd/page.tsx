@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { DpdConfigClient } from "@/components/dashboard/DpdConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
@@ -11,7 +12,7 @@ export default async function DpdPage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const config = (settings?.dpd_config as DpdConfig | null) ?? null;
+  const config = (mascheazaConfig("dpd_config", settings?.dpd_config) as DpdConfig | null) ?? null;
 
   return (
     <div className="p-6 max-w-2xl">

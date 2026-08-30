@@ -4,13 +4,17 @@ import { Fragment, useEffect, useMemo, useRef, useState, useTransition, type Rea
 import Image from "next/image";
 import { toast } from "sonner";
 import {
-  Plus, Pencil, Trash2, Check, X, ChevronRight, FolderOpen, Folder, Tag, ImagePlus, Loader2, Search,
+  Plus, Pencil, Trash2, Check, X, ChevronRight, ChevronUp, ChevronDown, CornerUpRight,
+  Eye, EyeOff, FolderOpen, Folder, Tag, ImagePlus, Loader2, Search,
 } from "lucide-react";
-import { createCategory, updateCategory, deleteCategory } from "@/lib/actions/category.actions";
+import {
+  createCategory, updateCategory, deleteCategory, moveCategory, reorderCategories,
+} from "@/lib/actions/category.actions";
 import { uploadImage } from "@/lib/actions/upload.actions";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/button";
 import { buildCategoryForest, collectSubtreeIds, searchCategoryForest } from "@/lib/categories/tree";
+import { idCategoriiAscunse } from "@/lib/categories/vizibilitate";
 
 interface Category {
   id: string;
@@ -18,6 +22,7 @@ interface Category {
   parent_id: string | null;
   name: string;
   sort_order: number;
+  is_active: boolean;
   image_url?: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -107,6 +112,9 @@ export function CategoriesClient({ initialCategories }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Confirm delete
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // Care categorie se muta acum, si unde a ales omul sa o duca
+  const [moving, setMoving] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<string>("");
   // Name filter (diacritics/case-insensitive); while active the tree is
   // filtered to matches + their ancestors/descendants, all forced open.
   const [search, setSearch] = useState("");
@@ -118,6 +126,10 @@ export function CategoriesClient({ initialCategories }: Props) {
   const forest = useMemo(() => buildCategoryForest(categories), [categories]);
   const searchRes = useMemo(() => searchCategoryForest(categories, search), [categories, search]);
   const searchActive = searchRes !== null;
+  // Cine nu se vede in magazin: categoriile stinse SI tot ce atarna sub ele.
+  // Randurile de sub o categorie stinsa raman `is_active = true` in baza, deci
+  // fara asta ar fi aratat aprinse intr-un raion inchis.
+  const ascunse = useMemo(() => idCategoriiAscunse(categories), [categories]);
 
   const totalCount = categories.length;
   const rootCount = forest.roots.length;
@@ -143,11 +155,68 @@ export function CategoriesClient({ initialCategories }: Props) {
     });
   }
 
+  /**
+   * Ordinea, mutata cu un pas in sus sau in jos intre frati.
+   *
+   * Se trimite GRUPUL INTREG, renumerotat 0..n-1, nu doar cele doua randuri
+   * schimbate intre ele. Motivul e in date: importul scrie `sort_order = 0` pe
+   * tot ce creeaza, iar adaugarea din panou pune numarul de frati de la acel
+   * moment — pe Vetdepo, cele 12 radacini au 0, 0, 6, 10, 13, 16, 20, 24, 32, 33,
+   * 34, 37. Cu un simplu schimb intre doi vecini, un grup plin de zerouri n-ar fi
+   * avut ce sa schimbe. Renumerotarea repara grupul la prima apasare.
+   */
+  function handleReorder(cat: Category, delta: -1 | 1) {
+    const frati = cat.parent_id ? rawChildren(cat.parent_id) : forest.roots;
+    const i = frati.findIndex(f => f.id === cat.id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= frati.length) return;
+
+    const ordonati = [...frati];
+    [ordonati[i], ordonati[j]] = [ordonati[j], ordonati[i]];
+    const items = ordonati.map((c, idx) => ({ id: c.id, sort_order: idx }));
+    const noiIndici = new Map(items.map(x => [x.id, x.sort_order]));
+    const inainte = categories;
+
+    setCategories(prev => {
+      const cu = prev.map(c => (noiIndici.has(c.id) ? { ...c, sort_order: noiIndici.get(c.id)! } : c));
+      // Sortare stabila pe tot vectorul: padurea pastreaza ordinea din lista,
+      // deci fara ea randurile ar fi ramas pe loc pana la un refresh. Grupurile
+      // neatinse nu se misca — la valori egale, sortarea stabila pastreaza
+      // ordinea de acum, care e chiar cea trimisa de server.
+      return [...cu].sort((a, b) => a.sort_order - b.sort_order);
+    });
+
+    startTransition(async () => {
+      const result = await reorderCategories(items);
+      if ("error" in result) {
+        setCategories(inainte);
+        toast.error(result.error);
+      }
+    });
+  }
+
+  /**
+   * Stinge sau aprinde o categorie. Stinsa, iese din magazin cu tot ce e sub ea.
+   */
+  function handleToggleActive(cat: Category) {
+    const nou = !cat.is_active;
+    setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, is_active: nou } : c)));
+    startTransition(async () => {
+      const result = await updateCategory(cat.id, { is_active: nou });
+      if ("error" in result) {
+        setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, is_active: !nou } : c)));
+        toast.error(result.error);
+        return;
+      }
+      toast.success(nou ? "Categoria se vede in magazin." : "Categoria nu mai apare in magazin.");
+    });
+  }
+
   // ── Create root category (optimistic)
   function handleCreateRoot(name: string) {
     const sort_order = categories.filter(c => !c.parent_id).length;
     const tempId = nextTempId();
-    setCategories(prev => [...prev, { id: tempId, business_id: "", parent_id: null, name, sort_order, image_url: null, created_at: "", updated_at: "" }]);
+    setCategories(prev => [...prev, { id: tempId, business_id: "", parent_id: null, name, sort_order, is_active: true, image_url: null, created_at: "", updated_at: "" }]);
     setEditing(null);
     toast.success("Categorie adaugata.");
     startTransition(async () => {
@@ -161,7 +230,7 @@ export function CategoriesClient({ initialCategories }: Props) {
   function handleCreateSub(parentId: string, name: string) {
     const sort_order = rawChildren(parentId).length;
     const tempId = nextTempId();
-    setCategories(prev => [...prev, { id: tempId, business_id: "", parent_id: parentId, name, sort_order, image_url: null, created_at: "", updated_at: "" }]);
+    setCategories(prev => [...prev, { id: tempId, business_id: "", parent_id: parentId, name, sort_order, is_active: true, image_url: null, created_at: "", updated_at: "" }]);
     setEditing(null);
     toast.success("Subcategorie adaugata.");
     startTransition(async () => {
@@ -176,7 +245,6 @@ export function CategoriesClient({ initialCategories }: Props) {
     const previousName = categories.find(c => c.id === id)?.name;
     setCategories(prev => prev.map(c => c.id === id ? { ...c, name } : c));
     setEditing(null);
-    toast.success("Redenumit.");
     startTransition(async () => {
       const result = await updateCategory(id, { name });
       if ("error" in result) {
@@ -184,20 +252,48 @@ export function CategoriesClient({ initialCategories }: Props) {
         if (previousName !== undefined) {
           setCategories(prev => prev.map(c => c.id === id ? { ...c, name: previousName } : c));
         }
+        return;
       }
+      const mutate = result.produseMutate ?? 0;
+      toast.success(mutate > 0
+        ? `Redenumit. ${pluralRo(mutate, "produs a venit", "produse au venit")} cu ea.`
+        : "Redenumit.");
     });
   }
 
   // ── Delete (optimistic; DB cascades over the whole subtree, so remove it
   // here too and restore rows at their original positions on error)
+  /**
+   * Mutarea, optimist ca restul: rândul sare pe loc sub noul părinte, iar dacă
+   * serverul refuză, se pune la loc de unde a plecat.
+   */
+  function handleMove(id: string, newParentId: string | null) {
+    const inainte = categories;
+    setCategories(prev => prev.map(c => (c.id === id ? { ...c, parent_id: newParentId } : c)));
+    setMoving(null);
+    setMoveTarget("");
+    // Noul parinte se deschide, altfel categoria pare ca a disparut.
+    if (newParentId) setExpanded(prev => new Set([...prev, newParentId]));
+
+    startTransition(async () => {
+      const result = await moveCategory(id, newParentId);
+      if ("error" in result) {
+        setCategories(inainte);
+        toast.error(result.error);
+      } else {
+        toast.success("Categoria a fost mutata.");
+      }
+    });
+  }
+
   function handleDelete(id: string) {
     const subtree = collectSubtreeIds(categories, id);
     const backup = categories
       .map((c, index) => ({ c, index }))
       .filter(({ c }) => subtree.has(c.id));
+    const parinte = categories.find(c => c.id === categories.find(x => x.id === id)?.parent_id)?.name ?? null;
     setCategories(prev => prev.filter(c => !subtree.has(c.id)));
     setConfirmDelete(null);
-    toast.success("Stearsa.");
     startTransition(async () => {
       const result = await deleteCategory(id);
       if ("error" in result) {
@@ -207,7 +303,13 @@ export function CategoriesClient({ initialCategories }: Props) {
           for (const { c, index } of backup) next.splice(Math.min(index, next.length), 0, c);
           return next;
         });
+        return;
       }
+      // Cate produse au fost duse undeva — altfel mutarea lor ar fi tacuta, si
+      // exact tacerea asta a lasat pe Vetdepo 557 de produse pe nume moarte.
+      toast.success(result.produseMutate > 0
+        ? `Stearsa. ${pluralRo(result.produseMutate, "produs a trecut", "produse au trecut")} ${parinte ? `la „${parinte}"` : "fara categorie"}.`
+        : "Stearsa.");
     });
   }
 
@@ -275,10 +377,54 @@ export function CategoriesClient({ initialCategories }: Props) {
     );
   }
 
-  /** Row action buttons: add subcategory / rename / delete — any depth. */
+  /**
+   * Sagetile de ordine, la marginea din stanga a actiunilor.
+   *
+   * Dezactivate la capete, si ascunse cu totul cat timp e o cautare pornita:
+   * acolo lista arata doar potrivirile, deci „mai sus" ar fi insemnat altceva
+   * decat se vede — un pas peste frati care nu sunt pe ecran.
+   */
+  function orderActions(cat: Category, isTemp: boolean) {
+    if (searchActive) return null;
+    const frati = cat.parent_id ? rawChildren(cat.parent_id) : forest.roots;
+    const i = frati.findIndex(f => f.id === cat.id);
+    const buton = "w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:hover:bg-transparent";
+    return (
+      <div className="flex flex-col flex-shrink-0 -my-1">
+        <button type="button" title="Mai sus" aria-label={`Muta ${cat.name} mai sus`}
+          onClick={() => handleReorder(cat, -1)} disabled={isTemp || i <= 0} className={buton}>
+          <ChevronUp className="h-3.5 w-3.5" />
+        </button>
+        <button type="button" title="Mai jos" aria-label={`Muta ${cat.name} mai jos`}
+          onClick={() => handleReorder(cat, 1)} disabled={isTemp || i < 0 || i >= frati.length - 1} className={buton}>
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  /** Row action buttons: add subcategory / rename / move / hide / delete — any depth. */
   function rowActions(cat: Category, isTemp: boolean) {
+    const subAscunsa = !cat.is_active ? false : ascunse.has(cat.id);
     return (
       <div className="flex items-center gap-0.5 flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => handleToggleActive(cat)}
+          disabled={isTemp}
+          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors disabled:opacity-40 ${
+            cat.is_active
+              ? "text-muted-foreground hover:text-foreground hover:bg-muted"
+              : "text-amber-600 hover:bg-amber-500/10"
+          }`}
+          title={cat.is_active
+            ? (subAscunsa
+              ? "Ascunsa fiindca o categorie de deasupra e stinsa"
+              : "Ascunde din magazin (cu tot ce e sub ea)")
+            : "Arata din nou in magazin"}
+        >
+          {cat.is_active ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+        </button>
         <button
           type="button"
           onClick={() => { setExpanded(prev => new Set([...prev, cat.id])); setEditing(`new-sub-${cat.id}`); }}
@@ -292,9 +438,68 @@ export function CategoriesClient({ initialCategories }: Props) {
           className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40">
           <Pencil className="h-3.5 w-3.5" />
         </button>
+        <button
+          type="button"
+          onClick={() => { setMoveTarget(cat.parent_id ?? ""); setMoving(cat.id); }}
+          disabled={isTemp}
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+          title="Muta in alta categorie"
+        >
+          <CornerUpRight className="h-3.5 w-3.5" />
+        </button>
         <button type="button" onClick={() => setConfirmDelete(cat.id)} disabled={isTemp}
           className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40">
           <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  /**
+   * Rândul de mutare: alegi unde duci categoria, cu tot ce are sub ea.
+   *
+   * Din listă lipsesc categoria însăși și tot ce atârnă sub ea. Nu e o
+   * curățenie de fațadă: mutată acolo, ramura s-ar închide într-un cerc și ar
+   * ieși cu totul din arbore, adică nu s-ar mai vedea nicăieri și n-ar mai
+   * putea fi nici adusă înapoi, nici ștearsă. Serverul verifică din nou același
+   * lucru, fiindcă lista din pagină nu e o barieră.
+   */
+  function moveForm(cat: Category) {
+    const interzise = collectSubtreeIds(categories, cat.id);
+    const destinatii: { id: string; name: string; depth: number }[] = [];
+    const strange = (nod: Category, depth: number) => {
+      if (interzise.has(nod.id) || nod.id.startsWith("temp-")) return;
+      destinatii.push({ id: nod.id, name: nod.name, depth });
+      for (const k of rawChildren(nod.id)) strange(k, depth + 1);
+    };
+    for (const r of forest.roots) strange(r, 0);
+
+    const acasa = cat.parent_id === null;
+    return (
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <select
+          value={moveTarget}
+          onChange={(e) => setMoveTarget(e.target.value)}
+          aria-label={`Muta ${cat.name} in`}
+          className="flex-1 min-w-0 px-2 py-1 text-sm bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="" disabled={acasa}>
+            {acasa ? "Este deja la nivelul principal" : "Nivel principal (fara parinte)"}
+          </option>
+          {destinatii.map((d) => (
+            <option key={d.id} value={d.id}>
+              {`${"  ".repeat(d.depth)}${d.depth > 0 ? "└ " : ""}${d.name}`}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={() => handleMove(cat.id, moveTarget || null)}
+          disabled={isPending || (acasa && !moveTarget)}
+          className="px-2.5 py-1 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-40 flex-shrink-0">
+          Muta
+        </button>
+        <button type="button" onClick={() => setMoving(null)}
+          className="px-2.5 py-1 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors flex-shrink-0">
+          Anuleaza
         </button>
       </div>
     );
@@ -344,12 +549,14 @@ export function CategoriesClient({ initialCategories }: Props) {
     const isTemp = cat.id.startsWith("temp-");
     const isEditing = editing === cat.id;
     const isConfirmingDelete = confirmDelete === cat.id;
+    const isMoving = moving === cat.id;
     const isAddingSub = editing === `new-sub-${cat.id}`;
     const isOpen = searchActive ? (kids.length > 0 || isAddingSub) : (expanded.has(cat.id) || isAddingSub);
+    const esteAscunsa = ascunse.has(cat.id);
 
     return (
       <Fragment key={cat.id}>
-        <div className="flex items-center gap-2 pr-3 py-2 border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors"
+        <div className={`flex items-center gap-2 pr-3 py-2 border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors ${esteAscunsa ? "opacity-60" : ""}`}
           style={{ paddingLeft: INDENT_BASE + depth * INDENT_STEP }}>
           {/* Expand toggle / alignment slot */}
           {hasKids || isAddingSub ? (
@@ -374,12 +581,18 @@ export function CategoriesClient({ initialCategories }: Props) {
             />
           ) : isConfirmingDelete ? (
             deleteConfirm(cat)
+          ) : isMoving ? (
+            moveForm(cat)
           ) : (
             <>
-              <span className="flex-1 text-sm text-foreground truncate">{cat.name}</span>
+              <span className={`flex-1 text-sm truncate ${esteAscunsa ? "text-muted-foreground line-through decoration-muted-foreground/40" : "text-foreground"}`}>
+                {cat.name}
+              </span>
+              {esteAscunsa && <span className="text-[10px] text-amber-600 flex-shrink-0">ascunsa</span>}
               {hasKids && (
                 <span className="text-xs text-muted-foreground flex-shrink-0">{rawChildren(cat.id).length} sub</span>
               )}
+              {orderActions(cat, isTemp)}
               {rowActions(cat, isTemp)}
             </>
           )}
@@ -471,13 +684,15 @@ export function CategoriesClient({ initialCategories }: Props) {
             const isTemp = cat.id.startsWith("temp-");
             const isEditing = editing === cat.id;
             const isConfirmingDelete = confirmDelete === cat.id;
+            const isMoving = moving === cat.id;
             const isAddingSub = editing === `new-sub-${cat.id}`;
             const isOpen = searchActive ? (kids.length > 0 || isAddingSub) : (expanded.has(cat.id) || isAddingSub);
+            const esteAscunsa = ascunse.has(cat.id);
 
             return (
-              <div key={cat.id} className="border border-border rounded-xl overflow-hidden">
+              <div key={cat.id} className={`border rounded-xl overflow-hidden ${esteAscunsa ? "border-amber-500/30" : "border-border"}`}>
                 {/* Root category row */}
-                <div className={`flex items-center gap-2 px-3 py-2.5 bg-surface hover:bg-muted/40 transition-colors ${isEditing ? "bg-muted/40" : ""}`}>
+                <div className={`flex items-center gap-2 px-3 py-2.5 bg-surface hover:bg-muted/40 transition-colors ${isEditing ? "bg-muted/40" : ""} ${esteAscunsa ? "opacity-60" : ""}`}>
                   {/* Expand toggle */}
                   <button
                     type="button"
@@ -501,12 +716,18 @@ export function CategoriesClient({ initialCategories }: Props) {
                     />
                   ) : isConfirmingDelete ? (
                     deleteConfirm(cat)
+                  ) : isMoving ? (
+                    moveForm(cat)
                   ) : (
                     <>
-                      <span className="flex-1 text-sm font-semibold text-foreground truncate">{cat.name}</span>
+                      <span className={`flex-1 text-sm font-semibold truncate ${esteAscunsa ? "text-muted-foreground line-through decoration-muted-foreground/40" : "text-foreground"}`}>
+                        {cat.name}
+                      </span>
+                      {esteAscunsa && <span className="text-[10px] text-amber-600 flex-shrink-0">ascunsa</span>}
                       {hasKids && (
                         <span className="text-xs text-muted-foreground flex-shrink-0">{rawChildren(cat.id).length} sub</span>
                       )}
+                      {orderActions(cat, isTemp)}
                       {rowActions(cat, isTemp)}
                     </>
                   )}
@@ -542,7 +763,9 @@ export function CategoriesClient({ initialCategories }: Props) {
       {totalCount > 0 && (
         <div className="mt-6 p-4 rounded-xl bg-muted/50 border border-border">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Categoriile create aici apar ca optiuni in formularul de adaugare/editare produs. Poti crea subcategorii pe oricate niveluri. Stergerea unei categorii sterge si subcategoriile ei, dar nu afecteaza produsele deja clasificate.
+            Categoriile create aici apar ca optiuni in formularul de adaugare/editare produs si, in aceasta ordine, in magazin. Poti crea subcategorii pe oricate niveluri.
+            Sagetile schimba ordinea intre categoriile de la acelasi nivel. Ochiul ascunde o categorie din magazin impreuna cu subcategoriile si cu produsele ei — in panou ramane, iar produsele raman active.
+            Stergerea unei categorii sterge si subcategoriile ei, iar produsele din ele trec la categoria de deasupra.
           </p>
         </div>
       )}

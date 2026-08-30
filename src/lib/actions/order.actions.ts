@@ -1,41 +1,108 @@
 "use server";
 
+import { after } from "next/server";
+import { marketplaceCareTineComanda, deCeNuDeAici } from "@/lib/orders/origin";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { scrieStatisticiOferte } from "@/lib/offers/statistici";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
-import { computeVat } from "@/lib/utils/vat";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { computeVat, vatBase } from "@/lib/utils/vat";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
-import { comboStockMap, enabledComboPriceMap } from "@/lib/storefront/variants";
-import { expandBundleStock } from "@/lib/bundles";
-import { applyBumpPricing, applyFbtPricing } from "@/lib/offers/offers";
+import { comboStockMap, enabledComboPriceMap, parseVariants } from "@/lib/storefront/variants";
+import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
+import {
+  amprentaLinii,
+  necesarDeStoc,
+  planificaEditarea,
+  recalculeazaTotal,
+  reducerileDepasescMarfa,
+  slabesteVariante,
+  sumaExtraoptiunilor,
+  type CatalogEdit,
+  type ModificareLinie,
+  type VarianteSlim,
+} from "@/lib/orders/edit-pricing";
+import { verifyShippingQuote } from "@/lib/shipping/quote-token";
+import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
+import { verifyBillingCompany } from "@/lib/billing/verify";
+import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
+import { stocRezervat } from "@/lib/orders/stoc-rezervat";
+import { cheiEticheta } from "@/lib/gls/eticheta";
+import { deleteFromR2 } from "@/lib/r2";
+import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
+import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
+import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
+import { esteIdExtra } from "@/lib/orders/extras";
+import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
+import { inchideSesiuneaStripeVeche } from "@/lib/stripe-sesiune";
+import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
 import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
-import { computeCardDiscount, computeCodDiscount, parseCardDiscountConfig } from "@/lib/payment-methods";
+import { enqueueEmagStocMany } from "@/lib/emag/queue";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, verificaMetodaPlata, isCodPaymentMethod, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
+import { ORDER_STATUS } from "@/lib/orders/status";
 import { sendSms } from "@/lib/smso";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
 import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchimpOrderPaid, orderValueTag } from "@/lib/mailchimp-sync";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
+import type { Json } from "@/types/database.types";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
 const STORE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+/**
+ * Ofertele refuzate la re-evaluare, scrise in jurnal cu clientul ADMIN.
+ *
+ * `logError` scrie prin clientul de cerere, iar comenzile magazinului sunt
+ * anonime: politicile RLS taie insertul, deci pe calea publica un jurnal gol nu
+ * dovedeste ca nu s-a intamplat nimic. Aici avem nevoie exact de dovada aceea:
+ * daca dupa lansare apar des refuzuri cu motivul „declansator" sau „suprafata",
+ * inseamna ca re-evaluarea difera de magazin undeva unde n-am prevazut, si
+ * clienti adevarati raman cu comanda blocata.
+ */
+async function jurnalizeazaOfertele(
+  admin: SupabaseClient<Database>, businessId: string, rez: RezultatOferte,
+): Promise<void> {
+  // Se scrie DOAR cand comanda chiar s-a oprit. Asta e singurul semnal care
+  // trebuie urmarit, si tot asta tine jurnalul mic: apelul vine dintr-un
+  // endpoint public anonim, deci fiecare rand scris e un rand pe care il poate
+  // cere oricine (limitat de cele 10 incercari pe minut si pe IP).
+  if (!rez.error) return;
+  try {
+    await admin.from("error_logs").insert({
+      action: "applyOfferPricing.rejected",
+      message: "Comanda oprita: oferta revendicata nu se mai justifica",
+      details: { rejected: rez.rejected, applied: rez.applied } as never,
+      business_id: businessId,
+      severity: "warning",
+    });
+  } catch {
+    // Jurnalul nu are voie sa pice o comanda.
+  }
 }
 
 // ── Server-authoritative pricing ─────────────────────────────────────────────
@@ -45,14 +112,33 @@ function round2(n: number): number {
 
 type OrderProduct = {
   id: string;
+  name: string;
   price: number;
   is_active: boolean;
   business_id: string;
   page_sections: unknown;
 };
 
-// All legitimate per-unit prices: base price + every enabled variant combination.
-function legitUnitPrices(product: OrderProduct): number[] {
+/**
+ * Preturile unitare legitime pentru produsul principal.
+ *
+ * Cand comanda numeste o varianta, singurul pret legitim e AL EI. Fara ingustarea
+ * asta, orice pret de varianta activa trecea pentru orice varianta: se putea
+ * comanda marimea scumpa la pretul celei ieftine, iar comerciantul vedea in
+ * comanda numele corect si suma mica. Liniile din cos n-au avut niciodata
+ * problema — acolo varianta se trimite explicit si se pretuieste din combinatii.
+ */
+function legitUnitPrices(product: OrderProduct, variantTitle?: string | null): number[] {
+  if (variantTitle) {
+    const pret = enabledComboPriceMap(product.page_sections, round2(product.price)).get(variantTitle);
+    // Varianta necunoscuta sau dezactivata intre timp: nu cadem pe pretul de baza,
+    // fiindca ar fi exact portita pe care o inchidem. Comanda e respinsa.
+    return pret != null ? [round2(pret)] : [];
+  }
+  // Produsul cu variante NU are pret legitim fara o varianta aleasa. `pretulLiniei`
+  // opreste comanda inainte sa se ajunga aici; randul asta e a doua incuietoare,
+  // ca o cale noua sa nu poata reintra pe portita.
+  if (parseVariants(product.page_sections) !== null) return [];
   const set = new Set<number>([round2(product.price)]);
   const ps = (product.page_sections ?? {}) as {
     variants?: { enabled?: boolean; combinations?: Array<{ enabled?: boolean; price?: number | null }> };
@@ -70,35 +156,33 @@ function legitUnitPrices(product: OrderProduct): number[] {
   return [...set];
 }
 
-// Legitimate bundle totals for a given unit price and quantity (mirrors ProductPage
-// quantity-tier math: plain qty*unit is always valid; tiers 2/3 add bundle prices).
+// Totalurile legitime pentru un pret unitar si o cantitate: pretul intreg si cel
+// calculat de motorul de trepte. Amandoua raman valide — pretul intreg acopera
+// clientii cu pagina veche in cache, care inca trimit `cantitate x pret`.
 function legitBundleTotals(product: OrderProduct, unit: number, quantity: number): number[] {
-  const totals = [round2(unit * quantity)];
-  const ps = (product.page_sections ?? {}) as {
-    quantity_tiers?: { enabled?: boolean; mode?: string; tier2_price?: number; tier3_price?: number; tier2_percent?: number; tier3_percent?: number };
-  };
-  const t = ps.quantity_tiers;
-  if (t?.enabled) {
-    const isPercent = t.mode === "percent";
-    if (quantity === 2) {
-      const p = isPercent ? unit * 2 * (1 - (t.tier2_percent ?? 0) / 100) : Number(t.tier2_price ?? 0);
-      if (p > 0) totals.push(round2(p));
-    } else if (quantity === 3) {
-      const p = isPercent ? unit * 3 * (1 - (t.tier3_percent ?? 0) / 100) : Number(t.tier3_price ?? 0);
-      if (p > 0) totals.push(round2(p));
-    }
-  }
-  return totals;
+  const intreg = round2(unit * quantity);
+  const trepte = construiesteTrepte((product.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers, unit);
+  const cuPachete = round2(pretPeTrepte(trepte, quantity, unit).subtotal);
+  return cuPachete === intreg ? [intreg] : [intreg, cuPachete];
 }
 
 // Returns the authoritative pre-discount subtotal, or null if the claimed unit
 // price cannot be reconciled with any legitimate configuration.
-function authoritativeSubtotal(product: OrderProduct, claimedUnit: number, quantity: number): number | null {
-  if (!Number.isFinite(claimedUnit) || quantity < 1) return null;
+function authoritativeSubtotal(
+  product: OrderProduct,
+  claimedUnit: number,
+  quantity: number,
+  variantTitle?: string | null,
+): number | null {
+  // `Number.isFinite` si pe CANTITATE, nu doar pe pret: `round2` inghite NaN in
+  // zero (`Number(NaN) || 0`), deci o cantitate nenumerica facea si suma ceruta,
+  // si toate totalurile legitime sa fie 0,00 — se potriveau perfect intre ele si
+  // produsul principal pleca pe gratis. `NaN < 1` e fals, deci poarta veche o lasa.
+  if (!Number.isFinite(claimedUnit) || !Number.isFinite(quantity) || quantity < 1) return null;
   const claimed = round2(claimedUnit * quantity);
   let best: number | null = null;
   let bestDiff = Infinity;
-  for (const unit of legitUnitPrices(product)) {
+  for (const unit of legitUnitPrices(product, variantTitle)) {
     for (const candidate of legitBundleTotals(product, unit, quantity)) {
       const d = Math.abs(candidate - claimed);
       if (d < bestDiff) { bestDiff = d; best = candidate; }
@@ -106,6 +190,113 @@ function authoritativeSubtotal(product: OrderProduct, claimedUnit: number, quant
   }
   // Tolerance absorbs rounding only; real tampering is orders of magnitude away.
   return best !== null && bestDiff <= 0.5 ? best : null;
+}
+
+/**
+ * Costul de livrare pe care il acceptam, nu cel pe care il cere clientul.
+ *
+ * Transportul era singurul numar din comanda scris asa cum venea din browser:
+ * cine trimitea zero primea livrare gratuita, iar comerciantul platea oricum
+ * curierul. Acum se accepta doar doua lucruri: un pret pe care l-am cotat chiar
+ * noi, dovedit cu semnatura de la `getShippingOptions`, sau tariful implicit al
+ * magazinului, pentru cazul in care nu exista niciun curier de ales.
+ *
+ * Orice altceva cade pe tariful implicit. NU refuzam comanda: o cotatie pierduta
+ * nu are voie sa coste o vanzare, iar tariful implicit e valoarea pe care
+ * comerciantul a declarat-o oricum.
+ *
+ * Livrarea gratuita ramane unde era, dupa apelul asta: pragul de comanda si
+ * codul de reducere se evalueaza server-side si pun transportul pe zero.
+ */
+function autoritativeShipping(
+  businessId: string,
+  cerut: number,
+  token: string | null | undefined,
+  dest: { county?: string | null; city?: string | null; country?: string | null; postCode?: string | null },
+  tarifImplicit: number | null,
+  /**
+   * Optiunea aleasa de client. Semnatura o acopera, deci trebuie confruntata.
+   *
+   * `ramburs` NU vine de la client: se pune de apelant din metoda de plata deja
+   * validata fata de ce ofera magazinul (`verificaMetodaPlata`). Asta e tot
+   * rostul lui — la cotare regimul a fost declarat de browser, aici e confruntat
+   * cu ce se intampla de fapt.
+   */
+  optiune: { courier?: string | null; deliveryType?: string | null; courierLabel?: string | null; ramburs: boolean },
+  /** `shipping_zones` al magazinului: spune doar DACA are curieri de ales. */
+  zone: Record<string, { enabled?: boolean; price?: number }> | null,
+  /**
+   * Serverul a hotarat deja ca livrarea e gratuita (prag atins sau cupon).
+   *
+   * Atunci nu e nimic de verificat: browserul trimite zero, dar tokenul lui e
+   * semnat pe pretul COTAT al curierului, deci nicio semnatura n-are cum sa
+   * bata. Fara scurtatura asta, clientul care tocmai a trecut pragul de livrare
+   * gratuita nu putea comanda deloc — si zece din cincisprezece magazine cu
+   * curieri activi au prag, deci ar fi cazut exact comenzile mari.
+   */
+  esteGratuit: boolean,
+): number {
+  if (esteGratuit) return 0;
+
+  const claimed = Math.max(0, round2(Number(cerut) || 0));
+  if (verifyShippingQuote(businessId, dest, claimed, token, optiune)) return claimed;
+
+  /*
+   * REZERVA e tariful implicit al magazinului, si NIMIC ales de client.
+   *
+   * Am incercat sa o leg de curierul ales, citind `shipping_zones[courier].price`.
+   * Era gresit din radacina: `selected_courier` vine din browser, deci clientul
+   * isi alegea singur rezerva. Trimitand `pickup` fara niciun token se obtinea
+   * zero — inclusiv pe o comanda internationala, unde „Ridicare personala" nici
+   * macar nu e o optiune ofertabila. Rezerva trebuie sa fie un numar pe care
+   * l-a scris comerciantul si pe care clientul nu-l poate misca.
+   */
+  if (tarifImplicit == null) return claimed;
+
+  /*
+   * Magazin fara niciun curier de ales, care cere exact tariful implicit: e
+   * cazul normal, nu unul de semnalat.
+   *
+   * Ramura asta NU strange nimic si nu trebuie citita ca o intarire: numeric da
+   * acelasi rezultat ca ramura de mai jos, fiindca `max(claimed, tarifImplicit)`
+   * e chiar `claimed` cand cele doua sunt egale. Singurul ei rost e sa nu umple
+   * jurnalul cu avertismente pentru magazinele care n-au curieri configurati.
+   *
+   * Cine chiar apara banii e `max`-ul de mai jos. Si nici el nu acopera tot:
+   * magazinul okxi are si `default_shipping_cost` 0,00 si pretul zonei Sameday
+   * 0, cu tarif live, deci acolo nu exista niciun numar declarat sub care sa nu
+   * se poata cobori. Tocmai de aceea amprenta trebuie sa lege TOT ce a produs
+   * pretul, nu doar destinatia: pe okxi, o cotatie stricata nu costa nimic.
+   * Regimul de ramburs e legat (vezi `QuoteOption.ramburs`); greutatea inca nu —
+   * ea se calculeaza server-side, dar din lista de produse DECLARATA de client.
+   */
+  const areCurieri = Object.values(zone ?? {}).some((z) => z?.enabled);
+  if (!areCurieri && claimed === round2(tarifImplicit)) return claimed;
+
+  logError({
+    action: "placeOrder.shippingRejected",
+    message: "Shipping cost not covered by a signed quote",
+    // `ramburs` e in jurnal fiindca e singura parte a amprentei pe care clientul
+    // nu o trimite: cand semnatura cade fara motiv vizibil, aici se vede daca
+    // regimul cerut la cotare a fost altul decat cel al comenzii.
+    details: { businessId, claimed, tarifImplicit, courier: optiune.courier, deliveryType: optiune.deliveryType, ramburs: optiune.ramburs, hasToken: !!token },
+    severity: "warning",
+  });
+
+  /*
+   * Cel mai MARE dintre suma ceruta si tariful implicit — niciodata comanda
+   * oprita.
+   *
+   * Oprirea ar fi fost curata pe hartie, dar cade pe capul clientilor cinstiti
+   * la fiecare deploy care schimba amprenta si la fiecare rotire a cheii, cand
+   * toate cotatiile aflate in circulatie devin invalide deodata.
+   *
+   * `max` scoate insa castigul din stricarea semnaturii: mai jos de tariful
+   * implicit nu se poate cobori oricum. Iar clientul caruia i-a expirat cotatia
+   * plateste ce a vazut pe ecran, nu un tarif mai mic — asa comerciantul nu mai
+   * ramane dator, cum ramanea cand se cadea sec pe tariful implicit.
+   */
+  return Math.max(claimed, Math.max(0, round2(tarifImplicit)));
 }
 
 type CheckoutExtra = { id: string; label: string; price: number };
@@ -123,6 +314,53 @@ function validateExtras(
     .map((e) => ({ id: e.id, label: e.label, price: round2(Number(e.price)) }));
 }
 
+/**
+ * Datele de facturare pe firma, hotarate de SERVER.
+ *
+ * Trei filtre, in ordinea asta, si toate trei sunt necesare:
+ *
+ *   1. COMUTATORUL. Se citeste din `page_content`, nu din ce a trimis browserul.
+ *      Actiunile astea sunt exporturi dintr-un modul `"use server"`, adica
+ *      endpointuri publice: pe un magazin cu reglajul stins, oricine ar putea
+ *      atasa oricarei comenzi date de firma pe care comerciantul nu le-a cerut
+ *      niciodata. Acelasi principiu ca la `validateExtras`, care nu crede
+ *      preturile venite de la client.
+ *   2. FORMA. `parseBillingCompany` taie sirurile, verifica cifra de control a
+ *      CUI-ului si respinge blocul daca lipseste denumirea — o factura fara ele
+ *      e mai rea decat lipsa facturii.
+ *   3. ADEVARUL. `verifyBillingCompany` reintreaba ANAF, cu doua secunde de
+ *      rabdare, si ia de acolo denumirea, numarul de la registrul comertului si
+ *      statutul de platitor de TVA. Cifra de control prinde greselile de tastare,
+ *      nu si un CUI real trimis cu o denumire inventata.
+ *
+ * CAND ANAF SPUNE CA ACEL CUI NU EXISTA, comanda nu trece. Alternativa — sa o
+ * salvam tacut ca persoana fizica — ar fi fost mai rea decat pare: clientul a
+ * cerut explicit factura pe firma, ar fi apasat „Trimite comanda", ar fi vazut
+ * pagina de confirmare si ar fi aflat abia peste cateva zile, de pe factura, ca
+ * datele lui n-au ajuns nicaieri. Un mesaj sub campul de CUI se repara in zece
+ * secunde. Filtrul 1 si 2 intorc insa `null`, nu eroare: acolo nu e nimic de
+ * reparat de catre client.
+ */
+type BillingResolution = { company: BillingCompany | null } | { error: string };
+
+async function resolveBillingCompany(
+  pageContent: unknown,
+  input: unknown,
+): Promise<BillingResolution> {
+  const pornit = (pageContent as { checkout_config?: { company_fields?: { enabled?: boolean } } } | null)
+    ?.checkout_config?.company_fields?.enabled === true;
+  if (!pornit) return { company: null };
+
+  const curatat = parseBillingCompany(input);
+  if (!curatat) return { company: null };
+
+  const confirmat = await verifyBillingCompany(curatat);
+  if (!confirmat) {
+    return { error: "CUI-ul introdus nu exista in registrul ANAF. Verifica-l si incearca din nou." };
+  }
+  return { company: confirmat };
+}
+
 async function buildOrderNumber(supabase: SupabaseClient, businessId: string): Promise<string> {
   const { data: settings } = await supabase
     .from("store_settings")
@@ -131,9 +369,29 @@ async function buildOrderNumber(supabase: SupabaseClient, businessId: string): P
     .single();
 
   if (settings?.order_number_format === "sequential") {
-    const { data: counter } = await supabase.rpc("next_order_number", { p_business_id: businessId });
-    const n = (counter as number) ?? 1;
-    return `#${String(n).padStart(4, "0")}`;
+    const { data: counter, error } = await supabase.rpc("next_order_number", { p_business_id: businessId });
+    /*
+     * `?? 1` era o GHICITURA, si mereu aceeasi.
+     *
+     * La o eroare de RPC iesea `#0001` — adica numarul primei comenzi a
+     * magazinului. Constrangerea de unicitate opreste duplicatul, deci nu se
+     * corupe nimic, dar comerciantul primeste o eroare de checkout care nu spune
+     * nimic, iar cauza adevarata (contorul n-a raspuns) nu se vede nicaieri.
+     *
+     * Mai bine se arunca: apelantul stie sa opreasca comanda, iar jurnalul spune
+     * de ce. Un numar de comanda ghicit nu e un numar de comanda.
+     */
+    if (error || typeof counter !== "number") {
+      await logError({
+        action: "nextOrderNumber",
+        message: error?.message ?? "contorul n-a intors un numar",
+        details: { businessId, raspuns: counter },
+        businessId,
+        severity: "critical",
+      });
+      throw new Error("Nu s-a putut genera numarul comenzii.");
+    }
+    return `#${String(counter).padStart(4, "0")}`;
   }
 
   return `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
@@ -169,14 +427,309 @@ async function ga4OrderEvent(
   }
 }
 
+/**
+ * Prima linie care cere mai mult decat stocul declarat al variantei ei, spusa
+ * pe romaneste. `null` cand totul e in regula.
+ *
+ * Sta aici, intr-un singur loc, fiindca sunt DOUA cai de comanda: formularul de
+ * comanda directa din pagina de produs (`placeOrder`) si finalizarea cosului
+ * (`placeCartOrder`). Verificarea exista doar pe a doua, asa ca o marime pusa pe
+ * zero se putea totusi comanda din formular, care e chiar calea cea mai
+ * folosita. Doua copii ale regulii ar fi apucat-o iar pe drumuri diferite.
+ *
+ * Combinatiile fara stoc completat nu sunt in harta: pentru ele nu se schimba
+ * nimic, ramane stocul produsului intreg. Acelasi produs poate aparea pe mai
+ * multe linii, deci cantitatile se aduna inainte de comparatie.
+ */
+function eroareStocPeVarianta(
+  stocPeProdus: Map<string, Map<string, number>>,
+  linii: { product_id: string; variant_title?: string | null; quantity: number }[],
+): string | null {
+  const cerut = new Map<string, { titlu: string; productId: string; cantitate: number }>();
+  for (const l of linii) {
+    if (!l.variant_title) continue;
+    const cheie = `${l.product_id}::${l.variant_title}`;
+    const dejaCerut = cerut.get(cheie)?.cantitate ?? 0;
+    const cantitate = Math.max(1, Math.floor(Number(l.quantity) || 1));
+    cerut.set(cheie, {
+      titlu: l.variant_title,
+      productId: l.product_id,
+      cantitate: dejaCerut + cantitate,
+    });
+  }
+  for (const { titlu, productId, cantitate } of cerut.values()) {
+    const disponibil = stocPeProdus.get(productId)?.get(titlu);
+    if (disponibil === undefined || cantitate <= disponibil) continue;
+    return disponibil <= 0
+      ? `Varianta „${titlu}" nu mai este in stoc. Alege alta optiune.`
+      : `Din varianta „${titlu}" au mai ramas ${disponibil} bucati.`;
+  }
+  return null;
+}
+
+/*
+ * ═══ AICI ERA `scadeStoculVariantelor`, SI A FOST STEARSA ═══
+ *
+ * Scadea marimile cu `decrement_variant_stock_batch`, care PLAFONEAZA la zero in
+ * loc sa refuze. Era chemata doar pe calea de rezerva, cand `revendica_stoc_complet`
+ * nu raspundea — iar acea cale REDESCHIDEA supravanzarea pe care o inchisesem cu o
+ * zi inainte: sistemul de siguranta cadea, aplicatia mergea mai departe, si mergea
+ * pe purtarea nesigura.
+ *
+ * De la 19.08 nu mai exista cale de rezerva: cand verdictul nu se poate da,
+ * comanda NU intra. Functia a fost stearsa, nu doar lasata nechemata — cod mort
+ * care poarta algoritmul gresit se recheama, la a doua citire, de cineva care
+ * vede doar ca „exista deja o functie pentru asta".
+ *
+ * Scaderea care plafoneaza mai traieste in baza, in `revendica_stoc_comanda`
+ * (reactivarea unei comenzi anulate), unde plafonarea E purtarea corecta:
+ * comerciantul a decis deja, iar un refuz i-ar lasa comanda intr-o stare
+ * imposibila. Vezi `scade_variante_raportat`, care macar o raporteaza.
+ */
+
+
+/**
+ * Cate comenzi pe minut si pe acelasi magazin mai sunt trafic si nu rafala.
+ *
+ * NU e un plafon dur si nu trebuie facut unul: un plafon dur pe magazin se
+ * intoarce impotriva comerciantului — atacatorul ii umple cota si comenzile REALE
+ * nu mai intra (vezi comentariul de la `submitPageForm`, page.actions.ts). Peste
+ * pragul asta comanda se salveaza in continuare si se vede in panou; se opresc
+ * doar instiintarile. Cel mai incarcat magazin din productie n-a trecut niciodata
+ * de o comanda pe minut, deci 30 lasa loc si unei campanii adevarate.
+ */
+const PRAG_RAFALA_MAGAZIN = 30;
+
+/**
+ * Si pe ORA, nu doar pe minut.
+ *
+ * Cu o singura fereastra de un minut, pragul se ocoleste tinand ritmul sub el:
+ * 29 de comenzi pe minut nu-l ating NICIODATA si fac totusi 1.740 de comenzi pe
+ * ora, adica 1.740 de SMS-uri din creditul comerciantului si de doua ori pe atat
+ * emailuri. Iar comentariul de mai sus spune chiar el ca asta e frana care ramane
+ * dupa ce plafonul pe IP e ocolit cu o lista de proxy-uri — deci trebuie sa tina
+ * si la ritm constant, nu doar la rafala.
+ *
+ * 600 e de zece ori peste cel mai incarcat magazin masurat (o comanda pe minut),
+ * deci o campanie adevarata incape; si ramane sub pragul de minut inmultit cu 60,
+ * deci fereastra scurta continua sa prinda varfurile.
+ */
+const PRAG_ORAR_MAGAZIN = 600;
+
+/**
+ * Magazinul asta primeste chiar acum o rafala de comenzi?
+ *
+ * Peste prag nu mai pleaca nici emailul catre comerciant, nici cel catre client,
+ * nici SMS-ul — care se plateste din creditul comerciantului. Plafonul pe IP se
+ * ocoleste cu o lista de proxy-uri, si atunci asta e singura frana care ramane:
+ * fara ea, fiecare comanda falsa mai ardea un SMS si mai ingropa o comanda reala
+ * in casuta comerciantului.
+ *
+ * Cele doua numarari pleaca IMPREUNA: a doua fereastra nu adauga nicio
+ * intarziere pe drumul raspunsului, doar inca o cerere in paralel.
+ */
+async function pesteRafalaMagazinului(
+  admin: SupabaseClient<Database>, businessId: string, actiune: string,
+): Promise<boolean> {
+  const acum = Date.now();
+  const numara = async (deLa: number) => {
+    const { count } = await admin
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .gte("created_at", new Date(acum - deLa).toISOString());
+    return count ?? 0;
+  };
+  const [peMinut, peOra] = await Promise.all([numara(60_000), numara(3_600_000)]);
+  const pesteMinut = peMinut > PRAG_RAFALA_MAGAZIN;
+  const pesteOra = peOra > PRAG_ORAR_MAGAZIN;
+  if (!pesteMinut && !pesteOra) return false;
+  /*
+   * Alerta se scrie doar pe trecerea pragului, nu la fiecare comanda de dupa.
+   *
+   * Peste prag ajung AICI toate comenzile urmatoare — la fereastra de o ora,
+   * sute — si un rand de fiecare ar umple `error_logs` cu copii ale aceleiasi
+   * stiri. Banda de trei valori, nu una singura: cu inserari in paralel
+   * numaratoarea poate sari peste exact prag+1.
+   */
+  const laTrecere = (n: number, prag: number) => n > prag && n <= prag + 3;
+  if (laTrecere(peMinut, PRAG_RAFALA_MAGAZIN) || laTrecere(peOra, PRAG_ORAR_MAGAZIN)) {
+    logError({
+      action: `${actiune}.rafalaMagazin`,
+      message: pesteMinut
+        ? `${peMinut} comenzi intr-un minut pe acelasi magazin — emailurile si SMS-ul s-au oprit`
+        : `${peOra} comenzi intr-o ora pe acelasi magazin — emailurile si SMS-ul s-au oprit`,
+      details: { businessId, peMinut, peOra },
+      severity: "warning",
+    });
+  }
+  return true;
+}
+
+// `Revendicare` si regula „numai {ok:true} trece" stau in `lib/orders/verdict-stoc.ts`,
+// unde pot fi TESTATE — sub `"use server"` n-ar putea fi.
+
+/**
+ * Verdictul de stoc si scaderea lui, in ACEEASI instructiune din baza.
+ *
+ * Pana acum erau doua drumuri: `expandBundleStock` citea stocul si compara in
+ * aplicatie, iar `decrement_stock_batch` scadea abia DUPA ce comanda era scrisa —
+ * si scadea cu `greatest(0, ...)`, deci supravanzarea nu lasa nici macar urma unui
+ * numar negativ. Intre citire si scadere incap trei-patru dus-intorsuri la baza,
+ * adica sute de milisecunde: cinci cereri in aceeasi clipa treceau toate cinci de
+ * verificare si vindeau toate acelasi ultim produs.
+ *
+ * `revendica_stoc_batch` incuie randurile, da verdictul peste tot si abia apoi
+ * scade: ori rezerva tot, ori nu atinge nimic si spune care produs a picat. Se
+ * cheama INAINTE de inserarea comenzii, iar la esecul insertului stocul se da
+ * inapoi cu `elibereazaStocul` — acelasi model ca la cupoane
+ * (`claim_discount_use` / `release_discount_use`).
+ *
+ * `expandBundleStock` ramane inaintea ei si nu se scoate: ea desface pachetele in
+ * componente si formuleaza mesajele omenesti („scoate pachetul din cos"), pe care
+ * un verdict venit din baza nu le poate da.
+ *
+ * ═══ SI VARIANTELE, DE LA 18.08 ═══
+ *
+ * Variantele nu treceau pe aici deloc: se verificau in aplicatie
+ * (`eroareStocPeVarianta`, o citire) si se scadeau DUPA insert, cu o functie care
+ * plafoneaza la zero in loc sa refuze. Verificarea de produs nu acoperea gaura,
+ * fiindca `products.stock_quantity` e SUMA combinatiilor: pe un produs cu 94 de
+ * marimi si 993.313 bucati, o cursa pe marimea cu 2 bucati trecea de fiecare data.
+ *
+ * Dovedit pe productie inainte de reparatie, pe „Pique Polo" / „verde sticla 4XL"
+ * (stoc 2): pe calea veche a doua cerere primea `{ok:true}` si vindea a treia
+ * bucata; pe cea noua primeste `{ok:false, varianta, disponibil:0}`. Iar plafonarea
+ * facea ca baza sa nu ramana negativa, deci supravanzarea nu lasa nicio urma.
+ *
+ * Consecinta pentru apelanti: scaderea variantelor S-A MUTAT INAINTE de insert,
+ * impreuna cu cea de produs. `scadeStoculVariantelor` ramane DOAR pentru cazul
+ * `nerevendicat` (functia din baza inca nu exista) — chemata si dupa o revendicare
+ * reusita, ar scadea a doua oara.
+ */
+async function revendicaStocul(
+  admin: SupabaseClient<Database>,
+  decrements: { product_id: string; quantity: number }[],
+  liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
+): Promise<Revendicare> {
+  const variante = liniiVarianta
+    .filter((l) => l.variant_title)
+    .map((l) => ({
+      product_id: l.product_id,
+      variant_title: l.variant_title as string,
+      // Aceeasi normalizare ca `stocRezervat` si ca fosta `scadeStoculVariantelor`:
+      // ce se rezerva trebuie sa fie exact ce se scrie pe comanda, altfel anularea
+      // da inapoi alt numar decat s-a luat.
+      quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+    }));
+  if (decrements.length === 0 && variante.length === 0) return { fel: "revendicat" };
+  const { data, error } = await admin.rpc(
+    "revendica_stoc_complet" as never,
+    { p_produse: decrements, p_variante: variante } as never,
+  );
+  /*
+   * ⚠ CAND FUNCTIA NU RASPUNDE, COMANDA NU INTRA.
+   *
+   * Aici scria pana la 19.08 exact pe dos: „comanda MERGE MAI DEPARTE pe drumul
+   * vechi", cu justificarea ca migratia poate sa nu fie inca aplicata. Migratia e
+   * aplicata, iar drumul vechi plafona in loc sa refuze — adica supravanzarea pe
+   * marimi se redeschidea singura ori de cate ori RPC-ul pica: schema cache
+   * stricat, `REVOKE` gresit, deploy ajuns inaintea migratiei.
+   *
+   * Un checkout oprit doua minute e incomparabil mai ieftin decat marfa vanduta de
+   * doua ori. Regula sta acum in `interpreteazaRevendicarea`, cu teste: numai
+   * `{ok: true}` lasa comanda sa treaca.
+   *
+   * Jurnalul ramane `critical`: daca ramura asta apare in `/admin/logs`,
+   * checkout-ul chiar e oprit si trebuie umblat la baza, nu la cod.
+   */
+  if (error) {
+    await logError({
+      action: "revendicaStocul", message: error.message,
+      details: { code: error.code, hint: error.hint, produse: decrements.length, variante: variante.length },
+      severity: "critical",
+    });
+  }
+  const verdict = interpreteazaRevendicarea(data, error);
+  if (verdict.fel === "esuat" && !error) {
+    await logError({ action: "revendicaStocul", message: "raspuns de forma neasteptata", details: { produse: decrements.length, raspuns: data }, severity: "critical" });
+  }
+  return verdict;
+}
+
+/**
+ * Da inapoi utilizarea cuponului cand comanda nu mai intra.
+ *
+ * Perechea lui `claim_discount_use`, ca `elibereazaStocul` pentru stoc. Exista ca
+ * functie, si nu ca patru apeluri imprastiate, tocmai fiindca era chemata in patru
+ * locuri FARA sa se uite nimeni la rezultat: daca revendicarea a reusit si
+ * compensarea pica, ramane consumata o utilizare pentru o comanda care nu s-a
+ * facut niciodata — o campanie de 100 serveste 99, si nimeni nu afla de ce.
+ *
+ * Nu opreste nimic: comanda oricum nu intra. Dar se VEDE.
+ */
+async function elibereazaCuponul(
+  admin: SupabaseClient<Database>,
+  discountId: string | null | undefined,
+): Promise<void> {
+  if (!discountId) return;
+  const { error } = await admin.rpc("release_discount_use", { p_discount_id: discountId });
+  if (error) {
+    await logError({
+      action: "releaseDiscountUse",
+      message: `utilizarea cuponului NU s-a putut da inapoi: ${error.message}`,
+      details: { discountId, code: error.code }, severity: "critical",
+    });
+  }
+}
+
+/**
+ * Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
+ * `revendicaStocul`, ca `release_discount_use` pentru cupon.
+ *
+ * DA INAPOI SI VARIANTELE. De cand revendicarea le ia inainte de insert, o
+ * eliberare doar pe produse ar lasa marimea consumata pentru o comanda care nu
+ * exista — adica exact gaura pe care mutarea o repara, doar pe calea de eroare.
+ * Amandoua intr-un singur apel: doua apeluri separate pot reusi pe jumatate.
+ */
+async function elibereazaStocul(
+  admin: SupabaseClient<Database>,
+  decrements: { product_id: string; quantity: number }[],
+  liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
+): Promise<void> {
+  const variante = liniiVarianta
+    .filter((l) => l.variant_title)
+    .map((l) => ({
+      product_id: l.product_id,
+      variant_title: l.variant_title as string,
+      quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+    }));
+  if (decrements.length === 0 && variante.length === 0) return;
+  const { error } = await admin.rpc(
+    "elibereaza_stoc_complet" as never,
+    { p_produse: decrements, p_variante: variante } as never,
+  );
+  if (error) {
+    // Marfa ramane rezervata pentru o comanda care nu exista. Se repara de mana,
+    // deci trebuie sa se vada: fara jurnal, stocul scade in gol si nimeni nu stie.
+    await logError({ action: "elibereazaStocul", message: error.message, details: { code: error.code, produse: decrements.length, variante: variante.length }, severity: "critical" });
+  }
+}
+
 export async function placeOrder(data: {
   business_id: string;
   cart_session_id?: string;
   product_id: string;
   product_name: string;
   product_price: number;
+  /** Combinatia de varianta aleasa, cand produsul are variante. */
+  variant_title?: string;
   quantity: number;
   shipping_cost: number;
+  /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
+  shipping_token?: string;
+  /** Rambursul pentru care s-a cerut cotatia. Doar pentru masurare. */
+  cod_declarat?: number;
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
@@ -186,9 +739,23 @@ export async function placeOrder(data: {
   customer_address: string;
   customer_country?: string;
   customer_postal_code?: string;
+  /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
+  billing_company?: BillingCompanyInput;
+  /**
+   * NU SE CITESC. `discount_id` n-a fost citit niciodata, iar `discount_amount`
+   * a plecat pe 2026-08-04 din singurul loc care il folosea (payload-ul de
+   * email). Cuponul se re-valideaza integral pe server din `discount_code`, si
+   * doar ce iese de acolo ajunge si in `orders`, si in emailuri.
+   *
+   * Raman declarate fiindca `OrderModal.tsx` si `checkout-core.ts` inca le
+   * trimit; scoase de aici, `tsc` ar pica pe ele. Cine le sterge, sa le stearga
+   * si de la apelanti — dar sa nu le RECITEASCA: un numar de reducere venit de
+   * la browser nu are ce cauta langa un total calculat de server.
+   */
   discount_id?: string;
-  discount_code?: string;
   discount_amount?: number;
+  /** Singurul camp de cupon citit: se re-valideaza cu `validateDiscount`. */
+  discount_code?: string;
   vat_amount?: number;
   vat_rate?: number;
   extras?: { id: string; label: string; price: number }[];
@@ -206,6 +773,8 @@ export async function placeOrder(data: {
   locker_id?: string;
   locker_name?: string;
   locker_address?: string;
+  /** Codul postal al punctului de ridicare; GLS il cere pe adresa de livrare. */
+  locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
   woot_service_id?: number;
@@ -213,6 +782,64 @@ export async function placeOrder(data: {
   woot_service_name?: string;
   colete_service_id?: number;
   colete_service_name?: string;
+  ecolet_service_slug?: string;
+  /* ⚠ Cheia ofertei Innoship are TREI parti: curierul real, felul livrarii si
+     varianta serviciului. Pastrata partial, reemiterea dupa corectarea adresei
+     ar pleca pe alt serviciu si alt pret. */
+  innoship_courier_id?: number;
+  innoship_service_id?: number;
+  innoship_option_id?: string;
+  innoship_courier_name?: string;
+  innoship_service_name?: string;
+  /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe care a
+     fost cotata. Cu `show_byoc`, acelasi curier apare de doua ori, la preturi
+     diferite — pastrat doar curierul, reemiterea ar putea pleca pe celalalt
+     contract. La locker se adauga si reteaua: easybox si FANbox sunt
+     nomenclatoare separate, cu curieri diferiti la emitere. */
+  smartship_courier_id?: number;
+  smartship_courier_name?: string;
+  smartship_own_contract?: boolean;
+  smartship_locker_net?: "easybox" | "fanbox";
+  /* ⚠ Cheia ofertei Shipo are O SINGURA parte, si NU e curierul: e SERVICIUL
+     (`rate_id`). Acelasi curier apare la adresa, in locker si in PUDO, la preturi
+     diferite, iar curierul si tipul punctului se DEDUC de ei din el. Pierdut aici,
+     alegerea clientului nu mai ajunge niciodata pe comanda. */
+  shipo_rate_id?: number;
+  shipo_courier_slug?: string;
+  shipo_courier_name?: string;
+  /* ⚠ Cheia ofertei FedEx e SERVICIUL (`serviceType`), si atat: FedEx e un singur
+     transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda, iar emiterea ar pleca pe serviciul implicit — mai scump sau mai lent
+     decat cel platit. E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  fedex_service_type?: string;
+  fedex_service_name?: string;
+  /* ⚠ Cheia ofertei UPS e CODUL SERVICIULUI (`Service.Code`), si atat: UPS e un
+     singur transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda — iar la UPS asta e mai scump decat la ceilalti: lipsa lui `Service.Code`
+     la emitere nu e o eroare, e o factura. Ghidul lor romanesc, verbatim: „Daca nicio
+     optiune de serviciu nu este selectata de dvs., atunci expedierea se va efectua si
+     factura automat prin UPS Express" — cel mai scump produs al lor.
+     E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  ups_service_code?: string;
+  ups_service_name?: string;
+  /* ⚠⚠ La DHL produsul NU e un moft de pret, e o CONDITIE DE EMITERE: `productCode`
+     e in `required` la `POST /shipments`. Spre deosebire de UPS — care fara cod de
+     serviciu factureaza tacit produsul cel mai scump — DHL REFUZA cererea. Deci
+     pierdut aici, AWB-ul nu se mai poate emite deloc din lot, iar comerciantul afla
+     abia in fereastra comenzii, la mana.
+     ⚠ Se pastreaza si `dhl_local_product_code`: la livrarile interne DHL cere produsul
+     GLOBAL (`productCode`) impreuna cu cel LOCAL (`localProductCode`). Codul local NU
+     se compune niciodata de noi — se copiaza LITERAL din cotarea pe care a vazut-o
+     clientul, fiindca pana si documentatia lor se contrazice pe latimea lui (schema
+     zice 1-3 caractere, exemplele scriu unul singur, codurile publicate de DHL UK au
+     trei). Pierdut aici, nu mai are de unde fi luat. */
+  dhl_product_code?: string;
+  dhl_product_name?: string;
+  dhl_local_product_code?: string;
+  ecolet_courier_name?: string;
+  ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
   source?: OrderSource;
 }) {
@@ -224,30 +851,122 @@ export async function placeOrder(data: {
   if (!rateLimit(`placeOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
+  /*
+   * Al doilea strat, DURABIL. Cel de deasupra e o harta in memoria instantei:
+   * limita reala se inmulteste cu numarul de instante calde de pe Vercel si se
+   * pierde la fiecare deploy, deci pe hartie sunt 10 pe minut si in fapt nu e
+   * niciun plafon. Contorul asta sta in Postgres, deci e unul singur pentru toate
+   * instantele. Cheia e comuna celor doua cai de comanda: altfel se comuta intre
+   * formularul de produs si cos si se ia plafonul de doua ori.
+   */
+  if (!(await consumaLimita(`comanda:ip:${ip}`, 40, 3600)).permis) {
+    return { error: "Prea multe comenzi trimise de pe aceasta conexiune. Te rugam incearca mai tarziu." };
+  }
 
   // Use admin client for order creation — customers are anonymous, RLS requires service role
   const admin = createAdminClient();
 
+  /*
+   * Numele clientului, TAIAT la 120 de caractere.
+   *
+   * Venea din browser doar cu `.trim()`, adica nelimitat, iar actiunea e export
+   * „use server", deci endpoint public. Acelasi sir ajunge in `orders`, in
+   * subiectul emailului catre comerciant („Comanda noua X - NUME"), in SMS si mai
+   * departe pe AWB si pe factura. Numele de produs sunt de mult taiate la fel;
+   * asta era singurul camp de text al comenzii ramas fara plafon.
+   *
+   * Se taie o singura data, aici, si se foloseste peste tot: plafonat doar la
+   * inserare, emailul ar fi plecat in continuare cu sirul intreg.
+   */
+  const numeClient = data.customer_name.trim().slice(0, 120);
+
   // Reload product + store config and recompute every price server-side.
-  const [{ data: product }, { data: cfgRow }] = await Promise.all([
+  const [{ data: product, error: eroareProdus }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
-      .select("id, price, is_active, business_id, page_sections")
+      .select("id, name, price, is_active, business_id, page_sections")
       .eq("id", data.product_id)
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, vat_enabled, vat_rate, prices_include_vat")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones")
       .eq("business_id", data.business_id)
       .single(),
   ]);
 
+  // O interogare cazuta nu inseamna „produsul nu mai e disponibil": reincarcarea
+  // nu repara o pana, deci raspunsul corect e sa mai incerce. `.single()` fara rand
+  // intoarce tot eroare, deci se verifica intai produsul lipsa, care e altceva.
+  if (eroareProdus && product === null && eroareProdus.code !== "PGRST116") {
+    logError({ action: "placeOrder.productUnavailable", message: eroareProdus.message, details: { businessId: data.business_id, productId: data.product_id }, severity: "error" });
+    return { error: "Nu am putut verifica produsul. Te rugam incearca din nou in cateva momente." };
+  }
   if (!product || !product.is_active) {
     return { error: "Produsul nu mai este disponibil. Reincarca pagina." };
   }
+  if (eroareCfg && cfgRow === null && eroareCfg.code !== "PGRST116") {
+    logError({ action: "placeOrder.configUnavailable", message: eroareCfg.message, details: { businessId: data.business_id }, severity: "error" });
+    return { error: "Nu am putut verifica setarile magazinului. Te rugam incearca din nou in cateva momente." };
+  }
 
-  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, data.quantity);
+  /*
+   * Metoda de plata, verificata fata de ce ofera CHIAR magazinul.
+   *
+   * Pana acum se normaliza doar sirul primit din browser, deci trecea orice cod
+   * cunoscut, indiferent daca magazinul il ofera sau nu. De metoda atarna insa
+   * trei sume — reducerea de card, reducerea de ramburs si taxa de ramburs — plus
+   * baza de TVA: cine trimitea „stripe" pe un magazin care are doar ramburs lua
+   * reducerea de card si scapa de taxa, iar comanda ramanea neplatita.
+   *
+   * Garda sta AICI, inaintea oricarei scrieri (jurnalul ofertelor scrie deja in
+   * `error_logs` mai jos), si nu corecteaza in tacere: comanda se opreste, iar
+   * formularul isi reface lista de metode la reincarcare, deci refuzul se repara.
+   */
+  const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
+  if ("error" in metoda) {
+    logError({ action: "placeOrder.paymentMethodRejected", message: "Payment method not offered by the store", details: { businessId: data.business_id, cerut: String(data.payment_method ?? "").slice(0, 40) }, severity: "warning" });
+    return { error: metoda.error };
+  }
+  const metodaPlata = metoda.metoda;
+
+  /*
+   * Cantitatea comandata, judecata o singura data si folosita peste tot.
+   *
+   * Era singurul numar din comanda care nu trecea prin nicio plafonare: liniile
+   * din cos si editarea din panou se opresc de mult la 999, formularul de produs
+   * nu se oprea nicaieri. Iar `Math.floor` pe ce vine din browser nu e de ajuns,
+   * fiindca `quantity` poate sosi si nenumeric.
+   *
+   * Peste plafon se REFUZA, nu se rescrie: plafonata in tacere, cantitatea intra
+   * apoi in motorul de trepte, deci cine cere 5000 primeste si TREAPTA lui 999,
+   * adica alt pret unitar decat cel de pe ecran.
+   */
+  const ceruta = cantitateCeruta(data.quantity);
+  if (ceruta.fel !== "ok") return { error: mesajCantitate(ceruta) };
+  const cantitate = ceruta.cantitate;
+
+  /*
+   * Produsul din formular trebuie sa aiba varianta aleasa, si aceea sa fie de
+   * vanzare.
+   *
+   * `legitUnitPrices` refuza deja o varianta necunoscuta, dar ramura FARA
+   * varianta intorcea pretul de baza plus toate preturile combinatiilor: adica un
+   * produs cu variante trimis fara nicio marime trecea la pretul de baza. Pe
+   * ANTIFOANE, 156,80 in loc de 438,00, si o linie pe factura fara marime, pe
+   * care comerciantul n-are cum sa o expedieze. Formularul nu lasa asta sa se
+   * intample, dar actiunea e export „use server", adica endpoint public.
+   */
+  const linieP = pretulLiniei(
+    { name: String((product as OrderProduct).name ?? ""), price: round2(Number(product.price)), page_sections: product.page_sections },
+    data.variant_title,
+  );
+  if (linieP.fel === "eroare") {
+    logError({ action: "placeOrder.variantRejected", message: linieP.error, details: { businessId: data.business_id, productId: data.product_id, variant: String(data.variant_title ?? "").slice(0, 80) }, severity: "warning" });
+    return { error: linieP.error };
+  }
+
+  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
   if (mainSubtotal === null) {
-    logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity }, severity: "warning" });
+    logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity, cantitate }, severity: "warning" });
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
   }
 
@@ -256,41 +975,138 @@ export async function placeOrder(data: {
   // client (same model as placeCartOrder). The current product is excluded to avoid
   // double-counting, and unavailable/inactive items are dropped.
   let cartItems: { product_id: string; name: string; price: number; quantity: number }[] = [];
+  // Stocul declarat pe fiecare combinatie, pentru produsul comandat si pentru
+  // tot ce vine din cos odata cu el. Se verifica dupa ce se stiu toate liniile.
+  const stocPeVarianta = new Map<string, Map<string, number>>([
+    [product.id, comboStockMap(product.page_sections)],
+  ]);
+  const liniiCuVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [
+    { product_id: data.product_id, variant_title: data.variant_title, quantity: cantitate },
+  ];
   if (data.additional_items?.length) {
     const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
     if (ids.length > 0) {
-      const { data: extraProducts } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
+      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
+      // O interogare cazuta arunca TOT cosul purtat, in tacere: clientul ar primi
+      // o comanda doar cu produsul din formular, la un total pe care nu l-a vazut.
+      if (eroareExtra) {
+        logError({ action: "placeOrder.cartItemsUnavailable", message: eroareExtra.message, details: { businessId: data.business_id, ids }, severity: "error" });
+        return { error: "Nu am putut verifica produsele din cos. Te rugam incearca din nou in cateva momente." };
+      }
       const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => {
         const base = round2(Number(p.price));
-        return [p.id, { name: String(p.name), price: base, combos: enabledComboPriceMap(p.page_sections, base) }];
+        stocPeVarianta.set(p.id, comboStockMap(p.page_sections));
+        return [p.id, {
+          name: String(p.name),
+          price: base,
+          pageSections: p.page_sections,
+          tiers: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers,
+        }];
       }));
-      cartItems = data.additional_items
-        .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id) && i.quantity > 0)
+      /*
+       * Lista filtrata se tine intr-o variabila, ca stocul si preturile sa se uite
+       * la EXACT aceleasi linii. Repetat, filtrul ar putea ajunge sa difere.
+       *
+       * Cantitatea se PLAFONEAZA aici, o singura data, si tot de aici o iau si
+       * verificarea de stoc, si pretul. `placeOrder` e export dintr-un modul
+       * „use server", adica endpoint public, iar `Math.floor` primea pur si simplu
+       * ce trimitea browserul; calea de editare plafoneaza de mult la 999.
+       * Plafonata doar la pret, s-ar fi scazut din stoc un numar si s-ar fi
+       * incasat altul.
+       */
+      const cerute = data.additional_items
+        .filter((i) => i.product_id !== data.product_id && extraMap.has(i.product_id))
+        .map((i) => ({ linie: i, ceruta: cantitateCeruta(i.quantity) }));
+      // O cantitate imposibila OPRESTE comanda, nu scoate linia in tacere: scoasa,
+      // clientul plateste restul cosului fara sa afle ca a pierdut un produs — si
+      // aici pot fi si bump-uri acceptate, nu doar linii de cos.
+      const respinsa = cerute.find((c) => c.ceruta.fel !== "ok");
+      if (respinsa) {
+        const r = respinsa.ceruta as Exclude<typeof respinsa.ceruta, { fel: "ok" }>;
+        // Cantitatea bruta e valoare JSON arbitrara dintr-un endpoint public, deci
+        // se taie inainte de jurnal, ca `payment_method` cateva randuri mai sus.
+        // Iar mesajul numeste produsul cu numele din CATALOG: pe calea asta comanda
+        // foloseste oricum numele autoritar, tocmai fiindca cel de la client nu e
+        // de incredere si poate veni si gol.
+        logError({ action: "placeOrder.cantitateRespinsa", message: r.fel, details: { businessId: data.business_id, productId: respinsa.linie.product_id, quantity: String(respinsa.linie.quantity).slice(0, 40) }, severity: "warning" });
+        return { error: mesajCantitate(r, extraMap.get(respinsa.linie.product_id)?.name) };
+      }
+      // Varianta ceruta trebuie sa existe, iar un produs cu variante nu poate
+      // veni fara niciuna. Pana acum calea asta cadea pe pretul de baza in
+      // amandoua cazurile, spre deosebire de calea cosului, care refuza.
+      // Aceleasi linii pe care le pretuieste blocul de mai jos, nu un filtru scris
+      // a doua oara: chiar comentariul de deasupra avertizeaza ca doua filtre
+      // repetate ajung sa difere.
+      const eroareVar = eroareVarianta(
+        new Map([...extraMap].map(([id, m]) => [id, { name: m.name, price: m.price, page_sections: m.pageSections }])),
+        cerute.map((c) => c.linie),
+      );
+      if (eroareVar) {
+        logError({ action: "placeOrder.variantUnavailable", message: eroareVar, details: { businessId: data.business_id, ids }, severity: "warning" });
+        return { error: eroareVar };
+      }
+      const liniiDinCos = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
+      liniiCuVarianta.push(...liniiDinCos);
+      cartItems = liniiDinCos
         .map((i) => {
           const meta = extraMap.get(i.product_id)!;
-          // Named variant priced from its enabled combination; unknown/disabled
-          // variants and simple products fall back to the product's base price.
-          const variantPrice = i.variant_title ? meta.combos.get(i.variant_title) : undefined;
+          // Pretul si numele vin din ACEEASI functie care a dat verdictul mai sus.
+          // Aici era portita: o varianta dezactivata intre timp cadea pe pretul de
+          // BAZA si intra in comanda purtandu-i numele.
+          const rezolvata = pretulLiniei(
+            { name: meta.name, price: meta.price, page_sections: meta.pageSections },
+            i.variant_title,
+          );
+          const unitPrice = rezolvata.fel === "ok" ? rezolvata.unitPrice : meta.price;
+          // Treptele se aplica si liniilor purtate din cos in comanda directa,
+          // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
+          // plecata din formularul de produs il pierde pe drum.
+          const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
           return {
             product_id: i.product_id,
-            name: i.variant_title ? `${meta.name} (${i.variant_title})` : meta.name,
-            price: variantPrice != null ? round2(variantPrice) : meta.price,
-            quantity: Math.floor(i.quantity),
+            name: rezolvata.fel === "ok" ? rezolvata.nume : meta.name,
+            price: linie.unitPrice,
+            quantity: i.quantity,
           };
         });
     }
   }
-  // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
-  // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
-  if (data.accepted_offer_ids?.length) {
-    const bumped = await applyBumpPricing(admin, data.business_id, data.accepted_offer_ids, cartItems);
-    cartItems = bumped.items;
-    // FBT: distribute the "bought together" set discount across the companion lines.
-    // Anchor priced at the product's BASE price — matches the set pricing the storefront
-    // showed (resolveProductOffers uses the base price), so preview and charge agree.
-    const fbt = await applyFbtPricing(admin, data.business_id, data.accepted_offer_ids, data.product_id, round2(Number(product.price)), cartItems);
-    cartItems = fbt.items;
-  }
+  /*
+   * Stocul declarat al fiecarei variante cerute, inainte sa se scrie ceva.
+   *
+   * Calea asta n-avea verificarea deloc, desi finalizarea cosului o are de mult:
+   * o marime pusa pe zero de comerciant se putea comanda linistit din formularul
+   * de pe pagina de produs, iar el afla din comanda pe care n-o putea onora.
+   */
+  const eroareStoc = eroareStocPeVarianta(stocPeVarianta, liniiCuVarianta);
+  if (eroareStoc) return { error: eroareStoc };
+
+  /*
+   * Ofertele acceptate, RE-EVALUATE de la zero pe server: declansatorul,
+   * suprafata, setul pe care magazinul l-ar fi aratat si abia apoi pretul.
+   *
+   * Ancora se paseaza cu pretul ei unitar REAL, adica al variantei alese, nu cu
+   * pretul de baza al produsului. Cardul din pagina imparte economia setului
+   * folosind pretul afisat, deci pe un produs cu variante cele doua numere
+   * spuneau lucruri diferite.
+   */
+  const oferte = await applyOfferPricing(admin, data.business_id, data.accepted_offer_ids, cartItems, {
+    anchor: {
+      productId: data.product_id,
+      basePrice: round2(Number(product.price)),
+      // Aici ROTUNJIT, spre deosebire de linia care se scrie in comanda: numarul
+      // asta nu ajunge in `items`, ci imparte economia setului intre companioni,
+      // iar cardul din pagina o imparte folosind pretul AFISAT. Nerotunjit, cele
+      // doua ar da preturi diferite pe aceiasi companioni.
+      unitPrice: round2(mainSubtotal / cantitate),
+    },
+    // Liniile cu varianta aleasa vin sigur din cos, nu de la o oferta: ofertele
+    // adauga produsul dintr-o apasare, deci nu pot alege o marime.
+    cuVariantaAleasa: new Set((data.additional_items ?? []).filter((i) => i.variant_title).map((i) => i.product_id)),
+  });
+  await jurnalizeazaOfertele(admin, data.business_id, oferte);
+  if (oferte.error) return { error: oferte.error };
+  cartItems = oferte.items;
   const cartSubtotal = round2(cartItems.reduce((s, i) => s + i.price * i.quantity, 0));
   const subtotal = round2(mainSubtotal + cartSubtotal);
 
@@ -301,6 +1117,9 @@ export async function placeOrder(data: {
   }
 
   const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
+  const billingResolution = await resolveBillingCompany(cfgRow?.page_content, data.billing_company);
+  if ("error" in billingResolution) return { error: billingResolution.error };
+  const billingCompany = billingResolution.company;
   const extrasTotal = validatedExtras.reduce((s, e) => s + e.price, 0);
 
   // Re-validate the discount server-side against the authoritative subtotal.
@@ -309,71 +1128,253 @@ export async function placeOrder(data: {
   let isFreeShipping = false;
   if (data.discount_code) {
     const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
-    if (dres.valid) {
+    /*
+     * Cuponul respins OPRESTE comanda, nu se scoate in tacere.
+     *
+     * Fara ramura asta, un cupon devenit invalid intre completarea formularului
+     * si trimitere (si-a atins limita, a expirat, l-a stins comerciantul, sau
+     * marfa repretuita a cazut sub pragul lui) lasa `discountAmount` pe zero si
+     * comanda intra cu totalul INTREG. Ecranul scria 350, curierul incasa 500.
+     * Aceeasi situatie prinsa mai jos, la revendicare, intoarce deja eroare.
+     */
+    if (!dres.valid) return { error: dres.error };
       discountAmount = Math.min(dres.discount.discountAmount, subtotal);
       validDiscountId = dres.discount.id;
       isFreeShipping = dres.discount.type === "free_shipping";
-    }
   }
 
   // Card-payment discount: applies only to online card methods, on the goods
   // value (subtotal + extras, after any promo), never on shipping. Computed
   // server-side and baked into total so the card processor charges the right sum.
+
   const cardDiscount = computeCardDiscount(
     parseCardDiscountConfig(cfgRow?.card_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
   );
   // Ramburs (cash-on-delivery) discount — mutually exclusive with the card discount
   // (an order has a single payment method), computed on the same goods base.
   const codDiscount = computeCodDiscount(
     parseCardDiscountConfig(cfgRow?.cod_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
   );
 
+  // Taxa de ramburs — acelasi declansator ca reducerea de mai sus, semn invers.
+  // Se calculeaza AICI, inaintea TVA-ului, fiindca intra in baza lui: e o suma
+  // purtatoare de TVA, ca extraoptiunile, nu ca transportul.
+  const vatCfgTaxa = {
+    vat_enabled: cfgRow?.vat_enabled ?? false,
+    vat_rate: Number(cfgRow?.vat_rate ?? 19),
+    prices_include_vat: cfgRow?.prices_include_vat ?? true,
+  };
+  const codFee = computeCodFee(
+    parseCodFeeConfig(cfgRow?.cod_fee_config),
+    metodaPlata,
+    subtotal + extrasTotal - discountAmount,
+    vatCfgTaxa,
+  );
+
   // Shipping clamped non-negative; zeroed when free-shipping rules apply.
-  const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
-  let shipping = Math.max(0, round2(data.shipping_cost));
-  if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
+  // Aceeasi regula ca pe toata partea vizitatorului: `0` inseamna „fara prag",
+  // nu „gratuit mereu". Vezi `prag-transport-gratuit.ts` — serverul era singurul
+  // care citea altfel, si de acolo iesea totalul afisat diferit de cel incasat.
+  const freeThreshold = pragTransportGratuit(cfgRow?.free_shipping_threshold);
+  // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
+  // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
+  const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
+  const shipping = autoritativeShipping(
+    data.business_id,
+    data.shipping_cost,
+    data.shipping_token,
+    { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
+    cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
+    {
+      courier: data.selected_courier,
+      deliveryType: data.delivery_type,
+      courierLabel: data.courier_label,
+      // Din METODA validata mai sus, nu din vreun numar trimis de browser.
+      // Formularul cere cotatia cu `cod = totalul` cand plata e ramburs si cu 0
+      // altfel, deci steagul lui e chiar asta. Egalitatea ar cadea doar pe o
+      // comanda de 0,00 lei platita ramburs; in productie sunt 0 din 96.
+      ramburs: isCodPaymentMethod(metodaPlata),
+    },
+    (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
+    esteGratuit,
+  );
 
   // VAT: recomputed server-side (mirrors placeCartOrder + the storefront) so single-
-  // product / One-Product-Store orders collect VAT too. Base is the PRE-discount
-  // goods+extras; only VAT-exclusive pricing adds VAT on top of the total.
+  // product / One-Product-Store orders collect VAT too. Only VAT-exclusive pricing
+  // adds VAT on top of the total.
   const vatEnabled = cfgRow?.vat_enabled ?? false;
   const vatRate = Number(cfgRow?.vat_rate ?? 19);
   const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
-  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
+  // Baza: marfa, extraoptiunile si TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs.
+  // Formula sta in `vatBase`, folosita si de cele doua formulare din magazin si de
+  // cos, ca ce vede clientul sa fie ce se incaseaza.
+  const { vatAmount, vatAddOn } = computeVat(
+    vatBase({ goods: subtotal, extras: extrasTotal, shipping, discount: discountAmount, cardDiscount, codDiscount, codFee }),
+    { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat },
+  );
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping + vatAddOn));
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
+
+  /*
+   * Cat de mult a subdeclarat clientul rambursul la cotare — masurat, nu blocat.
+   *
+   * Semnatura leaga STEAGUL de ramburs, nu suma: suma nu se poate reconstrui,
+   * fiindca e chiar totalul care contine transportul pe care tocmai il verificam.
+   * La FAN Courier atat ajunge (pretul lui comuta pe un boolean), dar la ceilalti
+   * cinci curieri comisionul iese din SUMA — deci cine cere cotatia cu `cod: 0.01`
+   * si comanda apoi 5000 de lei pastreaza steagul, iar diferenta de comision o
+   * plateste comerciantul.
+   *
+   * NU se refuza si NU se cade pe tariful implicit: asta ar repretui tacit o
+   * comanda buna ori de cate ori clientul isi schimba cosul intre cotatie si
+   * trimitere — adica exact defectul „ecranul spune una, se incaseaza alta" pe
+   * care il vaneaza tot auditul. Se scrie in jurnal, ca sa se poata masura cat
+   * costa cu adevarat inainte de a alege o garda mai dura.
+   */
+  /*
+   * Se compara MARFA cu MARFA, nu marfa cu totalul.
+   *
+   * Amandoua formularele cer cotatia cu suma marfii, nu cu totalul: `OrderModal`
+   * trimite subtotalul, iar checkout-ul totalul cosului, care nu contine
+   * transportul. Comparat cu totalul final, pragul s-ar fi aprins pe aproape orice
+   * comanda cu transport platit — 49 din 51 de comenzi ramburs din ultimele 30 de
+   * zile — si jurnalul ar fi masurat propria noastra nepotrivire de unitati in loc
+   * de subdeclarare.
+   */
+  const marfaIncasata = round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount);
+  if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
+      && marfaIncasata - round2(Number(data.cod_declarat)) > 1) {
+    logError({
+      action: "placeOrder.rambursSubdeclarat",
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, total: round2(total) },
+      severity: "warning",
+    });
+  }
+
 
   // Bundle-aware stock: expand a bundle into its components + validate availability
   // before creating the order (prevents overselling components).
   const stockExp = await expandBundleStock(admin, data.business_id, [
-    { product_id: data.product_id, quantity: data.quantity },
+    { product_id: data.product_id, quantity: cantitate },
     ...cartItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
   ]);
-  if ("error" in stockExp) return { error: stockExp.error };
+  if ("error" in stockExp) {
+    // Singurele respingeri din checkout fara jurnal: „Pachet Femei" e nevandabil
+    // de o saptamana, publicat, si nimeni n-avea de unde sti.
+    logError({ action: "placeOrder.bundleStock", message: stockExp.motiv, details: { businessId: data.business_id, productId: data.product_id, componenta: stockExp.componenta }, severity: "warning" });
+    return { error: stockExp.error };
+  }
 
-  const order_number = await buildOrderNumber(admin, data.business_id);
+  /*
+   * Prins aici, nu lasat sa iasa: o actiune de server care arunca ii da clientului
+   * un ecran de eroare opac („An error occurred in the Server Components render"),
+   * in loc de un mesaj din care sa inteleaga ca poate reincerca.
+   *
+   * Se cheama INAINTE de revendicarea stocului, deci o picare aici nu lasa marfa
+   * rezervata pentru o comanda care n-a intrat.
+   */
+  let order_number: string;
+  try {
+    order_number = await buildOrderNumber(admin, data.business_id);
+  } catch {
+    return { error: "Nu am putut genera numarul comenzii. Reincearca peste cateva momente." };
+  }
 
-  const unitPrice = round2(mainSubtotal / data.quantity);
+  // NEROTUNJIT, deliberat: `subtotal` si `total` stau pe `mainSubtotal`, deci
+  // pretul unitar trebuie sa fie exact acela care, inmultit cu cantitatea, il da
+  // inapoi. Rotunjit la ban, un pachet de 2 bucati la 13,41 pleca cu 6,71 pe
+  // linie, adica 13,42 — suma liniilor nu mai dadea totalul comenzii, si asta pe
+  // documentul dupa care se factureaza si se restituie banii.
+  //
+  // Celelalte doua cai care scriu linii faceau deja asa: cosul (`placeCartOrder`)
+  // si editarea din panou (`edit-pricing.ts`, care chiar VERIFICA pretul unitar
+  // nerotunjit — vezi `estePretAutoritar`). Rotunjirea de aici era singura
+  // exceptie, si tocmai ea rupea contopirea liniilor la editare.
+  //
+  // Documentul primeste oricum doi bani: cele trei case rotunjesc pretul unitar
+  // la trimitere, iar garda din `reconcile.ts` modeleaza exact acea rotunjire si
+  // absoarbe diferenta cu o linie de ajustare.
+  const unitPrice = mainSubtotal / cantitate;
   const allItems = [
     {
       product_id: data.product_id,
-      name: data.product_name,
+      // Numele din CATALOG, cu marimea coapta de noi. Venea de la client, iar
+      // `orders.items` nu retine `variant_title` nicaieri: numele e SINGURA urma
+      // a marimii vandute, si pleaca netaiat pe factura la toate trei casele. Cu
+      // `variant_title: "S"` si `product_name: "GEACA (XXL)"`, pretul era al lui S
+      // si comanda scria XXL.
+      name: linieP.nume,
       price: unitPrice,
-      quantity: data.quantity,
+      quantity: cantitate,
       ...(data.customization && { customization: data.customization }),
     },
     ...cartItems,
     ...validatedExtras.map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
+  /*
+   * Utilizarea cuponului se revendica ATOMIC, chiar inainte de inserare.
+   *
+   * Pana acum limita se verifica la validare si contorul crestea dupa ce comanda
+   * era deja creata: doua comenzi simultane treceau amandoua de verificare si
+   * depaseau limita. `claim_discount_use` face verificarea si incrementul in
+   * aceeasi instructiune, deci a doua cerere nu mai gaseste randul.
+   *
+   * Revendicam aici, nu mai devreme: intre validarea cuponului si punctul asta
+   * mai exista pasi care pot iesi cu eroare, iar o utilizare arsa degeaba ar
+   * scadea din numarul pe care comerciantul l-a pus la vanzare.
+   */
+  if (validDiscountId) {
+    /*
+     * `error` VERIFICAT, si verdictul cerut EXPLICIT `true`.
+     *
+     * Era `const { data } = ...` cu `if (data === false)`. La o eroare de RPC,
+     * `data` e `null`, iar `null === false` e FALS — deci checkout-ul mergea mai
+     * departe, clientul primea reducerea, si utilizarea NU se revendica. Pe un
+     * cupon cu `max_uses = 100`, o serie de erori il duce peste limita fara ca
+     * nimic sa se vada.
+     *
+     * Acum orice altceva decat `true` opreste comanda. O reducere neacordata
+     * pentru cateva secunde e o suparare; o campanie de 100 care serveste 130 e o
+     * paguba, si una pe care o afli abia la socoteala.
+     */
+    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use", { p_discount_id: validDiscountId });
+    if (eCupon) {
+      await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
+      return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
+    }
+    if (revendicat !== true) {
+      return { error: "Codul a atins limita maxima de utilizari. Reincarca pagina si incearca fara el." };
+    }
+  }
+
+  // Si stocul se revendica atomic, tot inainte de inserare — `expandBundleStock`
+  // de mai sus a citit doar, iar intre citire si scaderea de dupa insert incapeau
+  // patru cereri paralele care vindeau toate acelasi ultim produs. Vezi
+  // `revendicaStocul`.
+  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCuVarianta);
+  /*
+   * `!== "revendicat"`, nu doar `=== "refuzat"`.
+   *
+   * „Refuzat" inseamna „nu mai e marfa" — un raspuns adevarat. „Esuat" inseamna
+   * „n-am putut afla", si e nou: pana acum se numea `nerevendicat` si LASA comanda
+   * sa treaca mai departe, pe algoritmul vechi. Amandoua opresc acum comanda si
+   * dau cuponul inapoi; doar textul difera.
+   */
+  if (stoc.fel !== "revendicat") {
+    await elibereazaCuponul(admin, validDiscountId);
+    return { error: stoc.error };
+  }
+
   const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
-    customer_name: data.customer_name.trim(),
+    customer_name: numeClient,
     customer_phone: data.customer_phone.trim(),
     customer_email: data.customer_email?.trim() || null,
     shipping_address: {
@@ -384,6 +1385,26 @@ export async function placeOrder(data: {
         country: data.customer_country,
         postal_code: data.customer_postal_code?.trim() || "",
       }),
+      /*
+       * ⚠ Codul postal al CLIENTULUI si pe comenzile romanesti, cand chiar il avem.
+       *
+       * Ramura de mai sus il scrie DOAR pentru livrarea internationala, fiindca
+       * doar acolo il cere formularul. Rezultatul: pe intern `postal_code` nici
+       * nu exista in `shipping_address`, iar GLS — care il cere obligatoriu
+       * (`Address.ZipCode`, REQUIRED) — primea sirul gol la fiecare colet.
+       *
+       * ⚠ Codul PUNCTULUI de ridicare NU intra aici. E codul altei adrese, iar
+       * `postal_code` e citit de formularele de AWB ale TUTUROR celorlalti
+       * curieri (Cargus, Sameday, FAN, eColet…) ca fiind al destinatarului: pus
+       * aici, ar pleca un cod postal dintr-un oras alaturi de localitatea
+       * clientului. Sta langa celelalte campuri de punct, mai jos.
+       */
+      ...(!data.customer_country || data.customer_country === "RO"
+        ? (() => {
+            const cod = (data.customer_postal_code ?? "").trim();
+            return cod ? { postal_code: cod } : {};
+          })()
+        : {}),
       ...(data.selected_courier && {
         courier: data.selected_courier,
         courier_label: data.courier_label,
@@ -393,6 +1414,10 @@ export async function placeOrder(data: {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
         locker_address: data.locker_address,
+        /* Codul postal AL PUNCTULUI. GLS il cere pe adresa de livrare, care la
+           livrarea in punct e chiar a punctului. Nu se amesteca cu `postal_code`,
+           care descrie destinatarul si e citit de toti ceilalti curieri. */
+        locker_post_code: data.locker_post_code,
         locker_city: data.locker_city,
         locker_county: data.locker_county,
       }),
@@ -405,41 +1430,140 @@ export async function placeOrder(data: {
         colete_service_id: data.colete_service_id,
         colete_service_name: data.colete_service_name,
       }),
+      /* ⚠ eColet: cheia e un SLUG, deci conditia e pe sir gol, nu pe zero. */
+      ...(data.ecolet_service_slug && {
+        ecolet_service_slug: data.ecolet_service_slug,
+        ecolet_courier_name: data.ecolet_courier_name,
+        ecolet_service_name: data.ecolet_service_name,
+      }),
+      /* ⚠ Innoship: conditia e pe CURIER, care e un intreg pozitiv. Pe
+         `innoship_option_id` n-ar merge — el poate lipsi legitim (nu toate
+         ofertele au varianta), iar atunci s-ar pierde si curierul, si serviciul. */
+      ...(data.innoship_courier_id && {
+        innoship_courier_id: data.innoship_courier_id,
+        innoship_service_id: data.innoship_service_id,
+        innoship_option_id: data.innoship_option_id,
+        innoship_courier_name: data.innoship_courier_name,
+        innoship_service_name: data.innoship_service_name,
+      }),
+      /*
+       * ⚠ SmartShip: conditia e pe CURIER, ca la Innoship. Pe
+       * `smartship_own_contract` n-ar merge — el e `false` pentru ofertele de pe
+       * contractul SmartShip, adica pentru MAJORITATEA comenzilor, si atunci
+       * intreg blocul ar fi sarit. Iar pe `smartship_locker_net` n-ar merge nici
+       * atat: el lipseste la livrarea la adresa.
+       *
+       * ⚠ Si `own_contract` se scrie EXPLICIT cu `=== true`: pastrat ca
+       * `undefined`, emiterea l-ar citi drept „nu stiu" si ar putea pleca pe
+       * celalalt contract, la alt pret decat cel platit de client.
+       */
+      ...(data.smartship_courier_id && {
+        smartship_courier_id: data.smartship_courier_id,
+        smartship_courier_name: data.smartship_courier_name,
+        smartship_own_contract: data.smartship_own_contract === true,
+        ...(data.smartship_locker_net ? { smartship_locker_net: data.smartship_locker_net } : {}),
+      }),
+      ...(data.shipo_rate_id && {
+        shipo_rate_id: data.shipo_rate_id,
+        shipo_courier_slug: data.shipo_courier_slug,
+        shipo_courier_name: data.shipo_courier_name,
+      }),
+      ...(data.fedex_service_type && {
+        fedex_service_type: data.fedex_service_type,
+        fedex_service_name: data.fedex_service_name,
+      }),
+      ...(data.ups_service_code && {
+        ups_service_code: data.ups_service_code,
+        ups_service_name: data.ups_service_name,
+      }),
+      /* ⚠ Conditia e pe `dhl_product_code`, produsul GLOBAL: el vine la fiecare
+         oferta DHL, si intern si extern. Pe `dhl_local_product_code` n-ar merge —
+         el lipseste la expedierile internationale, si atunci blocul intreg ar fi
+         sarit exact pe comenzile in afara tarii. */
+      ...(data.dhl_product_code && {
+        dhl_product_code: data.dhl_product_code,
+        dhl_product_name: data.dhl_product_name,
+        ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
+      }),
     },
     items: allItems,
     subtotal,
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
+    // Reducerea data de oferte sta DEJA in pretul liniilor; coloana o inregistreaza
+    // ca sa existe o pista de audit. Fara ea, o reducere de oferta nu se poate
+    // deosebi in `items` de o schimbare ulterioara a pretului de catalog, si nici
+    // nu se putea dovedi ca nu s-a abuzat de vreo oferta.
+    offer_discount_amount: oferte.savings,
     card_discount_amount: cardDiscount,
     cod_discount_amount: codDiscount,
+    cod_fee_amount: codFee,
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
-    payment_method: data.payment_method ?? "cash_on_delivery",
+    payment_method: metodaPlata,
     payment_status: "unpaid",
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
+    billing_company: (billingCompany ?? null) as never,
+    /*
+     * Id-ul cuponului revendicat, scris PE COMANDA — nu doar codul lui.
+     *
+     * Utilizarea revendicata mai sus trebuie sa se poata da inapoi cand comanda
+     * nu se mai face (anulata, returnata, stearsa, plata online abandonata).
+     * Codul ca text nu ajunge: comerciantul poate redenumi cuponul intre timp, si
+     * atunci comanda ar arata catre un cod inexistent — sau, mai rau, catre un
+     * cupon nou cu acelasi nume. Coloana vine din migratia
+     * `2026-08-04-eliberare-cupon.sql`.
+     *
+     * `as never` ca la `order_source` si `billing_company`: coloana e in baza,
+     * dar inca nu si in tipurile generate.
+     */
+    discount_id: (validDiscountId ?? null) as never,
+    /* Ce s-a rezervat, ca sa se poata da inapoi intocmai la anulare. `as never`
+     * ca la `discount_id`: coloana e noua si tipurile generate n-o stiu inca. */
+    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCuVarianta) as never,
   }).select("id, order_number").single();
 
   if (error) {
-    logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
+    // Comanda n-a intrat, deci utilizarea revendicata si stocul rezervat se dau
+    // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
+    // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
+    await elibereazaCuponul(admin, validDiscountId);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
+    await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 
-  if (validDiscountId) {
-    await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
+  /*
+   * Acceptarile de oferta intra in contor ABIA ACUM, cand comanda chiar exista.
+   *
+   * Numarate in `applyOfferPricing`, cum erau, treceau in contor si comenzile
+   * care picau mai jos — comanda minima, ANAF, cupon respins, stoc pierdut,
+   * insert cazut — iar clientul care corecta si retrimitea mai adauga una.
+   * `after` scoate scrierea de pe drumul raspunsului: nicio comanda nu asteapta
+   * dupa o statistica.
+   */
+  if (oferte.applied.length > 0) {
+    try {
+      after(() => scrieStatisticiOferte(admin, oferte.applied.map((id) => ({
+        offerId: id, conversions: 1, revenue: oferte.venitPeOferta[id] ?? 0,
+      }))));
+    } catch { /* fara context de cerere (scripturi, teste) */ }
   }
 
-  // Atomic stock decrement — bundle components when ordering a bundle, else the product itself.
-  await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+
+  // Stocul — si de produs, si de marime — e DEJA scazut, odata cu verdictul,
+  // inainte de insert. Nu mai exista nicio a doua cale.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
-  void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
-  void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
-  void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
 
   // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
   // by transaction_id; captures the conversion even when the browser tag is blocked.
@@ -453,6 +1577,12 @@ export async function placeOrder(data: {
     phone: data.customer_phone.trim(),
     orderId: order.id,
   });
+
+  // Peste pragul moale pe magazin comanda ramane scrisa si vizibila in panou, dar
+  // instiintarile nu mai pleaca: plafonul pe IP se ocoleste cu proxy-uri, iar
+  // fiecare comanda falsa mai arde un SMS din creditul comerciantului si mai
+  // ingroapa o comanda reala in casuta lui. Vezi `pesteRafalaMagazinului`.
+  const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeOrder");
 
   // Send emails
   try {
@@ -477,18 +1607,53 @@ export async function placeOrder(data: {
 
       const emailPayload = {
         order_number: order.order_number,
-        customer_name: data.customer_name,
+        customer_name: numeClient,
         customer_phone: data.customer_phone,
         customer_email: data.customer_email,
         total,
         subtotal,
-        items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
-        shipping_cost: data.shipping_cost,
-        discount_code: data.discount_code,
-        discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
-        card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
-        cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
-        payment_method: data.payment_method ?? "cash_on_delivery",
+        // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
+        // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
+        // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
+        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
+        shipping_cost: shipping,
+        /*
+         * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`
+         * mai sus, aceleasi doua expresii.
+         *
+         * Pana acum plecau `data.discount_amount` si `data.discount_code`, adica
+         * numerele din cererea browserului, desi vecinele lor (`total`,
+         * `cardDiscount`, `codFee`) erau recalculate de server. Baza si emailul
+         * puteau deci sa se contrazica pe aceeasi comanda.
+         *
+         * Expunere MASURATA 2026-08-04: zero comenzi din 96 au `discount_amount`
+         * peste zero, iar singurul cupon folosit vreodata (tonel-beauty #0003,
+         * „PRIMA") e de tip `free_shipping`, adica are `discount_amount` 0 prin
+         * constructie — deci si clientul si serverul duceau acelasi 0, si emailul
+         * nu tiparea niciun rand. Nu s-a contrazis nimic pana acum.
+         *
+         * Varianta ostila era mai rea: `placeOrder` e export „use server" cu
+         * adresa de destinatie aleasa de apelant, deci un `discount_amount:
+         * 100000` fabricat tiparea „Reducere -100.000,00 lei" intr-un email
+         * purtand numele unui magazin real.
+         *
+         * `data.discount_amount` si `data.discount_id` nu mai sunt citite acum
+         * NICAIERI; raman in semnatura doar fiindca `OrderModal.tsx` si
+         * `checkout-core.ts` inca le trimit.
+         */
+        discount_code: validDiscountId ? data.discount_code : undefined,
+        discount_amount: discountAmount,
+        card_discount_amount: cardDiscount,
+        cod_discount_amount: codDiscount,
+        cod_fee_amount: codFee,
+        // TVA-ul si REGIMUL de preturi: emailul trebuie sa stie nu doar cifra, ci
+        // si daca ea se aduna in coloana. La preturi cu TVA inclus e portiunea
+        // extrasa din incasare — adunata, ducea coloana peste Total.
+        vat_amount: vatAmount,
+        vat_rate: vatEnabled ? vatRate : 0,
+        vat_enabled: vatEnabled,
+        prices_include_vat: pricesIncludeVat,
+        payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order_id: order.id,
@@ -499,29 +1664,34 @@ export async function placeOrder(data: {
         delivery_type: data.delivery_type,
         locker_name: data.locker_name,
         custom_fields: data.custom_fields,
+        billing_company: billingCompany,
       };
+      // `!pesteRafala` pe amandoua: sub rafala comanda ramane scrisa, doar
+      // instiintarile tac. Alternativa — sa refuzam comanda — ar fi facut din
+      // rafala o negare de serviciu asupra vanzarilor comerciantului.
       const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([
-        config.new_order !== false && notifyEmail
+        !pesteRafala && config.new_order !== false && notifyEmail
           ? sendNewOrderEmail(notifyEmail, emailPayload, emailSender)
           : null,
-        data.customer_email
+        !pesteRafala && data.customer_email
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload, emailSender)
           : null,
       ].filter(Boolean));
 
       // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
-      void maybeSendNoticeNotification({
+      // Se opreste primul sub rafala: se plateste din creditul comerciantului.
+      if (!pesteRafala) void maybeSendNoticeNotification({
         businessId: data.business_id,
         orderId: order.id,
         triggerKey: "pending",
         phone: data.customer_phone,
         vars: {
-          order: order.order_number, name: data.customer_name, total: formatPrice(total),
+          order: order.order_number, name: numeClient, total: formatPrice(total),
           awb: "", store: businessName,
           phone: data.customer_phone, email: data.customer_email ?? "",
           address: data.customer_address, city: data.customer_city, region: data.customer_county,
-          payment_method: data.payment_method ?? "cash_on_delivery",
+          payment_method: metodaPlata,
           shipping_method: data.courier_label ?? "",
           store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
           date_added: formatDate(new Date()),
@@ -534,7 +1704,7 @@ export async function placeOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
         });
@@ -546,7 +1716,7 @@ export async function placeOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -559,7 +1729,7 @@ export async function placeOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -574,7 +1744,7 @@ export async function placeOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           currency: "RON",
           total,
           financial_status: "pending",
@@ -606,7 +1776,7 @@ export async function placeOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           total,
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))
@@ -645,14 +1815,74 @@ function defaultStatusSms(status: string, opts: { orderNumber: string; businessN
   }
 }
 
+/*
+ * Instiintarile de schimbare de stare — plafonate. Schimbarea de stare, NU.
+ *
+ * `sendCustomerNotification` si `sendCustomerSms` si-au primit plafoanele, dar
+ * `updateOrder` trimite pe EXACT aceleasi doua canale si n-avea niciunul: emailul
+ * de stare pleaca tot pe domeniul PLATFORMEI cand magazinul n-are SMTP propriu,
+ * SMS-ul tot pe cheia magazinului, iar destinatarul e tot cel scris in comanda —
+ * pe care apelantul si-l alege singur cu `updateOrderDetails`. Plimbata intre
+ * doua stari valide (`pending` <-> `confirmed`), aceeasi comanda trimitea la
+ * nesfarsit, si inca cu o bucata de text ales de apelant in mesaj: `awb` intra si
+ * in corpul SMS-ului, si in email. Fara plafonul asta, cel de la mesajele manuale
+ * se ocolea pur si simplu schimband functia apelata.
+ *
+ * Se opreste DOAR instiintarea: starea se salveaza oricum, facturarea automata si
+ * marcarea „platit" in Mailchimp/Brevo nu se ating. Un plafon care refuza
+ * actualizarea i-ar fi luat comerciantului panoul in loc sa apere pe cineva —
+ * aceeasi regula ca la pragul de rafala pe magazin.
+ *
+ * Bugete separate de cele ale mesajelor manuale si mult mai largi: o comanda
+ * adevarata trece prin cateva stari, nu prin douazeci, iar un comerciant care
+ * bifeaza comenzi una cate una din panou nu ajunge la 200 pe ora. Cel pe comanda
+ * e cel care taie bucla; cel pe cont opreste plimbarea intre comenzi.
+ */
+const STARI_PE_ORA = 200;
+const STARI_PE_COMANDA = 20;
+
+async function poateInstiintaStarea(userId: string, orderId: string): Promise<boolean> {
+  const peOra = await consumaLimita(`stare-mesaj:${userId}`, STARI_PE_ORA, 3600);
+  const peComanda = peOra.permis
+    ? await consumaLimita(`stare-comanda:${orderId}`, STARI_PE_COMANDA, 86400)
+    : { permis: false };
+  if (peOra.permis && peComanda.permis) return true;
+  // Alerta, de cel mult trei ori pe ora si pe cont: peste plafon ajung aici toate
+  // incercarile urmatoare, si un rand de fiecare ar umple jurnalul.
+  if ((await consumaLimita(`alerta-stare:${userId}`, 3, 3600)).permis) {
+    logError({
+      action: "updateOrder.instiintariOprite",
+      message: "Plafon atins: starea s-a salvat, instiintarea catre client nu a mai plecat",
+      details: { orderId, peOra: peOra.permis, peComanda: peComanda.permis },
+      userId,
+      severity: "warning",
+    });
+  }
+  return false;
+}
+
 export async function updateOrder(orderId: string, data: { status: string; payment_status: string; awb?: string }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
+  /*
+   * Statusul se verifica pe lista, si AWB-ul se taie: amandoua ajung in TEXTUL
+   * mesajelor care pleaca spre client.
+   *
+   * `defaultStatusSms` scrie `STATUS_SMS_LABELS[status] ?? status`, deci un status
+   * nerecunoscut se copiaza ca atare in corpul SMS-ului; `awb` intra si in SMS, si
+   * in emailul de stare, si nu-l trimite NICIUN apelant din panou — vine doar
+   * dintr-un POST direct pe actiune. Adica exact cele doua bucati de text pe care
+   * si le-ar alege cineva care vrea sa foloseasca instiintarile ca releu.
+   * `bulkUpdateOrderStatus` verifica statusul de mult, pe aceeasi lista.
+   */
+  if (!(data.status in ORDER_STATUS)) return { error: "Status invalid." };
+  const awb = data.awb?.trim().slice(0, 64) || undefined;
+
   const { data: order } = await supabase
     .from("orders")
-    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status, shipping_address, payment_method, created_at, items, order_source")
+    .select("business_id, order_number, customer_name, customer_email, customer_phone, total, status, payment_status, shipping_address, payment_method, created_at, items, order_source, discount_code")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -661,29 +1891,116 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   if (!biz) return { error: "Acces interzis" };
   const storeName = biz.store_name || biz.business_name;
 
-  const { error } = await supabase.from("orders")
-    .update({ status: data.status as never, payment_status: data.payment_status as never })
-    .eq("id", orderId);
+  /*
+   * ═══ ⚠ CICLUL COMENZII LOR NU SE SCHIMBA DE AICI (25.08.2026) ═══
+   *
+   * Vezi `marketplaceCareTineComanda` pentru cele trei pagube masurate. Paza sta pe
+   * SERVER, nu in componenta: butoanele se pot ocoli cu un POST pe actiune, si oricum
+   * `bulkUpdateOrderStatus` ajungea la acelasi RPC pe alt drum.
+   *
+   * ⚠ SE REFUZA NUMAI CE CHIAR SE ATINGE. `updateOrder` primeste si `awb`, iar o salvare
+   * care duce doar numarul de AWB n-are de ce sa fie oprita — altfel comerciantul ar
+   * ramane fara nicio cale de a-l scrie pe o comanda eMAG expediata cu curierul lui.
+   */
+  const tineEl = marketplaceCareTineComanda(order.order_source);
+  if (tineEl) {
+    if (data.status !== order.status) return { error: deCeNuDeAici(tineEl, "starea") };
+    if (data.payment_status !== order.payment_status) return { error: deCeNuDeAici(tineEl, "plata") };
+  }
+
+  /*
+   * STATUSUL, CUPONUL SI STOCUL — INTR-O SINGURA TRANZACTIE.
+   *
+   * Erau trei drumuri separate la baza: un UPDATE, apoi `release_order_discount`,
+   * apoi `elibereaza_stoc_comanda`. Fiecare putea sa pice singur, iar apelul de
+   * aici nici nu se uita la eroare (`const { data: fel } = await ...`, fara
+   * `error`). Rezultatul unei picari: comanda anulata, marfa inca rezervata,
+   * raspuns de SUCCES si NICIO urma nicaieri.
+   *
+   * Regulile („vanzarea se intoarce", „vanzarea se reia") au plecat si ele in
+   * baza. Se calculau aici din statusul citit cu cateva dus-intorsuri inainte, iar
+   * intre citire si scriere statusul se putea schimba din panou, dintr-un lot sau
+   * dintr-un webhook de plata — si atunci se elibera stoc pentru o intoarcere care
+   * nu mai avea loc. Acum se citesc sub `for update`, langa scriere.
+   *
+   * Autorizarea RAMANE aici: functia e `security definer` si se cheama abia dupa
+   * ce `businesses ... eq(user_id)` de mai sus a confirmat ca magazinul e al lui.
+   */
+  const adminTranzitie = createAdminClient();
+  const { data: tranzitie, error } = await adminTranzitie.rpc("aplica_tranzitia_comenzii", {
+    p_order_id: orderId,
+    p_status: data.status,
+    p_payment_status: data.payment_status,
+    // Apartenenta e deja verificata mai sus, cu clientul utilizatorului sub RLS.
+    // Se trimite si aici fiindca nu costa nimic si inchide drumul daca vreodata
+    // verificarea de deasupra se muta sau se pierde la o refactorizare.
+    p_business_id: order.business_id,
+  });
 
   if (error) {
-    logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
+    await logError({ action: "updateOrder", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id, severity: "critical" });
     return { error: "Eroare la actualizare." };
   }
 
-  const statusChanged = data.status !== (order.status as string);
-  const paymentChanged = data.payment_status !== (order.payment_status as string);
+  const t = tranzitie as unknown as {
+    gasit?: boolean; status_vechi?: string; plata_veche?: string;
+    status_schimbat?: boolean; plata_schimbata?: boolean;
+    cupon?: string; stoc?: string; negative?: unknown[];
+  } | null;
 
-  // Server-side GA4 refund (Measurement Protocol) when the sale is reversed —
-  // refunds can't be tracked from the customer's browser. Offset by transaction_id.
+  /*
+   * Raspuns de alta forma inseamna ca NU stim ce s-a intamplat — nici macar daca
+   * s-a scris ceva. Se opreste aici, cu jurnal: mai departe ar pleca emailuri si
+   * SMS-uri catre client despre o schimbare care poate n-a avut loc.
+   */
+  if (!t || t.gasit !== true) {
+    await logError({ action: "updateOrder", message: t?.gasit === false ? "comanda a disparut intre verificare si scriere" : "raspuns de forma neasteptata la tranzitie", details: { orderId, raspuns: t }, businessId: order.business_id, userId: user.id, severity: "critical" });
+    return { error: "Eroare la actualizare." };
+  }
+
+  const statusVechi = t.status_vechi ?? (order.status as string);
+  const statusChanged = t.status_schimbat === true;
+  const paymentChanged = t.plata_schimbata === true;
+
+  // „necunoscut" = comanda plasata inainte sa existe `stoc_rezervat`. Nu se
+  // ghiceste din `items` (pachetele nu-si scriu componentele acolo), deci ramane
+  // o urma in loguri si comerciantul poate corecta de mana.
+  if (t.stoc === "necunoscut") {
+    logError({ action: "updateOrder.elibereazaStoc", message: "Comanda e dinainte de inregistrarea stocului rezervat; stocul NU s-a dat inapoi automat.", details: { orderId }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+  if (Array.isArray(t.negative) && t.negative.length > 0) {
+    logError({ action: "updateOrder.revendicaStoc", message: "Reactivarea comenzii a dus stocul sub zero: marfa s-a vandut altcuiva intre timp.", details: { orderId, negative: t.negative }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+  // „plin" = intre timp cuponul si-a atins limita: comanda ramane valida, dar
+  // peste limita, si asta trebuie sa se vada undeva.
+  if (t.cupon === "plin") {
+    logError({ action: "updateOrder.reclaimDiscount", message: "Cuponul si-a atins limita intre anulare si reactivare; comanda ramane cu reducerea, necontorizata.", details: { orderId, code: order.discount_code }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+
+  /*
+   * GA4: rambursarea se raporteaza pe statusul VECHI intors de baza, nu pe cel
+   * citit mai sus. Sunt aceleasi in cazul obisnuit, dar cand nu sunt, cel din
+   * baza e cel adevarat — si atunci evenimentul ar fi plecat pentru o intoarcere
+   * care nu s-a produs, sau ar fi lipsit pentru una care s-a produs.
+   */
   const GA4_REVERSAL = new Set(["refunded", "cancelled"]);
-  if (statusChanged && GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(order.status as string)) {
+  if (statusChanged && GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(statusVechi)) {
     const refundItems = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
     const gaClientId = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
     void ga4OrderEvent(order.business_id, "refund", { transactionId: orderId, value: order.total ?? 0, clientId: gaClientId, items: refundItems });
   }
 
+  /*
+   * Bugetul instiintarilor se consuma o singura data pe apel, si numai cand chiar
+   * ar pleca ceva: o comanda fara email si fara telefon n-are de ce sa arda din
+   * el, iar un apel care nu schimba nimic nu trimite oricum nimic.
+   */
+  const poateInstiinta = (statusChanged || paymentChanged) && (order.customer_email || order.customer_phone)
+    ? await poateInstiintaStarea(user.id, orderId)
+    : false;
+
   // Send status change email to customer
-  if (statusChanged && order.customer_email) {
+  if (poateInstiinta && statusChanged && order.customer_email) {
     const emailSender = await getStoreEmailSender(createAdminClient(), order.business_id);
     sendOrderStatusToCustomer(order.customer_email, {
       order_number: order.order_number,
@@ -691,14 +2008,18 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       total: order.total,
       status: data.status,
       business_name: storeName,
-      awb: data.awb,
+      awb,
       store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
     }, emailSender).catch(() => {});
   }
 
   // Send status change SMS to customer (opt-in per store via SMSO)
-  if (statusChanged && order.customer_phone) {
-    const { data: st } = await supabase
+  if (poateInstiinta && statusChanged && order.customer_phone) {
+    // Service role: `privat.decripteaza_config` nu decripteaza pentru
+    // `authenticated`, deci pe clientul utilizatorului `api_key` ar veni ca
+    // `enc.v1.…` si instiintarea nu ar ajunge NICIODATA la client — tacut,
+    // fiindca trimiterea e fire-and-forget. Proprietatea e verificata mai sus.
+    const { data: st } = await createAdminClient()
       .from("store_settings")
       .select("smso_config")
       .eq("business_id", order.business_id)
@@ -711,7 +2032,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
         body: defaultStatusSms(data.status, {
           orderNumber: order.order_number,
           businessName: storeName,
-          awb: data.awb,
+          awb,
         }),
         type: "transactional",
       });
@@ -736,7 +2057,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       order: order.order_number,
       name: order.customer_name,
       total: formatPrice(Number(order.total)),
-      awb: data.awb ?? "",
+      awb: awb ?? "",
       store: storeName,
       phone: order.customer_phone ?? "",
       email: order.customer_email ?? "",
@@ -750,13 +2071,15 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
       date_added: order.created_at ? formatDate(order.created_at as string) : "",
     };
+    // `poateInstiinta` doar pe SMS-urile platite; marcarea „platit" din
+    // Mailchimp/Brevo de mai jos NU e o instiintare si ramane neatinsa.
     if (statusChanged) {
       const tk = noticeTriggerForStatus(data.status);
-      if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+      if (poateInstiinta && tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
     }
     if (paymentChanged) {
       const tk = noticeTriggerForPayment(data.payment_status);
-      if (tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
+      if (poateInstiinta && tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
       if (data.payment_status === "paid") { void maybeMarkMailchimpOrderPaid(orderId); void maybeMarkBrevoOrderPaid(orderId); }
     }
   }
@@ -771,8 +2094,43 @@ export async function updateOrder(orderId: string, data: { status: string; payme
 // items must never fire the status & payment hooks (customer email, SMS,
 // notice.ro, auto-invoicing) that updateOrder triggers.
 
+export interface ProdusPentruEditare {
+  id: string;
+  name: string;
+  price: number;
+  stock_quantity: number | null;
+  track_inventory: boolean;
+  is_bundle: boolean;
+  /**
+   * Mai e in vanzare? La cautare e mereu adevarat (se cauta doar activele), dar
+   * produsele liniilor DEJA vandute se citesc fara filtru, tocmai ca o linie a unui
+   * produs stins sa se poata scoate. Vezi `CatalogEdit.activ`.
+   */
+  activ: boolean;
+  /** Prima poza a produsului, pentru lista de alegere. `null` cand n-are niciuna. */
+  imagine: string | null;
+  /** `null` cand produsul nu e variabil; altfel optiunile si combinatiile active. */
+  variante: VarianteSlim | null;
+  /** Configuratia bruta de trepte, ca panoul sa arate acelasi pachet ca magazinul. */
+  trepte: unknown;
+}
+
+/**
+ * Prima poza a produsului, sau `null`.
+ *
+ * `products.images` e jsonb si vine din import, din formular si din librarie —
+ * deci poate fi orice: lipsa, lista goala, sau elemente care nu-s siruri. Se
+ * verifica, nu se presupune: un `String(images[0])` pe un obiect ar fi trimis
+ * „[object Object]" ca `src` catre `next/image`, si randul ar fi crapat.
+ */
+function primaImagine(brut: unknown): string | null {
+  if (!Array.isArray(brut)) return null;
+  const prima = brut.find((x) => typeof x === "string" && x.trim());
+  return typeof prima === "string" ? prima : null;
+}
+
 export async function searchOrderProducts(businessId: string, query: string): Promise<
-  { products: { id: string; name: string; price: number; stock_quantity: number | null; track_inventory: boolean; is_bundle: boolean }[] } | { error: string }
+  { products: ProdusPentruEditare[] } | { error: string }
 > {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -781,7 +2139,11 @@ export async function searchOrderProducts(businessId: string, query: string): Pr
   if (!biz) return { error: "Acces interzis" };
 
   let q = supabase.from("products")
-    .select("id, name, price, stock_quantity, track_inventory, is_bundle")
+    // `page_sections` intra ca sa se poata alege o VARIANTA din panou. Nu pleaca
+    // spre browser: se slabeste mai jos la titlu + pret + stoc (vreo doua sute
+    // de octeti in loc de o mie cinci sute pe produs). Din `images` pleaca DOAR
+    // prima, din acelasi motiv.
+    .select("id, name, price, stock_quantity, track_inventory, is_bundle, images, page_sections")
     .eq("business_id", businessId)
     .eq("is_active", true)
     .order("name")
@@ -798,7 +2160,106 @@ export async function searchOrderProducts(businessId: string, query: string): Pr
       stock_quantity: p.stock_quantity as number | null,
       track_inventory: !!p.track_inventory,
       is_bundle: !!p.is_bundle,
+      // Cautarea filtreaza pe `is_active`, deci ce iese de aici e activ prin constructie.
+      activ: true,
+      imagine: primaImagine(p.images),
+      variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
+      trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
     })),
+  };
+}
+
+/**
+ * Reglajele de care are nevoie previzualizarea din modalul de editare.
+ *
+ * Fara ele, modalul isi facea propria socoteala — `order.total + suma adaugata` —
+ * si numea alt numar decat cel pe care il scria serverul: pe comanda #0065 arata
+ * 193,00 acolo unde serverul scria 173,00, fiindca adaugarea trecea pragul de
+ * livrare gratuita. Cifra aia nu e decorativa: pe ea scria „diferenta de X nu se
+ * incaseaza automat", iar rambursul de pe AWB se ia din totalul serverului.
+ *
+ * Aceeasi verificare de proprietate ca la `searchOrderProducts`: sunt reglajele
+ * magazinului propriu, pe care comerciantul le vede oricum in Setari.
+ */
+export async function getOrderEditContext(businessId: string, orderId?: string): Promise<
+  {
+    vat_enabled: boolean;
+    vat_rate: number;
+    prices_include_vat: boolean;
+    free_shipping_threshold: number | null;
+    cod_fee_config: unknown;
+    /**
+     * Catalogul VIU al produselor care sunt DEJA pe comanda.
+     *
+     * Fara el, panoul n-ar putea nici sa repretuiasca o cantitate schimbata prin
+     * trepte, nici sa stie ce linie are voie sa creasca.
+     *
+     * ⚠ Se intoarce CATALOGUL, nu capacitatile gata calculate — desi ar fi fost la
+     * indemana, fiindca functia le calculeaza oricum. Capacitatile sunt indexate pe
+     * pozitia liniei, iar aici liniile s-ar citi A DOUA OARA din baza: intre
+     * randarea paginii si deschiderea ferestrei, un lot sau un webhook poate
+     * schimba lista, si atunci indicele 2 al panoului n-ar mai fi indicele 2 al
+     * raspunsului. Panoul cheama `capacitatiLinii` peste liniile pe care le ARATA
+     * el, deci indicii, amprenta si cifrele vin toate din acelasi vector.
+     */
+    catalogLinii: ProdusPentruEditare[];
+  } | { error: string }
+> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  const { data: biz } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  const { data: cfg } = await supabase
+    .from("store_settings")
+    .select("vat_enabled, vat_rate, prices_include_vat, free_shipping_threshold, cod_fee_config")
+    .eq("business_id", businessId)
+    .single();
+
+  const catalogLinii: ProdusPentruEditare[] = [];
+  if (orderId) {
+    // Comanda se cere cu businessId in filtru, nu doar cu id: altfel un
+    // `orderId` din alt magazin ar fi intors liniile lui.
+    const { data: ord } = await supabase
+      .from("orders").select("items").eq("id", orderId).eq("business_id", businessId).single();
+    const items = Array.isArray(ord?.items) ? (ord.items as unknown[]) : [];
+    const ids = [...new Set(
+      items
+        .map((b) => (b && typeof b === "object" ? (b as { product_id?: unknown }).product_id : null))
+        .filter((x): x is string => typeof x === "string" && !esteIdExtra(x)),
+    )];
+    if (ids.length > 0) {
+      // FARA `is_active`: un produs stins intre timp ramane pe comanda, iar linia
+      // lui trebuie sa se poata scoate. Aceeasi citire ca in `updateOrderDetails`.
+      const { data: produse } = await supabase.from("products")
+        .select("id, name, price, stock_quantity, track_inventory, is_bundle, is_active, images, page_sections")
+        .eq("business_id", businessId)
+        .in("id", ids);
+      for (const p of produse ?? []) {
+        catalogLinii.push({
+          id: p.id as string,
+          name: String(p.name),
+          price: round2(Number(p.price)),
+          stock_quantity: p.stock_quantity as number | null,
+          track_inventory: !!p.track_inventory,
+          is_bundle: !!p.is_bundle,
+          activ: !!p.is_active,
+          imagine: primaImagine(p.images),
+          variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
+          trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
+        });
+      }
+    }
+  }
+
+  return {
+    vat_enabled: cfg?.vat_enabled ?? false,
+    vat_rate: Number(cfg?.vat_rate ?? 19),
+    prices_include_vat: cfg?.prices_include_vat ?? true,
+    free_shipping_threshold: pragTransportGratuit(cfg?.free_shipping_threshold),
+    cod_fee_config: cfg?.cod_fee_config ?? null,
+    catalogLinii,
   };
 }
 
@@ -811,15 +2272,51 @@ export async function updateOrderDetails(orderId: string, data: {
   county: string;
   postal_code?: string;
   /** Products to append to the order; re-priced server-side from the live catalog. */
-  added_items?: { product_id: string; quantity: number }[];
-}): Promise<{ success: true; newTotal: number } | { error: string }> {
+  added_items?: { product_id: string; variant_title?: string | null; quantity: number }[];
+  /**
+   * Liniile DEJA existente, duse la o cantitate noua. `quantity: 0` = scoasa.
+   *
+   * Se cer pe INDEX, fiindca liniile din `orders.items` n-au id, iar doua linii pot
+   * avea acelasi `product_id`: `aplicaBumpPeOBucata` desprinde o bucata pe o linie
+   * separata, cu pret redus. Cheiate pe produs, o scoatere ar fi luat linia gresita.
+   */
+  linii_modificate?: ModificareLinie[];
+  /**
+   * Amprenta liniilor pe care le-a vazut panoul cand a desenat modalul.
+   *
+   * Obligatorie cand se cer modificari pe linii: indexul nu inseamna nimic daca
+   * intre timp altcineva a schimbat lista. Vezi `amprentaLinii`.
+   */
+  amprenta_items?: string;
+  /**
+   * Transportul re-cotat din panou, cand comerciantul schimba destinatia.
+   * Acceptat DOAR insotit de semnatura primita de la `getShippingOptions`.
+   */
+  shipping_cost?: number;
+  shipping_token?: string;
+  /** Eticheta cotatiei re-cerute. Face parte din semnatura, deci se confrunta. */
+  courier_label?: string;
+}): Promise<{ success: true; newTotal: number; faraStoc: number } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, business_id, status, items, subtotal, total, shipping_address")
+    // ⚠ Coloanele de AWB se cer TOATE. Pana la 11.08 lipseau GLS, Pall-Ex si
+    // eColet, desi exista de saptamani si modalul le si afisa: `areAwb` iesea deci
+    // FALS pe o comanda cu AWB emis la trei curieri, iar transportul re-cotat
+    // trecea peste el. La Pall-Ex borderoul validat e ireversibil.
+    //
+    // ⚠ 16.08.2026: aceeasi scapare se repetase, si mai larg. Lipseau SAPTE —
+    // Posta, Innoship, Packeta, SmartShip, Shipo, FedEx si UPS — adica jumatate
+    // din curierii platformei. Pe oricare dintre ei, garda de mai jos („Comanda
+    // are AWB emis, anuleaza-l intai") NU se declansa: comerciantul putea scoate
+    // linii dintr-o comanda al carei colet plecase deja, iar eticheta tiparita
+    // ramanea cu greutatea si rambursul vechi.
+    //
+    // Se adauga ORICE curier nou aici, in aceeasi apasare cu coloana lui de AWB.
+    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -831,7 +2328,21 @@ export async function updateOrderDetails(orderId: string, data: {
     return { error: "Comenzile anulate sau rambursate nu pot fi editate." };
   }
 
-  const name = data.customer_name.trim();
+  /*
+   * Numele clientului, taiat la 120 — dar NUMAI cand chiar se schimba.
+   *
+   * Ambele cai de comanda il taie de la intrare (vezi `placeOrder`); aici era
+   * singura scriere ramasa fara plafon, si de aici numele pleaca mai departe pe
+   * AWB, pe factura si in emailuri, exact ca de acolo.
+   *
+   * Conditia nu e cosmetica: taiat neconditionat, un nume vechi de peste 120 de
+   * caractere ar fi fost SCURTAT tacit pe o comanda careia comerciantul ii repara
+   * doar telefonul — si scurtat exact pe comenzile cu factura Oblio, unde garda de
+   * mai jos exista tocmai ca titularul sa nu se schimbe. Nemiscat, se scrie
+   * inapoi aceeasi valoare; miscat, se scrie una plafonata.
+   */
+  const numeCerut = data.customer_name.trim();
+  const name = numeCerut === order.customer_name ? numeCerut : numeCerut.slice(0, 120);
   const phone = data.customer_phone.trim();
   const address = data.address.trim();
   const city = data.city.trim();
@@ -839,56 +2350,55 @@ export async function updateOrderDetails(orderId: string, data: {
   if (!name || !phone) return { error: "Numele si telefonul clientului sunt obligatorii." };
   if (!address || !city || !county) return { error: "Adresa, orasul si judetul sunt obligatorii." };
 
-  // Merge duplicate additions; integer quantities only.
-  const wanted = new Map<string, number>();
-  for (const it of data.added_items ?? []) {
-    const qty = Math.floor(Number(it.quantity));
-    if (!it.product_id || !Number.isFinite(qty) || qty <= 0) continue;
-    wanted.set(it.product_id, Math.min(999, (wanted.get(it.product_id) ?? 0) + qty));
+  /*
+   * COMANDA FACTURATA: datele se pot corecta, BANII nu.
+   *
+   * Documentul fiscal a plecat deja spre client si spre contabilitate cu un
+   * total anume. Pana acum functia nici nu citea numerele de factura, deci se
+   * putea adauga marfa peste o factura emisa si aceasta ramanea la vechiul
+   * total, in tacere.
+   *
+   * Blocarea NU e totala, si asta e deliberat: 42 din cele 47 de comenzi
+   * facturate din productie sunt deja expediate, iar acolo corectarea unui
+   * telefon gresit e chiar lucrul care salveaza livrarea. Se blocheaza numai ce
+   * misca banii — adaugarea de produse si schimbarea transportului.
+   *
+   * Proformele nu intra: nu sunt documente fiscale.
+   */
+  const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number;
+  const cereAdaugari = (data.added_items ?? []).some((i) => i?.product_id && Number(i.quantity) > 0);
+  const cereModificari = (data.linii_modificate ?? []).length > 0;
+  /*
+   * ⚠ `cereProduse` inseamna „se misca marfa", nu „se adauga marfa".
+   *
+   * Se uita la AMANDOUA cererile. Cat timp se uita doar la `added_items`, un
+   * payload care numai scoate linii trecea nevazut de garda de mai jos, iar o
+   * comanda cu factura fiscala emisa se putea goli de produse — exact gaura pe
+   * care garda o inchide. Butonul stins din panou nu ajuta: actiunile de server
+   * sunt endpointuri publice, chemabile cu orice argumente printr-un POST direct.
+   */
+  const cereProduse = cereAdaugari || cereModificari;
+  const cereTransport = data.shipping_cost != null;
+  if (numarFactura && (cereProduse || cereTransport)) {
+    return { error: `Comanda are factura ${numarFactura}. Suma facturata nu se mai poate schimba din panou. Emite storno la furnizorul de facturare, apoi fa o comanda noua pentru diferenta.` };
   }
-
-  // Re-price added products from the live catalog (never trust the client) and
-  // validate stock bundle-aware, exactly like order placement does.
-  const admin = createAdminClient();
-  let newItems: { product_id: string; name: string; price: number; quantity: number }[] = [];
-  let decrements: { product_id: string; quantity: number }[] = [];
-  if (wanted.size > 0) {
-    const ids = [...wanted.keys()];
-    const { data: products } = await admin.from("products")
-      .select("id, name, price, is_active")
-      .in("id", ids)
-      .eq("business_id", order.business_id);
-    const live = new Map((products ?? []).filter((p) => p.is_active).map((p) => [p.id as string, p]));
-    if (ids.some((id) => !live.has(id))) {
-      return { error: "Unul dintre produsele adaugate nu mai este disponibil. Reincarca pagina si incearca din nou." };
-    }
-
-    const stockExp = await expandBundleStock(admin, order.business_id, ids.map((id) => ({ product_id: id, quantity: wanted.get(id)! })));
-    if ("error" in stockExp) return { error: stockExp.error };
-    decrements = stockExp.decrements;
-
-    newItems = ids.map((id) => ({
-      product_id: id,
-      name: String(live.get(id)!.name),
-      price: round2(Number(live.get(id)!.price)),
-      quantity: wanted.get(id)!,
-    }));
+  // `stornoOblioInvoice` reconstruieste titularul din randul VIU al comenzii,
+  // deci nota de credit ar iesi pe alt nume decat factura pe care o storneaza.
+  // Pe comenzile PE FIRMA titularul e firma, nu persoana de contact, deci acolo
+  // numele se poate corecta linistit — altfel o litera gresita in numele celui
+  // care a comandat ar fi blocat si corectarea adresei.
+  if (order.oblio_invoice_number && !order.billing_company && name !== order.customer_name) {
+    return { error: `Comanda are factura Oblio ${order.oblio_invoice_number}. Numele clientului nu se mai poate schimba, altfel stornarea ar iesi pe alt titular.` };
   }
-
-  const addedSum = round2(newItems.reduce((s, i) => s + i.price * i.quantity, 0));
-  const newSubtotal = round2(Number(order.subtotal) + addedSum);
-  const newTotal = round2(Number(order.total) + addedSum);
-
-  // Merge the address into shipping_address WITHOUT touching courier/locker/
-  // service keys — those belong to the checkout choice and the AWB flow.
-  const prevShip = (order.shipping_address ?? {}) as Record<string, unknown>;
-  const newShip = {
-    ...prevShip,
-    county,
-    city,
-    address,
-    ...(data.postal_code?.trim() ? { postal_code: data.postal_code.trim() } : {}),
-  };
+  if (numarFactura) {
+    logError({
+      action: "updateOrderDetails.editedInvoiced",
+      message: "Order with a fiscal invoice was edited (customer data only)",
+      details: { orderId, numarFactura },
+      userId: user.id,
+      severity: "warning",
+    });
+  }
 
   // Refuse to touch a row whose items are not the expected array — appending
   // onto a corrupt value would silently replace the customer's original items.
@@ -898,35 +2408,567 @@ export async function updateOrderDetails(orderId: string, data: {
   }
   const prevItems = order.items as unknown[];
 
-  const { error } = await supabase.from("orders").update({
-    customer_name: name,
-    customer_phone: phone,
-    customer_email: data.customer_email?.trim() || null,
-    shipping_address: newShip,
-    items: [...prevItems, ...newItems],
-    subtotal: newSubtotal,
-    total: newTotal,
-    updated_at: new Date().toISOString(),
-  } as never).eq("id", orderId);
-
-  if (error) {
-    logError({ action: "updateOrderDetails", message: error.message, details: { code: error.code, hint: error.hint, orderId }, userId: user.id });
-    return { error: "Eroare la salvarea modificarilor." };
+  /*
+   * ═══ CE NU SE ATINGE LA LINII, SI DE CE ═══
+   *
+   * Adaugarea de produse peste un AWB emis trece de mult, cu un avertisment in
+   * panou. SCOATEREA e alt fel de risc: coletul e deja la curier CU marfa in el,
+   * declarat cu greutatea si rambursul de atunci, iar comanda ar spune ca nu s-a
+   * trimis. La Pall-Ex borderoul validat e chiar ireversibil. Deci modificarile de
+   * linii cer intai anularea AWB-ului — butoanele sunt in acelasi modal.
+   *
+   * `ecolet_order_to_send_id` fara AWB inseamna expediere REALA in curs: eColet
+   * emite asincron, deci lipsa numarului nu inseamna lipsa coletului.
+   */
+  const areAwb = !!(order.woot_awb_number || order.sameday_awb_number || order.cargus_awb_number
+    || order.dpd_awb_number || order.fan_courier_awb_number || order.colete_awb_number
+    || order.gls_awb_number || order.pallex_awb_number || order.ecolet_awb_number
+    || order.ecolet_order_to_send_id
+    /* ⚠ Cei sapte care lipseau pana la 16.08.2026 — vezi nota de la select. */
+    || order.posta_awb_number || order.innoship_awb_number || order.packeta_packet_id
+    || order.smartship_awb_number || order.shipo_awb_number || order.fedex_awb_number
+    || order.ups_awb_number
+    /* ⚠ DHL Express NU are anulare de expediere in API — `delete:` apare o singura
+       data in toata specificatia lor, si aia pe ridicare. Deci aici garda e cu atat
+       mai importanta: comanda editata peste un AWB DHL viu nu se mai poate repara
+       nici macar anuland eticheta, fiindca eticheta nu se poate anula. Ce se poate
+       face e `dezleagaDhlAwbAction` — anuleaza ridicarea, daca a fost ceruta, si
+       scoate numerele de pe comanda; coletul ramane insa emis la DHL. */
+    || order.dhl_awb_number);
+  if (cereModificari && areAwb) {
+    return { error: "Comanda are AWB emis. Anuleaza-l intai (butoanele sunt in aceeasi fereastra), apoi scoate sau schimba liniile si genereaza un AWB nou." };
   }
 
-  // Stock decrement + Google Merchant availability sync for the added items
-  // (mirrors placeOrder; runs only after the order update committed).
-  if (decrements.length > 0) {
-    await admin.rpc("decrement_stock_batch" as never, { p_items: decrements } as never);
-    void enqueueGmcSyncMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
-    void enqueueOlxSyncMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
-    void enqueueAboutYouStockMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
-    void enqueueTrendyolInventoryMany(order.business_id, [...new Set([...decrements.map((d) => d.product_id), ...newItems.map((i) => i.product_id)])]);
+  /*
+   * Comenzile de marketplace nu se editeaza la linii din panou.
+   *
+   * Acolo `orders.subtotal` NU e suma liniilor: la Trendyol liniile poarta pretul
+   * cu TVA si subtotalul e `total - vat`, iar la About You liniile sunt in EURO si
+   * cele anulate stau in `items` fara sa intre nici in subtotal, nici in total.
+   * Scazand contributia unei linii dintr-un subtotal calculat altfel, cifra ar iesi
+   * gresita in tacere. Peste asta, urmatorul ingest rescrie oricum liniile de la
+   * furnizor. Adresa si datele clientului se pot corecta si aici.
+   */
+  const marketplace = (order.order_source as { marketplace?: string } | null)?.marketplace;
+  if (cereModificari && marketplace) {
+    return { error: `Comanda vine din ${marketplace} si liniile ei se schimba din contul de acolo — altfel urmatoarea sincronizare le-ar scrie la loc. Datele clientului si adresa se pot corecta si de aici.` };
+  }
+
+  /*
+   * ═══ AMPRENTA: INDEXUL NU INSEAMNA NIMIC SINGUR ═══
+   *
+   * Modificarile vin pe indexul liniei. Intre desenarea modalului si apasarea pe
+   * „Salveaza" incap minute, iar in ele altcineva poate schimba liniile — si
+   * atunci indexul 2 nu mai e produsul pe care l-a apasat comerciantul. Se compara
+   * cu ACEEASI functie pe care a folosit-o si panoul.
+   */
+  if (cereModificari && data.amprenta_items !== amprentaLinii(prevItems)) {
+    return { error: "Liniile comenzii s-au schimbat intre timp. Reincarca pagina si incearca din nou." };
+  }
+
+  const admin = createAdminClient();
+
+  /*
+   * Catalogul VIU pentru toate produsele atinse — si cele adaugate, si cele care
+   * sunt DEJA pe comanda. Repretuirea trece prin ACELEASI motoare ca cele doua cai
+   * de comanda: combinatiile pentru variante si treptele pentru pachete. Pana acum
+   * functia citea doar `price`, deci un produs variabil intra la pretul de baza,
+   * fara marime, iar treptele nu existau deloc.
+   *
+   * Produsele liniilor existente se citesc FARA `is_active`: un produs stins intre
+   * timp ramane pe comanda, iar linia lui trebuie sa se poata scoate. Ce nu se
+   * gaseste lipseste pur si simplu din catalog, iar `capacitatiLinii` inchide
+   * atunci cresterea si miscarea de stoc pentru linia aia.
+   */
+  const idsAdaugate = [...new Set((data.added_items ?? []).map((i) => i?.product_id).filter((x): x is string => !!x))];
+  const idsLinii = [...new Set(
+    prevItems
+      .map((b) => (b && typeof b === "object" ? (b as { product_id?: unknown }).product_id : null))
+      .filter((x): x is string => typeof x === "string" && !esteIdExtra(x)),
+  )];
+  const idsToate = [...new Set([...idsAdaugate, ...idsLinii])];
+
+  const catalog = new Map<string, CatalogEdit>();
+  const live = new Map<string, { id: string; page_sections: unknown }>();
+  if (idsToate.length > 0) {
+    const { data: products } = await admin.from("products")
+      .select("id, name, price, is_active, is_bundle, page_sections")
+      .in("id", idsToate)
+      .eq("business_id", order.business_id);
+    for (const p of products ?? []) {
+      // Doar produsele adaugate trebuie sa fie ACTIVE; cele deja vandute nu.
+      if (!p.is_active && idsAdaugate.includes(p.id as string)) continue;
+      live.set(p.id as string, { id: p.id as string, page_sections: p.page_sections });
+      catalog.set(p.id as string, {
+        name: String(p.name),
+        price: round2(Number(p.price)),
+        is_bundle: !!p.is_bundle,
+        activ: !!p.is_active,
+        variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
+        trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
+      });
+    }
+    if (idsAdaugate.some((id) => !catalog.has(id))) {
+      return { error: "Unul dintre produsele adaugate nu mai este disponibil. Reincarca pagina si incearca din nou." };
+    }
+  }
+
+  const plan = planificaEditarea(prevItems, data.linii_modificate ?? [], data.added_items ?? [], catalog);
+  if ("error" in plan) return { error: plan.error };
+
+  /*
+   * ═══ REDUCEREA NU POATE MANCA MAI MULT DECAT MARFA RAMASA ═══
+   *
+   * Cuponul si reducerea de card raman inghetate la ce s-a convenit la plasare —
+   * regula scrisa cand se putea doar ADAUGA, cand subtotalul nu putea decat sa
+   * creasca. De cand se scot linii, reducerea poate ajunge peste marfa: pe o
+   * comanda de 200 cu 50% reducere, scoaterea a 150 de lei de marfa lasa 50 de lei
+   * de marfa si 100 de lei de reducere. `recalculeazaTotal` plafoneaza totalul la
+   * zero — corect ca aritmetica, dar comanda s-ar fi scris cu total 0, curierul n-ar
+   * mai fi incasat nimic, si clientul ar fi primit marfa pe gratis. In tacere.
+   *
+   * Nu se rescaleaza cuponul (ar schimba o intelegere) — se refuza, si se spune ce
+   * are de facut omul. Se compara cu starea de dinainte: o comanda deja incalcata
+   * (date vechi) trebuie sa-si poata corecta mai departe adresa.
+   */
+  const reduceri = {
+    discount: Number(order.discount_amount) || 0,
+    cardDiscount: Number(order.card_discount_amount) || 0,
+    codDiscount: Number(order.cod_discount_amount) || 0,
+  };
+  const depaseaDinainte = reducerileDepasescMarfa({
+    subtotal: Number(order.subtotal), extras: sumaExtraoptiunilor(prevItems), ...reduceri,
+  });
+  const depaseAcum = reducerileDepasescMarfa({
+    subtotal: round2(Number(order.subtotal) + plan.deltaSubtotal), extras: plan.extras, ...reduceri,
+  });
+  if (depaseAcum && !depaseaDinainte) {
+    return { error: "Marfa ramasa e mai mica decat reducerile de pe comanda, deci totalul ar iesi negativ. Lasa mai multe produse pe comanda, sau anuleaz-o si fa una noua fara cupon." };
+  }
+
+  let decrements: { product_id: string; quantity: number }[] = [];
+  if (plan.adaugate.length > 0) {
+    // Stocul DECLARAT pe combinatie, cu acelasi ajutor ca ambele cai de comanda.
+    const eroareStoc = eroareStocPeVarianta(
+      new Map([...live.entries()].map(([id, p]) => [id, comboStockMap(p.page_sections)])),
+      plan.adaugate,
+    );
+    if (eroareStoc) return { error: eroareStoc };
+
+    // Stocul de produs se verifica si se scade DOAR pe cantitatea adaugata, si
+    // dupa contopire: altfel componentele pachetelor s-ar scadea a doua oara.
+    const stockExp = await expandBundleStock(admin, order.business_id, plan.adaugate.map((a) => ({ product_id: a.product_id, quantity: a.quantity })));
+    if ("error" in stockExp) {
+      logError({ action: "updateOrderDetails.bundleStock", message: stockExp.motiv, details: { businessId: order.business_id, componenta: stockExp.componenta }, severity: "warning" });
+      return { error: stockExp.error };
+    }
+    decrements = stockExp.decrements;
+  }
+
+  /*
+   * Ce se da INAPOI la stoc pentru liniile scoase sau scazute.
+   *
+   * Se desface prin compozitia de AZI a pachetelor, ca la adaugare, dar fara
+   * verdict de disponibilitate (`expandBundleRelease`): bucatile se intorc pe
+   * raft, iar o componenta stinsa intre timp n-are cum sa opreasca scoaterea.
+   * Cantitatile se cleameaza oricum in baza la ce s-a rezervat chiar pe comanda
+   * asta, deci o compozitie schimbata nu poate umfla stocul.
+   */
+  const eliberari = plan.scoase.length > 0
+    ? await expandBundleRelease(admin, order.business_id, plan.scoase.map((s) => ({ product_id: s.product_id, quantity: s.quantity })))
+    : [];
+
+  /*
+   * Cat mai datoreaza comanda DUPA editare — clema care apara rezervarea liniilor
+   * ramase.
+   *
+   * Clema din baza stia doar cat luase comanda in TOTAL pe un produs. Cand acelasi
+   * produs e consumat de doua linii (o componenta de pachet plus vanzarea lui
+   * separata) si compozitia pachetului s-a schimbat intre vanzare si editare,
+   * scoaterea pachetului cerea inapoi mai mult decat i se cuvenea liniei si manca
+   * rezervarea celeilalte: stocul crestea cu marfa inca nelivrata, iar la anulare
+   * nu se mai dadea nimic inapoi.
+   *
+   * Se desface prin ACEEASI functie ca eliberarea, dinadins: doua desfaceri
+   * diferite ar readuce chiar nepotrivirea pe care clema o repara.
+   */
+  const nevoi = necesarDeStoc(plan.items, catalog);
+  const necesarProduse = nevoi.produse.length > 0
+    ? await expandBundleRelease(admin, order.business_id, nevoi.produse)
+    : [];
+
+  /*
+   * Totalul se RECALCULEAZA din componente, nu se aduna peste cel vechi.
+   *
+   * Adunarea simpla lasa TVA-ul in urma: la magazinele cu preturi fara TVA,
+   * liniile adaugate de comerciant plecau nefacturate cu TVA, deci se incasa mai
+   * putin decat trebuia. Iar `vat_amount` ramanea cel vechi la TOATE magazinele,
+   * si el se vede in panou si in emailul comenzii.
+   *
+   * Reducerea promotionala si cea de card raman cele stabilite la plasare: au
+   * fost convenite pe cosul de atunci, iar comerciantul adauga produse ulterior.
+   * Pragul de livrare gratuita se reevalueaza, fiindca adaugarea poate sa il
+   * treaca. Cu zero linii adaugate, formula da exact totalul dinainte.
+   */
+  const { data: cfgRow } = await supabase
+    .from("store_settings")
+    .select("vat_enabled, vat_rate, prices_include_vat, free_shipping_threshold, cod_fee_config")
+    .eq("business_id", order.business_id)
+    .single();
+
+  // Subtotalul se muta cu DIFERENTA, nu se recalculeaza din linii. `placeOrder`
+  // scrie acum pretul unitar nerotunjit, ca si celelalte doua cai, deci pe
+  // comenzile noi suma liniilor da chiar subtotalul — dar comenzile de dinainte
+  // poarta in continuare pretul rotunjit si difera cu un ban. Si oricum, o linie
+  // de oferta nu se poate re-deriva din catalog. Cu diferenta, zero adaugari
+  // inseamna exact zero schimbare.
+  const newSubtotal = round2(Number(order.subtotal) + plan.deltaSubtotal);
+
+  /*
+   * Extraoptiunile stau in `items` ca linii `extra_*` si NU intra in `subtotal`.
+   *
+   * ⚠ Din liniile de DUPA editare, nu din cele dinainte. Cat timp se putea doar
+   * adauga, cele doua erau acelasi lucru; de cand se poate scoate, o extraoptiune
+   * stearsa („ambalare cadou") ar fi ramas in total si in baza taxei de ramburs,
+   * iar caseta de totaluri din panou — care isi numara extraoptiunile din liniile
+   * REALE — ar fi raportat pe loc o „diferenta nejustificata" exact de valoarea ei.
+   */
+  const extrasTotal = plan.extras;
+
+  const vatCfg = {
+    vat_enabled: cfgRow?.vat_enabled ?? false,
+    /*
+     * Cota INGHETATA la vanzare, cand comanda are una.
+     *
+     * Coloana `orders.vat_rate` exista tocmai ca sa tina cota de atunci. Luata
+     * din setarile de azi, o comanda vanduta cu 19% ar fi capatat 21% pentru ca
+     * s-a schimbat legea sau pentru ca si-a corectat comerciantul o cifra —
+     * si-ar fi capatat-o cand cineva intra doar sa repare un numar de telefon.
+     * Aceeasi regula ca la facturare, chemata din acelasi loc (`invoiceVat`):
+     * cota comenzii, altfel a magazinului. Scrisa aici a doua oara, ar fi apucat
+     * pe alt drum — s-a mai intamplat de trei ori in proiectul asta.
+     */
+    vat_rate: invoiceVat(order, {
+      vat_enabled: cfgRow?.vat_enabled ?? false,
+      vat_rate: cfgRow?.vat_rate ?? 19,
+      // Regimul comenzii, nu al facturii: aici se recalculeaza TOTALUL comenzii,
+      // deci `taxIncluded` de la `invoiceVat` NU are ce cauta mai jos.
+      prices_include_vat: cfgRow?.prices_include_vat ?? true,
+    }).rate,
+    // `true`, ca la plasare. Nu misca nimic azi (coloana e NOT NULL si
+    // `vat_enabled` scurtcircuiteaza), dar doua rezerve diferite pentru acelasi
+    // camp sunt o capcana pusa la pastrare.
+    prices_include_vat: cfgRow?.prices_include_vat ?? true,
+  };
+
+  /*
+   * Taxa de ramburs PROCENTUALA se recalculeaza; cea fixa se pastreaza.
+   *
+   * Baza taxei e chiar marfa care tocmai s-a schimbat, deci lasata inghetata ea
+   * ar fi ramas procentul din cosul de acum o saptamana. Suma fixa, in schimb,
+   * nu depinde de marfa: recitita din setari, ar fi schimbat tacit o suma pe
+   * care clientul a acceptat-o la plasare.
+   *
+   * Cota se ia DIN COMANDA, nu din setarile de azi: taxa se scaleaza cu baza,
+   * pastrand exact procentul convenit atunci. Recitita din configuratie, ar fi
+   * fost procentul de acum — iar comerciantul care si-a urcat taxa de la 2% la
+   * 5% intre timp ar fi taxat retroactiv o comanda veche, sau, oprind-o, ar fi
+   * sters o taxa pe care clientul o acceptase deja.
+   *
+   * Baza scade DOAR cuponul, ca la plasare — nu se foloseste `vatBase`, care
+   * scade si reducerea de card, si pe cea de ramburs.
+   *
+   * Trei conditii inainte de a misca ceva: marfa chiar s-a schimbat, comanda
+   * chiar avea o taxa, si baza veche e pozitiva. Asa taxa nu poate nici sa
+   * apara pe o comanda care n-a avut-o, nici sa dispara de pe una care a avut-o.
+   * Comenzile din marketplace nu sunt atinse: n-au avut niciodata taxa de
+   * ramburs, oricat de „cash_on_delivery" ar parea metoda lor de plata.
+   */
+  const cfgTaxa = parseCodFeeConfig(cfgRow?.cod_fee_config);
+  const taxaVeche = round2(Number(order.cod_fee_amount) || 0);
+  /*
+   * ⚠ BAZA VECHE se face din extraoptiunile VECHI.
+   *
+   * `extrasTotal` a devenit suma de DUPA editare (asa trebuie: o extraoptiune
+   * scoasa iese si din total). Lasat si in `bazaVeche`, amesteca subtotalul de
+   * dinainte cu extraoptiunile de dupa — un raport intre doua momente diferite.
+   * Pe o comanda de 200 cu o ambalare cadou de 50 si taxa de 2%, scoaterea
+   * ambalarii facea serverul sa scrie alta taxa decat cea aratata in panou, iar
+   * din totalul serverului se ia rambursul pus pe AWB.
+   */
+  const extrasVechi = sumaExtraoptiunilor(prevItems);
+  const bazaVeche = round2(Number(order.subtotal) + extrasVechi - (Number(order.discount_amount) || 0));
+  const bazaNoua = round2(newSubtotal + extrasTotal - (Number(order.discount_amount) || 0));
+  // Poarta e „BAZA s-a schimbat", nu „marfa s-a schimbat": extraoptiunile intra in
+  // baza taxei, dar niciodata in subtotal, deci o comanda din care se scoate doar
+  // ambalarea cadou isi pastra taxa calculata pe o baza care nu mai exista.
+  const codFee = cfgTaxa.type === "percent" && bazaNoua !== bazaVeche && taxaVeche > 0 && bazaVeche > 0
+    ? round2(taxaVeche * (bazaNoua / bazaVeche))
+    : taxaVeche;
+
+  /*
+   * Transportul re-cotat, cand comerciantul muta comanda in alt judet.
+   *
+   * Nu se re-coteaza aici: ar insemna un apel la API-ul curierului exact in
+   * pasul cu banii, iar niciuna din cele sase biblioteci de curieri nu stie de
+   * `AbortSignal`. Cotatia se cere din panou, cu acelasi endpoint public pe care
+   * il foloseste magazinul, si vine inapoi SEMNATA. Fara semnatura valabila
+   * pentru noua destinatie, ramane costul de azi — adica purtarea de pana acum.
+   */
+  const prevShip = (order.shipping_address ?? {}) as Record<string, unknown>;
+  let shippingDeBaza = Math.max(0, round2(Number(order.shipping_cost) || 0));
+  let etichetaNoua: string | null = null;
+  if (data.shipping_cost != null) {
+    const cerut = Math.max(0, round2(Number(data.shipping_cost)));
+    /*
+     * Semnatura acopera optiunea INTREAGA, deci se confrunta cu ea intreaga.
+     *
+     * Eticheta face parte din amprenta, si ea nu e niciodata goala la semnare
+     * („Livrare prin Cargus", „Sameday EasyBox (locker)", „DPD International
+     * (Germania)"). Verificata fara ea, partea a noua a amprentei iesea sir gol
+     * si semnatura nu batea NICIODATA: re-cotarea din panou se arunca tacit la
+     * fiecare incercare, iar comerciantul vedea „Comanda a fost actualizata"
+     * peste transportul vechi.
+     *
+     * Vine de la client fara grija: fiind semnata, o eticheta nepotrivita nu
+     * poate decat sa strice verificarea. NU se deduce din comanda — eticheta
+     * salvata e a destinatiei VECHI, iar o mutare in alta tara ar compara
+     * „Livrare prin DPD" cu „DPD International (Germania)".
+     */
+    const semnaturaBuna = verifyShippingQuote(order.business_id, { county, city }, cerut, data.shipping_token, {
+      courier: typeof prevShip.courier === "string" ? prevShip.courier : undefined,
+      deliveryType: prevShip.delivery_type === "locker" ? "locker" : "address",
+      courierLabel: data.courier_label,
+      /*
+       * Aceeasi intrebare ca la checkout, dar din alta sursa — si trebuie sa fie
+       * ACEEASI sursa ca la cerere, altfel re-cotarea din panou moare tacit, cum
+       * a mai murit o data cand se verifica fara eticheta.
+       *
+       * Panoul cere cotatia cu `cod: rambursDeIncasat(...)`, adica dupa BANI, nu
+       * dupa metoda: o comanda cu card ramasa neplatita pleaca oricum cu ramburs
+       * la curier. Deci si aici se raspunde cu acelasi ajutor, nu cu
+       * `isCodPaymentMethod`. `order.total` in loc de totalul nou: steagul e doar
+       * „> 0", iar `sePoateAplica` de mai jos cere oricum o comanda neplatita.
+       */
+      ramburs: rambursDeIncasat({ payment_status: order.payment_status, total: order.total }) > 0,
+    });
+    const sePoateAplica = semnaturaBuna
+      && order.payment_status !== "paid"
+      && !areAwb
+      && !numarFactura
+      // Transport zero inseamna livrare gratuita deja acordata (prag sau cupon):
+      // comanda nu retine steagul, deci nu i-l putem lua inapoi pe ghicite.
+      && shippingDeBaza > 0;
+    if (sePoateAplica) {
+      shippingDeBaza = cerut;
+      // Eticheta insoteste pretul: mutata in alta tara, comanda ar fi ramas cu
+      // „Livrare prin DPD" peste o expediere „DPD International (Germania)".
+      etichetaNoua = data.courier_label?.trim() || null;
+    } else {
+      logError({
+        action: "updateOrderDetails.shippingRejected",
+        message: "Re-quoted shipping refused",
+        details: { orderId, cerut, semnaturaBuna, paid: order.payment_status === "paid", areAwb, areFactura: !!numarFactura, shippingVechi: shippingDeBaza },
+        userId: user.id,
+        severity: "warning",
+      });
+    }
+  }
+
+  // Aceeasi formula, si aici si in previzualizarea din modal.
+  const { total: newTotal, vatAmount, shipping: newShipping } = recalculeazaTotal({
+    subtotal: newSubtotal,
+    extras: extrasTotal,
+    discount: Number(order.discount_amount) || 0,
+    cardDiscount: Number(order.card_discount_amount) || 0,
+    codDiscount: Number(order.cod_discount_amount) || 0,
+    codFee,
+    shipping: shippingDeBaza,
+    freeShippingThreshold: pragTransportGratuit(cfgRow?.free_shipping_threshold),
+    vat: vatCfg,
+  });
+
+  // Merge the address into shipping_address WITHOUT touching courier/locker/
+  // service keys — those belong to the checkout choice and the AWB flow.
+  const newShip = {
+    ...prevShip,
+    county,
+    city,
+    address,
+    ...(data.postal_code?.trim() ? { postal_code: data.postal_code.trim() } : {}),
+    ...(etichetaNoua ? { courier_label: etichetaNoua } : {}),
+  };
+
+  // Stocul liniilor adaugate se revendica atomic INAINTE de scriere, ca la ambele
+  // cai de comanda: `expandBundleStock` de mai sus doar citeste, iar scaderea de
+  // dupa update lasa aceeasi fereastra — doi comercianti care adauga in acelasi
+  // timp acelasi ultim produs treceau amandoi. Vezi `revendicaStocul`.
+  const stoc = await revendicaStocul(admin, decrements, plan.adaugate);
+  if (stoc.fel !== "revendicat") return { error: stoc.error };
+
+  /*
+   * ═══ MODIFICAREA SI REZERVAREA, INTR-O SINGURA TRANZACTIE ═══
+   *
+   * Erau doua scrieri: `UPDATE orders` cu liniile si totalurile noi, apoi
+   * `adauga_stoc_rezervat`. Daca a doua pica, prima ramanea — stocul scazut,
+   * liniile noi pe comanda, dar `stoc_rezervat` CEL VECHI, deci la anulare
+   * liniile adaugate nu se mai puteau da inapoi. Si se raspundea `success: true`.
+   *
+   * Calculele raman in aplicatie; functia scrie doar ce a hotarat ea.
+   */
+  const { data: ed, error } = await admin.rpc("editeaza_comanda_atomic", {
+    p_order_id: orderId,
+    p_business_id: order.business_id,
+    p_patch: {
+      customer_name: name,
+      customer_phone: phone,
+      customer_email: data.customer_email?.trim() || "",
+      shipping_address: newShip,
+      items: plan.items,
+      subtotal: newSubtotal,
+      shipping_cost: newShipping,
+      cod_fee_amount: codFee,
+      vat_amount: vatAmount,
+      // Cota, nu doar suma. Fara ea, o comanda cu `vat_rate = 0` primea un
+      // `vat_amount > 0` peste o cota ramasa zero, iar SmartBill o citea in
+      // continuare ca „istorica". Aceeasi expresie ca la plasare.
+      vat_rate: vatCfg.vat_enabled ? vatCfg.vat_rate : 0,
+      total: newTotal,
+      // `as unknown as Json`: obiectul E jsonb valid, dar `plan.items` e `unknown[]`
+      // si TS nu poate dovedi asta. Cast INGUST, doar pe argument — numele functiei
+      // si celelalte argumente raman verificate, spre deosebire de `as never` pe tot
+      // apelul, care stingea verificarea cu totul.
+    } as unknown as Json,
+    p_produse: stoc.fel === "revendicat" ? decrements : [],
+    p_variante: stoc.fel === "revendicat" ? stocRezervat([], plan.adaugate).variante : [],
+    /*
+     * Statusul pe care l-am VAZUT cand am citit comanda.
+     *
+     * Intre citirea de mai sus si scrierea de aici incap cateva dus-intorsuri, iar
+     * in ele altcineva (panoul, un lot, un webhook de marketplace) poate ANULA
+     * comanda si elibera stocul ei. Fara asta, editarea s-ar aplica peste o comanda
+     * deja anulata si i-ar adauga stoc rezervat proaspat — pe care anularea, deja
+     * intamplata, nu-l mai elibereaza niciodata.
+     */
+    p_status_asteptat: order.status,
+    /*
+     * ═══ CE SE DA INAPOI, SUB ACELASI LACAT ═══
+     *
+     * Nu se cheama `elibereaza_stoc_complet` din aplicatie, desi ar fi fost la
+     * indemana: ar fi fost a doua tranzactie, iar intre ele incape esecul care
+     * lasa marfa data inapoi si comanda nescrisa (sau invers). Functia scade din
+     * `orders.stoc_rezervat` SI pune bucatile pe raft in aceeasi instructiune, si
+     * cleameaza la ce s-a rezervat chiar pe comanda asta — deci nu se poate da
+     * inapoi mai mult decat s-a luat.
+     */
+    p_produse_minus: eliberari,
+    p_variante_minus: stocRezervat([], plan.scoase).variante,
+    // Ce ramane DATOR comenzii: sub asta, rezervarea nu se atinge.
+    p_produse_necesar: necesarProduse,
+    p_variante_necesar: nevoi.variante,
+  });
+
+  const rezEd = ed as { gasit?: boolean; stoc_cunoscut?: boolean; motiv?: string; status_curent?: string } | null;
+  if (rezEd?.motiv === "stoc eliberat") {
+    // Comanda si-a dat deja marfa inapoi (anulata, rambursata, sau doar cu plata
+    // trecuta pe „refunded", care elibereaza fara sa schimbe statusul). Peste ea,
+    // marfa nu se mai misca in niciun sens.
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
+    return { error: "Comanda si-a eliberat deja stocul (e anulata sau rambursata), deci liniile ei nu se mai pot schimba. Datele clientului si adresa se pot corecta." };
+  }
+  if (rezEd?.motiv === "status schimbat") {
+    // Nu e o eroare de sistem, e o cursa pierduta: cineva a mutat comanda intre
+    // timp. Stocul rezervat se da inapoi si omul afla ce s-a intamplat.
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
+    return { error: `Comanda a fost mutata intre timp (acum e „${rezEd.status_curent}"). Reincarca pagina si incearca din nou.` };
+  }
+  if (error || rezEd?.gasit !== true) {
+    // Comanda n-a fost salvata, deci stocul rezervat pentru liniile adaugate se
+    // da inapoi — altfel marfa ramane scazuta pentru linii care nu exista.
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
+    await logError({ action: "updateOrderDetails", message: error?.message ?? "editarea n-a raspuns valid", details: { code: error?.code, orderId, raspuns: rezEd }, businessId: order.business_id, userId: user.id, severity: "critical" });
+    return { error: "Eroare la salvarea modificarilor." };
+  }
+  if (rezEd.stoc_cunoscut === false && (stoc.fel === "revendicat" || eliberari.length > 0)) {
+    // Comanda e dinainte de coloana `stoc_rezervat`: nu se stie ce a consumat,
+    // deci nici ce sa i se dea inapoi. Liniile adaugate raman scazute la anulare,
+    // iar cele scoase nu si-au putut intoarce marfa. Se vede, se corecteaza de mana.
+    logError({ action: "updateOrderDetails.stocRezervat", message: "Comanda e dinainte de inregistrarea stocului rezervat; stocul liniilor atinse NU s-a putut misca automat.", details: { orderId, adaugate: plan.adaugate.length, scoase: plan.scoase.length }, businessId: order.business_id, userId: user.id, severity: "warning" });
+  }
+  if (plan.faraStoc.length > 0) {
+    // Liniile la care nu s-a putut sti CE s-a consumat (varianta neidentificabila
+    // in catalogul de azi, produs sters). Comanda e corecta la bani; marfa ramane
+    // rezervata pana la o anulare, sau se corecteaza de mana din produs.
+    logError({
+      action: "updateOrderDetails.stocNemiscat",
+      message: "Linii scazute sau scoase al caror stoc nu s-a putut da inapoi automat.",
+      details: { orderId, indici: plan.faraStoc },
+      businessId: order.business_id, userId: user.id, severity: "warning",
+    });
+  }
+
+  /*
+   * ⚠ SUMA S-A SCHIMBAT: SESIUNEA DE PLATA VECHE NU MAI ARE VOIE SA INCASEZE.
+   *
+   * O sesiune Stripe Checkout ramane platibila 24 de ore de la creare. Fara
+   * randurile astea, clientul plecat la plata pe 100 de lei putea plati exact 100
+   * dupa ce comanda ajunsese la 150 — si comanda de 150 se marca PLATITA.
+   *
+   * Se face DUPA scrierea reusita: invers, o editare picata l-ar fi lasat pe
+   * client fara sesiune valida pentru o comanda nemodificata. Si numai cand suma
+   * chiar s-a schimbat — o editare de adresa nu are de ce sa strice o plata in
+   * curs.
+   */
+  if (order.stripe_session_id && newTotal !== Number(order.total)) {
+    /*
+     * ⚠ INVELIT IN `try`, si NU din prudenta generica.
+     *
+     * Scrierea atomica de mai sus a REUSIT deja. Orice aruncare de aici (Stripe
+     * indisponibil, cheie lipsa) ar iesi din actiune ca esec, comerciantul ar
+     * vedea „Eroare la salvare" pentru o editare care CHIAR a intrat in baza, si
+     * ar apasa din nou — adaugand produsele a doua oara. Inchiderea sesiunii e
+     * curatenie de dupa; nu are voie sa schimbe verdictul editarii.
+     */
+    try {
+      await inchideSesiuneaStripeVeche(admin, {
+        businessId: order.business_id,
+        orderId,
+        sessionId: order.stripe_session_id as string,
+      });
+    } catch (e) {
+      await logError({
+        action: "updateOrderDetails.stripeSesiune",
+        message: `Comanda a fost editata, dar inchiderea sesiunii Stripe a aruncat: ${e instanceof Error ? e.message : String(e)}`,
+        details: { orderId, sessionId: order.stripe_session_id },
+        businessId: order.business_id, userId: user.id, severity: "critical",
+      });
+    }
+  }
+
+  /*
+   * Canalele externe afla ca stocul s-a miscat — in AMANDOUA sensurile.
+   *
+   * Conditia era `plan.adaugate.length > 0`, deci o editare care doar SCOATE marfa
+   * nu anunta pe nimeni: produsul se intorcea pe raft, dar Google Merchant, OLX,
+   * About You si Trendyol il tineau mai departe pe „stoc 0" pana la cronul urmator.
+   */
+  if (plan.adaugate.length > 0 || plan.scoase.length > 0) {
+    const atinse = [...new Set([
+      ...decrements.map((d) => d.product_id),
+      ...plan.adaugate.map((a) => a.product_id),
+      ...eliberari.map((e) => e.product_id),
+      ...plan.scoase.map((s) => s.product_id),
+    ])];
+    dupaRaspuns(() => enqueueGmcSyncMany(order.business_id, atinse), "enqueueGmcSyncMany", order.business_id);
+    dupaRaspuns(() => enqueueOlxSyncMany(order.business_id, atinse), "enqueueOlxSyncMany", order.business_id);
+    dupaRaspuns(() => enqueueAboutYouStockMany(order.business_id, atinse), "enqueueAboutYouStockMany", order.business_id);
+    dupaRaspuns(() => enqueueTrendyolInventoryMany(order.business_id, atinse), "enqueueTrendyolInventoryMany", order.business_id);
+    dupaRaspuns(() => enqueueEmagStocMany(order.business_id, atinse), "enqueueEmagStocMany", order.business_id);
   }
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);
-  return { success: true, newTotal };
+  return { success: true, newTotal, faraStoc: plan.faraStoc.length };
 }
 
 export async function deleteOrder(orderId: string) {
@@ -934,26 +2976,131 @@ export async function deleteOrder(orderId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: order } = await supabase.from("orders").select("business_id").eq("id", orderId).single();
+  const { data: order } = await supabase.from("orders").select("business_id, discount_code, gls_awb_number, order_source").eq("id", orderId).single();
   if (!order) return { error: "Comanda negasita" };
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
 
-  const { error } = await supabase.from("orders").delete().eq("id", orderId);
+  /*
+   * ═══ ⚠ O COMANDA A LOR NU SE STERGE DE AICI (25.08.2026) ═══
+   *
+   * La ei comanda ramane. Stearsa la noi, se rup patru lucruri deodata, si toate tacut:
+   *
+   *   - `emag_orders.order_id` devine NULL, deci randul ramane orfan;
+   *   - stocul comenzii se intoarce pe raft desi marfa a plecat la client;
+   *   - daca factura nu era inca urcata, cronul n-o mai vede NICIODATA, iar eMAG ramane
+   *     fara documentul pe care il cere dupa livrare;
+   *   - iar daca ei ating comanda din nou, ea reintra ca rand NOU si poate primi a doua
+   *     factura fiscala pentru aceeasi vanzare.
+   *
+   * ⚠ SI NU E NEVOIE DE O MODIFICARE LA EI CA SA REINVIE: butonul de istoric
+   * (`importaIstoricEmag`) pagineaza pe data, pana la un an in urma, fara sa se uite la
+   * `modified`. Adica omul care sterge o comanda si apoi apasa „adu istoricul" si-o aduce
+   * inapoi — dar pe drumul de istoric, care nu consuma stoc si nu factureaza.
+   *
+   * ⚠ Acelasi tipar exista deja in casa la produse: `deleteProduct` nu sterge pana cand
+   * retragerea ofertei nu e scrisa durabil in coada. Aici nu exista un echivalent de
+   * trimis la ei, deci se opreste de tot.
+   */
+  const tineEl = marketplaceCareTineComanda(order.order_source);
+  if (tineEl) return { error: deCeNuDeAici(tineEl, "stergerea") };
+
+  /*
+   * CUPONUL, STOCUL SI STERGEREA — ORI TOT, ORI NIMIC.
+   *
+   * Ordinea de pana acum era corecta ca intentie si periculoasa ca rezultat:
+   *
+   *     elibereaza cupon  -> reuseste
+   *     elibereaza stoc   -> reuseste
+   *     DELETE order      -> ESUEAZA
+   *
+   * si ramaneai cu o comanda care exista si al carei stoc fusese deja pus inapoi
+   * pe raft — adica supravanzare, din chiar incercarea de a nu pierde marfa. Nu
+   * se repara inversand ordinea: dupa DELETE nu mai stii CE sa dai inapoi
+   * (`discount_id` si `stoc_rezervat` pleaca odata cu randul). Se repara punand
+   * tot intr-o tranzactie.
+   *
+   * Si stergerea insasi era oarba in celalalt sens: un DELETE care nu prinde
+   * niciun rand sub RLS NU intoarce eroare, deci `if (error)` nu se aprindea si
+   * comanda ramanea, raportata ca stearsa. Functia spune daca a gasit-o.
+   *
+   * Autorizarea ramane mai sus (`businesses ... eq(user_id)`), inainte de orice
+   * apel cu drepturi de serviciu.
+   */
+  const { data: sters, error } = await createAdminClient()
+    .rpc("sterge_comanda", { p_order_id: orderId, p_business_id: order.business_id });
   if (error) {
-    logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, userId: user.id });
+    await logError({ action: "deleteOrder", message: error.message, details: { code: error.code, orderId }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la stergerea comenzii." };
+  }
+  if ((sters as { gasit?: boolean } | null)?.gasit !== true) {
+    logError({ action: "deleteOrder", message: "comanda n-a fost gasita la stergere", details: { orderId, raspuns: sters }, businessId: order.business_id, userId: user.id, severity: "warning" });
+    return { error: "Comanda negasita" };
+  }
+
+  /*
+   * ⚠ ETICHETA AWB PLEACA ODATA CU COMANDA.
+   *
+   * Fisierul din R2 nu e o poza de produs: contine NUMELE, ADRESA si TELEFONUL
+   * cumparatorului. Comanda dispare din baza, dar cheia lui se calcula exclusiv
+   * din `(businessId, orderId)` — deci dupa stergere nimeni si nimic nu o mai
+   * putea compune, si fisierul ramanea in bucket pentru totdeauna: nici la o
+   * cerere GDPR de stergere n-ar mai fi fost gasit.
+   *
+   * Se face DUPA stergerea reusita si nu poate schimba rezultatul: comanda chiar
+   * s-a sters, iar o eroare aici n-are ce sa-i spuna comerciantului. Se striga in
+   * loguri, unde e treaba platformei.
+   */
+  try {
+    /* ⚠ Doar cand a existat un AWB GLS. Altfel fiecare stergere de comanda ar fi
+       asteptat trei drumuri catre R2 care in majoritatea cazurilor n-au ce sterge. */
+    if (order.gls_awb_number) {
+      await Promise.all(cheiEticheta(order.business_id, orderId).map((k) => deleteFromR2(k)));
+    }
+  } catch (e) {
+    await logError({
+      action: "deleteOrder",
+      message: `Comanda a fost stearsa, dar eticheta GLS NU s-a putut sterge din CDN: ${(e as Error).message}. Contine datele cumparatorului.`,
+      details: { orderId },
+      businessId: order.business_id,
+      userId: user.id,
+      severity: "warning",
+    });
   }
 
   revalidatePath("/dashboard/orders");
   return { success: true };
 }
 
+/*
+ * Plafoanele mesajelor catre client — email si SMS.
+ *
+ * Destinatarul e ales de apelant: comanda ii apartine, iar `updateOrderDetails`
+ * ii rescrie `customer_email` cu ce vrea. Fara plafon, un cont nou isi publica un
+ * magazin, isi plaseaza singur o comanda si trimite in bucla emailuri arbitrare
+ * catre orice adresa — semnate SPF/DKIM de domeniul PLATFORMEI, fiindca fara SMTP
+ * propriu se pleaca pe Resend-ul nostru. Reputatia arsa nu-l atinge pe el, ci
+ * trimite in spam emailurile reale ale tuturor celorlalti comercianti. Exact
+ * abuzul pentru care s-a inasprit /api/notifications/test („ERA UN RELEU DE EMAIL
+ * DESCHIS"), doar ca acolo destinatarul e fixat si aici nu poate fi.
+ *
+ * Doua chei, nu una: pe UTILIZATOR se plafoneaza volumul, pe COMANDA se opreste
+ * tinta unica — o comanda reala nu are nevoie de zeci de mesaje, iar altfel se
+ * comuta intre comenzi si plafonul pe utilizator ramane singurul zid.
+ */
+const MESAJE_PE_ORA = 50;
+const MESAJE_PE_COMANDA = 10;
+
 export async function sendCustomerNotification(orderId: string, subject: string, message: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
+  // Prima linie, in memorie: taie bucla fara sa atinga baza. Cheia e pe cont, deci
+  // cine o consuma se opreste singur pe el.
+  if (!rateLimit(`mesajClient:${user.id}`, 10, 60_000)) {
+    return { error: "Prea multe mesaje trimise. Asteapta un minut si incearca din nou." };
+  }
 
   if (!subject.trim() || !message.trim()) return { error: "Completeaza subiectul si mesajul." };
 
@@ -968,6 +3115,20 @@ export async function sendCustomerNotification(orderId: string, subject: string,
   if (!biz) return { error: "Acces interzis" };
 
   if (!order.customer_email) return { error: "Clientul nu a lasat o adresa de email." };
+
+  /*
+   * Plafoanele durabile se consuma DUPA verificarea de proprietate.
+   *
+   * Puse mai sus, oricine putea arde contorul unei comenzi straine trimitand
+   * cereri pe id-uri care nu-i apartin, si comerciantul adevarat ramanea fara
+   * dreptul de a-si anunta clientul.
+   */
+  if (!(await consumaLimita(`mesaj-client:${user.id}`, MESAJE_PE_ORA, 3600)).permis) {
+    return { error: "Ai trimis prea multe mesaje in ultima ora. Incearca mai tarziu." };
+  }
+  if (!(await consumaLimita(`mesaj-comanda:${orderId}`, MESAJE_PE_COMANDA, 86400)).permis) {
+    return { error: "Prea multe mesaje pe aceasta comanda. Incearca maine." };
+  }
 
   const emailSender = await getStoreEmailSender(createAdminClient(), order.business_id);
   const res = await sendCustomerMessage(order.customer_email, {
@@ -984,6 +3145,12 @@ export async function sendCustomerSms(orderId: string, message: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
+  // Aceeasi prima linie ca la mesajul pe email, si acelasi buget pe cont mai jos:
+  // numarul destinatarului vine tot dintr-o comanda pe care apelantul si-o poate
+  // face singur, iar fiecare SMS pleaca pe cheia SMSO a magazinului.
+  if (!rateLimit(`mesajClient:${user.id}`, 10, 60_000)) {
+    return { error: "Prea multe mesaje trimise. Asteapta un minut si incearca din nou." };
+  }
 
   if (!message.trim()) return { error: "Scrie mesajul SMS." };
 
@@ -999,7 +3166,9 @@ export async function sendCustomerSms(orderId: string, message: string) {
 
   if (!order.customer_phone) return { error: "Clientul nu a lasat un numar de telefon." };
 
-  const { data: st } = await supabase
+  // Service role, dupa verificarea de proprietate de mai sus — pe clientul
+  // utilizatorului `api_key` ar veni ca `enc.v1.…` si SMSO ar refuza mesajul.
+  const { data: st } = await createAdminClient()
     .from("store_settings")
     .select("smso_config")
     .eq("business_id", order.business_id)
@@ -1007,6 +3176,16 @@ export async function sendCustomerSms(orderId: string, message: string) {
   const smso = st?.smso_config as SmsoConfig | null;
   if (!smso?.enabled || !smso.api_key || !smso.sender_id) {
     return { error: "SMSO nu este activat. Conecteaza-l din Integrari." };
+  }
+
+  // Plafoanele durabile, dupa verificarea de proprietate — vezi
+  // `sendCustomerNotification`. Bugetul pe cont e COMUN celor doua canale: cine
+  // il consuma pe email nu trebuie sa mai aiba unul intreg pe SMS.
+  if (!(await consumaLimita(`mesaj-client:${user.id}`, MESAJE_PE_ORA, 3600)).permis) {
+    return { error: "Ai trimis prea multe mesaje in ultima ora. Incearca mai tarziu." };
+  }
+  if (!(await consumaLimita(`sms-comanda:${orderId}`, MESAJE_PE_COMANDA, 86400)).permis) {
+    return { error: "Prea multe SMS-uri pe aceasta comanda. Incearca maine." };
   }
 
   const res = await sendSms(smso.api_key, {
@@ -1024,6 +3203,10 @@ export async function placeCartOrder(data: {
   cart_session_id?: string;
   items: { product_id: string; name: string; price: number; quantity: number; variant_title?: string }[];
   shipping_cost: number;
+  /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
+  shipping_token?: string;
+  /** Rambursul pentru care s-a cerut cotatia. Doar pentru masurare. */
+  cod_declarat?: number;
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
@@ -1033,9 +3216,23 @@ export async function placeCartOrder(data: {
   customer_address: string;
   customer_country?: string;
   customer_postal_code?: string;
+  /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
+  billing_company?: BillingCompanyInput;
+  /**
+   * NU SE CITESC. `discount_id` n-a fost citit niciodata, iar `discount_amount`
+   * a plecat pe 2026-08-04 din singurul loc care il folosea (payload-ul de
+   * email). Cuponul se re-valideaza integral pe server din `discount_code`, si
+   * doar ce iese de acolo ajunge si in `orders`, si in emailuri.
+   *
+   * Raman declarate fiindca `OrderModal.tsx` si `checkout-core.ts` inca le
+   * trimit; scoase de aici, `tsc` ar pica pe ele. Cine le sterge, sa le stearga
+   * si de la apelanti — dar sa nu le RECITEASCA: un numar de reducere venit de
+   * la browser nu are ce cauta langa un total calculat de server.
+   */
   discount_id?: string;
-  discount_code?: string;
   discount_amount?: number;
+  /** Singurul camp de cupon citit: se re-valideaza cu `validateDiscount`. */
+  discount_code?: string;
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
   vat_amount?: number;
@@ -1048,6 +3245,8 @@ export async function placeCartOrder(data: {
   locker_id?: string;
   locker_name?: string;
   locker_address?: string;
+  /** Codul postal al punctului de ridicare; GLS il cere pe adresa de livrare. */
+  locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
   woot_service_id?: number;
@@ -1055,6 +3254,58 @@ export async function placeCartOrder(data: {
   woot_service_name?: string;
   colete_service_id?: number;
   colete_service_name?: string;
+  ecolet_service_slug?: string;
+  /* ⚠ Cheia ofertei Innoship are TREI parti: curierul real, felul livrarii si
+     varianta serviciului. Pastrata partial, reemiterea dupa corectarea adresei
+     ar pleca pe alt serviciu si alt pret. */
+  innoship_courier_id?: number;
+  innoship_service_id?: number;
+  innoship_option_id?: string;
+  innoship_courier_name?: string;
+  innoship_service_name?: string;
+  /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe care a
+     fost cotata. Cu `show_byoc`, acelasi curier apare de doua ori, la preturi
+     diferite — pastrat doar curierul, reemiterea ar putea pleca pe celalalt
+     contract. La locker se adauga si reteaua: easybox si FANbox sunt
+     nomenclatoare separate, cu curieri diferiti la emitere. */
+  smartship_courier_id?: number;
+  smartship_courier_name?: string;
+  smartship_own_contract?: boolean;
+  smartship_locker_net?: "easybox" | "fanbox";
+  /* ⚠ Cheia ofertei Shipo are O SINGURA parte, si NU e curierul: e SERVICIUL
+     (`rate_id`). Acelasi curier apare la adresa, in locker si in PUDO, la preturi
+     diferite, iar curierul si tipul punctului se DEDUC de ei din el. Pierdut aici,
+     alegerea clientului nu mai ajunge niciodata pe comanda. */
+  shipo_rate_id?: number;
+  shipo_courier_slug?: string;
+  shipo_courier_name?: string;
+  /* ⚠ Cheia ofertei FedEx e SERVICIUL (`serviceType`), si atat: FedEx e un singur
+     transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda, iar emiterea ar pleca pe serviciul implicit — mai scump sau mai lent
+     decat cel platit. E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  fedex_service_type?: string;
+  fedex_service_name?: string;
+  /* ⚠ Cheia ofertei UPS e CODUL SERVICIULUI (`Service.Code`), si atat: UPS e un
+     singur transportator, nu un broker, deci acelasi serviciu nu apare de doua ori la
+     preturi diferite. Pierduta aici, alegerea clientului nu mai ajunge niciodata pe
+     comanda — iar la UPS asta e mai scump decat la ceilalti: lipsa lui `Service.Code`
+     la emitere nu e o eroare, e o factura. Ghidul lor romanesc, verbatim: „Daca nicio
+     optiune de serviciu nu este selectata de dvs., atunci expedierea se va efectua si
+     factura automat prin UPS Express" — cel mai scump produs al lor.
+     E fix lectia de la SmartShip, calcata a doua oara la Shipo. */
+  ups_service_code?: string;
+  ups_service_name?: string;
+  /* ⚠⚠ Aceleasi trei campuri ca in `placeOrder`, si din acelasi motiv: `productCode`
+     e OBLIGATORIU la emiterea DHL, iar pe intern e insotit de `localProductCode`.
+     ⚠ Sunt DOUA checkout-uri scrise separat (formularul si cosul). Completata una
+     singura, jumatate din comenzile DHL ajung fara produsul ales de client si nu se
+     pot emite din lot. */
+  dhl_product_code?: string;
+  dhl_product_name?: string;
+  dhl_local_product_code?: string;
+  ecolet_courier_name?: string;
+  ecolet_service_name?: string;
   /** First-touch attribution captured client-side (utm / referrer / ad click id). */
   source?: OrderSource;
 }) {
@@ -1065,6 +3316,12 @@ export async function placeCartOrder(data: {
   if (!rateLimit(`placeCartOrder:${ip}`, 10, 60_000)) {
     return { error: "Prea multe incercari. Te rugam asteapta un minut si incearca din nou." };
   }
+  // Al doilea strat, DURABIL, pe ACEEASI cheie ca la comanda din formular: vezi
+  // `placeOrder`. Cele doua cai duc amandoua la aceleasi doua emailuri si acelasi
+  // SMS platit, deci n-au voie sa aiba doua bugete separate.
+  if (!(await consumaLimita(`comanda:ip:${ip}`, 40, 3600)).permis) {
+    return { error: "Prea multe comenzi trimise de pe aceasta conexiune. Te rugam incearca mai tarziu." };
+  }
   // An empty cart passes every check below (`some` on [] is false, subtotal 0),
   // so a direct call would insert a phantom order, send both emails and burn a
   // discount use. Only the UI guarded this; the action must guard it too.
@@ -1073,35 +3330,64 @@ export async function placeCartOrder(data: {
   // Use admin client — customers are anonymous
   const admin = createAdminClient();
 
+  // Numele clientului, taiat la 120 de caractere ca pe calea directa — acelasi
+  // sir ajunge in baza, in subiectul emailului si in SMS. Vezi `placeOrder`.
+  const numeClient = data.customer_name.trim().slice(0, 120);
+
   // Reload every product + store config; recompute all prices server-side.
   const productIds = [...new Set(data.items.map((i) => i.product_id))];
-  const [{ data: dbProducts }, { data: cfgRow }] = await Promise.all([
+  const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
-      .select("id, price, is_active, page_sections")
+      // `name` se cere ca linia sa poarte numele din CATALOG, nu sirul din browser.
+      .select("id, name, price, is_active, page_sections")
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones")
       .eq("business_id", data.business_id)
       .single(),
   ]);
 
+  // O interogare cazuta nu inseamna „produsul nu mai e disponibil": fara `error`
+  // citit, orice pana de o secunda ii spunea clientului sa reincarce cosul, iar
+  // reincarcarea nu repara nimic. Raspunsul corect e sa mai incerce.
+  if (eroareProduse) {
+    logError({ action: "placeCartOrder.productsUnavailable", message: eroareProduse.message, details: { businessId: data.business_id, productIds }, severity: "error" });
+    return { error: "Nu am putut verifica produsele din cos. Te rugam incearca din nou in cateva momente." };
+  }
+
+  // Fara setari nu se poate spune ce metode ofera magazinul, iar garda de mai jos
+  // ar refuza tocmai platile online — deci o pana de o secunda ar arata ca „metoda
+  // nu mai e disponibila", si reincarcarea n-ar repara nimic.
+  if (eroareCfg && cfgRow === null && eroareCfg.code !== "PGRST116") {
+    logError({ action: "placeCartOrder.configUnavailable", message: eroareCfg.message, details: { businessId: data.business_id }, severity: "error" });
+    return { error: "Nu am putut verifica setarile magazinului. Te rugam incearca din nou in cateva momente." };
+  }
+
+  // Aceeasi garda ca la comanda directa: metoda de plata se verifica fata de ce
+  // ofera magazinul, nu doar fata de tabelul de coduri. Vezi `verificaMetodaPlata`.
+  const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
+  if ("error" in metoda) {
+    logError({ action: "placeCartOrder.paymentMethodRejected", message: "Payment method not offered by the store", details: { businessId: data.business_id, cerut: String(data.payment_method ?? "").slice(0, 40) }, severity: "warning" });
+    return { error: metoda.error };
+  }
+  const metodaPlata = metoda.metoda;
+
   const activeProducts = (dbProducts ?? []).filter((p) => p.is_active);
   const priceMap = new Map(activeProducts.map((p) => [p.id, round2(Number(p.price))]));
-  // Per-product map of enabled variant title -> authoritative unit price. A cart
-  // line that names a variant is re-priced from this, never from the browser.
-  const comboMap = new Map(
-    activeProducts.map((p) => [p.id, enabledComboPriceMap(p.page_sections, round2(Number(p.price)))]),
-  );
   if (data.items.some((i) => !priceMap.has(i.product_id))) {
     logError({ action: "placeCartOrder.itemUnavailable", message: "Cart item missing/inactive for business", details: { businessId: data.business_id, productIds }, severity: "warning" });
     return { error: "Unul dintre produse nu mai este disponibil. Reincarca cosul." };
   }
-  // A named variant that no longer maps to an enabled combination (merchant
-  // disabled or renamed it) must not silently fall back to the base price.
-  if (data.items.some((i) => i.variant_title && !comboMap.get(i.product_id)?.has(i.variant_title))) {
-    logError({ action: "placeCartOrder.variantUnavailable", message: "Cart variant no longer enabled", details: { businessId: data.business_id, productIds }, severity: "warning" });
-    return { error: "O varianta din cos nu mai este disponibila. Reincarca cosul." };
+  // Varianta ceruta trebuie sa existe SI produsul cu variante trebuie sa aiba una
+  // aleasa. Verificarea sta acum in `pretulLiniei`, langa pret, ca sa nu mai poata
+  // exista o cale prin care linia trece de poarta si se pretuieste altfel.
+  const catalogLinii = new Map(activeProducts.map((p) => [p.id,
+    { name: String(p.name ?? ""), price: round2(Number(p.price)), page_sections: p.page_sections }]));
+  const eroareVar = eroareVarianta(catalogLinii, data.items);
+  if (eroareVar) {
+    logError({ action: "placeCartOrder.variantUnavailable", message: eroareVar, details: { businessId: data.business_id, productIds }, severity: "warning" });
+    return { error: eroareVar };
   }
   /*
    * Stocul DECLARAT pe combinatie.
@@ -1110,43 +3396,82 @@ export async function placeCartOrder(data: {
    * in total lasa sa se comande marimea S si cand marimea S avea zero, iar
    * comerciantul afla din comanda pe care n-o putea onora. Combinatiile fara
    * numar completat nu intra in harta, deci pentru ele nu se schimba nimic.
+   *
+   * Aceeasi regula, acelasi ajutor ca la comanda directa. Scrisa de doua ori, a
+   * si apucat-o pe drumuri diferite: calea cealalta n-a avut-o niciodata.
    */
-  const stocCombo = new Map(activeProducts.map((p) => [p.id, comboStockMap(p.page_sections)]));
-  const cerutPeCombo = new Map<string, number>();
-  for (const i of data.items) {
-    if (!i.variant_title) continue;
-    const cheie = `${i.product_id}::${i.variant_title}`;
-    cerutPeCombo.set(cheie, (cerutPeCombo.get(cheie) ?? 0) + Math.max(1, Math.floor(Number(i.quantity) || 1)));
+  /*
+   * Cantitatea se judeca AICI, o singura data, si de aici o iau toate cele trei
+   * locuri: verificarea de stoc, pretul si scaderea stocului pe marime.
+   * Endpointul e public, iar fara plafon orice defect de pret se inmulteste cu un
+   * numar ales de client; plafonata doar la pret, s-ar fi scazut din stoc un
+   * numar si s-ar fi incasat altul.
+   *
+   * Ce nu se incadreaza OPRESTE comanda. Filtrata, poarta se inchidea numai cand
+   * picau TOATE liniile: cu trei in cos si una stricata, comanda pleca cu doua,
+   * iar clientul n-avea de unde afla — pagina de confirmare randeaza ce a intrat,
+   * iar cosul e golit imediat dupa.
+   */
+  const cerute = data.items.map((i) => ({ linie: i, ceruta: cantitateCeruta(i.quantity) }));
+  const respinsa = cerute.find((c) => c.ceruta.fel !== "ok");
+  if (respinsa) {
+    const r = respinsa.ceruta as Exclude<typeof respinsa.ceruta, { fel: "ok" }>;
+    logError({ action: "placeCartOrder.cantitateRespinsa", message: r.fel, details: { businessId: data.business_id, productId: respinsa.linie.product_id, quantity: String(respinsa.linie.quantity).slice(0, 40) }, severity: "warning" });
+    // Aici numele autoritar nu e la indemana (interogarea nu cere coloana, si
+    // numele clientului ajunge oricum in `orders.items`), deci se taie doar.
+    return { error: mesajCantitate(r, String(respinsa.linie.name ?? "").slice(0, 60) || undefined) };
   }
-  for (const [cheie, cerut] of cerutPeCombo) {
-    const taiat = cheie.indexOf("::");
-    const productId = cheie.slice(0, taiat);
-    const titlu = cheie.slice(taiat + 2);
-    const disponibil = stocCombo.get(productId)?.get(titlu);
-    if (disponibil !== undefined && cerut > disponibil) {
-      return {
-        error: disponibil <= 0
-          ? `Varianta „${titlu}" nu mai este in stoc. Alege alta optiune.`
-          : `Din varianta „${titlu}" au mai ramas ${disponibil} bucati.`,
-      };
-    }
-  }
+  const liniiCerute = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
+  if (liniiCerute.length === 0) return { error: "Cosul este gol." };
 
-  let validatedItems = data.items.map((i) => {
-    const variantPrice = i.variant_title ? comboMap.get(i.product_id)!.get(i.variant_title) : undefined;
+  const eroareStoc = eroareStocPeVarianta(
+    new Map(activeProducts.map((p) => [p.id, comboStockMap(p.page_sections)])),
+    liniiCerute,
+  );
+  if (eroareStoc) return { error: eroareStoc };
+
+  // Configuratia de trepte a fiecarui produs. `page_sections` e deja incarcat mai
+  // sus pentru variante si stoc, deci treptele nu costa nicio interogare in plus.
+  const trepteMap = new Map(
+    activeProducts.map((p) => [p.id, (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers]),
+  );
+
+  let validatedItems = liniiCerute.map((i) => {
+    // Acelasi ajutor care a dat verdictul mai sus da si pretul: verificat si
+    // pretuit de doua functii diferite, cele doua ajungeau sa nu mai spuna
+    // acelasi lucru — chiar asta era defectul.
+    const rezolvata = pretulLiniei(catalogLinii.get(i.product_id)!, i.variant_title);
+    const unitPrice = rezolvata.fel === "ok" ? rezolvata.unitPrice : priceMap.get(i.product_id)!;
+    // Treptele de cantitate se aplica si pe calea cosului, cu ACELASI motor pe
+    // care il foloseste pagina de produs. Pana acum le onora doar comanda
+    // directa: pagina promitea „3 bucati 250 lei", iar clientul care punea 3 in
+    // cos platea 269,97.
+    //
+    // Pretul unitar ramane NEROTUNJIT (250 / 3 = 83,3333...), ca `pret x cantitate`
+    // sa dea exact totalul pachetului. Rotunjit la ban, linia ar iesi 249,99 si
+    // clientul ar plati alt total decat cel din cos. E acelasi lucru pe care il
+    // trimite deja calea comenzii directe.
+    const linie = pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
     return {
       product_id: i.product_id,
-      name: i.variant_title ? `${i.name} (${i.variant_title})` : i.name,
-      price: variantPrice != null ? round2(variantPrice) : priceMap.get(i.product_id)!,
+      // Numele din CATALOG, nu cel din browser: pana acum `orders.items[].name`
+      // era un sir liber de la client, purtat mai departe pe factura si in
+      // emailuri. Calea comenzii directe folosea de mult numele autoritar.
+      name: rezolvata.fel === "ok" ? rezolvata.nume : String(i.name ?? "").slice(0, 200),
+      price: linie.unitPrice,
       quantity: i.quantity,
     };
   });
-  // Order bumps: re-price accepted bump lines at the offer's authoritative discounted
-  // price (server-side; the client can't forge it). No-op without accepted_offer_ids.
-  if (data.accepted_offer_ids?.length) {
-    const bumped = await applyBumpPricing(admin, data.business_id, data.accepted_offer_ids, validatedItems);
-    validatedItems = bumped.items;
-  }
+  // Aceeasi re-evaluare ca la comanda directa, fara ancora: „cumparate frecvent
+  // impreuna" se vinde numai din pagina produsului, deci un id de FBT revendicat
+  // aici n-a fost niciodata aratat.
+  const oferte = await applyOfferPricing(admin, data.business_id, data.accepted_offer_ids, validatedItems, {
+    anchor: null,
+    cuVariantaAleasa: new Set(liniiCerute.filter((i) => i.variant_title).map((i) => i.product_id)),
+  });
+  await jurnalizeazaOfertele(admin, data.business_id, oferte);
+  if (oferte.error) return { error: oferte.error };
+  validatedItems = oferte.items;
   const subtotal = round2(validatedItems.reduce((s, i) => s + i.price * i.quantity, 0));
 
   // Enforce the merchant's minimum order value (Setari > Livrare) against the authoritative subtotal.
@@ -1156,6 +3481,9 @@ export async function placeCartOrder(data: {
   }
 
   const validatedExtras = validateExtras(cfgRow?.page_content, data.extras);
+  const billingResolution = await resolveBillingCompany(cfgRow?.page_content, data.billing_company);
+  if ("error" in billingResolution) return { error: billingResolution.error };
+  const billingCompany = billingResolution.company;
   const extrasTotal = validatedExtras.reduce((s, e) => s + e.price, 0);
 
   // Re-validate discount server-side (guard even though cart has no discount UI today).
@@ -1164,56 +3492,213 @@ export async function placeCartOrder(data: {
   let isFreeShipping = false;
   if (data.discount_code) {
     const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
-    if (dres.valid) {
+    /*
+     * Cuponul respins OPRESTE comanda, nu se scoate in tacere.
+     *
+     * Fara ramura asta, un cupon devenit invalid intre completarea formularului
+     * si trimitere (si-a atins limita, a expirat, l-a stins comerciantul, sau
+     * marfa repretuita a cazut sub pragul lui) lasa `discountAmount` pe zero si
+     * comanda intra cu totalul INTREG. Ecranul scria 350, curierul incasa 500.
+     * Aceeasi situatie prinsa mai jos, la revendicare, intoarce deja eroare.
+     */
+    if (!dres.valid) return { error: dres.error };
       discountAmount = Math.min(dres.discount.discountAmount, subtotal);
       validDiscountId = dres.discount.id;
       isFreeShipping = dres.discount.type === "free_shipping";
-    }
   }
 
   // Recompute VAT from store config (mirrors MiniStoreRenderer) so it cannot be forged.
   const vatEnabled = cfgRow?.vat_enabled ?? false;
   const vatRate = Number(cfgRow?.vat_rate ?? 19);
   const pricesIncludeVat = cfgRow?.prices_include_vat ?? true;
-  // Shared helper — identical formula on placeOrder + both storefront modals.
-  const { vatAmount, vatAddOn } = computeVat(subtotal + extrasTotal, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
 
   // Card-payment discount: only for online card methods, on the goods value
   // (subtotal + extras, after promo), never on shipping/VAT. Baked into total.
+
   const cardDiscount = computeCardDiscount(
     parseCardDiscountConfig(cfgRow?.card_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
   );
   // Ramburs (cash-on-delivery) discount — mutually exclusive with the card discount.
   const codDiscount = computeCodDiscount(
     parseCardDiscountConfig(cfgRow?.cod_discount_config),
-    data.payment_method,
+    metodaPlata,
     subtotal + extrasTotal - discountAmount,
   );
 
-  const freeThreshold = cfgRow?.free_shipping_threshold != null ? Number(cfgRow.free_shipping_threshold) : null;
-  let shipping = Math.max(0, round2(data.shipping_cost));
-  if (isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold)) shipping = 0;
+  // Taxa de ramburs — acelasi declansator ca reducerea de mai sus, semn invers.
+  // Se calculeaza AICI, inaintea TVA-ului, fiindca intra in baza lui: e o suma
+  // purtatoare de TVA, ca extraoptiunile, nu ca transportul.
+  const vatCfgTaxa = {
+    vat_enabled: cfgRow?.vat_enabled ?? false,
+    vat_rate: Number(cfgRow?.vat_rate ?? 19),
+    prices_include_vat: cfgRow?.prices_include_vat ?? true,
+  };
+  const codFee = computeCodFee(
+    parseCodFeeConfig(cfgRow?.cod_fee_config),
+    metodaPlata,
+    subtotal + extrasTotal - discountAmount,
+    vatCfgTaxa,
+  );
 
-  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + shipping + vatAddOn));
+  // Aceeasi regula ca pe toata partea vizitatorului: `0` inseamna „fara prag",
+  // nu „gratuit mereu". Vezi `prag-transport-gratuit.ts` — serverul era singurul
+  // care citea altfel, si de acolo iesea totalul afisat diferit de cel incasat.
+  const freeThreshold = pragTransportGratuit(cfgRow?.free_shipping_threshold);
+  // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
+  // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
+  const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
+  const shipping = autoritativeShipping(
+    data.business_id,
+    data.shipping_cost,
+    data.shipping_token,
+    { county: data.customer_county, city: data.customer_city, country: data.customer_country, postCode: data.customer_postal_code },
+    cfgRow?.default_shipping_cost != null ? Number(cfgRow.default_shipping_cost) : null,
+    {
+      courier: data.selected_courier,
+      deliveryType: data.delivery_type,
+      courierLabel: data.courier_label,
+      // Ca la comanda directa: regimul iese din metoda validata, nu din `cod`.
+      ramburs: isCodPaymentMethod(metodaPlata),
+    },
+    (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
+    esteGratuit,
+  );
+
+  // Aceeasi baza ca la comanda directa si ca in magazin: marfa, extraoptiunile si
+  // TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs. Vezi `vatBase`.
+  // Blocul asta statea mai sus, INAINTE ca transportul sa fie calculat; de cand
+  // transportul intra in baza, ordinea corecta e taxa de ramburs, transport, TVA.
+  const { vatAmount, vatAddOn } = computeVat(
+    vatBase({ goods: subtotal, extras: extrasTotal, shipping, discount: discountAmount, cardDiscount, codDiscount, codFee }),
+    { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat },
+  );
+
+  const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
+
+  /*
+   * Cat de mult a subdeclarat clientul rambursul la cotare — masurat, nu blocat.
+   *
+   * Semnatura leaga STEAGUL de ramburs, nu suma: suma nu se poate reconstrui,
+   * fiindca e chiar totalul care contine transportul pe care tocmai il verificam.
+   * La FAN Courier atat ajunge (pretul lui comuta pe un boolean), dar la ceilalti
+   * cinci curieri comisionul iese din SUMA — deci cine cere cotatia cu `cod: 0.01`
+   * si comanda apoi 5000 de lei pastreaza steagul, iar diferenta de comision o
+   * plateste comerciantul.
+   *
+   * NU se refuza si NU se cade pe tariful implicit: asta ar repretui tacit o
+   * comanda buna ori de cate ori clientul isi schimba cosul intre cotatie si
+   * trimitere — adica exact defectul „ecranul spune una, se incaseaza alta" pe
+   * care il vaneaza tot auditul. Se scrie in jurnal, ca sa se poata masura cat
+   * costa cu adevarat inainte de a alege o garda mai dura.
+   */
+  /*
+   * Se compara MARFA cu MARFA, nu marfa cu totalul.
+   *
+   * Amandoua formularele cer cotatia cu suma marfii, nu cu totalul: `OrderModal`
+   * trimite subtotalul, iar checkout-ul totalul cosului, care nu contine
+   * transportul. Comparat cu totalul final, pragul s-ar fi aprins pe aproape orice
+   * comanda cu transport platit — 49 din 51 de comenzi ramburs din ultimele 30 de
+   * zile — si jurnalul ar fi masurat propria noastra nepotrivire de unitati in loc
+   * de subdeclarare.
+   */
+  const marfaIncasata = round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount);
+  if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
+      && marfaIncasata - round2(Number(data.cod_declarat)) > 1) {
+    logError({
+      action: "placeCartOrder.rambursSubdeclarat",
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, total: round2(total) },
+      severity: "warning",
+    });
+  }
+
 
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).
   const stockExp = await expandBundleStock(admin, data.business_id, validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })));
-  if ("error" in stockExp) return { error: stockExp.error };
+  if ("error" in stockExp) {
+    logError({ action: "placeCartOrder.bundleStock", message: stockExp.motiv, details: { businessId: data.business_id, componenta: stockExp.componenta }, severity: "warning" });
+    return { error: stockExp.error };
+  }
 
-  const order_number = await buildOrderNumber(admin, data.business_id);
+  /*
+   * Prins aici, nu lasat sa iasa: o actiune de server care arunca ii da clientului
+   * un ecran de eroare opac („An error occurred in the Server Components render"),
+   * in loc de un mesaj din care sa inteleaga ca poate reincerca.
+   *
+   * Se cheama INAINTE de revendicarea stocului, deci o picare aici nu lasa marfa
+   * rezervata pentru o comanda care n-a intrat.
+   */
+  let order_number: string;
+  try {
+    order_number = await buildOrderNumber(admin, data.business_id);
+  } catch {
+    return { error: "Nu am putut genera numarul comenzii. Reincearca peste cateva momente." };
+  }
 
   const allItems = [
     ...validatedItems,
     ...validatedExtras.map((e) => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
 
+  /*
+   * Utilizarea cuponului se revendica ATOMIC, chiar inainte de inserare.
+   *
+   * Pana acum limita se verifica la validare si contorul crestea dupa ce comanda
+   * era deja creata: doua comenzi simultane treceau amandoua de verificare si
+   * depaseau limita. `claim_discount_use` face verificarea si incrementul in
+   * aceeasi instructiune, deci a doua cerere nu mai gaseste randul.
+   *
+   * Revendicam aici, nu mai devreme: intre validarea cuponului si punctul asta
+   * mai exista pasi care pot iesi cu eroare, iar o utilizare arsa degeaba ar
+   * scadea din numarul pe care comerciantul l-a pus la vanzare.
+   */
+  if (validDiscountId) {
+    /*
+     * `error` VERIFICAT, si verdictul cerut EXPLICIT `true`.
+     *
+     * Era `const { data } = ...` cu `if (data === false)`. La o eroare de RPC,
+     * `data` e `null`, iar `null === false` e FALS — deci checkout-ul mergea mai
+     * departe, clientul primea reducerea, si utilizarea NU se revendica. Pe un
+     * cupon cu `max_uses = 100`, o serie de erori il duce peste limita fara ca
+     * nimic sa se vada.
+     *
+     * Acum orice altceva decat `true` opreste comanda. O reducere neacordata
+     * pentru cateva secunde e o suparare; o campanie de 100 care serveste 130 e o
+     * paguba, si una pe care o afli abia la socoteala.
+     */
+    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use", { p_discount_id: validDiscountId });
+    if (eCupon) {
+      await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
+      return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
+    }
+    if (revendicat !== true) {
+      return { error: "Codul a atins limita maxima de utilizari. Reincarca pagina si incearca fara el." };
+    }
+  }
+
+  // Ca la comanda din formular: stocul se revendica atomic inainte de inserare,
+  // fiindca `expandBundleStock` doar citeste. Vezi `revendicaStocul`.
+  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCerute);
+  /*
+   * `!== "revendicat"`, nu doar `=== "refuzat"`.
+   *
+   * „Refuzat" inseamna „nu mai e marfa" — un raspuns adevarat. „Esuat" inseamna
+   * „n-am putut afla", si e nou: pana acum se numea `nerevendicat` si LASA comanda
+   * sa treaca mai departe, pe algoritmul vechi. Amandoua opresc acum comanda si
+   * dau cuponul inapoi; doar textul difera.
+   */
+  if (stoc.fel !== "revendicat") {
+    await elibereazaCuponul(admin, validDiscountId);
+    return { error: stoc.error };
+  }
+
   const { data: order, error } = await admin.from("orders").insert({
     business_id: data.business_id,
     order_number,
-    customer_name: data.customer_name.trim(),
+    customer_name: numeClient,
     customer_phone: data.customer_phone.trim(),
     customer_email: data.customer_email?.trim() || null,
     shipping_address: {
@@ -1224,6 +3709,26 @@ export async function placeCartOrder(data: {
         country: data.customer_country,
         postal_code: data.customer_postal_code?.trim() || "",
       }),
+      /*
+       * ⚠ Codul postal al CLIENTULUI si pe comenzile romanesti, cand chiar il avem.
+       *
+       * Ramura de mai sus il scrie DOAR pentru livrarea internationala, fiindca
+       * doar acolo il cere formularul. Rezultatul: pe intern `postal_code` nici
+       * nu exista in `shipping_address`, iar GLS — care il cere obligatoriu
+       * (`Address.ZipCode`, REQUIRED) — primea sirul gol la fiecare colet.
+       *
+       * ⚠ Codul PUNCTULUI de ridicare NU intra aici. E codul altei adrese, iar
+       * `postal_code` e citit de formularele de AWB ale TUTUROR celorlalti
+       * curieri (Cargus, Sameday, FAN, eColet…) ca fiind al destinatarului: pus
+       * aici, ar pleca un cod postal dintr-un oras alaturi de localitatea
+       * clientului. Sta langa celelalte campuri de punct, mai jos.
+       */
+      ...(!data.customer_country || data.customer_country === "RO"
+        ? (() => {
+            const cod = (data.customer_postal_code ?? "").trim();
+            return cod ? { postal_code: cod } : {};
+          })()
+        : {}),
       ...(data.selected_courier && {
         courier: data.selected_courier,
         courier_label: data.courier_label,
@@ -1233,6 +3738,10 @@ export async function placeCartOrder(data: {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
         locker_address: data.locker_address,
+        /* Codul postal AL PUNCTULUI. GLS il cere pe adresa de livrare, care la
+           livrarea in punct e chiar a punctului. Nu se amesteca cu `postal_code`,
+           care descrie destinatarul si e citit de toti ceilalti curieri. */
+        locker_post_code: data.locker_post_code,
         locker_city: data.locker_city,
         locker_county: data.locker_county,
       }),
@@ -1245,41 +3754,134 @@ export async function placeCartOrder(data: {
         colete_service_id: data.colete_service_id,
         colete_service_name: data.colete_service_name,
       }),
+      /* ⚠ eColet: cheia e un SLUG, deci conditia e pe sir gol, nu pe zero. */
+      ...(data.ecolet_service_slug && {
+        ecolet_service_slug: data.ecolet_service_slug,
+        ecolet_courier_name: data.ecolet_courier_name,
+        ecolet_service_name: data.ecolet_service_name,
+      }),
+      /* ⚠ Innoship: conditia e pe CURIER, care e un intreg pozitiv. Pe
+         `innoship_option_id` n-ar merge — el poate lipsi legitim (nu toate
+         ofertele au varianta), iar atunci s-ar pierde si curierul, si serviciul. */
+      ...(data.innoship_courier_id && {
+        innoship_courier_id: data.innoship_courier_id,
+        innoship_service_id: data.innoship_service_id,
+        innoship_option_id: data.innoship_option_id,
+        innoship_courier_name: data.innoship_courier_name,
+        innoship_service_name: data.innoship_service_name,
+      }),
+      /*
+       * ⚠ SmartShip: conditia e pe CURIER, ca la Innoship. Pe
+       * `smartship_own_contract` n-ar merge — el e `false` pentru ofertele de pe
+       * contractul SmartShip, adica pentru MAJORITATEA comenzilor, si atunci
+       * intreg blocul ar fi sarit. Iar pe `smartship_locker_net` n-ar merge nici
+       * atat: el lipseste la livrarea la adresa.
+       *
+       * ⚠ Si `own_contract` se scrie EXPLICIT cu `=== true`: pastrat ca
+       * `undefined`, emiterea l-ar citi drept „nu stiu" si ar putea pleca pe
+       * celalalt contract, la alt pret decat cel platit de client.
+       */
+      ...(data.smartship_courier_id && {
+        smartship_courier_id: data.smartship_courier_id,
+        smartship_courier_name: data.smartship_courier_name,
+        smartship_own_contract: data.smartship_own_contract === true,
+        ...(data.smartship_locker_net ? { smartship_locker_net: data.smartship_locker_net } : {}),
+      }),
+      ...(data.shipo_rate_id && {
+        shipo_rate_id: data.shipo_rate_id,
+        shipo_courier_slug: data.shipo_courier_slug,
+        shipo_courier_name: data.shipo_courier_name,
+      }),
+      ...(data.fedex_service_type && {
+        fedex_service_type: data.fedex_service_type,
+        fedex_service_name: data.fedex_service_name,
+      }),
+      ...(data.ups_service_code && {
+        ups_service_code: data.ups_service_code,
+        ups_service_name: data.ups_service_name,
+      }),
+      /* ⚠ Conditia e pe `dhl_product_code`, produsul GLOBAL: el vine la fiecare
+         oferta DHL, si intern si extern. Pe `dhl_local_product_code` n-ar merge —
+         el lipseste la expedierile internationale, si atunci blocul intreg ar fi
+         sarit exact pe comenzile in afara tarii. */
+      ...(data.dhl_product_code && {
+        dhl_product_code: data.dhl_product_code,
+        dhl_product_name: data.dhl_product_name,
+        ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
+      }),
     },
     items: allItems,
     subtotal,
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
     discount_amount: discountAmount,
+    // Reducerea data de oferte sta DEJA in pretul liniilor; coloana o inregistreaza
+    // ca sa existe o pista de audit. Fara ea, o reducere de oferta nu se poate
+    // deosebi in `items` de o schimbare ulterioara a pretului de catalog, si nici
+    // nu se putea dovedi ca nu s-a abuzat de vreo oferta.
+    offer_discount_amount: oferte.savings,
     card_discount_amount: cardDiscount,
     cod_discount_amount: codDiscount,
+    cod_fee_amount: codFee,
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
-    payment_method: data.payment_method ?? "cash_on_delivery",
+    payment_method: metodaPlata,
     payment_status: "unpaid",
     status: "pending",
     order_source: buildOrderSource(data.source, userAgent) as never,
+    billing_company: (billingCompany ?? null) as never,
+    /* Vezi `placeOrder`: id-ul cuponului revendicat, ca utilizarea sa se poata da
+     * inapoi cand comanda nu se mai face. `as never` din acelasi motiv. */
+    discount_id: (validDiscountId ?? null) as never,
+    /*
+     * CU `variante` — si aici a stat o gaura, din chiar ziua reparatiei.
+     *
+     * Comentariul de dinainte spunea „fara variante: calea asta scade doar stocul
+     * de PRODUS (nu cheama `scadeStoculVariantelor`)". Nu era adevarat: linia
+     * exista cateva randuri mai jos si scadea marimile. Deci coada consuma XL, iar
+     * `stoc_rezervat` nu-l pomenea — si la anulare `elibereaza_stoc_comanda` punea
+     * inapoi produsul si NICIODATA marimea.
+     *
+     * Calea directa avea argumentul de la inceput; pe cea a cosului l-am uitat si
+     * mi-am justificat omisiunea intr-un comentariu care era deja fals cand l-am
+     * scris. Un comentariu gresit e mai rau decat lipsa lui: opreste pe urmatorul
+     * din a se mai uita.
+     */
+    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCerute) as never,
   }).select("id, order_number, total").single();
 
   if (error) {
-    logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
+    // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
+    // rezervat. Vezi `placeOrder`.
+    await elibereazaCuponul(admin, validDiscountId);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
+    await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 
-  if (validDiscountId) {
-    await admin.rpc("increment_discount_uses", { p_discount_id: validDiscountId });
+  // Acelasi motiv ca pe calea directa: contorul se misca abia dupa ce comanda a
+  // intrat cu adevarat.
+  if (oferte.applied.length > 0) {
+    try {
+      after(() => scrieStatisticiOferte(admin, oferte.applied.map((id) => ({
+        offerId: id, conversions: 1, revenue: oferte.venitPeOferta[id] ?? 0,
+      }))));
+    } catch { /* fara context de cerere (scripturi, teste) */ }
   }
 
-  // Atomic batch stock decrement — bundle components expanded; non-bundles as-is.
-  await admin.rpc("decrement_stock_batch" as never, { p_items: stockExp.decrements } as never);
+  // Stocul — de produs si de marime — e deja scazut inainte de insert.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  void enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
-  void enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
-  void enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
-  void enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
+  // Acelasi prag moale pe magazin ca la comanda din formular: peste el comanda se
+  // salveaza, dar emailurile si SMS-ul nu mai pleaca. Vezi `pesteRafalaMagazinului`.
+  const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeCartOrder");
 
   // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
   // by transaction_id; captures the conversion even when the browser tag is blocked.
@@ -1317,18 +3919,53 @@ export async function placeCartOrder(data: {
 
       const emailPayload = {
         order_number: order.order_number,
-        customer_name: data.customer_name,
+        customer_name: numeClient,
         customer_phone: data.customer_phone,
         customer_email: data.customer_email,
         total,
         subtotal,
-        items: allItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
-        shipping_cost: data.shipping_cost,
-        discount_code: data.discount_code,
-        discount_amount: (data.discount_amount ?? 0) > 0 ? (data.discount_amount ?? 0) : undefined,
-        card_discount_amount: cardDiscount > 0 ? cardDiscount : undefined,
-        cod_discount_amount: codDiscount > 0 ? codDiscount : undefined,
-        payment_method: data.payment_method ?? "cash_on_delivery",
+        // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
+        // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
+        // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
+        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
+        shipping_cost: shipping,
+        /*
+         * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`
+         * mai sus, aceleasi doua expresii.
+         *
+         * Pana acum plecau `data.discount_amount` si `data.discount_code`, adica
+         * numerele din cererea browserului, desi vecinele lor (`total`,
+         * `cardDiscount`, `codFee`) erau recalculate de server. Baza si emailul
+         * puteau deci sa se contrazica pe aceeasi comanda.
+         *
+         * Expunere MASURATA 2026-08-04: zero comenzi din 96 au `discount_amount`
+         * peste zero, iar singurul cupon folosit vreodata (tonel-beauty #0003,
+         * „PRIMA") e de tip `free_shipping`, adica are `discount_amount` 0 prin
+         * constructie — deci si clientul si serverul duceau acelasi 0, si emailul
+         * nu tiparea niciun rand. Nu s-a contrazis nimic pana acum.
+         *
+         * Varianta ostila era mai rea: `placeOrder` e export „use server" cu
+         * adresa de destinatie aleasa de apelant, deci un `discount_amount:
+         * 100000` fabricat tiparea „Reducere -100.000,00 lei" intr-un email
+         * purtand numele unui magazin real.
+         *
+         * `data.discount_amount` si `data.discount_id` nu mai sunt citite acum
+         * NICAIERI; raman in semnatura doar fiindca `OrderModal.tsx` si
+         * `checkout-core.ts` inca le trimit.
+         */
+        discount_code: validDiscountId ? data.discount_code : undefined,
+        discount_amount: discountAmount,
+        card_discount_amount: cardDiscount,
+        cod_discount_amount: codDiscount,
+        cod_fee_amount: codFee,
+        // TVA-ul si REGIMUL de preturi: emailul trebuie sa stie nu doar cifra, ci
+        // si daca ea se aduna in coloana. La preturi cu TVA inclus e portiunea
+        // extrasa din incasare — adunata, ducea coloana peste Total.
+        vat_amount: vatAmount,
+        vat_rate: vatEnabled ? vatRate : 0,
+        vat_enabled: vatEnabled,
+        prices_include_vat: pricesIncludeVat,
+        payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order_id: order.id,
@@ -1339,29 +3976,34 @@ export async function placeCartOrder(data: {
         delivery_type: data.delivery_type,
         locker_name: data.locker_name,
         custom_fields: data.custom_fields,
+        billing_company: billingCompany,
       };
+      // `!pesteRafala` pe amandoua: sub rafala comanda ramane scrisa, doar
+      // instiintarile tac. Alternativa — sa refuzam comanda — ar fi facut din
+      // rafala o negare de serviciu asupra vanzarilor comerciantului.
       const emailSender = await getStoreEmailSender(admin, data.business_id);
       await Promise.all([
-        config.new_order !== false && notifyEmail
+        !pesteRafala && config.new_order !== false && notifyEmail
           ? sendNewOrderEmail(notifyEmail, emailPayload, emailSender)
           : null,
-        data.customer_email
+        !pesteRafala && data.customer_email
           ? sendOrderConfirmationToCustomer(data.customer_email, emailPayload, emailSender)
           : null,
       ].filter(Boolean));
 
       // notice.ro — new-order SMS (Procesare comanda / pending), opt-in per store. Fire-and-forget.
-      void maybeSendNoticeNotification({
+      // Se opreste primul sub rafala: se plateste din creditul comerciantului.
+      if (!pesteRafala) void maybeSendNoticeNotification({
         businessId: data.business_id,
         orderId: order.id,
         triggerKey: "pending",
         phone: data.customer_phone,
         vars: {
-          order: order.order_number, name: data.customer_name, total: formatPrice(total),
+          order: order.order_number, name: numeClient, total: formatPrice(total),
           awb: "", store: businessName,
           phone: data.customer_phone, email: data.customer_email ?? "",
           address: data.customer_address, city: data.customer_city, region: data.customer_county,
-          payment_method: data.payment_method ?? "cash_on_delivery",
+          payment_method: metodaPlata,
           shipping_method: data.courier_label ?? "",
           store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
           date_added: formatDate(new Date()),
@@ -1374,7 +4016,7 @@ export async function placeCartOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
         });
@@ -1386,7 +4028,7 @@ export async function placeCartOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -1399,7 +4041,7 @@ export async function placeCartOrder(data: {
           businessId: data.business_id,
           source: "checkout",
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
@@ -1414,7 +4056,7 @@ export async function placeCartOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           currency: "RON",
           total,
           financial_status: "pending",
@@ -1446,7 +4088,7 @@ export async function placeCartOrder(data: {
         order: {
           id: order.id,
           email: data.customer_email,
-          name: data.customer_name,
+          name: numeClient,
           total,
           items: allItems
             .filter((i) => !i.product_id.startsWith("extra_"))

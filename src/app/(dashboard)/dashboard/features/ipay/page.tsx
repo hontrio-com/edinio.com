@@ -1,4 +1,5 @@
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
+import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { redirect } from "next/navigation";
 import IPayConfigClient from "@/components/dashboard/IPayConfigClient";
 import type { IPayConfig } from "@/lib/ipay";
@@ -10,7 +11,7 @@ export default async function IPayPage() {
   const { business, settings } = await getCachedBusinessWithSettings(user.id);
   if (!business) redirect("/dashboard");
 
-  const ipayConfig = (settings?.ipay_config as IPayConfig | null) ?? null;
+  const ipayConfig = (mascheazaConfig("ipay_config", settings?.ipay_config) as IPayConfig | null) ?? null;
 
   return <IPayConfigClient businessId={business.id} initialConfig={ipayConfig} />;
 }

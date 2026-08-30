@@ -111,6 +111,7 @@ async function klarnaCall<T = Record<string, unknown>>(
 /** The subset of an `orders` row (+ store VAT flags) needed to build the Klarna order. */
 export type KlarnaOrderInput = {
   id: string;
+  business_id: string;
   order_number: string;
   total: number;
   shipping_cost: number;
@@ -192,11 +193,15 @@ export function buildOrderLines(order: KlarnaOrderInput): KlarnaLine[] {
     });
   }
 
-  // Promo + offer + card-payment discounts are already subtracted from
-  // `orders.total`, so mirror them as a single negative line.
+  // Promo + card-payment discounts are already subtracted from `orders.total`,
+  // so mirror them as a single negative line.
+  //
+  // `offer_discount_amount` NU intra aici: reducerea de oferta sta in pretul
+  // liniei, deci e deja scazuta din liniile de mai sus. Adunata si aici, s-ar
+  // scadea de doua ori, iar suma liniilor n-ar mai da totalul comenzii. Coloana
+  // exista doar ca pista de audit.
   const discount = toMinor(
     (Number(order.discount_amount) || 0) +
-    (Number(order.offer_discount_amount) || 0) +
     (Number(order.card_discount_amount) || 0),
   );
   if (discount > 0) {
@@ -407,6 +412,7 @@ export function refundOrder(c: KlarnaConfig, klarnaOrderId: string, refundedAmou
 export function toKlarnaOrderInput(order: Record<string, unknown>, pricesIncludeVat: boolean): KlarnaOrderInput {
   return {
     id: String(order.id ?? ""),
+    business_id: String(order.business_id ?? ""),
     order_number: String(order.order_number ?? ""),
     total: Number(order.total) || 0,
     shipping_cost: Number(order.shipping_cost) || 0,

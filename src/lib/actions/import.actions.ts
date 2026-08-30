@@ -7,7 +7,9 @@ import { uploadToR2, deleteFromR2, r2KeyFromUrl } from "@/lib/r2";
 import { getProductLimit } from "@/lib/plan-limits";
 import { logError } from "@/lib/error-logger";
 import { parseCsv } from "@/lib/import/csv";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { parseTabular, recordsToCsv } from "@/lib/import/tabular";
+import { hasAcceptedExtension } from "@/lib/import/tabular-formats";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { detectFormat, autoMapColumns } from "@/lib/import/presets";
 import { toStagedProducts } from "@/lib/import/adapters";
 import { stageProducts, validateStaged, processImport } from "@/lib/import/committer";
@@ -62,24 +64,26 @@ export async function createImportJob(
   if (file.size === 0) return { error: "Fisierul este gol" };
   if (file.size > MAX_FILE_BYTES) return { error: "Fisierul este prea mare (maximum 8MB)" };
 
-  const nameOk = file.name.toLowerCase().endsWith(".csv");
-  if (!nameOk) return { error: "Momentan acceptam doar fisiere CSV" };
+  if (!hasAcceptedExtension(file.name)) {
+    return { error: "Acceptam fisiere CSV, XLSX sau XLSM" };
+  }
 
-  let text: string;
+  let buffer: Buffer;
   try {
-    text = await file.text();
+    buffer = Buffer.from(await file.arrayBuffer());
   } catch {
     return { error: "Nu am putut citi fisierul" };
   }
 
-  let parsed: ReturnType<typeof parseCsv>;
-  try {
-    parsed = parseCsv(text);
-  } catch {
-    return { error: "Nu am putut citi fisierul CSV. Verifica formatul." };
-  }
-  if (parsed.headers.length === 0) return { error: "Fisierul nu are un antet valid" };
-  if (parsed.rows.length === 0) return { error: "Fisierul nu contine produse" };
+  /*
+   * Fisierul se aduce la CSV AICI si asa se pastreaza in R2. Pasii de mai departe
+   * (previzualizare, pornire, cronul de recuperare) il recitesc de acolo si nu
+   * trebuie sa stie nimic despre XLSX. Un singur punct de conversie.
+   */
+  const read = await parseTabular(buffer, file.name);
+  if ("error" in read) return { error: read.error };
+  const parsed = read.parsed;
+  const text = read.format === "csv" ? buffer.toString("utf-8") : recordsToCsv(parsed);
 
   const source = detectFormat(parsed.headers);
   const mapping: ColumnMapping = source === "generic_csv" ? autoMapColumns(parsed.headers) : {};
@@ -163,6 +167,9 @@ export async function previewMapping(
   let products: StagedProduct[];
   try {
     const parsed = parseCsv(await fetchRawCsv(job.file_url));
+    /* Ghilimea rupta se opreste aici: `rows` e gol, deci fara verificare importul
+       ar merge mai departe pe zero produse si ar parea ca fisierul era gol. */
+    if (parsed.parseError) return { error: parsed.parseError };
     products = toStagedProducts(job.source as ImportSource, parsed, mapping, options);
   } catch {
     return { error: "Nu am putut reinterpreta fisierul" };
@@ -171,7 +178,7 @@ export async function previewMapping(
   const [cats, { count }, { data: profile }] = await Promise.all([
     // Windowed past the 1000-row PostgREST cap so "categorii noi" counts stay
     // correct for stores with big imported taxonomies.
-    fetchAllRows("import.validate.categories", (from, to) =>
+    fetchAllRowsStrict("import.validate.categories", (from, to) =>
       supabase.from("categories").select("id, name").eq("business_id", businessId).order("id").range(from, to)
     ),
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId),
@@ -213,6 +220,9 @@ export async function startImport(
   let products: StagedProduct[];
   try {
     const parsed = parseCsv(await fetchRawCsv(job.file_url));
+    /* Ghilimea rupta se opreste aici: `rows` e gol, deci fara verificare importul
+       ar merge mai departe pe zero produse si ar parea ca fisierul era gol. */
+    if (parsed.parseError) return { error: parsed.parseError };
     products = toStagedProducts(job.source as ImportSource, parsed, mapping, options);
   } catch (e) {
     logError({ action: "startImport.adapt", message: e instanceof Error ? e.message : "adapt failed", businessId, userId: user.id });

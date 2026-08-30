@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { getOrder, toMinor, type RevolutConfig } from "@/lib/revolut";
 
 export type RevolutFinalizeResult =
@@ -19,7 +21,7 @@ export type RevolutFinalizeResult =
 export async function finalizeRevolutOrder(
   admin: SupabaseClient,
   cfg: RevolutConfig,
-  order: { id: string; total: number },
+  order: { id: string; businessId: string; total: number },
   revolutOrderId: string,
 ): Promise<RevolutFinalizeResult> {
   const rev = await getOrder(cfg, revolutOrderId);
@@ -46,19 +48,19 @@ export async function finalizeRevolutOrder(
     return { status: "failed", error: "Suma platii nu corespunde comenzii. Te rugam contacteaza magazinul." };
   }
 
-  const { error } = await admin.from("orders")
-    .update({
-      payment_status: "paid",
-      status: "confirmed",
-      revolut_order_id: revolutOrderId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", order.id)
-    .neq("payment_status", "paid");
-
-  if (!error) {
-    void maybeMarkMailchimpOrderPaid(order.id);
-    void maybeMarkBrevoOrderPaid(order.id);
-  }
+  /*
+   * Un singur loc pentru „comanda e platita" (vezi `finalizare-plata.ts`).
+   *
+   * Aici se scria `status: "confirmed"` NECONDITIONAT — deci o re-livrare de
+   * webhook peste o comanda deja `shipped` o dadea inapoi la `confirmed`. Si se
+   * raspundea `paid` chiar cand `update`-ul pica: procesatorul spunea „incasat",
+   * clientul vedea „platit", iar in baza scria „neplatit".
+   */
+  const r = await finalizeazaPlataComenzii(
+    admin,
+    { id: order.id, businessId: order.businessId },
+    { revolut_order_id: revolutOrderId },
+  );
+  if (r.fel === "esuat") return { status: "failed", error: r.error };
   return { status: "paid" };
 }

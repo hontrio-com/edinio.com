@@ -10,11 +10,13 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Package, Truck, Loader2, CheckCircle2 } from "lucide-react";
+import { Package, Truck, Loader2, CheckCircle2, Ban } from "lucide-react";
 import {
   getTrendyolOrderFulfillment, markTrendyolPicking, markTrendyolInvoiced, sendTrendyolTracking,
+  anuleazaComandaTrendyol,
 } from "@/lib/actions/trendyol.actions";
 import type { TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
+import { MOTIVE_ANULARE_TRENDYOL } from "@/lib/trendyol/types";
 
 const CARD = "rounded-2xl border border-border bg-card";
 const SHIPPED = ["shipped", "delivered", "atcollectionpoint"];
@@ -36,6 +38,8 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
   const [pending, startTransition] = useTransition();
   const [awb, setAwb] = useState("");
   const [curier, setCurier] = useState("");
+  const [motivAnulare, setMotivAnulare] = useState("");
+  const [aratatAnularea, setAratatAnularea] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -56,11 +60,17 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
     router.refresh();
   }
 
-  function advance(fn: () => Promise<{ success: true; status: string } | { error: string }>, okMsg: string) {
+  function advance(
+    fn: () => Promise<{ success: true; status: string; avertisment?: string } | { error: string }>,
+    okMsg: string,
+  ) {
     startTransition(async () => {
       const res = await fn();
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success(okMsg);
+      // Trendyol a preluat schimbarea, dar comanda din Edinio nu: nu e o eroare
+      // (o reincercare ar fi respinsa de Trendyol), dar nici un succes curat.
+      if (res.avertisment) toast.warning(res.avertisment);
+      else toast.success(okMsg);
       refresh();
     });
   }
@@ -89,7 +99,8 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
     startTransition(async () => {
       const res = await sendTrendyolTracking(businessId, orderId, { trackingNumber: awb.trim(), providerCode: curier });
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success("AWB trimis către Trendyol.");
+      if (res.avertisment) toast.warning(res.avertisment);
+      else toast.success("AWB trimis către Trendyol.");
       setAwb("");
       refresh();
     });
@@ -158,6 +169,69 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
               Trimite AWB la Trendyol
             </button>
+          </div>
+        )}
+
+        {/*
+          ═══ ⚠ SINGURA CALE DE ANULARE, DE AZI (26.08.2026) ═══
+
+          Pana azi comerciantul anula o comanda Trendyol din selectorul generic de status al
+          comenzii. Aia schimba starea DOAR la noi: elibera stocul local, iar la Trendyol
+          comanda ramanea activa si pleca la client. La prima recitire, reconcilierea o aducea
+          inapoi si revendica marfa — iar daca intre timp se vanduse, stocul intra pe minus.
+
+          Selectorul generic nu mai atinge comenzile Trendyol. Deci butonul asta TREBUIE sa
+          existe, si trebuie sa fie aici: e ce ramane omului cand nu poate onora comanda.
+
+          ⚠ Nu se afiseaza dupa expediere: coletul e la curier si ei refuza anularea. Ascuns
+          acum, comerciantul afla din ecran, nu dintr-un refuz al lor pe care nu-l poate citi.
+        */}
+        {!shipped && !terminal && (
+          <div className="pt-1 border-t border-border">
+            {!aratatAnularea ? (
+              <button
+                type="button" onClick={() => setAratatAnularea(true)} disabled={pending}
+                className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+              >
+                <Ban className="h-3.5 w-3.5" /> Nu pot furniza comanda asta
+              </button>
+            ) : (
+              <div className="mt-2 space-y-2">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Comanda se anulează la Trendyol, iar marfa se întoarce în stocul tău. Nu se
+                  poate desface după ce pleacă.
+                </p>
+                <select
+                  value={motivAnulare} onChange={(e) => setMotivAnulare(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Alege motivul</option>
+                  {MOTIVE_ANULARE_TRENDYOL.map((m) => (
+                    <option key={m.id} value={m.id}>{m.nume}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <button
+                    type="button" onClick={() => { setAratatAnularea(false); setMotivAnulare(""); }}
+                    disabled={pending}
+                    className="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-border hover:bg-muted disabled:opacity-50"
+                  >
+                    Renunț
+                  </button>
+                  <button
+                    type="button" disabled={pending || !motivAnulare}
+                    onClick={() => advance(
+                      () => anuleazaComandaTrendyol(businessId, orderId, Number(motivAnulare)),
+                      "Comanda a fost anulată la Trendyol, iar marfa s-a întors în stoc.",
+                    )}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
+                  >
+                    {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+                    Anulează la Trendyol
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

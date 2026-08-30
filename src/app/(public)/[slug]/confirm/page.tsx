@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, unitarSeInchide } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -51,6 +51,9 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let discountAmount = 0;
   let cardDiscountAmount = 0;
   let codDiscountAmount = 0;
+  let codFeeAmount = 0;
+  let vatAmount = 0;
+  let vatRate = 0;
   let discountCode: string | null = null;
   let orderNumber: string | null = null;
   // Customer identifiers for pixel Advanced Matching (hashed client-side).
@@ -63,7 +66,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, subtotal, total, customer_name, customer_email, customer_phone")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, subtotal, total, customer_name, customer_email, customer_phone")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -74,6 +77,9 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       discountAmount = order.discount_amount ?? 0;
       cardDiscountAmount = order.card_discount_amount ?? 0;
       codDiscountAmount = order.cod_discount_amount ?? 0;
+      codFeeAmount = order.cod_fee_amount ?? 0;
+      vatAmount = Number(order.vat_amount ?? 0);
+      vatRate = Number(order.vat_rate ?? 0);
       discountCode = order.discount_code ?? null;
       orderNumber = order.order_number ?? null;
       customerName = order.customer_name ?? null;
@@ -92,12 +98,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   // stie de TVA-ul adaugat, deci magazinele cu preturi fara TVA aratau
   // clientului mai putin decat s-a comandat si decat scrie pe factura. Suma din
   // adresa ramane ultima rezerva, pentru linkurile vechi.
-  const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount - codDiscountAmount;
+  const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount - codDiscountAmount + codFeeAmount;
   const displayTotal = totalComanda ?? (computedTotal || Number(total) || 0);
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("marketing_config, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
+    .select("marketing_config, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
     .eq("business_id", business.id)
     .single();
   const marketingConfig = (storeSettings?.marketing_config as MarketingConfig | null) ?? null;
@@ -132,6 +138,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       shippingCost: Number(storeSettings?.default_shipping_cost ?? 0),
       freeShippingThreshold: storeSettings?.free_shipping_threshold ?? null,
       minOrderAmount: storeSettings?.min_order_amount ?? null,
+      vat: {
+        vat_enabled: storeSettings?.vat_enabled ?? false,
+        vat_rate: Number(storeSettings?.vat_rate ?? 19),
+        prices_include_vat: storeSettings?.prices_include_vat ?? true,
+        show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+      },
     },
   });
 
@@ -222,7 +234,11 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[var(--st-text)] truncate">{item.name}</p>
                             {item.quantity > 1 && (
-                              <p className="text-xs text-[var(--st-muted)]">{item.quantity} x {formatPrice(item.price)}</p>
+                              <p className="text-xs text-[var(--st-muted)]">
+                                {unitarSeInchide(item.price, item.quantity)
+                                  ? `${item.quantity} x ${formatPrice(item.price)}`
+                                  : `${item.quantity} buc.`}
+                              </p>
                             )}
                           </div>
                           <p className="text-sm font-semibold text-[var(--st-text)] ml-4 shrink-0">
@@ -260,6 +276,22 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-[var(--st-muted)]">Reducere plata ramburs</span>
                           <span className="font-medium text-green-600">- {formatPrice(codDiscountAmount)}</span>
+                        </div>
+                      )}
+                      {codFeeAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-[var(--st-muted)]">Taxa plata ramburs</span>
+                          <span className="font-medium text-[var(--st-text)]">{formatPrice(codFeeAmount)}</span>
+                        </div>
+                      )}
+                      {vatAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          {/* Cu preturi FARA TVA, taxa se adauga peste randurile de deasupra: fara
+                              randul asta, ele nu dadeau „Total de plata" si clientul n-avea din ce
+                              intelege diferenta. Cu preturi CU TVA inclus, cuvantul „inclus" spune
+                              ca suma e deja in total. */}
+                          <span className="text-[var(--st-muted)]">TVA ({vatRate}%){(storeSettings?.prices_include_vat ?? true) ? " inclus" : ""}</span>
+                          <span className="font-medium text-[var(--st-text)]">{formatPrice(vatAmount)}</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between pt-2 border-t border-[var(--st-border)]">

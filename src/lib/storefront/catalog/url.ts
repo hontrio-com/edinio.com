@@ -20,8 +20,24 @@ const REZERVATI = new Set(["cat", "q", "page", "sort", "pmin", "pmax", "sale", "
 const MAX_VALORI_PER_CHEIE = 20;
 const MAX_TEXT = 100;
 
-/** Sortarile pe care le stie catalogul. „relevance" nu se salveaza: exista doar cat timp e o cautare activa. */
-const SORTARI = ["newest", "price_asc", "price_desc", "popular", "name_asc"];
+/**
+ * Sortarile pe care le POARTA adresa.
+ *
+ * „relevance" nu se salveaza: exista doar cat timp e o cautare activa.
+ *
+ * ⚠ Nici asezarile magazinului („random", „manual") nu intra aici, si nu din
+ * scapare: ele nu sunt sortari cerute de vizitator, ci ordinea IMPLICITA a
+ * paginii, care se ia oricum din `page_content`. Scrise in adresa, ar fi fost
+ * citite inapoi ca „nimic" si pagina ar fi navigat inca o data ca sa curete
+ * parametrul — un dus-intors in plus si o intrare de istoric care face butonul
+ * „Inapoi" sa sara imediat inainte.
+ *
+ * De aia lista e EXPORTATA: cine scrie adresa trebuie sa scrie numai ce poate
+ * fi citit inapoi, altfel scrierea si citirea nu mai au acelasi punct fix.
+ * Vezi `compuneInterogare` din `MiniStoreRenderer`.
+ */
+export const SORTARI_IN_ADRESA = ["newest", "price_asc", "price_desc", "popular", "name_asc"];
+const SORTARI = SORTARI_IN_ADRESA;
 
 export interface FiltreCitite {
   categorie: string;

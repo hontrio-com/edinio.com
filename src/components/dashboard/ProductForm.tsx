@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { SiglaMarketplace } from "./SiglaMarketplace";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus, X, Pencil, Loader2, Upload, Star, ArrowLeft, Trash2,
-  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info, ExternalLink,
+  Globe, BarChart2, Check, Ruler, ChevronDown, ImageIcon, Info, ExternalLink, ShieldCheck,
 } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -16,10 +17,12 @@ import {
   SortableContext, arrayMove, useSortable, rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { construiesteTrepte, mesajProblemaTrepte, problemaMonotonie } from "@/lib/storefront/quantity-tiers";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { createProduct, updateProduct, deleteProduct } from "@/lib/actions/product.actions";
 import { publishOlxProduct } from "@/lib/actions/olx.actions";
 import { publishTrendyolProduct } from "@/lib/actions/trendyol.actions";
+import { trimiteAcumPeEmag } from "@/lib/actions/emag.actions";
 import { createCategory } from "@/lib/actions/category.actions";
 import { flattenCategoryForest } from "@/lib/categories/tree";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
@@ -84,6 +87,8 @@ interface VariantCombination {
   price: string;
   compare_at_price: string;
   sku: string;
+  /** Codul de bare al combinatiei. Vezi `VariantCombo` din lib/storefront/variants. */
+  gtin: string;
   stock_quantity: string;
   image: string;
   enabled: boolean;
@@ -121,6 +126,22 @@ interface FormState {
   variants: VariantsState;
   customization: CustomizationState;
   google: GoogleShoppingState;
+  gpsr: GpsrState;
+}
+
+/**
+ * Suprascrierea GPSR de pe produs.
+ *
+ * ⚠ Gol inseamna „ia din setarile magazinului". Suprascrierea e la nivel de PERSOANA intreaga:
+ * imbinate camp cu camp, s-ar naste o adresa jumatate a unui producator si jumatate a altuia — o
+ * informatie legala falsa, si mai rea decat una lipsa.
+ */
+interface GpsrPersoanaState { name: string; country: string; address: string; email: string; phone: string }
+interface GpsrState {
+  placed_before_2024: boolean;
+  manufacturer: GpsrPersoanaState;
+  contact_person: GpsrPersoanaState;
+  warning_and_safety: string;
 }
 
 interface GoogleShoppingState {
@@ -174,6 +195,7 @@ function generateCombinations(options: VariantOption[], existing: VariantCombina
       price: "",
       compare_at_price: "",
       sku: "",
+      gtin: "",
       stock_quantity: "",
       image: "",
       enabled: true,
@@ -224,6 +246,17 @@ const EMPTY_FORM: FormState = {
   variants: { enabled: false, options: [], combinations: [] },
   customization: { enabled: false, fields: [] },
   google: { gtin: "", brand: "", mpn: "", google_product_category: "", condition: "", gender: "", age_group: "", color: "", size: "", material: "", custom_label_0: "", custom_label_1: "", custom_label_2: "", custom_label_3: "", custom_label_4: "" },
+  /*
+   * ⚠ SUPRASCRIEREA GPSR, la nivel de PERSOANA intreaga. Gol inseamna „ia din setarile
+   * magazinului". Imbinate camp cu camp, s-ar naste o adresa jumatate a unui producator si
+   * jumatate a altuia — o informatie legala falsa, si mai rea decat una lipsa.
+   */
+  gpsr: {
+    placed_before_2024: false,
+    manufacturer: { name: "", country: "", address: "", email: "", phone: "" },
+    contact_person: { name: "", country: "", address: "", email: "", phone: "" },
+    warning_and_safety: "",
+  },
 };
 
 type PageSections = {
@@ -291,12 +324,30 @@ function productToForm(p: Product): FormState {
       ? {
           enabled: vars.enabled,
           options: vars.options.map(o => ({ ...o, inputValue: "" })),
-          combinations: vars.combinations,
+          // `gtin` e camp nou: combinatiile salvate inainte nu-l au deloc, iar
+          // `undefined` intr-un input il face necontrolat si React se plange la
+          // prima tastare. Golul explicit il tine controlat de la inceput.
+          combinations: vars.combinations.map(c => ({ ...c, gtin: c.gtin ?? "" })),
         }
       : { enabled: false, options: [], combinations: [] },
     customization: ps.customization
       ? { enabled: ps.customization.enabled, fields: ps.customization.fields }
       : { enabled: false, fields: [] },
+    /* ⚠ Citit fara sa presupunem forma: `page_sections` e jsonb, si produsele vechi n-au cheia. */
+    gpsr: (() => {
+      const g = (ps as { gpsr?: Record<string, unknown> } | null)?.gpsr ?? {};
+      const p = (x: unknown) => {
+        const o = (x ?? {}) as Record<string, unknown>;
+        const c = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+        return { name: c("name"), country: c("country"), address: c("address"), email: c("email"), phone: c("phone") };
+      };
+      return {
+        placed_before_2024: g.placed_before_2024 === true,
+        manufacturer: p(g.manufacturer),
+        contact_person: p(g.contact_person),
+        warning_and_safety: typeof g.warning_and_safety === "string" ? g.warning_and_safety : "",
+      };
+    })(),
     google: {
       gtin: ps.google?.gtin ?? "",
       brand: ps.google?.brand ?? "",
@@ -494,17 +545,29 @@ interface Props {
   olxConnected?: boolean;
   // Butonul „Publică pe Trendyol" apare doar cand contul e conectat acolo.
   trendyolConnected?: boolean;
+  /** Contul eMAG e legat. Fara el, butonul n-are ce face. */
+  emagConnected?: boolean;
+  /**
+   * Produsul e DEJA pe eMAG.
+   *
+   * ⚠ Butonul dispare atunci, nu se dezactiveaza: un buton stins pe care scrie
+   * „Publica" il pune pe om sa se intrebe de ce nu merge. Cand produsul e deja acolo,
+   * pretul si stocul lui pleaca oricum singure, iar locul in care se vede starea
+   * ofertei e ecranul integrarii.
+   */
+  emagPublicat?: boolean;
   // Sectiunea Google Shopping se afiseaza doar cand contul are Google Merchant conectat.
   gmcConnected?: boolean;
   // Clasele de transport definite in Setari > Livrare (pentru selectorul de pe produs).
   shippingClasses?: { id: string; name: string }[];
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, gmcConnected = false, shippingClasses = [] }: Props) {
+export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, shippingClasses = [] }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
   const [tyPublishing, startTyPublish] = useTransition();
+  const [emagPublishing, startEmagPublish] = useTransition();
 
   // Trendyol isi construieste singur listarea din maparea categoriei daca produsul
   // nu a trecut inca prin ecranul de listare — altfel butonul ar fi o fundatura.
@@ -518,6 +581,26 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
           ? "Trimis pe Trendyol. Listarea a fost creată din maparea categoriei; intră în aprobare."
           : "Trimis pe Trendyol. Intră în aprobare.",
       );
+    });
+  }
+
+  /*
+   * ⚠ `trimiteAcumPeEmag` raspunde IN ACEEASI APASARE, cu tot cu motivul lor.
+   * Pus in coada, omul ar fi vazut „se trimite" si ar fi asteptat pana la un minut
+   * fara nicio veste, iar un refuz ar fi aparut abia in alt ecran.
+   */
+  function handlePublishEmag() {
+    if (!product) return;
+    startEmagPublish(async () => {
+      const res = await trimiteAcumPeEmag(businessId, product.id, "oferta");
+      if ("error" in res) { toast.error(res.error); return; }
+      /* ⚠ eMAG raspunde 200 si la lucruri care n-au mers: „reusit cu observatii"
+         inseamna ca oferta e salvata DAR au ceva de spus despre ea. Aratat ca reusita
+         curata, omul ar fi plecat crezand ca se vinde. */
+      if (res.verdict === "reusit") toast.success("Trimis pe eMAG. Intră în validarea lor.");
+      else if (res.verdict === "reusit_cu_observatii") {
+        toast.warning(res.mesaj || "Trimis pe eMAG, dar au observații la documentație.");
+      } else toast.error(res.mesaj || "eMAG nu a acceptat produsul.");
     });
   }
 
@@ -537,6 +620,15 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   // Toggle vizual pentru sectiunea Google Shopping: inchis implicit, dar deschis
   // din start daca produsul editat are deja atribute completate.
   const [showGoogle, setShowGoogle] = useState(() => hasGoogleData(form.google));
+  /*
+   * ⚠ Deschisa din start daca produsul are deja o suprascriere: inchisa, ar fi ascuns date pe care
+   * omul le-a scris — si le-ar fi crezut pierdute. Acelasi tipar ca la Google Shopping.
+   */
+  const [showGpsr, setShowGpsr] = useState(
+    form.gpsr.placed_before_2024
+    || [form.gpsr.manufacturer, form.gpsr.contact_person].some((p) => Object.values(p).some((x) => x !== ""))
+    || form.gpsr.warning_and_safety !== "",
+  );
   const [helpOpen, setHelpOpen] = useState<string | null>(null);
   const toggleHelp = (k: string) => setHelpOpen((p) => (p === k ? null : k));
   const [isPending, startTransition] = useTransition();
@@ -570,6 +662,58 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   function set<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: val }));
   }
+
+  /*
+   * Categoria scrisa pe produs, dar care nu exista in lista.
+   *
+   * Se intampla dupa un import ale carui categorii au fost sterse intre timp, sau
+   * dupa o redenumire veche: `products.category` e text, nu cheie straina. Pana
+   * acum, campul aparea GOL — lista derulanta n-avea optiunea, deci browserul
+   * n-avea ce bifa — desi produsul chiar avea o categorie scrisa in baza. Cine
+   * deschidea produsul citea „fara categorie" si nu vedea nimic de reparat.
+   *
+   * Acum valoarea se arata ca atare, cu un buton care o transforma intr-o
+   * categorie adevarata (la nivelul principal, de unde poate fi mutata oriunde).
+   */
+  const categorieOrfana = useMemo(() => {
+    const nume = form.category.trim();
+    if (!nume) return null;
+    return localCategories.some((c) => c.name === nume) ? null : nume;
+  }, [form.category, localCategories]);
+
+  function creeazaCategoriaOrfana() {
+    if (!categorieOrfana) return;
+    startCatTransition(async () => {
+      const result = await createCategory({ name: categorieOrfana });
+      if ("error" in result) { toast.error(result.error); return; }
+      setLocalCategories(prev => [...prev, { id: result.id, name: categorieOrfana, parent_id: null }]);
+      toast.success("Categorie creata!");
+    });
+  }
+
+  /**
+   * Totalul adunat din variante, sau `null` cand produsul nu-si tine stocul asa.
+   *
+   * Aceeasi regula ca in baza de date (declansatorul `products_sync_variant_stock`):
+   * se aduna numai cand TOATE combinatiile active isi declara stocul. Una singura
+   * lasata goala inseamna „nelimitata", iar o suma partiala ar plafona produsul
+   * intreg la cat au celelalte. Scrisa si aici ca omul sa vada in formular exact
+   * numarul care se va salva, nu altul.
+   */
+  const stocDinVariante = useMemo<number | null>(() => {
+    if (!form.variants.enabled) return null;
+    const active = form.variants.combinations.filter((c) => c.enabled);
+    if (active.length === 0) return null;
+    let total = 0;
+    for (const c of active) {
+      const brut = String(c.stock_quantity ?? "").trim();
+      if (brut === "") return null;
+      const n = Number(brut);
+      if (!Number.isFinite(n) || n < 0) return null;
+      total += Math.floor(n);
+    }
+    return total;
+  }, [form.variants]);
 
   function handleNameChange(name: string) {
     setForm(prev => ({
@@ -683,7 +827,12 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
       sku: form.sku,
       images: form.images,
       track_inventory: form.track_inventory,
-      stock_quantity: form.track_inventory ? (parseInt(form.stock_quantity) || 0) : null,
+      // Cand stocul se tine pe variante, totalul e suma lor. Baza de date il
+      // recalculeaza oricum la scriere, dar il trimitem corect de aici ca sa nu
+      // existe nicio clipa in care randul poarta alt numar decat cel adevarat.
+      stock_quantity: form.track_inventory
+        ? (stocDinVariante ?? (parseInt(form.stock_quantity) || 0))
+        : null,
       is_featured: form.is_featured,
       is_active: form.is_active,
       weight_grams: form.weight_grams ? parseInt(form.weight_grams) : null,
@@ -711,12 +860,34 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
         variants: {
           enabled: form.variants.enabled,
           options: form.variants.options.map(({ inputValue: _iv, ...o }) => o),
-          combinations: form.variants.combinations,
+          combinations: form.variants.combinations.map(c => ({ ...c, gtin: c.gtin.trim() })),
         },
         customization: {
           enabled: form.customization.enabled,
           fields: form.customization.fields,
         },
+        /*
+         * ⚠ Se scrie doar ce a completat OMUL. Un obiect plin de siruri goale ar arata, la citire,
+         * ca o suprascriere — iar produsul ar pleca fara producator, in loc sa-l ia din setari.
+         */
+        gpsr: (() => {
+          const p = (o: GpsrPersoanaState) => {
+            const v = {
+              name: o.name.trim(), country: o.country.trim().toUpperCase().slice(0, 2),
+              address: o.address.trim(), email: o.email.trim(), phone: o.phone.trim(),
+            };
+            return Object.values(v).some((x) => x !== "") ? v : undefined;
+          };
+          const out: Record<string, unknown> = {};
+          if (form.gpsr.placed_before_2024) out.placed_before_2024 = true;
+          const man = p(form.gpsr.manufacturer);
+          if (man) out.manufacturer = man;
+          const con = p(form.gpsr.contact_person);
+          if (con) out.contact_person = con;
+          const av = form.gpsr.warning_and_safety.trim();
+          if (av) out.warning_and_safety = av;
+          return out;
+        })(),
         google: {
           gtin: form.google.gtin.trim(),
           brand: form.google.brand.trim(),
@@ -776,14 +947,14 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
             </span>
           ) : "Produs nou"}
         </h1>
-        {isEditing && (olxConnected || trendyolConnected || (product?.is_active && product?.slug && business?.is_published)) && (
+        {isEditing && (olxConnected || trendyolConnected || (emagConnected && !emagPublicat) || (product?.is_active && product?.slug && business?.is_published)) && (
           <div className="ml-auto flex items-center gap-2">
             {olxConnected && (
               <button type="button" onClick={handlePublishOlx} disabled={olxPublishing}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
                 {olxPublishing
                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Image src="/integrations/olx.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                  : <SiglaMarketplace piata="olx" />}
                 Postează pe OLX
               </button>
             )}
@@ -792,8 +963,17 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
                 {tyPublishing
                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Image src="/integrations/trendyol.svg" alt="" width={16} height={16} className="h-4 w-4 rounded-[3px]" />}
+                  : <SiglaMarketplace piata="trendyol" />}
                 Publică pe Trendyol
+              </button>
+            )}
+            {emagConnected && !emagPublicat && (
+              <button type="button" onClick={handlePublishEmag} disabled={emagPublishing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground disabled:opacity-50">
+                {emagPublishing
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <SiglaMarketplace piata="emag" />}
+                Publică pe eMAG
               </button>
             )}
             {/* Live only when the product is active AND the store is published — otherwise the page 404s. */}
@@ -913,6 +1093,12 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                     <label className="block text-sm font-medium text-foreground mb-1.5">Categorie</label>
                     <select value={form.category} onChange={(e) => set("category", e.target.value)} className={inputCls}>
                       <option value="">Fara categorie</option>
+                      {/* Valoarea scrisa pe produs, cand nu mai are rand in tabel.
+                          Fara optiunea asta, selectul n-avea ce bifa si campul
+                          parea gol desi produsul avea o categorie. */}
+                      {categorieOrfana && (
+                        <option value={categorieOrfana}>{categorieOrfana} (nu exista in lista)</option>
+                      )}
                       {categoryGroups.map(({ root, descendants }) =>
                         descendants.length > 0 ? (
                           <optgroup key={root.id} label={root.name}>
@@ -926,6 +1112,17 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                         )
                       )}
                     </select>
+                    {categorieOrfana && (
+                      <div className="mt-1.5 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-500">
+                        <span className="flex-1">
+                          &bdquo;{categorieOrfana}&rdquo; e scrisa pe produs, dar nu exista in lista de categorii, deci nu apare in magazin ca raion.
+                        </span>
+                        <button type="button" onClick={creeazaCategoriaOrfana} disabled={isCreatingCat}
+                          className="text-primary hover:underline whitespace-nowrap disabled:opacity-50">
+                          Creeaza categoria
+                        </button>
+                      </div>
+                    )}
                     {!showAddCategory ? (
                       <button type="button" onClick={() => setShowAddCategory(true)}
                         className="mt-1.5 text-xs text-primary hover:underline flex items-center gap-1">
@@ -1134,12 +1331,25 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                                   placeholder="ex: GNT-ROS-M"
                                   className={smallInputCls} />
                               </div>
+                              {/* Cod EAN al combinatiei */}
+                              <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Cod EAN</label>
+                                <input type="text" inputMode="numeric" value={combo.gtin}
+                                  onChange={e => updateCombo(idx, "gtin", e.target.value)}
+                                  placeholder={form.google.gtin || "ex: 5941234567899"}
+                                  className={smallInputCls} />
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
                         Pret gol = foloseste pretul de baza al produsului. Stocul se gestioneaza per varianta.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Codul EAN se pune pe fiecare varianta, fiindca fiecare culoare sau marime are codul ei.
+                        Lasat gol, se foloseste cel de pe produs &mdash; dar acelasi cod pe mai multe variante
+                        inseamna cod duplicat pentru Google Shopping, iar variantele acelea sunt respinse.
                       </p>
                     </div>
                   )}
@@ -1430,19 +1640,46 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
               </div>
               {helpOpen === "tiers" && (
                 <HelpCard>
-                  <p>Oferi un pret mai mic cand clientul cumpara mai multe bucati din acelasi produs, ca sa-l incurajezi sa comande mai mult.</p>
-                  <p>Setezi pana la 2 praguri (la 2 buc. si la 3 buc.), fie ca pret fix pe bucata, fie ca procent de reducere. Poti adauga si o eticheta (ex: &laquo;Cel mai bun pret&raquo;).</p>
+                  <p>Oferi un pret mai bun cand clientul cumpara 2 sau 3 bucati deodata, ca sa-l incurajezi sa comande mai mult.</p>
+                  <p>Fiecare treapta e un <span className="font-medium text-foreground">pachet</span>: la <span className="font-medium text-foreground">Suma fixa</span> scrii cat costa pachetul <span className="font-medium text-foreground">intreg</span>, nu cat costa o bucata din el. La <span className="font-medium text-foreground">Procent</span> scrii cat la suta scade pretul, iar totalul pachetului se calculeaza singur. Poti adauga si o eticheta (ex: &laquo;Cel mai bun pret&raquo;).</p>
                   <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
                     <p className="font-medium text-foreground mb-1">Exemplu</p>
-                    <p>Pret normal 50 lei/buc. La 2 buc. &rarr; 45 lei/buc, la 3 buc. &rarr; 40 lei/buc. Clientul vede economia pe pagina produsului si e tentat sa ia mai multe.</p>
+                    <p>Pret normal 50 lei bucata. Pachetul de 2 bucati &rarr; scrii <span className="font-medium text-foreground">90</span> (adica 45 lei/bucata). Pachetul de 3 bucati &rarr; scrii <span className="font-medium text-foreground">120</span> (adica 40 lei/bucata).</p>
+                  </div>
+                  <div className="rounded-lg bg-warning/10 border border-warning/30 p-2.5 mt-1">
+                    <p className="font-medium text-foreground mb-1">Atentie</p>
+                    <p>Un pachet mai mare trebuie sa coste mai mult decat unul mai mic. La un produs de 149 lei, daca scrii <span className="font-medium text-foreground">129</span> la 2 bucati, doua bucati ar costa mai putin decat una singura &mdash; si chiar asa s-ar si incasa. O astfel de configuratie nu se salveaza.</p>
                   </div>
                 </HelpCard>
               )}
               {form.quantity_tiers.enabled && (
                 <div className="px-5 py-4 space-y-4">
+                  {/* Configuratia stricata se ARATA, nu se corecteaza in tacere:
+                      zece produse active din magazine publicate au deja pachete
+                      sub pretul unei bucati, si comerciantul n-avea de unde sa
+                      afle. Serverul refuza oricum salvarea. */}
+                  {(() => {
+                    const problema = problemaMonotonie(construiesteTrepte(
+                      {
+                        enabled: true,
+                        mode: form.quantity_tiers.mode,
+                        tier2_price: parseFloat(form.quantity_tiers.tier2_price) || 0,
+                        tier3_price: parseFloat(form.quantity_tiers.tier3_price) || 0,
+                        tier2_percent: parseFloat(form.quantity_tiers.tier2_percent) || 0,
+                        tier3_percent: parseFloat(form.quantity_tiers.tier3_percent) || 0,
+                      },
+                      parseFloat(form.price) || 0,
+                    ));
+                    if (!problema) return null;
+                    return (
+                      <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3">
+                        <p className="text-xs text-foreground">{mesajProblemaTrepte(problema)}</p>
+                      </div>
+                    );
+                  })()}
                   {/* Mode selector */}
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Tip reducere</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Cum stabilesti pretul pachetului</p>
                     <div className="grid grid-cols-2 gap-2">
                       {(["fixed", "percent"] as const).map(m => (
                         <button key={m} type="button"
@@ -1496,11 +1733,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                             </>
                           ) : (
                             <>
-                              <label className="text-xs text-muted-foreground mb-1 block">Pret total (lei)</label>
-                              <input type="number" min="0" placeholder="ex: 179"
+                              <label className="text-xs text-muted-foreground mb-1 block">Pret total pachet (lei)</label>
+                              <input type="number" min="0" placeholder={`ex: ${Math.round((parseFloat(form.price) || 50) * Number(qty) * 0.9)}`}
                                 value={form.quantity_tiers[priceKey]}
                                 onChange={e => set("quantity_tiers", { ...form.quantity_tiers, [priceKey]: e.target.value })}
                                 className={smallInputCls} />
+                              {/* Acelasi ajutor calculat ca la procente: cifra scrisa e
+                                  totalul, iar aici se vede ce inseamna pe bucata. */}
+                              {parseFloat(form.quantity_tiers[priceKey]) > 0 && (
+                                <p className="text-[11px] text-muted-foreground mt-1">
+                                  {Number(qty)} buc = {formatPrice(parseFloat(form.quantity_tiers[priceKey]) / Number(qty))} /buc
+                                </p>
+                              )}
                             </>
                           )}
                         </div>
@@ -1572,6 +1816,99 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 </div>
               </div>
             </div>
+
+            {/*
+              ── Siguranța produsului (GPSR) ─────────────────────────────────
+              ⚠ SE ARATĂ DOAR CÂND E CONECTAT UN MARKETPLACE CARE O CERE, după același tipar ca
+              secțiunea Google Shopping de mai jos. Cerința LEGALĂ îl privește pe oricine vinde în
+              UE, deci datele există pentru toată lumea — dar cerința TEHNICĂ, un API care refuză,
+              e numai a marketplace-urilor. Un comerciant fără nicio integrare n-are ce face cu
+              câmpurile astea acum, și n-are rost să i le punem în drum.
+
+              ⚠ ȘI E DOAR O SUPRASCRIERE: gol înseamnă „ia din Setări", unde se completează o
+              dată pentru tot catalogul. Cerute aici pe fiecare produs, ar fi fost rescrise de trei
+              mii de ori și greșite de la al doilea.
+            */}
+            {(olxConnected || emagConnected) && (
+            <div className={sectionCls}>
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Siguranța produsului (GPSR)</p>
+                    <p className="text-xs text-muted-foreground">
+                      Doar dacă acest produs are alt producător decât cel din Setări. Gol = se folosesc datele din Setări.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={showGpsr} onCheckedChange={setShowGpsr} className="shrink-0" />
+              </div>
+              {showGpsr && (
+              <div className="px-5 py-5 space-y-4">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={form.gpsr.placed_before_2024}
+                    onChange={(e) => setForm((f) => ({ ...f, gpsr: { ...f.gpsr, placed_before_2024: e.target.checked } }))} />
+                  <span>
+                    <span className="text-foreground">Pus pe piață înainte de 13 decembrie 2024</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Pentru produsele astea, regulamentul nu cere datele de mai jos.
+                    </span>
+                  </span>
+                </label>
+
+                {!form.gpsr.placed_before_2024 && (
+                  <>
+                    {([
+                      ["manufacturer", "Producător", "Cine a fabricat acest produs, dacă e altul decât cel din Setări."],
+                      ["contact_person", "Persoană responsabilă în UE", "Cine răspunde pentru el în Uniune."],
+                    ] as const).map(([cheie, titlu, ajutor]) => (
+                      <div key={cheie} className="space-y-2 rounded-xl border border-border p-3">
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">{titlu}</p>
+                          <p className="text-[11px] text-muted-foreground">{ajutor}</p>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {([
+                            ["name", "Denumire"], ["country", "Țara (RO, DE, CN…)"],
+                            ["address", "Adresă completă"], ["email", "E-mail"], ["phone", "Telefon"],
+                          ] as const).map(([camp, eticheta]) => (
+                            <input
+                              key={camp}
+                              type="text"
+                              value={form.gpsr[cheie][camp]}
+                              placeholder={eticheta}
+                              aria-label={`${titlu} — ${eticheta}`}
+                              className="w-full rounded-lg border border-border bg-background p-2 text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({
+                                ...f,
+                                gpsr: { ...f.gpsr, [cheie]: { ...f.gpsr[cheie], [camp]: e.target.value } },
+                              }))} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-foreground" htmlFor="gpsr-avertisment-produs">
+                        Avertismente și instrucțiuni de siguranță
+                      </label>
+                      <textarea
+                        id="gpsr-avertisment-produs"
+                        rows={3}
+                        value={form.gpsr.warning_and_safety}
+                        onChange={(e) => setForm((f) => ({ ...f, gpsr: { ...f.gpsr, warning_and_safety: e.target.value } }))}
+                        placeholder="Ce scrie pe ambalajul acestui produs, dacă diferă de textul din Setări."
+                        className="w-full rounded-lg border border-border bg-background p-2 text-sm" />
+                    </div>
+                  </>
+                )}
+              </div>
+              )}
+            </div>
+            )}
 
             {/* ── Google Shopping / Merchant Center (doar cand GMC e conectat) ── */}
             {gmcConnected && (
@@ -1702,9 +2039,27 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   <>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Cantitate in stoc</label>
-                      <input type="number" value={form.stock_quantity}
-                        onChange={(e) => set("stock_quantity", e.target.value)}
-                        placeholder="0" min="0" className={inputCls} />
+                      {stocDinVariante !== null ? (
+                        /*
+                         * Produsul isi tine stocul pe variante, deci totalul e suma lor,
+                         * nu un al doilea numar scris de mana. Campul ramane vizibil ca
+                         * omul sa vada cat are, dar nu se mai poate scrie in el: pana
+                         * acum se puteau tine doua socoteli care se departau una de alta,
+                         * iar cand cea de aici ajungea sub suma, produsul se declara
+                         * epuizat desi marimile lui aveau marfa.
+                         */
+                        <>
+                          <input type="number" value={stocDinVariante} readOnly disabled
+                            className={inputCls + " opacity-60 cursor-not-allowed"} />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Se aduna singur din stocul variantelor. Modifica-l la fiecare varianta, in sectiunea Variante.
+                          </p>
+                        </>
+                      ) : (
+                        <input type="number" value={form.stock_quantity}
+                          onChange={(e) => set("stock_quantity", e.target.value)}
+                          placeholder="0" min="0" className={inputCls} />
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Notifica la stoc mic</label>

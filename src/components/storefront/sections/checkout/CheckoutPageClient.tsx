@@ -29,19 +29,20 @@ export function CheckoutPageClient({
   freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
   initialDiscountCode: string | null;
-  /** Greutatile produselor, pentru cotatia internationala pe kilograme. */
-  productWeights?: Record<string, number>;
 }) {
-  const { items, total, count } = useCart();
+  const { items, total, count, lineUnit } = useCart();
   // Ref, nu stare: e un semn ca evenimentele au plecat, nu ceva ce se randeaza.
   const trimis = useRef(false);
 
   useEffect(() => {
     if (trimis.current || items.length === 0) return;
     trimis.current = true;
-    const linii = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity }));
+    // Pretul raportat e cel de la server, nu instantaneul din localStorage:
+    // altfel `value` (total de la server) si `items[].price` din acelasi eveniment
+    // spun lucruri diferite despre aceeasi comanda.
+    const linii = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity }));
     fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: items.map((i) => i.productId) });
-    ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: items.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: i.price, quantity: i.quantity })) });
+    ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: items.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     gtagEvent("begin_checkout", { currency: "RON", value: total, items: linii });
   }, [items, total, count]);
 

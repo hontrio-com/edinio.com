@@ -102,7 +102,7 @@ export function SectionPreviewFrame({
       ...chrome,
       openCart: nimic,
       openLightbox: nimic,
-      isPreview: false,
+      esteEditorDesign: false,
       // Miniatura arata sectiunea asa cum apare pe pagina principala: acolo
       // logoul e o ancora goala, nu un link care ar scoate iframe-ul din cadru.
       isHome: true,
@@ -111,6 +111,10 @@ export function SectionPreviewFrame({
       visibleProducts: products,
       filteredProducts: items,
       paginatedProducts: items,
+      // Previzualizarea are mereu catalogul demo intreg in memorie, deci
+      // numerele sunt chiar lungimile listelor de deasupra.
+      totalVizibile: products.length,
+      totalFiltrate: items.length,
       featuredProducts: products.filter((p) => p.is_featured).slice(0, 8),
       // Un rand curat n-are configuratie aici, deci ii dam una sintetica cu
       // id-ul cerut: altfel un rand deschis direct pe ruta de previzualizare ar
@@ -121,7 +125,9 @@ export function SectionPreviewFrame({
           items: items.slice(0, 6),
         },
       ],
-      isProductOutOfStock: (p) => !!(p.track_inventory && p.stock_quantity === 0),
+      // A OPTA formulare, acum si ea pe steagul de la server. In previzualizare
+      // produsele sunt cele demo, unde steagul e mereu false.
+      isProductOutOfStock: (p) => p.fara_stoc,
 
       search: "",
       setSearch: nimic,
@@ -130,7 +136,14 @@ export function SectionPreviewFrame({
       setSortTouched: nimic,
       effectiveSort: "newest",
       hasSearchMatches: false,
+      // Miniatura din galerie n-are asezare proprie: arata modelul, nu magazinul.
+      asezareMagazin: "",
       headerHasSearch: false,
+      // Miniatura nu cere nimic de la server: e o randare statica peste produse
+      // demonstrative, deci si cautarea si indicatorul de incarcare sunt inerte.
+      catalogPeServer: false,
+      trimiteCautarea: nimic,
+      catalogSeIncarca: false,
 
       filtersOpen: false,
       setFiltersOpen: nimic,
@@ -293,7 +306,7 @@ export function SectionPreviewFrame({
       );
     }
     return (
-      <CartProvider slug={chrome.business.slug}>
+      <CartProvider slug={chrome.business.slug} businessId={chrome.business.id}>
         <StorefrontProvider value={value}>
           <ShopPageSection variant={section.variant} setari={section.settings} />
         </StorefrontProvider>
@@ -315,7 +328,7 @@ export function SectionPreviewFrame({
   }
 
   return (
-    <CartProvider slug={chrome.business.slug}>
+    <CartProvider slug={chrome.business.slug} businessId={chrome.business.id}>
       <StorefrontProvider value={value}>
         <PreviewSection section={section} />
       </StorefrontProvider>

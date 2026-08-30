@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
 import { politicaIndexabila } from "@/lib/storefront/policy-index";
+import { adresaPublica } from "@/lib/storefront/identitate-publica";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { firimituriJsonLd, graf, paginaWebJsonLd, referintaMagazin } from "@/lib/storefront/date-structurate";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -92,7 +95,7 @@ export default async function PolicyPage({ params }: Props) {
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("store_policies, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount")
+    .select("store_policies, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
     .eq("business_id", business.id)
     .single();
 
@@ -111,12 +114,22 @@ export default async function PolicyPage({ params }: Props) {
   // Fall back to auto-generated template if content is empty
   const isEmpty = !content.trim() || content === "<p></p>";
   if (isEmpty && enabled) {
+    /*
+     * ⚠ Adresa vine din AMANDOUA familiile de coloane.
+     *
+     * Ecranul „Datele magazinului" scrie `address`/`city`/`county`, iar „Editeaza
+     * magazinul > Locatie" scrie `store_*`. Sablonul citea doar prima familie,
+     * asa ca un comerciant care completase a doua avea tiparit pe pagina lui
+     * publica de Termeni, negru pe alb, literalul „[adresa completă]". Pe o
+     * pagina cu valoare juridica. Vezi `identitate-publica.ts`.
+     */
+    const adr = adresaPublica(business);
     const templates = buildPolicyTemplates({
       businessName: business.business_name,
       cui:          (business as Record<string, unknown>).cui as string | null ?? null,
-      address:      (business as Record<string, unknown>).address as string | null ?? null,
-      city:         (business as Record<string, unknown>).city as string | null ?? null,
-      county:       (business as Record<string, unknown>).county as string | null ?? null,
+      address:      adr.strada || null,
+      city:         adr.oras || null,
+      county:       adr.judet || null,
       phone:        (business as Record<string, unknown>).phone as string | null ?? null,
       email:        (business as Record<string, unknown>).email as string | null ?? null,
     });
@@ -125,6 +138,35 @@ export default async function PolicyPage({ params }: Props) {
 
   const color = business.primary_color ?? "#1AB554";
   const showContent = enabled && content.trim() !== "";
+
+  /*
+   * Datele structurate ale paginii de politica.
+   *
+   * Doua trepte de firimituri si un `WebPage`, atat: o politica de retur nu are
+   * entitate proprie de descris, dar are un loc in magazin si un nume — si pana
+   * acum nu le declara nicaieri, desi paginile astea SUNT indexabile anume
+   * (Merchant Center le cere ca sa valideze contul) si sunt in sitemap.
+   *
+   * ⚠ Se cheama ACEEASI functie ca `generateMetadata` (`politicaIndexabila`).
+   * Scrisa a doua oara, prima nepotrivire ar fi fost o pagina care se declara
+   * `noindex` in `<head>` si se descrie ca pagina indexabila in `<script>` —
+   * exact semnalul contradictoriu pe care Search Console il raporteaza ca eroare.
+   * Pagina care arata „nu e disponibila" nu descrie nimic, deci nici ea nu emite.
+   */
+  const urlPolitica = `${storeBaseUrl(business)}/politici/${type}`;
+  const numeMagazin = business.store_name ?? business.business_name;
+  const indexabila = politicaIndexabila(storeSettings?.page_content ?? null, storeSettings?.store_policies ?? null, type);
+  const magazinRef = referintaMagazin(business, storeBaseUrl(business));
+  const dateStructurate = indexabila && showContent
+    ? graf(
+        paginaWebJsonLd({ nume: meta.label, url: urlPolitica, parteDin: magazinRef }),
+        magazinRef,
+        firimituriJsonLd([
+          { nume: numeMagazin, url: storeBaseUrl(business) },
+          { nume: meta.label, url: urlPolitica },
+        ]),
+      )
+    : null;
 
   // Detect custom domain access
   const headersList = await headers();
@@ -154,11 +196,20 @@ export default async function PolicyPage({ params }: Props) {
       shippingCost: Number(storeSettings?.default_shipping_cost ?? 0),
       freeShippingThreshold: storeSettings?.free_shipping_threshold ?? null,
       minOrderAmount: storeSettings?.min_order_amount ?? null,
+      vat: {
+        vat_enabled: storeSettings?.vat_enabled ?? false,
+        vat_rate: Number(storeSettings?.vat_rate ?? 19),
+        prices_include_vat: storeSettings?.prices_include_vat ?? true,
+        show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+      },
     },
   });
 
   return (
     <StorefrontThemeScope style={resolved.style}>
+      {dateStructurate ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(dateStructurate) }} />
+      ) : null}
       <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
         <main className="max-w-3xl w-full mx-auto px-4 py-10 flex-1">
           <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">{meta.label}</h1>

@@ -1,41 +1,177 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
-import { resolvePaymentMethods, parseCardDiscountConfig } from "@/lib/payment-methods";
+import { Skeleton } from "@/components/ui/skeleton";
+import { processorReadiness, resolvePaymentMethods, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules } from "@/lib/shipping/rules";
 import type { MarketingConfig } from "@/lib/marketing";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 import { parseEmailConfig } from "@/lib/email/config";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
+import type { Database } from "@/types/database.types";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
 }
 
+/** Exact campurile trimise mai departe — aceleasi cu selectul de mai jos. */
+type ProfilSetari = Pick<
+  Database["public"]["Tables"]["users_profile"]["Row"],
+  "full_name" | "plan" | "plan_interval" | "plan_expires_at" | "payment_failed_at" | "mfa_email_enabled"
+>;
+
+/**
+ * Setarile se despart in DOUA, nu pe sectiuni.
+ *
+ * Ecranul e o singura Client Component cu 14 file care primesc totul dintr-un
+ * foc, deci nu se poate livra fila cu fila fara sa o rup in bucati. Ce se poate
+ * insa: interogarea grea sa nu mai tina coaja pe loc. Selectul de magazin cere
+ * ~30 de coloane de setari, iar lista de produse pentru „Tip magazin" umbla
+ * baza in ferestre de cate 1000 de randuri — la un catalog mare, mai multe
+ * dus-intors inainte sa apara ceva pe ecran.
+ *
+ * Profilul ramane in parinte fiindca de el atarna `redirect("/login")`: un
+ * `redirect` de sub `<Suspense>` ar ajunge dupa ce coaja a plecat deja. Costa o
+ * interogare de un rand pusa inaintea celorlalte (inainte mergeau in paralel) —
+ * in schimb scheletul pleaca imediat, nu dupa produse.
+ */
 export default async function SettingsPage({ searchParams }: Props) {
   const { plan_success, domain_success } = await searchParams;
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: bizRow }] = await Promise.all([
-    supabase.from("users_profile").select("*").eq("id", user.id).single(),
-    supabase
-      .from("businesses")
-      .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cookie_banner_config, marketing_config, email_config, page_content)")
-      .eq("user_id", user.id)
-      .order("created_at")
-      .limit(1)
-      .single(),
-  ]);
+  /*
+   * NU `select("*")`: randul intreg ajungea in payload-ul RSC al unei Client
+   * Component, cu tot cu `admin_notes` — notitele INTERNE ale platformei despre
+   * acel comerciant — plus `role`, `suspended_until`, `stripe_customer_id` si
+   * hash-ul OTP. Componenta citeste cinci campuri.
+   *
+   * ATENTIE, ca sa nu se inchida constatarea prea devreme: asta e igiena de
+   * payload, NU remedierea. Comerciantul poate citi `admin_notes` oricum, direct
+   * din browser cu cheia anon, fiindca SELECT pe `users_profile` n-a fost
+   * niciodata revocat de la `authenticated`. Remedierea reala e revocarea la
+   * nivel de coloana — e RESTRICTIVA, deci se aplica DUPA deploy
+   * (migrations/2026-08-04-DUPA-DEPLOY-coloane-profil.sql).
+   */
+  const { data: profile } = await supabase
+    .from("users_profile")
+    .select("full_name, plan, plan_interval, plan_expires_at, payment_failed_at, mfa_email_enabled")
+    .eq("id", user.id)
+    .single();
 
   if (!profile) redirect("/login");
+
+  return (
+    <Suspense fallback={<ScheletSetari />}>
+      <ContinutSetari
+        profile={profile}
+        userId={user.id}
+        email={user.email ?? ""}
+        planSuccess={plan_success === "1"}
+        domainSuccess={domain_success === "1"}
+      />
+    </Suspense>
+  );
+}
+
+function ScheletSetari() {
+  return (
+    <div className="flex min-h-[calc(100vh-3.5rem)]">
+      {/* coloana din stanga tine locul celor 14 file din NAV_SECTIONS */}
+      <aside className="hidden lg:flex flex-col flex-shrink-0 w-52 border-r border-border py-6 px-2 space-y-1">
+        {Array.from({ length: 14 }).map((_, i) => (
+          <Skeleton key={i} className="h-9" />
+        ))}
+      </aside>
+      <div className="flex-1 p-6 max-w-3xl space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <div className="flex gap-2 lg:hidden">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-24" />
+          ))}
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-10 w-32 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+async function ContinutSetari({
+  profile,
+  userId,
+  email,
+  planSuccess,
+  domainSuccess,
+}: {
+  profile: ProfilSetari;
+  userId: string;
+  email: string;
+  planSuccess: boolean;
+  domainSuccess: boolean;
+}) {
+  const supabase = await createClient();
+
+  const { data: bizRow } = await supabase
+    .from("businesses")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .eq("user_id", userId)
+    .order("created_at")
+    .limit(1)
+    .single();
 
   const business = bizRow ? { id: bizRow.id, business_name: bizRow.business_name, address: bizRow.address, city: bizRow.city, county: bizRow.county, phone: bizRow.phone, email: bizRow.email, cui: bizRow.cui, reg_com: bizRow.reg_com, custom_domain: bizRow.custom_domain } : null;
   const rawSettings = bizRow?.store_settings;
   const storeSettings = Array.isArray(rawSettings) ? rawSettings[0] ?? null : rawSettings ?? null;
+
+  /*
+   * Cheia SMSO se citeste separat, cu service role.
+   *
+   * Din 2026-08-05 `privat.decripteaza_config` nu mai decripteaza pentru
+   * `anon`/`authenticated`, deci pe clientul comerciantului campul ar sosi
+   * `enc.v1.…`. Aici nu e doar afisare: fila SMS din SettingsClient trimite
+   * cheia mai departe catre SMSO pentru SMS-ul de test (`/api/sms/test`, cu
+   * `api_key` in corp). Cu textul cifrat in mana, furnizorul raspunde „cheie
+   * invalida" pe o cheie care e, de fapt, corecta in baza — si comerciantul
+   * ajunge sa o schimbe degeaba.
+   *
+   * CE NU SE INTAMPLA, ca sa nu se caute o paguba care nu exista: valoarea
+   * intoarsa in formular NU se pierde la salvare. `privat.cripteaza` sare peste
+   * orice sir care incepe deja cu `enc.v1.` (vezi 2026-08-04-criptare-
+   * credentiale.sql, „marcajul `enc.v1.` face totul IDEMPOTENT"), deci un
+   * dus-intors ar rescrie exact acelasi text cifrat. Se strica APELUL catre
+   * furnizor, nu randul din baza.
+   *
+   * Restul configuratiilor de pe pagina raman pe clientul comerciantului: din
+   * ele se citesc doar steaguri („e configurat?"), iar `enc.v1.…` e un sir
+   * negol, deci raspunsul ramane acelasi.
+   *
+   * PROPRIETATEA, fiindca service role ocoleste RLS: `bizRow` a fost adus mai
+   * sus cu clientul comerciantului, filtrat pe `user_id = userId`, iar `userId`
+   * e chiar sesiunea (`getCachedUser` in parinte). Citirea de mai jos e legata
+   * de `bizRow.id`, deci de un magazin despre care s-a dovedit deja ca e al lui.
+   */
+  let smsoSettings: Record<string, unknown> | null = null;
+  if (bizRow?.id) {
+    const { data: randSmso } = await createAdminClient()
+      .from("store_settings")
+      .select("smso_config")
+      .eq("business_id", bizRow.id)
+      .single();
+    smsoSettings = (randSmso?.smso_config as Record<string, unknown> | null) ?? null;
+  }
 
   // One Product Store (Settings > Tip magazin): current mode + active products picker.
   const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
@@ -106,6 +242,17 @@ export default async function SettingsPage({ searchParams }: Props) {
   const sg = storeSettings?.sameday_config as CourierCfg | null;
   const wc = storeSettings?.woot_config as CourierCfg | null;
   const cc = storeSettings?.colete_config as CourierCfg | null;
+  const gl = storeSettings?.gls_config as CourierCfg | null;
+  const pe = storeSettings?.pallex_config as CourierCfg | null;
+  const ec = storeSettings?.ecolet_config as CourierCfg | null;
+  const po = storeSettings?.posta_config as CourierCfg | null;
+  const io = storeSettings?.innoship_config as CourierCfg | null;
+  const pk = storeSettings?.packeta_config as CourierCfg | null;
+  const ss = storeSettings?.smartship_config as CourierCfg | null;
+  const sh = storeSettings?.shipo_config as CourierCfg | null;
+  const fx = storeSettings?.fedex_config as CourierCfg | null;
+  const up = storeSettings?.ups_config as CourierCfg | null;
+  const dh = storeSettings?.dhl_config as CourierCfg | null;
 
   const activeCourierIds: string[] = [
     ...(fc?.enabled && fc?.username && fc?.client_id ? ["fan-courier"] : []),
@@ -114,28 +261,123 @@ export default async function SettingsPage({ searchParams }: Props) {
     ...(sg?.enabled && sg?.username && sg?.pickup_point_id ? ["sameday"] : []),
     ...(wc?.enabled && wc?.public_key && wc?.secret_key ? ["woot"] : []),
     ...(cc?.enabled && cc?.client_id && cc?.client_secret ? ["colete"] : []),
+    /*
+     * Aceeasi regula de „configurat" ca in pagina comenzii si ca in checkout:
+     * `client_number` e obligatoriu fiindca fara el MyGLS nu stie pe ce contract
+     * sa emita. Cele trei locuri trebuie sa spuna acelasi lucru, altfel panoul
+     * ofera o metoda pe care magazinul n-o poate folosi.
+     */
+    ...(gl?.enabled && gl?.username && gl?.client_number ? ["gls"] : []),
+    /* Aceeasi regula ca in `pallexGata`, in pagina de integrari si in cea de
+       comanda: Pall-Ex se autentifica prin HTTP Basic, atat. */
+    ...(pe?.enabled && pe?.username ? ["pallex"] : []),
+    /* Aceeasi regula ca in `ecoletGata`: eColet are o singura credentiala, un
+       token de acces. */
+    ...(ec?.enabled && ec?.api_token ? ["ecolet"] : []),
+    /* Aceeasi regula ca in `postaGata`, in pagina de integrari si in cea de
+       comanda. `cod_trimitere` intra in ea desi nu e credentiala: fara el Posta
+       respinge fiecare AWB, deci metoda ar aparea in checkout fara sa poata
+       produce vreo trimitere. */
+    ...(po?.enabled && po?.username && po?.cod_trimitere ? ["posta"] : []),
+    /* Aceeasi regula ca in `innoshipGata`: cheia si id-ul depozitului. */
+    ...(io?.enabled && io?.api_key && io?.external_client_location ? ["innoship"] : []),
+    /*
+     * ⚠ PACKETA LIPSEA DE AICI, si asta o facea imposibil de pornit.
+     *
+     * Metoda ei exista in `SHIPPING_METHODS`, dar `isIntegrated` se citeste din
+     * lista asta — deci randul ramanea stins si dezactivat, iar zona `packeta` nu
+     * se putea activa niciodata. Fara zona activa, `getShippingOptions` nici nu
+     * ajunge la ramura Packeta: integrarea era livrata si totusi de neatins din
+     * checkout. Gasita 2026-09-05, la cablarea SmartShip.
+     *
+     * Aceeasi regula ca in `packetaGata`: parola API si eticheta de expeditor.
+     */
+    ...(pk?.enabled && pk?.api_password && pk?.eshop ? ["packeta"] : []),
+    /*
+     * Aceeasi regula ca in `smartshipGata`: cheia de API SI adresa de ridicare cu
+     * id-ul ei NUMERIC de localitate. Fara `city`, fiecare cerere cade pe
+     * validare, deci metoda ar aparea in checkout fara sa poata produce nimic.
+     */
+    ...(ss?.enabled && ss?.api_key
+      && (ss?.expeditor as { name?: string; address?: string; phone?: string; city?: number } | null)?.name
+      && (ss?.expeditor as { name?: string; address?: string; phone?: string; city?: number } | null)?.address
+      && (ss?.expeditor as { name?: string; address?: string; phone?: string; city?: number } | null)?.phone
+      && Number((ss?.expeditor as { city?: number } | null)?.city) > 0
+      ? ["smartship"] : []),
+    /*
+     * Aceeasi regula ca in `shipoGata`: cheia de API SI adresa de ridicare.
+     *
+     * ⚠ `sender_address_id` NU e un oras, e id-ul unei adrese salvate in contul
+     * lor — si el se trimite si ca `sender_city` la cotare. Fara el, `POST /rates`
+     * nici nu se poate forma, deci metoda ar aparea in checkout fara sa poata
+     * produce vreun pret. Vezi si capcana Packeta de mai sus: o metoda adaugata
+     * in `SHIPPING_METHODS` dar NU aici ramane vesnic stinsa.
+     */
+    ...(sh?.enabled && sh?.api_key && Number((sh as { sender_address_id?: number } | null)?.sender_address_id) > 0
+      ? ["shipo"] : []),
+    /*
+     * Aceeasi regula ca in `fedexGata`: amandoua credentialele, numarul de cont SI
+     * adresa de expeditie cu cod postal.
+     *
+     * ⚠ Codul postal nu e un moft: Romania e tara „postal-aware" la FedEx (sablonul
+     * lor e `NNNNNN`, sase cifre), iar fara el `POST /rate/v1/rates/quotes` raspunde
+     * `POSTALCODE.ZIPCODE.REQUIRED`. Metoda ar aparea in checkout fara sa poata
+     * produce vreun pret. Vezi si capcana Packeta de mai sus: o metoda adaugata in
+     * `SHIPPING_METHODS` dar NU aici ramane vesnic stinsa.
+     */
+    ...(fx?.enabled && fx?.client_id && fx?.client_secret && fx?.account_number
+      && (fx as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.oras
+      && (fx as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.cod_postal
+      ? ["fedex"] : []),
+    /*
+     * Aceeasi regula ca in `upsGata`: amandoua credentialele, numarul de cont SI adresa
+     * de expeditie cu cod postal.
+     *
+     * ⚠ Codul postal nu e un moft. In schema UPS el e „optional" pentru Romania — dar
+     * `StateProvinceCode` NU se trimite (ei n-au nomenclator de judete romanesti, iar
+     * cotarea cere fix doua caractere), deci codul postal ramane singurul semnal dupa
+     * care pot zona ruta. Vezi si capcana Packeta de mai sus: o metoda adaugata in
+     * `SHIPPING_METHODS` dar NU aici ramane vesnic stinsa.
+     */
+    ...(up?.enabled && up?.client_id && up?.client_secret && up?.account_number
+      && (up as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.oras
+      && (up as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.cod_postal
+      ? ["ups"] : []),
+    /*
+     * Aceeasi regula ca in `dhlGata`: utilizatorul, parola, numarul de cont SI adresa
+     * de expeditie cu cod postal.
+     *
+     * ⚠ Campurile se numesc `username` / `password`, NU `client_id` / `client_secret`
+     * ca la FedEx si UPS de deasupra — blocul asta e copiat de acolo. O redenumire
+     * uitata face conditia vesnic falsa, iar metoda ramane stinsa pentru toata lumea
+     * fara nicio eroare de tip (`CourierCfg` e `Record<string, unknown>`).
+     *
+     * ⚠ Codul postal nu e un moft: `postalCode` e CHEIE OBLIGATORIE in `shipperDetails`
+     * la cotare (lipsa cheii = 400), iar tariful se determina, in cuvintele lor, „based
+     * on city, postal code, and country code". Si schema il declara `minLength: 0`,
+     * deci `""` trece de validare si cade abia la motorul lor (`340004`/`420506`) —
+     * adica metoda ar aparea in checkout fara sa poata produce vreun pret. Vezi si
+     * capcana Packeta de mai sus: o metoda adaugata in `SHIPPING_METHODS` dar NU aici
+     * ramane vesnic stinsa.
+     */
+    ...(dh?.enabled && dh?.username && dh?.password && dh?.account_number
+      && (dh as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.oras
+      && (dh as { expeditor?: { oras?: string; cod_postal?: string } | null } | null)?.expeditor?.cod_postal
+      ? ["dhl"] : []),
     "own",
     "pickup",
   ];
 
-  const ncfg = storeSettings?.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
-  const scfg = storeSettings?.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
-  const icfg = storeSettings?.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
-  const kcfg = storeSettings?.klarna_config as { enabled?: boolean; username?: string; password?: string } | null;
-  const rcfg = storeSettings?.revolut_config as { enabled?: boolean; secret_key?: string } | null;
-  const paymentReadiness = {
-    netopia: !!(ncfg?.enabled && ncfg?.pos_signature && ncfg?.api_key),
-    stripe: !!(scfg?.enabled && scfg?.charges_enabled && scfg?.account_id),
-    ipay: !!(icfg?.enabled && icfg?.username && icfg?.password),
-    klarna: !!(kcfg?.enabled && kcfg?.username && kcfg?.password),
-    revolut: !!(rcfg?.enabled && rcfg?.secret_key),
-  };
+  // Acelasi ajutor ca magazinul si ca verificarea de la plasarea comenzii: „gata"
+  // trebuie sa insemne acelasi lucru in toate trei, altfel panoul arata o metoda
+  // pe care comanda o refuza.
+  const paymentReadiness = processorReadiness(storeSettings);
   const paymentMethods = resolvePaymentMethods(storeSettings?.payment_methods, paymentReadiness);
 
   return (
     <SettingsClient
       profile={profile}
-      email={user.email ?? ""}
+      email={email}
       businessId={business?.id ?? null}
       businessData={business ?? null}
       storePolicies={(storeSettings?.store_policies as Record<string, unknown>) ?? {}}
@@ -145,15 +387,16 @@ export default async function SettingsPage({ searchParams }: Props) {
         vat_rate: storeSettings?.vat_rate ?? 19,
         prices_include_vat: storeSettings?.prices_include_vat ?? true,
         show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+        show_vat_label: storeSettings?.show_vat_label ?? true,
       }}
       notificationsConfig={{
         notification_email: (storeSettings?.notifications_config as Record<string, unknown>)?.notification_email as string ?? "",
         new_order: (storeSettings?.notifications_config as Record<string, unknown>)?.new_order !== false,
       }}
       smsoConfig={{
-        enabled: (storeSettings?.smso_config as Record<string, unknown>)?.enabled === true,
-        api_key: (storeSettings?.smso_config as Record<string, unknown>)?.api_key as string ?? "",
-        sender_id: (storeSettings?.smso_config as Record<string, unknown>)?.sender_id as string ?? "",
+        enabled: smsoSettings?.enabled === true,
+        api_key: smsoSettings?.api_key as string ?? "",
+        sender_id: smsoSettings?.sender_id as string ?? "",
       }}
       shippingConfig={{
         shipping_enabled: storeSettings?.shipping_enabled ?? false,
@@ -162,12 +405,16 @@ export default async function SettingsPage({ searchParams }: Props) {
         shipping_zones: (storeSettings?.shipping_zones as Record<string, { enabled: boolean; price: number; label?: string }> | null) ?? {},
         shipping_classes: parseShippingClasses(storeSettings?.shipping_classes),
         shipping_rules: parseShippingRules(storeSettings?.shipping_rules),
+        /* Termenul de livrare sta in `page_content`, langa comutatorul de
+           afisare din editor — vezi `@/lib/shipping/delivery-time`. */
+        delivery_time: (storeSettings?.page_content as { delivery_time?: unknown } | null)?.delivery_time ?? null,
       }}
       activeCourierIds={activeCourierIds}
       paymentMethods={paymentMethods}
       paymentReadiness={paymentReadiness}
       cardDiscount={parseCardDiscountConfig(storeSettings?.card_discount_config)}
       codDiscount={parseCardDiscountConfig(storeSettings?.cod_discount_config)}
+      codFee={parseCodFeeConfig(storeSettings?.cod_fee_config)}
       cookieBanner={parseCookieBannerConfig(storeSettings?.cookie_banner_config)}
       cookieCategories={detectConsentCategories(storeSettings?.marketing_config as MarketingConfig | null)}
       storeSeo={storeSeo}
@@ -179,8 +426,8 @@ export default async function SettingsPage({ searchParams }: Props) {
       products={opsProducts}
       shippingCategories={shippingCategories}
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
-      planSuccess={plan_success === "1"}
-      domainSuccess={domain_success === "1"}
+      planSuccess={planSuccess}
+      domainSuccess={domainSuccess}
     />
   );
 }

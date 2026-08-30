@@ -1,7 +1,14 @@
 "use server";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
+import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
+import { eroareNesigura, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   createFanCourierAwb,
   deleteFanCourierAwb,
@@ -28,8 +35,21 @@ export async function saveFanCourierConfig(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Business negasit" };
 
+  // Campurile secrete venite GOALE isi pastreaza valoarea salvata: formularul le
+  // primeste mascate (vezi lib/integrari/secrete.ts), deci o salvare obisnuita
+  // nu trebuie sa le stearga. Fara asta, mascarea ar distruge integrarea.
+  // Citirea se face cu SERVICE ROLE. De aici valoarea nu pleaca spre curier — se
+  // scrie doar la loc, si `privat.cripteaza` e idempotenta, deci randul din baza ar
+  // ramane corect si citit cifrat. Se citeste totusi decriptat fiindca asta e
+  // contractul lui `pastreazaSecretele` (secrete.ts): altfel `configFinal` tine
+  // `enc.v1.…`, si primul care adauga dupa salvare un apel catre curier sau un
+  // `return { config }` rupe integrarea in tacere. Proprietatea e dovedita mai sus.
+  const { data: vechi } = await createAdminClient()
+    .from("store_settings").select("fan_courier_config").eq("business_id", businessId).maybeSingle();
+  const configFinal = pastreazaSecretele("fan_courier_config", config, vechi?.fan_courier_config);
+
   const { error } = await supabase.from("store_settings").update({
-    fan_courier_config: config as unknown as import("@/types/database.types").Json,
+    fan_courier_config: configFinal as unknown as import("@/types/database.types").Json,
     updated_at: new Date().toISOString(),
   }).eq("business_id", businessId);
 
@@ -58,10 +78,13 @@ export async function disconnectFanCourier(
 }
 
 export async function loadFanCourierAccountAction(
+  businessId: string,
   username: string,
   password: string,
 ): Promise<{ branches: FanCourierBranch[] } | { error: string }> {
-  return loadFanCourierAccount(username, password);
+  const parola = await secretDinConfig(businessId, "fan_courier_config", "password", password);
+  if (!parola) return { error: "Completeaza parola selfAWB." };
+  return loadFanCourierAccount(username, parola);
 }
 
 // ─── AWB actions ──────────────────────────────────────────────────────────────
@@ -75,8 +98,13 @@ async function getConfigAndOrder(businessId: string, orderId: string) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" as const };
 
+  // Configul se citeste cu service role: vederea public.store_settings nu mai
+  // decripteaza pentru `authenticated`, deci pe clientul utilizatorului parola
+  // selfAWB ar veni `enc.v1.…` si FAN ar respinge orice AWB. Service role
+  // OCOLESTE RLS — de aceea proprietatea magazinului se verifica mai sus.
+  const admin = createAdminClient();
   const [{ data: settings }, { data: order }] = await Promise.all([
-    supabase.from("store_settings")
+    admin.from("store_settings")
       .select("fan_courier_config")
       .eq("business_id", businessId).single(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
@@ -104,19 +132,68 @@ export async function createFanCourierAwbAction(
   const orderData = order as typeof order & { fan_courier_awb_number?: string | null };
   if (orderData.fan_courier_awb_number) return { error: "AWB FAN Courier a fost deja creat" };
 
-  try {
-    const awbNumber = await createFanCourierAwb(config, input);
+  /*
+   * ⚠ FAN e, impreuna cu Woot, curierul cel mai expus: nu trimitem nicio referinta
+   * a noastra in payloadul `intern-awb`, deci un AWB creat si nesalvat local ramane
+   * complet ANONIM la ei — nu poate fi nici gasit, nici legat inapoi. Registrul
+   * local e singurul strat care poate opri a doua apasare.
+   *
+   * In plus, `fanFetch` reincearca AUTOMAT orice cerere pe 401, inclusiv POST-ul de
+   * creare: daca FAN raspunde 401 dupa ce a inregistrat AWB-ul, un singur apel poate
+   * produce DOUA. Rezervarea nu opreste asta (e in interiorul aceluiasi apel), dar
+   * macar a doua APASARE nu mai adauga o a treia.
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    { businessId, orderId, fel: "awb", furnizor: "fancourier", cheie: cheieOperatie("awb", "fancourier", orderId) },
+    async () => {
+      const awbNumber = await createFanCourierAwb(config, input);
+      return { referinta: awbNumber, valoare: { awbNumber } };
+    },
+    verdictFurnizor,
+    /*
+     * ⚠ NU SE DA `legaturaVie`, si nu din uitare.
+     *
+     * Aici statea `async () => !!orderData.<coloana>` — dar `orderData` se
+     * citeste INAINTE, iar mai sus exista un `return` care opreste totul daca
+     * numarul exista deja. Deci in clipa apelului predicatul era garantat fals:
+     * literalmente `async () => false`.
+     *
+     * Iar `false` pe ramura `deja` inseamna „elibereaza slotul si REIA", adica
+     * inca un apel la curier. Si `deja` apare exact in cazul pentru care exista
+     * registrul: AWB creat, scrierea pe comanda pierduta. Adica paza se
+     * transforma tocmai acolo in AL DOILEA COLET REAL, FACTURAT.
+     *
+     * Fara callback, `deja` ADOPTA referinta din registru si o scrie inapoi pe
+     * comanda — ce face codul de mai jos oricum.
+     *
+     * ⚠ Schimbul, pe fata: cazul prost devine o comanda care poarta un AWB
+     * anulat (vizibil, si deja strigat in `/admin/logs` de `marcheazaAnulata`
+     * cand eliberarea pica), in loc de un colet platit de doua ori.
+     */
+  );
 
-    await supabase.from("orders").update({
-      fan_courier_awb_number: awbNumber,
-      updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
-    void enqueueAboutYouShip(businessId, orderId);
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  const awbNumber = r.fel === "facut" ? r.valoare.awbNumber : (r.referinta ?? "");
 
-    return { awbNumber };
-  } catch (e) {
-    return { error: (e as Error).message };
+  const { error: eScriere, data: randuri } = await supabase.from("orders").update({
+    fan_courier_awb_number: awbNumber,
+    updated_at: new Date().toISOString(),
+  }).eq("id", orderId).select("id");
+
+  if (eScriere || !randuri || randuri.length === 0) {
+    await logError({
+      action: "fancourier.createAwb",
+      message: `AWB FAN Courier creat (${awbNumber}), dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+      details: { orderId, businessId, code: eScriere?.code },
+      businessId,
+      severity: "critical",
+    });
+  } else {
+    dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
+
+  return { awbNumber };
 }
 
 // ─── Pickup (courier order) actions ──────────────────────────────────────────
@@ -130,7 +207,13 @@ async function getOwnedFanConfig(businessId: string) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" as const };
 
-  const { data: settings } = await supabase
+  // Service role, ca in getConfigAndOrder: parola selfAWB pleaca la FAN, iar
+  // clientul utilizatorului o primeste cifrata. Proprietatea magazinului e
+  // verificata chiar deasupra, fiindca service role sare peste RLS.
+  // Configul asta se scrie mai jos la loc (last_pickup_*) cu parola in clar in
+  // el — corect: declansatorul de pe vedere o cripteaza inapoi la scriere.
+  const admin = createAdminClient();
+  const { data: settings } = await admin
     .from("store_settings").select("fan_courier_config").eq("business_id", businessId).single();
 
   const config = settings?.fan_courier_config as FanCourierConfig | null;
@@ -148,23 +231,68 @@ export async function createFanCourierPickupAction(
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config } = ctx;
 
-  try {
-    const orderId = await createFanCourierPickupOrder(config, input);
+  /*
+   * ⚠ AICI DUPLICATUL ERA MAI RAU DECAT LA CEILALTI.
+   *
+   * Nu exista nicio garda pe server (doar `hasActivePickup` in modal), iar scrierea
+   * de mai jos SUPRASCRIE `last_pickup_id`. Deci a doua apasare chema FAN a doua
+   * oara SI facea prima ridicare NEANULABILA — `cancelFanCourierPickupAction`
+   * raspunde „Nu exista o ridicare programata care sa poata fi anulata" fara acel id.
+   *
+   * Discriminantul e ZIUA ceruta: doua apasari pe aceeasi zi sunt duplicat, o
+   * ridicare pentru alta zi e legitima.
+   */
+  const r = await cuRegistru(
+    createAdminClient(),
+    {
+      businessId,
+      orderId: null,
+      fel: "ridicare",
+      furnizor: "fancourier",
+      cheie: cheieOperatie("ridicare", "fancourier", input.pickupDate),
+    },
+    async () => {
+      const idRidicare = await createFanCourierPickupOrder(config, input);
+      /*
+       * `createFanCourierPickupOrder` intoarce deliberat sir GOL cand raspunsul e
+       * 2xx dar fara id („an error-free 2xx counts as accepted even without one").
+       * Inchis ca `reusit` cu referinta goala, randul ar fi blocat ziua definitiv:
+       * anularea raspunde „nu exista o ridicare care sa poata fi anulata" (n-are
+       * `last_pickup_id`), deci nici slotul nu s-ar mai putea elibera vreodata.
+       * Ridicarea EXISTA la FAN, doar ca nu-i stim numarul — adica fix „nu stim".
+       */
+      if (!idRidicare) {
+        throw eroareNesigura("FAN Courier a acceptat ridicarea dar nu a returnat id-ul ei. Verifica in contul FAN inainte de a programa alta pe aceeasi zi.");
+      }
+      return { referinta: String(idRidicare), valoare: { orderId: idRidicare } };
+    },
+    verdictFurnizor,
+  );
 
-    // Remember the last pickup so the UI can warn about duplicates / allow cancel.
-    await supabase.from("store_settings").update({
-      fan_courier_config: {
-        ...config,
-        last_pickup_date: input.pickupDate,
-        last_pickup_id: orderId || null,
-      } as unknown as import("@/types/database.types").Json,
-      updated_at: new Date().toISOString(),
-    }).eq("business_id", businessId);
+  if (r.fel === "blocat" || r.fel === "eroare") return { error: r.mesaj };
+  const idRidicare = r.fel === "facut" ? r.valoare.orderId : (r.referinta ?? "");
 
-    return { orderId };
-  } catch (e) {
-    return { error: (e as Error).message };
+  // Remember the last pickup so the UI can warn about duplicates / allow cancel.
+  const { error: eScriere } = await supabase.from("store_settings").update({
+    fan_courier_config: {
+      ...config,
+      last_pickup_date: input.pickupDate,
+      last_pickup_id: idRidicare || null,
+    } as unknown as import("@/types/database.types").Json,
+    updated_at: new Date().toISOString(),
+  }).eq("business_id", businessId);
+
+  if (eScriere) {
+    await logError({
+      action: "fancourier.pickup",
+      message: `Ridicare FAN ceruta (${idRidicare || "fara id"}), dar configul NU s-a actualizat: ${eScriere.message}. Ridicarea nu va putea fi anulata din panou.`,
+      details: { businessId, pickupDate: input.pickupDate },
+      businessId,
+      severity: "critical",
+    });
   }
+
+  return { orderId: idRidicare };
 }
 
 export async function cancelFanCourierPickupAction(
@@ -178,17 +306,56 @@ export async function cancelFanCourierPickupAction(
     return { error: "Nu exista o ridicare programata din platforma care sa poata fi anulata." };
   }
 
+  // Ziua pe care o elibereaza anularea trebuie citita INAINTE ca `last_pickup_date`
+  // sa fie golit: ea e chiar discriminantul cheii din registru.
+  const ziuaAnulata = config.last_pickup_date;
+
   try {
     await deleteFanCourierPickupOrder(config, config.last_pickup_id);
 
-    await supabase.from("store_settings").update({
+    const { data: randuriRidicare, error: eRidicare } = await supabase.from("store_settings").update({
       fan_courier_config: {
         ...config,
         last_pickup_date: null,
         last_pickup_id: null,
       } as unknown as import("@/types/database.types").Json,
       updated_at: new Date().toISOString(),
-    }).eq("business_id", businessId);
+    }).eq("business_id", businessId).select("business_id");
+
+    /*
+     * Acelasi tipar ca la AWB-uri: ridicarea e deja stearsa la FAN, deci esecul
+     * scrierii nu se intoarce ca eroare — dar nici nu are voie sa treaca tacut.
+     * Fara semnal, configul ar pastra un `last_pickup_id` mort, iar interfata i-ar
+     * arata comerciantului o ridicare programata care nu mai exista.
+     */
+    if (eRidicare || !randuriRidicare || randuriRidicare.length === 0) {
+      await logError({
+        action: "fancourier.deletePickup",
+        message: `Ridicarea FAN ${config.last_pickup_id} a fost stearsa la curier, dar configul NU s-a actualizat: ${eRidicare?.message ?? "niciun rand modificat"}`,
+        details: { businessId, pickupId: config.last_pickup_id, code: eRidicare?.code },
+        businessId, severity: "critical",
+      });
+    }
+
+    /*
+     * Fara eliberare, reprogramarea pe ACEEASI zi ar fi primit `deja` si ar fi scris
+     * inapoi id-ul ridicarii STERSE — adica exact invierea pe care registrul o
+     * inchide in alte parti. Interfata chiar la asta indeamna: anulezi si programezi
+     * din nou, de obicei tot pentru azi.
+     */
+    if (ziuaAnulata) {
+      const eliberat = await marcheazaAnulata(
+        createAdminClient(), businessId, cheieOperatie("ridicare", "fancourier", ziuaAnulata));
+      if (!eliberat) {
+        await logError({
+          action: "fancourier.cancelPickup",
+          message: `Ridicare FAN anulata pentru ${ziuaAnulata}, dar slotul din registru NU s-a eliberat. O reprogramare pe aceeasi zi va fi refuzata.`,
+          details: { businessId, ziuaAnulata },
+          businessId,
+          severity: "critical",
+        });
+      }
+    }
 
     return { success: true };
   } catch (e) {
@@ -210,10 +377,42 @@ export async function deleteFanCourierAwbAction(
   try {
     await deleteFanCourierAwb(config, orderData.fan_courier_awb_number);
 
-    await supabase.from("orders").update({
+    const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       fan_courier_awb_number: null,
       updated_at: new Date().toISOString(),
-    }).eq("id", orderId);
+    }).eq("id", orderId).eq("business_id", businessId).select("id");
+    /*
+     * Scrierea locala se VERIFICA, dar esecul ei NU devine eroare catre om.
+     *
+     * AWB-ul e deja ANULAT la curier. Un „Eroare la actualizare" l-ar trimite pe
+     * comerciant sa apese din nou, iar a doua anulare cade la curier cu „AWB
+     * inexistent" si arata ca un sistem stricat. Deci se raporteaza succes si se
+     * striga in `/admin/logs`: acolo ramane singura dovada ca o comanda mai poarta
+     * un numar de transport care nu mai exista.
+     *
+     * `.eq("business_id")` nu e decorativ: fara el, zero randuri ar putea insemna
+     * si „alta comanda", nu doar „scriere pierduta", si alarma ar fi ambigua.
+     */
+    if (eScriere || !randuri || randuri.length === 0) {
+      await logError({
+        action: "fancourier.deleteAwb",
+        message: `AWB FAN Courier ${orderData.fan_courier_awb_number} a fost anulat la curier, dar comanda NU s-a actualizat: ${eScriere?.message ?? "niciun rand modificat"}`,
+        details: { orderId, businessId, awb: orderData.fan_courier_awb_number, code: eScriere?.code },
+        businessId, severity: "critical",
+      });
+    }
+
+    // Fara eliberare, emiterea urmatoare ar adopta chiar AWB-ul sters.
+    const eliberat = await marcheazaAnulata(createAdminClient(), businessId, cheieOperatie("awb", "fancourier", orderId));
+    if (!eliberat) {
+      await logError({
+        action: "fancourier.deleteAwb",
+        message: "AWB FAN Courier sters, dar slotul din registru NU s-a eliberat. Urmatoarea emitere pe aceasta comanda va fi refuzata.",
+        details: { orderId, businessId, awb: orderData.fan_courier_awb_number },
+        businessId,
+        severity: "critical",
+      });
+    }
 
     return { success: true };
   } catch (e) {

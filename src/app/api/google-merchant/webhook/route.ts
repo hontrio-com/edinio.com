@@ -8,12 +8,23 @@ import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig
 // Receives Merchant API PRODUCT_STATUS_CHANGE notifications. We always ack (2xx)
 // so Google doesn't retry forever, then refresh the affected product's status.
 export async function POST(req: NextRequest) {
-  // Optional shared-secret check: when GMC_WEBHOOK_SECRET is set, the notification
-  // subscription registers a callback URL carrying ?token=<secret>, so forged POSTs
-  // (which can't know the secret) are acked-and-ignored. Left open when the secret
-  // is unset, for backward compatibility with older subscriptions.
+  // Shared-secret OBLIGATORIU: abonamentul de notificari inregistreaza un URL de
+  // callback cu ?token=<secret>, deci POST-urile falsificate (care nu-l stiu)
+  // sunt confirmate si ignorate.
+  //
+  // Varianta de dinainte lasa ruta DESCHISA cand secretul lipsea din mediu, cu
+  // doar un plafon pe IP. Dar `account_id` nu e secret: oricine trimitea
+  // {"account":"accounts/<id-ul altui comerciant>"} ajungea, cu clientul de
+  // serviciu, pe ramura finala si stergea `last_status_at` de pe TOT catalogul
+  // unui magazin strain. Fail-closed, ca la cele 12 rute de cron (vezi
+  // src/lib/cron-auth.ts): fara secret nu intra nimeni. Ce se pierde e doar
+  // prospetimea starilor — cronul gmc-sync le reinterogheaza oricum la 30 min.
   const secret = process.env.GMC_WEBHOOK_SECRET;
-  if (secret && req.nextUrl.searchParams.get("token") !== secret) {
+  if (!secret) {
+    console.error("[gmc/webhook] GMC_WEBHOOK_SECRET nu e setat — notificare respinsa");
+    return NextResponse.json({ ok: true });
+  }
+  if (req.nextUrl.searchParams.get("token") !== secret) {
     return NextResponse.json({ ok: true });
   }
 

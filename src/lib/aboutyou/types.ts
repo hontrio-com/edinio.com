@@ -47,28 +47,93 @@ export interface AboutYouConfig {
   // Webhook subscription (created via API; client_secret verifies signatures).
   webhook_subscription_id?: string;
   webhook_secret?: string;
+  /**
+   * Secret propriu, pus in URL-ul de abonare. Schema de semnatura a lui About You
+   * nu e publicata, deci verificarea semnaturii e o deductie; tokenul asta e a
+   * doua incuietoare, care nu depinde de nimic ghicit.
+   */
+  webhook_token?: string;
+  /**
+   * S-a uitat deja o dată la antetele unei livrări adevărate, ca să afle schema de semnătură.
+   *
+   * ⚠ O singură dată pe magazin: un webhook care vine des ar umple jurnalul cu același lucru, iar
+   * o intrare care se repetă încetează să fie citită. Vezi `semnatura-descoperire.ts`.
+   */
+  semnatura_cercetata?: boolean;
   // Fulfillment.
   fulfillment_type?: AboutYouFulfillmentType;
   default_carrier_key?: string;
   carrier_map?: Record<string, string>; // Edinio courier code -> About You carrier_key
+  /**
+   * Curierii la care AWB-ul de TUR e valabil si pentru RETUR, declarat de comerciant.
+   *
+   * ⚠ NU E O PRESUPUNERE DE-A NOASTRA, si de-aia sta in config, nu in cod. `return_tracking_key`
+   * e un camp separat de `shipment_tracking_key` in schema lor, deci ei le tin drept doua
+   * documente. Daca sunt sau nu acelasi la un curier anume, stie contractul comerciantului cu
+   * curierul — nu stim noi. Nedeclarat, se opreste expedierea. Vezi `shipOrderNow`.
+   */
+  retur_bidirectional?: Record<string, boolean>;
   // Catalog defaults.
   default_country_of_origin?: string;   // ISO2, default "RO"
   brand_id?: number;                    // merchant's primary brand
   brand_name?: string;
   ship_countries?: string[];            // About You country codes to list in
+  // Publicul magazinului. About You imparte arborele pe Women/Men/Girls/Boys, iar
+  // categoriile romanesti („Genti") rareori spun pentru cine sunt — fara asta,
+  // maparea automata n-ar avea cum sa aleaga intre ramuri.
+  target_audience?: "women" | "men" | "girls" | "boys";
   // Pricing.
   price_mode?: "fx_from_ron" | "manual_eur";
   fx?: AboutYouFxConfig;
   category_map?: Record<string, AboutYouCategoryMapEntry>;
   auto_sync?: boolean;
   last_sync_at?: string;
+  /**
+   * De la ce pagina reia reconcilierea catalogului.
+   *
+   * ⚠ FARA EA SE PORNEA MEREU DE LA 1. Cu plafon de 50 de pagini si un buget de timp care se
+   * termina de obicei mai devreme, un catalog mare nu ajungea NICIODATA la sfarsit: primele
+   * pagini se reconciliau de zeci de ori pe ora, ultimele niciodata. Un produs respins de ei,
+   * aflat pe pagina 60, ramanea la noi „activ" pentru totdeauna.
+   *
+   * ⚠ Cand catalogul se termina, se intoarce la 1: altfel cursorul ar creste la nesfarsit si de
+   * la un punct fiecare rulare ar cere pagini goale.
+   */
+  reconcile_page?: number;
+  /** Unde a ajuns roata pe `/products/rejected`. Vezi nota din `reconcileStatuses`. */
+  rejected_page?: number;
+  /**
+   * Unde a ajuns roata pe listarile ramase orfane.
+   *
+   * ⚠ FARA EA, primele doua sute tin locul tuturor: o retragere care nu se poate duce la capat
+   * lasa randul pe loc, iar urmatoarele cinci mii n-ar mai fi vazute niciodata. Vezi
+   * `retrageListarileOrfane`.
+   */
+  orfane_dupa?: string | null;
+  /**
+   * MOSTENIRE: raspandirea unei setari globale, ramasa neterminata.
+   *
+   * ⚠ NU SE MAI SCRIE. Lucrarile in masa stau acum intr-un RAND propriu (`aboutyou_bulk_jobs`),
+   * fiindca un singur camp in config se calca in picioare: „Publica toate" scria `fanout =
+   * publish`, iar o salvare de setari un minut mai tarziu il inlocuia cu `price` — prima lucrare
+   * disparea in tacere.
+   *
+   * ⚠ SE MAI CITESTE, SI DE-AIA RAMANE. Intre comit si desfasurare pot exista magazine cu campul
+   * inca plin, iar el inseamna „mai am catalog de pus la coada": ignorat, exact produsele alea ar
+   * ramane neatinse de nimic. `continuaLucrarileInMasa` il preia intr-o lucrare si abia atunci il
+   * sterge. Se scoate cand nu mai exista niciun magazin cu el.
+   */
+  fanout?: { op: "upsert" | "price"; dupa: string | null } | null;
   orders_synced_at?: string;
   needs_reconnect?: boolean;
 }
 
 // ── Statuses ──────────────────────────────────────────────────────────────────
+// `local` = salvat la noi, netrimis niciodata. `draft` = About You l-a acceptat
+// si asteapta publicarea. Cat timp amandoua se numeau `draft`, „Publică toate"
+// incerca sa publice si produse care nu ajunsesera niciodata acolo.
 export type AboutYouListingStatus =
-  | "draft" | "pending" | "active" | "published" | "rejected" | "inactive" | "error";
+  | "local" | "draft" | "pending" | "active" | "published" | "rejected" | "inactive" | "error";
 
 export type AboutYouOrderItemStatus = "open" | "shipped" | "cancelled" | "returned";
 export type AboutYouOrderStatus = "open" | "shipped" | "cancelled" | "returned" | "mixed";
@@ -146,12 +211,84 @@ export interface AboutYouMaterialCluster { cluster_id: number; components: About
 export type AboutYouReadStatus =
   | "draft" | "pending_approval" | "pending_active" | "active" | "rejected" | "inactive" | "problem";
 export interface AboutYouRejectionReason { key?: string; type?: string; name?: string; description?: string }
+// GET /products/ (GetProductItemSchema). Deliberately does NOT carry rejection
+// data — that lives only on GET /products/rejected and on the
+// `product_master.status_updated` webhook.
+/**
+ * Un articol din `GET /products/`.
+ *
+ * ═══ ⚠ CREDEAM CA DA TREI CAMPURI. DA DOUAZECI SI TREI (27.08.2026) ═══
+ *
+ * Tipul asta avea doar `style_key`, `sku` si `status`, iar codul a construit pe el o convingere
+ * scrisa in doua locuri: „nu exista niciun capat de citire a stocului sau pretului… deci nici
+ * deriva fata de ei nu se poate masura". Afirmatia a modelat hotarari saptamani la rand — de la
+ * `valid_at` pana la reasertarea oarba de sase ore.
+ *
+ * ⚠ E FALSA. Masurat pe contul de sandbox, o singura cerere `GET /products/?page=1&per_page=2`,
+ * raspuns `200`, cheile unui articol:
+ *
+ *   attributes, brand, category, color, colorway_key, countries, country_of_origin,
+ *   description, descriptions, ean, images, material_composition_non_textile,
+ *   material_composition_textile, name, prices, quantity, quantity_fbm, second_size,
+ *   size, sku, status, style_key, weight
+ *
+ * ⚠ CE SCHIMBA: se poate compara ce credem noi cu ce au ei, pe stoc, pret si continut. Deci
+ * reasertarea nu mai trebuie sa GHICEASCA („probabil in sase ore s-a asezat"), ci poate VERIFICA.
+ *
+ * ⚠ SI DE CE N-AM AFLAT MAI DEVREME: n-am cerut niciodata. Convingerea a intrat odata cu tipul,
+ * la prima scriere, si de-atunci fiecare comentariu nou s-a sprijinit pe cel dinainte. O cerere
+ * de citire ar fi lamurit-o oricand.
+ */
 export interface AboutYouGetProductItem {
   style_key: string | null;
   sku: string;
   status: AboutYouReadStatus | string;
+  /** Stocul din depozitul comerciantului. `quantity_fbm` e cel din depozitele lor. */
+  quantity?: number | null;
+  quantity_fbm?: number | null;
+  /** Preturile pe tara, in forma in care le-am trimis. */
+  prices?: { country_code?: string; retail_price?: number | null; sale_price?: number | null }[] | null;
+  ean?: string | null;
+  name?: string | null;
+  color?: number | null;
+  size?: number | null;
+  second_size?: number | null;
+  brand?: number | null;
+  category?: number | null;
+  countries?: string[] | null;
+  country_of_origin?: string | null;
+  /**
+   * ⚠ URL-URILE NU SUNT ALE NOASTRE, si asta nu e o subtilitate: About You REGAZDUIESTE fiecare
+   * imagine si o si transcodeaza. Masurat pe acelasi produs, aceeasi zi:
+   *
+   *   trimis:  https://edinio-cdn.com/products/<uuid>/<uuid>.webp        (6 bucati)
+   *   primit:  https://ayou-live-sellerscenter-s3.s3.amazonaws.com/…jpg  (6 bucati)
+   *
+   * Deci o comparatie pe URL ar gasi „deriva" la fiecare citire, pentru totdeauna — o retrimitere
+   * la nesfarsit pe un produs perfect sanatos. Se compara NUMARUL. Vezi `amprentaArticolului`.
+   */
+  images?: string[] | null;
+  /** ⚠ Aceleasi numere pe care le trimitem, dar REORDONATE. Se compara sortat. */
+  attributes?: number[] | null;
+  weight?: number | null;
+  colorway_key?: string | null;
+  /*
+   * ⚠ Cele patru de mai jos lipseau din tip desi VIN in raspuns — vezi lista masurata din nota de
+   * mai sus. `name`, `description` si `descriptions` se intorc goale fiindca noi nu le trimitem
+   * (`buildAboutYouItems` nu le pune); compozitia, in schimb, se intoarce identica cu ce am
+   * trimis, pana la ordinea grupurilor, deci se poate compara.
+   */
+  description?: string | null;
+  descriptions?: Record<string, string> | null;
+  material_composition_textile?: AboutYouMaterialCluster[] | null;
+  material_composition_non_textile?: AboutYouMaterialCluster[] | null;
+}
+// GET /products/rejected (RejectedProductSchema).
+export interface AboutYouRejectedProduct {
+  style_key: string | null;
   rejection_reasons?: AboutYouRejectionReason[] | null;
   rejection_message?: string | null;
+  rejected_product_ids_hint?: unknown;
 }
 
 // ── Product / variant payload (what we SEND on POST /products) ─────────────────
@@ -175,7 +312,9 @@ export interface AboutYouProductItem {
   hs_code?: string;
   name?: string;
   descriptions?: Record<string, string>; // by locale
-  size?: number;
+  // Required by the schema even though the value may be null: a missing key is a
+  // 400 on the whole request. Typed as required so TypeScript enforces it.
+  size: number | null;
   second_size?: number;
   quantity?: number;
   material_composition_textile?: AboutYouMaterialCluster[];

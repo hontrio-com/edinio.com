@@ -12,10 +12,12 @@ import { basicAuthHeader, trendyolBaseUrl, userAgent } from "./auth";
 import { mesajDupaStatus, traduMesajTrendyol } from "./errors";
 import type {
   TrendyolBatchAck, TrendyolBatchResult, TrendyolBrand, TrendyolCategory,
-  TrendyolCategoryAttribute, TrendyolEnvironment, TrendyolProductItem, TrendyolShipmentPackage,
-  TrendyolSupplierAddresses, TrendyolStoreFront,
+  TrendyolCategoryAttribute, TrendyolEnvironment, TrendyolProductAttribute, TrendyolProductItem,
+  TrendyolShipmentPackage, TrendyolSupplierAddresses, TrendyolStoreFront,
 } from "./types";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
+import type { TrendyolClaim } from "./types";
+import { asteaptaRandulTrendyol, grupulCaii, tineCont429 } from "./ritm";
 
 export interface TrendyolAuth {
   supplierId: string;
@@ -59,6 +61,45 @@ async function call<T>(
     return { error: "Credențialele Trendyol lipsesc.", status: 0 };
   }
   const vitrina = auth.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
+
+  /*
+   * ═══ ⚠ RITMUL SE NUMARA INTR-UN SINGUR LOC, PE GRUP SI PE VANZATOR ═══
+   *
+   * Pana azi clientul n-avea nicio franare: singura era `PACE_MS = 350` in bucla cronului, in
+   * memoria unei instante. Deci cronul, un buton apasat de om, importul si un webhook sosit
+   * intre timp credeau fiecare ca au bugetul intreg — iar Trendyol vedea suma.
+   *
+   * ⚠ Din 14 septembrie 2026 limitele lor trec pe GRUPURI DE SERVICII, per vanzator. De-aia
+   * cheia e `supplierId:vitrina:grup`: doua magazine Edinio pe acelasi cont impart bugetul,
+   * iar o trecere grea de catalog n-are voie sa intarzie o miscare de stoc dupa o vanzare.
+   *
+   * ═══ ⚠ SI CAND N-A VENIT RANDUL, CEREREA NU MAI PLEACA (26.08.2026) ═══
+   *
+   * Pana azi pleca. Argumentul scris aici era ca un limitator care blocheaza ar opri
+   * confirmarile de comenzi si miscarile de stoc ale tuturor magazinelor — un incident mai
+   * mare decat depasirea de care ne aparam.
+   *
+   * ⚠ ARGUMENTUL NU MAI STA, si nu fiindca s-a razgandit cineva: `ceruJeton` intoarce
+   * `ok: true` la ORICE necaz cu baza. Deci `false` de aici nu mai poate insemna „contorul e
+   * cazut" — inseamna strict „galeata e plina si dupa cinci secunde de asteptare". Iar in
+   * cazul ala a trimite oricum inseamna ca limitatorul nu limiteaza nimic tocmai cand ar
+   * trebui: la inghesuiala.
+   *
+   * ⚠ SI CE ERA DE APARAT E APARAT PE ALTA CALE. Galetile sunt pe grup: o trecere grea de
+   * catalog nu poate goli galeata comenzilor, fiindca n-o atinge.
+   *
+   * ⚠ SE INTOARCE 429, NU O EROARE OARECARE. Casa citeste 429 ca trecator peste tot
+   * (`eTrecatoare` in `sync.ts`): coada reincearca si NU arde o incercare. O eroare cu alt cod
+   * ar fi golit cozi — chiar incidentul Trendyol de acum o luna.
+   */
+  const grup = grupulCaii(path, method);
+  if (!await asteaptaRandulTrendyol(auth.supplierId, vitrina, grup)) {
+    return {
+      error: "Prea multe cereri catre Trendyol chiar acum. Se reia singur peste putin.",
+      status: 429,
+    };
+  }
+
   try {
     const res = await fetch(`${trendyolBaseUrl(auth.environment)}${path}`, {
       method,
@@ -72,9 +113,14 @@ async function call<T>(
         // Nomenclatoarele (categorii, atribute) vin in limba ceruta aici.
         "Accept-Language": limbaVitrinei(vitrina),
         Accept: "application/json",
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        /* ⚠ La `FormData` NU se pune antetul: `fetch` il scrie singur, cu granita. Scris de
+           noi, granita ar lipsi si corpul n-ar putea fi despartit de nimeni. */
+        ...(body !== undefined && !(body instanceof FormData)
+          ? { "Content-Type": "application/json" } : {}),
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined
+        : body instanceof FormData ? body
+        : JSON.stringify(body),
       cache: "no-store",
       // Fara asta, o cerere blocata consuma tot bugetul functiei si esueaza
       // fara mesaj util — apelurile astea ruleaza si din cron-uri.
@@ -85,14 +131,37 @@ async function call<T>(
     let json: unknown = {};
     try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
     if (!res.ok) {
-      const obj = (json ?? {}) as { errors?: { message?: string }[]; message?: string; exception?: string };
+      /*
+       * ⚠ EI AU SPUS „PREA REPEDE": TAC TOATE INSTANTELE, nu doar asta.
+       *
+       * Fara pauza impartita, prima instanta ia 429 si se opreste, iar celelalte continua sa
+       * bata la aceeasi usa — si fiecare pana isi arde propriile jetoane. Cererile respinse
+       * se numara si ele in limita lor, deci o pauza necoordonata face raul mai mare.
+       *
+       * ⚠ Nu se asteapta dupa scriere: raspunsul pentru cererea ASTA e oricum 429. Pauza e
+       * pentru cele care vin dupa.
+       */
+      if (res.status === 429) {
+        void tineCont429(auth.supplierId, vitrina, grup, res.headers);
+      }
+      const obj = (json ?? {}) as {
+        errors?: { message?: string; key?: string; errorCode?: string }[];
+        message?: string; exception?: string; key?: string;
+      };
+      const primaEroare = Array.isArray(obj.errors) ? obj.errors[0] : undefined;
       const brut =
-        (Array.isArray(obj.errors) && obj.errors[0]?.message) ||
+        primaEroare?.message ||
         (typeof obj.message === "string" && obj.message) ||
         (typeof obj.exception === "string" && obj.exception) ||
         "";
+      /*
+       * `key` e identificatorul STABIL al erorii; `message` e localizat de
+       * `Accept-Language` si se schimba sub noi. Documentatia lor cere explicit
+       * sa nu potrivim pe text.
+       */
+      const cheie = primaEroare?.key || primaEroare?.errorCode || (typeof obj.key === "string" ? obj.key : undefined);
       // Codul HTTP spune uneori mai mult decat textul; altfel traducem textul.
-      const detail = mesajDupaStatus(res.status, auth.environment) ?? traduMesajTrendyol(brut, res.status);
+      const detail = mesajDupaStatus(res.status, auth.environment) ?? traduMesajTrendyol(brut, res.status, cheie);
       return { error: detail, status: res.status, details: json };
     }
     return { data: json as T };
@@ -143,15 +212,35 @@ export function getCategoryAttributeValues(auth: TrendyolAuth, categoryId: numbe
     auth, "GET", `/integration/product/categories/${categoryId}/attributes/${attributeId}/values?page=${page}&size=${size}`);
 }
 
-// Brands (min 1000/page). by-name is case-sensitive.
+/*
+ * Lista completa de branduri, paginata.
+ *
+ * ⚠ NU incerca sa o incarci toata: pagina 200 raspunde in continuare cu 1000 de
+ * randuri, deci catalogul are peste doua sute de mii de branduri. Un cache
+ * „complet" ar insemna sute de cereri si zeci de megaocteti pentru fiecare
+ * vitrina. Pentru cautare foloseste `getBrandsByName`.
+ */
 export function getBrands(auth: TrendyolAuth, page = 0, size = 1000) {
   return call<{ brands: TrendyolBrand[] }>(auth, "GET", `/integration/product/brands?page=${page}&size=${size}`);
 }
-// Atentie: lista completa vine invelita in `{ brands: [...] }`, dar cautarea
-// dupa nume raspunde cu un ARRAY simplu. Citit gresit, cautarea de brand nu
-// returna niciodata nimic.
-export function getBrandsByName(auth: TrendyolAuth, name: string) {
-  return call<TrendyolBrand[]>(auth, "GET", `/integration/product/brands/by-name?name=${encodeURIComponent(name)}`);
+/*
+ * Cautarea dupa nume.
+ *
+ * ⚠ `size` NU e in documentatie, dar functioneaza si conteaza enorm: fara el,
+ * serviciul taie la 20 de randuri. Probat pe „Avon" — 20 de rezultate fara
+ * `size`, 31 (toate) cu `size=100`, si printre cele taiate erau chiar potrivirile
+ * exacte pe care le cauta comerciantul. Peste 100 nu se mai schimba nimic: 100 e
+ * deja intreaga multime de potriviri.
+ *
+ * Nu e sensibila la registru, desi comentariul de aici sustinea contrariul:
+ * „avon" si „Avon" intorc exact aceleasi randuri.
+ *
+ * Atentie si la forma: lista completa vine invelita in `{ brands: [...] }`, dar
+ * cautarea raspunde cu un ARRAY simplu. Citit gresit, nu returna niciodata nimic.
+ */
+export function getBrandsByName(auth: TrendyolAuth, name: string, size = 500) {
+  return call<TrendyolBrand[]>(
+    auth, "GET", `/integration/product/brands/by-name?name=${encodeURIComponent(name)}&size=${size}`);
 }
 
 // Approved products (stock/price). Presence of a productMainId here => approved;
@@ -173,12 +262,199 @@ export function getApprovedProducts(
     auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/approved/inventory-and-price${qs ? `?${qs}` : ""}`);
 }
 
+/**
+ * Starea unui produs la ei, dupa barcode.
+ *
+ * Cel mai ieftin mod de a afla trei lucruri deodata: daca produsul EXISTA in
+ * catalogul vanzatorului, daca e aprobat si daca e arhivat. Barcode-ul e in
+ * CALE, nu in query.
+ *
+ * Probat: 200 cu `{approved, archived, contentId}` cand exista; **404** cu
+ * `errors[0].key = "product.not.found"` cand nu. Discriminantul e curat, deci
+ * nu trebuie ghicit nimic din textul erorii.
+ *
+ * `contentId` de aici e singura cale catre `content-bulk-update`, care NU
+ * lucreaza pe barcode.
+ */
+export function getProductBaseInfo(auth: TrendyolAuth, barcode: string) {
+  return call<{
+    barcode: string; approved?: boolean; approvedDate?: number;
+    archived?: boolean; contentId?: number; listingId?: string;
+  }>(auth, "GET", `/integration/product/sellers/${auth.supplierId}/product/${encodeURIComponent(barcode)}`);
+}
+
+/**
+ * Arhiveaza sau scoate din arhiva produse, dupa barcode.
+ *
+ * Un produs arhivat la ei ramane in cont dar NU se vinde. Cand comerciantul il
+ * publica din Edinio, asta e ce vrea de fapt: sa reintre la vanzare.
+ */
+export function setArchiveState(auth: TrendyolAuth, items: { barcode: string; archived: boolean }[]) {
+  return call<TrendyolBatchAck>(
+    auth, "PUT", `/integration/product/sellers/${auth.supplierId}/products/archive-state`, { items });
+}
+
+/**
+ * Sterge produse din catalogul vanzatorului, dupa barcode.
+ *
+ * ═══ ⚠ TRENDYOL CHIAR ARE STERGERE, SI N-O FOLOSEAM ═══
+ *
+ * Comentariile din `sync.ts` porneau de la ideea ca ei n-au stergere, asa ca stergerea unui
+ * produs din Edinio se traducea in „stoc zero, apoi uitam listarea". Dar
+ * `DELETE /integration/product/sellers/{id}/products` exista, primeste unul sau mai multe
+ * barcode-uri si raspunde asincron cu `batchRequestId`, ca orice alta scriere de produs.
+ *
+ * ⚠ NU E O SCURTATURA CATRE „gata": raspunsul spune doar ca au PRIMIT cererea. Verdictul se
+ * afla din `getBatchResult`, ca la orice lot — de-aia se scrie in registru.
+ *
+ * ⚠ SI NU E MEREU CU PUTINTA. Un produs cu comenzi in curs, sau intr-o stare pe care ei o
+ * apara, poate fi refuzat. De-aia calea de stergere din `sync.ts` incepe cu ARHIVAREA (care
+ * il scoate din vanzare imediat) si abia apoi cere stergerea: chiar daca stergerea e
+ * refuzata, marfa nu se mai vinde.
+ */
+export function deleteProducts(auth: TrendyolAuth, barcodes: string[]) {
+  return call<TrendyolBatchAck>(
+    auth, "DELETE", `/integration/product/sellers/${auth.supplierId}/products`,
+    { items: barcodes.map((barcode) => ({ barcode })) });
+}
+
+/**
+ * Produsele NEAPROBATE: in asteptare sau RESPINSE la revizuire.
+ *
+ * ⚠ Aici se afla singurul lucru pe care lotul nu-l spune niciodata.
+ *
+ * Un lot poate raspunde `COMPLETED` cu articolul `SUCCESS` — produsul a fost
+ * acceptat — si abia dupa aceea Trendyol sa-l respinga la revizuirea de
+ * continut: „Eroare de conexiune la serverul de imagini", „titlu neconform",
+ * si asa mai departe. Produsul nu se vinde, iar noi il aratam „in aprobare" la
+ * nesfarsit, fiindca nimic nu citea starea asta.
+ *
+ * `rejectReasonDetails[]` vine cu motivul SI explicatia, traduse in limba
+ * cerută de `Accept-Language`. `status` accepta `rejected` si `pendingApproval`,
+ * deci se poate intreba tintit.
+ */
+export interface TrendyolMotivRespingere {
+  rejectReason?: string;
+  rejectReasonDetail?: string;
+}
+export function getUnapprovedProducts(
+  auth: TrendyolAuth,
+  params: { page?: number; size?: number; status?: "rejected" | "pendingApproval"; barcode?: string; productMainId?: string } = {},
+) {
+  const q = new URLSearchParams();
+  if (params.page != null) q.set("page", String(params.page));
+  // Documentat: maximum 1000 pe pagina, iar `page * size` nu poate depasi 10.000.
+  if (params.size != null) q.set("size", String(Math.max(1, Math.min(1000, params.size))));
+  if (params.status) q.set("status", params.status);
+  if (params.barcode) q.set("barcode", params.barcode);
+  if (params.productMainId) q.set("productMainId", params.productMainId);
+  const qs = q.toString();
+  return call<{
+    content: {
+      productMainId?: string; barcode?: string; title?: string;
+      rejectReasonDetails?: TrendyolMotivRespingere[];
+    }[];
+    totalElements?: number; totalPages?: number;
+  }>(auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/unapproved${qs ? `?${qs}` : ""}`);
+}
+
 // ── Products (async batch) ────────────────────────────────────────────────────
 export function createProducts(auth: TrendyolAuth, items: TrendyolProductItem[]) {
   return call<TrendyolBatchAck>(auth, "POST", `/integration/product/sellers/${auth.supplierId}/v2/products`, { items });
 }
+// Forma lui `requestItem` difera dupa tipul lotului: `ProductV2OnBoarding` il
+// invele in `product`, iar loturile de stoc/pret trimit barcode-ul direct. Le
+// declaram pe amandoua, ca legarea rezultatului de produs sa nu depinda de tip.
+/**
+ * Actualizeaza produsele NEAPROBATE (ciorna sau respinse la revizuie).
+ *
+ * ⚠ Asta e ruta prin care se REPARA un produs respins. Recrearea nu merge:
+ * Trendyol raspunde „codul de bare exista deja", fiindca produsul chiar exista.
+ *
+ * Documentatia lor: „You can easily update any information except barcode if the
+ * product is not approved", si „as you will send the full data" — deci se trimite
+ * setul COMPLET, nu doar campul schimbat.
+ *
+ * Payload-ul e cel de creare MINUS `quantity`, `listPrice` si `salePrice`:
+ * stocul si pretul se schimba numai prin `price-and-inventory`.
+ */
+export type TrendyolItemActualizare = Omit<TrendyolProductItem, "quantity" | "listPrice" | "salePrice">;
+
+export function updateUnapprovedProducts(auth: TrendyolAuth, items: TrendyolItemActualizare[]) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/unapproved-bulk-update`, { items });
+}
+
+/**
+ * Actualizeaza CONTINUTUL unui produs deja APROBAT.
+ *
+ * ⚠ Cheia e `contentId`, NU barcode-ul — un cod care trimite barcode aici n-are
+ * cum sa functioneze. `contentId` se afla din serviciul de stare pe barcode si
+ * il pastram in `trendyol_listings.ty_content_id`.
+ *
+ * La produs aprobat NU se mai pot schimba: barcode, productMainId, brandId,
+ * categoryId, si nici atributele `slicer` sau `varianter` (marimea, culoarea).
+ *
+ * ⚠ Atributele sunt „totul sau nimic": daca trimiti unul singur modificat,
+ * trebuie sa le trimiti pe TOATE ale produsului, altfel le pierzi pe celelalte.
+ */
+export function updateApprovedContent(
+  auth: TrendyolAuth,
+  items: { contentId: number; title?: string; description?: string; images?: { url: string }[]; attributes?: TrendyolProductAttribute[] }[],
+) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/content-bulk-update`, { items });
+}
+
+/**
+ * Actualizeaza campurile DE VARIANTA ale unui produs aprobat.
+ *
+ * ⚠ Ruta asta e singura prin care se pot schimba `vatRate`, `stockCode`,
+ * `dimensionalWeight` si — cel mai important pentru Romania — **`sgrPrice`** pe
+ * un produs deja aprobat. `content-bulk-update` nu le are in schema, iar
+ * `createProducts` refuza un barcode existent: fara ea, garantia SGR ramane
+ * inghetata la valoarea de la prima listare, pentru totdeauna.
+ *
+ * Cheia e `barcode`, si actualizarea e PARTIALA: se trimite doar ce se schimba.
+ * Singurul camp care nu se poate modifica e chiar barcode-ul.
+ */
+export function updateApprovedVariants(
+  auth: TrendyolAuth,
+  items: { barcode: string; sgrPrice?: number; vatRate?: number; stockCode?: string; dimensionalWeight?: number }[],
+) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/variant-bulk-update`, { items });
+}
+
+/**
+ * Schimba termenul de expediere la produse DEJA APROBATE.
+ *
+ * ═══ ⚠ DE CE O RUTA APARTE ═══
+ *
+ * `deliveryOption` pleaca in incarcatura de creare/actualizare de produs — dar aia atinge
+ * CONTINUTUL, deci pe un produs aprobat il trimite din nou prin revizuia lor. Iar
+ * `price-and-inventory` are strict `barcode/quantity/salePrice/listPrice`: n-are unde sa incapa.
+ * Fara ruta asta, o schimbare de termen pur si simplu n-ar avea pe unde sa ajunga la produsele
+ * publicate.
+ *
+ * ⚠ CHEIA E LA PLURAL AICI, `deliveryOptions`, si la SINGULAR in incarcatura de produs. Nu e o
+ * scapare de-a mea: asa scrie in amandoua paginile lor, si asa arata si raspunsul de citire
+ * (`filterApprovedProducts` intoarce `variants[].deliveryOptions`). Verificat in doua locuri
+ * inainte de a fi scris asa.
+ *
+ * ⚠ Cheia de identificare e BARCODUL, si numai el e obligatoriu: termenul se declara pe varianta,
+ * nu pe magazin. Cel mult 1000 de articole pe cerere.
+ */
+export function updateDeliveryInfo(
+  auth: TrendyolAuth,
+  items: { barcode: string; deliveryOptions: { deliveryDuration: number } }[],
+) {
+  return call<TrendyolBatchAck>(
+    auth, "POST", `/integration/product/sellers/${auth.supplierId}/products/delivery-info-bulk-update`, { items });
+}
+
 export function getBatchResult(auth: TrendyolAuth, batchRequestId: string) {
-  return call<TrendyolBatchResult<{ product?: { barcode?: string } }>>(
+  return call<TrendyolBatchResult<{ product?: { barcode?: string }; barcode?: string }>>(
     auth, "GET", `/integration/product/sellers/${auth.supplierId}/products/batch-requests/${encodeURIComponent(batchRequestId)}`);
 }
 
@@ -200,15 +476,64 @@ export function getOrders(
   if (params.startDate != null) q.set("startDate", String(params.startDate));
   if (params.endDate != null) q.set("endDate", String(params.endDate));
   if (params.page != null) q.set("page", String(params.page));
-  if (params.size != null) q.set("size", String(params.size));
+  // Serviciul refuza peste 200 pe pagina. Necaptusit, o cerere mai mare intoarce
+  // 400 si ingestul de comenzi se opreste tacut la prima pagina.
+  if (params.size != null) q.set("size", String(Math.max(1, Math.min(200, params.size))));
   if (params.orderNumber) q.set("orderNumber", params.orderNumber);
   if (params.orderByField) q.set("orderByField", params.orderByField);
   if (params.orderByDirection) q.set("orderByDirection", params.orderByDirection);
   const qs = q.toString();
-  // Fereastra de date e limitata la 2 saptamani; vezi `fereastraComenzi` in orders.ts.
+  /*
+   * Calea V2.
+   *
+   * Documentatia lor: „The following endpoint services will be deprecated as of
+   * October 15, 2026" — si `/orders` era exact una dintre ele. Ramasa pe V1,
+   * integrarea si-ar fi pierdut comenzile peste noapte, la o data fixa si
+   * anuntata. Fereastra de date e limitata la 2 saptamani; vezi
+   * `fereastraComenzi` in orders.ts.
+   */
   return call<{ content: TrendyolShipmentPackage[]; totalElements?: number; totalPages?: number; page?: number; size?: number }>(
-    auth, "GET", `/integration/order/sellers/${auth.supplierId}/orders${qs ? `?${qs}` : ""}`);
+    auth, "GET", `/integration/order/sellers/${auth.supplierId}/v2/orders${qs ? `?${qs}` : ""}`);
 }
+/**
+ * Comenzile schimbate, prin flux cu cursor.
+ *
+ * ═══ ⚠ ALTFEL DE PAGINARE DECAT `/v2/orders` ═══
+ *
+ * Nu mai dau `totalPages`, `totalElements` sau `page` — changelog-ul lor din 02.06.2026 o spune
+ * pe fata. Dau `hasMore` si un `nextCursor`, iar bucla se opreste cand `hasMore` e `false`.
+ *
+ * ⚠ CURSORUL E OPAC. Regula lor, verbatim: „nextCursor opaque bir değerdir → parse edilmemelidir,
+ * değiştirilmemelidir." Nu se citeste, nu se schimba, nu se construieste de mana.
+ *
+ * ⚠ TIMPUL LOR E IN MILISECUNDE SI IN GMT+3, si fereastra e de cel mult doua saptamani, din
+ * cel mult ultimele trei luni. Cerut altfel, raspund 400 — iar cronul ar parea ca merge.
+ *
+ * ⚠ `size` are plafonul 200 la ei. Cerut mai mare, refuza cererea.
+ */
+export function getOrdersStream(
+  auth: TrendyolAuth,
+  p: {
+    lastModifiedStartDate?: number; lastModifiedEndDate?: number;
+    size?: number; nextCursor?: string; packageItemStatuses?: string;
+  },
+) {
+  const q = new URLSearchParams();
+  if (p.lastModifiedStartDate != null) q.set("lastModifiedStartDate", String(p.lastModifiedStartDate));
+  if (p.lastModifiedEndDate != null) q.set("lastModifiedEndDate", String(p.lastModifiedEndDate));
+  if (p.size != null) q.set("size", String(Math.max(1, Math.min(200, p.size))));
+  /* ⚠ La prima cerere NU se trimite deloc, nu se trimite gol. */
+  if (p.nextCursor) q.set("nextCursor", p.nextCursor);
+  if (p.packageItemStatuses) q.set("packageItemStatuses", p.packageItemStatuses);
+  const qs = q.toString();
+  return call<{
+    content?: TrendyolShipmentPackage[];
+    hasMore?: boolean;
+    nextCursor?: string;
+    size?: number;
+  }>(auth, "GET", `/integration/order/sellers/${auth.supplierId}/orders/stream${qs ? `?${qs}` : ""}`);
+}
+
 // Move a package Picking -> Invoiced. Trendyol's contracted cargo handles the
 // actual shipment (tracking is assigned by Trendyol).
 export function updatePackage(
@@ -217,6 +542,49 @@ export function updatePackage(
   body: { lines: { lineId: number; quantity: number }[]; params?: Record<string, unknown>; status: "Picking" | "Invoiced" },
 ) {
   return call<undefined>(auth, "PUT", `/integration/order/sellers/${auth.supplierId}/shipment-packages/${packageId}`, body);
+}
+
+/**
+ * „Nu pot furniza": anuleaza linii dintr-un pachet, cu motiv.
+ *
+ * ═══ ⚠ E SINGURA CALE ADEVARATA DE ANULARE (26.08.2026) ═══
+ *
+ * Pana azi comerciantul anula o comanda Trendyol din selectorul generic al comenzii. Aia
+ * schimba starea DOAR la noi: elibera stocul local, iar la Trendyol comanda ramanea activa —
+ * si la prima recitire revendica marfa inapoi. Daca intre timp se vanduse, stocul intra pe
+ * minus si ramanea doar un rand in jurnal.
+ *
+ * ⚠ `shouldKeepPreviousStatus: true`, si nu din comoditate. Ei SPARG pachetul cand se anuleaza
+ * o parte din el si dau un `shipmentPackageId` NOU restului. Cu `false`, ce ramane porneste pe
+ * „created" — adica o comanda deja pregatita s-ar intoarce la inceput. Cu `true`, isi tine
+ * starea. (Spargerea se intampla oricum; noul pachet ne vine la urmatoarea recitire, fiindca
+ * anularea modifica comanda si intra singura in fereastra de citire.)
+ */
+export function unsupplyPackageItems(
+  auth: TrendyolAuth, packageId: number,
+  p: { lines: { lineId: number; quantity: number }[]; reasonId: number; shouldKeepPreviousStatus?: boolean },
+) {
+  return call<undefined>(
+    auth, "PUT",
+    `/integration/order/sellers/${auth.supplierId}/shipment-packages/${packageId}/items/unsupplied`,
+    {
+      lines: p.lines,
+      reasonId: p.reasonId,
+      /*
+       * ⚠ SE TRIMITE DOAR CAND E CERUT ANUME (26.08.2026).
+       *
+       * Paginile lor nu se potrivesc: cea internationala il documenteaza, cea turceasca nu-l
+       * pomeneste deloc. Cand doua pagini ale aceluiasi serviciu spun lucruri diferite, campul
+       * OMIS e partea sigura — implicitul lor e `false`, iar trimiterea unui camp pe care un
+       * capat nu-l cunoaste e riscul necunoscut.
+       *
+       * ⚠ Trimiteam `true` din oficiu, ca sa nu se intoarca la „created" ce ramane din pachet.
+       * Grija era buna; certitudinea, nu.
+       */
+      ...(p.shouldKeepPreviousStatus !== undefined
+        ? { shouldKeepPreviousStatus: p.shouldKeepPreviousStatus }
+        : {}),
+    });
 }
 
 /**
@@ -238,7 +606,248 @@ export function updateTrackingDetails(
     auth, "PUT", `/integration/order/sellers/${auth.supplierId}/shipment-packages/${packageId}/tracking-details`, body);
 }
 
+/**
+ * Trimite catre Trendyol LINKUL facturii emise de comerciant.
+ *
+ * ═══ ⚠ VARIANTA INTERNATIONALA CERE DOAR DOUA CAMPURI ═══
+ *
+ * Documentatia lor are DOUA seturi, cu contracte diferite:
+ *
+ *   TURCIA         invoiceLink, shipmentPackageId, invoiceDateTime, invoiceNumber
+ *                  cu `invoiceNumber` de fix 16 semne: [3 alfanumerice][an 2020-2099][9 cifre]
+ *   INTERNATIONAL  invoiceLink, shipmentPackageId. ATAT.
+ *
+ * Citat din OpenAPI-ul lor international: „Only requires invoice link and shipment package ID
+ * (no invoice number or date fields)."
+ *
+ * ⚠ ASTA SCHIMBA TOT CE CREDEAM. Amanasem functia fiindca o serie romaneasca („EDN1234") nu
+ * incape in formatul de 16 semne. Formatul ala e al TURCIEI. Pentru marketplace-ul international
+ * — al nostru — nu se cere niciun numar de factura, deci nu exista nimic de potrivit si nimic de
+ * inventat.
+ *
+ * ⚠ UN SINGUR FOC. La al doilea trimis pe acelasi pachet raspund 409 („The invoice for the
+ * package number {N} has already been sent"), si NU au niciun capat de corectie sau stergere.
+ * De-aia urcarea trece prin `cuRegistru`, iar 409-ul se citeste ca reusita, nu ca esec.
+ *
+ * ⚠ LINKUL TREBUIE SA RAMANA VIU MULT TIMP: ei cer 10 ani in Arabia Saudita si 5 in Emirate.
+ * Pentru Romania nu scriu niciun termen. De-aia PDF-ul se rehosteaza la noi, sub o cheie
+ * stabila si de neghicit — nu se da adresa furnizorului de facturare, care e in spatele
+ * acreditarilor comerciantului si poate expira.
+ */
+export function sendInvoiceLink(
+  auth: TrendyolAuth, p: { invoiceLink: string; shipmentPackageId: number },
+) {
+  return call<undefined>(
+    auth, "POST", `/integration/sellers/${auth.supplierId}/seller-invoice-links`,
+    { invoiceLink: p.invoiceLink, shipmentPackageId: p.shipmentPackageId });
+}
+
+/**
+ * Urca FISIERUL facturii, cand linkul nu e o cale buna.
+ *
+ * ⚠ `multipart/form-data`, cu `shipmentPackageId` si `file`. Doar PDF, JPEG sau PNG, cel mult
+ * 10 MB — mesajul lor de eroare le numeste pe toate trei.
+ *
+ * ⚠ Si aici varianta internationala NU cere `invoiceNumber`/`invoiceDateTime`. Cere insa
+ * `storeFrontCode` ca ANTET obligatoriu, spre deosebire de trimiterea prin link. `call` il pune
+ * oricum pe toate cererile.
+ */
+export function uploadInvoiceFile(
+  auth: TrendyolAuth, p: { shipmentPackageId: number; file: Blob; numeFisier?: string },
+) {
+  const corp = new FormData();
+  corp.set("shipmentPackageId", String(p.shipmentPackageId));
+  corp.set("file", p.file, p.numeFisier ?? "factura.pdf");
+  return call<undefined>(
+    auth, "POST", `/integration/sellers/${auth.supplierId}/seller-invoice-file`, corp);
+}
+
 // ── Webhooks ──────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════════
+   RETURURILE (CLAIMS)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Cererile de retur ale vanzatorului.
+ *
+ * ⚠ PANA AZI NU CITEAM NIMIC DIN ASTA. Tot ce stia Edinio despre un retur era statusul
+ * grosier al pachetului (`Returned`) — nu ce articol s-a intors, nu cate bucati, nu de ce, si
+ * nu daca cererea asteapta o hotarare de la comerciant.
+ *
+ * ═══ ⚠ FEREASTRA FILTREAZA DUPA DATA CREARII, NU DUPA ULTIMA MODIFICARE ═══
+ *
+ * Citat din ghidul lor, in ambele limbi si in patru pagini deosebite:
+ *   „| startDate | It works according to the creation date of the claim package. | integer |"
+ *   „| startDate | İade paketinin oluşturulma tarihine göre çalışır. | integer |"
+ *
+ * ⚠ CONSECINTA E TOT INTELESUL RECONCILIERII. Un retur creat la 10:00 care trece pe `Accepted`
+ * la 14:00 NU reintra in nicio fereastra de dupa 10:00 — data crearii ramane 10:00 oricate
+ * tranzitii urmeaza. `lastModifiedDate` se schimba, dar NIMIC nu filtreaza pe el: parametrii
+ * sunt `startDate`, `endDate`, `page`, `size`, `claimItemStatus`, `orderNumber`, `claimIds`, si
+ * atat. Nu exista `lastModifiedStartDate`, nu exista sortare. Nici capatul de audit nu ajuta —
+ * primeste doar id-uri de cale, deci nu se poate cladi din el un flux „ce s-a schimbat".
+ *
+ * ⚠ SI ORDINEA E FIX INVERSUL FILTRULUI: „will be provided to you in the order of
+ * lastModifiedDate". Se filtreaza pe data crearii, dar se ordoneaza pe ultima modificare — deci
+ * cat parcurgem paginile unei ferestre, un retur care isi schimba statusul isi schimba locul in
+ * sortare, si poate aluneca peste o pagina deja citita. De-aia ferestrele se tin scurte, si
+ * de-aia cererile inca vii se reintreaba PE ID, unde ordinea nu conteaza.
+ *
+ * ⚠ LATIMEA DE DOUA SAPTAMANI E PRECAUTIA NOASTRA, NU REGULA LOR (26.08.2026). Comentariul de
+ * aici a sustinut pana azi ca fereastra e obligatorie si ca peste doua saptamani raspund 400. NU
+ * E SCRIS NICAIERI pentru retururi: in OpenAPI `startDate`/`endDate` sunt `required: false`, si
+ * singurul „maximum" din toata pagina e cel de la `size`. Regula de doua saptamani e scrisa la
+ * COMENZI si a fost adusa aici prin analogie. Se pastreaza fiindca e sigura in ambele sensuri,
+ * dar se numeste ce este: o alegere de-a noastra.
+ */
+export function getClaims(
+  auth: TrendyolAuth,
+  /*
+   * ⚠ `startDate`/`endDate` SUNT OPTIONALE cand se cere pe `claimIds`. Ei spun ca la trimiterea
+   * lui `claimIds` ceilalti parametri nu se mai proceseaza — iar noi avem nevoie chiar de calea
+   * asta pentru reconcilierea cererilor vii, care n-are fereastra de timp si nici n-ar trebui
+   * sa aiba.
+   */
+  params: {
+    startDate?: number; endDate?: number;
+    page?: number; size?: number; claimIds?: string[]; claimItemStatus?: string;
+  },
+) {
+  const q = new URLSearchParams();
+  if (params.startDate != null) q.set("startDate", String(params.startDate));
+  if (params.endDate != null) q.set("endDate", String(params.endDate));
+  if (params.page != null) q.set("page", String(params.page));
+  /*
+   * ⚠ 200 E DOCUMENTAT DOAR PE TURCIA. In `/reference/getclaims.md`, `size` are
+   * `"default": 50, "maximum": 200`. In variantele internationale (`getclaimseurope`,
+   * `getclaimsgulf`) blocul e identic intre ele si NU CONTINE `maximum` — deci acolo plafonul
+   * e nedocumentat, nu infirmat. Se taie oricum la 200: pe Turcia e chiar regula lor, iar in
+   * rest e cea mai buna margine pe care o cunoastem.
+   */
+  if (params.size != null) q.set("size", String(Math.max(1, Math.min(200, params.size))));
+  if (params.claimIds?.length) q.set("claimIds", params.claimIds.join(","));
+  if (params.claimItemStatus) q.set("claimItemStatus", params.claimItemStatus);
+  return call<{
+    content?: TrendyolClaim[];
+    totalElements?: number; totalPages?: number; page?: number; size?: number;
+  }>(auth, "GET", `${caleaClaims(auth)}?${q.toString()}`);
+}
+
+/**
+ * Aproba returul pentru anumite LINII ale cererii.
+ *
+ * ⚠ PE LINII, nu pe cerere: Trendyol are retururi partiale, iar comerciantul poate accepta o
+ * bucata si respinge alta din aceeasi cerere. O aprobare „pe tot" ar fi luat o hotarare pe
+ * care el n-a luat-o.
+ */
+/**
+ * Golful are capetele LUI pentru retururi.
+ *
+ * ═══ ⚠ EUROPA SI GOLFUL NU IMPART ACELEASI CAI ═══
+ *
+ * Trendyol are o sectiune separata de documentatie, „Returned Order Integration for GULF
+ * region", cu variante `-gulf` ale acelorasi servicii. Trimise pe calea europeana, cererile
+ * unui vanzator din Golf nu gasesc nimic — si asta ARATA la fel ca „n-are retururi".
+ *
+ * ⚠ NEVERIFICAT PE TRAFIC, si se spune pe fata: niciunul dintre conturile noastre nu e
+ * inregistrat in Golf, deci n-am avut cum sa lovim capetele astea. Numele vine din indexul lor
+ * de documentatie. Pe vitrinele europene — singurele pe care le folosim azi — nu se schimba
+ * nimic.
+ */
+const VITRINE_GOLF = new Set(["SA", "AE", "KW", "QA", "BH", "OM"]);
+
+export function eVitrinaGolf(vitrina: string | undefined): boolean {
+  return VITRINE_GOLF.has((vitrina ?? "").toUpperCase());
+}
+
+/**
+ * ⚠ NU EXISTA „SUFIXUL REGIUNII". Chiar ideea asta a produs defectul (26.08.2026).
+ *
+ * Prima forma lipea `-gulf` dupa `claims` la toate capetele, fiindca asa arata la CITIRE. Dar
+ * ei nu pun marcajul in acelasi loc:
+ *
+ *   citire     /claims-gulf                          marcajul dupa „claims"
+ *   aprobare   /claims/{id}/items/approve-gulf       marcajul la SFARSITUL caii
+ *   respingere /claims/{id}/issue-gulf               la fel
+ *
+ * Deci un vanzator din Golf citea retururile, dar nu le putea nici aproba, nici respinge — si
+ * amandoua ar fi picat cu 404, adica exact ca „n-are ce aproba".
+ *
+ * ⚠ SI LA RESPINGERE NU ERA NICI MACAR SUFIXUL GRESIT: peticul care il adauga nu s-a aplicat,
+ * fiindca `replace` nu gaseste si tace. De-aia fiecare cale se scrie acum INTREAGA, o data,
+ * langa perechea ei europeana — se vede din privire care unde merge.
+ *
+ * ⚠ NEVERIFICAT PE TRAFIC, si se spune pe fata: niciunul dintre conturile noastre nu e
+ * inregistrat in Golf. Caile vin din documentatia lor. Pe vitrinele europene nu se schimba nimic.
+ */
+function caleaClaims(auth: TrendyolAuth): string {
+  const baza = `/integration/order/sellers/${auth.supplierId}`;
+  return eVitrinaGolf(auth.storefront) ? `${baza}/claims-gulf` : `${baza}/claims`;
+}
+
+function caleaAprobare(auth: TrendyolAuth, claimId: string): string {
+  const baza = `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}/items`;
+  return eVitrinaGolf(auth.storefront) ? `${baza}/approve-gulf` : `${baza}/approve`;
+}
+
+function caleaRespingere(auth: TrendyolAuth, claimId: string): string {
+  const baza = `/integration/order/sellers/${auth.supplierId}/claims/${encodeURIComponent(claimId)}`;
+  return eVitrinaGolf(auth.storefront) ? `${baza}/issue-gulf` : `${baza}/issue`;
+}
+
+export function approveClaimItems(auth: TrendyolAuth, claimId: string, claimLineItemIdList: string[]) {
+  return call<undefined>(auth, "PUT", caleaAprobare(auth, claimId), { claimLineItemIdList });
+}
+
+/**
+ * Respinge liniile, cu motiv si (optional) dovezi.
+ *
+ * ═══ ⚠ NU E JSON, SI LISTA NU E O LISTA (26.08.2026) ═══
+ *
+ * Trimiteam un corp JSON cu `claimItemIdList` ca tablou. Referinta lor cere altceva, si
+ * amandoua deosebirile conteaza:
+ *
+ *   - `multipart/form-data`, fiindca la aceeasi cerere se pot atasa si dovezi (poze, PDF-uri);
+ *   - `claimItemIdList` ca SIR despartit prin virgula, nu ca tablou;
+ *   - `description` de cel mult 500 de caractere.
+ *
+ * ⚠ Trimis in forma veche, serviciul refuza cererea intreaga — iar comerciantul ramane cu
+ * „am respins" apasat si cu returul netratat la ei, care le expira in favoarea clientului.
+ *
+ * ⚠ ANTETUL NU SE SCRIE DE MANA. `fetch` pune singur `Content-Type: multipart/form-data` CU
+ * granita, cand corpul e un `FormData`; scris de noi, granita ar lipsi si corpul n-ar putea fi
+ * despartit de nimeni.
+ */
+export function rejectClaimItems(
+  auth: TrendyolAuth, claimId: string,
+  p: { claimIssueReasonId: number; claimItemIdList: string[]; description: string; files?: Blob[] },
+) {
+  const corp = new FormData();
+  corp.set("claimIssueReasonId", String(p.claimIssueReasonId));
+  corp.set("claimItemIdList", p.claimItemIdList.join(","));
+  corp.set("description", p.description.slice(0, 500));
+  for (const f of p.files ?? []) corp.append("files", f);
+  return call<undefined>(auth, "POST", caleaRespingere(auth, claimId), corp);
+}
+
+/**
+ * Motivele pe care le accepta ei la respingere. Se citesc, nu se ghicesc.
+ *
+ * ⚠ SI ASTA ARE VARIANTA DE GOLF (26.08.2026). Nu era in niciun audit: capatul e
+ * `claim-issue-reasons-gulf`, si nu are `sellerId` in cale — ceea ce il face usor de ratat cand
+ * cauti dupa tiparul celorlalte.
+ *
+ * ⚠ CE AR FI INSEMNAT: un vanzator din Golf ar fi primit motivele EUROPENE, ar fi ales unul, si
+ * respingerea lui ar fi fost refuzata cu un id pe care regiunea lui nu-l cunoaste. Adica taman
+ * pasul de dinaintea celui pe care tocmai il reparasem.
+ */
+export function getClaimIssueReasons(auth: TrendyolAuth) {
+  const cale = eVitrinaGolf(auth.storefront)
+    ? "/integration/order/claim-issue-reasons-gulf"
+    : "/integration/order/claim-issue-reasons";
+  return call<{ id: number; name: string; externalReasonId?: number }[]>(auth, "GET", cale);
+}
+
 export function createWebhook(
   auth: TrendyolAuth,
   body: { url: string; authenticationType: "BASIC_AUTHENTICATION" | "API_KEY"; username?: string; password?: string; apiKey?: string; subscribedStatuses?: string[]; countryCodes?: string[] },

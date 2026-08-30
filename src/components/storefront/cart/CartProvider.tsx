@@ -1,7 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCartSessionId } from "@/lib/cart-session";
+import { getCartPricing } from "@/lib/actions/store.actions";
+import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
+import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
+import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 /**
  * Cosul storefrontului: stare in memorie oglindita in localStorage, per magazin.
@@ -11,33 +15,49 @@ import { getCartSessionId } from "@/lib/cart-session";
  * fisierul de 2900 de linii.
  */
 
-export interface CartItem {
-  productId: string;
-  slug?: string;
-  name: string;
-  price: number;
-  imageUrl: string | null;
-  quantity: number;
-  /** Combinatia de varianta aleasa („S / Rosu") — lipseste la produsele simple. */
-  variantTitle?: string;
-  variantSku?: string;
-}
+// Forma unei linii sta in modulul pur, langa regula care o curata; aici se
+// re-exporta, ca sa nu se schimbe niciun import existent.
+export type { CartItem };
 
-/**
- * O linie de cos e identificata prin produs + varianta aleasa, ca doua variante
- * ale aceluiasi produs (marimea S si marimea L) sa fie linii distincte, nu una
- * singura. Produsele simple cad pe id-ul produsului, ceea ce pastreaza
- * compatibilitatea cu cosurile salvate in localStorage inainte de variante.
- */
-export function lineKey(item: Pick<CartItem, "productId" | "variantTitle">): string {
-  return item.variantTitle ? `${item.productId}::${item.variantTitle}` : item.productId;
-}
+// Identitatea unei linii sta tot in modulul pur, langa forma ei; aici se
+// re-exporta, ca sa nu se schimbe niciun import existent.
+export { lineKey };
 
 export interface CartContextValue {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">, cantitate?: number) => void;
   removeItem: (key: string) => void;
   updateQty: (key: string, qty: number) => void;
+  /**
+   * Cat costa o linie, cu treptele de cantitate aplicate.
+   *
+   * TOATE suprafetele cosului trec pe aici in loc sa inmulteasca ele
+   * `pret x cantitate`: altfel fiecare ar putea ajunge la alt numar, iar unul
+   * dintre ele ar fi diferit de cel pe care il incaseaza serverul.
+   */
+  lineTotal: (item: CartItem) => number;
+  /**
+   * Cat costa O BUCATA din linie, inainte de treptele de cantitate.
+   *
+   * Are aceeasi sursa ca `lineTotal`, si tocmai de asta exista. Eticheta „N buc x
+   * P" si taietura de deasupra reducerii se scriau din `item.price`, adica din
+   * instantaneul salvat in localStorage la adaugare, in timp ce totalul de langa
+   * ele venea deja de la server: cele doua numere de pe acelasi rand nu se
+   * inmulteau. 
+   *
+   * `lineUnit(item) * item.quantity` e chiar pretul intreg al liniei, acelasi
+   * numar din care `pretPeTrepte` scade `savings`. Deci total + economie =
+   * unitar x cantitate, si nu mai poate aparea un al treilea numar pe rand.
+   *
+   * Cat timp preturile de la server nu au ajuns inca (sau produsul a fost sters
+   * ori dezactivat, si `getCartPricing` nu-l mai intoarce), intoarce pretul
+   * salvat — exact ca `lineTotal`. Randul ramane deci consistent si atunci: ori
+   * amandoua numerele sunt vechi, ori amandoua sunt de la server, niciodata unul
+   * din fiecare.
+   */
+  lineUnit: (item: CartItem) => number;
+  /** Cat economiseste linia fata de pretul intreg (0 cand nu se aplica nimic). */
+  lineSavings: (item: CartItem) => number;
   total: number;
   count: number;
   clear: () => void;
@@ -73,7 +93,7 @@ export function useCartOptional(): CartContextValue | null {
   return useContext(CartContext);
 }
 
-export function CartProvider({ children, slug }: { children: ReactNode; slug: string }) {
+export function CartProvider({ children, slug, businessId }: { children: ReactNode; slug: string; businessId?: string }) {
   const STORAGE_KEY = `cart_${slug}`;
   const [items, setItems] = useState<CartItem[]>([]);
   const [sessionId, setSessionId] = useState("");
@@ -87,7 +107,7 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (stored) setItems(JSON.parse(stored));
+      if (stored) setItems(normalizeazaCos(JSON.parse(stored)));
     } catch {}
     setSessionId(getCartSessionId(slug));
     setHydrated(true);
@@ -102,7 +122,7 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
     function laStorage(e: StorageEvent) {
       if (e.key !== STORAGE_KEY) return;
       try {
-        setItems(e.newValue ? (JSON.parse(e.newValue) as CartItem[]) : []);
+        setItems(e.newValue ? normalizeazaCos(JSON.parse(e.newValue)) : []);
       } catch {}
     }
     window.addEventListener("storage", laStorage);
@@ -119,7 +139,13 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
   function save(schimba: (prev: CartItem[]) => CartItem[]) {
     setItems((prev) => {
       const next = schimba(prev);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      // `setItem` arunca la cota depasita sau in navigare privata, iar de aici ar
+      // arunca din INTERIORUL randarii: singura plasa e error boundary-ul de
+      // radacina, deci tot magazinul ar deveni pagina de eroare. Cosul degradeaza
+      // la „doar in memorie", ca in `cart-session.ts` si in `AddToCartButton`.
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {}
       return next;
     });
   }
@@ -130,12 +156,14 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
    * Valorile sub 1 sau nefinite cad tot pe 1: o adaugare nu poate scadea cosul.
    */
   function addItem(item: Omit<CartItem, "quantity">, cantitate = 1) {
-    const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
+    const n = normalizeazaCantitate(cantitate);
     save((prev) => {
       const key = lineKey(item);
       const exists = prev.find((i) => lineKey(i) === key);
       return exists
-        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + n } : i))
+        // Se clemeaza SUMA, nu incrementul: altfel o mie de apasari pe „+" duc
+        // linia peste plafon, iar serverul refuza acum toata comanda.
+        ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: normalizeazaCantitate(i.quantity + n) } : i))
         : [...prev, { ...item, quantity: n }];
     });
   }
@@ -149,7 +177,11 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
       removeItem(key);
       return;
     }
-    save((prev) => prev.map((i) => (lineKey(i) === key ? { ...i, quantity: qty } : i)));
+    // Butoanele „+/-" nu inventeaza o fractie, dar functia e in contextul public
+    // al cosului, deci o poate chema orice pagina custom. Fara clema, valoarea
+    // primita se si SCRIA in localStorage, de mana noastra.
+    const n = normalizeazaCantitate(qty);
+    save((prev) => prev.map((i) => (lineKey(i) === key ? { ...i, quantity: n } : i)));
   }
 
   function clear() {
@@ -157,15 +189,56 @@ export function CartProvider({ children, slug }: { children: ReactNode; slug: st
   }
 
   function restoreCart(next: CartItem[]) {
-    save(() => next);
+    save(() => normalizeazaCos(next));
   }
 
-  const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  /**
+   * Preturile autoritare ale produselor din cos, citite de la server.
+   *
+   * Cosul din localStorage tine ce s-a salvat la adaugare, deci un pret vechi de
+   * zile daca intre timp comerciantul l-a schimbat. Serverul recalculeaza oricum
+   * la plasarea comenzii, deci fara pasul asta cosul arata un numar si comanda
+   * pleaca cu altul. Tot de aici vin si treptele de cantitate.
+   *
+   * Cade pe preturile salvate cand cererea esueaza: un cos care afiseaza ceva
+   * usor vechi e mai bun decat unul care nu afiseaza nimic.
+   */
+  const [preturi, setPreturi] = useState<Awaited<ReturnType<typeof getCartPricing>>>({});
+  const cheieProduse = items.map((i) => i.productId).sort().join(",");
+  useEffect(() => {
+    if (!hydrated || !businessId || !cheieProduse) return;
+    let activ = true;
+    getCartPricing(businessId, cheieProduse.split(","))
+      .then((r) => { if (activ) setPreturi(r); })
+      .catch(() => {});
+    return () => { activ = false; };
+  }, [hydrated, businessId, cheieProduse]);
+
+  const pretUnitar = useMemo(() => (item: CartItem): number => {
+    const reguli = preturi[item.productId];
+    if (!reguli) return item.price;
+    const varianta = item.variantTitle ? reguli.combos[item.variantTitle] : undefined;
+    return varianta != null ? varianta : reguli.price;
+  }, [preturi]);
+
+  const linie = useMemo(() => (item: CartItem) => {
+    const unitar = pretUnitar(item);
+    const trepte = construiesteTrepte(preturi[item.productId]?.tiers, unitar);
+    return pretPeTrepte(trepte, item.quantity, unitar);
+  }, [preturi, pretUnitar]);
+
+  const lineTotal = (item: CartItem) => linie(item).subtotal;
+  const lineSavings = (item: CartItem) => linie(item).savings;
+  // Acelasi `pretUnitar` din care porneste si `linie`, expus ca sa nu mai fie
+  // nevoie de `item.price` nicaieri in afara.
+  const lineUnit = (item: CartItem) => pretUnitar(item);
+
+  const total = items.reduce((s, i) => s + linie(i).subtotal, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -194,13 +267,20 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
       value={{
         items,
         addItem: (item, cantitate = 1) => {
-          const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
+          const n = normalizeazaCantitate(cantitate);
           setItems((prev) =>
             prev.some((i) => lineKey(i) === lineKey(item))
-              ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: i.quantity + n } : i))
+              ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: normalizeazaCantitate(i.quantity + n) } : i))
               : [...prev, { ...item, quantity: n }],
           );
         },
+        // Miniatura nu citeste nimic de la server, deci nu are trepte: pretul de
+        // linie ramane inmultirea simpla. Si aici cele doua numere trebuie sa
+        // vina din aceeasi sursa, altfel miniatura ar arata comerciantului chiar
+        // contradictia pe care tocmai am scos-o din cosul adevarat.
+        lineTotal: (item) => item.price * item.quantity,
+        lineUnit: (item) => item.price,
+        lineSavings: () => 0,
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>
           setItems((prev) =>

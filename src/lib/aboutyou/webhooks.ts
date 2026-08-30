@@ -2,23 +2,91 @@
 // event handlers. About You returns a `client_secret` when a subscription is
 // created; events are signed with it.
 //
-// SIGNATURE SCHEME: the exact header name + algorithm are confirmed on the sandbox.
-// The most likely form is HMAC-SHA256(client_secret, rawBody) as hex, delivered in
-// a signature header. We accept a few candidate header names / encodings and
-// compare timing-safe. Until confirmed, an event that fails verification is logged
-// and IGNORED — we never act on unverified data (safe by default).
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⚠ SCHEMA DE SEMNATURA E CONFIRMATA. MASURATA, NU CITITA (27.08.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Aici scria, de la prima zi a integrarii: „SEMNATURA NU E CONFIRMATA… presupunerea de mai jos e
+ * dedusa, nu citita", si mai departe „daca schema difera, TOATE evenimentele cad tacut".
+ * Afirmatia a stat luni intregi si a intrat in fiecare audit ca risc deschis.
+ *
+ * S-a lamurit cu doua livrari adevarate pe contul de sandbox — o schimbare de stoc dus-intors —
+ * si cu o unealta care se uita la ce vine (`semnatura-descoperire.ts`). Rezultatul, verbatim din
+ * jurnal:
+ *
+ *     schema de semnatura AFLATA: hmac-sha256(corp)/hex pe antetul „x-signature"
+ *
+ * Adica exact ce deduseseram: HMAC-SHA256 peste CORPUL BRUT, in hexazecimal, 64 de caractere,
+ * fara prefix, pe antetul `x-signature`.
+ *
+ * ⚠ SI IN TOATA LISTA ANTETELOR PRIMITE nu exista alt candidat de semnatura si niciun antet de
+ * marca de timp — deci nu e o schema cu `timestamp.corp`, cum au altii. Verificat pe lista
+ * intreaga, nu pe cele patru la care ne uitam.
+ *
+ * ⚠ CE RAMANE ADEVARAT: tokenul din URL. Nu mai e o carja pentru o semnatura neconfirmata, ci a
+ * doua incuietoare — iar cand secretul se pierde la o resalvare de config, el e singurul lucru
+ * care mai tine webhookul in viata. Se pastreaza.
+ *
+ * ⚠ SI DE CE SE ACCEPTA IN CONTINUARE SI BASE64, si celelalte trei antete: nu slabeste nimic.
+ * Toate cer acelasi secret, deci cine nu-l are nu trece pe niciuna. Masurat inseamna „stim ce
+ * trimit AZI, pe contul asta"; ingustat la un singur nume, o schimbare la ei ar taia toate
+ * evenimentele in tacere — chiar paguba pe care nota veche o descria.
+ */
 
 import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { randCitit } from "@/lib/supabase/rand-citit";
+import { EroareTrecatoare } from "./erori";
 
-// Subscribe to the full set now so the merchant does not re-subscribe later; order
-// events are handled starting in Faza 3.
-export const ABOUTYOU_WEBHOOK_EVENTS = [
-  "order.created", "order.updated", "order.cancelled", "order.shipped", "order.returned",
+/*
+ * ═══ ⚠ TREI EVENIMENTE INVECHITE PUTEAU DARAMA TOT ABONAMENTUL (27.08.2026) ═══
+ *
+ * `order.shipped`, `order.cancelled` si `order.returned` sunt inlocuite la ei de `order.updated`
+ * si `order_items.*`. Cerute intr-o lista in care un singur nume nerecunoscut face cererea sa
+ * pice INTREAGA, ele nu ne aduceau nimic in plus — dar puteau lasa comerciantul fara NICIUN
+ * webhook, si fara sa afle de ce.
+ *
+ * ⚠ NU SE STERG PUR SI SIMPLU: n-avem cum sa citim documentatia lor (e in spatele contului de
+ * partener), deci „sunt invechite" e o informatie, nu o certitudine. Se cer mai departe, dar
+ * SEPARAT: daca cererea intreaga cade, se reia numai cu cele esentiale. Asa iese bine in
+ * amandoua lumile — si daca inca merg, si daca nu mai sunt primite.
+ *
+ * ⚠ SI NU NE LIPSESTE NIMIC FARA ELE. Orice eveniment de comanda duce la aceeasi fapta:
+ * `ingestOrderByNumber`, adica o RECITIRE intreaga a comenzii de la ei. Trei nume in plus pentru
+ * aceeasi recitire nu aduc nicio informatie noua. Ce s-ar pierde e doar clipa in care se afla, iar
+ * acolo e `reconciliazaComenzile`, care reintreaba comenzile deschise din ultimele 60 de zile.
+ */
+export const EVENIMENTE_ESENTIALE = [
+  "order.created", "order.updated",
   "order_items.shipped", "order_items.cancelled", "order_items.returned",
   "stock.updated", "product_master.status_updated",
 ];
+
+/**
+ * Cele trei invechite. NU se mai cer.
+ *
+ * ═══ ⚠ ERAU CERUTE „DIN PRISOS", SI ACUM NU MAI SUNT (27.08.2026) ═══
+ *
+ * Pe 27.08 dimineata le-am lasat in cerere, cu o reluare pe cele esentiale in caz de refuz.
+ * Rationamentul era: „«sunt invechite» e o informatie, nu o certitudine, deci se cer mai departe".
+ * Intre timp specificatia lor curenta a fost citita inca o data, separat, si le marcheaza
+ * `deprecated`, cu `order.updated` / `order_items.*` drept inlocuitori. Doua citiri care spun
+ * acelasi lucru — acelasi prag ca la `valid_at`.
+ *
+ * ⚠ SI NU SE PIERDE NIMIC. Orice eveniment de comanda duce la aceeasi fapta: `ingestOrderByNumber`,
+ * adica o RECITIRE intreaga a comenzii. Trei nume in plus pentru aceeasi recitire nu aduceau
+ * nicio informatie noua — doar inca un fel in care cererea de abonare putea fi refuzata intreaga,
+ * lasand comerciantul fara NICIUN webhook.
+ *
+ * ⚠ LISTA RAMANE SCRISA, si nu din nostalgie: `getAboutYouWebhookDiagnoza` trebuie sa stie ca un
+ * abonament vechi care inca le poarta e sanatos, nu stricat.
+ */
+export const EVENIMENTE_INVECHITE = ["order.cancelled", "order.shipped", "order.returned"];
+
+/** Ce se cere efectiv la abonare. */
+export const ABOUTYOU_WEBHOOK_EVENTS = [...EVENIMENTE_ESENTIALE];
 
 const SIGNATURE_HEADERS = ["x-signature", "x-aboutyou-signature", "x-scayle-signature", "signature"];
 
@@ -45,18 +113,111 @@ export function verifyAboutYouSignature(secret: string | undefined | null, signa
     }));
 }
 
-// stock.updated: reflect About You's stock view onto the local variant so the
-// dashboard shows accurate quantities. Tolerant parse (payload shape TBD).
+/*
+ * stock.updated: aducem starea de stoc de la About You pe variantele locale.
+ *
+ * Plicul e `{id, event, timestamp, message, subscription_id}`, iar la evenimentul
+ * asta `message` e o LISTA de `{sku, quantity, quantity_fbm}` — nu un obiect.
+ * Codul citea `data.sku` de pe un obiect: pe o lista, `sku` e mereu `undefined`,
+ * deci fiecare eveniment se pierdea in tacere.
+ */
 export async function handleStockUpdated(
   admin: SupabaseClient<Database>, businessId: string, payload: unknown,
 ): Promise<void> {
   const root = (payload ?? {}) as Record<string, unknown>;
-  const data = (root.data as Record<string, unknown>) ?? root;
-  const sku = typeof data.sku === "string" ? data.sku : undefined;
-  const qtyRaw = data.quantity ?? data.stock;
-  const qty = typeof qtyRaw === "number" ? qtyRaw : undefined;
-  if (!sku || qty == null) return;
-  await admin.from("aboutyou_variants")
-    .update({ quantity: Math.max(0, Math.round(qty)), updated_at: new Date().toISOString() } as never)
-    .eq("business_id", businessId).eq("sku", sku);
+  const brut = root.message ?? root.data ?? root;
+  const linii = (Array.isArray(brut) ? brut : [brut]) as Record<string, unknown>[];
+
+  const now = new Date().toISOString();
+  for (const linie of linii) {
+    if (!linie || typeof linie !== "object") continue;
+    const sku = typeof linie.sku === "string" ? linie.sku : undefined;
+    // `quantity` e stocul din depozitul comerciantului; `quantity_fbm` e cel din
+    // depozitele About You si nu ne priveste aici.
+    const qtyRaw = linie.quantity ?? linie.stock;
+    const qty = typeof qtyRaw === "number" ? qtyRaw : undefined;
+    if (!sku || qty == null) continue;
+    const { error } = await admin.from("aboutyou_variants")
+      .update({ quantity: Math.max(0, Math.round(qty)), updated_at: now } as never)
+      .eq("business_id", businessId).eq("sku", sku);
+    /*
+     * ⚠ SCRIEREA PICATA ARUNCA. Rezultatul nu se citea, deci handlerul iesea linistit si randul
+     * din inbox primea `prelucrat_la`: stocul lor ramanea altul decat cel scris la noi, si nimic
+     * n-o mai spunea. Regula e simpla — orice efect obligatoriu al evenimentului care n-a fost
+     * scris inseamna ca evenimentul NU s-a prelucrat.
+     *
+     * ⚠ „Zero randuri atinse" NU e o eroare: e un SKU pe care nu-l avem, si acolo n-avem ce face.
+     */
+    /* ⚠ Trecatoare: o pana a bazei nu spune nimic despre eveniment. Vezi `EroareTrecatoare`. */
+    if (error) throw new EroareTrecatoare(`stocul SKU-ului ${sku} nu s-a putut scrie: ${error.message}`);
+  }
+}
+
+/*
+ * product_master.status_updated: statusul si MOTIVELE respingerii.
+ *
+ * Evenimentul era abonat, dar aruncat fara handler. E singura cale prin care
+ * motivele ajung la noi fara sa mai intrebam nimic: `GET /products/` nu le are
+ * deloc in schema, iar `GET /products/rejected` inseamna inca o cerere si o
+ * intarziere de pana la un minut.
+ *
+ * `external_reference_key` e `style_key`-ul nostru, adica id-ul produsului Edinio.
+ */
+export async function handleProductMasterStatus(
+  admin: SupabaseClient<Database>, businessId: string, payload: unknown,
+): Promise<void> {
+  const root = (payload ?? {}) as Record<string, unknown>;
+  const msg = (root.message ?? root.data ?? root) as Record<string, unknown>;
+  const styleKey = typeof msg.external_reference_key === "string" ? msg.external_reference_key : null;
+  if (!styleKey) return;
+
+  const status = typeof msg.status === "string" ? msg.status : null;
+  const motive = Array.isArray(msg.rejection_reasons) ? msg.rejection_reasons : [];
+  const mesaj = typeof msg.rejection_message === "string" ? msg.rejection_message : null;
+  const now = new Date().toISOString();
+
+  /*
+   * `error` are TREI cazuri, nu doua.
+   *
+   * Scris necondiționat, un eveniment de status fara `rejection_message` punea
+   * `error: null` peste un mesaj de la ultima trimitere — un eșec de articol la
+   * actualizare, de exemplu — si comerciantul rămânea convins ca totul a intrat.
+   * Dar tacerea singura nu e de ajuns in celalalt sens: evenimentul de APROBARE
+   * nu aduce niciun motiv, deci mesajul respingerii de dinainte ar rămâne lipit pe
+   * un produs sanatos, si nimic altceva nu-l mai sterge. Deci: motiv nou -> scrie;
+   * status sanatos -> goleste; altfel -> nu atinge.
+   */
+  /*
+   * Golirea se face DOAR cand mesajul de acolo era chiar unul de respingere.
+   *
+   * Prima varianta golea `error` la orice status sanatos — dar in aceeasi coloana
+   * scrie si `pollOpenBatches` esecurile de ARTICOL la actualizare, iar un articol
+   * respins nu schimba statusul produsului: ramane `active`. Deci un eveniment de
+   * status stergea mesajul unei actualizari care chiar picase, si comerciantul
+   * ramanea convins ca modificarea a intrat — exact ce interzice reconcilierea.
+   * Citim statusul de dinainte: doar o listare care ERA respinsa isi pierde
+   * mesajul cand About You retrage respingerea.
+   */
+  /* ⚠ Strict: inghitita, o pana lua „era respinsa" drept fals si nu mai golea mesajul niciodata. */
+  const veche = randCitit<{ status: string }>("aboutyou.statusulDinainte", await admin
+    .from("aboutyou_listings").select("status")
+    .eq("business_id", businessId).eq("style_key", styleKey).maybeSingle());
+  const eraRespinsa = ["rejected", "problem"].includes(veche?.status ?? "");
+  const eSanatos = status != null && status !== "rejected" && status !== "problem";
+
+  const { error: eScriere } = await admin.from("aboutyou_listings")
+    .update({
+      ...(status ? { status } : {}),
+      rejection_reasons: motive as never,
+      ...(mesaj ? { error: mesaj } : eraRespinsa && eSanatos ? { error: null } : {}),
+      last_status_at: now,
+      updated_at: now,
+    } as never)
+    .eq("business_id", businessId).eq("style_key", styleKey);
+  /*
+   * ⚠ ARUNCA. Asta e SINGURA cale prin care motivele respingerii ajung la noi fara sa mai
+   * intrebam — `GET /products/` nu le are deloc in schema. Pierdut tacut, comerciantul vede
+   * „respins" fara sa afle de ce, si nu mai are cum sa afle.
+   */
+  if (eScriere) throw new EroareTrecatoare(`statusul produsului ${styleKey} nu s-a putut scrie: ${eScriere.message}`);
 }

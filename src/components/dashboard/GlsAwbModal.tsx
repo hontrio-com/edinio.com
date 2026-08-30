@@ -1,0 +1,364 @@
+"use client";
+
+import { useState } from "react";
+import { toast } from "sonner";
+import { AlertTriangle, Download, Loader2, Package, X } from "lucide-react";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
+import { createGlsAwbAction, type DateAwbGls } from "@/lib/actions/gls.actions";
+import { MAX_COLETE } from "@/lib/gls/expediere";
+import { Button } from "@/components/ui/button";
+import type { Database } from "@/types/database.types";
+
+type Order = Database["public"]["Tables"]["orders"]["Row"];
+
+type ShippingAddress = {
+  name?: string;
+  city?: string;
+  county?: string;
+  address?: string;
+  street?: string;
+  street_no?: string;
+  postal_code?: string;
+  country?: string;
+  courier?: string;
+  delivery_type?: string;
+  locker_id?: string;
+  locker_name?: string;
+  /* ⚠ Localitatea si judetul PUNCTULUI. Nedeclarate, `tsc` nu semnala lipsa lor,
+     iar formularul trimitea orasul CLIENTULUI cu strada si codul postal ale
+     punctului — o adresa care nu exista. La FAN Courier era deja corect. */
+  locker_city?: string;
+  locker_county?: string;
+  locker_post_code?: string;
+};
+
+/**
+ * Emiterea AWB-ului GLS dintr-o comanda.
+ *
+ * ═══ ETICHETA ═══
+ *
+ * Se descarca automat la emitere si se pastreaza pe CDN, deci se poate lua
+ * oricand din `/api/gls/awb`.
+ *
+ * ⚠ Ce NU se face niciodata: `PrintLabels` chemat a doua oara pentru aceeasi
+ * comanda — ar crea un al DOILEA colet, real si facturat. Cand eticheta chiar
+ * lipseste din CDN, se cere de la GLS cu `GetPrintedLabels`, care primeste
+ * `ParcelId` si nu creeaza nimic.
+ *
+ * ⚠ GLS nu cere greutatea la emitere (spre deosebire de ceilalti cinci curieri):
+ * cantareste la depozit. De aia formularul n-are camp de greutate — nu e o
+ * scapare.
+ */
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  order: Order;
+  businessId: string;
+  onSuccess: () => void;
+};
+
+/**
+ * Invelisul care MONTEAZA formularul abia la deschidere.
+ *
+ * Fara el, componenta ramane montata cu `return null`, iar valorile initiale
+ * (rambursul, adresa) s-ar calcula o singura data, la prima randare — deci un
+ * efect ar trebui sa le rescrie la fiecare deschidere. Efectul acela e chiar
+ * ce interzice `react-hooks/set-state-in-effect`, si pe buna dreptate: starea
+ * derivata dintr-o proprietate nu se sincronizeaza, se DERIVA.
+ *
+ * Montand la deschidere, initializatorii `useState` ruleaza din nou de fiecare
+ * data si nu mai e nevoie de niciun efect.
+ */
+export function GlsAwbModal(props: Props) {
+  if (!props.open) return null;
+  return <Formular {...props} />;
+}
+
+function Formular({ onClose, order, businessId, onSuccess }: Props) {
+  const comanda = order as typeof order & { gls_awb_number?: string | null };
+  const areAwb = !!comanda.gls_awb_number;
+  const addr = (order.shipping_address ?? {}) as ShippingAddress;
+
+  /*
+   * Livrarea la punct GLS aleasa de client in checkout.
+   *
+   * ⚠ Curierul se NORMALIZEAZA, exact ca in lot (`bulk-orders.actions.ts`).
+   * Scris aici `addr.courier === "gls"` si acolo `.toLowerCase().trim()`, aceeasi
+   * comanda ar fi fost citita diferit dupa cum se apasa butonul: pe o valoare
+   * venita cu majuscule sau cu spatii (import, marketplace, date mai vechi),
+   * formularul ar fi trimis coletul la DOMICILIU, iar lotul la punct.
+   */
+  const laPunct = (addr.courier ?? "").toLowerCase().trim() === "gls"
+    && addr.delivery_type === "locker"
+    && !!addr.locker_id;
+
+  const [nume, setNume] = useState(order.customer_name ?? "");
+  const [telefon, setTelefon] = useState(order.customer_phone ?? "");
+  const [email, setEmail] = useState(order.customer_email ?? "");
+  const [oras, setOras] = useState((laPunct ? addr.locker_city : "") || addr.city || "");
+  const [strada, setStrada] = useState(
+    [addr.street ?? addr.address ?? "", addr.street_no ?? ""].filter(Boolean).join(" ").trim(),
+  );
+  const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || "");
+  const [numarColete, setNumarColete] = useState("1");
+  /*
+   * Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
+   * ramasa neplatita ar pleca altfel cu ramburs zero si fara nicio cale de
+   * incasare. Vezi `rambursDeIncasat` — s-a intamplat deja in productie.
+   *
+   * Ramane EDITABIL: e valoarea implicita, nu o incuietoare.
+   */
+  const [ramburs, setRamburs] = useState(() =>
+    areAwb ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2),
+  );
+  const [continut, setContinut] = useState(() => {
+    const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
+    const nume = items.map((i) => i?.name).filter(Boolean).join(", ");
+    return (nume || "Produse").slice(0, 40);
+  });
+
+  const [creating, setCreating] = useState(false);
+  const [eticheta, setEticheta] = useState<string | null>(null);
+  const [awbEmis, setAwbEmis] = useState<string | null>(null);
+  const [seDescarca, setSeDescarca] = useState(false);
+
+  /**
+   * Eticheta unui AWB emis mai demult: din CDN, iar daca lipseste de acolo, de la
+   * GLS cu `GetPrintedLabels`.
+   *
+   * ⚠ Ruta NU cheama niciodata `PrintLabels`: acela ar crea un al doilea colet
+   * real si facturat.
+   */
+  async function descarcaSalvata() {
+    setSeDescarca(true);
+    try {
+      const res = await fetch(`/api/gls/awb?orderId=${order.id}&businessId=${businessId}`);
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        toast.error(j?.error ?? "Eticheta nu a putut fi descarcata");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      /*
+       * ⚠ Numele se ia din raspuns, nu se compune aici cu „.pdf".
+       *
+       * La formatele Zebra eticheta e ZPL, nu PDF. Salvata cu extensia gresita,
+       * cititorul spune „fisier deteriorat" si comerciantul n-are cum sa lege
+       * asta de formatul ales in configurare. Serverul stie ce a trimis.
+       */
+      a.download = numeDinAntet(res) ?? `eticheta-gls-${comanda.gls_awb_number}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setSeDescarca(false);
+    }
+  }
+
+  /** `filename="..."` din `Content-Disposition`, cand serverul il trimite. */
+  function numeDinAntet(res: Response): string | null {
+    const m = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "");
+    return m ? m[1] : null;
+  }
+
+  function descarca(base64: string, awb: string) {
+    const octeti = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    /*
+     * ⚠ Se recunoaste PDF-ul dupa continut, nu se presupune.
+     *
+     * La formatele Zebra octetii sunt ZPL — text de imprimanta, care incepe cu
+     * „^XA". Numit `.pdf`, fisierul se deschide „deteriorat". Semnatura „%PDF-"
+     * e singurul lucru care nu minte, oricare ar fi configurarea.
+     */
+    const ePdf = String.fromCharCode(...octeti.subarray(0, 5)) === "%PDF-";
+    const tip = ePdf ? "application/pdf" : "application/vnd.zebra.zpl";
+    const url = URL.createObjectURL(new Blob([octeti], { type: tip }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `eticheta-gls-${awb}.${ePdf ? "pdf" : "zpl"}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleCreate() {
+    if (!nume.trim()) return toast.error("Numele destinatarului este obligatoriu");
+    if (!telefon.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
+    if (!oras.trim()) return toast.error("Orasul destinatarului este obligatoriu");
+    if (!laPunct && !strada.trim()) return toast.error("Adresa destinatarului este obligatorie");
+    const colete = parseInt(numarColete, 10);
+    if (!Number.isFinite(colete) || colete < 1) return toast.error("Numarul de colete trebuie sa fie cel putin 1");
+    /* „Count of parcels sent in one shipment. (maximum 99)" — pagina 9; peste,
+       GLS refuza toata expedierea cu codul 29. */
+    if (colete > MAX_COLETE) return toast.error(`GLS accepta cel mult ${MAX_COLETE} colete pe o expediere`);
+
+    const date: DateAwbGls = {
+      destinatar: {
+        nume: nume.trim(),
+        strada: strada.trim(),
+        oras: oras.trim(),
+        judet: (laPunct ? addr.locker_county : "") || addr.county || null,
+        codPostal: codPostal.trim() || null,
+        tara: addr.country || "RO",
+        telefon: telefon.trim(),
+        email: email.trim(),
+      },
+      numarColete: colete,
+      ramburs: parseFloat(ramburs) || 0,
+      continut: continut.trim() || null,
+      servicii: laPunct ? { parcelShopId: addr.locker_id } : undefined,
+    };
+
+    setCreating(true);
+    const r = await createGlsAwbAction(businessId, order.id, date);
+    setCreating(false);
+
+    if ("error" in r) {
+      toast.error(r.error);
+      return;
+    }
+
+    setAwbEmis(r.awb);
+    if (r.etichetaBase64) {
+      setEticheta(r.etichetaBase64);
+      /* Descarcare automata: comerciantul o are pe loc, fara inca un clic. */
+      descarca(r.etichetaBase64, r.awb);
+      toast.success(`AWB GLS ${r.awb} creat — eticheta s-a descarcat`);
+    } else {
+      toast.warning(
+        `AWB GLS ${r.awb} exista deja. Foloseste butonul de descarcare pentru eticheta.`,
+      );
+    }
+    onSuccess();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-background p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <Package className="h-5 w-5" />
+            AWB GLS
+          </h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {areAwb && !awbEmis && (
+          <div className="mb-4 space-y-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+            <p>
+              Comanda are deja AWB GLS <strong>{comanda.gls_awb_number}</strong>.
+            </p>
+            <Button size="sm" variant="outline" onClick={descarcaSalvata} disabled={seDescarca}>
+              {seDescarca ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Descarca eticheta
+            </Button>
+          </div>
+        )}
+
+        {eticheta && awbEmis && (
+          <div className="mb-4 space-y-2 rounded-lg border border-warning/30 bg-warning/5 p-3">
+            <p className="flex items-start gap-2 text-sm font-medium text-foreground">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              Salveaza eticheta acum
+            </p>
+            <p className="text-xs text-muted-foreground">
+Am salvat-o si noi, deci o poti descarca oricand din comanda. Butonul de mai
+              jos ti-o da imediat, fara sa mai intrebe GLS.
+            </p>
+            <Button size="sm" onClick={() => descarca(eticheta, awbEmis)}>
+              <Download className="h-4 w-4" />
+              Descarca eticheta {awbEmis}
+            </Button>
+          </div>
+        )}
+
+        {!areAwb && (
+          <div className="space-y-3">
+            {laPunct && (
+              <div className="rounded-lg border border-info/30 bg-info/5 px-3 py-2 text-xs">
+                Livrare la punct GLS: <strong>{addr.locker_name || addr.locker_id}</strong>.
+                Adresa de strada nu se mai trimite.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Nume destinatar *</span>
+                <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={nume} onChange={(e) => setNume(e.target.value)} />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Telefon *</span>
+                <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={telefon} onChange={(e) => setTelefon(e.target.value)} />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-muted-foreground">Email</span>
+                <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={email} onChange={(e) => setEmail(e.target.value)} />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Oras *</span>
+                <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={oras} onChange={(e) => setOras(e.target.value)} />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Cod postal</span>
+                <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={codPostal} onChange={(e) => setCodPostal(e.target.value)} />
+                {/* ⚠ GLS il cere obligatoriu, dar comenzile din Romania nu-l
+                    primesc din checkout (campul se arata doar la livrarea
+                    internationala). Lasat gol, serverul il completeaza cu al unui
+                    punct GLS din acelasi oras — corect pentru rutare, dar nu al
+                    strazii clientului. Cine il stie, il scrie aici. */}
+                {!codPostal.trim() && (
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Lasat gol, se completeaza cu codul localitatii din reteaua GLS.
+                  </span>
+                )}
+              </label>
+              {!laPunct && (
+                <label className="text-sm sm:col-span-2">
+                  <span className="mb-1 block text-muted-foreground">Strada si numar *</span>
+                  <input className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={strada} onChange={(e) => setStrada(e.target.value)} />
+                </label>
+              )}
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Numar de colete</span>
+                <input type="number" min={1} max={MAX_COLETE} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={numarColete} onChange={(e) => setNumarColete(e.target.value)} />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-muted-foreground">Ramburs (lei)</span>
+                <input type="number" step="0.01" min={0} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={ramburs} onChange={(e) => setRamburs(e.target.value)} />
+              </label>
+              <label className="text-sm sm:col-span-2">
+                <span className="mb-1 block text-muted-foreground">Continut</span>
+                <input maxLength={40} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={continut} onChange={(e) => setContinut(e.target.value)} />
+              </label>
+            </div>
+
+            {/* GLS nu cere greutatea la emitere — cantareste la depozit. */}
+            <p className="text-xs text-muted-foreground">
+              GLS nu cere greutatea la emiterea AWB-ului: coletul se cantareste la depozit.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={onClose} disabled={creating}>Renunta</Button>
+              <Button onClick={handleCreate} disabled={creating}>
+                {creating ? <Loader2 className="animate-spin" /> : <Package className="h-4 w-4" />}
+                {creating ? "Se emite..." : "Emite AWB"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

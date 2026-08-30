@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Check, Minus, Package, Plus, ShoppingCart, Truck, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { gtagEvent } from "@/lib/marketing";
-import { lineKey, type CartItem } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCart, type CartItem } from "@/components/storefront/cart/CartProvider";
 import type { CartPricing } from "@/lib/storefront/cart/pricing";
 
 /**
@@ -88,6 +88,22 @@ export function CartLine({
   dens?: "rand" | "compact";
 }) {
   const key = lineKey(item);
+  const cos = useCart();
+  const totalLinie = cos.lineTotal(item);
+  const economie = cos.lineSavings(item);
+  // Pretul pe bucata vine tot de la cos, nu din `item.price`: acela e
+  // instantaneul salvat in localStorage la adaugare si putea fi vechi de zile,
+  // in timp ce totalul de langa el venea deja de la server.
+  //
+  // Masurat pe 2026-08-04, DOAR pe liniile care chiar trec prin cos: 14 din 55 au
+  // alt pret decat catalogul, dar stau in 2 cosuri din 22. Restul liniilor
+  // salvate sunt `buy_now`, n-au vazut niciodata cosul, si diferentele lor sunt
+  // preturi de TREAPTA scrise dinadins de formularul de comanda.
+  const pretBucata = cos.lineUnit(item);
+  // Pretul intreg al liniei, cel taiat cand se aplica o treapta. Prin definitia
+  // din `pretPeTrepte` e chiar `unitar x cantitate`, adica `totalLinie +
+  // economie`: asa raman toate trei numerele impacate intre ele.
+  const intreg = pretBucata * item.quantity;
   const rand = useRef<HTMLDivElement>(null);
   const href = item.slug ? `${basePath}/product/${item.slug}` : null;
   const latime = dens === "compact" ? "w-16 h-16" : "w-20 h-20 sm:w-24 sm:h-24";
@@ -132,7 +148,7 @@ export function CartLine({
         {item.variantTitle && (
           <p className="text-xs text-muted-foreground mt-0.5">{item.variantTitle}</p>
         )}
-        <p className="text-xs text-muted-foreground mt-1">{formatPrice(item.price)} bucata</p>
+        <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>
 
         {/* Zona de atins a butonului „Sterge" e adusa la inaltimea stepperului
             si departata de „+": text de 12 px inseamna vreo 16 px de atins, iar
@@ -146,7 +162,7 @@ export function CartLine({
             onSchimba={(n) => { if (n <= 0) mutaFocalizarea(); onQty(key, n); }}
           />
           <button type="button" aria-label={`Sterge ${item.name} din cos`} data-sterge-linie=""
-            onClick={() => { mutaFocalizarea(); stergeCuEveniment(item); onRemove(key); }}
+            onClick={() => { mutaFocalizarea(); stergeCuEveniment(item, totalLinie, pretBucata); onRemove(key); }}
             className="h-9 -ml-2 px-2 rounded-lg text-xs text-muted-foreground hover:text-destructive transition-colors inline-flex items-center gap-1">
             <X className="h-3.5 w-3.5" />
             Sterge
@@ -154,19 +170,42 @@ export function CartLine({
         </div>
       </div>
 
-      <p className="text-sm sm:text-base font-bold shrink-0 tabular-nums" style={{ color }}>
-        {formatPrice(item.price * item.quantity)}
-      </p>
+      {/* Totalul liniei vine de la cos, nu din inmultire locala: doar acolo se
+          aplica treptele de cantitate, si tot acolo se uita si serverul. */}
+      <div className="shrink-0 text-right">
+        <p className="text-sm sm:text-base font-bold tabular-nums" style={{ color }}>
+          {formatPrice(totalLinie)}
+        </p>
+        {economie > 0 && (
+          <>
+            <p className="text-xs text-muted-foreground line-through tabular-nums">
+              {formatPrice(intreg)}
+            </p>
+            <p className="text-[11px] font-semibold" style={{ color }}>
+              -{formatPrice(economie)}
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-/** Acelasi eveniment pe care il trimite si sertarul la stergerea unei linii. */
-function stergeCuEveniment(item: CartItem) {
+/**
+ * Acelasi eveniment pe care il trimite si sertarul la stergerea unei linii.
+ *
+ * Valoarea e cea REALA a liniei, cu treptele de cantitate aplicate, nu inmultirea
+ * la pret intreg: altfel rapoartele arata alti bani decat cei din comenzi.
+ *
+ * `pretBucata` se primeste din afara, de la cos, din acelasi motiv: `item.price`
+ * e instantaneul din localStorage, deci Analytics ar fi raportat pretul unitar
+ * de la data adaugarii in cos langa o valoare de linie calculata la zi.
+ */
+function stergeCuEveniment(item: CartItem, valoare: number, pretBucata: number) {
   gtagEvent("remove_from_cart", {
     currency: "RON",
-    value: item.price * item.quantity,
-    items: [{ item_id: item.productId, item_name: item.name, price: item.price, quantity: item.quantity }],
+    value: valoare,
+    items: [{ item_id: item.productId, item_name: item.name, price: pretBucata, quantity: item.quantity }],
   });
 }
 
@@ -237,6 +276,12 @@ export function RezumatCos({
             {pricing.shipping === 0 ? "Gratuita" : formatPrice(pricing.shipping)}
           </span>
         </div>
+        {pricing.vatAmount !== null && (
+          <div className="flex justify-between text-muted-foreground">
+            <span>{pricing.vatLabel}</span>
+            <span className="font-medium text-foreground tabular-nums">{formatPrice(pricing.vatAmount)}</span>
+          </div>
+        )}
         <div className="flex justify-between font-bold text-base text-foreground pt-2 border-t border-border">
           <span>Total</span>
           <span className="tabular-nums" style={{ color }}>{formatPrice(pricing.grandTotal)}</span>

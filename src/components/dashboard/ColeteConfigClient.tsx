@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Panel } from "@/components/ui/panel";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 const DEFAULT_SENDER: COSender = {
   name: "",
@@ -46,17 +47,17 @@ export default function ColeteConfigClient({
   const [saving, startSaveTransition] = useTransition();
   const [disconnecting, startDisconnectTransition] = useTransition();
 
-  const isConnected = !!(initialConfig?.client_id && initialConfig?.client_secret);
+  const isConnected = !!(initialConfig?.client_id && secretulEsteSalvat(initialConfig, "client_secret"));
 
   function updateSender(key: keyof COSender, value: string) {
     setSender(prev => ({ ...prev, [key]: value }));
   }
 
   function handleTest() {
-    if (!clientId || !clientSecret) { toast.error("Introdu Client ID si Client Secret"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu Client ID si Client Secret"); return; }
     startTestTransition(async () => {
       setTestResult(null);
-      const result = await testCOConnection(clientId, clientSecret, sandbox);
+      const result = await testCOConnection(businessId, clientId, clientSecret, sandbox);
       if ("error" in result) {
         setTestResult({ error: result.error });
         toast.error(result.error);
@@ -68,7 +69,7 @@ export default function ColeteConfigClient({
   }
 
   function handleSave() {
-    if (!clientId || !clientSecret) { toast.error("Client ID si Client Secret sunt obligatorii"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Client ID si Client Secret sunt obligatorii"); return; }
     if (!sender.name || !sender.phone) { toast.error("Numele si telefonul expeditorului sunt obligatorii"); return; }
     if (!sender.county || !sender.city || !sender.postal_code || !sender.street || !sender.street_number) {
       toast.error("Adresa expeditorului este incompleta"); return;
@@ -169,14 +170,14 @@ export default function ColeteConfigClient({
                 type="password"
                 value={clientSecret}
                 onChange={e => setClientSecret(e.target.value)}
-                placeholder="Client Secret furnizat de Colete Online"
+                placeholder={secretulEsteSalvat(initialConfig, "client_secret") ? PLACEHOLDER_SECRET_SALVAT : "Client Secret furnizat de Colete Online"}
               />
             </Field>
             <Button
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={testing || !clientId || !clientSecret}
+              disabled={testing || !clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))}
             >
               {testing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               Testeaza conexiunea

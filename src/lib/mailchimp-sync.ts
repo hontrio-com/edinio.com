@@ -3,6 +3,7 @@
 // — it must never break the order/popup/form flow it is called from.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import { upsertMember, splitName, type MailchimpConfig } from "@/lib/mailchimp";
 import { ensureStore, upsertProduct, deleteProduct, syncOrder, setOrderFinancialStatus, mailchimpStoreId, type EcomProduct } from "@/lib/mailchimp-ecommerce";
@@ -231,10 +232,19 @@ export async function maybeSyncMailchimpProductsBulk(opts: {
       return;
     }
 
-    // Upsert: pull current product data for the affected ids.
-    const { data: products } = await admin
-      .from("products").select("id, name, price, images").eq("business_id", opts.businessId).in("id", opts.ids);
-    for (const p of products ?? []) {
+    /* Upsert: pull current product data for the affected ids.
+       Pe bucati: `.in()` intra in ADRESA, iar peste ~650 de id-uri cererea e
+       respinsa la margine (masurat, vezi `supabase/id-chunks.ts`). Functia
+       asta e chemata cu `void` dintr-o actiune in masa, deci un esec aici n-ar
+       fi ajuns nici in interfata, nici in loguri: catalogul Mailchimp ar fi
+       ramas pur si simplu in urma, fara ca cineva sa afle. */
+    const products: { id: string; name: string; price: number; images: unknown }[] = [];
+    for (const bucata of bucatiDeIduri(opts.ids)) {
+      const { data } = await admin
+        .from("products").select("id, name, price, images").eq("business_id", opts.businessId).in("id", bucata);
+      products.push(...((data ?? []) as typeof products));
+    }
+    for (const p of products) {
       const img = Array.isArray(p.images) ? (p.images as unknown[])[0] : null;
       const res = await upsertProduct(config, storeId, {
         id: p.id, title: p.name, price: Number(p.price) || 0,

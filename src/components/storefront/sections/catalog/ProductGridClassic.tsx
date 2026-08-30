@@ -2,7 +2,7 @@
 
 import { ShoppingCart } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
-import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { hrefCatalog } from "@/lib/storefront/category-href";
 import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
 
 /**
@@ -15,14 +15,21 @@ import { StoreProductCard } from "@/components/storefront/sections/products/Stor
  *
  * Ancora `#produse` e folosita de butonul din hero si de „Vezi toate" din
  * randurile pe categorie, deci trebuie sa ramana pe sectiune.
+ *
+ * `prioritate` spune daca grila e PRIMA sectiune a paginii, exact ca la
+ * randurile de produse. Grila era singura care nu primea steagul si isi incarca
+ * nerabdator primele patru imagini oricum — adica tocmai ce interzice
+ * comentariul din `SectionRenderer`. Pe un magazin cu hero si trei randuri
+ * deasupra, alea patru erau sub pliu si furau banda de la bannerul care chiar
+ * era elementul LCP: 864 KiB pe eSAFE, imagini de furnizor care ocolesc si
+ * redimensionarea din CDN.
  */
-export function ProductGridClassic() {
+export function ProductGridClassic({ prioritate = false }: { prioritate?: boolean }) {
   const {
     catalogRoot,
     color,
     search,
     categoryFilter,
-    filteredProducts,
     paginatedProducts,
     featuredProducts,
     pageContent,
@@ -30,6 +37,9 @@ export function ProductGridClassic() {
     currentPage,
     totalPages,
     goToPage,
+    interogareFiltre,
+    totalFiltrate,
+    catalogSeIncarca,
   } = useStorefront();
 
   const areRecomandate = pageContent.show_featured_section === true;
@@ -47,14 +57,14 @@ export function ProductGridClassic() {
           <h2 className="text-xl font-semibold text-foreground">Produse</h2>
         </div>
       )}
-      {areRecomandate && featuredProducts.length > 0 && filteredProducts.length > 0 && (
+      {areRecomandate && featuredProducts.length > 0 && totalFiltrate > 0 && (
         <div className="flex items-center gap-2 mb-4">
           <h2 className="text-base font-bold text-foreground">Toate produsele</h2>
           <div className="h-px flex-1 bg-border" />
         </div>
       )}
 
-      {filteredProducts.length === 0 ? (
+      {totalFiltrate === 0 ? (
         <div className="text-center py-20 border border-dashed border-border rounded-2xl">
           <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
             <ShoppingCart className="h-7 w-7 text-muted-foreground" />
@@ -68,13 +78,18 @@ export function ProductGridClassic() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* Cat timp se cere pagina noua, grila se stinge putin si nu mai
+              primeste apasari: pe palierul server un filtru bifat e un
+              dus-intors, iar fara semnul asta vizitatorul apasa a doua data
+              crezand ca prima n-a mers. */}
+          <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 transition-opacity${catalogSeIncarca ? " opacity-50 pointer-events-none" : ""}`}
+            aria-busy={catalogSeIncarca || undefined}>
             {paginatedProducts.map((product, i) => (
-              <StoreProductCard key={product.id} product={product} priority={i < 4} />
+              <StoreProductCard key={product.id} product={product} priority={prioritate && i < 4} />
             ))}
           </div>
           {totalPages > 1 && (
-            <Paginare current={currentPage} total={totalPages} color={color} catalogRoot={catalogRoot} onGo={mergiLa} />
+            <Paginare current={currentPage} total={totalPages} color={color} catalogRoot={catalogRoot} interogareFiltre={interogareFiltre} onGo={mergiLa} />
           )}
         </>
       )}
@@ -97,6 +112,7 @@ function Paginare({
   total,
   color,
   catalogRoot,
+  interogareFiltre,
   onGo,
 }: {
   current: number;
@@ -108,6 +124,15 @@ function Paginare({
    * paginare ar fi trimis mereu la radacina magazinului.
    */
   catalogRoot: string;
+  /**
+   * Filtrele active, gata scrise ca interogare. Fara ele, fiecare numar de
+   * pagina arunca cautarea, categoria si pretul si trimitea la catalogul intreg.
+   *
+   * Nu contin `utm_*`/`gclid`/`preview`: alea se adauga doar la rescrierea
+   * adresei, din motivul scris in `MiniStoreRenderer` — puse in ancore, ar lipsi
+   * din HTML-ul initial si ar aparea abia la hidratare.
+   */
+  interogareFiltre: string;
   onGo: (n: number) => void;
 }) {
   const pagini = Array.from({ length: total }, (_, i) => i + 1)
@@ -118,15 +143,34 @@ function Paginare({
       return acc;
     }, []);
 
+  /* `type="button"` explicit pe Inapoi/Inainte: un `<button>` fara `type` e
+     `submit`, deci daca grila ajunge vreodata intr-un `<form>` (bara de cautare
+     e deja unul, doar ca alaturi), apasarea ar trimite formularul si ar reincarca
+     pagina in loc sa schimbe pagina. Sora din `ShopPieces` il avea, asta nu. */
   const nav = "px-3 py-2 text-sm rounded-lg border border-border disabled:opacity-30 hover:bg-muted transition-colors";
-  // Fara slash inaintea interogarii: `/magazin/?page=2` ia un 308 la fiecare
-  // apasare, iar Search Console numara fiecare pagina ca redirectionare.
-  const radacina = radacinaMagazin(catalogRoot);
-  const href = (p: number) => (p <= 1 ? radacina : `${radacina}?page=${p}`);
+  /*
+   * Numerele duc la ACEEASI lista, doar la alta pagina din ea.
+   *
+   * Inainte se scria `?page=N` gol, deci fiecare numar arunca cautarea,
+   * categoria, intervalul de pret si fatetele: „pagina 2 din manusi sub 50 lei"
+   * ducea la pagina 2 din tot catalogul. Bug-ul statea ascuns fiindca
+   * `e.preventDefault()` de mai jos inghite apasarea obisnuita si paginarea se
+   * face pe loc — se vedea doar la ctrl-click, la copierea adresei, si la
+   * roboti, care nu apasa nimic si citesc chiar `href`-ul gresit.
+   *
+   * Aceeasi compunere ca sora ei din `ShopPieces`. `hrefCatalog` normalizeaza
+   * radacina, deci ramane si fara slash inaintea interogarii: `/magazin/?page=2`
+   * lua un 308 la fiecare apasare, iar Search Console numara fiecare pagina ca
+   * redirectionare.
+   */
+  const href = (p: number) => hrefCatalog(
+    catalogRoot,
+    p <= 1 ? interogareFiltre : `${interogareFiltre}${interogareFiltre ? "&" : ""}page=${p}`,
+  );
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 mt-8">
-      <button onClick={() => onGo(Math.max(1, current - 1))} disabled={current === 1} className={nav}>
+      <button type="button" onClick={() => onGo(Math.max(1, current - 1))} disabled={current === 1} className={nav}>
         Inapoi
       </button>
       {pagini.map((p, i) =>
@@ -150,7 +194,7 @@ function Paginare({
           </a>
         ),
       )}
-      <button onClick={() => onGo(Math.min(total, current + 1))} disabled={current === total} className={nav}>
+      <button type="button" onClick={() => onGo(Math.min(total, current + 1))} disabled={current === total} className={nav}>
         Inainte
       </button>
     </div>

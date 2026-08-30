@@ -48,7 +48,15 @@ export function normalizeSearchText(input: string): string {
     .replace(/ł/g, "l");
 }
 
-function tokenize(input: string): string[] {
+/**
+ * Cuvintele unei interogari sau ale unui camp.
+ *
+ * Exportata fiindca palierul server trebuie sa trimita in SQL EXACT cuvintele
+ * pe care le-ar folosi motorul de aici: vocabularul din `catalog_cuvant` e
+ * despicat de o oglinda a acestei functii (vezi `catalog_reface_cuvinte`), deci
+ * orice a doua tokenizare ar caut cuvinte care nu exista in index.
+ */
+export function tokenize(input: string): string[] {
   return normalizeSearchText(input)
     .replace(/(\d)(?=[a-z])/g, "$1 ")
     .replace(/([a-z])(?=\d)/g, "$1 ")

@@ -231,6 +231,7 @@ function privacyTemplate(
 <p>Colectăm datele cu caracter personal pe care ni le furnizezi direct, atunci când:</p>
 <ul>
 <li>Plasezi o comandă: nume și prenume, adresă de livrare, număr de telefon, adresă de e-mail;</li>
+<li>Plasezi o comandă pe firmă: denumirea societății, codul de identificare fiscală (CUI), numărul de înregistrare la registrul comerțului și adresa sediului social, necesare pentru emiterea facturii. Pentru persoanele fizice autorizate, întreprinderile individuale și întreprinderile familiale, aceste date sunt date cu caracter personal;</li>
 <li>Creezi un cont: adresă de e-mail, parolă (stocată criptat);</li>
 <li>Ne contactezi: conținutul mesajului și datele de identificare;</li>
 <li>Te abonezi la newsletter: adresă de e-mail.</li>

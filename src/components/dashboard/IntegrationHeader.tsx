@@ -10,6 +10,33 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   sameday: { src: "/integrations/sameday.webp", alt: "Sameday" },
   woot: { src: "/integrations/woot.webp", alt: "Woot" },
   colete: { src: "/integrations/colete-online.svg", alt: "Colete Online" },
+  gls: { src: "/integrations/gls.svg", alt: "GLS" },
+  /*
+   * ⚠ `pallex.avif` E RECOLORAT DE NOI, nu e fisierul de la Pall-Ex.
+   *
+   * Cel oficial e ALB (94% din cerneala) si era invizibil peste tot, fiindca
+   * toate cele cinci locuri unde apare un logo randeaza pe alb: `bg-surface` e
+   * #FFFFFF si in `.dark`, iar pe site pastilele sunt `bg-white`.
+   *
+   * `filter: invert(1)`, cum e la Oblio si Netopia, NU merge aici: logo-ul are un
+   * accent rosu #E02020 pe care inversarea l-ar face CYAN. S-a inversat doar
+   * LUMINOZITATEA (HSL), pastrand nuanta — albul devine negru, rosul ramane rosu,
+   * iar aureolele roz deschis dintre ele devin rosu inchis si se topesc in
+   * cerneala. Originalul alb sta in `pallex-alb.avif`, pentru cand va exista o
+   * suprafata intunecata.
+   */
+  pallex: { src: "/integrations/pallex.avif", alt: "Pall-Ex" },
+  ecolet: { src: "/integrations/ecolet.png", alt: "eColet" },
+  posta: { src: "/integrations/posta_romana.svg", alt: "Poșta Română" },
+  packeta: { src: "/integrations/packeta.png", alt: "Packeta" },
+  innoship: { src: "/integrations/innoship.svg", alt: "Innoship" },
+  smartship: { src: "/integrations/smartship.png", alt: "SmartShip.ro" },
+  /* ⚠ Cheia trebuie sa fie EXACT `id`-ul pasat de pagina (`<IntegrationHeader id="shipo">`).
+     Nepotrivita, pagina se randeaza fara nicio eroare, doar fara sigla. */
+  shipo: { src: "/integrations/shipo.ro.svg", alt: "Shipo.ro" },
+  fedex: { src: "/integrations/fedex.svg", alt: "FedEx" },
+  ups: { src: "/integrations/ups.svg", alt: "UPS" },
+  dhl: { src: "/integrations/dhl.svg", alt: "DHL Express" },
   smartbill: { src: "/integrations/smartbill.webp", alt: "SmartBill" },
   oblio: { src: "/integrations/oblio.webp", alt: "Oblio", filter: "invert(1)" },
   fgo: { src: "/integrations/fgo.svg", alt: "fGO" },
@@ -29,6 +56,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   olx: { src: "/integrations/olx.svg", alt: "OLX" },
   aboutyou: { src: "/integrations/aboutyou.png", alt: "About You" },
   trendyol: { src: "/integrations/trendyol.svg", alt: "Trendyol" },
+  emag: { src: "/integrations/emag.webp", alt: "eMAG Marketplace" },
   marketing: { src: "/integrations/facebook-pixel.svg", alt: "Marketing" },
 };
 

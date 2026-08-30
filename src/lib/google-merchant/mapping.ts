@@ -1,7 +1,10 @@
 // Maps an Edinio product to a Merchant API productInput payload.
 
 import { storeBaseUrl } from "@/lib/seo";
-import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice } from "@/lib/storefront/variants";
+// Un GTIN invalid duce la respingerea produsului, deci se lasa afara, nu se
+// trimite. Verificarea e comuna cu feedul Facebook si cu datele structurate.
+import { isValidGtin, normalizeGtin } from "@/lib/gtin";
+import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, combinatiiActiveUnice } from "@/lib/storefront/variants";
 import { CURRENCY, DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "./types";
 
 export interface MappableBusiness {
@@ -24,6 +27,11 @@ export interface MappableProduct {
   stock_quantity: number | null;
   weight_grams: number | null;
   is_bundle?: boolean;
+  /**
+   * Verdictul `disponibilitatePachet`, calculat de apelant: componentele nu sunt
+   * in randul produsului, iar aici nu exista acces la baza.
+   */
+  pachetDisponibil?: boolean;
   page_sections?: unknown;
 }
 
@@ -65,17 +73,6 @@ function plainText(html: string | null, fallback: string): string {
   return (text || fallback).slice(0, 4900);
 }
 
-// A GTIN must be 8/12/13/14 digits with a valid mod-10 check digit; sending an
-// invalid one gets the product disapproved, so we drop it rather than submit it.
-function isValidGtin(raw: string | undefined): boolean {
-  const s = (raw ?? "").replace(/\s/g, "");
-  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(s)) return false;
-  const d = s.split("").map(Number);
-  const check = d.pop()!;
-  const sum = d.reverse().reduce((acc, n, i) => acc + n * (i % 2 === 0 ? 3 : 1), 0);
-  return (10 - (sum % 10)) % 10 === check;
-}
-
 export function toGoogleProductInput(
   business: MappableBusiness,
   product: MappableProduct,
@@ -86,7 +83,14 @@ export function toGoogleProductInput(
 
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
   const link = `${storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain })}/product/${product.slug ?? product.id}`;
-  const inStock = !product.track_inventory || (product.stock_quantity ?? 0) > 0;
+  /*
+   * Pachetul se scrie cu `track_inventory: false`, deci prima ramura era mereu
+   * adevarata: orice pachet pleca „IN_STOCK", inclusiv unul cu toate componentele
+   * sterse. Ironia era ca `attributes.isBundle` de mai jos stia deja ca e pachet.
+   */
+  const inStock = product.is_bundle
+    ? product.pachetDisponibil !== false
+    : (!product.track_inventory || (product.stock_quantity ?? 0) > 0);
 
   const base = Number(product.price) || 0;
   const compare = product.compare_at_price != null ? Number(product.compare_at_price) : null;
@@ -114,7 +118,7 @@ export function toGoogleProductInput(
   if (googleCat) attributes.googleProductCategory = googleCat;
   // v1 renamed the single `gtin` attribute to a `gtins` array. Only valid GTINs
   // are submitted; an invalid one would disapprove the product.
-  if (validGtin) attributes.gtins = [g.gtin!.replace(/\s/g, "")];
+  if (validGtin) attributes.gtins = [normalizeGtin(g.gtin)];
   if (g.mpn) attributes.mpn = g.mpn;
   const gender = toEnum(g.gender, GENDERS);
   if (gender) attributes.gender = gender;
@@ -167,7 +171,10 @@ export function expandProductOffers(
   config: GoogleMerchantConfig,
 ): OfferInput[] {
   const variants = parseVariants(product.page_sections);
-  const enabled = variants?.combinations.filter((c) => c.enabled && c.title) ?? [];
+  // Cate o oferta pe TITLU, nu pe rand: titlurile duplicate au si `id` duplicat,
+  // deci a doua oferta o suprascria pe prima la Google (acelasi `offerId`) si
+  // feedul publica alt pret decat pagina. Prima castiga, ca peste tot.
+  const enabled = combinatiiActiveUnice(variants);
   const base = toGoogleProductInput(business, product, config);
   if (!variants || enabled.length === 0) {
     return [{ offerId: product.id, input: base }];
@@ -203,11 +210,24 @@ export function expandProductOffers(
     const attrs: Record<string, unknown> = { ...baseAttrs };
     attrs.title = `${product.name} - ${combo.title}`.slice(0, 150);
     attrs.itemGroupId = product.id;
-    // No per-variant identifiers exist in our model; a product-level GTIN shared
-    // across variants would be a duplicate-GTIN disapproval, so strip identifiers.
-    delete attrs.gtins;
-    delete attrs.mpn;
-    attrs.identifierExists = false;
+    /*
+     * Identificatorul acestei variante.
+     *
+     * Un GTIN identifica un articol anume, nu o familie: cele sapte culori ale
+     * aceleiasi huse au sapte coduri diferite. Cat exista doar codul de pe
+     * produs, nu se putea trimite niciunul — acelasi cod pe toate variantele
+     * inseamna GTIN duplicat, adica respingere — si fiecare oferta pleca cu
+     * `identifierExists: false`. Acum fiecare combinatie isi are codul ei.
+     *
+     * Codul de pe produs NU se mai foloseste aici, nici macar ca rezerva:
+     * pus pe mai multe variante, ar face exact duplicatul de care fugim.
+     */
+    const comboGtin = isValidGtin(combo.gtin) ? normalizeGtin(combo.gtin) : null;
+    if (comboGtin) attrs.gtins = [comboGtin];
+    else delete attrs.gtins;
+    // `mpn` ramane cel de pe produs cand exista: spre deosebire de GTIN, codul de
+    // fabricant se poate repeta intre variantele aceluiasi model.
+    attrs.identifierExists = !!(comboGtin || attrs.mpn);
 
     const unit = comboUnitPrice(combo, basePrice) || basePrice;
     const compare = comboCompareAtPrice(combo, baseCompare);

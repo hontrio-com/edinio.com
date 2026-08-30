@@ -15,6 +15,7 @@ import { CartControl } from "@/components/storefront/sections/_shared/CartContro
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { stilSigla } from "@/lib/storefront/logo-box";
 
 const STROKE = 1.5;
 
@@ -105,8 +106,8 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
                 aria-label={nume}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                  style={{ height: logoSize, maxWidth: logoSize * 5 }}
-                  className="w-auto max-w-full object-contain" />
+                  style={stilSigla(logoSize)}
+                  className="w-auto object-contain" />
               </a>
             ) : (
               <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity" aria-label={nume}>

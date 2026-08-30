@@ -1,5 +1,6 @@
 "use client";
 
+import { adresaPublica } from "@/lib/storefront/identitate-publica";
 import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import {
@@ -11,12 +12,14 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
-import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { formatPrice } from "@/lib/utils/format";
 import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
 import type { ShippingClass, ShippingRule } from "@/lib/shipping/rules";
-import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail } from "@/lib/actions/auth.actions";
+import { normalizeazaTimpDeLivrare } from "@/lib/shipping/delivery-time";
+import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail, schimbaParola } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
 import { DomainSection } from "@/components/dashboard/DomainSection";
 import { EmailSettingsClient, type EmailSettingsInitial } from "@/components/dashboard/EmailSettingsClient";
@@ -32,7 +35,15 @@ import { TIPURI_POLITICI } from "@/lib/storefront/policy-index";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { type StoreMode } from "@/lib/storefront/store-mode";
 
-type UserProfile = Database["public"]["Tables"]["users_profile"]["Row"];
+/**
+ * DOAR campurile de care are nevoie ecranul, nu randul intreg. Pagina trimite
+ * exact atat (vezi settings/page.tsx): `admin_notes`, `role`, `suspended_until`,
+ * `stripe_customer_id` si hash-ul OTP nu au ce cauta in browser.
+ */
+type UserProfile = Pick<
+  Database["public"]["Tables"]["users_profile"]["Row"],
+  "full_name" | "plan" | "plan_interval" | "plan_expires_at" | "payment_failed_at" | "mfa_email_enabled"
+>;
 
 type SectionId =
   | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"
@@ -183,6 +194,8 @@ interface VatSettings {
   vat_rate: number;
   prices_include_vat: boolean;
   show_vat_breakdown: boolean;
+  /** Eticheta „(TVA inclus)" / „(fara TVA)" de langa pret. */
+  show_vat_label: boolean;
 }
 
 interface NotificationsConfig {
@@ -210,6 +223,8 @@ interface ShippingConfig {
   shipping_zones: Record<string, ShippingMethodConfig>;
   shipping_classes: ShippingClass[];
   shipping_rules: ShippingRule[];
+  /* Brut din `page_content.delivery_time` — se curata prin normalizator. */
+  delivery_time: unknown;
 }
 
 const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice: number; filter?: string }[] = [
@@ -219,6 +234,29 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "sameday",      label: "Sameday",           logo: "/integrations/sameday.webp",      defaultPrice: 19 },
   { id: "woot",         label: "Woot",              logo: "/integrations/woot.webp",         defaultPrice: 16 },
   { id: "colete",       label: "Colete Online",     logo: "/integrations/colete-online.svg", defaultPrice: 15 },
+  { id: "gls",          label: "GLS",               logo: "/integrations/gls.svg",          defaultPrice: 18 },
+  { id: "pallex",       label: "Pall-Ex",           logo: "/integrations/pallex.avif",      defaultPrice: 150 },
+  { id: "ecolet",       label: "eColet",            logo: "/integrations/ecolet.png",       defaultPrice: 18 },
+  { id: "posta",        label: "Posta Romana",      logo: "/integrations/posta_romana.svg", defaultPrice: 16 },
+  { id: "packeta",      label: "Packeta",           logo: "/integrations/packeta.png", defaultPrice: 15 },
+  { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
+  { id: "smartship",    label: "SmartShip",         logo: "/integrations/smartship.png",    defaultPrice: 17 },
+  { id: "shipo",        label: "Shipo.ro",          logo: "/integrations/shipo.ro.svg",     defaultPrice: 17 },
+  /* ⚠ Tariful fix e mai mare decat la ceilalti fiindca FedEx e un transportator
+     express, nu un curier de colete ieftin: cel mai ieftin serviciu intern al lor
+     (FedEx Priority) porneste mult peste tarifele locale. Un implicit de 17 lei ar
+     fi facut comerciantul sa vanda transport in pierdere pana la prima factura. */
+  { id: "fedex",        label: "FedEx",             logo: "/integrations/fedex.svg",        defaultPrice: 45 },
+  /* ⚠ Acelasi rationament ca la FedEx: UPS e transportator express, nu curier de
+     colete ieftin. Cel mai ieftin serviciu intern al lor (UPS Express Saver) porneste
+     mult peste tarifele locale, iar un implicit de 17 lei l-ar face pe comerciant sa
+     vanda transport in pierdere pana la prima factura. */
+  { id: "ups",          label: "UPS",               logo: "/integrations/ups.svg",          defaultPrice: 45 },
+  /* ⚠ Acelasi rationament ca la FedEx si UPS: DHL Express e transportator express, nu
+     curier de colete ieftin. Cel mai ieftin produs intern al lor (DHL Domestic Express,
+     codul N) porneste mult peste tarifele locale, iar un implicit de 17 lei l-ar face pe
+     comerciant sa vanda transport in pierdere pana la prima factura. */
+  { id: "dhl",          label: "DHL Express",       logo: "/integrations/dhl.svg",          defaultPrice: 45 },
   { id: "own",          label: "Curier propriu",    logo: "",                               defaultPrice: 10 },
   { id: "pickup",       label: "Ridicare personala", logo: "",                              defaultPrice: 0  },
 ];
@@ -232,9 +270,42 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   cargus: "Cargus",
   woot: "Woot",
   colete: "Colete Online",
+  gls: "Livrare prin GLS",
+  pallex: "Livrare paletizata Pall-Ex",
+  ecolet: "eColet",
+  /* Trebuie sa ramana in pas cu `addrLabel` din shipping.actions.ts: aici e doar
+     substituentul aratat comerciantului, iar daca cele doua se despart, campul
+     gol promite un text si checkout-ul afiseaza altul. */
+  posta: "Livrare prin Poșta Română",
+  packeta: "Livrare la adresa prin Packeta",
+  innoship: "Innoship",
+  smartship: "SmartShip",
+  /* ⚠ Trebuie sa fie sir-cu-sir egal cu `COURIER_LABELS.shipo` din
+     shipping.actions.ts: campul gol din panou promite un text, iar checkout-ul
+     afiseaza fallback-ul — nepotrivirea o vede doar un cumparator. */
+  shipo: "Shipo.ro",
+  fedex: "FedEx",
+  ups: "UPS",
+  /* ⚠ Sir-cu-sir egal cu `COURIER_LABELS.dhl` din shipping.actions.ts („DHL Express").
+     Aici e doar substituentul aratat comerciantului; daca cele doua se despart, campul
+     gol promite un text si checkout-ul afiseaza altul. */
+  dhl: "DHL Express",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
+
+/**
+ * Curierii integrati care totusi NU pot cota din contract.
+ *
+ * ⚠ GLS e singurul de pana acum: MyGLS n-are metoda de tarif. Fara randul asta,
+ * panoul i-ar fi aratat comerciantului butonul „Pret automat (din contract)"
+ * pentru un curier care nu coteaza — iar bifat, ar fi ascuns si campul de pret
+ * fix, lasand livrarea pe zero lei. Trebuie sa ramana in pas cu
+ * `FARA_API_DE_TARIF` din src/lib/actions/shipping.actions.ts.
+ */
+/* ⚠ Packeta e aici fiindca API-ul lor n-are NICIO metoda de tarif: pretul vine din
+   contract, ca la Posta si GLS. */
+const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta", "packeta"]);
 
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};
@@ -260,6 +331,7 @@ interface Props {
   paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean; klarna: boolean; revolut: boolean };
   cardDiscount: CardDiscountConfig;
   codDiscount: CardDiscountConfig;
+  codFee: CodFeeConfig;
   cookieBanner: CookieBannerConfig;
   cookieCategories: ConsentCategory[];
   storeSeo: StoreSeo;
@@ -287,7 +359,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
 
   useEffect(() => {
@@ -335,6 +407,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [savingGeneral, startGeneralTransition] = useTransition();
 
   // Password
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [deleteConfirmPassword, setDeleteConfirmPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
@@ -375,9 +449,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     const templates = buildPolicyTemplates({
       businessName: businessData?.business_name ?? null,
       cui:          businessData?.cui ?? null,
-      address:      businessData?.address ?? null,
-      city:         businessData?.city ?? null,
-      county:       businessData?.county ?? null,
+      /* Aceeasi precedenta ca pe pagina publica: altfel previzualizarea din panou
+         ar arata alta adresa decat cea tiparita in Termeni. Vezi identitate-publica.ts. */
+      address:      adresaPublica(businessData ?? {}).strada || null,
+      city:         adresaPublica(businessData ?? {}).oras || null,
+      county:       adresaPublica(businessData ?? {}).judet || null,
       phone:        businessData?.phone ?? null,
       email:        businessData?.email ?? null,
     });
@@ -438,6 +514,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [shippingClasses, setShippingClasses] = useState<ShippingClass[]>(shippingConfig.shipping_classes);
   const [shippingRules, setShippingRules] = useState<ShippingRule[]>(shippingConfig.shipping_rules);
   const [savingShipping, startShippingTransition] = useTransition();
+
+  /*
+   * Termenul de livrare: procesare + tranzit.
+   *
+   * Se tine ca SIR, ca restul campurilor numerice de pe fila: golit in timp ce
+   * scrii, un `useState<number>` ar sari inapoi la 0 sub degete. Se face numar
+   * la salvare, iar normalizatorul din `@/lib/shipping/delivery-time` are
+   * ultimul cuvant.
+   *
+   * Valoarea de pornire e cea salvata; pentru un magazin care n-a completat
+   * niciodata nimic, campurile arata implicitele 1-2 zile de procesare si 1-3 de
+   * tranzit, dar comutatorul e STINS — deci nu se declara nimic catre Google
+   * pana cand omul nu confirma ca asa e la el.
+   */
+  const timpLivrareSalvat = normalizeazaTimpDeLivrare(shippingConfig.delivery_time);
+  const [livrareTimpPornit, setLivrareTimpPornit] = useState(timpLivrareSalvat?.enabled === true);
+  const [procesareMin, setProcesareMin] = useState<string>(String(timpLivrareSalvat?.handling_min ?? 1));
+  const [procesareMax, setProcesareMax] = useState<string>(String(timpLivrareSalvat?.handling_max ?? 2));
+  const [tranzitMin, setTranzitMin] = useState<string>(String(timpLivrareSalvat?.transit_min ?? 1));
+  const [tranzitMax, setTranzitMax] = useState<string>(String(timpLivrareSalvat?.transit_max ?? 3));
 
   // Mirrors the <Input> primitive so every native input in Settings matches the
   // rest of the dashboard (border-input, transparent bg, focus-visible ring).
@@ -515,6 +611,26 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       const result = await updateCodDiscount(businessId, codDisc);
       if ("error" in result) toast.error(result.error);
       else toast.success("Discountul la plata ramburs a fost salvat.");
+    });
+  }
+
+  // Taxa la plata ramburs — oglinda discountului de mai sus, cu semn invers.
+  const [codTaxa, setCodTaxa] = useState<CodFeeConfig>(codFee);
+  const [savingCodTaxa, startCodTaxaTransition] = useTransition();
+  function saveCodFee() {
+    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
+    if (codTaxa.enabled && (!Number.isFinite(codTaxa.value) || codTaxa.value <= 0)) {
+      toast.error("Introdu o valoare mai mare ca 0 pentru taxa.");
+      return;
+    }
+    if (codTaxa.enabled && codTaxa.type === "percent" && codTaxa.value > 100) {
+      toast.error("Procentul nu poate depasi 100%.");
+      return;
+    }
+    startCodTaxaTransition(async () => {
+      const result = await updateCodFee(businessId, codTaxa);
+      if ("error" in result) toast.error(result.error);
+      else toast.success("Taxa la plata ramburs a fost salvata.");
     });
   }
 
@@ -604,6 +720,20 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       toast.error("Comanda minima trebuie sa fie un numar pozitiv.");
       return;
     }
+    /*
+     * Termenul de livrare se verifica INAINTE de a pleca la server: acolo,
+     * intors invalid, el s-ar pastra pe randul vechi in tacere, iar
+     * comerciantul ar vedea „salvat" peste niste zile pe care nu le-a salvat.
+     */
+    const timpDeLivrare = {
+      enabled: livrareTimpPornit,
+      handling_min: Number(procesareMin), handling_max: Number(procesareMax),
+      transit_min: Number(tranzitMin), transit_max: Number(tranzitMax),
+    };
+    if (!normalizeazaTimpDeLivrare(timpDeLivrare)) {
+      toast.error("Timpul de livrare: zilele trebuie sa fie numere intre 0 si 30, iar maximul cel putin cat minimul.");
+      return;
+    }
     startShippingTransition(async () => {
       const result = await updateShippingConfig(businessId, {
         shipping_enabled: shippingEnabled,
@@ -612,6 +742,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
         shipping_zones: shippingZones,
         shipping_classes: shippingClasses,
         shipping_rules: shippingRules,
+        delivery_time: timpDeLivrare,
       });
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile de livrare au fost salvate.");
@@ -754,14 +885,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     if (newPassword !== confirmPassword) { toast.error("Parolele nu coincid."); return; }
     if (newPassword.length < 8) { toast.error("Parola trebuie sa aiba cel putin 8 caractere."); return; }
     setSavingPassword(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    // Trece prin server, care cere parola ACTUALA. Varianta de dinainte chema
+    // updateUser direct din browser, deci orice sesiune imprumutata schimba
+    // parola — iar GoTrue inchide apoi toate celelalte sesiuni, adica
+    // proprietarul real era dat afara si nu mai putea intra.
+    const result = await schimbaParola(currentPassword, newPassword);
     setSavingPassword(false);
-    if (error) toast.error("Nu am putut schimba parola.");
-    else {
-      toast.success("Parola a fost schimbata cu succes.");
-      setNewPassword(""); setConfirmPassword("");
-    }
+    if ("error" in result) { toast.error(result.error); return; }
+    toast.success("Parola a fost schimbata cu succes.");
+    setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
   }
 
   async function startEnableMfa() {
@@ -1337,7 +1469,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     const autoPrice = zone.auto_price ?? true;
                     // Pretul automat "din contract" exista doar la curierii reali integrati prin API.
                     // "Curier propriu" si "Ridicare personala" nu au contract, deci folosesc pret fix.
-                    const supportsAutoPrice = needsIntegration && isIntegrated;
+                    const supportsAutoPrice = needsIntegration && isIntegrated && !FARA_PRET_AUTOMAT.has(method.id);
                     return (
                       <div key={method.id} className={`rounded-xl border transition-colors ${!canToggle ? "opacity-50 bg-surface border-border" : zone.enabled ? "border-primary/30 bg-primary/5" : "border-border bg-surface"}`}>
                         <div className="flex items-center gap-3 p-3.5">
@@ -1474,6 +1606,58 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
               </div>
 
+              {/*
+                * Timpul de livrare — procesare + tranzit.
+                *
+                * Reclamat de un comerciant caruia Search Console ii semnala
+                * „deliveryTime lipseste" pe toate paginile de produs: cautase
+                * exact aici si nu gasise nimic. Zilele existau doar in editorul
+                * de magazin, ca setare de AFISARE, deci cine nu voia casuta pe
+                * pagina n-avea cum sa declare un termen catre Google.
+                */}
+              <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Timp de livrare</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Cat dureaza de la comanda pana la client. Se publica in datele structurate ale paginilor de produs
+                      (<span className="font-mono text-[11px]">offers.shippingDetails.deliveryTime</span>), de unde Google
+                      il ia pentru Merchant Listings. Daca ai pornit „Estimare livrare" in editorul de magazin, casuta de
+                      pe pagina produsului arata aceleasi zile.
+                    </p>
+                  </div>
+                  <Switch checked={livrareTimpPornit} onCheckedChange={setLivrareTimpPornit} />
+                </div>
+                {livrareTimpPornit && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-foreground">Timp de procesare</p>
+                      <p className="text-[11px] text-muted-foreground">Cat sta comanda la tine pana pleaca la curier. 0 = expediezi in aceeasi zi.</p>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="0" max="30" step="1" value={procesareMin}
+                          onChange={(e) => setProcesareMin(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile minime de procesare" />
+                        <span className="text-sm text-muted-foreground">-</span>
+                        <input type="number" min="0" max="30" step="1" value={procesareMax}
+                          onChange={(e) => setProcesareMax(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile maxime de procesare" />
+                        <span className="text-sm text-muted-foreground">zile</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-foreground">Timp de tranzit</p>
+                      <p className="text-[11px] text-muted-foreground">Cat sta coletul la curier, dupa ce a plecat de la tine.</p>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min="0" max="30" step="1" value={tranzitMin}
+                          onChange={(e) => setTranzitMin(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile minime de tranzit" />
+                        <span className="text-sm text-muted-foreground">-</span>
+                        <input type="number" min="0" max="30" step="1" value={tranzitMax}
+                          onChange={(e) => setTranzitMax(e.target.value)} className={`${inputCls} w-20`} aria-label="Zile maxime de tranzit" />
+                        <span className="text-sm text-muted-foreground">zile</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Minimum order value */}
               <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
                 <div>
@@ -1601,6 +1785,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           Nu, preturile sunt fara TVA
                         </button>
                       </div>
+                    </div>
+
+                    {/* Eticheta de langa pret */}
+                    <div className="flex items-center justify-between gap-4 pt-4 border-t border-border">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">Afiseaza eticheta langa pret</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Pe pagina produsului, langa pret, va scrie{" "}
+                          <span className="font-medium text-foreground">
+                            ({vat.prices_include_vat ? "TVA inclus" : "fara TVA"})
+                          </span>
+                          . Textul se ia din setarea de mai sus, ca sa nu poata scrie una si sa se incaseze alta.
+                        </p>
+                      </div>
+                      <Switch checked={vat.show_vat_label} onCheckedChange={(v) => setVat(prev => ({ ...prev, show_vat_label: v }))} />
                     </div>
 
                     {/* Arata defalcarea TVA */}
@@ -1896,6 +2095,106 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div className="px-5 py-4 border-t border-border">
                   <Button onClick={saveCodDiscount} disabled={savingCodDisc}>
                     {savingCodDisc ? <Loader2 className="animate-spin" /> : <Save />}
+                    Salveaza
+                  </Button>
+                </div>
+              </div>
+
+              {/* Taxa la plata ramburs */}
+              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">Taxa la plata ramburs</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Adauga automat o suma la comenzile platite ramburs, ca sa acoperi comisionul curierului. Nu se aplica la plata cu cardul.
+                    </p>
+                  </div>
+                  <Switch checked={codTaxa.enabled} onCheckedChange={(v) => setCodTaxa(c => ({ ...c, enabled: v }))} className="mt-1 shrink-0" aria-label={codTaxa.enabled ? "Dezactiveaza" : "Activeaza"} />
+                </div>
+                {codTaxa.enabled && (
+                  <div className="px-5 py-5 space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Tip taxa</label>
+                      <div className="grid grid-cols-2 gap-2 max-w-sm">
+                        <button type="button" onClick={() => setCodTaxa(c => ({ ...c, type: "percent" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codTaxa.type === "percent" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Procent (%)
+                        </button>
+                        <button type="button" onClick={() => setCodTaxa(c => ({ ...c, type: "fixed" }))}
+                          className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codTaxa.type === "fixed" ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                          Suma fixa (lei)
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                        {codTaxa.type === "percent" ? "Valoare taxa (%)" : "Valoare taxa (lei)"}
+                      </label>
+                      <input
+                        type="number" min={0} max={codTaxa.type === "percent" ? 100 : undefined} step="0.01"
+                        value={codTaxa.value || ""}
+                        onChange={e => setCodTaxa(c => ({ ...c, value: Math.max(0, Number(e.target.value) || 0) }))}
+                        className={`${inputCls} max-w-[200px]`}
+                        placeholder={codTaxa.type === "percent" ? "ex: 2" : "ex: 10"}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        {codTaxa.type === "percent"
+                          ? "Se calculeaza la valoarea produselor (fara transport), dupa eventualul cod de reducere."
+                          : "Se adauga la total, indiferent de valoarea comenzii."}
+                      </p>
+                    </div>
+
+                    {/* Intrebarea de TVA are rost DOAR pentru o suma fixa: un procent
+                        se aplica peste o baza care e deja in regimul magazinului. */}
+                    {codTaxa.type === "fixed" && vatSettings.vat_enabled && (
+                      <div>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">Suma introdusa</label>
+                        <div className="grid grid-cols-2 gap-2 max-w-sm">
+                          <button type="button" onClick={() => setCodTaxa(c => ({ ...c, amount_includes_vat: true }))}
+                            className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${codTaxa.amount_includes_vat ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                            Contine TVA
+                          </button>
+                          <button type="button" onClick={() => setCodTaxa(c => ({ ...c, amount_includes_vat: false }))}
+                            className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${!codTaxa.amount_includes_vat ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}>
+                            Fara TVA
+                          </button>
+                        </div>
+                        {/* Suma pe care o vede clientul, calculata cu aceeasi functie
+                            ca la checkout si pe server. Fara ea, alegerea de mai sus
+                            ramane o abstractie pe care comerciantul o afla abia din
+                            prima comanda.
+
+                            Se citeste `vatSettings` (prop-ul SALVAT), nu starea
+                            `vat`/`vatRateInput` din editorul de TVA de alaturi: aceea
+                            se schimba la fiecare tasta si poate sta intr-o forma pe
+                            care aplicatia refuza sa o salveze (camp de cota golit =>
+                            cota 0). Serverul foloseste cota salvata, deci si
+                            previzualizarea trebuie sa o foloseasca pe aceeasi, altfel
+                            arata un numar pe care nu-l va incasa nimeni. */}
+                        {codTaxa.value > 0 && (
+                          <p className="text-[11px] text-muted-foreground mt-2">
+                            Comanda va creste cu <strong className="text-foreground">
+                              {formatPrice(
+                                Math.round(
+                                  codFeeInStoreMode(codTaxa.value, codTaxa.amount_includes_vat, vatSettings)
+                                    * (vatSettings.prices_include_vat ? 1 : 1 + vatSettings.vat_rate / 100)
+                                    * 100,
+                                ) / 100,
+                              )}
+                            </strong>{" "}
+                            , cu TVA inclus.
+                            {!vatSettings.prices_include_vat && (
+                              <> In rezumatul comenzii apare fara TVA, ca restul preturilor din magazin.</>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="px-5 py-4 border-t border-border">
+                  <Button onClick={saveCodFee} disabled={savingCodTaxa}>
+                    {savingCodTaxa ? <Loader2 className="animate-spin" /> : <Save />}
                     Salveaza
                   </Button>
                 </div>
@@ -2252,6 +2551,17 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
                 <div className="px-5 py-5 space-y-4">
                   <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Parola actuala</label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className={inputCls}
+                      autoComplete="current-password"
+                      placeholder="Parola cu care te-ai conectat"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">Parola noua</label>
                     <input
                       type="password"
@@ -2270,7 +2580,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       className={inputCls}
                     />
                   </div>
-                  <Button onClick={changePassword} disabled={savingPassword || !newPassword || !confirmPassword}>
+                  <Button onClick={changePassword} disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}>
                     {savingPassword && <Loader2 className="animate-spin" />}
                     {savingPassword ? "Se schimba..." : "Schimba parola"}
                   </Button>
@@ -2425,16 +2735,31 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           placeholder={email}
                         />
                       </div>
+                      <div>
+                        <label className="block text-xs font-medium text-foreground mb-1.5">
+                          Introdu parola contului
+                        </label>
+                        <input
+                          type="password"
+                          value={deleteConfirmPassword}
+                          onChange={(e) => setDeleteConfirmPassword(e.target.value)}
+                          className={inputCls}
+                          autoComplete="current-password"
+                        />
+                        <p className="mt-1.5 text-[11px] text-muted-foreground">
+                          Daca ai un abonament activ, va fi anulat automat.
+                        </p>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmEmail(""); }}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmEmail(""); setDeleteConfirmPassword(""); }}>
                           Anuleaza
                         </Button>
                         <Button
                           size="sm"
-                          disabled={deletingAccount || deleteConfirmEmail !== email}
+                          disabled={deletingAccount || deleteConfirmEmail !== email || !deleteConfirmPassword}
                           onClick={() => {
                             startDeleteTransition(async () => {
-                              const result = await deleteAccount();
+                              const result = await deleteAccount(deleteConfirmPassword);
                               if (result && "error" in result) toast.error(result.error);
                             });
                           }}

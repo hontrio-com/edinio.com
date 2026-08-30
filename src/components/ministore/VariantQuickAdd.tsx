@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ShoppingCart, X, Package } from "lucide-react";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, formatPriceRange } from "@/lib/utils/format";
+import type { PriceRange } from "@/lib/utils/product-price";
 import { createClient } from "@/lib/supabase/client";
 import {
   parseVariants, comboTitle, findCombo, comboUnitPrice, comboCompareAtPrice,
@@ -28,6 +29,13 @@ interface QuickAddProduct {
   compare_at_price: number | null;
   images: string[];
   page_sections: unknown;
+  /**
+   * Intervalul vandabil, calculat pe SERVER. Obligatoriu: cu `deferCombinations`
+   * sertarul se deschide inainte sa soseasca combinatiile, deci pana atunci nu
+   * are din ce sa-l derive — si pana acum arata pretul de BAZA, care poate sa nu
+   * fie de vanzare deloc.
+   */
+  price_range: PriceRange;
 }
 
 /**
@@ -108,9 +116,12 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd, deferCom
   if (!open || !product || !variants) return null;
 
   const basePrice = Number(product.price);
+  // Pana la prima bifa nu exista o combinatie aleasa, deci nici un pret unic:
+  // se arata intervalul vandabil, nu pretul de baza.
   const displayPrice = comboUnitPrice(combo, basePrice);
+  const pretAfisat = combo ? formatPrice(displayPrice) : formatPriceRange(product.price_range.min, product.price_range.max);
   const displayCompare = comboCompareAtPrice(combo, product.compare_at_price);
-  const hasDiscount = displayCompare != null && displayCompare > displayPrice;
+  const hasDiscount = !!combo && displayCompare != null && displayCompare > displayPrice;
   const image = combo?.image || product.images[0] || null;
   // A full selection was made but it maps to no enabled combination (merchant
   // disabled that exact mix) — block the add and tell the customer. Cat timp
@@ -162,7 +173,7 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd, deferCom
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{product.name}</p>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-lg font-bold" style={{ color }}>{formatPrice(displayPrice)}</span>
+                <span className="text-lg font-bold" style={{ color }}>{pretAfisat}</span>
                 {hasDiscount && (
                   <span className="text-sm text-muted-foreground line-through">{formatPrice(displayCompare!)}</span>
                 )}

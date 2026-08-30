@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyState, exchangeCode, hasContentScope } from "@/lib/google-merchant/oauth";
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription } from "@/lib/google-merchant/client";
 import { DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
@@ -35,7 +36,22 @@ export async function GET(req: NextRequest) {
   // the user back to reconnect and keep the Shopping permission ticked.
   if (!hasContentScope(tok.scope)) return back(req, "gmc=noscope");
 
-  const { data: ss } = await supabase
+  /*
+   * Configul existent se citeste cu SERVICE ROLE, nu cu clientul utilizatorului.
+   *
+   * Vederea `store_settings` nu mai decripteaza pentru `authenticated`, iar
+   * obiectul citit aici se scrie INAPOI intreg mai jos. Orice camp secret venit
+   * ca sir `enc.v1.…` ar fi criptat de declansator inca o data peste el insusi,
+   * si nu s-ar mai putea desface. Azi singurul secret al coloanei
+   * (`refresh_token`) se suprascrie oricum, dar regula tine si pentru campurile
+   * care se adauga maine.
+   *
+   * Service role ocoleste RLS, deci proprietatea magazinului TREBUIE verificata
+   * separat — se face mai sus, pe clientul utilizatorului
+   * (`businesses.id = businessId AND businesses.user_id = user.id`).
+   */
+  const admin = createAdminClient();
+  const { data: ss } = await admin
     .from("store_settings").select("id, google_merchant_config").eq("business_id", businessId).single();
   const config: GoogleMerchantConfig = (ss?.google_merchant_config as GoogleMerchantConfig) ?? {};
   config.refresh_token = tok.refreshToken;
@@ -66,7 +82,15 @@ export async function GET(req: NextRequest) {
       if (!("error" in created)) dataSourceName = created.data.name;
     }
     if (dataSourceName && !config.notification_subscription_name) {
-      const sub = await createNotificationSubscription(tok.accessToken, acc.id, `${PLATFORM_ORIGIN}/api/google-merchant/webhook`);
+      // Tokenul TREBUIE sa fie in URL-ul de callback, la fel ca in
+      // connectMerchant (src/lib/actions/google-merchant.actions.ts):
+      // /api/google-merchant/webhook cere acum secretul si confirma-si-ignora
+      // orice notificare fara el. Inregistrat fara token, abonamentul creat aici
+      // ar fi mort pentru totdeauna — nu se mai recreeaza nimic, fiindca
+      // `notification_subscription_name` ramane setat.
+      const webhookSecret = process.env.GMC_WEBHOOK_SECRET;
+      const callbackUri = `${PLATFORM_ORIGIN}/api/google-merchant/webhook${webhookSecret ? `?token=${encodeURIComponent(webhookSecret)}` : ""}`;
+      const sub = await createNotificationSubscription(tok.accessToken, acc.id, callbackUri);
       if (!("error" in sub)) config.notification_subscription_name = sub.data.name;
     }
     config.connected = !!dataSourceName;
@@ -75,12 +99,34 @@ export async function GET(req: NextRequest) {
     config.data_source_name = dataSourceName;
   }
 
-  if (ss?.id) {
-    await supabase.from("store_settings")
+  /*
+   * ═══ ⚠ CODUL DE AUTORIZARE E DE UNICA FOLOSINTA (29.08.2026, seara) ═══
+   *
+   * Scrierea asta mergea oarba, iar omul era trimis inapoi cu „conectat". Numai ca `exchangeCode`
+   * a consumat DEJA codul de la Google: nu se mai poate schimba a doua oara. Deci o pana de o
+   * clipa la baza lasa starea cea mai proasta cu putinta:
+   *
+   *     tokenul e emis la ei, dar la noi nu scrie nimic
+   *     ecranul spune „conectat", fiindca redirectarea nu s-a uitat la nimic
+   *     comerciantul crede ca a terminat, si nimic nu merge
+   *     iar reluarea cere alt cod, deci trebuie sa reia TOT dansul de autorizare
+   *
+   * ⚠ SI NU EXISTA NICIO PLASA. Nu se scrie nicaieri ce s-a pierdut, deci nici macar nu se poate
+   * afla din jurnal ca tokenul acela exista la ei si nu la noi.
+   *
+   * ⚠ Deci se citeste raspunsul, si daca n-a intrat, omul afla ACUM — cat mai are rabdare sa apese
+   * inca o data — nu peste doua zile, cand se intreaba de ce nu se sincronizeaza nimic.
+   */
+  const { error: eScris } = ss?.id
+    ? await supabase.from("store_settings")
       .update({ google_merchant_config: config as never, updated_at: new Date().toISOString() })
-      .eq("business_id", businessId);
-  } else {
-    await supabase.from("store_settings").insert({ business_id: businessId, google_merchant_config: config as never });
+      .eq("business_id", businessId)
+    : await supabase.from("store_settings")
+      .insert({ business_id: businessId, google_merchant_config: config as never });
+
+  if (eScris) {
+    console.error("[gmc/oauth] conexiunea nu s-a putut salva:", eScris);
+    return back(req, "gmc=save_failed");
   }
 
   return back(req, config.connected ? "gmc=connected" : "gmc=choose");

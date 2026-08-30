@@ -12,6 +12,9 @@ import crypto from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import type { OlxConfig } from "./types";
+import { patchOlxConfig } from "./config";
+import { logError } from "@/lib/error-logger";
+import type { Json } from "@/types/database.types";
 
 type Db = SupabaseClient<Database>;
 
@@ -67,12 +70,32 @@ async function tokenRequest(body: Record<string, string>): Promise<OlxTokens | {
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
+      /*
+       * ⚠ SI CEREREA DE TOKEN ARE UN CAPAT (31.08.2026). Clientul Partner API primise unul, dar
+       * asta ramasese fara — si e chemata mai devreme decat el, din `loadOlxContext`. O cerere
+       * care atarna aici tine intreg cronul: nu apuca niciun magazin, nici macar cele conectate
+       * la alt cont. Douazeci de secunde, ca la celalalt.
+       */
+      signal: AbortSignal.timeout(20_000),
     });
     const data = (await res.json().catch(() => ({}))) as TokenResponse;
     if (!res.ok || !data.access_token) {
       return {
         error: data.error_description ?? data.error ?? `HTTP ${res.status}`,
-        invalidGrant: data.error === "invalid_grant" || res.status === 400 || res.status === 401,
+        /*
+         * ═══ ⚠ ORICE 400 SAU 401 TRECEA DREPT „SESIUNE MOARTA" (30.08.2026, tarziu) ═══
+         *
+         * `invalidGrant` duce, mai sus, la `needs_reconnect` — adica ii spunem comerciantului sa
+         * reconecteze contul. Dar OLX raspunde `400` si pentru `invalid_client`, `invalid_scope`,
+         * `invalid_request`, iar `401` si pentru un antet gresit sau o cheie de aplicatie schimbata.
+         * Niciuna nu inseamna ca refresh tokenul LUI a expirat.
+         *
+         * Un `400` de la o greseala de-a noastra in configurarea aplicatiei ar fi trimis TOTI
+         * comerciantii sa reconecteze conturi perfect sanatoase.
+         *
+         * ⚠ Se cere chiar codul lor. Restul raman erori trecatoare, deci se reincearca.
+         */
+        invalidGrant: data.error === "invalid_grant",
       };
     }
     const expiresAt = new Date(Date.now() + (Number(data.expires_in) || 86400) * 1000).toISOString();
@@ -122,15 +145,44 @@ export async function ensureMerchantToken(
   const res = await refreshTokens(config.refresh_token);
   if ("error" in res) {
     if (res.invalidGrant) {
-      const patched: OlxConfig = { ...config, needs_reconnect: true };
-      await persistConfig(db, businessId, patched);
+      /*
+       * ═══ ⚠ `invalid_grant` POATE INSEMNA „ALTCINEVA A ROTIT DEJA" (30.08.2026, tarziu) ═══
+       *
+       * Doua fire pornesc cu acelasi refresh token R1. Primul primeste A2 + R2 si scrie. Al doilea
+       * cere tot cu R1 — deja consumat — si OLX ii raspunde `invalid_grant`. Pana azi, al doilea
+       * scria `needs_reconnect = true` peste configul SANATOS al primului:
+       *
+       *     A repara sesiunea ✅
+       *     B o marcheaza „reconecteaza contul" ❌
+       *
+       * Iar CAS-ul de mai jos nu-l prindea, fiindca B iesea de-aici fara sa mai ajunga la el.
+       *
+       * ⚠ SE INTREABA MARTORUL INAINTE DE A DA VESTEA PROASTA: daca `token_updated_at` s-a miscat
+       * de cand am citit, altcineva a rotit — si atunci tokenul LUI e bun, iar al nostru era doar
+       * vechi. Numai daca nimeni n-a rotit, refresh tokenul chiar a murit.
+       */
+      const citit = await citesteConfig(db, businessId);
+      /*
+       * ⚠ FARA MARTOR NU SE DA VESTEA PROASTA. Daca nici nu s-a putut citi, nu stim daca refresh
+       * tokenul chiar a murit sau doar l-a consumat celalalt fir — iar una din cele doua urmari e
+       * cu mult mai scumpa. Se reia; la trecerea urmatoare, martorul se citeste iar.
+       */
+      if (!citit.ok) {
+        return { error: "Nu am putut verifica sesiunea OLX; se reia.", needsReconnect: false };
+      }
+      const proaspat = citit.config;
+      const altcinevaARotit = proaspat != null
+        && (proaspat.token_updated_at ?? null) !== (config.token_updated_at ?? null);
+      if (altcinevaARotit && proaspat.access_token && proaspat.refresh_token) {
+        return { token: proaspat.access_token, config: proaspat };
+      }
+      await persistConfig(db, businessId, { needs_reconnect: true });
       return { error: "Sesiunea OLX a expirat. Reconecteaza contul OLX.", needsReconnect: true };
     }
     return { error: res.error, needsReconnect: false };
   }
 
-  const patched: OlxConfig = {
-    ...config,
+  const petic: Partial<OlxConfig> = {
     access_token: res.accessToken,
     access_token_expires_at: res.expiresAt,
     // Rotation: keep the new refresh token when one is issued.
@@ -138,18 +190,172 @@ export async function ensureMerchantToken(
     token_updated_at: new Date().toISOString(),
     needs_reconnect: false,
   };
-  await persistConfig(db, businessId, patched);
-  return { token: res.accessToken, config: patched };
+
+  /*
+   * ═══ ⚠ ROTATIA ARE UN SINGUR CASTIGATOR (30.08.2026) ═══
+   *
+   * Functia asta se cheama din cron, din actiuni si din callback. Doua fire care gasesc acelasi
+   * access token expirat pornesc AMANDOUA reimprospatarea, cu acelasi refresh token:
+   *
+   *     A si B citesc configul: acces expirat, refresh R1
+   *     A: OLX -> A2 + R2, scrie R2
+   *     B: OLX cu R1 -> refuz, fiindca R1 s-a consumat
+   *     B scrie peste configul SANATOS al lui A ❌
+   *
+   * ⚠ COMPARAREA NU SE POATE FACE PE TOKEN: `refresh_token` e criptat in baza, deci ce sta acolo nu
+   * se poate confrunta cu ce tine firul in mana. Dar rotatia lasa un martor necriptat —
+   * `token_updated_at` — si „nimeni n-a rotit de cand am citit eu" se spune atunci simplu.
+   *
+   * ⚠ CINE PIERDE CURSA NU SE PLANGE, RECITESTE. Celalalt fir a scris deja un token bun; a-l
+   * declara „sesiune moarta" ar trimite comerciantul sa reconecteze un cont viu.
+   */
+  const vazut = config.token_updated_at ?? null;
+  /*
+   * ═══ CAS-UL SE REINCEARCA, SI DE-AIA E SIGUR (31.08.2026) ═══
+   *
+   * O pana de-o clipa la baza (lock timeout, conexiune taiata) lasa refresh tokenul ROTIT numai in
+   * memoria procesului asta — iar cel din baza nu mai e bun, fiindca OLX l-a consumat. Pana azi se
+   * iesea din prima, cu un esec trecator: corect, dar risipitor, fiindca urmatoarea trecere trebuie
+   * sa ceara ALT token de la ei.
+   *
+   * ⚠ SI RELUAREA E SIGURA, nu doar comoda — se vede din corpul RPC-ului. Peticul muta chiar
+   * `token_updated_at`, martorul pe care se face compararea:
+   *
+   *     daca prima chemare a PICAT       -> martorul e neschimbat -> a doua scrie, ca si prima
+   *     daca a REUSIT si raspunsul s-a pierdut -> martorul e mutat -> a doua intoarce `false`
+   *                                        -> ramura „am pierdut cursa" reciteste configul
+   *                                        -> si gaseste acolo chiar scrierea NOASTRA
+   *
+   * ⚠ Se trimit ACELASI martor si ACELASI petic la fiecare incercare. Un martor recitit intre
+   * incercari ar transforma reluarea intr-o scriere neconditionata, adica exact caderea fara CAS pe
+   * care am scos-o.
+   */
+  let aScris: boolean | null = null;
+  let eRotatie: { message: string } | null = null;
+  for (let incercare = 0; incercare < 3; incercare++) {
+    const r = await db.rpc("olx_roteste_tokenul", {
+      p_business_id: businessId,
+      p_vazut: vazut,
+      p_patch: petic as unknown as Json,
+    });
+    aScris = r.data as boolean | null;
+    eRotatie = r.error;
+    if (!eRotatie) break;
+    if (incercare < 2) await new Promise((gata) => setTimeout(gata, 200 * (incercare + 1)));
+  }
+
+  if (!eRotatie && aScris === false) {
+    /* Altcineva a rotit intre timp: se ia ce a scris el, nu se scrie peste. */
+    const citit = await citesteConfig(db, businessId);
+    const proaspat = citit.ok ? citit.config : null;
+    if (proaspat?.access_token && proaspat.refresh_token) {
+      return { token: proaspat.access_token, config: proaspat };
+    }
+    return { error: "Sesiunea OLX se reinnoieste in alta parte; se reia.", needsReconnect: false };
+  }
+
+  /*
+   * ═══ UN CAS PICAT NU COBOARA PE O SCRIERE FARA CAS (31.08.2026) ═══
+   *
+   * Pana azi, daca RPC-ul de rotatie nu se putea rula, se scria oricum — prin `persistConfig`,
+   * adica fara nicio conditie. Asta desfacea tocmai paza pe care CAS-ul o pune:
+   *
+   *     A si B pornesc cu R1
+   *     A: OLX -> R2, CAS reuseste, in baza e R2
+   *     B: OLX -> R3, dar RPC-ul lui pica (lock timeout)
+   *     B scrie fara conditie -> R3 peste R2
+   *     -> R2 e pierdut, si daca A a mai apucat sa foloseasca R3... nu, R3 e al lui B
+   *
+   * Mai simplu: o scriere fara CAS pe un camp care se roteste e chiar cursa. Iar aici pretul
+   * neplatit e mic: nescris, tokenul nou trait doar in memorie inseamna o reimprospatare in plus
+   * la trecerea urmatoare — nu o conexiune moarta, fiindca paza de mai jos (`rotit`) refuza sa
+   * raporteze sanatate cand refresh tokenul chiar s-a schimbat.
+   */
+  if (eRotatie) {
+    await logError({
+      action: "olx.rotatie", severity: "warning",
+      message: `rotatia tokenului nu s-a putut scrie sub CAS, nici dupa trei incercari: ${eRotatie.message}`,
+      businessId,
+    });
+  }
+  const scris = !eRotatie;
+
+  /*
+   * ═══ ⚠ UN REFRESH TOKEN ROTIT SI NESCRIS INSEAMNA CONEXIUNE MOARTA (29.08.2026, noaptea) ═══
+   *
+   * OLX roteste refresh tokenul: cand da unul nou, cel vechi nu mai e bun. Pana azi scrierea mergea
+   * oarba si se raporta oricum sanatate:
+   *
+   *     avem R1 -> OLX ne da A2 + R2
+   *     scrierea lui R2 pica -> in baza ramane R1
+   *     mergem mai departe cu A2, deci totul pare bine
+   *     A2 expira -> incercam iar cu R1, care nu mai e bun -> „reconecteaza contul" ❌
+   *
+   * ⚠ DEOSEBIREA E CHIAR ROTATIA. Daca ei NU ne-au dat alt refresh token, cel din baza e inca bun:
+   * o scriere picata costa doar o reimprospatare in plus, deci se merge mai departe. Daca ne-au dat
+   * unul nou si nu l-am scris, singurul martor al conexiunii e in memoria procesului asta — si
+   * moare cu el. Atunci NU se raporteaza sanatate.
+   */
+  const rotit = !!res.refreshToken && res.refreshToken !== config.refresh_token;
+  if (!scris && rotit) {
+    return {
+      error: "Nu am putut salva sesiunea OLX reînnoită; se reia.",
+      needsReconnect: false,
+    };
+  }
+  return { token: res.accessToken, config: { ...config, ...petic } };
 }
 
-async function persistConfig(db: Db, businessId: string, config: OlxConfig): Promise<void> {
+/**
+ * Scrie un petic peste configul OLX, si SPUNE daca a intrat.
+ *
+ * ═══ ⚠ ERA O PAZA CARE NU SE PUTEA APRINDE (29.08.2026, noaptea) ═══
+ *
+ * Avea `try/catch` in jurul unei cereri care NU arunca: `supabase-js` intoarce `{ error }` la o
+ * eroare PostgREST. Deci `catch`-ul prindea doar caderile de retea ale clientului, iar un refuz al
+ * bazei se scurgea tacut — si comentariul „best-effort — next call refreshes again" nu era
+ * adevarat pentru cazul care conteaza.
+ *
+ * ⚠ SI SCRIE UN PETIC, NU CONFIGUL INTREG. Scris intreg, doua salvari care se suprapun se calca —
+ * iar cea mai scumpa de pierdut e chiar cea de aici, fiindca refresh tokenul SE ROTESTE.
+ */
+/**
+ * Citeste configul proaspat, prin vederea care decripteaza.
+ *
+ * ⚠ Se cheama cand am PIERDUT cursa rotatiei: celalalt fir a scris deja un token bun, si pe acela
+ * il vrem — nu unul pe care tocmai l-am invalidat noi ceruind altul.
+ */
+/**
+ * Configul OLX, cu „n-am putut citi" deosebit de „nu scrie nimic".
+ *
+ * ═══ `null` INSEMNA DOUA LUCRURI, SI UNUL DINTRE ELE TRIMITEA OMUL SA RECONECTEZE (31.08.2026) ═══
+ *
+ * Ramura `invalid_grant` de mai jos intreaba martorul: „a rotit altcineva de cand am citit eu?".
+ * Daca da, tokenul lui e bun si al nostru era doar vechi. Dar citirea inghitea eroarea si intorcea
+ * `null`, iar `null` se citea ca „nimeni n-a rotit":
+ *
+ *     doua fire pornesc cu R1; A castiga si scrie R2
+ *     B primeste `invalid_grant`, corect
+ *     B reciteste martorul -> baza da timeout -> `null`
+ *     -> B scrie `needs_reconnect: true` peste conexiunea SANATOASA a lui A
+ *
+ * Adica o clipa proasta a bazei stinge un cont viu, si comerciantul vede „Sesiunea OLX a expirat".
+ */
+type CitireConfig = { ok: true; config: OlxConfig | null } | { ok: false };
+
+async function citesteConfig(db: Db, businessId: string): Promise<CitireConfig> {
+  const { data, error } = await db
+    .from("store_settings").select("olx_config").eq("business_id", businessId).maybeSingle();
+  if (error) return { ok: false };
+  return { ok: true, config: (data?.olx_config as OlxConfig) ?? null };
+}
+
+async function persistConfig(db: Db, businessId: string, patch: Partial<OlxConfig>): Promise<boolean> {
   try {
-    await db
-      .from("store_settings")
-      .update({ olx_config: config as never, updated_at: new Date().toISOString() })
-      .eq("business_id", businessId);
+    await patchOlxConfig(db, businessId, patch);
+    return true;
   } catch {
-    // best-effort — next call refreshes again
+    return false;
   }
 }
 
@@ -170,8 +376,28 @@ export async function getAppToken(): Promise<string | null> {
 }
 
 // ── Signed OAuth `state` — ties the callback to a business + prevents CSRF ──────
+/**
+ * ⚠ FARA CADERE PE UN SIR SCRIS IN COD.
+ *
+ * Ultima varianta era `"edinio-olx-state"`, adica o cheie pe care o stie oricine deschide
+ * depozitul. Cu ea, `state` se poate FABRICA pentru orice `businessId` — iar `state` e singurul
+ * lucru care leaga intoarcerea de la OLX de un dans pornit chiar de comerciant:
+ *
+ *     atacatorul isi autorizeaza propriul cont OLX si tine `code`-ul
+ *     fabrica un `state` pentru magazinul victimei si o pacaleste sa deschida adresa
+ *     -> contul LUI de OLX ajunge legat la magazinul EI, si produsele ei se publica la el
+ *
+ * (Paza de proprietate din callback nu prinde asta: businessul CHIAR e al ei, si ea chiar e
+ * autentificata. Semnatura e ce lipseste.)
+ *
+ * ⚠ In practica firul nu era de apucat — `olxConfigured()` cere `OLX_CLIENT_SECRET`, deci fara el
+ * nu se porneste niciun dans. Dar o cadere care arata ca o plasa si nu e una devine adevar pentru
+ * cine o citeste mai tarziu. Fara cheie, nu se semneaza nimic.
+ */
 function stateSecret(): string {
-  return process.env.OLX_CLIENT_SECRET || process.env.CRON_SECRET || "edinio-olx-state";
+  const s = process.env.OLX_CLIENT_SECRET || process.env.CRON_SECRET;
+  if (!s) throw new Error("OLX_CLIENT_SECRET lipseste: `state` nu poate fi semnat.");
+  return s;
 }
 
 export function signState(businessId: string): string {
@@ -185,8 +411,22 @@ export function verifyState(state: string): string | null {
     const [businessId, ts, sig] = Buffer.from(state, "base64url").toString("utf8").split(".");
     if (!businessId || !ts || !sig) return null;
     const expected = crypto.createHmac("sha256", stateSecret()).update(`${businessId}.${ts}`).digest("hex").slice(0, 32);
-    if (sig !== expected) return null;
-    if (Date.now() - Number(ts) > 15 * 60_000) return null; // 15 min validity
+    /*
+     * ⚠ Comparare in timp constant. `!==` pe siruri iese la primul caracter deosebit, deci timpul
+     * de raspuns spune cate caractere s-au potrivit — si semnatura se poate ghici caracter cu
+     * caracter, fara sa stii cheia. `timingSafeEqual` cere lungimi egale, de-aia paza dinainte.
+     */
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    /*
+     * ⚠ `Number("maine")` da `NaN`, iar `NaN > 15 * 60_000` e FALS — deci o clipa fara inteles
+     * trecea de paza de vechime ca si cum ar fi fost proaspata. Semnatura acopera si `ts`, deci
+     * n-o putea fabrica un strain; dar o data necitibila n-are voie sa insemne „acum".
+     */
+    const nascut = Number(ts);
+    if (!Number.isFinite(nascut)) return null;
+    if (Date.now() - nascut > 15 * 60_000) return null; // 15 min validity
     return businessId;
   } catch {
     return null;

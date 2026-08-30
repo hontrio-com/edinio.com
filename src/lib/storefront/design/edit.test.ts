@@ -65,14 +65,20 @@ test("bara de anunt se sterge din partea fixa, nu din lista", () => {
   assert.equal(dupa.chrome.announcement, null);
 });
 
-test("doar sectiunile care pot exista de mai multe ori se duplica", () => {
+test("singleton-urile nu se duplica", () => {
   const d = design();
   assert.equal(duplicateSection(d, "hero"), d, "hero e singleton");
+});
 
-  const dupa = duplicateSection(d, "featured");
-  assert.equal(dupa.home.filter((s) => s.kind === "product_row").length, 2);
-  const ids = dupa.home.map((s) => s.id);
-  assert.equal(new Set(ids).size, ids.length, "copia primeste id nou");
+test("⚠ nici randurile de produse nu se duplica: copia n-ar mai putea fi stearsa", () => {
+  // Randurile isi iau continutul din `page_content`, deci se fac si se sterg din
+  // „Editeaza magazinul"; `removable: false` in registry spune exact asta. Cat
+  // timp duplicarea era permisa, editorul de design putea naste un rand pe care
+  // pe urma nimic nu-l mai scotea — o capcana facuta din doua reguli corecte
+  // luate separat.
+  const d = design();
+  assert.equal(duplicateSection(d, "featured"), d);
+  assert.equal(d.home.filter((s) => s.kind === "product_row").length, 1);
 });
 
 test("adaugarea pune sectiunea inaintea catalogului", () => {

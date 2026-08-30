@@ -114,10 +114,14 @@ export function AdminUserDetail({ profile, authUser, businesses, invoices, ticke
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: profile.id }),
       });
-      const data = await res.json() as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error ?? "Eroare");
-      window.open(data.url, "_blank");
-      toast.success("Sesiune deschisa intr-un tab nou");
+      const data = await res.json() as { success?: boolean; redirectTo?: string; error?: string };
+      if (!res.ok || !data.success) throw new Error(data.error ?? "Eroare");
+      // Serverul a pus deja cookie-urile de sesiune; nu mai primim niciun token
+      // in raspuns. Cookie-urile sunt comune pe origine, deci si varianta veche
+      // („deschide intr-un tab nou") inlocuia tot sesiunea de admin — doar ca
+      // parea altfel. Navigam explicit, ca sa fie limpede ce s-a intamplat.
+      toast.success("Ai intrat in contul utilizatorului. Deconecteaza-te ca sa revii la contul tau.");
+      window.location.href = data.redirectTo ?? "/dashboard";
     } catch (err) { toast.error(err instanceof Error ? err.message : "Eroare la impersonare"); }
     finally { setImpersonating(false); }
   }

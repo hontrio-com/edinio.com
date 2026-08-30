@@ -83,6 +83,13 @@ export function parseBool(raw: unknown, fallback = false): boolean {
 }
 
 /** Extract image URLs from a delimited cell, keeping only http(s) links. */
+/**
+ * Gard anti-abuz, nu regula de afaceri: cel mai incarcat produs real din catalog
+ * are 72 de imagini si niciunul nu trece de 100 (masurat 2026-08-04). Fara plafon,
+ * un rand de CSV cu 50.000 de adrese producea 50.000 de descarcari.
+ */
+export const MAX_IMAGINI_PE_PRODUS = 100;
+
 export function splitImages(raw: unknown): string[] {
   if (raw == null) return [];
   const s = String(raw).trim();
@@ -92,7 +99,7 @@ export function splitImages(raw: unknown): string[] {
       .split(/[\s,|\n]+/)
       .map((t) => t.trim())
       .filter((t) => /^https?:\/\//i.test(t)),
-  );
+  ).slice(0, MAX_IMAGINI_PE_PRODUS);
 }
 
 /** Split a tags cell on comma / pipe / newline. */
@@ -196,6 +203,10 @@ export function parseVariantCombos(raw: unknown): StagedVariantCombination[] {
       if (key === "pret") combo.price = parsePrice(val) ?? 0;
       else if (key === "pret_vechi") combo.compare_at_price = parsePrice(val);
       else if (key === "sku") combo.sku = val;
+      // `ean` si `gtin` inseamna acelasi lucru. Exportul scrie `ean`, dar cine
+      // isi pregateste fisierul singur scrie deseori `gtin`, iar refuzul unuia
+      // dintre ele ar pierde codurile fara sa spuna nimic.
+      else if (key === "ean" || key === "gtin") combo.gtin = val;
       else if (key === "stoc") combo.stock_quantity = parseIntOrNull(val) ?? 0;
       else if (key === "activ") combo.enabled = parseBool(val, true);
       else if (key === "imagine") combo.image = val;

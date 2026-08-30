@@ -9,16 +9,21 @@ import {
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { disponibilitatePachet } from "@/lib/bundles";
+import type { BundleComponent } from "@/lib/storefront/product-data";
 import { getProductPriceRange } from "@/lib/utils/product-price";
+import { vatLabel } from "@/lib/utils/vat";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
-  VARIANT_TITLE_SEP,
+  comboEpuizat, comboStock, toateCombinatiileEpuizate, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
+import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
+import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
 
 import type {
   Business, Product, StoreSettings, PageContent, PageSections,
@@ -32,6 +37,8 @@ import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
+import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 
 /* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
@@ -145,7 +152,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
-  bundleComponents?: { id: string; name: string; slug: string | null; price: number; image_url: string | null; quantity: number; out_of_stock: boolean }[];
+  bundleComponents?: BundleComponent[];
   altMap?: Record<string, string>;
   /** When this product page IS the store homepage (One Product Store mode):
    *  hides the "back to store" breadcrumb since there is no catalog behind it. */
@@ -173,26 +180,46 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // Pixels / GA4: standard product-view event, once per product.
   const productId = product.id;
   const productName = product.name;
-  const productPrice = Number(product.price) || 0;
+  // Pretul raportat pixelilor e cel pe care il poate cumpara clientul: pe un
+  // produs variabil, pretul de baza poate sa nu existe ca oferta.
+  const priceRange = getProductPriceRange(Number(product.price) || 0, product.page_sections);
+  const productPrice = priceRange.min;
   useEffect(() => {
     if (demo) return;
     gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
     fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
     ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
   }, [demo, productId, productName, productPrice]);
+
+  /*
+   * Afisarea ofertelor, in contorul lor (`offers.impressions`) — pana acum nu o
+   * scria nimeni, deci panoul arata zero pe oferte care rulau de saptamani.
+   * Toata judecata (din browser, la intrarea in ecran, o singura data) sta in
+   * `useAfisariOferte`, ca sa nu diverga intre cele doua designuri de pagina.
+   *
+   * `productOffers` e chiar lista pe care o primeste `ProductOffers`, iar
+   * `resolveProductOffers` scoate deja ofertele fara produse si seturile FBT
+   * necumparabile — ce e in lista se si vede pe ecran.
+   */
+  const refOferte = useAfisariOferte(business.id, productOffers.map((o) => o.id), !demo);
+
   // SEO alt text from the Media Library, falling back to the product name.
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
 
   const color = business.primary_color ?? "#1AB554";
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
-  const freeShippingThreshold = storeSettings?.free_shipping_threshold
-    ? Number(storeSettings.free_shipping_threshold) : null;
+  const freeShippingThreshold = pragTransportGratuit(storeSettings?.free_shipping_threshold);
   const minOrderAmount = storeSettings?.min_order_amount
     ? Number(storeSettings.min_order_amount) : null;
-  // VAT note shown under the price (only for VAT-registered stores).
-  const vatEnabled = storeSettings?.vat_enabled ?? false;
-  const pricesIncludeVat = storeSettings?.prices_include_vat ?? true;
+  // Eticheta de langa pret: „(TVA inclus)" sau „(fara TVA)". Textul se deduce din
+  // setarea de preturi, nu se scrie separat nicaieri; `null` cand magazinul nu e
+  // platitor de TVA sau comerciantul a stins-o din Setari > Taxe.
+  const eticheta = vatLabel({
+    vat_enabled: storeSettings?.vat_enabled ?? false,
+    prices_include_vat: storeSettings?.prices_include_vat ?? true,
+    show_vat_label: storeSettings?.show_vat_label ?? true,
+  });
 
   const pageContent = (storeSettings?.page_content as PageContent) ?? {};
   const pageSections = (product.page_sections as PageSections) ?? {};
@@ -215,6 +242,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // repeta la nesfarsit; zece iframe-uri deodata ar arde procesorul degeaba.
   const buttonEffect = demo || reduceMotion ? "none" : (pageContent.button_effect ?? "none");
   const deliveryEstimate = pageContent.delivery_estimate;
+  /* Zilele reale (Setari → Livrare); `deliveryEstimate` doar aprinde casuta. */
+  const deliveryTime = pageContent.delivery_time;
   const showQualityBadge = pageContent.show_quality_badge === true; // "Calitate verificata" badge — off unless enabled (ANPC/Omnibus: merchant opt-in)
   // Numar stabil, derivat din id-ul produsului: cu Math.random() serverul si
   // browserul scriau numere diferite in acelasi HTML (nepotrivire de hidratare).
@@ -309,20 +338,57 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   );
 
   // Inainte de a alege o varianta, afiseaza intervalul de pret (sau doar minimul daca e setat din editor).
-  const priceRange = getProductPriceRange(basePrice, pageSections);
   const priceLowestOnly = pageContent.price_range_display?.enabled === false;
-  const showPriceRange = !selectedCombo && priceRange.hasRange;
+  /*
+   * Pe produsele cu variante, pretul dinainte de alegere iese INTOTDEAUNA din
+   * interval, nu doar cand variantele au preturi diferite.
+   *
+   * Cu `hasRange` in conditie, un produs ale carui marimi costa toate la fel
+   * cadea pe pretul de BAZA — iar baza nu e de vanzare: ANTIFOANE INT UF REFILL
+   * are baza 156,80 si singura combinatie activa 438,00, deci pagina promitea cu
+   * 281,20 lei mai putin decat se incaseaza. `formatPriceRange` colapseaza singur
+   * cand min si max sunt egale, deci nu e nevoie de a doua ramura.
+   */
+  const showPriceRange = !selectedCombo && !!variantsData;
 
-  const hasDiscount = !showPriceRange && displayComparePrice && displayComparePrice > displayPrice;
+  // Reducerea se raporteaza la pretul de pe ecran. Pana la prima bifa acela e
+  // minimul vandabil, nu baza — altfel cardul de catalog scria „-12%" si pagina
+  // produsului nu confirma nicio reducere.
+  const pretDeComparat = selectedCombo ? displayPrice : priceRange.min;
+  const aratamInterval = showPriceRange && priceRange.hasRange;
+  const hasDiscount = !aratamInterval && !!displayComparePrice && displayComparePrice > pretDeComparat;
   const discountPct = hasDiscount
-    ? Math.round((1 - displayPrice / displayComparePrice!) * 100)
+    ? Math.round((1 - pretDeComparat / displayComparePrice!) * 100)
     : 0;
 
   // Stock status
   const stockStatus = pageSections.stock_status ?? "in_stock";
   const isOutOfStock = stockStatus === "out_of_stock"
-    || (product.track_inventory && product.stock_quantity !== null && product.stock_quantity === 0);
+    || (product.track_inventory && product.stock_quantity !== null && product.stock_quantity === 0)
+    // Varianta aleasa si-a terminat stocul declarat, sau toate s-au terminat.
+    // Prima nu s-ar putea alege din interfata, fiindca optiunile epuizate sunt
+    // taiate, dar o selectie ramasa de dinainte tot ajunge aici.
+    || comboEpuizat(selectedCombo)
+    || toateCombinatiileEpuizate(variantsData)
+    /*
+     * Pachetul e indisponibil cand oricare componenta lipseste sau s-a terminat.
+     *
+     * Pana acum pagina de produs calcula disponibilitatea din campurile
+     * produsului insusi — dar un pachet se scrie cu `track_inventory: false`,
+     * deci conditiile de deasupra sunt TOATE false pe orice pachet. Cardul din
+     * catalog stia asta si scria „Stoc epuizat"; pagina deschidea butonul
+     * Comanda, iar comanda cadea la ultimul pas. Acum amandoua trec prin aceeasi
+     * regula ca verificarea de la comanda.
+     */
+    || (product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
+  /*
+   * Cate bucati mai sunt: din varianta aleasa daca ea isi tine socoteala,
+   * altfel din produs. Pana acum se citea mereu stocul produsului INTREG, deci
+   * pe un produs cu 40 de bucati marimea cu 2 ramase nu spunea nimic.
+   */
+  const stocRamas = comboStock(selectedCombo)
+    ?? (product.track_inventory ? product.stock_quantity : null);
   // Combinatia trebuie sa EXISTE si sa fie activa, nu doar sa aiba titlul
   // complet: altfel linia intra in cos cu pretul de baza, iar serverul respinge
   // comanda intreaga la trimitere.
@@ -347,24 +413,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
   // Build quantity tiers — percent mode when variants enabled
   const tierConfig = pageSections.quantity_tiers;
-  const quantityTiers: QuantityTier[] | undefined = tierConfig?.enabled
-    ? (() => {
-        const isPercent = tierConfig.mode === "percent";
-        const tier2Price = isPercent
-          ? displayPrice * 2 * (1 - (tierConfig.tier2_percent ?? 0) / 100)
-          : tierConfig.tier2_price;
-        const tier3Price = isPercent
-          ? displayPrice * 3 * (1 - (tierConfig.tier3_percent ?? 0) / 100)
-          : tierConfig.tier3_price;
-        const hasT2 = isPercent ? (tierConfig.tier2_percent ?? 0) > 0 : tier2Price > 0;
-        const hasT3 = isPercent ? (tierConfig.tier3_percent ?? 0) > 0 : tier3Price > 0;
-        return [
-          { qty: 1, price: displayPrice, badge: "" },
-          ...(hasT2 ? [{ qty: 2, price: Math.round(tier2Price * 100) / 100, badge: tierConfig.tier2_badge }] : []),
-          ...(hasT3 ? [{ qty: 3, price: Math.round(tier3Price * 100) / 100, badge: tierConfig.tier3_badge }] : []),
-        ];
-      })()
-    : undefined;
+  // Treptele vin din motorul comun, nu dintr-o copie locala. Formula era scrisa
+  // de trei ori — aici, in cealalta pagina de produs si in `construiesteTrepte` —
+  // desi docstring-ul motorului sustinea deja ca exista un singur loc. Copiile
+  // se pot desincroniza tacit de motorul care chiar incaseaza.
+  const quantityTiers: QuantityTier[] | undefined = construiesteTrepte(tierConfig, displayPrice);
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
@@ -431,6 +484,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
   const deliveryDates = useMemo(() => {
     if (!deliveryEstimate?.enabled) return null;
+    // Zilele vin din acelasi loc ca cele trimise catre Google (procesare +
+    // tranzit, Setari → Livrare), cu rezerva pe `min_days`/`max_days`. Socotite
+    // separat, casuta si microdatele aceleiasi pagini se departau la prima
+    // modificare a uneia dintre setari.
+    const timp = parseTimpDeLivrare({ delivery_time: deliveryTime, delivery_estimate: deliveryEstimate });
+    if (!timp) return null;
+    const fereastra = fereastraDeLivrare(timp);
     const acum = new Date().getTime();
     const ZI = 24 * 60 * 60 * 1000;
     // Zilele se adauga pe instant si data se formateaza ancorata in fusul
@@ -441,10 +501,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       timeZone: "Europe/Bucharest", day: "numeric", month: "long",
     });
     return {
-      min: fmt(acum + (deliveryEstimate.min_days ?? 2) * ZI),
-      max: fmt(acum + (deliveryEstimate.max_days ?? 4) * ZI),
+      min: fmt(acum + fereastra.min * ZI),
+      max: fmt(acum + fereastra.max * ZI),
     };
-  }, [deliveryEstimate]);
+  }, [deliveryEstimate, deliveryTime]);
 
   // Reset slide when variant image changes
   useEffect(() => { setActiveSlide(0); }, [variantImage]);
@@ -463,7 +523,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // (the exact formula the server enforces), pre-accept the offer, open the buy-now modal.
   function handleBuyTogether(offer: ResolvedOffer) {
     if (!offer.pricing) return;
-    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings);
+    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings, displayPrice);
     const items = offer.products.map((p, idx) => ({
       product_id: p.id,
       name: p.name,
@@ -531,15 +591,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
               <span className="text-white text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: color }}>-{discountPct}%</span>
             </>
           )}
+          {eticheta && (
+            <span className="text-sm text-muted-foreground">({eticheta})</span>
+          )}
           {pageSections.customization?.enabled && pageSections.customization.fields.length > 0 && (
             <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: `${color}1a`, color }}>Personalizabil</span>
           )}
         </div>
-        {vatEnabled && (
-          <p className="text-xs text-muted-foreground">
-            {pricesIncludeVat ? "Prețul include TVA" : "Preț fără TVA (TVA se adaugă la finalizare)"}
-          </p>
-        )}
+        {/* Eticheta sta acum LANGA pret, in randul lui, nu ca nota dedesubt. */}
 
         {/* Bundle contents — shown prominently in the buy box */}
         {product.is_bundle && bundleComponents.length > 0 && (
@@ -641,12 +700,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
             <span className="text-sm font-semibold text-foreground">Produs in precomanda</span>
           </div>
         )}
-        {!isOutOfStock && !isPreorder && product.track_inventory && product.stock_quantity !== null && product.stock_quantity > 0 && product.stock_quantity <= 10 && (
+        {!isOutOfStock && !isPreorder && stocRamas !== null && stocRamas > 0 && stocRamas <= 10 && (
           <motion.div className="flex items-center gap-2"
             animate={demo || reduceMotion ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
             <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
             <span className="text-sm font-semibold text-red-600">
-              Doar {product.stock_quantity} {product.stock_quantity === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
+              Doar {stocRamas} {stocRamas === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
             </span>
           </motion.div>
         )}
@@ -719,9 +778,16 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
 
       {/* Hero: o singura grila, cu asezarea comutata din CSS. Galeria ramane in
           doua variante (banda care culiseaza pe telefon, diapozitive suprapuse pe
-          desktop), dar zona de cumparare e una singura. */}
+          desktop), dar zona de cumparare e una singura.
+
+          `grid-cols-1` pentru acelasi motiv ca la varianta „detaliat": pista
+          implicita de pe telefon e `auto`, iar minimul ei e min-content-ul
+          copiilor, nu latimea containerului — un singur copil mai lat (o sina
+          derulabila, un tabel, o imagine lipita in descriere) intinde pista si
+          scoate toata pagina din ecran. `lg:grid-cols-2` inseamna deja
+          `minmax(0,1fr)`, deci desktopul avea plafonul; telefonul nu-l avea. */}
       <div className="px-4 pt-3 pb-8 lg:px-6 lg:pt-8 lg:pb-16">
-        <div className="max-w-6xl mx-auto grid gap-6 lg:grid-cols-2 lg:gap-16 lg:items-start">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-16 lg:items-start">
           <div>
             <div className="lg:hidden">
               <Gallery mobile slides={slides} activeSlide={activeSlide} goTo={goTo} color={color}
@@ -763,11 +829,15 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           ramane transparente. */}
       {demo ? null : (
       <>
-      {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none */}
-      <ProductOffers offers={productOffers} basePath={basePath} color={color}
-        anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
-        ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
-        onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+      {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none.
+          Invelisul nestilizat e doar tinta observatorului de afisari: sectiunea isi
+          pastreaza fundalul, chenarul de sus si spatierea, deci nimic nu se muta. */}
+      <div ref={refOferte}>
+        <ProductOffers offers={productOffers} basePath={basePath} color={color}
+          anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+          ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
+          onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+      </div>
 
       {/* Benefits */}
       {benefitsSection?.enabled && benefitsSection.items.length > 0 && (
@@ -867,7 +937,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
               <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Pachet</p>
               <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Ce conține pachetul</h2>
             </motion.div>
-            <div className="grid sm:grid-cols-2 gap-3">
+            {/* `grid-cols-1` ca la grila eroului: numele componentelor se rup
+                aici la spatii, deci pista nu se umfla azi, dar plafonul costa
+                o clasa si inchide cazul. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {bundleComponents.map((c) => (
                 <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-surface shadow-sm">
                   <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted/40 border border-border shrink-0">
@@ -882,7 +955,18 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                 </div>
               ))}
             </div>
-            {Number(product.compare_at_price) > Number(product.price) && (
+            {/*
+              * Randul apare doar cand afirmatia lui e ADEVARATA azi.
+              *
+              * `compare_at_price` se ingheata la salvarea pachetului, dar
+              * preturile de deasupra sunt citite LIVE. Cand comerciantul schimba
+              * pretul unei componente, cele doua se despart si aceeasi caseta
+              * spune doua lucruri: „Cumparate separat: 448,00" peste trei randuri
+              * care insumeaza altceva. Pe „Pachet Femei" insemna 448,00 lei peste
+              * trei randuri „Produs indisponibil · 0,00 lei".
+              */}
+            {Number(product.compare_at_price) > Number(product.price)
+              && Math.abs(bundleComponents.reduce((s, c) => s + c.price * c.quantity, 0) - Number(product.compare_at_price)) < 0.01 && (
               <p className="text-center text-sm text-muted-foreground mt-6">
                 Cumpărate separat: <span className="line-through">{formatPrice(Number(product.compare_at_price))}</span>
                 {" · "}în pachet plătești <span className="font-bold" style={{ color }}>{formatPrice(Number(product.price))}</span>
@@ -979,7 +1063,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           price: displayPrice,
           compare_at_price: displayComparePrice,
           images: slides,
-          weight_grams: product.weight_grams,
+          variantTitle: selectedComboTitle ?? undefined,
         }}
         business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
         shippingCost={shippingCost}
@@ -995,6 +1079,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           // fi disparut necomandata.
           if (!cos) return;
           cos.restoreCart(cosDupaComanda(cos.items, liniiComandate));
+        }}
+        onCartLineChange={(key, qty) => {
+          // Sectiunea „Din cosul tau" arata cosul real, deci editarea din
+          // formular il modifica pe el, nu doar afisajul.
+          if (demo || !cos) return;
+          if (qty <= 0) cos.removeItem(key);
+          else cos.updateQty(key, qty);
         }}
         fbtOffer={fbtOffer}
       />

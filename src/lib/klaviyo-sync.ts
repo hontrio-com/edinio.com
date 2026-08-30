@@ -8,6 +8,7 @@
 // server-side (no local suppression table).
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import { upsertProfile, subscribeProfiles, splitName, type KlaviyoConfig } from "@/lib/klaviyo";
 import { trackPlacedOrder, upsertCatalogItem, deleteCatalogItem } from "@/lib/klaviyo-ecommerce";
@@ -192,9 +193,18 @@ export async function maybeSyncKlaviyoProductsBulk(opts: {
 
     const admin = createAdminClient();
     const base = await storeBaseUrl(opts.businessId);
-    const { data: products } = await admin
-      .from("products").select("id, name, price, images, slug, description").eq("business_id", opts.businessId).in("id", opts.ids);
-    for (const p of products ?? []) {
+    /* Pe bucati, acelasi motiv ca in `mailchimp-sync.ts`: `.in()` intra in
+       adresa si peste ~650 de id-uri cererea e respinsa la margine. Chemata cu
+       `void`, o cadere aici ar fi lasat catalogul Klaviyo in urma in tacere. */
+    const products: {
+      id: string; name: string; price: number; images: unknown; slug: string | null; description: string | null;
+    }[] = [];
+    for (const bucata of bucatiDeIduri(opts.ids)) {
+      const { data } = await admin
+        .from("products").select("id, name, price, images, slug, description").eq("business_id", opts.businessId).in("id", bucata);
+      products.push(...((data ?? []) as typeof products));
+    }
+    for (const p of products) {
       const img = Array.isArray(p.images) ? (p.images as unknown[])[0] : null;
       const res = await upsertCatalogItem(config, {
         id: p.id,

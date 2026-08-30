@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
+import { hasVariants } from "@/lib/storefront/variants";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { getProductLimit } from "@/lib/plan-limits";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
@@ -55,24 +58,50 @@ async function resolveComponents(
   const out: BundleComponent[] = [];
   for (const it of items) {
     const p = map.get(it.product_id);
-    if (!p || p.is_bundle) continue; // skip missing or nested bundles
+    const cantitate = Math.max(1, Math.floor(Number(it.quantity) || 1));
+    // Randul care nu se mai rezolva NU se sare in tacere: pana acum pachetul cu
+    // componente sterse se deschidea in formular cu zero produse si refuza sa se
+    // salveze („cel putin 2 produse"), fara sa spuna ca trei au disparut — deci
+    // comerciantul nu-l putea nici repara, nici intelege.
+    if (!p || p.is_bundle) {
+      out.push({
+        product_id: it.product_id,
+        quantity: cantitate,
+        name: "Produs sters",
+        price: 0,
+        image_url: null,
+        track_inventory: false,
+        stock_quantity: null,
+        vandabila: false,
+        existaInCatalog: false,
+      });
+      continue;
+    }
+    // Produsul DEZACTIVAT nu e sters: isi pastreaza numele si pretul, dar nu e
+    // vandabil. Confundate, formularul i-ar spune comerciantului „nu mai exista
+    // in catalog" despre un produs pe care tocmai el l-a ascuns temporar — si
+    // i-ar bloca orice salvare pana cand il scoate din pachet, adica pana cand il
+    // pierde definitiv. La bricosmart, trei componente stau fiecare in cate trei
+    // pachete: o singura dezactivare ar intepa noua formulare.
     out.push({
       product_id: p.id,
-      quantity: Math.max(1, Math.floor(Number(it.quantity) || 1)),
+      quantity: cantitate,
       name: p.name,
       price: Number(p.price) || 0,
       image_url: firstImage(p.images),
       track_inventory: p.track_inventory,
       stock_quantity: p.stock_quantity,
+      vandabila: p.is_active,
+      existaInCatalog: true,
     });
   }
   return out;
 }
 
 // Products that can go into a bundle (everything except other bundles).
-export async function getBundleEligibleProducts(businessId: string): Promise<{
+export async function getBundleEligibleProducts(businessId: string, includeIds: string[] = []): Promise<{
   id: string; name: string; price: number; image_url: string | null;
-  track_inventory: boolean; stock_quantity: number | null;
+  track_inventory: boolean; stock_quantity: number | null; is_active: boolean;
 }[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -82,20 +111,63 @@ export async function getBundleEligibleProducts(businessId: string): Promise<{
   // PostgREST taie SILENTIOS la 1000 de randuri: pe un magazin cu mai multe
   // produse, cele de dupa nu apareau in selector si comerciantul nu putea pune
   // in oferta chiar produsele lui noi.
-  const data = await fetchAllRows("produse pentru oferte", (from, to) =>
+  const data = await fetchAllRowsStrict("produse pentru oferte", (from, to) =>
     supabase
       .from("products")
-      .select("id, name, price, images, track_inventory, stock_quantity")
+      .select("id, name, price, images, is_active, track_inventory, stock_quantity, page_sections")
       .eq("business_id", businessId)
       .eq("is_bundle", false)
       .order("name")
       .range(from, to),
   );
 
-  return (data ?? []).map((p) => ({
-    id: p.id, name: p.name, price: Number(p.price) || 0, image_url: firstImage(p.images),
-    track_inventory: p.track_inventory, stock_quantity: p.stock_quantity,
-  }));
+  /*
+   * Produsele cu VARIANTE nu pot fi componente.
+   *
+   * `BundleItem` n-are camp de varianta, `resolveComponents` ia pretul de BAZA, iar
+   * `expandBundleStock` scade din stocul PRODUSULUI, nu al combinatiei — deci un
+   * pachet cu o componenta variabila s-ar vinde sub pret, s-ar expedia fara marime
+   * si ar lasa stocul pe combinatii neatins. Ofertele au inchis exact gaura asta;
+   * pachetele n-o aveau inchisa. Se blocheaza selectia pana cand `BundleItem`
+   * capata o varianta — azi niciun pachet nu are asa ceva, deci nu se pierde nimic.
+   *
+   * Si produsele INACTIVE ies din selector: nu se poate cumpara prin pachet ce nu
+   * se poate cumpara direct.
+   */
+  // Componentele DEJA din pachet raman in lista chiar daca nu mai sunt eligibile
+  // (dezactivate sau ajunse variabile intre timp): altfel formularul le-ar arata
+  // drept „sterse" si ar refuza orice salvare pana cand comerciantul le scoate,
+  // adica pana cand le pierde. Filtrul se aplica doar la ce se poate ADAUGA.
+  const pastrate = new Set(includeIds);
+  return (data ?? [])
+    .filter((p) => pastrate.has(p.id) || (p.is_active && !hasVariants(p.page_sections)))
+    .map((p) => ({
+      id: p.id, name: p.name, price: Number(p.price) || 0, image_url: firstImage(p.images),
+      track_inventory: p.track_inventory, stock_quantity: p.stock_quantity, is_active: p.is_active,
+    }));
+}
+
+/**
+ * Componentele care nu se mai pot vinde OPRESC salvarea.
+ *
+ * `resolveComponents` intoarce de acum si randurile nerezolvate, ca formularul sa
+ * le poata arata si sa le poata scoate comerciantul — dar ele n-au voie sa ajunga
+ * la pretuire. Un substitut are pretul 0, deci un pachet cu toate componentele
+ * sterse ar iesi din `computeBundlePricing` cu `compareAt = 0` si `price = 0` si
+ * s-ar scrie ca produs ACTIV la 0,00 lei. Verificarea din browser nu e de ajuns:
+ * amandoua actiunile sunt exporturi „use server".
+ */
+function componenteNevandabile(components: BundleComponent[]): string | null {
+  // Doar cele STERSE. Una dezactivata isi pastreaza pretul, deci pachetul se
+  // pretuieste corect si doar nu se poate vinde — asta o spune
+  // `disponibilitatePachet`, nu o interdictie de salvare. Blocata si ea, o
+  // ascundere temporara de produs ar bloca orice modificare a pachetelor care il
+  // contin, inclusiv stingerea lor.
+  const rele = components.filter((c) => !c.existaInCatalog).length;
+  if (rele === 0) return null;
+  return rele === 1
+    ? "Un produs din pachet nu mai exista in catalog. Scoate-l din pachet inainte de a salva."
+    : `${rele} produse din pachet nu mai exista in catalog. Scoate-le inainte de a salva.`;
 }
 
 function buildBundleWrite(data: BundleFormData, components: BundleComponent[]) {
@@ -125,13 +197,15 @@ export async function createBundle(
 
   if (!data.name.trim()) return { error: "Pachetul are nevoie de un nume." };
   const components = await resolveComponents(supabase, businessId, data.items);
+  const eroareComponente = componenteNevandabile(components);
+  if (eroareComponente) return { error: eroareComponente };
   if (components.length < 2) return { error: "Un pachet trebuie sa contina cel putin 2 produse." };
 
   const { data: profile } = await supabase.from("users_profile").select("plan").eq("id", user.id).single();
   const limit = getProductLimit(profile?.plan ?? "free");
-  const { count } = await supabase
-    .from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId);
-  if (limit !== Infinity && (count ?? 0) >= limit) {
+  // Pe CONT, nu pe magazin: planul e per cont. Vezi plan-limits.ts.
+  const count = await numaraProduseleContului(supabase, user.id);
+  if (limit !== Infinity && count >= limit) {
     return { error: `Ai atins limita de ${limit} produse pentru planul tau. Upgradeaza planul.` };
   }
 
@@ -159,8 +233,11 @@ export async function createBundle(
     logError({ action: "createBundle", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea pachetului. Incearca din nou." };
   }
-  if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
+  if (created?.id) dupaRaspuns(() => enqueueGmcSync(businessId, created.id, created.id, "upsert"), "enqueueGmcSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueOlxSync(businessId, created.id, created.id, "upsert"), "enqueueOlxSync", businessId);
+  // Sincron, inaintea revalidarii: un pachet salvat trebuie sa-si arate pretul
+  // si disponibilitatea noua imediat, nu peste un minut.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products/bundles");
   return { success: true };
 }
@@ -175,6 +252,8 @@ export async function updateBundle(
 
   if (!data.name.trim()) return { error: "Pachetul are nevoie de un nume." };
   const components = await resolveComponents(supabase, businessId, data.items);
+  const eroareComponente = componenteNevandabile(components);
+  if (eroareComponente) return { error: eroareComponente };
   if (components.length < 2) return { error: "Un pachet trebuie sa contina cel putin 2 produse." };
 
   const { data: oldRow } = await supabase
@@ -213,8 +292,11 @@ export async function updateBundle(
     void deleteOrphanImages(supabase, businessId, removed, { excludeProductId: bundleId });
   }
 
-  void enqueueGmcSync(businessId, bundleId, bundleId, "upsert");
-  void enqueueOlxSync(businessId, bundleId, bundleId, "upsert");
+  dupaRaspuns(() => enqueueGmcSync(businessId, bundleId, bundleId, "upsert"), "enqueueGmcSync", businessId);
+  dupaRaspuns(() => enqueueOlxSync(businessId, bundleId, bundleId, "upsert"), "enqueueOlxSync", businessId);
+  // Sincron, inaintea revalidarii: un pachet salvat trebuie sa-si arate pretul
+  // si disponibilitatea noua imediat, nu peste un minut.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products/bundles");
   revalidatePath(`/dashboard/products/bundles/${bundleId}/edit`);
   return { success: true };

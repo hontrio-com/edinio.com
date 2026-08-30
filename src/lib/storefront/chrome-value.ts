@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { categoriiVizibile } from "@/lib/categories/vizibilitate";
 import { meniuCuAcasa } from "@/lib/pages/menu";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { cartHref, cartOnPage, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
@@ -12,9 +13,16 @@ import type {
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
 import type { StoreDesign } from "@/lib/storefront/design/types";
+import { pentruBrowser, type BusinessCitit } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
+/**
+ * Intrarea e randul INTREG (apelantii sunt componente de server, care au nevoie
+ * de `user_id` si `suspended_until` pentru propriile lor verificari), dar ce iese
+ * de aici pleaca la componente de CLIENT — deci se taie, o singura data, in
+ * `pentruBrowser`. Vezi ./business-public.ts pentru ce se taie si de ce.
+ */
+type Business = BusinessCitit;
 
 /**
  * Partea serializabila a identitatii magazinului.
@@ -73,7 +81,17 @@ export function buildChromeData({
    * `store_settings`. Fara ele sertarul nu poate arata un total, deci butonul de
    * cos ramane link catre magazin.
    */
-  comert?: { shippingCost: number; freeShippingThreshold: number | null; minOrderAmount: number | null };
+  comert?: {
+    shippingCost: number;
+    freeShippingThreshold: number | null;
+    minOrderAmount: number | null;
+    /**
+     * Regimul de TVA. Fara el sertarul arata marfa plus transport, atat: la
+     * magazinele cu preturi FARA TVA totalul iesea mai mic decat cel cerut la
+     * finalizare.
+     */
+    vat?: import("@/lib/storefront/cart/pricing").CartPricingInput["vat"];
+  };
 }): StoreChromeData {
   // Un magazin cu cosul pe pagina il are pe pagina PESTE TOT: si in header-ul
   // paginii de produs, si in cel al paginilor custom. Modul „hidden" (magazinul
@@ -94,7 +112,7 @@ export function buildChromeData({
   const cosSertar = !!design && cartMode === "link" && !cosPePagina && !!comert;
 
   return {
-    business,
+    business: pentruBrowser(business),
     basePath,
     // Se calculeaza aici, o singura data, ca cele ~12 componente care leaga o
     // categorie sau o pagina de catalog sa nu il mai deduca fiecare din
@@ -120,10 +138,17 @@ export function buildChromeData({
     // si header-ul lipit la `top-9` ar lasa o fasie goala in capul ecranului.
     // Unde designul nu e dat, calculul ramane cel de dinainte si il completeaza
     // invelisul de pagina, care il are mereu.
+    // ⚠ O SINGURA POARTA, si aceea e `enabled` din design. Flagul din
+    // `page_content` a ramas doar acolo unde designul lipseste: cerut si el,
+    // bara aprinsa din editorul de design nu se randa niciodata, dar header-ul
+    // se aseza oricum la `top-9` — adica exact fasia goala pe care comentariul
+    // de mai sus o descrie, doar ca in cealalta directie.
     hasAnnouncementBar:
       pageContent.show_announcement_on_store !== false
-      && pageContent.announcement_bar?.enabled === true
-      && (!design || standaloneAnnouncement(design)?.enabled === true),
+      && (design
+        ? standaloneAnnouncement(design)?.enabled === true
+        : pageContent.announcement_bar?.enabled === true),
+    announcementOn: design ? design.chrome.announcement?.enabled === true : undefined,
     cartMode: cosPePagina ? "page" : cosSertar ? "drawer" : cartMode,
     cartHref: cosPePagina ? cartHref(basePath) : undefined,
     comert,
@@ -159,10 +184,13 @@ export async function loadSearchCategories(
    */
   const { data } = await createAdminClient()
     .from("categories")
-    .select("id, name, parent_id, image_url, sort_order")
+    .select("id, name, parent_id, image_url, sort_order, is_active")
     .eq("business_id", businessId)
     .order("sort_order")
     .order("id")
     .limit(300);
-  return data ?? [];
+  // Subarborii stinsi din panou nu ajung in meniuri. Taierea se face aici, dupa
+  // citire, fiindca o categorie aprinsa sub un parinte stins e tot ascunsa —
+  // lucru pe care un `.eq("is_active", true)` in interogare nu-l poate sti.
+  return categoriiVizibile(data ?? []);
 }

@@ -16,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 export function DpdConfigClient({
   businessId,
@@ -34,7 +35,6 @@ export function DpdConfigClient({
   const [clientId, setClientId] = useState<number | null>(initialConfig?.client_id ?? null);
   const [clientName, setClientName] = useState("");
   const [international, setInternational] = useState(initialConfig?.international_enabled ?? false);
-  const [useWeight, setUseWeight] = useState(initialConfig?.use_product_weight ?? false);
   const [iban, setIban] = useState(initialConfig?.iban ?? "");
   const [accountHolder, setAccountHolder] = useState(initialConfig?.account_holder ?? "");
   const [declaredValue, setDeclaredValue] = useState(initialConfig?.declared_value_enabled ?? false);
@@ -45,10 +45,10 @@ export function DpdConfigClient({
 
   async function handleConnect() {
     if (!username.trim()) return toast.error("Completeaza username-ul DPD");
-    if (!password.trim()) return toast.error("Completeaza parola DPD");
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completeaza parola DPD");
 
     setLoading(true);
-    const result = await loadDpdAccountAction(username.trim(), password.trim());
+    const result = await loadDpdAccountAction(businessId, username.trim(), password.trim());
     setLoading(false);
 
     if ("error" in result) {
@@ -70,7 +70,6 @@ export function DpdConfigClient({
       password: password.trim(),
       client_id: clientId,
       international_enabled: international,
-      use_product_weight: useWeight,
       iban: iban.trim() || undefined,
       account_holder: accountHolder.trim() || undefined,
       declared_value_enabled: declaredValue,
@@ -144,14 +143,14 @@ export function DpdConfigClient({
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Parola contului DPD"
+              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola contului DPD"}
             />
           </Field>
         </div>
 
         <Button
           onClick={handleConnect}
-          disabled={loading || !username.trim() || !password.trim()}
+          disabled={loading || !username.trim() || (!password.trim() && !secretulEsteSalvat(initialConfig, "password"))}
         >
           {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
           {loading ? "Se conecteaza..." : "Testeaza si conecteaza"}
@@ -195,13 +194,10 @@ export function DpdConfigClient({
             <Switch checked={international} onCheckedChange={setInternational} />
           </div>
           {international && (
-            <label className="mt-3 flex cursor-pointer items-start gap-2.5 border-t border-border pt-3">
-              <input type="checkbox" checked={useWeight} onChange={e => setUseWeight(e.target.checked)}
-                className="mt-0.5 rounded border-border accent-primary" />
-              <span className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Calculeaza dupa greutatea reala a produselor.</span> Pretul livrarii internationale se ia din greutatea setata pe fiecare produs. Daca e oprit, se foloseste o estimare de 1kg.
-              </span>
-            </label>
+            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+              Pretul livrarii se calculeaza din greutatea setata pe fiecare produs, inmultita cu
+              bucatile din cos. Produsele fara greutate completata intra cu o estimare de 1 kg pe colet.
+            </p>
           )}
         </Panel>
       )}

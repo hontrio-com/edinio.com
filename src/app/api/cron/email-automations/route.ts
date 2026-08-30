@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { listAllAuthUsers } from "@/lib/supabase/admin";
-import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { logError } from "@/lib/error-logger";
 import {
   sendAutomationEmail,
   emailOnboardingNotStarted, emailOnboardingStuck, emailOnboardingHelp, emailOnboardingLastChance,
@@ -15,8 +17,9 @@ import {
 
 // Verify cron secret to prevent unauthorized calls
 function verifyCron(req: NextRequest): boolean {
-  const secret = req.headers.get("authorization")?.replace("Bearer ", "");
-  return secret === process.env.CRON_SECRET;
+  // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
+  // lipsea din mediu (undefined === undefined).
+  return verificaCron(req);
 }
 
 function hoursBetween(a: Date, b: Date): number {
@@ -44,7 +47,7 @@ export async function GET(req: NextRequest) {
   // Get all sent automation keys to avoid duplicates. Windowed (.range) —
   // taiat la 1000 de cap-ul PostgREST, dedup-ul uita emailuri deja trimise
   // si automatiile ajung sa RETRIMITA aceleasi mailuri.
-  const allSent = await fetchAllRows("cron.emailAutomations.sent", (f, t) =>
+  const allSent = await fetchAllRowsStrict("cron.emailAutomations.sent", (f, t) =>
     admin.from("email_automations").select("user_id, email_key").order("user_id").order("email_key").range(f, t));
   const sentSet = new Set(allSent.map(s => `${s.user_id}:${s.email_key}`));
 
@@ -52,13 +55,49 @@ export async function GET(req: NextRequest) {
     return sentSet.has(`${userId}:${key}`);
   }
 
-  async function markSent(userId: string, key: string): Promise<void> {
+  /**
+   * Revendica dreptul de a trimite, INAINTE de trimitere.
+   *
+   * ═══ CE REPARA ═══
+   *
+   * Era `markSent`, chemata DUPA trimitere, cu insertul inghitit:
+   *
+   *     .insert(...).then(() => {}, () => {})
+   *
+   * Doua greseli. Intai, `.then(succes, esec)` nu prinde nimic: clientul Supabase
+   * NU ARUNCA la eroare de SQL, intoarce `{ error }` — deci ramura de esec nu se
+   * executa niciodata. Al doilea, si mai important: ordinea. Email trimis ->
+   * marcaj picat -> la rularea urmatoare omul primeste ACELASI email. Constrangerea
+   * de unicitate nu salveaza ordinea; ea opreste randul dublat, nu mesajul dublat.
+   *
+   * Inversat, cel mai rau caz devine un email de automatizare PIERDUT. Aceeasi
+   * alegere ca la recuperarea cosurilor: pentru marketing, o trimitere lipsa costa
+   * mai putin decat una repetata.
+   *
+   * `23505` (unicitate incalcata) inseamna „altcineva l-a luat deja, sau s-a
+   * trimis" — nu e o eroare, e raspunsul corect. Orice ALTA eroare inseamna „nu
+   * stim", si atunci nu se trimite: la indoiala, tacere.
+   */
+  async function revendicaTrimiterea(userId: string, key: string): Promise<boolean> {
+    const { error } = await admin
+      .from("email_automations")
+      .insert({ user_id: userId, email_key: key } as never);
+    if (error) {
+      if (error.code !== "23505") {
+        await logError({
+          action: "email-automations",
+          message: `marcajul de trimitere nu s-a putut scrie, deci NU s-a trimis: ${error.message}`,
+          details: { userId, key, code: error.code }, severity: "critical",
+        });
+      }
+      return false;
+    }
     sentSet.add(`${userId}:${key}`);
-    await admin.from("email_automations").insert({ user_id: userId, email_key: key } as never).then(() => {}, () => {});
+    return true;
   }
 
   // ── Fetch all users with auth data (windowed — vezi nota de la allSent) ────
-  const profiles = await fetchAllRows("cron.emailAutomations.profiles", (f, t) =>
+  const profiles = await fetchAllRowsStrict("cron.emailAutomations.profiles", (f, t) =>
     admin
       .from("users_profile")
       .select("id, full_name, plan, plan_expires_at, onboarding_step, onboarding_completed, created_at")
@@ -68,23 +107,39 @@ export async function GET(req: NextRequest) {
   const authMap = new Map(authList.map(u => [u.id, u]));
 
   // ── Fetch businesses + product counts + order counts ───────────────────────
-  const businesses = await fetchAllRows("cron.emailAutomations.businesses", (f, t) =>
+  const businesses = await fetchAllRowsStrict("cron.emailAutomations.businesses", (f, t) =>
     admin.from("businesses").select("id, user_id, slug, business_name, created_at, suspended_until").order("id").range(f, t));
   const bizMap = new Map(businesses.map(b => [b.user_id, b]));
 
-  const productCounts = await fetchAllRows("cron.emailAutomations.products", (f, t) =>
-    admin.from("products").select("business_id").order("id").range(f, t));
-  const prodCountMap: Record<string, number> = {};
-  for (const p of productCounts) {
-    prodCountMap[p.business_id] = (prodCountMap[p.business_id] ?? 0) + 1;
+  /*
+   * Cate produse si cate comenzi are fiecare magazin — NUMARATE IN BAZA.
+   *
+   * Se citeau TOATE randurile de produse si TOATE cele de comenzi, cate o
+   * coloana, doar ca sa fie numarate aici. Masurat: 5.862 de randuri de produse
+   * in SASE dus-intorsuri secventiale (fereastra PostgREST e de 1000) plus inca
+   * unul pentru comenzi, la fiecare ora, pentru doua numere pe magazin. Acum e un
+   * singur apel care intoarce ~3,5 kB.
+   *
+   * Semantica e IDENTICA (toate randurile, fara filtru pe `is_active` sau pe
+   * starea comenzii), verificata pe productie grup cu grup: 49 din 49 si 18 din
+   * 18, zero nepotriviri. Conteaza fiindca de numerele astea atarna cine primeste
+   * „nu ai niciun produs" si „nu ai nicio comanda".
+   *
+   * RPC-ul intoarce `jsonb`, un singur rand, si nu `setof`: `db-max-rows` taie si
+   * rezultatele procedurilor, deci un `setof` ar fi facut magazinul numarul 1001
+   * sa para cu zero produse — adica exact emailul gresit, trimis automat.
+   */
+  const { data: numarRaw, error: eNumar } = await admin.rpc("numar_produse_si_comenzi");
+  if (eNumar) {
+    // Fara numere, automatiile „nu ai produse"/„nu ai comenzi" ar suna la toata
+    // lumea. Se opreste rularea; urmatoarea ora reia de unde a ramas, fiindca
+    // dedup-ul e in `email_automations`, nu in memoria rularii.
+    console.error("[cron.emailAutomations] numaratorile au esuat:", eNumar.message);
+    return NextResponse.json({ error: "counts unavailable" }, { status: 500 });
   }
-
-  const orderCounts = await fetchAllRows("cron.emailAutomations.orders", (f, t) =>
-    admin.from("orders").select("business_id").order("id").range(f, t));
-  const orderCountMap: Record<string, number> = {};
-  for (const o of orderCounts) {
-    orderCountMap[o.business_id] = (orderCountMap[o.business_id] ?? 0) + 1;
-  }
+  const numar = (numarRaw ?? {}) as { produse?: Record<string, number>; comenzi?: Record<string, number> };
+  const prodCountMap: Record<string, number> = numar.produse ?? {};
+  const orderCountMap: Record<string, number> = numar.comenzi ?? {};
 
   // ── Process each user ──────────────────────────────────────────────────────
   for (const profile of profiles) {
@@ -109,7 +164,7 @@ export async function GET(req: NextRequest) {
       if (hoursOld >= 2 && profile.onboarding_step === "registered") {
         const e = emailOnboardingNotStarted(name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -117,7 +172,7 @@ export async function GET(req: NextRequest) {
       if (hoursOld >= 24 && (profile.onboarding_step === "details" || profile.onboarding_step === "customize")) {
         const e = emailOnboardingStuck(name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -125,7 +180,7 @@ export async function GET(req: NextRequest) {
       if (daysOld >= 3) {
         const e = emailOnboardingHelp(name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -133,7 +188,7 @@ export async function GET(req: NextRequest) {
       if (daysOld >= 7) {
         const e = emailOnboardingLastChance(name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -156,7 +211,7 @@ export async function GET(req: NextRequest) {
       const offlineKey = `store_offline:${biz.suspended_until}`;
       if (!alreadySent(profile.id, offlineKey)) {
         const e = emailStoreOffline(name, biz.business_name);
-        if (await sendAutomationEmail(email, e)) { await markSent(profile.id, offlineKey); sent++; }
+        if (await revendicaTrimiterea(profile.id, offlineKey) && await sendAutomationEmail(email, e)) sent++;
       }
     }
 
@@ -170,7 +225,7 @@ export async function GET(req: NextRequest) {
       if (bizDaysOld >= 3 && daysUntilExpiry > 3) {
         const e = emailTrialTips(name, biz.slug);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -178,7 +233,7 @@ export async function GET(req: NextRequest) {
       if (productCount === 0 && bizDaysOld >= 2) {
         const e = emailNoProducts(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -186,7 +241,7 @@ export async function GET(req: NextRequest) {
       if (productCount > 0 && orderCount === 0 && bizDaysOld >= 5) {
         const e = emailNoOrders(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -194,7 +249,7 @@ export async function GET(req: NextRequest) {
       if (daysUntilExpiry <= 3 && daysUntilExpiry > 1) {
         const e = emailTrialExpires3d(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -202,7 +257,7 @@ export async function GET(req: NextRequest) {
       if (daysUntilExpiry <= 1 && daysUntilExpiry > 0) {
         const e = emailTrialExpires1d(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -210,7 +265,7 @@ export async function GET(req: NextRequest) {
       if (daysSinceExpiry >= 0 && daysSinceExpiry < 1) {
         const e = emailTrialExpired(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -218,7 +273,7 @@ export async function GET(req: NextRequest) {
       if (daysSinceExpiry >= 3) {
         const e = emailReactivate3d(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -226,7 +281,7 @@ export async function GET(req: NextRequest) {
       if (daysSinceExpiry >= 7) {
         const e = emailReactivate7d(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
     }
@@ -239,7 +294,7 @@ export async function GET(req: NextRequest) {
       if (inactiveDays >= 7 && inactiveDays < 14) {
         const e = emailInactive7d(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
 
@@ -247,7 +302,7 @@ export async function GET(req: NextRequest) {
       if (inactiveDays >= 14) {
         const e = emailInactive14d(name, biz.business_name);
         if (!alreadySent(profile.id, e.key)) {
-          if (await sendAutomationEmail(email, e)) { await markSent(profile.id, e.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }
       }
     }
@@ -259,21 +314,21 @@ export async function GET(req: NextRequest) {
       if (orderCount >= 10) {
         const e10 = emailMilestone10(name, biz.business_name);
         if (!alreadySent(profile.id, e10.key)) {
-          if (await sendAutomationEmail(email, e10)) { await markSent(profile.id, e10.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e10.key) && await sendAutomationEmail(email, e10)) sent++;
         }
       }
       // D16: 50 comenzi
       if (orderCount >= 50) {
         const e50 = emailMilestone(name, biz.business_name, 50);
         if (!alreadySent(profile.id, e50.key)) {
-          if (await sendAutomationEmail(email, e50)) { await markSent(profile.id, e50.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e50.key) && await sendAutomationEmail(email, e50)) sent++;
         }
       }
       // D16: 100 comenzi
       if (orderCount >= 100) {
         const e100 = emailMilestone(name, biz.business_name, 100);
         if (!alreadySent(profile.id, e100.key)) {
-          if (await sendAutomationEmail(email, e100)) { await markSent(profile.id, e100.key); sent++; }
+          if (await revendicaTrimiterea(profile.id, e100.key) && await sendAutomationEmail(email, e100)) sent++;
         }
       }
     }
@@ -282,7 +337,7 @@ export async function GET(req: NextRequest) {
   // ── D14: Prima comanda (check recent orders) ──────────────────────────────
   // This checks orders placed in the last 2 hours
   const twoHoursAgo = new Date(now.getTime() - 2 * 3600000).toISOString();
-  const recentOrders = await fetchAllRows("cron.emailAutomations.recentOrders", (f, t) =>
+  const recentOrders = await fetchAllRowsStrict("cron.emailAutomations.recentOrders", (f, t) =>
     admin
       .from("orders")
       .select("id, business_id, order_number, customer_name, total, created_at")
@@ -302,7 +357,7 @@ export async function GET(req: NextRequest) {
     if (totalOrders === 1) {
       const e = emailFirstOrder(profile.full_name ?? "", biz.business_name, order.order_number, order.customer_name, order.total);
       if (!alreadySent(profile.id, e.key)) {
-        if (await sendAutomationEmail(auth.email, e)) { await markSent(profile.id, e.key); sent++; }
+        if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(auth.email, e)) sent++;
       }
     }
   }

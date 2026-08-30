@@ -3,6 +3,7 @@
 // fire-and-forget — it must never break the order/popup/form flow it is called from.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import { upsertContact, splitName, type BrevoConfig } from "@/lib/brevo";
 import { syncOrder, upsertProduct, deleteProduct, brevoStoreId, type BrevoEcomProduct } from "@/lib/brevo-ecommerce";
@@ -211,9 +212,17 @@ export async function maybeSyncBrevoProductsBulk(opts: {
     }
 
     const admin = createAdminClient();
-    const { data: products } = await admin
-      .from("products").select("id, name, price, images").eq("business_id", opts.businessId).in("id", opts.ids);
-    for (const p of products ?? []) {
+    /* Pe bucati, acelasi motiv ca in `mailchimp-sync.ts` si `klaviyo-sync.ts`:
+       `.in()` intra in adresa si peste ~650 de id-uri cererea e respinsa la
+       margine. Chemata cu `void`, o cadere aici ar fi lasat catalogul Brevo in
+       urma fara ca nimeni sa afle. */
+    const products: { id: string; name: string; price: number; images: unknown }[] = [];
+    for (const bucata of bucatiDeIduri(opts.ids)) {
+      const { data } = await admin
+        .from("products").select("id, name, price, images").eq("business_id", opts.businessId).in("id", bucata);
+      products.push(...((data ?? []) as typeof products));
+    }
+    for (const p of products) {
       const img = Array.isArray(p.images) ? (p.images as unknown[])[0] : null;
       const res = await upsertProduct(config, {
         id: p.id, name: p.name, price: Number(p.price) || 0,

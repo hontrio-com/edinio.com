@@ -1,14 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
-import { checkoutPaymentMethods, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { checkoutPaymentMethods, processorReadiness, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, parseCodFeeConfig, sanitizeCodFeeConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
+import { normalizeazaTimpDeLivrare } from "@/lib/shipping/delivery-time";
 
 /**
  * Public, secret-free view of a store's checkout configuration.
@@ -22,13 +25,15 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   vat_rate: number;
   prices_include_vat: boolean;
   show_vat_breakdown: boolean;
+  /** Eticheta „(TVA inclus)" / „(fara TVA)" de langa pret. */
+  show_vat_label: boolean;
   shipping_zones: Json | null;
   min_order_amount: number | null;
   payment_methods: { type: PaymentMethodType; label: string }[];
   card_discount: CardDiscountConfig;
   cod_discount: CardDiscountConfig;
+  cod_fee: CodFeeConfig;
   international_shipping: boolean;
-  dpd_use_weight: boolean;
   mailchimp_newsletter: boolean;
   brevo_newsletter: boolean;
   klaviyo_newsletter: boolean;
@@ -36,31 +41,23 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, mailchimp_config, brevo_config, klaviyo_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, show_vat_label, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, cod_fee_config, mailchimp_config, brevo_config, klaviyo_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
 
-  const sc = data.stripe_config as { enabled?: boolean; charges_enabled?: boolean; account_id?: string } | null;
-  const nc = data.netopia_config as { enabled?: boolean; pos_signature?: string; api_key?: string } | null;
-  const ic = data.ipay_config as { enabled?: boolean; username?: string; password?: string } | null;
-  const kc = data.klarna_config as { enabled?: boolean; username?: string; password?: string } | null;
-  const rc = data.revolut_config as { enabled?: boolean; secret_key?: string } | null;
-
   // International (EU) checkout is available only when DPD is enabled as a courier,
   // opted into international, and credentialed. Booleans only — no secrets leak.
-  const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number; use_product_weight?: boolean } | null;
+  // `use_product_weight` NU mai pleaca spre browser: greutatea nu se mai
+  // calculeaza acolo, ci din cosul incarcat din baza la cotare.
+  const dc = data.dpd_config as { enabled?: boolean; international_enabled?: boolean; username?: string; client_id?: number } | null;
   const zonesCfg = (data.shipping_zones ?? {}) as Record<string, { enabled?: boolean }>;
   const internationalShipping = !!(dc?.enabled && dc?.international_enabled && dc?.username && dc?.client_id && zonesCfg["dpd"]?.enabled);
-  const dpdUseWeight = internationalShipping && dc?.use_product_weight === true;
 
-  const ready = {
-    netopia: !!(nc?.enabled && nc?.pos_signature && nc?.api_key),
-    stripe: !!(sc?.enabled && sc?.charges_enabled && sc?.account_id),
-    ipay: !!(ic?.enabled && ic?.username && ic?.password),
-    klarna: !!(kc?.enabled && kc?.username && kc?.password),
-    revolut: !!(rc?.enabled && rc?.secret_key),
-  };
+  // Aceeasi regula pe care o foloseste si verificarea de la plasarea comenzii:
+  // daca ecranul si serverul ar decide separat ce procesator e gata, dezacordul
+  // dintre ele ar refuza comenzi bune.
+  const ready = processorReadiness(data);
 
   // Checkout newsletter opt-in is offered only when Mailchimp is connected, an
   // audience is chosen, and the checkout source is on. Booleans only — no secrets leak.
@@ -74,13 +71,14 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     vat_rate: Number(data.vat_rate ?? 19),
     prices_include_vat: data.prices_include_vat ?? true,
     show_vat_breakdown: data.show_vat_breakdown ?? true,
+    show_vat_label: data.show_vat_label ?? true,
     shipping_zones: (data.shipping_zones as Json) ?? null,
     min_order_amount: data.min_order_amount != null ? Number(data.min_order_amount) : null,
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
     card_discount: parseCardDiscountConfig(data.card_discount_config),
     cod_discount: parseCardDiscountConfig(data.cod_discount_config),
+    cod_fee: parseCodFeeConfig(data.cod_fee_config),
     international_shipping: internationalShipping,
-    dpd_use_weight: dpdUseWeight,
     mailchimp_newsletter: !!(mc?.enabled && mc?.audience_id && mc?.sources?.checkout !== false),
     brevo_newsletter: !!(bv?.enabled && bv?.list_id && bv?.sources?.checkout !== false),
     klaviyo_newsletter: !!(kv?.enabled && kv?.list_id && kv?.sources?.checkout !== false),
@@ -144,6 +142,38 @@ export async function updateCodDiscount(
   if (error) {
     logError({ action: "updateCodDiscount", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea discountului la plata ramburs." };
+  }
+
+  if (biz.slug) revalidatePath(`/${biz.slug}`);
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+/**
+ * Salveaza taxa la plata ramburs. Aceeasi forma ca cele doua reduceri de mai sus,
+ * dar cu un camp in plus: daca suma fixa scrisa de comerciant contine deja TVA.
+ */
+export async function updateCodFee(
+  businessId: string,
+  config: CodFeeConfig,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Magazin negasit" };
+
+  const sanitized = sanitizeCodFeeConfig(config);
+  const { error } = await supabase
+    .from("store_settings")
+    .update({ cod_fee_config: sanitized as never })
+    .eq("business_id", businessId);
+
+  if (error) {
+    logError({ action: "updateCodFee", message: error.message, details: { code: error.code, businessId }, userId: user.id });
+    return { error: "Eroare la salvarea taxei la plata ramburs." };
   }
 
   if (biz.slug) revalidatePath(`/${biz.slug}`);
@@ -337,7 +367,7 @@ export async function updateNotificationsSettings(
 
 export async function updateVatSettings(
   businessId: string,
-  settings: { vat_enabled: boolean; vat_rate: number; prices_include_vat: boolean; show_vat_breakdown: boolean },
+  settings: { vat_enabled: boolean; vat_rate: number; prices_include_vat: boolean; show_vat_breakdown: boolean; show_vat_label: boolean },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -348,7 +378,8 @@ export async function updateVatSettings(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+    .from("store_settings")
+    .select("id, vat_rate, prices_include_vat").eq("business_id", businessId).single();
 
   let error;
   if (existing) {
@@ -361,6 +392,58 @@ export async function updateVatSettings(
   }
 
   if (error) return { error: "Eroare la salvare." };
+
+  /*
+   * ═══ ⚠ O SCHIMBARE DE TVA MIȘCĂ TOATE PREȚURILE DE PE MARKETPLACE ═══
+   *
+   * eMAG cere prețul FĂRĂ TVA, la toate cele patru câmpuri. Prețul afișat în magazin
+   * nu se schimbă când comerciantul trece de la 19% la 21% cu „prețuri cu TVA incluse"
+   * — dar prețul net, adică exact ce trimitem noi, se schimbă cu două procente.
+   *
+   * Fără repunerea în coadă, ofertele rămâneau cu prețul net vechi până când cineva
+   * atingea fiecare produs în parte. Nimic n-ar fi dat eroare: ele s-ar fi vândut mai
+   * departe, cu marja mutată, iar diferența s-ar fi văzut abia în contabilitate.
+   *
+   * ⚠ Numai când chiar s-a schimbat ceva. Salvarea altor setări din aceeași carte —
+   * „arată defalcarea TVA", de pildă — n-are de ce să pună un catalog întreg la coadă.
+   *
+   * ⚠ NU BLOCHEAZĂ salvarea setărilor: eMAG n-are voie s-o întârzie sau s-o strice.
+   *
+   * ⚠ DAR NICI `void (async () => ...)()` (îndreptat 25.08.2026). Forma aceea pornea
+   * lucrarea și dădea drumul răspunsului; pe Vercel, instanța poate fi înghețată în clipa
+   * în care răspunsul se închide, deci repunerea în coadă putea să nu apuce să fie scrisă.
+   * Iar aici tăcerea costă: prețurile nete de pe eMAG se socotesc din cota de TVA, deci un
+   * catalog întreg ar fi rămas cu prețuri vechi la ei, fără nicio urmă.
+   *
+   * `dupaRaspuns` e chiar mecanismul scris în casă pentru asta — folosește `after()` din
+   * Next, care ține instanța vie până termină. Aceeași clasă de problemă a fost reparată
+   * în alte optzeci și patru de locuri; ăsta rămăsese.
+   */
+  const vechiRate = Number((existing as { vat_rate?: unknown } | null)?.vat_rate);
+  const vechiInclus = (existing as { prices_include_vat?: boolean } | null)?.prices_include_vat;
+  const sAuSchimbatPreturile =
+    !!existing
+    && (vechiRate !== settings.vat_rate || vechiInclus !== settings.prices_include_vat);
+
+  if (sAuSchimbatPreturile) {
+    dupaRaspuns(async () => {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const { fetchAllRowsStrict } = await import("@/lib/supabase/fetch-all");
+      const { enqueueEmagPretMany } = await import("@/lib/emag/queue");
+      const admin = createAdminClient();
+      /* ⚠ `fetchAllRowsStrict`: PostgREST taie la 1000 FĂRĂ să spună, iar aici lista e
+         chiar catalogul. Tăiată, restul ofertelor ar fi rămas cu prețul vechi. */
+      const randuri = await fetchAllRowsStrict<{ product_id: string | null }>(
+        "tva.emag", (from, to) =>
+          admin.from("emag_offers").select("product_id")
+            .eq("business_id", businessId).eq("auto_sync", true).not("product_id", "is", null)
+            .order("emag_id", { ascending: true }).range(from, to),
+      );
+      const ids = [...new Set(randuri.map((r) => r.product_id).filter((x): x is string => !!x))];
+      if (ids.length) await enqueueEmagPretMany(businessId, ids);
+    }, "tvaEmag", businessId);
+  }
+
   revalidatePath("/dashboard/settings");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
   return { success: true };
@@ -378,17 +461,36 @@ export async function updateSmsoConfig(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+  // Citit cu SERVICE ROLE: `pastreazaSecretele` are nevoie de valoarea REALA a
+  // cheii, ca sa o scrie la loc. Vederea `store_settings` nu mai decripteaza
+  // pentru `authenticated`, deci cu clientul utilizatorului am lua sirul `enc.v1.…`
+  // si l-am pastra ca atare in configul imbinat. Service role ocoleste RLS; dreptul
+  // asupra magazinului e verificat exact deasupra.
+  //
+  // CORECTIE 15.08.2026: comentariul de aici sustinea ca rescrierea ar cripta cheia
+  // A DOUA OARA si ar face-o nedescifrabila. Nu e adevarat, si merita spus, fiindca
+  // teama asta duce la migratii de „salvare" inutile. `privat.cripteaza` iese pe
+  // prima linie pentru orice sir care incepe deja cu `enc.v1.`, deci rescrierea e
+  // no-op (2026-08-04-criptare-credentiale.sql). Verificat pe productie pe toate
+  // cele 26 de campuri secrete cu valori: zero dublu-criptate. Motivul real pentru
+  // service role e cel de mai sus — ce se strica e ce FOLOSESTE configul imbinat,
+  // nu randul din baza.
+  const { data: existing } = await createAdminClient()
+    .from("store_settings").select("id, smso_config").eq("business_id", businessId).single();
+
+  // Formularul primeste `api_key` MASCAT (gol), deci o salvare obisnuita
+  // trebuie sa pastreze valoarea existenta. Fara asta, prima salvare o STERGE —
+  // exact greseala impotriva careia avertizeaza comentariul din secrete.ts.
+  const configFinal = pastreazaSecretele("smso_config", config, existing?.smso_config);
 
   let error;
   if (existing) {
     ({ error } = await supabase.from("store_settings")
-      .update({ smso_config: config as never, updated_at: new Date().toISOString() })
+      .update({ smso_config: configFinal as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId));
   } else {
     ({ error } = await supabase.from("store_settings")
-      .insert({ business_id: businessId, smso_config: config as never }));
+      .insert({ business_id: businessId, smso_config: configFinal as never }));
   }
 
   if (error) return { error: "Eroare la salvare." };
@@ -409,17 +511,27 @@ export async function updateSmartbillConfig(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+  // Citit cu SERVICE ROLE, din acelasi motiv ca la `updateSmsoConfig`:
+  // `pastreazaSecretele` scrie inapoi valoarea veche, iar cu clientul
+  // utilizatorului aceea ar fi sirul `enc.v1.…`, care ar ajunge criptat a doua
+  // oara si ar rupe tacit facturarea SmartBill. Dreptul asupra magazinului e
+  // verificat exact deasupra; service role ocoleste RLS.
+  const { data: existing } = await createAdminClient()
+    .from("store_settings").select("id, smartbill_config").eq("business_id", businessId).single();
+
+  // Formularul primeste `token` MASCAT (gol), deci o salvare obisnuita
+  // trebuie sa pastreze valoarea existenta. Fara asta, prima salvare o STERGE —
+  // exact greseala impotriva careia avertizeaza comentariul din secrete.ts.
+  const configFinal = pastreazaSecretele("smartbill_config", config, existing?.smartbill_config);
 
   let error;
   if (existing) {
     ({ error } = await supabase.from("store_settings")
-      .update({ smartbill_config: config as never, updated_at: new Date().toISOString() })
+      .update({ smartbill_config: configFinal as never, updated_at: new Date().toISOString() })
       .eq("business_id", businessId));
   } else {
     ({ error } = await supabase.from("store_settings")
-      .insert({ business_id: businessId, smartbill_config: config as never }));
+      .insert({ business_id: businessId, smartbill_config: configFinal as never }));
   }
 
   if (error) return { error: "Eroare la salvare." };
@@ -468,6 +580,15 @@ export async function updateShippingConfig(
     // Clase de transport + reguli condiționale (Faza 1). Sanitizate defensiv la salvare.
     shipping_classes?: ShippingClass[];
     shipping_rules?: ShippingRule[];
+    /*
+     * Termenul de livrare: procesare + tranzit, in zile.
+     *
+     * Sta in `page_content`, nu intr-o coloana proprie, fiindca acolo era deja
+     * jumatatea veche a setarii (`delivery_estimate`, comutatorul de afisare din
+     * editor) si fiindca amandoua se citesc impreuna, dintr-un singur camp deja
+     * adus de fiecare pagina publica.
+     */
+    delivery_time?: unknown;
   },
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
@@ -487,12 +608,29 @@ export async function updateShippingConfig(
   const rulesRow = parseShippingRules(config.shipping_rules ?? []);
 
   const { data: existing } = await supabase
-    .from("store_settings").select("id").eq("business_id", businessId).single();
+    .from("store_settings").select("id, page_content").eq("business_id", businessId).single();
+
+  /*
+   * Termenul de livrare se imbina PESTE `page_content`, cheie cu cheie: acolo
+   * stau si meniul, si estimarea din editor, si SEO-ul magazinului, scrise de
+   * alte ecrane. Un `page_content` inlocuit intreg de pe fila de livrare le-ar
+   * sterge pe toate.
+   *
+   * Un formular invalid (max sub min, zile lipsa) intoarce `null` din
+   * normalizator si atunci randul de dinainte ramane neatins — nu se sterge in
+   * tacere un termen bun din cauza unei greseli de tastare.
+   */
+  const timpDeLivrare = normalizeazaTimpDeLivrare(config.delivery_time);
+  const pageContentActual = (existing?.page_content as Record<string, unknown> | null) ?? {};
+  const pageContentNou = timpDeLivrare
+    ? { ...pageContentActual, delivery_time: timpDeLivrare }
+    : pageContentActual;
 
   let error;
   if (existing) {
     ({ error } = await supabase.from("store_settings")
       .update({
+        ...(timpDeLivrare ? { page_content: pageContentNou as never } : {}),
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,
@@ -507,6 +645,7 @@ export async function updateShippingConfig(
     ({ error } = await supabase.from("store_settings")
       .insert({
         business_id: businessId,
+        ...(timpDeLivrare ? { page_content: pageContentNou as never } : {}),
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,
@@ -539,4 +678,44 @@ export async function updateProfileName(
 
   revalidatePath("/dashboard", "layout");
   return { success: true };
+}
+
+/**
+ * Preturile autoritare ale produselor dintr-un cos: pretul de baza, preturile
+ * variantelor si configuratia de trepte.
+ *
+ * Cosul din browser tine identitati si cantitati, nu preturi de incredere: ce s-a
+ * salvat in localStorage la adaugare poate fi vechi de zile. Serverul recalculeaza
+ * oricum totul la plasarea comenzii, deci fara pasul asta cosul afiseaza un pret
+ * si comanda pleaca cu altul. Aceleasi date alimenteaza si motorul de trepte, ca
+ * pretul de pachet sa se vada in cos, nu doar la finalizare.
+ *
+ * Public si fara secrete: doar produse active ale magazinului cerut.
+ */
+export async function getCartPricing(
+  businessId: string,
+  productIds: string[],
+): Promise<Record<string, { price: number; combos: Record<string, number>; tiers: Json | null }>> {
+  const ids = [...new Set((productIds ?? []).filter((id) => typeof id === "string" && id))].slice(0, 200);
+  if (!businessId || ids.length === 0) return {};
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("products")
+    .select("id, price, page_sections")
+    .eq("business_id", businessId)
+    .eq("is_active", true)
+    .in("id", ids);
+
+  const { enabledComboPriceMap } = await import("@/lib/storefront/variants");
+  const out: Record<string, { price: number; combos: Record<string, number>; tiers: Json | null }> = {};
+  for (const p of data ?? []) {
+    const base = Math.round((Number(p.price) || 0) * 100) / 100;
+    out[p.id] = {
+      price: base,
+      combos: Object.fromEntries(enabledComboPriceMap(p.page_sections, base)),
+      tiers: ((p.page_sections ?? {}) as { quantity_tiers?: Json }).quantity_tiers ?? null,
+    };
+  }
+  return out;
 }

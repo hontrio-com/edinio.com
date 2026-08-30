@@ -1,18 +1,30 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
 import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoProduct, maybeSyncBrevoProductsBulk } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoProduct, maybeSyncKlaviyoProductsBulk } from "@/lib/klaviyo-sync";
 import { createClient } from "@/lib/supabase/server";
-import { getProductLimit } from "@/lib/plan-limits";
+import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
+import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
-import { enqueueGmcSync, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
-import { enqueueOlxSync, enqueueOlxSyncMany } from "@/lib/olx/queue";
-import { enqueueAboutYouSync, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
-import { enqueueTrendyolSync, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
+import { readBundleConfig } from "@/lib/bundles";
+import { construiesteTrepte, mesajProblemaTrepte, problemaMonotonie } from "@/lib/storefront/quantity-tiers";
+import { enqueueGmcSync, enqueueGmcStergereMany, enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
+import {
+  enqueueOlxSync, enqueueOlxStergereMany, enqueueOlxSyncMany,
+  enqueueOlxRetragereInainteDeStergere,
+} from "@/lib/olx/queue";
+import { enqueueAboutYouSync, enqueueAboutYouStergereMany, enqueueAboutYouSyncMany } from "@/lib/aboutyou/queue";
+import { enqueueTrendyolSync, enqueueTrendyolStergereMany, enqueueTrendyolSyncMany } from "@/lib/trendyol/queue";
+import {
+  enqueueEmagPretMany, enqueueEmagRetragereInainteDeStergere,
+  enqueueEmagSync, enqueueEmagSyncMany,
+} from "@/lib/emag/queue";
 
 interface ProductData {
   name: string;
@@ -84,6 +96,41 @@ function isSlugConflict(error: { code?: string | null; message: string }) {
   return error.code === "23505" && error.message.includes("slug");
 }
 
+/**
+ * Un pachet nu are voie sa coste mai putin decat o cantitate mai mica.
+ *
+ * Verificarea sta pe SERVER, nu doar in formular: `createProduct` si
+ * `updateProduct` scriu `page_sections` cu `as never`, deci nici tipurile nu
+ * apara, iar orice cale care ocoleste formularul — import, un tab vechi, un
+ * viitor API — intra direct in baza.
+ *
+ * Se verifica pe pretul de BAZA si, la produsele variabile, pe fiecare pret de
+ * combinatie: in modul suma fixa cazul cel mai defavorabil e varianta cea mai
+ * scumpa, fiindca un pachet fix e cu atat mai probabil sub o bucata cu cat
+ * bucata e mai scumpa.
+ */
+function problemaTrepteProdus(data: ProductData): string | null {
+  const ps = (data.page_sections ?? null) as { quantity_tiers?: unknown; variants?: { enabled?: boolean; combinations?: Array<{ enabled?: boolean; price?: unknown }> } } | null;
+  const cfg = ps?.quantity_tiers;
+  if (!cfg) return null;
+
+  const preturi = new Set<number>();
+  const baza = Number(data.price);
+  if (Number.isFinite(baza) && baza > 0) preturi.add(baza);
+  if (ps?.variants?.enabled && Array.isArray(ps.variants.combinations)) {
+    for (const c of ps.variants.combinations) {
+      const n = Number(c?.price);
+      if (c?.enabled && Number.isFinite(n) && n > 0) preturi.add(n);
+    }
+  }
+
+  for (const unit of preturi) {
+    const problema = problemaMonotonie(construiesteTrepte(cfg, unit));
+    if (problema) return mesajProblemaTrepte(problema);
+  }
+  return null;
+}
+
 export async function createProduct(businessId: string, data: ProductData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -97,6 +144,9 @@ export async function createProduct(businessId: string, data: ProductData) {
     .single();
   if (!biz) return { error: "Magazin negasit" };
 
+  const problemaTrepte = problemaTrepteProdus(data);
+  if (problemaTrepte) return { error: problemaTrepte };
+
   // Check plan product limit
   const { data: profile } = await supabase
     .from("users_profile")
@@ -107,12 +157,11 @@ export async function createProduct(businessId: string, data: ProductData) {
   const plan = profile?.plan ?? "free";
   const limit = getProductLimit(plan);
 
-  const { count } = await supabase
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", businessId);
+  // Numaram pe CONT, nu pe magazin: planul e per cont, iar numaratoarea pe
+  // magazin insemna ca al doilea magazin dubla limita. Vezi plan-limits.ts.
+  const count = await numaraProduseleContului(supabase, user.id);
 
-  if (limit !== Infinity && (count ?? 0) >= limit) {
+  if (limit !== Infinity && count >= limit) {
     return { error: `Ai atins limita de ${limit} produse pentru planul tau. Upgradeaza planul pentru mai multe produse.` };
   }
 
@@ -141,13 +190,18 @@ export async function createProduct(businessId: string, data: ProductData) {
     logError({ action: "createProduct", message: error.message, details: { code: error.code, hint: error.hint, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
   }
-  if (created?.id) void enqueueGmcSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueOlxSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueAboutYouSync(businessId, created.id, created.id, "upsert");
-  if (created?.id) void enqueueTrendyolSync(businessId, created.id, created.id, "upsert");
+  if (created?.id) dupaRaspuns(() => enqueueGmcSync(businessId, created.id, created.id, "upsert"), "enqueueGmcSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueOlxSync(businessId, created.id, created.id, "upsert"), "enqueueOlxSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueAboutYouSync(businessId, created.id, created.id, "upsert"), "enqueueAboutYouSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueTrendyolSync(businessId, created.id, created.id, "upsert", true), "enqueueTrendyolSync", businessId);
+  if (created?.id) dupaRaspuns(() => enqueueEmagSync(businessId, created.id, created.id, "oferta", true), "enqueueEmagSync", businessId);
   if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   if (created?.id) void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -165,17 +219,25 @@ export async function updateProduct(productId: string, businessId: string, data:
     .single();
   if (!biz) return { error: "Magazin negasit" };
 
-  // Fetch old images to detect removals
+  const problemaTrepte = problemaTrepteProdus(data);
+  if (problemaTrepte) return { error: problemaTrepte };
+
+  /*
+   * ⚠ SI `is_active`, nu doar imaginile.
+   *
+   * Din el se afla daca produsul TOCMAI a fost activat — singurul moment in care un
+   * produs care n-a fost niciodata pe marketplace trebuie publicat. Vezi mai jos.
+   */
   const { data: oldProduct } = await supabase
     .from("products")
-    .select("images")
+    .select("images, is_active")
     .eq("id", productId)
     .eq("business_id", businessId)
     .single();
 
   const slug = await resolveUniqueSlug(supabase, businessId, data.slug, productId);
 
-  const { error } = await supabase.from("products").update({
+  const { data: randeAtinse, error } = await supabase.from("products").update({
     name: data.name.trim(),
     slug,
     description: data.description?.trim() || null,
@@ -192,11 +254,30 @@ export async function updateProduct(productId: string, businessId: string, data:
     weight_grams: data.weight_grams ?? null,
     page_sections: (data.page_sections ?? {}) as never,
     updated_at: new Date().toISOString(),
-  }).eq("id", productId).eq("business_id", businessId);
+  })
+    .eq("id", productId).eq("business_id", businessId)
+    /*
+     * `is_bundle: false` — pe SCRIERE, nu doar pe citire.
+     *
+     * Formularul obisnuit reconstruieste `page_sections` de la zero si nu cunoaste
+     * cheia `bundle`, iar aici se scrie inlocuire: o singura salvare lasa
+     * `is_bundle = true` cu configul sters, pachetul continua sa se vanda la
+     * pretul lui inghetat, iar `expandBundleStock` scade stocul RANDULUI DE
+     * PACHET in loc de componente. Filtrul pus doar pe pagina de editare acopera
+     * doar ce se deschide de acolo: functia asta e export dintr-un modul
+     * „use server”, deci un tab ramas deschis inainte de deploy sau o cerere
+     * reluata ajung direct aici.
+     */
+    .eq("is_bundle", false)
+    .select("id");
 
   if (error) {
     logError({ action: "updateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la salvare. Incearca din nou." };
+  }
+  // Zero randuri inseamna ca tinta e un pachet: altfel salvarea „reuseste” mut.
+  if (!randeAtinse || randeAtinse.length === 0) {
+    return { error: "Pachetele se editeaza din sectiunea Pachete, nu din formularul de produs." };
   }
 
   // Clean up removed images from R2 — but only those no other product still
@@ -207,13 +288,40 @@ export async function updateProduct(productId: string, businessId: string, data:
     void deleteOrphanImages(supabase, businessId, removed, { excludeProductId: productId });
   }
 
-  void enqueueGmcSync(businessId, productId, productId, "upsert");
-  void enqueueOlxSync(businessId, productId, productId, "upsert");
-  void enqueueAboutYouSync(businessId, productId, productId, "upsert");
-  void enqueueTrendyolSync(businessId, productId, productId, "upsert");
+  dupaRaspuns(() => enqueueGmcSync(businessId, productId, productId, "upsert"), "enqueueGmcSync", businessId);
+  dupaRaspuns(() => enqueueOlxSync(businessId, productId, productId, "upsert"), "enqueueOlxSync", businessId);
+  dupaRaspuns(() => enqueueAboutYouSync(businessId, productId, productId, "upsert"), "enqueueAboutYouSync", businessId);
+  /*
+   * ═══ ⚠ ACTIVAREA E NASTEREA, PENTRU MARKETPLACE (24.08.2026) ═══
+   *
+   * `publicaSiFaraOferta` e steagul care ingaduie publicarea automata, si e restrans
+   * dinadins: fara el, orice atingere a unui produs — o marire de pret in masa, o
+   * schimbare de categorie — ar fi trimis pe eMAG tot ce a atins.
+   *
+   * Dar `createProduct` il da, iar `updateProduct` nu — si atunci un produs care intra in
+   * magazin INACTIV nu se publica niciodata. Asta se intampla la:
+   *
+   *   duplicare      — `duplicateProduct` scrie `is_active: false` si nu anunta pe nimeni
+   *   import CSV     — produsele pot veni inactive
+   *   creare ca ciorna, activata mai tarziu
+   *
+   * ⚠ Si nu se poate da la creare in schimb: un produs inactiv NU e sarit la trimitere, e
+   * publicat cu `status: 0`. Deci am fi creat oferte in catalogul lor pentru ciorne pe
+   * care comerciantul nu s-a hotarat inca sa le vanda.
+   *
+   * Momentul corect e cel in care el spune „da”: trecerea din inactiv in activ.
+   */
+  const tocmaiActivat = oldProduct?.is_active === false && data.is_active === true;
+
+  dupaRaspuns(() => enqueueTrendyolSync(businessId, productId, productId, "upsert", tocmaiActivat), "enqueueTrendyolSync", businessId);
+  dupaRaspuns(() => enqueueEmagSync(businessId, productId, productId, "oferta", tocmaiActivat), "enqueueEmagSync", businessId);
   void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
   void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -241,12 +349,11 @@ export async function duplicateProduct(productId: string, businessId: string) {
   const plan = profile?.plan ?? "free";
   const limit = getProductLimit(plan);
 
-  const { count } = await supabase
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", businessId);
+  // Numaram pe CONT, nu pe magazin: planul e per cont, iar numaratoarea pe
+  // magazin insemna ca al doilea magazin dubla limita. Vezi plan-limits.ts.
+  const count = await numaraProduseleContului(supabase, user.id);
 
-  if (limit !== Infinity && (count ?? 0) >= limit) {
+  if (limit !== Infinity && count >= limit) {
     return { error: `Ai atins limita de ${limit} produse. Upgradeaza planul.` };
   }
 
@@ -288,9 +395,59 @@ export async function duplicateProduct(productId: string, businessId: string) {
     logError({ action: "duplicateProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: isSlugConflict(error) ? "Exista deja un produs cu acest link (slug). Alege altul." : "Eroare la duplicare." };
   }
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   // Intoarcem id-ul ca UI-ul sa deschidă direct editarea copiei.
   return { success: true, id: created.id };
+}
+
+/**
+ * Pachetele care contin produsul asta si care ar ramane incomplete fara el.
+ *
+ * `deleteProduct` stergea componenta si pleca: pachetul ramanea publicat, cu
+ * pretul lui, listand randuri „Produs indisponibil” si refuzand orice comanda la
+ * ultimul pas. Asa a ajuns „Pachet Femei” nevandabil pe 2026-07-28, fara ca
+ * cineva sa afle. Sunt 12 pachete in tot sistemul, deci interogarea e gratuita.
+ */
+async function dezactiveazaPacheteleCu(
+  supabase: Awaited<ReturnType<typeof createClient>>, businessId: string, productIds: string[],
+): Promise<void> {
+  if (productIds.length === 0) return;
+  const { data: pachete } = await supabase
+    .from("products").select("id, page_sections")
+    .eq("business_id", businessId).eq("is_bundle", true).eq("is_active", true);
+  const sters = new Set(productIds);
+  const afectate = (pachete ?? [])
+    .filter((b) => (readBundleConfig(b.page_sections)?.items ?? []).some((i) => sters.has(i.product_id)))
+    .map((b) => b.id);
+  if (afectate.length === 0) return;
+  // Fail-closed: mai bine un pachet ascuns decat unul publicat pe care nimeni
+  // nu-l poate cumpara. Comerciantul il vede in lista de pachete, marcat.
+  // Pe bucati, ca peste tot unde id-urile ajung in adresa (vezi `id-chunks.ts`):
+  // aici lista e de obicei scurta, dar „de obicei” nu e o limita.
+  for (const bucata of bucatiDeIduri(afectate)) {
+    const { error } = await supabase.from("products").update({ is_active: false }).in("id", bucata).eq("business_id", businessId);
+    if (error) {
+      logError({ action: "dezactiveazaPacheteleCu", message: error.message, details: { businessId, afectate: bucata }, severity: "error" });
+      return;
+    }
+  }
+  // Feedurile sunt cozi de PUSH: fara sincronizare, oferta ramane activa si „in
+  // stoc" in Merchant Center dupa ce magazinul tocmai a stins pachetul — adica
+  // exact divergenta pagina-vs-feed din care ies suspendarile. Toate celelalte
+  // cai de scriere din fisierul asta sincronizeaza; asta nu o facea.
+  dupaRaspuns(() => enqueueGmcSyncMany(businessId, afectate), "enqueueGmcSyncMany", businessId);
+  dupaRaspuns(() => enqueueOlxSyncMany(businessId, afectate), "enqueueOlxSyncMany", businessId);
+  dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, afectate), "enqueueAboutYouSyncMany", businessId);
+  dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, afectate), "enqueueTrendyolSyncMany", businessId);
+  /* ⚠ „pret”, nu „oferta”: functia asta schimba DOAR `is_active` pe pachetele care
+     contineau produsul atins. La eMAG asta e `status` pe oferta, adica `offer/save`.
+     Pe ruta grea ar fi plecat documentatia intreaga a fiecarui pachet, ca sa se
+     schimbe un singur numar. */
+  dupaRaspuns(() => enqueueEmagPretMany(businessId, afectate), "enqueueEmagPretMany", businessId);
 }
 
 export async function deleteProduct(productId: string, businessId: string) {
@@ -314,6 +471,59 @@ export async function deleteProduct(productId: string, businessId: string) {
     .eq("business_id", businessId)
     .single();
 
+  /*
+   * ═══ ⚠ OFERTELE eMAG SE CITESC ÎNAINTE DE ȘTERGERE (audit 24.08.2026) ═══
+   *
+   * `emag_offers.product_id` devine `null` la ștergere (`on delete set null`), deci după
+   * linia de mai jos nu se mai poate afla ce oferte avea produsul. Iar retragerea pusă la
+   * coadă cu `product_id: null` era ȘTEARSĂ de cron înainte să trimită ceva.
+   *
+   * ⚠ Rezultatul, până azi: comerciantul ștergea produsul din magazin și continua să
+   * primească comenzi eMAG pentru marfă pe care n-o mai avea. Anulările le plătea el, în
+   * bani și în punctaj la ei.
+   *
+   * Se face ÎNAINTE și se așteaptă: pus cu `void` după ștergere, ar fi citit o legătură
+   * deja ruptă.
+   */
+  /*
+   * ═══ ⚠ SI SE OPRESTE DACA NU S-A PUTUT PROGRAMA (25.08.2026) ═══
+   *
+   * Pana acum functia intorcea `void`, deci raspunsul ei nu se putea citi: o citire
+   * picata a `emag_offers` dadea `data: null`, lista de oferte iesea goala, si totul
+   * arata exact ca „produsul asta n-a fost niciodata pe eMAG”. Produsul se stergea, iar
+   * oferta ramanea la VANZARE acolo.
+   *
+   * ⚠ Iar dupa stergere nu mai e nimic de reparat: `on delete set null` rupe
+   * `emag_offers.product_id`, deci nici macar nu se mai poate afla ce oferte erau ale
+   * lui. Comerciantul afla cand primeste o comanda pentru marfa pe care n-o mai are.
+   *
+   * ⚠ NU se asteapta dupa eMAG — ar fi o legatura de retea intre „sterg un produs” si
+   * „raspunde marketplace-ul”. Se asteapta doar ca lucrarea sa fie SCRISA in coada; de
+   * acolo cronul o duce singur, cu reincercari.
+   */
+  const retragerea = await enqueueEmagRetragereInainteDeStergere(businessId, [productId]);
+  if (retragerea.fel === "nesigur") {
+    return {
+      error: "Produsul n-a fost șters: retragerea ofertei de pe eMAG nu s-a putut programa "
+        + `(${retragerea.motiv}) Încearcă din nou peste câteva momente.`,
+    };
+  }
+  /*
+   * ⚠ SI OLX, DIN ACELASI MOTIV (30.08.2026, tarziu). Retragerea lui se punea la coada DUPA
+   * stergere, prin `dupaRaspuns`, iar `enqueueOlxSync` e dinadins non-throwing: o punere la coada
+   * picata lasa anuntul ACTIV la OLX pentru un produs care nu mai exista nicaieri. Marfa se vinde
+   * acolo, iar comerciantul afla cand primeste comanda.
+   *
+   * ⚠ Nu se asteapta dupa OLX — doar ca lucrarea sa fie SCRISA.
+   */
+  const retragereaOlx = await enqueueOlxRetragereInainteDeStergere(businessId, [productId]);
+  if (retragereaOlx.fel === "nesigur") {
+    return {
+      error: "Produsul n-a fost șters: retragerea anunțului de pe OLX nu s-a putut programa "
+        + `(${retragereaOlx.motiv}) Încearcă din nou peste câteva momente.`,
+    };
+  }
+
   const { error } = await supabase.from("products").delete()
     .eq("id", productId).eq("business_id", businessId);
 
@@ -321,6 +531,7 @@ export async function deleteProduct(productId: string, businessId: string) {
     logError({ action: "deleteProduct", message: error.message, details: { code: error.code, hint: error.hint, productId, businessId }, userId: user.id });
     return { error: "Eroare la stergere." };
   }
+  await dezactiveazaPacheteleCu(supabase, businessId, [productId]);
 
   // Clean up R2 images — but only those no other product still references
   // (the deleted product's row is already gone, so it won't self-match).
@@ -329,13 +540,19 @@ export async function deleteProduct(productId: string, businessId: string) {
   }
 
   // Remove from Google Merchant + OLX too (product_id is null — the row is now gone).
-  void enqueueGmcSync(businessId, null, productId, "delete");
-  void enqueueOlxSync(businessId, null, productId, "delete");
-  void enqueueAboutYouSync(businessId, null, productId, "delete");
-  void enqueueTrendyolSync(businessId, null, productId, "delete");
+  dupaRaspuns(() => enqueueGmcSync(businessId, null, productId, "delete"), "enqueueGmcSync", businessId);
+  dupaRaspuns(() => enqueueOlxSync(businessId, null, productId, "delete"), "enqueueOlxSync", businessId);
+  dupaRaspuns(() => enqueueAboutYouSync(businessId, null, productId, "delete"), "enqueueAboutYouSync", businessId);
+  dupaRaspuns(() => enqueueTrendyolSync(businessId, null, productId, "delete"), "enqueueTrendyolSync", businessId);
+  /* ⚠ Retragerea eMAG s-a pus la coada MAI SUS, inainte de stergere: vezi nota de
+     acolo. Pusa aici, ar fi citit o legatura deja rupta si n-ar fi trimis nimic. */
   void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncBrevoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
   void maybeSyncKlaviyoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
+  // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
+  // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
+  // cronul. Nu arunca niciodata — randul e deja in coada.
+  await proiecteazaImediat(businessId);
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -348,7 +565,24 @@ export type BulkAction =
   | { kind: "price"; mode: "inc_pct" | "dec_pct" | "inc_amt" | "dec_amt" | "set"; amount: number }
   | { kind: "delete" };
 
-const MAX_BULK = 1000;
+/**
+ * Plafonul de siguranta, ridicat de la 1000 (2026-08-11).
+ *
+ * ⚠ Vechiul 1000 nu era doar strimt, era GRESIT: `.in("id", ids)` pleaca in
+ * ADRESA, iar marginea o respinge intre 600 si 700 de id-uri (masurat, vezi
+ * `id-chunks.ts`). Deci plafonul statea PESTE pragul la care platforma cedeaza —
+ * o selectie de exact 1000 trecea de verificare si pica dupa aceea cu „Eroare la
+ * actiunea in masa", care il trimitea pe om sa reincerce ce n-avea cum sa mearga.
+ *
+ * Acum fiecare cerere merge pe bucati de `ID_PER_CERERE`, deci lungimea adresei
+ * nu mai depinde de cate produse a ales omul. Ce ramane de pazit e TIMPUL: o
+ * bucata inseamna un dus-intors, iar functia are un buget. La 20000 ies 100 de
+ * cereri pentru pornit/oprit, ceea ce intra confortabil; peste, lucrarea
+ * trebuie mutata pe o coada, nu strecurata intr-o apasare de buton.
+ *
+ * Cel mai mare catalog de azi are 3351 de produse.
+ */
+const MAX_BULK = 20000;
 
 export async function bulkProductAction(
   businessId: string,
@@ -373,55 +607,125 @@ export async function bulkProductAction(
   try {
     if (action.kind === "active" || action.kind === "featured") {
       const patch = action.kind === "active" ? { is_active: action.value } : { is_featured: action.value };
-      const { error, count } = await supabase
-        .from("products").update({ ...patch, updated_at: now }, { count: "exact" })
-        .eq("business_id", businessId).in("id", ids);
-      if (error) throw error;
-      void enqueueGmcSyncMany(businessId, ids);
-      void enqueueOlxSyncMany(businessId, ids);
-      void enqueueAboutYouSyncMany(businessId, ids);
-      void enqueueTrendyolSyncMany(businessId, ids);
+      /* Pe bucati: `.in()` intra in adresa, iar peste ~650 de id-uri cererea e
+         respinsa la margine. Vezi `id-chunks.ts`. */
+      let count = 0;
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").update({ ...patch, updated_at: now }, { count: "exact" })
+          .eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        count += res.count ?? bucata.length;
+      }
+      dupaRaspuns(() => enqueueGmcSyncMany(businessId, ids), "enqueueGmcSyncMany", businessId);
+      dupaRaspuns(() => enqueueOlxSyncMany(businessId, ids), "enqueueOlxSyncMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
+      /*
+       * ⚠ „pret”, nu „oferta”, si numai la ACTIVARE.
+       *
+       * `is_active` devine `status` pe oferta eMAG, iar starea se schimba prin
+       * `offer/save` — ruta usoara. Trimisa pe `product_offer/save`, ar fi plecat
+       * toata documentatia produsului ca sa se schimbe un singur numar.
+       *
+       * `is_featured` NU are corespondent la eMAG. Pus si el in coada, ar fi mancat
+       * din cele 3 cereri pe secunda ale magazinului fara sa schimbe nimic acolo.
+       */
+      if (action.kind === "active") dupaRaspuns(() => enqueueEmagPretMany(businessId, ids), "enqueueEmagPretMany", businessId);
       if (action.kind === "active" && action.value === false) void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       if (action.kind === "active" && action.value === false) void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       if (action.kind === "active" && action.value === false) void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
       else void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
-      return { success: true, count: count ?? ids.length };
+      return { success: true, count };
     }
 
     if (action.kind === "category") {
       const value = action.value?.trim() || null;
-      const { error, count } = await supabase
-        .from("products").update({ category: value, updated_at: now }, { count: "exact" })
-        .eq("business_id", businessId).in("id", ids);
-      if (error) throw error;
-      void enqueueGmcSyncMany(businessId, ids);
-      void enqueueOlxSyncMany(businessId, ids);
-      void enqueueAboutYouSyncMany(businessId, ids);
-      void enqueueTrendyolSyncMany(businessId, ids);
+      let count = 0;
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").update({ category: value, updated_at: now }, { count: "exact" })
+          .eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        count += res.count ?? bucata.length;
+      }
+      dupaRaspuns(() => enqueueGmcSyncMany(businessId, ids), "enqueueGmcSyncMany", businessId);
+      dupaRaspuns(() => enqueueOlxSyncMany(businessId, ids), "enqueueOlxSyncMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
+      dupaRaspuns(() => enqueueEmagSyncMany(businessId, ids), "enqueueEmagSyncMany", businessId);
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
-      return { success: true, count: count ?? ids.length };
+      return { success: true, count };
     }
 
     if (action.kind === "delete") {
-      const { data: rows } = await supabase
-        .from("products").select("id, images").eq("business_id", businessId).in("id", ids);
-      const { error } = await supabase
-        .from("products").delete().eq("business_id", businessId).in("id", ids);
-      if (error) throw error;
+      /* Si citirea, si stergerea merg pe bucati: amandoua duc id-urile in
+         adresa. Imaginile se strang din toate bucatile INAINTE de stergere —
+         dupa aceea randurile nu mai exista si nu mai stie nimeni ce fisiere
+         erau ale lor. */
+      const rows: { id: string; images: unknown }[] = [];
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").select("id, images").eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        rows.push(...((res.data ?? []) as { id: string; images: unknown }[]));
+      }
+      /* ⚠ Ofertele eMAG, din acelasi motiv ca imaginile de mai sus: `product_id` devine
+         `null` la stergere, deci dupa bucla urmatoare nu se mai stie ce oferte erau ale
+         lor. Se asteapta, nu se pune cu `void`. Vezi `deleteProduct`. */
+      /* ⚠ Fail-closed, ca la stergerea unui singur produs: vezi nota lunga din
+         `deleteProduct`. Aici cantareste si mai mult, fiindca o stergere in masa poate
+         lasa sute de oferte la vanzare deodata. */
+      const retragerea = await enqueueEmagRetragereInainteDeStergere(businessId, ids);
+      if (retragerea.fel === "nesigur") {
+        return {
+          error: "Produsele n-au fost șterse: retragerea ofertelor de pe eMAG nu s-a putut "
+            + `programa (${retragerea.motiv}) Încearcă din nou peste câteva momente.`,
+        };
+      }
+      /* ⚠ Si OLX, la fel. Aici cantareste si mai mult: o stergere in masa poate lasa sute de
+         anunturi la vanzare deodata. */
+      const retragereaOlx = await enqueueOlxRetragereInainteDeStergere(businessId, ids);
+      if (retragereaOlx.fel === "nesigur") {
+        return {
+          error: "Produsele n-au fost șterse: retragerea anunțurilor de pe OLX nu s-a putut "
+            + `programa (${retragereaOlx.motiv}) Încearcă din nou peste câteva momente.`,
+        };
+      }
+
+      for (const bucata of bucatiDeIduri(ids)) {
+        const { error } = await supabase
+          .from("products").delete().eq("business_id", businessId).in("id", bucata);
+        if (error) throw error;
+      }
+      await dezactiveazaPacheteleCu(supabase, businessId, ids);
       // Reference-safe R2 cleanup + remove from Google Merchant.
       for (const r of rows ?? []) {
         if (Array.isArray(r.images)) void deleteOrphanImages(supabase, businessId, r.images as string[]);
       }
-      for (const id of ids) void enqueueGmcSync(businessId, null, id, "delete");
-      for (const id of ids) void enqueueOlxSync(businessId, null, id, "delete");
-      for (const id of ids) void enqueueAboutYouSync(businessId, null, id, "delete");
-      for (const id of ids) void enqueueTrendyolSync(businessId, null, id, "delete");
+      /*
+       * ═══ ⚠ ERAU 1360 DE CHEMARI, FIECARE CU CITIREA EI DE CONFIG (27.08.2026) ═══
+       *
+       * Cate una PE PRODUS, pe fiecare din cele patru integrari: la 340 de produse inseamna 1360
+       * de drumuri la baza, toate DUPA raspuns. `after` tine instanta pana se termina, dar peste
+       * durata maxima a functiei ce n-a apucat se TAIE — iar ce se taie sunt tocmai retragerile.
+       * Produsul e sters la noi si ramane la vanzare pe marketplace, tacut.
+       *
+       * O citire de config si un lot de scriere, pe integrare. Aceeasi treaba, patru drumuri.
+       */
+      dupaRaspuns(() => enqueueGmcStergereMany(businessId, ids), "enqueueGmcStergereMany", businessId);
+      dupaRaspuns(() => enqueueOlxStergereMany(businessId, ids), "enqueueOlxStergereMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouStergereMany(businessId, ids), "enqueueAboutYouStergereMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolStergereMany(businessId, ids), "enqueueTrendyolStergereMany", businessId);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count: (rows ?? []).length || ids.length };
     }
@@ -430,9 +734,16 @@ export async function bulkProductAction(
     if (action.kind === "price") {
       const amt = Number(action.amount);
       if (!Number.isFinite(amt) || amt < 0) return { error: "Valoare invalida." };
-      const { data: rows, error: readErr } = await supabase
-        .from("products").select("id, price").eq("business_id", businessId).in("id", ids);
-      if (readErr) throw readErr;
+      /* Scrierile erau deja pe bucati de 20, dar CITIREA lua toate id-urile
+         intr-un singur `.in()` — deci calea de pret cadea la fel de sus ca
+         celelalte, doar ca la primul pas. */
+      const rows: { id: string; price: number }[] = [];
+      for (const bucata of bucatiDeIduri(ids)) {
+        const res = await supabase
+          .from("products").select("id, price").eq("business_id", businessId).in("id", bucata);
+        if (res.error) throw res.error;
+        rows.push(...((res.data ?? []) as { id: string; price: number }[]));
+      }
 
       const compute = (price: number): number => {
         let p = price;
@@ -458,13 +769,26 @@ export async function bulkProductAction(
         ));
         count += results.filter((res) => !res.error).length;
       }
-      void enqueueGmcSyncMany(businessId, ids);
-      void enqueueOlxSyncMany(businessId, ids);
-      void enqueueAboutYouSyncMany(businessId, ids);
-      void enqueueTrendyolSyncMany(businessId, ids);
+      dupaRaspuns(() => enqueueGmcSyncMany(businessId, ids), "enqueueGmcSyncMany", businessId);
+      dupaRaspuns(() => enqueueOlxSyncMany(businessId, ids), "enqueueOlxSyncMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
+      /*
+       * ⚠⚠ „pret”, NU „oferta”. AICI ERA CHIAR DEFECTUL VETDEPO, MUTAT LA eMAG.
+       *
+       * O schimbare de pret in masa punea in coada `op: "oferta"`, adica ruta
+       * `product_offer/save` — cea care trimite documentatia INTREAGA a produsului.
+       * La Trendyol, exact confuzia asta a raportat succes pe 1051 de produse fara
+       * sa schimbe niciun pret, si s-a aflat abia cand a intrebat comerciantul.
+       *
+       * Scrisesem in `queue.ts` ca „o schimbare de pret nu are CUM sa ajunga pe ruta
+       * grea". Mecanismul era bun; firul era legat gresit.
+       */
+      dupaRaspuns(() => enqueueEmagPretMany(businessId, ids), "enqueueEmagPretMany", businessId);
       void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
       void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });
+      await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count };
     }

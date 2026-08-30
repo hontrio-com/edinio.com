@@ -1,19 +1,21 @@
 "use client";
 
 import { useState, useEffect, useTransition, useRef } from "react";
-import { computeVat, type VatConfig } from "@/lib/utils/vat";
+import { computeVat, vatBase, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
 import { getAttribution } from "@/lib/storefront/attribution";
+import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
 import { gtagEvent } from "@/lib/marketing";
 import type { CourierSelection } from "@/components/ministore/CourierSelector";
-import { computeCardDiscount, computeCodDiscount, type PaymentMethodType, type CardDiscountConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
+import { useCompanyBilling } from "@/components/ministore/CompanyFields";
 import { type CheckoutPreview } from "./checkout-preview";
 
 /**
@@ -35,7 +37,6 @@ export interface CheckoutOrderInput {
   shippingCost: number; freeShippingThreshold: number | null;
   emailFieldConfig: { enabled: boolean; required: boolean };
   initialDiscountCode?: string | null;
-  productWeights?: Record<string, number>;
   /**
    * Miniatura din catalogul de design-uri: formularul se randeaza in fluxul
    * paginii, cu datele astea in loc de cele de la server, si nu iese in retea
@@ -54,11 +55,11 @@ export interface CheckoutOrderInput {
 }
 
 export function useCheckoutOrder({
-  open, onClose, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode, productWeights,
+  open, onClose, basePath, businessId, shippingCost, freeShippingThreshold, emailFieldConfig, initialDiscountCode,
   preview = null,
   suprafata = "modal",
 }: CheckoutOrderInput) {
-  const { items, total, clear, sessionId, hydrated } = useCart();
+  const { items, total, clear, sessionId, hydrated, lineUnit } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<StorePageContent["checkout_config"]>(
     preview ? preview.checkoutConfig : ({ email_field: emailFieldConfig } as StorePageContent["checkout_config"])
   );
@@ -69,15 +70,44 @@ export function useCheckoutOrder({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>(preview?.paymentMethods[0]?.type ?? "cash_on_delivery");
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>(preview?.cardDiscount ?? { enabled: false, type: "percent", value: 0 });
   const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>(preview?.codDiscount ?? { enabled: false, type: "percent", value: 0 });
+  const [codFeeConfig, setCodFeeConfig] = useState<CodFeeConfig>(preview?.codFee ?? DEFAULT_COD_FEE);
   const customFields = checkoutConfig?.custom_fields ?? [];
   const extras = checkoutConfig?.extras ?? [];
   // Discount code is OFF by default — same semantics as the editor toggle and OrderModal.
   const hiddenFields = checkoutConfig?.hidden_fields ?? ["discount"];
-  const emailField = checkoutConfig?.email_field ?? emailFieldConfig;
+  const emailFieldBrut = checkoutConfig?.email_field ?? emailFieldConfig;
+  // Comenzi pe firma. Implicit oprit: un magazin care nu a pornit reglajul arata
+  // exact formularul de pana acum, fara niciun camp in plus.
+  const companyFieldsOn = checkoutConfig?.company_fields?.enabled === true;
   const [selectedExtras, setSelectedExtras] = useState<Record<string, boolean>>({});
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [courierSelection, setCourierSelection] = useState<CourierSelection | null>(null);
   const [hasCouriers, setHasCouriers] = useState(!!preview);
+
+  /*
+   * ⚠ LIVRAREA LA PUNCT GLS PORNESTE CAMPUL DE EMAIL, nu doar il face obligatoriu.
+   *
+   * MyGLS cere emailul la serviciul PSD (pagina 36): coletul ajunge la un ghiseu,
+   * iar cumparatorul trebuie sa AFLE ca il poate ridica. Verificarea exista de
+   * mult — dar campul se randa doar cand magazinul il avea pornit
+   * (`emailField.enabled`). Intr-un magazin care l-a oprit, un client care alegea
+   * un punct GLS primea „Emailul e obligatoriu" pe un camp CARE NU EXISTA pe
+   * ecran: nu-l putea completa, nu putea trimite comanda, si nu avea nici cea mai
+   * mica idee ce sa faca. Checkout mort, fara nicio urma nicaieri.
+   *
+   * Se deriva aici, o singura data, ca formularul si validarea sa nu poata
+   * ajunge vreodata la raspunsuri diferite.
+   */
+  /* ⚠ Doi curieri cer emailul la livrarea in punct, si numai ei: GLS il are camp
+     obligatoriu pe adresa de livrare, iar Shipo trimite ACOLO codul de ridicare
+     („emailul este obligatoriu pentru locker/pudo" — documentatia lor). Largita la
+     toate lockerele, regula ar bloca degeaba comenzi care azi merg la SmartShip si
+     Packeta, unde emailul nu se cere. */
+  const laPunctGls = courierSelection?.deliveryType === "locker"
+    && (courierSelection?.courier === "gls" || courierSelection?.courier === "shipo");
+  const emailField = laPunctGls
+    ? { enabled: true, required: true }
+    : emailFieldBrut;
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
   // Comanda minima a comerciantului (Setari > Livrare). Vine din aceeasi
@@ -109,17 +139,29 @@ export function useCheckoutOrder({
   const isFreeShippingDiscount = appliedDiscount?.type === "free_shipping";
   const shipping = (isFreeShippingDiscount || (freeShippingThreshold && goodsTotal >= freeShippingThreshold)) ? 0 : baseShippingCost;
 
-  // VAT (shared helper — identical formula on server + OrderModal).
-  const vatBase = goodsTotal + extrasTotal;
-  const { vatAmount, vatAddOn } = computeVat(vatBase, vatConfig);
   // Card-payment discount (mirrors the server): only for online card methods, on
   // the goods value after promo. Shown live as the customer switches payment method.
   const cardDiscountAmount = computeCardDiscount(cardDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);
   // Ramburs discount (mirrors the server): only when the customer picks cash on delivery.
   const codDiscountAmount = computeCodDiscount(codDiscountConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount);
+  // Taxa de ramburs (oglinda serverului): se calculeaza INAINTEA TVA-ului, fiindca
+  // intra in baza lui alaturi de marfa si extraoptiuni.
+  const codFeeAmount = computeCodFee(codFeeConfig, paymentMethod, goodsTotal + extrasTotal - discountAmount, vatConfig);
+  // VAT: aceeasi baza si acelasi helper ca serverul si ca formularul de comanda
+  // directa — marfa, extraoptiunile si TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs.
+  const bazaTva = vatBase({
+    goods: goodsTotal,
+    extras: extrasTotal,
+    shipping,
+    discount: discountAmount,
+    cardDiscount: cardDiscountAmount,
+    codDiscount: codDiscountAmount,
+    codFee: codFeeAmount,
+  });
+  const { vatAmount, vatAddOn } = computeVat(bazaTva, vatConfig);
   // Round to 2 decimals (cents): float subtraction like 199.29 - 19.93 would
   // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
-  const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount - codDiscountAmount + shipping + vatAddOn) * 100) / 100);
+  const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount - codDiscountAmount + codFeeAmount + shipping + vatAddOn) * 100) / 100);
 
   const [form, setForm] = useState(preview?.form ?? { name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -129,26 +171,43 @@ export function useCheckoutOrder({
   // and re-send merchant/customer notifications.
   const placedRef = useRef<{ payloadKey: string; orderId: string } | null>(null);
   const [intlEnabled, setIntlEnabled] = useState(preview?.intlEnabled ?? false);
-  const [dpdUseWeight, setDpdUseWeight] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
-  // Total cart weight (kg) from per-product weights; used for the live intl quote.
-  const totalWeightKg = items.reduce((s, i) => s + ((productWeights?.[i.productId] ?? 0) * i.quantity), 0) / 1000;
+  // Comenzile din afara tarii NU primesc blocul de firma: cifra de control a
+  // CUI-ului e un algoritm strict romanesc, deci orice cod de TVA european ar fi
+  // respins ca „invalid" si ar bloca trimiterea formularului. Facturarea B2B
+  // intracomunitara e alta discutie, cu taxare inversa cu tot.
+  const companyEnabled = companyFieldsOn && !isIntl;
+  // Starea si cautarea ANAF stau in acelasi carlig si pentru modalul „cumpara
+  // acum", ca regulile de validare a CUI-ului sa nu poata diverge intre cele doua
+  // formulare. Chemat neconditionat: pornit sau nu, e acelasi numar de carlige.
+  const companyBilling = useCompanyBilling(companyEnabled);
   // DPD international services don't support cash-on-delivery — EU orders pay online.
   // Klarna is hardcoded to RO/RON (the store currency); Klarna requires the consumer
   // country to match the currency, so it can't serve non-RO orders — exclude it abroad.
-  const availablePaymentMethods = isIntl
-    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && m.type !== "klarna")
+  /*
+   * ⚠ PALL-EX NU INCASEAZA LA LIVRARE, deci rambursul nu are ce cauta pe el.
+   *
+   * API-ul ClientPlus n-are niciun camp de incasare. Lasata la vedere, combinatia
+   * „Livrare paletizata Pall-Ex" + „Plata la livrare" se putea chiar plasa:
+   * comanda iesea `unpaid`, cu taxa de ramburs incasata pentru un serviciu care
+   * nu exista, iar la emitere formularul ii cerea comerciantului sa confirme ca
+   * trimite marfa fara nicio cale de a lua banii. Clientului i se promisese ceva
+   * imposibil.
+   */
+  const faraRamburs = isIntl || courierSelection?.courier === "pallex";
+  const availablePaymentMethods = faraRamburs
+    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && (!isIntl || m.type !== "klarna"))
     : paymentMethods;
   // Fiecare efect de mai jos incepe cu garda de preview, INAINTE de orice
   // ascultator sau scriere pe `document`: pusa mai jos, functia de curatare n-ar
   // mai rula si magazinul real ar ramane cu scroll-ul blocat.
   useEffect(() => {
     if (preview) return;
-    if (isIntl && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
+    if (faraRamburs && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
       setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntl]);
+  }, [isIntl, faraRamburs]);
 
   // Auto-apply a recovery discount code passed via the restore link (?code=).
   //
@@ -245,13 +304,13 @@ export function useCheckoutOrder({
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
       setCodDiscountConfig(data.cod_discount);
+      setCodFeeConfig(data.cod_fee);
       setMinOrderAmount(data.min_order_amount);
       // Check if any courier is enabled in shipping_zones (Settings > Livrare)
       const zones = data.shipping_zones as Record<string, { enabled?: boolean }> | null;
       const anyEnabled = zones && Object.values(zones).some((z) => z?.enabled);
       setHasCouriers(!!anyEnabled);
       setIntlEnabled(data.international_shipping === true);
-      setDpdUseWeight(data.dpd_use_weight === true);
     });
   }, [preview, open, businessId]);
 
@@ -259,7 +318,12 @@ export function useCheckoutOrder({
   useEffect(() => {
     if (preview || !open || items.length === 0) return;
     let cancelled = false;
-    getCheckoutBumps(businessId, items.map((i) => i.productId)).then((b) => { if (!cancelled) setBumps(b ?? []); }).catch(() => {});
+    // Pe esec lista se GOLESTE, nu ramane cea veche: serverul re-evalueaza acum
+    // ofertele la plasarea comenzii, iar un bump bifat dintr-o lista invechita
+    // i-ar opri comanda din cauza unei erori de retea.
+    getCheckoutBumps(businessId, items.map((i) => i.productId))
+      .then((b) => { if (!cancelled) setBumps(b ?? []); })
+      .catch(() => { if (!cancelled) setBumps([]); });
     return () => { cancelled = true; };
   }, [preview, open, businessId, items]);
 
@@ -308,9 +372,45 @@ export function useCheckoutOrder({
       if (!form.county) e.county = "Selectati judetul";
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
+    /*
+     * ⚠ In Bucuresti se cere SECTORUL, nu doar un text de doua litere.
+     *
+     * Fara regula asta, o adresa salvata mai demult („Bucuresti") ar trece:
+     * selectorul de sector s-ar randa gol, dar `form.city` ar pastra vechea
+     * valoare, iar omul ar comanda cu ea. Exact valoarea pe care Sameday n-o
+     * recunoaste — si care facea sa cada noua din zece cotatii bucurestene.
+     */
+    else if (!isIntl && normalizeCountyName(form.county || "").toLowerCase() === "bucuresti"
+             && sectorBucuresti(form.city) === null) {
+      e.city = "Alegeti sectorul";
+    }
     if (form.address.trim().length < 5 && !(courierSelection?.deliveryType === "locker")) e.address = "Minim 5 caractere";
+    // Campurile de firma stau in formular imediat dupa adresa, deci si erorile
+    // lor intra aici: `Object.keys` pastreaza ordinea, iar dupa prima cheie se
+    // muta focusul.
+    Object.assign(e, companyBilling.validateCompany());
     if (hasCouriers && !courierSelection) e.courier = "Selecteaza o metoda de livrare";
-    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) e.courier = "Selecteaza un locker";
+    if (courierSelection?.deliveryType === "locker" && !courierSelection.lockerId) {
+      /* La Posta punctul e un OFICIU POSTAL, nu un locker: mesajul il trimite pe
+         cumparator sa caute un dulap care nu exista. Vezi si CourierSelector. */
+      e.courier = courierSelection.courier === "posta" ? "Alege un oficiu postal" : "Selecteaza un locker";
+    }
+    /*
+     * ⚠ Livrarea la punct GLS cere emailul, chiar daca magazinul l-a facut
+     * optional.
+     *
+     * MyGLS il cere obligatoriu la serviciul PSD, si pe buna dreptate: coletul
+     * ajunge la un ghiseu, iar cumparatorul trebuie sa AFLE ca il poate ridica.
+     * Fara instiintare, coletul sta pana expira termenul si se intoarce la
+     * comerciant, care plateste si dusul, si intorsul.
+     *
+     * Cerut aici, la alegere, nu la emiterea AWB-ului: acolo comanda e deja
+     * plasata, iar comerciantul ar ramane cu un colet pe care nu-l poate expedia
+     * si fara nicio cale de a mai obtine emailul de la client.
+     */
+    if (laPunctGls && !form.email.trim()) {
+      e.email = "Emailul e obligatoriu pentru livrarea la punct GLS";
+    }
     for (const field of customFields) {
       if (field.required) {
         if (field.type === "checkbox" && customValues[field.id] !== "da") {
@@ -350,6 +450,9 @@ export function useCheckoutOrder({
         items: allItems,
         accepted_offer_ids: acceptedBumpOffers.length > 0 ? acceptedBumpOffers.map((o) => o.id) : undefined,
         shipping_cost: shipping,
+        shipping_token: courierSelection?.token,
+        // Vezi `placeCartOrder`: doar pentru masurare, nu pentru decizie.
+        cod_declarat: paymentMethod === "cash_on_delivery" ? total : 0,
         discount_code: appliedDiscount?.code,
         discount_amount: discountAmount,
         customer_name: form.name,
@@ -363,6 +466,10 @@ export function useCheckoutOrder({
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
+        // Datele de pe factura, cand clientul a ales persoana juridica. `undefined`
+        // altfel — comanda ramane exact ce era. NU atinge adresa de livrare de mai
+        // sus: pretul transportului e semnat pe destinatia aceea.
+        billing_company: companyBilling.billingPayload() ?? undefined,
         extras: extras.filter(ex => selectedExtras[ex.id]).map(ex => ({ id: ex.id, label: ex.label, price: ex.price })),
         custom_fields: Object.keys(customValues).length > 0 ? customValues : undefined,
         vat_amount: vatAmount,
@@ -376,11 +483,51 @@ export function useCheckoutOrder({
         locker_address: courierSelection?.lockerAddress,
         locker_city: courierSelection?.lockerCity,
         locker_county: courierSelection?.lockerCounty,
+        /* ⚠ La livrarea in punct, adresa de livrare E a punctului, iar GLS cere
+           obligatoriu codul postal — pe care comenzile romanesti nu-l primesc din
+           checkout. Acolo unde curierul il da, ajunge asa pe comanda. */
+        locker_post_code: courierSelection?.lockerPostCode,
         woot_service_id: courierSelection?.wootServiceId,
         woot_courier_name: courierSelection?.wootCourierName,
         woot_service_name: courierSelection?.wootServiceName,
         colete_service_id: courierSelection?.coleteServiceId,
         colete_service_name: courierSelection?.coleteServiceName,
+        ecolet_service_slug: courierSelection?.ecoletServiceSlug,
+        ecolet_courier_name: courierSelection?.ecoletCourierName,
+        ecolet_service_name: courierSelection?.ecoletServiceName,
+        /* ⚠ Cheia ofertei Innoship are TREI parti; fara toate, reemiterea ar
+           pleca pe alt serviciu si alt pret. Vezi optionKey din CourierSelector. */
+        innoship_courier_id: courierSelection?.innoshipCourierId,
+        innoship_service_id: courierSelection?.innoshipServiceId,
+        innoship_option_id: courierSelection?.innoshipOptionId,
+        innoship_courier_name: courierSelection?.innoshipCourierName,
+        innoship_service_name: courierSelection?.innoshipServiceName,
+        /* ⚠ Cheia ofertei SmartShip are DOUA parti: curierul si CONTRACTUL pe
+           care a fost cotata (`show_byoc` intoarce acelasi curier de doua ori, la
+           preturi diferite). Iar la locker se adauga si reteaua, fiindca easybox
+           si FANbox sunt nomenclatoare separate. */
+        smartship_courier_id: courierSelection?.smartshipCourierId,
+        smartship_courier_name: courierSelection?.smartshipCourierName,
+        smartship_own_contract: courierSelection?.smartshipOwnContract,
+        /* ⚠ Checkout-ul are DOUA formulare scrise separat (pagina si modalul de
+           produs). Reparat doar unul, jumatate din comenzi raman fara alegerea
+           clientului. Vezi memoria despre regula de Bucuresti. */
+        shipo_rate_id: courierSelection?.shipoRateId,
+        shipo_courier_slug: courierSelection?.shipoCourierSlug,
+        shipo_courier_name: courierSelection?.shipoCourierName,
+        fedex_service_type: courierSelection?.fedexServiceType,
+        fedex_service_name: courierSelection?.fedexServiceName,
+        ups_service_code: courierSelection?.upsServiceCode,
+        ups_service_name: courierSelection?.upsServiceName,
+        /* ⚠ Perechea celor trei linii din `OrderModal.tsx` (mini-store). Aceleasi chei,
+           scrise la fel: `DhlAwbModal` le citeste litera cu litera din `shipping_address`
+           ca sa preselecteze produsul cotat clientului.
+           ⚠ `productCode` e OBLIGATORIU la emiterea DHL, nu optional ca serviciul UPS de
+           deasupra: fara el AWB-ul nu se poate face deloc. */
+        dhl_product_code: courierSelection?.dhlProductCode,
+        dhl_product_name: courierSelection?.dhlProductName,
+        dhl_local_product_code: courierSelection?.dhlLocalProductCode,
+        smartship_locker_net: courierSelection?.smartshipLockerNet,
         source: getAttribution() ?? undefined,
       };
       // Cheia de reluare e payload-ul INTREG, metoda de plata inclusa.
@@ -400,7 +547,8 @@ export function useCheckoutOrder({
       if (!orderId) {
         // GA4 funnel: shipping + payment info captured once, right before the order
         // is created (single-page checkout; retries reuse placedRef so no re-fire).
-        const gaItems = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity }));
+        // Acelasi pret ca in `value`: cel de la server, nu cel din localStorage.
+        const gaItems = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity }));
         gtagEvent("add_shipping_info", { currency: "RON", value: grandTotal, shipping_tier: courierSelection?.courierLabel, items: gaItems });
         gtagEvent("add_payment_info", { currency: "RON", value: grandTotal, payment_type: paymentMethod, items: gaItems });
         const result = await placeCartOrder(payload);
@@ -448,12 +596,14 @@ export function useCheckoutOrder({
     bumps,
     cardDiscountAmount,
     codDiscountAmount,
+    codFeeAmount,
+    companyBilling,
+    companyEnabled,
     customFields,
     customValues,
     discountAmount,
     discountError,
     discountInput,
-    dpdUseWeight,
     emailField,
     errors,
     extras,
@@ -491,7 +641,6 @@ export function useCheckoutOrder({
     showDiscountField,
     toggleBump,
     total,
-    totalWeightKg,
     vatAmount,
     vatConfig,
   };

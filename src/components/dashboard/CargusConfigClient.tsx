@@ -16,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
 import { selectCls } from "@/lib/ui";
+import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 type Step = "credentials" | "settings";
 
@@ -46,15 +47,15 @@ export function CargusConfigClient({
   const [repaymentType, setRepaymentType] = useState<"cash" | "bank">(initialConfig?.repayment_type ?? "cash");
   const [declaredValue, setDeclaredValue] = useState(initialConfig?.declared_value_enabled ?? false);
 
-  const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.subscription_key);
+  const isActive = !!(initialConfig?.enabled && initialConfig?.username && secretulEsteSalvat(initialConfig, "subscription_key"));
 
   async function handleLoadAccount() {
     if (!username.trim()) return toast.error("Completeaza username-ul");
-    if (!password.trim()) return toast.error("Completeaza parola");
-    if (!subscriptionKey.trim()) return toast.error("Completeaza Subscription Key");
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completeaza parola");
+    if (!subscriptionKey.trim() && !secretulEsteSalvat(initialConfig, "subscription_key")) return toast.error("Completeaza Subscription Key");
 
     setLoading(true);
-    const result = await loadCargusAccountAction(username.trim(), password.trim(), subscriptionKey.trim());
+    const result = await loadCargusAccountAction(businessId, username.trim(), password.trim(), subscriptionKey.trim());
     setLoading(false);
 
     if ("error" in result) {
@@ -167,7 +168,7 @@ export function CargusConfigClient({
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Parola contului webexpress"
+              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola contului webexpress"}
             />
           </Field>
         </div>
@@ -181,14 +182,14 @@ export function CargusConfigClient({
             type="text"
             value={subscriptionKey}
             onChange={e => setSubscriptionKey(e.target.value.trim())}
-            placeholder="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+            placeholder={secretulEsteSalvat(initialConfig, "subscription_key") ? PLACEHOLDER_SECRET_SALVAT : "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"}
             className="font-mono"
           />
         </Field>
 
         <Button
           onClick={handleLoadAccount}
-          disabled={loading || !username.trim() || !password.trim() || !subscriptionKey.trim()}
+          disabled={loading || !username.trim() || (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) || (!subscriptionKey.trim() && !secretulEsteSalvat(initialConfig, "subscription_key"))}
         >
           {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
           {loading ? "Se conecteaza..." : "Conecteaza si incarca datele"}

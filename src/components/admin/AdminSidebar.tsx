@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Store, Receipt,
   LifeBuoy, BarChart2, Shield, ChevronRight, LogOut, Menu, X,
-  History, Settings2, Globe, FileText, Megaphone,
+  History, Settings2, Globe, FileText, Megaphone, Newspaper,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -21,6 +21,10 @@ const NAV = [
   { href: "/admin/facturi", icon: Receipt, label: "Facturi" },
   { href: "/admin/suport", icon: LifeBuoy, label: "Suport" },
   { href: "/admin/noutati", icon: Megaphone, label: "Noutati" },
+  // O singura intrare pentru tot blogul. Articolele, autorii si categoriile se
+  // impart intre ele din submeniul de sus, ca bara asta sa nu creasca cu trei
+  // randuri pentru o singura parte a panoului.
+  { href: "/admin/blog", icon: Newspaper, label: "Blog" },
   { href: "/admin/statistici", icon: BarChart2, label: "Statistici" },
   { href: "/admin/activitate", icon: History, label: "Activitate" },
   { href: "/admin/logs", icon: FileText, label: "Logs" },

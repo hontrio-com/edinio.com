@@ -6,7 +6,6 @@ import { ArrowRight, ChevronDown, Phone } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   COMPETITORS,
-  INDUSTRY_LINKS,
   RESOURCES,
   SOLUTION_COLUMNS,
   type MenuId,
@@ -68,38 +67,19 @@ export function MobileNav({ open, onClose }: Props) {
           onToggle={setSection}
         >
           {SOLUTION_COLUMNS.flatMap((column) => column.items).map((item) => {
-            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className="flex items-center gap-3 rounded-xl px-2 py-2.5 active:bg-tint-2"
+                className="flex items-center gap-2 border-l-2 border-transparent py-2.5 pl-2.5 pr-2 active:border-primary active:bg-tint-2"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-hairline bg-white">
-                  <Icon className="h-4 w-4 text-ink-3" strokeWidth={1.75} />
-                </span>
                 <span className="text-[14px] font-medium text-ink">{item.label}</span>
                 {item.badge ? <MenuBadge>{item.badge}</MenuBadge> : null}
               </Link>
             );
           })}
 
-          <p className="px-2 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
-            Industrii
-          </p>
-          <div className="grid grid-cols-2 gap-x-2">
-            {INDUSTRY_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={onClose}
-                className="rounded-lg px-2 py-2 text-[13px] text-ink-2 active:bg-tint-2"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
         </Group>
 
         <Group label="De ce noi?" id="de-ce-noi" openSection={section} onToggle={setSection}>
@@ -127,17 +107,13 @@ export function MobileNav({ open, onClose }: Props) {
 
         <Group label="Resurse" id="resurse" openSection={section} onToggle={setSection}>
           {RESOURCES.map((item) => {
-            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className="flex items-center gap-3 rounded-xl px-2 py-2.5 active:bg-tint-2"
+                className="flex items-center gap-2 border-l-2 border-transparent py-2.5 pl-2.5 pr-2 active:border-primary active:bg-tint-2"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-hairline bg-white">
-                  <Icon className="h-4 w-4 text-ink-3" strokeWidth={1.75} />
-                </span>
                 <span className="text-[14px] font-medium text-ink">{item.label}</span>
                 {item.badge ? <MenuBadge>{item.badge}</MenuBadge> : null}
               </Link>

@@ -1,10 +1,7 @@
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import {
   COMPARE_FEATURED,
   COMPETITORS,
-  MENU_INDUSTRY_LINKS,
   RESOURCES,
   RESOURCES_FEATURED,
   SOLUTION_COLUMNS,
@@ -12,7 +9,6 @@ import {
 } from "@/lib/website/nav";
 import {
   ColumnHeading,
-  CompactLink,
   CompareItem,
   FeaturedPanel,
   HelpStrip,
@@ -22,18 +18,22 @@ import {
 /**
  * Cele trei panouri ale mega menu-ului.
  *
- * Toate au ACEEASI latime (1140px) si, centrate, cad exact peste containerul
- * barei de sus: marginea din stanga a panoului se aliniaza cu sigla, cea din
- * dreapta cu butonul. Am incercat intai o latime pe masura fiecarui panou, dar
- * cele mici pluteau in mijlocul ecranului, fara legatura cu intrarea care le
- * deschidea. Latimea comuna arata intentionat, nu intamplator.
+ * Toate PORNESC din acelasi invelis de 1140px, care cade exact peste containerul
+ * barei de sus: marginea din stanga se aliniaza cu sigla, cea din dreapta cu
+ * butonul. „De ce noi" si „Resurse" il umplu; „Solutie eCommerce" e strans la
+ * 880px din 30.08, dupa ce industriile au iesit din el.
+ *
+ * ⚠ Un carton mai ingust NU pluteste in mijlocul ecranului, cum patea prima
+ * incercare de latimi pe masura fiecarui panou. Cauza de atunci era `mx-auto`,
+ * nu latimea: acum centrarea sta pe invelis, iar cartonul se aliniaza la stanga
+ * in el. Amanuntul, la `PanelCard`.
  *
  * Fiecare panou are aceeasi impartire: continut la stanga, un panou de
  * promovare la dreapta.
  *
- * Cat se vede in meniu vs cat exista: in meniu intra doar sase industrii, alese
- * in `MENU_INDUSTRY_LINKS`, ca inaltimea coloanei sa nu depaseasca restul
- * panoului. Toate noua se vad pe `/industrii`.
+ * ⚠ INDUSTRIILE AU IESIT DIN MENIU, si de pe desktop, si de pe telefon. Paginile
+ * raman si raman legate din subsol, care e pe fiecare pagina, deci n-au ramas
+ * orfane pentru Google.
  */
 
 /** Impartirea comuna: continut la stanga, promovare la dreapta. */
@@ -48,23 +48,56 @@ const SPLIT = "grid grid-cols-[minmax(0,1fr)_minmax(0,0.34fr)] gap-x-5 p-5";
 function PanelCard({
   children,
   onNavigate,
+  latime,
 }: {
   children: React.ReactNode;
   onNavigate?: () => void;
+  /** Latimea cartonului, cand nu se vrea cea plina. Vezi nota de mai jos. */
+  latime?: string;
 }) {
   return (
-    /* `pointer-events-auto` reia mouse-ul de la invelis. Vezi nota din SiteHeader. */
-    <div className="pointer-events-auto mx-auto w-full max-w-[1140px] overflow-hidden rounded-[20px] border border-hairline bg-white shadow-[0_24px_64px_-16px_rgba(10,10,10,0.16),0_6px_18px_-8px_rgba(10,10,10,0.07)]">
-      {children}
-      <HelpStrip onNavigate={onNavigate} />
+    /*
+      ═══ UN CARTON MAI INGUST SE ALINIAZA LA STANGA, NU SE CENTREAZA ═══
+
+      Nota de sus spune ca toate panourile au fost facute la fel de late fiindca
+      unul mic „plutea in mijlocul ecranului, fara legatura cu intrarea care il
+      deschidea". Adevarat, dar cauza nu era latimea, era `mx-auto`: un carton
+      centrat pe ecran n-are de unde sa stie unde e intrarea din bara.
+
+      Deci invelisul pastreaza latimea plina si centrarea, iar cartonul sta in
+      coltul lui din stanga. Marginea lui din stanga cade exact peste sigla, la
+      fel ca la panourile late. Ingust sau lat, panoul atarna de bara.
+    */
+    <div className="mx-auto w-full max-w-[1140px]">
+      {/* `pointer-events-auto` reia mouse-ul de la invelis. Vezi nota din SiteHeader. */}
+      <div
+        className={cn(
+          "pointer-events-auto w-full overflow-hidden rounded-[20px] border border-hairline bg-white shadow-[0_24px_64px_-16px_rgba(10,10,10,0.16),0_6px_18px_-8px_rgba(10,10,10,0.07)]",
+          latime,
+        )}
+      >
+        {children}
+        <HelpStrip onNavigate={onNavigate} />
+      </div>
     </div>
   );
 }
 
 export function SolutionPanel({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <PanelCard onNavigate={onNavigate}>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.62fr)_minmax(0,0.95fr)] gap-x-5 p-5">
+    /*
+      ⚠ MAI INGUST DECAT CELELALTE DOUA, dinadins (cerut 30.08).
+
+      Industriile au iesit din panou, deci au ramas doua coloane de cate doua
+      intrari si cardul de promovare. Pe 1140px, atat continut lasa un gol lat
+      cat inca o coloana, iar panoul arata a ceva din care s-a sters ceva — chiar
+      asa si era. Stranse la 880px, aceleasi intrari arata alese, nu ramase.
+
+      Latimea e a PANOULUI, nu a intrarilor: coloanele isi pastreaza masura, doar
+      cartonul nu se mai intinde dupa ele.
+    */
+    <PanelCard onNavigate={onNavigate} latime="max-w-[580px]">
+      <div className="grid grid-cols-2 gap-x-5 px-5 pt-5">
         {SOLUTION_COLUMNS.map((column) => (
           <div key={column.heading}>
             <ColumnHeading>{column.heading}</ColumnHeading>
@@ -75,28 +108,18 @@ export function SolutionPanel({ onNavigate }: { onNavigate?: () => void }) {
             </div>
           </div>
         ))}
+      </div>
 
-        {/* Industrii — lista compacta, fara descrieri, plus trimitere la toate. */}
-        <div className="flex flex-col">
-          <ColumnHeading>Industrii</ColumnHeading>
-          <div className="flex flex-col">
-            {MENU_INDUSTRY_LINKS.map((link) => (
-              <CompactLink key={link.href} link={link} onNavigate={onNavigate} />
-            ))}
-          </div>
-          <div className="mt-2 border-t border-hairline pt-2">
-            <Link
-              href="/industrii"
-              onClick={onNavigate}
-              className="group flex items-center gap-1.5 rounded-lg px-3 py-[7px] text-[13px] font-semibold leading-5 text-ink transition-colors duration-150 hover:bg-tint-2"
-            >
-              Vezi toate industriile
-              <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-            </Link>
-          </div>
-        </div>
+      {/*
+        Integrarile stau DEDESUBT, ca banda pe toata latimea (cerut 30.08).
 
-        <FeaturedPanel featured={SOLUTION_FEATURED} onNavigate={onNavigate} />
+        Cat au stat in dreapta, latimea lor minima tinea panoul deschis la peste
+        800px oricat de putin continut aveau coloanele. Coborate, ele se intind
+        dupa panou in loc sa-l intinda pe el, iar cele doua coloane pot ajunge la
+        580px, adica exact cat le trebuie.
+      */}
+      <div className="px-5 pb-5 pt-4">
+        <FeaturedPanel featured={SOLUTION_FEATURED} onNavigate={onNavigate} asezare="banda" />
       </div>
     </PanelCard>
   );

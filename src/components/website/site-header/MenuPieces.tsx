@@ -5,13 +5,14 @@ import {
   CASETA_MICA,
   CasetaSigla,
 } from "../sections/integrations/CasetaSigla";
-import type { NavCompare, NavFeatured, NavItem, NavLink } from "@/lib/website/nav";
+import type { NavCompare, NavFeatured, NavItem } from "@/lib/website/nav";
 
 /**
  * Cărămizile mega menu-ului.
  *
- * Verdele apare doar în două locuri: eticheta mică de tip „Inclus" și iconița la
- * hover. Titlurile rămân negru integral (`text-ink`).
+ * Verdele apare doar în două locuri: eticheta mică de tip „Inclus" și linia de
+ * accent care apare la hover, în stânga unei intrări. Titlurile rămân negru
+ * integral (`text-ink`). Iconițele au plecat cu totul pe 30.08; vezi `MegaItem`.
  *
  * Supratitlurile panourilor de promovare au avut un punct verde în față. E scos:
  * era un ornament fără rost, pus din reflex, nu pentru că spunea ceva.
@@ -39,7 +40,7 @@ export function ColumnHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Rând cu iconiță în cutie, titlu și descriere. Se colorează la hover. */
+/** Rând cu titlu și descriere. La hover capătă o linie verde în stânga. */
 export function MegaItem({
   item,
   onNavigate,
@@ -47,27 +48,44 @@ export function MegaItem({
   item: NavItem;
   onNavigate?: () => void;
 }) {
-  const Icon = item.icon;
   return (
+    /*
+      ═══ FĂRĂ ICONIȚĂ, CU O LINIE DE ACCENT LA STÂNGA ═══
+
+      Aici era un pătrat de 36px cu bordură, umbră de 1px și o iconiță Lucide,
+      repetat la fiecare intrare. Clientul l-a numit „vibe coded" (30.08), și
+      avea dreptate: tiparul are nume în literatura de specialitate, „the
+      icon-in-a-pale-chip", cu observația care lămurește totul — una e în regulă,
+      șapte sunt o semnătură. Aceeași formă era și în meniul de telefon.
+
+      Ce ține locul: mărimea, greutatea și spațiul. Titlul de coloană rămâne
+      singurul semn structural. E drumul pe care merge și Vercel, ales dintre
+      șase variante puse una lângă alta.
+
+      ⚠ ACCENTUL A RĂMAS, DAR CA GEST, NU CA OBIECT. Linia verde de 2px apare
+      doar la hover. Un obiect colorat care stă permanent lângă fiecare rând e
+      exact ce s-a scos; o linie care apare când treci cu mausul spune același
+      lucru și nu ocupă nimic cât timp nu e nevoie de ea.
+
+      ⚠ BORDURA E MEREU ACOLO, transparentă. Adăugată abia la hover, ar fi împins
+      textul cu 2px la fiecare trecere a mausului.
+
+      ⚠ `pl-2.5` PESTE bordura de 2px face fix 12px, cât `px-3` al titlului de
+      coloană. Fără socoteala asta, textul intrărilor ar sta cu 2px mai la dreapta
+      decât titlul de deasupra lui — genul de nepotrivire care nu se numește, dar
+      se simte.
+    */
     <Link
       href={item.href}
       onClick={onNavigate}
-      className="group flex gap-3 rounded-xl p-3 transition-colors duration-150 hover:bg-tint-2"
+      className="block border-l-2 border-transparent py-2.5 pl-2.5 pr-3 transition-[background-color,border-color] duration-150 hover:border-primary hover:bg-tint-2"
     >
-      <span className="mt-px flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-hairline bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)] transition-colors duration-150 group-hover:border-primary/30">
-        <Icon
-          className="h-[17px] w-[17px] text-ink-2 transition-colors duration-150 group-hover:text-primary"
-          strokeWidth={1.75}
-        />
+      <span className="flex items-center gap-2">
+        <span className="text-[14px] font-semibold leading-5 text-ink">{item.label}</span>
+        {item.badge ? <MenuBadge>{item.badge}</MenuBadge> : null}
       </span>
-      <span className="min-w-0">
-        <span className="flex items-center gap-2">
-          <span className="text-[14px] font-semibold leading-5 text-ink">{item.label}</span>
-          {item.badge ? <MenuBadge>{item.badge}</MenuBadge> : null}
-        </span>
-        <span className="mt-0.5 block text-[12.5px] leading-[1.55] text-ink-2">
-          {item.description}
-        </span>
+      <span className="mt-0.5 block text-[12.5px] leading-[1.55] text-ink-2">
+        {item.description}
       </span>
     </Link>
   );
@@ -97,25 +115,6 @@ export function CompareItem({
       <span className="mt-0.5 block text-[12.5px] leading-[1.55] text-ink-2">
         {item.description}
       </span>
-    </Link>
-  );
-}
-
-/** Link compact, fără descriere. Folosit pentru coloana de industrii. */
-export function CompactLink({
-  link,
-  onNavigate,
-}: {
-  link: NavLink;
-  onNavigate?: () => void;
-}) {
-  return (
-    <Link
-      href={link.href}
-      onClick={onNavigate}
-      className="rounded-lg px-3 py-[7px] text-[13px] leading-5 text-ink-2 transition-colors duration-150 hover:bg-tint-2 hover:text-ink"
-    >
-      {link.label}
     </Link>
   );
 }
@@ -153,16 +152,33 @@ export function HelpStrip({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Panoul de promovare din dreapta: fundal calm, siglele stinse, un link. */
+/**
+ * Panoul de promovare din dreapta unui mega menu, sau banda de sub el.
+ *
+ * ⚠ DOUĂ AȘEZĂRI, ACELEAȘI PIESE. „coloana" e cea dintâi: card înalt, în dreapta
+ * conținutului, cu siglele trei pe rând. „banda" a venit pe 30.08, cerută pentru
+ * panoul de soluție: cardul coboară sub coloane, pe toată lățimea, iar siglele
+ * intră toate șase pe un singur rând.
+ *
+ * Motivul e că panoul s-a strâns. Cu cardul în dreapta, lățimea lui minimă ținea
+ * panoul la peste 800px oricât de puțin conținut avea. Coborât dedesubt, panoul
+ * poate ajunge la 580, iar banda se întinde pe toată lățimea în loc să o ceară.
+ *
+ * ⚠ Casetele siglelor rămân 56×56 în amândouă. Sunt socotite pe SUPRAFAȚĂ, nu pe
+ * înălțime; micșorate pentru bandă, sistemul optic ar fi trebuit refăcut.
+ */
 export function FeaturedPanel({
   featured,
   onNavigate,
   className,
+  asezare = "coloana",
 }: {
   featured: NavFeatured;
   onNavigate?: () => void;
   className?: string;
+  asezare?: "coloana" | "banda";
 }) {
+  const banda = asezare === "banda";
   return (
     <Link
       href={featured.href}
@@ -176,10 +192,17 @@ export function FeaturedPanel({
         {featured.eyebrow}
       </span>
 
-      <span className="mt-3 block text-[15px] font-semibold leading-[1.35] text-ink">
+      <span
+        className={cn(
+          "mt-3 block text-[15px] font-semibold leading-[1.35] text-ink",
+          /* In banda, titlul nu se intinde pe toata latimea: un rand de 540px
+             se citeste greu, iar textul lung ar impinge siglele pe alt rand. */
+          banda && "max-w-[46ch]",
+        )}
+      >
         {featured.title}
       </span>
-      <span className="mt-1.5 block text-[12.5px] leading-[1.55] text-ink-2">
+      <span className={cn("mt-1.5 block text-[12.5px] leading-[1.55] text-ink-2", banda && "max-w-[62ch]")}>
         {featured.description}
       </span>
 
@@ -210,7 +233,12 @@ export function FeaturedPanel({
         împarte prisosul între ele.
       */}
       {featured.logos ? (
-        <span className="mt-4 grid grid-cols-3 justify-items-center gap-y-2.5">
+        <span
+          className={cn(
+            "mt-4 grid justify-items-center gap-y-2.5",
+            banda ? "grid-cols-6 gap-x-2" : "grid-cols-3",
+          )}
+        >
           {featured.logos.map((cheie) => (
             <CasetaSigla
               key={cheie}

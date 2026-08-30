@@ -1,21 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import type { LogoKey } from "./logos";
 import {
-  ArrowRightLeft,
   Car,
-  CircleHelp,
   Cpu,
-  Gauge,
-  LifeBuoy,
-  Newspaper,
   PawPrint,
   Pill,
-  Plug,
-  ShieldCheck,
   Shirt,
   Sofa,
   Sparkles,
-  Store,
 } from "lucide-react";
 
 /**
@@ -31,11 +23,20 @@ import {
  * Textele sunt cu diacritice: e text de fatada, iar lipsa lor se vede.
  */
 
+/**
+ * O intrare dintr-un panou al mega menu-ului.
+ *
+ * ⚠ N-ARE ICONITA, din 30.08. Avea `icon: LucideIcon`, desenata intr-un patrat
+ * de 36px la fiecare rand. Clientul a numit tiparul „vibe coded" si avea
+ * dreptate: e sablonul pe care il scoate orice unealta. Amanuntul, in `MegaItem`.
+ *
+ * Campul n-a fost lasat „pentru mai tarziu": nefolosit, ar fi tinut in pachetul
+ * barei de sus sase iconite Lucide, pe fiecare pagina a site-ului, degeaba.
+ */
 export interface NavItem {
   label: string;
   href: string;
   description: string;
-  icon: LucideIcon;
   /** Eticheta mica de langa titlu, ex. "Gratuit". Verde, folosita rar. */
   badge?: string;
 }
@@ -118,13 +119,11 @@ export const SOLUTION_COLUMNS: NavColumn[] = [
         */
         label: "Magazin online",
         href: "/",
-        icon: Store,
         description: "Magazin complet, pregătit pentru vânzare din prima zi.",
       },
       {
         label: "Integrări",
         href: "/integrari",
-        icon: Plug,
         description: "Facturare, marketing, curieri și plăți într-un singur loc.",
       },
     ],
@@ -135,13 +134,11 @@ export const SOLUTION_COLUMNS: NavColumn[] = [
       {
         label: "Optimizare",
         href: "/optimizare",
-        icon: Gauge,
         description: "Pagini rapide și optimizate pentru Google.",
       },
       {
         label: "Mentenanță gratuită",
         href: "/mentenanta-gratuita",
-        icon: ShieldCheck,
         description: "Mentenanță și asistență fără costuri suplimentare.",
         badge: "Inclus",
       },
@@ -231,31 +228,20 @@ export const INDUSTRY_LINKS: NavLink[] = INDUSTRIES.map((i) => ({
   href: `/industrii/${i.slug}`,
 }));
 
-/**
- * Industriile care intra in mega menu, in ordinea ceruta de client.
+/*
+ * ⚠ INDUSTRIILE AU IESIT DIN MEGA MENU pe 30.08, cerut de client.
  *
- * Lista e scrisa explicit, nu taiata din `INDUSTRIES` cu un `slice`: asa, cine
- * reordoneaza lista mare maine nu schimba din greseala ce se vede in meniu.
+ * Aici era `MENU_INDUSTRY_LINKS`, lista scurta care umplea a treia coloana a
+ * panoului. A plecat odata cu coloana, din `MegaPanels` si din `MobileNav`.
  *
- * ⚠ PATRU, nu sase. Erau sase - cate incap fara ca aceasta coloana sa fie mai
- * inalta decat restul panoului - dar doua dintre ele, „Sport si fitness" si
- * „Bijuterii", au fost scoase cu totul la cererea clientului (13.08). Coloana e
- * acum mai scurta. Daca se vrea inapoi la sase, se aleg doua dintre cele ramase
- * pe /industrii: cosmetice, petshop, suplimente.
+ * ⚠ PAGINILE RAMAN, SI RAMAN LEGATE. Subsolul are o rubrica „Industrii" cu
+ * patru intrari, iar subsolul e pe fiecare pagina a site-ului. Deci scoaterea
+ * din meniu nu le face orfane si nu le scoate din indexul Google. Verificat
+ * inainte de taiere, tocmai fiindca asta ar fi fost urmarea nevazuta.
  *
- * Un slug gresit opreste build-ul, in loc sa scoata tacut o intrare din meniu.
+ * `INDUSTRIES` si `INDUSTRY_LINKS` raman: le folosesc paginile `/industrii`,
+ * `/industrii/[industrie]` si subsolul.
  */
-const MENU_INDUSTRY_SLUGS = ["haine", "electronice", "piese-auto", "mobila"];
-
-export const MENU_INDUSTRY_LINKS: NavLink[] = MENU_INDUSTRY_SLUGS.map((slug) => {
-  const industry = INDUSTRIES.find((i) => i.slug === slug);
-  if (!industry) {
-    throw new Error(
-      `MENU_INDUSTRY_SLUGS: nu exista industria "${slug}" in INDUSTRIES.`,
-    );
-  }
-  return { label: industry.label, href: `/industrii/${industry.slug}` };
-});
 
 export const SOLUTION_FEATURED: NavFeatured = {
   eyebrow: "Totul inclus",
@@ -359,7 +345,6 @@ export const RESOURCES: NavItem[] = [
   {
     label: "Centru de ajutor",
     href: "/ajutor",
-    icon: LifeBuoy,
     description: "Ghiduri pas cu pas pentru fiecare funcție a platformei.",
   },
   {
@@ -370,19 +355,16 @@ export const RESOURCES: NavItem[] = [
     */
     label: "Blog",
     href: "/blog",
-    icon: Newspaper,
     description: "Ghiduri despre vânzarea online și noutățile platformei.",
   },
   {
     label: "Întrebări frecvente",
     href: "/intrebari-frecvente",
-    icon: CircleHelp,
     description: "Răspunsuri scurte la ce ne întrebați cel mai des.",
   },
   {
     label: "Migrare magazin",
     href: "/migrare",
-    icon: ArrowRightLeft,
     description: "Mutăm produsele și comenzile din platforma actuală.",
     badge: "Gratuit",
   },
@@ -430,7 +412,6 @@ export const MENU_PREFIXES: Record<MenuId, string[]> = {
     "/integrari",
     "/optimizare",
     "/mentenanta-gratuita",
-    "/industrii",
   ],
   "de-ce-noi": ["/vs"],
   resurse: ["/ajutor", "/blog", "/intrebari-frecvente", "/migrare"],

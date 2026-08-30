@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi, requireBlogEditorApi } from "@/lib/admin-guard";
 import { indemnDeAratat } from "@/lib/blog/indemn";
+import { adresaDeImagine } from "@/lib/blog/imagini";
 import {
   adreseBune,
   canonicaBuna,
@@ -655,6 +656,18 @@ function preaLung(intrare: ArticolInput): string | null {
   if (etichete.length > 12) return "Sunt prea multe etichete. Maximul e 12.";
   if (etichete.some((e) => (e ?? "").trim().length > LIMITE.eticheta)) {
     return `O etichetă e mai lungă de ${LIMITE.eticheta} de caractere.`;
+  }
+
+  /*
+    Gazdele copertei și ale imaginii de partajare. Vezi `blog/imagini.ts`, unde
+    stă și motivul pentru care regula e mai strictă decât cea din `r2-url.ts`.
+  */
+  for (const [camp, valoare] of [
+    ["Adresa copertei", intrare.cover_url],
+    ["Imaginea de partajare", intrare.og_image_url],
+  ] as const) {
+    const r = adresaDeImagine(valoare, camp);
+    if (!r.ok) return r.motiv;
   }
 
   return null;

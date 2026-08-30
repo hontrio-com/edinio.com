@@ -43,9 +43,21 @@ export async function CorpArticol({ a }: { a: ArticolIntreg }) {
   const data = a.published_at
     ? new Date(a.published_at).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" })
     : null;
+  /*
+    ⚠ `content_updated_at`, NU `updated_at`.
+
+    Al doilea se mută la orice atingere administrativă. Deci un articol pe care
+    nimeni nu-l atinsese începea să scrie „Actualizat 30 august" pentru că altul
+    fusese pus în vitrină, iar triggerul îl coborâse pe ăsta.
+
+    Pragul de 24 de ore rămâne: între publicare și primele corecturi trec de
+    obicei câteva ore, iar „Actualizat" în aceeași zi cu publicarea nu spune
+    nimic nimănui.
+  */
   const actualizat =
-    a.published_at && new Date(a.updated_at).getTime() - new Date(a.published_at).getTime() > 86_400_000
-      ? new Date(a.updated_at).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" })
+    a.published_at &&
+    new Date(a.content_updated_at).getTime() - new Date(a.published_at).getTime() > 86_400_000
+      ? new Date(a.content_updated_at).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" })
       : null;
 
   return (

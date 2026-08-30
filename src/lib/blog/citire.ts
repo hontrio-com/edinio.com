@@ -55,19 +55,26 @@ async function db(): Promise<SupabaseClient> {
 /** Articolul din listă: fără corpul HTML, care nu se citește acolo. */
 export type ArticolDeLista = Pick<
   ArticolBlog,
-  | "id" | "slug" | "title" | "excerpt" | "cover_url" | "cover_alt" | "published_at" | "updated_at"
-  | "reading_minutes" | "is_featured" | "is_pinned" | "noindex"
+  | "id" | "slug" | "title" | "excerpt" | "cover_url" | "cover_alt" | "published_at"
+  | "content_updated_at" | "reading_minutes" | "is_featured" | "is_pinned" | "noindex"
 > & {
   autor: Pick<AutorBlog, "name" | "slug" | "avatar_url"> | null;
   categorie: Pick<CategorieBlog, "name" | "slug"> | null;
 };
 
 const CAMPURI_LISTA =
-  /* ⚠ `updated_at` e aici pentru `lastModified` din sitemap. A putut fi adăugat
-     abia după ce citirile au plecat de pe rândul articolului: cât timp fiecare
-     VIZITĂ îl muta, un sitemap construit pe el ar fi spus lui Google că
-     articolele populare se schimbă în fiecare zi. Vezi `blog_post_stats`. */
-  "id, slug, title, excerpt, cover_url, cover_alt, published_at, updated_at, reading_minutes, is_featured, is_pinned, noindex," +
+  /*
+    ⚠ `content_updated_at`, NU `updated_at`.
+
+    Al doilea se mută la ORICE atingere administrativă: ridici alt articol în
+    vitrină și triggerul îl coboară pe ăsta, îl fixezi, îl ascunzi de Google, îl
+    arhivezi. Iar din el ieșeau trei lucruri care ajung la Google — eticheta
+    „Actualizat", `dateModified` și `lastModified` din sitemap.
+
+    Deci un articol pe care nimeni nu-l atinsese începea să spună „Actualizat
+    azi" fiindcă altul fusese pus în vitrină. Vezi `blog_continut_atins()`.
+  */
+  "id, slug, title, excerpt, cover_url, cover_alt, published_at, content_updated_at, reading_minutes, is_featured, is_pinned, noindex," +
   " blog_authors(name, slug, avatar_url), blog_categories(name, slug)";
 
 /**

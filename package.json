@@ -16,6 +16,9 @@
     "tipuri-db": "node scripts/verifica-tipuri-db.mjs",
     "compare": "node scripts/tests/compare-storefront.mjs"
   },
+  "engines": {
+    "node": ">=24 <25"
+  },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1057.0",
     "@aws-sdk/s3-request-presigner": "^3.1072.0",

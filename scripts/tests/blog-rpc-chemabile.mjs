@@ -88,22 +88,52 @@ const CHEMARI = [
 
   /* Nu scrie: iese pe prima linie cand vreun slug e null. */
   { fn: "blog_muta_taxonomia", args: { p_fel: "categorie", p_slug_vechi: null, p_slug_nou: null }, publica: false },
+
+  /* Nu scriu: id inexistent, deci ies fara sa atinga nimic. */
+  { fn: "blog_sterge_articol", args: { p_id: "00000000-0000-0000-0000-000000000000" }, publica: false },
+  { fn: "blog_sterge_taxonomia", args: { p_fel: "categorie", p_id: "00000000-0000-0000-0000-000000000000" }, publica: false },
+  {
+    fn: "blog_actualizeaza_taxonomia",
+    args: { p_fel: "categorie", p_id: "00000000-0000-0000-0000-000000000000", p_rand: {} },
+    publica: false,
+  },
+
+  /*
+    ⚠ ASTA CHIAR SCRIE. Un `p_rand` gol cade pe NOT NULL (`slug`) inainte sa se
+    scrie ceva — dar rationamentul asta e tot al meu, iar unul de-al meu a fost
+    deja gresit o data. Plasa care chiar apara e numaratoarea de randuri de la
+    final.
+  */
+  { fn: "blog_creeaza_articol", args: { p_rand: {}, p_etichete: null }, publica: false },
+
+  /* Nu scrie: amprenta si adresa care nu pot exista. */
+  {
+    fn: "blog_anuleaza_confirmare",
+    args: { p_email: "___proba___@nicaieri.invalid", p_token_hash: "___proba___" },
+    publica: false,
+  },
+
   {
     fn: "blog_salveaza_articol",
     args: {
       p_id: "00000000-0000-0000-0000-000000000000",
-      p_rand: {}, p_etichete: null, p_slug_vechi: null, p_lasa_redirect: false,
-      p_salvat_de: null, p_titlu_vechi: null, p_html_vechi: null, p_versiuni: 50,
+      p_rand: {},
+      p_etichete: null,
+      p_salvat_de: null,
+      p_versiuni: 50,
+      p_versiune_asteptata: null,
+      p_creeaza_versiune: false,
     },
     /*
-      ⚠ Aceasta ARUNCA dinadins, pe un id care nu exista: `no_data_found`.
-      E singurul fel de a-i vedea semnatura fara sa scriem nimic — iar chiar
-      exceptia aceea dovedeste ca PostgREST a gasit functia si i-a potrivit
-      TOATE argumentele pe nume.
+      ⚠ Aceasta ARUNCA dinadins, pe un id care nu exista: `no_data_found`. E
+      singurul fel de a-i vedea semnatura fara sa scriem nimic — iar chiar
+      exceptia aceea dovedeste ca PostgREST a gasit functia si i-a potrivit TOATE
+      argumentele pe nume.
     */
     asteptat: "PGRST",
     publica: false,
   },
+
   { fn: "redactorii_blogului", args: {}, publica: false },
   { fn: "cont_dupa_email", args: { p_email: "___proba___@nicaieri.invalid" }, publica: false },
 ];

@@ -4,7 +4,8 @@ import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
 import { CautareBlog } from "@/components/website/blog/CautareBlog";
-import { Paginare, paginaCeruta } from "@/components/website/blog/Paginare";
+import { notFound } from "next/navigation";
+import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
 import { cautaArticole } from "@/lib/blog/citire";
 import { ACASA } from "@/lib/website/breadcrumbs";
 
@@ -42,6 +43,20 @@ export default async function CautareBlogPage({ searchParams }: Props) {
   const { articole, total, pagini } = cautat
     ? await cautaArticole(cautat, cerut)
     : { articole: [], total: 0, pagini: 1 };
+
+  /*
+    ⚠ ȘI AICI, DEȘI PAGINA E `noindex`.
+
+    Celelalte liste (`/blog`, rubrică, autor, etichetă) dau 404 pe o pagină care
+    nu există; asta rămăsese pe dinafară. `?q=seo&p=99999` răspundea 200 cu o
+    listă goală și cu paginarea desenată dedesubt — adică arăta ca o pagină
+    adevărată care s-a golit, nu ca o adresă greșită.
+
+    Miza SEO e mică, fiindcă e `noindex`. Miza e că omul care ajunge acolo dintr-o
+    legătură veche nu află ce s-a întâmplat, iar ecranul se poartă altfel decât
+    toate celelalte liste ale blogului.
+  */
+  if (cautat && paginaNuExista(cerut, total, pagini)) notFound();
 
   const preaScurt = cautat.length > 0 && cautat.length < 2;
 

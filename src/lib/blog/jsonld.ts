@@ -28,7 +28,7 @@ export function articolJsonLd(a: ArticolIntreg): object {
     ⚠ `dateModified` E ADEVĂRAT, nu cosmetic. Motoarele îl folosesc ca semn de
     prospețime, iar unul umflat („actualizat azi" pe un text neatins de un an)
     e o minciună pe care o pot verifica singure comparând conținutul. Vine din
-    `updated_at`, care se schimbă doar la o salvare adevărată.
+    `content_updated_at`, care se mută doar când se schimbă ce citește omul.
 
     ⚠ ASTA A FOST FALS PÂNĂ PE 30.08.2026, ȘI E UȘOR SĂ REDEVINĂ. Citirile
     stăteau ca o coloană pe rândul articolului, iar triggerul `blog_posts_touch`
@@ -38,6 +38,13 @@ export function articolJsonLd(a: ArticolIntreg): object {
 
     Deci: nimic care se scrie la CITIRE nu are voie înapoi pe `blog_posts`.
     Nu e o preferință de așezare, e ce ține propoziția de mai sus adevărată.
+
+    ⚠ ȘI NU MAI VINE DIN `updated_at`, TOT DIN ACELAȘI MOTIV. Acela se mută la
+    orice atingere administrativă — o bifă de vitrină, o fixare, o arhivare — și
+    niciuna nu schimbă un cuvânt din ce citește omul. Acum vine din
+    `content_updated_at`, care se mută doar când se schimbă textul, titlul,
+    coperta, autorul, rubrica, îndemnul, întrebările sau SEO. Lista e enumerată pe
+    nume în `blog_continut_atins()`.
   */
   const articol: Record<string, unknown> = {
     "@type": "BlogPosting",
@@ -55,7 +62,7 @@ export function articolJsonLd(a: ArticolIntreg): object {
     url: adresa,
     mainEntityOfPage: { "@type": "WebPage", "@id": adresa },
     datePublished: a.published_at,
-    dateModified: a.updated_at,
+    dateModified: a.content_updated_at,
     inLanguage: "ro-RO",
     isPartOf: { "@id": ID_SITE },
     publisher: { "@id": ID_ORGANIZATIE },

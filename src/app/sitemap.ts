@@ -100,12 +100,15 @@ export function paginiDeSite(): string[] {
 }
 
 /**
- * Când s-a schimbat ultima oară articolul.
+ * Când s-a schimbat ultima oară CONȚINUTUL articolului.
  *
- * `updated_at` e mai nou decât `published_at` doar dacă cineva chiar l-a
- * salvat după publicare. Programat în viitor și încă neatins, `updated_at` poate
- * fi mai VECHI decât `published_at` — de aceea se ia cea mai mare dintre ele, nu
- * pur și simplu `updated_at`.
+ * ⚠ VINE DIN `content_updated_at`, NU DIN `updated_at`. Al doilea se mută la
+ * orice atingere administrativă — pui alt articol în vitrină și triggerul îl
+ * coboară pe ăsta, îl fixezi, îl arhivezi. Un sitemap construit pe el spunea lui
+ * Google că articolul s-a schimbat, când de fapt cineva apăsase o bifă.
+ *
+ * Se ia cea mai MARE dintre cele două date: un articol programat în viitor și
+ * încă neatins poate avea data conținutului mai veche decât cea de publicare.
  */
 function candSaSchimbat(actualizat?: string | null, publicat?: string | null): Date {
   const d = [actualizat, publicat]
@@ -116,10 +119,12 @@ function candSaSchimbat(actualizat?: string | null, publicat?: string | null): D
 }
 
 /** Cel mai proaspăt articol dintr-un teanc, pentru paginile de rubrică și autor. */
-function ceaMaiProaspata(articole: { updated_at?: string | null; published_at?: string | null }[]): Date {
+function ceaMaiProaspata(
+  articole: { content_updated_at?: string | null; published_at?: string | null }[],
+): Date {
   if (articole.length === 0) return new Date();
   return new Date(
-    Math.max(...articole.map((a) => candSaSchimbat(a.updated_at, a.published_at).getTime())),
+    Math.max(...articole.map((a) => candSaSchimbat(a.content_updated_at, a.published_at).getTime())),
   );
 }
 
@@ -355,7 +360,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     */
     ...articoleBlog.map((a) => ({
       url: `${PLATFORM_ORIGIN}/blog/${a.slug}`,
-      lastModified: candSaSchimbat(a.updated_at, a.published_at),
+      lastModified: candSaSchimbat(a.content_updated_at, a.published_at),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),

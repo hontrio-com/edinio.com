@@ -10,6 +10,7 @@ import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { categoriiVizibile } from "@/lib/categories/vizibilitate";
+import { articolePublicate } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
 import {
@@ -209,6 +210,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   // ── Platform (www.edinio.com): marketing + stores WITHOUT a custom domain ──
+
+  /* Plafonul e generos dinadins: la 2000 de articole sitemapul tot încape sub
+     limita de 50.000 a Google, iar taierea de la sfârșitul funcției rămâne
+     singurul loc unde se pierde ceva — și acolo se pierde ce e mai puțin
+     important, fiindcă ordinea de prioritate e static → magazine → produse. */
+  /*
+    ⚠ ARTICOLELE CU `noindex` NU INTRĂ ÎN SITEMAP.
+
+    Un sitemap e o rugăminte: „indexează asta". Pagina cu `noindex` spune exact
+    pe dos. Trimise amândouă, Google primește două instrucțiuni care se bat cap
+    în cap, cheltuie o vizită ca să afle că n-avea ce căuta acolo, și numără
+    contradicția la sănătatea site-ului.
+
+    Găsit chiar la proba de punere în funcțiune (30.08.2026): articolul de test
+    era `noindex` și apărea totuși în sitemap.
+  */
+  const articoleBlog = (await articolePublicate(2000)).filter((a) => !a.noindex);
+  const categoriiCuArticole = [
+    ...new Set(articoleBlog.map((a) => a.categorie?.slug).filter((s): s is string => !!s)),
+  ];
+
   const staticPages: MetadataRoute.Sitemap = [
     { url: PLATFORM_ORIGIN, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
     { url: `${PLATFORM_ORIGIN}/preturi`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
@@ -267,6 +289,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${PLATFORM_ORIGIN}${adresaGhid(g.categorie.slug, g.slug)}`,
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
+      priority: 0.5,
+    })),
+
+    /*
+      Blogul: fiecare articol publicat, și categoriile care au articole.
+
+      ⚠ SE CITESC PRIN `articolePublicate`, care merge pe clientul obișnuit, NU
+      pe cel de serviciu folosit mai jos pentru magazine. Regula din baza de date
+      lasă să treacă doar `published` cu data trecută, deci o ciornă sau un
+      articol programat nu POT ajunge aici. Cu cheia de serviciu ar fi ajuns la
+      un filtru scris de mână, iar un filtru uitat ar fi trimis Google către
+      pagini care dau 404 — genul de greșeală care se plătește în încredere.
+
+      ⚠ `lastModified` E DATA ADEVĂRATĂ a articolului, nu `new Date()` ca la
+      paginile de deasupra. Acolo e o aproximare fără miză; aici e un semnal:
+      un sitemap care spune că TOATE articolele s-au schimbat azi nu mai spune
+      nimic despre niciunul, iar crawlerul învață să-l ignore.
+    */
+    ...articoleBlog.map((a) => ({
+      url: `${PLATFORM_ORIGIN}/blog/${a.slug}`,
+      lastModified: a.published_at ? new Date(a.published_at) : new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
+    ...categoriiCuArticole.map((slug) => ({
+      url: `${PLATFORM_ORIGIN}/blog/categorie/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: "weekly" as const,
       priority: 0.5,
     })),
   ];

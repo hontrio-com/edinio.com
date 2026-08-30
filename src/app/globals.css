@@ -1905,3 +1905,54 @@
  * paginilor proprii si anunturile.
  */
 .policy-content pre { white-space: pre-wrap; overflow-x: auto; }
+
+/* ─── Textul unui articol de blog ─────────────────────────────────────────────
+
+   Pornește de la `.policy-content`, care dă structura, și schimbă MĂSURA. O
+   pagină de politici se răsfoiește după o clauză; un articol se citește de la
+   cap la coadă, iar la lectură lungă mărimea și aerul dintre rânduri sunt tot
+   ce ține ochiul pe text.
+
+   ⚠ `scroll-margin-top` E OBLIGATORIU PE TITLURI, nu cosmetic.
+
+   Bara de sus e lipită (`sticky`) și acoperă 88px. Fără marginea asta, un salt
+   din cuprins aduce titlul EXACT sub bară: cititorul apasă, pagina se mișcă, și
+   ajunge la un paragraf din mijloc fără să vadă titlul la care voia să meargă.
+   Pare că legătura e stricată, deși a funcționat perfect. Auditul de design din
+   23.08 a găsit fix defectul ăsta în altă parte a site-ului. */
+.blog-articol { font-size: 17px; }
+.blog-articol p { margin: 1.1em 0; line-height: 1.75; }
+.blog-articol h2 {
+  font-size: 1.45rem;
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 2em 0 0.6em;
+  scroll-margin-top: 88px;
+}
+.blog-articol h3 {
+  font-size: 1.15rem;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 1.6em 0 0.4em;
+  scroll-margin-top: 88px;
+}
+.blog-articol ul, .blog-articol ol { margin: 1.1em 0; }
+.blog-articol li + li { margin-top: 0.4em; }
+.blog-articol li { line-height: 1.7; }
+.blog-articol blockquote { margin: 1.5em 0; font-size: 1.05em; }
+/* Pozele din corpul articolului: lățime plină, colțuri ca ale celorlalte
+   cartonașe. `height: auto` ține raportul când lățimea e limitată de coloană. */
+.blog-articol img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  margin: 1.6em 0;
+}
+.blog-articol figure { margin: 1.6em 0; }
+.blog-articol figcaption {
+  margin-top: 0.6em;
+  font-size: 0.82em;
+  color: var(--muted-foreground);
+  text-align: center;
+}

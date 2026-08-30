@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-guard";
 import {
   adreseBune,
+  canonicaBuna,
   minuteDeCitit,
   seVede,
   slugDin,
@@ -442,7 +443,14 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
     content_html: html,
     cover_url: intrare.cover_url?.trim() || null,
     cover_alt: intrare.cover_alt?.trim() || null,
-    og_image_url: intrare.og_image_url?.trim() || null,
+    /* ⚠ NU SE ATINGE CAND EDITORUL NU-L TRIMITE. Campul n-are inca o casuta in
+       editor, deci `intrare.og_image_url` e mereu `undefined`, iar scrierea
+       neconditionata il punea pe `null` la FIECARE salvare. O valoare pusa
+       vreodata din baza sau dintr-un import ar fi fost stearsa de prima salvare
+       a unui om care nici nu stia ca exista campul. */
+    ...(intrare.og_image_url !== undefined
+      ? { og_image_url: intrare.og_image_url?.trim() || null }
+      : {}),
     author_id: intrare.author_id || null,
     category_id: intrare.category_id || null,
     status: intrare.status ?? "draft",
@@ -451,7 +459,7 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
     faq: intrebariBune(intrare.faq),
     seo_title: intrare.seo_title?.trim() || null,
     seo_description: intrare.seo_description?.trim() || null,
-    canonical_url: intrare.canonical_url?.trim() || null,
+    canonical_url: canonicaBuna(intrare.canonical_url),
     noindex: intrare.noindex ?? false,
     /* Socotit la salvare, nu la afișare: lista de articole n-are de ce să
        despice HTML-ul a douăzeci de articole ca să scrie un număr lângă fiecare. */
@@ -526,6 +534,17 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
     mai bun decât unul nesalvat. Eșecul se vede în jurnal.
   */
   if (vechi.slug !== s.slug && seVede(vechi)) {
+    /*
+      ⚠ SE STERGE INTAI REDIRECTAREA CARE PLEACA DE LA ADRESA NOUA.
+
+      Fara asta se face o bucla: redenumesti `a` in `b` (deci `a → b`), te
+      razgandesti si redenumesti inapoi `b` in `a` (deci `b → a`). Acum `/blog/a`
+      trimite la `/blog/b`, care trimite la `/blog/a`, la nesfarsit. Browserul da
+      „prea multe redirectari", Google la fel, si nu se poate desface decat din
+      SQL — fiindca articolul insusi e in regula, doar drumul catre el nu.
+    */
+    await blogDb().from("blog_redirects").delete().eq("from_slug", s.slug);
+
     const { error: eRedirect } = await blogDb()
       .from("blog_redirects")
       .upsert({ from_slug: vechi.slug, to_slug: s.slug }, { onConflict: "from_slug" });
@@ -551,8 +570,141 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
 
 export async function stergeArticol(id: string): Promise<Raspuns> {
   if (!(await requireAdminApi())) return { error: "Neautorizat" };
+
+  /* Redirectarile CATRE articolul sters raman fara tinta: ar fi trimis un
+     vizitator de la o adresa veche catre un 404, ceea ce e mai rau decat 404-ul
+     de la bun inceput — al doilea macar e cinstit de la prima cerere. */
+  const articol = await iaArticol(id);
+  if (articol) {
+    await blogDb().from("blog_redirects").delete().eq("to_slug", articol.slug);
+  }
+
   const { error } = await blogDb().from("blog_posts").delete().eq("id", id);
   if (error) return { error: "Nu s-a putut sterge. Incearca din nou." };
   reimprospateaza();
   return { success: true };
+}
+
+// ── Istoricul versiunilor ────────────────────────────────────────────────────
+
+/**
+ * Câte versiuni se păstrează pentru un articol.
+ *
+ * ⚠ FĂRĂ PLAFON, ISTORICUL CREȘTE LA NESFÂRȘIT. Fiecare salvare scrie o copie a
+ * întregului HTML. Un articol lung, rescris de cincizeci de ori, ar ajunge să
+ * ocupe de cincizeci de ori cât el însuși, iar nimeni nu se uită vreodată la a
+ * treizecea versiune de acum trei luni.
+ *
+ * Cincizeci acoperă cu mult o zi de scris intens, care e singurul moment în
+ * care omul chiar vrea să se întoarcă.
+ */
+const VERSIUNI_PASTRATE = 50;
+
+export type VersiuneInLista = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  /** Câte caractere avea textul atunci. Ca să se vadă dintr-o privire ce s-a schimbat. */
+  marime: number;
+};
+
+export async function listeazaVersiuni(idArticol: string): Promise<VersiuneInLista[]> {
+  if (!(await requireAdminApi())) return [];
+  const { data } = await blogDb()
+    .from("blog_post_revisions")
+    .select("id, title, content_html, created_at")
+    .eq("post_id", idArticol)
+    .order("created_at", { ascending: false })
+    .limit(VERSIUNI_PASTRATE);
+
+  return ((data ?? []) as { id: string; title: string | null; content_html: string | null; created_at: string }[])
+    .map((v) => ({
+      id: v.id,
+      title: v.title,
+      created_at: v.created_at,
+      marime: (v.content_html ?? "").replace(/<[^>]+>/g, "").length,
+    }));
+}
+
+/** Textul unei versiuni, pentru previzualizare. */
+export async function iaVersiune(id: string): Promise<{ title: string | null; content_html: string | null } | null> {
+  if (!(await requireAdminApi())) return null;
+  const { data } = await blogDb()
+    .from("blog_post_revisions").select("title, content_html").eq("id", id).maybeSingle();
+  return (data as { title: string | null; content_html: string | null }) ?? null;
+}
+
+/**
+ * Aduce înapoi o versiune veche.
+ *
+ * ⚠ NU SE PIERDE NIMIC. Revenirea trece prin aceeași cale ca o salvare
+ * obișnuită, deci starea de ACUM se scrie ea însăși ca versiune înainte să fie
+ * înlocuită. Cine revine din greșeală poate reveni înapoi.
+ *
+ * ⚠ SE ADUC DOAR TITLUL ȘI TEXTUL. Adresa web, starea, data publicării,
+ * etichetele și câmpurile de SEO rămân cele de acum. Motivul: o versiune veche
+ * a unui articol PUBLICAT i-ar fi adus înapoi și adresa veche, iar aceea e deja
+ * în Google. Revenirea la un text nu trebuie să mute pagina.
+ */
+export async function revinoLaVersiune(idArticol: string, idVersiune: string): Promise<Raspuns> {
+  const admin = await requireAdminApi();
+  if (!admin) return { error: "Neautorizat" };
+
+  const [vechea, acum] = await Promise.all([iaVersiune(idVersiune), iaArticol(idArticol)]);
+  if (!vechea) return { error: "Versiunea nu mai există." };
+  if (!acum) return { error: "Articolul nu mai există." };
+
+  const db = blogDb();
+
+  /* Întâi se pune deoparte ce e acum, apoi se scrie ce era. În ordinea
+     inversă, o cădere între cele două ar fi lăsat articolul schimbat și fără
+     nicio urmă a stării dinainte. */
+  const { error: eIstoric } = await db.from("blog_post_revisions").insert({
+    post_id: idArticol,
+    title: acum.title,
+    content_html: acum.content_html,
+    saved_by: admin.id,
+  });
+  if (eIstoric) return { error: "Nu s-a putut păstra versiunea de acum. Nu am schimbat nimic." };
+
+  const html = vechea.content_html ?? "";
+  const { error } = await db
+    .from("blog_posts")
+    .update({
+      title: vechea.title ?? acum.title,
+      content_html: html,
+      reading_minutes: minuteDeCitit(html),
+    })
+    .eq("id", idArticol);
+
+  if (error) return { error: "Nu s-a putut reveni. Încearcă din nou." };
+
+  await taieIstoriculVechi(idArticol);
+  reimprospateaza();
+  return { success: true };
+}
+
+/**
+ * Taie versiunile de peste plafon.
+ *
+ * ⚠ SE ȘTERG CELE MAI VECHI, nu cele mai mici. Un articol scurtat mult are
+ * versiuni mici recente și una mare veche; ștergerea după mărime ar fi păstrat
+ * tocmai ce nu trebuie.
+ */
+async function taieIstoriculVechi(idArticol: string): Promise<void> {
+  const db = blogDb();
+  const { data } = await db
+    .from("blog_post_revisions")
+    .select("id")
+    .eq("post_id", idArticol)
+    .order("created_at", { ascending: false })
+    .range(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE + 200);
+
+  const deSters = ((data ?? []) as { id: string }[]).map((v) => v.id);
+  if (deSters.length === 0) return;
+  const { error } = await db.from("blog_post_revisions").delete().in("id", deSters);
+  if (error) {
+    /* Nu opreste salvarea: un istoric prea lung e o risipa, nu o stricaciune. */
+    console.error("[blog] istoricul vechi n-a putut fi taiat", idArticol, error);
+  }
 }

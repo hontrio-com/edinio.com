@@ -84,3 +84,49 @@ test("titlurile si structura textului raman", () => {
     assert.ok(iesit.includes(eticheta), `s-a pierdut ${eticheta}`);
   }
 });
+
+/*
+  ═══ GĂURILE GĂSITE LA AUDITUL DIN 30.08.2026 ═══
+
+  Trei constatări, toate confirmate de un verificator advers care a citit codul.
+  Fiecare era o linie greșită cu urmări reale.
+*/
+
+test("o adresa cu protocol mostenit nu e „a noastra”", () => {
+  // `//gazda.straina/pixel.png` incepe cu "/" si trecea de verificarea care se
+  // uita doar la primul caracter. Adica un pixel de urmarire scris asa intra in
+  // articol si incarca adresa IP a fiecarui cititor la cine il serveste.
+  const iesit = curataArticol('<p><img src="//urmaritor.example/pixel.gif"></p>');
+  assert.ok(!iesit.includes("urmaritor.example"), "a trecut un pixel de urmarire");
+  assert.ok(!iesit.includes("<img"));
+});
+
+test("o legatura cu protocol mostenit e socotita in afara", () => {
+  assert.equal(esteInAfara("//google.com/ceva"), true);
+  const iesit = curataArticol('<a href="//google.com">x</a>');
+  assert.ok(iesit.includes("nofollow"), "a plecat fara nofollow catre alt domeniu");
+});
+
+test("un domeniu care se TERMINA cu edinio.com nu e al nostru", () => {
+  // `notedinio.com`.endsWith("edinio.com") e adevarat. Verificarea dinainte il
+  // socotea intern: legatura pleca dofollow, si o imagine de acolo ramanea.
+  assert.equal(esteInAfara("https://notedinio.com/x"), true);
+  assert.equal(esteInAfara("https://edinio.com.atacator.ro/x"), true);
+  const iesit = curataArticol('<a href="https://notedinio.com">x</a>');
+  assert.ok(iesit.includes("nofollow"), "notedinio.com a fost socotit intern");
+});
+
+test("domeniul nostru si subdomeniile lui raman interne", () => {
+  assert.equal(esteInAfara("https://edinio.com/preturi"), false);
+  assert.equal(esteInAfara("https://www.edinio.com/preturi"), false);
+  assert.equal(esteInAfara("https://ajutor.edinio.com/x"), false);
+});
+
+test("h1 din corpul articolului coboara la h2", () => {
+  // Bara editorului are un buton „Titlu mare" care punea `h1`. Cuprinsul citeste
+  // doar h2 si h3, deci autorul care isi structura firesc articolul cu el ramanea
+  // fara cuprins, fara niciun semn. Si pagina are deja un h1, pus de PageHero.
+  const iesit = curataArticol("<h1>Titlu mare</h1><p>text</p>");
+  assert.ok(iesit.includes("<h2>Titlu mare</h2>"), `n-a coborat: ${iesit}`);
+  assert.ok(!iesit.includes("<h1"), "a ramas un al doilea h1 in pagina");
+});

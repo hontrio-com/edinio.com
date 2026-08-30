@@ -1,0 +1,26 @@
+-- ═══ REVOCAREA CARE CHIAR REVOCA ═══
+-- Aplicata pe 30.08.2026 ca `blog_revoca_fara_diacritice_de_la_anon`.
+--
+-- ⚠ `revoke ... from public` DIN MIGRAREA DE CAUTARE N-A SCOS NIMIC.
+--
+-- Supabase acorda EXECUTE fiecarui rol EXPLICIT (anon, authenticated,
+-- service_role), prin drepturi implicite pe schema, nu prin PUBLIC. Revocarea de
+-- la PUBLIC atinge o cale pe care nimeni n-o folosea; granturile explicite raman.
+--
+-- Masurat, nu presupus. Dupa migrarea de cautare:
+--   has_function_privilege('anon',          '...', 'EXECUTE') = true
+--   has_function_privilege('authenticated', '...', 'EXECUTE') = true
+-- Dupa migrarea asta:
+--   anon = false, authenticated = false, service_role = true
+--
+-- ⚠ NU STRICA SCRIEREA. Coloana `blog_posts.cauta` e derivata si `stored`, deci
+-- functia se cheama la SCRIERE, nu la citire. Scrierile aplicatiei merg prin
+-- `createAdminClient()`, adica `service_role`, care isi pastreaza dreptul.
+-- Verificat cu un `insert` sub `set local role service_role`: coloana s-a
+-- calculat corect („Livrări și plăți" → „livrari si plati").
+--
+-- ⚠ DACA VREODATA SE RECREEAZA FUNCTIA cu `create or replace`, granturile
+-- implicite se pun LA LOC, si `anon` capata iar dreptul. Revocarile astea doua
+-- trebuie repetate dupa fiecare recreare.
+revoke execute on function public.fara_diacritice(text) from anon;
+revoke execute on function public.fara_diacritice(text) from authenticated;

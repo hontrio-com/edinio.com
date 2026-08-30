@@ -10,7 +10,7 @@ import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { categoriiVizibile } from "@/lib/categories/vizibilitate";
-import { articolePublicate, eticheteFolosite } from "@/lib/blog/citire";
+import { eticheteFolosite, toateArticolelePublicate } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
 import {
@@ -211,10 +211,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // ── Platform (www.edinio.com): marketing + stores WITHOUT a custom domain ──
 
-  /* Plafonul e generos dinadins: la 2000 de articole sitemapul tot încape sub
-     limita de 50.000 a Google, iar taierea de la sfârșitul funcției rămâne
-     singurul loc unde se pierde ceva — și acolo se pierde ce e mai puțin
-     important, fiindcă ordinea de prioritate e static → magazine → produse. */
+  /* ⚠ SE IAU IN FELII, nu cu un `.limit()` mare.
+     Aici scria „plafonul e generos dinadins: la 2000 de articole sitemapul tot
+     incape sub limita Google". Era o presupunere gresita: PostgREST taie TACUT
+     la propriul lui plafon de randuri, deci `.limit(2000)` ar fi adus o mie si
+     ne-ar fi lasat sa credem ca le are pe toate. Vezi nota din
+     `toateArticolelePublicate`. */
   /*
     ⚠ ARTICOLELE CU `noindex` NU INTRĂ ÎN SITEMAP.
 
@@ -227,7 +229,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     era `noindex` și apărea totuși în sitemap.
   */
   const [toateArticolele, eticheteBlog] = await Promise.all([
-    articolePublicate(2000),
+    toateArticolelePublicate(),
     eticheteFolosite(),
   ]);
   const articoleBlog = toateArticolele.filter((a) => !a.noindex);

@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { pliaza, pregatesteCautarea } from "./types";
+import { canonicaBuna, pliaza, pregatesteCautarea } from "./types";
 
 /*
   ═══ DE CE EXISTĂ FIȘIERUL ĂSTA ═══
@@ -84,4 +84,41 @@ test("coloana de cautare din migrare foloseste aceeasi pliere", () => {
   assert.ok(/generated always as/i.test(sql), "coloana nu mai e derivata, deci se poate invechi");
   assert.ok(sql.includes("lower("), "coloana nu mai e scrisa cu litere mici");
   assert.ok(sql.includes("gin_trgm_ops"), "s-a pierdut indicele trigram");
+});
+
+// ── Adresa canonică ──
+
+/*
+  ⚠ O CANONICĂ GREȘITĂ SCOATE ARTICOLUL DIN GOOGLE, în tăcere.
+
+  Câmpul se scria fără nicio verificare. „edinio.com/ghid" fără `https://` devine
+  o cale relativă către o pagină inexistentă, iar `<link rel="canonical">` trimite
+  tot ce a strâns articolul către un 404. Nicio eroare la salvare, nicio eroare în
+  pagină; se vede abia peste săptămâni, în trafic.
+
+  Aceeași lecție ca la `sameAs`: o valoare care pleacă spre un motor se verifică
+  la poartă. Găsit la auditul din 30.08.2026.
+*/
+
+test("o canonica fara protocol se ignora, nu se scrie stramba", () => {
+  assert.equal(canonicaBuna("edinio.com/ghid"), null);
+  assert.equal(canonicaBuna("/blog/ceva"), null);
+  assert.equal(canonicaBuna("ceva"), null);
+});
+
+test("o canonica adevarata trece", () => {
+  assert.equal(canonicaBuna("https://www.edinio.com/blog/x"), "https://www.edinio.com/blog/x");
+  assert.equal(canonicaBuna("  https://alt-site.ro/articol  "), "https://alt-site.ro/articol");
+});
+
+test("scheme periculoase nu ajung canonica", () => {
+  assert.equal(canonicaBuna("javascript:alert(1)"), null);
+  assert.equal(canonicaBuna("data:text/html,x"), null);
+});
+
+test("gol inseamna „fara canonica”, care e purtarea buna", () => {
+  // Lipsa canonicei nu e o scapare: pagina se declara pe ea insasi.
+  assert.equal(canonicaBuna(""), null);
+  assert.equal(canonicaBuna(null), null);
+  assert.equal(canonicaBuna(undefined), null);
 });

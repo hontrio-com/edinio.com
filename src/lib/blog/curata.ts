@@ -44,25 +44,51 @@ import sanitizeHtmlLib from "sanitize-html";
 
 /** Gazdele de la care se acceptă imagini. R2 direct, sau CDN-ul din fața lui. */
 function gazdaNoastra(src: string): boolean {
+  /*
+    ⚠ `//gazda.straina/pixel.png` INCEPE CU "/" DAR NU E AL NOSTRU.
+    E o adresa cu protocol mostenit: browserul o cere de la gazda scrisa dupa
+    cele doua bare, pe acelasi protocol ca pagina. Verificarea dinainte se uita
+    doar la primul caracter, deci un pixel de urmarire scris asa trecea drept
+    imagine locala. Se respinge inainte de orice altceva.
+  */
+  if (src.startsWith("//")) return false;
   if (src.startsWith("/")) return true; // din `public/`, deci al nostru
   try {
     const u = new URL(src);
     if (u.protocol !== "https:") return false;
     const cdn = process.env.NEXT_PUBLIC_CDN_URL;
     if (cdn && src.startsWith(cdn.replace(/\/+$/, "") + "/")) return true;
-    return u.hostname.endsWith(".r2.dev") || u.hostname.endsWith(".edinio.com");
+    return u.hostname.endsWith(".r2.dev") || esteEdinio(u.hostname);
   } catch {
     return false;
   }
 }
 
+/**
+ * Gazda e a noastră?
+ *
+ * ⚠ `hostname.endsWith("edinio.com")` E GRESIT, si a fost scris asa pana pe
+ * 30.08.2026. `notedinio.com` se termina cu "edinio.com", deci trecea drept
+ * gazda noastra: o legatura catre un domeniu strain ar fi plecat fara
+ * `nofollow` si fara `noopener`, iar o imagine de acolo ar fi ramas in articol.
+ *
+ * Un domeniu e al nostru daca E chiar el, sau daca e un subdomeniu — adica are
+ * PUNCT inaintea lui.
+ */
+function esteEdinio(gazda: string): boolean {
+  const g = gazda.toLowerCase();
+  return g === "edinio.com" || g.endsWith(".edinio.com");
+}
+
 /** Legătura duce în afara site-ului nostru? */
 export function esteInAfara(href: string): boolean {
+  /* Si aici: o adresa cu protocol mostenit incepe cu "/" dar duce in alta parte. */
+  if (href.startsWith("//")) return true;
   if (href.startsWith("/") || href.startsWith("#")) return false;
   try {
     const u = new URL(href);
     if (u.protocol === "mailto:" || u.protocol === "tel:") return false;
-    return !u.hostname.endsWith("edinio.com");
+    return !esteEdinio(u.hostname);
   } catch {
     return false;
   }
@@ -90,6 +116,20 @@ export function curataArticol(html: string | null | undefined): string {
     allowedSchemesByTag: { a: ["http", "https", "mailto", "tel"], img: ["https"] },
     disallowedTagsMode: "discard",
     transformTags: {
+      /*
+        ⚠ `h1` DIN CORP COBOARA LA `h2`.
+
+        Doua motive, si al doilea e cel care musca. Intai: titlul paginii e deja
+        un `h1`, pus de `PageHero`. Doi `h1` intr-o pagina spun cititoarelor de
+        ecran si motoarelor ca pagina are doua subiecte.
+
+        Al doilea: cuprinsul citeste DOAR `h2` si `h3`. Bara editorului are un
+        buton „Titlu mare" care punea `h1`, deci autorul care isi structura
+        firesc articolul cu el ramanea fara cuprins — fara niciun semn, si fara
+        nicio diferenta vizibila in pagina, fiindca `.blog-articol` nici nu
+        imbraca `h1`. Coborat aici, butonul face ce pare ca face.
+      */
+      h1: (_numeEticheta, atribute) => ({ tagName: "h2", attribs: atribute }),
       a: (numeEticheta, atribute) => {
         const href = atribute.href ?? "";
         const inAfara = esteInAfara(href);

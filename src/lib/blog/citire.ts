@@ -15,6 +15,20 @@ import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
  * Filtrele de mai jos sunt pentru ordine și pentru numărul de rânduri, nu
  * pentru ascundere — ascunderea e mai jos de ele, în bază.
  *
+ * ⚠ FILTRELE DE MAI JOS SUNT EXPLICITE, NU SE BIZUIE PE CINE CERE.
+ *
+ * Regula din baza de date ascunde ciornele de `anon`, dar un ADMIN logat trece
+ * prin `blog_posts_admin_all` si vede tot. Pana pe 30.08.2026 asta insemna ca
+ * paginile publice aratau altceva pentru el decat pentru restul lumii — de
+ * obicei inofensiv, cu o exceptie urata: `/llms.txt` se serveste cu
+ * `Cache-Control: public, s-maxage=3600`. Un singur admin care deschidea acea
+ * adresa umplea cache-ul COMUN cu titlurile ciornelor, si le servea o ora
+ * intregii lumi.
+ *
+ * Acum fiecare citire publica pune ea insasi conditiile. Regula din baza ramane
+ * plasa; astea sunt gardul. Nici RLS nu se poate slabi din greseala fara ca
+ * cineva sa observe, nici o sesiune de admin nu mai schimba ce vede publicul.
+ *
  * Tabelele nu sunt încă în tipurile generate, deci clientul e fără tipuri, ca
  * la `blog.actions.ts`.
  *
@@ -44,6 +58,15 @@ const CAMPURI_LISTA =
   "id, slug, title, excerpt, cover_url, cover_alt, published_at, reading_minutes, is_featured, noindex," +
   " blog_authors(name, slug, avatar_url), blog_categories(name, slug)";
 
+/**
+ * Conditiile care fac un articol vizibil public, puse pe orice interogare.
+ *
+ * Aceleasi trei ca in `blog_posts_public_read` si ca in `seVede()`. Al treilea
+ * loc unde e scrisa regula, si dinadins: aici e singurul care nu depinde nici
+ * de baza, nici de cine intreaba.
+ */
+const ACUM = () => new Date().toISOString();
+
 /** Supabase întoarce relația fie ca obiect, fie ca listă cu un element. */
 function unul<T>(v: unknown): T | null {
   const x = Array.isArray(v) ? v[0] : v;
@@ -69,6 +92,9 @@ export async function articolePublicate(limita = 50): Promise<ArticolDeLista[]> 
   const { data } = await (await db())
     .from("blog_posts")
     .select(CAMPURI_LISTA)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .limit(limita);
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
@@ -84,6 +110,9 @@ export async function articoleleCategoriei(slugCategorie: string, limita = 50): 
     .from("blog_posts")
     .select(CAMPURI_LISTA)
     .eq("category_id", (cat as { id: string }).id)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .limit(limita);
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
@@ -100,6 +129,9 @@ export async function articolDupaSlug(slug: string): Promise<ArticolIntreg | nul
     .from("blog_posts")
     .select("*, blog_authors(*), blog_categories(*)")
     .eq("slug", slug)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
     .maybeSingle();
   if (!data) return null;
   const r = data as Record<string, unknown>;
@@ -151,6 +183,9 @@ export async function articoleInrudite(
       .select(CAMPURI_LISTA)
       .eq("category_id", articol.category_id)
       .neq("id", articol.id)
+      .eq("status", "published")
+      .not("published_at", "is", null)
+      .lte("published_at", ACUM())
       .order("published_at", { ascending: false })
       .limit(cate);
     gasite.push(...((data ?? []) as unknown as Record<string, unknown>[]).map(caLista));
@@ -161,6 +196,9 @@ export async function articoleInrudite(
     const { data } = await client
       .from("blog_posts")
       .select(CAMPURI_LISTA)
+      .eq("status", "published")
+      .not("published_at", "is", null)
+      .lte("published_at", ACUM())
       .order("published_at", { ascending: false })
       .limit(cate + stiute.size);
     for (const r of (data ?? []) as unknown as Record<string, unknown>[]) {
@@ -186,6 +224,9 @@ export async function articoleleAutorului(idAutor: string, limita = 50): Promise
     .from("blog_posts")
     .select(CAMPURI_LISTA)
     .eq("author_id", idAutor)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .limit(limita);
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
@@ -234,6 +275,9 @@ export async function paginaDeArticole(
   const { data, count } = await (await db())
     .from("blog_posts")
     .select(CAMPURI_LISTA, { count: "exact" })
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
 
@@ -265,6 +309,9 @@ export async function cautaArticole(
     .from("blog_posts")
     .select(CAMPURI_LISTA, { count: "exact" })
     .ilike("cauta", `%${cautat}%`)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
 
@@ -327,6 +374,9 @@ export async function articoleleEtichetei(
     .from("blog_posts")
     .select(CAMPURI_LISTA, { count: "exact" })
     .in("id", idUri)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
 
@@ -348,7 +398,12 @@ export async function articoleleEtichetei(
  */
 export async function eticheteFolosite(): Promise<EticheteBlogPublic[]> {
   const client = await db();
-  const { data: articole } = await client.from("blog_posts").select("id");
+  const { data: articole } = await client
+    .from("blog_posts")
+    .select("id")
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM());
   const idUri = ((articole ?? []) as { id: string }[]).map((a) => a.id);
   if (idUri.length === 0) return [];
 
@@ -361,4 +416,41 @@ export async function eticheteFolosite(): Promise<EticheteBlogPublic[]> {
     if (e) dupaSlug.set(e.slug, e);
   }
   return [...dupaSlug.values()].sort((a, b) => a.name.localeCompare(b.name, "ro"));
+}
+
+/**
+ * TOATE articolele publicate, luate în felii.
+ *
+ * ⚠ `.limit(2000)` NU ADUCE 2000. PostgREST are propriul plafon de rânduri pe
+ * cerere (1000 la configurația obișnuită), și taie TĂCUT: nicio eroare, niciun
+ * semn, doar mai puține rânduri decât ai cerut. Sitemapul ar fi anunțat primele
+ * o mie de articole și le-ar fi lăsat pe restul nevăzute, iar noi am fi crezut
+ * că le-am cerut pe toate.
+ *
+ * Aceeași capcană a mușcat deja în cronuri, cu aceeași formă: o tăietură pusă
+ * înaintea deduplicării, pe care rotația n-o repară.
+ *
+ * Se cere în felii până vine una mai mică decât felia, adică până se termină.
+ */
+export async function toateArticolelePublicate(maxim = 20000): Promise<ArticolDeLista[]> {
+  const client = await db();
+  const FELIE = 500;
+  const toate: ArticolDeLista[] = [];
+
+  for (let de_la = 0; de_la < maxim; de_la += FELIE) {
+    const { data } = await client
+      .from("blog_posts")
+      .select(CAMPURI_LISTA)
+      .eq("status", "published")
+      .not("published_at", "is", null)
+      .lte("published_at", ACUM())
+      .order("published_at", { ascending: false })
+      .range(de_la, de_la + FELIE - 1);
+
+    const felie = ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
+    toate.push(...felie);
+    if (felie.length < FELIE) break; // s-au terminat
+  }
+
+  return toate;
 }

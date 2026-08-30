@@ -227,3 +227,27 @@ export function pliaza(text: string): string {
 export function pregatesteCautarea(q: string): string {
   return pliaza(q.trim()).replace(/[%_\\]/g, "\\$&").slice(0, 100);
 }
+
+/**
+ * Adresa canonică scrisă de mână, dacă e o adresă adevărată.
+ *
+ * ⚠ O CANONICĂ GREȘITĂ SCOATE ARTICOLUL DIN GOOGLE, în tăcere. Scris
+ * „edinio.com/ghid" fără `https://`, câmpul devine o cale relativă către o
+ * pagină care nu există, iar eticheta `<link rel="canonical">` trimite tot ce a
+ * strâns articolul către un 404. Nicio eroare nicăieri, nici la salvare, nici
+ * în pagină; se vede abia peste săptămâni, în trafic.
+ *
+ * Aceeași lecție ca la `sameAs` (30.08.2026): o valoare care pleacă în afară,
+ * către un motor, trebuie verificată la poartă. Ce nu trece se ignoră, fiindcă
+ * lipsa canonicei e purtarea implicită bună — pagina se declară pe ea însăși.
+ */
+export function canonicaBuna(brut: string | null | undefined): string | null {
+  const s = (brut ?? "").trim();
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}

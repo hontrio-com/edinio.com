@@ -11,10 +11,20 @@ create extension if not exists unaccent;
  * doar de intrare, deci putem sa o declaram imuabila si sa o folosim in
  * amandoua.
  *
- * ⚠ `revoke ... from public` DINADINS. O functie noua primeste implicit EXECUTE
- * pentru toata lumea, inclusiv `anon`. Aici n-ar face rau — e o transformare de
- * text — dar obiceiul de a o lasa asa e cel care conteaza: aceeasi neatentie pe
- * o functie care citeste date ar fi o scurgere.
+ * ⚠ `revoke ... from public` DE MAI JOS NU FACE CE PARE CA FACE.
+ *
+ * Randul acela a fost scris crezand ca ii scoate lui `anon` dreptul de EXECUTE.
+ * Nu i-l scoate. Supabase acorda EXECUTE fiecarui rol EXPLICIT (anon,
+ * authenticated, service_role), prin drepturi implicite pe schema, nu prin
+ * PUBLIC — deci revocarea de la PUBLIC atinge o cale pe care nimeni n-o
+ * folosea, iar granturile explicite raman intacte.
+ *
+ * Verificat in aceeasi zi, la audit:
+ *   has_function_privilege('anon', 'public.fara_diacritice(text)', 'EXECUTE')
+ * dadea `true` DUPA migrarea asta. Comentariul de aici mintea.
+ *
+ * Randul e lasat ca sa se vada greseala; revocarea adevarata e in migrarea
+ * urmatoare, `2026-08-30_blog_revoca_fara_diacritice.sql`.
  */
 create or replace function public.fara_diacritice(t text)
 returns text

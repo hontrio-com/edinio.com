@@ -9,6 +9,7 @@ import { sendBlogSubscribeConfirmation } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { clientIpFromHeaders, rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { randCsv } from "@/lib/blog/csv";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 
 /**
@@ -357,13 +358,15 @@ export async function exportaAbonati(): Promise<{ csv: string; randuri: number }
     if (felie.length < FELIE) break;
   }
 
-  /* ⚠ Câmpurile se pun între ghilimele și ghilimelele se dublează. O adresă nu
-     conține virgulă, dar `source` e text liber, și un CSV rupt la mijloc e greu
-     de observat: se deschide, arată aproape bine, și mută coloanele. */
-  const camp = (v: string | null) => `"${(v ?? "").replace(/"/g, '""')}"`;
+  /*
+    Vezi `blog/csv.ts`: ghilimelele apără CSV-ul, dar nu și foaia de calcul. O
+    celulă care începe cu `=`, `+`, `-` sau `@` e citită ca FORMULĂ de Excel și
+    de LibreOffice, oricâte ghilimele ar avea în jur — iar verificarea adresei de
+    email e deliberat simplă, deci o adresă chiar poate începe așa.
+  */
   const linii = [
     "email,sursa,confirmat_la,creat_la",
-    ...toti.map((a) => [camp(a.email), camp(a.source), camp(a.confirmed_at), camp(a.created_at)].join(",")),
+    ...toti.map((a) => randCsv([a.email, a.source, a.confirmed_at, a.created_at])),
   ];
 
   return { csv: linii.join("\r\n"), randuri: toti.length };

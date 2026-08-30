@@ -5631,13 +5631,23 @@ export type Database = {
       */
       blog_actualizeaza_taxonomia: { Args: { p_fel: string; p_id: string; p_rand: Json }; Returns: undefined }
       blog_anuleaza_confirmare: { Args: { p_email: string; p_token_hash: string }; Returns: boolean }
+      /* ⚠ Intorc UN SINGUR `jsonb`, cu randurile SI totalul alaturi.
+         Cu `count(*) over ()`, totalul calatorea pe fiecare rand — deci la o
+         pagina de dupa ultimul rand nu mai exista niciun rand din care sa-l
+         citesti, iar ecranul spunea „niciun articol" pe o baza plina. */
       blog_articole_admin: {
         Args: { p_de_la: number; p_cate: number; p_cauta?: string | null; p_stare?: string | null }
+        Returns: Json
+      }
+      /* ⚠ Citire proprie, nu `paginaDeArticole`: aceea ordoneaza `is_pinned`
+         intai, ceea ce e bun pentru /blog si gresit pentru un feed — un feed e
+         un flux cronologic, nu o copie a asezarii de pe pagina. */
+      blog_articole_pentru_feed: {
+        Args: { p_cate: number }
         Returns: {
-          id: string; slug: string; title: string; status: string
-          published_at: string | null; is_featured: boolean; is_pinned: boolean
-          reading_minutes: number | null; updated_at: string
-          autor: string | null; categorie: string | null; views: number; total: number
+          slug: string; title: string; excerpt: string | null
+          published_at: string | null; content_updated_at: string | null
+          autor: string | null; categorie: string | null
         }[]
       }
       blog_categorii_folosite: {
@@ -5656,8 +5666,8 @@ export type Database = {
       blog_creste_citirile: { Args: { p_slug: string }; Returns: undefined }
       blog_dezaboneaza: { Args: { p_unsub_token: string }; Returns: boolean }
       blog_etichete_admin: {
-        Args: Record<string, never>
-        Returns: { id: string; slug: string; name: string; cate: number }[]
+        Args: { p_de_la?: number; p_cate?: number; p_cauta?: string | null }
+        Returns: Json
       }
       blog_etichete_folosite: {
         Args: Record<string, never>
@@ -5667,6 +5677,19 @@ export type Database = {
          redenumirea, si redirectarea, in aceeasi tranzactie. Se pastreaza pentru
          reparatii facute de mana din consola. */
       blog_muta_taxonomia: { Args: { p_fel: string; p_slug_vechi: string | null; p_slug_nou: string | null }; Returns: undefined }
+      /* ⚠ Intoarce ce a SCRIS, nu doar un semnal de izbanda: editorul isi pune
+         starea din raspuns. `router.refresh()` aduce datele noi de la server dar
+         nu atinge `useState` din client, deci formularul ramanea cu textul vechi. */
+      blog_restaureaza_versiune: {
+        Args: {
+          p_articol: string; p_versiune: string; p_versiune_asteptata: number | null
+          p_salvat_de: string | null; p_minute: number; p_versiuni: number
+        }
+        Returns: {
+          title: string; content_html: string
+          reading_minutes: number | null; edit_version: number
+        }[]
+      }
       blog_salveaza_articol: {
         Args: {
           p_id: string; p_rand: Json; p_etichete: Json; p_salvat_de: string | null

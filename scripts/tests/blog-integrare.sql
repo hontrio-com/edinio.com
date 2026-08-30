@@ -25,6 +25,8 @@
 --   G  newsletter: jetoane, anulare, confirmare, dezabonare, reinscriere
 --   H  RLS: ce poate un redactor cu jetonul lui (in tranzactie proprie)
 --   I  listele din admin: paginare, filtre, cautare cu diacritice
+--   K  vitrina, revenirea si concurenta lor (runda a treia)
+--   L  usa directa prin REST e inchisa
 --   J  nimic n-a ramas in urma
 --
 -- ═══ CUM SE RULEAZA ═══
@@ -567,6 +569,224 @@ begin
   raise notice '════ I: toate au trecut ════';
 end $;
 
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- K. VITRINA, REVENIREA SI USA DIRECTA (runda a treia de audit, 31.08.2026)
+-- ═══════════════════════════════════════════════════════════════════════════
+do $
+declare a uuid; b uuid; ra uuid; v bigint; v_a bigint; r record; d1 timestamptz; d2 timestamptz; n int;
+begin
+  delete from public.blog_posts where slug like 'zz-k-%';
+
+  -- ── K1. O CIORNA NU POATE GOLI VITRINA PUBLICA ─────────────────────────
+  --
+  -- Dovedit pe baza inainte de reparatie: A publicat si in vitrina; cineva
+  -- bifeaza „scoate-l in fata" pe o CIORNA; declansatorul il cobora pe A; ciorna
+  -- nu apare pe site. Masurat atunci: ZERO articole in vitrina publica.
+  insert into public.blog_posts (slug, title, content_html, status, published_at, is_featured)
+  values ('zz-k-public','A','<p>a</p>','published', now() - interval '1 day', true) returning id into a;
+  select edit_version into v_a from public.blog_posts where id = a;
+
+  insert into public.blog_posts (slug, title, content_html, status)
+  values ('zz-k-ciorna','B','<p>b</p>','draft') returning id into b;
+  update public.blog_posts set is_featured = true where id = b;
+
+  if (select is_featured from public.blog_posts where id = b) then
+    raise exception 'K1: o CIORNA a luat vitrina'; end if;
+  if not (select is_featured from public.blog_posts where id = a) then
+    raise exception 'K1: A a fost coborat de o ciorna'; end if;
+  if (select edit_version from public.blog_posts where id = a) <> v_a then
+    raise exception 'K1: versiunea lui A s-a miscat degeaba'; end if;
+  raise notice 'K1 ciorna respinsa, A neatins';
+
+  -- ── K2. NICI UN ARTICOL PROGRAMAT ──────────────────────────────────────
+  update public.blog_posts set status='published', published_at = now() + interval '3 days' where id = b;
+  update public.blog_posts set is_featured = true where id = b;
+  if (select is_featured from public.blog_posts where id = b) then
+    raise exception 'K2: un articol PROGRAMAT a luat vitrina'; end if;
+  raise notice 'K2 articolul programat respins';
+
+  -- ── K3. CEL VIZIBIL IA VITRINA, SI VERSIUNEA CELUI COBORAT CRESTE ──────
+  --
+  -- Fara cresterea aceea, coborarea e o schimbare pe care blocajul optimist n-o
+  -- vede: o fila deschisa peste A ar salva cu versiunea veche, ar trece, iar
+  -- sarcina ei ar readuce vitrina la A.
+  select content_updated_at into d1 from public.blog_posts where id = a;
+  update public.blog_posts set published_at = now() - interval '1 hour' where id = b;
+  update public.blog_posts set is_featured = true where id = b;
+  if not (select is_featured from public.blog_posts where id = b) then
+    raise exception 'K3: vizibilul NU a luat vitrina'; end if;
+  if (select is_featured from public.blog_posts where id = a) then
+    raise exception 'K3: A a ramas in vitrina'; end if;
+  if (select edit_version from public.blog_posts where id = a) <> v_a + 1 then
+    raise exception 'K3: versiunea lui A nu a crescut'; end if;
+  raise notice 'K3 vitrina a trecut la B, si versiunea lui A a crescut';
+
+  -- ── K4. DAR NU SI DATA CONTINUTULUI: vitrina nu e continut ─────────────
+  select content_updated_at into d2 from public.blog_posts where id = a;
+  if d1 <> d2 then raise exception 'K4: coborarea a mutat data continutului'; end if;
+  raise notice 'K4 data continutului lui A: neatinsa';
+
+  -- ── K5. FILA VECHE PESTE A PRIMESTE P0409 ──────────────────────────────
+  begin
+    perform public.blog_salveaza_articol(a, jsonb_build_object('title','de la fila veche'),
+                                         null, null, 50, v_a, true);
+    raise exception 'K5: fila veche a scris peste, desi vitrina se mutase';
+  exception when sqlstate 'P0409' then
+    raise notice 'K5 fila veche: refuzata cu P0409';
+  end;
+
+  -- ── K6. IESIREA DIN PUBLIC SCOATE DIN VITRINA ──────────────────────────
+  update public.blog_posts set status='archived' where id = b;
+  if (select is_featured from public.blog_posts where id = b) then
+    raise exception 'K6: a ramas in vitrina desi a fost arhivat'; end if;
+  raise notice 'K6 arhivat → iese singur din vitrina';
+
+  -- ── K7. REVENIREA CERE VERSIUNEA ───────────────────────────────────────
+  select edit_version into v from public.blog_posts where id = a;
+  v := public.blog_salveaza_articol(a, jsonb_build_object('title','A2','content_html','<p>doi</p>'),
+                                    null, null, 50, v, true);
+  select id into ra from public.blog_post_revisions where post_id = a order by created_at desc limit 1;
+
+  begin
+    perform public.blog_restaureaza_versiune(a, ra, 1, null, 2, 50);
+    raise exception 'K7: a restaurat cu o versiune veche';
+  exception when sqlstate 'P0409' then
+    raise notice 'K7 revenire cu versiune veche: P0409';
+  end;
+
+  -- ── K8. REVIZIA TREBUIE SA FIE A ARTICOLULUI ───────────────────────────
+  --
+  -- Prin ecran nu se poate gresi, dar actiunea e o adresa POST: chemata de mana
+  -- cu o revizie a lui A si id-ul lui B, textul lui A ajungea peste B.
+  begin
+    perform public.blog_restaureaza_versiune(b, ra, null, null, 2, 50);
+    raise exception 'K8: a restaurat o revizie a ALTUI articol';
+  exception when no_data_found then
+    raise notice 'K8 revizie straina: refuzata';
+  end;
+
+  -- ── K9. REVENIREA BUNA INTOARCE CE A SCRIS ─────────────────────────────
+  --
+  -- Editorul isi pune starea din raspuns: `router.refresh()` singur nu atinge
+  -- `useState`, deci formularul ramanea cu textul de dinainte.
+  select edit_version into v from public.blog_posts where id = a;
+  select * into r from public.blog_restaureaza_versiune(a, ra, v, null, 9, 50);
+  if r.edit_version <> v + 1 then raise exception 'K9: versiunea intoarsa e %, nu %', r.edit_version, v+1; end if;
+  if r.reading_minutes <> 9 then raise exception 'K9: minutele intoarse sunt %', r.reading_minutes; end if;
+  if (select title from public.blog_posts where id = a) <> r.title then
+    raise exception 'K9: ce a intors nu e ce e in baza'; end if;
+  raise notice 'K9 revenirea intoarce titlul, textul, minutele si versiunea — si sunt cele din baza';
+
+  -- ── K10. DATA ETICHETEI TINE SEAMA DE CONTINUT ─────────────────────────
+  --
+  -- Pagina unei etichete se schimba si cand se rescrie un articol DEJA publicat.
+  -- `max(published_at)` spunea mai departe data publicarii.
+  update public.blog_posts set status='published', published_at = now() - interval '30 days' where id = a;
+  update public.blog_posts set content_updated_at = now() - interval '1 hour' where id = a;
+  insert into public.blog_tags (slug, name) values ('zz-k-et','Zz K Et') on conflict (slug) do nothing;
+  insert into public.blog_post_tags (post_id, tag_id)
+  select a, id from public.blog_tags where slug = 'zz-k-et' on conflict do nothing;
+
+  select ultima into d1 from public.blog_etichete_folosite() where slug = 'zz-k-et';
+  if d1 < now() - interval '2 hours' then
+    raise exception 'K10: data etichetei e %, deci s-a luat published_at, nu continutul', d1; end if;
+  raise notice 'K10 data etichetei tine seama de continut, nu doar de publicare';
+
+  -- ── K11. FEEDUL E CRONOLOGIC, NU DUPA FIXARE ───────────────────────────
+  --
+  -- `paginaDeArticole` ordoneaza `is_pinned` intai — bun pentru /blog, gresit
+  -- pentru un feed: un articol fixat din ianuarie statea inaintea celui de ieri.
+  update public.blog_posts set is_pinned = true where id = a;              -- vechi si FIXAT
+  update public.blog_posts set status='published', published_at = now() - interval '1 hour',
+                               is_pinned = false where id = b;             -- nou, nefixat
+  select slug into r from public.blog_articole_pentru_feed(10) limit 1;
+  if r.slug <> 'zz-k-ciorna' then
+    raise exception 'K11: primul din feed e %, nu cel mai NOU articol', r.slug; end if;
+  raise notice 'K11 feedul incepe cu cel mai nou, nu cu cel fixat';
+
+  delete from public.blog_posts where slug like 'zz-k-%';
+  delete from public.blog_tags  where slug like 'zz-k-%';
+  raise notice '════ K: toate au trecut ════';
+end $;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- L. USA DIRECTA E INCHISA (RLS + granturi)
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Blogul avea doua sisteme de autorizare, iar cel din RLS era mai slab decat cel
+-- din actiunile de server: nu trecea prin MFA, nici prin plafoanele de lungime,
+-- nici prin poarta pe gazdele de imagini, nici prin regulile de rol. Doua
+-- sisteme inseamna ca cel mai slab hotaraste.
+begin;
+
+do $
+declare cine uuid; a uuid; n int;
+begin
+  select id into cine from public.users_profile order by created_at limit 1;
+  if cine is null then raise notice 'L SARITA: niciun cont'; return; end if;
+
+  insert into public.blog_posts (slug, title, content_html, status, published_at)
+  values ('zz-l-public','Public','<p>p</p>','published', now() - interval '1 day') returning id into a;
+  insert into public.blog_posts (slug, title, content_html, status)
+  values ('zz-l-ciorna','Ciorna','<p>c</p>','draft');
+
+  update public.users_profile set role = 'editor' where id = cine;
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', cine, 'role','authenticated')::text, true);
+
+  begin
+    insert into public.blog_posts (slug, title, content_html) values ('zz-l-nou','Nou','<p>n</p>');
+    raise exception 'L1: a INSERAT un articol';
+  exception when insufficient_privilege then raise notice 'L1 INSERT articol: refuzat'; end;
+
+  begin
+    update public.blog_posts set title = 'schimbat' where id = a;
+    raise exception 'L2: a SCHIMBAT un articol';
+  exception when insufficient_privilege then raise notice 'L2 UPDATE articol: refuzat'; end;
+
+  begin
+    delete from public.blog_posts where id = a;
+    raise exception 'L3: a STERS un articol';
+  exception when insufficient_privilege then raise notice 'L3 DELETE articol: refuzat'; end;
+
+  begin
+    insert into public.blog_tags (slug, name) values ('zz-l-et','Et');
+    raise exception 'L4: a inserat o eticheta';
+  exception when insufficient_privilege then raise notice 'L4 INSERT eticheta: refuzat'; end;
+
+  -- Citirea PUBLICULUI ramane: de acolo traieste site-ul.
+  select count(*) into n from public.blog_posts where slug = 'zz-l-public';
+  if n <> 1 then raise exception 'L5: nu mai vede nici articolele publicate'; end if;
+  raise notice 'L5 citirea publicului: neatinsa';
+
+  -- Dar CIORNELE nu se mai vad prin REST.
+  select count(*) into n from public.blog_posts where slug = 'zz-l-ciorna';
+  if n <> 0 then raise exception 'L6: ciornele inca se vad prin REST'; end if;
+  raise notice 'L6 ciornele: nu se mai vad prin REST';
+
+  begin
+    perform count(*) from public.blog_post_revisions;
+    raise exception 'L7: inca vede reviziile';
+  exception when insufficient_privilege then raise notice 'L7 reviziile: refuzate'; end;
+
+  begin
+    perform count(*) from public.blog_subscribers;
+    raise exception 'L8: inca vede abonatii';
+  exception when insufficient_privilege then raise notice 'L8 abonatii: refuzati'; end;
+
+  -- `user_id` al autorului: nici pentru un cont autentificat.
+  begin
+    perform user_id from public.blog_authors limit 1;
+    raise exception 'L9: inca vede user_id al autorilor';
+  exception when insufficient_privilege then raise notice 'L9 user_id al autorului: refuzat'; end;
+
+  reset role;
+  raise notice '════ L: usa directa e inchisa ════';
+end $;
+
+rollback;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- J. NIMIC NU A RAMAS IN URMA
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -574,7 +794,10 @@ do $$
 declare n int := 0;
 begin
   select
-    (select count(*) from public.blog_posts       where slug like 'zz-adm-%')
+    (select count(*) from public.blog_posts       where slug like 'zz-k-%')
+  + (select count(*) from public.blog_tags        where slug like 'zz-k-%')
+  + (select count(*) from public.blog_posts       where slug like 'zz-l-%')
+  + (select count(*) from public.blog_posts       where slug like 'zz-adm-%')
   + (select count(*) from public.blog_tags        where slug like 'zz-adm-%')
   + (select count(*) from public.blog_posts       where slug like 'zz-proba-%')
   + (select count(*) from public.blog_categories  where slug like 'zz-proba-%')

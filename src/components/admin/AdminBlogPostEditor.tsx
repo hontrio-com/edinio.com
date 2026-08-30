@@ -302,9 +302,44 @@ export function AdminBlogPostEditor({
     setNesalvat(true);
   }
 
+  /**
+   * Adresa, scrisă de mână.
+   *
+   * ⚠ FOLOSEA `setF` DIRECT, DECI NU MARCA NIMIC NESALVAT.
+   *
+   * Toate celelalte câmpuri trec prin `pune`, care crește generația și aprinde
+   * „Nesalvat". Ăsta nu. Deci: articolul e salvat de tot; omul schimbă DOAR
+   * adresa, din `/blog/vechi` în `/blog/nou`; nu atinge nimic altceva.
+   *
+   * Formularul rămâne pe `nesalvat = false`. Salvarea automată nu pornește —
+   * ea se uită la steagul acela. Avertismentul de la închiderea filei nu apare,
+   * din același motiv. Omul pleacă liniștit, și adresa nouă nu există nicăieri.
+   *
+   * Cel mai tăcut fel de pierdere: nimic nu dă eroare, iar la întoarcere pagina
+   * arată vechea adresă ca și cum n-ar fi fost atinsă niciodată.
+   */
+  function schimbaSlugul(slug: string) {
+    setF((s) => ({ ...s, slug, slugScrisDeMana: true }));
+    generatie.current++;
+    setNesalvat(true);
+  }
+
   function adaugaEticheta(brut: string) {
     const nume = brut.trim().replace(/,+$/, "").trim();
+    /* Doar se golește caseta: lista nu s-a schimbat, deci nu e nimic de salvat. */
     if (!nume) { setF((s) => ({ ...s, etichetaInLucru: "" })); return; }
+
+    /*
+      ⚠ ȘI AICI, DIN AVAL. Pe drumul obișnuit caseta `etichetaInLucru` a trecut
+      deja prin `pune` la fiecare literă, deci formularul e nesalvat. Dar o
+      lipire directă cu virgulă la coadă ajunge aici fără să fi tastat nimeni —
+      iar atunci lista se schimbă și nimic n-o marchează.
+
+      Nu mă bizui pe drumul obișnuit: marchez unde se schimbă LISTA.
+    */
+    generatie.current++;
+    setNesalvat(true);
+
     setF((s) => ({
       ...s,
       /* Fara duplicate, si fara sa tina seama de litere mari: „eMAG" si „emag"
@@ -449,6 +484,42 @@ export function AdminBlogPostEditor({
     router.push("/admin/blog");
   }
 
+  /**
+   * După ce o versiune veche a fost adusă înapoi.
+   *
+   * ⚠ `router.refresh()` SINGUR NU AJUNGE, și asta a fost un defect adevărat.
+   *
+   * El aduce date noi de la server, dar NU atinge `useState` din client — așa e
+   * făcut. Deci formularul rămânea cu textul de DINAINTE de revenire, iar
+   * `versiuneaMea` cu numărul vechi. Omul se uita la ecran și vedea textul vechi
+   * peste o bază care avea deja textul nou; iar prima salvare de după pica cu
+   * P0409, pe bună dreptate, dar fără ca el să înțeleagă de ce.
+   *
+   * Acum revenirea întoarce ce a scris, și se pune direct.
+   */
+  function dupaORevenire(r: { title: string; content_html: string; reading_minutes: number | null; edit_version: number }) {
+    /*
+      ⚠ REFERINȚELE SE MUTĂ ÎNAINTEA APELURILOR DE STARE, nu după.
+
+      Regula lui React o cere anume: „modifying a value previously passed as an
+      argument to a hook is not allowed". Motivul e că o randare întreruptă și
+      reluată ar putea vedea referința pe o valoare care nu se potrivește cu
+      starea — adică exact nepotrivirea pe care funcția asta o repară.
+
+      Și generația crește tot aici: altfel o salvare automată pornită înainte de
+      revenire s-ar întoarce, ar vedea aceeași generație, și ar crede că ecranul e
+      la zi față de ce a trimis ea.
+    */
+    versiuneaMea.current = r.edit_version;
+    generatie.current++;
+
+    setF((s) => ({ ...s, title: r.title, content_html: r.content_html }));
+    setNesalvat(false);
+    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
+    router.refresh();
+  }
+
   /** Ce se face după orice scriere reușită: nu mai e nimic nesalvat. */
   function dupaOSalvareReusita(stareNoua?: StareArticol, generatieLaPornire?: number) {
     setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
@@ -563,9 +634,10 @@ export function AdminBlogPostEditor({
       {articol && (
         <AdminBlogVersiuni
           idArticol={articol.id}
+          versiuneaAcum={versiuneaMea.current}
           deschis={vedeIstoricul}
           inchide={() => setVedeIstoricul(false)}
-          dupaRevenire={() => router.refresh()}
+          dupaRevenire={dupaORevenire}
         />
       )}
 
@@ -604,7 +676,7 @@ export function AdminBlogPostEditor({
           <div className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
             <span>/blog/</span>
             <input type="text" value={f.slug}
-              onChange={(e) => setF((s) => ({ ...s, slug: e.target.value, slugScrisDeMana: true }))}
+              onChange={(e) => schimbaSlugul(e.target.value)}
               placeholder="adresa-articolului"
               className="flex-1 font-mono bg-transparent border-0 focus:outline-none text-zinc-600" />
           </div>
@@ -765,25 +837,36 @@ export function AdminBlogPostEditor({
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-2">
-            <label className="inline-flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={f.is_featured}
-                onChange={(e) => pune("is_featured", e.target.checked)} className="h-4 w-4 accent-zinc-900" />
-              <span className="text-sm text-zinc-700 inline-flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Scoate-l în față (vitrina din capul listei)
-              </span>
-            </label>
-            <label className="inline-flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={f.is_pinned}
-                onChange={(e) => pune("is_pinned", e.target.checked)} className="h-4 w-4 accent-zinc-900" />
-              <span className="text-sm text-zinc-700 inline-flex items-center gap-1.5">
-                <Pin className="h-3.5 w-3.5 text-zinc-500" /> Ține-l sus în listă, oricât de vechi ar fi
-              </span>
-            </label>
-            <p className="text-xs text-zinc-500">
-              Vitrina e una singură. Fixate pot fi mai multe: urcă în ordine, fără să ocupe vitrina.
-            </p>
-          </div>
+          {/*
+            ⚠ NU SE ARATA UNUI REDACTOR.
+
+            Vitrina si fixarea sunt hotarari despre ce vede publicul prima data,
+            iar un redactor nu poate nici macar sa publice. Ascunderea nu e paza —
+            aceea e in `vitrinaSiFixarea` din actiune — dar un buton care arata la
+            fel pentru toata lumea si e ignorat pentru jumatate dintre ei e o
+            promisiune incalcata.
+          */}
+          {rol === "admin" && (
+            <div className="mt-4 flex flex-col gap-2">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={f.is_featured}
+                  onChange={(e) => pune("is_featured", e.target.checked)} className="h-4 w-4 accent-zinc-900" />
+                <span className="text-sm text-zinc-700 inline-flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Scoate-l în față (vitrina din capul listei)
+                </span>
+              </label>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={f.is_pinned}
+                  onChange={(e) => pune("is_pinned", e.target.checked)} className="h-4 w-4 accent-zinc-900" />
+                <span className="text-sm text-zinc-700 inline-flex items-center gap-1.5">
+                  <Pin className="h-3.5 w-3.5 text-zinc-500" /> Ține-l sus în listă, oricât de vechi ar fi
+                </span>
+              </label>
+              <p className="text-xs text-zinc-500">
+                Vitrina e una singură. Fixate pot fi mai multe: urcă în ordine, fără să ocupe vitrina.
+              </p>
+            </div>
+          )}
 
           {/*
             ═══ ETICHETE ═══

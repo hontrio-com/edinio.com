@@ -23,13 +23,22 @@ import {
 /**
  * Blogul, partea de administrare: autori si categorii.
  *
- * Tabelele nu sunt inca in tipurile generate ale bazei, deci merge pe un client
- * fara tipuri, exact ca `announcement.actions.ts`. Cand se regenereaza tipurile,
- * `blogDb()` e singurul loc de schimbat.
+ * ⚠ CLIENTUL E TIPAT, din 31.08.2026. Tabelele si functiile de blog au intrat in
+ * `database.types.ts`, deci `tsc` verifica numele coloanelor, numele functiilor
+ * SI numele argumentelor lor. Ultimul lucru conteaza cel mai mult: PostgREST
+ * alege functia dupa numele argumentelor, deci pana acum un `p_slug_vechi` scris
+ * `p_vechi_slug` trecea de typecheck si de build, si cadea la prima apasare.
  *
  * ⚠ CLIENTUL DE SERVICIU SARE PESTE DREPTURILE PE RAND. De aceea fiecare functie
- * de aici incepe cu o paza, fara exceptie. Regulile din baza raman a doua plasa,
- * pentru cine ar ajunge la tabele pe alt drum; ce se intampla prin panou trece
+ * de aici incepe cu o paza, fara exceptie.
+ *
+ * ⚠ SI E SINGURUL DRUM DE SCRIERE, din 31.08.2026. Baza nu mai are nicio politica
+ * prin care `authenticated` sa scrie direct in tabelele de blog: calea aceea
+ * ocolea tot ce e aici — MFA, plafoanele de lungime, poarta pe gazdele de
+ * imagini, regulile de rol. Doua sisteme de autorizare inseamna ca cel mai slab
+ * hotaraste. Acum e unul singur, si se citeste dintr-o privire.
+ *
+ * Ce se intampla prin panou trece
  * pe aici.
  *
  * ⚠ DOUA PAZE, ALESE DUPA CE FACE FUNCTIA:
@@ -90,6 +99,21 @@ function reimprospateaza() {
   */
   revalidatePath("/blog");
   revalidatePath("/blog/[slug]", "page");
+  /*
+    ⚠ ȘI PAGINILE DE RUBRICĂ, AUTOR ȘI ETICHETĂ.
+
+    O salvare poate muta articolul dintr-o rubrică în alta, îi poate schimba
+    autorul sau etichetele — iar `revalidatePath` invalidează DOAR calea numită.
+    Celelalte pagini care se hrănesc din aceleași date rămân vechi, fără ca
+    nimic să spună că sunt vechi.
+
+    Se dă ruta cu paranteze drepte și `"page"`, ca să prindă toate valorile
+    segmentului dinamic, nu o singură pagină.
+  */
+  revalidatePath("/blog/categorie/[slug]", "page");
+  revalidatePath("/blog/autor/[slug]", "page");
+  revalidatePath("/blog/eticheta/[slug]", "page");
+  revalidatePath("/blog/feed");
 }
 
 /**
@@ -395,8 +419,21 @@ export async function eticheteleArticolului(idArticol: string): Promise<string[]
 }
 
 /** Toate etichetele, cu numarul de articole pe fiecare. Pentru ecranul de admin. */
-export async function listeazaEtichete(): Promise<{ id: string; slug: string; name: string; cate: number }[]> {
-  if (!(await requireAdminApi())) return [];
+const ETICHETE_PE_PAGINA = 100;
+
+export type EticheteInAdmin = { id: string; slug: string; name: string; cate: number };
+export type PaginaEtichete = {
+  etichete: EticheteInAdmin[];
+  total: number;
+  pagina: number;
+  pagini: number;
+};
+
+export async function listeazaEtichete(
+  pagina = 1,
+  cauta?: string,
+): Promise<PaginaEtichete> {
+  if (!(await requireAdminApi())) return { etichete: [], total: 0, pagina: 1, pagini: 1 };
 
   /*
     ⚠ SE NUMĂRĂ ÎN BAZĂ, NU AICI.
@@ -411,13 +448,32 @@ export async function listeazaEtichete(): Promise<{ id: string; slug: string; na
     etichetele legate doar de ciorne — altfel ar șterge una crezând că nu e
     folosită nicăieri.
   */
-  const { data } = await blogDb().rpc("blog_etichete_admin");
-  return ((data ?? []) as { id: string; slug: string; name: string; cate: number }[]).map((e) => ({
-    id: e.id,
-    slug: e.slug,
-    name: e.name,
-    cate: Number(e.cate ?? 0),
-  }));
+  const p = Number.isSafeInteger(pagina) && pagina >= 1 ? pagina : 1;
+  const termen = (cauta ?? "").trim();
+
+  const { data } = await blogDb().rpc("blog_etichete_admin", {
+    p_de_la: (p - 1) * ETICHETE_PE_PAGINA,
+    p_cate: ETICHETE_PE_PAGINA,
+    p_cauta: termen ? pregatesteCautarea(termen) : null,
+  });
+
+  const raspuns = (data ?? { randuri: [], total: 0 }) as {
+    randuri: { id: string; slug: string; name: string; cate: number }[];
+    total: number;
+  };
+  const total = Number(raspuns.total ?? 0);
+
+  return {
+    etichete: (raspuns.randuri ?? []).map((e) => ({
+      id: e.id,
+      slug: e.slug,
+      name: e.name,
+      cate: Number(e.cate ?? 0),
+    })),
+    total,
+    pagina: p,
+    pagini: Math.max(1, Math.ceil(total / ETICHETE_PE_PAGINA)),
+  };
 }
 
 /**
@@ -517,8 +573,20 @@ export async function listeazaArticole(
     p_stare: stare ?? null,
   });
 
-  const randuri = (data ?? []) as (ArticolInLista & { total: number })[];
-  const total = randuri.length > 0 ? Number(randuri[0].total ?? 0) : 0;
+  /*
+    ⚠ TOTALUL VINE ALĂTURI DE RÂNDURI, NU PE ELE.
+
+    Înainte călătorea pe fiecare rând, prin `count(*) over ()`. La
+    `/admin/blog?p=999` cu 300 de articole în bază, interogarea întoarce ZERO
+    rânduri — deci nu mai exista niciun rând din care să-l citești, iar ecranul
+    spunea „Niciun articol" peste o bază plină.
+  */
+  const raspuns = (data ?? { randuri: [], total: 0 }) as {
+    randuri: ArticolInLista[];
+    total: number;
+  };
+  const randuri = raspuns.randuri ?? [];
+  const total = Number(raspuns.total ?? 0);
 
   return {
     articole: randuri.map((r) => ({
@@ -809,8 +877,10 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
     category_id: intrare.category_id || null,
     status: intrare.status ?? "draft",
     published_at: intrare.published_at || null,
-    is_featured: intrare.is_featured ?? false,
-    is_pinned: intrare.is_pinned ?? false,
+    /* ⚠ Puse de `vitrinaSiFixarea`, nu de aici: depind de ROL si de faptul ca
+       articolul chiar se vede. Valorile de mai jos sunt doar temelia. */
+    is_featured: false,
+    is_pinned: false,
     /* Îndemnul se curăță la scriere: un „propriu” pe jumătate scris n-are ce
        căuta în baza de date, fiindcă la afișare ar fi oricum aruncat. */
     cta: indemnDeSalvat(intrare.cta),
@@ -832,6 +902,68 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
  * un câmp, ci oprește ÎNTREAGA scriere. Fără asta, omul ar apăsa „Publică" și
  * ar primi „nu s-a putut salva", fără să afle vreodată că lipsea data.
  */
+/**
+ * Cine are voie sa atinga vitrina si fixarea.
+ *
+ * ⚠ UN REDACTOR NU. Nu e o preferinta de asezare: vitrina si fixarea sunt
+ * hotarari despre CE VEDE PUBLICUL PRIMA DATA, iar redactorul nu poate nici
+ * macar sa publice. A hotari ce sta in capul paginii fara a putea hotari ce
+ * ajunge pe pagina e o margine trasa stramb.
+ *
+ * ⚠ SI SE APLICA PE SERVER, NU DOAR IN ECRAN. Bifele se ascund si in editor, dar
+ * ascunderea nu e paza: actiunea e o adresa POST pe care oricine o poate chema cu
+ * ce vrea in ea.
+ */
+function poateAtingeVitrina(rol: "admin" | "editor"): boolean {
+  return rol === "admin";
+}
+
+/**
+ * Poate articolul asta sa tina vitrina?
+ *
+ * ⚠ NUMAI DACA SE VEDE ACUM. Dovedit pe baza inainte de a fi reparat: articolul
+ * A, publicat si in vitrina; cineva bifeaza „scoate-l in fata" pe o CIORNA;
+ * declansatorul il cobora pe A; ciorna nu apare pe site fiindca pagina publica
+ * cere `status = published`. Rezultat masurat: ZERO articole in vitrina publica,
+ * si nicio eroare nicaieri.
+ *
+ * Acelasi lucru cu un articol PROGRAMAT: pana vine ceasul, nu se vede.
+ *
+ * Baza tine regula si ea (vezi `blog_o_singura_vitrina`), dar acolo bifa se
+ * stinge in tacere. Aici omul primeste un motiv.
+ */
+function poateFiInVitrina(intrare: ArticolInput): boolean {
+  if (intrare.status !== "published") return false;
+  const cand = dataLaPublicare(intrare);
+  return !!cand && new Date(cand).getTime() <= Date.now();
+}
+
+/**
+ * Vitrina si fixarea, croite dupa cine scrie si dupa ce se vede.
+ *
+ * Intoarce fie campurile de pus pe rand, fie un motiv de aratat omului.
+ */
+function vitrinaSiFixarea(
+  rol: "admin" | "editor",
+  intrare: ArticolInput,
+): { is_featured: boolean; is_pinned: boolean } | { error: string } {
+  if (!poateAtingeVitrina(rol)) {
+    /* Nu e o eroare: pur si simplu nu se scriu. Un redactor care apasa Salveaza
+       nu trebuie oprit fiindca ecranul lui n-a aratat bifele. */
+    return { is_featured: false, is_pinned: false };
+  }
+
+  if (intrare.is_featured && !poateFiInVitrina(intrare)) {
+    return {
+      error:
+        "Doar un articol publicat și vizibil acum poate sta în vitrină. " +
+        "Publică-l întâi (sau așteaptă ora programată), apoi scoate-l în față.",
+    };
+  }
+
+  return { is_featured: intrare.is_featured ?? false, is_pinned: intrare.is_pinned ?? false };
+}
+
 function dataLaPublicare(intrare: ArticolInput): string | null {
   if (intrare.status !== "published") return intrare.published_at || null;
   return intrare.published_at || new Date().toISOString();
@@ -872,7 +1004,10 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
   }
 
   /* Dacă n-a ales un autor, se pune cel legat de contul lui. Vezi `autorulMeu`. */
-  const rand = randDinIntrare(intrare, s.slug);
+  const vitrina = vitrinaSiFixarea(cine.rol, intrare);
+  if ("error" in vitrina) return { error: vitrina.error };
+
+  const rand = { ...randDinIntrare(intrare, s.slug), ...vitrina };
   if (!rand.author_id) rand.author_id = await autorulMeu(cine.id);
 
   /*
@@ -923,6 +1058,9 @@ export async function actualizeazaArticol(
     return { error: `Adresa „${s.slug}" e folosită de o pagină a blogului. Alege alta.` };
   }
 
+  const vitrina = vitrinaSiFixarea(admin.rol, intrare);
+  if ("error" in vitrina) return { error: vitrina.error };
+
   const vechi = await iaArticol(id);
   if (!vechi) return { error: "Articolul nu mai există." };
 
@@ -971,7 +1109,11 @@ export async function actualizeazaArticol(
   */
   const { data: versiuneNoua, error } = await blogDb().rpc("blog_salveaza_articol", {
     p_id: id,
-    p_rand: caJson({ ...randDinIntrare(intrare, s.slug), published_at: dataLaPublicare(intrare) }),
+    p_rand: caJson({
+      ...randDinIntrare(intrare, s.slug),
+      ...vitrina,
+      published_at: dataLaPublicare(intrare),
+    }),
     p_etichete: etichetePentruBaza(intrare.etichete),
     p_salvat_de: admin.id,
     p_versiuni: VERSIUNI_PASTRATE,
@@ -1123,52 +1265,89 @@ export async function iaVersiune(id: string): Promise<{ title: string | null; co
  * a unui articol PUBLICAT i-ar fi adus înapoi și adresa veche, iar aceea e deja
  * în Google. Revenirea la un text nu trebuie să mute pagina.
  */
-export async function revinoLaVersiune(idArticol: string, idVersiune: string): Promise<Raspuns> {
+export type VersiuneRestaurata = {
+  title: string;
+  content_html: string;
+  reading_minutes: number | null;
+  edit_version: number;
+};
+
+/**
+ * Aduce înapoi o versiune veche.
+ *
+ * ⚠ CEA MAI DISTRUCTIVĂ OPERAȚIE DIN EDITOR: înlocuiește TOT textul. De aceea are
+ * acum toate pazele pe care le are salvarea, și una în plus.
+ *
+ * 1. **Verifică versiunea.** Trimitea `null` dinadins, cu nota „omul tocmai a
+ *    citit lista și a ales din ea". Nota era o scuză proastă: între deschiderea
+ *    istoricului și apăsare, altcineva putea salva — iar revenirea ștergea munca
+ *    aceea fără să spună nimic. Blocajul optimist apăra salvarea obișnuită și
+ *    lăsa descoperită tocmai operația care rescrie articolul întreg.
+ *
+ * 2. **Cere ca revizia să fie A ARTICOLULUI.** Se citea doar după `id`. Prin
+ *    ecran nu se poate greși, dar acțiunea e o adresă POST: chemată de mână cu o
+ *    revizie a articolului A și id-ul articolului B, textul lui A ajungea peste B.
+ *    Se verifică în două locuri — aici, ca să dea un mesaj limpede, și încă o dată
+ *    în bază, sub lacăt, fiindcă acolo e singurul loc care nu poate fi ocolit.
+ *
+ * 3. **Întoarce ce a scris.** Editorul își pune starea din răspuns.
+ *    `router.refresh()` singur nu ajungea: aduce datele noi de la server, dar NU
+ *    atinge `useState` din client — deci formularul rămânea cu textul de dinainte,
+ *    iar `versiuneaMea` cu numărul vechi. Următoarea salvare pica atunci cu P0409,
+ *    pe bună dreptate, dar fără ca omul să înțeleagă de ce.
+ */
+export async function revinoLaVersiune(
+  idArticol: string,
+  idVersiune: string,
+  versiuneAsteptata: number | null,
+): Promise<RaspunsCu<VersiuneRestaurata>> {
   const cine = await requireBlogEditorApi();
   if (!cine) return { error: "Neautorizat" };
 
-  const [vechea, acum] = await Promise.all([iaVersiune(idVersiune), iaArticol(idArticol)]);
-  if (!vechea) return { error: "Versiunea nu mai există." };
+  const acum = await iaArticol(idArticol);
   if (!acum) return { error: "Articolul nu mai există." };
 
-  /* Aceeași margine ca la salvare: un redactor nu atinge un articol publicat.
-     Vezi `poateLasaInStarea` și nota de deasupra lui `listeazaVersiuni`. */
+  /* Aceeași margine ca la salvare: un redactor nu atinge un articol publicat. */
   if (!poateLasaInStarea(cine.rol, acum.status)) {
     return { error: "Articolul e publicat. Doar un administrator poate reveni la o versiune." };
   }
 
-  /*
-    ⚠ PRIN ACEEAȘI FUNCȚIE CA SALVAREA, nu cu două cereri.
+  /* ⚠ Și `post_id`, nu doar `id`. Vezi punctul 2 de mai sus. */
+  const { data: veche } = await blogDb()
+    .from("blog_post_revisions")
+    .select("content_html")
+    .eq("id", idVersiune)
+    .eq("post_id", idArticol)
+    .maybeSingle();
 
-    Erau două: întâi se punea deoparte ce e acum, apoi se scria ce era. Ordinea
-    era gândită bine — o cădere între ele lăsa articolul neatins — dar tot rămânea
-    o fereastră: revizia scrisă, articolul nu. Iar istoricul se tăia abia după,
-    într-o a treia cerere.
+  if (!veche) return { error: "Versiunea nu mai există sau nu e a acestui articol." };
 
-    Funcția face totul sub lacăt: pune deoparte starea de acum (`p_creeaza_versiune`),
-    scrie ce era, taie istoricul. Ori tot, ori nimic.
-  */
-  const html = vechea.content_html ?? "";
-  const { error } = await blogDb().rpc("blog_salveaza_articol", {
-    p_id: idArticol,
-    p_rand: {
-      title: vechea.title ?? acum.title,
-      content_html: html,
-      reading_minutes: minuteDeCitit(html),
-    },
-    /* `null`: revenirea nu atinge etichetele. Ele n-au fost niciodată păstrate
-       în istoric, deci n-avem la ce să le întoarcem. */
-    p_etichete: null,
+  const html = (veche as { content_html: string | null }).content_html ?? "";
+
+  const { data, error } = await blogDb().rpc("blog_restaureaza_versiune", {
+    p_articol: idArticol,
+    p_versiune: idVersiune,
+    p_versiune_asteptata: versiuneAsteptata,
     p_salvat_de: cine.id,
+    /* Socotit aici, nu în SQL: `minuteDeCitit` e singura regulă, și rescrisă în
+       bază s-ar fi despărțit de ea. */
+    p_minute: minuteDeCitit(html),
     p_versiuni: VERSIUNI_PASTRATE,
-    /* Fără verificare de versiune: omul tocmai a citit lista și a ales din ea. */
-    p_versiune_asteptata: null,
-    p_creeaza_versiune: true,
   });
 
+  if (error && (error as { code?: string }).code === "P0409") {
+    return {
+      error:
+        "Articolul a fost modificat între timp — în altă filă sau de alt redactor. " +
+        "Închide istoricul, reîncarcă articolul, și alege din nou versiunea.",
+    };
+  }
   if (error) return { error: "Nu s-a putut reveni. Încearcă din nou." };
 
+  const r = (Array.isArray(data) ? data[0] : data) as VersiuneRestaurata | null;
+  if (!r) return { error: "Nu s-a putut reveni. Încearcă din nou." };
+
   reimprospateaza();
-  return { success: true };
+  return { success: true, date: { ...r, edit_version: Number(r.edit_version) } };
 }
 

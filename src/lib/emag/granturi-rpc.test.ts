@@ -37,17 +37,17 @@ import { readFileSync, readdirSync } from "node:fs";
 const PUBLICE_DINADINS: Record<string, string> = {
   is_admin: "chemata din politicile RLS, deci trebuie sa mearga sub rolul utilizatorului",
   /*
-   * ⚠ ACEEASI PRICINA CA `is_admin`, si a fost cantarita, nu presupusa.
+   * ⚠ `is_blog_editor` A FOST AICI SI A PLECAT, si merita spus de ce: lista asta
+   * trebuie sa se scurteze, nu sa creasca.
    *
-   * `is_blog_editor()` e chemata din politicile RLS ale blogului — pe `blog_posts`,
-   * `blog_post_tags`, `blog_post_revisions`, `blog_post_stats`, `blog_tags`. Acelea
-   * ruleaza sub rolul apelantului, deci fara EXECUTE pentru `authenticated` ar cadea
-   * FIECARE dintre ele, si niciun redactor n-ar mai putea deschide nimic.
-   *
-   * Nu expune nimic: intoarce un singur `boolean` despre cel care intreaba, citit
-   * din `users_profile` dupa `auth.uid()`. Nu poate fi intrebata despre altcineva.
+   * Pe 30.08.2026 a fost adaugata cu motivul bun de atunci — o chemau politicile
+   * RLS de blog, care ruleaza sub rolul apelantului. Pe 31.08.2026 politicile
+   * acelea au fost sterse cu totul: blogul nu mai are nicio cale de scriere
+   * directa prin `authenticated`, fiindca tot ce scrie trece prin actiuni de
+   * server cu cheia de serviciu. Fara politici care s-o cheme, functia n-are de ce
+   * sa mai fie deschisa — deci grantul i-a fost retras, si exceptia a devenit
+   * inutila.
    */
-  is_blog_editor: "chemata din politicile RLS de blog, sub rolul utilizatorului",
   catalog_cauta: "cautarea din vitrina publica, fara autentificare",
   catalog_pagina: "paginarea vitrinei publice",
   catalog_randuri: "randurile vitrinei publice",

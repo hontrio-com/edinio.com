@@ -20,6 +20,22 @@ function faraEtichete(html: string, maxim = 300): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, maxim);
 }
 
+/**
+ * Cea mai mare dintre data conținutului și cea de publicare.
+ *
+ * ⚠ `dateModified` NU POATE FI ÎNAINTEA LUI `datePublished`. Un articol scris pe
+ * 25 august și programat pentru 1 septembrie are `content_updated_at` în trecut
+ * față de `published_at` — iar datele structurate ar fi spus că a fost modificat
+ * înainte să existe public. E o contradicție logică pe care un motor o poate
+ * verifica singur, și care aruncă o umbră peste tot restul.
+ *
+ * `sitemap.ts` avea deja regula asta; aici lipsea.
+ */
+function candSaSchimbat(continut: string, publicat: string | null): string {
+  if (!publicat) return continut;
+  return new Date(continut).getTime() >= new Date(publicat).getTime() ? continut : publicat;
+}
+
 export function articolJsonLd(a: ArticolIntreg): object {
   const adresa = `${PLATFORM_ORIGIN}/blog/${a.slug}`;
   const noduri: object[] = [];
@@ -62,7 +78,7 @@ export function articolJsonLd(a: ArticolIntreg): object {
     url: adresa,
     mainEntityOfPage: { "@type": "WebPage", "@id": adresa },
     datePublished: a.published_at,
-    dateModified: a.content_updated_at,
+    dateModified: candSaSchimbat(a.content_updated_at, a.published_at),
     inLanguage: "ro-RO",
     isPartOf: { "@id": ID_SITE },
     publisher: { "@id": ID_ORGANIZATIE },

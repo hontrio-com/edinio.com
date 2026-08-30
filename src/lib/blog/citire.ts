@@ -35,6 +35,11 @@ import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
  * plasa; astea sunt gardul. Nici RLS nu se poate slabi din greseala fara ca
  * cineva sa observe, nici o sesiune de admin nu mai schimba ce vede publicul.
  *
+ * ⚠ SI DIN 31.08.2026 NU MAI EXISTA NICIO POLITICA DE ADMIN SAU DE REDACTOR pe
+ * tabelele de blog. Un cont autentificat vede prin REST exact ce vede un
+ * vizitator: articolele publicate. Ciornele nu se mai pot citi decat cu cheia de
+ * serviciu, adica doar prin actiunile de server.
+ *
  * ⚠ CLIENTUL E TIPAT, din 30.08.2026. Tabelele si functiile de blog au intrat in
  * `database.types.ts`, deci `tsc` verifica numele coloanelor si al functiilor.
  * Pana atunci era turnat cu `as unknown as SupabaseClient`, ceea ce insemna ca un
@@ -370,6 +375,37 @@ export async function articolulDinVitrina(): Promise<ArticolDeLista | null> {
     .lte("published_at", ACUM())
     .maybeSingle();
   return data ? caLista(data as unknown as Record<string, unknown>) : null;
+}
+
+export type ArticolDeFeed = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  published_at: string | null;
+  content_updated_at: string | null;
+  autor: string | null;
+  categorie: string | null;
+};
+
+/**
+ * Articolele pentru feedul RSS.
+ *
+ * ⚠ CITIRE PROPRIE, NU `paginaDeArticole`. Aceea ordonează `is_pinned` întâi,
+ * ceea ce e bun pentru `/blog`: un ghid de pornire scris acum un an trebuie să
+ * rămână sus. Într-un FEED e greșit — un feed e un flux cronologic, nu o copie
+ * a așezării de pe pagină.
+ *
+ * Urmarea, pe feedul de dinainte: un articol fixat din ianuarie stătea primul,
+ * iar cel de ieri al doilea. Iar `lastBuildDate` se lua din primul element, deci
+ * putea fi mai VECHI decât alte articole din același feed — și un cititor care se
+ * uită la data aceea crede că n-are ce prelua.
+ *
+ * ⚠ Sare și peste `noindex`: dacă i-am spus lui Google să nu-l indexeze, n-are
+ * de ce să plece mai departe printr-un feed.
+ */
+export async function articolePentruFeed(cate = 30): Promise<ArticolDeFeed[]> {
+  const { data } = await (await db()).rpc("blog_articole_pentru_feed", { p_cate: cate });
+  return (data ?? []) as ArticolDeFeed[];
 }
 
 export const PE_PAGINA = 12;

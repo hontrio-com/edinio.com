@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { History, Loader2, RotateCcw, X } from "lucide-react";
-import { listeazaVersiuni, revinoLaVersiune, type VersiuneInLista } from "@/lib/actions/blog.actions";
+import {
+  listeazaVersiuni,
+  revinoLaVersiune,
+  type VersiuneInLista,
+  type VersiuneRestaurata,
+} from "@/lib/actions/blog.actions";
 
 /**
  * Istoricul unui articol, cu revenire.
@@ -23,15 +28,30 @@ import { listeazaVersiuni, revinoLaVersiune, type VersiuneInLista } from "@/lib/
  */
 export function AdminBlogVersiuni({
   idArticol,
+  versiuneaAcum,
   deschis,
   inchide,
   dupaRevenire,
 }: {
   idArticol: string;
+  /**
+   * Versiunea de la care pleacă cel care se uită la istoric.
+   *
+   * ⚠ Se trimite la revenire. Fără ea, revenirea scria peste o salvare făcută de
+   * altcineva între deschiderea istoricului și apăsare — adică exact fereastra
+   * pe care blocajul optimist există ca s-o închidă.
+   */
+  versiuneaAcum: number | null;
   deschis: boolean;
   inchide: () => void;
-  /** Editorul își reia datele: textul de pe ecran nu mai e cel din bază. */
-  dupaRevenire: () => void;
+  /**
+   * Ce a scris revenirea, ca editorul să-și pună starea din el.
+   *
+   * ⚠ NU E DOAR UN SEMNAL. `router.refresh()` singur nu ajungea: aduce datele noi
+   * de la server, dar nu atinge `useState` din client — deci formularul rămânea
+   * cu textul de dinainte și cu numărul de versiune vechi.
+   */
+  dupaRevenire: (restaurat: VersiuneRestaurata) => void;
 }) {
   const [versiuni, setVersiuni] = useState<VersiuneInLista[] | null>(null);
   const [revine, setRevine] = useState<string | null>(null);
@@ -56,11 +76,11 @@ export function AdminBlogVersiuni({
     )) return;
 
     setRevine(v.id);
-    const res = await revinoLaVersiune(idArticol, v.id);
+    const res = await revinoLaVersiune(idArticol, v.id, versiuneaAcum);
     setRevine(null);
-    if ("error" in res) { toast.error(res.error); return; }
+    if ("error" in res) { toast.error(res.error, { duration: 12_000 }); return; }
     toast.success("Versiunea a fost adusă înapoi.");
-    dupaRevenire();
+    dupaRevenire(res.date);
     inchide();
   }
 

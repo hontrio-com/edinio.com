@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
+
 import Link from "next/link";
 import type { RolBlog } from "@/lib/admin-guard";
+import type { PaginaEtichete } from "@/lib/actions/blog.actions";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Tags, Trash2, ExternalLink } from "lucide-react";
@@ -20,7 +23,26 @@ export type EticheteRand = { id: string; slug: string; name: string; cate: numbe
  * Ecranul ăsta există pentru curățenie: să se vadă câte s-au adunat, care au
  * rămas fără articole, și care sunt scrise de două ori altfel.
  */
-export function AdminBlogTagsClient({ etichete, rol }: { etichete: EticheteRand[]; rol: RolBlog }) {
+export function AdminBlogTagsClient({
+  rezultat,
+  rol,
+  cautat,
+}: {
+  rezultat: PaginaEtichete;
+  rol: RolBlog;
+  cautat: string;
+}) {
+  const { etichete, total, pagina, pagini } = rezultat;
+  const [cauta, setCauta] = useState(cautat);
+
+  function cere(schimbari: { q?: string; p?: string }) {
+    const u = new URLSearchParams();
+    const q = schimbari.q ?? cautat;
+    if (q.trim()) u.set("q", q.trim());
+    if (schimbari.p) u.set("p", schimbari.p);
+    const x = u.toString();
+    router.push(x ? `/admin/blog/etichete?${x}` : "/admin/blog/etichete");
+  }
 /**
  * ⚠ ASCUNDEREA NU E PAZĂ. Acțiunile cer `requireAdminApi()`, și acolo se
  * hotărăște cu adevărat. Rândul de mai jos e ca redactorul să nu apese un buton
@@ -50,6 +72,17 @@ export function AdminBlogTagsClient({ etichete, rol }: { etichete: EticheteRand[
     <div className="p-6 max-w-3xl mx-auto">
       <BlogSubmeniu activ="etichete" rol={rol} />
 
+      {(total > 0 || cautat) && (
+        <div className="mb-4">
+          {/* Trimite la Enter: căutarea se face în bază. */}
+          <input type="search" value={cauta}
+            onChange={(e) => setCauta(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") cere({ q: cauta }); }}
+            placeholder="Caută o etichetă, apoi Enter"
+            className="h-9 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none" />
+        </div>
+      )}
+
       {/* ⚠ Se SPUNE de ce lipsesc butoanele. Un ecran din care ele pur si
           simplu lipsesc il face pe om sa creada ca s-a stricat ceva sau ca n-a
           gasit el unde sa apese. */}
@@ -65,7 +98,7 @@ export function AdminBlogTagsClient({ etichete, rol }: { etichete: EticheteRand[
           <h1 className="text-xl font-semibold text-zinc-900">Etichete</h1>
         </div>
         <span className="text-xs text-zinc-500">
-          {etichete.length} {etichete.length === 1 ? "etichetă" : "etichete"}
+          {total} {total === 1 ? "etichetă" : "etichete"}
           {orfane > 0 ? `, ${orfane} fără articole` : ""}
         </span>
       </div>
@@ -116,6 +149,21 @@ export function AdminBlogTagsClient({ etichete, rol }: { etichete: EticheteRand[
           ))}
         </div>
       )}
+      {pagini > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-2">
+          {Array.from({ length: pagini }, (_, k) => k + 1).map((n) => (
+            <button key={n} type="button" onClick={() => cere({ p: String(n) })}
+              className={`min-w-9 rounded-lg border px-3 py-1.5 text-center text-xs font-medium ${
+                n === pagina
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"
+              }`}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+
     </div>
   );
 }

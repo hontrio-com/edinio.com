@@ -134,6 +134,26 @@ const CHEMARI = [
     publica: false,
   },
 
+  /* Nu scrie: e `stable`, doar citeste. Publica, fiindca feedul se serveste
+     de pe o ruta fara sesiune. */
+  { fn: "blog_articole_pentru_feed", args: { p_cate: 1 }, publica: true },
+
+  /*
+    ⚠ ARUNCA dinadins, pe un articol care nu exista: `no_data_found`. Ca la
+    `blog_salveaza_articol`, chiar exceptia dovedeste ca PostgREST a gasit
+    functia si i-a potrivit toate argumentele pe nume.
+  */
+  {
+    fn: "blog_restaureaza_versiune",
+    args: {
+      p_articol: "00000000-0000-0000-0000-000000000000",
+      p_versiune: "00000000-0000-0000-0000-000000000000",
+      p_versiune_asteptata: null, p_salvat_de: null, p_minute: 1, p_versiuni: 50,
+    },
+    asteptat: "PGRST",
+    publica: false,
+  },
+
   { fn: "redactorii_blogului", args: {}, publica: false },
   { fn: "cont_dupa_email", args: { p_email: "___proba___@nicaieri.invalid" }, publica: false },
 ];

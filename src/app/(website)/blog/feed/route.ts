@@ -1,4 +1,4 @@
-import { paginaDeArticole } from "@/lib/blog/citire";
+import { articolePentruFeed } from "@/lib/blog/citire";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 
 /**
@@ -46,7 +46,15 @@ function xml(t: string | null | undefined): string {
 export const revalidate = 3600;
 
 export async function GET() {
-  const { articole } = await paginaDeArticole(1, CATE);
+  /*
+    ⚠ CITIRE PROPRIE, NU `paginaDeArticole`.
+
+    Aceea ordonează `is_pinned` întâi — bun pentru `/blog`, unde un ghid de
+    pornire trebuie să rămână sus. Într-un feed e greșit: un feed e un flux
+    cronologic, nu o copie a așezării de pe pagină. Pe feedul de dinainte, un
+    articol fixat din ianuarie stătea primul, iar cel de ieri al doilea.
+  */
+  const articole = await articolePentruFeed(CATE);
 
   const elemente = articole
     .map((a) => {
@@ -56,20 +64,35 @@ export async function GET() {
       <link>${xml(adresa)}</link>
       <guid isPermaLink="true">${xml(adresa)}</guid>
       ${a.published_at ? `<pubDate>${new Date(a.published_at).toUTCString()}</pubDate>` : ""}
-      ${a.autor?.name ? `<dc:creator>${xml(a.autor.name)}</dc:creator>` : ""}
-      ${a.categorie?.name ? `<category>${xml(a.categorie.name)}</category>` : ""}
+      ${a.autor ? `<dc:creator>${xml(a.autor)}</dc:creator>` : ""}
+      ${a.categorie ? `<category>${xml(a.categorie)}</category>` : ""}
       <description>${xml(a.excerpt)}</description>
     </item>`;
     })
     .join("\n");
 
   /*
-    `lastBuildDate` e data celui mai proaspăt articol, nu `new Date()`. Aceeași
-    regulă ca la `lastModified` din sitemap: un feed care spune „s-a schimbat
-    chiar acum" la fiecare cerere nu mai spune nimic, iar cititorul învață să nu
-    se mai uite la câmp.
+    `lastBuildDate` e data celui mai proaspăt lucru din feed, nu `new Date()`.
+    Aceeași regulă ca la `lastModified` din sitemap: un feed care spune „s-a
+    schimbat chiar acum" la fiecare cerere nu mai spune nimic, iar cititorul
+    învață să nu se mai uite la câmp.
+
+    ⚠ SE IA MAXIMUL, NU PRIMUL ELEMENT. Înainte era `articole.find(...)` — adică
+    data primului din listă. Cât timp lista era ordonată cu articolele fixate în
+    față, primul putea fi un articol din ianuarie, deci `lastBuildDate` ieșea mai
+    VECHE decât alte articole din același feed. Un cititor care se uită la data
+    aceea crede că n-are ce prelua.
+
+    ⚠ Și se ține seama și de `content_updated_at`: un articol vechi rescris azi
+    chiar înseamnă că feedul s-a schimbat azi.
   */
-  const ceaMaiNoua = articole.find((a) => a.published_at)?.published_at;
+  const ceaMaiNoua = articole.reduce<number>((max, a) => {
+    for (const d of [a.published_at, a.content_updated_at]) {
+      const t = d ? new Date(d).getTime() : NaN;
+      if (Number.isFinite(t) && t > max) max = t;
+    }
+    return max;
+  }, 0);
 
   const corp = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -79,7 +102,7 @@ export async function GET() {
     <atom:link href="${PLATFORM_ORIGIN}/blog/feed" rel="self" type="application/rss+xml" />
     <description>Cum vinzi online din România: livrare, plăți, marketplace-uri, facturare.</description>
     <language>ro-RO</language>
-    ${ceaMaiNoua ? `<lastBuildDate>${new Date(ceaMaiNoua).toUTCString()}</lastBuildDate>` : ""}
+    ${ceaMaiNoua > 0 ? `<lastBuildDate>${new Date(ceaMaiNoua).toUTCString()}</lastBuildDate>` : ""}
 ${elemente}
   </channel>
 </rss>

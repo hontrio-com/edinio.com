@@ -2,6 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+/*
+  ⚠ CITIRILE DE SURSĂ SE NORMALIZEAZĂ LA \n.
+
+  Pe Windows, git scrie fișierele cu CRLF în copia de lucru. O probă care caută
+  în sursă cu un tipar ce trece peste un rând — orice `\n` dintr-un regex — nu
+  mai potrivește nimic, fiindcă în fișier scrie `\r\n`.
+
+  Nu e o închipuire: exact asta a doborât patru probe, printre care și cea care
+  verifică FIECARE coloană scrisă din tot depozitul. Aceea a răspuns „am găsit 0
+  tabele în tipuri" — deci plasa care apără împotriva scrierii într-o coloană
+  inexistentă era căzută, tocmai capcana din care s-a născut ea (vezi nota de
+  sus despre `posta_config`).
+
+  ⚠ ÎN DEPOZIT MAI SUNT ~370 DE CITIRI NENORMALIZATE, în ~140 de fișiere de
+  probă. Cele mai multe trec fiindcă tiparele lor stau pe un singur rând. Sunt
+  fragile la fel; se repară pe măsură ce se ating.
+*/
+
+
 /* ══════════════════════════════════════════════════════════════════════════
    O INTENTIE SCRISA NU SE ARUNCA, SI O REZERVA NU REPETA DEFECTUL (31.08.2026)
    ══════════════════════════════════════════════════════════════════════════
@@ -15,25 +34,25 @@ import { readFileSync } from "node:fs";
      - CAS-ul nu se poate rula, si caderea scrie fara conditie
 */
 
-const sync = readFileSync("src/lib/olx/sync.ts", "utf8");
-const oauth = readFileSync("src/lib/olx/oauth.ts", "utf8");
-const config = readFileSync("src/lib/olx/config.ts", "utf8");
-const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8");
-const actiuni = readFileSync("src/lib/actions/olx.actions.ts", "utf8");
-const mesaje = readFileSync("src/lib/actions/olx-mesaje.actions.ts", "utf8");
-const cont = readFileSync("src/lib/actions/olx-cont.actions.ts", "utf8");
-const importul = readFileSync("src/lib/actions/olx-import.actions.ts", "utf8");
-const intentie = readFileSync("src/lib/olx/intentie-de-cumparare.ts", "utf8");
-const plati = readFileSync("src/lib/olx/plati.ts", "utf8");
+const sync = readFileSync("src/lib/olx/sync.ts", "utf8").replace(/\r\n/g, "\n");
+const oauth = readFileSync("src/lib/olx/oauth.ts", "utf8").replace(/\r\n/g, "\n");
+const config = readFileSync("src/lib/olx/config.ts", "utf8").replace(/\r\n/g, "\n");
+const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8").replace(/\r\n/g, "\n");
+const actiuni = readFileSync("src/lib/actions/olx.actions.ts", "utf8").replace(/\r\n/g, "\n");
+const mesaje = readFileSync("src/lib/actions/olx-mesaje.actions.ts", "utf8").replace(/\r\n/g, "\n");
+const cont = readFileSync("src/lib/actions/olx-cont.actions.ts", "utf8").replace(/\r\n/g, "\n");
+const importul = readFileSync("src/lib/actions/olx-import.actions.ts", "utf8").replace(/\r\n/g, "\n");
+const intentie = readFileSync("src/lib/olx/intentie-de-cumparare.ts", "utf8").replace(/\r\n/g, "\n");
+const plati = readFileSync("src/lib/olx/plati.ts", "utf8").replace(/\r\n/g, "\n");
 /*
  * ⚠ SE CITESC SI COMPONENTELE, nu doar actiunile. Proba de pana acum cauta `platiNelamurite:` in
  * SURSA actiunilor si trecea verde peste un panou care nu afisa cifra si un `totBine` care n-o
  * socotea: confirma ca se SCRIE campul, nu ca-l citeste cineva. Un capat de fir care nu se leaga
  * nicaieri arata, dintr-un inventar, exact ca o functie livrata.
  */
-const panou = readFileSync("src/components/dashboard/OlxSanatate.tsx", "utf8");
-const panouCont = readFileSync("src/components/dashboard/OlxAccountPanel.tsx", "utf8");
-const ecran = readFileSync("src/components/dashboard/OlxClient.tsx", "utf8");
+const panou = readFileSync("src/components/dashboard/OlxSanatate.tsx", "utf8").replace(/\r\n/g, "\n");
+const panouCont = readFileSync("src/components/dashboard/OlxAccountPanel.tsx", "utf8").replace(/\r\n/g, "\n");
+const ecran = readFileSync("src/components/dashboard/OlxClient.tsx", "utf8").replace(/\r\n/g, "\n");
 
 function faraComentarii(t: string): string {
   return t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
@@ -217,7 +236,7 @@ test("⚠ cartierul se sterge cu `null`, nu cu `undefined`", () => {
   assert.doesNotMatch(corp, /=== null \? undefined :/,
     "`undefined` nu ajunge niciodata in baza: `JSON.stringify` il scoate din petic");
   /* ⚠ Si tipul chiar primeste `null`, altfel `tsc` ar fi cerut inapoi `undefined`. */
-  const tipuri = readFileSync("src/lib/olx/types.ts", "utf8");
+  const tipuri = readFileSync("src/lib/olx/types.ts", "utf8").replace(/\r\n/g, "\n");
   assert.match(tipuri, /default_district_id\?: number \| null;/);
   assert.match(tipuri, /default_district_name\?: string \| null;/);
 });
@@ -328,7 +347,7 @@ export `, i + 10)));
    * Copiate aici, ar fi fost aceleasi probe cu alt nume — si s-ar fi despartit de original la
    * prima schimbare. Se cere doar sa existe, ca lantul sa se vada.
    */
-  const registru = readFileSync("src/lib/operatii/registru.test.ts", "utf8");
+  const registru = readFileSync("src/lib/operatii/registru.test.ts", "utf8").replace(/\r\n/g, "\n");
   for (const garantie of [
     "se ADOPTA rezultatul, fara al doilea apel",
     "furnizorul NU e chemat",
@@ -559,7 +578,7 @@ test("⚠ „Ignoră” tine minte, si textul spune adevarul", () => {
   const i = importul.indexOf("export async function ignoraAnuntOlx");
   assert.match(importul.slice(i), /if \(eConfig\) return \{ error:/);
   /* ⚠ Iar textul din ecran nu mai promite ce nu tinem, si nici invers. */
-  const ecran = readFileSync("src/components/dashboard/OlxImport.tsx", "utf8");
+  const ecran = readFileSync("src/components/dashboard/OlxImport.tsx", "utf8").replace(/\r\n/g, "\n");
   assert.match(ecran, /„Ignoră” ține minte alegerea/);
   assert.doesNotMatch(ecran, /anunțul apare din nou/, "textul vechi a ramas peste purtarea noua");
 });
@@ -585,7 +604,7 @@ test("⚠ lista alba a refuzurilor traieste intr-un singur loc", () => {
     "lista alba sta in `verdictul-platii.ts`, unde se poate proba cu mesaje adevarate");
   assert.match(cod, /verdictulPlatii\(/, "actiunile trebuie sa foloseasca hotararea probata");
 
-  const verdict = readFileSync("src/lib/olx/verdictul-platii.ts", "utf8");
+  const verdict = readFileSync("src/lib/olx/verdictul-platii.ts", "utf8").replace(/\r\n/g, "\n");
   const i = verdict.indexOf("const REFUZ_LIMPEDE");
   assert.ok(i > 0, "lista alba a disparut cu totul");
   const lista = verdict.slice(i, verdict.indexOf("]", i));

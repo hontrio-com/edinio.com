@@ -7,7 +7,7 @@ import { notFound } from "next/navigation";
 import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
 import { CautareBlog } from "@/components/website/blog/CautareBlog";
 import { AbonareBlog } from "@/components/website/blog/AbonareBlog";
-import { categoriiBlog, paginaDeArticole } from "@/lib/blog/citire";
+import { articolulDinVitrina, categoriiFolosite, paginaDeArticole } from "@/lib/blog/citire";
 import { listaBlogJsonLd } from "@/lib/blog/jsonld";
 import { jsonLdSafe } from "@/lib/json-ld";
 import { ACASA } from "@/lib/website/breadcrumbs";
@@ -49,24 +49,36 @@ export default async function BlogPage({ searchParams }: Props) {
   const { p } = await searchParams;
   const cerut = paginaCeruta(p);
 
-  const [{ articole, total, pagini }, categorii] = await Promise.all([
+  const [{ articole, total, pagini }, categoriiDeAratat, vitrina] = await Promise.all([
     paginaDeArticole(cerut),
-    categoriiBlog(),
+    categoriiFolosite(),
+    /* Vitrina se caută doar când chiar se arată, adică pe prima pagină. */
+    cerut === 1 ? articolulDinVitrina() : Promise.resolve(null),
   ]);
 
   /* ⚠ O pagină care nu există dă 404, nu o listă goală cu adresă proprie.
      Vezi `paginaNuExista`. */
   if (paginaNuExista(cerut, total, pagini)) notFound();
 
-  /* Categoriile fără niciun articol publicat nu se arată: un filtru care duce la
-     o pagină goală e o promisiune neonorată. Se socotesc pe TOATE articolele,
-     nu doar pe cele de pe pagina curentă. */
-  const cuArticole = new Set(articole.map((a) => a.categorie?.slug).filter(Boolean));
-  const categoriiDeAratat = categorii.filter((c) => cuArticole.has(c.slug));
+  /*
+    ⚠ RUBRICILE SE SOCOTESC PE TOATE ARTICOLELE, ȘI ACUM CHIAR SE SOCOTESC.
+
+    Comentariul de aici spunea exact asta, dar codul de dedesubt făcea pe dos:
+    `new Set(articole.map(...))` — adică din cele 12 rânduri ale paginii curente.
+    Urmarea: navigația se schimba sub picioarele omului de la o pagină la alta, iar
+    o rubrică ale cărei articole erau abia în pagina 3 nu se vedea de nicăieri.
+
+    Cele fără niciun articol publicat tot nu se arată: un filtru care duce la o
+    pagină goală e o promisiune neonorată. Numai că acum „fără articole" se
+    hotărăște în bază, nu din ce s-a nimerit pe ecran.
+  */
 
   /* Cel scos în față stă lat, dar DOAR pe prima pagină: pe a treia, un articol
-     mare în capul listei ar rupe ordinea cronologică fără să spună de ce. */
-  const scosInFata = cerut === 1 ? (articole.find((a) => a.is_featured) ?? articole[0]) : null;
+     mare în capul listei ar rupe ordinea cronologică fără să spună de ce.
+
+     ⚠ Se caută în TOATĂ baza, nu în pagina curentă — vezi `articolulDinVitrina`.
+     Dacă nu e ales niciunul, stă primul din listă, ca pagina să nu arate ciuntită. */
+  const scosInFata = cerut === 1 ? (vitrina ?? articole[0] ?? null) : null;
   const restul = scosInFata ? articole.filter((a) => a.id !== scosInFata.id) : articole;
 
   return (

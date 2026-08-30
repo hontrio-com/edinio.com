@@ -37,7 +37,24 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const TABELE = ["store_settings", "orders", "businesses", "users_profile"];
+const TABELE = [
+  "store_settings", "orders", "businesses", "users_profile",
+  /*
+    ⚠ BLOGUL E AICI FIINDCĂ NU E ÎN TIPURILE GENERATE.
+
+    `src/types/database.types.ts` nu cunoaște niciun `blog_*`, deci tot codul de
+    blog merge pe clienți fără tipuri (`as unknown as SupabaseClient`). Urmarea:
+    `tsc` nu poate spune nimic despre coloanele lui, iar
+    `coloanele-scrise-exista.test.ts` — care citește tot din tipuri — sare peste
+    fiecare scriere de blog fără să lase vreun semn că a sărit.
+
+    Unealta de față nu se uită în tipuri, se uită în BAZĂ. Deci e singura care
+    poate apăra blogul azi, și e mai puternică decât tipurile: tipurile pot fi
+    vechi, PostgREST-ul nu.
+  */
+  "blog_posts", "blog_authors", "blog_categories", "blog_tags", "blog_post_tags",
+  "blog_post_revisions", "blog_redirects", "blog_subscribers", "blog_post_stats",
+];
 
 /* ── 1. Ce coloane cere codul ─────────────────────────────────────────────── */
 
@@ -83,6 +100,56 @@ function cereriDinFisier(text) {
     for (const e of lista.matchAll(/(\w+)\s*\(([^()]*)\)/g)) {
       if (TABELE.includes(e[1])) cereri.push({ tabel: e[1], lista: e[2] });
     }
+  }
+  return cereri;
+}
+
+/**
+ * `.from("tabel").insert({…})` / `.update({…})` / `.upsert({…})`.
+ *
+ * ⚠ O COLOANA SCRISA GRESIT E MAI RAU DECAT UNA CITITA GRESIT.
+ *
+ * La citire, PostgREST raspunde cu eroare si pagina se vede goala — urat, dar
+ * vizibil. La scriere, INTREAGA scriere e respinsa: omul apasa „Salveaza",
+ * primeste „nu s-a putut", si nimic nu spune care camp e de vina. Iar daca
+ * scrierea e intr-o cale rara — o stergere, o dezabonare — poate sta stricata
+ * luni de zile fara ca cineva sa dea peste ea.
+ *
+ * Se citesc doar cheile de la primul nivel al obiectului, si numai cele scrise
+ * ca nume simplu (`slug: …`). Cheile calculate (`[camp]: …`) si raspandirile
+ * (`...rand`) se sar: acolo nu avem ce compara, iar o proba care se preface ca a
+ * verificat e mai rea decat una care spune ca n-a putut.
+ */
+function scrieriDinFisier(text) {
+  const cereri = [];
+  const re = /\.from\(\s*["'\`](\w+)["'\`]\s*\)((?:(?!\.from\()[\s\S]){0,200}?)\.(insert|update|upsert)\(\s*\{/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const tabel = m[1];
+    if (!TABELE.includes(tabel)) continue;
+
+    /* De la acolada deschisa, pana la perechea ei. */
+    const start = re.lastIndex - 1;
+    let adanc = 0, i = start;
+    for (; i < text.length; i++) {
+      if (text[i] === "{") adanc++;
+      else if (text[i] === "}") { adanc--; if (adanc === 0) break; }
+    }
+    const corp = text.slice(start + 1, i);
+
+    /* Doar nivelul de sus: se sar obiectele imbricate. */
+    const chei = [];
+    let nivel = 0;
+    for (const linie of corp.split("\n")) {
+      const curat = linie.trim();
+      if (nivel === 0) {
+        const k = /^([a-z_][a-z0-9_]*)\s*:/i.exec(curat);
+        if (k) chei.push(k[1]);
+      }
+      nivel += (linie.match(/[{[]/g) ?? []).length - (linie.match(/[}\]]/g) ?? []).length;
+      if (nivel < 0) nivel = 0;
+    }
+    if (chei.length) cereri.push({ tabel, coloane: chei });
   }
   return cereri;
 }
@@ -146,12 +213,19 @@ if (!url || !cheie) {
 /* Se aduna reuniunea coloanelor cerute, pe tabel, cu locul de unde vin. */
 const cerute = new Map(TABELE.map((t) => [t, new Map()]));
 for (const cale of fisiere("src")) {
-  const text = readFileSync(cale, "utf8");
+  const text = readFileSync(cale, "utf8").replace(/\r\n/g, "\n");
   for (const { tabel, lista } of cereriDinFisier(text)) {
     for (const col of coloaneDin(lista)) {
       const m = cerute.get(tabel);
       if (!m.has(col)) m.set(col, cale);
     }
+  }
+  /* Si coloanele SCRISE. Se verifica prin acelasi `select=`: daca PostgREST
+     poate CITI numele, atunci coloana exista, deci scrierea nu va fi respinsa
+     din pricina lui. */
+  for (const { tabel, coloane } of scrieriDinFisier(text)) {
+    const m = cerute.get(tabel);
+    for (const col of coloane) if (!m.has(col)) m.set(col, cale + " (scriere)");
   }
 }
 

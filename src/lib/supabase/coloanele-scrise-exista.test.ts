@@ -3,6 +3,25 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+/*
+  ⚠ CITIRILE DE SURSĂ SE NORMALIZEAZĂ LA \n.
+
+  Pe Windows, git scrie fișierele cu CRLF în copia de lucru. O probă care caută
+  în sursă cu un tipar ce trece peste un rând — orice `\n` dintr-un regex — nu
+  mai potrivește nimic, fiindcă în fișier scrie `\r\n`.
+
+  Nu e o închipuire: exact asta a doborât patru probe, printre care și cea care
+  verifică FIECARE coloană scrisă din tot depozitul. Aceea a răspuns „am găsit 0
+  tabele în tipuri" — deci plasa care apără împotriva scrierii într-o coloană
+  inexistentă era căzută, tocmai capcana din care s-a născut ea (vezi nota de
+  sus despre `posta_config`).
+
+  ⚠ ÎN DEPOZIT MAI SUNT ~370 DE CITIRI NENORMALIZATE, în ~140 de fișiere de
+  probă. Cele mai multe trec fiindcă tiparele lor stau pe un singur rând. Sunt
+  fragile la fel; se repară pe măsură ce se ating.
+*/
+
+
 /* ══════════════════════════════════════════════════════════════════════════
    O COLOANA CARE NU EXISTA NU STRICA UN CAMP — STRICA TOATA SCRIEREA
    ══════════════════════════════════════════════════════════════════════════
@@ -35,7 +54,7 @@ const RADACINA = process.cwd();
 
 /** Coloanele fiecarei tabele, din tipurile generate. */
 function coloanePeTabela(): Map<string, Set<string>> {
-  const tipuri = readFileSync(join(RADACINA, "src/types/database.types.ts"), "utf8");
+  const tipuri = readFileSync(join(RADACINA, "src/types/database.types.ts"), "utf8").replace(/\r\n/g, "\n");
   const out = new Map<string, Set<string>>();
   const re = /^ {6}([a-z][a-z0-9_]*): \{\n {8}Row: \{\n((?: {10}[a-z][a-z0-9_]*: [^\n]*\n)+)/gm;
   for (const m of tipuri.matchAll(re)) {
@@ -175,7 +194,7 @@ test("⚠ fiecare coloana SCRISA exista in tabela ei", () => {
   const gresite: string[] = [];
   let verificate = 0;
   for (const cale of [...fisiere(join(RADACINA, "src/lib")), ...fisiere(join(RADACINA, "src/app/api"))]) {
-    const brut = readFileSync(cale, "utf8");
+    const brut = readFileSync(cale, "utf8").replace(/\r\n/g, "\n");
     const cod = doarCod(brut);
     /*
      * ⚠ Se CAUTA in textul brut si se CITESTE din cel golit. Golirea sterge si numele tabelei

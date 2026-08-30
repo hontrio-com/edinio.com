@@ -2,6 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+/*
+  ⚠ CITIRILE DE SURSĂ SE NORMALIZEAZĂ LA \n.
+
+  Pe Windows, git scrie fișierele cu CRLF în copia de lucru. O probă care caută
+  în sursă cu un tipar ce trece peste un rând — orice `\n` dintr-un regex — nu
+  mai potrivește nimic, fiindcă în fișier scrie `\r\n`.
+
+  Nu e o închipuire: exact asta a doborât patru probe, printre care și cea care
+  verifică FIECARE coloană scrisă din tot depozitul. Aceea a răspuns „am găsit 0
+  tabele în tipuri" — deci plasa care apără împotriva scrierii într-o coloană
+  inexistentă era căzută, tocmai capcana din care s-a născut ea (vezi nota de
+  sus despre `posta_config`).
+
+  ⚠ ÎN DEPOZIT MAI SUNT ~370 DE CITIRI NENORMALIZATE, în ~140 de fișiere de
+  probă. Cele mai multe trec fiindcă tiparele lor stau pe un singur rând. Sunt
+  fragile la fel; se repară pe măsură ce se ating.
+*/
+
+
 /* ══════════════════════════════════════════════════════════════════════════
    MUNCA CERUTA DE COMERCIANT NU SE ARUNCA (29.08.2026, noaptea)
    ══════════════════════════════════════════════════════════════════════════
@@ -24,9 +43,9 @@ import { readFileSync } from "node:fs";
    atinge produsul, poate niciodata.
 */
 
-const coada = readFileSync("src/lib/olx/queue.ts", "utf8");
-const sync = readFileSync("src/lib/olx/sync.ts", "utf8");
-const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8");
+const coada = readFileSync("src/lib/olx/queue.ts", "utf8").replace(/\r\n/g, "\n");
+const sync = readFileSync("src/lib/olx/sync.ts", "utf8").replace(/\r\n/g, "\n");
+const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8").replace(/\r\n/g, "\n");
 
 test("⚠ fiecare scriere in coada isi citeste raspunsul", () => {
   /*
@@ -128,7 +147,7 @@ test("⚠ si coada chiar ocoleste ce e abandonat sau in asteptare", () => {
    * ⚠ Fara asta, jumatatea de sus ar fi o teorie: un element cu `next_retry_at` in viitor ar fi
    * revendicat oricum, iar unul abandonat s-ar relua la nesfarsit.
    */
-  const temelie = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const temelie = readFileSync("migrations/000-schema-baseline.sql", "utf8").replace(/\r\n/g, "\n");
   const i = temelie.indexOf("FUNCTION public.revendica_din_coada");
   const d = temelie.indexOf("AS $function$", i);
   const corp = temelie.slice(d, temelie.indexOf("$function$", d + 13));
@@ -153,7 +172,7 @@ test("⚠ rotatia tokenului are un singur castigator", () => {
    * martor necriptat, `token_updated_at`, si „nimeni n-a rotit de cand am citit eu" se spune atunci
    * simplu. Masurat pe baza adevarata: al doilea fir primeste `false`, iar peticul lui NU intra.
    */
-  const oauth = readFileSync("src/lib/olx/oauth.ts", "utf8");
+  const oauth = readFileSync("src/lib/olx/oauth.ts", "utf8").replace(/\r\n/g, "\n");
   assert.match(oauth, /await db\.rpc\("olx_roteste_tokenul", \{/);
   assert.match(oauth, /p_vazut: vazut,/);
   /* ⚠ Cine pierde cursa RECITESTE, nu se plange: celalalt fir a scris deja un token bun. */
@@ -162,7 +181,7 @@ test("⚠ rotatia tokenului are un singur castigator", () => {
     "un fir care a pierdut cursa nu declara sesiunea moarta");
 
   /* ⚠ Si conditia chiar e in baza, sub incuietoare — altfel doua fire ar trece amandoua de ea. */
-  const temelie = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const temelie = readFileSync("migrations/000-schema-baseline.sql", "utf8").replace(/\r\n/g, "\n");
   const i = temelie.indexOf("FUNCTION public.olx_roteste_tokenul");
   assert.notEqual(i, -1, "functia lipseste din temelie");
   const d = temelie.indexOf("AS $function$", i);
@@ -190,7 +209,7 @@ test("⚠ produsul nu se sterge pana retragerea de pe OLX nu e SCRISA", () => {
    *
    * eMAG avea deja apararea asta; OLX nu. Nu se asteapta dupa OLX — doar ca lucrarea sa fie SCRISA.
    */
-  const q = readFileSync("src/lib/olx/queue.ts", "utf8");
+  const q = readFileSync("src/lib/olx/queue.ts", "utf8").replace(/\r\n/g, "\n");
   assert.match(q, /export async function enqueueOlxRetragereInainteDeStergere\(/);
   /* ⚠ Si „n-am putut citi" NU e „nu e conectat": puse sub acelasi raspuns, o pana lasa stergerea sa treaca. */
   assert.match(q, /if \(eConfig\) \{[\s\S]{0,180}?fel: "nesigur"/);
@@ -198,7 +217,7 @@ test("⚠ produsul nu se sterge pana retragerea de pe OLX nu e SCRISA", () => {
   /* ⚠ Si aici NU se inghite, spre deosebire de restul fisierului: cine cheama trebuie sa afle. */
   assert.match(q, /scrieEsecul\("retragereInainteDeStergere"[\s\S]{0,140}?fel: "nesigur"/);
 
-  const act = readFileSync("src/lib/actions/product.actions.ts", "utf8");
+  const act = readFileSync("src/lib/actions/product.actions.ts", "utf8").replace(/\r\n/g, "\n");
   /* ⚠ Si chiar INAINTEA stergerii, pe amandoua caile — una singura lasata pe dinafara ajunge. */
   for (const nume of ["deleteProduct", "bulk"]) void nume;
   const chemari = [...act.matchAll(/enqueueOlxRetragereInainteDeStergere\(/g)];

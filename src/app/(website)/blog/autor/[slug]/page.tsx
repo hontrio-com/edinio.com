@@ -7,7 +7,7 @@ import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
 import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
-import { articoleleAutorului, autorDupaSlug } from "@/lib/blog/citire";
+import { articoleleAutorului, autorDupaSlug, subiecteleAutorului } from "@/lib/blog/citire";
 import { adreseBune } from "@/lib/blog/types";
 import { autorJsonLd } from "@/lib/blog/jsonld";
 import { jsonLdSafe } from "@/lib/json-ld";
@@ -62,9 +62,20 @@ export default async function AutorBlogPage({ params, searchParams }: Props) {
   const { autor, articole, total, pagini } = gasit;
   if (paginaNuExista(cerut, total, pagini)) notFound();
   const profiluri = adreseBune(autor.sameas);
-  const subiecte = [
-    ...new Set(articole.map((a) => a.categorie?.name).filter((n): n is string => !!n)),
-  ];
+
+  /*
+    ⚠ SUBIECTELE SE IAU PE TOATE ARTICOLELE LUI, NU PE PAGINA CURENTĂ.
+
+    Se socoteau din `articole` — adică din cele 12 de pe pagina deschisă. Deci
+    aceeași persoană avea alte competențe pe pagina 1 față de pagina 2, și în
+    text, și în `knowsAbout` din datele structurate.
+
+    Pentru un cititor ar fi fost doar ciudat. Pentru un motor care răspunde cu
+    text e mai rău: un `@id` care descrie de fiecare dată altceva nu e o
+    identitate, e zgomot — iar identitatea autorului e tocmai lucrul pe care
+    pagina asta există ca să-l dovedească.
+  */
+  const subiecte = await subiecteleAutorului(autor.id);
 
   return (
     <>

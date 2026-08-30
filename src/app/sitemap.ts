@@ -99,6 +99,30 @@ export function paginiDeSite(): string[] {
   return [...adrese].sort();
 }
 
+/**
+ * Când s-a schimbat ultima oară articolul.
+ *
+ * `updated_at` e mai nou decât `published_at` doar dacă cineva chiar l-a
+ * salvat după publicare. Programat în viitor și încă neatins, `updated_at` poate
+ * fi mai VECHI decât `published_at` — de aceea se ia cea mai mare dintre ele, nu
+ * pur și simplu `updated_at`.
+ */
+function candSaSchimbat(actualizat?: string | null, publicat?: string | null): Date {
+  const d = [actualizat, publicat]
+    .filter((x): x is string => !!x)
+    .map((x) => new Date(x).getTime())
+    .filter((t) => Number.isFinite(t));
+  return d.length ? new Date(Math.max(...d)) : new Date();
+}
+
+/** Cel mai proaspăt articol dintr-un teanc, pentru paginile de rubrică și autor. */
+function ceaMaiProaspata(articole: { updated_at?: string | null; published_at?: string | null }[]): Date {
+  if (articole.length === 0) return new Date();
+  return new Date(
+    Math.max(...articole.map((a) => candSaSchimbat(a.updated_at, a.published_at).getTime())),
+  );
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const host = (await headers()).get("host")?.split(":")[0].toLowerCase() ?? "";
   const supabase = await createClient();
@@ -313,20 +337,33 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       un filtru scris de mână, iar un filtru uitat ar fi trimis Google către
       pagini care dau 404 — genul de greșeală care se plătește în încredere.
 
-      ⚠ `lastModified` E DATA ADEVĂRATĂ a articolului, nu `new Date()` ca la
-      paginile de deasupra. Acolo e o aproximare fără miză; aici e un semnal:
-      un sitemap care spune că TOATE articolele s-au schimbat azi nu mai spune
-      nimic despre niciunul, iar crawlerul învață să-l ignore.
+      ⚠ `lastModified` E DATA ADEVĂRATĂ, nu `new Date()` ca la paginile de
+      deasupra. Acolo e o aproximare fără miză; aici e un semnal: un sitemap care
+      spune că TOATE paginile s-au schimbat azi nu mai spune nimic despre
+      niciuna, iar crawlerul învață să nu se mai uite la câmp.
+
+      ⚠ NOTA ASTA A FOST MULTĂ VREME O MINCIUNĂ PE JUMĂTATE. Stătea exact aici,
+      deasupra unor blocuri care puneau `new Date()` la categorii, la autori și
+      la etichete. Numai articolele o respectau.
+
+      ⚠ ARTICOLUL FOLOSEȘTE `updated_at`, NU DOAR `published_at`. Cu
+      `published_at`, un articol corectat peste șase luni părea neatins din ziua
+      publicării, deci Google n-avea niciun motiv să se întoarcă la el. Am putut
+      trece pe `updated_at` abia după ce citirile au plecat de pe rândul
+      articolului: cât timp fiecare vizită îl muta, ar fi însemnat „articolele
+      citite se schimbă zilnic".
     */
     ...articoleBlog.map((a) => ({
       url: `${PLATFORM_ORIGIN}/blog/${a.slug}`,
-      lastModified: a.published_at ? new Date(a.published_at) : new Date(),
+      lastModified: candSaSchimbat(a.updated_at, a.published_at),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),
+    /* Pagina unei rubrici se schimbă când apare un articol în ea. Deci data ei e
+       a celui mai proaspăt articol al ei — nu ziua de azi. */
     ...categoriiCuArticole.map((slug) => ({
       url: `${PLATFORM_ORIGIN}/blog/categorie/${slug}`,
-      lastModified: new Date(),
+      lastModified: ceaMaiProaspata(articoleBlog.filter((a) => a.categorie?.slug === slug)),
       changeFrequency: "weekly" as const,
       priority: 0.5,
     })),
@@ -335,7 +372,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        crawlerul degeaba. */
     ...autoriDeAratat.map((slug) => ({
       url: `${PLATFORM_ORIGIN}/blog/autor/${slug}`,
-      lastModified: new Date(),
+      lastModified: ceaMaiProaspata(articoleBlog.filter((a) => a.autor?.slug === slug)),
       changeFrequency: "weekly" as const,
       priority: 0.4,
     })),
@@ -346,9 +383,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        chemată: o înlocuire automată nu potrivise, iar variabila rămăsese
        nefolosită. Am prins-o citind sitemapul adevărat, nu codul — pagina de
        etichetă răspundea 200 și tot nu era anunțată nicăieri. */
+    /* Data vine din `blog_etichete_folosite`: legăturile eticheta-articol nu se
+       pot număra aici fără să le cerem pe toate, iar acolo e plafonul tăcut de
+       1000 de rânduri al PostgREST. */
     ...eticheteBlog.map((e) => ({
       url: `${PLATFORM_ORIGIN}/blog/eticheta/${e.slug}`,
-      lastModified: new Date(),
+      lastModified: e.ultima ? new Date(e.ultima) : new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.4,
     })),

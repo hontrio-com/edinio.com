@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import { pregatesteCautarea } from "./types";
 import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
 
@@ -14,6 +14,12 @@ import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
  * Adică o ciornă nu poate ajunge pe site nici dacă o pagină uită să filtreze.
  * Filtrele de mai jos sunt pentru ordine și pentru numărul de rânduri, nu
  * pentru ascundere — ascunderea e mai jos de ele, în bază.
+ *
+ * ⚠ ȘI FĂRĂ COOKIE-URI, DIN 30.08.2026. `createClient()` din `supabase/server`
+ * citește cookie-urile prin `next/headers`, iar o pagină care atinge
+ * cookie-urile nu mai poate fi randată o dată pentru toți: Next o socotește la
+ * fiecare cerere. Pentru pagini care arată identic pentru toată lumea și trăiesc
+ * din a fi rapide, asta e exact ce nu vrem. Vezi `supabase/public.ts`.
  *
  * ⚠ FILTRELE DE MAI JOS SUNT EXPLICITE, NU SE BIZUIE PE CINE CERE.
  *
@@ -42,20 +48,25 @@ import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
  * client.
  */
 async function db(): Promise<SupabaseClient> {
-  return (await createClient()) as unknown as SupabaseClient;
+  return createPublicClient() as unknown as SupabaseClient;
 }
 
 /** Articolul din listă: fără corpul HTML, care nu se citește acolo. */
 export type ArticolDeLista = Pick<
   ArticolBlog,
-  "id" | "slug" | "title" | "excerpt" | "cover_url" | "cover_alt" | "published_at" | "reading_minutes" | "is_featured" | "is_pinned" | "noindex"
+  | "id" | "slug" | "title" | "excerpt" | "cover_url" | "cover_alt" | "published_at" | "updated_at"
+  | "reading_minutes" | "is_featured" | "is_pinned" | "noindex"
 > & {
   autor: Pick<AutorBlog, "name" | "slug" | "avatar_url"> | null;
   categorie: Pick<CategorieBlog, "name" | "slug"> | null;
 };
 
 const CAMPURI_LISTA =
-  "id, slug, title, excerpt, cover_url, cover_alt, published_at, reading_minutes, is_featured, is_pinned, noindex," +
+  /* ⚠ `updated_at` e aici pentru `lastModified` din sitemap. A putut fi adăugat
+     abia după ce citirile au plecat de pe rândul articolului: cât timp fiecare
+     VIZITĂ îl muta, un sitemap construit pe el ar fi spus lui Google că
+     articolele populare se schimbă în fiecare zi. Vezi `blog_post_stats`. */
+  "id, slug, title, excerpt, cover_url, cover_alt, published_at, updated_at, reading_minutes, is_featured, is_pinned, noindex," +
   " blog_authors(name, slug, avatar_url), blog_categories(name, slug)";
 
 /**
@@ -286,6 +297,32 @@ export async function autoriCuArticole(): Promise<AutorBlog[]> {
 }
 
 /** Câte articole intră pe o pagină din listă. */
+/**
+ * Articolul scos în față, oriunde ar fi el.
+ *
+ * ⚠ SE CĂUTA DOAR ÎN PAGINA CURENTĂ. `/blog` făcea
+ * `articole.find((a) => a.is_featured)` pe cele 12 rânduri pe care le avea în
+ * mână. Deci vitrina se vedea numai cât timp articolul ales era destul de nou
+ * ca să încapă în prima pagină; din clipa în care ieșea de acolo, dispărea
+ * tăcut de pe site și rămânea doar bifa aprinsă în admin, care spunea contrariul.
+ *
+ * ⚠ E UNUL SINGUR, ȘI ACUM O ȚINE BAZA. Comentariul din `types.ts` spunea de la
+ * început „cel scos în față e unul singur", dar nimic nu-l ținea: două articole
+ * puteau avea `is_featured`, iar pagina alegea după noroc. Vezi indexul
+ * `blog_posts_o_singura_vitrina` și triggerul de lângă el.
+ */
+export async function articolulDinVitrina(): Promise<ArticolDeLista | null> {
+  const { data } = await (await db())
+    .from("blog_posts")
+    .select(CAMPURI_LISTA)
+    .eq("is_featured", true)
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .lte("published_at", ACUM())
+    .maybeSingle();
+  return data ? caLista(data as unknown as Record<string, unknown>) : null;
+}
+
 export const PE_PAGINA = 12;
 
 /**
@@ -363,6 +400,17 @@ export async function cautaArticole(
 export interface EticheteBlogPublic {
   slug: string;
   name: string;
+  /**
+   * Cel mai proaspăt articol al etichetei.
+   *
+   * ⚠ Numai `eticheteFolosite()` o completează, fiindcă doar acolo se face
+   * socoteala în bază. Sub un articol nu are ce căuta, deci acolo lipsește.
+   *
+   * E pentru `lastModified` din sitemap: fără ea, toate paginile de etichetă
+   * spuneau „s-a schimbat chiar acum", la fiecare cerere — iar un sitemap care
+   * spune asta despre tot nu mai spune nimic despre nimic.
+   */
+  ultima?: string | null;
 }
 
 /** Etichetele unui articol, pentru afișare sub el. */
@@ -397,20 +445,24 @@ export async function articoleleEtichetei(
   pePagina = PE_PAGINA,
 ): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
   const client = await db();
-  const { data: t } = await client
-    .from("blog_tags").select("id").eq("slug", slugEticheta).maybeSingle();
-  if (!t) return { articole: [], total: 0, pagini: 1 };
 
-  const { data: legaturi } = await client
-    .from("blog_post_tags").select("post_id").eq("tag_id", (t as { id: string }).id);
-  const idUri = ((legaturi ?? []) as { post_id: string }[]).map((l) => l.post_id);
-  if (idUri.length === 0) return { articole: [], total: 0, pagini: 1 };
+  /*
+    ⚠ O SINGURĂ INTEROGARE, CU LEGĂTURĂ, NU DOUĂ CU O LISTĂ DE ID-URI ÎNTRE ELE.
 
+    Înainte se cereau TOATE legăturile etichetei, apoi articolele cu
+    `.in("id", idUri)`. Două plafoane tăcute pe același drum: PostgREST taie la
+    1000 de rânduri fără să spună nimic, iar `.in()` cu o mie de id-uri face o
+    adresă enormă. La a 1001-a legătură, pagina etichetei ar fi început să piardă
+    articole — fără nicio eroare, fără niciun semn.
+
+    `!inner` face o legătură adevărată: filtrarea, numărarea și paginarea se
+    întâmplă toate în bază.
+  */
   const de_la = Math.max(0, (pagina - 1) * pePagina);
   const { data, count } = await client
     .from("blog_posts")
-    .select(CAMPURI_LISTA, { count: "exact" })
-    .in("id", idUri)
+    .select(`${CAMPURI_LISTA}, blog_post_tags!inner(blog_tags!inner(slug))`, { count: "exact" })
+    .eq("blog_post_tags.blog_tags.slug", slugEticheta)
     .eq("status", "published")
     .not("published_at", "is", null)
     .lte("published_at", ACUM())
@@ -434,25 +486,58 @@ export async function articoleleEtichetei(
  * trimite crawlerul degeaba.
  */
 export async function eticheteFolosite(): Promise<EticheteBlogPublic[]> {
-  const client = await db();
-  const { data: articole } = await client
-    .from("blog_posts")
-    .select("id")
-    .eq("status", "published")
-    .not("published_at", "is", null)
-    .lte("published_at", ACUM());
-  const idUri = ((articole ?? []) as { id: string }[]).map((a) => a.id);
-  if (idUri.length === 0) return [];
+  /*
+    ⚠ SE NUMĂRĂ ÎN BAZĂ, NU AICI.
 
-  const { data: legaturi } = await client
-    .from("blog_post_tags").select("blog_tags(slug, name)").in("post_id", idUri);
+    Înainte: cere id-urile TUTUROR articolelor publicate, apoi legăturile lor.
+    Ambele cereri erau tăiate tăcut de PostgREST la 1000 de rânduri, deci de la
+    al 1001-lea articol lista de etichete devenea pur și simplu greșită — fără
+    nicio eroare. Aceeași capcană ca în cronuri: o tăietură pusă înaintea
+    adunării.
 
-  const dupaSlug = new Map<string, EticheteBlogPublic>();
-  for (const r of (legaturi ?? []) as unknown as Record<string, unknown>[]) {
-    const e = unul<EticheteBlogPublic>(r.blog_tags);
-    if (e) dupaSlug.set(e.slug, e);
-  }
-  return [...dupaSlug.values()].sort((a, b) => a.name.localeCompare(b.name, "ro"));
+    ⚠ ȘI SE SAR ARTICOLELE `noindex`. Nu se săreau: o etichetă ale cărei
+    articole erau toate `noindex` ajungea în sitemap și în lista de sub articole.
+    Îi spuneam lui Google „uite o pagină", iar când venea găsea pe ea numai
+    lucruri despre care îi ceruserăm să nu le indexeze — o pagină subțire cerută
+    de noi înșine.
+  */
+  const { data } = await (await db()).rpc("blog_etichete_folosite");
+  return ((data ?? []) as { slug: string; name: string; ultima: string | null }[]).map((e) => ({
+    slug: e.slug,
+    name: e.name,
+    ultima: e.ultima ?? null,
+  }));
+}
+
+/**
+ * Rubricile care au măcar un articol publicat, cu câte are fiecare.
+ *
+ * ⚠ PE TOATE ARTICOLELE, NU PE PAGINA CURENTĂ. Pagina `/blog` își făcea lista
+ * de rubrici din cele 12 articole pe care le avea în mână, deși comentariul de
+ * lângă spunea „pe TOATE articolele". Deci navigația se schimba sub picioarele
+ * omului de la o pagină la alta, iar o rubrică ale cărei articole erau abia în
+ * pagina 3 nu se vedea de nicăieri.
+ */
+export async function categoriiFolosite(): Promise<{ slug: string; name: string; cate: number }[]> {
+  const { data } = await (await db()).rpc("blog_categorii_folosite");
+  return ((data ?? []) as { slug: string; name: string; cate: number }[]).map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    cate: Number(c.cate ?? 0),
+  }));
+}
+
+/**
+ * Despre ce scrie un autor — pentru `knowsAbout` din datele structurate.
+ *
+ * ⚠ TOT PE TOATE ARTICOLELE LUI. Se socotea din pagina curentă, deci aceeași
+ * persoană avea alte competențe pe pagina 1 față de pagina 2. Un `@id` care
+ * descrie de fiecare dată altceva nu e o identitate, e zgomot — și tocmai
+ * identitatea e ce trebuie să dovedească pagina de autor.
+ */
+export async function subiecteleAutorului(idAutor: string): Promise<string[]> {
+  const { data } = await (await db()).rpc("blog_subiectele_autorului", { p_autor: idAutor });
+  return ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
 }
 
 /**

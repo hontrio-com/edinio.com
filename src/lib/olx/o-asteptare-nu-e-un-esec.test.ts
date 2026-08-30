@@ -4,6 +4,25 @@ import { readFileSync } from "node:fs";
 import { asteptareaCeruta } from "./client";
 import { classify, asteptareaLor } from "./sync";
 
+/*
+  ⚠ CITIRILE DE SURSĂ SE NORMALIZEAZĂ LA \n.
+
+  Pe Windows, git scrie fișierele cu CRLF în copia de lucru. O probă care caută
+  în sursă cu un tipar ce trece peste un rând — orice `\n` dintr-un regex — nu
+  mai potrivește nimic, fiindcă în fișier scrie `\r\n`.
+
+  Nu e o închipuire: exact asta a doborât patru probe, printre care și cea care
+  verifică FIECARE coloană scrisă din tot depozitul. Aceea a răspuns „am găsit 0
+  tabele în tipuri" — deci plasa care apără împotriva scrierii într-o coloană
+  inexistentă era căzută, tocmai capcana din care s-a născut ea (vezi nota de
+  sus despre `posta_config`).
+
+  ⚠ ÎN DEPOZIT MAI SUNT ~370 DE CITIRI NENORMALIZATE, în ~140 de fișiere de
+  probă. Cele mai multe trec fiindcă tiparele lor stau pe un singur rând. Sunt
+  fragile la fel; se repară pe măsură ce se ating.
+*/
+
+
 /* ══════════════════════════════════════════════════════════════════════════
    O ASTEPTARE NU E UN ESEC (31.08.2026)
    ══════════════════════════════════════════════════════════════════════════
@@ -21,9 +40,9 @@ import { classify, asteptareaLor } from "./sync";
    spune ceva despre CLIPA. Numai primul are voie sa consume din rabdarea noastra.
 */
 
-const sync = readFileSync("src/lib/olx/sync.ts", "utf8");
-const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8");
-const coada = readFileSync("src/lib/olx/queue.ts", "utf8");
+const sync = readFileSync("src/lib/olx/sync.ts", "utf8").replace(/\r\n/g, "\n");
+const cron = readFileSync("src/app/api/cron/olx-sync/route.ts", "utf8").replace(/\r\n/g, "\n");
+const coada = readFileSync("src/lib/olx/queue.ts", "utf8").replace(/\r\n/g, "\n");
 
 /**
  * Codul, fara comentarii.
@@ -71,7 +90,7 @@ test("⚠ antetul chiar ajunge din raspuns pana in politica", () => {
    * legatura — campul dus mai departe din raspunsul lor — si taiata, toate probele de mai sus ar fi
    * ramas verzi peste un `429` care arde iar incercari.
    */
-  const client = readFileSync("src/lib/olx/client.ts", "utf8");
+  const client = readFileSync("src/lib/olx/client.ts", "utf8").replace(/\r\n/g, "\n");
   assert.match(client, /return \{ error: msg, status: res\.status, validation, retryAfterMs: asteptareaCeruta\(res\.headers\) \};/);
 });
 

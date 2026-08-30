@@ -12,6 +12,13 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { categoriiVizibile } from "@/lib/categories/vizibilitate";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
+import {
+  COMPETITORS,
+  INDUSTRIES,
+  RESOURCES,
+  SOLUTION_COLUMNS,
+  TOP_NAV,
+} from "@/lib/website/nav";
 
 // Un fisier de sitemap accepta maxim 50.000 de URL-uri (limita Google) —
 // peste, fisierul intreg e respins. Pastram ordinea de prioritate
@@ -57,6 +64,39 @@ function homepageNoindex(row: { store_settings?: unknown }): boolean {
 //    own domain;
 //  - the platform sitemap (www.edinio.com) lists marketing pages + stores that
 //    do NOT have a custom domain (those live on, and index under, their domain).
+
+/**
+ * Adresele paginilor de prezentare, scoase din datele meniului.
+ *
+ * ⚠ SE IAU DIN `nav.ts`, NU SE SCRIU AICI. Meniul e singurul loc unde cineva
+ * chiar adauga o pagina noua; daca lista de aici ar fi scrisa de mana, s-ar
+ * despartii de el la prima pagina adaugata — si chiar asta se intamplase.
+ *
+ * Cele patru adaugate cu mana la sfarsit sunt paginile-index si cele care nu
+ * stau in meniu, dar sunt vii si indexabile. `/` si `/ajutor` ies, fiindca sunt
+ * puse separat mai sus, cu prioritatile lor.
+ */
+export const PUSE_SEPARAT = ["/", "/ajutor", "/preturi", "/despre", "/contact"];
+
+export function paginiDeSite(): string[] {
+  const adrese = new Set<string>();
+  for (const col of SOLUTION_COLUMNS) for (const it of col.items) adrese.add(it.href);
+  for (const it of RESOURCES) adrese.add(it.href);
+  for (const t of TOP_NAV) if ("href" in t) adrese.add(t.href);
+
+  adrese.add("/vs");
+  adrese.add("/industrii");
+  adrese.add("/magazin-online");
+  adrese.add("/start");
+
+  for (const c of COMPETITORS) adrese.add(c.href);
+  for (const i of INDUSTRIES) adrese.add(`/industrii/${i.slug}`);
+
+  // Puse separat mai sus, cu alta prioritate. Aici ar fi iesit de doua ori.
+  for (const deja of PUSE_SEPARAT) adrese.delete(deja);
+
+  return [...adrese].sort();
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const host = (await headers()).get("host")?.split(":")[0].toLowerCase() ?? "";
@@ -178,6 +218,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${PLATFORM_ORIGIN}/confidentialitate`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
     { url: `${PLATFORM_ORIGIN}/cookies`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
     { url: `${PLATFORM_ORIGIN}/gdpr`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
+
+    /*
+      Paginile de prezentare, luate din CHIAR datele meniului.
+
+      ⚠ NU SE SCRIU DE MANA. Pana pe 30.08.2026, lista de deasupra se oprise la
+      paginile vechi, iar zece pagini vii lipseau cu totul din sitemap: /blog,
+      /integrari, /magazin-online, /optimizare, /mentenanta-gratuita, /vs,
+      /industrii, /intrebari-frecvente, /migrare si /start. Toate raspundeau 200.
+
+      Nu le-a observat nimeni fiindca o pagina lipsa dintr-un sitemap nu strica
+      nimic si nu da nicio eroare — doar nu e gasita. E cel mai tacut fel de
+      defect: paginile de comparatie si cele pe industrii sunt tocmai cele care
+      aduc cautari cu intentie de cumparare, si tocmai ele nu erau anuntate.
+
+      Luate din `nav.ts`, o pagina adaugata in meniu intra singura aici, si una
+      scoasa iese. Aceeasi disciplina ca la centrul de ajutor, mai jos. Slug-urile
+      de competitori si de industrii vin din listele din care isi fac paginile
+      `generateStaticParams`, deci nu pot ramane in urma.
+    */
+    ...paginiDeSite().map((cale) => ({
+      url: `${PLATFORM_ORIGIN}${cale}`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+    })),
     /*
       Centrul de ajutor: pagina lui de start, categoriile si fiecare ghid.
       Se construiesc din datele centrului, nu se scriu de mana: un ghid adaugat

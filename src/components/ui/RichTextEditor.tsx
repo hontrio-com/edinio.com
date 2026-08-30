@@ -5,12 +5,13 @@ import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import Link from "@tiptap/extension-link";
-import { useState, useCallback, useEffect } from "react";
+import Image from "@tiptap/extension-image";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Heading1, Heading2, Heading3, List, ListOrdered,
   AlignLeft, AlignCenter, AlignRight, Link2, Code,
-  Undo, Redo, FileCode,
+  Undo, Redo, FileCode, ImagePlus, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,6 +19,22 @@ interface Props {
   content: string;
   onChange: (html: string) => void;
   disabled?: boolean;
+  /**
+   * Îngăduie poze în text.
+   *
+   * ⚠ OPȚIONAL DINADINS, ȘI IMPLICIT STINS. Componenta asta se folosește în
+   * cinci locuri, iar patru dintre ele scriu text de COMERCIANT: descrieri de
+   * produs, politici, blocuri de pagină, anunțuri. Toate trec la afișare prin
+   * `lib/utils/sanitize-html.ts`, care aruncă `img` dinadins — o poză de pe alt
+   * domeniu în textul unui comerciant e un pixel de urmărire cu alt nume.
+   *
+   * Aprins acolo, butonul ar fi lăsat oamenii să insereze poze care dispar în
+   * tăcere la prima afișare. Blogul e singurul cu curățător propriu
+   * (`lib/blog/curata.ts`), unde `img` e îngăduit de la gazdele noastre.
+   */
+  cuImagini?: boolean;
+  /** Cum se urcă o poză aleasă. Cere `cuImagini`. */
+  incarcaImagine?: (file: File) => Promise<string | null>;
   placeholder?: string;
 }
 
@@ -50,13 +67,32 @@ function Sep() {
   return <div className="w-px h-4 bg-border mx-0.5 flex-shrink-0" />;
 }
 
-export function RichTextEditor({ content, onChange, disabled = false, placeholder }: Props) {
+export function RichTextEditor({
+  content, onChange, disabled = false, placeholder,
+  cuImagini = false, incarcaImagine,
+}: Props) {
   const [htmlMode, setHtmlMode] = useState(false);
   const [rawHtml, setRawHtml] = useState(content);
+  const [urcaPoza, setUrcaPoza] = useState(false);
+  const alegePoza = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
       StarterKit,
+      /*
+        ⚠ FĂRĂ NODUL ĂSTA, `<img>` NU LIPSEȘTE DOAR DIN BARĂ — SE ȘTERGE SINGUR.
+
+        Schema ProseMirror nu poate ține ce nu cunoaște. `setContent` arunca
+        eticheta, emitea o schimbare, iar `onUpdate` scria înapoi în formular
+        HTML-ul FĂRĂ poză. Adică: o poză scrisă de mână în modul HTML dispărea
+        la prima comutare înapoi, iar un articol care AVEA deja poze în bază le
+        pierdea tăcut la simpla redeschidere în editor — următoarea salvare le
+        ștergea și din bază.
+
+        Se adaugă doar când e cerut, ca schema să rămână aceeași pentru textele
+        de comerciant, unde pozele oricum n-ar trece de curățătorul lor.
+      */
+      ...(cuImagini ? [Image.configure({ HTMLAttributes: { class: "rounded-lg" } })] : []),
       Underline,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Link.configure({
@@ -99,6 +135,17 @@ export function RichTextEditor({ content, onChange, disabled = false, placeholde
     }
   }, [editor]);
 
+  async function pozaAleasa(file: File) {
+    if (!incarcaImagine || !editor) return;
+    setUrcaPoza(true);
+    const url = await incarcaImagine(file);
+    setUrcaPoza(false);
+    if (!url) return;
+    /* `alt` gol dinadins: o descriere inventată de noi ar fi mai rea decât
+       lipsa ei. Autorul o scrie în pagină, unde vede poza. */
+    editor.chain().focus().setImage({ src: url, alt: "" }).run();
+  }
+
   if (!editor) return null;
 
   function toggleHtmlMode() {
@@ -118,6 +165,22 @@ export function RichTextEditor({ content, onChange, disabled = false, placeholde
     )}>
       {/* Toolbar */}
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/40 flex-wrap">
+        {cuImagini && incarcaImagine && (
+          <>
+            <ToolbarBtn onClick={() => alegePoza.current?.click()} title="Pune o poza">
+              {urcaPoza ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+            </ToolbarBtn>
+            <input ref={alegePoza} type="file" accept="image/*" className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                /* Se goleste campul, altfel aceeasi poza aleasa a doua oara la
+                   rand nu mai declanseaza nimic. */
+                e.target.value = "";
+                if (f) pozaAleasa(f);
+              }} />
+            <Sep />
+          </>
+        )}
         <ToolbarBtn onClick={() => editor.chain().focus().undo().run()} title="Anuleaza">
           <Undo className="h-3.5 w-3.5" />
         </ToolbarBtn>

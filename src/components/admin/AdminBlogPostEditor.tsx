@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle, X,
+  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle, X, Check, RotateCcw, History,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
@@ -20,6 +19,7 @@ import {
   type ArticolBlog, type AutorBlog, type CategorieBlog, type IntrebareBlog, type StareArticol,
 } from "@/lib/blog/types";
 import { creeazaArticol, actualizeazaArticol, type ArticolInput } from "@/lib/actions/blog.actions";
+import { AdminBlogVersiuni } from "./AdminBlogVersiuni";
 
 const inputCls =
   "w-full px-3 py-2 text-sm border border-zinc-300 rounded-lg bg-white text-zinc-900 focus:outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900/20";
@@ -68,6 +68,34 @@ function pentruInput(iso: string | null): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/** Ce se trimite la server, din starea formularului. */
+function intrareDin(f: Stare, status: StareArticol): ArticolInput {
+  return {
+    title: f.title,
+    slug: f.slug,
+    excerpt: f.excerpt,
+    answer_summary: f.answer_summary,
+    content_html: f.content_html,
+    cover_url: f.cover_url,
+    cover_alt: f.cover_alt,
+    author_id: f.author_id,
+    category_id: f.category_id,
+    status,
+    /* `datetime-local` dă o oră FĂRĂ fus. `new Date(...)` o citește ca oră
+       locală a browserului, care e chiar ce a vrut omul când a ales-o. */
+    published_at: f.publicatLa ? new Date(f.publicatLa).toISOString() : null,
+    is_featured: f.is_featured,
+    faq: f.faq,
+    seo_title: f.seo_title,
+    seo_description: f.seo_description,
+    canonical_url: f.canonical_url,
+    noindex: f.noindex,
+    /* Și cea din casetă, nescrisă încă: altfel omul tastează o etichetă,
+       apasă Salvează fără Enter, și o pierde fără să afle. */
+    etichete: [...f.etichete, f.etichetaInLucru.trim()].filter(Boolean),
+  };
+}
+
 function dinStareInitiala(a: ArticolBlog | null, etichete: string[]): Stare {
   return {
     title: a?.title ?? "",
@@ -110,10 +138,39 @@ export function AdminBlogPostEditor({
   const [salveaza, setSalveaza] = useState(false);
   const [incarca, setIncarca] = useState(false);
 
-  const pune = <K extends keyof Stare>(k: K, v: Stare[K]) => setF((s) => ({ ...s, [k]: v }));
+  /*
+    ═══ NESALVAT, SALVARE AUTOMATĂ, ȘI PAZA LA IEȘIRE ═══
+
+    Editorul ăsta era singurul loc din panou unde se scrie mult text și nu
+    exista nicio plasă. Restul panoului are deja tiparul `dirty` +
+    `beforeunload` în cinci locuri (PageBuilder, FormBuilder, StoreDesignEditor
+    și încă două).
+
+    ⚠ `beforeunload` NU E DE AJUNS, ȘI E CALEA MAI PUȚIN PROBABILĂ. Butonul
+    „← Articole” de sus e un `<Link>`, adică navigare pe client: browserul nu
+    părăsește pagina, deci evenimentul nici nu pornește. Un singur clic ștergea
+    tot. De aceea există și paza de la `inapoiLaLista`.
+
+    ⚠ SALVAREA AUTOMATĂ MERGE DOAR PE UN ARTICOL CARE EXISTĂ DEJA. Pe unul nou
+    ar fi creat rânduri în tăcere, de fiecare dată când cineva deschide
+    formularul și se răzgândește. Acolo lucrează copia locală de mai jos.
+  */
+  const [nesalvat, setNesalvat] = useState(false);
+  const [salvatLa, setSalvatLa] = useState<string | null>(null);
+  const stareaAcum = useRef(f);
+  /* ⚠ Scrisă în efect, nu în corpul randării: React interzice atingerea
+     referințelor în timpul randării, fiindcă o randare întreruptă și reluată
+     ar lăsa referința pe o valoare care n-a ajuns niciodată pe ecran. */
+  useEffect(() => { stareaAcum.current = f; }, [f]);
+
+  const pune = <K extends keyof Stare>(k: K, v: Stare[K]) => {
+    setF((s) => ({ ...s, [k]: v }));
+    setNesalvat(true);
+  };
 
   function schimbaTitlul(title: string) {
     setF((s) => ({ ...s, title, slug: s.slugScrisDeMana ? s.slug : slugDin(title) }));
+    setNesalvat(true);
   }
 
   function adaugaEticheta(brut: string) {
@@ -136,37 +193,107 @@ export function AdminBlogPostEditor({
     const res = await uploadImage(file, "gallery", "blog");
     setIncarca(false);
     if ("error" in res) { toast.error(res.error); return; }
+    setNesalvat(false);
+    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
     pune("cover_url", res.url);
+  }
+
+  const nesalvatRef = useRef(nesalvat);
+  useEffect(() => { nesalvatRef.current = nesalvat; }, [nesalvat]);
+
+  /** Cheia sub care se ține copia locală. Un articol nou are cheia lui. */
+  const cheieLocala = `blog-ciorna-${articol?.id ?? "nou"}`;
+
+  /** Salvarea tăcută: fără mesaje, fără reîmprospătare, fără mutat pagina. */
+  const salveazaTacut = useCallback(async () => {
+    const st = stareaAcum.current;
+    if (!articol || !st.title.trim()) return;
+    const res = await actualizeazaArticol(articol.id, intrareDin(st, st.status));
+    if (!("error" in res)) {
+      setNesalvat(false);
+      setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+      try { localStorage.removeItem(cheieLocala); } catch { /* fila privată */ }
+    }
+  }, [articol, cheieLocala]);
+
+  /* La fiecare 30 de secunde, dacă e ceva nesalvat. Nu la fiecare tastă: ar fi
+     scris în baza de date de zeci de ori pe minut și ar fi umplut istoricul de
+     versiuni cu zgomot. */
+  useEffect(() => {
+    if (!articol) return;
+    const ceas = setInterval(() => { if (nesalvatRef.current) salveazaTacut(); }, 30_000);
+    return () => clearInterval(ceas);
+  }, [articol, salveazaTacut]);
+
+  /* Paza la închiderea filei sau la reîncărcare. Vezi nota de sus: NU acoperă
+     navigarea pe client, de aceea există și `inapoiLaLista`. */
+  useEffect(() => {
+    function laPlecare(e: BeforeUnloadEvent) {
+      if (nesalvatRef.current) { e.preventDefault(); e.returnValue = ""; }
+    }
+    window.addEventListener("beforeunload", laPlecare);
+    return () => window.removeEventListener("beforeunload", laPlecare);
+  }, []);
+
+  /*
+    ⚠ COPIA LOCALĂ E SINGURA PLASĂ A UNUI ARTICOL NOU.
+
+    Salvarea tăcută nu poate lucra înainte să existe rândul: ar fi creat
+    articole de fiecare dată când cineva deschide formularul și se răzgândește.
+    Dar tocmai articolul nou e cel la care se scrie cel mai mult text dintr-o
+    dată. Copia din browser acoperă exact golul acela.
+  */
+  useEffect(() => {
+    if (!nesalvat) return;
+    const t = setTimeout(() => {
+      try { localStorage.setItem(cheieLocala, JSON.stringify(stareaAcum.current)); } catch { /* plin sau privat */ }
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [nesalvat, f, cheieLocala]);
+
+  /* Ce s-a găsit în browser la deschidere, dacă e ceva. Se OFERĂ, nu se pune:
+     o copie mai veche scrisă peste articolul de acum ar fi o pierdere, nu o
+     salvare. */
+  const [copieGasita, setCopieGasita] = useState<Stare | null>(null);
+  const [vedeIstoricul, setVedeIstoricul] = useState(false);
+  useEffect(() => {
+    /* ⚠ AMÂNAT CU UN `setTimeout(0)`, nu citit direct în efect.
+
+       Citirea nu poate sta în corpul componentei: `localStorage` nu există la
+       randarea de pe server, iar o citire păzită cu `typeof window` ar da alt
+       rezultat pe server decât în browser, adică nepotrivire la hidratare.
+
+       Iar scrisă direct în efect, pune starea în aceeași bătaie cu montarea și
+       declanșează o a doua randare imediată. Amânată o bătaie, banda apare
+       după ce editorul e deja pe ecran, ceea ce e și corect ca purtare: omul
+       vede întâi articolul, apoi întrebarea despre copie. */
+    const t = setTimeout(() => {
+      try {
+        const brut = localStorage.getItem(cheieLocala);
+        if (!brut) return;
+        const veche = JSON.parse(brut) as Stare;
+        if (veche.title !== stareaAcum.current.title || veche.content_html !== stareaAcum.current.content_html) {
+          setCopieGasita(veche);
+        }
+      } catch { /* copie stricată: se ignoră */ }
+    }, 0);
+    return () => clearTimeout(t);
+    // O singură dată, la deschidere.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Întoarcerea la listă, cu întrebare când e ceva nesalvat. */
+  function inapoiLaLista() {
+    if (nesalvat && !window.confirm("Ai schimbări nesalvate. Le pierzi dacă pleci acum. Continui?")) return;
+    router.push("/admin/blog");
   }
 
   async function salveaza_(stareNoua?: StareArticol) {
     const status = stareNoua ?? f.status;
     setSalveaza(true);
 
-    const intrare: ArticolInput = {
-      title: f.title,
-      slug: f.slug,
-      excerpt: f.excerpt,
-      answer_summary: f.answer_summary,
-      content_html: f.content_html,
-      cover_url: f.cover_url,
-      cover_alt: f.cover_alt,
-      author_id: f.author_id,
-      category_id: f.category_id,
-      status,
-      /* `datetime-local` dă o oră FĂRĂ fus. `new Date(...)` o citește ca oră
-         locală a browserului, care e chiar ce a vrut omul când a ales-o. */
-      published_at: f.publicatLa ? new Date(f.publicatLa).toISOString() : null,
-      is_featured: f.is_featured,
-      faq: f.faq,
-      seo_title: f.seo_title,
-      seo_description: f.seo_description,
-      canonical_url: f.canonical_url,
-      noindex: f.noindex,
-      /* Si cea din caseta, nescrisa inca: altfel omul tasteaza o eticheta,
-         apasa Salveaza fara Enter, si o pierde fara sa afle. */
-      etichete: [...f.etichete, f.etichetaInLucru.trim()].filter(Boolean),
-    };
+    const intrare = intrareDin(f, status);
 
     /* Ramurile sunt despărțite dinadins: cele două acțiuni întorc forme
        diferite, iar pe o singură variabilă de tip reunit `res.date` ajungea
@@ -175,6 +302,9 @@ export function AdminBlogPostEditor({
       const res = await actualizeazaArticol(articol.id, intrare);
       setSalveaza(false);
       if ("error" in res) { toast.error(res.error); return; }
+    setNesalvat(false);
+    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
       if (stareNoua) pune("status", stareNoua);
       toast.success("Salvat.");
       router.refresh();
@@ -184,6 +314,9 @@ export function AdminBlogPostEditor({
     const res = await creeazaArticol(intrare);
     setSalveaza(false);
     if ("error" in res) { toast.error(res.error); return; }
+    setNesalvat(false);
+    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
     if (stareNoua) pune("status", stareNoua);
     toast.success("Articol creat.");
     /* `replace`, nu `push`: „înapoi" trebuie să ducă la lista de articole, nu
@@ -220,13 +353,69 @@ export function AdminBlogPostEditor({
   return (
     <div className="p-6 max-w-3xl mx-auto pb-24">
       <div className="flex items-center justify-between mb-6">
-        <Link href="/admin/blog" className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900">
+        {/* Buton, nu `Link`: navigarea pe client nu porneste `beforeunload`,
+            deci fara paza asta un singur clic stergea tot ce nu era salvat. */}
+        <button type="button" onClick={inapoiLaLista}
+          className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900">
           <ArrowLeft className="h-4 w-4" /> Articole
-        </Link>
-        <span className="text-xs text-zinc-500">
+        </button>
+        <div className="flex items-center gap-3">
+          {articol && (
+            <button type="button" onClick={() => setVedeIstoricul(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900">
+              <History className="h-3.5 w-3.5" /> Istoric
+            </button>
+          )}
+        <span className="flex items-center gap-2 text-xs text-zinc-500">
           {STARI[f.status]}{minute ? ` · ${minute} min de citit` : ""}
+          {nesalvat ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] text-amber-700">
+              Nesalvat
+            </span>
+          ) : salvatLa ? (
+            <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
+              <Check className="h-3 w-3" /> salvat la {salvatLa}
+            </span>
+          ) : null}
         </span>
+        </div>
       </div>
+
+      {articol && (
+        <AdminBlogVersiuni
+          idArticol={articol.id}
+          deschis={vedeIstoricul}
+          inchide={() => setVedeIstoricul(false)}
+          dupaRevenire={() => router.refresh()}
+        />
+      )}
+
+      {/*
+        ⚠ SE OFERĂ, NU SE PUNE. O copie mai veche scrisă automat peste articolul
+        de acum ar fi o pierdere, nu o salvare. Omul vede că există și alege.
+      */}
+      {copieGasita && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <RotateCcw className="h-4 w-4 shrink-0 text-amber-700" />
+          <p className="flex-1 text-sm text-amber-900">
+            Am găsit în browser o versiune nesalvată
+            {copieGasita.title ? ` a articolului „${copieGasita.title}”` : ""}.
+          </p>
+          <button type="button"
+            onClick={() => { setF(copieGasita); setCopieGasita(null); setNesalvat(true); }}
+            className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800">
+            Adu-o înapoi
+          </button>
+          <button type="button"
+            onClick={() => {
+              setCopieGasita(null);
+              try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
+            }}
+            className="text-xs font-medium text-amber-800 hover:underline">
+            Arunc-o
+          </button>
+        </div>
+      )}
 
       <div className="space-y-6">
         <div>
@@ -265,6 +454,12 @@ export function AdminBlogPostEditor({
             content={f.content_html}
             onChange={(html) => pune("content_html", html)}
             placeholder="Scrie articolul. Folosește titluri mari și mici: din ele se face cuprinsul."
+            cuImagini
+            incarcaImagine={async (file) => {
+              const res = await uploadImage(file, "gallery", "blog");
+              if ("error" in res) { toast.error(res.error); return null; }
+              return res.url;
+            }}
           />
         </Sectiune>
 

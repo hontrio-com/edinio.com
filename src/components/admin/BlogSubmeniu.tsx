@@ -5,13 +5,19 @@ import { cn } from "@/lib/utils/cn";
  * Navigarea dintre ecranele blogului.
  *
  * Bara laterală are o singură intrare, „Blog"; de aici încolo se merge între
- * articole, autori și categorii. Așa bara laterală nu se umflă cu trei rânduri
- * pentru o parte a panoului, iar cele trei ecrane se simt ca un singur loc.
+ * articole, autori, categorii și etichete. Așa bara laterală nu se umflă cu un
+ * rând pentru fiecare ecran, iar ele se simt ca un singur loc.
+ *
+ * ⚠ Numărul lor a crescut de la trei la patru. Dacă mai vine unul, se schimbă
+ * și rândurile de mai sus: un comentariu care numără greșit e o minciună mică,
+ * dar exact felul de minciună care face pe cineva să nu mai creadă niciun
+ * comentariu din fișier.
  */
 const FILE = [
   { cheie: "articole", href: "/admin/blog", eticheta: "Articole" },
   { cheie: "autori", href: "/admin/blog/autori", eticheta: "Autori" },
   { cheie: "categorii", href: "/admin/blog/categorii", eticheta: "Categorii" },
+  { cheie: "etichete", href: "/admin/blog/etichete", eticheta: "Etichete" },
 ] as const;
 
 export function BlogSubmeniu({ activ }: { activ: (typeof FILE)[number]["cheie"] }) {

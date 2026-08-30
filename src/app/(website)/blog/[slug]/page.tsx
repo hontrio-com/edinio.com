@@ -6,7 +6,7 @@ import { Clock } from "lucide-react";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
-import { articolDupaSlug, articoleInrudite, undeS_aMutat } from "@/lib/blog/citire";
+import { articolDupaSlug, articoleInrudite, eticheteArticol, undeS_aMutat } from "@/lib/blog/citire";
 import { curataArticol } from "@/lib/blog/curata";
 import { cuprinsSiHtml, meritaCuprins } from "@/lib/blog/cuprins";
 import { articolJsonLd } from "@/lib/blog/jsonld";
@@ -62,7 +62,10 @@ export default async function ArticolBlogPage({ params }: Props) {
   /* Ordinea contează: se curăță ÎNTÂI, apoi se pun ancorele. Curățătorul nu
      îngăduie `id`, deci ancorele puse înainte ar fi fost șterse. */
   const { cuprins, html } = cuprinsSiHtml(curataArticol(a.content_html));
-  const inrudite = await articoleInrudite(a);
+  const [inrudite, etichete] = await Promise.all([
+    articoleInrudite(a),
+    eticheteArticol(a.id),
+  ]);
 
   const data = a.published_at
     ? new Date(a.published_at).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" })
@@ -160,6 +163,26 @@ export default async function ArticolBlogPage({ params }: Props) {
                   ))}
                 </dl>
               </section>
+            )}
+
+            {/*
+              Etichetele stau după text, nu înaintea lui: sunt drumuri către alte
+              articole, folositoare abia după ce omul a terminat de citit. Puse
+              sus, ar fi trimis cititorul altundeva înainte să afle ce scrie aici.
+            */}
+            {etichete.length > 0 && (
+              <nav aria-label="Etichete" className="mt-12 flex flex-wrap items-center gap-2">
+                <span className="text-[12.5px] text-ink-3">Etichete:</span>
+                {etichete.map((e) => (
+                  <Link
+                    key={e.slug}
+                    href={`/blog/eticheta/${e.slug}`}
+                    className="rounded-full border border-hairline px-3 py-1 text-[12.5px] font-medium text-ink-2 transition-colors hover:border-ink-3/40 hover:text-ink"
+                  >
+                    {e.name}
+                  </Link>
+                ))}
+              </nav>
             )}
 
             {a.autor?.bio && (

@@ -275,3 +275,90 @@ export async function cautaArticole(
     pagini: Math.max(1, Math.ceil(total / pePagina)),
   };
 }
+
+export interface EticheteBlogPublic {
+  slug: string;
+  name: string;
+}
+
+/** Etichetele unui articol, pentru afișare sub el. */
+export async function eticheteArticol(idArticol: string): Promise<EticheteBlogPublic[]> {
+  const { data } = await (await db())
+    .from("blog_post_tags").select("blog_tags(slug, name)").eq("post_id", idArticol);
+  return ((data ?? []) as unknown as Record<string, unknown>[])
+    .map((r) => unul<EticheteBlogPublic>(r.blog_tags))
+    .filter((e): e is EticheteBlogPublic => !!e)
+    .sort((a, b) => a.name.localeCompare(b.name, "ro"));
+}
+
+/** O etichetă, după adresa ei. */
+export async function eticheta(slug: string): Promise<EticheteBlogPublic | null> {
+  const { data } = await (await db())
+    .from("blog_tags").select("slug, name").eq("slug", slug).maybeSingle();
+  return (data as EticheteBlogPublic) ?? null;
+}
+
+/**
+ * Articolele unei etichete.
+ *
+ * ⚠ DOUĂ INTEROGĂRI, NU UN JOIN. PostgREST ar putea filtra articolele printr-o
+ * relație imbricată, dar atunci numărătoarea totală (de care are nevoie
+ * paginarea) se face pe rândurile legăturii, nu pe articole. Aici întâi se află
+ * ce articole poartă eticheta, apoi se citesc chiar acele articole — iar regula
+ * din baza de date le taie pe cele nepublicate la al doilea pas.
+ */
+export async function articoleleEtichetei(
+  slugEticheta: string,
+  pagina = 1,
+  pePagina = PE_PAGINA,
+): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
+  const client = await db();
+  const { data: t } = await client
+    .from("blog_tags").select("id").eq("slug", slugEticheta).maybeSingle();
+  if (!t) return { articole: [], total: 0, pagini: 1 };
+
+  const { data: legaturi } = await client
+    .from("blog_post_tags").select("post_id").eq("tag_id", (t as { id: string }).id);
+  const idUri = ((legaturi ?? []) as { post_id: string }[]).map((l) => l.post_id);
+  if (idUri.length === 0) return { articole: [], total: 0, pagini: 1 };
+
+  const de_la = Math.max(0, (pagina - 1) * pePagina);
+  const { data, count } = await client
+    .from("blog_posts")
+    .select(CAMPURI_LISTA, { count: "exact" })
+    .in("id", idUri)
+    .order("published_at", { ascending: false })
+    .range(de_la, de_la + pePagina - 1);
+
+  const total = count ?? 0;
+  return {
+    articole: ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista),
+    total,
+    pagini: Math.max(1, Math.ceil(total / pePagina)),
+  };
+}
+
+/**
+ * Etichetele care au măcar un articol publicat, pentru sitemap și pentru lista
+ * de sub articole.
+ *
+ * ⚠ SE PORNEȘTE DE LA ARTICOLE, NU DE LA ETICHETE. O etichetă poate exista
+ * legată doar de ciorne; pagina ei ar fi goală, iar un sitemap care o anunță
+ * trimite crawlerul degeaba.
+ */
+export async function eticheteFolosite(): Promise<EticheteBlogPublic[]> {
+  const client = await db();
+  const { data: articole } = await client.from("blog_posts").select("id");
+  const idUri = ((articole ?? []) as { id: string }[]).map((a) => a.id);
+  if (idUri.length === 0) return [];
+
+  const { data: legaturi } = await client
+    .from("blog_post_tags").select("blog_tags(slug, name)").in("post_id", idUri);
+
+  const dupaSlug = new Map<string, EticheteBlogPublic>();
+  for (const r of (legaturi ?? []) as unknown as Record<string, unknown>[]) {
+    const e = unul<EticheteBlogPublic>(r.blog_tags);
+    if (e) dupaSlug.set(e.slug, e);
+  }
+  return [...dupaSlug.values()].sort((a, b) => a.name.localeCompare(b.name, "ro"));
+}

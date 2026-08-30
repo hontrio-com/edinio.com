@@ -263,6 +263,102 @@ export async function articoleAleCategoriei(id: string): Promise<number> {
   return count ?? 0;
 }
 
+
+/**
+ * Pune etichetele pe un articol, facandu-le pe cele care nu exista.
+ *
+ * ⚠ SE INLOCUIESC, NU SE ADAUGA. Editorul trimite lista INTREAGA de etichete a
+ * articolului, deci una scoasa din caseta trebuie sa dispara si din legaturi.
+ * Adaugarea in loc de inlocuire ar fi facut ca o eticheta scoasa sa ramana pe
+ * veci, iar omul ar fi crezut ca a scos-o.
+ *
+ * ⚠ ETICHETELE INSELE NU SE STERG cand raman fara articole. Una scrisa gresit
+ * si corectata ar lasa in urma o eticheta orfana, e adevarat — dar stergerea
+ * automata ar fi sters si una folosita de un articol aflat in ciorna, iar aceea
+ * chiar e in uz. Curatenia lor e treaba ecranului de etichete, cu mana omului.
+ */
+async function puneEtichete(idArticol: string, nume: string[] | undefined): Promise<void> {
+  if (nume === undefined) return; // editorul n-a trimis nimic: nu se atinge nimic
+
+  const curate = [...new Set(
+    nume.map((n) => n.trim()).filter((n) => n.length > 0 && n.length <= 40),
+  )].slice(0, 12);
+
+  const db = blogDb();
+  await db.from("blog_post_tags").delete().eq("post_id", idArticol);
+  if (curate.length === 0) return;
+
+  /* Fiecare eticheta are un slug, iar slugul e cheia unica. Doua nume care dau
+     acelasi slug („eMAG" si „emag") sunt aceeasi eticheta, si asa si trebuie. */
+  const randuri = curate
+    .map((n) => ({ nume: n, slug: slugDin(n) }))
+    .filter((e) => e.slug.length > 0);
+  if (randuri.length === 0) return;
+
+  const { error: eUpsert } = await db
+    .from("blog_tags")
+    .upsert(randuri.map((e) => ({ slug: e.slug, name: e.nume })), { onConflict: "slug", ignoreDuplicates: true });
+  if (eUpsert) {
+    console.error("[blog] etichetele nu s-au putut face", eUpsert);
+    return;
+  }
+
+  const { data: gasite } = await db
+    .from("blog_tags").select("id, slug").in("slug", randuri.map((e) => e.slug));
+
+  const legaturi = ((gasite ?? []) as { id: string }[]).map((t) => ({
+    post_id: idArticol,
+    tag_id: t.id,
+  }));
+  if (legaturi.length > 0) {
+    await db.from("blog_post_tags").insert(legaturi);
+  }
+}
+
+/** Etichetele unui articol, pentru cand se deschide in editor. */
+export async function eticheteleArticolului(idArticol: string): Promise<string[]> {
+  if (!(await requireAdminApi())) return [];
+  const { data } = await blogDb()
+    .from("blog_post_tags").select("blog_tags(name)").eq("post_id", idArticol);
+  return ((data ?? []) as Record<string, unknown>[])
+    .map((r) => {
+      const t = Array.isArray(r.blog_tags) ? r.blog_tags[0] : r.blog_tags;
+      return (t as { name?: string } | null)?.name ?? "";
+    })
+    .filter(Boolean)
+    .sort();
+}
+
+/** Toate etichetele, cu numarul de articole pe fiecare. Pentru ecranul de admin. */
+export async function listeazaEtichete(): Promise<{ id: string; slug: string; name: string; cate: number }[]> {
+  if (!(await requireAdminApi())) return [];
+  const db = blogDb();
+  const [{ data: etichete }, { data: legaturi }] = await Promise.all([
+    db.from("blog_tags").select("id, slug, name").order("name"),
+    db.from("blog_post_tags").select("tag_id"),
+  ]);
+  const numar = new Map<string, number>();
+  for (const l of (legaturi ?? []) as { tag_id: string }[]) {
+    numar.set(l.tag_id, (numar.get(l.tag_id) ?? 0) + 1);
+  }
+  return ((etichete ?? []) as { id: string; slug: string; name: string }[])
+    .map((e) => ({ ...e, cate: numar.get(e.id) ?? 0 }));
+}
+
+/**
+ * Sterge o eticheta.
+ *
+ * Legaturile pica singure: cheia straina din `blog_post_tags` e
+ * `on delete cascade`. Articolele raman neatinse.
+ */
+export async function stergeEticheta(id: string): Promise<Raspuns> {
+  if (!(await requireAdminApi())) return { error: "Neautorizat" };
+  const { error } = await blogDb().from("blog_tags").delete().eq("id", id);
+  if (error) return { error: "Nu s-a putut sterge. Incearca din nou." };
+  reimprospateaza();
+  return { success: true };
+}
+
 // ── Articole ─────────────────────────────────────────────────────────────────
 
 /** Rândul din lista de admin: articolul plus numele autorului și al categoriei. */
@@ -318,6 +414,8 @@ export type ArticolInput = {
   seo_description?: string | null;
   canonical_url?: string | null;
   noindex?: boolean;
+  /** Numele etichetelor, asa cum le-a scris omul. Se fac singure daca nu exista. */
+  etichete?: string[];
 };
 
 /**
@@ -388,8 +486,10 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
     .single();
 
   if (error) return { error: traduEroare(error, "un articol") };
+  const idNou = (data as { id: string }).id;
+  await puneEtichete(idNou, intrare.etichete);
   reimprospateaza();
-  return { success: true, date: { id: (data as { id: string }).id } };
+  return { success: true, date: { id: idNou } };
 }
 
 export async function actualizeazaArticol(id: string, intrare: ArticolInput): Promise<Raspuns> {
@@ -433,6 +533,8 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
       console.error("[blog] redirectare neputută la schimbarea slugului", vechi.slug, "->", s.slug, eRedirect);
     }
   }
+
+  await puneEtichete(id, intrare.etichete);
 
   /* Versiunea de dinainte, păstrată. Se scrie DUPĂ salvare: dacă salvarea cade,
      n-are rost o versiune a unei schimbări care nu s-a întâmplat. */

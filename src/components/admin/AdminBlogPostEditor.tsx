@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle,
+  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle, X,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
@@ -55,6 +55,9 @@ type Stare = {
   seo_description: string;
   canonical_url: string;
   noindex: boolean;
+  etichete: string[];
+  /** Ce se scrie acum in caseta, inainte de Enter. */
+  etichetaInLucru: string;
 };
 
 /** ISO → valoarea pe care o cere `<input type="datetime-local">`, în ora locală. */
@@ -65,7 +68,7 @@ function pentruInput(iso: string | null): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function dinStareInitiala(a: ArticolBlog | null): Stare {
+function dinStareInitiala(a: ArticolBlog | null, etichete: string[]): Stare {
   return {
     title: a?.title ?? "",
     slug: a?.slug ?? "",
@@ -85,6 +88,8 @@ function dinStareInitiala(a: ArticolBlog | null): Stare {
     seo_description: a?.seo_description ?? "",
     canonical_url: a?.canonical_url ?? "",
     noindex: a?.noindex ?? false,
+    etichete: etichete ?? [],
+    etichetaInLucru: "",
   };
 }
 
@@ -92,13 +97,16 @@ export function AdminBlogPostEditor({
   articol,
   autori,
   categorii,
+  etichete = [],
 }: {
   articol: ArticolBlog | null;
   autori: AutorBlog[];
   categorii: CategorieBlog[];
+  /** Etichetele pe care le are deja articolul. Gol la unul nou. */
+  etichete?: string[];
 }) {
   const router = useRouter();
-  const [f, setF] = useState<Stare>(() => dinStareInitiala(articol));
+  const [f, setF] = useState<Stare>(() => dinStareInitiala(articol, etichete));
   const [salveaza, setSalveaza] = useState(false);
   const [incarca, setIncarca] = useState(false);
 
@@ -106,6 +114,21 @@ export function AdminBlogPostEditor({
 
   function schimbaTitlul(title: string) {
     setF((s) => ({ ...s, title, slug: s.slugScrisDeMana ? s.slug : slugDin(title) }));
+  }
+
+  function adaugaEticheta(brut: string) {
+    const nume = brut.trim().replace(/,+$/, "").trim();
+    if (!nume) { setF((s) => ({ ...s, etichetaInLucru: "" })); return; }
+    setF((s) => ({
+      ...s,
+      /* Fara duplicate, si fara sa tina seama de litere mari: „eMAG" si „emag"
+         dau acelasi slug, deci ar fi ajuns aceeasi eticheta oricum. Mai bine se
+         vede pe loc decat sa se lamureasca abia dupa salvare. */
+      etichete: s.etichete.some((e) => e.toLowerCase() === nume.toLowerCase())
+        ? s.etichete
+        : [...s.etichete, nume].slice(0, 12),
+      etichetaInLucru: "",
+    }));
   }
 
   async function incarcaCoperta(file: File) {
@@ -140,6 +163,9 @@ export function AdminBlogPostEditor({
       seo_description: f.seo_description,
       canonical_url: f.canonical_url,
       noindex: f.noindex,
+      /* Si cea din caseta, nescrisa inca: altfel omul tasteaza o eticheta,
+         apasa Salveaza fara Enter, si o pierde fara sa afle. */
+      etichete: [...f.etichete, f.etichetaInLucru.trim()].filter(Boolean),
     };
 
     /* Ramurile sunt despărțite dinadins: cele două acțiuni întorc forme
@@ -332,6 +358,57 @@ export function AdminBlogPostEditor({
               <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Scoate-l în față pe pagina de blog
             </span>
           </label>
+
+          {/*
+            ═══ ETICHETE ═══
+
+            Se scriu liber, spre deosebire de categorie, care se alege dintr-o
+            listă ținută de noi. Un articol are O categorie și poate avea mai
+            multe etichete; de aceea categoria intră în firimituri și în datele
+            structurate, iar eticheta nu — ar fi spus că articolul e în cinci
+            secțiuni deodată.
+
+            ⚠ Enter ADAUGĂ, nu trimite formularul. Fără `preventDefault`, Enter
+            într-un câmp de text trimite formularul din jur, iar omul ar fi
+            salvat articolul crezând că adaugă o etichetă.
+          */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-zinc-700 mb-1.5">Etichete</label>
+            {f.etichete.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {f.etichete.map((e) => (
+                  <span key={e} className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
+                    {e}
+                    <button type="button" aria-label={`Scoate eticheta ${e}`}
+                      onClick={() => pune("etichete", f.etichete.filter((x) => x !== e))}
+                      className="text-zinc-400 hover:text-red-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <input type="text" value={f.etichetaInLucru}
+              onChange={(e) => {
+                const v = e.target.value;
+                /* Virgula adaugă pe loc: aşa se poate lipi o listă întreagă. */
+                if (v.includes(",")) adaugaEticheta(v);
+                else pune("etichetaInLucru", v);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); adaugaEticheta(f.etichetaInLucru); }
+                if (e.key === "Backspace" && !f.etichetaInLucru && f.etichete.length > 0) {
+                  pune("etichete", f.etichete.slice(0, -1));
+                }
+              }}
+              onBlur={() => adaugaEticheta(f.etichetaInLucru)}
+              placeholder="Scrie o etichetă și apasă Enter"
+              className={inputCls} />
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Cel mult 12. Fiecare primește pagina ei, la /blog/eticheta/…, unde se strâng
+              toate articolele cu eticheta aceea.
+            </p>
+          </div>
 
           <div className="mt-4">
             <label className="block text-sm font-medium text-zinc-700 mb-1.5">Rezumat pentru listă</label>

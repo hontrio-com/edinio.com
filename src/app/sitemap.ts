@@ -10,7 +10,7 @@ import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { categoriiVizibile } from "@/lib/categories/vizibilitate";
-import { articolePublicate } from "@/lib/blog/citire";
+import { articolePublicate, eticheteFolosite } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
 import {
@@ -226,7 +226,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     Găsit chiar la proba de punere în funcțiune (30.08.2026): articolul de test
     era `noindex` și apărea totuși în sitemap.
   */
-  const articoleBlog = (await articolePublicate(2000)).filter((a) => !a.noindex);
+  const [toateArticolele, eticheteBlog] = await Promise.all([
+    articolePublicate(2000),
+    eticheteFolosite(),
+  ]);
+  const articoleBlog = toateArticolele.filter((a) => !a.noindex);
   const categoriiCuArticole = [
     ...new Set(articoleBlog.map((a) => a.categorie?.slug).filter((s): s is string => !!s)),
   ];
@@ -329,6 +333,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        crawlerul degeaba. */
     ...autoriDeAratat.map((slug) => ({
       url: `${PLATFORM_ORIGIN}/blog/autor/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.4,
+    })),
+    /* Etichetele folosite de măcar un articol publicat. Cele legate doar de
+       ciorne dau 404 dinadins, deci n-au ce căuta aici.
+
+       ⚠ Bucata asta a lipsit o vreme, deși `eticheteFolosite()` era deja
+       chemată: o înlocuire automată nu potrivise, iar variabila rămăsese
+       nefolosită. Am prins-o citind sitemapul adevărat, nu codul — pagina de
+       etichetă răspundea 200 și tot nu era anunțată nicăieri. */
+    ...eticheteBlog.map((e) => ({
+      url: `${PLATFORM_ORIGIN}/blog/eticheta/${e.slug}`,
       lastModified: new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.4,

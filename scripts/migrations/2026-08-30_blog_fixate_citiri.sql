@@ -1,3 +1,9 @@
+-- ⚠ DEPASITA IN ACEEASI ZI, in partea de citiri. Vezi
+-- `2026-08-30_blog_citiri_separate.sql`: coloana `blog_posts.views` nu mai exista,
+-- iar `blog_creste_citirile` scrie in `blog_post_stats` si nu mai e chemabila de
+-- `anon`. Fisierul de fata se pastreaza fiindca partea de FIXARE (`is_pinned`) e
+-- in continuare in vigoare, si fiindca istoricul migratiilor nu se rescrie.
+--
 -- ═══ ARTICOLE FIXATE SI NUMARUL DE CITIRI ═══
 -- Aplicata pe 30.08.2026 ca `blog_fixate_si_vizualizari`.
 

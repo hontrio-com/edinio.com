@@ -29,11 +29,28 @@ export function articolJsonLd(a: ArticolIntreg): object {
     prospețime, iar unul umflat („actualizat azi" pe un text neatins de un an)
     e o minciună pe care o pot verifica singure comparând conținutul. Vine din
     `updated_at`, care se schimbă doar la o salvare adevărată.
+
+    ⚠ ASTA A FOST FALS PÂNĂ PE 30.08.2026, ȘI E UȘOR SĂ REDEVINĂ. Citirile
+    stăteau ca o coloană pe rândul articolului, iar triggerul `blog_posts_touch`
+    e neconditionat: fiecare VIZITĂ muta `updated_at`. Un articol pe care nu-l
+    atinsese nimeni se lăuda aici că e proaspăt editat, cu atât mai tare cu cât
+    era citit mai mult. Acum cifrele stau în `blog_post_stats`.
+
+    Deci: nimic care se scrie la CITIRE nu are voie înapoi pe `blog_posts`.
+    Nu e o preferință de așezare, e ce ține propoziția de mai sus adevărată.
   */
   const articol: Record<string, unknown> = {
     "@type": "BlogPosting",
     "@id": `${adresa}#articol`,
-    headline: a.seo_title?.trim() || a.title,
+    /*
+      ⚠ TITLUL ARTICOLULUI, NU CEL DIN SEO.
+      `headline` înseamnă, la schema.org, titlul lucrării — adică ce vede
+      cititorul ca `h1`. Titlul de SEO e altceva: e croit pentru rezultatele
+      Google și ajunge de obicei cu marca la coadă („... | Edinio"). Pus în
+      `headline`, datele structurate ar fi spus că articolul se numește altfel
+      decât scrie în pagină.
+    */
+    headline: a.title,
     description: a.seo_description?.trim() || a.excerpt || faraEtichete(a.content_html, 200),
     url: adresa,
     mainEntityOfPage: { "@type": "WebPage", "@id": adresa },

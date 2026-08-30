@@ -207,6 +207,36 @@ export function AdminBlogPostEditor({
     setNesalvat(true);
   };
 
+  /**
+   * Ca `pune`, dar pentru valori venite DE LA SERVER.
+   *
+   * ⚠ NU MARCHEAZĂ NESALVAT, și asta e tot rostul lui. După o publicare reușită
+   * codul făcea `setNesalvat(false)` și imediat `pune("status", ...)`, iar `pune`
+   * marchează întotdeauna nesalvat. Deci formularul se declara nesalvat la o
+   * zecime de secundă după ce serverul confirmase salvarea — ceea ce, mai
+   * departe, pornea autosalvarea peste o publicare tocmai încheiată.
+   */
+  const puneDeLaServer = <K extends keyof Stare>(k: K, v: Stare[K]) => {
+    setF((s) => ({ ...s, [k]: v }));
+  };
+
+  /**
+   * ═══ O SINGURĂ SCRIERE ODATĂ ═══
+   *
+   * ⚠ FĂRĂ ASTA, AUTOSALVAREA ȘI PUBLICAREA SE BAT PE ACELAȘI ARTICOL.
+   *
+   * Ceasul de 30 de secunde putea porni exact când omul apasă „Publică". Dacă
+   * publicarea ajungea prima la server și autosalvarea a doua, ultima scriere
+   * câștiga — iar autosalvarea trimitea `status` vechi. Rezultatul: articolul
+   * revenea în ciornă după ce ecranul îi spusese omului că e publicat. Niciun
+   * mesaj de eroare, nicăieri.
+   *
+   * Referință, nu stare: trebuie citită de ceasul de autosalvare fără să aștepte
+   * o randare, iar o valoare de stare ar fi fost veche exact în clipa care
+   * contează.
+   */
+  const scriereInCurs = useRef(false);
+
   function schimbaTitlul(title: string) {
     setF((s) => ({ ...s, title, slug: s.slugScrisDeMana ? s.slug : slugDin(title) }));
     setNesalvat(true);
@@ -232,9 +262,14 @@ export function AdminBlogPostEditor({
     const res = await uploadImage(file, "gallery", "blog");
     setIncarca(false);
     if ("error" in res) { toast.error(res.error); return; }
-    setNesalvat(false);
-    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
-    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
+    /*
+      ⚠ AICI ERA `setNesalvat(false)` + ștergerea copiei locale, puse din greșeală
+      de o înlocuire automată care a lovit fiecare funcție cu aceeași linie de
+      verificare a erorii. Urmarea: o simplă încărcare de copertă spunea „salvat",
+      deși nimic nu plecase la server, și arunca și plasa de siguranță din browser.
+      Încărcarea unei poze SCHIMBĂ articolul, deci îl lasă nesalvat — ceea ce face
+      `pune` de mai jos.
+    */
     pune("cover_url", res.url);
   }
 
@@ -248,11 +283,23 @@ export function AdminBlogPostEditor({
   const salveazaTacut = useCallback(async () => {
     const st = stareaAcum.current;
     if (!articol || !st.title.trim()) return;
-    const res = await actualizeazaArticol(articol.id, intrareDin(st, st.status));
-    if (!("error" in res)) {
-      setNesalvat(false);
-      setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
-      try { localStorage.removeItem(cheieLocala); } catch { /* fila privată */ }
+
+    /* ⚠ Se dă la o parte când omul salvează sau publică. Autosalvarea e o plasă,
+       nu o concurentă: peste o scriere pornită de om, ea n-are ce adăuga, dar
+       are ce strica. Nu se pune la coadă — următorul ceas vine în 30 de secunde,
+       iar starea de atunci e oricum mai proaspătă decât cea de acum. */
+    if (scriereInCurs.current) return;
+
+    scriereInCurs.current = true;
+    try {
+      const res = await actualizeazaArticol(articol.id, intrareDin(st, st.status));
+      if (!("error" in res)) {
+        setNesalvat(false);
+        setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+        try { localStorage.removeItem(cheieLocala); } catch { /* fila privată */ }
+      }
+    } finally {
+      scriereInCurs.current = false;
     }
   }, [articol, cheieLocala]);
 
@@ -328,7 +375,23 @@ export function AdminBlogPostEditor({
     router.push("/admin/blog");
   }
 
+  /** Ce se face după orice scriere reușită: nu mai e nimic nesalvat. */
+  function dupaOSalvareReusita(stareNoua?: StareArticol) {
+    setNesalvat(false);
+    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
+    /* ⚠ `puneDeLaServer`, NU `pune`: starea vine de la server, deci n-are ce
+       marca drept nesalvat. Vezi nota de la definiția lui. */
+    if (stareNoua) puneDeLaServer("status", stareNoua);
+  }
+
   async function salveaza_(stareNoua?: StareArticol) {
+    /* ⚠ Nicio a doua scriere cât una e pe drum. Două apăsări repezi pe „Publică"
+       trimiteau două cereri, iar a doua scria peste prima cu o stare care putea
+       fi deja veche. */
+    if (scriereInCurs.current) return;
+    scriereInCurs.current = true;
+
     const status = stareNoua ?? f.status;
     setSalveaza(true);
 
@@ -340,11 +403,9 @@ export function AdminBlogPostEditor({
     if (articol) {
       const res = await actualizeazaArticol(articol.id, intrare);
       setSalveaza(false);
+      scriereInCurs.current = false;
       if ("error" in res) { toast.error(res.error); return; }
-    setNesalvat(false);
-    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
-    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
-      if (stareNoua) pune("status", stareNoua);
+      dupaOSalvareReusita(stareNoua);
       toast.success("Salvat.");
       router.refresh();
       return;
@@ -352,11 +413,9 @@ export function AdminBlogPostEditor({
 
     const res = await creeazaArticol(intrare);
     setSalveaza(false);
+    scriereInCurs.current = false;
     if ("error" in res) { toast.error(res.error); return; }
-    setNesalvat(false);
-    setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
-    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
-    if (stareNoua) pune("status", stareNoua);
+    dupaOSalvareReusita(stareNoua);
     toast.success("Articol creat.");
     /* `replace`, nu `push`: „înapoi" trebuie să ducă la lista de articole, nu
        la formularul gol de dinainte, care ar crea un al doilea articol. */

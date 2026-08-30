@@ -6,7 +6,7 @@ import { Link2 } from "lucide-react";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
-import { Paginare, paginaCeruta } from "@/components/website/blog/Paginare";
+import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
 import { articoleleAutorului, autorDupaSlug } from "@/lib/blog/citire";
 import { adreseBune } from "@/lib/blog/types";
 import { autorJsonLd } from "@/lib/blog/jsonld";
@@ -60,6 +60,7 @@ export default async function AutorBlogPage({ params, searchParams }: Props) {
   if (!gasit || gasit.total === 0) notFound();
 
   const { autor, articole, total, pagini } = gasit;
+  if (paginaNuExista(cerut, total, pagini)) notFound();
   const profiluri = adreseBune(autor.sameas);
   const subiecte = [
     ...new Set(articole.map((a) => a.categorie?.name).filter((n): n is string => !!n)),

@@ -2,33 +2,37 @@
 
 import { headers } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIpFromHeaders, rateLimit } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 
 /**
  * Acțiunile publice ale blogului.
  *
- * ⚠ FIȘIER SEPARAT DINADINS. `blog.actions.ts` are `requireAdminApi()` în prima
- * linie a fiecărei funcții, fără excepție — o regulă ușor de verificat dintr-o
- * privire. O funcție publică strecurată acolo ar fi rupt regula aceea și ar fi
- * făcut ca următorul care citește fișierul să nu mai poată avea încredere în ea.
+ * ⚠ FIȘIER SEPARAT DINADINS. `blog.actions.ts` are o pază în prima linie a
+ * fiecărei funcții, fără excepție — o regulă ușor de verificat dintr-o privire.
+ * O funcție publică strecurată acolo ar fi rupt regula aceea și ar fi făcut ca
+ * următorul care citește fișierul să nu mai poată avea încredere în ea.
  *
  * Aici, dimpotrivă: TOT ce e în fișierul ăsta e chemat de vizitatori nelogați,
  * deci fiecare funcție trebuie să fie sigură prin ea însăși.
  */
-async function db(): Promise<SupabaseClient> {
-  return (await createClient()) as unknown as SupabaseClient;
-}
 
 /**
  * Numără o citire de articol.
  *
- * ⚠ NUMĂRUL E O MĂSURĂ, NU O CONTABILITATE. Nu ține minte cine a citit, nu pune
- * cookie și nu deosebește un om de altul. Un cititor care reîncarcă pagina
- * numără de două ori, iar plafonul de mai jos oprește doar rafalele. E de ajuns
- * pentru întrebarea la care răspunde („ce articole se citesc?"), și e mult mai
- * puțin decât ar cere o unealtă de analiză — care ar fi însemnat și un banner
- * de cookie-uri în plus.
+ * ⚠ TRECE PRIN CHEIA DE SERVICIU, NU PRIN CEA ANONIMĂ.
+ *
+ * Prima scriere chema funcția din bază cu clientul obișnuit, iar funcția avea
+ * `grant execute ... to anon`. Cheia anonimă a Supabase e PUBLICĂ: oricine putea
+ * chema direct `rpc/blog_creste_citirile` de câte ori voia, ocolind cu totul
+ * plafonul de aici. Cifrele ar fi fost o glumă, iar baza ar fi luat scrierile.
+ * Acum funcția e chemabilă doar cu cheia de serviciu, deci drumul ăsta e singurul.
+ *
+ * ⚠ DOUĂ PLAFOANE, NU UNUL. Cel din memorie oprește rafalele fără să coste
+ * nimic, dar se pierde la fiecare desfășurare și e per instanță — pe serverless,
+ * „30 pe minut" devine „30 × câte instanțe calde sunt". Cel durabil ține cu
+ * adevărat, fiindcă stă în bază.
  *
  * ⚠ NU ARUNCĂ NICIODATĂ. E o socoteală de margine: dacă pică, articolul tot se
  * citește. O eroare aruncată de aici ar fi stricat pagina pentru un număr.
@@ -38,14 +42,25 @@ export async function numaraCitirea(slug: string): Promise<void> {
     const s = (slug ?? "").trim();
     if (!s || s.length > 100) return;
 
-    /* 30 pe minut de pe același IP: destul pentru cineva care răsfoiește, prea
-       puțin pentru cineva care umflă cifrele cu un script. */
     const ip = clientIpFromHeaders(await headers());
+
+    /* Prima linie: în memorie, fără cost. 30 pe minut e destul pentru cineva
+       care răsfoiește, prea puțin pentru un script. */
     if (!rateLimit(`blogView:${ip}`, 30, 60_000)) return;
 
-    /* Funcția din baza de date verifică ea însăși că articolul e publicat, deci
-       o ciornă nu poate fi numărată nici dacă i se ghicește adresa. */
-    await (await db()).rpc("blog_creste_citirile", { p_slug: s });
+    /* A doua linie: în bază, deci globală și supraviețuiește desfășurărilor.
+       Mai largă decât prima dinadins — ea e pentru abuzul întins pe timp, nu
+       pentru rafală. */
+    const { permis } = await consumaLimita(`blog-view:ip:${ip}`, 300, 3600);
+    if (!permis) return;
+
+    /* Funcția din bază verifică ea însăși că articolul e publicat, deci o ciornă
+       nu poate fi numărată nici dacă i se ghicește adresa. Și scrie în
+       `blog_post_stats`, nu pe rândul articolului: vezi nota din `types.ts`. */
+    /* Turnat, ca peste tot in blog: tabelele si functiile de blog nu sunt inca
+       in `database.types.ts`. Vezi nota din `scripts/tests/coloane-cerute-exista.mjs`
+       — plasa pentru asta nu e `tsc`, e proba care confrunta codul cu baza. */
+    await (createAdminClient() as unknown as SupabaseClient).rpc("blog_creste_citirile", { p_slug: s });
   } catch {
     /* Tăcere dinadins. Vezi nota de sus. */
   }

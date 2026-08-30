@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
-import { Paginare, paginaCeruta } from "@/components/website/blog/Paginare";
+import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
 import { articoleleEtichetei, eticheta } from "@/lib/blog/citire";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { siteMetadata } from "@/lib/website/metadata";
@@ -24,14 +24,29 @@ type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ p?: st
  * poate întâmpla firesc: o etichetă pusă doar pe o ciornă. O pagină goală ar fi
  * conținut subțire, și ar intra în judecata pe tot domeniul.
  */
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
+  const { p } = await searchParams;
+  const pagina = paginaCeruta(p);
   const e = await eticheta(slug);
   if (!e) return { title: "Etichetă negăsită" };
+
+  /*
+    ⚠ CANONICA TREBUIE SĂ ȚINĂ SEAMA DE PAGINĂ.
+
+    Aici canonica arăta întotdeauna spre pagina 1, inclusiv pe `?p=2`. Adică
+    pagina a doua îi spunea lui Google „eu sunt de fapt pagina întâi" — iar
+    Google, crezând-o, n-ar mai fi urmat legăturile din ea. Articolele mai vechi
+    ale etichetei ar fi rămas de negăsit.
+
+    Lista principală și categoriile o făceau deja corect; eticheta rămăsese în
+    urmă. Acum toate trei spun același lucru.
+  */
+  const titlu = `${e.name}: articole de blog`;
   return siteMetadata({
-    title: `${e.name}: articole de blog`,
+    title: pagina > 1 ? `${titlu}, pagina ${pagina}` : titlu,
     description: `Toate articolele etichetate „${e.name}" de pe blogul Edinio.`,
-    path: `/blog/eticheta/${e.slug}`,
+    path: pagina > 1 ? `/blog/eticheta/${e.slug}?p=${pagina}` : `/blog/eticheta/${e.slug}`,
   });
 }
 
@@ -45,6 +60,7 @@ export default async function EticheteBlogPage({ params, searchParams }: Props) 
 
   const { articole, total, pagini } = await articoleleEtichetei(slug, cerut);
   if (total === 0) notFound();
+  if (paginaNuExista(cerut, total, pagini)) notFound();
 
   return (
     <>

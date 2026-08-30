@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
-import { Paginare, paginaCeruta } from "@/components/website/blog/Paginare";
+import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
 import { articoleleCategoriei, categoriiBlog } from "@/lib/blog/citire";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { siteMetadata } from "@/lib/website/metadata";
@@ -65,6 +65,10 @@ export default async function CategorieBlogPage({ params, searchParams }: Props)
     tot domeniul.
   */
   if (total === 0) notFound();
+
+  /* ⚠ Și o pagină de paginare care nu există: `?p=999` pe o categorie cu două
+     pagini răspundea 200 cu o listă goală. Vezi `paginaNuExista`. */
+  if (paginaNuExista(cerut, total, pagini)) notFound();
 
   return (
     <>

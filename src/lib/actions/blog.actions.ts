@@ -11,6 +11,7 @@ import {
   minuteDeCitit,
   seVede,
   slugDin,
+  SLUGURI_REZERVATE_BLOG,
   type ArticolBlog,
   type AutorBlog,
   type CategorieBlog,
@@ -397,14 +398,19 @@ const NU_AI_VOIE_SA_PUBLICI =
 /** Rândul din lista de admin: articolul plus numele autorului și al categoriei. */
 export type ArticolInLista = Pick<
   ArticolBlog,
-  "id" | "slug" | "title" | "status" | "published_at" | "is_featured" | "is_pinned" | "views" | "reading_minutes" | "updated_at"
-> & { autor: string | null; categorie: string | null };
+  "id" | "slug" | "title" | "status" | "published_at" | "is_featured" | "is_pinned" | "reading_minutes" | "updated_at"
+> & {
+  autor: string | null;
+  categorie: string | null;
+  /** Din `blog_post_stats`, nu de pe rândul articolului. Vezi nota din `types.ts`. */
+  views: number;
+};
 
 export async function listeazaArticole(): Promise<ArticolInLista[]> {
   if (!(await requireBlogEditorApi())) return [];
   const { data } = await blogDb()
     .from("blog_posts")
-    .select("id, slug, title, status, published_at, is_featured, is_pinned, views, reading_minutes, updated_at, blog_authors(name), blog_categories(name)")
+    .select("id, slug, title, status, published_at, is_featured, is_pinned, reading_minutes, updated_at, blog_authors(name), blog_categories(name), blog_post_stats(views)")
     .order("updated_at", { ascending: false });
 
   return ((data ?? []) as Record<string, unknown>[]).map((r) => {
@@ -414,10 +420,17 @@ export async function listeazaArticole(): Promise<ArticolInLista[]> {
       const x = Array.isArray(v) ? v[0] : v;
       return (x as { name?: string } | null)?.name ?? null;
     };
+    /* Un articol necitit încă n-are rând în `blog_post_stats`: rândul se face la
+       prima vizită. Lipsa lui înseamnă zero, nu o eroare. */
+    const cateCitiri = (v: unknown): number => {
+      const x = Array.isArray(v) ? v[0] : v;
+      return (x as { views?: number } | null)?.views ?? 0;
+    };
     return {
       ...(r as unknown as ArticolInLista),
       autor: unul(r.blog_authors),
       categorie: unul(r.blog_categories),
+      views: cateCitiri(r.blog_post_stats),
     };
   });
 }
@@ -477,6 +490,102 @@ function intrebariBune(intrari: IntrebareBlog[] | undefined): IntrebareBlog[] {
   return (intrari ?? [])
     .map((i) => ({ q: (i.q ?? "").trim(), a: (i.a ?? "").trim() }))
     .filter((i) => i.q.length > 0 && i.a.length > 0);
+}
+
+/**
+ * Cât de lung are voie să fie fiecare câmp.
+ *
+ * ⚠ VERIFICAREA DIN EDITOR NU E O VERIFICARE.
+ *
+ * Ecranul are `maxLength` pe casete, dar `maxLength` e o purtare a browserului,
+ * nu o regulă: acțiunea de server e o adresă POST pe care oricine o poate chema
+ * direct, cu ce vrea în ea (vezi ghidul Next, „Treat every action as an
+ * untrusted entry point"). Fără rândurile de mai jos, un `content_html` de
+ * cincizeci de megaocteți intra în baza de date, iar de acolo în fiecare
+ * randare a paginii și în fiecare versiune din istoric.
+ *
+ * ⚠ NUMERELE SUNT LARGI DINADINS. Nu sunt reguli de redacție — un articol lung
+ * și bun nu trebuie oprit de aici. Sunt marginea de dincolo de care valoarea nu
+ * mai poate fi ceva scris de un om.
+ */
+const LIMITE = {
+  title: 200,
+  slug: 80,
+  excerpt: 500,
+  answer_summary: 1200,
+  content_html: 400_000,
+  cover_url: 2048,
+  cover_alt: 300,
+  og_image_url: 2048,
+  seo_title: 200,
+  seo_description: 500,
+  canonical_url: 2048,
+  intrebare: 300,
+  raspuns: 2000,
+  eticheta: 40,
+} as const;
+
+const NUME_OMENESC: Record<string, string> = {
+  title: "Titlul",
+  slug: "Adresa",
+  excerpt: "Rezumatul",
+  answer_summary: "Răspunsul scurt",
+  content_html: "Textul articolului",
+  cover_url: "Adresa copertei",
+  cover_alt: "Textul copertei",
+  og_image_url: "Imaginea de partajare",
+  seo_title: "Titlul SEO",
+  seo_description: "Descrierea SEO",
+  canonical_url: "Adresa canonică",
+};
+
+/**
+ * Trece intrarea de plafoane?
+ *
+ * ⚠ SPUNE CARE CÂMP ȘI CU CÂT. Un „datele nu sunt valide" l-ar lăsa pe om să
+ * caute singur, într-un formular cu douăzeci de casete, care dintre ele e prea
+ * lungă — și n-ar afla niciodată, fiindcă nimic nu i-ar arăta numărul.
+ */
+function preaLung(intrare: ArticolInput): string | null {
+  const perechi: [keyof typeof LIMITE, string | null | undefined][] = [
+    ["title", intrare.title],
+    ["slug", intrare.slug],
+    ["excerpt", intrare.excerpt],
+    ["answer_summary", intrare.answer_summary],
+    ["content_html", intrare.content_html],
+    ["cover_url", intrare.cover_url],
+    ["cover_alt", intrare.cover_alt],
+    ["og_image_url", intrare.og_image_url],
+    ["seo_title", intrare.seo_title],
+    ["seo_description", intrare.seo_description],
+    ["canonical_url", intrare.canonical_url],
+  ];
+  for (const [camp, valoare] of perechi) {
+    const n = (valoare ?? "").length;
+    if (n > LIMITE[camp]) {
+      return `${NUME_OMENESC[camp] ?? camp} are ${n} de caractere, iar maximul e ${LIMITE[camp]}.`;
+    }
+  }
+
+  /* Întrebările frecvente: și câte, și cât de lungi. Zece e cu mult peste ce se
+     citește vreodată dintr-un articol, și peste ce arată Google. */
+  const faq = intrare.faq ?? [];
+  if (faq.length > 10) return "Sunt prea multe întrebări frecvente. Maximul e 10.";
+  for (const i of faq) {
+    if ((i.q ?? "").length > LIMITE.intrebare) return `O întrebare e mai lungă de ${LIMITE.intrebare} de caractere.`;
+    if ((i.a ?? "").length > LIMITE.raspuns) return `Un răspuns e mai lung de ${LIMITE.raspuns} de caractere.`;
+  }
+
+  /* Etichetele se tăiau tăcut în `puneEtichete` (12 bucăți, 40 de caractere).
+     Tăcerea aia era o problemă în sine: omul scria cincisprezece etichete,
+     apăsa salvează, și trei dispăreau fără ca nimic să spună de ce. */
+  const etichete = intrare.etichete ?? [];
+  if (etichete.length > 12) return "Sunt prea multe etichete. Maximul e 12.";
+  if (etichete.some((e) => (e ?? "").trim().length > LIMITE.eticheta)) {
+    return `O etichetă e mai lungă de ${LIMITE.eticheta} de caractere.`;
+  }
+
+  return null;
 }
 
 /** Câmpurile comune la creare și la actualizare. */
@@ -539,8 +648,17 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
   const titlu = intrare.title?.trim();
   if (!titlu) return { error: "Titlul este obligatoriu." };
 
+  const capat = preaLung(intrare);
+  if (capat) return { error: capat };
+
   const s = slugSauMotiv(intrare.slug, titlu);
   if ("error" in s) return s;
+  /* ⚠ Doar articolele au adrese rezervate: ele stau chiar sub `/blog/`, unde
+     sunt și rutele. Categoriile și autorii stau sub prefixele lor, deci nu se
+     pot ciocni cu nimic. Vezi `SLUGURI_REZERVATE_BLOG`. */
+  if (SLUGURI_REZERVATE_BLOG.has(s.slug)) {
+    return { error: `Adresa „${s.slug}" e folosită de o pagină a blogului. Alege alta.` };
+  }
 
   const { data, error } = await blogDb()
     .from("blog_posts")
@@ -564,8 +682,17 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
   const titlu = intrare.title?.trim();
   if (!titlu) return { error: "Titlul este obligatoriu." };
 
+  const capat = preaLung(intrare);
+  if (capat) return { error: capat };
+
   const s = slugSauMotiv(intrare.slug, titlu);
   if ("error" in s) return s;
+  /* ⚠ Doar articolele au adrese rezervate: ele stau chiar sub `/blog/`, unde
+     sunt și rutele. Categoriile și autorii stau sub prefixele lor, deci nu se
+     pot ciocni cu nimic. Vezi `SLUGURI_REZERVATE_BLOG`. */
+  if (SLUGURI_REZERVATE_BLOG.has(s.slug)) {
+    return { error: `Adresa „${s.slug}" e folosită de o pagină a blogului. Alege alta.` };
+  }
 
   const vechi = await iaArticol(id);
   if (!vechi) return { error: "Articolul nu mai există." };
@@ -577,57 +704,65 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
     return { error: "Articolul e publicat. Doar un administrator îl mai poate schimba." };
   }
 
-  const { error } = await blogDb()
-    .from("blog_posts")
-    .update({ ...randDinIntrare(intrare, s.slug), published_at: dataLaPublicare(intrare) })
-    .eq("id", id);
+  /*
+    ═══ TOATĂ SALVAREA, ÎNTR-O SINGURĂ TRANZACȚIE ═══
+
+    Aici erau cinci cereri pe rând: rândul articolului, ștergerea redirectării
+    inverse, scrierea redirectării noi, refacerea etichetelor, scrierea
+    versiunii. Fiecare izbutea sau cădea singură, iar o cădere la mijloc lăsa în
+    urmă lucruri care nu dădeau nicio eroare vizibilă:
+
+      - slug schimbat, redirectare nescrisă → adresa veche dă 404, și tot ce
+        strânsese articolul în Google se pierde;
+      - articol salvat, etichete nescrise → dispare din rubricile lui de pe site;
+      - articol salvat, versiune nescrisă → istoricul minte despre ce a fost.
+
+    Ecranul spunea „salvat" în toate cazurile, fiindcă PRIMA cerere chiar
+    izbutise.
+
+    PostgREST rulează o funcție într-o singură tranzacție. Deci ori toate, ori
+    niciuna. Vezi `2026-08-30_blog_salvare_tranzactionala.sql`.
+
+    ⚠ SLUGUL ETICHETEI SE FACE AICI, NU ÎN SQL. `slugDin` e singura regulă de
+    slugit din tot blogul. Rescrisă și în funcție, cele două s-ar fi despărțit
+    tăcut la prima diacritică tratată altfel — aceeași capcană ca la
+    `pliaza` / `fara_diacritice`.
+  */
+  const etichetePentruBaza =
+    intrare.etichete === undefined
+      ? null // editorul n-a trimis nimic: nu se atinge nimic
+      : [
+          ...new Map(
+            intrare.etichete
+              .map((n) => (n ?? "").trim())
+              .filter((n) => n.length > 0)
+              .map((n) => [slugDin(n), { slug: slugDin(n), name: n }] as const)
+              .filter(([slug]) => slug.length > 0),
+          ).values(),
+        ].slice(0, 12);
+
+  const { error } = await blogDb().rpc("blog_salveaza_articol", {
+    p_id: id,
+    p_rand: { ...randDinIntrare(intrare, s.slug), published_at: dataLaPublicare(intrare) },
+    p_etichete: etichetePentruBaza,
+    p_slug_vechi: vechi.slug,
+    /*
+      ⚠ Doar dacă articolul A FOST vizibil. Un slug schimbat pe o ciornă n-a fost
+      niciodată nicăieri: o redirectare de la el ar fi o adresă inventată, care
+      nu duce decât la umplut tabela.
+
+      Dar dacă articolul se vedea, adresa veche există deja în Google, în
+      legături și în istoricul cuiva. Mutată fără redirectare, tot ce a strâns se
+      pierde și rămâne un 404 pe care motoarele îl țin minte mult.
+    */
+    p_lasa_redirect: vechi.slug !== s.slug && seVede(vechi),
+    p_salvat_de: admin.id,
+    p_titlu_vechi: vechi.title,
+    p_html_vechi: vechi.content_html,
+    p_versiuni: VERSIUNI_PASTRATE,
+  });
 
   if (error) return { error: traduEroare(error, "un articol") };
-
-  /*
-    ═══ SLUGUL SCHIMBAT LASĂ O REDIRECTARE ÎN URMĂ ═══
-
-    ⚠ Doar dacă articolul A FOST vizibil. Un slug schimbat pe o ciornă n-a fost
-    niciodată nicăieri: o redirectare de la el ar fi o adresă inventată, care nu
-    duce decât la umplut tabela.
-
-    Dar dacă articolul se vedea, adresa veche există deja în Google, în legături
-    și în istoricul cuiva. Mutată fără redirectare, tot ce a strâns se pierde și
-    rămâne un 404 pe care motoarele îl țin minte mult.
-
-    Se scrie și se merge mai departe: un articol salvat cu redirectarea ratată e
-    mai bun decât unul nesalvat. Eșecul se vede în jurnal.
-  */
-  if (vechi.slug !== s.slug && seVede(vechi)) {
-    /*
-      ⚠ SE STERGE INTAI REDIRECTAREA CARE PLEACA DE LA ADRESA NOUA.
-
-      Fara asta se face o bucla: redenumesti `a` in `b` (deci `a → b`), te
-      razgandesti si redenumesti inapoi `b` in `a` (deci `b → a`). Acum `/blog/a`
-      trimite la `/blog/b`, care trimite la `/blog/a`, la nesfarsit. Browserul da
-      „prea multe redirectari", Google la fel, si nu se poate desface decat din
-      SQL — fiindca articolul insusi e in regula, doar drumul catre el nu.
-    */
-    await blogDb().from("blog_redirects").delete().eq("from_slug", s.slug);
-
-    const { error: eRedirect } = await blogDb()
-      .from("blog_redirects")
-      .upsert({ from_slug: vechi.slug, to_slug: s.slug }, { onConflict: "from_slug" });
-    if (eRedirect) {
-      console.error("[blog] redirectare neputută la schimbarea slugului", vechi.slug, "->", s.slug, eRedirect);
-    }
-  }
-
-  await puneEtichete(id, intrare.etichete);
-
-  /* Versiunea de dinainte, păstrată. Se scrie DUPĂ salvare: dacă salvarea cade,
-     n-are rost o versiune a unei schimbări care nu s-a întâmplat. */
-  await blogDb().from("blog_post_revisions").insert({
-    post_id: id,
-    title: vechi.title,
-    content_html: vechi.content_html,
-    saved_by: admin.id,
-  });
 
   reimprospateaza();
   return { success: true };

@@ -112,8 +112,16 @@ export interface ArticolBlog {
    * n-are de ce să ocupe vitrina.
    */
   is_pinned: boolean;
-  /** Câte ori s-a deschis. O măsură, nu o contabilitate: vezi `numaraCitirea`. */
-  views: number;
+  /*
+    ⚠ CITIRILE NU MAI SUNT AICI. Stăteau ca o coloană pe rândul articolului, iar
+    fiecare vizită făcea un `update` pe el — ceea ce pornea triggerul de
+    `updated_at` și marca articolul drept modificat editorial. Un articol doar
+    CITIT începea să spună „Actualizat azi", și la fel spunea și `dateModified`
+    din datele structurate.
+
+    Acum stau în `blog_post_stats`, legate prin `post_id`. Rândul editorial se
+    schimbă doar când îl schimbă un om.
+  */
   faq: IntrebareBlog[];
 
   seo_title: string | null;
@@ -161,6 +169,28 @@ export function minuteDeCitit(html: string): number {
   if (!text) return 1;
   return Math.max(1, Math.round(text.split(" ").length / 200));
 }
+
+/**
+ * Adresele pe care un ARTICOL nu le poate lua, fiindcă sunt deja rute.
+ *
+ * ⚠ UN ARTICOL CU SLUG-UL „cautare" AR FI DE NEATINS. Baza îl acceptă (forma e
+ * validă), se salvează, se publică, apare în listă și în sitemap — dar
+ * `/blog/cautare` e ruta de căutare, iar Next alege întotdeauna segmentul
+ * static. Articolul ar exista peste tot, mai puțin la propria lui adresă, și
+ * nimic nu ar da vreo eroare.
+ *
+ * ⚠ SE ȚINE ÎN ACORD CU `src/app/(website)/blog/`. Fiecare nume de aici e un
+ * dosar de acolo. Dacă apare o rută nouă sub /blog, numele ei se adaugă și aici;
+ * proba din `types.test.ts` compară cele două liste și cade dacă se despart.
+ */
+export const SLUGURI_REZERVATE_BLOG = new Set([
+  "cautare",
+  "confirma",
+  "dezabonare",
+  "autor",
+  "categorie",
+  "eticheta",
+]);
 
 /** Din „Cum îți alegi curierul" iese „cum-iti-alegi-curierul". */
 export function slugDin(text: string): string {

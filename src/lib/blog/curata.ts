@@ -42,7 +42,50 @@ import sanitizeHtmlLib from "sanitize-html";
  * scrie un id care se ciocnește cu ceva din pagină.
  */
 
-/** Gazdele de la care se acceptă imagini. R2 direct, sau CDN-ul din fața lui. */
+/**
+ * Gazdele de la care se acceptă imagini, scrise pe nume.
+ *
+ * ⚠ AICI A FOST `hostname.endsWith(".r2.dev")`, ȘI ERA O UȘĂ DESCHISĂ.
+ * `r2.dev` e domeniul public pe care Cloudflare îl dă ORICĂREI găleți, a
+ * oricui. Regula aceea nu spunea „imaginile noastre", spunea „imaginile oricui
+ * are cont de Cloudflare" — deci cine putea pune HTML într-un articol putea lăsa
+ * în pagină un pixel de urmărire găzduit de el, care ne raporta cititorii.
+ *
+ * ⚠ DACĂ MEDIUL N-ARE `R2_PUBLIC_URL`, NU SE ACCEPTĂ NICIO GAZDĂ EXTERNĂ, și e
+ * dinadins: un articol cu imagini lipsă se vede din prima privire, o gaură prin
+ * care intră conținut străin nu se vede niciodată. `curata` rulează numai pe
+ * server (vezi `blog/[slug]/page.tsx`), deci variabila fără `NEXT_PUBLIC_` chiar
+ * ajunge aici.
+ */
+function gazdaDin(adresa: string | undefined): string | null {
+  if (!adresa) return null;
+  try {
+    return new URL(adresa).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/*
+  ⚠ SE CITEȘTE LA FIECARE FOLOSIRE, NU O DATĂ LA ÎNCĂRCAREA MODULULUI.
+
+  O constantă de modul ar fi fost cu un pic mai iute și ar fi avut două neajunsuri
+  adevărate: valoarea s-ar fi copt la import — deci orice mediu care pune
+  variabilele mai târziu ar fi rămas cu o listă goală, tăcut — și n-ar fi putut fi
+  probată deloc, fiindcă `import` se ridică deasupra oricărei linii care ar seta
+  mediul.
+
+  Prețul e două `new URL` pe imagine, adică nimic pe lângă curățarea HTML-ului.
+*/
+function gazdeleNoastre(): ReadonlySet<string> {
+  return new Set(
+    [gazdaDin(process.env.R2_PUBLIC_URL), gazdaDin(process.env.NEXT_PUBLIC_CDN_URL)].filter(
+      (g): g is string => !!g,
+    ),
+  );
+}
+
+/** R2 direct, sau CDN-ul din fața lui. */
 function gazdaNoastra(src: string): boolean {
   /*
     ⚠ `//gazda.straina/pixel.png` INCEPE CU "/" DAR NU E AL NOSTRU.
@@ -56,9 +99,7 @@ function gazdaNoastra(src: string): boolean {
   try {
     const u = new URL(src);
     if (u.protocol !== "https:") return false;
-    const cdn = process.env.NEXT_PUBLIC_CDN_URL;
-    if (cdn && src.startsWith(cdn.replace(/\/+$/, "") + "/")) return true;
-    return u.hostname.endsWith(".r2.dev") || esteEdinio(u.hostname);
+    return gazdeleNoastre().has(u.hostname.toLowerCase()) || esteEdinio(u.hostname);
   } catch {
     return false;
   }

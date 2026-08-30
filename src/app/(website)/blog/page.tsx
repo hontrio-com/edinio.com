@@ -3,7 +3,8 @@ import Link from "next/link";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
-import { Paginare, paginaCeruta } from "@/components/website/blog/Paginare";
+import { notFound } from "next/navigation";
+import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
 import { CautareBlog } from "@/components/website/blog/CautareBlog";
 import { AbonareBlog } from "@/components/website/blog/AbonareBlog";
 import { categoriiBlog, paginaDeArticole } from "@/lib/blog/citire";
@@ -52,6 +53,10 @@ export default async function BlogPage({ searchParams }: Props) {
     paginaDeArticole(cerut),
     categoriiBlog(),
   ]);
+
+  /* ⚠ O pagină care nu există dă 404, nu o listă goală cu adresă proprie.
+     Vezi `paginaNuExista`. */
+  if (paginaNuExista(cerut, total, pagini)) notFound();
 
   /* Categoriile fără niciun articol publicat nu se arată: un filtru care duce la
      o pagină goală e o promisiune neonorată. Se socotesc pe TOATE articolele,

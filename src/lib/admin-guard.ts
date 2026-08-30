@@ -125,6 +125,31 @@ export async function requireBlogEditor() {
 
   const rol = data?.role;
   if (rol !== "admin" && rol !== "editor") redirect("/dashboard");
+
+  /*
+    ⚠ UN ADMIN TRECE PE AICI CU EXACT ACELEASI TREI CONDITII CA LA `requireAdmin`.
+
+    Prima scriere a functiei asteia verifica DOAR rolul din profil. Am scris-o
+    copiind ce credeam ca face `requireAdmin()` — dar citisem versiunea de
+    dinaintea unirii cu `main`, iar poarta MFA si claim-ul semnat tocmai de acolo
+    veneau. Rezultatul: un admin cu sesiune valida dar NECONFIRMATA cu al doilea
+    factor ajungea in blog, iar de acolo actiunile lucreaza cu cheia de serviciu.
+
+    Adica exact modelul de securitate construit pentru /admin era ocolit printr-o
+    usa laterala pe care o deschisesem eu.
+  */
+  if (rol === "admin" && !areClaimDeAdmin(user)) redirect("/dashboard");
+
+  /*
+    ⚠ MFA SI PENTRU REDACTOR, nu doar pentru admin. Un redactor schimba continut
+    public al Edinio; contul lui merita al doilea factor la fel de mult.
+
+    Nu blocheaza pe nimeni care nu l-a inrolat: `sesiuneNeconfirmata` intoarce
+    FALS cand `mfa_email_enabled` e stins (vezi `lib/auth/mfa.ts`). Conturile
+    fara al doilea factor merg exact ca inainte.
+  */
+  if (await sesiuneCurentaNeconfirmata(user.id)) redirect("/login/mfa");
+
   return { user, profile: data, rol: rol as RolBlog };
 }
 
@@ -146,5 +171,12 @@ export async function requireBlogEditorApi(): Promise<{ id: string; rol: RolBlog
 
   const rol = data?.role;
   if (rol !== "admin" && rol !== "editor") return null;
+
+  /* ⚠ ACELEASI TREI CONDITII CA LA ECRAN, si din acelasi motiv. O poarta de
+     actiune mai slaba decat poarta de pagina e o usa lasata deschisa in spate:
+     actiunile se pot chema direct, fara sa treaca prin niciun ecran. */
+  if (rol === "admin" && !areClaimDeAdmin(user)) return null;
+  if (await sesiuneCurentaNeconfirmata(user.id)) return null;
+
   return { id: user.id, rol: rol as RolBlog };
 }

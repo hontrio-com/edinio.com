@@ -68,6 +68,39 @@ export const NUMELE_TIPURILOR: Record<TipIndemn, string> = {
 };
 
 /**
+ * Adresa unui îndemn scris de mână, dacă e o adresă pe care o putem pune pe buton.
+ *
+ * ⚠ NU LĂSA CADRUL SĂ FIE SINGURA PAZĂ. Câmpul ajungea direct în `href`, fără
+ * nicio verificare: `javascript:`, `data:` sau `//gazda-straina` treceau. Primul
+ * e cod care rulează la o apăsare, al doilea la fel, iar al treilea e o adresă
+ * cu protocol moștenit care duce în altă parte deși începe cu bară — exact
+ * capcana care a mai mușcat o dată azi, în curățătorul de HTML.
+ *
+ * Se acceptă:
+ *   - căi interne: `/preturi`, `/blog/x` (dar NU `//ceva`)
+ *   - adrese întregi, numai `https:`
+ *
+ * Orice altceva întoarce `null`, iar îndemnul nu se mai arată deloc — un buton
+ * care nu duce nicăieri e mai rău decât lipsa lui.
+ */
+const LUNGIME_MAXIMA_ADRESA = 2048;
+
+export function adresaDeIndemn(brut: string | null | undefined): string | null {
+  const s = (brut ?? "").trim();
+  if (!s || s.length > LUNGIME_MAXIMA_ADRESA) return null;
+
+  if (s.startsWith("//")) return null;
+  if (s.startsWith("/")) return s;
+
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Îndemnul gata de desenat, sau `null` când articolul n-are unul.
  *
  * ⚠ `null` PENTRU UN „PROPRIU" INCOMPLET. Un îndemn cu buton fără adresă e un
@@ -80,7 +113,7 @@ export function indemnDeAratat(brut: unknown): Presetare | null {
   if (!i.tip) return null;
 
   if (i.tip === "propriu") {
-    const adresa = (i.adresa ?? "").trim();
+    const adresa = adresaDeIndemn(i.adresa);
     const eticheta = (i.eticheta ?? "").trim();
     const titlu = (i.titlu ?? "").trim();
     if (!adresa || !eticheta || !titlu) return null;

@@ -1,6 +1,15 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
+
 import { curataArticol, esteInAfara } from "./curata";
+
+/*
+  Gazda noastră de imagini vine din mediu, iar `curata` o citește la fiecare
+  folosire — tocmai ca rândul de mai jos să însemne ceva. Dacă cineva o mută
+  înapoi într-o constantă de modul, probele de aici cad, fiindcă `import` se
+  ridică deasupra acestei linii.
+*/
+process.env.R2_PUBLIC_URL = "https://pub-alnostru.r2.dev";
 
 /*
   Curățătorul blogului se deosebește de cel comun prin DOUĂ alegeri, și amândouă
@@ -45,7 +54,7 @@ test("mailto si tel nu sunt „in afara”", () => {
 });
 
 test("imaginea de pe gazda noastra trece, si primeste incarcare amanata", () => {
-  const iesit = curataArticol('<p><img src="https://ceva.r2.dev/blog/poza.webp" alt="o poza"></p>');
+  const iesit = curataArticol('<p><img src="https://pub-alnostru.r2.dev/blog/poza.webp" alt="o poza"></p>');
   assert.ok(iesit.includes("poza.webp"), "imaginea noastra a fost aruncata");
   assert.ok(iesit.includes('loading="lazy"'));
   assert.ok(iesit.includes('alt="o poza"'));
@@ -129,4 +138,25 @@ test("h1 din corpul articolului coboara la h2", () => {
   const iesit = curataArticol("<h1>Titlu mare</h1><p>text</p>");
   assert.ok(iesit.includes("<h2>Titlu mare</h2>"), `n-a coborat: ${iesit}`);
   assert.ok(!iesit.includes("<h1"), "a ramas un al doilea h1 in pagina");
+});
+
+/*
+  ⚠ ACEASTA E PROBA CARE ÎNLOCUIEȘTE O UȘĂ DESCHISĂ, nu una care descrie codul.
+
+  Până pe 30.08.2026 regula era `hostname.endsWith(".r2.dev")`. `r2.dev` e
+  domeniul public pe care Cloudflare îl dă ORICĂREI găleți, a oricui — deci
+  regula spunea, de fapt, „imaginile oricui are cont de Cloudflare". Proba de
+  deasupra trecea vesel, fiindcă folosea chiar o gazdă străină drept „a noastră".
+
+  Aceasta cade dacă metacaracterul se întoarce.
+*/
+test("o galeata R2 straina NU e a noastra, desi se termina in .r2.dev", () => {
+  const iesit = curataArticol('<p><img src="https://pub-alcuiva.r2.dev/pixel.gif"></p>');
+  assert.ok(!iesit.includes("pub-alcuiva"), "a trecut o galeata R2 straina");
+  assert.ok(!iesit.includes("<img"), "a ramas un img stricat");
+});
+
+test("un domeniu care se termina in edinio.com nu e edinio.com", () => {
+  assert.equal(esteInAfara("https://notedinio.com/ceva"), true);
+  assert.equal(esteInAfara("https://blog.edinio.com/ceva"), false);
 });

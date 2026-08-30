@@ -29,6 +29,7 @@ import {
 export function AdminBlogVersiuni({
   idArticol,
   versiuneaAcum,
+  nesalvat,
   deschis,
   inchide,
   dupaRevenire,
@@ -41,7 +42,19 @@ export function AdminBlogVersiuni({
    * altcineva între deschiderea istoricului și apăsare — adică exact fereastra
    * pe care blocajul optimist există ca s-o închidă.
    */
-  versiuneaAcum: number | null;
+  versiuneaAcum: () => number | null;
+  /**
+   * Are omul modificări nesalvate pe ecran?
+   *
+   * ⚠ REVENIREA PESTE ELE LE PIERDE ÎN TĂCERE. Ea scrie doar titlul și textul —
+   * ceea ce e corect. Dar editorul, la întoarcere, punea `nesalvat = false` și
+   * ștergea copia locală. Deci un SEO, un slug sau niște etichete schimbate și
+   * nesalvate rămâneau pe ecran, arătând ca salvate, peste o bază care nu le are.
+   * Omul pleacă și le pierde, fără niciun avertisment.
+   *
+   * Serverul nu poate repara asta: baza nu știe ce e doar în React.
+   */
+  nesalvat: boolean;
   deschis: boolean;
   inchide: () => void;
   /**
@@ -75,8 +88,24 @@ export function AdminBlogVersiuni({
       `Aduci înapoi textul de la ${cand}?\n\nCe e acum se păstrează ca versiune, deci poți reveni și de acolo. Adresa web, starea și câmpurile de SEO rămân neatinse.`,
     )) return;
 
+    /*
+      ⚠ SE OPREȘTE AICI, NU LA DESCHIDEREA PANOULUI.
+
+      Auditul cerea blocarea istoricului cât timp e ceva nesalvat. Am ales altfel:
+      CITITUL istoricului e inofensiv și uneori chiar lucrul de care ai nevoie ca
+      să te hotărăști. Ce nu e inofensiv e APĂSAREA.
+    */
+    if (nesalvat) {
+      toast.error(
+        "Ai modificări nesalvate. Salvează-le întâi — revenirea la o versiune ar " +
+          "lăsa pe ecran câmpuri care nu sunt în bază, iar tu le-ai crede salvate.",
+        { duration: 12_000 },
+      );
+      return;
+    }
+
     setRevine(v.id);
-    const res = await revinoLaVersiune(idArticol, v.id, versiuneaAcum);
+    const res = await revinoLaVersiune(idArticol, v.id, versiuneaAcum());
     setRevine(null);
     if ("error" in res) { toast.error(res.error, { duration: 12_000 }); return; }
     toast.success("Versiunea a fost adusă înapoi.");

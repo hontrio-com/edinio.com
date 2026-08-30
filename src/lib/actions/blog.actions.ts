@@ -153,6 +153,67 @@ function traduEroare(error: { code?: string; message?: string } | null, ceEra: s
 
 // ── Autori ───────────────────────────────────────────────────────────────────
 
+/**
+ * Cât de lung are voie să fie fiecare câmp de autor sau de rubrică.
+ *
+ * ⚠ ARTICOLELE AVEAU PLAFOANE, ASTEA NU. Ecranele lor sunt doar pentru
+ * administratori, ceea ce micșorează mult riscul — dar acțiunea de server rămâne
+ * o adresă POST, iar „numai adminii ajung aici" e o presupunere despre cine
+ * apasă, nu despre ce se poate trimite.
+ *
+ * ⚠ NUMERELE SUNT LARGI. Nu sunt reguli de redacție: o biografie bună n-are de ce
+ * să fie oprită de aici. Sunt marginea de dincolo de care valoarea nu mai poate
+ * fi ceva scris de un om.
+ */
+const LIMITE_TAXONOMIE = {
+  name: 120,
+  slug: 100,
+  role_title: 160,
+  bio: 5000,
+  avatar_url: 2048,
+  description: 2000,
+  seo_title: 200,
+  seo_description: 500,
+  sameas: 8,
+  sameas_url: 2048,
+} as const;
+
+/** Numele omenesc al câmpului, ca mesajul să spună unde să se uite omul. */
+const NUME_TAXONOMIE: Record<string, string> = {
+  name: "Numele",
+  slug: "Adresa",
+  role_title: "Rolul",
+  bio: "Descrierea",
+  avatar_url: "Adresa pozei",
+  description: "Descrierea",
+  seo_title: "Titlul SEO",
+  seo_description: "Descrierea SEO",
+};
+
+function preaLungTaxonomie(
+  campuri: [keyof typeof LIMITE_TAXONOMIE, string | null | undefined][],
+): string | null {
+  for (const [camp, valoare] of campuri) {
+    const n = (valoare ?? "").length;
+    if (n > LIMITE_TAXONOMIE[camp]) {
+      return `${NUME_TAXONOMIE[camp] ?? camp} are ${n} de caractere, iar maximul e ${LIMITE_TAXONOMIE[camp]}.`;
+    }
+  }
+  return null;
+}
+
+/** Adresele publice ale unui autor: câte, și cât de lungi. */
+function preaMulteAdrese(adrese: string[] | undefined): string | null {
+  const a = adrese ?? [];
+  if (a.length > LIMITE_TAXONOMIE.sameas) {
+    return `Sunt prea multe adrese publice. Maximul e ${LIMITE_TAXONOMIE.sameas}.`;
+  }
+  if (a.some((x) => (x ?? "").length > LIMITE_TAXONOMIE.sameas_url)) {
+    return `O adresă publică e mai lungă de ${LIMITE_TAXONOMIE.sameas_url} de caractere.`;
+  }
+  return null;
+}
+
 export async function listeazaAutori(): Promise<AutorBlog[]> {
   if (!(await requireBlogEditorApi())) return [];
   const { data } = await blogDb().from("blog_authors").select("*").order("name");
@@ -186,8 +247,33 @@ export async function creeazaAutor(intrare: AutorInput): Promise<RaspunsCu<{ id:
   const nume = intrare.name?.trim();
   if (!nume) return { error: "Numele este obligatoriu." };
 
+  const capat = preaLungTaxonomie([
+    ["name", intrare.name],
+    ["slug", intrare.slug],
+    ["role_title", intrare.role_title],
+    ["bio", intrare.bio],
+    ["avatar_url", intrare.avatar_url],
+  ]) ?? preaMulteAdrese(intrare.sameas);
+  if (capat) return { error: capat };
+
+
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
+
+  /*
+    ⚠ ACEEAȘI POARTĂ CA LA COPERTĂ ȘI LA IMAGINEA DE PARTAJARE.
+
+    Avatarul se scria neverificat, doar cu `trim()`. Iar el ajunge într-un
+    `<Image>` pe pagina publică a autorului și sub fiecare articol al lui — deci
+    o adresă străină pusă printr-o cerere scrisă de mână ar face ca BROWSERUL
+    fiecărui cititor să ceară poza de la serverul acela. Care vede atunci IP-ul,
+    agentul, ora și traficul nostru.
+
+    E chiar motivul pentru care imaginile din corpul articolului sunt îngrădite.
+    Nu se rescrie regula: se cheamă aceeași funcție.
+  */
+  const avatar = adresaDeImagine(intrare.avatar_url, "Avatarul autorului");
+  if (!avatar.ok) return { error: avatar.motiv };
 
   const { data, error } = await blogDb()
     .from("blog_authors")
@@ -196,7 +282,7 @@ export async function creeazaAutor(intrare: AutorInput): Promise<RaspunsCu<{ id:
       slug: s.slug,
       role_title: intrare.role_title?.trim() || null,
       bio: intrare.bio?.trim() || null,
-      avatar_url: intrare.avatar_url?.trim() || null,
+      avatar_url: avatar.adresa,
       sameas: adreseBune(intrare.sameas),
       user_id: intrare.user_id || null,
     })
@@ -213,6 +299,16 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
   const nume = intrare.name?.trim();
   if (!nume) return { error: "Numele este obligatoriu." };
 
+  const capat = preaLungTaxonomie([
+    ["name", intrare.name],
+    ["slug", intrare.slug],
+    ["role_title", intrare.role_title],
+    ["bio", intrare.bio],
+    ["avatar_url", intrare.avatar_url],
+  ]) ?? preaMulteAdrese(intrare.sameas);
+  if (capat) return { error: capat };
+
+
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
 
@@ -228,6 +324,21 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
     Nu e, pentru o pagină indexată. Acolo redirectarea nu e un lucru în plus, e
     jumătatea care păstrează ce a strâns pagina în ani. Ori amândouă, ori niciuna.
   */
+  /*
+    ⚠ ACEEAȘI POARTĂ CA LA COPERTĂ ȘI LA IMAGINEA DE PARTAJARE.
+
+    Avatarul se scria neverificat, doar cu `trim()`. Iar el ajunge într-un
+    `<Image>` pe pagina publică a autorului și sub fiecare articol al lui — deci
+    o adresă străină pusă printr-o cerere scrisă de mână ar face ca BROWSERUL
+    fiecărui cititor să ceară poza de la serverul acela. Care vede atunci IP-ul,
+    agentul, ora și traficul nostru.
+
+    E chiar motivul pentru care imaginile din corpul articolului sunt îngrădite.
+    Nu se rescrie regula: se cheamă aceeași funcție.
+  */
+  const avatar = adresaDeImagine(intrare.avatar_url, "Avatarul autorului");
+  if (!avatar.ok) return { error: avatar.motiv };
+
   const { error } = await blogDb().rpc("blog_actualizeaza_taxonomia", {
     p_fel: "autor",
     p_id: id,
@@ -236,7 +347,7 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
       slug: s.slug,
       role_title: intrare.role_title?.trim() || null,
       bio: intrare.bio?.trim() || null,
-      avatar_url: intrare.avatar_url?.trim() || null,
+      avatar_url: avatar.adresa,
       sameas: adreseBune(intrare.sameas),
       user_id: intrare.user_id || null,
     },
@@ -312,6 +423,16 @@ export async function creeazaCategorie(intrare: CategorieInput): Promise<Raspuns
   const nume = intrare.name?.trim();
   if (!nume) return { error: "Numele este obligatoriu." };
 
+  const capat = preaLungTaxonomie([
+    ["name", intrare.name],
+    ["slug", intrare.slug],
+    ["description", intrare.description],
+    ["seo_title", intrare.seo_title],
+    ["seo_description", intrare.seo_description],
+  ]);
+  if (capat) return { error: capat };
+
+
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
 
@@ -337,6 +458,16 @@ export async function actualizeazaCategorie(id: string, intrare: CategorieInput)
   if (!(await requireAdminApi())) return { error: "Neautorizat" };
   const nume = intrare.name?.trim();
   if (!nume) return { error: "Numele este obligatoriu." };
+
+  const capat = preaLungTaxonomie([
+    ["name", intrare.name],
+    ["slug", intrare.slug],
+    ["description", intrare.description],
+    ["seo_title", intrare.seo_title],
+    ["seo_description", intrare.seo_description],
+  ]);
+  if (capat) return { error: capat };
+
 
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
@@ -877,10 +1008,8 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
     category_id: intrare.category_id || null,
     status: intrare.status ?? "draft",
     published_at: intrare.published_at || null,
-    /* ⚠ Puse de `vitrinaSiFixarea`, nu de aici: depind de ROL si de faptul ca
-       articolul chiar se vede. Valorile de mai jos sunt doar temelia. */
-    is_featured: false,
-    is_pinned: false,
+    /* ⚠ VITRINA ȘI FIXAREA NU SUNT AICI, DELOC. Le pune `vitrinaSiFixarea`, și
+       numai când are ce pune — vezi nota de la ea. */
     /* Îndemnul se curăță la scriere: un „propriu” pe jumătate scris n-are ce
        căuta în baza de date, fiindcă la afișare ar fi oricum aruncat. */
     cta: indemnDeSalvat(intrare.cta),
@@ -914,6 +1043,28 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
  * ascunderea nu e paza: actiunea e o adresa POST pe care oricine o poate chema cu
  * ce vrea in ea.
  */
+/**
+ * Versiunea de la care pleacă cel care scrie — cerută, nu opțională.
+ *
+ * ⚠ ERA `?? null`, IAR BAZA CITEA `null` CA „NU VERIFICA". Adică orice cerere
+ * care nu purta câmpul stingea blocajul optimist cu totul: un client vechi rămas
+ * deschis, o filă reîncărcată pe jumătate, un apel viitor scris de altcineva.
+ * Se ocolea din NEATENȚIE, ceea ce e mai probabil decât reaua-voință.
+ *
+ * Baza o cere acum ea însăși (P0400). Verificarea de aici e ca omul să
+ * primească un mesaj în românește, nu un cod.
+ */
+function versiuneaCeruta(v: number | null | undefined): { v: number } | { error: string } {
+  if (!Number.isSafeInteger(v) || Number(v) < 1) {
+    return {
+      error:
+        "Nu știu de la ce versiune ai plecat, deci n-aș ști dacă scriu peste munca altcuiva. " +
+        "Reîncarcă articolul și încearcă din nou.",
+    };
+  }
+  return { v: Number(v) };
+}
+
 function poateAtingeVitrina(rol: "admin" | "editor"): boolean {
   return rol === "admin";
 }
@@ -946,11 +1097,25 @@ function poateFiInVitrina(intrare: ArticolInput): boolean {
 function vitrinaSiFixarea(
   rol: "admin" | "editor",
   intrare: ArticolInput,
-): { is_featured: boolean; is_pinned: boolean } | { error: string } {
+  esteNou: boolean,
+): { is_featured?: boolean; is_pinned?: boolean } | { error: string } {
   if (!poateAtingeVitrina(rol)) {
-    /* Nu e o eroare: pur si simplu nu se scriu. Un redactor care apasa Salveaza
-       nu trebuie oprit fiindca ecranul lui n-a aratat bifele. */
-    return { is_featured: false, is_pinned: false };
+    /*
+      ⚠ NU SE ATING, ȘI ASTA NU E ACELAȘI LUCRU CU „SE SCRIU FALSE".
+      Nota de aici chiar spunea „pur si simplu nu se scriu" — și era falsă:
+      funcția întorcea `{ is_featured: false, is_pinned: false }`, care AJUNGE
+      pe rând.
+
+      Ce se întâmpla: un admin pregătește un articol la verificare și îl fixează
+      dinainte, ca să stea sus când se publică. Un redactor îl deschide, schimbă
+      un paragraf, apasă Salvează — iar fixarea adminului dispare. Redactorul
+      n-a văzut niciodată bifa, deci nici nu poate bănui că a stins-o.
+
+      Acum cheile lipsesc din `p_rand`, iar
+      `jsonb_populate_record(vechi, p_rand)` din `blog_salveaza_articol` păstrează
+      ce era. La un articol NOU nu există „ce era", deci pornesc pe false.
+    */
+    return esteNou ? { is_featured: false, is_pinned: false } : {};
   }
 
   if (intrare.is_featured && !poateFiInVitrina(intrare)) {
@@ -1004,7 +1169,7 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
   }
 
   /* Dacă n-a ales un autor, se pune cel legat de contul lui. Vezi `autorulMeu`. */
-  const vitrina = vitrinaSiFixarea(cine.rol, intrare);
+  const vitrina = vitrinaSiFixarea(cine.rol, intrare, true);
   if ("error" in vitrina) return { error: vitrina.error };
 
   const rand = { ...randDinIntrare(intrare, s.slug), ...vitrina };
@@ -1058,7 +1223,10 @@ export async function actualizeazaArticol(
     return { error: `Adresa „${s.slug}" e folosită de o pagină a blogului. Alege alta.` };
   }
 
-  const vitrina = vitrinaSiFixarea(admin.rol, intrare);
+  const versiune = versiuneaCeruta(intrare.edit_version);
+  if ("error" in versiune) return { error: versiune.error };
+
+  const vitrina = vitrinaSiFixarea(admin.rol, intrare, false);
   if ("error" in vitrina) return { error: vitrina.error };
 
   const vechi = await iaArticol(id);
@@ -1117,7 +1285,7 @@ export async function actualizeazaArticol(
     p_etichete: etichetePentruBaza(intrare.etichete),
     p_salvat_de: admin.id,
     p_versiuni: VERSIUNI_PASTRATE,
-    p_versiune_asteptata: intrare.edit_version ?? null,
+    p_versiune_asteptata: versiune.v,
     /*
       ⚠ Salvarea automată NU scrie versiune în istoric.
 
@@ -1304,6 +1472,9 @@ export async function revinoLaVersiune(
   const cine = await requireBlogEditorApi();
   if (!cine) return { error: "Neautorizat" };
 
+  const versiune = versiuneaCeruta(versiuneAsteptata);
+  if ("error" in versiune) return { error: versiune.error };
+
   const acum = await iaArticol(idArticol);
   if (!acum) return { error: "Articolul nu mai există." };
 
@@ -1327,7 +1498,7 @@ export async function revinoLaVersiune(
   const { data, error } = await blogDb().rpc("blog_restaureaza_versiune", {
     p_articol: idArticol,
     p_versiune: idVersiune,
-    p_versiune_asteptata: versiuneAsteptata,
+    p_versiune_asteptata: versiune.v,
     p_salvat_de: cine.id,
     /* Socotit aici, nu în SQL: `minuteDeCitit` e singura regulă, și rescrisă în
        bază s-ar fi despărțit de ea. */
@@ -1341,6 +1512,9 @@ export async function revinoLaVersiune(
         "Articolul a fost modificat între timp — în altă filă sau de alt redactor. " +
         "Închide istoricul, reîncarcă articolul, și alege din nou versiunea.",
     };
+  }
+  if (error && (error as { code?: string }).code === "P0400") {
+    return { error: "Reîncarcă articolul înainte de a reveni la o versiune." };
   }
   if (error) return { error: "Nu s-a putut reveni. Încearcă din nou." };
 

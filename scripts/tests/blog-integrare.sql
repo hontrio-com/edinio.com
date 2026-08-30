@@ -27,6 +27,7 @@
 --   I  listele din admin: paginare, filtre, cautare cu diacritice
 --   K  vitrina, revenirea si concurenta lor (runda a treia)
 --   L  usa directa prin REST e inchisa
+--   M  versiunea obligatorie, fixarea pastrata, etichetele si taxonomiile
 --   J  nimic n-a ramas in urma
 --
 -- ═══ CUM SE RULEAZA ═══
@@ -70,7 +71,8 @@ begin
   values ('zz-proba-a','A','<p>a</p>','published', now() - interval '1 day') returning id into a;
 
   -- A1. Lant: a → b, apoi b → c. Trebuie sa iasa a → c, nu a → b → c.
-  v := public.blog_salveaza_articol(a, jsonb_build_object('slug','zz-proba-b'), null, null, 50, null, true);
+  select edit_version into v from public.blog_posts where id = a;
+  v := public.blog_salveaza_articol(a, jsonb_build_object('slug','zz-proba-b'), null, null, 50, v, true);
   v := public.blog_salveaza_articol(a, jsonb_build_object('slug','zz-proba-c'), null, null, 50, v, true);
 
   select to_slug into t from public.blog_redirects where fel='articol' and from_slug='zz-proba-a';
@@ -131,9 +133,22 @@ begin
   if n::bigint <> v then raise exception 'B2: numarul intors (%) nu e cel din baza (%)', v, n; end if;
   raise notice 'B2 versiunea buna trece, si numarul intors e cel din baza';
 
-  -- B3. `null` sare peste verificare — dinadins, pentru unelte si reparatii.
-  v := public.blog_salveaza_articol(a, jsonb_build_object('title','fara verificare'), null, null, 50, null, true);
-  raise notice 'B3 null sare peste verificare, cum e scris';
+  -- B3. `null` NU MAI SARE PESTE VERIFICARE: e refuzat.
+  --
+  -- ⚠ PROBA ASTA SPUNEA PE DOS PANA PE 31.08.2026, si trecea. Scrisesem dinadins
+  -- „null sare peste verificare — pentru unelte si reparatii", iar proba apara
+  -- purtarea aceea. Suna a chibzuinta si era o gaura: actiunea de server trimitea
+  -- `intrare.edit_version ?? null`, deci orice cerere care nu purta campul stingea
+  -- blocajul optimist cu totul — din neatentie, nu din rea-vointa.
+  --
+  -- O proba care apara o portita e mai rea decat lipsa ei: da incredere.
+  begin
+    perform public.blog_salveaza_articol(a, jsonb_build_object('title','fara versiune'),
+                                         null, null, 50, null, true);
+    raise exception 'B3: a scris FARA versiune asteptata';
+  exception when sqlstate 'P0400' then
+    raise notice 'B3 salvare fara versiune: refuzata cu P0400';
+  end;
 
   -- ═══════════════════════════════════════════════════════════════════════
   -- C. DATA CONTINUTULUI
@@ -660,7 +675,10 @@ begin
   -- Prin ecran nu se poate gresi, dar actiunea e o adresa POST: chemata de mana
   -- cu o revizie a lui A si id-ul lui B, textul lui A ajungea peste B.
   begin
-    perform public.blog_restaureaza_versiune(b, ra, null, null, 2, 50);
+    -- ⚠ Versiunea lui B, nu `null`: de la 31.08.2026 `null` e refuzat mai
+    -- devreme (P0400), deci proba n-ar mai ajunge la ce vrea sa arate.
+    perform public.blog_restaureaza_versiune(
+      b, ra, (select edit_version from public.blog_posts where id = b), null, 2, 50);
     raise exception 'K8: a restaurat o revizie a ALTUI articol';
   exception when no_data_found then
     raise notice 'K8 revizie straina: refuzata';
@@ -787,6 +805,134 @@ end $;
 
 rollback;
 
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- M. RUNDA A PATRA: versiunea obligatorie, fixarea pastrata, etichetele
+-- ═══════════════════════════════════════════════════════════════════════════
+do $
+declare aut uuid; cat uuid; et uuid; a uuid; v bigint; d1 timestamptz; d2 timestamptz;
+begin
+  delete from public.blog_posts where slug like 'zz-m-%';
+  delete from public.blog_authors where slug like 'zz-m-%';
+  delete from public.blog_categories where slug like 'zz-m-%';
+  delete from public.blog_tags where slug like 'zz-m-%';
+
+  insert into public.blog_authors (slug, name, bio) values ('zz-m-autor','Neanuntat','biografie') returning id into aut;
+  insert into public.blog_categories (slug, name) values ('zz-m-rubrica','Rubrica') returning id into cat;
+  insert into public.blog_tags (slug, name) values ('zz-m-et','Eticheta') returning id into et;
+
+  -- ── M1. O taxonomie FARA articol public nu exista public ───────────────
+  --
+  -- Paginile lor dau deja 404 dinadins. Dar RLS spunea `using (true)`, deci
+  -- REST-ul le intorcea oricum: un autor pregatit pentru cineva neanuntat inca —
+  -- nume, rol, biografie — se putea citi de oricine.
+  set local role anon;
+  if exists (select 1 from public.blog_authors where slug='zz-m-autor') then
+    raise exception 'M1: un autor FARA articol public se vede de anon'; end if;
+  if exists (select 1 from public.blog_categories where slug='zz-m-rubrica') then
+    raise exception 'M1: o rubrica fara articol public se vede'; end if;
+  if exists (select 1 from public.blog_tags where slug='zz-m-et') then
+    raise exception 'M1: o eticheta fara articol public se vede'; end if;
+  reset role;
+  raise notice 'M1 fara continut public: nu exista public';
+
+  insert into public.blog_posts (slug, title, content_html, status, published_at, author_id, category_id)
+  values ('zz-m-art','Art','<p>x</p>','published', now() - interval '1 day', aut, cat) returning id into a;
+  insert into public.blog_post_tags (post_id, tag_id) values (a, et);
+
+  set local role anon;
+  if not exists (select 1 from public.blog_authors where slug='zz-m-autor') then
+    raise exception 'M2: autorul CU articol public nu se mai vede'; end if;
+  if not exists (select 1 from public.blog_categories where slug='zz-m-rubrica') then
+    raise exception 'M2: rubrica cu articol public nu se vede'; end if;
+  if not exists (select 1 from public.blog_tags where slug='zz-m-et') then
+    raise exception 'M2: eticheta cu articol public nu se vede'; end if;
+  reset role;
+  raise notice 'M2 cu articol public: toate trei se vad';
+
+  -- ── M3. Versiunea e obligatorie, si la salvare si la revenire ──────────
+  begin
+    perform public.blog_salveaza_articol(a, jsonb_build_object('title','x'), null, null, 50, null, true);
+    raise exception 'M3: a salvat FARA versiune';
+  exception when sqlstate 'P0400' then raise notice 'M3 salvare fara versiune: P0400'; end;
+
+  begin
+    perform public.blog_restaureaza_versiune(a, gen_random_uuid(), null, null, 2, 50);
+    raise exception 'M3: a revenit FARA versiune';
+  exception when sqlstate 'P0400' then raise notice 'M3 revenire fara versiune: P0400'; end;
+
+  -- ── M4. Eticheta schimbata MUTA data continutului ──────────────────────
+  --
+  -- Etichetele nu stau pe `blog_posts`, deci declansatorul de continut nu le
+  -- vede. Dar ele apar sub articol si pe pagina etichetei — deci schimbarea lor
+  -- chiar schimba ce vede cititorul.
+  update public.blog_posts set content_updated_at = now() - interval '10 days' where id = a;
+  select content_updated_at, edit_version into d1, v from public.blog_posts where id = a;
+  v := public.blog_salveaza_articol(a, '{}'::jsonb,
+        '[{"slug":"zz-m-et","name":"Eticheta"},{"slug":"zz-m-et2","name":"A doua"}]'::jsonb,
+        null, 50, v, false);
+  select content_updated_at into d2 from public.blog_posts where id = a;
+  if d2 <= d1 then raise exception 'M4: eticheta noua NU a mutat data continutului'; end if;
+  raise notice 'M4 eticheta adaugata → data continutului s-a mutat';
+
+  -- ── M5. Aceleasi etichete, alta ordine: data NU se misca ───────────────
+  select content_updated_at, edit_version into d1, v from public.blog_posts where id = a;
+  v := public.blog_salveaza_articol(a, '{}'::jsonb,
+        '[{"slug":"zz-m-et2","name":"A doua"},{"slug":"zz-m-et","name":"Eticheta"}]'::jsonb,
+        null, 50, v, false);
+  select content_updated_at into d2 from public.blog_posts where id = a;
+  if d1 <> d2 then raise exception 'M5: o REORDONARE a mutat data continutului'; end if;
+  raise notice 'M5 aceleasi etichete, alta ordine → data neatinsa';
+
+  -- ── M6. O cheie lipsa pastreaza fixarea ────────────────────────────────
+  --
+  -- Un admin fixeaza un articol la verificare; un redactor ii schimba un
+  -- paragraf si salveaza. Inainte, actiunea trimitea `is_pinned: false` pentru
+  -- redactori — deci fixarea adminului disparea, iar redactorul n-avea de unde
+  -- sa stie: bifa nici nu i se arata.
+  update public.blog_posts set is_pinned = true where id = a;
+  select edit_version into v from public.blog_posts where id = a;
+  v := public.blog_salveaza_articol(a, jsonb_build_object('content_html','<p>alt paragraf</p>'),
+                                    null, null, 50, v, false);
+  if not (select is_pinned from public.blog_posts where id = a) then
+    raise exception 'M6: o salvare fara cheia is_pinned a stins fixarea'; end if;
+  raise notice 'M6 cheia lipsa pastreaza fixarea';
+
+  -- ── M7/M8. CE N-AM SCHIMBAT, DAR AM REscris ────────────────────────────
+  --
+  -- ⚠ ASTEA DOUA NU PAZESC O SCHIMBARE, PAZESC O REscriere.
+  --
+  -- Pe 31.08.2026 am refacut corpul lui `blog_salveaza_articol` ca sa cer
+  -- versiunea. Am pastrat logica si am pierdut TOATE comentariile din el — 47 de
+  -- randuri de „de ce", sterse fara sa bage nimeni de seama, fiindca baseline-ul
+  -- e un dump al bazei: la prima regenerare ar fi disparut si din repo.
+  --
+  -- Daca o rescriere poate pierde tacut comentariile, poate pierde tacut si un
+  -- `if`. Redirectarea si istoricul sunt cele doua bucati din functie de care
+  -- runda asta nu s-a atins deloc — deci exact cele pe care nimeni nu s-ar gandi
+  -- sa le verifice dupa.
+  select edit_version into v from public.blog_posts where id = a;
+  v := public.blog_salveaza_articol(a, jsonb_build_object('slug','zz-m-mutat'),
+                                    null, null, 50, v, true);
+  if not exists (select 1 from public.blog_redirects
+                  where fel = 'articol' and from_slug = 'zz-m-art' and to_slug = 'zz-m-mutat') then
+    raise exception 'M7: slugul schimbat pe un articol VIZIBIL nu a lasat redirectare';
+  end if;
+  raise notice 'M7 redirectarea a supravietuit rescrierii';
+
+  if (select count(*) from public.blog_post_revisions where post_id = a) = 0 then
+    raise exception 'M8: p_creeaza_versiune = true nu a scris nicio revizie';
+  end if;
+  raise notice 'M8 istoricul a supravietuit rescrierii';
+
+  delete from public.blog_posts where slug like 'zz-m-%';
+  delete from public.blog_authors where slug like 'zz-m-%';
+  delete from public.blog_categories where slug like 'zz-m-%';
+  delete from public.blog_tags where slug like 'zz-m-%';
+  delete from public.blog_redirects where from_slug like 'zz-m-%' or to_slug like 'zz-m-%';
+  raise notice '════ M: toate au trecut ════';
+end $;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- J. NIMIC NU A RAMAS IN URMA
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -794,7 +940,12 @@ do $$
 declare n int := 0;
 begin
   select
-    (select count(*) from public.blog_posts       where slug like 'zz-k-%')
+    (select count(*) from public.blog_redirects   where from_slug like 'zz-m-%' or to_slug like 'zz-m-%')
+  + (select count(*) from public.blog_posts       where slug like 'zz-m-%')
+  + (select count(*) from public.blog_authors     where slug like 'zz-m-%')
+  + (select count(*) from public.blog_categories  where slug like 'zz-m-%')
+  + (select count(*) from public.blog_tags        where slug like 'zz-m-%')
+  + (select count(*) from public.blog_posts       where slug like 'zz-k-%')
   + (select count(*) from public.blog_tags        where slug like 'zz-k-%')
   + (select count(*) from public.blog_posts       where slug like 'zz-l-%')
   + (select count(*) from public.blog_posts       where slug like 'zz-adm-%')

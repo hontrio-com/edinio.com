@@ -1612,21 +1612,32 @@ declare
   acum   public.blog_posts%rowtype;
   veche  public.blog_post_revisions%rowtype;
 begin
+  -- ⚠ CERUTA, NU OPTIONALA — si asta e schimbarea din 31.08.2026.
+  --
+  -- Comentariul de aici spunea: „`null` sare peste ea — dar acum trebuie CERUT
+  -- anume, nu e purtarea implicita a revenirii". Suna a chibzuinta, si era o
+  -- gaura: actiunea de server trimitea `?? null`, deci orice cerere careia ii
+  -- lipsea campul stingea blocajul cu totul. Din neatentie, nu din rea-vointa —
+  -- ceea ce e tocmai mai probabil.
+  if p_versiune_asteptata is null then
+    raise exception 'versiunea asteptata e obligatorie: fara ea, revenirea ar trece peste o scriere mai noua'
+      using errcode = 'P0400';
+  end if;
+
   select * into acum from public.blog_posts where id = p_articol for update;
   if not found then
     raise exception 'articolul % nu exista', p_articol using errcode = 'no_data_found';
   end if;
 
-  -- ⚠ ACEEASI VERIFICARE CA LA SALVARE. `null` sare peste ea — dar acum trebuie
-  -- CERUT anume, nu e purtarea implicita a revenirii.
-  if p_versiune_asteptata is not null and acum.edit_version <> p_versiune_asteptata then
+  -- Aceeasi verificare ca la salvare.
+  if acum.edit_version <> p_versiune_asteptata then
     raise exception
       'articolul a fost modificat intre timp (are versiunea %, tu ai plecat de la %)',
       acum.edit_version, p_versiune_asteptata
       using errcode = 'P0409';
   end if;
 
-  -- ⚠ SI `post_id`, nu doar `id`. Vezi #5 de mai sus.
+  -- ⚠ SI `post_id`, nu doar `id`: altfel se putea cere o revizie a ALTUI articol.
   select * into veche
   from public.blog_post_revisions
   where id = p_versiune and post_id = p_articol;
@@ -1664,26 +1675,40 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.blog_salveaza_articol(p_id uuid, p_rand jsonb, p_etichete jsonb, p_salvat_de uuid, p_versiuni integer, p_versiune_asteptata bigint DEFAULT NULL::bigint, p_creeaza_versiune boolean DEFAULT true)
+CREATE OR REPLACE FUNCTION public.blog_salveaza_articol(p_id uuid, p_rand jsonb, p_etichete jsonb, p_salvat_de uuid, p_versiuni integer, p_versiune_asteptata bigint, p_creeaza_versiune boolean DEFAULT true)
  RETURNS bigint
  LANGUAGE plpgsql
 AS $function$
 declare
-  vechi        public.blog_posts%rowtype;
-  v_slug_nou   text;
-  v_versiune   bigint;
+  vechi         public.blog_posts%rowtype;
+  v_slug_nou    text;
+  v_versiune    bigint;
   v_era_vizibil boolean;
+  v_et_vechi    text[];
+  v_et_noi      text[];
 begin
+  -- ⚠ CERUTA, NU OPTIONALA — schimbat pe 31.08.2026.
+  --
+  -- Semnatura avea `p_versiune_asteptata bigint default null`, iar verificarea de
+  -- mai jos incepea cu `is not null and`. Adica: cine nu trimitea versiunea nu
+  -- primea o eroare, ci scapa de blocajul optimist. Iar clientul chiar trimitea
+  -- `intrare.edit_version ?? null`.
+  --
+  -- Se ridica AICI, nu doar in actiunea de server: functia e chemabila si direct.
+  if p_versiune_asteptata is null then
+    raise exception 'versiunea asteptata e obligatorie: fara ea, o scriere veche ar trece peste una noua'
+      using errcode = 'P0400';
+  end if;
+
   -- ⚠ `for update` tine randul pana la capatul tranzactiei. Doua salvari
   -- simultane se aseaza la rand, deci a doua vede versiunea scrisa de prima si
   -- poate sa o refuze — fara lacat s-ar strecura amandoua.
   select * into vechi from public.blog_posts where id = p_id for update;
-
   if not found then
     raise exception 'articolul % nu exista', p_id using errcode = 'no_data_found';
   end if;
 
-  if p_versiune_asteptata is not null and vechi.edit_version <> p_versiune_asteptata then
+  if vechi.edit_version <> p_versiune_asteptata then
     raise exception
       'articolul a fost modificat intre timp (are versiunea %, tu ai plecat de la %)',
       vechi.edit_version, p_versiune_asteptata
@@ -1698,6 +1723,9 @@ begin
   -- ⚠ Se porneste de la randul EXISTENT, nu de la unul gol: cheile lipsa din
   -- jsonb pastreaza ce era. Cu `jsonb_populate_record(null::blog_posts, ...)`
   -- orice camp netrimis ar fi devenit NULL.
+  --
+  -- De asta poate actiunea de server sa OMITA `is_featured` si `is_pinned` cand
+  -- scrie un redactor: cheile lipsa lasa neatins ce a pus adminul.
   update public.blog_posts p set
     title            = n.title,
     slug             = n.slug,
@@ -1749,12 +1777,28 @@ begin
   -- ═══ Etichetele ═══
   --
   -- ⚠ Slugul vine gata facut de sus, din `slugDin`. Rescris aici, ar fi a doua
-  -- implementare a aceleiasi reguli, iar cele doua s-ar despartri tacut la prima
+  -- implementare a aceleiasi reguli, iar cele doua s-ar desparti tacut la prima
   -- diacritica tratata altfel.
   --
   -- `null` = „editorul n-a trimis etichete", deci nu se atinge nimic.
   -- `[]`   = „le-a scos pe toate".
   if p_etichete is not null then
+    -- ⚠ SE CITESC INAINTE DE SCRIERE. Etichetele nu stau pe `blog_posts`, deci
+    -- declansatorul care misca `content_updated_at` nu le vede niciodata. Dar ele
+    -- apar sub articol si pe pagina etichetei: o eticheta schimbata CHIAR schimba
+    -- ce vede cititorul, deci „Actualizat" trebuie sa spuna asta.
+    select coalesce(array_agg(t.slug order by t.slug), array[]::text[])
+      into v_et_vechi
+      from public.blog_post_tags pt
+      join public.blog_tags t on t.id = pt.tag_id
+     where pt.post_id = p_id;
+
+    select coalesce(array_agg(x order by x), array[]::text[])
+      into v_et_noi
+      from (select distinct e->>'slug' as x
+              from jsonb_array_elements(p_etichete) e
+             where coalesce(e->>'slug', '') <> '') s;
+
     insert into public.blog_tags (slug, name)
     select e->>'slug', e->>'name'
     from jsonb_array_elements(p_etichete) e
@@ -1768,6 +1812,13 @@ begin
     from public.blog_tags t
     where t.slug in (select e->>'slug' from jsonb_array_elements(p_etichete) e)
     on conflict do nothing;
+
+    -- ⚠ SETURI SORTATE, nu ordinea in care au fost scrise. „SEO, Marketing" si
+    -- „Marketing, SEO" sunt aceleasi etichete; mutarea datei pentru o reordonare
+    -- ar fi tot o minciuna, doar in celalalt sens.
+    if v_et_vechi is distinct from v_et_noi then
+      update public.blog_posts set content_updated_at = now() where id = p_id;
+    end if;
   end if;
 
   -- ═══ Versiunea de dinainte ═══
@@ -7691,6 +7742,7 @@ CREATE INDEX announcements_feed_idx ON public.announcements USING btree (is_publ
 CREATE INDEX bds_biz_zi ON public.business_daily_stats USING btree (business_id, zi DESC);
 CREATE UNIQUE INDEX blog_authors_un_cont ON public.blog_authors USING btree (user_id) WHERE (user_id IS NOT NULL);
 CREATE INDEX blog_post_revisions_post_idx ON public.blog_post_revisions USING btree (post_id, created_at DESC);
+CREATE INDEX blog_post_tags_tag_idx ON public.blog_post_tags USING btree (tag_id);
 CREATE INDEX blog_posts_author_idx ON public.blog_posts USING btree (author_id);
 CREATE INDEX blog_posts_category_idx ON public.blog_posts USING btree (category_id);
 CREATE INDEX blog_posts_cauta_idx ON public.blog_posts USING gin (cauta extensions.gin_trgm_ops);
@@ -8176,14 +8228,23 @@ create policy owner_select_aboutyou_webhook_inbox on public.aboutyou_webhook_inb
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Admins manage announcements" on public.announcements as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
 create policy "Read published announcements" on public.announcements as PERMISSIVE for SELECT to authenticated using (((is_published = true) OR is_admin()));
-create policy blog_authors_public_read on public.blog_authors as PERMISSIVE for SELECT to anon, authenticated using (true);
-create policy blog_categories_public_read on public.blog_categories as PERMISSIVE for SELECT to anon, authenticated using (true);
+create policy blog_authors_public_read on public.blog_authors as PERMISSIVE for SELECT to anon, authenticated using ((EXISTS ( SELECT 1
+   FROM blog_posts p
+  WHERE ((p.author_id = blog_authors.id) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))));
+create policy blog_categories_public_read on public.blog_categories as PERMISSIVE for SELECT to anon, authenticated using ((EXISTS ( SELECT 1
+   FROM blog_posts p
+  WHERE ((p.category_id = blog_categories.id) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))));
 create policy blog_post_tags_public_read on public.blog_post_tags as PERMISSIVE for SELECT to anon, authenticated using ((EXISTS ( SELECT 1
    FROM blog_posts p
   WHERE ((p.id = blog_post_tags.post_id) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))));
 create policy blog_posts_public_read on public.blog_posts as PERMISSIVE for SELECT to anon, authenticated using (((status = 'published'::text) AND (published_at IS NOT NULL) AND (published_at <= now())));
-create policy blog_redirects_public_read on public.blog_redirects as PERMISSIVE for SELECT to anon, authenticated using (true);
-create policy blog_tags_public_read on public.blog_tags as PERMISSIVE for SELECT to anon, authenticated using (true);
+create policy blog_redirects_public_read on public.blog_redirects as PERMISSIVE for SELECT to anon, authenticated using (((fel <> 'articol'::text) OR (EXISTS ( SELECT 1
+   FROM blog_posts p
+  WHERE ((p.slug = blog_redirects.to_slug) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now()))))));
+create policy blog_tags_public_read on public.blog_tags as PERMISSIVE for SELECT to anon, authenticated using ((EXISTS ( SELECT 1
+   FROM (blog_post_tags pt
+     JOIN blog_posts p ON ((p.id = pt.post_id)))
+  WHERE ((pt.tag_id = blog_tags.id) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))));
 create policy "Owners read own brevo suppressions" on public.brevo_suppressions as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = brevo_suppressions.business_id) AND (b.user_id = auth.uid())))));

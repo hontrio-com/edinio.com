@@ -216,7 +216,7 @@ export function AdminBlogPostEditor({
 
   const pune = <K extends keyof Stare>(k: K, v: Stare[K]) => {
     setF((s) => ({ ...s, [k]: v }));
-    generatie.current++;
+    altaGeneratie();
     setNesalvat(true);
   };
 
@@ -283,6 +283,29 @@ export function AdminBlogPostEditor({
   const generatie = useRef(0);
 
   /**
+   * Singurul loc care crește generația.
+   *
+   * Înainte, șase locuri scriau `generatie.current++` de mână. Cel din
+   * `dupaORevenire` era respins de `react-hooks/immutability` cu „Modifying a
+   * value previously passed as an argument to a hook" — celelalte cinci treceau.
+   *
+   * ⚠ NU ȘTIU DE CE, ȘI AM ÎNCERCAT SĂ AFLU. Am scris întâi aici o explicație
+   * curată — „regula numără lexical, `generatie` intră în închiderea lui
+   * `salveazaTacut`, deci orice scriere de sub `useCallback` pică". Am
+   * confruntat-o și e FALSĂ: mutând ajutorul sub hook, regula tace; scriind
+   * modificarea din nou direct în `dupaORevenire`, tace și atunci. Nici
+   * referirea la `generatie` dinaintea declarării ei (în `pune`) nu era cauza.
+   *
+   * Deci mecanismul ține de o deducție a compilatorului pe care n-o pot fixa din
+   * afară. Ce E verificat: forma de acum trece, iar o singură scriere e oricum
+   * mai bună decât șase. Dacă regula se aprinde din nou, nu porni de la o teorie
+   * — pornește de la `npx eslint` pe fișierul ăsta.
+   */
+  function altaGeneratie() {
+    generatie.current++;
+  }
+
+  /**
    * Aduce inapoi ciorna gasita in browser.
    *
    * ⚠ Functie cu nume, nu o inchidere scrisa in JSX: regula lui React se supara
@@ -292,13 +315,13 @@ export function AdminBlogPostEditor({
   function aduCiornaInapoi(copie: Stare) {
     setF(copie);
     setCopieGasita(null);
-    generatie.current++;
+    altaGeneratie();
     setNesalvat(true);
   }
 
   function schimbaTitlul(title: string) {
     setF((s) => ({ ...s, title, slug: s.slugScrisDeMana ? s.slug : slugDin(title) }));
-    generatie.current++;
+    altaGeneratie();
     setNesalvat(true);
   }
 
@@ -320,7 +343,7 @@ export function AdminBlogPostEditor({
    */
   function schimbaSlugul(slug: string) {
     setF((s) => ({ ...s, slug, slugScrisDeMana: true }));
-    generatie.current++;
+    altaGeneratie();
     setNesalvat(true);
   }
 
@@ -337,7 +360,7 @@ export function AdminBlogPostEditor({
 
       Nu mă bizui pe drumul obișnuit: marchez unde se schimbă LISTA.
     */
-    generatie.current++;
+    altaGeneratie();
     setNesalvat(true);
 
     setF((s) => ({
@@ -511,7 +534,7 @@ export function AdminBlogPostEditor({
       la zi față de ce a trimis ea.
     */
     versiuneaMea.current = r.edit_version;
-    generatie.current++;
+    altaGeneratie();
 
     setF((s) => ({ ...s, title: r.title, content_html: r.content_html }));
     setNesalvat(false);
@@ -631,10 +654,23 @@ export function AdminBlogPostEditor({
         </div>
       </div>
 
+      {/*
+        ⚠ `versiuneaAcum` e o FUNCȚIE, nu valoarea.
+      
+        Citirea unei referințe în timpul randării e chiar ce interzice regula lui
+        React — și are dreptate: o randare întreruptă și reluată ar putea citi
+        altceva decât ce ajunge pe ecran.
+      
+        Dar e și greșit pe fond: dacă o salvare automată se încheie cât timp
+        panoul de istoric e deschis, versiunea din bază s-a schimbat. O valoare
+        prinsă la randare ar fi veche, iar revenirea ar cădea cu P0409 fără motiv.
+        Citită la apăsare, e cea de acum.
+      */}
       {articol && (
         <AdminBlogVersiuni
           idArticol={articol.id}
-          versiuneaAcum={versiuneaMea.current}
+          versiuneaAcum={() => versiuneaMea.current}
+          nesalvat={nesalvat}
           deschis={vedeIstoricul}
           inchide={() => setVedeIstoricul(false)}
           dupaRevenire={dupaORevenire}

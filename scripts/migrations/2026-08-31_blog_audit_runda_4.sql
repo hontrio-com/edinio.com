@@ -1,0 +1,166 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BLOG — RUNDA A PATRA DE AUDIT, 31.08.2026
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ ADEVARUL REPRODUCTIBIL E `migrations/000-schema-baseline.sql`. Aici se scrie
+-- CE s-a schimbat si DE CE. Corpurile functiilor nu se copiaza in fisiere cu
+-- data — asa s-a nascut defectul #1 din runda a doua, cand depozitul a ajuns sa
+-- aiba doua adevaruri despre aceeasi functie si il citea pe cel gresit intai.
+--
+-- Invariantele sunt probate de `scripts/tests/blog-integrare.sql`, sectiunea M,
+-- care intreaba BAZA — nu fisierul de fata.
+--
+-- ⚠ AUDITUL PE CARE IL REZOLVA NU E LUAT DE BUN. Din zece constatari, doua erau
+-- gresite si sunt scrise ca atare la capat. Restul au fost dovedite pe baza
+-- INAINTE de reparatie, cu numere.
+--
+--
+-- ═══ 1. VERSIUNEA ASTEPTATA ERA OPTIONALA, SI ASTA STINGEA BLOCAJUL ═══
+--
+-- `blog_salveaza_articol` avea `p_versiune_asteptata bigint default null`, iar
+-- verificarea incepea cu `is not null and`. Cu alte cuvinte: cine nu trimitea
+-- versiunea nu primea o eroare, ci scapa de blocajul optimist cu totul.
+--
+-- Nu era o portita teoretica. Actiunea de server trimitea chiar
+-- `intrare.edit_version ?? null`, deci ORICE cerere careia ii lipsea campul —
+-- un client vechi ramas deschis, o fila reincarcata pe jumatate, un apel scris
+-- mai tarziu de altcineva — trecea peste munca altuia in tacere. Din neatentie,
+-- ceea ce e tocmai mai probabil decat reaua-vointa.
+--
+-- Acum lipsa versiunii e o eroare: SQLSTATE nou `P0400`, si la salvare, si la
+-- revenirea la o versiune. Verificarea sta in BAZA, nu doar in actiune, fiindca
+-- functia e chemabila si direct cu cheia de serviciu.
+--
+-- ⚠ `create or replace` NU poate scoate un `default` de pe un parametru (42P13).
+-- A trebuit `drop function` intai, in aceeasi migratie — si de aceea au trebuit
+-- redate si granturile: recrearea ii da inapoi lui `anon` dreptul de EXECUTE,
+-- implicit in Postgres, si tocmai de asta usor de uitat.
+--
+-- ⚠ PROBA CARE APARA GAURA. In `blog-integrare.sql`, afirmatia B3 se numea
+-- „`null` sare peste verificare — dinadins, pentru unelte si reparatii" si
+-- trecea. O scrisesem eu, suna a chibzuinta, si apara exact purtarea gresita. E
+-- inversata acum. O proba care apara o portita e mai rea decat lipsa ei: da
+-- incredere.
+--
+--
+-- ═══ 2. REVENIREA LA O VERSIUNE PESTE MODIFICARI NESALVATE ═══
+--
+-- Nu se repara in baza — baza nu poate sti ce e doar in React.
+--
+-- Revenirea scrie titlul si textul, ceea ce e corect. Dar editorul, la
+-- intoarcere, punea `nesalvat = false` si stergea copia locala. Deci un SEO, un
+-- slug sau niste etichete schimbate si nesalvate ramaneau PE ECRAN, aratand ca
+-- salvate, peste o baza care nu le avea. Omul pleaca si le pierde.
+--
+-- Oprirea e la APASARE, nu la deschiderea panoului: cititul istoricului e
+-- inofensiv si uneori chiar lucrul de care ai nevoie ca sa te hotarasti.
+--
+--
+-- ═══ 3. UN REDACTOR STINGEA FIXAREA PUSA DE ADMIN ═══
+--
+-- Dovedit pe baza: `is_pinned` trecea din `true` in `false` fara ca nimeni sa fi
+-- atins bifa.
+--
+-- `vitrinaSiFixarea` intorcea pentru redactori `{ is_featured: false,
+-- is_pinned: false }`, iar comentariul de langa ea spunea „pur si simplu nu se
+-- scriu" — si era fals: valorile ajungeau pe rand. Un admin pregatea un articol
+-- si il fixa dinainte; un redactor ii schimba un paragraf si apasa Salveaza;
+-- fixarea disparea. Redactorul nici nu vede bifa, deci nu putea banui.
+--
+-- Acum cheile LIPSESC din `p_rand` cand scrie un redactor, iar
+-- `jsonb_populate_record(vechi, p_rand)` pastreaza ce era. La un articol NOU nu
+-- exista „ce era", deci acolo pornesc pe `false`.
+--
+--
+-- ═══ 4. „ACTUALIZAT" NU VEDEA SCHIMBAREA ETICHETELOR ═══
+--
+-- Etichetele stau in `blog_post_tags`, nu pe `blog_posts`, deci declansatorul
+-- care misca `content_updated_at` nu le vedea niciodata. Dar ele apar sub
+-- articol si pe pagina etichetei: o eticheta schimbata CHIAR schimba ce vede
+-- cititorul, iar data spunea altceva — si ea intra in `dateModified`, in
+-- eticheta „Actualizat" si in `lastModified` din sitemap.
+--
+-- ⚠ SE COMPARA SETURI SORTATE, nu ordinea. „SEO, Marketing" si „Marketing, SEO"
+-- sunt aceleasi etichete; mutarea datei pentru o reordonare ar fi tot o
+-- minciuna, doar in celalalt sens. Probat in ambele sensuri (M4 si M5).
+--
+--
+-- ═══ 5. TAXONOMIILE FARA ARTICOL PUBLIC SE CITEAU DE ORICINE ═══
+--
+-- `blog_authors`, `blog_categories` si `blog_tags` aveau `using (true)`.
+-- Paginile lor dadeau deja 404 — dar REST-ul le intorcea oricum. Deci un autor
+-- pregatit pentru cineva neanuntat inca, cu nume, rol si biografie, se putea
+-- citi de oricine stia adresa proiectului.
+--
+-- Politicile cer acum sa existe cel putin un articol PUBLIC legat de rand.
+-- Probat in ambele sensuri: invizibil inainte de publicare (M1), vizibil dupa
+-- (M2). Fara sensul al doilea, o politica `using (false)` ar fi trecut proba.
+--
+--
+-- ═══ 6. AVATARUL AUTORULUI OCOLEA POARTA DE IMAGINI ═══
+--
+-- Se scria cu `trim()` si atat, desi ajunge intr-un `<Image>` pe pagina publica
+-- a autorului si sub fiecare articol al lui. O adresa straina pusa printr-o
+-- cerere scrisa de mana ar fi facut ca BROWSERUL fiecarui cititor sa ceara poza
+-- de la serverul acela — care vede atunci IP-ul, agentul si ora.
+--
+-- E chiar motivul pentru care imaginile din corpul articolului sunt ingradite.
+-- Nu s-a rescris regula: se cheama aceeasi `adresaDeImagine`.
+--
+--
+-- ═══ 7. ACTIUNILE DE TAXONOMII N-AVEAU PLAFOANE ═══
+--
+-- Articolele aveau, ele nu. Ecranele sunt doar pentru administratori, ceea ce
+-- micsoreaza mult riscul — dar o actiune de server ramane o adresa POST, iar
+-- „numai adminii ajung aici" e o presupunere despre cine apasa, nu despre ce se
+-- poate trimite. Numerele sunt largi dinadins: sunt marginea de dincolo de care
+-- valoarea nu mai poate fi ceva scris de un om.
+--
+--
+-- ═══ 8. CITIRILE PUBLICE INGHITEAU ERORILE ═══
+--
+-- Nu e o schimbare de schema, dar e cea mai grava de aici, deci se scrie.
+--
+-- In `src/lib/blog/citire.ts` cuvantul `error` nu aparea NICIODATA: toate cele
+-- 23 de citiri publice luau doar `data`. O baza cazuta nu dadea o eroare, ci o
+-- lista goala — adica „articolul nu exista", adica 404, adica Google scoate
+-- pagina din index. Exact defectul care a tinut sitemapul platformei gol doua
+-- saptamani, raspunzand 200 tot timpul.
+--
+-- Toate cele 23 trec acum printr-un `cere()` care ARUNCA. Iar
+-- `toateArticolelePublicate` foloseste `fetchAllRowsStrict`: plafonul tacut de
+-- 1000 de randuri al PostgREST taia sitemapul fara sa spuna nimic.
+--
+--
+-- ═══ 9. COMENTARIILE PIERDUTE LA RESCRIERE — DEFECT AL RUNDEI, NU AL CODULUI ═══
+--
+-- Rescriind `blog_salveaza_articol` pentru #1, am pastrat logica si am sters
+-- fara sa bag de seama TOATE cele 47 de randuri de comentariu din corpul ei, si
+-- 11 din `blog_restaureaza_versiune`.
+--
+-- ⚠ ASTA NU SE VEDE NICAIERI PANA E TARZIU. Corpurile din BAZA sunt sursa:
+-- baseline-ul e un dump al lor. La prima regenerare, cele 58 de randuri de
+-- „de ce" ar fi disparut si din Git, intr-un commit care parea o reparatie.
+-- S-a prins doar fiindca `schema-baseline.sh --check` arata diff-ul, si m-am
+-- uitat la el in loc sa regenerez direct.
+--
+-- Puse la loc, plus notele noi. Si probele M7/M8 pazesc acum tocmai bucatile de
+-- care runda asta NU s-a atins — redirectarea si istoricul: daca o rescriere
+-- poate pierde tacut comentariile, poate pierde tacut si un `if`.
+--
+--
+-- ═══ CE SPUNEA AUDITUL SI NU ERA ADEVARAT ═══
+--
+-- Doua din zece constatari nu s-au reparat, fiindca nu erau defecte:
+--
+--   * „sanitize-html — REZOLVAT". Nu era: instantaneul auditului e dinaintea
+--     revenirii mele la 2.17.5. Versiunea 2.17.7 aduce `htmlparser2` ca ESM, iar
+--     pachetul e in `serverExternalPackages`, deci Next il cere cu `require` la
+--     RULARE. Build-ul ramane verde si aplicatia cade dupa desfasurare — asa s-a
+--     si intamplat, 56 de erori si 21 de oameni, intre 22:15 si 22:23.
+--
+--   * „comentarii invechite" la `server-only` si la sectiunea de sitemap a
+--     magazinelor. Le-am citit pe amandoua: spun ce face codul.
+--
+-- Nicio schimbare de schema pentru astea doua. Se scriu aici ca sa nu fie
+-- „reparate" la runda urmatoare.

@@ -1,5 +1,7 @@
 import { cache } from "react";
 import { createPublicClient } from "@/lib/supabase/public";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { pregatesteCautarea } from "./types";
 import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
 
@@ -107,6 +109,44 @@ const CAMPURI_LISTA =
  */
 const ACUM = () => new Date().toISOString();
 
+/**
+ * O eroare de la baza NU e „nu există".
+ *
+ * ⚠ TOATE CELE 23 DE CITIRI DE AICI IGNORAU `error`. Scriau `const { data } = …`
+ * și mergeau mai departe cu `data ?? []` sau `if (!data) return null`. Adică
+ * două lucruri cu totul diferite ieșeau la fel:
+ *
+ *   * articolul chiar nu există  → `data = null`, `error = null`  → 404, corect;
+ *   * baza a avut o clipă proastă → `data = null`, `error = {…}`  → 404, GREȘIT.
+ *
+ * Al doilea e scump și tăcut. Google tratează 404 și 5xx cu totul diferit: pe
+ * 404 înțelege „adresa asta nu mai există" și poate scoate pagina din index; pe
+ * 5xx înțelege „serverul are o problemă acum" și revine mai târziu. Deci o pană
+ * de câteva minute la bază putea, până acum, să ne coste articole din index.
+ *
+ * ⚠ IAR PE LISTE ERA ȘI MAI RĂU. `data ?? []` face dintr-o eroare o listă goală,
+ * care arată exact ca „nu sunt articole". Sitemapul răspundea 200, valid, și fără
+ * blog. Proiectul a mai trecut o dată prin asta — vezi nota din
+ * `supabase/fetch-all.ts`: „sitemapul platformei a raspuns 200, valid, si gol,
+ * doua saptamani. Nimeni n-a aflat, fiindca un raspuns partial arata exact ca
+ * unul adevarat."
+ *
+ * ⚠ SE ARUNCĂ, NU SE ÎNTOARCE GOL. Aruncarea urcă până la Next, care răspunde
+ * 500 — adică adevărul. O pagină care nu se poate desena trebuie să spună asta,
+ * nu să pretindă că nu există.
+ */
+function cere<T>(rezultat: { data: T; error: { message?: string } | null }, unde: string): T {
+  if (rezultat.error) {
+    throw new Error(
+      `[blog] citirea publică „${unde}” a eșuat: ${rezultat.error.message ?? "eroare necunoscută"}. ` +
+        "Se aruncă dinadins: un răspuns gol ar fi arătat ca „nu există”, iar Google " +
+        "scoate din index paginile care dau 404.",
+    );
+  }
+  return rezultat.data;
+}
+
+
 /** Supabase întoarce relația fie ca obiect, fie ca listă cu un element. */
 function unul<T>(v: unknown): T | null {
   const x = Array.isArray(v) ? v[0] : v;
@@ -129,7 +169,7 @@ function caLista(r: Record<string, unknown>): ArticolDeLista {
  * și o listă care nu se potrivește cu datele scrise pe ea pare stricată.
  */
 export async function articolePublicate(limita = 50): Promise<ArticolDeLista[]> {
-  const { data } = await (await db())
+  const { data, error: e1 } = await (await db())
     .from("blog_posts")
     .select(CAMPURI_LISTA)
     .eq("status", "published")
@@ -137,6 +177,7 @@ export async function articolePublicate(limita = 50): Promise<ArticolDeLista[]> 
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .limit(limita);
+  cere({ data: null, error: e1 }, "articolePublicate");
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
 }
 
@@ -148,12 +189,13 @@ export async function articoleleCategoriei(
 ): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
   const gol = { articole: [] as ArticolDeLista[], total: 0, pagini: 1 };
   const client = await db();
-  const { data: cat } = await client
+  const { data: cat, error: e2 } = await client
     .from("blog_categories").select("id").eq("slug", slugCategorie).maybeSingle();
+  cere({ data: null, error: e2 }, "articoleleCategoriei");
   if (!cat) return gol;
 
   const de_la = Math.max(0, (pagina - 1) * pePagina);
-  const { data, count } = await client
+  const { data, count, error: e3 } = await client
     .from("blog_posts")
     .select(CAMPURI_LISTA, { count: "exact" })
     .eq("category_id", (cat as { id: string }).id)
@@ -165,6 +207,7 @@ export async function articoleleCategoriei(
     .order("is_pinned", { ascending: false })
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  cere({ data: null, error: e3 }, "articoleleCategoriei");
 
   const total = count ?? 0;
   return {
@@ -192,7 +235,7 @@ export type ArticolIntreg = ArticolBlog & {
  * nou. Deci nu poate învechi nimic.
  */
 export const articolDupaSlug = cache(async function articolDupaSlug(slug: string): Promise<ArticolIntreg | null> {
-  const { data } = await (await db())
+  const { data, error: e4 } = await (await db())
     .from("blog_posts")
     /* ⚠ `blog_authors(*)` ar cere si `user_id`, pe care `anon` nu-l mai poate
        citi (vezi `CAMPURI_AUTOR`). Cu `*` interogarea n-ar intoarce mai putin, ar
@@ -203,6 +246,7 @@ export const articolDupaSlug = cache(async function articolDupaSlug(slug: string
     .not("published_at", "is", null)
     .lte("published_at", ACUM())
     .maybeSingle();
+  cere({ data: null, error: e4 }, "articolDupaSlug");
   if (!data) return null;
   const r = data as Record<string, unknown>;
   return {
@@ -231,15 +275,17 @@ export type FelRedirectare = "articol" | "categorie" | "autor";
  * același nume.
  */
 export async function undeS_aMutat(slug: string, fel: FelRedirectare = "articol"): Promise<string | null> {
-  const { data } = await (await db())
+  const { data, error: e5 } = await (await db())
     .from("blog_redirects").select("to_slug").eq("fel", fel).eq("from_slug", slug).maybeSingle();
+  cere({ data: null, error: e5 }, "undeS_aMutat");
   return (data as { to_slug: string } | null)?.to_slug ?? null;
 }
 
 /** Categoriile, în ordinea aleasă din admin. */
 export async function categoriiBlog(): Promise<CategorieBlog[]> {
-  const { data } = await (await db())
+  const { data, error: e6 } = await (await db())
     .from("blog_categories").select("*").order("sort_order").order("name");
+  cere({ data: null, error: e6 }, "categoriiBlog");
   return (data ?? []) as unknown as CategorieBlog[];
 }
 
@@ -259,7 +305,7 @@ export async function articoleInrudite(
   const gasite: ArticolDeLista[] = [];
 
   if (articol.category_id) {
-    const { data } = await client
+    const { data, error: e7 } = await client
       .from("blog_posts")
       .select(CAMPURI_LISTA)
       .eq("category_id", articol.category_id)
@@ -269,12 +315,13 @@ export async function articoleInrudite(
       .lte("published_at", ACUM())
       .order("published_at", { ascending: false })
       .limit(cate);
+    cere({ data: null, error: e7 }, "articoleInrudite");
     gasite.push(...((data ?? []) as unknown as Record<string, unknown>[]).map(caLista));
   }
 
   if (gasite.length < cate) {
     const stiute = new Set([articol.id, ...gasite.map((a) => a.id)]);
-    const { data } = await client
+    const { data, error: e8 } = await client
       .from("blog_posts")
       .select(CAMPURI_LISTA)
       .eq("status", "published")
@@ -282,6 +329,7 @@ export async function articoleInrudite(
       .lte("published_at", ACUM())
       .order("published_at", { ascending: false })
       .limit(cate + stiute.size);
+    cere({ data: null, error: e8 }, "articoleInrudite");
     for (const r of (data ?? []) as unknown as Record<string, unknown>[]) {
       const a = caLista(r);
       if (!stiute.has(a.id)) { gasite.push(a); stiute.add(a.id); }
@@ -294,8 +342,9 @@ export async function articoleInrudite(
 
 /** Un autor, după adresa lui. `null` dacă nu există. */
 export async function autorDupaSlug(slug: string): Promise<AutorBlog | null> {
-  const { data } = await (await db())
+  const { data, error: e9 } = await (await db())
     .from("blog_authors").select(CAMPURI_AUTOR).eq("slug", slug).maybeSingle();
+  cere({ data: null, error: e9 }, "autorDupaSlug");
   return (data as AutorBlog) ?? null;
 }
 
@@ -312,7 +361,7 @@ export async function articoleleAutorului(
   pePagina = PE_PAGINA,
 ): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
   const de_la = Math.max(0, (pagina - 1) * pePagina);
-  const { data, count } = await (await db())
+  const { data, count, error: e10 } = await (await db())
     .from("blog_posts")
     .select(CAMPURI_LISTA, { count: "exact" })
     .eq("author_id", idAutor)
@@ -321,6 +370,7 @@ export async function articoleleAutorului(
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  cere({ data: null, error: e10 }, "articoleleAutorului");
 
   const total = count ?? 0;
   return {
@@ -339,14 +389,16 @@ export async function articoleleAutorului(
  */
 export async function autoriCuArticole(): Promise<AutorBlog[]> {
   const client = await db();
-  const { data: articole } = await client
+  const { data: articole, error: e11 } = await client
     .from("blog_posts").select("author_id").not("author_id", "is", null);
+  cere({ data: null, error: e11 }, "autoriCuArticole");
   const idUri = [
     ...new Set(((articole ?? []) as { author_id: string }[]).map((a) => a.author_id)),
   ];
   if (idUri.length === 0) return [];
-  const { data } = await client
+  const { data, error: e12 } = await client
     .from("blog_authors").select(CAMPURI_AUTOR).in("id", idUri).order("name");
+  cere({ data: null, error: e12 }, "autoriCuArticole");
   return (data ?? []) as unknown as AutorBlog[];
 }
 
@@ -366,7 +418,7 @@ export async function autoriCuArticole(): Promise<AutorBlog[]> {
  * `blog_posts_o_singura_vitrina` și triggerul de lângă el.
  */
 export async function articolulDinVitrina(): Promise<ArticolDeLista | null> {
-  const { data } = await (await db())
+  const { data, error: e13 } = await (await db())
     .from("blog_posts")
     .select(CAMPURI_LISTA)
     .eq("is_featured", true)
@@ -374,6 +426,7 @@ export async function articolulDinVitrina(): Promise<ArticolDeLista | null> {
     .not("published_at", "is", null)
     .lte("published_at", ACUM())
     .maybeSingle();
+  cere({ data: null, error: e13 }, "articolulDinVitrina");
   return data ? caLista(data as unknown as Record<string, unknown>) : null;
 }
 
@@ -404,7 +457,8 @@ export type ArticolDeFeed = {
  * de ce să plece mai departe printr-un feed.
  */
 export async function articolePentruFeed(cate = 30): Promise<ArticolDeFeed[]> {
-  const { data } = await (await db()).rpc("blog_articole_pentru_feed", { p_cate: cate });
+  const { data, error: e14 } = await (await db()).rpc("blog_articole_pentru_feed", { p_cate: cate });
+  cere({ data: null, error: e14 }, "articolePentruFeed");
   return (data ?? []) as ArticolDeFeed[];
 }
 
@@ -427,7 +481,7 @@ export async function paginaDeArticole(
   pePagina = PE_PAGINA,
 ): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
   const de_la = Math.max(0, (pagina - 1) * pePagina);
-  const { data, count } = await (await db())
+  const { data, count, error: e15 } = await (await db())
     .from("blog_posts")
     .select(CAMPURI_LISTA, { count: "exact" })
     .eq("status", "published")
@@ -439,6 +493,7 @@ export async function paginaDeArticole(
     .order("is_pinned", { ascending: false })
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  cere({ data: null, error: e15 }, "paginaDeArticole");
 
   const total = count ?? 0;
   return {
@@ -476,7 +531,7 @@ export async function cautaArticole(
   if (cautat.length < 2) return { articole: [], total: 0, pagini: 1 };
 
   const de_la = Math.max(0, (pagina - 1) * pePagina);
-  const { data, count } = await (await db())
+  const { data, count, error: e16 } = await (await db())
     .from("blog_posts")
     .select(CAMPURI_LISTA, { count: "exact" })
     .ilike("cauta", `%${cautat}%`)
@@ -485,6 +540,7 @@ export async function cautaArticole(
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  cere({ data: null, error: e16 }, "cautaArticole");
 
   const total = count ?? 0;
   return {
@@ -512,8 +568,9 @@ export interface EticheteBlogPublic {
 
 /** Etichetele unui articol, pentru afișare sub el. */
 export async function eticheteArticol(idArticol: string): Promise<EticheteBlogPublic[]> {
-  const { data } = await (await db())
+  const { data, error: e17 } = await (await db())
     .from("blog_post_tags").select("blog_tags(slug, name)").eq("post_id", idArticol);
+  cere({ data: null, error: e17 }, "eticheteArticol");
   return ((data ?? []) as unknown as Record<string, unknown>[])
     .map((r) => unul<EticheteBlogPublic>(r.blog_tags))
     .filter((e): e is EticheteBlogPublic => !!e)
@@ -522,8 +579,9 @@ export async function eticheteArticol(idArticol: string): Promise<EticheteBlogPu
 
 /** O etichetă, după adresa ei. */
 export async function eticheta(slug: string): Promise<EticheteBlogPublic | null> {
-  const { data } = await (await db())
+  const { data, error: e18 } = await (await db())
     .from("blog_tags").select("slug, name").eq("slug", slug).maybeSingle();
+  cere({ data: null, error: e18 }, "eticheta");
   return (data as EticheteBlogPublic) ?? null;
 }
 
@@ -556,7 +614,7 @@ export async function articoleleEtichetei(
     întâmplă toate în bază.
   */
   const de_la = Math.max(0, (pagina - 1) * pePagina);
-  const { data, count } = await client
+  const { data, count, error: e19 } = await client
     .from("blog_posts")
     .select(`${CAMPURI_LISTA}, blog_post_tags!inner(blog_tags!inner(slug))`, { count: "exact" })
     .eq("blog_post_tags.blog_tags.slug", slugEticheta)
@@ -565,6 +623,7 @@ export async function articoleleEtichetei(
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  cere({ data: null, error: e19 }, "articoleleEtichetei");
 
   const total = count ?? 0;
   return {
@@ -598,7 +657,8 @@ export async function eticheteFolosite(): Promise<EticheteBlogPublic[]> {
     lucruri despre care îi ceruserăm să nu le indexeze — o pagină subțire cerută
     de noi înșine.
   */
-  const { data } = await (await db()).rpc("blog_etichete_folosite");
+  const { data, error: e20 } = await (await db()).rpc("blog_etichete_folosite");
+  cere({ data: null, error: e20 }, "eticheteFolosite");
   return ((data ?? []) as { slug: string; name: string; ultima: string | null }[]).map((e) => ({
     slug: e.slug,
     name: e.name,
@@ -616,7 +676,8 @@ export async function eticheteFolosite(): Promise<EticheteBlogPublic[]> {
  * pagina 3 nu se vedea de nicăieri.
  */
 export async function categoriiFolosite(): Promise<{ slug: string; name: string; cate: number }[]> {
-  const { data } = await (await db()).rpc("blog_categorii_folosite");
+  const { data, error: e21 } = await (await db()).rpc("blog_categorii_folosite");
+  cere({ data: null, error: e21 }, "categoriiFolosite");
   return ((data ?? []) as { slug: string; name: string; cate: number }[]).map((c) => ({
     slug: c.slug,
     name: c.name,
@@ -633,43 +694,56 @@ export async function categoriiFolosite(): Promise<{ slug: string; name: string;
  * identitatea e ce trebuie să dovedească pagina de autor.
  */
 export async function subiecteleAutorului(idAutor: string): Promise<string[]> {
-  const { data } = await (await db()).rpc("blog_subiectele_autorului", { p_autor: idAutor });
+  const { data, error: e22 } = await (await db()).rpc("blog_subiectele_autorului", { p_autor: idAutor });
+  cere({ data: null, error: e22 }, "subiecteleAutorului");
   return ((data ?? []) as { name: string }[]).map((r) => r.name).filter(Boolean);
 }
 
 /**
  * TOATE articolele publicate, luate în felii.
  *
- * ⚠ `.limit(2000)` NU ADUCE 2000. PostgREST are propriul plafon de rânduri pe
- * cerere (1000 la configurația obișnuită), și taie TĂCUT: nicio eroare, niciun
- * semn, doar mai puține rânduri decât ai cerut. Sitemapul ar fi anunțat primele
- * o mie de articole și le-ar fi lăsat pe restul nevăzute, iar noi am fi crezut
- * că le-am cerut pe toate.
+ * ⚠ FOLOSEȘTE `fetchAllRowsStrict`, ȘI ASTA E TOT ROSTUL EI.
  *
- * Aceeași capcană a mușcat deja în cronuri, cu aceeași formă: o tăietură pusă
- * înaintea deduplicării, pe care rotația n-o repară.
+ * Bucla scrisă de mână de dinainte avea două găuri, amândouă tăcute:
  *
- * Se cere în felii până vine una mai mică decât felia, adică până se termină.
+ * 1. `.limit()` NU ADUCE CÂT CERI. PostgREST are propriul plafon de rânduri pe
+ *    cerere (1000 la configurația obișnuită) și taie fără nicio eroare. De aceea
+ *    se merge în felii — asta era deja bine.
+ *
+ * 2. Dar felia nu se uita la `error`. O cădere a bazei la PRIMA felie dădea
+ *    `data = null` → `felie = []` → `length < FELIE` → `break`, iar funcția
+ *    întorcea o listă goală care arată exact ca „nu există articole".
+ *    Sitemapul răspundea 200, valid, și fără blog.
+ *
+ * Proiectul a mai trecut o dată prin asta, la altă masă: nota din
+ * `supabase/fetch-all.ts` spune „sitemapul platformei a raspuns 200, valid, si
+ * gol, doua saptamani. Nimeni n-a aflat, fiindca un raspuns partial arata exact
+ * ca unul adevarat." Unealta scrisă atunci face exact ce trebuie aici: ori
+ * citește tot, ori aruncă.
+ *
+ * ⚠ Și fereastra e acum 1000, nu 500. Unealta cere asta anume: o fereastră mai
+ * mică decât plafonul face ca „am primit mai puțin decât am cerut" să nu mai
+ * însemne sigur „s-au terminat".
  */
-export async function toateArticolelePublicate(maxim = 20000): Promise<ArticolDeLista[]> {
+export async function toateArticolelePublicate(): Promise<ArticolDeLista[]> {
   const client = await db();
-  const FELIE = 500;
-  const toate: ArticolDeLista[] = [];
-
-  for (let de_la = 0; de_la < maxim; de_la += FELIE) {
-    const { data } = await client
-      .from("blog_posts")
-      .select(CAMPURI_LISTA)
-      .eq("status", "published")
-      .not("published_at", "is", null)
-      .lte("published_at", ACUM())
-      .order("published_at", { ascending: false })
-      .range(de_la, de_la + FELIE - 1);
-
-    const felie = ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
-    toate.push(...felie);
-    if (felie.length < FELIE) break; // s-au terminat
-  }
-
-  return toate;
+  const randuri = await fetchAllRowsStrict<Record<string, unknown>>(
+    "blog.toateArticolelePublicate",
+    (de_la, pana_la) =>
+      client
+        .from("blog_posts")
+        .select(CAMPURI_LISTA)
+        .eq("status", "published")
+        .not("published_at", "is", null)
+        .lte("published_at", ACUM())
+        /* ⚠ Ordonare stabilă, cu `id` drept departajare: fără ea, două articole
+           cu aceeași dată se pot muta între ferestre, iar unul s-ar pierde. */
+        .order("published_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(de_la, pana_la) as unknown as PromiseLike<{
+          data: Record<string, unknown>[] | null;
+          error: PostgrestError | null;
+        }>,
+  );
+  return randuri.map(caLista);
 }

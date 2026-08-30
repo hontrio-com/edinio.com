@@ -73,7 +73,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/sanitize-html": "^2.16.1",
     "eslint": "^9",
-    "eslint-config-next": "^16.3.0",
+    "eslint-config-next": "^16.3.3",
     "shadcn": "^4.8.0",
     "tailwindcss": "^4",
     "typescript": "^5"

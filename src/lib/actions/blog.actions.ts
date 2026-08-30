@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/types/database.types";
 import { requireAdminApi, requireBlogEditorApi } from "@/lib/admin-guard";
 import { indemnDeAratat } from "@/lib/blog/indemn";
 import { adresaDeImagine } from "@/lib/blog/imagini";
@@ -43,8 +43,40 @@ import {
  *     etichetelor. Un redactor scrie articole, nu hotaraste cine sunt autorii
  *     platformei sau cum se imparte blogul pe categorii.
  */
-function blogDb(): SupabaseClient {
-  return createAdminClient() as unknown as SupabaseClient;
+function blogDb() {
+  return createAdminClient();
+}
+
+/**
+ * Randul din baza, citit ca `ArticolBlog`.
+ *
+ * ⚠ CELE DOUA FORME CHIAR DIFERA, si e bine ca `tsc` o spune.
+ *
+ * In baza, `faq` si `cta` sunt `jsonb` — adica `Json`, care poate fi orice. In
+ * cod, `faq` e `IntrebareBlog[]` si `cta` are forma din `blog/indemn.ts`.
+ * Trecerea dintre ele nu e o conversie, e o PRESUPUNERE: „ce e in coloana are
+ * forma pe care o astept".
+ *
+ * Presupunerea e tinuta la SCRIERE, unde `intrebariBune` si `indemnDeSalvat`
+ * curata ce intra. Deci un rand scris de aplicatie o respecta. Unul scris cu SQL
+ * de mana, nu — de aceea afisarea trece oricum prin `indemnDeAratat`, care
+ * arunca ce nu are forma buna.
+ *
+ * Functia asta exista ca sa fie UN SINGUR loc unde presupunerea se face, cu
+ * motivul scris langa ea, in loc de cinci turnari raspandite prin fisier.
+ */
+function caArticol(rand: unknown): ArticolBlog {
+  return rand as ArticolBlog;
+}
+
+/**
+ * Randul de scris, dat functiilor din baza ca `jsonb`.
+ *
+ * Aceeasi punte, in celalalt sens: `randDinIntrare` intoarce o forma de domeniu
+ * (cu `faq: IntrebareBlog[]`), iar functia din baza primeste `Json`.
+ */
+function caJson(rand: object): Json {
+  return rand as unknown as Json;
 }
 
 function reimprospateaza() {
@@ -434,7 +466,16 @@ export type ArticolInLista = Pick<
   views: number;
 };
 
-export const ARTICOLE_PE_PAGINA = 25;
+/*
+  ⚠ NU `export`, INTR-UN FISIER `"use server"`.
+
+  Acolo au voie sa fie exportate DOAR functii asincrone: fiecare export devine o
+  adresa POST. O constanta exportata rupe build-ul cu „Only async functions are
+  allowed to be exported in a use server file" — iar `tsc` si lint-ul NU vad asta,
+  fiindca e o regula a lui Next, nu a lui TypeScript. S-a vazut abia la `npm run
+  build`, dupa ce celelalte doua porti spusesera „curat".
+*/
+const ARTICOLE_PE_PAGINA = 25;
 
 export type PaginaArticole = {
   articole: ArticolInLista[];
@@ -502,7 +543,7 @@ export async function listeazaArticole(
 export async function iaArticol(id: string): Promise<ArticolBlog | null> {
   if (!(await requireBlogEditorApi())) return null;
   const { data } = await blogDb().from("blog_posts").select("*").eq("id", id).single();
-  return (data as ArticolBlog) ?? null;
+  return data ? caArticol(data) : null;
 }
 
 /**
@@ -845,7 +886,7 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
     Nimic nu dădea vreo eroare, fiindcă prima cerere chiar izbutise.
   */
   const { data, error } = await blogDb().rpc("blog_creeaza_articol", {
-    p_rand: { ...rand, published_at: dataLaPublicare(intrare) },
+    p_rand: caJson({ ...rand, published_at: dataLaPublicare(intrare) }),
     p_etichete: etichetePentruBaza(intrare.etichete),
   });
 
@@ -930,7 +971,7 @@ export async function actualizeazaArticol(
   */
   const { data: versiuneNoua, error } = await blogDb().rpc("blog_salveaza_articol", {
     p_id: id,
-    p_rand: { ...randDinIntrare(intrare, s.slug), published_at: dataLaPublicare(intrare) },
+    p_rand: caJson({ ...randDinIntrare(intrare, s.slug), published_at: dataLaPublicare(intrare) }),
     p_etichete: etichetePentruBaza(intrare.etichete),
     p_salvat_de: admin.id,
     p_versiuni: VERSIUNI_PASTRATE,

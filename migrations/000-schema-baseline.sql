@@ -16,6 +16,7 @@ create extension if not exists pg_stat_statements with schema extensions;
 create extension if not exists pg_trgm with schema extensions;
 create extension if not exists pgcrypto with schema extensions;
 create extension if not exists supabase_vault with schema vault;
+create extension if not exists unaccent with schema public;
 create extension if not exists "uuid-ossp" with schema extensions;
 
 -- ── TIPURI ────────────────────────────────────────────────
@@ -1169,6 +1170,557 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.blog_actualizeaza_taxonomia(p_fel text, p_id uuid, p_rand jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+declare
+  v_slug_vechi text;
+  v_slug_nou   text;
+begin
+  if p_fel = 'categorie' then
+    select slug into v_slug_vechi from public.blog_categories where id = p_id for update;
+    if not found then
+      raise exception 'rubrica % nu exista', p_id using errcode = 'no_data_found';
+    end if;
+
+    update public.blog_categories c set
+      name             = n.name,
+      slug             = n.slug,
+      description      = n.description,
+      seo_title        = n.seo_title,
+      seo_description  = n.seo_description,
+      sort_order       = n.sort_order
+    from jsonb_populate_record(
+           (select q from public.blog_categories q where q.id = p_id), p_rand) n
+    where c.id = p_id
+    returning c.slug into v_slug_nou;
+
+  elsif p_fel = 'autor' then
+    select slug into v_slug_vechi from public.blog_authors where id = p_id for update;
+    if not found then
+      raise exception 'autorul % nu exista', p_id using errcode = 'no_data_found';
+    end if;
+
+    update public.blog_authors a set
+      name        = n.name,
+      slug        = n.slug,
+      role_title  = n.role_title,
+      bio         = n.bio,
+      avatar_url  = n.avatar_url,
+      sameas      = n.sameas,
+      user_id     = n.user_id
+    from jsonb_populate_record(
+           (select q from public.blog_authors q where q.id = p_id), p_rand) n
+    where a.id = p_id
+    returning a.slug into v_slug_nou;
+
+  else
+    raise exception 'fel necunoscut: %', p_fel;
+  end if;
+
+  -- Aceeasi grija de lanturi si bucle ca la articole.
+  if v_slug_vechi is distinct from v_slug_nou then
+    delete from public.blog_redirects where fel = p_fel and from_slug = v_slug_nou;
+    update public.blog_redirects set to_slug = v_slug_nou
+     where fel = p_fel and to_slug = v_slug_vechi and from_slug <> v_slug_nou;
+    insert into public.blog_redirects (fel, from_slug, to_slug)
+    values (p_fel, v_slug_vechi, v_slug_nou)
+    on conflict (fel, from_slug) do update set to_slug = excluded.to_slug;
+    delete from public.blog_redirects where fel = p_fel and from_slug = to_slug;
+  end if;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_anuleaza_confirmare(p_email text, p_token_hash text)
+ RETURNS boolean
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  update public.blog_subscribers
+     set token_hash = null, token_expires_at = null
+   where email = lower(p_email)
+     and confirmed_at is null
+     and token_hash = p_token_hash
+  returning true;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_articole_admin(p_de_la integer, p_cate integer, p_cauta text DEFAULT NULL::text, p_stare text DEFAULT NULL::text)
+ RETURNS TABLE(id uuid, slug text, title text, status text, published_at timestamp with time zone, is_featured boolean, is_pinned boolean, reading_minutes integer, updated_at timestamp with time zone, autor text, categorie text, views bigint, total bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with filtrate as (
+    select p.*
+    from public.blog_posts p
+    where (p_stare is null or p.status = p_stare)
+      and (
+        p_cauta is null or btrim(p_cauta) = ''
+        or p.cauta like '%' || p_cauta || '%'
+      )
+  )
+  select
+    f.id, f.slug, f.title, f.status, f.published_at,
+    f.is_featured, f.is_pinned, f.reading_minutes, f.updated_at,
+    a.name as autor, c.name as categorie,
+    coalesce(s.views, 0) as views,
+    count(*) over () as total
+  from filtrate f
+  left join public.blog_authors a    on a.id = f.author_id
+  left join public.blog_categories c on c.id = f.category_id
+  left join public.blog_post_stats s on s.post_id = f.id
+  order by f.updated_at desc
+  offset greatest(p_de_la, 0)
+  limit greatest(p_cate, 1);
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_categorii_folosite()
+ RETURNS TABLE(slug text, name text, cate bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select c.slug, c.name, count(*) as cate
+  from public.blog_categories c
+  join public.blog_posts p on p.category_id = c.id
+  where p.status = 'published'
+    and p.published_at is not null
+    and p.published_at <= now()
+  group by c.slug, c.name, c.sort_order
+  order by c.sort_order, c.name;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_cere_confirmare(p_email text, p_token_hash text, p_expira_la timestamp with time zone, p_sursa text)
+ RETURNS boolean
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  insert into public.blog_subscribers (email, token_hash, token_expires_at, source)
+  values (lower(p_email), p_token_hash, p_expira_la, p_sursa)
+  on conflict (email) do update
+    set token_hash       = excluded.token_hash,
+        token_expires_at = excluded.token_expires_at,
+        source           = excluded.source,
+        -- Cine s-a dezabonat si se reinscrie trebuie sa confirme din nou.
+        confirmed_at     = case when public.blog_subscribers.unsubscribed_at is not null
+                                then null else public.blog_subscribers.confirmed_at end
+    where
+      -- Cine e deja abonat si activ nu primeste nimic.
+      (public.blog_subscribers.confirmed_at is null
+        or public.blog_subscribers.unsubscribed_at is not null)
+      -- Si cat timp are un jeton viu, nu se emite al doilea.
+      and (public.blog_subscribers.token_hash is null
+        or public.blog_subscribers.token_expires_at is null
+        or public.blog_subscribers.token_expires_at < now())
+  returning true;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_confirma(p_token_hash text, p_ip text)
+ RETURNS text
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  update public.blog_subscribers
+     set confirmed_at     = now(),
+         confirmed_ip     = p_ip,
+         token_hash       = null,
+         token_expires_at = null,
+         unsubscribed_at  = null,
+         unsub_token      = coalesce(unsub_token, encode(extensions.gen_random_bytes(24), 'hex'))
+   where token_hash = p_token_hash
+     and token_expires_at is not null
+     and token_expires_at > now()
+  returning email;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_continut_atins()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if (new.title            is distinct from old.title)
+  or (new.slug             is distinct from old.slug)
+  or (new.excerpt          is distinct from old.excerpt)
+  or (new.answer_summary   is distinct from old.answer_summary)
+  or (new.content_html     is distinct from old.content_html)
+  or (new.cover_url        is distinct from old.cover_url)
+  or (new.cover_alt        is distinct from old.cover_alt)
+  or (new.og_image_url     is distinct from old.og_image_url)
+  or (new.author_id        is distinct from old.author_id)
+  or (new.category_id      is distinct from old.category_id)
+  or (new.cta              is distinct from old.cta)
+  or (new.faq              is distinct from old.faq)
+  or (new.seo_title        is distinct from old.seo_title)
+  or (new.seo_description  is distinct from old.seo_description)
+  or (new.canonical_url    is distinct from old.canonical_url)
+  then
+    new.content_updated_at = now();
+  end if;
+  return new;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_creeaza_articol(p_rand jsonb, p_etichete jsonb)
+ RETURNS TABLE(id uuid, edit_version bigint)
+ LANGUAGE plpgsql
+AS $function$
+declare
+  v_id uuid;
+begin
+  insert into public.blog_posts (
+    title, slug, excerpt, answer_summary, content_html,
+    cover_url, cover_alt, og_image_url,
+    author_id, category_id, status, published_at,
+    is_featured, is_pinned, cta, faq,
+    seo_title, seo_description, canonical_url, noindex, reading_minutes
+  )
+  select
+    n.title, n.slug, n.excerpt, n.answer_summary,
+    coalesce(n.content_html, ''),
+    n.cover_url, n.cover_alt, n.og_image_url,
+    n.author_id, n.category_id,
+    coalesce(n.status, 'draft'),
+    n.published_at,
+    coalesce(n.is_featured, false),
+    coalesce(n.is_pinned, false),
+    n.cta,
+    coalesce(n.faq, '[]'::jsonb),
+    n.seo_title, n.seo_description, n.canonical_url,
+    coalesce(n.noindex, false),
+    n.reading_minutes
+  from jsonb_populate_record(null::public.blog_posts, p_rand) n
+  returning public.blog_posts.id into v_id;
+
+  if p_etichete is not null then
+    insert into public.blog_tags (slug, name)
+    select e->>'slug', e->>'name'
+    from jsonb_array_elements(p_etichete) e
+    where coalesce(e->>'slug', '') <> ''
+    on conflict (slug) do nothing;
+
+    insert into public.blog_post_tags (post_id, tag_id)
+    select v_id, t.id
+    from public.blog_tags t
+    where t.slug in (select e->>'slug' from jsonb_array_elements(p_etichete) e)
+    on conflict do nothing;
+  end if;
+
+  return query select v_id, p.edit_version from public.blog_posts p where p.id = v_id;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_creste_citirile(p_slug text)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  insert into public.blog_post_stats (post_id, views)
+  select p.id, 1
+  from public.blog_posts p
+  where p.slug = p_slug
+    and p.status = 'published'
+    and p.published_at is not null
+    and p.published_at <= now()
+  on conflict (post_id)
+  do update set views = public.blog_post_stats.views + 1, updated_at = now();
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_dezaboneaza(p_unsub_token text)
+ RETURNS boolean
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  update public.blog_subscribers
+     set unsubscribed_at = coalesce(unsubscribed_at, now())
+   where unsub_token = p_unsub_token
+  returning true;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_etichete_admin()
+ RETURNS TABLE(id uuid, slug text, name text, cate bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select t.id, t.slug, t.name, count(pt.post_id) as cate
+  from public.blog_tags t
+  left join public.blog_post_tags pt on pt.tag_id = t.id
+  group by t.id, t.slug, t.name
+  order by t.name;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_etichete_folosite()
+ RETURNS TABLE(slug text, name text, cate bigint, ultima timestamp with time zone)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select t.slug, t.name, count(*) as cate, max(p.published_at) as ultima
+  from public.blog_tags t
+  join public.blog_post_tags pt on pt.tag_id = t.id
+  join public.blog_posts p      on p.id = pt.post_id
+  where p.status = 'published'
+    and p.published_at is not null
+    and p.published_at <= now()
+    and p.noindex is not true
+  group by t.slug, t.name
+  order by t.name;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_muta_taxonomia(p_fel text, p_slug_vechi text, p_slug_nou text)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if p_slug_vechi is null or p_slug_nou is null or p_slug_vechi = p_slug_nou then
+    return;
+  end if;
+  if p_fel not in ('categorie', 'autor') then
+    raise exception 'fel necunoscut: %', p_fel;
+  end if;
+
+  -- Fara asta se face bucla la dus-intors.
+  delete from public.blog_redirects where fel = p_fel and from_slug = p_slug_nou;
+
+  -- Lanturile se strang: ce arata catre numele vechi arata acum direct catre cel nou.
+  update public.blog_redirects set to_slug = p_slug_nou
+   where fel = p_fel and to_slug = p_slug_vechi and from_slug <> p_slug_nou;
+
+  insert into public.blog_redirects (fel, from_slug, to_slug)
+  values (p_fel, p_slug_vechi, p_slug_nou)
+  on conflict (fel, from_slug) do update set to_slug = excluded.to_slug;
+
+  delete from public.blog_redirects where fel = p_fel and from_slug = to_slug;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_o_singura_vitrina()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if new.is_featured then
+    update public.blog_posts set is_featured = false
+    where is_featured and id <> new.id;
+  end if;
+  return new;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_salveaza_articol(p_id uuid, p_rand jsonb, p_etichete jsonb, p_salvat_de uuid, p_versiuni integer, p_versiune_asteptata bigint DEFAULT NULL::bigint, p_creeaza_versiune boolean DEFAULT true)
+ RETURNS bigint
+ LANGUAGE plpgsql
+AS $function$
+declare
+  vechi        public.blog_posts%rowtype;
+  v_slug_nou   text;
+  v_versiune   bigint;
+  v_era_vizibil boolean;
+begin
+  -- ⚠ `for update` tine randul pana la capatul tranzactiei. Doua salvari
+  -- simultane se aseaza la rand, deci a doua vede versiunea scrisa de prima si
+  -- poate sa o refuze — fara lacat s-ar strecura amandoua.
+  select * into vechi from public.blog_posts where id = p_id for update;
+
+  if not found then
+    raise exception 'articolul % nu exista', p_id using errcode = 'no_data_found';
+  end if;
+
+  if p_versiune_asteptata is not null and vechi.edit_version <> p_versiune_asteptata then
+    raise exception
+      'articolul a fost modificat intre timp (are versiunea %, tu ai plecat de la %)',
+      vechi.edit_version, p_versiune_asteptata
+      using errcode = 'P0409';
+  end if;
+
+  -- Se hotaraste AICI, din randul blocat, nu din ce credea clientul.
+  v_era_vizibil := vechi.status = 'published'
+               and vechi.published_at is not null
+               and vechi.published_at <= now();
+
+  -- ⚠ Se porneste de la randul EXISTENT, nu de la unul gol: cheile lipsa din
+  -- jsonb pastreaza ce era. Cu `jsonb_populate_record(null::blog_posts, ...)`
+  -- orice camp netrimis ar fi devenit NULL.
+  update public.blog_posts p set
+    title            = n.title,
+    slug             = n.slug,
+    excerpt          = n.excerpt,
+    answer_summary   = n.answer_summary,
+    content_html     = n.content_html,
+    cover_url        = n.cover_url,
+    cover_alt        = n.cover_alt,
+    og_image_url     = n.og_image_url,
+    author_id        = n.author_id,
+    category_id      = n.category_id,
+    status           = n.status,
+    published_at     = n.published_at,
+    is_featured      = n.is_featured,
+    is_pinned        = n.is_pinned,
+    cta              = n.cta,
+    faq              = n.faq,
+    seo_title        = n.seo_title,
+    seo_description  = n.seo_description,
+    canonical_url    = n.canonical_url,
+    noindex          = n.noindex,
+    reading_minutes  = n.reading_minutes,
+    edit_version     = vechi.edit_version + 1
+  from jsonb_populate_record(vechi, p_rand) n
+  where p.id = p_id
+  returning p.slug, p.edit_version into v_slug_nou, v_versiune;
+
+  -- ═══ Redirectarea ═══
+  --
+  -- Doar daca articolul ERA vizibil. Un slug schimbat pe o ciorna n-a fost
+  -- niciodata nicaieri: o redirectare de la el ar fi o adresa inventata.
+  if v_era_vizibil and vechi.slug is distinct from v_slug_nou then
+    -- Fara asta se face bucla la dus-intors: `a → b`, apoi inapoi `b → a`.
+    delete from public.blog_redirects
+     where fel = 'articol' and from_slug = v_slug_nou;
+
+    -- Lanturile se strang: ce arata catre slugul vechi arata acum direct catre cel nou.
+    update public.blog_redirects set to_slug = v_slug_nou
+     where fel = 'articol' and to_slug = vechi.slug and from_slug <> v_slug_nou;
+
+    insert into public.blog_redirects (fel, from_slug, to_slug)
+    values ('articol', vechi.slug, v_slug_nou)
+    on conflict (fel, from_slug) do update set to_slug = excluded.to_slug;
+
+    delete from public.blog_redirects
+     where fel = 'articol' and from_slug = to_slug;
+  end if;
+
+  -- ═══ Etichetele ═══
+  --
+  -- ⚠ Slugul vine gata facut de sus, din `slugDin`. Rescris aici, ar fi a doua
+  -- implementare a aceleiasi reguli, iar cele doua s-ar despartri tacut la prima
+  -- diacritica tratata altfel.
+  --
+  -- `null` = „editorul n-a trimis etichete", deci nu se atinge nimic.
+  -- `[]`   = „le-a scos pe toate".
+  if p_etichete is not null then
+    insert into public.blog_tags (slug, name)
+    select e->>'slug', e->>'name'
+    from jsonb_array_elements(p_etichete) e
+    where coalesce(e->>'slug', '') <> ''
+    on conflict (slug) do nothing;
+
+    delete from public.blog_post_tags where post_id = p_id;
+
+    insert into public.blog_post_tags (post_id, tag_id)
+    select p_id, t.id
+    from public.blog_tags t
+    where t.slug in (select e->>'slug' from jsonb_array_elements(p_etichete) e)
+    on conflict do nothing;
+  end if;
+
+  -- ═══ Versiunea de dinainte ═══
+  --
+  -- ⚠ NU LA FIECARE SALVARE. Salvarea automata bate la 30 de secunde; cu o
+  -- revizie de fiecare data, cele 50 de sloturi se umplu in 25 de minute de scris
+  -- si istoricul ajunge sa contina numai variante aproape identice din ultima
+  -- jumatate de ora — adica exact ce nu cauta nimeni cand deschide istoricul.
+  --
+  -- Titlul si textul vin din randul BLOCAT, deci sunt cu adevarat cele de dinainte.
+  if p_creeaza_versiune then
+    insert into public.blog_post_revisions (post_id, title, content_html, saved_by)
+    values (p_id, vechi.title, vechi.content_html, p_salvat_de);
+
+    delete from public.blog_post_revisions r
+     where r.post_id = p_id
+       and r.id not in (
+         select id from public.blog_post_revisions
+         where post_id = p_id
+         order by created_at desc
+         limit greatest(p_versiuni, 1)
+       );
+  end if;
+
+  return v_versiune;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_sterge_articol(p_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+declare v_slug text;
+begin
+  select slug into v_slug from public.blog_posts where id = p_id for update;
+  if not found then return false; end if;
+
+  -- ⚠ Si `fel`, nu doar slugul: o rubrica poate avea acelasi slug istoric, si
+  -- n-are nicio legatura cu articolul care se sterge.
+  delete from public.blog_redirects where fel = 'articol' and to_slug = v_slug;
+  delete from public.blog_posts where id = p_id;
+  return true;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_sterge_taxonomia(p_fel text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+declare v_slug text;
+begin
+  if p_fel = 'categorie' then
+    select slug into v_slug from public.blog_categories where id = p_id for update;
+    if not found then return false; end if;
+    delete from public.blog_redirects where fel = 'categorie' and (to_slug = v_slug or from_slug = v_slug);
+    delete from public.blog_categories where id = p_id;
+  elsif p_fel = 'autor' then
+    select slug into v_slug from public.blog_authors where id = p_id for update;
+    if not found then return false; end if;
+    delete from public.blog_redirects where fel = 'autor' and (to_slug = v_slug or from_slug = v_slug);
+    delete from public.blog_authors where id = p_id;
+  else
+    raise exception 'fel necunoscut: %', p_fel;
+  end if;
+  return true;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.blog_subiectele_autorului(p_autor uuid)
+ RETURNS TABLE(name text)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select distinct c.name
+  from public.blog_categories c
+  join public.blog_posts p on p.category_id = c.id
+  where p.author_id = p_autor
+    and p.status = 'published'
+    and p.published_at is not null
+    and p.published_at <= now()
+  order by c.name;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.catalog_aplica_proiectii(p_randuri jsonb)
  RETURNS integer
  LANGUAGE plpgsql
@@ -1893,6 +2445,20 @@ begin
 end; $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.cont_dupa_email(p_email text)
+ RETURNS TABLE(id uuid, rol text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'auth', 'pg_temp'
+AS $function$
+  select u.id, coalesce(p.role, 'user')
+  from auth.users u
+  left join public.users_profile p on p.id = u.id
+  where lower(u.email) = lower(p_email)
+  limit 1;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.curata_analitice_brute(p_pastreaza_zile integer DEFAULT 8, p_max integer DEFAULT 5000)
  RETURNS integer
  LANGUAGE plpgsql
@@ -2555,6 +3121,14 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.fara_diacritice(t text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE STRICT
+ SET search_path TO 'public', 'pg_temp'
+AS $function$ select unaccent('public.unaccent', t) $function$
+;
+
 CREATE OR REPLACE FUNCTION public.genereaza_schema_baseline()
  RETURNS text
  LANGUAGE plpgsql
@@ -2996,6 +3570,19 @@ AS $function$
   SELECT EXISTS (
     SELECT 1 FROM public.users_profile
     WHERE id = auth.uid() AND role = 'admin'
+  );
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.is_blog_editor()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1 from public.users_profile
+    where id = auth.uid() and role in ('admin', 'editor')
   );
 $function$
 ;
@@ -3630,6 +4217,20 @@ begin
 
   return 'reluat';
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.redactorii_blogului()
+ RETURNS TABLE(id uuid, full_name text, email text, role text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'auth', 'pg_temp'
+AS $function$
+  select p.id, p.full_name, u.email::text, p.role
+  from public.users_profile p
+  join auth.users u on u.id = p.id
+  where p.role in ('admin', 'editor')
+  order by p.role, p.full_name;
 $function$
 ;
 
@@ -4806,6 +5407,34 @@ begin
 end; $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.unaccent(regdictionary, text)
+ RETURNS text
+ LANGUAGE c
+ STABLE PARALLEL SAFE STRICT
+AS '$libdir/unaccent', $function$unaccent_dict$function$
+;
+
+CREATE OR REPLACE FUNCTION public.unaccent(text)
+ RETURNS text
+ LANGUAGE c
+ STABLE PARALLEL SAFE STRICT
+AS '$libdir/unaccent', $function$unaccent_dict$function$
+;
+
+CREATE OR REPLACE FUNCTION public.unaccent_init(internal)
+ RETURNS internal
+ LANGUAGE c
+ PARALLEL SAFE
+AS '$libdir/unaccent', $function$unaccent_init$function$
+;
+
+CREATE OR REPLACE FUNCTION public.unaccent_lexize(internal, internal, internal, internal)
+ RETURNS internal
+ LANGUAGE c
+ PARALLEL SAFE
+AS '$libdir/unaccent', $function$unaccent_lexize$function$
+;
+
 CREATE OR REPLACE FUNCTION public.update_domain_orders_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -5218,6 +5847,100 @@ create table if not exists public.announcements (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   created_by uuid);
+
+create table if not exists public.blog_authors (
+  id uuid default gen_random_uuid() not null,
+  user_id uuid,
+  slug text not null,
+  name text not null,
+  role_title text,
+  bio text,
+  avatar_url text,
+  sameas text[] default '{}'::text[] not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.blog_categories (
+  id uuid default gen_random_uuid() not null,
+  slug text not null,
+  name text not null,
+  description text,
+  seo_title text,
+  seo_description text,
+  sort_order integer default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.blog_post_revisions (
+  id uuid default gen_random_uuid() not null,
+  post_id uuid not null,
+  title text,
+  content_html text,
+  saved_by uuid,
+  created_at timestamp with time zone default now() not null);
+
+create table if not exists public.blog_post_stats (
+  post_id uuid not null,
+  views bigint default 0 not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.blog_post_tags (
+  post_id uuid not null,
+  tag_id uuid not null);
+
+create table if not exists public.blog_posts (
+  id uuid default gen_random_uuid() not null,
+  slug text not null,
+  title text not null,
+  excerpt text,
+  answer_summary text,
+  content_html text default ''::text not null,
+  cover_url text,
+  cover_alt text,
+  og_image_url text,
+  author_id uuid,
+  category_id uuid,
+  status text default 'draft'::text not null,
+  published_at timestamp with time zone,
+  is_featured boolean default false not null,
+  faq jsonb default '[]'::jsonb not null,
+  seo_title text,
+  seo_description text,
+  canonical_url text,
+  noindex boolean default false not null,
+  reading_minutes integer,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  cauta text generated always as (lower(fara_diacritice(((((((COALESCE(title, ''::text) || ' '::text) || COALESCE(excerpt, ''::text)) || ' '::text) || COALESCE(answer_summary, ''::text)) || ' '::text) || regexp_replace(COALESCE(content_html, ''::text), '<[^>]+>'::text, ' '::text, 'g'::text))))) stored,
+  is_pinned boolean default false not null,
+  cta jsonb,
+  edit_version bigint default 1 not null,
+  content_updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.blog_redirects (
+  id uuid default gen_random_uuid() not null,
+  from_slug text not null,
+  to_slug text not null,
+  created_at timestamp with time zone default now() not null,
+  fel text default 'articol'::text not null);
+
+create table if not exists public.blog_subscribers (
+  id uuid default gen_random_uuid() not null,
+  email text not null,
+  source text,
+  confirmed_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  confirmed_ip text,
+  unsubscribed_at timestamp with time zone,
+  token_hash text,
+  token_expires_at timestamp with time zone,
+  unsub_token text);
+
+create table if not exists public.blog_tags (
+  id uuid default gen_random_uuid() not null,
+  slug text not null,
+  name text not null,
+  created_at timestamp with time zone default now() not null);
 
 create table if not exists public.brevo_suppressions (
   id uuid default gen_random_uuid() not null,
@@ -6447,6 +7170,15 @@ alter table public.aboutyou_veghe add constraint aboutyou_veghe_pkey PRIMARY KEY
 alter table public.aboutyou_webhook_inbox add constraint aboutyou_webhook_inbox_pkey PRIMARY KEY (id);
 alter table public.admin_audit_log add constraint admin_audit_log_pkey PRIMARY KEY (id);
 alter table public.announcements add constraint announcements_pkey PRIMARY KEY (id);
+alter table public.blog_authors add constraint blog_authors_pkey PRIMARY KEY (id);
+alter table public.blog_categories add constraint blog_categories_pkey PRIMARY KEY (id);
+alter table public.blog_post_revisions add constraint blog_post_revisions_pkey PRIMARY KEY (id);
+alter table public.blog_post_stats add constraint blog_post_stats_pkey PRIMARY KEY (post_id);
+alter table public.blog_post_tags add constraint blog_post_tags_pkey PRIMARY KEY (post_id, tag_id);
+alter table public.blog_posts add constraint blog_posts_pkey PRIMARY KEY (id);
+alter table public.blog_redirects add constraint blog_redirects_pkey PRIMARY KEY (id);
+alter table public.blog_subscribers add constraint blog_subscribers_pkey PRIMARY KEY (id);
+alter table public.blog_tags add constraint blog_tags_pkey PRIMARY KEY (id);
 alter table public.brevo_suppressions add constraint brevo_suppressions_pkey PRIMARY KEY (id);
 alter table public.business_daily_stats add constraint business_daily_stats_pkey PRIMARY KEY (business_id, zi, event_type, device, source);
 alter table public.businesses add constraint businesses_pkey PRIMARY KEY (id);
@@ -6525,6 +7257,11 @@ alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_busine
 alter table public.aboutyou_variants add constraint aboutyou_variants_business_id_sku_key UNIQUE (business_id, sku);
 alter table public.aboutyou_veghe add constraint aboutyou_veghe_business_id_style_key_key UNIQUE (business_id, style_key);
 alter table public.aboutyou_webhook_inbox add constraint aboutyou_webhook_inbox_business_id_event_id_key UNIQUE (business_id, event_id);
+alter table public.blog_authors add constraint blog_authors_slug_key UNIQUE (slug);
+alter table public.blog_categories add constraint blog_categories_slug_key UNIQUE (slug);
+alter table public.blog_posts add constraint blog_posts_slug_key UNIQUE (slug);
+alter table public.blog_subscribers add constraint blog_subscribers_email_key UNIQUE (email);
+alter table public.blog_tags add constraint blog_tags_slug_key UNIQUE (slug);
 alter table public.brevo_suppressions add constraint brevo_suppressions_business_id_email_key UNIQUE (business_id, email);
 alter table public.businesses add constraint businesses_custom_domain_key UNIQUE (custom_domain);
 alter table public.businesses add constraint businesses_slug_key UNIQUE (slug);
@@ -6557,6 +7294,16 @@ alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_status_c
 alter table public.aboutyou_intentii add constraint aboutyou_intentii_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'stock'::text, 'price'::text])));
 alter table public.aboutyou_intentii add constraint aboutyou_intentii_status_check CHECK ((status = ANY (ARRAY['deschis'::text, 'abandonat'::text])));
 alter table public.aboutyou_sync_queue add constraint aboutyou_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'publish'::text, 'stock'::text, 'price'::text, 'ship'::text, 'status'::text])));
+alter table public.blog_authors add constraint blog_authors_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
+alter table public.blog_categories add constraint blog_categories_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
+alter table public.blog_posts add constraint blog_posts_cta_is_object CHECK (((cta IS NULL) OR (jsonb_typeof(cta) = 'object'::text)));
+alter table public.blog_posts add constraint blog_posts_faq_is_list CHECK ((jsonb_typeof(faq) = 'array'::text));
+alter table public.blog_posts add constraint blog_posts_published_has_date CHECK (((status <> 'published'::text) OR (published_at IS NOT NULL)));
+alter table public.blog_posts add constraint blog_posts_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
+alter table public.blog_posts add constraint blog_posts_status_known CHECK ((status = ANY (ARRAY['draft'::text, 'review'::text, 'published'::text, 'archived'::text])));
+alter table public.blog_redirects add constraint blog_redirects_fel_check CHECK ((fel = ANY (ARRAY['articol'::text, 'categorie'::text, 'autor'::text])));
+alter table public.blog_redirects add constraint blog_redirects_not_circular CHECK ((from_slug <> to_slug));
+alter table public.blog_tags add constraint blog_tags_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
@@ -6589,7 +7336,7 @@ alter table public.trendyol_listings add constraint trendyol_listings_origin_chk
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'inventory'::text, 'livrare'::text])));
 alter table public.users_profile add constraint users_profile_plan_check CHECK ((plan = ANY (ARRAY['free'::text, 'basic'::text, 'premium'::text, 'ultra'::text])));
 alter table public.users_profile add constraint users_profile_plan_interval_check CHECK (((plan_interval IS NULL) OR (plan_interval = ANY (ARRAY['monthly'::text, 'annual'::text]))));
-alter table public.users_profile add constraint users_profile_role_check CHECK ((role = ANY (ARRAY['user'::text, 'admin'::text, 'moderator'::text])));
+alter table public.users_profile add constraint users_profile_role_check CHECK ((role = ANY (ARRAY['user'::text, 'admin'::text, 'moderator'::text, 'editor'::text])));
 alter table privat.store_settings add constraint store_settings_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.abandoned_carts add constraint abandoned_carts_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.abandoned_carts add constraint abandoned_carts_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
@@ -6608,6 +7355,14 @@ alter table public.aboutyou_variants add constraint aboutyou_variants_listing_id
 alter table public.aboutyou_variants add constraint aboutyou_variants_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.admin_audit_log add constraint admin_audit_log_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.announcements add constraint announcements_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.blog_authors add constraint blog_authors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.blog_post_revisions add constraint blog_post_revisions_post_id_fkey FOREIGN KEY (post_id) REFERENCES blog_posts(id) ON DELETE CASCADE;
+alter table public.blog_post_revisions add constraint blog_post_revisions_saved_by_fkey FOREIGN KEY (saved_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.blog_post_stats add constraint blog_post_stats_post_id_fkey FOREIGN KEY (post_id) REFERENCES blog_posts(id) ON DELETE CASCADE;
+alter table public.blog_post_tags add constraint blog_post_tags_post_id_fkey FOREIGN KEY (post_id) REFERENCES blog_posts(id) ON DELETE CASCADE;
+alter table public.blog_post_tags add constraint blog_post_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES blog_tags(id) ON DELETE CASCADE;
+alter table public.blog_posts add constraint blog_posts_author_id_fkey FOREIGN KEY (author_id) REFERENCES blog_authors(id) ON DELETE SET NULL;
+alter table public.blog_posts add constraint blog_posts_category_id_fkey FOREIGN KEY (category_id) REFERENCES blog_categories(id) ON DELETE SET NULL;
 alter table public.brevo_suppressions add constraint brevo_suppressions_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.business_daily_stats add constraint business_daily_stats_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.businesses add constraint businesses_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -6799,6 +7554,18 @@ CREATE INDEX aboutyou_veghe_scadente_idx ON public.aboutyou_veghe USING btree (u
 CREATE INDEX aboutyou_webhook_inbox_neprelucrate_idx ON public.aboutyou_webhook_inbox USING btree (business_id, primit_la) WHERE (prelucrat_la IS NULL);
 CREATE INDEX announcements_feed_idx ON public.announcements USING btree (is_published, is_pinned DESC, published_at DESC);
 CREATE INDEX bds_biz_zi ON public.business_daily_stats USING btree (business_id, zi DESC);
+CREATE UNIQUE INDEX blog_authors_un_cont ON public.blog_authors USING btree (user_id) WHERE (user_id IS NOT NULL);
+CREATE INDEX blog_post_revisions_post_idx ON public.blog_post_revisions USING btree (post_id, created_at DESC);
+CREATE INDEX blog_posts_author_idx ON public.blog_posts USING btree (author_id);
+CREATE INDEX blog_posts_category_idx ON public.blog_posts USING btree (category_id);
+CREATE INDEX blog_posts_cauta_idx ON public.blog_posts USING gin (cauta extensions.gin_trgm_ops);
+CREATE UNIQUE INDEX blog_posts_o_singura_vitrina ON public.blog_posts USING btree ((true)) WHERE is_featured;
+CREATE INDEX blog_posts_ordine_publica_idx ON public.blog_posts USING btree (is_pinned DESC, published_at DESC NULLS LAST) WHERE (status = 'published'::text);
+CREATE INDEX blog_posts_public_order_idx ON public.blog_posts USING btree (status, published_at DESC NULLS LAST);
+CREATE UNIQUE INDEX blog_redirects_fel_from ON public.blog_redirects USING btree (fel, from_slug);
+CREATE INDEX blog_subscribers_confirmed_idx ON public.blog_subscribers USING btree (confirmed_at) WHERE (confirmed_at IS NOT NULL);
+CREATE INDEX blog_subscribers_token_hash ON public.blog_subscribers USING btree (token_hash) WHERE (token_hash IS NOT NULL);
+CREATE UNIQUE INDEX blog_subscribers_unsub_token ON public.blog_subscribers USING btree (unsub_token) WHERE (unsub_token IS NOT NULL);
 CREATE INDEX brevo_suppressions_business_email_idx ON public.brevo_suppressions USING btree (business_id, email);
 CREATE INDEX catalog_index_cuvant_product_id_idx ON public.catalog_index_cuvant USING btree (product_id);
 CREATE INDEX categories_business_id_idx ON public.categories USING btree (business_id);
@@ -7082,6 +7849,11 @@ CREATE TRIGGER aboutyou_marcheaza_listarea AFTER UPDATE OF brand_id, category_id
 CREATE TRIGGER trg_aboutyou_marcheaza_aprobarea BEFORE INSERT OR UPDATE ON public.aboutyou_listings FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_aprobarea();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.aboutyou_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER aboutyou_marcheaza_varianta AFTER INSERT OR UPDATE OF sku, ean, size_id, second_size_id, color_id, quantity, retail_price_eur, sale_price_eur, enabled ON public.aboutyou_variants FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_varianta();
+CREATE TRIGGER blog_authors_touch BEFORE UPDATE ON public.blog_authors FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER blog_categories_touch BEFORE UPDATE ON public.blog_categories FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER blog_posts_continut BEFORE UPDATE ON public.blog_posts FOR EACH ROW EXECUTE FUNCTION blog_continut_atins();
+CREATE TRIGGER blog_posts_o_singura_vitrina BEFORE INSERT OR UPDATE OF is_featured ON public.blog_posts FOR EACH ROW WHEN (new.is_featured) EXECUTE FUNCTION blog_o_singura_vitrina();
+CREATE TRIGGER blog_posts_touch BEFORE UPDATE ON public.blog_posts FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER businesses_blocheaza_domeniu_platforma BEFORE INSERT OR UPDATE OF custom_domain ON public.businesses FOR EACH ROW EXECUTE FUNCTION blocheaza_domeniu_platforma();
 CREATE TRIGGER set_businesses_updated_at BEFORE UPDATE ON public.businesses FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER catalog_produs_cuvinte AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_cuvinte_murdar();
@@ -7129,6 +7901,15 @@ alter table public.aboutyou_veghe enable row level security;
 alter table public.aboutyou_webhook_inbox enable row level security;
 alter table public.admin_audit_log enable row level security;
 alter table public.announcements enable row level security;
+alter table public.blog_authors enable row level security;
+alter table public.blog_categories enable row level security;
+alter table public.blog_post_revisions enable row level security;
+alter table public.blog_post_stats enable row level security;
+alter table public.blog_post_tags enable row level security;
+alter table public.blog_posts enable row level security;
+alter table public.blog_redirects enable row level security;
+alter table public.blog_subscribers enable row level security;
+alter table public.blog_tags enable row level security;
 alter table public.brevo_suppressions enable row level security;
 alter table public.business_daily_stats enable row level security;
 alter table public.businesses enable row level security;
@@ -7260,6 +8041,36 @@ create policy owner_select_aboutyou_webhook_inbox on public.aboutyou_webhook_inb
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Admins manage announcements" on public.announcements as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
 create policy "Read published announcements" on public.announcements as PERMISSIVE for SELECT to authenticated using (((is_published = true) OR is_admin()));
+create policy blog_authors_admin_all on public.blog_authors as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_authors_public_read on public.blog_authors as PERMISSIVE for SELECT to anon, authenticated using (true);
+create policy blog_categories_admin_all on public.blog_categories as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_categories_public_read on public.blog_categories as PERMISSIVE for SELECT to anon, authenticated using (true);
+create policy blog_post_revisions_admin_all on public.blog_post_revisions as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_post_revisions_editor_read on public.blog_post_revisions as PERMISSIVE for SELECT to authenticated using (is_blog_editor());
+create policy blog_post_stats_editor_read on public.blog_post_stats as PERMISSIVE for SELECT to authenticated using (is_blog_editor());
+create policy blog_post_tags_admin_all on public.blog_post_tags as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_post_tags_editor_delete on public.blog_post_tags as PERMISSIVE for DELETE to authenticated using ((is_blog_editor() AND (EXISTS ( SELECT 1
+   FROM blog_posts p
+  WHERE ((p.id = blog_post_tags.post_id) AND (p.status = ANY (ARRAY['draft'::text, 'review'::text])))))));
+create policy blog_post_tags_editor_insert on public.blog_post_tags as PERMISSIVE for INSERT to authenticated with check ((is_blog_editor() AND (EXISTS ( SELECT 1
+   FROM blog_posts p
+  WHERE ((p.id = blog_post_tags.post_id) AND (p.status = ANY (ARRAY['draft'::text, 'review'::text])))))));
+create policy blog_post_tags_editor_read on public.blog_post_tags as PERMISSIVE for SELECT to authenticated using (is_blog_editor());
+create policy blog_post_tags_public_read on public.blog_post_tags as PERMISSIVE for SELECT to anon, authenticated using ((EXISTS ( SELECT 1
+   FROM blog_posts p
+  WHERE ((p.id = blog_post_tags.post_id) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))));
+create policy blog_posts_admin_all on public.blog_posts as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_posts_editor_delete on public.blog_posts as PERMISSIVE for DELETE to authenticated using ((is_blog_editor() AND (status = 'draft'::text)));
+create policy blog_posts_editor_insert on public.blog_posts as PERMISSIVE for INSERT to authenticated with check ((is_blog_editor() AND (status = ANY (ARRAY['draft'::text, 'review'::text]))));
+create policy blog_posts_editor_read on public.blog_posts as PERMISSIVE for SELECT to authenticated using (is_blog_editor());
+create policy blog_posts_editor_update on public.blog_posts as PERMISSIVE for UPDATE to authenticated using ((is_blog_editor() AND (status = ANY (ARRAY['draft'::text, 'review'::text])))) with check ((is_blog_editor() AND (status = ANY (ARRAY['draft'::text, 'review'::text]))));
+create policy blog_posts_public_read on public.blog_posts as PERMISSIVE for SELECT to anon, authenticated using (((status = 'published'::text) AND (published_at IS NOT NULL) AND (published_at <= now())));
+create policy blog_redirects_admin_all on public.blog_redirects as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_redirects_public_read on public.blog_redirects as PERMISSIVE for SELECT to anon, authenticated using (true);
+create policy blog_subscribers_admin_all on public.blog_subscribers as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_tags_admin_all on public.blog_tags as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
+create policy blog_tags_editor_write on public.blog_tags as PERMISSIVE for INSERT to authenticated with check (is_blog_editor());
+create policy blog_tags_public_read on public.blog_tags as PERMISSIVE for SELECT to anon, authenticated using (true);
 create policy "Owners read own brevo suppressions" on public.brevo_suppressions as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = brevo_suppressions.business_id) AND (b.user_id = auth.uid())))));
@@ -7835,6 +8646,186 @@ grant SELECT on table public.announcements to service_role;
 grant TRIGGER on table public.announcements to service_role;
 grant TRUNCATE on table public.announcements to service_role;
 grant UPDATE on table public.announcements to service_role;
+grant DELETE on table public.blog_authors to anon;
+grant INSERT on table public.blog_authors to anon;
+grant REFERENCES on table public.blog_authors to anon;
+grant TRIGGER on table public.blog_authors to anon;
+grant TRUNCATE on table public.blog_authors to anon;
+grant UPDATE on table public.blog_authors to anon;
+grant DELETE on table public.blog_authors to authenticated;
+grant INSERT on table public.blog_authors to authenticated;
+grant REFERENCES on table public.blog_authors to authenticated;
+grant SELECT on table public.blog_authors to authenticated;
+grant TRIGGER on table public.blog_authors to authenticated;
+grant TRUNCATE on table public.blog_authors to authenticated;
+grant UPDATE on table public.blog_authors to authenticated;
+grant DELETE on table public.blog_authors to service_role;
+grant INSERT on table public.blog_authors to service_role;
+grant REFERENCES on table public.blog_authors to service_role;
+grant SELECT on table public.blog_authors to service_role;
+grant TRIGGER on table public.blog_authors to service_role;
+grant TRUNCATE on table public.blog_authors to service_role;
+grant UPDATE on table public.blog_authors to service_role;
+grant DELETE on table public.blog_categories to anon;
+grant INSERT on table public.blog_categories to anon;
+grant REFERENCES on table public.blog_categories to anon;
+grant SELECT on table public.blog_categories to anon;
+grant TRIGGER on table public.blog_categories to anon;
+grant TRUNCATE on table public.blog_categories to anon;
+grant UPDATE on table public.blog_categories to anon;
+grant DELETE on table public.blog_categories to authenticated;
+grant INSERT on table public.blog_categories to authenticated;
+grant REFERENCES on table public.blog_categories to authenticated;
+grant SELECT on table public.blog_categories to authenticated;
+grant TRIGGER on table public.blog_categories to authenticated;
+grant TRUNCATE on table public.blog_categories to authenticated;
+grant UPDATE on table public.blog_categories to authenticated;
+grant DELETE on table public.blog_categories to service_role;
+grant INSERT on table public.blog_categories to service_role;
+grant REFERENCES on table public.blog_categories to service_role;
+grant SELECT on table public.blog_categories to service_role;
+grant TRIGGER on table public.blog_categories to service_role;
+grant TRUNCATE on table public.blog_categories to service_role;
+grant UPDATE on table public.blog_categories to service_role;
+grant DELETE on table public.blog_post_revisions to anon;
+grant INSERT on table public.blog_post_revisions to anon;
+grant REFERENCES on table public.blog_post_revisions to anon;
+grant SELECT on table public.blog_post_revisions to anon;
+grant TRIGGER on table public.blog_post_revisions to anon;
+grant TRUNCATE on table public.blog_post_revisions to anon;
+grant UPDATE on table public.blog_post_revisions to anon;
+grant DELETE on table public.blog_post_revisions to authenticated;
+grant INSERT on table public.blog_post_revisions to authenticated;
+grant REFERENCES on table public.blog_post_revisions to authenticated;
+grant SELECT on table public.blog_post_revisions to authenticated;
+grant TRIGGER on table public.blog_post_revisions to authenticated;
+grant TRUNCATE on table public.blog_post_revisions to authenticated;
+grant UPDATE on table public.blog_post_revisions to authenticated;
+grant DELETE on table public.blog_post_revisions to service_role;
+grant INSERT on table public.blog_post_revisions to service_role;
+grant REFERENCES on table public.blog_post_revisions to service_role;
+grant SELECT on table public.blog_post_revisions to service_role;
+grant TRIGGER on table public.blog_post_revisions to service_role;
+grant TRUNCATE on table public.blog_post_revisions to service_role;
+grant UPDATE on table public.blog_post_revisions to service_role;
+grant REFERENCES on table public.blog_post_stats to anon;
+grant SELECT on table public.blog_post_stats to anon;
+grant TRIGGER on table public.blog_post_stats to anon;
+grant REFERENCES on table public.blog_post_stats to authenticated;
+grant SELECT on table public.blog_post_stats to authenticated;
+grant TRIGGER on table public.blog_post_stats to authenticated;
+grant DELETE on table public.blog_post_stats to service_role;
+grant INSERT on table public.blog_post_stats to service_role;
+grant REFERENCES on table public.blog_post_stats to service_role;
+grant SELECT on table public.blog_post_stats to service_role;
+grant TRIGGER on table public.blog_post_stats to service_role;
+grant TRUNCATE on table public.blog_post_stats to service_role;
+grant UPDATE on table public.blog_post_stats to service_role;
+grant DELETE on table public.blog_post_tags to anon;
+grant INSERT on table public.blog_post_tags to anon;
+grant REFERENCES on table public.blog_post_tags to anon;
+grant SELECT on table public.blog_post_tags to anon;
+grant TRIGGER on table public.blog_post_tags to anon;
+grant TRUNCATE on table public.blog_post_tags to anon;
+grant UPDATE on table public.blog_post_tags to anon;
+grant DELETE on table public.blog_post_tags to authenticated;
+grant INSERT on table public.blog_post_tags to authenticated;
+grant REFERENCES on table public.blog_post_tags to authenticated;
+grant SELECT on table public.blog_post_tags to authenticated;
+grant TRIGGER on table public.blog_post_tags to authenticated;
+grant TRUNCATE on table public.blog_post_tags to authenticated;
+grant UPDATE on table public.blog_post_tags to authenticated;
+grant DELETE on table public.blog_post_tags to service_role;
+grant INSERT on table public.blog_post_tags to service_role;
+grant REFERENCES on table public.blog_post_tags to service_role;
+grant SELECT on table public.blog_post_tags to service_role;
+grant TRIGGER on table public.blog_post_tags to service_role;
+grant TRUNCATE on table public.blog_post_tags to service_role;
+grant UPDATE on table public.blog_post_tags to service_role;
+grant DELETE on table public.blog_posts to anon;
+grant INSERT on table public.blog_posts to anon;
+grant REFERENCES on table public.blog_posts to anon;
+grant SELECT on table public.blog_posts to anon;
+grant TRIGGER on table public.blog_posts to anon;
+grant TRUNCATE on table public.blog_posts to anon;
+grant UPDATE on table public.blog_posts to anon;
+grant DELETE on table public.blog_posts to authenticated;
+grant INSERT on table public.blog_posts to authenticated;
+grant REFERENCES on table public.blog_posts to authenticated;
+grant SELECT on table public.blog_posts to authenticated;
+grant TRIGGER on table public.blog_posts to authenticated;
+grant TRUNCATE on table public.blog_posts to authenticated;
+grant UPDATE on table public.blog_posts to authenticated;
+grant DELETE on table public.blog_posts to service_role;
+grant INSERT on table public.blog_posts to service_role;
+grant REFERENCES on table public.blog_posts to service_role;
+grant SELECT on table public.blog_posts to service_role;
+grant TRIGGER on table public.blog_posts to service_role;
+grant TRUNCATE on table public.blog_posts to service_role;
+grant UPDATE on table public.blog_posts to service_role;
+grant DELETE on table public.blog_redirects to anon;
+grant INSERT on table public.blog_redirects to anon;
+grant REFERENCES on table public.blog_redirects to anon;
+grant SELECT on table public.blog_redirects to anon;
+grant TRIGGER on table public.blog_redirects to anon;
+grant TRUNCATE on table public.blog_redirects to anon;
+grant UPDATE on table public.blog_redirects to anon;
+grant DELETE on table public.blog_redirects to authenticated;
+grant INSERT on table public.blog_redirects to authenticated;
+grant REFERENCES on table public.blog_redirects to authenticated;
+grant SELECT on table public.blog_redirects to authenticated;
+grant TRIGGER on table public.blog_redirects to authenticated;
+grant TRUNCATE on table public.blog_redirects to authenticated;
+grant UPDATE on table public.blog_redirects to authenticated;
+grant DELETE on table public.blog_redirects to service_role;
+grant INSERT on table public.blog_redirects to service_role;
+grant REFERENCES on table public.blog_redirects to service_role;
+grant SELECT on table public.blog_redirects to service_role;
+grant TRIGGER on table public.blog_redirects to service_role;
+grant TRUNCATE on table public.blog_redirects to service_role;
+grant UPDATE on table public.blog_redirects to service_role;
+grant DELETE on table public.blog_subscribers to anon;
+grant INSERT on table public.blog_subscribers to anon;
+grant REFERENCES on table public.blog_subscribers to anon;
+grant SELECT on table public.blog_subscribers to anon;
+grant TRIGGER on table public.blog_subscribers to anon;
+grant TRUNCATE on table public.blog_subscribers to anon;
+grant UPDATE on table public.blog_subscribers to anon;
+grant DELETE on table public.blog_subscribers to authenticated;
+grant INSERT on table public.blog_subscribers to authenticated;
+grant REFERENCES on table public.blog_subscribers to authenticated;
+grant SELECT on table public.blog_subscribers to authenticated;
+grant TRIGGER on table public.blog_subscribers to authenticated;
+grant TRUNCATE on table public.blog_subscribers to authenticated;
+grant UPDATE on table public.blog_subscribers to authenticated;
+grant DELETE on table public.blog_subscribers to service_role;
+grant INSERT on table public.blog_subscribers to service_role;
+grant REFERENCES on table public.blog_subscribers to service_role;
+grant SELECT on table public.blog_subscribers to service_role;
+grant TRIGGER on table public.blog_subscribers to service_role;
+grant TRUNCATE on table public.blog_subscribers to service_role;
+grant UPDATE on table public.blog_subscribers to service_role;
+grant DELETE on table public.blog_tags to anon;
+grant INSERT on table public.blog_tags to anon;
+grant REFERENCES on table public.blog_tags to anon;
+grant SELECT on table public.blog_tags to anon;
+grant TRIGGER on table public.blog_tags to anon;
+grant TRUNCATE on table public.blog_tags to anon;
+grant UPDATE on table public.blog_tags to anon;
+grant DELETE on table public.blog_tags to authenticated;
+grant INSERT on table public.blog_tags to authenticated;
+grant REFERENCES on table public.blog_tags to authenticated;
+grant SELECT on table public.blog_tags to authenticated;
+grant TRIGGER on table public.blog_tags to authenticated;
+grant TRUNCATE on table public.blog_tags to authenticated;
+grant UPDATE on table public.blog_tags to authenticated;
+grant DELETE on table public.blog_tags to service_role;
+grant INSERT on table public.blog_tags to service_role;
+grant REFERENCES on table public.blog_tags to service_role;
+grant SELECT on table public.blog_tags to service_role;
+grant TRIGGER on table public.blog_tags to service_role;
+grant TRUNCATE on table public.blog_tags to service_role;
+grant UPDATE on table public.blog_tags to service_role;
 grant DELETE on table public.brevo_suppressions to anon;
 grant INSERT on table public.brevo_suppressions to anon;
 grant REFERENCES on table public.brevo_suppressions to anon;
@@ -9317,6 +10308,15 @@ grant TRUNCATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to
 grant UPDATE on table public.zz_backup_preturi_vetdepo_hrana_caini_20260903 to service_role;
 
 -- ── GRANTURI PE COLOANA (RLS verifica RANDURI, nu COLOANE) ─
+grant SELECT (avatar_url) on table public.blog_authors to anon;
+grant SELECT (bio) on table public.blog_authors to anon;
+grant SELECT (created_at) on table public.blog_authors to anon;
+grant SELECT (id) on table public.blog_authors to anon;
+grant SELECT (name) on table public.blog_authors to anon;
+grant SELECT (role_title) on table public.blog_authors to anon;
+grant SELECT (sameas) on table public.blog_authors to anon;
+grant SELECT (slug) on table public.blog_authors to anon;
+grant SELECT (updated_at) on table public.blog_authors to anon;
 grant SELECT (address) on table public.businesses to anon;
 grant UPDATE (address) on table public.businesses to authenticated;
 grant SELECT (business_name) on table public.businesses to anon;
@@ -9436,6 +10436,32 @@ grant execute on function public.blocheaza_domeniu_platforma() to service_role;
 grant execute on function public.blocheaza_escaladare_users_profile() to anon;
 grant execute on function public.blocheaza_escaladare_users_profile() to authenticated;
 grant execute on function public.blocheaza_escaladare_users_profile() to service_role;
+grant execute on function public.blog_actualizeaza_taxonomia(p_fel text, p_id uuid, p_rand jsonb) to service_role;
+grant execute on function public.blog_anuleaza_confirmare(p_email text, p_token_hash text) to service_role;
+grant execute on function public.blog_articole_admin(p_de_la integer, p_cate integer, p_cauta text, p_stare text) to service_role;
+grant execute on function public.blog_categorii_folosite() to anon;
+grant execute on function public.blog_categorii_folosite() to authenticated;
+grant execute on function public.blog_categorii_folosite() to service_role;
+grant execute on function public.blog_cere_confirmare(p_email text, p_token_hash text, p_expira_la timestamp with time zone, p_sursa text) to service_role;
+grant execute on function public.blog_confirma(p_token_hash text, p_ip text) to service_role;
+grant execute on function public.blog_continut_atins() to anon;
+grant execute on function public.blog_continut_atins() to authenticated;
+grant execute on function public.blog_continut_atins() to service_role;
+grant execute on function public.blog_creeaza_articol(p_rand jsonb, p_etichete jsonb) to service_role;
+grant execute on function public.blog_creste_citirile(p_slug text) to service_role;
+grant execute on function public.blog_dezaboneaza(p_unsub_token text) to service_role;
+grant execute on function public.blog_etichete_admin() to service_role;
+grant execute on function public.blog_etichete_folosite() to anon;
+grant execute on function public.blog_etichete_folosite() to authenticated;
+grant execute on function public.blog_etichete_folosite() to service_role;
+grant execute on function public.blog_muta_taxonomia(p_fel text, p_slug_vechi text, p_slug_nou text) to service_role;
+grant execute on function public.blog_o_singura_vitrina() to service_role;
+grant execute on function public.blog_salveaza_articol(p_id uuid, p_rand jsonb, p_etichete jsonb, p_salvat_de uuid, p_versiuni integer, p_versiune_asteptata bigint, p_creeaza_versiune boolean) to service_role;
+grant execute on function public.blog_sterge_articol(p_id uuid) to service_role;
+grant execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) to service_role;
+grant execute on function public.blog_subiectele_autorului(p_autor uuid) to anon;
+grant execute on function public.blog_subiectele_autorului(p_autor uuid) to authenticated;
+grant execute on function public.blog_subiectele_autorului(p_autor uuid) to service_role;
 grant execute on function public.catalog_aplica_proiectii(p_randuri jsonb) to service_role;
 grant execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) to service_role;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to anon;
@@ -9457,6 +10483,7 @@ grant execute on function public.claim_discount_use(p_discount_id uuid) to servi
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) to service_role;
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
+grant execute on function public.cont_dupa_email(p_email text) to service_role;
 grant execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) to service_role;
 grant execute on function public.curata_limite() to service_role;
 grant execute on function public.curata_ritm_extern() to service_role;
@@ -9483,6 +10510,8 @@ grant execute on function public.emag_oferte_legate_stramb(p_business_id uuid, p
 grant execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) to service_role;
 grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
 grant execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) to service_role;
+grant execute on function public.fara_diacritice(t text) to authenticated;
+grant execute on function public.fara_diacritice(t text) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
 grant execute on function public.handle_new_user() to service_role;
 grant execute on function public.handle_support_message_insert() to service_role;
@@ -9501,6 +10530,8 @@ grant execute on function public.increment_tool_views(tool_id uuid) to service_r
 grant execute on function public.is_admin() to anon;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.is_admin() to service_role;
+grant execute on function public.is_blog_editor() to authenticated;
+grant execute on function public.is_blog_editor() to service_role;
 grant execute on function public.jsonb_merge_config(p_business_id uuid, p_column text, p_patch jsonb) to service_role;
 grant execute on function public.marcheaza_operatie_anulata(p_business_id uuid, p_cheie text) to service_role;
 grant execute on function public.mark_payout_complete(p_user_id uuid, p_amount integer) to service_role;
@@ -9535,6 +10566,7 @@ grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
 grant execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
+grant execute on function public.redactorii_blogului() to service_role;
 grant execute on function public.release_discount_use(p_discount_id uuid) to service_role;
 grant execute on function public.release_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.repretuieste_pachetele_cu(p_component_id uuid) to service_role;
@@ -9581,6 +10613,18 @@ grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
+grant execute on function public.unaccent(text) to anon;
+grant execute on function public.unaccent(regdictionary, text) to anon;
+grant execute on function public.unaccent(regdictionary, text) to authenticated;
+grant execute on function public.unaccent(text) to authenticated;
+grant execute on function public.unaccent(text) to service_role;
+grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent_init(internal) to anon;
+grant execute on function public.unaccent_init(internal) to authenticated;
+grant execute on function public.unaccent_init(internal) to service_role;
+grant execute on function public.unaccent_lexize(internal, internal, internal, internal) to anon;
+grant execute on function public.unaccent_lexize(internal, internal, internal, internal) to authenticated;
+grant execute on function public.unaccent_lexize(internal, internal, internal, internal) to service_role;
 grant execute on function public.update_domain_orders_updated_at() to anon;
 grant execute on function public.update_domain_orders_updated_at() to authenticated;
 grant execute on function public.update_domain_orders_updated_at() to service_role;
@@ -9618,6 +10662,20 @@ revoke execute on function public.agregeaza_analitice(p_zile integer) from publi
 revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid, p_elibereaza_stoc boolean) from public;
 revoke execute on function public.blocheaza_escaladare_users_profile() from public;
+revoke execute on function public.blog_actualizeaza_taxonomia(p_fel text, p_id uuid, p_rand jsonb) from public;
+revoke execute on function public.blog_anuleaza_confirmare(p_email text, p_token_hash text) from public;
+revoke execute on function public.blog_articole_admin(p_de_la integer, p_cate integer, p_cauta text, p_stare text) from public;
+revoke execute on function public.blog_cere_confirmare(p_email text, p_token_hash text, p_expira_la timestamp with time zone, p_sursa text) from public;
+revoke execute on function public.blog_confirma(p_token_hash text, p_ip text) from public;
+revoke execute on function public.blog_creeaza_articol(p_rand jsonb, p_etichete jsonb) from public;
+revoke execute on function public.blog_creste_citirile(p_slug text) from public;
+revoke execute on function public.blog_dezaboneaza(p_unsub_token text) from public;
+revoke execute on function public.blog_etichete_admin() from public;
+revoke execute on function public.blog_muta_taxonomia(p_fel text, p_slug_vechi text, p_slug_nou text) from public;
+revoke execute on function public.blog_o_singura_vitrina() from public;
+revoke execute on function public.blog_salveaza_articol(p_id uuid, p_rand jsonb, p_etichete jsonb, p_salvat_de uuid, p_versiuni integer, p_versiune_asteptata bigint, p_creeaza_versiune boolean) from public;
+revoke execute on function public.blog_sterge_articol(p_id uuid) from public;
+revoke execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) from public;
 revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;
 revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
@@ -9633,6 +10691,7 @@ revoke execute on function public.claim_discount_use(p_discount_id uuid) from pu
 revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) from public;
 revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.cont_dupa_email(p_email text) from public;
 revoke execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) from public;
 revoke execute on function public.curata_limite() from public;
 revoke execute on function public.curata_ritm_extern() from public;
@@ -9650,6 +10709,7 @@ revoke execute on function public.emag_oferte_legate_stramb(p_business_id uuid, 
 revoke execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) from public;
 revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
 revoke execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) from public;
+revoke execute on function public.fara_diacritice(t text) from public;
 revoke execute on function public.genereaza_schema_baseline() from public;
 revoke execute on function public.handle_new_user() from public;
 revoke execute on function public.handle_support_message_insert() from public;
@@ -9659,6 +10719,7 @@ revoke execute on function public.increment_discount_uses(p_discount_id uuid) fr
 revoke execute on function public.increment_offer_stats(p_offer_id uuid, p_impressions integer, p_conversions integer, p_revenue numeric) from public;
 revoke execute on function public.increment_referral_balance(p_user_id uuid, p_amount integer) from public;
 revoke execute on function public.increment_tool_views(tool_id uuid) from public;
+revoke execute on function public.is_blog_editor() from public;
 revoke execute on function public.jsonb_merge_config(p_business_id uuid, p_column text, p_patch jsonb) from public;
 revoke execute on function public.marcheaza_operatie_anulata(p_business_id uuid, p_cheie text) from public;
 revoke execute on function public.mark_payout_complete(p_user_id uuid, p_amount integer) from public;
@@ -9672,6 +10733,7 @@ revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;
 revoke execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
+revoke execute on function public.redactorii_blogului() from public;
 revoke execute on function public.release_discount_use(p_discount_id uuid) from public;
 revoke execute on function public.release_order_discount(p_order_id uuid) from public;
 revoke execute on function public.repretuieste_pachetele_cu(p_component_id uuid) from public;

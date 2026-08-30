@@ -282,6 +282,20 @@ export function AdminBlogPostEditor({
    */
   const generatie = useRef(0);
 
+  /**
+   * Aduce inapoi ciorna gasita in browser.
+   *
+   * ⚠ Functie cu nume, nu o inchidere scrisa in JSX: regula lui React se supara
+   * pe o referinta modificata acolo, si pe buna dreptate — la o randare intrerupta
+   * si reluata, cresterea s-ar putea intampla de doua ori.
+   */
+  function aduCiornaInapoi(copie: Stare) {
+    setF(copie);
+    setCopieGasita(null);
+    generatie.current++;
+    setNesalvat(true);
+  }
+
   function schimbaTitlul(title: string) {
     setF((s) => ({ ...s, title, slug: s.slugScrisDeMana ? s.slug : slugDin(title) }));
     generatie.current++;
@@ -567,7 +581,7 @@ export function AdminBlogPostEditor({
             {copieGasita.title ? ` a articolului „${copieGasita.title}”` : ""}.
           </p>
           <button type="button"
-            onClick={() => { setF(copieGasita); setCopieGasita(null); generatie.current++; setNesalvat(true); }}
+            onClick={() => aduCiornaInapoi(copieGasita)}
             className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800">
             Adu-o înapoi
           </button>

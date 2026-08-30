@@ -3,7 +3,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-guard";
 import { sendBlogSubscribeConfirmation } from "@/lib/email";
@@ -26,8 +25,8 @@ import { PLATFORM_ORIGIN } from "@/lib/seo";
  * chemabilă de `anon` ar fi însemnat că oricine poate încerca jetoane direct,
  * ocolind orice plafon scris aici.
  */
-function db(): SupabaseClient {
-  return createAdminClient() as unknown as SupabaseClient;
+function db() {
+  return createAdminClient();
 }
 
 export type RaspunsAbonare = { ok: true; mesaj: string } | { ok: false; eroare: string };

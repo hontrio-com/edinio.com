@@ -1,3 +1,20 @@
+-- ⚠ DEPASITA. NU APLICA FISIERUL ASTA.
+--
+-- Corpul functiei de mai jos are `on conflict (from_slug)`. Cheia lui
+-- `blog_redirects` a devenit `(fel, from_slug)` in aceeasi zi, cand rubricile si
+-- autorii au primit si ei redirectari — deci reaplicat, fisierul ASTA ar strica
+-- productia: prima redenumire de articol ar crapa cu „no unique or exclusion
+-- constraint matching the ON CONFLICT specification", si ar lua cu ea toata
+-- salvarea.
+--
+-- Forma buna e in `2026-08-30_blog_audit_runda_2.sql`, iar adevarul e in
+-- `migrations/000-schema-baseline.sql`. Fisierul se pastreaza fiindca istoricul
+-- migratiilor nu se rescrie — vezi `migrations/CITESTE-INTAI.md`: fisierele cu
+-- data sunt ISTORIC si nu se reaplica.
+--
+-- Gasit de un audit din afara pe 30.08.2026, care a citit depozitul si a crezut
+-- ca asa e si in productie. Nu era: productia primise deja corectia. Dar
+-- depozitul mintea despre productie, ceea ce e propria lui problema.
 -- ═══ O SALVARE, O TRANZACTIE ═══
 --
 -- Salvarea unui articol erau CINCI cereri pe rand: actualizarea randului,

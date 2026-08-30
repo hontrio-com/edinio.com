@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-guard";
 
@@ -18,8 +17,8 @@ import { requireAdminApi } from "@/lib/admin-guard";
  * `user` — adică platforma ar fi rămas fără nimeni care să publice, și fără
  * nimeni care să repare.
  */
-function db(): SupabaseClient {
-  return createAdminClient() as unknown as SupabaseClient;
+function db() {
+  return createAdminClient();
 }
 
 export type Redactor = {

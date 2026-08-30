@@ -1,5 +1,4 @@
 import { cache } from "react";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPublicClient } from "@/lib/supabase/public";
 import { pregatesteCautarea } from "./types";
 import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
@@ -36,8 +35,10 @@ import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
  * plasa; astea sunt gardul. Nici RLS nu se poate slabi din greseala fara ca
  * cineva sa observe, nici o sesiune de admin nu mai schimba ce vede publicul.
  *
- * Tabelele nu sunt încă în tipurile generate, deci clientul e fără tipuri, ca
- * la `blog.actions.ts`.
+ * ⚠ CLIENTUL E TIPAT, din 30.08.2026. Tabelele si functiile de blog au intrat in
+ * `database.types.ts`, deci `tsc` verifica numele coloanelor si al functiilor.
+ * Pana atunci era turnat cu `as unknown as SupabaseClient`, ceea ce insemna ca un
+ * nume de coloana gresit trecea de typecheck si cadea abia in trafic.
  *
  * ⚠ FĂRĂ `import "server-only"`, ca și la `curata.ts`. Pachetul nu e instalat —
  * îl rezolvă Next la build — și face fișierul de necitit pentru node. Aici a
@@ -48,8 +49,8 @@ import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
  * `next/headers`, care oricum pică la build dacă ajunge într-un component de
  * client.
  */
-async function db(): Promise<SupabaseClient> {
-  return createPublicClient() as unknown as SupabaseClient;
+async function db() {
+  return createPublicClient();
 }
 
 /**

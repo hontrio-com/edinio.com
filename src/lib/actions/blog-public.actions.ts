@@ -1,7 +1,6 @@
 "use server";
 
 import { headers } from "next/headers";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientIpFromHeaders, rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
@@ -57,10 +56,11 @@ export async function numaraCitirea(slug: string): Promise<void> {
     /* Funcția din bază verifică ea însăși că articolul e publicat, deci o ciornă
        nu poate fi numărată nici dacă i se ghicește adresa. Și scrie în
        `blog_post_stats`, nu pe rândul articolului: vezi nota din `types.ts`. */
-    /* Turnat, ca peste tot in blog: tabelele si functiile de blog nu sunt inca
-       in `database.types.ts`. Vezi nota din `scripts/tests/coloane-cerute-exista.mjs`
-       — plasa pentru asta nu e `tsc`, e proba care confrunta codul cu baza. */
-    await (createAdminClient() as unknown as SupabaseClient).rpc("blog_creste_citirile", { p_slug: s });
+    /* ⚠ FARA TURNARE, din 30.08.2026: tabelele si functiile de blog sunt acum in
+       `database.types.ts`, deci `tsc` verifica si numele functiei, si numele
+       argumentului. Pana atunci, un `p_slug` scris gresit ar fi trecut de
+       typecheck si de build, si ar fi cazut abia in trafic. */
+    await createAdminClient().rpc("blog_creste_citirile", { p_slug: s });
   } catch {
     /* Tăcere dinadins. Vezi nota de sus. */
   }

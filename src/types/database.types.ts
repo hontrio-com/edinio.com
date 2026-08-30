@@ -887,6 +887,359 @@ export type Database = {
         }
         Relationships: []
       }
+      blog_authors: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          id: string
+          name: string
+          role_title: string | null
+          sameas: string[]
+          slug: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          role_title?: string | null
+          sameas?: string[]
+          slug: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          role_title?: string | null
+          sameas?: string[]
+          slug?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      blog_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          seo_description: string | null
+          seo_title: string | null
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          seo_description?: string | null
+          seo_title?: string | null
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          seo_description?: string | null
+          seo_title?: string | null
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      blog_post_revisions: {
+        Row: {
+          content_html: string | null
+          created_at: string
+          id: string
+          post_id: string
+          saved_by: string | null
+          title: string | null
+        }
+        Insert: {
+          content_html?: string | null
+          created_at?: string
+          id?: string
+          post_id: string
+          saved_by?: string | null
+          title?: string | null
+        }
+        Update: {
+          content_html?: string | null
+          created_at?: string
+          id?: string
+          post_id?: string
+          saved_by?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blog_post_revisions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "blog_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blog_post_stats: {
+        Row: {
+          post_id: string
+          updated_at: string
+          views: number
+        }
+        Insert: {
+          post_id: string
+          updated_at?: string
+          views?: number
+        }
+        Update: {
+          post_id?: string
+          updated_at?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blog_post_stats_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: true
+            referencedRelation: "blog_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blog_post_tags: {
+        Row: {
+          post_id: string
+          tag_id: string
+        }
+        Insert: {
+          post_id: string
+          tag_id: string
+        }
+        Update: {
+          post_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blog_post_tags_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "blog_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blog_post_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "blog_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blog_posts: {
+        Row: {
+          answer_summary: string | null
+          author_id: string | null
+          canonical_url: string | null
+          category_id: string | null
+          cauta: string | null
+          content_html: string
+          content_updated_at: string
+          cover_alt: string | null
+          cover_url: string | null
+          created_at: string
+          cta: Json | null
+          edit_version: number
+          excerpt: string | null
+          faq: Json
+          id: string
+          is_featured: boolean
+          is_pinned: boolean
+          noindex: boolean
+          og_image_url: string | null
+          published_at: string | null
+          reading_minutes: number | null
+          seo_description: string | null
+          seo_title: string | null
+          slug: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          answer_summary?: string | null
+          author_id?: string | null
+          canonical_url?: string | null
+          category_id?: string | null
+          content_html?: string
+          content_updated_at?: string
+          cover_alt?: string | null
+          cover_url?: string | null
+          created_at?: string
+          cta?: Json | null
+          edit_version?: number
+          excerpt?: string | null
+          faq?: Json
+          id?: string
+          is_featured?: boolean
+          is_pinned?: boolean
+          noindex?: boolean
+          og_image_url?: string | null
+          published_at?: string | null
+          reading_minutes?: number | null
+          seo_description?: string | null
+          seo_title?: string | null
+          slug: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          answer_summary?: string | null
+          author_id?: string | null
+          canonical_url?: string | null
+          category_id?: string | null
+          content_html?: string
+          content_updated_at?: string
+          cover_alt?: string | null
+          cover_url?: string | null
+          created_at?: string
+          cta?: Json | null
+          edit_version?: number
+          excerpt?: string | null
+          faq?: Json
+          id?: string
+          is_featured?: boolean
+          is_pinned?: boolean
+          noindex?: boolean
+          og_image_url?: string | null
+          published_at?: string | null
+          reading_minutes?: number | null
+          seo_description?: string | null
+          seo_title?: string | null
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "blog_posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "blog_authors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "blog_posts_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "blog_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      blog_redirects: {
+        Row: {
+          created_at: string
+          fel: string
+          from_slug: string
+          id: string
+          to_slug: string
+        }
+        Insert: {
+          created_at?: string
+          fel?: string
+          from_slug: string
+          id?: string
+          to_slug: string
+        }
+        Update: {
+          created_at?: string
+          fel?: string
+          from_slug?: string
+          id?: string
+          to_slug?: string
+        }
+        Relationships: []
+      }
+      blog_subscribers: {
+        Row: {
+          confirmed_at: string | null
+          confirmed_ip: string | null
+          created_at: string
+          email: string
+          id: string
+          source: string | null
+          token_expires_at: string | null
+          token_hash: string | null
+          unsub_token: string | null
+          unsubscribed_at: string | null
+        }
+        Insert: {
+          confirmed_at?: string | null
+          confirmed_ip?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          source?: string | null
+          token_expires_at?: string | null
+          token_hash?: string | null
+          unsub_token?: string | null
+          unsubscribed_at?: string | null
+        }
+        Update: {
+          confirmed_at?: string | null
+          confirmed_ip?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          source?: string | null
+          token_expires_at?: string | null
+          token_hash?: string | null
+          unsub_token?: string | null
+          unsubscribed_at?: string | null
+        }
+        Relationships: []
+      }
+      blog_tags: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          slug?: string
+        }
+        Relationships: []
+      }
       brevo_suppressions: {
         Row: {
           business_id: string
@@ -5265,6 +5618,74 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      /*
+        ⚠ FUNCTIILE DE BLOG. Numele argumentelor sunt PARTEA CARE CONTEAZA.
+
+        PostgREST alege functia dupa NUMELE argumentelor din corpul JSON, nu dupa
+        ordine. Cu clientul netipat, un `p_slug_vechi` scris `p_vechi_slug` trecea
+        de `tsc`, trecea de build, si cadea abia cand un om apasa „Salveaza".
+        Randurile astea il fac sa cada la compilare.
+
+        Plasa de dedesubt ramane si ea: `npm run verifica:rpc-blog` intreaba
+        PostgREST-ul adevarat. Tipurile pot fi vechi; el, nu.
+      */
+      blog_actualizeaza_taxonomia: { Args: { p_fel: string; p_id: string; p_rand: Json }; Returns: undefined }
+      blog_anuleaza_confirmare: { Args: { p_email: string; p_token_hash: string }; Returns: boolean }
+      blog_articole_admin: {
+        Args: { p_de_la: number; p_cate: number; p_cauta?: string | null; p_stare?: string | null }
+        Returns: {
+          id: string; slug: string; title: string; status: string
+          published_at: string | null; is_featured: boolean; is_pinned: boolean
+          reading_minutes: number | null; updated_at: string
+          autor: string | null; categorie: string | null; views: number; total: number
+        }[]
+      }
+      blog_categorii_folosite: {
+        Args: Record<string, never>
+        Returns: { slug: string; name: string; cate: number }[]
+      }
+      blog_cere_confirmare: {
+        Args: { p_email: string; p_token_hash: string; p_expira_la: string; p_sursa: string }
+        Returns: boolean
+      }
+      blog_confirma: { Args: { p_token_hash: string; p_ip: string }; Returns: string }
+      blog_creeaza_articol: {
+        Args: { p_rand: Json; p_etichete: Json }
+        Returns: { id: string; edit_version: number }[]
+      }
+      blog_creste_citirile: { Args: { p_slug: string }; Returns: undefined }
+      blog_dezaboneaza: { Args: { p_unsub_token: string }; Returns: boolean }
+      blog_etichete_admin: {
+        Args: Record<string, never>
+        Returns: { id: string; slug: string; name: string; cate: number }[]
+      }
+      blog_etichete_folosite: {
+        Args: Record<string, never>
+        Returns: { slug: string; name: string; cate: number; ultima: string | null }[]
+      }
+      /* ⚠ Nu mai e chemata de nimeni: `blog_actualizeaza_taxonomia` face si
+         redenumirea, si redirectarea, in aceeasi tranzactie. Se pastreaza pentru
+         reparatii facute de mana din consola. */
+      blog_muta_taxonomia: { Args: { p_fel: string; p_slug_vechi: string | null; p_slug_nou: string | null }; Returns: undefined }
+      blog_salveaza_articol: {
+        Args: {
+          p_id: string; p_rand: Json; p_etichete: Json; p_salvat_de: string | null
+          p_versiuni: number; p_versiune_asteptata?: number | null; p_creeaza_versiune?: boolean
+        }
+        /* Versiunea NOUA a articolului. Editorul o tine si o trimite inapoi la
+           urmatoarea salvare; asa se vede daca a mai scris cineva intre timp. */
+        Returns: number
+      }
+      blog_sterge_articol: { Args: { p_id: string }; Returns: boolean }
+      blog_sterge_taxonomia: { Args: { p_fel: string; p_id: string }; Returns: boolean }
+      blog_subiectele_autorului: { Args: { p_autor: string }; Returns: { name: string }[] }
+      /* Cele doua functii `security definer` de langa blog: `users_profile` NU tine
+         adresa de email — ea sta in `auth.users`, la care PostgREST nu ajunge. */
+      cont_dupa_email: { Args: { p_email: string }; Returns: { id: string; rol: string }[] }
+      redactorii_blogului: {
+        Args: Record<string, never>
+        Returns: { id: string; full_name: string | null; email: string | null; role: string }[]
+      }
       agregeaza_analitice: { Args: { p_zile?: number }; Returns: number }
       aplica_tranzitia_comenzii: { Args: { p_order_id: string; p_status: string; p_payment_status?: string | null; p_business_id?: string; p_elibereaza_stoc?: boolean | null }; Returns: Json }
       catalog_aplica_proiectii: { Args: { p_randuri: Json }; Returns: number }

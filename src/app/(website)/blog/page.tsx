@@ -5,6 +5,7 @@ import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
 import { Paginare, paginaCeruta } from "@/components/website/blog/Paginare";
 import { CautareBlog } from "@/components/website/blog/CautareBlog";
+import { AbonareBlog } from "@/components/website/blog/AbonareBlog";
 import { categoriiBlog, paginaDeArticole } from "@/lib/blog/citire";
 import { listaBlogJsonLd } from "@/lib/blog/jsonld";
 import { jsonLdSafe } from "@/lib/json-ld";
@@ -116,6 +117,14 @@ export default async function BlogPage({ searchParams }: Props) {
             <Paginare pagina={cerut} pagini={pagini} adresa="/blog" />
           </>
         )}
+
+        {/*
+          ⚠ ÎN AFARA CONDIȚIEI, DINADINS. Prima dată caseta era înăuntrul ramurii
+          cu articole, deci pe un blog gol nu se vedea deloc — exact momentul în
+          care are cel mai mult rost. Cine ajunge pe un blog fără articole și
+          vrea să afle când apar primele n-are altă cale să o spună.
+        */}
+        <AbonareBlog />
       </section>
 
       <FinalCta />

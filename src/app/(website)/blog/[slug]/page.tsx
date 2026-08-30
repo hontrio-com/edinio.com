@@ -6,6 +6,7 @@ import { Clock } from "lucide-react";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
+import { AbonareBlog } from "@/components/website/blog/AbonareBlog";
 import { articolDupaSlug, articoleInrudite, eticheteArticol, undeS_aMutat } from "@/lib/blog/citire";
 import { curataArticol } from "@/lib/blog/curata";
 import { cuprinsSiHtml, meritaCuprins } from "@/lib/blog/cuprins";
@@ -223,6 +224,8 @@ export default async function ArticolBlogPage({ params }: Props) {
             </nav>
           )}
         </div>
+
+        <AbonareBlog />
 
         {inrudite.length > 0 && (
           <section className="mt-20 border-t border-hairline pt-10">

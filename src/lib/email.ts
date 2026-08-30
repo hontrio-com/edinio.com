@@ -1754,3 +1754,43 @@ export async function sendReturnRequestToMerchant(
   });
 }
 
+
+// ── Noutatile blogului ───────────────────────────────────────────────────────
+
+/**
+ * Emailul prin care omul isi confirma abonarea la noutatile blogului.
+ *
+ * ⚠ FARA CONFIRMARE, ORICINE POATE ABONA PE ORICINE. Cineva scrie adresa altuia
+ * in caseta de pe site, iar acela incepe sa primeasca emailuri pe care nu le-a
+ * cerut. In afara de a fi gresit, e si ilegal: consimtamantul trebuie sa fie al
+ * persoanei si trebuie sa se poata dovedi. Apasarea legaturii de aici E dovada,
+ * si de aceea se pastreaza si ora, si adresa IP de la care s-a apasat.
+ *
+ * ⚠ ARUNCA daca nu poate trimite. Spre deosebire de emailurile de curtoazie de
+ * mai sus, care se sting in tacere, asta E lucrarea: fara el nu exista abonare.
+ * Cine il cheama trebuie sa afle daca n-a plecat, ca sa nu spuna omului „ti-am
+ * trimis" cand n-a trimis nimeni nimic.
+ */
+export async function sendBlogSubscribeConfirmation(email: string, adresaConfirmare: string): Promise<void> {
+  const content = `
+    <h2 style="margin:0 0 8px 0;font-size:20px;font-weight:700;color:#18181b;">Mai e un pas</h2>
+    <p style="margin:0 0 20px 0;font-size:15px;color:#3f3f46;line-height:1.65;">
+      Cineva (sperăm că tu) a cerut să primească noutățile de pe blogul Edinio la adresa aceasta.
+      Apasă butonul ca să confirmi. Dacă nu ai cerut tu, ignoră mesajul: fără apăsare nu se întâmplă nimic.
+    </p>
+    <div style="text-align:center;margin:28px 0;">
+      <a href="${escapeUrl(adresaConfirmare)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">
+        Confirm abonarea
+      </a>
+    </div>
+    <p style="margin:0;font-size:12px;color:#a1a1aa;line-height:1.6;">
+      Trimitem rar, doar când apare ceva care merită citit. Te poți dezabona din orice email.
+    </p>
+  `;
+  await getResend().emails.send({
+    from: FROM,
+    to: email,
+    subject: "Confirmă abonarea la blogul Edinio",
+    html: baseTemplate(content),
+  });
+}

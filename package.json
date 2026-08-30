@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import ./scripts/tests/register.mjs --test \"src/**/*.test.ts\"",
     "bundle": "node scripts/tests/bundle-size.mjs",
+    "capturi": "node --import ./scripts/tests/register.mjs scripts/leaga-capturi.mjs",
     "compare": "node scripts/tests/compare-storefront.mjs"
   },
   "dependencies": {

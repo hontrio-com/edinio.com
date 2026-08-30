@@ -15,9 +15,27 @@
  * cand cineva iese de pe lista; o nepotrivire acolo poate sta stricata luni de
  * zile, iar cand se vede, se vede sub forma unei plangeri de spam.
  *
- * ⚠ NU CHEAMA FUNCTIILE CARE SCRIU. Se intreaba doar daca PostgREST le CUNOASTE,
- * trimitand argumentele intr-o cerere pe care o refuza pentru alt motiv. Altfel
- * proba ar fi lasat gunoi in baza de productie.
+ * ⚠ CUM SE INTREABA FARA SA SE SCRIE, SI DE CE NU E DE AJUNS SA CREZI CA ASA E.
+ *
+ * Prima scriere a acestui fisier spunea, exact aici, „nu cheama functiile care
+ * scriu... altfel proba ar fi lasat gunoi in baza de productie". Propozitia era
+ * FALSA. `blog_cere_confirmare` chemata cu argumente goale a inserat un rand in
+ * `blog_subscribers` pe PRODUCTIE, pe 30.08.2026 la 18:44. L-am gasit din
+ * intamplare, numarand abonatii pentru altceva.
+ *
+ * Deci acum sunt doua lucruri, nu unul:
+ *
+ * 1. Fiecare chemare are un motiv ANUME pentru care nu poate scrie, scris langa
+ *    ea. Pentru cele mai multe e „argumentul nu se potriveste cu niciun rand".
+ *    Pentru `blog_cere_confirmare`, care insereaza chiar si pe o adresa goala, e
+ *    o data NEVALIDA: PostgREST potriveste intai functia dupa numele
+ *    argumentelor (deci un nume gresit tot da PGRST202, care e ce probam), si
+ *    abia apoi Postgres incearca sa faca din sir un `timestamptz` si cade cu
+ *    22007 — inainte sa se execute vreo instructiune.
+ *
+ * 2. Se NUMARA randurile inainte si dupa. Fiindca punctul 1 e tot un rationament
+ *    al meu, iar rationamentul de dinainte era gresit. Daca vreun numar s-a
+ *    schimbat, proba cade si spune care tabela.
  *
  * ═══ CUM SE FOLOSESTE ═══
  *
@@ -48,13 +66,27 @@ if (!url || !service) {
  * direct, ocolind orice plafon scris in actiunea de server.
  */
 const CHEMARI = [
+  /* Nu scrie: niciun articol n-are slugul asta, deci `insert ... select` nu alege nimic. */
   { fn: "blog_creste_citirile", args: { p_slug: "___proba___" }, publica: false },
+
+  /* Nu scriu: sunt `stable`, doar citesc. */
   { fn: "blog_etichete_folosite", args: {}, publica: true },
   { fn: "blog_categorii_folosite", args: {}, publica: true },
   { fn: "blog_subiectele_autorului", args: { p_autor: "00000000-0000-0000-0000-000000000000" }, publica: true },
-  { fn: "blog_cere_confirmare", args: { p_email: "", p_token_hash: "", p_expira_la: null, p_sursa: "" }, publica: false },
+
+  /*
+    ⚠ ASTA CHIAR SCRIE, SI A SCRIS. Insereaza pe orice adresa, inclusiv una goala.
+    `p_expira_la` e dinadins un sir care nu poate fi o data: PostgREST potriveste
+    intai functia dupa numele argumentelor, apoi Postgres cade la conversie cu
+    22007 — deci aflam ce voiam fara sa se execute nicio instructiune.
+  */
+  { fn: "blog_cere_confirmare", args: { p_email: "", p_token_hash: "", p_expira_la: "___nu-e-o-data___", p_sursa: "" }, publica: false },
+
+  /* Nu scriu: `where` pe un jeton care nu poate exista (24 de octeti de intamplare). */
   { fn: "blog_confirma", args: { p_token_hash: "___proba___", p_ip: "" }, publica: false },
   { fn: "blog_dezaboneaza", args: { p_unsub_token: "___proba___" }, publica: false },
+
+  /* Nu scrie: iese pe prima linie cand vreun slug e null. */
   { fn: "blog_muta_taxonomia", args: { p_fel: "categorie", p_slug_vechi: null, p_slug_nou: null }, publica: false },
   {
     fn: "blog_salveaza_articol",
@@ -76,6 +108,35 @@ const CHEMARI = [
   { fn: "cont_dupa_email", args: { p_email: "___proba___@nicaieri.invalid" }, publica: false },
 ];
 
+/**
+ * Cate randuri are fiecare tabela pe care proba ar putea-o atinge.
+ *
+ * ⚠ ASTA E PLASA ADEVARATA. Motivele scrise langa fiecare chemare sunt tot
+ * rationamente ale mele, iar unul dintre ele a fost deja gresit. Numerele nu sunt.
+ */
+const TABELE_DE_PAZIT = [
+  "blog_subscribers", "blog_posts", "blog_post_tags", "blog_post_revisions",
+  "blog_redirects", "blog_post_stats", "blog_tags", "blog_authors", "blog_categories",
+];
+
+async function numaraRanduri() {
+  const out = {};
+  for (const t of TABELE_DE_PAZIT) {
+    const r = await fetch(`${url}/rest/v1/${t}?select=*&limit=0`, {
+      headers: {
+        apikey: service,
+        Authorization: `Bearer ${service}`,
+        Prefer: "count=exact",
+      },
+    });
+    // Antetul `content-range` are forma `<interval>/<total>`; cu `limit=0`,
+    // intervalul lipseste si ramane doar totalul dupa bara.
+    const cr = r.headers.get("content-range") ?? "";
+    out[t] = Number.parseInt(cr.split("/")[1] ?? "-1", 10);
+  }
+  return out;
+}
+
 async function cheama(fn, args, cheie) {
   const r = await fetch(`${url}/rest/v1/rpc/${fn}`, {
     method: "POST",
@@ -94,6 +155,7 @@ async function cheama(fn, args, cheie) {
 }
 
 let rele = 0;
+const inainte = await numaraRanduri();
 
 for (const { fn, args, publica } of CHEMARI) {
   const cu = await cheama(fn, args, service);
@@ -132,6 +194,21 @@ for (const { fn, args, publica } of CHEMARI) {
   }
 
   console.log(`OK        ${fn}  (${publica ? "publica" : "doar cheia de serviciu"})`);
+}
+
+/* ═══ Si acum: a scris ceva? ═══ */
+const dupa = await numaraRanduri();
+for (const t of TABELE_DE_PAZIT) {
+  if (inainte[t] < 0 || dupa[t] < 0) {
+    console.warn(`NENUMARAT ${t} — n-am putut citi numarul de randuri`);
+    continue;
+  }
+  if (inainte[t] !== dupa[t]) {
+    rele++;
+    console.error(`A SCRIS    ${t}: ${inainte[t]} -> ${dupa[t]} randuri`);
+    console.error("           Proba asta NU are voie sa schimbe nimic. Vezi nota de sus:");
+    console.error("           pe 30.08.2026 a lasat un rand in `blog_subscribers` pe productie.");
+  }
 }
 
 if (rele > 0) {

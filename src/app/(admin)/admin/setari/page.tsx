@@ -1,9 +1,12 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminPlatformSettingsClient } from "@/components/admin/AdminPlatformSettingsClient";
 
 export const metadata = { title: "Setari platforma" };
 
 export default async function AdminSettingsPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   const admin = createAdminClient();
 
   const { data: rows } = await admin

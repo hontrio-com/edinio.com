@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminOverview } from "@/components/admin/AdminOverview";
@@ -13,7 +14,9 @@ export const metadata = { title: "Prezentare generala" };
  * INTEGRALA a facturilor platite, care creste cu vechimea platformei.
  * Sub `<Suspense>`, cadrul pleaca acum si scheletul tine locul doar panoului.
  */
-export default function AdminPage() {
+export default async function AdminPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto">
       <Suspense fallback={<ScheletPrezentare />}>

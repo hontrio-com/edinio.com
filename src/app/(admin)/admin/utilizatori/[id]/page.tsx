@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { Suspense, type ComponentProps } from "react";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,6 +18,8 @@ type ProfilUtilizator = ComponentProps<typeof AdminUserDetail>["profile"];
  * dupa cadru.
  */
 export default async function AdminUserDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   const { id } = await params;
   const admin = createAdminClient();
 

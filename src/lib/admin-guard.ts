@@ -100,3 +100,51 @@ export async function esteAdmin(): Promise<boolean> {
   if (!user || !areClaimDeAdmin(user)) return false;
   return areRolInProfil(user.id);
 }
+
+/** Rolurile care au voie in redactia blogului. */
+export type RolBlog = "admin" | "editor";
+
+/**
+ * Paza ecranelor de blog: admin SAU redactor.
+ *
+ * ⚠ NU LARGESTE `requireAdmin()`. Un redactor n-are ce cauta la utilizatori, la
+ * facturi sau la setarile platformei. De aceea e o functie separata, chemata
+ * doar de paginile de blog — iar celelalte 21 de pagini de admin isi pastreaza
+ * `requireAdmin()`, fiecare pe capul ei.
+ *
+ * Intoarce si ROLUL, fiindca ecranele arata altceva: un redactor vede „Trimite
+ * la verificare" acolo unde un admin vede „Publica".
+ */
+export async function requireBlogEditor() {
+  const user = await getCachedUser();
+  if (!user) redirect("/login");
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users_profile").select("role, full_name, avatar_url").eq("id", user.id).single();
+
+  const rol = data?.role;
+  if (rol !== "admin" && rol !== "editor") redirect("/dashboard");
+  return { user, profile: data, rol: rol as RolBlog };
+}
+
+/**
+ * Aceeasi paza, pentru actiuni de server. `null` cand nu are voie.
+ *
+ * ⚠ ACTIUNILE FOLOSESC CHEIA DE SERVICIU, care sare peste drepturile pe rand.
+ * Deci regulile din baza NU apara aici: ele sunt a doua plasa, pentru cazul in
+ * care cineva ajunge la tabele pe alt drum. Marginea redactorului trebuie pusa
+ * in cod, si de aceea functia asta intoarce rolul.
+ */
+export async function requireBlogEditorApi(): Promise<{ id: string; rol: RolBlog } | null> {
+  const user = await getCachedUser();
+  if (!user) return null;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("users_profile").select("role").eq("id", user.id).single();
+
+  const rol = data?.role;
+  if (rol !== "admin" && rol !== "editor") return null;
+  return { id: user.id, rol: rol as RolBlog };
+}

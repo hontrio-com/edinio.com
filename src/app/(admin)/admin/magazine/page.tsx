@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminBusinessesClient } from "@/components/admin/AdminBusinessesClient";
@@ -14,7 +15,9 @@ export const metadata = { title: "Magazine" };
  * dus-intors inainte sa se poata trimite ceva. Sub `<Suspense>` asteapta doar
  * tabelul, nu pagina intreaga.
  */
-export default function AdminBusinessesPage() {
+export default async function AdminBusinessesPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto">
       <Suspense fallback={<ScheletMagazine />}>

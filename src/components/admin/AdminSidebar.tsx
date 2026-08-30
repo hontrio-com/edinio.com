@@ -32,8 +32,9 @@ const NAV = [
   { href: "/admin/setari", icon: Settings2, label: "Setari platforma" },
 ];
 
-function SidebarContent({ adminName, adminEmail, onClose }: { adminName: string; adminEmail: string; onClose?: () => void }) {
+function SidebarContent({ adminName, adminEmail, onClose, rol = "admin" }: { adminName: string; adminEmail: string; onClose?: () => void; rol?: "admin" | "editor" }) {
   const pathname = usePathname();
+  const intrari = rol === "editor" ? NAV.filter((n) => n.href.startsWith("/admin/blog")) : NAV;
   const router = useRouter();
 
   async function handleLogout() {
@@ -58,7 +59,7 @@ function SidebarContent({ adminName, adminEmail, onClose }: { adminName: string;
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ href, icon: Icon, label, exact }) => {
+        {intrari.map(({ href, icon: Icon, label, exact }) => {
           const active = exact ? pathname === href : pathname.startsWith(href);
           return (
             <Link
@@ -109,7 +110,15 @@ function SidebarContent({ adminName, adminEmail, onClose }: { adminName: string;
   );
 }
 
-export function AdminSidebar({ adminName, adminEmail }: { adminName: string; adminEmail: string }) {
+/**
+ * ⚠ REDACTORUL VEDE DOAR BLOGUL.
+ *
+ * Ascunderea nu e paza — celelalte pagini se apara singure, fiecare cu
+ * `requireAdmin()`. Dar o bara plina cu intrari care il arunca inapoi la
+ * dashboard ar fi fost o insiruire de usi incuiate, si l-ar fi facut sa creada
+ * ca ceva e stricat.
+ */
+export function AdminSidebar({ adminName, adminEmail, rol = "admin" }: { adminName: string; adminEmail: string; rol?: "admin" | "editor" }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -135,7 +144,7 @@ export function AdminSidebar({ adminName, adminEmail }: { adminName: string; adm
         "lg:hidden fixed inset-y-0 left-0 z-50 w-64 bg-zinc-900 border-r border-zinc-800 transition-transform duration-300",
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <SidebarContent adminName={adminName} adminEmail={adminEmail} onClose={() => setMobileOpen(false)} />
+        <SidebarContent adminName={adminName} adminEmail={adminEmail} rol={rol} onClose={() => setMobileOpen(false)} />
       </div>
 
       {/* Desktop sidebar */}
@@ -143,7 +152,7 @@ export function AdminSidebar({ adminName, adminEmail }: { adminName: string; adm
         className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 bg-zinc-900 dark:bg-zinc-950 border-r border-zinc-800"
         style={{ width: "var(--admin-sidebar-width, 240px)" }}
       >
-        <SidebarContent adminName={adminName} adminEmail={adminEmail} />
+        <SidebarContent adminName={adminName} adminEmail={adminEmail} rol={rol} />
       </aside>
     </>
   );

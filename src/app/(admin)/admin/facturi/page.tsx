@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminInvoicesClient } from "@/components/admin/AdminInvoicesClient";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -5,6 +6,8 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 export const metadata = { title: "Facturi" };
 
 export default async function AdminInvoicesPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   const admin = createAdminClient();
 
   // Lista ramane la ultimele 500; harta de nume trebuie completa (peste 1000

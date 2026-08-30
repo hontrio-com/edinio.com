@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminActivityClient } from "@/components/admin/AdminActivityClient";
@@ -17,7 +18,9 @@ export const metadata = { title: "Activitate" };
  * acopera toata pagina si asteapta TOATE datele; `<Suspense>` asteapta doar
  * bucata lui.
  */
-export default function AdminActivityPage() {
+export default async function AdminActivityPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto">
       <Suspense fallback={<SkeletonPagina randuri={10} />}>

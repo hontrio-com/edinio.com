@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { createAdminClient, listAllAuthUsers } from "@/lib/supabase/admin";
 import { AdminUsersClient } from "@/components/admin/AdminUsersClient";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -5,6 +6,8 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 export const metadata = { title: "Utilizatori" };
 
 export default async function AdminUsersPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   const admin = createAdminClient();
 
   // Ferestre .range() peste cap-ul silentios de 1000 de randuri PostgREST.

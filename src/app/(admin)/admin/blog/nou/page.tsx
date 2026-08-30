@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/admin-guard";
+import { requireBlogEditor } from "@/lib/admin-guard";
 import { listeazaAutori, listeazaCategorii } from "@/lib/actions/blog.actions";
 import { AdminBlogPostEditor } from "@/components/admin/AdminBlogPostEditor";
 import { AlegeSablon } from "@/components/admin/AlegeSablon";
@@ -17,7 +17,7 @@ type Props = { searchParams: Promise<{ sablon?: string }> };
  * `?sablon=gol` e drumul limpede pentru „scriu de la zero".
  */
 export default async function AdminBlogArticolNouPage({ searchParams }: Props) {
-  await requireAdmin();
+  const { rol } = await requireBlogEditor();
   const { sablon } = await searchParams;
   if (!sablon) return <AlegeSablon />;
 
@@ -27,6 +27,7 @@ export default async function AdminBlogArticolNouPage({ searchParams }: Props) {
       articol={null}
       autori={autori}
       categorii={categorii}
+      rol={rol}
       sablon={sablon === "gol" ? null : sablonDupaCheie(sablon)}
     />
   );

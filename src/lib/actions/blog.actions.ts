@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireAdminApi } from "@/lib/admin-guard";
+import { requireAdminApi, requireBlogEditorApi } from "@/lib/admin-guard";
 import { indemnDeAratat } from "@/lib/blog/indemn";
 import {
   adreseBune,
@@ -25,9 +25,21 @@ import {
  * fara tipuri, exact ca `announcement.actions.ts`. Cand se regenereaza tipurile,
  * `blogDb()` e singurul loc de schimbat.
  *
- * ⚠ CLIENTUL DE SERVICIU SARE PESTE DREPTURILE PE RAND. De aceea fiecare
- * functie de aici incepe cu `requireAdminApi()`, fara exceptie. Regulile din
- * baza raman paza pentru citirea publica; aici paza e poarta asta.
+ * ⚠ CLIENTUL DE SERVICIU SARE PESTE DREPTURILE PE RAND. De aceea fiecare functie
+ * de aici incepe cu o paza, fara exceptie. Regulile din baza raman a doua plasa,
+ * pentru cine ar ajunge la tabele pe alt drum; ce se intampla prin panou trece
+ * pe aici.
+ *
+ * ⚠ DOUA PAZE, ALESE DUPA CE FACE FUNCTIA:
+ *
+ *   `requireBlogEditorApi()` — CONTINUT. Articolele, si citirea autorilor si a
+ *     categoriilor (redactorul trebuie sa le poata alege din editor). Intoarce
+ *     si rolul, fiindca marginea redactorului se pune in cod: vezi
+ *     `poateLasaInStarea`.
+ *
+ *   `requireAdminApi()` — STRUCTURA. Autorii, categoriile si stergerea
+ *     etichetelor. Un redactor scrie articole, nu hotaraste cine sunt autorii
+ *     platformei sau cum se imparte blogul pe categorii.
  */
 function blogDb(): SupabaseClient {
   return createAdminClient() as unknown as SupabaseClient;
@@ -84,7 +96,7 @@ function traduEroare(error: { code?: string; message?: string } | null, ceEra: s
 // ── Autori ───────────────────────────────────────────────────────────────────
 
 export async function listeazaAutori(): Promise<AutorBlog[]> {
-  if (!(await requireAdminApi())) return [];
+  if (!(await requireBlogEditorApi())) return [];
   const { data } = await blogDb().from("blog_authors").select("*").order("name");
   return (data ?? []) as AutorBlog[];
 }
@@ -178,7 +190,7 @@ export async function articoleAleAutorului(id: string): Promise<number> {
 // ── Categorii ────────────────────────────────────────────────────────────────
 
 export async function listeazaCategorii(): Promise<CategorieBlog[]> {
-  if (!(await requireAdminApi())) return [];
+  if (!(await requireBlogEditorApi())) return [];
   const { data } = await blogDb()
     .from("blog_categories")
     .select("*")
@@ -319,7 +331,7 @@ async function puneEtichete(idArticol: string, nume: string[] | undefined): Prom
 
 /** Etichetele unui articol, pentru cand se deschide in editor. */
 export async function eticheteleArticolului(idArticol: string): Promise<string[]> {
-  if (!(await requireAdminApi())) return [];
+  if (!(await requireBlogEditorApi())) return [];
   const { data } = await blogDb()
     .from("blog_post_tags").select("blog_tags(name)").eq("post_id", idArticol);
   return ((data ?? []) as Record<string, unknown>[])
@@ -361,6 +373,25 @@ export async function stergeEticheta(id: string): Promise<Raspuns> {
   return { success: true };
 }
 
+/**
+ * Are voie rolul asta sa lase articolul in starea asta?
+ *
+ * ⚠ AICI E MARGINEA ADEVARATA A REDACTORULUI, nu in regulile din baza.
+ * Actiunile folosesc cheia de serviciu, care sare peste drepturile pe rand;
+ * regulile de acolo sunt a doua plasa, pentru cine ar ajunge la tabele pe alt
+ * drum. Ce se intampla prin panou trece pe aici.
+ *
+ * Un redactor poate scrie si trimite la verificare. Publicarea si arhivarea
+ * raman ale adminului: sunt hotarari despre ce vede lumea, nu despre text.
+ */
+function poateLasaInStarea(rol: "admin" | "editor", stare: StareArticol): boolean {
+  if (rol === "admin") return true;
+  return stare === "draft" || stare === "review";
+}
+
+const NU_AI_VOIE_SA_PUBLICI =
+  "Nu poți publica singur. Trimite articolul la verificare, iar un administrator îl publică.";
+
 // ── Articole ─────────────────────────────────────────────────────────────────
 
 /** Rândul din lista de admin: articolul plus numele autorului și al categoriei. */
@@ -370,7 +401,7 @@ export type ArticolInLista = Pick<
 > & { autor: string | null; categorie: string | null };
 
 export async function listeazaArticole(): Promise<ArticolInLista[]> {
-  if (!(await requireAdminApi())) return [];
+  if (!(await requireBlogEditorApi())) return [];
   const { data } = await blogDb()
     .from("blog_posts")
     .select("id, slug, title, status, published_at, is_featured, is_pinned, views, reading_minutes, updated_at, blog_authors(name), blog_categories(name)")
@@ -392,7 +423,7 @@ export async function listeazaArticole(): Promise<ArticolInLista[]> {
 }
 
 export async function iaArticol(id: string): Promise<ArticolBlog | null> {
-  if (!(await requireAdminApi())) return null;
+  if (!(await requireBlogEditorApi())) return null;
   const { data } = await blogDb().from("blog_posts").select("*").eq("id", id).single();
   return (data as ArticolBlog) ?? null;
 }
@@ -500,7 +531,11 @@ function dataLaPublicare(intrare: ArticolInput): string | null {
 }
 
 export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{ id: string }>> {
-  if (!(await requireAdminApi())) return { error: "Neautorizat" };
+  const cine = await requireBlogEditorApi();
+  if (!cine) return { error: "Neautorizat" };
+  if (!poateLasaInStarea(cine.rol, intrare.status ?? "draft")) {
+    return { error: NU_AI_VOIE_SA_PUBLICI };
+  }
   const titlu = intrare.title?.trim();
   if (!titlu) return { error: "Titlul este obligatoriu." };
 
@@ -521,8 +556,11 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
 }
 
 export async function actualizeazaArticol(id: string, intrare: ArticolInput): Promise<Raspuns> {
-  const admin = await requireAdminApi();
+  const admin = await requireBlogEditorApi();
   if (!admin) return { error: "Neautorizat" };
+  if (!poateLasaInStarea(admin.rol, intrare.status ?? "draft")) {
+    return { error: NU_AI_VOIE_SA_PUBLICI };
+  }
   const titlu = intrare.title?.trim();
   if (!titlu) return { error: "Titlul este obligatoriu." };
 
@@ -531,6 +569,13 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
 
   const vechi = await iaArticol(id);
   if (!vechi) return { error: "Articolul nu mai există." };
+
+  /* ⚠ SI STAREA DE DINAINTE CONTEAZA. Fara randul asta, un redactor putea lua
+     un articol PUBLICAT si sa-l salveze ca ciorna — adica sa-l scoata de pe
+     site. Marginea nu e doar „ce lasi in urma", e si „de ce te atingi". */
+  if (!poateLasaInStarea(admin.rol, vechi.status)) {
+    return { error: "Articolul e publicat. Doar un administrator îl mai poate schimba." };
+  }
 
   const { error } = await blogDb()
     .from("blog_posts")
@@ -589,12 +634,20 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
 }
 
 export async function stergeArticol(id: string): Promise<Raspuns> {
-  if (!(await requireAdminApi())) return { error: "Neautorizat" };
+  const cine = await requireBlogEditorApi();
+  if (!cine) return { error: "Neautorizat" };
 
   /* Redirectarile CATRE articolul sters raman fara tinta: ar fi trimis un
      vizitator de la o adresa veche catre un 404, ceea ce e mai rau decat 404-ul
      de la bun inceput — al doilea macar e cinstit de la prima cerere. */
   const articol = await iaArticol(id);
+
+  /* Un redactor sterge doar ciorne. Una „la verificare" e deja in fata cuiva
+     si ar disparea de sub ochii lui; una publicata e pe site. */
+  if (articol && cine.rol === "editor" && articol.status !== "draft") {
+    return { error: "Poți șterge doar ciorne. Cere unui administrator." };
+  }
+
   if (articol) {
     await blogDb().from("blog_redirects").delete().eq("to_slug", articol.slug);
   }

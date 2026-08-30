@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminDomainOrdersClient } from "@/components/admin/AdminDomainOrdersClient";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -5,6 +6,8 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 export const metadata = { title: "Comenzi domenii" };
 
 export default async function AdminDomainOrdersPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   const admin = createAdminClient();
 
   // Lista ramane la ultimele 500; harta de business-uri trebuie completa

@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminStatsClient } from "@/components/admin/AdminStatsClient";
@@ -31,7 +32,9 @@ function buildMonthLabels(count = 12) {
  * Nimic nu ajungea la browser pana nu se strangeau TOATE. Sub `<Suspense>`,
  * cadrul se trimite imediat si scheletul tine locul doar tablourilor.
  */
-export default function AdminStatsPage() {
+export default async function AdminStatsPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   return (
     <div className="p-4 sm:p-8 max-w-7xl mx-auto">
       <Suspense fallback={<ScheletStatistici />}>

@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AdminOrdersClient } from "@/components/admin/AdminOrdersClient";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
@@ -5,6 +6,8 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 export const metadata = { title: "Comenzi" };
 
 export default async function AdminOrdersPage() {
+  /* ⚠ Paza pe FIECARE pagina, nu doar in aspect. Vezi nota din layout. */
+  await requireAdmin();
   const admin = createAdminClient();
 
   // Lista ramane intentionat la ultimele 500 de comenzi (jurnal recent), dar

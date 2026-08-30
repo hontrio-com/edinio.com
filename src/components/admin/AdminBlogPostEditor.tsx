@@ -160,6 +160,7 @@ export function AdminBlogPostEditor({
   categorii,
   etichete = [],
   sablon = null,
+  rol = "admin",
 }: {
   articol: ArticolBlog | null;
   autori: AutorBlog[];
@@ -168,6 +169,8 @@ export function AdminBlogPostEditor({
   etichete?: string[];
   /** Schela de pornire, doar la un articol NOU. Vezi `blog/sabloane.ts`. */
   sablon?: SablonArticol | null;
+  /** Un redactor nu poate publica singur. Vezi butoanele de jos. */
+  rol?: "admin" | "editor";
 }) {
   const router = useRouter();
   const [f, setF] = useState<Stare>(() => dinStareInitiala(articol, etichete, sablon));
@@ -713,9 +716,13 @@ export function AdminBlogPostEditor({
             <div>
               <label className="block text-sm font-medium text-zinc-700 mb-1.5">Stare</label>
               <select value={f.status} onChange={(e) => pune("status", e.target.value as StareArticol)} className={inputCls}>
-                {(Object.keys(STARI) as StareArticol[]).map((s) => (
-                  <option key={s} value={s}>{STARI[s]}</option>
-                ))}
+                {(Object.keys(STARI) as StareArticol[])
+                  /* Un redactor nu alege „Publicat” sau „Arhivat”: le-ar fi
+                     respins acțiunea, iar lista i-ar fi promis altceva. */
+                  .filter((s) => rol === "admin" || s === "draft" || s === "review")
+                  .map((s) => (
+                    <option key={s} value={s}>{STARI[s]}</option>
+                  ))}
               </select>
             </div>
             <div>
@@ -788,11 +795,28 @@ export function AdminBlogPostEditor({
             {salveaza && <Loader2 className="h-4 w-4 animate-spin" />}
             Salvează
           </button>
-          {f.status !== "published" && (
-            <button type="button" onClick={() => salveaza_("published")} disabled={salveaza}
-              className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50">
-              Publică
-            </button>
+          {/*
+            ⚠ REDACTORUL NU VEDE „PUBLICĂ”, VEDE „TRIMITE LA VERIFICARE”.
+
+            Ascunderea butonului nu e paza — aceea e în acțiune, unde
+            `poateLasaInStarea` respinge starea. Dar un buton care arată la fel
+            pentru toată lumea și eșuează pentru jumătate dintre ei e o
+            promisiune încălcată; mai bine spune de la început ce se întâmplă.
+          */}
+          {rol === "editor" ? (
+            f.status !== "review" && (
+              <button type="button" onClick={() => salveaza_("review")} disabled={salveaza}
+                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50">
+                Trimite la verificare
+              </button>
+            )
+          ) : (
+            f.status !== "published" && (
+              <button type="button" onClick={() => salveaza_("published")} disabled={salveaza}
+                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50">
+                Publică
+              </button>
+            )
           )}
         </div>
       </div>

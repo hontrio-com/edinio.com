@@ -187,6 +187,8 @@ export const SLUGURI_REZERVATE_BLOG = new Set([
   "cautare",
   "confirma",
   "dezabonare",
+  "feed",
+  "previzualizare",
   "autor",
   "categorie",
   "eticheta",
@@ -245,8 +247,16 @@ export function adreseBune(intrari: string[] | null | undefined): string[] {
  * Coloana `blog_posts.cauta` e derivată cu funcția aceea. Dacă cele două se
  * despart, căutarea nu crapă: pur și simplu nu mai găsește. Cineva scrie
  * „livrare” cu diacritice, nu primește nimic, și crede că nu există articolul.
- * Cel mai tăcut fel de defect. Proba din `types.test.ts` compară cele două
- * liste de perechi, iar migrarea le enumeră pe ale ei.
+ * Cel mai tăcut fel de defect.
+ *
+ * ⚠ NU SE POT COMPARA „LISTELE DE PERECHI", cum spunea nota asta până acum:
+ * migrarea nu enumeră nicio pereche, ci cheamă `unaccent`. Deci singura
+ * comparație cinstită e IEȘIRE cu IEȘIRE, pe cazuri anume — și exact așa s-a
+ * găsit singura despărțire care era (`ß`).
+ *
+ * Perechile din `types.test.ts` sunt luate din baza adevărată, rulând
+ * `select public.fara_diacritice(t)` pe fiecare. Când se adaugă un caz, se ia
+ * tot de acolo, nu din cap.
  */
 export function pliaza(text: string): string {
   return text
@@ -256,6 +266,18 @@ export function pliaza(text: string): string {
     .replace(/[îí]/gi, (c) => (c === c.toLowerCase() ? "i" : "I"))
     .replace(/[șş]/gi, (c) => (c === c.toLowerCase() ? "s" : "S"))
     .replace(/[țţ]/gi, (c) => (c === c.toLowerCase() ? "t" : "T"))
+    /*
+      ⚠ ß NU E O DIACRITICĂ ROMÂNEASCĂ, ȘI TOCMAI DE ACEEA A SCĂPAT.
+
+      `normalize("NFD")` nu-l desface: nu e o literă cu semn deasupra, e o literă
+      în sine. Deci trecea neatins prin tot ce e mai sus, iar coloana din bază —
+      care merge pe `unaccent` — îl scrie „ss". Cine caută „Straße" nu găsea
+      articolul care chiar vorbea despre el.
+
+      Găsit confruntând ieșire cu ieșire, nu citind cele două funcții: 27 de
+      cazuri din 28 se potriveau, iar al 28-lea nu se vedea din cod.
+    */
+    .replace(/ß/g, "ss")
     .toLowerCase();
 }
 

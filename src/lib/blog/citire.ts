@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPublicClient } from "@/lib/supabase/public";
 import { pregatesteCautarea } from "./types";
@@ -151,7 +152,18 @@ export type ArticolIntreg = ArticolBlog & {
 };
 
 /** Un articol, cu autorul și categoria lui. `null` dacă nu se vede. */
-export async function articolDupaSlug(slug: string): Promise<ArticolIntreg | null> {
+/**
+ * ⚠ ÎNVELIT ÎN `cache`, FIINDCĂ SE CHEAMĂ DE DOUĂ ORI PE FIECARE CERERE.
+ *
+ * O dată din `generateMetadata` și o dată din pagina însăși — așa e făcut App
+ * Router-ul, și e în regulă să fie așa. Fără `cache`, fiecare deschidere de
+ * articol înseamnă două interogări identice, cu tot cu corpul HTML.
+ *
+ * `cache` din React ține răspunsul pe durata UNEI cereri. Nu e memorie între
+ * vizitatori și nu e cache de conținut: la cererea următoare se întreabă din
+ * nou. Deci nu poate învechi nimic.
+ */
+export const articolDupaSlug = cache(async function articolDupaSlug(slug: string): Promise<ArticolIntreg | null> {
   const { data } = await (await db())
     .from("blog_posts")
     .select("*, blog_authors(*), blog_categories(*)")
@@ -167,7 +179,7 @@ export async function articolDupaSlug(slug: string): Promise<ArticolIntreg | nul
     autor: unul<AutorBlog>(r.blog_authors),
     categorie: unul<CategorieBlog>(r.blog_categories),
   };
-}
+});
 
 /**
  * Unde s-a mutat un articol care nu mai e la adresa cerută.
@@ -176,9 +188,20 @@ export async function articolDupaSlug(slug: string): Promise<ArticolIntreg | nul
  * articol viu nu trece niciodată pe aici, deci tabela de redirectări nu costă
  * nimic la fiecare citire.
  */
-export async function undeS_aMutat(slug: string): Promise<string | null> {
+export type FelRedirectare = "articol" | "categorie" | "autor";
+
+/**
+ * Unde s-a mutat adresa asta?
+ *
+ * ⚠ FELUL CONTEAZĂ. Un articol și o rubrică pot avea același slug vechi fără să
+ * se calce, fiindcă stau pe căi diferite: `/blog/x` față de
+ * `/blog/categorie/x`. Cheia din bază e (fel, from_slug) tocmai de aceea —
+ * altfel redenumirea unei rubrici ar fi șters tăcut redirectarea unui articol cu
+ * același nume.
+ */
+export async function undeS_aMutat(slug: string, fel: FelRedirectare = "articol"): Promise<string | null> {
   const { data } = await (await db())
-    .from("blog_redirects").select("to_slug").eq("from_slug", slug).maybeSingle();
+    .from("blog_redirects").select("to_slug").eq("fel", fel).eq("from_slug", slug).maybeSingle();
   return (data as { to_slug: string } | null)?.to_slug ?? null;
 }
 
@@ -367,8 +390,20 @@ export async function paginaDeArticole(
  * Caută în articolele publicate.
  *
  * Caută în coloana derivată `cauta`, care ține titlul, rezumatul, răspunsul
- * scurt și textul articolului fără etichete, pliat de diacritice. Deci „livrare"
- * găsește și „livrări", iar „PLĂȚI" găsește „plati".
+ * scurt și textul articolului fără etichete, pliat de diacritice.
+ *
+ * ⚠ CE FACE: „PLĂȚI" găsește „plati", „Întârziere" găsește „intarziere". Adică
+ * scrisul cu sau fără diacritice, cu litere mari sau mici, nu mai contează.
+ *
+ * ⚠ CE NU FACE, DEȘI NOTA ASTA A SPUS MULTĂ VREME CĂ FACE: nu găsește „livrări"
+ * căutând „livrare". E potrivire de subșir, nu de rădăcină — după pliere,
+ * „livrare" pur și simplu nu se află în „livrari" (a patra literă diferă).
+ * Pentru rădăcini ar fi trebuit `to_tsvector('romanian', …)`, care e altă
+ * unealtă și altă coloană.
+ *
+ * Nu e o scăpare, e o alegere: căutarea unui blog cu câteva zeci de articole
+ * n-are nevoie de rădăcini. Dar nota trebuie să spună adevărul, altfel
+ * următorul care caută „de ce nu găsește" pornește de la o presupunere falsă.
  */
 export async function cautaArticole(
   q: string,

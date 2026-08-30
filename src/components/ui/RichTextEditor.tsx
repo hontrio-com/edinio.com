@@ -11,7 +11,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Heading1, Heading2, Heading3, List, ListOrdered,
   AlignLeft, AlignCenter, AlignRight, Link2, Code,
-  Undo, Redo, FileCode, ImagePlus, Loader2,
+  Undo, Redo, FileCode, ImagePlus, Loader2, Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -141,10 +141,42 @@ export function RichTextEditor({
     const url = await incarcaImagine(file);
     setUrcaPoza(false);
     if (!url) return;
-    /* `alt` gol dinadins: o descriere inventată de noi ar fi mai rea decât
-       lipsa ei. Autorul o scrie în pagină, unde vede poza. */
-    editor.chain().focus().setImage({ src: url, alt: "" }).run();
+
+    /*
+      ⚠ SE CERE TEXTUL ALTERNATIV, NU SE PUNE GOL.
+
+      Aici scria `alt: ""` cu nota „autorul o scrie în pagină, unde vede poza".
+      Nota era falsă: nu exista NICIUN loc unde s-o scrie, în afară de modul HTML
+      brut. Deci fiecare poză pusă din editor intra în articol fără descriere, iar
+      cine se folosește de un cititor de ecran auzea „imagine" și atât.
+
+      Se cere ACUM, cât timp poza e proaspăt aleasă și omul știe ce e în ea. Cerut
+      mai târziu, ar fi trebuit să se întoarcă și să se uite din nou.
+
+      ⚠ ȘI SE POATE LĂSA GOL. O poză pur decorativă TREBUIE să aibă `alt=""`, nu
+      o descriere: altfel cititorul de ecran citește cu voce tare un ornament.
+      De aceea „Renunț" nu oprește punerea pozei, doar o lasă fără descriere.
+    */
+    const alt = window.prompt(
+      "Ce se vede în poză? (o propoziție scurtă; lasă gol dacă e doar decor)",
+      "",
+    );
+    editor.chain().focus().setImage({ src: url, alt: alt ?? "" }).run();
   }
+
+  /**
+   * Schimbă descrierea unei poze deja puse.
+   *
+   * Fără asta, o poză pusă în grabă cu descrierea greșită sau lipsă nu se mai
+   * putea îndrepta decât în modul HTML — adică practic deloc.
+   */
+  const schimbaAlt = useCallback(() => {
+    if (!editor) return;
+    const acum = (editor.getAttributes("image").alt as string | undefined) ?? "";
+    const alt = window.prompt("Ce se vede în poză? (lasă gol dacă e doar decor)", acum);
+    if (alt === null) return;
+    editor.chain().focus().updateAttributes("image", { alt }).run();
+  }, [editor]);
 
   if (!editor) return null;
 
@@ -178,6 +210,13 @@ export function RichTextEditor({
                 e.target.value = "";
                 if (f) pozaAleasa(f);
               }} />
+            {/* Se arată doar când e o poză aleasă: altfel ar fi un buton care nu
+                face nimic, iar bara are deja destule. */}
+            {editor.isActive("image") && (
+              <ToolbarBtn onClick={schimbaAlt} title="Descrierea pozei (text alternativ)">
+                <Type className="h-3.5 w-3.5" />
+              </ToolbarBtn>
+            )}
             <Sep />
           </>
         )}

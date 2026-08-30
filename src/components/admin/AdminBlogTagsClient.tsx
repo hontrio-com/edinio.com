@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { RolBlog } from "@/lib/admin-guard";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Tags, Trash2, ExternalLink } from "lucide-react";
@@ -19,7 +20,15 @@ export type EticheteRand = { id: string; slug: string; name: string; cate: numbe
  * Ecranul ăsta există pentru curățenie: să se vadă câte s-au adunat, care au
  * rămas fără articole, și care sunt scrise de două ori altfel.
  */
-export function AdminBlogTagsClient({ etichete }: { etichete: EticheteRand[] }) {
+export function AdminBlogTagsClient({ etichete, rol }: { etichete: EticheteRand[]; rol: RolBlog }) {
+/**
+ * ⚠ ASCUNDEREA NU E PAZĂ. Acțiunile cer `requireAdminApi()`, și acolo se
+ * hotărăște cu adevărat. Rândul de mai jos e ca redactorul să nu apese un buton
+ * care oricum îl refuză: o unealtă care te lasă să încerci și apoi spune
+ * „Neautorizat" te învață că e stricată, nu că n-ai voie.
+ */
+  const poateSchimba = rol === "admin";
+
   const router = useRouter();
 
   async function sterge(e: EticheteRand) {
@@ -39,7 +48,16 @@ export function AdminBlogTagsClient({ etichete }: { etichete: EticheteRand[] }) 
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <BlogSubmeniu activ="etichete" />
+      <BlogSubmeniu activ="etichete" rol={rol} />
+
+      {/* ⚠ Se SPUNE de ce lipsesc butoanele. Un ecran din care ele pur si
+          simplu lipsesc il face pe om sa creada ca s-a stricat ceva sau ca n-a
+          gasit el unde sa apese. */}
+      {!poateSchimba && (
+        <p className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          Etichetele se nasc singure din ce scrii in articole. Stergerea lor o face un administrator.
+        </p>
+      )}
 
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -88,10 +106,12 @@ export function AdminBlogTagsClient({ etichete }: { etichete: EticheteRand[] }) 
                   <ExternalLink className="h-4 w-4" />
                 </Link>
               )}
-              <button type="button" onClick={() => sterge(e)}
-                className="p-2 rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-600" title="Șterge">
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {poateSchimba && (
+                <button type="button" onClick={() => sterge(e)}
+                  className="p-2 rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-600" title="Șterge">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { RolBlog } from "@/lib/admin-guard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -30,7 +31,7 @@ function dataScurta(iso: string | null): string {
 }
 
 /** Vezi nota din `AdminBlogAuthorsClient`: lista vine din props, nu din stare. */
-export function AdminBlogPostsClient({ articole }: { articole: ArticolInLista[] }) {
+export function AdminBlogPostsClient({ articole, rol }: { articole: ArticolInLista[]; rol: RolBlog }) {
   const router = useRouter();
 
   /* ⚠ FILTRUL LUCREAZA PE CE E DEJA ADUS, nu cere din nou de la server. La
@@ -63,7 +64,7 @@ export function AdminBlogPostsClient({ articole }: { articole: ArticolInLista[] 
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <BlogSubmeniu activ="articole" />
+      <BlogSubmeniu activ="articole" rol={rol} />
 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">

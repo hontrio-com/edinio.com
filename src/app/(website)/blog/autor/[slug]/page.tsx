@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { Link2 } from "lucide-react";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
 import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
-import { articoleleAutorului, autorDupaSlug, subiecteleAutorului } from "@/lib/blog/citire";
+import { articoleleAutorului, autorDupaSlug, subiecteleAutorului, undeS_aMutat } from "@/lib/blog/citire";
 import { adreseBune } from "@/lib/blog/types";
 import { autorJsonLd } from "@/lib/blog/jsonld";
 import { jsonLdSafe } from "@/lib/json-ld";
@@ -57,7 +57,18 @@ export default async function AutorBlogPage({ params, searchParams }: Props) {
   const { p } = await searchParams;
   const cerut = paginaCeruta(p);
   const gasit = await autorulSiArticolele(slug, cerut);
-  if (!gasit || gasit.total === 0) notFound();
+  if (!gasit || gasit.total === 0) {
+      /*
+        ⚠ NU 404 DIRECT: poate doar s-a mutat.
+
+        Adresa unei pagini de autor e la fel de indexată ca a unui articol, și de
+        obicei mai veche decât articolele din ea. Până pe 30.08.2026, o redenumire
+        din admin o omora fără urmă. Un 308 duce mai departe tot ce a strâns.
+      */
+      const mutatLa = await undeS_aMutat(slug, "autor");
+      if (mutatLa) permanentRedirect(`/blog/autor/${mutatLa}`);
+    notFound();
+  }
 
   const { autor, articole, total, pagini } = gasit;
   if (paginaNuExista(cerut, total, pagini)) notFound();

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FileText, ArrowRight } from "lucide-react";
 import { SABLOANE } from "@/lib/blog/sabloane";
 import { BlogSubmeniu } from "./BlogSubmeniu";
+import type { RolBlog } from "@/lib/admin-guard";
 
 /**
  * Alegerea șablonului, înainte de a scrie.
@@ -16,10 +17,10 @@ import { BlogSubmeniu } from "./BlogSubmeniu";
  * „înapoi" al browserului duce înapoi la alegere. Un selector cu stare în
  * memorie n-ar fi avut nimic din toate astea.
  */
-export function AlegeSablon() {
+export function AlegeSablon({ rol }: { rol: RolBlog }) {
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <BlogSubmeniu activ="articole" />
+      <BlogSubmeniu activ="articole" rol={rol} />
 
       <div className="mb-2 flex items-center gap-2">
         <FileText className="h-5 w-5 text-zinc-900" />

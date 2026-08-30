@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils/cn";
  * articole, autori, categorii, etichete, abonați și redactori. Așa bara laterală nu se umflă cu un
  * rând pentru fiecare ecran, iar ele se simt ca un singur loc.
  *
- * ⚠ Numărul lor a crescut de la trei la șase, iar ultima se vede doar de admini.
+ * ⚠ Sunt șase, iar ULTIMELE DOUĂ se văd doar de admini: „Abonați" (date
+ * personale) și „Redactori" (cine împarte dreptul de a scrie).
  * Dacă mai vine una, se schimbă
  * și rândurile de mai sus: un comentariu care numără greșit e o minciună mică,
  * dar exact felul de minciună care face pe cineva să nu mai creadă niciun
@@ -19,16 +20,29 @@ const FILE = [
   { cheie: "autori", href: "/admin/blog/autori", eticheta: "Autori" },
   { cheie: "categorii", href: "/admin/blog/categorii", eticheta: "Categorii" },
   { cheie: "etichete", href: "/admin/blog/etichete", eticheta: "Etichete" },
-  { cheie: "abonati", href: "/admin/blog/abonati", eticheta: "Abonati" },
+  /* ⚠ Si abonatii doar pentru admini: sunt adrese de email ale unor oameni,
+     adica date personale, si n-au nicio treaba cu scrisul articolelor. */
+  { cheie: "abonati", href: "/admin/blog/abonati", eticheta: "Abonati", doarAdmin: true },
   /* ⚠ Doar pentru admini: cine imparte dreptul de a scrie nu poate fi cel care
      tocmai l-a primit. Ascunderea nu e paza — pagina cere `requireAdmin()` — dar
      o intrare care il arunca inapoi ar fi o usa incuiata pusa la vedere. */
   { cheie: "redactori", href: "/admin/blog/redactori", eticheta: "Redactori", doarAdmin: true },
 ] as const;
 
-export function BlogSubmeniu({ activ, rol = "admin" }: {
+/**
+ * ⚠ `rol` E OBLIGATORIU, si asta a fost o reparatie.
+ *
+ * Avea `= "admin"` drept implicit, iar patru din cele sapte ecrane nu-l
+ * trimiteau deloc. Deci un REDACTOR vedea intrarea „Redactori", apasa, si era
+ * aruncat la `/dashboard` fara nicio explicatie. O usa incuiata pusa la vedere e
+ * mai rea decat un perete: omul crede ca a gresit el ceva.
+ *
+ * Fara implicit, o pagina noua nu mai poate uita rolul — o uita compilatorul in
+ * locul nostru, cu o eroare.
+ */
+export function BlogSubmeniu({ activ, rol }: {
   activ: (typeof FILE)[number]["cheie"];
-  rol?: "admin" | "editor";
+  rol: "admin" | "editor";
 }) {
   const file = FILE.filter((f) => rol === "admin" || !("doarAdmin" in f && f.doarAdmin));
   return (

@@ -5,7 +5,7 @@ import { AdminBlogTagsClient } from "@/components/admin/AdminBlogTagsClient";
 export const metadata = { title: "Etichete blog" };
 
 export default async function AdminBlogEtichetePage() {
-  await requireBlogEditor();
+  const { rol } = await requireBlogEditor();
   const etichete = await listeazaEtichete();
-  return <AdminBlogTagsClient etichete={etichete} />;
+  return <AdminBlogTagsClient etichete={etichete} rol={rol} />;
 }

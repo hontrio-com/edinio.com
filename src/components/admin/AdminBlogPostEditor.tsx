@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle, X, Check, RotateCcw, History, Pin,
+  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle, X, Check, RotateCcw, History, Pin, Eye,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
@@ -46,6 +46,7 @@ type Stare = {
   content_html: string;
   cover_url: string;
   cover_alt: string;
+  og_image_url: string;
   author_id: string;
   category_id: string;
   status: StareArticol;
@@ -87,6 +88,7 @@ function intrareDin(f: Stare, status: StareArticol): ArticolInput {
     content_html: f.content_html,
     cover_url: f.cover_url,
     cover_alt: f.cover_alt,
+    og_image_url: f.og_image_url,
     author_id: f.author_id,
     category_id: f.category_id,
     status,
@@ -133,6 +135,7 @@ function dinStareInitiala(a: ArticolBlog | null, etichete: string[], sablon?: Sa
     content_html: a?.content_html ?? (a ? "" : sablon?.html ?? ""),
     cover_url: a?.cover_url ?? "",
     cover_alt: a?.cover_alt ?? "",
+    og_image_url: a?.og_image_url ?? "",
     author_id: a?.author_id ?? "",
     category_id: a?.category_id ?? "",
     status: a?.status ?? "draft",
@@ -563,7 +566,20 @@ export function AdminBlogPostEditor({
 
         <Sectiune
           titlu="Întrebări frecvente"
-          lamurire="Se arată la finalul articolului ȘI pleacă în datele structurate ca FAQPage, adică pot apărea direct în rezultatele Google. O întrebare fără răspuns nu se salvează: o structură care promite un răspuns inexistent e mai rea decât lipsa ei."
+          /*
+            ⚠ TEXTUL ĂSTA A FOST FALS. Spunea „pot apărea direct în rezultatele
+            Google" — adevărat până în august 2023, când Google a scos
+            rezultatele îmbogățite de tip FAQ pentru aproape toată lumea (au mai
+            rămas doar site-uri de stat și de sănătate). Un om care citea asta
+            își scria întrebările pentru un loc în Google care nu mai există,
+            și apoi se întreba de ce nu apar.
+
+            Rostul lor e acum altul, și nu mai mic: sunt bucata pe care motoarele
+            care răspund cu text — ChatGPT, Perplexity, AI Overviews — o pot
+            cita întreagă, fiindcă o întrebare cu răspunsul ei se ține pe
+            picioarele ei fără restul articolului.
+          */
+          lamurire="Se arată la finalul articolului ȘI pleacă în datele structurate ca FAQPage. Nu mai aduc rezultate îmbogățite în Google (au fost scoase în 2023), dar sunt exact bucata pe care ChatGPT, Perplexity sau AI Overviews o pot cita întreagă. O întrebare fără răspuns nu se salvează: o structură care promite un răspuns inexistent e mai rea decât lipsa ei."
         >
           <div className="space-y-3">
             {f.faq.map((intrebare, i) => (
@@ -623,6 +639,33 @@ export function AdminBlogPostEditor({
                 </p>
               </div>
             )}
+
+            {/*
+              ⚠ CÂMPUL ĂSTA EXISTA ÎN MODEL, ÎN BAZĂ ȘI ÎN METADATE, DAR NU AVEA
+              CASETĂ.
+
+              Adică singurul fel de a-l pune era direct din baza de date. Mai rău:
+              fiindcă editorul nu-l trimitea niciodată, `randDinIntrare` avea o
+              ramură anume ca să NU-l scrie — altfel prima salvare a unui om care
+              nici nu știa că există l-ar fi golit. Un câmp pe care codul îl
+              ocolește ca să nu-l strice e un câmp care ar fi trebuit să aibă o
+              casetă.
+            */}
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 mb-1.5">
+                Imaginea de partajare <span className="font-normal text-zinc-400">(opțional)</span>
+              </label>
+              <input type="text" value={f.og_image_url}
+                onChange={(e) => pune("og_image_url", e.target.value)}
+                placeholder="Lasă gol ca să se folosească imaginea de deschidere"
+                className={inputCls} />
+              <p className="mt-1.5 text-xs text-zinc-500">
+                Ce se vede când cineva dă articolul mai departe pe Facebook, WhatsApp sau LinkedIn.
+                Lăsat gol, se folosește imaginea de deschidere — de obicei asta și vrei. Se pune
+                separat doar când imaginea de sus arată rău tăiată la 1200×630, sau când vrei pe ea
+                titlul scris mare.
+              </p>
+            </div>
           </div>
         </Sectiune>
 
@@ -849,6 +892,30 @@ export function AdminBlogPostEditor({
           până la capăt pentru un buton. */}
       <div className="fixed bottom-0 inset-x-0 lg:left-[var(--admin-sidebar-width,240px)] bg-white border-t border-zinc-200 px-6 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-end gap-2">
+          {/*
+            ⚠ EXISTA CA SA NU MAI FIE NEVOIE SA PUBLICI CA SA VEZI.
+
+            Pana acum, un redactor n-avea niciun fel de a se uita la ciorna lui:
+            pagina publica refuza tot ce nu e publicat, si bine face. Deci
+            singurul fel de a vedea cum arata textul era sa-l arati lumii.
+
+            ⚠ Doar pe un articol SALVAT. Pe unul nou nu exista inca `id`, deci
+            n-ar avea ce sa arate; iar un buton care duce la o pagina goala e mai
+            rau decat unul care lipseste.
+
+            ⚠ `target="_blank"`: fila de editare ramane deschisa, cu tot ce e
+            nesalvat in ea. Deschisa in aceeasi fila, previzualizarea ar fi
+            aruncat munca nesalvata a omului.
+          */}
+          {articol?.id && (
+            <a href={`/blog/previzualizare/${articol.id}`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-zinc-300 rounded-lg hover:bg-zinc-50"
+              title={nesalvat ? "Arata ultima versiune SALVATA, nu ce e pe ecran acum" : undefined}>
+              <Eye className="h-4 w-4" />
+              Previzualizează
+              {nesalvat && <span className="text-xs font-normal text-amber-600">(ce e salvat)</span>}
+            </a>
+          )}
           <button type="button" onClick={() => salveaza_()} disabled={salveaza}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-zinc-300 rounded-lg hover:bg-zinc-50 disabled:opacity-50">
             {salveaza && <Loader2 className="h-4 w-4 animate-spin" />}

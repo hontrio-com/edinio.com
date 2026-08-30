@@ -109,6 +109,19 @@ export type AutorInput = {
   bio?: string | null;
   avatar_url?: string | null;
   sameas?: string[];
+  /**
+   * Contul de pe platformă al persoanei, dacă are unul.
+   *
+   * ⚠ COLOANA EXISTA DE LA ÎNCEPUT ȘI NU O SCRIA NIMIC. Un câmp pe care nimeni
+   * nu-l pune și nimeni nu-l citește nu e „pregătit pentru viitor", e o promisiune
+   * pe care schema o face și codul n-o ține: următorul care o vede presupune că
+   * e completată și construiește pe ea.
+   *
+   * Acum face ceva: un articol nou pornește cu autorul legat de contul celui
+   * care scrie, în loc să-l pună pe om să-l aleagă din listă de fiecare dată — și
+   * să poată alege, din neatenție, numele altcuiva.
+   */
+  user_id?: string | null;
 };
 
 export async function creeazaAutor(intrare: AutorInput): Promise<RaspunsCu<{ id: string }>> {
@@ -128,6 +141,7 @@ export async function creeazaAutor(intrare: AutorInput): Promise<RaspunsCu<{ id:
       bio: intrare.bio?.trim() || null,
       avatar_url: intrare.avatar_url?.trim() || null,
       sameas: adreseBune(intrare.sameas),
+      user_id: intrare.user_id || null,
     })
     .select("id")
     .single();
@@ -145,6 +159,12 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
 
+  /* Slugul de dinainte, ca să știm dacă s-a mutat. Citit ÎNAINTE de scriere:
+     după ea nu mai există nicăieri. */
+  const { data: inainte } = await blogDb()
+    .from("blog_authors").select("slug").eq("id", id).maybeSingle();
+  const vechiSlug = (inainte as { slug: string } | null)?.slug ?? null;
+
   const { error } = await blogDb()
     .from("blog_authors")
     .update({
@@ -154,10 +174,32 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
       bio: intrare.bio?.trim() || null,
       avatar_url: intrare.avatar_url?.trim() || null,
       sameas: adreseBune(intrare.sameas),
+      user_id: intrare.user_id || null,
     })
     .eq("id", id);
 
   if (error) return { error: traduEroare(error, "un autor") };
+
+  /*
+    ⚠ ȘI ADRESA ASTA E INDEXATĂ.
+
+    Redenumirea unui ARTICOL lăsa o redirectare în urmă; redenumirea unei rubrici
+    sau a unui autor nu lăsa nimic — deși paginile acelea sunt la fel de indexate
+    și, de obicei, mai vechi decât articolele din ele. Un redactor care schimbă
+    „Livrare" în „Livrare și curierat" mută, dintr-o singură apăsare, o pagină
+    care putea să fi strâns legături ani de zile.
+
+    Se scrie DUPĂ salvare și nu oprește nimic dacă pică: o redenumire salvată cu
+    redirectarea ratată e mai bună decât una nesalvată. Funcția din bază strânge
+    și lanțurile, și se ferește de bucla dus-întors.
+  */
+  if (vechiSlug && vechiSlug !== s.slug) {
+    const { error: eMutare } = await blogDb().rpc("blog_muta_taxonomia", {
+      p_fel: "autor", p_slug_vechi: vechiSlug, p_slug_nou: s.slug,
+    });
+    if (eMutare) console.error("[blog] redirectare de autor neputută", vechiSlug, "->", s.slug, eMutare);
+  }
+
   reimprospateaza();
   return { success: true };
 }
@@ -243,6 +285,12 @@ export async function actualizeazaCategorie(id: string, intrare: CategorieInput)
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
 
+  /* Slugul de dinainte, ca să știm dacă s-a mutat. Citit ÎNAINTE de scriere:
+     după ea nu mai există nicăieri. */
+  const { data: inainte } = await blogDb()
+    .from("blog_categories").select("slug").eq("id", id).maybeSingle();
+  const vechiSlug = (inainte as { slug: string } | null)?.slug ?? null;
+
   const { error } = await blogDb()
     .from("blog_categories")
     .update({
@@ -256,6 +304,27 @@ export async function actualizeazaCategorie(id: string, intrare: CategorieInput)
     .eq("id", id);
 
   if (error) return { error: traduEroare(error, "o categorie") };
+
+  /*
+    ⚠ ȘI ADRESA ASTA E INDEXATĂ.
+
+    Redenumirea unui ARTICOL lăsa o redirectare în urmă; redenumirea unei rubrici
+    sau a unui autor nu lăsa nimic — deși paginile acelea sunt la fel de indexate
+    și, de obicei, mai vechi decât articolele din ele. Un redactor care schimbă
+    „Livrare" în „Livrare și curierat" mută, dintr-o singură apăsare, o pagină
+    care putea să fi strâns legături ani de zile.
+
+    Se scrie DUPĂ salvare și nu oprește nimic dacă pică: o redenumire salvată cu
+    redirectarea ratată e mai bună decât una nesalvată. Funcția din bază strânge
+    și lanțurile, și se ferește de bucla dus-întors.
+  */
+  if (vechiSlug && vechiSlug !== s.slug) {
+    const { error: eMutare } = await blogDb().rpc("blog_muta_taxonomia", {
+      p_fel: "categorie", p_slug_vechi: vechiSlug, p_slug_nou: s.slug,
+    });
+    if (eMutare) console.error("[blog] redirectare de rubrica neputută", vechiSlug, "->", s.slug, eMutare);
+  }
+
   reimprospateaza();
   return { success: true };
 }
@@ -441,6 +510,40 @@ export async function iaArticol(id: string): Promise<ArticolBlog | null> {
   return (data as ArticolBlog) ?? null;
 }
 
+/**
+ * Articolul pentru PREVIZUALIZARE, cu autorul si rubrica lui.
+ *
+ * ⚠ TRECE PESTE FILTRELE DE VIZIBILITATE, SI DE ACEEA ARE PAZA IN PRIMA LINIE.
+ *
+ * Toate celelalte citiri de articole din site refuza ce nu e `published` cu data
+ * trecuta — asta e tocmai ce le face sigure. Aceasta nu refuza nimic, fiindca
+ * rostul ei e sa arate o CIORNA. Deci singurul lucru care sta intre o ciorna si
+ * lumea intreaga e `requireBlogEditorApi()` de mai jos. Nu se scoate, nu se muta
+ * mai jos, si nu se cheama functia asta din nicio pagina publica.
+ */
+export async function articolDePrevizualizat(id: string): Promise<ArticolPrevizualizat | null> {
+  if (!(await requireBlogEditorApi())) return null;
+  const { data } = await blogDb()
+    .from("blog_posts")
+    .select("*, blog_authors(*), blog_categories(*)")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const r = data as Record<string, unknown>;
+  const unul = <T,>(v: unknown): T | null =>
+    Array.isArray(v) ? ((v[0] as T) ?? null) : ((v as T) ?? null);
+  return {
+    ...(r as unknown as ArticolBlog),
+    autor: unul<AutorBlog>(r.blog_authors),
+    categorie: unul<CategorieBlog>(r.blog_categories),
+  };
+}
+
+export type ArticolPrevizualizat = ArticolBlog & {
+  autor: AutorBlog | null;
+  categorie: CategorieBlog | null;
+};
+
 export type ArticolInput = {
   title: string;
   slug?: string | null;
@@ -599,11 +702,12 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
     content_html: html,
     cover_url: intrare.cover_url?.trim() || null,
     cover_alt: intrare.cover_alt?.trim() || null,
-    /* ⚠ NU SE ATINGE CAND EDITORUL NU-L TRIMITE. Campul n-are inca o casuta in
-       editor, deci `intrare.og_image_url` e mereu `undefined`, iar scrierea
-       neconditionata il punea pe `null` la FIECARE salvare. O valoare pusa
-       vreodata din baza sau dintr-un import ar fi fost stearsa de prima salvare
-       a unui om care nici nu stia ca exista campul. */
+    /* ⚠ NU SE ATINGE CAND CEL CARE CHEAMA NU-L TRIMITE.
+       Din 30.08.2026 editorul are casuta lui, deci pe drumul obisnuit campul
+       vine mereu. Ramura asta ramane pentru celelalte drumuri — un import, o
+       reparatie facuta cu SQL, un apel viitor care nu stie de camp: scrierea
+       neconditionata l-ar pune pe `null` la fiecare salvare, si o valoare pusa
+       de altcineva ar fi stearsa fara ca nimeni sa observe. */
     ...(intrare.og_image_url !== undefined
       ? { og_image_url: intrare.og_image_url?.trim() || null }
       : {}),
@@ -639,6 +743,19 @@ function dataLaPublicare(intrare: ArticolInput): string | null {
   return intrare.published_at || new Date().toISOString();
 }
 
+/**
+ * Autorul legat de contul celui care scrie acum, dacă există unul.
+ *
+ * ⚠ E O PROPUNERE, NU O REGULĂ. Se folosește doar când editorul n-a ales
+ * niciunul. Un admin care scrie în numele altcuiva — se întâmplă — tot poate
+ * alege pe cine vrea.
+ */
+async function autorulMeu(idCont: string): Promise<string | null> {
+  const { data } = await blogDb()
+    .from("blog_authors").select("id").eq("user_id", idCont).maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
+}
+
 export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{ id: string }>> {
   const cine = await requireBlogEditorApi();
   if (!cine) return { error: "Neautorizat" };
@@ -660,9 +777,13 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
     return { error: `Adresa „${s.slug}" e folosită de o pagină a blogului. Alege alta.` };
   }
 
+  /* Dacă n-a ales un autor, se pune cel legat de contul lui. Vezi `autorulMeu`. */
+  const rand = randDinIntrare(intrare, s.slug);
+  if (!rand.author_id) rand.author_id = await autorulMeu(cine.id);
+
   const { data, error } = await blogDb()
     .from("blog_posts")
-    .insert({ ...randDinIntrare(intrare, s.slug), published_at: dataLaPublicare(intrare) })
+    .insert({ ...rand, published_at: dataLaPublicare(intrare) })
     .select("id")
     .single();
 

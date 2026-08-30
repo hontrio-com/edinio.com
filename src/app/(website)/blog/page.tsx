@@ -34,7 +34,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     articolele mai vechi ar fi devenit de negăsit — chiar defectul pe care
     paginarea trebuia să-l repare.
   */
-  return siteMetadata({
+  const meta = siteMetadata({
     title:
       pagina > 1
         ? `Blog, pagina ${pagina}`
@@ -43,6 +43,21 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
       "Ghiduri practice despre magazine online, curierat, facturare si vanzare in Romania, plus noutatile platformei Edinio.",
     path: pagina > 1 ? `/blog?p=${pagina}` : "/blog",
   });
+
+  /*
+    Legatura catre feed, ca sa poata fi GASIT.
+
+    Un feed pe care nu-l anunta nicio pagina exista doar pentru cine ii ghiceste
+    adresa. Randul asta e felul in care cititoarele de feeduri si crawlerele afla
+    ca avem unul — si crawlerele se intorc la un feed mai des decat la sitemap.
+  */
+  return {
+    ...meta,
+    alternates: {
+      ...meta.alternates,
+      types: { "application/rss+xml": [{ url: "/blog/feed", title: "Blogul Edinio" }] },
+    },
+  };
 }
 
 export default async function BlogPage({ searchParams }: Props) {

@@ -5,7 +5,7 @@ import { AdminBlogPostsClient } from "@/components/admin/AdminBlogPostsClient";
 export const metadata = { title: "Blog" };
 
 export default async function AdminBlogPage() {
-  await requireBlogEditor();
+  const { rol } = await requireBlogEditor();
   const articole = await listeazaArticole();
-  return <AdminBlogPostsClient articole={articole} />;
+  return <AdminBlogPostsClient articole={articole} rol={rol} />;
 }

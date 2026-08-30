@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
 import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
-import { articoleleCategoriei, categoriiBlog } from "@/lib/blog/citire";
+import { articoleleCategoriei, categoriiBlog, undeS_aMutat } from "@/lib/blog/citire";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { siteMetadata } from "@/lib/website/metadata";
 
@@ -52,7 +52,19 @@ export default async function CategorieBlogPage({ params, searchParams }: Props)
   const cerut = paginaCeruta(p);
 
   const c = await categoria(slug);
-  if (!c) notFound();
+  if (!c) {
+    /*
+      ⚠ NU 404 DIRECT: poate doar s-a mutat.
+
+      Adresa unei rubrici e la fel de indexata ca a unui articol, si de obicei
+      mai veche decat articolele din ea. Pana pe 30.08.2026, o redenumire din
+      admin o omora fara urma — articolele isi pastrau adresele, rubrica nu. Un
+      308 duce mai departe tot ce a strans.
+    */
+    const mutatLa = await undeS_aMutat(slug, "categorie");
+    if (mutatLa) permanentRedirect(`/blog/categorie/${mutatLa}`);
+    notFound();
+  }
 
   const { articole, total, pagini } = await articoleleCategoriei(slug, cerut);
 

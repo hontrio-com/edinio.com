@@ -19,7 +19,7 @@ type Props = { searchParams: Promise<{ sablon?: string }> };
 export default async function AdminBlogArticolNouPage({ searchParams }: Props) {
   const { rol } = await requireBlogEditor();
   const { sablon } = await searchParams;
-  if (!sablon) return <AlegeSablon />;
+  if (!sablon) return <AlegeSablon rol={rol} />;
 
   const [autori, categorii] = await Promise.all([listeazaAutori(), listeazaCategorii()]);
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { RolBlog } from "@/lib/admin-guard";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FolderTree, Plus, Pencil, Trash2, Loader2, X } from "lucide-react";
@@ -49,7 +50,15 @@ function cnMasura(n: number, max: number) {
 }
 
 /** Vezi nota din `AdminBlogAuthorsClient`: lista vine din props, nu din stare. */
-export function AdminBlogCategoriesClient({ categorii }: { categorii: CategorieBlog[] }) {
+export function AdminBlogCategoriesClient({ categorii, rol }: { categorii: CategorieBlog[]; rol: RolBlog }) {
+/**
+ * ⚠ ASCUNDEREA NU E PAZĂ. Acțiunile cer `requireAdminApi()`, și acolo se
+ * hotărăște cu adevărat. Rândul de mai jos e ca redactorul să nu apese un buton
+ * care oricum îl refuză: o unealtă care te lasă să încerci și apoi spune
+ * „Neautorizat" te învață că e stricată, nu că n-ai voie.
+ */
+  const poateSchimba = rol === "admin";
+
   const router = useRouter();
   const [editare, setEditare] = useState<Editare | null>(null);
   const [salveaza, setSalveaza] = useState(false);
@@ -202,17 +211,28 @@ export function AdminBlogCategoriesClient({ categorii }: { categorii: CategorieB
   // ── Lista ──
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <BlogSubmeniu activ="categorii" />
+      <BlogSubmeniu activ="categorii" rol={rol} />
+
+      {/* ⚠ Se SPUNE de ce lipsesc butoanele. Un ecran din care ele pur si
+          simplu lipsesc il face pe om sa creada ca s-a stricat ceva sau ca n-a
+          gasit el unde sa apese. */}
+      {!poateSchimba && (
+        <p className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          Rubricile le stabileste un administrator. Tu le poti vedea si alege pentru articolele tale.
+        </p>
+      )}
 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <FolderTree className="h-5 w-5 text-zinc-900" />
           <h1 className="text-xl font-semibold text-zinc-900">Categorii</h1>
         </div>
-        <button type="button" onClick={() => setEditare({ ...GOL })}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800">
-          <Plus className="h-4 w-4" /> Categorie nouă
-        </button>
+        {poateSchimba && (
+          <button type="button" onClick={() => setEditare({ ...GOL })}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800">
+            <Plus className="h-4 w-4" /> Categorie nouă
+          </button>
+        )}
       </div>
 
       {categorii.length === 0 ? (
@@ -232,14 +252,18 @@ export function AdminBlogCategoriesClient({ categorii }: { categorii: CategorieB
                 <p className="text-sm font-semibold text-zinc-900 truncate">{c.name}</p>
                 <p className="text-xs text-zinc-500 truncate font-mono">/blog/categorie/{c.slug}</p>
               </div>
-              <button type="button" onClick={() => incepeEditarea(c)}
-                className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100" title="Editează">
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button type="button" onClick={() => sterge(c)}
-                className="p-2 rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-600" title="Șterge">
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {poateSchimba && (
+                <>
+                <button type="button" onClick={() => incepeEditarea(c)}
+                  className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100" title="Editează">
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => sterge(c)}
+                  className="p-2 rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-600" title="Șterge">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                </>
+              )}
             </div>
           ))}
         </div>

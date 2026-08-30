@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { Redactor } from "@/lib/actions/blog-redactori.actions";
+import type { RolBlog } from "@/lib/admin-guard";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -27,6 +29,8 @@ type Editare = {
    * spate ce tocmai a scris, la urmatoarea litera din nume.
    */
   slugScrisDeMana: boolean;
+  /** Contul de pe platforma, sau sir gol pentru un autor invitat. */
+  user_id: string;
   role_title: string;
   bio: string;
   avatar_url: string;
@@ -35,7 +39,7 @@ type Editare = {
 
 const GOL: Editare = {
   id: null, name: "", slug: "", slugScrisDeMana: false,
-  role_title: "", bio: "", avatar_url: "", sameas: "",
+  user_id: "", role_title: "", bio: "", avatar_url: "", sameas: "",
 };
 
 /**
@@ -46,7 +50,15 @@ const GOL: Editare = {
  * Ecranul ar arata atunci ce era acolo la deschidere, iar omul ar crede ca
  * salvarea n-a mers. Singura stare de aici e formularul deschis.
  */
-export function AdminBlogAuthorsClient({ autori }: { autori: AutorBlog[] }) {
+export function AdminBlogAuthorsClient({ autori, rol, conturi }: { autori: AutorBlog[]; rol: RolBlog; conturi: Redactor[] }) {
+/**
+ * ⚠ ASCUNDEREA NU E PAZĂ. Acțiunile cer `requireAdminApi()`, și acolo se
+ * hotărăște cu adevărat. Rândul de mai jos e ca redactorul să nu apese un buton
+ * care oricum îl refuză: o unealtă care te lasă să încerci și apoi spune
+ * „Neautorizat" te învață că e stricată, nu că n-ai voie.
+ */
+  const poateSchimba = rol === "admin";
+
   const router = useRouter();
   const [editare, setEditare] = useState<Editare | null>(null);
   const [salveaza, setSalveaza] = useState(false);
@@ -62,6 +74,7 @@ export function AdminBlogAuthorsClient({ autori }: { autori: AutorBlog[] }) {
       name: a.name,
       slug: a.slug,
       slugScrisDeMana: true, // un autor salvat are deja o adresa; nu i-o schimbam de sub picioare
+      user_id: a.user_id ?? "",
       role_title: a.role_title ?? "",
       bio: a.bio ?? "",
       avatar_url: a.avatar_url ?? "",
@@ -155,6 +168,36 @@ export function AdminBlogAuthorsClient({ autori }: { autori: AutorBlog[] }) {
             </div>
           </div>
 
+          {/*
+            ⚠ LEGĂTURA CU CONTUL FACE CEVA, NU E DOAR O ÎNSEMNARE.
+
+            Un articol nou pornește cu autorul legat de contul celui care scrie.
+            Fără ea, fiecare redactor trebuia să se aleagă din listă de fiecare
+            dată — și putea alege, din neatenție, numele altcuiva, ceea ce pe un
+            blog înseamnă un text semnat de cine nu l-a scris.
+
+            Rămâne opțională: un autor invitat, care nu are cont pe platformă, e
+            un caz obișnuit și trebuie să meargă.
+          */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1.5">
+              Contul lui pe platformă <span className="font-normal text-zinc-400">(opțional)</span>
+            </label>
+            <select value={editare.user_id}
+              onChange={(e) => setEditare({ ...editare, user_id: e.target.value })}
+              className={inputCls}>
+              <option value="">Fără cont (autor invitat)</option>
+              {conturi.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.full_name || c.email || c.id}{c.email && c.full_name ? ` — ${c.email}` : ""}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Legat, articolele scrise din contul acela pornesc automat cu numele lui.
+            </p>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1.5">Rol</label>
             <input type="text" value={editare.role_title}
@@ -234,17 +277,28 @@ export function AdminBlogAuthorsClient({ autori }: { autori: AutorBlog[] }) {
   // ── Lista ──
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <BlogSubmeniu activ="autori" />
+      <BlogSubmeniu activ="autori" rol={rol} />
+
+      {/* ⚠ Se SPUNE de ce lipsesc butoanele. Un ecran din care ele pur si
+          simplu lipsesc il face pe om sa creada ca s-a stricat ceva sau ca n-a
+          gasit el unde sa apese. */}
+      {!poateSchimba && (
+        <p className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+          Autorii ii adauga si ii schimba un administrator. Tu ii poti vedea si alege pentru articolele tale.
+        </p>
+      )}
 
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <PenLine className="h-5 w-5 text-zinc-900" />
           <h1 className="text-xl font-semibold text-zinc-900">Autori</h1>
         </div>
-        <button type="button" onClick={incepeNou}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800">
-          <Plus className="h-4 w-4" /> Autor nou
-        </button>
+        {poateSchimba && (
+          <button type="button" onClick={incepeNou}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800">
+            <Plus className="h-4 w-4" /> Autor nou
+          </button>
+        )}
       </div>
 
       {autori.length === 0 ? (
@@ -269,14 +323,18 @@ export function AdminBlogAuthorsClient({ autori }: { autori: AutorBlog[] }) {
                   {a.sameas?.length ? ` · ${a.sameas.length} ${a.sameas.length === 1 ? "profil" : "profiluri"}` : " · fără profiluri publice"}
                 </p>
               </div>
-              <button type="button" onClick={() => incepeEditarea(a)}
-                className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100" title="Editează">
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button type="button" onClick={() => sterge(a)}
-                className="p-2 rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-600" title="Șterge">
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {poateSchimba && (
+                <>
+                <button type="button" onClick={() => incepeEditarea(a)}
+                  className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100" title="Editează">
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => sterge(a)}
+                  className="p-2 rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-600" title="Șterge">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                </>
+              )}
             </div>
           ))}
         </div>
